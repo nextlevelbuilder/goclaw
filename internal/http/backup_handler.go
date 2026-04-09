@@ -163,14 +163,7 @@ func (h *BackupHandler) handleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	exportTokenMu.Lock()
-	entry, ok := exportTokens[token]
-	if ok && time.Now().After(entry.expiresAt) {
-		delete(exportTokens, token)
-		ok = false
-	}
-	exportTokenMu.Unlock()
-
+	entry, ok := lookupExportToken(token)
 	if !ok {
 		writeError(w, http.StatusNotFound, protocol.ErrNotFound,
 			i18n.T(locale, i18n.MsgNotFound, "backup token", token))

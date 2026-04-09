@@ -1,7 +1,6 @@
 package whatsapp
 
 import (
-	"context"
 	"log/slog"
 	"os"
 	"strings"
@@ -125,8 +124,8 @@ func classifyDownloadError(err error) string {
 }
 
 // scheduleMediaCleanup removes temp media files after a delay.
-// Uses time.AfterFunc so it does not block and respects the provided context for logging only.
-func scheduleMediaCleanup(ctx context.Context, paths []string, delay time.Duration) {
+// Uses time.AfterFunc so it does not block.
+func scheduleMediaCleanup(paths []string, delay time.Duration) {
 	if len(paths) == 0 {
 		return
 	}

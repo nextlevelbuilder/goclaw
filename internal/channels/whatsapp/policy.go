@@ -4,49 +4,26 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 )
 
 // checkGroupPolicy evaluates the group policy for a sender.
 func (c *Channel) checkGroupPolicy(ctx context.Context, senderID, chatID string) bool {
-	groupPolicy := c.config.GroupPolicy
-	if groupPolicy == "" {
-		groupPolicy = "open"
-	}
-
-	switch groupPolicy {
-	case "disabled":
-		return false
-	case "allowlist":
-		return c.IsAllowed(senderID)
-	case "pairing":
-		if c.HasAllowList() && c.IsAllowed(senderID) {
-			return true
-		}
-		if _, cached := c.approvedGroups.Load(chatID); cached {
-			return true
-		}
+	result := c.CheckGroupPolicy(ctx, senderID, chatID, c.config.GroupPolicy)
+	switch result {
+	case channels.PolicyAllow:
+		return true
+	case channels.PolicyNeedsPairing:
 		groupSenderID := fmt.Sprintf("group:%s", chatID)
-		if c.pairingService != nil {
-			paired, err := c.pairingService.IsPaired(ctx, groupSenderID, c.Name())
-			if err != nil {
-				slog.Warn("security.pairing_check_failed, assuming paired (fail-open)",
-					"group_sender", groupSenderID, "channel", c.Name(), "error", err)
-				paired = true
-			}
-			if paired {
-				c.approvedGroups.Store(chatID, true)
-				return true
-			}
-		}
 		c.sendPairingReply(ctx, groupSenderID, chatID)
 		return false
-	default: // "open"
-		return true
+	default:
+		return false
 	}
 }
 
@@ -56,58 +33,33 @@ func (c *Channel) checkDMPolicy(ctx context.Context, senderID, chatID string) bo
 	if dmPolicy == "" {
 		dmPolicy = "pairing"
 	}
-
-	switch dmPolicy {
-	case "disabled":
-		slog.Debug("whatsapp DM rejected: disabled", "sender_id", senderID)
-		return false
-	case "open":
+	result := c.CheckDMPolicy(ctx, senderID, dmPolicy)
+	switch result {
+	case channels.PolicyAllow:
 		return true
-	case "allowlist":
-		if !c.IsAllowed(senderID) {
-			slog.Debug("whatsapp DM rejected by allowlist", "sender_id", senderID)
-			return false
-		}
-		return true
-	default: // "pairing"
-		paired := false
-		if c.pairingService != nil {
-			p, err := c.pairingService.IsPaired(ctx, senderID, c.Name())
-			if err != nil {
-				slog.Warn("security.pairing_check_failed, assuming paired (fail-open)",
-					"sender_id", senderID, "channel", c.Name(), "error", err)
-				paired = true
-			} else {
-				paired = p
-			}
-		}
-		inAllowList := c.HasAllowList() && c.IsAllowed(senderID)
-
-		if paired || inAllowList {
-			return true
-		}
-
+	case channels.PolicyNeedsPairing:
 		c.sendPairingReply(ctx, senderID, chatID)
+		return false
+	default:
+		slog.Debug("whatsapp DM rejected by policy", "sender_id", senderID, "policy", dmPolicy)
 		return false
 	}
 }
 
 // sendPairingReply sends a pairing code to the user via WhatsApp.
 func (c *Channel) sendPairingReply(ctx context.Context, senderID, chatID string) {
-	if c.pairingService == nil {
+	ps := c.PairingService()
+	if ps == nil {
 		slog.Warn("whatsapp pairing: no pairing service configured")
 		return
 	}
 
-	// Debounce.
-	if lastSent, ok := c.pairingDebounce.Load(senderID); ok {
-		if time.Since(lastSent.(time.Time)) < pairingDebounceTime {
-			slog.Info("whatsapp pairing: debounced", "sender_id", senderID)
-			return
-		}
+	if !c.CanSendPairingNotif(senderID, pairingDebounceTime) {
+		slog.Info("whatsapp pairing: debounced", "sender_id", senderID)
+		return
 	}
 
-	code, err := c.pairingService.RequestPairing(ctx, senderID, c.Name(), chatID, "default", nil)
+	code, err := ps.RequestPairing(ctx, senderID, c.Name(), chatID, "default", nil)
 	if err != nil {
 		slog.Warn("whatsapp pairing request failed", "sender_id", senderID, "channel", c.Name(), "error", err)
 		return
@@ -135,7 +87,7 @@ func (c *Channel) sendPairingReply(ctx context.Context, senderID, chatID string)
 	if _, sendErr := c.client.SendMessage(c.ctx, chatJID, waMsg); sendErr != nil {
 		slog.Warn("failed to send whatsapp pairing reply", "error", sendErr)
 	} else {
-		c.pairingDebounce.Store(senderID, time.Now())
+		c.MarkPairingNotifSent(senderID)
 		slog.Info("whatsapp pairing reply sent", "sender_id", senderID, "code", code)
 	}
 }

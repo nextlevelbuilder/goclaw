@@ -33,9 +33,9 @@ type TickerConfig struct {
 	Agents        store.AgentStore
 	Sessions      store.SessionStore // optional: for cleaning up isolated heartbeat sessions
 	ProviderStore store.ProviderStore
-	ProviderReg   *providers.Registry
-	MsgBus        *bus.MessageBus
-	Sched         *scheduler.Scheduler
+	ProviderReg   ProviderResolver
+	MsgBus        EventPublisher
+	Sched         ActiveSessionChecker
 	RunAgent      func(ctx context.Context, req agent.RunRequest) <-chan scheduler.RunOutcome
 }
 
@@ -45,9 +45,9 @@ type Ticker struct {
 	agents        store.AgentStore
 	sessions      store.SessionStore
 	providerStore store.ProviderStore
-	providerReg   *providers.Registry
-	msgBus        *bus.MessageBus
-	sched         *scheduler.Scheduler
+	providerReg   ProviderResolver
+	msgBus        EventPublisher
+	sched         ActiveSessionChecker
 	runAgent      func(ctx context.Context, req agent.RunRequest) <-chan scheduler.RunOutcome
 	onEvent       func(store.HeartbeatEvent)
 

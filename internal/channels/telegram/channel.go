@@ -28,7 +28,6 @@ type Channel struct {
 	httpClient        *http.Client
 	transport         *http.Transport
 	ipv4Once          sync.Once // guards enableIPv4Only to prevent data race
-	pairingService    store.PairingStore
 	agentStore        store.AgentStore            // for agent key lookup (nil if not configured)
 	configPermStore   store.ConfigPermissionStore // for group file writer management (nil if not configured)
 	teamStore         store.TeamStore             // for /tasks, /task_detail commands (nil if not configured)
@@ -37,18 +36,15 @@ type Channel struct {
 	stopThinking      sync.Map                    // localKey string → *thinkingCancel
 	typingCtrls       sync.Map                    // localKey string → *typing.Controller
 	reactions         sync.Map                    // localKey string → *StatusReactionController
-	pairingReplySent  sync.Map                    // userID string → time.Time (debounce pairing replies)
 	threadIDs         sync.Map                    // localKey string → messageThreadID int (for forum topic routing)
-	approvedGroups    sync.Map                    // chatIDStr string → true (cached group pairing approval)
-	groupHistory      *channels.PendingHistory
-	historyLimit      int
-	requireMention    bool
 	mentionMode       string             // "strict" (default) or "yield"
 	pollCancel        context.CancelFunc // cancels the long polling context
 	pollDone          chan struct{}      // closed when polling goroutine exits
 	handlerWg         sync.WaitGroup     // tracks in-flight handler goroutines for graceful shutdown
 	handlerSem        chan struct{}      // bounded semaphore for concurrent handler goroutines
 	pendingDraftID    sync.Map           // localKey string → int (draftID)
+	// pairingService, approvedGroups, pairingDebounce, groupHistory, historyLimit, requireMention
+	// are inherited from channels.BaseChannel.
 }
 
 type thinkingCancel struct {
@@ -83,7 +79,7 @@ func WithSubagentTaskStore(s store.SubagentTaskStore) Option {
 // WithPendingMessageStore sets the pending message store for group history buffering.
 func WithPendingMessageStore(s store.PendingMessageStore) Option {
 	return func(c *Channel) {
-		c.groupHistory = channels.MakeHistory(channels.TypeTelegram, s, c.TenantID())
+		c.SetGroupHistory(channels.MakeHistory(channels.TypeTelegram, s, c.TenantID()))
 	}
 }
 
@@ -150,17 +146,17 @@ func New(cfg config.TelegramConfig, msgBus *bus.MessageBus, pairingSvc store.Pai
 	}
 
 	ch := &Channel{
-		BaseChannel:    base,
-		bot:            bot,
-		config:         cfg,
-		httpClient:     httpClient,
-		transport:      transport,
-		pairingService: pairingSvc,
-		groupHistory:   channels.MakeHistory(channels.TypeTelegram, nil, base.TenantID()),
-		historyLimit:   historyLimit,
-		requireMention: requireMention,
-		mentionMode:    mentionMode,
+		BaseChannel: base,
+		bot:         bot,
+		config:      cfg,
+		httpClient:  httpClient,
+		transport:   transport,
+		mentionMode: mentionMode,
 	}
+	ch.SetPairingService(pairingSvc)
+	ch.SetGroupHistory(channels.MakeHistory(channels.TypeTelegram, nil, base.TenantID()))
+	ch.SetHistoryLimit(historyLimit)
+	ch.SetRequireMention(requireMention)
 	for _, o := range chanOpts {
 		o(ch)
 	}
@@ -205,7 +201,9 @@ func (c *Channel) Start(ctx context.Context) error {
 
 	c.SetRunning(true)
 	c.MarkHealthy(connectedSummary(username))
-	c.groupHistory.StartFlusher()
+	if gh := c.GroupHistory(); gh != nil {
+		gh.StartFlusher()
+	}
 	c.handlerSem = make(chan struct{}, 20) // limit concurrent message handlers
 	slog.Info("telegram bot connected", "username", username)
 
@@ -334,11 +332,17 @@ func (c *Channel) BlockReplyEnabled() *bool { return c.config.BlockReply }
 
 // SetPendingCompaction configures LLM-based auto-compaction for pending messages.
 func (c *Channel) SetPendingCompaction(cfg *channels.CompactionConfig) {
-	c.groupHistory.SetCompactionConfig(cfg)
+	if gh := c.GroupHistory(); gh != nil {
+		gh.SetCompactionConfig(cfg)
+	}
 }
 
 // SetPendingHistoryTenantID propagates tenant_id to the pending history for DB operations.
-func (c *Channel) SetPendingHistoryTenantID(id uuid.UUID) { c.groupHistory.SetTenantID(id) }
+func (c *Channel) SetPendingHistoryTenantID(id uuid.UUID) {
+	if gh := c.GroupHistory(); gh != nil {
+		gh.SetTenantID(id)
+	}
+}
 
 // Stop shuts down the Telegram bot by cancelling the long polling context
 // and waiting for the polling goroutine to exit.
@@ -346,7 +350,9 @@ func (c *Channel) Stop(_ context.Context) error {
 	slog.Info("stopping telegram bot")
 	c.SetRunning(false)
 	c.MarkStopped("Stopped")
-	c.groupHistory.StopFlusher()
+	if gh := c.GroupHistory(); gh != nil {
+		gh.StopFlusher()
+	}
 
 	if c.pollCancel != nil {
 		c.pollCancel()
@@ -477,8 +483,8 @@ func (c *Channel) migrateGroupChat(ctx context.Context, oldChatID, newChatID int
 		"old_chat_id", oldStr, "new_chat_id", newStr, "channel", c.Name())
 
 	// Update DB (paired_devices, sessions, channel_contacts).
-	if c.pairingService != nil {
-		if err := c.pairingService.MigrateGroupChatID(ctx, c.Name(), oldStr, newStr); err != nil {
+	if ps := c.PairingService(); ps != nil {
+		if err := ps.MigrateGroupChatID(ctx, c.Name(), oldStr, newStr); err != nil {
 			slog.Error("telegram: failed to migrate group chat in DB",
 				"old_chat_id", oldStr, "new_chat_id", newStr, "error", err)
 			return
@@ -486,15 +492,15 @@ func (c *Channel) migrateGroupChat(ctx context.Context, oldChatID, newChatID int
 	}
 
 	// Invalidate approvedGroups cache.
-	c.approvedGroups.Delete(oldStr)
-	c.approvedGroups.Store(newStr, true)
+	c.ClearGroupApproval(oldStr)
+	c.MarkGroupApproved(newStr)
 
 	// Clear pairing reply debounce for old group sender.
 	oldGroupSender := fmt.Sprintf("group:%d", oldChatID)
-	c.pairingReplySent.Delete(oldGroupSender)
+	c.ClearPairingDebounce(oldGroupSender)
 
 	// Clear in-memory pending history for old key (will rebuild from DB on next access).
-	if c.groupHistory != nil {
-		c.groupHistory.Clear(oldStr)
+	if gh := c.GroupHistory(); gh != nil {
+		gh.Clear(oldStr)
 	}
 }

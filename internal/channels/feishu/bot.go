@@ -95,14 +95,14 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 			if mc.RootID != "" && c.cfg.TopicSessionMode == "enabled" {
 				historyKey = fmt.Sprintf("%s:topic:%s", mc.ChatID, mc.RootID)
 			}
-			c.groupHistory.Record(historyKey, channels.HistoryEntry{
+			c.GroupHistory().Record(historyKey, channels.HistoryEntry{
 				Sender:    senderName,
 				SenderID:  mc.SenderID,
 				Body:      mc.Content,
 				Media:     earlyMediaPaths,
 				Timestamp: time.Now(),
 				MessageID: messageID,
-			}, c.historyLimit)
+			}, c.HistoryLimit())
 
 			// Collect contact even when bot is not mentioned (cache prevents DB spam).
 			if cc := c.ContactCollector(); cc != nil {
@@ -182,8 +182,8 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 	if senderName != "" {
 		if mc.ChatType == "group" {
 			annotated := fmt.Sprintf("[From: %s]\n%s", senderName, content)
-			if c.historyLimit > 0 {
-				content = c.groupHistory.BuildContext(chatID, annotated, c.historyLimit)
+			if c.HistoryLimit() > 0 {
+				content = c.GroupHistory().BuildContext(chatID, annotated, c.HistoryLimit())
 			} else {
 				content = annotated
 			}
@@ -204,8 +204,8 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 
 	// 10b. Collect media from pending history (files downloaded by earlier non-mentioned messages).
 	var mediaFiles []bus.MediaFile
-	if mc.ChatType == "group" && c.historyLimit > 0 {
-		if histMediaPaths := c.groupHistory.CollectMedia(chatID); len(histMediaPaths) > 0 {
+	if mc.ChatType == "group" && c.HistoryLimit() > 0 {
+		if histMediaPaths := c.GroupHistory().CollectMedia(chatID); len(histMediaPaths) > 0 {
 			for _, p := range histMediaPaths {
 				mediaFiles = append(mediaFiles, bus.MediaFile{Path: p}) // cannot use append(slice, other...) — different types
 			}
@@ -290,14 +290,14 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 		PeerKind:     peerKind,
 		UserID:       userID,
 		AgentID:      targetAgentID,
-		HistoryLimit: c.historyLimit,
+		HistoryLimit: c.HistoryLimit(),
 		TenantID:     c.TenantID(),
 		Metadata:     metadata,
 	})
 
 	// Clear pending history after sending to agent.
 	if mc.ChatType == "group" {
-		c.groupHistory.Clear(chatID)
+		c.GroupHistory().Clear(chatID)
 	}
 }
 

@@ -29,20 +29,17 @@ const (
 // Channel connects to Slack via Socket Mode for event-driven messaging.
 type Channel struct {
 	*channels.BaseChannel
-	api            *slackapi.Client   // Bot Token API client (xoxb-)
-	userAPI        *slackapi.Client   // User Token API client (xoxp-, optional)
-	sm             *socketmode.Client // Socket Mode client (xapp-)
-	config         config.SlackConfig
-	botUserID      string // populated on Start() via auth.test
-	teamID         string // populated on Start() via auth.test
-	requireMention bool   // require @bot in channels (default true)
+	api       *slackapi.Client   // Bot Token API client (xoxb-)
+	userAPI   *slackapi.Client   // User Token API client (xoxp-, optional)
+	sm        *socketmode.Client // Socket Mode client (xapp-)
+	config    config.SlackConfig
+	botUserID string // populated on Start() via auth.test
+	teamID    string // populated on Start() via auth.test
 
-	placeholders    sync.Map // localKey -> placeholderTS
-	dedup           sync.Map // channel+ts -> time.Time
-	threadParticip  sync.Map // channelID+threadTS -> time.Time (auto-reply without @mention)
-	reactions       sync.Map // chatID:messageID -> *reactionState
-	pairingDebounce sync.Map // senderID -> time.Time
-	approvedGroups  sync.Map // channelID -> true
+	placeholders   sync.Map // localKey -> placeholderTS
+	dedup          sync.Map // channel+ts -> time.Time
+	threadParticip sync.Map // channelID+threadTS -> time.Time (auto-reply without @mention)
+	reactions      sync.Map // chatID:messageID -> *reactionState
 
 	// High-churn map: sync.Mutex + regular map for debounce timers
 	debounceMu     sync.Mutex
@@ -52,13 +49,12 @@ type Channel struct {
 	userCacheMu sync.RWMutex
 	userCache   map[string]cachedUser
 
-	pairingService store.PairingStore
-	groupHistory   *channels.PendingHistory
-	historyLimit   int
-	debounceDelay  time.Duration
-	threadTTL      time.Duration  // thread participation expiry (0 = disabled)
-	wg             sync.WaitGroup // tracks goroutines for clean shutdown
-	cancelFn       context.CancelFunc
+	debounceDelay time.Duration
+	threadTTL     time.Duration  // thread participation expiry (0 = disabled)
+	wg            sync.WaitGroup // tracks goroutines for clean shutdown
+	cancelFn      context.CancelFunc
+	// pairingService, pairingDebounce, approvedGroups, groupHistory, historyLimit, requireMention
+	// are inherited from channels.BaseChannel.
 }
 
 type cachedUser struct {
@@ -119,23 +115,24 @@ func New(cfg config.SlackConfig, msgBus *bus.MessageBus, pairingSvc store.Pairin
 		}
 	}
 
-	return &Channel{
+	ch := &Channel{
 		BaseChannel:    base,
 		config:         cfg,
-		requireMention: requireMention,
-		pairingService: pairingSvc,
-		groupHistory:   channels.MakeHistory(channels.TypeSlack, pendingStore, base.TenantID()),
-		historyLimit:   historyLimit,
 		debounceDelay:  debounceDelay,
 		threadTTL:      threadTTL,
 		debounceTimers: make(map[string]*debounceEntry),
 		userCache:      make(map[string]cachedUser),
-	}, nil
+	}
+	ch.SetRequireMention(requireMention)
+	ch.SetPairingService(pairingSvc)
+	ch.SetGroupHistory(channels.MakeHistory(channels.TypeSlack, pendingStore, base.TenantID()))
+	ch.SetHistoryLimit(historyLimit)
+	return ch, nil
 }
 
 // Start opens the Socket Mode connection and begins receiving events.
 func (c *Channel) Start(ctx context.Context) error {
-	c.groupHistory.StartFlusher()
+	c.GroupHistory().StartFlusher()
 	slog.Info("starting slack bot (socket mode)")
 
 	c.api = slackapi.New(
@@ -241,12 +238,7 @@ func (c *Channel) sweepMaps() {
 	}
 	c.userCacheMu.Unlock()
 
-	c.pairingDebounce.Range(func(k, v any) bool {
-		if now.Sub(v.(time.Time)) > pairingDebounceTime*10 {
-			c.pairingDebounce.Delete(k)
-		}
-		return true
-	})
+	// pairingDebounce is on BaseChannel; CanSendPairingNotif uses time.Since, no sweep needed.
 }
 
 // eventLoop processes Socket Mode events.
@@ -275,15 +267,21 @@ func (c *Channel) handleEvent(evt socketmode.Event) {
 
 // SetPendingCompaction configures LLM-based auto-compaction for pending messages.
 func (c *Channel) SetPendingCompaction(cfg *channels.CompactionConfig) {
-	c.groupHistory.SetCompactionConfig(cfg)
+	if gh := c.GroupHistory(); gh != nil {
+		gh.SetCompactionConfig(cfg)
+	}
 }
 
 // SetPendingHistoryTenantID propagates tenant_id to the pending history for DB operations.
-func (c *Channel) SetPendingHistoryTenantID(id uuid.UUID) { c.groupHistory.SetTenantID(id) }
+func (c *Channel) SetPendingHistoryTenantID(id uuid.UUID) {
+	if gh := c.GroupHistory(); gh != nil {
+		gh.SetTenantID(id)
+	}
+}
 
 // Stop gracefully shuts down the Slack channel.
 func (c *Channel) Stop(_ context.Context) error {
-	c.groupHistory.StopFlusher()
+	c.GroupHistory().StopFlusher()
 	slog.Info("stopping slack bot")
 	c.SetRunning(false)
 

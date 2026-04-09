@@ -35,30 +35,27 @@ func init() {
 // Auth state is stored in PostgreSQL (standard) or SQLite (desktop).
 type Channel struct {
 	*channels.BaseChannel
-	client          *whatsmeow.Client
-	container       *sqlstore.Container
-	config          config.WhatsAppConfig
-	mu              sync.Mutex
-	ctx             context.Context
-	cancel          context.CancelFunc
-	parentCtx       context.Context // stored from Start() for Reauth() context chain
-	pairingService  store.PairingStore
-	pairingDebounce sync.Map // senderID → time.Time
-	approvedGroups  sync.Map // chatID → true (in-memory cache for paired groups)
-	groupHistory    *channels.PendingHistory // tracks group messages for context
+	client    *whatsmeow.Client
+	container *sqlstore.Container
+	config    config.WhatsAppConfig
+	mu        sync.Mutex
+	ctx       context.Context
+	cancel    context.CancelFunc
+	parentCtx context.Context // stored from Start() for Reauth() context chain
 
 	// QR state
 	lastQRMu        sync.RWMutex
-	lastQRB64       string     // base64-encoded PNG, empty when authenticated
-	waAuthenticated bool       // true once WhatsApp account is connected
-	myJID           types.JID  // linked account's phone JID for mention detection
-	myLID           types.JID  // linked account's LID — WhatsApp's newer identifier
+	lastQRB64       string    // base64-encoded PNG, empty when authenticated
+	waAuthenticated bool      // true once WhatsApp account is connected
+	myJID           types.JID // linked account's phone JID for mention detection
+	myLID           types.JID // linked account's LID — WhatsApp's newer identifier
 
 	// typingCancel tracks active typing-refresh loops per chatID.
 	typingCancel sync.Map // chatID string → context.CancelFunc
 
 	// reauthMu serializes Reauth() and StartQRFlow() to prevent race when user clicks reauth rapidly.
 	reauthMu sync.Mutex
+	// pairingService, pairingDebounce, approvedGroups, groupHistory are inherited from channels.BaseChannel.
 }
 
 // GetLastQRB64 returns the most recent QR PNG (base64).
@@ -96,13 +93,14 @@ func New(cfg config.WhatsAppConfig, msgBus *bus.MessageBus,
 		return nil, fmt.Errorf("whatsapp sqlstore upgrade: %w", err)
 	}
 
-	return &Channel{
-		BaseChannel:    base,
-		config:         cfg,
-		pairingService: pairingSvc,
-		container:      container,
-		groupHistory:   channels.MakeHistory("whatsapp", pendingStore, base.TenantID()),
-	}, nil
+	ch := &Channel{
+		BaseChannel: base,
+		config:      cfg,
+		container:   container,
+	}
+	ch.SetPairingService(pairingSvc)
+	ch.SetGroupHistory(channels.MakeHistory("whatsapp", pendingStore, base.TenantID()))
+	return ch, nil
 }
 
 // Start initializes the whatsmeow client and connects to WhatsApp.

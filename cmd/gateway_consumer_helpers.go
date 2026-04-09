@@ -75,14 +75,14 @@ func extractSessionMetadata(msg bus.InboundMessage, peerKind string) map[string]
 		meta["display_name"] = v
 	}
 
-	if v := msg.Metadata["username"]; v != "" {
-		meta["username"] = v
+	if v := msg.Metadata[tools.MetaUsername]; v != "" {
+		meta[tools.MetaUsername] = v
 	}
 	if peerKind != "" {
 		meta["peer_kind"] = peerKind
 	}
-	if v := msg.Metadata["chat_title"]; v != "" {
-		meta["chat_title"] = v
+	if v := msg.Metadata[tools.MetaChatTitle]; v != "" {
+		meta[tools.MetaChatTitle] = v
 	}
 
 	if len(meta) == 0 {

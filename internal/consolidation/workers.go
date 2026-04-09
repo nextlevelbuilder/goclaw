@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
-	"github.com/nextlevelbuilder/goclaw/internal/knowledgegraph"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -24,7 +23,7 @@ type ConsolidationDeps struct {
 	EventBus      eventbus.DomainEventBus
 	Provider      providers.Provider // for LLM summarization
 	Model         string
-	Extractor     *knowledgegraph.Extractor
+	Extractor     EntityExtractor
 }
 
 // Register wires all consolidation workers to the event bus.

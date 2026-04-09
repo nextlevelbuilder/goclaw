@@ -190,14 +190,7 @@ func (h *BackupS3Handler) handleUpload(w http.ResponseWriter, r *http.Request) {
 	fileName := ""
 
 	if req.BackupToken != "" {
-		exportTokenMu.Lock()
-		entry, ok := exportTokens[req.BackupToken]
-		if ok && time.Now().After(entry.expiresAt) {
-			delete(exportTokens, req.BackupToken)
-			ok = false
-		}
-		exportTokenMu.Unlock()
-
+		entry, ok := lookupExportToken(req.BackupToken)
 		if !ok {
 			writeError(w, http.StatusNotFound, protocol.ErrNotFound,
 				i18n.T(locale, i18n.MsgNotFound, "backup token", req.BackupToken))

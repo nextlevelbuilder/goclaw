@@ -97,17 +97,17 @@ func (c *Channel) handleGroupMessage(msg protocol.GroupMessage) {
 	}
 
 	// Step 2: @mention gating — record non-mentioned messages in history and return.
-	if c.requireMention {
+	if c.RequireMention() {
 		wasMentioned := c.checkBotMentioned(msg.Data.Mentions)
 		if !wasMentioned {
-			c.groupHistory.Record(threadID, channels.HistoryEntry{
+			c.GroupHistory().Record(threadID, channels.HistoryEntry{
 				Sender:    senderName,
 				SenderID:  senderID,
 				Body:      content,
 				Media:     media,
 				Timestamp: time.Now(),
 				MessageID: msg.Data.MsgID,
-			}, c.historyLimit)
+			}, c.HistoryLimit())
 
 			// Collect contact even when bot is not mentioned (cache prevents DB spam).
 			if cc := c.ContactCollector(); cc != nil {
@@ -131,15 +131,15 @@ func (c *Channel) handleGroupMessage(msg protocol.GroupMessage) {
 	// Step 3: flush pending history + annotate current message with sender name.
 	annotated := fmt.Sprintf("[From: %s]\n%s", senderName, content)
 	finalContent := annotated
-	if c.historyLimit > 0 {
-		finalContent = c.groupHistory.BuildContext(threadID, annotated, c.historyLimit)
+	if c.HistoryLimit() > 0 {
+		finalContent = c.GroupHistory().BuildContext(threadID, annotated, c.HistoryLimit())
 	}
 
 	c.startTyping(threadID, protocol.ThreadTypeGroup)
 
 	// Collect media from pending history entries (images sent before this @mention).
 	// Must come after BuildContext — CollectMedia nulls out Media fields to prevent double-cleanup.
-	histMedia := c.groupHistory.CollectMedia(threadID)
+	histMedia := c.GroupHistory().CollectMedia(threadID)
 	allMedia := append(histMedia, media...)
 
 	// Collect contact for group-mentioned messages.
@@ -156,7 +156,7 @@ func (c *Channel) handleGroupMessage(msg protocol.GroupMessage) {
 	c.HandleMessage(senderID, threadID, finalContent, allMedia, metadata, "group")
 
 	// Clear pending history after sending to agent (matches Telegram/Discord/Slack/Feishu pattern).
-	c.groupHistory.Clear(threadID)
+	c.GroupHistory().Clear(threadID)
 }
 
 // startTyping starts a typing indicator with keepalive for the given thread.

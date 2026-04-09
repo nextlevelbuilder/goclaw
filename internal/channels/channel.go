@@ -22,6 +22,18 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
+// PolicyResult is returned by BaseChannel policy checks.
+type PolicyResult int
+
+const (
+	// PolicyAllow means the message should be processed.
+	PolicyAllow PolicyResult = iota
+	// PolicyDeny means the message should be silently dropped.
+	PolicyDeny
+	// PolicyNeedsPairing means the sender is unpaired; caller should send its platform-specific pairing reply.
+	PolicyNeedsPairing
+)
+
 // InternalChannels are system channels excluded from outbound dispatch.
 // "browser" uses WebSocket directly — no outbound channel routing needed.
 var InternalChannels = map[string]bool{
@@ -164,6 +176,14 @@ type BaseChannel struct {
 	agentID          string                  // for DB instances: routes to specific agent (empty = use resolveAgentRoute)
 	tenantID         uuid.UUID               // for DB instances: tenant scope (zero = master tenant fallback)
 	contactCollector *store.ContactCollector // optional: auto-collect contacts from channel messages
+
+	// Shared policy + pairing fields (set via setters after construction).
+	pairingService  store.PairingStore
+	groupHistory    *PendingHistory
+	historyLimit    int
+	approvedGroups  sync.Map // chatID → true (in-memory cache for paired group approval)
+	pairingDebounce sync.Map // senderID → time.Time (debounce pairing reply sends)
+	requireMention  bool
 }
 
 // NewBaseChannel creates a new BaseChannel with the given parameters.
@@ -210,6 +230,147 @@ func (c *BaseChannel) SetContactCollector(cc *store.ContactCollector) { c.contac
 
 // ContactCollector returns the contact collector (may be nil).
 func (c *BaseChannel) ContactCollector() *store.ContactCollector { return c.contactCollector }
+
+// SetPairingService sets the pairing store used for policy checks and code generation.
+func (c *BaseChannel) SetPairingService(ps store.PairingStore) { c.pairingService = ps }
+
+// PairingService returns the configured pairing store (may be nil).
+func (c *BaseChannel) PairingService() store.PairingStore { return c.pairingService }
+
+// SetGroupHistory sets the pending group history tracker.
+func (c *BaseChannel) SetGroupHistory(gh *PendingHistory) { c.groupHistory = gh }
+
+// GroupHistory returns the pending group history tracker (may be nil).
+func (c *BaseChannel) GroupHistory() *PendingHistory { return c.groupHistory }
+
+// SetHistoryLimit sets the per-group message accumulation limit.
+func (c *BaseChannel) SetHistoryLimit(n int) { c.historyLimit = n }
+
+// HistoryLimit returns the per-group message accumulation limit.
+func (c *BaseChannel) HistoryLimit() int { return c.historyLimit }
+
+// SetRequireMention sets whether @mention is required in group chats.
+func (c *BaseChannel) SetRequireMention(b bool) { c.requireMention = b }
+
+// RequireMention returns whether @mention is required in group chats.
+func (c *BaseChannel) RequireMention() bool { return c.requireMention }
+
+// IsGroupApproved returns true if the group was already approved via pairing.
+func (c *BaseChannel) IsGroupApproved(chatID string) bool {
+	_, ok := c.approvedGroups.Load(chatID)
+	return ok
+}
+
+// MarkGroupApproved caches a group as approved so future messages skip DB lookups.
+func (c *BaseChannel) MarkGroupApproved(chatID string) {
+	c.approvedGroups.Store(chatID, true)
+}
+
+// ClearGroupApproval removes a group from the approval cache.
+func (c *BaseChannel) ClearGroupApproval(chatID string) {
+	c.approvedGroups.Delete(chatID)
+}
+
+// CanSendPairingNotif returns true if debounce period has elapsed for senderID.
+// debounce is the minimum interval between pairing replies to the same sender.
+func (c *BaseChannel) CanSendPairingNotif(senderID string, debounce time.Duration) bool {
+	if lastSent, ok := c.pairingDebounce.Load(senderID); ok {
+		if time.Since(lastSent.(time.Time)) < debounce {
+			return false
+		}
+	}
+	return true
+}
+
+// MarkPairingNotifSent records the current time for senderID debounce tracking.
+func (c *BaseChannel) MarkPairingNotifSent(senderID string) {
+	c.pairingDebounce.Store(senderID, time.Now())
+}
+
+// ClearPairingDebounce removes the debounce entry for a sender, allowing immediate pairing reply.
+func (c *BaseChannel) ClearPairingDebounce(senderID string) {
+	c.pairingDebounce.Delete(senderID)
+}
+
+// CheckDMPolicy evaluates the DM policy for senderID.
+// dmPolicy is one of: "pairing" (default), "open", "allowlist", "disabled".
+// Returns PolicyAllow, PolicyDeny, or PolicyNeedsPairing.
+// When PolicyNeedsPairing is returned, the caller should use its platform-specific
+// pairing reply mechanism (BaseChannel has no knowledge of transport).
+func (c *BaseChannel) CheckDMPolicy(ctx context.Context, senderID, dmPolicy string) PolicyResult {
+	if dmPolicy == "" {
+		dmPolicy = "pairing"
+	}
+	switch dmPolicy {
+	case "disabled":
+		return PolicyDeny
+	case "open":
+		return PolicyAllow
+	case "allowlist":
+		if c.IsAllowed(senderID) {
+			return PolicyAllow
+		}
+		return PolicyDeny
+	default: // "pairing"
+		if c.HasAllowList() && c.IsAllowed(senderID) {
+			return PolicyAllow
+		}
+		if c.pairingService != nil {
+			paired, err := c.pairingService.IsPaired(ctx, senderID, c.name)
+			if err != nil {
+				slog.Warn("security.pairing_check_failed, assuming paired (fail-open)",
+					"sender_id", senderID, "channel", c.name, "error", err)
+				return PolicyAllow
+			}
+			if paired {
+				return PolicyAllow
+			}
+		}
+		return PolicyNeedsPairing
+	}
+}
+
+// CheckGroupPolicy evaluates the group policy for a message.
+// groupPolicy is one of: "open" (default), "allowlist", "disabled", "pairing".
+// chatID is the group chat identifier used for approval caching.
+// Returns PolicyAllow, PolicyDeny, or PolicyNeedsPairing.
+func (c *BaseChannel) CheckGroupPolicy(ctx context.Context, senderID, chatID, groupPolicy string) PolicyResult {
+	if groupPolicy == "" {
+		groupPolicy = "open"
+	}
+	switch groupPolicy {
+	case "disabled":
+		return PolicyDeny
+	case "allowlist":
+		if c.IsAllowed(senderID) {
+			return PolicyAllow
+		}
+		return PolicyDeny
+	case "pairing":
+		if c.HasAllowList() && c.IsAllowed(senderID) {
+			return PolicyAllow
+		}
+		if c.IsGroupApproved(chatID) {
+			return PolicyAllow
+		}
+		groupSenderID := "group:" + chatID
+		if c.pairingService != nil {
+			paired, err := c.pairingService.IsPaired(ctx, groupSenderID, c.name)
+			if err != nil {
+				slog.Warn("security.pairing_check_failed, assuming paired (fail-open)",
+					"group_sender", groupSenderID, "channel", c.name, "error", err)
+				return PolicyAllow
+			}
+			if paired {
+				c.MarkGroupApproved(chatID)
+				return PolicyAllow
+			}
+		}
+		return PolicyNeedsPairing
+	default: // "open"
+		return PolicyAllow
+	}
+}
 
 // IsRunning returns whether the channel is running.
 func (c *BaseChannel) IsRunning() bool {

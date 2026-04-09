@@ -25,16 +25,12 @@ type Channel struct {
 	session         *discordgo.Session
 	config          config.DiscordConfig
 	botUserID       string   // populated on start
-	requireMention  bool     // require @bot mention in groups (default true)
 	placeholders    sync.Map // placeholderKey string → messageID string
 	typingCtrls     sync.Map // channelID string → *typing.Controller
-	pairingService  store.PairingStore
-	pairingDebounce sync.Map // senderID → time.Time
-	approvedGroups  sync.Map // chatID → true (in-memory cache for paired groups)
-	groupHistory    *channels.PendingHistory
-	historyLimit    int
 	agentStore      store.AgentStore            // for agent key lookup (nil = writer commands disabled)
 	configPermStore store.ConfigPermissionStore // for group file writer management (nil = writer commands disabled)
+	// pairingService, pairingDebounce, approvedGroups, groupHistory, historyLimit, requireMention
+	// are inherited from channels.BaseChannel.
 }
 
 // New creates a new Discord channel from config.
@@ -65,22 +61,23 @@ func New(cfg config.DiscordConfig, msgBus *bus.MessageBus, pairingSvc store.Pair
 		historyLimit = channels.DefaultGroupHistoryLimit
 	}
 
-	return &Channel{
+	ch := &Channel{
 		BaseChannel:     base,
 		session:         session,
 		config:          cfg,
-		requireMention:  requireMention,
-		pairingService:  pairingSvc,
-		groupHistory:    channels.MakeHistory(channels.TypeDiscord, pendingStore, base.TenantID()),
-		historyLimit:    historyLimit,
 		agentStore:      agentStore,
 		configPermStore: configPermStore,
-	}, nil
+	}
+	ch.SetRequireMention(requireMention)
+	ch.SetPairingService(pairingSvc)
+	ch.SetGroupHistory(channels.MakeHistory(channels.TypeDiscord, pendingStore, base.TenantID()))
+	ch.SetHistoryLimit(historyLimit)
+	return ch, nil
 }
 
 // Start opens the Discord gateway connection and begins receiving events.
 func (c *Channel) Start(_ context.Context) error {
-	c.groupHistory.StartFlusher()
+	c.GroupHistory().StartFlusher()
 	slog.Info("starting discord bot")
 
 	c.session.AddHandler(c.handleMessage)
@@ -108,15 +105,21 @@ func (c *Channel) BlockReplyEnabled() *bool { return c.config.BlockReply }
 
 // SetPendingCompaction configures LLM-based auto-compaction for pending messages.
 func (c *Channel) SetPendingCompaction(cfg *channels.CompactionConfig) {
-	c.groupHistory.SetCompactionConfig(cfg)
+	if gh := c.GroupHistory(); gh != nil {
+		gh.SetCompactionConfig(cfg)
+	}
 }
 
 // SetPendingHistoryTenantID propagates tenant_id to the pending history for DB operations.
-func (c *Channel) SetPendingHistoryTenantID(id uuid.UUID) { c.groupHistory.SetTenantID(id) }
+func (c *Channel) SetPendingHistoryTenantID(id uuid.UUID) {
+	if gh := c.GroupHistory(); gh != nil {
+		gh.SetTenantID(id)
+	}
+}
 
 // Stop closes the Discord gateway connection.
 func (c *Channel) Stop(_ context.Context) error {
-	c.groupHistory.StopFlusher()
+	c.GroupHistory().StopFlusher()
 	slog.Info("stopping discord bot")
 	c.SetRunning(false)
 	return c.session.Close()

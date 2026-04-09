@@ -7,14 +7,13 @@ import (
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
-	"github.com/nextlevelbuilder/goclaw/internal/knowledgegraph"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // semanticWorker handles episodic.created events → extracts KG facts from summaries.
 type semanticWorker struct {
 	kgStore   store.KnowledgeGraphStore
-	extractor *knowledgegraph.Extractor
+	extractor EntityExtractor
 	eventBus  eventbus.DomainEventBus
 }
 

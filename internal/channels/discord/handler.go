@@ -162,7 +162,7 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 
 	// Mention gating: in groups, only respond when bot is @mentioned (default true).
 	// When not mentioned, record message to pending history for later context.
-	if peerKind == "group" && c.requireMention {
+	if peerKind == "group" && c.RequireMention() {
 		mentioned := false
 		for _, u := range m.Mentions {
 			if u.ID == c.botUserID {
@@ -184,14 +184,14 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 					mediaPaths = append(mediaPaths, mf.Path)
 				}
 			}
-			c.groupHistory.Record(channelID, channels.HistoryEntry{
+			c.GroupHistory().Record(channelID, channels.HistoryEntry{
 				Sender:    senderName,
 				SenderID:  senderID,
 				Body:      content,
 				Media:     mediaPaths,
 				Timestamp: m.Timestamp,
 				MessageID: m.ID,
-			}, c.historyLimit)
+			}, c.HistoryLimit())
 
 			// Collect contact even when bot is not mentioned (cache prevents DB spam).
 			if cc := c.ContactCollector(); cc != nil {
@@ -247,13 +247,13 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 	finalContent := content
 	if peerKind == "group" {
 		annotated := fmt.Sprintf("[From: %s (<@%s>)]\n%s", senderName, senderID, content)
-		if c.historyLimit > 0 {
-			finalContent = c.groupHistory.BuildContext(channelID, annotated, c.historyLimit)
+		if c.HistoryLimit() > 0 {
+			finalContent = c.GroupHistory().BuildContext(channelID, annotated, c.HistoryLimit())
 		} else {
 			finalContent = annotated
 		}
 		// Collect media from pending history entries (sent before this @mention).
-		if histMediaPaths := c.groupHistory.CollectMedia(channelID); len(histMediaPaths) > 0 {
+		if histMediaPaths := c.GroupHistory().CollectMedia(channelID); len(histMediaPaths) > 0 {
 			for _, p := range histMediaPaths {
 				mediaFiles = append(mediaFiles, bus.MediaFile{Path: p})
 			}
@@ -306,105 +306,52 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 
 	// Clear pending history after sending to agent.
 	if peerKind == "group" {
-		c.groupHistory.Clear(channelID)
+		c.GroupHistory().Clear(channelID)
 	}
 }
 
 // checkGroupPolicy evaluates the group policy for a sender, with pairing support.
 func (c *Channel) checkGroupPolicy(ctx context.Context, senderID, channelID string) bool {
-	groupPolicy := c.config.GroupPolicy
-	if groupPolicy == "" {
-		groupPolicy = "open"
-	}
-
-	switch groupPolicy {
-	case "disabled":
-		return false
-	case "allowlist":
-		return c.IsAllowed(senderID)
-	case "pairing":
-		if c.IsAllowed(senderID) {
-			return true
-		}
-		if _, cached := c.approvedGroups.Load(channelID); cached {
-			return true
-		}
+	result := c.CheckGroupPolicy(ctx, senderID, channelID, c.config.GroupPolicy)
+	switch result {
+	case channels.PolicyAllow:
+		return true
+	case channels.PolicyNeedsPairing:
 		groupSenderID := fmt.Sprintf("group:%s", channelID)
-		if c.pairingService != nil {
-			paired, err := c.pairingService.IsPaired(ctx, groupSenderID, c.Name())
-			if err != nil {
-				slog.Warn("security.pairing_check_failed, assuming paired (fail-open)",
-					"group_sender", groupSenderID, "channel", c.Name(), "error", err)
-				paired = true
-			}
-			if paired {
-				c.approvedGroups.Store(channelID, true)
-				return true
-			}
-		}
 		c.sendPairingReply(ctx, groupSenderID, channelID)
 		return false
-	default: // "open"
-		return true
+	default:
+		return false
 	}
 }
 
 // checkDMPolicy evaluates the DM policy for a sender, handling pairing flow.
 func (c *Channel) checkDMPolicy(ctx context.Context, senderID, channelID string) bool {
-	dmPolicy := c.config.DMPolicy
-	if dmPolicy == "" {
-		dmPolicy = "pairing"
-	}
-
-	switch dmPolicy {
-	case "disabled":
-		slog.Debug("discord DM rejected: disabled", "sender_id", senderID)
-		return false
-	case "open":
+	result := c.CheckDMPolicy(ctx, senderID, c.config.DMPolicy)
+	switch result {
+	case channels.PolicyAllow:
 		return true
-	case "allowlist":
-		if !c.IsAllowed(senderID) {
-			slog.Debug("discord DM rejected by allowlist", "sender_id", senderID)
-			return false
-		}
-		return true
-	default: // "pairing"
-		paired := false
-		if c.pairingService != nil {
-			p, err := c.pairingService.IsPaired(ctx, senderID, c.Name())
-			if err != nil {
-				slog.Warn("security.pairing_check_failed, assuming paired (fail-open)",
-					"sender_id", senderID, "channel", c.Name(), "error", err)
-				paired = true
-			} else {
-				paired = p
-			}
-		}
-		inAllowList := c.HasAllowList() && c.IsAllowed(senderID)
-
-		if paired || inAllowList {
-			return true
-		}
-
+	case channels.PolicyNeedsPairing:
 		c.sendPairingReply(ctx, senderID, channelID)
+		return false
+	default:
+		slog.Debug("discord DM rejected by policy", "sender_id", senderID, "policy", c.config.DMPolicy)
 		return false
 	}
 }
 
 // sendPairingReply sends a pairing code to the user via DM.
 func (c *Channel) sendPairingReply(ctx context.Context, senderID, channelID string) {
-	if c.pairingService == nil {
+	ps := c.PairingService()
+	if ps == nil {
 		return
 	}
 
-	// Debounce
-	if lastSent, ok := c.pairingDebounce.Load(senderID); ok {
-		if time.Since(lastSent.(time.Time)) < pairingDebounceTime {
-			return
-		}
+	if !c.CanSendPairingNotif(senderID, pairingDebounceTime) {
+		return
 	}
 
-	code, err := c.pairingService.RequestPairing(ctx, senderID, c.Name(), channelID, "default", nil)
+	code, err := ps.RequestPairing(ctx, senderID, c.Name(), channelID, "default", nil)
 	if err != nil {
 		slog.Debug("discord pairing request failed", "sender_id", senderID, "error", err)
 		return
@@ -418,7 +365,7 @@ func (c *Channel) sendPairingReply(ctx context.Context, senderID, channelID stri
 	if _, err := c.session.ChannelMessageSend(channelID, replyText); err != nil {
 		slog.Warn("failed to send discord pairing reply", "error", err)
 	} else {
-		c.pairingDebounce.Store(senderID, time.Now())
+		c.MarkPairingNotifSent(senderID)
 		slog.Info("discord pairing reply sent", "sender_id", senderID, "code", code)
 	}
 }

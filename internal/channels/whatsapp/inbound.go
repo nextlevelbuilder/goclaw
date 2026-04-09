@@ -90,7 +90,7 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 			if senderLabel == "" {
 				senderLabel = senderID
 			}
-			c.groupHistory.Record(chatID, channels.HistoryEntry{
+			c.GroupHistory().Record(chatID, channels.HistoryEntry{
 				Sender:    senderLabel,
 				SenderID:  senderID,
 				Body:      content,
@@ -100,8 +100,8 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 			return
 		}
 		// Mentioned — prepend accumulated group context.
-		content = c.groupHistory.BuildContext(chatID, content, historyLimit)
-		c.groupHistory.Clear(chatID)
+		content = c.GroupHistory().BuildContext(chatID, content, historyLimit)
+		c.GroupHistory().Clear(chatID)
 	}
 
 	metadata := map[string]string{
@@ -176,7 +176,7 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 	for _, mf := range mediaFiles {
 		tmpPaths = append(tmpPaths, mf.Path)
 	}
-	scheduleMediaCleanup(c.ctx, tmpPaths, 5*time.Minute)
+	scheduleMediaCleanup(tmpPaths, 5*time.Minute)
 }
 
 // extractTextContent extracts text from any WhatsApp message variant.

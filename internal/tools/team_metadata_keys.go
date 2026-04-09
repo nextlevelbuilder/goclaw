@@ -30,6 +30,12 @@ const (
 	MetaCommand          = "command"
 	MetaIsForum          = "is_forum"
 	MetaMessageThreadID  = "message_thread_id"
+	MetaDMThreadID       = "dm_thread_id"
+	MetaChatTitle        = "chat_title"
+	MetaUsername         = "username"
+	MetaUserName         = "user_name"
+	MetaTopicSystemPrompt = "topic_system_prompt"
+	MetaTopicSkills      = "topic_skills"
 )
 
 // Task metadata keys stored in store.TeamTaskData.Metadata.
