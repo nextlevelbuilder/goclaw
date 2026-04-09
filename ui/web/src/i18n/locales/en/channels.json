@@ -483,5 +483,12 @@
     "relinkDevice": "Re-link Device",
     "connectedSuccess": "✅ WhatsApp connected successfully!",
     "tabQrCode": "QR Code"
+  },
+  "teams": {
+    "appPackage": {
+      "download": "Download App Package",
+      "generating": "Generating...",
+      "error": "Failed to generate app package"
+    }
   }
 }

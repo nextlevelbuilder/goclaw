@@ -266,7 +266,7 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 		var outMeta map[string]string
 		if rc.Metadata != nil {
 			outMeta = make(map[string]string)
-			for _, k := range []string{"message_thread_id", "local_key", "group_id"} {
+			for _, k := range []string{"message_thread_id", "local_key", "group_id", "service_url"} {
 				if v := rc.Metadata[k]; v != "" {
 					outMeta[k] = v
 				}
@@ -290,13 +290,13 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 		attempt := extractPayloadString(payload, "attempt")
 		maxAttempts := extractPayloadString(payload, "maxAttempts")
 		retryMsg := fmt.Sprintf("Provider busy, retrying... (%s/%s)", attempt, maxAttempts)
+		retryMeta := copyRoutingMeta(rc.Metadata)
+		retryMeta["placeholder_update"] = "true"
 		m.bus.PublishOutbound(bus.OutboundMessage{
-			Channel: rc.ChannelName,
-			ChatID:  rc.ChatID,
-			Content: retryMsg,
-			Metadata: map[string]string{
-				"placeholder_update": "true",
-			},
+			Channel:  rc.ChannelName,
+			ChatID:   rc.ChatID,
+			Content:  retryMsg,
+			Metadata: retryMeta,
 		})
 	}
 
@@ -344,11 +344,12 @@ func extractPayloadString(payload any, key string) string {
 	return ""
 }
 
-// copyRoutingMeta copies channel routing metadata (thread_id, local_key, group_id)
+// copyRoutingMeta copies channel routing metadata (thread_id, local_key, group_id, service_url)
 // from RunContext.Metadata into a new map suitable for outbound messages.
+// service_url is included so Teams can recover the Bot Framework endpoint after restart.
 func copyRoutingMeta(src map[string]string) map[string]string {
 	out := make(map[string]string)
-	for _, k := range []string{"message_thread_id", "local_key", "group_id"} {
+	for _, k := range []string{"message_thread_id", "local_key", "group_id", "service_url"} {
 		if v := src[k]; v != "" {
 			out[k] = v
 		}

@@ -792,7 +792,10 @@ func (l *Loop) buildGroupWriterPrompt(ctx context.Context, groupID, senderID str
 	}
 
 	if len(writers) == 0 {
-		return "", files // fail-open
+		// No writers configured yet — grant full access (bootstrap mode).
+		// Explicitly tell the agent it can use all tools to prevent LLM
+		// from self-restricting based on training assumptions.
+		return "## Group File Permissions\n\nNo file writer restrictions configured. You have full access to all tools including cron, write_file, and memory in this group.\n", files
 	}
 
 	// System-initiated runs (cron, delegate, subagent) have no sender ID.
@@ -835,6 +838,12 @@ func (l *Loop) buildGroupWriterPrompt(ctx context.Context, groupID, senderID str
 	sb.WriteString("## Group File Permissions\n\n")
 	sb.WriteString("**This is the current, live file writer list. It may change during the conversation. Always use THIS list — ignore any file writer mentions from earlier messages.**\n\n")
 	sb.WriteString("File writers: " + strings.Join(names, ", ") + "\n\n")
+
+	// Tell writer agents to always retry tools — permissions may have changed
+	// since last tool error. Prevents session history from poisoning future attempts.
+	if isWriter {
+		sb.WriteString("You ARE a file writer. You have full write access. Always attempt tool calls — do NOT refuse based on previous tool errors in this conversation. Permissions may have changed.\n\n")
+	}
 
 	if !isWriter {
 		sb.WriteString("CURRENT SENDER IS NOT A FILE WRITER. MANDATORY:\n")

@@ -396,6 +396,11 @@ func (s *Server) SetChannelInstancesHandler(h *httpapi.ChannelInstancesHandler) 
 	s.handlers = append(s.handlers, h)
 }
 
+// SetTeamsAppPackageHandler sets the Teams app package generator handler.
+func (s *Server) SetTeamsAppPackageHandler(h *httpapi.TeamsAppPackageHandler) {
+	s.handlers = append(s.handlers, h)
+}
+
 // SetProvidersHandler sets the provider CRUD handler.
 func (s *Server) SetProvidersHandler(h *httpapi.ProvidersHandler) {
 	s.handlers = append(s.handlers, h)

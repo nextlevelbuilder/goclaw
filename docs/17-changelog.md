@@ -47,6 +47,11 @@ All notable changes to GoClaw Gateway are documented here. Format follows [Keep 
   - `internal/channels/whatsapp/format.go` — HTML-to-WhatsApp message formatting
   - Database-backed auth persistence for cross-platform support
 
+#### Teams App Package Generator
+- **CLI command**: `goclaw teams app-package --name "Bot" -o teams-app.zip`
+- **HTTP API**: `GET /v1/teams/app-package?name=Bot&bot_id=xxx`
+- **Web UI**: Download button on Teams channel detail page
+
 ### Refactored
 
 #### Parallel Sub-Agent Enhancement (#600) (2026-03-31)

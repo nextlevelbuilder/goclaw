@@ -24,7 +24,7 @@ graph LR
 **How it works:**
 - Log in with the gateway token via the built-in web dashboard
 - Create agents, configure LLM providers, chat — all from the dashboard
-- Connect chat channels (Telegram, Discord, etc.) for messaging
+- Connect chat channels (Telegram, Discord, Teams, etc.) for messaging
 - All data lives under the default "master" tenant — no tenant config needed
 
 **Setup:**
@@ -104,7 +104,7 @@ graph TB
 
 **How it works:**
 - Each tenant's **backend connects via a tenant-bound API key** — GoClaw auto-scopes all data
-- **Chat channels** (Telegram, Discord, etc.) connect directly — tenant resolved from channel instance config
+- **Chat channels** (Telegram, Discord, Teams, etc.) connect directly — tenant resolved from channel instance config
 - The **Tenant Isolation Layer** resolves tenant_id from credentials and injects it into Go context
 - Every SQL query enforces `WHERE tenant_id = $N` — fail-closed, no cross-tenant leakage
 
@@ -247,7 +247,7 @@ After `connect`, **all methods are auto-scoped** to the API key's tenant. Events
 
 ## Chat Channels
 
-Chat channels (Telegram, Discord, Zalo, Slack, WhatsApp, Feishu) connect **directly** to GoClaw — no API key needed. Tenant isolation is baked into the channel instance at registration time.
+Chat channels (Telegram, Discord, Teams, Zalo, Slack, WhatsApp, Feishu) connect **directly** to GoClaw — no API key needed. Tenant isolation is baked into the channel instance at registration time.
 
 ```mermaid
 sequenceDiagram

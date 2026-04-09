@@ -545,6 +545,26 @@ Per-agent entity-relation graph.
 | `PUT` | `/v1/channels/instances/{id}` | Update instance |
 | `DELETE` | `/v1/channels/instances/{id}` | Delete instance (not default) |
 
+### Teams App Package
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/teams/app-package` | Generate Teams app manifest ZIP |
+
+**Query parameters:**
+- `name` (required) — Bot display name (≤30 chars, alphanumeric + spaces)
+- `bot_id` (optional) — Azure App Registration ID. If omitted, resolved from `instance_id`
+- `instance_id` (optional) — UUID of Teams channel instance. Used to auto-populate `bot_id` if available
+- `full_name` (optional) — Full name (≤100 chars, defaults to `name`)
+- `description` (optional) — Short description (≤80 chars, defaults to "AI assistant powered by GoClaw")
+- `developer` (optional) — Developer name (defaults to "GoClaw")
+
+**Response:** ZIP file containing `manifest.json` (Teams 1.19 schema) and icon PNG files (192x192 color + 32x32 outline). Download header includes safe filename: `teams-app-{name}.zip`
+
+**Errors:**
+- `400 Bad Request` — Missing `name`, invalid `instance_id`, or invalid parameters
+- `401 Unauthorized` — Missing or invalid Bearer token
+
 ### Contacts
 
 | Method | Path | Description |
@@ -571,7 +591,7 @@ Per-agent entity-relation graph.
 | `POST` | `/v1/channels/instances/{id}/writers` | Add writer to group |
 | `DELETE` | `/v1/channels/instances/{id}/writers/{userId}` | Remove writer |
 
-**Supported channels:** `telegram`, `discord`, `slack`, `whatsapp`, `zalo_oa`, `zalo_personal`, `feishu`
+**Supported channels:** `telegram`, `discord`, `slack`, `whatsapp`, `zalo_oa`, `zalo_personal`, `feishu`, `teams`
 
 Credentials are masked in HTTP responses.
 

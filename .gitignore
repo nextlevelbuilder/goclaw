@@ -88,3 +88,4 @@ compose.d/*
 /mise.*.toml
 /mise
 /.mise
+internal/webui/dist

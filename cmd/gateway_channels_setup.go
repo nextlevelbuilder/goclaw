@@ -14,6 +14,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels/discord"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/feishu"
 	slackchannel "github.com/nextlevelbuilder/goclaw/internal/channels/slack"
+	teamschannel "github.com/nextlevelbuilder/goclaw/internal/channels/teams"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/telegram"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/whatsapp"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/zalo"
@@ -134,6 +135,35 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 			slog.Info("feishu/lark channel enabled (config)")
 		}
 	}
+
+}
+
+// registerTeamsChannel registers Teams from config for backward compatibility.
+// DB instances are also supported via teams.Factory registered in the instance loader.
+// DB instances are also supported via teams.Factory registered in the instance loader.
+func registerTeamsChannel(cfg *config.Config, channelMgr *channels.Manager, msgBus *bus.MessageBus) {
+	if !cfg.Channels.Teams.Enabled {
+		return
+	}
+	if cfg.Channels.Teams.BotID == "" {
+		channelMgr.RecordHealth(channels.TypeTeams, channels.NewChannelHealthForType(
+			channels.TypeTeams,
+			channels.ChannelHealthStateFailed,
+			"Missing credentials",
+			"Set channels.teams.bot_id in config.",
+			channels.ChannelFailureKindConfig,
+			false,
+		))
+		return
+	}
+	t, err := teamschannel.New(cfg.Channels.Teams, msgBus)
+	if err != nil {
+		channelMgr.RecordFailure(channels.TypeTeams, "", err)
+		slog.Error("failed to initialize teams channel", "error", err)
+		return
+	}
+	channelMgr.RegisterChannel(channels.TypeTeams, t)
+	slog.Info("teams channel enabled (config)")
 }
 
 // wireChannelRPCMethods registers WS RPC methods for channels, instances, agent links, and teams.

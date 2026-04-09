@@ -105,15 +105,22 @@ func (m *Manager) dispatchOutbound(ctx context.Context) {
 }
 
 // WebhookHandlers returns all webhook handlers from channels that implement WebhookChannel.
-// Used to mount webhook routes on the main gateway mux.
+// Used to mount webhook routes on the main gateway mux. Deduplicates by path so that
+// multiple channels sharing the same webhook path (e.g. config + DB instance) don't panic.
 func (m *Manager) WebhookHandlers() []WebhookRoute {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
+	seen := make(map[string]bool)
 	var routes []WebhookRoute
 	for _, ch := range m.channels {
 		if wh, ok := ch.(WebhookChannel); ok {
 			if path, handler := wh.WebhookHandler(); path != "" && handler != nil {
+				if seen[path] {
+					slog.Warn("webhook path already mounted, skipping duplicate", "path", path, "channel", ch.Name())
+					continue
+				}
+				seen[path] = true
 				routes = append(routes, WebhookRoute{Path: path, Handler: handler})
 			}
 		}
