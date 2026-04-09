@@ -104,7 +104,7 @@ export function VaultDetailDialog({ doc, open, onOpenChange, onDeleted }: Props)
 
                 {/* Path + badges */}
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
-                  <span className="text-xs-plus font-mono text-muted-foreground truncate max-w-[400px]" title={doc.path}>
+                  <span className="text-xs-plus font-mono text-muted-foreground truncate max-w-[400px] direction-rtl text-left" dir="rtl" title={doc.path}>
                     {doc.path}
                   </span>
                   {editMode ? (
@@ -215,7 +215,7 @@ export function VaultDetailDialog({ doc, open, onOpenChange, onDeleted }: Props)
 
             {/* Hash + link count as subtle footer */}
             <div className="flex items-center justify-between text-2xs text-muted-foreground border-t pt-2">
-              <span className="font-mono">SHA-256: {doc.content_hash.slice(0, 16)}...</span>
+              <span className="font-mono">SHA-256: {doc.content_hash.length > 16 ? `${doc.content_hash.slice(0, 8)}...${doc.content_hash.slice(-8)}` : doc.content_hash}</span>
               {linkCount > 0 && <span>{linkCount} link{linkCount !== 1 ? "s" : ""}</span>}
             </div>
 
