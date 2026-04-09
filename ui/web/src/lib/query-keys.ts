@@ -35,6 +35,7 @@ export const queryKeys = {
     all: ["channels"] as const,
     list: (params: Record<string, unknown>) => ["channels", params] as const,
     detail: (id: string) => ["channels", "detail", id] as const,
+    whatsappGroups: (id: string) => ["channels", id, "whatsapp-groups"] as const,
   },
   contacts: {
     all: ["contacts"] as const,

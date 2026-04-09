@@ -9,6 +9,7 @@ import { ChannelHeader } from "./channel-header";
 import { ChannelGeneralTab } from "./channel-general-tab";
 import { ChannelCredentialsTab } from "./channel-credentials-tab";
 import { ChannelGroupsTab } from "./channel-groups-tab";
+import { ChannelWhatsAppGroupsTab } from "./channel-whatsapp-groups-tab";
 import { ChannelManagersTab } from "./channel-managers-tab";
 import { ChannelAdvancedDialog } from "./channel-advanced-dialog";
 import { ChannelDiagnosticsCard } from "./channel-diagnostics-card";
@@ -36,10 +37,11 @@ const baseChannelDetailTabs = new Set(["general", "credentials", "managers"]);
 export function resolveChannelDetailTab(
   requestedTab: string | null,
   isTelegram: boolean,
+  isWhatsApp: boolean,
 ) {
   if (!requestedTab) return DEFAULT_CHANNEL_DETAIL_TAB;
   if (requestedTab === "groups") {
-    return isTelegram ? "groups" : DEFAULT_CHANNEL_DETAIL_TAB;
+    return (isTelegram || isWhatsApp) ? "groups" : DEFAULT_CHANNEL_DETAIL_TAB;
   }
   return baseChannelDetailTabs.has(requestedTab)
     ? requestedTab
@@ -81,6 +83,8 @@ export function ChannelDetailPage({
   })();
 
   const isTelegram = instance?.channel_type === "telegram";
+  const isWhatsApp = instance?.channel_type === "whatsapp";
+  const showGroupsTab = isTelegram || isWhatsApp;
   const supportsReauth = instance
     ? channelsWithAuth.has(instance.channel_type)
     : false;
@@ -90,8 +94,8 @@ export function ChannelDetailPage({
 
   useEffect(() => {
     if (!instance) return;
-    setActiveTab(resolveChannelDetailTab(searchParams.get("tab"), isTelegram));
-  }, [instance, isTelegram, searchParams]);
+    setActiveTab(resolveChannelDetailTab(searchParams.get("tab"), isTelegram, isWhatsApp));
+  }, [instance, isTelegram, isWhatsApp, searchParams]);
 
   useEffect(() => {
     if (!instance) return;
@@ -248,7 +252,7 @@ export function ChannelDetailPage({
               <TabsTrigger value="credentials">
                 {t("detail.tabs.credentials")}
               </TabsTrigger>
-              {isTelegram && (
+              {showGroupsTab && (
                 <TabsTrigger value="groups">
                   {t("detail.tabs.groups")}
                 </TabsTrigger>
@@ -273,13 +277,21 @@ export function ChannelDetailPage({
               />
             </TabsContent>
 
-            {isTelegram && (
+            {showGroupsTab && (
               <TabsContent value="groups" className="mt-4">
-                <ChannelGroupsTab
-                  instance={instance}
-                  onUpdate={updateInstance}
-                  listManagerGroups={listManagerGroups}
-                />
+                {isTelegram && (
+                  <ChannelGroupsTab
+                    instance={instance}
+                    onUpdate={updateInstance}
+                    listManagerGroups={listManagerGroups}
+                  />
+                )}
+                {isWhatsApp && (
+                  <ChannelWhatsAppGroupsTab
+                    instance={instance}
+                    onUpdate={updateInstance}
+                  />
+                )}
               </TabsContent>
             )}
 

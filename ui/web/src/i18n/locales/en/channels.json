@@ -482,6 +482,32 @@
     "alreadyLinkedDetail": "WhatsApp is connected. To link a different device, click Re-link — this will log out the current session.",
     "relinkDevice": "Re-link Device",
     "connectedSuccess": "✅ WhatsApp connected successfully!",
-    "tabQrCode": "QR Code"
+    "tabQrCode": "QR Code",
+    "groups": {
+      "title": "WhatsApp Groups",
+      "description": "Assign agents to specific WhatsApp groups. Groups without an assignment inherit the channel's default agent.",
+      "discovered": "Discovered Groups",
+      "noGroups": "No WhatsApp groups discovered. The bot must be connected and joined to groups first.",
+      "groupName": "Group Name",
+      "jid": "JID",
+      "memberCount": "{{count}} members",
+      "assignAgent": "Assign Agent",
+      "inheritAgent": "Inherit (default)",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "configured": "Configured",
+      "notConfigured": "Not configured",
+      "addGroupManually": "Add group manually",
+      "jidPlaceholder": "Group JID (e.g. 123456789@g.us)",
+      "add": "Add",
+      "save": "Save Changes",
+      "saving": "Saving...",
+      "saved": "Saved",
+      "removeGroup": "Remove group",
+      "count": "{{count}} groups",
+      "noAgentOverride": "inherits default",
+      "displayName": "Display Name",
+      "displayNamePlaceholder": "Friendly name for this group"
+    }
   }
 }

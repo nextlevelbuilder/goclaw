@@ -536,6 +536,13 @@ func runGateway() {
 	// Channel manager
 	channelMgr := channels.NewManager(msgBus)
 
+	// Wire WhatsApp group lister for HTTP API
+	if channelInstancesH != nil {
+		adapter := &waGroupListerAdapter{mgr: channelMgr}
+		channelInstancesH.SetWhatsAppGroupLister(adapter)
+		channelInstancesH.SetWhatsAppGroupRefresher(adapter)
+	}
+
 	// Wire channel sender + tenant checker on message tool (now that channelMgr exists)
 	if t, ok := toolsReg.Get("message"); ok {
 		if cs, ok := t.(tools.ChannelSenderAware); ok {

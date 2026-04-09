@@ -22,6 +22,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway/methods"
+	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
@@ -261,4 +262,43 @@ func wireChannelEventSubscribers(
 			}()
 		})
 	}
+}
+
+// waGroupListerAdapter adapts the channels.Manager to the http.WhatsAppGroupLister interface.
+// This avoids the HTTP package depending on the channels package.
+type waGroupListerAdapter struct {
+	mgr *channels.Manager
+}
+
+func (a *waGroupListerAdapter) ListWhatsAppGroups(channelName string) []httpapi.WhatsAppGroupInfo {
+	ch, ok := a.mgr.GetChannel(channelName)
+	if !ok {
+		return nil
+	}
+	provider, ok := ch.(interface{ GetCachedGroupsRaw() []whatsapp.WAGroupDiscovery })
+	if !ok {
+		return nil
+	}
+	raw := provider.GetCachedGroupsRaw()
+	result := make([]httpapi.WhatsAppGroupInfo, len(raw))
+	for i, g := range raw {
+		result[i] = httpapi.WhatsAppGroupInfo{
+			JID:         g.JID,
+			Name:        g.Name,
+			MemberCount: g.MemberCount,
+		}
+	}
+	return result
+}
+
+func (a *waGroupListerAdapter) RefreshWhatsAppGroups(channelName string) {
+	ch, ok := a.mgr.GetChannel(channelName)
+	if !ok {
+		return
+	}
+	provider, ok := ch.(interface{ RefreshGroups() })
+	if !ok {
+		return
+	}
+	provider.RefreshGroups()
 }
