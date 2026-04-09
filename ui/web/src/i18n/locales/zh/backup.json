@@ -17,7 +17,10 @@
       "workspace": "工作区",
       "freeDisk": "可用磁盘空间",
       "warnings": "警告",
-      "refresh": "刷新"
+      "refresh": "刷新",
+      "pgDumpMissing": "pg_dump 不可用",
+      "pgDumpHint": "安装 postgresql-client 以启用数据库备份。",
+      "goToPackages": "前往软件包"
     },
     "options": {
       "includeDb": "包含数据库",

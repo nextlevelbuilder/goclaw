@@ -44,10 +44,38 @@ func (h *BackupHandler) RegisterRoutes(mux *http.ServeMux) {
 		requireAuth(permissions.RoleAdmin, h.handleDownload))
 }
 
+// preflightHTTPResponse is the flat JSON shape consumed by the web UI.
+type preflightHTTPResponse struct {
+	PgDumpAvailable    bool     `json:"pg_dump_available"`
+	DiskSpaceOK        bool     `json:"disk_space_ok"`
+	DbSizeBytes        int64    `json:"db_size_bytes"`
+	DbSizeHuman        string   `json:"db_size_human"`
+	FreeDiskBytes      int64    `json:"free_disk_bytes"`
+	FreeDiskHuman      string   `json:"free_disk_human"`
+	DataDirSizeBytes   int64    `json:"data_dir_size_bytes"`
+	DataDirSizeHuman   string   `json:"data_dir_size_human"`
+	WorkspaceSizeBytes int64    `json:"workspace_size_bytes"`
+	WorkspaceSizeHuman string   `json:"workspace_size_human"`
+	Warnings           []string `json:"warnings"`
+}
+
 // handlePreflight returns a preflight check result for the backup operation.
 func (h *BackupHandler) handlePreflight(w http.ResponseWriter, r *http.Request) {
 	result := backup.RunPreflight(r.Context(), h.dsn, h.cfg.ResolvedDataDir(), h.cfg.WorkspacePath())
-	writeJSON(w, http.StatusOK, result)
+	resp := preflightHTTPResponse{
+		PgDumpAvailable:    result.PgDumpAvailable,
+		DiskSpaceOK:        result.DiskSpaceOK,
+		DbSizeBytes:        result.DbSizeBytes,
+		DbSizeHuman:        backup.FormatBytes(result.DbSizeBytes),
+		FreeDiskBytes:      result.FreeDiskBytes,
+		FreeDiskHuman:      backup.FormatBytes(result.FreeDiskBytes),
+		DataDirSizeBytes:   result.DataDirSizeBytes,
+		DataDirSizeHuman:   backup.FormatBytes(result.DataDirSizeBytes),
+		WorkspaceSizeBytes: result.WorkspaceSizeBytes,
+		WorkspaceSizeHuman: backup.FormatBytes(result.WorkspaceSizeBytes),
+		Warnings:           result.Warnings,
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // handleBackup runs the backup as an SSE-streamed operation.

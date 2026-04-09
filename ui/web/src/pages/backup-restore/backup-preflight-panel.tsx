@@ -1,6 +1,8 @@
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router";
 import { CheckCircle2, XCircle, RefreshCw, AlertTriangle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useBackupPreflight } from "./hooks/use-backup-preflight";
 
 export function BackupPreflightPanel() {
@@ -55,7 +57,7 @@ export function BackupPreflightPanel() {
         </div>
       ))}
 
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-muted-foreground pt-1">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-sm text-muted-foreground pt-1">
         {info.map((i) => (
           <div key={i.label} className="flex justify-between">
             <span>{i.label}</span>
@@ -80,6 +82,21 @@ export function BackupPreflightPanel() {
         <p className="text-xs text-destructive">
           {t("backup.preflight.critical", { defaultValue: "Critical checks failed. Backup may not work correctly." })}
         </p>
+      )}
+
+      {!data.pg_dump_available && (
+        <Alert className="border-amber-200/70 bg-amber-50/70 text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-100">
+          <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-300" />
+          <AlertTitle className="text-amber-900 dark:text-amber-100">
+            {t("backup.preflight.pgDumpMissing")}
+          </AlertTitle>
+          <AlertDescription className="text-xs text-amber-800 dark:text-amber-200">
+            {t("backup.preflight.pgDumpHint")}{" "}
+            <Link to="/packages" className="underline font-medium hover:text-amber-950 dark:hover:text-amber-50">
+              {t("backup.preflight.goToPackages")}
+            </Link>
+          </AlertDescription>
+        </Alert>
       )}
     </div>
   );

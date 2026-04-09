@@ -1,6 +1,7 @@
 import { useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { PageHeader } from "@/components/shared/page-header";
 import { useTenants } from "@/hooks/use-tenants";
 import { SystemBackupPanel } from "./system-backup-panel";
 import { SystemRestorePanel } from "./system-restore-panel";
@@ -22,10 +23,7 @@ export function BackupRestorePage() {
 
   return (
     <div className="p-4 sm:p-6 pb-10 space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{t("description")}</p>
-      </div>
+      <PageHeader title={t("title")} description={t("description")} />
 
       <div className="mx-auto max-w-3xl">
         <Tabs value={tab} onValueChange={setTab}>
