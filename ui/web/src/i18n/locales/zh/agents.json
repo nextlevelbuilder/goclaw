@@ -195,6 +195,21 @@
         "minimalDesc": "子代理/定时 — 最少必要部分",
         "none": "无",
         "noneDesc": "仅身份行 — API/webhook集成"
+      },
+      "section": {
+        "persona": "人设",
+        "styleEcho": "风格回声",
+        "tools": "工具",
+        "safety": "安全",
+        "safetySm": "安全(精简)",
+        "skills": "技能",
+        "mcp": "MCP",
+        "memory": "记忆",
+        "memorySm": "记忆(精简)",
+        "sandbox": "沙盒",
+        "evolution": "进化",
+        "workspace": "工作区",
+        "identityOnly": "仅身份"
       }
     },
     "engine": {

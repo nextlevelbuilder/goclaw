@@ -21,6 +21,22 @@ const MODE_ICONS: Record<(typeof PROMPT_MODES)[number], LucideIcon> = {
   none: CircleOff,
 };
 
+/** Section tag keys per mode — maps to i18n detail.prompt.section.* */
+const MODE_SECTIONS: Record<(typeof PROMPT_MODES)[number], string[]> = {
+  full: ["persona", "tools", "safety", "skills", "mcp", "memory", "sandbox", "evolution"],
+  task: ["styleEcho", "tools", "safetySm", "skills", "mcp", "memorySm"],
+  minimal: ["tools", "safety", "workspace"],
+  none: ["identityOnly"],
+};
+
+/** Estimated base token range per mode (excluding context files) */
+const MODE_TOKENS: Record<(typeof PROMPT_MODES)[number], string> = {
+  full: "~2-4K",
+  task: "~1-2K",
+  minimal: "~300-600",
+  none: "~10",
+};
+
 export function PromptSettingsSection({ agent, onUpdate }: Props) {
   const { t } = useTranslation("agents");
   const savedMode = readPromptMode(agent);
@@ -61,6 +77,7 @@ export function PromptSettingsSection({ agent, onUpdate }: Props) {
         {PROMPT_MODES.map((m) => {
           const Icon = MODE_ICONS[m] as LucideIcon;
           const selected = mode === m;
+          const sections = MODE_SECTIONS[m];
           return (
             <button
               key={m}
@@ -77,16 +94,31 @@ export function PromptSettingsSection({ agent, onUpdate }: Props) {
                 "h-4 w-4 shrink-0 mt-0.5",
                 selected ? "text-primary" : "text-muted-foreground",
               )} />
-              <div className="min-w-0 flex-1">
-                <span className={cn(
-                  "text-xs font-medium",
-                  selected && "text-primary",
-                )}>
-                  {t(`detail.prompt.mode.${m}`)}
-                </span>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="flex items-center justify-between gap-1">
+                  <span className={cn(
+                    "text-xs font-medium",
+                    selected && "text-primary",
+                  )}>
+                    {t(`detail.prompt.mode.${m}`)}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground/70 tabular-nums shrink-0">
+                    {MODE_TOKENS[m]}
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
                   {t(`detail.prompt.mode.${m}Desc`)}
                 </p>
+                <div className="flex flex-wrap gap-1">
+                  {sections.map((s) => (
+                    <span
+                      key={s}
+                      className="inline-block rounded bg-muted px-1.5 py-0.5 text-[9px] leading-tight text-muted-foreground"
+                    >
+                      {t(`detail.prompt.section.${s}`)}
+                    </span>
+                  ))}
+                </div>
               </div>
             </button>
           );

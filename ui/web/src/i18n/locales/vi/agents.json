@@ -195,6 +195,21 @@
         "minimalDesc": "Subagent/cron — chỉ các phần tối thiểu",
         "none": "Không",
         "noneDesc": "Chỉ dòng định danh — tích hợp API/webhook"
+      },
+      "section": {
+        "persona": "Nhân cách",
+        "styleEcho": "Phong cách",
+        "tools": "Công cụ",
+        "safety": "An toàn",
+        "safetySm": "An toàn (gọn)",
+        "skills": "Skills",
+        "mcp": "MCP",
+        "memory": "Bộ nhớ",
+        "memorySm": "Bộ nhớ (gọn)",
+        "sandbox": "Sandbox",
+        "evolution": "Tiến hóa",
+        "workspace": "Workspace",
+        "identityOnly": "Chỉ định danh"
       }
     },
     "engine": {

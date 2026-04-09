@@ -203,6 +203,21 @@
         "minimalDesc": "Subagent/cron — bare minimum sections",
         "none": "None",
         "noneDesc": "Identity line only — API/webhook integrations"
+      },
+      "section": {
+        "persona": "Persona",
+        "styleEcho": "Style Echo",
+        "tools": "Tools",
+        "safety": "Safety",
+        "safetySm": "Safety (slim)",
+        "skills": "Skills",
+        "mcp": "MCP",
+        "memory": "Memory",
+        "memorySm": "Memory (slim)",
+        "sandbox": "Sandbox",
+        "evolution": "Evolution",
+        "workspace": "Workspace",
+        "identityOnly": "Identity only"
       }
     },
     "engine": {
