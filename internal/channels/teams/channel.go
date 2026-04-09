@@ -150,6 +150,15 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 
 	serviceURL, ok := c.serviceURLs.Load(msg.ChatID)
 	if !ok {
+		// Fallback: extract serviceURL from message metadata (survives restart).
+		// The inbound webhook handler stores service_url in metadata.
+		if surl := msg.Metadata["service_url"]; surl != "" && isValidServiceURL(surl) {
+			c.storeServiceURL(msg.ChatID, surl)
+			serviceURL = surl
+			ok = true
+		}
+	}
+	if !ok {
 		return fmt.Errorf("teams: no serviceURL for conversation %s", msg.ChatID)
 	}
 
