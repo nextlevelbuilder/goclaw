@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
@@ -67,6 +68,13 @@ func FactoryWithDB(db *sql.DB, pendingStore store.PendingMessageStore, dialect s
 			}
 			if json.Unmarshal(cfg, &wrapper) == nil {
 				waCfg.Groups = wrapper.Groups
+			}
+		}
+
+		if len(waCfg.Groups) > 0 {
+			slog.Info("whatsapp group overrides loaded", "name", name, "count", len(waCfg.Groups))
+			for jid, gc := range waCfg.Groups {
+				slog.Info("whatsapp group override", "jid", jid, "agent_id", gc.AgentID, "enabled", gc.Enabled)
 			}
 		}
 

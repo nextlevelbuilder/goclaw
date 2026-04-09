@@ -14,6 +14,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -149,15 +150,21 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 
 	// Resolve group-specific agent override.
 	targetAgentID := c.AgentID()
-	if peerKind == "group" && c.config.Groups != nil {
-		if grp, ok := c.config.Groups[chatID]; ok && grp != nil {
-			if grp.Enabled != nil && !*grp.Enabled {
-				slog.Debug("whatsapp group message rejected: group disabled", "chat_id", chatID)
-				return
-			}
-			if grp.AgentID != "" {
-				targetAgentID = grp.AgentID
-				slog.Debug("whatsapp group agent override", "chat_id", chatID, "agent_id", targetAgentID)
+	if peerKind == "group" {
+		slog.Info("whatsapp group routing", "chat_id", chatID, "default_agent", targetAgentID,
+			"groups_count", len(c.config.Groups))
+		if c.config.Groups != nil {
+			if grp, ok := c.config.Groups[chatID]; ok && grp != nil {
+				if grp.Enabled != nil && !*grp.Enabled {
+					slog.Info("whatsapp group message rejected: group disabled", "chat_id", chatID)
+					return
+				}
+				if grp.AgentID != "" {
+					targetAgentID = grp.AgentID
+					slog.Info("whatsapp group agent override applied", "chat_id", chatID, "agent_id", targetAgentID)
+				}
+			} else {
+				slog.Info("whatsapp group no override found", "chat_id", chatID, "available_keys", groupKeys(c.config.Groups))
 			}
 		}
 	}
@@ -283,4 +290,13 @@ func (c *Channel) isMentioned(evt *events.Message) bool {
 		}
 	}
 	return false
+}
+
+// groupKeys returns the keys of the groups map for logging.
+func groupKeys(m map[string]*config.WhatsAppGroupConfig) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }

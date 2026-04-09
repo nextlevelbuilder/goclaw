@@ -218,6 +218,25 @@ func (s *PGChannelInstanceStore) Update(ctx context.Context, id uuid.UUID, updat
 		}
 		updates["credentials"] = credsBytes
 	}
+
+	// Marshal config to JSON bytes for JSONB column.
+	// The HTTP/WS handlers decode JSON into map[string]any, which may not
+	// serialize correctly to JSONB via database/sql parameter encoding.
+	if cfgVal, ok := updates["config"]; ok {
+		if cfgVal == nil {
+			updates["config"] = []byte("null")
+		} else {
+			switch cfgVal.(type) {
+			case json.RawMessage, []byte:
+				// Already raw JSON bytes — use as-is.
+			default:
+				if b, err := json.Marshal(cfgVal); err == nil {
+					updates["config"] = json.RawMessage(b)
+				}
+			}
+		}
+	}
+
 	updates["updated_at"] = time.Now()
 	if store.IsCrossTenant(ctx) {
 		return execMapUpdate(ctx, s.db, "channel_instances", id, updates)
