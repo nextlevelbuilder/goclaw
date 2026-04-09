@@ -268,10 +268,10 @@ func (p *GitHubCopilotProvider) processSSEEvent(event *codexSSEEvent, result *Ch
 	case "response.output_text.delta":
 		streamState.recordTextDelta(event.ItemID, event.OutputIndex, event.ContentIndex, event.Delta, result, onChunk)
 	case "response.output_text.done":
-		streamState.recordFinalText(event.ItemID, event.OutputIndex, event.ContentIndex, event.Text, result, onChunk)
+		streamState.rememberFinalText(event.ItemID, event.OutputIndex, event.ContentIndex, event.Text)
 	case "response.content_part.done":
 		if event.Part != nil && event.Part.Type == "output_text" {
-			streamState.recordFinalText(event.ItemID, event.OutputIndex, event.ContentIndex, event.Part.Text, result, onChunk)
+			streamState.rememberFinalText(event.ItemID, event.OutputIndex, event.ContentIndex, event.Part.Text)
 		}
 	case "response.function_call_arguments.delta":
 		if event.ItemID != "" {
@@ -287,7 +287,6 @@ func (p *GitHubCopilotProvider) processSSEEvent(event *codexSSEEvent, result *Ch
 			switch event.Item.Type {
 			case "message":
 				streamState.registerMessageItem(event.ItemID, event.OutputIndex, event.Item)
-				streamState.flushMessage(codexEventItemKey(event.ItemID, event.Item), result, onChunk)
 				streamState.updateResultPhase(result)
 			case "function_call":
 				acc := toolCalls[event.Item.ID]
@@ -315,7 +314,9 @@ func (p *GitHubCopilotProvider) processSSEEvent(event *codexSSEEvent, result *Ch
 		if event.Response != nil {
 			if result.Content == "" {
 				streamState.ingestCompletedResponse(event.Response)
-				streamState.flushCompletedResponse(result, onChunk)
+				if best := streamState.bestCompletedMessage(); best != nil {
+					appendCodexContent(result, best.normalizedText(), onChunk)
+				}
 				streamState.updateResultPhase(result)
 			}
 			if event.Response.Usage != nil {
