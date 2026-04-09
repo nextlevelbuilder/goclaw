@@ -27,7 +27,9 @@ const (
 	UserFile           = "USER.md"
 	UserPredefinedFile = "USER_PREDEFINED.md"
 	BootstrapFile      = "BOOTSTRAP.md"
-	DelegationFile   = "DELEGATION.md"
+	CapabilitiesFile = "CAPABILITIES.md"
+	AgentsMinimalFile = "AGENTS_MINIMAL.md"
+	DelegationFile    = "DELEGATION.md"
 	TeamFile         = "TEAM.md"
 	AvailabilityFile = "AVAILABILITY.md"
 	HeartbeatFile  = "HEARTBEAT.md"
@@ -44,13 +46,16 @@ var standardFiles = []string{
 	IdentityFile,
 	UserFile,
 	BootstrapFile,
+	CapabilitiesFile,
 }
 
 // minimalAllowlist is the set of files loaded for subagent/cron sessions.
 // Matching TS MINIMAL_BOOTSTRAP_ALLOWLIST.
 var minimalAllowlist = map[string]bool{
-	AgentsFile: true,
-	ToolsFile:  true,
+	AgentsFile:         true,
+	ToolsFile:          true,
+	UserPredefinedFile: true, // baseline language + communication rules
+	CapabilitiesFile:   true, // domain expertise always needed
 }
 
 // File represents a workspace bootstrap file loaded from disk.
@@ -91,15 +96,22 @@ func LoadWorkspaceFiles(workspaceDir string) []File {
 }
 
 // FilterForSession filters bootstrap files based on session type.
-// Normal sessions get all files. Subagent and cron sessions get only
-// AGENTS.md and TOOLS.md (minimal mode), matching TS filterBootstrapFilesForSession().
+// Normal sessions get all files. Subagent/cron/heartbeat get allowlisted files.
+// Heartbeat additionally swaps full AGENTS.md for slim AGENTS_MINIMAL.md.
 func FilterForSession(files []File, sessionKey string) []File {
 	if !IsSubagentSession(sessionKey) && !IsCronSession(sessionKey) && !IsHeartbeatSession(sessionKey) {
 		return files
 	}
 
+	useSlimAgents := IsHeartbeatSession(sessionKey)
 	var filtered []File
 	for _, f := range files {
+		if f.Name == AgentsFile && useSlimAgents {
+			if slim, err := ReadTemplate(AgentsMinimalFile); err == nil {
+				filtered = append(filtered, File{Name: AgentsMinimalFile, Content: slim})
+			}
+			continue
+		}
 		if minimalAllowlist[f.Name] {
 			filtered = append(filtered, f)
 		}
@@ -126,7 +138,7 @@ func IsCronSession(sessionKey string) bool {
 // IsHeartbeatSession checks if a session key indicates a heartbeat session.
 func IsHeartbeatSession(sessionKey string) bool {
 	rest := sessionRest(sessionKey)
-	return strings.HasPrefix(rest, "heartbeat")
+	return strings.HasPrefix(strings.ToLower(rest), "heartbeat")
 }
 
 // IsTeamSession checks if a session key indicates a team-dispatched task session.

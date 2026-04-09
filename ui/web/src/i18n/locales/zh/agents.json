@@ -212,7 +212,8 @@
         "memorySm": "记忆(精简)",
         "sandbox": "沙盒",
         "evolution": "进化",
-        "channelHints": "频道提示"
+        "channelHints": "频道提示",
+        "pinnedSkills": "固定技能"
       }
     },
     "engine": {

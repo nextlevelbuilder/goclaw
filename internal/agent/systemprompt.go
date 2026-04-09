@@ -63,12 +63,19 @@ func resolvePromptMode(runtimeOverride PromptMode, sessionKey string, configMode
 	if runtimeOverride != "" {
 		return runtimeOverride
 	}
-	// Layer 2: Auto-detect for subagent/cron — cap at minimal
-	if bootstrap.IsSubagentSession(sessionKey) || bootstrap.IsCronSession(sessionKey) || bootstrap.IsHeartbeatSession(sessionKey) {
+	// Layer 2a: Heartbeat — keep minimal (simple periodic check)
+	if bootstrap.IsHeartbeatSession(sessionKey) {
 		if configMode != "" {
 			return minMode(configMode, PromptMinimal)
 		}
 		return PromptMinimal
+	}
+	// Layer 2b: Subagent/cron — cap at task (needs memory slim, skills search, exec bias)
+	if bootstrap.IsSubagentSession(sessionKey) || bootstrap.IsCronSession(sessionKey) {
+		if configMode != "" {
+			return minMode(configMode, PromptTask)
+		}
+		return PromptTask
 	}
 	// Layer 3: Agent config
 	if configMode != "" {
@@ -338,6 +345,11 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 		} else {
 			lines = append(lines, buildSkillsSection(cfg.SkillsSummary, cfg.HasSkillSearch, cfg.HasSkillManage)...)
 		}
+	}
+
+	// 4.1. Pinned skills — minimal mode standalone (pinned skills are explicitly chosen, always relevant)
+	if isMinimal && !cfg.IsBootstrap && cfg.PinnedSkillsSummary != "" {
+		lines = append(lines, buildPinnedSkillsMinimalSection(cfg.PinnedSkillsSummary)...)
 	}
 
 	// 4.5. ## MCP Tools — full + task (task: search-only, no inline)

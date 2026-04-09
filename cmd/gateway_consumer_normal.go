@@ -358,6 +358,7 @@ func processNormalMessage(
 		LocalKey:          msg.Metadata["local_key"],
 		UserID:            userID,
 		SenderID:          msg.SenderID,
+		SenderName:        resolveSenderName(msg),
 		RunID:             runID,
 		Stream:            enableStream,
 		HistoryLimit:      msg.HistoryLimit,

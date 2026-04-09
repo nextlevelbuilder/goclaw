@@ -33,6 +33,7 @@ var summoningFiles = []string{
 	bootstrap.SoulFile,
 	bootstrap.IdentityFile,
 	bootstrap.UserPredefinedFile,
+	bootstrap.CapabilitiesFile,
 }
 
 // fileTagRe parses <file name="SOUL.md">content</file> from LLM output.
@@ -137,6 +138,14 @@ func (s *AgentSummoner) SummonAgent(agentID uuid.UUID, tenantID uuid.UUID, provi
 				slog.Warn("summoning: failed to store SOUL.md", "agent", agentID, "error", storeErr)
 			} else {
 				s.emitEvent(agentID, tenantID, SummonEventFileGenerated, bootstrap.SoulFile, "")
+			}
+		}
+		// CAPABILITIES.md is generated alongside SOUL.md in the first call
+		if capContent := soulFiles[bootstrap.CapabilitiesFile]; capContent != "" {
+			if storeErr := s.agents.SetAgentContextFile(ctx, agentID, bootstrap.CapabilitiesFile, capContent); storeErr != nil {
+				slog.Warn("summoning: failed to store CAPABILITIES.md", "agent", agentID, "error", storeErr)
+			} else {
+				s.emitEvent(agentID, tenantID, SummonEventFileGenerated, bootstrap.CapabilitiesFile, "")
 			}
 		}
 	}

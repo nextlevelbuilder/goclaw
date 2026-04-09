@@ -96,6 +96,7 @@ func (h *AgentsHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/agents/{id}/regenerate", h.adminMiddleware(h.handleRegenerate))
 	mux.HandleFunc("POST /v1/agents/{id}/resummon", h.adminMiddleware(h.handleResummon))
 	// Export (agent owner or system owner)
+	mux.HandleFunc("GET /v1/agents/{id}/system-prompt-preview", h.adminMiddleware(h.handleSystemPromptPreview))
 	mux.HandleFunc("GET /v1/agents/{id}/export/preview", h.authMiddleware(h.handleExportPreview))
 	mux.HandleFunc("GET /v1/agents/{id}/export", h.authMiddleware(h.handleExport))
 	mux.HandleFunc("GET /v1/agents/{id}/export/download/{token}", h.authMiddleware(h.handleExportDownload))
@@ -186,8 +187,8 @@ func (h *AgentsHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 		req.TenantID = store.TenantIDFromContext(r.Context())
 	}
 
-	if req.AgentType == "" {
-		req.AgentType = store.AgentTypeOpen
+	if req.AgentType == "" || req.AgentType == store.AgentTypeOpen {
+		req.AgentType = store.AgentTypePredefined // v3: open agents deprecated, default to predefined
 	}
 	if req.ContextWindow <= 0 {
 		req.ContextWindow = config.DefaultContextWindow

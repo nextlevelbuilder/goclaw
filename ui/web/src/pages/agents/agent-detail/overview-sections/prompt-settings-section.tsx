@@ -22,21 +22,22 @@ const MODE_ICONS: Record<(typeof PROMPT_MODES)[number], LucideIcon> = {
 };
 
 /**
- * Section tags per mode — accurate to systemprompt.go gating logic.
- * Context files, workspace, time are shared across all modes so not listed.
+ * Section tags per mode — accurate to systemprompt.go gating logic (v3).
+ * Context files (AGENTS, TOOLS, USER_PREDEFINED, CAPABILITIES), workspace, time shared across all modes.
+ * Subagent/cron use task mode. Heartbeat uses minimal with AGENTS_MINIMAL.
  */
 const MODE_SECTIONS: Record<(typeof PROMPT_MODES)[number], string[]> = {
   full: ["persona", "tools", "execBias", "callStyle", "safety", "skills", "mcp", "memory", "sandbox", "evolution", "channelHints"],
-  task: ["styleEcho", "tools", "execBias", "safetySm", "skillsSearch", "mcpSearch", "memorySm"],
-  minimal: ["tools", "safety"],
+  task: ["styleEcho", "tools", "execBias", "safetySm", "skillsSearch", "mcpSearch", "memorySm", "pinnedSkills"],
+  minimal: ["tools", "safety", "pinnedSkills"],
   none: [],
 };
 
-/** Token count per mode — measured via tiktoken (cl100k) on production agent (tieu-ho) */
+/** Token count per mode — measured via tiktoken (cl100k) on production agent (tieu-ho), v3 updated */
 const MODE_TOKENS: Record<(typeof PROMPT_MODES)[number], string> = {
-  full: "~3.1K",
-  task: "~2.2K",
-  minimal: "~1.9K",
+  full: "~3.2K",
+  task: "~2.3K",
+  minimal: "~1.4K",
   none: "~6",
 };
 

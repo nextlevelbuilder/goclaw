@@ -52,7 +52,6 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
 
   const provider = watch("provider");
   const model = watch("model");
-  const agentType = watch("agentType");
   const agentKey = watch("agentKey");
   const displayName = watch("displayName");
 
@@ -120,7 +119,7 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
 
   const canCreate = !!agentKey && !!displayName && !!provider && !!model &&
     !errors.agentKey && !errors.displayName &&
-    (agentType !== "predefined" || !!watch("description")?.trim());
+    !!watch("description")?.trim();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

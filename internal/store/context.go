@@ -42,6 +42,8 @@ const (
 	// CredentialUserIDKey holds the resolved tenant user identity for credential lookups.
 	// Falls back to UserIDFromContext if not set.
 	CredentialUserIDKey contextKey = "goclaw_credential_user_id"
+	// SenderNameKey is the display name from channel metadata (for bootstrap auto-contact).
+	SenderNameKey contextKey = "goclaw_sender_name"
 )
 
 // WithShellDenyGroups returns a new context with shell deny group overrides.
@@ -144,6 +146,17 @@ func AgentKeyFromContext(ctx context.Context) string {
 // WithSenderID returns a new context with the original individual sender ID.
 func WithSenderID(ctx context.Context, id string) context.Context {
 	return context.WithValue(ctx, SenderIDKey, id)
+}
+
+// WithSenderName returns a new context with the sender display name from channel metadata.
+func WithSenderName(ctx context.Context, name string) context.Context {
+	return context.WithValue(ctx, SenderNameKey, name)
+}
+
+// SenderNameFromContext extracts the sender display name. Returns "" if not set.
+func SenderNameFromContext(ctx context.Context) string {
+	v, _ := ctx.Value(SenderNameKey).(string)
+	return v
 }
 
 // SenderIDFromContext extracts the sender ID from context. Returns "" if not set.

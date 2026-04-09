@@ -151,8 +151,8 @@ func TestModeResolutionRuntimeWins(t *testing.T) {
 
 func TestModeResolutionSubagentAutoDetect(t *testing.T) {
 	mode := resolvePromptMode("", "agent:abc:subagent:xyz", PromptTask)
-	if mode != PromptMinimal {
-		t.Errorf("subagent should cap at minimal, got %s", mode)
+	if mode != PromptTask {
+		t.Errorf("subagent should cap at task, got %s", mode)
 	}
 }
 
@@ -219,6 +219,203 @@ func TestPinnedSkillsMax10(t *testing.T) {
 	pinned := ag.ParsePinnedSkills()
 	if len(pinned) != 10 {
 		t.Errorf("expected 10 pinned skills, got %d", len(pinned))
+	}
+}
+
+// --- Phase 1 TDD: New behavior tests ---
+
+func TestModeResolutionCronTask(t *testing.T) {
+	// Cron sessions should cap at task (not minimal)
+	mode := resolvePromptMode("", "agent:abc:cron:daily-report", "")
+	if mode != PromptTask {
+		t.Errorf("cron should resolve to task, got %s", mode)
+	}
+}
+
+func TestModeResolutionCronConfigCapped(t *testing.T) {
+	// Cron with config=full should be capped at task
+	mode := resolvePromptMode("", "agent:abc:cron:daily", PromptFull)
+	if mode != PromptTask {
+		t.Errorf("cron with config=full should cap at task, got %s", mode)
+	}
+}
+
+func TestModeResolutionHeartbeatMinimal(t *testing.T) {
+	// Heartbeat stays minimal (no change from current)
+	mode := resolvePromptMode("", "agent:abc:heartbeat", "")
+	if mode != PromptMinimal {
+		t.Errorf("heartbeat should stay minimal, got %s", mode)
+	}
+}
+
+func TestModeResolutionHeartbeatConfigCapped(t *testing.T) {
+	mode := resolvePromptMode("", "agent:abc:heartbeat", PromptFull)
+	if mode != PromptMinimal {
+		t.Errorf("heartbeat with config=full should cap at minimal, got %s", mode)
+	}
+}
+
+func TestModeResolutionDelegateUsesConfig(t *testing.T) {
+	// Delegate key starts with "delegate:", not "agent:" → sessionRest returns ""
+	// → falls through to config mode, no auto-detect cap
+	mode := resolvePromptMode("", "delegate:abc:target-agent", PromptFull)
+	if mode != PromptFull {
+		t.Errorf("delegate should use config mode (full), got %s", mode)
+	}
+}
+
+func TestModeResolutionSubagentTaskCap(t *testing.T) {
+	// Subagent with config=full should cap at task (not minimal)
+	mode := resolvePromptMode("", "agent:abc:subagent:xyz", PromptFull)
+	if mode != PromptTask {
+		t.Errorf("subagent with config=full should cap at task, got %s", mode)
+	}
+}
+
+func TestPinnedSkillsMinimalMode(t *testing.T) {
+	cfg := SystemPromptConfig{
+		Mode:                PromptMinimal,
+		PinnedSkillsSummary: "<available_skills><skill><name>weather</name></skill></available_skills>",
+		ToolNames:           []string{"exec", "read_file"},
+	}
+	prompt := BuildSystemPrompt(cfg)
+	if !strings.Contains(prompt, "<available_skills>") {
+		t.Error("minimal mode should include pinned skills XML")
+	}
+}
+
+func TestMinimalAllowlistIncludesUserPredefined(t *testing.T) {
+	files := []bootstrap.File{
+		{Name: "AGENTS.md", Content: "rules"},
+		{Name: "TOOLS.md", Content: "tools"},
+		{Name: "USER_PREDEFINED.md", Content: "user rules"},
+		{Name: "SOUL.md", Content: "persona"},
+	}
+	filtered := bootstrap.FilterForSession(files, "agent:abc:subagent:xyz")
+	found := false
+	for _, f := range filtered {
+		if f.Name == "USER_PREDEFINED.md" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("USER_PREDEFINED.md should be in minimal allowlist")
+	}
+	// SOUL.md should NOT be included
+	for _, f := range filtered {
+		if f.Name == "SOUL.md" {
+			t.Error("SOUL.md should not be in minimal allowlist")
+		}
+	}
+}
+
+// --- Phase 2 TDD: Context file restructuring tests ---
+
+func TestCapabilitiesInStableContextFiles(t *testing.T) {
+	files := []bootstrap.ContextFile{
+		{Path: "AGENTS.md", Content: "rules"},
+		{Path: "CAPABILITIES.md", Content: "expertise"},
+		{Path: "USER.md", Content: "user"},
+	}
+	stable, dynamic := splitStableDynamicContextFiles(files)
+	found := false
+	for _, f := range stable {
+		if f.Path == "CAPABILITIES.md" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("CAPABILITIES.md should be in stable context files")
+	}
+	for _, f := range dynamic {
+		if f.Path == "CAPABILITIES.md" {
+			t.Error("CAPABILITIES.md should not be in dynamic files")
+		}
+	}
+}
+
+func TestCapabilitiesInMinimalAllowlist(t *testing.T) {
+	files := []bootstrap.File{
+		{Name: "AGENTS.md", Content: "rules"},
+		{Name: "CAPABILITIES.md", Content: "expertise"},
+		{Name: "SOUL.md", Content: "persona"},
+	}
+	filtered := bootstrap.FilterForSession(files, "agent:abc:subagent:xyz")
+	found := false
+	for _, f := range filtered {
+		if f.Name == "CAPABILITIES.md" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("CAPABILITIES.md should pass minimal allowlist")
+	}
+}
+
+func TestHeartbeatGetsAgentsMinimal(t *testing.T) {
+	files := []bootstrap.File{
+		{Name: "AGENTS.md", Content: "full rules"},
+		{Name: "TOOLS.md", Content: "tools"},
+		{Name: "CAPABILITIES.md", Content: "expertise"},
+	}
+	filtered := bootstrap.FilterForSession(files, "agent:abc:heartbeat")
+	for _, f := range filtered {
+		if f.Name == "AGENTS.md" {
+			t.Error("heartbeat should NOT get full AGENTS.md")
+		}
+		if f.Name == "AGENTS_MINIMAL.md" && f.Content == "" {
+			t.Error("AGENTS_MINIMAL.md should have content")
+		}
+	}
+	// Should have AGENTS_MINIMAL.md
+	hasMinimal := false
+	for _, f := range filtered {
+		if f.Name == "AGENTS_MINIMAL.md" {
+			hasMinimal = true
+		}
+	}
+	if !hasMinimal {
+		t.Error("heartbeat should get AGENTS_MINIMAL.md")
+	}
+}
+
+func TestSubagentKeepsFullAgents(t *testing.T) {
+	files := []bootstrap.File{
+		{Name: "AGENTS.md", Content: "full rules"},
+		{Name: "TOOLS.md", Content: "tools"},
+	}
+	filtered := bootstrap.FilterForSession(files, "agent:abc:subagent:xyz")
+	hasFullAgents := false
+	for _, f := range filtered {
+		if f.Name == "AGENTS.md" {
+			hasFullAgents = true
+		}
+	}
+	if !hasFullAgents {
+		t.Error("subagent (now task mode) should keep full AGENTS.md")
+	}
+}
+
+func TestCapabilitiesNotPersonaFile(t *testing.T) {
+	files := []bootstrap.ContextFile{
+		{Path: "SOUL.md", Content: "persona"},
+		{Path: "CAPABILITIES.md", Content: "expertise"},
+		{Path: "AGENTS.md", Content: "rules"},
+	}
+	persona, other := splitPersonaFiles(files)
+	for _, f := range persona {
+		if f.Path == "CAPABILITIES.md" {
+			t.Error("CAPABILITIES.md should not be a persona file")
+		}
+	}
+	found := false
+	for _, f := range other {
+		if f.Path == "CAPABILITIES.md" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("CAPABILITIES.md should be in other files (not persona)")
 	}
 }
 

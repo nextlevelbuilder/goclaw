@@ -180,6 +180,18 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		hadBootstrap = false
 	}
 
+	// Bootstrap auto-contact: inject known sender info from channel metadata.
+	// DM only — group chats have permission checks and multiple senders.
+	if hadBootstrap && peerKind == "direct" {
+		if senderName := store.SenderNameFromContext(ctx); senderName != "" {
+			hint := fmt.Sprintf("Known user info (from %s): Name=%q\nDefault timezone: Asia/Saigon (GMT+7). User can correct this.", channelType, senderName)
+			if extraSystemPrompt != "" {
+				extraSystemPrompt += "\n\n"
+			}
+			extraSystemPrompt += hint
+		}
+	}
+
 	// Group writer restrictions: filter context files + inject prompt
 	if l.configPermStore != nil && (strings.HasPrefix(userID, "group:") || strings.HasPrefix(userID, "guild:")) {
 		senderID := store.SenderIDFromContext(ctx)

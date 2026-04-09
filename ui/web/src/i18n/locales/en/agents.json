@@ -220,7 +220,8 @@
         "memorySm": "Memory (slim)",
         "sandbox": "Sandbox",
         "evolution": "Evolution",
-        "channelHints": "Channel Hints"
+        "channelHints": "Channel Hints",
+        "pinnedSkills": "Pinned Skills"
       }
     },
     "engine": {

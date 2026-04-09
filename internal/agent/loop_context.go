@@ -63,6 +63,10 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 	if req.SenderID != "" {
 		ctx = store.WithSenderID(ctx, req.SenderID)
 	}
+	// Inject sender display name for bootstrap auto-contact
+	if req.SenderName != "" {
+		ctx = store.WithSenderName(ctx, req.SenderName)
+	}
 	// Inject global builtin tool settings for media tools (provider chain)
 	if l.builtinToolSettings != nil {
 		ctx = tools.WithBuiltinToolSettings(ctx, l.builtinToolSettings)

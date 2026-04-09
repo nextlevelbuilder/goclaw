@@ -67,8 +67,8 @@ func (m *AgentsMethods) handleCreate(ctx context.Context, client *gateway.Client
 	}
 
 	agentType := params.AgentType
-	if agentType == "" {
-		agentType = store.AgentTypeOpen
+	if agentType == "" || agentType == store.AgentTypeOpen {
+		agentType = store.AgentTypePredefined // v3: open agents deprecated, default to predefined
 	}
 
 	agentID := config.NormalizeAgentID(params.Name)

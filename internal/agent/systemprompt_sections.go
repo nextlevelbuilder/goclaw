@@ -124,6 +124,7 @@ var stableContextFileNames = map[string]bool{
 	bootstrap.AgentsFile:         true,
 	bootstrap.ToolsFile:          true,
 	bootstrap.UserPredefinedFile: true,
+	bootstrap.CapabilitiesFile:   true,
 }
 
 // splitStableDynamicContextFiles separates context files into stable (agent-level,
@@ -138,6 +139,18 @@ func splitStableDynamicContextFiles(files []bootstrap.ContextFile) (stable, dyna
 		}
 	}
 	return
+}
+
+// buildPinnedSkillsMinimalSection generates a slim pinned-skills-only section for minimal mode.
+// No search/manage — just inline the pinned tools so subagent/cron can use them.
+func buildPinnedSkillsMinimalSection(pinnedSummary string) []string {
+	return []string{
+		"## Pinned Skills",
+		"",
+		"The following skills are always available:",
+		pinnedSummary,
+		"",
+	}
 }
 
 // buildSkillsHybridSection generates a hybrid skills section: pinned skills inline + search for rest.

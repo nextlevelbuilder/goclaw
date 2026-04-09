@@ -36,9 +36,7 @@ _(Customize these to match your agent's personality.)_
 - **Length:** Default short. Go deep only when the topic deserves it.
 - **Formality:** Match the user. If they say "yo" don't reply with "Kính gửi..."
 
-## Expertise
-
-_(Optional — add domain-specific knowledge, technical skills, or specialized instructions here. Remove this placeholder when customizing.)_
+_(For domain expertise and technical skills, see CAPABILITIES.md)_
 
 ## Continuity
 

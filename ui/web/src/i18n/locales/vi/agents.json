@@ -212,7 +212,8 @@
         "memorySm": "Bộ nhớ (gọn)",
         "sandbox": "Sandbox",
         "evolution": "Tiến hóa",
-        "channelHints": "Channel Hints"
+        "channelHints": "Channel Hints",
+        "pinnedSkills": "Pinned Skills"
       }
     },
     "engine": {

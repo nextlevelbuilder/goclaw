@@ -10,7 +10,7 @@ export const agentCreateSchema = z.object({
     .refine(isValidSlug, "Only lowercase letters, numbers, and hyphens"),
   provider: z.string().min(1, "Required"),
   model: z.string().min(1, "Required"),
-  agentType: z.enum(["open", "predefined"]),
+  agentType: z.enum(["predefined"]),
   description: z.string().optional(),
   selfEvolve: z.boolean(),
 });
