@@ -29,11 +29,11 @@ const MODE_SECTIONS: Record<(typeof PROMPT_MODES)[number], string[]> = {
   none: ["identityOnly"],
 };
 
-/** Estimated token range per mode: base (~measured via tiktoken) + typical context files */
+/** Token range per mode measured via tiktoken (cl100k) across bare→heavy configs */
 const MODE_TOKENS: Record<(typeof PROMPT_MODES)[number], string> = {
-  full: "~1.7K+",
-  task: "~1.1K+",
-  minimal: "~660",
+  full: "~500–2.9K",
+  task: "~350–1.2K",
+  minimal: "~350–820",
   none: "~6",
 };
 
