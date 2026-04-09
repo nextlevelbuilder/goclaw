@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { FileText, Eye } from "lucide-react";
+import { FileText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { BootstrapFile } from "@/types/agent";
 
@@ -90,22 +90,6 @@ export function FileSidebar({
         })}
       </div>
 
-      {/* Preview separator + item */}
-      <div className="my-2 border-t border-border/50" />
-      <div className="space-y-0.5">
-        <button
-          type="button"
-          onClick={() => onSelect(PREVIEW_SENTINEL)}
-          className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] transition-colors ${
-            selectedFile === PREVIEW_SENTINEL
-              ? "bg-background text-foreground shadow-sm cursor-pointer"
-              : "text-foreground hover:bg-background/60 cursor-pointer"
-          }`}
-        >
-          <Eye className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          <span>{t("files.systemPromptPreview")}</span>
-        </button>
-      </div>
     </div>
   );
 }

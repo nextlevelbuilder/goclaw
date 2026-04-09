@@ -102,6 +102,7 @@ export function useVaultLinks(agentId: string, docId: string | null) {
       `/v1/agents/${agentId}/vault/documents/${docId}/links`,
     ),
     enabled: !!docId && !!agentId,
+    placeholderData: (prev) => prev,
   });
 
   return {
@@ -123,6 +124,7 @@ export function useVaultFileContent(path: string | null) {
     enabled: !!path,
     staleTime: 30_000,
     retry: false,
+    placeholderData: (prev) => prev,
   });
 
   return { content: data?.content ?? null, size: data?.size ?? 0, loading: isLoading, error: !!error };

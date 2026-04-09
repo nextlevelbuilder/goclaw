@@ -179,13 +179,13 @@ export function VaultDetailDialog({ doc, open, onOpenChange, onDeleted }: Props)
             {loading ? (
               <div className="h-8 animate-pulse rounded-md bg-muted" />
             ) : (
-              <div className="flex items-start gap-4 text-xs">
+              <div className="flex items-center gap-4 text-xs">
                 <div className="flex items-center gap-1.5 text-muted-foreground shrink-0">
                   <Link2 className="h-3.5 w-3.5" />
                   <span>{t("detail.outlinks")} ({outlinks.length})</span>
                 </div>
                 {outlinks.length > 0 ? (
-                  <div className="flex flex-wrap gap-1 flex-1">
+                  <div className="flex flex-wrap items-center gap-1 flex-1">
                     {outlinks.map((l) => (
                       <LinkBadge key={l.id} link={l} agentId={doc.agent_id} t={t} />
                     ))}

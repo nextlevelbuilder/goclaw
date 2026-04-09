@@ -16,9 +16,7 @@ import {
   FileEditor,
   RegenerateDialog,
   OpenAgentEmptyState,
-  SystemPromptPreview,
 } from "./file-sections";
-import { PREVIEW_SENTINEL } from "./file-sections/file-sidebar";
 
 interface AgentFilesTabProps {
   agent: AgentData;
@@ -156,24 +154,18 @@ export function AgentFilesTab({
           onSelect={setSelectedFile}
           isUserScoped={isUserScoped}
         />
-        {selectedFile === PREVIEW_SENTINEL ? (
-          <div className="flex-1 min-w-0">
-            <SystemPromptPreview agentKey={agent.agent_key} />
-          </div>
-        ) : (
-          <FileEditor
-            fileName={selectedFile}
-            content={content}
-            onChange={handleContentChange}
-            loading={loading}
-            dirty={dirty}
-            saving={saving}
-            canEdit={canEdit}
-            onSave={handleSave}
-            headerActions={aiActions || undefined}
-            contactSearchEnabled={isPredefined}
-          />
-        )}
+        <FileEditor
+          fileName={selectedFile}
+          content={content}
+          onChange={handleContentChange}
+          loading={loading}
+          dirty={dirty}
+          saving={saving}
+          canEdit={canEdit}
+          onSave={handleSave}
+          headerActions={aiActions || undefined}
+          contactSearchEnabled={isPredefined}
+        />
       </div>
 
       {onRegenerate && (

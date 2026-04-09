@@ -2,6 +2,9 @@ import { useState } from "react";
 import { Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { useDeleteLink } from "./hooks/use-vault";
 import type { VaultLink } from "@/types/vault";
 
@@ -61,15 +64,16 @@ interface DocTypeSelectProps {
 
 export function DocTypeSelect({ value, onChange, t }: DocTypeSelectProps) {
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-full text-base md:text-sm border rounded px-1.5 py-1 bg-background mt-0.5"
-    >
-      {DOC_TYPES.map((dt) => (
-        <option key={dt} value={dt}>{t(`type.${dt}`)}</option>
-      ))}
-    </select>
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className="h-6 w-auto text-[10px] px-1.5 py-0 gap-1">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent className="pointer-events-auto">
+        {DOC_TYPES.map((dt) => (
+          <SelectItem key={dt} value={dt} className="text-xs">{t(`type.${dt}`)}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
@@ -81,15 +85,16 @@ interface ScopeSelectProps {
 
 export function ScopeSelect({ value, onChange, t }: ScopeSelectProps) {
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-full text-base md:text-sm border rounded px-1.5 py-1 bg-background mt-0.5"
-    >
-      {SCOPES.map((s) => (
-        <option key={s} value={s}>{t(`scope.${s}`)}</option>
-      ))}
-    </select>
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className="h-6 w-auto text-[10px] px-1.5 py-0 gap-1">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent className="pointer-events-auto">
+        {SCOPES.map((s) => (
+          <SelectItem key={s} value={s} className="text-xs">{t(`scope.${s}`)}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 

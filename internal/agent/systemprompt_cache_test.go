@@ -54,8 +54,8 @@ func TestTimeSectionDateOnly(t *testing.T) {
 	after = strings.TrimSuffix(after, " (UTC)")
 	after = strings.TrimSpace(after)
 	// Format is "2006-01-02 Monday" — no ":" should appear in the date/weekday part.
-	parts := strings.Fields(after)
-	for _, p := range parts {
+	parts := strings.FieldsSeq(after)
+	for p := range parts {
 		if strings.Count(p, ":") >= 2 {
 			t.Errorf("time section contains time component: %s", dateLine)
 		}
