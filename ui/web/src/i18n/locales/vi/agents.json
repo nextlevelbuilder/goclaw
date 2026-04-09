@@ -200,16 +200,19 @@
         "persona": "Nhân cách",
         "styleEcho": "Phong cách",
         "tools": "Công cụ",
+        "execBias": "Exec Bias",
+        "callStyle": "Call Style",
         "safety": "An toàn",
         "safetySm": "An toàn (gọn)",
         "skills": "Skills",
+        "skillsSearch": "Skills (tìm)",
         "mcp": "MCP",
+        "mcpSearch": "MCP (tìm)",
         "memory": "Bộ nhớ",
         "memorySm": "Bộ nhớ (gọn)",
         "sandbox": "Sandbox",
         "evolution": "Tiến hóa",
-        "workspace": "Workspace",
-        "identityOnly": "Chỉ định danh"
+        "channelHints": "Channel Hints"
       }
     },
     "engine": {

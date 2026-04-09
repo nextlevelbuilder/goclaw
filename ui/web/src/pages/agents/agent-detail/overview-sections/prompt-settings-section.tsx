@@ -21,15 +21,18 @@ const MODE_ICONS: Record<(typeof PROMPT_MODES)[number], LucideIcon> = {
   none: CircleOff,
 };
 
-/** Section tag keys per mode — maps to i18n detail.prompt.section.* */
+/**
+ * Section tags per mode — accurate to systemprompt.go gating logic.
+ * Context files, workspace, time are shared across all modes so not listed.
+ */
 const MODE_SECTIONS: Record<(typeof PROMPT_MODES)[number], string[]> = {
-  full: ["persona", "tools", "safety", "skills", "mcp", "memory", "sandbox", "evolution"],
-  task: ["styleEcho", "tools", "safetySm", "skills", "mcp", "memorySm"],
-  minimal: ["tools", "safety", "workspace"],
-  none: ["identityOnly"],
+  full: ["persona", "tools", "execBias", "callStyle", "safety", "skills", "mcp", "memory", "sandbox", "evolution", "channelHints"],
+  task: ["styleEcho", "tools", "execBias", "safetySm", "skillsSearch", "mcpSearch", "memorySm"],
+  minimal: ["tools", "safety"],
+  none: [],
 };
 
-/** Token range per mode — measured via tiktoken (cl100k) on production agents */
+/** Token count per mode — measured via tiktoken (cl100k) on production agent (tieu-ho) */
 const MODE_TOKENS: Record<(typeof PROMPT_MODES)[number], string> = {
   full: "~3.1K",
   task: "~2.2K",
@@ -78,6 +81,7 @@ export function PromptSettingsSection({ agent, onUpdate }: Props) {
           const Icon = MODE_ICONS[m] as LucideIcon;
           const selected = mode === m;
           const sections = MODE_SECTIONS[m];
+          const tokens = MODE_TOKENS[m];
           return (
             <button
               key={m}
@@ -102,23 +106,27 @@ export function PromptSettingsSection({ agent, onUpdate }: Props) {
                   )}>
                     {t(`detail.prompt.mode.${m}`)}
                   </span>
-                  <span className="text-[10px] text-muted-foreground/70 tabular-nums shrink-0">
-                    {MODE_TOKENS[m]}
-                  </span>
+                  {m !== "none" && (
+                    <span className="text-[10px] text-muted-foreground/70 tabular-nums shrink-0">
+                      {tokens}
+                    </span>
+                  )}
                 </div>
                 <p className="text-[11px] text-muted-foreground">
                   {t(`detail.prompt.mode.${m}Desc`)}
                 </p>
-                <div className="flex flex-wrap gap-1">
-                  {sections.map((s) => (
-                    <span
-                      key={s}
-                      className="inline-block rounded bg-muted px-1.5 py-0.5 text-[9px] leading-tight text-muted-foreground"
-                    >
-                      {t(`detail.prompt.section.${s}`)}
-                    </span>
-                  ))}
-                </div>
+                {sections.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {sections.map((s) => (
+                      <span
+                        key={s}
+                        className="inline-block rounded bg-muted px-1.5 py-0.5 text-[9px] leading-tight text-muted-foreground"
+                      >
+                        {t(`detail.prompt.section.${s}`)}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </button>
           );

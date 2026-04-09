@@ -208,16 +208,19 @@
         "persona": "Persona",
         "styleEcho": "Style Echo",
         "tools": "Tools",
+        "execBias": "Exec Bias",
+        "callStyle": "Call Style",
         "safety": "Safety",
         "safetySm": "Safety (slim)",
         "skills": "Skills",
+        "skillsSearch": "Skills (search)",
         "mcp": "MCP",
+        "mcpSearch": "MCP (search)",
         "memory": "Memory",
         "memorySm": "Memory (slim)",
         "sandbox": "Sandbox",
         "evolution": "Evolution",
-        "workspace": "Workspace",
-        "identityOnly": "Identity only"
+        "channelHints": "Channel Hints"
       }
     },
     "engine": {

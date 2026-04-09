@@ -200,16 +200,19 @@
         "persona": "人设",
         "styleEcho": "风格回声",
         "tools": "工具",
+        "execBias": "执行偏好",
+        "callStyle": "调用风格",
         "safety": "安全",
         "safetySm": "安全(精简)",
         "skills": "技能",
+        "skillsSearch": "技能(搜索)",
         "mcp": "MCP",
+        "mcpSearch": "MCP(搜索)",
         "memory": "记忆",
         "memorySm": "记忆(精简)",
         "sandbox": "沙盒",
         "evolution": "进化",
-        "workspace": "工作区",
-        "identityOnly": "仅身份"
+        "channelHints": "频道提示"
       }
     },
     "engine": {
