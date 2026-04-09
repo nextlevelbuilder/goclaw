@@ -87,7 +87,7 @@ export const SessionSwitcher = memo(function SessionSwitcher({ sessions, activeK
               <MessageSquare className="h-4 w-4 shrink-0 text-muted-foreground" />
               <div className="min-w-0 flex-1">
                 <div className="truncate font-medium text-[13px]">{label}</div>
-                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <div className="flex items-center gap-1.5 text-xs-plus text-muted-foreground">
                   <span>{session.messageCount} {tc("messages")}</span>
                   <span>·</span>
                   <span>{formatRelativeTime(session.updated)}</span>

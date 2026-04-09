@@ -50,7 +50,7 @@ export function ChatGPTOAuthQuotaStrip({
 
   if (loading && !quota) {
     return (
-      <Badge variant="outline" className={cn("h-5 px-1.5 text-[10px]", className)}>
+      <Badge variant="outline" className={cn("h-5 px-1.5 text-2xs", className)}>
         {t(`${translationKeyPrefix}.checking`)}
       </Badge>
     );
@@ -85,14 +85,14 @@ export function ChatGPTOAuthQuotaStrip({
             {failureKind ? (
               <Badge
                 variant={failureVariantByKind[failureKind]}
-                className="h-5 px-1.5 text-[10px]"
+                className="h-5 px-1.5 text-2xs"
               >
                 {t(`${translationKeyPrefix}.failure.${failureKind}.label`)}
               </Badge>
             ) : layout === "inline" ? (
               <>
                 {planLabel && (
-                  <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+                  <Badge variant="outline" className="h-5 px-1.5 text-2xs">
                     {planLabel}
                   </Badge>
                 )}
@@ -143,7 +143,7 @@ export function ChatGPTOAuthQuotaStrip({
                           compact && "gap-1.5",
                         )}
                       >
-                        <span className="w-7 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                        <span className="w-7 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
                           {signal.shortLabel}
                         </span>
                         <div className="flex-1 overflow-hidden rounded-full bg-muted h-1.5">
@@ -158,7 +158,7 @@ export function ChatGPTOAuthQuotaStrip({
                           />
                         </div>
                         {!compact && (
-                          <span className="w-10 text-right text-[11px] font-medium">
+                          <span className="w-10 text-right text-xs-plus font-medium">
                             {signal.remaining}%
                           </span>
                         )}

@@ -73,7 +73,7 @@ export function PersonalitySection({
               className="w-14 text-center text-base md:text-sm"
             />
           ) : (
-            <span className="text-[10px] text-muted-foreground">{t("identity.emoji")}</span>
+            <span className="text-2xs text-muted-foreground">{t("identity.emoji")}</span>
           )}
         </div>
 

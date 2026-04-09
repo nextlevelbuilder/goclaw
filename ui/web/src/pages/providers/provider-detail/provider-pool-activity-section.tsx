@@ -18,7 +18,7 @@ import { toPoolEntriesWithCounts } from "@/adapters/provider-pool.adapter";
 function MonitorStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-md border bg-background/70 px-2 py-1">
-      <p className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground xl:text-[10px]">
+      <p className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground xl:text-2xs">
         {label}
       </p>
       <p className="mt-0.5 text-[13px] font-semibold leading-tight tabular-nums xl:text-sm">
@@ -127,7 +127,7 @@ export function ProviderPoolActivitySection({
             <h4 className="text-xs font-medium text-muted-foreground">
               {ta("chatgptOAuthRouting.sequenceTitle")}
             </h4>
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="text-2xs">
               {ta("chatgptOAuthRouting.recentRequestsCount", {
                 count: recentRequests.length,
               })}

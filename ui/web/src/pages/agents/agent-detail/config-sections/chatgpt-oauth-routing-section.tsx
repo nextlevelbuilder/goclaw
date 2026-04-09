@@ -174,7 +174,7 @@ export function ChatGPTOAuthRoutingSection({
             {showOverrideMode ? (
               <Badge
                 variant={mode === "inherit" ? "secondary" : "outline"}
-                className="h-6 px-2 text-[11px] [@media(max-height:860px)]:h-5"
+                className="h-6 px-2 text-xs-plus [@media(max-height:860px)]:h-5"
               >
                 {mode === "inherit"
                   ? t("chatgptOAuthRouting.mode.inherit")
@@ -182,17 +182,17 @@ export function ChatGPTOAuthRoutingSection({
               </Badge>
             ) : null}
             {!canManageProviders ? (
-              <Badge variant="outline" className="h-6 px-2 text-[11px] [@media(max-height:860px)]:h-5">
+              <Badge variant="outline" className="h-6 px-2 text-xs-plus [@media(max-height:860px)]:h-5">
                 {t("chatgptOAuthRouting.viewerMode")}
               </Badge>
             ) : null}
             {isDirty ? (
-              <Badge variant="warning" className="h-6 px-2 text-[11px] [@media(max-height:860px)]:h-5">
+              <Badge variant="warning" className="h-6 px-2 text-xs-plus [@media(max-height:860px)]:h-5">
                 {t("chatgptOAuthRouting.draftBadge")}
               </Badge>
             ) : null}
             {(quotaLoading || isLoading) ? (
-              <Badge variant="outline" className="h-6 px-2 text-[11px] [@media(max-height:860px)]:h-5">
+              <Badge variant="outline" className="h-6 px-2 text-xs-plus [@media(max-height:860px)]:h-5">
                 {t("chatgptOAuthRouting.quota.checking")}
               </Badge>
             ) : null}

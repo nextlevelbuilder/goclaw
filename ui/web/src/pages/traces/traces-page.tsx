@@ -211,13 +211,13 @@ export function TracesPage() {
                           )}
                         </div>
                         <div className="mt-0.5 flex items-center gap-1">
-                          <Badge variant="outline" className="shrink-0 gap-0.5 text-[10px] px-1.5 py-0">
+                          <Badge variant="outline" className="shrink-0 gap-0.5 text-2xs px-1.5 py-0">
                             <SourceIcon className="h-2.5 w-2.5" />
                             {t(`source.${source.type}`)}
                             {source.topic && ` #${source.topic}`}
                           </Badge>
                           {trace.channel && (
-                            <Badge variant="secondary" className="shrink-0 text-[10px] px-1.5 py-0">
+                            <Badge variant="secondary" className="shrink-0 text-2xs px-1.5 py-0">
                               {trace.channel}
                             </Badge>
                           )}

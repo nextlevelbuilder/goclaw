@@ -56,11 +56,11 @@ export const KanbanCard = memo(function KanbanCard({ task, isTeamV2, emojiLookup
       {/* Top row: identifier + priority + running badge + delete button */}
       <div className="mb-1 flex items-center justify-between">
         <div className="flex items-center gap-1.5">
-          <span className="font-mono text-[10px] text-muted-foreground">
+          <span className="font-mono text-2xs text-muted-foreground">
             {task.identifier || `#${task.task_number ?? ""}`}
           </span>
           <span
-            className={`font-mono text-[10px] font-medium ${prio.color}`}
+            className={`font-mono text-2xs font-medium ${prio.color}`}
             title={`${PRIORITY_TOOLTIPS[task.priority] ?? "Low"} priority`}
           >
             {prio.label}
@@ -68,7 +68,7 @@ export const KanbanCard = memo(function KanbanCard({ task, isTeamV2, emojiLookup
         </div>
         <div className="flex items-center gap-1.5">
           {locked && (
-            <span className="flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400">
+            <span className="flex items-center gap-1 text-2xs text-green-600 dark:text-green-400">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-green-500" />
               {t("board.running")}
             </span>
@@ -89,7 +89,7 @@ export const KanbanCard = memo(function KanbanCard({ task, isTeamV2, emojiLookup
 
       {/* Blocked-by row */}
       {hasBlockers && (
-        <p className="mt-1 flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400">
+        <p className="mt-1 flex items-center gap-1 text-2xs text-amber-600 dark:text-amber-400">
           <Ban className="h-3 w-3 shrink-0" />
           <span className="truncate">
             {task.blocked_by!.map((id) => taskLookup?.get(id) || id.slice(0, 8)).join(", ")}
@@ -104,15 +104,15 @@ export const KanbanCard = memo(function KanbanCard({ task, isTeamV2, emojiLookup
           {ownerName || t("board.unassigned")}
         </span>
         {task.task_type && task.task_type !== "general" && (
-          <Badge variant="outline" className="text-[10px] px-1 py-0">{task.task_type}</Badge>
+          <Badge variant="outline" className="text-2xs px-1 py-0">{task.task_type}</Badge>
         )}
         {(task.comment_count ?? 0) > 0 && (
-          <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground ml-auto">
+          <span className="flex items-center gap-0.5 text-2xs text-muted-foreground ml-auto">
             <MessageSquare className="h-3 w-3" /> {task.comment_count}
           </span>
         )}
         {(task.attachment_count ?? 0) > 0 && (
-          <span className={`flex items-center gap-0.5 text-[10px] text-muted-foreground ${(task.comment_count ?? 0) === 0 ? "ml-auto" : ""}`}>
+          <span className={`flex items-center gap-0.5 text-2xs text-muted-foreground ${(task.comment_count ?? 0) === 0 ? "ml-auto" : ""}`}>
             <Paperclip className="h-3 w-3" /> {task.attachment_count}
           </span>
         )}
@@ -123,7 +123,7 @@ export const KanbanCard = memo(function KanbanCard({ task, isTeamV2, emojiLookup
           <div className="h-1.5 flex-1 rounded-full bg-muted">
             <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${task.progress_percent}%` }} />
           </div>
-          <span className="text-[10px] text-muted-foreground">{task.progress_percent}%</span>
+          <span className="text-2xs text-muted-foreground">{task.progress_percent}%</span>
         </div>
       )}
     </motion.div>

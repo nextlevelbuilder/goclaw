@@ -64,7 +64,7 @@ export function TreeItem({
   );
 
   const sizeLabel = showSize && (node.isDir ? 0 : node.size) > 0 && (
-    <span className="ml-auto shrink-0 text-[10px] text-muted-foreground tabular-nums">
+    <span className="ml-auto shrink-0 text-2xs text-muted-foreground tabular-nums">
       {formatSize(node.size)}
     </span>
   );

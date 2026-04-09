@@ -24,7 +24,7 @@ export function ConnectionStatus({ collapsed }: { collapsed?: boolean }) {
         <div className="flex items-center justify-between gap-1.5 text-xs overflow-hidden">
           <span className="truncate font-medium text-foreground/80">{tenantName}</span>
           {role && (
-            <span className={cn("shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium", ROLE_STYLES[role] ?? ROLE_STYLES.viewer)}>
+            <span className={cn("shrink-0 rounded-full px-1.5 py-0.5 text-2xs font-medium", ROLE_STYLES[role] ?? ROLE_STYLES.viewer)}>
               {role}
             </span>
           )}

@@ -143,7 +143,7 @@ export function TeamMembersDialog({
                   <span className="truncate text-sm font-medium">
                     {m.display_name || m.agent_key || m.agent_id.slice(0, 8)}
                   </span>
-                  <Badge variant="outline" className={`shrink-0 text-[10px] px-1.5 py-0 ${ROLE_COLORS[m.role] ?? ""}`}>
+                  <Badge variant="outline" className={`shrink-0 text-2xs px-1.5 py-0 ${ROLE_COLORS[m.role] ?? ""}`}>
                     {m.role}
                   </Badge>
                 </div>

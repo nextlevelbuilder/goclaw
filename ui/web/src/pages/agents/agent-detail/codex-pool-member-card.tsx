@@ -48,7 +48,7 @@ function poolRoleBadgeClass(role: CodexPoolEntry["role"]): string {
 function MemberMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex h-full items-center justify-between gap-1 rounded-md border bg-background/70 px-2 py-1 xl:px-2.5">
-      <p className="truncate text-[9px] font-medium text-muted-foreground xl:text-[10px]">
+      <p className="truncate text-[9px] font-medium text-muted-foreground xl:text-2xs">
         {label}
       </p>
       <p className="shrink-0 text-[12px] font-semibold leading-tight tabular-nums xl:text-[13px]">
@@ -119,7 +119,7 @@ export function CodexPoolMemberCard({
               <Badge
                 variant="outline"
                 className={cn(
-                  "h-5 px-1.5 text-[10px] xl:h-6 xl:px-2 xl:text-xs",
+                  "h-5 px-1.5 text-2xs xl:h-6 xl:px-2 xl:text-xs",
                   poolRoleBadgeClass(entry.role),
                 )}
               >
@@ -128,7 +128,7 @@ export function CodexPoolMemberCard({
               {showAvailabilityBadge && (
                 <Badge
                   variant={availabilityVariant(entry.availability)}
-                  className="h-5 px-1.5 text-[10px] xl:h-6 xl:px-2 xl:text-xs"
+                  className="h-5 px-1.5 text-2xs xl:h-6 xl:px-2 xl:text-xs"
                 >
                   {t(`chatgptOAuthRouting.status.${entry.availability}`)}
                 </Badge>
@@ -136,7 +136,7 @@ export function CodexPoolMemberCard({
               {showHealthBadge && (
                 <Badge
                   variant={runtimeHealthVariant(entry.healthState)}
-                  className="h-5 px-1.5 text-[10px] xl:h-6 xl:px-2 xl:text-xs"
+                  className="h-5 px-1.5 text-2xs xl:h-6 xl:px-2 xl:text-xs"
                 >
                   {t(`chatgptOAuthRouting.healthState.${entry.healthState}`)}
                 </Badge>
@@ -144,14 +144,14 @@ export function CodexPoolMemberCard({
               {showRouteBadge && (
                 <Badge
                   variant={routeBadgeVariant(routeReadiness)}
-                  className="h-5 px-1.5 text-[10px] xl:h-6 xl:px-2 xl:text-xs"
+                  className="h-5 px-1.5 text-2xs xl:h-6 xl:px-2 xl:text-xs"
                 >
                   {t(routeLabelKey(routeReadiness))}
                 </Badge>
               )}
             </div>
             {entry.label !== entry.name && (
-              <p className="truncate font-mono text-[10px] text-muted-foreground xl:text-xs">
+              <p className="truncate font-mono text-2xs text-muted-foreground xl:text-xs">
                 {entry.name}
               </p>
             )}
@@ -187,21 +187,21 @@ export function CodexPoolMemberCard({
         <div className="mt-1 rounded-md border bg-background/75 px-2 py-1.5 xl:mt-1.5 xl:px-2.5">
           <div className="flex items-center justify-between gap-2">
             {totalOutcomes > 0 ? (
-              <p className="truncate text-[11px] font-medium text-foreground xl:text-xs">
+              <p className="truncate text-xs-plus font-medium text-foreground xl:text-xs">
                 {t("chatgptOAuthRouting.runtimeHealthSummary", {
                   rate: entry.successRate,
                   score: entry.healthScore,
                 })}
               </p>
             ) : (
-              <p className="truncate text-[11px] text-muted-foreground xl:text-xs">
+              <p className="truncate text-xs-plus text-muted-foreground xl:text-xs">
                 {t("chatgptOAuthRouting.noRuntimeSample")}
               </p>
             )}
             {entry.consecutiveFailures > 0 && (
               <Badge
                 variant={entry.consecutiveFailures >= 3 ? "destructive" : "warning"}
-                className="h-5 shrink-0 px-1.5 text-[10px] xl:h-6 xl:px-2 xl:text-xs"
+                className="h-5 shrink-0 px-1.5 text-2xs xl:h-6 xl:px-2 xl:text-xs"
               >
                 {t("chatgptOAuthRouting.failureStreakBadge", {
                   count: entry.consecutiveFailures,
@@ -229,7 +229,7 @@ export function CodexPoolMemberCard({
             )}
           </div>
 
-          <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-muted-foreground xl:mt-1.5 xl:gap-3 xl:text-[11px]">
+          <div className="mt-1 flex items-center justify-between gap-2 text-2xs text-muted-foreground xl:mt-1.5 xl:gap-3 xl:text-xs-plus">
             <span>
               {t("chatgptOAuthRouting.runtimeSuccessCompact", {
                 count: entry.successCount,

@@ -55,7 +55,7 @@ export function McpSettingsFields({ form }: McpSettingsFieldsProps) {
         </div>
         <p className="text-xs text-muted-foreground">
           {t("form.toolPrefixHint")} Tools:{" "}
-          <code className="text-[10px]">mcp_&#123;prefix&#125;__&#123;tool&#125;</code>
+          <code className="text-2xs">mcp_&#123;prefix&#125;__&#123;tool&#125;</code>
         </p>
       </div>
 

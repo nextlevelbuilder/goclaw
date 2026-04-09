@@ -70,7 +70,7 @@ export function AgentListRow({ agent, ownerName, onClick, onResummon, onDelete }
           <TooltipTrigger asChild>
             <Badge
               variant="outline"
-              className={cn("text-[11px]", promptModeBadgeClass(promptMode))}
+              className={cn("text-xs-plus", promptModeBadgeClass(promptMode))}
             >
               {t(`detail.prompt.mode.${promptMode}`)}
             </Badge>
@@ -82,7 +82,7 @@ export function AgentListRow({ agent, ownerName, onClick, onResummon, onDelete }
         {selfEvolve && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <Badge className="bg-orange-100 text-[11px] text-orange-700 hover:bg-orange-100 dark:bg-orange-900/30 dark:text-orange-300">
+              <Badge className="bg-orange-100 text-xs-plus text-orange-700 hover:bg-orange-100 dark:bg-orange-900/30 dark:text-orange-300">
                 <Sparkles className="mr-0.5 h-3 w-3" />
                 {t("card.evolving")}
               </Badge>
@@ -93,7 +93,7 @@ export function AgentListRow({ agent, ownerName, onClick, onResummon, onDelete }
           </Tooltip>
         )}
         {hasOAuthRouting && (
-          <Badge variant="outline" className="text-[11px]">
+          <Badge variant="outline" className="text-xs-plus">
             {t("chatgptOAuthRouting.badge")}
           </Badge>
         )}
@@ -108,7 +108,7 @@ export function AgentListRow({ agent, ownerName, onClick, onResummon, onDelete }
 
       {/* Context window */}
       {agent.context_window > 0 && (
-        <span className="hidden shrink-0 text-[11px] text-muted-foreground lg:block">
+        <span className="hidden shrink-0 text-xs-plus text-muted-foreground lg:block">
           {(agent.context_window / 1000).toFixed(0)}K
         </span>
       )}

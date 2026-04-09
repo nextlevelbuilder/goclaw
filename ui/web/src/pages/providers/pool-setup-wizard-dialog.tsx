@@ -269,7 +269,7 @@ function ProviderPlanBadge({ provider }: { provider: ProviderData }) {
   const { t } = useTranslation("common");
   if (!provider.enabled) {
     return (
-      <span className="text-[10px] text-muted-foreground shrink-0">{t("disabled")}</span>
+      <span className="text-2xs text-muted-foreground shrink-0">{t("disabled")}</span>
     );
   }
   // plan_type is not available at this level without quota data, show nothing

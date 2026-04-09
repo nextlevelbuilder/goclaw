@@ -161,16 +161,16 @@ function InstanceRow({ instance, isSelected, onClick, resolve }: { instance: Use
         {displayName || instance.user_id}
       </span>
       {displayName && (
-        <span className="truncate font-mono text-[10px] text-muted-foreground">{instance.user_id}</span>
+        <span className="truncate font-mono text-2xs text-muted-foreground">{instance.user_id}</span>
       )}
       <div className="flex items-center gap-2">
         {instance.file_count > 0 && (
-          <Badge variant="outline" className="text-[10px]">
+          <Badge variant="outline" className="text-2xs">
             {instance.file_count} file{instance.file_count !== 1 ? "s" : ""}
           </Badge>
         )}
         {lastSeen && (
-          <span className="text-[10px] text-muted-foreground">{lastSeen}</span>
+          <span className="text-2xs text-muted-foreground">{lastSeen}</span>
         )}
       </div>
     </button>

@@ -28,7 +28,7 @@ function FileActions({
   const { t } = useTranslation("common");
   return (
     <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-      <Badge variant={sizeBadgeVariant(size)} className="text-[10px] px-1.5 py-0">
+      <Badge variant={sizeBadgeVariant(size)} className="text-2xs px-1.5 py-0">
         {formatSize(size)}
       </Badge>
       {onDownload && (

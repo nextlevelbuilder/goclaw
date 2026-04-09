@@ -73,7 +73,7 @@ function TenantSwitcher() {
     >
       <Building2 className="h-3.5 w-3.5" />
       <span>{label}</span>
-      <span className="text-[10px] underline underline-offset-2">{t("switchTenant", { defaultValue: "Switch" })}</span>
+      <span className="text-2xs underline underline-offset-2">{t("switchTenant", { defaultValue: "Switch" })}</span>
     </button>
   );
 }

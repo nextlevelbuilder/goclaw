@@ -75,11 +75,11 @@ export function PromptModeCards({ value, onChange, compact }: PromptModeCardsPro
                 )}>
                   {t(`detail.prompt.mode.${m}`)}
                 </span>
-                <span className="text-[10px] text-muted-foreground/70 tabular-nums shrink-0">
+                <span className="text-2xs text-muted-foreground/70 tabular-nums shrink-0">
                   {tokens}
                 </span>
               </div>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs-plus text-muted-foreground">
                 {t(`detail.prompt.mode.${m}Desc`)}
               </p>
               {!compact && sections.length > 0 && (

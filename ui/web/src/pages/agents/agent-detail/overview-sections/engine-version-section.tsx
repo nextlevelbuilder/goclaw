@@ -40,7 +40,7 @@ export function EngineVersionSection({ agentId: _agentId }: EngineVersionSection
 
 function FeatureBadge({ icon: Icon, label }: { icon: typeof Workflow; label: string }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+    <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs-plus font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
       <Icon className="h-3 w-3" />
       {label}
     </span>

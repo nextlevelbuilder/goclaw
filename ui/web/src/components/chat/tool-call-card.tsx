@@ -55,16 +55,16 @@ export function ToolCallCard({ entry, compact }: ToolCallCardProps) {
           )}
           {entry.arguments && Object.keys(entry.arguments).length > 0 && (
             <div>
-              <div className="text-[10px] font-semibold uppercase text-muted-foreground mb-0.5">{t("toolArguments")}</div>
-              <pre className="whitespace-pre-wrap text-[11px] font-mono bg-background rounded p-1.5 max-h-40 overflow-y-auto">
+              <div className="text-2xs font-semibold uppercase text-muted-foreground mb-0.5">{t("toolArguments")}</div>
+              <pre className="whitespace-pre-wrap text-xs-plus font-mono bg-background rounded p-1.5 max-h-40 overflow-y-auto">
                 {JSON.stringify(entry.arguments, null, 2)}
               </pre>
             </div>
           )}
           {entry.result && (
             <div>
-              <div className="text-[10px] font-semibold uppercase text-muted-foreground mb-0.5">{t("toolResult")}</div>
-              <pre className="whitespace-pre-wrap text-[11px] font-mono bg-background rounded p-1.5 max-h-40 overflow-y-auto">
+              <div className="text-2xs font-semibold uppercase text-muted-foreground mb-0.5">{t("toolResult")}</div>
+              <pre className="whitespace-pre-wrap text-xs-plus font-mono bg-background rounded p-1.5 max-h-40 overflow-y-auto">
                 {entry.result}
               </pre>
             </div>
@@ -103,5 +103,5 @@ function PhaseLabel({ phase, isSkill }: { phase: ToolStreamEntry["phase"]; isSki
     completed: "text-blue-500",
     error: "text-red-500",
   };
-  return <span className={`text-[11px] ${colors[phase] ?? "text-muted-foreground"}`}>{labels[phase] ?? phase}</span>;
+  return <span className={`text-xs-plus ${colors[phase] ?? "text-muted-foreground"}`}>{labels[phase] ?? phase}</span>;
 }

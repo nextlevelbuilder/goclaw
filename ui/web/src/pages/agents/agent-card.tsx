@@ -83,7 +83,7 @@ export function AgentCard({ agent, onClick, onResummon, onDelete }: AgentCardPro
           <TooltipTrigger asChild>
             <Badge
               variant="outline"
-              className={cn("text-[11px]", promptModeBadgeClass(promptMode))}
+              className={cn("text-xs-plus", promptModeBadgeClass(promptMode))}
             >
               {t(`detail.prompt.mode.${promptMode}`)}
             </Badge>
@@ -97,7 +97,7 @@ export function AgentCard({ agent, onClick, onResummon, onDelete }: AgentCardPro
             <TooltipTrigger asChild>
               <Badge
                 variant={selfEvolve ? "default" : "outline"}
-                className={`text-[11px] ${selfEvolve ? "bg-orange-100 text-orange-700 hover:bg-orange-100 dark:bg-orange-900/30 dark:text-orange-300" : "text-muted-foreground"}`}
+                className={`text-xs-plus ${selfEvolve ? "bg-orange-100 text-orange-700 hover:bg-orange-100 dark:bg-orange-900/30 dark:text-orange-300" : "text-muted-foreground"}`}
               >
                 <Sparkles className="mr-0.5 h-3 w-3" />
                 {selfEvolve ? t("card.evolving") : t("card.static")}
@@ -111,12 +111,12 @@ export function AgentCard({ agent, onClick, onResummon, onDelete }: AgentCardPro
           </Tooltip>
         )}
         {hasOAuthRouting && (
-          <Badge variant="outline" className="text-[11px]">
+          <Badge variant="outline" className="text-xs-plus">
             {t("chatgptOAuthRouting.badge")}
           </Badge>
         )}
         {agent.context_window > 0 && (
-          <span className="text-[11px] text-muted-foreground">
+          <span className="text-xs-plus text-muted-foreground">
             {(agent.context_window / 1000).toFixed(0)}K ctx
           </span>
         )}

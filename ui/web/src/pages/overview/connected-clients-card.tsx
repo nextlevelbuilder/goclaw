@@ -59,7 +59,7 @@ export function ConnectedClientsCard({
                         {isYou && (
                           <Badge
                             variant="info"
-                            className="ml-1.5 text-[10px] px-1 py-0"
+                            className="ml-1.5 text-2xs px-1 py-0"
                           >
                             {t("connectedClients.you")}
                           </Badge>
@@ -77,7 +77,7 @@ export function ConnectedClientsCard({
                                 ? "secondary"
                                 : "outline"
                           }
-                          className="text-[10px]"
+                          className="text-2xs"
                         >
                           {c.role}
                         </Badge>

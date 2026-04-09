@@ -136,7 +136,7 @@ export function ProviderListRow({
             <Badge
               variant={oauthPool.role === "owner" ? "outline" : "info"}
               className={cn(
-                "h-5 px-1.5 text-[10px]",
+                "h-5 px-1.5 text-2xs",
                 oauthPool.role === "owner" && "border-primary/30 bg-primary/[0.06] text-primary",
               )}
             >
@@ -146,14 +146,14 @@ export function ProviderListRow({
           {showPoolHint && !hasPoolRole && onPoolSetup ? (
             <Badge
               variant="outline"
-              className="h-5 cursor-pointer border-dashed border-primary/40 px-1.5 text-[10px] text-primary transition-colors hover:border-primary hover:bg-primary/10"
+              className="h-5 cursor-pointer border-dashed border-primary/40 px-1.5 text-2xs text-primary transition-colors hover:border-primary hover:bg-primary/10"
               onClick={(event) => { event.stopPropagation(); onPoolSetup(); }}
             >
               {t("list.poolAvailable")}
             </Badge>
           ) : null}
           {reasoningDefaults ? (
-            <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+            <Badge variant="secondary" className="h-5 px-1.5 text-2xs">
               {t("list.reasoningDefault", {
                 level: t(`reasoning.${reasoningDefaults.effort ?? "off"}`),
               })}
@@ -198,7 +198,7 @@ export function ProviderListRow({
       </div>
 
       <div className="hidden shrink-0 sm:block">
-        <Badge variant={typeBadge.variant} className="text-[11px]">
+        <Badge variant={typeBadge.variant} className="text-xs-plus">
           {typeBadge.label}
         </Badge>
       </div>
@@ -207,7 +207,7 @@ export function ProviderListRow({
         <ProviderApiKeyBadge provider={provider} oauthAvailability={oauthPool?.availability} />
       </div>
 
-      <div className="hidden shrink-0 text-[11px] text-muted-foreground lg:block">
+      <div className="hidden shrink-0 text-xs-plus text-muted-foreground lg:block">
         {provider.enabled ? tc("enabled") : tc("disabled")}
       </div>
 

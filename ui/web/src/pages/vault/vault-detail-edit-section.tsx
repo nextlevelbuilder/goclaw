@@ -65,7 +65,7 @@ interface DocTypeSelectProps {
 export function DocTypeSelect({ value, onChange, t }: DocTypeSelectProps) {
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="h-6 w-auto text-[10px] px-1.5 py-0 gap-1">
+      <SelectTrigger className="h-6 w-auto text-2xs px-1.5 py-0 gap-1">
         <SelectValue />
       </SelectTrigger>
       <SelectContent className="pointer-events-auto">
@@ -86,7 +86,7 @@ interface ScopeSelectProps {
 export function ScopeSelect({ value, onChange, t }: ScopeSelectProps) {
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="h-6 w-auto text-[10px] px-1.5 py-0 gap-1">
+      <SelectTrigger className="h-6 w-auto text-2xs px-1.5 py-0 gap-1">
         <SelectValue />
       </SelectTrigger>
       <SelectContent className="pointer-events-auto">

@@ -122,7 +122,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({ content, classN
         return <CodeBlock className={className}>{children}</CodeBlock>;
       }
       return (
-        <code className="rounded bg-muted px-1.5 py-0.5 text-[0.85em] font-medium text-primary" style={{ fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, monospace" }} {...props}>
+        <code className="rounded bg-muted px-1.5 py-0.5 text-[0.85em] font-medium text-primary font-mono-code" {...props}>
           {children}
         </code>
       );

@@ -105,39 +105,39 @@ export function ProviderApiKeyBadge({
   if (provider.provider_type === "chatgpt_oauth") {
     if (oauthAvailability === "needs_sign_in") {
       return (
-        <span className="flex items-center gap-1 text-[11px] text-amber-700 dark:text-amber-400">
+        <span className="flex items-center gap-1 text-xs-plus text-amber-700 dark:text-amber-400">
           <AlertTriangle className="h-3 w-3" />{t("card.signInNeeded")}
         </span>
       );
     }
     if (oauthAvailability === "disabled") {
       return (
-        <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+        <span className="flex items-center gap-1 text-xs-plus text-muted-foreground">
           <CircleSlash2 className="h-3 w-3" />{t("card.disabled")}
         </span>
       );
     }
     return (
-      <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400">
+      <span className="flex items-center gap-1 text-xs-plus text-emerald-600 dark:text-emerald-400">
         <Link2 className="h-3 w-3" />{t("card.connected")}
       </span>
     );
   }
   if (provider.provider_type === "claude_cli") {
     return (
-      <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400">
+      <span className="flex items-center gap-1 text-xs-plus text-emerald-600 dark:text-emerald-400">
         <ShieldCheck className="h-3 w-3" />{t("card.authenticated")}
       </span>
     );
   }
   if (provider.api_key === "***") {
     return (
-      <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+      <span className="flex items-center gap-1 text-xs-plus text-muted-foreground">
         <Key className="h-3 w-3" />{t("card.apiKeySet")}
       </span>
     );
   }
   return (
-    <span className="text-[11px] text-muted-foreground/60">{t("apiKey.notSet")}</span>
+    <span className="text-xs-plus text-muted-foreground/60">{t("apiKey.notSet")}</span>
   );
 }

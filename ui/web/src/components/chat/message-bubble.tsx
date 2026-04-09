@@ -76,7 +76,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             </div>
           )}
           {message.timestamp && (
-            <div className="mt-1 text-[10px] text-muted-foreground">
+            <div className="mt-1 text-2xs text-muted-foreground">
               {new Intl.DateTimeFormat([], {
                 timeZone: resolveTimezone(timezone),
                 hour: "numeric",

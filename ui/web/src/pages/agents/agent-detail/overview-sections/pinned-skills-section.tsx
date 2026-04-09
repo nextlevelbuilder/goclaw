@@ -119,7 +119,7 @@ export function PinnedSkillsSection({ agent, onUpdate }: Props) {
         </Select>
       )}
 
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-xs-plus text-muted-foreground">
         {t("detail.prompt.pinnedHint", "Pinned skills are always inlined in the system prompt. Others use skill_search.")}
       </p>
     </section>

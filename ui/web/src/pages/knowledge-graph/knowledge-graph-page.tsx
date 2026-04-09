@@ -8,7 +8,7 @@ import { useEmbeddingStatus } from "@/hooks/use-embedding-status";
 import { useContactResolver } from "@/hooks/use-contact-resolver";
 import { formatUserLabel } from "@/lib/format-user-label";
 import { useKGStats } from "@/pages/memory/hooks/use-knowledge-graph";
-import { KGEntitiesTab } from "@/pages/memory/kg-entities-tab";
+import { KGEntitiesTab } from "@/pages/memory/knowledge-graph/kg-entities-tab";
 
 export function KnowledgeGraphPage() {
   const { t } = useTranslation("memory");

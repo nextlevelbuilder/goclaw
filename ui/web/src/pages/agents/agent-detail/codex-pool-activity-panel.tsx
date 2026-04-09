@@ -17,7 +17,7 @@ import type { CodexPoolActivityPanelProps, CodexPoolRecentRequestsPanelProps } f
 function MonitorStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="h-full rounded-md border bg-background/70 px-2 py-1 xl:px-2.5 xl:py-1.5">
-      <p className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground xl:text-[10px]">
+      <p className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground xl:text-2xs">
         {label}
       </p>
       <p className="mt-0.5 text-[13px] font-semibold leading-tight tabular-nums xl:mt-1 xl:text-sm">
@@ -72,16 +72,16 @@ export function CodexPoolActivityPanel({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 [@media(max-height:760px)]:gap-1.5">
-            <Badge variant="outline" className="h-6 px-2 text-[11px] [@media(max-height:760px)]:h-5">
+            <Badge variant="outline" className="h-6 px-2 text-xs-plus [@media(max-height:760px)]:h-5">
               {t(strategyLabelKey(strategy))}
             </Badge>
             {blockedEntries.length > 0 && (
-              <Badge variant="warning" className="h-6 px-2 text-[11px] [@media(max-height:760px)]:h-5">
+              <Badge variant="warning" className="h-6 px-2 text-xs-plus [@media(max-height:760px)]:h-5">
                 {t("chatgptOAuthRouting.blockedNowTitle")} {blockedEntries.length}
               </Badge>
             )}
             {failoverOnlyProviders > 0 && (
-              <Badge variant="warning" className="h-6 px-2 text-[11px] [@media(max-height:760px)]:h-5">
+              <Badge variant="warning" className="h-6 px-2 text-xs-plus [@media(max-height:760px)]:h-5">
                 {t("chatgptOAuthRouting.failoverOnlyProviders", {
                   count: failoverOnlyProviders,
                 })}

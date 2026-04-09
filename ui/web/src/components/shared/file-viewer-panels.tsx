@@ -66,7 +66,7 @@ export function CodeViewer({ content, language }: { content: string; language: s
 
   return (
     <div className="group relative overflow-hidden rounded-lg border border-border/60">
-      <div className="flex items-center justify-between border-b border-border/40 bg-muted/70 px-3 py-1.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+      <div className="flex items-center justify-between border-b border-border/40 bg-muted/70 px-3 py-1.5 text-xs-plus font-medium tracking-wide text-muted-foreground uppercase">
         <span>{language || "text"}</span>
         <button
           type="button"
@@ -81,11 +81,11 @@ export function CodeViewer({ content, language }: { content: string; language: s
         {highlighted ? (
           <code
             ref={codeRef}
-            style={{ fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, monospace" }}
+            className="font-mono-code"
             dangerouslySetInnerHTML={{ __html: highlighted }}
           />
         ) : (
-          <code style={{ fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, monospace" }}>
+          <code className="font-mono-code">
             {content}
           </code>
         )}
@@ -119,7 +119,7 @@ export function CsvViewer({ content }: { content: string }) {
 
   return (
     <div className="group relative rounded-lg border border-border/60 flex flex-col overflow-hidden">
-      <div className="flex items-center justify-between border-b border-border/40 bg-muted/70 px-3 py-1.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase shrink-0">
+      <div className="flex items-center justify-between border-b border-border/40 bg-muted/70 px-3 py-1.5 text-xs-plus font-medium tracking-wide text-muted-foreground uppercase shrink-0">
         <span>{t("csvRows", { count: body.length })}</span>
         <button
           type="button"
@@ -229,7 +229,7 @@ export function UnsupportedFileViewer({
         <Button variant="outline" size="sm" onClick={onDownload}>
           <Download className="h-3.5 w-3.5 mr-1.5" />
           {fileName}
-          <Badge variant={sizeBadgeVariant(size)} className="text-[10px] ml-1.5">
+          <Badge variant={sizeBadgeVariant(size)} className="text-2xs ml-1.5">
             {formatSize(size)}
           </Badge>
         </Button>

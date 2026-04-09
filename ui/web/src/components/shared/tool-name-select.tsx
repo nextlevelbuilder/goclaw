@@ -155,7 +155,7 @@ export function ToolNameSelect({
         >
           {grouped.builtin.length > 0 && (
             <>
-              <div className="text-muted-foreground px-2 py-1 text-[10px] font-semibold uppercase tracking-wider">
+              <div className="text-muted-foreground px-2 py-1 text-2xs font-semibold uppercase tracking-wider">
                 {t("builtinTools")}
               </div>
               {grouped.builtin.map((t) => (
@@ -167,7 +167,7 @@ export function ToolNameSelect({
                   className="hover:bg-accent hover:text-accent-foreground flex w-full cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none"
                 >
                   <span className="truncate">{t.displayName}</span>
-                  <code className="text-muted-foreground text-[10px]">{t.name}</code>
+                  <code className="text-muted-foreground text-2xs">{t.name}</code>
                 </button>
               ))}
             </>

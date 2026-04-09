@@ -181,17 +181,17 @@ export function MCPGrantsDialog({
                             <div className="mt-1.5 flex flex-col gap-1">
                               {hasAllow && (
                                 <div className="flex flex-wrap items-center gap-1">
-                                  <Badge variant="success" className="text-[10px] px-1.5 py-0">allow</Badge>
+                                  <Badge variant="success" className="text-2xs px-1.5 py-0">allow</Badge>
                                   {grant.tool_allow!.map((tool) => (
-                                    <Badge key={tool} variant="secondary" className="font-mono text-[10px] px-1.5 py-0">{tool}</Badge>
+                                    <Badge key={tool} variant="secondary" className="font-mono text-2xs px-1.5 py-0">{tool}</Badge>
                                   ))}
                                 </div>
                               )}
                               {hasDeny && (
                                 <div className="flex flex-wrap items-center gap-1">
-                                  <Badge variant="destructive" className="text-[10px] px-1.5 py-0">deny</Badge>
+                                  <Badge variant="destructive" className="text-2xs px-1.5 py-0">deny</Badge>
                                   {grant.tool_deny!.map((tool) => (
-                                    <Badge key={tool} variant="secondary" className="font-mono text-[10px] px-1.5 py-0">{tool}</Badge>
+                                    <Badge key={tool} variant="secondary" className="font-mono text-2xs px-1.5 py-0">{tool}</Badge>
                                   ))}
                                 </div>
                               )}

@@ -136,12 +136,12 @@ export function TeamLinksTab() {
                     {link.target_display_name || link.target_agent_key}
                   </td>
                   <td className="px-4 py-3">
-                    <Badge variant={DIRECTION_VARIANT[link.direction] ?? "outline"} className="text-[10px]">
+                    <Badge variant={DIRECTION_VARIANT[link.direction] ?? "outline"} className="text-2xs">
                       {t(`links.${link.direction}`)}
                     </Badge>
                   </td>
                   <td className="px-4 py-3">
-                    <Badge variant={STATUS_VARIANT[link.status] ?? "secondary"} className="text-[10px]">
+                    <Badge variant={STATUS_VARIANT[link.status] ?? "secondary"} className="text-2xs">
                       {t(`links.${link.status}`)}
                     </Badge>
                   </td>

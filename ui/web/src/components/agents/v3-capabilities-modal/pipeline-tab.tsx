@@ -52,7 +52,7 @@ export function PipelineTab() {
           <span className="text-xs font-medium text-blue-600 dark:text-blue-400">
             {t("pipeline.iteration")}
           </span>
-          <span className="text-[10px] text-muted-foreground">
+          <span className="text-2xs text-muted-foreground">
             {t("pipeline.iterationDesc")}
           </span>
         </div>
@@ -62,10 +62,10 @@ export function PipelineTab() {
               <div className="flex items-center gap-1.5 rounded-md bg-muted/50 px-2.5 py-1.5">
                 <Icon className="h-3.5 w-3.5 text-blue-500" />
                 <div className="min-w-0">
-                  <p className="text-[11px] font-medium">
+                  <p className="text-xs-plus font-medium">
                     {t(`pipeline.${key}`)}
                   </p>
-                  <p className="text-[10px] text-muted-foreground">
+                  <p className="text-2xs text-muted-foreground">
                     {t(`pipeline.${key}Desc`)}
                   </p>
                 </div>

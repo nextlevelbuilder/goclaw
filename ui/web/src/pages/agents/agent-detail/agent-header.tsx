@@ -79,7 +79,7 @@ export function AgentHeader({ agent, heartbeat, onBack, onDelete, onAdvanced, on
               <TooltipTrigger asChild>
                 <Badge
                   variant="outline"
-                  className={cn("text-[10px]", promptModeBadgeClass(promptMode))}
+                  className={cn("text-2xs", promptModeBadgeClass(promptMode))}
                 >
                   {t(`detail.prompt.mode.${promptMode}`)}
                 </Badge>
@@ -90,7 +90,7 @@ export function AgentHeader({ agent, heartbeat, onBack, onDelete, onAdvanced, on
             </Tooltip>
             <Badge
               variant="outline"
-              className="text-[10px] bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 cursor-pointer"
+              className="text-2xs bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 cursor-pointer"
               onClick={() => setV3Open(true)}
             >
               V3
@@ -100,7 +100,7 @@ export function AgentHeader({ agent, heartbeat, onBack, onDelete, onAdvanced, on
                 <TooltipTrigger asChild>
                   <Badge
                     variant={selfEvolve ? "default" : "outline"}
-                    className={`text-[10px] ${selfEvolve ? "bg-orange-100 text-orange-700 hover:bg-orange-100 dark:bg-orange-900/30 dark:text-orange-300" : "text-muted-foreground"}`}
+                    className={`text-2xs ${selfEvolve ? "bg-orange-100 text-orange-700 hover:bg-orange-100 dark:bg-orange-900/30 dark:text-orange-300" : "text-muted-foreground"}`}
                   >
                     <Sparkles className="h-2.5 w-2.5 sm:mr-0.5" />
                     <span className="hidden sm:inline">{selfEvolve ? t("detail.evolving") : t("detail.static")}</span>
@@ -114,7 +114,7 @@ export function AgentHeader({ agent, heartbeat, onBack, onDelete, onAdvanced, on
             {hasOAuthRouting && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Badge variant="outline" className="text-[10px]">
+                  <Badge variant="outline" className="text-2xs">
                     {t("chatgptOAuthRouting.badge")}
                   </Badge>
                 </TooltipTrigger>
@@ -125,7 +125,7 @@ export function AgentHeader({ agent, heartbeat, onBack, onDelete, onAdvanced, on
             )}
           </div>
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
-            <span className="font-mono text-[11px]">{keyDisplay}</span>
+            <span className="font-mono text-xs-plus">{keyDisplay}</span>
             {agent.provider && (
               <>
                 <span className="text-border">·</span>

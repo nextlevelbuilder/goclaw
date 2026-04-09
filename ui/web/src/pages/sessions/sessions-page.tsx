@@ -144,7 +144,7 @@ function SessionRow({
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           {session.metadata?.username ? `@${session.metadata.username}` : session.key}
           {session.channel && session.channel !== "ws" && (
-            <Badge variant="secondary" className="text-[10px] px-1 py-0">{session.channel}</Badge>
+            <Badge variant="secondary" className="text-2xs px-1 py-0">{session.channel}</Badge>
           )}
         </div>
       </td>
@@ -202,7 +202,7 @@ function ContextUsageBar({
             style={{ width: `${pct}%` }}
           />
         </div>
-        <div className="mt-0.5 flex items-center gap-1 text-[10px] text-muted-foreground">
+        <div className="mt-0.5 flex items-center gap-1 text-2xs text-muted-foreground">
           <span>{formatTokens(estimatedTokens)} / {formatTokens(contextWindow)}</span>
           {compactionCount > 0 && (
             <span

@@ -30,7 +30,7 @@ export function MemoryTab() {
       />
 
       <div className="flex justify-center">
-        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+        <div className="flex items-center gap-1.5 text-2xs text-muted-foreground">
           <ArrowDown className="h-3 w-3" />
           <span>session.completed</span>
         </div>
@@ -43,7 +43,7 @@ export function MemoryTab() {
       />
 
       <div className="flex justify-center">
-        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+        <div className="flex items-center gap-1.5 text-2xs text-muted-foreground">
           <ArrowDown className="h-3 w-3" />
           <span>episodic.created</span>
         </div>
@@ -55,7 +55,7 @@ export function MemoryTab() {
         description={t("memory.l2Desc")}
       />
 
-      <p className="text-[11px] text-muted-foreground italic">
+      <p className="text-xs-plus text-muted-foreground italic">
         {t("memory.eventFlow")}
       </p>
     </div>
