@@ -43,6 +43,10 @@ func init() {
 	rootCmd.AddCommand(sessionsCmd())
 	rootCmd.AddCommand(migrateCmd())
 	rootCmd.AddCommand(upgradeCmd())
+	rootCmd.AddCommand(backupCmd())
+	rootCmd.AddCommand(restoreCmd())
+	rootCmd.AddCommand(tenantBackupCmd())
+	rootCmd.AddCommand(tenantRestoreCmd())
 	rootCmd.AddCommand(authCmd())
 	rootCmd.AddCommand(setupCmd())
 }

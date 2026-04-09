@@ -513,6 +513,20 @@ func (s *Server) SetSystemConfigsHandler(h *httpapi.SystemConfigsHandler) {
 // SetUsageHandler sets the usage analytics handler.
 func (s *Server) SetUsageHandler(h *httpapi.UsageHandler) { s.handlers = append(s.handlers, h) }
 
+// SetBackupHandler sets the system backup handler.
+func (s *Server) SetBackupHandler(h *httpapi.BackupHandler) { s.handlers = append(s.handlers, h) }
+
+// SetRestoreHandler sets the system restore handler.
+func (s *Server) SetRestoreHandler(h *httpapi.RestoreHandler) { s.handlers = append(s.handlers, h) }
+
+// SetBackupS3Handler sets the S3 backup integration handler.
+func (s *Server) SetBackupS3Handler(h *httpapi.BackupS3Handler) { s.handlers = append(s.handlers, h) }
+
+// SetTenantBackupHandler sets the tenant-scoped backup/restore handler.
+func (s *Server) SetTenantBackupHandler(h *httpapi.TenantBackupHandler) {
+	s.handlers = append(s.handlers, h)
+}
+
 // SetDocsHandler sets the OpenAPI spec + Swagger UI handler.
 func (s *Server) SetDocsHandler(h *httpapi.DocsHandler) { s.handlers = append(s.handlers, h) }
 
