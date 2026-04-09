@@ -39,8 +39,11 @@ var imageGenModelDefaults = map[string]string{
 
 // CreateImageTool generates images using an image generation API.
 type CreateImageTool struct {
-	registry *providers.Registry
+	registry  *providers.Registry
+	vaultIntc *VaultInterceptor
 }
+
+func (t *CreateImageTool) SetVaultInterceptor(v *VaultInterceptor) { t.vaultIntc = v }
 
 func NewCreateImageTool(registry *providers.Registry) *CreateImageTool {
 	return &CreateImageTool{registry: registry}
@@ -126,6 +129,9 @@ func (t *CreateImageTool) Execute(ctx context.Context, args map[string]any) *Res
 	result := &Result{ForLLM: fmt.Sprintf("MEDIA:%s\nUse the EXACT filename when referencing: %s", imagePath, filepath.Base(imagePath))}
 	result.Media = []bus.MediaFile{{Path: imagePath, MimeType: "image/png"}}
 	result.Deliverable = fmt.Sprintf("[Generated image: %s]\nPrompt: %s", filepath.Base(imagePath), prompt)
+	if t.vaultIntc != nil {
+		go t.vaultIntc.AfterWriteMedia(context.WithoutCancel(ctx), imagePath, prompt, "image/png")
+	}
 	result.Provider = chainResult.Provider
 	result.Model = chainResult.Model
 	if chainResult.Usage != nil {

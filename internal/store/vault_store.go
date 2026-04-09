@@ -10,10 +10,12 @@ type VaultDocument struct {
 	ID          string         `json:"id" db:"id"`
 	TenantID    string         `json:"tenant_id" db:"tenant_id"`
 	AgentID     string         `json:"agent_id" db:"agent_id"`
+	TeamID      *string        `json:"team_id,omitempty" db:"team_id"`
 	Scope       string         `json:"scope" db:"scope"`             // personal, team, shared
+	CustomScope *string        `json:"custom_scope,omitempty" db:"custom_scope"`
 	Path        string         `json:"path" db:"path"`               // workspace-relative path
 	Title       string         `json:"title" db:"title"`
-	DocType     string         `json:"doc_type" db:"doc_type"`       // context, memory, note, skill, episodic
+	DocType     string         `json:"doc_type" db:"doc_type"`       // context, memory, note, skill, episodic, media
 	ContentHash string         `json:"content_hash" db:"content_hash"` // SHA-256 hex digest
 	Summary     string         `json:"summary" db:"summary"`           // LLM-generated summary for richer embedding/search
 	Metadata    map[string]any `json:"metadata,omitempty" db:"metadata"`
@@ -31,6 +33,15 @@ type VaultLink struct {
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 }
 
+// VaultBacklink is an enriched backlink with source doc metadata (single JOIN query).
+type VaultBacklink struct {
+	FromDocID string  `json:"from_doc_id"`
+	Context   string  `json:"context"`
+	Title     string  `json:"title"`
+	Path      string  `json:"path"`
+	TeamID    *string `json:"team_id,omitempty"`
+}
+
 // VaultSearchResult is a single result from vault search.
 type VaultSearchResult struct {
 	Document VaultDocument `json:"document" db:"-"`
@@ -43,6 +54,7 @@ type VaultSearchOptions struct {
 	Query      string
 	AgentID    string
 	TenantID   string
+	TeamID     *string  // nil = no filter, ptr-to-empty = personal (NULL team_id), ptr-to-uuid = specific team
 	Scope      string   // empty = all scopes
 	DocTypes   []string // empty = all types
 	MaxResults int      // default 10
@@ -51,6 +63,7 @@ type VaultSearchOptions struct {
 
 // VaultListOptions configures a list query for vault documents.
 type VaultListOptions struct {
+	TeamID   *string  // nil = no filter, ptr-to-empty = personal (NULL team_id), ptr-to-uuid = specific team
 	Scope    string   // empty = all
 	DocTypes []string // empty = all
 	Limit    int
@@ -74,7 +87,7 @@ type VaultStore interface {
 	CreateLink(ctx context.Context, link *VaultLink) error
 	DeleteLink(ctx context.Context, tenantID, id string) error
 	GetOutLinks(ctx context.Context, tenantID, docID string) ([]VaultLink, error)
-	GetBacklinks(ctx context.Context, tenantID, docID string) ([]VaultLink, error)
+	GetBacklinks(ctx context.Context, tenantID, docID string) ([]VaultBacklink, error)
 	DeleteDocLinks(ctx context.Context, tenantID, docID string) error
 
 	// Embedding

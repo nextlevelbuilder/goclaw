@@ -305,6 +305,7 @@ CREATE TABLE IF NOT EXISTS memory_documents (
     content    TEXT NOT NULL DEFAULT '',
     hash       VARCHAR(64) NOT NULL,
     team_id    TEXT REFERENCES agent_teams(id) ON DELETE SET NULL,
+    custom_scope TEXT,
     tenant_id  TEXT NOT NULL REFERENCES tenants(id),
     created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -331,6 +332,7 @@ CREATE TABLE IF NOT EXISTS memory_chunks (
     hash        VARCHAR(64) NOT NULL,
     text        TEXT NOT NULL,
     team_id     TEXT REFERENCES agent_teams(id) ON DELETE SET NULL,
+    custom_scope TEXT,
     tenant_id   TEXT NOT NULL REFERENCES tenants(id),
     created_at  TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at  TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -866,6 +868,7 @@ CREATE TABLE IF NOT EXISTS team_tasks (
     confidence_score     REAL,
     comment_count        INT NOT NULL DEFAULT 0,
     attachment_count     INT NOT NULL DEFAULT 0,
+    custom_scope         TEXT,
     tenant_id            TEXT NOT NULL REFERENCES tenants(id),
     created_at           TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at           TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -897,6 +900,7 @@ CREATE TABLE IF NOT EXISTS team_task_comments (
     metadata         TEXT DEFAULT '{}',
     comment_type     VARCHAR(20) NOT NULL DEFAULT 'note',
     confidence_score REAL,
+    custom_scope     TEXT,
     tenant_id        TEXT NOT NULL REFERENCES tenants(id),
     created_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
@@ -915,6 +919,7 @@ CREATE TABLE IF NOT EXISTS team_task_events (
     actor_type VARCHAR(10) NOT NULL,
     actor_id   VARCHAR(255) NOT NULL,
     data       TEXT,
+    custom_scope TEXT,
     tenant_id  TEXT NOT NULL REFERENCES tenants(id),
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
@@ -938,6 +943,7 @@ CREATE TABLE IF NOT EXISTS team_task_attachments (
     created_by_agent_id  TEXT REFERENCES agents(id),
     created_by_sender_id VARCHAR(255) DEFAULT '',
     metadata             TEXT NOT NULL DEFAULT '{}',
+    custom_scope         TEXT,
     tenant_id            TEXT NOT NULL REFERENCES tenants(id),
     created_at           TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     UNIQUE(task_id, path)
@@ -1380,6 +1386,7 @@ CREATE TABLE IF NOT EXISTS subagent_tasks (
     completed_at      TEXT,
     archived_at       TEXT,
     metadata          TEXT NOT NULL DEFAULT '{}',
+    custom_scope      TEXT,
     created_at        TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at        TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
@@ -1503,21 +1510,25 @@ CREATE TABLE IF NOT EXISTS vault_documents (
     id           TEXT NOT NULL PRIMARY KEY,
     tenant_id    TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     agent_id     TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    team_id      TEXT REFERENCES agent_teams(id) ON DELETE SET NULL,
     scope        TEXT NOT NULL DEFAULT 'personal',
+    custom_scope TEXT,
     path         TEXT NOT NULL,
     title        TEXT NOT NULL DEFAULT '',
     doc_type     TEXT NOT NULL DEFAULT 'note',
     content_hash TEXT NOT NULL DEFAULT '',
+    summary      TEXT NOT NULL DEFAULT '',
     metadata     TEXT DEFAULT '{}',
     created_at   TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at   TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    UNIQUE(agent_id, scope, path)
+    UNIQUE(agent_id, COALESCE(team_id, '00000000-0000-0000-0000-000000000000'), scope, path)
 );
 
 CREATE INDEX IF NOT EXISTS idx_vault_docs_tenant ON vault_documents(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_vault_docs_agent_scope ON vault_documents(agent_id, scope);
 CREATE INDEX IF NOT EXISTS idx_vault_docs_type ON vault_documents(agent_id, doc_type);
 CREATE INDEX IF NOT EXISTS idx_vault_docs_hash ON vault_documents(content_hash);
+CREATE INDEX IF NOT EXISTS idx_vault_docs_team ON vault_documents(team_id);
 
 -- ============================================================
 -- Table: vault_links (V3 wikilink edges)
@@ -1529,6 +1540,7 @@ CREATE TABLE IF NOT EXISTS vault_links (
     to_doc_id   TEXT NOT NULL REFERENCES vault_documents(id) ON DELETE CASCADE,
     link_type   TEXT NOT NULL DEFAULT 'wikilink',
     context     TEXT NOT NULL DEFAULT '',
+    custom_scope TEXT,
     created_at  TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     UNIQUE(from_doc_id, to_doc_id, link_type)
 );

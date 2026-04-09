@@ -15,7 +15,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 10
+const SchemaVersion = 11
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -266,6 +266,47 @@ CREATE INDEX IF NOT EXISTS idx_vault_links_to ON vault_links(to_doc_id);`,
 
 	// Version 9 → 10: add summary column to vault_documents.
 	9: `ALTER TABLE vault_documents ADD COLUMN summary TEXT NOT NULL DEFAULT '';`,
+
+	// Version 10 → 11: add team_id + custom_scope to vault_documents (fix cross-team UNIQUE),
+	// add custom_scope to 8 other tables (vault_versions absent in SQLite).
+	10: `-- Recreate vault_documents with correct UNIQUE constraint and team_id.
+-- SQLite cannot DROP an inline UNIQUE; must recreate the table.
+CREATE TABLE vault_documents_new (
+    id           TEXT NOT NULL PRIMARY KEY,
+    tenant_id    TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    agent_id     TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    team_id      TEXT REFERENCES agent_teams(id) ON DELETE SET NULL,
+    scope        TEXT NOT NULL DEFAULT 'personal',
+    custom_scope TEXT,
+    path         TEXT NOT NULL,
+    title        TEXT NOT NULL DEFAULT '',
+    doc_type     TEXT NOT NULL DEFAULT 'note',
+    content_hash TEXT NOT NULL DEFAULT '',
+    summary      TEXT NOT NULL DEFAULT '',
+    metadata     TEXT DEFAULT '{}',
+    created_at   TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at   TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    UNIQUE(agent_id, COALESCE(team_id, '00000000-0000-0000-0000-000000000000'), scope, path)
+);
+INSERT INTO vault_documents_new (id, tenant_id, agent_id, team_id, scope, custom_scope, path, title, doc_type, content_hash, summary, metadata, created_at, updated_at)
+    SELECT id, tenant_id, agent_id, NULL, scope, NULL, path, title, doc_type, content_hash, summary, metadata, created_at, updated_at
+    FROM vault_documents;
+DROP TABLE vault_documents;
+ALTER TABLE vault_documents_new RENAME TO vault_documents;
+CREATE INDEX IF NOT EXISTS idx_vault_docs_tenant ON vault_documents(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_vault_docs_agent_scope ON vault_documents(agent_id, scope);
+CREATE INDEX IF NOT EXISTS idx_vault_docs_type ON vault_documents(agent_id, doc_type);
+CREATE INDEX IF NOT EXISTS idx_vault_docs_hash ON vault_documents(content_hash);
+CREATE INDEX IF NOT EXISTS idx_vault_docs_team ON vault_documents(team_id);
+-- custom_scope on other tables (vault_versions absent in SQLite).
+ALTER TABLE vault_links ADD COLUMN custom_scope TEXT;
+ALTER TABLE memory_documents ADD COLUMN custom_scope TEXT;
+ALTER TABLE memory_chunks ADD COLUMN custom_scope TEXT;
+ALTER TABLE team_tasks ADD COLUMN custom_scope TEXT;
+ALTER TABLE team_task_attachments ADD COLUMN custom_scope TEXT;
+ALTER TABLE team_task_comments ADD COLUMN custom_scope TEXT;
+ALTER TABLE team_task_events ADD COLUMN custom_scope TEXT;
+ALTER TABLE subagent_tasks ADD COLUMN custom_scope TEXT;`,
 }
 
 // EnsureSchema creates tables if they don't exist and applies incremental migrations.

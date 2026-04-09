@@ -25,7 +25,10 @@ type CreateAudioTool struct {
 	registry          *providers.Registry
 	elevenlabsAPIKey  string
 	elevenlabsBaseURL string
+	vaultIntc         *VaultInterceptor
 }
+
+func (t *CreateAudioTool) SetVaultInterceptor(v *VaultInterceptor) { t.vaultIntc = v }
 
 // NewCreateAudioTool creates a CreateAudioTool.
 // elevenlabsKey and elevenlabsBase are used for ElevenLabs sound effects generation.
@@ -174,6 +177,9 @@ func (t *CreateAudioTool) Execute(ctx context.Context, args map[string]any) *Res
 	result := &Result{ForLLM: fmt.Sprintf("MEDIA:%s\nUse the EXACT filename when referencing: %s", audioPath, filepath.Base(audioPath))}
 	result.Media = []bus.MediaFile{{Path: audioPath, MimeType: "audio/mpeg"}}
 	result.Deliverable = fmt.Sprintf("[Generated audio: %s]\nPrompt: %s", filepath.Base(audioPath), prompt)
+	if t.vaultIntc != nil {
+		go t.vaultIntc.AfterWriteMedia(context.WithoutCancel(ctx), audioPath, prompt, "audio/mpeg")
+	}
 	result.Provider = providerName
 	result.Model = model
 	if usage != nil {

@@ -50,5 +50,32 @@ func wireVault(stores *store.Stores, toolsReg *tools.Registry, workspace string)
 		}
 	}
 
-	slog.Info("vault tools registered", "tools", "vault_search,vault_link,vault_backlinks")
+	// Wire interceptor into media generation tools.
+	if imgTool, ok := toolsReg.Get("create_image"); ok {
+		if it, ok := imgTool.(*tools.CreateImageTool); ok {
+			it.SetVaultInterceptor(vaultIntc)
+		}
+	}
+	if vidTool, ok := toolsReg.Get("create_video"); ok {
+		if vt, ok := vidTool.(*tools.CreateVideoTool); ok {
+			vt.SetVaultInterceptor(vaultIntc)
+		}
+	}
+	if audTool, ok := toolsReg.Get("create_audio"); ok {
+		if at, ok := audTool.(*tools.CreateAudioTool); ok {
+			at.SetVaultInterceptor(vaultIntc)
+		}
+	}
+	if ttsTool, ok := toolsReg.Get("tts"); ok {
+		if tt, ok := ttsTool.(*tools.TtsTool); ok {
+			tt.SetVaultInterceptor(vaultIntc)
+		}
+	}
+	if editTool, ok := toolsReg.Get("edit"); ok {
+		if et, ok := editTool.(*tools.EditTool); ok {
+			et.SetVaultInterceptor(vaultIntc)
+		}
+	}
+
+	slog.Info("vault tools registered", "tools", "vault_search,vault_link,vault_backlinks,create_image,create_video,create_audio,tts,edit")
 }

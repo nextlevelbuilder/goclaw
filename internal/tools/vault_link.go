@@ -68,16 +68,29 @@ func (t *VaultLinkTool) Execute(ctx context.Context, args map[string]any) *Resul
 	tid := tenantID.String()
 	aid := agentID.String()
 
+	// Infer scope and team from context.
+	var teamID *string
+	scope := "personal"
+	if rc := store.RunContextFromCtx(ctx); rc != nil && rc.TeamID != "" {
+		teamID = &rc.TeamID
+		scope = "team"
+	}
+
 	// Resolve source doc (auto-register if not in vault)
-	fromDoc, err := t.resolveOrRegister(ctx, tid, aid, fromPath)
+	fromDoc, err := t.resolveOrRegister(ctx, tid, aid, teamID, scope, fromPath)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("cannot resolve source doc: %v", err))
 	}
 
 	// Resolve target doc (auto-register if not in vault)
-	toDoc, err := t.resolveOrRegister(ctx, tid, aid, toPath)
+	toDoc, err := t.resolveOrRegister(ctx, tid, aid, teamID, scope, toPath)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("cannot resolve target doc: %v", err))
+	}
+
+	// Block cross-team links (both team docs must be same team).
+	if fromDoc.TeamID != nil && toDoc.TeamID != nil && *fromDoc.TeamID != *toDoc.TeamID {
+		return ErrorResult("cannot link documents from different teams")
 	}
 
 	link := &store.VaultLink{
@@ -93,17 +106,18 @@ func (t *VaultLinkTool) Execute(ctx context.Context, args map[string]any) *Resul
 	return NewResult(fmt.Sprintf("Linked %s → %s", fromPath, toPath))
 }
 
-// resolveOrRegister finds a vault doc by path, or creates a stub entry.
-func (t *VaultLinkTool) resolveOrRegister(ctx context.Context, tenantID, agentID, path string) (*store.VaultDocument, error) {
+// resolveOrRegister finds a vault doc by path, or creates a stub entry with team context.
+func (t *VaultLinkTool) resolveOrRegister(ctx context.Context, tenantID, agentID string, teamID *string, scope, path string) (*store.VaultDocument, error) {
 	doc, err := t.vaultStore.GetDocument(ctx, tenantID, agentID, path)
 	if err == nil && doc != nil {
 		return doc, nil
 	}
-	// Auto-register stub
+	// Auto-register stub with team context.
 	doc = &store.VaultDocument{
 		TenantID: tenantID,
 		AgentID:  agentID,
-		Scope:    "personal",
+		TeamID:   teamID,
+		Scope:    scope,
 		Path:     path,
 		Title:    strings.TrimSuffix(path, ".md"),
 		DocType:  "note",
@@ -163,28 +177,45 @@ func (t *VaultBacklinksTool) Execute(ctx context.Context, args map[string]any) *
 		return ErrorResult(fmt.Sprintf("document not found in vault: %s", path))
 	}
 
-	links, err := t.vaultStore.GetBacklinks(ctx, tenantID.String(), doc.ID)
+	backlinks, err := t.vaultStore.GetBacklinks(ctx, tenantID.String(), doc.ID)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("failed to get backlinks: %v", err))
 	}
 
-	if len(links) == 0 {
-		return NewResult(fmt.Sprintf("No documents link to %s", path))
+	// Determine current team context for filtering.
+	var currentTeamID string
+	if rc := store.RunContextFromCtx(ctx); rc != nil {
+		currentTeamID = rc.TeamID
 	}
 
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Documents linking to %s:\n\n", path))
-	for i, l := range links {
-		// Look up the source document
-		srcDoc, err := t.vaultStore.GetDocumentByID(ctx, tenantID.String(), l.FromDocID)
-		if err != nil {
-			continue
+	count := 0
+	for _, bl := range backlinks {
+		// Team boundary filter:
+		// - Team context: show same-team docs only (hide personal + other teams)
+		// - Personal context: show personal docs only (hide team docs)
+		if bl.TeamID != nil && *bl.TeamID != "" {
+			if currentTeamID == "" || *bl.TeamID != currentTeamID {
+				continue
+			}
+		} else {
+			// Personal doc — hide in team context (prevents exfiltration)
+			if currentTeamID != "" {
+				continue
+			}
 		}
-		sb.WriteString(fmt.Sprintf("%d. %s (%s)", i+1, srcDoc.Title, srcDoc.Path))
-		if l.Context != "" {
-			sb.WriteString(fmt.Sprintf(" — \"%s\"", l.Context))
+
+		count++
+		sb.WriteString(fmt.Sprintf("%d. %s (%s)", count, bl.Title, bl.Path))
+		if bl.Context != "" {
+			sb.WriteString(fmt.Sprintf(" — \"%s\"", bl.Context))
 		}
 		sb.WriteByte('\n')
+	}
+
+	if count == 0 {
+		return NewResult(fmt.Sprintf("No documents link to %s", path))
 	}
 	return NewResult(sb.String())
 }

@@ -21,6 +21,16 @@ func NewVaultInterceptor(vs store.VaultStore, workspace string) *VaultIntercepto
 	return &VaultInterceptor{vaultStore: vs, workspace: workspace}
 }
 
+// inferScopeFromContext returns scope and team_id based on RunContext.
+// TeamID present → scope="team", teamID=&rc.TeamID. Absent → "personal", nil.
+func inferScopeFromContext(ctx context.Context) (scope string, teamID *string) {
+	rc := store.RunContextFromCtx(ctx)
+	if rc != nil && rc.TeamID != "" {
+		return "team", &rc.TeamID
+	}
+	return "personal", nil
+}
+
 // AfterWrite registers or updates a vault document after a file write.
 // Non-blocking: errors logged but not propagated.
 func (v *VaultInterceptor) AfterWrite(ctx context.Context, resolvedPath, content string) {
@@ -36,7 +46,6 @@ func (v *VaultInterceptor) AfterWrite(ctx context.Context, resolvedPath, content
 
 	tenantID := store.TenantIDFromContext(ctx).String()
 	agentID := store.AgentIDFromContext(ctx).String()
-	// uuid.Nil.String() == "00000000-0000-0000-0000-000000000000"
 	nilUUID := "00000000-0000-0000-0000-000000000000"
 	if tenantID == nilUUID || agentID == nilUUID {
 		return
@@ -45,11 +54,13 @@ func (v *VaultInterceptor) AfterWrite(ctx context.Context, resolvedPath, content
 	hash := vault.ContentHash([]byte(content))
 	title := inferVaultTitle(relPath)
 	docType := inferVaultDocType(relPath)
+	scope, teamID := inferScopeFromContext(ctx)
 
 	doc := &store.VaultDocument{
 		TenantID:    tenantID,
 		AgentID:     agentID,
-		Scope:       "personal",
+		TeamID:      teamID,
+		Scope:       scope,
 		Path:        relPath,
 		Title:       title,
 		DocType:     docType,
@@ -57,6 +68,53 @@ func (v *VaultInterceptor) AfterWrite(ctx context.Context, resolvedPath, content
 	}
 	if err := v.vaultStore.UpsertDocument(ctx, doc); err != nil {
 		slog.Warn("vault.after_write", "path", relPath, "err", err)
+	}
+}
+
+// AfterWriteMedia registers a binary media file in the vault.
+// Hashes from disk file (not RAM) to avoid holding large binaries in memory.
+// Non-blocking: errors logged but not propagated.
+func (v *VaultInterceptor) AfterWriteMedia(ctx context.Context, resolvedPath, summary, mimeType string) {
+	if v.vaultStore == nil {
+		return
+	}
+
+	relPath, err := filepath.Rel(v.workspace, resolvedPath)
+	if err != nil || strings.HasPrefix(relPath, "..") {
+		return
+	}
+	relPath = filepath.ToSlash(relPath)
+
+	tenantID := store.TenantIDFromContext(ctx).String()
+	agentID := store.AgentIDFromContext(ctx).String()
+	nilUUID := "00000000-0000-0000-0000-000000000000"
+	if tenantID == nilUUID || agentID == nilUUID {
+		return
+	}
+
+	hash, err := vault.ContentHashFile(resolvedPath)
+	if err != nil {
+		slog.Warn("vault.media_hash", "path", relPath, "err", err)
+		return
+	}
+
+	title := inferVaultTitle(relPath)
+	scope, teamID := inferScopeFromContext(ctx)
+
+	doc := &store.VaultDocument{
+		TenantID:    tenantID,
+		AgentID:     agentID,
+		TeamID:      teamID,
+		Scope:       scope,
+		Path:        relPath,
+		Title:       title,
+		DocType:     "media",
+		ContentHash: hash,
+		Summary:     summary,
+		Metadata:    map[string]any{"mime_type": mimeType},
+	}
+	if err := v.vaultStore.UpsertDocument(ctx, doc); err != nil {
+		slog.Warn("vault.after_write_media", "path", relPath, "err", err)
 	}
 }
 
@@ -103,8 +161,20 @@ func inferVaultTitle(relPath string) string {
 }
 
 // inferVaultDocType guesses doc_type from path conventions.
+// Media extension check runs first — doc_type describes content format, not location.
 func inferVaultDocType(relPath string) string {
 	lower := strings.ToLower(relPath)
+	ext := strings.ToLower(filepath.Ext(relPath))
+
+	// Media types (images, video, audio)
+	switch ext {
+	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp",
+		".mp4", ".webm", ".mov", ".avi", ".mkv",
+		".mp3", ".wav", ".ogg", ".flac", ".aac", ".m4a":
+		return "media"
+	}
+
+	// Path-based inference
 	switch {
 	case strings.HasPrefix(lower, "memory/"):
 		return "memory"

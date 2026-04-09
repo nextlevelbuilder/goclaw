@@ -1,21 +1,51 @@
 package http
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // VaultHandler serves Knowledge Vault document and link endpoints.
 type VaultHandler struct {
-	store store.VaultStore
+	store      store.VaultStore
+	teamAccess store.TeamAccessStore // nil = skip team membership validation (e.g. lite edition)
 }
 
-func NewVaultHandler(s store.VaultStore) *VaultHandler {
-	return &VaultHandler{store: s}
+func NewVaultHandler(s store.VaultStore, ta store.TeamAccessStore) *VaultHandler {
+	return &VaultHandler{store: s, teamAccess: ta}
+}
+
+// validateTeamMembership checks that the requesting user belongs to the given team.
+// Owner role bypasses this check. Returns false and writes 403 if unauthorized.
+func (h *VaultHandler) validateTeamMembership(ctx context.Context, w http.ResponseWriter, teamID string) bool {
+	if store.IsOwnerRole(ctx) {
+		return true
+	}
+	if h.teamAccess == nil {
+		return true // no team store = skip validation (lite edition)
+	}
+	userID := store.UserIDFromContext(ctx)
+	if userID == "" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "user identity required"})
+		return false
+	}
+	tid, err := uuid.Parse(teamID)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid team_id"})
+		return false
+	}
+	ok, err := h.teamAccess.HasTeamAccess(ctx, tid, userID)
+	if err != nil || !ok {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "not a member of the specified team"})
+		return false
+	}
+	return true
 }
 
 func (h *VaultHandler) RegisterRoutes(mux *http.ServeMux) {
@@ -46,12 +76,16 @@ func (h *VaultHandler) parseListOpts(r *http.Request) store.VaultListOptions {
 	if limit > 500 {
 		limit = 500
 	}
-	return store.VaultListOptions{
+	opts := store.VaultListOptions{
 		Scope:    r.URL.Query().Get("scope"),
 		DocTypes: splitCSV(r.URL.Query().Get("doc_type")),
 		Limit:    limit,
 		Offset:   offset,
 	}
+	if teamID := r.URL.Query().Get("team_id"); teamID != "" {
+		opts.TeamID = &teamID
+	}
+	return opts
 }
 
 // handleListAllDocuments lists vault documents across all agents in tenant.
@@ -60,6 +94,18 @@ func (h *VaultHandler) handleListAllDocuments(w http.ResponseWriter, r *http.Req
 	tenantID := store.TenantIDFromContext(r.Context())
 	agentID := r.URL.Query().Get("agent_id")
 	opts := h.parseListOpts(r)
+
+	// Validate team membership if specific team requested.
+	if opts.TeamID != nil && *opts.TeamID != "" {
+		if !h.validateTeamMembership(r.Context(), w, *opts.TeamID) {
+			return
+		}
+	}
+	// Non-owner without team_id filter: default to personal (NULL team_id) only.
+	if opts.TeamID == nil && !store.IsOwnerRole(r.Context()) {
+		empty := ""
+		opts.TeamID = &empty
+	}
 
 	docs, err := h.store.ListDocuments(r.Context(), tenantID.String(), agentID, opts)
 	if err != nil {
@@ -78,6 +124,16 @@ func (h *VaultHandler) handleListDocuments(w http.ResponseWriter, r *http.Reques
 	tenantID := store.TenantIDFromContext(r.Context())
 	agentID := r.PathValue("agentID")
 	opts := h.parseListOpts(r)
+
+	if opts.TeamID != nil && *opts.TeamID != "" {
+		if !h.validateTeamMembership(r.Context(), w, *opts.TeamID) {
+			return
+		}
+	}
+	if opts.TeamID == nil && !store.IsOwnerRole(r.Context()) {
+		empty := ""
+		opts.TeamID = &empty
+	}
 
 	docs, err := h.store.ListDocuments(r.Context(), tenantID.String(), agentID, opts)
 	if err != nil {
@@ -107,6 +163,12 @@ func (h *VaultHandler) handleGetDocument(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "document not found"})
 		return
 	}
+	// Verify team boundary — non-owner must be team member to view team docs.
+	if doc.TeamID != nil && *doc.TeamID != "" && !store.IsOwnerRole(r.Context()) {
+		if !h.validateTeamMembership(r.Context(), w, *doc.TeamID) {
+			return
+		}
+	}
 	writeJSON(w, http.StatusOK, doc)
 }
 
@@ -121,6 +183,7 @@ func (h *VaultHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
 		Scope      string   `json:"scope"`
 		DocTypes   []string `json:"doc_types"`
 		MaxResults int      `json:"max_results"`
+		TeamID     string   `json:"team_id"`
 	}
 	if !bindJSON(w, r, locale, &body) {
 		return
@@ -133,14 +196,25 @@ func (h *VaultHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
 		body.MaxResults = 10
 	}
 
-	results, err := h.store.Search(r.Context(), store.VaultSearchOptions{
+	searchOpts := store.VaultSearchOptions{
 		Query:      body.Query,
 		AgentID:    agentID,
 		TenantID:   tenantID.String(),
 		Scope:      body.Scope,
 		DocTypes:   body.DocTypes,
 		MaxResults: body.MaxResults,
-	})
+	}
+	if body.TeamID != "" {
+		if !h.validateTeamMembership(r.Context(), w, body.TeamID) {
+			return
+		}
+		searchOpts.TeamID = &body.TeamID
+	} else if !store.IsOwnerRole(r.Context()) {
+		empty := ""
+		searchOpts.TeamID = &empty // non-owner: personal only
+	}
+
+	results, err := h.store.Search(r.Context(), searchOpts)
 	if err != nil {
 		slog.Warn("vault.search failed", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -174,8 +248,34 @@ func (h *VaultHandler) handleGetLinks(w http.ResponseWriter, r *http.Request) {
 		outLinks = []store.VaultLink{}
 	}
 	if backlinks == nil {
-		backlinks = []store.VaultLink{}
+		backlinks = []store.VaultBacklink{}
 	}
+
+	// Filter backlinks by team boundary — derive team context from the target document
+	// itself (not a query param) so clients don't need to supply it correctly.
+	isOwner := store.IsOwnerRole(r.Context())
+	if !isOwner {
+		targetDoc, _ := h.store.GetDocumentByID(r.Context(), tenantID.String(), docID)
+		var currentTeamID string
+		if targetDoc != nil && targetDoc.TeamID != nil {
+			currentTeamID = *targetDoc.TeamID
+		}
+		filtered := make([]store.VaultBacklink, 0, len(backlinks))
+		for _, bl := range backlinks {
+			if currentTeamID != "" {
+				if bl.TeamID != nil && *bl.TeamID != currentTeamID {
+					continue
+				}
+			} else {
+				if bl.TeamID != nil && *bl.TeamID != "" {
+					continue
+				}
+			}
+			filtered = append(filtered, bl)
+		}
+		backlinks = filtered
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"outlinks":  outLinks,
 		"backlinks": backlinks,
@@ -193,6 +293,7 @@ func (h *VaultHandler) handleCreateDocument(w http.ResponseWriter, r *http.Reque
 		Title    string         `json:"title"`
 		DocType  string         `json:"doc_type"`
 		Scope    string         `json:"scope"`
+		TeamID   string         `json:"team_id"`
 		Metadata map[string]any `json:"metadata"`
 	}
 	if !bindJSON(w, r, locale, &body) {
@@ -226,13 +327,22 @@ func (h *VaultHandler) handleCreateDocument(w http.ResponseWriter, r *http.Reque
 		Scope:    body.Scope,
 		Metadata: body.Metadata,
 	}
+	if body.TeamID != "" {
+		if !h.validateTeamMembership(r.Context(), w, body.TeamID) {
+			return
+		}
+		doc.TeamID = &body.TeamID
+		if body.Scope == "personal" {
+			doc.Scope = "team"
+		}
+	}
 	if err := h.store.UpsertDocument(r.Context(), doc); err != nil {
 		slog.Warn("vault.create failed", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	// Re-fetch to get server-generated fields (id, timestamps).
-	created, _ := h.store.GetDocument(r.Context(), tenantID.String(), agentID, body.Path)
+	// Re-fetch by ID (set via RETURNING) — unambiguous even when same path exists across teams.
+	created, _ := h.store.GetDocumentByID(r.Context(), tenantID.String(), doc.ID)
 	if created != nil {
 		writeJSON(w, http.StatusCreated, created)
 	} else {
@@ -257,6 +367,7 @@ func (h *VaultHandler) handleUpdateDocument(w http.ResponseWriter, r *http.Reque
 		Title    *string        `json:"title"`
 		DocType  *string        `json:"doc_type"`
 		Scope    *string        `json:"scope"`
+		TeamID   *string        `json:"team_id"` // nil=no change, ""=clear, "uuid"=set
 		Metadata map[string]any `json:"metadata"`
 	}
 	if !bindJSON(w, r, locale, &body) {
@@ -271,6 +382,20 @@ func (h *VaultHandler) handleUpdateDocument(w http.ResponseWriter, r *http.Reque
 	}
 	if body.Scope != nil {
 		existing.Scope = *body.Scope
+	}
+	if body.TeamID != nil {
+		// Only owner/admin can change team assignment.
+		if !store.IsOwnerRole(r.Context()) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "only owner can change document team assignment"})
+			return
+		}
+		if *body.TeamID == "" {
+			existing.TeamID = nil
+			existing.Scope = "personal"
+		} else {
+			existing.TeamID = body.TeamID
+			existing.Scope = "team"
+		}
 	}
 	if body.Metadata != nil {
 		existing.Metadata = body.Metadata
@@ -301,7 +426,15 @@ func (h *VaultHandler) handleDeleteDocument(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Links are cascade-deleted by FK constraint in vault_links table.
+	// Verify team boundary before deletion.
+	if existing.TeamID != nil && *existing.TeamID != "" && !store.IsOwnerRole(r.Context()) {
+		if !h.validateTeamMembership(r.Context(), w, *existing.TeamID) {
+			return
+		}
+	}
+
+	// DeleteDocument without RunContext applies no team_id filter (broad match on tenant+agent+path).
+	// This is safe because we pre-validated team membership above and use server-derived existing.Path.
 	if err := h.store.DeleteDocument(r.Context(), tenantID.String(), agentID, existing.Path); err != nil {
 		slog.Warn("vault.delete failed", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -344,6 +477,11 @@ func (h *VaultHandler) handleCreateLink(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "source document does not belong to this agent"})
 		return
 	}
+	// Block cross-team linking (both team docs must be in same team).
+	if from.TeamID != nil && to.TeamID != nil && *from.TeamID != *to.TeamID {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "cannot link documents from different teams"})
+		return
+	}
 
 	link := &store.VaultLink{
 		FromDocID: body.FromDocID,
@@ -372,7 +510,7 @@ func (h *VaultHandler) handleDeleteLink(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusNoContent)
 }
 
-var allowedDocTypes = map[string]bool{"context": true, "memory": true, "note": true, "skill": true, "episodic": true}
+var allowedDocTypes = map[string]bool{"context": true, "memory": true, "note": true, "skill": true, "episodic": true, "media": true}
 var allowedScopes = map[string]bool{"personal": true, "team": true, "shared": true}
 
 func validDocType(dt string) bool { return allowedDocTypes[dt] }

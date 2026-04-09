@@ -20,8 +20,11 @@ type EditTool struct {
 	sandboxMgr      sandbox.Manager
 	contextFileIntc *ContextFileInterceptor
 	memIntc         *MemoryInterceptor
+	vaultIntc       *VaultInterceptor
 	permStore       store.ConfigPermissionStore // nil = no group write restriction
 }
+
+func (t *EditTool) SetVaultInterceptor(v *VaultInterceptor) { t.vaultIntc = v }
 
 // DenyPaths adds path prefixes that edit must reject.
 func (t *EditTool) DenyPaths(prefixes ...string) {
@@ -186,6 +189,10 @@ func (t *EditTool) Execute(ctx context.Context, args map[string]any) *Result {
 
 	if err := os.WriteFile(resolved, []byte(newContent), 0644); err != nil {
 		return ErrorResult(fmt.Sprintf("failed to write file: %v", err))
+	}
+
+	if t.vaultIntc != nil {
+		go t.vaultIntc.AfterWrite(context.WithoutCancel(ctx), resolved, newContent)
 	}
 
 	count := strings.Count(content, oldStr)

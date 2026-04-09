@@ -28,6 +28,7 @@ type UnifiedSearchOptions struct {
 	AgentID    string
 	UserID     string
 	TenantID   string
+	TeamID     *string // nil = no filter (owner), ptr-to-empty = personal, ptr-to-uuid = team
 	Scope      string
 	DocTypes   []string
 	MaxResults int
@@ -82,6 +83,7 @@ func (s *VaultSearchService) Search(ctx context.Context, opts UnifiedSearchOptio
 				Query:      opts.Query,
 				AgentID:    opts.AgentID,
 				TenantID:   opts.TenantID,
+				TeamID:     opts.TeamID,
 				Scope:      opts.Scope,
 				DocTypes:   opts.DocTypes,
 				MaxResults: opts.MaxResults * 2,

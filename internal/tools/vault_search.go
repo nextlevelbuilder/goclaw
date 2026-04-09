@@ -74,6 +74,10 @@ func (t *VaultSearchTool) Execute(ctx context.Context, args map[string]any) *Res
 		UserID:   userID,
 		TenantID: tenantID.String(),
 	}
+	// Team context from RunContext — cannot be spoofed via tool args.
+	if rc := store.RunContextFromCtx(ctx); rc != nil && rc.TeamID != "" {
+		opts.TeamID = &rc.TeamID
+	}
 
 	if scope, ok := args["scope"].(string); ok && scope != "" {
 		opts.Scope = scope
