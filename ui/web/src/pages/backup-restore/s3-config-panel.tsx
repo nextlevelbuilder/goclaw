@@ -1,24 +1,35 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslation } from "react-i18next";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { useS3Config, useSaveS3Config, type S3ConfigInput } from "./hooks/use-s3-config";
+import { useS3Config, useSaveS3Config } from "./hooks/use-s3-config";
+import { s3ConfigSchema, type S3ConfigFormData } from "@/schemas/s3-config.schema";
 
 export function S3ConfigPanel() {
   const { t } = useTranslation("backup");
   const { data, isLoading } = useS3Config();
   const saveMutation = useSaveS3Config();
 
-  const [form, setForm] = useState<S3ConfigInput>({
-    access_key_id: "",
-    secret_access_key: "",
-    bucket: "",
-    region: "us-east-1",
-    endpoint: "",
-    prefix: "backups/",
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<S3ConfigFormData>({
+    resolver: zodResolver(s3ConfigSchema),
+    defaultValues: {
+      access_key_id: "",
+      secret_access_key: "",
+      bucket: "",
+      region: "us-east-1",
+      endpoint: "",
+      prefix: "backups/",
+    },
   });
 
   // Populate form on initial load only (not after save-triggered refetch)
@@ -26,23 +37,19 @@ export function S3ConfigPanel() {
   useEffect(() => {
     if (data?.configured && !hydrated.current) {
       hydrated.current = true;
-      setForm((prev) => ({
-        ...prev,
+      reset({
         access_key_id: data.access_key_id ?? "",
+        secret_access_key: "",
         bucket: data.bucket ?? "",
         region: data.region ?? "us-east-1",
         endpoint: data.endpoint ?? "",
         prefix: data.prefix ?? "backups/",
-      }));
+      });
     }
-  }, [data]);
+  }, [data, reset]);
 
-  const update = (field: keyof S3ConfigInput, value: string) =>
-    setForm((prev) => ({ ...prev, [field]: value }));
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    saveMutation.mutate(form);
+  const onValid = (data: S3ConfigFormData) => {
+    saveMutation.mutate(data);
   };
 
   if (isLoading) {
@@ -64,43 +71,48 @@ export function S3ConfigPanel() {
       </div>
       <p className="text-sm text-muted-foreground">{t("s3.description")}</p>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit(onValid)} className="space-y-4">
         <div>
           <Label htmlFor="s3-key">{t("s3.fields.accessKeyId")}</Label>
-          <Input id="s3-key" value={form.access_key_id} onChange={(e) => update("access_key_id", e.target.value)}
-            className="mt-1 text-base md:text-sm" required />
+          <Input id="s3-key" {...register("access_key_id")}
+            className="mt-1 text-base md:text-sm" />
+          {errors.access_key_id && (
+            <p className="mt-1 text-xs text-destructive">{errors.access_key_id.message}</p>
+          )}
         </div>
 
         <div>
           <Label htmlFor="s3-secret">{t("s3.fields.secretAccessKey")}</Label>
-          <Input id="s3-secret" type="password" value={form.secret_access_key}
-            onChange={(e) => update("secret_access_key", e.target.value)}
+          <Input id="s3-secret" type="password" {...register("secret_access_key")}
             placeholder={data?.configured ? t("s3.fields.secretPlaceholder") : undefined}
-            className="mt-1 text-base md:text-sm" required={!data?.configured} />
+            className="mt-1 text-base md:text-sm" />
         </div>
 
         <div>
           <Label htmlFor="s3-bucket">{t("s3.fields.bucket")}</Label>
-          <Input id="s3-bucket" value={form.bucket} onChange={(e) => update("bucket", e.target.value)}
-            className="mt-1 text-base md:text-sm" required />
+          <Input id="s3-bucket" {...register("bucket")}
+            className="mt-1 text-base md:text-sm" />
+          {errors.bucket && (
+            <p className="mt-1 text-xs text-destructive">{errors.bucket.message}</p>
+          )}
         </div>
 
         <div>
           <Label htmlFor="s3-region">{t("s3.fields.region")}</Label>
-          <Input id="s3-region" value={form.region} onChange={(e) => update("region", e.target.value)}
+          <Input id="s3-region" {...register("region")}
             className="mt-1 text-base md:text-sm" />
         </div>
 
         <div>
           <Label htmlFor="s3-endpoint">{t("s3.fields.endpoint")}</Label>
-          <Input id="s3-endpoint" value={form.endpoint} onChange={(e) => update("endpoint", e.target.value)}
+          <Input id="s3-endpoint" {...register("endpoint")}
             placeholder="https://..." className="mt-1 text-base md:text-sm" />
           <p className="mt-1 text-xs text-muted-foreground">{t("s3.fields.endpointHint")}</p>
         </div>
 
         <div>
           <Label htmlFor="s3-prefix">{t("s3.fields.prefix")}</Label>
-          <Input id="s3-prefix" value={form.prefix} onChange={(e) => update("prefix", e.target.value)}
+          <Input id="s3-prefix" {...register("prefix")}
             className="mt-1 text-base md:text-sm" />
         </div>
 

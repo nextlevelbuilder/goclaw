@@ -1,6 +1,11 @@
 import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslation } from "react-i18next";
 import { AlertCircle } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { tokenFormSchema, type TokenFormData } from "@/schemas/login.schema";
 
 interface TokenFormProps {
   onSubmit: (userId: string, token: string) => void;
@@ -8,24 +13,27 @@ interface TokenFormProps {
 
 export function TokenForm({ onSubmit }: TokenFormProps) {
   const { t } = useTranslation("login");
-  const [userId, setUserId] = useState("system");
-  const [token, setToken] = useState("");
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!token.trim() || !userId.trim()) return;
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<TokenFormData>({
+    resolver: zodResolver(tokenFormSchema),
+    defaultValues: { userId: "system", token: "" },
+  });
 
+  const onValid = async (data: TokenFormData) => {
     setConnecting(true);
     setError(null);
 
     try {
-      // Verify connectivity and credentials before navigating
       const res = await fetch("/v1/agents", {
         headers: {
-          Authorization: `Bearer ${token.trim()}`,
-          "X-GoClaw-User-Id": userId.trim(),
+          Authorization: `Bearer ${data.token.trim()}`,
+          "X-GoClaw-User-Id": data.userId.trim(),
         },
       });
 
@@ -39,48 +47,52 @@ export function TokenForm({ onSubmit }: TokenFormProps) {
         return;
       }
 
-      onSubmit(userId.trim(), token.trim());
+      onSubmit(data.userId.trim(), data.token.trim());
     } catch {
       setError(t("token.errorCannotConnect"));
     } finally {
       setConnecting(false);
     }
-  }
+  };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit(onValid)} className="space-y-4">
       <div className="space-y-2">
-        <label htmlFor="userId" className="text-sm font-medium">
+        <Label htmlFor="userId" className="text-sm font-medium">
           {t("token.userId")}
-        </label>
-        <input
+        </Label>
+        <Input
           id="userId"
           type="text"
-          value={userId}
-          onChange={(e) => { setUserId(e.target.value); setError(null); }}
+          {...register("userId")}
           placeholder={t("token.userIdPlaceholder")}
-          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base md:text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          className="text-base md:text-sm"
           autoFocus
           disabled={connecting}
         />
+        {errors.userId && (
+          <p className="text-xs text-destructive">{errors.userId.message}</p>
+        )}
         <p className="text-xs text-muted-foreground">
           {t("token.userIdHint")}
         </p>
       </div>
 
       <div className="space-y-2">
-        <label htmlFor="token" className="text-sm font-medium">
+        <Label htmlFor="token" className="text-sm font-medium">
           {t("token.gatewayToken")}
-        </label>
-        <input
+        </Label>
+        <Input
           id="token"
           type="password"
-          value={token}
-          onChange={(e) => { setToken(e.target.value); setError(null); }}
+          {...register("token")}
           placeholder={t("token.tokenPlaceholder")}
-          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base md:text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          className="text-base md:text-sm"
           disabled={connecting}
         />
+        {errors.token && (
+          <p className="text-xs text-destructive">{errors.token.message}</p>
+        )}
       </div>
 
       {error && (
@@ -92,7 +104,7 @@ export function TokenForm({ onSubmit }: TokenFormProps) {
 
       <button
         type="submit"
-        disabled={!token.trim() || !userId.trim() || connecting}
+        disabled={connecting}
         className="inline-flex h-9 w-full items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
       >
         {connecting ? t("token.connecting") : t("token.connect")}

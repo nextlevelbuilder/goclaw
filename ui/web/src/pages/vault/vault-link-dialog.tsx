@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -9,6 +11,7 @@ import {
 import { Combobox } from "@/components/ui/combobox";
 import { useCreateLink, useVaultDocuments } from "./hooks/use-vault";
 import type { VaultDocument } from "@/types/vault";
+import { vaultLinkSchema, type VaultLinkFormData } from "@/schemas/vault.schema";
 
 const LINK_TYPES = [
   { value: "reference", label: "Reference" },
@@ -30,32 +33,39 @@ export function VaultLinkDialog({ agentId, fromDoc, open, onOpenChange, onCreate
   const { t } = useTranslation("vault");
   const { create } = useCreateLink(agentId);
   const { documents } = useVaultDocuments(agentId, { limit: 100 });
-
-  const [toDocId, setToDocId] = useState("");
-  const [linkType, setLinkType] = useState("reference");
-  const [context, setContext] = useState("");
   const [saving, setSaving] = useState(false);
+
+  const {
+    register,
+    handleSubmit,
+    watch,
+    setValue,
+    reset,
+    formState: { errors },
+  } = useForm<VaultLinkFormData>({
+    resolver: zodResolver(vaultLinkSchema),
+    defaultValues: {
+      toDocId: "",
+      linkType: "reference",
+      context: "",
+    },
+  });
+
+  const toDocId = watch("toDocId");
+  const linkType = watch("linkType");
 
   const docOptions = documents
     .filter((d) => d.id !== fromDoc.id)
     .map((d) => ({ value: d.id, label: d.title || d.path }));
 
-  const reset = () => {
-    setToDocId("");
-    setLinkType("reference");
-    setContext("");
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!toDocId || !linkType.trim()) return;
+  const onValid = async (data: VaultLinkFormData) => {
     setSaving(true);
     try {
       await create({
         from_doc_id: fromDoc.id,
-        to_doc_id: toDocId,
-        link_type: linkType.trim(),
-        context: context.trim() || undefined,
+        to_doc_id: data.toDocId,
+        link_type: data.linkType.trim(),
+        context: data.context?.trim() || undefined,
       });
       reset();
       onCreated?.();
@@ -67,8 +77,12 @@ export function VaultLinkDialog({ agentId, fromDoc, open, onOpenChange, onCreate
     }
   };
 
+  const handleClose = (v: boolean) => {
+    if (!saving) { reset(); onOpenChange(v); }
+  };
+
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!saving) { reset(); onOpenChange(v); } }}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md max-sm:inset-0">
         <DialogHeader>
           <DialogTitle>{t("createLink")}</DialogTitle>
@@ -77,39 +91,47 @@ export function VaultLinkDialog({ agentId, fromDoc, open, onOpenChange, onCreate
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit(onValid)} className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="link-to-doc">{t("fields.toDoc")} *</Label>
             <Combobox
               value={toDocId}
-              onChange={setToDocId}
+              onChange={(v) => setValue("toDocId", v, { shouldValidate: true })}
               options={docOptions}
               placeholder={t("fields.selectDoc")}
             />
+            {errors.toDocId && (
+              <p className="text-xs text-destructive">{errors.toDocId.message}</p>
+            )}
           </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="link-type">{t("fields.linkType")}</Label>
             <Combobox
               value={linkType}
-              onChange={setLinkType}
+              onChange={(v) => setValue("linkType", v, { shouldValidate: true })}
               options={LINK_TYPES}
               allowCustom
               customLabel={t("fields.customType") || "Custom:"}
               placeholder="reference"
             />
+            {errors.linkType && (
+              <p className="text-xs text-destructive">{errors.linkType.message}</p>
+            )}
           </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="link-context">{t("fields.linkContext")}</Label>
             <Textarea
               id="link-context"
-              value={context}
-              onChange={(e) => setContext(e.target.value)}
+              {...register("context")}
               placeholder={t("fields.linkContextPlaceholder")}
               className="text-base md:text-sm resize-none"
               rows={2}
             />
+            {errors.context && (
+              <p className="text-xs text-destructive">{errors.context.message}</p>
+            )}
           </div>
 
           <DialogFooter>

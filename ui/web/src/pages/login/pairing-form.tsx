@@ -1,7 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslation } from "react-i18next";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Methods, PROTOCOL_VERSION } from "@/api/protocol";
 import { generateId } from "@/lib/utils";
+import { pairingFormSchema, type PairingFormData } from "@/schemas/login.schema";
 
 type PairingStatus = "idle" | "connecting" | "pending" | "approved";
 
@@ -11,7 +16,6 @@ interface PairingFormProps {
 
 export function PairingForm({ onApproved }: PairingFormProps) {
   const { t } = useTranslation("login");
-  const [userId, setUserId] = useState("");
   const [code, setCode] = useState<string | null>(null);
   const senderIDRef = useRef<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -19,6 +23,13 @@ export function PairingForm({ onApproved }: PairingFormProps) {
 
   const wsRef = useRef<WebSocket | null>(null);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const { register, handleSubmit, watch } = useForm<PairingFormData>({
+    resolver: zodResolver(pairingFormSchema),
+    defaultValues: { userId: "" },
+  });
+
+  const userId = watch("userId");
 
   useEffect(() => {
     return () => {
@@ -37,9 +48,7 @@ export function PairingForm({ onApproved }: PairingFormProps) {
     [userId, onApproved],
   );
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!userId.trim()) return;
+  const onValid = (data: PairingFormData) => {
     setError(null);
     setStatus("connecting");
 
@@ -57,7 +66,7 @@ export function PairingForm({ onApproved }: PairingFormProps) {
           id,
           method: Methods.CONNECT,
           params: {
-            user_id: userId.trim(),
+            user_id: data.userId.trim(),
             protocolVersion: PROTOCOL_VERSION,
           },
         }),
@@ -111,7 +120,7 @@ export function PairingForm({ onApproved }: PairingFormProps) {
     };
 
     ws.onerror = () => {};
-  }
+  };
 
   function startPolling(ws: WebSocket, sid: string) {
     const poll = () => {
@@ -154,22 +163,21 @@ export function PairingForm({ onApproved }: PairingFormProps) {
 
   // Request form
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit(onValid)} className="space-y-4">
       {error && (
         <p className="text-center text-sm text-destructive">{error}</p>
       )}
 
       <div className="space-y-2">
-        <label htmlFor="pairingUserId" className="text-sm font-medium">
+        <Label htmlFor="pairingUserId" className="text-sm font-medium">
           {t("pairing.userId")}
-        </label>
-        <input
+        </Label>
+        <Input
           id="pairingUserId"
           type="text"
-          value={userId}
-          onChange={(e) => setUserId(e.target.value)}
+          {...register("userId")}
           placeholder={t("pairing.userIdPlaceholder")}
-          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base md:text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          className="text-base md:text-sm"
           autoFocus
         />
       </div>
@@ -180,7 +188,7 @@ export function PairingForm({ onApproved }: PairingFormProps) {
 
       <button
         type="submit"
-        disabled={!userId.trim() || status === "connecting"}
+        disabled={status === "connecting"}
         className="inline-flex h-9 w-full items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
       >
         {status === "connecting" ? t("pairing.connecting") : t("pairing.requestAccess")}

@@ -24,7 +24,7 @@ interface McpConnectionFieldsProps {
 /** Renders transport selector plus stdio command/args or HTTP url/headers fields. */
 export function McpConnectionFields({ form }: McpConnectionFieldsProps) {
   const { t } = useTranslation("mcp");
-  const { register, watch, setValue } = form;
+  const { register, watch, setValue, formState: { errors } } = form;
   const transport = watch("transport");
   const name = watch("name");
   const headers = watch("headers") as Record<string, string>;
@@ -40,7 +40,11 @@ export function McpConnectionFields({ form }: McpConnectionFieldsProps) {
           onChange={(e) => setValue("name", slugify(e.target.value))}
           placeholder="my-mcp-server"
         />
-        <p className="text-xs text-muted-foreground">{t("form.nameHint")}</p>
+        {errors.name ? (
+          <p className="text-xs text-destructive">{errors.name.message}</p>
+        ) : (
+          <p className="text-xs text-muted-foreground">{t("form.nameHint")}</p>
+        )}
       </div>
 
       <div className="grid gap-1.5">
