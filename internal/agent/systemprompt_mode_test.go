@@ -84,17 +84,16 @@ func TestTaskModeDropsSections(t *testing.T) {
 	}
 }
 
-func TestTaskModePersonaSlim(t *testing.T) {
+func TestTaskModePersonaFull(t *testing.T) {
 	cfg := fullTestConfig()
 	cfg.Mode = PromptTask
 	prompt := BuildSystemPrompt(cfg)
-	// Style should be extracted as slim echo
-	if !strings.Contains(prompt, "Playful, curious") {
-		t.Error("task mode should include style echo from SOUL.md")
+	// Task mode now gets full persona (SOUL.md + IDENTITY.md)
+	if !strings.Contains(prompt, "Persona & Identity") {
+		t.Error("task mode should have full Persona section")
 	}
-	// Full lore content should NOT appear (full persona section dropped)
-	if strings.Contains(prompt, "Long backstory") {
-		t.Error("task mode should not include full SOUL.md body")
+	if !strings.Contains(prompt, "Playful, curious") {
+		t.Error("task mode should include SOUL.md content")
 	}
 }
 
@@ -128,15 +127,42 @@ func TestTaskModeMemorySlim(t *testing.T) {
 
 // --- None mode tests ---
 
-func TestNoneModeIdentityOnly(t *testing.T) {
+func TestNoneModeSections(t *testing.T) {
+	cfg := fullTestConfig()
+	cfg.Mode = PromptNone
+	cfg.PinnedSkillsSummary = "<available_skills><skill><name>weather</name></skill></available_skills>"
+	cfg.HasMCPToolSearch = true
+	cfg.ExtraPrompt = "extra context here"
+	// None mode only gets TOOLS.md via ModeAllowlist (filtering happens in pipeline)
+	cfg.ContextFiles = []bootstrap.ContextFile{
+		{Path: "TOOLS.md", Content: "tool notes"},
+	}
+	prompt := BuildSystemPrompt(cfg)
+
+	// Should have: Tooling, Workspace, Runtime, Pinned Skills, MCP search, Extra prompt, Safety slim
+	for _, want := range []string{"## Tooling", "## Workspace", "## Runtime", "## Pinned Skills", "mcp_tool_search", "extra context here", "## Safety"} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("none mode missing: %s", want)
+		}
+	}
+	// Should NOT have: Persona, Memory Recall, Self-Evolution, Tool Call Style, Execution Bias, Sub-Agent, Recency
+	for _, dropped := range []string{"# Persona", "## Memory Recall", "## Self-Evolution", "## Tool Call Style", "## Execution Bias", "## Sub-Agent Spawning", "Reminder: Follow AGENTS.md"} {
+		if strings.Contains(prompt, dropped) {
+			t.Errorf("none mode should not have: %s", dropped)
+		}
+	}
+	// Size check: should be under 3000 chars (~750 tokens)
+	if len(prompt) > 3000 {
+		t.Errorf("none mode too large: %d chars", len(prompt))
+	}
+}
+
+func TestNoneModeNoTime(t *testing.T) {
 	cfg := fullTestConfig()
 	cfg.Mode = PromptNone
 	prompt := BuildSystemPrompt(cfg)
-	if len(prompt) > 200 {
-		t.Errorf("none mode should be minimal, got %d chars", len(prompt))
-	}
-	if strings.Contains(prompt, "## Tooling") {
-		t.Error("none mode should not have Tooling")
+	if strings.Contains(prompt, "Current date:") {
+		t.Error("none mode should not have time section")
 	}
 }
 
@@ -352,30 +378,21 @@ func TestCapabilitiesInMinimalAllowlist(t *testing.T) {
 	}
 }
 
-func TestHeartbeatGetsAgentsMinimal(t *testing.T) {
-	files := []bootstrap.File{
-		{Name: "AGENTS.md", Content: "full rules"},
-		{Name: "TOOLS.md", Content: "tools"},
-		{Name: "CAPABILITIES.md", Content: "expertise"},
+func TestHeartbeatUsesAgentsCore(t *testing.T) {
+	// Heartbeat resolves to minimal mode → ModeAllowlist("minimal") = {AGENTS_CORE.md, CAPABILITIES.md}
+	mode := resolvePromptMode("", "agent:abc:heartbeat", "")
+	if mode != PromptMinimal {
+		t.Fatalf("heartbeat should resolve to minimal, got %s", mode)
 	}
-	filtered := bootstrap.FilterForSession(files, "agent:abc:heartbeat")
-	for _, f := range filtered {
-		if f.Name == "AGENTS.md" {
-			t.Error("heartbeat should NOT get full AGENTS.md")
-		}
-		if f.Name == "AGENTS_MINIMAL.md" && f.Content == "" {
-			t.Error("AGENTS_MINIMAL.md should have content")
-		}
+	allowlist := bootstrap.ModeAllowlist(string(mode))
+	if allowlist == nil {
+		t.Fatal("minimal allowlist should not be nil")
 	}
-	// Should have AGENTS_MINIMAL.md
-	hasMinimal := false
-	for _, f := range filtered {
-		if f.Name == "AGENTS_MINIMAL.md" {
-			hasMinimal = true
-		}
+	if !allowlist[bootstrap.AgentsCoreFile] {
+		t.Error("minimal allowlist should include AGENTS_CORE.md")
 	}
-	if !hasMinimal {
-		t.Error("heartbeat should get AGENTS_MINIMAL.md")
+	if allowlist[bootstrap.AgentsFile] {
+		t.Error("minimal allowlist should NOT include full AGENTS.md")
 	}
 }
 

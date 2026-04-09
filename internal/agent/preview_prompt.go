@@ -40,8 +40,11 @@ func BuildPreviewPrompt(ctx context.Context, ag *store.AgentData, mode PromptMod
 			if f.Content == "" {
 				continue
 			}
-			if mode == PromptMinimal && !bootstrap.IsMinimalAllowed(f.FileName) {
-				continue
+			// Mode-aware context file filtering
+			if allowlist := bootstrap.ModeAllowlist(string(mode)); allowlist != nil {
+				if !allowlist[f.FileName] {
+					continue
+				}
 			}
 			contextFiles = append(contextFiles, bootstrap.ContextFile{Path: f.FileName, Content: f.Content})
 		}
@@ -183,8 +186,10 @@ func mergePreviewUserFiles(ctx context.Context, as store.AgentStore, agentID uui
 		if seen[uf.FileName] || uf.Content == "" {
 			continue
 		}
-		if mode == PromptMinimal && !bootstrap.IsMinimalAllowed(uf.FileName) {
-			continue
+		if allowlist := bootstrap.ModeAllowlist(string(mode)); allowlist != nil {
+			if !allowlist[uf.FileName] {
+				continue
+			}
 		}
 		result = append(result, bootstrap.ContextFile{Path: uf.FileName, Content: uf.Content})
 	}

@@ -111,6 +111,8 @@ var userSeedFilesOpen = []string{
 	UserFile,
 	BootstrapFile,
 	CapabilitiesFile,
+	AgentsCoreFile,
+	AgentsTaskFile,
 }
 
 // userSeedFilesPredefined is the set of files seeded per-user for predefined agents.

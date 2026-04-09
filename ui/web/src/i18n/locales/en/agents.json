@@ -196,13 +196,13 @@
       "title": "System Prompt Mode",
       "mode": {
         "full": "Full",
-        "fullDesc": "All sections — chatbot, main agent",
+        "fullDesc": "All sections — interactive chat, persona, full features",
         "task": "Task",
-        "taskDesc": "Enterprise automation — lean prompt, keeps tools/safety/skills",
+        "taskDesc": "Enterprise automation — memory, evolution, no persona/vibe",
         "minimal": "Minimal",
-        "minimalDesc": "Subagent/cron — bare minimum sections",
+        "minimalDesc": "Background tasks — core rules, domain context, observe-only",
         "none": "None",
-        "noneDesc": "Identity line only — API/webhook integrations"
+        "noneDesc": "Pure tool-call automation — tools, skills, no rules or persona"
       },
       "section": {
         "persona": "Persona",
@@ -221,8 +221,14 @@
         "sandbox": "Sandbox",
         "evolution": "Evolution",
         "channelHints": "Channel Hints",
-        "pinnedSkills": "Pinned Skills"
-      }
+        "pinnedSkills": "Pinned Skills",
+        "skillsHybrid": "Skills (hybrid)",
+        "memoryMin": "Memory (min)",
+        "domainCtx": "Domain Context",
+        "workspace": "Workspace",
+        "toolNotes": "Tool Notes"
+      },
+      "upgradeWarning": "Mode upgraded. Some files may need regeneration — use Resummon or Edit with AI in the Files tab."
     },
     "engine": {
       "title": "Engine Version",

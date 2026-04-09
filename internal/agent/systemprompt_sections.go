@@ -84,10 +84,20 @@ func buildSafetySlimSection() []string {
 	}
 }
 
-// buildMemoryRecallSlimSection generates a 1-line memory instruction for task mode.
-func buildMemoryRecallSlimSection() []string {
+// buildMemoryRecallSlimSection generates a concise memory instruction for task mode.
+func buildMemoryRecallSlimSection(hasMemoryExpand bool) []string {
+	line := "Before answering about prior work/decisions: call memory_search."
+	if hasMemoryExpand {
+		line += " Use memory_expand(id) for full session details from episodic results."
+	}
+	line += " If no results, say so naturally."
+	return []string{line, ""}
+}
+
+// buildMemoryRecallMinimalSection generates a 1-line memory instruction for minimal mode.
+func buildMemoryRecallMinimalSection() []string {
 	return []string{
-		"Before answering about prior work/decisions: call memory_search. If no results, say so naturally.",
+		"If you need context from past sessions: call memory_search.",
 		"",
 	}
 }
@@ -122,6 +132,8 @@ func buildExecutionBiasSection() []string {
 // These go above the cache boundary for Anthropic prompt caching.
 var stableContextFileNames = map[string]bool{
 	bootstrap.AgentsFile:         true,
+	bootstrap.AgentsTaskFile:     true,
+	bootstrap.AgentsCoreFile:     true,
 	bootstrap.ToolsFile:          true,
 	bootstrap.UserPredefinedFile: true,
 	bootstrap.CapabilitiesFile:   true,
@@ -221,9 +233,18 @@ func buildToolCallStyleSection() []string {
 }
 
 // buildMemoryRecallSection generates the ## Memory Recall section for the system prompt.
-func buildMemoryRecallSection(hasMemoryGet, hasKG bool) []string {
+func buildMemoryRecallSection(hasMemoryGet, hasMemoryExpand, hasKG bool) []string {
 	lines := []string{"## Memory Recall", ""}
 
+	// 3-tier explanation so agent understands the architecture
+	lines = append(lines,
+		"You have 3 levels of memory:",
+		"- **Auto-recall (L0)**: Past session hints may appear in a \"Memory Context\" section above — these are auto-injected.",
+		"- **Episodic (L1)**: Full session summaries — retrieve via memory_search, then memory_expand(id) for details.",
+		"- **Semantic (L2)**: Knowledge graph of people, projects, connections — retrieve via knowledge_graph_search.",
+		"")
+
+	// Tool usage instructions
 	if hasMemoryGet {
 		lines = append(lines,
 			"Before answering questions about prior work, decisions, people, preferences, or todos: "+
@@ -234,6 +255,12 @@ func buildMemoryRecallSection(hasMemoryGet, hasKG bool) []string {
 			"Before answering questions about prior work, decisions, people, preferences, or todos: "+
 				"call memory_search with a relevant query and answer from the matching results. "+
 				"If no relevant results found, say so naturally without mentioning tool names.")
+	}
+
+	if hasMemoryExpand {
+		lines = append(lines,
+			"When memory_search returns episodic results with an ID, call memory_expand(id) to retrieve "+
+				"the full session summary for deeper context.")
 	}
 
 	if hasKG {

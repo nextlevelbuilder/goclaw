@@ -118,6 +118,7 @@ type SystemPromptConfig struct {
 	PinnedSkillsSummary string            // XML summary of pinned skills only (hybrid mode)
 	HasMCPToolSearch   bool              // mcp_tool_search tool registered? (MCP search mode)
 	HasKnowledgeGraph  bool              // knowledge_graph_search tool registered?
+	HasMemoryExpand    bool              // memory_expand tool registered? (v3 episodic deep retrieval)
 	MCPToolDescs       map[string]string // MCP tool name → description (inline mode only)
 
 	// Sandbox info — matching TS sandboxInfo in system-prompt.ts
@@ -215,11 +216,7 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 	isFull := cfg.Mode == PromptFull || cfg.Mode == ""
 	isTask := cfg.Mode == PromptTask
 	isMinimal := cfg.Mode == PromptMinimal
-
-	// None mode: identity line only (API/webhook integrations).
-	if cfg.Mode == PromptNone {
-		return "You are a personal assistant."
-	}
+	isNone := cfg.Mode == PromptNone
 
 	var lines []string
 
@@ -284,14 +281,10 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 		)
 	}
 
-	// 1.7. # Persona — mode-aware: full=SOUL.md+IDENTITY.md body, task=style echo, minimal=skip
+	// 1.7. # Persona — full+task get full persona (SOUL.md+IDENTITY.md), minimal/none skip
 	personaFiles, otherFiles := splitPersonaFiles(cfg.ContextFiles)
-	if isFull && len(personaFiles) > 0 {
+	if (isFull || isTask) && len(personaFiles) > 0 {
 		lines = append(lines, buildPersonaSection(personaFiles, cfg.AgentType)...)
-	} else if isTask {
-		if slim := buildPersonaSlim(personaFiles, cfg.AgentID); slim != nil {
-			lines = append(lines, slim...)
-		}
 	}
 
 	// 2. ## Tooling
@@ -312,8 +305,8 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 		lines = append(lines, cfg.CredentialCLIContext, "")
 	}
 
-	// 3. ## Safety — task mode gets slim version (keeps prompt injection defense)
-	if isTask {
+	// 3. ## Safety — task/none get slim version (keeps prompt injection defense)
+	if isTask || isNone {
 		lines = append(lines, buildSafetySlimSection()...)
 	} else {
 		lines = append(lines, buildSafetySection()...)
@@ -347,13 +340,13 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 		}
 	}
 
-	// 4.1. Pinned skills — minimal mode standalone (pinned skills are explicitly chosen, always relevant)
-	if isMinimal && !cfg.IsBootstrap && cfg.PinnedSkillsSummary != "" {
+	// 4.1. Pinned skills — minimal/none mode standalone (pinned skills are explicitly chosen, always relevant)
+	if (isMinimal || isNone) && !cfg.IsBootstrap && cfg.PinnedSkillsSummary != "" {
 		lines = append(lines, buildPinnedSkillsMinimalSection(cfg.PinnedSkillsSummary)...)
 	}
 
-	// 4.5. ## MCP Tools — full + task (task: search-only, no inline)
-	if (isFull || isTask) && !cfg.IsBootstrap {
+	// 4.5. ## MCP Tools — full + task + none (none: search-only)
+	if (isFull || isTask || isNone) && !cfg.IsBootstrap {
 		if isFull && len(cfg.MCPToolDescs) > 0 {
 			lines = append(lines, buildMCPToolsInlineSection(cfg.MCPToolDescs)...)
 		}
@@ -393,13 +386,15 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 		lines = append(lines, buildUserIdentitySection(cfg.OwnerIDs)...)
 	}
 
-	// 12.5. ## Memory Recall — full=detailed, task=slim, minimal=skip
+	// 12.5. ## Memory Recall — full=detailed, task=slim, minimal=essential
 	if cfg.HasMemory {
 		if isFull {
 			hasMemoryGet := slices.Contains(cfg.ToolNames, "memory_get")
-			lines = append(lines, buildMemoryRecallSection(hasMemoryGet, cfg.HasKnowledgeGraph)...)
+			lines = append(lines, buildMemoryRecallSection(hasMemoryGet, cfg.HasMemoryExpand, cfg.HasKnowledgeGraph)...)
 		} else if isTask {
-			lines = append(lines, buildMemoryRecallSlimSection()...)
+			lines = append(lines, buildMemoryRecallSlimSection(cfg.HasMemoryExpand)...)
+		} else if isMinimal {
+			lines = append(lines, buildMemoryRecallMinimalSection()...)
 		}
 	}
 
@@ -424,7 +419,9 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 	}
 
 	// 8. Time (below boundary — date changes don't bust the stable cache)
-	lines = append(lines, buildTimeSection()...)
+	if !isNone {
+		lines = append(lines, buildTimeSection()...)
+	}
 
 	// 9.5. Channel formatting hints — full mode only
 	if isFull {

@@ -188,13 +188,13 @@
       "title": "Chế độ System Prompt",
       "mode": {
         "full": "Đầy đủ",
-        "fullDesc": "Tất cả phần — chatbot, agent chính",
+        "fullDesc": "Tất cả phần — chat tương tác, persona, đầy đủ tính năng",
         "task": "Tác vụ",
-        "taskDesc": "Tự động hóa doanh nghiệp — prompt gọn, giữ tools/safety/skills",
+        "taskDesc": "Tự động hóa — memory, evolution, không persona/vibe",
         "minimal": "Tối giản",
-        "minimalDesc": "Subagent/cron — chỉ các phần tối thiểu",
+        "minimalDesc": "Tác vụ nền — rules cốt lõi, domain context, observe-only",
         "none": "Không",
-        "noneDesc": "Chỉ dòng định danh — tích hợp API/webhook"
+        "noneDesc": "Tự động gọi tool — tools, skills, không rules hay persona"
       },
       "section": {
         "persona": "Persona",
@@ -213,8 +213,14 @@
         "sandbox": "Sandbox",
         "evolution": "Evolution",
         "channelHints": "Channel Hints",
-        "pinnedSkills": "Pinned Skills"
-      }
+        "pinnedSkills": "Pinned Skills",
+        "skillsHybrid": "Skills (hybrid)",
+        "memoryMin": "Memory (min)",
+        "domainCtx": "Domain Context",
+        "workspace": "Workspace",
+        "toolNotes": "Tool Notes"
+      },
+      "upgradeWarning": "Đã nâng cấp mode. Một số file có thể cần tạo lại — dùng Resummon hoặc Edit with AI ở tab Files."
     },
     "engine": {
       "title": "Phiên Bản Engine",

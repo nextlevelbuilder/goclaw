@@ -118,6 +118,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 	_, hasSkillManage := l.tools.Get("skill_manage")
 	_, hasMCPToolSearch := l.tools.Get("mcp_tool_search")
 	_, hasKG := l.tools.Get("knowledge_graph_search")
+	_, hasMemoryExpand := l.tools.Get("memory_expand")
 
 	// Per-user workspace: show the user's subdirectory in the system prompt.
 	// Uses cached workspace from userSetups (includes channel isolation).
@@ -264,6 +265,17 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		contextFiles = filtered
 	}
 
+	// Mode-aware context file filtering: each mode loads different files.
+	if allowlist := bootstrap.ModeAllowlist(string(mode)); allowlist != nil {
+		filtered := make([]bootstrap.ContextFile, 0, len(contextFiles))
+		for _, cf := range contextFiles {
+			if allowlist[cf.Path] {
+				filtered = append(filtered, cf)
+			}
+		}
+		contextFiles = filtered
+	}
+
 	// Resolve team members so agent knows who to assign tasks to.
 	// Only resolve when team context is active — avoids unnecessary DB query for member-only inbound chats.
 	var teamMembers []store.TeamMemberData
@@ -296,6 +308,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		HasSkillManage:         l.skillEvolve && hasSkillManage,
 		HasMCPToolSearch:       hasMCPToolSearch,
 		HasKnowledgeGraph:      hasKG,
+		HasMemoryExpand:        hasMemoryExpand,
 		MCPToolDescs:           mcpToolDescs,
 		ContextFiles:           contextFiles,
 		AgentType:              l.agentType,

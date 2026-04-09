@@ -15,7 +15,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 11
+const SchemaVersion = 12
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -264,13 +264,16 @@ CREATE TABLE IF NOT EXISTS vault_links (
 CREATE INDEX IF NOT EXISTS idx_vault_links_from ON vault_links(from_doc_id);
 CREATE INDEX IF NOT EXISTS idx_vault_links_to ON vault_links(to_doc_id);`,
 
-	// Version 9 → 10: add summary column to vault_documents.
-	9: `ALTER TABLE vault_documents ADD COLUMN summary TEXT NOT NULL DEFAULT '';`,
+	// Version 9 → 10: originally added summary column to vault_documents.
+	// Now a no-op: migration 8 already creates vault_documents WITH summary.
+	// DBs from schema.sql also include summary. ALTER would fail with "duplicate column".
+	9: `SELECT 1;`,
 
 	// Version 10 → 11: add team_id + custom_scope to vault_documents (fix cross-team UNIQUE),
 	// add custom_scope to 8 other tables (vault_versions absent in SQLite).
-	10: `-- Recreate vault_documents with correct UNIQUE constraint and team_id.
--- SQLite cannot DROP an inline UNIQUE; must recreate the table.
+	10: `-- Recreate vault_documents with team_id + custom_scope columns.
+-- SQLite prohibits expressions (COALESCE) in UNIQUE constraints,
+-- so we use a unique INDEX instead of inline UNIQUE.
 CREATE TABLE vault_documents_new (
     id           TEXT NOT NULL PRIMARY KEY,
     tenant_id    TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -285,14 +288,15 @@ CREATE TABLE vault_documents_new (
     summary      TEXT NOT NULL DEFAULT '',
     metadata     TEXT DEFAULT '{}',
     created_at   TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at   TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    UNIQUE(agent_id, COALESCE(team_id, '00000000-0000-0000-0000-000000000000'), scope, path)
+    updated_at   TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 INSERT INTO vault_documents_new (id, tenant_id, agent_id, team_id, scope, custom_scope, path, title, doc_type, content_hash, summary, metadata, created_at, updated_at)
     SELECT id, tenant_id, agent_id, NULL, scope, NULL, path, title, doc_type, content_hash, summary, metadata, created_at, updated_at
     FROM vault_documents;
 DROP TABLE vault_documents;
 ALTER TABLE vault_documents_new RENAME TO vault_documents;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_vault_docs_unique_path
+    ON vault_documents(agent_id, COALESCE(team_id, ''), scope, path);
 CREATE INDEX IF NOT EXISTS idx_vault_docs_tenant ON vault_documents(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_vault_docs_agent_scope ON vault_documents(agent_id, scope);
 CREATE INDEX IF NOT EXISTS idx_vault_docs_type ON vault_documents(agent_id, doc_type);
@@ -307,6 +311,61 @@ ALTER TABLE team_task_attachments ADD COLUMN custom_scope TEXT;
 ALTER TABLE team_task_comments ADD COLUMN custom_scope TEXT;
 ALTER TABLE team_task_events ADD COLUMN custom_scope TEXT;
 ALTER TABLE subagent_tasks ADD COLUMN custom_scope TEXT;`,
+	// Version 11 → 12: seed AGENTS_CORE.md + AGENTS_TASK.md, remove AGENTS_MINIMAL.md.
+	11: `INSERT INTO agent_context_files (id, agent_id, file_name, content, tenant_id, created_at, updated_at)
+SELECT lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)),2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)),2) || '-' || hex(randomblob(6))),
+  a.id, 'AGENTS_CORE.md',
+  '# Operating Rules (Core)
+
+## Language & Communication
+
+- Match the user''s language. Detect from first message, stay consistent.
+
+## Internal Messages
+
+- [System Message] blocks are internal context. Not user-visible.
+- Rewrite system messages in your normal voice before delivering.
+- Never use exec or curl for messaging.
+- When asked to save or remember, MUST call write_file or edit in THIS turn.
+',
+  a.tenant_id, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+FROM agents a
+WHERE a.deleted_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM agent_context_files WHERE agent_id = a.id AND file_name = 'AGENTS_CORE.md');
+
+INSERT INTO agent_context_files (id, agent_id, file_name, content, tenant_id, created_at, updated_at)
+SELECT lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)),2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)),2) || '-' || hex(randomblob(6))),
+  a.id, 'AGENTS_TASK.md',
+  '# Operating Rules (Task)
+
+## Language & Communication
+
+- Match the user''s language. Detect from first message, stay consistent.
+
+## Internal Messages
+
+- [System Message] blocks are internal context. Not user-visible.
+- Rewrite system messages in your normal voice before delivering.
+- Never use exec or curl for messaging.
+- When asked to save or remember, MUST call write_file or edit in THIS turn.
+
+## Memory
+
+- Use memory_search before answering about prior work, decisions, or preferences.
+- Use write_file to persist important information. No mental notes.
+- Only reference MEMORY.md content in private/direct chats.
+
+## Scheduling
+
+- Use cron tool for periodic or timed tasks.
+- Use kind: at for one-shot reminders.
+',
+  a.tenant_id, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+FROM agents a
+WHERE a.deleted_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM agent_context_files WHERE agent_id = a.id AND file_name = 'AGENTS_TASK.md');
+
+DELETE FROM agent_context_files WHERE file_name = 'AGENTS_MINIMAL.md';`,
 }
 
 // EnsureSchema creates tables if they don't exist and applies incremental migrations.

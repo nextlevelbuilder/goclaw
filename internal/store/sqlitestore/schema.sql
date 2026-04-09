@@ -1520,10 +1520,11 @@ CREATE TABLE IF NOT EXISTS vault_documents (
     summary      TEXT NOT NULL DEFAULT '',
     metadata     TEXT DEFAULT '{}',
     created_at   TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at   TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    UNIQUE(agent_id, COALESCE(team_id, '00000000-0000-0000-0000-000000000000'), scope, path)
+    updated_at   TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
-
+-- SQLite prohibits expressions in inline UNIQUE constraints; use a unique index instead.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_vault_docs_unique_path
+    ON vault_documents(agent_id, COALESCE(team_id, ''), scope, path);
 CREATE INDEX IF NOT EXISTS idx_vault_docs_tenant ON vault_documents(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_vault_docs_agent_scope ON vault_documents(agent_id, scope);
 CREATE INDEX IF NOT EXISTS idx_vault_docs_type ON vault_documents(agent_id, doc_type);

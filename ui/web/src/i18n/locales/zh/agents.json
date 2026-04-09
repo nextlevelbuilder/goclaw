@@ -188,13 +188,13 @@
       "title": "系统提示模式",
       "mode": {
         "full": "完整",
-        "fullDesc": "所有部分 — 聊天机器人、主代理",
+        "fullDesc": "所有部分 — 交互聊天、人设、全部功能",
         "task": "任务",
-        "taskDesc": "企业自动化 — 精简提示，保留工具/安全/技能",
+        "taskDesc": "企业自动化 — 记忆、进化、无人设/语气",
         "minimal": "最小化",
-        "minimalDesc": "子代理/定时 — 最少必要部分",
+        "minimalDesc": "后台任务 — 核心规则、领域上下文、仅观察",
         "none": "无",
-        "noneDesc": "仅身份行 — API/webhook集成"
+        "noneDesc": "纯工具调用自动化 — 工具、技能、无规则或人设"
       },
       "section": {
         "persona": "Persona",
@@ -213,8 +213,14 @@
         "sandbox": "Sandbox",
         "evolution": "Evolution",
         "channelHints": "Channel Hints",
-        "pinnedSkills": "Pinned Skills"
-      }
+        "pinnedSkills": "Pinned Skills",
+        "skillsHybrid": "Skills (hybrid)",
+        "memoryMin": "Memory (min)",
+        "domainCtx": "Domain Context",
+        "workspace": "Workspace",
+        "toolNotes": "Tool Notes"
+      },
+      "upgradeWarning": "模式已升级。部分文件可能需要重新生成 — 在 Files 标签页使用 Resummon 或 Edit with AI。"
     },
     "engine": {
       "title": "引擎版本",

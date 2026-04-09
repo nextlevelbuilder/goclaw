@@ -13,6 +13,7 @@ export const agentCreateSchema = z.object({
   agentType: z.enum(["predefined"]),
   description: z.string().optional(),
   selfEvolve: z.boolean(),
+  promptMode: z.enum(["full", "task", "minimal", "none"]).optional(),
 });
 
 export type AgentCreateFormData = z.infer<typeof agentCreateSchema>;

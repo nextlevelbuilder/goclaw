@@ -19,6 +19,12 @@ import { useAgentPresets } from "./agent-presets";
 import { agentCreateSchema, type AgentCreateFormData } from "@/schemas/agent.schema";
 import { AgentIdentityAndModelFields } from "./agent-identity-and-model-fields";
 import { AgentDescriptionSection } from "./agent-description-section";
+import { Zap, Wrench, Package, CircleOff } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Label } from "@/components/ui/label";
+
+const PROMPT_MODES = ["full", "task", "minimal", "none"] as const;
+const MODE_ICONS = { full: Zap, task: Wrench, minimal: Package, none: CircleOff };
 
 interface AgentCreateDialogProps {
   open: boolean;
@@ -93,6 +99,10 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
     setLoading(true);
     setSubmitError("");
     try {
+      const otherConfig: Record<string, unknown> = {};
+      if (data.promptMode && data.promptMode !== "full") {
+        otherConfig.prompt_mode = data.promptMode;
+      }
       await onCreate({
         agent_key: data.agentKey,
         display_name: data.displayName || undefined,
@@ -103,6 +113,7 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
         emoji: data.emoji?.trim() || null,
         agent_description: data.description?.trim() || null,
         self_evolve: data.selfEvolve || false,
+        ...(Object.keys(otherConfig).length > 0 && { other_config: otherConfig }),
       });
       onOpenChange(false);
     } catch (err) {
@@ -141,6 +152,28 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
             onVerify={handleVerify}
           />
           <AgentDescriptionSection form={form} agentPresets={agentPresets} />
+
+          {/* Prompt Mode selector */}
+          <div className="space-y-1.5">
+            <Label>{t("detail.prompt.title")}</Label>
+            <div className="grid grid-cols-4 gap-1.5">
+              {PROMPT_MODES.map((m) => {
+                const Icon = MODE_ICONS[m];
+                const selected = watch("promptMode") === m || (!watch("promptMode") && m === "full");
+                return (
+                  <button key={m} type="button"
+                    onClick={() => setValue("promptMode", m === "full" ? undefined : m)}
+                    className={cn("flex flex-col items-center gap-1 rounded-md border p-2 text-xs cursor-pointer",
+                      selected ? "ring-2 ring-primary border-primary" : "hover:border-primary/30"
+                    )}>
+                    <Icon className="h-3.5 w-3.5" />
+                    {t(`detail.prompt.mode.${m}`)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {submitError && <p className="text-sm text-destructive">{submitError}</p>}
         </div>
 

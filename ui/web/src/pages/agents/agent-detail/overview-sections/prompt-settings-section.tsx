@@ -4,6 +4,7 @@ import { Zap, Wrench, Package, CircleOff } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { toast } from "@/stores/use-toast-store";
 import type { AgentData } from "@/types/agent";
 import { readPromptMode } from "../agent-display-utils";
 
@@ -23,22 +24,22 @@ const MODE_ICONS: Record<(typeof PROMPT_MODES)[number], LucideIcon> = {
 
 /**
  * Section tags per mode — accurate to systemprompt.go gating logic (v3).
- * Context files (AGENTS, TOOLS, USER_PREDEFINED, CAPABILITIES), workspace, time shared across all modes.
- * Subagent/cron use task mode. Heartbeat uses minimal with AGENTS_MINIMAL.
+ * Context files filtered by ModeAllowlist: full=all, task=AGENTS_TASK+TOOLS+CAPABILITIES,
+ * minimal=AGENTS_CORE+CAPABILITIES, none=TOOLS only.
  */
 const MODE_SECTIONS: Record<(typeof PROMPT_MODES)[number], string[]> = {
   full: ["persona", "tools", "execBias", "callStyle", "safety", "skills", "mcp", "memory", "sandbox", "evolution", "channelHints"],
-  task: ["styleEcho", "tools", "execBias", "safetySm", "skillsSearch", "mcpSearch", "memorySm"],
-  minimal: ["tools", "safety", "pinnedSkills"],
-  none: [],
+  task: ["styleEcho", "tools", "execBias", "safetySm", "skillsHybrid", "mcpSearch", "memorySm"],
+  minimal: ["tools", "pinnedSkills", "memoryMin", "domainCtx"],
+  none: ["tools", "toolNotes", "pinnedSkills", "mcpSearch", "workspace"],
 };
 
-/** Token count per mode — measured via tiktoken (cl100k) on production agent (tieu-ho), v3 updated */
+/** Token count per mode — estimated from systemprompt.go section sizes */
 const MODE_TOKENS: Record<(typeof PROMPT_MODES)[number], string> = {
-  full: "~3.2K",
-  task: "~2.3K",
-  minimal: "~1.4K",
-  none: "~6",
+  full: "~4.8K",
+  task: "~1.3K",
+  minimal: "~570",
+  none: "~640",
 };
 
 export function PromptSettingsSection({ agent, onUpdate }: Props) {
@@ -61,6 +62,11 @@ export function PromptSettingsSection({ agent, onUpdate }: Props) {
         delete bag.prompt_mode;
       }
       await onUpdate({ other_config: bag });
+      // Warn when upgrading to a mode that may need files the agent doesn't have yet
+      const modeRank: Record<string, number> = { none: 0, minimal: 1, task: 2, full: 3 };
+      if ((modeRank[mode] ?? 3) > (modeRank[savedMode] ?? 3)) {
+        toast.info(t("detail.prompt.upgradeWarning", "Mode upgraded. Some files may need regeneration — use Resummon or Edit with AI in the Files tab."));
+      }
     } finally {
       setSaving(false);
     }
@@ -107,11 +113,9 @@ export function PromptSettingsSection({ agent, onUpdate }: Props) {
                   )}>
                     {t(`detail.prompt.mode.${m}`)}
                   </span>
-                  {m !== "none" && (
-                    <span className="text-[10px] text-muted-foreground/70 tabular-nums shrink-0">
-                      {tokens}
-                    </span>
-                  )}
+                  <span className="text-[10px] text-muted-foreground/70 tabular-nums shrink-0">
+                    {tokens}
+                  </span>
                 </div>
                 <p className="text-[11px] text-muted-foreground">
                   {t(`detail.prompt.mode.${m}Desc`)}

@@ -254,8 +254,14 @@ export function AgentsPage() {
           const created = await createAgent(data);
           refresh();
           if (created && typeof created === "object" && "status" in created && created.status === "summoning") {
-            const ag = created as { id: string; display_name?: string; agent_key: string };
-            setSummoningAgent({ id: ag.id, name: ag.display_name || ag.agent_key });
+            const ag = created as { id: string; display_name?: string; agent_key: string; other_config?: Record<string, unknown> };
+            // Skip summoning modal for none/minimal — these modes don't use persona files
+            const pm = ag.other_config?.prompt_mode;
+            if (pm === "none" || pm === "minimal") {
+              // no-op: summoning will still run on backend but we skip the modal
+            } else {
+              setSummoningAgent({ id: ag.id, name: ag.display_name || ag.agent_key });
+            }
           }
         }}
       />
