@@ -29,12 +29,12 @@ const MODE_SECTIONS: Record<(typeof PROMPT_MODES)[number], string[]> = {
   none: ["identityOnly"],
 };
 
-/** Estimated base token range per mode (excluding context files) */
+/** Estimated token range per mode: base (~measured via tiktoken) + typical context files */
 const MODE_TOKENS: Record<(typeof PROMPT_MODES)[number], string> = {
-  full: "~2-4K",
-  task: "~1-2K",
-  minimal: "~300-600",
-  none: "~10",
+  full: "~1.7K+",
+  task: "~1.1K+",
+  minimal: "~660",
+  none: "~6",
 };
 
 export function PromptSettingsSection({ agent, onUpdate }: Props) {
