@@ -39,9 +39,10 @@ const (
 
 // ExecApprovalConfig configures command execution approval.
 type ExecApprovalConfig struct {
-	Security  ExecSecurity `json:"security"`  // "deny", "allowlist", "full" (default "full")
-	Ask       ExecAskMode  `json:"ask"`       // "off", "on-miss", "always" (default "off")
-	Allowlist []string     `json:"allowlist"` // glob patterns for allowed commands
+	Security           ExecSecurity `json:"security"`           // "deny", "allowlist", "full" (default "full")
+	Ask                ExecAskMode  `json:"ask"`                // "off", "on-miss", "always" (default "off")
+	Allowlist          []string     `json:"allowlist"`          // glob patterns for allowed commands
+	PackageAutoApprove bool         `json:"packageAutoApprove"` // auto-approve package install commands (apk add, pip install, etc.)
 }
 
 // DefaultExecApprovalConfig returns the default (permissive) config.

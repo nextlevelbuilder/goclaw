@@ -1,11 +1,14 @@
 package tools
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -200,9 +203,17 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 				continue
 			}
 
-			// Package install commands: route through approval flow instead of hard deny.
-			// This lets agents "request permission" from admin to install packages.
+			// Package install commands: auto-approve or route through approval flow.
 			if t.approvalMgr != nil && matchesAny(normalizedCommand, pkgInstallPatterns) {
+				if t.approvalMgr.config.PackageAutoApprove {
+					// Route apk commands through pkg-helper (root socket) since
+					// the agent runs as non-root and can't call apk directly.
+					if result := t.maybeRouteViaPkgHelper(normalizedCommand); result != nil {
+						return result
+					}
+					slog.Info("exec: package install auto-approved", "command", truncateCmd(command, 100), "agent", t.agentID)
+					continue
+				}
 				slog.Info("exec: package install requires approval", "command", truncateCmd(command, 100), "agent", t.agentID)
 				decision, err := t.approvalMgr.RequestApproval(command, t.agentID, 2*time.Minute)
 				if err != nil {
@@ -294,6 +305,99 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 
 	// Host execution
 	return t.executeOnHost(ctx, command, cwd)
+}
+
+// apkCommandRe extracts action and packages from apk add/del commands.
+var apkCommandRe = regexp.MustCompile(`\bapk\s+(?:add|del)\b`)
+
+// apkPkgExtractRe parses "apk add [flags] pkg1 pkg2 ..." or "apk del [flags] pkg1 pkg2 ...".
+var apkPkgExtractRe = regexp.MustCompile(`\bapk\s+(add|del)\s+(.+)`)
+
+// maybeRouteViaPkgHelper intercepts apk add/del commands and routes them through
+// the root-privileged pkg-helper Unix socket. Returns nil if the command is not an apk command.
+func (t *ExecTool) maybeRouteViaPkgHelper(command string) *Result {
+	if !apkCommandRe.MatchString(command) {
+		return nil
+	}
+
+	m := apkPkgExtractRe.FindStringSubmatch(command)
+	if m == nil {
+		return nil
+	}
+
+	apkAction := m[1] // "add" or "del"
+	action := "install"
+	if apkAction == "del" {
+		action = "uninstall"
+	}
+
+	// Parse package names, skipping flags (--no-cache, etc.)
+	var pkgs []string
+	for _, token := range strings.Fields(m[2]) {
+		if strings.HasPrefix(token, "-") {
+			continue
+		}
+		pkgs = append(pkgs, token)
+	}
+	if len(pkgs) == 0 {
+		return ErrorResult("no packages specified")
+	}
+
+	var installed []string
+	var errs []string
+	for _, pkg := range pkgs {
+		ok, errMsg := execApkViaHelper(action, pkg)
+		if ok {
+			installed = append(installed, pkg)
+		} else {
+			errs = append(errs, fmt.Sprintf("%s: %s", pkg, errMsg))
+		}
+	}
+
+	var out strings.Builder
+	if len(installed) > 0 {
+		fmt.Fprintf(&out, "OK: %s %s\n", action, strings.Join(installed, " "))
+	}
+	if len(errs) > 0 {
+		fmt.Fprintf(&out, "Errors:\n%s\n", strings.Join(errs, "\n"))
+		slog.Warn("exec: pkg-helper partial failure", "errors", errs)
+	}
+	slog.Info("exec: apk routed via pkg-helper", "action", action, "packages", pkgs, "ok", len(installed), "failed", len(errs))
+
+	if len(errs) > 0 && len(installed) == 0 {
+		return ErrorResult(out.String())
+	}
+	return NewResult(out.String())
+}
+
+// execApkViaHelper sends install/uninstall to the pkg-helper Unix socket.
+func execApkViaHelper(action, pkg string) (bool, string) {
+	conn, err := net.DialTimeout("unix", "/tmp/pkg.sock", 5*time.Second)
+	if err != nil {
+		return false, fmt.Sprintf("pkg-helper unavailable: %v", err)
+	}
+	defer conn.Close()
+
+	conn.SetDeadline(time.Now().Add(60 * time.Second)) //nolint:errcheck
+
+	req := map[string]string{"action": action, "package": pkg}
+	if err := json.NewEncoder(conn).Encode(req); err != nil {
+		return false, fmt.Sprintf("pkg-helper send failed: %v", err)
+	}
+
+	scanner := bufio.NewScanner(conn)
+	if !scanner.Scan() {
+		return false, "pkg-helper: no response"
+	}
+
+	var resp struct {
+		OK    bool   `json:"ok"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(scanner.Bytes(), &resp); err != nil {
+		return false, fmt.Sprintf("pkg-helper: invalid response: %v", err)
+	}
+	return resp.OK, resp.Error
 }
 
 // matchesAny checks if a command matches any pattern in the list.
