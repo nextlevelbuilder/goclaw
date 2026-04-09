@@ -90,7 +90,8 @@
       "links": "Links",
       "skills": "Skills",
       "instances": "Instances",
-      "permissions": "Permissions"
+      "permissions": "Permissions",
+      "evolution": "Evolution"
     },
     "summonFailed": "Summon Failed",
     "evolving": "Evolving",
@@ -103,7 +104,37 @@
     "skills": "Skills",
     "evolution": "Evolution",
     "capabilities": "Capabilities",
-    "llmSeesAs": "LLM sees this as"
+    "llmSeesAs": "LLM sees this as",
+    "prompt": {
+      "title": "System Prompt Mode"
+    },
+    "orchestration": {
+      "title": "Orchestration",
+      "delegateTargets": "Delegate Targets",
+      "team": "Team",
+      "noDelegates": "Standard spawn mode — no delegation configured"
+    },
+    "evolutionTab": {
+      "notEnabled": "Evolution not enabled",
+      "notEnabledHint": "Enable \"Evolution Metrics\" in the Agent tab to start collecting data.",
+      "toolSuccess": "Tool Success Rate",
+      "retrievalQuality": "Retrieval Quality",
+      "noMetrics": "No metrics data collected yet",
+      "suggestions": "Suggestions",
+      "noSuggestions": "No suggestions generated yet",
+      "approve": "Approve",
+      "reject": "Reject",
+      "rollback": "Rollback",
+      "guardrails": "Adaptation Guardrails",
+      "maxDelta": "Max Delta / Cycle",
+      "minDataPoints": "Min Data Points",
+      "rollbackDrop": "Rollback on Drop"
+    },
+    "pinnedSkills": {
+      "title": "Pinned Skills",
+      "addPlaceholder": "Add a skill...",
+      "hint": "Pinned skills are always inlined in the system prompt. Others use skill_search."
+    }
   },
   "general": {
     "selfEvolution": "Self-Evolution",
@@ -116,6 +147,12 @@
     "skillLearningInfo": "After complex tasks, the agent may suggest saving the workflow as a reusable skill. User approval is always required before any skill is created. Skills are private to the owner by default.",
     "skillNudgeIntervalLabel": "Nudge after N tool calls",
     "skillNudgeIntervalHint": "After this many tool calls, the agent will suggest saving the workflow as a skill. Set to 0 to disable post-task suggestions (system prompt guidance still shown).",
+    "v3Flags": "V3 Engine Flags",
+    "v3FlagsHint": "These flags are saved independently from the agent config.",
+    "evolutionMetrics": "Evolution Metrics",
+    "evolutionMetricsLabel": "Collect tool success rates and retrieval quality data",
+    "evolutionSuggestions": "Evolution Suggestions",
+    "evolutionSuggestionsLabel": "Generate optimization suggestions from metrics",
     "budget": "Monthly Budget",
     "budgetLabel": "Budget limit (USD)",
     "budgetHint": "Optional monthly spending cap. Agent will reject requests when exceeded. Leave empty for unlimited.",

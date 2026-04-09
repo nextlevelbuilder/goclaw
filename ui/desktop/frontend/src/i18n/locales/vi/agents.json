@@ -90,7 +90,8 @@
       "links": "Liên kết",
       "skills": "Skill",
       "instances": "Phiên bản người dùng",
-      "permissions": "Phân quyền"
+      "permissions": "Phân quyền",
+      "evolution": "Tiến hóa"
     },
     "summonFailed": "Triệu hồi thất bại",
     "evolving": "Đang tiến hóa",
@@ -103,7 +104,37 @@
     "skills": "Kỹ năng",
     "evolution": "Tiến hóa",
     "capabilities": "Khả năng",
-    "llmSeesAs": "LLM nhìn thấy đây là"
+    "llmSeesAs": "LLM nhìn thấy đây là",
+    "prompt": {
+      "title": "Chế độ System Prompt"
+    },
+    "orchestration": {
+      "title": "Điều phối",
+      "delegateTargets": "Mục tiêu ủy quyền",
+      "team": "Nhóm",
+      "noDelegates": "Chế độ spawn tiêu chuẩn — chưa cấu hình ủy quyền"
+    },
+    "evolutionTab": {
+      "notEnabled": "Tiến hóa chưa được bật",
+      "notEnabledHint": "Bật \"Chỉ số Tiến hóa\" trong tab Agent để bắt đầu thu thập dữ liệu.",
+      "toolSuccess": "Tỉ lệ thành công công cụ",
+      "retrievalQuality": "Chất lượng truy xuất",
+      "noMetrics": "Chưa có dữ liệu chỉ số",
+      "suggestions": "Đề xuất",
+      "noSuggestions": "Chưa có đề xuất nào",
+      "approve": "Duyệt",
+      "reject": "Từ chối",
+      "rollback": "Hoàn tác",
+      "guardrails": "Rào chắn thích ứng",
+      "maxDelta": "Delta tối đa / chu kỳ",
+      "minDataPoints": "Số điểm dữ liệu tối thiểu",
+      "rollbackDrop": "Hoàn tác khi giảm"
+    },
+    "pinnedSkills": {
+      "title": "Kỹ năng ghim",
+      "addPlaceholder": "Thêm kỹ năng...",
+      "hint": "Kỹ năng ghim luôn được nhúng vào system prompt. Các kỹ năng khác dùng skill_search."
+    }
   },
   "general": {
     "selfEvolution": "Tự tiến hóa",
@@ -116,6 +147,12 @@
     "skillLearningInfo": "Sau các tác vụ phức tạp, agent có thể đề xuất lưu quy trình thành kỹ năng tái sử dụng. Luôn cần sự đồng ý của người dùng trước khi tạo kỹ năng. Kỹ năng mặc định là riêng tư.",
     "skillNudgeIntervalLabel": "Nhắc sau N lệnh tool",
     "skillNudgeIntervalHint": "Sau số lượng lệnh tool này, agent sẽ đề xuất lưu quy trình thành kỹ năng. Đặt 0 để tắt đề xuất sau tác vụ (hướng dẫn trong system prompt vẫn hiển thị).",
+    "v3Flags": "Cờ V3 Engine",
+    "v3FlagsHint": "Các cờ này được lưu độc lập với cấu hình agent.",
+    "evolutionMetrics": "Chỉ số Tiến hóa",
+    "evolutionMetricsLabel": "Thu thập tỉ lệ thành công công cụ và chất lượng truy xuất",
+    "evolutionSuggestions": "Đề xuất Tiến hóa",
+    "evolutionSuggestionsLabel": "Tạo đề xuất tối ưu từ chỉ số",
     "budget": "Ngân sách hàng tháng",
     "budgetLabel": "Giới hạn ngân sách (USD)",
     "budgetHint": "Giới hạn chi tiêu hàng tháng tùy chọn. Agent sẽ từ chối yêu cầu khi vượt quá. Để trống cho không giới hạn.",

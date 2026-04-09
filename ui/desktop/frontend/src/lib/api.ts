@@ -66,6 +66,11 @@ class ApiClient {
     return this.request<T>('GET', path)
   }
 
+  async getWithParams<T>(path: string, params?: Record<string, string>): Promise<T> {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : ''
+    return this.request<T>('GET', `${path}${qs}`)
+  }
+
   async post<T>(path: string, body?: unknown): Promise<T> {
     return this.request<T>('POST', path, body)
   }

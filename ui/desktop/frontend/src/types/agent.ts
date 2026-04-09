@@ -24,6 +24,50 @@ export interface CompactionConfig {
   }
 }
 
+export interface ContextPruningConfig {
+  mode?: 'off' | 'cache-ttl'
+  keepLastAssistants?: number
+  softTrimRatio?: number
+  hardClearRatio?: number
+  softTrim?: { maxChars?: number; headChars?: number; tailChars?: number }
+  hardClear?: { enabled?: boolean }
+}
+
+export interface SubagentsConfig {
+  maxConcurrent?: number
+  maxSpawnDepth?: number
+  maxChildrenPerAgent?: number
+  archiveAfterMinutes?: number
+  model?: string
+}
+
+export interface ToolPolicyConfig {
+  profile?: string
+  allow?: string[]
+  deny?: string[]
+  alsoAllow?: string[]
+  toolCallPrefix?: string
+}
+
+export interface SandboxConfig {
+  mode?: 'off' | 'non-main' | 'all'
+  image?: string
+  workspace_access?: 'none' | 'ro' | 'rw'
+  scope?: 'session' | 'agent' | 'shared'
+  timeout_sec?: number
+  memory_mb?: number
+  cpus?: number
+  network_enabled?: boolean
+}
+
+export type ReasoningOverrideMode = 'inherit' | 'custom'
+
+export interface AgentReasoningConfig {
+  override_mode?: ReasoningOverrideMode
+  effort?: string
+  fallback?: 'downgrade' | 'provider_default' | 'off'
+}
+
 // --- Main agent data ---
 
 export interface AgentData {
@@ -47,6 +91,10 @@ export interface AgentData {
   // Per-agent JSONB configs (null/undefined = use global defaults)
   memory_config?: MemoryConfig | null
   compaction_config?: CompactionConfig | null
+  context_pruning?: ContextPruningConfig | null
+  tools_config?: ToolPolicyConfig | null
+  sandbox_config?: SandboxConfig | null
+  subagents_config?: SubagentsConfig | null
   other_config?: Record<string, unknown> | null
   tenant_id?: string
 }
