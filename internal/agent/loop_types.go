@@ -87,10 +87,9 @@ type Loop struct {
 	memoryCfg    *config.MemoryConfig
 	sandboxCfg   *sandbox.Config
 
-	// v3 feature flags (from agent other_config JSONB)
-	v3MemoryEnabled    bool
-	v3RetrievalEnabled bool
-	autoInjector       memory.AutoInjector // v3 L0 memory auto-inject (nil = disabled)
+	// v3 memory/retrieval flags removed — always true at runtime.
+	// Memory flush runs if callback != nil; auto-inject runs if AutoInjector != nil.
+	autoInjector memory.AutoInjector // v3 L0 memory auto-inject (nil = disabled)
 
 	eventPub        bus.EventPublisher // currently unused by Loop; kept for future use
 	domainBus       eventbus.DomainEventBus // V3 domain event bus for consolidation pipeline
@@ -247,10 +246,8 @@ type LoopConfig struct {
 	DataDir          string // global workspace root for team workspace resolution
 	WorkspaceSharing *store.WorkspaceSharingConfig
 
-	// V3 feature flags (from agent other_config JSONB)
-	V3MemoryEnabled    bool
-	V3RetrievalEnabled bool
-	AutoInjector       memory.AutoInjector // v3 L0 memory auto-inject (nil = disabled)
+	// v3 memory/retrieval flags removed — always true at runtime.
+	AutoInjector memory.AutoInjector // v3 L0 memory auto-inject (nil = disabled)
 
 	// Per-agent DB overrides (nil = use global defaults)
 	RestrictToWs *bool
@@ -416,8 +413,6 @@ func NewLoop(cfg LoopConfig) *Loop {
 		workspace:              cfg.Workspace,
 		dataDir:                cfg.DataDir,
 		workspaceSharing:       cfg.WorkspaceSharing,
-		v3MemoryEnabled:        cfg.V3MemoryEnabled,
-		v3RetrievalEnabled:     cfg.V3RetrievalEnabled,
 		autoInjector:           cfg.AutoInjector,
 		restrictToWs:           cfg.RestrictToWs,
 		subagentsCfg:           cfg.SubagentsCfg,

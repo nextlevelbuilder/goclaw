@@ -197,7 +197,6 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 		logAttrs := []any{
 			"agent", l.id, "duration_ms", elapsed.Milliseconds(),
 			"iterations", result.Iterations,
-			"v3_memory", l.v3MemoryEnabled, "v3_retrieval", l.v3RetrievalEnabled,
 		}
 		if result.Usage != nil {
 			logAttrs = append(logAttrs, "total_tokens", result.Usage.TotalTokens)

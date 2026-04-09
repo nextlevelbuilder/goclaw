@@ -92,7 +92,6 @@ type PipelineConfig struct {
 	MaxTokens          int
 	Compaction         *config.CompactionConfig
 
-	// V3 feature sub-flags (pipeline is already enabled when this config is used)
-	V3MemoryEnabled    bool
-	V3RetrievalEnabled bool
+	// V3 memory/retrieval flags removed — always true at runtime.
+	// Memory flush runs if callback != nil; auto-inject runs if AutoInject != nil.
 }

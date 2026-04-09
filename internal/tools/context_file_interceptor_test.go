@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -289,5 +290,113 @@ func TestInterceptor_TTLExpiry(t *testing.T) {
 	intc.readAgentFile(ctx, agentID, "SOUL.md")
 	if n := as.agentCallsN.Load(); n != 2 {
 		t.Errorf("after TTL expiry expected 2 store calls, got %d", n)
+	}
+}
+
+// TestInterceptor_AllowsCapabilitiesWrite verifies that a predefined agent
+// with self_evolve=true can write to CAPABILITIES.md (routed to agent-level store).
+func TestInterceptor_AllowsCapabilitiesWrite(t *testing.T) {
+	agentID := uuid.New()
+	as := &stubAgentStore{}
+	intc := NewContextFileInterceptor(as, "/workspace",
+		cache.NewInMemoryCache[[]store.AgentContextFileData](),
+		cache.NewInMemoryCache[[]store.AgentContextFileData](),
+	)
+
+	ctx := store.WithAgentID(context.Background(), agentID)
+	ctx = store.WithAgentType(ctx, store.AgentTypePredefined)
+	ctx = store.WithUserID(ctx, "user-1")
+	ctx = store.WithSelfEvolve(ctx, true)
+
+	handled, err := intc.WriteFile(ctx, "CAPABILITIES.md", "domain: finance")
+	if err != nil {
+		t.Fatalf("expected CAPABILITIES.md write to succeed with self_evolve=true, got error: %v", err)
+	}
+	if !handled {
+		t.Fatal("expected CAPABILITIES.md to be handled as context file")
+	}
+	if n := as.setAgentCallN.Load(); n != 1 {
+		t.Errorf("expected 1 SetAgentContextFile call, got %d", n)
+	}
+}
+
+// TestInterceptor_BlocksCapabilitiesWithoutSelfEvolve verifies that a predefined agent
+// without self_evolve cannot write to CAPABILITIES.md.
+func TestInterceptor_BlocksCapabilitiesWithoutSelfEvolve(t *testing.T) {
+	agentID := uuid.New()
+	as := &stubAgentStore{}
+	intc := NewContextFileInterceptor(as, "/workspace",
+		cache.NewInMemoryCache[[]store.AgentContextFileData](),
+		cache.NewInMemoryCache[[]store.AgentContextFileData](),
+	)
+
+	ctx := store.WithAgentID(context.Background(), agentID)
+	ctx = store.WithAgentType(ctx, store.AgentTypePredefined)
+	ctx = store.WithUserID(ctx, "user-1")
+	// self_evolve NOT set (defaults to false)
+
+	handled, err := intc.WriteFile(ctx, "CAPABILITIES.md", "domain: finance")
+	if !handled {
+		t.Fatal("expected CAPABILITIES.md to be handled as context file")
+	}
+	if err == nil {
+		t.Fatal("expected error when writing CAPABILITIES.md without self_evolve")
+	}
+	if !strings.Contains(err.Error(), "predefined configuration") {
+		t.Errorf("expected predefined-config error, got: %v", err)
+	}
+}
+
+// TestInterceptor_AllowsCapabilitiesRead verifies that a predefined agent
+// with self_evolve=true can read CAPABILITIES.md (needed before updating).
+func TestInterceptor_AllowsCapabilitiesRead(t *testing.T) {
+	agentID := uuid.New()
+	as := &stubAgentStore{
+		agentFiles: []store.AgentContextFileData{
+			{AgentID: agentID, FileName: "CAPABILITIES.md", Content: "domain: finance"},
+		},
+	}
+	intc := NewContextFileInterceptor(as, "/workspace",
+		cache.NewInMemoryCache[[]store.AgentContextFileData](),
+		cache.NewInMemoryCache[[]store.AgentContextFileData](),
+	)
+
+	ctx := store.WithAgentID(context.Background(), agentID)
+	ctx = store.WithAgentType(ctx, store.AgentTypePredefined)
+	ctx = store.WithUserID(ctx, "user-1")
+	ctx = store.WithSelfEvolve(ctx, true)
+
+	content, handled, err := intc.ReadFile(ctx, "CAPABILITIES.md")
+	if err != nil {
+		t.Fatalf("expected read to succeed with self_evolve=true, got error: %v", err)
+	}
+	if !handled {
+		t.Fatal("expected CAPABILITIES.md to be handled")
+	}
+	if content != "domain: finance" {
+		t.Errorf("expected content 'domain: finance', got %q", content)
+	}
+}
+
+// TestInterceptor_BlocksCapabilitiesReadWithoutSelfEvolve verifies that a predefined agent
+// without self_evolve cannot read CAPABILITIES.md via read_file.
+func TestInterceptor_BlocksCapabilitiesReadWithoutSelfEvolve(t *testing.T) {
+	agentID := uuid.New()
+	as := &stubAgentStore{}
+	intc := NewContextFileInterceptor(as, "/workspace",
+		cache.NewInMemoryCache[[]store.AgentContextFileData](),
+		cache.NewInMemoryCache[[]store.AgentContextFileData](),
+	)
+
+	ctx := store.WithAgentID(context.Background(), agentID)
+	ctx = store.WithAgentType(ctx, store.AgentTypePredefined)
+	ctx = store.WithUserID(ctx, "user-1")
+
+	_, _, err := intc.ReadFile(ctx, "CAPABILITIES.md")
+	if err == nil {
+		t.Fatal("expected error when reading CAPABILITIES.md without self_evolve")
+	}
+	if !strings.Contains(err.Error(), "already loaded into your context") {
+		t.Errorf("expected context-loaded error, got: %v", err)
 	}
 }

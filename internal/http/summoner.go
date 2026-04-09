@@ -74,7 +74,7 @@ func (s *AgentSummoner) SummonAgent(agentID uuid.UUID, tenantID uuid.UUID, provi
 	ctx, cancel := context.WithTimeout(store.WithTenantID(context.Background(), tenantID), 600*time.Second)
 	defer cancel()
 
-	s.ensureUserPredefined(ctx, agentID)
+	s.ensureBackfillFiles(ctx, agentID)
 	s.emitEvent(agentID, tenantID, SummonEventStarted, "", "")
 
 	// Check which files already exist (from a previous partial run)

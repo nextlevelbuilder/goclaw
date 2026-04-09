@@ -572,6 +572,7 @@ func buildSelfEvolveSection() []string {
 		"## Self-Evolution",
 		"",
 		"You may update SOUL.md to refine communication style (tone, voice, vocabulary, response style).",
+		"You may update CAPABILITIES.md to refine domain expertise, technical skills, and specialized knowledge.",
 		"MUST NOT change: name, identity, contact info, core purpose, IDENTITY.md, or AGENTS.md.",
 		"Make changes incrementally based on clear user feedback patterns.",
 		"",
