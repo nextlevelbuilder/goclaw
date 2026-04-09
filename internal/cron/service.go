@@ -58,11 +58,13 @@ func (cs *Service) Start() error {
 		cs.store = Store{Version: 1}
 	}
 
-	// Compute next runs for all enabled jobs
+	// Compute next runs for all enabled jobs: fix NULL and past-due next_run_at.
+	// Past-due jobs happen when the service was stopped and their scheduled time passed.
+	// Without this, ALL past-due jobs would fire simultaneously on the first tick.
 	now := nowMS()
 	for i := range cs.store.Jobs {
 		job := &cs.store.Jobs[i]
-		if job.Enabled && job.State.NextRunAtMS == nil {
+		if job.Enabled && (job.State.NextRunAtMS == nil || *job.State.NextRunAtMS <= now) {
 			next := cs.computeNextRun(&job.Schedule, now)
 			job.State.NextRunAtMS = next
 		}

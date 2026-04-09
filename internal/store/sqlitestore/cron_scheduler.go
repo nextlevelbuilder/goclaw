@@ -69,18 +69,21 @@ func (s *SQLiteCronStore) InvalidateCache() {
 	s.mu.Unlock()
 }
 
-// recomputeStaleJobs fixes enabled jobs with next_run_at = NULL on startup.
+// recomputeStaleJobs fixes enabled jobs on startup:
+//   - Recomputes next_run_at for jobs where it is NULL (crashed mid-execution).
+//   - Advances past-due jobs (next_run_at < now) to their next future run time,
+//     preventing a flood of all missed jobs firing simultaneously after downtime.
 func (s *SQLiteCronStore) recomputeStaleJobs() {
+	now := time.Now()
 	rows, err := s.db.QueryContext(s.baseCtx,
 		`SELECT id, schedule_kind, cron_expression, run_at, timezone, interval_ms
-		 FROM cron_jobs WHERE enabled = 1 AND next_run_at IS NULL`)
+		 FROM cron_jobs WHERE enabled = 1 AND (next_run_at IS NULL OR next_run_at < ?)`, now)
 	if err != nil {
 		slog.Warn("cron: failed to query stale jobs", "error", err)
 		return
 	}
 	defer rows.Close()
 
-	now := time.Now()
 	var fixed int
 	for rows.Next() {
 		var id uuid.UUID
@@ -124,7 +127,7 @@ func (s *SQLiteCronStore) recomputeStaleJobs() {
 	}
 
 	if fixed > 0 {
-		slog.Info("cron: recomputed stale next_run_at on startup", "fixed", fixed)
+		slog.Info("cron: advanced stale/past-due jobs to next future run", "fixed", fixed)
 	}
 }
 
@@ -184,6 +187,11 @@ func (s *SQLiteCronStore) checkAndRunDueJobs() {
 
 // executeOneJob runs a single cron job with retry, logs the result, and updates next_run_at.
 func (s *SQLiteCronStore) executeOneJob(job store.CronJob, handler func(job *store.CronJob) (*store.CronJobResult, error)) {
+	// Preserve the original scheduled time before reload clears it.
+	// For "every" jobs, this anchor is used to compute the next run from the
+	// intended schedule time (not "now"), preventing drift and synchronization.
+	scheduledAtMS := job.State.NextRunAtMS
+
 	if id, parseErr := uuid.Parse(job.ID); parseErr == nil {
 		freshJob, ok := s.loadClaimedJob(id)
 		if !ok {
@@ -253,11 +261,26 @@ func (s *SQLiteCronStore) executeOneJob(job store.CronJob, handler func(job *sto
 		}
 	} else if id, parseErr := uuid.Parse(job.ID); parseErr == nil {
 		schedule := job.Schedule
-		next := computeNextRun(&schedule, now, s.defaultTZ)
 		var nextRunValue any
-		if next != nil {
-			nextRunValue = *next
+
+		// For "every" (interval) jobs, compute next run from the original scheduled
+		// time (anchor) instead of "now". This prevents drift and synchronization
+		// of interval-based jobs after server restarts.
+		if schedule.Kind == "every" && scheduledAtMS != nil && schedule.EveryMS != nil && *schedule.EveryMS > 0 {
+			anchor := time.UnixMilli(*scheduledAtMS)
+			interval := time.Duration(*schedule.EveryMS) * time.Millisecond
+			next := anchor.Add(interval)
+			for !next.After(now) {
+				next = next.Add(interval)
+			}
+			nextRunValue = next
+		} else {
+			next := computeNextRun(&schedule, now, s.defaultTZ)
+			if next != nil {
+				nextRunValue = *next
+			}
 		}
+
 		s.db.ExecContext(s.baseCtx,
 			`UPDATE cron_jobs SET
 			 last_run_at = ?, last_status = ?, last_error = ?, updated_at = ?,
