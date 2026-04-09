@@ -6,8 +6,6 @@ import (
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
-	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
-	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tokencount"
 )
 
@@ -27,7 +25,7 @@ type promptPreviewResponse struct {
 }
 
 // handleSystemPromptPreview renders the actual system prompt for an agent in a given mode.
-// GET /v1/agents/{id}/system-prompt-preview?mode=full|task|minimal|none
+// GET /v1/agents/{id}/system-prompt-preview?mode=full|task|minimal|none&user_id=xxx
 func (h *AgentsHandler) handleSystemPromptPreview(w http.ResponseWriter, r *http.Request) {
 	agentID := r.PathValue("id")
 	mode := agent.PromptMode(r.URL.Query().Get("mode"))
@@ -48,41 +46,21 @@ func (h *AgentsHandler) handleSystemPromptPreview(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Load context files
-	agentFiles, _ := h.agents.GetAgentContextFiles(ctx, ag.ID)
+	// Build preview prompt — reuses same BuildSystemPrompt() as LLM pipeline.
+	// Runtime-only fields (channel, peer kind, credentials) are zero-valued;
+	// BuildSystemPrompt nil-checks every field so these sections are simply skipped.
+	prompt := agent.BuildPreviewPrompt(ctx, ag, mode, r.URL.Query().Get("user_id"), agent.PreviewDeps{
+		AgentStore:   h.agents,
+		TeamStore:    h.teamStore,
+		AgentLinks:   h.agentLinkStore,
+		ProviderReg:  h.providerReg,
+		ToolLister:   h.toolsReg,
+		SkillsLoader: h.skillsLoader,
+		DataDir:      h.dataDir,
+	})
 
-	// Build context files list
-	var contextFiles []bootstrap.ContextFile
-	for _, f := range agentFiles {
-		if f.Content != "" {
-			contextFiles = append(contextFiles, bootstrap.ContextFile{
-				Path:    f.FileName,
-				Content: f.Content,
-			})
-		}
-	}
-
-	// Resolve tool names from agent config
-	toolNames := resolvePreviewToolNames(ag)
-
-	// Build the system prompt config
-	cfg := agent.SystemPromptConfig{
-		AgentID:      ag.AgentKey,
-		Mode:         mode,
-		ToolNames:    toolNames,
-		ContextFiles: contextFiles,
-		AgentType:    ag.AgentType,
-		HasMemory:    true,
-		HasSpawn:     true,
-	}
-
-	prompt := agent.BuildSystemPrompt(cfg)
-
-	// Count tokens
 	counter := tokencount.NewFallbackCounter()
 	tokens := counter.Count("claude-3", prompt)
-
-	// Parse sections from ## headers
 	sections := parseSections(prompt)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -106,26 +84,14 @@ func parseSections(prompt string) []promptPreviewSection {
 				Name:  name,
 				Start: pos,
 			})
-			// Close previous section
 			if len(sections) > 1 {
 				sections[len(sections)-2].End = pos - 1
 			}
 		}
-		pos += len(line) + 1 // +1 for newline
+		pos += len(line) + 1
 	}
-	// Close last section
 	if len(sections) > 0 {
 		sections[len(sections)-1].End = len(prompt)
 	}
 	return sections
-}
-
-// resolvePreviewToolNames returns a representative tool list for preview.
-func resolvePreviewToolNames(ag *store.AgentData) []string {
-	return []string{
-		"read_file", "write_file", "list_files", "edit", "exec",
-		"memory_search", "memory_get", "spawn",
-		"web_search", "web_fetch", "skill_search", "use_skill",
-		"datetime", "cron",
-	}
 }

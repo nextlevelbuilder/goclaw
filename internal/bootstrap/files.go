@@ -58,6 +58,10 @@ var minimalAllowlist = map[string]bool{
 	CapabilitiesFile:   true, // domain expertise always needed
 }
 
+// IsMinimalAllowed reports whether a file name is in the minimal allowlist
+// (loaded for subagent/cron/heartbeat sessions).
+func IsMinimalAllowed(fileName string) bool { return minimalAllowlist[fileName] }
+
 // File represents a workspace bootstrap file loaded from disk.
 type File struct {
 	Name    string // filename (e.g. "AGENTS.md")

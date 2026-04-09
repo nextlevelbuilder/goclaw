@@ -32,6 +32,10 @@ type AgentsHandler struct {
 	kgStore          store.KnowledgeGraphStore // for import (nil = disabled)
 	episodicStore    store.EpisodicStore       // for import (nil in SQLite/lite builds)
 	vaultStore       store.VaultStore          // for vault import (nil = disabled)
+	toolsReg         ToolLister                // for system prompt preview tool resolution (nil = fallback)
+	skillsLoader     SkillPinnedBuilder        // for system prompt preview pinned skills (nil = skip)
+	teamStore        store.TeamStore           // for system prompt preview team context (nil = skip)
+	agentLinkStore   store.AgentLinkStore      // for system prompt preview delegation targets (nil = skip)
 	defaultWorkspace string                   // default workspace path template (e.g. "~/.goclaw/workspace")
 	dataDir          string                   // resolved data directory (e.g. "~/.goclaw/data") — for team workspace export
 	msgBus           *bus.MessageBus          // for cache invalidation events (nil = no events)
@@ -76,6 +80,26 @@ func (h *AgentsHandler) SetEpisodicStore(ep store.EpisodicStore) {
 // nil is safe — vault import is skipped when not set.
 func (h *AgentsHandler) SetVaultStore(vs store.VaultStore) {
 	h.vaultStore = vs
+}
+
+// ToolLister is satisfied by tools.Registry for system prompt preview.
+type ToolLister interface{ List() []string }
+
+// SkillPinnedBuilder is satisfied by skills.Loader for pinned skills summary.
+type SkillPinnedBuilder interface {
+	BuildPinnedSummary(ctx context.Context, names []string) string
+}
+
+// SetPreviewDeps attaches optional dependencies for system prompt preview.
+func (h *AgentsHandler) SetPreviewDeps(tl ToolLister, sl SkillPinnedBuilder) {
+	h.toolsReg = tl
+	h.skillsLoader = sl
+}
+
+// SetPreviewStores attaches team + agent link stores for system prompt preview.
+func (h *AgentsHandler) SetPreviewStores(ts store.TeamStore, als store.AgentLinkStore) {
+	h.teamStore = ts
+	h.agentLinkStore = als
 }
 
 // isOwnerUser checks if the given user ID is a system owner.

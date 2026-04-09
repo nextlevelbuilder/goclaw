@@ -17,6 +17,7 @@ import { SummoningModal } from "../summoning-modal";
 import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { DetailPageSkeleton } from "@/components/shared/loading-skeleton";
 import { agentDisplayName } from "./agent-display-utils";
+import { SystemPromptDialog } from "./system-prompt-dialog";
 
 interface AgentDetailPageProps {
   agentId: string;
@@ -35,6 +36,7 @@ export function AgentDetailPage({ agentId, onBack }: AgentDetailPageProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [heartbeatOpen, setHeartbeatOpen] = useState(false);
+  const [promptOpen, setPromptOpen] = useState(false);
 
   const handleResummon = async () => {
     await resummonAgent();
@@ -61,6 +63,7 @@ export function AgentDetailPage({ agentId, onBack }: AgentDetailPageProps) {
         onDelete={() => setDeleteOpen(true)}
         onAdvanced={() => setAdvancedOpen(true)}
         onHeartbeat={() => setHeartbeatOpen(true)}
+        onSystemPrompt={() => setPromptOpen(true)}
       />
 
       <div className="p-3 sm:p-4">
@@ -151,6 +154,14 @@ export function AgentDetailPage({ agentId, onBack }: AgentDetailPageProps) {
           refresh={hb.refresh}
           agentProvider={agent?.provider}
           agentModel={agent?.model}
+        />
+      )}
+
+      {promptOpen && (
+        <SystemPromptDialog
+          agentKey={agent.agent_key}
+          open={promptOpen}
+          onOpenChange={setPromptOpen}
         />
       )}
 

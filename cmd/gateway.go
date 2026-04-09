@@ -210,8 +210,10 @@ func runGateway() {
 	loadBootstrapFiles(pgStores, workspace, agentCfg)
 
 	// Backfill CAPABILITIES.md for pre-v3 agents that don't have it yet.
-	if _, err := bootstrap.BackfillCapabilities(context.Background(), pgStores.DB); err != nil {
+	if count, err := bootstrap.BackfillCapabilities(context.Background(), pgStores.DB); err != nil {
 		slog.Warn("bootstrap: capabilities backfill failed", "error", err)
+	} else if count > 0 {
+		slog.Info("bootstrap: capabilities backfill complete", "agents", count)
 	}
 
 	// Subagent system
@@ -286,6 +288,12 @@ func runGateway() {
 	}
 	httpapi.InitGatewayToken(cfg.Gateway.Token)
 	agentsH, skillsH, tracesH, mcpH, channelInstancesH, providersH, builtinToolsH, pendingMessagesH, teamEventsH, secureCLIH, secureCLIGrantH, mcpUserCredsH := wireHTTP(pgStores, cfg.Agents.Defaults.Workspace, dataDir, bundledSkillsDir, msgBus, toolsReg, providerRegistry, permPE.IsOwner, gatewayAddr, mcpToolLister)
+
+	// Wire dependencies for system prompt preview parity.
+	if agentsH != nil {
+		agentsH.SetPreviewDeps(toolsReg, skillsLoader)
+		agentsH.SetPreviewStores(pgStores.Teams, pgStores.AgentLinks)
+	}
 
 	// External wake/trigger API
 	wakeH := httpapi.NewWakeHandler(agentRouter)
