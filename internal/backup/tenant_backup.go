@@ -53,6 +53,13 @@ func TenantBackup(ctx context.Context, opts TenantBackupOptions) (*TenantBackupM
 		}
 	}
 
+	// Cross-check registry against actual schema — warn about unregistered tables
+	if warnings := ValidateTableRegistry(ctx, opts.DB); len(warnings) > 0 {
+		for _, w := range warnings {
+			progress("validate", w)
+		}
+	}
+
 	outFile, err := os.Create(opts.OutputPath)
 	if err != nil {
 		return nil, fmt.Errorf("create output file: %w", err)

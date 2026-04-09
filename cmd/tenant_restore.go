@@ -32,6 +32,12 @@ Modes:
 		RunE: func(cmd *cobra.Command, args []string) error {
 			archivePath := args[0]
 
+			// Tenant restore is PG-only
+			cfg, cfgErr := config.Load(resolveConfigPath())
+			if cfgErr == nil && cfg.Database.StorageBackend == "sqlite" {
+				return fmt.Errorf("tenant restore is not available in Lite edition (single tenant). Use 'goclaw restore' for full system restore")
+			}
+
 			if _, err := os.Stat(archivePath); err != nil {
 				return fmt.Errorf("archive not found: %s", archivePath)
 			}
