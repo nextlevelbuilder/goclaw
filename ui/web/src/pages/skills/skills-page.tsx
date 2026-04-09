@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { Zap, RefreshCw, Upload, ScanSearch } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,8 +11,11 @@ import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { cn } from "@/lib/utils";
 import { useSkills, type SkillInfo } from "./hooks/use-skills";
 import { SkillDetailDialog } from "./skill-detail-dialog";
-import { SkillUploadDialog } from "./skill-upload-dialog";
 import { SkillEditDialog } from "./skill-edit-dialog";
+
+const SkillUploadDialog = lazy(() =>
+  import("./skill-upload-dialog").then((m) => ({ default: m.SkillUploadDialog }))
+);
 import { MissingDepsPanel } from "./missing-deps-panel";
 import { SkillTableRow } from "./skill-table-row";
 import { useRuntimes } from "./hooks/use-runtimes";
@@ -216,7 +219,9 @@ export function SkillsPage() {
         />
       )}
 
-      <SkillUploadDialog open={uploadOpen} onOpenChange={setUploadOpen} onUpload={(f) => uploadSkill(f)} />
+      <Suspense fallback={null}>
+        <SkillUploadDialog open={uploadOpen} onOpenChange={setUploadOpen} onUpload={(f) => uploadSkill(f)} />
+      </Suspense>
 
       <ConfirmDeleteDialog
         open={!!deleteTarget}

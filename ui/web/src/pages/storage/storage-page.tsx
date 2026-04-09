@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from "react";
 import { Info, RefreshCw, Upload } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "@/stores/use-toast-store";
@@ -20,9 +20,12 @@ import {
 } from "@/components/ui/dialog";
 import { buildTree, mergeSubtree, setNodeLoading, formatSize, isTextFile } from "@/lib/file-helpers";
 import { FileBrowser } from "@/components/shared/file-browser";
-import { FileUploadDialog } from "@/components/shared/file-upload-dialog";
 import { useStorage, useStorageSize } from "./hooks/use-storage";
 import { useHttp } from "@/hooks/use-ws";
+
+const FileUploadDialog = lazy(() =>
+  import("@/components/shared/file-upload-dialog").then((m) => ({ default: m.FileUploadDialog }))
+);
 
 export function StoragePage() {
   const { t } = useTranslation("storage");
@@ -226,13 +229,15 @@ export function StoragePage() {
         />
       </div>
 
-      <FileUploadDialog
-        open={uploadOpen}
-        onOpenChange={handleUploadClose}
-        onUpload={handleUploadFile}
-        title={t("upload.title")}
-        description={uploadFolder ? `${t("upload.description")} → ${uploadFolder}/` : t("upload.description")}
-      />
+      <Suspense fallback={null}>
+        <FileUploadDialog
+          open={uploadOpen}
+          onOpenChange={handleUploadClose}
+          onUpload={handleUploadFile}
+          title={t("upload.title")}
+          description={uploadFolder ? `${t("upload.description")} → ${uploadFolder}/` : t("upload.description")}
+        />
+      </Suspense>
 
       {/* Delete confirmation dialog */}
       <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>

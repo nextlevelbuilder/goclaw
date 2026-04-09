@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { Plus, RefreshCw, Key, Ban, Copy, Check, Building2, Code2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -21,11 +21,16 @@ import { useMinLoading } from "@/hooks/use-min-loading";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import { usePagination } from "@/hooks/use-pagination";
 import { useApiKeys } from "./hooks/use-api-keys";
-import { ApiKeyCreateDialog } from "./api-key-create-dialog";
-import { ApiKeyCodeDialog } from "./api-key-code-dialog";
 import { useTenants } from "@/hooks/use-tenants";
 import { formatRelativeTime } from "@/lib/format";
 import type { ApiKeyData } from "@/types/api-key";
+
+const ApiKeyCreateDialog = lazy(() =>
+  import("./api-key-create-dialog").then((m) => ({ default: m.ApiKeyCreateDialog }))
+);
+const ApiKeyCodeDialog = lazy(() =>
+  import("./api-key-code-dialog").then((m) => ({ default: m.ApiKeyCodeDialog }))
+);
 
 function fullDateTime(iso: string | null): string {
   if (!iso) return "";
@@ -143,14 +148,14 @@ export function ApiKeysPage() {
                           <Key className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
                           <div>
                             <div className="font-medium">{key.name}</div>
-                            <code className="text-[11px] text-muted-foreground font-mono">{key.prefix}...***</code>
+                            <code className="text-xs-plus text-muted-foreground font-mono">{key.prefix}...***</code>
                           </div>
                         </div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1 flex-wrap">
                           {key.scopes.map((s) => (
-                            <Badge key={s} variant="secondary" className="text-[11px] font-mono px-1.5 py-0">
+                            <Badge key={s} variant="secondary" className="text-xs-plus font-mono px-1.5 py-0">
                               {s.replace("operator.", "")}
                             </Badge>
                           ))}
@@ -205,15 +210,17 @@ export function ApiKeysPage() {
         )}
       </div>
 
-      <ApiKeyCreateDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        onCreate={async (input) => {
-          const res = await createApiKey(input);
-          setCreateOpen(false);
-          setNewKeyRaw(res.key);
-        }}
-      />
+      <Suspense fallback={null}>
+        <ApiKeyCreateDialog
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          onCreate={async (input) => {
+            const res = await createApiKey(input);
+            setCreateOpen(false);
+            setNewKeyRaw(res.key);
+          }}
+        />
+      </Suspense>
 
       {/* Show-once key dialog */}
       <Dialog open={!!newKeyRaw} onOpenChange={(open) => !open && setNewKeyRaw(null)}>
@@ -248,7 +255,9 @@ export function ApiKeysPage() {
         loading={revokeLoading}
       />
 
-      <ApiKeyCodeDialog open={codeOpen} onOpenChange={setCodeOpen} />
+      <Suspense fallback={null}>
+        <ApiKeyCodeDialog open={codeOpen} onOpenChange={setCodeOpen} />
+      </Suspense>
     </div>
   );
 }

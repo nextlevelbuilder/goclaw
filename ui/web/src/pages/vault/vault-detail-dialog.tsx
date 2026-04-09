@@ -104,7 +104,7 @@ export function VaultDetailDialog({ doc, open, onOpenChange, onDeleted }: Props)
 
                 {/* Path + badges */}
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
-                  <span className="text-[11px] font-mono text-muted-foreground truncate max-w-[400px]" title={doc.path}>
+                  <span className="text-xs-plus font-mono text-muted-foreground truncate max-w-[400px]" title={doc.path}>
                     {doc.path}
                   </span>
                   {editMode ? (
@@ -114,10 +114,10 @@ export function VaultDetailDialog({ doc, open, onOpenChange, onDeleted }: Props)
                     </>
                   ) : (
                     <>
-                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                      <Badge variant="secondary" className="text-2xs px-1.5 py-0">
                         {t(`type.${doc.doc_type}`)}
                       </Badge>
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                      <Badge variant="outline" className="text-2xs px-1.5 py-0">
                         {t(`scope.${doc.scope}`)}
                       </Badge>
                     </>
@@ -214,7 +214,7 @@ export function VaultDetailDialog({ doc, open, onOpenChange, onDeleted }: Props)
             )}
 
             {/* Hash + link count as subtle footer */}
-            <div className="flex items-center justify-between text-[10px] text-muted-foreground border-t pt-2">
+            <div className="flex items-center justify-between text-2xs text-muted-foreground border-t pt-2">
               <span className="font-mono">SHA-256: {doc.content_hash.slice(0, 16)}...</span>
               {linkCount > 0 && <span>{linkCount} link{linkCount !== 1 ? "s" : ""}</span>}
             </div>
@@ -225,7 +225,7 @@ export function VaultDetailDialog({ doc, open, onOpenChange, onDeleted }: Props)
                 <summary className="text-muted-foreground cursor-pointer hover:text-foreground">
                   {t("detail.metadata")}
                 </summary>
-                <pre className="bg-muted p-2 rounded overflow-x-auto max-h-[120px] mt-1 text-[11px]">
+                <pre className="bg-muted p-2 rounded overflow-x-auto max-h-[120px] mt-1 text-xs-plus">
                   {JSON.stringify(doc.metadata, null, 2)}
                 </pre>
               </details>

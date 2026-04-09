@@ -1,11 +1,14 @@
-import { useState } from "react";
+import { useState, lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { useProviders } from "../hooks/use-providers";
 import { ProviderHeader } from "./provider-header";
 import { ProviderOverview } from "./provider-overview";
-import { ProviderAdvancedDialog } from "./provider-advanced-dialog";
 import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { DetailPageSkeleton } from "@/components/shared/loading-skeleton";
+
+const ProviderAdvancedDialog = lazy(() =>
+  import("./provider-advanced-dialog").then((m) => ({ default: m.ProviderAdvancedDialog }))
+);
 
 interface ProviderDetailPageProps {
   providerId: string;
@@ -45,13 +48,15 @@ export function ProviderDetailPage({ providerId, onBack }: ProviderDetailPagePro
         </div>
       </div>
 
-      <ProviderAdvancedDialog
-        key={provider.id}
-        open={advancedOpen}
-        onOpenChange={setAdvancedOpen}
-        provider={provider}
-        onUpdate={updateProvider}
-      />
+      <Suspense fallback={null}>
+        <ProviderAdvancedDialog
+          key={provider.id}
+          open={advancedOpen}
+          onOpenChange={setAdvancedOpen}
+          provider={provider}
+          onUpdate={updateProvider}
+        />
+      </Suspense>
 
       <ConfirmDeleteDialog
         open={deleteOpen}

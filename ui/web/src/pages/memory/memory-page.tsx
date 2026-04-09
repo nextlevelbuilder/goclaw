@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { Plus, RefreshCw, Search, Database } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -11,15 +11,18 @@ import { useAgents } from "@/pages/agents/hooks/use-agents";
 import { useContactResolver } from "@/hooks/use-contact-resolver";
 import { formatUserLabel } from "@/lib/format-user-label";
 import { useMemoryDocuments } from "./hooks/use-memory";
-import { MemoryDocumentDialog } from "./memory-document-dialog";
-import { MemoryCreateDialog } from "./memory-create-dialog";
-import { MemorySearchDialog } from "./memory-search-dialog";
-import { MemoryDocumentsTable } from "./memory-documents-table";
+import { MemoryDocumentDialog } from "./documents/memory-document-dialog";
+import { MemorySearchDialog } from "./documents/memory-search-dialog";
+import { MemoryDocumentsTable } from "./documents/memory-documents-table";
 import { useMinLoading } from "@/hooks/use-min-loading";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import { useEmbeddingStatus } from "@/hooks/use-embedding-status";
-import { EpisodicTab } from "./episodic-tab";
+import { EpisodicTab } from "./episodic/episodic-tab";
 import type { MemoryDocument } from "@/types/memory";
+
+const MemoryCreateDialog = lazy(() =>
+  import("./documents/memory-create-dialog").then((m) => ({ default: m.MemoryCreateDialog }))
+);
 
 export function MemoryPage() {
   const { t } = useTranslation("memory");
@@ -234,12 +237,14 @@ export function MemoryPage() {
         document={viewDoc}
       />
 
-      <MemoryCreateDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        agentId={agentId || undefined}
-        knownUserIds={userIds}
-      />
+      <Suspense fallback={null}>
+        <MemoryCreateDialog
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          agentId={agentId || undefined}
+          knownUserIds={userIds}
+        />
+      </Suspense>
 
       <MemorySearchDialog
         open={searchOpen}

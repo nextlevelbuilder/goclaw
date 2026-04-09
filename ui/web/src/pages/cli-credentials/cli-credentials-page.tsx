@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { KeyRound, Plus, RefreshCw, Pencil, Trash2, Users, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,10 +10,15 @@ import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { useMinLoading } from "@/hooks/use-min-loading";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import { useCliCredentials, useCliCredentialPresets } from "./hooks/use-cli-credentials";
-import { CliCredentialFormDialog } from "./cli-credential-form-dialog";
-import { CLIUserCredentialsDialog } from "./cli-user-credentials-dialog";
 import { CliCredentialGrantsDialog } from "./cli-credential-grants-dialog";
 import type { SecureCLIBinary, CLICredentialInput } from "./hooks/use-cli-credentials";
+
+const CliCredentialFormDialog = lazy(() =>
+  import("./cli-credential-form-dialog").then((m) => ({ default: m.CliCredentialFormDialog }))
+);
+const CLIUserCredentialsDialog = lazy(() =>
+  import("./cli-user-credentials-dialog").then((m) => ({ default: m.CLIUserCredentialsDialog }))
+);
 
 export function CliCredentialsPage() {
   const { t } = useTranslation("cli-credentials");
@@ -164,13 +169,15 @@ export function CliCredentialsPage() {
         )}
       </div>
 
-      <CliCredentialFormDialog
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        credential={editItem}
-        presets={presets}
-        onSubmit={editItem ? handleEdit : handleCreate}
-      />
+      <Suspense fallback={null}>
+        <CliCredentialFormDialog
+          open={formOpen}
+          onOpenChange={setFormOpen}
+          credential={editItem}
+          presets={presets}
+          onSubmit={editItem ? handleEdit : handleCreate}
+        />
+      </Suspense>
 
       <ConfirmDialog
         open={!!deleteTarget}
@@ -184,11 +191,13 @@ export function CliCredentialsPage() {
       />
 
       {userCredsTarget && (
-        <CLIUserCredentialsDialog
-          open={!!userCredsTarget}
-          onOpenChange={(open: boolean) => !open && setUserCredsTarget(null)}
-          binary={userCredsTarget}
-        />
+        <Suspense fallback={null}>
+          <CLIUserCredentialsDialog
+            open={!!userCredsTarget}
+            onOpenChange={(open: boolean) => !open && setUserCredsTarget(null)}
+            binary={userCredsTarget}
+          />
+        </Suspense>
       )}
 
       {grantsTarget && (

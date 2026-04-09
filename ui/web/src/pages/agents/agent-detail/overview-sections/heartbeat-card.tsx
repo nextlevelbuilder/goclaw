@@ -1,12 +1,15 @@
-import { useState } from "react";
+import { useState, lazy, Suspense } from "react";
 import { Heart, Settings, List, Activity } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import type { UseAgentHeartbeatReturn } from "@/pages/agents/hooks/use-agent-heartbeat";
-import { HeartbeatConfigDialog } from "../heartbeat-config-dialog";
 import { HeartbeatLogsDialog } from "../heartbeat-logs-dialog";
 import { formatRelativeTime } from "@/lib/format";
+
+const HeartbeatConfigDialog = lazy(() =>
+  import("../heartbeat-config-dialog").then((m) => ({ default: m.HeartbeatConfigDialog }))
+);
 
 interface HeartbeatCardProps {
   heartbeat: UseAgentHeartbeatReturn;
@@ -46,11 +49,13 @@ export function HeartbeatCard({ heartbeat }: HeartbeatCardProps) {
           <p className="mt-2 text-xs text-muted-foreground">{t("heartbeat.notConfigured")}</p>
         </div>
         {configOpen && (
-          <HeartbeatConfigDialog
-            open={configOpen} onOpenChange={setConfigOpen}
-            config={config} saving={saving} update={update} test={test}
-            getChecklist={getChecklist} setChecklist={setChecklist} fetchTargets={fetchTargets} refresh={refresh}
-          />
+          <Suspense fallback={null}>
+            <HeartbeatConfigDialog
+              open={configOpen} onOpenChange={setConfigOpen}
+              config={config} saving={saving} update={update} test={test}
+              getChecklist={getChecklist} setChecklist={setChecklist} fetchTargets={fetchTargets} refresh={refresh}
+            />
+          </Suspense>
         )}
       </>
     );
@@ -127,11 +132,13 @@ export function HeartbeatCard({ heartbeat }: HeartbeatCardProps) {
       </div>
 
       {configOpen && (
-        <HeartbeatConfigDialog
-          open={configOpen} onOpenChange={setConfigOpen}
-          config={config} saving={saving} update={update} test={test}
-          getChecklist={getChecklist} setChecklist={setChecklist} fetchTargets={fetchTargets} refresh={refresh}
-        />
+        <Suspense fallback={null}>
+          <HeartbeatConfigDialog
+            open={configOpen} onOpenChange={setConfigOpen}
+            config={config} saving={saving} update={update} test={test}
+            getChecklist={getChecklist} setChecklist={setChecklist} fetchTargets={fetchTargets} refresh={refresh}
+          />
+        </Suspense>
       )}
       {logsOpen && (
         <HeartbeatLogsDialog open={logsOpen} onOpenChange={setLogsOpen} fetchLogs={fetchLogs} />
