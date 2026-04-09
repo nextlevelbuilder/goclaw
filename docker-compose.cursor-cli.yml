@@ -6,7 +6,7 @@
 #   docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.cursor-cli.yml up -d --build
 #
 # Optional:
-#   - Set GOCLAW_CLAUDE_CLI_PATH to override binary path (default: agent)
+#   - Set GOCLAW_CURSOR_CLI_PATH to override binary path (default: agent)
 #   - If host mount is unavailable, run auth once inside container:
 #       docker compose exec goclaw agent auth login
 
@@ -16,7 +16,7 @@ services:
       args:
         ENABLE_CURSOR_AGENT: "true"
     environment:
-      - GOCLAW_CLAUDE_CLI_PATH=${GOCLAW_CLAUDE_CLI_PATH:-agent}
+      - GOCLAW_CURSOR_CLI_PATH=${GOCLAW_CURSOR_CLI_PATH:-agent}
     volumes:
       - ${HOME}/.cursor:/app/.cursor-host:ro
       - goclaw-cursor-config:/app/.cursor

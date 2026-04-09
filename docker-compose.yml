@@ -21,6 +21,7 @@
 #
 # With OTel tracing:  add -f docker-compose.otel.yml
 # With Claude CLI:    add -f docker-compose.claude-cli.yml
+# With Cursor CLI:    add -f docker-compose.cursor-cli.yml
 
 services:
   goclaw:
