@@ -30,13 +30,14 @@ func MediaImagesFromCtx(ctx context.Context) []providers.ImageContent {
 // --- ReadImageTool ---
 
 // visionProviderPriority is the order in which providers are tried for vision.
-var visionProviderPriority = []string{"openrouter", "gemini", "anthropic", "dashscope"}
+var visionProviderPriority = []string{"openrouter", "gemini", "anthropic", "claude-cli", "dashscope"}
 
 // visionModelDefaults maps provider names to preferred vision models.
 var visionModelDefaults = map[string]string{
 	"openrouter": "google/gemini-2.5-flash-image",
 	"gemini":     "gemini-2.5-flash",
 	"anthropic":  "",
+	"claude-cli": "",
 	"dashscope":  "qwen3-vl",
 }
 
@@ -146,8 +147,9 @@ func (t *ReadImageTool) callProvider(ctx context.Context, cp credentialProvider,
 		},
 		Model: model,
 		Options: map[string]any{
-			"max_tokens":  1024,
-			"temperature": 0.3,
+			"max_tokens":      1024,
+			"temperature":     0.3,
+			"disable_tools":   true,
 		},
 	})
 	if err != nil {
