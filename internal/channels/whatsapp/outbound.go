@@ -80,6 +80,21 @@ func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) error {
 	return nil
 }
 
+// sendText sends a plain text message directly to a WhatsApp JID.
+// Used for command feedback (e.g. /menu, /reset confirmation).
+func (c *Channel) sendText(chatJID types.JID, text string) {
+	if c.client == nil || !c.client.IsConnected() {
+		slog.Warn("whatsapp: cannot send text, not connected")
+		return
+	}
+	waMsg := &waE2E.Message{
+		Conversation: proto.String(text),
+	}
+	if _, err := c.client.SendMessage(c.ctx, chatJID, waMsg); err != nil {
+		slog.Error("whatsapp: failed to send command reply", "error", err, "chat", chatJID.String())
+	}
+}
+
 // buildMediaMessage uploads media to WhatsApp and returns the message proto.
 func (c *Channel) buildMediaMessage(data []byte, mime, caption string) (*waE2E.Message, error) {
 	switch {
