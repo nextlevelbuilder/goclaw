@@ -120,7 +120,7 @@ func runDoctor() {
 		checkChannel("Discord", cfg.Channels.Discord.Enabled, cfg.Channels.Discord.Token != "")
 		checkChannel("Zalo", cfg.Channels.Zalo.Enabled, cfg.Channels.Zalo.Token != "")
 		checkChannel("Feishu", cfg.Channels.Feishu.Enabled, cfg.Channels.Feishu.AppID != "")
-		checkChannel("WhatsApp", cfg.Channels.WhatsApp.Enabled, cfg.Channels.WhatsApp.BridgeURL != "")
+		checkChannel("WhatsApp", cfg.Channels.WhatsApp.Enabled, cfg.Channels.WhatsApp.Enabled)
 	}
 
 	// External tools

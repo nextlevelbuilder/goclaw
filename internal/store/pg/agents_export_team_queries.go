@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -13,64 +14,64 @@ import (
 
 // TeamExport holds portable team metadata.
 type TeamExport struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description,omitempty"`
-	Status      string          `json:"status"`
-	Settings    json.RawMessage `json:"settings,omitempty"`
+	Name        string          `json:"name" db:"name"`
+	Description string          `json:"description,omitempty" db:"description"`
+	Status      string          `json:"status" db:"status"`
+	Settings    json.RawMessage `json:"settings,omitempty" db:"settings"`
 }
 
 // TeamMemberExport references a team member by agent_key (portable cross-system).
 type TeamMemberExport struct {
-	AgentKey string `json:"agent_key"`
-	Role     string `json:"role"`
+	AgentKey string `json:"agent_key" db:"agent_key"`
+	Role     string `json:"role" db:"role"`
 }
 
 // TeamTaskExport is a portable team task (no internal UUIDs).
 // Note: blocked_by (UUID[]) is intentionally omitted — task UUIDs change on import,
 // so the dependency graph would be invalid. Tasks are imported with cleared blocked_by.
 type TeamTaskExport struct {
-	Subject         string          `json:"subject"`
-	Description     string          `json:"description,omitempty"`
-	Status          string          `json:"status"`
-	Priority        int             `json:"priority"`
-	Result          *string         `json:"result,omitempty"`
-	Metadata        json.RawMessage `json:"metadata,omitempty"`
-	TaskType        *string         `json:"task_type,omitempty"`
-	TaskNumber      *int            `json:"task_number,omitempty"`
-	Identifier      *string         `json:"identifier,omitempty"`
-	OwnerAgentKey   *string         `json:"owner_agent_key,omitempty"`
-	CreatedByKey    *string         `json:"created_by_key,omitempty"`
-	AssigneeUserID  *string         `json:"assignee_user_id,omitempty"`
-	ParentIdx       *int            `json:"parent_idx,omitempty"` // index into tasks array
-	ProgressPercent *int            `json:"progress_percent,omitempty"`
-	ProgressStep    *string         `json:"progress_step,omitempty"`
+	Subject         string          `json:"subject" db:"-"`
+	Description     string          `json:"description,omitempty" db:"-"`
+	Status          string          `json:"status" db:"-"`
+	Priority        int             `json:"priority" db:"-"`
+	Result          *string         `json:"result,omitempty" db:"-"`
+	Metadata        json.RawMessage `json:"metadata,omitempty" db:"-"`
+	TaskType        *string         `json:"task_type,omitempty" db:"-"`
+	TaskNumber      *int            `json:"task_number,omitempty" db:"-"`
+	Identifier      *string         `json:"identifier,omitempty" db:"-"`
+	OwnerAgentKey   *string         `json:"owner_agent_key,omitempty" db:"-"`
+	CreatedByKey    *string         `json:"created_by_key,omitempty" db:"-"`
+	AssigneeUserID  *string         `json:"assignee_user_id,omitempty" db:"-"`
+	ParentIdx       *int            `json:"parent_idx,omitempty" db:"-"` // index into tasks array
+	ProgressPercent *int            `json:"progress_percent,omitempty" db:"-"`
+	ProgressStep    *string         `json:"progress_step,omitempty" db:"-"`
 }
 
 // TeamTaskCommentExport is a portable task comment referencing task by index.
 type TeamTaskCommentExport struct {
-	TaskIdx     int             `json:"task_idx"`
-	AgentKey    *string         `json:"agent_key,omitempty"`
-	UserID      *string         `json:"user_id,omitempty"`
-	Content     string          `json:"content"`
-	CommentType string          `json:"comment_type"`
-	Metadata    json.RawMessage `json:"metadata,omitempty"`
+	TaskIdx     int             `json:"task_idx" db:"-"`
+	AgentKey    *string         `json:"agent_key,omitempty" db:"-"`
+	UserID      *string         `json:"user_id,omitempty" db:"-"`
+	Content     string          `json:"content" db:"-"`
+	CommentType string          `json:"comment_type" db:"-"`
+	Metadata    json.RawMessage `json:"metadata,omitempty" db:"-"`
 }
 
 // TeamTaskEventExport is a portable task event referencing task by index.
 type TeamTaskEventExport struct {
-	TaskIdx   int             `json:"task_idx"`
-	EventType string          `json:"event_type"`
-	ActorType string          `json:"actor_type"`
-	ActorID   string          `json:"actor_id"`
-	Data      json.RawMessage `json:"data,omitempty"`
+	TaskIdx   int             `json:"task_idx" db:"-"`
+	EventType string          `json:"event_type" db:"-"`
+	ActorType string          `json:"actor_type" db:"-"`
+	ActorID   string          `json:"actor_id" db:"-"`
+	Data      json.RawMessage `json:"data,omitempty" db:"-"`
 }
 
 // AgentLinkExport represents an inter-agent link using agent_key references.
 type AgentLinkExport struct {
-	SourceAgentKey string `json:"source_agent_key"`
-	TargetAgentKey string `json:"target_agent_key"`
-	Direction      string `json:"direction"`
-	Description    string `json:"description,omitempty"`
+	SourceAgentKey string `json:"source_agent_key" db:"source_agent_key"`
+	TargetAgentKey string `json:"target_agent_key" db:"target_agent_key"`
+	Direction      string `json:"direction" db:"direction"`
+	Description    string `json:"description,omitempty" db:"description"`
 }
 
 // TeamTasksExport bundles tasks with their UUIDs for downstream comment/event mapping.
@@ -95,7 +96,7 @@ func ExportTeamByLead(ctx context.Context, db *sql.DB, agentID uuid.UUID) (*Team
 			" FROM agent_teams WHERE lead_agent_id = $1"+tc,
 		args...,
 	).Scan(&teamID, &t.Name, &t.Description, &t.Status, &t.Settings)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, uuid.Nil, nil, nil
 	}
 	if err != nil {
@@ -115,28 +116,15 @@ func exportTeamMembers(ctx context.Context, db *sql.DB, teamID, leadAgentID uuid
 	if err != nil {
 		return nil, err
 	}
-	rows, err := db.QueryContext(ctx,
+	var out []TeamMemberExport
+	err = pkgSqlxDB.SelectContext(ctx, &out,
 		"SELECT a.agent_key, m.role"+
 			" FROM agent_team_members m"+
 			" JOIN agents a ON a.id = m.agent_id"+
 			" WHERE m.team_id = $1 AND m.agent_id != $2"+tc,
 		append([]any{teamID, leadAgentID}, tcArgs...)...,
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var out []TeamMemberExport
-	for rows.Next() {
-		var m TeamMemberExport
-		if err := rows.Scan(&m.AgentKey, &m.Role); err != nil {
-			slog.Warn("export.team.member.scan", "error", err)
-			continue
-		}
-		out = append(out, m)
-	}
-	return out, rows.Err()
+	return out, err
 }
 
 // ExportTeamTasks returns all tasks for a team, resolving agent keys for owner/creator.
@@ -383,29 +371,16 @@ func ExportAgentLinks(ctx context.Context, db *sql.DB, agentID uuid.UUID) ([]Age
 	if err != nil {
 		return nil, err
 	}
-	rows, err := db.QueryContext(ctx,
-		"SELECT sa.agent_key, ta.agent_key, l.direction, COALESCE(l.description,'')"+
+	var out []AgentLinkExport
+	err = pkgSqlxDB.SelectContext(ctx, &out,
+		"SELECT sa.agent_key AS source_agent_key, ta.agent_key AS target_agent_key, l.direction, COALESCE(l.description,'') AS description"+
 			" FROM agent_links l"+
 			" JOIN agents sa ON sa.id = l.source_agent_id"+
 			" JOIN agents ta ON ta.id = l.target_agent_id"+
 			" WHERE (l.source_agent_id = $1 OR l.target_agent_id = $1)"+tc,
 		append([]any{agentID}, tcArgs...)...,
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var out []AgentLinkExport
-	for rows.Next() {
-		var l AgentLinkExport
-		if err := rows.Scan(&l.SourceAgentKey, &l.TargetAgentKey, &l.Direction, &l.Description); err != nil {
-			slog.Warn("export.agent_link.scan", "error", err)
-			continue
-		}
-		out = append(out, l)
-	}
-	return out, rows.Err()
+	return out, err
 }
 
 // ExportTeamPreviewCounts returns team-related counts for the preview endpoint.
@@ -421,7 +396,7 @@ func ExportTeamPreviewCounts(ctx context.Context, db *sql.DB, agentID uuid.UUID)
 	err = db.QueryRowContext(ctx,
 		"SELECT id FROM agent_teams WHERE lead_agent_id = $1"+tc, args...,
 	).Scan(&teamID)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		err = nil
 		// Still count agent links even if no team
 		_ = db.QueryRowContext(ctx,

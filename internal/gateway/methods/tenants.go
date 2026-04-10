@@ -381,10 +381,26 @@ func (m *TenantsMethods) handleMine(ctx context.Context, client *gateway.Client,
 		return
 	}
 
+	// Batch-fetch all tenant data in a single query instead of per-membership.
+	ids := make([]uuid.UUID, 0, len(memberships))
+	for _, mem := range memberships {
+		ids = append(ids, mem.TenantID)
+	}
+	tenants, tErr := m.tenantStore.GetTenantsByIDs(ctx, ids)
+	if tErr != nil {
+		slog.Error("tenants.mine: batch fetch failed", "error", tErr, "user_id", userID)
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToList, "tenants")))
+		return
+	}
+	tenantMap := make(map[uuid.UUID]*store.TenantData, len(tenants))
+	for i := range tenants {
+		tenantMap[tenants[i].ID] = &tenants[i]
+	}
+
 	entries := make([]tenantEntry, 0, len(memberships))
 	for _, mem := range memberships {
-		t, err := m.tenantStore.GetTenant(ctx, mem.TenantID)
-		if err != nil || t == nil || t.Status != store.TenantStatusActive {
+		t := tenantMap[mem.TenantID]
+		if t == nil || t.Status != store.TenantStatusActive {
 			continue
 		}
 		entries = append(entries, tenantEntry{ID: t.ID.String(), Name: t.Name, Slug: t.Slug, Role: mem.Role, Status: t.Status})

@@ -120,8 +120,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 
 	var req chatCompletionsRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, fmt.Sprintf(`{"error":{"message":"%s"}}`, i18n.T(locale, i18n.MsgInvalidRequest, err.Error())), http.StatusBadRequest)
+	if !bindJSON(w, r, locale, &req) {
 		return
 	}
 

@@ -55,7 +55,7 @@ export function ChatGPTOAuthRoutingSummarySection({
     [statuses],
   );
   const currentProvider = providerByName.get(agent.provider);
-  const savedRouting = normalizeChatGPTOAuthRouting(agent.other_config);
+  const savedRouting = normalizeChatGPTOAuthRouting(agent.chatgpt_oauth_routing ?? agent.other_config);
   const providerDefaults = getChatGPTOAuthProviderRouting(currentProvider?.settings);
   const effectiveRouting = resolveEffectiveChatGPTOAuthRouting(
     agent.provider,

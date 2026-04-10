@@ -196,8 +196,7 @@ func (h *SkillsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var updates map[string]any
-	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
+	if !bindJSON(w, r, locale, &updates) {
 		return
 	}
 	// Prevent changing sensitive fields (use /toggle endpoint for enabled)
@@ -352,10 +351,14 @@ func (h *SkillsHandler) handleInstallDep(w http.ResponseWriter, r *http.Request)
 	if !h.requireMasterTenant(w, r) {
 		return
 	}
+	locale := extractLocale(r)
 	var body struct {
 		Dep string `json:"dep"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Dep == "" {
+	if !bindJSON(w, r, locale, &body) {
+		return
+	}
+	if body.Dep == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "dep required"})
 		return
 	}
@@ -521,8 +524,7 @@ func (h *SkillsHandler) handleToggle(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Enabled bool `json:"enabled"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
+	if !bindJSON(w, r, locale, &body) {
 		return
 	}
 

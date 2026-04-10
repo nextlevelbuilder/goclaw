@@ -24,10 +24,10 @@ type permCacheEntry struct {
 }
 
 type permRow struct {
-	Scope      string
-	ConfigType string
-	Permission string
-	UserID     string // individual user ID or "*" (group wildcard)
+	Scope      string `json:"scope" db:"scope"`
+	ConfigType string `json:"config_type" db:"config_type"`
+	Permission string `json:"permission" db:"permission"`
+	UserID     string `json:"user_id" db:"user_id"` // individual user ID or "*" (group wildcard)
 }
 
 // fwCacheEntry holds cached file_writer ConfigPermission rows for a scope.
@@ -86,25 +86,13 @@ func (s *PGConfigPermissionStore) CheckPermission(ctx context.Context, agentID u
 	if err != nil {
 		return false, err
 	}
-	rows, err := s.db.QueryContext(ctx,
+	var permRows []permRow
+	err = pkgSqlxDB.SelectContext(ctx, &permRows,
 		`SELECT scope, config_type, permission, user_id FROM agent_config_permissions
 		 WHERE agent_id = $1 AND (user_id = $2 OR user_id = '*')`+tClause,
 		append([]any{agentID, userID}, tArgs...)...,
 	)
 	if err != nil {
-		return false, err
-	}
-	defer rows.Close()
-
-	var permRows []permRow
-	for rows.Next() {
-		var r permRow
-		if err := rows.Scan(&r.Scope, &r.ConfigType, &r.Permission, &r.UserID); err != nil {
-			return false, err
-		}
-		permRows = append(permRows, r)
-	}
-	if err := rows.Err(); err != nil {
 		return false, err
 	}
 

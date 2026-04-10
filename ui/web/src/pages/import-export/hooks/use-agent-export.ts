@@ -23,7 +23,7 @@ export function useExportPreview(agentId: string | null) {
     queryKey: ["export-preview", agentId],
     enabled: !!agentId,
     queryFn: () => http.get<ExportPreview>(`/v1/agents/${agentId}/export/preview`),
-    staleTime: 30_000,
+    staleTime: 60_000,
   });
 }
 

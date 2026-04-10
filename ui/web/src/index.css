@@ -127,6 +127,8 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --text-2xs: 10px;
+  --text-xs-plus: 11px;
 }
 
 @layer base {
@@ -151,6 +153,10 @@
 
 /* Allow word breaks anywhere for long URLs/text on narrow screens */
 @utility break-anywhere { overflow-wrap: anywhere; }
+
+@utility font-mono-code {
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
 
 /* Expand touch targets on coarse pointer (touch) devices for small icon buttons */
 @media (pointer: coarse) {
@@ -361,3 +367,12 @@
 .dark .hljs-template-variable { color: #ffa657; }
 .dark .hljs-deletion { color: #ffa198; background: rgba(255,129,130,0.15); }
 .dark .hljs-addition { background: rgba(63,185,80,0.15); }
+
+/* Hide scrollbar but keep scrolling */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}

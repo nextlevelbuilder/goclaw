@@ -40,11 +40,11 @@ func (c *tenantCache) GetTenant(ctx context.Context, id uuid.UUID) (*store.Tenan
 	c.mu.RLock()
 	if e, ok := c.byID[id]; ok && time.Since(e.fetchedAt) <= c.ttl {
 		c.mu.RUnlock()
-		slog.Debug("tenant_cache.hit", "id", id)
+		// slog.Debug("tenant_cache.hit", "id", id)
 		return e.tenant, nil
 	}
 	c.mu.RUnlock()
-	slog.Debug("tenant_cache.miss", "id", id)
+	// slog.Debug("tenant_cache.miss", "id", id)
 
 	t, err := c.store.GetTenant(ctx, id)
 	if err != nil {
@@ -61,11 +61,11 @@ func (c *tenantCache) GetTenantBySlug(ctx context.Context, slug string) (*store.
 	c.mu.RLock()
 	if e, ok := c.bySlug[slug]; ok && time.Since(e.fetchedAt) <= c.ttl {
 		c.mu.RUnlock()
-		slog.Debug("tenant_cache.hit", "slug", slug)
+		// slog.Debug("tenant_cache.hit", "slug", slug)
 		return e.tenant, nil
 	}
 	c.mu.RUnlock()
-	slog.Debug("tenant_cache.miss", "slug", slug)
+	// slog.Debug("tenant_cache.miss", "slug", slug)
 
 	t, err := c.store.GetTenantBySlug(ctx, slug)
 	if err != nil {

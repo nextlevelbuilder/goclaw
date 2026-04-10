@@ -85,6 +85,7 @@ func setupToolRegistry(
 	// Memory tools — PG-backed; always registered (PG memory is always available)
 	toolsReg.Register(tools.NewMemorySearchTool())
 	toolsReg.Register(tools.NewMemoryGetTool())
+	toolsReg.Register(tools.NewMemoryExpandTool())
 	toolsReg.Register(tools.NewKnowledgeGraphSearchTool())
 	slog.Info("memory + knowledge graph tools registered (PG-backed)")
 
@@ -278,7 +279,12 @@ func setupToolRegistry(
 	if execTool, ok := toolsReg.Get("exec"); ok {
 		if et, ok := execTool.(*tools.ExecTool); ok {
 			et.DenyPaths(dataDir, ".goclaw/")
-			et.AllowPathExemptions(".goclaw/skills-store/")
+			// Allow skills execution: master-tenant skills-store + all tenant-scoped skills-store dirs.
+			et.AllowPathExemptions(
+				".goclaw/skills-store/",
+				filepath.Join(dataDir, "skills-store")+"/",
+				filepath.Join(dataDir, "tenants")+"/",
+			)
 			// Harden: block access to internal workspace files via shell commands.
 			// Prevents `cat ../config.json`, `cat memory.db` etc. from user workspaces.
 			et.DenyPaths(
@@ -452,6 +458,18 @@ func setupMemoryEmbeddings(
 						slog.Info("KG embeddings backfill complete", "entities_updated", count)
 					}
 				}()
+			}
+
+			// Wire embedding provider into vault store for semantic document search.
+			if pgStores.Vault != nil {
+				pgStores.Vault.SetEmbeddingProvider(embProvider)
+				slog.Info("vault embeddings enabled", "provider", embProvider.Name())
+			}
+
+			// V3: Wire embedding provider into episodic store for semantic search.
+			if pgStores.Episodic != nil {
+				pgStores.Episodic.SetEmbeddingProvider(embProvider)
+				slog.Info("episodic embeddings enabled", "provider", embProvider.Name())
 			}
 		} else {
 			slog.Warn("memory embeddings disabled (no API key), chunks stored without vectors")

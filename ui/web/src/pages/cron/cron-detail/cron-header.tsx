@@ -40,7 +40,7 @@ export function CronHeader({ job, isRunning, onBack, onRun, onToggle, onDelete }
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 flex-wrap">
             <h2 className="truncate text-base font-semibold">{job.name}</h2>
-            <Badge variant={job.enabled ? "success" : "secondary"} className="text-[10px]">
+            <Badge variant={job.enabled ? "success" : "secondary"} className="text-2xs">
               {job.enabled ? t("detail.enabled") : t("detail.disabled")}
             </Badge>
             <Tooltip>
@@ -58,13 +58,13 @@ export function CronHeader({ job, isRunning, onBack, onRun, onToggle, onDelete }
             </Tooltip>
           </div>
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
-            <Badge variant="outline" className="text-[10px]">{job.schedule.kind}</Badge>
+            <Badge variant="outline" className="text-2xs">{job.schedule.kind}</Badge>
             <span className="text-border">·</span>
             <span>{formatSchedule(job)}</span>
             {job.agentId && (
               <>
                 <span className="text-border">·</span>
-                <span className="text-[11px]">{agentLabel}</span>
+                <span className="text-xs-plus">{agentLabel}</span>
               </>
             )}
           </div>

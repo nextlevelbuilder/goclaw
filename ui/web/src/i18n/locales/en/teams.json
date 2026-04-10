@@ -363,5 +363,40 @@
     "delegations": "Delegations",
     "settings": "Settings",
     "addMember": "Add member"
+  },
+  "tabs": {
+    "teams": "Agent Teams",
+    "board": "Board",
+    "links": "Agent Links",
+    "settings": "Settings"
+  },
+  "links": {
+    "title": "Agent Links",
+    "empty": "No agent links configured.",
+    "create": "Create Link",
+    "editLink": "Edit Link",
+    "save": "Save",
+    "source": "Source Agent",
+    "target": "Target Agent",
+    "selectAgent": "Select agent...",
+    "direction": "Direction",
+    "outbound": "Outbound",
+    "inbound": "Inbound",
+    "bidirectional": "Bidirectional",
+    "description": "Description",
+    "descriptionPlaceholder": "Optional description...",
+    "maxConcurrent": "Max Concurrent",
+    "status": "Status",
+    "active": "Active",
+    "disabled": "Disabled",
+    "deleteTitle": "Delete Link",
+    "confirmDelete": "Delete this agent link? This cannot be undone.",
+    "deleted": "Link deleted",
+    "deleteFailed": "Failed to delete link",
+    "created": "Link created",
+    "createFailed": "Failed to create link",
+    "updated": "Link updated",
+    "updateFailed": "Failed to update link",
+    "sameAgentError": "Source and target must be different agents."
   }
 }

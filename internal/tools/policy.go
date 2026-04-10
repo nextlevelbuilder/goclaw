@@ -89,12 +89,30 @@ var leafSubagentDenyList = []string{
 
 // PolicyEngine evaluates tool access based on layered config policies.
 type PolicyEngine struct {
-	globalPolicy *config.ToolsConfig
+	globalPolicy     *config.ToolsConfig
+	mu               sync.RWMutex     // protects denyCapabilities + registry
+	denyCapabilities []ToolCapability // capability-based deny rules (v3)
+	registry         *Registry        // for metadata lookups (nil = skip capability checks)
 }
 
 // NewPolicyEngine creates a policy engine from global config.
 func NewPolicyEngine(cfg *config.ToolsConfig) *PolicyEngine {
 	return &PolicyEngine{globalPolicy: cfg}
+}
+
+// SetRegistry enables capability-based filtering by providing metadata lookups.
+func (pe *PolicyEngine) SetRegistry(r *Registry) {
+	pe.mu.Lock()
+	defer pe.mu.Unlock()
+	pe.registry = r
+}
+
+// DenyCapability adds a capability to the deny list.
+// Tools with this capability are excluded from FilterTools results.
+func (pe *PolicyEngine) DenyCapability(cap ToolCapability) {
+	pe.mu.Lock()
+	defer pe.mu.Unlock()
+	pe.denyCapabilities = append(pe.denyCapabilities, cap)
 }
 
 // FilterTools returns only the tools allowed by the policy for the given context.
@@ -110,6 +128,15 @@ func (pe *PolicyEngine) FilterTools(
 ) []providers.ToolDefinition {
 	allTools := registry.List()
 	allowed := pe.evaluate(allTools, providerName, agentToolPolicy, groupToolAllow)
+
+	// Step 8: Capability-based deny (v3 RBAC)
+	pe.mu.RLock()
+	denyCaps := pe.denyCapabilities
+	capReg := pe.registry
+	pe.mu.RUnlock()
+	if len(denyCaps) > 0 && capReg != nil {
+		allowed = filterByCapability(allowed, denyCaps, capReg)
+	}
 
 	// Apply subagent restrictions
 	if isSubagent {
@@ -130,8 +157,16 @@ func (pe *PolicyEngine) FilterTools(
 		}
 	}
 
-	// Add registry aliases for allowed canonical tools
-	for alias, canonical := range registry.Aliases() {
+	// Add registry aliases for allowed canonical tools.
+	// Sort alias names for deterministic ordering (prompt caching).
+	aliasMap := registry.Aliases()
+	aliasList := make([]string, 0, len(aliasMap))
+	for alias := range aliasMap {
+		aliasList = append(aliasList, alias)
+	}
+	slices.Sort(aliasList)
+	for _, alias := range aliasList {
+		canonical := aliasMap[alias]
 		if !allowedSet[canonical] {
 			continue
 		}
@@ -441,4 +476,17 @@ func copySlice(s []string) []string {
 	c := make([]string, len(s))
 	copy(c, s)
 	return c
+}
+
+// filterByCapability removes tools whose metadata matches any denied capability.
+func filterByCapability(names []string, denyCaps []ToolCapability, reg *Registry) []string {
+	out := make([]string, 0, len(names))
+	for _, name := range names {
+		meta := reg.GetMetadata(name)
+		denied := slices.ContainsFunc(denyCaps, meta.HasCapability)
+		if !denied {
+			out = append(out, name)
+		}
+	}
+	return out
 }

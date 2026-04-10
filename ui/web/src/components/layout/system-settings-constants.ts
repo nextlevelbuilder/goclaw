@@ -42,6 +42,8 @@ export interface InitState {
   kgProvider: string;
   kgModel: string;
   kgMinConfidence: string;
+  bgProvider: string;
+  bgModel: string;
 }
 
 export const DEFAULTS: InitState = {
@@ -51,6 +53,7 @@ export const DEFAULTS: InitState = {
   compProvider: "", compModel: "",
   compThreshold: "", compKeepRecent: "", compMaxTokens: "",
   kgProvider: "", kgModel: "", kgMinConfidence: "0.75",
+  bgProvider: "", bgModel: "",
 };
 
 export function parseBool(v: string | undefined, fallback: boolean): boolean {

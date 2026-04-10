@@ -76,6 +76,9 @@ export function AgentIdentityAndModelFields({
               placeholder={t("create.displayNamePlaceholder")}
             />
           </div>
+          {errors.displayName && (
+            <p className="text-xs text-destructive">{errors.displayName.message}</p>
+          )}
         </div>
 
         <div className="space-y-2">
@@ -114,7 +117,7 @@ export function AgentIdentityAndModelFields({
                         <span className="flex items-center gap-2">
                           {p.display_name || p.name}
                           {poolOwnerNames?.has(p.name) && (
-                            <span className="rounded border border-primary/30 bg-primary/10 px-1.5 py-px text-[10px] font-medium text-primary">
+                            <span className="rounded border border-primary/30 bg-primary/10 px-1.5 py-px text-2xs font-medium text-primary">
                               {t("providers:list.poolBadge")}
                             </span>
                           )}
@@ -127,6 +130,9 @@ export function AgentIdentityAndModelFields({
             />
           ) : (
             <Input {...register("provider")} placeholder="openrouter" />
+          )}
+          {errors.provider && (
+            <p className="text-xs text-destructive">{errors.provider.message}</p>
           )}
         </div>
 
@@ -158,6 +164,9 @@ export function AgentIdentityAndModelFields({
               {verifying ? "..." : t("create.check")}
             </Button>
           </div>
+          {errors.model && (
+            <p className="text-xs text-destructive">{errors.model.message}</p>
+          )}
           {verifyResult && (
             <p className={`text-xs ${verifyResult.valid ? "text-success" : "text-destructive"}`}>
               {verifyResult.valid

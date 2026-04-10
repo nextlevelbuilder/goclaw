@@ -1,4 +1,8 @@
 {
+  "contextUsage": {
+    "tooltip": "{{used}} / {{max}} tokens ({{percent}}%) · 压缩 {{compactions}} 次 · 最近：{{lastCompact}}",
+    "never": "无"
+  },
   "empty": {
     "description": "发送消息开始与Agent对话。",
     "title": "开始对话"

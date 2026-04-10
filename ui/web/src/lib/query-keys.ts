@@ -16,6 +16,7 @@ export const queryKeys = {
     links: (agentId: string) => ["agents", agentId, "links"] as const,
     instances: (agentId: string) => ["agents", agentId, "instances"] as const,
     codexPoolActivity: (agentId: string, limit: number) => ["agents", agentId, "codex-pool-activity", limit] as const,
+    systemPromptPreview: (agentKey: string, mode: string) => ["agents", agentKey, "system-prompt-preview", mode] as const,
   },
   sessions: {
     all: ["sessions"] as const,
@@ -71,6 +72,16 @@ export const queryKeys = {
     all: ["memory"] as const,
     list: (params: Record<string, unknown>) => ["memory", params] as const,
   },
+  v3Flags: {
+    detail: (agentId: string) => ["v3-flags", agentId] as const,
+  },
+  orchestration: {
+    detail: (agentId: string) => ["orchestration", agentId] as const,
+  },
+  evolution: {
+    metrics: (agentId: string, params: Record<string, unknown>) => ["evolution", "metrics", agentId, params] as const,
+    suggestions: (agentId: string, params: Record<string, unknown>) => ["evolution", "suggestions", agentId, params] as const,
+  },
   packages: {
     all: ["packages"] as const,
     runtimes: ["packages", "runtimes"] as const,
@@ -87,8 +98,14 @@ export const queryKeys = {
     detail: (tenantId: string) => ["tenants", tenantId] as const,
     users: (tenantId: string) => ["tenants", tenantId, "users"] as const,
   },
-  proxyPool: {
-    all: ["proxyPool"] as const,
+  vault: {
+    all: ["vault"] as const,
+    docs: (params: Record<string, unknown>) => ["vault", "docs", params] as const,
+    links: (agentId: string, docId: string) => ["vault", "links", agentId, docId] as const,
+  },
+  episodic: {
+    all: ["episodic"] as const,
+    list: (agentId: string, params: Record<string, unknown>) => ["episodic", agentId, params] as const,
   },
   kg: {
     all: ["kg"] as const,

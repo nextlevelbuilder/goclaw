@@ -83,7 +83,7 @@ export function CompactRequestCard({ request, index }: CompactRequestCardProps) 
           <div
             className={cn(
               "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[9px] font-semibold tabular-nums",
-              "xl:h-6 xl:w-6 xl:text-[10px]",
+              "xl:h-6 xl:w-6 xl:text-2xs",
               accent.index,
             )}
           >
@@ -99,18 +99,18 @@ export function CompactRequestCard({ request, index }: CompactRequestCardProps) 
                 {providerSummary}
               </p>
             </div>
-            <p className="truncate text-[10px] text-muted-foreground xl:text-[11px]">
+            <p className="truncate text-2xs text-muted-foreground xl:text-xs-plus">
               {request.model || t("chatgptOAuthRouting.unknownModel")}
             </p>
           </div>
         </div>
       </div>
 
-      <div className="relative z-10 mt-1 flex items-center gap-1.5 overflow-hidden whitespace-nowrap text-[10px] text-muted-foreground xl:mt-2 xl:gap-2 xl:text-[11px]">
+      <div className="relative z-10 mt-1 flex items-center gap-1.5 overflow-hidden whitespace-nowrap text-2xs text-muted-foreground xl:mt-2 xl:gap-2 xl:text-xs-plus">
         <Badge
           variant={request.used_failover ? "warning" : "outline"}
           className={cn(
-            "h-5 shrink-0 px-1.5 text-[10px] xl:h-6 xl:px-2 xl:text-xs",
+            "h-5 shrink-0 px-1.5 text-2xs xl:h-6 xl:px-2 xl:text-xs",
             request.used_failover ? undefined : accent.directBadge,
           )}
         >
@@ -136,7 +136,7 @@ export function CompactRequestCard({ request, index }: CompactRequestCardProps) 
         {request.status !== "completed" && (
           <Badge
             variant={requestStatusVariant(request.status)}
-            className="h-5 shrink-0 px-1.5 text-[10px] xl:h-6 xl:px-2 xl:text-xs"
+            className="h-5 shrink-0 px-1.5 text-2xs xl:h-6 xl:px-2 xl:text-xs"
           >
             {request.status}
           </Badge>
@@ -146,7 +146,7 @@ export function CompactRequestCard({ request, index }: CompactRequestCardProps) 
       {request.used_failover &&
         request.failover_providers &&
         request.failover_providers.length > 0 && (
-          <p className="relative z-10 mt-0.5 truncate text-[10px] text-muted-foreground xl:text-[11px]">
+          <p className="relative z-10 mt-0.5 truncate text-2xs text-muted-foreground xl:text-xs-plus">
             {t("chatgptOAuthRouting.failoverHint", {
               providers: request.failover_providers.join(", "),
             })}

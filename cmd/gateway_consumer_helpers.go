@@ -75,20 +75,32 @@ func extractSessionMetadata(msg bus.InboundMessage, peerKind string) map[string]
 		meta["display_name"] = v
 	}
 
-	if v := msg.Metadata["username"]; v != "" {
-		meta["username"] = v
+	if v := msg.Metadata[tools.MetaUsername]; v != "" {
+		meta[tools.MetaUsername] = v
 	}
 	if peerKind != "" {
 		meta["peer_kind"] = peerKind
 	}
-	if v := msg.Metadata["chat_title"]; v != "" {
-		meta["chat_title"] = v
+	if v := msg.Metadata[tools.MetaChatTitle]; v != "" {
+		meta[tools.MetaChatTitle] = v
 	}
 
 	if len(meta) == 0 {
 		return nil
 	}
 	return meta
+}
+
+// buildPancakeSessionLabel returns "Pancake:{senderName}:{pageName}" with non-empty parts only.
+func buildPancakeSessionLabel(senderName, pageName string) string {
+	label := "Pancake"
+	if senderName != "" {
+		label += ":" + senderName
+	}
+	if pageName != "" {
+		label += ":" + pageName
+	}
+	return label
 }
 
 // buildAnnounceOutMeta builds outbound metadata for announce messages so that
@@ -176,4 +188,20 @@ func resolveChannelType(channelMgr *channels.Manager, name string) string {
 		return ""
 	}
 	return channelMgr.ChannelTypeForName(name)
+}
+
+// resolveSenderName extracts the sender display name from channel metadata.
+// Checks "sender_name" (Feishu), "first_name" (Telegram), "push_name" (WhatsApp).
+// Sanitizes to prevent prompt injection via newlines/control chars.
+func resolveSenderName(msg bus.InboundMessage) string {
+	for _, key := range []string{"sender_name", "first_name", "push_name", "display_name"} {
+		if name := msg.Metadata[key]; name != "" {
+			clean := strings.NewReplacer("\n", " ", "\r", " ", "\t", " ").Replace(strings.TrimSpace(name))
+			if len([]rune(clean)) > 100 {
+				clean = string([]rune(clean)[:100])
+			}
+			return clean
+		}
+	}
+	return ""
 }

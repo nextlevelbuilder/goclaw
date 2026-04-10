@@ -1,6 +1,6 @@
 # 06 - Store Layer and Data Model
 
-The store layer abstracts all persistence behind Go interfaces backed by PostgreSQL. Each store interface has a PostgreSQL implementation wired at startup.
+The store layer abstracts all persistence behind Go interfaces. Each store interface has a PostgreSQL implementation (standard edition) or SQLite implementation (Lite desktop edition). Implementations are wired at startup based on `//go:build` tags and edition configuration.
 
 ---
 
@@ -8,9 +8,14 @@ The store layer abstracts all persistence behind Go interfaces backed by Postgre
 
 ```mermaid
 flowchart TD
-    START["Gateway Startup"] --> PG["PostgreSQL Backend"]
+    START["Gateway Startup"] --> CHOOSE{"Edition<br/>& Build Tag"}
+    
+    CHOOSE -->|Standard<br/>(PostgreSQL)| PG["PostgreSQL Backend"]
+    CHOOSE -->|Lite<br/>(-tags sqliteonly)| SQLite["SQLite Backend"]
 
     PG --> PG_STORES["PGSessionStore<br/>PGMemoryStore<br/>PGCronStore<br/>PGPairingStore<br/>PGSkillStore<br/>PGAgentStore<br/>PGProviderStore<br/>PGTracingStore<br/>PGMCPServerStore<br/>PGCustomToolStore<br/>PGChannelInstanceStore<br/>PGConfigSecretsStore<br/>PGTeamStore<br/>PGBuiltinToolStore<br/>PGPendingMessageStore<br/>PGKnowledgeGraphStore<br/>PGContactStore<br/>PGActivityStore<br/>PGSnapshotStore<br/>PGSecureCLIStore<br/>PGAPIKeyStore"]
+    
+    SQLite --> SQLITE_STORES["SQLiteActivityStore<br/>SQLiteEpisodicStore<br/>SQLiteEvolutionMetrics<br/>SQLiteEvolutionSuggestions<br/>SQLiteKnowledgeGraph<br/>SQLiteVaultStore<br/>SQLiteAgentLinks<br/>SQLiteSubagentTasks<br/>SQLiteSecureCLIStore"]
 ```
 
 ---
@@ -42,6 +47,22 @@ The `Stores` struct is the top-level container holding all PostgreSQL-backed sto
 | SnapshotStore | `PGSnapshotStore` | Hourly usage snapshots, cost aggregation, time series queries |
 | SecureCLIStore | `PGSecureCLIStore` | CLI binary configs with encrypted credential injection |
 | APIKeyStore | `PGAPIKeyStore` | Gateway API keys, scopes, expiration, revocation |
+
+### SQLite Parity (Lite Edition)
+
+**New in v3:** SQLite backend supports 9 additional stores for Lite desktop edition (`-tags sqliteonly`). Schema v9 adds 4 new tables. Text search uses LIKE (no FTS5). Vector features omitted.
+
+| Interface | Implementation | PostgreSQL vs SQLite |
+|-----------|---|---|
+| ActivityStore | `SQLiteActivityStore` | ✓ Parity |
+| EpisodicStore | `SQLiteEpisodicStore` | LIKE search (no tsvector), no vector embedding |
+| EvolutionMetrics | `SQLiteEvolutionMetrics` | ✓ Parity (json_extract instead of JSONB operator) |
+| EvolutionSuggestions | `SQLiteEvolutionSuggestions` | ✓ Parity |
+| KnowledgeGraphStore | `SQLiteKnowledgeGraph` | LIKE search, Go-side dedup (Jaro-Winkler), no vector embedding, recursive CTE for traversal, depth cap 5 |
+| VaultStore | `SQLiteVaultStore` | LIKE search (no tsvector), no vector embedding |
+| AgentLinksStore | `SQLiteAgentLinks` | LIKE search, no vector |
+| SubagentTasksStore | `SQLiteSubagentTasks` | ✓ Parity (json_set for metadata merge) |
+| SecureCLIStore | `SQLiteSecureCLIStore` | ✓ Parity + AES-256-GCM encryption mandatory (GOCLAW_KEY env var required) |
 
 ---
 
@@ -79,6 +100,18 @@ flowchart TD
 | Subagent | `agent:{agentId}:subagent:{label}` | `agent:default:subagent:my-task` |
 | Cron | `agent:{agentId}:cron:{jobId}:run:{runId}` | `agent:default:cron:reminder:run:abc123` |
 | Main | `agent:{agentId}:{mainKey}` | `agent:default:main` |
+
+### Session Metadata - Compaction Tracking
+
+**New well-known metadata key** (Phase 5 follow-up): `last_compaction_at` (RFC3339 string)
+
+This timestamp is written to `sessions.metadata` JSONB after successful message compaction (context pruning). Both execution paths update it:
+- **V3 pipeline**: `PruneStage.CompactMessages()` after successful compaction
+- **V2 legacy**: `maybeSummarize()` goroutine after successful summarization
+
+Operators can read this via `GetSessionMetadata()` to understand when a session was last compacted. The web UI optionally displays this timestamp in a context-usage tooltip.
+
+Go constant export: `agent.SessionMetaKeyLastCompactionAt = "last_compaction_at"`
 
 ---
 
@@ -601,13 +634,179 @@ All "create or update" operations use `INSERT ... ON CONFLICT DO UPDATE`, ensuri
 
 ---
 
-## 17. File Reference
+## 17. V3 Memory & Evolution System (New in v3)
+
+GoClaw v3 introduces a 3-tier memory architecture with event-driven consolidation.
+
+### 3-Tier Memory Model
+
+```
+L0 (Working Memory)           L1 (Episodic Memory)        L2 (Semantic Memory)
+┌─────────────────────────┐  ┌──────────────────────┐     ┌──────────────────────┐
+│ Current conversation    │  │ Session summaries    │     │ Knowledge graph      │
+│ messages in session     │  │ w/ embeddings        │     │ entities & relations │
+│ High context window     │  │ Auto-injected via    │     │ Temporal validity    │
+└─────────────────────────┘  │ memory search tool   │     │ Long-term recall     │
+                             │ 90-day retention     │     └──────────────────────┘
+                             │ Query via hybrid     │
+                             │ search (FTS + vec)   │
+                             └──────────────────────┘
+```
+
+**L0 (Working Memory):** Current session messages stored in `sessions` table. Auto-compacted via summarization at context window threshold.
+
+**L1 (Episodic Memory):** Session summaries extracted after `run.completed` events. Stored in `episodic_summaries` with L0 abstracts (~50 tokens each) for fast auto-inject. Hybrid search returns top results as context for memory_search/memory_expand tools.
+
+**L2 (Semantic Memory):** Knowledge Graph with temporal validity windows (`valid_from`, `valid_until`). Supports long-term facts, relationships, and inference. Queried via kg_entities/kg_relations with current-only filters.
+
+### New Store Interfaces
+
+| Interface | Purpose | Key Methods |
+|-----------|---------|-------------|
+| `EpisodicStore` | Tier 1.5 memory CRUD + hybrid search | `Create`, `Search`, `ExistsBySourceID`, `ListUnpromoted`, `MarkPromoted` |
+| `EvolutionMetricsStore` | Stage 1: record metrics (retrieval, tool, feedback) | `RecordMetric`, `AggregateToolMetrics`, `AggregateRetrievalMetrics` |
+| `EvolutionSuggestionStore` | Stage 2: generate & track improvement suggestions | `CreateSuggestion`, `ListSuggestions`, `UpdateSuggestionStatus` |
+| `VaultStore` | Knowledge Vault: document registry + links | `UpsertDocument`, `Search`, `CreateLink`, `GetOutLinks`, `GetBacklinks` |
+| `AgentLinkStore` | Inter-agent delegation links (replaces v2 `agent_links` in teams context) | `CreateLink`, `CanDelegate`, `DelegateTargets`, `SearchDelegateTargets` |
+
+### New Tables
+
+| Table | Purpose | Key Columns |
+|-------|---------|-------------|
+| `episodic_summaries` | Session conversation summaries | `agent_id`, `user_id`, `session_key`, `summary`, `l0_abstract`, `key_topics` (TEXT[]), `embedding` (vector), `source_id` (dedup), `expires_at`, `recall_count` (INT), `recall_score` (FLOAT), `last_recalled_at` (TIMESTAMPTZ) |
+| `agent_evolution_metrics` | Self-evolution performance data | `agent_id`, `session_key`, `metric_type` (retrieval/tool/feedback), `metric_key`, `value` (JSONB) |
+| `agent_evolution_suggestions` | Data-driven improvement suggestions | `agent_id`, `suggestion_type`, `suggestion`, `rationale`, `parameters` (JSONB), `status` (pending/approved/rejected/applied) |
+| `vault_documents` | Knowledge Vault document registry | `agent_id`, `scope` (personal/team/shared), `path`, `title`, `doc_type`, `content_hash`, `embedding` (vector), `metadata` (JSONB) |
+| `vault_links` | Wikilinks between vault documents | `from_doc_id`, `to_doc_id`, `link_type`, `context` (snippet) |
+| `vault_versions` | Document version history (prepared for v3.1) | `doc_id`, `version`, `content`, `changed_by`, `created_at` |
+| `kg_entities` | Extended with temporal columns | `valid_from` (TIMESTAMPTZ), `valid_until` (TIMESTAMPTZ) for temporal facts |
+| `kg_relations` | Extended with temporal columns | `valid_from` (TIMESTAMPTZ), `valid_until` (TIMESTAMPTZ) for temporal edges |
+
+### 12 Promoted Agent Columns
+
+Migration 000037 moves 12 config fields from `agents.other_config` JSONB to dedicated columns:
+
+**Scalar columns:**
+- `emoji` (VARCHAR) — agent emoji/icon
+- `agent_description` (VARCHAR) — human-friendly description
+- `thinking_level` (VARCHAR) — extended thinking depth
+- `max_tokens` (INT) — context window limit
+- `self_evolve` (BOOLEAN) — enable self-evolution metrics
+- `skill_evolve` (BOOLEAN) — enable skill evolution
+- `skill_nudge_interval` (INT) — suggestion frequency (days)
+
+**JSONB columns (structures stay JSON-shaped):**
+- `reasoning_config` (JSONB) — reasoning model settings
+- `workspace_sharing` (JSONB) — workspace access config
+- `chatgpt_oauth_routing` (JSONB) — ChatGPT OAuth fallback rules
+- `shell_deny_groups` (JSONB) — shell command deny patterns
+- `kg_dedup_config` (JSONB) — KG deduplication thresholds
+
+---
+
+## 18. Progressive Memory Loading (L0/L1/L2)
+
+Three-stage memory loading strategy minimizes token cost while maximizing relevance.
+
+```mermaid
+flowchart TD
+    MSG["User message arrives"] --> INJECT["L0: AutoInjector"]
+    INJECT -->|"Not relevant"| SKIP["Skip injection"]
+    INJECT -->|"Relevant"| L0OUT["Inject L0 summaries<br/>to system prompt"]
+    L0OUT --> TOOL1["Tool available: memory_search"]
+    TOOL1 -->|"Agent uses tool"| L1["L1: Unified search<br/>BM25 + vector hybrid<br/>across episodic + KG"]
+    L1 --> L1RES["Return top K results"]
+    TOOL1 -->|"Agent needs details"| TOOL2["Tool: memory_expand"]
+    TOOL2 --> L2["L2: Deep retrieval<br/>Load full summary +<br/>linked KG edges"]
+    L2 --> L2RES["Return full context"]
+```
+
+### L0: Auto-Injection
+
+Runs in ContextStage (once per turn). Checks user message relevance against episodic summaries and KG. Returns formatted section (~200 tokens max) for system prompt. Disabled if agent has `auto_inject_enabled: false`.
+
+| Parameter | Default |
+|-----------|---------|
+| `MaxEntries` | 5 |
+| `MaxTokens` | 200 |
+| `Threshold` | 0.3 (relevance) |
+
+### L1: Unified Search
+
+Agent calls `memory_search(query)` tool. Hybrid search across:
+- **Episodic (L0 abstracts)** — fast (~50 token summaries) with FTS + vector
+- **Knowledge Graph** — current entities/relations (temporal `valid_until IS NULL`)
+
+Weights: FTS 0.3, vector 0.7. Returns top K results within score threshold.
+
+### L2: Memory Expansion
+
+Agent calls `memory_expand(episodic_id)` for deep retrieval. Returns full summary + linked KG edges. Used when agent needs comprehensive context from a specific episodic entry.
+
+---
+
+## 19. Consolidation Pipeline (Event-Driven)
+
+Event bus fires workers asynchronously to extract and build long-term memory.
+
+```mermaid
+flowchart TD
+    RUN["run.completed event"]
+    RUN --> EP["EpisodicWorker"]
+    EP -->|"Extract summary + L0"| ES["Create episodic_summary"]
+    ES -->|"episodic.created event"| SW["SemanticWorker"]
+    SW -->|"Extract entities/relations<br/>from summary"| KG["Create KG entities<br/>& relations"]
+    KG -->|"entity.upserted event"| DW["DedupWorker"]
+    DW -->|"Merge duplicates<br/>via embeddings"| DEDUP["Consolidate nodes"]
+    ES -->|"episodic.created event"| DREAM["DreamingWorker<br/>(10m debounce)"]
+    DREAM -->|"Batch synthesis"| SYNTH["LLM synthesis pass<br/>→ long-term memory"]
+```
+
+### Workers
+
+| Worker | Triggers | Responsibility |
+|--------|----------|-----------------|
+| **EpisodicWorker** | `run.completed` | Extract session summary via LLM or compaction summary. Generate L0 abstract. Store in `episodic_summaries`. Emit `episodic.created` |
+| **SemanticWorker** | `episodic.created` | Parse summary for entity mentions and relationships. Extract via regex/NER. Insert into KG tables (`kg_entities`, `kg_relations`). Emit `entity.upserted` |
+| **DedupWorker** | `entity.upserted` | Check for duplicate entities via embedding similarity. Merge duplicate nodes by redirecting relations. Update timestamps to reflect consolidation |
+| **DreamingWorker** | `episodic.created` (debounced 10m) | Batch collect unpromoted episodic summaries scored by usefulness (recall signal). Call LLM for synthesis/insight pass. Write results to long-term memory (update KG, write to vault, etc.) |
+
+### Dreaming Weighted Scoring (Phase 10, Migration 000045)
+
+The DreamingWorker prioritizes unpromoted episodic summaries by usefulness via a 4-component running-average score:
+
+**ComputeRecallScore formula** (14-day half-life):
+```
+score = 0.30 * frequency + 0.35 * relevance + 0.20 * recency + 0.15 * freshness
+```
+
+**Tracking columns** (added to `episodic_summaries`):
+- `recall_count INT DEFAULT 0` — Number of times this summary was returned in memory searches
+- `recall_score DOUBLE PRECISION DEFAULT 0` — Weighted average score (0 to 1)
+- `last_recalled_at TIMESTAMPTZ` — Timestamp of most recent search hit
+
+**Index for DreamingWorker**: `idx_episodic_recall_unpromoted` on `(agent_id, user_id, recall_score DESC) WHERE promoted_at IS NULL`. Enables efficient `ListUnpromotedScored()` queries to fetch highest-scoring summaries first.
+
+**Integration with memory_search tool**: After search results are returned to agent, a fire-and-forget task increments `recall_count`, updates `recall_score` via running average, and sets `last_recalled_at`. No blocking — search returns immediately.
+
+### Configuration
+
+| Parameter | Default |
+|-----------|---------|
+| `ConsolidationEnabled` | true |
+| `EpisodicTTLDays` | 90 |
+
+Workers subscribe on startup via `consolidation.Register()`.
+
+---
+
+## 18. File Reference
 
 | File | Purpose |
 |------|---------|
 | `internal/store/stores.go` | `Stores` container struct (all 22 store interfaces) |
 | `internal/store/types.go` | `BaseModel`, `StoreConfig`, `GenNewID()` |
-| `internal/store/context.go` | Context propagation: `WithUserID`, `WithAgentID`, `WithAgentType`, `WithSenderID` |
+| `internal/store/context.go` | Context propagation: `WithUserID`, `WithAgentID`, `WithAgentType`, `WithSenderID`, `WithTenantID` |
 | `internal/store/session_store.go` | `SessionStore` interface, `SessionData`, `SessionInfo` |
 | `internal/store/memory_store.go` | `MemoryStore` interface, `MemorySearchResult`, `EmbeddingProvider` |
 | `internal/store/skill_store.go` | `SkillStore` interface |
@@ -629,6 +828,10 @@ All "create or update" operations use `INSERT ... ON CONFLICT DO UPDATE`, ensuri
 | `internal/store/snapshot_store.go` | `SnapshotStore` interface, usage aggregation |
 | `internal/store/secure_cli_store.go` | `SecureCLIStore` interface, CLI credential injection |
 | `internal/store/api_key_store.go` | `APIKeyStore` interface, gateway API keys |
+| `internal/store/episodic_store.go` | `EpisodicStore` interface, episodic summary CRUD & hybrid search (v3 new) |
+| `internal/store/evolution_store.go` | `EvolutionMetricsStore`, `EvolutionSuggestionStore` interfaces (v3 new) |
+| `internal/store/vault_store.go` | `VaultStore` interface, document registry & links (v3 new) |
+| `internal/store/agent_link_store.go` | `AgentLinkStore` interface, delegation links (v3 new) |
 | `internal/store/pg/factory.go` | PG store factory: creates all PG store instances from a connection pool |
 | `internal/store/pg/sessions.go` | `PGSessionStore`: session cache, Save, GetOrCreate |
 | `internal/store/pg/agents.go` | `PGAgentStore`: CRUD, soft delete, access control |
@@ -645,6 +848,6 @@ All "create or update" operations use `INSERT ... ON CONFLICT DO UPDATE`, ensuri
 | `internal/store/pg/providers.go` | `PGProviderStore`: provider CRUD with encrypted keys |
 | `internal/store/pg/tracing.go` | `PGTracingStore`: traces and spans with batch insert |
 | `internal/store/pg/pool.go` | Connection pool management |
-| `internal/store/pg/helpers.go` | Nullable helpers, JSON helpers, `execMapUpdate()` |
+| `internal/store/pg/helpers.go` | Nullable helpers, JSON helpers, `execMapUpdate()`, `StructScan` |
 | `internal/store/validate.go` | Input validation utilities |
 | `internal/tools/context_keys.go` | Tool context keys including `WithToolWorkspace` |

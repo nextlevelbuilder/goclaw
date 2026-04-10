@@ -30,6 +30,17 @@ type scored struct {
 	score float64
 }
 
+// SkillEmbedder computes embeddings for skill search queries.
+// When set on Index, Search() uses hybrid BM25+vector scoring.
+// When nil, falls back to BM25-only (current default behavior).
+type SkillEmbedder interface {
+	// EmbedQuery returns a vector embedding for the search query.
+	EmbedQuery(query string) ([]float32, error)
+	// EmbedSkills pre-computes embeddings for all skill descriptions.
+	// Called during Index.Build(). Returns map[slug]→embedding.
+	EmbedSkills(skills []Info) (map[string][]float32, error)
+}
+
 // Index is an in-memory BM25 index for skill search.
 type Index struct {
 	mu    sync.RWMutex
@@ -38,6 +49,10 @@ type Index struct {
 	avgDL float64        // average document length (in tokens)
 	k1    float64        // BM25 term frequency saturation (default 1.2)
 	b     float64        // BM25 length normalization (default 0.75)
+
+	// Optional: embedding-based hybrid search (nil = BM25 only).
+	embedder   SkillEmbedder
+	embeddings map[string][]float32 // slug → embedding vector
 }
 
 // NewIndex creates a new empty skill search index.
@@ -49,11 +64,19 @@ func NewIndex() *Index {
 	}
 }
 
+// SetEmbedder enables hybrid BM25+vector search.
+// Must be called before Build(). Nil disables vector scoring (BM25 only).
+func (idx *Index) SetEmbedder(e SkillEmbedder) {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+	idx.embedder = e
+}
+
 // Build indexes a list of skills for BM25 search.
+// If embedder is set, also pre-computes skill embeddings for hybrid search.
 // Call this at startup and whenever the skill set changes.
 func (idx *Index) Build(skills []Info) {
 	idx.mu.Lock()
-	defer idx.mu.Unlock()
 
 	idx.docs = make([]skillDoc, 0, len(skills))
 	idx.df = make(map[string]int)
@@ -84,6 +107,21 @@ func (idx *Index) Build(skills []Info) {
 
 	if len(idx.docs) > 0 {
 		idx.avgDL = float64(totalTokens) / float64(len(idx.docs))
+	}
+
+	// Capture embedder ref before releasing lock — EmbedSkills is an external API call
+	// that can take seconds; holding the lock would block all Search() callers.
+	embedder := idx.embedder
+	idx.mu.Unlock()
+
+	// Pre-compute embeddings if embedder is available (best-effort).
+	if embedder != nil {
+		embs, err := embedder.EmbedSkills(skills)
+		if err == nil && len(embs) > 0 {
+			idx.mu.Lock()
+			idx.embeddings = embs
+			idx.mu.Unlock()
+		}
 	}
 }
 

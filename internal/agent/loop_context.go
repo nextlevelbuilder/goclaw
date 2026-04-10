@@ -14,6 +14,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
+	"github.com/nextlevelbuilder/goclaw/internal/workspace"
 )
 
 // contextSetupResult holds the outputs of injectContext that are needed by the main loop.
@@ -41,6 +42,15 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 	if req.UserID != "" {
 		ctx = store.WithUserID(ctx, req.UserID)
 	}
+	// Resolve merged tenant user identity for credential lookups.
+	// Keeps UserID unchanged (session/workspace scoping) but sets a separate
+	// CredentialUserID for SecureCLI, MCP, and other per-user features.
+	if l.userResolver != nil && req.UserID != "" {
+		credUserID := l.resolveCredentialUserID(ctx, *req)
+		if credUserID != "" && credUserID != req.UserID {
+			ctx = store.WithCredentialUserID(ctx, credUserID)
+		}
+	}
 	// Inject agent type into context for interceptor routing
 	if l.agentType != "" {
 		ctx = store.WithAgentType(ctx, l.agentType)
@@ -52,6 +62,10 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 	// Inject original sender ID for group file writer permission checks
 	if req.SenderID != "" {
 		ctx = store.WithSenderID(ctx, req.SenderID)
+	}
+	// Inject sender display name for bootstrap auto-contact
+	if req.SenderName != "" {
+		ctx = store.WithSenderName(ctx, req.SenderName)
 	}
 	// Inject global builtin tool settings for media tools (provider chain)
 	if l.builtinToolSettings != nil {
@@ -106,7 +120,8 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 	// Seeding must run before buildMessages→resolveContextFiles reads context files.
 	// Team sessions skip seeding: members process tasks from leader, not end-user onboarding.
 	isTeamSession := bootstrap.IsTeamSession(req.SessionKey)
-	setup := l.getOrCreateUserSetup(ctx, req.UserID, req.Channel, isTeamSession)
+	channelMeta := l.buildChannelMeta(req)
+	setup := l.getOrCreateUserSetup(ctx, req.UserID, req.Channel, isTeamSession, channelMeta)
 
 	// Workspace resolution (layered pipeline).
 	// Layer order: tenant → team → project (future) → user/chat
@@ -180,6 +195,39 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 		}
 	}
 
+	// V3 workspace: resolve once, set immutable context.
+	{
+		var teamIDPtr *string
+		if req.TeamID != "" {
+			teamIDPtr = &req.TeamID
+		}
+		var teamWSConfig *workspace.TeamWorkspaceConfig
+		if resolvedTeamSettings != nil {
+			var cfg workspace.TeamWorkspaceConfig
+			if json.Unmarshal(resolvedTeamSettings, &cfg) == nil {
+				teamWSConfig = &cfg
+			}
+		}
+		resolver := workspace.NewResolver()
+		wc, wsErr := resolver.Resolve(ctx, workspace.ResolveParams{
+			AgentID:    l.agentUUID.String(),
+			AgentType:  l.agentType,
+			UserID:     req.UserID,
+			ChatID:     req.ChatID,
+			TenantID:   store.TenantIDFromContext(ctx).String(),
+			TenantSlug: store.TenantSlugFromContext(ctx),
+			PeerKind:   req.PeerKind,
+			TeamID:    teamIDPtr,
+			TeamConfig: teamWSConfig,
+			BaseDir:   l.dataDir,
+		})
+		if wsErr != nil {
+			slog.Warn("workspace resolution failed", "err", wsErr)
+		} else {
+			ctx = workspace.WithContext(ctx, wc)
+		}
+	}
+
 	// Persist agent UUID + user ID on the session (for querying/tracing)
 	if l.agentUUID != uuid.Nil || req.UserID != "" {
 		l.sessions.SetAgentInfo(ctx, req.SessionKey, l.agentUUID, req.UserID)
@@ -242,11 +290,14 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 	if l.provider != nil {
 		providerName = l.provider.Name()
 	}
+	// Extract resolved credential user ID (set earlier via WithCredentialUserID, empty if not resolved).
+	credUserID, _ := ctx.Value(store.CredentialUserIDKey).(string)
 	rc := &store.RunContext{
 		AgentID:             l.agentUUID,
 		AgentKey:            l.id,
 		TenantID:            l.tenantID,
 		UserID:              req.UserID,
+		CredentialUserID:    credUserID,
 		AgentType:           l.agentType,
 		SenderID:            req.SenderID,
 		SelfEvolve:          l.selfEvolve,

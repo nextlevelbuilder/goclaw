@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/adhocore/gronx"
@@ -146,33 +145,51 @@ func (cs *Service) runLoop(stopChan chan struct{}) {
 		case <-stopChan:
 			return
 		case <-ticker.C:
-			cs.checkJobs()
+			cs.safeCheckJobs()
 		}
 	}
+}
+
+// safeCheckJobs wraps checkJobs with panic recovery so a panic in any
+// check/claim logic doesn't kill the runLoop goroutine.
+func (cs *Service) safeCheckJobs() {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("cron: checkJobs panicked — runLoop continues", "panic", fmt.Sprint(r))
+		}
+	}()
+	cs.checkJobs()
 }
 
 func (cs *Service) checkJobs() {
 	cs.mu.Lock()
 
 	now := nowMS()
-	var dueJobIDs []string
+
+	// Collect due jobs and preserve their original scheduled times.
+	// The scheduled time is used as anchor for "every" jobs to prevent drift.
+	type dueJob struct {
+		id            string
+		scheduledAtMS int64
+	}
+	var dueJobs []dueJob
 
 	for i := range cs.store.Jobs {
 		job := &cs.store.Jobs[i]
 		if job.Enabled && job.State.NextRunAtMS != nil && *job.State.NextRunAtMS <= now {
-			dueJobIDs = append(dueJobIDs, job.ID)
+			dueJobs = append(dueJobs, dueJob{id: job.ID, scheduledAtMS: *job.State.NextRunAtMS})
 		}
 	}
 
-	if len(dueJobIDs) == 0 {
+	if len(dueJobs) == 0 {
 		cs.mu.Unlock()
 		return
 	}
 
 	// Clear NextRunAtMS to prevent duplicate execution
-	dueMap := make(map[string]bool, len(dueJobIDs))
-	for _, id := range dueJobIDs {
-		dueMap[id] = true
+	dueMap := make(map[string]bool, len(dueJobs))
+	for _, dj := range dueJobs {
+		dueMap[dj.id] = true
 	}
 	for i := range cs.store.Jobs {
 		if dueMap[cs.store.Jobs[i].ID] {
@@ -182,20 +199,19 @@ func (cs *Service) checkJobs() {
 	cs.saveUnsafe()
 	cs.mu.Unlock()
 
-	// Execute jobs in parallel — scheduler enforces per-session serialization
-	var wg sync.WaitGroup
-	for _, jobID := range dueJobIDs {
-		wg.Add(1)
-		go func(id string) {
-			defer wg.Done()
+	// Execute jobs in parallel without blocking the runLoop.
+	// Previously wg.Wait() blocked here — if any job hung (e.g. LLM timeout,
+	// agent loop stuck), the entire cron scheduler would stop checking for new
+	// due jobs. Now each job runs independently with panic recovery.
+	for _, dj := range dueJobs {
+		go func(id string, scheduledAtMS int64) {
 			defer safego.Recover(nil, "job_id", id)
-			cs.executeJobByID(id)
-		}(jobID)
+			cs.executeJobByID(id, scheduledAtMS)
+		}(dj.id, dj.scheduledAtMS)
 	}
-	wg.Wait()
 }
 
-func (cs *Service) executeJobByID(jobID string) {
+func (cs *Service) executeJobByID(jobID string, scheduledAtMS int64) {
 	cs.mu.Lock()
 	var job *Job
 	for i := range cs.store.Jobs {
@@ -247,10 +263,22 @@ func (cs *Service) executeJobByID(jobID string) {
 		if cs.store.Jobs[i].DeleteAfterRun {
 			cs.store.Jobs = append(cs.store.Jobs[:i], cs.store.Jobs[i+1:]...)
 		} else {
-			next := cs.computeNextRun(&cs.store.Jobs[i].Schedule, now)
-			cs.store.Jobs[i].State.NextRunAtMS = next
-			if next == nil {
-				cs.store.Jobs[i].Enabled = false
+			schedule := &cs.store.Jobs[i].Schedule
+			// For "every" (interval) jobs, compute next run from the original
+			// scheduled time (anchor) to prevent drift and synchronization.
+			if schedule.Kind == "every" && schedule.EveryMS != nil && *schedule.EveryMS > 0 && scheduledAtMS > 0 {
+				interval := *schedule.EveryMS
+				// O(1) advance to the next future slot from anchor
+				elapsed := now - scheduledAtMS
+				periods := elapsed / interval
+				next := scheduledAtMS + (periods+1)*interval
+				cs.store.Jobs[i].State.NextRunAtMS = &next
+			} else {
+				next := cs.computeNextRun(schedule, now)
+				cs.store.Jobs[i].State.NextRunAtMS = next
+				if next == nil {
+					cs.store.Jobs[i].Enabled = false
+				}
 			}
 		}
 		break

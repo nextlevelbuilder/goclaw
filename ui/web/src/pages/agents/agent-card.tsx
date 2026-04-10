@@ -4,7 +4,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { AgentData } from "@/types/agent";
-import { UUID_RE, agentDisplayName, hasActiveChatGPTOAuthRouting } from "./agent-detail/agent-display-utils";
+import { cn } from "@/lib/utils";
+import { UUID_RE, agentDisplayName, hasActiveChatGPTOAuthRouting, readPromptMode } from "./agent-detail/agent-display-utils";
+import { promptModeBadgeClass } from "./agent-detail/prompt-mode-badge-utils";
 
 interface AgentCardProps {
   agent: AgentData;
@@ -16,10 +18,10 @@ interface AgentCardProps {
 export function AgentCard({ agent, onClick, onResummon, onDelete }: AgentCardProps) {
   const { t } = useTranslation("agents");
   const displayName = agentDisplayName(agent, t("card.unnamedAgent"));
-  const otherCfg = (agent.other_config ?? {}) as Record<string, unknown>;
-  const selfEvolve = agent.agent_type === "predefined" && Boolean(otherCfg.self_evolve);
-  const emoji = typeof otherCfg.emoji === "string" ? otherCfg.emoji : "";
-  const hasOAuthRouting = hasActiveChatGPTOAuthRouting(agent.other_config);
+  const selfEvolve = agent.agent_type === "predefined" && Boolean(agent.self_evolve);
+  const emoji = agent.emoji ?? "";
+  const hasOAuthRouting = hasActiveChatGPTOAuthRouting(agent.chatgpt_oauth_routing);
+  const promptMode = readPromptMode(agent);
 
   // Show agent_key as subtitle only if there's a display_name and agent_key is meaningful
   const showSubtitle = agent.display_name && !UUID_RE.test(agent.agent_key);
@@ -79,12 +81,15 @@ export function AgentCard({ agent, onClick, onResummon, onDelete }: AgentCardPro
       <div className="flex items-center gap-1.5">
         <Tooltip>
           <TooltipTrigger asChild>
-            <Badge variant="outline" className="text-[11px]">{agent.agent_type}</Badge>
+            <Badge
+              variant="outline"
+              className={cn("text-xs-plus", promptModeBadgeClass(promptMode))}
+            >
+              {t(`detail.prompt.mode.${promptMode}`)}
+            </Badge>
           </TooltipTrigger>
           <TooltipContent side="top" className="max-w-[260px] text-xs">
-            {agent.agent_type === "predefined"
-              ? t("card.predefinedTooltip")
-              : t("card.openTooltip")}
+            {t(`detail.prompt.mode.${promptMode}Desc`)}
           </TooltipContent>
         </Tooltip>
         {agent.agent_type === "predefined" && (
@@ -92,7 +97,7 @@ export function AgentCard({ agent, onClick, onResummon, onDelete }: AgentCardPro
             <TooltipTrigger asChild>
               <Badge
                 variant={selfEvolve ? "default" : "outline"}
-                className={`text-[11px] ${selfEvolve ? "bg-orange-100 text-orange-700 hover:bg-orange-100 dark:bg-orange-900/30 dark:text-orange-300" : "text-muted-foreground"}`}
+                className={`text-xs-plus ${selfEvolve ? "bg-orange-100 text-orange-700 hover:bg-orange-100 dark:bg-orange-900/30 dark:text-orange-300" : "text-muted-foreground"}`}
               >
                 <Sparkles className="mr-0.5 h-3 w-3" />
                 {selfEvolve ? t("card.evolving") : t("card.static")}
@@ -106,12 +111,12 @@ export function AgentCard({ agent, onClick, onResummon, onDelete }: AgentCardPro
           </Tooltip>
         )}
         {hasOAuthRouting && (
-          <Badge variant="outline" className="text-[11px]">
+          <Badge variant="outline" className="text-xs-plus">
             {t("chatgptOAuthRouting.badge")}
           </Badge>
         )}
         {agent.context_window > 0 && (
-          <span className="text-[11px] text-muted-foreground">
+          <span className="text-xs-plus text-muted-foreground">
             {(agent.context_window / 1000).toFixed(0)}K ctx
           </span>
         )}

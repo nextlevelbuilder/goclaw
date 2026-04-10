@@ -9,29 +9,29 @@ import (
 
 // UsageSnapshot represents one hourly aggregation row.
 type UsageSnapshot struct {
-	ID                uuid.UUID  `json:"id"`
-	BucketHour        time.Time  `json:"bucket_hour"`
-	AgentID           *uuid.UUID `json:"agent_id,omitempty"`
-	Provider          string     `json:"provider"`
-	Model             string     `json:"model"`
-	Channel           string     `json:"channel"`
-	InputTokens       int64      `json:"input_tokens"`
-	OutputTokens      int64      `json:"output_tokens"`
-	CacheReadTokens   int64      `json:"cache_read_tokens"`
-	CacheCreateTokens int64      `json:"cache_create_tokens"`
-	ThinkingTokens    int64      `json:"thinking_tokens"`
-	TotalCost         float64    `json:"total_cost"`
-	RequestCount      int        `json:"request_count"`
-	LLMCallCount      int        `json:"llm_call_count"`
-	ToolCallCount     int        `json:"tool_call_count"`
-	ErrorCount        int        `json:"error_count"`
-	UniqueUsers       int        `json:"unique_users"`
-	AvgDurationMS     int        `json:"avg_duration_ms"`
-	MemoryDocs        int        `json:"memory_docs"`
-	MemoryChunks      int        `json:"memory_chunks"`
-	KGEntities        int        `json:"kg_entities"`
-	KGRelations       int        `json:"kg_relations"`
-	CreatedAt         time.Time  `json:"created_at"`
+	ID                uuid.UUID  `json:"id" db:"id"`
+	BucketHour        time.Time  `json:"bucket_hour" db:"bucket_hour"`
+	AgentID           *uuid.UUID `json:"agent_id,omitempty" db:"agent_id"`
+	Provider          string     `json:"provider" db:"provider"`
+	Model             string     `json:"model" db:"model"`
+	Channel           string     `json:"channel" db:"channel"`
+	InputTokens       int64      `json:"input_tokens" db:"input_tokens"`
+	OutputTokens      int64      `json:"output_tokens" db:"output_tokens"`
+	CacheReadTokens   int64      `json:"cache_read_tokens" db:"cache_read_tokens"`
+	CacheCreateTokens int64      `json:"cache_create_tokens" db:"cache_create_tokens"`
+	ThinkingTokens    int64      `json:"thinking_tokens" db:"thinking_tokens"`
+	TotalCost         float64    `json:"total_cost" db:"total_cost"`
+	RequestCount      int        `json:"request_count" db:"request_count"`
+	LLMCallCount      int        `json:"llm_call_count" db:"llm_call_count"`
+	ToolCallCount     int        `json:"tool_call_count" db:"tool_call_count"`
+	ErrorCount        int        `json:"error_count" db:"error_count"`
+	UniqueUsers       int        `json:"unique_users" db:"unique_users"`
+	AvgDurationMS     int        `json:"avg_duration_ms" db:"avg_duration_ms"`
+	MemoryDocs        int        `json:"memory_docs" db:"memory_docs"`
+	MemoryChunks      int        `json:"memory_chunks" db:"memory_chunks"`
+	KGEntities        int        `json:"kg_entities" db:"kg_entities"`
+	KGRelations       int        `json:"kg_relations" db:"kg_relations"`
+	CreatedAt         time.Time  `json:"created_at" db:"created_at"`
 }
 
 // SnapshotQuery filters for listing snapshots.
@@ -47,38 +47,38 @@ type SnapshotQuery struct {
 
 // SnapshotTimeSeries is a single point in a time series response.
 type SnapshotTimeSeries struct {
-	BucketTime        time.Time `json:"bucket_time"`
-	InputTokens       int64     `json:"input_tokens"`
-	OutputTokens      int64     `json:"output_tokens"`
-	CacheReadTokens   int64     `json:"cache_read_tokens"`
-	CacheCreateTokens int64     `json:"cache_create_tokens"`
-	ThinkingTokens    int64     `json:"thinking_tokens"`
-	TotalCost         float64   `json:"total_cost"`
-	RequestCount      int       `json:"request_count"`
-	LLMCallCount      int       `json:"llm_call_count"`
-	ToolCallCount     int       `json:"tool_call_count"`
-	ErrorCount        int       `json:"error_count"`
-	UniqueUsers       int       `json:"unique_users"`
-	AvgDurationMS     int       `json:"avg_duration_ms"`
-	MemoryDocs        int       `json:"memory_docs"`
-	MemoryChunks      int       `json:"memory_chunks"`
-	KGEntities        int       `json:"kg_entities"`
-	KGRelations       int       `json:"kg_relations"`
+	BucketTime        time.Time `json:"bucket_time" db:"bucket_time"`
+	InputTokens       int64     `json:"input_tokens" db:"input_tokens"`
+	OutputTokens      int64     `json:"output_tokens" db:"output_tokens"`
+	CacheReadTokens   int64     `json:"cache_read_tokens" db:"cache_read_tokens"`
+	CacheCreateTokens int64     `json:"cache_create_tokens" db:"cache_create_tokens"`
+	ThinkingTokens    int64     `json:"thinking_tokens" db:"thinking_tokens"`
+	TotalCost         float64   `json:"total_cost" db:"total_cost"`
+	RequestCount      int       `json:"request_count" db:"request_count"`
+	LLMCallCount      int       `json:"llm_call_count" db:"llm_call_count"`
+	ToolCallCount     int       `json:"tool_call_count" db:"tool_call_count"`
+	ErrorCount        int       `json:"error_count" db:"error_count"`
+	UniqueUsers       int       `json:"unique_users" db:"unique_users"`
+	AvgDurationMS     int       `json:"avg_duration_ms" db:"avg_duration_ms"`
+	MemoryDocs        int       `json:"memory_docs" db:"memory_docs"`
+	MemoryChunks      int       `json:"memory_chunks" db:"memory_chunks"`
+	KGEntities        int       `json:"kg_entities" db:"kg_entities"`
+	KGRelations       int       `json:"kg_relations" db:"kg_relations"`
 }
 
 // SnapshotBreakdown is a grouped aggregation row (by provider, model, etc.).
 type SnapshotBreakdown struct {
-	Key               string  `json:"key"`
-	InputTokens       int64   `json:"input_tokens"`
-	OutputTokens      int64   `json:"output_tokens"`
-	CacheReadTokens   int64   `json:"cache_read_tokens"`
-	CacheCreateTokens int64   `json:"cache_create_tokens"`
-	TotalCost         float64 `json:"total_cost"`
-	RequestCount      int     `json:"request_count"`
-	LLMCallCount      int     `json:"llm_call_count"`
-	ToolCallCount     int     `json:"tool_call_count"`
-	ErrorCount        int     `json:"error_count"`
-	AvgDurationMS     int     `json:"avg_duration_ms"`
+	Key               string  `json:"key" db:"key"`
+	InputTokens       int64   `json:"input_tokens" db:"input_tokens"`
+	OutputTokens      int64   `json:"output_tokens" db:"output_tokens"`
+	CacheReadTokens   int64   `json:"cache_read_tokens" db:"cache_read_tokens"`
+	CacheCreateTokens int64   `json:"cache_create_tokens" db:"cache_create_tokens"`
+	TotalCost         float64 `json:"total_cost" db:"total_cost"`
+	RequestCount      int     `json:"request_count" db:"request_count"`
+	LLMCallCount      int     `json:"llm_call_count" db:"llm_call_count"`
+	ToolCallCount     int     `json:"tool_call_count" db:"tool_call_count"`
+	ErrorCount        int     `json:"error_count" db:"error_count"`
+	AvgDurationMS     int     `json:"avg_duration_ms" db:"avg_duration_ms"`
 }
 
 // SnapshotStore manages pre-computed usage snapshots.

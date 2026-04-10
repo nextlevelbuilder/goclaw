@@ -118,8 +118,11 @@ func (s *PGAgentLinkStore) ListLinksFrom(ctx context.Context, agentID uuid.UUID)
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+linkSelectColsJoined+`,
 		 sa.agent_key AS source_agent_key,
+		 COALESCE(sa.display_name, '') AS source_display_name,
+		 COALESCE(sa.emoji, '') AS source_emoji,
 		 ta.agent_key AS target_agent_key,
 		 COALESCE(ta.display_name, '') AS target_display_name,
+		 COALESCE(ta.emoji, '') AS target_emoji,
 		 COALESCE(ta.frontmatter, '') AS target_description,
 		 COALESCE(tm.name, '') AS team_name,
 		 EXISTS(SELECT 1 FROM agent_teams tl WHERE tl.lead_agent_id = l.target_agent_id AND tl.status = 'active') AS target_is_team_lead,
@@ -142,8 +145,11 @@ func (s *PGAgentLinkStore) ListLinksTo(ctx context.Context, agentID uuid.UUID) (
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+linkSelectColsJoined+`,
 		 sa.agent_key AS source_agent_key,
+		 COALESCE(sa.display_name, '') AS source_display_name,
+		 COALESCE(sa.emoji, '') AS source_emoji,
 		 ta.agent_key AS target_agent_key,
 		 COALESCE(ta.display_name, '') AS target_display_name,
+		 COALESCE(ta.emoji, '') AS target_emoji,
 		 COALESCE(ta.frontmatter, '') AS target_description,
 		 COALESCE(tm.name, '') AS team_name,
 		 EXISTS(SELECT 1 FROM agent_teams tl WHERE tl.lead_agent_id = l.target_agent_id AND tl.status = 'active') AS target_is_team_lead,
@@ -179,25 +185,45 @@ func linkTenantClause(ctx context.Context, agentID uuid.UUID, baseCondition stri
 
 func (s *PGAgentLinkStore) CanDelegate(ctx context.Context, fromAgentID, toAgentID uuid.UUID) (bool, error) {
 	var exists bool
+	// Tenant-scoped: add tenant_id filter unless cross-tenant context.
+	tenantFilter := ""
+	args := []any{fromAgentID, toAgentID}
+	if !store.IsCrossTenant(ctx) {
+		tenantID := store.TenantIDFromContext(ctx)
+		if tenantID == uuid.Nil {
+			return false, nil // fail-closed: no tenant = no access
+		}
+		tenantFilter = " AND tenant_id = $3"
+		args = append(args, tenantID)
+	}
 	err := s.db.QueryRowContext(ctx,
 		`SELECT EXISTS(
-			SELECT 1 FROM agent_links WHERE status = 'active' AND (
+			SELECT 1 FROM agent_links WHERE status = 'active'`+tenantFilter+` AND (
 				(source_agent_id = $1 AND target_agent_id = $2 AND direction IN ('outbound', 'bidirectional'))
 				OR
 				(source_agent_id = $2 AND target_agent_id = $1 AND direction IN ('inbound', 'bidirectional'))
 			)
-		)`, fromAgentID, toAgentID).Scan(&exists)
+		)`, args...).Scan(&exists)
 	return exists, err
 }
 
 func (s *PGAgentLinkStore) DelegateTargets(ctx context.Context, fromAgentID uuid.UUID) ([]store.AgentLinkData, error) {
-	// CASE expressions ensure "target" columns always refer to the "other" agent,
-	// regardless of whether fromAgent is source or target side of the link.
+	tenantCond, args := linkTenantClause(ctx, fromAgentID,
+		`l.status = 'active'
+		   AND CASE WHEN l.source_agent_id = $1 THEN ta.status ELSE sa.status END = 'active'
+		   AND (
+			(l.source_agent_id = $1 AND l.direction IN ('outbound', 'bidirectional'))
+			OR
+			(l.target_agent_id = $1 AND l.direction IN ('inbound', 'bidirectional'))
+		 )`)
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+linkSelectColsJoined+`,
 		 CASE WHEN l.source_agent_id = $1 THEN sa.agent_key ELSE ta.agent_key END AS source_agent_key,
+		 CASE WHEN l.source_agent_id = $1 THEN COALESCE(sa.display_name, '') ELSE COALESCE(ta.display_name, '') END AS source_display_name,
+		 CASE WHEN l.source_agent_id = $1 THEN COALESCE(sa.emoji, '') ELSE COALESCE(ta.emoji, '') END AS source_emoji,
 		 CASE WHEN l.source_agent_id = $1 THEN ta.agent_key ELSE sa.agent_key END AS target_agent_key,
 		 CASE WHEN l.source_agent_id = $1 THEN COALESCE(ta.display_name, '') ELSE COALESCE(sa.display_name, '') END AS target_display_name,
+		 CASE WHEN l.source_agent_id = $1 THEN COALESCE(ta.emoji, '') ELSE COALESCE(sa.emoji, '') END AS target_emoji,
 		 CASE WHEN l.source_agent_id = $1 THEN COALESCE(ta.frontmatter, '') ELSE COALESCE(sa.frontmatter, '') END AS target_description,
 		 COALESCE(tm.name, '') AS team_name,
 		 `+targetTeamLeadCols+`
@@ -205,14 +231,8 @@ func (s *PGAgentLinkStore) DelegateTargets(ctx context.Context, fromAgentID uuid
 		 JOIN agents sa ON sa.id = l.source_agent_id
 		 JOIN agents ta ON ta.id = l.target_agent_id
 		 LEFT JOIN agent_teams tm ON tm.id = l.team_id
-		 WHERE l.status = 'active'
-		   AND CASE WHEN l.source_agent_id = $1 THEN ta.status ELSE sa.status END = 'active'
-		   AND (
-			(l.source_agent_id = $1 AND l.direction IN ('outbound', 'bidirectional'))
-			OR
-			(l.target_agent_id = $1 AND l.direction IN ('inbound', 'bidirectional'))
-		 )
-		 ORDER BY CASE WHEN l.source_agent_id = $1 THEN ta.agent_key ELSE sa.agent_key END`, fromAgentID)
+		 WHERE `+tenantCond+`
+		 ORDER BY CASE WHEN l.source_agent_id = $1 THEN ta.agent_key ELSE sa.agent_key END`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -221,13 +241,23 @@ func (s *PGAgentLinkStore) DelegateTargets(ctx context.Context, fromAgentID uuid
 }
 
 func (s *PGAgentLinkStore) GetLinkBetween(ctx context.Context, fromAgentID, toAgentID uuid.UUID) (*store.AgentLinkData, error) {
+	tenantFilter := ""
+	args := []any{fromAgentID, toAgentID}
+	if !store.IsCrossTenant(ctx) {
+		tenantID := store.TenantIDFromContext(ctx)
+		if tenantID == uuid.Nil {
+			return nil, nil // fail-closed
+		}
+		tenantFilter = " AND tenant_id = $3"
+		args = append(args, tenantID)
+	}
 	row := s.db.QueryRowContext(ctx,
 		`SELECT `+linkSelectCols+`
-		 FROM agent_links WHERE status = 'active' AND (
+		 FROM agent_links WHERE status = 'active'`+tenantFilter+` AND (
 			(source_agent_id = $1 AND target_agent_id = $2 AND direction IN ('outbound', 'bidirectional'))
 			OR
 			(source_agent_id = $2 AND target_agent_id = $1 AND direction IN ('inbound', 'bidirectional'))
-		 ) LIMIT 1`, fromAgentID, toAgentID)
+		 ) LIMIT 1`, args...)
 	d, err := scanLinkRow(row)
 	if err != nil {
 		return nil, nil // no link found
@@ -239,13 +269,15 @@ func (s *PGAgentLinkStore) SearchDelegateTargets(ctx context.Context, fromAgentI
 	if limit <= 0 {
 		limit = 5
 	}
-	// Handle both directions: when fromAgent is source OR target of a bidirectional link.
-	// CASE expressions ensure "target" columns always refer to the "other" agent.
+	tenantFilter, args := delegateTenantArgs(ctx, fromAgentID, query, limit)
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+linkSelectColsJoined+`,
 		 CASE WHEN l.source_agent_id = $1 THEN sa.agent_key ELSE ta.agent_key END AS source_agent_key,
+		 CASE WHEN l.source_agent_id = $1 THEN COALESCE(sa.display_name, '') ELSE COALESCE(ta.display_name, '') END AS source_display_name,
+		 CASE WHEN l.source_agent_id = $1 THEN COALESCE(sa.emoji, '') ELSE COALESCE(ta.emoji, '') END AS source_emoji,
 		 CASE WHEN l.source_agent_id = $1 THEN ta.agent_key ELSE sa.agent_key END AS target_agent_key,
 		 CASE WHEN l.source_agent_id = $1 THEN COALESCE(ta.display_name, '') ELSE COALESCE(sa.display_name, '') END AS target_display_name,
+		 CASE WHEN l.source_agent_id = $1 THEN COALESCE(ta.emoji, '') ELSE COALESCE(sa.emoji, '') END AS target_emoji,
 		 CASE WHEN l.source_agent_id = $1 THEN COALESCE(ta.frontmatter, '') ELSE COALESCE(sa.frontmatter, '') END AS target_description,
 		 COALESCE(tm.name, '') AS team_name,
 		 `+targetTeamLeadCols+`
@@ -253,7 +285,7 @@ func (s *PGAgentLinkStore) SearchDelegateTargets(ctx context.Context, fromAgentI
 		 JOIN agents sa ON sa.id = l.source_agent_id
 		 JOIN agents ta ON ta.id = l.target_agent_id
 		 LEFT JOIN agent_teams tm ON tm.id = l.team_id
-		 WHERE l.status = 'active'
+		 WHERE l.status = 'active'`+tenantFilter+`
 		   AND CASE WHEN l.source_agent_id = $1 THEN ta.status ELSE sa.status END = 'active'
 		   AND (
 		     (l.source_agent_id = $1 AND l.direction IN ('outbound', 'bidirectional'))
@@ -262,7 +294,7 @@ func (s *PGAgentLinkStore) SearchDelegateTargets(ctx context.Context, fromAgentI
 		   )
 		   AND CASE WHEN l.source_agent_id = $1 THEN ta.tsv ELSE sa.tsv END @@ plainto_tsquery('simple', $2)
 		 ORDER BY ts_rank(CASE WHEN l.source_agent_id = $1 THEN ta.tsv ELSE sa.tsv END, plainto_tsquery('simple', $2)) DESC
-		 LIMIT $3`, fromAgentID, query, limit)
+		 LIMIT $3`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -275,11 +307,15 @@ func (s *PGAgentLinkStore) SearchDelegateTargetsByEmbedding(ctx context.Context,
 		limit = 5
 	}
 	vecStr := vectorToString(embedding)
+	tenantFilter, args := delegateTenantArgs(ctx, fromAgentID, vecStr, limit)
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+linkSelectColsJoined+`,
 		 CASE WHEN l.source_agent_id = $1 THEN sa.agent_key ELSE ta.agent_key END AS source_agent_key,
+		 CASE WHEN l.source_agent_id = $1 THEN COALESCE(sa.display_name, '') ELSE COALESCE(ta.display_name, '') END AS source_display_name,
+		 CASE WHEN l.source_agent_id = $1 THEN COALESCE(sa.emoji, '') ELSE COALESCE(ta.emoji, '') END AS source_emoji,
 		 CASE WHEN l.source_agent_id = $1 THEN ta.agent_key ELSE sa.agent_key END AS target_agent_key,
 		 CASE WHEN l.source_agent_id = $1 THEN COALESCE(ta.display_name, '') ELSE COALESCE(sa.display_name, '') END AS target_display_name,
+		 CASE WHEN l.source_agent_id = $1 THEN COALESCE(ta.emoji, '') ELSE COALESCE(sa.emoji, '') END AS target_emoji,
 		 CASE WHEN l.source_agent_id = $1 THEN COALESCE(ta.frontmatter, '') ELSE COALESCE(sa.frontmatter, '') END AS target_description,
 		 COALESCE(tm.name, '') AS team_name,
 		 `+targetTeamLeadCols+`
@@ -287,7 +323,7 @@ func (s *PGAgentLinkStore) SearchDelegateTargetsByEmbedding(ctx context.Context,
 		 JOIN agents sa ON sa.id = l.source_agent_id
 		 JOIN agents ta ON ta.id = l.target_agent_id
 		 LEFT JOIN agent_teams tm ON tm.id = l.team_id
-		 WHERE l.status = 'active'
+		 WHERE l.status = 'active'`+tenantFilter+`
 		   AND CASE WHEN l.source_agent_id = $1 THEN ta.status ELSE sa.status END = 'active'
 		   AND (
 		     (l.source_agent_id = $1 AND l.direction IN ('outbound', 'bidirectional'))
@@ -296,7 +332,7 @@ func (s *PGAgentLinkStore) SearchDelegateTargetsByEmbedding(ctx context.Context,
 		   )
 		   AND CASE WHEN l.source_agent_id = $1 THEN ta.embedding ELSE sa.embedding END IS NOT NULL
 		 ORDER BY (CASE WHEN l.source_agent_id = $1 THEN ta.embedding ELSE sa.embedding END) <=> $2::vector
-		 LIMIT $3`, fromAgentID, vecStr, limit)
+		 LIMIT $3`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -305,11 +341,33 @@ func (s *PGAgentLinkStore) SearchDelegateTargetsByEmbedding(ctx context.Context,
 }
 
 func (s *PGAgentLinkStore) DeleteTeamLinksForAgent(ctx context.Context, teamID, agentID uuid.UUID) error {
+	args := []any{teamID, agentID}
+	tenantFilter := ""
+	if !store.IsCrossTenant(ctx) {
+		if tid := store.TenantIDFromContext(ctx); tid != uuid.Nil {
+			tenantFilter = " AND tenant_id = $3"
+			args = append(args, tid)
+		}
+	}
 	_, err := s.db.ExecContext(ctx,
-		`DELETE FROM agent_links WHERE team_id = $1 AND (source_agent_id = $2 OR target_agent_id = $2)`,
-		teamID, agentID,
+		`DELETE FROM agent_links WHERE team_id = $1 AND (source_agent_id = $2 OR target_agent_id = $2)`+tenantFilter,
+		args...,
 	)
 	return err
+}
+
+// delegateTenantArgs builds tenant filter clause for delegate queries using $1=agentID, $2/$3=other params.
+// Inserts tenant check without shifting existing param positions (appended to WHERE, not changing $N indices).
+func delegateTenantArgs(ctx context.Context, args ...any) (string, []any) {
+	if store.IsCrossTenant(ctx) {
+		return "", args
+	}
+	tenantID := store.TenantIDFromContext(ctx)
+	if tenantID == uuid.Nil {
+		// fail-closed: impossible condition returns no results
+		return " AND l.tenant_id = '00000000-0000-0000-0000-000000000000'", args
+	}
+	return fmt.Sprintf(" AND l.tenant_id = '%s'", tenantID.String()), args
 }
 
 // --- scan helpers ---
@@ -338,7 +396,8 @@ func scanLinkRowsJoined(rows *sql.Rows) ([]store.AgentLinkData, error) {
 		if err := rows.Scan(
 			&d.ID, &d.SourceAgentID, &d.TargetAgentID, &d.Direction, &d.TeamID, &desc,
 			&d.MaxConcurrent, &d.Settings, &d.Status, &d.CreatedBy, &d.CreatedAt, &d.UpdatedAt,
-			&d.SourceAgentKey, &d.TargetAgentKey, &d.TargetDisplayName, &d.TargetDescription,
+			&d.SourceAgentKey, &d.SourceDisplayName, &d.SourceEmoji,
+			&d.TargetAgentKey, &d.TargetDisplayName, &d.TargetEmoji, &d.TargetDescription,
 			&d.TeamName, &d.TargetIsTeamLead, &d.TargetTeamName,
 		); err != nil {
 			return nil, err

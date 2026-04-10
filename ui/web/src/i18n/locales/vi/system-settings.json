@@ -53,6 +53,17 @@
     "minConfidenceHint": "Ngưỡng độ tin cậy (0–1) cho thực thể được trích xuất.",
     "info": "Tự động trích xuất thực thể và quan hệ khi agent ghi vào bộ nhớ. Để trống provider để tắt."
   },
+  "bg": {
+    "title": "Background Workers",
+    "description": "Provider và model cho các tác vụ nền (vault enrichment, consolidation, dreaming).",
+    "provider": "Provider",
+    "model": "Model",
+    "providerTip": "Provider LLM cho tác vụ nền. Để trống sẽ dùng agent default.",
+    "modelTip": "Model cho tác vụ nền. Để trống sẽ dùng model mặc định của provider.",
+    "providerPlaceholder": "(agent default)",
+    "modelPlaceholder": "(mặc định)",
+    "info": "Dùng cho vault enrichment (tóm tắt tài liệu), consolidation (tóm tắt phiên) và dreaming. Để trống sẽ fallback về agent default provider."
+  },
   "compaction": {
     "title": "Nén tin nhắn chờ",
     "description": "Tóm tắt lịch sử tin nhắn chờ dài để nằm trong giới hạn context.",

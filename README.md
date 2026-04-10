@@ -26,8 +26,6 @@ Single binary. Production-tested. Agents that orchestrate for you.
   <img src="https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey?style=flat-square" alt="License: CC BY-NC 4.0" />
 </p>
 
-A Go port of [OpenClaw](https://github.com/openclaw/openclaw) with enhanced security, multi-tenant PostgreSQL, and production-grade observability.
-
 🌐 **Languages:**
 [🇨🇳 简体中文](_readmes/README.zh-CN.md) ·
 [🇯🇵 日本語](_readmes/README.ja.md) ·
@@ -60,47 +58,20 @@ A Go port of [OpenClaw](https://github.com/openclaw/openclaw) with enhanced secu
 [🇩🇰 Dansk](_readmes/README.da.md) ·
 [🇳🇴 Norsk](_readmes/README.nb.md)
 
-## What Makes It Different
+## Core Features
 
-- **Agent Teams & Orchestration** — Teams with shared task boards, inter-agent delegation (sync/async), and hybrid agent discovery
-- **Multi-Tenant PostgreSQL** — Per-user workspaces, per-user context files, encrypted API keys (AES-256-GCM), isolated sessions
-- **Single Binary** — ~25 MB static Go binary, no Node.js runtime, <1s startup, runs on a $5 VPS
-- **Production Security** — 5-layer permission system (gateway auth → global tool policy → per-agent → per-channel → owner-only) plus rate limiting, prompt injection detection, SSRF protection, shell deny patterns, and AES-256-GCM encryption
-- **20+ LLM Providers** — Anthropic (native HTTP+SSE with prompt caching), OpenAI, OpenRouter, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP, and any OpenAI-compatible endpoint
+- **8-Stage Agent Pipeline** — context → history → prompt → think → act → observe → memory → summarize. Pluggable stages, always-on execution
+- **4-Mode Prompt System** — Full / Task / Minimal / None with section gating, cache boundary optimization, and per-session mode resolution
+- **3-Tier Memory** — Working (conversation) → Episodic (session summaries) → Semantic (knowledge graph). Progressive loading L0/L1/L2
+- **Knowledge Vault** — Document registry with [[wikilinks]], hybrid search (FTS + pgvector), filesystem sync
+- **Agent Teams & Orchestration** — Shared task boards, inter-agent delegation (sync/async), 3 orchestration modes (auto/explicit/manual)
+- **Self-Evolution** — Metrics → suggestions → auto-adapt with guardrails. Agents refine their own communication style
+- **Multi-Tenant PostgreSQL** — Per-user workspaces, per-user context files, encrypted API keys (AES-256-GCM), RBAC, isolated sessions
+- **20+ LLM Providers** — Anthropic (native HTTP+SSE with prompt caching), OpenAI, OpenRouter, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, DashScope, Claude CLI, Codex, ACP, and any OpenAI-compatible endpoint
 - **7 Messaging Channels** — Telegram, Discord, Slack, Zalo OA, Zalo Personal, Feishu/Lark, WhatsApp
-- **Extended Thinking** — Per-provider thinking mode (Anthropic budget tokens, OpenAI reasoning effort, DashScope thinking budget) with streaming support
-- **Heartbeat System** — Periodic agent check-ins via HEARTBEAT.md checklists with suppress-on-OK, active hours, retry logic, and channel delivery
-- **Scheduling & Cron** — `at`, `every`, and cron expressions for automated agent tasks with lane-based concurrency
+- **Production Security** — 5-layer permission system, rate limiting, prompt injection detection, SSRF protection, AES-256-GCM encryption
+- **Single Binary** — ~25 MB static Go binary, no Node.js runtime, <1s startup, runs on a $5 VPS
 - **Observability** — Built-in LLM call tracing with spans and prompt cache metrics, optional OpenTelemetry OTLP export
-
-## Claw Ecosystem
-
-|                 | OpenClaw        | ZeroClaw | PicoClaw | **GoClaw**                              |
-| --------------- | --------------- | -------- | -------- | --------------------------------------- |
-| Language        | TypeScript      | Rust     | Go       | **Go**                                  |
-| Binary size     | 28 MB + Node.js | 3.4 MB   | ~8 MB    | **~25 MB** (base) / **~36 MB** (+ OTel) |
-| Docker image    | —               | —        | —        | **~50 MB** (Alpine)                     |
-| RAM (idle)      | > 1 GB          | < 5 MB   | < 10 MB  | **~35 MB**                              |
-| Startup         | > 5 s           | < 10 ms  | < 1 s    | **< 1 s**                               |
-| Target hardware | $599+ Mac Mini  | $10 edge | $10 edge | **$5 VPS+**                             |
-
-| Feature                    | OpenClaw                             | ZeroClaw                                     | PicoClaw                              | **GoClaw**                     |
-| -------------------------- | ------------------------------------ | -------------------------------------------- | ------------------------------------- | ------------------------------ |
-| Multi-tenant (PostgreSQL)  | —                                    | —                                            | —                                     | ✅                             |
-| MCP integration            | — (uses ACP)                         | —                                            | —                                     | ✅ (stdio/SSE/streamable-http) |
-| Agent teams                | —                                    | —                                            | —                                     | ✅ Task board + mailbox        |
-| Security hardening         | ✅ (SSRF, path traversal, injection) | ✅ (sandbox, rate limit, injection, pairing) | Basic (workspace restrict, exec deny) | ✅ 5-layer defense             |
-| OTel observability         | ✅ (opt-in extension)                | ✅ (Prometheus + OTLP)                       | —                                     | ✅ OTLP (opt-in build tag)     |
-| Prompt caching             | —                                    | —                                            | —                                     | ✅ Anthropic + OpenAI-compat   |
-| Knowledge graph            | —                                    | —                                            | —                                     | ✅ LLM extraction + traversal  |
-| Skill system               | ✅ Embeddings/semantic               | ✅ SKILL.md + TOML                           | ✅ Basic                              | ✅ BM25 + pgvector hybrid      |
-| Lane-based scheduler       | ✅                                   | Bounded concurrency                          | —                                     | ✅ (main/subagent/team/cron)   |
-| Messaging channels         | 37+                                  | 15+                                          | 10+                                   | 7+                             |
-| Companion apps             | macOS, iOS, Android                  | Python SDK                                   | —                                     | Web dashboard + **Desktop app** |
-| Live Canvas / Voice        | ✅ (A2UI + TTS/STT)                  | —                                            | Voice transcription                   | TTS (4 providers)              |
-| LLM providers              | 10+                                  | 8 native + 29 compat                         | 13+                                   | **20+**                        |
-| Per-user workspaces        | ✅ (file-based)                      | —                                            | —                                     | ✅ (PostgreSQL)                |
-| Encrypted secrets          | — (env vars only)                    | ✅ ChaCha20-Poly1305                         | — (plaintext JSON)                    | ✅ AES-256-GCM in DB           |
 
 ## Desktop Edition (GoClaw Lite)
 
@@ -156,11 +127,19 @@ git tag lite-v0.1.0 && git push origin lite-v0.1.0
 ## Architecture
 
 <p align="center">
-  <img src="_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
+  <img src="_statics/Multi-Tenant Architecture.jpg" alt="Multi-Tenant Architecture" width="800" />
 </p>
 
 <p align="center">
-  <img src="_statics/goclaw_multi_tenant.png" alt="GoClaw Multi-Tenant" width="800" />
+  <img src="_statics/3-Tier Memory Architecture.jpg" alt="3-Tier Memory" width="800" />
+</p>
+
+<p align="center">
+  <img src="_statics/8-Stage Agent Pipeline.jpg" alt="8-Stage Agent Pipeline" width="800" />
+</p>
+
+<p align="center">
+  <img src="_statics/Mode Prompt System.jpg" alt="4-Mode Prompt System" width="800" />
 </p>
 
 ## Quick Start
@@ -256,70 +235,62 @@ Open **About** dialog → click **Update Now** (admin only). The update includes
 
 ## Multi-Agent Orchestration
 
-GoClaw supports agent teams and inter-agent delegation — each agent runs with its own identity, tools, LLM provider, and context files.
-
-### Agent Delegation
-
 <p align="center">
-  <img src="_statics/agent-delegation.jpg" alt="Agent Delegation" width="700" />
+  <img src="_statics/Agent Orchestration.jpg" alt="Agent Orchestration" width="800" />
 </p>
 
-| Mode | How it works | Best for |
-|------|-------------|----------|
-| **Sync** | Agent A asks Agent B and **waits** for the answer | Quick lookups, fact checks |
-| **Async** | Agent A asks Agent B and **moves on**. B announces later | Long tasks, reports, deep analysis |
+Each agent runs with its own identity, tools, LLM provider, and context files. Three delegation modes — sync (wait), async (fire-and-forget), bidirectional — connected through explicit permission links with concurrency limits.
 
-Agents communicate through explicit **permission links** with direction control (`outbound`, `inbound`, `bidirectional`) and concurrency limits at both per-link and per-agent levels.
+> Details: [Agent Teams docs](https://docs.goclaw.sh/#teams-what-are-teams)
 
-### Agent Teams
+## Knowledge Vault
 
 <p align="center">
-  <img src="_statics/agent-teams.jpg" alt="Agent Teams Workflow" width="800" />
+  <img src="_statics/Knowledge Vault.jpg" alt="Knowledge Vault" width="800" />
 </p>
 
-- **Shared task board** — Create, claim, complete, search tasks with `blocked_by` dependencies
-- **Tools**: `team_tasks` for task management, `spawn` for subagent orchestration
+Document registry with `[[wikilinks]]` for bidirectional linking. Hybrid search combines full-text (BM25) and semantic (pgvector) for precise retrieval. Filesystem sync keeps vault in sync with on-disk files.
 
-> For delegation details, permission links, and concurrency control, see the [Agent Teams docs](https://docs.goclaw.sh/#teams-what-are-teams).
+## Self-Evolution
+
+<p align="center">
+  <img src="_statics/Self-Evolution System.jpg" alt="Self-Evolution" width="800" />
+</p>
+
+Agents improve themselves through a 3-stage guardrailed pipeline: metrics collection → suggestion analysis → auto-adaptation. Can refine communication style and domain expertise (CAPABILITIES.md) — but never change identity, name, or core purpose.
+
+## Provider Adapters
+
+<p align="center">
+  <img src="_statics/Provider Adapter System.jpg" alt="Provider Adapters" width="800" />
+</p>
+
+20+ LLM providers unified through a single adapter interface. Capability-based routing, encrypted API keys (AES-256-GCM), extended thinking support per-provider, and prompt caching for Anthropic + OpenAI.
+
+## Event-Driven Architecture
+
+<p align="center">
+  <img src="_statics/DomainEventBus.jpg" alt="DomainEventBus" width="800" />
+</p>
+
+Typed domain events power the consolidation pipeline — session summaries, knowledge graph extraction, and dreaming promotion all run asynchronously via worker pools with dedup and retry.
 
 ## Built-in Tools
 
-| Tool               | Group         | Description                                                  |
-| ------------------ | ------------- | ------------------------------------------------------------ |
-| `read_file`        | fs            | Read file contents (with virtual FS routing)                 |
-| `write_file`       | fs            | Write/create files                                           |
-| `edit_file`        | fs            | Apply targeted edits to existing files                       |
-| `list_files`       | fs            | List directory contents                                      |
-| `search`           | fs            | Search file contents by pattern                              |
-| `glob`             | fs            | Find files by glob pattern                                   |
-| `exec`             | runtime       | Execute shell commands (with approval workflow)              |
-| `web_search`       | web           | Search the web (Brave, DuckDuckGo)                           |
-| `web_fetch`        | web           | Fetch and parse web content                                  |
-| `memory_search`    | memory        | Search long-term memory (FTS + vector)                       |
-| `memory_get`       | memory        | Retrieve memory entries                                      |
-| `skill_search`     | —             | Search skills (BM25 + embedding hybrid)                      |
-| `knowledge_graph_search` | memory  | Search entities and traverse knowledge graph relationships   |
-| `create_image`     | media         | Image generation (DashScope, MiniMax)                        |
-| `create_audio`     | media         | Audio generation (OpenAI, ElevenLabs, MiniMax, Suno)         |
-| `create_video`     | media         | Video generation (MiniMax, Veo)                              |
-| `read_document`    | media         | Document reading (Gemini File API, provider chain)           |
-| `read_image`       | media         | Image analysis                                               |
-| `read_audio`       | media         | Audio transcription and analysis                             |
-| `read_video`       | media         | Video analysis                                               |
-| `message`          | messaging     | Send messages to channels                                    |
-| `tts`              | —             | Text-to-Speech synthesis                                     |
-| `spawn`            | —             | Spawn a subagent                                             |
-| `subagents`        | sessions      | Control running subagents                                    |
-| `team_tasks`       | teams         | Shared task board (list, create, claim, complete, search)    |
-| `sessions_list`    | sessions      | List active sessions                                         |
-| `sessions_history` | sessions      | View session history                                         |
-| `sessions_send`    | sessions      | Send message to a session                                    |
-| `sessions_spawn`   | sessions      | Spawn a new session                                          |
-| `session_status`   | sessions      | Check session status                                         |
-| `cron`             | automation    | Schedule and manage cron jobs                                |
-| `gateway`          | automation    | Gateway administration                                       |
-| `browser`          | ui            | Browser automation (navigate, click, type, screenshot)       |
-| `announce_queue`   | automation    | Async result announcement (for async delegations)            |
+30+ tools across 8 categories:
+
+| Category | Tools | Description |
+|----------|-------|-------------|
+| **Filesystem** | `read_file`, `write_file`, `edit_file`, `list_files`, `search`, `glob` | File operations with virtual FS routing |
+| **Runtime** | `exec`, `browser` | Shell commands (approval workflow) + browser automation |
+| **Web** | `web_search`, `web_fetch` | Search (Brave, DuckDuckGo) + content extraction |
+| **Memory** | `memory_search`, `memory_get`, `knowledge_graph_search` | 3-tier memory + KG traversal |
+| **Media** | `create_image`, `create_audio`, `create_video`, `read_*`, `tts` | Generation + analysis (multi-provider) |
+| **Skills** | `skill_search`, `use_skill`, `skill_manage` | BM25 + semantic hybrid search |
+| **Teams** | `team_tasks`, `spawn`, `delegate`, `message` | Task board + orchestration + messaging |
+| **Automation** | `cron`, `heartbeat`, `sessions_*` | Scheduling + session management |
+
+> Full tool reference at [docs.goclaw.sh](https://docs.goclaw.sh/#custom-tools)
 
 ## Documentation
 
@@ -350,7 +321,7 @@ See [CHANGELOG.md](CHANGELOG.md) for detailed feature status including what's be
 
 ## Acknowledgments
 
-GoClaw is built upon the original [OpenClaw](https://github.com/openclaw/openclaw) project. We are grateful for the architecture and vision that inspired this Go port.
+GoClaw was originally inspired by the [OpenClaw](https://github.com/openclaw/openclaw) project architecture.
 
 ## License
 

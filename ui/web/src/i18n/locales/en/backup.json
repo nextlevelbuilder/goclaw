@@ -1,0 +1,127 @@
+{
+  "title": "Backup & Restore",
+  "description": "Create system backups, restore from archives, and manage S3 storage",
+  "tabs": {
+    "systemBackup": "System Backup",
+    "systemRestore": "System Restore",
+    "s3Config": "S3 Storage",
+    "tenantBackup": "Tenant Backup"
+  },
+  "backup": {
+    "preflight": {
+      "title": "System Check",
+      "pgDump": "pg_dump available",
+      "diskSpace": "Sufficient disk space",
+      "dbSize": "Database size",
+      "dataDir": "Data directory",
+      "workspace": "Workspace",
+      "freeDisk": "Free disk space",
+      "warnings": "Warnings",
+      "refresh": "Refresh",
+      "pgDumpMissing": "pg_dump not available",
+      "pgDumpHint": "Install postgresql-client to enable database backups.",
+      "goToPackages": "Go to Packages"
+    },
+    "options": {
+      "includeDb": "Include database",
+      "includeFiles": "Include files",
+      "destination": "Backup destination",
+      "local": "Download locally",
+      "s3": "Upload to S3"
+    },
+    "start": "Start Backup",
+    "running": "Backing up...",
+    "complete": "Backup Complete",
+    "download": "Download Backup",
+    "uploadS3": "Upload to S3",
+    "newBackup": "New Backup",
+    "fileSize": "File size",
+    "schemaVersion": "Schema version",
+    "s3History": {
+      "title": "S3 Backups",
+      "empty": "No backups found in S3",
+      "name": "File",
+      "size": "Size",
+      "date": "Date"
+    },
+    "errorTitle": "Backup Failed"
+  },
+  "restore": {
+    "warning": "Restoring will overwrite existing data. This action cannot be undone. Create a backup first.",
+    "dropzone": "Drop .tar.gz backup archive here",
+    "dropzoneHint": "or click to browse",
+    "options": {
+      "restoreDb": "Restore database",
+      "restoreFiles": "Restore files",
+      "dryRun": "Dry run (preview only)"
+    },
+    "start": "Restore",
+    "confirmTitle": "Confirm System Restore",
+    "confirmDesc": "This will overwrite your current database and files with the backup contents. Are you sure?",
+    "running": "Restoring...",
+    "doNotClose": "Do not close this page during restore",
+    "complete": "Restore Complete",
+    "dryRunNote": "This was a dry run. No changes were made.",
+    "dbRestored": "Database restored",
+    "filesExtracted": "Files extracted",
+    "bytesExtracted": "Data restored",
+    "schemaVersion": "Schema version",
+    "warnings": "Warnings",
+    "newRestore": "New Restore",
+    "errorTitle": "Restore Failed",
+    "tryAgain": "Try Again"
+  },
+  "s3": {
+    "title": "S3 Storage Configuration",
+    "description": "Configure S3-compatible storage for remote backups",
+    "status": {
+      "configured": "Configured",
+      "notConfigured": "Not configured"
+    },
+    "fields": {
+      "accessKeyId": "Access Key ID",
+      "secretAccessKey": "Secret Access Key",
+      "secretPlaceholder": "Enter to update",
+      "bucket": "Bucket",
+      "region": "Region",
+      "endpoint": "Endpoint (optional)",
+      "endpointHint": "For S3-compatible services (MinIO, R2, etc.)",
+      "prefix": "Key Prefix"
+    },
+    "save": "Save & Test Connection",
+    "saving": "Testing connection...",
+    "saveSuccess": "S3 configuration saved and connection verified",
+    "saveError": "Failed to save S3 configuration"
+  },
+  "tenant": {
+    "title": "Tenant Backup & Restore",
+    "description": "Backup or restore individual tenant data",
+    "selectTenant": "Select tenant",
+    "selectTenantPlaceholder": "Choose a tenant...",
+    "backup": {
+      "start": "Backup Tenant",
+      "running": "Backing up tenant...",
+      "complete": "Tenant Backup Complete",
+      "download": "Download",
+      "tableCounts": "Tables backed up",
+      "newBackup": "New Backup"
+    },
+    "restore": {
+      "mode": "Restore mode",
+      "modeUpsert": "Merge (upsert)",
+      "modeReplace": "Replace all",
+      "modeNew": "New tenant",
+      "dropzone": "Drop tenant backup archive here",
+      "dryRun": "Dry run (preview only)",
+      "start": "Restore Tenant",
+      "confirmTitle": "Confirm Tenant Restore",
+      "confirmDesc": "This will modify the selected tenant's data. Are you sure?",
+      "running": "Restoring tenant...",
+      "complete": "Tenant Restore Complete",
+      "tablesRestored": "Tables restored",
+      "filesExtracted": "Files extracted",
+      "dryRunNote": "Dry run — no changes made",
+      "newRestore": "New Restore"
+    }
+  }
+}

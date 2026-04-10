@@ -156,90 +156,84 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 		l.traceCollector.SetTraceStatus(ctx, traceID, store.TraceStatusRunning)
 	}
 
-	result, err := l.runLoop(ctx, req)
-
-	// Finalize the root agent span. Uses EmitSpanUpdate (channel send) so it
-	// succeeds even if ctx is cancelled. Must run before FinishTrace so
-	// aggregates include this span.
-	if agentSpanID != uuid.Nil {
-		l.emitAgentSpanEnd(ctx, agentSpanID, runStart, result, err)
-	}
-
-	// Child trace: restore trace status now that this run is done.
-	if isChildTrace && l.traceCollector != nil && traceID != uuid.Nil {
-		status := store.TraceStatusCompleted
+	// V3 pipeline path (always enabled)
+	{
+		result, err := l.runViaPipeline(ctx, req)
+		// Tracing + events handled below via the same finalize path
 		if err != nil {
+			if agentSpanID != uuid.Nil {
+				l.emitAgentSpanEnd(ctx, agentSpanID, runStart, nil, err)
+			}
+			if isChildTrace && l.traceCollector != nil && traceID != uuid.Nil {
+				status := store.TraceStatusError
+				if ctx.Err() != nil {
+					status = store.TraceStatusCancelled
+				}
+				traceCtx := ctx
+				if ctx.Err() != nil {
+					traceCtx = context.WithoutCancel(ctx)
+				}
+				l.traceCollector.SetTraceStatus(traceCtx, traceID, status)
+			}
 			if ctx.Err() != nil {
-				status = store.TraceStatusCancelled
+				emitRun(AgentEvent{Type: protocol.AgentEventRunCancelled, AgentID: l.id, RunID: req.RunID})
 			} else {
-				status = store.TraceStatusError
+				emitRun(AgentEvent{Type: protocol.AgentEventRunFailed, AgentID: l.id, RunID: req.RunID, Payload: map[string]string{"error": err.Error()}})
+			}
+			if !isChildTrace && l.traceCollector != nil && traceID != uuid.Nil {
+				traceFinalized = true
+				traceCtx := ctx
+				traceStatus := store.TraceStatusError
+				if ctx.Err() != nil {
+					traceCtx = context.WithoutCancel(ctx)
+					traceStatus = store.TraceStatusCancelled
+				}
+				l.traceCollector.FinishTrace(traceCtx, traceID, traceStatus, err.Error(), "")
+			}
+			return nil, err
+		}
+		// Structured performance log for v3 pipeline runs.
+		elapsed := time.Since(runStart)
+		logAttrs := []any{
+			"agent", l.id, "duration_ms", elapsed.Milliseconds(),
+			"iterations", result.Iterations,
+		}
+		if result.Usage != nil {
+			logAttrs = append(logAttrs, "total_tokens", result.Usage.TotalTokens)
+		}
+		slog.Info("v3.run.completed", logAttrs...)
+
+		if agentSpanID != uuid.Nil {
+			l.emitAgentSpanEnd(ctx, agentSpanID, runStart, result, nil)
+		}
+		if isChildTrace && l.traceCollector != nil && traceID != uuid.Nil {
+			l.traceCollector.SetTraceStatus(ctx, traceID, store.TraceStatusCompleted)
+		}
+		completedPayload := map[string]any{"content": result.Content}
+		if result.Thinking != "" {
+			completedPayload["thinking"] = result.Thinking
+		}
+		if result != nil && result.Usage != nil {
+			completedPayload["usage"] = map[string]any{
+				"prompt_tokens":         result.Usage.PromptTokens,
+				"completion_tokens":     result.Usage.CompletionTokens,
+				"total_tokens":          result.Usage.TotalTokens,
+				"cache_creation_tokens": result.Usage.CacheCreationTokens,
+				"cache_read_tokens":     result.Usage.CacheReadTokens,
 			}
 		}
-		traceCtx := ctx
-		if ctx.Err() != nil {
-			traceCtx = context.WithoutCancel(ctx)
+		if result != nil && len(result.Media) > 0 {
+			completedPayload["media"] = result.Media
 		}
-		l.traceCollector.SetTraceStatus(traceCtx, traceID, status)
-	}
-
-	if err != nil {
-		// Distinguish user-initiated cancellation from real errors.
-		if ctx.Err() != nil {
-			emitRun(AgentEvent{
-				Type:    protocol.AgentEventRunCancelled,
-				AgentID: l.id,
-				RunID:   req.RunID,
-			})
-		} else {
-			emitRun(AgentEvent{
-				Type:    protocol.AgentEventRunFailed,
-				AgentID: l.id,
-				RunID:   req.RunID,
-				Payload: map[string]string{"error": err.Error()},
-			})
-		}
-		// Only finish trace for root runs; child traces don't own the trace lifecycle.
-		// Use background context when the run context is cancelled (/stop command)
-		// so the DB update still succeeds.
+		emitRun(AgentEvent{Type: protocol.AgentEventRunCompleted, AgentID: l.id, RunID: req.RunID, Payload: completedPayload})
 		if !isChildTrace && l.traceCollector != nil && traceID != uuid.Nil {
 			traceFinalized = true
-			traceCtx := ctx
-			traceStatus := store.TraceStatusError
-			if ctx.Err() != nil {
-				traceCtx = context.WithoutCancel(ctx)
-				traceStatus = store.TraceStatusCancelled
+			if result != nil {
+				l.traceCollector.FinishTrace(ctx, traceID, store.TraceStatusCompleted, "", truncateStr(result.Content, l.traceCollector.PreviewMaxLen()))
+			} else {
+				l.traceCollector.FinishTrace(ctx, traceID, store.TraceStatusCompleted, "", "")
 			}
-			l.traceCollector.FinishTrace(traceCtx, traceID, traceStatus, err.Error(), "")
 		}
-		return nil, err
+		return result, nil
 	}
-
-	completedPayload := map[string]any{"content": result.Content}
-	if result.Usage != nil {
-		completedPayload["usage"] = map[string]any{
-			"prompt_tokens":         result.Usage.PromptTokens,
-			"completion_tokens":     result.Usage.CompletionTokens,
-			"total_tokens":          result.Usage.TotalTokens,
-			"cache_creation_tokens": result.Usage.CacheCreationTokens,
-			"cache_read_tokens":     result.Usage.CacheReadTokens,
-		}
-	}
-	if len(result.Media) > 0 {
-		completedPayload["media"] = result.Media
-	}
-	emitRun(AgentEvent{
-		Type:    protocol.AgentEventRunCompleted,
-		AgentID: l.id,
-		RunID:   req.RunID,
-		Payload: completedPayload,
-	})
-	if !isChildTrace && l.traceCollector != nil && traceID != uuid.Nil {
-		traceFinalized = true
-		if result != nil {
-			l.traceCollector.FinishTrace(ctx, traceID, store.TraceStatusCompleted, "", truncateStr(result.Content, l.traceCollector.PreviewMaxLen()))
-		} else {
-			l.traceCollector.FinishTrace(ctx, traceID, store.TraceStatusCompleted, "", "")
-		}
-	}
-	return result, nil
 }

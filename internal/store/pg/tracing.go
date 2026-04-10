@@ -58,18 +58,10 @@ func (s *PGTracingStore) UpdateTrace(ctx context.Context, traceID uuid.UUID, upd
 }
 
 func (s *PGTracingStore) GetTrace(ctx context.Context, traceID uuid.UUID) (*store.TraceData, error) {
-	var d store.TraceData
-	var parentTraceID, agentID, teamID *uuid.UUID
-	var userID, sessionKey, runID, name, channel, inputPreview, outputPreview, errStr *string
-	var endTime *time.Time
-	var durationMS *int
-	var metadata *[]byte
-	var tags []byte
-
 	query := `SELECT id, parent_trace_id, agent_id, user_id, session_key, run_id, start_time, end_time,
 		 duration_ms, name, channel, input_preview, output_preview,
-		 total_input_tokens, total_output_tokens, COALESCE(total_cost, 0), span_count, llm_call_count, tool_call_count,
-		 status, error, metadata, tags, team_id, created_at
+		 total_input_tokens, total_output_tokens, COALESCE(total_cost, 0) AS total_cost, span_count, llm_call_count, tool_call_count,
+		 status, error, COALESCE(metadata, '{}'::jsonb) AS metadata, COALESCE(tags, '{}') AS tags, team_id, created_at
 		 FROM traces WHERE id = $1`
 	qArgs := []any{traceID}
 	if !store.IsCrossTenant(ctx) {
@@ -81,33 +73,11 @@ func (s *PGTracingStore) GetTrace(ctx context.Context, traceID uuid.UUID) (*stor
 		qArgs = append(qArgs, tenantID)
 	}
 
-	err := s.db.QueryRowContext(ctx, query, qArgs...).Scan(&d.ID, &parentTraceID, &agentID, &userID, &sessionKey, &runID, &d.StartTime, &endTime,
-		&durationMS, &name, &channel, &inputPreview, &outputPreview,
-		&d.TotalInputTokens, &d.TotalOutputTokens, &d.TotalCost, &d.SpanCount, &d.LLMCallCount, &d.ToolCallCount,
-		&d.Status, &errStr, &metadata, &tags, &teamID, &d.CreatedAt)
-	if err != nil {
+	var row traceRow
+	if err := pkgSqlxDB.GetContext(ctx, &row, query, qArgs...); err != nil {
 		return nil, err
 	}
-
-	d.ParentTraceID = parentTraceID
-	d.AgentID = agentID
-	d.TeamID = teamID
-	d.UserID = derefStr(userID)
-	d.SessionKey = derefStr(sessionKey)
-	d.RunID = derefStr(runID)
-	d.EndTime = endTime
-	if durationMS != nil {
-		d.DurationMS = *durationMS
-	}
-	d.Name = derefStr(name)
-	d.Channel = derefStr(channel)
-	d.InputPreview = derefStr(inputPreview)
-	d.OutputPreview = derefStr(outputPreview)
-	d.Error = derefStr(errStr)
-	if metadata != nil {
-		d.Metadata = *metadata
-	}
-	scanStringArray(tags, &d.Tags)
+	d := row.toTraceData()
 	return &d, nil
 }
 
@@ -171,7 +141,7 @@ func (s *PGTracingStore) ListTraces(ctx context.Context, opts store.TraceListOpt
 
 	q := `SELECT id, parent_trace_id, agent_id, user_id, session_key, run_id, start_time, end_time,
 		 duration_ms, name, channel, input_preview, output_preview,
-		 total_input_tokens, total_output_tokens, COALESCE(total_cost, 0), span_count, llm_call_count, tool_call_count,
+		 total_input_tokens, total_output_tokens, COALESCE(total_cost, 0) AS total_cost, span_count, llm_call_count, tool_call_count,
 		 status, error, metadata, tags, team_id, created_at
 		 FROM traces` + where
 
@@ -181,57 +151,17 @@ func (s *PGTracingStore) ListTraces(ctx context.Context, opts store.TraceListOpt
 	}
 	q += fmt.Sprintf(" ORDER BY created_at DESC OFFSET %d LIMIT %d", opts.Offset, limit)
 
-	rows, err := s.db.QueryContext(ctx, q, args...)
-	if err != nil {
+	var rows []traceRow
+	if err := pkgSqlxDB.SelectContext(ctx, &rows, q, args...); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var result []store.TraceData
-	for rows.Next() {
-		var d store.TraceData
-		var parentTraceID, agentID, teamID *uuid.UUID
-		var userID, sessionKey, runID, name, channel, inputPreview, outputPreview, errStr *string
-		var endTime *time.Time
-		var durationMS *int
-		var metadata *[]byte
-		var tags []byte
-
-		if err := rows.Scan(&d.ID, &parentTraceID, &agentID, &userID, &sessionKey, &runID, &d.StartTime, &endTime,
-			&durationMS, &name, &channel, &inputPreview, &outputPreview,
-			&d.TotalInputTokens, &d.TotalOutputTokens, &d.TotalCost, &d.SpanCount, &d.LLMCallCount, &d.ToolCallCount,
-			&d.Status, &errStr, &metadata, &tags, &teamID, &d.CreatedAt); err != nil {
-			continue
-		}
-
-		d.ParentTraceID = parentTraceID
-		d.AgentID = agentID
-		d.TeamID = teamID
-		d.UserID = derefStr(userID)
-		d.SessionKey = derefStr(sessionKey)
-		d.RunID = derefStr(runID)
-		d.EndTime = endTime
-		if durationMS != nil {
-			d.DurationMS = *durationMS
-		}
-		d.Name = derefStr(name)
-		d.Channel = derefStr(channel)
-		d.InputPreview = derefStr(inputPreview)
-		d.OutputPreview = derefStr(outputPreview)
-		d.Error = derefStr(errStr)
-		if metadata != nil {
-			d.Metadata = *metadata
-		}
-		scanStringArray(tags, &d.Tags)
-		result = append(result, d)
-	}
-	return result, nil
+	return traceRowsToData(rows), nil
 }
 
 func (s *PGTracingStore) ListChildTraces(ctx context.Context, parentTraceID uuid.UUID) ([]store.TraceData, error) {
 	q := `SELECT id, parent_trace_id, agent_id, user_id, session_key, run_id, start_time, end_time,
 		 duration_ms, name, channel, input_preview, output_preview,
-		 total_input_tokens, total_output_tokens, COALESCE(total_cost, 0), span_count, llm_call_count, tool_call_count,
+		 total_input_tokens, total_output_tokens, COALESCE(total_cost, 0) AS total_cost, span_count, llm_call_count, tool_call_count,
 		 status, error, metadata, tags, team_id, created_at
 		 FROM traces WHERE parent_trace_id = $1`
 	qArgs := []any{parentTraceID}
@@ -246,51 +176,11 @@ func (s *PGTracingStore) ListChildTraces(ctx context.Context, parentTraceID uuid
 	}
 	q += " ORDER BY created_at"
 
-	rows, err := s.db.QueryContext(ctx, q, qArgs...)
-	if err != nil {
+	var rows []traceRow
+	if err := pkgSqlxDB.SelectContext(ctx, &rows, q, qArgs...); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var result []store.TraceData
-	for rows.Next() {
-		var d store.TraceData
-		var parentID, agentID, teamID *uuid.UUID
-		var userID, sessionKey, runID, name, channel, inputPreview, outputPreview, errStr *string
-		var endTime *time.Time
-		var durationMS *int
-		var metadata *[]byte
-		var tags []byte
-
-		if err := rows.Scan(&d.ID, &parentID, &agentID, &userID, &sessionKey, &runID, &d.StartTime, &endTime,
-			&durationMS, &name, &channel, &inputPreview, &outputPreview,
-			&d.TotalInputTokens, &d.TotalOutputTokens, &d.TotalCost, &d.SpanCount, &d.LLMCallCount, &d.ToolCallCount,
-			&d.Status, &errStr, &metadata, &tags, &teamID, &d.CreatedAt); err != nil {
-			continue
-		}
-
-		d.ParentTraceID = parentID
-		d.AgentID = agentID
-		d.TeamID = teamID
-		d.UserID = derefStr(userID)
-		d.SessionKey = derefStr(sessionKey)
-		d.RunID = derefStr(runID)
-		d.EndTime = endTime
-		if durationMS != nil {
-			d.DurationMS = *durationMS
-		}
-		d.Name = derefStr(name)
-		d.Channel = derefStr(channel)
-		d.InputPreview = derefStr(inputPreview)
-		d.OutputPreview = derefStr(outputPreview)
-		d.Error = derefStr(errStr)
-		if metadata != nil {
-			d.Metadata = *metadata
-		}
-		scanStringArray(tags, &d.Tags)
-		result = append(result, d)
-	}
-	return result, nil
+	return traceRowsToData(rows), nil
 }
 
 func (s *PGTracingStore) CreateSpan(ctx context.Context, span *store.SpanData) error {
@@ -322,70 +212,19 @@ func (s *PGTracingStore) UpdateSpan(ctx context.Context, spanID uuid.UUID, updat
 }
 
 func (s *PGTracingStore) GetTraceSpans(ctx context.Context, traceID uuid.UUID) ([]store.SpanData, error) {
-	rows, err := s.db.QueryContext(ctx,
+	var rows []spanRow
+	err := pkgSqlxDB.SelectContext(ctx, &rows,
 		`SELECT id, trace_id, parent_span_id, agent_id, span_type, name,
 		 start_time, end_time, duration_ms, status, error, level,
 		 model, provider, input_tokens, output_tokens, finish_reason,
-		 model_params, tool_name, tool_call_id, input_preview, output_preview,
-		 metadata, team_id, created_at
+		 COALESCE(model_params, '{}'::jsonb) AS model_params,
+		 tool_name, tool_call_id, input_preview, output_preview,
+		 COALESCE(metadata, '{}'::jsonb) AS metadata, team_id, created_at
 		 FROM spans WHERE trace_id = $1 ORDER BY start_time`, traceID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var result []store.SpanData
-	for rows.Next() {
-		var d store.SpanData
-		var parentSpanID, agentID, teamID *uuid.UUID
-		var name, errStr, level, model, provider, finishReason, toolName, toolCallID, inputPreview, outputPreview *string
-		var status *string
-		var endTime *time.Time
-		var durationMS, inputTokens, outputTokens *int
-		var modelParams, metadata *[]byte
-
-		if err := rows.Scan(&d.ID, &d.TraceID, &parentSpanID, &agentID, &d.SpanType, &name,
-			&d.StartTime, &endTime, &durationMS, &status, &errStr, &level,
-			&model, &provider, &inputTokens, &outputTokens, &finishReason,
-			&modelParams, &toolName, &toolCallID, &inputPreview, &outputPreview,
-			&metadata, &teamID, &d.CreatedAt); err != nil {
-			slog.Warn("tracing: span scan failed", "trace_id", traceID, "error", err)
-			continue
-		}
-
-		d.ParentSpanID = parentSpanID
-		d.AgentID = agentID
-		d.TeamID = teamID
-		d.Name = derefStr(name)
-		d.EndTime = endTime
-		d.Status = derefStr(status)
-		d.Level = derefStr(level)
-		if modelParams != nil {
-			d.ModelParams = *modelParams
-		}
-		if metadata != nil {
-			d.Metadata = *metadata
-		}
-		if durationMS != nil {
-			d.DurationMS = *durationMS
-		}
-		d.Error = derefStr(errStr)
-		d.Model = derefStr(model)
-		d.Provider = derefStr(provider)
-		if inputTokens != nil {
-			d.InputTokens = *inputTokens
-		}
-		if outputTokens != nil {
-			d.OutputTokens = *outputTokens
-		}
-		d.FinishReason = derefStr(finishReason)
-		d.ToolName = derefStr(toolName)
-		d.ToolCallID = derefStr(toolCallID)
-		d.InputPreview = derefStr(inputPreview)
-		d.OutputPreview = derefStr(outputPreview)
-		result = append(result, d)
-	}
-	return result, nil
+	return spanRowsToData(rows), nil
 }
 
 func (s *PGTracingStore) BatchCreateSpans(ctx context.Context, spans []store.SpanData) error {
@@ -525,25 +364,15 @@ func (s *PGTracingStore) GetCostSummary(ctx context.Context, opts store.CostSumm
 
 	where := " WHERE " + strings.Join(conditions, " AND ")
 
-	q := `SELECT agent_id, COALESCE(SUM(total_cost), 0), COALESCE(SUM(total_input_tokens), 0),
-		  COALESCE(SUM(total_output_tokens), 0), COUNT(*)
+	q := `SELECT agent_id, COALESCE(SUM(total_cost), 0) AS total_cost,
+		  COALESCE(SUM(total_input_tokens), 0) AS total_input_tokens,
+		  COALESCE(SUM(total_output_tokens), 0) AS total_output_tokens,
+		  COUNT(*) AS trace_count
 		  FROM traces` + where + ` GROUP BY agent_id ORDER BY SUM(total_cost) DESC`
 
-	rows, err := s.db.QueryContext(ctx, q, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
 	var result []store.CostSummaryRow
-	for rows.Next() {
-		var r store.CostSummaryRow
-		var agentID *uuid.UUID
-		if err := rows.Scan(&agentID, &r.TotalCost, &r.TotalInputTokens, &r.TotalOutputTokens, &r.TraceCount); err != nil {
-			continue
-		}
-		r.AgentID = agentID
-		result = append(result, r)
+	if err := pkgSqlxDB.SelectContext(ctx, &result, q, args...); err != nil {
+		return nil, err
 	}
 	return result, nil
 }

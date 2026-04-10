@@ -51,7 +51,7 @@ function RunEntry({ entry }: { entry: CronRunLogEntry }) {
 
         {/* Duration */}
         {entry.durationMs != null && entry.durationMs > 0 && (
-          <Badge variant="outline" className="hidden sm:inline-flex gap-1 text-[10px] font-normal shrink-0">
+          <Badge variant="outline" className="hidden sm:inline-flex gap-1 text-2xs font-normal shrink-0">
             <Zap className="h-2.5 w-2.5" />
             {formatDuration(entry.durationMs)}
           </Badge>
@@ -64,7 +64,7 @@ function RunEntry({ entry }: { entry: CronRunLogEntry }) {
 
         {/* Tokens */}
         {entry.inputTokens != null && entry.inputTokens > 0 && (
-          <span className="hidden sm:block shrink-0 text-[10px] text-muted-foreground tabular-nums">
+          <span className="hidden sm:block shrink-0 text-2xs text-muted-foreground tabular-nums">
             {formatTokens(entry.inputTokens)}/{formatTokens(entry.outputTokens ?? 0)}
           </span>
         )}
@@ -72,7 +72,7 @@ function RunEntry({ entry }: { entry: CronRunLogEntry }) {
         {/* Status */}
         <Badge
           variant={isSuccess ? "success" : "destructive"}
-          className="shrink-0 text-[10px] min-w-[36px] justify-center"
+          className="shrink-0 text-2xs min-w-[36px] justify-center"
         >
           {entry.status || "?"}
         </Badge>
@@ -95,13 +95,13 @@ function RunEntry({ entry }: { entry: CronRunLogEntry }) {
             <div className="mt-2 rounded-md border border-destructive/20 bg-destructive/5 p-3">
               <div className="mb-1.5 flex items-center gap-1.5">
                 <AlertTriangle className="h-3 w-3 text-destructive" />
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-destructive">{t("detail.lastError")}</span>
+                <span className="text-2xs font-semibold uppercase tracking-wider text-destructive">{t("detail.lastError")}</span>
               </div>
               <pre className="text-xs text-destructive/80 whitespace-pre-wrap break-all font-mono">{entry.error}</pre>
             </div>
           )}
           {/* Mobile: duration + tokens */}
-          <div className="mt-2 flex items-center gap-3 text-[10px] text-muted-foreground sm:hidden">
+          <div className="mt-2 flex items-center gap-3 text-2xs text-muted-foreground sm:hidden">
             {entry.durationMs != null && entry.durationMs > 0 && (
               <span>{formatDuration(entry.durationMs)}</span>
             )}
@@ -158,7 +158,7 @@ export function CronRunHistoryTab({ job, getRunLog, onRefresh }: CronRunHistoryT
           <Clock className="h-4 w-4 text-muted-foreground" />
           <h4 className="text-sm font-semibold">{t("detail.runHistory")}</h4>
           {runLogTotal > 0 && (
-            <Badge variant="secondary" className="text-[10px]">{runLogTotal}</Badge>
+            <Badge variant="secondary" className="text-2xs">{runLogTotal}</Badge>
           )}
         </div>
         <Button variant="ghost" size="sm" onClick={() => loadRunLog()} className="gap-1.5 text-xs h-7">

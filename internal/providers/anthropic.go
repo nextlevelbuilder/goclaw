@@ -25,34 +25,45 @@ var claudeModelAliases = map[string]string{
 	"haiku":  "claude-haiku-4-5-20251001",
 }
 
-// resolveModel expands a short alias to a full model ID, or returns the input unchanged.
-func resolveAnthropicModel(model, defaultModel string) string {
+// resolveAnthropicModel expands a short alias to a full model ID, or returns the input unchanged.
+// If a registry is provided, triggers forward-compat resolution for unknown models.
+func resolveAnthropicModel(model, defaultModel string, registry ModelRegistry) string {
 	if model == "" {
 		return defaultModel
 	}
 	if full, ok := claudeModelAliases[model]; ok {
 		return full
 	}
+	// Trigger forward-compat resolution to cache specs for token counting
+	if registry != nil {
+		_ = registry.Resolve("anthropic", model)
+	}
 	return model
 }
 
 // AnthropicProvider implements Provider using the Anthropic Claude API via net/http.
 type AnthropicProvider struct {
+	name         string // provider name (default: "anthropic")
 	apiKey       string
 	baseURL      string
 	defaultModel string
 	client       *http.Client
 	retryConfig  RetryConfig
+	middlewares  RequestMiddleware // composed middleware chain (nil = no-op)
+	registry     ModelRegistry    // model resolution registry (nil = skip)
 }
 
 // NewAnthropicProvider creates a new Anthropic provider.
 func NewAnthropicProvider(apiKey string, opts ...AnthropicOption) *AnthropicProvider {
 	p := &AnthropicProvider{
+		name:         "anthropic",
 		apiKey:       apiKey,
 		baseURL:      anthropicAPIBase,
 		defaultModel: defaultClaudeModel,
 		client:       &http.Client{Timeout: DefaultHTTPTimeout},
 		retryConfig:  DefaultRetryConfig(),
+		// No CacheMiddleware: Anthropic uses block-level cache_control in buildRequestBody
+		middlewares: ComposeMiddlewares(FastModeMiddleware, ServiceTierMiddleware),
 	}
 	for _, o := range opts {
 		o(p)
@@ -62,8 +73,25 @@ func NewAnthropicProvider(apiKey string, opts ...AnthropicOption) *AnthropicProv
 
 type AnthropicOption func(*AnthropicProvider)
 
+// WithAnthropicName overrides the provider name (default: "anthropic").
+func WithAnthropicName(name string) AnthropicOption {
+	return func(p *AnthropicProvider) {
+		if name != "" {
+			p.name = name
+		}
+	}
+}
+
 func WithAnthropicModel(model string) AnthropicOption {
 	return func(p *AnthropicProvider) { p.defaultModel = model }
+}
+
+func WithAnthropicRegistry(r ModelRegistry) AnthropicOption {
+	return func(p *AnthropicProvider) { p.registry = r }
+}
+
+func WithAnthropicMiddlewares(mws ...RequestMiddleware) AnthropicOption {
+	return func(p *AnthropicProvider) { p.middlewares = ComposeMiddlewares(mws...) }
 }
 
 func WithAnthropicBaseURL(baseURL string) AnthropicOption {
@@ -74,29 +102,65 @@ func WithAnthropicBaseURL(baseURL string) AnthropicOption {
 	}
 }
 
-func (p *AnthropicProvider) Name() string           { return "anthropic" }
+func (p *AnthropicProvider) Name() string           { return p.name }
 func (p *AnthropicProvider) DefaultModel() string   { return p.defaultModel }
 func (p *AnthropicProvider) SupportsThinking() bool { return true }
 
+// Capabilities implements CapabilitiesAware for pipeline code-path selection.
+func (p *AnthropicProvider) Capabilities() ProviderCapabilities {
+	return ProviderCapabilities{
+		Streaming:        true,
+		ToolCalling:      true,
+		StreamWithTools:  true,
+		Thinking:         true,
+		Vision:           true,
+		CacheControl:     true,
+		MaxContextWindow: 200_000,
+		TokenizerID:      "cl100k_base",
+	}
+}
+
+// middlewareConfig builds a MiddlewareConfig for the current request.
+func (p *AnthropicProvider) middlewareConfig(model string, req ChatRequest) MiddlewareConfig {
+	return MiddlewareConfig{
+		Provider: "anthropic",
+		Model:    model,
+		Caps:     p.Capabilities(),
+		AuthType: "api_key",
+		APIBase:  p.baseURL,
+		Options:  req.Options,
+	}
+}
+
 func (p *AnthropicProvider) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
-	model := resolveAnthropicModel(req.Model, p.defaultModel)
+	model := resolveAnthropicModel(req.Model, p.defaultModel, p.registry)
 
 	body := p.buildRequestBody(model, req, false)
+	body = ApplyMiddlewares(body, p.middlewares, p.middlewareConfig(model, req))
 
-	return RetryDo(ctx, p.retryConfig, func() (*ChatResponse, error) {
+	resp, err := RetryDo(ctx, p.retryConfig, func() (*ChatResponse, error) {
 		respBody, err := p.doRequest(ctx, body)
 		if err != nil {
 			return nil, err
 		}
 		defer respBody.Close()
 
-		var resp anthropicResponse
-		if err := json.NewDecoder(respBody).Decode(&resp); err != nil {
+		var parsed anthropicResponse
+		if err := json.NewDecoder(respBody).Decode(&parsed); err != nil {
 			return nil, fmt.Errorf("anthropic: decode response: %w", err)
 		}
 
-		return p.parseResponse(&resp), nil
+		return p.parseResponse(&parsed), nil
 	})
+	// Drop user-visible reasoning after parsing for models flagged as leakers.
+	// Usage.ThinkingTokens and RawAssistantContent remain intact so billing
+	// and Anthropic tool-use thinking passback continue to work.
+	if resp != nil {
+		if strip, _ := req.Options[OptStripThinking].(bool); strip {
+			resp.Thinking = ""
+		}
+	}
+	return resp, err
 }
 
 func (p *AnthropicProvider) doRequest(ctx context.Context, body any) (io.ReadCloser, error) {

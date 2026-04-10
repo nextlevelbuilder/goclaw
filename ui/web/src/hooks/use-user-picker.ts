@@ -46,7 +46,7 @@ export function useUserPicker(search: string, peerKind?: string, source?: "conta
       return res.results ?? [];
     },
     // Always enabled — empty search returns recent contacts
-    staleTime: 30_000,
+    staleTime: 60_000,
   });
 
   const results = data ?? [];

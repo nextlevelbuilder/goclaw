@@ -225,8 +225,8 @@ func TestScheduler_DifferentSessionsParallel(t *testing.T) {
 }
 
 func TestScheduler_DropOldPolicy(t *testing.T) {
-	// Use a blocking run function
-	started := make(chan struct{})
+	// Use a blocking run function (buffered so send never races with receive)
+	started := make(chan struct{}, 1)
 	blockCh := make(chan struct{})
 
 	runFn := func(_ context.Context, req agent.RunRequest) (*agent.RunResult, error) {

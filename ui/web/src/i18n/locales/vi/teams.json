@@ -363,5 +363,40 @@
     "delegations": "Ủy quyền",
     "settings": "Cài đặt",
     "addMember": "Thêm thành viên"
+  },
+  "tabs": {
+    "teams": "Agent Team",
+    "board": "Bảng",
+    "links": "Agent Link",
+    "settings": "Cài đặt"
+  },
+  "links": {
+    "title": "Liên kết Agent",
+    "empty": "Chưa có liên kết agent nào.",
+    "create": "Tạo liên kết",
+    "editLink": "Sửa liên kết",
+    "save": "Lưu",
+    "source": "Agent nguồn",
+    "target": "Agent đích",
+    "selectAgent": "Chọn agent...",
+    "direction": "Hướng",
+    "outbound": "Đi ra",
+    "inbound": "Đi vào",
+    "bidirectional": "Hai chiều",
+    "description": "Mô tả",
+    "descriptionPlaceholder": "Mô tả tùy chọn...",
+    "maxConcurrent": "Tối đa đồng thời",
+    "status": "Trạng thái",
+    "active": "Hoạt động",
+    "disabled": "Tắt",
+    "deleteTitle": "Xóa liên kết",
+    "confirmDelete": "Xóa liên kết agent này? Không thể hoàn tác.",
+    "deleted": "Đã xóa liên kết",
+    "deleteFailed": "Xóa liên kết thất bại",
+    "created": "Đã tạo liên kết",
+    "createFailed": "Tạo liên kết thất bại",
+    "updated": "Đã cập nhật liên kết",
+    "updateFailed": "Cập nhật liên kết thất bại",
+    "sameAgentError": "Agent nguồn và đích phải khác nhau."
   }
 }

@@ -127,7 +127,7 @@ func handleSubagentAnnounce(
 	}
 
 	// Enqueue into producer-consumer queue using tenant-scoped key from routing.
-	q, isProcessor := enqueueSubagentAnnounce(queueKey, entry)
+	isProcessor := enqueueSubagentAnnounce(queueKey, entry)
 	if isProcessor {
 		deps.BgWg.Add(1)
 		go func() {
@@ -137,7 +137,7 @@ func handleSubagentAnnounce(
 			// Fetch live roster for merged announce context.
 			roster := deps.SubagentMgr.RosterForParent(parentAgent)
 
-			processSubagentAnnounceLoop(ctx, q, routing, roster, deps.SubagentMgr, deps.Sched, deps.MsgBus, deps.Cfg)
+			processSubagentAnnounceLoop(ctx, routing, roster, deps.SubagentMgr, deps.Sched, deps.MsgBus, deps.Cfg)
 		}()
 	}
 
@@ -290,52 +290,10 @@ func handleTeammateMessage(
 			}
 		}
 
-		// Determine announce content: success result or failure error.
-		var announceContent string
-		var announceMedia []agent.MediaResult
-		if outcome.Err != nil {
-			slog.Error("teammate message: agent run failed", "error", outcome.Err)
-			errMsg := outcome.Err.Error()
-			if len(errMsg) > 500 {
-				errMsg = errMsg[:500] + "..."
-			}
-			announceContent = fmt.Sprintf("[FAILED] %s", errMsg)
-		} else if outcome.Result == nil {
-			slog.Warn("teammate message: nil result without error", "from", senderID)
+		// Build announce content from outcome + task comments/attachments.
+		announceContent, announceMedia, ok := buildTeammateAnnounce(ctx, outcome, senderID, inMeta, deps)
+		if !ok {
 			return
-		} else if (outcome.Result.Content == "" && len(outcome.Result.Media) == 0) || agent.IsSilentReply(outcome.Result.Content) {
-			slog.Info("teammate message: suppressed silent/empty reply", "from", senderID)
-			return
-		} else {
-			announceContent = outcome.Result.Content
-			announceMedia = outcome.Result.Media
-		}
-
-		// Append member comments & attachments so leader sees them in the announce.
-		if taskIDStr := inMeta[tools.MetaTeamTaskID]; taskIDStr != "" && deps.TeamStore != nil {
-			if taskUUID, err := uuid.Parse(taskIDStr); err == nil {
-				if comments, err := deps.TeamStore.ListRecentTaskComments(ctx, taskUUID, 5); err == nil && len(comments) > 0 {
-					var parts []string
-					for _, c := range comments {
-						author := c.AgentKey
-						if author == "" {
-							author = "system"
-						}
-						text := c.Content
-						if len([]rune(text)) > 500 {
-							text = string([]rune(text)[:500]) + "..."
-						}
-						parts = append(parts, fmt.Sprintf("- [%s]: %s", author, text))
-					}
-					announceContent += "\n\n[Member notes]\n" + strings.Join(parts, "\n")
-				}
-				if attachments, err := deps.TeamStore.ListTaskAttachments(ctx, taskUUID); err == nil && len(attachments) > 0 {
-					announceContent += "\n\n[Attached files in team workspace]"
-					for _, a := range attachments {
-						announceContent += "\n- " + filepath.Base(a.Path)
-					}
-				}
-			}
 		}
 
 		// Announce result (or failure) to lead agent via announce queue.
@@ -345,27 +303,7 @@ func handleTeammateMessage(
 			return
 		}
 
-		// Resolve lead agent.
-		leadAgent := ""
-		if cachedTeam != nil {
-			if leadAg, err := deps.AgentStore.GetByID(ctx, cachedTeam.LeadAgentID); err == nil {
-				leadAgent = leadAg.AgentKey
-			}
-		} else if teamIDStr := inMeta[tools.MetaTeamID]; teamIDStr != "" {
-			if teamUUID, err := uuid.Parse(teamIDStr); err == nil {
-				if team, err := deps.TeamStore.GetTeam(ctx, teamUUID); err == nil {
-					if leadAg, err := deps.AgentStore.GetByID(ctx, team.LeadAgentID); err == nil {
-						leadAgent = leadAg.AgentKey
-					}
-				}
-			}
-		}
-		if leadAgent == "" {
-			leadAgent = inMeta[tools.MetaFromAgent]
-		}
-		if leadAgent == "" {
-			leadAgent = deps.Cfg.ResolveDefaultAgentID()
-		}
+		leadAgent := resolveTeammateLeadAgent(ctx, cachedTeam, inMeta, deps)
 
 		origPeerKind := inMeta[tools.MetaOriginPeerKind]
 		if origPeerKind == "" {
@@ -401,7 +339,7 @@ func handleTeammateMessage(
 			Content:           announceContent,
 			Media:             announceMedia,
 		}
-		q, isProcessor := enqueueAnnounce(leadSessionKey, entry)
+		isProcessor := enqueueAnnounce(leadSessionKey, entry)
 		if !isProcessor {
 			slog.Info("teammate announce: merged into pending batch",
 				"member", entry.MemberAgent, "session", leadSessionKey)
@@ -423,7 +361,7 @@ func handleTeammateMessage(
 			ParentRootSpanID: parentRootSpanID,
 			OutMeta:          outMeta,
 		}
-		processAnnounceLoop(ctx, q, routing, deps.Sched, deps.MsgBus, deps.TeamStore, deps.PostTurn, deps.Cfg)
+		processAnnounceLoop(ctx, routing, deps.Sched, deps.MsgBus, deps.TeamStore, deps.PostTurn, deps.Cfg)
 	}(origChannel, origChatID, msg.SenderID, taskIDStr, outMeta, msg.Metadata)
 
 	return true
@@ -491,9 +429,9 @@ func handleStopCommand(
 			sessionKey = sessions.BuildGroupTopicSessionKey(agentID, msg.Channel, msg.ChatID, topicID)
 		}
 	}
-	if msg.Metadata["dm_thread_id"] != "" && peerKind == string(sessions.PeerDirect) {
+	if msg.Metadata[tools.MetaDMThreadID] != "" && peerKind == string(sessions.PeerDirect) {
 		var threadID int
-		fmt.Sscanf(msg.Metadata["dm_thread_id"], "%d", &threadID)
+		fmt.Sscanf(msg.Metadata[tools.MetaDMThreadID], "%d", &threadID)
 		if threadID > 0 {
 			sessionKey = sessions.BuildDMThreadSessionKey(agentID, msg.Channel, msg.ChatID, threadID)
 		}
@@ -579,4 +517,79 @@ func buildTaskBoardSnapshot(ctx context.Context, teamStore store.TeamStore, team
 	}
 	return fmt.Sprintf("=== Task board (this batch) ===\nTask progress: %d/%d completed, %d active:\n%s",
 		completed, total, active, strings.Join(activeLines, "\n"))
+}
+
+// buildTeammateAnnounce constructs announce content from agent outcome + task comments/attachments.
+// Returns content, media, and whether to proceed with the announce.
+func buildTeammateAnnounce(ctx context.Context, outcome scheduler.RunOutcome, senderID string, inMeta map[string]string, deps *ConsumerDeps) (string, []agent.MediaResult, bool) {
+	var content string
+	var media []agent.MediaResult
+
+	if outcome.Err != nil {
+		slog.Error("teammate message: agent run failed", "error", outcome.Err)
+		errMsg := outcome.Err.Error()
+		if len(errMsg) > 500 {
+			errMsg = errMsg[:500] + "..."
+		}
+		content = fmt.Sprintf("[FAILED] %s", errMsg)
+	} else if outcome.Result == nil {
+		slog.Warn("teammate message: nil result without error", "from", senderID)
+		return "", nil, false
+	} else if (outcome.Result.Content == "" && len(outcome.Result.Media) == 0) || agent.IsSilentReply(outcome.Result.Content) {
+		slog.Info("teammate message: suppressed silent/empty reply", "from", senderID)
+		return "", nil, false
+	} else {
+		content = outcome.Result.Content
+		media = outcome.Result.Media
+	}
+
+	// Append member comments & attachments so leader sees them in the announce.
+	if taskIDStr := inMeta[tools.MetaTeamTaskID]; taskIDStr != "" && deps.TeamStore != nil {
+		if taskUUID, err := uuid.Parse(taskIDStr); err == nil {
+			if comments, err := deps.TeamStore.ListRecentTaskComments(ctx, taskUUID, 5); err == nil && len(comments) > 0 {
+				var parts []string
+				for _, c := range comments {
+					author := c.AgentKey
+					if author == "" {
+						author = "system"
+					}
+					text := c.Content
+					if len([]rune(text)) > 500 {
+						text = string([]rune(text)[:500]) + "..."
+					}
+					parts = append(parts, fmt.Sprintf("- [%s]: %s", author, text))
+				}
+				content += "\n\n[Member notes]\n" + strings.Join(parts, "\n")
+			}
+			if attachments, err := deps.TeamStore.ListTaskAttachments(ctx, taskUUID); err == nil && len(attachments) > 0 {
+				content += "\n\n[Attached files in team workspace]"
+				for _, a := range attachments {
+					content += "\n- " + filepath.Base(a.Path)
+				}
+			}
+		}
+	}
+
+	return content, media, true
+}
+
+// resolveTeammateLeadAgent resolves the lead agent key for routing a teammate announce.
+func resolveTeammateLeadAgent(ctx context.Context, cachedTeam *store.TeamData, inMeta map[string]string, deps *ConsumerDeps) string {
+	if cachedTeam != nil {
+		if leadAg, err := deps.AgentStore.GetByID(ctx, cachedTeam.LeadAgentID); err == nil {
+			return leadAg.AgentKey
+		}
+	} else if teamIDStr := inMeta[tools.MetaTeamID]; teamIDStr != "" {
+		if teamUUID, err := uuid.Parse(teamIDStr); err == nil {
+			if team, err := deps.TeamStore.GetTeam(ctx, teamUUID); err == nil {
+				if leadAg, err := deps.AgentStore.GetByID(ctx, team.LeadAgentID); err == nil {
+					return leadAg.AgentKey
+				}
+			}
+		}
+	}
+	if lead := inMeta[tools.MetaFromAgent]; lead != "" {
+		return lead
+	}
+	return deps.Cfg.ResolveDefaultAgentID()
 }

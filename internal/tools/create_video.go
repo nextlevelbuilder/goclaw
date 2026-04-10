@@ -31,8 +31,11 @@ const maxImageToVideoBytes = 20 * 1024 * 1024
 // CreateVideoTool generates videos using a video generation API.
 // Uses Gemini Veo via predictLongRunning API (async with polling).
 type CreateVideoTool struct {
-	registry *providers.Registry
+	registry  *providers.Registry
+	vaultIntc *VaultInterceptor
 }
+
+func (t *CreateVideoTool) SetVaultInterceptor(v *VaultInterceptor) { t.vaultIntc = v }
 
 func NewCreateVideoTool(registry *providers.Registry) *CreateVideoTool {
 	return &CreateVideoTool{registry: registry}
@@ -194,6 +197,9 @@ func (t *CreateVideoTool) Execute(ctx context.Context, args map[string]any) *Res
 	result := &Result{ForLLM: fmt.Sprintf("MEDIA:%s\nUse the EXACT filename when referencing: %s", videoPath, filepath.Base(videoPath))}
 	result.Media = []bus.MediaFile{{Path: videoPath, MimeType: "video/mp4"}}
 	result.Deliverable = fmt.Sprintf("[Generated video: %s]\nPrompt: %s", filepath.Base(videoPath), prompt)
+	if t.vaultIntc != nil {
+		go t.vaultIntc.AfterWriteMedia(context.WithoutCancel(ctx), videoPath, prompt, "video/mp4")
+	}
 	result.Provider = chainResult.Provider
 	result.Model = chainResult.Model
 	if chainResult.Usage != nil {

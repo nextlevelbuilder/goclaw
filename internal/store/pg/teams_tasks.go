@@ -120,8 +120,8 @@ func (s *PGTeamStore) CreateTask(ctx context.Context, task *store.TeamTaskData) 
 	hex := strings.ReplaceAll(task.ID.String(), "-", "")
 	task.Identifier = fmt.Sprintf("T-%03d-%s", taskNumber, hex[len(hex)-4:])
 
-	// Serialize metadata to JSON (NULL when empty).
-	var metaJSON []byte
+	// Serialize metadata to JSON; default to '{}' to satisfy NOT NULL constraint.
+	metaJSON := []byte(`{}`)
 	if len(task.Metadata) > 0 {
 		metaJSON, _ = json.Marshal(task.Metadata)
 	}

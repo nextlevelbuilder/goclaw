@@ -2,11 +2,8 @@ package pg
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"time"
 
-	"github.com/lib/pq"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -51,7 +48,7 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 				ARRAY[e.id::text] AS path,
 				''::text AS via
 			FROM kg_entities e
-			WHERE e.id = $1 AND e.agent_id = $2%s
+			WHERE e.id = $1 AND e.agent_id = $2 AND e.valid_until IS NULL%s
 
 			UNION ALL
 
@@ -67,8 +64,8 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 					ELSE '~' || r.relation_type
 				END
 			FROM paths p
-			JOIN kg_relations r ON (r.source_entity_id = p.id OR r.target_entity_id = p.id) AND r.agent_id = $2
-			JOIN kg_entities  e ON e.id = (CASE WHEN r.source_entity_id = p.id THEN r.target_entity_id ELSE r.source_entity_id END) AND e.agent_id = $2
+			JOIN kg_relations r ON (r.source_entity_id = p.id OR r.target_entity_id = p.id) AND r.agent_id = $2 AND r.valid_until IS NULL
+			JOIN kg_entities  e ON e.id = (CASE WHEN r.source_entity_id = p.id THEN r.target_entity_id ELSE r.source_entity_id END) AND e.agent_id = $2 AND e.valid_until IS NULL
 			WHERE p.depth < $%d
 			  AND NOT e.id::text = ANY(p.path)
 		)
@@ -99,7 +96,7 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 				ARRAY[e.id::text] AS path,
 				''::text AS via
 			FROM kg_entities e
-			WHERE e.id = $1 AND e.agent_id = $2 AND e.user_id = $3%s
+			WHERE e.id = $1 AND e.agent_id = $2 AND e.user_id = $3 AND e.valid_until IS NULL%s
 
 			UNION ALL
 
@@ -115,8 +112,8 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 					ELSE '~' || r.relation_type
 				END
 			FROM paths p
-			JOIN kg_relations r ON (r.source_entity_id = p.id OR r.target_entity_id = p.id) AND r.user_id = $3
-			JOIN kg_entities  e ON e.id = (CASE WHEN r.source_entity_id = p.id THEN r.target_entity_id ELSE r.source_entity_id END) AND e.user_id = $3
+			JOIN kg_relations r ON (r.source_entity_id = p.id OR r.target_entity_id = p.id) AND r.user_id = $3 AND r.valid_until IS NULL
+			JOIN kg_entities  e ON e.id = (CASE WHEN r.source_entity_id = p.id THEN r.target_entity_id ELSE r.source_entity_id END) AND e.user_id = $3 AND e.valid_until IS NULL
 			WHERE p.depth < $%d
 			  AND NOT e.id::text = ANY(p.path)
 		)
@@ -131,46 +128,15 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 		args = append(args, maxDepth)
 	}
 
-	rows, err := tx.QueryContext(ctx, q, args...)
-	if err != nil {
+	// Use sqlx on the transaction for struct scanning with pq.StringArray support.
+	txSqlx := sqlxTx(tx)
+	var tRows []traversalRow
+	if err = txSqlx.SelectContext(ctx, &tRows, q, args...); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var results []store.TraversalResult
-	for rows.Next() {
-		var e store.Entity
-		var props []byte
-		var createdAt, updatedAt time.Time
-		var depth int
-		var path []string
-		var via string
-
-		if err := rows.Scan(
-			&e.ID, &e.AgentID, &e.UserID, &e.ExternalID,
-			&e.Name, &e.EntityType, &e.Description,
-			&props, &e.SourceID, &e.Confidence,
-			&createdAt, &updatedAt,
-			&depth, pq.Array(&path), &via,
-		); err != nil {
-			continue
-		}
-		if len(props) > 0 {
-			json.Unmarshal(props, &e.Properties) //nolint:errcheck
-		}
-		e.CreatedAt = createdAt.UnixMilli()
-		e.UpdatedAt = updatedAt.UnixMilli()
-
-		results = append(results, store.TraversalResult{
-			Entity: e,
-			Depth:  depth,
-			Path:   path,
-			Via:    via,
-		})
+	results := make([]store.TraversalResult, len(tRows))
+	for i := range tRows {
+		results[i] = tRows[i].toTraversalResult()
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
 	return results, tx.Commit()
 }

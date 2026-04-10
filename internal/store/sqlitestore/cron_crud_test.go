@@ -230,7 +230,7 @@ func TestSQLiteCronStore_ExecuteOneJob_DoesNotRestoreNextRunAfterDisable(t *test
 			t.Fatalf("disable during run error: %v", err)
 		}
 		return &store.CronJobResult{Content: "ok"}, nil
-	})
+	}, false)
 
 	current := mustRawJob(t, db, jobUUID)
 	if current.enabled {

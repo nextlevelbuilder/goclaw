@@ -27,7 +27,7 @@ export function CategoryGroup({
     <div className="rounded-lg border">
       <div className="flex items-center gap-2 border-b bg-muted/40 px-4 py-2">
         <span className="text-sm font-medium">{t(`builtin.categories.${category}`, category)}</span>
-        <Badge variant="secondary" className="h-5 px-1.5 text-[11px]">
+        <Badge variant="secondary" className="h-5 px-1.5 text-xs-plus">
           {tools.length}
         </Badge>
       </div>

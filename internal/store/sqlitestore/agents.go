@@ -32,6 +32,10 @@ const agentSelectCols = `id, agent_key, display_name, frontmatter, owner_id, pro
 	 context_window, max_tool_iterations, workspace, restrict_to_workspace,
 	 tools_config, sandbox_config, subagents_config, memory_config,
 	 compaction_config, context_pruning, other_config,
+	 emoji, agent_description, thinking_level, max_tokens,
+	 self_evolve, skill_evolve, skill_nudge_interval,
+	 reasoning_config, workspace_sharing, chatgpt_oauth_routing,
+	 shell_deny_groups, kg_dedup_config,
 	 agent_type, is_default, status, budget_monthly_cents, created_at, updated_at, tenant_id`
 
 func (s *SQLiteAgentStore) Create(ctx context.Context, agent *store.AgentData) error {
@@ -50,8 +54,12 @@ func (s *SQLiteAgentStore) Create(ctx context.Context, agent *store.AgentData) e
 		 context_window, max_tool_iterations, workspace, restrict_to_workspace,
 		 tools_config, sandbox_config, subagents_config, memory_config,
 		 compaction_config, context_pruning, other_config,
+		 emoji, agent_description, thinking_level, max_tokens,
+		 self_evolve, skill_evolve, skill_nudge_interval,
+		 reasoning_config, workspace_sharing, chatgpt_oauth_routing,
+		 shell_deny_groups, kg_dedup_config,
 		 agent_type, is_default, status, budget_monthly_cents, created_at, updated_at, tenant_id)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		agent.ID, agent.AgentKey,
 		agent.DisplayName,
 		sql.NullString{String: agent.Frontmatter, Valid: agent.Frontmatter != ""},
@@ -59,6 +67,10 @@ func (s *SQLiteAgentStore) Create(ctx context.Context, agent *store.AgentData) e
 		agent.ContextWindow, agent.MaxToolIterations, agent.Workspace, agent.RestrictToWorkspace,
 		jsonOrEmpty(agent.ToolsConfig), jsonOrNull(agent.SandboxConfig), jsonOrNull(agent.SubagentsConfig), jsonOrNull(agent.MemoryConfig),
 		jsonOrNull(agent.CompactionConfig), jsonOrNull(agent.ContextPruning), jsonOrEmpty(agent.OtherConfig),
+		agent.Emoji, agent.AgentDescription, agent.ThinkingLevel, agent.MaxTokens,
+		agent.SelfEvolve, agent.SkillEvolve, agent.SkillNudgeInterval,
+		jsonOrEmpty(agent.ReasoningConfig), jsonOrEmpty(agent.WorkspaceSharing), jsonOrEmpty(agent.ChatGPTOAuthRouting),
+		jsonOrEmpty(agent.ShellDenyGroups), jsonOrEmpty(agent.KGDedupConfig),
 		agent.AgentType, agent.IsDefault, agent.Status, agent.BudgetMonthlyCents,
 		now, now, tenantID,
 	)
@@ -119,6 +131,11 @@ func (s *SQLiteAgentStore) GetByIDUnscoped(ctx context.Context, id uuid.UUID) (*
 func (s *SQLiteAgentStore) Update(ctx context.Context, id uuid.UUID, updates map[string]any) error {
 	if len(updates) == 0 {
 		return nil
+	}
+
+	// Coerce NOT NULL int columns: null → default to prevent constraint violations.
+	if v, ok := updates["skill_nudge_interval"]; ok && v == nil {
+		updates["skill_nudge_interval"] = 0
 	}
 
 	// Unset existing default before setting a new one (scoped to same tenant).
@@ -221,11 +238,15 @@ func scanAgentRow(row agentRowScanner) (*store.AgentData, error) {
 	var d store.AgentData
 	var frontmatter sql.NullString
 	var toolsCfg, sandboxCfg, subagentsCfg, memoryCfg, compactionCfg, pruningCfg, otherCfg *[]byte
+	var reasoningCfg, wsCfg, oauthCfg, shellCfg, kgCfg *[]byte
 	createdAt, updatedAt := scanTimePair()
 	err := row.Scan(
 		&d.ID, &d.AgentKey, &d.DisplayName, &frontmatter, &d.OwnerID, &d.Provider, &d.Model,
 		&d.ContextWindow, &d.MaxToolIterations, &d.Workspace, &d.RestrictToWorkspace,
 		&toolsCfg, &sandboxCfg, &subagentsCfg, &memoryCfg, &compactionCfg, &pruningCfg, &otherCfg,
+		&d.Emoji, &d.AgentDescription, &d.ThinkingLevel, &d.MaxTokens,
+		&d.SelfEvolve, &d.SkillEvolve, &d.SkillNudgeInterval,
+		&reasoningCfg, &wsCfg, &oauthCfg, &shellCfg, &kgCfg,
 		&d.AgentType, &d.IsDefault, &d.Status, &d.BudgetMonthlyCents,
 		createdAt, updatedAt, &d.TenantID,
 	)
@@ -257,6 +278,21 @@ func scanAgentRow(row agentRowScanner) (*store.AgentData, error) {
 	}
 	if otherCfg != nil {
 		d.OtherConfig = *otherCfg
+	}
+	if reasoningCfg != nil {
+		d.ReasoningConfig = *reasoningCfg
+	}
+	if wsCfg != nil {
+		d.WorkspaceSharing = *wsCfg
+	}
+	if oauthCfg != nil {
+		d.ChatGPTOAuthRouting = *oauthCfg
+	}
+	if shellCfg != nil {
+		d.ShellDenyGroups = *shellCfg
+	}
+	if kgCfg != nil {
+		d.KGDedupConfig = *kgCfg
 	}
 	return &d, nil
 }

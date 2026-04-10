@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -107,6 +108,7 @@ func (h *TracesHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 
 	trace, err := h.tracing.GetTrace(r.Context(), traceID)
 	if err != nil {
+		slog.Warn("traces.get_trace_failed", "trace_id", traceIDStr, "error", err)
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "trace", traceIDStr)})
 		return
 	}
@@ -123,6 +125,7 @@ func (h *TracesHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 
 	spans, err := h.tracing.GetTraceSpans(r.Context(), traceID)
 	if err != nil {
+		slog.Error("traces.get_spans_failed", "trace_id", traceIDStr, "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}

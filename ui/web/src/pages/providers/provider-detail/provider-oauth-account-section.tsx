@@ -45,7 +45,7 @@ export function ProviderOAuthAccountSection({
       <div className="space-y-0.5">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="text-sm font-medium">{t("detail.oauthAccountUsage")}</h3>
-          <Badge variant="outline" className="h-6 px-2 text-[11px]">
+          <Badge variant="outline" className="h-6 px-2 text-xs-plus">
             {t(`detail.oauthPoolRole.${role}`)}
           </Badge>
         </div>
@@ -106,7 +106,7 @@ export function ProviderOAuthAccountSection({
                 className="w-full"
               />
             ) : (
-              <Badge variant="outline" className="h-5 w-fit px-1.5 text-[10px]">
+              <Badge variant="outline" className="h-5 w-fit px-1.5 text-2xs">
                 {t(
                   availability === "disabled"
                     ? "list.status.disabled"

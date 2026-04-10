@@ -1,6 +1,36 @@
 package providers
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strings"
+)
+
+// CacheBoundaryMarker separates stable from dynamic prompt content.
+// Exported so agent package can assert consistency (agent has its own copy
+// to avoid circular import; agent_test verifies they match).
+const CacheBoundaryMarker = "<!-- GOCLAW_CACHE_BOUNDARY -->"
+
+// splitSystemPromptForCache splits a system prompt at the cache boundary marker.
+// Returns 2 blocks if boundary found: stable (with cache_control) + dynamic (without).
+// Returns 1 block with cache_control if no boundary (backwards compat).
+func splitSystemPromptForCache(content string) []map[string]any {
+	ephemeral := map[string]any{"type": "ephemeral"}
+	idx := strings.Index(content, CacheBoundaryMarker)
+	if idx == -1 {
+		return []map[string]any{
+			{"type": "text", "text": content, "cache_control": ephemeral},
+		}
+	}
+	stable := strings.TrimSpace(content[:idx])
+	dynamic := strings.TrimSpace(content[idx+len(CacheBoundaryMarker):])
+	blocks := []map[string]any{
+		{"type": "text", "text": stable, "cache_control": ephemeral},
+	}
+	if dynamic != "" {
+		blocks = append(blocks, map[string]any{"type": "text", "text": dynamic})
+	}
+	return blocks
+}
 
 // buildRawBlock reconstructs a complete content block from streaming data.
 // This is needed to preserve thinking blocks (with signatures) for tool use passback.
@@ -65,10 +95,7 @@ func (p *AnthropicProvider) buildRequestBody(model string, req ChatRequest, stre
 	for _, msg := range req.Messages {
 		switch msg.Role {
 		case "system":
-			systemBlocks = append(systemBlocks, map[string]any{
-				"type": "text",
-				"text": msg.Content,
-			})
+			systemBlocks = append(systemBlocks, splitSystemPromptForCache(msg.Content)...)
 
 		case "user":
 			if len(msg.Images) > 0 {
@@ -146,11 +173,6 @@ func (p *AnthropicProvider) buildRequestBody(model string, req ChatRequest, stre
 				},
 			})
 		}
-	}
-
-	// Add cache_control breakpoint to the last system block (caches system prompt prefix).
-	if len(systemBlocks) > 0 {
-		systemBlocks[len(systemBlocks)-1]["cache_control"] = map[string]any{"type": "ephemeral"}
 	}
 
 	body := map[string]any{

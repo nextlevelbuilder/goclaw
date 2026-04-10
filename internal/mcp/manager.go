@@ -25,6 +25,7 @@ const (
 	initialBackoff       = 2 * time.Second
 	maxBackoff           = 60 * time.Second
 	maxReconnectAttempts = 10
+	reconnectCooldown    = 5 * time.Minute // wait after exhausting reconnect attempts before retrying
 
 	// mcpToolInlineMaxCount is the threshold above which MCP tools switch
 	// to search mode (deferred loading via mcp_tool_search) instead of
@@ -41,15 +42,35 @@ type ServerStatus struct {
 	Error     string `json:"error,omitempty"`
 }
 
+// connParams stores connection parameters needed to re-establish a dead connection.
+// Populated during initial connectAndDiscover and used by tryReconnect.
+type connParams struct {
+	command string
+	args    []string
+	env     map[string]string
+	url     string
+	headers map[string]string
+}
+
 // serverState tracks a single MCP server connection.
+//
+// Dual-pointer design for the MCP client:
+//   - client: direct pointer used by healthLoop (single goroutine, no contention).
+//   - clientPtr: atomic pointer shared with all BridgeTools via NewBridgeTool.
+//     BridgeTools call clientPtr.Load() in Execute for race-safe access.
+//
+// On reconnect, fullReconnect() updates BOTH: ss.client for healthLoop and
+// ss.clientPtr.Store() for BridgeTools. The old client is closed AFTER the swap.
 type serverState struct {
 	name       string
 	transport  string
-	client     *mcpclient.Client
+	client     *mcpclient.Client               // direct ref for health checks (single-goroutine access)
+	clientPtr  atomic.Pointer[mcpclient.Client] // shared atomic ref for BridgeTools (multi-goroutine safe)
 	connected  atomic.Bool
 	toolNames  []string // registered tool names in the registry
 	timeoutSec int
 	cancel     context.CancelFunc
+	conn       connParams // connection params for reconnect
 
 	mu              sync.Mutex
 	reconnAttempts  int
@@ -495,8 +516,9 @@ func (m *Manager) Stop() {
 			if ss.cancel != nil {
 				ss.cancel()
 			}
-			if ss.client != nil {
-				if err := ss.client.Close(); err != nil {
+			// Use atomic pointer — health loop may swap client via fullReconnect concurrently.
+			if client := ss.clientPtr.Load(); client != nil {
+				if err := client.Close(); err != nil {
 					slog.Debug("mcp.server.close_error", "server", name, "error", err)
 				}
 			}

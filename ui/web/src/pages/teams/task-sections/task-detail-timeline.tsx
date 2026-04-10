@@ -35,12 +35,12 @@ export function TaskDetailTimeline({ events, resolveMember }: TaskDetailTimeline
             {/* Content */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 text-xs">
-                <Badge variant="outline" className="text-[10px]">{e.event_type}</Badge>
+                <Badge variant="outline" className="text-2xs">{e.event_type}</Badge>
                 <span className="text-muted-foreground">
                   {e.actor_type === "human" ? "Human" : (resolveMember(e.actor_id) || e.actor_id?.slice(0, 8) || "\u2014")}
                 </span>
               </div>
-              <span className="text-[11px] text-muted-foreground">{formatDate(e.created_at)}</span>
+              <span className="text-xs-plus text-muted-foreground">{formatDate(e.created_at)}</span>
             </div>
           </div>
         ))}

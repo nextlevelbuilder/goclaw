@@ -155,7 +155,7 @@ func (s *PGTeamStore) ListTeams(ctx context.Context) ([]store.TeamData, error) {
 			 COALESCE(a.agent_key, '') AS agent_key,
 			 COALESCE(a.display_name, '') AS display_name,
 			 COALESCE(a.frontmatter, '') AS frontmatter,
-			 COALESCE(a.other_config->>'emoji', '') AS emoji
+			 COALESCE(a.emoji, '') AS emoji
 			 FROM agent_team_members m
 			 JOIN agents a ON a.id = m.agent_id
 			 WHERE a.status = 'active'
@@ -210,7 +210,7 @@ func (s *PGTeamStore) ListMembers(ctx context.Context, teamID uuid.UUID) ([]stor
 		 COALESCE(a.agent_key, '') AS agent_key,
 		 COALESCE(a.display_name, '') AS display_name,
 		 COALESCE(a.frontmatter, '') AS frontmatter,
-		 COALESCE(a.other_config->>'emoji', '') AS emoji
+		 COALESCE(a.emoji, '') AS emoji
 		 FROM agent_team_members m
 		 JOIN agents a ON a.id = m.agent_id
 		 JOIN agent_teams at2 ON at2.id = m.team_id
@@ -226,24 +226,9 @@ func (s *PGTeamStore) ListMembers(ctx context.Context, teamID uuid.UUID) ([]stor
 	}
 	q += ` ORDER BY m.joined_at`
 
-	rows, err := s.db.QueryContext(ctx, q, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
 	var members []store.TeamMemberData
-	for rows.Next() {
-		var d store.TeamMemberData
-		if err := rows.Scan(
-			&d.TeamID, &d.AgentID, &d.Role, &d.JoinedAt,
-			&d.AgentKey, &d.DisplayName, &d.Frontmatter, &d.Emoji,
-		); err != nil {
-			return nil, err
-		}
-		members = append(members, d)
-	}
-	return members, rows.Err()
+	err := pkgSqlxDB.SelectContext(ctx, &members, q, args...)
+	return members, err
 }
 
 func (s *PGTeamStore) ListIdleMembers(ctx context.Context, teamID uuid.UUID) ([]store.TeamMemberData, error) {
@@ -251,7 +236,7 @@ func (s *PGTeamStore) ListIdleMembers(ctx context.Context, teamID uuid.UUID) ([]
 		 COALESCE(a.agent_key, '') AS agent_key,
 		 COALESCE(a.display_name, '') AS display_name,
 		 COALESCE(a.frontmatter, '') AS frontmatter,
-		 COALESCE(a.other_config->>'emoji', '') AS emoji
+		 COALESCE(a.emoji, '') AS emoji
 		 FROM agent_team_members m
 		 JOIN agents a ON a.id = m.agent_id
 		 JOIN agent_teams at2 ON at2.id = m.team_id
@@ -271,24 +256,9 @@ func (s *PGTeamStore) ListIdleMembers(ctx context.Context, teamID uuid.UUID) ([]
 	}
 	q += ` ORDER BY m.joined_at`
 
-	rows, err := s.db.QueryContext(ctx, q, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
 	var members []store.TeamMemberData
-	for rows.Next() {
-		var d store.TeamMemberData
-		if err := rows.Scan(
-			&d.TeamID, &d.AgentID, &d.Role, &d.JoinedAt,
-			&d.AgentKey, &d.DisplayName, &d.Frontmatter, &d.Emoji,
-		); err != nil {
-			return nil, err
-		}
-		members = append(members, d)
-	}
-	return members, rows.Err()
+	err := pkgSqlxDB.SelectContext(ctx, &members, q, args...)
+	return members, err
 }
 
 func (s *PGTeamStore) GetTeamForAgent(ctx context.Context, agentID uuid.UUID) (*store.TeamData, error) {
@@ -338,21 +308,9 @@ func (s *PGTeamStore) KnownUserIDs(ctx context.Context, teamID uuid.UUID, limit 
 	q += fmt.Sprintf(" ORDER BY s.user_id LIMIT $%d", len(args)+1)
 	args = append(args, limit)
 
-	rows, err := s.db.QueryContext(ctx, q, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
 	var users []string
-	for rows.Next() {
-		var uid string
-		if err := rows.Scan(&uid); err != nil {
-			return nil, err
-		}
-		users = append(users, uid)
-	}
-	return users, rows.Err()
+	err := pkgSqlxDB.SelectContext(ctx, &users, q, args...)
+	return users, err
 }
 
 // ============================================================
@@ -385,28 +343,17 @@ func (s *PGTeamStore) ListTeamGrants(ctx context.Context, teamID uuid.UUID) ([]s
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, team_id, user_id, role, COALESCE(granted_by, ''), created_at
-		 FROM team_user_grants WHERE team_id = $1`+tClause+` ORDER BY created_at DESC`,
-		append([]any{teamID}, tArgs...)...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
 	var result []store.TeamUserGrant
-	for rows.Next() {
-		var g store.TeamUserGrant
-		if err := rows.Scan(&g.ID, &g.TeamID, &g.UserID, &g.Role, &g.GrantedBy, &g.CreatedAt); err != nil {
-			return nil, err
-		}
-		result = append(result, g)
-	}
-	return result, rows.Err()
+	err = pkgSqlxDB.SelectContext(ctx, &result,
+		`SELECT id, team_id, user_id, role, COALESCE(granted_by, '') AS granted_by, created_at
+		 FROM team_user_grants WHERE team_id = $1`+tClause+` ORDER BY created_at DESC`,
+		append([]any{teamID}, tArgs...)...,
+	)
+	return result, err
 }
 
 func (s *PGTeamStore) ListUserTeams(ctx context.Context, userID string) ([]store.TeamData, error) {
-	baseQuery := `SELECT ` + teamSelectCols + `
+	baseQuery := `SELECT id, name, lead_agent_id, COALESCE(description,'') AS description, status, settings, created_by, created_at, updated_at
 		 FROM agent_teams t
 		 WHERE t.status = $1
 		   AND EXISTS (SELECT 1 FROM team_user_grants g WHERE g.team_id = t.id AND g.user_id = $2)`
@@ -422,28 +369,9 @@ func (s *PGTeamStore) ListUserTeams(ctx context.Context, userID string) ([]store
 	}
 	baseQuery += ` ORDER BY t.created_at DESC`
 
-	rows, err := s.db.QueryContext(ctx, baseQuery, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
 	var teams []store.TeamData
-	for rows.Next() {
-		var d store.TeamData
-		var desc sql.NullString
-		if err := rows.Scan(
-			&d.ID, &d.Name, &d.LeadAgentID, &desc, &d.Status,
-			&d.Settings, &d.CreatedBy, &d.CreatedAt, &d.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		if desc.Valid {
-			d.Description = desc.String
-		}
-		teams = append(teams, d)
-	}
-	return teams, rows.Err()
+	err := pkgSqlxDB.SelectContext(ctx, &teams, baseQuery, args...)
+	return teams, err
 }
 
 func (s *PGTeamStore) HasTeamAccess(ctx context.Context, teamID uuid.UUID, userID string) (bool, error) {

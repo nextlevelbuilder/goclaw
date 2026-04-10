@@ -133,7 +133,7 @@ export function ProviderReasoningSection({
               {reasoningPreviewCapability?.levels?.length ? (
                 <div className="flex flex-wrap gap-1">
                   {reasoningPreviewCapability.levels.map((level) => (
-                    <Badge key={level} variant="outline" className="text-[10px]">
+                    <Badge key={level} variant="outline" className="text-2xs">
                       {t(`reasoning.${level}`)}
                     </Badge>
                   ))}

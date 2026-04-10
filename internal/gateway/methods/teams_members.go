@@ -3,7 +3,7 @@ package methods
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
+
 
 	"github.com/google/uuid"
 
@@ -83,14 +83,6 @@ func (m *TeamsMethods) handleAddMember(ctx context.Context, client *gateway.Clie
 		return
 	}
 
-	// Auto-create outbound link from lead to new member
-	if m.linkStore != nil {
-		leadAgent, err := m.agentStore.GetByID(ctx, team.LeadAgentID)
-		if err == nil {
-			m.autoCreateTeamLinks(ctx, teamID, leadAgent, []*store.AgentData{ag}, client.UserID())
-		}
-	}
-
 	// Invalidate caches for all team members
 	m.invalidateTeamCaches(ctx, teamID)
 	emitAudit(m.eventBus, client, "team.member_added", "team", teamID.String())
@@ -168,13 +160,6 @@ func (m *TeamsMethods) handleRemoveMember(ctx context.Context, client *gateway.C
 		return
 	}
 
-	// Clean up team-specific links
-	if m.linkStore != nil {
-		if err := m.linkStore.DeleteTeamLinksForAgent(ctx, teamID, agentID); err != nil {
-			slog.Warn("teams.members.remove: failed to clean up links", "error", err)
-		}
-	}
-
 	// Invalidate caches for all remaining members + removed agent
 	m.invalidateTeamCaches(ctx, teamID)
 	if m.agentRouter != nil {
@@ -202,27 +187,3 @@ func (m *TeamsMethods) handleRemoveMember(ctx context.Context, client *gateway.C
 	}
 }
 
-// autoCreateTeamLinks creates outbound agent_links from lead to each member.
-// Only the lead can delegate to members — members cannot delegate back to lead
-// or to other members. Silently skips existing links (UNIQUE constraint).
-func (m *TeamsMethods) autoCreateTeamLinks(ctx context.Context, teamID uuid.UUID, leadAgent *store.AgentData, members []*store.AgentData, createdBy string) {
-	for _, member := range members {
-		if member.ID == leadAgent.ID {
-			continue
-		}
-		link := &store.AgentLinkData{
-			SourceAgentID: leadAgent.ID,
-			TargetAgentID: member.ID,
-			Direction:     store.LinkDirectionOutbound,
-			TeamID:        &teamID,
-			Description:   "auto-created by team",
-			MaxConcurrent: 3,
-			Status:        store.LinkStatusActive,
-			CreatedBy:     createdBy,
-		}
-		if err := m.linkStore.CreateLink(ctx, link); err != nil {
-			slog.Debug("teams: auto-link already exists or failed",
-				"source", leadAgent.AgentKey, "target", member.AgentKey, "error", err)
-		}
-	}
-}

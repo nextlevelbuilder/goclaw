@@ -28,20 +28,24 @@ func loopbackAddr(host string, port int) string {
 	return net.JoinHostPort(host, strconv.Itoa(port))
 }
 
-func registerProviders(registry *providers.Registry, cfg *config.Config) {
+func registerProviders(registry *providers.Registry, cfg *config.Config, modelReg providers.ModelRegistry) {
 	if cfg.Providers.Anthropic.APIKey != "" {
 		registry.Register(providers.NewAnthropicProvider(cfg.Providers.Anthropic.APIKey,
-			providers.WithAnthropicBaseURL(cfg.Providers.Anthropic.APIBase)))
+			providers.WithAnthropicBaseURL(cfg.Providers.Anthropic.APIBase),
+			providers.WithAnthropicRegistry(modelReg)))
 		slog.Info("registered provider", "name", "anthropic")
 	}
 
 	if cfg.Providers.OpenAI.APIKey != "" {
-		registry.Register(providers.NewOpenAIProvider("openai", cfg.Providers.OpenAI.APIKey, cfg.Providers.OpenAI.APIBase, "gpt-4o"))
+		registry.Register(providers.NewOpenAIProvider("openai", cfg.Providers.OpenAI.APIKey, cfg.Providers.OpenAI.APIBase, "gpt-4o").
+			WithRegistry(modelReg))
 		slog.Info("registered provider", "name", "openai")
 	}
 
 	if cfg.Providers.OpenRouter.APIKey != "" {
-		registry.Register(providers.NewOpenAIProvider("openrouter", cfg.Providers.OpenRouter.APIKey, "https://openrouter.ai/api/v1", "anthropic/claude-sonnet-4-5-20250929"))
+		orProv := providers.NewOpenAIProvider("openrouter", cfg.Providers.OpenRouter.APIKey, "https://openrouter.ai/api/v1", "anthropic/claude-sonnet-4-5-20250929")
+		orProv.WithSiteInfo("https://goclaw.sh", "GoClaw")
+		registry.Register(orProv)
 		slog.Info("registered provider", "name", "openrouter")
 	}
 
@@ -266,7 +270,7 @@ func jsonToStringMap(data json.RawMessage) map[string]string {
 // gatewayAddr is used to inject GoClaw MCP bridge for Claude CLI providers.
 // mcpStore is optional; when provided, per-agent MCP servers are injected into CLI config.
 // cfg provides fallback api_base values from config/env when DB providers have none set.
-func registerProvidersFromDB(registry *providers.Registry, provStore store.ProviderStore, secretStore store.ConfigSecretsStore, gatewayAddr, gatewayToken string, mcpStore store.MCPServerStore, cfg *config.Config) {
+func registerProvidersFromDB(registry *providers.Registry, provStore store.ProviderStore, secretStore store.ConfigSecretsStore, gatewayAddr, gatewayToken string, mcpStore store.MCPServerStore, cfg *config.Config, modelReg providers.ModelRegistry) {
 	dbProviders, err := provStore.ListAllProviders(context.Background())
 	if err != nil {
 		slog.Warn("failed to load providers from DB", "error", err)
@@ -292,6 +296,7 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 				continue
 			}
 			var cliOpts []providers.ClaudeCLIOption
+			cliOpts = append(cliOpts, providers.WithClaudeCLIName(p.Name))
 			cliOpts = append(cliOpts, providers.WithClaudeCLISecurityHooks("", true))
 			if gatewayAddr != "" {
 				mcpData := providers.BuildCLIMCPConfigData(nil, gatewayAddr, gatewayToken)
@@ -339,7 +344,9 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 			registry.RegisterForTenant(p.TenantID, codex)
 		case store.ProviderAnthropicNative:
 			registry.RegisterForTenant(p.TenantID, providers.NewAnthropicProvider(p.APIKey,
-				providers.WithAnthropicBaseURL(p.APIBase)))
+				providers.WithAnthropicName(p.Name),
+				providers.WithAnthropicBaseURL(p.APIBase),
+				providers.WithAnthropicRegistry(modelReg)))
 		case store.ProviderDashScope:
 			registry.RegisterForTenant(p.TenantID, providers.NewDashScopeProvider(p.Name, p.APIKey, p.APIBase, ""))
 		case store.ProviderBailian:
@@ -403,6 +410,9 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 			prov.WithProviderType(p.ProviderType)
 			if p.ProviderType == store.ProviderMiniMax {
 				prov.WithChatPath("/text/chatcompletion_v2")
+			}
+			if p.ProviderType == store.ProviderOpenRouter {
+				prov.WithSiteInfo("https://goclaw.sh", "GoClaw")
 			}
 			registry.RegisterForTenant(p.TenantID, prov)
 		}
@@ -478,6 +488,7 @@ func registerACPFromDB(registry *providers.Registry, p store.LLMProviderData) {
 	}
 	registry.RegisterForTenant(p.TenantID, providers.NewACPProvider(
 		binary, settings.Args, workDir, idleTTL, tools.DefaultDenyPatterns(),
+		providers.WithACPName(p.Name),
 		providers.WithACPModel(p.Name),
 	))
 	slog.Info("registered provider from DB", "name", p.Name, "type", "acp")

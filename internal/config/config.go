@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -186,6 +187,22 @@ type MemoryConfig struct {
 	VectorWeight      float64 `json:"vector_weight,omitempty"`      // hybrid search vector weight (default 0.7)
 	TextWeight        float64 `json:"text_weight,omitempty"`        // hybrid search FTS weight (default 0.3)
 	MinScore          float64 `json:"min_score,omitempty"`          // minimum relevance score (default 0.35)
+
+	// Dreaming configures the episodic → long-term consolidation worker.
+	// nil = use hardcoded defaults (threshold=5, debounce=10min, enabled).
+	Dreaming *DreamingConfig `json:"dreaming,omitempty"`
+}
+
+// DreamingConfig controls per-agent behaviour of the consolidation dreaming
+// worker (episodic summaries → long-term memory). Pointer fields allow partial
+// overrides from JSONB to merge cleanly with defaults without clobbering
+// unset values (e.g. leaving VerboseLog at its default when only Threshold is
+// overridden).
+type DreamingConfig struct {
+	Enabled    *bool `json:"enabled,omitempty"`     // default true (nil = enabled)
+	DebounceMs int   `json:"debounce_ms,omitempty"` // min interval between runs per agent/user (default 600000 = 10 min)
+	Threshold  int   `json:"threshold,omitempty"`   // min unpromoted entries before running (default 5)
+	VerboseLog *bool `json:"verbose_log,omitempty"` // log debounce/below-threshold skips at info level (default false)
 }
 
 // SandboxConfig configures Docker-based sandbox execution.
@@ -301,6 +318,11 @@ type ModelPricing struct {
 	OutputPerMillion      float64 `json:"output_per_million"`
 	CacheReadPerMillion   float64 `json:"cache_read_per_million,omitempty"`
 	CacheCreatePerMillion float64 `json:"cache_create_per_million,omitempty"`
+	// ReasoningPerMillion is the per-million-token rate for reasoning/thinking tokens
+	// (e.g., Claude extended thinking, GPT-5 reasoning, o3/o4-mini CoT). If zero,
+	// reasoning tokens fall back to OutputPerMillion (providers typically charge
+	// reasoning at the same rate as output tokens).
+	ReasoningPerMillion float64 `json:"reasoning_per_million,omitempty"`
 }
 
 // TelemetryConfig configures OpenTelemetry export for traces and spans.
@@ -322,6 +344,22 @@ type CronConfig struct {
 	RetryBaseDelay  string `json:"retry_base_delay,omitempty"` // initial backoff delay (default "2s", Go duration)
 	RetryMaxDelay   string `json:"retry_max_delay,omitempty"`  // maximum backoff delay (default "30s", Go duration)
 	DefaultTimezone string `json:"default_timezone,omitempty"` // IANA timezone for cron expressions when not set per-job (e.g. "Asia/Ho_Chi_Minh")
+	JobTimeout      string `json:"job_timeout,omitempty"`      // max duration per cron job execution (default "10m", Go duration)
+}
+
+// DefaultJobTimeout is the fallback timeout for cron job execution.
+const DefaultJobTimeout = 10 * time.Minute
+
+// JobTimeoutDuration returns the configured job timeout or the default (10m).
+func (cc CronConfig) JobTimeoutDuration() time.Duration {
+	if cc.JobTimeout != "" {
+		d, err := time.ParseDuration(cc.JobTimeout)
+		if err == nil && d > 0 {
+			return d
+		}
+		slog.Warn("cron: invalid job_timeout, using default", "value", cc.JobTimeout, "default", DefaultJobTimeout)
+	}
+	return DefaultJobTimeout
 }
 
 // ToRetryConfig converts CronConfig to cron.RetryConfig with defaults applied.

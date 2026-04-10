@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import type { MemoryConfig } from "@/types/agent";
+import type { MemoryConfig, DreamingConfig } from "@/types/agent";
 import { InfoLabel, numOrUndef } from "./config-section";
 
 interface MemorySectionProps {
@@ -12,6 +12,10 @@ interface MemorySectionProps {
 export function MemorySection({ value, onChange }: MemorySectionProps) {
   const { t } = useTranslation("agents");
   const s = "configSections.memory";
+  const ds = "configSections.dreaming";
+  const dreaming: DreamingConfig = value.dreaming ?? {};
+  const setDreaming = (patch: Partial<DreamingConfig>) =>
+    onChange({ ...value, dreaming: { ...dreaming, ...patch } });
   return (
     <section className="space-y-3">
       <div>
@@ -93,6 +97,51 @@ export function MemorySection({ value, onChange }: MemorySectionProps) {
               onChange={(e) => onChange({ ...value, text_weight: numOrUndef(e.target.value) })}
               className="text-base md:text-sm"
             />
+          </div>
+        </div>
+        {/* Phase 8 — Dreaming worker per-agent overrides.
+            Nested inside memory since dreaming is memory consolidation.
+            All fields optional; nil = use backend defaults. */}
+        <div className="rounded-md border border-dashed p-3 space-y-4">
+          <div>
+            <h4 className="text-sm font-medium">{t(`${ds}.title`)}</h4>
+            <p className="text-xs text-muted-foreground">{t(`${ds}.description`)}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={dreaming.enabled ?? true}
+              onCheckedChange={(v) => setDreaming({ enabled: v })}
+            />
+            <InfoLabel tip={t(`${ds}.enabledTip`)}>{t(`${ds}.enabled`)}</InfoLabel>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <InfoLabel tip={t(`${ds}.thresholdTip`)}>{t(`${ds}.threshold`)}</InfoLabel>
+              <Input
+                type="number"
+                placeholder="5"
+                value={dreaming.threshold ?? ""}
+                onChange={(e) => setDreaming({ threshold: numOrUndef(e.target.value) })}
+                className="text-base md:text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <InfoLabel tip={t(`${ds}.debounceMsTip`)}>{t(`${ds}.debounceMs`)}</InfoLabel>
+              <Input
+                type="number"
+                placeholder="600000"
+                value={dreaming.debounce_ms ?? ""}
+                onChange={(e) => setDreaming({ debounce_ms: numOrUndef(e.target.value) })}
+                className="text-base md:text-sm"
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={dreaming.verbose_log ?? false}
+              onCheckedChange={(v) => setDreaming({ verbose_log: v })}
+            />
+            <InfoLabel tip={t(`${ds}.verboseLogTip`)}>{t(`${ds}.verboseLog`)}</InfoLabel>
           </div>
         </div>
       </div>

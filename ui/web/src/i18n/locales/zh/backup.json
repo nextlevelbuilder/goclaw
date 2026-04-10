@@ -1,0 +1,127 @@
+{
+  "title": "备份与恢复",
+  "description": "创建系统备份、从存档恢复以及管理 S3 存储",
+  "tabs": {
+    "systemBackup": "系统备份",
+    "systemRestore": "系统恢复",
+    "s3Config": "S3 存储",
+    "tenantBackup": "租户备份"
+  },
+  "backup": {
+    "preflight": {
+      "title": "系统检查",
+      "pgDump": "pg_dump 可用",
+      "diskSpace": "磁盘空间充足",
+      "dbSize": "数据库大小",
+      "dataDir": "数据目录",
+      "workspace": "工作区",
+      "freeDisk": "可用磁盘空间",
+      "warnings": "警告",
+      "refresh": "刷新",
+      "pgDumpMissing": "pg_dump 不可用",
+      "pgDumpHint": "安装 postgresql-client 以启用数据库备份。",
+      "goToPackages": "前往软件包"
+    },
+    "options": {
+      "includeDb": "包含数据库",
+      "includeFiles": "包含文件",
+      "destination": "备份目标",
+      "local": "下载到本地",
+      "s3": "上传到 S3"
+    },
+    "start": "开始备份",
+    "running": "正在备份...",
+    "complete": "备份完成",
+    "download": "下载备份",
+    "uploadS3": "上传到 S3",
+    "newBackup": "新建备份",
+    "fileSize": "文件大小",
+    "schemaVersion": "架构版本",
+    "s3History": {
+      "title": "S3 备份",
+      "empty": "S3 中未找到备份",
+      "name": "文件",
+      "size": "大小",
+      "date": "日期"
+    },
+    "errorTitle": "备份失败"
+  },
+  "restore": {
+    "warning": "恢复将覆盖现有数据。此操作不可撤销。请先创建备份。",
+    "dropzone": "将 .tar.gz 备份文件拖放到此处",
+    "dropzoneHint": "或点击浏览",
+    "options": {
+      "restoreDb": "恢复数据库",
+      "restoreFiles": "恢复文件",
+      "dryRun": "模拟运行（仅预览）"
+    },
+    "start": "恢复",
+    "confirmTitle": "确认系统恢复",
+    "confirmDesc": "此操作将用备份内容覆盖当前数据库和文件。确定继续吗？",
+    "running": "正在恢复...",
+    "doNotClose": "恢复期间请勿关闭此页面",
+    "complete": "恢复完成",
+    "dryRunNote": "这是模拟运行，未进行任何更改。",
+    "dbRestored": "数据库已恢复",
+    "filesExtracted": "已提取文件",
+    "bytesExtracted": "已恢复数据",
+    "schemaVersion": "架构版本",
+    "warnings": "警告",
+    "newRestore": "新建恢复",
+    "errorTitle": "恢复失败",
+    "tryAgain": "重试"
+  },
+  "s3": {
+    "title": "S3 存储配置",
+    "description": "配置 S3 兼容存储用于远程备份",
+    "status": {
+      "configured": "已配置",
+      "notConfigured": "未配置"
+    },
+    "fields": {
+      "accessKeyId": "Access Key ID",
+      "secretAccessKey": "Secret Access Key",
+      "secretPlaceholder": "输入以更新",
+      "bucket": "Bucket",
+      "region": "Region",
+      "endpoint": "Endpoint（可选）",
+      "endpointHint": "用于 S3 兼容服务（MinIO、R2 等）",
+      "prefix": "Key 前缀"
+    },
+    "save": "保存并测试连接",
+    "saving": "正在测试连接...",
+    "saveSuccess": "S3 配置已保存并验证连接",
+    "saveError": "保存 S3 配置失败"
+  },
+  "tenant": {
+    "title": "租户备份与恢复",
+    "description": "备份或恢复单个租户数据",
+    "selectTenant": "选择租户",
+    "selectTenantPlaceholder": "选择一个租户...",
+    "backup": {
+      "start": "备份租户",
+      "running": "正在备份租户...",
+      "complete": "租户备份完成",
+      "download": "下载",
+      "tableCounts": "已备份的表",
+      "newBackup": "新建备份"
+    },
+    "restore": {
+      "mode": "恢复模式",
+      "modeUpsert": "合并（upsert）",
+      "modeReplace": "替换全部",
+      "modeNew": "新租户",
+      "dropzone": "将租户备份文件拖放到此处",
+      "dryRun": "模拟运行（仅预览）",
+      "start": "恢复租户",
+      "confirmTitle": "确认租户恢复",
+      "confirmDesc": "此操作将修改所选租户的数据。确定继续吗？",
+      "running": "正在恢复租户...",
+      "complete": "租户恢复完成",
+      "tablesRestored": "已恢复的表",
+      "filesExtracted": "已提取文件",
+      "dryRunNote": "模拟运行 — 未进行更改",
+      "newRestore": "新建恢复"
+    }
+  }
+}

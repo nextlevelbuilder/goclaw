@@ -7,7 +7,7 @@ import type { AttachedFile } from "@/components/chat/chat-input";
 
 interface UseChatSendOptions {
   agentId: string;
-  onMessageAdded: (msg: ChatMessage) => void;
+  onMessageAdded: (msg: ChatMessage, sessionKey?: string) => void;
   onExpectRun: () => void;
 }
 
@@ -58,7 +58,7 @@ export function useChatSend({
         role: "user",
         content: displayContent,
         timestamp: Date.now(),
-      });
+      }, sessionKey);
 
       try {
         // Upload files first, then pass path+filename to chat.send

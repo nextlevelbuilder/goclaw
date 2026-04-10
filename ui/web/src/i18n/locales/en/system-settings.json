@@ -53,6 +53,17 @@
     "minConfidenceHint": "Minimum confidence threshold (0–1) for extracted entities.",
     "info": "Automatically extracts entities and relationships when agents write to memory. Leave provider empty to disable."
   },
+  "bg": {
+    "title": "Background Workers",
+    "description": "Provider and model for background tasks (vault enrichment, consolidation, dreaming).",
+    "provider": "Provider",
+    "model": "Model",
+    "providerTip": "LLM provider for background tasks. Leave empty to use agent default.",
+    "modelTip": "Model for background tasks. Leave empty to use provider default.",
+    "providerPlaceholder": "(agent default)",
+    "modelPlaceholder": "(default)",
+    "info": "Used for vault enrichment (document summarization), consolidation (session summaries), and dreaming. Leave empty to fall back to the agent default provider."
+  },
   "compaction": {
     "title": "Pending Message Compaction",
     "description": "Summarize long pending message history to stay within context limits.",

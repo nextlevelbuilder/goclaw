@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslation } from "react-i18next";
 import { Shield, Clock, Building2, KeyRound } from "lucide-react";
 import {
@@ -22,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { useTenants } from "@/hooks/use-tenants";
 import type { ApiKeyCreateInput } from "@/types/api-key";
+import { apiKeyCreateSchema, type ApiKeyCreateFormData } from "@/schemas/api-key.schema";
 
 const ALL_SCOPES = [
   "operator.admin",
@@ -54,37 +57,50 @@ export function ApiKeyCreateDialog({ open, onOpenChange, onCreate }: Props) {
 
   const defaultTenant = currentTenantId || SYSTEM_TENANT;
 
-  const [name, setName] = useState("");
-  const [scopes, setScopes] = useState<string[]>([]);
-  const [expiry, setExpiry] = useState("never");
-  const [tenantValue, setTenantValue] = useState(defaultTenant);
   const [saving, setSaving] = useState(false);
 
+  const {
+    register,
+    handleSubmit,
+    watch,
+    setValue,
+    reset,
+    formState: { errors },
+  } = useForm<ApiKeyCreateFormData>({
+    resolver: zodResolver(apiKeyCreateSchema),
+    defaultValues: {
+      name: "",
+      scopes: [],
+      expiry: "never",
+      tenantValue: defaultTenant,
+    },
+  });
+
+  const scopes = watch("scopes");
+  const expiry = watch("expiry");
+  const tenantValue = watch("tenantValue");
+
   const toggleScope = (scope: string) => {
-    setScopes((prev) =>
-      prev.includes(scope) ? prev.filter((s) => s !== scope) : [...prev, scope],
-    );
+    const next = scopes.includes(scope)
+      ? scopes.filter((s) => s !== scope)
+      : [...scopes, scope];
+    setValue("scopes", next, { shouldValidate: true });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim() || scopes.length === 0) return;
+  const onValid = async (data: ApiKeyCreateFormData) => {
     setSaving(true);
     try {
-      const expiryOption = EXPIRY_OPTIONS.find((o) => o.value === expiry);
+      const expiryOption = EXPIRY_OPTIONS.find((o) => o.value === data.expiry);
       const input: ApiKeyCreateInput = {
-        name: name.trim(),
-        scopes,
+        name: data.name.trim(),
+        scopes: data.scopes,
         expires_in: expiryOption && expiryOption.seconds > 0 ? expiryOption.seconds : undefined,
       };
-      if (isOwner && tenantValue !== SYSTEM_TENANT) {
-        input.tenant_id = tenantValue;
+      if (isOwner && data.tenantValue !== SYSTEM_TENANT) {
+        input.tenant_id = data.tenantValue;
       }
       await onCreate(input);
-      setName("");
-      setScopes([]);
-      setExpiry("never");
-      setTenantValue(defaultTenant);
+      reset({ name: "", scopes: [], expiry: "never", tenantValue: defaultTenant });
     } finally {
       setSaving(false);
     }
@@ -101,19 +117,20 @@ export function ApiKeyCreateDialog({ open, onOpenChange, onCreate }: Props) {
           <DialogDescription>{t("description")}</DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit(onValid)} className="space-y-5">
           {/* Name + Tenant row */}
           <div className={`grid gap-4 ${isOwner ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"}`}>
             <div className="space-y-1.5">
               <Label htmlFor="key-name">{t("form.name")}</Label>
               <Input
                 id="key-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                {...register("name")}
                 placeholder={t("form.namePlaceholder")}
                 className="text-base md:text-sm"
-                required
               />
+              {errors.name && (
+                <p className="text-xs text-destructive">{errors.name.message}</p>
+              )}
             </div>
 
             {isOwner && (
@@ -122,7 +139,10 @@ export function ApiKeyCreateDialog({ open, onOpenChange, onCreate }: Props) {
                   <Building2 className="h-3.5 w-3.5" />
                   Tenant
                 </Label>
-                <Select value={tenantValue} onValueChange={setTenantValue}>
+                <Select
+                  value={tenantValue}
+                  onValueChange={(v) => setValue("tenantValue", v, { shouldValidate: true })}
+                >
                   <SelectTrigger id="key-tenant" className="text-base md:text-sm">
                     <SelectValue />
                   </SelectTrigger>
@@ -172,7 +192,7 @@ export function ApiKeyCreateDialog({ open, onOpenChange, onCreate }: Props) {
                       )}
                     </div>
                     <div className="min-w-0">
-                      <Badge variant={isSelected ? "default" : "secondary"} className="text-[11px] font-mono px-1.5 py-0">
+                      <Badge variant={isSelected ? "default" : "secondary"} className="text-xs-plus font-mono px-1.5 py-0">
                         {shortName}
                       </Badge>
                       <p className="text-xs text-muted-foreground mt-0.5 leading-tight">
@@ -183,6 +203,9 @@ export function ApiKeyCreateDialog({ open, onOpenChange, onCreate }: Props) {
                 );
               })}
             </div>
+            {errors.scopes && (
+              <p className="text-xs text-destructive">{errors.scopes.message}</p>
+            )}
           </div>
 
           {/* Expiry */}
@@ -191,7 +214,10 @@ export function ApiKeyCreateDialog({ open, onOpenChange, onCreate }: Props) {
               <Clock className="h-3.5 w-3.5" />
               {t("form.expiry")}
             </Label>
-            <Select value={expiry} onValueChange={setExpiry}>
+            <Select
+              value={expiry}
+              onValueChange={(v) => setValue("expiry", v, { shouldValidate: true })}
+            >
               <SelectTrigger id="key-expiry" className="text-base md:text-sm">
                 <SelectValue />
               </SelectTrigger>
@@ -209,7 +235,7 @@ export function ApiKeyCreateDialog({ open, onOpenChange, onCreate }: Props) {
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               {t("form.cancel")}
             </Button>
-            <Button type="submit" disabled={saving || !name.trim() || scopes.length === 0}>
+            <Button type="submit" disabled={saving || scopes.length === 0}>
               {saving ? t("form.creating") : t("form.create")}
             </Button>
           </DialogFooter>

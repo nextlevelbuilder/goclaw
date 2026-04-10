@@ -2,7 +2,14 @@ name: Release
 
 on:
   push:
-    branches: [main]
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"   # stable only: v1.2.3 (not beta/rc)
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v3.0.0). Leave empty to use latest tag on HEAD.'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -16,20 +23,42 @@ jobs:
   release:
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.semrel.outputs.version }}
-      released: ${{ steps.semrel.outputs.version != '' }}
+      version: ${{ steps.version.outputs.version }}
+      released: ${{ steps.version.outputs.version != '' }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - id: semrel
-        uses: go-semantic-release/action@v1
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          allow-initial-development-versions: true
-          # Repo default branch is dev, but releases are cut from main.
-          custom-arguments: --no-ci
+      - name: Resolve version from tag
+        id: version
+        run: |
+          # Priority: workflow_dispatch input > pushed tag > latest tag on HEAD
+          TAG="${{ inputs.tag || github.ref_name }}"
+          if [[ -z "$TAG" || "$TAG" == "main" || "$TAG" == "dev" ]]; then
+            TAG=$(git describe --tags --abbrev=0 HEAD 2>/dev/null || echo "")
+          fi
+          if [[ -z "$TAG" ]]; then
+            echo "No tag found. Skipping release."
+            echo "version=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          VERSION="${TAG#v}"
+          echo "Releasing version: $VERSION (tag: $TAG)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        if: steps.version.outputs.version != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${{ steps.version.outputs.version }}"
+          gh release create "$TAG" \
+            --title "GoClaw $TAG" \
+            --generate-notes \
+            --latest \
+            2>/dev/null || echo "Release $TAG already exists, continuing..."
 
   # Build cross-platform binaries and attach to release
   build-binaries:

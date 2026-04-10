@@ -1,7 +1,6 @@
 package http
 
 import (
-	"encoding/json"
 	"log/slog"
 	"net/http"
 	"os"
@@ -72,8 +71,7 @@ func (h *TenantsHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 		Name string `json:"name"`
 		Slug string `json:"slug"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
+	if !bindJSON(w, r, locale, &input) {
 		return
 	}
 
@@ -155,8 +153,7 @@ func (h *TenantsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 		Status   string         `json:"status"`
 		Settings map[string]any `json:"settings"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
+	if !bindJSON(w, r, locale, &input) {
 		return
 	}
 
@@ -229,8 +226,7 @@ func (h *TenantsHandler) handleUsersAdd(w http.ResponseWriter, r *http.Request) 
 		UserID string `json:"user_id"`
 		Role   string `json:"role"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
+	if !bindJSON(w, r, locale, &input) {
 		return
 	}
 

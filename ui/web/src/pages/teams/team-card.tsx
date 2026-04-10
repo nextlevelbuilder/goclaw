@@ -31,7 +31,7 @@ function MemberChip({ member, isLead }: { member: TeamMemberData; isLead: boolea
           {isLead && <Crown className="h-3 w-3 shrink-0 text-amber-500" />}
         </div>
         {member.frontmatter && (
-          <p className="line-clamp-2 text-[11px] leading-snug text-muted-foreground">
+          <p className="line-clamp-2 text-xs-plus leading-snug text-muted-foreground">
             {member.frontmatter}
           </p>
         )}
@@ -72,7 +72,7 @@ export function TeamCard({ team, onClick, onDelete }: TeamCardProps) {
           <span className="truncate text-sm font-semibold">{team.name}</span>
         </div>
         {(team.settings as Record<string, unknown>)?.version != null && (
-          <Badge variant="outline" className="shrink-0 text-[10px]">
+          <Badge variant="outline" className="shrink-0 text-2xs">
             v{String((team.settings as Record<string, unknown>).version)}
           </Badge>
         )}
@@ -95,7 +95,7 @@ export function TeamCard({ team, onClick, onDelete }: TeamCardProps) {
             <MemberChip key={m.agent_id} member={m} isLead={m.role === "lead"} />
           ))}
           {overflow > 0 && (
-            <span className="pl-2 text-[11px] text-muted-foreground">
+            <span className="pl-2 text-xs-plus text-muted-foreground">
               +{overflow} {t("detail.more")}
             </span>
           )}
@@ -106,7 +106,7 @@ export function TeamCard({ team, onClick, onDelete }: TeamCardProps) {
       <div className="flex items-center gap-1.5">
         <div className="ml-auto flex items-center gap-1.5">
           {team.created_at && (
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-xs-plus text-muted-foreground">
               {formatRelativeTime(team.created_at)}
             </span>
           )}

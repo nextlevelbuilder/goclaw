@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -325,7 +326,7 @@ func formatCredentialedResult(binary string, args []string,
 	}
 
 	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return ErrorResult(fmt.Sprintf("[CREDENTIALED EXEC] Command timed out after %s.\nBinary: %s", timeout, binary))
 		}
 		exitCode := -1
@@ -361,7 +362,9 @@ func (t *ExecTool) lookupCredentialedBinary(ctx context.Context, command string)
 		agentIDPtr = &agentID
 	}
 	// Pass userID for per-user credential resolution (LEFT JOIN, zero extra queries).
-	userID := store.UserIDFromContext(ctx)
+	// Uses CredentialUserIDFromContext to pick up merged tenant user identity
+	// (falls back to UserIDFromContext when not set).
+	userID := store.CredentialUserIDFromContext(ctx)
 	cred, err := t.secureCLIStore.LookupByBinary(ctx, binary, agentIDPtr, userID)
 	if err != nil {
 		slog.Warn("secure_cli.lookup: query failed", "binary", binary, "agent_id", agentID, "error", err)

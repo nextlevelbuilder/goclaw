@@ -81,15 +81,15 @@ export function ChannelHeader({
                   {instance.enabled ? t("enabled") : t("disabled")}
                 </TooltipContent>
               </Tooltip>
-              <Badge variant={statusMeta.badgeVariant} className="text-[10px]">
+              <Badge variant={statusMeta.badgeVariant} className="text-2xs">
                 {statusMeta.label}
               </Badge>
-              {failureKind && <Badge variant="outline" className="text-[10px]">{failureKind}</Badge>}
+              {failureKind && <Badge variant="outline" className="text-2xs">{failureKind}</Badge>}
             </div>
             <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-              <span className="font-mono text-[11px]">{instance.name}</span>
+              <span className="font-mono text-xs-plus">{instance.name}</span>
               <span className="text-border">·</span>
-              <Badge variant="outline" className="text-[10px]">
+              <Badge variant="outline" className="text-2xs">
                 {typeLabel}
               </Badge>
               <span className="text-border">·</span>

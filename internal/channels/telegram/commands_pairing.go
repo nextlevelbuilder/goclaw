@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/mymmrac/telego"
 	tu "github.com/mymmrac/telego/telegoutil"
@@ -24,19 +23,18 @@ func buildPairingReply(code string) string {
 // sendPairingReply generates a pairing code and sends the reply to the user.
 // Debounces: won't send another reply to the same user within 60 seconds.
 func (c *Channel) sendPairingReply(ctx context.Context, chatID int64, userID, username string) {
-	if c.pairingService == nil {
+	ps := c.PairingService()
+	if ps == nil {
 		return
 	}
 
-	if lastSent, ok := c.pairingReplySent.Load(userID); ok {
-		if time.Since(lastSent.(time.Time)) < pairingReplyDebounce {
-			slog.Debug("pairing reply debounced", "user_id", userID)
-			return
-		}
+	if !c.CanSendPairingNotif(userID, pairingReplyDebounce) {
+		slog.Debug("pairing reply debounced", "user_id", userID)
+		return
 	}
 
 	meta := map[string]string{"username": username}
-	code, err := c.pairingService.RequestPairing(ctx, userID, c.Name(), fmt.Sprintf("%d", chatID), "default", meta)
+	code, err := ps.RequestPairing(ctx, userID, c.Name(), fmt.Sprintf("%d", chatID), "default", meta)
 	if err != nil {
 		slog.Debug("pairing request failed", "user_id", userID, "error", err)
 		return
@@ -47,7 +45,7 @@ func (c *Channel) sendPairingReply(ctx context.Context, chatID int64, userID, us
 	if _, err := c.bot.SendMessage(ctx, msg); err != nil {
 		slog.Warn("failed to send pairing reply", "chat_id", chatID, "error", err)
 	} else {
-		c.pairingReplySent.Store(userID, time.Now())
+		c.MarkPairingNotifSent(userID)
 		slog.Info("telegram pairing reply sent",
 			"user_id", userID, "username", username, "code", code,
 		)
@@ -60,17 +58,20 @@ func (c *Channel) sendPairingReply(ctx context.Context, chatID int64, userID, us
 // localKey is the composite key (e.g. "-100123:topic:42") stored as chat_id in the pairing
 // request so that the approval notification can be routed to the correct forum topic.
 func (c *Channel) sendGroupPairingReply(ctx context.Context, chatID int64, chatIDStr, groupSenderID, localKey string, messageThreadID int, chatTitle string) {
-	if lastSent, ok := c.pairingReplySent.Load(chatIDStr); ok {
-		if time.Since(lastSent.(time.Time)) < pairingReplyDebounce {
-			return
-		}
+	ps := c.PairingService()
+	if ps == nil {
+		return
+	}
+
+	if !c.CanSendPairingNotif(chatIDStr, pairingReplyDebounce) {
+		return
 	}
 
 	var meta map[string]string
 	if chatTitle != "" {
 		meta = map[string]string{"chat_title": chatTitle}
 	}
-	code, err := c.pairingService.RequestPairing(ctx, groupSenderID, c.Name(), localKey, "default", meta)
+	code, err := ps.RequestPairing(ctx, groupSenderID, c.Name(), localKey, "default", meta)
 	if err != nil {
 		slog.Debug("group pairing request failed", "chat_id", chatIDStr, "error", err)
 		return
@@ -93,7 +94,7 @@ func (c *Channel) sendGroupPairingReply(ctx context.Context, chatID int64, chatI
 	if err != nil {
 		slog.Warn("failed to send group pairing reply", "chat_id", chatIDStr, "error", err)
 	} else {
-		c.pairingReplySent.Store(chatIDStr, time.Now())
+		c.MarkPairingNotifSent(chatIDStr)
 		slog.Info("telegram group pairing reply sent", "chat_id", chatIDStr, "code", code)
 	}
 }

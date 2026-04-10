@@ -27,7 +27,7 @@ export function useContactSearch(search: string) {
       return res.contacts ?? [];
     },
     enabled: debouncedSearch.length >= 2,
-    staleTime: 30_000,
+    staleTime: 60_000,
   });
 
   return { contacts: data ?? [], loading: isLoading };

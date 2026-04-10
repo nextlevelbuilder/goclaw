@@ -60,7 +60,7 @@ export function TenantOverrideControl({
           <TooltipTrigger asChild>
             <Badge
               variant={badgeVariant}
-              className="h-5 cursor-default px-1.5 text-[10px] leading-none"
+              className="h-5 cursor-default px-1.5 text-2xs leading-none"
             >
               {overrideLabel}
             </Badge>
@@ -129,12 +129,12 @@ export function ToolRow({
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-1.5">
           <span className="text-sm font-medium leading-tight">{tool.display_name}</span>
-          <code className="text-[11px] text-muted-foreground">{tool.name}</code>
+          <code className="text-xs-plus text-muted-foreground">{tool.name}</code>
           {deprecated && (
             <TooltipProvider delayDuration={200}>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Badge variant="destructive" className="ml-1 h-4 px-1 text-[10px] leading-none cursor-default">
+                  <Badge variant="destructive" className="ml-1 h-4 px-1 text-2xs leading-none cursor-default">
                     {t("builtin.deprecated")}
                   </Badge>
                 </TooltipTrigger>
@@ -148,7 +148,7 @@ export function ToolRow({
             <TooltipProvider delayDuration={200}>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Badge variant="outline" className="ml-1 h-4 px-1 text-[10px] leading-none cursor-default">
+                  <Badge variant="outline" className="ml-1 h-4 px-1 text-2xs leading-none cursor-default">
                     {t("builtin.requires")}
                   </Badge>
                 </TooltipTrigger>
@@ -182,7 +182,7 @@ export function ToolRow({
           <TooltipProvider delayDuration={200}>
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="flex items-center gap-1 text-[11px] text-muted-foreground cursor-default">
+                <span className="flex items-center gap-1 text-xs-plus text-muted-foreground cursor-default">
                   <Info className="h-3 w-3" />
                   {configHint}
                 </span>

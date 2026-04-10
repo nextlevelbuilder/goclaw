@@ -4,13 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lib/pq"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -78,41 +76,17 @@ func (s *PGSkillStore) ListSkills(ctx context.Context) []store.SkillInfo {
 	// Returns active + archived + system skills. Archived skills are shown dimmed in the UI
 	// so admins can see missing deps and re-activate after installing them.
 	// Tenant filter: system skills visible globally, custom skills scoped to tenant.
-	rows, err := s.db.QueryContext(ctx,
+	var scanned []skillInfoRowWithFrontmatter
+	if err := pkgSqlxDB.SelectContext(ctx, &scanned,
 		`SELECT id, name, slug, description, visibility, tags, version, is_system, status, enabled, deps, frontmatter, file_path
 		 FROM skills WHERE (status IN ('active', 'archived') OR is_system = true) AND (is_system = true OR tenant_id = $1)
-		 ORDER BY name`, tid)
-	if err != nil {
+		 ORDER BY name`, tid); err != nil {
 		return nil
 	}
-	defer rows.Close()
 
-	var result []store.SkillInfo
-	for rows.Next() {
-		var id uuid.UUID
-		var name, slug, visibility, status string
-		var desc *string
-		var tags []string
-		var version int
-		var isSystem, enabled bool
-		var depsRaw, fmRaw []byte
-		var filePath *string
-		if err := rows.Scan(&id, &name, &slug, &desc, &visibility, pq.Array(&tags), &version, &isSystem, &status, &enabled, &depsRaw, &fmRaw, &filePath); err != nil {
-			continue
-		}
-		info := buildSkillInfo(id.String(), name, slug, desc, version, s.baseDir, filePath)
-		info.Visibility = visibility
-		info.Tags = tags
-		info.IsSystem = isSystem
-		info.Status = status
-		info.Enabled = enabled
-		info.MissingDeps = parseDepsColumn(depsRaw)
-		info.Author = parseFrontmatterAuthor(fmRaw)
-		result = append(result, info)
-	}
-	if err := rows.Err(); err != nil {
-		slog.Warn("ListSkills: rows iteration error", "error", err)
-		return nil // don't cache partial results
+	result := make([]store.SkillInfo, 0, len(scanned))
+	for i := range scanned {
+		result = append(result, scanned[i].toSkillInfo(s.baseDir))
 	}
 
 	s.mu.Lock()
@@ -129,59 +103,34 @@ func (s *PGSkillStore) ListAllSkills(ctx context.Context) []store.SkillInfo {
 	if tid == uuid.Nil {
 		tid = store.MasterTenantID
 	}
-	rows, err := s.db.QueryContext(ctx,
+	var scanned []skillInfoRow
+	if err := pkgSqlxDB.SelectContext(ctx, &scanned,
 		`SELECT id, name, slug, description, visibility, tags, version, is_system, status, enabled, deps, file_path
 		 FROM skills WHERE enabled = true AND status != 'deleted' AND (is_system = true OR tenant_id = $1)
-		 ORDER BY name`, tid)
-	if err != nil {
+		 ORDER BY name`, tid); err != nil {
 		return nil
 	}
-	defer rows.Close()
-
-	return s.scanSkillInfoList(rows)
+	return skillInfoRowsToSlice(scanned, s.baseDir)
 }
 
 // ListAllSystemSkills returns only system skills (for startup dependency scanning).
 // No tenant filter — system skills belong to MasterTenantID and are globally visible.
 func (s *PGSkillStore) ListAllSystemSkills(ctx context.Context) []store.SkillInfo {
-	rows, err := s.db.QueryContext(ctx,
+	var scanned []skillInfoRow
+	if err := pkgSqlxDB.SelectContext(ctx, &scanned,
 		`SELECT id, name, slug, description, visibility, tags, version, is_system, status, enabled, deps, file_path
 		 FROM skills WHERE is_system = true AND enabled = true AND status != 'deleted'
-		 ORDER BY name`)
-	if err != nil {
+		 ORDER BY name`); err != nil {
 		return nil
 	}
-	defer rows.Close()
-
-	return s.scanSkillInfoList(rows)
+	return skillInfoRowsToSlice(scanned, s.baseDir)
 }
 
-// scanSkillInfoList scans rows into a []SkillInfo slice. Shared by list methods.
-func (s *PGSkillStore) scanSkillInfoList(rows *sql.Rows) []store.SkillInfo {
-	var result []store.SkillInfo
-	for rows.Next() {
-		var id uuid.UUID
-		var name, slug, visibility, status string
-		var desc *string
-		var tags []string
-		var version int
-		var isSystem, enabled bool
-		var depsRaw []byte
-		var filePath *string
-		if err := rows.Scan(&id, &name, &slug, &desc, &visibility, pq.Array(&tags), &version, &isSystem, &status, &enabled, &depsRaw, &filePath); err != nil {
-			continue
-		}
-		info := buildSkillInfo(id.String(), name, slug, desc, version, s.baseDir, filePath)
-		info.Visibility = visibility
-		info.Tags = tags
-		info.IsSystem = isSystem
-		info.Status = status
-		info.Enabled = enabled
-		info.MissingDeps = parseDepsColumn(depsRaw)
-		result = append(result, info)
-	}
-	if err := rows.Err(); err != nil {
-		slog.Warn("scanSkillInfoList: rows iteration error", "error", err)
+// skillInfoRowsToSlice converts a slice of skillInfoRow to []store.SkillInfo. Shared by list methods.
+func skillInfoRowsToSlice(rows []skillInfoRow, baseDir string) []store.SkillInfo {
+	result := make([]store.SkillInfo, len(rows))
+	for i := range rows {
+		result[i] = rows[i].toSkillInfo(baseDir)
 	}
 	return result
 }

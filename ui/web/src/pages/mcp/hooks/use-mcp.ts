@@ -18,6 +18,7 @@ export function useMCP() {
       const res = await http.get<{ servers: MCPServerData[] }>("/v1/mcp/servers");
       return res.servers ?? [];
     },
+    staleTime: 60_000,
   });
 
   const invalidate = useCallback(
@@ -43,6 +44,11 @@ export function useMCP() {
   const updateServer = useCallback(
     async (id: string, data: Partial<MCPServerInput>) => {
       try {
+        if (data.enabled !== undefined) {
+          queryClient.setQueryData<MCPServerData[]>(queryKeys.mcp.all, (old) =>
+            old?.map((s) => (s.id === id ? { ...s, enabled: data.enabled! } : s)),
+          );
+        }
         await http.put(`/v1/mcp/servers/${id}`, data);
         await invalidate();
         toast.success(i18next.t("mcp:toast.updated"));

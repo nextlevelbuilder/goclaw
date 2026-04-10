@@ -7,22 +7,18 @@ import (
 	"fmt"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/store/base"
 )
 
-// scopeClause extracts QueryScope from context and generates SQLite WHERE conditions
-// using ? placeholders (instead of PG's $N positional params).
+// scopeClause extracts QueryScope from context and generates SQLite WHERE conditions.
+// Thin wrapper around base.BuildScopeClause with SQLite dialect.
 func scopeClause(ctx context.Context) (clause string, args []any, err error) {
 	scope, err := store.ScopeFromContext(ctx)
 	if err != nil {
 		return "", nil, err
 	}
-	clause = " AND tenant_id = ?"
-	args = []any{scope.TenantID}
-
-	if scope.ProjectID != nil {
-		clause += " AND project_id = ?"
-		args = append(args, *scope.ProjectID)
-	}
+	bScope := base.QueryScope{TenantID: scope.TenantID, ProjectID: scope.ProjectID}
+	clause, args, _ = base.BuildScopeClause(sqliteDialect, bScope, 0)
 	return clause, args, nil
 }
 
@@ -38,12 +34,7 @@ func scopeClauseAlias(ctx context.Context, alias string) (clause string, args []
 	if err != nil {
 		return "", nil, err
 	}
-	clause = " AND " + alias + ".tenant_id = ?"
-	args = []any{scope.TenantID}
-
-	if scope.ProjectID != nil {
-		clause += " AND " + alias + ".project_id = ?"
-		args = append(args, *scope.ProjectID)
-	}
+	bScope := base.QueryScope{TenantID: scope.TenantID, ProjectID: scope.ProjectID}
+	clause, args, _ = base.BuildScopeClauseAlias(sqliteDialect, bScope, 0, alias)
 	return clause, args, nil
 }

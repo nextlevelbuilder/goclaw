@@ -4,9 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
-
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/typing"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/zalo"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/zalo/personal/protocol"
@@ -30,12 +29,12 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 	}
 
 	threadType := protocol.ThreadTypeUser
-	if _, isGroup := c.approvedGroups.Load(msg.ChatID); isGroup {
+	if c.IsGroupApproved(msg.ChatID) {
 		threadType = protocol.ThreadTypeGroup
 	} else if msg.Metadata != nil {
 		if _, ok := msg.Metadata["group_id"]; ok {
 			threadType = protocol.ThreadTypeGroup
-			c.approvedGroups.Store(msg.ChatID, true)
+			c.MarkGroupApproved(msg.ChatID)
 		}
 	}
 
@@ -86,19 +85,7 @@ func (c *Channel) sendFile(ctx context.Context, sess *protocol.Session, chatID s
 }
 
 func (c *Channel) sendChunkedText(ctx context.Context, sess *protocol.Session, chatID string, threadType protocol.ThreadType, text string) error {
-	for len(text) > 0 {
-		chunk := text
-		if len(chunk) > maxTextLength {
-			cutAt := maxTextLength
-			if idx := strings.LastIndex(text[:maxTextLength], "\n"); idx > maxTextLength/2 {
-				cutAt = idx + 1
-			}
-			chunk = text[:cutAt]
-			text = text[cutAt:]
-		} else {
-			text = ""
-		}
-
+	for _, chunk := range channels.ChunkMarkdown(text, maxTextLength) {
 		if _, err := protocol.SendMessage(ctx, sess, chatID, threadType, chunk); err != nil {
 			return err
 		}

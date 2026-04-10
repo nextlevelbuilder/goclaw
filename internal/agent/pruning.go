@@ -205,8 +205,8 @@ func pruneContextMessages(msgs []providers.Message, contextWindowTokens int, cfg
 		tailChars := settings.softTrimTailChars
 		if hasImportantTail(msg.Content) {
 			totalBudget := headChars + tailChars
-			headChars = totalBudget * 7 / 10
-			tailChars = totalBudget - headChars
+			tailChars = totalBudget * 7 / 10
+			headChars = totalBudget - tailChars
 		}
 		head := takeHead(msg.Content, headChars)
 		tail := takeTail(msg.Content, tailChars)

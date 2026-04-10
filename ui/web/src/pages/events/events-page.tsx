@@ -50,7 +50,7 @@ export function EventsPage() {
         }
         setTeamMap(map);
       })
-      .catch(() => {});
+      .catch((err) => console.error("[EventsPage] fetch teams failed:", err));
   }, [ws, ws.isConnected]);
 
   const resolveTeam = useCallback(

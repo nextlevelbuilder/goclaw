@@ -229,11 +229,11 @@ func (c *Channel) handleBotCommand(ctx context.Context, message *telego.Message,
 		return true
 
 	case "/reactions":
-		var lines string
+		var lines strings.Builder
 		for _, r := range reactionLegend {
-			lines += fmt.Sprintf("%s  %s\n", r.Emoji, r.Desc)
+			lines.WriteString(fmt.Sprintf("%s  %s\n", r.Emoji, r.Desc))
 		}
-		reactText := fmt.Sprintf("<b>Reaction Emoji Legend</b>\n\n<pre>%s</pre>\nReaction level: <b>%s</b>", lines, c.config.ReactionLevel)
+		reactText := fmt.Sprintf("<b>Reaction Emoji Legend</b>\n\n<pre>%s</pre>\nReaction level: <b>%s</b>", lines.String(), c.config.ReactionLevel)
 		msg := tu.Message(chatIDObj, reactText)
 		msg.ParseMode = telego.ModeHTML
 		setThread(msg)
@@ -243,4 +243,3 @@ func (c *Channel) handleBotCommand(ctx context.Context, message *telego.Message,
 
 	return false
 }
-

@@ -12,20 +12,20 @@ import (
 // Credentials are encrypted at rest and injected into child processes via Direct Exec Mode.
 type SecureCLIBinary struct {
 	BaseModel
-	BinaryName     string          `json:"binary_name"`
-	BinaryPath     *string         `json:"binary_path,omitempty"`
-	Description    string          `json:"description"`
-	EncryptedEnv   []byte          `json:"-"`               // AES-256-GCM encrypted JSON — never serialized to API
-	DenyArgs       json.RawMessage `json:"deny_args"`       // regex patterns for blocked subcommands
-	DenyVerbose    json.RawMessage `json:"deny_verbose"`    // blocked verbose/debug flags
-	TimeoutSeconds int             `json:"timeout_seconds"`
-	Tips           string          `json:"tips"`            // hint injected into TOOLS.md context
-	IsGlobal       bool            `json:"is_global"`
-	Enabled        bool            `json:"enabled"`
-	CreatedBy      string          `json:"created_by"`
-	UserEnv        []byte          `json:"-"` // per-user encrypted env (populated by LookupByBinary LEFT JOIN)
+	BinaryName     string          `json:"binary_name" db:"binary_name"`
+	BinaryPath     *string         `json:"binary_path,omitempty" db:"binary_path"`
+	Description    string          `json:"description" db:"description"`
+	EncryptedEnv   []byte          `json:"-" db:"encrypted_env"`               // AES-256-GCM encrypted JSON — never serialized to API
+	DenyArgs       json.RawMessage `json:"deny_args" db:"deny_args"`       // regex patterns for blocked subcommands
+	DenyVerbose    json.RawMessage `json:"deny_verbose" db:"deny_verbose"`    // blocked verbose/debug flags
+	TimeoutSeconds int             `json:"timeout_seconds" db:"timeout_seconds"`
+	Tips           string          `json:"tips" db:"tips"`            // hint injected into TOOLS.md context
+	IsGlobal       bool            `json:"is_global" db:"is_global"`
+	Enabled        bool            `json:"enabled" db:"enabled"`
+	CreatedBy      string          `json:"created_by" db:"created_by"`
+	UserEnv        []byte          `json:"-" db:"-"` // per-user encrypted env (populated by LookupByBinary LEFT JOIN)
 	// EnvKeys is set by HTTP handlers only (names from decrypted env, no values); not a DB column.
-	EnvKeys []string `json:"env_keys,omitempty"`
+	EnvKeys []string `json:"env_keys,omitempty" db:"-"`
 }
 
 // MergeGrantOverrides applies agent grant overrides onto a binary config.
@@ -50,28 +50,28 @@ func (b *SecureCLIBinary) MergeGrantOverrides(g *SecureCLIAgentGrant) {
 
 // SecureCLIUserCredential holds per-user encrypted env overrides for a binary.
 type SecureCLIUserCredential struct {
-	ID           uuid.UUID       `json:"id"`
-	BinaryID     uuid.UUID       `json:"binary_id"`
-	UserID       string          `json:"user_id"`
-	Metadata     json.RawMessage `json:"metadata,omitempty"`
-	CreatedAt    string          `json:"created_at"`
-	UpdatedAt    string          `json:"updated_at"`
+	ID           uuid.UUID       `json:"id" db:"id"`
+	BinaryID     uuid.UUID       `json:"binary_id" db:"binary_id"`
+	UserID       string          `json:"user_id" db:"user_id"`
+	Metadata     json.RawMessage `json:"metadata,omitempty" db:"metadata"`
+	CreatedAt    string          `json:"created_at" db:"created_at"`
+	UpdatedAt    string          `json:"updated_at" db:"updated_at"`
 	// EncryptedEnv is decrypted JSON — never serialized to API.
-	EncryptedEnv []byte `json:"-"`
+	EncryptedEnv []byte `json:"-" db:"encrypted_env"`
 }
 
 // SecureCLIAgentGrant represents a per-agent grant with optional setting overrides.
 type SecureCLIAgentGrant struct {
 	BaseModel
-	BinaryID       uuid.UUID        `json:"binary_id"`
-	AgentID        uuid.UUID        `json:"agent_id"`
-	DenyArgs       *json.RawMessage `json:"deny_args,omitempty"`
-	DenyVerbose    *json.RawMessage `json:"deny_verbose,omitempty"`
-	TimeoutSeconds *int             `json:"timeout_seconds,omitempty"`
-	Tips           *string          `json:"tips,omitempty"`
-	Enabled        bool             `json:"enabled"`
-	CreatedAt      time.Time        `json:"created_at"`
-	UpdatedAt      time.Time        `json:"updated_at"`
+	BinaryID       uuid.UUID        `json:"binary_id" db:"binary_id"`
+	AgentID        uuid.UUID        `json:"agent_id" db:"agent_id"`
+	DenyArgs       *json.RawMessage `json:"deny_args,omitempty" db:"deny_args"`
+	DenyVerbose    *json.RawMessage `json:"deny_verbose,omitempty" db:"deny_verbose"`
+	TimeoutSeconds *int             `json:"timeout_seconds,omitempty" db:"timeout_seconds"`
+	Tips           *string          `json:"tips,omitempty" db:"tips"`
+	Enabled        bool             `json:"enabled" db:"enabled"`
+	CreatedAt      time.Time        `json:"created_at" db:"created_at"`
+	UpdatedAt      time.Time        `json:"updated_at" db:"updated_at"`
 }
 
 // SecureCLIStore manages secure CLI binary credential configurations.

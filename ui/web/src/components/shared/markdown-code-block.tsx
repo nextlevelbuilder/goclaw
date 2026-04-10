@@ -5,6 +5,7 @@
 import { useTranslation } from "react-i18next";
 import { Check, Copy } from "lucide-react";
 import { useClipboard } from "@/hooks/use-clipboard";
+import { cn } from "@/lib/utils";
 
 export function CodeBlock({
   className,
@@ -20,7 +21,7 @@ export function CodeBlock({
 
   return (
     <div className="not-prose group relative my-3 overflow-hidden rounded-lg border border-border/60">
-      <div className="flex items-center justify-between border-b border-border/40 bg-muted/70 px-3 py-1.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+      <div className="flex items-center justify-between border-b border-border/40 bg-muted/70 px-3 py-1.5 text-xs-plus font-medium tracking-wide text-muted-foreground uppercase">
         <span>{lang || "code"}</span>
         <button
           type="button"
@@ -33,9 +34,8 @@ export function CodeBlock({
       </div>
       <pre className="overflow-x-auto bg-muted/30 p-3 text-[13px] leading-normal text-foreground whitespace-pre">
         <code
-          className={className}
+          className={cn(className, "font-mono-code")}
           style={{
-            fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, monospace",
             wordWrap: "normal",
             overflowWrap: "normal",
           }}

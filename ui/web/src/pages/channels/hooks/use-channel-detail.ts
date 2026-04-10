@@ -30,6 +30,7 @@ export function useChannelDetail(instanceId: string | undefined) {
     queryFn: async () => {
       return http.get<ChannelInstanceData>(`/v1/channels/instances/${instanceId}`);
     },
+    staleTime: 60_000,
     enabled: !!instanceId,
   });
 

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,10 +12,65 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	orch "github.com/nextlevelbuilder/goclaw/internal/orchestration"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
+	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
+
+// makeDelegateAnnounceCallback returns the batch callback used by tools.NewAnnounceQueue.
+// Extracted from runGateway to keep the main function concise.
+func makeDelegateAnnounceCallback(
+	subagentMgr *tools.SubagentManager,
+	msgBus *bus.MessageBus,
+) func(sessionKey string, items []tools.AnnounceQueueItem, meta tools.AnnounceMetadata) {
+	return func(sessionKey string, items []tools.AnnounceQueueItem, meta tools.AnnounceMetadata) {
+		roster := subagentMgr.RosterForParent(meta.ParentAgent)
+		content := tools.FormatBatchedAnnounce(items, roster)
+		senderID := fmt.Sprintf("subagent:batch-%d", len(items))
+		label := items[0].Label
+		if len(items) > 1 {
+			label = fmt.Sprintf("%d tasks", len(items))
+		}
+		batchMeta := map[string]string{
+			tools.MetaOriginChannel:    meta.OriginChannel,
+			tools.MetaOriginPeerKind:   meta.OriginPeerKind,
+			tools.MetaParentAgent:      meta.ParentAgent,
+			tools.MetaSubagentLabel:    label,
+			tools.MetaOriginTraceID:    meta.OriginTraceID,
+			tools.MetaOriginRootSpanID: meta.OriginRootSpanID,
+		}
+		if meta.OriginLocalKey != "" {
+			batchMeta[tools.MetaOriginLocalKey] = meta.OriginLocalKey
+		}
+		if meta.OriginSessionKey != "" {
+			batchMeta[tools.MetaOriginSessionKey] = meta.OriginSessionKey
+		}
+		// Collect media from all items in the batch.
+		var batchMedia []bus.MediaFile
+		for _, item := range items {
+			batchMedia = append(batchMedia, item.Media...)
+		}
+		// Notify clients that leader is processing team results
+		// (bridges UI gap between last task.completed and announce run.started).
+		bus.BroadcastForTenant(msgBus, protocol.EventTeamLeaderProcessing, meta.OriginTenantID, map[string]any{
+			"agentId": meta.ParentAgent,
+			"tasks":   len(items),
+		})
+
+		msgBus.PublishInbound(bus.InboundMessage{
+			Channel:  "system",
+			SenderID: senderID,
+			ChatID:   meta.OriginChatID,
+			Content:  content,
+			UserID:   meta.OriginUserID,
+			TenantID: meta.OriginTenantID,
+			Metadata: batchMeta,
+			Media:    batchMedia,
+		})
+	}
+}
 
 // subagentAnnounceEntry holds one subagent completion result waiting to be announced.
 type subagentAnnounceEntry struct {
@@ -47,60 +101,17 @@ type subagentAnnounceRouting struct {
 	OutMeta          map[string]string
 }
 
-// subagentAnnounceQueue is a producer-consumer queue per parent session.
-// Multiple subagent goroutines enqueue entries; one processor drains and merges.
-type subagentAnnounceQueue struct {
-	mu      sync.Mutex
-	running bool
-	entries []subagentAnnounceEntry
-}
+// subagentAnnounceQueue uses BatchQueue for producer-consumer synchronization.
+var subagentAnnounceQueue orch.BatchQueue[subagentAnnounceEntry]
 
-// subagentAnnounceQueues maps sessionKey → queue. Cleaned up when queue finishes.
-var subagentAnnounceQueues sync.Map
-
-func getOrCreateSubagentAnnounceQueue(key string) *subagentAnnounceQueue {
-	v, _ := subagentAnnounceQueues.LoadOrStore(key, &subagentAnnounceQueue{})
-	return v.(*subagentAnnounceQueue)
-}
-
-// enqueueSubagentAnnounce adds a result to the queue. Returns (queue, isProcessor).
-// If isProcessor=true, the caller must run processSubagentAnnounceLoop.
-func enqueueSubagentAnnounce(key string, entry subagentAnnounceEntry) (*subagentAnnounceQueue, bool) {
-	q := getOrCreateSubagentAnnounceQueue(key)
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	q.entries = append(q.entries, entry)
-	if q.running {
-		return q, false
-	}
-	q.running = true
-	return q, true
-}
-
-func (q *subagentAnnounceQueue) drain() []subagentAnnounceEntry {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	out := q.entries
-	q.entries = nil
-	return out
-}
-
-// tryFinish atomically checks for pending entries and marks the queue idle.
-func (q *subagentAnnounceQueue) tryFinish(key string) bool {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	if len(q.entries) > 0 {
-		return false
-	}
-	q.running = false
-	subagentAnnounceQueues.Delete(key)
-	return true
+// enqueueSubagentAnnounce adds a result to the queue. Returns isProcessor.
+func enqueueSubagentAnnounce(key string, entry subagentAnnounceEntry) bool {
+	return subagentAnnounceQueue.Enqueue(key, entry)
 }
 
 // processSubagentAnnounceLoop drains entries, builds merged announce, schedules to parent.
 func processSubagentAnnounceLoop(
 	ctx context.Context,
-	q *subagentAnnounceQueue,
 	r subagentAnnounceRouting,
 	roster tools.SubagentRoster,
 	subagentMgr *tools.SubagentManager,
@@ -116,14 +127,14 @@ func processSubagentAnnounceLoop(
 	for {
 		select {
 		case <-ctx.Done():
-			q.tryFinish(r.QueueKey)
+			subagentAnnounceQueue.TryFinish(r.QueueKey)
 			return
 		default:
 		}
 
-		entries := q.drain()
+		entries := subagentAnnounceQueue.Drain(r.QueueKey)
 		if len(entries) == 0 {
-			if q.tryFinish(r.QueueKey) {
+			if subagentAnnounceQueue.TryFinish(r.QueueKey) {
 				return
 			}
 			// Brief sleep to avoid tight spin when entries arrive between drain and tryFinish.

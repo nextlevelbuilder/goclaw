@@ -144,7 +144,7 @@ export function AgentPermissionsTab({ agentId }: AgentPermissionsTabProps) {
   const currentDescKey = CONFIG_TYPES.find((c) => c.value === configType)?.descKey ?? "";
 
   return (
-    <div className="space-y-4">
+    <section className="space-y-4 rounded-lg border p-3 sm:p-4">
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div>
@@ -244,13 +244,13 @@ export function AgentPermissionsTab({ agentId }: AgentPermissionsTabProps) {
                           <div className="flex items-center gap-2 min-w-0 text-sm">
                             <Badge
                               variant={p.permission === "allow" ? "success" : "destructive"}
-                              className="text-[10px] shrink-0"
+                              className="text-2xs shrink-0"
                             >
                               {p.permission}
                             </Badge>
                             <span className="font-medium truncate">{label}</span>
                             {username && (
-                              <span className="text-[11px] text-muted-foreground shrink-0">{username}</span>
+                              <span className="text-xs-plus text-muted-foreground shrink-0">{username}</span>
                             )}
                           </div>
                           <Button
@@ -282,13 +282,13 @@ export function AgentPermissionsTab({ agentId }: AgentPermissionsTabProps) {
                     <div className="flex items-center gap-2 min-w-0 text-sm">
                       <Badge
                         variant={p.permission === "allow" ? "success" : "destructive"}
-                        className="text-[10px] shrink-0"
+                        className="text-2xs shrink-0"
                       >
                         {p.permission}
                       </Badge>
                       <span className="font-medium truncate">{formatUserLabel(p.userId, resolve)}</span>
-                      <span className="text-[11px] text-muted-foreground shrink-0">{p.configType}</span>
-                      <span className="text-[11px] text-muted-foreground shrink-0">@ {scopeLabels.get(p.scope) ?? p.scope}</span>
+                      <span className="text-xs-plus text-muted-foreground shrink-0">{p.configType}</span>
+                      <span className="text-xs-plus text-muted-foreground shrink-0">@ {scopeLabels.get(p.scope) ?? p.scope}</span>
                     </div>
                     <Button
                       variant="ghost"
@@ -305,6 +305,6 @@ export function AgentPermissionsTab({ agentId }: AgentPermissionsTabProps) {
           )}
         </div>
       )}
-    </div>
+    </section>
   );
 }

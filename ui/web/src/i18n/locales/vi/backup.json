@@ -1,0 +1,127 @@
+{
+  "title": "Sao lưu & Khôi phục",
+  "description": "Tạo bản sao lưu hệ thống, khôi phục từ bản lưu trữ và quản lý S3",
+  "tabs": {
+    "systemBackup": "Sao lưu hệ thống",
+    "systemRestore": "Khôi phục hệ thống",
+    "s3Config": "Lưu trữ S3",
+    "tenantBackup": "Sao lưu Tenant"
+  },
+  "backup": {
+    "preflight": {
+      "title": "Kiểm tra hệ thống",
+      "pgDump": "pg_dump khả dụng",
+      "diskSpace": "Đủ dung lượng ổ đĩa",
+      "dbSize": "Kích thước CSDL",
+      "dataDir": "Thư mục dữ liệu",
+      "workspace": "Workspace",
+      "freeDisk": "Dung lượng trống",
+      "warnings": "Cảnh báo",
+      "refresh": "Làm mới",
+      "pgDumpMissing": "pg_dump không khả dụng",
+      "pgDumpHint": "Cài đặt postgresql-client để bật sao lưu cơ sở dữ liệu.",
+      "goToPackages": "Đi đến Gói cài đặt"
+    },
+    "options": {
+      "includeDb": "Bao gồm CSDL",
+      "includeFiles": "Bao gồm tệp",
+      "destination": "Đích sao lưu",
+      "local": "Tải về máy",
+      "s3": "Tải lên S3"
+    },
+    "start": "Bắt đầu sao lưu",
+    "running": "Đang sao lưu...",
+    "complete": "Sao lưu hoàn tất",
+    "download": "Tải bản sao lưu",
+    "uploadS3": "Tải lên S3",
+    "newBackup": "Sao lưu mới",
+    "fileSize": "Kích thước tệp",
+    "schemaVersion": "Phiên bản schema",
+    "s3History": {
+      "title": "Bản sao lưu S3",
+      "empty": "Không tìm thấy bản sao lưu trên S3",
+      "name": "Tệp",
+      "size": "Kích thước",
+      "date": "Ngày"
+    },
+    "errorTitle": "Sao lưu thất bại"
+  },
+  "restore": {
+    "warning": "Khôi phục sẽ ghi đè dữ liệu hiện tại. Thao tác này không thể hoàn tác. Hãy tạo bản sao lưu trước.",
+    "dropzone": "Kéo thả tệp .tar.gz vào đây",
+    "dropzoneHint": "hoặc nhấp để chọn",
+    "options": {
+      "restoreDb": "Khôi phục CSDL",
+      "restoreFiles": "Khôi phục tệp",
+      "dryRun": "Chạy thử (chỉ xem trước)"
+    },
+    "start": "Khôi phục",
+    "confirmTitle": "Xác nhận khôi phục hệ thống",
+    "confirmDesc": "Thao tác này sẽ ghi đè CSDL và tệp hiện tại bằng nội dung sao lưu. Bạn có chắc chắn?",
+    "running": "Đang khôi phục...",
+    "doNotClose": "Không đóng trang này trong quá trình khôi phục",
+    "complete": "Khôi phục hoàn tất",
+    "dryRunNote": "Đây là chạy thử. Không có thay đổi nào được thực hiện.",
+    "dbRestored": "CSDL đã khôi phục",
+    "filesExtracted": "Tệp đã giải nén",
+    "bytesExtracted": "Dữ liệu đã khôi phục",
+    "schemaVersion": "Phiên bản schema",
+    "warnings": "Cảnh báo",
+    "newRestore": "Khôi phục mới",
+    "errorTitle": "Khôi phục thất bại",
+    "tryAgain": "Thử lại"
+  },
+  "s3": {
+    "title": "Cấu hình lưu trữ S3",
+    "description": "Cấu hình lưu trữ tương thích S3 cho sao lưu từ xa",
+    "status": {
+      "configured": "Đã cấu hình",
+      "notConfigured": "Chưa cấu hình"
+    },
+    "fields": {
+      "accessKeyId": "Access Key ID",
+      "secretAccessKey": "Secret Access Key",
+      "secretPlaceholder": "Nhập để cập nhật",
+      "bucket": "Bucket",
+      "region": "Region",
+      "endpoint": "Endpoint (tùy chọn)",
+      "endpointHint": "Cho dịch vụ tương thích S3 (MinIO, R2, v.v.)",
+      "prefix": "Tiền tố Key"
+    },
+    "save": "Lưu & Kiểm tra kết nối",
+    "saving": "Đang kiểm tra kết nối...",
+    "saveSuccess": "Cấu hình S3 đã lưu và kết nối đã xác minh",
+    "saveError": "Lưu cấu hình S3 thất bại"
+  },
+  "tenant": {
+    "title": "Sao lưu & Khôi phục Tenant",
+    "description": "Sao lưu hoặc khôi phục dữ liệu từng tenant",
+    "selectTenant": "Chọn tenant",
+    "selectTenantPlaceholder": "Chọn một tenant...",
+    "backup": {
+      "start": "Sao lưu Tenant",
+      "running": "Đang sao lưu tenant...",
+      "complete": "Sao lưu tenant hoàn tất",
+      "download": "Tải về",
+      "tableCounts": "Bảng đã sao lưu",
+      "newBackup": "Sao lưu mới"
+    },
+    "restore": {
+      "mode": "Chế độ khôi phục",
+      "modeUpsert": "Hợp nhất (upsert)",
+      "modeReplace": "Thay thế tất cả",
+      "modeNew": "Tenant mới",
+      "dropzone": "Kéo thả bản sao lưu tenant vào đây",
+      "dryRun": "Chạy thử (chỉ xem trước)",
+      "start": "Khôi phục Tenant",
+      "confirmTitle": "Xác nhận khôi phục Tenant",
+      "confirmDesc": "Thao tác này sẽ thay đổi dữ liệu của tenant được chọn. Bạn có chắc chắn?",
+      "running": "Đang khôi phục tenant...",
+      "complete": "Khôi phục tenant hoàn tất",
+      "tablesRestored": "Bảng đã khôi phục",
+      "filesExtracted": "Tệp đã giải nén",
+      "dryRunNote": "Chạy thử — không có thay đổi",
+      "newRestore": "Khôi phục mới"
+    }
+  }
+}

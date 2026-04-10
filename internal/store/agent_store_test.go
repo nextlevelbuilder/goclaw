@@ -26,7 +26,7 @@ func TestParseReasoningConfigDefaultsToOff(t *testing.T) {
 
 func TestParseReasoningConfigUsesLegacyThinkingLevel(t *testing.T) {
 	agent := &AgentData{
-		OtherConfig: json.RawMessage(`{"thinking_level":"medium"}`),
+		ThinkingLevel: "medium",
 	}
 
 	got := agent.ParseReasoningConfig()
@@ -43,10 +43,8 @@ func TestParseReasoningConfigUsesLegacyThinkingLevel(t *testing.T) {
 
 func TestParseReasoningConfigPrefersAdvancedSettings(t *testing.T) {
 	agent := &AgentData{
-		OtherConfig: json.RawMessage(`{
-			"thinking_level": "high",
-			"reasoning": {"effort": "xhigh", "fallback": "provider_default"}
-		}`),
+		ThinkingLevel:   "high",
+		ReasoningConfig: json.RawMessage(`{"effort": "xhigh", "fallback": "provider_default"}`),
 	}
 
 	got := agent.ParseReasoningConfig()
@@ -66,10 +64,8 @@ func TestParseReasoningConfigPrefersAdvancedSettings(t *testing.T) {
 
 func TestParseReasoningConfigKeepsLegacyEffortWhenAdvancedOnlySetsFallback(t *testing.T) {
 	agent := &AgentData{
-		OtherConfig: json.RawMessage(`{
-			"thinking_level": "medium",
-			"reasoning": {"fallback": "off"}
-		}`),
+		ThinkingLevel:   "medium",
+		ReasoningConfig: json.RawMessage(`{"fallback": "off"}`),
 	}
 
 	got := agent.ParseReasoningConfig()
@@ -83,10 +79,8 @@ func TestParseReasoningConfigKeepsLegacyEffortWhenAdvancedOnlySetsFallback(t *te
 
 func TestParseReasoningConfigPreservesExplicitInherit(t *testing.T) {
 	agent := &AgentData{
-		OtherConfig: json.RawMessage(`{
-			"thinking_level": "high",
-			"reasoning": {"override_mode": "inherit"}
-		}`),
+		ThinkingLevel:   "high",
+		ReasoningConfig: json.RawMessage(`{"override_mode": "inherit"}`),
 	}
 
 	got := agent.ParseReasoningConfig()
@@ -162,11 +156,9 @@ func TestResolveEffectiveReasoningConfigPreservesCustomAgentReasoning(t *testing
 
 func TestParseChatGPTOAuthRoutingNormalizesNames(t *testing.T) {
 	agent := &AgentData{
-		OtherConfig: json.RawMessage(`{
-			"chatgpt_oauth_routing": {
-				"strategy": "round_robin",
-				"extra_provider_names": [" openai-codex-backup ", "", "openai-codex-backup", "openai-codex-team"]
-			}
+		ChatGPTOAuthRouting: json.RawMessage(`{
+			"strategy": "round_robin",
+			"extra_provider_names": [" openai-codex-backup ", "", "openai-codex-backup", "openai-codex-team"]
 		}`),
 	}
 
@@ -189,11 +181,9 @@ func TestParseChatGPTOAuthRoutingNormalizesNames(t *testing.T) {
 
 func TestParseChatGPTOAuthRoutingFallsBackToManual(t *testing.T) {
 	agent := &AgentData{
-		OtherConfig: json.RawMessage(`{
-			"chatgpt_oauth_routing": {
-				"strategy": "something_else",
-				"extra_provider_names": ["openai-codex-backup"]
-			}
+		ChatGPTOAuthRouting: json.RawMessage(`{
+			"strategy": "something_else",
+			"extra_provider_names": ["openai-codex-backup"]
 		}`),
 	}
 
@@ -208,11 +198,9 @@ func TestParseChatGPTOAuthRoutingFallsBackToManual(t *testing.T) {
 
 func TestParseChatGPTOAuthRoutingManualWithoutExtrasPreservesExplicitSingleAccount(t *testing.T) {
 	agent := &AgentData{
-		OtherConfig: json.RawMessage(`{
-			"chatgpt_oauth_routing": {
-				"strategy": "manual",
-				"extra_provider_names": []
-			}
+		ChatGPTOAuthRouting: json.RawMessage(`{
+			"strategy": "manual",
+			"extra_provider_names": []
 		}`),
 	}
 
@@ -230,10 +218,8 @@ func TestParseChatGPTOAuthRoutingManualWithoutExtrasPreservesExplicitSingleAccou
 
 func TestParseChatGPTOAuthRoutingPreservesExplicitInheritMode(t *testing.T) {
 	agent := &AgentData{
-		OtherConfig: json.RawMessage(`{
-			"chatgpt_oauth_routing": {
-				"override_mode": "inherit"
-			}
+		ChatGPTOAuthRouting: json.RawMessage(`{
+			"override_mode": "inherit"
 		}`),
 	}
 

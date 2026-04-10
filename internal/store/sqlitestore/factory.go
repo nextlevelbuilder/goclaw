@@ -23,7 +23,17 @@ func NewSQLiteStores(cfg store.StoreConfig) (*store.Stores, error) {
 		return nil, fmt.Errorf("ensure schema: %w", err)
 	}
 
+	initSqlx(db)
+
 	slog.Info("sqlite stores initialized", "path", cfg.SQLitePath)
+
+	// F15: SecureCLI requires encryption key — skip if empty.
+	var secureCLI store.SecureCLIStore
+	if cfg.EncryptionKey != "" {
+		secureCLI = NewSQLiteSecureCLIStore(db, cfg.EncryptionKey)
+	} else {
+		slog.Warn("securecli: encryption key empty, store disabled")
+	}
 
 	return &store.Stores{
 		DB:                    db,
@@ -51,8 +61,14 @@ func NewSQLiteStores(cfg store.StoreConfig) (*store.Stores, error) {
 		APIKeys:          NewSQLiteAPIKeyStore(db),
 		ConfigPermissions: NewSQLiteConfigPermissionStore(db),
 		Memory:         NewSQLiteMemoryStore(db),
-		SubagentTasks:  NewSQLiteSubagentTaskStore(),
-		// Phase 2 Batch B+C stores (nil = gracefully skipped by gateway):
-		// AgentLinks, KnowledgeGraph, SecureCLI
+		SubagentTasks:   NewSQLiteSubagentTaskStore(db),
+		AgentLinks:      NewSQLiteAgentLinkStore(db),
+		SecureCLI:            secureCLI,
+		SecureCLIGrants:      NewSQLiteSecureCLIAgentGrantStore(db),
+		Episodic:             NewSQLiteEpisodicStore(db),
+		EvolutionMetrics:     NewSQLiteEvolutionMetricsStore(db),
+		EvolutionSuggestions: NewSQLiteEvolutionSuggestionStore(db),
+		KnowledgeGraph:       NewSQLiteKnowledgeGraphStore(db),
+		Vault:                NewSQLiteVaultStore(db),
 	}, nil
 }

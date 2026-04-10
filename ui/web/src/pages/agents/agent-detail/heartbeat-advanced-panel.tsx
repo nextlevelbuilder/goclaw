@@ -49,7 +49,7 @@ export function HeartbeatAdvancedPanel({
                 onChange={(e) => setAckMaxChars(Number(e.target.value))}
                 className="text-base md:text-sm"
               />
-              <p className="text-[11px] text-muted-foreground">{t("heartbeat.ackMaxCharsHint")}</p>
+              <p className="text-xs-plus text-muted-foreground">{t("heartbeat.ackMaxCharsHint")}</p>
             </div>
             <div className="space-y-1">
               <Label htmlFor="hb-retries" className="text-xs">{t("heartbeat.maxRetries")}</Label>
@@ -62,20 +62,20 @@ export function HeartbeatAdvancedPanel({
                 onChange={(e) => setMaxRetries(Number(e.target.value))}
                 className="text-base md:text-sm"
               />
-              <p className="text-[11px] text-muted-foreground">{t("heartbeat.maxRetriesHint")}</p>
+              <p className="text-xs-plus text-muted-foreground">{t("heartbeat.maxRetriesHint")}</p>
             </div>
           </div>
           <div className="flex items-center justify-between gap-4">
             <div>
               <span className="text-xs font-medium">{t("heartbeat.isolatedSession")}</span>
-              <p className="text-[11px] text-muted-foreground">{t("heartbeat.isolatedSessionHint")}</p>
+              <p className="text-xs-plus text-muted-foreground">{t("heartbeat.isolatedSessionHint")}</p>
             </div>
             <Switch checked={isolatedSession} onCheckedChange={setIsolatedSession} />
           </div>
           <div className="flex items-center justify-between gap-4">
             <div>
               <span className="text-xs font-medium">{t("heartbeat.lightContext")}</span>
-              <p className="text-[11px] text-muted-foreground">{t("heartbeat.lightContextHint")}</p>
+              <p className="text-xs-plus text-muted-foreground">{t("heartbeat.lightContextHint")}</p>
             </div>
             <Switch checked={lightContext} onCheckedChange={setLightContext} />
           </div>

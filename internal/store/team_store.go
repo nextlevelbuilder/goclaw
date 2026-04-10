@@ -11,13 +11,13 @@ import (
 
 // RecoveredTaskInfo contains minimal info for leader notification after batch recovery/stale.
 type RecoveredTaskInfo struct {
-	ID         uuid.UUID
-	TeamID     uuid.UUID
-	TenantID   uuid.UUID
-	TaskNumber int
-	Subject    string
-	Channel    string // task's origin channel for notification routing
-	ChatID     string // task scope for notification routing
+	ID         uuid.UUID `db:"-"`
+	TeamID     uuid.UUID `db:"-"`
+	TenantID   uuid.UUID `db:"-"`
+	TaskNumber int       `db:"-"`
+	Subject    string    `db:"-"`
+	Channel    string    `db:"-"` // task's origin channel for notification routing
+	ChatID     string    `db:"-"` // task scope for notification routing
 }
 
 // ErrTaskNotFound is returned when a task does not exist.
@@ -60,136 +60,136 @@ const (
 // TeamData represents an agent team.
 type TeamData struct {
 	BaseModel
-	Name        string          `json:"name"`
-	LeadAgentID uuid.UUID       `json:"lead_agent_id"`
-	Description string          `json:"description,omitempty"`
-	Status      string          `json:"status"`
-	Settings    json.RawMessage `json:"settings,omitempty"`
-	CreatedBy   string          `json:"created_by"`
+	Name        string          `json:"name" db:"name"`
+	LeadAgentID uuid.UUID       `json:"lead_agent_id" db:"lead_agent_id"`
+	Description string          `json:"description,omitempty" db:"description"`
+	Status      string          `json:"status" db:"status"`
+	Settings    json.RawMessage `json:"settings,omitempty" db:"settings"`
+	CreatedBy   string          `json:"created_by" db:"created_by"`
 
 	// Joined fields (populated by queries that JOIN agents table)
-	LeadAgentKey    string `json:"lead_agent_key,omitempty"`
-	LeadDisplayName string `json:"lead_display_name,omitempty"`
+	LeadAgentKey    string `json:"lead_agent_key,omitempty" db:"lead_agent_key"`
+	LeadDisplayName string `json:"lead_display_name,omitempty" db:"lead_display_name"`
 
 	// Enriched fields (populated by ListTeams)
-	MemberCount int              `json:"member_count"`
-	Members     []TeamMemberData `json:"members,omitempty"`
+	MemberCount int              `json:"member_count" db:"member_count"`
+	Members     []TeamMemberData `json:"members,omitempty" db:"-"`
 }
 
 // TeamMemberData represents a team member.
 type TeamMemberData struct {
-	TeamID   uuid.UUID `json:"team_id"`
-	AgentID  uuid.UUID `json:"agent_id"`
-	Role     string    `json:"role"`
-	JoinedAt time.Time `json:"joined_at"`
+	TeamID   uuid.UUID `json:"team_id" db:"team_id"`
+	AgentID  uuid.UUID `json:"agent_id" db:"agent_id"`
+	Role     string    `json:"role" db:"role"`
+	JoinedAt time.Time `json:"joined_at" db:"joined_at"`
 
-	// Joined fields
-	AgentKey    string `json:"agent_key,omitempty"`
-	DisplayName string `json:"display_name,omitempty"`
-	Frontmatter string `json:"frontmatter,omitempty"`
-	Emoji       string `json:"emoji,omitempty"`
+	// Joined fields (from agents table via JOIN)
+	AgentKey    string `json:"agent_key,omitempty" db:"agent_key"`
+	DisplayName string `json:"display_name,omitempty" db:"display_name"`
+	Frontmatter string `json:"frontmatter,omitempty" db:"frontmatter"`
+	Emoji       string `json:"emoji,omitempty" db:"emoji"`
 }
 
 // TeamTaskData represents a task in the team's shared task list.
 type TeamTaskData struct {
 	BaseModel
-	TeamID       uuid.UUID      `json:"team_id"`
-	Subject      string         `json:"subject"`
-	Description  string         `json:"description,omitempty"`
-	Status       string         `json:"status"`
-	OwnerAgentID *uuid.UUID     `json:"owner_agent_id,omitempty"`
-	BlockedBy    []uuid.UUID    `json:"blocked_by,omitempty"`
-	Priority     int            `json:"priority"`
-	Result       *string        `json:"result,omitempty"`
-	Metadata     map[string]any `json:"metadata,omitempty"`
-	UserID       string         `json:"user_id,omitempty"`
-	Channel      string         `json:"channel,omitempty"`
+	TeamID       uuid.UUID      `json:"team_id" db:"team_id"`
+	Subject      string         `json:"subject" db:"subject"`
+	Description  string         `json:"description,omitempty" db:"description"`
+	Status       string         `json:"status" db:"status"`
+	OwnerAgentID *uuid.UUID     `json:"owner_agent_id,omitempty" db:"owner_agent_id"`
+	BlockedBy    []uuid.UUID    `json:"blocked_by,omitempty" db:"blocked_by"`
+	Priority     int            `json:"priority" db:"priority"`
+	Result       *string        `json:"result,omitempty" db:"result"`
+	Metadata     map[string]any `json:"metadata,omitempty" db:"metadata"`
+	UserID       string         `json:"user_id,omitempty" db:"user_id"`
+	Channel      string         `json:"channel,omitempty" db:"channel"`
 
 	// V2 fields
-	TaskType        string     `json:"task_type"`
-	TaskNumber      int        `json:"task_number,omitempty"`
-	Identifier      string     `json:"identifier,omitempty"`
-	CreatedByAgentID *uuid.UUID `json:"created_by_agent_id,omitempty"`
-	AssigneeUserID  string     `json:"assignee_user_id,omitempty"`
-	ParentID        *uuid.UUID `json:"parent_id,omitempty"`
-	ChatID          string     `json:"chat_id,omitempty"`
-	LockedAt        *time.Time `json:"locked_at,omitempty"`
-	LockExpiresAt   *time.Time `json:"lock_expires_at,omitempty"`
-	ProgressPercent int        `json:"progress_percent,omitempty"`
-	ProgressStep    string     `json:"progress_step,omitempty"`
+	TaskType         string     `json:"task_type" db:"task_type"`
+	TaskNumber       int        `json:"task_number,omitempty" db:"task_number"`
+	Identifier       string     `json:"identifier,omitempty" db:"identifier"`
+	CreatedByAgentID *uuid.UUID `json:"created_by_agent_id,omitempty" db:"created_by_agent_id"`
+	AssigneeUserID   string     `json:"assignee_user_id,omitempty" db:"assignee_user_id"`
+	ParentID         *uuid.UUID `json:"parent_id,omitempty" db:"parent_id"`
+	ChatID           string     `json:"chat_id,omitempty" db:"chat_id"`
+	LockedAt         *time.Time `json:"locked_at,omitempty" db:"locked_at"`
+	LockExpiresAt    *time.Time `json:"lock_expires_at,omitempty" db:"lock_expires_at"`
+	ProgressPercent  int        `json:"progress_percent,omitempty" db:"progress_percent"`
+	ProgressStep     string     `json:"progress_step,omitempty" db:"progress_step"`
 
 	// Follow-up reminder fields
-	FollowupAt      *time.Time `json:"followup_at,omitempty"`
-	FollowupCount   int        `json:"followup_count,omitempty"`
-	FollowupMax     int        `json:"followup_max,omitempty"`
-	FollowupMessage string     `json:"followup_message,omitempty"`
-	FollowupChannel string     `json:"followup_channel,omitempty"`
-	FollowupChatID  string     `json:"followup_chat_id,omitempty"`
+	FollowupAt      *time.Time `json:"followup_at,omitempty" db:"followup_at"`
+	FollowupCount   int        `json:"followup_count,omitempty" db:"followup_count"`
+	FollowupMax     int        `json:"followup_max,omitempty" db:"followup_max"`
+	FollowupMessage string     `json:"followup_message,omitempty" db:"followup_message"`
+	FollowupChannel string     `json:"followup_channel,omitempty" db:"followup_channel"`
+	FollowupChatID  string     `json:"followup_chat_id,omitempty" db:"followup_chat_id"`
 
 	// Denormalized counts for dashboard performance
-	CommentCount    int `json:"comment_count"`
-	AttachmentCount int `json:"attachment_count"`
+	CommentCount    int `json:"comment_count" db:"comment_count"`
+	AttachmentCount int `json:"attachment_count" db:"attachment_count"`
 
 	// Joined fields
-	OwnerAgentKey     string `json:"owner_agent_key,omitempty"`
-	CreatedByAgentKey string `json:"created_by_agent_key,omitempty"`
+	OwnerAgentKey     string `json:"owner_agent_key,omitempty" db:"owner_agent_key"`
+	CreatedByAgentKey string `json:"created_by_agent_key,omitempty" db:"created_by_agent_key"`
 }
 
 // TeamTaskCommentData represents a comment on a team task.
 type TeamTaskCommentData struct {
-	ID          uuid.UUID  `json:"id"`
-	TaskID      uuid.UUID  `json:"task_id"`
-	AgentID     *uuid.UUID `json:"agent_id,omitempty"`
-	UserID      string     `json:"user_id,omitempty"`
-	Content     string     `json:"content"`
-	CommentType string     `json:"comment_type,omitempty"` // "note" (default) or "blocker"
-	CreatedAt   time.Time  `json:"created_at"`
+	ID          uuid.UUID  `json:"id" db:"id"`
+	TaskID      uuid.UUID  `json:"task_id" db:"task_id"`
+	AgentID     *uuid.UUID `json:"agent_id,omitempty" db:"agent_id"`
+	UserID      string     `json:"user_id,omitempty" db:"user_id"`
+	Content     string     `json:"content" db:"content"`
+	CommentType string     `json:"comment_type,omitempty" db:"comment_type"` // "note" (default) or "blocker"
+	CreatedAt   time.Time  `json:"created_at" db:"created_at"`
 
 	// Joined
-	AgentKey string `json:"agent_key,omitempty"`
+	AgentKey string `json:"agent_key,omitempty" db:"agent_key"`
 }
 
 // TeamTaskEventData represents an audit event on a team task.
 type TeamTaskEventData struct {
-	ID        uuid.UUID       `json:"id"`
-	TaskID    uuid.UUID       `json:"task_id"`
-	EventType string          `json:"event_type"`
-	ActorType string          `json:"actor_type"` // "agent" | "human"
-	ActorID   string          `json:"actor_id"`
-	Data      json.RawMessage `json:"data,omitempty"`
-	CreatedAt time.Time       `json:"created_at"`
+	ID        uuid.UUID       `json:"id" db:"id"`
+	TaskID    uuid.UUID       `json:"task_id" db:"task_id"`
+	EventType string          `json:"event_type" db:"event_type"`
+	ActorType string          `json:"actor_type" db:"actor_type"`
+	ActorID   string          `json:"actor_id" db:"actor_id"`
+	Data      json.RawMessage `json:"data,omitempty" db:"data"`
+	CreatedAt time.Time       `json:"created_at" db:"created_at"`
 }
 
 // TeamTaskAttachmentData represents a file attached to a team task (path-based, no FK to workspace).
 type TeamTaskAttachmentData struct {
-	ID                uuid.UUID       `json:"id"`
-	TaskID            uuid.UUID       `json:"task_id"`
-	TeamID            uuid.UUID       `json:"team_id"`
-	ChatID            string          `json:"chat_id,omitempty"`
-	Path              string          `json:"path"`
-	FileSize          int64           `json:"file_size"`
-	MimeType          string          `json:"mime_type,omitempty"`
-	CreatedByAgentID  *uuid.UUID      `json:"created_by_agent_id,omitempty"`
-	CreatedBySenderID string          `json:"created_by_sender_id,omitempty"`
-	Metadata          json.RawMessage `json:"metadata,omitempty"`
-	CreatedAt         time.Time       `json:"created_at"`
-	DownloadURL       string          `json:"download_url,omitempty"` // signed URL, populated at delivery time
+	ID                uuid.UUID       `json:"id" db:"id"`
+	TaskID            uuid.UUID       `json:"task_id" db:"task_id"`
+	TeamID            uuid.UUID       `json:"team_id" db:"team_id"`
+	ChatID            string          `json:"chat_id,omitempty" db:"chat_id"`
+	Path              string          `json:"path" db:"path"`
+	FileSize          int64           `json:"file_size" db:"file_size"`
+	MimeType          string          `json:"mime_type,omitempty" db:"mime_type"`
+	CreatedByAgentID  *uuid.UUID      `json:"created_by_agent_id,omitempty" db:"created_by_agent_id"`
+	CreatedBySenderID string          `json:"created_by_sender_id,omitempty" db:"created_by_sender_id"`
+	Metadata          json.RawMessage `json:"metadata,omitempty" db:"metadata"`
+	CreatedAt         time.Time       `json:"created_at" db:"created_at"`
+	DownloadURL       string          `json:"download_url,omitempty" db:"-"` // signed URL, populated at delivery time
 }
 
 // TeamUserGrant represents a user's access grant to a team.
 type TeamUserGrant struct {
-	ID        uuid.UUID `json:"id"`
-	TeamID    uuid.UUID `json:"team_id"`
-	UserID    string    `json:"user_id"`
-	Role      string    `json:"role"`
-	GrantedBy string    `json:"granted_by,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        uuid.UUID `json:"id" db:"id"`
+	TeamID    uuid.UUID `json:"team_id" db:"team_id"`
+	UserID    string    `json:"user_id" db:"user_id"`
+	Role      string    `json:"role" db:"role"`
+	GrantedBy string    `json:"granted_by,omitempty" db:"granted_by"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
 }
 
 // ScopeEntry represents a unique channel+chatID scope across tasks.
 type ScopeEntry struct {
-	Channel string `json:"channel"`
-	ChatID  string `json:"chat_id"`
+	Channel string `json:"channel" db:"-"`
+	ChatID  string `json:"chat_id" db:"-"`
 }
 
 // TeamCRUDStore manages core team and member operations.

@@ -411,6 +411,34 @@ When using small models (MiniMax, Qwen, Gemini Flash): all 3 layers are critical
 
 ---
 
+## 6. Model Registry (v3)
+
+The **model registry** (v3) provides structured metadata about LLM models used by the steering system and cost calculation:
+
+```
+ModelRegistry interface
+├── Resolve(provider, modelID) → ModelSpec
+├── Register(spec ModelSpec)
+├── Catalog(provider) → []ModelSpec
+└── RegisterResolver(provider, ForwardCompatResolver)
+```
+
+Each `ModelSpec` includes:
+- **ID, Provider**: Model identifier
+- **ContextWindow, MaxTokens**: Capacity bounds
+- **Reasoning, Vision**: Capability flags
+- **TokenizerID**: For token estimation
+- **Cost**: Per-1M-token pricing (input, output, cache-read)
+
+**Forward-compatibility resolver** — providers can implement custom resolution for unknown models, allowing dynamic pricing updates without code changes. The registry caches resolved specs for performance.
+
+**Model steering uses the registry for:**
+- Context window checks (adaptive throttle at 60%)
+- Token-based iteration budgets and hints (75%, 90% warnings)
+- Cost calculation in traces
+
+---
+
 ## Reference Keywords
 
 | Keyword | File/Package |
@@ -426,3 +454,5 @@ When using small models (MiniMax, Qwen, Gemini Flash): all 3 layers are critical
 | `IsSilentReply()` (NO_REPLY) | `internal/agent/sanitize.go` |
 | `i18n.MsgSkillNudge70Pct` / `90Pct` | `internal/i18n/` |
 | `WithIterationProgress()` | `internal/tools/` |
+| `ModelRegistry`, `ModelSpec`, `InMemoryRegistry` | `internal/providers/model_registry.go` |
+| `SeedDefaultModels()`, `ForwardCompatResolver` | `internal/providers/model_registry.go` |

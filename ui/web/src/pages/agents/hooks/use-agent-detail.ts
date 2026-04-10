@@ -59,6 +59,7 @@ export function useAgentDetail(agentId: string | undefined) {
 
       return { agent: ag, files };
     },
+    staleTime: 60_000,
     enabled: !!agentId,
   });
 

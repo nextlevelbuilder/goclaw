@@ -44,7 +44,7 @@ export function OpenAgentEmptyState({ files }: OpenAgentEmptyStateProps) {
                   {FILE_DESCRIPTIONS[file.name] || t("files.contextFile")}
                 </div>
               </div>
-              <Badge variant="outline" className="shrink-0 text-[10px]">
+              <Badge variant="outline" className="shrink-0 text-2xs">
                 {t("files.perUser")}
               </Badge>
             </div>

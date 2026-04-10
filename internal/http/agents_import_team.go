@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -60,20 +61,37 @@ func (h *AgentsHandler) importTeamSection(ctx context.Context, ag *store.AgentDa
 	// Always include the importing agent itself
 	agentKeyToID[ag.AgentKey] = ag.ID
 
-	// Insert non-lead members
-	for _, m := range arc.teamMembers {
-		memberID, ok := agentKeyToID[m.AgentKey]
-		if !ok {
-			slog.Info("import.team: member not found, skipping", "agent_key", m.AgentKey)
-			continue
+	// Insert non-lead members (batch)
+	{
+		type memberRow struct {
+			agentID uuid.UUID
+			role    string
 		}
-		if _, err = h.db.ExecContext(ctx,
-			`INSERT INTO agent_team_members (team_id, agent_id, role, tenant_id, joined_at)
-			 VALUES ($1, $2, $3, $4, NOW())
-			 ON CONFLICT (team_id, agent_id) DO NOTHING`,
-			teamID, memberID, m.Role, tid,
-		); err != nil {
-			slog.Warn("import.team: insert member", "agent_key", m.AgentKey, "error", err)
+		var rows []memberRow
+		for _, m := range arc.teamMembers {
+			memberID, ok := agentKeyToID[m.AgentKey]
+			if !ok {
+				slog.Info("import.team: member not found, skipping", "agent_key", m.AgentKey)
+				continue
+			}
+			rows = append(rows, memberRow{agentID: memberID, role: m.Role})
+		}
+		const cols = 4 // team_id, agent_id, role, tenant_id
+		for start := 0; start < len(rows); start += 1000 {
+			end := min(start+1000, len(rows))
+			chunk := rows[start:end]
+			args := make([]any, 0, len(chunk)*cols)
+			ph := make([]string, 0, len(chunk))
+			for i, r := range chunk {
+				b := i * cols
+				ph = append(ph, fmt.Sprintf("($%d,$%d,$%d,$%d,NOW())", b+1, b+2, b+3, b+4))
+				args = append(args, teamID, r.agentID, r.role, tid)
+			}
+			q := `INSERT INTO agent_team_members (team_id, agent_id, role, tenant_id, joined_at)
+				VALUES ` + strings.Join(ph, ",") + ` ON CONFLICT (team_id, agent_id) DO NOTHING`
+			if _, err = h.db.ExecContext(ctx, q, args...); err != nil {
+				slog.Warn("import.team: batch insert members", "count", len(chunk), "error", err)
+			}
 		}
 	}
 
@@ -130,62 +148,132 @@ func (h *AgentsHandler) importTeamSection(ctx context.Context, ag *store.AgentDa
 		}
 	}
 
-	// Insert comments
-	for _, c := range arc.teamComments {
-		if c.TaskIdx < 0 || c.TaskIdx >= len(taskIDByIdx) {
-			continue
+	// Insert comments (batch)
+	{
+		type commentRow struct {
+			id          uuid.UUID
+			taskID      uuid.UUID
+			agentID     *uuid.UUID
+			userID      *string
+			content     string
+			commentType string
+			metadata    any
 		}
-		taskID := taskIDByIdx[c.TaskIdx]
-
-		var agentID *uuid.UUID
-		if c.AgentKey != nil {
-			if id, ok := agentKeyToID[*c.AgentKey]; ok {
-				agentID = &id
+		var cRows []commentRow
+		for _, c := range arc.teamComments {
+			if c.TaskIdx < 0 || c.TaskIdx >= len(taskIDByIdx) {
+				continue
+			}
+			var agentID *uuid.UUID
+			if c.AgentKey != nil {
+				if id, ok := agentKeyToID[*c.AgentKey]; ok {
+					agentID = &id
+				}
+			}
+			cRows = append(cRows, commentRow{
+				id: uuid.Must(uuid.NewV7()), taskID: taskIDByIdx[c.TaskIdx],
+				agentID: agentID, userID: c.UserID, content: c.Content,
+				commentType: c.CommentType, metadata: nullJSON(c.Metadata),
+			})
+		}
+		const cols = 8
+		for start := 0; start < len(cRows); start += 1000 {
+			end := min(start+1000, len(cRows))
+			chunk := cRows[start:end]
+			args := make([]any, 0, len(chunk)*cols)
+			ph := make([]string, 0, len(chunk))
+			for i, r := range chunk {
+				b := i * cols
+				ph = append(ph, fmt.Sprintf("($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,NOW())", b+1, b+2, b+3, b+4, b+5, b+6, b+7, b+8))
+				args = append(args, r.id, r.taskID, r.agentID, r.userID, r.content, r.commentType, r.metadata, tid)
+			}
+			q := `INSERT INTO team_task_comments (id, task_id, agent_id, user_id, content, comment_type, metadata, tenant_id, created_at)
+				VALUES ` + strings.Join(ph, ",")
+			if _, err = h.db.ExecContext(ctx, q, args...); err != nil {
+				slog.Warn("import.team: batch insert comments", "count", len(chunk), "error", err)
 			}
 		}
-		if _, err = h.db.ExecContext(ctx,
-			`INSERT INTO team_task_comments (id, task_id, agent_id, user_id, content, comment_type, metadata, tenant_id, created_at)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())`,
-			uuid.Must(uuid.NewV7()), taskID, agentID, c.UserID,
-			c.Content, c.CommentType, nullJSON(c.Metadata), tid,
-		); err != nil {
-			slog.Warn("import.team: insert comment", "task_id", taskID, "error", err)
+	}
+
+	// Insert events (batch)
+	{
+		type eventRow struct {
+			id        uuid.UUID
+			taskID    uuid.UUID
+			eventType string
+			actorType string
+			actorID   string
+			data      any
+		}
+		var eRows []eventRow
+		for _, ev := range arc.teamEvents {
+			if ev.TaskIdx < 0 || ev.TaskIdx >= len(taskIDByIdx) {
+				continue
+			}
+			eRows = append(eRows, eventRow{
+				id: uuid.Must(uuid.NewV7()), taskID: taskIDByIdx[ev.TaskIdx],
+				eventType: ev.EventType, actorType: ev.ActorType,
+				actorID: ev.ActorID, data: nullJSON(ev.Data),
+			})
+		}
+		const cols = 7
+		for start := 0; start < len(eRows); start += 1000 {
+			end := min(start+1000, len(eRows))
+			chunk := eRows[start:end]
+			args := make([]any, 0, len(chunk)*cols)
+			ph := make([]string, 0, len(chunk))
+			for i, r := range chunk {
+				b := i * cols
+				ph = append(ph, fmt.Sprintf("($%d,$%d,$%d,$%d,$%d,$%d,$%d,NOW())", b+1, b+2, b+3, b+4, b+5, b+6, b+7))
+				args = append(args, r.id, r.taskID, r.eventType, r.actorType, r.actorID, r.data, tid)
+			}
+			q := `INSERT INTO team_task_events (id, task_id, event_type, actor_type, actor_id, data, tenant_id, created_at)
+				VALUES ` + strings.Join(ph, ",")
+			if _, err = h.db.ExecContext(ctx, q, args...); err != nil {
+				slog.Warn("import.team: batch insert events", "count", len(chunk), "error", err)
+			}
 		}
 	}
 
-	// Insert events
-	for _, ev := range arc.teamEvents {
-		if ev.TaskIdx < 0 || ev.TaskIdx >= len(taskIDByIdx) {
-			continue
+	// Insert agent_links (batch)
+	{
+		type linkRow struct {
+			id    uuid.UUID
+			srcID uuid.UUID
+			tgtID uuid.UUID
+			dir   string
+			desc  string
 		}
-		taskID := taskIDByIdx[ev.TaskIdx]
-		if _, err = h.db.ExecContext(ctx,
-			`INSERT INTO team_task_events (id, task_id, event_type, actor_type, actor_id, data, tenant_id, created_at)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())`,
-			uuid.Must(uuid.NewV7()), taskID,
-			ev.EventType, ev.ActorType, ev.ActorID, nullJSON(ev.Data), tid,
-		); err != nil {
-			slog.Warn("import.team: insert event", "task_id", taskID, "error", err)
+		var lRows []linkRow
+		for _, l := range arc.teamLinks {
+			srcID, srcOK := agentKeyToID[l.SourceAgentKey]
+			tgtID, tgtOK := agentKeyToID[l.TargetAgentKey]
+			if !srcOK || !tgtOK {
+				slog.Info("import.team: agent_link skipped — agent not found",
+					"source", l.SourceAgentKey, "target", l.TargetAgentKey)
+				continue
+			}
+			lRows = append(lRows, linkRow{
+				id: uuid.Must(uuid.NewV7()), srcID: srcID, tgtID: tgtID,
+				dir: l.Direction, desc: l.Description,
+			})
 		}
-	}
-
-	// Insert agent_links
-	for _, l := range arc.teamLinks {
-		srcID, srcOK := agentKeyToID[l.SourceAgentKey]
-		tgtID, tgtOK := agentKeyToID[l.TargetAgentKey]
-		if !srcOK || !tgtOK {
-			slog.Info("import.team: agent_link skipped — agent not found",
-				"source", l.SourceAgentKey, "target", l.TargetAgentKey)
-			continue
-		}
-		if _, err = h.db.ExecContext(ctx,
-			`INSERT INTO agent_links (id, source_agent_id, target_agent_id, direction, description, created_by, tenant_id)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7)
-			 ON CONFLICT DO NOTHING`,
-			uuid.Must(uuid.NewV7()), srcID, tgtID,
-			l.Direction, l.Description, userID, tid,
-		); err != nil {
-			slog.Warn("import.team: insert link", "error", err)
+		const cols = 7
+		for start := 0; start < len(lRows); start += 1000 {
+			end := min(start+1000, len(lRows))
+			chunk := lRows[start:end]
+			args := make([]any, 0, len(chunk)*cols)
+			ph := make([]string, 0, len(chunk))
+			for i, r := range chunk {
+				b := i * cols
+				ph = append(ph, fmt.Sprintf("($%d,$%d,$%d,$%d,$%d,$%d,$%d)", b+1, b+2, b+3, b+4, b+5, b+6, b+7))
+				args = append(args, r.id, r.srcID, r.tgtID, r.dir, r.desc, userID, tid)
+			}
+			q := `INSERT INTO agent_links (id, source_agent_id, target_agent_id, direction, description, created_by, tenant_id)
+				VALUES ` + strings.Join(ph, ",") + ` ON CONFLICT DO NOTHING`
+			if _, err = h.db.ExecContext(ctx, q, args...); err != nil {
+				slog.Warn("import.team: batch insert links", "count", len(chunk), "error", err)
+			}
 		}
 	}
 
@@ -208,6 +296,7 @@ func (h *AgentsHandler) importTeamSection(ctx context.Context, ag *store.AgentDa
 }
 
 // buildAgentKeyMap resolves all agent_keys referenced in the team section to UUIDs.
+// Uses batch GetByKeys with tenant-scoped context instead of per-key SELECT.
 func (h *AgentsHandler) buildAgentKeyMap(ctx context.Context, tid uuid.UUID, arc *importArchive) map[string]uuid.UUID {
 	keys := make(map[string]struct{})
 	for _, m := range arc.teamMembers {
@@ -231,14 +320,22 @@ func (h *AgentsHandler) buildAgentKeyMap(ctx context.Context, tid uuid.UUID, arc
 		keys[l.TargetAgentKey] = struct{}{}
 	}
 
-	out := make(map[string]uuid.UUID, len(keys))
-	for key := range keys {
-		var id uuid.UUID
-		if err := h.db.QueryRowContext(ctx,
-			`SELECT id FROM agents WHERE agent_key = $1 AND tenant_id = $2`, key, tid,
-		).Scan(&id); err == nil {
-			out[key] = id
-		}
+	keyList := make([]string, 0, len(keys))
+	for k := range keys {
+		keyList = append(keyList, k)
+	}
+
+	// Ensure tenant-scoped context for GetByKeys (Red Team Fix #2).
+	scopedCtx := store.WithTenantID(ctx, tid)
+	agents, err := h.agents.GetByKeys(scopedCtx, keyList)
+	if err != nil {
+		slog.Warn("import.team: batch agent key lookup failed", "error", err)
+		return make(map[string]uuid.UUID)
+	}
+
+	out := make(map[string]uuid.UUID, len(agents))
+	for _, a := range agents {
+		out[a.AgentKey] = a.ID
 	}
 	return out
 }

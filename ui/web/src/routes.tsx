@@ -84,6 +84,9 @@ const PendingMessagesPage = lazyWithRetry(() =>
 const MemoryPage = lazyWithRetry(() =>
   import("@/pages/memory/memory-page").then((m) => ({ default: m.MemoryPage })),
 );
+const VaultPage = lazyWithRetry(() =>
+  import("@/pages/vault/vault-page").then((m) => ({ default: m.VaultPage })),
+);
 const KnowledgeGraphPage = lazyWithRetry(() =>
   import("@/pages/knowledge-graph/knowledge-graph-page").then((m) => ({ default: m.KnowledgeGraphPage })),
 );
@@ -117,6 +120,9 @@ const TenantsAdminPage = lazyWithRetry(() =>
 const TenantDetailPage = lazyWithRetry(() =>
   import("@/pages/tenants-admin/tenant-detail-page").then((m) => ({ default: m.TenantDetailPage })),
 );
+const BackupRestorePage = lazyWithRetry(() =>
+  import("@/pages/backup-restore/backup-restore-page").then((m) => ({ default: m.BackupRestorePage })),
+);
 const TenantSelectorPage = lazyWithRetry(() =>
   import("@/pages/login/tenant-selector").then((m) => ({ default: m.TenantSelectorPage })),
 );
@@ -124,7 +130,7 @@ const TenantSelectorPage = lazyWithRetry(() =>
 function PageLoader() {
   return (
     <div className="flex h-full items-center justify-center">
-      <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+      <img src="/goclaw-icon.svg" alt="" className="h-8 w-8 animate-pulse opacity-50" />
     </div>
   );
 }
@@ -167,6 +173,7 @@ export function AppRoutes() {
           <Route path={ROUTES.CHAT_PATTERN} element={<ChatPage />} />
           <Route path={ROUTES.AGENTS} element={<AgentsPage key="list" />} />
           <Route path={ROUTES.IMPORT_EXPORT} element={<RequireAdmin><ImportExportPage /></RequireAdmin>} />
+          <Route path={ROUTES.BACKUP_RESTORE} element={<RequireAdmin><BackupRestorePage /></RequireAdmin>} />
           <Route path={ROUTES.AGENT_CODEX_POOL} element={<RequireAdmin><AgentCodexPoolPage /></RequireAdmin>} />
           <Route path={ROUTES.AGENT_DETAIL} element={<AgentsPage key="detail" />} />
           <Route path={ROUTES.TEAMS} element={<TeamsPage key="list" />} />
@@ -208,6 +215,7 @@ export function AppRoutes() {
           <Route path={ROUTES.APPROVALS} element={<ApprovalsPage />} />
           <Route path={ROUTES.PENDING_MESSAGES} element={<PendingMessagesPage />} />
           <Route path={ROUTES.MEMORY} element={<MemoryPage />} />
+          <Route path={ROUTES.VAULT} element={<VaultPage />} />
           <Route path={ROUTES.KNOWLEDGE_GRAPH} element={<KnowledgeGraphPage />} />
         </Route>
 

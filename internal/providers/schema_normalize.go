@@ -4,6 +4,8 @@ package providers
 // Union flattening + key stripping live in schema_transforms.go.
 // Shared helpers live in schema_helpers.go.
 
+import "maps"
+
 // maxSchemaDepth prevents stack overflow from malicious deeply-nested schemas.
 const maxSchemaDepth = 64
 
@@ -59,9 +61,7 @@ func collectDefs(schema map[string]any) map[string]any {
 	defs := make(map[string]any)
 	for _, key := range []string{"$defs", "definitions"} {
 		if block, ok := schema[key].(map[string]any); ok {
-			for name, def := range block {
-				defs[name] = def
-			}
+			maps.Copy(defs, block)
 		}
 	}
 	return defs
@@ -150,5 +150,3 @@ func stripNullVariants(schema map[string]any, depth int) map[string]any {
 		return stripNullVariants(child, depth+1)
 	})
 }
-
-

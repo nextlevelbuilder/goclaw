@@ -90,3 +90,107 @@ func TestInMemoryCache_Clear(t *testing.T) {
 		}
 	}
 }
+
+// TestInMemoryCache_PeriodicSweep verifies expired entries are removed by
+// the background sweep goroutine (not just lazy on Get).
+func TestInMemoryCache_PeriodicSweep(t *testing.T) {
+	c := NewInMemoryCache[string](
+		WithSweepInterval[string](20*time.Millisecond),
+	)
+	defer c.Close()
+	ctx := context.Background()
+
+	c.Set(ctx, "short", "v1", 10*time.Millisecond)
+	c.Set(ctx, "long", "v2", 0) // no expiry
+
+	// Wait for sweep to run at least once after short entry expires
+	time.Sleep(60 * time.Millisecond)
+
+	// Short entry should be removed by sweep even without Get
+	if count := c.sizeLocked(); count != 1 {
+		t.Errorf("expected 1 entry after sweep, got %d", count)
+	}
+	if _, ok := c.Get(ctx, "long"); !ok {
+		t.Error("long-lived entry should still exist")
+	}
+}
+
+// TestInMemoryCache_MaxSizeEviction verifies oldest entries are evicted when
+// max size cap is reached.
+func TestInMemoryCache_MaxSizeEviction(t *testing.T) {
+	c := NewInMemoryCache[int](
+		WithMaxSize[int](5),
+		WithSweepInterval[int](10*time.Millisecond),
+	)
+	defer c.Close()
+	ctx := context.Background()
+
+	// Insert 10 entries with distinct creation times to ensure oldest-first ordering
+	for i := 0; i < 10; i++ {
+		c.Set(ctx, string(rune('a'+i)), i, 0)
+		time.Sleep(2 * time.Millisecond)
+	}
+
+	// Trigger sweep by waiting for interval
+	time.Sleep(30 * time.Millisecond)
+
+	if count := c.sizeLocked(); count > 5 {
+		t.Errorf("expected size ≤ 5 after max-size eviction, got %d", count)
+	}
+}
+
+// TestInMemoryCache_Close verifies Close stops the sweep goroutine (no leak).
+func TestInMemoryCache_Close(t *testing.T) {
+	c := NewInMemoryCache[string](
+		WithSweepInterval[string](10*time.Millisecond),
+	)
+	ctx := context.Background()
+	c.Set(ctx, "k", "v", 0)
+
+	c.Close()
+	// Close should be idempotent
+	c.Close()
+
+	// After Close, cache is still readable for lazy access but sweep is stopped
+	if _, ok := c.Get(ctx, "k"); !ok {
+		t.Error("Get should still work after Close")
+	}
+}
+
+// TestInMemoryCache_ConcurrentSweepAndSet verifies no race between sweep and Set.
+func TestInMemoryCache_ConcurrentSweepAndSet(t *testing.T) {
+	c := NewInMemoryCache[int](
+		WithSweepInterval[int](1*time.Millisecond),
+		WithMaxSize[int](100),
+	)
+	defer c.Close()
+	ctx := context.Background()
+
+	done := make(chan bool)
+	go func() {
+		for i := 0; i < 500; i++ {
+			c.Set(ctx, string(rune('a'+(i%26))), i, 5*time.Millisecond)
+		}
+		done <- true
+	}()
+	go func() {
+		for i := 0; i < 500; i++ {
+			_, _ = c.Get(ctx, string(rune('a'+(i%26))))
+		}
+		done <- true
+	}()
+	<-done
+	<-done
+}
+
+// TestInMemoryCache_BackwardCompatZeroArg verifies existing call sites with
+// zero-arg constructor still work (variadic options).
+func TestInMemoryCache_BackwardCompatZeroArg(t *testing.T) {
+	c := NewInMemoryCache[string]()
+	defer c.Close()
+	ctx := context.Background()
+	c.Set(ctx, "k", "v", 0)
+	if v, ok := c.Get(ctx, "k"); !ok || v != "v" {
+		t.Errorf("backward compat broken: got %v, %v", v, ok)
+	}
+}

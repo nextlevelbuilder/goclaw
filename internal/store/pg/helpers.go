@@ -3,97 +3,41 @@ package pg
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
-	"fmt"
 	"log/slog"
-	"regexp"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/store/base"
 )
 
-// validColumnName matches safe SQL identifiers (letters, digits, underscores).
-// Defense-in-depth: prevents column name injection in execMapUpdate.
-var validColumnName = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+// --- Nullable helpers (delegated to base/) ---
 
-// --- Nullable helpers ---
+var (
+	nilStr    = base.NilStr
+	nilInt    = base.NilInt
+	nilUUID   = base.NilUUID
+	nilTime   = base.NilTime
+	derefStr  = base.DerefStr
+	derefInt  = base.DerefInt
+	derefUUID = base.DerefUUID
+	derefBytes = base.DerefBytes
+)
 
-func nilStr(s string) *string {
-	if s == "" {
-		return nil
-	}
-	return &s
-}
+// --- JSON helpers (delegated to base/) ---
 
-func nilInt(v int) *int {
-	if v == 0 {
-		return nil
-	}
-	return &v
-}
+var (
+	jsonOrEmpty      = base.JsonOrEmpty
+	jsonOrEmptyArray = base.JsonOrEmptyArray
+	jsonOrNull       = base.JsonOrNull
+)
 
-func nilUUID(u *uuid.UUID) *uuid.UUID {
-	if u == nil || *u == uuid.Nil {
-		return nil
-	}
-	return u
-}
+// --- Column/table validation (delegated to base/) ---
 
-func nilTime(t *time.Time) *time.Time {
-	if t == nil || t.IsZero() {
-		return nil
-	}
-	return t
-}
+var validColumnName = base.ValidColumnName
 
-func derefStr(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
-}
-
-func derefUUID(u *uuid.UUID) uuid.UUID {
-	if u == nil {
-		return uuid.Nil
-	}
-	return *u
-}
-
-func derefBytes(b *[]byte) []byte {
-	if b == nil {
-		return nil
-	}
-	return *b
-}
-
-// --- JSON helpers ---
-
-func jsonOrEmpty(data []byte) []byte {
-	if data == nil {
-		return []byte("{}")
-	}
-	return data
-}
-
-func jsonOrEmptyArray(data []byte) []byte {
-	if data == nil {
-		return []byte("[]")
-	}
-	return data
-}
-
-func jsonOrNull(data json.RawMessage) any {
-	if data == nil {
-		return nil
-	}
-	return []byte(data)
-}
-
-// --- PostgreSQL array helpers ---
+// --- PostgreSQL array helpers (PG-specific) ---
 
 // pqStringArray converts a Go string slice to a PostgreSQL text[] literal.
 // Each element is double-quoted and escaped to prevent array literal injection.
@@ -162,87 +106,65 @@ func scanStringArray(data []byte, dest *[]string) {
 	*dest = result
 }
 
-// --- Dynamic UPDATE helper ---
+// --- Dynamic UPDATE helpers (using base.BuildMapUpdate) ---
 
 // execMapUpdate builds and runs a dynamic UPDATE from a column→value map.
-// Column names are validated against a strict identifier regex to prevent SQL injection.
 func execMapUpdate(ctx context.Context, db *sql.DB, table string, id uuid.UUID, updates map[string]any) error {
-	if len(updates) == 0 {
+	query, args, err := base.BuildMapUpdate(pgDialect, table, id, updates)
+	if err != nil {
+		slog.Warn("security.invalid_column_name", "table", table, "error", err)
+		return err
+	}
+	if query == "" {
 		return nil
 	}
-	var setClauses []string
-	var args []any
-	i := 1
-	for col, val := range updates {
-		if !validColumnName.MatchString(col) {
-			slog.Warn("security.invalid_column_name", "table", table, "column", col)
-			return fmt.Errorf("invalid column name: %q", col)
-		}
-		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", col, i))
-		args = append(args, val)
-		i++
-	}
-	// Auto-set updated_at for tables that have the column, unless caller already included it.
-	if _, ok := updates["updated_at"]; !ok && tableHasUpdatedAt(table) {
-		setClauses = append(setClauses, fmt.Sprintf("updated_at = $%d", i))
-		args = append(args, time.Now().UTC())
-		i++
-	}
-	args = append(args, id)
-	q := fmt.Sprintf("UPDATE %s SET %s WHERE id = $%d", table, strings.Join(setClauses, ", "), i)
-	_, err := db.ExecContext(ctx, q, args...)
+	_, err = db.ExecContext(ctx, query, args...)
 	return err
 }
 
-// tablesWithUpdatedAt lists tables that have an updated_at column.
-var tablesWithUpdatedAt = map[string]bool{
-	"agents": true, "llm_providers": true, "sessions": true,
-	"channel_instances": true, "cron_jobs": true,
-	"skills": true, "mcp_servers": true, "agent_links": true,
-	"agent_teams": true, "team_tasks": true, "builtin_tools": true,
-	"agent_context_files": true, "user_context_files": true,
-	"user_agent_overrides": true, "config_secrets": true,
-	"memory_documents": true, "memory_chunks": true, "embedding_cache": true,
-	"secure_cli_binaries": true, "tenants": true,
+// execMapUpdateWhereTenant is like execMapUpdate but appends AND tenant_id = $N filter.
+func execMapUpdateWhereTenant(ctx context.Context, db *sql.DB, table string, updates map[string]any, id, tenantID uuid.UUID) error {
+	query, args, err := base.BuildMapUpdateWhereTenant(pgDialect, table, updates, id, tenantID)
+	if err != nil {
+		slog.Warn("security.invalid_column_name", "table", table, "error", err)
+		return err
+	}
+	if query == "" {
+		return nil
+	}
+	_, err = db.ExecContext(ctx, query, args...)
+	return err
 }
 
-func tableHasUpdatedAt(table string) bool {
-	return tablesWithUpdatedAt[table]
-}
+// tableHasUpdatedAt returns true if the table has an updated_at column.
+var tableHasUpdatedAt = base.TableHasUpdatedAt
 
-// --- Tenant filter helpers ---
+// --- Tenant filter helpers (delegated to base/) ---
 
 // tenantIDForInsert returns the tenant UUID for INSERT operations.
-// Falls back to MasterTenantID when no tenant in context.
 func tenantIDForInsert(ctx context.Context) uuid.UUID {
-	tid := store.TenantIDFromContext(ctx)
-	if tid == uuid.Nil {
-		return store.MasterTenantID
-	}
-	return tid
+	return base.TenantIDForInsert(store.TenantIDFromContext(ctx), store.MasterTenantID)
 }
 
 // requireTenantID returns the tenant UUID or an error if missing (fail-closed).
 func requireTenantID(ctx context.Context) (uuid.UUID, error) {
 	tid := store.TenantIDFromContext(ctx)
-	if tid == uuid.Nil {
-		return uuid.Nil, fmt.Errorf("tenant_id required")
+	if err := base.RequireTenantID(tid); err != nil {
+		return uuid.Nil, err
 	}
 	return tid, nil
 }
 
-// --- Scope-based query helpers ---
-// Generate WHERE clauses for tenant + optional project-level isolation.
-// Uses store.QueryScope which extracts scope from context (fail-closed).
+// --- Scope-based query helpers (thin wrappers around base/) ---
 
 // scopeClause extracts QueryScope from context and generates WHERE conditions.
-// Drop-in replacement for tenantClauseN that supports future project-level scoping.
 func scopeClause(ctx context.Context, startParam int) (clause string, args []any, nextParam int, err error) {
 	scope, err := store.ScopeFromContext(ctx)
 	if err != nil {
 		return "", nil, startParam, err
 	}
-	clause, args, nextParam = scope.WhereClause(startParam)
+	bScope := base.QueryScope{TenantID: scope.TenantID, ProjectID: scope.ProjectID}
+	clause, args, nextParam = base.BuildScopeClause(pgDialect, bScope, startParam)
 	return clause, args, nextParam, nil
 }
 
@@ -253,6 +175,8 @@ func scopeClauseAlias(ctx context.Context, startParam int, alias string) (clause
 	if err != nil {
 		return "", nil, startParam, err
 	}
-	clause, args, nextParam = scope.WhereClauseAlias(startParam, alias)
+	bScope := base.QueryScope{TenantID: scope.TenantID, ProjectID: scope.ProjectID}
+	clause, args, nextParam = base.BuildScopeClauseAlias(pgDialect, bScope, startParam, alias)
 	return clause, args, nextParam, nil
 }
+

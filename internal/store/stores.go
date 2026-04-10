@@ -39,4 +39,8 @@ type Stores struct {
 	ScreencastSessions        ScreencastSessionStore
 	BrowserAudit              BrowserAuditStore
 	SubagentTasks          SubagentTaskStore
+	Vault                  VaultStore
+	Episodic               EpisodicStore
+	EvolutionMetrics       EvolutionMetricsStore
+	EvolutionSuggestions   EvolutionSuggestionStore
 }

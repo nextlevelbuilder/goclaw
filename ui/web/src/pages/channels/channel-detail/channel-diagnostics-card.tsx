@@ -51,7 +51,7 @@ export function ChannelDiagnosticsCard({
           </p>
 
           <div className="mt-4">
-            <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+            <p className="text-xs-plus font-medium uppercase tracking-[0.16em] text-muted-foreground">
               {t("detail.recommendedAction", {
                 defaultValue: "Recommended action",
               })}
@@ -89,7 +89,7 @@ export function ChannelDiagnosticsCard({
         </div>
 
         <div>
-          <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+          <p className="text-xs-plus font-medium uppercase tracking-[0.16em] text-muted-foreground">
             {t("detail.timeline.title", { defaultValue: "Timeline" })}
           </p>
           <div className="mt-3 space-y-2">

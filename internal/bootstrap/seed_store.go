@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"path/filepath"
 	"strings"
@@ -9,8 +10,46 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
+
+// ChannelMeta carries channel-provided contact info for bootstrap decisions.
+type ChannelMeta struct {
+	ChannelType     string
+	DisplayName     string
+	DefaultTimezone string
+}
+
+// shouldSkipBootstrap returns true when channel provides enough user info
+// to pre-fill USER.md, making the interactive bootstrap unnecessary.
+// Currently only Pancake channel qualifies (provides Facebook profile name).
+func shouldSkipBootstrap(meta *ChannelMeta) bool {
+	return meta != nil &&
+		meta.ChannelType == "pancake" &&
+		meta.DisplayName != ""
+}
+
+// buildPrefilledUser generates USER.md content pre-filled with channel-provided contact info.
+func buildPrefilledUser(meta *ChannelMeta) string {
+	tz := meta.DefaultTimezone
+	if tz == "" {
+		tz = "(unknown)"
+	}
+	name := channels.SanitizeDisplayName(meta.DisplayName)
+	return fmt.Sprintf(`# USER.md - About This User
+
+- **Name:** %s
+- **What to call them:** %s
+- **Timezone:** %s
+
+## Context
+
+_(First contact via %s channel. Profile info auto-filled from channel data.)_
+`, name, name, tz, meta.ChannelType)
+}
+
+
 
 // retryOnBusy retries fn up to 3 times on SQLITE_BUSY errors with 500ms delay.
 func retryOnBusy(fn func() error) error {
@@ -110,6 +149,9 @@ var userSeedFilesOpen = []string{
 	IdentityFile,
 	UserFile,
 	BootstrapFile,
+	CapabilitiesFile,
+	AgentsCoreFile,
+	AgentsTaskFile,
 }
 
 // userSeedFilesPredefined is the set of files seeded per-user for predefined agents.
@@ -137,7 +179,7 @@ var userSeedFilesPredefined = []string{
 // This ensures wizard-configured owner profiles are preserved on first chat.
 //
 // Returns the list of file names that were seeded.
-func SeedUserFiles(ctx context.Context, agentStore store.AgentStore, agentID uuid.UUID, userID, agentType string, skipIfAnyExist bool) ([]string, error) {
+func SeedUserFiles(ctx context.Context, agentStore store.AgentStore, agentID uuid.UUID, userID, agentType string, skipIfAnyExist bool, channelMeta *ChannelMeta) ([]string, error) {
 	files := userSeedFilesOpen
 	if agentType == store.AgentTypePredefined {
 		files = userSeedFilesPredefined
@@ -155,6 +197,44 @@ func SeedUserFiles(ctx context.Context, agentStore store.AgentStore, agentID uui
 	if skipIfAnyExist && len(existing) > 0 {
 		slog.Debug("bootstrap: skip user seed (existing files)", "agent", agentID, "user", userID, "existing", len(existing))
 		return nil, nil
+	}
+
+	// Channel-provided contact info: skip bootstrap, pre-fill USER.md directly.
+	// Currently only Pancake channel (Facebook Messenger) provides enough user info
+	// (display_name from Facebook profile) to skip the interactive onboarding flow.
+	if shouldSkipBootstrap(channelMeta) {
+		userContent := buildPrefilledUser(channelMeta)
+		if err := retryOnBusy(func() error {
+			return agentStore.SetUserContextFile(ctx, agentID, userID, UserFile, userContent)
+		}); err != nil {
+			return nil, err
+		}
+		seeded := []string{UserFile}
+
+		// For open agents: still seed SOUL.md, IDENTITY.md, AGENTS.md (default templates)
+		// so the agent has its personality/identity files — just skip BOOTSTRAP.md.
+		if agentType == store.AgentTypeOpen {
+			for _, name := range userSeedFilesOpen {
+				if name == BootstrapFile || name == UserFile {
+					continue // skip bootstrap (the whole point) and user (already filled)
+				}
+				content, err := templateFS.ReadFile(filepath.Join("templates", name))
+				if err != nil {
+					continue
+				}
+				if err := retryOnBusy(func() error {
+					return agentStore.SetUserContextFile(ctx, agentID, userID, name, string(content))
+				}); err != nil {
+					return seeded, err
+				}
+				seeded = append(seeded, name)
+			}
+		}
+
+		slog.Info("bootstrap skipped (channel contact info)",
+			"agent", agentID, "user", userID, "channel", channelMeta.ChannelType,
+			"display_name", channelMeta.DisplayName, "files", seeded)
+		return seeded, nil
 	}
 
 	hasFile := make(map[string]bool, len(existing))

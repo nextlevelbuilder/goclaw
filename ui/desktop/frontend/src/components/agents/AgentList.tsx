@@ -115,6 +115,7 @@ export function AgentList() {
       {/* Fullscreen detail panel */}
       {detailAgent && (
         <AgentDetailPanel
+          key={detailAgent.id}
           agent={detailAgent}
           onSave={handleSave}
           onResummon={async (id) => { await resummonAgent(id); setSummoningAgent({ id, name: detailAgent.display_name || detailAgent.agent_key }) }}

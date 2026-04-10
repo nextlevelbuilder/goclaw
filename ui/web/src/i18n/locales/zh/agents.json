@@ -53,6 +53,66 @@
     "evolvingTooltip": "Agent可以自我进化其沟通风格 (SOUL.md)。身份和工作流程保持不变。",
     "staticTooltip": "Agent风格是静态的。在设置中启用自我进化以允许风格适应。"
   },
+  "v3Info": {
+    "title": "v3 新特性",
+    "subtitle": "相比 v2 架构的重大改进",
+    "tabs": {
+      "core": "核心引擎",
+      "memory": "记忆与知识",
+      "orchestration": "编排"
+    },
+    "features": {
+      "pipeline": {
+        "title": "流水线",
+        "v2v3": "单体 7K LOC → 8 个可插拔阶段",
+        "desc": "结构化 context → history → prompt → think → act → observe → memory → summarize 循环，每阶段支持独立回调。",
+        "stat": "8 阶段"
+      },
+      "memory": {
+        "title": "记忆",
+        "v2v3": "单层 → 3 层（工作 → 情景 → 语义）",
+        "desc": "工作记忆保存活跃上下文；情景记忆存储会话摘要；语义层由知识图谱支撑。",
+        "stat": "3 层"
+      },
+      "retrieval": {
+        "title": "检索",
+        "v2v3": "手动搜索 → L0/L1/L2 渐进式加载",
+        "desc": "L0 摘要自动注入每个会话，L1/L2 按需通过 BM25 + 向量混合搜索加载。",
+        "stat": "自动注入"
+      },
+      "vault": {
+        "title": "知识库",
+        "v2v3": "无知识库 → 文档注册 + Wiki链接 + 混合搜索",
+        "desc": "集中式文档存储，支持 [[wikilink]] 解析、文件系统同步和跨全部知识的统一搜索。",
+        "stat": "全新"
+      },
+      "evolution": {
+        "title": "自我进化",
+        "v2v3": "无指标 → 指标 → 建议 → 自动适应",
+        "desc": "记录工具成功率和检索质量，生成改进建议，通过护栏保护的变更机制应用并支持回滚。",
+        "stat": "3 阶段"
+      },
+      "orchestration": {
+        "title": "编排",
+        "v2v3": "仅生成 → 生成 + 委派 + 团队模式",
+        "desc": "Delegate 工具通过 agent_links 实现 Agent 间任务移交，支持自动、显式和手动三种委派模式。",
+        "stat": "3 种模式"
+      },
+      "resilience": {
+        "title": "Provider 弹性",
+        "v2v3": "直接调用 → 中间件 + 故障转移 + 冷却",
+        "desc": "可组合请求中间件链处理速率限制、过载、认证错误和网络故障，自动故障转移。",
+        "stat": "9 种错误类型"
+      },
+      "registry": {
+        "title": "模型注册表",
+        "v2v3": "静态配置 → 动态注册表 + 前向兼容解析器",
+        "desc": "ModelRegistry 跨 Provider 解析模型别名，前向兼容解析器将废弃 ID 映射到当前等效项。",
+        "stat": "自动解析"
+      }
+    },
+    "note": "v3 功能按 Agent 可选开启，在 Agent 设置中启用。"
+  },
   "delete": {
     "title": "删除Agent",
     "description": "永久删除此Agent及其所有上下文文件、Session和配置。此操作无法撤销。",
@@ -121,9 +181,96 @@
     "personality": "Agent个性",
     "modelBudget": "模型与预算",
     "skills": "技能",
-    "evolution": "进化",
+    "evolution": {
+      "title": "进化",
+      "metricsLabel": "进化指标",
+      "metricsHint": "记录工具效果、检索质量和响应反馈",
+      "suggestionsLabel": "进化建议",
+      "suggestionsHint": "根据已记录的指标生成数据驱动的改进建议",
+      "toolSuccess": "工具成功率",
+      "retrievalQuality": "检索质量",
+      "feedback": "反馈",
+      "noMetrics": "尚无指标记录。Agent 处理请求后指标将出现。",
+      "noSuggestions": "尚无建议。建议由每日分析 cron 生成。",
+      "suggestions": "建议",
+      "guardrails": "适应护栏",
+      "maxDelta": "每周期最大变化",
+      "minDataPoints": "最少数据点",
+      "rollbackDrop": "下降时回滚",
+      "lockedParams": "锁定参数",
+      "timeRange": "时间范围",
+      "approve": "批准",
+      "reject": "拒绝",
+      "rollback": "回滚",
+      "confirmApprove": "将此建议应用到 Agent？",
+      "confirmReject": "拒绝此建议？",
+      "confirmRollback": "撤销此已应用的建议？",
+      "confirmDescription": "此操作将更新建议状态。",
+      "notEnabled": "进化未启用",
+      "notEnabledHint": "在 Agent 选项卡的进化部分启用「进化指标」以开始记录指标。",
+      "colType": "类型",
+      "colSuggestion": "建议",
+      "colStatus": "状态",
+      "colCreated": "创建时间",
+      "colActions": "操作",
+      "cancel": "取消",
+      "confirm": "确认",
+      "confirming": "...",
+      "successRate": "成功率",
+      "usageRate": "使用率",
+      "tooltipCalls": "{{count}} 次调用，平均 {{ms}}ms",
+      "tooltipQueries": "{{count}} 次查询，得分 {{score}}"
+    },
     "capabilities": "能力",
-    "llmSeesAs": "LLM会看到这个为"
+    "llmSeesAs": "LLM会看到这个为",
+    "prompt": {
+      "title": "系统提示模式",
+      "mode": {
+        "full": "完整",
+        "fullDesc": "所有部分 — 交互聊天、人设、全部功能",
+        "task": "任务",
+        "taskDesc": "企业自动化 — 记忆、进化、无人设/语气",
+        "minimal": "最小化",
+        "minimalDesc": "后台任务 — 核心规则、领域上下文、仅观察",
+        "none": "无",
+        "noneDesc": "纯工具调用自动化 — 工具、技能、无规则或人设"
+      },
+      "section": {
+        "persona": "Persona",
+        "styleEcho": "Style Echo",
+        "tools": "Tools",
+        "execBias": "Exec Bias",
+        "callStyle": "Call Style",
+        "safety": "Safety",
+        "safetySm": "Safety (sm)",
+        "skills": "Skills",
+        "skillsSearch": "Skills (search)",
+        "mcp": "MCP",
+        "mcpSearch": "MCP (search)",
+        "memory": "Memory",
+        "memorySm": "Memory (sm)",
+        "sandbox": "Sandbox",
+        "evolution": "进化",
+        "channelHints": "频道提示",
+        "pinnedSkills": "固定技能",
+        "skillsHybrid": "Skills (hybrid)",
+        "memoryMin": "Memory (min)",
+        "domainCtx": "Domain Context",
+        "workspace": "Workspace",
+        "toolNotes": "Tool Notes"
+      },
+      "upgradeWarning": "模式已升级。部分文件可能需要重新生成 — 在 Files 标签页使用 Resummon 或 Edit with AI。"
+    },
+    "engine": {
+      "title": "引擎版本",
+      "learnMore": "了解更多",
+      "pipelineTitle": "流水线",
+      "pipelineHint": "8阶段结构化执行循环",
+      "memoryTitle": "记忆",
+      "memoryHint": "情景记忆 + L0自动注入",
+      "retrievalTitle": "检索",
+      "retrievalHint": "L0/L1/L2渐进式知识加载"
+    }
   },
   "general": {
     "selfEvolution": "自我进化",
@@ -457,7 +604,9 @@
     "emptyFile": "空",
     "estTokens": "估计 {{tokens}} token",
     "insertContact": "搜索联系人以插入...",
-    "contentPlaceholder": "文件内容..."
+    "contentPlaceholder": "文件内容...",
+    "systemPromptPreview": "系统提示词",
+    "tokens": "tokens"
   },
   "fileEditor": {
     "editWithAi": "AI 编辑",
@@ -673,10 +822,17 @@
       "textWeight": "文本权重",
       "textWeightTip": "混合搜索中关键词相似度的权重。"
     },
-    "browserProxy": {
-      "title": "浏览器代理",
-      "description": "当Agent使用浏览器时，自动从代理池分配代理。代理选择对Agent透明——Agent不知道使用了哪个代理。",
-      "label": "使用代理池"
+    "dreaming": {
+      "title": "Dreaming（记忆整合）",
+      "description": "后台工作器将会话摘要提升为长期记忆。根据Agent整合频率调整参数。",
+      "enabled": "已启用",
+      "enabledTip": "关闭后Agent将仅使用原始会话摘要，不进行长期整合。",
+      "threshold": "阈值",
+      "thresholdTip": "触发整合运行所需的最少未提升摘要数。默认5。",
+      "debounceMs": "防抖间隔 (ms)",
+      "debounceMsTip": "每个Agent/用户两次运行之间的最小间隔。默认600000（10分钟）。",
+      "verboseLog": "详细日志",
+      "verboseLogTip": "在info级别输出防抖和低于阈值跳过，便于运维调试。"
     },
     "thinking": {
       "title": "扩展思考",

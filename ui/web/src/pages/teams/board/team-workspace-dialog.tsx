@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -9,8 +9,11 @@ import {
 import { RefreshCw, Upload } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { FileBrowser } from "@/components/shared/file-browser";
-import { FileUploadDialog } from "@/components/shared/file-upload-dialog";
 import { buildTree, isTextFile } from "@/lib/file-helpers";
+
+const FileUploadDialog = lazy(() =>
+  import("@/components/shared/file-upload-dialog").then((m) => ({ default: m.FileUploadDialog }))
+);
 import { useTeamWorkspace } from "../hooks/use-team-workspace";
 import { useHttp } from "@/hooks/use-ws";
 import { toast } from "@/stores/use-toast-store";
@@ -251,13 +254,15 @@ export function TeamWorkspaceDialog({ open, onOpenChange, teamId, scopes }: Team
           showSize
         />
 
-        <FileUploadDialog
-          open={uploadOpen}
-          onOpenChange={handleUploadClose}
-          onUpload={handleUploadFile}
-          title={t("workspace.upload.title")}
-          description={t("workspace.upload.description")}
-        />
+        <Suspense fallback={null}>
+          <FileUploadDialog
+            open={uploadOpen}
+            onOpenChange={handleUploadClose}
+            onUpload={handleUploadFile}
+            title={t("workspace.upload.title")}
+            description={t("workspace.upload.description")}
+          />
+        </Suspense>
       </DialogContent>
     </Dialog>
   );

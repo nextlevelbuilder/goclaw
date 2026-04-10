@@ -227,7 +227,43 @@ OpenAI-compatible providers handle thinking/reasoning content as metadata. The `
 
 ---
 
-## 6. Observability
+## 6. Reasoning Content Stripping (Phase 6 — OpenClaw TS port)
+
+Some models emit chain-of-thought reasoning tokens even when `effort="off"` is specified. To prevent that raw CoT from reaching end users, GoClaw supports a `StripThinking` flag on `ReasoningDecision`.
+
+### Models Known to Leak CoT
+
+Auto-flagged via `modelLeaksReasoning(model)` in `internal/providers/reasoning_resolution.go`:
+- **Kimi family**: any model name containing `kimi` (case-insensitive, e.g. `kimi-k2`, `moonshot/kimi-k2-thinking`)
+- **DeepSeek-Reasoner**: any model name containing `deepseek-reasoner`
+
+The allowlist is a simple substring check — extendable as new leaky models appear.
+
+### Auto-Enable Flow
+
+1. `ResolveReasoningDecision` runs its normal flow, then a `defer` checks: if `EffectiveEffort == "off" && modelLeaksReasoning(model)`, it sets `decision.StripThinking = true`.
+2. The agent loop (`loop_pipeline_callbacks.go`) reads `decision.StripThinking` and propagates it into `chatReq.Options[providers.OptStripThinking] = true`.
+3. Each provider's streaming handler reads `OptStripThinking` from options at the top of `ChatStream`/`Chat` and applies guard clauses.
+
+### Implementation Per Provider
+
+- **Anthropic** (`anthropic_stream.go`, `anthropic.go`): `thinking_delta` events skip `result.Thinking` accumulation AND the `onChunk` emit when stripping, but `thinkingChars` still increments so `Usage.ThinkingTokens` stays billable. `RawAssistantContent` (content blocks for tool-use passback) is never touched. Non-streaming `Chat()` clears `resp.Thinking` post-parse.
+- **OpenAI** (`openai_chat.go`): streaming guards `reasoning`/`reasoning_content` delta accumulation; non-streaming clears `resp.Thinking` post-parse. `Usage.ThinkingTokens` read from the usage chunk independently.
+- **Codex** (`codex.go`): `processSSEEvent` takes an extra `stripThinking bool` param; the `reasoning` item case skips summary text appending when set. Usage still extracted from `response.completed`.
+- **DashScope**: inherits both guards via `OpenAIProvider` embedding — no separate implementation needed.
+
+### Invariants Preserved
+
+| Field | Stripping effect | Rationale |
+|---|---|---|
+| `ChatResponse.Thinking` | Cleared | User-visible output |
+| `Usage.ThinkingTokens` | **Unchanged** | Billing accuracy (Phase 1 depends on it) |
+| `RawAssistantContent` | **Unchanged** | Anthropic tool-use replay requires raw thinking blocks |
+| `onChunk(StreamChunk{Thinking})` | Not emitted | Streaming UI display |
+
+---
+
+## 7. Observability
 
 Each LLM span can now include a `metadata.reasoning` section with:
 - `source`

@@ -103,16 +103,16 @@ export function HeartbeatLogsDialog({
                     </span>
                     <div className="flex items-center gap-1.5">
                       {(log.inputTokens != null || log.outputTokens != null) && (
-                        <span className="text-[10px] text-muted-foreground">
+                        <span className="text-2xs text-muted-foreground">
                           {log.inputTokens ?? 0}↓ {log.outputTokens ?? 0}↑
                         </span>
                       )}
                       {log.durationMs != null && (
-                        <span className="text-[10px] text-muted-foreground">
+                        <span className="text-2xs text-muted-foreground">
                           {formatDuration(log.durationMs)}
                         </span>
                       )}
-                      <Badge variant={statusVariant(log.status)} className="text-[10px]">
+                      <Badge variant={statusVariant(log.status)} className="text-2xs">
                         {log.status}
                       </Badge>
                     </div>

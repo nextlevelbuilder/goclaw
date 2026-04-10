@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { Plug, Plus, RefreshCw, RotateCcw, Pencil, Trash2, Users, Wrench, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,12 +11,17 @@ import { TableSkeleton } from "@/components/shared/loading-skeleton";
 import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { useMCP, type MCPServerData, type MCPServerInput } from "./hooks/use-mcp";
 import { MCPFormDialog } from "./mcp-form-dialog";
-import { MCPGrantsDialog } from "./mcp-grants-dialog";
 import { MCPToolsDialog } from "./mcp-tools-dialog";
-import { MCPUserCredentialsDialog } from "./mcp-user-credentials-dialog";
 import { useMinLoading } from "@/hooks/use-min-loading";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import { usePagination } from "@/hooks/use-pagination";
+
+const MCPGrantsDialog = lazy(() =>
+  import("./mcp-grants-dialog").then((m) => ({ default: m.MCPGrantsDialog }))
+);
+const MCPUserCredentialsDialog = lazy(() =>
+  import("./mcp-user-credentials-dialog").then((m) => ({ default: m.MCPUserCredentialsDialog }))
+);
 
 const transportBadge: Record<string, string> = {
   stdio: "default",
@@ -132,7 +137,7 @@ export function MCPPage() {
                               <span className="ml-1 text-xs text-muted-foreground">({srv.name})</span>
                             )}
                           </div>
-                          <span className="font-mono text-[11px] text-muted-foreground">
+                          <span className="font-mono text-xs-plus text-muted-foreground">
                             {srv.tool_prefix || `mcp_${srv.name.replace(/-/g, "_")}`}
                           </span>
                         </div>
@@ -236,15 +241,17 @@ export function MCPPage() {
       />
 
       {grantsServer && (
-        <MCPGrantsDialog
-          open={!!grantsServer}
-          onOpenChange={(open) => !open && setGrantsServer(null)}
-          server={grantsServer}
-          onGrant={(agentId, allow, deny) => grantAgent(grantsServer.id, agentId, allow, deny)}
-          onRevoke={(agentId) => revokeAgent(grantsServer.id, agentId)}
-          onLoadGrants={listAgentGrants}
-          onLoadTools={listServerTools}
-        />
+        <Suspense fallback={null}>
+          <MCPGrantsDialog
+            open={!!grantsServer}
+            onOpenChange={(open) => !open && setGrantsServer(null)}
+            server={grantsServer}
+            onGrant={(agentId, allow, deny) => grantAgent(grantsServer.id, agentId, allow, deny)}
+            onRevoke={(agentId) => revokeAgent(grantsServer.id, agentId)}
+            onLoadGrants={listAgentGrants}
+            onLoadTools={listServerTools}
+          />
+        </Suspense>
       )}
 
       {toolsServer && (
@@ -268,14 +275,16 @@ export function MCPPage() {
       />
 
       {credentialsServer && (
-        <MCPUserCredentialsDialog
-          open={!!credentialsServer}
-          onOpenChange={(open) => !open && setCredentialsServer(null)}
-          server={credentialsServer}
-          onGetCredentials={getUserCredentials}
-          onSetCredentials={setUserCredentials}
-          onDeleteCredentials={deleteUserCredentials}
-        />
+        <Suspense fallback={null}>
+          <MCPUserCredentialsDialog
+            open={!!credentialsServer}
+            onOpenChange={(open) => !open && setCredentialsServer(null)}
+            server={credentialsServer}
+            onGetCredentials={getUserCredentials}
+            onSetCredentials={setUserCredentials}
+            onDeleteCredentials={deleteUserCredentials}
+          />
+        </Suspense>
       )}
     </div>
   );

@@ -214,9 +214,40 @@ func nullStr(s *string) any {
 	return *s
 }
 
+// nullStrVal converts an empty string to nil interface for nullable text columns.
+// Non-empty strings are returned as-is.
+func nullStrVal(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
+}
+
 // readNewSections parses extended archive entries into the importArchive.
 // Skills/MCP/permissions sections from old archives are silently skipped (backward compat).
 func readNewSections(arc *importArchive, entries map[string][]byte) error {
+	if data, ok := entries["evolution/metrics.jsonl"]; ok {
+		items, err := parseJSONL[pg.EvolutionMetricExport](data)
+		if err != nil {
+			return fmt.Errorf("parse evolution/metrics.jsonl: %w", err)
+		}
+		arc.evolutionMetrics = items
+	}
+	if data, ok := entries["evolution/suggestions.jsonl"]; ok {
+		items, err := parseJSONL[pg.EvolutionSuggestionExport](data)
+		if err != nil {
+			return fmt.Errorf("parse evolution/suggestions.jsonl: %w", err)
+		}
+		arc.evolutionSuggestions = items
+	}
+
+	if data, ok := entries["episodic/summaries.jsonl"]; ok {
+		items, err := parseJSONL[pg.EpisodicSummaryExport](data)
+		if err != nil {
+			return fmt.Errorf("parse episodic/summaries.jsonl: %w", err)
+		}
+		arc.episodicSummaries = items
+	}
 	if data, ok := entries["cron/jobs.jsonl"]; ok {
 		items, err := parseJSONL[pg.CronJobExport](data)
 		if err != nil {
@@ -289,6 +320,22 @@ func readNewSections(arc *importArchive, entries map[string][]byte) error {
 		if rel := strings.TrimPrefix(name, "team/workspace/"); rel != name && rel != "" {
 			arc.teamWorkspace[rel] = data
 		}
+	}
+
+	// Vault section: Knowledge Vault documents + links
+	if data, ok := entries["vault/documents.jsonl"]; ok {
+		items, err := parseJSONL[pg.VaultDocumentExport](data)
+		if err != nil {
+			return fmt.Errorf("parse vault/documents.jsonl: %w", err)
+		}
+		arc.vaultDocuments = items
+	}
+	if data, ok := entries["vault/links.jsonl"]; ok {
+		items, err := parseJSONL[pg.VaultLinkExport](data)
+		if err != nil {
+			return fmt.Errorf("parse vault/links.jsonl: %w", err)
+		}
+		arc.vaultLinks = items
 	}
 
 	return nil

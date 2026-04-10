@@ -58,27 +58,15 @@ func (s *PGPendingMessageStore) ListByKey(ctx context.Context, channelName, hist
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx,
+	var result []store.PendingMessage
+	err = pkgSqlxDB.SelectContext(ctx, &result,
 		`SELECT id, channel_name, history_key, sender, sender_id, body, platform_msg_id, is_summary, created_at, updated_at
 		 FROM channel_pending_messages
 		 WHERE channel_name = $1 AND history_key = $2`+tClause+`
 		 ORDER BY created_at ASC`,
 		append([]any{channelName, historyKey}, tArgs...)...,
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var result []store.PendingMessage
-	for rows.Next() {
-		var m store.PendingMessage
-		if err := rows.Scan(&m.ID, &m.ChannelName, &m.HistoryKey, &m.Sender, &m.SenderID, &m.Body, &m.PlatformMsgID, &m.IsSummary, &m.CreatedAt, &m.UpdatedAt); err != nil {
-			return nil, err
-		}
-		result = append(result, m)
-	}
-	return result, rows.Err()
+	return result, err
 }
 
 func (s *PGPendingMessageStore) DeleteByKey(ctx context.Context, channelName, historyKey string) error {
@@ -165,7 +153,8 @@ func (s *PGPendingMessageStore) ListGroups(ctx context.Context) ([]store.Pending
 	if tClause != "" {
 		where = ` WHERE m.tenant_id = $1`
 	}
-	rows, err := s.db.QueryContext(ctx,
+	var result []store.PendingMessageGroup
+	err = pkgSqlxDB.SelectContext(ctx, &result,
 		`SELECT channel_name, history_key,
 		        COUNT(*) AS message_count,
 		        BOOL_OR(is_summary)
@@ -188,20 +177,7 @@ func (s *PGPendingMessageStore) ListGroups(ctx context.Context) ([]store.Pending
 		 ORDER BY last_activity DESC`,
 		tArgs...,
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var result []store.PendingMessageGroup
-	for rows.Next() {
-		var g store.PendingMessageGroup
-		if err := rows.Scan(&g.ChannelName, &g.HistoryKey, &g.MessageCount, &g.HasSummary, &g.LastActivity); err != nil {
-			return nil, err
-		}
-		result = append(result, g)
-	}
-	return result, rows.Err()
+	return result, err
 }
 
 func (s *PGPendingMessageStore) CountAll(ctx context.Context) (int64, error) {

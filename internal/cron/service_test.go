@@ -352,6 +352,233 @@ func TestService_RunLog_PopulatedByAutoExecution(t *testing.T) {
 	}
 }
 
+// --- Flood prevention & anchor scheduling ---
+
+func TestService_Start_AdvancesPastDueJobs(t *testing.T) {
+	dir := t.TempDir()
+	storePath := filepath.Join(dir, "cron.json")
+
+	var execCount atomic.Int32
+	handler := func(job *Job) (string, error) {
+		execCount.Add(1)
+		return "done", nil
+	}
+
+	// Create service with 3 every-5min jobs, manually set past-due NextRunAtMS
+	cs1 := NewService(storePath, handler)
+	interval := int64(300000) // 5 min
+	now := time.Now().UnixMilli()
+	for i, offset := range []int64{600000, 1200000, 1800000} { // 10, 20, 30 min ago
+		name := fmt.Sprintf("past-due-%d", i)
+		job, err := cs1.AddJob(name, Schedule{Kind: "every", EveryMS: &interval}, "tick", false, "", "", "")
+		if err != nil {
+			t.Fatalf("AddJob error: %v", err)
+		}
+		// Override NextRunAtMS to past value
+		for j := range cs1.store.Jobs {
+			if cs1.store.Jobs[j].ID == job.ID {
+				past := now - offset
+				cs1.store.Jobs[j].State.NextRunAtMS = &past
+			}
+		}
+	}
+	cs1.saveUnsafe()
+
+	// Reload and Start — should advance all jobs to future, not fire them
+	cs2 := NewService(storePath, handler)
+	if err := cs2.Start(); err != nil {
+		t.Fatalf("Start error: %v", err)
+	}
+	// Give just enough time for one potential tick, but jobs should be in the future
+	time.Sleep(1500 * time.Millisecond)
+	cs2.Stop()
+
+	// Verify no past-due executions happened (jobs were advanced, not fired)
+	if count := execCount.Load(); count != 0 {
+		t.Fatalf("expected 0 executions for advanced past-due jobs, got %d", count)
+	}
+
+	// Verify all jobs have future NextRunAtMS
+	afterNow := time.Now().UnixMilli()
+	for _, job := range cs2.ListJobs(true) {
+		if job.State.NextRunAtMS == nil {
+			t.Fatalf("job %s should have NextRunAtMS set", job.Name)
+		}
+		if *job.State.NextRunAtMS <= afterNow {
+			t.Fatalf("job %s NextRunAtMS %d should be in the future (> %d)", job.Name, *job.State.NextRunAtMS, afterNow)
+		}
+	}
+}
+
+func TestAnchorBasedNextRun_PreservesOffset(t *testing.T) {
+	// Test the O(1) anchor arithmetic directly — deterministic, no scheduler needed.
+	// Formula: next = anchor + (elapsed/interval + 1) * interval
+
+	tests := []struct {
+		name        string
+		anchor      int64 // scheduledAtMS
+		interval    int64 // everyMS
+		now         int64
+		wantNext    int64
+	}{
+		{
+			name:     "normal_one_period",
+			anchor:   1000,
+			interval: 5000,
+			now:      6500,
+			// elapsed=5500, periods=5500/5000=1, next=1000+(1+1)*5000=11000
+			wantNext: 11000,
+		},
+		{
+			name:     "different_anchor_preserves_offset",
+			anchor:   2000,
+			interval: 5000,
+			now:      6500,
+			// elapsed=4500, periods=4500/5000=0, next=2000+(0+1)*5000=7000
+			wantNext: 7000,
+		},
+		{
+			name:     "exact_boundary",
+			anchor:   1000,
+			interval: 5000,
+			now:      6000,
+			// elapsed=5000, periods=5000/5000=1, next=1000+(1+1)*5000=11000
+			wantNext: 11000,
+		},
+		{
+			name:     "multiple_periods_skipped",
+			anchor:   1000,
+			interval: 5000,
+			now:      22000,
+			// elapsed=21000, periods=21000/5000=4, next=1000+(4+1)*5000=26000
+			wantNext: 26000,
+		},
+		{
+			name:     "small_interval_large_gap",
+			anchor:   0,
+			interval: 1000, // 1 second
+			now:      86400000, // 24 hours later — O(1) handles this without 86400 iterations
+			// elapsed=86400000, periods=86400000/1000=86400, next=0+(86400+1)*1000=86401000
+			wantNext: 86401000,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			elapsed := tt.now - tt.anchor
+			periods := elapsed / tt.interval
+			next := tt.anchor + (periods+1)*tt.interval
+			if next != tt.wantNext {
+				t.Fatalf("anchor=%d interval=%d now=%d: got next=%d, want %d",
+					tt.anchor, tt.interval, tt.now, next, tt.wantNext)
+			}
+			if next <= tt.now {
+				t.Fatalf("next %d should be after now %d", next, tt.now)
+			}
+		})
+	}
+
+	// Verify two jobs with same interval but different anchors maintain offset
+	anchorA, anchorB := int64(1000), int64(2000)
+	interval := int64(5000)
+	now := int64(6500)
+
+	nextA := anchorA + (((now - anchorA) / interval) + 1) * interval
+	nextB := anchorB + (((now - anchorB) / interval) + 1) * interval
+	offset := nextA - nextB
+	if offset != 4000 { // 11000 - 7000 = 4000 (original offset 1000 preserved mod interval)
+		t.Fatalf("expected 4000ms offset between jobs, got %d", offset)
+	}
+}
+
+func TestService_RunJob_UsesNowBasedScheduling(t *testing.T) {
+	dir := t.TempDir()
+	storePath := filepath.Join(dir, "cron.json")
+
+	handler := func(job *Job) (string, error) { return "ok", nil }
+	cs := NewService(storePath, handler)
+	cs.SetRetryConfig(RetryConfig{MaxRetries: 0})
+
+	interval := int64(60000) // 60s
+	job, err := cs.AddJob("manual-test", Schedule{Kind: "every", EveryMS: &interval}, "msg", false, "", "", "")
+	if err != nil {
+		t.Fatalf("AddJob error: %v", err)
+	}
+
+	beforeRun := time.Now().UnixMilli()
+	ran, _, runErr := cs.RunJob(job.ID, true)
+	afterRun := time.Now().UnixMilli()
+
+	if runErr != nil {
+		t.Fatalf("RunJob error: %v", runErr)
+	}
+	if !ran {
+		t.Fatal("RunJob should have executed")
+	}
+
+	found, ok := cs.GetJob(job.ID)
+	if !ok {
+		t.Fatal("job should exist after RunJob")
+	}
+	if found.State.NextRunAtMS == nil {
+		t.Fatal("NextRunAtMS should be set after RunJob")
+	}
+
+	// RunJob uses computeNextRun(now) → now + interval.
+	// NextRunAtMS should be approximately now + 60s (±1s tolerance for execution time).
+	expectedMin := beforeRun + interval
+	expectedMax := afterRun + interval + 1000
+	if *found.State.NextRunAtMS < expectedMin || *found.State.NextRunAtMS > expectedMax {
+		t.Fatalf("NextRunAtMS %d should be between %d and %d (now + interval)",
+			*found.State.NextRunAtMS, expectedMin, expectedMax)
+	}
+}
+
+func TestService_Start_DisablesPastDueAtJobs(t *testing.T) {
+	dir := t.TempDir()
+	storePath := filepath.Join(dir, "cron.json")
+
+	var execCount atomic.Int32
+	handler := func(job *Job) (string, error) {
+		execCount.Add(1)
+		return "done", nil
+	}
+
+	// Add an at-job with time in the past
+	cs1 := NewService(storePath, handler)
+	past := time.Now().Add(-time.Hour).UnixMilli()
+	_, err := cs1.AddJob("past-at", Schedule{Kind: "at", AtMS: &past}, "msg", false, "", "", "")
+	if err != nil {
+		t.Fatalf("AddJob error: %v", err)
+	}
+	// Override: AddJob rejects past at-jobs, so set it manually
+	for i := range cs1.store.Jobs {
+		cs1.store.Jobs[i].State.NextRunAtMS = &past
+		cs1.store.Jobs[i].Enabled = true
+	}
+	cs1.saveUnsafe()
+
+	// Reload and Start
+	cs2 := NewService(storePath, handler)
+	if err := cs2.Start(); err != nil {
+		t.Fatalf("Start error: %v", err)
+	}
+	time.Sleep(1500 * time.Millisecond)
+	cs2.Stop()
+
+	// Verify: past-due at job should be disabled, not executed
+	if count := execCount.Load(); count != 0 {
+		t.Fatalf("expected 0 executions for disabled past at-job, got %d", count)
+	}
+	jobs := cs2.ListJobs(true)
+	if len(jobs) != 1 {
+		t.Fatalf("expected 1 job, got %d", len(jobs))
+	}
+	if jobs[0].Enabled {
+		t.Fatal("past-due at-job should be disabled")
+	}
+}
+
 // --- helpers ---
 
 //go:fix inline

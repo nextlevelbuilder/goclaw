@@ -21,12 +21,13 @@ type runContextKey struct{}
 // accessor functions (which fall back to individual keys when RunContext is absent).
 type RunContext struct {
 	// Identity
-	AgentID   uuid.UUID
-	AgentKey  string
-	TenantID  uuid.UUID
-	UserID    string
-	AgentType string
-	SenderID  string
+	AgentID          uuid.UUID
+	AgentKey         string
+	TenantID         uuid.UUID
+	UserID           string
+	CredentialUserID string // resolved tenant user for credential lookups (empty = use UserID)
+	AgentType        string
+	SenderID         string
 
 	// Flags
 	SelfEvolve          bool

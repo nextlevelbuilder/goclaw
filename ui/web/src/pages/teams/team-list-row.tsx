@@ -66,7 +66,7 @@ export function TeamListRow({ team, onClick, onDelete }: TeamListRowProps) {
       {/* Lead agent */}
       {team.lead_agent_key && (
         <div className="hidden shrink-0 lg:block">
-          <Badge variant="outline" className="text-[11px]">
+          <Badge variant="outline" className="text-xs-plus">
             {t("detail.lead")}: {team.lead_display_name || team.lead_agent_key}
           </Badge>
         </div>
@@ -74,7 +74,7 @@ export function TeamListRow({ team, onClick, onDelete }: TeamListRowProps) {
 
       {/* Version */}
       {(team.settings as Record<string, unknown>)?.version != null && (
-        <Badge variant="outline" className="hidden shrink-0 text-[10px] sm:inline-flex">
+        <Badge variant="outline" className="hidden shrink-0 text-2xs sm:inline-flex">
           v{String((team.settings as Record<string, unknown>).version)}
         </Badge>
       )}
@@ -86,7 +86,7 @@ export function TeamListRow({ team, onClick, onDelete }: TeamListRowProps) {
 
       {/* Created date */}
       {team.created_at && (
-        <span className="hidden shrink-0 text-[11px] text-muted-foreground lg:block">
+        <span className="hidden shrink-0 text-xs-plus text-muted-foreground lg:block">
           {formatRelativeTime(team.created_at)}
         </span>
       )}

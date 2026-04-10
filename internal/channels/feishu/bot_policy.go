@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 )
 
 // --- Sender name resolution ---
@@ -46,6 +48,16 @@ func (c *Channel) fetchSenderName(ctx context.Context, openID string) string {
 
 // --- Policy checks ---
 
+// isInGroupAllowList checks whether senderID is in the Feishu-specific group allowlist.
+func (c *Channel) isInGroupAllowList(senderID string) bool {
+	for _, allowed := range c.groupAllowList {
+		if senderID == allowed || strings.TrimPrefix(allowed, "@") == senderID {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *Channel) checkGroupPolicy(ctx context.Context, senderID, chatID string) bool {
 	groupPolicy := c.cfg.GroupPolicy
 	if groupPolicy == "" {
@@ -56,107 +68,54 @@ func (c *Channel) checkGroupPolicy(ctx context.Context, senderID, chatID string)
 	case "disabled":
 		return false
 	case "allowlist":
-		if c.IsAllowed(senderID) {
-			return true
-		}
-		for _, allowed := range c.groupAllowList {
-			if senderID == allowed || strings.TrimPrefix(allowed, "@") == senderID {
-				return true
-			}
-		}
-		return false
+		return c.IsAllowed(senderID) || c.isInGroupAllowList(senderID)
 	case "pairing":
-		// Allowlist bypass (per-user)
-		inAllowList := c.HasAllowList() && c.IsAllowed(senderID)
-		inGroupAllowList := false
-		for _, allowed := range c.groupAllowList {
-			if senderID == allowed || strings.TrimPrefix(allowed, "@") == senderID {
-				inGroupAllowList = true
-				break
-			}
-		}
-		if inAllowList || inGroupAllowList {
+		// Feishu groupAllowList bypass: per-user sender allowlist specific to Feishu.
+		if c.isInGroupAllowList(senderID) {
 			return true
 		}
-
-		// Group-level pairing (one approval per group, matching Telegram pattern)
-		if _, cached := c.approvedGroups.Load(chatID); cached {
+		// Delegate remaining pairing logic to BaseChannel (handles allowList, approvedGroups, DB check).
+		result := c.CheckGroupPolicy(ctx, senderID, chatID, groupPolicy)
+		switch result {
+		case channels.PolicyAllow:
 			return true
+		case channels.PolicyNeedsPairing:
+			groupSenderID := fmt.Sprintf("group:%s", chatID)
+			c.sendPairingReply(ctx, groupSenderID, chatID)
+			return false
+		default:
+			return false
 		}
-		groupSenderID := fmt.Sprintf("group:%s", chatID)
-		if c.pairingService != nil {
-			paired, err := c.pairingService.IsPaired(ctx, groupSenderID, c.Name())
-			if err != nil {
-				slog.Warn("security.pairing_check_failed, assuming paired (fail-open)",
-					"group_sender", groupSenderID, "channel", c.Name(), "error", err)
-				paired = true
-			}
-			if paired {
-				c.approvedGroups.Store(chatID, true)
-				return true
-			}
-		}
-		c.sendPairingReply(ctx, groupSenderID, chatID)
-		return false
 	default: // "open"
 		return true
 	}
 }
 
 func (c *Channel) checkDMPolicy(ctx context.Context, senderID, chatID string) bool {
-	dmPolicy := c.cfg.DMPolicy
-	if dmPolicy == "" {
-		dmPolicy = "pairing"
-	}
-
-	switch dmPolicy {
-	case "disabled":
-		slog.Debug("feishu DM rejected: disabled", "sender_id", senderID)
-		return false
-	case "open":
+	result := c.CheckDMPolicy(ctx, senderID, c.cfg.DMPolicy)
+	switch result {
+	case channels.PolicyAllow:
 		return true
-	case "allowlist":
-		if !c.IsAllowed(senderID) {
-			slog.Debug("feishu DM rejected by allowlist", "sender_id", senderID)
-			return false
-		}
-		return true
-	default: // "pairing"
-		paired := false
-		if c.pairingService != nil {
-			p, err := c.pairingService.IsPaired(ctx, senderID, c.Name())
-			if err != nil {
-				slog.Warn("security.pairing_check_failed, assuming paired (fail-open)",
-					"sender_id", senderID, "channel", c.Name(), "error", err)
-				paired = true
-			} else {
-				paired = p
-			}
-		}
-		inAllowList := c.HasAllowList() && c.IsAllowed(senderID)
-
-		if paired || inAllowList {
-			return true
-		}
-
+	case channels.PolicyNeedsPairing:
 		c.sendPairingReply(ctx, senderID, chatID)
+		return false
+	default:
+		slog.Debug("feishu DM rejected by policy", "sender_id", senderID, "policy", c.cfg.DMPolicy)
 		return false
 	}
 }
 
 func (c *Channel) sendPairingReply(ctx context.Context, senderID, chatID string) {
-	if c.pairingService == nil {
+	ps := c.PairingService()
+	if ps == nil {
 		return
 	}
 
-	// Debounce
-	if lastSent, ok := c.pairingDebounce.Load(senderID); ok {
-		if t, ok := lastSent.(time.Time); ok && time.Since(t) < pairingDebounceTime {
-			return
-		}
+	if !c.CanSendPairingNotif(senderID, pairingDebounceTime) {
+		return
 	}
 
-	code, err := c.pairingService.RequestPairing(ctx, senderID, c.Name(), chatID, "default", nil)
+	code, err := ps.RequestPairing(ctx, senderID, c.Name(), chatID, "default", nil)
 	if err != nil {
 		slog.Debug("feishu pairing request failed", "sender_id", senderID, "error", err)
 		return
@@ -171,7 +130,7 @@ func (c *Channel) sendPairingReply(ctx context.Context, senderID, chatID string)
 	if err := c.sendText(context.Background(), chatID, receiveIDType, replyText); err != nil {
 		slog.Warn("failed to send feishu pairing reply", "error", err)
 	} else {
-		c.pairingDebounce.Store(senderID, time.Now())
+		c.MarkPairingNotifSent(senderID)
 		slog.Info("feishu pairing reply sent", "sender_id", senderID, "code", code)
 	}
 }

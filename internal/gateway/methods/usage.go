@@ -50,28 +50,28 @@ func (m *UsageMethods) handleGet(ctx context.Context, client *gateway.Client, re
 		params.Limit = 20
 	}
 
-	sessions := m.sessions.List(ctx, params.AgentID)
+	// Use ListPagedRich: single query returns model, provider, tokens — no N+1 GetOrCreate loop.
+	// Fetch large batch to filter non-zero tokens, then paginate in-memory.
+	result := m.sessions.ListPagedRich(ctx, store.SessionListOpts{
+		AgentID: params.AgentID,
+		Limit:   10000,
+	})
 
-	records := make([]UsageRecord, 0, len(sessions))
-	for _, s := range sessions {
-		// Get full session data for token info
-		data := m.sessions.GetOrCreate(ctx, s.Key)
-		if data.InputTokens == 0 && data.OutputTokens == 0 {
+	records := make([]UsageRecord, 0, len(result.Sessions))
+	for _, s := range result.Sessions {
+		if s.InputTokens == 0 && s.OutputTokens == 0 {
 			continue
 		}
-
-		// Extract agentID from session key (format: "agent:<agentID>:<scopeKey>")
 		agentID := extractAgentIDFromKey(s.Key)
-
 		records = append(records, UsageRecord{
 			AgentID:      agentID,
 			SessionKey:   s.Key,
-			Model:        data.Model,
-			Provider:     data.Provider,
-			InputTokens:  data.InputTokens,
-			OutputTokens: data.OutputTokens,
-			TotalTokens:  data.InputTokens + data.OutputTokens,
-			Timestamp:    data.Updated.UnixMilli(),
+			Model:        s.Model,
+			Provider:     s.Provider,
+			InputTokens:  s.InputTokens,
+			OutputTokens: s.OutputTokens,
+			TotalTokens:  s.InputTokens + s.OutputTokens,
+			Timestamp:    s.Updated.UnixMilli(),
 		})
 	}
 
@@ -96,7 +96,8 @@ func (m *UsageMethods) handleGet(ctx context.Context, client *gateway.Client, re
 }
 
 func (m *UsageMethods) handleSummary(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
-	sessions := m.sessions.List(ctx, "") // all agents
+	// Use ListPagedRich: single query returns all token data — no N+1 GetOrCreate loop.
+	result := m.sessions.ListPagedRich(ctx, store.SessionListOpts{Limit: 10000})
 
 	type agentSummary struct {
 		InputTokens  int64 `json:"inputTokens"`
@@ -108,9 +109,8 @@ func (m *UsageMethods) handleSummary(ctx context.Context, client *gateway.Client
 	byAgent := make(map[string]*agentSummary)
 	var totalRecords int
 
-	for _, s := range sessions {
-		data := m.sessions.GetOrCreate(ctx, s.Key)
-		if data.InputTokens == 0 && data.OutputTokens == 0 {
+	for _, s := range result.Sessions {
+		if s.InputTokens == 0 && s.OutputTokens == 0 {
 			continue
 		}
 
@@ -119,9 +119,9 @@ func (m *UsageMethods) handleSummary(ctx context.Context, client *gateway.Client
 			byAgent[agentID] = &agentSummary{}
 		}
 
-		byAgent[agentID].InputTokens += data.InputTokens
-		byAgent[agentID].OutputTokens += data.OutputTokens
-		byAgent[agentID].TotalTokens += data.InputTokens + data.OutputTokens
+		byAgent[agentID].InputTokens += s.InputTokens
+		byAgent[agentID].OutputTokens += s.OutputTokens
+		byAgent[agentID].TotalTokens += s.InputTokens + s.OutputTokens
 		byAgent[agentID].Sessions++
 		totalRecords++
 	}

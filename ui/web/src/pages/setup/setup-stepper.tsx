@@ -42,7 +42,7 @@ export function SetupStepper({ currentStep, completedSteps }: SetupStepperProps)
                   {step.label}
                 </span>
                 {step.sublabel && (
-                  <span className="block text-[10px] text-muted-foreground">{step.sublabel}</span>
+                  <span className="block text-2xs text-muted-foreground">{step.sublabel}</span>
                 )}
               </div>
             </div>

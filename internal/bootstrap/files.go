@@ -13,6 +13,7 @@
 package bootstrap
 
 import (
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,7 +28,13 @@ const (
 	UserFile           = "USER.md"
 	UserPredefinedFile = "USER_PREDEFINED.md"
 	BootstrapFile      = "BOOTSTRAP.md"
-	DelegationFile   = "DELEGATION.md"
+	CapabilitiesFile  = "CAPABILITIES.md"
+	AgentsCoreFile    = "AGENTS_CORE.md"
+	AgentsTaskFile    = "AGENTS_TASK.md"
+
+	// Deprecated: v1 remnant. Heartbeat uses AGENTS_CORE.md via ModeAllowlist("minimal").
+	AgentsMinimalFile = "AGENTS_MINIMAL.md"
+	DelegationFile    = "DELEGATION.md"
 	TeamFile         = "TEAM.md"
 	AvailabilityFile = "AVAILABILITY.md"
 	HeartbeatFile  = "HEARTBEAT.md"
@@ -44,13 +51,51 @@ var standardFiles = []string{
 	IdentityFile,
 	UserFile,
 	BootstrapFile,
+	CapabilitiesFile,
 }
 
 // minimalAllowlist is the set of files loaded for subagent/cron sessions.
 // Matching TS MINIMAL_BOOTSTRAP_ALLOWLIST.
 var minimalAllowlist = map[string]bool{
-	AgentsFile: true,
-	ToolsFile:  true,
+	AgentsFile:         true,
+	ToolsFile:          true,
+	UserPredefinedFile: true, // baseline language + communication rules
+	CapabilitiesFile:   true, // domain expertise always needed
+}
+
+// IsMinimalAllowed reports whether a file name is in the minimal allowlist
+// (loaded for subagent/cron/heartbeat sessions).
+// Deprecated: use ModeAllowlist() instead.
+func IsMinimalAllowed(fileName string) bool { return minimalAllowlist[fileName] }
+
+// ModeAllowlist returns the set of allowed context file names for a prompt mode.
+// Returns nil for full mode (= no filtering, include all files).
+// Unknown modes default to nil (full) — fail-open since full is the safest/most inclusive.
+func ModeAllowlist(mode string) map[string]bool {
+	switch mode {
+	case "full", "":
+		return nil
+	case "task":
+		return map[string]bool{
+			AgentsTaskFile:   true,
+			ToolsFile:        true,
+			CapabilitiesFile: true,
+			SoulFile:         true, // persona (splitPersonaFiles extracts to primacy zone)
+			IdentityFile:     true,
+		}
+	case "minimal":
+		return map[string]bool{
+			AgentsCoreFile:   true,
+			CapabilitiesFile: true,
+		}
+	case "none":
+		return map[string]bool{
+			ToolsFile: true,
+		}
+	default:
+		slog.Warn("unknown prompt mode in ModeAllowlist, defaulting to full", "mode", mode)
+		return nil
+	}
 }
 
 // File represents a workspace bootstrap file loaded from disk.
@@ -91,15 +136,25 @@ func LoadWorkspaceFiles(workspaceDir string) []File {
 }
 
 // FilterForSession filters bootstrap files based on session type.
-// Normal sessions get all files. Subagent and cron sessions get only
-// AGENTS.md and TOOLS.md (minimal mode), matching TS filterBootstrapFilesForSession().
+// Normal sessions get all files. Subagent/cron/heartbeat get allowlisted files.
+// Heartbeat additionally swaps full AGENTS.md for slim AGENTS_MINIMAL.md.
+//
+// Deprecated: use ModeAllowlist() for mode-aware filtering in the pipeline.
+// This function is only used by legacy tests.
 func FilterForSession(files []File, sessionKey string) []File {
 	if !IsSubagentSession(sessionKey) && !IsCronSession(sessionKey) && !IsHeartbeatSession(sessionKey) {
 		return files
 	}
 
+	useSlimAgents := IsHeartbeatSession(sessionKey)
 	var filtered []File
 	for _, f := range files {
+		if f.Name == AgentsFile && useSlimAgents {
+			if slim, err := ReadTemplate(AgentsMinimalFile); err == nil {
+				filtered = append(filtered, File{Name: AgentsMinimalFile, Content: slim})
+			}
+			continue
+		}
 		if minimalAllowlist[f.Name] {
 			filtered = append(filtered, f)
 		}
@@ -126,7 +181,7 @@ func IsCronSession(sessionKey string) bool {
 // IsHeartbeatSession checks if a session key indicates a heartbeat session.
 func IsHeartbeatSession(sessionKey string) bool {
 	rest := sessionRest(sessionKey)
-	return strings.HasPrefix(rest, "heartbeat")
+	return strings.HasPrefix(strings.ToLower(rest), "heartbeat")
 }
 
 // IsTeamSession checks if a session key indicates a team-dispatched task session.

@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -13,8 +15,10 @@ import (
 
 // MemorySearchTool implements the memory_search tool for hybrid semantic + FTS search.
 type MemorySearchTool struct {
-	memStore store.MemoryStore // Postgres-backed
-	hasKG    bool              // knowledge_graph_search tool is available
+	memStore      store.MemoryStore              // Postgres-backed
+	episodicStore store.EpisodicStore             // v3 episodic memory (nil = v2 fallback)
+	metricsStore  store.EvolutionMetricsStore     // evolution metrics (nil = disabled)
+	hasKG         bool                           // knowledge_graph_search tool is available
 }
 
 func NewMemorySearchTool() *MemorySearchTool {
@@ -24,6 +28,16 @@ func NewMemorySearchTool() *MemorySearchTool {
 // SetMemoryStore enables Postgres queries with agentID/userID scoping.
 func (t *MemorySearchTool) SetMemoryStore(ms store.MemoryStore) {
 	t.memStore = ms
+}
+
+// SetEpisodicStore enables v3 episodic search with tier awareness.
+func (t *MemorySearchTool) SetEpisodicStore(es store.EpisodicStore) {
+	t.episodicStore = es
+}
+
+// SetEvolutionMetricsStore enables retrieval metric recording.
+func (t *MemorySearchTool) SetEvolutionMetricsStore(ms store.EvolutionMetricsStore) {
+	t.metricsStore = ms
 }
 
 // SetHasKG enables the KG hint in search results.
@@ -52,6 +66,11 @@ func (t *MemorySearchTool) Parameters() map[string]any {
 			"minScore": map[string]any{
 				"type":        "number",
 				"description": "Minimum relevance score threshold (0-1)",
+			},
+			"depth": map[string]any{
+				"type":        "string",
+				"description": "Result depth: l0 (abstracts only), l1 (overview), l2 (full content). Default: l1. Only affects episodic memories.",
+				"enum":        []string{"l0", "l1", "l2"},
 			},
 		},
 		"required": []string{"query"},
@@ -111,19 +130,132 @@ func (t *MemorySearchTool) Execute(ctx context.Context, args map[string]any) *Re
 		}
 		results = append(results, leaderResults...)
 	}
-	if len(results) == 0 {
+	// V3 episodic memory search (merge with document results)
+	var episodicResults []store.EpisodicSearchResult
+	if t.episodicStore != nil {
+		epOpts := store.EpisodicSearchOptions{
+			MaxResults: maxResults, MinScore: minScore, VectorWeight: 0.3, TextWeight: 0.7,
+		}
+		epResults, epErr := t.episodicStore.Search(ctx, query, agentStr, userID, epOpts)
+		if epErr == nil {
+			episodicResults = epResults
+		}
+	}
+
+	if len(results) == 0 && len(episodicResults) == 0 {
 		return NewResult("No memory results found for query: " + query)
 	}
 
+	// Build combined output with tier labels
+	type taggedResult struct {
+		Tier string `json:"tier"`
+		store.MemorySearchResult
+		L0         string `json:"l0_abstract,omitempty"`
+		EpisodicID string `json:"episodic_id,omitempty"`
+	}
+	var combined []taggedResult
+	for _, r := range results {
+		combined = append(combined, taggedResult{Tier: "document", MemorySearchResult: r})
+	}
+	for _, r := range episodicResults {
+		combined = append(combined, taggedResult{
+			Tier: "episodic", EpisodicID: r.EpisodicID, L0: r.L0Abstract,
+			MemorySearchResult: store.MemorySearchResult{
+				Path: "episodic:" + r.SessionKey, Score: r.Score, Snippet: r.L0Abstract, Source: "episodic",
+			},
+		})
+	}
+
 	output := map[string]any{
-		"results": results,
-		"count":   len(results),
+		"results": combined,
+		"count":   len(combined),
 	}
 	if t.hasKG {
 		output["hint"] = "Also run knowledge_graph_search if the query involves people, teams, projects, or connections between entities."
 	}
+	if len(episodicResults) > 0 {
+		output["episodic_hint"] = "Use memory_expand(id) for full details on episodic memories."
+	}
 	data, _ := json.MarshalIndent(output, "", "  ")
+
+	// Record retrieval metric non-blocking (best-effort).
+	t.recordRetrievalMetric(ctx, len(combined), episodicResults)
+	// Phase 10: update per-episode recall signals for dreaming weighted
+	// scoring. Fire-and-forget — recall tracking must never block the hot
+	// search path or surface errors to the agent loop.
+	t.recordEpisodicRecall(ctx, episodicResults)
+
 	return NewResult(string(data))
+}
+
+// recordEpisodicRecall schedules a best-effort RecordRecall update per
+// episodic hit so DreamingWorker can prioritise useful entries. Runs in a
+// background goroutine bounded by a 5s timeout so slow DBs can't leak.
+func (t *MemorySearchTool) recordEpisodicRecall(ctx context.Context, episodic []store.EpisodicSearchResult) {
+	if t.episodicStore == nil || len(episodic) == 0 {
+		return
+	}
+	tenantID := store.TenantIDFromContext(ctx)
+	if tenantID == uuid.Nil {
+		return
+	}
+	// Snapshot hits so the goroutine doesn't observe caller mutations.
+	hits := make([]store.EpisodicSearchResult, 0, len(episodic))
+	for _, r := range episodic {
+		if r.EpisodicID == "" {
+			continue
+		}
+		hits = append(hits, r)
+	}
+	if len(hits) == 0 {
+		return
+	}
+	go func() {
+		bgCtx, cancel := context.WithTimeout(store.WithTenantID(context.Background(), tenantID), 5*time.Second)
+		defer cancel()
+		for _, r := range hits {
+			if err := t.episodicStore.RecordRecall(bgCtx, r.EpisodicID, r.Score); err != nil {
+				slog.Debug("memory.recall.record_failed", "episodic_id", r.EpisodicID, "error", err)
+			}
+		}
+	}()
+}
+
+// recordRetrievalMetric records a memory_search retrieval metric in a background goroutine.
+func (t *MemorySearchTool) recordRetrievalMetric(ctx context.Context, resultCount int, episodic []store.EpisodicSearchResult) {
+	if t.metricsStore == nil {
+		return
+	}
+	tenantID := store.TenantIDFromContext(ctx)
+	if tenantID == uuid.Nil {
+		return
+	}
+	agentID := store.AgentIDFromContext(ctx)
+	var topScore float64
+	for _, r := range episodic {
+		if r.Score > topScore {
+			topScore = r.Score
+		}
+	}
+	go func() {
+		bgCtx, cancel := context.WithTimeout(store.WithTenantID(context.Background(), tenantID), 5*time.Second)
+		defer cancel()
+		value, _ := json.Marshal(map[string]any{
+			"result_count":  resultCount,
+			"top_score":     topScore,
+			"used_in_reply": resultCount > 0,
+		})
+		if err := t.metricsStore.RecordMetric(bgCtx, store.EvolutionMetric{
+			ID:         uuid.New(),
+			TenantID:   tenantID,
+			AgentID:    agentID,
+			MetricType: store.MetricRetrieval,
+			MetricKey:  "memory_search",
+			Value:      value,
+		}); err != nil {
+			slog.Debug("evolution.metric.memory_search_failed", "error", err)
+		}
+	}()
 }
 
 // MemoryGetTool implements the memory_get tool for reading specific memory files.

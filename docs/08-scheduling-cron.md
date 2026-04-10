@@ -188,6 +188,17 @@ Example retry sequence: fail → wait 2s → retry → fail → wait 4s → retr
 
 Retries are transparent to the user; final run status (ok or error) is logged to the `cron_run_logs` table.
 
+### v3 Agent Evolution Cron Jobs
+
+Two background cron jobs manage agent evolution (v3):
+
+| Job | Frequency | Purpose |
+|-----|-----------|---------|
+| **Suggestion Analysis** | Daily (1 min after startup, then every 24h) | Analyzes agents with `evolution_metrics` enabled, generates improvement suggestions |
+| **Evaluation & Rollback** | Weekly (every 7 days) | Checks applied suggestions against quality guardrails, auto-rolls back degraded evolutions |
+
+Both jobs run with 5-minute timeout and tenant-scoped context. Failed analyses log at debug level and continue gracefully.
+
 ---
 
 ## File Reference
@@ -223,6 +234,7 @@ Retries are transparent to the user; final run status (ok or error) is logged to
 | File | Description |
 |------|-------------|
 | `cmd/gateway_cron.go` | makeCronJobHandler (routes cron execution to scheduler) |
+| `cmd/gateway_evolution_cron.go` | Evolution daily/weekly background jobs (v3 suggestion analysis + rollback evaluation) |
 | `cmd/gateway_agents.go` | Agent initialization and run loop setup |
 | `internal/gateway/methods/cron.go` | RPC method handlers (list, create, update, delete, toggle, run, runs) |
 

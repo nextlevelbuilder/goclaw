@@ -117,6 +117,9 @@ func (m *mockTenantStore) GetTenantUser(context.Context, uuid.UUID) (*store.Tena
 func (m *mockTenantStore) CreateTenantUserReturning(context.Context, uuid.UUID, string, string, string) (*store.TenantUserData, error) {
 	return nil, fmt.Errorf("not implemented")
 }
+func (m *mockTenantStore) GetTenantsByIDs(context.Context, []uuid.UUID) ([]store.TenantData, error) {
+	return nil, nil
+}
 
 type mockPairingStore struct {
 	paired map[string]bool

@@ -130,8 +130,7 @@ func TestManagerStartAllPromotesHealthyChannels(t *testing.T) {
 	channel := newFakeHealthChannel("telegram-main")
 	mgr.RegisterChannel("telegram-main", channel)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	if err := mgr.StartAll(ctx); err != nil {
 		t.Fatalf("StartAll returned error: %v", err)
@@ -162,8 +161,7 @@ func TestManagerStartAllCapturesStartupFailures(t *testing.T) {
 	channel.startErr = errors.New(`telego: getUpdates: api: 401 "Unauthorized"`)
 	mgr.RegisterChannel("telegram-main", channel)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	if err := mgr.StartAll(ctx); err != nil {
 		t.Fatalf("StartAll returned error: %v", err)
@@ -198,8 +196,7 @@ func TestManagerStartAllDoesNotDoubleCountSelfReportedStartupFailure(t *testing.
 	channel.selfMarkFailure = true
 	mgr.RegisterChannel("telegram-main", channel)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	if err := mgr.StartAll(ctx); err != nil {
 		t.Fatalf("StartAll returned error: %v", err)

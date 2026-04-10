@@ -28,6 +28,20 @@ func (l *Loop) buildFilteredTools(req *RunRequest, hadBootstrap bool, iteration,
 		toolDefs = l.tools.ProviderDefs()
 	}
 
+	// V3 orchestration mode filtering: hide tools the agent shouldn't see.
+	// spawn: no delegate/team_tasks. delegate: no team_tasks. team: all.
+	if orchDeny := orchModeDenyTools(l.orchMode); len(orchDeny) > 0 {
+		filtered := toolDefs[:0:0]
+		for _, td := range toolDefs {
+			if !orchDeny[td.Function.Name] {
+				filtered = append(filtered, td)
+			} else {
+				delete(allowedTools, td.Function.Name)
+			}
+		}
+		toolDefs = filtered
+	}
+
 	// Per-tenant tool exclusions: remove tools disabled for this agent's tenant.
 	if len(l.disabledTools) > 0 {
 		filtered := toolDefs[:0]

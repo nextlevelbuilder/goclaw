@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 import { DetailPageSkeleton } from "@/components/shared/loading-skeleton";
 import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { useTranslation } from "react-i18next";
@@ -7,8 +7,11 @@ import { BoardHeader } from "./board/board-header";
 import { BoardContainer } from "./board/board-container";
 import { TeamInfoDialog } from "./board/team-info-dialog";
 import { TeamMembersDialog } from "./board/team-members-dialog";
-import { TeamWorkspaceDialog } from "./board/team-workspace-dialog";
 import type { TeamData, TeamMemberData, TeamAccessSettings, ScopeEntry } from "@/types/team";
+
+const TeamWorkspaceDialog = lazy(() =>
+  import("./board/team-workspace-dialog").then((m) => ({ default: m.TeamWorkspaceDialog }))
+);
 
 interface TeamDetailPageProps {
   teamId: string;
@@ -131,12 +134,14 @@ export function TeamDetailPage({ teamId, onBack }: TeamDetailPageProps) {
       />
 
       {/* Workspace dialog */}
-      <TeamWorkspaceDialog
-        open={workspaceOpen}
-        onOpenChange={setWorkspaceOpen}
-        teamId={teamId}
-        scopes={scopes}
-      />
+      <Suspense fallback={null}>
+        <TeamWorkspaceDialog
+          open={workspaceOpen}
+          onOpenChange={setWorkspaceOpen}
+          teamId={teamId}
+          scopes={scopes}
+        />
+      </Suspense>
 
       {/* Delete confirmation */}
       <ConfirmDeleteDialog

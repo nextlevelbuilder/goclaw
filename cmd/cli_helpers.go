@@ -1,23 +1,20 @@
 package cmd
 
-import (
-	"fmt"
-	"os"
-)
+import "net/http"
 
 // requireGateway exits with a helpful error if the gateway is not reachable.
+// Uses HTTP /health endpoint (faster and doesn't require WS handshake).
 func requireGateway() {
-	if !isGatewayReachable() {
-		fmt.Fprintln(os.Stderr, "Error: the gateway must be running for this command.")
-		fmt.Fprintln(os.Stderr, "Start it first:  goclaw")
-		os.Exit(1)
-	}
+	requireRunningGatewayHTTP()
 }
 
-// isGatewayReachable tries a quick RPC ping to check if the gateway is up.
+// isGatewayReachable checks if the gateway is up via HTTP health endpoint.
 func isGatewayReachable() bool {
-	_, err := gatewayRPC("ping", nil)
-	// Any response (even error) means the gateway is up.
-	// Only connection failure means it's down.
-	return err == nil
+	base := resolveGatewayBaseURL()
+	resp, err := healthClient.Get(base + "/health")
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
 }

@@ -9,7 +9,7 @@ export function useTenantUsersList() {
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.tenantUsers.all,
     queryFn: () => http.get<{ users: TenantUserData[] }>("/v1/tenant-users"),
-    staleTime: 30_000,
+    staleTime: 60_000,
   });
 
   return { users: data?.users ?? [], loading: isLoading };

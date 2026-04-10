@@ -17,9 +17,34 @@ type ReasoningDecision struct {
 	KnownModel          bool     `json:"known_model,omitempty"`
 	SupportedLevels     []string `json:"supported_levels,omitempty"`
 	UsedProviderDefault bool     `json:"used_provider_default,omitempty"`
+	// StripThinking signals that ChatResponse.Thinking should be dropped by
+	// stream handlers (model leaks reasoning even when effort="off").
+	// Usage.ThinkingTokens is preserved for billing accuracy.
+	StripThinking bool `json:"strip_thinking,omitempty"`
 }
 
-func ResolveReasoningDecision(provider Provider, model, requestedEffort, fallback, source string) ReasoningDecision {
+// modelLeaksReasoning returns true for models known to emit reasoning tokens
+// into the user-visible content even when reasoning effort is "off". Stream
+// handlers drop these from ChatResponse.Thinking to avoid leaking raw CoT to
+// end users. Billing tokens (Usage.ThinkingTokens) are NOT affected.
+func modelLeaksReasoning(model string) bool {
+	m := strings.ToLower(strings.TrimSpace(model))
+	if m == "" {
+		return false
+	}
+	// Known leakers: Moonshot Kimi (any variant), DeepSeek-Reasoner family.
+	// Extend this list only after confirming the model does not honor effort="off".
+	return strings.Contains(m, "kimi") || strings.Contains(m, "deepseek-reasoner")
+}
+
+func ResolveReasoningDecision(provider Provider, model, requestedEffort, fallback, source string) (out ReasoningDecision) {
+	// Post-process: when resolved effort is "off" on a known leaky model,
+	// mark the decision for downstream stream handlers to strip thinking output.
+	defer func() {
+		if out.EffectiveEffort == "off" && modelLeaksReasoning(model) {
+			out.StripThinking = true
+		}
+	}()
 	decision := ReasoningDecision{
 		Source:          normalizeReasoningSource(source),
 		RequestedEffort: NormalizeReasoningEffort(requestedEffort),

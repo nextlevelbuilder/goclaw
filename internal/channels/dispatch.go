@@ -71,6 +71,9 @@ func (m *Manager) dispatchOutbound(ctx context.Context) {
 			if err := channel.Send(ctx, msg); err != nil {
 				slog.Error("error sending message to channel",
 					"channel", msg.Channel,
+					"chat_id", msg.ChatID,
+					"content_len", len(msg.Content),
+					"content_preview", Truncate(msg.Content, 160),
 					"error", err,
 				)
 				// Try to send a text-only error notification back to the chat.

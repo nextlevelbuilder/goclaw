@@ -183,4 +183,7 @@ const (
 	// Zalo Personal
 	MethodZaloPersonalQRStart   = "zalo.personal.qr.start"
 	MethodZaloPersonalContacts  = "zalo.personal.contacts"
+
+	// WhatsApp
+	MethodWhatsAppQRStart = "whatsapp.qr.start"
 )

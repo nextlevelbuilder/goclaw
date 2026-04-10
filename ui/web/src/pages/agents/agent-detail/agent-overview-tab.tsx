@@ -8,6 +8,9 @@ import { PersonalitySection } from "./overview-sections/personality-section";
 import { ModelBudgetSection } from "./overview-sections/model-budget-section";
 import { SkillsSection } from "./overview-sections/skills-section";
 import { EvolutionSection } from "./overview-sections/evolution-section";
+import { PromptSettingsSection } from "./overview-sections/prompt-settings-section";
+import { PinnedSkillsSection } from "./overview-sections/pinned-skills-section";
+import { OrchestrationSection } from "./overview-sections/orchestration-section";
 import { CapabilitiesSection } from "./overview-sections/capabilities-section";
 import { ChatGPTOAuthRoutingSummarySection } from "./overview-sections/chatgpt-oauth-routing-summary-section";
 import { HeartbeatCard } from "./overview-sections/heartbeat-card";
@@ -24,10 +27,8 @@ interface AgentOverviewTabProps {
 export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool }: AgentOverviewTabProps) {
   const { t } = useTranslation("agents");
 
-  const otherCfg = (agent.other_config ?? {}) as Record<string, unknown>;
-
   // Personality
-  const [emoji, setEmoji] = useState(typeof otherCfg.emoji === "string" ? otherCfg.emoji : "");
+  const [emoji, setEmoji] = useState(agent.emoji ?? "");
   const [displayName, setDisplayName] = useState(agent.display_name ?? "");
   const [frontmatter, setFrontmatter] = useState(agent.frontmatter ?? "");
   const [status, setStatus] = useState(agent.status);
@@ -42,10 +43,10 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool
     agent.budget_monthly_cents ? String(agent.budget_monthly_cents / 100) : "",
   );
   // Evolution (predefined only)
-  const [selfEvolve, setSelfEvolve] = useState(Boolean(otherCfg.self_evolve));
-  const [skillEvolve, setSkillEvolve] = useState(Boolean(otherCfg.skill_evolve));
+  const [selfEvolve, setSelfEvolve] = useState(Boolean(agent.self_evolve));
+  const [skillEvolve, setSkillEvolve] = useState(Boolean(agent.skill_evolve));
   const [skillNudgeInterval, setSkillNudgeInterval] = useState(
-    typeof otherCfg.skill_nudge_interval === "number" ? otherCfg.skill_nudge_interval : 15,
+    typeof agent.skill_nudge_interval === "number" ? agent.skill_nudge_interval : 15,
   );
 
   // Memory (always shown — per-agent overrides, empty = use system defaults)
@@ -64,20 +65,8 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool
   const handleSave = async () => {
     setSaving(true);
     try {
-      const updatedOtherConfig: Record<string, unknown> = {
-        ...otherCfg,
-        emoji: emoji.trim() || undefined,
-        self_evolve: selfEvolve,
-        skill_evolve: skillEvolve,
-        skill_nudge_interval: skillEvolve ? skillNudgeInterval : undefined,
-      };
-      // When the provider changes, clear stale pool routing config so it
-      // doesn't reference members from the previous provider's pool.
-      if (provider !== agent.provider) {
-        delete updatedOtherConfig.chatgpt_oauth_routing;
-      }
       const budgetCents = budgetDollars ? Math.round(parseFloat(budgetDollars) * 100) : null;
-      await onUpdate({
+      const updates: Record<string, unknown> = {
         display_name: displayName,
         frontmatter: frontmatter || null,
         provider,
@@ -86,14 +75,24 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool
         max_tool_iterations: maxToolIterations,
         status,
         is_default: isDefault,
-        other_config: updatedOtherConfig,
         budget_monthly_cents: budgetCents,
         memory_config: mem,
         subagents_config: subEnabled ? sub : null,
         tools_config: toolsEnabled
           ? { profile: tools.profile, allow: tools.allow, deny: tools.deny, alsoAllow: tools.alsoAllow, byProvider: tools.byProvider }
           : {},
-      });
+        // Promoted fields sent at top level
+        emoji: emoji.trim() || null,
+        self_evolve: selfEvolve,
+        skill_evolve: skillEvolve,
+        skill_nudge_interval: skillEvolve ? skillNudgeInterval : 15,
+      };
+      // When the provider changes, clear stale pool routing config so it
+      // doesn't reference members from the previous provider's pool.
+      if (provider !== agent.provider) {
+        updates.chatgpt_oauth_routing = null;
+      }
+      await onUpdate(updates);
     } catch {
       // toast shown by hook
     } finally {
@@ -103,6 +102,8 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool
 
   return (
     <div className="space-y-4">
+      <PromptSettingsSection agent={agent} onUpdate={onUpdate} />
+
       <PersonalitySection
         agentKey={agent.agent_key}
         emoji={emoji}
@@ -134,10 +135,22 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool
       />
 
       <ChatGPTOAuthRoutingSummarySection agent={agent} onManage={onManageCodexPool} />
-      {provider !== agent.provider && !!otherCfg.chatgpt_oauth_routing && (
+      {provider !== agent.provider && !!agent.chatgpt_oauth_routing && (
         <p className="text-xs text-amber-600 dark:text-amber-400 -mt-2 px-1">
           {t("chatgptOAuthRouting.providerChangedWarning")}
         </p>
+      )}
+
+      {agent.agent_type === "predefined" && (
+        <EvolutionSection
+          agentId={agent.id}
+          selfEvolve={selfEvolve}
+          onSelfEvolveChange={setSelfEvolve}
+          skillEvolve={skillEvolve}
+          onSkillEvolveChange={setSkillEvolve}
+          skillNudgeInterval={skillNudgeInterval}
+          onSkillNudgeIntervalChange={setSkillNudgeInterval}
+        />
       )}
 
       {/* Memory — always visible, per-agent overrides */}
@@ -149,17 +162,9 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool
       <HeartbeatCard heartbeat={heartbeat} />
 
       <SkillsSection agentId={agent.id} />
+      <PinnedSkillsSection agent={agent} onUpdate={onUpdate} />
 
-      {agent.agent_type === "predefined" && (
-        <EvolutionSection
-          selfEvolve={selfEvolve}
-          onSelfEvolveChange={setSelfEvolve}
-          skillEvolve={skillEvolve}
-          onSkillEvolveChange={setSkillEvolve}
-          skillNudgeInterval={skillNudgeInterval}
-          onSkillNudgeIntervalChange={setSkillNudgeInterval}
-        />
-      )}
+      <OrchestrationSection agentId={agent.id} />
 
       <CapabilitiesSection
         subEnabled={subEnabled}

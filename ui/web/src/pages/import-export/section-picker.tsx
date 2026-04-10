@@ -42,7 +42,7 @@ export function SectionPicker({ sections, selected, onChange, disabled, ns = "im
                 {t(sec.labelKey)}
               </Label>
               {sec.required && (
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">required</Badge>
+                <Badge variant="outline" className="text-2xs px-1.5 py-0 shrink-0">required</Badge>
               )}
               {sec.count != null && sec.count > 0 && (
                 <span className="text-xs text-muted-foreground tabular-nums shrink-0">
@@ -50,7 +50,7 @@ export function SectionPicker({ sections, selected, onChange, disabled, ns = "im
                 </span>
               )}
               {sec.comingSoon && (
-                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">soon</Badge>
+                <Badge variant="secondary" className="text-2xs px-1.5 py-0 shrink-0">soon</Badge>
               )}
             </div>
             <Switch

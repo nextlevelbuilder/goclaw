@@ -48,17 +48,17 @@ function EventDataRow({ data }: { data: Record<string, unknown> }) {
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="text-[10px] text-muted-foreground underline-offset-2 hover:underline"
+        className="text-2xs text-muted-foreground underline-offset-2 hover:underline"
       >
         {expanded ? "hide" : "details"}
       </button>
       {expanded && (
-        <pre className="mt-1 max-h-20 overflow-auto rounded bg-muted px-2 py-1 text-[10px] text-muted-foreground">
+        <pre className="mt-1 max-h-20 overflow-auto rounded bg-muted px-2 py-1 text-2xs text-muted-foreground">
           {JSON.stringify(data, null, 2)}
         </pre>
       )}
       {!expanded && summary && (
-        <span className="ml-1 text-[10px] text-muted-foreground">{summary}</span>
+        <span className="ml-1 text-2xs text-muted-foreground">{summary}</span>
       )}
     </div>
   );
@@ -138,19 +138,19 @@ export function TeamAuditLogsModal({ open, onOpenChange, teamId }: TeamAuditLogs
                   <div className="flex flex-wrap items-center gap-1.5">
                     <Badge
                       variant="outline"
-                      className={`text-[10px] border-0 font-medium ${EVENT_BADGE_CLASSES[e.event_type] ?? "bg-muted text-muted-foreground"}`}
+                      className={`text-2xs border-0 font-medium ${EVENT_BADGE_CLASSES[e.event_type] ?? "bg-muted text-muted-foreground"}`}
                     >
                       {t(`auditLogs.event.${e.event_type}`, { defaultValue: e.event_type })}
                     </Badge>
                     <span className="text-xs text-muted-foreground truncate max-w-[120px]">
                       {e.actor_type === "human" ? "Human" : (e.actor_id?.slice(0, 8) ?? "—")}
                     </span>
-                    <span className="text-[11px] text-muted-foreground ml-auto shrink-0">
+                    <span className="text-xs-plus text-muted-foreground ml-auto shrink-0">
                       {formatRelativeTime(e.created_at)}
                     </span>
                   </div>
                   {e.task_id && (
-                    <div className="text-[10px] text-muted-foreground mt-0.5">
+                    <div className="text-2xs text-muted-foreground mt-0.5">
                       task: {e.task_id.slice(0, 8)}
                     </div>
                   )}

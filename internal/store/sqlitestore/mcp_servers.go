@@ -16,6 +16,9 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
+const mcpServerSelectCols = `id, name, display_name, transport, command, args, url, headers, env,
+		 api_key, tool_prefix, timeout_sec, settings, enabled, created_by, created_at, updated_at`
+
 // SQLiteMCPServerStore implements store.MCPServerStore backed by SQLite.
 type SQLiteMCPServerStore struct {
 	db     *sql.DB
@@ -67,128 +70,82 @@ func (s *SQLiteMCPServerStore) CreateServer(ctx context.Context, srv *store.MCPS
 }
 
 func (s *SQLiteMCPServerStore) GetServer(ctx context.Context, id uuid.UUID) (*store.MCPServerData, error) {
-	if store.IsCrossTenant(ctx) {
-		return s.scanServer(s.db.QueryRowContext(ctx,
-			`SELECT id, name, display_name, transport, command, args, url, headers, env,
-			 api_key, tool_prefix, timeout_sec, settings, enabled, created_by, created_at, updated_at
-			 FROM mcp_servers WHERE id = ?`, id))
+	q := `SELECT ` + mcpServerSelectCols + ` FROM mcp_servers WHERE id = ?`
+	qArgs := []any{id}
+	if !store.IsCrossTenant(ctx) {
+		tenantID := store.TenantIDFromContext(ctx)
+		if tenantID == uuid.Nil {
+			return nil, sql.ErrNoRows
+		}
+		q += ` AND tenant_id = ?`
+		qArgs = append(qArgs, tenantID)
 	}
-	tenantID := store.TenantIDFromContext(ctx)
-	if tenantID == uuid.Nil {
-		return nil, sql.ErrNoRows
-	}
-	return s.scanServer(s.db.QueryRowContext(ctx,
-		`SELECT id, name, display_name, transport, command, args, url, headers, env,
-		 api_key, tool_prefix, timeout_sec, settings, enabled, created_by, created_at, updated_at
-		 FROM mcp_servers WHERE id = ? AND tenant_id = ?`, id, tenantID))
-}
-
-func (s *SQLiteMCPServerStore) GetServerByName(ctx context.Context, name string) (*store.MCPServerData, error) {
-	if store.IsCrossTenant(ctx) {
-		return s.scanServer(s.db.QueryRowContext(ctx,
-			`SELECT id, name, display_name, transport, command, args, url, headers, env,
-			 api_key, tool_prefix, timeout_sec, settings, enabled, created_by, created_at, updated_at
-			 FROM mcp_servers WHERE name = ?`, name))
-	}
-	tenantID := store.TenantIDFromContext(ctx)
-	if tenantID == uuid.Nil {
-		return nil, sql.ErrNoRows
-	}
-	return s.scanServer(s.db.QueryRowContext(ctx,
-		`SELECT id, name, display_name, transport, command, args, url, headers, env,
-		 api_key, tool_prefix, timeout_sec, settings, enabled, created_by, created_at, updated_at
-		 FROM mcp_servers WHERE name = ? AND tenant_id = ?`, name, tenantID))
-}
-
-func (s *SQLiteMCPServerStore) scanServer(row *sql.Row) (*store.MCPServerData, error) {
-	var srv store.MCPServerData
-	var displayName, command, url, apiKey, toolPrefix *string
-	var args, headers, env *[]byte
-	createdAt, updatedAt := scanTimePair()
-	err := row.Scan(
-		&srv.ID, &srv.Name, &displayName, &srv.Transport, &command,
-		&args, &url, &headers, &env,
-		&apiKey, &toolPrefix, &srv.TimeoutSec,
-		&srv.Settings, &srv.Enabled, &srv.CreatedBy, createdAt, updatedAt,
-	)
-	if err != nil {
+	var row mcpServerRow
+	if err := pkgSqlxDB.GetContext(ctx, &row, q, qArgs...); err != nil {
 		return nil, err
 	}
-	srv.CreatedAt = createdAt.Time
-	srv.UpdatedAt = updatedAt.Time
-	srv.DisplayName = derefStr(displayName)
-	srv.Command = derefStr(command)
-	srv.URL = derefStr(url)
-	srv.ToolPrefix = derefStr(toolPrefix)
-	srv.Args = derefBytes(args)
-	srv.Headers = s.decryptJSON(derefBytes(headers))
-	srv.Env = s.decryptJSON(derefBytes(env))
-	if apiKey != nil && *apiKey != "" && s.encKey != "" {
-		decrypted, err := crypto.Decrypt(*apiKey, s.encKey)
-		if err != nil {
-			slog.Warn("mcp: failed to decrypt api key", "server", srv.Name, "error", err)
-		} else {
-			srv.APIKey = decrypted
-		}
-	} else {
-		srv.APIKey = derefStr(apiKey)
-	}
+	srv := row.toMCPServerData()
+	s.decryptServerFields(&srv)
 	return &srv, nil
 }
 
+func (s *SQLiteMCPServerStore) GetServerByName(ctx context.Context, name string) (*store.MCPServerData, error) {
+	q := `SELECT ` + mcpServerSelectCols + ` FROM mcp_servers WHERE name = ?`
+	qArgs := []any{name}
+	if !store.IsCrossTenant(ctx) {
+		tenantID := store.TenantIDFromContext(ctx)
+		if tenantID == uuid.Nil {
+			return nil, sql.ErrNoRows
+		}
+		q += ` AND tenant_id = ?`
+		qArgs = append(qArgs, tenantID)
+	}
+	var row mcpServerRow
+	if err := pkgSqlxDB.GetContext(ctx, &row, q, qArgs...); err != nil {
+		return nil, err
+	}
+	srv := row.toMCPServerData()
+	s.decryptServerFields(&srv)
+	return &srv, nil
+}
+
+// decryptServerFields decrypts api_key, headers, and env after scan.
+func (s *SQLiteMCPServerStore) decryptServerFields(srv *store.MCPServerData) {
+	srv.Headers = s.decryptJSON(srv.Headers)
+	srv.Env = s.decryptJSON(srv.Env)
+	if srv.APIKey != "" && s.encKey != "" {
+		if decrypted, err := crypto.Decrypt(srv.APIKey, s.encKey); err == nil {
+			srv.APIKey = decrypted
+		} else {
+			slog.Warn("mcp: failed to decrypt api key", "server", srv.Name, "error", err)
+		}
+	}
+}
+
 func (s *SQLiteMCPServerStore) ListServers(ctx context.Context) ([]store.MCPServerData, error) {
-	query := `SELECT id, name, display_name, transport, command, args, url, headers, env,
-		 api_key, tool_prefix, timeout_sec, settings, enabled, created_by, created_at, updated_at
-		 FROM mcp_servers`
+	q := `SELECT ` + mcpServerSelectCols + ` FROM mcp_servers`
 	var qArgs []any
 	if !store.IsCrossTenant(ctx) {
 		tenantID := store.TenantIDFromContext(ctx)
 		if tenantID == uuid.Nil {
 			return []store.MCPServerData{}, nil
 		}
-		query += ` WHERE tenant_id = ?`
+		q += ` WHERE tenant_id = ?`
 		qArgs = append(qArgs, tenantID)
 	}
-	query += ` ORDER BY name`
-	rows, err := s.db.QueryContext(ctx, query, qArgs...)
-	if err != nil {
+	q += ` ORDER BY name`
+
+	var rows []mcpServerRow
+	if err := pkgSqlxDB.SelectContext(ctx, &rows, q, qArgs...); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	result := make([]store.MCPServerData, 0)
-	for rows.Next() {
-		var srv store.MCPServerData
-		var displayName, command, url, apiKey, toolPrefix *string
-		var args, headers, env *[]byte
-		createdAt, updatedAt := scanTimePair()
-		if err := rows.Scan(
-			&srv.ID, &srv.Name, &displayName, &srv.Transport, &command,
-			&args, &url, &headers, &env,
-			&apiKey, &toolPrefix, &srv.TimeoutSec,
-			&srv.Settings, &srv.Enabled, &srv.CreatedBy, createdAt, updatedAt,
-		); err != nil {
-			continue
-		}
-		srv.CreatedAt = createdAt.Time
-		srv.UpdatedAt = updatedAt.Time
-		srv.DisplayName = derefStr(displayName)
-		srv.Command = derefStr(command)
-		srv.URL = derefStr(url)
-		srv.ToolPrefix = derefStr(toolPrefix)
-		srv.Args = derefBytes(args)
-		srv.Headers = s.decryptJSON(derefBytes(headers))
-		srv.Env = s.decryptJSON(derefBytes(env))
-		if apiKey != nil && *apiKey != "" && s.encKey != "" {
-			if decrypted, err := crypto.Decrypt(*apiKey, s.encKey); err == nil {
-				srv.APIKey = decrypted
-			}
-		} else {
-			srv.APIKey = derefStr(apiKey)
-		}
+	result := make([]store.MCPServerData, 0, len(rows))
+	for _, r := range rows {
+		srv := r.toMCPServerData()
+		s.decryptServerFields(&srv)
 		result = append(result, srv)
 	}
-	return result, rows.Err()
+	return result, nil
 }
 
 func (s *SQLiteMCPServerStore) UpdateServer(ctx context.Context, id uuid.UUID, updates map[string]any) error {

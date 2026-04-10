@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, lazy, Suspense } from "react";
 import { useParams, useNavigate } from "react-router";
 import { Radio, Plus, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -11,7 +11,10 @@ import { Pagination } from "@/components/shared/pagination";
 import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { useChannels } from "./hooks/use-channels";
 import { useChannelInstances, type ChannelInstanceData, type ChannelInstanceInput } from "./hooks/use-channel-instances";
-import { ChannelInstanceFormDialog } from "./channel-instance-form-dialog";
+
+const ChannelInstanceFormDialog = lazy(() =>
+  import("./channel-instance-form-dialog").then((m) => ({ default: m.ChannelInstanceFormDialog }))
+);
 import { channelsWithAuth, reauthDialogs } from "./channel-wizard-registry";
 import { ChannelDetailPage } from "./channel-detail/channel-detail-page";
 import { ChannelListRow } from "./channel-list-row";
@@ -189,20 +192,22 @@ export function ChannelsPage() {
         )}
       </div>
 
-      <ChannelInstanceFormDialog
-        open={formOpen}
-        onOpenChange={(open) => {
-          setFormOpen(open);
-          if (!open) {
-            setEditInstance(null);
-            setTimeout(() => refresh(), 1500);
-          }
-        }}
-        instance={editInstance}
-        agents={agents}
-        onSubmit={editInstance ? handleEdit : handleCreate}
-        onUpdate={handleUpdate}
-      />
+      <Suspense fallback={null}>
+        <ChannelInstanceFormDialog
+          open={formOpen}
+          onOpenChange={(open) => {
+            setFormOpen(open);
+            if (!open) {
+              setEditInstance(null);
+              setTimeout(() => refresh(), 1500);
+            }
+          }}
+          instance={editInstance}
+          agents={agents}
+          onSubmit={editInstance ? handleEdit : handleCreate}
+          onUpdate={handleUpdate}
+        />
+      </Suspense>
 
       <ConfirmDeleteDialog
         open={!!deleteTarget}

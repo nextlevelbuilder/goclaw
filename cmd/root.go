@@ -36,14 +36,19 @@ func init() {
 	rootCmd.AddCommand(agentCmd())
 	rootCmd.AddCommand(doctorCmd())
 	rootCmd.AddCommand(configCmd())
-	rootCmd.AddCommand(modelsCmd())
+	rootCmd.AddCommand(providersCmd())
 	rootCmd.AddCommand(channelsCmd())
 	rootCmd.AddCommand(cronCmd())
 	rootCmd.AddCommand(skillsCmd())
 	rootCmd.AddCommand(sessionsCmd())
 	rootCmd.AddCommand(migrateCmd())
 	rootCmd.AddCommand(upgradeCmd())
+	rootCmd.AddCommand(backupCmd())
+	rootCmd.AddCommand(restoreCmd())
+	rootCmd.AddCommand(tenantBackupCmd())
+	rootCmd.AddCommand(tenantRestoreCmd())
 	rootCmd.AddCommand(authCmd())
+	rootCmd.AddCommand(setupCmd())
 }
 
 func versionCmd() *cobra.Command {

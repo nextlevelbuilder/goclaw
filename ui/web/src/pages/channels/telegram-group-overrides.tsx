@@ -129,7 +129,7 @@ export function TelegramGroupOverrides({ groups, onChange, knownGroups }: Props)
                 >
                   <Plus className="h-3 w-3" />
                   <span className="font-mono">{rawId}</span>
-                  <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                  <Badge variant="secondary" className="text-2xs px-1 py-0">
                     {g.writer_count}
                   </Badge>
                 </button>

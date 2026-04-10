@@ -32,6 +32,7 @@ export function useChannelInstances(filters: ChannelInstanceFilters = {}) {
       return { instances: res.instances ?? [], total: res.total ?? 0 };
     },
     placeholderData: (prev) => prev,
+    staleTime: 60_000,
   });
 
   const instances = data?.instances ?? [];

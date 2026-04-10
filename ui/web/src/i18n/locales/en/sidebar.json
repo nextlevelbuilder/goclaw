@@ -12,7 +12,7 @@
     "overview": "Overview",
     "chat": "Chat",
     "agents": "Agents",
-    "agentTeams": "Agent Teams",
+    "agentTeams": "Agent Link & Team",
     "sessions": "Sessions",
     "pendingMessages": "Pending Messages",
     "channels": "Channels",
@@ -23,6 +23,7 @@
     "builtinTools": "Built-in Tools",
     "mcpServers": "MCP Servers",
     "memory": "Memory",
+    "vault": "Vault",
     "knowledgeGraph": "Knowledge Graph",
     "browser": "Browser",
     "proxyPool": "Proxy Pool",
@@ -42,6 +43,7 @@
     "apiKeys": "API Keys",
     "apiDocs": "API Docs",
     "packages": "Packages",
-    "tenants": "Tenants"
+    "tenants": "Tenants",
+    "backupRestore": "Backup & Restore"
   }
 }

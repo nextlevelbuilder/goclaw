@@ -72,9 +72,9 @@ func processNormalMessage(
 	}
 
 	// DM thread: override session key to isolate per-thread history in private chats.
-	if msg.Metadata["dm_thread_id"] != "" && peerKind == string(sessions.PeerDirect) {
+	if msg.Metadata[tools.MetaDMThreadID] != "" && peerKind == string(sessions.PeerDirect) {
 		var threadID int
-		fmt.Sscanf(msg.Metadata["dm_thread_id"], "%d", &threadID)
+		fmt.Sscanf(msg.Metadata[tools.MetaDMThreadID], "%d", &threadID)
 		if threadID > 0 {
 			sessionKey = sessions.BuildDMThreadSessionKey(agentID, msg.Channel, msg.ChatID, threadID)
 		}
@@ -108,6 +108,12 @@ func processNormalMessage(
 		}
 	}
 
+	// Set session label for Pancake channels: "Pancake:{SenderName}:{PageName}"
+	if msg.Metadata["pancake_mode"] != "" {
+		label := buildPancakeSessionLabel(msg.Metadata["display_name"], msg.Metadata["page_name"])
+		deps.SessStore.SetLabel(ctx, sessionKey, label)
+	}
+
 	// Auto-collect channel contacts for the contact selector.
 	// Skip internal senders (system:*, notification:*, teammate:*, ticker:*, session_send_tool).
 	if deps.ContactCollector != nil && msg.SenderID != "" && !bus.IsInternalSender(msg.SenderID) {
@@ -126,7 +132,7 @@ func processNormalMessage(
 		// Also collect group chat as a contact (for group permission management / merge).
 		// Group IDs (e.g., Telegram "-100456") differ from user IDs — no UNIQUE conflict.
 		if peerKind == string(sessions.PeerGroup) && msg.ChatID != "" {
-			groupTitle := msg.Metadata["chat_title"] // Telegram: message.Chat.Title
+			groupTitle := msg.Metadata[tools.MetaChatTitle] // Telegram: message.Chat.Title
 			deps.ContactCollector.EnsureContact(ctx, channelType, msg.Channel, msg.ChatID, "", groupTitle, "", "group", "group", "", "")
 		}
 	}
@@ -246,7 +252,7 @@ func processNormalMessage(
 	}
 
 	// Append per-topic system prompt (from group/topic config hierarchy).
-	if tsp := msg.Metadata["topic_system_prompt"]; tsp != "" {
+	if tsp := msg.Metadata[tools.MetaTopicSystemPrompt]; tsp != "" {
 		if extraPrompt != "" {
 			extraPrompt += "\n\n"
 		}
@@ -255,7 +261,7 @@ func processNormalMessage(
 
 	// Per-topic skill filter override (from group/topic config hierarchy).
 	var skillFilter []string
-	if ts := msg.Metadata["topic_skills"]; ts != "" {
+	if ts := msg.Metadata[tools.MetaTopicSkills]; ts != "" {
 		skillFilter = strings.Split(ts, ",")
 	}
 
@@ -352,12 +358,13 @@ func processNormalMessage(
 		ForwardMedia:      fwdMedia,
 		Channel:           msg.Channel,
 		ChannelType:       resolveChannelType(deps.ChannelMgr, msg.Channel),
-		ChatTitle:         msg.Metadata["chat_title"],
+		ChatTitle:         msg.Metadata[tools.MetaChatTitle],
 		ChatID:            msg.ChatID,
 		PeerKind:          peerKind,
 		LocalKey:          msg.Metadata["local_key"],
 		UserID:            userID,
 		SenderID:          msg.SenderID,
+		SenderName:        resolveSenderName(msg),
 		RunID:             runID,
 		Stream:            enableStream,
 		HistoryLimit:      msg.HistoryLimit,

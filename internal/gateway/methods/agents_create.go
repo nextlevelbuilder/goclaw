@@ -44,6 +44,18 @@ func (m *AgentsMethods) handleCreate(ctx context.Context, client *gateway.Client
 		CompactionConfig json.RawMessage `json:"compaction_config,omitempty"`
 		ContextPruning   json.RawMessage `json:"context_pruning,omitempty"`
 		OtherConfig      json.RawMessage `json:"other_config,omitempty"`
+		// Promoted config fields (Emoji already above)
+		AgentDescription    string          `json:"agent_description"`
+		ThinkingLevel       string          `json:"thinking_level"`
+		MaxTokens           int             `json:"max_tokens"`
+		SelfEvolve          bool            `json:"self_evolve"`
+		SkillEvolve         bool            `json:"skill_evolve"`
+		SkillNudgeInterval  int             `json:"skill_nudge_interval"`
+		ReasoningConfig     json.RawMessage `json:"reasoning_config,omitempty"`
+		WorkspaceSharing    json.RawMessage `json:"workspace_sharing,omitempty"`
+		ChatGPTOAuthRouting json.RawMessage `json:"chatgpt_oauth_routing,omitempty"`
+		ShellDenyGroups     json.RawMessage `json:"shell_deny_groups,omitempty"`
+		KGDedupConfig       json.RawMessage `json:"kg_dedup_config,omitempty"`
 	}
 	if req.Params != nil {
 		json.Unmarshal(req.Params, &params)
@@ -55,8 +67,8 @@ func (m *AgentsMethods) handleCreate(ctx context.Context, client *gateway.Client
 	}
 
 	agentType := params.AgentType
-	if agentType == "" {
-		agentType = store.AgentTypeOpen
+	if agentType == "" || agentType == store.AgentTypeOpen {
+		agentType = store.AgentTypePredefined // v3: open agents deprecated, default to predefined
 	}
 
 	agentID := config.NormalizeAgentID(params.Name)
@@ -134,7 +146,19 @@ func (m *AgentsMethods) handleCreate(ctx context.Context, client *gateway.Client
 			MemoryConfig:     params.MemoryConfig,
 			CompactionConfig: params.CompactionConfig,
 			ContextPruning:   params.ContextPruning,
-			OtherConfig:      params.OtherConfig,
+			OtherConfig:         params.OtherConfig,
+			Emoji:               params.Emoji,
+			AgentDescription:    params.AgentDescription,
+			ThinkingLevel:       params.ThinkingLevel,
+			MaxTokens:           params.MaxTokens,
+			SelfEvolve:          params.SelfEvolve,
+			SkillEvolve:         params.SkillEvolve,
+			SkillNudgeInterval:  params.SkillNudgeInterval,
+			ReasoningConfig:     params.ReasoningConfig,
+			WorkspaceSharing:    params.WorkspaceSharing,
+			ChatGPTOAuthRouting: params.ChatGPTOAuthRouting,
+			ShellDenyGroups:     params.ShellDenyGroups,
+			KGDedupConfig:       params.KGDedupConfig,
 		}
 		if err := m.agentStore.Create(ctx, agentData); err != nil {
 			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToCreate, "agent", fmt.Sprintf("%v", err))))

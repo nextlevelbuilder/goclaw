@@ -16,9 +16,12 @@ import (
 // Implements Tool + ContextualTool interfaces.
 // Per-call channel is read from ctx for thread-safety.
 type TtsTool struct {
-	mu      sync.RWMutex
-	manager *tts.Manager
+	mu        sync.RWMutex
+	manager   *tts.Manager
+	vaultIntc *VaultInterceptor
 }
+
+func (t *TtsTool) SetVaultInterceptor(v *VaultInterceptor) { t.vaultIntc = v }
 
 // NewTtsTool creates a TTS tool backed by the given manager.
 func NewTtsTool(mgr *tts.Manager) *TtsTool {
@@ -124,5 +127,9 @@ func (t *TtsTool) Execute(ctx context.Context, args map[string]any) *Result {
 	forLLM := fmt.Sprintf("%sMEDIA:%s", voiceTag, audioPath)
 	r := &Result{ForLLM: forLLM}
 	r.Deliverable = fmt.Sprintf("[Generated audio: %s]\nText: %s", filepath.Base(audioPath), text)
+	if t.vaultIntc != nil {
+		mimeType := "audio/" + result.Extension
+		go t.vaultIntc.AfterWriteMedia(context.WithoutCancel(ctx), audioPath, text, mimeType)
+	}
 	return r
 }

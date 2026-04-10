@@ -122,7 +122,13 @@ func (m *mockKGStore) Stats(context.Context, string, string) (*store.GraphStats,
 }
 
 func (m *mockKGStore) SetEmbeddingProvider(store.EmbeddingProvider) {}
-func (m *mockKGStore) Close() error                                 { return nil }
+func (m *mockKGStore) Close() error { return nil }
+func (m *mockKGStore) ListEntitiesTemporal(_ context.Context, _, _ string, _ store.EntityListOptions, _ store.TemporalQueryOptions) ([]store.Entity, error) {
+	return nil, nil
+}
+func (m *mockKGStore) SupersedeEntity(_ context.Context, _ *store.Entity, _ *store.Entity) error {
+	return nil
+}
 
 // ── test helpers ───────────────────────────────────────────────────
 
@@ -403,7 +409,7 @@ func TestKGSearch_RelationsCappedAt5(t *testing.T) {
 	tool.SetKGStore(ms)
 
 	ctx := kgContext()
-	result := tool.executeSearch(ctx, testAgentID.String(), testUserID, "HubEntity", nil)
+	result := tool.executeSearch(ctx, testAgentID.String(), testUserID, "HubEntity", nil, store.TemporalQueryOptions{})
 	text := result.ForLLM
 
 	relCount := strings.Count(text, "—[connects]→")

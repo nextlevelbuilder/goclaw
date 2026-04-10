@@ -18,6 +18,7 @@ export function useAgentSkills(agentId: string) {
       http
         .get<{ skills: SkillWithGrant[] }>(`/v1/agents/${agentId}/skills`)
         .then((r) => r.skills ?? []),
+    staleTime: 60_000,
   });
 
   const optimisticToggle = useCallback(

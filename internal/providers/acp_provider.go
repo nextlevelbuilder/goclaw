@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"regexp"
@@ -15,6 +16,7 @@ import (
 // ACPProvider implements Provider by orchestrating ACP-compatible agent subprocesses.
 // It delegates to a ProcessPool that manages agent lifecycle over JSON-RPC 2.0 stdio.
 type ACPProvider struct {
+	name         string // provider name (default: "acp")
 	pool         *acp.ProcessPool
 	bridge       *acp.ToolBridge
 	defaultModel string
@@ -24,6 +26,15 @@ type ACPProvider struct {
 
 // ACPOption configures an ACPProvider.
 type ACPOption func(*ACPProvider)
+
+// WithACPName overrides the provider name (default: "acp").
+func WithACPName(name string) ACPOption {
+	return func(p *ACPProvider) {
+		if name != "" {
+			p.name = name
+		}
+	}
+}
 
 // WithACPModel sets the default model/agent name.
 func WithACPModel(model string) ACPOption {
@@ -46,6 +57,7 @@ func WithACPPermMode(mode string) ACPOption {
 // NewACPProvider creates a provider that orchestrates ACP agents as subprocesses.
 func NewACPProvider(binary string, args []string, workDir string, idleTTL time.Duration, denyPatterns []*regexp.Regexp, opts ...ACPOption) *ACPProvider {
 	p := &ACPProvider{
+		name:         "acp",
 		defaultModel: "claude",
 	}
 	for _, opt := range opts {
@@ -69,8 +81,23 @@ func NewACPProvider(binary string, args []string, workDir string, idleTTL time.D
 	return p
 }
 
-func (p *ACPProvider) Name() string         { return "acp" }
+func (p *ACPProvider) Name() string         { return p.name }
 func (p *ACPProvider) DefaultModel() string { return p.defaultModel }
+
+// Capabilities implements CapabilitiesAware for pipeline code-path selection.
+// ACP is subprocess-based (JSON-RPC 2.0 over stdio) — no HTTP adapter, capabilities only.
+func (p *ACPProvider) Capabilities() ProviderCapabilities {
+	return ProviderCapabilities{
+		Streaming:        true,
+		ToolCalling:      true,
+		StreamWithTools:  true,
+		Thinking:         true,
+		Vision:           false,
+		CacheControl:     false,
+		MaxContextWindow: 200_000,
+		TokenizerID:      "cl100k_base",
+	}
+}
 
 // Chat sends a prompt and returns the complete response (non-streaming).
 func (p *ACPProvider) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
@@ -139,7 +166,7 @@ func (p *ACPProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk f
 	defer cancelFn()
 	go func() {
 		<-cancelCtx.Done()
-		if ctx.Err() == context.Canceled {
+		if errors.Is(ctx.Err(), context.Canceled) {
 			_ = proc.Cancel()
 		}
 	}()

@@ -374,6 +374,20 @@ erDiagram
 
 40+ tables carry `tenant_id` with NOT NULL constraint. Exception: `api_keys.tenant_id` is nullable — NULL means system-level cross-tenant key.
 
+### v3 Tenant-Scoped Stores
+
+New v3 stores (`evolution`, `vault`, `episodic`, `agent_links`) all enforce tenant isolation:
+
+| Store | Purpose | Tenant Scoping |
+|-------|---------|----------------|
+| `EvolutionMetrics` | Track agent improvement suggestions | `WHERE tenant_id = $N` |
+| `EvolutionSuggestions` | Store LLM-generated optimizations | `WHERE tenant_id = $N` |
+| `Vault` | Persistent data storage for agents | `WHERE tenant_id = $N` |
+| `Episodic` | Episodic memory for agents | `WHERE tenant_id = $N` |
+| `AgentLink` | Delegation links between agents | `WHERE tenant_id = $N` |
+
+All v3 stores follow the same tenant isolation pattern — all queries include `WHERE tenant_id = $N` at the SQL level.
+
 **Master tenant** (UUID `0193a5b0-7000-7000-8000-000000000001`): All legacy/default data. Single-tenant deployments use this exclusively.
 
 ---

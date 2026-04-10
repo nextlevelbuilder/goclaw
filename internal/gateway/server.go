@@ -542,6 +542,25 @@ func (s *Server) SetKnowledgeGraphHandler(h *httpapi.KnowledgeGraphHandler) {
 	s.handlers = append(s.handlers, h)
 }
 
+// SetEvolutionHandler sets the evolution metrics + suggestions handler.
+func (s *Server) SetEvolutionHandler(h *httpapi.EvolutionHandler) {
+	s.handlers = append(s.handlers, h)
+}
+
+// SetVaultHandler sets the Knowledge Vault document handler.
+func (s *Server) SetVaultHandler(h *httpapi.VaultHandler) { s.handlers = append(s.handlers, h) }
+
+// SetEpisodicHandler sets the episodic memory handler.
+func (s *Server) SetEpisodicHandler(h *httpapi.EpisodicHandler) { s.handlers = append(s.handlers, h) }
+
+// SetOrchestrationHandler sets the orchestration mode handler.
+func (s *Server) SetOrchestrationHandler(h *httpapi.OrchestrationHandler) {
+	s.handlers = append(s.handlers, h)
+}
+
+// SetV3FlagsHandler sets the per-agent v3 feature flag handler.
+func (s *Server) SetV3FlagsHandler(h *httpapi.V3FlagsHandler) { s.handlers = append(s.handlers, h) }
+
 // SetActivityHandler sets the activity audit log handler.
 func (s *Server) SetActivityHandler(h *httpapi.ActivityHandler) {
 	s.handlers = append(s.handlers, h)
@@ -554,6 +573,20 @@ func (s *Server) SetSystemConfigsHandler(h *httpapi.SystemConfigsHandler) {
 
 // SetUsageHandler sets the usage analytics handler.
 func (s *Server) SetUsageHandler(h *httpapi.UsageHandler) { s.handlers = append(s.handlers, h) }
+
+// SetBackupHandler sets the system backup handler.
+func (s *Server) SetBackupHandler(h *httpapi.BackupHandler) { s.handlers = append(s.handlers, h) }
+
+// SetRestoreHandler sets the system restore handler.
+func (s *Server) SetRestoreHandler(h *httpapi.RestoreHandler) { s.handlers = append(s.handlers, h) }
+
+// SetBackupS3Handler sets the S3 backup integration handler.
+func (s *Server) SetBackupS3Handler(h *httpapi.BackupS3Handler) { s.handlers = append(s.handlers, h) }
+
+// SetTenantBackupHandler sets the tenant-scoped backup/restore handler.
+func (s *Server) SetTenantBackupHandler(h *httpapi.TenantBackupHandler) {
+	s.handlers = append(s.handlers, h)
+}
 
 // SetDocsHandler sets the OpenAPI spec + Swagger UI handler.
 func (s *Server) SetDocsHandler(h *httpapi.DocsHandler) { s.handlers = append(s.handlers, h) }

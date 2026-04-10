@@ -10,16 +10,16 @@ import (
 // Built-in tools are seeded at startup and can be enabled/disabled or configured
 // via the settings JSONB column.
 type BuiltinToolDef struct {
-	Name        string          `json:"name"`
-	DisplayName string          `json:"display_name"`
-	Description string          `json:"description"`
-	Category    string          `json:"category"`
-	Enabled     bool            `json:"enabled"`
-	Settings    json.RawMessage `json:"settings"`
-	Requires    []string        `json:"requires,omitempty"`
-	Metadata    json.RawMessage `json:"metadata"`
-	CreatedAt   time.Time       `json:"created_at"`
-	UpdatedAt   time.Time       `json:"updated_at"`
+	Name        string          `json:"name" db:"name"`
+	DisplayName string          `json:"display_name" db:"display_name"`
+	Description string          `json:"description" db:"description"`
+	Category    string          `json:"category" db:"category"`
+	Enabled     bool            `json:"enabled" db:"enabled"`
+	Settings    json.RawMessage `json:"settings" db:"settings"`
+	Requires    []string        `json:"requires,omitempty" db:"requires"`
+	Metadata    json.RawMessage `json:"metadata" db:"metadata"`
+	CreatedAt   time.Time       `json:"created_at" db:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at" db:"updated_at"`
 }
 
 // BuiltinToolStore manages built-in tool definitions.

@@ -12,6 +12,8 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
+	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
 	"github.com/nextlevelbuilder/goclaw/internal/providerresolve"
@@ -28,6 +30,7 @@ type ResolverDeps struct {
 	AgentStore     store.AgentStore
 	ProviderStore  store.ProviderStore
 	ProviderReg    *providers.Registry
+	ModelRegistry  providers.ModelRegistry // per-model context window + capabilities lookup
 	Bus            bus.EventPublisher
 	Sessions       store.SessionStore
 	Tools          *tools.Registry
@@ -43,6 +46,7 @@ type ResolverDeps struct {
 	ContextFileLoader ContextFileLoaderFunc
 	BootstrapCleanup  BootstrapCleanupFunc
 	CacheInvalidate   CacheInvalidateFunc
+	DefaultTimezone   string // system default timezone for bootstrap pre-fill
 
 	// Security
 	InjectionAction string // "log", "warn", "block", "off"
@@ -92,8 +96,11 @@ type ResolverDeps struct {
 	// Memory store for extractive memory fallback
 	MemoryStore store.MemoryStore
 
-	// Bridge trace registry for CLI tool span attribution
-	BridgeTraceReg *mcpbridge.BridgeTraceRegistry
+	// V3 evolution metrics store
+	EvolutionMetricsStore store.EvolutionMetricsStore
+
+	// Contact store for user identity resolution (channel contacts → tenant users)
+	ContactStore store.ContactStore
 
 	// Tenant store for workspace path resolution
 	TenantStore store.TenantStore
@@ -104,6 +111,15 @@ type ResolverDeps struct {
 
 	// Global workspace root (GOCLAW_WORKSPACE)
 	Workspace string
+
+	// V3 auto-inject: episodic memory injection into system prompt (nil = disabled)
+	AutoInjector memory.AutoInjector
+
+	// V3 domain event bus for consolidation pipeline (nil = disabled)
+	DomainBus eventbus.DomainEventBus
+
+	// Vault hook: called when a text file is uploaded by user (nil = no vault registration)
+	OnTextUploaded func(ctx context.Context, path, content string)
 }
 
 // NewManagedResolver creates a ResolverFunc that builds Loops from DB agent data.
@@ -360,15 +376,47 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			dataDir = config.TenantDataDir(deps.DataDir, ag.TenantID, tenantSlug)
 		}
 
+		// v3 feature flags (from other_config JSONB).
+		// NOTE: flags are immutable per-Loop — changes via admin API take effect on next session only.
+		// In-flight loops continue with the flags set at creation. This is by design:
+		// CacheKindAgent invalidation destroys the old Loop, and the next request creates a new one.
+		v3f := ag.ParseV3Flags()
+
+		// v3 orchestration mode: resolve from team membership + agent links
+		orchMode := ResolveOrchestrationMode(ctx, ag.ID, deps.TeamStore, deps.AgentLinkStore)
+
+		// Populate delegation targets for prompt injection (only when mode >= delegate).
+		var delegateTargets []DelegateTargetEntry
+		if orchMode != ModeSpawn && deps.AgentLinkStore != nil {
+			if links, err := deps.AgentLinkStore.DelegateTargets(ctx, ag.ID); err == nil {
+				for _, link := range links {
+					delegateTargets = append(delegateTargets, DelegateTargetEntry{
+						AgentKey:    link.TargetAgentKey,
+						DisplayName: link.TargetDisplayName,
+						Description: link.Description,
+					})
+				}
+			}
+		}
+
+		// v3 evolution metrics: only wire store when feature flag enabled
+		var evoMetricsStore store.EvolutionMetricsStore
+		if v3f.EvolutionMetrics && deps.EvolutionMetricsStore != nil {
+			evoMetricsStore = deps.EvolutionMetricsStore
+		}
+
 		restrictVal := true // always restrict agents to their workspace
 		loop := NewLoop(LoopConfig{
 			ID:                     ag.AgentKey,
+			DisplayName:            ag.DisplayName,
 			AgentUUID:              ag.ID,
 			TenantID:               ag.TenantID,
 			AgentType:              ag.AgentType,
 			IsTeamLead:             isTeamLead,
+			AutoInjector:          deps.AutoInjector,
 			Provider:               provider,
 			Model:                  ag.Model,
+			ModelRegistry:          deps.ModelRegistry,
 			ContextWindow:          contextWindow,
 			MaxTokens:              ag.ParseMaxTokens(),
 			MaxIterations:          maxIter,
@@ -379,6 +427,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			MemoryCfg:              ag.ParseMemoryConfig(),
 			SandboxCfg:             sandboxCfgOverride,
 			Bus:                    deps.Bus,
+			DomainBus:              deps.DomainBus,
 			Sessions:               deps.Sessions,
 			Tools:                  toolsReg,
 			ToolPolicy:             deps.ToolPolicy,
@@ -392,6 +441,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			ContextFileLoader:      deps.ContextFileLoader,
 			BootstrapCleanup:       deps.BootstrapCleanup,
 			CacheInvalidate:        deps.CacheInvalidate,
+			DefaultTimezone:        deps.DefaultTimezone,
 			OnEvent:                deps.OnEvent,
 			TraceCollector:         deps.TraceCollector,
 			InjectionAction:        deps.InjectionAction,
@@ -404,28 +454,32 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			BuiltinToolSettings:    builtinSettings,
 			DisabledTools:          disabledTools,
 			ReasoningConfig:        store.ResolveEffectiveReasoningConfig(providerReasoningDefaults, ag.ParseReasoningConfig()),
+			PromptMode:             PromptMode(ag.ParsePromptMode()),
+			PinnedSkills:           ag.ParsePinnedSkills(),
 			SelfEvolve:             ag.ParseSelfEvolve(),
 			SkillEvolve:            ag.AgentType == store.AgentTypePredefined && ag.ParseSkillEvolve(),
 			SkillNudgeInterval:     ag.ParseSkillNudgeInterval(),
 			WorkspaceSharing:       ag.ParseWorkspaceSharing(),
 			ShellDenyGroups:        ag.ParseShellDenyGroups(),
-			BrowserUseProxy:       ag.ParseBrowserUseProxy(),
 			ConfigPermStore:        deps.ConfigPermStore,
 			TeamStore:              deps.TeamStore,
 			SecureCLIStore:         deps.SecureCLIStore,
+			OnTextUploaded:         deps.OnTextUploaded,
 			MediaStore:             deps.MediaStore,
 			ModelPricing:           deps.ModelPricing,
 			BudgetMonthlyCents:     derefInt(ag.BudgetMonthlyCents),
 			TracingStore:           deps.TracingStore,
 			MemoryStore:            deps.MemoryStore,
-			BridgeTraceReg:         deps.BridgeTraceReg,
 			MCPStore:               deps.MCPStore,
 			MCPPool:                deps.MCPPool,
 			MCPUserCredSrvs:        mcpUserCredSrvs,
+			OrchMode:               orchMode,
+			DelegateTargets:        delegateTargets,
+			EvolutionMetricsStore:  evoMetricsStore,
+			UserResolver:           newContactResolver(deps.ContactStore),
 		})
 
-		slog.Info("resolved agent from DB", "agent", agentKey, "model", ag.Model, "provider", ag.Provider,
-			"browserUseProxy", ag.ParseBrowserUseProxy(), "otherConfigLen", len(ag.OtherConfig))
+		slog.Info("resolved agent from DB", "agent", agentKey, "model", ag.Model, "provider", ag.Provider)
 		return loop, nil
 	}
 }

@@ -7,9 +7,32 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css" crossorigin="anonymous" />
     <title>GoClaw Dashboard</title>
+    <style>
+      #app-loader{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:#fff}
+      .loader-content{display:flex;flex-direction:column;align-items:center}
+      .loader-logo{width:4rem;height:4rem;animation:pulse 1.5s ease-in-out infinite}
+      .loader-shimmer{width:10rem;height:3px;margin-top:1rem;overflow:hidden;border-radius:9999px;background:#e4e4e7}
+      .shimmer-bar{height:100%;width:33%;border-radius:9999px;background:linear-gradient(90deg,transparent,#a1a1aa,transparent);animation:shimmer 1.2s linear infinite}
+      @keyframes pulse{0%,100%{opacity:.5;transform:scale(.92)}50%{opacity:1;transform:scale(1)}}
+      @keyframes shimmer{from{transform:translateX(-10rem)}to{transform:translateX(10rem)}}
+      .fade-out{opacity:0;transition:opacity 300ms ease}
+      @media(prefers-reduced-motion:reduce){.loader-logo{animation:none;opacity:1}.shimmer-bar{animation:none}}
+      @media(prefers-color-scheme:dark){
+        #app-loader{background:#09090b}
+        .loader-shimmer{background:#27272a}
+        .shimmer-bar{background:linear-gradient(90deg,transparent,#52525b,transparent)}
+      }
+    </style>
   </head>
   <body>
+    <div id="app-loader">
+      <div class="loader-content">
+        <img src="/goclaw-icon.svg" alt="GoClaw" class="loader-logo" />
+        <div class="loader-shimmer"><div class="shimmer-bar"></div></div>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

@@ -1,16 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Calendar, Clock, AlertTriangle, Pencil, Send, Settings } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Calendar, Clock, AlertTriangle, Pencil } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { StickySaveBar } from "@/components/shared/sticky-save-bar";
 import { MarkdownRenderer } from "@/components/shared/markdown-renderer";
-import { Combobox } from "@/components/ui/combobox";
-import { getAllIanaTimezones, isValidIanaTimezone } from "@/lib/constants";
+import { isValidIanaTimezone } from "@/lib/constants";
 import { formatDate } from "@/lib/format";
 import { toast } from "@/stores/use-toast-store";
 import { useChannels } from "@/pages/channels/hooks/use-channels";
@@ -19,13 +17,10 @@ import { Methods } from "@/api/protocol";
 import type { CronJob, CronJobPatch } from "../hooks/use-cron";
 import { CronStatusBadge } from "../cron-utils";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
-
-interface DeliveryTarget {
-  channel: string;
-  chatId: string;
-  title?: string;
-  kind: string;
-}
+import { CronScheduleSection } from "./cron-schedule-section";
+import { CronDeliverySection } from "./cron-delivery-section";
+import type { DeliveryTarget } from "./cron-delivery-section";
+import { CronLifecycleSection } from "./cron-lifecycle-section";
 
 interface CronOverviewTabProps {
   job: CronJob;
@@ -124,70 +119,18 @@ export function CronOverviewTab({ job, onUpdate }: CronOverviewTabProps) {
   return (
     <div className="space-y-4">
       {/* Schedule section */}
-      <section className="space-y-3 rounded-lg border p-3 sm:p-4 overflow-hidden">
-        <h3 className="text-sm font-medium">{t("detail.schedule")}</h3>
-
-        <div className="space-y-2">
-          <Label>{t("create.name")}</Label>
-          <Input value={job.name} disabled className="text-base md:text-sm" />
-        </div>
-
-        <div className="space-y-2">
-          <Label>{t("create.scheduleType")}</Label>
-          <div className="flex gap-2">
-            {(["every", "cron", "at"] as const).map((kind) => (
-              <Button
-                key={kind}
-                variant={scheduleKind === kind ? "default" : "outline"}
-                size="sm"
-                onClick={() => !readonly && setScheduleKind(kind)}
-                disabled={readonly}
-                type="button"
-              >
-                {kind === "every" ? t("create.every") : kind === "cron" ? t("create.cron") : t("create.once")}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        {scheduleKind === "every" && (
-          <div className="space-y-2">
-            <Label>{t("create.intervalSeconds")}</Label>
-            <Input
-              type="number" min={1} value={everySeconds}
-              onChange={(e) => setEverySeconds(e.target.value)}
-              disabled={readonly} className="text-base md:text-sm"
-            />
-          </div>
-        )}
-
-        {scheduleKind === "cron" && (
-          <div className="space-y-2">
-            <Label>{t("create.cronExpression")}</Label>
-            <Input
-              value={cronExpr} onChange={(e) => setCronExpr(e.target.value)}
-              disabled={readonly} placeholder="0 * * * *" className="text-base md:text-sm"
-            />
-            <p className="text-xs text-muted-foreground">{t("create.cronHint")}</p>
-          </div>
-        )}
-
-        {scheduleKind === "at" && (
-          <p className="text-sm text-muted-foreground">{t("create.onceDesc")}</p>
-        )}
-
-        {/* Timezone */}
-        <div className="space-y-2">
-          <Label>{t("detail.timezone")}</Label>
-          <Combobox
-            value={timezone} onChange={setTimezone}
-            options={getAllIanaTimezones()}
-            placeholder={t("detail.timezone")}
-            className="text-base md:text-sm"
-          />
-          <p className="text-xs text-muted-foreground">{t("detail.timezoneDesc")}</p>
-        </div>
-      </section>
+      <CronScheduleSection
+        job={job}
+        scheduleKind={scheduleKind}
+        setScheduleKind={setScheduleKind}
+        everySeconds={everySeconds}
+        setEverySeconds={setEverySeconds}
+        cronExpr={cronExpr}
+        setCronExpr={setCronExpr}
+        timezone={timezone}
+        setTimezone={setTimezone}
+        readonly={readonly}
+      />
 
       {/* Message section */}
       <section className="space-y-3 rounded-lg border p-3 sm:p-4 overflow-hidden">
@@ -216,80 +159,19 @@ export function CronOverviewTab({ job, onUpdate }: CronOverviewTabProps) {
       </section>
 
       {/* Delivery section */}
-      <section className="space-y-3 rounded-lg border p-3 sm:p-4 overflow-hidden">
-        <div className="flex items-center gap-2">
-          <Send className="h-4 w-4 text-blue-500" />
-          <h3 className="text-sm font-medium">{t("detail.delivery")}</h3>
-        </div>
-        <p className="text-xs text-muted-foreground">{t("detail.deliveryDesc")}</p>
-
-        <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-2.5">
-          <p className="text-sm font-medium">{t("detail.deliverToChannel")}</p>
-          <Switch checked={deliver} onCheckedChange={setDeliver} disabled={readonly} />
-        </div>
-
-        {deliver && (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[140px_1fr]">
-            <div className="space-y-2 min-w-0">
-              <Label>{t("detail.channelLabel")}</Label>
-              {channelNames.length > 0 ? (
-                <Select value={channel || "__none__"}
-                  onValueChange={(v) => { setChannel(v === "__none__" ? "" : v); setTo(""); }}>
-                  <SelectTrigger className="text-base md:text-sm">
-                    <SelectValue placeholder={t("detail.channelPlaceholder")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">{t("detail.channelPlaceholder")}</SelectItem>
-                    {channelNames.map((ch) => (
-                      <SelectItem key={ch} value={ch}>{ch}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input value={channel} onChange={(e) => setChannel(e.target.value)}
-                  placeholder={t("detail.channelPlaceholder")} className="text-base md:text-sm" />
-              )}
-            </div>
-            <div className="space-y-2 min-w-0">
-              <Label>{t("detail.toLabel")}</Label>
-              {(() => {
-                if (!channel) {
-                  return <Input placeholder={t("detail.channelPlaceholder")} disabled className="text-base md:text-sm" />;
-                }
-                const filtered = targets.filter((tgt) => tgt.channel === channel);
-                if (filtered.length > 0) {
-                  return (
-                    <Select value={to || "__none__"} onValueChange={(v) => setTo(v === "__none__" ? "" : v)}>
-                      <SelectTrigger className="text-base md:text-sm">
-                        <SelectValue placeholder={t("detail.toPlaceholder")} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">{t("detail.toPlaceholder")}</SelectItem>
-                        {filtered.map((tgt) => (
-                          <SelectItem key={tgt.chatId} value={tgt.chatId}
-                            title={tgt.title ? `${tgt.title} (${tgt.chatId})` : tgt.chatId}>
-                            <span className="truncate">{tgt.title ? `${tgt.title} (${tgt.chatId})` : tgt.chatId}</span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  );
-                }
-                return <Input value={to} onChange={(e) => setTo(e.target.value)}
-                  placeholder={t("detail.toPlaceholder")} className="text-base md:text-sm" />;
-              })()}
-            </div>
-          </div>
-        )}
-
-        <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-2.5">
-          <div>
-            <p className="text-sm font-medium">{t("detail.wakeHeartbeat")}</p>
-            <p className="text-xs text-muted-foreground">{t("detail.wakeHeartbeatDesc")}</p>
-          </div>
-          <Switch checked={wakeHeartbeat} onCheckedChange={setWakeHeartbeat} disabled={readonly} />
-        </div>
-      </section>
+      <CronDeliverySection
+        deliver={deliver}
+        setDeliver={setDeliver}
+        channel={channel}
+        setChannel={setChannel}
+        to={to}
+        setTo={setTo}
+        wakeHeartbeat={wakeHeartbeat}
+        setWakeHeartbeat={setWakeHeartbeat}
+        channelNames={channelNames}
+        targets={targets}
+        readonly={readonly}
+      />
 
       {/* Agent & Status section */}
       <section className="space-y-3 rounded-lg border p-3 sm:p-4 overflow-hidden">
@@ -322,7 +204,7 @@ export function CronOverviewTab({ job, onUpdate }: CronOverviewTabProps) {
         </div>
 
         {/* Info grid */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {job.state?.nextRunAtMs && (
             <div className="rounded-md bg-muted/50 p-3">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -353,28 +235,13 @@ export function CronOverviewTab({ job, onUpdate }: CronOverviewTabProps) {
       </section>
 
       {/* Lifecycle section */}
-      <section className="space-y-3 rounded-lg border p-3 sm:p-4 overflow-hidden">
-        <div className="flex items-center gap-2">
-          <Settings className="h-4 w-4 text-muted-foreground" />
-          <h3 className="text-sm font-medium">{t("detail.lifecycle")}</h3>
-        </div>
-
-        <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-2.5">
-          <div>
-            <p className="text-sm font-medium">{t("detail.deleteAfterRun")}</p>
-            <p className="text-xs text-muted-foreground">{t("detail.deleteAfterRunDesc")}</p>
-          </div>
-          <Switch checked={deleteAfterRun} onCheckedChange={setDeleteAfterRun} disabled={readonly} />
-        </div>
-
-        <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-2.5">
-          <div>
-            <p className="text-sm font-medium">{t("stateless")}</p>
-            <p className="text-xs text-muted-foreground">{t("statelessHelp")}</p>
-          </div>
-          <Switch checked={stateless} onCheckedChange={setStateless} disabled={readonly} />
-        </div>
-      </section>
+      <CronLifecycleSection
+        deleteAfterRun={deleteAfterRun}
+        setDeleteAfterRun={setDeleteAfterRun}
+        stateless={stateless}
+        setStateless={setStateless}
+        readonly={readonly}
+      />
 
       {/* Last error */}
       {job.state?.lastError && (

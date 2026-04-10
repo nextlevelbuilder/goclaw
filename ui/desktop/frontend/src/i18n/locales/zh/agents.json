@@ -90,7 +90,8 @@
       "links": "链接",
       "skills": "Skill",
       "instances": "用户实例",
-      "permissions": "权限"
+      "permissions": "权限",
+      "evolution": "进化"
     },
     "summonFailed": "召唤失败",
     "evolving": "进化中",
@@ -103,7 +104,37 @@
     "skills": "技能",
     "evolution": "进化",
     "capabilities": "能力",
-    "llmSeesAs": "LLM会看到这个为"
+    "llmSeesAs": "LLM会看到这个为",
+    "prompt": {
+      "title": "系统提示模式"
+    },
+    "orchestration": {
+      "title": "编排",
+      "delegateTargets": "委派目标",
+      "team": "团队",
+      "noDelegates": "标准生成模式 — 未配置委派"
+    },
+    "evolutionTab": {
+      "notEnabled": "进化未启用",
+      "notEnabledHint": "在 Agent 选项卡中启用「进化指标」以开始收集数据。",
+      "toolSuccess": "工具成功率",
+      "retrievalQuality": "检索质量",
+      "noMetrics": "暂无指标数据",
+      "suggestions": "建议",
+      "noSuggestions": "暂无建议",
+      "approve": "批准",
+      "reject": "拒绝",
+      "rollback": "回滚",
+      "guardrails": "适应护栏",
+      "maxDelta": "每周期最大变化",
+      "minDataPoints": "最小数据点",
+      "rollbackDrop": "回滚触发降幅"
+    },
+    "pinnedSkills": {
+      "title": "固定技能",
+      "addPlaceholder": "添加技能...",
+      "hint": "固定的技能始终内联在系统提示中。其他技能使用 skill_search。"
+    }
   },
   "general": {
     "selfEvolution": "自我进化",
@@ -116,6 +147,12 @@
     "skillLearningInfo": "在复杂任务后，Agent可能会建议将工作流程保存为可重用技能。创建技能前始终需要用户批准。技能默认为私有。",
     "skillNudgeIntervalLabel": "N 次工具调用后提醒",
     "skillNudgeIntervalHint": "达到此工具调用次数后，Agent会建议将工作流程保存为技能。设为 0 可禁用任务后建议（系统提示词中的指导仍然显示）。",
+    "v3Flags": "V3 引擎标志",
+    "v3FlagsHint": "这些标志独立于Agent配置保存。",
+    "evolutionMetrics": "进化指标",
+    "evolutionMetricsLabel": "收集工具成功率和检索质量数据",
+    "evolutionSuggestions": "进化建议",
+    "evolutionSuggestionsLabel": "根据指标生成优化建议",
     "budget": "月度预算",
     "budgetLabel": "预算限额 (USD)",
     "budgetHint": "可选的月度支出上限。超出后 Agent 将拒绝请求。留空表示无限制。",

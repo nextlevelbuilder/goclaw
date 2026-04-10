@@ -38,13 +38,12 @@ export function TeamMembersDialog({
     if (open && !didRefresh.current) { didRefresh.current = true; refresh(); }
   }, [open, refresh]);
 
-  // Build emoji lookup from agents' other_config
+  // Build emoji lookup from agents' top-level emoji field
   const emojiMap = useMemo(() => {
     const map = new Map<string, string>();
     for (const a of agents) {
-      const cfg = a.other_config as Record<string, unknown> | null;
-      if (cfg && typeof cfg.emoji === "string" && cfg.emoji) {
-        map.set(a.id, cfg.emoji);
+      if (typeof a.emoji === "string" && a.emoji) {
+        map.set(a.id, a.emoji);
       }
     }
     return map;
@@ -144,7 +143,7 @@ export function TeamMembersDialog({
                   <span className="truncate text-sm font-medium">
                     {m.display_name || m.agent_key || m.agent_id.slice(0, 8)}
                   </span>
-                  <Badge variant="outline" className={`shrink-0 text-[10px] px-1.5 py-0 ${ROLE_COLORS[m.role] ?? ""}`}>
+                  <Badge variant="outline" className={`shrink-0 text-2xs px-1.5 py-0 ${ROLE_COLORS[m.role] ?? ""}`}>
                     {m.role}
                   </Badge>
                 </div>

@@ -39,6 +39,7 @@ export function useMemoryDocuments(filters: MemoryDocFilters) {
       return res ?? [];
     },
     placeholderData: (prev) => prev,
+    staleTime: 60_000,
   });
 
   const documents = data ?? [];

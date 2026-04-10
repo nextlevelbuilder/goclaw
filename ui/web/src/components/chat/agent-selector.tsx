@@ -11,9 +11,9 @@ interface AgentSelectorProps {
   onChange: (agentId: string) => void;
 }
 
-/** Extract emoji from agent's other_config JSONB */
+/** Extract emoji from agent top-level field */
 function agentEmoji(agent: AgentData): string | undefined {
-  return (agent.other_config?.emoji as string) || undefined;
+  return agent.emoji || undefined;
 }
 
 export function AgentSelector({ value, onChange }: AgentSelectorProps) {
@@ -34,7 +34,7 @@ export function AgentSelector({ value, onChange }: AgentSelectorProps) {
         const active = (res.agents ?? []).filter((a) => a.status === "active");
         setAgents(active);
       })
-      .catch(() => {});
+      .catch((err) => console.error("[AgentSelector] fetch agents failed:", err));
   }, [http, connected]);
 
   useLayoutEffect(() => {

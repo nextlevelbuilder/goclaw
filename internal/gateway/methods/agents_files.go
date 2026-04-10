@@ -17,7 +17,8 @@ import (
 // TOOLS.md excluded — not applicable.
 var allowedAgentFiles = []string{
 	bootstrap.AgentsFile, bootstrap.SoulFile, bootstrap.IdentityFile,
-	bootstrap.UserFile, bootstrap.UserPredefinedFile, bootstrap.BootstrapFile, bootstrap.MemoryJSONFile,
+	bootstrap.UserFile, bootstrap.UserPredefinedFile, bootstrap.CapabilitiesFile,
+	bootstrap.BootstrapFile, bootstrap.MemoryJSONFile,
 	bootstrap.HeartbeatFile,
 }
 

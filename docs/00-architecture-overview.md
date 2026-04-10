@@ -97,16 +97,18 @@ flowchart TD
 
 | Module | Description |
 |--------|-------------|
-| `internal/gateway/` | WebSocket + HTTP server, client handling, method router |
+| `internal/gateway/` | WebSocket + HTTP server, client handling, method router. Decomposed: gateway_deps, gateway_http_wiring, gateway_events, gateway_lifecycle, gateway_tools_wiring |
 | `internal/gateway/methods/` | RPC method handlers: chat, agents, teams, delegations, sessions, config, skills, cron, pairing, exec approval, usage, send |
 | `internal/agent/` | Agent loop (think, act, observe), router, resolver, system prompt builder, sanitization, pruning, tracing, memory flush, DELEGATION.md + TEAM.md injection |
-| `internal/providers/` | LLM providers: Anthropic (native HTTP + SSE), OpenAI-compatible (HTTP + SSE, 12+ providers), DashScope (Qwen), ACP (JSON-RPC 2.0 subprocess), Claude CLI, Codex, extended thinking support, retry logic |
+| `internal/providers/` | LLM providers: Anthropic (native HTTP + SSE), OpenAI-compatible (HTTP + SSE, 12+ providers), DashScope (Qwen), ACP (JSON-RPC 2.0 subprocess), Claude CLI, Codex, extended thinking support, retry logic. Shared SSEScanner in providers/sse_reader.go |
 | `internal/providers/acp/` | ACP protocol implementation: ProcessPool (subprocess lifecycle), ToolBridge (fs/terminal), session management |
 | `internal/tools/` | Tool registry, filesystem ops, exec/shell, policy engine, subagent, delegation manager, team tools, context file + memory interceptors, credential scrubbing, rate limiting, PathDenyable |
 | `internal/tools/dynamic_loader.go` | Custom tool loader: LoadGlobal (startup), LoadForAgent (per-agent clone), ReloadGlobal (cache invalidation) |
 | `internal/tools/dynamic_tool.go` | Custom tool executor: command template rendering, shell escaping, encrypted env vars |
-| `internal/store/` | Store interfaces: SessionStore, AgentStore, ProviderStore, SkillStore, MemoryStore, CronStore, PairingStore, TracingStore, MCPServerStore, TeamStore, ChannelInstanceStore, ConfigSecretsStore |
+| `internal/store/` | Store interfaces: SessionStore, AgentStore, ProviderStore, SkillStore, MemoryStore, CronStore, PairingStore, TracingStore, MCPServerStore, TeamStore, ChannelInstanceStore, ConfigSecretsStore. Dual-DB support via Dialect pattern |
+| `internal/store/base/` | Shared store abstractions: Dialect interface, NilStr, BuildMapUpdate, BuildScopeClause, and other common helpers for both PostgreSQL and SQLite |
 | `internal/store/pg/` | PostgreSQL implementations (`database/sql` + `pgx/v5`) |
+| `internal/store/sqlitestore/` | SQLite implementations (`modernc.org/sqlite`) for desktop edition |
 | `internal/bootstrap/` | System prompt files (AGENTS.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, BOOTSTRAP.md) + seeding + truncation |
 | `internal/config/` | Config loading (JSON5) + env var overlay |
 | `internal/skills/` | SKILL.md loader (5-tier hierarchy) + BM25 search + hot-reload via fsnotify |
@@ -132,6 +134,14 @@ flowchart TD
 | `internal/sessions/` | Session management and lifecycle |
 | `internal/tasks/` | Task management system |
 | `internal/upgrade/` | Database schema version tracking and migrations |
+| `internal/pipeline/` | 8-stage pluggable agent pipeline (context → history → prompt → think → act → observe → memory → summarize) |
+| `internal/orchestration/` | Orchestration primitives: BatchQueue[T] generic for result aggregation, ChildResult capture, media conversion helpers |
+| `internal/eventbus/` | DomainEventBus: typed event publishing, worker pool, dedup, retry, used by consolidation workers |
+| `internal/consolidation/` | Memory consolidation workers: episodic (recent facts), semantic (embeddings), dreaming (synthesis), dedup |
+| `internal/tokencount/` | Token counting: tiktoken BPE counter with fallback, used by pipeline for context tracking |
+| `internal/workspace/` | Workspace context resolver: 6 scenarios (agent default, team lead, team member, dispatch, subagent, cron) |
+| `internal/vault/` | Knowledge Vault: wikilinks (semantic mesh), hybrid search (BM25+vector), filesystem sync, L0 auto-injection |
+| `internal/channels/whatsapp/` | Native WhatsApp channel via whatsmeow (replaces WhatsApp API), QR auth, media handling |
 
 ---
 
@@ -409,11 +419,68 @@ flowchart TD
 
 ---
 
+## V3 Architecture (Wave 1 & Wave 2 - dev-v3 branch)
+
+### Overview
+
+V3 introduces a **pluggable 8-stage pipeline** (replacing the monolithic `runLoop`), an event-driven architecture via `DomainEventBus`, and advanced memory consolidation. The system maintains backward compatibility via a **dual-mode gate** at the loop level: agents can opt into v3 pipeline or stay on v2 monolithic loop per-agent via `other_config` JSONB.
+
+### 8-Stage Pipeline
+
+| Stage | Phase | Responsibility |
+|-------|-------|-----------------|
+| **ContextStage** | Setup (once) | Inject agent/user/workspace context, compute per-user files |
+| **ThinkStage** | Iteration | Build system prompt, filter tools by policy, call LLM |
+| **PruneStage** | Iteration | Context pruning (2-pass: soft trim → hard clear), run memory flush if compaction triggered |
+| **ToolStage** | Iteration | Execute tool calls (parallel goroutines for multiple calls) |
+| **ObserveStage** | Iteration | Process tool results, append to messages |
+| **CheckpointStage** | Iteration | Track iteration state, check for loop exit conditions |
+| **FinalizeStage** | Finalize (once) | Sanitize output, flush messages, update session metadata |
+
+### Feature Flags (in `agents.other_config` JSONB)
+
+| Flag | Key | Type | Default | Purpose |
+|------|-----|------|---------|---------|
+| Pipeline | `v3_pipeline_enabled` | bool | false | Use v3 pipeline instead of v2 monolithic loop |
+| Memory | `v3_memory_enabled` | bool | false | Enable episodic/semantic consolidation workers via DomainEventBus |
+| Retrieval | `v3_retrieval_enabled` | bool | false | Enable Knowledge Vault with wikilinks + hybrid search, L0 auto-injection |
+| Evolution Metrics | `self_evolution_metrics` | bool | false | Track agent metrics for evolution suggestions (tool usage, retrieval patterns) |
+| Evolution Suggestions | `self_evolution_suggestions` | bool | false | Generate and apply evolution suggestions (auto-adapt prompt/tools) |
+
+### Memory Consolidation System
+
+**DomainEventBus** drives asynchronous consolidation:
+
+- **Episodic Worker** — Extracts facts from recent runs, clusters by topic, stores in `episodic_memory` table with embeddings
+- **Semantic Worker** — Reprocesses episodic clusters, generates abstracted summaries, produces `semantic_memory` entries
+- **Dreaming Worker** — Synthesizes novel insights from memory clusters, cross-links related memories, drives self-evolution
+- **Dedup Worker** — Prevents duplicate memory entries, maintains consistency across consolidation cycles
+
+### Workspace Context Resolver
+
+Six distinct workspace scenarios:
+
+1. **Agent default** — Agent workspace from config, sandbox environment
+2. **Team lead** — Team workspace as default (agent coordinates tasks)
+3. **Team member** — Agent workspace with team workspace accessible via `WithToolTeamWorkspace()`
+4. **Dispatch** — Temporary workspace from `req.TeamWorkspace` (one-off delegated task)
+5. **Subagent** — Inherited workspace from parent agent via context propagation
+6. **Cron** — Workspace resolved from agent + timezone context at cron trigger time
+
+### Knowledge Vault (Wikilinks + Hybrid Search)
+
+- **Wikilinks**: Bidirectional semantic links (`[[related-concept]]`) automatically extracted from memories
+- **Hybrid Search**: BM25 keyword search + vector similarity (pgvector) combined via RRF (reciprocal rank fusion)
+- **L0 Auto-Injection**: Top-K vault entries injected into system prompt as "relevant context from vault"
+- **Filesystem Sync**: Vault entries exported as `.md` files for manual editing, re-imported with change tracking
+
+---
+
 ## Cross-References
 
 | Document | Content |
 |----------|---------|
-| [01-agent-loop.md](./01-agent-loop.md) | Agent loop detail, sanitization pipeline, history management |
+| [01-agent-loop.md](./01-agent-loop.md) | Agent loop detail, v3 pipeline stages, sanitization pipeline, history management, orchestration modes, self-evolution |
 | [02-providers.md](./02-providers.md) | LLM providers, retry logic, schema cleaning |
 | [03-tools-system.md](./03-tools-system.md) | Tool registry, policy engine, interceptors, custom tools, MCP grants |
 | [04-gateway-protocol.md](./04-gateway-protocol.md) | WebSocket protocol v3, HTTP API, RBAC, identity propagation |

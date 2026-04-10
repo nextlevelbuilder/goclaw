@@ -39,6 +39,47 @@ interface HeartbeatConfigDialogProps {
   agentModel?: string;
 }
 
+function deriveFormDefaults(
+  config: HeartbeatConfig | null,
+  defaultTz: string,
+  providerNameById: Record<string, string>,
+): HeartbeatConfigFormData {
+  if (config) {
+    return {
+      enabled: config.enabled,
+      intervalMin: Math.round(config.intervalSec / 60),
+      ackMaxChars: config.ackMaxChars,
+      maxRetries: config.maxRetries,
+      isolatedSession: config.isolatedSession,
+      lightContext: config.lightContext,
+      activeHoursStart: config.activeHoursStart ?? "",
+      activeHoursEnd: config.activeHoursEnd ?? "",
+      timezone: config.timezone || defaultTz,
+      channel: config.channel ?? "",
+      chatId: config.chatId ?? "",
+      hbProvider: config.providerId ? (providerNameById[config.providerId] ?? "") : "",
+      hbModel: config.model ?? "",
+      checklist: "",
+    };
+  }
+  return {
+    enabled: false,
+    intervalMin: 30,
+    ackMaxChars: 300,
+    maxRetries: 2,
+    isolatedSession: false,
+    lightContext: false,
+    activeHoursStart: "",
+    activeHoursEnd: "",
+    timezone: defaultTz,
+    channel: "",
+    chatId: "",
+    hbProvider: "",
+    hbModel: "",
+    checklist: "",
+  };
+}
+
 export function HeartbeatConfigDialog({
   open, onOpenChange, config, saving, update, test, getChecklist, setChecklist, fetchTargets, refresh,
   agentProvider, agentModel,
@@ -85,7 +126,7 @@ export function HeartbeatConfigDialog({
     },
   });
 
-  const { control, register, watch, setValue } = form;
+  const { control, register, watch, setValue, formState: { errors } } = form;
   const enabled = watch("enabled");
   const hbProvider = watch("hbProvider") ?? "";
   const hbModel = watch("hbModel") ?? "";
@@ -113,43 +154,10 @@ export function HeartbeatConfigDialog({
   useEffect(() => {
     if (!open) return;
     refreshProviders();
-    if (config) {
-      form.reset({
-        enabled: config.enabled,
-        intervalMin: Math.round(config.intervalSec / 60),
-        ackMaxChars: config.ackMaxChars,
-        maxRetries: config.maxRetries,
-        isolatedSession: config.isolatedSession,
-        lightContext: config.lightContext,
-        activeHoursStart: config.activeHoursStart ?? "",
-        activeHoursEnd: config.activeHoursEnd ?? "",
-        timezone: config.timezone || defaultTz,
-        channel: config.channel ?? "",
-        chatId: config.chatId ?? "",
-        hbProvider: config.providerId ? (providerNameById[config.providerId] ?? "") : "",
-        hbModel: config.model ?? "",
-        checklist: "",
-      });
-    } else {
-      form.reset({
-        enabled: false,
-        intervalMin: 30,
-        ackMaxChars: 300,
-        maxRetries: 2,
-        isolatedSession: false,
-        lightContext: false,
-        activeHoursStart: "",
-        activeHoursEnd: "",
-        timezone: defaultTz,
-        channel: "",
-        chatId: "",
-        hbProvider: "",
-        hbModel: "",
-        checklist: "",
-      });
-    }
+    form.reset(deriveFormDefaults(config, defaultTz, providerNameById));
     loadChecklist();
-    fetchTargets().then(setTargets).catch(() => {});
+    fetchTargets().then(setTargets)
+      .catch((err) => console.error("[HeartbeatConfig] fetch targets failed:", err));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -198,7 +206,7 @@ export function HeartbeatConfigDialog({
           <DialogTitle className="flex items-center gap-2">
             <Heart className="h-4 w-4 text-rose-500" />
             {t("heartbeat.configTitle")}
-            <Badge variant={enabled ? "success" : "secondary"} className="text-[10px]">
+            <Badge variant={enabled ? "success" : "secondary"} className="text-2xs">
               {enabled ? t("heartbeat.on") : t("heartbeat.off")}
             </Badge>
           </DialogTitle>
@@ -207,33 +215,38 @@ export function HeartbeatConfigDialog({
         <div className="overflow-y-auto min-h-0 -mx-4 px-4 sm:-mx-6 sm:px-6 space-y-4 overscroll-contain">
 
           {/* Enable + Interval */}
-          <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
-            <div className="flex items-center gap-3 min-w-0">
-              <Controller
-                control={control}
-                name="enabled"
-                render={({ field }) => (
-                  <Switch checked={field.value} onCheckedChange={field.onChange} />
-                )}
-              />
-              <div className="min-w-0">
-                <span className="text-sm font-medium">{t("heartbeat.enabled")}</span>
-                <p className="text-xs text-muted-foreground">{t("heartbeat.enabledHint")}</p>
+          <div className="rounded-lg border p-3 space-y-2">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <Controller
+                  control={control}
+                  name="enabled"
+                  render={({ field }) => (
+                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                  )}
+                />
+                <div className="min-w-0">
+                  <span className="text-sm font-medium">{t("heartbeat.enabled")}</span>
+                  <p className="text-xs text-muted-foreground">{t("heartbeat.enabledHint")}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  type="number"
+                  min={5}
+                  {...register("intervalMin", {
+                    valueAsNumber: true,
+                    onChange: (e) => setValue("intervalMin", Math.max(5, Number(e.target.value) || 5)),
+                  })}
+                  className="w-[4.5rem] text-center text-base md:text-sm"
+                />
+                <span className="text-xs text-muted-foreground">min</span>
               </div>
             </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-              <Input
-                type="number"
-                min={5}
-                {...register("intervalMin", {
-                  valueAsNumber: true,
-                  onChange: (e) => setValue("intervalMin", Math.max(5, Number(e.target.value) || 5)),
-                })}
-                className="w-[4.5rem] text-center text-base md:text-sm"
-              />
-              <span className="text-xs text-muted-foreground">min</span>
-            </div>
+            {errors.intervalMin && (
+              <p className="text-xs text-destructive">{errors.intervalMin.message}</p>
+            )}
           </div>
 
           {/* Provider / Model override */}

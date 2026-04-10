@@ -53,6 +53,17 @@
     "minConfidenceHint": "提取实体的最低置信度阈值（0–1）。",
     "info": "当Agent写入记忆时自动提取实体和关系。留空Provider以禁用。"
   },
+  "bg": {
+    "title": "后台工作者",
+    "description": "用于后台任务（知识库摘要、会话整合、梦境）的Provider和模型。",
+    "provider": "Provider",
+    "model": "模型",
+    "providerTip": "后台任务使用的LLM Provider。留空则使用Agent默认。",
+    "modelTip": "后台任务使用的模型。留空则使用Provider默认。",
+    "providerPlaceholder": "(Agent默认)",
+    "modelPlaceholder": "(默认)",
+    "info": "用于知识库文档摘要、会话整合和梦境。留空则回退到Agent默认Provider。"
+  },
   "compaction": {
     "title": "待处理消息压缩",
     "description": "压缩长待处理消息历史以保持在上下文限制内。",

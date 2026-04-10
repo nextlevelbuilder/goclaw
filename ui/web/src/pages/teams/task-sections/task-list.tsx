@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, lazy, Suspense } from "react";
 import { ClipboardList, Trash2, MessageSquare, Paperclip } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,8 +10,11 @@ import { usePagination } from "@/hooks/use-pagination";
 import type { TeamTaskData, TeamTaskComment, TeamTaskEvent, TeamTaskAttachment } from "@/types/team";
 import type { TeamMemberData } from "@/types/team";
 import { taskStatusBadgeVariant, isTerminalStatus } from "./task-utils";
-import { TaskDetailDialog } from "./task-detail-dialog";
 import { buildTaskLookup, buildMemberLookup } from "../board/board-utils";
+
+const TaskDetailDialog = lazy(() =>
+  import("./task-detail-dialog").then((m) => ({ default: m.TaskDetailDialog }))
+);
 
 interface TaskListProps {
   tasks: TeamTaskData[];
@@ -203,10 +206,10 @@ export function TaskList({
                   <p className="truncate text-xs text-muted-foreground/70">{task.description}</p>
                 )}
                 {task.task_type && task.task_type !== "general" && (
-                  <Badge variant="outline" className="mt-0.5 text-[10px]">{task.task_type}</Badge>
+                  <Badge variant="outline" className="mt-0.5 text-2xs">{task.task_type}</Badge>
                 )}
                 {((task.comment_count ?? 0) > 0 || (task.attachment_count ?? 0) > 0) && (
-                  <div className="mt-0.5 flex items-center gap-2 text-[10px] text-muted-foreground">
+                  <div className="mt-0.5 flex items-center gap-2 text-2xs text-muted-foreground">
                     {(task.comment_count ?? 0) > 0 && (
                       <span className="flex items-center gap-0.5">
                         <MessageSquare className="h-3 w-3" /> {task.comment_count}
@@ -224,14 +227,14 @@ export function TaskList({
                     <div className="h-1.5 flex-1 rounded-full bg-muted">
                       <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${task.progress_percent}%` }} />
                     </div>
-                    <span className="text-[10px] text-muted-foreground">{task.progress_percent}%</span>
+                    <span className="text-2xs text-muted-foreground">{task.progress_percent}%</span>
                   </div>
                 )}
               </div>
               <div className="flex flex-wrap items-center gap-1">
                 <Badge variant={taskStatusBadgeVariant(task.status)}>{task.status.replace(/_/g, " ")}</Badge>
                 {isTeamV2 && task.followup_at && task.status === "in_progress" && (
-                  <Badge variant="outline" className="border-amber-500/50 bg-amber-500/10 text-[10px] text-amber-700 dark:text-amber-400">
+                  <Badge variant="outline" className="border-amber-500/50 bg-amber-500/10 text-2xs text-amber-700 dark:text-amber-400">
                     {t("tasks.badges.awaitingReply")}
                   </Badge>
                 )}
@@ -266,22 +269,24 @@ export function TaskList({
       />
 
       {selectedTask && (
-        <TaskDetailDialog
-          task={selectedTask}
-          teamId={teamId}
-          isTeamV2={isTeamV2}
-          onClose={() => setSelectedTask(null)}
-          getTaskDetail={getTaskDetail}
-          deleteTask={deleteTask}
-          onAddComment={addTaskComment}
-          taskLookup={taskLookup}
-          memberLookup={memberLookup}
-          emojiLookup={emojiLookup}
-          onNavigateTask={(taskId) => {
-            const found = tasks.find((t) => t.id === taskId);
-            if (found) setSelectedTask(found);
-          }}
-        />
+        <Suspense fallback={null}>
+          <TaskDetailDialog
+            task={selectedTask}
+            teamId={teamId}
+            isTeamV2={isTeamV2}
+            onClose={() => setSelectedTask(null)}
+            getTaskDetail={getTaskDetail}
+            deleteTask={deleteTask}
+            onAddComment={addTaskComment}
+            taskLookup={taskLookup}
+            memberLookup={memberLookup}
+            emojiLookup={emojiLookup}
+            onNavigateTask={(taskId) => {
+              const found = tasks.find((t) => t.id === taskId);
+              if (found) setSelectedTask(found);
+            }}
+          />
+        </Suspense>
       )}
 
       <ConfirmDialog

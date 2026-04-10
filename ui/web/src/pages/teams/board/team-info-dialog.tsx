@@ -35,11 +35,11 @@ export function TeamInfoDialog({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {team.name}
-              <Badge variant={team.status === "active" ? "success" : "secondary"} className="text-[10px]">
+              <Badge variant={team.status === "active" ? "success" : "secondary"} className="text-2xs">
                 {team.status}
               </Badge>
               <button type="button" className="relative inline-flex items-center" onClick={() => setFeaturesOpen(true)}>
-                <Badge className="bg-gradient-to-r from-orange-500 to-amber-500 text-[10px] px-2 py-0.5 text-white border-0 font-semibold hover:from-orange-600 hover:to-amber-600">
+                <Badge className="bg-gradient-to-r from-orange-500 to-amber-500 text-2xs px-2 py-0.5 text-white border-0 font-semibold hover:from-orange-600 hover:to-amber-600">
                   v2 Super Team
                 </Badge>
               </button>

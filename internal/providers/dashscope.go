@@ -50,6 +50,22 @@ func NewDashScopeProvider(name, apiKey, apiBase, defaultModel string) *DashScope
 // Name is inherited from the embedded OpenAIProvider (returns the user-specified name).
 func (p *DashScopeProvider) SupportsThinking() bool { return true }
 
+// Capabilities implements CapabilitiesAware for pipeline code-path selection.
+// StreamWithTools=false is THE critical difference: DashScope falls back to
+// non-streaming when tools are present.
+func (p *DashScopeProvider) Capabilities() ProviderCapabilities {
+	return ProviderCapabilities{
+		Streaming:        true,
+		ToolCalling:      true,
+		StreamWithTools:  false,
+		Thinking:         true,
+		Vision:           true,
+		CacheControl:     false,
+		MaxContextWindow: 128_000,
+		TokenizerID:      "cl100k_base",
+	}
+}
+
 // ModelSupportsThinking implements ModelThinkingCapable.
 // Returns true only for models that accept enable_thinking / thinking_budget.
 func (p *DashScopeProvider) ModelSupportsThinking(model string) bool {

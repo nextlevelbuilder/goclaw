@@ -51,7 +51,7 @@ export function SkillTableRow({
             {skill.name}
           </button>
           {skill.is_system && (
-            <Badge variant="outline" className="border-blue-500 text-blue-600 text-[10px]">
+            <Badge variant="outline" className="border-blue-500 text-blue-600 text-2xs">
               {t("system")}
             </Badge>
           )}
@@ -69,7 +69,7 @@ export function SkillTableRow({
           <Badge
             variant="outline"
             className={cn(
-              "text-[10px] w-fit",
+              "text-2xs w-fit",
               isArchived
                 ? "border-amber-500 text-amber-600 dark:border-amber-600 dark:text-amber-400"
                 : "border-emerald-500 text-emerald-600 dark:border-emerald-600 dark:text-emerald-400",
@@ -82,7 +82,7 @@ export function SkillTableRow({
             const shown = deps.slice(0, 3);
             const rest = deps.length - shown.length;
             return (
-              <span className="text-[10px] text-amber-600 dark:text-amber-400 leading-tight">
+              <span className="text-2xs text-amber-600 dark:text-amber-400 leading-tight">
                 {shown.join(", ")}{rest > 0 && `, +${rest}`}
               </span>
             );

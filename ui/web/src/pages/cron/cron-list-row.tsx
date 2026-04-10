@@ -37,7 +37,7 @@ export function CronListRow({ job, onClick, onRun, onDelete }: CronListRowProps)
           <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${job.enabled ? "bg-emerald-500" : "bg-muted-foreground/40"}`} />
         </div>
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Badge variant="outline" className="text-[10px] px-1 py-0">{job.schedule.kind}</Badge>
+          <Badge variant="outline" className="text-2xs px-1 py-0">{job.schedule.kind}</Badge>
           <span className="truncate">{formatSchedule(job)}</span>
         </div>
       </div>

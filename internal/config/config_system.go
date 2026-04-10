@@ -52,6 +52,10 @@ func (c *Config) ApplySystemConfigs(configs map[string]string) {
 	boolean("gateway.tool_status", &c.Gateway.ToolStatus)
 	integer("gateway.task_recovery_interval_sec", &c.Gateway.TaskRecoveryIntervalSec)
 
+	// Background workers (vault enrichment, consolidation)
+	str("background.provider", &c.Gateway.BackgroundProvider)
+	str("background.model", &c.Gateway.BackgroundModel)
+
 	// Tools
 	str("tools.profile", &c.Tools.Profile)
 	integer("tools.rate_limit_per_hour", &c.Tools.RateLimitPerHour)

@@ -64,10 +64,23 @@ func (l *Loop) shouldShareKnowledgeGraph() bool {
 	return l.workspaceSharing != nil && l.workspaceSharing.ShareKnowledgeGraph
 }
 
+// buildChannelMeta extracts channel metadata from RunRequest for bootstrap decisions.
+// Returns nil when channel type is unknown (preserves normal bootstrap flow).
+func (l *Loop) buildChannelMeta(req *RunRequest) *bootstrap.ChannelMeta {
+	if req == nil || req.ChannelType == "" {
+		return nil
+	}
+	return &bootstrap.ChannelMeta{
+		ChannelType:     req.ChannelType,
+		DisplayName:     req.SenderName,
+		DefaultTimezone: l.defaultTimezone,
+	}
+}
+
 // getOrCreateUserSetup returns the cached userSetup for a user, creating it on first call.
 // On first call: seeds context files (non-team) and resolves workspace from user profile.
 // On subsequent calls: returns cached setup immediately (no DB calls).
-func (l *Loop) getOrCreateUserSetup(ctx context.Context, userID, channel string, isTeamSession bool) *userSetup {
+func (l *Loop) getOrCreateUserSetup(ctx context.Context, userID, channel string, isTeamSession bool, channelMeta *bootstrap.ChannelMeta) *userSetup {
 	if userID == "" {
 		return &userSetup{workspace: l.workspace}
 	}
@@ -92,7 +105,7 @@ func (l *Loop) getOrCreateUserSetup(ctx context.Context, userID, channel string,
 			}
 			// Step 2: Seed context files (must run before buildMessages reads them).
 			// Passes isNew so SeedUserFiles knows whether to skip existing files.
-			if err := l.seedUserFiles(ctx, l.agentUUID, userID, l.agentType, isNew); err != nil {
+			if err := l.seedUserFiles(ctx, l.agentUUID, userID, l.agentType, isNew, channelMeta); err != nil {
 				slog.Warn("failed to seed user context files", "error", err)
 				// Seeding failed (e.g. SQLITE_BUSY after retries). Inject
 				// embedded bootstrap templates in-memory so the first turn

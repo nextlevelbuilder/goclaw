@@ -37,7 +37,7 @@ export function ChannelScopesInfo({ channelType }: ChannelScopesInfoProps) {
               <div key={s.scope} className="flex items-baseline gap-2 text-xs font-mono">
                 <code className="text-amber-900 dark:text-amber-100">{s.scope}</code>
                 {s.note && (
-                  <span className="text-amber-600 dark:text-amber-400 font-sans text-[11px]">
+                  <span className="text-amber-600 dark:text-amber-400 font-sans text-xs-plus">
                     — {s.note}
                   </span>
                 )}

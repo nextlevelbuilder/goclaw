@@ -46,12 +46,70 @@
     "summonFailed": "Failed",
     "resummon": "Resummon",
     "delete": "Delete",
-    "predefinedTooltip": "Shared context files (SOUL.md, IDENTITY.md, AGENTS.md) with per-user USER.md instances.",
-    "openTooltip": "Each user gets their own full set of context files.",
     "evolving": "Evolving",
     "static": "Static",
     "evolvingTooltip": "Agent can self-evolve its communication style (SOUL.md). Identity and workflow stay fixed.",
     "staticTooltip": "Agent style is static. Enable Self-Evolution in settings to allow style adaptation."
+  },
+  "v3Info": {
+    "title": "What's New in v3",
+    "subtitle": "Major improvements over v2 architecture",
+    "tabs": {
+      "core": "Core Engine",
+      "memory": "Memory & Knowledge",
+      "orchestration": "Orchestration"
+    },
+    "features": {
+      "pipeline": {
+        "title": "Pipeline",
+        "v2v3": "Monolithic 7K LOC → 8 pluggable stages",
+        "desc": "Structured context → history → prompt → think → act → observe → memory → summarize loop with per-stage callbacks.",
+        "stat": "8 stages"
+      },
+      "memory": {
+        "title": "Memory",
+        "v2v3": "Single-tier → 3-tier (Working → Episodic → Semantic)",
+        "desc": "Working memory holds active context; episodic stores session summaries; semantic layer is backed by knowledge graph.",
+        "stat": "3 tiers"
+      },
+      "retrieval": {
+        "title": "Retrieval",
+        "v2v3": "Manual search → L0/L1/L2 progressive loading",
+        "desc": "L0 abstracts auto-inject into every session. L1/L2 load on demand via BM25 + vector hybrid search.",
+        "stat": "Auto-inject"
+      },
+      "vault": {
+        "title": "Knowledge Vault",
+        "v2v3": "No vault → Document registry + wikilinks + hybrid search",
+        "desc": "Centralized document store with [[wikilink]] resolution, filesystem sync, and unified search across all knowledge.",
+        "stat": "NEW"
+      },
+      "evolution": {
+        "title": "Self-Evolution",
+        "v2v3": "No metrics → Metrics → Suggestions → Auto-adapt",
+        "desc": "Records tool success rates and retrieval quality, generates suggestions, applies guardrail-protected changes with rollback.",
+        "stat": "3 stages"
+      },
+      "orchestration": {
+        "title": "Orchestration",
+        "v2v3": "Spawn only → Spawn + Delegate + Team modes",
+        "desc": "Delegate tool enables inter-agent task handoff with agent_links. Three delegation modes: auto, explicit, and manual.",
+        "stat": "3 modes"
+      },
+      "resilience": {
+        "title": "Provider Resilience",
+        "v2v3": "Direct calls → Middleware + failover + cooldown",
+        "desc": "Composable request middleware chain handles rate limits, overload, auth errors, and network failures with automatic failover.",
+        "stat": "9 error types"
+      },
+      "registry": {
+        "title": "Model Registry",
+        "v2v3": "Static config → Dynamic registry + forward-compat resolver",
+        "desc": "ModelRegistry resolves model aliases across providers. Forward-compat resolver maps deprecated IDs to current equivalents.",
+        "stat": "Auto-resolve"
+      }
+    },
+    "note": "v3 features are opt-in per agent. Enable them in agent settings."
   },
   "delete": {
     "title": "Delete Agent",
@@ -110,7 +168,8 @@
       "links": "Links",
       "skills": "Skills",
       "instances": "Instances",
-      "permissions": "Permissions"
+      "permissions": "Permissions",
+      "evolution": "Evolution"
     },
     "summonFailed": "Summon Failed",
     "evolving": "Evolving",
@@ -121,9 +180,113 @@
     "personality": "Agent Personality",
     "modelBudget": "Model & Budget",
     "skills": "Skills",
-    "evolution": "Evolution",
     "capabilities": "Capabilities",
-    "llmSeesAs": "LLM sees this as"
+    "llmSeesAs": "LLM sees this as",
+    "v3": {
+      "title": "V3 Features",
+      "pipeline": "V3 Pipeline",
+      "pipelineHint": "Use new 8-stage pipeline instead of legacy loop",
+      "pipelineActiveInfo": "Agent is using the new v3 pipeline. Toggle off to revert to v2 behavior.",
+      "memory": "V3 Memory",
+      "memoryHint": "Enable episodic memory and L0 auto-injection",
+      "retrieval": "V3 Retrieval",
+      "retrievalHint": "Enable new retrieval pipeline"
+    },
+    "prompt": {
+      "title": "System Prompt Mode",
+      "mode": {
+        "full": "Full",
+        "fullDesc": "All sections — interactive chat, persona, full features",
+        "task": "Task",
+        "taskDesc": "Enterprise automation — memory, evolution, no persona/vibe",
+        "minimal": "Minimal",
+        "minimalDesc": "Background tasks — core rules, domain context, observe-only",
+        "none": "None",
+        "noneDesc": "Pure tool-call automation — tools, skills, no rules or persona"
+      },
+      "section": {
+        "persona": "Persona",
+        "styleEcho": "Style Echo",
+        "tools": "Tools",
+        "execBias": "Exec Bias",
+        "callStyle": "Call Style",
+        "safety": "Safety",
+        "safetySm": "Safety (slim)",
+        "skills": "Skills",
+        "skillsSearch": "Skills (search)",
+        "mcp": "MCP",
+        "mcpSearch": "MCP (search)",
+        "memory": "Memory",
+        "memorySm": "Memory (slim)",
+        "sandbox": "Sandbox",
+        "evolution": "Evolution",
+        "channelHints": "Channel Hints",
+        "pinnedSkills": "Pinned Skills",
+        "skillsHybrid": "Skills (hybrid)",
+        "memoryMin": "Memory (min)",
+        "domainCtx": "Domain Context",
+        "workspace": "Workspace",
+        "toolNotes": "Tool Notes"
+      },
+      "upgradeWarning": "Mode upgraded. Some files may need regeneration — use Resummon or Edit with AI in the Files tab."
+    },
+    "engine": {
+      "title": "Engine Version",
+      "learnMore": "Learn more",
+      "pipelineTitle": "Pipeline",
+      "pipelineHint": "8-stage structured execution loop",
+      "memoryTitle": "Memory",
+      "memoryHint": "Episodic memory + L0 auto-injection",
+      "retrievalTitle": "Retrieval",
+      "retrievalHint": "Progressive L0/L1/L2 knowledge loading"
+    },
+    "orchestration": {
+      "title": "Orchestration",
+      "mode": "Mode",
+      "delegateTargets": "Delegate Targets",
+      "noDelegates": "No delegate targets configured. Agent uses self-clone (spawn) mode.",
+      "team": "Team"
+    },
+    "evolution": {
+      "title": "Evolution",
+      "metricsLabel": "Evolution Metrics",
+      "metricsHint": "Record tool effectiveness, retrieval quality, and response feedback",
+      "suggestionsLabel": "Evolution Suggestions",
+      "suggestionsHint": "Generate data-driven improvement suggestions from recorded metrics",
+      "toolSuccess": "Tool Success Rate",
+      "retrievalQuality": "Retrieval Quality",
+      "feedback": "Feedback",
+      "noMetrics": "No metrics recorded yet. Metrics will appear as the agent handles requests.",
+      "noSuggestions": "No suggestions generated yet. Suggestions are created by the daily analysis cron.",
+      "suggestions": "Suggestions",
+      "guardrails": "Adaptation Guardrails",
+      "maxDelta": "Max delta / cycle",
+      "minDataPoints": "Min data points",
+      "rollbackDrop": "Rollback on drop",
+      "lockedParams": "Locked parameters",
+      "timeRange": "Time range",
+      "approve": "Approve",
+      "reject": "Reject",
+      "rollback": "Rollback",
+      "confirmApprove": "Apply this suggestion to the agent?",
+      "confirmReject": "Reject this suggestion?",
+      "confirmRollback": "Revert this applied suggestion?",
+      "confirmDescription": "This action will update the suggestion status.",
+      "notEnabled": "Evolution not enabled",
+      "notEnabledHint": "Enable 'Evolution Metrics' in the Evolution section of the Agent tab to start recording metrics.",
+      "colType": "Type",
+      "colSuggestion": "Suggestion",
+      "colStatus": "Status",
+      "colCreated": "Created",
+      "colActions": "Actions",
+      "cancel": "Cancel",
+      "confirm": "Confirm",
+      "confirming": "...",
+      "successRate": "Success Rate",
+      "usageRate": "Usage Rate",
+      "tooltipCalls": "{{count}} calls, {{ms}}ms avg",
+      "tooltipQueries": "{{count}} queries, score {{score}}"
+    }
   },
   "general": {
     "selfEvolution": "Self-Evolution",
@@ -457,7 +620,9 @@
     "emptyFile": "empty",
     "estTokens": "Est {{tokens}} tokens",
     "insertContact": "Search contact to insert...",
-    "contentPlaceholder": "File content..."
+    "contentPlaceholder": "File content...",
+    "systemPromptPreview": "System Prompt",
+    "tokens": "tokens"
   },
   "fileEditor": {
     "editWithAi": "Edit with AI",
@@ -673,10 +838,17 @@
       "textWeight": "Text Weight",
       "textWeightTip": "Weight for keyword similarity in hybrid search."
     },
-    "browserProxy": {
-      "title": "Browser Proxy",
-      "description": "Auto-assign a proxy from the pool when this agent uses the browser. The proxy is selected transparently — the agent does not see which proxy is used.",
-      "label": "Use Proxy Pool"
+    "dreaming": {
+      "title": "Dreaming (Memory Consolidation)",
+      "description": "Background worker that promotes session summaries into long-term memory. Tune when the agent is too chatty or not consolidating often enough.",
+      "enabled": "Enabled",
+      "enabledTip": "Disable if you want the agent to rely only on raw session summaries without long-term consolidation.",
+      "threshold": "Threshold",
+      "thresholdTip": "Minimum unpromoted summaries before a consolidation run fires. Default 5.",
+      "debounceMs": "Debounce (ms)",
+      "debounceMsTip": "Minimum interval between runs per agent/user. Default 600000 (10 minutes).",
+      "verboseLog": "Verbose Logging",
+      "verboseLogTip": "Emit debounce and below-threshold skips at info level for operator debugging."
     },
     "thinking": {
       "title": "Extended Thinking",

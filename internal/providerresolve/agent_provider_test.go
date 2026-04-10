@@ -53,11 +53,9 @@ func TestResolveConfiguredProviderKeepsNonCodexBase(t *testing.T) {
 	agent := &store.AgentData{
 		TenantID: tenantID,
 		Provider: "anthropic",
-		OtherConfig: json.RawMessage(`{
-			"chatgpt_oauth_routing": {
-				"strategy": "round_robin",
-				"extra_provider_names": ["openai-codex-backup"]
-			}
+		ChatGPTOAuthRouting: json.RawMessage(`{
+			"strategy": "round_robin",
+			"extra_provider_names": ["openai-codex-backup"]
 		}`),
 	}
 
@@ -89,11 +87,9 @@ func TestResolveConfiguredProviderUsesRouterForCodexAgents(t *testing.T) {
 	agent := &store.AgentData{
 		TenantID: tenantID,
 		Provider: "openai-codex",
-		OtherConfig: json.RawMessage(`{
-			"chatgpt_oauth_routing": {
-				"strategy": "round_robin",
-				"extra_provider_names": ["openai-codex-backup"]
-			}
+		ChatGPTOAuthRouting: json.RawMessage(`{
+			"strategy": "round_robin",
+			"extra_provider_names": ["openai-codex-backup"]
 		}`),
 	}
 
@@ -167,10 +163,8 @@ func TestResolveConfiguredProviderKeepsExplicitSingleAccountOverride(t *testing.
 	agent := &store.AgentData{
 		TenantID: tenantID,
 		Provider: "openai-codex",
-		OtherConfig: json.RawMessage(`{
-			"chatgpt_oauth_routing": {
-				"strategy": "manual"
-			}
+		ChatGPTOAuthRouting: json.RawMessage(`{
+			"strategy": "manual"
 		}`),
 	}
 
@@ -217,11 +211,9 @@ func TestResolveConfiguredProviderReturnsRouterEvenWhenPrimaryNeedsFailover(t *t
 	agent := &store.AgentData{
 		TenantID: tenantID,
 		Provider: "openai-codex",
-		OtherConfig: json.RawMessage(`{
-			"chatgpt_oauth_routing": {
-				"strategy": "round_robin",
-				"extra_provider_names": ["openai-codex-backup"]
-			}
+		ChatGPTOAuthRouting: json.RawMessage(`{
+			"strategy": "round_robin",
+			"extra_provider_names": ["openai-codex-backup"]
 		}`),
 	}
 

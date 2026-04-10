@@ -1,7 +1,6 @@
 package http
 
 import (
-	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -85,8 +84,7 @@ func (h *KnowledgeGraphHandler) handleUpsertEntity(w http.ResponseWriter, r *htt
 	agentID := r.PathValue("agentID")
 
 	var entity store.Entity
-	if err := json.NewDecoder(r.Body).Decode(&entity); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
+	if !bindJSON(w, r, locale, &entity) {
 		return
 	}
 	entity.AgentID = agentID
@@ -129,8 +127,7 @@ func (h *KnowledgeGraphHandler) handleTraverse(w http.ResponseWriter, r *http.Re
 		UserID   string `json:"user_id"`
 		MaxDepth int    `json:"max_depth"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
+	if !bindJSON(w, r, locale, &body) {
 		return
 	}
 	if body.EntityID == "" {
@@ -167,8 +164,7 @@ func (h *KnowledgeGraphHandler) handleExtract(w http.ResponseWriter, r *http.Req
 		Model    string  `json:"model"`
 		MinConf  float64 `json:"min_confidence"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
+	if !bindJSON(w, r, locale, &body) {
 		return
 	}
 	if body.Text == "" {
@@ -246,8 +242,7 @@ func (h *KnowledgeGraphHandler) handleScanDuplicates(w http.ResponseWriter, r *h
 		Threshold float64 `json:"threshold"`
 		Limit     int     `json:"limit"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
+	if !bindJSON(w, r, locale, &body) {
 		return
 	}
 	if body.Threshold <= 0 {
@@ -295,8 +290,7 @@ func (h *KnowledgeGraphHandler) handleMergeEntities(w http.ResponseWriter, r *ht
 		TargetID string `json:"target_id"`
 		SourceID string `json:"source_id"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
+	if !bindJSON(w, r, locale, &body) {
 		return
 	}
 	if body.TargetID == "" || body.SourceID == "" {
@@ -319,8 +313,7 @@ func (h *KnowledgeGraphHandler) handleDismissCandidate(w http.ResponseWriter, r 
 	var body struct {
 		CandidateID string `json:"candidate_id"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
+	if !bindJSON(w, r, locale, &body) {
 		return
 	}
 	if body.CandidateID == "" {

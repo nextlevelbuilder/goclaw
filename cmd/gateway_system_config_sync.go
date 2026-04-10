@@ -106,6 +106,10 @@ func seedConfigForContext(ctx context.Context, sc store.SystemConfigStore, cfg *
 	setBool("gateway.tool_status", cfg.Gateway.ToolStatus)
 	setInt("gateway.task_recovery_interval_sec", cfg.Gateway.TaskRecoveryIntervalSec)
 
+	// Background workers
+	set("background.provider", cfg.Gateway.BackgroundProvider)
+	set("background.model", cfg.Gateway.BackgroundModel)
+
 	// Tools
 	set("tools.profile", cfg.Tools.Profile)
 	setInt("tools.rate_limit_per_hour", cfg.Tools.RateLimitPerHour)

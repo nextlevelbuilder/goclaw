@@ -1,0 +1,56 @@
+{
+  "title": "Agent Capabilities V3",
+  "subtitle": "Các hệ thống cốt lõi của agent",
+  "note": "Tất cả tính năng luôn bật cho agent v3.",
+  "tabs": {
+    "pipeline": "Pipeline",
+    "memory": "Bộ nhớ",
+    "knowledge": "Tri thức",
+    "orchestration": "Điều phối"
+  },
+  "pipeline": {
+    "title": "Pipeline 8 giai đoạn",
+    "description": "Mỗi tin nhắn đi qua 8 giai đoạn có cấu trúc trong 3 pha.",
+    "setup": "Khởi tạo",
+    "setupDesc": "Làm giàu context với cấu hình agent, workspace, lịch sử người dùng, và ký ức từ phiên trước.",
+    "iteration": "Vòng lặp",
+    "iterationDesc": "Lặp lại cho đến khi hoàn thành hoặc đạt giới hạn.",
+    "think": "Suy nghĩ",
+    "thinkDesc": "LLM suy luận với đầy đủ context",
+    "prune": "Cắt tỉa",
+    "pruneDesc": "Quản lý token và nén lịch sử",
+    "tools": "Công cụ",
+    "toolsDesc": "Thực thi tool call từ LLM",
+    "observe": "Quan sát",
+    "observeDesc": "Thu thập và xác nhận kết quả",
+    "checkpoint": "Lưu điểm",
+    "checkpointDesc": "Lưu trạng thái trung gian",
+    "finalize": "Hoàn tất",
+    "finalizeDesc": "Lưu metadata, phát sự kiện cho consolidation bộ nhớ, và dọn dẹp."
+  },
+  "memory": {
+    "title": "Hệ thống bộ nhớ 3 tầng",
+    "description": "Bộ nhớ lũy tiến từ hội thoại đến tri thức dài hạn.",
+    "l0Title": "L0 Bộ nhớ làm việc",
+    "l0Desc": "Lịch sử phiên với nén tự động theo token. Khi lịch sử vượt ngưỡng, tin nhắn cũ được tóm tắt qua LLM và cắt bớt. Memory flush trích xuất dữ liệu quan trọng trước khi nén.",
+    "l1Title": "L1 Bộ nhớ sự kiện",
+    "l1Desc": "Tóm tắt phiên tạo sau mỗi lần chạy. Mỗi bản tóm tắt có L0 abstract (~50 token) để inject nhanh. Tìm kiếm FTS + vector với TTL 90 ngày. Abstract liên quan được tự động inject vào system prompt mỗi lượt.",
+    "l2Title": "L2 Bộ nhớ ngữ nghĩa",
+    "l2Desc": "Đồ thị tri thức với thực thể và quan hệ trích xuất qua LLM (ngưỡng 0.75). Tự động gộp trùng. Dreaming tổng hợp 5+ bản tóm tắt thành tài liệu kiến thức dài hạn.",
+    "eventFlow": "Sự kiện: session.completed kích hoạt tạo L1, tiếp tục kích hoạt trích xuất L2 và dreaming."
+  },
+  "knowledge": {
+    "kgTitle": "Đồ thị tri thức",
+    "kgDesc": "Thực thể (người, dự án, công nghệ) và quan hệ được trích xuất từ tóm tắt phiên qua LLM. Phiên bản thời gian theo dõi khi dữ liệu hợp lệ. Tìm kiếm qua knowledge_graph_search với duyệt đa bước đến 5 cấp.",
+    "vaultTitle": "Kho tri thức",
+    "vaultDesc": "Sổ đăng ký tài liệu với [[wikilink]]. Tìm kiếm kết hợp vault (40%) + episodic (30%) + KG (30%). SHA-256 phát hiện thay đổi nội dung.",
+    "dreamingTitle": "Dreaming",
+    "dreamingDesc": "Khi 5+ bản tóm tắt phiên tích lũy, LLM tổng hợp dữ liệu dài hạn: sở thích người dùng, kiến trúc dự án, mẫu lặp lại, quyết định quan trọng. Lưu làm tài liệu tìm kiếm được. Debounce 10 phút mỗi agent."
+  },
+  "orchestration": {
+    "delegateTitle": "Ủy quyền agent",
+    "delegateDesc": "Agent ủy quyền nhiệm vụ cho agent được liên kết qua agent_links với kiểm tra quyền. Chế độ đồng bộ chờ kết quả. Chế độ bất đồng bộ phát ngay và thông báo kết quả sau.",
+    "evolutionTitle": "Tự tiến hóa",
+    "evolutionDesc": "Theo dõi sử dụng tool và retrieval hàng tuần. Phát hiện 3 mẫu: sử dụng retrieval thấp (< 20%), tỷ lệ lỗi tool cao (< 10%), và mẫu tool lặp lại (> 100 lần/tuần). Đề xuất điều chỉnh cấu hình với tự động áp dụng có bảo vệ."
+  }
+}

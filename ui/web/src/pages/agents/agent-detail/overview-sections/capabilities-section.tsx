@@ -22,7 +22,7 @@ export function CapabilitiesSection({
   const { t } = useTranslation("agents");
 
   return (
-    <section className="space-y-4">
+    <section className="space-y-4 rounded-lg border p-3 sm:p-4">
       <ConfigGroupHeader
         title={t("detail.capabilities")}
         description={t("configGroups.capabilitiesDesc")}

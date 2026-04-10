@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Settings2, Loader2, Save, AlertTriangle, Info, ExternalLink, Network } from "lucide-react";
+import { Settings2, Loader2, Save, AlertTriangle, Info, ExternalLink, Network, Cog } from "lucide-react";
 import { Link } from "react-router";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -57,6 +57,10 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
   const [kgModel, setKgModel] = useState("");
   const [kgMinConfidence, setKgMinConfidence] = useState("0.75");
 
+  // Background Workers
+  const [bgProvider, setBgProvider] = useState("");
+  const [bgModel, setBgModel] = useState("");
+
   const applyConfigs = useCallback((
     configs: Record<string, string>,
     kgSettings?: { extraction_provider?: string; extraction_model?: string; min_confidence?: number },
@@ -71,12 +75,14 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
       compMaxTokens: configs["compaction.max_tokens"] ?? "",
       kgProvider: kgSettings?.extraction_provider ?? "", kgModel: kgSettings?.extraction_model ?? "",
       kgMinConfidence: String(kgSettings?.min_confidence ?? 0.75),
+      bgProvider: configs["background.provider"] ?? "", bgModel: configs["background.model"] ?? "",
     };
     setInit(s);
     setEmbProvider(s.embProvider); setEmbModel(s.embModel); setEmbMaxChunkLen(s.embMaxChunkLen); setEmbChunkOverlap(s.embChunkOverlap);
     setToolStatus(s.toolStatus); setBlockReply(s.blockReply); setIntentClassify(s.intentClassify);
     setCompProvider(s.compProvider); setCompModel(s.compModel); setCompThreshold(s.compThreshold); setCompKeepRecent(s.compKeepRecent); setCompMaxTokens(s.compMaxTokens);
     setKgProvider(s.kgProvider); setKgModel(s.kgModel); setKgMinConfidence(s.kgMinConfidence);
+    setBgProvider(s.bgProvider); setBgModel(s.bgModel);
     resetEmb();
   }, [resetEmb]);
 
@@ -118,6 +124,8 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
       if (compThreshold !== init.compThreshold) updates["compaction.threshold"] = compThreshold;
       if (compKeepRecent !== init.compKeepRecent) updates["compaction.keep_recent"] = compKeepRecent;
       if (compMaxTokens !== init.compMaxTokens) updates["compaction.max_tokens"] = compMaxTokens;
+      if (bgProvider !== init.bgProvider) updates["background.provider"] = bgProvider;
+      if (bgModel !== init.bgModel) updates["background.model"] = bgModel;
       for (const [key, value] of Object.entries(updates)) await http.put(`/v1/system-configs/${key}`, { value });
       const kgChanged = kgProvider !== init.kgProvider || kgModel !== init.kgModel || kgMinConfidence !== init.kgMinConfidence;
       if (kgChanged) {
@@ -175,6 +183,20 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
                 </div>
                 <div className="flex items-start gap-2 rounded-md border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-700 dark:border-violet-800 dark:bg-violet-950/30 dark:text-violet-300">
                   <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span>{t("kg.info")}</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Background Workers */}
+            <Card className="border-slate-200 dark:border-slate-700">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base"><Cog className="h-4 w-4 text-slate-500" />{t("bg.title")}</CardTitle>
+                <CardDescription>{t("bg.description")}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 pt-0">
+                <ProviderModelSelect provider={bgProvider} onProviderChange={(v) => { setBgProvider(v); setBgModel(""); }} model={bgModel} onModelChange={setBgModel} allowEmpty providerLabel={t("bg.provider")} modelLabel={t("bg.model")} providerTip={t("bg.providerTip")} modelTip={t("bg.modelTip")} providerPlaceholder={t("bg.providerPlaceholder")} modelPlaceholder={t("bg.modelPlaceholder")} />
+                <div className="flex items-start gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-950/30 dark:text-slate-300">
+                  <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span>{t("bg.info")}</span>
                 </div>
               </CardContent>
             </Card>

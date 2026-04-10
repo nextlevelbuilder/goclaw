@@ -8,30 +8,30 @@ import (
 
 // SkillInfo describes a discovered skill.
 type SkillInfo struct {
-	ID          string   `json:"id,omitempty"` // DB UUID
-	Name        string   `json:"name"`
-	Slug        string   `json:"slug"`
-	Path        string   `json:"path"`
-	BaseDir     string   `json:"baseDir"`
-	Source      string   `json:"source"`
-	Description string   `json:"description"`
-	Visibility  string   `json:"visibility,omitempty"`
-	Tags        []string `json:"tags,omitempty"`
-	Version     int      `json:"version,omitempty"`
-	IsSystem    bool     `json:"is_system,omitempty"`
-	Status      string   `json:"status,omitempty"`
-	Enabled     bool     `json:"enabled"`
-	Author      string   `json:"author,omitempty"`
-	MissingDeps []string `json:"missing_deps,omitempty"`
+	ID          string   `json:"id,omitempty" db:"id"` // DB UUID
+	Name        string   `json:"name" db:"name"`
+	Slug        string   `json:"slug" db:"slug"`
+	Path        string   `json:"path" db:"path"`
+	BaseDir     string   `json:"baseDir" db:"-"`
+	Source      string   `json:"source" db:"-"`
+	Description string   `json:"description" db:"description"`
+	Visibility  string   `json:"visibility,omitempty" db:"visibility"`
+	Tags        []string `json:"tags,omitempty" db:"tags"`
+	Version     int      `json:"version,omitempty" db:"version"`
+	IsSystem    bool     `json:"is_system,omitempty" db:"is_system"`
+	Status      string   `json:"status,omitempty" db:"status"`
+	Enabled     bool     `json:"enabled" db:"enabled"`
+	Author      string   `json:"author,omitempty" db:"author"`
+	MissingDeps []string `json:"missing_deps,omitempty" db:"missing_deps"`
 }
 
 // SkillSearchResult is a scored skill returned from embedding search.
 type SkillSearchResult struct {
-	Name        string  `json:"name"`
-	Slug        string  `json:"slug"`
-	Description string  `json:"description"`
-	Path        string  `json:"path"`
-	Score       float64 `json:"score"`
+	Name        string  `json:"name" db:"name"`
+	Slug        string  `json:"slug" db:"slug"`
+	Description string  `json:"description" db:"description"`
+	Path        string  `json:"path" db:"path"`
+	Score       float64 `json:"score" db:"score"`
 }
 
 // SkillStore manages skill discovery and loading.
@@ -81,15 +81,15 @@ type SkillCreateParams struct {
 
 // SkillWithGrantStatus is a skill with its grant status for a specific agent.
 type SkillWithGrantStatus struct {
-	ID          uuid.UUID `json:"id"`
-	Name        string    `json:"name"`
-	Slug        string    `json:"slug"`
-	Description string    `json:"description"`
-	Visibility  string    `json:"visibility"`
-	Version     int       `json:"version"`
-	Granted     bool      `json:"granted"`
-	PinnedVer   *int      `json:"pinned_version,omitempty"`
-	IsSystem    bool      `json:"is_system"`
+	ID          uuid.UUID `json:"id" db:"id"`
+	Name        string    `json:"name" db:"name"`
+	Slug        string    `json:"slug" db:"slug"`
+	Description string    `json:"description" db:"description"`
+	Visibility  string    `json:"visibility" db:"visibility"`
+	Version     int       `json:"version" db:"version"`
+	Granted     bool      `json:"granted" db:"granted"`
+	PinnedVer   *int      `json:"pinned_version,omitempty" db:"pinned_version"`
+	IsSystem    bool      `json:"is_system" db:"is_system"`
 }
 
 // SkillManageStore extends SkillStore with CRUD, ownership, and grant operations

@@ -15,7 +15,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
@@ -36,14 +35,13 @@ const (
 // Channel connects to the Zalo OA Bot API.
 type Channel struct {
 	*channels.BaseChannel
-	token           string
-	dmPolicy        string
-	mediaMaxMB      int
-	blockReply      *bool
-	pairingService  store.PairingStore
-	pairingDebounce sync.Map // senderID → time.Time
-	stopCh          chan struct{}
-	client          *http.Client
+	token      string
+	dmPolicy   string
+	mediaMaxMB int
+	blockReply *bool
+	stopCh     chan struct{}
+	client     *http.Client
+	// pairingService, pairingDebounce are inherited from channels.BaseChannel.
 }
 
 // New creates a new Zalo channel.
@@ -65,16 +63,17 @@ func New(cfg config.ZaloConfig, msgBus *bus.MessageBus, pairingSvc store.Pairing
 		mediaMax = defaultMediaMaxMB
 	}
 
-	return &Channel{
-		BaseChannel:    base,
-		token:          cfg.Token,
-		dmPolicy:       dmPolicy,
-		mediaMaxMB:     mediaMax,
-		blockReply:     cfg.BlockReply,
-		pairingService: pairingSvc,
-		stopCh:         make(chan struct{}),
-		client:         &http.Client{Timeout: 60 * time.Second},
-	}, nil
+	ch := &Channel{
+		BaseChannel: base,
+		token:       cfg.Token,
+		dmPolicy:    dmPolicy,
+		mediaMaxMB:  mediaMax,
+		blockReply:  cfg.BlockReply,
+		stopCh:      make(chan struct{}),
+		client:      &http.Client{Timeout: 60 * time.Second},
+	}
+	ch.SetPairingService(pairingSvc)
+	return ch, nil
 }
 
 // BlockReplyEnabled returns the per-channel block_reply override (nil = inherit gateway default).
@@ -283,59 +282,30 @@ func (c *Channel) handleImageMessage(msg *zaloMessage) {
 // --- DM Policy ---
 
 func (c *Channel) checkDMPolicy(ctx context.Context, senderID, chatID string) bool {
-	switch c.dmPolicy {
-	case "disabled":
-		slog.Debug("zalo message rejected: DMs disabled", "sender_id", senderID)
-		return false
-
-	case "open":
+	result := c.CheckDMPolicy(ctx, senderID, c.dmPolicy)
+	switch result {
+	case channels.PolicyAllow:
 		return true
-
-	case "allowlist":
-		if !c.IsAllowed(senderID) {
-			slog.Debug("zalo message rejected by allowlist", "sender_id", senderID)
-			return false
-		}
-		return true
-
-	default: // "pairing"
-		// Check if already paired or in allowlist
-		paired := false
-		if c.pairingService != nil {
-			p, err := c.pairingService.IsPaired(ctx, senderID, c.Name())
-			if err != nil {
-				slog.Warn("security.pairing_check_failed, assuming paired (fail-open)",
-					"sender_id", senderID, "channel", c.Name(), "error", err)
-				paired = true
-			} else {
-				paired = p
-			}
-		}
-		inAllowList := c.HasAllowList() && c.IsAllowed(senderID)
-
-		if paired || inAllowList {
-			return true
-		}
-
-		// Send pairing reply (debounced)
+	case channels.PolicyNeedsPairing:
 		c.sendPairingReply(ctx, senderID, chatID)
+		return false
+	default:
+		slog.Debug("zalo message rejected by policy", "sender_id", senderID, "policy", c.dmPolicy)
 		return false
 	}
 }
 
 func (c *Channel) sendPairingReply(ctx context.Context, senderID, chatID string) {
-	if c.pairingService == nil {
+	ps := c.PairingService()
+	if ps == nil {
 		return
 	}
 
-	// Debounce
-	if lastSent, ok := c.pairingDebounce.Load(senderID); ok {
-		if time.Since(lastSent.(time.Time)) < pairingDebounce {
-			return
-		}
+	if !c.CanSendPairingNotif(senderID, pairingDebounce) {
+		return
 	}
 
-	code, err := c.pairingService.RequestPairing(ctx, senderID, c.Name(), chatID, "default", nil)
+	code, err := ps.RequestPairing(ctx, senderID, c.Name(), chatID, "default", nil)
 	if err != nil {
 		slog.Debug("zalo pairing request failed", "sender_id", senderID, "error", err)
 		return
@@ -349,7 +319,7 @@ func (c *Channel) sendPairingReply(ctx context.Context, senderID, chatID string)
 	if err := c.sendMessage(chatID, replyText); err != nil {
 		slog.Warn("failed to send zalo pairing reply", "error", err)
 	} else {
-		c.pairingDebounce.Store(senderID, time.Now())
+		c.MarkPairingNotifSent(senderID)
 		slog.Info("zalo pairing reply sent", "sender_id", senderID, "code", code)
 	}
 }
@@ -406,20 +376,7 @@ func (c *Channel) downloadMedia(url string) (string, error) {
 // --- Chunked text sending ---
 
 func (c *Channel) sendChunkedText(chatID, text string) error {
-	for len(text) > 0 {
-		chunk := text
-		if len(chunk) > maxTextLength {
-			// Try to break at newline
-			cutAt := maxTextLength
-			if idx := strings.LastIndex(text[:maxTextLength], "\n"); idx > maxTextLength/2 {
-				cutAt = idx + 1
-			}
-			chunk = text[:cutAt]
-			text = text[cutAt:]
-		} else {
-			text = ""
-		}
-
+	for _, chunk := range channels.ChunkMarkdown(text, maxTextLength) {
 		if err := c.sendMessage(chatID, chunk); err != nil {
 			return err
 		}

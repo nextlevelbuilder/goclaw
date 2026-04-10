@@ -28,15 +28,20 @@ func (s *SQLiteCronStore) RunJob(ctx context.Context, jobID string, force bool) 
 		return false, "", fmt.Errorf("no job handler configured")
 	}
 
+	// Claim the job for manual execution by clearing next_run_at (match PG behavior).
+	// executeOneJob with reloadClaimed=false skips loadClaimedJob, using the
+	// already-loaded job directly — allowing manual runs on disabled jobs.
 	if id, parseErr := uuid.Parse(jobID); parseErr == nil {
-		if _, execErr := s.db.ExecContext(ctx, "UPDATE cron_jobs SET last_status = 'running', updated_at = ? WHERE id = ?", time.Now(), id); execErr != nil {
+		if _, execErr := s.db.ExecContext(ctx,
+			"UPDATE cron_jobs SET last_status = 'running', next_run_at = NULL, updated_at = ? WHERE id = ?",
+			time.Now(), id); execErr != nil {
 			slog.Warn("cron: failed to mark job running", "job", jobID, "error", execErr)
 		}
 	}
 	s.InvalidateCache()
 
 	s.emitEvent(store.CronEvent{Action: "running", JobID: job.ID, JobName: job.Name, UserID: job.UserID})
-	s.executeOneJob(*job, handler)
+	s.executeOneJob(*job, handler, false)
 
 	s.mu.Lock()
 	s.cacheLoaded = false

@@ -29,7 +29,7 @@ export function CollapsibleSection({
         <Icon className="h-4 w-4 shrink-0" />
         <span>{title}</span>
         {count != null && (
-          <Badge variant="secondary" className="ml-1 text-[10px]">{count}</Badge>
+          <Badge variant="secondary" className="ml-1 text-2xs">{count}</Badge>
         )}
         {open
           ? <ChevronDown className="ml-auto h-4 w-4" />

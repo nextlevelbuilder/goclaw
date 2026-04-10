@@ -526,11 +526,152 @@ When both features are disabled (default), zero token overhead.
 | `internal/i18n/catalog_vi.go` | Vietnamese nudge translations |
 | `internal/i18n/catalog_zh.go` | Chinese nudge translations |
 | `cmd/gateway_builtin_tools.go` | `skill_manage` builtin tool seed entry |
+| `internal/agent/suggestion_engine.go` | SuggestionEngine + pluggable rules interface |
+| `internal/agent/suggestion_rules.go` | Concrete rules: LowRetrievalUsageRule, ToolFailureRule, RepeatedToolRule |
+| `internal/agent/evolution_guardrails.go` | Guardrail validation, apply/rollback logic |
+| `internal/store/evolution_store.go` | Store interfaces: EvolutionMetricsStore, EvolutionSuggestionStore |
+| `internal/store/pg/evolution_metrics.go` | PostgreSQL evolution metrics CRUD + aggregation |
+| `internal/store/pg/evolution_suggestions.go` | PostgreSQL evolution suggestions CRUD + status updates |
+| `cmd/gateway_evolution_cron.go` | Daily cron job scheduler for suggestion generation |
 
 ---
 
-## 8. Cross-References
+## 8. Agent Evolution Metrics System (V3)
+
+V3 introduces automated agent improvement via metrics-driven suggestions. Agents track tool usage, retrieval performance, and user feedback to generate actionable evolution recommendations.
+
+### 8.1 Metrics Collection
+
+Metrics are recorded during agent execution and stored per-agent in the database. Three metric types:
+
+| Type | Description | Examples |
+|------|-------------|----------|
+| **tool** | Tool invocation performance | invocation_count, success_rate, failure_count, avg_duration_ms |
+| **retrieval** | Knowledge retrieval quality | recall_rate, precision, relevance_score, query_count |
+| **feedback** | User satisfaction signals | rating, sentiment, effectiveness_score |
+
+**Collection points:**
+- Tool execution: name, status (success/failure), duration recorded in agent loop
+- Retrieval queries: recall metrics computed from vector search results
+- User feedback: optional post-run feedback API or implicit signals (abort/rephrase patterns)
+
+Metrics aggregate over 7-day rolling windows for suggestion analysis.
+
+### 8.2 Suggestion Engine
+
+`SuggestionEngine` analyzes aggregated metrics and generates suggestions via pluggable rules.
+
+**Architecture:**
+
+```
+Metrics Aggregation (7-day window)
+    ↓
+Rule Evaluation (run daily/weekly)
+    ├─ LowRetrievalUsageRule
+    ├─ ToolFailureRule
+    └─ RepeatedToolRule
+    ↓
+Suggestion Creation (pending status)
+    ↓
+Admin Review → Approve/Reject/Rollback
+```
+
+**Suggestion Types:**
+
+| Type | Trigger | Recommendation | Parameters |
+|------|---------|-----------------|------------|
+| `low_retrieval_usage` | Avg recall < threshold for 7 days | Lower `retrieval_threshold` parameter | `{current_threshold, proposed_threshold, confidence}` |
+| `tool_failure` | Single tool failure rate > 20% | Review tool config or fallback | `{tool_name, failure_count, success_count}` |
+| `repeated_tool` | Tool called 5+ consecutive times without context change | Consider extracting as skill | `{tool_name, occurrence_count, pattern_score}` |
+
+**Duplicate Prevention:** Only one pending suggestion per type per agent. New analyses skip rules that already have pending suggestions.
+
+### 8.3 Auto-Adapt Guardrails
+
+Suggestions can be auto-applied with safety constraints (optional admin-enabled). Guardrails prevent runaway adaptation.
+
+**Constraints:**
+
+| Name | Default | Purpose |
+|------|---------|---------|
+| `max_delta_per_cycle` | 0.1 | Max parameter change per apply cycle (prevents aggressive swings) |
+| `min_data_points` | 100 | Minimum metrics before applying (avoid overfitting on small sample) |
+| `rollback_on_drop_pct` | 20.0 | Auto-rollback if quality metric drops >20% after apply |
+| `locked_params` | `[]` | Parameters that cannot be auto-changed (e.g., security settings) |
+
+**Apply Flow:**
+
+1. Admin approves `low_retrieval_usage` suggestion (raises `retrieval_threshold` by +0.05)
+2. System checks: min_data_points met? parameter not locked? delta ≤ 0.1? → OK
+3. Baseline values saved for rollback
+4. Suggestion status → `applied`
+5. Monitor: if recall drops >20%, auto-rollback and set status → `rolled_back`
+
+**Baseline Storage:**
+
+Previous parameter values stored in suggestion `parameters._baseline` for rollback:
+
+```json
+{
+  "current_threshold": 0.5,
+  "proposed_threshold": 0.55,
+  "_baseline": {
+    "retrieval_threshold": 0.5
+  }
+}
+```
+
+### 8.4 Cron Scheduling
+
+Evolution analysis runs as a periodic cron job (default: daily).
+
+**Schedule:** Configurable via `evolution_cron_schedule` in agent config. Examples: `every day at 02:00`, `every 7 days at sunday 02:00`.
+
+**Execution:**
+1. Load all agents in tenant
+2. For each agent: `engine.Analyze(ctx, agentID)`
+3. Create pending suggestions (if new findings detected)
+4. Log results: created suggestions count, skipped rules, errors
+
+**Cron Event:** `evolution.analysis.completed` event emitted on completion.
+
+### 8.5 API & WebSocket
+
+**HTTP Endpoints** (see [22 — V3 HTTP Endpoints](22-v3-http-endpoints.md)):
+- `GET /v1/agents/{agentID}/evolution/metrics` — Query/aggregate metrics
+- `GET /v1/agents/{agentID}/evolution/suggestions` — List suggestions
+- `PATCH /v1/agents/{agentID}/evolution/suggestions/{suggestionID}` — Approve/reject/rollback
+
+**WebSocket Methods** (see [19 — WebSocket RPC](19-websocket-rpc.md)):
+- `agent.evolution.metrics` — Get metrics
+- `agent.evolution.suggestions` — List suggestions
+- `agent.evolution.apply` — Apply suggestion
+- `agent.evolution.rollback` — Rollback applied suggestion
+
+### 8.6 Configuration
+
+Per-agent evolution settings stored in `agents.other_config` JSONB:
+
+```json
+{
+  "evolution_enabled": true,
+  "evolution_guardrails": {
+    "max_delta_per_cycle": 0.1,
+    "min_data_points": 100,
+    "rollback_on_drop_pct": 20.0,
+    "locked_params": ["security_level"]
+  }
+}
+```
+
+Defaults used if keys absent. Set `evolution_enabled: false` to disable metrics collection entirely.
+
+---
+
+## 9. Cross-References
 
 - [14 - Skills Runtime](./14-skills-runtime.md) — Python/Node runtime environment for skill scripts
 - [15 - Core Skills System](./15-core-skills-system.md) — Bundled system skills, startup seeding, dependency checking
 - [16 - Skill Publishing System](./16-skill-publishing.md) — `publish_skill` tool and `skill-creator` core skill
+- [19 - WebSocket RPC Methods](./19-websocket-rpc.md) — V3 WebSocket methods for evolution, episodic, vault
+- [22 - V3 HTTP Endpoints](./22-v3-http-endpoints.md) — HTTP REST endpoints for evolution metrics, suggestions, episodic memory, vault documents

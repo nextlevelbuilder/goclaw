@@ -169,7 +169,7 @@ func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
 	}
 
 	// Mention gating in groups (with thread participation cache)
-	if !isDM && c.requireMention {
+	if !isDM && c.RequireMention() {
 		mentioned := c.isBotMentioned(content)
 
 		// Thread participation cache: auto-reply in threads where bot previously participated
@@ -187,14 +187,14 @@ func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
 		}
 
 		if !mentioned {
-			c.groupHistory.Record(localKey, channels.HistoryEntry{
+			c.GroupHistory().Record(localKey, channels.HistoryEntry{
 				Sender:    displayName,
 				SenderID:  senderID,
 				Body:      content,
 				Media:     mediaPaths,
 				Timestamp: time.Now(),
 				MessageID: ev.TimeStamp,
-			}, c.historyLimit)
+			}, c.HistoryLimit())
 
 			// Collect contact even when bot is not mentioned (cache prevents DB spam).
 			if cc := c.ContactCollector(); cc != nil {
@@ -236,12 +236,12 @@ func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
 	finalContent := content
 	if peerKind == "group" {
 		annotated := fmt.Sprintf("[From: %s]\n%s", displayName, content)
-		if c.historyLimit > 0 {
+		if c.HistoryLimit() > 0 {
 			// Collect media from pending history (files downloaded by earlier non-mentioned messages).
-			if histMediaPaths := c.groupHistory.CollectMedia(localKey); len(histMediaPaths) > 0 {
+			if histMediaPaths := c.GroupHistory().CollectMedia(localKey); len(histMediaPaths) > 0 {
 				mediaPaths = append(mediaPaths, histMediaPaths...)
 			}
-			finalContent = c.groupHistory.BuildContext(localKey, annotated, c.historyLimit)
+			finalContent = c.GroupHistory().BuildContext(localKey, annotated, c.HistoryLimit())
 		} else {
 			finalContent = annotated
 		}
@@ -251,7 +251,7 @@ func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
 		"message_id":      ev.TimeStamp,
 		"user_id":         senderID,
 		"username":        displayName,
-		"display_name":    displayName,
+		"display_name":    channels.SanitizeDisplayName(displayName),
 		"channel_id":      channelID,
 		"is_dm":           fmt.Sprintf("%t", isDM),
 		"local_key":       localKey,
@@ -281,7 +281,7 @@ func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
 			participKey := channelID + ":particip:" + replyThreadTS
 			c.threadParticip.Store(participKey, time.Now())
 		}
-		c.groupHistory.Clear(localKey)
+		c.GroupHistory().Clear(localKey)
 	}
 }
 

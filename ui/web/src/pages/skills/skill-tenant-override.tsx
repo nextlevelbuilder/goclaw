@@ -37,7 +37,7 @@ export function SkillTenantOverride({
           <TooltipTrigger asChild>
             <Badge
               variant={badgeVariant as "default" | "secondary" | "outline"}
-              className="h-5 cursor-default px-1.5 text-[10px] leading-none"
+              className="h-5 cursor-default px-1.5 text-2xs leading-none"
             >
               {label}
             </Badge>

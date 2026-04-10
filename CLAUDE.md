@@ -24,9 +24,13 @@ internal/
 ├── bus/                      Event bus system
 ├── cache/                    Caching layer
 ├── channels/                 Channel manager: Telegram, Feishu/Lark, Zalo, Discord, WhatsApp
+│   └── whatsapp/             Native WhatsApp via whatsmeow (v3)
 ├── config/                   Config loading (JSON5) + env var overlay
+├── consolidation/            Memory consolidation workers (episodic, semantic, dreaming) (v3)
 ├── crypto/                   AES-256-GCM encryption for API keys
 ├── cron/                     Cron scheduling (at/every/cron expr)
+├── edition/                  Edition system (Lite, Standard) with feature gating
+├── eventbus/                 Domain event bus with worker pool, dedup, retry (v3)
 ├── gateway/                  WS + HTTP server, client, method router
 │   └── methods/              RPC handlers (chat, agents, sessions, config, skills, cron, pairing)
 ├── hooks/                    Hook system for extensibility
@@ -37,33 +41,50 @@ internal/
 ├── media/                    Media handling utilities
 ├── memory/                   Memory system (pgvector)
 ├── oauth/                    OAuth authentication
+├── orchestration/            Orchestration primitives: BatchQueue[T] generic, ChildResult, media conversion (v3)
 ├── permissions/              RBAC (admin/operator/viewer)
+├── pipeline/                 8-stage agent pipeline (context→history→prompt→think→act→observe→memory→summarize)
 ├── providers/                LLM providers: Anthropic (native HTTP+SSE), OpenAI-compat (HTTP+SSE), DashScope (Alibaba Qwen), Claude CLI (stdio+MCP bridge), ACP (Anthropic Console Proxy), Codex (OpenAI)
-├── sandbox/                  Docker-based code sandbox
+├── providerresolve/          Provider adapter + model registry with forward-compat resolver
+├── sandbox/                  Docker-based code execution sandbox
 ├── scheduler/                Lane-based concurrency (main/subagent/cron)
 ├── sessions/                 Session management
 ├── skills/                   SKILL.md loader + BM25 search
-├── store/                    Store interfaces + pg/ (PostgreSQL) implementations
+├── store/                    Store interfaces + implementations (PostgreSQL, SQLite)
+│   ├── base/                 Shared store abstractions: Dialect interface, helpers (NilStr, BuildMapUpdate, BuildScopeClause)
+│   ├── pg/                   PostgreSQL implementations (database/sql + pgx/v5)
+│   └── sqlitestore/          SQLite implementations (modernc.org/sqlite)
 ├── tasks/                    Task management
-├── tools/                    Tool registry, filesystem, exec, web, memory, subagent, MCP bridge
+├── tokencount/               tiktoken BPE token counting
+├── tools/                    Tool registry, filesystem, exec, web, memory, subagent, MCP bridge, delegate
 ├── tracing/                  LLM call tracing + optional OTel export (build-tag gated)
 ├── tts/                      Text-to-Speech (OpenAI, ElevenLabs, Edge, MiniMax)
+├── updater/                  Desktop auto-update checker (Lite edition)
 ├── upgrade/                  Database schema version tracking
+├── vault/                    Knowledge Vault with wikilinks, hybrid search, FS sync
+├── workspace/                WorkspaceContext resolver for 6 scenarios
 pkg/protocol/                 Wire types (frames, methods, errors, events)
 pkg/browser/                  Browser automation (Rod + CDP)
 migrations/                   PostgreSQL migration files
 ui/web/                       React SPA (pnpm, Vite, Tailwind, Radix UI)
+ui/desktop/                   Wails v2 desktop app (React frontend + embedded gateway)
 ```
 
 ## Key Patterns
 
-- **Store layer:** Interface-based (`store.SessionStore`, `store.AgentStore`, etc.) with pg/ (PostgreSQL) implementations. Uses `database/sql` + `pgx/v5/stdlib`, raw SQL, `execMapUpdate()` helper in `pg/helpers.go`
+- **Store layer:** Interface-based (`store.SessionStore`, `store.AgentStore`, etc.) with shared Dialect pattern in `store/base/`. PostgreSQL (`pg/`) and SQLite (`sqlitestore/`) implementations use `database/sql` + `pgx/v5/stdlib` + sqlx, raw SQL, `BuildMapUpdate()` and `BuildScopeClause()` helpers
 - **Agent types:** `open` (per-user context, 7 files) vs `predefined` (shared context + USER.md per-user)
 - **Context files:** `agent_context_files` (agent-level) + `user_context_files` (per-user), routed via `ContextFileInterceptor`
-- **Providers:** Anthropic (native HTTP+SSE), OpenAI-compat (HTTP+SSE), DashScope (Alibaba Qwen), Claude CLI (stdio+MCP bridge), ACP (Anthropic Console Proxy), Codex (OpenAI). All use `RetryDo()` for retries. Loads from `llm_providers` table with encrypted API keys
-- **Agent loop:** `RunRequest` → think→act→observe → `RunResult`. Events: `run.started`, `run.completed`, `chunk`, `tool.call`, `tool.result`. Auto-summarization at >85% context (token-based only)
-- **Context propagation:** `store.WithAgentType(ctx)`, `store.WithUserID(ctx)`, `store.WithAgentID(ctx)`, `store.WithLocale(ctx)`
-- **WebSocket protocol (v3):** Frame types `req`/`res`/`event`. First request must be `connect`
+- **Providers:** Anthropic (native HTTP+SSE), OpenAI-compat (HTTP+SSE), DashScope (Alibaba Qwen), Claude CLI (stdio+MCP bridge), ACP (Anthropic Console Proxy), Codex (OpenAI). All use `RetryDo()` for retries. Loads from `llm_providers` table with encrypted API keys. ProviderAdapter enables pluggable implementations with ModelRegistry forward-compat resolver. Shared SSEScanner in `providers/sse_reader.go` for streaming providers
+- **Pipeline:** 8-stage loop (context→history→prompt→think→act→observe→memory→summarize) with pluggable callbacks, always-on execution path
+- **DomainEventBus:** Typed events with worker pool, dedup, retry. Used by consolidation pipeline and memory workers
+- **3-tier memory:** Working (conversation) → Episodic (session summaries) → Semantic (KG). Progressive loading L0/L1/L2 with auto-inject for L0
+- **Knowledge Vault:** Document registry + [[wikilinks]] + hybrid search, query layer above existing stores, FS sync, unified search
+- **Context propagation:** `store.WithAgentType(ctx)`, `store.WithUserID(ctx)`, `store.WithAgentID(ctx)`, `store.WithLocale(ctx)`, `store.WithTenantID(ctx)`
+- **Request middleware:** Composable chain (cache, service tier, request guards), zero-alloc fast path for hot operations
+- **Self-evolution:** Metrics → suggestions → auto-adapt. 3 progressive stages: metrics collection, suggestion analysis, guardrail-protected apply/rollback
+- **Orchestration:** Delegate tool for inter-agent task delegation with agent_links, 3 delegation modes (auto/explicit/manual), token-aware work distribution. BatchQueue[T] generic for result aggregation
+- **WebSocket protocol:** Frame types `req`/`res`/`event`. First request must be `connect`
 - **Config:** JSON5 at `GOCLAW_CONFIG` env. Secrets in `.env.local` or env vars, never in config.json
 - **Security:** Rate limiting, input guard (detection-only), CORS, shell deny patterns, SSRF protection, path traversal prevention, AES-256-GCM encryption. All security logs: `slog.Warn("security.*")`
 - **Telegram formatting:** LLM output → `SanitizeAssistantContent()` → `markdownToTelegramHTML()` → `chunkHTML()` → `sendHTML()`. Tables rendered as ASCII in `<pre>` tags
@@ -74,7 +95,10 @@ ui/web/                       React SPA (pnpm, Vite, Tailwind, Radix UI)
 ```bash
 go build -o goclaw . && ./goclaw onboard && source .env.local && ./goclaw
 ./goclaw migrate up                 # DB migrations
-go test -v ./tests/integration/     # Integration tests
+# Integration tests (requires pgvector pg18 on port 5433)
+docker run -d --name pgtest -p 5433:5432 -e POSTGRES_PASSWORD=test -e POSTGRES_DB=goclaw_test pgvector/pgvector:pg18
+TEST_DATABASE_URL="postgres://postgres:test@localhost:5433/goclaw_test?sslmode=disable" \
+  go test -v -tags integration ./tests/integration/
 
 cd ui/web && pnpm install && pnpm dev   # Web dashboard (dev)
 
@@ -167,7 +191,7 @@ Go conventions to follow:
 - Use `switch/case` instead of `if/else if` chains on the same variable
 - Use `append(dst, src...)` instead of loop-based append
 - Always handle errors; don't ignore return values
-- **Migrations:** When adding a new SQL migration file in `migrations/`, bump `RequiredSchemaVersion` in `internal/upgrade/version.go` to match the new migration number
+- **Migrations (dual-DB):** PostgreSQL and SQLite have **separate migration systems**. When adding schema changes: (1) PG: add SQL in `migrations/` + bump `RequiredSchemaVersion` in `internal/upgrade/version.go`. (2) SQLite: update `internal/store/sqlitestore/schema.sql` (full schema for fresh DBs) + add incremental patch in `schema.go` `migrations` map + bump `SchemaVersion` constant. **Always update both** — missing SQLite migrations cause desktop edition to crash on startup
 - **i18n strings:** When adding user-facing error messages, add key to `internal/i18n/keys.go` and translations to `catalog_en.go`, `catalog_vi.go`, `catalog_zh.go`. For UI strings, add to all locale JSON files in `ui/web/src/i18n/locales/{en,vi,zh}/`
 - **SQL safety:** When implementing or modifying SQL store code (`store/pg/*.go`), always verify: (1) All user inputs use parameterized queries (`$1, $2, ...`), never string concatenation — prevents SQL injection. (2) Queries are optimized — no N+1 queries, no unnecessary full table scans. (3) WHERE clauses, JOINs, and ORDER BY columns use existing indices — check migration files for available indexes
 - **DB query reuse:** Before adding a new DB query for key entities (teams, agents, sessions, users), check if the same data is already fetched earlier in the current flow/pipeline. Prefer passing resolved data through context, event payloads, or function params rather than re-querying. Duplicate queries waste DB resources and add latency

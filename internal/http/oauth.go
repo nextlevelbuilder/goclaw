@@ -2,7 +2,6 @@ package http
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -176,8 +175,7 @@ func (h *OAuthHandler) handleStart(w http.ResponseWriter, r *http.Request) {
 		APIBase     string `json:"api_base"`
 	}
 	if r.ContentLength > 0 {
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
+		if !bindJSON(w, r, locale, &body) {
 			return
 		}
 	}
@@ -291,7 +289,10 @@ func (h *OAuthHandler) handleManualCallback(w http.ResponseWriter, r *http.Reque
 	var body struct {
 		RedirectURL string `json:"redirect_url"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.RedirectURL == "" {
+	if !bindJSON(w, r, locale, &body) {
+		return
+	}
+	if body.RedirectURL == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgRequired, "redirect_url")})
 		return
 	}

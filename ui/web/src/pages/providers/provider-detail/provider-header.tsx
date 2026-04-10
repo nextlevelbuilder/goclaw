@@ -53,12 +53,12 @@ export function ProviderHeader({ provider, onBack, onAdvanced, onDelete }: Provi
                 {provider.enabled ? tc("enabled") : tc("disabled")}
               </TooltipContent>
             </Tooltip>
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="text-2xs">
               {typeLabel}
             </Badge>
           </div>
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
-            <span className="font-mono text-[11px]">{subtitle}</span>
+            <span className="font-mono text-xs-plus">{subtitle}</span>
             <span className="text-border">·</span>
             <span>{typeLabel}</span>
           </div>

@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -175,5 +176,48 @@ func TestIsHiddenPathOnlyAffectsMaster(t *testing.T) {
 	}
 	if handler.isHiddenPath(masterReq, "my-tenants") {
 		t.Fatal("partial match should not be hidden")
+	}
+}
+
+func TestStorageDeleteInvalidatesSizeCache(t *testing.T) {
+	baseDir := t.TempDir()
+	writeStorageTestFile(t, filepath.Join(baseDir, "tmp.txt"), "abc")
+
+	handler := NewStorageHandler(baseDir)
+	req := httptest.NewRequest(http.MethodDelete, "/v1/storage/files/tmp.txt", nil)
+	req = req.WithContext(store.WithTenantID(context.Background(), store.MasterTenantID))
+	req.SetPathValue("path", "tmp.txt")
+
+	sizeBase := handler.tenantBaseDir(req)
+	handler.sizeCache.Store(sizeBase, &sizeCacheEntry{total: 3, files: 1})
+
+	w := httptest.NewRecorder()
+	handler.handleDelete(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if _, ok := handler.sizeCache.Load(sizeBase); ok {
+		t.Fatal("expected size cache entry to be invalidated after delete")
+	}
+}
+
+func TestStorageMoveInvalidatesSizeCache(t *testing.T) {
+	baseDir := t.TempDir()
+	writeStorageTestFile(t, filepath.Join(baseDir, "from.txt"), "abc")
+
+	handler := NewStorageHandler(baseDir)
+	req := httptest.NewRequest(http.MethodPut, "/v1/storage/move?from=from.txt&to=to.txt", nil)
+	req = req.WithContext(store.WithTenantID(context.Background(), store.MasterTenantID))
+
+	sizeBase := handler.tenantBaseDir(req)
+	handler.sizeCache.Store(sizeBase, &sizeCacheEntry{total: 3, files: 1})
+
+	w := httptest.NewRecorder()
+	handler.handleMove(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if _, ok := handler.sizeCache.Load(sizeBase); ok {
+		t.Fatal("expected size cache entry to be invalidated after move")
 	}
 }

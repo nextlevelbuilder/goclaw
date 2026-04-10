@@ -9,6 +9,7 @@ import (
 	"log/slog"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
+	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -195,8 +196,26 @@ func (l *Loop) finalizeRun(
 	// 9. Maybe summarize
 	l.maybeSummarize(ctx, req.SessionKey)
 
+	// V3: emit session.completed for consolidation pipeline (episodic → semantic → dreaming)
+	if l.domainBus != nil {
+		l.domainBus.Publish(eventbus.DomainEvent{
+			Type:     eventbus.EventSessionCompleted,
+			TenantID: l.tenantID.String(),
+			AgentID:  l.id,
+			UserID:   req.UserID,
+			SourceID: req.SessionKey,
+			Payload: &eventbus.SessionCompletedPayload{
+				SessionKey:      req.SessionKey,
+				MessageCount:    len(history) + len(rs.pendingMsgs),
+				TokensUsed:      rs.totalUsage.PromptTokens + rs.totalUsage.CompletionTokens,
+				CompactionCount: l.sessions.GetCompactionCount(ctx, req.SessionKey),
+			},
+		})
+	}
+
 	return &RunResult{
 		Content:        rs.finalContent,
+		Thinking:       rs.finalThinking,
 		RunID:          req.RunID,
 		Iterations:     rs.iteration,
 		Usage:          &rs.totalUsage,

@@ -19,6 +19,8 @@ import { useAgentPresets } from "./agent-presets";
 import { agentCreateSchema, type AgentCreateFormData } from "@/schemas/agent.schema";
 import { AgentIdentityAndModelFields } from "./agent-identity-and-model-fields";
 import { AgentDescriptionSection } from "./agent-description-section";
+import { Label } from "@/components/ui/label";
+import { PromptModeCards, type PromptMode } from "./prompt-mode-cards";
 
 interface AgentCreateDialogProps {
   open: boolean;
@@ -52,7 +54,6 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
 
   const provider = watch("provider");
   const model = watch("model");
-  const agentType = watch("agentType");
   const agentKey = watch("agentKey");
   const displayName = watch("displayName");
 
@@ -95,16 +96,20 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
     setSubmitError("");
     try {
       const otherConfig: Record<string, unknown> = {};
-      if (data.emoji?.trim()) otherConfig.emoji = data.emoji.trim();
-      if (data.description?.trim()) otherConfig.description = data.description.trim();
-      if (data.selfEvolve) otherConfig.self_evolve = true;
+      if (data.promptMode && data.promptMode !== "full") {
+        otherConfig.prompt_mode = data.promptMode;
+      }
       await onCreate({
         agent_key: data.agentKey,
         display_name: data.displayName || undefined,
         provider: data.provider,
         model: data.model,
         agent_type: data.agentType,
-        other_config: Object.keys(otherConfig).length > 0 ? otherConfig : undefined,
+        // Promoted fields at top level
+        emoji: data.emoji?.trim() || null,
+        agent_description: data.description?.trim() || null,
+        self_evolve: data.selfEvolve || false,
+        ...(Object.keys(otherConfig).length > 0 && { other_config: otherConfig }),
       });
       onOpenChange(false);
     } catch (err) {
@@ -121,7 +126,7 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
 
   const canCreate = !!agentKey && !!displayName && !!provider && !!model &&
     !errors.agentKey && !errors.displayName &&
-    (agentType !== "predefined" || !!watch("description")?.trim());
+    !!watch("description")?.trim();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -143,6 +148,17 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
             onVerify={handleVerify}
           />
           <AgentDescriptionSection form={form} agentPresets={agentPresets} />
+
+          {/* Prompt Mode selector */}
+          <div className="space-y-1.5">
+            <Label>{t("detail.prompt.title")}</Label>
+            <PromptModeCards
+              value={(watch("promptMode") ?? "full") as PromptMode}
+              onChange={(m) => setValue("promptMode", m === "full" ? undefined : m)}
+              compact
+            />
+          </div>
+
           {submitError && <p className="text-sm text-destructive">{submitError}</p>}
         </div>
 

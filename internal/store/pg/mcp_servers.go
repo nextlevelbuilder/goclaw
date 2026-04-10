@@ -66,121 +66,81 @@ func (s *PGMCPServerStore) CreateServer(ctx context.Context, srv *store.MCPServe
 	return err
 }
 
+const mcpServerSelectCols = `id, name, COALESCE(display_name, '') AS display_name, transport,
+		 COALESCE(command, '') AS command, args, COALESCE(url, '') AS url, headers, env,
+		 COALESCE(api_key, '') AS api_key, COALESCE(tool_prefix, '') AS tool_prefix,
+		 timeout_sec, settings, enabled, created_by, created_at, updated_at`
+
 func (s *PGMCPServerStore) GetServer(ctx context.Context, id uuid.UUID) (*store.MCPServerData, error) {
-	if store.IsCrossTenant(ctx) {
-		return s.scanServer(s.db.QueryRowContext(ctx,
-			`SELECT id, name, display_name, transport, command, args, url, headers, env,
-			 api_key, tool_prefix, timeout_sec, settings, enabled, created_by, created_at, updated_at
-			 FROM mcp_servers WHERE id = $1`, id))
+	q := `SELECT ` + mcpServerSelectCols + ` FROM mcp_servers WHERE id = $1`
+	qArgs := []any{id}
+	if !store.IsCrossTenant(ctx) {
+		tenantID := store.TenantIDFromContext(ctx)
+		if tenantID == uuid.Nil {
+			return nil, sql.ErrNoRows
+		}
+		q += ` AND tenant_id = $2`
+		qArgs = append(qArgs, tenantID)
 	}
-	tenantID := store.TenantIDFromContext(ctx)
-	if tenantID == uuid.Nil {
-		return nil, sql.ErrNoRows
-	}
-	return s.scanServer(s.db.QueryRowContext(ctx,
-		`SELECT id, name, display_name, transport, command, args, url, headers, env,
-		 api_key, tool_prefix, timeout_sec, settings, enabled, created_by, created_at, updated_at
-		 FROM mcp_servers WHERE id = $1 AND tenant_id = $2`, id, tenantID))
-}
-
-func (s *PGMCPServerStore) GetServerByName(ctx context.Context, name string) (*store.MCPServerData, error) {
-	if store.IsCrossTenant(ctx) {
-		return s.scanServer(s.db.QueryRowContext(ctx,
-			`SELECT id, name, display_name, transport, command, args, url, headers, env,
-			 api_key, tool_prefix, timeout_sec, settings, enabled, created_by, created_at, updated_at
-			 FROM mcp_servers WHERE name = $1`, name))
-	}
-	tenantID := store.TenantIDFromContext(ctx)
-	if tenantID == uuid.Nil {
-		return nil, sql.ErrNoRows
-	}
-	return s.scanServer(s.db.QueryRowContext(ctx,
-		`SELECT id, name, display_name, transport, command, args, url, headers, env,
-		 api_key, tool_prefix, timeout_sec, settings, enabled, created_by, created_at, updated_at
-		 FROM mcp_servers WHERE name = $1 AND tenant_id = $2`, name, tenantID))
-}
-
-func (s *PGMCPServerStore) scanServer(row *sql.Row) (*store.MCPServerData, error) {
 	var srv store.MCPServerData
-	var displayName, command, url, apiKey, toolPrefix *string
-	var args, headers, env *[]byte
-	err := row.Scan(
-		&srv.ID, &srv.Name, &displayName, &srv.Transport, &command,
-		&args, &url, &headers, &env,
-		&apiKey, &toolPrefix, &srv.TimeoutSec,
-		&srv.Settings, &srv.Enabled, &srv.CreatedBy, &srv.CreatedAt, &srv.UpdatedAt,
-	)
-	if err != nil {
+	if err := pkgSqlxDB.GetContext(ctx, &srv, q, qArgs...); err != nil {
 		return nil, err
 	}
-	srv.DisplayName = derefStr(displayName)
-	srv.Command = derefStr(command)
-	srv.URL = derefStr(url)
-	srv.ToolPrefix = derefStr(toolPrefix)
-	srv.Args = derefBytes(args)
-	srv.Headers = s.decryptJSONB(derefBytes(headers))
-	srv.Env = s.decryptJSONB(derefBytes(env))
-	if apiKey != nil && *apiKey != "" && s.encKey != "" {
-		decrypted, err := crypto.Decrypt(*apiKey, s.encKey)
-		if err != nil {
-			slog.Warn("mcp: failed to decrypt api key", "server", srv.Name, "error", err)
-		} else {
-			srv.APIKey = decrypted
-		}
-	} else {
-		srv.APIKey = derefStr(apiKey)
-	}
+	s.decryptServerFields(&srv)
 	return &srv, nil
 }
 
+func (s *PGMCPServerStore) GetServerByName(ctx context.Context, name string) (*store.MCPServerData, error) {
+	q := `SELECT ` + mcpServerSelectCols + ` FROM mcp_servers WHERE name = $1`
+	qArgs := []any{name}
+	if !store.IsCrossTenant(ctx) {
+		tenantID := store.TenantIDFromContext(ctx)
+		if tenantID == uuid.Nil {
+			return nil, sql.ErrNoRows
+		}
+		q += ` AND tenant_id = $2`
+		qArgs = append(qArgs, tenantID)
+	}
+	var srv store.MCPServerData
+	if err := pkgSqlxDB.GetContext(ctx, &srv, q, qArgs...); err != nil {
+		return nil, err
+	}
+	s.decryptServerFields(&srv)
+	return &srv, nil
+}
+
+// decryptServerFields decrypts api_key, headers, and env after sqlx scan.
+func (s *PGMCPServerStore) decryptServerFields(srv *store.MCPServerData) {
+	srv.Headers = s.decryptJSONB(srv.Headers)
+	srv.Env = s.decryptJSONB(srv.Env)
+	if srv.APIKey != "" && s.encKey != "" {
+		if decrypted, err := crypto.Decrypt(srv.APIKey, s.encKey); err == nil {
+			srv.APIKey = decrypted
+		} else {
+			slog.Warn("mcp: failed to decrypt api key", "server", srv.Name, "error", err)
+		}
+	}
+}
+
 func (s *PGMCPServerStore) ListServers(ctx context.Context) ([]store.MCPServerData, error) {
-	query := `SELECT id, name, display_name, transport, command, args, url, headers, env,
-		 api_key, tool_prefix, timeout_sec, settings, enabled, created_by, created_at, updated_at
-		 FROM mcp_servers`
+	q := `SELECT ` + mcpServerSelectCols + ` FROM mcp_servers`
 	var qArgs []any
 	if !store.IsCrossTenant(ctx) {
 		tenantID := store.TenantIDFromContext(ctx)
 		if tenantID == uuid.Nil {
 			return []store.MCPServerData{}, nil
 		}
-		query += ` WHERE tenant_id = $1`
+		q += ` WHERE tenant_id = $1`
 		qArgs = append(qArgs, tenantID)
 	}
-	query += ` ORDER BY name`
-	rows, err := s.db.QueryContext(ctx, query, qArgs...)
-	if err != nil {
+	q += ` ORDER BY name`
+
+	var result []store.MCPServerData
+	if err := pkgSqlxDB.SelectContext(ctx, &result, q, qArgs...); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	result := make([]store.MCPServerData, 0)
-	for rows.Next() {
-		var srv store.MCPServerData
-		var displayName, command, url, apiKey, toolPrefix *string
-		var args, headers, env *[]byte
-		if err := rows.Scan(
-			&srv.ID, &srv.Name, &displayName, &srv.Transport, &command,
-			&args, &url, &headers, &env,
-			&apiKey, &toolPrefix, &srv.TimeoutSec,
-			&srv.Settings, &srv.Enabled, &srv.CreatedBy, &srv.CreatedAt, &srv.UpdatedAt,
-		); err != nil {
-			continue
-		}
-		srv.DisplayName = derefStr(displayName)
-		srv.Command = derefStr(command)
-		srv.URL = derefStr(url)
-		srv.ToolPrefix = derefStr(toolPrefix)
-		srv.Args = derefBytes(args)
-		srv.Headers = s.decryptJSONB(derefBytes(headers))
-		srv.Env = s.decryptJSONB(derefBytes(env))
-		if apiKey != nil && *apiKey != "" && s.encKey != "" {
-			if decrypted, err := crypto.Decrypt(*apiKey, s.encKey); err == nil {
-				srv.APIKey = decrypted
-			}
-		} else {
-			srv.APIKey = derefStr(apiKey)
-		}
-		result = append(result, srv)
+	for i := range result {
+		s.decryptServerFields(&result[i])
 	}
 	return result, nil
 }

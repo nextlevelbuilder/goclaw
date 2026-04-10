@@ -1,5 +1,7 @@
 package providers
 
+import "maps"
+
 import "strings"
 
 // walkSchema applies fn to every nested map in known schema fields
@@ -69,9 +71,7 @@ func copySchema(schema map[string]any) map[string]any {
 
 func copyVisited(m map[string]bool) map[string]bool {
 	out := make(map[string]bool, len(m)+1)
-	for k, v := range m {
-		out[k] = v
-	}
+	maps.Copy(out, m)
 	return out
 }
 

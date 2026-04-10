@@ -84,10 +84,10 @@ export class HttpClient {
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: res.statusText }));
-      throw new ApiError(
-        err.code ?? "HTTP_ERROR",
-        err.error ?? err.message ?? res.statusText,
-      );
+      const nested = typeof err.error === "object" && err.error !== null ? err.error : null;
+      const code = nested?.code ?? err.code ?? "HTTP_ERROR";
+      const message = nested?.message ?? (typeof err.error === "string" ? err.error : null) ?? err.message ?? res.statusText;
+      throw new ApiError(code, message);
     }
 
     return res.json() as Promise<T>;
@@ -140,13 +140,14 @@ export class HttpClient {
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: res.statusText }));
-      if (res.status === 401 || err.code === "TENANT_ACCESS_REVOKED") {
+      // Backend wraps errors as { "error": { "code": "...", "message": "..." } }
+      const nested = typeof err.error === "object" && err.error !== null ? err.error : null;
+      const code = nested?.code ?? err.code ?? "HTTP_ERROR";
+      const message = nested?.message ?? (typeof err.error === "string" ? err.error : null) ?? err.message ?? res.statusText;
+      if (res.status === 401 || code === "TENANT_ACCESS_REVOKED") {
         this.onAuthFailure?.();
       }
-      throw new ApiError(
-        err.code ?? "HTTP_ERROR",
-        err.error ?? err.message ?? res.statusText,
-      );
+      throw new ApiError(code, message);
     }
 
     return res.json() as Promise<T>;

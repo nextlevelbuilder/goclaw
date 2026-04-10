@@ -133,7 +133,7 @@ export function ToolMultiSelect({
             >
               <span className="truncate font-mono text-xs">{t.name}</span>
               {t.description && (
-                <span className="text-muted-foreground truncate text-[11px] w-full text-left">
+                <span className="text-muted-foreground truncate text-xs-plus w-full text-left">
                   {t.description}
                 </span>
               )}

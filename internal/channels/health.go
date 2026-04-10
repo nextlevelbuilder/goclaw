@@ -65,12 +65,12 @@ type ChannelHealth struct {
 	Detail              string              `json:"detail,omitempty"`
 	FailureKind         ChannelFailureKind  `json:"failure_kind,omitempty"`
 	Retryable           bool                `json:"retryable"`
-	CheckedAt           time.Time           `json:"checked_at,omitempty"`
+	CheckedAt           time.Time           `json:"checked_at"`
 	FailureCount        int                 `json:"failure_count,omitempty"`
 	ConsecutiveFailures int                 `json:"consecutive_failures,omitempty"`
-	FirstFailedAt       time.Time           `json:"first_failed_at,omitempty"`
-	LastFailedAt        time.Time           `json:"last_failed_at,omitempty"`
-	LastHealthyAt       time.Time           `json:"last_healthy_at,omitempty"`
+	FirstFailedAt       time.Time           `json:"first_failed_at"`
+	LastFailedAt        time.Time           `json:"last_failed_at"`
+	LastHealthyAt       time.Time           `json:"last_healthy_at"`
 	Remediation         *ChannelRemediation `json:"remediation,omitempty"`
 }
 

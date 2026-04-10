@@ -75,14 +75,14 @@ function TaskCard({ task }: { task: ActiveTeamTask }) {
                 style={{ width: `${Math.min(pct, 100)}%` }}
               />
             </div>
-            <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">{pct}%</span>
+            <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">{pct}%</span>
           </div>
         </div>
       )}
 
       {/* Step message — full text, no truncation */}
       {task.progressStep && (
-        <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+        <p className="mt-1 text-xs-plus leading-snug text-muted-foreground">
           {task.progressStep}
         </p>
       )}

@@ -20,11 +20,8 @@ import (
 // WARNING: Zalo Personal is an unofficial, reverse-engineered integration. Account may be locked/banned.
 type Channel struct {
 	*channels.BaseChannel
-	config          config.ZaloPersonalConfig
-	pairingService  store.PairingStore
-	pairingDebounce sync.Map // senderID -> time.Time
-	approvedGroups  sync.Map // groupID → true (in-memory cache for paired groups)
-	typingCtrls     sync.Map // threadID → *typing.Controller
+	config      config.ZaloPersonalConfig
+	typingCtrls sync.Map // threadID → *typing.Controller
 
 	mu       sync.RWMutex // protects sess and listener
 	sess     *protocol.Session
@@ -33,11 +30,8 @@ type Channel struct {
 	// Pre-loaded credentials (from DB or from file/QR as fallback).
 	preloadedCreds *protocol.Credentials
 
-	groupHistory   *channels.PendingHistory
-	historyLimit   int
-	requireMention bool
-	stopCh         chan struct{}
-	stopOnce       sync.Once
+	stopCh   chan struct{}
+	stopOnce sync.Once
 }
 
 // New creates a new Zalo Personal channel from config.
@@ -52,25 +46,26 @@ func New(cfg config.ZaloPersonalConfig, msgBus *bus.MessageBus, pairingSvc store
 	}
 	base.ValidatePolicy(cfg.DMPolicy, cfg.GroupPolicy)
 
-	requireMention := true
-	if cfg.RequireMention != nil {
-		requireMention = *cfg.RequireMention
-	}
-
 	historyLimit := cfg.HistoryLimit
 	if historyLimit == 0 {
 		historyLimit = channels.DefaultGroupHistoryLimit
 	}
 
-	return &Channel{
-		BaseChannel:    base,
-		config:         cfg,
-		pairingService: pairingSvc,
-		groupHistory:   channels.MakeHistory(channels.TypeZaloPersonal, pendingStore, base.TenantID()),
-		historyLimit:   historyLimit,
-		requireMention: requireMention,
-		stopCh:         make(chan struct{}),
-	}, nil
+	requireMention := true
+	if cfg.RequireMention != nil {
+		requireMention = *cfg.RequireMention
+	}
+
+	ch := &Channel{
+		BaseChannel: base,
+		config:      cfg,
+		stopCh:      make(chan struct{}),
+	}
+	ch.SetPairingService(pairingSvc)
+	ch.SetGroupHistory(channels.MakeHistory(channels.TypeZaloPersonal, pendingStore, base.TenantID()))
+	ch.SetHistoryLimit(historyLimit)
+	ch.SetRequireMention(requireMention)
+	return ch, nil
 }
 
 // BlockReplyEnabled returns the per-channel block_reply override (nil = inherit gateway default).
@@ -92,7 +87,9 @@ func (c *Channel) getListener() *protocol.Listener {
 
 // Start authenticates and begins listening for Zalo messages.
 func (c *Channel) Start(ctx context.Context) error {
-	c.groupHistory.StartFlusher()
+	if gh := c.GroupHistory(); gh != nil {
+		gh.StartFlusher()
+	}
 	slog.Warn("security.unofficial_api",
 		"channel", "zalo_personal",
 		"msg", "Zalo Personal is unofficial and reverse-engineered. Account may be locked/banned. Use at own risk.",
@@ -127,15 +124,23 @@ func (c *Channel) Start(ctx context.Context) error {
 
 // SetPendingCompaction configures LLM-based auto-compaction for pending messages.
 func (c *Channel) SetPendingCompaction(cfg *channels.CompactionConfig) {
-	c.groupHistory.SetCompactionConfig(cfg)
+	if gh := c.GroupHistory(); gh != nil {
+		gh.SetCompactionConfig(cfg)
+	}
 }
 
 // SetPendingHistoryTenantID propagates tenant_id to the pending history for DB operations.
-func (c *Channel) SetPendingHistoryTenantID(id uuid.UUID) { c.groupHistory.SetTenantID(id) }
+func (c *Channel) SetPendingHistoryTenantID(id uuid.UUID) {
+	if gh := c.GroupHistory(); gh != nil {
+		gh.SetTenantID(id)
+	}
+}
 
 // Stop gracefully shuts down the Zalo Personal channel.
 func (c *Channel) Stop(_ context.Context) error {
-	c.groupHistory.StopFlusher()
+	if gh := c.GroupHistory(); gh != nil {
+		gh.StopFlusher()
+	}
 	slog.Info("stopping zalo_personal channel")
 	c.stopOnce.Do(func() { close(c.stopCh) })
 	c.typingCtrls.Range(func(key, val any) bool {

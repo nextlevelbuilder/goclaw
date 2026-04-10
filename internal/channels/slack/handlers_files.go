@@ -88,7 +88,7 @@ func (c *Channel) flushDebounce(localKey string) {
 	c.HandleMessage(entry.senderID, entry.channelID, combined, entry.media, entry.metadata, entry.peerKind)
 
 	if entry.peerKind == "group" {
-		c.groupHistory.Clear(localKey)
+		c.GroupHistory().Clear(localKey)
 	}
 }
 

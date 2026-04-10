@@ -52,6 +52,7 @@ export function useAgents() {
         status: a.isRunning ? "running" : "idle",
       }));
     },
+    staleTime: 60_000,
     enabled: connected,
   });
 

@@ -3,6 +3,9 @@ import { FileText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { BootstrapFile } from "@/types/agent";
 
+/** Special sentinel value indicating the system prompt preview is selected. */
+export const PREVIEW_SENTINEL = "__preview__";
+
 /**
  * Estimate token count from text content (Unicode-aware).
  * Splits into ASCII and non-ASCII segments for better accuracy:
@@ -65,15 +68,15 @@ export function FileSidebar({
               <div className="min-w-0 flex-1 text-left">
                 <div className="truncate">{file.name}</div>
                 {userScoped ? (
-                  <Badge variant="outline" className="mt-0.5 text-[10px]">
+                  <Badge variant="outline" className="mt-0.5 text-2xs">
                     {t("files.perUser")}
                   </Badge>
                 ) : file.missing ? (
-                  <span className="text-[10px] text-muted-foreground/60">
+                  <span className="text-2xs text-muted-foreground/60">
                     {t("files.emptyFile")}
                   </span>
                 ) : (
-                  <div className="text-[10px] text-muted-foreground/60">
+                  <div className="text-2xs text-muted-foreground/60">
                     {t("files.estTokens", { tokens: formatTokenCount(
                       file.content
                         ? estimateTokensFromContent(file.content)
@@ -86,6 +89,7 @@ export function FileSidebar({
           );
         })}
       </div>
+
     </div>
   );
 }

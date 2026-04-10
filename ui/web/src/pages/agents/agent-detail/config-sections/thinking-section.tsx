@@ -177,7 +177,7 @@ export function ThinkingSection({
           {capability?.levels?.length ? (
             <div className="flex flex-wrap gap-1">
               {capability.levels.map((level) => (
-                <Badge key={level} variant="outline" className="text-[10px]">
+                <Badge key={level} variant="outline" className="text-2xs">
                   {t(`${s}.${level}`)}
                 </Badge>
               ))}

@@ -497,6 +497,164 @@ The flush is idempotent per compaction cycle -- it will not run again until the 
 
 ---
 
+## 17. V3 Three-Tier Memory & Auto-Injection (New in v3)
+
+V3 introduces a comprehensive 3-tier memory system with event-driven consolidation and intelligent auto-injection.
+
+### Architecture Overview
+
+**Working Memory (L0):** Current conversation in `sessions.messages`. Auto-compacted via summarization at context threshold.
+
+**Episodic Memory (L1):** Session summaries stored in `episodic_summaries` table with:
+- Full summary + ~50-token L0 abstract (pre-computed)
+- Embedding vector for hybrid search
+- Key topics array for quick filtering
+- 90-day retention by default
+
+**Semantic Memory (L2):** Knowledge Graph in `kg_entities` + `kg_relations` with temporal validity (`valid_from`, `valid_until`). Long-term structured knowledge.
+
+### Auto-Injection (L0 Loading)
+
+Runs in ContextStage once per turn. Checks user message against episodic index. If relevant matches found, injects L0 abstracts into system prompt.
+
+**Config** (stored in agent settings):
+```json
+{
+  "auto_inject_enabled": true,
+  "auto_inject_threshold": 0.3,
+  "auto_inject_max_tokens": 200,
+  "episodic_ttl_days": 90,
+  "consolidation_enabled": true
+}
+```
+
+**Return value:** Formatted section (~200 tokens max) with top K summaries, or empty string if no relevant matches.
+
+### Progressive Tool Access
+
+Three tool-based memory interactions:
+
+| Tool | Purpose | Tier | Example |
+|------|---------|------|---------|
+| (auto-inject) | Automatic context injection | L0 | System prompt includes 3 relevant past sessions |
+| `memory_search(query)` | Hybrid search L1 + L2 | L1 | "Find past discussions about billing" |
+| `memory_expand(id)` | Deep retrieval from episodic | L2 | "Show me full summary + linked facts from session XYZ" |
+
+---
+
+## 18. Consolidation Pipeline (Event-Driven Workers)
+
+After a session ends (`run.completed` event), async workers extract and consolidate memory into long-term storage.
+
+```mermaid
+flowchart LR
+    RUN["run.completed<br/>event"] --> EP["EpisodicWorker<br/>extract summary<br/>+ L0 abstract"]
+    EP --> ES["episodic_summaries<br/>table"]
+    ES --> EPEV["episodic.created<br/>event"]
+    EPEV --> SW["SemanticWorker<br/>extract entities<br/>& relations"]
+    SW --> KG["kg_entities<br/>kg_relations"]
+    KG --> ENT["entity.upserted<br/>event"]
+    ENT --> DW["DedupWorker<br/>merge duplicates<br/>via embeddings"]
+    DW --> CONSOLIDATE["Consolidate<br/>duplicate nodes"]
+    EPEV -->|"10m debounce"| DREAM["DreamingWorker<br/>batch synthesis<br/>via LLM"]
+    DREAM --> SYNTH["Long-term<br/>memory output"]
+```
+
+### Worker Responsibilities
+
+**EpisodicWorker** (`internal/consolidation/episodic_worker.go`):
+1. Listens to `run.completed` events
+2. Checks for duplicate via `source_id` = `session_key:compaction_count`
+3. Uses compaction summary if available, else calls LLM to summarize
+4. Generates L0 abstract via `generateL0Abstract()` (~50 tokens)
+5. Extracts entity names via `extractEntityNames()`
+6. Sets 90-day expiry
+7. Stores in `episodic_summaries`
+8. Publishes `episodic.created` for downstream workers
+
+**SemanticWorker** (`internal/consolidation/semantic_worker.go`):
+1. Listens to `episodic.created` events
+2. Parses summary for entity mentions + relationships
+3. Inserts entities into `kg_entities` with confidence score
+4. Inserts relations into `kg_relations`
+5. Publishes `entity.upserted` for dedup
+
+**DedupWorker** (`internal/consolidation/dedup_worker.go`):
+1. Listens to `entity.upserted` events
+2. Searches for similar entities via embedding cosine distance
+3. Merges duplicates by redirecting relations
+4. Updates consolidation timestamps
+
+**DreamingWorker** (`internal/consolidation/dreaming_worker.go`):
+1. Listens to `episodic.created` events with 10-minute debounce
+2. Collects unpromoted episodic summaries (limit: configurable, default 10)
+3. Calls LLM for batch synthesis/insight pass
+4. Writes results to long-term storage (vault, KG expansion, etc.)
+5. Marks summaries as promoted via `MarkPromoted()`
+
+### Consolidation Flow
+
+| Stage | Event | Worker | Output |
+|-------|-------|--------|--------|
+| 1 | `run.completed` | EpisodicWorker | `episodic_summaries` row + `episodic.created` |
+| 2 | `episodic.created` | SemanticWorker | `kg_entities` + `kg_relations` rows + `entity.upserted` |
+| 3 | `entity.upserted` | DedupWorker | Merged KG nodes |
+| 4 | `episodic.created` (debounced) | DreamingWorker | Promoted episodic + synthetic memory |
+
+---
+
+## 19. Episodic Summaries Table Schema
+
+| Column | Type | Purpose |
+|--------|------|---------|
+| `id` | UUID | Primary key |
+| `tenant_id` | UUID | Multi-tenant scope |
+| `agent_id` | UUID | Agent owner |
+| `user_id` | VARCHAR(255) | Chat participant (empty for team) |
+| `session_key` | TEXT | Reference to original session |
+| `summary` | TEXT | Full conversation summary (2-4 paragraphs) |
+| `l0_abstract` | TEXT | Short abstract (~50 tokens) for auto-inject |
+| `key_topics` | TEXT[] | Extracted entity names for filtering |
+| `embedding` | vector(1536) | Vector embedding of full summary |
+| `source_type` | TEXT | "session", "v2_daily", "manual" |
+| `source_id` | TEXT | Dedup key (unique per source) |
+| `turn_count` | INT | Message count in session |
+| `token_count` | INT | Total tokens used |
+| `created_at` | TIMESTAMPTZ | Creation timestamp |
+| `expires_at` | TIMESTAMPTZ | Auto-expiry (90 days default) |
+
+**Indexes:** GIN on `to_tsvector`, HNSW on embedding, unique on `(agent_id, user_id, source_id)`, on `(agent_id, user_id)` for scoped queries.
+
+---
+
+## 20. Knowledge Graph Temporal Validity
+
+Migration 000037 adds temporal columns to KG tables for time-bounded facts.
+
+**Added columns:**
+- `valid_from` (TIMESTAMPTZ, default NOW()) — when fact becomes true
+- `valid_until` (TIMESTAMPTZ, nullable) — when fact expires (NULL = current)
+
+**Usage pattern:**
+```sql
+-- Query only current facts
+SELECT * FROM kg_entities 
+WHERE agent_id = $1 AND valid_until IS NULL;
+
+-- Query facts valid at point in time
+SELECT * FROM kg_entities
+WHERE agent_id = $1 
+  AND valid_from <= $2 
+  AND (valid_until IS NULL OR valid_until > $2);
+```
+
+**Benefits:**
+- Track fact lifecycle (learned → updated → deprecated)
+- Support temporal reasoning ("what did we know in January?")
+- Auto-expire outdated information via DedupWorker consolidation
+
+---
+
 ## File Reference
 
 ### Bootstrap Files & Constants
@@ -529,9 +687,27 @@ The flush is idempotent per compaction cycle -- it will not run again until the 
 | `internal/store/pg/skills.go` | Managed skill store (embedding search, auto-backfill) |
 | `internal/store/pg/skills_grants.go` | Skill grants (agent/user visibility, version pinning, RBAC) |
 
-### Memory System
+### V3 Memory System (New)
 | File | Description |
 |------|-------------|
+| `internal/memory/auto_injector.go` | AutoInjector interface for L0 auto-injection into system prompt |
+| `internal/memory/auto_injector_impl.go` | AutoInjector implementation (episodic search + relevance filtering) |
+| `internal/memory/unified_search.go` | Hybrid search across episodic summaries + KG |
+| `internal/memory/l1_cache.go` | L1 cache for fast episodic lookups |
+| `internal/consolidation/workers.go` | Worker registration + event subscriptions |
+| `internal/consolidation/episodic_worker.go` | Extract summaries from sessions → episodic_summaries |
+| `internal/consolidation/semantic_worker.go` | Extract entities/relations from episodic → KG |
+| `internal/consolidation/dedup_worker.go` | Merge duplicate entities via embeddings |
+| `internal/consolidation/dreaming_worker.go` | Batch synthesis of episodic → long-term memory (10m debounce) |
+| `internal/consolidation/l0_abstract.go` | L0 abstract generation (~50 tokens) |
+
+### Memory Store
+| File | Description |
+|------|-------------|
+| `internal/store/episodic_store.go` | EpisodicStore interface (CRUD, search, promotion lifecycle) |
+| `internal/store/evolution_store.go` | EvolutionMetricsStore, EvolutionSuggestionStore interfaces |
+| `internal/store/vault_store.go` | VaultStore interface (document registry, links, search) |
+| `internal/store/pg/episodic*.go` | PG implementation of episodic store |
 | `internal/store/pg/memory_docs.go` | Memory document store (chunking, indexing, embedding, scoping) |
 | `internal/store/pg/memory_search.go` | Hybrid search (FTS + vector merge, weighted scoring, scope filtering) |
 
@@ -541,7 +717,7 @@ The flush is idempotent per compaction cycle -- it will not run again until the 
 
 | Document | Relevant Content |
 |----------|-----------------|
-| [00-architecture-overview.md](./00-architecture-overview.md) | Startup sequence, database wiring |
-| [01-agent-loop.md](./01-agent-loop.md) | Agent loop calls BuildSystemPrompt, compaction flow |
-| [03-tools-system.md](./03-tools-system.md) | ContextFileInterceptor routing read_file/write_file to DB |
-| [06-store-data-model.md](./06-store-data-model.md) | memory_documents, memory_chunks tables |
+| [00-architecture-overview.md](./00-architecture-overview.md) | Startup sequence, event bus setup, consolidation worker registration |
+| [01-agent-loop.md](./01-agent-loop.md) | Agent loop calls BuildSystemPrompt, auto-injection point, compaction flow |
+| [03-tools-system.md](./03-tools-system.md) | ContextFileInterceptor routing, memory_search + memory_expand tools |
+| [06-store-data-model.md](./06-store-data-model.md) | episodic_summaries, evolution, vault, KG temporal tables; EpisodicStore, EvolutionStore, VaultStore interfaces |

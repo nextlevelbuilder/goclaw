@@ -4,6 +4,10 @@
   "newChat": "New Chat",
   "openSessions": "Open sessions",
   "readOnly": "Read-only — this session belongs to another user",
+  "contextUsage": {
+    "tooltip": "{{used}} / {{max}} tokens ({{percent}}%) · {{compactions}} compactions · last: {{lastCompact}}",
+    "never": "never"
+  },
   "empty": {
     "title": "Start a conversation",
     "description": "Send a message to begin chatting with the agent."

@@ -2,7 +2,10 @@ package tools
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -19,10 +22,10 @@ func TestBase64DecodeShellDeny(t *testing.T) {
 	}
 
 	allowed := []string{
-		"base64 -w0 file.txt",       // encode, no pipe to shell
-		"base64 -d file.txt",        // decode without pipe to shell
-		"echo hello | base64",       // encode
-		"base64 --decode file.txt",  // decode without pipe to shell
+		"base64 -w0 file.txt",      // encode, no pipe to shell
+		"base64 -d file.txt",       // decode without pipe to shell
+		"echo hello | base64",      // encode
+		"base64 --decode file.txt", // decode without pipe to shell
 	}
 
 	for _, cmd := range denied {
@@ -98,7 +101,7 @@ func TestDestructiveOpsGaps(t *testing.T) {
 	)
 
 	mustAllow(t, patterns,
-		"halting the process",  // "halt" inside word
+		"halting the process", // "halt" inside word
 		"initialize",          // "init" inside word
 		"initial setup",       // "init" inside word
 		"init_db",             // no space+digit after init
@@ -167,6 +170,446 @@ func TestExecute_RejectsNULByte(t *testing.T) {
 				t.Errorf("unexpected NUL rejection for %q", tc.name)
 			}
 		})
+	}
+}
+
+func TestPathExemptions(t *testing.T) {
+	dataDir := t.TempDir()
+	workspace := filepath.Join(t.TempDir(), "workspace")
+	if err := os.MkdirAll(workspace, 0755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	tool := &ExecTool{
+		workspace: workspace,
+		restrict:  false,
+	}
+	tool.DenyPaths(dataDir, ".goclaw/")
+	tool.AllowPathExemptions(".goclaw/skills-store/", filepath.Join(dataDir, "skills-store")+"/")
+
+	cases := []struct {
+		name  string
+		cmd   string
+		allow bool // true = exempt (should pass deny check), false = denied
+	}{
+		// --- Exempted commands ---
+		{
+			"relative_skills_store",
+			"python3 .goclaw/skills-store/ck-ui/scripts/search.py --query test",
+			true,
+		},
+		{
+			"absolute_skills_store",
+			`python3 /app/data/skills-store/ck-ui-ux-pro-max/1/scripts/search.py "professional" --design-system`,
+			true,
+		},
+		{
+			"quoted_double_absolute",
+			`cat "/app/data/skills-store/my-skill/README.md"`,
+			true,
+		},
+		{
+			"quoted_single_absolute",
+			`cat '/app/data/skills-store/my-skill/README.md'`,
+			true,
+		},
+		{
+			"quoted_double_relative",
+			`python3 ".goclaw/skills-store/tool.py"`,
+			true,
+		},
+
+		// --- Denied commands (not exempt) ---
+		{
+			"datadir_config",
+			"cat /app/data/config.json",
+			false,
+		},
+		{
+			"datadir_db",
+			"cp /app/data/goclaw.db /tmp/",
+			false,
+		},
+		{
+			"dotgoclaw_root",
+			"ls .goclaw/",
+			false,
+		},
+		{
+			"dotgoclaw_secrets",
+			"cat .goclaw/secrets.json",
+			false,
+		},
+
+		// --- Path traversal attacks (must be denied) ---
+		{
+			"traversal_absolute",
+			"cat /app/data/skills-store/../../config.json",
+			false,
+		},
+		{
+			"traversal_relative",
+			"cat .goclaw/skills-store/../secrets.json",
+			false,
+		},
+		{
+			"traversal_double_quoted",
+			`cat "/app/data/skills-store/../config.json"`,
+			false,
+		},
+		{
+			"traversal_deep",
+			"python3 /app/data/skills-store/skill/../../../etc/passwd",
+			false,
+		},
+
+		// --- Comment/pipe bypass attempts (denied by per-field matching) ---
+		{
+			"comment_with_exempt_path",
+			"cat /app/data/config.json # .goclaw/skills-store/legit",
+			false, // /app/data/config.json matches deny and is NOT exempt
+		},
+
+		// --- Unicode/encoding bypass attempts (must be denied) ---
+		{
+			"unicode_fullwidth_dots",
+			"cat /app/data/skills-store/\uff0e\uff0e/config.json", // fullwidth dots ．．
+			false, // NFKC normalizes ．→. so ".." check catches it
+		},
+		{
+			"zero_width_in_traversal",
+			"cat /app/data/skills-store/..\u200b/config.json", // zero-width space in ..
+			false, // normalizeCommand strips zero-width chars, ".." check catches it
+		},
+
+		// --- Pipe/redirect attempts (must be denied) ---
+		{
+			"pipe_after_exempt_path",
+			"cat /app/data/skills-store/tool.py | grep password /app/data/config.json",
+			false, // /app/data/config.json matches deny, pipe doesn't exempt it
+		},
+
+		// --- Subshell/backtick in path (should be denied if contains datadir) ---
+		{
+			"subshell_in_command",
+			"$(cat /app/data/config.json)",
+			false,
+		},
+		{
+			"backtick_in_command",
+			"`cat /app/data/config.json`",
+			false,
+		},
+
+		// --- Edge: exempt path as substring (should NOT exempt) ---
+		{
+			"exempt_prefix_not_in_path",
+			"cat /app/data/not-skills-store/secret.txt",
+			false, // /app/data/not-skills-store/ does NOT start with /app/data/skills-store/
+		},
+		{
+			"partial_exempt_match",
+			"cat /app/data/skills-storebad/evil.py",
+			false, // /app/data/skills-storebad/ does NOT start with /app/data/skills-store/
+		},
+
+		// --- Symlink-named path (defense-in-depth; sandbox handles actual resolution) ---
+		{
+			"skills_store_valid_nested",
+			"python3 /app/data/skills-store/my-skill/v2/scripts/run.py --flag",
+			true, // legitimate nested skill path
+		},
+		{
+			"skills_store_just_prefix",
+			"ls /app/data/skills-store/",
+			true, // listing skills-store itself is allowed
+		},
+
+		// --- Exact deny path (not a prefix of skills-store) ---
+		{
+			"exact_datadir",
+			"ls /app/data",
+			false,
+		},
+		{
+			"datadir_trailing_slash",
+			"ls /app/data/",
+			false,
+		},
+	}
+
+	allPatterns := make([]*regexp.Regexp, 0)
+	allPatterns = append(allPatterns, tool.pathDenyPatterns...)
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			normalizedCmd := strings.ReplaceAll(normalizeCommand(tc.cmd), "/app/data", dataDir)
+			denied := false
+			for _, pattern := range allPatterns {
+				if !pattern.MatchString(normalizedCmd) {
+					continue
+				}
+				// Replicate per-field exemption logic from Execute()
+				fields := parseExecCommandWords(strings.TrimSpace(normalizedCmd))
+				matchingFields := 0
+				exemptFields := 0
+				for _, field := range fields {
+					clean := strings.TrimSpace(field)
+					if !pattern.MatchString(clean) {
+						continue
+					}
+					matchingFields++
+					if matchesAnyPathExemption(clean, tool.denyExemptions, workspace) {
+						exemptFields++
+					}
+				}
+				exempt := matchingFields > 0 && exemptFields == matchingFields
+				if !exempt {
+					denied = true
+					break
+				}
+			}
+
+			if tc.allow && denied {
+				t.Errorf("expected command to be exempt (allowed), but was denied: %s", tc.cmd)
+			}
+			if !tc.allow && !denied {
+				t.Errorf("expected command to be denied, but was allowed: %s", tc.cmd)
+			}
+		})
+	}
+}
+
+// TestPathExemptions_MixedArgs verifies that a command with both a denied
+// path and an exempt path in different arguments is correctly denied.
+// Per-field matching ensures the non-exempt field causes denial.
+func TestPathExemptions_MixedArgs(t *testing.T) {
+	dataDir := t.TempDir()
+	workspace := filepath.Join(t.TempDir(), "workspace")
+	if err := os.MkdirAll(workspace, 0755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	tool := &ExecTool{}
+	tool.DenyPaths(dataDir)
+	tool.AllowPathExemptions(filepath.Join(dataDir, "skills-store") + "/")
+
+	cmd := "cat " + filepath.Join(dataDir, "config.json") + " " + filepath.Join(dataDir, "skills-store", "tool.py")
+	normalizedCmd := normalizeCommand(cmd)
+
+	denied := false
+	for _, pattern := range tool.pathDenyPatterns {
+		if !pattern.MatchString(normalizedCmd) {
+			continue
+		}
+		fields := parseExecCommandWords(strings.TrimSpace(normalizedCmd))
+		matchingFields := 0
+		exemptFields := 0
+		for _, field := range fields {
+			clean := strings.TrimSpace(field)
+			if !pattern.MatchString(clean) {
+				continue
+			}
+			matchingFields++
+			if matchesAnyPathExemption(clean, tool.denyExemptions, workspace) {
+				exemptFields++
+			}
+		}
+		if matchingFields == 0 || exemptFields != matchingFields {
+			denied = true
+		}
+	}
+
+	if !denied {
+		t.Error("mixed-path command should be denied: /app/data/config.json is not exempt")
+	}
+}
+
+func TestExecute_AllowsCurrentWorkspaceNestedUnderDeniedRoot(t *testing.T) {
+	dataDir := t.TempDir()
+	workspace := filepath.Join(dataDir, "teams", "team-123")
+	if err := os.MkdirAll(workspace, 0755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	tool := NewExecTool("/workspace", false)
+	tool.DenyPaths(dataDir)
+
+	target := filepath.Join(workspace, ".uploads", "report.png")
+	ctx := WithToolWorkspace(context.Background(), workspace)
+	result := tool.Execute(ctx, map[string]any{
+		"command": "printf '%s' " + target,
+	})
+
+	if strings.Contains(result.ForLLM, "command denied by safety policy") {
+		t.Fatalf("expected nested workspace path to bypass dataDir deny, got: %s", result.ForLLM)
+	}
+	if !strings.Contains(result.ForLLM, target) {
+		t.Fatalf("expected command output to include workspace path, got: %s", result.ForLLM)
+	}
+}
+
+func TestExecute_AllowsCurrentTeamWorkspaceNestedUnderDeniedRoot(t *testing.T) {
+	dataDir := t.TempDir()
+	teamWorkspace := filepath.Join(dataDir, "tenants", "acme", "teams", "team-123")
+	if err := os.MkdirAll(teamWorkspace, 0755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	tool := NewExecTool("/workspace", false)
+	tool.DenyPaths(dataDir)
+
+	target := filepath.Join(teamWorkspace, "report.png")
+	ctx := WithToolWorkspace(context.Background(), t.TempDir())
+	ctx = WithToolTeamWorkspace(ctx, teamWorkspace)
+	result := tool.Execute(ctx, map[string]any{
+		"command": "printf '%s' " + target,
+	})
+
+	if strings.Contains(result.ForLLM, "command denied by safety policy") {
+		t.Fatalf("expected nested team workspace path to bypass dataDir deny, got: %s", result.ForLLM)
+	}
+	if !strings.Contains(result.ForLLM, target) {
+		t.Fatalf("expected command output to include team workspace path, got: %s", result.ForLLM)
+	}
+}
+
+func TestExecute_DoesNotExemptOtherDataDirPaths(t *testing.T) {
+	dataDir := t.TempDir()
+	workspace := filepath.Join(dataDir, "teams", "team-123")
+	if err := os.MkdirAll(workspace, 0755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	tool := NewExecTool("/workspace", false)
+	tool.DenyPaths(dataDir)
+
+	ctx := WithToolWorkspace(context.Background(), workspace)
+	result := tool.Execute(ctx, map[string]any{
+		"command": "printf '%s' " + filepath.Join(dataDir, "config.json"),
+	})
+
+	if !strings.Contains(result.ForLLM, "command denied by safety policy") {
+		t.Fatalf("expected unrelated dataDir path to remain denied, got: %s", result.ForLLM)
+	}
+}
+
+func TestExecute_DoesNotExemptWorkspaceLocalDotGoclawPaths(t *testing.T) {
+	dataDir := t.TempDir()
+	workspace := filepath.Join(dataDir, "teams", "team-123")
+	if err := os.MkdirAll(workspace, 0755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	tool := NewExecTool("/workspace", false)
+	tool.DenyPaths(dataDir, ".goclaw/")
+
+	ctx := WithToolWorkspace(context.Background(), workspace)
+	result := tool.Execute(ctx, map[string]any{
+		"command": "printf '%s' " + filepath.Join(workspace, ".goclaw", "secrets.json"),
+	})
+
+	if !strings.Contains(result.ForLLM, "command denied by safety policy") {
+		t.Fatalf("expected workspace-local .goclaw path to remain denied, got: %s", result.ForLLM)
+	}
+}
+
+func TestExecute_AllowsQuotedAndPrefixedUploadArguments(t *testing.T) {
+	dataDir := t.TempDir()
+	workspace := filepath.Join(dataDir, "teams", "team-123")
+	if err := os.MkdirAll(filepath.Join(workspace, ".uploads"), 0755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	target := filepath.Join(workspace, ".uploads", "Quarterly Report.png")
+	if err := os.WriteFile(target, []byte("ok"), 0644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	tool := NewExecTool("/workspace", false)
+	tool.DenyPaths(dataDir)
+
+	ctx := WithToolWorkspace(context.Background(), workspace)
+	result := tool.Execute(ctx, map[string]any{
+		"command": "printf '%s' file=@\"" + target + "\"",
+	})
+	if strings.Contains(result.ForLLM, "command denied by safety policy") {
+		t.Fatalf("expected quoted/prefixed upload argument to bypass deny, got: %s", result.ForLLM)
+	}
+	if !strings.Contains(result.ForLLM, "file=@"+target) {
+		t.Fatalf("expected output to contain prefixed path, got: %s", result.ForLLM)
+	}
+}
+
+func TestExecute_DoesNotExemptSymlinkEscapeInsideTeamWorkspace(t *testing.T) {
+	if err := os.MkdirAll(t.TempDir(), 0755); err != nil {
+		t.Fatalf("TempDir setup error = %v", err)
+	}
+	dataDir := t.TempDir()
+	workspace := filepath.Join(dataDir, "personal")
+	teamWorkspace := filepath.Join(dataDir, "teams", "team-123")
+	if err := os.MkdirAll(workspace, 0755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.MkdirAll(teamWorkspace, 0755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	protected := filepath.Join(dataDir, "config.json")
+	if err := os.WriteFile(protected, []byte("secret"), 0644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	linkPath := filepath.Join(teamWorkspace, "leak.txt")
+	if err := os.Symlink(protected, linkPath); err != nil {
+		t.Fatalf("Symlink() error = %v", err)
+	}
+
+	tool := NewExecTool("/workspace", false)
+	tool.DenyPaths(dataDir)
+
+	ctx := WithToolWorkspace(context.Background(), workspace)
+	ctx = WithToolTeamWorkspace(ctx, teamWorkspace)
+	result := tool.Execute(ctx, map[string]any{
+		"command": "printf '%s' " + linkPath,
+	})
+
+	if !strings.Contains(result.ForLLM, "command denied by safety policy") {
+		t.Fatalf("expected symlink escape to remain denied, got: %s", result.ForLLM)
+	}
+}
+
+func TestExecute_AllowsLegacyWorkspaceUploadsLayout(t *testing.T) {
+	dataDir := t.TempDir()
+	workspace := filepath.Join(dataDir, ".goclaw", "goclaw-workspace", "ws", "system")
+	legacyUploads := filepath.Join(workspace, "uploads")
+	if err := os.MkdirAll(legacyUploads, 0755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	target := filepath.Join(legacyUploads, "Quarterly Report.png")
+	if err := os.WriteFile(target, []byte("ok"), 0644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	tool := NewExecTool("/workspace", false)
+	tool.DenyPaths(dataDir, ".goclaw/")
+
+	ctx := WithToolWorkspace(context.Background(), workspace)
+	result := tool.Execute(ctx, map[string]any{
+		"command": "cp \"" + target + "\" /tmp/partner.png",
+	})
+
+	if strings.Contains(result.ForLLM, "command denied by safety policy") {
+		t.Fatalf("expected legacy uploads layout to bypass deny, got: %s", result.ForLLM)
+	}
+}
+
+func TestPathAliasVariants_AppWorkspaceMirror(t *testing.T) {
+	got := pathAliasVariants("/app/workspace/glm-thuc-bo/ws/user/.uploads")
+	want := "/app/.goclaw/glm-thuc-bo/ws/user/.uploads"
+	if !slices.Contains(got, want) {
+		t.Fatalf("expected mirror variant %q in %v", want, got)
+	}
+}
+
+func TestIsNestedUnderDeniedRoot_RelativeDotGoclaw(t *testing.T) {
+	tool := &ExecTool{pathDenyRoots: []string{".goclaw/"}}
+	if !tool.isNestedUnderDeniedRoot("/app/.goclaw/glm-thuc-bo/ws/user/.uploads") {
+		t.Fatal("expected absolute .goclaw path to be treated as nested under relative deny root")
 	}
 }
 

@@ -53,6 +53,66 @@
     "evolvingTooltip": "Agent có thể tự tiến hóa phong cách giao tiếp (SOUL.md). Nhận dạng và quy trình làm việc giữ nguyên.",
     "staticTooltip": "Phong cách agent là tĩnh. Bật Tự Tiến Hóa trong cài đặt để cho phép thích nghi phong cách."
   },
+  "v3Info": {
+    "title": "Điểm Mới Trong v3",
+    "subtitle": "Cải tiến lớn so với kiến trúc v2",
+    "tabs": {
+      "core": "Lõi Engine",
+      "memory": "Bộ Nhớ & Tri Thức",
+      "orchestration": "Điều Phối"
+    },
+    "features": {
+      "pipeline": {
+        "title": "Pipeline",
+        "v2v3": "Monolithic 7K LOC → 8 giai đoạn độc lập",
+        "desc": "Vòng lặp context → history → prompt → think → act → observe → memory → summarize với callback riêng từng giai đoạn.",
+        "stat": "8 giai đoạn"
+      },
+      "memory": {
+        "title": "Bộ Nhớ",
+        "v2v3": "Một tầng → 3 tầng (Working → Episodic → Semantic)",
+        "desc": "Working memory lưu ngữ cảnh đang dùng; episodic lưu tóm tắt phiên; semantic được hỗ trợ bởi đồ thị tri thức.",
+        "stat": "3 tầng"
+      },
+      "retrieval": {
+        "title": "Truy Xuất",
+        "v2v3": "Tìm kiếm thủ công → Tải tiến dần L0/L1/L2",
+        "desc": "Bản tóm tắt L0 tự động chèn vào mỗi phiên. L1/L2 tải theo yêu cầu qua tìm kiếm kết hợp BM25 + vector.",
+        "stat": "Tự động chèn"
+      },
+      "vault": {
+        "title": "Kho Tri Thức",
+        "v2v3": "Không có → Đăng ký tài liệu + wikilinks + tìm kiếm lai",
+        "desc": "Kho tài liệu tập trung với phân giải [[wikilink]], đồng bộ filesystem và tìm kiếm thống nhất trên toàn bộ tri thức.",
+        "stat": "MỚI"
+      },
+      "evolution": {
+        "title": "Tự Tiến Hóa",
+        "v2v3": "Không có số liệu → Số liệu → Đề xuất → Tự thích nghi",
+        "desc": "Ghi lại tỉ lệ thành công của tool và chất lượng truy xuất, tạo đề xuất, áp dụng thay đổi được bảo vệ bởi guardrail với khả năng rollback.",
+        "stat": "3 giai đoạn"
+      },
+      "orchestration": {
+        "title": "Điều Phối",
+        "v2v3": "Chỉ spawn → Spawn + Delegate + Chế độ nhóm",
+        "desc": "Công cụ Delegate cho phép chuyển giao nhiệm vụ giữa các agent qua agent_links. Ba chế độ: tự động, tường minh và thủ công.",
+        "stat": "3 chế độ"
+      },
+      "resilience": {
+        "title": "Độ Bền Provider",
+        "v2v3": "Gọi trực tiếp → Middleware + chuyển dự phòng + cooldown",
+        "desc": "Chuỗi middleware xử lý giới hạn tốc độ, quá tải, lỗi xác thực và lỗi mạng với chuyển dự phòng tự động.",
+        "stat": "9 loại lỗi"
+      },
+      "registry": {
+        "title": "Registry Model",
+        "v2v3": "Cấu hình tĩnh → Registry động + resolver tương thích ngược",
+        "desc": "ModelRegistry phân giải bí danh model qua các provider. Resolver tương thích ngược ánh xạ ID cũ sang tương đương hiện tại.",
+        "stat": "Tự phân giải"
+      }
+    },
+    "note": "Tính năng v3 được bật tùy chọn cho từng agent. Kích hoạt trong cài đặt agent."
+  },
   "delete": {
     "title": "Xóa agent",
     "description": "Xóa vĩnh viễn agent này, tất cả tệp ngữ cảnh, session và cấu hình. Hành động này không thể hoàn tác.",
@@ -121,9 +181,96 @@
     "personality": "Cá tính Agent",
     "modelBudget": "Mô hình & Ngân sách",
     "skills": "Kỹ năng",
-    "evolution": "Tiến hóa",
+    "evolution": {
+      "title": "Tiến hóa",
+      "metricsLabel": "Số liệu Tiến hóa",
+      "metricsHint": "Ghi lại hiệu quả tool, chất lượng truy xuất và phản hồi phản hồi",
+      "suggestionsLabel": "Đề xuất Tiến hóa",
+      "suggestionsHint": "Tạo đề xuất cải thiện dựa trên dữ liệu từ số liệu đã ghi",
+      "toolSuccess": "Tỉ lệ thành công Tool",
+      "retrievalQuality": "Chất lượng truy xuất",
+      "feedback": "Phản hồi",
+      "noMetrics": "Chưa có số liệu. Số liệu sẽ xuất hiện khi agent xử lý yêu cầu.",
+      "noSuggestions": "Chưa có đề xuất. Đề xuất được tạo bởi cron phân tích hàng ngày.",
+      "suggestions": "Đề xuất",
+      "guardrails": "Rào chắn thích nghi",
+      "maxDelta": "Delta tối đa / chu kỳ",
+      "minDataPoints": "Điểm dữ liệu tối thiểu",
+      "rollbackDrop": "Rollback khi giảm",
+      "lockedParams": "Tham số bị khóa",
+      "timeRange": "Khoảng thời gian",
+      "approve": "Duyệt",
+      "reject": "Từ chối",
+      "rollback": "Hoàn tác",
+      "confirmApprove": "Áp dụng đề xuất này cho agent?",
+      "confirmReject": "Từ chối đề xuất này?",
+      "confirmRollback": "Hoàn tác đề xuất đã áp dụng này?",
+      "confirmDescription": "Hành động này sẽ cập nhật trạng thái đề xuất.",
+      "notEnabled": "Tiến hóa chưa bật",
+      "notEnabledHint": "Bật 'Số liệu Tiến hóa' trong phần Tiến hóa của tab Agent để bắt đầu ghi số liệu.",
+      "colType": "Loại",
+      "colSuggestion": "Đề xuất",
+      "colStatus": "Trạng thái",
+      "colCreated": "Tạo lúc",
+      "colActions": "Thao tác",
+      "cancel": "Hủy",
+      "confirm": "Xác nhận",
+      "confirming": "...",
+      "successRate": "Tỉ lệ thành công",
+      "usageRate": "Tỉ lệ sử dụng",
+      "tooltipCalls": "{{count}} lệnh, trung bình {{ms}}ms",
+      "tooltipQueries": "{{count}} truy vấn, điểm {{score}}"
+    },
     "capabilities": "Khả năng",
-    "llmSeesAs": "LLM nhìn thấy đây là"
+    "llmSeesAs": "LLM nhìn thấy đây là",
+    "prompt": {
+      "title": "Chế độ System Prompt",
+      "mode": {
+        "full": "Đầy đủ",
+        "fullDesc": "Tất cả phần — chat tương tác, persona, đầy đủ tính năng",
+        "task": "Tác vụ",
+        "taskDesc": "Tự động hóa — memory, evolution, không persona/vibe",
+        "minimal": "Tối giản",
+        "minimalDesc": "Tác vụ nền — rules cốt lõi, domain context, observe-only",
+        "none": "Không",
+        "noneDesc": "Tự động gọi tool — tools, skills, không rules hay persona"
+      },
+      "section": {
+        "persona": "Persona",
+        "styleEcho": "Style Echo",
+        "tools": "Tools",
+        "execBias": "Exec Bias",
+        "callStyle": "Call Style",
+        "safety": "Safety",
+        "safetySm": "Safety (sm)",
+        "skills": "Skills",
+        "skillsSearch": "Skills (search)",
+        "mcp": "MCP",
+        "mcpSearch": "MCP (search)",
+        "memory": "Memory",
+        "memorySm": "Memory (sm)",
+        "sandbox": "Sandbox",
+        "evolution": "Tiến hóa",
+        "channelHints": "Gợi ý kênh",
+        "pinnedSkills": "Skill ghim",
+        "skillsHybrid": "Skills (hybrid)",
+        "memoryMin": "Memory (min)",
+        "domainCtx": "Domain Context",
+        "workspace": "Workspace",
+        "toolNotes": "Tool Notes"
+      },
+      "upgradeWarning": "Đã nâng cấp mode. Một số file có thể cần tạo lại — dùng Resummon hoặc Edit with AI ở tab Files."
+    },
+    "engine": {
+      "title": "Phiên Bản Engine",
+      "learnMore": "Tìm hiểu thêm",
+      "pipelineTitle": "Pipeline",
+      "pipelineHint": "Vòng lặp thực thi 8 giai đoạn có cấu trúc",
+      "memoryTitle": "Bộ Nhớ",
+      "memoryHint": "Bộ nhớ episodic + tự động chèn L0",
+      "retrievalTitle": "Truy Xuất",
+      "retrievalHint": "Tải tri thức tiến dần L0/L1/L2"
+    }
   },
   "general": {
     "selfEvolution": "Tự tiến hóa",
@@ -457,7 +604,9 @@
     "emptyFile": "trống",
     "estTokens": "Ước {{tokens}} token",
     "insertContact": "Tìm liên hệ để chèn...",
-    "contentPlaceholder": "Nội dung tệp..."
+    "contentPlaceholder": "Nội dung tệp...",
+    "systemPromptPreview": "System Prompt",
+    "tokens": "tokens"
   },
   "fileEditor": {
     "editWithAi": "Chỉnh sửa với AI",
@@ -673,10 +822,17 @@
       "textWeight": "Trọng số văn bản",
       "textWeightTip": "Trọng số từ khóa trong tìm kiếm hỗn hợp."
     },
-    "browserProxy": {
-      "title": "Proxy trình duyệt",
-      "description": "Tự động gán proxy từ pool khi agent sử dụng trình duyệt. Proxy được chọn minh bạch — agent không biết proxy nào đang dùng.",
-      "label": "Sử dụng Proxy Pool"
+    "dreaming": {
+      "title": "Dreaming (hợp nhất bộ nhớ)",
+      "description": "Worker nền ghi các tóm tắt phiên vào bộ nhớ dài hạn. Tinh chỉnh nếu agent hợp nhất quá thường xuyên hoặc quá ít.",
+      "enabled": "Đã bật",
+      "enabledTip": "Tắt nếu bạn chỉ muốn dùng tóm tắt phiên thô, không cần hợp nhất dài hạn.",
+      "threshold": "Ngưỡng",
+      "thresholdTip": "Số tóm tắt chưa promote tối thiểu trước khi chạy hợp nhất. Mặc định 5.",
+      "debounceMs": "Debounce (ms)",
+      "debounceMsTip": "Khoảng thời gian tối thiểu giữa hai lần chạy cho mỗi agent/user. Mặc định 600000 (10 phút).",
+      "verboseLog": "Log chi tiết",
+      "verboseLogTip": "Ghi các lần skip (debounce, below-threshold) ở mức info để debug."
     },
     "thinking": {
       "title": "Suy nghĩ mở rộng",

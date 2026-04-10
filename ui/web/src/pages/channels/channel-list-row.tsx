@@ -85,7 +85,7 @@ export function ChannelListRow({
                       statusMeta.dotClass,
                     )}
                   />
-                  <Badge variant="outline" className="text-[11px]">
+                  <Badge variant="outline" className="text-xs-plus">
                     {channelTypeLabels[instance.channel_type] || instance.channel_type}
                   </Badge>
                 </div>
@@ -111,7 +111,7 @@ export function ChannelListRow({
             </div>
 
             <div className="min-w-0">
-              <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+              <p className="text-xs-plus font-medium uppercase tracking-[0.16em] text-muted-foreground">
                 {t("list.nextStep", { defaultValue: "Next step" })}
               </p>
               <p className="mt-2 truncate text-sm font-medium">{nextStepLabel}</p>

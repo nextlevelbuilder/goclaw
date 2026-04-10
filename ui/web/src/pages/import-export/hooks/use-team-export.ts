@@ -19,7 +19,7 @@ export function useTeamExportPreview(teamId: string | null) {
     queryKey: ["team-export-preview", teamId],
     enabled: !!teamId,
     queryFn: () => http.get<TeamExportPreview>(`/v1/teams/${teamId}/export/preview`),
-    staleTime: 30_000,
+    staleTime: 60_000,
   });
 }
 

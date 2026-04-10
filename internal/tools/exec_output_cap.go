@@ -46,16 +46,10 @@ func capExecOutput(output string, maxChars int) string {
 	runes := []rune(output)
 	totalRunes := len(runes)
 	suffix := fmt.Sprintf("\n\n[Output truncated: %d chars total. Redirect to file for full output: command > output.txt]", totalRunes)
-	budget := maxChars - utf8.RuneCountInString(suffix)
-	if budget < 2000 {
-		budget = 2000
-	}
+	budget := max(maxChars-utf8.RuneCountInString(suffix), 2000)
 
 	// Check if tail has important content.
-	tailCheckLen := 2000
-	if tailCheckLen > totalRunes {
-		tailCheckLen = totalRunes
-	}
+	tailCheckLen := min(2000, totalRunes)
 	tailSample := string(runes[totalRunes-tailCheckLen:])
 
 	if execImportantTailRe.MatchString(tailSample) && budget > 4000 {

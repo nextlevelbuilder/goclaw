@@ -35,21 +35,18 @@ const (
 // Channel connects to Feishu/Lark via native HTTP + WebSocket.
 type Channel struct {
 	*channels.BaseChannel
-	cfg             config.FeishuConfig
-	client          *LarkClient
-	botOpenID       string
-	pairingService  store.PairingStore
-	senderCache     sync.Map // open_id → *senderCacheEntry
-	dedup           sync.Map // message_id → struct{}
-	pairingDebounce sync.Map // senderID → time.Time
-	reactions       sync.Map // chatID → *reactionState
-	approvedGroups  sync.Map // chatID → true (in-memory cache for paired groups)
-	groupAllowList  []string
-	groupHistory    *channels.PendingHistory
-	historyLimit    int
-	stopCh          chan struct{}
-	httpServer      *http.Server
-	wsClient        *WSClient
+	cfg            config.FeishuConfig
+	client         *LarkClient
+	botOpenID      string
+	senderCache    sync.Map // open_id → *senderCacheEntry
+	dedup          sync.Map // message_id → struct{}
+	reactions      sync.Map // chatID → *reactionState
+	groupAllowList []string // Feishu-specific: per-group sender allowlist (separate from BaseChannel allowList)
+	stopCh         chan struct{}
+	httpServer     *http.Server
+	wsClient       *WSClient
+	// pairingService, pairingDebounce, approvedGroups, groupHistory, historyLimit
+	// are inherited from channels.BaseChannel.
 }
 
 // reactionState tracks an active typing reaction on a user's message.
@@ -82,21 +79,22 @@ func New(cfg config.FeishuConfig, msgBus *bus.MessageBus, pairingSvc store.Pairi
 		historyLimit = channels.DefaultGroupHistoryLimit
 	}
 
-	return &Channel{
+	ch := &Channel{
 		BaseChannel:    base,
 		cfg:            cfg,
 		client:         client,
-		pairingService: pairingSvc,
 		groupAllowList: cfg.GroupAllowFrom,
-		groupHistory:   channels.MakeHistory(channels.TypeFeishu, pendingStore, base.TenantID()),
-		historyLimit:   historyLimit,
 		stopCh:         make(chan struct{}),
-	}, nil
+	}
+	ch.SetPairingService(pairingSvc)
+	ch.SetGroupHistory(channels.MakeHistory(channels.TypeFeishu, pendingStore, base.TenantID()))
+	ch.SetHistoryLimit(historyLimit)
+	return ch, nil
 }
 
 // Start begins receiving Feishu events via WebSocket or Webhook.
 func (c *Channel) Start(ctx context.Context) error {
-	c.groupHistory.StartFlusher()
+	c.GroupHistory().StartFlusher()
 	slog.Info("starting feishu/lark bot")
 
 	// Probe bot identity
@@ -126,15 +124,21 @@ func (c *Channel) BlockReplyEnabled() *bool { return c.cfg.BlockReply }
 
 // SetPendingCompaction configures LLM-based auto-compaction for pending messages.
 func (c *Channel) SetPendingCompaction(cfg *channels.CompactionConfig) {
-	c.groupHistory.SetCompactionConfig(cfg)
+	if gh := c.GroupHistory(); gh != nil {
+		gh.SetCompactionConfig(cfg)
+	}
 }
 
 // SetPendingHistoryTenantID propagates tenant_id to the pending history for DB operations.
-func (c *Channel) SetPendingHistoryTenantID(id uuid.UUID) { c.groupHistory.SetTenantID(id) }
+func (c *Channel) SetPendingHistoryTenantID(id uuid.UUID) {
+	if gh := c.GroupHistory(); gh != nil {
+		gh.SetTenantID(id)
+	}
+}
 
 // Stop shuts down the Feishu channel.
 func (c *Channel) Stop(_ context.Context) error {
-	c.groupHistory.StopFlusher()
+	c.GroupHistory().StopFlusher()
 	slog.Info("stopping feishu/lark bot")
 	close(c.stopCh)
 
@@ -320,19 +324,7 @@ func (c *Channel) probeBotInfo(ctx context.Context) error {
 // --- Send helpers ---
 
 func (c *Channel) sendChunkedText(ctx context.Context, chatID, receiveIDType, text string, chunkLimit int) error {
-	for len(text) > 0 {
-		chunk := text
-		if len(chunk) > chunkLimit {
-			cutAt := chunkLimit
-			if idx := strings.LastIndex(text[:chunkLimit], "\n"); idx > chunkLimit/2 {
-				cutAt = idx + 1
-			}
-			chunk = text[:cutAt]
-			text = text[cutAt:]
-		} else {
-			text = ""
-		}
-
+	for _, chunk := range channels.ChunkMarkdown(text, chunkLimit) {
 		if err := c.sendText(ctx, chatID, receiveIDType, chunk); err != nil {
 			return err
 		}
