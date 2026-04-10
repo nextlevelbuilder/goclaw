@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -79,6 +80,27 @@ func TestLoad_ValidJSON5(t *testing.T) {
 	// Unset fields should retain defaults
 	if cfg.Agents.Defaults.Provider != "anthropic" {
 		t.Fatalf("default provider should be preserved: got %q", cfg.Agents.Defaults.Provider)
+	}
+}
+
+func TestSaveLoad_PreservesWebSearchProviderOrder(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.json")
+
+	cfg := Default()
+	cfg.Tools.Web.ProviderOrder = []string{"tavily", "brave", "exa"}
+
+	if err := Save(cfgPath, cfg); err != nil {
+		t.Fatalf("save error: %v", err)
+	}
+
+	loaded, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load error: %v", err)
+	}
+
+	if !reflect.DeepEqual(loaded.Tools.Web.ProviderOrder, cfg.Tools.Web.ProviderOrder) {
+		t.Fatalf("provider order = %v, want %v", loaded.Tools.Web.ProviderOrder, cfg.Tools.Web.ProviderOrder)
 	}
 }
 

@@ -1,8 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ChangeEvent } from "react";
 import { Save } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -22,7 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { InfoLabel } from "@/components/shared/info-label";
-import { isSecret } from "@/lib/secret";
+import { WebSearchProviderSequence, type ProviderId } from "./web-search-provider-sequence";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type ToolsData = Record<string, any>;
@@ -33,11 +32,17 @@ interface Props {
   saving: boolean;
 }
 
-function normalizeProviderOrder(value: unknown): string[] {
+function normalizeProviderOrder(value: unknown): ProviderId[] {
   if (!Array.isArray(value)) {
     return [];
   }
-  return value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
+  return value.filter(
+    (entry): entry is ProviderId =>
+      entry === "exa" ||
+      entry === "tavily" ||
+      entry === "brave" ||
+      entry === "duckduckgo",
+  );
 }
 
 export function ToolsWebSection({ data, onSave, saving }: Props) {
@@ -61,21 +66,7 @@ export function ToolsWebSection({ data, onSave, saving }: Props) {
   const handleSave = () => {
     const toSave: ToolsData = { ...draft };
     const web = { ...(toSave.web ?? {}) };
-    const exa = { ...(web.exa ?? {}) };
-    const tavily = { ...(web.tavily ?? {}) };
-    const brave = { ...(web.brave ?? {}) };
-    if (isSecret(exa.api_key)) {
-      delete exa.api_key;
-    }
-    if (isSecret(tavily.api_key)) {
-      delete tavily.api_key;
-    }
-    if (isSecret(brave.api_key)) {
-      delete brave.api_key;
-    }
-    web.exa = exa;
-    web.tavily = tavily;
-    web.brave = brave;
+    web.duckduckgo = { ...(web.duckduckgo ?? {}), enabled: true };
     web.provider_order = normalizeProviderOrder(web.provider_order);
     toSave.web = web;
     onSave(toSave);
@@ -101,158 +92,26 @@ export function ToolsWebSection({ data, onSave, saving }: Props) {
       <CardContent className="space-y-4">
         {/* Web Search */}
         <div className="grid gap-3">
-          <div className="grid gap-1.5">
-            <InfoLabel tip={t("tools.providerOrderTip")}>{t("tools.providerOrder")}</InfoLabel>
-            <Textarea
-              value={providerOrder.join("\n")}
-              onChange={(e) =>
-                updateNested("web", {
-                  provider_order: e.target.value
-                    .split("\n")
-                    .map((entry) => entry.trim().toLowerCase())
-                    .filter(Boolean),
-                })
-              }
-              className="min-h-[88px] font-mono text-xs"
-              placeholder={t("tools.providerOrderPlaceholder")}
-            />
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>DuckDuckGo</Label>
-                <Switch
-                  checked={ddg.enabled !== false}
-                  onCheckedChange={(v) => updateNested("web", { duckduckgo: { ...ddg, enabled: v } })}
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label className="text-xs text-muted-foreground">{t("tools.maxResults")}</Label>
-                <Input
-                  type="number"
-                  className="text-base md:text-sm"
-                  value={ddg.max_results ?? ""}
-                  onChange={(e) => updateNested("web", { duckduckgo: { ...ddg, max_results: Number(e.target.value) } })}
-                  placeholder="5"
-                  min={1}
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Exa</Label>
-                <Switch
-                  checked={exa.enabled ?? false}
-                  onCheckedChange={(v) => updateNested("web", { exa: { ...exa, enabled: v } })}
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label className="text-xs text-muted-foreground">{t("tools.maxResults")}</Label>
-                <Input
-                  type="number"
-                  className="text-base md:text-sm"
-                  value={exa.max_results ?? ""}
-                  onChange={(e) => updateNested("web", { exa: { ...exa, max_results: Number(e.target.value) } })}
-                  placeholder="5"
-                  min={1}
-                />
-              </div>
-              {exa.enabled && (
-                <div className="grid gap-1.5">
-                  <InfoLabel tip={t("tools.exaApiKeyTip")}>{t("tools.apiKeyLabel")}</InfoLabel>
-                  <Input
-                    type="password"
-                    className="text-base md:text-sm"
-                    value={isSecret(exa.api_key) ? "" : (exa.api_key ?? "")}
-                    onChange={(e) =>
-                      updateNested("web", { exa: { ...exa, api_key: e.target.value } })
-                    }
-                    placeholder={t("tools.exaApiKeyPlaceholder")}
-                    autoComplete="off"
-                  />
-                  {isSecret(exa.api_key) && (
-                    <p className="text-xs text-muted-foreground">{t("tools.apiKeyManaged")}</p>
-                  )}
-                </div>
-              )}
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Tavily</Label>
-                <Switch
-                  checked={tavily.enabled ?? false}
-                  onCheckedChange={(v) => updateNested("web", { tavily: { ...tavily, enabled: v } })}
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label className="text-xs text-muted-foreground">{t("tools.maxResults")}</Label>
-                <Input
-                  type="number"
-                  className="text-base md:text-sm"
-                  value={tavily.max_results ?? ""}
-                  onChange={(e) => updateNested("web", { tavily: { ...tavily, max_results: Number(e.target.value) } })}
-                  placeholder="5"
-                  min={1}
-                />
-              </div>
-              {tavily.enabled && (
-                <div className="grid gap-1.5">
-                  <InfoLabel tip={t("tools.tavilyApiKeyTip")}>{t("tools.apiKeyLabel")}</InfoLabel>
-                  <Input
-                    type="password"
-                    className="text-base md:text-sm"
-                    value={isSecret(tavily.api_key) ? "" : (tavily.api_key ?? "")}
-                    onChange={(e) =>
-                      updateNested("web", { tavily: { ...tavily, api_key: e.target.value } })
-                    }
-                    placeholder={t("tools.tavilyApiKeyPlaceholder")}
-                    autoComplete="off"
-                  />
-                  {isSecret(tavily.api_key) && (
-                    <p className="text-xs text-muted-foreground">{t("tools.apiKeyManaged")}</p>
-                  )}
-                </div>
-              )}
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Brave Search</Label>
-                <Switch
-                  checked={brave.enabled ?? false}
-                  onCheckedChange={(v) => updateNested("web", { brave: { ...brave, enabled: v } })}
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label className="text-xs text-muted-foreground">{t("tools.maxResults")}</Label>
-                <Input
-                  type="number"
-                  className="text-base md:text-sm"
-                  value={brave.max_results ?? ""}
-                  onChange={(e) => updateNested("web", { brave: { ...brave, max_results: Number(e.target.value) } })}
-                  placeholder="5"
-                  min={1}
-                />
-              </div>
-              {brave.enabled && (
-                <div className="grid gap-1.5">
-                  <InfoLabel tip={t("tools.braveApiKeyTip")}>{t("tools.apiKeyLabel")}</InfoLabel>
-                  <Input
-                    type="password"
-                    className="text-base md:text-sm"
-                    value={isSecret(brave.api_key) ? "" : (brave.api_key ?? "")}
-                    onChange={(e) =>
-                      updateNested("web", { brave: { ...brave, api_key: e.target.value } })
-                    }
-                    placeholder={t("tools.braveApiKeyPlaceholder")}
-                    autoComplete="off"
-                  />
-                  {isSecret(brave.api_key) && (
-                    <p className="text-xs text-muted-foreground">{t("tools.apiKeyManaged")}</p>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
+          <WebSearchProviderSequence
+            providerOrder={providerOrder}
+            onProviderOrderChange={(nextOrder) =>
+              updateNested("web", { provider_order: nextOrder })
+            }
+            exa={exa}
+            tavily={tavily}
+            brave={brave}
+            duckduckgo={ddg}
+            onProviderPatch={(provider, patch) =>
+              updateNested("web", {
+                [provider]: { ...(web[provider] ?? {}), ...patch },
+              })
+            }
+            onDuckDuckGoPatch={(patch) =>
+              updateNested("web", {
+                duckduckgo: { ...ddg, ...patch, enabled: true },
+              })
+            }
+          />
         </div>
 
         <Separator />
@@ -277,7 +136,7 @@ export function ToolsWebSection({ data, onSave, saving }: Props) {
               <Label>{t("tools.allowedDomains")}</Label>
               <Textarea
                 value={(webFetch.allowed_domains ?? []).join("\n")}
-                onChange={(e) =>
+                onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
                   updateNested("web_fetch", {
                     ...webFetch,
                     allowed_domains: e.target.value.split("\n").filter(Boolean),
@@ -292,7 +151,7 @@ export function ToolsWebSection({ data, onSave, saving }: Props) {
             <InfoLabel tip={t("tools.blockedDomainsTip")}>{t("tools.blockedDomains")}</InfoLabel>
             <Textarea
               value={(webFetch.blocked_domains ?? []).join("\n")}
-              onChange={(e) =>
+              onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
                 updateNested("web_fetch", {
                   ...webFetch,
                   blocked_domains: e.target.value.split("\n").filter(Boolean),
@@ -314,14 +173,14 @@ export function ToolsWebSection({ data, onSave, saving }: Props) {
               <Label>{t("tools.browserEnabled")}</Label>
               <Switch
                 checked={browser.enabled !== false}
-                onCheckedChange={(v) => updateNested("browser", { enabled: v })}
+                onCheckedChange={(v: boolean) => updateNested("browser", { enabled: v })}
               />
             </div>
             <div className="flex items-center gap-2">
               <Label>{t("tools.browserHeadless")}</Label>
               <Switch
                 checked={browser.headless !== false}
-                onCheckedChange={(v) => updateNested("browser", { headless: v })}
+                onCheckedChange={(v: boolean) => updateNested("browser", { headless: v })}
               />
             </div>
           </div>
