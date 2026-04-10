@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PR 821 · Web Search Provider Order Review</title>
+    <style>
+      :root {
+        --bg: #0f1115;
+        --fg: #ece7df;
+        --muted: #b9b1a7;
+        --card: #171a20;
+        --border: #2a3038;
+        --accent: #ef5b2f;
+      }
+      .light {
+        --bg: #f7f4ef;
+        --fg: #181613;
+        --muted: #625b52;
+        --card: #ffffff;
+        --border: #ddd6cb;
+        --accent: #e85a2d;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        background: radial-gradient(circle at top, rgba(232,90,45,0.12), transparent 30%), var(--bg);
+        color: var(--fg);
+      }
+      .wrap {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 32px 24px 48px;
+      }
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 24px;
+      }
+      h1 {
+        margin: 0;
+        font-size: 32px;
+        line-height: 1.1;
+      }
+      p { color: var(--muted); }
+      .theme-toggle {
+        border: 1px solid var(--border);
+        background: var(--card);
+        color: var(--fg);
+        border-radius: 999px;
+        padding: 10px 14px;
+        cursor: pointer;
+      }
+      .summary {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+        margin-bottom: 28px;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 18px;
+      }
+      .card h2, .card h3 {
+        margin: 0 0 10px;
+      }
+      .comparison {
+        display: grid;
+        gap: 20px;
+        margin-bottom: 24px;
+      }
+      .comparison-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+      }
+      .shot {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        overflow: hidden;
+      }
+      .shot header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border);
+      }
+      .shot .label {
+        letter-spacing: 0.08em;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .shot .state {
+        font-size: 13px;
+        color: var(--accent);
+      }
+      img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+      .note {
+        font-size: 14px;
+        color: var(--muted);
+      }
+      @media (max-width: 900px) {
+        .summary,
+        .comparison-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="topbar">
+        <div>
+          <h1>PR 821 · Web Search Provider Order Review</h1>
+          <p>
+            Before: baseline <code>dev</code> frontend on <code>127.0.0.1:5175</code>. After: feature frontend on
+            <code>127.0.0.1:5174</code>. Both use the same live GoClaw backend on <code>100.120.60.40:18790</code>,
+            light theme, and the same authenticated dashboard session.
+          </p>
+        </div>
+        <button
+          class="theme-toggle"
+          onclick="document.documentElement.classList.toggle('light'); this.textContent = document.documentElement.classList.contains('light') ? '● Dark' : '○ Light';"
+        >
+          ○ Light
+        </button>
+      </div>
+
+      <div class="summary">
+        <div class="card">
+          <h2>What changed</h2>
+          <p>Web Search config now exposes a ranked provider chain with Exa, Tavily, Brave, and a visible DuckDuckGo fallback.</p>
+        </div>
+        <div class="card">
+          <h2>Why it matters</h2>
+          <p>Operators can see the actual provider ordering path, configure it inline, and understand where the always-on fallback sits.</p>
+        </div>
+        <div class="card">
+          <h2>Review cue</h2>
+          <p>Red callout borders wrap the changed control surface itself, not just the section header. The rest of the page is unchanged context.</p>
+        </div>
+      </div>
+
+      <section class="comparison">
+        <div class="card">
+          <h3>1. Web Search card becomes an explicit provider-order control</h3>
+          <p class="note">
+            The old UI only exposes DuckDuckGo and Brave as a flat pair of controls. The new UI turns that area into a ranked
+            provider-order surface with a visible chain and DuckDuckGo pinned as the last fallback.
+          </p>
+        </div>
+        <div class="comparison-grid">
+          <article class="shot">
+            <header><span class="label">BEFORE</span><span class="state">Flat two-provider controls</span></header>
+            <img src="./before-web-search-overview.png" alt="Before web search overview" />
+          </article>
+          <article class="shot">
+            <header><span class="label">AFTER</span><span class="state">Ranked provider-order surface</span></header>
+            <img src="./after-web-search-overview.png" alt="After web search overview" />
+          </article>
+        </div>
+      </section>
+
+      <section class="comparison">
+        <div class="card">
+          <h3>2. Detailed provider rows expose the expanded inline workflow</h3>
+          <p class="note">
+            Before, the detailed controls only cover DuckDuckGo and Brave. After, the UI supports the full provider chain with
+            inline max-result and API-key fields. The highlighted after state was captured with local demo values entered only
+            to show the enabled-row layout; those demo values were not part of the committed config.
+          </p>
+        </div>
+        <div class="comparison-grid">
+          <article class="shot">
+            <header><span class="label">BEFORE</span><span class="state">DuckDuckGo + Brave detail only</span></header>
+            <img src="./before-web-search-enabled-fields.png" alt="Before enabled fields" />
+          </article>
+          <article class="shot">
+            <header><span class="label">AFTER</span><span class="state">Expanded ranked provider rows</span></header>
+            <img src="./after-web-search-enabled-fields.png" alt="After enabled fields" />
+          </article>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>
