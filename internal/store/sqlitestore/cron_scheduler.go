@@ -5,8 +5,8 @@ package sqlitestore
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -154,9 +154,20 @@ func (s *SQLiteCronStore) runLoop() {
 		case <-s.stop:
 			return
 		case <-ticker.C:
-			s.checkAndRunDueJobs()
+			s.safeCheckAndRunDueJobs()
 		}
 	}
+}
+
+// safeCheckAndRunDueJobs wraps checkAndRunDueJobs with panic recovery
+// so a panic in any check/claim logic doesn't kill the runLoop goroutine.
+func (s *SQLiteCronStore) safeCheckAndRunDueJobs() {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("cron: checkAndRunDueJobs panicked — runLoop continues", "panic", fmt.Sprint(r))
+		}
+	}()
+	s.checkAndRunDueJobs()
 }
 
 func (s *SQLiteCronStore) checkAndRunDueJobs() {
@@ -184,20 +195,22 @@ func (s *SQLiteCronStore) checkAndRunDueJobs() {
 		return
 	}
 
-	// Execute jobs in parallel — scheduler enforces per-session serialization.
-	var wg sync.WaitGroup
+	// Execute jobs in parallel without blocking the runLoop.
+	// Previously wg.Wait() blocked here — if any job hung (e.g. LLM timeout,
+	// agent loop stuck), the entire cron scheduler would stop checking for new
+	// due jobs. Now each job runs independently; cache is invalidated per-job.
 	for _, job := range claimedJobs {
-		wg.Add(1)
 		go func(job store.CronJob) {
-			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("cron: job execution panicked", "job_id", job.ID, "job_name", job.Name, "panic", fmt.Sprint(r))
+				}
+				// Invalidate cache so the next tick picks up the updated next_run_at.
+				s.InvalidateCache()
+			}()
 			s.executeOneJob(job, handler, true)
 		}(job)
 	}
-	wg.Wait()
-
-	s.mu.Lock()
-	s.cacheLoaded = false
-	s.mu.Unlock()
 }
 
 // executeOneJob runs a claimed job. When reloadClaimed is true (scheduler path),
