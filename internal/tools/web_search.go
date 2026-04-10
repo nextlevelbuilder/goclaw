@@ -199,7 +199,7 @@ func WebSearchConfigFromConfig(cfg *config.Config) WebSearchConfig {
 		BraveEnabled:     cfg.Tools.Web.Brave.Enabled,
 		BraveAPIKey:      cfg.Tools.Web.Brave.APIKey,
 		BraveMaxResults:  cfg.Tools.Web.Brave.MaxResults,
-		DDGEnabled:       cfg.Tools.Web.DuckDuckGo.Enabled,
+		DDGEnabled:       true,
 		DDGMaxResults:    cfg.Tools.Web.DuckDuckGo.MaxResults,
 	}
 }

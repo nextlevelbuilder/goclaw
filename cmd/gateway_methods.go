@@ -21,7 +21,7 @@ func registerAllMethods(server *gateway.Server, agents *agent.Router, sessStore 
 	chatMethods.Register(router)
 	methods.NewAgentsMethods(agents, cfg, cfgPath, workspace, agentStore, contextFileInterceptor, msgBus).Register(router)
 	methods.NewSessionsMethods(sessStore, msgBus, cfg).Register(router)
-	configMethods := methods.NewConfigMethods(cfg, cfgPath, configSecretsStore, msgBus)
+	configMethods := methods.NewConfigMethods(cfg, cfgPath, configSecretsStore, sysConfigStore, msgBus)
 	if sysConfigStore != nil {
 		configMethods.SetSystemConfigSync(func(ctx context.Context, c *config.Config) {
 			// Only sync config for the current tenant (from request context)

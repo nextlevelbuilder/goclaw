@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/titanous/json5"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
@@ -20,15 +21,22 @@ import (
 // ConfigMethods handles config.get, config.apply, config.patch, config.schema.
 // Matching TS src/gateway/server-methods/config.ts.
 type ConfigMethods struct {
-	cfg          *config.Config
-	cfgPath      string
-	secretsStore store.ConfigSecretsStore
-	syncFn       func(ctx context.Context, cfg *config.Config) // nil-safe; syncs non-secret settings to system_configs
-	eventBus     bus.EventPublisher                            // nil-safe; broadcasts config change events
+	cfg               *config.Config
+	cfgPath           string
+	secretsStore      store.ConfigSecretsStore
+	systemConfigStore store.SystemConfigStore
+	syncFn            func(ctx context.Context, cfg *config.Config) // nil-safe; syncs non-secret settings to system_configs
+	eventBus          bus.EventPublisher                            // nil-safe; broadcasts config change events
 }
 
-func NewConfigMethods(cfg *config.Config, cfgPath string, secretsStore store.ConfigSecretsStore, eventBus bus.EventPublisher) *ConfigMethods {
-	return &ConfigMethods{cfg: cfg, cfgPath: cfgPath, secretsStore: secretsStore, eventBus: eventBus}
+func NewConfigMethods(cfg *config.Config, cfgPath string, secretsStore store.ConfigSecretsStore, systemConfigStore store.SystemConfigStore, eventBus bus.EventPublisher) *ConfigMethods {
+	return &ConfigMethods{
+		cfg:               cfg,
+		cfgPath:           cfgPath,
+		secretsStore:      secretsStore,
+		systemConfigStore: systemConfigStore,
+		eventBus:          eventBus,
+	}
 }
 
 // SetSystemConfigSync sets a callback to sync config to system_configs after save.
@@ -59,10 +67,11 @@ func (m *ConfigMethods) requireOwner(next gateway.MethodHandler) gateway.MethodH
 	}
 }
 
-func (m *ConfigMethods) handleGet(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+func (m *ConfigMethods) handleGet(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+	resolved := m.resolveConfigForContext(ctx)
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
-		"config": m.cfg.MaskedCopy(),
-		"hash":   m.cfg.Hash(),
+		"config": resolved.MaskedCopy(),
+		"hash":   resolved.Hash(),
 		"path":   m.cfgPath,
 	}))
 }
@@ -84,8 +93,10 @@ func (m *ConfigMethods) handleApply(ctx context.Context, client *gateway.Client,
 		return
 	}
 
+	currentCfg := m.resolveConfigForContext(ctx)
+
 	// Optimistic concurrency: validate hash if provided
-	if params.BaseHash != "" && params.BaseHash != m.cfg.Hash() {
+	if params.BaseHash != "" && params.BaseHash != currentCfg.Hash() {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgConfigHashMismatch)))
 		return
 	}
@@ -102,36 +113,25 @@ func (m *ConfigMethods) handleApply(ctx context.Context, client *gateway.Client,
 		return
 	}
 
-	// Extract secrets → save to config_secrets table, strip all from file
+	// Extract secrets → save to config_secrets table for this scope.
 	if err := m.saveSecretsToStore(ctx, newCfg); err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToSave, "config", err.Error())))
 		return
 	}
-	newCfg.StripSecrets()
 
-	// Save to disk
-	if err := config.Save(m.cfgPath, newCfg); err != nil {
+	if err := m.persistConfigForContext(ctx, newCfg); err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToSave, "config", err.Error())))
 		return
 	}
-
-	// Update in-memory config and restore secrets
-	m.cfg.ReplaceFrom(newCfg)
-	if m.secretsStore != nil {
-		if secrets, err := m.secretsStore.GetAll(ctx); err == nil {
-			m.cfg.ApplyDBSecrets(secrets)
-		}
-	}
-	m.cfg.ApplyEnvOverrides()
-	m.syncToSystemConfigs(ctx)
-	m.broadcastChanged(ctx)
+	resolved := m.resolveConfigForContext(ctx)
+	m.broadcastChanged(ctx, resolved)
 	emitAudit(m.eventBus, client, "config.applied", "config", "gateway")
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"ok":      true,
 		"path":    m.cfgPath,
-		"config":  m.cfg.MaskedCopy(),
-		"hash":    m.cfg.Hash(),
+		"config":  resolved.MaskedCopy(),
+		"hash":    resolved.Hash(),
 		"restart": false,
 	}))
 }
@@ -153,14 +153,16 @@ func (m *ConfigMethods) handlePatch(ctx context.Context, client *gateway.Client,
 		return
 	}
 
+	currentCfg := m.resolveConfigForContext(ctx)
+
 	// Optimistic concurrency
-	if params.BaseHash != "" && params.BaseHash != m.cfg.Hash() {
+	if params.BaseHash != "" && params.BaseHash != currentCfg.Hash() {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgConfigHashMismatch)))
 		return
 	}
 
 	// Merge strategy: serialize current -> deserialize patch on top -> save
-	currentJSON, err := json.Marshal(m.cfg)
+	currentJSON, err := json.Marshal(currentCfg)
 	if err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgInternalError, "failed to serialize current config")))
 		return
@@ -184,42 +186,32 @@ func (m *ConfigMethods) handlePatch(ctx context.Context, client *gateway.Client,
 		return
 	}
 
-	// Extract secrets → save to config_secrets table, strip all from file
+	// Extract secrets → save to config_secrets table for this scope.
 	if err := m.saveSecretsToStore(ctx, merged); err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToSave, "config", err.Error())))
 		return
 	}
-	merged.StripSecrets()
 
-	// Save to disk
-	if err := config.Save(m.cfgPath, merged); err != nil {
+	if err := m.persistConfigForContext(ctx, merged); err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToSave, "config", err.Error())))
 		return
 	}
-
-	// Update in-memory config and restore secrets
-	m.cfg.ReplaceFrom(merged)
-	if m.secretsStore != nil {
-		if secrets, err := m.secretsStore.GetAll(ctx); err == nil {
-			m.cfg.ApplyDBSecrets(secrets)
-		}
-	}
-	m.cfg.ApplyEnvOverrides()
-	m.syncToSystemConfigs(ctx)
-	m.broadcastChanged(ctx)
+	resolved := m.resolveConfigForContext(ctx)
+	m.broadcastChanged(ctx, resolved)
 	emitAudit(m.eventBus, client, "config.patched", "config", "gateway")
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"ok":      true,
 		"path":    m.cfgPath,
-		"config":  m.cfg.MaskedCopy(),
-		"hash":    m.cfg.Hash(),
+		"config":  resolved.MaskedCopy(),
+		"hash":    resolved.Hash(),
 		"restart": false,
 	}))
 }
 
 func normalizeWebSearchConfig(cfg *config.Config) {
 	cfg.Tools.Web.ProviderOrder = tools.NormalizeWebSearchProviderOrder(cfg.Tools.Web.ProviderOrder)
+	cfg.Tools.Web.DuckDuckGo.Enabled = true
 }
 
 func validateWebSearchConfig(cfg *config.Config) error {
@@ -236,18 +228,18 @@ func validateWebSearchConfig(cfg *config.Config) error {
 }
 
 // syncToSystemConfigs syncs the resolved config to system_configs table for the given tenant.
-func (m *ConfigMethods) syncToSystemConfigs(ctx context.Context) {
+func (m *ConfigMethods) syncToSystemConfigs(ctx context.Context, cfg *config.Config) {
 	if m.syncFn != nil {
-		m.syncFn(ctx, m.cfg)
+		m.syncFn(ctx, cfg)
 	}
 }
 
 // broadcastChanged notifies subscribers that config has been updated.
-func (m *ConfigMethods) broadcastChanged(ctx context.Context) {
+func (m *ConfigMethods) broadcastChanged(ctx context.Context, cfg *config.Config) {
 	if m.eventBus != nil {
 		m.eventBus.Broadcast(bus.Event{
 			Name:     bus.TopicConfigChanged,
-			Payload:  m.cfg,
+			Payload:  cfg,
 			TenantID: store.TenantIDFromContext(ctx),
 		})
 	}
@@ -317,4 +309,79 @@ func (m *ConfigMethods) saveSecretsToStore(ctx context.Context, cfg *config.Conf
 		}
 	}
 	return nil
+}
+
+func (m *ConfigMethods) resolveConfigForContext(ctx context.Context) *config.Config {
+	resolved := cloneConfigOrDefault(m.cfg)
+	scopedCtx := tenantConfigContext(ctx)
+
+	if m.systemConfigStore != nil {
+		if values, err := m.systemConfigStore.List(scopedCtx); err == nil && len(values) > 0 {
+			resolved.ApplySystemConfigs(values)
+		}
+	}
+	if m.secretsStore != nil {
+		if secrets, err := m.secretsStore.GetAll(scopedCtx); err == nil && len(secrets) > 0 {
+			resolved.ApplyDBSecrets(secrets)
+		}
+	}
+
+	resolved.ApplyEnvOverrides()
+	normalizeWebSearchConfig(resolved)
+	return resolved
+}
+
+func (m *ConfigMethods) persistConfigForContext(ctx context.Context, cfg *config.Config) error {
+	if isMasterTenantContext(ctx) {
+		toSave := cloneConfigOrDefault(cfg)
+		toSave.StripSecrets()
+		if err := config.Save(m.cfgPath, toSave); err != nil {
+			return err
+		}
+		m.cfg.ReplaceFrom(toSave)
+		if m.secretsStore != nil {
+			if secrets, err := m.secretsStore.GetAll(tenantConfigContext(ctx)); err == nil {
+				m.cfg.ApplyDBSecrets(secrets)
+			}
+		}
+		m.cfg.ApplyEnvOverrides()
+		normalizeWebSearchConfig(m.cfg)
+		m.syncToSystemConfigs(ctx, m.cfg)
+		return nil
+	}
+
+	scoped := cloneConfigOrDefault(cfg)
+	scoped.StripSecrets()
+	scoped.ApplyEnvOverrides()
+	normalizeWebSearchConfig(scoped)
+	m.syncToSystemConfigs(ctx, scoped)
+	return nil
+}
+
+func cloneConfigOrDefault(base *config.Config) *config.Config {
+	if base == nil {
+		return config.Default()
+	}
+	data, err := json.Marshal(base)
+	if err != nil {
+		return config.Default()
+	}
+	cloned := config.Default()
+	if err := json.Unmarshal(data, cloned); err != nil {
+		return config.Default()
+	}
+	return cloned
+}
+
+func tenantConfigContext(ctx context.Context) context.Context {
+	tenantID := store.TenantIDFromContext(ctx)
+	if tenantID == uuid.Nil {
+		tenantID = store.MasterTenantID
+	}
+	return store.WithTenantID(context.Background(), tenantID)
+}
+
+func isMasterTenantContext(ctx context.Context) bool {
+	tenantID := store.TenantIDFromContext(ctx)
+	return tenantID == uuid.Nil || tenantID == store.MasterTenantID
 }

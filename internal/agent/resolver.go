@@ -14,9 +14,9 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
-	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
+	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	"github.com/nextlevelbuilder/goclaw/internal/providerresolve"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
@@ -431,7 +431,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			TenantID:               ag.TenantID,
 			AgentType:              ag.AgentType,
 			IsTeamLead:             isTeamLead,
-			AutoInjector:          deps.AutoInjector,
+			AutoInjector:           deps.AutoInjector,
 			Provider:               provider,
 			Model:                  ag.Model,
 			ModelRegistry:          deps.ModelRegistry,
@@ -534,6 +534,8 @@ func resolveTenantConfig(ctx context.Context, deps ResolverDeps, tenantID uuid.U
 	}
 
 	cloned.ApplyEnvOverrides()
+	cloned.Tools.Web.ProviderOrder = tools.NormalizeWebSearchProviderOrder(cloned.Tools.Web.ProviderOrder)
+	cloned.Tools.Web.DuckDuckGo.Enabled = true
 	return cloned
 }
 

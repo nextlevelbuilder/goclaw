@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/cache"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
@@ -53,6 +54,9 @@ func (d *gatewayDeps) runLifecycle(
 			if evt.Name != bus.TopicConfigChanged {
 				return
 			}
+			if !isMasterConfigEvent(evt) {
+				return
+			}
 			updatedCfg, ok := evt.Payload.(*config.Config)
 			if !ok || updatedCfg.Gateway.Quota == nil {
 				return
@@ -68,6 +72,9 @@ func (d *gatewayDeps) runLifecycle(
 		if evt.Name != bus.TopicConfigChanged {
 			return
 		}
+		if !isMasterConfigEvent(evt) {
+			return
+		}
 		updatedCfg, ok := evt.Payload.(*config.Config)
 		if !ok {
 			return
@@ -80,20 +87,26 @@ func (d *gatewayDeps) runLifecycle(
 		if evt.Name != bus.TopicConfigChanged {
 			return
 		}
+		if d.agentRouter != nil {
+			d.agentRouter.InvalidateAll()
+		}
+		if !isMasterConfigEvent(evt) {
+			return
+		}
 		updatedCfg, ok := evt.Payload.(*config.Config)
 		if !ok {
 			return
 		}
 		resolvedCfg := resolveMasterConfig(updatedCfg, d.pgStores)
 		deps.webSearchTool = syncWebSearchToolRegistration(deps.toolsReg, deps.webSearchTool, resolvedCfg)
-		if d.agentRouter != nil {
-			d.agentRouter.InvalidateAll()
-		}
 	})
 
 	// Reload web_fetch domain policy on config changes via pub/sub.
 	d.msgBus.Subscribe("webfetch-config-reload", func(evt bus.Event) {
 		if evt.Name != bus.TopicConfigChanged {
+			return
+		}
+		if !isMasterConfigEvent(evt) {
 			return
 		}
 		updatedCfg, ok := evt.Payload.(*config.Config)
@@ -106,6 +119,9 @@ func (d *gatewayDeps) runLifecycle(
 	// Reload TTS providers on config changes via pub/sub.
 	d.msgBus.Subscribe("tts-config-reload", func(evt bus.Event) {
 		if evt.Name != bus.TopicConfigChanged {
+			return
+		}
+		if !isMasterConfigEvent(evt) {
 			return
 		}
 		updatedCfg, ok := evt.Payload.(*config.Config)
@@ -267,5 +283,11 @@ func resolveMasterConfig(base *config.Config, stores *store.Stores) *config.Conf
 		}
 	}
 	cloned.ApplyEnvOverrides()
+	cloned.Tools.Web.ProviderOrder = tools.NormalizeWebSearchProviderOrder(cloned.Tools.Web.ProviderOrder)
+	cloned.Tools.Web.DuckDuckGo.Enabled = true
 	return cloned
+}
+
+func isMasterConfigEvent(evt bus.Event) bool {
+	return evt.TenantID == uuid.Nil || evt.TenantID == store.MasterTenantID
 }

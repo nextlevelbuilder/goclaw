@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
@@ -110,8 +111,12 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 			} else {
 				ctx = store.WithTenantID(ctx, store.MasterTenantID)
 			}
+			if tenantID := store.TenantIDFromContext(ctx); tenantID != uuid.Nil && tenantID != store.MasterTenantID {
+				return
+			}
 			if sysConfigs, err := d.pgStores.SystemConfigs.List(ctx); err == nil && len(sysConfigs) > 0 {
 				d.cfg.ApplySystemConfigs(sysConfigs)
+				d.cfg.Tools.Web.DuckDuckGo.Enabled = true
 				// Update PGMemoryStore chunk config so new documents use updated settings
 				if mem := d.cfg.Agents.Defaults.Memory; mem != nil {
 					if pgMem, ok := d.pgStores.Memory.(*pg.PGMemoryStore); ok {
