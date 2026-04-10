@@ -68,6 +68,11 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 
 	content := extractTextContent(evt.Message)
 
+	// Command interception: check for slash commands before the normal pipeline.
+	if handled := c.handleCommand(ctx, content, senderID, chatID, peerKind, chatJID); handled {
+		return
+	}
+
 	var mediaList []media.MediaInfo
 	mediaList = c.downloadMedia(evt)
 
