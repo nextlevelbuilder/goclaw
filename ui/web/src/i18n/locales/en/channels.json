@@ -40,7 +40,13 @@
   "list": {
     "failureStreak": "{{count}} failures in a row",
     "openChannelDetail": "Open channel detail for the latest diagnosis",
-    "nextStep": "Next step"
+    "nextStep": "Next step",
+    "groupsCount": "{{count}} groups",
+    "showGroups": "Show groups",
+    "hideGroups": "Hide groups",
+    "defaultAgent": "Default",
+    "groupDisabled": "Disabled",
+    "noGroups": "No groups discovered yet. Groups appear after the bot receives messages in WhatsApp groups."
   },
   "failureKind": {
     "auth": "Auth",

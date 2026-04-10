@@ -40,7 +40,13 @@
   "list": {
     "failureStreak": "连续 {{count}} 次失败",
     "openChannelDetail": "打开 Channel 详情查看最新诊断",
-    "nextStep": "下一步"
+    "nextStep": "下一步",
+    "groupsCount": "{{count}} 个群组",
+    "showGroups": "显示群组",
+    "hideGroups": "隐藏群组",
+    "defaultAgent": "默认",
+    "groupDisabled": "已禁用",
+    "noGroups": "尚未发现群组。机器人接收 WhatsApp 群组消息后，群组会自动出现。"
   },
   "failureKind": {
     "auth": "认证",

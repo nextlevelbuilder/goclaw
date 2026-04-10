@@ -40,7 +40,13 @@
   "list": {
     "failureStreak": "{{count}} lỗi liên tiếp",
     "openChannelDetail": "Mở chi tiết channel để xem chẩn đoán mới nhất",
-    "nextStep": "Bước tiếp theo"
+    "nextStep": "Bước tiếp theo",
+    "groupsCount": "{{count}} nhóm",
+    "showGroups": "Hiện nhóm",
+    "hideGroups": "Ẩn nhóm",
+    "defaultAgent": "Mặc định",
+    "groupDisabled": "Đã tắt",
+    "noGroups": "Chưa phát hiện nhóm nào. Nhóm sẽ xuất hiện sau khi bot nhận tin nhắn trong nhóm WhatsApp."
   },
   "failureKind": {
     "auth": "Xác thực",
