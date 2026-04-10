@@ -36,7 +36,7 @@ All notable changes to GoClaw Gateway are documented here. Format follows [Keep 
 
 #### Native Web Search Provider Stack (2026-04-10)
 - **Optional Exa + Tavily backends**: `web_search` now supports Exa and Tavily alongside Brave Search and DuckDuckGo without importing the CCS hook/MCP runtime model
-- **Configurable provider order**: admins can rank `exa`, `tavily`, `brave`, and `duckduckgo`; enabled providers omitted from the list are appended automatically so DuckDuckGo stays the fallback
+- **Configurable provider order**: admins can rank `exa`, `tavily`, and `brave`; DuckDuckGo stays pinned as the always-on fallback and omitted providers are appended automatically
 - **Secret parity with Brave**: Exa and Tavily API keys now persist through `config_secrets` with the same masked-config behavior as Brave
 - **Live reload + startup sync**: DB-backed search-provider secrets and order changes now rebuild the running `web_search` tool on boot and after config saves
 - **Provider caps honored**: per-provider `max_results` settings now clamp actual provider requests instead of being inert UI/config fields

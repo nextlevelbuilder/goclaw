@@ -1,3 +1,4 @@
+import { useId } from "react";
 import {
   DndContext,
   PointerSensor,
@@ -15,7 +16,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Lock } from "lucide-react";
+import { ChevronDown, ChevronUp, GripVertical, Lock } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -54,8 +55,8 @@ const SORTABLE_IDS: SortableProviderId[] = ["exa", "tavily", "brave"];
 const META: Record<
   ProviderId,
   {
-    label: string;
-    kind: "API" | "Built-in";
+    labelKey: string;
+    kindKey: "tools.providerModeApi" | "tools.providerModeBuiltIn";
     railClass: string;
     textClass: string;
     borderClass: string;
@@ -65,8 +66,8 @@ const META: Record<
   }
 > = {
   exa: {
-    label: "Exa",
-    kind: "API",
+    labelKey: "tools.providerLabelExa",
+    kindKey: "tools.providerModeApi",
     railClass: "bg-blue-600",
     textClass: "text-blue-700 dark:text-blue-300",
     borderClass: "border-blue-600/50",
@@ -75,8 +76,8 @@ const META: Record<
     keyPlaceholder: "tools.exaApiKeyPlaceholder",
   },
   tavily: {
-    label: "Tavily",
-    kind: "API",
+    labelKey: "tools.providerLabelTavily",
+    kindKey: "tools.providerModeApi",
     railClass: "bg-cyan-500",
     textClass: "text-cyan-700 dark:text-cyan-300",
     borderClass: "border-cyan-500/50",
@@ -85,8 +86,8 @@ const META: Record<
     keyPlaceholder: "tools.tavilyApiKeyPlaceholder",
   },
   brave: {
-    label: "Brave Search",
-    kind: "API",
+    labelKey: "tools.providerLabelBrave",
+    kindKey: "tools.providerModeApi",
     railClass: "bg-orange-500",
     textClass: "text-orange-700 dark:text-orange-300",
     borderClass: "border-orange-500/50",
@@ -95,8 +96,8 @@ const META: Record<
     keyPlaceholder: "tools.braveApiKeyPlaceholder",
   },
   duckduckgo: {
-    label: "DuckDuckGo",
-    kind: "Built-in",
+    labelKey: "tools.providerLabelDuckDuckGo",
+    kindKey: "tools.providerModeBuiltIn",
     railClass: "bg-slate-500",
     textClass: "text-slate-700 dark:text-slate-300",
     borderClass: "border-slate-500/50",
@@ -119,6 +120,19 @@ function hasUsableKey(value?: string): boolean {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function inputValueForMaxResults(value?: number): string {
+  return typeof value === "number" && value > 0 ? String(value) : "";
+}
+
+function parseOptionalMaxResults(rawValue: string): number | undefined {
+  const trimmed = rawValue.trim();
+  if (trimmed === "") {
+    return undefined;
+  }
+  const parsed = Number.parseInt(trimmed, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
 const SPINE_LEFT = "58px";
 
 interface SortableRowProps {
@@ -126,6 +140,10 @@ interface SortableRowProps {
   index: number;
   config: ProviderConfig;
   onProviderPatch: (provider: SortableProviderId, patch: Partial<ProviderConfig>) => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
 }
 
 function SortableProviderRow({
@@ -133,8 +151,13 @@ function SortableProviderRow({
   index,
   config,
   onProviderPatch,
+  onMoveUp,
+  onMoveDown,
+  canMoveUp,
+  canMoveDown,
 }: SortableRowProps) {
   const { t } = useTranslation("config");
+  const fieldBaseId = useId();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({
       id: provider,
@@ -146,14 +169,17 @@ function SortableProviderRow({
   };
 
   const meta = META[provider];
+  const providerLabel = t(meta.labelKey);
   const enabled = config.enabled ?? false;
   const ready = hasUsableKey(config.api_key);
+  const maxResultsId = `${fieldBaseId}-max-results`;
+  const apiKeyId = `${fieldBaseId}-api-key`;
 
   const handleEnabledChange = (value: boolean) => {
     if (value && !ready) {
       toast.error(
         t("tools.providerKeyRequiredTitle"),
-        t("tools.providerKeyRequiredMessage", { provider: meta.label }),
+        t("tools.providerKeyRequiredMessage", { provider: providerLabel }),
       );
       return;
     }
@@ -217,8 +243,8 @@ function SortableProviderRow({
         <div className="flex gap-4 px-3 py-2.5">
           <button
             type="button"
-            aria-label={`Reorder ${meta.label}`}
-            className="flex h-8 w-8 shrink-0 cursor-grab items-center justify-center rounded border border-border/50 bg-muted/10 text-muted-foreground transition-colors hover:bg-muted/20 active:cursor-grabbing"
+            aria-label={t("tools.providerDragHandleAria", { provider: providerLabel })}
+            className="flex h-11 w-11 shrink-0 cursor-grab touch-none items-center justify-center rounded border border-border/50 bg-muted/10 text-muted-foreground transition-colors hover:bg-muted/20 active:cursor-grabbing sm:h-8 sm:w-8"
             {...attributes}
             {...listeners}
           >
@@ -234,7 +260,7 @@ function SortableProviderRow({
                   {String(index + 1).padStart(2, "0")}
                 </span>
                 <span className="text-sm font-semibold tracking-tight">
-                  {meta.label}
+                  {providerLabel}
                 </span>
                 <Badge
                   variant="outline"
@@ -243,7 +269,7 @@ function SortableProviderRow({
                     meta.textClass,
                   )}
                 >
-                  {meta.kind}
+                  {t(meta.kindKey)}
                 </Badge>
                 <Badge variant={enabled ? "success" : "secondary"} className="h-4 px-1.5 py-0 text-[10px]">
                   {enabled
@@ -257,41 +283,64 @@ function SortableProviderRow({
                 </Badge>
               </div>
 
-              <Switch
-                checked={enabled}
-                onCheckedChange={handleEnabledChange}
-              />
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={onMoveUp}
+                  disabled={!canMoveUp}
+                  aria-label={t("tools.providerMoveUpAria", { provider: providerLabel })}
+                  className="flex h-9 w-9 items-center justify-center rounded border border-border/50 bg-muted/10 text-muted-foreground transition-colors hover:bg-muted/20 disabled:cursor-not-allowed disabled:opacity-40 sm:hidden"
+                >
+                  <ChevronUp className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={onMoveDown}
+                  disabled={!canMoveDown}
+                  aria-label={t("tools.providerMoveDownAria", { provider: providerLabel })}
+                  className="flex h-9 w-9 items-center justify-center rounded border border-border/50 bg-muted/10 text-muted-foreground transition-colors hover:bg-muted/20 disabled:cursor-not-allowed disabled:opacity-40 sm:hidden"
+                >
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+                <Switch
+                  checked={enabled}
+                  onCheckedChange={handleEnabledChange}
+                  aria-label={t("tools.providerToggleAria", { provider: providerLabel })}
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-1 gap-2 md:grid-cols-[110px_minmax(0,1fr)]">
               <div className="grid gap-1">
-                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
+                <Label htmlFor={maxResultsId} className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
                   {t("tools.maxResults")}
                 </Label>
                 <Input
+                  id={maxResultsId}
                   type="number"
                   min={1}
-                  value={config.max_results ?? ""}
+                  value={inputValueForMaxResults(config.max_results)}
                   onChange={(event) =>
                     onProviderPatch(provider, {
-                      max_results: Number(event.target.value),
+                      max_results: parseOptionalMaxResults(event.target.value),
                     })
                   }
-                  className="h-7 px-2 text-xs"
+                  className="h-7 px-2 text-base md:text-sm"
                   placeholder="5"
                 />
               </div>
 
               <div className="grid gap-1">
-                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
+                <Label htmlFor={apiKeyId} className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
                   {t("tools.apiKeyLabel")}
                 </Label>
                 <Input
+                  id={apiKeyId}
                   type="password"
                   value={isSecret(config.api_key) ? "" : (config.api_key ?? "")}
                   onChange={(event) => handleApiKeyChange(event.target.value)}
                   className={cn(
-                    "h-7 px-2 text-xs transition-colors md:text-xs",
+                    "h-7 px-2 text-base transition-colors md:text-sm",
                     !enabled && "bg-muted/10 opacity-60",
                   )}
                   placeholder={meta.keyPlaceholder ? t(meta.keyPlaceholder) : ""}
@@ -346,6 +395,17 @@ export function WebSearchProviderSequence({
     onProviderOrderChange(arrayMove(ordered, oldIndex, newIndex));
   };
 
+  const moveProvider = (provider: SortableProviderId, direction: -1 | 1) => {
+    const index = ordered.findIndex((entry) => entry === provider);
+    const nextIndex = index + direction;
+    if (index === -1 || nextIndex < 0 || nextIndex >= ordered.length) {
+      return;
+    }
+    onProviderOrderChange(arrayMove(ordered, index, nextIndex));
+  };
+
+  const ddgMaxResultsId = useId();
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
@@ -379,6 +439,10 @@ export function WebSearchProviderSequence({
                   index={index}
                   config={providerConfigs[provider]}
                   onProviderPatch={onProviderPatch}
+                  onMoveUp={() => moveProvider(provider, -1)}
+                  onMoveDown={() => moveProvider(provider, 1)}
+                  canMoveUp={index > 0}
+                  canMoveDown={index < ordered.length - 1}
                 />
               ))}
             </div>
@@ -434,7 +498,7 @@ export function WebSearchProviderSequence({
                       {String(ordered.length + 1).padStart(2, "0")}
                     </span>
                     <span className="text-sm font-semibold tracking-tight">
-                      {META.duckduckgo.label}
+                      {t(META.duckduckgo.labelKey)}
                     </span>
                     <Badge
                       variant="outline"
@@ -443,7 +507,7 @@ export function WebSearchProviderSequence({
                         META.duckduckgo.textClass,
                       )}
                     >
-                      {META.duckduckgo.kind}
+                      {t(META.duckduckgo.kindKey)}
                     </Badge>
                     <Badge variant="secondary" className="h-4 px-1.5 py-0 text-[10px]">{t("tools.providerFallbackPinned")}</Badge>
                     <Badge variant="info" className="h-4 px-1.5 py-0 text-[10px]">{t("tools.providerStateAlwaysReady")}</Badge>
@@ -457,27 +521,26 @@ export function WebSearchProviderSequence({
 
                 <div className="grid grid-cols-1 gap-2 md:grid-cols-[110px_minmax(0,1fr)]">
                   <div className="grid gap-1">
-                    <Label className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
+                    <Label htmlFor={ddgMaxResultsId} className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
                       {t("tools.maxResults")}
                     </Label>
                     <Input
+                      id={ddgMaxResultsId}
                       type="number"
                       min={1}
-                      value={duckduckgo.max_results ?? ""}
+                      value={inputValueForMaxResults(duckduckgo.max_results)}
                       onChange={(event) =>
                         onDuckDuckGoPatch({
-                          max_results: Number(event.target.value),
+                          max_results: parseOptionalMaxResults(event.target.value),
                         })
                       }
-                      className="h-7 px-2 text-xs"
+                      className="h-7 px-2 text-base md:text-sm"
                       placeholder="5"
                     />
                   </div>
 
                   <div className="grid gap-1">
-                    <Label className="text-[10px] uppercase tracking-wider text-muted-foreground/70 opacity-0">
-                      .
-                    </Label>
+                    <div aria-hidden="true" className="h-5" />
                     <div className="flex h-7 items-center rounded bg-muted/20 px-3 text-[10px] text-muted-foreground/70">
                       {t("tools.providerFallbackDescription")}
                     </div>
