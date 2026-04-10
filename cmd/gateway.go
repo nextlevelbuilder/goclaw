@@ -21,6 +21,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels/discord"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/feishu"
 	slackchannel "github.com/nextlevelbuilder/goclaw/internal/channels/slack"
+	teamschannel "github.com/nextlevelbuilder/goclaw/internal/channels/teams"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/telegram"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/whatsapp"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/zalo"
@@ -565,6 +566,7 @@ func runGateway() {
 		instanceLoader.RegisterFactory(channels.TypeZaloPersonal, zalopersonal.FactoryWithPendingStore(pgStores.PendingMessages))
 		instanceLoader.RegisterFactory(channels.TypeWhatsApp, whatsapp.Factory)
 		instanceLoader.RegisterFactory(channels.TypeSlack, slackchannel.FactoryWithPendingStore(pgStores.PendingMessages))
+		instanceLoader.RegisterFactory(channels.TypeTeams, teamschannel.Factory)
 		if err := instanceLoader.LoadAll(context.Background()); err != nil {
 			slog.Error("failed to load channel instances from DB", "error", err)
 		}
@@ -572,6 +574,13 @@ func runGateway() {
 
 	// Register config-based channels as fallback when no DB instances loaded.
 	registerConfigChannels(cfg, channelMgr, msgBus, pgStores, instanceLoader)
+	// Teams also loads from config (in addition to DB instances) for backward compatibility.
+	registerTeamsChannel(cfg, channelMgr, msgBus)
+
+	// Teams app package download endpoint
+	if pgStores.ChannelInstances != nil {
+		server.SetTeamsAppPackageHandler(httpapi.NewTeamsAppPackageHandler(pgStores.ChannelInstances))
+	}
 
 	// Register channels/instances/links/teams RPC methods
 	wireChannelRPCMethods(server, pgStores, channelMgr, agentRouter, msgBus, workspace)

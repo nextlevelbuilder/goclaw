@@ -65,6 +65,7 @@ const (
 	TypeWhatsApp     = "whatsapp"
 	TypeZaloOA       = "zalo_oa"
 	TypeZaloPersonal = "zalo_personal"
+	TypeTeams        = "teams"
 )
 
 // Channel defines the interface that all channel implementations must satisfy.

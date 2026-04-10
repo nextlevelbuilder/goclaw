@@ -379,5 +379,12 @@
     "retry": "重试",
     "close": "关闭",
     "skip": "跳过"
+  },
+  "teams": {
+    "appPackage": {
+      "download": "下载应用包",
+      "generating": "生成中...",
+      "error": "生成应用包失败"
+    }
   }
 }

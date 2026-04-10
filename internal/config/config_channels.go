@@ -20,6 +20,7 @@ type ChannelsConfig struct {
 	Zalo              ZaloConfig               `json:"zalo"`
 	ZaloPersonal      ZaloPersonalConfig       `json:"zalo_personal"`
 	Feishu            FeishuConfig             `json:"feishu"`
+	Teams             TeamsConfig              `json:"teams"`
 	PendingCompaction *PendingCompactionConfig `json:"pending_compaction,omitempty"` // global pending message compaction settings
 }
 
@@ -190,6 +191,19 @@ type FeishuConfig struct {
 	STTTenantID       string              `json:"stt_tenant_id,omitempty"`
 	STTTimeoutSeconds int                 `json:"stt_timeout_seconds,omitempty"`
 	VoiceAgentID      string              `json:"voice_agent_id,omitempty"`
+}
+
+type TeamsConfig struct {
+	Enabled     bool                `json:"enabled"`
+	BotID       string              `json:"bot_id"`
+	BotPassword string              `json:"bot_password"`
+	BotType     string              `json:"bot_type,omitempty"`     // "SingleTenant" (default) or "MultiTenant"
+	TenantID    string              `json:"tenant_id,omitempty"`    // required for SingleTenant
+	DMPolicy    string              `json:"dm_policy,omitempty"`    // "open" (default), "pairing", "allowlist", "disabled"
+	GroupPolicy string              `json:"group_policy,omitempty"` // "open" (default), "allowlist", "disabled"
+	WebhookPath string              `json:"webhook_path,omitempty"` // default "/webhooks/teams"
+	AllowFrom   FlexibleStringSlice `json:"allow_from"`
+	BlockReply  *bool               `json:"block_reply,omitempty"` // override gateway block_reply (nil = inherit)
 }
 
 // ProvidersConfig maps provider name to its config.
