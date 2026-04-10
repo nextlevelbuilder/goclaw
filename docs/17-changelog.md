@@ -34,6 +34,20 @@ All notable changes to GoClaw Gateway are documented here. Format follows [Keep 
 
 ### Added
 
+#### Microsoft Teams Channel Integration (2026-04-10)
+- **Native Teams support**: Webhook-based channel with Azure Bot Framework REST API integration
+- **Authentication**: JWT bearer token validation with automatic Microsoft OIDC key caching
+- **Bot types**: SingleTenant and MultiTenant bot support with tenant isolation
+- **App package generation**: CLI command (`goclaw teams app-package`) and HTTP endpoint (`GET /v1/teams/app-package`) for Teams manifest + icons ZIP
+- **Policies**: DM policy (`open`, `pairing`, `allowlist`, `disabled`) and group policy support
+- **Message delivery**: Async outbound dispatch per goroutine to prevent cross-channel blocking
+- **Typing indicator**: Real-time typing activity during agent processing
+- **Media support**: Images and file attachments via Bot Framework API
+
+#### Platform Resilience (2026-04-10)
+- **Async outbound dispatch**: All channel sends run in goroutines, temp media cleanup after delivery. Prevents slow sends from blocking others
+- **CoerceStringBools export**: `CoerceStringBools()` exported with `"inherit"` value support for consistent policy inheritance across channel types
+
 #### Parallel Sub-Agent Enhancement (#600) (2026-03-31)
 - **Smart leader delegation**: Conditional leader delegation prompt instead of forced delegation for all subagent spawns
 - **Compaction prompt persistence**: Preserves pending subagent and team task state across context summarization to maintain work continuity

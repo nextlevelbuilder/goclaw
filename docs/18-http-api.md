@@ -571,7 +571,22 @@ Per-agent entity-relation graph.
 | `POST` | `/v1/channels/instances/{id}/writers` | Add writer to group |
 | `DELETE` | `/v1/channels/instances/{id}/writers/{userId}` | Remove writer |
 
-**Supported channels:** `telegram`, `discord`, `slack`, `whatsapp`, `zalo_oa`, `zalo_personal`, `feishu`
+### Microsoft Teams App Package
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/teams/app-package` | Generate Teams app package ZIP |
+
+Query parameters:
+- `name` (required): Bot display name (max 30 chars)
+- `bot_id` (required): Azure Bot ID, or use `instance_id` to resolve from channel instance
+- `full_name` (optional): Full bot name (defaults to `name`)
+- `description` (optional): Short description (max 80 chars)
+- `developer` (optional): Developer name (defaults to "GoClaw")
+
+Returns ZIP file with `manifest.json` + color/outline icons for Teams sideloading.
+
+**Supported channels:** `telegram`, `discord`, `slack`, `whatsapp`, `zalo_oa`, `zalo_personal`, `feishu`, `teams`
 
 Credentials are masked in HTTP responses.
 
