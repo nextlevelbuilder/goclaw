@@ -68,38 +68,39 @@ func (m *Manager) dispatchOutbound(ctx context.Context) {
 				}
 			}
 
-			if err := channel.Send(ctx, msg); err != nil {
-				slog.Error("error sending message to channel",
-					"channel", msg.Channel,
-					"error", err,
-				)
-				// Try to send a text-only error notification back to the chat.
-				// Only for media failures — text-only failures likely mean the chat
-				// is inaccessible (kicked, blocked, etc.) so retrying won't help.
-				if len(msg.Media) > 0 {
-					notifyMsg := bus.OutboundMessage{
-						Channel:  msg.Channel,
-						ChatID:   msg.ChatID,
-						Content:  formatChannelSendError(err),
-						Metadata: sendErrorMeta(msg.Metadata),
-					}
-					if err2 := channel.Send(ctx, notifyMsg); err2 != nil {
-						slog.Warn("failed to send error notification",
-							"channel", msg.Channel, "error", err2)
-					}
-				}
-			}
-
-			// Clean up temp media files only. Workspace-generated files are preserved
-			// so they remain accessible via workspace/web UI after delivery.
-			tmpDir := os.TempDir()
-			for _, media := range msg.Media {
-				if media.URL != "" && strings.HasPrefix(media.URL, tmpDir) {
-					if err := os.Remove(media.URL); err != nil {
-						slog.Debug("failed to clean up media file", "path", media.URL, "error", err)
+			// Send asynchronously to prevent one slow channel from blocking all others.
+			// Temp media cleanup runs inside the goroutine AFTER send completes
+			// to avoid a race where files are deleted before the channel reads them.
+			go func(ch Channel, m bus.OutboundMessage) {
+				if err := ch.Send(ctx, m); err != nil {
+					slog.Error("error sending message to channel",
+						"channel", m.Channel,
+						"error", err,
+					)
+					if len(m.Media) > 0 {
+						notifyMsg := bus.OutboundMessage{
+							Channel:  m.Channel,
+							ChatID:   m.ChatID,
+							Content:  formatChannelSendError(err),
+							Metadata: sendErrorMeta(m.Metadata),
+						}
+						if err2 := ch.Send(ctx, notifyMsg); err2 != nil {
+							slog.Warn("failed to send error notification",
+								"channel", m.Channel, "error", err2)
+						}
 					}
 				}
-			}
+				// Clean up temp media files after send completes.
+				// Workspace-generated files are preserved for web UI access.
+				tmpDir := os.TempDir()
+				for _, media := range m.Media {
+					if media.URL != "" && strings.HasPrefix(media.URL, tmpDir) {
+						if err := os.Remove(media.URL); err != nil {
+							slog.Debug("failed to clean up media file", "path", media.URL, "error", err)
+						}
+					}
+				}
+			}(channel, msg)
 		}
 	}
 }

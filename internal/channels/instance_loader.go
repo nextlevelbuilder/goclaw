@@ -160,9 +160,10 @@ func (l *InstanceLoader) Stop(ctx context.Context) {
 	l.loaded = make(map[string]struct{})
 }
 
-// coerceStringBools converts string "true"/"false" values to JSON booleans
-// in a raw config blob. Older UI versions saved select-based bool fields as strings.
-func coerceStringBools(data json.RawMessage) json.RawMessage {
+// CoerceStringBools converts string "true"/"false"/"inherit" values in a config JSON blob.
+// "true"/"false" → JSON booleans, "inherit" → key removed (nil = inherit default).
+// Safe to call on any JSON object. Returns input unchanged if no coercion needed.
+func CoerceStringBools(data json.RawMessage) json.RawMessage {
 	if len(data) == 0 {
 		return data
 	}
@@ -179,6 +180,9 @@ func coerceStringBools(data json.RawMessage) json.RawMessage {
 				changed = true
 			case "false":
 				m[k] = false
+				changed = true
+			case "inherit":
+				delete(m, k) // nil = inherit gateway default
 				changed = true
 			}
 		}
@@ -222,7 +226,7 @@ func (l *InstanceLoader) loadInstance(ctx context.Context, inst store.ChannelIns
 
 	// Normalize config: convert string "true"/"false" to JSON booleans.
 	// Older UI versions saved select-based bool fields as strings.
-	cfg := coerceStringBools(inst.Config)
+	cfg := CoerceStringBools(inst.Config)
 
 	ch, err := factory(inst.Name, inst.Credentials, cfg, l.msgBus, l.pairingSvc)
 	if err != nil {
