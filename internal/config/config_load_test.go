@@ -27,6 +27,15 @@ func TestDefault_SensibleDefaults(t *testing.T) {
 	if cfg.Tools.Web.DuckDuckGo.MaxResults != 5 {
 		t.Fatalf("default ddg max results: got %d", cfg.Tools.Web.DuckDuckGo.MaxResults)
 	}
+	if cfg.Tools.Web.Exa.Enabled {
+		t.Fatal("Exa should be disabled by default")
+	}
+	if cfg.Tools.Web.Tavily.Enabled {
+		t.Fatal("Tavily should be disabled by default")
+	}
+	if len(cfg.Tools.Web.ProviderOrder) != 0 {
+		t.Fatalf("default provider order: got %v, want empty", cfg.Tools.Web.ProviderOrder)
+	}
 }
 
 // --- Load with missing file → uses defaults ---

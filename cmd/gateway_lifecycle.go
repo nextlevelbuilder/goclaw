@@ -26,6 +26,8 @@ type lifecycleDeps struct {
 	sched             *scheduler.Scheduler
 	heartbeatTicker   *heartbeat.Ticker
 	quotaChecker      *channels.QuotaChecker
+	toolsReg          *tools.Registry
+	webSearchTool     *tools.WebSearchTool
 	webFetchTool      *tools.WebFetchTool
 	ttsTool           *tools.TtsTool
 	sandboxMgr        sandbox.Manager
@@ -70,6 +72,23 @@ func (d *gatewayDeps) runLifecycle(
 			return
 		}
 		d.pgStores.Cron.SetDefaultTimezone(updatedCfg.Cron.DefaultTimezone)
+	})
+
+	// Reload web_fetch domain policy on config changes via pub/sub.
+	d.msgBus.Subscribe("websearch-config-reload", func(evt bus.Event) {
+		if evt.Name != bus.TopicConfigChanged {
+			return
+		}
+		updatedCfg, ok := evt.Payload.(*config.Config)
+		if !ok {
+			return
+		}
+		if d.pgStores.ConfigSecrets != nil {
+			if secrets, err := d.pgStores.ConfigSecrets.GetAll(context.Background()); err == nil && len(secrets) > 0 {
+				updatedCfg.ApplyDBSecrets(secrets)
+			}
+		}
+		deps.webSearchTool = syncWebSearchToolRegistration(deps.toolsReg, deps.webSearchTool, updatedCfg)
 	})
 
 	// Reload web_fetch domain policy on config changes via pub/sub.

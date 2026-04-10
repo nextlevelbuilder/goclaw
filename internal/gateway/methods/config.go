@@ -22,7 +22,7 @@ type ConfigMethods struct {
 	cfgPath      string
 	secretsStore store.ConfigSecretsStore
 	syncFn       func(ctx context.Context, cfg *config.Config) // nil-safe; syncs non-secret settings to system_configs
-	eventBus     bus.EventPublisher       // nil-safe; broadcasts config change events
+	eventBus     bus.EventPublisher                            // nil-safe; broadcasts config change events
 }
 
 func NewConfigMethods(cfg *config.Config, cfgPath string, secretsStore store.ConfigSecretsStore, eventBus bus.EventPublisher) *ConfigMethods {
@@ -260,7 +260,19 @@ func (m *ConfigMethods) saveSecretsToStore(ctx context.Context, cfg *config.Conf
 	}
 
 	secrets := cfg.ExtractDBSecrets()
-	for key, value := range secrets {
+	currentValues := cfg.ManagedSecretValues()
+	for _, key := range config.ManagedSecretKeys() {
+		rawValue := currentValues[key]
+		if config.IsMaskedSecret(rawValue) {
+			continue
+		}
+		value, ok := secrets[key]
+		if !ok {
+			if err := m.secretsStore.Delete(ctx, key); err != nil {
+				slog.Warn("failed to delete config secret", "key", key, "error", err)
+			}
+			continue
+		}
 		if err := m.secretsStore.Set(ctx, key, value); err != nil {
 			slog.Warn("failed to save config secret", "key", key, "error", err)
 		}

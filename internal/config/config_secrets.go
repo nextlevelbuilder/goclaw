@@ -4,6 +4,40 @@ import "encoding/json"
 
 const secretMask = "***"
 
+var managedSecretKeys = []string{
+	"gateway.token",
+	"tts.openai.api_key",
+	"tts.elevenlabs.api_key",
+	"tts.minimax.api_key",
+	"tts.minimax.group_id",
+	"tools.web.exa.api_key",
+	"tools.web.tavily.api_key",
+	"tools.web.brave.api_key",
+	"tailscale.auth_key",
+}
+
+func ManagedSecretKeys() []string {
+	return append([]string(nil), managedSecretKeys...)
+}
+
+func IsMaskedSecret(value string) bool {
+	return value == secretMask
+}
+
+func (c *Config) ManagedSecretValues() map[string]string {
+	return map[string]string{
+		"gateway.token":            c.Gateway.Token,
+		"tts.openai.api_key":       c.Tts.OpenAI.APIKey,
+		"tts.elevenlabs.api_key":   c.Tts.ElevenLabs.APIKey,
+		"tts.minimax.api_key":      c.Tts.MiniMax.APIKey,
+		"tts.minimax.group_id":     c.Tts.MiniMax.GroupID,
+		"tools.web.exa.api_key":    c.Tools.Web.Exa.APIKey,
+		"tools.web.tavily.api_key": c.Tools.Web.Tavily.APIKey,
+		"tools.web.brave.api_key":  c.Tools.Web.Brave.APIKey,
+		"tailscale.auth_key":       c.Tailscale.AuthKey,
+	}
+}
+
 // MaskedCopy returns a deep copy of the config with all secret fields masked.
 // Used by config.get to avoid exposing secrets to WebSocket clients.
 func (c *Config) MaskedCopy() *Config {
@@ -59,6 +93,8 @@ func (c *Config) MaskedCopy() *Config {
 	maskNonEmpty(&cp.Tts.MiniMax.APIKey)
 
 	// Mask web tool keys
+	maskNonEmpty(&cp.Tools.Web.Exa.APIKey)
+	maskNonEmpty(&cp.Tools.Web.Tavily.APIKey)
 	maskNonEmpty(&cp.Tools.Web.Brave.APIKey)
 
 	// Mask Tailscale auth key
@@ -109,6 +145,8 @@ func (c *Config) StripSecrets() {
 	c.Tts.MiniMax.APIKey = ""
 
 	// Web tool keys
+	c.Tools.Web.Exa.APIKey = ""
+	c.Tools.Web.Tavily.APIKey = ""
 	c.Tools.Web.Brave.APIKey = ""
 
 	// Tailscale auth key
@@ -164,6 +202,8 @@ func (c *Config) StripMaskedSecrets() {
 	stripIfMasked(&c.Tts.MiniMax.APIKey)
 
 	// Web tool keys
+	stripIfMasked(&c.Tools.Web.Exa.APIKey)
+	stripIfMasked(&c.Tools.Web.Tavily.APIKey)
 	stripIfMasked(&c.Tools.Web.Brave.APIKey)
 
 	// Tailscale auth key
@@ -185,6 +225,8 @@ func (c *Config) ApplyDBSecrets(secrets map[string]string) {
 	apply("tts.elevenlabs.api_key", &c.Tts.ElevenLabs.APIKey)
 	apply("tts.minimax.api_key", &c.Tts.MiniMax.APIKey)
 	apply("tts.minimax.group_id", &c.Tts.MiniMax.GroupID)
+	apply("tools.web.exa.api_key", &c.Tools.Web.Exa.APIKey)
+	apply("tools.web.tavily.api_key", &c.Tools.Web.Tavily.APIKey)
 	apply("tools.web.brave.api_key", &c.Tools.Web.Brave.APIKey)
 	apply("tailscale.auth_key", &c.Tailscale.AuthKey)
 }
@@ -205,6 +247,8 @@ func (c *Config) ExtractDBSecrets() map[string]string {
 	collect("tts.elevenlabs.api_key", c.Tts.ElevenLabs.APIKey)
 	collect("tts.minimax.api_key", c.Tts.MiniMax.APIKey)
 	collect("tts.minimax.group_id", c.Tts.MiniMax.GroupID)
+	collect("tools.web.exa.api_key", c.Tools.Web.Exa.APIKey)
+	collect("tools.web.tavily.api_key", c.Tools.Web.Tavily.APIKey)
 	collect("tools.web.brave.api_key", c.Tools.Web.Brave.APIKey)
 	collect("tailscale.auth_key", c.Tailscale.AuthKey)
 
