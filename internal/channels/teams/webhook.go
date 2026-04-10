@@ -144,8 +144,10 @@ func (c *Channel) handleConversationUpdate(activity Activity) {
 }
 
 // stripBotMention removes Teams bot mention tags like "<at>BotName</at>" from message text.
+// Capped at 50 iterations to prevent CPU spike from crafted payloads with thousands of tags.
 func stripBotMention(text string) string {
-	for {
+	const maxIterations = 50
+	for i := 0; i < maxIterations; i++ {
 		start := strings.Index(text, "<at>")
 		if start == -1 {
 			break

@@ -17,7 +17,11 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 )
 
-const defaultWebhookPath = "/webhooks/teams"
+const (
+	defaultWebhookPath    = "/webhooks/teams"
+	maxServiceURLEntries  = 10000 // cap to prevent unbounded memory growth
+	serviceURLEvictBatch  = 1000  // evict this many oldest entries when cap reached
+)
 
 // Compile-time interface assertions.
 var (
@@ -209,6 +213,7 @@ func (c *Channel) BlockReplyEnabled() *bool {
 
 // storeServiceURL validates and stores the serviceURL for a conversation.
 // Only accepts HTTPS URLs from known Bot Framework domains to prevent SSRF.
+// Evicts oldest entries when the map exceeds maxServiceURLEntries to prevent unbounded memory growth.
 func (c *Channel) storeServiceURL(conversationID, serviceURL string) {
 	if !isValidServiceURL(serviceURL) {
 		slog.Warn("security.teams: rejected invalid serviceURL",
@@ -218,6 +223,24 @@ func (c *Channel) storeServiceURL(conversationID, serviceURL string) {
 		return
 	}
 	c.serviceURLs.Store(conversationID, serviceURL)
+
+	// Evict oldest entries if over cap. Range iteration order is non-deterministic,
+	// which provides pseudo-random eviction. Active conversations will re-store
+	// their URL from the next inbound webhook.
+	count := 0
+	c.serviceURLs.Range(func(_, _ any) bool { count++; return true })
+	if count > maxServiceURLEntries {
+		evicted := 0
+		c.serviceURLs.Range(func(key, _ any) bool {
+			if key.(string) == conversationID {
+				return true // don't evict the one we just stored
+			}
+			c.serviceURLs.Delete(key)
+			evicted++
+			return evicted < serviceURLEvictBatch
+		})
+		slog.Debug("teams: evicted stale serviceURL entries", "evicted", evicted)
+	}
 }
 
 // isValidServiceURL checks that a serviceURL is HTTPS and from a known Bot Framework domain.
