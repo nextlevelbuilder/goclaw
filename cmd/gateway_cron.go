@@ -81,7 +81,8 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 
 		// Build context with tenant scope and timeout so agent loop events are
 		// scoped correctly and a hung agent can't block the cron scheduler forever.
-		cronCtx, cancelCron := context.WithTimeout(context.Background(), 10*time.Minute)
+		jobTimeout := cfg.Cron.JobTimeoutDuration()
+		cronCtx, cancelCron := context.WithTimeout(context.Background(), jobTimeout)
 		defer cancelCron()
 		cronCtx = store.WithTenantID(cronCtx, job.TenantID)
 
@@ -115,7 +116,7 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 		select {
 		case outcome = <-outCh:
 		case <-cronCtx.Done():
-			return nil, fmt.Errorf("cron job %s timed out after 10m", job.Name)
+			return nil, fmt.Errorf("cron job %s timed out after %s", job.Name, jobTimeout)
 		}
 		if outcome.Err != nil {
 			return nil, outcome.Err

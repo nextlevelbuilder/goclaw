@@ -145,9 +145,20 @@ func (cs *Service) runLoop(stopChan chan struct{}) {
 		case <-stopChan:
 			return
 		case <-ticker.C:
-			cs.checkJobs()
+			cs.safeCheckJobs()
 		}
 	}
+}
+
+// safeCheckJobs wraps checkJobs with panic recovery so a panic in any
+// check/claim logic doesn't kill the runLoop goroutine.
+func (cs *Service) safeCheckJobs() {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("cron: checkJobs panicked — runLoop continues", "panic", fmt.Sprint(r))
+		}
+	}()
+	cs.checkJobs()
 }
 
 func (cs *Service) checkJobs() {
