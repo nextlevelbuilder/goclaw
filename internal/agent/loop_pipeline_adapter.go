@@ -160,7 +160,7 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 				l.domainBus.Publish(eventbus.DomainEvent{
 					Type:     eventbus.EventSessionCompleted,
 					TenantID: l.tenantID.String(),
-					AgentID:  l.id,
+					AgentID:  l.agentUUID.String(),
 					UserID:   req.UserID,
 					SourceID: sessionKey,
 					Payload: &eventbus.SessionCompletedPayload{
