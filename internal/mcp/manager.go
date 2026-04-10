@@ -25,6 +25,7 @@ const (
 	initialBackoff       = 2 * time.Second
 	maxBackoff           = 60 * time.Second
 	maxReconnectAttempts = 10
+	reconnectCooldown    = 5 * time.Minute // wait after exhausting reconnect attempts before retrying
 
 	// mcpToolInlineMaxCount is the threshold above which MCP tools switch
 	// to search mode (deferred loading via mcp_tool_search) instead of
@@ -55,7 +56,8 @@ type connParams struct {
 type serverState struct {
 	name       string
 	transport  string
-	client     *mcpclient.Client
+	client     *mcpclient.Client               // direct ref for health checks (single-goroutine access)
+	clientPtr  atomic.Pointer[mcpclient.Client] // shared atomic ref for BridgeTools (multi-goroutine safe)
 	connected  atomic.Bool
 	toolNames  []string // registered tool names in the registry
 	timeoutSec int

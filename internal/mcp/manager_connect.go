@@ -94,6 +94,7 @@ func connectAndDiscover(ctx context.Context, name, transportType, command string
 			headers: headers,
 		},
 	}
+	ss.clientPtr.Store(client)
 	ss.connected.Store(true)
 
 	return ss, toolsResult.Tools, nil
@@ -140,7 +141,7 @@ func (m *Manager) connectServer(ctx context.Context, name, transportType, comman
 func (m *Manager) registerBridgeTools(ss *serverState, mcpTools []mcpgo.Tool, serverName, toolPrefix string, timeoutSec int) []string {
 	var registeredNames []string
 	for _, mcpTool := range mcpTools {
-		bt := NewBridgeTool(serverName, mcpTool, ss.client, toolPrefix, timeoutSec, &ss.connected)
+		bt := NewBridgeTool(serverName, mcpTool, &ss.clientPtr, toolPrefix, timeoutSec, &ss.connected)
 
 		if _, exists := m.registry.Get(bt.Name()); exists {
 			slog.Warn("mcp.tool.name_collision",
@@ -206,7 +207,7 @@ func (m *Manager) connectViaPool(ctx context.Context, tenantID uuid.UUID, name, 
 func (m *Manager) registerPoolBridgeTools(entry *poolEntry, serverName, toolPrefix string, timeoutSec int) []string {
 	var registeredNames []string
 	for _, mcpTool := range entry.tools {
-		bt := NewBridgeTool(serverName, mcpTool, entry.state.client, toolPrefix, timeoutSec, &entry.state.connected)
+		bt := NewBridgeTool(serverName, mcpTool, &entry.state.clientPtr, toolPrefix, timeoutSec, &entry.state.connected)
 
 		if _, exists := m.registry.Get(bt.Name()); exists {
 			slog.Warn("mcp.tool.name_collision",
@@ -310,14 +311,24 @@ func (m *Manager) healthLoop(ctx context.Context, ss *serverState) {
 // tryReconnect attempts to reconnect with exponential backoff.
 // For SSE/HTTP transports, a server-side restart invalidates the session,
 // so pinging the old client will never succeed. In that case, we create a
-// fresh client and swap it in, updating all BridgeTools that reference it.
+// fresh client and atomically swap it via serverState.clientPtr — all
+// BridgeTools see the new client on their next Execute call.
 func (m *Manager) tryReconnect(ctx context.Context, ss *serverState) {
 	ss.mu.Lock()
 	if ss.reconnAttempts >= maxReconnectAttempts {
-		ss.lastErr = fmt.Sprintf("max reconnect attempts (%d) reached", maxReconnectAttempts)
+		ss.lastErr = fmt.Sprintf("max reconnect attempts (%d) reached, entering cooldown", maxReconnectAttempts)
 		ss.mu.Unlock()
-		slog.Error("mcp.server.reconnect_exhausted", "server", ss.name)
-		return
+		slog.Warn("mcp.server.reconnect_cooldown", "server", ss.name, "cooldown", reconnectCooldown)
+		// Cooldown: wait before resetting attempts so the server has time to recover.
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(reconnectCooldown):
+		}
+		ss.mu.Lock()
+		ss.reconnAttempts = 0
+		ss.mu.Unlock()
+		return // will retry on next health tick
 	}
 	ss.reconnAttempts++
 	attempt := ss.reconnAttempts
@@ -343,6 +354,7 @@ func (m *Manager) tryReconnect(ctx context.Context, ss *serverState) {
 		ss.connected.Store(true)
 		ss.mu.Lock()
 		ss.reconnAttempts = 0
+		ss.healthFailures = 0
 		ss.lastErr = ""
 		ss.mu.Unlock()
 		slog.Info("mcp.server.reconnected", "server", ss.name)
@@ -350,11 +362,9 @@ func (m *Manager) tryReconnect(ctx context.Context, ss *serverState) {
 	}
 
 	// Slow path: server-side session is dead (container restart, OOM, etc.).
-	// Close the old client and create a fresh connection.
+	// Create fresh client FIRST, then swap and close old — avoids a window
+	// where ss.client points to a closed client if creation fails.
 	slog.Info("mcp.server.full_reconnect", "server", ss.name, "attempt", attempt)
-
-	oldClient := ss.client
-	_ = oldClient.Close()
 
 	newClient, err := createClient(ss.transport, ss.conn.command, ss.conn.args, ss.conn.env, ss.conn.url, ss.conn.headers)
 	if err != nil {
@@ -380,8 +390,11 @@ func (m *Manager) tryReconnect(ctx context.Context, ss *serverState) {
 		return
 	}
 
-	// Swap client and update all BridgeTools referencing the old client.
+	// Swap atomically: store new client, then close old.
+	// BridgeTools use clientPtr.Load() so they see the new client immediately.
+	oldClient := ss.client
 	ss.client = newClient
+	ss.clientPtr.Store(newClient)
 	ss.connected.Store(true)
 	ss.mu.Lock()
 	ss.reconnAttempts = 0
@@ -389,31 +402,7 @@ func (m *Manager) tryReconnect(ctx context.Context, ss *serverState) {
 	ss.lastErr = ""
 	ss.mu.Unlock()
 
-	m.updateBridgeToolClients(ss.name, newClient)
+	_ = oldClient.Close()
 
 	slog.Info("mcp.server.reconnected", "server", ss.name, "method", "full_reconnect")
-}
-
-// updateBridgeToolClients swaps the client pointer on all BridgeTools
-// registered for the named server. Called after a full reconnect to ensure
-// existing tools use the fresh connection instead of the dead one.
-func (m *Manager) updateBridgeToolClients(serverName string, newClient *mcpclient.Client) {
-	m.mu.RLock()
-	ss := m.servers[serverName]
-	var toolNames []string
-	if ss != nil {
-		toolNames = ss.toolNames
-	}
-	if _, isPool := m.poolServers[serverName]; isPool {
-		toolNames = m.poolToolNames[serverName]
-	}
-	m.mu.RUnlock()
-
-	for _, name := range toolNames {
-		if t, ok := m.registry.Get(name); ok {
-			if bt, ok := t.(*BridgeTool); ok {
-				bt.swapClient(newClient)
-			}
-		}
-	}
 }

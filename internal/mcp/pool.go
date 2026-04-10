@@ -591,6 +591,10 @@ func (p *Pool) evictOldestIdleLocked() bool {
 // Client returns the MCP client for this pool entry.
 func (e *poolEntry) Client() *mcpclient.Client { return e.state.client }
 
+// ClientPtr returns the atomic client pointer for this pool entry.
+// Used by BridgeTools to atomically load the current client during reconnect.
+func (e *poolEntry) ClientPtr() *atomic.Pointer[mcpclient.Client] { return &e.state.clientPtr }
+
 // Connected returns a pointer to the connected flag for this pool entry.
 func (e *poolEntry) Connected() *atomic.Bool { return &e.state.connected }
 
@@ -642,15 +646,22 @@ func poolHealthLoop(ctx context.Context, ss *serverState) {
 }
 
 // poolTryReconnect attempts a full reconnect for a pool-managed connection.
-// Closes the dead client, creates a fresh one using stored connection params,
-// and swaps ss.client in-place. Existing BridgeTools referencing the old client
-// will be updated by the next Manager.tryReconnect call or pool Acquire cycle.
+// Creates a fresh client, atomically swaps ss.clientPtr so all BridgeTools
+// see the new client, then closes the old one.
 func poolTryReconnect(ctx context.Context, ss *serverState) {
 	ss.mu.Lock()
 	if ss.reconnAttempts >= maxReconnectAttempts {
-		ss.lastErr = fmt.Sprintf("max reconnect attempts (%d) reached", maxReconnectAttempts)
+		ss.lastErr = fmt.Sprintf("max reconnect attempts (%d) reached, entering cooldown", maxReconnectAttempts)
 		ss.mu.Unlock()
-		slog.Error("mcp.pool.reconnect_exhausted", "server", ss.name)
+		slog.Warn("mcp.pool.reconnect_cooldown", "server", ss.name, "cooldown", reconnectCooldown)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(reconnectCooldown):
+		}
+		ss.mu.Lock()
+		ss.reconnAttempts = 0
+		ss.mu.Unlock()
 		return
 	}
 	ss.reconnAttempts++
@@ -678,10 +689,8 @@ func poolTryReconnect(ctx context.Context, ss *serverState) {
 		return
 	}
 
-	// Slow path: create fresh client.
+	// Slow path: create fresh client FIRST, then swap and close old.
 	slog.Info("mcp.pool.full_reconnect", "server", ss.name, "attempt", attempt)
-
-	_ = ss.client.Close()
 
 	newClient, err := createClient(ss.transport, ss.conn.command, ss.conn.args, ss.conn.env, ss.conn.url, ss.conn.headers)
 	if err != nil {
@@ -707,18 +716,19 @@ func poolTryReconnect(ctx context.Context, ss *serverState) {
 		return
 	}
 
-	// Swap client in-place. BridgeTools referencing ss.client via pool entry
-	// still hold the old pointer — the Manager's updateBridgeToolClients will
-	// fix them on the next tool call or health cycle that touches this server.
-	// For pool-backed connections, Acquire() also handles this: it detects
-	// disconnected entries, creates fresh connections, and returns new entries.
+	// Swap atomically: store new client, then close old.
+	// BridgeTools use clientPtr.Load() so they see the new client immediately.
+	oldClient := ss.client
 	ss.client = newClient
+	ss.clientPtr.Store(newClient)
 	ss.connected.Store(true)
 	ss.mu.Lock()
 	ss.reconnAttempts = 0
 	ss.healthFailures = 0
 	ss.lastErr = ""
 	ss.mu.Unlock()
+
+	_ = oldClient.Close()
 
 	slog.Info("mcp.pool.reconnected", "server", ss.name, "method", "full_reconnect")
 }
