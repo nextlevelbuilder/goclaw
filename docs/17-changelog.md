@@ -34,6 +34,7 @@ All notable changes to GoClaw Gateway are documented here. Format follows [Keep 
 
 ### Added
 
+<<<<<<< HEAD
 #### Episodic Memory Weighted Scoring — Dreaming Enhancement (2026-04-10, Phase 10)
 - **Recall signal tracking**: `episodic_summaries` table gains 3 columns: `recall_count INT`, `recall_score DOUBLE PRECISION`, `last_recalled_at TIMESTAMPTZ` to track usefulness of each memory
 - **ComputeRecallScore formula**: 4-component running average (30% frequency + 35% relevance + 20% recency + 15% freshness, 14-day half-life) quantifies memory value
@@ -150,6 +151,20 @@ All notable changes to GoClaw Gateway are documented here. Format follows [Keep 
   - `internal/channels/whatsapp/qr_methods.go` — QR code generation and authentication flow
   - `internal/channels/whatsapp/format.go` — HTML-to-WhatsApp message formatting
   - Database-backed auth persistence for cross-platform support
+
+#### Microsoft Teams Channel Integration (2026-04-10)
+- **Native Teams support**: Webhook-based channel with Azure Bot Framework REST API integration
+- **Authentication**: JWT bearer token validation with automatic Microsoft OIDC key caching
+- **Bot types**: SingleTenant and MultiTenant bot support with tenant isolation
+- **App package generation**: CLI command (`goclaw teams app-package`) and HTTP endpoint (`GET /v1/teams/app-package`) for Teams manifest + icons ZIP
+- **Policies**: DM policy (`open`, `pairing`, `allowlist`, `disabled`) and group policy support
+- **Message delivery**: Async outbound dispatch per goroutine to prevent cross-channel blocking
+- **Typing indicator**: Real-time typing activity during agent processing
+- **Media support**: Images and file attachments via Bot Framework API
+
+#### Platform Resilience (2026-04-10)
+- **Async outbound dispatch**: All channel sends run in goroutines, temp media cleanup after delivery. Prevents slow sends from blocking others
+- **CoerceStringBools export**: `CoerceStringBools()` exported with `"inherit"` value support for consistent policy inheritance across channel types
 
 ### Refactored
 
