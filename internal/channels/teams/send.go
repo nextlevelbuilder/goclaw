@@ -188,14 +188,42 @@ func parseRetryAfterHeader(value string) time.Duration {
 }
 
 // ensureToken returns a valid Azure AD token, refreshing if expired.
+// The HTTP call runs outside the mutex to prevent convoy stall when multiple
+// goroutines need a token simultaneously during refresh.
 func (c *botClient) ensureToken(ctx context.Context) (string, error) {
+	// Fast path: return cached token under read lock.
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	if c.token != "" && time.Now().Before(c.tokenExpiry) {
-		return c.token, nil
+		tok := c.token
+		c.mu.Unlock()
+		return tok, nil
+	}
+	c.mu.Unlock()
+
+	// Slow path: fetch new token outside the lock.
+	// Multiple goroutines may race here during expiry — that's benign since
+	// Azure AD client_credentials is idempotent and last writer wins.
+	tok, expiresIn, err := c.fetchToken(ctx)
+	if err != nil {
+		return "", err
 	}
 
+	// Store the new token under lock.
+	c.mu.Lock()
+	c.token = tok
+	expiryDuration := time.Duration(expiresIn)*time.Second - tokenRefreshMargin
+	if expiryDuration < 30*time.Second {
+		expiryDuration = 30 * time.Second
+	}
+	c.tokenExpiry = time.Now().Add(expiryDuration)
+	c.mu.Unlock()
+
+	slog.Debug("teams: acquired Azure AD token", "expires_in", expiresIn)
+	return tok, nil
+}
+
+// fetchToken performs the HTTP call to Azure AD token endpoint.
+func (c *botClient) fetchToken(ctx context.Context) (token string, expiresIn int, err error) {
 	tokenURL := c.resolveTokenURL()
 	data := url.Values{
 		"grant_type":    {"client_credentials"},
@@ -206,36 +234,27 @@ func (c *botClient) ensureToken(ctx context.Context) (string, error) {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, strings.NewReader(data.Encode()))
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("token request: %w", err)
+		return "", 0, fmt.Errorf("token request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return "", fmt.Errorf("token endpoint %d: %s", resp.StatusCode, string(respBody))
+		return "", 0, fmt.Errorf("token endpoint %d: %s", resp.StatusCode, string(respBody))
 	}
 
 	var tokenResp tokenResponse
 	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
-		return "", fmt.Errorf("decode token response: %w", err)
+		return "", 0, fmt.Errorf("decode token response: %w", err)
 	}
 
-	c.token = tokenResp.AccessToken
-	// Floor expiry at 30s to prevent tight retry loop if ExpiresIn is 0 or tiny
-	expiryDuration := time.Duration(tokenResp.ExpiresIn)*time.Second - tokenRefreshMargin
-	if expiryDuration < 30*time.Second {
-		expiryDuration = 30 * time.Second
-	}
-	c.tokenExpiry = time.Now().Add(expiryDuration)
-
-	slog.Debug("teams: acquired Azure AD token", "expires_in", tokenResp.ExpiresIn)
-	return c.token, nil
+	return tokenResp.AccessToken, tokenResp.ExpiresIn, nil
 }
 
 // resolveTokenURL returns the OAuth2 token endpoint based on tenant type.
