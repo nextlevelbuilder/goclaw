@@ -136,8 +136,8 @@ func TestCallClassifyWithRetry_AllFail(t *testing.T) {
 		t.Errorf("Error should mention exhausted retries: %v", err)
 	}
 
-	if provider.calls != enrichMaxRetries {
-		t.Errorf("Expected %d calls, got %d", enrichMaxRetries, provider.calls)
+	if provider.calls != classifyMaxRetries {
+		t.Errorf("Expected %d calls, got %d", classifyMaxRetries, provider.calls)
 	}
 }
 
@@ -174,22 +174,22 @@ func TestCallClassifyWithRetry_ContextCancellation(t *testing.T) {
 // TestCallClassifyWithRetry_RetriesAndBackoffs verifies retry timeouts and backoffs escalate.
 func TestCallClassifyWithRetry_RetriesAndBackoffs(t *testing.T) {
 	// Verify first backoff is 0 (no backoff on first attempt)
-	if enrichRetryBackoffs[0] != 0 {
-		t.Errorf("First backoff should be 0, got %v", enrichRetryBackoffs[0])
+	if classifyBackoffs[0] != 0 {
+		t.Errorf("First backoff should be 0, got %v", classifyBackoffs[0])
 	}
 
 	// Verify backoffs escalate for retry attempts
-	if enrichRetryBackoffs[1] == 0 || enrichRetryBackoffs[2] == 0 {
-		t.Errorf("Backoffs should escalate: %v", enrichRetryBackoffs)
+	if classifyBackoffs[1] == 0 || classifyBackoffs[2] == 0 {
+		t.Errorf("Backoffs should escalate: %v", classifyBackoffs)
 	}
 
-	if enrichRetryBackoffs[1] >= enrichRetryBackoffs[2] {
-		t.Errorf("Backoffs should increase: %v", enrichRetryBackoffs)
+	if classifyBackoffs[1] >= classifyBackoffs[2] {
+		t.Errorf("Backoffs should increase: %v", classifyBackoffs)
 	}
 
 	// Verify timeouts escalate
-	if enrichRetryTimeouts[0] >= enrichRetryTimeouts[1] || enrichRetryTimeouts[1] >= enrichRetryTimeouts[2] {
-		t.Errorf("Timeouts should escalate: %v", enrichRetryTimeouts)
+	if classifyTimeouts[0] >= classifyTimeouts[1] || classifyTimeouts[1] >= classifyTimeouts[2] {
+		t.Errorf("Timeouts should escalate: %v", classifyTimeouts)
 	}
 }
 

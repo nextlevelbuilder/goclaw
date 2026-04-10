@@ -68,17 +68,8 @@ func RescanWorkspace(ctx context.Context, params RescanParams, vs store.VaultSto
 			agentIDStr = *agentID
 		}
 
-		// Use full workspace-relative path for DB storage and enrichment.
-		// This preserves the real filesystem path (e.g. "teams/{uuid}/system/file.md")
-		// so enrichment worker can locate files via filepath.Join(workspace, path).
-		relPath := entry.RelPath
-
 		// Check if document already exists with same hash.
-		// Fallback: also check old stripped path (pre-fix records stored without prefix).
-		existing, _ := vs.GetDocument(ctx, params.TenantID, agentIDStr, relPath)
-		if existing == nil && strippedPath != relPath {
-			existing, _ = vs.GetDocument(ctx, params.TenantID, agentIDStr, strippedPath)
-		}
+		existing, _ := vs.GetDocument(ctx, params.TenantID, agentIDStr, strippedPath)
 		if existing != nil && existing.ContentHash == hash {
 			result.Unchanged++
 			continue
@@ -89,14 +80,14 @@ func RescanWorkspace(ctx context.Context, params RescanParams, vs store.VaultSto
 			AgentID:     agentID,
 			TeamID:      teamID,
 			Scope:       scope,
-			Path:        relPath,
-			Title:       InferTitle(relPath),
-			DocType:     InferDocType(relPath),
+			Path:        strippedPath,
+			Title:       InferTitle(strippedPath),
+			DocType:     InferDocType(strippedPath),
 			ContentHash: hash,
 		}
 
 		if err := vs.UpsertDocument(ctx, doc); err != nil {
-			slog.Warn("vault.rescan: upsert", "path", relPath, "err", err)
+			slog.Warn("vault.rescan: upsert", "path", entry.RelPath, "err", err)
 			result.Errors++
 			continue
 		}
@@ -120,7 +111,7 @@ func RescanWorkspace(ctx context.Context, params RescanParams, vs store.VaultSto
 					DocID:       doc.ID,
 					TenantID:    params.TenantID,
 					AgentID:     agentIDStr,
-					Path:        relPath,
+					Path:        strippedPath,
 					ContentHash: hash,
 					Workspace:   params.Workspace,
 				},

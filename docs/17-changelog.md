@@ -34,6 +34,13 @@ All notable changes to GoClaw Gateway are documented here. Format follows [Keep 
 
 ### Added
 
+#### Native Web Search Provider Stack (2026-04-10)
+- **Optional Exa + Tavily backends**: `web_search` now supports Exa and Tavily alongside Brave Search and DuckDuckGo without importing the CCS hook/MCP runtime model
+- **Configurable provider order**: admins can rank `exa`, `tavily`, `brave`, and `duckduckgo`; enabled providers omitted from the list are appended automatically so DuckDuckGo stays the fallback
+- **Secret parity with Brave**: Exa and Tavily API keys now persist through `config_secrets` with the same masked-config behavior as Brave
+- **Live reload + startup sync**: DB-backed search-provider secrets and order changes now rebuild the running `web_search` tool on boot and after config saves
+- **Provider caps honored**: per-provider `max_results` settings now clamp actual provider requests instead of being inert UI/config fields
+
 #### Episodic Memory Weighted Scoring — Dreaming Enhancement (2026-04-10, Phase 10)
 - **Recall signal tracking**: `episodic_summaries` table gains 3 columns: `recall_count INT`, `recall_score DOUBLE PRECISION`, `last_recalled_at TIMESTAMPTZ` to track usefulness of each memory
 - **ComputeRecallScore formula**: 4-component running average (30% frequency + 35% relevance + 20% recency + 15% freshness, 14-day half-life) quantifies memory value

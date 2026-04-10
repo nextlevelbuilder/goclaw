@@ -12,7 +12,6 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
-	"github.com/nextlevelbuilder/goclaw/internal/vault"
 )
 
 // gatewayDeps holds shared dependencies used across the extracted gateway setup functions.
@@ -28,7 +27,6 @@ type gatewayDeps struct {
 	toolsReg         *tools.Registry
 	skillsLoader     *skills.Loader // optional: enables skill creation in evolution approval
 	permCache        *cache.PermissionCache // nil if no tenant store; closed on shutdown to stop sweep goroutines
-	enrichProgress   *vault.EnrichProgress  // nil if enrichment worker not registered
 	workspace        string
 	dataDir          string
 	domainBus        eventbus.DomainEventBus

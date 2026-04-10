@@ -4,6 +4,7 @@ import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
 import { EdgeArrowProgram } from "sigma/rendering";
 import forceAtlas2 from "graphology-layout-forceatlas2";
 import noverlap from "graphology-layout-noverlap";
+import louvain from "graphology-communities-louvain";
 import type Graph from "graphology";
 import { useUiStore } from "@/stores/use-ui-store";
 import { SIGMA_SETTINGS } from "./graph-utils";
@@ -34,12 +35,12 @@ function useThemeColors() {
   return {
     isDark,
     labelColor: isDark ? "#e2e8f0" : "#1e293b",
-    // Base edge color — visible but not dominant
-    edgeColor: isDark ? "#47556966" : "#94a3b8cc",
-    // Dim color for non-active edges
-    dimEdgeColor: isDark ? "#47556933" : "#cbd5e166",
-    // Highlight for active neighborhood edges
-    highlightEdgeColor: isDark ? "#a1a1aa" : "#64748b",
+    // Soft base edge color — lighter than borders
+    edgeColor: isDark ? "#47556966" : "#d1d5db99",
+    // Even lighter dim color
+    dimEdgeColor: isDark ? "#47556933" : "#e5e7eb66",
+    // Softer highlight (not too dark)
+    highlightEdgeColor: isDark ? "#a1a1aa" : "#9ca3af",
   };
 }
 
@@ -75,54 +76,97 @@ export function SigmaGraphContainer({
   useEffect(() => {
     if (!containerRef.current || graph.order === 0) return;
 
-    // Unified adaptive FA2 layout — no density branching.
-    // Params scale with orphan ratio (disconnected nodes / total nodes).
+    // Step 1: Detect communities with Louvain, then seed nodes spatially per community.
+    // This breaks the "ring" pattern that FA2 + circular init produces on sparse graphs.
     if (graph.order > 1) {
-      // Random disc init — uniform area distribution for all graph types.
-      const spread = Math.sqrt(graph.order) * 20;
-      const nodes = graph.nodes();
-      for (let i = 0; i < nodes.length; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const r = Math.sqrt(Math.random()) * spread;
-        graph.setNodeAttribute(nodes[i], "x", Math.cos(angle) * r);
-        graph.setNodeAttribute(nodes[i], "y", Math.sin(angle) * r);
+      // Detect communities — Louvain returns { nodeId: communityId }
+      const communities = louvain(graph, { resolution: 1 });
+
+      // Group nodes by community
+      const communityGroups = new Map<number, string[]>();
+      for (const node of graph.nodes()) {
+        const c = communities[node] ?? 0;
+        if (!communityGroups.has(c)) communityGroups.set(c, []);
+        communityGroups.get(c)!.push(node);
       }
 
-      // Orphan ratio drives adaptive parameters:
-      // High orphan → stronger gravity (pull orphans to center), tighter layout
-      // Low orphan  → link forces dominate, more spread for cluster readability
-      let orphanCount = 0;
-      for (const node of nodes) {
-        if (graph.degree(node) === 0) orphanCount++;
-      }
-      const orphanRatio = orphanCount / graph.order;
-      const gravity = 0.5 + orphanRatio * 2.0;
-      const scalingRatio = 4.0 - orphanRatio * 2.0;
-      const iterations = graph.order < 100 ? 500 : graph.order < 500 ? 300 : 200;
+      // Sort communities by size (big ones placed first / more central)
+      const communityIds = Array.from(communityGroups.keys())
+        .sort((a, b) => communityGroups.get(b)!.length - communityGroups.get(a)!.length);
+      const numCommunities = communityIds.length;
 
+      // Cell size derived from the LARGEST community — smaller clusters get same cell
+      // but will pack tighter via noverlap post-processing.
+      const maxCommunitySize = Math.max(
+        ...Array.from(communityGroups.values(), (nodes) => nodes.length),
+      );
+      // Each node contributes ~12 units of space (node size ~5-12 + margin)
+      const cellSize = Math.max(Math.sqrt(maxCommunitySize) * 28, 140);
+
+      // Grid dimensions — aim for slightly wide aspect (4:3)
+      const cols = Math.ceil(Math.sqrt(numCommunities * 1.4));
+      const rows = Math.ceil(numCommunities / cols);
+      const gridWidth = cols * cellSize;
+      const gridHeight = rows * cellSize;
+
+      // Deterministic pseudo-random for jitter (breaks grid rigidity)
+      const jitter = (seed: number) => {
+        const x = Math.sin(seed * 9999) * 10000;
+        return (x - Math.floor(x)) - 0.5;
+      };
+
+      communityIds.forEach((cId, idx) => {
+        const nodesInCommunity = communityGroups.get(cId)!;
+        const col = idx % cols;
+        const row = Math.floor(idx / cols);
+        // Cell center with slight jitter
+        const cx = col * cellSize - gridWidth / 2 + cellSize / 2 + jitter(idx) * cellSize * 0.2;
+        const cy = row * cellSize - gridHeight / 2 + cellSize / 2 + jitter(idx + 1000) * cellSize * 0.2;
+        // Local radius: scales with community size — bigger community = bigger circle
+        // Uses sqrt so large clusters don't balloon out of proportion
+        const localRadius = Math.max(Math.sqrt(nodesInCommunity.length) * 12, 25);
+
+        nodesInCommunity.forEach((nodeId, i) => {
+          const localAngle = (i / nodesInCommunity.length) * Math.PI * 2;
+          const jitterR = localRadius * (0.6 + Math.abs(jitter(i + idx * 100)) * 0.7);
+          const x = cx + Math.cos(localAngle) * jitterR;
+          const y = cy + Math.sin(localAngle) * jitterR;
+          graph.setNodeAttribute(nodeId, "x", x);
+          graph.setNodeAttribute(nodeId, "y", y);
+        });
+      });
+
+      // Step 2: Run FA2 with community-aware settings.
+      // Since we have community seeds, FA2 just refines (doesn't completely re-layout).
+      const iterations = graph.order < 100 ? 250 : graph.order < 500 ? 180 : 100;
       forceAtlas2.assign(graph, {
         iterations,
         settings: {
-          linLogMode: true,
-          outboundAttractionDistribution: true,
-          gravity,
-          scalingRatio,
+          // Standard FA2 (NOT linLogMode — causes ring collapse)
+          linLogMode: false,
+          outboundAttractionDistribution: false,
+          // Moderate gravity — pulls clusters slightly closer (prevents drift)
+          gravity: 0.15,
+          // Moderate repulsion — less aggressive spacing
+          scalingRatio: 8,
           adjustSizes: true,
-          strongGravityMode: true,
+          strongGravityMode: false,
           slowDown: 8,
-          barnesHutOptimize: graph.order > 100,
+          barnesHutOptimize: graph.order > 300,
           edgeWeightInfluence: 0,
         },
       });
 
-      // Noverlap only for connected-heavy graphs (prevents overlap in dense clusters).
-      // Skip for high-orphan graphs to avoid grid artifacts.
-      if (orphanRatio < 0.3) {
-        noverlap.assign(graph, {
-          maxIterations: 30,
-          settings: { margin: 2, ratio: 1.02, speed: 3, gridSize: 20 },
-        });
-      }
+      // Step 3: Noverlap post-process — push apart any remaining overlaps (tight)
+      noverlap.assign(graph, {
+        maxIterations: 50,
+        settings: {
+          margin: 3,
+          ratio: 1.02,
+          speed: 3,
+          gridSize: 20,
+        },
+      });
     }
 
     const edgePrograms: Record<string, typeof EdgeArrowProgram> = {

@@ -2,15 +2,14 @@ import Graph from "graphology";
 import type { VaultDocument, VaultLink } from "@/types/vault";
 import { getNodeSize, truncateMiddle } from "@/components/graph/graph-utils";
 
-// Colors per vault document type — dominant types (note 44%, media 54%) use
-// softer tones; rare types use vivid accents for visibility.
+// Colors per vault document type
 export const VAULT_TYPE_COLORS: Record<string, string> = {
-  context: "#6366f1",  // indigo (rare, vivid)
-  memory: "#8b5cf6",   // violet
-  note: "#14b8a6",     // teal (dominant, soft)
+  context: "#3b82f6",  // blue
+  memory: "#8b5cf6",   // purple
+  note: "#eab308",     // yellow
   skill: "#22c55e",    // green
-  episodic: "#f59e0b", // amber
-  media: "#ec4899",    // pink (dominant, soft)
+  episodic: "#f97316", // orange
+  media: "#ef4444",    // red
 };
 const DEFAULT_COLOR = "#9ca3af";
 

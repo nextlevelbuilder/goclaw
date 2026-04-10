@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -95,6 +96,11 @@ type ResolverDeps struct {
 
 	// Memory store for extractive memory fallback
 	MemoryStore store.MemoryStore
+
+	// Tenant-scoped config sources for tools that depend on system_configs + config_secrets.
+	BaseConfig         *config.Config
+	SystemConfigStore  store.SystemConfigStore
+	ConfigSecretsStore store.ConfigSecretsStore
 
 	// V3 evolution metrics store
 	EvolutionMetricsStore store.EvolutionMetricsStore
@@ -277,6 +283,18 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 		}
 
 		toolsReg := deps.Tools
+
+		tenantCfg := resolveTenantConfig(ctx, deps, ag.TenantID)
+		if tenantCfg != nil {
+			if toolsReg == deps.Tools {
+				toolsReg = deps.Tools.Clone()
+			}
+			if tenantWebSearch := tools.NewWebSearchTool(tools.WebSearchConfigFromConfig(tenantCfg)); tenantWebSearch != nil {
+				toolsReg.Register(tenantWebSearch)
+			} else {
+				toolsReg.Unregister("web_search")
+			}
+		}
 
 		// Per-agent MCP servers: connect to granted MCP servers and register their tools.
 		// Uses a per-agent MCP Manager that queries the MCPServerStore for accessible servers.
@@ -482,6 +500,41 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 		slog.Info("resolved agent from DB", "agent", agentKey, "model", ag.Model, "provider", ag.Provider)
 		return loop, nil
 	}
+}
+
+func resolveTenantConfig(ctx context.Context, deps ResolverDeps, tenantID uuid.UUID) *config.Config {
+	if deps.BaseConfig == nil {
+		return nil
+	}
+
+	data, err := json.Marshal(deps.BaseConfig)
+	if err != nil {
+		return nil
+	}
+	cloned := config.Default()
+	if err := json.Unmarshal(data, cloned); err != nil {
+		return nil
+	}
+
+	scopedCtx := ctx
+	if tenantID != uuid.Nil {
+		scopedCtx = store.WithTenantID(scopedCtx, tenantID)
+	}
+
+	if deps.SystemConfigStore != nil {
+		if values, err := deps.SystemConfigStore.List(scopedCtx); err == nil && len(values) > 0 {
+			cloned.ApplySystemConfigs(values)
+		}
+	}
+
+	if deps.ConfigSecretsStore != nil {
+		if secrets, err := deps.ConfigSecretsStore.GetAll(scopedCtx); err == nil && len(secrets) > 0 {
+			cloned.ApplyDBSecrets(secrets)
+		}
+	}
+
+	cloned.ApplyEnvOverrides()
+	return cloned
 }
 
 // InvalidateAgent removes an agent from the router cache, forcing re-resolution.

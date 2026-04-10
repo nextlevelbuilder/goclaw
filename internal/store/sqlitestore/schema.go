@@ -15,7 +15,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 15
+const SchemaVersion = 14
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -404,14 +404,6 @@ CREATE INDEX IF NOT EXISTS idx_vault_docs_agent_scope ON vault_documents(agent_i
 CREATE INDEX IF NOT EXISTS idx_vault_docs_type ON vault_documents(agent_id, doc_type);
 CREATE INDEX IF NOT EXISTS idx_vault_docs_hash ON vault_documents(content_hash);
 CREATE INDEX IF NOT EXISTS idx_vault_docs_team ON vault_documents(team_id);`,
-
-	// Version 14 → 15: cron_jobs UNIQUE constraint on (agent_id, tenant_id, name).
-	// Dedup first: keep one row per combo (SQLite has no DISTINCT ON — use GROUP BY + MIN).
-	14: `DELETE FROM cron_jobs WHERE id NOT IN (
-  SELECT MIN(id) FROM cron_jobs GROUP BY agent_id, tenant_id, name
-);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_cron_jobs_agent_tenant_name
-  ON cron_jobs(agent_id, tenant_id, name);`,
 }
 
 // EnsureSchema creates tables if they don't exist and applies incremental migrations.

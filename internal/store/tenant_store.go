@@ -67,9 +67,6 @@ type TenantStore interface {
 	ListUsers(ctx context.Context, tenantID uuid.UUID) ([]TenantUserData, error)
 	ListUserTenants(ctx context.Context, userID string) ([]TenantUserData, error)
 
-	// GetTenantsByIDs returns tenants matching the given UUIDs in a single query.
-	GetTenantsByIDs(ctx context.Context, ids []uuid.UUID) ([]TenantData, error)
-
 	// ResolveUserTenant returns the tenant_id for a user.
 	// If user belongs to multiple tenants, returns the first (by created_at).
 	// If no membership, returns MasterTenantID (backward compat).

@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
 // syncSystemConfigs upserts non-secret config values into the system_configs table.
@@ -82,6 +84,12 @@ func seedConfigForContext(ctx context.Context, sc store.SystemConfigStore, cfg *
 			set(key, fmt.Sprintf("%t", *val))
 		}
 	}
+	setBoolExact := func(key string, val bool) {
+		set(key, fmt.Sprintf("%t", val))
+	}
+	setIntExact := func(key string, val int) {
+		set(key, fmt.Sprintf("%d", val))
+	}
 
 	// Embedding
 	if m := cfg.Agents.Defaults.Memory; m != nil {
@@ -114,6 +122,15 @@ func seedConfigForContext(ctx context.Context, sc store.SystemConfigStore, cfg *
 	set("tools.profile", cfg.Tools.Profile)
 	setInt("tools.rate_limit_per_hour", cfg.Tools.RateLimitPerHour)
 	setBool("tools.scrub_credentials", cfg.Tools.ScrubCredentials)
+	set("tools.web.provider_order", strings.Join(tools.NormalizeWebSearchProviderOrder(cfg.Tools.Web.ProviderOrder), ","))
+	setBoolExact("tools.web.exa.enabled", cfg.Tools.Web.Exa.Enabled)
+	setIntExact("tools.web.exa.max_results", cfg.Tools.Web.Exa.MaxResults)
+	setBoolExact("tools.web.tavily.enabled", cfg.Tools.Web.Tavily.Enabled)
+	setIntExact("tools.web.tavily.max_results", cfg.Tools.Web.Tavily.MaxResults)
+	setBoolExact("tools.web.brave.enabled", cfg.Tools.Web.Brave.Enabled)
+	setIntExact("tools.web.brave.max_results", cfg.Tools.Web.Brave.MaxResults)
+	setBoolExact("tools.web.duckduckgo.enabled", cfg.Tools.Web.DuckDuckGo.Enabled)
+	setIntExact("tools.web.duckduckgo.max_results", cfg.Tools.Web.DuckDuckGo.MaxResults)
 
 	// TTS
 	set("tts.provider", cfg.Tts.Provider)

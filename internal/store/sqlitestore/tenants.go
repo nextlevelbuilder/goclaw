@@ -7,7 +7,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -85,33 +84,6 @@ func (s *SQLiteTenantStore) ListTenants(ctx context.Context) ([]store.TenantData
 		result = append(result, r.toTenantData())
 	}
 	return result, nil
-}
-
-func (s *SQLiteTenantStore) GetTenantsByIDs(ctx context.Context, ids []uuid.UUID) ([]store.TenantData, error) {
-	if len(ids) == 0 {
-		return nil, nil
-	}
-	const chunkSize = 500
-	var all []store.TenantData
-	for start := 0; start < len(ids); start += chunkSize {
-		end := min(start+chunkSize, len(ids))
-		chunk := ids[start:end]
-		ph := make([]string, len(chunk))
-		args := make([]any, len(chunk))
-		for i, id := range chunk {
-			ph[i] = "?"
-			args[i] = id.String()
-		}
-		q := `SELECT ` + tenantSelectCols + ` FROM tenants WHERE id IN (` + strings.Join(ph, ",") + `)`
-		var rows []tenantRow
-		if err := pkgSqlxDB.SelectContext(ctx, &rows, q, args...); err != nil {
-			return nil, err
-		}
-		for _, r := range rows {
-			all = append(all, r.toTenantData())
-		}
-	}
-	return all, nil
 }
 
 func (s *SQLiteTenantStore) UpdateTenant(ctx context.Context, id uuid.UUID, updates map[string]any) error {

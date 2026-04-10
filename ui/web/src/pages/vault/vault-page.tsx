@@ -7,7 +7,6 @@ import { useAgents } from "@/pages/agents/hooks/use-agents";
 import { useTeams } from "@/pages/teams/hooks/use-teams";
 import { useIsMobile } from "@/hooks/use-media-query";
 import { useVaultDocuments, useVaultGraphData, useRescanWorkspace } from "./hooks/use-vault";
-import { useEnrichmentProgress } from "./hooks/use-enrichment-progress";
 import { VaultDocumentSidebar } from "./vault-document-sidebar";
 import { VaultSearchDialog } from "./vault-search-dialog";
 import { VaultCreateDialog } from "./vault-create-dialog";
@@ -41,8 +40,6 @@ export function VaultPage() {
   const [page, setPage] = useState(0);
 
   const { rescan, isPending: rescanPending } = useRescanWorkspace();
-  const enrichment = useEnrichmentProgress();
-  const enriching = enrichment?.running ?? false;
 
   const { documents, total, loading } = useVaultDocuments(selectedAgent, {
     teamId: selectedTeam || undefined,
@@ -146,42 +143,26 @@ export function VaultPage() {
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button size="sm" variant="outline" onClick={() => rescan()} disabled={rescanPending || enriching}>
-                  {(rescanPending || enriching) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderSync className="h-3.5 w-3.5" />}
+                <Button size="sm" variant="outline" onClick={() => rescan()} disabled={rescanPending}>
+                  {rescanPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderSync className="h-3.5 w-3.5" />}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>{enriching ? t("enriching", "Enriching documents...") : t("rescanTooltip", "Rescan workspace")}</TooltipContent>
+              <TooltipContent>{t("rescanTooltip", "Rescan workspace")}</TooltipContent>
             </Tooltip>
           </TooltipProvider>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
                 <span>
-                  <Button size="sm" onClick={() => setCreateOpen(true)}>
+                  <Button size="sm" onClick={() => setCreateOpen(true)} disabled={!selectedAgent}>
                     <Plus className="h-3.5 w-3.5" />
                   </Button>
                 </span>
               </TooltipTrigger>
+              {!selectedAgent && <TooltipContent>{t("selectAgentFirst", "Select an agent first")}</TooltipContent>}
             </Tooltip>
           </TooltipProvider>
         </div>
-
-        {/* Enrichment progress bar */}
-        {enrichment && enrichment.total > 0 && (
-          <div className="px-3 py-1.5 flex items-center gap-2 text-xs text-muted-foreground">
-            <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
-              <div
-                className="h-full bg-primary rounded-full transition-all duration-300"
-                style={{ width: `${Math.round((enrichment.done / enrichment.total) * 100)}%` }}
-              />
-            </div>
-            <span className="shrink-0">
-              {enrichment.running
-                ? `${t("enriching", "Enriching")} ${enrichment.done}/${enrichment.total}`
-                : t("enrichComplete", "Enrichment complete")}
-            </span>
-          </div>
-        )}
 
         {/* Graph — takes full remaining height */}
         <div className="flex-1 min-h-0 relative">
@@ -204,7 +185,7 @@ export function VaultPage() {
           onSelectResult={(doc) => { setDetailDoc(doc); setSelectedDocId(doc.id); }}
         />
       )}
-      <VaultCreateDialog open={createOpen} onOpenChange={setCreateOpen} defaultAgentId={selectedAgent} defaultTeamId={selectedTeam} />
+      {selectedAgent && <VaultCreateDialog agentId={selectedAgent} open={createOpen} onOpenChange={setCreateOpen} />}
 
       {/* Detail dialog for all document views */}
       <Suspense fallback={null}>

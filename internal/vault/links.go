@@ -48,7 +48,7 @@ func ExtractWikilinks(content string) []WikilinkMatch {
 }
 
 // ResolveWikilinkTarget finds a vault_document matching the wikilink target.
-// Strategy: exact path -> path+.md -> basename DB query -> nil.
+// Strategy: exact path -> path+.md -> basename match -> nil.
 func ResolveWikilinkTarget(ctx context.Context, vs store.VaultStore, target, tenantID, agentID string) (*store.VaultDocument, error) {
 	// 1. Exact path match
 	doc, err := vs.GetDocument(ctx, tenantID, agentID, target)
@@ -64,17 +64,20 @@ func ResolveWikilinkTarget(ctx context.Context, vs store.VaultStore, target, ten
 		}
 	}
 
-	// 3. Basename search via targeted DB query (replaces ListDocuments N+1).
-	targetBase := filepath.Base(target)
-	doc, err = vs.GetDocumentByBasename(ctx, tenantID, agentID, targetBase)
-	if err == nil && doc != nil {
-		return doc, nil
+	// 3. Basename search: list all docs and find by basename
+	docs, err := vs.ListDocuments(ctx, tenantID, agentID, store.VaultListOptions{Limit: 500})
+	if err != nil {
+		return nil, err
 	}
-	// Try with .md suffix.
-	if !strings.HasSuffix(targetBase, ".md") {
-		doc, err = vs.GetDocumentByBasename(ctx, tenantID, agentID, targetBase+".md")
-		if err == nil && doc != nil {
-			return doc, nil
+	targetBase := strings.ToLower(filepath.Base(target))
+	targetBaseMD := targetBase
+	if !strings.HasSuffix(targetBaseMD, ".md") {
+		targetBaseMD = targetBase + ".md"
+	}
+	for i := range docs {
+		base := strings.ToLower(filepath.Base(docs[i].Path))
+		if base == targetBase || base == targetBaseMD {
+			return &docs[i], nil
 		}
 	}
 
@@ -96,8 +99,7 @@ func SyncDocLinks(ctx context.Context, vs store.VaultStore, doc *store.VaultDocu
 		return err
 	}
 
-	// Resolve all wikilinks, then batch-create links in a single call.
-	var links []store.VaultLink
+	// Resolve and create new links
 	for _, m := range matches {
 		target, err := ResolveWikilinkTarget(ctx, vs, m.Target, tenantID, agentID)
 		if err != nil {
@@ -108,15 +110,15 @@ func SyncDocLinks(ctx context.Context, vs store.VaultStore, doc *store.VaultDocu
 			slog.Debug("vault.link_unresolved", "target", m.Target)
 			continue
 		}
-		links = append(links, store.VaultLink{
+		link := &store.VaultLink{
 			FromDocID: doc.ID,
 			ToDocID:   target.ID,
 			LinkType:  "wikilink",
 			Context:   m.Context,
-		})
+		}
+		if err := vs.CreateLink(ctx, link); err != nil {
+			slog.Warn("vault.create_link", "from", doc.Path, "to", target.Path, "err", err)
+		}
 	}
-	if len(links) == 0 {
-		return nil
-	}
-	return vs.CreateLinks(ctx, links)
+	return nil
 }

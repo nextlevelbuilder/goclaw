@@ -118,7 +118,7 @@
       "list_files": "列出工作区中指定路径下的文件和目录",
       "edit": "对现有文件应用搜索替换编辑，无需重写整个文件",
       "exec": "在工作区中执行Shell命令并返回stdout/stderr",
-      "web_search": "使用搜索引擎（Brave或DuckDuckGo）在网上搜索信息",
+      "web_search": "使用 Exa、Tavily、Brave Search 或 DuckDuckGo 搜索网络信息",
       "web_fetch": "获取网页或API端点并提取文本内容",
       "memory_search": "使用语义相似度搜索Agent的长期记忆",
       "memory_get": "按文件路径检索特定记忆文档",

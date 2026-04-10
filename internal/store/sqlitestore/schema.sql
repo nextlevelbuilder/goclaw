@@ -482,7 +482,6 @@ CREATE INDEX IF NOT EXISTS idx_cron_jobs_user_id ON cron_jobs(user_id);
 CREATE INDEX IF NOT EXISTS idx_cron_jobs_agent_user ON cron_jobs(agent_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_cron_jobs_team ON cron_jobs(team_id) WHERE team_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_cron_jobs_tenant ON cron_jobs(tenant_id);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_cron_jobs_agent_tenant_name ON cron_jobs(agent_id, tenant_id, name);
 
 -- ============================================================
 -- Table: cron_run_logs

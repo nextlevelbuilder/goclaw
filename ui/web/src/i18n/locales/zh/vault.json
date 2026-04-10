@@ -68,8 +68,6 @@
     "media": "Media"
   },
   "rescanTooltip": "重新扫描工作区",
-  "enriching": "处理中",
-  "enrichComplete": "处理完成",
   "rescanNew": "{{count}} 个新文件",
   "rescanUpdated": "{{count}} 个已更新",
   "rescanUnchanged": "{{count}} 个未变",
@@ -77,23 +75,7 @@
   "rescanNoFiles": "未发现新文件",
   "rescanBusy": "扫描正在进行中",
   "rescanError": "扫描失败",
-  "upload": {
-    "title": "上传到知识库",
-    "destination": "目标位置",
-    "shared": "共享",
-    "agent": "智能体",
-    "team": "团队",
-    "selectAgent": "选择智能体...",
-    "selectTeam": "选择团队...",
-    "dropzone": "拖放文件到此处或点击浏览",
-    "dropzoneHint": "仅限文本文件 (.md, .txt, .json, .yaml, .csv, ...)",
-    "files": "文件 ({{count}})",
-    "uploading": "上传中...",
-    "upload": "上传"
-  },
   "toast": {
-    "uploadSuccess": "已上传 {{count}} 个文件",
-    "uploadFailed": "上传失败",
     "docCreated": "文档已创建",
     "docCreateFailed": "创建文档失败",
     "docUpdated": "文档已更新",

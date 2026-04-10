@@ -3,7 +3,6 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"sync"
 	"time"
 
@@ -344,22 +343,6 @@ type CronConfig struct {
 	RetryBaseDelay  string `json:"retry_base_delay,omitempty"` // initial backoff delay (default "2s", Go duration)
 	RetryMaxDelay   string `json:"retry_max_delay,omitempty"`  // maximum backoff delay (default "30s", Go duration)
 	DefaultTimezone string `json:"default_timezone,omitempty"` // IANA timezone for cron expressions when not set per-job (e.g. "Asia/Ho_Chi_Minh")
-	JobTimeout      string `json:"job_timeout,omitempty"`      // max duration per cron job execution (default "10m", Go duration)
-}
-
-// DefaultJobTimeout is the fallback timeout for cron job execution.
-const DefaultJobTimeout = 10 * time.Minute
-
-// JobTimeoutDuration returns the configured job timeout or the default (10m).
-func (cc CronConfig) JobTimeoutDuration() time.Duration {
-	if cc.JobTimeout != "" {
-		d, err := time.ParseDuration(cc.JobTimeout)
-		if err == nil && d > 0 {
-			return d
-		}
-		slog.Warn("cron: invalid job_timeout, using default", "value", cc.JobTimeout, "default", DefaultJobTimeout)
-	}
-	return DefaultJobTimeout
 }
 
 // ToRetryConfig converts CronConfig to cron.RetryConfig with defaults applied.

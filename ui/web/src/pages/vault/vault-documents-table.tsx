@@ -80,7 +80,7 @@ export function VaultDocumentsTable({ documents, agents, loading, onSelect }: Pr
                   {doc.title || doc.path.split("/").pop()}
                 </td>
                 <td className="px-3 py-2 text-muted-foreground text-xs whitespace-nowrap">
-                  {doc.agent_id ? (agentMap.get(doc.agent_id) ?? doc.agent_id.slice(0, 8)) : t("scope.shared")}
+                  {agentMap.get(doc.agent_id) ?? doc.agent_id.slice(0, 8)}
                 </td>
                 <td className="px-3 py-2 text-muted-foreground max-w-[200px]" title={doc.path}>
                   <span className="font-mono text-xs">{truncatePath(doc.path)}</span>

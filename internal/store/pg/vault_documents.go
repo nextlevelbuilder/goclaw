@@ -176,57 +176,6 @@ func (s *PGVaultStore) GetDocumentByID(ctx context.Context, tenantID, id string)
 	return &doc, nil
 }
 
-// GetDocumentsByIDs returns documents matching the given IDs with tenant isolation.
-// Chunks by 500 to stay within PG param limits.
-func (s *PGVaultStore) GetDocumentsByIDs(ctx context.Context, tenantID string, docIDs []string) ([]store.VaultDocument, error) {
-	if len(docIDs) == 0 {
-		return nil, nil
-	}
-	tid := mustParseUUID(tenantID)
-	const chunkSize = 500
-	var all []store.VaultDocument
-	for start := 0; start < len(docIDs); start += chunkSize {
-		end := min(start+chunkSize, len(docIDs))
-		var scanned []vaultDocRow
-		if err := pkgSqlxDB.SelectContext(ctx, &scanned,
-			`SELECT id, tenant_id, agent_id, team_id, scope, custom_scope, path, title, doc_type, content_hash, summary, metadata, created_at, updated_at
-			 FROM vault_documents WHERE id = ANY($1) AND tenant_id = $2`,
-			pqStringArray(docIDs[start:end]), tid); err != nil {
-			return nil, err
-		}
-		for i := range scanned {
-			all = append(all, scanned[i].toVaultDocument())
-		}
-	}
-	return all, nil
-}
-
-// GetDocumentByBasename finds a document by path basename (case-insensitive).
-// Uses the stored generated column path_basename + index for fast lookup.
-func (s *PGVaultStore) GetDocumentByBasename(ctx context.Context, tenantID, agentID, basename string) (*store.VaultDocument, error) {
-	tid := mustParseUUID(tenantID)
-	q := `SELECT id, tenant_id, agent_id, team_id, scope, custom_scope, path, title, doc_type, content_hash, summary, metadata, created_at, updated_at
-		FROM vault_documents
-		WHERE tenant_id = $1 AND path_basename = lower($2)`
-	args := []any{tid, basename}
-	p := 3
-	if agentID != "" {
-		q += fmt.Sprintf(" AND agent_id = $%d", p)
-		args = append(args, mustParseUUID(agentID))
-	}
-	q += " LIMIT 1"
-	var row vaultDocRow
-	err := s.db.QueryRowContext(ctx, q, args...).Scan(
-		&row.ID, &row.TenantID, &row.AgentID, &row.TeamID, &row.Scope, &row.CustomScope,
-		&row.Path, &row.Title, &row.DocType, &row.ContentHash, &row.Summary,
-		&row.MetaJSON, &row.CreatedAt, &row.UpdatedAt)
-	if err != nil {
-		return nil, err
-	}
-	doc := row.toVaultDocument()
-	return &doc, nil
-}
-
 // DeleteDocument removes a vault document by tenant, agent, and path.
 // Empty agentID means no agent filter.
 // Team scoping via RunContext (same rules as GetDocument).

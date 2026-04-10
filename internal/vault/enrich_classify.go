@@ -6,18 +6,24 @@ import (
 	"log/slog"
 	"maps"
 	"slices"
+	"strings"
+	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 const (
+	classifyMaxRetries      = 3
 	classifyMaxTokens       = 1024
 	classifyTemperature     = 0.1
 	classifyCtxMaxLen       = 256 // max context string length stored in DB
 	classifySummaryMaxChars = 300 // max summary chars in prompt (validated: 300 for accuracy)
 	classifyMaxSourceDocs   = 20  // max source docs per classifyLinks call (validated: cap unbounded time)
 )
+
+var classifyTimeouts = [3]time.Duration{5 * time.Minute, 7 * time.Minute, 10 * time.Minute}
+var classifyBackoffs = [3]time.Duration{0, 2 * time.Second, 4 * time.Second}
 
 // validClassifyTypes — accepted link types stored directly in DB (aligned with UI vault-link-dialog.tsx).
 var validClassifyTypes = map[string]bool{
@@ -106,8 +112,10 @@ func (w *enrichWorker) classifyLinks(ctx context.Context, tenantID, agentID stri
 			if err := w.vault.DeleteDocLinksByTypes(ctx, tenantID, sourceDocID, allTypes); err != nil {
 				slog.Warn("vault.classify: delete_old", "doc", sourceDocID, "err", err)
 			}
-			if err := w.vault.CreateLinks(ctx, newLinks); err != nil {
-				slog.Debug("vault.classify: batch_create_links", "from", sourceDocID, "count", len(newLinks), "err", err)
+			for i := range newLinks {
+				if err := w.vault.CreateLink(ctx, &newLinks[i]); err != nil {
+					slog.Debug("vault.classify: create_link", "from", sourceDocID, "to", newLinks[i].ToDocID, "err", err)
+				}
 			}
 		}
 	}
@@ -123,10 +131,10 @@ func (w *enrichWorker) gatherCandidates(ctx context.Context, tenantID, agentID s
 			slog.Warn("vault.classify: find_similar", "doc", r.payload.DocID, "err", err)
 			continue
 		}
-		// Use title carried from Phase 0 batch-fetch (avoids per-doc refetch).
-		title := r.title
-		if title == "" {
-			title = r.payload.Path
+		// Derive title from path (payload has no Title field; neighbor docs have it from DB).
+		title := r.payload.Path
+		if doc, err := w.vault.GetDocumentByID(ctx, tenantID, r.payload.DocID); err == nil && doc != nil {
+			title = doc.Title
 		}
 		src := classifyDoc{
 			DocID:   r.payload.DocID,
@@ -163,14 +171,33 @@ func (w *enrichWorker) gatherCandidates(ctx context.Context, tenantID, agentID s
 	return out
 }
 
-// callClassifyWithRetry calls the LLM with shared retry logic.
+// callClassifyWithRetry calls the LLM with escalating timeouts and backoffs.
 func (w *enrichWorker) callClassifyWithRetry(ctx context.Context, system, user string) (string, error) {
-	return w.chatWithRetry(ctx, "vault.classify", providers.ChatRequest{
-		Messages: []providers.Message{
-			{Role: "system", Content: system},
-			{Role: "user", Content: user},
-		},
-		Model:   w.model,
-		Options: map[string]any{"max_tokens": classifyMaxTokens, "temperature": classifyTemperature},
-	})
+	var lastErr error
+	for attempt := range classifyMaxRetries {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-time.After(classifyBackoffs[attempt]):
+			}
+		}
+		cctx, cancel := context.WithTimeout(ctx, classifyTimeouts[attempt])
+		resp, err := w.provider.Chat(cctx, providers.ChatRequest{
+			Messages: []providers.Message{
+				{Role: "system", Content: system},
+				{Role: "user", Content: user},
+			},
+			Model:   w.model,
+			Options: map[string]any{"max_tokens": classifyMaxTokens, "temperature": classifyTemperature},
+		})
+		cancel()
+		if err != nil {
+			lastErr = err
+			slog.Warn("vault.classify: retry", "attempt", attempt+1, "err", err)
+			continue
+		}
+		return strings.TrimSpace(resp.Content), nil
+	}
+	return "", fmt.Errorf("classify exhausted %d retries: %w", classifyMaxRetries, lastErr)
 }

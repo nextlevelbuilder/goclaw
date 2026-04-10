@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"os"
 	"strings"
@@ -26,6 +27,8 @@ type lifecycleDeps struct {
 	sched             *scheduler.Scheduler
 	heartbeatTicker   *heartbeat.Ticker
 	quotaChecker      *channels.QuotaChecker
+	toolsReg          *tools.Registry
+	webSearchTool     *tools.WebSearchTool
 	webFetchTool      *tools.WebFetchTool
 	ttsTool           *tools.TtsTool
 	sandboxMgr        sandbox.Manager
@@ -70,6 +73,22 @@ func (d *gatewayDeps) runLifecycle(
 			return
 		}
 		d.pgStores.Cron.SetDefaultTimezone(updatedCfg.Cron.DefaultTimezone)
+	})
+
+	// Reload web_fetch domain policy on config changes via pub/sub.
+	d.msgBus.Subscribe("websearch-config-reload", func(evt bus.Event) {
+		if evt.Name != bus.TopicConfigChanged {
+			return
+		}
+		updatedCfg, ok := evt.Payload.(*config.Config)
+		if !ok {
+			return
+		}
+		resolvedCfg := resolveMasterConfig(updatedCfg, d.pgStores)
+		deps.webSearchTool = syncWebSearchToolRegistration(deps.toolsReg, deps.webSearchTool, resolvedCfg)
+		if d.agentRouter != nil {
+			d.agentRouter.InvalidateAll()
+		}
 	})
 
 	// Reload web_fetch domain policy on config changes via pub/sub.
@@ -224,4 +243,29 @@ func (d *gatewayDeps) runLifecycle(
 		slog.Error("gateway error", "error", err)
 		os.Exit(1)
 	}
+}
+
+func resolveMasterConfig(base *config.Config, stores *store.Stores) *config.Config {
+	data, err := json.Marshal(base)
+	if err != nil {
+		return base
+	}
+	cloned := config.Default()
+	if err := json.Unmarshal(data, cloned); err != nil {
+		return base
+	}
+
+	masterCtx := store.WithTenantID(context.Background(), store.MasterTenantID)
+	if stores != nil && stores.SystemConfigs != nil {
+		if values, err := stores.SystemConfigs.List(masterCtx); err == nil && len(values) > 0 {
+			cloned.ApplySystemConfigs(values)
+		}
+	}
+	if stores != nil && stores.ConfigSecrets != nil {
+		if secrets, err := stores.ConfigSecrets.GetAll(masterCtx); err == nil && len(secrets) > 0 {
+			cloned.ApplyDBSecrets(secrets)
+		}
+	}
+	cloned.ApplyEnvOverrides()
+	return cloned
 }

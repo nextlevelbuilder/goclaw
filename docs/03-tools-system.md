@@ -69,8 +69,14 @@ Context keys ensure each tool call receives the correct per-call values without 
 
 | Tool | Description |
 |------|-------------|
-| `web_search` | Search the web (Brave, DuckDuckGo) |
+| `web_search` | Search the web (Exa, Tavily, Brave Search, DuckDuckGo) |
 | `web_fetch` | Fetch and parse a URL |
+
+### Web Search Provider Config
+
+- `tools.web.provider_order` controls backend priority. Default order is `["exa", "tavily", "brave", "duckduckgo"]`, and any enabled provider omitted from the list is appended automatically so DuckDuckGo stays the fallback.
+- Provider-specific caps are `tools.web.exa.max_results`, `tools.web.tavily.max_results`, `tools.web.brave.max_results`, and `tools.web.duckduckgo.max_results`.
+- Exa and Tavily also require their own `api_key` values.
 
 ### Memory (group: `memory`)
 
@@ -727,7 +733,7 @@ The tool registry supports per-session rate limiting via `ToolRateLimiter`. When
 ### Web Tools
 | File | Purpose |
 |------|---------|
-| `internal/tools/web_search{,_brave,_ddg}.go` | web_search tool (Brave, DuckDuckGo) |
+| `internal/tools/web_search{,_exa,_tavily,_brave,_ddg}.go` | web_search tool (Exa, Tavily, Brave Search, DuckDuckGo) |
 | `internal/tools/web_fetch{,_convert,_convert_handlers,_convert_utils,_hidden}.go` | web_fetch tool: fetch, HTML→Markdown, element handlers |
 | `internal/tools/web_shared.go` | Shared web utilities |
 

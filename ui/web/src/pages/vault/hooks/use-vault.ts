@@ -92,15 +92,39 @@ export function useVaultSearchAll() {
   return { search };
 }
 
-/** Fetch all links for a set of vault documents (single batch query). */
+/** Fetch all links for a set of vault documents (for graph view). */
 export function useVaultAllLinks(agentId: string, documents: { id: string }[]) {
   const http = useHttp();
+
   const docIds = useMemo(() => documents.map((d) => d.id), [documents]);
 
   const { data, isLoading } = useQuery({
     queryKey: [VAULT_KEY, "all-links", agentId, [...docIds].sort().join(",")],
-    queryFn: () => http.post<VaultLink[]>("/v1/vault/links/batch", { doc_ids: docIds }),
-    enabled: docIds.length > 0,
+    queryFn: async () => {
+      if (docIds.length === 0) return [];
+      const allLinks: VaultLink[] = [];
+      const batchSize = 10;
+      for (let i = 0; i < docIds.length; i += batchSize) {
+        const batch = docIds.slice(i, i + batchSize);
+        const results = await Promise.all(
+          batch.map((id) =>
+            http.get<{ outlinks: VaultLink[]; backlinks: VaultLink[] }>(
+              `/v1/agents/${agentId}/vault/documents/${id}/links`,
+            ).catch(() => ({ outlinks: [], backlinks: [] })),
+          ),
+        );
+        for (const r of results) {
+          allLinks.push(...r.outlinks);
+        }
+      }
+      const seen = new Set<string>();
+      return allLinks.filter((l) => {
+        if (seen.has(l.id)) return false;
+        seen.add(l.id);
+        return true;
+      });
+    },
+    enabled: !!agentId && docIds.length > 0,
     staleTime: 60_000,
   });
 
@@ -133,11 +157,43 @@ export function useVaultGraphData(agentId: string, opts?: { teamId?: string }) {
     [documents],
   );
 
-  // Fetch all links in one batch query (single SQL, no N+1).
-  const docIds = useMemo(() => documents.map((d) => d.id), [documents]);
+  // Fetch links grouped by agent_id — works for both single-agent and all-agents mode.
   const { data: linksData, isLoading: linksLoading } = useQuery({
     queryKey: [VAULT_KEY, "graph-links", docIdKey],
-    queryFn: () => http.post<VaultLink[]>("/v1/vault/links/batch", { doc_ids: docIds }),
+    queryFn: async () => {
+      if (documents.length === 0) return [];
+      // Group doc IDs by agent_id
+      const byAgent = new Map<string, string[]>();
+      for (const doc of documents) {
+        const aid = doc.agent_id;
+        if (!aid) continue;
+        if (!byAgent.has(aid)) byAgent.set(aid, []);
+        byAgent.get(aid)!.push(doc.id);
+      }
+
+      const allLinks: VaultLink[] = [];
+      for (const [aid, ids] of byAgent) {
+        const batchSize = 10;
+        for (let i = 0; i < ids.length; i += batchSize) {
+          const batch = ids.slice(i, i + batchSize);
+          const results = await Promise.all(
+            batch.map((id) =>
+              http.get<{ outlinks: VaultLink[]; backlinks: VaultLink[] }>(
+                `/v1/agents/${aid}/vault/documents/${id}/links`,
+              ).catch(() => ({ outlinks: [], backlinks: [] })),
+            ),
+          );
+          for (const r of results) allLinks.push(...r.outlinks);
+        }
+      }
+      // Dedup
+      const seen = new Set<string>();
+      return allLinks.filter((l) => {
+        if (seen.has(l.id)) return false;
+        seen.add(l.id);
+        return true;
+      });
+    },
     enabled: documents.length > 0,
     staleTime: 60_000,
   });
@@ -145,34 +201,22 @@ export function useVaultGraphData(agentId: string, opts?: { teamId?: string }) {
   return { documents, links: linksData ?? [], loading: docsLoading || linksLoading };
 }
 
-/** Enriched backlink with source doc metadata (from backend JOIN). */
-export interface VaultBacklink {
-  from_doc_id: string;
-  context: string;
-  title: string;
-  path: string;
-  team_id?: string;
-}
-
 /** Get links (outlinks + backlinks) for a vault document. */
-export function useVaultLinks(docId: string | null) {
+export function useVaultLinks(agentId: string, docId: string | null) {
   const http = useHttp();
 
   const { data, isLoading } = useQuery({
-    queryKey: [VAULT_KEY, "links", docId],
-    queryFn: () => http.get<{
-      outlinks: VaultLink[];
-      backlinks: VaultBacklink[];
-      doc_names: Record<string, string>;
-    }>(`/v1/vault/documents/${docId}/links`),
-    enabled: !!docId,
+    queryKey: [VAULT_KEY, "links", agentId, docId],
+    queryFn: () => http.get<{ outlinks: VaultLink[]; backlinks: VaultLink[] }>(
+      `/v1/agents/${agentId}/vault/documents/${docId}/links`,
+    ),
+    enabled: !!docId && !!agentId,
     placeholderData: (prev) => prev,
   });
 
   return {
     outlinks: data?.outlinks ?? [],
     backlinks: data?.backlinks ?? [],
-    docNames: data?.doc_names ?? {},
     loading: isLoading,
   };
 }

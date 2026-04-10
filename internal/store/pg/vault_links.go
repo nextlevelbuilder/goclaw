@@ -11,93 +11,6 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-// CreateLinks batch-inserts vault links with tenant validation.
-// Validates same-tenant boundary for all links, then multi-row INSERT.
-func (s *PGVaultStore) CreateLinks(ctx context.Context, links []store.VaultLink) error {
-	if len(links) == 0 {
-		return nil
-	}
-
-	// Collect all unique doc IDs for tenant validation.
-	docIDSet := make(map[string]struct{})
-	for _, l := range links {
-		docIDSet[l.FromDocID] = struct{}{}
-		docIDSet[l.ToDocID] = struct{}{}
-	}
-	docIDs := make([]string, 0, len(docIDSet))
-	for id := range docIDSet {
-		docIDs = append(docIDs, id)
-	}
-
-	// Batch-fetch tenant_id for all referenced docs.
-	type docMeta struct {
-		tenantID uuid.UUID
-		teamID   *uuid.UUID
-	}
-	docMap := make(map[string]docMeta, len(docIDs))
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, tenant_id, team_id FROM vault_documents WHERE id = ANY($1)`,
-		pqStringArray(docIDs))
-	if err != nil {
-		return fmt.Errorf("vault batch link: fetch docs: %w", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id, tid uuid.UUID
-		var teamID *uuid.UUID
-		if err := rows.Scan(&id, &tid, &teamID); err != nil {
-			return fmt.Errorf("vault batch link: scan doc: %w", err)
-		}
-		docMap[id.String()] = docMeta{tenantID: tid, teamID: teamID}
-	}
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("vault batch link: rows err: %w", err)
-	}
-
-	// Validate and build multi-row INSERT (chunk by 500).
-	const chunkSize = 500
-	var valid []store.VaultLink
-	for _, l := range links {
-		from, fromOK := docMap[l.FromDocID]
-		to, toOK := docMap[l.ToDocID]
-		if !fromOK || !toOK {
-			continue // skip if doc not found
-		}
-		if from.tenantID != to.tenantID {
-			continue // cross-tenant
-		}
-		if from.teamID != nil && to.teamID != nil && *from.teamID != *to.teamID {
-			continue // cross-team
-		}
-		valid = append(valid, l)
-	}
-
-	for start := 0; start < len(valid); start += chunkSize {
-		end := min(start+chunkSize, len(valid))
-		chunk := valid[start:end]
-		const paramsPerRow = 6 // id, from_doc_id, to_doc_id, link_type, context, created_at
-		args := make([]any, 0, len(chunk)*paramsPerRow)
-		ph := make([]string, 0, len(chunk))
-		now := time.Now().UTC()
-		for i, l := range chunk {
-			b := i * paramsPerRow
-			ph = append(ph, fmt.Sprintf("($%d,$%d,$%d,$%d,$%d,$%d)", b+1, b+2, b+3, b+4, b+5, b+6))
-			args = append(args,
-				uuid.Must(uuid.NewV7()),
-				mustParseUUID(l.FromDocID), mustParseUUID(l.ToDocID),
-				l.LinkType, l.Context, now,
-			)
-		}
-		q := `INSERT INTO vault_links (id, from_doc_id, to_doc_id, link_type, context, created_at)
-			VALUES ` + strings.Join(ph, ",") + `
-			ON CONFLICT (from_doc_id, to_doc_id, link_type) DO UPDATE SET context = EXCLUDED.context`
-		if _, err := s.db.ExecContext(ctx, q, args...); err != nil {
-			return fmt.Errorf("vault batch create links: %w", err)
-		}
-	}
-	return nil
-}
-
 // CreateLink inserts a vault link, updating context on conflict.
 // Validates same-tenant + same-team boundary before insert.
 func (s *PGVaultStore) CreateLink(ctx context.Context, link *store.VaultLink) error {
@@ -168,25 +81,6 @@ func (s *PGVaultStore) GetOutLinks(ctx context.Context, tenantID, docID string) 
 		JOIN vault_documents vd ON vl.from_doc_id = vd.id
 		WHERE vl.from_doc_id = $1 AND vd.tenant_id = $2
 		ORDER BY vl.created_at`, uid, tid)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	return scanVaultLinks(rows)
-}
-
-// GetOutLinksBatch returns all outlinks for multiple doc IDs in a single query.
-func (s *PGVaultStore) GetOutLinksBatch(ctx context.Context, tenantID string, docIDs []string) ([]store.VaultLink, error) {
-	if len(docIDs) == 0 {
-		return nil, nil
-	}
-	tid := mustParseUUID(tenantID)
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT vl.id, vl.from_doc_id, vl.to_doc_id, vl.link_type, vl.context, vl.created_at
-		FROM vault_links vl
-		JOIN vault_documents vd ON vl.from_doc_id = vd.id
-		WHERE vl.from_doc_id = ANY($1) AND vd.tenant_id = $2
-		ORDER BY vl.created_at`, pqStringArray(docIDs), tid)
 	if err != nil {
 		return nil, err
 	}

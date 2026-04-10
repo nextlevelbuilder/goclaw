@@ -5,8 +5,12 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"slices"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 )
 
 // Matching TS src/agents/tools/web-search.ts constants.
@@ -15,8 +19,24 @@ const (
 	maxSearchCount       = 10
 	searchTimeoutSeconds = 30
 	braveSearchEndpoint  = "https://api.search.brave.com/res/v1/web/search"
+	exaSearchEndpoint    = "https://api.exa.ai/search"
+	tavilySearchEndpoint = "https://api.tavily.com/search"
 	webSearchUserAgent   = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
+
+const (
+	searchProviderExa        = "exa"
+	searchProviderTavily     = "tavily"
+	searchProviderBrave      = "brave"
+	searchProviderDuckDuckGo = "duckduckgo"
+)
+
+var defaultSearchProviderOrder = []string{
+	searchProviderExa,
+	searchProviderTavily,
+	searchProviderBrave,
+	searchProviderDuckDuckGo,
+}
 
 // SearchProvider abstracts a web search backend.
 type SearchProvider interface {
@@ -68,30 +88,30 @@ func normalizeFreshness(value string) string {
 
 // WebSearchTool implements the web_search tool matching TS src/agents/tools/web-search.ts.
 type WebSearchTool struct {
+	mu        sync.RWMutex
 	providers []SearchProvider
 	cache     *webCache
 }
 
 // WebSearchConfig holds configuration for the web search tool.
 type WebSearchConfig struct {
-	BraveAPIKey     string
-	BraveEnabled    bool
-	BraveMaxResults int
-	DDGEnabled      bool
-	DDGMaxResults   int
-	CacheTTL        time.Duration
+	ProviderOrder    []string
+	ExaAPIKey        string
+	ExaEnabled       bool
+	ExaMaxResults    int
+	TavilyAPIKey     string
+	TavilyEnabled    bool
+	TavilyMaxResults int
+	BraveAPIKey      string
+	BraveEnabled     bool
+	BraveMaxResults  int
+	DDGEnabled       bool
+	DDGMaxResults    int
+	CacheTTL         time.Duration
 }
 
 func NewWebSearchTool(cfg WebSearchConfig) *WebSearchTool {
-	var providers []SearchProvider
-
-	// Priority: Brave > DuckDuckGo (matching TS)
-	if cfg.BraveEnabled && cfg.BraveAPIKey != "" {
-		providers = append(providers, newBraveSearchProvider(cfg.BraveAPIKey))
-	}
-	if cfg.DDGEnabled {
-		providers = append(providers, newDuckDuckGoSearchProvider())
-	}
+	providers := buildSearchProviders(cfg)
 
 	if len(providers) == 0 {
 		return nil
@@ -105,6 +125,82 @@ func NewWebSearchTool(cfg WebSearchConfig) *WebSearchTool {
 	return &WebSearchTool{
 		providers: providers,
 		cache:     newWebCache(defaultCacheMaxEntries, ttl),
+	}
+}
+
+func (t *WebSearchTool) UpdateConfig(cfg WebSearchConfig) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.providers = buildSearchProviders(cfg)
+	ttl := cfg.CacheTTL
+	if ttl <= 0 {
+		ttl = defaultCacheTTL
+	}
+	t.cache = newWebCache(defaultCacheMaxEntries, ttl)
+}
+
+func buildSearchProviders(cfg WebSearchConfig) []SearchProvider {
+	var providers []SearchProvider
+	for _, providerID := range NormalizeWebSearchProviderOrder(cfg.ProviderOrder) {
+		switch providerID {
+		case searchProviderExa:
+			if cfg.ExaEnabled && cfg.ExaAPIKey != "" {
+				providers = append(providers, newExaSearchProvider(cfg.ExaAPIKey, cfg.ExaMaxResults))
+			}
+		case searchProviderTavily:
+			if cfg.TavilyEnabled && cfg.TavilyAPIKey != "" {
+				providers = append(providers, newTavilySearchProvider(cfg.TavilyAPIKey, cfg.TavilyMaxResults))
+			}
+		case searchProviderBrave:
+			if cfg.BraveEnabled && cfg.BraveAPIKey != "" {
+				providers = append(providers, newBraveSearchProvider(cfg.BraveAPIKey, cfg.BraveMaxResults))
+			}
+		case searchProviderDuckDuckGo:
+			if cfg.DDGEnabled {
+				providers = append(providers, newDuckDuckGoSearchProvider(cfg.DDGMaxResults))
+			}
+		}
+	}
+	return providers
+}
+
+func NormalizeWebSearchProviderOrder(order []string) []string {
+	result := make([]string, 0, len(defaultSearchProviderOrder))
+	for _, raw := range order {
+		id := strings.ToLower(strings.TrimSpace(raw))
+		if id == searchProviderDuckDuckGo {
+			continue
+		}
+		if !slices.Contains(defaultSearchProviderOrder, id) || slices.Contains(result, id) {
+			continue
+		}
+		result = append(result, id)
+	}
+	for _, id := range defaultSearchProviderOrder {
+		if id == searchProviderDuckDuckGo {
+			continue
+		}
+		if !slices.Contains(result, id) {
+			result = append(result, id)
+		}
+	}
+	return append(result, searchProviderDuckDuckGo)
+}
+
+func WebSearchConfigFromConfig(cfg *config.Config) WebSearchConfig {
+	return WebSearchConfig{
+		ProviderOrder:    cfg.Tools.Web.ProviderOrder,
+		ExaEnabled:       cfg.Tools.Web.Exa.Enabled,
+		ExaAPIKey:        cfg.Tools.Web.Exa.APIKey,
+		ExaMaxResults:    cfg.Tools.Web.Exa.MaxResults,
+		TavilyEnabled:    cfg.Tools.Web.Tavily.Enabled,
+		TavilyAPIKey:     cfg.Tools.Web.Tavily.APIKey,
+		TavilyMaxResults: cfg.Tools.Web.Tavily.MaxResults,
+		BraveEnabled:     cfg.Tools.Web.Brave.Enabled,
+		BraveAPIKey:      cfg.Tools.Web.Brave.APIKey,
+		BraveMaxResults:  cfg.Tools.Web.Brave.MaxResults,
+		DDGEnabled:       cfg.Tools.Web.DuckDuckGo.Enabled,
+		DDGMaxResults:    cfg.Tools.Web.DuckDuckGo.MaxResults,
 	}
 }
 
@@ -175,16 +271,21 @@ func (t *WebSearchTool) Execute(ctx context.Context, args map[string]any) *Resul
 	}
 
 	// Check cache (scoped per channel to prevent cross-channel cache poisoning)
+	t.mu.RLock()
+	cache := t.cache
+	providers := append([]SearchProvider(nil), t.providers...)
+	t.mu.RUnlock()
+
 	channel := ToolChannelFromCtx(ctx)
 	cacheKey := fmt.Sprintf("%s:%s", channel, buildSearchCacheKey(params))
-	if cached, ok := t.cache.get(cacheKey); ok {
+	if cached, ok := cache.get(cacheKey); ok {
 		slog.Debug("web_search cache hit", "query", query)
 		return NewResult(cached)
 	}
 
 	// Try providers in order (first success wins)
 	var lastErr error
-	for _, provider := range t.providers {
+	for _, provider := range providers {
 		results, err := provider.Search(ctx, params)
 		if err != nil {
 			slog.Warn("web_search provider failed", "provider", provider.Name(), "error", err)
@@ -195,7 +296,7 @@ func (t *WebSearchTool) Execute(ctx context.Context, args map[string]any) *Resul
 		formatted := formatSearchResults(query, results, provider.Name())
 		wrapped := wrapExternalContent(formatted, "Web Search", false)
 
-		t.cache.set(cacheKey, wrapped)
+		cache.set(cacheKey, wrapped)
 		return NewResult(wrapped)
 	}
 
@@ -246,4 +347,33 @@ func truncateStr(s string, max int) string {
 		return s
 	}
 	return s[:max] + "..."
+}
+
+func coalesceSearchText(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func clampProviderResultCount(requested, providerMax int) int {
+	if requested <= 0 {
+		requested = defaultSearchCount
+	}
+	if providerMax > 0 && requested > providerMax {
+		return providerMax
+	}
+	return requested
+}
+
+func normalizeProviderMaxResults(value int) int {
+	if value <= 0 {
+		return defaultSearchCount
+	}
+	if value > maxSearchCount {
+		return maxSearchCount
+	}
+	return value
 }

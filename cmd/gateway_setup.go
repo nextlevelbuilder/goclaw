@@ -13,11 +13,11 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
-	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
@@ -30,7 +30,7 @@ import (
 
 // setupToolRegistry creates the tool registry and registers all tools.
 // Returns the registry, exec approval manager, MCP manager, sandbox manager,
-// browser manager (caller must defer Close), web fetch tool, TTS tool,
+// browser manager (caller must defer Close), web search tool, web fetch tool, TTS tool,
 // permission policy engine, tool policy engine, data directory, and resolved agent defaults.
 func setupToolRegistry(
 	cfg *config.Config,
@@ -42,6 +42,7 @@ func setupToolRegistry(
 	mcpMgr *mcpbridge.Manager,
 	sandboxMgr sandbox.Manager,
 	browserMgr *browser.Manager,
+	webSearchTool *tools.WebSearchTool,
 	webFetchTool *tools.WebFetchTool,
 	ttsTool *tools.TtsTool,
 	permPE *permissions.PolicyEngine,
@@ -116,11 +117,7 @@ func setupToolRegistry(
 	}
 
 	// Web tools (web_search + web_fetch)
-	webSearchTool := tools.NewWebSearchTool(tools.WebSearchConfig{
-		BraveEnabled: cfg.Tools.Web.Brave.Enabled,
-		BraveAPIKey:  cfg.Tools.Web.Brave.APIKey,
-		DDGEnabled:   cfg.Tools.Web.DuckDuckGo.Enabled,
-	})
+	webSearchTool = tools.NewWebSearchTool(tools.WebSearchConfigFromConfig(cfg))
 	if webSearchTool != nil {
 		toolsReg.Register(webSearchTool)
 		slog.Info("web_search tool enabled")
@@ -278,6 +275,28 @@ func setupToolRegistry(
 	}
 
 	return
+}
+
+func syncWebSearchToolRegistration(toolsReg *tools.Registry, current *tools.WebSearchTool, cfg *config.Config) *tools.WebSearchTool {
+	nextCfg := tools.WebSearchConfigFromConfig(cfg)
+	nextTool := tools.NewWebSearchTool(nextCfg)
+
+	switch {
+	case current != nil && nextTool != nil:
+		current.UpdateConfig(nextCfg)
+		slog.Info("web_search config reloaded")
+		return current
+	case current == nil && nextTool != nil:
+		toolsReg.Register(nextTool)
+		slog.Info("web_search tool enabled")
+		return nextTool
+	case current != nil && nextTool == nil:
+		toolsReg.Unregister("web_search")
+		slog.Info("web_search tool disabled")
+		return nil
+	default:
+		return nil
+	}
 }
 
 // wireTracingAndCron sets up tracing collector, snapshot worker, and cron config
@@ -590,4 +609,3 @@ func setupSkillsSystem(
 
 	return skillsLoader, skillSearchTool, globalSkillsDir, bundledSkillsDir, builtinSkillsDir
 }
-

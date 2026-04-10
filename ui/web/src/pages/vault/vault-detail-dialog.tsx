@@ -24,7 +24,7 @@ interface Props {
 
 export function VaultDetailDialog({ doc, open, onOpenChange, onDeleted }: Props) {
   const { t } = useTranslation("vault");
-  const { outlinks, backlinks, docNames, loading } = useVaultLinks(doc?.id ?? null);
+  const { outlinks, backlinks, loading } = useVaultLinks(doc?.agent_id ?? "", doc?.id ?? null);
 
   const [editMode, setEditMode] = useState(false);
   const [editTitle, setEditTitle] = useState("");
@@ -50,8 +50,8 @@ export function VaultDetailDialog({ doc, open, onOpenChange, onDeleted }: Props)
   );
   // Fetch image as authenticated blob URL for <img> rendering.
   const { url: imageUrl, error: imageError } = useVaultImageUrl(open && isMedia && isImage && doc ? doc.path : null);
-  const { update } = useUpdateDocument(doc?.id ?? "");
-  const { remove: removeDoc } = useDeleteDocument(doc?.id ?? "");
+  const { update } = useUpdateDocument(doc?.agent_id ?? "", doc?.id ?? "");
+  const { remove: removeDoc } = useDeleteDocument(doc?.agent_id ?? "", doc?.id ?? "");
 
   if (!doc) return null;
 
@@ -227,40 +227,38 @@ export function VaultDetailDialog({ doc, open, onOpenChange, onDeleted }: Props)
                   <span>{t("detail.outlinks")} ({outlinks.length})</span>
                 </div>
                 {outlinks.length > 0 ? (
-                  <div className="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto scrollbar-thin">
+                  <div className="flex flex-wrap items-center gap-1 flex-1">
                     {outlinks.map((l) => (
-                      <LinkBadge key={l.id} link={l} docNames={docNames} t={t} />
+                      <LinkBadge key={l.id} link={l} agentId={doc.agent_id} t={t} />
                     ))}
                   </div>
                 ) : (
                   <span className="text-xs text-muted-foreground">{t("detail.noLinks")}</span>
                 )}
+                <Button variant="ghost" size="xs" className="h-6 px-1.5 gap-1 shrink-0" onClick={() => setLinkDialogOpen(true)}>
+                  <Plus className="h-3 w-3" />
+                  <span>{t("addLink")}</span>
+                </Button>
               </div>
             )}
 
             {!loading && backlinks.length > 0 && (
-              <div className="flex items-center gap-4 text-xs">
+              <div className="flex items-start gap-4 text-xs">
                 <span className="text-muted-foreground shrink-0">{t("detail.backlinks")} ({backlinks.length})</span>
-                <div className="flex items-center gap-1 min-w-0 overflow-x-auto scrollbar-thin">
+                <div className="flex flex-wrap gap-1">
                   {backlinks.map((l) => (
-                    <Badge key={l.from_doc_id} variant="secondary" className="text-xs shrink-0" title={l.path}>
-                      {l.title || l.from_doc_id.slice(0, 8)}
+                    <Badge key={l.id} variant="secondary" className="text-xs">
+                      {l.link_type}: {l.from_doc_id.slice(0, 8)}
                     </Badge>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Bottom bar: hash + add link */}
+            {/* Hash + link count as subtle footer */}
             <div className="flex items-center justify-between text-2xs text-muted-foreground border-t pt-2">
-              <div className="flex items-center gap-3">
-                <span className="font-mono">SHA-256: {doc.content_hash.length > 16 ? `${doc.content_hash.slice(0, 8)}...${doc.content_hash.slice(-8)}` : doc.content_hash}</span>
-                {linkCount > 0 && <span>{linkCount} link{linkCount !== 1 ? "s" : ""}</span>}
-              </div>
-              <Button variant="ghost" size="xs" className="h-6 px-1.5 gap-1" onClick={() => setLinkDialogOpen(true)}>
-                <Plus className="h-3 w-3" />
-                <span className="text-xs">{t("addLink")}</span>
-              </Button>
+              <span className="font-mono">SHA-256: {doc.content_hash.length > 16 ? `${doc.content_hash.slice(0, 8)}...${doc.content_hash.slice(-8)}` : doc.content_hash}</span>
+              {linkCount > 0 && <span>{linkCount} link{linkCount !== 1 ? "s" : ""}</span>}
             </div>
 
             {/* Metadata JSON (if present) */}
@@ -280,7 +278,7 @@ export function VaultDetailDialog({ doc, open, onOpenChange, onDeleted }: Props)
 
       {linkDialogOpen && (
         <VaultLinkDialog
-          agentId={doc.agent_id ?? ""}
+          agentId={doc.agent_id}
           fromDoc={doc}
           open={linkDialogOpen}
           onOpenChange={setLinkDialogOpen}

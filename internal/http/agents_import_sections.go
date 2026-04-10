@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
@@ -152,42 +151,40 @@ func (h *AgentsHandler) importKG(ctx context.Context, ag *store.AgentData, arc *
 
 func (h *AgentsHandler) importCron(ctx context.Context, ag *store.AgentData, arc *importArchive, summary *ImportSummary, progressFn func(ProgressEvent)) {
 	tid := importTenantID(ctx)
-	const paramsPerRow = 10 // agent_id, name, schedule_kind, cron_expression, interval_ms, run_at, timezone, payload, delete_after_run, tenant_id (enabled is literal false)
-	const chunkSize = 5000
-
-	for start := 0; start < len(arc.cronJobs); start += chunkSize {
-		end := min(start+chunkSize, len(arc.cronJobs))
-		chunk := arc.cronJobs[start:end]
-
-		args := make([]any, 0, len(chunk)*paramsPerRow)
-		placeholders := make([]string, 0, len(chunk))
-		for i, j := range chunk {
-			base := i * paramsPerRow
-			placeholders = append(placeholders, fmt.Sprintf(
-				"($%d,$%d,false,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)",
-				base+1, base+2, base+3, base+4, base+5, base+6, base+7, base+8, base+9, base+10,
-			))
-			args = append(args, ag.ID, j.Name, j.ScheduleKind,
+	for _, j := range arc.cronJobs {
+		// cron_jobs has no UNIQUE constraint on (agent_id, name), so use SELECT+UPDATE/INSERT
+		var exists bool
+		_ = h.db.QueryRowContext(ctx,
+			`SELECT EXISTS(SELECT 1 FROM cron_jobs WHERE agent_id = $1 AND name = $2 AND tenant_id = $3)`,
+			ag.ID, j.Name, tid,
+		).Scan(&exists)
+		if exists {
+			_, err := h.db.ExecContext(ctx,
+				`UPDATE cron_jobs
+				 SET schedule_kind=$1, cron_expression=$2, interval_ms=$3,
+				     run_at=$4, timezone=$5, payload=$6, delete_after_run=$7
+				 WHERE agent_id=$8 AND name=$9 AND tenant_id=$10`,
+				j.ScheduleKind, j.CronExpression, j.IntervalMS,
+				nullStr(j.RunAt), j.Timezone, j.Payload, j.DeleteAfterRun,
+				ag.ID, j.Name, tid,
+			)
+			if err != nil {
+				slog.Warn("agents.import.cron_job.update", "agent_id", ag.ID, "name", j.Name, "error", err)
+			}
+		} else {
+			_, err := h.db.ExecContext(ctx,
+				`INSERT INTO cron_jobs
+				   (agent_id, name, enabled, schedule_kind, cron_expression, interval_ms, run_at, timezone, payload, delete_after_run, tenant_id)
+				 VALUES ($1, $2, false, $3, $4, $5, $6, $7, $8, $9, $10)`,
+				ag.ID, j.Name, j.ScheduleKind,
 				j.CronExpression, j.IntervalMS, nullStr(j.RunAt), j.Timezone,
 				j.Payload, j.DeleteAfterRun, tid,
 			)
+			if err != nil {
+				slog.Warn("agents.import.cron_job.insert", "agent_id", ag.ID, "name", j.Name, "error", err)
+			}
 		}
-
-		q := `INSERT INTO cron_jobs
-			(agent_id, name, enabled, schedule_kind, cron_expression, interval_ms, run_at, timezone, payload, delete_after_run, tenant_id)
-			VALUES ` + strings.Join(placeholders, ",") + `
-			ON CONFLICT (agent_id, tenant_id, name) DO UPDATE SET
-				schedule_kind = EXCLUDED.schedule_kind,
-				cron_expression = EXCLUDED.cron_expression,
-				interval_ms = EXCLUDED.interval_ms,
-				run_at = EXCLUDED.run_at,
-				timezone = EXCLUDED.timezone,
-				payload = EXCLUDED.payload,
-				delete_after_run = EXCLUDED.delete_after_run`
-		if _, err := h.db.ExecContext(ctx, q, args...); err != nil {
-			slog.Warn("agents.import.cron_jobs.batch", "agent_id", ag.ID, "count", len(chunk), "error", err)
-		}
-		summary.CronJobs += len(chunk)
+		summary.CronJobs++
 	}
 	if progressFn != nil {
 		progressFn(ProgressEvent{Phase: "cron", Status: "done", Current: summary.CronJobs, Total: len(arc.cronJobs)})
@@ -197,28 +194,18 @@ func (h *AgentsHandler) importCron(ctx context.Context, ag *store.AgentData, arc
 func (h *AgentsHandler) importUserProfiles(ctx context.Context, ag *store.AgentData, arc *importArchive, summary *ImportSummary, progressFn func(ProgressEvent)) {
 	// workspace=NULL for portability (auto-created via GetOrCreateUserProfile on first user access)
 	tid := importTenantID(ctx)
-	const colsPerRow = 3 // agent_id, user_id, tenant_id
-	const chunkSize = 5000
-
-	for start := 0; start < len(arc.userProfiles); start += chunkSize {
-		end := min(start+chunkSize, len(arc.userProfiles))
-		chunk := arc.userProfiles[start:end]
-
-		args := make([]any, 0, len(chunk)*colsPerRow)
-		placeholders := make([]string, 0, len(chunk))
-		for i, p := range chunk {
-			base := i * colsPerRow
-			placeholders = append(placeholders, fmt.Sprintf("($%d,$%d,NULL,$%d)", base+1, base+2, base+3))
-			args = append(args, ag.ID, p.UserID, tid)
+	for _, p := range arc.userProfiles {
+		_, err := h.db.ExecContext(ctx,
+			`INSERT INTO user_agent_profiles (agent_id, user_id, workspace, tenant_id)
+			 VALUES ($1, $2, NULL, $3)
+			 ON CONFLICT DO NOTHING`,
+			ag.ID, p.UserID, tid,
+		)
+		if err != nil {
+			slog.Warn("agents.import.user_profile", "agent_id", ag.ID, "user_id", p.UserID, "error", err)
+			continue
 		}
-
-		q := `INSERT INTO user_agent_profiles (agent_id, user_id, workspace, tenant_id)
-			VALUES ` + strings.Join(placeholders, ",") + `
-			ON CONFLICT (agent_id, user_id) DO NOTHING`
-		if _, err := h.db.ExecContext(ctx, q, args...); err != nil {
-			slog.Warn("agents.import.user_profiles.batch", "agent_id", ag.ID, "count", len(chunk), "error", err)
-		}
-		summary.UserProfiles += len(chunk)
+		summary.UserProfiles++
 	}
 	if progressFn != nil {
 		progressFn(ProgressEvent{Phase: "user_profiles", Status: "done", Current: summary.UserProfiles, Total: len(arc.userProfiles)})
@@ -227,35 +214,22 @@ func (h *AgentsHandler) importUserProfiles(ctx context.Context, ag *store.AgentD
 
 func (h *AgentsHandler) importUserOverrides(ctx context.Context, ag *store.AgentData, arc *importArchive, summary *ImportSummary, progressFn func(ProgressEvent)) {
 	tid := importTenantID(ctx)
-	const colsPerRow = 6 // agent_id, user_id, provider, model, settings, tenant_id
-	const chunkSize = 5000
-
-	for start := 0; start < len(arc.userOverrides); start += chunkSize {
-		end := min(start+chunkSize, len(arc.userOverrides))
-		chunk := arc.userOverrides[start:end]
-
-		args := make([]any, 0, len(chunk)*colsPerRow)
-		placeholders := make([]string, 0, len(chunk))
-		for i, o := range chunk {
-			base := i * colsPerRow
-			placeholders = append(placeholders, fmt.Sprintf(
-				"($%d,$%d,$%d,$%d,$%d,$%d)",
-				base+1, base+2, base+3, base+4, base+5, base+6,
-			))
-			args = append(args, ag.ID, o.UserID, o.Provider, o.Model, coalesceJSON(o.Settings), tid)
+	for _, o := range arc.userOverrides {
+		_, err := h.db.ExecContext(ctx,
+			`INSERT INTO user_agent_overrides (agent_id, user_id, provider, model, settings, tenant_id)
+			 VALUES ($1, $2, $3, $4, $5, $6)
+			 ON CONFLICT (agent_id, user_id) DO UPDATE SET
+			     provider = EXCLUDED.provider,
+			     model = EXCLUDED.model,
+			     settings = EXCLUDED.settings,
+			     updated_at = NOW()`,
+			ag.ID, o.UserID, o.Provider, o.Model, coalesceJSON(o.Settings), tid,
+		)
+		if err != nil {
+			slog.Warn("agents.import.user_override", "agent_id", ag.ID, "user_id", o.UserID, "error", err)
+			continue
 		}
-
-		q := `INSERT INTO user_agent_overrides (agent_id, user_id, provider, model, settings, tenant_id)
-			VALUES ` + strings.Join(placeholders, ",") + `
-			ON CONFLICT (agent_id, user_id) DO UPDATE SET
-				provider = EXCLUDED.provider,
-				model = EXCLUDED.model,
-				settings = EXCLUDED.settings,
-				updated_at = NOW()`
-		if _, err := h.db.ExecContext(ctx, q, args...); err != nil {
-			slog.Warn("agents.import.user_overrides.batch", "agent_id", ag.ID, "count", len(chunk), "error", err)
-		}
-		summary.UserOverrides += len(chunk)
+		summary.UserOverrides++
 	}
 	if progressFn != nil {
 		progressFn(ProgressEvent{Phase: "user_overrides", Status: "done", Current: summary.UserOverrides, Total: len(arc.userOverrides)})

@@ -13,8 +13,8 @@ import (
 
 // TestCallClassifyWithRetry_FirstAttemptSuccess uses first timeout.
 func TestCallClassifyWithRetry_FirstAttemptSuccess(t *testing.T) {
-	// Verify that first attempt uses enrichRetryTimeouts[0]
-	if enrichRetryTimeouts[0] == 0 {
+	// Verify that first attempt uses classifyTimeouts[0]
+	if classifyTimeouts[0] == 0 {
 		t.Errorf("First timeout should be non-zero")
 	}
 
@@ -76,17 +76,17 @@ func TestCallClassifyWithRetry_ResponseWhitespaceStripping(t *testing.T) {
 
 // TestCallClassifyWithRetry_MaxRetriesConstant verifies retry limit.
 func TestCallClassifyWithRetry_MaxRetriesConstant(t *testing.T) {
-	if enrichMaxRetries != 3 {
-		t.Errorf("enrichMaxRetries should be 3, got %d", enrichMaxRetries)
+	if classifyMaxRetries != 3 {
+		t.Errorf("classifyMaxRetries should be 3, got %d", classifyMaxRetries)
 	}
 
 	// Verify arrays have correct length
-	if len(enrichRetryTimeouts) != enrichMaxRetries {
-		t.Errorf("enrichRetryTimeouts length should be %d, got %d", enrichMaxRetries, len(enrichRetryTimeouts))
+	if len(classifyTimeouts) != classifyMaxRetries {
+		t.Errorf("classifyTimeouts length should be %d, got %d", classifyMaxRetries, len(classifyTimeouts))
 	}
 
-	if len(enrichRetryBackoffs) != enrichMaxRetries {
-		t.Errorf("enrichRetryBackoffs length should be %d, got %d", enrichMaxRetries, len(enrichRetryBackoffs))
+	if len(classifyBackoffs) != classifyMaxRetries {
+		t.Errorf("classifyBackoffs length should be %d, got %d", classifyMaxRetries, len(classifyBackoffs))
 	}
 }
 

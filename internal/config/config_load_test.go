@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -26,6 +27,15 @@ func TestDefault_SensibleDefaults(t *testing.T) {
 	}
 	if cfg.Tools.Web.DuckDuckGo.MaxResults != 5 {
 		t.Fatalf("default ddg max results: got %d", cfg.Tools.Web.DuckDuckGo.MaxResults)
+	}
+	if cfg.Tools.Web.Exa.Enabled {
+		t.Fatal("Exa should be disabled by default")
+	}
+	if cfg.Tools.Web.Tavily.Enabled {
+		t.Fatal("Tavily should be disabled by default")
+	}
+	if len(cfg.Tools.Web.ProviderOrder) != 0 {
+		t.Fatalf("default provider order: got %v, want empty", cfg.Tools.Web.ProviderOrder)
 	}
 }
 
@@ -70,6 +80,59 @@ func TestLoad_ValidJSON5(t *testing.T) {
 	// Unset fields should retain defaults
 	if cfg.Agents.Defaults.Provider != "anthropic" {
 		t.Fatalf("default provider should be preserved: got %q", cfg.Agents.Defaults.Provider)
+	}
+}
+
+func TestSaveLoad_PreservesWebSearchProviderOrder(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.json")
+
+	cfg := Default()
+	cfg.Tools.Web.ProviderOrder = []string{"tavily", "brave", "exa"}
+
+	if err := Save(cfgPath, cfg); err != nil {
+		t.Fatalf("save error: %v", err)
+	}
+
+	loaded, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load error: %v", err)
+	}
+
+	if !reflect.DeepEqual(loaded.Tools.Web.ProviderOrder, cfg.Tools.Web.ProviderOrder) {
+		t.Fatalf("provider order = %v, want %v", loaded.Tools.Web.ProviderOrder, cfg.Tools.Web.ProviderOrder)
+	}
+}
+
+func TestApplySystemConfigs_AppliesWebSearchSettings(t *testing.T) {
+	cfg := Default()
+	cfg.ApplySystemConfigs(map[string]string{
+		"tools.web.provider_order":         "brave,exa,tavily,duckduckgo",
+		"tools.web.exa.enabled":            "true",
+		"tools.web.exa.max_results":        "7",
+		"tools.web.tavily.enabled":         "false",
+		"tools.web.tavily.max_results":     "8",
+		"tools.web.brave.enabled":          "true",
+		"tools.web.brave.max_results":      "9",
+		"tools.web.duckduckgo.enabled":     "true",
+		"tools.web.duckduckgo.max_results": "6",
+	})
+
+	wantOrder := []string{"brave", "exa", "tavily", "duckduckgo"}
+	if !reflect.DeepEqual(cfg.Tools.Web.ProviderOrder, wantOrder) {
+		t.Fatalf("provider_order = %v, want %v", cfg.Tools.Web.ProviderOrder, wantOrder)
+	}
+	if !cfg.Tools.Web.Exa.Enabled || cfg.Tools.Web.Exa.MaxResults != 7 {
+		t.Fatalf("exa = %+v, want enabled with max_results 7", cfg.Tools.Web.Exa)
+	}
+	if cfg.Tools.Web.Tavily.Enabled || cfg.Tools.Web.Tavily.MaxResults != 8 {
+		t.Fatalf("tavily = %+v, want disabled with max_results 8", cfg.Tools.Web.Tavily)
+	}
+	if !cfg.Tools.Web.Brave.Enabled || cfg.Tools.Web.Brave.MaxResults != 9 {
+		t.Fatalf("brave = %+v, want enabled with max_results 9", cfg.Tools.Web.Brave)
+	}
+	if !cfg.Tools.Web.DuckDuckGo.Enabled || cfg.Tools.Web.DuckDuckGo.MaxResults != 6 {
+		t.Fatalf("duckduckgo = %+v, want enabled with max_results 6", cfg.Tools.Web.DuckDuckGo)
 	}
 }
 

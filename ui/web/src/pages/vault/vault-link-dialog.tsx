@@ -31,7 +31,7 @@ interface Props {
 
 export function VaultLinkDialog({ agentId, fromDoc, open, onOpenChange, onCreated }: Props) {
   const { t } = useTranslation("vault");
-  const { create } = useCreateLink();
+  const { create } = useCreateLink(agentId);
   const { documents } = useVaultDocuments(agentId, { limit: 100 });
   const [saving, setSaving] = useState(false);
 

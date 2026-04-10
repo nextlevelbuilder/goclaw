@@ -119,60 +119,6 @@ func (s *SQLiteVaultStore) GetDocumentByID(ctx context.Context, tenantID, id str
 	return scanVaultDoc(row)
 }
 
-// GetDocumentsByIDs returns documents matching the given IDs with tenant isolation.
-func (s *SQLiteVaultStore) GetDocumentsByIDs(ctx context.Context, tenantID string, docIDs []string) ([]store.VaultDocument, error) {
-	if len(docIDs) == 0 {
-		return nil, nil
-	}
-	const chunkSize = 500
-	var all []store.VaultDocument
-	for start := 0; start < len(docIDs); start += chunkSize {
-		end := min(start+chunkSize, len(docIDs))
-		chunk := docIDs[start:end]
-		ph := make([]string, len(chunk))
-		args := make([]any, len(chunk))
-		for i, id := range chunk {
-			ph[i] = "?"
-			args[i] = id
-		}
-		args = append(args, tenantID)
-		q := `SELECT id, tenant_id, agent_id, team_id, scope, custom_scope, path, title, doc_type, content_hash, summary, metadata, created_at, updated_at
-			FROM vault_documents WHERE id IN (` + strings.Join(ph, ",") + `) AND tenant_id = ?`
-		rows, err := s.db.QueryContext(ctx, q, args...)
-		if err != nil {
-			return nil, err
-		}
-		for rows.Next() {
-			doc, scanErr := scanVaultDocRow(rows)
-			if scanErr != nil {
-				rows.Close()
-				return nil, scanErr
-			}
-			all = append(all, *doc)
-		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
-			return nil, err
-		}
-	}
-	return all, nil
-}
-
-// GetDocumentByBasename finds a document by path basename (case-insensitive).
-func (s *SQLiteVaultStore) GetDocumentByBasename(ctx context.Context, tenantID, agentID, basename string) (*store.VaultDocument, error) {
-	q := `SELECT id, tenant_id, agent_id, team_id, scope, custom_scope, path, title, doc_type, content_hash, summary, metadata, created_at, updated_at
-		FROM vault_documents
-		WHERE tenant_id = ? AND lower(replace(path, rtrim(path, replace(path, '/', '')), '')) = lower(?)`
-	args := []any{tenantID, basename}
-	if agentID != "" {
-		q += " AND agent_id = ?"
-		args = append(args, agentID)
-	}
-	q += " LIMIT 1"
-	row := s.db.QueryRowContext(ctx, q, args...)
-	return scanVaultDoc(row)
-}
-
 // DeleteDocument removes a vault document (FK cascades delete vault_links).
 // Empty agentID means no agent filter.
 // Team scoping via RunContext (same rules as GetDocument).

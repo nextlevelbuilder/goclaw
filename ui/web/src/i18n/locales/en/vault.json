@@ -68,8 +68,6 @@
     "media": "Media"
   },
   "rescanTooltip": "Rescan workspace",
-  "enriching": "Enriching",
-  "enrichComplete": "Enrichment complete",
   "rescanNew": "{{count}} new",
   "rescanUpdated": "{{count}} updated",
   "rescanUnchanged": "{{count}} unchanged",
@@ -77,23 +75,7 @@
   "rescanNoFiles": "No new files found",
   "rescanBusy": "Rescan already in progress",
   "rescanError": "Rescan failed",
-  "upload": {
-    "title": "Upload to Vault",
-    "destination": "Destination",
-    "shared": "Shared",
-    "agent": "Agent",
-    "team": "Team",
-    "selectAgent": "Select agent...",
-    "selectTeam": "Select team...",
-    "dropzone": "Drop files here or click to browse",
-    "dropzoneHint": "Text files only (.md, .txt, .json, .yaml, .csv, ...)",
-    "files": "Files ({{count}})",
-    "uploading": "Uploading...",
-    "upload": "Upload"
-  },
   "toast": {
-    "uploadSuccess": "{{count}} file(s) uploaded",
-    "uploadFailed": "Upload failed",
     "docCreated": "Document created",
     "docCreateFailed": "Failed to create document",
     "docUpdated": "Document updated",

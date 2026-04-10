@@ -99,9 +99,9 @@ export function ScopeSelect({ value, onChange, t }: ScopeSelectProps) {
 }
 
 /** Outlink badge with inline delete confirmation. */
-export function LinkBadge({ link, docNames, t }: { link: VaultLink; docNames?: Record<string, string>; t: (k: string) => string }) {
+export function LinkBadge({ link, agentId, t }: { link: VaultLink; agentId: string; t: (k: string) => string }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const { remove } = useDeleteLink(link.id);
+  const { remove } = useDeleteLink(agentId, link.id);
 
   const handleDelete = async () => {
     try {
@@ -123,8 +123,8 @@ export function LinkBadge({ link, docNames, t }: { link: VaultLink; docNames?: R
   }
 
   return (
-    <Badge variant="secondary" className="text-xs group relative pr-1 gap-1 shrink-0">
-      <span>{link.link_type}: {docNames?.[link.to_doc_id] || link.to_doc_id.slice(0, 8)}</span>
+    <Badge variant="secondary" className="text-xs group relative pr-1 gap-1">
+      <span>{link.link_type}: {link.to_doc_id.slice(0, 8)}</span>
       <button
         onClick={() => setConfirmDelete(true)}
         className="opacity-0 group-hover:opacity-100 transition-opacity"

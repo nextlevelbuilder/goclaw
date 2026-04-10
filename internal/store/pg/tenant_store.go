@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lib/pq"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -79,27 +78,6 @@ func (s *PGTenantStore) ListTenants(ctx context.Context) ([]store.TenantData, er
 		return nil, err
 	}
 	return tenants, nil
-}
-
-func (s *PGTenantStore) GetTenantsByIDs(ctx context.Context, ids []uuid.UUID) ([]store.TenantData, error) {
-	if len(ids) == 0 {
-		return nil, nil
-	}
-	// Chunk by 500 to stay well within PG param limits.
-	const chunkSize = 500
-	var all []store.TenantData
-	for start := 0; start < len(ids); start += chunkSize {
-		end := min(start+chunkSize, len(ids))
-		var chunk []store.TenantData
-		if err := pkgSqlxDB.SelectContext(ctx, &chunk,
-			`SELECT id, name, slug, status, settings, created_at, updated_at
-			 FROM tenants WHERE id = ANY($1)`,
-			pq.Array(ids[start:end])); err != nil {
-			return nil, err
-		}
-		all = append(all, chunk...)
-	}
-	return all, nil
 }
 
 func (s *PGTenantStore) UpdateTenant(ctx context.Context, id uuid.UUID, updates map[string]any) error {

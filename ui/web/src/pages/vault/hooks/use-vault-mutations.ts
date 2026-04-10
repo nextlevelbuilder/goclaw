@@ -18,16 +18,15 @@ interface RescanResult {
 
 const VAULT_KEY = "vault";
 
-/** Create a new vault document. Agent-scoped or cross-agent (empty agentId). */
+/** Create a new vault document. */
 export function useCreateDocument(agentId: string) {
   const http = useHttp();
   const queryClient = useQueryClient();
 
   const create = useCallback(
-    async (body: { path: string; title: string; doc_type: string; scope: string; team_id?: string; metadata?: Record<string, unknown> }) => {
+    async (body: { path: string; title: string; doc_type: string; scope: string; metadata?: Record<string, unknown> }) => {
       try {
-        const url = agentId ? `/v1/agents/${agentId}/vault/documents` : `/v1/vault/documents`;
-        const doc = await http.post<VaultDocument>(url, body);
+        const doc = await http.post<VaultDocument>(`/v1/agents/${agentId}/vault/documents`, body);
         await queryClient.invalidateQueries({ queryKey: [VAULT_KEY] });
         toast.success(i18n.t("vault:toast.docCreated"));
         return doc;
@@ -43,14 +42,14 @@ export function useCreateDocument(agentId: string) {
 }
 
 /** Update a vault document. */
-export function useUpdateDocument(docId: string) {
+export function useUpdateDocument(agentId: string, docId: string) {
   const http = useHttp();
   const queryClient = useQueryClient();
 
   const update = useCallback(
     async (body: { title?: string; doc_type?: string; scope?: string; metadata?: Record<string, unknown> }) => {
       try {
-        const doc = await http.put<VaultDocument>(`/v1/vault/documents/${docId}`, body);
+        const doc = await http.put<VaultDocument>(`/v1/agents/${agentId}/vault/documents/${docId}`, body);
         await queryClient.invalidateQueries({ queryKey: [VAULT_KEY] });
         toast.success(i18n.t("vault:toast.docUpdated"));
         return doc;
@@ -59,40 +58,40 @@ export function useUpdateDocument(docId: string) {
         throw err;
       }
     },
-    [http, docId, queryClient],
+    [http, agentId, docId, queryClient],
   );
 
   return { update };
 }
 
 /** Delete a vault document. */
-export function useDeleteDocument(docId: string) {
+export function useDeleteDocument(agentId: string, docId: string) {
   const http = useHttp();
   const queryClient = useQueryClient();
 
   const remove = useCallback(async () => {
     try {
-      await http.delete(`/v1/vault/documents/${docId}`);
+      await http.delete(`/v1/agents/${agentId}/vault/documents/${docId}`);
       await queryClient.invalidateQueries({ queryKey: [VAULT_KEY] });
       toast.success(i18n.t("vault:toast.docDeleted"));
     } catch (err) {
       toast.error(i18n.t("vault:toast.docDeleteFailed"), err instanceof Error ? err.message : "");
       throw err;
     }
-  }, [http, docId, queryClient]);
+  }, [http, agentId, docId, queryClient]);
 
   return { remove };
 }
 
 /** Create a link between two vault documents. */
-export function useCreateLink() {
+export function useCreateLink(agentId: string) {
   const http = useHttp();
   const queryClient = useQueryClient();
 
   const create = useCallback(
     async (body: { from_doc_id: string; to_doc_id: string; link_type: string; context?: string }) => {
       try {
-        const link = await http.post<VaultLink>(`/v1/vault/links`, body);
+        const link = await http.post<VaultLink>(`/v1/agents/${agentId}/vault/links`, body);
         await queryClient.invalidateQueries({ queryKey: [VAULT_KEY, "links"] });
         await queryClient.invalidateQueries({ queryKey: [VAULT_KEY, "all-links"] });
         toast.success(i18n.t("vault:toast.linkCreated"));
@@ -102,7 +101,7 @@ export function useCreateLink() {
         throw err;
       }
     },
-    [http, queryClient],
+    [http, agentId, queryClient],
   );
 
   return { create };
@@ -146,13 +145,13 @@ export function useRescanWorkspace() {
 }
 
 /** Delete a vault link. */
-export function useDeleteLink(linkId: string) {
+export function useDeleteLink(agentId: string, linkId: string) {
   const http = useHttp();
   const queryClient = useQueryClient();
 
   const remove = useCallback(async () => {
     try {
-      await http.delete(`/v1/vault/links/${linkId}`);
+      await http.delete(`/v1/agents/${agentId}/vault/links/${linkId}`);
       await queryClient.invalidateQueries({ queryKey: [VAULT_KEY, "links"] });
       await queryClient.invalidateQueries({ queryKey: [VAULT_KEY, "all-links"] });
       toast.success(i18n.t("vault:toast.linkDeleted"));
@@ -160,7 +159,7 @@ export function useDeleteLink(linkId: string) {
       toast.error(i18n.t("vault:toast.linkDeleteFailed"), err instanceof Error ? err.message : "");
       throw err;
     }
-  }, [http, linkId, queryClient]);
+  }, [http, agentId, linkId, queryClient]);
 
   return { remove };
 }

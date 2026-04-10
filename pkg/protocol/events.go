@@ -105,9 +105,6 @@ const (
 
 	// Tenant access revocation — forces affected user's UI to logout.
 	EventTenantAccessRevoked = "tenant.access.revoked"
-
-	// Vault enrichment pipeline progress.
-	EventVaultEnrichProgress = "vault.enrich.progress"
 )
 
 // Agent event subtypes (in payload.type)

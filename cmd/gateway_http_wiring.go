@@ -175,9 +175,7 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 
 	// V3: Knowledge Vault document API
 	if d.pgStores != nil && d.pgStores.Vault != nil {
-		vh := httpapi.NewVaultHandler(d.pgStores.Vault, d.pgStores.Teams, d.workspace, d.domainBus, d.pgStores.Agents, d.pgStores.Teams)
-		vh.SetEnrichProgress(d.enrichProgress)
-		d.server.SetVaultHandler(vh)
+		d.server.SetVaultHandler(httpapi.NewVaultHandler(d.pgStores.Vault, d.pgStores.Teams, d.workspace, d.domainBus, d.pgStores.Agents, d.pgStores.Teams))
 	}
 
 	// V3: Episodic memory summaries API

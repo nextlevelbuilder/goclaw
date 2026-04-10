@@ -1,8 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ChangeEvent } from "react";
 import { Save } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -22,7 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { InfoLabel } from "@/components/shared/info-label";
-import { isSecret } from "@/lib/secret";
+import { WebSearchProviderSequence, type ProviderId } from "./web-search-provider-sequence";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type ToolsData = Record<string, any>;
@@ -31,6 +30,33 @@ interface Props {
   data: ToolsData | undefined;
   onSave: (value: ToolsData) => Promise<void>;
   saving: boolean;
+}
+
+const SORTABLE_PROVIDER_ORDER: ProviderId[] = ["exa", "tavily", "brave"];
+
+function normalizeProviderOrder(value: unknown): ProviderId[] {
+  const result: ProviderId[] = [];
+  const seen = new Set<ProviderId>();
+
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      if (
+        (entry === "exa" || entry === "tavily" || entry === "brave") &&
+        !seen.has(entry)
+      ) {
+        seen.add(entry);
+        result.push(entry);
+      }
+    }
+  }
+
+  for (const provider of SORTABLE_PROVIDER_ORDER) {
+    if (!seen.has(provider)) {
+      result.push(provider);
+    }
+  }
+
+  return result;
 }
 
 export function ToolsWebSection({ data, onSave, saving }: Props) {
@@ -54,11 +80,8 @@ export function ToolsWebSection({ data, onSave, saving }: Props) {
   const handleSave = () => {
     const toSave: ToolsData = { ...draft };
     const web = { ...(toSave.web ?? {}) };
-    const brave = { ...(web.brave ?? {}) };
-    if (isSecret(brave.api_key)) {
-      delete brave.api_key;
-    }
-    web.brave = brave;
+    web.duckduckgo = { ...(web.duckduckgo ?? {}), enabled: true };
+    web.provider_order = normalizeProviderOrder(web.provider_order);
     toSave.web = web;
     onSave(toSave);
   };
@@ -66,7 +89,10 @@ export function ToolsWebSection({ data, onSave, saving }: Props) {
   if (!data) return null;
 
   const web = draft.web ?? {};
+  const providerOrder = normalizeProviderOrder(web.provider_order);
   const ddg = web.duckduckgo ?? {};
+  const exa = web.exa ?? {};
+  const tavily = web.tavily ?? {};
   const brave = web.brave ?? {};
   const webFetch = draft.web_fetch ?? {};
   const browser = draft.browser ?? {};
@@ -79,65 +105,27 @@ export function ToolsWebSection({ data, onSave, saving }: Props) {
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Web Search */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label>DuckDuckGo</Label>
-              <Switch
-                checked={ddg.enabled !== false}
-                onCheckedChange={(v) => updateNested("web", { duckduckgo: { ...ddg, enabled: v } })}
-              />
-            </div>
-            <div className="grid gap-1.5">
-              <Label className="text-xs text-muted-foreground">{t("tools.maxResults")}</Label>
-              <Input
-                type="number"
-                className="text-base md:text-sm"
-                value={ddg.max_results ?? ""}
-                onChange={(e) => updateNested("web", { duckduckgo: { ...ddg, max_results: Number(e.target.value) } })}
-                placeholder="5"
-                min={1}
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label>Brave Search</Label>
-              <Switch
-                checked={brave.enabled ?? false}
-                onCheckedChange={(v) => updateNested("web", { brave: { ...brave, enabled: v } })}
-              />
-            </div>
-            <div className="grid gap-1.5">
-              <Label className="text-xs text-muted-foreground">{t("tools.maxResults")}</Label>
-              <Input
-                type="number"
-                className="text-base md:text-sm"
-                value={brave.max_results ?? ""}
-                onChange={(e) => updateNested("web", { brave: { ...brave, max_results: Number(e.target.value) } })}
-                placeholder="5"
-                min={1}
-              />
-            </div>
-            {brave.enabled && (
-              <div className="grid gap-1.5">
-                <InfoLabel tip={t("tools.braveApiKeyTip")}>{t("tools.braveApiKey")}</InfoLabel>
-                <Input
-                  type="password"
-                  className="text-base md:text-sm"
-                  value={isSecret(brave.api_key) ? "" : (brave.api_key ?? "")}
-                  onChange={(e) =>
-                    updateNested("web", { brave: { ...brave, api_key: e.target.value } })
-                  }
-                  placeholder={t("tools.braveApiKeyPlaceholder")}
-                  autoComplete="off"
-                />
-                {isSecret(brave.api_key) && (
-                  <p className="text-xs text-muted-foreground">{t("tools.braveApiKeyManaged")}</p>
-                )}
-              </div>
-            )}
-          </div>
+        <div className="grid gap-3">
+          <WebSearchProviderSequence
+            providerOrder={providerOrder}
+            onProviderOrderChange={(nextOrder) =>
+              updateNested("web", { provider_order: nextOrder })
+            }
+            exa={exa}
+            tavily={tavily}
+            brave={brave}
+            duckduckgo={ddg}
+            onProviderPatch={(provider, patch) =>
+              updateNested("web", {
+                [provider]: { ...(web[provider] ?? {}), ...patch },
+              })
+            }
+            onDuckDuckGoPatch={(patch) =>
+              updateNested("web", {
+                duckduckgo: { ...ddg, ...patch, enabled: true },
+              })
+            }
+          />
         </div>
 
         <Separator />
@@ -162,7 +150,7 @@ export function ToolsWebSection({ data, onSave, saving }: Props) {
               <Label>{t("tools.allowedDomains")}</Label>
               <Textarea
                 value={(webFetch.allowed_domains ?? []).join("\n")}
-                onChange={(e) =>
+                onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
                   updateNested("web_fetch", {
                     ...webFetch,
                     allowed_domains: e.target.value.split("\n").filter(Boolean),
@@ -177,7 +165,7 @@ export function ToolsWebSection({ data, onSave, saving }: Props) {
             <InfoLabel tip={t("tools.blockedDomainsTip")}>{t("tools.blockedDomains")}</InfoLabel>
             <Textarea
               value={(webFetch.blocked_domains ?? []).join("\n")}
-              onChange={(e) =>
+              onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
                 updateNested("web_fetch", {
                   ...webFetch,
                   blocked_domains: e.target.value.split("\n").filter(Boolean),
@@ -199,14 +187,14 @@ export function ToolsWebSection({ data, onSave, saving }: Props) {
               <Label>{t("tools.browserEnabled")}</Label>
               <Switch
                 checked={browser.enabled !== false}
-                onCheckedChange={(v) => updateNested("browser", { enabled: v })}
+                onCheckedChange={(v: boolean) => updateNested("browser", { enabled: v })}
               />
             </div>
             <div className="flex items-center gap-2">
               <Label>{t("tools.browserHeadless")}</Label>
               <Switch
                 checked={browser.headless !== false}
-                onCheckedChange={(v) => updateNested("browser", { headless: v })}
+                onCheckedChange={(v: boolean) => updateNested("browser", { headless: v })}
               />
             </div>
           </div>

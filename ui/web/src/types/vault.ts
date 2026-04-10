@@ -2,7 +2,7 @@
 export interface VaultDocument {
   id: string;
   tenant_id: string;
-  agent_id?: string | null;
+  agent_id: string;
   team_id?: string;
   scope: "personal" | "team" | "shared";
   custom_scope?: string;

@@ -83,20 +83,13 @@ type VaultStore interface {
 	CountDocuments(ctx context.Context, tenantID, agentID string, opts VaultListOptions) (int, error)
 	UpdateHash(ctx context.Context, tenantID, id, newHash string) error
 
-	// GetDocumentsByIDs returns documents matching the given IDs with tenant isolation.
-	GetDocumentsByIDs(ctx context.Context, tenantID string, docIDs []string) ([]VaultDocument, error)
-	// GetDocumentByBasename finds a document by path basename (case-insensitive).
-	GetDocumentByBasename(ctx context.Context, tenantID, agentID, basename string) (*VaultDocument, error)
-
 	// Search (FTS + vector hybrid)
 	Search(ctx context.Context, opts VaultSearchOptions) ([]VaultSearchResult, error)
 
 	// Links
-	CreateLinks(ctx context.Context, links []VaultLink) error
 	CreateLink(ctx context.Context, link *VaultLink) error
 	DeleteLink(ctx context.Context, tenantID, id string) error
 	GetOutLinks(ctx context.Context, tenantID, docID string) ([]VaultLink, error)
-	GetOutLinksBatch(ctx context.Context, tenantID string, docIDs []string) ([]VaultLink, error)
 	GetBacklinks(ctx context.Context, tenantID, docID string) ([]VaultBacklink, error)
 	DeleteDocLinks(ctx context.Context, tenantID, docID string) error
 	DeleteDocLinksByType(ctx context.Context, tenantID, docID, linkType string) error
