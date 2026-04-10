@@ -398,5 +398,12 @@
     "relinkDevice": "重新连接",
     "connectedSuccess": "✅ WhatsApp 连接成功！",
     "tabQrCode": "二维码"
+  },
+  "teams": {
+    "appPackage": {
+      "download": "下载应用包",
+      "generating": "生成中...",
+      "error": "生成应用包失败"
+    }
   }
 }

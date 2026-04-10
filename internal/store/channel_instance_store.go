@@ -30,7 +30,7 @@ func IsDefaultChannelInstance(name string) bool {
 	}
 	// Legacy config-based defaults that were seeded with bare channel-type names.
 	switch name {
-	case "telegram", "discord", "feishu", "zalo_oa", "whatsapp":
+	case "telegram", "discord", "feishu", "zalo_oa", "whatsapp", "slack", "teams":
 		return true
 	}
 	return false

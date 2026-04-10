@@ -79,6 +79,11 @@ export const credentialsSchema: Record<string, FieldDef[]> = {
     { key: "page_access_token", label: "Page Access Token", type: "password", required: true, help: "Page-level token from Pancake dashboard → Page Settings" },
     { key: "webhook_secret", label: "Webhook Secret (Optional)", type: "password", help: "HMAC-SHA256 secret for webhook signature verification. Leave empty to skip verification." },
   ],
+  teams: [
+    { key: "bot_id", label: "Bot ID (App ID)", type: "text", required: true, placeholder: "Azure App Registration ID", help: "Application (client) ID from Azure Portal > App Registrations" },
+    { key: "bot_password", label: "Bot Password", type: "password", required: true, help: "Client secret from Azure Portal > App Registrations > Certificates & secrets" },
+    { key: "tenant_id", label: "Tenant ID", type: "text", placeholder: "Azure AD Tenant ID", help: "Required for SingleTenant. Find in Azure Portal > App Registrations > Overview" },
+  ],
 };
 
 // --- Config schemas ---
@@ -183,6 +188,14 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "features.comment_reply", label: "Comment Reply", type: "boolean", defaultValue: false },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "Sender IDs to whitelist. Empty = accept all." },
     { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit" },
+  ],
+  teams: [
+    { key: "bot_type", label: "Bot Type", type: "select", options: [{ value: "SingleTenant", label: "Single Tenant" }, { value: "MultiTenant", label: "Multi Tenant" }], defaultValue: "SingleTenant", help: "Must match Azure Bot Service configuration" },
+    { key: "webhook_path", label: "Webhook Path", type: "text", defaultValue: "/webhooks/teams", help: "Set Azure Bot Service messaging endpoint to: https://your-goclaw-domain{this-path}" },
+    { key: "dm_policy", label: "DM Policy", type: "select", options: dmPolicyOptions, defaultValue: "open" },
+    { key: "group_policy", label: "Group Policy", type: "select", options: groupPolicyOptions, defaultValue: "open", help: "Control access for group chats and channels" },
+    { key: "allow_from", label: "Allowed Users", type: "tags", help: "Teams user IDs (29:xxx format). Empty = allow all." },
+    { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Deliver intermediate text during tool iterations" },
   ],
 };
 

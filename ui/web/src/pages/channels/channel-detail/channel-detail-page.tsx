@@ -11,6 +11,7 @@ import { ChannelCredentialsTab } from "./channel-credentials-tab";
 import { ChannelGroupsTab } from "./channel-groups-tab";
 import { ChannelManagersTab } from "./channel-managers-tab";
 import { ChannelDiagnosticsCard } from "./channel-diagnostics-card";
+import { TeamsAppPackageButton } from "./teams-app-package-button";
 import { DetailPageSkeleton } from "@/components/shared/loading-skeleton";
 import { useChannels } from "../hooks/use-channels";
 import { channelsWithAuth } from "../channel-wizard-registry";
@@ -183,6 +184,13 @@ export function ChannelDetailPage({
               <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
               <span className="text-muted-foreground">{neutralHealthNote}</span>
             </div>
+          )}
+
+          {instance?.channel_type === "teams" && (
+            <TeamsAppPackageButton
+              instanceId={instance.id}
+              displayName={instance.display_name || instance.name}
+            />
           )}
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>

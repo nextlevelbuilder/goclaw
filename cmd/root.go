@@ -49,6 +49,7 @@ func init() {
 	rootCmd.AddCommand(tenantRestoreCmd())
 	rootCmd.AddCommand(authCmd())
 	rootCmd.AddCommand(setupCmd())
+	rootCmd.AddCommand(teamsCmd())
 }
 
 func versionCmd() *cobra.Command {
