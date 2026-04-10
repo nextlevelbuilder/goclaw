@@ -409,6 +409,8 @@
     "title": "Agent nhóm WhatsApp",
     "hint": "Gán agent cụ thể để xử lý từng nhóm WhatsApp. Nhóm không có cấu hình sẽ dùng agent mặc định của channel.",
     "groupLabel": "Nhóm: {{id}}",
+    "nameLabel": "Tên nhóm",
+    "namePlaceholder": "vd: Channel Outlook",
     "agentLabel": "Agent",
     "selectAgent": "Dùng mặc định channel",
     "addGroupPlaceholder": "JID nhóm (vd: 123456@g.us)",

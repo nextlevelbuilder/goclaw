@@ -14,6 +14,7 @@ import type { ChannelContact } from "@/types/contact";
 import type { AgentData } from "@/types/agent";
 
 interface WhatsAppGroupConfigValues {
+  name?: string;
   agent_id?: string;
   enabled?: boolean;
 }
@@ -104,7 +105,11 @@ export function WhatsAppGroupOverrides({
                 ) : (
                   <ChevronRight className="h-4 w-4" />
                 )}
-                <span className="font-mono text-xs">{id}</span>
+                {group.name ? (
+                  <span className="text-sm">{group.name}</span>
+                ) : (
+                  <span className="font-mono text-xs">{id}</span>
+                )}
               </button>
               <Button
                 type="button"
@@ -119,6 +124,20 @@ export function WhatsAppGroupOverrides({
 
             {expanded[id] && (
               <div className="space-y-3 pl-2">
+                {/* Group name / alias */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    {t("whatsappGroupOverrides.nameLabel")}
+                  </label>
+                  <Input
+                    value={group.name ?? ""}
+                    onChange={(e) =>
+                      updateGroup(id, { ...group, name: e.target.value || undefined })
+                    }
+                    placeholder={t("whatsappGroupOverrides.namePlaceholder")}
+                    className="h-9 text-sm"
+                  />
+                </div>
                 {/* Agent selector */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">

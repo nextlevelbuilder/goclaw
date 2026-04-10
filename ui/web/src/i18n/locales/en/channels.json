@@ -494,6 +494,8 @@
     "title": "WhatsApp Group Agents",
     "hint": "Assign a specific agent to handle each WhatsApp group. Groups without an override use the default channel agent.",
     "groupLabel": "Group: {{id}}",
+    "nameLabel": "Group Name",
+    "namePlaceholder": "e.g. Channel Outlook",
     "agentLabel": "Agent",
     "selectAgent": "Use channel default",
     "addGroupPlaceholder": "Group JID (e.g. 123456@g.us)",

@@ -133,6 +133,7 @@ type SlackConfig struct {
 
 // WhatsAppGroupConfig defines per-group overrides for a WhatsApp channel.
 type WhatsAppGroupConfig struct {
+	Name    string `json:"name,omitempty"`    // human-readable alias (e.g. "Channel Outlook")
 	AgentID string `json:"agent_id,omitempty"` // agent_key to route to (overrides channel default)
 	Enabled *bool  `json:"enabled,omitempty"`  // disable bot for this group (default: true)
 }

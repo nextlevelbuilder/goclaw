@@ -409,6 +409,8 @@
     "title": "WhatsApp 群组 Agent",
     "hint": "为每个 WhatsApp 群组指定专门的 Agent 处理。未配置的群组使用 Channel 默认 Agent。",
     "groupLabel": "群组: {{id}}",
+    "nameLabel": "群组名称",
+    "namePlaceholder": "例如 Channel Outlook",
     "agentLabel": "Agent",
     "selectAgent": "使用 Channel 默认",
     "addGroupPlaceholder": "群组 JID（例如 123456@g.us）",

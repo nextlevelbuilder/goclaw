@@ -141,8 +141,8 @@ function WhatsAppGroupsContent({
   const { t } = useTranslation("channels");
   const config = (instance.config ?? {}) as Record<string, unknown>;
   const [groups, setGroups] = useState<
-    Record<string, { agent_id?: string; enabled?: boolean }>
-  >((config.groups as Record<string, { agent_id?: string; enabled?: boolean }>) ?? {});
+    Record<string, { name?: string; agent_id?: string; enabled?: boolean }>
+  >((config.groups as Record<string, { name?: string; agent_id?: string; enabled?: boolean }>) ?? {});
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {

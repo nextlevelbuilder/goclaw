@@ -19,6 +19,7 @@ import {
 import { channelsWithAuth } from "./channel-wizard-registry";
 
 interface WhatsAppGroupConfig {
+  name?: string;    // human-readable alias
   agent_id?: string; // agent_key (slug), NOT agent.id
   enabled?: boolean;
 }
@@ -249,9 +250,16 @@ export function ChannelListRow({
                         <Users className="h-3.5 w-3.5" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <span className="truncate font-mono text-xs text-muted-foreground">
-                          {jid}
-                        </span>
+                        {config?.name ? (
+                          <div className="flex flex-col">
+                            <span className="truncate text-sm">{config.name}</span>
+                            <span className="truncate font-mono text-xs text-muted-foreground">{jid}</span>
+                          </div>
+                        ) : (
+                          <span className="truncate font-mono text-xs text-muted-foreground">
+                            {jid}
+                          </span>
+                        )}
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
                         {isDisabled && (
