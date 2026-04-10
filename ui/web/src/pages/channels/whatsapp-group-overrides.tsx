@@ -129,7 +129,8 @@ export function WhatsAppGroupOverrides({
                     onValueChange={(val) =>
                       updateGroup(id, {
                         ...group,
-                        agent_id: val || undefined,
+                        agent_id:
+                          val === "__default__" || !val ? undefined : val,
                       })
                     }
                   >

@@ -159,7 +159,7 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 					slog.Info("whatsapp group message rejected: group disabled", "chat_id", chatID)
 					return
 				}
-				if grp.AgentID != "" {
+				if grp.AgentID != "" && grp.AgentID != "__default__" {
 					targetAgentID = grp.AgentID
 					slog.Info("whatsapp group agent override applied", "chat_id", chatID, "agent_id", targetAgentID)
 				}
@@ -167,6 +167,17 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 				slog.Info("whatsapp group no override found", "chat_id", chatID, "available_keys", groupKeys(c.config.Groups))
 			}
 		}
+	}
+
+	// Final routing summary log (unconditional — always fires for group messages).
+	if peerKind == "group" {
+		slog.Info("whatsapp routing resolved",
+			"chat_id", chatID,
+			"default_agent", c.AgentID(),
+			"final_agent", targetAgentID,
+			"override_applied", targetAgentID != c.AgentID(),
+			"groups_configured", len(c.config.Groups),
+		)
 	}
 
 	// Typing indicator.
