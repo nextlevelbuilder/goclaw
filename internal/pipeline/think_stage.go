@@ -95,16 +95,7 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 		resp.ToolCalls = s.deps.UniqueToolCallIDs(resp.ToolCalls, state.RunID, state.Iteration)
 	}
 
-	// 8. Emit block reply for ALL responses with content (including final answers).
-	// Non-streaming channels (WhatsApp, Discord, Zalo) need this for delivery.
-	// Must fire BEFORE the BreakLoop check — otherwise final answers (no tool calls)
-	// are never emitted, and the dedup logic in the consumer suppresses the final
-	// message because ObserveStage already counted it as a block reply.
-	if resp.Content != "" && s.deps.EmitBlockReply != nil {
-		s.deps.EmitBlockReply(resp.Content)
-	}
-
-	// 9. Flow control + message append.
+	// 8. Flow control + message append.
 	// Final answer (no tool calls): FinalizeStage builds the definitive assistant
 	// message with sanitization + MediaRefs, so skip AppendPending here to avoid
 	// a duplicate. Matches v2 behavior where loop breaks before appending.
@@ -123,6 +114,14 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 		RawAssistantContent: resp.RawAssistantContent, // Anthropic thinking blocks passback
 	}
 	state.Messages.AppendPending(assistantMsg)
+
+	// 9. Emit block reply for intermediate assistant content during tool iterations.
+	// Non-streaming channels (Zalo, Discord, WhatsApp) need this for delivery.
+	// Only fires for intermediate responses (with tool calls) — final answers
+	// are delivered through the normal consumer path after FinalizeStage sanitization.
+	if resp.Content != "" && s.deps.EmitBlockReply != nil {
+		s.deps.EmitBlockReply(resp.Content)
+	}
 
 	return nil
 }

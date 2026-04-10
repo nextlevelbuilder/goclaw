@@ -30,8 +30,10 @@ func (s *ObserveStage) Execute(_ context.Context, state *RunState) error {
 		return nil
 	}
 
-	// 2. Track block replies (every response with content counts as a block)
-	if resp.Content != "" {
+	// 2. Track block replies for intermediate responses only (with tool calls).
+	// Final answers (no tool calls) are delivered through the normal consumer path,
+	// not via block.reply — counting them here causes false dedup suppression.
+	if resp.Content != "" && len(resp.ToolCalls) > 0 {
 		state.Observe.BlockReplies++
 		state.Observe.LastBlockReply = resp.Content
 	}
