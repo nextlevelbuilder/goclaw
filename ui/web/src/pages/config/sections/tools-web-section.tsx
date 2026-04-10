@@ -32,17 +32,31 @@ interface Props {
   saving: boolean;
 }
 
+const SORTABLE_PROVIDER_ORDER: ProviderId[] = ["exa", "tavily", "brave"];
+
 function normalizeProviderOrder(value: unknown): ProviderId[] {
-  if (!Array.isArray(value)) {
-    return [];
+  const result: ProviderId[] = [];
+  const seen = new Set<ProviderId>();
+
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      if (
+        (entry === "exa" || entry === "tavily" || entry === "brave") &&
+        !seen.has(entry)
+      ) {
+        seen.add(entry);
+        result.push(entry);
+      }
+    }
   }
-  return value.filter(
-    (entry): entry is ProviderId =>
-      entry === "exa" ||
-      entry === "tavily" ||
-      entry === "brave" ||
-      entry === "duckduckgo",
-  );
+
+  for (const provider of SORTABLE_PROVIDER_ORDER) {
+    if (!seen.has(provider)) {
+      result.push(provider);
+    }
+  }
+
+  return result;
 }
 
 export function ToolsWebSection({ data, onSave, saving }: Props) {

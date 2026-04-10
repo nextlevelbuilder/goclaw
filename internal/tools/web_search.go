@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 )
 
 // Matching TS src/agents/tools/web-search.ts constants.
@@ -139,7 +141,7 @@ func (t *WebSearchTool) UpdateConfig(cfg WebSearchConfig) {
 
 func buildSearchProviders(cfg WebSearchConfig) []SearchProvider {
 	var providers []SearchProvider
-	for _, providerID := range normalizeWebSearchProviderOrder(cfg.ProviderOrder) {
+	for _, providerID := range NormalizeWebSearchProviderOrder(cfg.ProviderOrder) {
 		switch providerID {
 		case searchProviderExa:
 			if cfg.ExaEnabled && cfg.ExaAPIKey != "" {
@@ -162,21 +164,44 @@ func buildSearchProviders(cfg WebSearchConfig) []SearchProvider {
 	return providers
 }
 
-func normalizeWebSearchProviderOrder(order []string) []string {
+func NormalizeWebSearchProviderOrder(order []string) []string {
 	result := make([]string, 0, len(defaultSearchProviderOrder))
 	for _, raw := range order {
 		id := strings.ToLower(strings.TrimSpace(raw))
+		if id == searchProviderDuckDuckGo {
+			continue
+		}
 		if !slices.Contains(defaultSearchProviderOrder, id) || slices.Contains(result, id) {
 			continue
 		}
 		result = append(result, id)
 	}
 	for _, id := range defaultSearchProviderOrder {
+		if id == searchProviderDuckDuckGo {
+			continue
+		}
 		if !slices.Contains(result, id) {
 			result = append(result, id)
 		}
 	}
-	return result
+	return append(result, searchProviderDuckDuckGo)
+}
+
+func WebSearchConfigFromConfig(cfg *config.Config) WebSearchConfig {
+	return WebSearchConfig{
+		ProviderOrder:    cfg.Tools.Web.ProviderOrder,
+		ExaEnabled:       cfg.Tools.Web.Exa.Enabled,
+		ExaAPIKey:        cfg.Tools.Web.Exa.APIKey,
+		ExaMaxResults:    cfg.Tools.Web.Exa.MaxResults,
+		TavilyEnabled:    cfg.Tools.Web.Tavily.Enabled,
+		TavilyAPIKey:     cfg.Tools.Web.Tavily.APIKey,
+		TavilyMaxResults: cfg.Tools.Web.Tavily.MaxResults,
+		BraveEnabled:     cfg.Tools.Web.Brave.Enabled,
+		BraveAPIKey:      cfg.Tools.Web.Brave.APIKey,
+		BraveMaxResults:  cfg.Tools.Web.Brave.MaxResults,
+		DDGEnabled:       cfg.Tools.Web.DuckDuckGo.Enabled,
+		DDGMaxResults:    cfg.Tools.Web.DuckDuckGo.MaxResults,
+	}
 }
 
 func (t *WebSearchTool) Name() string { return "web_search" }

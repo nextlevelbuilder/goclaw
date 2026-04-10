@@ -2,6 +2,7 @@ package config
 
 import (
 	"strconv"
+	"strings"
 )
 
 // ApplySystemConfigs overlays system_configs DB values onto the in-memory config.
@@ -25,6 +26,11 @@ func (c *Config) ApplySystemConfigs(configs map[string]string) {
 		if v, ok := configs[key]; ok && v != "" {
 			b := v == "true" || v == "1"
 			*dst = &b
+		}
+	}
+	booleanValue := func(key string, dst *bool) {
+		if v, ok := configs[key]; ok && v != "" {
+			*dst = v == "true" || v == "1"
 		}
 	}
 
@@ -60,6 +66,26 @@ func (c *Config) ApplySystemConfigs(configs map[string]string) {
 	str("tools.profile", &c.Tools.Profile)
 	integer("tools.rate_limit_per_hour", &c.Tools.RateLimitPerHour)
 	boolean("tools.scrub_credentials", &c.Tools.ScrubCredentials)
+	if raw, ok := configs["tools.web.provider_order"]; ok && raw != "" {
+		parts := strings.Split(raw, ",")
+		order := make([]string, 0, len(parts))
+		for _, part := range parts {
+			part = strings.ToLower(strings.TrimSpace(part))
+			if part == "" {
+				continue
+			}
+			order = append(order, part)
+		}
+		c.Tools.Web.ProviderOrder = order
+	}
+	booleanValue("tools.web.exa.enabled", &c.Tools.Web.Exa.Enabled)
+	integer("tools.web.exa.max_results", &c.Tools.Web.Exa.MaxResults)
+	booleanValue("tools.web.tavily.enabled", &c.Tools.Web.Tavily.Enabled)
+	integer("tools.web.tavily.max_results", &c.Tools.Web.Tavily.MaxResults)
+	booleanValue("tools.web.brave.enabled", &c.Tools.Web.Brave.Enabled)
+	integer("tools.web.brave.max_results", &c.Tools.Web.Brave.MaxResults)
+	booleanValue("tools.web.duckduckgo.enabled", &c.Tools.Web.DuckDuckGo.Enabled)
+	integer("tools.web.duckduckgo.max_results", &c.Tools.Web.DuckDuckGo.MaxResults)
 
 	// TTS
 	str("tts.provider", &c.Tts.Provider)

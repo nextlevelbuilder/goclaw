@@ -43,15 +43,15 @@ func TestNewWebSearchTool_PreservesDefaultDDGOnlyFlow(t *testing.T) {
 	}
 }
 
-func TestNormalizeWebSearchProviderOrder_DedupesAndAppendsDefaults(t *testing.T) {
-	got := normalizeWebSearchProviderOrder([]string{
+func TestNormalizeWebSearchProviderOrder_DedupesAndForcesDDGLast(t *testing.T) {
+	got := NormalizeWebSearchProviderOrder([]string{
 		" brave ",
 		"duckduckgo",
 		"brave",
 		"unknown",
 		"exa",
 	})
-	want := []string{"brave", "duckduckgo", "exa", "tavily"}
+	want := []string{"brave", "exa", "tavily", "duckduckgo"}
 	if len(got) != len(want) {
 		t.Fatalf("len = %d, want %d (%v)", len(got), len(want), got)
 	}

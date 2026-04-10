@@ -159,9 +159,6 @@ func runGateway() {
 		dbGatewayAddr := loopbackAddr(cfg.Gateway.Host, cfg.Gateway.Port)
 		registerProvidersFromDB(providerRegistry, pgStores.Providers, pgStores.ConfigSecrets, dbGatewayAddr, cfg.Gateway.Token, pgStores.MCP, cfg, modelReg)
 	}
-	if pgStores.ConfigSecrets != nil {
-		webSearchTool = syncWebSearchToolRegistration(toolsReg, webSearchTool, cfg)
-	}
 	slog.Info("model registry initialized", "anthropic_models", len(modelReg.Catalog("anthropic")), "openai_models", len(modelReg.Catalog("openai")))
 
 	// Warn if deprecated session scope settings are configured
@@ -182,6 +179,7 @@ func runGateway() {
 			slog.Info("system_configs applied to in-memory config", "keys", len(sysConfigs))
 		}
 	}
+	webSearchTool = syncWebSearchToolRegistration(toolsReg, webSearchTool, resolveMasterConfig(cfg, pgStores))
 	setupMemoryEmbeddings(pgStores, providerRegistry)
 
 	// Resolve background provider for consolidation + vault enrichment.

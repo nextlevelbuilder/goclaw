@@ -117,7 +117,7 @@ func setupToolRegistry(
 	}
 
 	// Web tools (web_search + web_fetch)
-	webSearchTool = tools.NewWebSearchTool(buildWebSearchConfig(cfg))
+	webSearchTool = tools.NewWebSearchTool(tools.WebSearchConfigFromConfig(cfg))
 	if webSearchTool != nil {
 		toolsReg.Register(webSearchTool)
 		slog.Info("web_search tool enabled")
@@ -277,25 +277,8 @@ func setupToolRegistry(
 	return
 }
 
-func buildWebSearchConfig(cfg *config.Config) tools.WebSearchConfig {
-	return tools.WebSearchConfig{
-		ProviderOrder:    cfg.Tools.Web.ProviderOrder,
-		ExaEnabled:       cfg.Tools.Web.Exa.Enabled,
-		ExaAPIKey:        cfg.Tools.Web.Exa.APIKey,
-		ExaMaxResults:    cfg.Tools.Web.Exa.MaxResults,
-		TavilyEnabled:    cfg.Tools.Web.Tavily.Enabled,
-		TavilyAPIKey:     cfg.Tools.Web.Tavily.APIKey,
-		TavilyMaxResults: cfg.Tools.Web.Tavily.MaxResults,
-		BraveEnabled:     cfg.Tools.Web.Brave.Enabled,
-		BraveAPIKey:      cfg.Tools.Web.Brave.APIKey,
-		BraveMaxResults:  cfg.Tools.Web.Brave.MaxResults,
-		DDGEnabled:       cfg.Tools.Web.DuckDuckGo.Enabled,
-		DDGMaxResults:    cfg.Tools.Web.DuckDuckGo.MaxResults,
-	}
-}
-
 func syncWebSearchToolRegistration(toolsReg *tools.Registry, current *tools.WebSearchTool, cfg *config.Config) *tools.WebSearchTool {
-	nextCfg := buildWebSearchConfig(cfg)
+	nextCfg := tools.WebSearchConfigFromConfig(cfg)
 	nextTool := tools.NewWebSearchTool(nextCfg)
 
 	switch {

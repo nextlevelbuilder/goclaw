@@ -104,6 +104,38 @@ func TestSaveLoad_PreservesWebSearchProviderOrder(t *testing.T) {
 	}
 }
 
+func TestApplySystemConfigs_AppliesWebSearchSettings(t *testing.T) {
+	cfg := Default()
+	cfg.ApplySystemConfigs(map[string]string{
+		"tools.web.provider_order":         "brave,exa,tavily,duckduckgo",
+		"tools.web.exa.enabled":            "true",
+		"tools.web.exa.max_results":        "7",
+		"tools.web.tavily.enabled":         "false",
+		"tools.web.tavily.max_results":     "8",
+		"tools.web.brave.enabled":          "true",
+		"tools.web.brave.max_results":      "9",
+		"tools.web.duckduckgo.enabled":     "true",
+		"tools.web.duckduckgo.max_results": "6",
+	})
+
+	wantOrder := []string{"brave", "exa", "tavily", "duckduckgo"}
+	if !reflect.DeepEqual(cfg.Tools.Web.ProviderOrder, wantOrder) {
+		t.Fatalf("provider_order = %v, want %v", cfg.Tools.Web.ProviderOrder, wantOrder)
+	}
+	if !cfg.Tools.Web.Exa.Enabled || cfg.Tools.Web.Exa.MaxResults != 7 {
+		t.Fatalf("exa = %+v, want enabled with max_results 7", cfg.Tools.Web.Exa)
+	}
+	if cfg.Tools.Web.Tavily.Enabled || cfg.Tools.Web.Tavily.MaxResults != 8 {
+		t.Fatalf("tavily = %+v, want disabled with max_results 8", cfg.Tools.Web.Tavily)
+	}
+	if !cfg.Tools.Web.Brave.Enabled || cfg.Tools.Web.Brave.MaxResults != 9 {
+		t.Fatalf("brave = %+v, want enabled with max_results 9", cfg.Tools.Web.Brave)
+	}
+	if !cfg.Tools.Web.DuckDuckGo.Enabled || cfg.Tools.Web.DuckDuckGo.MaxResults != 6 {
+		t.Fatalf("duckduckgo = %+v, want enabled with max_results 6", cfg.Tools.Web.DuckDuckGo)
+	}
+}
+
 // --- Load with invalid JSON5 → error ---
 
 func TestLoad_InvalidJSON5(t *testing.T) {

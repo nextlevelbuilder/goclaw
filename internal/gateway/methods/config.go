@@ -3,7 +3,8 @@ package methods
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
+	"fmt"
+	"strings"
 
 	"github.com/titanous/json5"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -94,9 +96,17 @@ func (m *ConfigMethods) handleApply(ctx context.Context, client *gateway.Client,
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidRequest, err.Error())))
 		return
 	}
+	normalizeWebSearchConfig(newCfg)
+	if err := validateWebSearchConfig(newCfg); err != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidRequest, err.Error())))
+		return
+	}
 
 	// Extract secrets → save to config_secrets table, strip all from file
-	m.saveSecretsToStore(ctx, newCfg)
+	if err := m.saveSecretsToStore(ctx, newCfg); err != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToSave, "config", err.Error())))
+		return
+	}
 	newCfg.StripSecrets()
 
 	// Save to disk
@@ -114,7 +124,7 @@ func (m *ConfigMethods) handleApply(ctx context.Context, client *gateway.Client,
 	}
 	m.cfg.ApplyEnvOverrides()
 	m.syncToSystemConfigs(ctx)
-	m.broadcastChanged()
+	m.broadcastChanged(ctx)
 	emitAudit(m.eventBus, client, "config.applied", "config", "gateway")
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
@@ -168,9 +178,17 @@ func (m *ConfigMethods) handlePatch(ctx context.Context, client *gateway.Client,
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidRequest, err.Error())))
 		return
 	}
+	normalizeWebSearchConfig(merged)
+	if err := validateWebSearchConfig(merged); err != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidRequest, err.Error())))
+		return
+	}
 
 	// Extract secrets → save to config_secrets table, strip all from file
-	m.saveSecretsToStore(ctx, merged)
+	if err := m.saveSecretsToStore(ctx, merged); err != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToSave, "config", err.Error())))
+		return
+	}
 	merged.StripSecrets()
 
 	// Save to disk
@@ -188,7 +206,7 @@ func (m *ConfigMethods) handlePatch(ctx context.Context, client *gateway.Client,
 	}
 	m.cfg.ApplyEnvOverrides()
 	m.syncToSystemConfigs(ctx)
-	m.broadcastChanged()
+	m.broadcastChanged(ctx)
 	emitAudit(m.eventBus, client, "config.patched", "config", "gateway")
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
@@ -200,6 +218,23 @@ func (m *ConfigMethods) handlePatch(ctx context.Context, client *gateway.Client,
 	}))
 }
 
+func normalizeWebSearchConfig(cfg *config.Config) {
+	cfg.Tools.Web.ProviderOrder = tools.NormalizeWebSearchProviderOrder(cfg.Tools.Web.ProviderOrder)
+}
+
+func validateWebSearchConfig(cfg *config.Config) error {
+	if cfg.Tools.Web.Exa.Enabled && strings.TrimSpace(cfg.Tools.Web.Exa.APIKey) == "" {
+		return fmt.Errorf("tools.web.exa.api_key is required when Exa is enabled")
+	}
+	if cfg.Tools.Web.Tavily.Enabled && strings.TrimSpace(cfg.Tools.Web.Tavily.APIKey) == "" {
+		return fmt.Errorf("tools.web.tavily.api_key is required when Tavily is enabled")
+	}
+	if cfg.Tools.Web.Brave.Enabled && strings.TrimSpace(cfg.Tools.Web.Brave.APIKey) == "" {
+		return fmt.Errorf("tools.web.brave.api_key is required when Brave is enabled")
+	}
+	return nil
+}
+
 // syncToSystemConfigs syncs the resolved config to system_configs table for the given tenant.
 func (m *ConfigMethods) syncToSystemConfigs(ctx context.Context) {
 	if m.syncFn != nil {
@@ -208,9 +243,13 @@ func (m *ConfigMethods) syncToSystemConfigs(ctx context.Context) {
 }
 
 // broadcastChanged notifies subscribers that config has been updated.
-func (m *ConfigMethods) broadcastChanged() {
+func (m *ConfigMethods) broadcastChanged(ctx context.Context) {
 	if m.eventBus != nil {
-		m.eventBus.Broadcast(bus.Event{Name: bus.TopicConfigChanged, Payload: m.cfg})
+		m.eventBus.Broadcast(bus.Event{
+			Name:     bus.TopicConfigChanged,
+			Payload:  m.cfg,
+			TenantID: store.TenantIDFromContext(ctx),
+		})
 	}
 }
 
@@ -254,9 +293,9 @@ func (m *ConfigMethods) handleSchema(_ context.Context, client *gateway.Client, 
 
 // saveSecretsToStore extracts non-LLM/non-channel secrets from the config
 // and persists them to the config_secrets table.
-func (m *ConfigMethods) saveSecretsToStore(ctx context.Context, cfg *config.Config) {
+func (m *ConfigMethods) saveSecretsToStore(ctx context.Context, cfg *config.Config) error {
 	if m.secretsStore == nil {
-		return
+		return nil
 	}
 
 	secrets := cfg.ExtractDBSecrets()
@@ -269,12 +308,13 @@ func (m *ConfigMethods) saveSecretsToStore(ctx context.Context, cfg *config.Conf
 		value, ok := secrets[key]
 		if !ok {
 			if err := m.secretsStore.Delete(ctx, key); err != nil {
-				slog.Warn("failed to delete config secret", "key", key, "error", err)
+				return fmt.Errorf("delete config secret %s: %w", key, err)
 			}
 			continue
 		}
 		if err := m.secretsStore.Set(ctx, key, value); err != nil {
-			slog.Warn("failed to save config secret", "key", key, "error", err)
+			return fmt.Errorf("save config secret %s: %w", key, err)
 		}
 	}
+	return nil
 }
