@@ -22,6 +22,9 @@ func skillsCmd() *cobra.Command {
 	}
 	cmd.AddCommand(skillsListCmd())
 	cmd.AddCommand(skillsShowCmd())
+	cmd.AddCommand(skillsInstallCmd())
+	cmd.AddCommand(skillsRemoveCmd())
+	cmd.AddCommand(skillsSearchCmd())
 	return cmd
 }
 

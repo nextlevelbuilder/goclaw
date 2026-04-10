@@ -114,6 +114,29 @@ All notable changes to GoClaw Gateway are documented here. Format follows [Keep 
 - **Functional options pattern**: Telegram provider refactored to `telegram.New()` with `WithXxxStore()` option setters for cleaner initialization
 - **File organization**: Subagent code split into focused modules: `subagent.go`, `subagent_roster.go`, `subagent_spawn.go`. Spawn tool split: `spawn_tool.go` + `spawn_tool_actions.go`
 
+#### Skill Hub: Discovery & Installation (2026-03-31)
+- **Skill Hub CLI:** New commands `goclaw skills install`, `remove`, `search` for user-driven skill discovery and lifecycle
+- **Registry support:** Curated skill registry at `https://raw.githubusercontent.com/goclaw-hub/registry/main/index.json` with local caching (1-hour TTL)
+- **GitHub fetcher:** Tarball download via GitHub API with security hardening (50 MB limit, 500-file limit, path traversal guards, symlink skip)
+- **Skill installer:** Multi-stage orchestration (validate→copy→DB→deps→reload) with concurrent safety (advisory locks)
+- **Registry client:** JSON-based skill index resolution and fetch with HTTPS enforcement and env override support
+- **Installation commands:**
+  - `goclaw skills install shopee-product-finder` — Install by registry slug
+  - `goclaw skills install owner/repo` — Install from GitHub directly
+  - `goclaw skills install owner/repo@v1.0 --ref main` — Install specific ref
+  - `goclaw skills search <query>` — Search registry index
+  - `goclaw skills remove <slug>` — Remove installed skill
+- **Security features:** Package name validation (stdlib blocklist), SKILL.md content guard, tar bomb prevention, path traversal hardening
+- **Versioned storage:** Skills stored in `skills-store/{slug}/{version}/` with version increments on re-install
+- **Dependency validation:** Post-install scanning mirrors `publish_skill` tool; warns on missing deps (does not archive)
+- **Hot-reload:** BumpVersion() invalidates loader cache; next access loads from filesystem automatically
+- **Files added:**
+  - `internal/skills/github_fetcher.go` — Tarball download + secure extraction
+  - `internal/skills/registry_client.go` — Registry index fetch + cache
+  - `internal/skills/installer.go` — Installation orchestrator
+  - `cmd/skill_install_cmd.go` — `skills install` CLI handler
+  - `cmd/skill_remove_cmd.go` — `skills remove` CLI handler
+
 #### Runtime & Packages Management (2026-03-17)
 - **Packages page**: New "Packages" page in Web UI under System group for managing installed packages
 - **HTTP API endpoints**: GET/POST `/v1/packages`, `/v1/packages/install`, `/v1/packages/uninstall`, GET `/v1/packages/runtimes`
@@ -236,9 +259,13 @@ All notable changes to GoClaw Gateway are documented here. Format follows [Keep 
 
 ### Documentation
 
+- Added `22-skill-hub-installation.md` — Skill Hub overview, CLI commands, registry architecture, fetcher, installer, security model, error handling
+- Updated `16-skill-publishing.md` — Added cross-reference to Skill Hub for user-driven discovery and installation
+- Updated `00-architecture-overview.md` — Added Skill Hub components to module map (github_fetcher, registry_client, installer)
+- Updated `CLAUDE.md` — Added Skill Hub CLI commands and updated `internal/skills/` description
 - Updated `18-http-api.md` — Added section 17 for Runtime & Packages Management endpoints
 - Updated `09-security.md` — Added Docker entrypoint documentation, pkg-helper architecture, privilege separation
-- Updated `17-changelog.md` — New entries for packages management, Docker security, and auth fix
+- Updated `17-changelog.md` — New entries for packages management, Docker security, auth fix, and Skill Hub
 - Added `18-http-api.md` — Complete HTTP REST API reference (all endpoints, auth, error codes)
 - Added `19-websocket-rpc.md` — Complete WebSocket RPC method catalog (64+ methods, permission matrix)
 - Added `20-api-keys-auth.md` — API key authentication, RBAC scopes, security model, usage examples

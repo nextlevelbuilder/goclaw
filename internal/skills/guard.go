@@ -51,7 +51,7 @@ var skillGuardRules = []guardRule{
 	{regexp.MustCompile(`(?i)(curl|wget)\s+\S+.*\$\{?(HOME|USER|PASS|KEY|SECRET|TOKEN)`), "env var exfiltration via HTTP"},
 
 	// --- Path traversal ---
-	{regexp.MustCompile(`\.\./\.\./\.\./`),                          "deep path traversal (../../..)"},
+	{regexp.MustCompile(`\.\./`),                                     "path traversal (..)"},
 
 	// --- SQL injection ---
 	{regexp.MustCompile(`(?i)\bDROP\s+TABLE\b`),                     "SQL DROP TABLE"},
