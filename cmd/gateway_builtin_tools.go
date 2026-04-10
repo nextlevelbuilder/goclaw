@@ -26,7 +26,7 @@ func builtinToolSeedData() []store.BuiltinToolDef {
 		},
 
 		// web
-		{Name: "web_search", DisplayName: "Web Search", Description: "Search the web for information using a search engine (Brave or DuckDuckGo)", Category: "web", Enabled: true,
+		{Name: "web_search", DisplayName: "Web Search", Description: "Search the web for information using Exa, Tavily, Brave Search, or DuckDuckGo", Category: "web", Enabled: true,
 			Metadata: json.RawMessage(`{"config_hint":"Config → Tools → Web Search"}`),
 		},
 		{Name: "web_fetch", DisplayName: "Web Fetch", Description: "Fetch a web page or API endpoint and extract its text content", Category: "web", Enabled: true,

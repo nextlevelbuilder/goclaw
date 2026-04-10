@@ -81,12 +81,12 @@ func init() {
 		MsgNotImplemented: "%s 尚未实现",
 
 		// Agent links
-		MsgLinksNotConfigured:   "Agent链接未配置",
-		MsgInvalidDirection:     "方向必须是 outbound、inbound 或 bidirectional",
-		MsgSourceTargetSame:     "源和目标必须是不同的Agent",
-		MsgCannotDelegateOpen:   "无法委派给开放型Agent — 只有预定义Agent才能作为委派目标",
-		MsgNoUpdatesProvided:    "未提供更新内容",
-		MsgInvalidLinkStatus:    "状态必须是 active 或 disabled",
+		MsgLinksNotConfigured: "Agent链接未配置",
+		MsgInvalidDirection:   "方向必须是 outbound、inbound 或 bidirectional",
+		MsgSourceTargetSame:   "源和目标必须是不同的Agent",
+		MsgCannotDelegateOpen: "无法委派给开放型Agent — 只有预定义Agent才能作为委派目标",
+		MsgNoUpdatesProvided:  "未提供更新内容",
+		MsgInvalidLinkStatus:  "状态必须是 active 或 disabled",
 
 		// Teams
 		MsgTeamsNotConfigured:   "团队未配置",
@@ -144,7 +144,7 @@ func init() {
 		MsgToolListFiles:       "列出工作区指定路径中的文件和目录",
 		MsgToolEdit:            "通过查找和替换对现有文件进行定向编辑，无需重写整个文件",
 		MsgToolExec:            "在工作区中执行 shell 命令并返回标准输出/错误",
-		MsgToolWebSearch:       "使用搜索引擎（Brave 或 DuckDuckGo）在网络上搜索信息",
+		MsgToolWebSearch:       "使用 Exa、Tavily、Brave Search 或 DuckDuckGo 在网络上搜索信息",
 		MsgToolWebFetch:        "获取网页或 API 端点并提取其文本内容",
 		MsgToolMemorySearch:    "使用语义相似度搜索代理的长期记忆",
 		MsgToolMemoryGet:       "按文件路径检索特定的记忆文档",

@@ -81,12 +81,12 @@ func init() {
 		MsgNotImplemented: "%s not yet implemented",
 
 		// Agent links
-		MsgLinksNotConfigured:   "agent links not configured",
-		MsgInvalidDirection:     "direction must be outbound, inbound, or bidirectional",
-		MsgSourceTargetSame:     "source and target must be different agents",
-		MsgCannotDelegateOpen:   "cannot delegate to open agents — only predefined agents can be delegation targets",
-		MsgNoUpdatesProvided:    "no updates provided",
-		MsgInvalidLinkStatus:    "status must be active or disabled",
+		MsgLinksNotConfigured: "agent links not configured",
+		MsgInvalidDirection:   "direction must be outbound, inbound, or bidirectional",
+		MsgSourceTargetSame:   "source and target must be different agents",
+		MsgCannotDelegateOpen: "cannot delegate to open agents — only predefined agents can be delegation targets",
+		MsgNoUpdatesProvided:  "no updates provided",
+		MsgInvalidLinkStatus:  "status must be active or disabled",
 
 		// Teams
 		MsgTeamsNotConfigured:   "teams not configured",
@@ -144,7 +144,7 @@ func init() {
 		MsgToolListFiles:       "List files and directories in a given path within the workspace",
 		MsgToolEdit:            "Apply targeted search-and-replace edits to existing files without rewriting the entire file",
 		MsgToolExec:            "Execute a shell command in the workspace and return stdout/stderr",
-		MsgToolWebSearch:       "Search the web for information using a search engine (Brave or DuckDuckGo)",
+		MsgToolWebSearch:       "Search the web for information using Exa, Tavily, Brave Search, or DuckDuckGo",
 		MsgToolWebFetch:        "Fetch a web page or API endpoint and extract its text content",
 		MsgToolMemorySearch:    "Search through the agent's long-term memory using semantic similarity",
 		MsgToolMemoryGet:       "Retrieve a specific memory document by its file path",

@@ -182,7 +182,7 @@
       "list_files": "Liệt kê tệp và thư mục trong một đường dẫn trong workspace",
       "edit": "Áp dụng chỉnh sửa tìm-và-thay-thế vào tệp hiện có mà không cần ghi lại toàn bộ",
       "exec": "Thực thi lệnh shell trong workspace và trả về stdout/stderr",
-      "web_search": "Tìm kiếm thông tin trên web bằng công cụ tìm kiếm (Brave hoặc DuckDuckGo)",
+      "web_search": "Tìm kiếm thông tin trên web bằng Exa, Tavily, Brave Search hoặc DuckDuckGo",
       "web_fetch": "Tải trang web hoặc API endpoint và trích xuất nội dung văn bản",
       "memory_search": "Tìm kiếm trong bộ nhớ dài hạn của agent bằng độ tương đồng ngữ nghĩa",
       "memory_get": "Lấy tài liệu bộ nhớ cụ thể theo đường dẫn tệp",
