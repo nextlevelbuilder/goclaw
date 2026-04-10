@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -78,8 +79,11 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 			)
 		}
 
-		// Build context with tenant scope so agent loop events are scoped correctly.
-		cronCtx := store.WithTenantID(context.Background(), job.TenantID)
+		// Build context with tenant scope and timeout so agent loop events are
+		// scoped correctly and a hung agent can't block the cron scheduler forever.
+		cronCtx, cancelCron := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancelCron()
+		cronCtx = store.WithTenantID(cronCtx, job.TenantID)
 
 		// Reset session before each cron run to prevent tool errors from previous
 		// runs from polluting the context and blocking future executions (#294).
@@ -106,8 +110,13 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 			TraceTags:         []string{"cron"},
 		})
 
-		// Block until the scheduled run completes
-		outcome := <-outCh
+		// Block until the scheduled run completes or the timeout fires.
+		var outcome scheduler.RunOutcome
+		select {
+		case outcome = <-outCh:
+		case <-cronCtx.Done():
+			return nil, fmt.Errorf("cron job %s timed out after 10m", job.Name)
+		}
 		if outcome.Err != nil {
 			return nil, outcome.Err
 		}
