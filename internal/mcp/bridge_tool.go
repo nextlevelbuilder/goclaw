@@ -94,6 +94,11 @@ func (t *BridgeTool) OriginalName() string { return t.toolName }
 // IsConnected returns whether the underlying MCP server connection is healthy.
 func (t *BridgeTool) IsConnected() bool { return t.connected.Load() }
 
+// swapClient replaces the MCP client pointer after a full reconnect.
+// Called by Manager.updateBridgeToolClients when the server-side session
+// is dead and a fresh connection has been established.
+func (t *BridgeTool) swapClient(c *mcpclient.Client) { t.client = c }
+
 func (t *BridgeTool) Execute(ctx context.Context, args map[string]any) *tools.Result {
 	if !t.connected.Load() {
 		return tools.ErrorResult(fmt.Sprintf("MCP server %q is disconnected", t.serverName))

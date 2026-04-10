@@ -41,6 +41,16 @@ type ServerStatus struct {
 	Error     string `json:"error,omitempty"`
 }
 
+// connParams stores connection parameters needed to re-establish a dead connection.
+// Populated during initial connectAndDiscover and used by tryReconnect.
+type connParams struct {
+	command string
+	args    []string
+	env     map[string]string
+	url     string
+	headers map[string]string
+}
+
 // serverState tracks a single MCP server connection.
 type serverState struct {
 	name       string
@@ -50,6 +60,7 @@ type serverState struct {
 	toolNames  []string // registered tool names in the registry
 	timeoutSec int
 	cancel     context.CancelFunc
+	conn       connParams // connection params for reconnect
 
 	mu              sync.Mutex
 	reconnAttempts  int

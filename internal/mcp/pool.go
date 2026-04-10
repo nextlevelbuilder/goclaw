@@ -598,6 +598,8 @@ func (e *poolEntry) Connected() *atomic.Bool { return &e.state.connected }
 func (e *poolEntry) MCPTools() []mcpgo.Tool { return e.tools }
 
 // poolHealthLoop is a standalone health loop for pool-managed connections.
+// After consecutive ping failures, it attempts a full reconnect by creating
+// a fresh client, mirroring the Manager.tryReconnect slow path.
 func poolHealthLoop(ctx context.Context, ss *serverState) {
 	ticker := newHealthTicker()
 	defer ticker.Stop()
@@ -625,6 +627,7 @@ func poolHealthLoop(ctx context.Context, ss *serverState) {
 
 				if failures >= healthFailThreshold {
 					ss.connected.Store(false)
+					poolTryReconnect(ctx, ss)
 				}
 			} else {
 				ss.connected.Store(true)
@@ -636,4 +639,86 @@ func poolHealthLoop(ctx context.Context, ss *serverState) {
 			}
 		}
 	}
+}
+
+// poolTryReconnect attempts a full reconnect for a pool-managed connection.
+// Closes the dead client, creates a fresh one using stored connection params,
+// and swaps ss.client in-place. Existing BridgeTools referencing the old client
+// will be updated by the next Manager.tryReconnect call or pool Acquire cycle.
+func poolTryReconnect(ctx context.Context, ss *serverState) {
+	ss.mu.Lock()
+	if ss.reconnAttempts >= maxReconnectAttempts {
+		ss.lastErr = fmt.Sprintf("max reconnect attempts (%d) reached", maxReconnectAttempts)
+		ss.mu.Unlock()
+		slog.Error("mcp.pool.reconnect_exhausted", "server", ss.name)
+		return
+	}
+	ss.reconnAttempts++
+	attempt := ss.reconnAttempts
+	ss.mu.Unlock()
+
+	backoff := min(initialBackoff*time.Duration(1<<(attempt-1)), maxBackoff)
+	slog.Info("mcp.pool.reconnecting", "server", ss.name, "attempt", attempt, "backoff", backoff)
+
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(backoff):
+	}
+
+	// Fast path: transport may have auto-reconnected.
+	if err := ss.client.Ping(ctx); err == nil {
+		ss.connected.Store(true)
+		ss.mu.Lock()
+		ss.reconnAttempts = 0
+		ss.healthFailures = 0
+		ss.lastErr = ""
+		ss.mu.Unlock()
+		slog.Info("mcp.pool.reconnected", "server", ss.name)
+		return
+	}
+
+	// Slow path: create fresh client.
+	slog.Info("mcp.pool.full_reconnect", "server", ss.name, "attempt", attempt)
+
+	_ = ss.client.Close()
+
+	newClient, err := createClient(ss.transport, ss.conn.command, ss.conn.args, ss.conn.env, ss.conn.url, ss.conn.headers)
+	if err != nil {
+		slog.Warn("mcp.pool.reconnect_create_failed", "server", ss.name, "error", err)
+		return
+	}
+
+	if ss.transport != "stdio" {
+		if err := newClient.Start(ctx); err != nil {
+			_ = newClient.Close()
+			slog.Warn("mcp.pool.reconnect_start_failed", "server", ss.name, "error", err)
+			return
+		}
+	}
+
+	initReq := mcpgo.InitializeRequest{}
+	initReq.Params.ProtocolVersion = mcpgo.LATEST_PROTOCOL_VERSION
+	initReq.Params.ClientInfo = mcpgo.Implementation{Name: "goclaw", Version: "1.0.0"}
+
+	if _, err := newClient.Initialize(ctx, initReq); err != nil {
+		_ = newClient.Close()
+		slog.Warn("mcp.pool.reconnect_init_failed", "server", ss.name, "error", err)
+		return
+	}
+
+	// Swap client in-place. BridgeTools referencing ss.client via pool entry
+	// still hold the old pointer — the Manager's updateBridgeToolClients will
+	// fix them on the next tool call or health cycle that touches this server.
+	// For pool-backed connections, Acquire() also handles this: it detects
+	// disconnected entries, creates fresh connections, and returns new entries.
+	ss.client = newClient
+	ss.connected.Store(true)
+	ss.mu.Lock()
+	ss.reconnAttempts = 0
+	ss.healthFailures = 0
+	ss.lastErr = ""
+	ss.mu.Unlock()
+
+	slog.Info("mcp.pool.reconnected", "server", ss.name, "method", "full_reconnect")
 }
