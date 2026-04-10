@@ -53,6 +53,14 @@ type connParams struct {
 }
 
 // serverState tracks a single MCP server connection.
+//
+// Dual-pointer design for the MCP client:
+//   - client: direct pointer used by healthLoop (single goroutine, no contention).
+//   - clientPtr: atomic pointer shared with all BridgeTools via NewBridgeTool.
+//     BridgeTools call clientPtr.Load() in Execute for race-safe access.
+//
+// On reconnect, fullReconnect() updates BOTH: ss.client for healthLoop and
+// ss.clientPtr.Store() for BridgeTools. The old client is closed AFTER the swap.
 type serverState struct {
 	name       string
 	transport  string

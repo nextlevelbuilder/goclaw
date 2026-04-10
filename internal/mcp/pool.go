@@ -689,46 +689,8 @@ func poolTryReconnect(ctx context.Context, ss *serverState) {
 		return
 	}
 
-	// Slow path: create fresh client FIRST, then swap and close old.
-	slog.Info("mcp.pool.full_reconnect", "server", ss.name, "attempt", attempt)
-
-	newClient, err := createClient(ss.transport, ss.conn.command, ss.conn.args, ss.conn.env, ss.conn.url, ss.conn.headers)
-	if err != nil {
-		slog.Warn("mcp.pool.reconnect_create_failed", "server", ss.name, "error", err)
-		return
+	// Slow path: create fresh client, swap atomically, close old.
+	if fullReconnect(ctx, ss) {
+		slog.Info("mcp.pool.reconnected", "server", ss.name, "method", "full_reconnect")
 	}
-
-	if ss.transport != "stdio" {
-		if err := newClient.Start(ctx); err != nil {
-			_ = newClient.Close()
-			slog.Warn("mcp.pool.reconnect_start_failed", "server", ss.name, "error", err)
-			return
-		}
-	}
-
-	initReq := mcpgo.InitializeRequest{}
-	initReq.Params.ProtocolVersion = mcpgo.LATEST_PROTOCOL_VERSION
-	initReq.Params.ClientInfo = mcpgo.Implementation{Name: "goclaw", Version: "1.0.0"}
-
-	if _, err := newClient.Initialize(ctx, initReq); err != nil {
-		_ = newClient.Close()
-		slog.Warn("mcp.pool.reconnect_init_failed", "server", ss.name, "error", err)
-		return
-	}
-
-	// Swap atomically: store new client, then close old.
-	// BridgeTools use clientPtr.Load() so they see the new client immediately.
-	oldClient := ss.client
-	ss.client = newClient
-	ss.clientPtr.Store(newClient)
-	ss.connected.Store(true)
-	ss.mu.Lock()
-	ss.reconnAttempts = 0
-	ss.healthFailures = 0
-	ss.lastErr = ""
-	ss.mu.Unlock()
-
-	_ = oldClient.Close()
-
-	slog.Info("mcp.pool.reconnected", "server", ss.name, "method", "full_reconnect")
 }

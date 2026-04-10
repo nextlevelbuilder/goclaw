@@ -362,21 +362,32 @@ func (m *Manager) tryReconnect(ctx context.Context, ss *serverState) {
 	}
 
 	// Slow path: server-side session is dead (container restart, OOM, etc.).
-	// Create fresh client FIRST, then swap and close old — avoids a window
-	// where ss.client points to a closed client if creation fails.
-	slog.Info("mcp.server.full_reconnect", "server", ss.name, "attempt", attempt)
+	if fullReconnect(ctx, ss) {
+		slog.Info("mcp.server.reconnected", "server", ss.name, "method", "full_reconnect")
+	}
+}
+
+// fullReconnect creates a fresh MCP client, atomically swaps it into serverState,
+// and closes the old one. Returns true on success. Shared by Manager.tryReconnect
+// and poolTryReconnect to avoid duplication.
+//
+// The new client is created and validated FIRST, then swapped via clientPtr.Store()
+// so BridgeTools see the new client immediately. The old client is closed AFTER
+// the swap to avoid a window where ss.client points to a closed client.
+func fullReconnect(ctx context.Context, ss *serverState) bool {
+	slog.Info("mcp.full_reconnect", "server", ss.name, "transport", ss.transport)
 
 	newClient, err := createClient(ss.transport, ss.conn.command, ss.conn.args, ss.conn.env, ss.conn.url, ss.conn.headers)
 	if err != nil {
-		slog.Warn("mcp.server.reconnect_create_failed", "server", ss.name, "error", err)
-		return
+		slog.Warn("mcp.reconnect_create_failed", "server", ss.name, "error", err)
+		return false
 	}
 
 	if ss.transport != "stdio" {
 		if err := newClient.Start(ctx); err != nil {
 			_ = newClient.Close()
-			slog.Warn("mcp.server.reconnect_start_failed", "server", ss.name, "error", err)
-			return
+			slog.Warn("mcp.reconnect_start_failed", "server", ss.name, "error", err)
+			return false
 		}
 	}
 
@@ -386,8 +397,8 @@ func (m *Manager) tryReconnect(ctx context.Context, ss *serverState) {
 
 	if _, err := newClient.Initialize(ctx, initReq); err != nil {
 		_ = newClient.Close()
-		slog.Warn("mcp.server.reconnect_init_failed", "server", ss.name, "error", err)
-		return
+		slog.Warn("mcp.reconnect_init_failed", "server", ss.name, "error", err)
+		return false
 	}
 
 	// Swap atomically: store new client, then close old.
@@ -403,6 +414,5 @@ func (m *Manager) tryReconnect(ctx context.Context, ss *serverState) {
 	ss.mu.Unlock()
 
 	_ = oldClient.Close()
-
-	slog.Info("mcp.server.reconnected", "server", ss.name, "method", "full_reconnect")
+	return true
 }

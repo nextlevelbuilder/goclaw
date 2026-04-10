@@ -104,6 +104,9 @@ func (t *BridgeTool) Execute(ctx context.Context, args map[string]any) *tools.Re
 	}
 
 	client := t.clientPtr.Load() // atomic load — safe during concurrent reconnect
+	if client == nil {
+		return tools.ErrorResult(fmt.Sprintf("MCP server %q has no active client", t.serverName))
+	}
 
 	callCtx, cancel := context.WithTimeout(ctx, time.Duration(t.timeoutSec)*time.Second)
 	defer cancel()
