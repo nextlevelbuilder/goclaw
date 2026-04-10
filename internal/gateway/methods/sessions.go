@@ -3,6 +3,8 @@ package methods
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
@@ -13,7 +15,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
-// SessionsMethods handles sessions.list, sessions.preview, sessions.patch, sessions.delete, sessions.reset.
+// SessionsMethods handles sessions.list, sessions.preview, sessions.patch, sessions.delete, sessions.delete-bulk, sessions.reset.
 type SessionsMethods struct {
 	sessions store.SessionStore
 	eventBus bus.EventPublisher
@@ -29,6 +31,7 @@ func (m *SessionsMethods) Register(router *gateway.MethodRouter) {
 	router.Register(protocol.MethodSessionsPreview, m.handlePreview)
 	router.Register(protocol.MethodSessionsPatch, m.handlePatch)
 	router.Register(protocol.MethodSessionsDelete, m.handleDelete)
+	router.Register(protocol.MethodSessionsDeleteBulk, m.handleDeleteBulk)
 	router.Register(protocol.MethodSessionsReset, m.handleReset)
 }
 
@@ -73,6 +76,10 @@ func (m *SessionsMethods) handleList(ctx context.Context, client *gateway.Client
 
 type sessionKeyParams struct {
 	Key string `json:"key"`
+}
+
+type sessionsDeleteBulkParams struct {
+	Keys []string `json:"keys"`
 }
 
 func (m *SessionsMethods) handlePreview(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
@@ -201,6 +208,55 @@ func (m *SessionsMethods) handleDelete(ctx context.Context, client *gateway.Clie
 		"ok": true,
 	}))
 	emitAudit(m.eventBus, client, "session.deleted", "session", params.Key)
+}
+
+func (m *SessionsMethods) handleDeleteBulk(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+	locale := store.LocaleFromContext(ctx)
+	var params sessionsDeleteBulkParams
+	if req.Params != nil {
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidJSON)))
+			return
+		}
+	}
+
+	if len(params.Keys) == 0 {
+		client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
+			"ok":    true,
+			"count": 0,
+		}))
+		return
+	}
+
+	deleted := 0
+	for _, key := range params.Keys {
+		parts := strings.SplitN(key, ":", 4)
+		if len(parts) < 4 || parts[0] != "agent" || parts[2] != "ws" {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgPermissionDenied, "session")))
+			return
+		}
+
+		sess := m.sessions.Get(ctx, key)
+		if sess == nil {
+			continue
+		}
+		if !canSeeAll(client.Role(), m.cfg.Gateway.OwnerIDs, client.UserID()) && sess.UserID != client.UserID() {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgPermissionDenied, "session")))
+			return
+		}
+
+		if err := m.sessions.Delete(ctx, key); err != nil {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, fmt.Sprintf("bulk delete failed after %d deletions: %v", deleted, err)))
+			return
+		}
+		deleted++
+	}
+
+	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
+		"ok":    true,
+		"count": deleted,
+	}))
+	emitAudit(m.eventBus, client, "session.bulk_deleted", "session", fmt.Sprintf("count:%d", deleted))
 }
 
 func (m *SessionsMethods) handleReset(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {

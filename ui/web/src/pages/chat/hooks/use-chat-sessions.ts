@@ -46,6 +46,7 @@ export function useChatSessions(agentId: string) {
   }, [loadSessions]);
 
   const buildNewSessionKey = useCallback(() => {
+	if (!agentId) return "";
     const convId = uniqueId();
     return `agent:${agentId}:ws:direct:${convId}`;
   }, [agentId]);
@@ -61,6 +62,21 @@ export function useChatSessions(agentId: string) {
       throw err;
     }
   }, [ws, connected, loadSessions]);
+
+  const deleteAllSessions = useCallback(async () => {
+    if (!connected) return 0;
+    try {
+      const res = await ws.call<{ count?: number }>(Methods.SESSIONS_DELETE_BULK, {
+        keys: sessions.map((session) => session.key),
+      });
+      await loadSessions();
+      toast.success(i18next.t("sessions:toast.bulkDeleted"));
+      return res.count ?? 0;
+    } catch (err) {
+      toast.error(i18next.t("sessions:toast.bulkDeleteFailed"), userFriendlyError(err));
+      throw err;
+    }
+  }, [ws, connected, loadSessions, sessions]);
 
   // Update session label in-place when backend generates a title.
   const handleSessionUpdated = useCallback((payload: unknown) => {
@@ -81,5 +97,6 @@ export function useChatSessions(agentId: string) {
     refresh: loadSessions,
     buildNewSessionKey,
     deleteSession,
+    deleteAllSessions,
   };
 }

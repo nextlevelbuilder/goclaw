@@ -52,6 +52,7 @@ export function ChatPage() {
     refresh: refreshSessions,
     buildNewSessionKey,
     deleteSession,
+    deleteAllSessions,
   } = useChatSessions(agentId);
 
   const {
@@ -94,7 +95,12 @@ export function ChatPage() {
   });
 
   const handleNewChat = useCallback(() => {
-    navigate(`/chat/${encodeURIComponent(buildNewSessionKey())}`);
+    const nextKey = buildNewSessionKey();
+    if (!nextKey) {
+      navigate("/chat");
+      return;
+    }
+    navigate(`/chat/${encodeURIComponent(nextKey)}`);
   }, [buildNewSessionKey, navigate]);
 
   const handleSessionSelect = useCallback(
@@ -117,6 +123,12 @@ export function ChatPage() {
       }
     }
   }, [deleteSession, sessionKey, sessions, handleSessionSelect, handleNewChat]);
+
+  const handleDeleteAllSessions = useCallback(async () => {
+    await deleteAllSessions();
+    setAgentIdFallback(agentId);
+    navigate("/chat");
+  }, [deleteAllSessions, agentId, navigate]);
 
   const handleAgentChange = useCallback(
     (newAgentId: string) => {
@@ -202,6 +214,7 @@ export function ChatPage() {
               activeSessionKey={sessionKey}
               onSessionSelect={handleSessionSelectMobile}
               onDeleteSession={handleDeleteSession}
+              onDeleteAllSessions={handleDeleteAllSessions}
               onNewChat={handleNewChatMobile}
             />
           </div>
@@ -215,6 +228,7 @@ export function ChatPage() {
           activeSessionKey={sessionKey}
           onSessionSelect={handleSessionSelect}
           onDeleteSession={handleDeleteSession}
+          onDeleteAllSessions={handleDeleteAllSessions}
           onNewChat={handleNewChat}
         />
       )}

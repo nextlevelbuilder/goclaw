@@ -35,6 +35,8 @@
     "messages": "tin nhắn"
   },
   "toast": {
+    "bulkDeleted": "Đã xóa các cuộc trò chuyện",
+    "bulkDeleteFailed": "Không thể xóa các cuộc trò chuyện",
     "deleted": "Đã xóa session",
     "deleteFailed": "Không thể xóa session",
     "reset": "Đã đặt lại session",

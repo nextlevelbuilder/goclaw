@@ -76,6 +76,7 @@ export const Methods = {
   SESSIONS_PREVIEW: "sessions.preview",
   SESSIONS_PATCH: "sessions.patch",
   SESSIONS_DELETE: "sessions.delete",
+  SESSIONS_DELETE_BULK: "sessions.delete-bulk",
   SESSIONS_RESET: "sessions.reset",
 
   // Phase 2 - NEEDED

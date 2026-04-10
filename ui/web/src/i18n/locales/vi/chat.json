@@ -1,4 +1,9 @@
 {
+  "deleteAgentChatsConfirm": "Thao tác này sẽ xóa vĩnh viễn tất cả cuộc trò chuyện đang hiển thị của agent đã chọn.",
+  "deleteAgentChatsTitle": "Xóa các cuộc trò chuyện của agent?",
+  "deleteAllChats": "Xóa tất cả cuộc trò chuyện",
+  "deleteAllChatsConfirm": "Thao tác này sẽ xóa vĩnh viễn tất cả cuộc trò chuyện web đang hiển thị trên mọi agent.",
+  "deleteAllChatsTitle": "Xóa tất cả cuộc trò chuyện?",
   "empty": {
     "description": "Gửi tin nhắn để bắt đầu trò chuyện với agent.",
     "title": "Bắt đầu cuộc trò chuyện"

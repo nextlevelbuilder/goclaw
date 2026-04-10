@@ -1,4 +1,9 @@
 {
+  "deleteAgentChatsConfirm": "This will permanently delete all visible chats for the selected agent.",
+  "deleteAgentChatsTitle": "Delete agent chats?",
+  "deleteAllChats": "Delete all chats",
+  "deleteAllChatsConfirm": "This will permanently delete all visible web chats across all agents.",
+  "deleteAllChatsTitle": "Delete all chats?",
   "deleteChat": "Delete chat",
   "deleteChatConfirm": "This will permanently delete this conversation and all its messages.",
   "newChat": "New Chat",

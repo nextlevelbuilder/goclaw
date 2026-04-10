@@ -122,14 +122,16 @@ export const BoardContainer = memo(function BoardContainer({
   // Per-task debounce timers for fetch-one calls (300ms)
   const fetchTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   // Progress debounce timer (1s, global — batches all progress patches)
-  const progressTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const progressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingProgressRef = useRef(new Map<string, { percent: number; step: string }>());
 
   // Cleanup timers on unmount
   useEffect(() => {
     return () => {
       fetchTimersRef.current.forEach((t) => clearTimeout(t));
-      clearTimeout(progressTimerRef.current);
+      if (progressTimerRef.current !== null) {
+        clearTimeout(progressTimerRef.current);
+      }
     };
   }, []);
 
@@ -178,7 +180,9 @@ export const BoardContainer = memo(function BoardContainer({
       percent: p.progress_percent ?? 0,
       step: p.progress_step ?? "",
     });
-    clearTimeout(progressTimerRef.current);
+    if (progressTimerRef.current !== null) {
+      clearTimeout(progressTimerRef.current);
+    }
     progressTimerRef.current = setTimeout(() => {
       const patches = new Map(pendingProgressRef.current);
       pendingProgressRef.current.clear();

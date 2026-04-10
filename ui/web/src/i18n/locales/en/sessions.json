@@ -35,6 +35,8 @@
     "messages": "messages"
   },
   "toast": {
+    "bulkDeleted": "Chats deleted",
+    "bulkDeleteFailed": "Failed to delete chats",
     "deleted": "Session deleted",
     "deleteFailed": "Failed to delete session",
     "reset": "Session reset",

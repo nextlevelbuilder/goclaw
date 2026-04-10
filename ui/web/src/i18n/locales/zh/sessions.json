@@ -35,6 +35,8 @@
     "messages": "条消息"
   },
   "toast": {
+    "bulkDeleted": "对话已删除",
+    "bulkDeleteFailed": "删除对话失败",
     "deleted": "Session已删除",
     "deleteFailed": "删除Session失败",
     "reset": "Session已重置",
