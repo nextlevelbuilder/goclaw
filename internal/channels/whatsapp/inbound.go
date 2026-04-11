@@ -14,6 +14,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -67,6 +68,11 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 	}
 
 	content := extractTextContent(evt.Message)
+
+	// Command interception: check for slash commands before the normal pipeline.
+	if handled := c.handleCommand(ctx, content, senderID, chatID, peerKind, chatJID); handled {
+		return
+	}
 
 	var mediaList []media.MediaInfo
 	mediaList = c.downloadMedia(evt)
@@ -142,6 +148,43 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 			metadata["user_name"], "", peerKind, "user", "", "")
 	}
 
+	// Collect group as a contact for UI group discovery.
+	if cc := c.ContactCollector(); cc != nil && peerKind == "group" {
+		cc.EnsureContact(ctx, c.Type(), c.Name(), chatID, "", "", "", "group", "group", "", "")
+	}
+
+	// Resolve group-specific agent override.
+	targetAgentID := c.AgentID()
+	if peerKind == "group" {
+		slog.Info("whatsapp group routing", "chat_id", chatID, "default_agent", targetAgentID,
+			"groups_count", len(c.config.Groups))
+		if c.config.Groups != nil {
+			if grp, ok := c.config.Groups[chatID]; ok && grp != nil {
+				if grp.Enabled != nil && !*grp.Enabled {
+					slog.Info("whatsapp group message rejected: group disabled", "chat_id", chatID)
+					return
+				}
+				if grp.AgentID != "" && grp.AgentID != "__default__" {
+					targetAgentID = grp.AgentID
+					slog.Info("whatsapp group agent override applied", "chat_id", chatID, "agent_id", targetAgentID)
+				}
+			} else {
+				slog.Info("whatsapp group no override found", "chat_id", chatID, "available_keys", groupKeys(c.config.Groups))
+			}
+		}
+	}
+
+	// Final routing summary log (unconditional — always fires for group messages).
+	if peerKind == "group" {
+		slog.Info("whatsapp routing resolved",
+			"chat_id", chatID,
+			"default_agent", c.AgentID(),
+			"final_agent", targetAgentID,
+			"override_applied", targetAgentID != c.AgentID(),
+			"groups_configured", len(c.config.Groups),
+		)
+	}
+
 	// Typing indicator.
 	if prevCancel, ok := c.typingCancel.LoadAndDelete(chatID); ok {
 		if fn, ok := prevCancel.(context.CancelFunc); ok {
@@ -166,7 +209,7 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 		Media:    mediaFiles,
 		PeerKind: peerKind,
 		UserID:   userID,
-		AgentID:  c.AgentID(),
+		AgentID:  targetAgentID,
 		TenantID: c.TenantID(),
 		Metadata: metadata,
 	})
@@ -263,4 +306,13 @@ func (c *Channel) isMentioned(evt *events.Message) bool {
 		}
 	}
 	return false
+}
+
+// groupKeys returns the keys of the groups map for logging.
+func groupKeys(m map[string]*config.WhatsAppGroupConfig) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }

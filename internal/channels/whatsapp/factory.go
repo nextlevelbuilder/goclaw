@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
@@ -59,6 +60,24 @@ func FactoryWithDB(db *sql.DB, pendingStore store.PendingMessageStore, dialect s
 			HistoryLimit:   ic.HistoryLimit,
 			BlockReply:     ic.BlockReply,
 		}
+
+		// Parse per-group overrides from config JSONB.
+		if len(cfg) > 0 {
+			var wrapper struct {
+				Groups map[string]*config.WhatsAppGroupConfig `json:"groups"`
+			}
+			if json.Unmarshal(cfg, &wrapper) == nil {
+				waCfg.Groups = wrapper.Groups
+			}
+		}
+
+		if len(waCfg.Groups) > 0 {
+			slog.Info("whatsapp group overrides loaded", "name", name, "count", len(waCfg.Groups))
+			for jid, gc := range waCfg.Groups {
+				slog.Info("whatsapp group override", "jid", jid, "agent_id", gc.AgentID, "enabled", gc.Enabled)
+			}
+		}
+
 		// DB instances default to "pairing" for groups (secure by default).
 		if waCfg.GroupPolicy == "" {
 			waCfg.GroupPolicy = "pairing"
