@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -172,7 +173,7 @@ func (h *ChannelInstancesHandler) handleCreate(w http.ResponseWriter, r *http.Re
 		ChannelType: body.ChannelType,
 		AgentID:     agentID,
 		Credentials: body.Credentials,
-		Config:      body.Config,
+		Config:      channels.CoerceStringBools(body.Config),
 		Enabled:     enabled,
 		CreatedBy:   userID,
 	}
@@ -540,7 +541,7 @@ func (h *ChannelInstancesHandler) handleResolveContacts(w http.ResponseWriter, r
 // isValidChannelType checks if the channel type is supported.
 func isValidChannelType(ct string) bool {
 	switch ct {
-	case "telegram", "discord", "slack", "whatsapp", "zalo_oa", "zalo_personal", "feishu", "facebook", "pancake":
+	case "telegram", "discord", "slack", "whatsapp", "zalo_oa", "zalo_personal", "feishu", "facebook", "pancake", "teams":
 		return true
 	}
 	return false

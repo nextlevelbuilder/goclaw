@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -139,7 +140,7 @@ func (m *ChannelInstancesMethods) handleCreate(ctx context.Context, client *gate
 		ChannelType: params.ChannelType,
 		AgentID:     agentID,
 		Credentials: params.Credentials,
-		Config:      params.Config,
+		Config:      channels.CoerceStringBools(params.Config),
 		Enabled:     enabled,
 	}
 
@@ -183,6 +184,13 @@ func (m *ChannelInstancesMethods) handleUpdate(ctx context.Context, client *gate
 			updates[k] = v
 		} else {
 			slog.Warn("security.filtered_unknown_field", "field", k, "handler", "channels.instances.update")
+		}
+	}
+
+	// Normalize config: coerce string bools before saving.
+	if cfg, ok := updates["config"]; ok {
+		if raw, err := json.Marshal(cfg); err == nil {
+			updates["config"] = json.RawMessage(channels.CoerceStringBools(raw))
 		}
 	}
 
@@ -273,7 +281,7 @@ func maskInstance(inst store.ChannelInstanceData) map[string]any {
 // isValidChannelType checks if the channel type is supported.
 func isValidChannelType(ct string) bool {
 	switch ct {
-	case "telegram", "discord", "slack", "whatsapp", "zalo_oa", "zalo_personal", "feishu":
+	case "telegram", "discord", "slack", "whatsapp", "zalo_oa", "zalo_personal", "feishu", "teams":
 		return true
 	}
 	return false

@@ -398,5 +398,12 @@
     "relinkDevice": "Liên kết lại",
     "connectedSuccess": "✅ Kết nối WhatsApp thành công!",
     "tabQrCode": "Mã QR"
+  },
+  "teams": {
+    "appPackage": {
+      "download": "Tải gói ứng dụng",
+      "generating": "Đang tạo...",
+      "error": "Không thể tạo gói ứng dụng"
+    }
   }
 }

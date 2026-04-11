@@ -18,6 +18,7 @@ flowchart TD
         ZLP[Zalo Personal]
         WA[WhatsApp]
         SL[Slack]
+        TM[Microsoft Teams]
     end
 
     subgraph Gateway["Gateway Server"]

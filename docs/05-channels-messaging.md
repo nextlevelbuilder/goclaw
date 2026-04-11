@@ -16,6 +16,7 @@ flowchart LR
         ZL["Zalo OA"]
         ZLP["Zalo Personal"]
         WA["WhatsApp"]
+        TM["Microsoft Teams"]
     end
 
     subgraph "Channel Layer"
@@ -40,6 +41,7 @@ flowchart LR
     ZL --> CH
     ZLP --> CH
     WA --> CH
+    TM --> CH
     CH --> HM
     HM --> BUS
     BUS --> AGENT
@@ -53,6 +55,7 @@ flowchart LR
     SEND --> ZL
     SEND --> ZLP
     SEND --> WA
+    SEND --> TM
 ```
 
 Internal channels (`cli`, `system`, `subagent`, `browser`) are silently skipped by the outbound dispatcher and never forwarded to external platforms. The `browser` channel uses WebSocket directly on the gateway connection.
@@ -154,22 +157,22 @@ flowchart TD
 
 ## 4. Channel Comparison
 
-| Feature | Telegram | Feishu/Lark | Discord | Slack | WhatsApp | Zalo OA | Zalo Personal |
-|---------|----------|-------------|---------|-------|----------|---------|---------------|
-| Connection | Long polling | WS (default) / Webhook | Gateway events | Socket Mode | Direct protocol (in-process) | Long polling | Internal protocol |
-| DM support | Yes | Yes | Yes | Yes | Yes | Yes (DM only) | Yes |
-| Group support | Yes (mention gating) | Yes | Yes | Yes (mention gating + thread cache) | Yes | No | Yes |
-| Forum/Topics | Yes (per-topic config) | Yes (topic session mode) | -- | -- | -- | -- | -- |
-| Message limit | 4,096 chars | Configurable (default 4,000) | 2,000 chars | 4,000 chars | WhatsApp native limit | 2,000 chars | 2,000 chars |
-| Streaming | Typing indicator | Streaming message cards | Edit "Thinking..." | Edit "Thinking..." (throttled 1s) | No | No | No |
-| Media | Photos, voice, files | Images, files (30 MB) | Files, embeds | Files (download w/ SSRF protection) | Images, audio, video, documents | Images (5 MB) | -- |
-| Speech-to-text | Yes (STT proxy) | -- | -- | -- | -- | -- | -- |
-| Voice routing | Yes (VoiceAgentID) | -- | -- | -- | -- | -- | -- |
-| Rich formatting | Markdown → HTML | Card messages | Markdown | Markdown → mrkdwn | Plain text | Plain text | Plain text |
-| Bot commands | 10+ commands | -- | -- | -- | -- | -- | -- |
-| Tool allow list | Per-topic | -- | -- | -- | -- | -- | -- |
-| Pairing support | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| Status reactions | Yes | Yes | -- | Yes | -- | -- | -- |
+| Feature | Telegram | Feishu/Lark | Discord | Slack | WhatsApp | Zalo OA | Zalo Personal | Microsoft Teams |
+|---------|----------|-------------|---------|-------|----------|---------|---------------|-----------------|
+| Connection | Long polling | WS (default) / Webhook | Gateway events | Socket Mode | Direct protocol (in-process) | Long polling | Internal protocol | Webhook (Bot Framework) |
+| DM support | Yes | Yes | Yes | Yes | Yes | Yes (DM only) | Yes | Yes |
+| Group support | Yes (mention gating) | Yes | Yes | Yes (mention gating + thread cache) | Yes | No | Yes | Yes |
+| Forum/Topics | Yes (per-topic config) | Yes (topic session mode) | -- | -- | -- | -- | -- | -- |
+| Message limit | 4,096 chars | Configurable (default 4,000) | 2,000 chars | 4,000 chars | WhatsApp native limit | 2,000 chars | 2,000 chars | 2,000 chars |
+| Streaming | Typing indicator | Streaming message cards | Edit "Thinking..." | Edit "Thinking..." (throttled 1s) | No | No | No | Typing indicator |
+| Media | Photos, voice, files | Images, files (30 MB) | Files, embeds | Files (download w/ SSRF protection) | Images, audio, video, documents | Images (5 MB) | -- | Images, files |
+| Speech-to-text | Yes (STT proxy) | -- | -- | -- | -- | -- | -- | -- |
+| Voice routing | Yes (VoiceAgentID) | -- | -- | -- | -- | -- | -- | -- |
+| Rich formatting | Markdown → HTML | Card messages | Markdown | Markdown → mrkdwn | Plain text | Plain text | Plain text | Plain text |
+| Bot commands | 10+ commands | -- | -- | -- | -- | -- | -- | -- |
+| Tool allow list | Per-topic | -- | -- | -- | -- | -- | -- | -- |
+| Pairing support | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| Status reactions | Yes | Yes | -- | Yes | -- | -- | -- | -- |
 
 ---
 
@@ -489,7 +492,76 @@ Zalo Personal uses an unofficial, reverse-engineered protocol. The account used 
 
 ---
 
-## 12. Channel-Isolated Workspaces
+## 12. Microsoft Teams
+
+The Microsoft Teams channel connects via Azure Bot Framework REST API using webhook delivery.
+
+### Authentication
+
+Teams uses JWT bearer token authentication:
+
+```mermaid
+flowchart TD
+    TEAMS["Teams client"] --> WEBHOOK["Webhook POST<br/>(activity event)"]
+    WEBHOOK --> AUTH["Validate JWT:<br/>signature + claims"]
+    AUTH -->|Valid| PROCESS["Process message"]
+    AUTH -->|Invalid| REJECT["Reject (401)"]
+```
+
+- **Signature validation**: Uses Microsoft's OIDC public keys (auto-cached)
+- **Audience claim**: Must match configured bot ID
+- **Tenant validation**: For SingleTenant bots, `serviceUrl` tenant must match configured `tenant_id`
+
+### Configuration
+
+**config.json fields:**
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `bot_id` | Yes | -- | Azure Bot ID (App ID) |
+| `bot_password` | Yes | -- | Azure Bot Password (Client Secret) |
+| `bot_type` | No | `SingleTenant` | `SingleTenant` or `MultiTenant` |
+| `tenant_id` | Yes* | -- | Azure tenant UUID (required for SingleTenant) |
+| `webhook_path` | No | `/webhooks/teams` | Inbound webhook endpoint path |
+| `dm_policy` | No | `open` | DM policy: `open`, `pairing`, `allowlist`, `disabled` |
+| `group_policy` | No | `open` | Group policy: `open`, `allowlist`, `disabled` |
+| `allow_from` | No | [] | Allowlisted user IDs |
+
+**Environment variable overrides:**
+
+| Variable | Overrides | Example |
+|----------|-----------|---------|
+| `GOCLAW_TEAMS_BOT_ID` | `bot_id` | `123e4567-e89b-12d3-a456-426614174000` |
+| `GOCLAW_TEAMS_BOT_PASSWORD` | `bot_password` | `password_value` |
+| `GOCLAW_TEAMS_TENANT_ID` | `tenant_id` | `987f6543-e21c-98d3-b654-521487065000` |
+
+### App Package Generation
+
+Teams bot setup requires a manifest. GoClaw provides tools to generate the package:
+
+**Via CLI:**
+```bash
+goclaw teams app-package --name "My Bot" --bot-id <bot-id> --output app.zip
+```
+
+**Via HTTP API:**
+```
+GET /v1/teams/app-package?name=My%20Bot&bot_id=...
+```
+
+The ZIP contains `manifest.json` + color & outline icons. It can be sideloaded into Teams for testing or submitted to Teams Store for distribution.
+
+### Async Outbound Dispatch
+
+Messages are sent asynchronously (in separate goroutines) to prevent one slow send from blocking others. Temporary media files are cleaned up after delivery completes.
+
+### Typing Indicator
+
+A typing activity is sent while the agent is processing, providing real-time feedback.
+
+---
+
+## 13. Channel-Isolated Workspaces
 
 Each channel instance can target a specific agent, providing workspace isolation across channels.
 
@@ -508,7 +580,7 @@ Channel instances are loaded from the database with their assigned agent ID. The
 
 ---
 
-## 13. Local Key Propagation
+## 14. Local Key Propagation
 
 Thread/topic context is preserved through the entire message pipeline using a `local_key` in message metadata. This ensures subagent, delegation, and team message results land in the correct thread — not the root chat.
 
@@ -524,7 +596,7 @@ All channel state — placeholders, streams, reactions, typing controllers, thre
 
 ---
 
-## 14. Per-User Isolation
+## 15. Per-User Isolation
 
 Channels provide per-user isolation through compound sender IDs and context propagation:
 
@@ -535,7 +607,7 @@ Channels provide per-user isolation through compound sender IDs and context prop
 
 ---
 
-## 15. Pairing System
+## 16. Pairing System
 
 The pairing system provides a DM authentication flow for channels using the `pairing` DM policy.
 

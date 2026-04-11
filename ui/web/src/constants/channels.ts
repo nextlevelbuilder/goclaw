@@ -8,4 +8,5 @@ export const CHANNEL_TYPES = [
   { value: "whatsapp", label: "WhatsApp" },
   { value: "zalo_oa", label: "Zalo OA" },
   { value: "zalo_personal", label: "Zalo Personal" },
+  { value: "teams", label: "Microsoft Teams" },
 ] as const;
