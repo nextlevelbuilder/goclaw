@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -381,6 +382,66 @@ func TestEpisodicWorkerHandle_DuplicateSourceID(t *testing.T) {
 	// Should not create new episodic for duplicate
 	if len(mockStore.created) != 0 {
 		t.Errorf("Expected 0 created episodics for duplicate, got %d", len(mockStore.created))
+	}
+}
+
+// TestEpisodicWorkerHandle_NonUUIDAgentID guards the regression where Loop
+// published DomainEvent.AgentID as the agent key (e.g. "goctech-leader")
+// instead of l.agentUUID.String(). The episodic worker must reject such
+// events with a clear error — never panic, never leak a raw PG error.
+func TestEpisodicWorkerHandle_NonUUIDAgentID(t *testing.T) {
+	mockStore := &mockEpisodicStore{}
+	worker := &episodicWorker{store: mockStore}
+
+	ctx := context.Background()
+	event := eventbus.DomainEvent{
+		Type:     eventbus.EventSessionCompleted,
+		TenantID: uuid.New().String(),
+		AgentID:  "goctech-leader", // agent key, not a UUID
+		UserID:   "test-user",
+		Payload: &eventbus.SessionCompletedPayload{
+			SessionKey:      "session-123",
+			CompactionCount: 0,
+			Summary:         "Summary",
+		},
+	}
+
+	err := worker.Handle(ctx, event)
+	if err == nil {
+		t.Fatal("Expected error for non-UUID agent_id, got nil")
+	}
+	if !strings.Contains(err.Error(), "invalid agent_id") {
+		t.Errorf("Expected 'invalid agent_id' error, got: %v", err)
+	}
+	if len(mockStore.created) != 0 {
+		t.Errorf("Expected no episodic created on bad agent_id, got %d", len(mockStore.created))
+	}
+}
+
+// TestEpisodicWorkerHandle_NonUUIDTenantID mirrors the agent_id guard for tenant_id.
+func TestEpisodicWorkerHandle_NonUUIDTenantID(t *testing.T) {
+	mockStore := &mockEpisodicStore{}
+	worker := &episodicWorker{store: mockStore}
+
+	ctx := context.Background()
+	event := eventbus.DomainEvent{
+		Type:     eventbus.EventSessionCompleted,
+		TenantID: "not-a-uuid",
+		AgentID:  uuid.New().String(),
+		UserID:   "test-user",
+		Payload: &eventbus.SessionCompletedPayload{
+			SessionKey:      "session-123",
+			CompactionCount: 0,
+			Summary:         "Summary",
+		},
+	}
+
+	err := worker.Handle(ctx, event)
+	if err == nil {
+		t.Fatal("Expected error for non-UUID tenant_id, got nil")
+	}
+	if !strings.Contains(err.Error(), "invalid tenant_id") {
+		t.Errorf("Expected 'invalid tenant_id' error, got: %v", err)
 	}
 }
 
