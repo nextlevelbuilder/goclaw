@@ -137,6 +137,12 @@ func (s *SQLiteAgentStore) Update(ctx context.Context, id uuid.UUID, updates map
 	if v, ok := updates["skill_nudge_interval"]; ok && v == nil {
 		updates["skill_nudge_interval"] = 0
 	}
+	// NOT NULL text columns: null → empty string.
+	for _, col := range []string{"emoji", "agent_description"} {
+		if v, ok := updates[col]; ok && v == nil {
+			updates[col] = ""
+		}
+	}
 
 	// Unset existing default before setting a new one (scoped to same tenant).
 	if v, ok := updates["is_default"]; ok {
