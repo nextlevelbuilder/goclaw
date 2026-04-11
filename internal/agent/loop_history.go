@@ -96,7 +96,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 	// DM only — group chats have permission checks and multiple senders.
 	if hadBootstrap && peerKind == "direct" {
 		if senderName := store.SenderNameFromContext(ctx); senderName != "" {
-			hint := fmt.Sprintf("Known user info (from %s): Name=%q\nDefault timezone: Asia/Saigon (GMT+7). User can correct this.", channelType, senderName)
+			hint := fmt.Sprintf("Known user info (from %s): Name=%q\nDefault timezone: UTC. User can correct this.", channelType, senderName)
 			if extraSystemPrompt != "" {
 				extraSystemPrompt += "\n\n"
 			}
