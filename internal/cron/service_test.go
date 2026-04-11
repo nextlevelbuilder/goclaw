@@ -415,11 +415,11 @@ func TestAnchorBasedNextRun_PreservesOffset(t *testing.T) {
 	// Formula: next = anchor + (elapsed/interval + 1) * interval
 
 	tests := []struct {
-		name        string
-		anchor      int64 // scheduledAtMS
-		interval    int64 // everyMS
-		now         int64
-		wantNext    int64
+		name     string
+		anchor   int64 // scheduledAtMS
+		interval int64 // everyMS
+		now      int64
+		wantNext int64
 	}{
 		{
 			name:     "normal_one_period",
@@ -456,7 +456,7 @@ func TestAnchorBasedNextRun_PreservesOffset(t *testing.T) {
 		{
 			name:     "small_interval_large_gap",
 			anchor:   0,
-			interval: 1000, // 1 second
+			interval: 1000,     // 1 second
 			now:      86400000, // 24 hours later — O(1) handles this without 86400 iterations
 			// elapsed=86400000, periods=86400000/1000=86400, next=0+(86400+1)*1000=86401000
 			wantNext: 86401000,
@@ -483,8 +483,8 @@ func TestAnchorBasedNextRun_PreservesOffset(t *testing.T) {
 	interval := int64(5000)
 	now := int64(6500)
 
-	nextA := anchorA + (((now - anchorA) / interval) + 1) * interval
-	nextB := anchorB + (((now - anchorB) / interval) + 1) * interval
+	nextA := anchorA + (((now-anchorA)/interval)+1)*interval
+	nextB := anchorB + (((now-anchorB)/interval)+1)*interval
 	offset := nextA - nextB
 	if offset != 4000 { // 11000 - 7000 = 4000 (original offset 1000 preserved mod interval)
 		t.Fatalf("expected 4000ms offset between jobs, got %d", offset)
