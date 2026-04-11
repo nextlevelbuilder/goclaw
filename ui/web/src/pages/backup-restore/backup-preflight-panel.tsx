@@ -91,7 +91,6 @@ export function BackupPreflightPanel() {
             {t("backup.preflight.pgDumpMissing")}
           </AlertTitle>
           <AlertDescription className="text-xs text-amber-800 dark:text-amber-200">
-            {t("backup.preflight.pgDumpHint")}{" "}
             <Link to="/packages" className="underline font-medium hover:text-amber-950 dark:hover:text-amber-50">
               {t("backup.preflight.goToPackages")}
             </Link>
