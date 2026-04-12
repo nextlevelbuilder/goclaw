@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"io/fs"
@@ -28,7 +29,7 @@ func (h *AgentsHandler) handleExportPreview(w http.ResponseWriter, r *http.Reque
 		writeError(w, status, protocol.ErrNotFound, err.Error())
 		return
 	}
-	if !h.canExport(ag, userID) {
+	if !h.canExport(r.Context(), ag, userID) {
 		writeError(w, http.StatusForbidden, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgNoAccess, "agent"))
 		return
 	}
@@ -74,7 +75,7 @@ func (h *AgentsHandler) handleExport(w http.ResponseWriter, r *http.Request) {
 		writeError(w, status, protocol.ErrNotFound, err.Error())
 		return
 	}
-	if !h.canExport(ag, userID) {
+	if !h.canExport(r.Context(), ag, userID) {
 		writeError(w, http.StatusForbidden, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgNoAccess, "agent"))
 		return
 	}
@@ -172,14 +173,17 @@ func (h *AgentsHandler) handleExportDirect(w http.ResponseWriter, r *http.Reques
 }
 
 // canExport checks if userID has permission to export the given agent.
-func (h *AgentsHandler) canExport(ag *store.AgentData, userID string) bool {
+func (h *AgentsHandler) canExport(ctx context.Context, ag *store.AgentData, userID string) bool {
 	if ag.OwnerID == userID {
 		return true
 	}
 	if h.isOwnerUser(userID) {
 		return true
 	}
-	// TODO: tenant admin check
+	// Tenant owner or admin can export any agent within their tenant.
+	if role := store.RoleFromContext(ctx); role == store.TenantRoleOwner || role == store.TenantRoleAdmin {
+		return true
+	}
 	return false
 }
 

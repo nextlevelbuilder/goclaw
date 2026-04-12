@@ -215,7 +215,7 @@ func (c *Channel) sweepMaps() {
 	now := time.Now()
 
 	c.dedup.Range(func(k, v any) bool {
-		if now.Sub(v.(time.Time)) > 5*time.Minute {
+		if t, ok := v.(time.Time); ok && now.Sub(t) > 5*time.Minute {
 			c.dedup.Delete(k)
 		}
 		return true
@@ -223,7 +223,7 @@ func (c *Channel) sweepMaps() {
 
 	if c.threadTTL > 0 {
 		c.threadParticip.Range(func(k, v any) bool {
-			if now.Sub(v.(time.Time)) > c.threadTTL {
+			if t, ok := v.(time.Time); ok && now.Sub(t) > c.threadTTL {
 				c.threadParticip.Delete(k)
 			}
 			return true
