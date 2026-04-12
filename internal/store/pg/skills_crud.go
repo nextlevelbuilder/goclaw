@@ -222,6 +222,22 @@ func (s *PGSkillStore) GetNextVersion(ctx context.Context, slug string) int {
 	return maxVersion + 1
 }
 
+// GetSkillHashBySlug returns the file_hash and version of the latest non-deleted skill
+// version for the given slug, scoped to the current tenant.
+// Returns ok=false when no matching row exists.
+func (s *PGSkillStore) GetSkillHashBySlug(ctx context.Context, slug string) (string, int, bool) {
+	tid := tenantIDForInsert(ctx)
+	var hash string
+	var version int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COALESCE(file_hash, ''), version FROM skills
+		 WHERE slug = $1 AND tenant_id = $2 AND status != 'deleted'
+		 ORDER BY version DESC LIMIT 1`,
+		slug, tid,
+	).Scan(&hash, &version)
+	return hash, version, err == nil
+}
+
 // GetNextVersionLocked computes the next version atomically using an advisory lock.
 // Safe for concurrent write paths (patch, create). Returns version and a cleanup func
 // that MUST be called to release the lock (commits the transaction).
