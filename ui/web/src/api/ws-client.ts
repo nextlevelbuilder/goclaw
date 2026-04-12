@@ -21,6 +21,7 @@ export class WsClient {
   private reconnectAttempts = 0;
   private authenticated = false;
   private intentionalClose = false;
+  private pairingInProgress = false;
   private connectGeneration = 0;
 
   /** Server-assigned role from connect response. */
@@ -221,10 +222,14 @@ export class WsClient {
 
       // Browser pairing: server requires approval
       if (res?.status === "pending_pairing" && res.pairing_code && res.sender_id) {
-        this.onPairingRequired?.(res.pairing_code, res.sender_id);
+        if (!this.pairingInProgress) {
+          this.pairingInProgress = true;
+          this.onPairingRequired?.(res.pairing_code, res.sender_id);
+        }
         // Keep connection alive for polling browser.pairing.status
         return;
       }
+      this.pairingInProgress = false;
 
       // Server accepted connection but assigned viewer role → token is invalid
       if (this.getToken() && res?.role === "viewer") {
@@ -251,6 +256,7 @@ export class WsClient {
           this.onAuthFailure?.();
           return;
         }
+        this.intentionalClose = true;
         this.ws?.close();
       }
     }
@@ -329,11 +335,11 @@ export class WsClient {
   private scheduleReconnect(): void {
     if (this.reconnectTimer) return;
 
+    this.reconnectAttempts++;
     const delay = Math.min(
       this.baseReconnectDelay * Math.pow(2, this.reconnectAttempts),
       this.maxReconnectDelay,
     );
-    this.reconnectAttempts++;
 
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;

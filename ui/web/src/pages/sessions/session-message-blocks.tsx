@@ -52,7 +52,12 @@ export function SummaryBlock({ text }: { text: string }) {
 
   useLayoutEffect(() => {
     if (contentRef.current) {
-      setNeedsTruncation(contentRef.current.scrollHeight > SUMMARY_MAX_HEIGHT);
+      // Temporarily remove max-height to measure true content height
+      const el = contentRef.current;
+      const prev = el.style.maxHeight;
+      el.style.maxHeight = "none";
+      setNeedsTruncation(el.scrollHeight > SUMMARY_MAX_HEIGHT);
+      el.style.maxHeight = prev;
     }
   }, [text]);
 
@@ -62,7 +67,7 @@ export function SummaryBlock({ text }: { text: string }) {
       <div
         ref={contentRef}
         className="mt-1 overflow-hidden transition-[max-height] duration-200"
-        style={{ maxHeight: expanded ? contentRef.current?.scrollHeight : SUMMARY_MAX_HEIGHT }}
+        style={{ maxHeight: expanded ? (contentRef.current?.scrollHeight ?? "none") : SUMMARY_MAX_HEIGHT }}
       >
         {text}
       </div>

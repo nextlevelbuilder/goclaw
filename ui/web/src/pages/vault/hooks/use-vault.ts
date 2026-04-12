@@ -28,8 +28,8 @@ export function useVaultDocuments(agentId: string, opts: VaultListOpts) {
     if (opts.scope) p.scope = opts.scope;
     if (opts.docType) p.doc_type = opts.docType;
     if (opts.teamId) p.team_id = opts.teamId;
-    if (opts.limit) p.limit = String(opts.limit);
-    if (opts.offset) p.offset = String(opts.offset);
+    if (opts.limit !== undefined) p.limit = String(opts.limit);
+    if (opts.offset !== undefined) p.offset = String(opts.offset);
     return p;
   }, [agentId, opts.scope, opts.docType, opts.teamId, opts.limit, opts.offset]);
 

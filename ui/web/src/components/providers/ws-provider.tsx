@@ -76,6 +76,7 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
             });
         }
         if (state === "disconnected") {
+          store.setRole("");
           store.setTenant("", "", "", false);
           store.setAvailableTenants([]);
           store.setTenantSelected(false);

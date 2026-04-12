@@ -65,7 +65,7 @@ export function ChannelAdvancedDialog({
     if (!open) return;
     setValues(deriveInitialValues(instance));
      
-  }, [open]);
+  }, [open, instance]);
 
   const handleChange = useCallback((key: string, value: unknown) => {
     setValues((prev) => ({ ...prev, [key]: value }));

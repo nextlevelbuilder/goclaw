@@ -87,7 +87,7 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
     reset(deriveDefaults(job));
     fetchTargets();
      
-  }, [open]);
+  }, [open, job, reset, fetchTargets]);
 
   const handleSave = async () => {
     if (!onUpdate) {

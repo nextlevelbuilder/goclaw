@@ -96,18 +96,20 @@ export function CronOverviewTab({ job, onUpdate }: CronOverviewTabProps) {
       } else {
         schedule = { kind: "at" as const, atMs: job.schedule.atMs ?? Date.now() + 60000, tz: timezone !== "UTC" ? timezone : "" };
       }
-      await onUpdate(job.id, {
+      const patch: import("../hooks/use-cron").CronJobPatch = {
         schedule,
         message: message.trim(),
         agentId: agentId.trim() || "",
-        enabled,
         deliver,
         deliverChannel: deliver ? channel.trim() || undefined : undefined,
         deliverTo: deliver ? to.trim() || undefined : undefined,
         wakeHeartbeat,
         deleteAfterRun,
         stateless,
-      });
+      };
+      // Only include enabled in patch if it actually changed to avoid unintended toggles
+      if (enabled !== job.enabled) patch.enabled = enabled;
+      await onUpdate(job.id, patch);
       setEditingMessage(false);
     } catch {
       // toast shown by hook

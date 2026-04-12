@@ -67,7 +67,7 @@ export function ChannelDetailDialogs({
           confirmValue={instance.display_name || instance.name}
           confirmLabel={t("delete.confirmLabel")}
           onConfirm={async () => {
-            onDelete({
+            await onDelete({
               id: instance.id,
               name: instance.display_name || instance.name,
             });

@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Outlet, useLocation } from "react-router";
 import { WifiOff } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -28,6 +29,13 @@ export function AppLayout() {
   const setMobileSidebarOpen = useUiStore((s) => s.setMobileSidebarOpen);
   const connected = useAuthStore((s) => s.connected);
   const isMobile = useIsTablet();
+
+  // Close mobile sidebar on route change (e.g. programmatic navigation, back button)
+  useEffect(() => {
+    if (isMobile && mobileSidebarOpen) {
+      setMobileSidebarOpen(false);
+    }
+  }, [location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex h-dvh overflow-hidden safe-top">

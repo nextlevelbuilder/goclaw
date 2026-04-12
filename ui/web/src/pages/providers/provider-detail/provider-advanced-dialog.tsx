@@ -76,7 +76,7 @@ export function ProviderAdvancedDialog({
     setAcpPermMode(s.acpPermMode);
     setAcpWorkDir(s.acpWorkDir);
      
-  }, [open]);
+  }, [open, provider]);
 
   const [saving, setSaving] = useState(false);
 

@@ -312,19 +312,23 @@ func (m *TeamsMethods) handleUpdate(ctx context.Context, client *gateway.Client,
 		EscalationActions     []string `json:"escalation_actions,omitempty"`
 		WorkspaceScope        string   `json:"workspace_scope,omitempty"`
 		WorkspaceQuotaMB      *int     `json:"workspace_quota_mb,omitempty"`
-		Notifications         *struct {
+		Notifications *struct {
 			Dispatched *bool  `json:"dispatched,omitempty"`
 			Progress   *bool  `json:"progress,omitempty"`
 			Failed     *bool  `json:"failed,omitempty"`
 			Completed  *bool  `json:"completed,omitempty"`
 			Commented  *bool  `json:"commented,omitempty"`
 			NewTask    *bool  `json:"new_task,omitempty"`
+			SlowTool   *bool  `json:"slow_tool,omitempty"`
 			Mode       string `json:"mode,omitempty"`
 		} `json:"notifications,omitempty"`
 		MemberRequests *struct {
 			Enabled      *bool `json:"enabled,omitempty"`
 			AutoDispatch *bool `json:"auto_dispatch,omitempty"`
 		} `json:"member_requests,omitempty"`
+		BlockerEscalation *struct {
+			Enabled *bool `json:"enabled,omitempty"`
+		} `json:"blocker_escalation,omitempty"`
 	}
 	raw, _ := json.Marshal(params.Settings)
 	var access teamAccessSettings

@@ -42,8 +42,8 @@ export function useActivity() {
         if (filters?.action) params.action = filters.action;
         if (filters?.entity_type) params.entity_type = filters.entity_type;
         if (filters?.actor_id) params.actor_id = filters.actor_id;
-        if (filters?.limit) params.limit = String(filters.limit);
-        if (filters?.offset) params.offset = String(filters.offset);
+        if (filters?.limit !== undefined) params.limit = String(filters.limit);
+        if (filters?.offset !== undefined) params.offset = String(filters.offset);
 
         const res = await http.get<ActivityListResponse>("/v1/activity", params);
         setLogs(res.logs ?? []);

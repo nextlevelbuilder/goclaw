@@ -166,7 +166,7 @@ export function SigmaGraphContainer({
         onSigmaReady?.(null);
       }
     };
-  }, [graph, edgeType, compact]);  
+  }, [graph, edgeType, compact, setSigmaRef]);
 
   // --- Update theme colors without re-init ---
   useEffect(() => {

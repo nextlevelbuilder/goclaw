@@ -84,7 +84,7 @@ export function Sidebar({ collapsed, onNavItemClick }: SidebarProps) {
       <nav className="flex-1 space-y-4 overflow-y-auto px-2 py-4">
         <SidebarGroup label={t("groups.core")} collapsed={collapsed}>
           <SidebarItem to={ROUTES.OVERVIEW} icon={LayoutDashboard} label={t("nav.overview")} collapsed={collapsed} />
-          <SidebarItem to="/chat" icon={MessageSquare} label={t("nav.chat")} collapsed={collapsed} />
+          <SidebarItem to={ROUTES.CHAT} icon={MessageSquare} label={t("nav.chat")} collapsed={collapsed} />
           <SidebarItem to={ROUTES.AGENTS} icon={Bot} label={t("nav.agents")} collapsed={collapsed} />
           <SidebarItem to={ROUTES.TEAMS} icon={Users} label={t("nav.agentTeams")} collapsed={collapsed} />
         </SidebarGroup>

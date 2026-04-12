@@ -36,13 +36,15 @@ export function SigmaGraphSearch({ sigma, graph, onNodeSelect, placeholder = "Se
       }
       const lower = q.toLowerCase();
       const matches: SearchResult[] = [];
-      graph.forEachNode((node, attrs) => {
-        if (matches.length >= 10) return;
+      const nodes = graph.nodes();
+      for (let i = 0; i < nodes.length && matches.length < 10; i++) {
+        const node = nodes[i]!;
+        const attrs = graph.getNodeAttributes(node);
         const label = (attrs.label as string) || "";
         if (label.toLowerCase().includes(lower)) {
           matches.push({ id: node, label, color: attrs.color as string });
         }
-      });
+      }
       setResults(matches);
       setOpen(matches.length > 0);
       setActiveIndex(0);
