@@ -1,0 +1,30 @@
+services:
+  openhands-adapter:
+    image: ${OPENHANDS_ADAPTER_IMAGE:-goclaw-openhands-adapter:latest}
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      OPENHANDS_ADAPTER_DATA_DIR: /data
+    volumes:
+      - ./data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:${OPENHANDS_ADAPTER_PORT:-8091}:8091"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import sys, urllib.request
+          urllib.request.urlopen("http://127.0.0.1:8091/health", timeout=5)
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s

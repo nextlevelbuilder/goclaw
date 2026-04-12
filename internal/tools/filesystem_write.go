@@ -222,6 +222,7 @@ func (t *WriteFileTool) Execute(ctx context.Context, args map[string]any) *Resul
 	}
 	result := SilentResult(msg)
 	result.Deliverable = content
+	result.TouchedPaths = []string{resolved}
 	if deliver {
 		result.Media = []bus.MediaFile{{Path: resolved}}
 		// Track delivered path so message tool's self-send guard can detect duplicates.
@@ -262,6 +263,13 @@ func (t *WriteFileTool) executeInSandbox(ctx context.Context, path, content, san
 	}
 	result := SilentResult(msg)
 	result.Deliverable = content
+	if workspace := ToolWorkspaceFromCtx(ctx); workspace != "" {
+		if filepath.IsAbs(path) {
+			result.TouchedPaths = []string{filepath.Clean(path)}
+		} else {
+			result.TouchedPaths = []string{filepath.Join(workspace, filepath.Clean(path))}
+		}
+	}
 	if deliver {
 		// Sandbox workspace is bind-mounted — resolve to host path for delivery
 		workspace := ToolWorkspaceFromCtx(ctx)

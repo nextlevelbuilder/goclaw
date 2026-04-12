@@ -18,13 +18,14 @@ import { SystemMessageBlock, SummaryBlock } from "./session-message-blocks";
 /** Check if a message is an internal system message (subagent results, cron, etc.) */
 function isSystemMessage(msg: ChatMessage): boolean {
   const c = msg.content?.trimStart() ?? "";
-  return c.startsWith("[System Message]") || c.startsWith("[System]");
+  return msg.role === "system" || c.startsWith("[System Message]") || c.startsWith("[System");
 }
 
 /** Check if a message should be displayed */
 function isDisplayable(msg: ChatMessage): boolean {
   // Hide tool role messages (shown inline with assistant)
   if (msg.role === "tool") return false;
+  if (msg.role === "system") return true;
   // Show if there is text content
   if (msg.content?.trim()) return true;
   // Assistant messages with tool calls or thinking should still be displayed
@@ -272,4 +273,3 @@ export function SessionDetailPage({
     </div>
   );
 }
-

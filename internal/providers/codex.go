@@ -233,6 +233,23 @@ func (p *CodexProvider) processSSEEvent(event *codexSSEEvent, result *ChatRespon
 					acc.rawArgs = event.Item.Arguments
 				}
 				toolCalls[event.Item.ID] = acc
+				if onChunk != nil && acc.callID != "" && acc.name != "" {
+					args := make(map[string]any)
+					parseErr := ""
+					if acc.rawArgs != "" {
+						if err := json.Unmarshal([]byte(acc.rawArgs), &args); err != nil {
+							parseErr = fmt.Sprintf("malformed JSON (%d chars): %v", len(acc.rawArgs), err)
+						}
+					}
+					onChunk(StreamChunk{
+						ToolCalls: []ToolCall{{
+							ID:         acc.callID,
+							Name:       acc.name,
+							Arguments:  args,
+							ParseError: parseErr,
+						}},
+					})
+				}
 			case "reasoning":
 				if !stripThinking {
 					for _, s := range event.Item.Summary {

@@ -2,17 +2,23 @@ package tools
 
 import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/pipeline"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
 
 // Result is the unified return type from tool execution.
 type Result struct {
-	ForLLM  string `json:"for_llm"`            // content sent to the LLM
-	ForUser string `json:"for_user,omitempty"`  // content shown to the user
-	Silent  bool   `json:"silent"`              // suppress user message
-	IsError bool   `json:"is_error"`            // marks error
-	Async   bool   `json:"async"`               // running asynchronously
-	Err     error  `json:"-"`                   // internal error (not serialized)
+	ForLLM      string                `json:"for_llm"`            // content sent to the LLM
+	ForUser     string                `json:"for_user,omitempty"` // content shown to the user
+	Silent      bool                  `json:"silent"`             // suppress user message
+	IsError     bool                  `json:"is_error"`           // marks error
+	Async       bool                  `json:"async"`              // running asynchronously
+	Err         error                 `json:"-"`                  // internal error (not serialized)
+	Constraints []pipeline.Constraint `json:"-"`
+
+	// TouchedPaths records absolute or workspace-resolved filesystem paths the tool
+	// read or wrote during execution. Used by skill auto-activation and discovery.
+	TouchedPaths []string `json:"-"`
 
 	// Media holds media files to forward as output (e.g. images from delegation).
 	Media []bus.MediaFile `json:"-"`
@@ -39,6 +45,10 @@ func SilentResult(forLLM string) *Result {
 
 func ErrorResult(message string) *Result {
 	return &Result{ForLLM: message, IsError: true}
+}
+
+func ErrorResultWithConstraints(message string, constraints ...pipeline.Constraint) *Result {
+	return &Result{ForLLM: message, IsError: true, Constraints: constraints}
 }
 
 func UserResult(content string) *Result {

@@ -29,7 +29,7 @@ export function ToolPolicySection({ enabled, value, onToggle, onChange }: ToolPo
       onToggle={onToggle}
     >
       <div className="space-y-2">
-        <InfoLabel tip="Base tool profile. 'full' allows all tools, 'coding' includes filesystem/runtime/sessions/memory, 'messaging' includes messaging/sessions, 'minimal' allows only session_status.">{t(`${s}.profile`)}</InfoLabel>
+        <InfoLabel tip="Base tool profile. 'full' allows all tools, 'coding' targets software work, 'research' targets web research plus MCP/browser/file reporting, 'messaging' focuses on messaging flows, and 'minimal' allows only session_status.">{t(`${s}.profile`)}</InfoLabel>
         <Select
           value={value.profile ?? ""}
           onValueChange={(v) => onChange({ ...value, profile: v || undefined })}
@@ -38,6 +38,7 @@ export function ToolPolicySection({ enabled, value, onToggle, onChange }: ToolPo
           <SelectContent>
             <SelectItem value="full">full</SelectItem>
             <SelectItem value="coding">coding</SelectItem>
+            <SelectItem value="research">research</SelectItem>
             <SelectItem value="messaging">messaging</SelectItem>
             <SelectItem value="minimal">minimal</SelectItem>
           </SelectContent>

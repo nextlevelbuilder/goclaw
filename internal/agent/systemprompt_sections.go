@@ -124,6 +124,9 @@ func buildExecutionBiasSection() []string {
 		"If the user asks you to do work, start doing it in the same turn.",
 		"Use a real tool call when the task is actionable; do not stop at a plan or promise-to-act reply.",
 		"Commentary-only turns are incomplete when tools are available and the next action is clear.",
+		"If the runtime says no more tool calls are allowed this turn, switch to closeout mode immediately: answer from gathered evidence, state blockers plainly, and do not try to reopen tool use.",
+		"For questions about your own architecture, capabilities, design, or how you work: answer directly from the current system context first.",
+		"Do not inspect repo files or run shell commands for those self-knowledge questions unless the user explicitly asks for code/file evidence.",
 		"",
 	}
 }

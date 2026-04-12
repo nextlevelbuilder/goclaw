@@ -4,7 +4,6 @@ package pipeline
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
@@ -98,23 +97,12 @@ func messageIterationEstimate(msgIdx, totalMsgs, currentIteration int) int {
 
 // messageContent extracts text content from a providers.Message.
 func messageContent(msg providers.Message) string {
-	if msg.Content != "" {
-		return msg.Content
-	}
-	// Handle ContentBlocks if present
-	var parts []string
-	for _, block := range msg.ContentBlocks {
-		if block.Type == "text" {
-			parts = append(parts, block.Text)
-		}
-	}
-	return strings.Join(parts, "\n")
+	return msg.Content
 }
 
 // replaceMessageContent creates a copy of msg with replaced text content.
 func replaceMessageContent(msg providers.Message, newContent string) providers.Message {
 	msg.Content = newContent
-	msg.ContentBlocks = nil // clear blocks, use simple content
 	return msg
 }
 

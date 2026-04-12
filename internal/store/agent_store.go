@@ -298,6 +298,34 @@ func (a *AgentData) ParseSkillNudgeInterval() int {
 	return a.SkillNudgeInterval
 }
 
+// ParseIsolation returns the optional isolation mode from OtherConfig JSONB.
+// Currently supported:
+//   - "" (default): no extra filesystem isolation
+//   - "worktree": run inside an isolated git worktree
+func (a *AgentData) ParseIsolation() string {
+	if len(a.OtherConfig) == 0 {
+		return ""
+	}
+	var bag map[string]json.RawMessage
+	if json.Unmarshal(a.OtherConfig, &bag) != nil {
+		return ""
+	}
+	raw, ok := bag["isolation"]
+	if !ok {
+		return ""
+	}
+	var mode string
+	if json.Unmarshal(raw, &mode) != nil {
+		return ""
+	}
+	switch mode {
+	case "worktree":
+		return mode
+	default:
+		return ""
+	}
+}
+
 // normalizeReasoningEffort delegates to providers.NormalizeReasoningEffort (DRY).
 func normalizeReasoningEffort(value string) string {
 	return providers.NormalizeReasoningEffort(value)
@@ -320,10 +348,10 @@ type WorkspaceSharingConfig struct {
 }
 
 const (
-	ReasoningSourceUnset             = "unset"
-	ReasoningSourceLegacy            = "thinking_level"
-	ReasoningSourceAdvanced          = "reasoning"
-	ReasoningSourceProviderDefault   = "provider_default"
+	ReasoningSourceUnset           = "unset"
+	ReasoningSourceLegacy          = "thinking_level"
+	ReasoningSourceAdvanced        = "reasoning"
+	ReasoningSourceProviderDefault = "provider_default"
 	// Reasoning fallback constants — canonical definitions in providers package.
 	ReasoningFallbackDowngrade       = providers.ReasoningFallbackDowngrade
 	ReasoningFallbackDisable         = providers.ReasoningFallbackDisable

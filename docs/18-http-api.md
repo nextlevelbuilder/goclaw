@@ -55,6 +55,8 @@ OpenAI-compatible chat API for programmatic access to agents.
 }
 ```
 
+`X-GoClaw-User-Id` is still the preferred header for multi-tenant context, but `user` in the JSON body is accepted as a fallback for `POST /v1/chat/completions`.
+
 **Response** (non-streaming):
 
 ```json
@@ -95,6 +97,28 @@ CRUD operations for agent management. Requires `X-GoClaw-User-Id` header for mul
 | `GET` | `/v1/agents/{id}` | Get agent by ID or key | Bearer |
 | `PUT` | `/v1/agents/{id}` | Update agent (owner only) | Bearer |
 | `DELETE` | `/v1/agents/{id}` | Delete agent (owner only) | Bearer |
+
+`GET /v1/agents` returns an envelope:
+
+```json
+{
+  "agents": []
+}
+```
+
+Create/update payloads bind to the stored agent shape. The slug field is `agent_key`, not `name`:
+
+```json
+{
+  "agent_key": "prod-operator",
+  "display_name": "Production Operator",
+  "agent_type": "predefined",
+  "provider": "xai",
+  "model": "grok-3-mini",
+  "frontmatter": "Production smoke-test agent on e1",
+  "max_tokens": 1024
+}
+```
 
 ### Shares
 

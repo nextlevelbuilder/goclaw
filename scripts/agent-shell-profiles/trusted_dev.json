@@ -1,0 +1,17 @@
+{
+  "destructive_ops": true,
+  "data_exfiltration": true,
+  "reverse_shell": true,
+  "code_injection": true,
+  "privilege_escalation": true,
+  "dangerous_paths": true,
+  "env_injection": true,
+  "container_escape": true,
+  "crypto_mining": true,
+  "filter_bypass": true,
+  "network_recon": true,
+  "package_install": false,
+  "persistence": true,
+  "process_control": false,
+  "env_dump": true
+}

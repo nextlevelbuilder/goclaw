@@ -267,6 +267,7 @@ func (l *Loop) emitToolSpanEnd(ctx context.Context, spanID uuid.UUID, start time
 		"status":         store.SpanStatusCompleted,
 		"output_preview": tracing.TruncateMid(result.ForLLM, previewLimit),
 	}
+	meta := map[string]any{}
 
 	if result.IsError {
 		updates["status"] = store.SpanStatusError
@@ -280,12 +281,9 @@ func (l *Loop) emitToolSpanEnd(ctx context.Context, spanID uuid.UUID, start time
 		updates["provider"] = result.Provider
 		updates["model"] = result.Model
 		if result.Usage.CacheCreationTokens > 0 || result.Usage.CacheReadTokens > 0 {
-			meta := map[string]int{
+			meta["usage"] = map[string]int{
 				"cache_creation_tokens": result.Usage.CacheCreationTokens,
 				"cache_read_tokens":     result.Usage.CacheReadTokens,
-			}
-			if b, err := json.Marshal(meta); err == nil {
-				updates["metadata"] = b
 			}
 		}
 		// Calculate cost for tool's internal LLM calls.
@@ -296,6 +294,14 @@ func (l *Loop) emitToolSpanEnd(ctx context.Context, spanID uuid.UUID, start time
 			if cost > 0 {
 				updates["total_cost"] = cost
 			}
+		}
+	}
+	if len(result.Constraints) > 0 {
+		meta["constraints"] = result.Constraints
+	}
+	if len(meta) > 0 {
+		if b, err := json.Marshal(meta); err == nil {
+			updates["metadata"] = b
 		}
 	}
 

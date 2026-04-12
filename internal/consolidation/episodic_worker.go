@@ -114,11 +114,21 @@ func (w *episodicWorker) Handle(ctx context.Context, event eventbus.DomainEvent)
 
 // summarizeSession reads actual session messages and calls LLM to summarize.
 func (w *episodicWorker) summarizeSession(ctx context.Context, payload *eventbus.SessionCompletedPayload) (string, error) {
+	sessionModel := ""
 	// Try reading session messages for a real summary.
 	if w.sessions != nil {
+		if session := w.sessions.Get(ctx, payload.SessionKey); session != nil {
+			sessionModel = strings.TrimSpace(session.Model)
+			if len(session.Messages) > 0 {
+				return w.summarizeFromMessages(ctx, session.Messages, sessionModel)
+			}
+			if session.Summary != "" {
+				return session.Summary, nil
+			}
+		}
 		messages := w.sessions.GetHistory(ctx, payload.SessionKey)
 		if len(messages) > 0 {
-			return w.summarizeFromMessages(ctx, messages)
+			return w.summarizeFromMessages(ctx, messages, sessionModel)
 		}
 		// Messages may have been compacted away — try existing session summary.
 		if summary := w.sessions.GetSummary(ctx, payload.SessionKey); summary != "" {
@@ -129,7 +139,7 @@ func (w *episodicWorker) summarizeSession(ctx context.Context, payload *eventbus
 }
 
 // summarizeFromMessages builds a conversation excerpt and calls LLM.
-func (w *episodicWorker) summarizeFromMessages(ctx context.Context, messages []providers.Message) (string, error) {
+func (w *episodicWorker) summarizeFromMessages(ctx context.Context, messages []providers.Message, sessionModel string) (string, error) {
 	var sb strings.Builder
 	for _, m := range messages {
 		if m.Role == "system" {
@@ -153,12 +163,27 @@ func (w *episodicWorker) summarizeFromMessages(ctx context.Context, messages []p
 	sctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
+	model := strings.TrimSpace(w.model)
+	if model == "" {
+		model = strings.TrimSpace(sessionModel)
+	}
+	if model == "" && w.provider != nil {
+		model = strings.TrimSpace(w.provider.DefaultModel())
+	}
+	if model == "" {
+		providerName := "<nil>"
+		if w.provider != nil {
+			providerName = w.provider.Name()
+		}
+		return "", fmt.Errorf("no model configured for consolidation provider %q", providerName)
+	}
+
 	resp, err := w.provider.Chat(sctx, providers.ChatRequest{
 		Messages: []providers.Message{
 			{Role: "system", Content: summarizationPrompt},
 			{Role: "user", Content: sb.String()},
 		},
-		Model:   w.model,
+		Model:   model,
 		Options: map[string]any{"max_tokens": 1024, "temperature": 0.3},
 	})
 	if err != nil {

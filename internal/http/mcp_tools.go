@@ -80,6 +80,12 @@ func (h *MCPHandler) handleListServerTools(w http.ResponseWriter, r *http.Reques
 		_ = json.Unmarshal(srv.Args, &args)
 		_ = json.Unmarshal(srv.Env, &env)
 		_ = json.Unmarshal(srv.Headers, &headers)
+		if srv.APIKey != "" && headers["Authorization"] == "" {
+			if headers == nil {
+				headers = make(map[string]string)
+			}
+			headers["Authorization"] = "Bearer " + srv.APIKey
+		}
 
 		discovered, err := mcpbridge.DiscoverTools(r.Context(), srv.Transport, srv.Command, args, env, srv.URL, headers)
 		if err != nil {

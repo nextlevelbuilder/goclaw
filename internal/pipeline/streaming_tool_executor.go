@@ -15,7 +15,7 @@ import (
 type stToolStatus int32
 
 const (
-	stQueued    stToolStatus = iota
+	stQueued stToolStatus = iota
 	stExecuting
 	stCompleted
 )
@@ -32,10 +32,10 @@ type streamingTool struct {
 
 // StreamToolUpdate is yielded by the executor when a tool completes.
 type StreamToolUpdate struct {
-	Call   providers.ToolCall
-	RawMsg providers.Message
+	Call    providers.ToolCall
+	RawMsg  providers.Message
 	RawData any
-	Err    error
+	Err     error
 }
 
 // StreamingToolExecutor manages tool execution during LLM streaming.
@@ -48,9 +48,12 @@ type StreamingToolExecutor struct {
 	isSafeFn func(tc providers.ToolCall) bool
 	execFn   func(ctx context.Context, tc providers.ToolCall) (providers.Message, any, error)
 
-	mu       sync.Mutex
-	tools    []*streamingTool
-	allSafe  bool
+	mu            sync.Mutex
+	tools         []*streamingTool
+	allSafe       bool
+	pending       int
+	doneRequested bool
+	resultsClosed bool
 
 	executing atomic.Int32
 
@@ -60,7 +63,6 @@ type StreamingToolExecutor struct {
 
 	results chan StreamToolUpdate
 	closed  atomic.Bool
-	wg      sync.WaitGroup
 }
 
 // NewStreamingToolExecutor creates an executor for streaming tool execution.
@@ -87,7 +89,7 @@ func NewStreamingToolExecutor(
 
 // AddTool queues a tool for execution. Called by ThinkStage when a tool_use
 // block arrives from the LLM stream. May start execution immediately.
-func (ste *StreamingToolExecutor) AddTool(tc providers.ToolCall) {
+func (ste *StreamingToolExecutor) AddTool(tc providers.ToolCall) bool {
 	safe := false
 	if ste.isSafeFn != nil {
 		safe = ste.isSafeFn(tc)
@@ -97,13 +99,20 @@ func (ste *StreamingToolExecutor) AddTool(tc providers.ToolCall) {
 	st.status.Store(int32(stQueued))
 
 	ste.mu.Lock()
+	if ste.doneRequested || ste.resultsClosed {
+		ste.mu.Unlock()
+		return false
+	}
 	ste.tools = append(ste.tools, st)
+	ste.pending++
+	toStart := ste.tryStartNextLocked()
 	ste.mu.Unlock()
 
-	ste.tryStartNext()
+	ste.startTools(toStart)
+	return true
 }
 
-func (ste *StreamingToolExecutor) canStart(safe bool) bool {
+func (ste *StreamingToolExecutor) canStartLocked(safe bool) bool {
 	executing := ste.executing.Load()
 	if executing == 0 {
 		return true
@@ -111,15 +120,13 @@ func (ste *StreamingToolExecutor) canStart(safe bool) bool {
 	return safe && ste.allSafe
 }
 
-func (ste *StreamingToolExecutor) tryStartNext() {
-	ste.mu.Lock()
-	defer ste.mu.Unlock()
-
+func (ste *StreamingToolExecutor) tryStartNextLocked() []*streamingTool {
+	var toStart []*streamingTool
 	for _, st := range ste.tools {
 		if stToolStatus(st.status.Load()) != stQueued {
 			continue
 		}
-		if !ste.canStart(st.safe) {
+		if !ste.canStartLocked(st.safe) {
 			break
 		}
 
@@ -128,20 +135,34 @@ func (ste *StreamingToolExecutor) tryStartNext() {
 		if !st.safe {
 			ste.allSafe = false
 		}
+		toStart = append(toStart, st)
+	}
+	return toStart
+}
 
-		ste.wg.Add(1)
+func (ste *StreamingToolExecutor) startTools(toStart []*streamingTool) {
+	for _, st := range toStart {
 		go ste.executeTool(st)
 	}
 }
 
+func (ste *StreamingToolExecutor) maybeCloseResultsLocked() {
+	if ste.resultsClosed || !ste.doneRequested || ste.pending != 0 {
+		return
+	}
+	ste.resultsClosed = true
+	ste.closed.Store(true)
+	close(ste.results)
+}
+
 func (ste *StreamingToolExecutor) executeTool(st *streamingTool) {
 	defer func() {
+		ste.mu.Lock()
 		ste.executing.Add(-1)
 		st.status.Store(int32(stCompleted))
-		ste.wg.Done()
+		ste.pending--
 
-		// Recalculate allSafe
-		ste.mu.Lock()
+		// Recalculate allSafe.
 		allSafe := true
 		for _, t := range ste.tools {
 			if stToolStatus(t.status.Load()) == stExecuting && !t.safe {
@@ -150,9 +171,11 @@ func (ste *StreamingToolExecutor) executeTool(st *streamingTool) {
 			}
 		}
 		ste.allSafe = allSafe
+		toStart := ste.tryStartNextLocked()
+		ste.maybeCloseResultsLocked()
 		ste.mu.Unlock()
 
-		ste.tryStartNext()
+		ste.startTools(toStart)
 	}()
 
 	msg, raw, err := ste.execFn(ste.sibCtx, st.call)
@@ -174,7 +197,7 @@ func (ste *StreamingToolExecutor) executeTool(st *streamingTool) {
 			Call:    st.call,
 			RawMsg:  msg,
 			RawData: raw,
-			Err:    err,
+			Err:     err,
 		}
 	}
 }
@@ -182,11 +205,10 @@ func (ste *StreamingToolExecutor) executeTool(st *streamingTool) {
 // Done signals that the LLM stream is complete. Returns a channel that yields
 // results as tools complete. Channel closes when all tools finish.
 func (ste *StreamingToolExecutor) Done() <-chan StreamToolUpdate {
-	go func() {
-		ste.wg.Wait()
-		ste.closed.Store(true)
-		close(ste.results)
-	}()
+	ste.mu.Lock()
+	ste.doneRequested = true
+	ste.maybeCloseResultsLocked()
+	ste.mu.Unlock()
 	return ste.results
 }
 
@@ -206,6 +228,10 @@ func (ste *StreamingToolExecutor) HasPending() bool {
 func (ste *StreamingToolExecutor) Cancel() {
 	ste.sibCancel()
 	ste.closed.Store(true)
+	ste.mu.Lock()
+	ste.doneRequested = true
+	ste.maybeCloseResultsLocked()
+	ste.mu.Unlock()
 }
 
 // Count returns the total number of tools added.

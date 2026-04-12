@@ -39,6 +39,7 @@ export function ToolPolicySection({ enabled, value, onToggle, onChange }: ToolPo
         >
           <option value="">full (default)</option>
           <option value="coding">coding</option>
+          <option value="research">research</option>
           <option value="messaging">messaging</option>
           <option value="minimal">minimal</option>
         </select>

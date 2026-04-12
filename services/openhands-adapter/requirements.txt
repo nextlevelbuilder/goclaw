@@ -1,0 +1,6 @@
+fastapi==0.135.3
+uvicorn[standard]==0.44.0
+openhands-sdk==1.16.1
+openhands-workspace==1.16.1
+openhands-tools==1.16.1
+openhands-agent-server==1.16.1

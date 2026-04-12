@@ -40,11 +40,14 @@ type DisplayItem =
   | { kind: "notification"; msg: ChatMessage; idx: number }
   | { kind: "merged-tools"; msgs: ChatMessage[]; idx: number };
 
+function isHiddenSystemMessage(msg: ChatMessage): boolean {
+  const content = typeof msg.content === "string" ? msg.content.trimStart() : "";
+  return msg.role === "system" || (msg.role === "user" && content.startsWith("[System"));
+}
+
 /** Merge consecutive tool-only assistant messages into single groups */
 function buildDisplayItems(messages: ChatMessage[]): DisplayItem[] {
-  const filtered = messages.filter(
-    (msg) => !(msg.role === "user" && typeof msg.content === "string" && msg.content.startsWith("[System]")),
-  );
+  const filtered = messages.filter((msg) => !isHiddenSystemMessage(msg));
 
   const items: DisplayItem[] = [];
   let toolGroup: ChatMessage[] = [];

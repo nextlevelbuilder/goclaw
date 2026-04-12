@@ -49,10 +49,10 @@ type PipelineDeps struct {
 	InjectReminders  func(ctx context.Context, input *RunInput, msgs []providers.Message) []providers.Message
 
 	// Think callbacks (ThinkStage)
-	BuildFilteredTools  func(state *RunState) ([]providers.ToolDefinition, error)
-	CallLLM             func(ctx context.Context, state *RunState, req providers.ChatRequest) (*providers.ChatResponse, error)
-	UniqueToolCallIDs   func(calls []providers.ToolCall, runID string, iteration int) []providers.ToolCall
-	EmitBlockReply      func(content string) // emit block.reply for intermediate assistant content
+	BuildFilteredTools func(state *RunState) ([]providers.ToolDefinition, error)
+	CallLLM            func(ctx context.Context, state *RunState, req providers.ChatRequest) (*providers.ChatResponse, error)
+	UniqueToolCallIDs  func(calls []providers.ToolCall, runID string, iteration int) []providers.ToolCall
+	EmitBlockReply     func(content string) // emit block.reply for intermediate assistant content
 
 	// Prune callbacks (PruneStage)
 	PruneMessages   func(msgs []providers.Message, budget int) []providers.Message
@@ -72,6 +72,8 @@ type PipelineDeps struct {
 	ProcessToolResult func(ctx context.Context, state *RunState, tc providers.ToolCall, rawMsg providers.Message, rawData any) []providers.Message
 	// CheckReadOnly checks read-only streak. Returns warning message (if any) and whether to break.
 	CheckReadOnly func(state *RunState) (*providers.Message, bool)
+	// IsToolConcurrencySafe reports whether a tool invocation can safely run in parallel.
+	IsToolConcurrencySafe func(tc providers.ToolCall) bool
 
 	// Observe callbacks (ObserveStage)
 	DrainInjectCh func() []providers.Message
@@ -80,15 +82,16 @@ type PipelineDeps struct {
 	FlushMessages func(ctx context.Context, sessionKey string, msgs []providers.Message) error
 
 	// Finalize callbacks (FinalizeStage)
-	SkillPostscript          func(ctx context.Context, content string, totalToolCalls int) string // skill evolution nudge (nil = disabled)
-	SanitizeContent          func(content string) string
-	StripMessageDirectives   func(content string) string
-	DeduplicateMediaSuffix   func(content, suffix string) string
+	SkillPostscript        func(ctx context.Context, content string, totalToolCalls int) string // skill evolution nudge (nil = disabled)
+	SanitizeContent        func(content string) string
+	StripMessageDirectives func(content string) string
+	DeduplicateMediaSuffix func(content, suffix string) string
 	IsSilentReply          func(content string) bool
 	EmitSessionCompleted   func(ctx context.Context, sessionKey string, msgCount, tokensUsed, compactionCount int)
 	UpdateMetadata         func(ctx context.Context, sessionKey string, usage providers.Usage) error
 	BootstrapCleanup       func(ctx context.Context, state *RunState) error
 	MaybeSummarize         func(ctx context.Context, sessionKey string)
+	SessionEndHooks        func(ctx context.Context, state *RunState)
 }
 
 // PipelineConfig holds pipeline-level settings.
@@ -107,6 +110,18 @@ type PipelineConfig struct {
 	// Zero (default) preserves legacy behavior: budget = contextWindow - overhead - MaxTokens.
 	// Recommended: 5-10% of contextWindow for reasoning-heavy models.
 	ReserveTokens int
+
+	// Context defense (CP-01).
+	Truncation      *TruncationConfig
+	Microcompact    *MicrocompactConfig
+	ContextCollapse *ContextCollapser
+
+	// Concurrency + streaming (CP-02 / CP-03).
+	MaxToolConcurrency int
+	StreamingToolExec  bool
+
+	// Recovery (CP-04).
+	Recovery *RecoveryConfig
 
 	// V3 memory/retrieval flags removed — always true at runtime.
 	// Memory flush runs if callback != nil; auto-inject runs if AutoInject != nil.

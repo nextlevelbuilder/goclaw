@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, type KeyboardEvent } from "react";
+import { useState, useRef, useCallback, type CompositionEvent, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Send, Square, Paperclip, X } from "lucide-react";
 
@@ -23,19 +23,26 @@ export function ChatInput({ onSend, onAbort, isBusy, disabled, files, onFilesCha
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const composingRef = useRef(false);
 
   const handleSend = useCallback(() => {
-    if ((!value.trim() && files.length === 0) || disabled) return;
-    onSend(value, files.length > 0 ? files : undefined);
+    if (composingRef.current) return;
+    const currentValue = textareaRef.current?.value ?? value;
+    if ((!currentValue.trim() && files.length === 0) || disabled) return;
+    onSend(currentValue, files.length > 0 ? files : undefined);
     setValue("");
     onFilesChange([]);
     if (textareaRef.current) {
+      textareaRef.current.value = "";
       textareaRef.current.style.height = "auto";
     }
   }, [value, files, onSend, onFilesChange, disabled]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.nativeEvent.isComposing || composingRef.current || e.keyCode === 229) {
+        return;
+      }
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         handleSend();
@@ -44,12 +51,22 @@ export function ChatInput({ onSend, onAbort, isBusy, disabled, files, onFilesCha
     [handleSend],
   );
 
+  const handleCompositionStart = useCallback(() => {
+    composingRef.current = true;
+  }, []);
+
   const handleInput = useCallback(() => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "auto";
     el.style.height = Math.min(el.scrollHeight, 200) + "px";
   }, []);
+
+  const handleCompositionEnd = useCallback((e: CompositionEvent<HTMLTextAreaElement>) => {
+    composingRef.current = false;
+    setValue(e.currentTarget.value);
+    handleInput();
+  }, [handleInput]);
 
   const handleFileSelect = useCallback(() => {
     fileInputRef.current?.click();
@@ -122,6 +139,8 @@ export function ChatInput({ onSend, onAbort, isBusy, disabled, files, onFilesCha
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
+          onCompositionStart={handleCompositionStart}
+          onCompositionEnd={handleCompositionEnd}
           onInput={handleInput}
           placeholder={t("sendMessage")}
           disabled={disabled}

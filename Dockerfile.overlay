@@ -1,0 +1,38 @@
+FROM ghcr.io/nextlevelbuilder/goclaw:latest
+
+ARG VERSION=dev
+ARG OVERLAY_BUILD_STAMP=dev
+
+RUN printf '%s\n' "$OVERLAY_BUILD_STAMP" > /app/.overlay-build-stamp
+
+COPY .dist/linux-amd64/goclaw /app/goclaw
+COPY .dist/linux-amd64/pkg-helper /app/pkg-helper
+COPY migrations/ /app/migrations/
+COPY skills/ /app/bundled-skills/
+COPY docker/requirements-base.txt docker/requirements-skills.txt /tmp/
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+COPY scripts/github_app_token.py /app/scripts/github_app_token.py
+COPY scripts/gh-app-wrapper.sh /app/scripts/gh-app-wrapper.sh
+
+RUN set -eux; \
+    apk add --no-cache poppler-utils git github-cli bash openssl curl nodejs npm; \
+    python3 -m pip install --no-cache-dir --break-system-packages \
+        -r /tmp/requirements-base.txt \
+        -r /tmp/requirements-skills.txt; \
+    npm install -g --cache /tmp/npm-cache @perplexity-ai/mcp-server@0.8.2; \
+    sed -i 's/\r$//' /app/docker-entrypoint.sh; \
+    sed -i 's/\r$//' /app/scripts/github_app_token.py /app/scripts/gh-app-wrapper.sh; \
+    cd /app/bundled-skills; \
+    for skill in docx pptx xlsx; do \
+        if [ -d "${skill}/scripts" ] && [ ! -d "${skill}/scripts/office" ]; then \
+            rm -f "${skill}/scripts/office"; \
+            cp -r _shared/office "${skill}/scripts/office"; \
+        fi; \
+    done; \
+    rm -rf /tmp/npm-cache /tmp/requirements-base.txt /tmp/requirements-skills.txt; \
+    chmod +x /app/docker-entrypoint.sh; \
+    chmod +x /app/scripts/github_app_token.py /app/scripts/gh-app-wrapper.sh; \
+    chmod 755 /app/pkg-helper; \
+    chown root:root /app/pkg-helper
+
+LABEL org.opencontainers.image.version="${VERSION}"

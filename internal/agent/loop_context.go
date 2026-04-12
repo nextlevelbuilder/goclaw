@@ -212,9 +212,9 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 			TenantID:   store.TenantIDFromContext(ctx).String(),
 			TenantSlug: store.TenantSlugFromContext(ctx),
 			PeerKind:   req.PeerKind,
-			TeamID:    teamIDPtr,
+			TeamID:     teamIDPtr,
 			TeamConfig: teamWSConfig,
-			BaseDir:   l.dataDir,
+			BaseDir:    l.dataDir,
 		})
 		if wsErr != nil {
 			slog.Warn("workspace resolution failed", "err", wsErr)
@@ -226,6 +226,15 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 	// Persist agent UUID + user ID on the session (for querying/tracing)
 	if l.agentUUID != uuid.Nil || req.UserID != "" {
 		l.sessions.SetAgentInfo(ctx, req.SessionKey, l.agentUUID, req.UserID)
+	}
+
+	// Worktree isolation can override the effective tool workspace after the
+	// normal per-user/team resolution pipeline completes.
+	if toolCwd := tools.ToolCwdFromCtx(ctx); toolCwd != "" {
+		if err := os.MkdirAll(toolCwd, 0755); err != nil {
+			slog.Warn("failed to create tool cwd override", "cwd", toolCwd, "error", err)
+		}
+		ctx = tools.WithToolWorkspace(ctx, toolCwd)
 	}
 
 	// Security: scan user message for injection patterns.

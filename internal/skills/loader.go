@@ -26,18 +26,20 @@ import (
 
 // Metadata holds parsed SKILL.md frontmatter.
 type Metadata struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Paths       []string `json:"paths,omitempty"`
 }
 
 // Info describes a discovered skill.
 type Info struct {
-	Name        string `json:"name"`
-	Slug        string `json:"slug"`    // directory name (unique identifier)
-	Path        string `json:"path"`    // absolute path to SKILL.md
-	BaseDir     string `json:"baseDir"` // skill directory (parent of SKILL.md)
-	Source      string `json:"source"`  // "workspace", "global", "builtin"
-	Description string `json:"description"`
+	Name        string   `json:"name"`
+	Slug        string   `json:"slug"`    // directory name (unique identifier)
+	Path        string   `json:"path"`    // absolute path to SKILL.md
+	BaseDir     string   `json:"baseDir"` // skill directory (parent of SKILL.md)
+	Source      string   `json:"source"`  // "workspace", "global", "builtin"
+	Description string   `json:"description"`
+	Paths       []string `json:"paths,omitempty"`
 }
 
 // Loader discovers and loads SKILL.md files from multiple directories.
@@ -54,8 +56,9 @@ type Loader struct {
 	// Uses versioned subdirectory structure: <dir>/<slug>/<version>/SKILL.md
 	managedSkillsDir string
 
-	mu    sync.RWMutex
-	cache map[string]*Info // name → info (lazily populated)
+	mu            sync.RWMutex
+	cache         map[string]*Info // name → info (lazily populated)
+	pathActivator *PathActivator
 
 	// Version tracking for hot-reload (matching TS bumpSkillsSnapshotVersion).
 	// Bumped by the watcher on SKILL.md changes; consumers compare to detect staleness.
@@ -88,6 +91,7 @@ func NewLoader(workspace, globalSkills, builtinSkills string) *Loader {
 		globalSkills:        globalSkills,
 		builtinSkills:       builtinSkills,
 		cache:               make(map[string]*Info),
+		pathActivator:       NewPathActivator(),
 	}
 }
 
@@ -104,6 +108,9 @@ func (l *Loader) SetManagedDir(dir string) {
 func (l *Loader) ListSkills(_ context.Context) []Info {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
+	l.cache = make(map[string]*Info)
+	l.pathActivator = NewPathActivator()
 
 	seen := make(map[string]bool)
 	var skills []Info
@@ -148,10 +155,12 @@ func (l *Loader) ListSkills(_ context.Context) []Info {
 				if meta.Name != "" {
 					info.Name = meta.Name
 				}
+				info.Paths = append([]string(nil), meta.Paths...)
 			}
 			skills = append(skills, info)
 			seen[d.Name()] = true
 			l.cache[d.Name()] = &info
+			l.pathActivator.Register(info.Slug, info.Paths)
 		}
 	}
 
@@ -164,6 +173,7 @@ func (l *Loader) ListSkills(_ context.Context) []Info {
 			skills = append(skills, info)
 			seen[info.Slug] = true
 			l.cache[info.Slug] = &info
+			l.pathActivator.Register(info.Slug, info.Paths)
 		}
 	}
 
@@ -191,10 +201,12 @@ func (l *Loader) ListSkills(_ context.Context) []Info {
 					if meta.Name != "" {
 						info.Name = meta.Name
 					}
+					info.Paths = append([]string(nil), meta.Paths...)
 				}
 				skills = append(skills, info)
 				seen[d.Name()] = true
 				l.cache[d.Name()] = &info
+				l.pathActivator.Register(info.Slug, info.Paths)
 			}
 		}
 	}
@@ -241,6 +253,7 @@ func (l *Loader) listManagedSkills() []Info {
 			if meta.Name != "" {
 				info.Name = meta.Name
 			}
+			info.Paths = append([]string(nil), meta.Paths...)
 		}
 		skills = append(skills, info)
 	}
@@ -280,46 +293,13 @@ func (l *Loader) findLatestVersion(slug string) (int, string) {
 // The {baseDir} placeholder in SKILL.md is replaced with the skill's absolute directory path.
 // Priority: workspace > agents > global > managed > builtin
 func (l *Loader) LoadSkill(_ context.Context, name string) (string, bool) {
-	// Check flat skill directories (workspace, agents, global) first
-	for _, dir := range []string{l.workspaceSkills, l.projectAgentSkills, l.personalAgentSkills, l.globalSkills} {
-		if dir == "" {
-			continue
-		}
-		path := filepath.Join(dir, name, "SKILL.md")
-		data, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-		content := stripFrontmatter(string(data))
-		content = strings.ReplaceAll(content, "{baseDir}", filepath.Join(dir, name))
-		return content, true
+	l.ListSkills(context.Background())
+	l.mu.RLock()
+	info, ok := l.cache[name]
+	l.mu.RUnlock()
+	if ok {
+		return l.renderSkill(*info)
 	}
-
-	// Managed skills (DB-seeded, versioned) take priority over raw builtin files.
-	if l.managedSkillsDir != "" {
-		latestVer, latestDir := l.findLatestVersion(name)
-		if latestVer >= 0 {
-			path := filepath.Join(latestDir, "SKILL.md")
-			data, err := os.ReadFile(path)
-			if err == nil {
-				content := stripFrontmatter(string(data))
-				content = strings.ReplaceAll(content, "{baseDir}", latestDir)
-				return content, true
-			}
-		}
-	}
-
-	// Builtin fallback (only if not in managed)
-	if l.builtinSkills != "" {
-		path := filepath.Join(l.builtinSkills, name, "SKILL.md")
-		data, err := os.ReadFile(path)
-		if err == nil {
-			content := stripFrontmatter(string(data))
-			content = strings.ReplaceAll(content, "{baseDir}", filepath.Join(l.builtinSkills, name))
-			return content, true
-		}
-	}
-
 	return "", false
 }
 
@@ -331,7 +311,7 @@ func (l *Loader) LoadForContext(ctx context.Context, allowList []string) string 
 	if allowList == nil {
 		// Load all available skills
 		for _, s := range l.ListSkills(ctx) {
-			names = append(names, s.Name)
+			names = append(names, s.Slug)
 		}
 	} else {
 		names = allowList
@@ -475,6 +455,49 @@ func (l *Loader) GetSkill(ctx context.Context, name string) (*Info, bool) {
 	return info, ok
 }
 
+// ActivatedSkillContents returns rendered skill bodies that should be injected
+// when the agent touches the given paths. It combines registered path rules
+// with directory walk discovery from local .goclaw/skills folders.
+func (l *Loader) ActivatedSkillContents(ctx context.Context, touchedPaths []string) map[string]string {
+	if len(touchedPaths) == 0 {
+		return nil
+	}
+
+	l.ListSkills(ctx)
+
+	l.mu.RLock()
+	pa := l.pathActivator
+	cache := make(map[string]*Info, len(l.cache))
+	for k, v := range l.cache {
+		cache[k] = v
+	}
+	l.mu.RUnlock()
+
+	contents := make(map[string]string)
+	if pa != nil {
+		for _, slug := range pa.ActivateForPaths(touchedPaths) {
+			info := cache[slug]
+			if info == nil {
+				continue
+			}
+			if content, ok := l.renderSkill(*info); ok {
+				contents[slug] = content
+			}
+		}
+	}
+
+	for slug, content := range l.discoverSkillContentsForPaths(touchedPaths) {
+		if _, exists := contents[slug]; !exists {
+			contents[slug] = content
+		}
+	}
+
+	if len(contents) == 0 {
+		return nil
+	}
+	return contents
+}
+
 // --- Frontmatter parsing ---
 
 var frontmatterRe = regexp.MustCompile(`(?s)^---\n(.*?)\n---\n?`)
@@ -493,6 +516,7 @@ func parseMetadata(path string) *Metadata {
 	// Try JSON first
 	var jm Metadata
 	if json.Unmarshal([]byte(fm), &jm) == nil && jm.Name != "" {
+		jm.Paths = parsePaths(fm)
 		return &jm
 	}
 
@@ -501,6 +525,7 @@ func parseMetadata(path string) *Metadata {
 	return &Metadata{
 		Name:        kv["name"],
 		Description: kv["description"],
+		Paths:       parsePaths(fm),
 	}
 }
 
@@ -602,4 +627,136 @@ func escapeXML(s string) string {
 	s = strings.ReplaceAll(s, "<", "&lt;")
 	s = strings.ReplaceAll(s, ">", "&gt;")
 	return s
+}
+
+func (l *Loader) renderSkill(info Info) (string, bool) {
+	data, err := os.ReadFile(info.Path)
+	if err != nil {
+		return "", false
+	}
+	content := stripFrontmatter(string(data))
+	content = ExecuteShellInPrompt(content, info.Source, info.BaseDir)
+	content = strings.ReplaceAll(content, "{baseDir}", info.BaseDir)
+	return content, true
+}
+
+func (l *Loader) discoverSkillContentsForPaths(touchedPaths []string) map[string]string {
+	workspaceRoot := l.workspaceRoot()
+	if workspaceRoot == "" {
+		return nil
+	}
+
+	dirs := DiscoverSkillsForPaths(touchedPaths, workspaceRoot)
+	if len(dirs) == 0 {
+		return nil
+	}
+
+	contents := make(map[string]string)
+	for _, dir := range dirs {
+		entries, err := os.ReadDir(dir.Path)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			skillDir := filepath.Join(dir.Path, entry.Name())
+			skillFile := filepath.Join(skillDir, "SKILL.md")
+			if _, err := os.Stat(skillFile); err != nil {
+				continue
+			}
+
+			info := Info{
+				Name:    entry.Name(),
+				Slug:    entry.Name(),
+				Path:    skillFile,
+				BaseDir: skillDir,
+				Source:  "discovered",
+			}
+			if meta := parseMetadata(skillFile); meta != nil {
+				if meta.Name != "" {
+					info.Name = meta.Name
+				}
+				info.Description = meta.Description
+				info.Paths = append([]string(nil), meta.Paths...)
+			}
+			if len(info.Paths) > 0 && !matchesAny(info.Paths, touchedPaths) {
+				continue
+			}
+			if content, ok := l.renderSkill(info); ok {
+				contents[info.Slug] = content
+			}
+		}
+	}
+	if len(contents) == 0 {
+		return nil
+	}
+	return contents
+}
+
+func (l *Loader) workspaceRoot() string {
+	if l.workspaceSkills != "" {
+		return filepath.Dir(l.workspaceSkills)
+	}
+	if l.projectAgentSkills != "" {
+		return filepath.Dir(filepath.Dir(l.projectAgentSkills))
+	}
+	return ""
+}
+
+func parsePaths(frontmatter string) []string {
+	frontmatter = normalizeLineEndings(frontmatter)
+	lines := strings.Split(frontmatter, "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "paths:") {
+			continue
+		}
+
+		rest := strings.TrimSpace(strings.TrimPrefix(trimmed, "paths:"))
+		if rest != "" {
+			return splitPathList(rest)
+		}
+
+		var paths []string
+		for j := i + 1; j < len(lines); j++ {
+			next := lines[j]
+			if next == "" {
+				continue
+			}
+			if next[0] != ' ' && next[0] != '\t' {
+				break
+			}
+			entry := strings.TrimSpace(next)
+			if strings.HasPrefix(entry, "- ") {
+				entry = strings.TrimSpace(strings.TrimPrefix(entry, "- "))
+			}
+			entry = strings.Trim(entry, "\"'")
+			if entry != "" {
+				paths = append(paths, entry)
+			}
+		}
+		return paths
+	}
+	return nil
+}
+
+func splitPathList(value string) []string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	value = strings.TrimPrefix(value, "[")
+	value = strings.TrimSuffix(value, "]")
+
+	parts := strings.Split(value, ",")
+	var out []string
+	for _, part := range parts {
+		part = strings.TrimSpace(strings.Trim(part, "\"'"))
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }

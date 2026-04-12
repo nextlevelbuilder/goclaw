@@ -53,6 +53,7 @@ type Config struct {
 	Cron      CronConfig      `json:"cron"`
 	Telemetry TelemetryConfig `json:"telemetry"`
 	Tailscale TailscaleConfig `json:"tailscale"`
+	Plugins   PluginsConfig   `json:"plugins,omitempty"`
 	Bindings  []AgentBinding  `json:"bindings,omitempty"`
 	mu        sync.RWMutex
 }
@@ -79,6 +80,22 @@ type DatabaseConfig struct {
 // SkillsConfig configures the skills storage system.
 type SkillsConfig struct {
 	StorageDir string `json:"storage_dir,omitempty"` // directory for skill content (default: dataDir/skills-store/)
+}
+
+// PluginsConfig declares optional local/marketplace plugins to reconcile at startup.
+type PluginsConfig struct {
+	Declarations       []PluginDeclaration `json:"declarations,omitempty"`
+	MarketplaceURL     string              `json:"marketplace_url,omitempty"`
+	BlockedSources     []string            `json:"blocked_sources,omitempty"`
+	StrictKnownSources bool                `json:"strict_known_sources,omitempty"`
+}
+
+// PluginDeclaration declares the desired state of a plugin at startup.
+type PluginDeclaration struct {
+	Name    string `json:"name"`
+	Source  string `json:"source"`
+	Version string `json:"version,omitempty"`
+	Enabled bool   `json:"enabled,omitempty"`
 }
 
 // AgentBinding maps a channel/peer pattern to a specific agent.
@@ -329,13 +346,13 @@ type ModelPricing struct {
 // When enabled, spans are exported to an OTLP-compatible backend (Jaeger, Tempo, Datadog, etc.)
 // in addition to PostgreSQL storage.
 type TelemetryConfig struct {
-	Enabled      bool                       `json:"enabled,omitempty"`       // enable OTLP export (default false)
-	Endpoint     string                     `json:"endpoint,omitempty"`      // OTLP endpoint (e.g. "localhost:4317", "https://otel.example.com:4318")
-	Protocol     string                     `json:"protocol,omitempty"`      // "grpc" (default) or "http"
-	Insecure     bool                       `json:"insecure,omitempty"`      // skip TLS verification (default false, set true for local dev)
-	ServiceName  string                     `json:"service_name,omitempty"`  // OTEL service name (default "goclaw-gateway")
-	Headers      map[string]string          `json:"headers,omitempty"`       // extra headers (e.g. auth tokens for cloud backends)
-	ModelPricing map[string]*ModelPricing    `json:"model_pricing,omitempty"` // cost per model, key = "provider/model" or just "model"
+	Enabled      bool                     `json:"enabled,omitempty"`       // enable OTLP export (default false)
+	Endpoint     string                   `json:"endpoint,omitempty"`      // OTLP endpoint (e.g. "localhost:4317", "https://otel.example.com:4318")
+	Protocol     string                   `json:"protocol,omitempty"`      // "grpc" (default) or "http"
+	Insecure     bool                     `json:"insecure,omitempty"`      // skip TLS verification (default false, set true for local dev)
+	ServiceName  string                   `json:"service_name,omitempty"`  // OTEL service name (default "goclaw-gateway")
+	Headers      map[string]string        `json:"headers,omitempty"`       // extra headers (e.g. auth tokens for cloud backends)
+	ModelPricing map[string]*ModelPricing `json:"model_pricing,omitempty"` // cost per model, key = "provider/model" or just "model"
 }
 
 // CronConfig configures the cron job system.
@@ -428,6 +445,7 @@ func (c *Config) ReplaceFrom(src *Config) {
 	c.Cron = src.Cron
 	c.Telemetry = src.Telemetry
 	c.Tailscale = src.Tailscale
+	c.Plugins = src.Plugins
 	c.Bindings = src.Bindings
 }
 

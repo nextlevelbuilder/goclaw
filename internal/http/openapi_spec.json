@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "GoClaw Gateway API",
-    "description": "PostgreSQL multi-tenant AI agent gateway with WebSocket RPC + HTTP API.\n\n## Authentication\n\nAll endpoints require a Bearer token in the `Authorization` header:\n\n```\nAuthorization: Bearer <gateway-token-or-api-key>\n```\n\nYou can use either the **gateway token** (grants admin access) or an **API key** created via the API Keys endpoints (grants scoped access).\n\nIf no token is configured on the server, authentication is disabled (backward compatibility).\n\n## Common Headers\n\n| Header | Description |\n|--------|-------------|\n| `X-GoClaw-User-Id` | External user ID for multi-tenant context |\n| `X-GoClaw-Agent-Id` | Target agent ID (alternative to model prefix) |\n| `X-GoClaw-Tenant-Id` | Tenant scope — UUID or slug (gateway token / cross-tenant API keys) |\n| `Accept-Language` | Locale for error messages (`en`, `vi`, `zh`) |\n\n## WebSocket Protocol\n\nConnect via `POST /ws` (upgrade). Protocol v3 uses frame types: `req`, `res`, `event`.\nFirst request must be `connect` with `{\"token\": \"...\", \"user_id\": \"...\", \"locale\": \"en\"}`.",
+    "description": "PostgreSQL multi-tenant AI agent gateway with WebSocket RPC + HTTP API.\n\n## Authentication\n\nAll endpoints require a Bearer token in the `Authorization` header:\n\n```\nAuthorization: Bearer <gateway-token-or-api-key>\n```\n\nYou can use either the **gateway token** (grants admin access) or an **API key** created via the API Keys endpoints (grants scoped access).\n\nIf no token is configured on the server, authentication is disabled (backward compatibility).\n\n## Common Headers\n\n| Header | Description |\n|--------|-------------|\n| `X-GoClaw-User-Id` | External user ID for multi-tenant context. For `POST /v1/chat/completions`, the JSON `user` field is accepted as a fallback. |\n| `X-GoClaw-Agent-Id` | Target agent ID (alternative to model prefix) |\n| `X-GoClaw-Tenant-Id` | Tenant scope — UUID or slug (gateway token / cross-tenant API keys) |\n| `Accept-Language` | Locale for error messages (`en`, `vi`, `zh`) |\n\n## WebSocket Protocol\n\nConnect via `POST /ws` (upgrade). Protocol v3 uses frame types: `req`, `res`, `event`.\nFirst request must be `connect` with `{\"token\": \"...\", \"user_id\": \"...\", \"locale\": \"en\"}`.",
     "version": "0.2.0",
     "contact": {
       "name": "GoClaw",
@@ -67,7 +67,7 @@
       "post": {
         "tags": ["Chat"],
         "summary": "OpenAI-compatible chat completions",
-        "description": "Send messages to an agent and get a response. Compatible with OpenAI's chat completions API.\n\nUse the `model` field to target a specific agent: `goclaw:<agent-id>` or `agent:<agent-id>`.",
+        "description": "Send messages to an agent and get a response. Compatible with OpenAI's chat completions API.\n\nUse the `model` field to target a specific agent: `goclaw:<agent-id>` or `agent:<agent-id>`. In managed mode, `X-GoClaw-User-Id` is preferred, but the JSON `user` field is accepted as a fallback.",
         "requestBody": {
           "required": true,
           "content": {
@@ -312,7 +312,22 @@
           { "name": "X-GoClaw-User-Id", "in": "header", "required": true, "schema": { "type": "string" } }
         ],
         "responses": {
-          "200": { "description": "Agent list" },
+          "200": {
+            "description": "Agent list envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "agents": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/AgentInput" }
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": { "$ref": "#/components/responses/Unauthorized" }
         }
       },
@@ -880,13 +895,14 @@
       "AgentInput": {
         "type": "object",
         "properties": {
-          "name": { "type": "string", "description": "Unique agent slug" },
+          "agent_key": { "type": "string", "description": "Unique agent slug used by the HTTP API create/update handlers." },
           "display_name": { "type": "string" },
           "agent_type": { "type": "string", "enum": ["open", "predefined"] },
-          "description": { "type": "string" },
+          "frontmatter": { "type": "string", "description": "Short agent summary shown in listings and used for summoning/bootstrap." },
           "provider": { "type": "string", "description": "LLM provider name" },
           "model": { "type": "string", "description": "Model ID" },
-                  "system_prompt": { "type": "string" },
+          "max_tokens": { "type": "integer", "description": "Maximum output tokens for the agent." },
+          "workspace": { "type": "string", "description": "Optional workspace override. Defaults to <defaultWorkspace>/<agent_key>." },
                   "other_config": {
                     "type": "object",
                     "description": "Optional per-agent JSON config.",

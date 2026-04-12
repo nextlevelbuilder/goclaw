@@ -33,7 +33,7 @@ var toolGroups = map[string][]string{
 		"cron", "message", "create_forum_topic", "list_group_members",
 		"read_image", "read_document", "read_audio", "read_video",
 		"create_image", "create_video",
-		"skill_search", "mcp_tool_search", "tts",
+		"skill_search", "mcp_tool_search", "tts", "openhands_delegate",
 		"team_tasks",
 	},
 }
@@ -56,7 +56,8 @@ func UnregisterToolGroup(name string) {
 // Tool profiles define preset allow sets.
 var toolProfiles = map[string][]string{
 	"minimal":   {"session_status"},
-	"coding":    {"group:fs", "group:runtime", "group:sessions", "group:memory", "group:web", "read_image", "create_image", "skill_search"},
+	"coding":    {"group:fs", "group:runtime", "group:sessions", "group:memory", "group:web", "read_image", "create_image", "skill_search", "openhands_delegate"},
+	"research":  {"group:fs", "group:runtime", "group:memory", "group:web", "group:ui", "group:mcp", "read_image", "read_document", "skill_search", "mcp_tool_search"},
 	"messaging": {"group:messaging", "group:web", "sessions_list", "sessions_history", "sessions_send", "session_status", "read_image", "skill_search"},
 	"full":      {}, // empty = no restrictions
 }

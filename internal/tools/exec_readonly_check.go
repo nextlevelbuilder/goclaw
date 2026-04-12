@@ -120,9 +120,9 @@ func IsReadOnlyCommand(command string) bool {
 	padded := " " + command + " "
 	for _, flag := range dangerousFlags {
 		if strings.Contains(padded, flag) {
-			// Exception: sed without -i is read-only
+			// Exception: "sed" is read-only, but "sed -i" is mutating.
 			if flag == " -i " && extractBaseCommand(command) == "sed" {
-				continue // sed -i is actually mutating, but "sed" alone is read-only
+				return false
 			}
 			return false
 		}

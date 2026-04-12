@@ -5,7 +5,6 @@ package pipeline
 
 import (
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
-	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
 // ToolBatch groups tool calls by concurrency safety.
@@ -61,16 +60,14 @@ func PartitionToolCalls(
 	return batches
 }
 
-// DefaultIsConcurrencySafe builds a safety check function using
-// the tools registry metadata. Looks up each tool and calls
-// IsConcurrencySafeForTool with the tool's metadata.
-func DefaultIsConcurrencySafe(registry interface {
-	GetMetadata(name string) tools.ToolMetadata
-}) func(tc providers.ToolCall) bool {
+// DefaultIsConcurrencySafe builds a safety check function from a simple
+// read-only predicate. Kept for tests and lightweight callers that don't want
+// to wire the full tools registry classifier.
+func DefaultIsConcurrencySafe(isReadOnly func(name string) bool) func(tc providers.ToolCall) bool {
 	return func(tc providers.ToolCall) bool {
-		meta := registry.GetMetadata(tc.Name)
-		// Check if tool has a per-invocation classifier
-		// For now, use static metadata (enhanced per-tool in future)
-		return meta.IsReadOnly()
+		if isReadOnly == nil {
+			return false
+		}
+		return isReadOnly(tc.Name)
 	}
 }

@@ -2,11 +2,13 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
 
+	pluginhooks "github.com/nextlevelbuilder/goclaw/internal/plugins/hooks"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/internal/tracing"
@@ -18,6 +20,41 @@ import (
 func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 	l.activeRuns.Add(1)
 	defer l.activeRuns.Add(-1)
+
+	if l.isolation == "worktree" && l.worktreeMgr != nil && l.workspace != "" {
+		if ForkDepthFromCtx(ctx) >= MaxForkDepth {
+			return nil, fmt.Errorf("cannot create nested worktree isolation beyond depth %d", MaxForkDepth)
+		}
+
+		wt, err := l.worktreeMgr.Create(ctx, l.workspace, req.RunID)
+		if err != nil {
+			return nil, fmt.Errorf("create isolated worktree: %w", err)
+		}
+		ctx = WithForkDepth(ctx, ForkDepthFromCtx(ctx)+1)
+		ctx = tools.WithToolCwd(ctx, wt.Path)
+		req.ExtraSystemPrompt += fmt.Sprintf(
+			"\n\n[Isolation notice: operate inside isolated git worktree %s. Changes there do not affect the main checkout until merged.]",
+			wt.Path,
+		)
+		if l.hookExecutor != nil {
+			l.hookExecutor.Fire(ctx, pluginhooks.WorktreeCreate, map[string]any{
+				"path":   wt.Path,
+				"branch": wt.Branch,
+			})
+		}
+		defer func() {
+			safeCtx := context.WithoutCancel(ctx)
+			if l.hookExecutor != nil {
+				l.hookExecutor.Fire(safeCtx, pluginhooks.WorktreeRemove, map[string]any{
+					"path":   wt.Path,
+					"branch": wt.Branch,
+				})
+			}
+			if err := l.worktreeMgr.Remove(safeCtx, req.RunID); err != nil {
+				slog.Warn("worktree cleanup failed", "run", req.RunID, "error", err)
+			}
+		}()
+	}
 
 	// Per-run emit wrapper: enriches every AgentEvent with delegation + routing context.
 	emitRun := func(event AgentEvent) {
@@ -40,6 +77,13 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 		RunID:   req.RunID,
 		Payload: map[string]any{"message": req.Message},
 	})
+	if l.hookExecutor != nil {
+		l.hookExecutor.Fire(ctx, pluginhooks.SessionStart, map[string]any{
+			"agent_id":    l.id,
+			"run_id":      req.RunID,
+			"session_key": req.SessionKey,
+		})
+	}
 
 	// Create trace
 	var traceID uuid.UUID

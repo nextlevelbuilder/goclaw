@@ -40,6 +40,53 @@ export NPM_CONFIG_PREFIX="$RUNTIME_DIR/npm-global"
 export NODE_PATH="/usr/local/lib/node_modules:$RUNTIME_DIR/npm-global/lib/node_modules:${NODE_PATH:-}"
 export PATH="$RUNTIME_DIR/npm-global/bin:$RUNTIME_DIR/pip/bin:$PATH"
 
+# Runtime user home/config must live on the writable volume because the image
+# rootfs is read-only and the goclaw user has no dedicated home directory.
+export HOME="${GOCLAW_HOME:-/app/data}"
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+export GIT_CONFIG_GLOBAL="${GIT_CONFIG_GLOBAL:-$HOME/.gitconfig}"
+mkdir -p "$HOME" "$XDG_CONFIG_HOME" || true
+if [ "$(id -u)" = "0" ]; then
+  chown goclaw:goclaw "$HOME" "$XDG_CONFIG_HOME" 2>/dev/null || true
+fi
+
+# GitHub App runtime bootstrap for git/gh access to private repos.
+GH_APP_DIR="$RUNTIME_DIR/github-app"
+GH_APP_BIN_DIR="$GH_APP_DIR/bin"
+mkdir -p "$GH_APP_BIN_DIR" || true
+if [ "$(id -u)" = "0" ] && [ -d "$GH_APP_DIR" ]; then
+  chown root:goclaw "$GH_APP_DIR" "$GH_APP_BIN_DIR" 2>/dev/null || true
+  chmod 0770 "$GH_APP_DIR" "$GH_APP_BIN_DIR" 2>/dev/null || true
+fi
+export GOCLAW_GITHUB_APP_CACHE_DIR="${GOCLAW_GITHUB_APP_CACHE_DIR:-$GH_APP_DIR}"
+export GOCLAW_GITHUB_APP_HELPER="${GOCLAW_GITHUB_APP_HELPER:-/app/scripts/github_app_token.py}"
+REAL_GH_PATH="$(command -v gh 2>/dev/null || true)"
+if [ -n "${GOCLAW_GITHUB_APP_ID:-}" ] && { [ -n "${GOCLAW_GITHUB_APP_PRIVATE_KEY_FILE:-}" ] || [ -n "${GOCLAW_GITHUB_APP_PRIVATE_KEY_B64:-}" ]; }; then
+  if [ -x /app/scripts/gh-app-wrapper.sh ] && [ -n "$REAL_GH_PATH" ]; then
+    ln -sf /app/scripts/gh-app-wrapper.sh "$GH_APP_BIN_DIR/gh"
+    export GOCLAW_REAL_GH_PATH="$REAL_GH_PATH"
+  fi
+  if command -v git >/dev/null 2>&1; then
+    if command -v su-exec >/dev/null 2>&1 && [ "$(id -u)" = "0" ]; then
+      su-exec goclaw git config --global --replace-all credential.helper "!/app/scripts/github_app_token.py git-credential" || true
+      su-exec goclaw git config --global --replace-all credential.useHttpPath true || true
+      su-exec goclaw git config --global --unset-all url."https://github.com/".insteadOf || true
+      su-exec goclaw git config --global --add url."https://github.com/".insteadOf git@github.com: || true
+      su-exec goclaw git config --global --add url."https://github.com/".insteadOf ssh://git@github.com/ || true
+    else
+      git config --global --replace-all credential.helper "!/app/scripts/github_app_token.py git-credential" || true
+      git config --global --replace-all credential.useHttpPath true || true
+      git config --global --unset-all url."https://github.com/".insteadOf || true
+      git config --global --add url."https://github.com/".insteadOf git@github.com: || true
+      git config --global --add url."https://github.com/".insteadOf ssh://git@github.com/ || true
+    fi
+    if [ -f "$GIT_CONFIG_GLOBAL" ] && [ "$(id -u)" = "0" ]; then
+      chown goclaw:goclaw "$GIT_CONFIG_GLOBAL" 2>/dev/null || true
+    fi
+  fi
+fi
+export PATH="$GH_APP_BIN_DIR:$PATH"
+
 # System packages: re-install on-demand packages persisted across recreates.
 # After chown above, root owns .runtime and can create this file.
 APK_LIST="$RUNTIME_DIR/apk-packages"

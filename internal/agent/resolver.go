@@ -13,9 +13,10 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
-	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
+	"github.com/nextlevelbuilder/goclaw/internal/memory"
+	pluginhooks "github.com/nextlevelbuilder/goclaw/internal/plugins/hooks"
 	"github.com/nextlevelbuilder/goclaw/internal/providerresolve"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
@@ -120,6 +121,9 @@ type ResolverDeps struct {
 
 	// Vault hook: called when a text file is uploaded by user (nil = no vault registration)
 	OnTextUploaded func(ctx context.Context, path, content string)
+
+	// Plugin hook executor shared across loops.
+	HookExecutor *pluginhooks.Executor
 }
 
 // NewManagedResolver creates a ResolverFunc that builds Loops from DB agent data.
@@ -413,7 +417,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			TenantID:               ag.TenantID,
 			AgentType:              ag.AgentType,
 			IsTeamLead:             isTeamLead,
-			AutoInjector:          deps.AutoInjector,
+			AutoInjector:           deps.AutoInjector,
 			Provider:               provider,
 			Model:                  ag.Model,
 			ModelRegistry:          deps.ModelRegistry,
@@ -423,6 +427,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			Workspace:              workspace,
 			DataDir:                dataDir,
 			RestrictToWs:           &restrictVal,
+			Isolation:              ag.ParseIsolation(),
 			SubagentsCfg:           ag.ParseSubagentsConfig(),
 			MemoryCfg:              ag.ParseMemoryConfig(),
 			SandboxCfg:             sandboxCfgOverride,
@@ -477,6 +482,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			DelegateTargets:        delegateTargets,
 			EvolutionMetricsStore:  evoMetricsStore,
 			UserResolver:           newContactResolver(deps.ContactStore),
+			HookExecutor:           deps.HookExecutor,
 		})
 
 		slog.Info("resolved agent from DB", "agent", agentKey, "model", ag.Model, "provider", ag.Provider)

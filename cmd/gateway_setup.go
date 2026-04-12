@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,11 +14,11 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
-	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
@@ -113,6 +114,20 @@ func setupToolRegistry(
 		}
 		browserMgr = browser.New(opts...)
 		toolsReg.Register(browser.NewBrowserTool(browserMgr))
+	}
+
+	if cfg.Tools.OpenHands.Enabled && strings.TrimSpace(cfg.Tools.OpenHands.BaseURL) != "" {
+		toolsReg.Register(tools.NewOpenHandsDelegateTool(workspace, tools.OpenHandsDelegateConfig{
+			BaseURL:              cfg.Tools.OpenHands.BaseURL,
+			BearerToken:          cfg.Tools.OpenHands.BearerToken,
+			DefaultWaitSec:       cfg.Tools.OpenHands.DefaultWaitSec,
+			MaxWaitSec:           cfg.Tools.OpenHands.MaxWaitSec,
+			DefaultMaxRuntimeSec: cfg.Tools.OpenHands.DefaultMaxRuntimeSec,
+			DefaultMaxIterations: cfg.Tools.OpenHands.DefaultMaxIterations,
+			MaxUploadMB:          cfg.Tools.OpenHands.MaxUploadMB,
+			AllowedRepoPrefixes:  cfg.Tools.OpenHands.AllowedRepoPrefixes,
+		}))
+		slog.Info("openhands_delegate tool enabled", "base_url", cfg.Tools.OpenHands.BaseURL)
 	}
 
 	// Web tools (web_search + web_fetch)
@@ -590,4 +605,3 @@ func setupSkillsSystem(
 
 	return skillsLoader, skillSearchTool, globalSkillsDir, bundledSkillsDir, builtinSkillsDir
 }
-

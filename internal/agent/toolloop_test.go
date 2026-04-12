@@ -2,7 +2,11 @@ package agent
 
 import (
 	"fmt"
+	"strings"
 	"testing"
+
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
 // ===== Layer 1: Same-args loop detection =====
@@ -253,6 +257,137 @@ func TestReadOnlyStreak_ZeroStreak(t *testing.T) {
 	level, _ := s.detectReadOnlyStreak()
 	if level != "" {
 		t.Fatalf("expected no detection on zero streak, got %q", level)
+	}
+}
+
+func TestProcessToolResult_LoopWarningUsesSystemRole(t *testing.T) {
+	var rs runState
+	loop := &Loop{id: "tester"}
+	req := &RunRequest{RunID: "run-1"}
+	tc := providers.ToolCall{
+		ID:        "tc-1",
+		Name:      "list_files",
+		Arguments: map[string]any{"path": "."},
+	}
+	result := &tools.Result{ForLLM: "same result"}
+
+	var warnings []providers.Message
+	for range toolLoopWarningThreshold {
+		_, warnings, _ = loop.processToolResult(
+			t.Context(),
+			&rs,
+			req,
+			func(AgentEvent) {},
+			tc,
+			"list_files",
+			result,
+			false,
+		)
+	}
+
+	if len(warnings) == 0 {
+		t.Fatal("expected loop warning message")
+	}
+	if warnings[0].Role != "system" {
+		t.Fatalf("warning role = %q, want system", warnings[0].Role)
+	}
+}
+
+func TestProcessToolResult_SameResultWarningUsesSystemRole(t *testing.T) {
+	var rs runState
+	loop := &Loop{id: "tester"}
+	req := &RunRequest{RunID: "run-1"}
+	result := &tools.Result{ForLLM: "same result"}
+
+	var warnings []providers.Message
+	for i := range sameResultWarning {
+		tc := providers.ToolCall{
+			ID:        fmt.Sprintf("tc-%d", i),
+			Name:      "read_file",
+			Arguments: map[string]any{"path": fmt.Sprintf("/tmp/%d.txt", i)},
+		}
+		_, warnings, _ = loop.processToolResult(
+			t.Context(),
+			&rs,
+			req,
+			func(AgentEvent) {},
+			tc,
+			"read_file",
+			result,
+			false,
+		)
+	}
+
+	if len(warnings) == 0 {
+		t.Fatal("expected same-result warning message")
+	}
+	if warnings[0].Role != "system" {
+		t.Fatalf("warning role = %q, want system", warnings[0].Role)
+	}
+}
+
+func TestCheckReadOnlyStreak_WarningUsesSystemRole(t *testing.T) {
+	var rs runState
+	loop := &Loop{id: "tester"}
+	req := &RunRequest{RunID: "run-1"}
+
+	for range readOnlyStreakWarning {
+		rs.loopDetector.recordMutation("read_file", map[string]any{"path": "/same-file.txt"})
+	}
+
+	warnMsg, shouldBreak := loop.checkReadOnlyStreak(&rs, req)
+	if shouldBreak {
+		t.Fatal("expected warning, got break")
+	}
+	if warnMsg == nil {
+		t.Fatal("expected warning message")
+	}
+	if warnMsg.Role != "system" {
+		t.Fatalf("warning role = %q, want system", warnMsg.Role)
+	}
+}
+
+func TestProcessToolResult_RepeatedExecLoopReturnsObservedResult(t *testing.T) {
+	var rs runState
+	loop := &Loop{id: "tester"}
+	req := &RunRequest{RunID: "run-1"}
+	tc := providers.ToolCall{
+		ID:   "tc-exec",
+		Name: "exec",
+		Arguments: map[string]any{
+			"command": "docker info --format '{{.OSType}}'",
+		},
+	}
+	result := &tools.Result{
+		ForLLM:  "STDERR:\nsh: docker: not found\n",
+		IsError: true,
+	}
+
+	var action toolResultAction
+	for range toolLoopCriticalThreshold {
+		_, _, action = loop.processToolResult(
+			t.Context(),
+			&rs,
+			req,
+			func(AgentEvent) {},
+			tc,
+			"exec",
+			result,
+			false,
+		)
+	}
+
+	if action != toolResultBreak {
+		t.Fatalf("expected toolResultBreak, got %v", action)
+	}
+	if !rs.loopKilled {
+		t.Fatal("expected loopKilled=true")
+	}
+	if strings.Contains(rs.finalContent, "I was unable to complete this task") {
+		t.Fatalf("expected observed exec result, got generic failure: %s", rs.finalContent)
+	}
+	if !strings.Contains(rs.finalContent, "docker: not found") {
+		t.Fatalf("expected final content to include command result, got: %s", rs.finalContent)
 	}
 }
 

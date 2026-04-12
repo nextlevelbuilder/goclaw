@@ -33,16 +33,16 @@ type AgentsHandler struct {
 	kgStore          store.KnowledgeGraphStore // for import (nil = disabled)
 	episodicStore    store.EpisodicStore       // for import (nil in SQLite/lite builds)
 	vaultStore       store.VaultStore          // for vault import (nil = disabled)
-	toolsReg         ToolPreviewLister          // for system prompt preview tool resolution (nil = fallback)
-	skillsLoader     SkillPreviewBuilder        // for system prompt preview pinned skills (nil = skip)
-	skillAccessStore store.SkillAccessStore     // for system prompt preview skill filtering (nil = skip)
+	toolsReg         ToolPreviewLister         // for system prompt preview tool resolution (nil = fallback)
+	skillsLoader     SkillPreviewBuilder       // for system prompt preview pinned skills (nil = skip)
+	skillAccessStore store.SkillAccessStore    // for system prompt preview skill filtering (nil = skip)
 	teamStore        store.TeamStore           // for system prompt preview team context (nil = skip)
 	agentLinkStore   store.AgentLinkStore      // for system prompt preview delegation targets (nil = skip)
-	defaultWorkspace string                   // default workspace path template (e.g. "~/.goclaw/workspace")
-	dataDir          string                   // resolved data directory (e.g. "~/.goclaw/data") — for team workspace export
-	msgBus           *bus.MessageBus          // for cache invalidation events (nil = no events)
-	summoner         *AgentSummoner           // LLM-based agent setup (nil = disabled)
-	isOwner          func(string) bool        // checks if user ID is a system owner (nil = no owners configured)
+	defaultWorkspace string                    // default workspace path template (e.g. "~/.goclaw/workspace")
+	dataDir          string                    // resolved data directory (e.g. "~/.goclaw/data") — for team workspace export
+	msgBus           *bus.MessageBus           // for cache invalidation events (nil = no events)
+	summoner         *AgentSummoner            // LLM-based agent setup (nil = disabled)
+	isOwner          func(string) bool         // checks if user ID is a system owner (nil = no owners configured)
 }
 
 // NewAgentsHandler creates a handler for agent management endpoints.
@@ -193,6 +193,9 @@ func (h *AgentsHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		locale := store.LocaleFromContext(r.Context())
 		writeError(w, http.StatusInternalServerError, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToList, "agents"))
 		return
+	}
+	if agents == nil {
+		agents = []store.AgentData{}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"agents": agents})

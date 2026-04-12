@@ -131,6 +131,14 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 
 	agentID := extractAgentID(r, req.Model)
 	userID := store.UserIDFromContext(r.Context()) // resolved by enrichContext (respects API key owner binding)
+	if userID == "" && req.User != "" {
+		if err := store.ValidateUserID(req.User); err != nil {
+			http.Error(w, fmt.Sprintf(`{"error":{"message":"%s"}}`, i18n.T(locale, i18n.MsgInvalidRequest, err.Error())), http.StatusBadRequest)
+			return
+		}
+		userID = req.User
+		r = r.WithContext(store.WithUserID(r.Context(), userID))
+	}
 	if h.isManaged && userID == "" {
 		http.Error(w, fmt.Sprintf(`{"error":{"message":"%s"}}`, i18n.T(locale, i18n.MsgUserIDHeader)), http.StatusBadRequest)
 		return

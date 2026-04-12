@@ -58,6 +58,7 @@ func (l *Loop) pipelineCallbacks(req *RunRequest, bridgeRS *runState) pipelineCa
 		updateMetadata:     l.makeUpdateMetadata(req),
 		bootstrapCleanup:   l.makeBootstrapCleanup(),
 		maybeSummarize:     l.maybeSummarize,
+		sessionEndHooks:    l.makeSessionEndHooks(),
 	}
 }
 
@@ -85,6 +86,13 @@ type pipelineCallbackSet struct {
 	updateMetadata     func(ctx context.Context, sessionKey string, usage providers.Usage) error
 	bootstrapCleanup   func(ctx context.Context, state *pipeline.RunState) error
 	maybeSummarize     func(ctx context.Context, sessionKey string)
+	sessionEndHooks    func(ctx context.Context, state *pipeline.RunState)
+}
+
+func (l *Loop) makeSessionEndHooks() func(ctx context.Context, state *pipeline.RunState) {
+	return func(ctx context.Context, state *pipeline.RunState) {
+		l.fireSessionEndHooks(ctx, state.RunID, state.Input.SessionKey, state.Think.LastErrorIsAPI)
+	}
 }
 
 func (l *Loop) makeResolveWorkspace(req *RunRequest) func(ctx context.Context, input *pipeline.RunInput) (*workspace.WorkspaceContext, error) {
@@ -122,14 +130,42 @@ func (l *Loop) makeLoadContextFiles() func(ctx context.Context, userID string) (
 }
 
 func (l *Loop) makeBuildMessages() func(ctx context.Context, input *pipeline.RunInput, history []providers.Message, summary string) ([]providers.Message, error) {
+	var snapshotPersisted bool
 	return func(ctx context.Context, input *pipeline.RunInput, history []providers.Message, summary string) ([]providers.Message, error) {
 		msgs, _ := l.buildMessages(ctx, history, summary,
 			input.Message, input.ExtraSystemPrompt,
 			input.SessionKey, input.Channel, input.ChannelType,
 			input.ChatTitle, input.PeerKind, input.UserID,
 			input.HistoryLimit, input.SkillFilter, input.LightContext)
+		if !snapshotPersisted {
+			snapshotPersisted = true
+			if err := l.persistRunInputSnapshot(ctx, input); err != nil {
+				return nil, err
+			}
+		}
 		return msgs, nil
 	}
+}
+
+func (l *Loop) persistRunInputSnapshot(ctx context.Context, input *pipeline.RunInput) error {
+	if l.sessions == nil || input == nil || input.SessionKey == "" {
+		return nil
+	}
+	l.sessions.SetAgentInfo(ctx, input.SessionKey, l.agentUUID, input.UserID)
+
+	providerName := ""
+	if l.provider != nil {
+		providerName = l.provider.Name()
+	}
+	l.sessions.UpdateMetadata(ctx, input.SessionKey, l.model, providerName, input.Channel)
+
+	if !input.HideInput && input.Message != "" {
+		l.sessions.AddMessage(ctx, input.SessionKey, providers.Message{
+			Role:    "user",
+			Content: input.Message,
+		})
+	}
+	return l.sessions.Save(ctx, input.SessionKey)
 }
 
 // makeInjectContext wraps injectContext() for the v3 pipeline.
@@ -206,6 +242,14 @@ func (l *Loop) makeBuildFilteredTools(req *RunRequest) func(state *pipeline.RunS
 				state.Messages.AppendPending(msg)
 			}
 		}
+		toolDefs, selfKnowledgeMsg := applySelfKnowledgeToolPolicy(state, toolDefs)
+		if selfKnowledgeMsg != nil {
+			state.Messages.AppendPending(*selfKnowledgeMsg)
+		}
+		toolDefs, closeoutMsg := applyTurnCloseoutToolPolicy(state, toolDefs)
+		if closeoutMsg != nil {
+			state.Messages.AppendPending(*closeoutMsg)
+		}
 		return toolDefs, nil
 	}
 }
@@ -260,6 +304,19 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 		var err error
 		if req.Stream {
 			resp, err = provider.ChatStream(ctx, chatReq, func(chunk providers.StreamChunk) {
+				if len(chunk.ToolCalls) > 0 && state.Tool.StreamExecutor != nil {
+					if state.Tool.StreamedToolIDs == nil {
+						state.Tool.StreamedToolIDs = make(map[string]bool)
+					}
+					for _, tc := range chunk.ToolCalls {
+						if tc.ID == "" || state.Tool.StreamedToolIDs[tc.ID] {
+							continue
+						}
+						if state.Tool.StreamExecutor.AddTool(tc) {
+							state.Tool.StreamedToolIDs[tc.ID] = true
+						}
+					}
+				}
 				if chunk.Thinking != "" {
 					emitRun(AgentEvent{
 						Type:    protocol.ChatEventThinking,
@@ -347,20 +404,8 @@ func (l *Loop) makeRunMemoryFlush() func(ctx context.Context, state *pipeline.Ru
 	}
 }
 
-func (l *Loop) makeFlushMessages(req *RunRequest) func(ctx context.Context, sessionKey string, msgs []providers.Message) error {
-	// Track whether user message has been persisted (first flush only).
-	// v2 adds user message to pendingMsgs explicitly; v3 keeps it in history
-	// (via BuildMessages) so it never reaches FlushPending. This closure
-	// persists the user message on first flush to match v2 session format.
-	var userMsgFlushed bool
+func (l *Loop) makeFlushMessages(_ *RunRequest) func(ctx context.Context, sessionKey string, msgs []providers.Message) error {
 	return func(ctx context.Context, sessionKey string, msgs []providers.Message) error {
-		if !userMsgFlushed && !req.HideInput && req.Message != "" {
-			userMsgFlushed = true
-			l.sessions.AddMessage(ctx, sessionKey, providers.Message{
-				Role:    "user",
-				Content: req.Message,
-			})
-		}
 		for _, msg := range msgs {
 			l.sessions.AddMessage(ctx, sessionKey, msg)
 		}
@@ -402,4 +447,3 @@ func (l *Loop) makeBootstrapCleanup() func(ctx context.Context, state *pipeline.
 		return l.bootstrapCleanup(ctx, l.agentUUID, state.Input.UserID)
 	}
 }
-

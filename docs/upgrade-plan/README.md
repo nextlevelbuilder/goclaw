@@ -70,6 +70,9 @@ CP-07  Skill System Upgrade (Path Activation + Shell-in-Prompt + Discovery)
   |
   v
 CP-08  Plugin Ecosystem (Commands + Agents + Hooks + Servers)
+  |
+  v
+CP-09  Capability Gating + Blocker State + Action Policy
 ```
 
 ### Dependency Rules
@@ -81,6 +84,7 @@ CP-08  Plugin Ecosystem (Commands + Agents + Hooks + Servers)
 - **CP-06** is independent
 - **CP-07** is independent
 - **CP-08** depends on CP-07 (plugin hooks extend skill concepts)
+- **CP-09** depends on CP-02, CP-04, and CP-06 (tool metadata, recovery, permission semantics)
 
 ### Parallelization Strategy (for fastest completion)
 
@@ -90,6 +94,7 @@ Week 2-3:  CP-03 + CP-04 (parallel, after CP-01/02)
 Week 3-4:  CP-05 + CP-06 (parallel)
 Week 4-5:  CP-07
 Week 5-10: CP-08 (largest, can start week 5)
+Week 5-6:  CP-09 (can overlap late CP-08 work; high leverage for production stability)
 ```
 
 ---
@@ -107,6 +112,9 @@ Week 5-10: CP-08 (largest, can start week 5)
 | [CP-06-permission-classification.md](CP-06-permission-classification.md) | Bash classifier + dangerous patterns |
 | [CP-07-skill-system.md](CP-07-skill-system.md) | Path activation + shell-in-prompt + discovery |
 | [CP-08-plugin-ecosystem.md](CP-08-plugin-ecosystem.md) | 4-point extension + hooks + marketplace |
+| [CP-09-capability-gating-state-policy.md](CP-09-capability-gating-state-policy.md) | Capability snapshot + blocker state + action-family gating |
+| [CP-09-structured-constraints-spec.md](CP-09-structured-constraints-spec.md) | Final implementation-grade v1 design for structured constraints |
+| [CP-09-structured-constraints-checkpoints.md](CP-09-structured-constraints-checkpoints.md) | Execution checkpoints and ship gate for the structured-constraints rollout |
 
 ---
 

@@ -22,15 +22,15 @@ var virtualSystemFiles = map[string]string{
 
 // ReadFileTool reads file contents, optionally through a sandbox container.
 type ReadFileTool struct {
-	workspace        string
-	restrict         bool
-	allowedPrefixes  []string                // extra allowed path prefixes (e.g. skills dirs)
-	deniedPrefixes   []string                // path prefixes to deny access to (e.g. .goclaw)
-	sandboxMgr       sandbox.Manager         // nil = direct host access
-	contextFileIntc  *ContextFileInterceptor // nil = no virtual FS routing
-	memIntc          *MemoryInterceptor      // nil = no memory routing
-	permStore        store.ConfigPermissionStore // nil = no group read restriction
-	vaultIntc        *VaultInterceptor           // nil = no vault lazy sync
+	workspace       string
+	restrict        bool
+	allowedPrefixes []string                    // extra allowed path prefixes (e.g. skills dirs)
+	deniedPrefixes  []string                    // path prefixes to deny access to (e.g. .goclaw)
+	sandboxMgr      sandbox.Manager             // nil = direct host access
+	contextFileIntc *ContextFileInterceptor     // nil = no virtual FS routing
+	memIntc         *MemoryInterceptor          // nil = no memory routing
+	permStore       store.ConfigPermissionStore // nil = no group read restriction
+	vaultIntc       *VaultInterceptor           // nil = no vault lazy sync
 }
 
 // SetContextFileInterceptor enables virtual FS routing for context files.
@@ -191,7 +191,9 @@ func (t *ReadFileTool) Execute(ctx context.Context, args map[string]any) *Result
 		return ErrorResult(msg)
 	}
 
-	return t.paginateOutput(string(data), args)
+	result := t.paginateOutput(string(data), args)
+	result.TouchedPaths = []string{resolved}
+	return result
 }
 
 func (t *ReadFileTool) executeInSandbox(ctx context.Context, path, sandboxKey string, args map[string]any) *Result {
@@ -211,7 +213,15 @@ func (t *ReadFileTool) executeInSandbox(ctx context.Context, path, sandboxKey st
 		return ErrorResult(fmt.Sprintf("failed to read file: %v", err) + MaybeFsBridgeHint(err))
 	}
 
-	return t.paginateOutput(data, args)
+	result := t.paginateOutput(data, args)
+	if workspace := ToolWorkspaceFromCtx(ctx); workspace != "" {
+		if filepath.IsAbs(path) {
+			result.TouchedPaths = []string{filepath.Clean(path)}
+		} else {
+			result.TouchedPaths = []string{filepath.Join(workspace, filepath.Clean(path))}
+		}
+	}
+	return result
 }
 
 func (t *ReadFileTool) getFsBridge(ctx context.Context, sandboxKey string) (*sandbox.FsBridge, error) {
@@ -528,4 +538,3 @@ func resolveThroughExistingAncestors(target string) (string, error) {
 	}
 	return filepath.Clean(target), nil
 }
-

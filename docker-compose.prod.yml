@@ -1,0 +1,9 @@
+services:
+  goclaw:
+    image: goclaw:codex-upgrade-cps-prod
+    build:
+      context: ${GOCLAW_DIR:-.}
+      dockerfile: Dockerfile.overlay
+      args:
+        VERSION: "${GOCLAW_VERSION:-dev}"
+        OVERLAY_BUILD_STAMP: "${GOCLAW_OVERLAY_BUILD_STAMP:-dev}"

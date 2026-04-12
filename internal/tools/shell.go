@@ -9,8 +9,10 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"golang.org/x/text/unicode/norm"
@@ -41,6 +43,7 @@ type ExecTool struct {
 	approvalMgr      *ExecApprovalManager // nil = no approval needed
 	agentID          string               // for approval request context
 	secureCLIStore   store.SecureCLIStore // nil = no credentialed exec
+	denialTrackers   sync.Map             // session key -> *permissions.DenialTracker
 }
 
 // NewExecTool creates an exec tool that runs commands directly on the host.
@@ -111,6 +114,13 @@ func (t *ExecTool) SetSecureCLIStore(s store.SecureCLIStore) {
 
 func (t *ExecTool) Name() string        { return "exec" }
 func (t *ExecTool) Description() string { return "Execute a shell command and return its output" }
+func (t *ExecTool) IsConcurrencySafe(args map[string]any) bool {
+	command, _ := args["command"].(string)
+	if command == "" {
+		return false
+	}
+	return IsReadOnlyCommand(command)
+}
 func (t *ExecTool) Parameters() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -142,6 +152,28 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 	// Normalize command before all deny checks: NFKC + zero-width strip prevents
 	// Unicode-based pattern bypass while preserving functional command content.
 	normalizedCommand := normalizeCommand(command)
+
+	// Permission classifier (CP-06): hard-stop obviously destructive flows before
+	// the heavier deny/approval pipeline runs.
+	if blocked, reason := permissions.CheckDangerousPatterns(normalizedCommand); blocked {
+		if denied := t.handlePermissionDenial(ctx, command,
+			fmt.Sprintf("command denied by permission classifier: %s", reason)); denied != nil {
+			return denied
+		}
+	}
+	switch permissions.ClassifyCommand(normalizedCommand) {
+	case permissions.ClassDestructive:
+		if denied := t.handlePermissionDenial(ctx, command,
+			"command denied by permission classifier: destructive operation"); denied != nil {
+			return denied
+		}
+	case permissions.ClassProcessCtrl:
+		if denied := t.handlePermissionDenial(ctx, command,
+			"command denied by permission classifier: process-control operation requires approval"); denied != nil {
+			return denied
+		}
+	}
+	t.recordPermissionSuccess(ctx)
 
 	// Resolve deny patterns: per-agent overrides from context, fallback to all defaults.
 	denyOverrides := store.ShellDenyGroupsFromContext(ctx)
@@ -241,7 +273,11 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 			}
 		}
 		sandboxKey := ToolSandboxKeyFromCtx(ctx)
-		return t.executeCredentialed(ctx, cred, binary, cmdArgs, cwd, sandboxKey, command)
+		result := t.executeCredentialed(ctx, cred, binary, cmdArgs, cwd, sandboxKey, command)
+		if result != nil && !result.IsError {
+			result.TouchedPaths = touchedExecPaths(normalizedCommand, cwd)
+		}
+		return result
 	}
 
 	// Exec approval check (matching TS exec-approval.ts pipeline)
@@ -289,11 +325,62 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 	// Sandbox routing (sandboxKey from ctx — thread-safe)
 	sandboxKey := ToolSandboxKeyFromCtx(ctx)
 	if t.sandboxMgr != nil && sandboxKey != "" {
-		return t.executeInSandbox(ctx, command, cwd, sandboxKey)
+		result := t.executeInSandbox(ctx, command, cwd, sandboxKey)
+		if result != nil && !result.IsError {
+			result.TouchedPaths = touchedExecPaths(normalizedCommand, cwd)
+		}
+		return result
 	}
 
 	// Host execution
-	return t.executeOnHost(ctx, command, cwd)
+	result := t.executeOnHost(ctx, command, cwd)
+	if result != nil && !result.IsError {
+		result.TouchedPaths = touchedExecPaths(normalizedCommand, cwd)
+	}
+	return result
+}
+
+func (t *ExecTool) handlePermissionDenial(ctx context.Context, command, message string) *Result {
+	tracker := t.denialTrackerForSession(ctx)
+	if tracker != nil && tracker.RecordDenial() && t.approvalMgr != nil {
+		decision, err := t.approvalMgr.RequestApproval(command, t.agentID, 2*time.Minute)
+		if err != nil {
+			return ErrorResult(fmt.Sprintf("exec approval: %v", err))
+		}
+		if decision == ApprovalAllowOnce || decision == ApprovalAllowAlways {
+			tracker.RecordSuccess()
+			return nil
+		}
+		return ErrorResult("command denied by user")
+	}
+	return ErrorResult(message)
+}
+
+func (t *ExecTool) recordPermissionSuccess(ctx context.Context) {
+	if tracker := t.denialTrackerForSession(ctx); tracker != nil {
+		tracker.RecordSuccess()
+	}
+}
+
+func (t *ExecTool) denialTrackerForSession(ctx context.Context) *permissions.DenialTracker {
+	key := ToolSessionKeyFromCtx(ctx)
+	if key == "" {
+		key = ToolSandboxKeyFromCtx(ctx)
+	}
+	if key == "" {
+		key = "default"
+	}
+	if existing, ok := t.denialTrackers.Load(key); ok {
+		if tracker, ok := existing.(*permissions.DenialTracker); ok {
+			return tracker
+		}
+	}
+	tracker := permissions.NewDenialTracker()
+	actual, _ := t.denialTrackers.LoadOrStore(key, tracker)
+	if stored, ok := actual.(*permissions.DenialTracker); ok {
+		return stored
+	}
+	return tracker
 }
 
 // matchesAny checks if a command matches any pattern in the list.

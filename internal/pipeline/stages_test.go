@@ -332,6 +332,26 @@ func TestThinkStage_LLMError_Propagates(t *testing.T) {
 	}
 }
 
+func TestThinkStage_LLMPanicRecovered(t *testing.T) {
+	t.Parallel()
+	deps := &PipelineDeps{
+		Config: PipelineConfig{MaxIterations: 10, MaxTokens: 1000},
+		CallLLM: func(_ context.Context, _ *RunState, _ providers.ChatRequest) (*providers.ChatResponse, error) {
+			panic("provider boom")
+		},
+	}
+	stage := NewThinkStage(deps)
+	state := defaultState()
+
+	err := stage.Execute(context.Background(), state)
+	if err == nil {
+		t.Fatal("expected recovered panic error, got nil")
+	}
+	if !strings.Contains(err.Error(), "CallLLM panic") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 // --- PruneStage tests ---
 
 func TestPruneStage_UnderBudget_NoOp(t *testing.T) {
@@ -812,7 +832,7 @@ func TestToolStage_LoopKilled_ReturnsBreakLoop(t *testing.T) {
 	}
 }
 
-func TestToolStage_ToolBudgetExceeded_ReturnsBreakLoop(t *testing.T) {
+func TestToolStage_ToolBudgetExceeded_ArmsCloseout(t *testing.T) {
 	t.Parallel()
 	deps := &PipelineDeps{
 		Config: PipelineConfig{MaxToolCalls: 5},
@@ -831,8 +851,14 @@ func TestToolStage_ToolBudgetExceeded_ReturnsBreakLoop(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute() error: %v", err)
 	}
-	if stage.Result() != BreakLoop {
-		t.Errorf("Result() = %v after budget exceeded, want BreakLoop", stage.Result())
+	if stage.Result() != Continue {
+		t.Errorf("Result() = %v after budget exceeded, want Continue", stage.Result())
+	}
+	if !state.Turn.ForceAnswerOnly {
+		t.Fatal("expected closeout mode to be armed")
+	}
+	if state.Turn.CloseoutReason != TurnCloseoutReasonToolBudgetExhausted {
+		t.Fatalf("CloseoutReason = %q, want %q", state.Turn.CloseoutReason, TurnCloseoutReasonToolBudgetExhausted)
 	}
 }
 

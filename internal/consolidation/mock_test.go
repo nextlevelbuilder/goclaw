@@ -19,8 +19,9 @@ func (m *mockExtractor) Extract(_ context.Context, _ string) (*knowledgegraph.Ex
 
 // mockProvider implements providers.Provider for testing LLM calls.
 type mockProvider struct {
-	chatResp *providers.ChatResponse
-	chatErr  error
+	chatResp     *providers.ChatResponse
+	chatErr      error
+	defaultModel string
 }
 
 func (m *mockProvider) Chat(_ context.Context, _ providers.ChatRequest) (*providers.ChatResponse, error) {
@@ -31,5 +32,10 @@ func (m *mockProvider) ChatStream(_ context.Context, _ providers.ChatRequest, _ 
 	return m.chatResp, m.chatErr
 }
 
-func (m *mockProvider) Name() string         { return "mock" }
-func (m *mockProvider) DefaultModel() string  { return "mock-model" }
+func (m *mockProvider) Name() string { return "mock" }
+func (m *mockProvider) DefaultModel() string {
+	if m.defaultModel != "" {
+		return m.defaultModel
+	}
+	return "mock-model"
+}

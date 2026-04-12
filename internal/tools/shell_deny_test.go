@@ -111,6 +111,22 @@ func TestDestructiveOpsGaps(t *testing.T) {
 	)
 }
 
+func TestDestructiveOps_AllowsDockerFormatFlag(t *testing.T) {
+	patterns := DenyGroupRegistry["destructive_ops"].Patterns
+
+	mustAllow(t, patterns,
+		"docker info --format '{{.OSType}}'",
+		"docker inspect --format '{{json .State}}' container",
+		"printf '%s' --format",
+	)
+
+	mustDeny(t, patterns,
+		"format c:",
+		"cmd /c format d:",
+		"echo ok && format e:",
+	)
+}
+
 func TestPrivilegeEscalationGaps(t *testing.T) {
 	patterns := DenyGroupRegistry["privilege_escalation"].Patterns
 

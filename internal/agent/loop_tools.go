@@ -113,18 +113,25 @@ func (l *Loop) processToolResult(
 		IsError:    result.IsError,
 	}
 
+	warningMsgs = append(warningMsgs, l.postToolHookMessages(ctx, tc, result)...)
+	warningMsgs = append(warningMsgs, l.autoActivateSkillMessages(ctx, rs, result.TouchedPaths)...)
+
 	action = toolResultContinue
 
 	// Check for tool call loop after recording result.
 	if level, msg := rs.loopDetector.detect(registryName, argsHash); level != "" {
 		if level == "critical" {
 			slog.Warn("tool loop critical", "agent", l.id, "tool", registryName, "message", msg)
-			rs.finalContent = "I was unable to complete this task — I got stuck repeatedly calling " + registryName + " without making progress. Please try rephrasing your request."
+			if recovery := recoverRepeatedExecLoop(registryName, tc.Arguments, result); recovery != "" {
+				rs.finalContent = recovery
+			} else {
+				rs.finalContent = "I was unable to complete this task — I got stuck repeatedly calling " + registryName + " without making progress. Please try rephrasing your request."
+			}
 			rs.loopKilled = true
 			return toolMsg, nil, toolResultBreak
 		}
 		slog.Warn("tool loop warning", "agent", l.id, "tool", registryName, "message", msg)
-		warningMsgs = append(warningMsgs, providers.Message{Role: "user", Content: msg})
+		warningMsgs = append(warningMsgs, providers.Message{Role: "system", Content: msg})
 		action = toolResultWarning
 	}
 
@@ -138,7 +145,7 @@ func (l *Loop) processToolResult(
 				rs.loopKilled = true
 				return toolMsg, nil, toolResultBreak
 			}
-			warningMsgs = append(warningMsgs, providers.Message{Role: "user", Content: msg})
+			warningMsgs = append(warningMsgs, providers.Message{Role: "system", Content: msg})
 			action = toolResultWarning
 		}
 	}
@@ -164,6 +171,6 @@ func (l *Loop) checkReadOnlyStreak(rs *runState, req *RunRequest) (warningMsg *p
 	}
 	slog.Warn("tool loop warning: read-only streak",
 		"streak", rs.loopDetector.readOnlyStreak, "agent", l.id, "run", req.RunID)
-	warnMsg := providers.Message{Role: "user", Content: msg}
+	warnMsg := providers.Message{Role: "system", Content: msg}
 	return &warnMsg, false
 }

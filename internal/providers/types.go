@@ -104,6 +104,7 @@ type ChatResponse struct {
 type StreamChunk struct {
 	Content  string `json:"content,omitempty"`
 	Thinking string `json:"thinking,omitempty"`
+	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
 	Done     bool   `json:"done,omitempty"`
 }
 

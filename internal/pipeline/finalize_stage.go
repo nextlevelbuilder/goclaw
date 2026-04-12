@@ -30,6 +30,17 @@ func (s *FinalizeStage) Execute(ctx context.Context, state *RunState) error {
 		state.Observe.FinalContent = s.deps.SanitizeContent(state.Observe.FinalContent)
 	}
 
+	// 1a. Forced closeout fallback: runtime owns partial/blocked outcomes.
+	// If the forced no-tools closeout still produced no usable text, synthesize a
+	// deterministic fallback from the runtime state instead of returning guard text.
+	if state.Turn.ShouldUseCloseoutFallback(state.Observe.FinalContent) {
+		state.Observe.FinalContent = state.Turn.FallbackContent()
+	}
+	if state.Observe.FinalContent != "" &&
+		(state.Turn.Phase == "" || state.Turn.Phase == TurnPhaseRunning) {
+		state.Turn.Phase = TurnPhaseCompleted
+	}
+
 	// 1b. Skill evolution postscript (matching v2 loop_finalize.go:52-57).
 	if s.deps.SkillPostscript != nil && state.Observe.FinalContent != "" {
 		state.Observe.FinalContent = s.deps.SkillPostscript(ctx, state.Observe.FinalContent, state.Tool.TotalToolCalls)
@@ -108,6 +119,12 @@ func (s *FinalizeStage) Execute(ctx context.Context, state *RunState) error {
 	// 7. Post-run summarization (async background)
 	if s.deps.MaybeSummarize != nil {
 		s.deps.MaybeSummarize(ctx, state.Input.SessionKey)
+	}
+
+	// 7b. Session end hooks. Skip when the last failure was an upstream API error
+	// to avoid death spirals where cleanup hooks keep retriggering provider issues.
+	if s.deps.SessionEndHooks != nil && !state.Think.LastErrorIsAPI {
+		s.deps.SessionEndHooks(ctx, state)
 	}
 
 	// 8. Emit session.completed for consolidation pipeline (episodic → semantic → dreaming).

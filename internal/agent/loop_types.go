@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 
@@ -14,6 +16,7 @@ import (
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
 	"github.com/nextlevelbuilder/goclaw/internal/memory"
+	pluginhooks "github.com/nextlevelbuilder/goclaw/internal/plugins/hooks"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
@@ -84,6 +87,8 @@ type Loop struct {
 	workspace        string
 	dataDir          string // global workspace root for team workspace resolution
 	workspaceSharing *store.WorkspaceSharingConfig
+	isolation        string
+	worktreeMgr      *WorktreeManager
 
 	// Per-agent overrides from DB (nil = use global defaults)
 	restrictToWs *bool
@@ -95,7 +100,7 @@ type Loop struct {
 	// Memory flush runs if callback != nil; auto-inject runs if AutoInjector != nil.
 	autoInjector memory.AutoInjector // v3 L0 memory auto-inject (nil = disabled)
 
-	eventPub        bus.EventPublisher // currently unused by Loop; kept for future use
+	eventPub        bus.EventPublisher      // currently unused by Loop; kept for future use
 	domainBus       eventbus.DomainEventBus // V3 domain event bus for consolidation pipeline
 	sessions        store.SessionStore
 	tools           tools.ToolExecutor
@@ -207,14 +212,17 @@ type Loop struct {
 	memStore store.MemoryStore
 
 	// v3 orchestration mode (spawn/delegate/team) — controls tool visibility
-	orchMode          OrchestrationMode
-	delegateTargets   []DelegateTargetEntry // delegation targets for prompt injection
+	orchMode        OrchestrationMode
+	delegateTargets []DelegateTargetEntry // delegation targets for prompt injection
 
 	// v3 evolution metrics store (nil = disabled)
 	evolutionMetricsStore store.EvolutionMetricsStore
 
 	// User identity resolver: maps channel contacts to merged tenant users for credential lookups.
 	userResolver UserIdentityResolver
+
+	// Plugin hooks fired around the agent lifecycle and tool execution.
+	hookExecutor *pluginhooks.Executor
 }
 
 // AgentEvent is emitted during agent execution for WS broadcasting.
@@ -253,6 +261,8 @@ type LoopConfig struct {
 	Workspace        string
 	DataDir          string // global workspace root for team workspace resolution
 	WorkspaceSharing *store.WorkspaceSharingConfig
+	Isolation        string
+	WorktreeManager  *WorktreeManager
 
 	// v3 memory/retrieval flags removed — always true at runtime.
 	AutoInjector memory.AutoInjector // v3 L0 memory auto-inject (nil = disabled)
@@ -301,7 +311,7 @@ type LoopConfig struct {
 	TenantID    uuid.UUID // agent's owning tenant — injected into execution context
 	AgentType   string    // "open" or "predefined"
 	DisplayName string    // human-readable agent display name (for runtime section)
-	IsTeamLead bool      // agent leads a team (from resolver detection)
+	IsTeamLead  bool      // agent leads a team (from resolver detection)
 
 	// Per-user profile + file seeding + dynamic context loading
 	EnsureUserProfile EnsureUserProfileFunc // preferred: separate profile + workspace
@@ -373,14 +383,17 @@ type LoopConfig struct {
 	MCPUserCredSrvs []store.MCPAccessInfo // servers needing per-user creds
 
 	// V3 orchestration mode (resolved by resolver, controls tool visibility)
-	OrchMode          OrchestrationMode
-	DelegateTargets   []DelegateTargetEntry // delegation targets for prompt injection
+	OrchMode        OrchestrationMode
+	DelegateTargets []DelegateTargetEntry // delegation targets for prompt injection
 
 	// V3 evolution metrics store for recording tool/retrieval/feedback metrics
 	EvolutionMetricsStore store.EvolutionMetricsStore
 
 	// User identity resolver for credential lookups (maps channel contacts → tenant users)
 	UserResolver UserIdentityResolver
+
+	// Plugin hooks fired around tool/session lifecycle.
+	HookExecutor *pluginhooks.Executor
 }
 
 const defaultMaxTokens = config.DefaultMaxTokens
@@ -399,6 +412,9 @@ func NewLoop(cfg LoopConfig) *Loop {
 	}
 	if cfg.ContextWindow <= 0 {
 		cfg.ContextWindow = config.DefaultContextWindow
+	}
+	if cfg.WorktreeManager == nil && cfg.Isolation == "worktree" {
+		cfg.WorktreeManager = NewWorktreeManager(filepath.Join(os.TempDir(), "goclaw-worktrees"))
 	}
 
 	// Normalize injection action (default: "warn")
@@ -432,6 +448,8 @@ func NewLoop(cfg LoopConfig) *Loop {
 		workspace:              cfg.Workspace,
 		dataDir:                cfg.DataDir,
 		workspaceSharing:       cfg.WorkspaceSharing,
+		isolation:              cfg.Isolation,
+		worktreeMgr:            cfg.WorktreeManager,
 		autoInjector:           cfg.AutoInjector,
 		restrictToWs:           cfg.RestrictToWs,
 		subagentsCfg:           cfg.SubagentsCfg,
@@ -491,6 +509,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		delegateTargets:        cfg.DelegateTargets,
 		evolutionMetricsStore:  cfg.EvolutionMetricsStore,
 		userResolver:           cfg.UserResolver,
+		hookExecutor:           cfg.HookExecutor,
 	}
 }
 
@@ -553,7 +572,7 @@ type RunRequest struct {
 // RunResult is the output of a completed agent run.
 type RunResult struct {
 	Content        string           `json:"content"`
-	Thinking       string           `json:"thinking,omitempty"`       // reasoning content from thinking models (Claude, o3, DeepSeek-R1, Kimi)
+	Thinking       string           `json:"thinking,omitempty"` // reasoning content from thinking models (Claude, o3, DeepSeek-R1, Kimi)
 	RunID          string           `json:"runId"`
 	Iterations     int              `json:"iterations"`
 	Usage          *providers.Usage `json:"usage,omitempty"`
@@ -617,6 +636,10 @@ type runState struct {
 	// Loop detector kill flag — set when any detector triggers critical level.
 	// Propagated to RunResult.LoopKilled so the consumer can auto-fail team tasks.
 	loopKilled bool
+
+	// Skill activation state for this run — prevents re-injecting the same skill
+	// multiple times when several tools touch matching paths.
+	activatedSkills map[string]bool
 
 	// Truncation retry counter — caps consecutive truncation/parse-error retries
 	// to prevent burning through all iterations when max_tokens is too low.

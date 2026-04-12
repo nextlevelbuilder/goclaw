@@ -136,7 +136,9 @@ func (t *ListFilesTool) Execute(ctx context.Context, args map[string]any) *Resul
 		}
 	}
 
-	return SilentResult(sb.String())
+	result := SilentResult(sb.String())
+	result.TouchedPaths = []string{resolved}
+	return result
 }
 
 func (t *ListFilesTool) executeInSandbox(ctx context.Context, path, sandboxKey string) *Result {
@@ -156,7 +158,15 @@ func (t *ListFilesTool) executeInSandbox(ctx context.Context, path, sandboxKey s
 		return ErrorResult(fmt.Sprintf("failed to list directory: %v", err) + MaybeFsBridgeHint(err))
 	}
 
-	return SilentResult(output)
+	result := SilentResult(output)
+	if workspace := ToolWorkspaceFromCtx(ctx); workspace != "" {
+		if filepath.IsAbs(path) {
+			result.TouchedPaths = []string{filepath.Clean(path)}
+		} else {
+			result.TouchedPaths = []string{filepath.Join(workspace, filepath.Clean(path))}
+		}
+	}
+	return result
 }
 
 func (t *ListFilesTool) getFsBridge(ctx context.Context, sandboxKey string) (*sandbox.FsBridge, error) {

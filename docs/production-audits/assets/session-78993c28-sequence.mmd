@@ -1,0 +1,62 @@
+sequenceDiagram
+    autonumber
+    actor User as User
+    participant UI as GoClaw UI
+    participant GW as Gateway / Agent Loop
+    participant LLM as Claude Opus 4.6
+    participant LF as list_files
+    participant MS as memory_search
+    participant VS as vault_search
+    participant LD as Loop Detector
+
+    User->>UI: Gui yeu cau giai thich diem hay trong system design
+    UI->>GW: chat.send(session 78993c28..., agent=coder)
+    Note over GW: Run bat dau 14:45:21Z
+    GW->>LLM: LLM call #1 voi prompt + history
+    LLM-->>GW: Assistant note + 3 tool calls
+
+    par tool batch #1
+        GW->>LF: list_files({})
+        LF-->>GW: empty result
+    and
+        GW->>MS: memory_search(\"system design architecture\")
+        MS-->>GW: No memory results
+    and
+        GW->>VS: vault_search(\"system architecture design overview\")
+        VS-->>GW: No vault results
+    end
+
+    GW->>LLM: LLM call #2 voi ket qua tool batch #1
+    LLM-->>GW: tool call list_files(path=\".\")
+    GW->>LF: list_files(\".\")
+    LF-->>GW: same empty result
+
+    GW->>LLM: LLM call #3
+    LLM-->>GW: tool call list_files(path=\".\")
+    GW->>LF: list_files(\".\")
+    LF-->>GW: same empty result
+
+    GW->>LLM: LLM call #4
+    LLM-->>GW: tool call list_files(path=\".\")
+    GW->>LF: list_files(\".\")
+    LF-->>GW: same empty result
+    GW->>LD: record repeat #3
+    LD-->>GW: Warning: same list_files args/result
+
+    GW->>LLM: LLM call #5
+    LLM-->>GW: tool call list_files(path=\".\")
+    GW->>LF: list_files(\".\")
+    LF-->>GW: same empty result
+    GW->>LD: record repeat #4
+    LD-->>GW: Warning: not making progress
+
+    GW->>LLM: LLM call #6
+    LLM-->>GW: tool call list_files(path=\".\")
+    GW->>LF: list_files(\".\")
+    LF-->>GW: same empty result
+    GW->>LD: record repeat #5
+    LD-->>GW: CRITICAL stop runaway loop
+
+    GW-->>UI: Final assistant reply: stuck on repeated list_files
+    UI-->>User: Hien thong bao that bai
+    Note over GW,UI: Run hoan tat 14:45:58Z, duration ~36.9s

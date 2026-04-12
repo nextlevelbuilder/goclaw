@@ -113,6 +113,21 @@ func (p *AnthropicProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 					rawContentBlocks[idx] = block
 				}
 			}
+			if currentBlockType == "tool_use" && len(result.ToolCalls) > 0 {
+				idx := len(result.ToolCalls) - 1
+				if idx >= 0 && idx < len(result.ToolCalls) && onChunk != nil {
+					tc := result.ToolCalls[idx]
+					if rawJSON := toolCallJSON[idx]; rawJSON != "" {
+						args := make(map[string]any)
+						if err := json.Unmarshal([]byte(rawJSON), &args); err != nil {
+							tc.ParseError = fmt.Sprintf("malformed JSON (%d chars): %v", len(rawJSON), err)
+						}
+						tc.Arguments = args
+						result.ToolCalls[idx] = tc
+					}
+					onChunk(StreamChunk{ToolCalls: []ToolCall{tc}})
+				}
+			}
 			currentBlockType = ""
 
 		case "message_delta":

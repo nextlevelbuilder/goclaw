@@ -196,7 +196,9 @@ func (t *EditTool) Execute(ctx context.Context, args map[string]any) *Result {
 	}
 
 	count := strings.Count(content, oldStr)
-	return SilentResult(fmt.Sprintf("File edited: %s (%d replacement(s))", path, count))
+	result = SilentResult(fmt.Sprintf("File edited: %s (%d replacement(s))", path, count))
+	result.TouchedPaths = []string{resolved}
+	return result
 }
 
 func (t *EditTool) executeInSandbox(ctx context.Context, path, oldStr, newStr string, replaceAll bool, sandboxKey string) *Result {
@@ -227,7 +229,15 @@ func (t *EditTool) executeInSandbox(ctx context.Context, path, oldStr, newStr st
 	}
 
 	count := strings.Count(content, oldStr)
-	return SilentResult(fmt.Sprintf("File edited: %s (%d replacement(s))", path, count))
+	result = SilentResult(fmt.Sprintf("File edited: %s (%d replacement(s))", path, count))
+	if workspace := ToolWorkspaceFromCtx(ctx); workspace != "" {
+		if filepath.IsAbs(path) {
+			result.TouchedPaths = []string{filepath.Clean(path)}
+		} else {
+			result.TouchedPaths = []string{filepath.Join(workspace, filepath.Clean(path))}
+		}
+	}
+	return result
 }
 
 // applyEdit performs the search-and-replace. Returns (newContent, nil) on success

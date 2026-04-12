@@ -28,6 +28,7 @@ const (
 	ctxSandboxKey  toolContextKey = "tool_sandbox_key"
 	ctxAsyncCB     toolContextKey = "tool_async_cb"
 	ctxWorkspace   toolContextKey = "tool_workspace"
+	ctxToolCwd     toolContextKey = "tool_cwd"
 	ctxAgentKey    toolContextKey = "tool_agent_key"
 	ctxSessionKey  toolContextKey = "tool_session_key" // origin session key for announce routing
 	ctxRunKind     toolContextKey = "tool_run_kind"    // "notification", "announce", "delegation"
@@ -124,10 +125,25 @@ func ToolWorkspaceFromCtx(ctx context.Context) string {
 	if v, _ := ctx.Value(ctxWorkspace).(string); v != "" {
 		return v
 	}
+	if v, _ := ctx.Value(ctxToolCwd).(string); v != "" {
+		return v
+	}
 	if rc := store.RunContextFromCtx(ctx); rc != nil {
 		return rc.Workspace
 	}
 	return ""
+}
+
+// WithToolCwd injects an explicit working directory override for the current run.
+// Used by worktree isolation so tools operate inside the forked checkout.
+func WithToolCwd(ctx context.Context, cwd string) context.Context {
+	return context.WithValue(ctx, ctxToolCwd, cwd)
+}
+
+// ToolCwdFromCtx returns the explicit working directory override, if any.
+func ToolCwdFromCtx(ctx context.Context) string {
+	v, _ := ctx.Value(ctxToolCwd).(string)
+	return v
 }
 
 // WithToolAgentKey injects the calling agent's key into context.

@@ -14,9 +14,12 @@ interface MessageBubbleProps {
 
 export function MessageBubble({ message }: MessageBubbleProps) {
   const timezone = useUiStore((s) => s.timezone);
+  const isLegacySystemWarning = (message.content?.trimStart() ?? "").startsWith("[System");
+  const isSystem = message.role === "system" || (message.role === "user" && isLegacySystemWarning);
   const isUser = message.role === "user";
   const isTool = message.role === "tool";
 
+  if (isSystem) return null;
   if (isTool) return null;
   if (message.isNotification) return null;
   if (message.isBlockReply) return <BlockReplyBubble message={message} />;

@@ -11,6 +11,36 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/tracing"
 )
 
+type SpawnLimitSubject string
+
+const (
+	SpawnLimitChildren   SpawnLimitSubject = "spawn.children"
+	SpawnLimitConcurrent SpawnLimitSubject = "spawn.concurrent"
+	SpawnLimitDepth      SpawnLimitSubject = "spawn.depth"
+)
+
+type SpawnLimitError struct {
+	Subject SpawnLimitSubject
+	Current int
+	Limit   int
+}
+
+func (e *SpawnLimitError) Error() string {
+	if e == nil {
+		return "spawn capacity exhausted"
+	}
+	switch e.Subject {
+	case SpawnLimitChildren:
+		return fmt.Sprintf("max children per agent reached (%d/%d)", e.Current, e.Limit)
+	case SpawnLimitConcurrent:
+		return fmt.Sprintf("max concurrent subagents reached (%d/%d)", e.Current, e.Limit)
+	case SpawnLimitDepth:
+		return fmt.Sprintf("spawn depth limit reached (%d/%d)", e.Current, e.Limit)
+	default:
+		return fmt.Sprintf("spawn limit reached (%d/%d)", e.Current, e.Limit)
+	}
+}
+
 // Spawn creates a new subagent task that runs asynchronously.
 // Returns immediately with a status message. The subagent runs in a goroutine.
 // modelOverride optionally overrides the LLM model for this subagent (matching TS sessions-spawn-tool.ts).
@@ -38,7 +68,11 @@ func (sm *SubagentManager) Spawn(
 	// Check depth limit
 	if depth >= cfg.MaxSpawnDepth {
 		sm.mu.Unlock()
-		return "", fmt.Errorf("spawn depth limit reached (%d/%d)", depth, cfg.MaxSpawnDepth)
+		return "", &SpawnLimitError{
+			Subject: SpawnLimitDepth,
+			Current: depth,
+			Limit:   cfg.MaxSpawnDepth,
+		}
 	}
 
 	// Check concurrent limit (scoped per tenant for isolation).
@@ -51,7 +85,11 @@ func (sm *SubagentManager) Spawn(
 	}
 	if running >= cfg.MaxConcurrent {
 		sm.mu.Unlock()
-		return "", fmt.Errorf("max concurrent subagents reached (%d/%d)", running, cfg.MaxConcurrent)
+		return "", &SpawnLimitError{
+			Subject: SpawnLimitConcurrent,
+			Current: running,
+			Limit:   cfg.MaxConcurrent,
+		}
 	}
 
 	// Check per-parent children limit
@@ -63,7 +101,11 @@ func (sm *SubagentManager) Spawn(
 	}
 	if childCount >= cfg.MaxChildrenPerAgent {
 		sm.mu.Unlock()
-		return "", fmt.Errorf("max children per agent reached (%d/%d)", childCount, cfg.MaxChildrenPerAgent)
+		return "", &SpawnLimitError{
+			Subject: SpawnLimitChildren,
+			Current: childCount,
+			Limit:   cfg.MaxChildrenPerAgent,
+		}
 	}
 
 	id := generateSubagentID()
@@ -82,14 +124,14 @@ func (sm *SubagentManager) Spawn(
 		OriginChannel:    channel,
 		OriginChatID:     chatID,
 		OriginPeerKind:   peerKind,
-		OriginLocalKey:    ToolLocalKeyFromCtx(ctx),
-		OriginUserID:      store.UserIDFromContext(ctx),
-		OriginSessionKey:  ToolSessionKeyFromCtx(ctx),
-		OriginTenantID:    store.TenantIDFromContext(ctx),
-		OriginTraceID:     tracing.TraceIDFromContext(ctx),
-		OriginRootSpanID:  tracing.ParentSpanIDFromContext(ctx),
-		CreatedAt:         time.Now().UnixMilli(),
-		spawnConfig:       cfg,
+		OriginLocalKey:   ToolLocalKeyFromCtx(ctx),
+		OriginUserID:     store.UserIDFromContext(ctx),
+		OriginSessionKey: ToolSessionKeyFromCtx(ctx),
+		OriginTenantID:   store.TenantIDFromContext(ctx),
+		OriginTraceID:    tracing.TraceIDFromContext(ctx),
+		OriginRootSpanID: tracing.ParentSpanIDFromContext(ctx),
+		CreatedAt:        time.Now().UnixMilli(),
+		spawnConfig:      cfg,
 	}
 	// Detach from parent's cancellation chain so subagent survives after parent run completes.
 	// WithoutCancel preserves all context values (agent ID, workspace, trace info, etc.)
@@ -142,7 +184,11 @@ func (sm *SubagentManager) RunSync(
 
 	if depth >= cfg.MaxSpawnDepth {
 		sm.mu.Unlock()
-		return "", 0, fmt.Errorf("spawn depth limit reached (%d/%d)", depth, cfg.MaxSpawnDepth)
+		return "", 0, &SpawnLimitError{
+			Subject: SpawnLimitDepth,
+			Current: depth,
+			Limit:   cfg.MaxSpawnDepth,
+		}
 	}
 
 	id := generateSubagentID()

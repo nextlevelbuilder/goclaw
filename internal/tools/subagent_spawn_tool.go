@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/pipeline"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -140,6 +141,9 @@ func (t *SpawnTool) executeSubagentAsync(ctx context.Context, args map[string]an
 	msg, err := t.subagentMgr.Spawn(ctx, parentID, t.depth, task, label, modelOverride,
 		channel, chatID, peerKind, callback)
 	if err != nil {
+		if constrained := spawnLimitResult(err); constrained != nil {
+			return constrained
+		}
 		return ErrorResult(err.Error())
 	}
 
@@ -168,6 +172,9 @@ func (t *SpawnTool) executeSubagentSync(ctx context.Context, args map[string]any
 	result, iterations, err := t.subagentMgr.RunSync(ctx, parentID, t.depth, task, label,
 		channel, chatID)
 	if err != nil {
+		if constrained := spawnLimitResult(err); constrained != nil {
+			return constrained
+		}
 		return ErrorResult(fmt.Sprintf("Subagent '%s' failed: %v", label, err))
 	}
 
@@ -192,3 +199,24 @@ func (t *SpawnTool) SetPeerKind(peerKind string) {}
 
 // SetCallback is a no-op; callback is now read from ctx (thread-safe).
 func (t *SpawnTool) SetCallback(cb AsyncCallback) {}
+
+func spawnLimitResult(err error) *Result {
+	limitErr, ok := err.(*SpawnLimitError)
+	if !ok || limitErr == nil {
+		return nil
+	}
+
+	constraint := pipeline.Constraint{
+		Kind:       pipeline.ConstraintCapacityExhausted,
+		Subject:    string(limitErr.Subject),
+		Severity:   pipeline.SeverityHard,
+		Resolution: pipeline.ResolutionSelfReroute,
+		Sticky:     true,
+		Message:    limitErr.Error(),
+	}
+
+	return ErrorResultWithConstraints(
+		limitErr.Error()+". Do not retry spawn immediately. Synthesize locally or wait for current children to finish.",
+		constraint,
+	)
+}

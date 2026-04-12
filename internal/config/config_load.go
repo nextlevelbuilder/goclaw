@@ -53,6 +53,13 @@ func Default() *Config {
 				Enabled:  true,
 				Headless: true,
 			},
+			OpenHands: OpenHandsToolConfig{
+				DefaultWaitSec:       1800,
+				MaxWaitSec:           3600,
+				DefaultMaxRuntimeSec: 1800,
+				DefaultMaxIterations: 150,
+				MaxUploadMB:          64,
+			},
 			ExecApproval: ExecApprovalCfg{
 				Security: "full",
 				Ask:      "off",
@@ -185,6 +192,47 @@ func (c *Config) applyEnvOverrides() {
 	envStr("GOCLAW_STORAGE_BACKEND", &c.Database.StorageBackend)
 	envStr("GOCLAW_SQLITE_PATH", &c.Database.SQLitePath)
 
+	// OpenHands adapter tool
+	envStr("GOCLAW_OPENHANDS_BASE_URL", &c.Tools.OpenHands.BaseURL)
+	envStr("GOCLAW_OPENHANDS_BEARER_TOKEN", &c.Tools.OpenHands.BearerToken)
+	if v := os.Getenv("GOCLAW_OPENHANDS_ENABLED"); v != "" {
+		c.Tools.OpenHands.Enabled = v == "true" || v == "1"
+	}
+	if v := os.Getenv("GOCLAW_OPENHANDS_DEFAULT_WAIT_SEC"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 {
+			c.Tools.OpenHands.DefaultWaitSec = parsed
+		}
+	}
+	if v := os.Getenv("GOCLAW_OPENHANDS_MAX_WAIT_SEC"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 {
+			c.Tools.OpenHands.MaxWaitSec = parsed
+		}
+	}
+	if v := os.Getenv("GOCLAW_OPENHANDS_DEFAULT_MAX_RUNTIME_SEC"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 {
+			c.Tools.OpenHands.DefaultMaxRuntimeSec = parsed
+		}
+	}
+	if v := os.Getenv("GOCLAW_OPENHANDS_DEFAULT_MAX_ITERATIONS"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 {
+			c.Tools.OpenHands.DefaultMaxIterations = parsed
+		}
+	}
+	if v := os.Getenv("GOCLAW_OPENHANDS_MAX_UPLOAD_MB"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 {
+			c.Tools.OpenHands.MaxUploadMB = parsed
+		}
+	}
+	if v := os.Getenv("GOCLAW_OPENHANDS_ALLOWED_REPO_PREFIXES"); v != "" {
+		var prefixes []string
+		for item := range strings.SplitSeq(v, ",") {
+			if trimmed := strings.TrimSpace(item); trimmed != "" {
+				prefixes = append(prefixes, trimmed)
+			}
+		}
+		c.Tools.OpenHands.AllowedRepoPrefixes = prefixes
+	}
+
 	// Deprecation warning for GOCLAW_MODE (removed — PostgreSQL is always active)
 	if v := os.Getenv("GOCLAW_MODE"); v != "" {
 		slog.Warn("GOCLAW_MODE is deprecated; managed mode is now the only mode", "value", v)
@@ -279,7 +327,6 @@ func (c *Config) applyEnvOverrides() {
 		c.Tools.Browser.Enabled = true
 	}
 }
-
 
 // Save writes the config to a JSON file.
 func Save(path string, cfg *Config) error {

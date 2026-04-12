@@ -35,6 +35,17 @@ func DefaultTruncationConfig() TruncationConfig {
 	}
 }
 
+// TruncationConfigForWorkspace stores overflow artifacts inside the active
+// workspace so agents can read them back through read_file without tripping
+// the path escape guard.
+func TruncationConfigForWorkspace(workspacePath string) TruncationConfig {
+	cfg := DefaultTruncationConfig()
+	if workspacePath != "" {
+		cfg.OverflowDir = filepath.Join(workspacePath, "overflow")
+	}
+	return cfg
+}
+
 // TruncateResult checks if content exceeds MaxResultChars.
 // Returns (truncated, overflowRef). Fast path when under limit.
 func TruncateResult(content string, cfg TruncationConfig) (string, string) {

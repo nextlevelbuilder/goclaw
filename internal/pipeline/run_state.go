@@ -32,6 +32,7 @@ type RunState struct {
 	Observe   ObserveState
 	Compact   CompactState
 	Evolution EvolutionState
+	Turn      TurnState
 
 	// Cross-cutting concerns
 	Iteration int
@@ -48,7 +49,34 @@ func NewRunState(input *RunInput, ws *workspace.WorkspaceContext, model string, 
 		Provider:  provider,
 		RunID:     input.RunID,
 		Messages:  NewMessageBuffer(providers.Message{}),
+		Tool: ToolState{
+			Constraints: NewConstraintStore(),
+			Novelty:     NewNoveltyTracker(),
+		},
+		Turn: TurnState{
+			Phase: TurnPhaseRunning,
+		},
 	}
+}
+
+func (rs *RunState) EnsureConstraintStore() *ConstraintStore {
+	if rs == nil {
+		return NewConstraintStore()
+	}
+	if rs.Tool.Constraints == nil {
+		rs.Tool.Constraints = NewConstraintStore()
+	}
+	return rs.Tool.Constraints
+}
+
+func (rs *RunState) EnsureNoveltyTracker() *NoveltyTracker {
+	if rs == nil {
+		return NewNoveltyTracker()
+	}
+	if rs.Tool.Novelty == nil {
+		rs.Tool.Novelty = NewNoveltyTracker()
+	}
+	return rs.Tool.Novelty
 }
 
 // BuildResult converts final RunState into a RunResult.
@@ -72,37 +100,38 @@ func (rs *RunState) BuildResult() *RunResult {
 // RunInput is the pipeline's view of a run request.
 // Converted from agent.RunRequest by the adapter in Phase 8.
 type RunInput struct {
-	SessionKey        string
-	Message           string
-	Media             []bus.MediaFile
-	ForwardMedia      []bus.MediaFile
-	Channel           string
-	ChannelType       string
-	ChatTitle         string
-	ChatID            string
-	PeerKind          string
-	RunID             string
-	UserID            string
-	SenderID          string
-	Stream            bool
-	ExtraSystemPrompt string
-	SkillFilter       []string
-	HistoryLimit      int
-	ToolAllow         []string
-	LightContext      bool
-	RunKind           string
-	DelegationID      string
-	TeamID            string
-	TeamTaskID        string
-	ParentAgentID     string
-	MaxIterations     int
-	ModelOverride     string
-	HideInput         bool
-	ContentSuffix     string
-	LeaderAgentID     string
-	WorkspaceChannel  string
-	WorkspaceChatID   string
-	TeamWorkspace     string
+	SessionKey           string
+	Message              string
+	Media                []bus.MediaFile
+	ForwardMedia         []bus.MediaFile
+	Channel              string
+	ChannelType          string
+	ChatTitle            string
+	ChatID               string
+	PeerKind             string
+	RunID                string
+	UserID               string
+	SenderID             string
+	Stream               bool
+	ExtraSystemPrompt    string
+	SkillFilter          []string
+	HistoryLimit         int
+	ToolAllow            []string
+	LightContext         bool
+	RunKind              string
+	DelegationID         string
+	TeamID               string
+	TeamTaskID           string
+	ParentAgentID        string
+	MaxIterations        int
+	ModelOverride        string
+	HideInput            bool
+	ContentSuffix        string
+	LeaderAgentID        string
+	WorkspaceChannel     string
+	WorkspaceChatID      string
+	TeamWorkspace        string
+	SelfKnowledgeExplain bool
 }
 
 // MediaResult represents a media file produced during tool execution.

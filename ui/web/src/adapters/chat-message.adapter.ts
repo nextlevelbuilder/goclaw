@@ -3,6 +3,11 @@ import type { ChatMessage, ToolStreamEntry, MediaItem } from "@/types/chat";
 import { toFileUrl } from "@/lib/file-helpers";
 import { messageToTimestamp } from "@/lib/message-utils";
 
+function isLegacySystemWarning(content: string | undefined): boolean {
+  const trimmed = content?.trimStart() ?? "";
+  return trimmed.startsWith("[System Message]") || trimmed.startsWith("[System");
+}
+
 /**
  * Transform raw Message[] from history RPC into ChatMessage[] for display.
  * Reconstructs toolDetails from tool_calls + tool result messages,
@@ -23,6 +28,7 @@ export function transformHistoryMessages(
   const msgs: ChatMessage[] = allMsgs.map((m: Message, i: number) => {
     const chatMsg: ChatMessage = {
       ...m,
+      role: m.role === "user" && isLegacySystemWarning(m.content) ? "system" : m.role,
       timestamp: messageToTimestamp(m, i, allMsgs.length),
     };
 

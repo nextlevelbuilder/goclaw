@@ -163,6 +163,38 @@ func TestChatStream_MultipleToolCalls_OneTruncated(t *testing.T) {
 	}
 }
 
+// TestChatStream_SparseToolCallIndex ensures OpenAI-compatible streams that start
+// tool_calls at index=1 do not panic during accumulator finalization.
+func TestChatStream_SparseToolCallIndex(t *testing.T) {
+	chunks := []string{
+		`data: {"choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":1,"id":"call_sparse","type":"function","function":{"name":"lookup","arguments":""}}]}}]}` + "\n\n",
+		`data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":1,"function":{"arguments":"{\"query\":\"codex\"}"}}]}}]}` + "\n\n",
+		`data: {"choices":[{"index":0,"finish_reason":"stop","delta":{}}]}` + "\n\n",
+		"data: [DONE]\n\n",
+	}
+
+	server := newOpenAISSEServer(t, chunks)
+	p := newTestOpenAIProvider(server.URL)
+
+	req := ChatRequest{
+		Model:    "gpt-4",
+		Messages: []Message{{Role: "user", Content: "sparse tool call"}},
+	}
+	result, err := p.ChatStream(context.Background(), req, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.ToolCalls) != 1 {
+		t.Fatalf("expected 1 tool call, got %d", len(result.ToolCalls))
+	}
+	if result.ToolCalls[0].Name != "lookup" {
+		t.Errorf("tool name = %q, want %q", result.ToolCalls[0].Name, "lookup")
+	}
+	if got := result.ToolCalls[0].Arguments["query"]; got != "codex" {
+		t.Errorf("query = %v, want %q", got, "codex")
+	}
+}
+
 // TestParseResponse_TruncatedToolCallArgs verifies the non-streaming path
 // preserves FinishReason "length" and sets ParseError.
 func TestParseResponse_TruncatedToolCallArgs(t *testing.T) {

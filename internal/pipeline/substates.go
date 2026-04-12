@@ -8,7 +8,7 @@ import (
 
 // ContextState: owned by ContextStage, read by ThinkStage.
 type ContextState struct {
-	ContextFiles   []any  // bootstrap.ContextFile — typed in Phase 2, any avoids circular import
+	ContextFiles   []any // bootstrap.ContextFile — typed in Phase 2, any avoids circular import
 	SkillsSummary  string
 	TeamContext    string // team workspace context injected for team runs
 	MemorySection  string // L0 auto-injected memory context for system prompt
@@ -30,6 +30,8 @@ type ContextState struct {
 // ThinkState: owned by ThinkStage.
 type ThinkState struct {
 	LastResponse    *providers.ChatResponse
+	LastError       error
+	LastErrorIsAPI  bool
 	TotalUsage      providers.Usage
 	TruncRetries    int  // consecutive truncation retries (max 3)
 	StreamingActive bool // true during active stream
@@ -44,12 +46,23 @@ type PruneState struct {
 
 // ToolState: owned by ToolStage.
 type ToolState struct {
-	LoopDetector   any // concrete type toolLoopState lives in agent; Phase 5 defines LoopDetector interface
-	TotalToolCalls int
-	AsyncToolCalls []string      // tool names that executed async (spawn)
-	MediaResults   []MediaResult // media files produced by tools
-	Deliverables   []string      // tool output content for team task results
-	LoopKilled     bool          // set when loop detector triggers critical
+	LoopDetector    any // concrete type toolLoopState lives in agent; Phase 5 defines LoopDetector interface
+	TotalToolCalls  int
+	AsyncToolCalls  []string      // tool names that executed async (spawn)
+	MediaResults    []MediaResult // media files produced by tools
+	Deliverables    []string      // tool output content for team task results
+	LoopKilled      bool          // set when loop detector triggers critical
+	Constraints     *ConstraintStore
+	Novelty         *NoveltyTracker
+	StreamExecutor  *StreamingToolExecutor
+	StreamedToolIDs map[string]bool
+
+	// Self-knowledge recovery: used for "explain your own design/capabilities"
+	// questions so the loop can pivot from failed retrieval to direct synthesis.
+	RetrievalMisses           int
+	RetrievalHits             int
+	DirectAnswerOnly          bool
+	SelfKnowledgeHintInjected bool
 }
 
 // ObserveState: owned by ObserveStage.
@@ -69,12 +82,12 @@ type CompactState struct {
 
 // EvolutionState: owned by skill evolution nudge logic.
 type EvolutionState struct {
-	Nudge70Sent      bool
-	Nudge90Sent      bool
-	PostscriptSent   bool
-	BootstrapWrite   bool // BOOTSTRAP.md write detected
-	TeamTaskCreates  int  // team_tasks tool calls
-	TeamTaskSpawns   int  // delegate tool calls (spawns)
+	Nudge70Sent     bool
+	Nudge90Sent     bool
+	PostscriptSent  bool
+	BootstrapWrite  bool // BOOTSTRAP.md write detected
+	TeamTaskCreates int  // team_tasks tool calls
+	TeamTaskSpawns  int  // delegate tool calls (spawns)
 }
 
 // RunResult is the final output of a pipeline run.

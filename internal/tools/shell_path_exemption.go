@@ -282,3 +282,27 @@ func matchesAnyPathExemption(word string, exemptions []string, baseDir string) b
 	}
 	return false
 }
+
+// touchedExecPaths extracts canonical filesystem paths referenced by a shell command.
+// Used for skill auto-activation after exec reads/writes project files.
+func touchedExecPaths(command, baseDir string) []string {
+	if command == "" || baseDir == "" {
+		return nil
+	}
+	seen := make(map[string]bool)
+	var paths []string
+	for _, word := range parseExecCommandWords(command) {
+		for _, candidate := range extractPathCandidates(word) {
+			if strings.Contains(candidate, "..") {
+				continue
+			}
+			realPath, err := canonicalizeExecPath(candidate, baseDir)
+			if err != nil || realPath == "" || seen[realPath] {
+				continue
+			}
+			seen[realPath] = true
+			paths = append(paths, realPath)
+		}
+	}
+	return paths
+}

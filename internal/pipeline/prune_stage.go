@@ -58,6 +58,22 @@ func (s *PruneStage) Execute(ctx context.Context, state *RunState) error {
 		return nil // under budget, no action needed
 	}
 
+	// Layer 2: cheap in-memory stubbing of stale tool results before heavier pruning.
+	if s.deps.Config.Microcompact != nil {
+		compacted, mc := Microcompact(state.Messages.History(), state.Iteration, *s.deps.Config.Microcompact)
+		if mc.TokensFreed > 0 {
+			state.Messages.SetHistory(compacted)
+			historyTokens = s.countHistory(state)
+			state.Prune.HistoryTokens = historyTokens
+			if notice := FormatMicrocompactNotice(mc); notice != "" {
+				state.Messages.AppendPending(providers.Message{Role: "user", Content: notice})
+			}
+			if historyTokens <= budget {
+				return nil
+			}
+		}
+	}
+
 	// Phase 1: soft prune at 70% budget
 	if s.deps.PruneMessages != nil {
 		pruned := s.deps.PruneMessages(state.Messages.History(), budget)
