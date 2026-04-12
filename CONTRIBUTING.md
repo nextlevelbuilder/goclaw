@@ -50,10 +50,27 @@ Based on our automated review checklist:
 - **Correctness**: No logic errors, nil dereference, race conditions
 - **Security**: Parameterized SQL, no hardcoded secrets, input validation
 - **Breaking changes**: API contracts, DB migrations, config format
-- **Tenant isolation**: All queries scoped by `tenant_id`
+- **Tenant isolation**: All queries scoped by `tenant_id`. **Admin writes require the correct scope guard** — see section below
 - **i18n**: User-facing strings in all 3 locales (en/vi/zh)
 - **SQLite parity**: Changes compile with `-tags sqliteonly`
 - **Mobile UI**: `h-dvh` not `h-screen`, 16px input fonts, safe areas
+
+### Tenant-Scope Guards
+
+`RoleAdmin` checks role, not tenant. A non-master tenant admin holds `RoleAdmin` in their own tenant and passes role-only middleware. Pick the guard by the **target table**:
+
+| Target | Example | Guard |
+|---|---|---|
+| **Global** (no `tenant_id` column) | `builtin_tools`, disk config, `pip`/`npm`/`apk` | HTTP `requireMasterScope` · WS `requireMasterScope(requireOwner(...))` |
+| **Tenant-scoped** (has `tenant_id` column) | `agents`, `skills`, `llm_providers` | `requireTenantAdmin` + store SQL `WHERE tenant_id = $N` |
+
+Shared predicate: `store.IsMasterScope(ctx)` (`internal/store/context.go`).
+
+**Anti-patterns flagged in review:**
+- `store.Update(...)` on a no-`tenant_id` table without a master-scope check upstream
+- Write SQL with `WHERE ... (tenant_id = $N OR tenant_id IS NULL)` — the `IS NULL` arm lets tenants reach system rows
+- `requireAuth(RoleAdmin)` as the **sole** gate on a global-state write
+- Admin revoke/delete handlers that skip pre-fetch ownership verification (store SQL alone is not enough when it matches `IS NULL` arms)
 
 ### Commit Messages
 

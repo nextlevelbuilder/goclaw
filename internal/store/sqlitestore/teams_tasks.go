@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 	"unicode"
@@ -357,7 +358,14 @@ func (s *SQLiteTeamStore) DeleteTask(ctx context.Context, taskID, teamID uuid.UU
 		tenantWhere = " AND tenant_id = ?"
 		args = append(args, tid)
 	}
-	res, err := s.db.ExecContext(ctx,
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("delete task: begin tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	res, err := tx.ExecContext(ctx,
 		`DELETE FROM team_tasks WHERE id = ? AND team_id = ? AND status IN ('completed','failed','cancelled')`+tenantWhere,
 		args...)
 	if err != nil {
@@ -367,7 +375,17 @@ func (s *SQLiteTeamStore) DeleteTask(ctx context.Context, taskID, teamID uuid.UU
 	if n == 0 {
 		return store.ErrTaskNotFound
 	}
-	return nil
+
+	// Phase 04: clean up auto-created vault_links sourced from this task
+	// (task_attachment + defensive delegation_attachment) inside the same tx.
+	if _, derr := tx.ExecContext(ctx, `
+		DELETE FROM vault_links
+		WHERE json_extract(metadata, '$.source') IN (?, ?)
+	`, "task:"+taskID.String(), "delegation:"+taskID.String()); derr != nil {
+		slog.Warn("delete task: vault_links cleanup", "task_id", taskID, "err", derr)
+	}
+
+	return tx.Commit()
 }
 
 func (s *SQLiteTeamStore) DeleteTasks(ctx context.Context, taskIDs []uuid.UUID, teamID uuid.UUID) ([]uuid.UUID, error) {
@@ -415,9 +433,32 @@ func (s *SQLiteTeamStore) DeleteTasks(ctx context.Context, taskIDs []uuid.UUID, 
 	}
 
 	if len(deleted) > 0 {
-		_, err = s.db.ExecContext(ctx, `DELETE FROM team_tasks WHERE `+cond, args...)
-		if err != nil {
+		tx, txErr := s.db.BeginTx(ctx, nil)
+		if txErr != nil {
+			return nil, fmt.Errorf("delete tasks: begin tx: %w", txErr)
+		}
+		defer tx.Rollback() //nolint:errcheck
+
+		if _, err = tx.ExecContext(ctx, `DELETE FROM team_tasks WHERE `+cond, args...); err != nil {
 			return nil, err
+		}
+
+		// Phase 04 bulk cleanup: drop task_attachment / delegation_attachment
+		// links for all deleted task IDs in the same tx.
+		sourceArgs := make([]any, 0, len(deleted)*2)
+		phs := make([]string, 0, len(deleted)*2)
+		for _, id := range deleted {
+			sourceArgs = append(sourceArgs, "task:"+id.String(), "delegation:"+id.String())
+			phs = append(phs, "?", "?")
+		}
+		delQ := `DELETE FROM vault_links WHERE json_extract(metadata, '$.source') IN (` +
+			strings.Join(phs, ",") + `)`
+		if _, derr := tx.ExecContext(ctx, delQ, sourceArgs...); derr != nil {
+			slog.Warn("delete tasks: vault_links cleanup", "count", len(deleted), "err", derr)
+		}
+
+		if err := tx.Commit(); err != nil {
+			return deleted, err
 		}
 	}
 	return deleted, nil

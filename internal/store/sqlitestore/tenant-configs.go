@@ -5,9 +5,14 @@ package sqlitestore
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // SQLiteBuiltinToolTenantConfigStore implements store.BuiltinToolTenantConfigStore.
@@ -20,6 +25,9 @@ func NewSQLiteBuiltinToolTenantConfigStore(db *sql.DB) *SQLiteBuiltinToolTenantC
 }
 
 func (s *SQLiteBuiltinToolTenantConfigStore) ListDisabled(ctx context.Context, tenantID uuid.UUID) ([]string, error) {
+	if tenantID == uuid.Nil {
+		return nil, store.ErrInvalidTenant
+	}
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT tool_name FROM builtin_tool_tenant_configs WHERE tenant_id = ? AND enabled = 0`,
 		tenantID,
@@ -41,8 +49,11 @@ func (s *SQLiteBuiltinToolTenantConfigStore) ListDisabled(ctx context.Context, t
 }
 
 func (s *SQLiteBuiltinToolTenantConfigStore) ListAll(ctx context.Context, tenantID uuid.UUID) (map[string]bool, error) {
+	if tenantID == uuid.Nil {
+		return nil, store.ErrInvalidTenant
+	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT tool_name, enabled FROM builtin_tool_tenant_configs WHERE tenant_id = ?`,
+		`SELECT tool_name, enabled FROM builtin_tool_tenant_configs WHERE tenant_id = ? AND enabled IS NOT NULL`,
 		tenantID,
 	)
 	if err != nil {
@@ -53,31 +64,120 @@ func (s *SQLiteBuiltinToolTenantConfigStore) ListAll(ctx context.Context, tenant
 	result := make(map[string]bool)
 	for rows.Next() {
 		var name string
-		var enabled bool
+		var enabled sql.NullBool
 		if err := rows.Scan(&name, &enabled); err != nil {
 			return nil, err
 		}
-		result[name] = enabled
+		if enabled.Valid {
+			result[name] = enabled.Bool
+		}
 	}
 	return result, rows.Err()
 }
 
+// Set upserts the enabled flag. Preserves the settings column.
 func (s *SQLiteBuiltinToolTenantConfigStore) Set(ctx context.Context, tenantID uuid.UUID, toolName string, enabled bool) error {
+	if tenantID == uuid.Nil {
+		return store.ErrInvalidTenant
+	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO builtin_tool_tenant_configs (tool_name, tenant_id, enabled, updated_at)
 		 VALUES (?, ?, ?, ?)
-		 ON CONFLICT (tool_name, tenant_id) DO UPDATE SET enabled = excluded.enabled, updated_at = excluded.updated_at`,
+		 ON CONFLICT (tool_name, tenant_id)
+		 DO UPDATE SET enabled = excluded.enabled, updated_at = excluded.updated_at`,
 		toolName, tenantID, enabled, time.Now().UTC(),
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("set tenant tool enabled: %w", err)
+	}
+	return nil
 }
 
 func (s *SQLiteBuiltinToolTenantConfigStore) Delete(ctx context.Context, tenantID uuid.UUID, toolName string) error {
+	if tenantID == uuid.Nil {
+		return store.ErrInvalidTenant
+	}
 	_, err := s.db.ExecContext(ctx,
 		`DELETE FROM builtin_tool_tenant_configs WHERE tool_name = ? AND tenant_id = ?`,
 		toolName, tenantID,
 	)
 	return err
+}
+
+// GetSettings returns the raw settings JSON for a tool.
+// Missing row or NULL column → (nil, nil).
+func (s *SQLiteBuiltinToolTenantConfigStore) GetSettings(ctx context.Context, tenantID uuid.UUID, toolName string) (json.RawMessage, error) {
+	if tenantID == uuid.Nil {
+		return nil, store.ErrInvalidTenant
+	}
+	var raw sql.NullString
+	err := s.db.QueryRowContext(ctx,
+		`SELECT settings FROM builtin_tool_tenant_configs
+		 WHERE tool_name = ? AND tenant_id = ?`,
+		toolName, tenantID,
+	).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get tenant tool settings: %w", err)
+	}
+	if !raw.Valid || len(raw.String) == 0 {
+		return nil, nil
+	}
+	return json.RawMessage(raw.String), nil
+}
+
+// SetSettings upserts the settings JSON. Preserves enabled column. nil → SQL NULL.
+func (s *SQLiteBuiltinToolTenantConfigStore) SetSettings(ctx context.Context, tenantID uuid.UUID, toolName string, settings json.RawMessage) error {
+	if tenantID == uuid.Nil {
+		return store.ErrInvalidTenant
+	}
+	var settingsArg any
+	if settings != nil {
+		// SQLite stores JSON as TEXT — pass as string for portable NULL handling.
+		settingsArg = string(settings)
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO builtin_tool_tenant_configs (tool_name, tenant_id, settings, updated_at)
+		 VALUES (?, ?, ?, ?)
+		 ON CONFLICT (tool_name, tenant_id)
+		 DO UPDATE SET settings = excluded.settings, updated_at = excluded.updated_at`,
+		toolName, tenantID, settingsArg, time.Now().UTC(),
+	)
+	if err != nil {
+		return fmt.Errorf("set tenant tool settings: %w", err)
+	}
+	return nil
+}
+
+// ListAllSettings returns tool_name → raw settings JSON for every tenant row
+// with a non-null settings column.
+func (s *SQLiteBuiltinToolTenantConfigStore) ListAllSettings(ctx context.Context, tenantID uuid.UUID) (map[string]json.RawMessage, error) {
+	if tenantID == uuid.Nil {
+		return nil, store.ErrInvalidTenant
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT tool_name, settings FROM builtin_tool_tenant_configs
+		 WHERE tenant_id = ? AND settings IS NOT NULL`,
+		tenantID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list tenant tool settings: %w", err)
+	}
+	defer rows.Close()
+	result := make(map[string]json.RawMessage)
+	for rows.Next() {
+		var name string
+		var raw sql.NullString
+		if err := rows.Scan(&name, &raw); err != nil {
+			return nil, err
+		}
+		if raw.Valid && len(raw.String) > 0 {
+			result[name] = json.RawMessage(raw.String)
+		}
+	}
+	return result, rows.Err()
 }
 
 // SQLiteSkillTenantConfigStore implements store.SkillTenantConfigStore.

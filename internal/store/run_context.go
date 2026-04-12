@@ -52,6 +52,7 @@ type RunContext struct {
 	WorkspaceChannel string
 	WorkspaceChatID  string
 	TeamTaskID       string
+	DelegationID     string // delegation identifier for vault auto-linking (empty when not in delegation)
 	LeaderAgentID    string // leader's agent UUID for member memory read fallback
 	AgentToolKey     string // tool-level agent key for registry routing
 }

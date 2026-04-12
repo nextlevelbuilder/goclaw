@@ -49,14 +49,17 @@ func MediaDocRefsFromCtx(ctx context.Context) []providers.MediaRef {
 const documentMaxBytes = 20 * 1024 * 1024
 
 // documentProviderPriority is the order in which providers are tried for document analysis.
-// Gemini has best native PDF support (50MB, 258 tokens/page).
-// "alibaba" is included as an alias for dashscope (common DB registration name).
-var documentProviderPriority = []string{"gemini", "anthropic", "openrouter", "dashscope"}
+// Gemini has best native PDF support (50MB, 258 tokens/page). claude-cli is
+// included so installations with only Claude CLI configured can still analyze
+// PDFs via the CLI bridge (document content block in stream-json).
+var documentProviderPriority = []string{"gemini", "anthropic", "claude-cli", "openrouter", "dashscope"}
 
 // documentModelDefaults maps provider names to preferred document-capable models.
+// Empty string lets the provider pick its own default model.
 var documentModelDefaults = map[string]string{
 	"gemini":     "gemini-2.5-flash",
 	"openrouter": "google/gemini-2.5-flash",
+	"claude-cli": "",
 	"dashscope":  "qwen-vl-max",
 }
 

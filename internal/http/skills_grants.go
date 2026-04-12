@@ -76,7 +76,7 @@ func (h *SkillsHandler) handleGrantAgent(w http.ResponseWriter, r *http.Request)
 	}
 
 	h.skills.BumpVersion()
-	h.emitCacheInvalidate(bus.CacheKindSkillGrants, "")
+	h.emitCacheInvalidate(bus.CacheKindSkillGrants, "", uuid.Nil)
 	emitAudit(h.msgBus, r, "skill.grant_changed", "skill", idStr)
 	writeJSON(w, http.StatusCreated, map[string]string{"ok": "true"})
 }
@@ -113,7 +113,7 @@ func (h *SkillsHandler) handleRevokeAgent(w http.ResponseWriter, r *http.Request
 	}
 
 	h.skills.BumpVersion()
-	h.emitCacheInvalidate(bus.CacheKindSkillGrants, "")
+	h.emitCacheInvalidate(bus.CacheKindSkillGrants, "", uuid.Nil)
 	emitAudit(h.msgBus, r, "skill.grant_changed", "skill", idStr)
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
 }
@@ -158,7 +158,7 @@ func (h *SkillsHandler) handleGrantUser(w http.ResponseWriter, r *http.Request) 
 	}
 
 	h.skills.BumpVersion()
-	h.emitCacheInvalidate(bus.CacheKindSkillGrants, "")
+	h.emitCacheInvalidate(bus.CacheKindSkillGrants, "", uuid.Nil)
 	emitAudit(h.msgBus, r, "skill.grant_changed", "skill", idStr)
 	writeJSON(w, http.StatusCreated, map[string]string{"ok": "true"})
 }
@@ -193,7 +193,7 @@ func (h *SkillsHandler) handleRevokeUser(w http.ResponseWriter, r *http.Request)
 	}
 
 	h.skills.BumpVersion()
-	h.emitCacheInvalidate(bus.CacheKindSkillGrants, "")
+	h.emitCacheInvalidate(bus.CacheKindSkillGrants, "", uuid.Nil)
 	emitAudit(h.msgBus, r, "skill.grant_changed", "skill", idStr)
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
 }

@@ -13,7 +13,15 @@ import type { BuiltinToolData } from "./hooks/use-builtin-tools";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+// Tools with dedicated settings forms always show the Settings button,
+// even when settings is empty (the form lets the user create settings).
+const TOOLS_WITH_DEDICATED_FORM = new Set([
+  "web_search", "web_fetch", "tts", "knowledge_graph_search",
+  "create_image", "create_audio", "create_video",
+]);
+
 export function hasEditableSettings(tool: BuiltinToolData): boolean {
+  if (TOOLS_WITH_DEDICATED_FORM.has(tool.name)) return true;
   return tool.settings != null && Object.keys(tool.settings).length > 0;
 }
 

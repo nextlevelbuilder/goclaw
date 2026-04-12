@@ -9,11 +9,15 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-// TestInvalidateAgent_MatchesAgentKeyNotUUID verifies that InvalidateAgent(agentKey)
-// clears entries cached under agentKey but NOT entries cached under UUID.
-// This documents the root cause of the stale-cache bug: heartbeat/cron paths
-// previously used UUID in session keys, creating cache entries keyed by UUID
-// that InvalidateAgent(agentKey) could never match.
+// TestInvalidateAgent_MatchesAgentKeyNotUUID documents the pre-Phase-2 state
+// where cache entries could be fragmented between UUID-keyed and agentKey-keyed
+// forms. This test manually pokes r.agents[] to simulate the fragmented state
+// — it does NOT exercise Router.Get, which now canonicalizes on resolve (see
+// TestRouterGet_UUIDInputStoresCanonicalKey for the fixed path).
+//
+// Kept as a regression guard on the exact-segment match semantics: invalidating
+// by agentKey must clear the agentKey entry but leave a UUID-shaped entry alone
+// (the UUID's last segment is not the agentKey).
 func TestInvalidateAgent_MatchesAgentKeyNotUUID(t *testing.T) {
 	r := NewRouter()
 	agentKey := "my-agent"

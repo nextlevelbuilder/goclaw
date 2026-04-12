@@ -16,11 +16,14 @@ import (
 
 const (
 	graphAPIVersion = "v25.0"
-	graphAPIBase    = "https://graph.facebook.com"
 	maxRetries      = 3
 	// maxRetryAfterSec caps the Retry-After sleep to prevent goroutine stalls on abnormal values.
 	maxRetryAfterSec = 60
 )
+
+// graphAPIBase is the Graph API root. Declared as a variable so tests can
+// override it with an httptest.NewServer URL.
+var graphAPIBase = "https://graph.facebook.com"
 
 // fbIDPattern validates Facebook object IDs: numeric or "{num}_{num}" form (post IDs).
 var fbIDPattern = regexp.MustCompile(`^\d+(_\d+)?$`)
@@ -175,6 +178,12 @@ func (g *GraphClient) SendTypingOn(ctx context.Context, recipientID string) erro
 	return err
 }
 
+// graphBackoffBase is the base unit for exponential retry backoff in doRequest.
+// Production default = 1s, giving 1s, 2s, 4s... per attempt.
+// Tests override to 1ms via newFakeGraph so retry tests don't burn 6s of real
+// wall-clock time. Production behavior is unchanged.
+var graphBackoffBase = 1 * time.Second
+
 // doRequest executes a Graph API call with retries on transient errors.
 // The page access token is passed via Authorization header (never in the URL).
 func (g *GraphClient) doRequest(ctx context.Context, method, path string, body any) ([]byte, error) {
@@ -182,7 +191,7 @@ func (g *GraphClient) doRequest(ctx context.Context, method, path string, body a
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		if attempt > 0 {
-			backoff := time.Duration(1<<uint(attempt-1)) * time.Second
+			backoff := time.Duration(1<<uint(attempt-1)) * graphBackoffBase
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()

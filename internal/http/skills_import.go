@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -54,6 +55,11 @@ func (h *SkillsHandler) handleSkillsImport(w http.ResponseWriter, r *http.Reques
 			sendSSE(w, flusher, "error", ProgressEvent{Phase: "import", Status: "error", Detail: importErr.Error()})
 			return
 		}
+		// Import affects the importer's tenant scope — invalidate that
+		// tenant's cached agents so they pick up the new skill set. If
+		// imported under master, tid is the master tenant UUID, which
+		// still yields a correct per-tenant router wipe.
+		h.emitCacheInvalidate(bus.CacheKindSkills, "", store.TenantIDFromContext(r.Context()))
 		sendSSE(w, flusher, "complete", summary)
 		return
 	}
@@ -64,6 +70,7 @@ func (h *SkillsHandler) handleSkillsImport(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, err.Error())})
 		return
 	}
+	h.emitCacheInvalidate(bus.CacheKindSkills, "", store.TenantIDFromContext(r.Context()))
 	writeJSON(w, http.StatusCreated, summary)
 }
 

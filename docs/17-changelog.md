@@ -32,6 +32,86 @@ All notable changes to GoClaw Gateway are documented here. Format follows [Keep 
 
 ## [Unreleased]
 
+### Security
+
+#### Tenant-Scope Hotfix (2026-04-12)
+
+3 privilege-escalation vulnerabilities closed, same class as `b419f352` (Phase 1 `config.*` hotfix):
+
+- **CRITICAL** `PUT /v1/tools/builtin/{name}` — non-master admin could corrupt global tool defaults
+- **CRITICAL** `POST /v1/packages/install|uninstall` — non-master admin could run `pip`/`npm`/`apk` server-wide
+- **HIGH** `POST /v1/api-keys/{id}/revoke` (HTTP + WS) — tenant admin could revoke NULL-tenant system keys
+
+Fix adds shared `store.IsMasterScope(ctx)` predicate + `http.requireMasterScope` guard on all three endpoints. `APIKeyStore.Delete` dropped (YAGNI + dormant same-class vuln). WS router now injects role into ctx. Tests: 17 new unit tests. Audit: `plans/reports/debugger-260412-0922-tenant-scope-audit.md`.
+
+### Added
+
+#### Per-Tenant Tool Configuration — 4-Tier Overlay (2026-04-12)
+
+Tenant admins can override tool configuration without affecting other tenants. Overlay: `per-agent > tenant > global > hardcoded`, resolved at Execute time via `tools.BuiltinToolSettingsFromCtx(ctx)` — no Tool interface changes. See `docs/03-tools-system.md` § 14. Applies to `web_search`, `web_fetch`, `tts`. Web UI dialog is tenant-scope aware.
+- **Phase 5** (1e5e84d5): Builtin tools settings editor on web UI
+- **Phase 7 rest** (30a40bbe): Exa + Tavily web search providers with ranked ordering via `provider_order` config. Credit: @kaitranntt for original PR 825 work, ported to tenant settings storage pattern
+  - New files: `internal/tools/{web_search_exa,web_search_tavily,web_search_config}.go`
+  - 11 new unit tests for provider chain + normalization
+  - Provider-selection helper: `NormalizeWebSearchProviderOrder(order []string) → []string` (DuckDuckGo always last as free fallback)
+- **Phase 8** (def1712f, 43ee918b): Tenant-aware singleton pool pattern for stateful tools
+  - `web_fetch`: Domain policy override via `resolvePolicy(ctx)` reads tenant config; 6 new unit tests
+  - `tts`: Primary provider override via `resolvePrimary(ctx, mgr)` reads tenant config; 5 new unit tests
+  - Feature flag: `config.Tools.TenantScopedSingletons` (default: false) gates per-tenant pool instances with LRU eviction (64 tenants) + 30 min idle timeout
+
+### Fixed
+
+#### Feishu/Lark Writer Management Commands — Issue #818 Closed (2026-04-11)
+- **Issue #818 resolution**: Closes UX gap where users saw `/addwriter` error messages but Feishu had no handler
+- **Phase 1 — Thread reply routing**: Inbound messages with `thread_id` now properly route responses back to the same Feishu thread via `/open-apis/im/v1/messages/{id}/reply`. New `feishu_reply_target_id` metadata key included in `routingMetaKeys` allowlist. Graceful fallback to `SendMessage()` if thread root deleted
+- **Phase 2 — Document auto-fetch**: Pasted Lark docx URLs auto-detected and fetched via `/open-apis/docx/v1/documents/{id}/raw_content`. Content injected as `[Lark Doc: URL]` markers. LRU cache (128 entries, 5-min TTL) + 8000-rune truncation per document. Requires `docx:document:readonly` permission + owner grant
+- **Phase 3 — Writer management commands**: Added `/addwriter <@user or reply>`, `/removewriter`, `/writers` for group file-write permission control. Group-only (DMs rejected early). Requires existing writer authorization. Last-writer guard prevents removing final writer. Empty-writer groups allow bootstrap via explicit `/addwriter @self`. 10s timeout bounds Feishu API calls
+
+### Added
+
+### Testing
+
+#### Test Speed-Up + Coverage Ratchet Removal (2026-04-11)
+- **Philosophy shift**: Signal over coverage %. Reject mock-heavy/slow/low-signal tests even if % drops. Coverage ratchet gate removed — was creating pressure to write forced tests instead of fast, valuable ones
+- **`internal/vault` retry tests**: 16.3s → 0.6s. New `fastBackoffsForTest(t)` helper overrides package-level `enrichRetryBackoffs`/`enrichRetryTimeouts` so retry tests don't wait through real exponential backoff (was 6s per all-retry test). Production behavior unchanged
+- **`internal/cron` scheduler tests**: 11.7s → 1.5s. `runLoopTickInterval` extracted as package var (default 1s, unchanged); test-only `setFastTick(t)` helper overrides to 20ms so 6 scheduler tests don't sleep 1.5s each waiting for ticks
+- **`internal/channels/facebook` retry tests**: 6.3s → 3.0s. `graphBackoffBase` extracted as package var (default 1s, unchanged); `newFakeGraph` helper overrides to 1ms so HTTP retry tests don't burn 3+2+1s of real waits
+- **Vault duplicates removed**: `TestCallClassifyWithRetry_FirstAttemptSuccess` (dup of `_Success`) and `_MaxRetriesConstant` (dup of `_RetriesAndBackoffs`)
+- **Total saved**: ~29s wall-clock (3 packages: 34.3s → 5.1s). Full `go test -race ./...` now runs in ~57s (was ≥90s with hangs)
+- **Removed**: `scripts/check_coverage.go` + `scripts/coverage_thresholds.json` + "Coverage ratchet gate" CI step. Coverage profile + `go tool cover -func` summary preserved as informational only
+
+#### Test Coverage Improvement — Wave 1-3 (2026-04-11)
+- **CI ratchet gate**: `scripts/check_coverage.go` parses `coverage.out` per package and fails CI if coverage drops below stored floors in `scripts/coverage_thresholds.json`. `--update` flag ratchets thresholds upward when coverage improves. 61 packages locked.
+- **`-coverpkg=./...`**: CI now runs `go test -race -coverpkg=./...` so integration tests in `tests/integration/` are attributed to the source packages under test.
+- **`internal/testutil`**: shared helpers — `TestDB()` (integration-tagged), context builders (`TenantCtx`, `UserCtx`, `AgentCtx`, `FullCtx`), mockgen generate hooks for `SessionStore`/`AgentStore`/`ContactStore`.
+- **~663 new test functions across 36 files**:
+  - Wave 1 — `store/pg` integration test depth (session pagination/isolation, agent context files/profiles, agent_links CRUD, cron CRUD+state, vault CRUD/search, memory BM25/isolation); `gateway` unit tests (ratelimit, event_filter, server auth); `gateway/methods` handlers (sessions, skills, cron); `http` auth helpers + path security; `tasks.TaskTicker` (lifecycle, recoverAll, followupInterval); `agent` (pruning, extractive memory, intent classify, loop utils, inject, evolution guardrails).
+  - Wave 2 — `config` (normalize, expand/contract home, env overlays, system configs); `skills` (BM25 tokenize/index/search/rebuild, frontmatter parser, loader/context); `mcp` (pool, manager status, bridge BM25, env resolution); `backup` (ArchiveDirectory, SanitizeDSN, WritePgpass, Backup.Run); `channels/slack` (mention, user cache, classifyMime); `channels/discord` (resolveDisplayName, command routing, classifyMediaType); `channels/telegram` (markdown→HTML, table rendering, detectMention, service message); `channels/whatsapp` (extractTextContent, chunkText, markdown→WhatsApp, mimeToExt, classifyDownloadError).
+  - Wave 3 — `cache.PermissionCache` (9 methods + invalidation); `sessions` key builders + manager edge cases; `knowledgegraph` extractor (mock provider success/filter/error/invalid-JSON/long-text chunking), splitChunks, mergeResults.
+- **Coverage deltas** (local `go test`, no DB):
+  - `internal/knowledgegraph` 47.1% → 91.8% (+44.7pp)
+  - `internal/skills` 7.7% → 37.5% (+29.8pp)
+  - `internal/config` 19.3% → 48.2% (+28.9pp)
+  - `internal/cache` 72.9% → 96.9% (+24.0pp)
+  - `internal/sessions` 70.7% → 94.4% (+23.7pp)
+  - `internal/gateway` 0% → 15.1%
+  - `internal/mcp` 12.1% → 26.3% (+14.2pp)
+  - `internal/channels/whatsapp` 8.8% → 21.3% (+12.5pp)
+  - `internal/channels/discord` 15.6% → 27.7% (+12.1pp)
+  - `internal/tasks` 0% → 55.4%
+  - `internal/agent` 28.8% → 36.8%
+  - store/pg integration test depth improved — coverage attribution requires live pgvector in CI
+- **Deferred to separate plans**: `channels/feishu` (0%, 102 funcs), `providers/acp` (0%, 41 funcs), `channels/zalo` (regressed to 5%), `providers` (56%, 325 funcs), `channels/facebook` (31.8%)
+
+#### Deferred Coverage Waves A-C — Resolved (2026-04-11)
+Follow-up to Wave 1-3 above. Addresses the 6 modules deferred as too-large/greenfield/regression. Plan: `plans/260411-2020-deferred-coverage-waves/`.
+- **Wave A** — `internal/providers` 57.0 → 62.5% (hotspot tests for adapter/retry/SSE); `channels/zalo` 7.2 → 65.3% (regression fix + parse/policy/HTTP coverage)
+- **Wave B** — `channels/facebook` 23.1 → 81.9% (full bot lifecycle, media, policy); `store/pg` 1.3 → 3.5% (⚠️ capped at unit-test-only; 30% target requires CI integration wiring + pre-existing failing tenant-isolation tests — deferred separately)
+- **Wave C** — `providers/acp` 0.0 → **80.0%** greenfield (7 test files, 2560 LOC; JSON-RPC framing with adversarial input fuzz, terminal sandbox + allowlist + deny-pattern enforcement, ProcessPool lifecycle, tool_bridge with 3 permission modes); `channels/feishu` 20.6 → **63.9%** (15 test files; AES-CBC webhook decrypt + tamper detection, WS proto framing, larkclient HTTP error paths, media send/receive, bot parse/policy, lifecycle)
+- **Security tests added**: ACP JSON-RPC parser no-panic on 7 adversarial inputs; sandbox path-traversal + binary allowlist + deny-pattern (`rm -rf` even under `bash`); env sanitization strips 8 prefixes + 13 exact-name vars (GOCLAW/ANTHROPIC/OPENAI/DATABASE/AWS/GITHUB/SSH/STRIPE/DB_DSN/PG*/NPM_TOKEN/SECRET_KEY/JWT_SECRET). Feishu AES-CBC tamper detection + token mismatch drop; no real credentials in any fixture
+- **Scale**: ~375 new test functions across 22 files (~5858 LOC); zero source modifications — pure additive coverage
+- **Ratchet bumped**: `scripts/coverage_thresholds.json` — feishu 0 → 63.89, acp 0 → 80.05
+
 ### Added
 
 #### Episodic Memory Weighted Scoring — Dreaming Enhancement (2026-04-10, Phase 10)

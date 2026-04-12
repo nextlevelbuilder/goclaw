@@ -263,10 +263,12 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 
 		// Build outbound metadata: copy routing fields but strip reply_to_message_id
 		// (block replies are standalone) and placeholder_key (reserve for final message).
+		// feishu_reply_target_id MUST be preserved so intermediate block replies for
+		// threaded Lark messages also land inside the same thread.
 		var outMeta map[string]string
 		if rc.Metadata != nil {
 			outMeta = make(map[string]string)
-			for _, k := range []string{"message_thread_id", "local_key", "group_id"} {
+			for _, k := range routingMetaKeys {
 				if v := rc.Metadata[k]; v != "" {
 					outMeta[k] = v
 				}
@@ -344,11 +346,22 @@ func extractPayloadString(payload any, key string) string {
 	return ""
 }
 
-// copyRoutingMeta copies channel routing metadata (thread_id, local_key, group_id)
-// from RunContext.Metadata into a new map suitable for outbound messages.
+// routingMetaKeys enumerates the metadata keys that must survive the hop from
+// inbound RunContext.Metadata into outbound OutboundMessage.Metadata so that
+// replies, block replies, retries, and placeholder updates all land in the
+// correct thread / topic / subgroup routing bucket on each channel.
+var routingMetaKeys = []string{
+	"message_thread_id",      // telegram forum topics
+	"local_key",              // composite chat-id suffix
+	"group_id",               // legacy group identifier
+	"feishu_reply_target_id", // feishu/lark thread reply routing (issue #818)
+}
+
+// copyRoutingMeta copies channel routing metadata from RunContext.Metadata
+// into a new map suitable for outbound messages.
 func copyRoutingMeta(src map[string]string) map[string]string {
 	out := make(map[string]string)
-	for _, k := range []string{"message_thread_id", "local_key", "group_id"} {
+	for _, k := range routingMetaKeys {
 		if v := src[k]; v != "" {
 			out[k] = v
 		}

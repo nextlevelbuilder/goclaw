@@ -131,7 +131,7 @@ func (m *AgentsMethods) handleList(ctx context.Context, client *gateway.Client, 
 				"provider":  a.Provider,
 				"agentType": a.AgentType,
 				"status":    a.Status,
-				"isRunning": m.agents.IsRunning(a.AgentKey),
+				"isRunning": m.agents.IsRunning(ctx, a.AgentKey),
 			})
 		}
 		client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{

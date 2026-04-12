@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
-	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
 )
 
 func TestVaultClassify_DeleteDocLinksByTypes_SingleType(t *testing.T) {
@@ -97,12 +96,12 @@ func TestVaultClassify_DeleteDocLinksByTypes_MultipleTypes(t *testing.T) {
 	tid := tenantID.String()
 	aid := agentID.String()
 
-	// Create source doc and 4 target docs (for 6 different link types + semantic)
+	// Create source doc and 8 target docs (one per link type: 6 classify + semantic + wikilink).
 	docSource := makeVaultDoc(tid, aid, "source.md", "Source")
 	docs := make([]*store.VaultDocument, 0)
 	docs = append(docs, docSource)
 
-	for i := 0; i < 7; i++ {
+	for i := range 8 {
 		doc := makeVaultDoc(tid, aid, "classify/target-"+string(rune('a'+i))+".md", "Target "+string(rune('A'+i)))
 		if err := vs.UpsertDocument(ctx, doc); err != nil {
 			t.Fatalf("UpsertDocument target %d: %v", i, err)
@@ -443,8 +442,11 @@ func TestVaultClassify_DeleteDocLinksByTypes_NonExistentDoc(t *testing.T) {
 
 	tid := tenantID.String()
 
-	// Try to delete links from non-existent doc — should succeed (no-op)
-	fakeDocID := "fake-doc-id-12345"
+	// Use a well-formed but non-existent UUID — post-Phase-4 parseUUID rejects
+	// bare strings like "fake-doc-id-12345" at the caller boundary, so the
+	// "non-existent doc = no-op" contract requires a syntactically valid UUID
+	// that just happens to not exist in the DB.
+	fakeDocID := "00000000-0000-4000-8000-000000000dea"
 	if err := vs.DeleteDocLinksByTypes(ctx, tid, fakeDocID, []string{"reference"}); err != nil {
 		t.Fatalf("DeleteDocLinksByTypes on non-existent doc: %v", err)
 	}

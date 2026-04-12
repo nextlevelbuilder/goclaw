@@ -154,6 +154,86 @@ func openTestDBAtVersion(t *testing.T, targetVersion int) *sql.DB {
 
 	// Undo columns added by migrations after targetVersion.
 	// SQLite DROP COLUMN support varies, so recreate affected tables.
+
+	// Phase 03 (v15 → v16) adds:
+	//   - team_task_attachments.base_name
+	//   - vault_documents.path_basename
+	//   - vault_links.metadata
+	// Strip these when the test targets any version < 16 so the v13 migration
+	// (which recreates vault_documents via SELECT *) doesn't hit a column
+	// count mismatch.
+	if targetVersion < 16 {
+		// Recreate vault_documents without path_basename.
+		db.Exec(`CREATE TABLE vault_documents_v15 AS SELECT
+			id, tenant_id, agent_id, team_id, scope, custom_scope, path,
+			title, doc_type, content_hash, summary, metadata,
+			created_at, updated_at
+			FROM vault_documents`)
+		db.Exec(`DROP TABLE vault_documents`)
+		db.Exec(`CREATE TABLE vault_documents (
+			id TEXT NOT NULL PRIMARY KEY,
+			tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+			agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
+			team_id TEXT REFERENCES agent_teams(id) ON DELETE SET NULL,
+			scope TEXT NOT NULL DEFAULT 'personal',
+			custom_scope TEXT,
+			path TEXT NOT NULL,
+			title TEXT NOT NULL DEFAULT '',
+			doc_type TEXT NOT NULL DEFAULT 'note',
+			content_hash TEXT NOT NULL DEFAULT '',
+			summary TEXT NOT NULL DEFAULT '',
+			metadata TEXT DEFAULT '{}',
+			created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+			updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+		)`)
+		db.Exec(`INSERT INTO vault_documents SELECT * FROM vault_documents_v15`)
+		db.Exec(`DROP TABLE vault_documents_v15`)
+
+		// Recreate team_task_attachments without base_name.
+		db.Exec(`CREATE TABLE team_task_attachments_v15 AS SELECT
+			id, task_id, team_id, chat_id, path, file_size, mime_type,
+			created_by_agent_id, created_by_sender_id, metadata, custom_scope,
+			tenant_id, created_at
+			FROM team_task_attachments`)
+		db.Exec(`DROP TABLE team_task_attachments`)
+		db.Exec(`CREATE TABLE team_task_attachments (
+			id TEXT NOT NULL PRIMARY KEY,
+			task_id TEXT NOT NULL REFERENCES team_tasks(id) ON DELETE CASCADE,
+			team_id TEXT NOT NULL REFERENCES agent_teams(id) ON DELETE CASCADE,
+			chat_id VARCHAR(255) NOT NULL DEFAULT '',
+			path TEXT NOT NULL,
+			file_size BIGINT NOT NULL DEFAULT 0,
+			mime_type VARCHAR(100) DEFAULT '',
+			created_by_agent_id TEXT REFERENCES agents(id),
+			created_by_sender_id VARCHAR(255) DEFAULT '',
+			metadata TEXT NOT NULL DEFAULT '{}',
+			custom_scope TEXT,
+			tenant_id TEXT NOT NULL REFERENCES tenants(id),
+			created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+			UNIQUE(task_id, path)
+		)`)
+		db.Exec(`INSERT INTO team_task_attachments SELECT * FROM team_task_attachments_v15`)
+		db.Exec(`DROP TABLE team_task_attachments_v15`)
+
+		// Recreate vault_links without metadata column.
+		db.Exec(`CREATE TABLE vault_links_v15 AS SELECT
+			id, from_doc_id, to_doc_id, link_type, context, custom_scope, created_at
+			FROM vault_links`)
+		db.Exec(`DROP TABLE vault_links`)
+		db.Exec(`CREATE TABLE vault_links (
+			id TEXT NOT NULL PRIMARY KEY,
+			from_doc_id TEXT NOT NULL REFERENCES vault_documents(id) ON DELETE CASCADE,
+			to_doc_id TEXT NOT NULL REFERENCES vault_documents(id) ON DELETE CASCADE,
+			link_type TEXT NOT NULL DEFAULT 'wikilink',
+			context TEXT NOT NULL DEFAULT '',
+			custom_scope TEXT,
+			created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+			UNIQUE(from_doc_id, to_doc_id, link_type)
+		)`)
+		db.Exec(`INSERT INTO vault_links SELECT * FROM vault_links_v15`)
+		db.Exec(`DROP TABLE vault_links_v15`)
+	}
+
 	if targetVersion <= 11 {
 		// Migration 12 adds recall_count, recall_score, last_recalled_at.
 		// Recreate episodic_summaries without those columns.

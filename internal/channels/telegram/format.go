@@ -21,8 +21,10 @@ var htmlToMdReplacers = []struct {
 	{regexp.MustCompile(`(?i)</?p\s*>`), "\n"},
 	{regexp.MustCompile(`(?i)<b>([\s\S]*?)</b>`), "**$1**"},
 	{regexp.MustCompile(`(?i)<strong>([\s\S]*?)</strong>`), "**$1**"},
-	{regexp.MustCompile(`(?i)<i>([\s\S]*?)</i>`), "_$1_"},
-	{regexp.MustCompile(`(?i)<em>([\s\S]*?)</em>`), "_$1_"},
+	// ${1}_ (not $1_) — Go regexp treats $1_ as a named group reference (identifier
+	// characters include `_`), which drops the capture. Curly braces delimit the group.
+	{regexp.MustCompile(`(?i)<i>([\s\S]*?)</i>`), "_${1}_"},
+	{regexp.MustCompile(`(?i)<em>([\s\S]*?)</em>`), "_${1}_"},
 	{regexp.MustCompile(`(?i)<s>([\s\S]*?)</s>`), "~~$1~~"},
 	{regexp.MustCompile(`(?i)<strike>([\s\S]*?)</strike>`), "~~$1~~"},
 	{regexp.MustCompile(`(?i)<del>([\s\S]*?)</del>`), "~~$1~~"},

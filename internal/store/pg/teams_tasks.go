@@ -412,7 +412,14 @@ func (s *PGTeamStore) DeleteTask(ctx context.Context, taskID, teamID uuid.UUID) 
 		tenantWhere = fmt.Sprintf(" AND tenant_id = $%d", len(args)+1)
 		args = append(args, tid)
 	}
-	res, err := s.db.ExecContext(ctx,
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("delete task: begin tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck — no-op after commit
+
+	res, err := tx.ExecContext(ctx,
 		`DELETE FROM team_tasks WHERE id = $1 AND team_id = $2 AND status IN ('completed','failed','cancelled')`+tenantWhere,
 		args...)
 	if err != nil {
@@ -422,7 +429,25 @@ func (s *PGTeamStore) DeleteTask(ctx context.Context, taskID, teamID uuid.UUID) 
 	if n == 0 {
 		return store.ErrTaskNotFound
 	}
-	return nil
+
+	// Phase 04: clean up auto-created vault_links sourced from this task
+	// (task_attachment + defensive delegation_attachment) inside the same tx
+	// so cleanup is atomic with task deletion.
+	sources := []string{
+		"task:" + taskID.String(),
+		"delegation:" + taskID.String(),
+	}
+	if delRes, derr := tx.ExecContext(ctx, `
+		DELETE FROM vault_links
+		WHERE metadata->>'source' = ANY($1)
+	`, pqStringArray(sources)); derr != nil {
+		slog.Warn("delete task: vault_links cleanup", "task_id", taskID, "err", derr)
+	} else if cnt, _ := delRes.RowsAffected(); cnt > 0 {
+		slog.Info("vault.link.deleted_on_task_delete",
+			"task_id", taskID, "count", cnt)
+	}
+
+	return tx.Commit()
 }
 
 func (s *PGTeamStore) DeleteTasks(ctx context.Context, taskIDs []uuid.UUID, teamID uuid.UUID) ([]uuid.UUID, error) {
@@ -439,23 +464,57 @@ func (s *PGTeamStore) DeleteTasks(ctx context.Context, taskIDs []uuid.UUID, team
 		tenantWhere = fmt.Sprintf(" AND tenant_id = $%d", len(args)+1)
 		args = append(args, tid)
 	}
-	rows, err := s.db.QueryContext(ctx,
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("delete tasks: begin tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	rows, err := tx.QueryContext(ctx,
 		`DELETE FROM team_tasks
 		 WHERE id = ANY($1) AND team_id = $2 AND status IN ('completed','failed','cancelled')`+tenantWhere+`
 		 RETURNING id`, args...)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	var deleted []uuid.UUID
 	for rows.Next() {
 		var id uuid.UUID
 		if err := rows.Scan(&id); err != nil {
+			rows.Close()
 			return deleted, err
 		}
 		deleted = append(deleted, id)
 	}
-	return deleted, rows.Err()
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return deleted, err
+	}
+
+	// Phase 04 bulk cleanup: one statement for task + delegation sources
+	// across all deleted tasks. Scoped by tenant via the team_tasks delete
+	// above (only actually-deleted IDs populate `deleted`).
+	if len(deleted) > 0 {
+		sources := make([]string, 0, len(deleted)*2)
+		for _, id := range deleted {
+			sources = append(sources, "task:"+id.String(), "delegation:"+id.String())
+		}
+		if delRes, derr := tx.ExecContext(ctx, `
+			DELETE FROM vault_links
+			WHERE metadata->>'source' = ANY($1)
+		`, pqStringArray(sources)); derr != nil {
+			slog.Warn("delete tasks: vault_links cleanup", "count", len(deleted), "err", derr)
+		} else if cnt, _ := delRes.RowsAffected(); cnt > 0 {
+			slog.Info("vault.link.deleted_on_task_bulk_delete",
+				"tasks_deleted", len(deleted), "links_deleted", cnt)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return deleted, err
+	}
+	return deleted, nil
 }
 
 // ListActiveTasksByChatID returns non-terminal tasks for a given chat_id (session key).

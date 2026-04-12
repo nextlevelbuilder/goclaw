@@ -106,8 +106,10 @@ const (
 	MsgInvalidLogAction = "error.invalid_log_action" // "action must be 'start' or 'stop'"
 
 	// --- Config ---
-	MsgRawConfigRequired = "error.raw_config_required" // "raw config is required"
-	MsgRawPatchRequired  = "error.raw_patch_required"  // "raw patch is required"
+	MsgRawConfigRequired      = "error.raw_config_required"       // "raw config is required"
+	MsgRawPatchRequired       = "error.raw_patch_required"        // "raw patch is required"
+	MsgConfigMasterScopeOnly  = "error.config_master_scope_only"  // "config.* methods are master-scope only"
+	MsgMasterScopeRequired    = "error.master_scope_required"     // "this action requires master tenant scope"
 
 	// --- Storage / File ---
 	MsgCannotDeleteSkillsDir = "error.cannot_delete_skills_dir" // "cannot delete skills directories"

@@ -41,6 +41,25 @@ func (h *VaultHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 	agentIDStr := r.FormValue("agent_id")
 	teamIDStr := r.FormValue("team_id")
 
+	// Boundary UUID validation. validateTeamMembership below short-circuits
+	// on owner role + lite edition (nil teamAccess), which would leave a
+	// downstream parseUUIDOrNil(*doc.TeamID) call as a silent-nil trap.
+	// Validate at the HTTP boundary so bad form input is rejected before any
+	// store call or event publish.
+	// See docs/agent-identity-conventions.md.
+	if agentIDStr != "" {
+		if _, err := uuid.Parse(agentIDStr); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid agent_id: must be a UUID"})
+			return
+		}
+	}
+	if teamIDStr != "" {
+		if _, err := uuid.Parse(teamIDStr); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid team_id: must be a UUID"})
+			return
+		}
+	}
+
 	// Validate team membership if provided.
 	if teamIDStr != "" {
 		if !h.validateTeamMembership(r.Context(), w, teamIDStr) {

@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -70,6 +69,13 @@ func (r *Router) Register(ag Agent) {
 // Get returns an agent by ID. Lazy-creates from DB via resolver if needed.
 // Cached entries expire after TTL as a safety net for multi-instance deployments.
 // Cache key includes tenant so the same agent_key in different tenants resolves independently.
+//
+// Canonicalization: after a successful resolver call, the cache entry is stored
+// under `tenantID:agentKey` (canonical) regardless of whether the caller passed
+// a UUID or an agent_key. Callers passing the UUID form incur a fresh resolver
+// call on every invocation because the raw-UUID key never lands in the map.
+// Production callers pass agent_key today (see cmd/gateway_managed.go and
+// heartbeat/chat handlers), so the hot path is unaffected.
 func (r *Router) Get(ctx context.Context, agentID string) (Agent, error) {
 	cacheKey := agentCacheKey(ctx, agentID)
 
@@ -95,13 +101,23 @@ func (r *Router) Get(ctx context.Context, agentID string) (Agent, error) {
 		if err != nil {
 			return nil, err
 		}
+		// Canonicalize: always cache under `tenantID:agent_key` (ag.ID() is agent_key),
+		// never under a raw UUID input. This prevents fragmentation where two cache
+		// entries exist for the same logical agent.
+		canonicalKey := agentCacheKey(ctx, ag.ID())
 		r.mu.Lock()
-		// Double-check: another goroutine might have created it
-		if existing, ok := r.agents[cacheKey]; ok {
-			r.mu.Unlock()
-			return existing.agent, nil
+		// Double-check: another goroutine might have created it under the canonical key.
+		// Re-check TTL so a UUID-form caller cannot receive a stale canonical entry
+		// indefinitely — this branch is the only eviction path for entries the caller
+		// never wrote under the raw input key.
+		if existing, ok := r.agents[canonicalKey]; ok {
+			if r.ttl == 0 || time.Since(existing.cachedAt) < r.ttl {
+				r.mu.Unlock()
+				return existing.agent, nil
+			}
+			delete(r.agents, canonicalKey)
 		}
-		r.agents[cacheKey] = &agentEntry{agent: ag, cachedAt: time.Now()}
+		r.agents[canonicalKey] = &agentEntry{agent: ag, cachedAt: time.Now()}
 		r.mu.Unlock()
 		return ag, nil
 	}
@@ -118,14 +134,34 @@ func agentCacheKey(ctx context.Context, agentID string) string {
 	return tid.String() + ":" + agentID
 }
 
+// matchAgentCacheKey reports whether a cache key's final segment equals agentKey.
+// Cache keys are either bare ("agentKey") or tenant-scoped ("tenantID:agentKey").
+// Exact-segment match — not suffix match — prevents substring collisions like
+// "tenantX:sub-foo" being wiped when invalidating "foo". Rejects empty agentKey
+// to guard against accidental wildcard wipes.
+func matchAgentCacheKey(cacheKey, agentKey string) bool {
+	if agentKey == "" {
+		return false
+	}
+	if cacheKey == agentKey {
+		return true
+	}
+	// Find the last ":" segment boundary — tenant-scoped keys use "tenant:key".
+	for i := len(cacheKey) - 1; i >= 0; i-- {
+		if cacheKey[i] == ':' {
+			return cacheKey[i+1:] == agentKey
+		}
+	}
+	return false
+}
+
 // Remove removes an agent from the router.
-// Matches both plain and tenant-scoped keys (same as InvalidateAgent).
+// Matches both plain and tenant-scoped keys via exact-segment match.
 func (r *Router) Remove(agentID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	suffix := ":" + agentID
 	for key := range r.agents {
-		if key == agentID || strings.HasSuffix(key, suffix) {
+		if matchAgentCacheKey(key, agentID) {
 			delete(r.agents, key)
 		}
 	}
@@ -164,14 +200,36 @@ func (r *Router) ListInfo() []AgentInfo {
 	return infos
 }
 
-// IsRunning checks if a specific agent is currently running (cached in router).
-func (r *Router) IsRunning(agentID string) bool {
+// IsRunning checks if a specific agent is currently running (cached in
+// router). Ctx carries tenant scope — without it, a bare lookup returns false
+// in tenant-scoped deployments because cache keys are stored as
+// `tenantID:agentKey` after resolution.
+func (r *Router) IsRunning(ctx context.Context, agentID string) bool {
+	cacheKey := agentCacheKey(ctx, agentID)
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	if entry, ok := r.agents[agentID]; ok {
+	if entry, ok := r.agents[cacheKey]; ok {
 		return entry.agent.IsRunning()
 	}
 	return false
+}
+
+// GetCached returns a cached agent without invoking the resolver. Used by
+// cache-aware helpers that want to avoid a DB roundtrip on the hot path.
+// Returns (nil, false) on miss or when the entry has exceeded TTL.
+// Does NOT trigger resolver fallback — call Router.Get() for that path.
+func (r *Router) GetCached(ctx context.Context, agentID string) (Agent, bool) {
+	cacheKey := agentCacheKey(ctx, agentID)
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	entry, ok := r.agents[cacheKey]
+	if !ok {
+		return nil, false
+	}
+	if r.ttl > 0 && time.Since(entry.cachedAt) >= r.ttl {
+		return nil, false
+	}
+	return entry.agent, true
 }
 
 // --- Active Run Tracking (matching TS chat-abort.ts) ---

@@ -16,7 +16,10 @@ func (s *PGMemoryStore) Search(ctx context.Context, query string, agentID, userI
 		maxResults = s.cfg.MaxResults
 	}
 
-	aid := mustParseUUID(agentID)
+	aid, err := parseUUID(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("memory search: %w", err)
+	}
 
 	// FTS search using tsvector
 	ftsResults, err := s.ftsSearch(ctx, query, aid, userID, maxResults*2)

@@ -206,13 +206,24 @@ func sessionFileExists(workDir string, sessionID uuid.UUID) bool {
 	return err == nil
 }
 
-// buildStreamJSONInput creates stream-json stdin for vision (images + text).
+// buildStreamJSONInput creates stream-json stdin for multimodal input
+// (images/documents + text). The content block type is chosen from MIME:
+//   - application/pdf → "document" (Anthropic PDF support, Claude 3.5+)
+//   - image/*         → "image"
+//
+// MIME types that fit neither are emitted as "image" for backwards
+// compatibility; the upstream Anthropic API will reject them explicitly
+// rather than silently misroute.
 func buildStreamJSONInput(text string, images []ImageContent) *bytes.Reader {
 	var contentBlocks []map[string]any
 
 	for _, img := range images {
+		blockType := "image"
+		if img.MimeType == "application/pdf" {
+			blockType = "document"
+		}
 		contentBlocks = append(contentBlocks, map[string]any{
-			"type": "image",
+			"type": blockType,
 			"source": map[string]any{
 				"type":       "base64",
 				"media_type": img.MimeType,

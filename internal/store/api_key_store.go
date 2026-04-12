@@ -29,6 +29,13 @@ type APIKeyStore interface {
 	// Create inserts a new API key.
 	Create(ctx context.Context, key *APIKeyData) error
 
+	// Get looks up an API key by its ID. Unlike GetByHash, this does NOT
+	// filter on revoked/expired state — used by admin handlers that need to
+	// verify ownership before revoke/delete. Returns sql.ErrNoRows when the
+	// key does not exist. No tenant scoping is applied at store level —
+	// callers must enforce their own ownership rules.
+	Get(ctx context.Context, id uuid.UUID) (*APIKeyData, error)
+
 	// GetByHash looks up an active (non-revoked, non-expired) key by its SHA-256 hash.
 	GetByHash(ctx context.Context, keyHash string) (*APIKeyData, error)
 
@@ -37,9 +44,6 @@ type APIKeyStore interface {
 
 	// Revoke marks a key as revoked. If ownerID is non-empty, also enforces owner_id = ownerID.
 	Revoke(ctx context.Context, id uuid.UUID, ownerID string) error
-
-	// Delete permanently removes a key. If ownerID is non-empty, also enforces owner_id = ownerID.
-	Delete(ctx context.Context, id uuid.UUID, ownerID string) error
 
 	// TouchLastUsed updates the last_used_at timestamp.
 	TouchLastUsed(ctx context.Context, id uuid.UUID) error

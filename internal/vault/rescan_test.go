@@ -127,6 +127,11 @@ func TestInferVaultDocType(t *testing.T) {
 		{"web-fetch/page.html", "note"},
 		{"skills/my-skill/SKILL.md", "skill"},
 		{"deep/soul.md", "context"},
+		// Phase 01 — new `document` docType for office/PDF files.
+		{"docs/spec.pdf", "document"},
+		{"docs/sheet.xlsx", "document"},
+		{"docs/slide.pptx", "document"},
+		{"docs/memo.docx", "document"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
@@ -135,6 +140,41 @@ func TestInferVaultDocType(t *testing.T) {
 				t.Errorf("InferDocType(%q) = %q, want %q", tt.path, got, tt.docType)
 			}
 		})
+	}
+}
+
+// TestInferDocType_PathPrefixWinsOverExt ensures path-prefix rules
+// (memory/, skills/, episodic/, SOUL/IDENTITY/AGENTS) take precedence
+// over extension-based classification. Phase 01 refactor must preserve
+// this ordering after introducing the extension whitelist fallback.
+func TestInferDocType_PathPrefixWinsOverExt(t *testing.T) {
+	cases := []struct {
+		path string
+		want string
+	}{
+		// Path prefix rules — trump extension
+		{"memory/foo.md", "memory"},
+		{"memory/snapshots/day.md", "memory"},
+		{"skills/my-skill/README.md", "skill"},
+		{"skills/foo/skill.md", "skill"},
+		{"episodic/2024-01-01.json", "episodic"},
+		{"path/to/SOUL.md", "context"},
+		{"path/to/IDENTITY.md", "context"},
+		{"path/to/AGENTS.md", "context"},
+		// Extension fallback (whitelist) — no path-prefix match
+		{"notes/daily.md", "note"},
+		{"photos/cat.png", "media"},
+		{"videos/clip.mp4", "media"},
+		{"audio/voice.mp3", "media"},
+		{"docs/spec.pdf", "document"},
+		// Unknown / non-whitelisted → note (default)
+		{"data/file", "note"},
+		{"binaries/tool.exe", "note"},
+	}
+	for _, c := range cases {
+		if got := InferDocType(c.path); got != c.want {
+			t.Errorf("InferDocType(%q) = %q; want %q", c.path, got, c.want)
+		}
 	}
 }
 

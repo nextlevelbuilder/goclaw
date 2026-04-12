@@ -11,6 +11,7 @@ export const VAULT_TYPE_COLORS: Record<string, string> = {
   skill: "#22c55e",    // green
   episodic: "#f59e0b", // amber
   media: "#ec4899",    // pink (dominant, soft)
+  document: "#06b6d4", // cyan (Phase 01: PDF/office — distinct from media)
 };
 const DEFAULT_COLOR = "#9ca3af";
 

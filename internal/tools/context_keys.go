@@ -190,25 +190,94 @@ func RunKindFromCtx(ctx context.Context) string {
 // Leader agents in this mode can only relay status — mutations are blocked.
 const RunKindNotification = "notification"
 
-// --- Builtin tool settings (global DB overrides) ---
+// --- Builtin tool settings (3-tier overlay, tier-1 reserved) ---
+//
+// Tool config resolution order (most specific wins):
+//   1. (reserved — future per-agent override)
+//   2. Tenant override   (builtin_tool_tenant_configs.settings, via WithTenantToolSettings)
+//   3. Global default    (builtin_tools.settings, via WithBuiltinToolSettings — resolver-loaded)
+//   4. Hardcoded         (tool internal default when the map has no entry)
+//
+// `WithBuiltinToolSettings` carries the resolver-loaded global defaults (tier 3).
+// If per-agent overrides are added later, they can share this ctx key (same map) or
+// introduce a dedicated key — the merge function's precedence (builtin ctx key wins
+// over tenant) already reflects "more specific wins".
+//
+// Merge happens at tool-name level: if both tiers define `web_search`, the builtin
+// ctx-key value wins wholesale (no field-level deep merge inside the JSON blob).
 
-const ctxBuiltinToolSettings toolContextKey = "tool_builtin_settings"
+const (
+	ctxBuiltinToolSettings toolContextKey = "tool_builtin_settings"
+	ctxTenantToolSettings  toolContextKey = "tool_tenant_settings"
+)
 
 // BuiltinToolSettings maps tool name → settings JSON bytes.
 type BuiltinToolSettings map[string][]byte
 
+// WithBuiltinToolSettings injects the per-agent + global tool settings map.
+// Tier 1 + tier 3 in the overlay (coalesced by the resolver).
 func WithBuiltinToolSettings(ctx context.Context, settings BuiltinToolSettings) context.Context {
 	return context.WithValue(ctx, ctxBuiltinToolSettings, settings)
 }
 
+// WithTenantToolSettings injects the tenant-layer tool settings map (tier 2).
+// Loaded by the resolver via BuiltinToolTenantConfigStore.ListAllSettings.
+func WithTenantToolSettings(ctx context.Context, settings BuiltinToolSettings) context.Context {
+	return context.WithValue(ctx, ctxTenantToolSettings, settings)
+}
+
+// TenantToolSettingsFromCtx returns the raw tenant-layer map without merging.
+// Use BuiltinToolSettingsFromCtx for the merged view that tools should read.
+func TenantToolSettingsFromCtx(ctx context.Context) BuiltinToolSettings {
+	v, _ := ctx.Value(ctxTenantToolSettings).(BuiltinToolSettings)
+	return v
+}
+
+// BuiltinToolSettingsFromCtx returns the merged tool settings view.
+//
+// Merge semantics (current wiring — tier 1 per-agent override not yet loaded):
+//   - `WithBuiltinToolSettings` carries tier 3 (global defaults)
+//   - `WithTenantToolSettings`  carries tier 2 (tenant admin override)
+//   - Tenant wins over global at tool-name level (no field-level deep merge)
+//
+// When a future phase adds tier 1 (per-agent override), it will either
+// introduce a third ctx key that outranks both, OR the resolver will merge
+// tier 1 into the builtin-ctx-key map before injection. In the latter case,
+// semantics remain correct so long as tier 1 is layered ABOVE tenant — the
+// resolver will need a split then.
+//
+// Fast paths: single-tier or empty merge returns the underlying map directly
+// with zero allocations. Merge only runs when BOTH layers have entries.
 func BuiltinToolSettingsFromCtx(ctx context.Context) BuiltinToolSettings {
-	if v, _ := ctx.Value(ctxBuiltinToolSettings).(BuiltinToolSettings); v != nil {
-		return v
+	global, _ := ctx.Value(ctxBuiltinToolSettings).(BuiltinToolSettings)
+	tenant, _ := ctx.Value(ctxTenantToolSettings).(BuiltinToolSettings)
+
+	if len(global) == 0 && len(tenant) == 0 {
+		// RunContext fallback (existing behavior — subagent runs inherit
+		// parent's BuiltinToolSettings through RunContext serialization).
+		if rc := store.RunContextFromCtx(ctx); rc != nil && rc.BuiltinToolSettings != nil {
+			return BuiltinToolSettings(rc.BuiltinToolSettings)
+		}
+		return nil
 	}
-	if rc := store.RunContextFromCtx(ctx); rc != nil {
-		return BuiltinToolSettings(rc.BuiltinToolSettings)
+
+	// Fast paths — no allocation when only one tier is active.
+	if len(tenant) == 0 {
+		return global
 	}
-	return nil
+	if len(global) == 0 {
+		return tenant
+	}
+
+	// Both tiers present: layer tenant override on top of global defaults.
+	merged := make(BuiltinToolSettings, len(global)+len(tenant))
+	for k, v := range global {
+		merged[k] = v
+	}
+	for k, v := range tenant {
+		merged[k] = v
+	}
+	return merged
 }
 
 // --- Per-agent restrict_to_workspace override ---
@@ -368,6 +437,29 @@ func TeamTaskIDFromCtx(ctx context.Context) string {
 	}
 	if rc := store.RunContextFromCtx(ctx); rc != nil {
 		return rc.TeamTaskID
+	}
+	return ""
+}
+
+// --- Delegation ID propagation (delegate_tool → vault_interceptor) ---
+
+const ctxDelegationID toolContextKey = "tool_delegation_id"
+
+// WithDelegationID injects the delegation identifier into context so vault
+// documents created during the delegated task can be tagged in metadata for
+// Phase 05 auto-linking.
+func WithDelegationID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, ctxDelegationID, id)
+}
+
+// DelegationIDFromCtx returns the active delegation ID. Falls back to
+// RunContext when no explicit context key is present.
+func DelegationIDFromCtx(ctx context.Context) string {
+	if v, _ := ctx.Value(ctxDelegationID).(string); v != "" {
+		return v
+	}
+	if rc := store.RunContextFromCtx(ctx); rc != nil {
+		return rc.DelegationID
 	}
 	return ""
 }

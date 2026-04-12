@@ -2,6 +2,7 @@ package pg
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -35,7 +36,10 @@ func (s *PGMemoryStore) ListAllDocumentsGlobal(ctx context.Context) ([]store.Doc
 
 // ListAllDocuments returns all documents for an agent across all users (global + personal).
 func (s *PGMemoryStore) ListAllDocuments(ctx context.Context, agentID string) ([]store.DocumentInfo, error) {
-	aid := mustParseUUID(agentID)
+	aid, err := parseUUID(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("memory list all documents: %w", err)
+	}
 	tc, tcArgs, _, err := scopeClause(ctx, 2)
 	if err != nil {
 		return nil, err
@@ -57,7 +61,10 @@ func (s *PGMemoryStore) ListAllDocuments(ctx context.Context, agentID string) ([
 
 // GetDocumentDetail returns full document info with chunk and embedding counts.
 func (s *PGMemoryStore) GetDocumentDetail(ctx context.Context, agentID, userID, path string) (*store.DocumentDetail, error) {
-	aid := mustParseUUID(agentID)
+	aid, err := parseUUID(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("memory get document detail: %w", err)
+	}
 
 	var q string
 	var args []any
@@ -99,7 +106,10 @@ func (s *PGMemoryStore) GetDocumentDetail(ctx context.Context, agentID, userID, 
 
 // ListChunks returns chunks for a document identified by agent, user, and path.
 func (s *PGMemoryStore) ListChunks(ctx context.Context, agentID, userID, path string) ([]store.ChunkInfo, error) {
-	aid := mustParseUUID(agentID)
+	aid, err := parseUUID(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("memory list chunks: %w", err)
+	}
 
 	var q string
 	var args []any

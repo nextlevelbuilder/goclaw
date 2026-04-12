@@ -16,12 +16,25 @@ import (
 type mockAPIKeyStore struct {
 	mu        sync.Mutex
 	keys      map[string]*store.APIKeyData // hash → key
-	calls     int                          // GetByHash call count
-	touchedID uuid.UUID                    // last TouchLastUsed ID
+	byID      map[uuid.UUID]*store.APIKeyData
+	calls     int       // GetByHash call count
+	touchedID uuid.UUID // last TouchLastUsed ID
 }
 
 func newMockAPIKeyStore() *mockAPIKeyStore {
-	return &mockAPIKeyStore{keys: make(map[string]*store.APIKeyData)}
+	return &mockAPIKeyStore{
+		keys: make(map[string]*store.APIKeyData),
+		byID: make(map[uuid.UUID]*store.APIKeyData),
+	}
+}
+
+func (m *mockAPIKeyStore) Get(_ context.Context, id uuid.UUID) (*store.APIKeyData, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if k, ok := m.byID[id]; ok {
+		return k, nil
+	}
+	return nil, nil
 }
 
 func (m *mockAPIKeyStore) GetByHash(_ context.Context, hash string) (*store.APIKeyData, error) {
@@ -46,7 +59,6 @@ func (m *mockAPIKeyStore) List(_ context.Context, _ string) ([]store.APIKeyData,
 	return nil, nil
 }
 func (m *mockAPIKeyStore) Revoke(_ context.Context, _ uuid.UUID, _ string) error { return nil }
-func (m *mockAPIKeyStore) Delete(_ context.Context, _ uuid.UUID, _ string) error { return nil }
 
 func (m *mockAPIKeyStore) getCalls() int {
 	m.mu.Lock()

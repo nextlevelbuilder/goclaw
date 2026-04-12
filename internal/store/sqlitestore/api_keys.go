@@ -41,6 +41,52 @@ func (s *SQLiteAPIKeyStore) Create(ctx context.Context, key *store.APIKeyData) e
 	return err
 }
 
+// Get fetches a key by ID without revoked/expired filtering. No tenant scoping
+// at store layer — callers must enforce their own ownership rules.
+func (s *SQLiteAPIKeyStore) Get(ctx context.Context, id uuid.UUID) (*store.APIKeyData, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT id, name, prefix, key_hash, scopes, owner_id, tenant_id, expires_at, last_used_at, revoked, created_by, created_at, updated_at
+		 FROM api_keys
+		 WHERE id = ?`,
+		id,
+	)
+
+	var k store.APIKeyData
+	var createdBy *string
+	var ownerID *string
+	var tenantID *uuid.UUID
+	var scopesRaw []byte
+	var expiresAt, lastUsedAt nullSqliteTime
+	createdAt, updatedAt := scanTimePair()
+	err := row.Scan(
+		&k.ID, &k.Name, &k.Prefix, &k.KeyHash, &scopesRaw,
+		&ownerID, &tenantID, &expiresAt, &lastUsedAt, &k.Revoked, &createdBy,
+		createdAt, updatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	k.CreatedAt = createdAt.Time
+	k.UpdatedAt = updatedAt.Time
+	if expiresAt.Valid {
+		k.ExpiresAt = &expiresAt.Time
+	}
+	if lastUsedAt.Valid {
+		k.LastUsedAt = &lastUsedAt.Time
+	}
+	scanJSONStringArray(scopesRaw, &k.Scopes)
+	if createdBy != nil {
+		k.CreatedBy = *createdBy
+	}
+	if ownerID != nil {
+		k.OwnerID = *ownerID
+	}
+	if tenantID != nil {
+		k.TenantID = *tenantID
+	}
+	return &k, nil
+}
+
 func (s *SQLiteAPIKeyStore) GetByHash(ctx context.Context, keyHash string) (*store.APIKeyData, error) {
 	row := s.db.QueryRowContext(ctx,
 		`SELECT id, name, prefix, key_hash, scopes, owner_id, tenant_id, expires_at, last_used_at, revoked, created_by, created_at, updated_at
@@ -161,33 +207,6 @@ func (s *SQLiteAPIKeyStore) List(ctx context.Context, ownerID string) ([]store.A
 func (s *SQLiteAPIKeyStore) Revoke(ctx context.Context, id uuid.UUID, ownerID string) error {
 	q := "UPDATE api_keys SET revoked = 1, updated_at = ? WHERE id = ?"
 	args := []any{time.Now(), id}
-
-	if ownerID != "" {
-		q += " AND owner_id = ?"
-		args = append(args, ownerID)
-	}
-	if !store.IsCrossTenant(ctx) {
-		tid := store.TenantIDFromContext(ctx)
-		if tid != uuid.Nil {
-			q += " AND (tenant_id = ? OR tenant_id IS NULL)"
-			args = append(args, tid)
-		}
-	}
-
-	res, err := s.db.ExecContext(ctx, q, args...)
-	if err != nil {
-		return err
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return sql.ErrNoRows
-	}
-	return nil
-}
-
-func (s *SQLiteAPIKeyStore) Delete(ctx context.Context, id uuid.UUID, ownerID string) error {
-	q := "DELETE FROM api_keys WHERE id = ?"
-	args := []any{id}
 
 	if ownerID != "" {
 		q += " AND owner_id = ?"

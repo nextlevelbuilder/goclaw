@@ -79,6 +79,15 @@ func (v *VaultInterceptor) AfterWrite(ctx context.Context, resolvedPath, content
 		DocType:     docType,
 		ContentHash: hash,
 	}
+	// Phase 05: tag with delegation_id when write happens inside a delegated
+	// task so Phase 2.6 auto-linking can sibling-link the docs later.
+	if delegID := DelegationIDFromCtx(ctx); delegID != "" {
+		if doc.Metadata == nil {
+			doc.Metadata = make(map[string]any)
+		}
+		doc.Metadata["delegation_id"] = delegID
+		doc.Metadata["created_in"] = "delegation"
+	}
 	if err := v.vaultStore.UpsertDocument(ctx, doc); err != nil {
 		slog.Warn("vault.after_write", "path", relPath, "err", err)
 		return
@@ -142,6 +151,15 @@ func (v *VaultInterceptor) AfterWriteMedia(ctx context.Context, resolvedPath, su
 		eventAgentID = agentID
 	}
 
+	// Build metadata carefully: mime_type always set, plus optional
+	// delegation_id / created_in when running inside a delegation.
+	// Using explicit assignment preserves any future caller-supplied keys
+	// added via a metadata-capable variant — red-team concern #18.
+	meta := map[string]any{"mime_type": mimeType}
+	if delegID := DelegationIDFromCtx(ctx); delegID != "" {
+		meta["delegation_id"] = delegID
+		meta["created_in"] = "delegation"
+	}
 	doc := &store.VaultDocument{
 		TenantID:    tenantID,
 		AgentID:     agentIDPtr,
@@ -152,7 +170,7 @@ func (v *VaultInterceptor) AfterWriteMedia(ctx context.Context, resolvedPath, su
 		DocType:     "media",
 		ContentHash: hash,
 		Summary:     summary,
-		Metadata:    map[string]any{"mime_type": mimeType},
+		Metadata:    meta,
 	}
 	if err := v.vaultStore.UpsertDocument(ctx, doc); err != nil {
 		slog.Warn("vault.after_write_media", "path", relPath, "err", err)

@@ -131,11 +131,7 @@ func setupToolRegistry(
 	}
 
 	// Web tools (web_search + web_fetch)
-	webSearchTool := tools.NewWebSearchTool(tools.WebSearchConfig{
-		BraveEnabled: cfg.Tools.Web.Brave.Enabled,
-		BraveAPIKey:  cfg.Tools.Web.Brave.APIKey,
-		DDGEnabled:   cfg.Tools.Web.DuckDuckGo.Enabled,
-	})
+	webSearchTool := tools.NewWebSearchTool(tools.WebSearchConfigFromConfig(cfg))
 	if webSearchTool != nil {
 		toolsReg.Register(webSearchTool)
 		slog.Info("web_search tool enabled")

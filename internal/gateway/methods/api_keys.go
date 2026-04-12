@@ -163,6 +163,14 @@ func (m *APIKeysMethods) handleCreate(ctx context.Context, client *gateway.Clien
 	}))
 }
 
+// handleRevoke revokes an API key after verifying ownership.
+//
+// Phase 0b hotfix: store-layer Revoke SQL matches on
+// `tenant_id = $N OR tenant_id IS NULL`, which previously allowed any
+// tenant admin to revoke system-level (NULL-tenant) API keys. The fix
+// pre-fetches the key and enforces strict tenant match for non-owner
+// callers. Non-admin callers continue to use the ownerID filter path
+// (unchanged behaviour for personal keys).
 func (m *APIKeysMethods) handleRevoke(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	locale := store.LocaleFromContext(ctx)
 
@@ -182,10 +190,38 @@ func (m *APIKeysMethods) handleRevoke(ctx context.Context, client *gateway.Clien
 		return
 	}
 
-	// Non-admin callers can only revoke their own keys.
+	// Non-admin callers can only revoke their own keys — personal-key path,
+	// ownerID filter enforced by the store layer.
 	ownerID := ""
 	if !permissions.HasMinRole(client.Role(), permissions.RoleAdmin) {
 		ownerID = client.UserID()
+	}
+
+	// Admin path: verify the target key belongs to the caller's tenant (or
+	// caller is a system owner) before revoking. Personal-key path skips
+	// this because the ownerID filter already scopes to the caller.
+	//
+	// NOTE: Use client.IsOwner() — NOT store.IsOwnerRole(ctx). The WS router
+	// does not inject role into ctx (see router.go handleRequest), so the
+	// ctx-based helper is dead here. Client carries the authoritative role
+	// from connect.
+	if ownerID == "" && !client.IsOwner() {
+		key, gerr := m.apiKeys.Get(ctx, id)
+		if gerr != nil || key == nil {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "API key", params.ID)))
+			return
+		}
+		callerTID := store.TenantIDFromContext(ctx)
+		if key.TenantID == uuid.Nil || key.TenantID != callerTID {
+			slog.Warn("security.api_key_revoke_forbidden",
+				"key_id", params.ID,
+				"caller_tenant", callerTID,
+				"key_tenant", key.TenantID,
+				"user_id", client.UserID(),
+			)
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgPermissionDenied, "API key")))
+			return
+		}
 	}
 
 	if err := m.apiKeys.Revoke(ctx, id, ownerID); err != nil {

@@ -13,9 +13,18 @@ import (
 )
 
 func (s *PGKnowledgeGraphStore) UpsertRelation(ctx context.Context, relation *store.Relation) error {
-	aid := mustParseUUID(relation.AgentID)
-	src := mustParseUUID(relation.SourceEntityID)
-	tgt := mustParseUUID(relation.TargetEntityID)
+	aid, err := parseUUID(relation.AgentID)
+	if err != nil {
+		return fmt.Errorf("kg upsert relation: agent: %w", err)
+	}
+	src, err := parseUUID(relation.SourceEntityID)
+	if err != nil {
+		return fmt.Errorf("kg upsert relation: source: %w", err)
+	}
+	tgt, err := parseUUID(relation.TargetEntityID)
+	if err != nil {
+		return fmt.Errorf("kg upsert relation: target: %w", err)
+	}
 	props, err := json.Marshal(relation.Properties)
 	if err != nil {
 		props = []byte("{}")
@@ -37,8 +46,14 @@ func (s *PGKnowledgeGraphStore) UpsertRelation(ctx context.Context, relation *st
 }
 
 func (s *PGKnowledgeGraphStore) DeleteRelation(ctx context.Context, agentID, userID, relationID string) error {
-	aid := mustParseUUID(agentID)
-	rid := mustParseUUID(relationID)
+	aid, err := parseUUID(agentID)
+	if err != nil {
+		return fmt.Errorf("kg delete relation: agent: %w", err)
+	}
+	rid, err := parseUUID(relationID)
+	if err != nil {
+		return fmt.Errorf("kg delete relation: id: %w", err)
+	}
 	if store.IsSharedKG(ctx) {
 		tc, tcArgs, _, err := scopeClause(ctx, 3)
 		if err != nil {
@@ -62,8 +77,14 @@ func (s *PGKnowledgeGraphStore) DeleteRelation(ctx context.Context, agentID, use
 }
 
 func (s *PGKnowledgeGraphStore) ListRelations(ctx context.Context, agentID, userID, entityID string) ([]store.Relation, error) {
-	aid := mustParseUUID(agentID)
-	eid := mustParseUUID(entityID)
+	aid, err := parseUUID(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("kg list relations: agent: %w", err)
+	}
+	eid, err := parseUUID(entityID)
+	if err != nil {
+		return nil, fmt.Errorf("kg list relations: entity: %w", err)
+	}
 
 	var q string
 	var args []any
@@ -105,7 +126,10 @@ func (s *PGKnowledgeGraphStore) ListRelations(ctx context.Context, agentID, user
 }
 
 func (s *PGKnowledgeGraphStore) ListAllRelations(ctx context.Context, agentID, userID string, limit int) ([]store.Relation, error) {
-	aid := mustParseUUID(agentID)
+	aid, err := parseUUID(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("kg list all relations: %w", err)
+	}
 	if limit <= 0 {
 		limit = 200
 	}
@@ -144,13 +168,16 @@ func (s *PGKnowledgeGraphStore) ListAllRelations(ctx context.Context, agentID, u
 }
 
 func (s *PGKnowledgeGraphStore) IngestExtraction(ctx context.Context, agentID, userID string, entities []store.Entity, relations []store.Relation) ([]string, error) {
+	aid, err := parseUUID(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("kg ingest extraction: agent: %w", err)
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback() //nolint:errcheck
 
-	aid := mustParseUUID(agentID)
 	now := time.Now()
 	tid := tenantIDForInsert(ctx)
 
@@ -252,9 +279,11 @@ func (s *PGKnowledgeGraphStore) IngestExtraction(ctx context.Context, agentID, u
 }
 
 func (s *PGKnowledgeGraphStore) PruneByConfidence(ctx context.Context, agentID, userID string, minConfidence float64) (int, error) {
-	aid := mustParseUUID(agentID)
+	aid, err := parseUUID(agentID)
+	if err != nil {
+		return 0, fmt.Errorf("kg prune: %w", err)
+	}
 	var res sql.Result
-	var err error
 	if store.IsSharedKG(ctx) {
 		tc, tcArgs, _, tcErr := scopeClause(ctx, 3)
 		if tcErr != nil {
@@ -282,7 +311,10 @@ func (s *PGKnowledgeGraphStore) PruneByConfidence(ctx context.Context, agentID, 
 }
 
 func (s *PGKnowledgeGraphStore) Stats(ctx context.Context, agentID, userID string) (*store.GraphStats, error) {
-	aid := mustParseUUID(agentID)
+	aid, err := parseUUID(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("kg stats: %w", err)
+	}
 	stats := &store.GraphStats{EntityTypes: make(map[string]int)}
 
 	userFilter := ""

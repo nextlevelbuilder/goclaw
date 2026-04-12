@@ -85,6 +85,19 @@ func (t *ReadDocumentTool) callProvider(ctx context.Context, cp credentialProvid
 	}
 
 	slog.Info("read_document: using chat API", "provider", providerName, "model", model, "doc_size", len(data))
+
+	opts := map[string]any{
+		"max_tokens":  16384,
+		"temperature": 0.2,
+	}
+	// Scope disable_tools to claude-cli only — it's a CLI-bridge-specific
+	// option that skips loading the built-in MCP toolset for one-shot calls.
+	// Other providers silently ignore unknown keys today, but leaking
+	// provider-specific flags into the shared Options map couples layers.
+	if providerName == "claude-cli" {
+		opts["disable_tools"] = true
+	}
+
 	resp, err := p.Chat(ctx, providers.ChatRequest{
 		Messages: []providers.Message{
 			{
@@ -93,11 +106,8 @@ func (t *ReadDocumentTool) callProvider(ctx context.Context, cp credentialProvid
 				Images:  []providers.ImageContent{{MimeType: mime, Data: base64.StdEncoding.EncodeToString(data)}},
 			},
 		},
-		Model: model,
-		Options: map[string]any{
-			"max_tokens":  16384,
-			"temperature": 0.2,
-		},
+		Model:   model,
+		Options: opts,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("chat call: %w", err)

@@ -287,6 +287,24 @@ func IsOwnerRole(ctx context.Context) bool {
 	return RoleFromContext(ctx) == string(RoleOwner)
 }
 
+// IsMasterScope reports whether ctx should be treated as master-scope:
+//
+//	(a) system owner role (IsOwnerRole bypass-all), or
+//	(b) tenant id is unset (uuid.Nil — legacy / system callers), or
+//	(c) tenant id equals MasterTenantID.
+//
+// Used by both WS config.* methods and HTTP admin routes that write to
+// global (non-tenant-scoped) tables or execute server-wide side effects
+// (shell, filesystem). Centralises the Phase 1 / Phase 0b hotfix rule
+// so every layer shares one predicate — no drift.
+func IsMasterScope(ctx context.Context) bool {
+	if IsOwnerRole(ctx) {
+		return true
+	}
+	tid := TenantIDFromContext(ctx)
+	return tid == uuid.Nil || tid == MasterTenantID
+}
+
 // RoleOwner is the owner role constant for context checks.
 // Must match permissions.RoleOwner.
 const RoleOwner = "owner"

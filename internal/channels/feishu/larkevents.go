@@ -45,6 +45,12 @@ type EventMessage struct {
 	MessageID   string         `json:"message_id"`
 	RootID      string         `json:"root_id"`
 	ParentID    string         `json:"parent_id"`
+	// ThreadID is the definitive "this message lives inside a thread" signal
+	// per Lark docs. Unlike RootID (which is populated on ANY reply — including
+	// plain quote replies), ThreadID is only present when the message is in an
+	// actual topic thread. Used to decide whether to reply via the reply
+	// endpoint with reply_in_thread=true.
+	ThreadID    string         `json:"thread_id"`
 	ChatID      string         `json:"chat_id"`
 	ChatType    string         `json:"chat_type"`
 	MessageType string         `json:"message_type"`

@@ -5,15 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-
-	"github.com/google/uuid"
-	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -42,7 +41,8 @@ type EnrichWorkerDeps struct {
 	Provider   providers.Provider
 	Model      string
 	EventBus   eventbus.DomainEventBus
-	MsgBus     bus.EventPublisher // for WS event broadcast
+	MsgBus     bus.EventPublisher        // for WS event broadcast
+	TeamStore  store.TaskCommentStore    // for Phase 2.5 task-based auto-linking (nil-safe)
 }
 
 // RegisterEnrichWorker subscribes the enrichment worker to vault doc events.
@@ -50,12 +50,13 @@ type EnrichWorkerDeps struct {
 func RegisterEnrichWorker(deps EnrichWorkerDeps) (func(), *EnrichProgress) {
 	progress := NewEnrichProgress(deps.MsgBus)
 	w := &enrichWorker{
-		vault:    deps.VaultStore,
-		provider: deps.Provider,
-		model:    deps.Model,
-		dedup:    make(map[string]string),
-		sem:      semaphore.NewWeighted(enrichMaxConcurrent),
-		progress: progress,
+		vault:     deps.VaultStore,
+		teamStore: deps.TeamStore,
+		provider:  deps.Provider,
+		model:     deps.Model,
+		dedup:     make(map[string]string),
+		sem:       semaphore.NewWeighted(enrichMaxConcurrent),
+		progress:  progress,
 	}
 	unsub := deps.EventBus.Subscribe(eventbus.EventVaultDocUpserted, w.Handle)
 	return unsub, progress
@@ -64,17 +65,30 @@ func RegisterEnrichWorker(deps EnrichWorkerDeps) (func(), *EnrichProgress) {
 // enrichWorker processes vault document upsert events to generate summaries,
 // embeddings, and semantic links between related documents.
 type enrichWorker struct {
-	vault    store.VaultStore
-	provider providers.Provider
-	model    string
-	queue    enrichBatchQueue
-	progress *EnrichProgress
+	vault     store.VaultStore
+	teamStore store.TaskCommentStore // nil-tolerant — Phase 2.5 disabled when nil
+	provider  providers.Provider
+	model     string
+	queue     enrichBatchQueue
+	progress  *EnrichProgress
 
 	// Bounded dedup: docID → content_hash. Prevents re-processing unchanged files.
 	dedupMu sync.Mutex
 	dedup   map[string]string
 	sem     *semaphore.Weighted // limits concurrent LLM summarize calls
 }
+
+// enrichTaskSiblingCap bounds the number of auto-linked siblings per
+// (source_doc × task) pair. Tunable via VAULT_TASK_SIBLING_CAP env var so
+// operators can raise/lower without a rebuild.
+var enrichTaskSiblingCap = func() int {
+	if v := os.Getenv("VAULT_TASK_SIBLING_CAP"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 9
+}()
 
 // Handle is the EventBus handler for vault.doc_upserted events.
 func (w *enrichWorker) Handle(ctx context.Context, event eventbus.DomainEvent) error {
@@ -118,26 +132,20 @@ type enriched struct {
 // Items are chunked into enrichBatchSize groups so bulk rescan doesn't
 // overwhelm the LLM provider with hundreds of concurrent requests.
 func (w *enrichWorker) processBatch(ctx context.Context, key string) {
+	w.progress.TrackBatch()
 	var totalQueued int
 
 	for {
 		items := w.queue.Drain(key)
 		if len(items) == 0 {
 			if w.queue.TryFinish(key) {
-				if totalQueued > 0 {
-					w.progress.Finish()
-				}
+				w.progress.MarkBatchDone()
 				return
 			}
 			continue
 		}
 
 		totalQueued += len(items)
-		tenantID := uuid.Nil
-		if len(items) > 0 {
-			tenantID, _ = uuid.Parse(items[0].TenantID)
-		}
-		w.progress.Start(totalQueued, tenantID)
 
 		// Process in chunks of enrichBatchSize, up to enrichMaxConcurrent in parallel.
 		var wg sync.WaitGroup
@@ -157,7 +165,7 @@ func (w *enrichWorker) processBatch(ctx context.Context, key string) {
 		wg.Wait()
 
 		if w.queue.TryFinish(key) {
-			w.progress.Finish()
+			w.progress.MarkBatchDone()
 			return
 		}
 	}
@@ -208,12 +216,24 @@ func (w *enrichWorker) processChunk(ctx context.Context, items []eventbus.VaultD
 	var all []prepared
 	for _, item := range pending {
 		existing := docMap[item.DocID]
+		// Preceding short-circuit: existing non-empty summary wins. This
+		// protects LLM- or user-authored summaries from being clobbered by
+		// the deterministic synthesizer below on subsequent rescans. Phase 6
+		// idempotent embedding relies on this stability.
 		if existing != nil && existing.Summary != "" {
 			all = append(all, prepared{payload: item, summary: existing.Summary, title: existing.Title})
 			continue
 		}
-		if existing != nil && existing.DocType == "media" {
-			all = append(all, prepared{payload: item, title: existing.Title})
+		// Phase 02: deterministic pseudo-summary for media + new `document`
+		// docType. Pure function — no file read, no LLM, works for any binary.
+		if existing != nil && (existing.DocType == "media" || existing.DocType == "document") {
+			mime, _ := existing.Metadata["mime_type"].(string)
+			summary := SynthesizeMediaSummary(existing.Path, mime)
+			all = append(all, prepared{
+				payload: item,
+				title:   existing.Title,
+				summary: summary,
+			})
 			continue
 		}
 
@@ -266,14 +286,41 @@ func (w *enrichWorker) processChunk(ctx context.Context, items []eventbus.VaultD
 	}
 
 	// Phase 2 — Embed: update summary + embed per doc.
+	// Idempotent for media/document: if content hash and synthesized summary
+	// are unchanged AND non-empty, skip the DB write + embedding call. Text
+	// docs still re-embed every tick since their summary is LLM-generated.
 	var embedded []enriched
 	for _, r := range results {
+		existing := docMap[r.payload.DocID]
+		if existing != nil &&
+			(existing.DocType == "media" || existing.DocType == "document") &&
+			existing.ContentHash == r.payload.ContentHash &&
+			existing.Summary == r.summary &&
+			r.summary != "" {
+			slog.Debug("vault.enrich: skip_reembed_unchanged",
+				"doc", r.payload.DocID,
+				"doc_type", existing.DocType)
+			embedded = append(embedded, r)
+			continue
+		}
 		if err := w.vault.UpdateSummaryAndReembed(ctx, r.payload.TenantID, r.payload.DocID, r.summary); err != nil {
 			slog.Warn("vault.enrich: update_summary", "doc", r.payload.DocID, "err", err)
 			continue
 		}
 		embedded = append(embedded, r)
 	}
+
+	// Phase 2.5 — Task-based auto-linking (deterministic, no LLM).
+	// Runs BEFORE classify so the dedicated link_type `task_attachment`
+	// (outside validClassifyTypes) survives DeleteDocLinksByTypes.
+	// Piggybacks on docMap from Phase 0 — O(n) basename collection, one
+	// batched query to BatchGetTaskSiblingsByBasenames, one batched
+	// CreateLinks call. Nil-tolerant: disabled when teamStore is nil.
+	w.phase25TaskLinking(ctx, embedded, docMap)
+
+	// Phase 2.6 — Delegation-based auto-linking (deterministic, no LLM).
+	// Same invariants as Phase 2.5 but keyed on metadata.delegation_id.
+	w.phase26DelegationLinking(ctx, embedded, docMap)
 
 	// Phase 3 — Classify links for this chunk.
 	if len(embedded) > 0 {
@@ -373,13 +420,15 @@ func (w *enrichWorker) chatWithRetry(ctx context.Context, logPrefix string, req 
 }
 
 // syncWikilinks extracts [[wikilinks]] from document content and syncs them as vault links.
-// Skips binary/media files to avoid parsing garbage data as wikilinks.
+// Skips binary/media/document files to avoid parsing garbage data as wikilinks
+// (PDFs and office docs are binary and would produce garbage [[...]] matches
+// while wasting a 4MB read buffer).
 func (w *enrichWorker) syncWikilinks(ctx context.Context, p eventbus.VaultDocUpsertedPayload) {
 	doc, err := w.vault.GetDocumentByID(ctx, p.TenantID, p.DocID)
 	if err != nil || doc == nil {
 		return
 	}
-	if doc.DocType == "media" {
+	if doc.DocType == "media" || doc.DocType == "document" {
 		return
 	}
 

@@ -24,13 +24,16 @@ import (
 )
 
 const (
-	apiBase            = "https://bot-api.zaloplatforms.com"
 	defaultPollTimeout = 30
 	maxTextLength      = 2000
 	defaultMediaMaxMB  = 5
 	pollErrorBackoff   = 5 * time.Second
 	pairingDebounce    = 60 * time.Second
 )
+
+// apiBase is the Zalo Bot API root. Declared as a variable so tests can
+// override it with an httptest.NewServer URL.
+var apiBase = "https://bot-api.zaloplatforms.com"
 
 // Channel connects to the Zalo OA Bot API.
 type Channel struct {

@@ -220,7 +220,7 @@ func processNormalMessage(
 			outMeta["reply_to_message_id"] = mid
 		}
 	}
-	for _, k := range []string{tools.MetaMessageThreadID, "local_key", "placeholder_key", "group_id"} {
+	for _, k := range []string{tools.MetaMessageThreadID, "local_key", "placeholder_key", "group_id", "feishu_reply_target_id"} {
 		if v := msg.Metadata[k]; v != "" {
 			outMeta[k] = v
 		}

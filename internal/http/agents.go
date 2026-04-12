@@ -350,14 +350,13 @@ func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Only owner can update
+	// Tenant admins can update any agent in their tenant (adminMiddleware already
+	// verified RoleAdmin). System owners can update any agent across tenants.
+	// GetByID respects tenant scoping from context, so if the agent is returned
+	// it belongs to the caller's tenant.
 	ag, err := h.agents.GetByID(r.Context(), id)
 	if err != nil {
 		writeError(w, http.StatusNotFound, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "agent", id.String()))
-		return
-	}
-	if userID != "" && ag.OwnerID != userID && !h.isOwnerUser(userID) {
-		writeError(w, http.StatusForbidden, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgOwnerOnly, "update agent"))
 		return
 	}
 
@@ -370,6 +369,18 @@ func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	// Defense-in-depth against column injection via arbitrary JSON keys.
 	allowed := filterAllowedKeys(updates, agentAllowedFields)
 	allowed["restrict_to_workspace"] = true
+
+	// If agent_key is being changed, enforce the slug format. The router
+	// cache uses `tenantID:agentKey` as its canonical key and splits on the
+	// last colon for exact-segment invalidation — a colon inside agent_key
+	// would silently break invalidation. Slug regex already rejects colons
+	// and any other shell/path-unfriendly characters.
+	if newKey, ok := allowed["agent_key"].(string); ok && newKey != "" {
+		if !isValidSlug(newKey) {
+			writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidSlug, "agent_key"))
+			return
+		}
+	}
 
 	// Validate v3 flag values in other_config (must be boolean).
 	if oc, ok := allowed["other_config"]; ok && oc != nil {
@@ -417,8 +428,9 @@ func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.agents.Update(r.Context(), id, allowed); err != nil {
-		slog.Error("agents.update", "id", id, "error", err)
-		writeError(w, http.StatusInternalServerError, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToUpdate, "agent", "internal error"))
+		slog.Error("agents.update", "id", id, "user_id", userID,
+			"tenant_id", store.TenantIDFromContext(r.Context()), "error", err)
+		writeError(w, http.StatusInternalServerError, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToUpdate, "agent", err.Error()))
 		return
 	}
 

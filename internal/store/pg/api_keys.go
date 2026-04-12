@@ -41,6 +41,40 @@ func (s *PGAPIKeyStore) Create(ctx context.Context, key *store.APIKeyData) error
 	return err
 }
 
+// Get fetches a key by ID without revoked/expired filtering. No tenant scoping
+// at store layer — callers must enforce their own ownership rules.
+func (s *PGAPIKeyStore) Get(ctx context.Context, id uuid.UUID) (*store.APIKeyData, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT id, name, prefix, key_hash, scopes, owner_id, tenant_id, expires_at, last_used_at, revoked, created_by, created_at, updated_at
+		 FROM api_keys
+		 WHERE id = $1`,
+		id,
+	)
+
+	var k store.APIKeyData
+	var createdBy *string
+	var ownerID *string
+	var tenantID *uuid.UUID
+	err := row.Scan(
+		&k.ID, &k.Name, &k.Prefix, &k.KeyHash, pq.Array(&k.Scopes),
+		&ownerID, &tenantID, &k.ExpiresAt, &k.LastUsedAt, &k.Revoked, &createdBy,
+		&k.CreatedAt, &k.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if createdBy != nil {
+		k.CreatedBy = *createdBy
+	}
+	if ownerID != nil {
+		k.OwnerID = *ownerID
+	}
+	if tenantID != nil {
+		k.TenantID = *tenantID
+	}
+	return &k, nil
+}
+
 func (s *PGAPIKeyStore) GetByHash(ctx context.Context, keyHash string) (*store.APIKeyData, error) {
 	row := s.db.QueryRowContext(ctx,
 		`SELECT id, name, prefix, key_hash, scopes, owner_id, tenant_id, expires_at, last_used_at, revoked, created_by, created_at, updated_at
@@ -142,35 +176,6 @@ func (s *PGAPIKeyStore) Revoke(ctx context.Context, id uuid.UUID, ownerID string
 	q := "UPDATE api_keys SET revoked = true, updated_at = $1 WHERE id = $2"
 	args := []any{time.Now(), id}
 	argIdx := 3
-
-	if ownerID != "" {
-		q += fmt.Sprintf(" AND owner_id = $%d", argIdx)
-		args = append(args, ownerID)
-		argIdx++
-	}
-	if !store.IsCrossTenant(ctx) {
-		tid := store.TenantIDFromContext(ctx)
-		if tid != uuid.Nil {
-			q += fmt.Sprintf(" AND (tenant_id = $%d OR tenant_id IS NULL)", argIdx)
-			args = append(args, tid)
-		}
-	}
-
-	res, err := s.db.ExecContext(ctx, q, args...)
-	if err != nil {
-		return err
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return sql.ErrNoRows
-	}
-	return nil
-}
-
-func (s *PGAPIKeyStore) Delete(ctx context.Context, id uuid.UUID, ownerID string) error {
-	q := "DELETE FROM api_keys WHERE id = $1"
-	args := []any{id}
-	argIdx := 2
 
 	if ownerID != "" {
 		q += fmt.Sprintf(" AND owner_id = $%d", argIdx)

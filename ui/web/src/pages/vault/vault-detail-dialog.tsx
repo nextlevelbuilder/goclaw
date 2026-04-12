@@ -43,10 +43,14 @@ export function VaultDetailDialog({ doc, open, onOpenChange, onDeleted }: Props)
   }, [doc?.metadata, doc?.path]);
 
   const isMedia = doc?.doc_type === "media";
+  // Phase 01: `document` docType covers PDFs / office docs — also binary, so
+  // avoid the text-content fetch but still re-use the media image pathway
+  // only for true media (images stay rendered, documents show a placeholder).
+  const isBinary = isMedia || doc?.doc_type === "document";
 
-  // Only fetch text content for non-media files (media/binary cannot be rendered as markdown).
+  // Only fetch text content for non-binary files (media/document are binary and cannot be rendered as markdown).
   const { content: fileContent, loading: contentLoading, error: contentError } = useVaultFileContent(
-    open && doc && !isMedia ? doc.path : null,
+    open && doc && !isBinary ? doc.path : null,
   );
   // Fetch image as authenticated blob URL for <img> rendering.
   const { url: imageUrl, error: imageError } = useVaultImageUrl(open && isMedia && isImage && doc ? doc.path : null);
@@ -161,8 +165,8 @@ export function VaultDetailDialog({ doc, open, onOpenChange, onDeleted }: Props)
 
           {/* Content preview — always visible, scrollable */}
           <div className="flex-1 min-h-0 overflow-y-auto rounded-md border bg-muted/30 p-4">
-            {isMedia ? (
-              isImage ? (
+            {isBinary ? (
+              isMedia && isImage ? (
                 <div className="flex items-center justify-center">
                   {imageUrl ? (
                     <img

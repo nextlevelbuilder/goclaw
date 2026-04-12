@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -269,6 +270,23 @@ func (s *PGTeamStore) DetachFileFromTask(ctx context.Context, taskID uuid.UUID, 
 	if n, _ := res.RowsAffected(); n > 0 {
 		_, _ = s.db.ExecContext(ctx,
 			`UPDATE team_tasks SET attachment_count = GREATEST(attachment_count - 1, 0) WHERE id = $1 AND tenant_id = $2`, taskID, tid)
+
+		// Phase 04: clean up Phase 2.5 auto-links sourced from this task.
+		// Scoped DELETE via source key — broader than the single detached
+		// basename, but the task's auto-link group is meaningful as a whole.
+		source := "task:" + taskID.String()
+		if delRes, derr := s.db.ExecContext(ctx, `
+			DELETE FROM vault_links vl
+			USING vault_documents vd
+			WHERE vl.metadata->>'source' = $1
+			  AND vd.tenant_id = $2
+			  AND (vl.from_doc_id = vd.id OR vl.to_doc_id = vd.id)
+		`, source, tid); derr != nil {
+			slog.Warn("vault.link.cleanup_on_detach", "task_id", taskID, "err", derr)
+		} else if cnt, _ := delRes.RowsAffected(); cnt > 0 {
+			slog.Info("vault.link.deleted_on_detach",
+				"task_id", taskID, "count", cnt)
+		}
 	}
 	return nil
 }

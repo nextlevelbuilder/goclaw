@@ -445,8 +445,23 @@ type ToolPolicySpec struct {
 }
 
 type WebToolsConfig struct {
-	Brave      BraveConfig      `json:"brave"`
-	DuckDuckGo DuckDuckGoConfig `json:"duckduckgo"`
+	ProviderOrder []string         `json:"provider_order,omitempty"`
+	Exa           ExaConfig        `json:"exa"`
+	Tavily        TavilyConfig     `json:"tavily"`
+	Brave         BraveConfig      `json:"brave"`
+	DuckDuckGo    DuckDuckGoConfig `json:"duckduckgo"`
+}
+
+type ExaConfig struct {
+	Enabled    bool   `json:"enabled"`
+	APIKey     string `json:"api_key"`
+	MaxResults int    `json:"max_results"`
+}
+
+type TavilyConfig struct {
+	Enabled    bool   `json:"enabled"`
+	APIKey     string `json:"api_key"`
+	MaxResults int    `json:"max_results"`
 }
 
 type BraveConfig struct {

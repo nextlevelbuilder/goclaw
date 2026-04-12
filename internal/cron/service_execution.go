@@ -136,8 +136,13 @@ func (cs *Service) recordRunLocked(jobID string, err error, resultText string) {
 
 // --- Internal scheduling loop ---
 
+// runLoopTickInterval is the cron run loop tick rate. Production default = 1s.
+// Tests override this via the setFastTick(t) helper to avoid waiting >1s per
+// scheduled-job test. Production behavior is unchanged.
+var runLoopTickInterval = 1 * time.Second
+
 func (cs *Service) runLoop(stopChan chan struct{}) {
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(runLoopTickInterval)
 	defer ticker.Stop()
 
 	for {

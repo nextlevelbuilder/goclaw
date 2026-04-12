@@ -74,6 +74,7 @@ ui/desktop/                   Wails v2 desktop app (React frontend + embedded ga
 
 - **Store layer:** Interface-based (`store.SessionStore`, `store.AgentStore`, etc.) with shared Dialect pattern in `store/base/`. PostgreSQL (`pg/`) and SQLite (`sqlitestore/`) implementations use `database/sql` + `pgx/v5/stdlib` + sqlx, raw SQL, `BuildMapUpdate()` and `BuildScopeClause()` helpers
 - **Agent types:** `open` (per-user context, 7 files) vs `predefined` (shared context + USER.md per-user)
+- **Agent identity:** Dual-identity pattern (agent_key vs UUID) applies to agents, teams, tenants. Rule: UUID for DB/FK/events, agent_key for logs/paths/UI. See `docs/agent-identity-conventions.md`
 - **Context files:** `agent_context_files` (agent-level) + `user_context_files` (per-user), routed via `ContextFileInterceptor`
 - **Providers:** Anthropic (native HTTP+SSE), OpenAI-compat (HTTP+SSE), DashScope (Alibaba Qwen), Claude CLI (stdio+MCP bridge), ACP (Anthropic Console Proxy), Codex (OpenAI). All use `RetryDo()` for retries. Loads from `llm_providers` table with encrypted API keys. ProviderAdapter enables pluggable implementations with ModelRegistry forward-compat resolver. Shared SSEScanner in `providers/sse_reader.go` for streaming providers
 - **Pipeline:** 8-stage loop (context→history→prompt→think→act→observe→memory→summarize) with pluggable callbacks, always-on execution path
@@ -196,6 +197,7 @@ Go conventions to follow:
 - **SQL safety:** When implementing or modifying SQL store code (`store/pg/*.go`), always verify: (1) All user inputs use parameterized queries (`$1, $2, ...`), never string concatenation — prevents SQL injection. (2) Queries are optimized — no N+1 queries, no unnecessary full table scans. (3) WHERE clauses, JOINs, and ORDER BY columns use existing indices — check migration files for available indexes
 - **DB query reuse:** Before adding a new DB query for key entities (teams, agents, sessions, users), check if the same data is already fetched earlier in the current flow/pipeline. Prefer passing resolved data through context, event payloads, or function params rather than re-querying. Duplicate queries waste DB resources and add latency
 - **Solution design:** When designing a fix or feature, identify the root cause first — don't just patch symptoms. Think through production scenarios (high concurrency, multi-tenant isolation, failure cascades, long-running sessions) to ensure the solution holds up. Prefer explicit configuration over runtime heuristics. Prefer the simplest solution that addresses the root cause directly
+- **Tenant-scope guards on admin writes:** `RoleAdmin` is not a tenant check. Writes to **global** tables (no `tenant_id` column — e.g. `builtin_tools`, disk config, package mgmt) must gate with `http.requireMasterScope` / WS `requireMasterScope(requireOwner(...))`. Writes to **tenant-scoped** tables must gate with `http.requireTenantAdmin` + SQL `WHERE tenant_id = $N`. Shared predicate: `store.IsMasterScope(ctx)`. See `CONTRIBUTING.md` → "Tenant-scope guards" for the full decision table and anti-patterns.
 
 ## Mobile UI/UX Rules
 

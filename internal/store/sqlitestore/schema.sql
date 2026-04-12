@@ -939,6 +939,7 @@ CREATE TABLE IF NOT EXISTS team_task_attachments (
     team_id              TEXT NOT NULL REFERENCES agent_teams(id) ON DELETE CASCADE,
     chat_id              VARCHAR(255) NOT NULL DEFAULT '',
     path                 TEXT NOT NULL,
+    base_name            TEXT NOT NULL DEFAULT '',  -- app-populated lowercased basename; PG equivalent is GENERATED
     file_size            BIGINT NOT NULL DEFAULT 0,
     mime_type            VARCHAR(100) DEFAULT '',
     created_by_agent_id  TEXT REFERENCES agents(id),
@@ -953,6 +954,7 @@ CREATE TABLE IF NOT EXISTS team_task_attachments (
 CREATE INDEX IF NOT EXISTS idx_tta_task ON team_task_attachments(task_id);
 CREATE INDEX IF NOT EXISTS idx_tta_team ON team_task_attachments(team_id);
 CREATE INDEX IF NOT EXISTS idx_team_task_attachments_tenant ON team_task_attachments(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_tta_tenant_basename ON team_task_attachments(tenant_id, base_name);
 
 -- ============================================================
 -- Table: team_user_grants
@@ -1515,20 +1517,21 @@ CREATE INDEX IF NOT EXISTS idx_scuc_binary ON secure_cli_user_credentials(binary
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS vault_documents (
-    id           TEXT NOT NULL PRIMARY KEY,
-    tenant_id    TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    agent_id     TEXT REFERENCES agents(id) ON DELETE SET NULL,
-    team_id      TEXT REFERENCES agent_teams(id) ON DELETE SET NULL,
-    scope        TEXT NOT NULL DEFAULT 'personal',
-    custom_scope TEXT,
-    path         TEXT NOT NULL,
-    title        TEXT NOT NULL DEFAULT '',
-    doc_type     TEXT NOT NULL DEFAULT 'note',
-    content_hash TEXT NOT NULL DEFAULT '',
-    summary      TEXT NOT NULL DEFAULT '',
-    metadata     TEXT DEFAULT '{}',
-    created_at   TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at   TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    id            TEXT NOT NULL PRIMARY KEY,
+    tenant_id     TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    agent_id      TEXT REFERENCES agents(id) ON DELETE SET NULL,
+    team_id       TEXT REFERENCES agent_teams(id) ON DELETE SET NULL,
+    scope         TEXT NOT NULL DEFAULT 'personal',
+    custom_scope  TEXT,
+    path          TEXT NOT NULL,
+    path_basename TEXT NOT NULL DEFAULT '',  -- app-populated lowercased basename; PG equivalent is GENERATED
+    title         TEXT NOT NULL DEFAULT '',
+    doc_type      TEXT NOT NULL DEFAULT 'note',
+    content_hash  TEXT NOT NULL DEFAULT '',
+    summary       TEXT NOT NULL DEFAULT '',
+    metadata      TEXT DEFAULT '{}',
+    created_at    TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at    TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 -- SQLite prohibits expressions in inline UNIQUE constraints; use a unique index instead.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_vault_docs_unique_path
@@ -1538,6 +1541,11 @@ CREATE INDEX IF NOT EXISTS idx_vault_docs_agent_scope ON vault_documents(agent_i
 CREATE INDEX IF NOT EXISTS idx_vault_docs_type ON vault_documents(agent_id, doc_type);
 CREATE INDEX IF NOT EXISTS idx_vault_docs_hash ON vault_documents(content_hash);
 CREATE INDEX IF NOT EXISTS idx_vault_docs_team ON vault_documents(team_id);
+CREATE INDEX IF NOT EXISTS idx_vault_docs_basename ON vault_documents(tenant_id, path_basename);
+CREATE INDEX IF NOT EXISTS idx_vault_docs_path_prefix ON vault_documents(tenant_id, path);
+CREATE INDEX IF NOT EXISTS idx_vault_docs_delegation
+    ON vault_documents(json_extract(metadata, '$.delegation_id'))
+    WHERE json_extract(metadata, '$.delegation_id') IS NOT NULL;
 
 -- ============================================================
 -- Table: vault_links (V3 wikilink edges)
@@ -1549,6 +1557,7 @@ CREATE TABLE IF NOT EXISTS vault_links (
     to_doc_id   TEXT NOT NULL REFERENCES vault_documents(id) ON DELETE CASCADE,
     link_type   TEXT NOT NULL DEFAULT 'wikilink',
     context     TEXT NOT NULL DEFAULT '',
+    metadata    TEXT NOT NULL DEFAULT '{}',
     custom_scope TEXT,
     created_at  TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     UNIQUE(from_doc_id, to_doc_id, link_type)
@@ -1556,3 +1565,6 @@ CREATE TABLE IF NOT EXISTS vault_links (
 
 CREATE INDEX IF NOT EXISTS idx_vault_links_from ON vault_links(from_doc_id);
 CREATE INDEX IF NOT EXISTS idx_vault_links_to ON vault_links(to_doc_id);
+CREATE INDEX IF NOT EXISTS idx_vault_links_source
+    ON vault_links(json_extract(metadata, '$.source'))
+    WHERE json_extract(metadata, '$.source') IS NOT NULL;

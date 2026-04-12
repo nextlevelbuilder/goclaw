@@ -19,6 +19,13 @@ const CATEGORY_ORDER = [
   "sessions", "messaging", "scheduling", "subagents", "skills", "delegation", "teams",
 ];
 
+// Hardcoded master tenant UUID; mirrors backend store.MasterTenantID. When
+// the current tenant is NOT the master, UI routes settings writes through
+// the tenant-config endpoint. Backend enforces the same rule defensively —
+// this is purely a UX guard so tenant admins never see a 403 from the
+// global endpoint.
+const MASTER_TENANT_ID = "0193a5b0-7000-7000-8000-000000000001";
+
 /** Media tool that is enabled but has no provider chain configured */
 function needsProviderConfig(tool: BuiltinToolData): boolean {
   if (!MEDIA_TOOLS.has(tool.name) || !tool.enabled) return false;
@@ -30,8 +37,18 @@ function needsProviderConfig(tool: BuiltinToolData): boolean {
 
 export function BuiltinToolsPage() {
   const { t } = useTranslation("tools");
-  const { tools, loading, refresh, updateTool, setTenantConfig, deleteTenantConfig } = useBuiltinTools();
+  const {
+    tools,
+    loading,
+    refresh,
+    updateTool,
+    setTenantConfig,
+    deleteTenantConfig,
+    setTenantSettings,
+    clearTenantSettings,
+  } = useBuiltinTools();
   const { currentTenantId } = useTenants();
+  const hasTenantScope = !!currentTenantId && currentTenantId !== MASTER_TENANT_ID;
   const spinning = useMinLoading(loading);
   const showSkeleton = useDeferredLoading(loading && tools.length === 0);
   const [search, setSearch] = useState("");
@@ -64,8 +81,22 @@ export function BuiltinToolsPage() {
     await updateTool(tool.name, { enabled: !tool.enabled });
   };
 
+  // Route settings writes through the correct endpoint based on scope:
+  //   - Master scope → PUT /v1/tools/builtin/{name}   (global default)
+  //   - Tenant scope → PUT /v1/tools/builtin/{name}/tenant-config (override)
+  // Backend enforces master-scope defensively (Phase 0b), so even if this
+  // UI check drifted, a tenant admin would hit 403 instead of corrupting
+  // the global defaults.
   const handleSaveSettings = async (name: string, settings: Record<string, unknown>) => {
-    await updateTool(name, { settings });
+    if (hasTenantScope) {
+      await setTenantSettings(name, settings);
+    } else {
+      await updateTool(name, { settings });
+    }
+  };
+
+  const handleResetTenantSettings = async (name: string) => {
+    await clearTenantSettings(name);
   };
 
   return (
@@ -161,6 +192,8 @@ export function BuiltinToolsPage() {
           if (!open) setSettingsTool(null);
         }}
         onSave={handleSaveSettings}
+        tenantScope={hasTenantScope}
+        onResetToDefault={hasTenantScope ? handleResetTenantSettings : undefined}
       />
     </div>
   );

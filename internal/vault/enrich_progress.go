@@ -9,13 +9,17 @@ import (
 )
 
 // EnrichProgress tracks enrichment pipeline progress and broadcasts via WS events.
+// Lifecycle: handler calls Start(total) once with the global count,
+// worker batches call AddDone(n) as docs complete, and MarkBatchDone()
+// when a per-agent batch finishes. Auto-completes when done >= total.
 type EnrichProgress struct {
-	mu       sync.Mutex
-	msgBus   bus.EventPublisher
-	tenantID uuid.UUID
-	total    int
-	done     int
-	running  bool
+	mu            sync.Mutex
+	msgBus        bus.EventPublisher
+	tenantID      uuid.UUID
+	total         int
+	done          int
+	running       bool
+	activeBatches int // number of worker batches in flight
 }
 
 // NewEnrichProgress creates a progress tracker that broadcasts to WS clients.
@@ -49,28 +53,62 @@ func (p *EnrichProgress) broadcast(e EnrichEvent) {
 	bus.BroadcastForTenant(p.msgBus, protocol.EventVaultEnrichProgress, p.tenantID, e)
 }
 
-// Start signals enrichment with updated total and tenant scope.
+// Start signals enrichment with the global total. Called by the HTTP rescan
+// handler ONCE with the full count. Resets counters for a fresh run.
 func (p *EnrichProgress) Start(total int, tenantID uuid.UUID) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.done = 0
 	p.total = total
 	p.tenantID = tenantID
 	p.running = true
-	p.broadcast(EnrichEvent{Phase: "enriching", Done: p.done, Total: p.total, Running: true})
+	p.activeBatches = 0
+	p.broadcast(EnrichEvent{Phase: "enriching", Done: 0, Total: total, Running: true})
+}
+
+// TrackBatch increments the active batch counter. Called by worker when
+// a per-agent batch starts processing.
+func (p *EnrichProgress) TrackBatch() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.activeBatches++
 }
 
 // AddDone increments completed count by n and broadcasts progress.
+// Auto-completes when done >= total.
 func (p *EnrichProgress) AddDone(n int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.done += n
+	if p.done >= p.total && p.total > 0 {
+		p.broadcast(EnrichEvent{Phase: "complete", Done: p.done, Total: p.total, Running: false})
+		p.running = false
+		return
+	}
 	p.broadcast(EnrichEvent{Phase: "enriching", Done: p.done, Total: p.total, Running: true})
 }
 
+// MarkBatchDone decrements the active batch counter. If all batches
+// finished and done < total (some docs failed), force-complete.
+func (p *EnrichProgress) MarkBatchDone() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.activeBatches--
+	if p.activeBatches <= 0 && p.running {
+		p.broadcast(EnrichEvent{Phase: "complete", Done: p.done, Total: p.total, Running: false})
+		p.running = false
+		p.activeBatches = 0
+	}
+}
+
 // Finish signals the enrichment pipeline has completed and resets counters.
+// Kept for backward compat but prefer AddDone auto-complete or MarkBatchDone.
 func (p *EnrichProgress) Finish() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if !p.running {
+		return // already completed via auto-complete
+	}
 	p.broadcast(EnrichEvent{Phase: "complete", Done: p.done, Total: p.total, Running: false})
 	p.done = 0
 	p.total = 0

@@ -52,10 +52,11 @@ func (m *TeamsMethods) handleAddMember(ctx context.Context, client *gateway.Clie
 		return
 	}
 
-	// Resolve agent
+	// Resolve agent — accepts agent_key or UUID. Return an i18n error on
+	// failure; never leak the raw store error string to WS clients.
 	ag, err := resolveAgentInfo(ctx, m.agentStore, params.Agent)
 	if err != nil {
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "agent: "+err.Error()))
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidID, "agent")))
 		return
 	}
 
@@ -134,7 +135,8 @@ func (m *TeamsMethods) handleRemoveMember(ctx context.Context, client *gateway.C
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidID, "teamId")))
 		return
 	}
-	agentID, err := uuid.Parse(params.AgentID)
+	// Accept agent_key or UUID via cache-aware resolver.
+	agentID, err := resolveAgentUUIDCached(ctx, m.agentRouter, m.agentStore, params.AgentID)
 	if err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidID, "agentId")))
 		return

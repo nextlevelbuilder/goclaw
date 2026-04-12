@@ -16,48 +16,124 @@ import { MEDIA_TOOLS } from "./media-provider-params-schema";
 import { MediaProviderChainForm } from "./media-provider-chain-form";
 import { KGSettingsForm } from "./kg-settings-form";
 import { WebFetchExtractorChainForm } from "./web-fetch-extractor-chain-form";
+import { WebSearchChainForm } from "./web-search-chain-form";
+import { TtsProviderForm } from "./tts-provider-form";
 
 const KG_TOOL = "knowledge_graph_search";
 const WEB_FETCH_TOOL = "web_fetch";
+const WEB_SEARCH_TOOL = "web_search";
+const TTS_TOOL = "tts";
 
 interface Props {
   tool: BuiltinToolData | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (name: string, settings: Record<string, unknown>) => Promise<void>;
+  /**
+   * When true the dialog is editing a tenant override. Initial form values
+   * are drawn from `tool.tenant_settings ?? tool.settings` (fall back to the
+   * global default when no override exists yet) and the parent page is
+   * expected to route the save through the tenant-config endpoint. When
+   * false the dialog edits the global `tool.settings` directly — parent
+   * must enforce master-scope (the backend rejects non-master writes).
+   */
+  tenantScope?: boolean;
+  /**
+   * Optional reset handler. When provided, dialogs rendered in tenant scope
+   * with an existing override show a "Reset to default" button that calls
+   * this with the tool name — parent maps it to PUT tenant-config with
+   * settings:null, clearing the override while preserving tenant_enabled.
+   */
+  onResetToDefault?: (name: string) => Promise<void>;
 }
 
-export function BuiltinToolSettingsDialog({ tool, open, onOpenChange, onSave }: Props) {
+export function BuiltinToolSettingsDialog({
+  tool,
+  open,
+  onOpenChange,
+  onSave,
+  tenantScope = false,
+  onResetToDefault,
+}: Props) {
+  const { t } = useTranslation("tools");
   const isMedia = tool ? MEDIA_TOOLS.has(tool.name) : false;
   const isKG = tool?.name === KG_TOOL;
   const isWebFetch = tool?.name === WEB_FETCH_TOOL;
-  const wide = isMedia || isKG || isWebFetch;
+  const isWebSearch = tool?.name === WEB_SEARCH_TOOL;
+  const isTts = tool?.name === TTS_TOOL;
+  const wide = isMedia || isKG || isWebFetch || isWebSearch;
+
+  // Tenant-scope overlay: prefer the tenant override when present; fall back
+  // to the global default so the form opens pre-populated with something
+  // sensible when the admin is creating a new override.
+  const initialSettings: Record<string, unknown> =
+    (tenantScope ? (tool?.tenant_settings ?? tool?.settings) : tool?.settings) ?? {};
+  const hasTenantOverride = tenantScope && tool?.tenant_settings != null;
+
+  const modeBadge = tenantScope ? (
+    <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+      <span className="rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+        {t("builtin.tenantOverrideBadge")}
+      </span>
+      <span>{hasTenantOverride ? t("builtin.tenantOverrideHint") : t("builtin.tenantOverrideNewHint")}</span>
+    </div>
+  ) : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className={wide ? "sm:max-w-2xl" : "sm:max-w-md"}>
-        {isWebFetch && tool ? (
+        {modeBadge}
+        {isWebSearch && tool ? (
+          <WebSearchChainForm
+            initialSettings={initialSettings}
+            secretsSet={tool.secrets_set}
+            onSave={(settings) => onSave(tool.name, settings).then(() => onOpenChange(false))}
+            onCancel={() => onOpenChange(false)}
+          />
+        ) : isTts && tool ? (
+          <TtsProviderForm
+            initialSettings={initialSettings}
+            onSave={(settings) => onSave(tool.name, settings).then(() => onOpenChange(false))}
+            onCancel={() => onOpenChange(false)}
+          />
+        ) : isWebFetch && tool ? (
           <WebFetchExtractorChainForm
-            initialSettings={tool.settings ?? {}}
+            initialSettings={initialSettings}
             onSave={(settings) => onSave(tool.name, settings).then(() => onOpenChange(false))}
             onCancel={() => onOpenChange(false)}
           />
         ) : isMedia && tool ? (
           <MediaProviderChainForm
             toolName={tool.name}
-            initialSettings={tool.settings ?? {}}
+            initialSettings={initialSettings}
             onSave={(settings) => onSave(tool.name, settings).then(() => onOpenChange(false))}
             onCancel={() => onOpenChange(false)}
           />
         ) : isKG && tool ? (
           <KGSettingsForm
-            initialSettings={tool.settings ?? {}}
+            initialSettings={initialSettings}
             onSave={(settings) => onSave(tool.name, settings).then(() => onOpenChange(false))}
             onCancel={() => onOpenChange(false)}
           />
         ) : (
-          <JsonSettingsForm tool={tool} onOpenChange={onOpenChange} onSave={onSave} />
+          <JsonSettingsForm
+            tool={tool}
+            initialSettings={initialSettings}
+            onOpenChange={onOpenChange}
+            onSave={onSave}
+          />
         )}
+        {hasTenantOverride && onResetToDefault && tool ? (
+          <div className="mt-2 border-t pt-2 text-xs">
+            <button
+              type="button"
+              onClick={() => onResetToDefault(tool.name).then(() => onOpenChange(false))}
+              className="text-muted-foreground hover:text-foreground underline underline-offset-2"
+            >
+              {t("builtin.resetToGlobalDefault")}
+            </button>
+          </div>
+        ) : null}
       </DialogContent>
     </Dialog>
   );
@@ -66,10 +142,12 @@ export function BuiltinToolSettingsDialog({ tool, open, onOpenChange, onSave }: 
 
 function JsonSettingsForm({
   tool,
+  initialSettings,
   onOpenChange,
   onSave,
 }: {
   tool: BuiltinToolData | null;
+  initialSettings: Record<string, unknown>;
   onOpenChange: (open: boolean) => void;
   onSave: (name: string, settings: Record<string, unknown>) => Promise<void>;
 }) {
@@ -81,11 +159,15 @@ function JsonSettingsForm({
 
   useEffect(() => {
     if (tool) {
-      setJson(JSON.stringify(tool.settings ?? {}, null, 2));
+      // initialSettings is pre-resolved by the parent to account for tenant
+      // scope (tenant_settings ?? settings). Re-hydrate every time the tool
+      // or the resolved initial changes — handles switch-between-tools and
+      // tenant-override-cleared flows.
+      setJson(JSON.stringify(initialSettings, null, 2));
       setError("");
       setValidJson(true);
     }
-  }, [tool]);
+  }, [tool, initialSettings]);
 
   const handleJsonChange = (text: string) => {
     setJson(text);

@@ -3,6 +3,7 @@
 package sqlitestore
 
 import (
+	"context"
 	"database/sql"
 	_ "embed"
 	"errors"
@@ -15,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 15
+const SchemaVersion = 17
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -412,6 +413,107 @@ CREATE INDEX IF NOT EXISTS idx_vault_docs_team ON vault_documents(team_id);`,
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_cron_jobs_agent_tenant_name
   ON cron_jobs(agent_id, tenant_id, name);`,
+
+	// Version 15 → 16: vault media linking schema
+	// (team_task_attachments.base_name, vault_documents.path_basename,
+	//  vault_links.metadata, auto-linking indexes).
+	// Backfill of base_name / path_basename happens in backfillV16 below
+	// (Go-loop — SQLite has no regexp_replace in modernc.org/sqlite bundle).
+	15: `ALTER TABLE team_task_attachments ADD COLUMN base_name TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_tta_tenant_basename
+  ON team_task_attachments(tenant_id, base_name);
+
+ALTER TABLE vault_documents ADD COLUMN path_basename TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_vault_docs_basename
+  ON vault_documents(tenant_id, path_basename);
+
+ALTER TABLE vault_links ADD COLUMN metadata TEXT NOT NULL DEFAULT '{}';
+CREATE INDEX IF NOT EXISTS idx_vault_links_source
+  ON vault_links(json_extract(metadata, '$.source'))
+  WHERE json_extract(metadata, '$.source') IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_vault_docs_delegation
+  ON vault_documents(json_extract(metadata, '$.delegation_id'))
+  WHERE json_extract(metadata, '$.delegation_id') IS NOT NULL;`,
+
+	// Version 16 → 17: path prefix index for vault tree lazy-load queries.
+	16: `CREATE INDEX IF NOT EXISTS idx_vault_docs_path_prefix ON vault_documents(tenant_id, path);`,
+}
+
+// backfillV16 populates base_name / path_basename for rows that existed
+// before the v15 → v16 migration. Idempotent — re-running on already-filled
+// rows is a no-op thanks to the WHERE base_name = '' filter.
+func backfillV16(ctx context.Context, db *sql.DB) error {
+	type row struct{ id, path string }
+
+	// ---- team_task_attachments ----
+	attRows, err := collectIDPath(ctx, db,
+		`SELECT id, path FROM team_task_attachments WHERE base_name = ''`)
+	if err != nil {
+		return fmt.Errorf("v16 scan attachments: %w", err)
+	}
+	if err := updateBaseNames(ctx, db,
+		`UPDATE team_task_attachments SET base_name = ? WHERE id = ?`, attRows); err != nil {
+		return fmt.Errorf("v16 update attachments: %w", err)
+	}
+
+	// ---- vault_documents ----
+	docRows, err := collectIDPath(ctx, db,
+		`SELECT id, path FROM vault_documents WHERE path_basename = ''`)
+	if err != nil {
+		return fmt.Errorf("v16 scan vault_docs: %w", err)
+	}
+	if err := updateBaseNames(ctx, db,
+		`UPDATE vault_documents SET path_basename = ? WHERE id = ?`, docRows); err != nil {
+		return fmt.Errorf("v16 update vault_docs: %w", err)
+	}
+	return nil
+}
+
+// collectIDPath reads (id, path) tuples for a SELECT that returns exactly
+// those two columns. Separated so backfillV16 stays readable.
+func collectIDPath(ctx context.Context, db *sql.DB, q string) ([][2]string, error) {
+	rows, err := db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out [][2]string
+	for rows.Next() {
+		var id, path string
+		if err := rows.Scan(&id, &path); err != nil {
+			return nil, err
+		}
+		out = append(out, [2]string{id, path})
+	}
+	return out, rows.Err()
+}
+
+// updateBaseNames runs a prepared UPDATE inside one transaction for all rows.
+// No-op when rows is empty. The prepared statement form keeps SQLite happy
+// on larger backfills (<= ~10k legacy rows on typical desktop lite DBs).
+func updateBaseNames(ctx context.Context, db *sql.DB, updateSQL string, rows [][2]string) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	stmt, err := tx.PrepareContext(ctx, updateSQL)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	defer stmt.Close()
+	for _, r := range rows {
+		bn := ComputeAttachmentBaseName(r[1])
+		if _, err := stmt.ExecContext(ctx, bn, r[0]); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("update %s: %w", r[0], err)
+		}
+	}
+	return tx.Commit()
 }
 
 // EnsureSchema creates tables if they don't exist and applies incremental migrations.
@@ -478,6 +580,14 @@ func EnsureSchema(db *sql.DB) error {
 			}
 			if err := tx.Commit(); err != nil {
 				return fmt.Errorf("commit migration v%d: %w", v, err)
+			}
+			// Post-SQL backfill hooks for migrations needing app-side logic.
+			// modernc.org/sqlite lacks regexp_replace, so the v15 → v16
+			// basename columns must be populated via a Go loop.
+			if v == 15 {
+				if err := backfillV16(context.Background(), db); err != nil {
+					return fmt.Errorf("v16 backfill: %w", err)
+				}
 			}
 			slog.Info("sqlite: applied migration", "version", v+1)
 		}

@@ -119,6 +119,7 @@ func (h *VaultHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/vault/links/batch", h.auth(h.handleBatchGetLinks))
 	mux.HandleFunc("POST /v1/vault/upload", h.auth(h.handleUpload))
 	mux.HandleFunc("POST /v1/vault/rescan", h.auth(h.handleRescan))
+	mux.HandleFunc("GET /v1/vault/tree", h.auth(h.handleVaultTree))
 	mux.HandleFunc("POST /v1/vault/search", h.auth(h.handleSearchAll))
 	mux.HandleFunc("GET /v1/vault/enrichment/status", h.auth(h.handleEnrichmentStatus))
 	// Per-agent endpoints (backward compat — same handlers, agentID from path).

@@ -65,7 +65,8 @@
     "note": "笔记",
     "skill": "技能",
     "episodic": "情景记忆",
-    "media": "Media"
+    "media": "Media",
+    "document": "文档"
   },
   "rescanTooltip": "重新扫描工作区",
   "enriching": "处理中",

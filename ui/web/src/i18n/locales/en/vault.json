@@ -65,7 +65,8 @@
     "note": "Note",
     "skill": "Skill",
     "episodic": "Episodic",
-    "media": "Media"
+    "media": "Media",
+    "document": "Document"
   },
   "rescanTooltip": "Rescan workspace",
   "enriching": "Enriching",

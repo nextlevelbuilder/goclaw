@@ -18,8 +18,7 @@
       "freeDisk": "Dung lượng trống",
       "warnings": "Cảnh báo",
       "refresh": "Làm mới",
-      "pgDumpMissing": "pg_dump không khả dụng",
-      "pgDumpHint": "Cài đặt postgresql-client để bật sao lưu cơ sở dữ liệu.",
+      "pgDumpMissing": "pg_dump không khả dụng hoặc không tương thích",
       "goToPackages": "Đi đến Gói cài đặt"
     },
     "options": {

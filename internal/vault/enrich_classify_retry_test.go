@@ -75,6 +75,7 @@ func TestCallClassifyWithRetry_Success(t *testing.T) {
 
 // TestCallClassifyWithRetry_RetryThenSuccess fails twice, succeeds on third attempt.
 func TestCallClassifyWithRetry_RetryThenSuccess(t *testing.T) {
+	fastBackoffsForTest(t) // skip 2s+4s real backoffs
 	provider := &mockClassifyProvider{
 		responses: []string{
 			"", // attempt 0: error
@@ -111,6 +112,7 @@ func TestCallClassifyWithRetry_RetryThenSuccess(t *testing.T) {
 
 // TestCallClassifyWithRetry_AllFail exhausts retries and returns error.
 func TestCallClassifyWithRetry_AllFail(t *testing.T) {
+	fastBackoffsForTest(t) // skip 2s+4s real backoffs
 	provider := &mockClassifyProvider{
 		responses: []string{"", "", ""},
 		errors: []error{

@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -184,12 +185,16 @@ func (s *SQLiteTeamStore) AttachFileToTask(ctx context.Context, att *store.TeamT
 	if len(att.Metadata) == 0 {
 		att.Metadata = json.RawMessage(`{}`)
 	}
+	// SQLite has no GENERATED columns via modernc driver — compute app-side.
+	if att.BaseName == "" && att.Path != "" {
+		att.BaseName = ComputeAttachmentBaseName(att.Path)
+	}
 	tid := tenantIDForInsert(ctx)
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO team_task_attachments (id, task_id, team_id, chat_id, path, file_size, mime_type, created_by_agent_id, created_by_sender_id, metadata, created_at, tenant_id)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO team_task_attachments (id, task_id, team_id, chat_id, path, base_name, file_size, mime_type, created_by_agent_id, created_by_sender_id, metadata, created_at, tenant_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT (task_id, path) DO NOTHING`,
-		att.ID, att.TaskID, att.TeamID, att.ChatID, att.Path,
+		att.ID, att.TaskID, att.TeamID, att.ChatID, att.Path, att.BaseName,
 		att.FileSize, att.MimeType, att.CreatedByAgentID,
 		nilStr(att.CreatedBySenderID),
 		att.Metadata, att.CreatedAt, tid,
@@ -276,6 +281,19 @@ func (s *SQLiteTeamStore) DetachFileFromTask(ctx context.Context, taskID uuid.UU
 	if n, _ := res.RowsAffected(); n > 0 {
 		_, _ = s.db.ExecContext(ctx,
 			`UPDATE team_tasks SET attachment_count = MAX(attachment_count - 1, 0) WHERE id = ? AND tenant_id = ?`, taskID, tid)
+
+		// Phase 04: clean up Phase 2.5 auto-links sourced from this task.
+		source := "task:" + taskID.String()
+		if _, derr := s.db.ExecContext(ctx, `
+			DELETE FROM vault_links
+			WHERE json_extract(metadata, '$.source') = ?
+			  AND (
+			    from_doc_id IN (SELECT id FROM vault_documents WHERE tenant_id = ?)
+			    OR to_doc_id IN (SELECT id FROM vault_documents WHERE tenant_id = ?)
+			  )
+		`, source, tid, tid); derr != nil {
+			slog.Warn("vault.link.cleanup_on_detach", "task_id", taskID, "err", derr)
+		}
 	}
 	return nil
 }

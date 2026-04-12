@@ -37,6 +37,42 @@ func (c *LarkClient) SendMessage(ctx context.Context, receiveIDType, receiveID, 
 	return &data, nil
 }
 
+// ReplyMessage posts a reply to an existing Lark message via
+// POST /open-apis/im/v1/messages/{message_id}/reply.
+//
+// When replyInThread is true and the target message is inside a thread,
+// the reply stays nested in that thread. When the target is not threaded,
+// the reply renders as an inline quote at chat level.
+//
+// NOTE: `content` must be a double-encoded JSON string (e.g. `{"text":"hi"}`),
+// not a Go struct. The Lark API rejects object-typed `content`.
+func (c *LarkClient) ReplyMessage(ctx context.Context, rootMessageID, msgType, content string, replyInThread bool) (*SendMessageResp, error) {
+	if rootMessageID == "" {
+		return nil, fmt.Errorf("reply message: empty root message id")
+	}
+	// Defensive escaping: Lark message IDs are currently `om_` + alphanumeric,
+	// but any future schema change that permits `/` or reserved chars would
+	// otherwise silently break URL routing.
+	path := fmt.Sprintf("/open-apis/im/v1/messages/%s/reply", url.PathEscape(rootMessageID))
+	body := map[string]any{
+		"msg_type":        msgType,
+		"content":         content,
+		"reply_in_thread": replyInThread,
+	}
+	resp, err := c.doJSON(ctx, "POST", path, body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Code != 0 {
+		return nil, fmt.Errorf("reply message: code=%d msg=%s", resp.Code, resp.Msg)
+	}
+	var data SendMessageResp
+	if err := json.Unmarshal(resp.Data, &data); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+	return &data, nil
+}
+
 // --- IM API: Images ---
 
 func (c *LarkClient) DownloadImage(ctx context.Context, imageKey string) ([]byte, error) {

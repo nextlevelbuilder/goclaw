@@ -430,7 +430,11 @@ func wireExtras(
 		}
 	})
 
-	// Skills cache: bump version on skill changes
+	// Skills cache: bump version on every event (global listCache is
+	// version-keyed, so bump invalidates every tenant's ListSkills cache —
+	// cheap since rebuild is a single DB read). Then the agent router
+	// receives a scoped wipe: tenant-scoped events only wipe that tenant's
+	// cached Loops; master/global events wipe the entire router cache.
 	if stores.Skills != nil {
 		msgBus.Subscribe(bus.TopicCacheSkills, func(event bus.Event) {
 			if event.Name != protocol.EventCacheInvalidate {
@@ -441,6 +445,11 @@ func wireExtras(
 				return
 			}
 			stores.Skills.BumpVersion()
+			if payload.TenantID != uuid.Nil {
+				agentRouter.InvalidateTenant(payload.TenantID)
+				return
+			}
+			agentRouter.InvalidateAll()
 		})
 	}
 
@@ -510,7 +519,9 @@ func wireExtras(
 		})
 	}
 
-	// Builtin tools cache: re-apply disables on settings/enabled changes
+	// Builtin tools cache: re-apply disables on settings/enabled changes.
+	// Tenant-scoped events only invalidate that tenant's cached agents — the
+	// global registry disables list is master-only and unaffected.
 	if stores.BuiltinTools != nil {
 		msgBus.Subscribe(bus.TopicCacheBuiltinTools, func(event bus.Event) {
 			if event.Name != protocol.EventCacheInvalidate {
@@ -518,6 +529,10 @@ func wireExtras(
 			}
 			payload, ok := event.Payload.(bus.CacheInvalidatePayload)
 			if !ok || payload.Kind != bus.CacheKindBuiltinTools {
+				return
+			}
+			if payload.TenantID != uuid.Nil {
+				agentRouter.InvalidateTenant(payload.TenantID)
 				return
 			}
 			applyBuiltinToolDisables(context.Background(), stores.BuiltinTools, toolsReg)

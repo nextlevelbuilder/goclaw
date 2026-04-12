@@ -65,7 +65,8 @@
     "note": "Ghi chú",
     "skill": "Kỹ năng",
     "episodic": "Giai thoại",
-    "media": "Media"
+    "media": "Media",
+    "document": "Tài liệu"
   },
   "rescanTooltip": "Quét lại workspace",
   "enriching": "Đang xử lý",

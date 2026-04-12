@@ -156,6 +156,9 @@ func (b *baseNoopTeamStore) ListTaskAttachments(_ context.Context, _ uuid.UUID) 
 func (b *baseNoopTeamStore) DetachFileFromTask(_ context.Context, _ uuid.UUID, _ string) error {
 	return fmt.Errorf("not implemented: DetachFileFromTask")
 }
+func (b *baseNoopTeamStore) BatchGetTaskSiblingsByBasenames(_ context.Context, _ uuid.UUID, _ []string, _ int) (map[string][]store.TaskSibling, error) {
+	return nil, nil
+}
 
 // TaskRecoveryStore
 func (b *baseNoopTeamStore) RecoverAllStaleTasks(_ context.Context) ([]store.RecoveredTaskInfo, error) {
