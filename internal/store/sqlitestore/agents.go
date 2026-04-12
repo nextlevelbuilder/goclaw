@@ -138,7 +138,7 @@ func (s *SQLiteAgentStore) Update(ctx context.Context, id uuid.UUID, updates map
 		updates["skill_nudge_interval"] = 0
 	}
 	// NOT NULL text columns: null → empty string.
-	for _, col := range []string{"emoji", "agent_description"} {
+	for _, col := range []string{"emoji", "agent_description", "thinking_level"} {
 		if v, ok := updates[col]; ok && v == nil {
 			updates[col] = ""
 		}
