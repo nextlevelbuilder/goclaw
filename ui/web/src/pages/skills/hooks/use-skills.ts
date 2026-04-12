@@ -12,11 +12,14 @@ import type { SkillInfo, SkillFile, SkillVersions } from "@/types/skill";
 export type { SkillInfo, SkillFile, SkillVersions };
 
 export type SkillUploadResponse = {
-  id: string;
+  /** Absent when status is "unchanged" */
+  id?: string;
   slug: string;
   version: number;
   name: string;
+  /** "active" | "unchanged" | "archived" */
   status?: string;
+  is_new?: boolean;
   deps_warning?: string;
   deps_errors?: string[];
   missing_deps?: string[];

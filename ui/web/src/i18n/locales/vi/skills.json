@@ -46,7 +46,13 @@
     "validCount": "{{valid}} / {{total}} hợp lệ",
     "uploadCount": "Tải lên ({{count}})",
     "successCount": "{{success}} / {{total}} đã tải lên thành công",
-    "remove": "Xóa tệp"
+    "remove": "Xóa tệp",
+    "tooManySkills": "ZIP chứa quá nhiều kỹ năng (tối đa 50)",
+    "multiDetected": "Phát hiện {{count}} kỹ năng",
+    "skillUnchanged": "Nội dung không đổi — đã bỏ qua",
+    "slugConflict": "Slug trùng với kỹ năng hệ thống",
+    "unchanged": "Không đổi",
+    "new": "Mới"
   },
   "edit": {
     "title": "Chỉnh sửa skill",
