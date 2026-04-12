@@ -118,3 +118,64 @@ func TestVerifyBridgeContext_EmptyFields(t *testing.T) {
 		t.Error("expected tenantVerified=true when all fields empty (level 1 matches)")
 	}
 }
+
+// --- Extra params (localKey, sessionKey) tests ---
+
+func TestSignBridgeContext_WithExtraParams(t *testing.T) {
+	key := "test-secret"
+	// Without extra params
+	sig1 := SignBridgeContext(key, "agent1", "user1", "telegram", "chat1", "direct", "/ws", "tenant1")
+	// With extra params
+	sig2 := SignBridgeContext(key, "agent1", "user1", "telegram", "chat1", "direct", "/ws", "tenant1", "-100123:topic:42", "session-abc")
+
+	if sig1 == sig2 {
+		t.Error("signature with extra params should differ from signature without")
+	}
+}
+
+func TestVerifyBridgeContext_WithExtraParams(t *testing.T) {
+	key := "gateway-token"
+	localKey := "-100123:topic:42"
+	sessionKey := "session-abc"
+	sig := SignBridgeContext(key, "agent1", "user1", "telegram", "chat1", "direct", "/ws", "tenant1", localKey, sessionKey)
+
+	ok, tenantVerified := VerifyBridgeContext(key, "agent1", "user1", "telegram", "chat1", "direct", "/ws", "tenant1", sig, localKey, sessionKey)
+	if !ok {
+		t.Error("expected ok=true for valid signature with extra params")
+	}
+	if !tenantVerified {
+		t.Error("expected tenantVerified=true for full match")
+	}
+}
+
+func TestVerifyBridgeContext_FallbackWithoutExtraParams(t *testing.T) {
+	key := "gateway-token"
+	// Pre-localKey session: signed without extra params
+	sig := SignBridgeContext(key, "agent1", "user1", "telegram", "chat1", "direct", "/ws", "tenant1")
+
+	// New code passes localKey/sessionKey but signature was created without them
+	ok, tenantVerified := VerifyBridgeContext(key, "agent1", "user1", "telegram", "chat1", "direct", "/ws", "tenant1", sig, "-100123:topic:42", "session-abc")
+	if !ok {
+		t.Error("expected ok=true for fallback (pre-localKey session)")
+	}
+	if !tenantVerified {
+		t.Error("expected tenantVerified=true — base fields match at fallback level")
+	}
+}
+
+func TestVerifyBridgeContext_ExtraParamOrderMatters(t *testing.T) {
+	key := "gateway-token"
+	sig := SignBridgeContext(key, "agent1", "user1", "", "", "", "", "", "localKey", "sessionKey")
+
+	// Verify with same order
+	ok, _ := VerifyBridgeContext(key, "agent1", "user1", "", "", "", "", "", sig, "localKey", "sessionKey")
+	if !ok {
+		t.Error("expected ok=true for same order")
+	}
+
+	// Verify with swapped order
+	ok2, _ := VerifyBridgeContext(key, "agent1", "user1", "", "", "", "", "", sig, "sessionKey", "localKey")
+	if ok2 {
+		t.Error("expected ok=false for swapped extra param order")
+	}
+}

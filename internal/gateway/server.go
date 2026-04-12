@@ -288,6 +288,9 @@ func bridgeContextMiddleware(gatewayToken string, agentStore store.AgentStore, n
 		if workspace != "" && (agentIDStr != "" || userID != "") {
 			ctx = tools.WithToolWorkspace(ctx, workspace)
 		}
+		// Routing context (localKey, sessionKey) is injected unconditionally like channel/chatID.
+		// These are used for message routing (forum topics), not security-sensitive operations.
+		// Without valid agent context, tool execution will fail anyway.
 		if localKey != "" {
 			ctx = tools.WithToolLocalKey(ctx, localKey)
 		}
