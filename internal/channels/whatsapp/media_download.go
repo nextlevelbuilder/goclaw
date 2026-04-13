@@ -101,6 +101,34 @@ func mimeToExt(mime string) string {
 		return ".mp3"
 	case strings.HasPrefix(mime, "application/pdf"):
 		return ".pdf"
+	case strings.HasPrefix(mime, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"):
+		return ".docx"
+	case strings.HasPrefix(mime, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"):
+		return ".xlsx"
+	case strings.HasPrefix(mime, "application/vnd.openxmlformats-officedocument.presentationml.presentation"):
+		return ".pptx"
+	case strings.HasPrefix(mime, "application/msword"):
+		return ".doc"
+	case strings.HasPrefix(mime, "application/vnd.ms-excel"):
+		return ".xls"
+	case strings.HasPrefix(mime, "application/vnd.ms-powerpoint"):
+		return ".ppt"
+	case strings.HasPrefix(mime, "application/zip"):
+		return ".zip"
+	case strings.HasPrefix(mime, "application/vnd.rar"):
+		return ".rar"
+	case strings.HasPrefix(mime, "application/gzip"), strings.HasPrefix(mime, "application/x-gzip"):
+		return ".gz"
+	case strings.HasPrefix(mime, "text/plain"):
+		return ".txt"
+	case strings.HasPrefix(mime, "text/csv"):
+		return ".csv"
+	case strings.HasPrefix(mime, "text/html"):
+		return ".html"
+	case strings.HasPrefix(mime, "application/json"):
+		return ".json"
+	case strings.HasPrefix(mime, "text/markdown"):
+		return ".md"
 	default:
 		return ".bin"
 	}

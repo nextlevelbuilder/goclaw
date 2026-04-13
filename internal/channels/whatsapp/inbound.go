@@ -233,6 +233,15 @@ func extractQuotedText(msg *waE2E.Message) string {
 	if vid := msg.GetVideoMessage(); vid != nil && vid.GetCaption() != "" {
 		return vid.GetCaption()
 	}
+	if doc := msg.GetDocumentMessage(); doc != nil {
+		caption := doc.GetCaption()
+		if caption != "" {
+			return caption
+		}
+		if name := doc.GetFileName(); name != "" {
+			return fmt.Sprintf("[Document: %s]", name)
+		}
+	}
 	return ""
 }
 

@@ -46,6 +46,7 @@ type MediaAttachment struct {
 	URL         string `json:"url"`                    // file path or URL
 	ContentType string `json:"content_type,omitempty"` // MIME type (e.g. "image/jpeg", "video/mp4")
 	Caption     string `json:"caption,omitempty"`      // optional caption for media
+	FileName    string `json:"filename,omitempty"`     // original filename (used for WhatsApp DocumentMessage)
 }
 
 // Event represents a server-side event to broadcast to WebSocket clients.

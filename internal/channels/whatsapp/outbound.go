@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -40,7 +41,13 @@ func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) error {
 				return fmt.Errorf("read media file: %w", readErr)
 			}
 
-			waMsg, buildErr := c.buildMediaMessage(data, m.ContentType, caption)
+			// Use explicit FileName, or derive from URL path as fallback.
+			fileName := m.FileName
+			if fileName == "" && m.URL != "" {
+				fileName = filepath.Base(m.URL)
+			}
+
+			waMsg, buildErr := c.buildMediaMessage(data, m.ContentType, caption, fileName)
 			if buildErr != nil {
 				return fmt.Errorf("build media message: %w", buildErr)
 			}
@@ -81,7 +88,7 @@ func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) error {
 }
 
 // buildMediaMessage uploads media to WhatsApp and returns the message proto.
-func (c *Channel) buildMediaMessage(data []byte, mime, caption string) (*waE2E.Message, error) {
+func (c *Channel) buildMediaMessage(data []byte, mime, caption, fileName string) (*waE2E.Message, error) {
 	switch {
 	case strings.HasPrefix(mime, "image/"):
 		uploaded, err := c.client.Upload(c.ctx, data, whatsmeow.MediaImage)
@@ -141,18 +148,20 @@ func (c *Channel) buildMediaMessage(data []byte, mime, caption string) (*waE2E.M
 		if err != nil {
 			return nil, err
 		}
-		return &waE2E.Message{
-			DocumentMessage: &waE2E.DocumentMessage{
-				Caption:       proto.String(caption),
-				Mimetype:      proto.String(mime),
-				URL:           &uploaded.URL,
-				DirectPath:    &uploaded.DirectPath,
-				MediaKey:      uploaded.MediaKey,
-				FileEncSHA256: uploaded.FileEncSHA256,
-				FileSHA256:    uploaded.FileSHA256,
-				FileLength:    proto.Uint64(uint64(len(data))),
-			},
-		}, nil
+		docMsg := &waE2E.DocumentMessage{
+			Caption:       proto.String(caption),
+			Mimetype:      proto.String(mime),
+			URL:           &uploaded.URL,
+			DirectPath:    &uploaded.DirectPath,
+			MediaKey:      uploaded.MediaKey,
+			FileEncSHA256: uploaded.FileEncSHA256,
+			FileSHA256:    uploaded.FileSHA256,
+			FileLength:    proto.Uint64(uint64(len(data))),
+		}
+		if fileName != "" {
+			docMsg.FileName = proto.String(fileName)
+		}
+		return &waE2E.Message{DocumentMessage: docMsg}, nil
 	}
 }
 
