@@ -150,6 +150,7 @@ func (p *ClaudeCLIProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 
 	var finalResp ChatResponse
 	var contentBuf strings.Builder
+	var streamErrMsg string // error message from stream-json result event
 
 	for scanner.Scan() {
 		if ctx.Err() != nil {
@@ -192,8 +193,14 @@ func (p *ClaudeCLIProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 				finalResp.Content = contentBuf.String()
 			}
 			finalResp.FinishReason = "stop"
-			if ev.Subtype == "error" {
+			if ev.Subtype == "error" || ev.IsError {
 				finalResp.FinishReason = "error"
+				// Prefer ev.Error over ev.Result — result may be empty for usage/rate limit errors
+				if ev.Error != "" {
+					streamErrMsg = ev.Error
+				} else if ev.Result != "" {
+					streamErrMsg = ev.Result
+				}
 			}
 			if ev.Usage != nil {
 				finalResp.Usage = &Usage{
@@ -223,7 +230,16 @@ func (p *ClaudeCLIProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 		if finalResp.Content != "" {
 			return &finalResp, nil
 		}
-		return nil, fmt.Errorf("claude-cli: %w (stderr: %s)", err, stderrBuf.String())
+		stderrStr := strings.TrimSpace(stderrBuf.String())
+		if stderrStr == "" && finalResp.FinishReason == "error" {
+			// Error was communicated via stream-json stdout (claude-cli does not use stderr for API errors)
+			if streamErrMsg != "" {
+				stderrStr = "stream: " + streamErrMsg
+			} else {
+				stderrStr = "stream error (no message)"
+			}
+		}
+		return nil, fmt.Errorf("claude-cli: %w (stderr: %s)", err, stderrStr)
 	}
 	if debugFile != nil && stderrBuf.Len() > 0 {
 		fmt.Fprintf(debugFile, "\n=== STDERR:\n%s\n", stderrBuf.String())

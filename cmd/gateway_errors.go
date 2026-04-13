@@ -32,7 +32,7 @@ func formatAgentError(err error) string {
 	}
 
 	// 4. Rate limit
-	if containsAny(lower, "rate limit", "rate_limit", "too many requests", "429", "quota exceeded", "resource_exhausted") {
+	if containsAny(lower, "rate limit", "rate_limit", "too many requests", "429", "quota exceeded", "resource_exhausted", "usage limit") {
 		return "⚠️ API rate limit reached. Please try again later."
 	}
 
