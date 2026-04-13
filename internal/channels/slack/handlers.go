@@ -214,22 +214,25 @@ func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
 		"sender_id", senderID, "channel_id", channelID,
 		"is_dm", isDM, "preview", channels.Truncate(content, 50))
 
-	// Send "Thinking..." placeholder
+	// Send "Thinking..." placeholder (skipped when thinking_placeholder: false in config).
+	// When skipped, Send() falls through to sendChunked() which posts a new message —
+	// this triggers a Slack push notification on completion instead of on the placeholder.
 	replyThreadTS := threadTS
 	if !isDM && replyThreadTS == "" {
 		replyThreadTS = ev.TimeStamp // start thread from the triggering message
 	}
 
-	placeholderOpts := []slackapi.MsgOption{
-		slackapi.MsgOptionText("Thinking...", false),
-	}
-	if replyThreadTS != "" {
-		placeholderOpts = append(placeholderOpts, slackapi.MsgOptionTS(replyThreadTS))
-	}
-
-	_, placeholderTS, err := c.api.PostMessage(channelID, placeholderOpts...)
-	if err == nil {
-		c.placeholders.Store(localKey, placeholderTS)
+	if !c.disableThinking {
+		placeholderOpts := []slackapi.MsgOption{
+			slackapi.MsgOptionText("Thinking...", false),
+		}
+		if replyThreadTS != "" {
+			placeholderOpts = append(placeholderOpts, slackapi.MsgOptionTS(replyThreadTS))
+		}
+		_, placeholderTS, err := c.api.PostMessage(channelID, placeholderOpts...)
+		if err == nil {
+			c.placeholders.Store(localKey, placeholderTS)
+		}
 	}
 
 	// Build final content with group history context

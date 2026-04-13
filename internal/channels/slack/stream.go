@@ -69,7 +69,12 @@ func (s *slackStream) MsgTS() string {
 }
 
 // StreamEnabled reports whether streaming is active for DMs or groups.
+// Streaming requires a placeholder message to edit into; if thinking_placeholder
+// is disabled, streaming is also disabled and the final response is sent as a new message.
 func (c *Channel) StreamEnabled(isGroup bool) bool {
+	if c.disableThinking {
+		return false
+	}
 	if isGroup {
 		return c.config.GroupStream != nil && *c.config.GroupStream
 	}

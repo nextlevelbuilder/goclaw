@@ -126,9 +126,10 @@ type SlackConfig struct {
 	NativeStream   *bool               `json:"native_stream,omitempty"`   // use Slack ChatStreamer API if available (default false)
 	ReactionLevel  string              `json:"reaction_level,omitempty"`  // "off" (default), "minimal", "full"
 	BlockReply     *bool               `json:"block_reply,omitempty"`     // override gateway block_reply (nil = inherit)
-	DebounceDelay  int                 `json:"debounce_delay,omitempty"`  // ms delay before dispatching rapid messages (default 300, 0=disabled)
-	ThreadTTL      *int                `json:"thread_ttl,omitempty"`      // hours before thread participation expires (default 24, 0=disabled — always require @mention)
-	MediaMaxBytes  int64               `json:"media_max_bytes,omitempty"` // max file download size in bytes (default 20MB)
+	DebounceDelay       int                 `json:"debounce_delay,omitempty"`       // ms delay before dispatching rapid messages (default 300, 0=disabled)
+	ThreadTTL           *int                `json:"thread_ttl,omitempty"`           // hours before thread participation expires (default 24, 0=disabled — always require @mention)
+	MediaMaxBytes       int64               `json:"media_max_bytes,omitempty"`      // max file download size in bytes (default 20MB)
+	ThinkingPlaceholder *bool               `json:"thinking_placeholder,omitempty"` // send "Thinking..." placeholder before responding (default true); set false to skip placeholder so the final response arrives as a new message (triggers push notification)
 }
 
 type WhatsAppConfig struct {

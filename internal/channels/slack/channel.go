@@ -49,8 +49,9 @@ type Channel struct {
 	userCacheMu sync.RWMutex
 	userCache   map[string]cachedUser
 
-	debounceDelay time.Duration
-	threadTTL     time.Duration  // thread participation expiry (0 = disabled)
+	debounceDelay      time.Duration
+	threadTTL          time.Duration // thread participation expiry (0 = disabled)
+	disableThinking    bool          // when true, skip "Thinking..." placeholder so final response is a new message
 	wg            sync.WaitGroup // tracks goroutines for clean shutdown
 	cancelFn      context.CancelFunc
 	// pairingService, pairingDebounce, approvedGroups, groupHistory, historyLimit, requireMention
@@ -115,11 +116,14 @@ func New(cfg config.SlackConfig, msgBus *bus.MessageBus, pairingSvc store.Pairin
 		}
 	}
 
+	disableThinking := cfg.ThinkingPlaceholder != nil && !*cfg.ThinkingPlaceholder
+
 	ch := &Channel{
 		BaseChannel:    base,
 		config:         cfg,
 		debounceDelay:  debounceDelay,
 		threadTTL:      threadTTL,
+		disableThinking: disableThinking,
 		debounceTimers: make(map[string]*debounceEntry),
 		userCache:      make(map[string]cachedUser),
 	}
