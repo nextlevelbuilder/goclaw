@@ -20,6 +20,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/safego"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -277,6 +278,7 @@ func (c *Channel) startWebSocket(ctx context.Context) error {
 	c.wsClient = NewWSClient(c.cfg.AppID, c.cfg.AppSecret, domain, &wsEventAdapter{ch: c})
 
 	go func() {
+		defer safego.Recover(nil, "component", "feishu_ws", "channel", c.Name())
 		if err := c.wsClient.Start(ctx); err != nil {
 			slog.Error("feishu websocket error", "error", err)
 		}

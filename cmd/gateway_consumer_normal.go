@@ -220,7 +220,12 @@ func processNormalMessage(
 			outMeta["reply_to_message_id"] = mid
 		}
 	}
-	for _, k := range []string{tools.MetaMessageThreadID, "local_key", "placeholder_key", "group_id", "feishu_reply_target_id"} {
+	// Channel routing keys — keep in sync with routingMetaKeys in channels/events.go.
+	for _, k := range []string{
+		tools.MetaMessageThreadID, "local_key", "placeholder_key", "group_id",
+		"feishu_reply_target_id",
+		"fb_mode", "sender_id", "page_id", "reply_to_comment_id",
+	} {
 		if v := msg.Metadata[k]; v != "" {
 			outMeta[k] = v
 		}

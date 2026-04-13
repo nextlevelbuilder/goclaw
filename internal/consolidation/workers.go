@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/nextlevelbuilder/goclaw/internal/bgalert"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -24,6 +25,7 @@ type ConsolidationDeps struct {
 	SystemConfigs store.SystemConfigStore // per-tenant provider config
 	Registry      *providers.Registry     // provider resolution
 	Extractor     EntityExtractor
+	AlertDeps     bgalert.AlertDeps // for reporting non-retryable LLM errors
 	// AgentStore is optional: when present, the dreaming worker reads
 	// per-agent overrides from MemoryConfig.Dreaming. If nil, the worker
 	// uses its built-in defaults for every agent.
@@ -39,11 +41,13 @@ func Register(deps ConsolidationDeps) func() {
 		systemConfigs: deps.SystemConfigs,
 		registry:      deps.Registry,
 		eventBus:      deps.EventBus,
+		alertDeps:     deps.AlertDeps,
 	}
 	semantic := &semanticWorker{
 		kgStore:   deps.KGStore,
 		extractor: deps.Extractor,
 		eventBus:  deps.EventBus,
+		alertDeps: deps.AlertDeps,
 	}
 	dedup := &dedupWorker{
 		kgStore: deps.KGStore,
@@ -54,6 +58,7 @@ func Register(deps ConsolidationDeps) func() {
 		memoryStore:   deps.MemoryStore,
 		systemConfigs: deps.SystemConfigs,
 		registry:      deps.Registry,
+		alertDeps:     deps.AlertDeps,
 		threshold:     dreamingDefaultThreshold,
 		debounce:      dreamingDefaultDebounce,
 		resolveConfig: newAgentStoreResolver(deps.AgentStore),

@@ -117,7 +117,7 @@ func RescanWorkspace(ctx context.Context, params RescanParams, vs store.VaultSto
 		// can call progress.Start(total) before workers receive events.
 		// Skip auto-generated media files (goclaw_gen_*) — they create excessive
 		// noise links and shouldn't be counted in progress tracking.
-		if bus != nil && !strings.HasPrefix(filepath.Base(relPath), "goclaw_gen_") {
+		if bus != nil && !shouldSkipEnrichment(filepath.Base(relPath)) {
 			result.PendingEvents = append(result.PendingEvents, eventbus.DomainEvent{
 				ID:        uuid.Must(uuid.NewV7()).String(),
 				Type:      eventbus.EventVaultDocUpserted,

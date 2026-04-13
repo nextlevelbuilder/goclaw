@@ -1,5 +1,6 @@
 import Graph from "graphology";
 import type { VaultDocument, VaultLink } from "@/types/vault";
+import type { VaultGraphNode, VaultGraphEdge } from "@/types/graph-dto";
 import { getNodeSize, truncateMiddle } from "@/components/graph/graph-utils";
 
 // Colors per vault document type — matches DOC_TYPE_ICONS in vault-tree.tsx
@@ -49,6 +50,33 @@ export function limitVaultDocsByDegree(
   return [...docs].sort((a, b) => (deg.get(b.id) ?? 0) - (deg.get(a.id) ?? 0)).slice(0, nodeLimit);
 }
 
+/** Build graph from lightweight DTOs (degree pre-computed, no client loop). */
+export function buildVaultGraphFromDTO(nodes: VaultGraphNode[], edges: VaultGraphEdge[]): Graph {
+  const graph = new Graph({ multi: false, type: "directed" });
+  const nodeIds = new Set(nodes.map((n) => n.id));
+
+  for (const n of nodes) {
+    graph.addNode(n.id, {
+      label: truncateMiddle(n.t || n.p.split("/").pop() || n.id.slice(0, 8), 28),
+      x: 0, y: 0,
+      size: getNodeSize(n.deg, nodes.length),
+      color: VAULT_TYPE_COLORS_LIGHT[n.dt] ?? DEFAULT_COLOR_LIGHT,
+      docType: n.dt,
+    });
+  }
+
+  for (const e of edges) {
+    if (nodeIds.has(e.from) && nodeIds.has(e.to) && !graph.hasEdge(e.from, e.to)) {
+      graph.addEdgeWithKey(e.id, e.from, e.to, {
+        label: e.type, type: "curvedArrow",
+        color: "#a1a1aa", size: 0.4,
+      });
+    }
+  }
+
+  return graph;
+}
+
 /** Build a Graphology graph from vault documents and their links. */
 export function buildVaultGraph(
   documents: VaultDocument[],
@@ -74,7 +102,7 @@ export function buildVaultGraph(
       label: truncateMiddle(rawLabel, 28),
       x: 0,
       y: 0,
-      size: getNodeSize(degree),
+      size: getNodeSize(degree, documents.length),
       // Color set by nodeReducer based on theme; use light as initial fallback
       color: VAULT_TYPE_COLORS_LIGHT[doc.doc_type] ?? DEFAULT_COLOR_LIGHT,
       docType: doc.doc_type,

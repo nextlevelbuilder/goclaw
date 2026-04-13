@@ -337,6 +337,98 @@ func TestSend_MessengerMode(t *testing.T) {
 	}
 }
 
+// TestHandleMessagingEvent_PageEchoDoesNotTrackAdminReply verifies webhook
+// echoes for bot-sent messages do not arm the admin-reply cooldown.
+func TestHandleMessagingEvent_PageEchoDoesNotTrackAdminReply(t *testing.T) {
+	cfg := facebookInstanceConfig{}
+	cfg.Features.MessengerAutoReply = true
+	ch := newTestChannel(t, "111", cfg)
+
+	now := time.Now()
+	ch.botSentAt.Store("user-1", now)
+
+	ch.handleMessagingEvent(WebhookEntry{ID: "111"}, MessagingEvent{
+		Sender:    FBUser{ID: "111"},
+		Recipient: FBUser{ID: "user-1"},
+		Timestamp: now.UnixMilli(),
+		Message:   &IncomingMessage{MID: "echo-1", Text: "bot reply"},
+	})
+
+	if _, ok := ch.adminReplied.Load("user-1"); ok {
+		t.Fatal("bot echo should not be tracked as admin reply")
+	}
+}
+
+// TestSend_MessengerModeSkipsWhenAdminReplyTracked verifies bot replies are
+// suppressed when an admin reply was observed recently via webhook.
+func TestSend_MessengerModeSkipsWhenAdminReplyTracked(t *testing.T) {
+	var sends int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sends++
+		_, _ = w.Write([]byte(`{"message_id":"mid"}`))
+	}))
+	t.Cleanup(srv.Close)
+	swapGraphBase(t, srv.URL)
+
+	mb := bus.New()
+	ch, _ := New(facebookInstanceConfig{PageID: "111"}, facebookCreds{
+		PageAccessToken: "t", AppSecret: "s", VerifyToken: "v",
+	}, mb, nil)
+	ch.adminReplied.Store("user-1", time.Now())
+
+	err := ch.Send(t.Context(), bus.OutboundMessage{
+		ChatID:   "user-1",
+		Content:  "hello",
+		Metadata: map[string]string{"fb_mode": "messenger"},
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	if sends != 0 {
+		t.Fatalf("sends = %d, want 0 when admin already replied", sends)
+	}
+}
+
+// TestSend_MessengerModeDoesNotConsultGraphHistory verifies historical page
+// messages do not suppress replies after process restart.
+func TestSend_MessengerModeDoesNotConsultGraphHistory(t *testing.T) {
+	var gets, posts int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet:
+			gets++
+			_, _ = w.Write([]byte(`{"data":[{"messages":{"data":[{"from":{"id":"111"},"created_time":"2026-04-13T00:00:00+0000"}]}}]}`))
+		case r.Method == http.MethodPost:
+			posts++
+			_, _ = w.Write([]byte(`{"message_id":"mid"}`))
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	swapGraphBase(t, srv.URL)
+
+	mb := bus.New()
+	ch, _ := New(facebookInstanceConfig{PageID: "111"}, facebookCreds{
+		PageAccessToken: "t", AppSecret: "s", VerifyToken: "v",
+	}, mb, nil)
+
+	err := ch.Send(t.Context(), bus.OutboundMessage{
+		ChatID:   "user-1",
+		Content:  "hello",
+		Metadata: map[string]string{"fb_mode": "messenger"},
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	if gets != 0 {
+		t.Fatalf("unexpected graph history check: gets = %d, want 0", gets)
+	}
+	if posts != 1 {
+		t.Fatalf("posts = %d, want 1", posts)
+	}
+}
+
 // TestSend_CommentModeMissingMetadata verifies the comment path errors when
 // reply_to_comment_id metadata is absent.
 func TestSend_CommentModeMissingMetadata(t *testing.T) {

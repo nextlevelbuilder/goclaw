@@ -778,7 +778,10 @@
       "shareMemoryNote": "Toggling this does not migrate data — existing per-user memories become inaccessible in shared mode.",
       "shareKG": "Shared Knowledge Graph",
       "shareKGTip": "All users access the same knowledge graph. When off, each user has their own isolated KG with global canonical fallback for read operations.",
-      "shareKGNote": "Toggling this does not migrate data — existing per-user KG entities become inaccessible in shared mode."
+      "shareKGNote": "Toggling this does not migrate data — existing per-user KG entities become inaccessible in shared mode.",
+      "shareSessions": "Share Sessions",
+      "shareSessionsTip": "Allow agent to access conversation sessions across all groups. When off, each user's sessions remain isolated.",
+      "shareSessionsNote": "Toggling this does not migrate data — existing per-user sessions become inaccessible in shared mode."
     },
     "compaction": {
       "title": "Compaction",

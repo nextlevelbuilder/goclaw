@@ -1,7 +1,7 @@
 import { useRef, useMemo, useState, useCallback } from "react";
 import type Sigma from "sigma";
 import { useTranslation } from "react-i18next";
-import { buildVaultGraph, limitVaultDocsByDegree, VAULT_TYPE_COLORS_LIGHT, VAULT_TYPE_COLORS_DARK } from "@/adapters/vault-graph-adapter";
+import { buildVaultGraphFromDTO, VAULT_TYPE_COLORS_LIGHT, VAULT_TYPE_COLORS_DARK } from "@/adapters/vault-graph-adapter";
 import { useUiStore } from "@/stores/use-ui-store";
 import { SigmaGraphContainer } from "@/components/graph/sigma-graph-container";
 import { SigmaGraphControls } from "@/components/graph/sigma-graph-controls";
@@ -10,17 +10,16 @@ import { SigmaGraphFilters } from "@/components/graph/sigma-graph-filters";
 import { SigmaGraphMinimap } from "@/components/graph/sigma-graph-minimap";
 import { SigmaGraphKeyboardHelp } from "@/components/graph/sigma-graph-keyboard-help";
 import { useSigmaKeyboard } from "@/components/graph/use-sigma-keyboard";
-import type { VaultDocument } from "@/types/vault";
-import { useVaultGraphData } from "./hooks/use-vault";
+import { useVaultGraphData } from "@/hooks/use-vault-graph-data";
 
-const DEFAULT_NODE_LIMIT = 200;
+const DEFAULT_NODE_LIMIT = 2000;
 
 interface Props {
   agentId: string;
   teamId?: string;
   selectedDocId?: string | null;
   onNodeSelect?: (docId: string | null) => void;
-  onNodeDoubleClick?: (doc: VaultDocument) => void;
+  onNodeDoubleClick?: (nodeId: string) => void;
 }
 
 export function VaultGraphView({ agentId, teamId, selectedDocId, onNodeSelect, onNodeDoubleClick }: Props) {
@@ -32,28 +31,25 @@ export function VaultGraphView({ agentId, teamId, selectedDocId, onNodeSelect, o
   const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(new Set());
   const [filtersOpen, setFiltersOpen] = useState(false);
 
-  // Theme-aware node colors - subscribe to store for re-render, check DOM for actual state
-  useUiStore((s) => s.theme);
-  const isDark = typeof document !== "undefined" && document.documentElement.classList.contains("dark");
+  // Theme-aware node colors — derive from store, not DOM class (avoids stale reads)
+  const theme = useUiStore((s) => s.theme);
+  const isDark = theme === "dark" || (theme === "system"
+    && typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   const typeColors = isDark ? VAULT_TYPE_COLORS_DARK : VAULT_TYPE_COLORS_LIGHT;
 
-  const { documents: allDocs, links, loading } = useVaultGraphData(agentId, { teamId });
+  const { nodes, edges, totalNodes, totalEdges, loading } = useVaultGraphData(agentId, { teamId, limit: nodeLimit });
 
-  const totalCount = allDocs.length;
-  const isLimited = totalCount > nodeLimit;
-  const documents = useMemo(() => limitVaultDocsByDegree(allDocs, links, nodeLimit), [allDocs, links, nodeLimit]);
-  const docMap = useMemo(() => new Map(documents.map((d) => [d.id, d])), [documents]);
-  // Only build graph when ALL data loaded — prevents double-render
-  // (orphan-only layout → with-links layout) that causes visual chaos.
+  const isLimited = totalNodes > nodeLimit;
+  const nodeIds = useMemo(() => new Set(nodes.map((n) => n.id)), [nodes]);
+  // Only build graph when data loaded — prevents double-render
   const graph = useMemo(
-    () => loading ? buildVaultGraph([], []) : buildVaultGraph(documents, links),
-    [documents, links, loading],
+    () => loading ? buildVaultGraphFromDTO([], []) : buildVaultGraphFromDTO(nodes, edges),
+    [nodes, edges, loading],
   );
 
   const handleNodeDoubleClick = useCallback((nodeId: string) => {
-    const doc = docMap.get(nodeId);
-    if (doc) onNodeDoubleClick?.(doc);
-  }, [docMap, onNodeDoubleClick]);
+    if (nodeIds.has(nodeId)) onNodeDoubleClick?.(nodeId);
+  }, [nodeIds, onNodeDoubleClick]);
 
   useSigmaKeyboard({
     sigma,
@@ -64,14 +60,14 @@ export function VaultGraphView({ agentId, teamId, selectedDocId, onNodeSelect, o
     searchInputRef,
   });
 
-  const hasData = allDocs.length > 0;
+  const hasData = nodes.length > 0;
 
   return (
     <div
       ref={containerRef}
       tabIndex={0}
       role="application"
-      aria-label={`Vault knowledge graph with ${totalCount} documents and ${links.length} links`}
+      aria-label={`Vault knowledge graph with ${totalNodes} documents and ${totalEdges} links`}
       className="flex h-full flex-col overflow-hidden bg-background outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
     >
       {/* Top bar — responsive: stacks on narrow screens */}
@@ -107,7 +103,7 @@ export function VaultGraphView({ agentId, teamId, selectedDocId, onNodeSelect, o
 
       {/* Graph canvas + minimap overlay */}
       <div className="min-h-0 flex-1 relative">
-        {loading && allDocs.length === 0 ? (
+        {loading && nodes.length === 0 ? (
           <div className="h-full animate-pulse rounded-md bg-muted" />
         ) : !hasData ? (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No documents</div>
@@ -136,10 +132,10 @@ export function VaultGraphView({ agentId, teamId, selectedDocId, onNodeSelect, o
         isLimited={isLimited}
         onNodeLimitChange={setNodeLimit}
         labels={{
-          nodes: t("graphDocs", { count: totalCount, defaultValue: "{{count}} docs" }),
-          edges: t("graphLinks", { count: links.length, defaultValue: "{{count}} links" }),
+          nodes: t("graphDocs", { count: totalNodes, defaultValue: "{{count}} docs" }),
+          edges: t("graphLinks", { count: totalEdges, defaultValue: "{{count}} links" }),
           limitNote: isLimited
-            ? t("graphLimitNote", { limit: nodeLimit, total: totalCount, defaultValue: "showing {{limit}} of {{total}}" })
+            ? t("graphLimitNote", { limit: nodeLimit, total: totalNodes, defaultValue: "showing {{limit}} of {{total}}" })
             : undefined,
         }}
       />

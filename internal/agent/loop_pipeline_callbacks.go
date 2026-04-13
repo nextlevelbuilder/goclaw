@@ -309,7 +309,7 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 
 func (l *Loop) makePruneMessages() func(msgs []providers.Message, budget int) []providers.Message {
 	return func(msgs []providers.Message, budget int) []providers.Message {
-		return pruneContextMessages(msgs, budget, l.contextPruningCfg)
+		return pruneContextMessages(msgs, budget, l.contextPruningCfg, l.tokenCounter, l.model)
 	}
 }
 

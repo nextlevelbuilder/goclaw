@@ -78,9 +78,13 @@ func (p *EnrichProgress) Start(total int, tenantID uuid.UUID) {
 
 // AddError increments error count and broadcasts an error event.
 // Used when enrichment fails for a document (e.g., LLM retries exhausted).
+// Suppressed after Finish() to prevent stale errors from cancelled goroutines.
 func (p *EnrichProgress) AddError(errMsg string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if !p.running {
+		return
+	}
 	p.errorCount++
 	p.lastError = errMsg
 	p.broadcast(EnrichEvent{

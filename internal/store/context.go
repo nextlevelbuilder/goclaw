@@ -27,6 +27,8 @@ const (
 	SharedMemoryKey contextKey = "goclaw_shared_memory"
 	// SharedKGKey indicates KG should be shared across all users of the agent (no per-user scoping).
 	SharedKGKey contextKey = "goclaw_shared_kg"
+	// SharedSessionsKey indicates sessions should be shared across all users (no per-group scoping).
+	SharedSessionsKey contextKey = "goclaw_shared_sessions"
 	// ShellDenyGroupsKey holds per-agent shell deny group overrides.
 	ShellDenyGroupsKey contextKey = "goclaw_shell_deny_groups"
 	// AgentKeyKey is the context key for the agent key/name (string identifier, e.g. "default").
@@ -232,6 +234,22 @@ func IsSharedKG(ctx context.Context) bool {
 	}
 	if rc := RunContextFromCtx(ctx); rc != nil {
 		return rc.SharedKG
+	}
+	return false
+}
+
+// WithSharedSessions returns a context flagged for shared sessions (skip per-group scoping).
+func WithSharedSessions(ctx context.Context) context.Context {
+	return context.WithValue(ctx, SharedSessionsKey, true)
+}
+
+// IsSharedSessions returns true if sessions should be shared across users/groups.
+func IsSharedSessions(ctx context.Context) bool {
+	if v, ok := ctx.Value(SharedSessionsKey).(bool); ok {
+		return v
+	}
+	if rc := RunContextFromCtx(ctx); rc != nil {
+		return rc.SharedSessions
 	}
 	return false
 }

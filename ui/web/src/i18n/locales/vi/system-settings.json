@@ -76,5 +76,16 @@
     "maxTokensHint": "Giới hạn token cho bản tóm tắt.",
     "info": "Khi nhóm chat vượt ngưỡng, LLM tự động tóm tắt các tin nhắn cũ thành một mục gọn, giữ nguyên các tin gần nhất cho ngữ cảnh."
   },
-  "moreConfig": "Cấu hình thêm"
+  "moreConfig": "Cấu hình thêm",
+  "alert": {
+    "message": "Tác vụ nền gặp lỗi: {{reason}}. Các tính năng như tổng hợp bộ nhớ và làm giàu vault có thể không hoạt động.",
+    "openSettings": "Sửa trong Cài đặt",
+    "reason": {
+      "auth": "Xác thực thất bại (API key không hợp lệ hoặc hết hạn)",
+      "auth_permanent": "API key đã bị thu hồi hoặc vô hiệu hóa",
+      "billing": "Lỗi thanh toán (hết credit hoặc cần thanh toán)",
+      "model_not_found": "Không tìm thấy model (tên model không hợp lệ)",
+      "unknown": "Lỗi nhà cung cấp không xác định"
+    }
+  }
 }

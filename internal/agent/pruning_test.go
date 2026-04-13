@@ -191,7 +191,7 @@ func TestPruneContextMessages_ModeOff_ReturnsOriginal(t *testing.T) {
 		{Role: "assistant", Content: "hello"},
 	}
 	cfg := &config.ContextPruningConfig{Mode: "off"}
-	got := pruneContextMessages(msgs, 100000, cfg)
+	got := pruneContextMessages(msgs, 100000, cfg, nil, "")
 	if len(got) != len(msgs) {
 		t.Error("mode=off should return original slice")
 	}
@@ -199,7 +199,7 @@ func TestPruneContextMessages_ModeOff_ReturnsOriginal(t *testing.T) {
 
 func TestPruneContextMessages_ZeroWindow_ReturnsOriginal(t *testing.T) {
 	msgs := []providers.Message{{Role: "user", Content: "hi"}}
-	got := pruneContextMessages(msgs, 0, nil)
+	got := pruneContextMessages(msgs, 0, nil, nil, "")
 	if len(got) != len(msgs) {
 		t.Error("zero context window should return original")
 	}
@@ -214,7 +214,7 @@ func TestPruneContextMessages_SmallContext_NoChange(t *testing.T) {
 		{Role: "assistant", Content: "done"},
 	}
 	// Very large window → ratio tiny → nothing pruned.
-	got := pruneContextMessages(msgs, 1_000_000, nil)
+	got := pruneContextMessages(msgs, 1_000_000, nil, nil, "")
 	if len(got) != len(msgs) {
 		t.Errorf("small context: len=%d, want %d", len(got), len(msgs))
 	}
@@ -247,7 +247,7 @@ func TestPruneContextMessages_SoftTrim_LongToolResult(t *testing.T) {
 		},
 	}
 	// Use a context window that makes ratio exceed threshold.
-	got := pruneContextMessages(msgs, 100, cfg)
+	got := pruneContextMessages(msgs, 100, cfg, nil, "")
 
 	// Tool result should be trimmed — shorter than original.
 	for _, m := range got {
@@ -293,7 +293,7 @@ func TestPruneContextMessages_HardClear_WhenRatioVeryHigh(t *testing.T) {
 		},
 	}
 
-	got := pruneContextMessages(msgs, 10, cfg)
+	got := pruneContextMessages(msgs, 10, cfg, nil, "")
 
 	// Tool result should be replaced by placeholder or heavily trimmed.
 	for _, m := range got {
@@ -302,6 +302,124 @@ func TestPruneContextMessages_HardClear_WhenRatioVeryHigh(t *testing.T) {
 				t.Error("tool content should have been reduced")
 			}
 		}
+	}
+}
+
+// ─── media tool higher budget ───────────────────────────────────────────
+
+func TestPruneContextMessages_MediaToolHigherBudget(t *testing.T) {
+	// 7000-char tool result: exceeds default softTrimMaxChars (6000)
+	// but under media budget (8000). Media result should NOT be trimmed;
+	// non-media result should be trimmed.
+	content := strings.Repeat("Z", 7000)
+
+	msgs := []providers.Message{
+		{Role: "user", Content: "q"},
+		// Old assistant with two tool calls: one read_image, one exec
+		{Role: "assistant", Content: "a0", ToolCalls: []providers.ToolCall{
+			{ID: "tc_img", Name: "read_image"},
+			{ID: "tc_exec", Name: "exec"},
+		}},
+		{Role: "tool", Content: content, ToolCallID: "tc_img"},
+		{Role: "tool", Content: content, ToolCallID: "tc_exec"},
+		{Role: "user", Content: "q2"},
+		{Role: "assistant", Content: "a1"},
+		{Role: "user", Content: "q3"},
+		{Role: "assistant", Content: "a2"},
+		{Role: "user", Content: "q4"},
+		{Role: "assistant", Content: "a3"},
+	}
+
+	cfg := &config.ContextPruningConfig{
+		SoftTrimRatio:  0.01,  // force prune
+		HardClearRatio: 0.999, // don't hard clear
+	}
+
+	// Use 7000 tokens (28K chars) so per-result guard (30% = 8.4K) doesn't
+	// trigger on 7K-char results, isolating the soft trim behavior.
+	got := pruneContextMessages(msgs, 7000, cfg, nil, "")
+
+	// read_image result (7000 chars < 8000 media budget) → NOT trimmed
+	imgResult := got[2]
+	if imgResult.Content != content {
+		t.Errorf("read_image result should NOT be trimmed, got len=%d (want %d)", len(imgResult.Content), len(content))
+	}
+
+	// exec result (5000 chars > 3000 default budget) → trimmed
+	execResult := got[3]
+	if len(execResult.Content) >= len(content) {
+		t.Error("exec result should be trimmed (exceeds default budget)")
+	}
+}
+
+func TestPruneContextMessages_MediaToolSkipsHardClear(t *testing.T) {
+	content := strings.Repeat("M", 5000)
+
+	msgs := []providers.Message{
+		{Role: "user", Content: "q"},
+		{Role: "assistant", Content: "a0", ToolCalls: []providers.ToolCall{
+			{ID: "tc_img", Name: "read_image"},
+			{ID: "tc_exec", Name: "exec"},
+		}},
+		{Role: "tool", Content: content, ToolCallID: "tc_img"},
+		{Role: "tool", Content: content, ToolCallID: "tc_exec"},
+		{Role: "user", Content: "q2"},
+		{Role: "assistant", Content: "a1"},
+		{Role: "user", Content: "q3"},
+		{Role: "assistant", Content: "a2"},
+		{Role: "user", Content: "q4"},
+		{Role: "assistant", Content: "a3"},
+	}
+
+	enabled := true
+	cfg := &config.ContextPruningConfig{
+		SoftTrimRatio:        0.001,
+		HardClearRatio:       0.001,
+		MinPrunableToolChars: 1,
+		HardClear: &config.ContextPruningHardClear{
+			Enabled:     &enabled,
+			Placeholder: "[cleared]",
+		},
+	}
+
+	got := pruneContextMessages(msgs, 5000, cfg, nil, "")
+
+	// read_image result should survive hard clear (only soft-trimmed at most)
+	imgResult := got[2]
+	if imgResult.Content == "[cleared]" {
+		t.Error("read_image result should NOT be hard-cleared")
+	}
+
+	// exec result should be hard-cleared
+	execResult := got[3]
+	if execResult.Content != "[cleared]" {
+		t.Errorf("exec result should be hard-cleared, got len=%d", len(execResult.Content))
+	}
+}
+
+func TestBuildToolCallNameMap(t *testing.T) {
+	msgs := []providers.Message{
+		{Role: "assistant", ToolCalls: []providers.ToolCall{
+			{ID: "a", Name: "read_image"},
+			{ID: "b", Name: "exec"},
+		}},
+		{Role: "tool", Content: "result", ToolCallID: "a"},
+		{Role: "assistant", ToolCalls: []providers.ToolCall{
+			{ID: "c", Name: "web_fetch"},
+		}},
+	}
+	m := buildToolCallNameMap(msgs)
+	if m["a"] != "read_image" {
+		t.Errorf("m[a] = %q, want read_image", m["a"])
+	}
+	if m["b"] != "exec" {
+		t.Errorf("m[b] = %q, want exec", m["b"])
+	}
+	if m["c"] != "web_fetch" {
+		t.Errorf("m[c] = %q, want web_fetch", m["c"])
+	}
+	if _, ok := m["nonexistent"]; ok {
+		t.Error("unexpected key in map")
 	}
 }
 

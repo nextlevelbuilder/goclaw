@@ -354,7 +354,11 @@ var routingMetaKeys = []string{
 	"message_thread_id",      // telegram forum topics
 	"local_key",              // composite chat-id suffix
 	"group_id",               // legacy group identifier
-	"feishu_reply_target_id", // feishu/lark thread reply routing (issue #818)
+	"feishu_reply_target_id", // feishu/lark thread reply routing
+	"fb_mode",                // facebook messenger vs comment routing
+	"sender_id",              // facebook sender for first-inbox
+	"page_id",                // facebook page routing
+	"reply_to_comment_id",    // facebook comment reply target
 }
 
 // copyRoutingMeta copies channel routing metadata from RunContext.Metadata

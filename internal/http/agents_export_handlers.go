@@ -172,6 +172,7 @@ func (h *AgentsHandler) handleExportDirect(w http.ResponseWriter, r *http.Reques
 }
 
 // canExport checks if userID has permission to export the given agent.
+// Export is restricted to agent owner and system owner by design.
 func (h *AgentsHandler) canExport(ag *store.AgentData, userID string) bool {
 	if ag.OwnerID == userID {
 		return true
@@ -179,7 +180,6 @@ func (h *AgentsHandler) canExport(ag *store.AgentData, userID string) bool {
 	if h.isOwnerUser(userID) {
 		return true
 	}
-	// TODO: tenant admin check
 	return false
 }
 

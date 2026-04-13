@@ -151,6 +151,9 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 		if l.shouldShareKnowledgeGraph() {
 			ctx = store.WithSharedKG(ctx)
 		}
+		if l.shouldShareSessions() {
+			ctx = store.WithSharedSessions(ctx)
+		}
 		if err := os.MkdirAll(effectiveWorkspace, 0755); err != nil {
 			slog.Warn("failed to create user workspace directory", "workspace", effectiveWorkspace, "user", req.UserID, "error", err)
 		}
@@ -314,6 +317,7 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 		SelfEvolve:          l.selfEvolve,
 		SharedMemory:        store.IsSharedMemory(ctx),
 		SharedKG:            store.IsSharedKG(ctx),
+		SharedSessions:      store.IsSharedSessions(ctx),
 		RestrictToWorkspace: l.restrictToWs != nil && *l.restrictToWs,
 		BuiltinToolSettings: l.builtinToolSettings,
 		ChannelType:         req.ChannelType,

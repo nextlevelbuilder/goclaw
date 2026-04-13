@@ -33,6 +33,7 @@ type RunContext struct {
 	SelfEvolve          bool
 	SharedMemory        bool
 	SharedKG            bool
+	SharedSessions      bool
 	RestrictToWorkspace bool
 
 	// Tool configuration

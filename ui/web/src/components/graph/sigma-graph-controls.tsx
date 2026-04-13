@@ -3,7 +3,7 @@ import type Sigma from "sigma";
 import { ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const NODE_LIMIT_OPTIONS = [100, 200, 500, 1000, 5000] as const;
+const NODE_LIMIT_OPTIONS = [100, 200, 500, 1000, 2000, 5000] as const;
 
 interface SigmaGraphControlsProps {
   sigma: Sigma | null;

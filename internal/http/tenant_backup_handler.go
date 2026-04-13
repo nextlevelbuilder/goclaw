@@ -73,6 +73,7 @@ func (h *TenantBackupHandler) handleBackup(w http.ResponseWriter, r *http.Reques
 	}
 
 	if !h.authorised(r, userID, tenantID) {
+		slog.Warn("security.tenant_backup_denied", "user_id", userID, "tenant_id", tenantID)
 		writeError(w, http.StatusForbidden, protocol.ErrUnauthorized,
 			i18n.T(locale, i18n.MsgNoAccess, "tenant backup"))
 		return

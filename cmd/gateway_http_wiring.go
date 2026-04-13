@@ -181,6 +181,16 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 		vh.SetEnrichProgress(d.enrichProgress)
 		vh.SetEnrichWorker(d.enrichWorker)
 		d.server.SetVaultHandler(vh)
+
+		// Lightweight graph visualization endpoints (vault + KG).
+		var kgGraph store.KGGraphStore
+		if d.pgStores.KnowledgeGraph != nil {
+			kgGraph = newKGGraphStore(d.pgStores.DB)
+		}
+		vgHandler := httpapi.NewVaultGraphHandler(
+			newVaultGraphStore(d.pgStores.DB), kgGraph, d.pgStores.Teams,
+		)
+		d.server.SetVaultGraphHandler(vgHandler)
 	}
 
 	// V3: Episodic memory summaries API

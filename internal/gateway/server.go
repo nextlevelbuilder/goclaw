@@ -512,6 +512,11 @@ func (s *Server) SetEvolutionHandler(h *httpapi.EvolutionHandler) {
 // SetVaultHandler sets the Knowledge Vault document handler.
 func (s *Server) SetVaultHandler(h *httpapi.VaultHandler) { s.handlers = append(s.handlers, h) }
 
+// SetVaultGraphHandler sets the lightweight graph visualization handler.
+func (s *Server) SetVaultGraphHandler(h *httpapi.VaultGraphHandler) {
+	s.handlers = append(s.handlers, h)
+}
+
 // SetEpisodicHandler sets the episodic memory handler.
 func (s *Server) SetEpisodicHandler(h *httpapi.EpisodicHandler) { s.handlers = append(s.handlers, h) }
 

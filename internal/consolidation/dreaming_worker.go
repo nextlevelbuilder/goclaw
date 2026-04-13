@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/bgalert"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/providerresolve"
@@ -29,6 +30,7 @@ type dreamingWorker struct {
 	memoryStore   store.MemoryStore
 	systemConfigs store.SystemConfigStore // per-tenant provider config
 	registry      *providers.Registry     // provider resolution
+	alertDeps     bgalert.AlertDeps
 
 	// threshold/debounce are the global defaults. Per-agent overrides come
 	// from resolveConfig which reads the agent's MemoryConfig.Dreaming JSONB.
@@ -160,6 +162,7 @@ func (w *dreamingWorker) Handle(ctx context.Context, event eventbus.DomainEvent)
 	// Build LLM prompt and call provider.
 	synthesis, err := w.synthesize(ctx, provider, model, entries)
 	if err != nil {
+		bgalert.ReportProviderError(ctx, w.alertDeps, "dreaming", err)
 		slog.Warn("dreaming: LLM synthesis failed", "err", err, "agent", agentID)
 		return nil
 	}

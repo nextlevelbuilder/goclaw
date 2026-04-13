@@ -76,5 +76,16 @@
     "maxTokensHint": "压缩摘要的Token限制。",
     "info": "当群聊超过阈值时，LLM自动将旧消息总结为一条紧凑记录，保留最近的消息以保持上下文。"
   },
-  "moreConfig": "更多配置"
+  "moreConfig": "更多配置",
+  "alert": {
+    "message": "后台任务失败：{{reason}}。记忆整合和知识库增强等功能可能无法正常工作。",
+    "openSettings": "前往设置修复",
+    "reason": {
+      "auth": "认证失败（API密钥无效或已过期）",
+      "auth_permanent": "API密钥已被吊销或禁用",
+      "billing": "计费问题（余额不足或需要付款）",
+      "model_not_found": "模型未找到（模型名称无效或不可用）",
+      "unknown": "未知的提供商错误"
+    }
+  }
 }

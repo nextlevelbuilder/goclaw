@@ -21,9 +21,11 @@ var (
 )
 
 const (
-	webhookPath     = "/channels/facebook/webhook"
-	dedupTTL        = 24 * time.Hour  // matches Facebook's max retry window
-	dedupCleanEvery = 5 * time.Minute // how often to evict stale dedup entries
+	webhookPath        = "/channels/facebook/webhook"
+	dedupTTL           = 24 * time.Hour  // matches Facebook's max retry window
+	dedupCleanEvery    = 5 * time.Minute // how often to evict stale dedup entries
+	adminReplyCooldown = 5 * time.Minute
+	botEchoWindow      = 15 * time.Second
 )
 
 // Channel implements channels.Channel and channels.WebhookChannel for Facebook Fanpage.
@@ -41,6 +43,14 @@ type Channel struct {
 
 	// firstInboxSent tracks which senders have already received a first-inbox DM (in-memory).
 	firstInboxSent sync.Map // senderID(string) → struct{}
+
+	// adminReplied tracks conversations where admin (page) sent a message recently.
+	// Bot skips auto-reply for these conversations to avoid duplicate responses.
+	adminReplied sync.Map // chatID(string) → time.Time
+
+	// botSentAt tracks when bot last sent a reply to each conversation.
+	// Used to distinguish bot replies from admin replies in Graph API checks.
+	botSentAt sync.Map // chatID(string) → time.Time
 
 	// postFetcher caches post content to enrich comment context.
 	postFetcher *PostFetcher
@@ -148,12 +158,42 @@ func (ch *Channel) Start(ctx context.Context) error {
 // Stop gracefully shuts down the channel.
 func (ch *Channel) Stop(_ context.Context) error {
 	globalRouter.unregister(ch.pageID)
-	ch.stopFn()           // cancel stopCtx → cancels inflight Graph API calls
-	close(ch.stopCh)      // stop background goroutines
+	ch.stopFn()      // cancel stopCtx → cancels inflight Graph API calls
+	close(ch.stopCh) // stop background goroutines
 	ch.SetRunning(false)
 	ch.MarkStopped("stopped")
 	slog.Info("facebook channel stopped", "page_id", ch.pageID, "name", ch.Name())
 	return nil
+}
+
+func (ch *Channel) adminRepliedRecently(chatID string, now time.Time) bool {
+	val, ok := ch.adminReplied.Load(chatID)
+	if !ok {
+		return false
+	}
+	repliedAt, ok := val.(time.Time)
+	if !ok {
+		ch.adminReplied.Delete(chatID)
+		return false
+	}
+	if now.Sub(repliedAt) < adminReplyCooldown {
+		return true
+	}
+	ch.adminReplied.Delete(chatID)
+	return false
+}
+
+func (ch *Channel) isBotEcho(chatID string, eventAt time.Time) bool {
+	val, ok := ch.botSentAt.Load(chatID)
+	if !ok {
+		return false
+	}
+	sentAt, ok := val.(time.Time)
+	if !ok {
+		ch.botSentAt.Delete(chatID)
+		return false
+	}
+	return eventAt.Sub(sentAt).Abs() < botEchoWindow
 }
 
 // Send delivers an outbound message. Dispatches to comment reply or Messenger based on fb_mode metadata.
@@ -162,13 +202,27 @@ func (ch *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 
 	switch mode {
 	case "messenger":
+		if ch.adminRepliedRecently(msg.ChatID, time.Now()) {
+			slog.Info("facebook: skipping bot reply (admin already responded)",
+				"chat_id", msg.ChatID)
+			return nil
+		}
+
 		text := FormatForMessenger(msg.Content)
 		parts := splitMessage(text, messengerMaxChars)
+		sentAt := time.Now()
+		ch.botSentAt.Store(msg.ChatID, sentAt)
+		sentAny := false
 		for _, part := range parts {
 			if _, err := ch.graphClient.SendMessage(ctx, msg.ChatID, part); err != nil {
+				if !sentAny {
+					ch.botSentAt.Delete(msg.ChatID)
+				}
 				ch.handleAPIError(err)
 				return err
 			}
+			sentAny = true
+			ch.botSentAt.Store(msg.ChatID, time.Now())
 		}
 
 	default: // "comment"
@@ -232,7 +286,8 @@ func (ch *Channel) sendFirstInbox(ctx context.Context, senderID string) {
 	}
 }
 
-// runDedupCleaner evicts dedup entries older than dedupTTL every dedupCleanEvery.
+// runDedupCleaner evicts stale entries from dedup, adminReplied, and botSentAt
+// maps every dedupCleanEvery to prevent unbounded memory growth.
 func (ch *Channel) runDedupCleaner() {
 	ticker := time.NewTicker(dedupCleanEvery)
 	defer ticker.Stop()
@@ -248,6 +303,18 @@ func (ch *Channel) runDedupCleaner() {
 				}
 				return true
 			})
+			ch.adminReplied.Range(func(k, v any) bool {
+				if t, ok := v.(time.Time); ok && now.Sub(t) > adminReplyCooldown {
+					ch.adminReplied.Delete(k)
+				}
+				return true
+			})
+			ch.botSentAt.Range(func(k, v any) bool {
+				if t, ok := v.(time.Time); ok && now.Sub(t) > botEchoWindow {
+					ch.botSentAt.Delete(k)
+				}
+				return true
+			})
 		}
 	}
 }
@@ -257,4 +324,3 @@ func (ch *Channel) isDup(key string) bool {
 	_, loaded := ch.dedup.LoadOrStore(key, time.Now())
 	return loaded
 }
-

@@ -40,6 +40,8 @@ export interface VaultTreeProps {
   activePath: string | null;
   onSelect: (path: string) => void;
   onLoadMore: (path: string) => void;
+  /** Incremented on each loadRoot — forces re-mount to reset auto-expand state */
+  treeVersion: number;
 }
 
 function VaultTreeNode({
@@ -142,7 +144,7 @@ function VaultTreeNode({
   );
 }
 
-export function VaultTree({ tree, meta, loading, activePath, onSelect, onLoadMore }: VaultTreeProps) {
+export function VaultTree({ tree, meta, loading, activePath, onSelect, onLoadMore, treeVersion }: VaultTreeProps) {
   if (loading && tree.length === 0) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -160,7 +162,7 @@ export function VaultTree({ tree, meta, loading, activePath, onSelect, onLoadMor
   return (
     <div className="flex-1 min-h-0">
       {tree.map((node) => (
-        <VaultTreeNode key={node.path} node={node} depth={0}
+        <VaultTreeNode key={`${treeVersion}:${node.path}`} node={node} depth={0}
           meta={meta} activePath={activePath} onSelect={onSelect} onLoadMore={onLoadMore} />
       ))}
     </div>

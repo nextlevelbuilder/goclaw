@@ -371,7 +371,74 @@ Returns outgoing links and backlinks for a document.
 
 ---
 
-## 4. Orchestration Mode
+## 4. Graph Visualization
+
+Lightweight endpoints for rendering vault and knowledge graph relationships.
+
+### Get Vault Graph
+
+```
+GET /v1/vault/graph
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `agent_id` | string | Filter by agent (optional). |
+| `team_id` | string | Scope by team (optional). |
+| `limit` | integer | Max nodes to return (default: 500, max: 2000). |
+
+**Response:**
+
+```json
+{
+  "nodes": [
+    {
+      "id": "uuid",
+      "label": "Document Title",
+      "type": "document",
+      "agent_id": "uuid",
+      "metadata": {}
+    }
+  ],
+  "edges": [
+    {
+      "id": "link-uuid",
+      "source": "doc-uuid-1",
+      "target": "doc-uuid-2",
+      "type": "wikilink"
+    }
+  ],
+  "total_nodes": 150,
+  "total_edges": 120
+}
+```
+
+Used for vault document relationship visualization with FA2 layout (web worker rendering).
+
+### Get Knowledge Graph (Compact)
+
+```
+GET /v1/agents/{agentID}/kg/graph/compact
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `limit` | integer | Max nodes (default: 500, max: 2000). Optimized 10k node load. |
+
+**Response:** Same format as vault graph; nodes represent semantic entities, edges represent relationship types.
+
+**Features:**
+- Semantic zoom support
+- Optimized for 10k+ entity graphs
+- FA2 layout computed via web worker
+
+---
+
+## 5. Orchestration Mode
 
 Determines how an agent routes requests (standalone, delegation, team-based).
 
@@ -420,7 +487,7 @@ Or in team mode:
 
 ---
 
-## 5. V3 Feature Flags
+## 6. V3 Feature Flags
 
 Per-agent feature flags control v3 system capabilities (evolution, episodic memory, vault, etc.).
 
@@ -478,6 +545,7 @@ Accepts partial updates. Flag keys are validated against recognized v3 flags.
 | `internal/http/evolution_handlers.go` | Metrics + suggestions endpoints |
 | `internal/http/episodic_handlers.go` | Episodic memory list + search endpoints |
 | `internal/http/vault_handlers.go` | Knowledge vault document + link endpoints |
+| `internal/http/vault_graph_handler.go` | Vault + KG graph visualization endpoints |
 | `internal/http/orchestration_handlers.go` | Orchestration mode info endpoint |
 | `internal/http/v3_flags_handlers.go` | V3 feature flag get/toggle endpoints |
 | `internal/store/evolution_store.go` | Evolution metrics/suggestions store interface |

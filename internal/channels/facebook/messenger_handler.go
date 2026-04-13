@@ -3,6 +3,7 @@ package facebook
 import (
 	"fmt"
 	"log/slog"
+	"time"
 )
 
 // handleMessagingEvent processes a Messenger inbox event.
@@ -17,8 +18,19 @@ func (ch *Channel) handleMessagingEvent(entry WebhookEntry, event MessagingEvent
 		return
 	}
 
-	// Self-message prevention: skip messages sent by the page itself.
+	// Track admin (page) replies: when the page itself sends a message,
+	// record the recipient's chat ID so the bot skips auto-reply for that
+	// conversation during the cooldown window.
 	if event.Sender.ID == ch.pageID {
+		if event.Recipient.ID != "" {
+			eventAt := messagingEventTime(event.Timestamp)
+			if ch.isBotEcho(event.Recipient.ID, eventAt) {
+				slog.Debug("facebook: bot echo ignored", "chat_id", event.Recipient.ID)
+				return
+			}
+			ch.adminReplied.Store(event.Recipient.ID, eventAt)
+			slog.Debug("facebook: admin reply tracked", "chat_id", event.Recipient.ID)
+		}
 		return
 	}
 
@@ -40,6 +52,13 @@ func (ch *Channel) handleMessagingEvent(entry WebhookEntry, event MessagingEvent
 		return
 	}
 
+	// Check if admin already replied to this conversation recently.
+	senderID := event.Sender.ID
+	if ch.adminRepliedRecently(senderID, time.Now()) {
+		slog.Info("facebook: skipping auto-reply (admin replied recently)", "chat_id", senderID)
+		return
+	}
+
 	// Extract text content.
 	var content string
 	switch {
@@ -52,7 +71,6 @@ func (ch *Channel) handleMessagingEvent(entry WebhookEntry, event MessagingEvent
 		return
 	}
 
-	senderID := event.Sender.ID
 	// Messenger sessions are 1:1: chatID = senderID (channel name scopes the session).
 	chatID := senderID
 
@@ -67,4 +85,15 @@ func (ch *Channel) handleMessagingEvent(entry WebhookEntry, event MessagingEvent
 	}
 
 	ch.HandleMessage(senderID, chatID, content, nil, metadata, "direct")
+}
+
+func messagingEventTime(ts int64) time.Time {
+	switch {
+	case ts > 1_000_000_000_000:
+		return time.UnixMilli(ts)
+	case ts > 0:
+		return time.Unix(ts, 0)
+	default:
+		return time.Now()
+	}
 }

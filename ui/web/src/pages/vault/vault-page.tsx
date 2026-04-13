@@ -67,7 +67,7 @@ export function VaultPage() {
     doc_type: docType || undefined,
     team_id: selectedTeam || undefined,
   }), [selectedAgent, docType, selectedTeam]);
-  const { tree, meta, loading, loadRoot, loadSubtree } = useVaultTree(treeFilter);
+  const { tree, meta, loading, loadRoot, loadSubtree, treeVersion } = useVaultTree(treeFilter);
 
   useEffect(() => { loadRoot(); }, [loadRoot]);
 
@@ -79,7 +79,10 @@ export function VaultPage() {
   const handleTreeSelect = useCallback(async (path: string) => {
     setSelectedPath(path);
     const entry = meta.get(path);
-    if (!entry?.docId) return;
+    if (!entry?.docId) {
+      console.warn("[vault] meta missing docId for path:", path);
+      return;
+    }
     setSelectedDocId(entry.docId);
     try {
       const doc = await http.get<VaultDocument>(`/v1/vault/documents/${entry.docId}`);
@@ -93,11 +96,14 @@ export function VaultPage() {
     setSelectedDocId(docId);
   }, []);
 
-  // Graph double-click → open detail modal + highlight
-  const handleNodeDoubleClick = useCallback((doc: VaultDocument) => {
-    setDetailDoc(doc);
-    setSelectedDocId(doc.id);
-  }, []);
+  // Graph double-click → fetch full doc for detail modal
+  const handleNodeDoubleClick = useCallback(async (nodeId: string) => {
+    setSelectedDocId(nodeId);
+    try {
+      const doc = await http.get<VaultDocument>(`/v1/vault/documents/${nodeId}`);
+      setDetailDoc(doc);
+    } catch { /* http layer handles toast */ }
+  }, [http]);
 
   const handleCloseDetail = () => { setDetailDoc(null); };
 
@@ -124,6 +130,7 @@ export function VaultPage() {
           onDocTypeChange={handleDocTypeChange}
           agentId={selectedAgent}
           teamId={selectedTeam}
+          treeVersion={treeVersion}
         />
       </div>
 

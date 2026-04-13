@@ -20,6 +20,7 @@ func (h *TenantBackupHandler) handleRestore(w http.ResponseWriter, r *http.Reque
 	locale := extractLocale(r)
 
 	if !h.isOwnerUser(userID) {
+		slog.Warn("security.tenant_restore_owner_denied", "user_id", userID)
 		writeError(w, http.StatusForbidden, protocol.ErrUnauthorized,
 			i18n.T(locale, i18n.MsgNoAccess, "tenant restore"))
 		return

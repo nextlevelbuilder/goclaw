@@ -1,9 +1,10 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router";
 import { WifiOff } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
+import { BackgroundErrorBanner } from "./background-error-banner";
 import { ErrorBoundary } from "@/components/shared/error-boundary";
 import { useUiStore } from "@/stores/use-ui-store";
 import { useAuthStore } from "@/stores/use-auth-store";
@@ -29,6 +30,7 @@ export function AppLayout() {
   const setMobileSidebarOpen = useUiStore((s) => s.setMobileSidebarOpen);
   const connected = useAuthStore((s) => s.connected);
   const isMobile = useIsTablet();
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Close mobile sidebar on route change (e.g. programmatic navigation, back button)
   useEffect(() => {
@@ -62,7 +64,8 @@ export function AppLayout() {
         <Sidebar collapsed={sidebarCollapsed} />
       )}
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar />
+        <Topbar settingsOpen={settingsOpen} onSettingsOpenChange={setSettingsOpen} />
+        <BackgroundErrorBanner settingsOpen={settingsOpen} onOpenSettings={() => setSettingsOpen(true)} />
         {!connected && (
           <div className="flex items-center gap-2 border-b border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive">
             <WifiOff className="h-4 w-4 shrink-0" />

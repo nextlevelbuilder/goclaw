@@ -34,6 +34,8 @@ export function useVaultTree(filter: VaultTreeFilter = {}) {
   const [tree, setTree] = useState<TreeNode[]>([]);
   const [meta, setMeta] = useState<Map<string, VaultTreeEntry>>(new Map());
   const [loading, setLoading] = useState(false);
+  // Incremented on each loadRoot — forces VaultTreeNode re-mount to reset didAutoLoad
+  const [treeVersion, setTreeVersion] = useState(0);
 
   const buildParams = useCallback(
     (extraPath?: string): Record<string, string> => {
@@ -53,10 +55,15 @@ export function useVaultTree(filter: VaultTreeFilter = {}) {
     try {
       const res = await http.get<VaultTreeResponse>("/v1/vault/tree", buildParams());
       const entries = res.entries ?? [];
-      const m = new Map<string, VaultTreeEntry>();
-      for (const e of entries) m.set(e.path, e);
-      setMeta(m);
+      // Merge into existing meta so subtree entries from loadSubtree survive.
+      // Stale entries from old filters are harmless — no tree node exists to click them.
+      setMeta((prev) => {
+        const next = new Map(prev);
+        for (const e of entries) next.set(e.path, e);
+        return next;
+      });
       setTree(buildTree(toTreeInputs(entries)));
+      setTreeVersion((v) => v + 1);
     } finally {
       setLoading(false);
     }
@@ -78,5 +85,5 @@ export function useVaultTree(filter: VaultTreeFilter = {}) {
     }
   }, [http, buildParams]);
 
-  return { tree, meta, loading, loadRoot, loadSubtree };
+  return { tree, meta, loading, loadRoot, loadSubtree, treeVersion };
 }

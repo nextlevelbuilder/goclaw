@@ -109,6 +109,39 @@ func TestShouldShareKnowledgeGraph_DisabledByDefault(t *testing.T) {
 	}
 }
 
+// ─── shouldShareSessions ──────────────────────────────────────────────────────
+
+func TestShouldShareSessions_NilConfig(t *testing.T) {
+	l := &Loop{workspaceSharing: nil}
+	if l.shouldShareSessions() {
+		t.Error("nil config should return false")
+	}
+}
+
+func TestShouldShareSessions_EnabledConfig(t *testing.T) {
+	l := &Loop{workspaceSharing: &store.WorkspaceSharingConfig{ShareSessions: true}}
+	if !l.shouldShareSessions() {
+		t.Error("ShareSessions=true should return true")
+	}
+}
+
+func TestShouldShareSessions_DisabledByDefault(t *testing.T) {
+	l := &Loop{workspaceSharing: &store.WorkspaceSharingConfig{ShareMemory: true, ShareKnowledgeGraph: true}}
+	if l.shouldShareSessions() {
+		t.Error("ShareMemory and ShareKnowledgeGraph alone should not enable sessions sharing")
+	}
+}
+
+func TestShouldShareSessions_IndependentOfMemory(t *testing.T) {
+	l := &Loop{workspaceSharing: &store.WorkspaceSharingConfig{
+		ShareMemory:    true,
+		ShareSessions: false,
+	}}
+	if l.shouldShareSessions() {
+		t.Error("ShareMemory=true with ShareSessions=false should return false (independent)")
+	}
+}
+
 // ─── InvalidateUserWorkspace ──────────────────────────────────────────────
 
 func TestInvalidateUserWorkspace_RemovesCachedSetup(t *testing.T) {

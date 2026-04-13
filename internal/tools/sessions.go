@@ -65,6 +65,18 @@ func (t *SessionsListTool) Execute(ctx context.Context, args map[string]any) *Re
 	}
 	sessions := t.sessions.List(ctx, agentKey)
 
+	// Scope filter: group-scoped users only see sessions for their group.
+	currentSession := ToolSandboxKeyFromCtx(ctx)
+	{
+		var scoped []store.SessionInfo
+		for _, s := range sessions {
+			if isSessionInScope(ctx, s.Key, currentSession) {
+				scoped = append(scoped, s)
+			}
+		}
+		sessions = scoped
+	}
+
 	// Filter by active_minutes
 	if activeMinutes > 0 {
 		cutoff := time.Now().Add(-time.Duration(activeMinutes) * time.Minute)
@@ -154,6 +166,12 @@ func (t *SessionStatusTool) Execute(ctx context.Context, args map[string]any) *R
 	}
 	if !strings.HasPrefix(sessionKey, "agent:"+agentKey+":") {
 		return ErrorResult("access denied: session belongs to a different agent")
+	}
+
+	// Scope check: group-scoped users cannot access other groups' sessions.
+	currentSession := ToolSandboxKeyFromCtx(ctx)
+	if !isSessionInScope(ctx, sessionKey, currentSession) {
+		return ErrorResult("access denied: session outside current scope")
 	}
 
 	data := t.sessions.Get(ctx, sessionKey)

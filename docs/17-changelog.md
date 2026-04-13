@@ -69,6 +69,12 @@ Tenant admins can override tool configuration without affecting other tenants. O
 
 ### Added
 
+#### Vault & Knowledge Graph 10k Optimization (2026-04-12)
+- **Graph visualization endpoints**: `GET /v1/vault/graph` (cross-tenant) + `GET /v1/agents/{agentID}/kg/graph/compact` for rendering document relationships and semantic entities with support for up to 10k nodes (up from 2k default limit)
+- **FA2 layout optimization**: Graph layout computation moved to web worker (non-blocking frontend rendering)
+- **Semantic zoom**: UI-level semantic zoom support for graph visualization
+- **`DEFAULT_NODE_LIMIT` increase**: 200 → 2000 nodes per graph view to support larger knowledge bases
+
 ### Testing
 
 #### Test Speed-Up + Coverage Ratchet Removal (2026-04-11)

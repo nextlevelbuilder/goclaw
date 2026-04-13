@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"regexp"
 
+	"github.com/nextlevelbuilder/goclaw/internal/bgalert"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -23,6 +24,17 @@ func NewSystemConfigsHandler(s store.SystemConfigStore, msgBus *bus.MessageBus) 
 
 // validKeyRe allows alphanumeric, dots, underscores, hyphens (1-100 chars).
 var validKeyRe = regexp.MustCompile(`^[a-zA-Z0-9._-]{1,100}$`)
+
+// providerRelatedKeys lists system config keys whose changes should clear
+// background worker error alerts (user is likely fixing the root cause).
+var providerRelatedKeys = map[string]bool{
+	"background.provider":    true,
+	"background.model":       true,
+	"agent.default_provider": true,
+	"agent.default_model":    true,
+	"embedding.provider":     true,
+	"embedding.model":        true,
+}
 
 // RegisterRoutes registers system config endpoints on the given mux.
 func (h *SystemConfigsHandler) RegisterRoutes(mux *http.ServeMux) {
@@ -72,6 +84,11 @@ func (h *SystemConfigsHandler) handleSet(w http.ResponseWriter, r *http.Request)
 	if err := h.store.Set(r.Context(), key, req.Value); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
+	}
+
+	// Auto-clear background error alert when provider settings change.
+	if providerRelatedKeys[key] {
+		bgalert.ClearProviderError(r.Context(), h.store)
 	}
 
 	// Broadcast change with tenant context so in-memory config refreshes for the right tenant.

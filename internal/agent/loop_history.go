@@ -258,7 +258,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 
 	// History pipeline matching TS: limitHistoryTurns → pruneContext → sanitizeHistory.
 	trimmed := limitHistoryTurns(history, historyLimit)
-	pruned := pruneContextMessages(trimmed, l.contextWindow, l.contextPruningCfg)
+	pruned := pruneContextMessages(trimmed, l.contextWindow, l.contextPruningCfg, l.tokenCounter, l.model)
 	sanitized, droppedCount := sanitizeHistory(pruned)
 	messages = append(messages, sanitized...)
 

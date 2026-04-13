@@ -95,9 +95,14 @@ func (t *SessionsSendTool) Execute(ctx context.Context, args map[string]any) *Re
 		return ErrorResult("access denied: target session belongs to a different agent")
 	}
 
+	// Scope check: group-scoped users cannot send to other groups' sessions.
+	currentSession := ToolSandboxKeyFromCtx(ctx)
+	if !isSessionInScope(ctx, sessionKey, currentSession) {
+		return ErrorResult("access denied: cannot send to session outside current scope")
+	}
+
 	// Block self-send: agent should not send to its own current session
 	// to prevent re-processing loops (same pattern as message tool).
-	currentSession := ToolSandboxKeyFromCtx(ctx)
 	if currentSession != "" && sessionKey == currentSession {
 		return ErrorResult("cannot send to your own current session — your response is already delivered to it")
 	}

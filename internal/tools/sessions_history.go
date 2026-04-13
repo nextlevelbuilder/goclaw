@@ -80,6 +80,12 @@ func (t *SessionsHistoryTool) Execute(ctx context.Context, args map[string]any) 
 		return ErrorResult("access denied: session belongs to a different agent")
 	}
 
+	// Scope check: group-scoped users cannot read other groups' session history.
+	currentSession := ToolSandboxKeyFromCtx(ctx)
+	if !isSessionInScope(ctx, sessionKey, currentSession) {
+		return ErrorResult("access denied: session outside current scope")
+	}
+
 	history := t.sessions.GetHistory(ctx, sessionKey)
 	if history == nil {
 		out, _ := json.Marshal(map[string]any{

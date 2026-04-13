@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/bgalert"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/providerresolve"
@@ -21,6 +22,7 @@ type episodicWorker struct {
 	systemConfigs store.SystemConfigStore     // per-tenant provider config
 	registry      *providers.Registry         // provider resolution
 	eventBus      eventbus.DomainEventBus
+	alertDeps     bgalert.AlertDeps
 }
 
 // resolveProvider delegates to shared background provider resolution.
@@ -45,6 +47,8 @@ func (w *episodicWorker) Handle(ctx context.Context, event eventbus.DomainEvent)
 	if err != nil {
 		return fmt.Errorf("episodic: invalid tenant_id %q: %w", event.TenantID, err)
 	}
+	// Inject tenant context so store queries and bgalert scope correctly.
+	ctx = store.WithTenantID(ctx, tenantUUID)
 	agentUUID, err := uuid.Parse(event.AgentID)
 	if err != nil {
 		return fmt.Errorf("episodic: invalid agent_id %q: %w", event.AgentID, err)
@@ -68,6 +72,7 @@ func (w *episodicWorker) Handle(ctx context.Context, event eventbus.DomainEvent)
 		if provider != nil {
 			summary, err = w.summarizeSession(ctx, provider, model, payload)
 			if err != nil {
+				bgalert.ReportProviderError(ctx, w.alertDeps, "episodic", err)
 				return fmt.Errorf("episodic: summarize: %w", err)
 			}
 		}

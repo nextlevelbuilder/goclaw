@@ -34,6 +34,7 @@ interface Props {
   onDocTypeChange: (type: string) => void;
   agentId: string;
   teamId: string;
+  treeVersion: number;
 }
 
 function SearchResultCard({ doc, onClick }: { doc: VaultDocument; onClick: () => void }) {
@@ -57,7 +58,7 @@ function SearchResultCard({ doc, onClick }: { doc: VaultDocument; onClick: () =>
 
 export function VaultDocumentSidebar({
   tree, meta, selectedPath, onSelect, onLoadMore,
-  loading, docType, onDocTypeChange, agentId, teamId,
+  loading, docType, onDocTypeChange, agentId, teamId, treeVersion,
 }: Props) {
   const { t } = useTranslation("vault");
   const [query, setQuery] = useState("");
@@ -153,7 +154,7 @@ export function VaultDocumentSidebar({
           )
         ) : (
           <VaultTree tree={tree} meta={meta} loading={loading}
-            activePath={selectedPath} onSelect={onSelect} onLoadMore={onLoadMore} />
+            activePath={selectedPath} onSelect={onSelect} onLoadMore={onLoadMore} treeVersion={treeVersion} />
         )}
       </div>
     </div>

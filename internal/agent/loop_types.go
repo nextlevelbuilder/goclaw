@@ -18,6 +18,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tokencount"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/internal/tracing"
 )
@@ -140,6 +141,10 @@ type Loop struct {
 
 	// Context pruning config (trim old tool results in-memory)
 	contextPruningCfg *config.ContextPruningConfig
+
+	// tokenCounter provides accurate per-model token counting for context pruning.
+	// Nil means the legacy char-based heuristic is used.
+	tokenCounter tokencount.TokenCounter
 
 	// Sandbox info
 	sandboxEnabled         bool
@@ -481,6 +486,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		cacheInvalidate:        cfg.CacheInvalidate,
 		compactionCfg:          cfg.CompactionCfg,
 		contextPruningCfg:      cfg.ContextPruningCfg,
+		tokenCounter:           tokencount.NewTiktokenCounter(),
 		sandboxEnabled:         cfg.SandboxEnabled,
 		sandboxContainerDir:    cfg.SandboxContainerDir,
 		sandboxWorkspaceAccess: cfg.SandboxWorkspaceAccess,

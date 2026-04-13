@@ -292,8 +292,33 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 			return
 		}
 
+		// Collect MediaRefs from messages about to be truncated (keep up to 30 most recent).
+		const maxPreservedMediaRefs = 30
+		var preservedRefs []providers.MediaRef
+		for i := len(toSummarize) - 1; i >= 0 && len(preservedRefs) < maxPreservedMediaRefs; i-- {
+			for _, ref := range toSummarize[i].MediaRefs {
+				preservedRefs = append(preservedRefs, ref)
+				if len(preservedRefs) >= maxPreservedMediaRefs {
+					break
+				}
+			}
+		}
+
 		l.sessions.SetSummary(sctx, sessionKey, SanitizeAssistantContent(resp.Content))
 		l.sessions.TruncateHistory(sctx, sessionKey, keepLast)
+
+		// Inject preserved MediaRefs into the first kept message so they survive truncation.
+		if len(preservedRefs) > 0 {
+			kept := l.sessions.GetHistory(sctx, sessionKey)
+			if len(kept) > 0 {
+				kept[0].MediaRefs = append(preservedRefs, kept[0].MediaRefs...)
+				// Cap total refs on this message at maxPreservedMediaRefs.
+				if len(kept[0].MediaRefs) > maxPreservedMediaRefs {
+					kept[0].MediaRefs = kept[0].MediaRefs[:maxPreservedMediaRefs]
+				}
+				l.sessions.SetHistory(sctx, sessionKey, kept)
+			}
+		}
 		l.sessions.IncrementCompaction(sctx, sessionKey)
 		// Mirror SessionMetaKeyLastCompactionAt from the v3 prune/compact path
 		// so the legacy v2 post-turn summarizer also surfaces compaction cadence.

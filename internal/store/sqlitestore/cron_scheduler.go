@@ -130,12 +130,16 @@ func (s *SQLiteCronStore) recomputeStaleJobs() {
 		next := computeNextRun(&schedule, now, s.defaultTZ)
 		if next == nil {
 			if scheduleKind == "at" {
-				s.db.ExecContext(s.baseCtx, "UPDATE cron_jobs SET enabled = 0, updated_at = ? WHERE id = ?", now, id)
+				if _, err := s.db.ExecContext(s.baseCtx, "UPDATE cron_jobs SET enabled = 0, updated_at = ? WHERE id = ?", now, id); err != nil {
+					slog.Warn("cron: failed to disable one-shot job", "id", id, "error", err)
+				}
 			}
 			continue
 		}
 
-		s.db.ExecContext(s.baseCtx, "UPDATE cron_jobs SET next_run_at = ?, updated_at = ? WHERE id = ?", *next, now, id)
+		if _, err := s.db.ExecContext(s.baseCtx, "UPDATE cron_jobs SET next_run_at = ?, updated_at = ? WHERE id = ?", *next, now, id); err != nil {
+			slog.Warn("cron: failed to advance stale job", "id", id, "error", err)
+		}
 		fixed++
 	}
 	if err := rows.Err(); err != nil {
@@ -282,16 +286,20 @@ func (s *SQLiteCronStore) executeOneJob(job store.CronJob, handler func(job *sto
 		if aid, aidErr := uuid.Parse(job.AgentID); aidErr == nil {
 			agentUUID = &aid
 		}
-		s.db.ExecContext(s.baseCtx,
+		if _, err := s.db.ExecContext(s.baseCtx,
 			`INSERT INTO cron_run_logs (id, job_id, agent_id, status, error, summary, duration_ms, input_tokens, output_tokens, ran_at)
 			 VALUES (?,?,?,?,?,?,?,?,?,?)`,
 			logID, id, agentUUID, status, lastError, summary, durationMS, inputTokens, outputTokens, now,
-		)
+		); err != nil {
+			slog.Warn("cron: failed to insert run log", "job_id", job.ID, "error", err)
+		}
 	}
 
 	if job.DeleteAfterRun {
 		if id, parseErr := uuid.Parse(job.ID); parseErr == nil {
-			s.db.ExecContext(s.baseCtx, "DELETE FROM cron_jobs WHERE id = ?", id)
+			if _, err := s.db.ExecContext(s.baseCtx, "DELETE FROM cron_jobs WHERE id = ?", id); err != nil {
+				slog.Warn("cron: failed to delete one-shot job", "job_id", job.ID, "error", err)
+			}
 		}
 	} else if id, parseErr := uuid.Parse(job.ID); parseErr == nil {
 		schedule := job.Schedule
@@ -315,13 +323,15 @@ func (s *SQLiteCronStore) executeOneJob(job store.CronJob, handler func(job *sto
 			}
 		}
 
-		s.db.ExecContext(s.baseCtx,
+		if _, err := s.db.ExecContext(s.baseCtx,
 			`UPDATE cron_jobs SET
 			 last_run_at = ?, last_status = ?, last_error = ?, updated_at = ?,
 			 next_run_at = CASE WHEN enabled = 1 AND next_run_at IS NULL THEN ? ELSE next_run_at END
 			 WHERE id = ?`,
 			now, status, lastError, now, nextRunValue, id,
-		)
+		); err != nil {
+			slog.Warn("cron: failed to update job after run", "job_id", job.ID, "error", err)
+		}
 	}
 
 	evt := store.CronEvent{Action: "completed", JobID: job.ID, JobName: job.Name, UserID: job.UserID, Status: status}

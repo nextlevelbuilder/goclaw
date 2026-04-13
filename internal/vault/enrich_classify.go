@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"maps"
 	"slices"
-	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -154,8 +153,8 @@ func (w *EnrichWorker) gatherCandidates(ctx context.Context, tenantID, _ string,
 			if n.Score < enrichSimilarityMin || n.Document.Summary == "" {
 				continue
 			}
-			// Skip auto-generated media files as link targets — they create noise.
-			if strings.HasPrefix(n.Document.PathBasename, "goclaw_gen_") {
+			// Skip meaningless filenames as link targets — they create noise.
+			if shouldSkipEnrichment(n.Document.PathBasename) {
 				continue
 			}
 			// Bidirectional dedup: only process each pair once.
