@@ -15,41 +15,6 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
-// BridgeToolNames is the subset of GoClaw tools exposed via the MCP bridge.
-// Excluded: spawn (agent loop), create_forum_topic (channels).
-var BridgeToolNames = map[string]bool{
-	// Filesystem
-	"read_file":  true,
-	"write_file": true,
-	"list_files": true,
-	"edit":       true,
-	"exec":       true,
-	// Web
-	"web_search": true,
-	"web_fetch":  true,
-	// Memory & knowledge
-	"memory_search": true,
-	"memory_get":    true,
-	"skill_search":  true,
-	// Media
-	"read_image":   true,
-	"create_image": true,
-	"tts":          true,
-	// Browser automation
-	"browser": true,
-	// Scheduler
-	"cron": true,
-	// Messaging (send text/files to channels)
-	"message": true,
-	// Sessions (read + send)
-	"sessions_list":    true,
-	"session_status":   true,
-	"sessions_history": true,
-	"sessions_send":    true,
-	// Team tools (context from X-Agent-ID/X-Channel/X-Chat-ID headers)
-	"team_tasks": true,
-}
-
 // NewBridgeServer creates a StreamableHTTPServer that exposes GoClaw tools as MCP tools.
 // It reads tools from the registry, filters to BridgeToolNames, and serves them
 // over streamable-http transport (stateless mode).
@@ -60,9 +25,11 @@ func NewBridgeServer(reg *tools.Registry, version string, msgBus *bus.MessageBus
 		mcpserver.WithToolCapabilities(false),
 	)
 
-	// Register each safe tool from the GoClaw registry
+	// Register all tools from the registry.
+	// Tool availability is controlled by config (tools.deny, tools.allow, per-agent policy)
+	// and the registry's Disable mechanism — no hardcoded filtering here.
 	var registered int
-	for name := range BridgeToolNames {
+	for _, name := range reg.List() {
 		t, ok := reg.Get(name)
 		if !ok {
 			continue

@@ -369,7 +369,7 @@ func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	// Allowlist: only permit known agent columns to be updated.
 	// Defense-in-depth against column injection via arbitrary JSON keys.
 	allowed := filterAllowedKeys(updates, agentAllowedFields)
-	allowed["restrict_to_workspace"] = true
+	// restrict_to_workspace is user-configurable per agent (allowlisted above)
 
 	// If agent_key is being changed, enforce the slug format. The router
 	// cache uses `tenantID:agentKey` as its canonical key and splits on the

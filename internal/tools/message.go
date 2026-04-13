@@ -151,9 +151,7 @@ func (t *MessageTool) Execute(ctx context.Context, args map[string]any) *Result 
 			Content: message,
 			Media:   embeddedMedia,
 		}
-		if isGroupContext(ctx) {
-			outMsg.Metadata = map[string]string{"group_id": target}
-		}
+		outMsg.Metadata = buildMessageOutMeta(ctx, target)
 		t.msgBus.PublishOutbound(outMsg)
 		return SilentResult(fmt.Sprintf(`{"status":"sent","channel":"%s","target":"%s"}`, channel, target))
 	}
@@ -176,9 +174,7 @@ func (t *MessageTool) Execute(ctx context.Context, args map[string]any) *Result 
 			ChatID:  target,
 			Content: message,
 		}
-		if isGroupContext(ctx) {
-			outMsg.Metadata = map[string]string{"group_id": target}
-		}
+		outMsg.Metadata = buildMessageOutMeta(ctx, target)
 		t.msgBus.PublishOutbound(outMsg)
 		return SilentResult(fmt.Sprintf(`{"status":"sent","channel":"%s","target":"%s"}`, channel, target))
 	}
@@ -192,6 +188,28 @@ func (t *MessageTool) Execute(ctx context.Context, args map[string]any) *Result 
 	}
 
 	return ErrorResult("no channel sender or message bus available")
+}
+
+
+// buildOutMeta creates outbound metadata preserving topic/thread context from the session.
+func buildMessageOutMeta(ctx context.Context, target string) map[string]string {
+	meta := make(map[string]string)
+	if isGroupContext(ctx) {
+		meta["group_id"] = target
+	}
+	localKey := ToolLocalKeyFromCtx(ctx)
+	if localKey != "" {
+		meta["local_key"] = localKey
+		if idx := strings.Index(localKey, ":topic:"); idx > 0 {
+			meta[MetaMessageThreadID] = localKey[idx+7:]
+		} else if idx := strings.Index(localKey, ":thread:"); idx > 0 {
+			meta[MetaMessageThreadID] = localKey[idx+8:]
+		}
+	}
+	if len(meta) == 0 {
+		return nil
+	}
+	return meta
 }
 
 // validateChannelTenant checks the target channel belongs to the current tenant.
@@ -230,11 +248,8 @@ func (t *MessageTool) sendMedia(ctx context.Context, channel, target, filePath s
 		return ErrorResult("media sending requires message bus")
 	}
 
-	// Build metadata for group routing (Zalo needs group_id to choose group API).
-	var meta map[string]string
-	if isGroupContext(ctx) {
-		meta = map[string]string{"group_id": target}
-	}
+	// Build metadata for group routing + topic/thread context.
+	meta := buildMessageOutMeta(ctx, target)
 
 	t.msgBus.PublishOutbound(bus.OutboundMessage{
 		Channel:  channel,
