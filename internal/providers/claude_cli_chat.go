@@ -58,6 +58,9 @@ func (p *ClaudeCLIProvider) Chat(ctx context.Context, req ChatRequest) (*ChatRes
 	cmd := exec.CommandContext(ctx, p.cliPath, args...)
 	cmd.Dir = workDir
 	cmd.Env = filterCLIEnv(os.Environ())
+	if effortLevel != "" && effortLevel != "off" {
+		cmd.Env = removeEnvKey(cmd.Env, "CLAUDE_CODE_EFFORT_LEVEL")
+	}
 	if stdin != nil {
 		cmd.Stdin = stdin
 	}
@@ -117,6 +120,9 @@ func (p *ClaudeCLIProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 	cmd.WaitDelay = 5 * time.Second // force-close pipes if process lingers after kill
 	cmd.Dir = workDir
 	cmd.Env = filterCLIEnv(os.Environ())
+	if effortLevel != "" && effortLevel != "off" {
+		cmd.Env = removeEnvKey(cmd.Env, "CLAUDE_CODE_EFFORT_LEVEL")
+	}
 	if stdin != nil {
 		cmd.Stdin = stdin
 	}

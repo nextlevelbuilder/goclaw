@@ -40,7 +40,12 @@ func (p *ClaudeCLIProvider) buildArgs(model, workDir, mcpConfigPath string, cliS
 	}
 
 	if effort != "" && effort != "off" {
-		args = append(args, "--effort", effort)
+		effort = strings.ToLower(strings.TrimSpace(effort))
+		if isAlphaOnly(effort) {
+			args = append(args, "--effort", effort)
+		} else {
+			slog.Warn("claude-cli: invalid effort value, skipping --effort flag", "effort", effort)
+		}
 	}
 
 	if mcpConfigPath != "" {
@@ -311,4 +316,28 @@ func filterCLIEnv(environ []string) []string {
 		filtered = append(filtered, e)
 	}
 	return filtered
+}
+
+// isAlphaOnly returns true if s is non-empty and contains only a-z characters.
+func isAlphaOnly(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	for _, c := range s {
+		if c < 'a' || c > 'z' {
+			return false
+		}
+	}
+	return true
+}
+
+// removeEnvKey returns a copy of environ with all entries for the given key removed.
+func removeEnvKey(environ []string, key string) []string {
+	result := make([]string, 0, len(environ))
+	for _, e := range environ {
+		if k, _, _ := strings.Cut(e, "="); k != key {
+			result = append(result, e)
+		}
+	}
+	return result
 }
