@@ -139,6 +139,9 @@ func (s *PGCronStore) recomputeStaleJobs() {
 		}
 		fixed++
 	}
+	if err := rows.Err(); err != nil {
+		slog.Warn("cron: recompute stale iteration error", "error", err)
+	}
 
 	if fixed > 0 {
 		slog.Info("cron: advanced stale/past-due jobs to next future run", "fixed", fixed)
