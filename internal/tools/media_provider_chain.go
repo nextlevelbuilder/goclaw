@@ -341,7 +341,7 @@ func providerTypeFromName(name string) string {
 		return "minimax"
 	case name == "alibaba" || name == "dashscope" || name == "bailian":
 		return "dashscope"
-	case name == "openai":
+	case name == "openai" || strings.HasPrefix(name, "openai-"):
 		return "openai"
 	case name == "anthropic":
 		return "anthropic"

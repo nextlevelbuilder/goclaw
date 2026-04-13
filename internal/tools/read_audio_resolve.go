@@ -95,8 +95,16 @@ func (t *ReadAudioTool) callProvider(ctx context.Context, cp credentialProvider,
 			return []byte(resp.Content), resp.Usage, nil
 		}
 
-		// OpenAI: use input_audio content part (supports wav, mp3).
+		// OpenAI: route based on model type.
 		if ptype == "openai" {
+			if isTranscriptionModel(model) {
+				slog.Info("read_audio: using openai transcription API", "provider", providerName, "model", model, "size", len(data), "mime", mime)
+				resp, err := openaiTranscriptionCall(ctx, cp.APIKey(), cp.APIBase(), model, prompt, data, mime)
+				if err != nil {
+					return nil, nil, fmt.Errorf("openai transcription: %w", err)
+				}
+				return []byte(resp.Content), resp.Usage, nil
+			}
 			slog.Info("read_audio: using openai input_audio API", "provider", providerName, "model", model, "size", len(data), "mime", mime)
 			resp, err := openaiAudioCall(ctx, cp.APIKey(), cp.APIBase(), model, prompt, data, mime)
 			if err != nil {
