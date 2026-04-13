@@ -883,6 +883,7 @@ CREATE INDEX IF NOT EXISTS idx_tt_scope ON team_tasks(team_id, channel, chat_id)
 CREATE INDEX IF NOT EXISTS idx_tt_type ON team_tasks(team_id, task_type);
 CREATE INDEX IF NOT EXISTS idx_tt_lock ON team_tasks(lock_expires_at) WHERE lock_expires_at IS NOT NULL AND status = 'in_progress';
 CREATE UNIQUE INDEX IF NOT EXISTS idx_tt_identifier ON team_tasks(team_id, identifier) WHERE identifier IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tt_team_number ON team_tasks(team_id, task_number);
 CREATE INDEX IF NOT EXISTS idx_tt_followup ON team_tasks(followup_at) WHERE followup_at IS NOT NULL AND status = 'in_progress';
 -- idx_tt_blocked_by (GIN on array) omitted: Go code handles JSON array filtering
 CREATE INDEX IF NOT EXISTS idx_tt_owner_status ON team_tasks(team_id, owner_agent_id, status);

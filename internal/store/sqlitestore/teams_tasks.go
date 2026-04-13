@@ -95,11 +95,11 @@ func (s *SQLiteTeamStore) CreateTask(ctx context.Context, task *store.TeamTaskDa
 	}
 	defer tx.Rollback()
 
-	// Scope task_number per (team_id, chat_id).
+	// Scope task_number per team_id — unique sequence across all chats in the team.
 	var taskNumber int
 	err = tx.QueryRowContext(ctx,
-		`SELECT COALESCE(MAX(task_number), 0) + 1 FROM team_tasks WHERE team_id = ? AND COALESCE(chat_id, '') = ?`,
-		task.TeamID, task.ChatID,
+		`SELECT COALESCE(MAX(task_number), 0) + 1 FROM team_tasks WHERE team_id = ?`,
+		task.TeamID,
 	).Scan(&taskNumber)
 	if err != nil {
 		return fmt.Errorf("compute task_number: %w", err)
