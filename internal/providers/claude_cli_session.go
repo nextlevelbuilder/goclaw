@@ -29,13 +29,18 @@ func validateCLIModel(model string) error {
 
 // buildArgs constructs CLI arguments.
 // mcpConfigPath is the resolved per-session MCP config file (may differ per call).
-func (p *ClaudeCLIProvider) buildArgs(model, workDir, mcpConfigPath string, cliSessionID uuid.UUID, outputFormat string, hasImages, disableTools bool) []string {
+// effort is the reasoning effort level (low/medium/high); empty or "off" omits the flag.
+func (p *ClaudeCLIProvider) buildArgs(model, workDir, mcpConfigPath string, cliSessionID uuid.UUID, outputFormat string, hasImages, disableTools bool, effort string) []string {
 	args := []string{
 		"-p",
 		"--output-format", outputFormat,
 		"--model", model,
 		"--permission-mode", p.permMode,
 		"--verbose",
+	}
+
+	if effort != "" && effort != "off" {
+		args = append(args, "--effort", effort)
 	}
 
 	if mcpConfigPath != "" {
@@ -284,18 +289,23 @@ func ResetCLISession(baseWorkDir, sessionKey string) {
 	}
 }
 
-// filterCLIEnv removes CLAUDE* env vars to prevent nested session conflicts,
-// but preserves CLAUDE_CODE_OAUTH_TOKEN for authentication.
+// filterCLIEnv removes CLAUDE* env vars to prevent nested session conflicts.
+// Behavioral tuning vars are whitelisted so they can be set system-wide
+// and picked up by claude-cli subprocesses.
 func filterCLIEnv(environ []string) []string {
+	// Env vars that should pass through to the claude-cli subprocess.
+	allowed := map[string]bool{
+		"CLAUDE_CODE_OAUTH_TOKEN":                 true, // auth
+		"CLAUDE_CODE_EFFORT_LEVEL":                true, // behavioral tuning
+		"CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING":   true, // behavioral tuning
+	}
 	var filtered []string
 	for _, e := range environ {
 		key := e
 		if before, _, ok := strings.Cut(e, "="); ok {
 			key = before
 		}
-		// Filter out variables that could cause nested CLI conflicts,
-		// but preserve auth token needed by the subprocess.
-		if strings.HasPrefix(key, "CLAUDE") && key != "CLAUDE_CODE_OAUTH_TOKEN" {
+		if strings.HasPrefix(key, "CLAUDE") && !allowed[key] {
 			continue
 		}
 		filtered = append(filtered, e)
