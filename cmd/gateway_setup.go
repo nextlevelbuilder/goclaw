@@ -97,6 +97,9 @@ func setupToolRegistry(
 			slog.Info("browser tool enabled", "remote", cfg.Tools.Browser.RemoteURL)
 		} else {
 			opts = append(opts, browser.WithHeadless(cfg.Tools.Browser.Headless))
+			if cfg.Tools.Browser.NoSandbox {
+				opts = append(opts, browser.WithNoSandbox(true))
+			}
 			slog.Info("browser tool enabled", "headless", cfg.Tools.Browser.Headless)
 		}
 		if cfg.Tools.Browser.ActionTimeoutMs > 0 {

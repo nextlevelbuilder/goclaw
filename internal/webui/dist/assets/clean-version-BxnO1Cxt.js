@@ -1,0 +1,1 @@
+function e(e){return e.match(/^(v?\d+\.\d+\.\d+)/)?.[1]??e}export{e as t};

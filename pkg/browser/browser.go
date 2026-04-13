@@ -23,6 +23,7 @@ type Manager struct {
 	pageTenants map[string]string           // targetID → tenantID (for filtering)
 	pageLastUsed map[string]time.Time       // targetID → last access time
 	headless      bool
+	noSandbox     bool
 	remoteURL     string        // CDP endpoint for remote Chrome (sidecar); skips local launcher
 	actionTimeout time.Duration // per-action context timeout (default 30s)
 	idleTimeout   time.Duration // auto-close pages idle longer than this (default 10m, 0=disabled)
@@ -35,6 +36,12 @@ type Manager struct {
 type Option func(*Manager)
 
 // WithHeadless sets headless mode (default false).
+
+// WithNoSandbox disables Chrome sandbox (required on servers without user namespaces).
+func WithNoSandbox(ns bool) Option {
+	return func(m *Manager) { m.noSandbox = ns }
+}
+
 func WithHeadless(h bool) Option {
 	return func(m *Manager) { m.headless = h }
 }
@@ -140,6 +147,10 @@ func (m *Manager) Start(ctx context.Context) error {
 			Set("disable-renderer-backgrounding").
 			Set("disable-background-timer-throttling").
 			Set("disable-backgrounding-occluded-windows")
+
+		if m.noSandbox {
+			l = l.Set("no-sandbox")
+		}
 
 		u, err := l.Launch()
 		if err != nil {

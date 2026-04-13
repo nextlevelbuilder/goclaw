@@ -1,0 +1,1 @@
+function e(e){return e.normalize(`NFD`).replace(/[\u0300-\u036f]/g,``).replace(/đ/g,`d`).replace(/Đ/g,`d`).toLowerCase().replace(/[^a-z0-9-]/g,`-`).replace(/-{2,}/g,`-`).replace(/^-+/g,``)}function t(e){return/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(e)}export{e as n,t};

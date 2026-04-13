@@ -257,6 +257,10 @@ func bridgeContextMiddleware(gatewayToken string, agentStore store.AgentStore, n
 							if groups != nil {
 								ctx = store.WithShellDenyGroups(ctx, groups)
 							}
+							// Inject SharedKG context so KG tools use agent-level scope.
+							if ws := ag.ParseWorkspaceSharing(); ws != nil && ws.ShareKnowledgeGraph {
+								ctx = store.WithSharedKG(ctx)
+							}
 						}
 					}
 				}
@@ -288,9 +292,6 @@ func bridgeContextMiddleware(gatewayToken string, agentStore store.AgentStore, n
 		if workspace != "" && (agentIDStr != "" || userID != "") {
 			ctx = tools.WithToolWorkspace(ctx, workspace)
 		}
-		// Routing context (localKey, sessionKey) is injected unconditionally like channel/chatID.
-		// These are used for message routing (forum topics), not security-sensitive operations.
-		// Without valid agent context, tool execution will fail anyway.
 		if localKey != "" {
 			ctx = tools.WithToolLocalKey(ctx, localKey)
 		}

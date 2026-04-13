@@ -1,0 +1,37 @@
+diff --git a/internal/gateway/server.go b/internal/gateway/server.go
+index 4cf37b60..68ebe821 100644
+--- a/internal/gateway/server.go
++++ b/internal/gateway/server.go
+@@ -257,6 +257,10 @@ func bridgeContextMiddleware(gatewayToken string, agentStore store.AgentStore, n
+ 							if groups != nil {
+ 								ctx = store.WithShellDenyGroups(ctx, groups)
+ 							}
++							// Inject SharedKG context so KG tools use agent-level scope.
++							if ws := ag.ParseWorkspaceSharing(); ws != nil && ws.ShareKnowledgeGraph {
++								ctx = store.WithSharedKG(ctx)
++							}
+ 						}
+ 					}
+ 				}
+@@ -288,9 +292,6 @@ func bridgeContextMiddleware(gatewayToken string, agentStore store.AgentStore, n
+ 		if workspace != "" && (agentIDStr != "" || userID != "") {
+ 			ctx = tools.WithToolWorkspace(ctx, workspace)
+ 		}
+-		// Routing context (localKey, sessionKey) is injected unconditionally like channel/chatID.
+-		// These are used for message routing (forum topics), not security-sensitive operations.
+-		// Without valid agent context, tool execution will fail anyway.
+ 		if localKey != "" {
+ 			ctx = tools.WithToolLocalKey(ctx, localKey)
+ 		}
+@@ -512,11 +513,6 @@ func (s *Server) SetEvolutionHandler(h *httpapi.EvolutionHandler) {
+ // SetVaultHandler sets the Knowledge Vault document handler.
+ func (s *Server) SetVaultHandler(h *httpapi.VaultHandler) { s.handlers = append(s.handlers, h) }
+ 
+-// SetVaultGraphHandler sets the lightweight graph visualization handler.
+-func (s *Server) SetVaultGraphHandler(h *httpapi.VaultGraphHandler) {
+-	s.handlers = append(s.handlers, h)
+-}
+-
+ // SetEpisodicHandler sets the episodic memory handler.
+ func (s *Server) SetEpisodicHandler(h *httpapi.EpisodicHandler) { s.handlers = append(s.handlers, h) }
+ 

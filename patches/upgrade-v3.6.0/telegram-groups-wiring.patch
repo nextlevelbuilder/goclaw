@@ -1,0 +1,42 @@
+diff --git a/internal/channels/telegram/factory.go b/internal/channels/telegram/factory.go
+index f627b4d2..d79b2790 100644
+--- a/internal/channels/telegram/factory.go
++++ b/internal/channels/telegram/factory.go
+@@ -3,6 +3,7 @@ package telegram
+ import (
+ 	"encoding/json"
+ 	"fmt"
++	"log/slog"
+ 
+ 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+ 	"github.com/nextlevelbuilder/goclaw/internal/channels"
+@@ -37,6 +38,9 @@ type telegramInstanceConfig struct {
+ 	BlockReply      *bool    `json:"block_reply,omitempty"`
+ 	ForceIPv4       bool     `json:"force_ipv4,omitempty"`
+ 	AllowFrom       []string `json:"allow_from,omitempty"`
++
++	// Per-group (and per-topic) overrides from DB config.
++	Groups map[string]*config.TelegramGroupConfig `json:"groups,omitempty"`
+ }
+ 
+ // Factory creates a Telegram channel from DB instance data (no extra stores).
+@@ -111,6 +115,19 @@ func buildChannel(name string, creds json.RawMessage, cfg json.RawMessage,
+ 		ForceIPv4:      ic.ForceIPv4,
+ 	}
+ 
++	tgCfg.Groups = ic.Groups
++	if len(ic.Groups) > 0 {
++		slog.Info("telegram: loaded per-group config from DB", "group_count", len(ic.Groups))
++		for k, v := range ic.Groups {
++			skillCount := 0
++			if v != nil && v.Skills != nil {
++				skillCount = len(v.Skills)
++			}
++			hasPrompt := v != nil && v.SystemPrompt != ""
++			slog.Info("telegram: group config", "chat_id", k, "skills", skillCount, "has_system_prompt", hasPrompt)
++		}
++	}
++
+ 	// DB instances default to "pairing" for groups (secure by default).
+ 	// Config-based channels keep "open" default for backward compat.
+ 	if tgCfg.GroupPolicy == "" {
