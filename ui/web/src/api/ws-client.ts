@@ -91,6 +91,7 @@ export class WsClient {
 
   disconnect(): void {
     this.intentionalClose = true;
+    this.pairingInProgress = false;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;

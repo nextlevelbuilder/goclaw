@@ -79,7 +79,7 @@ export function VaultSearchDialog({ agentId, open, onOpenChange, onSelectResult 
                   className="w-full text-left p-2 rounded hover:bg-muted/50 flex items-center justify-between gap-2"
                   onClick={() => {
                     onSelectResult(r.document);
-                    onOpenChange(false);
+                    handleOpenChange(false);
                   }}
                 >
                   <div className="min-w-0">

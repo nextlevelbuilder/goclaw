@@ -126,7 +126,7 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
     } finally {
       setSaving(false);
     }
-  }, [teamId, form, escalationMode, escalationActions, updateTeamSettings, onSaved]);
+  }, [teamId, form, initial, escalationMode, escalationActions, updateTeamSettings, onSaved]);
 
   const channelOptions = CHANNEL_TYPES.map((c) => ({ value: c.value, label: c.label }));
 
