@@ -26,7 +26,7 @@ interface StepAgentProps {
 
 export function StepAgent({ provider, model, onComplete, onBack, existingAgent }: StepAgentProps) {
   const { t } = useTranslation("setup");
-  const { createAgent, updateAgent, deleteAgent, resummonAgent } = useAgents();
+  const { agents, createAgent, updateAgent, deleteAgent, resummonAgent } = useAgents();
   const agentPresets = useAgentPresets();
 
   const isEditing = !!existingAgent;
@@ -61,9 +61,13 @@ export function StepAgent({ provider, model, onComplete, onBack, existingAgent }
   }, [existingAgent, selectedPresetIdx, agentPresets]);
 
   const agentKey = useMemo(() => {
-    const slug = slugify(displayName);
-    return slug || "fox-spirit";
-  }, [displayName]);
+    const base = slugify(displayName) || "fox-spirit";
+    const existingKeys = new Set(agents.map((a) => a.agent_key));
+    if (!existingKeys.has(base)) return base;
+    let i = 2;
+    while (existingKeys.has(`${base}-${i}`)) i++;
+    return `${base}-${i}`;
+  }, [displayName, agents]);
 
   const selectedEmoji = useMemo(() => {
     if (selectedPresetIdx !== null && agentPresets[selectedPresetIdx]) {
