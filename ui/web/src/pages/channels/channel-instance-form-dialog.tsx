@@ -17,6 +17,7 @@ import { wizardAuthSteps, wizardConfigSteps } from "./channel-wizard-registry";
 import { CHANNEL_TYPES } from "@/constants/channels";
 import { channelInstanceSchema, type ChannelInstanceFormData } from "@/schemas/channel.schema";
 import { ChannelInstanceFormStep } from "./channel-instance-form-step";
+import { flattenConfig, unflattenConfig } from "@/lib/config-flatten";
 
 type WizardStep = "form" | "auth" | "config";
 
@@ -91,7 +92,7 @@ export function ChannelInstanceFormDialog({
       for (const f of schema) {
         if (f.defaultValue !== undefined) defaults[f.key] = f.defaultValue;
       }
-      const merged: Record<string, unknown> = { ...defaults, ...(instance?.config ?? {}) };
+      const merged: Record<string, unknown> = { ...defaults, ...flattenConfig((instance?.config ?? {}) as Record<string, unknown>) };
       const boolSelectKeys = new Set(
         schema.filter((f: FieldDef) => f.type === "select" && f.options?.some((o) => o.value === "true")).map((f: FieldDef) => f.key),
       );
@@ -176,7 +177,7 @@ export function ChannelInstanceFormDialog({
         display_name: values.displayName?.trim() || undefined,
         channel_type: values.channelType,
         agent_id: values.agentId,
-        config: Object.keys(cleanConfig).length > 0 ? cleanConfig : undefined,
+        config: Object.keys(cleanConfig).length > 0 ? unflattenConfig(cleanConfig) : undefined,
         enabled: values.enabled,
       };
       if (Object.keys(cleanCreds).length > 0) data.credentials = cleanCreds;
@@ -211,7 +212,7 @@ export function ChannelInstanceFormDialog({
     setLoading(true);
     setError("");
     try {
-      await onUpdate(createdInstanceId, { config: cleanConfig });
+      await onUpdate(createdInstanceId, { config: unflattenConfig(cleanConfig) });
       onOpenChange(false);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : t("form.errors.failedSaveConfig"));

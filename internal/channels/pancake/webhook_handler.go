@@ -52,12 +52,18 @@ func (r *webhookRouter) register(ch *Channel) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.instances[ch.pageID] = ch
+	if ch.webhookPageID != "" && ch.webhookPageID != ch.pageID {
+		r.instances[ch.webhookPageID] = ch
+	}
 }
 
-func (r *webhookRouter) unregister(pageID string) {
+func (r *webhookRouter) unregister(pageID string, webhookPageID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.instances, pageID)
+	if webhookPageID != "" && webhookPageID != pageID {
+		delete(r.instances, webhookPageID)
+	}
 }
 
 // webhookRoute returns the path+handler on first call; ("", nil) for subsequent calls.
@@ -113,19 +119,19 @@ func (r *webhookRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Resolve page_id: try top-level first, then data-level, then extract from conversation ID.
+	// Resolve page_id: top-level field takes priority, then data-level, then first conv ID segment.
 	pageID := event.PageID
 	if pageID == "" {
 		pageID = data.PageID
 	}
 	if pageID == "" {
-		// Conversation ID format: "pageID_senderID" — extract page portion.
+		// Last resort: extract from conversation ID (format: pageID_senderID for INBOX events).
 		if idx := strings.Index(data.Conversation.ID, "_"); idx > 0 {
 			pageID = data.Conversation.ID[:idx]
 		}
 	}
 
-	// Resolve conversation type — only process INBOX messages.
+	// Resolve conversation type.
 	convType := strings.ToUpper(data.Conversation.Type)
 
 	if event.EventType != "" && !strings.EqualFold(event.EventType, "messaging") {
@@ -136,17 +142,21 @@ func (r *webhookRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	slog.Debug("pancake: webhook event parsed",
-		"event_type", event.EventType,
-		"page_id", pageID,
+	// INFO-level: always visible without DEBUG — shows which field sourced the page_id.
+	slog.Info("pancake: webhook page_id resolution",
+		"event_page_id", event.PageID,
+		"data_page_id", data.PageID,
 		"conv_id", data.Conversation.ID,
+		"resolved_page_id", pageID,
 		"conv_type", convType,
 		"sender_id", data.Conversation.From.ID,
-		"sender_name", data.Conversation.From.Name,
 		"msg_id", data.Message.ID)
 
 	if pageID == "" {
-		slog.Warn("pancake: could not determine page_id from webhook payload")
+		slog.Warn("pancake: could not determine page_id from webhook payload",
+			"event_page_id", event.PageID,
+			"data_page_id", data.PageID,
+			"conv_id", data.Conversation.ID)
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -155,7 +165,6 @@ func (r *webhookRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r.mu.RUnlock()
 
 	if target == nil {
-		// Log all registered page IDs for debugging.
 		r.mu.RLock()
 		var registered []string
 		for pid := range r.instances {
@@ -164,6 +173,9 @@ func (r *webhookRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		r.mu.RUnlock()
 		slog.Warn("pancake: no channel instance for page_id",
 			"page_id", pageID,
+			"event_page_id", event.PageID,
+			"data_page_id", data.PageID,
+			"conv_id", data.Conversation.ID,
 			"registered_pages", registered)
 		w.WriteHeader(http.StatusOK)
 		return

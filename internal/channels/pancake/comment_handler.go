@@ -13,6 +13,12 @@ import (
 func (ch *Channel) handleCommentEvent(data MessagingData) {
 	// Feature gate.
 	if !ch.config.Features.CommentReply {
+		ch.commentReplyDisabledOnce.Do(func() {
+			slog.Info("pancake: comment ignored because comment_reply disabled",
+				"page_id", ch.pageID,
+				"channel_name", ch.Name(),
+				"hint", "enable config.features.comment_reply to auto-reply page comments")
+		})
 		return
 	}
 

@@ -14,6 +14,8 @@ export interface FieldDef {
   showWhen?: { key: string; value: string | string[] };
   /** Disable this field when another field has a specific value */
   disabledWhen?: { key: string; value: string; hint?: string };
+  /** Hide in an "Advanced" collapsible section — for rarely-needed fields */
+  advanced?: boolean;
 }
 
 // --- Shared option lists ---
@@ -193,7 +195,8 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit" },
   ],
   pancake: [
-    { key: "page_id", label: "Page ID", type: "text", required: true, help: "Pancake page ID (numeric, from Pancake dashboard)" },
+    { key: "page_id", label: "Page ID", type: "text", required: true, help: "Pancake internal page ID (numeric, from Pancake dashboard)" },
+    { key: "webhook_page_id", label: "Webhook Page ID", type: "text", help: "Only needed when the native platform page ID in webhooks differs from the Pancake page ID above (rare). Leave empty if both are the same.", advanced: true },
     { key: "platform", label: "Platform", type: "select", required: true, defaultValue: "", options: pancakePlatformOptions, help: "Select the platform this Pancake page serves." },
     { key: "features.inbox_reply", label: "Inbox Auto-Reply", type: "boolean", defaultValue: true },
     { key: "features.comment_reply", label: "Comment Reply", type: "boolean", defaultValue: false,

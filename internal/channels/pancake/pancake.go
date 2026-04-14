@@ -34,6 +34,7 @@ type Channel struct {
 	config        pancakeInstanceConfig
 	apiClient     *APIClient
 	pageID        string
+	webhookPageID string // native platform ID used in webhook event.page_id (may differ from Pancake internal pageID)
 	pageName      string // resolved from Pancake page metadata at Start()
 	platform      string // resolved from Pancake page metadata at Start()
 	webhookSecret string // optional HMAC-SHA256 secret for webhook verification
@@ -50,6 +51,10 @@ type Channel struct {
 
 	// postFetcher fetches and caches page post content for comment context enrichment.
 	postFetcher *PostFetcher
+
+	// commentReplyDisabledOnce prevents repeated info logs when COMMENT webhooks
+	// arrive but the feature is disabled in channel config.
+	commentReplyDisabledOnce sync.Once
 
 	stopCh  chan struct{}
 	stopCtx context.Context
@@ -79,6 +84,7 @@ func New(cfg pancakeInstanceConfig, creds pancakeCreds,
 		config:        cfg,
 		apiClient:     apiClient,
 		pageID:        cfg.PageID,
+		webhookPageID: cfg.WebhookPageID,
 		platform:      cfg.Platform,
 		webhookSecret: creds.WebhookSecret,
 		postFetcher:   NewPostFetcher(apiClient, cfg.PostContextCacheTTL),
@@ -163,7 +169,7 @@ func (ch *Channel) Start(ctx context.Context) error {
 
 // Stop gracefully shuts down the channel.
 func (ch *Channel) Stop(_ context.Context) error {
-	globalRouter.unregister(ch.pageID)
+	globalRouter.unregister(ch.pageID, ch.webhookPageID)
 	ch.stopFn()
 	close(ch.stopCh)
 	ch.SetRunning(false)
@@ -249,8 +255,12 @@ func (ch *Channel) sendCommentReply(ctx context.Context, msg bus.OutboundMessage
 		ch.rememberOutboundEcho(conversationID, part)
 	}
 
+	commentID := msg.Metadata["reply_to_comment_id"]
+	if commentID == "" {
+		return fmt.Errorf("pancake: reply_to_comment_id missing in outbound metadata for comment reply")
+	}
 	for _, part := range parts {
-		if err := ch.apiClient.ReplyComment(ctx, conversationID, part); err != nil {
+		if err := ch.apiClient.ReplyComment(ctx, conversationID, commentID, part); err != nil {
 			ch.handleAPIError(err)
 			ch.forgetOutboundEcho(conversationID, part)
 			return err

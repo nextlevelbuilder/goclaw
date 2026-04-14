@@ -17,7 +17,7 @@ func TestReplyComment_MatchesOfficialContract(t *testing.T) {
 	client := NewAPIClient("user-token", "page-token", "page-123")
 	client.httpClient = &http.Client{Transport: transport}
 
-	if err := client.ReplyComment(context.Background(), "conv-123", "thank you"); err != nil {
+	if err := client.ReplyComment(context.Background(), "conv-123", "msg-456", "thank you"); err != nil {
 		t.Fatalf("ReplyComment returned error: %v", err)
 	}
 
@@ -42,6 +42,9 @@ func TestReplyComment_MatchesOfficialContract(t *testing.T) {
 	if got, want := payload["message"], "thank you"; got != want {
 		t.Fatalf("payload.message = %#v, want %#v", got, want)
 	}
+	if got, want := payload["message_id"], "msg-456"; got != want {
+		t.Fatalf("payload.message_id = %#v, want %#v", got, want)
+	}
 }
 
 func TestReplyComment_ReturnsError(t *testing.T) {
@@ -55,7 +58,7 @@ func TestReplyComment_ReturnsError(t *testing.T) {
 	client := NewAPIClient("user-token", "page-token", "page-123")
 	client.httpClient = &http.Client{Transport: transport}
 
-	if err := client.ReplyComment(context.Background(), "conv-123", "thank you"); err == nil {
+	if err := client.ReplyComment(context.Background(), "conv-123", "msg-456", "thank you"); err == nil {
 		t.Fatal("expected ReplyComment to return error on HTTP 400")
 	}
 }

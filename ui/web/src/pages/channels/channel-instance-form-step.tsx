@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { Controller } from "react-hook-form";
 import type { UseFormReturn } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import type { ChannelInstanceData } from "./hooks/use-channel-instances";
 import type { AgentData } from "@/types/agent";
 import { slugify } from "@/lib/slug";
@@ -56,6 +57,11 @@ export function ChannelInstanceFormStep({
   const cfgFields = configSchema[channelType] ?? [];
   const formCfgFields = excludeSet.size > 0 ? cfgFields.filter((f: FieldDef) => !excludeSet.has(f.key)) : cfgFields;
   const hasWizard = !instance && !!wizard;
+  const normalCfgFields = formCfgFields.filter((f: FieldDef) => !f.advanced);
+  const advancedCfgFields = formCfgFields.filter((f: FieldDef) => f.advanced);
+  const [showAdvanced, setShowAdvanced] = useState(
+    () => advancedCfgFields.some((f) => configValues[f.key] !== undefined && configValues[f.key] !== ""),
+  );
 
   const handleTelegramGroupsChange = useCallback((groups: Record<string, GroupConfigWithTopics>) => {
     setConfigValues((prev) => ({
@@ -159,8 +165,25 @@ export function ChannelInstanceFormStep({
         {formCfgFields.length > 0 && (
           <fieldset className="rounded-md border p-3 space-y-3">
             <legend className="px-1 text-sm font-medium">{t("form.configuration")}</legend>
-            <ChannelFields fields={formCfgFields} values={configValues} onChange={onConfigChange} idPrefix="ci-cfg" />
+            <ChannelFields fields={normalCfgFields} values={configValues} onChange={onConfigChange} idPrefix="ci-cfg" />
             {instance && EditConfig && <EditConfig instance={instance} configValues={configValues} onConfigChange={onConfigChange} />}
+            {advancedCfgFields.length > 0 && (
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced((v) => !v)}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {showAdvanced ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                  {t("form.advanced", { defaultValue: "Advanced" })}
+                </button>
+                {showAdvanced && (
+                  <div className="mt-3">
+                    <ChannelFields fields={advancedCfgFields} values={configValues} onChange={onConfigChange} idPrefix="ci-cfg-adv" />
+                  </div>
+                )}
+              </div>
+            )}
           </fieldset>
         )}
 

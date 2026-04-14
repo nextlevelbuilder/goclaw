@@ -164,10 +164,12 @@ func (c *APIClient) UploadMedia(ctx context.Context, filename string, data io.Re
 }
 
 // ReplyComment sends a reply to a comment on a post (action: "reply_comment").
-func (c *APIClient) ReplyComment(ctx context.Context, conversationID, content string) error {
+// messageID is the ID of the comment being replied to — required by Pancake API.
+func (c *APIClient) ReplyComment(ctx context.Context, conversationID, messageID, content string) error {
 	body, _ := json.Marshal(SendMessageRequest{
-		Action:  "reply_comment",
-		Message: content,
+		Action:    "reply_comment",
+		Message:   content,
+		MessageID: messageID,
 	})
 	url := fmt.Sprintf("%s/pages/%s/conversations/%s/messages", c.pageV1BaseURL, c.pageID, conversationID)
 	if err := c.doRequest(ctx, http.MethodPost, url, bytes.NewReader(body)); err != nil {
