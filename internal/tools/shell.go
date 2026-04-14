@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os/exec"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 
@@ -311,7 +312,13 @@ func (t *ExecTool) executeOnHost(ctx context.Context, command, cwd string) *Resu
 	ctx, cancel := context.WithTimeout(ctx, t.timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "sh", "-c", command)
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.CommandContext(ctx, "cmd", "/C", command)
+	} else {
+		cmd = exec.CommandContext(ctx, "sh", "-c", command)
+	}
+
 	cmd.Dir = cwd
 
 	// Limit output to 1MB to prevent OOM from runaway commands.
