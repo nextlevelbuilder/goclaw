@@ -132,11 +132,11 @@ The dual-identity pattern is a **codebase-wide convention**, not agent-specific:
 | Entity | UUID field | Key field | Notes |
 |---|---|---|---|
 | Agent | `agents.id uuid` | `agents.agent_key text` | Dual-tenant: same key across tenants is allowed |
-| Team | `agent_teams.id uuid` | `agent_teams.team_key text` | Team members reference agents by UUID |
+| Team | `agent_teams.id uuid` | (no key field) | Teams use UUID only; no slug or key field |
 | Tenant | `tenants.id uuid` | `tenants.tenant_slug text` | Slug used in URLs and onboarding wizard |
 | Session | `sessions.session_key text` | (no separate UUID) | Session key is the only identifier — safe by construction |
 
-The rules in section 2 apply verbatim to `team_id`/`team_key` and `tenant_id`/`tenant_slug`. In particular:
+The rules in section 2 apply to agents and tenants. For **teams**:
 
 - `WithTenantID(ctx, ...)` takes a `uuid.UUID`. Never pass a slug.
 - `TeamMember.AgentID` is the canonical team-membership FK and must be a UUID.
@@ -254,6 +254,8 @@ Consequences for code:
 - Cache entries are keyed as `{tenantID}:{agentKey}` (section 8).
 - Log formatting: prefer `{"agent": "tieu-ho", "tenant": "master"}` together, or just the UUID. Never log `agent_key` alone without a tenant.
 - When designing new tables with agent_key columns, the unique index must include `tenant_id`. Scoping to tenant_id prevents the same error class in future features.
+
+**Note on teams:** Unlike agents, `agent_teams` table uses **UUID only**. There is no `team_key` or slug field. Always reference teams by `id` (UUID). Teams are not dual-identity.
 
 ## Appendix — TL;DR one-liner
 
