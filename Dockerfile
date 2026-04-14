@@ -67,7 +67,7 @@ RUN set -eux; \
     go build -ldflags="-s -w" -o /out/pkg-helper ./cmd/pkg-helper
 
 # ── Stage 2: Runtime ──
-FROM alpine:3.22
+FROM alpine:3.23
 
 ARG ENABLE_SANDBOX=false
 ARG ENABLE_PYTHON=false

@@ -76,5 +76,16 @@
     "maxTokensHint": "Token limit for compacted summary.",
     "info": "When a group chat exceeds the threshold, the LLM automatically summarizes older messages into a single compact entry, keeping the most recent ones intact for context."
   },
-  "moreConfig": "More Config"
+  "moreConfig": "More Config",
+  "alert": {
+    "message": "Background workers failed: {{reason}}. Features like memory consolidation and vault enrichment may not work.",
+    "openSettings": "Fix in Settings",
+    "reason": {
+      "auth": "Authentication failed (invalid or expired API key)",
+      "auth_permanent": "API key revoked or disabled",
+      "billing": "Billing issue (credits exhausted or payment required)",
+      "model_not_found": "Model not found (invalid model name or not available)",
+      "unknown": "Unknown provider error"
+    }
+  }
 }

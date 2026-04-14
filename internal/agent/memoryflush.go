@@ -67,6 +67,28 @@ func ResolveMemoryFlushSettings(compaction *config.CompactionConfig) *MemoryFlus
 	return settings
 }
 
+// buildMemoryFlushPromptConfig returns the SystemPromptConfig used by the
+// memory flush turn. Extracted as a pure function so tests can assert the
+// config shape (specifically, that AgentUUID is populated) without building
+// a full Loop fixture.
+func buildMemoryFlushPromptConfig(
+	agentID, agentUUID, model, workspace string,
+	toolNames []string,
+	hasMemory bool,
+	providerType string,
+) SystemPromptConfig {
+	return SystemPromptConfig{
+		AgentID:      agentID,
+		AgentUUID:    agentUUID,
+		Model:        model,
+		Workspace:    workspace,
+		Mode:         PromptMinimal,
+		ToolNames:    toolNames,
+		HasMemory:    hasMemory,
+		ProviderType: providerType,
+	}
+}
+
 // shouldRunMemoryFlush checks whether a memory flush should run before compaction.
 // Flush always runs when compaction triggers (called inside maybeSummarize),
 // gated only by enabled/memory checks and a dedup guard per compaction cycle.
@@ -108,16 +130,18 @@ func (l *Loop) runMemoryFlush(ctx context.Context, sessionKey string, settings *
 	flushPrompt := strings.ReplaceAll(settings.Prompt, "YYYY-MM-DD", today)
 	flushSystemPrompt := strings.ReplaceAll(settings.SystemPrompt, "YYYY-MM-DD", today)
 
-	// System prompt: combine agent's normal system prompt context with flush system prompt
-	systemPrompt := BuildSystemPrompt(SystemPromptConfig{
-		AgentID:      l.id,
-		Model:        l.model,
-		Workspace:    l.workspace,
-		Mode:         PromptMinimal,
-		ToolNames:    l.filteredToolNames(),
-		HasMemory:    l.hasMemory,
-		ProviderType: providerTypeOf(l.provider),
-	})
+	// System prompt: combine agent's normal system prompt context with flush system prompt.
+	// AgentUUID must stay in sync with loop_history.go's SystemPromptConfig —
+	// missing it here historically caused identity drift in downstream DomainEvents.
+	systemPrompt := BuildSystemPrompt(buildMemoryFlushPromptConfig(
+		l.id,
+		l.agentUUID.String(),
+		l.model,
+		l.workspace,
+		l.filteredToolNames(),
+		l.hasMemory,
+		providerTypeOf(l.provider),
+	))
 	systemPrompt += "\n\n" + flushSystemPrompt
 
 	messages = append(messages, providers.Message{

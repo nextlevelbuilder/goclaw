@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/bgalert"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -15,6 +17,7 @@ type semanticWorker struct {
 	kgStore   store.KnowledgeGraphStore
 	extractor EntityExtractor
 	eventBus  eventbus.DomainEventBus
+	alertDeps bgalert.AlertDeps
 }
 
 // Handle extracts entities and relations from an episodic summary.
@@ -24,6 +27,13 @@ func (w *semanticWorker) Handle(ctx context.Context, event eventbus.DomainEvent)
 		return fmt.Errorf("semantic: unexpected payload type %T", event.Payload)
 	}
 
+	// Inject tenant context so bgalert scopes correctly.
+	if event.TenantID != "" {
+		if tid, err := uuid.Parse(event.TenantID); err == nil {
+			ctx = store.WithTenantID(ctx, tid)
+		}
+	}
+
 	if w.extractor == nil || payload.Summary == "" {
 		return nil
 	}
@@ -31,6 +41,7 @@ func (w *semanticWorker) Handle(ctx context.Context, event eventbus.DomainEvent)
 	// Extract entities/relations from summary (much cheaper than full session)
 	result, err := w.extractor.Extract(ctx, payload.Summary)
 	if err != nil {
+		bgalert.ReportProviderError(ctx, w.alertDeps, "kg_extraction", err)
 		slog.Warn("semantic: extraction failed", "episodic_id", payload.EpisodicID, "err", err)
 		return nil // non-fatal: extraction failure doesn't block pipeline
 	}

@@ -148,6 +148,14 @@ func (h *APIKeysHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleRevoke revokes an API key after verifying the caller owns it.
+//
+// Phase 0b hotfix: the store layer's Revoke SQL matches rows where
+// `tenant_id = $N OR tenant_id IS NULL`, which let tenant admins revoke
+// system-level (NULL-tenant) API keys belonging to CI/CD or integrations.
+// The fix pre-fetches the key and rejects any non-owner caller whose tenant
+// does not exactly match the key's tenant. System owners bypass.
+// See plans/reports/debugger-260412-0922-tenant-scope-audit.md HIGH finding.
 func (h *APIKeysHandler) handleRevoke(w http.ResponseWriter, r *http.Request) {
 	locale := extractLocale(r)
 	idStr := r.PathValue("id")
@@ -157,8 +165,35 @@ func (h *APIKeysHandler) handleRevoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx := r.Context()
+
+	// Fetch first so ownership can be verified before any mutation.
+	key, err := h.apiKeys.Get(ctx, id)
+	if err != nil || key == nil {
+		writeError(w, http.StatusNotFound, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "API key", idStr))
+		return
+	}
+
+	// Ownership rule:
+	//   - System owner (bypass-all)      → may revoke any key
+	//   - Tenant admin in caller's tenant → may revoke only keys owned by that tenant (strict match)
+	//   - NULL-tenant (system) keys       → revocable only by system owners
+	if !store.IsOwnerRole(ctx) {
+		callerTID := store.TenantIDFromContext(ctx)
+		if key.TenantID == uuid.Nil || key.TenantID != callerTID {
+			slog.Warn("security.api_key_revoke_forbidden",
+				"key_id", idStr,
+				"caller_tenant", callerTID,
+				"key_tenant", key.TenantID,
+				"user_id", store.UserIDFromContext(ctx),
+			)
+			writeError(w, http.StatusForbidden, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgPermissionDenied, "API key"))
+			return
+		}
+	}
+
 	// HTTP revoke is admin-only (adminAuth middleware), so no owner filter needed.
-	if err := h.apiKeys.Revoke(r.Context(), id, ""); err != nil {
+	if err := h.apiKeys.Revoke(ctx, id, ""); err != nil {
 		slog.Error("api_keys.revoke failed", "error", err, "id", idStr)
 		writeError(w, http.StatusNotFound, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "API key", idStr))
 		return

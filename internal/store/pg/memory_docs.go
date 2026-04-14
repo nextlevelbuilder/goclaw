@@ -47,10 +47,12 @@ func NewPGMemoryStore(db *sql.DB, cfg PGMemoryConfig) *PGMemoryStore {
 }
 
 func (s *PGMemoryStore) GetDocument(ctx context.Context, agentID, userID, path string) (string, error) {
-	aid := mustParseUUID(agentID)
+	aid, err := parseUUID(agentID)
+	if err != nil {
+		return "", fmt.Errorf("memory get document: %w", err)
+	}
 	var content string
 
-	var err error
 	if store.IsSharedMemory(ctx) {
 		// Shared: no user_id filter
 		tc, tcArgs, _, tcErr := scopeClause(ctx, 3)
@@ -84,7 +86,10 @@ func (s *PGMemoryStore) GetDocument(ctx context.Context, agentID, userID, path s
 }
 
 func (s *PGMemoryStore) PutDocument(ctx context.Context, agentID, userID, path, content string) error {
-	aid := mustParseUUID(agentID)
+	aid, err := parseUUID(agentID)
+	if err != nil {
+		return fmt.Errorf("memory put document: %w", err)
+	}
 	hash := memory.ContentHash(content)
 	id := uuid.Must(uuid.NewV7())
 	now := time.Now()
@@ -95,7 +100,7 @@ func (s *PGMemoryStore) PutDocument(ctx context.Context, agentID, userID, path, 
 		uid = &userID
 	}
 
-	_, err := s.db.ExecContext(ctx,
+	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO memory_documents (id, agent_id, user_id, path, content, hash, tenant_id, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		 ON CONFLICT (agent_id, COALESCE(user_id, ''), path)
@@ -106,9 +111,11 @@ func (s *PGMemoryStore) PutDocument(ctx context.Context, agentID, userID, path, 
 }
 
 func (s *PGMemoryStore) DeleteDocument(ctx context.Context, agentID, userID, path string) error {
-	aid := mustParseUUID(agentID)
+	aid, err := parseUUID(agentID)
+	if err != nil {
+		return fmt.Errorf("memory delete document: %w", err)
+	}
 	var res sql.Result
-	var err error
 	if store.IsSharedMemory(ctx) {
 		// Shared: delete any matching doc regardless of user_id
 		tc, tcArgs, _, tcErr := scopeClause(ctx, 3)
@@ -146,7 +153,10 @@ func (s *PGMemoryStore) DeleteDocument(ctx context.Context, agentID, userID, pat
 }
 
 func (s *PGMemoryStore) ListDocuments(ctx context.Context, agentID, userID string) ([]store.DocumentInfo, error) {
-	aid := mustParseUUID(agentID)
+	aid, err := parseUUID(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("memory list documents: %w", err)
+	}
 
 	var q string
 	var args []any
@@ -187,7 +197,10 @@ func (s *PGMemoryStore) ListDocuments(ctx context.Context, agentID, userID strin
 
 // IndexDocument chunks a document and stores chunks with embeddings.
 func (s *PGMemoryStore) IndexDocument(ctx context.Context, agentID, userID, path string) error {
-	aid := mustParseUUID(agentID)
+	aid, err := parseUUID(agentID)
+	if err != nil {
+		return fmt.Errorf("memory index document: %w", err)
+	}
 
 	// Get document content
 	content, err := s.GetDocument(ctx, agentID, userID, path)
@@ -464,7 +477,27 @@ func (s *PGMemoryStore) Close() error { return nil }
 
 // --- Helpers ---
 
-func mustParseUUID(s string) uuid.UUID {
+// parseUUID returns the parsed UUID or a descriptive error. Use for every
+// INSERT/UPDATE/UPSERT/DELETE and any SELECT WHERE where silent nil would
+// either corrupt data or hide bugs as empty reads / zero-row updates. FK
+// constraints reject bad writes at the driver layer, but errors there come
+// back as cryptic PG 23503 — parseUUID catches them upstream with a clean
+// Go error. See docs/agent-identity-conventions.md.
+func parseUUID(s string) (uuid.UUID, error) {
+	id, err := uuid.Parse(s)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("parse uuid %q: %w", s, err)
+	}
+	return id, nil
+}
+
+// parseUUIDOrNil returns the parsed UUID or uuid.Nil on failure, without
+// raising an error. INTENTIONALLY silent — only acceptable on read-only
+// SELECT WHERE paths where a no-match (empty result) is the correct
+// semantics on bad input. Do NOT use for writes, updates, deletes, or any
+// SELECT where an empty result would hide a bug. Prefer parseUUID for new
+// code. See docs/agent-identity-conventions.md.
+func parseUUIDOrNil(s string) uuid.UUID {
 	id, err := uuid.Parse(s)
 	if err != nil {
 		return uuid.Nil

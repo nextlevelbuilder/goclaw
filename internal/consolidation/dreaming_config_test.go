@@ -109,8 +109,7 @@ func TestDreamingWorkerHandleHonoursCustomThreshold(t *testing.T) {
 	worker := &dreamingWorker{
 		episodicStore: mockEpisodic,
 		memoryStore:   mockMemory,
-		provider:      mockProvider,
-		model:         "test",
+		registry:      testRegistry(mockProvider),
 		threshold:     5, // global default says skip at count=2
 		debounce:      1 * time.Second,
 		resolveConfig: func(_ context.Context, _ string) *config.DreamingConfig {

@@ -30,7 +30,7 @@ export function ZaloPersonalQRDialog({
   // Auto-start when dialog opens
   useEffect(() => {
     if (open && status === "idle") start();
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open]);  
 
   // Reset state when dialog closes
   useEffect(() => {

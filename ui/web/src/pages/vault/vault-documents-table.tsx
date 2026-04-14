@@ -12,6 +12,7 @@ const DOC_TYPE_COLORS: Record<string, string> = {
   skill: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
   episodic: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
   media: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+  document: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300",
 };
 
 const SCOPE_COLORS: Record<string, string> = {

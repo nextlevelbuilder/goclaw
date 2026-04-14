@@ -133,9 +133,18 @@ func (s *SQLiteAgentStore) Update(ctx context.Context, id uuid.UUID, updates map
 		return nil
 	}
 
-	// Coerce NOT NULL int columns: null → default to prevent constraint violations.
-	if v, ok := updates["skill_nudge_interval"]; ok && v == nil {
-		updates["skill_nudge_interval"] = 0
+	// Coerce NOT NULL columns: null → default to prevent constraint violations.
+	// Promoted TEXT columns: null → empty string.
+	for _, col := range []string{"emoji", "agent_description", "thinking_level"} {
+		if v, ok := updates[col]; ok && v == nil {
+			updates[col] = ""
+		}
+	}
+	// Promoted INT columns: null → 0.
+	for _, col := range []string{"skill_nudge_interval", "max_tokens"} {
+		if v, ok := updates[col]; ok && v == nil {
+			updates[col] = 0
+		}
 	}
 
 	// Unset existing default before setting a new one (scoped to same tenant).

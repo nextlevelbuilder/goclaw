@@ -16,6 +16,7 @@ func (c *Channel) parseMessageEvent(event *MessageEvent) *messageContext {
 	contentType := msg.MessageType
 	rootID := msg.RootID
 	parentID := msg.ParentID
+	threadID := msg.ThreadID
 
 	senderID := ""
 	if sender != nil {
@@ -58,6 +59,7 @@ func (c *Channel) parseMessageEvent(event *MessageEvent) *messageContext {
 		MentionedBot: mentionedBot,
 		RootID:       rootID,
 		ParentID:     parentID,
+		ThreadID:     threadID,
 		Mentions:     mentions,
 	}
 }

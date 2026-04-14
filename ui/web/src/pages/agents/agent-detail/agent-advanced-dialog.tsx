@@ -78,7 +78,7 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
     setPrune(s.prune);
     setSbEnabled(s.sbEnabled);
     setSb(s.sb);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [open]);
 
   useEffect(() => {

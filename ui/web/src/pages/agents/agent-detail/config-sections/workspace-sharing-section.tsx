@@ -86,6 +86,21 @@ export function WorkspaceSharingSection({ value, onChange }: WorkspaceSharingSec
               </p>
             )}
           </div>
+
+          <div className={`rounded-lg border p-3 sm:p-4 ${value.share_sessions ? "border-orange-400/60 bg-orange-50/30 dark:border-orange-500/30 dark:bg-orange-950/10" : ""}`}>
+            <div className="flex items-center justify-between">
+              <InfoLabel tip={t(`${s}.shareSessionsTip`)}>{t(`${s}.shareSessions`)}</InfoLabel>
+              <Switch
+                checked={value.share_sessions ?? false}
+                onCheckedChange={(v) => onChange({ ...value, share_sessions: v })}
+              />
+            </div>
+            {value.share_sessions && (
+              <p className="mt-2 text-xs text-orange-600 dark:text-orange-400">
+                {t(`${s}.shareSessionsNote`)}
+              </p>
+            )}
+          </div>
         </div>
       </section>
 

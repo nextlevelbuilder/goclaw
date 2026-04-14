@@ -103,7 +103,7 @@ export function TeamAuditLogsModal({ open, onOpenChange, teamId }: TeamAuditLogs
       setEvents([]);
       fetchEvents(0, false);
     }
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open]);  
 
   const handleLoadMore = useCallback(() => {
     fetchEvents(events.length, true);

@@ -24,7 +24,7 @@ import { Separator } from "@/components/ui/separator";
 import { InfoLabel } from "@/components/shared/info-label";
 import { isSecret } from "@/lib/secret";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 type ToolsData = Record<string, any>;
 
 interface Props {

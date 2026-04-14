@@ -97,6 +97,17 @@ export function TaskList({
     }
   }, [deleteTasksBulk, teamId, selectedIds]);
 
+  const handleSingleDelete = useCallback(async () => {
+    if (!deleteTask || !deleteTargetId) return;
+    setSingleDeleting(true);
+    try {
+      await deleteTask(teamId, deleteTargetId);
+      setDeleteTargetId(null);
+    } finally {
+      setSingleDeleting(false);
+    }
+  }, [deleteTask, teamId, deleteTargetId]);
+
   if (loading && tasks.length === 0) {
     return <div className="py-8 text-center text-sm text-muted-foreground">{t("tasks.loading")}</div>;
   }
@@ -116,17 +127,6 @@ export function TaskList({
     if (!deleteTask) return;
     setDeleteTargetId(taskId);
   };
-
-  const handleSingleDelete = useCallback(async () => {
-    if (!deleteTask || !deleteTargetId) return;
-    setSingleDeleting(true);
-    try {
-      await deleteTask(teamId, deleteTargetId);
-      setDeleteTargetId(null);
-    } finally {
-      setSingleDeleting(false);
-    }
-  }, [deleteTask, teamId, deleteTargetId]);
 
   const hasBulkDelete = !!deleteTasksBulk && pageTerminalIds.length > 0;
   const allPageSelected = pageTerminalIds.length > 0 && pageTerminalIds.every((id) => selectedIds.has(id));

@@ -13,8 +13,8 @@ export function useEpisodicSummaries(agentId: string, opts: { userId?: string; l
   const params = useMemo(() => {
     const p: Record<string, string> = {};
     if (opts.userId) p.user_id = opts.userId;
-    if (opts.limit) p.limit = String(opts.limit);
-    if (opts.offset) p.offset = String(opts.offset);
+    if (opts.limit !== undefined) p.limit = String(opts.limit);
+    if (opts.offset !== undefined) p.offset = String(opts.offset);
     return p;
   }, [opts.userId, opts.limit, opts.offset]);
 

@@ -16,7 +16,7 @@ function estimateTokensFromContent(content: string): number {
   let ascii = 0;
   let nonAscii = 0;
   for (const ch of content) {
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+     
     if (ch.codePointAt(0)! < 128) ascii++;
     else nonAscii++;
   }

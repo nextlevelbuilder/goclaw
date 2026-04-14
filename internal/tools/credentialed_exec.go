@@ -140,6 +140,7 @@ func resolveAndMatchBinary(binaryName string, configPath *string) (string, error
 }
 
 // matchesBinaryDeny checks if the joined args string matches any per-binary deny pattern.
+// Used for deny_args where patterns span multiple args (e.g. `auth\s+login`, `repo\s+delete`).
 // Returns the matched pattern string, or empty if allowed.
 func matchesBinaryDeny(args []string, denyPatternsJSON json.RawMessage) string {
 	if len(denyPatternsJSON) == 0 {
@@ -158,6 +159,40 @@ func matchesBinaryDeny(args []string, denyPatternsJSON json.RawMessage) string {
 		}
 		if re.MatchString(argsStr) {
 			return p
+		}
+	}
+	return ""
+}
+
+// matchesBinaryVerbose checks each arg token against verbose/debug flag patterns.
+// Patterns are anchored at the START of each arg (but not the end), which allows:
+//   - `-v` to match `-v`, `-vv`, `-vvv` (verbosity escalation), `-v=1`, `-vq` (combined flags)
+//   - `--verbose` to match `--verbose`, `--verbose=true`
+//   - `-v` to NOT match `--version` (char 1 is `-`, not `v`)
+//   - `--verbose` to NOT match `--version` (diverges at char 5)
+//
+// This is intentional: verbose flags leak sensitive output (tokens in HTTP headers,
+// API response bodies, OAuth flows). Start-anchored per-arg matching catches the
+// real verbose family without false-positive on safe flags like `--version`.
+// Returns the matched pattern string, or empty if allowed.
+func matchesBinaryVerbose(args []string, denyPatternsJSON json.RawMessage) string {
+	if len(denyPatternsJSON) == 0 {
+		return ""
+	}
+	var patterns []string
+	if err := json.Unmarshal(denyPatternsJSON, &patterns); err != nil || len(patterns) == 0 {
+		return ""
+	}
+	for _, p := range patterns {
+		re, err := regexp.Compile("^(?:" + p + ")")
+		if err != nil {
+			slog.Warn("secure_cli.invalid_deny_pattern", "pattern", p, "error", err)
+			continue
+		}
+		for _, arg := range args {
+			if re.MatchString(arg) {
+				return p
+			}
 		}
 	}
 	return ""
@@ -196,8 +231,9 @@ func (t *ExecTool) executeCredentialed(ctx context.Context, cred *store.SecureCL
 	if p := matchesBinaryDeny(args, cred.DenyArgs); p != "" {
 		return credentialedDenyError(binary, args, p)
 	}
-	// Per-binary verbose deny check (deny_verbose)
-	if p := matchesBinaryDeny(args, cred.DenyVerbose); p != "" {
+	// Per-binary verbose deny check (deny_verbose) — per-arg start-anchored match
+	// so `-v` blocks `-v`/`-vv`/`-v=1` but not `--version`.
+	if p := matchesBinaryVerbose(args, cred.DenyVerbose); p != "" {
 		return credentialedDenyError(binary, args, p)
 	}
 

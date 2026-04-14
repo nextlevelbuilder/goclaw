@@ -105,8 +105,10 @@ func init() {
 		MsgInvalidLogAction: "action must be 'start' or 'stop'",
 
 		// Config
-		MsgRawConfigRequired: "raw config is required",
-		MsgRawPatchRequired:  "raw patch is required",
+		MsgRawConfigRequired:     "raw config is required",
+		MsgRawPatchRequired:      "raw patch is required",
+		MsgConfigMasterScopeOnly: "config.* methods are master-scope only; use tenant tool config endpoints for per-tenant overrides",
+		MsgMasterScopeRequired:   "this action requires master tenant scope",
 
 		// Storage / File
 		MsgCannotDeleteSkillsDir: "cannot delete skills directories",

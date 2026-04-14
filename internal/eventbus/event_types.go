@@ -27,15 +27,21 @@ const (
 )
 
 // DomainEvent is a typed event with metadata for the consolidation pipeline.
+//
+// Identity invariant: TenantID and AgentID are string fields for legacy wire
+// compatibility, but consumers parse them as UUIDs before touching the DB.
+// Publishers MUST supply valid UUID strings — never agent_key or tenant_slug.
+// The publish-time observer in validate_agent_id.go warns on drift.
+// See docs/agent-identity-conventions.md.
 type DomainEvent struct {
-	ID        string    // UUID v7 for ordering
+	ID        string // UUID v7 for ordering
 	Type      EventType
-	SourceID  string    // dedup key (e.g. session key, run ID)
-	TenantID  string
-	AgentID   string
+	SourceID  string // dedup key (e.g. session key, run ID)
+	TenantID  string // MUST be a valid UUID string — never tenant_slug
+	AgentID   string // MUST be a valid UUID string — never agent_key
 	UserID    string
 	Timestamp time.Time
-	Payload   any       // typed per EventType (see payload structs below)
+	Payload   any // typed per EventType (see payload structs below)
 }
 
 // --- Typed payloads, one per EventType ---

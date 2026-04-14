@@ -8,7 +8,7 @@ import { BehaviorSessionsCard } from "./behavior-sessions-card";
 import { BehaviorSecurityCard } from "./behavior-security-card";
 import { BehaviorPendingCompactionCard, type PendingCompactionValues } from "./behavior-pending-compaction-card";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 
 interface Props {
   config: Record<string, any>;
@@ -77,15 +77,19 @@ export function BehaviorSection({ config, onPatch, saving }: Props) {
     });
     setPendingCompaction(ch.pending_compaction ?? {});
     setDirty(false);
-  }, [config]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [config]);  
 
   const markDirty = <T,>(setter: React.Dispatch<React.SetStateAction<T>>) =>
     (v: T) => { setter(v); setDirty(true); };
 
   const handleSave = () => {
+    // Strip masked/secret values to avoid overwriting real secrets with "***"
+    const gwClean = Object.fromEntries(
+      Object.entries(gw).filter(([, v]) => typeof v !== "string" || v !== "***"),
+    );
     onPatch({
       gateway: {
-        ...gw,
+        ...gwClean,
         tool_status: ux.tool_status,
         block_reply: ux.block_reply,
         max_message_chars: rate.max_message_chars,

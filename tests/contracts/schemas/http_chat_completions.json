@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "POST /v1/chat/completions response (OpenAI-compatible)",
+  "type": "object",
+  "required": ["id", "object", "created", "model", "choices"],
+  "properties": {
+    "id": { "type": "string" },
+    "object": { "type": "string", "const": "chat.completion" },
+    "created": { "type": "number" },
+    "model": { "type": "string" },
+    "choices": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["index", "message", "finish_reason"],
+        "properties": {
+          "index": { "type": "number" },
+          "message": {
+            "type": "object",
+            "required": ["role", "content"],
+            "properties": {
+              "role": { "type": "string" },
+              "content": { "type": "string" }
+            }
+          },
+          "finish_reason": { "type": "string" }
+        }
+      }
+    },
+    "usage": {
+      "type": "object",
+      "properties": {
+        "prompt_tokens": { "type": "number" },
+        "completion_tokens": { "type": "number" },
+        "total_tokens": { "type": "number" }
+      }
+    }
+  }
+}

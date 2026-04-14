@@ -125,7 +125,7 @@ export function ChatPage() {
         navigate("/chat");
       }
     },
-    [navigate, sessionKey],
+    [navigate],
   );
 
   const handleSend = useCallback(

@@ -190,8 +190,17 @@ func (s *PGAgentStore) Update(ctx context.Context, id uuid.UUID, updates map[str
 	}
 
 	// Coerce NOT NULL columns: null → default to prevent constraint violations.
-	if v, ok := updates["skill_nudge_interval"]; ok && v == nil {
-		updates["skill_nudge_interval"] = 0
+	// Promoted TEXT columns (migration 000037): null → empty string.
+	for _, col := range []string{"emoji", "agent_description", "thinking_level"} {
+		if v, ok := updates[col]; ok && v == nil {
+			updates[col] = ""
+		}
+	}
+	// Promoted INT columns: null → 0.
+	for _, col := range []string{"skill_nudge_interval", "max_tokens"} {
+		if v, ok := updates[col]; ok && v == nil {
+			updates[col] = 0
+		}
 	}
 	// NOT NULL JSONB columns: null → empty object.
 	for _, col := range []string{"chatgpt_oauth_routing", "reasoning_config", "workspace_sharing", "shell_deny_groups", "kg_dedup_config"} {

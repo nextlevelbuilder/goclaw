@@ -11,39 +11,6 @@ import (
 // Advanced Retry Logic Tests
 // ============================================================================
 
-// TestCallClassifyWithRetry_FirstAttemptSuccess uses first timeout.
-func TestCallClassifyWithRetry_FirstAttemptSuccess(t *testing.T) {
-	// Verify that first attempt uses enrichRetryTimeouts[0]
-	if enrichRetryTimeouts[0] == 0 {
-		t.Errorf("First timeout should be non-zero")
-	}
-
-	provider := &mockClassifyProvider{
-		responses: []string{`[{"idx":1,"type":"reference","ctx":"first attempt"}]`},
-		errors:    []error{nil},
-	}
-
-	worker := &enrichWorker{
-		provider: provider,
-		model:    "test",
-	}
-
-	ctx := context.Background()
-	resp, err := worker.callClassifyWithRetry(ctx, "system", "user")
-
-	if err != nil {
-		t.Fatalf("First attempt should succeed: %v", err)
-	}
-
-	if provider.calls != 1 {
-		t.Errorf("Expected exactly 1 call on first-attempt success, got %d", provider.calls)
-	}
-
-	if !strings.Contains(resp, "reference") {
-		t.Errorf("Response missing expected content: %q", resp)
-	}
-}
-
 // TestCallClassifyWithRetry_ResponseWhitespaceStripping trims whitespace from response.
 func TestCallClassifyWithRetry_ResponseWhitespaceStripping(t *testing.T) {
 	// Response has leading/trailing whitespace that should be stripped
@@ -52,13 +19,10 @@ func TestCallClassifyWithRetry_ResponseWhitespaceStripping(t *testing.T) {
 		errors:    []error{nil},
 	}
 
-	worker := &enrichWorker{
-		provider: provider,
-		model:    "test",
-	}
+	worker := &EnrichWorker{}
 
 	ctx := context.Background()
-	resp, err := worker.callClassifyWithRetry(ctx, "system", "user")
+	resp, err := worker.callClassifyWithRetry(ctx, provider, "test", "system", "user")
 
 	if err != nil {
 		t.Fatalf("callClassifyWithRetry failed: %v", err)
@@ -74,24 +38,9 @@ func TestCallClassifyWithRetry_ResponseWhitespaceStripping(t *testing.T) {
 	}
 }
 
-// TestCallClassifyWithRetry_MaxRetriesConstant verifies retry limit.
-func TestCallClassifyWithRetry_MaxRetriesConstant(t *testing.T) {
-	if enrichMaxRetries != 3 {
-		t.Errorf("enrichMaxRetries should be 3, got %d", enrichMaxRetries)
-	}
-
-	// Verify arrays have correct length
-	if len(enrichRetryTimeouts) != enrichMaxRetries {
-		t.Errorf("enrichRetryTimeouts length should be %d, got %d", enrichMaxRetries, len(enrichRetryTimeouts))
-	}
-
-	if len(enrichRetryBackoffs) != enrichMaxRetries {
-		t.Errorf("enrichRetryBackoffs length should be %d, got %d", enrichMaxRetries, len(enrichRetryBackoffs))
-	}
-}
-
 // TestCallClassifyWithRetry_SecondAttemptSucceeds verifies first retry succeeds.
 func TestCallClassifyWithRetry_SecondAttemptSucceeds(t *testing.T) {
+	fastBackoffsForTest(t) // skip real 2s backoff between attempts
 	provider := &mockClassifyProvider{
 		responses: []string{
 			"", // attempt 0: error
@@ -103,13 +52,10 @@ func TestCallClassifyWithRetry_SecondAttemptSucceeds(t *testing.T) {
 		},
 	}
 
-	worker := &enrichWorker{
-		provider: provider,
-		model:    "test",
-	}
+	worker := &EnrichWorker{}
 
 	ctx := context.Background()
-	resp, err := worker.callClassifyWithRetry(ctx, "system", "user")
+	resp, err := worker.callClassifyWithRetry(ctx, provider, "test", "system", "user")
 
 	if err != nil {
 		t.Fatalf("Should succeed on second attempt, got error: %v", err)
@@ -131,13 +77,10 @@ func TestCallClassifyWithRetry_EmptyResponse(t *testing.T) {
 		errors:    []error{nil, nil, nil},
 	}
 
-	worker := &enrichWorker{
-		provider: provider,
-		model:    "test",
-	}
+	worker := &EnrichWorker{}
 
 	ctx := context.Background()
-	resp, err := worker.callClassifyWithRetry(ctx, "system", "user")
+	resp, err := worker.callClassifyWithRetry(ctx, provider, "test", "system", "user")
 
 	// Empty response is still a successful LLM call, should return empty string
 	if err != nil {

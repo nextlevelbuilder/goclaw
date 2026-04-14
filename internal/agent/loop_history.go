@@ -96,7 +96,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 	// DM only — group chats have permission checks and multiple senders.
 	if hadBootstrap && peerKind == "direct" {
 		if senderName := store.SenderNameFromContext(ctx); senderName != "" {
-			hint := fmt.Sprintf("Known user info (from %s): Name=%q\nDefault timezone: Asia/Saigon (GMT+7). User can correct this.", channelType, senderName)
+			hint := fmt.Sprintf("Known user info (from %s): Name=%q\nTimezone: not yet known. When the user mentions times, schedules, or reminders, ask for their timezone and update USER.md.", channelType, senderName)
 			if extraSystemPrompt != "" {
 				extraSystemPrompt += "\n\n"
 			}
@@ -258,7 +258,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 
 	// History pipeline matching TS: limitHistoryTurns → pruneContext → sanitizeHistory.
 	trimmed := limitHistoryTurns(history, historyLimit)
-	pruned := pruneContextMessages(trimmed, l.contextWindow, l.contextPruningCfg)
+	pruned := pruneContextMessages(trimmed, l.contextWindow, l.contextPruningCfg, l.tokenCounter, l.model)
 	sanitized, droppedCount := sanitizeHistory(pruned)
 	messages = append(messages, sanitized...)
 

@@ -89,7 +89,7 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit, onTest }: 
         url: server?.url ?? "",
         headers: server?.headers ?? {},
         env: server?.env ?? {},
-        toolPrefix: (server?.tool_prefix ?? "").replace(/^mcp_/, ""),
+        toolPrefix: server?.tool_prefix ?? "",
         timeout: server?.timeout_sec ?? 60,
         enabled: server?.enabled ?? true,
         requireUserCreds: server?.settings?.require_user_credentials ?? false,
@@ -160,7 +160,7 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit, onTest }: 
       });
       onOpenChange(false);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : t("form.saving"));
+      setError(err instanceof Error ? err.message : t("form.errors.saveFailed", "Save failed"));
     } finally {
       setLoading(false);
     }

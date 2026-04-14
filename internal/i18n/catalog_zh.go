@@ -105,8 +105,10 @@ func init() {
 		MsgInvalidLogAction: "action 必须是 'start' 或 'stop'",
 
 		// Config
-		MsgRawConfigRequired: "raw 配置是必填项",
-		MsgRawPatchRequired:  "raw 补丁是必填项",
+		MsgRawConfigRequired:     "raw 配置是必填项",
+		MsgRawPatchRequired:      "raw 补丁是必填项",
+		MsgConfigMasterScopeOnly: "config.* 方法仅适用于主作用域；使用租户工具配置端点进行租户级覆盖",
+		MsgMasterScopeRequired:   "此操作需要主租户范围",
 
 		// Storage / File
 		MsgCannotDeleteSkillsDir: "无法删除Skill目录",

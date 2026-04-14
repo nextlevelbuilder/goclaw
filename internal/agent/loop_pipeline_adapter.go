@@ -160,7 +160,7 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 				l.domainBus.Publish(eventbus.DomainEvent{
 					Type:     eventbus.EventSessionCompleted,
 					TenantID: l.tenantID.String(),
-					AgentID:  l.id,
+					AgentID:  l.agentUUID.String(),
 					UserID:   req.UserID,
 					SourceID: sessionKey,
 					Payload: &eventbus.SessionCompletedPayload{
@@ -255,7 +255,7 @@ func (l *Loop) makeAutoInjectCallback(req *RunRequest) func(ctx context.Context,
 	return func(ctx context.Context, userMessage, userID, recentContext string) (string, error) {
 		result, err := l.autoInjector.Inject(ctx, memory.InjectParams{
 			AgentID:       l.agentUUID.String(),
-			UserID:        userID,
+			UserID:        store.MemoryUserID(ctx),
 			TenantID:      store.TenantIDFromContext(ctx).String(),
 			UserMessage:   userMessage,
 			RecentContext: recentContext,

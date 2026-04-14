@@ -6,6 +6,10 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
 import { useTeams } from "@/pages/teams/hooks/use-teams";
 import { useVaultUpload } from "./hooks/use-vault-upload";
@@ -52,10 +56,8 @@ export function VaultCreateDialog({ open, onOpenChange, onUploaded, defaultAgent
   const [files, setFiles] = useState<File[]>([]);
   const [dragging, setDragging] = useState(false);
 
-  // Load teams on first open
   useEffect(() => { if (open) loadTeams(); }, [open, loadTeams]);
 
-  // Reset state when dialog opens; pre-select destination from parent filters
   useEffect(() => {
     if (!open) return;
     setFiles([]);
@@ -114,52 +116,71 @@ export function VaultCreateDialog({ open, onOpenChange, onUploaded, defaultAgent
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md max-sm:inset-0">
+      <DialogContent className="sm:max-w-lg max-sm:inset-0">
         <DialogHeader>
           <DialogTitle>{t("upload.title", "Upload to Vault")}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
-          {/* Destination radio group */}
-          <fieldset className="space-y-2">
+        <div className="space-y-4 max-h-[calc(85vh-8rem)] overflow-y-auto overscroll-contain -mx-1 px-1">
+          {/* Destination */}
+          <fieldset className="space-y-3">
             <Label>{t("upload.destination", "Destination")}</Label>
-            <div className="space-y-2">
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <input type="radio" name="dest" checked={destination === "shared"}
-                  onChange={() => setDestination("shared")} className="accent-primary" />
+            <RadioGroup
+              value={destination}
+              onValueChange={(v) => setDestination(v as Destination)}
+              className="gap-3"
+            >
+              <label className="flex items-center gap-2.5 text-sm cursor-pointer">
+                <RadioGroupItem value="shared" />
                 {t("upload.shared", "Shared")}
               </label>
 
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <input type="radio" name="dest" checked={destination === "agent"}
-                  onChange={() => setDestination("agent")} className="accent-primary" />
-                {t("upload.agent", "Agent")}
-              </label>
-              {destination === "agent" && (
-                <select value={agentId} onChange={(e) => setAgentId(e.target.value)}
-                  className="ml-6 w-[calc(100%-1.5rem)] text-base md:text-sm border rounded px-2 py-1.5 bg-background">
-                  <option value="">{t("upload.selectAgent", "Select agent...")}</option>
-                  {(agents ?? []).map((a) => (
-                    <option key={a.id} value={a.id}>{a.display_name || a.agent_key}</option>
-                  ))}
-                </select>
-              )}
+              <div className="space-y-2">
+                <label className="flex items-center gap-2.5 text-sm cursor-pointer">
+                  <RadioGroupItem value="agent" />
+                  {t("upload.agent", "Agent")}
+                </label>
+                {destination === "agent" && (
+                  <div className="pl-6">
+                    <Select value={agentId} onValueChange={setAgentId}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder={t("upload.selectAgent", "Select agent...")} />
+                      </SelectTrigger>
+                      <SelectContent className="pointer-events-auto">
+                        {(agents ?? []).map((a) => (
+                          <SelectItem key={a.id} value={a.id}>
+                            {a.display_name || a.agent_key}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
 
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <input type="radio" name="dest" checked={destination === "team"}
-                  onChange={() => setDestination("team")} className="accent-primary" />
-                {t("upload.team", "Team")}
-              </label>
-              {destination === "team" && (
-                <select value={teamId} onChange={(e) => setTeamId(e.target.value)}
-                  className="ml-6 w-[calc(100%-1.5rem)] text-base md:text-sm border rounded px-2 py-1.5 bg-background">
-                  <option value="">{t("upload.selectTeam", "Select team...")}</option>
-                  {(teams ?? []).map((team) => (
-                    <option key={team.id} value={team.id}>{team.name}</option>
-                  ))}
-                </select>
-              )}
-            </div>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2.5 text-sm cursor-pointer">
+                  <RadioGroupItem value="team" />
+                  {t("upload.team", "Team")}
+                </label>
+                {destination === "team" && (
+                  <div className="pl-6">
+                    <Select value={teamId} onValueChange={setTeamId}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder={t("upload.selectTeam", "Select team...")} />
+                      </SelectTrigger>
+                      <SelectContent className="pointer-events-auto">
+                        {(teams ?? []).map((team) => (
+                          <SelectItem key={team.id} value={team.id}>
+                            {team.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+            </RadioGroup>
           </fieldset>
 
           {/* Drop zone */}
@@ -168,7 +189,7 @@ export function VaultCreateDialog({ open, onOpenChange, onUploaded, defaultAgent
             onDragLeave={() => setDragging(false)}
             onDrop={onDrop}
             onClick={() => inputRef.current?.click()}
-            className={`flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-6 cursor-pointer transition-colors ${
+            className={`flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-8 cursor-pointer transition-colors ${
               dragging ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/50"
             }`}
           >
@@ -181,18 +202,18 @@ export function VaultCreateDialog({ open, onOpenChange, onUploaded, defaultAgent
 
           {/* File list */}
           {files.length > 0 && (
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">
                 {t("upload.files", { count: files.length, defaultValue: `Files (${files.length})` })}
               </Label>
-              <div className="max-h-48 overflow-y-auto overscroll-contain space-y-1 rounded border p-2">
+              <div className="max-h-48 overflow-y-auto overscroll-contain space-y-0.5 rounded-md border p-2">
                 {files.map((f, i) => (
-                  <div key={f.name} className="flex items-center gap-2 text-sm">
+                  <div key={f.name} className="flex items-center gap-2 rounded px-1.5 py-1 text-sm hover:bg-muted/50">
                     <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                     <span className="truncate flex-1 font-mono text-xs">{f.name}</span>
-                    <span className="shrink-0 text-xs text-muted-foreground">{formatBytes(f.size)}</span>
-                    <button type="button" onClick={() => removeFile(i)}
-                      className="shrink-0 p-0.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive">
+                    <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{formatBytes(f.size)}</span>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); removeFile(i); }}
+                      className="shrink-0 p-1 rounded-sm hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors">
                       <X className="h-3.5 w-3.5" />
                     </button>
                   </div>

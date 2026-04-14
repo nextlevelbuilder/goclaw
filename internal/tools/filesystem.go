@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
@@ -303,16 +304,29 @@ func (t *ReadFileTool) paginateOutput(content string, args map[string]any) *Resu
 	return SilentResult(output)
 }
 
-// allowedWithTeamWorkspace returns the allowed prefixes with team workspace appended
-// if present in context. Thread-safe: creates a new slice per request.
+// allowedWithTeamWorkspace returns the allowed prefixes with team workspace and
+// tenant-specific paths appended if present in context. Thread-safe: creates a
+// new slice per request. Merge order: base (global) → tenant paths → team workspace.
 func allowedWithTeamWorkspace(ctx context.Context, base []string) []string {
+	tenantPaths := TenantAllowedPathsFromCtx(ctx)
 	teamWs := ToolTeamWorkspaceFromCtx(ctx)
-	if teamWs == "" {
+
+	if len(tenantPaths) == 0 && teamWs == "" {
 		return base
 	}
-	out := make([]string, len(base)+1)
-	copy(out, base)
-	out[len(base)] = teamWs
+
+	// Pre-allocate capacity for all sources
+	capacity := len(base) + len(tenantPaths)
+	if teamWs != "" {
+		capacity++
+	}
+
+	out := make([]string, 0, capacity)
+	out = append(out, base...)
+	out = append(out, tenantPaths...)
+	if teamWs != "" {
+		out = append(out, teamWs)
+	}
 	return out
 }
 
@@ -488,7 +502,13 @@ func resolvePath(path, workspace string, restrict bool) (string, error) {
 }
 
 // isPathInside checks whether child is inside or equal to parent directory.
+// On Windows, comparison is case-insensitive since NTFS paths are case-insensitive.
 func isPathInside(child, parent string) bool {
+	// Windows paths are case-insensitive; normalize to lowercase for comparison.
+	if runtime.GOOS == "windows" {
+		child = strings.ToLower(child)
+		parent = strings.ToLower(parent)
+	}
 	if child == parent {
 		return true
 	}

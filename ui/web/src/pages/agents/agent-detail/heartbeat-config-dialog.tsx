@@ -158,7 +158,7 @@ export function HeartbeatConfigDialog({
     loadChecklist();
     fetchTargets().then(setTargets)
       .catch((err) => console.error("[HeartbeatConfig] fetch targets failed:", err));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [open]);
 
   const handleTest = async () => {

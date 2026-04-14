@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -108,6 +109,9 @@ type ResolverDeps struct {
 	// Per-tenant tool/skill config overrides
 	BuiltinToolTenantCfgs store.BuiltinToolTenantConfigStore
 	SkillTenantCfgs       store.SkillTenantConfigStore
+
+	// System config store for tenant-scoped settings (allowed_paths, etc.)
+	SystemConfigs store.SystemConfigStore
 
 	// Global workspace root (GOCLAW_WORKSPACE)
 	Workspace string
@@ -343,7 +347,11 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 		}
 
 		// Load per-tenant tool exclusions (disabled tools for this agent's tenant)
-		var disabledTools map[string]bool
+		// AND per-tenant tool settings overlay (tier 2 in the 4-tier cascade).
+		var (
+			disabledTools      map[string]bool
+			tenantToolSettings tools.BuiltinToolSettings
+		)
 		if deps.BuiltinToolTenantCfgs != nil && ag.TenantID != uuid.Nil {
 			if disabled, err := deps.BuiltinToolTenantCfgs.ListDisabled(ctx, ag.TenantID); err == nil && len(disabled) > 0 {
 				disabledTools = make(map[string]bool, len(disabled))
@@ -351,6 +359,32 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 					disabledTools[name] = true
 				}
 				slog.Debug("tenant tool exclusions", "agent", agentKey, "tenant", ag.TenantID, "disabled", len(disabled))
+			}
+			if settings, err := deps.BuiltinToolTenantCfgs.ListAllSettings(ctx, ag.TenantID); err != nil {
+				// Log but don't fail agent creation — fall back to global/hardcoded defaults.
+				slog.Warn("failed to load tenant tool settings", "agent", agentKey, "tenant", ag.TenantID, "error", err)
+			} else if len(settings) > 0 {
+				tenantToolSettings = make(tools.BuiltinToolSettings, len(settings))
+				for name, raw := range settings {
+					tenantToolSettings[name] = []byte(raw)
+				}
+				slog.Debug("tenant tool settings loaded", "agent", agentKey, "tenant", ag.TenantID, "tools", len(tenantToolSettings))
+			}
+		}
+
+		// Load tenant-specific allowed paths (from system_configs['allowed_paths']).
+		// These extend filesystem tool access beyond the agent's workspace.
+		var tenantAllowedPaths []string
+		if deps.SystemConfigs != nil && ag.TenantID != uuid.Nil {
+			tenantCtx := store.WithTenantID(ctx, ag.TenantID)
+			if raw, err := deps.SystemConfigs.Get(tenantCtx, "allowed_paths"); err == nil && raw != "" {
+				if json.Unmarshal([]byte(raw), &tenantAllowedPaths) == nil && len(tenantAllowedPaths) > 0 {
+					// Expand home directory in paths
+					for i, p := range tenantAllowedPaths {
+						tenantAllowedPaths[i] = config.ExpandHome(p)
+					}
+					slog.Debug("tenant allowed paths loaded", "agent", agentKey, "tenant", ag.TenantID, "paths", len(tenantAllowedPaths))
+				}
 			}
 		}
 
@@ -452,6 +486,8 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			SandboxContainerDir:    sandboxContainerDir,
 			SandboxWorkspaceAccess: sandboxWorkspaceAccess,
 			BuiltinToolSettings:    builtinSettings,
+			TenantToolSettings:     tenantToolSettings,
+			TenantAllowedPaths:     tenantAllowedPaths,
 			DisabledTools:          disabledTools,
 			ReasoningConfig:        store.ResolveEffectiveReasoningConfig(providerReasoningDefaults, ag.ParseReasoningConfig()),
 			PromptMode:             PromptMode(ag.ParsePromptMode()),
@@ -487,13 +523,13 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 // InvalidateAgent removes an agent from the router cache, forcing re-resolution.
 // Used when agent config is updated via API.
 // Matches both plain key ("agentKey") and tenant-scoped key ("tenantID:agentKey")
-// because callers only pass the agentKey without tenant context.
+// via exact-segment match (prevents substring collisions like "sub-foo" matching
+// when invalidating "foo"). Empty agentKey is rejected to prevent wildcard wipes.
 func (r *Router) InvalidateAgent(agentKey string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	suffix := ":" + agentKey
 	for key := range r.agents {
-		if key == agentKey || strings.HasSuffix(key, suffix) {
+		if matchAgentCacheKey(key, agentKey) {
 			delete(r.agents, key)
 		}
 	}
@@ -507,6 +543,27 @@ func (r *Router) InvalidateAll() {
 	defer r.mu.Unlock()
 	r.agents = make(map[string]*agentEntry)
 	slog.Debug("invalidated all agent caches")
+}
+
+// InvalidateTenant clears all cached agents for a single tenant.
+// Cache keys are "tenantID:agentKey" when tenant-scoped (see agentCacheKey).
+// Non-tenant entries (bare "agentKey") are untouched. uuid.Nil is a no-op —
+// callers use InvalidateAll for global invalidation.
+func (r *Router) InvalidateTenant(tenantID uuid.UUID) {
+	if tenantID == uuid.Nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	prefix := tenantID.String() + ":"
+	var deleted int
+	for key := range r.agents {
+		if strings.HasPrefix(key, prefix) {
+			delete(r.agents, key)
+			deleted++
+		}
+	}
+	slog.Debug("invalidated tenant agent cache", "tenant", tenantID, "count", deleted)
 }
 
 // resolveTenantSlug looks up the tenant slug for workspace path resolution.

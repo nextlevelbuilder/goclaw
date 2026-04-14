@@ -43,8 +43,9 @@ func TestScrubCredentials_GitHub(t *testing.T) {
 func TestScrubCredentials_AWS(t *testing.T) {
 	input := "aws_key: AKIAIOSFODNN7EXAMPLE"
 	got := ScrubCredentials(input)
-	if got == input {
-		t.Errorf("AWS key not scrubbed: %s", got)
+	want := "aws_key: [REDACTED]"
+	if got != want {
+		t.Errorf("AWS key scrub: got %q, want %q", got, want)
 	}
 }
 
@@ -52,18 +53,19 @@ func TestScrubCredentials_GenericKeyValue(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
+		want  string
 	}{
-		{"api_key", "api_key=supersecretvalue123"},
-		{"token", "token: mysecrettoken12345"},
-		{"password", "password=MyStr0ngP@ssword!"},
-		{"bearer", "bearer: eyJhbGciOiJIUzI1NiJ9.abc"},
-		{"authorization", "authorization=eyJhbGciOiJIUzI1NiJ9abcdef"},
+		{"api_key", "api_key=supersecretvalue123", "[REDACTED]"},
+		{"token", "token: mysecrettoken12345", "[REDACTED]"},
+		{"password", "password=MyStr0ngP@ssword!", "[REDACTED]"},
+		{"bearer", "bearer: eyJhbGciOiJIUzI1NiJ9.abc", "[REDACTED]"},
+		{"authorization", "authorization=eyJhbGciOiJIUzI1NiJ9abcdef", "[REDACTED]"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := ScrubCredentials(tt.input)
-			if got == tt.input {
-				t.Errorf("generic pattern %q not scrubbed: %s", tt.name, got)
+			if got != tt.want {
+				t.Errorf("generic pattern %q: got %q, want %q", tt.name, got, tt.want)
 			}
 		})
 	}
@@ -88,8 +90,9 @@ func TestScrubCredentials_NoFalsePositive(t *testing.T) {
 func TestScrubCredentials_MultiplePatterns(t *testing.T) {
 	input := "openai=sk-abcdefghijklmnopqrstuvwxyz, github=ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij"
 	got := ScrubCredentials(input)
-	if got == input {
-		t.Errorf("multiple patterns not scrubbed: %s", got)
+	want := "openai=[REDACTED], github=[REDACTED]"
+	if got != want {
+		t.Errorf("multiple patterns scrub: got %q, want %q", got, want)
 	}
 }
 

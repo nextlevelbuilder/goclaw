@@ -45,7 +45,7 @@ export function getAllIanaTimezones(): TzOption[] {
   if (_cachedTimezones) return _cachedTimezones;
   let tzNames: string[];
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     tzNames = (Intl as any).supportedValuesOf("timeZone") as string[];
   } catch {
     tzNames = FALLBACK_TIMEZONES;

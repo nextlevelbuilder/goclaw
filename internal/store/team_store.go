@@ -94,6 +94,7 @@ type TeamMemberData struct {
 type TeamTaskData struct {
 	BaseModel
 	TeamID       uuid.UUID      `json:"team_id" db:"team_id"`
+	TenantID     uuid.UUID      `json:"tenant_id" db:"tenant_id"`
 	Subject      string         `json:"subject" db:"subject"`
 	Description  string         `json:"description,omitempty" db:"description"`
 	Status       string         `json:"status" db:"status"`
@@ -160,6 +161,16 @@ type TeamTaskEventData struct {
 	CreatedAt time.Time       `json:"created_at" db:"created_at"`
 }
 
+// TaskSibling represents a vault document attached to the same team task as
+// another file sharing the same basename. Returned by BatchGetTaskSiblingsByBasenames
+// for Phase 04 task-based auto-linking.
+type TaskSibling struct {
+	TaskID         uuid.UUID `db:"task_id"`
+	DocID          uuid.UUID `db:"doc_id"`
+	BaseName       string    `db:"base_name"`
+	AttachmentTime time.Time `db:"created_at"`
+}
+
 // TeamTaskAttachmentData represents a file attached to a team task (path-based, no FK to workspace).
 type TeamTaskAttachmentData struct {
 	ID                uuid.UUID       `json:"id" db:"id"`
@@ -167,6 +178,7 @@ type TeamTaskAttachmentData struct {
 	TeamID            uuid.UUID       `json:"team_id" db:"team_id"`
 	ChatID            string          `json:"chat_id,omitempty" db:"chat_id"`
 	Path              string          `json:"path" db:"path"`
+	BaseName          string          `json:"base_name,omitempty" db:"base_name"` // PG: GENERATED; SQLite: app-populated
 	FileSize          int64           `json:"file_size" db:"file_size"`
 	MimeType          string          `json:"mime_type,omitempty" db:"mime_type"`
 	CreatedByAgentID  *uuid.UUID      `json:"created_by_agent_id,omitempty" db:"created_by_agent_id"`
@@ -246,6 +258,17 @@ type TaskCommentStore interface {
 	GetAttachment(ctx context.Context, attachmentID uuid.UUID) (*TeamTaskAttachmentData, error)
 	ListTaskAttachments(ctx context.Context, taskID uuid.UUID) ([]TeamTaskAttachmentData, error)
 	DetachFileFromTask(ctx context.Context, taskID uuid.UUID, path string) error
+
+	// BatchGetTaskSiblingsByBasenames returns, for each basename, the vault
+	// documents attached to the SAME team task(s) as that basename. Excludes
+	// the source basename's own docs. Capped per (source_basename × task_id)
+	// at `limit` (red-team concern #11). Chunks input at 500.
+	BatchGetTaskSiblingsByBasenames(
+		ctx context.Context,
+		tenantID uuid.UUID,
+		basenames []string,
+		limit int,
+	) (map[string][]TaskSibling, error)
 }
 
 // TaskRecoveryStore manages stale task detection and recovery.

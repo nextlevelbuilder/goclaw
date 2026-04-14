@@ -762,7 +762,10 @@
       "shareMemoryNote": "Bật/tắt không di chuyển dữ liệu — memory per-user trước đó sẽ không truy cập được trong chế độ shared.",
       "shareKG": "Chia sẻ Knowledge Graph",
       "shareKGTip": "Tất cả người dùng truy cập chung Knowledge Graph. Khi tắt, mỗi người dùng có KG riêng với fallback đọc từ global canonical.",
-      "shareKGNote": "Bật/tắt không di chuyển dữ liệu — KG per-user trước đó sẽ không truy cập được trong chế độ shared."
+      "shareKGNote": "Bật/tắt không di chuyển dữ liệu — KG per-user trước đó sẽ không truy cập được trong chế độ shared.",
+      "shareSessions": "Chia sẻ phiên hội thoại",
+      "shareSessionsTip": "Cho phép agent truy cập các phiên hội thoại trên tất cả các nhóm. Khi tắt, phiên của mỗi người dùng được cô lập riêng.",
+      "shareSessionsNote": "Bật/tắt không di chuyển dữ liệu — phiên per-user trước đó sẽ không truy cập được trong chế độ shared."
     },
     "compaction": {
       "title": "Nén ngữ cảnh",

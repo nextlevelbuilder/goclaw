@@ -201,7 +201,7 @@ func (l *Loop) finalizeRun(
 		l.domainBus.Publish(eventbus.DomainEvent{
 			Type:     eventbus.EventSessionCompleted,
 			TenantID: l.tenantID.String(),
-			AgentID:  l.id,
+			AgentID:  l.agentUUID.String(),
 			UserID:   req.UserID,
 			SourceID: req.SessionKey,
 			Payload: &eventbus.SessionCompletedPayload{

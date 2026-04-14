@@ -83,7 +83,7 @@ export function Combobox({
     // Auto-detect if inside a Radix Dialog (which sets pointer-events:none on body)
     const el = containerRef.current?.closest<HTMLElement>('[data-slot="dialog-content"]');
     return el ?? null;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [portalContainer, open]);
 
   // Compute dropdown position — flip above input when near viewport bottom.

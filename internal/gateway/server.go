@@ -229,6 +229,8 @@ func bridgeContextMiddleware(gatewayToken string, agentStore store.AgentStore, b
 		chatID := r.Header.Get("X-Chat-ID")
 		peerKind := r.Header.Get("X-Peer-Kind")
 		workspace := r.Header.Get("X-Workspace")
+		localKey := r.Header.Get("X-Local-Key")
+		sessionKey := r.Header.Get("X-Session-Key")
 
 		if agentIDStr != "" || userID != "" {
 			// Reject context headers when no gateway token — prevents unauthenticated impersonation.
@@ -243,7 +245,7 @@ func bridgeContextMiddleware(gatewayToken string, agentStore store.AgentStore, b
 			tenantIDStr := r.Header.Get("X-Tenant-ID")
 			sessionKey := r.Header.Get("X-Session-Key")
 			sig := r.Header.Get("X-Bridge-Sig")
-			ok, tenantVerified := providers.VerifyBridgeContext(gatewayToken, agentIDStr, userID, channel, chatID, peerKind, workspace, tenantIDStr, sig, sessionKey)
+			ok, tenantVerified := providers.VerifyBridgeContext(gatewayToken, agentIDStr, userID, channel, chatID, peerKind, workspace, tenantIDStr, sig, localKey, sessionKey)
 			if !ok {
 				slog.Warn("security.mcp_bridge: invalid bridge context signature",
 					"agent_id", agentIDStr, "user_id", userID)
@@ -251,20 +253,22 @@ func bridgeContextMiddleware(gatewayToken string, agentStore store.AgentStore, b
 				return
 			}
 
-			// Inject tenant_id first — needed by agentStore.GetByID which is tenant-scoped.
-			if tenantVerified && tenantIDStr != "" {
-				if tid, err := uuid.Parse(tenantIDStr); err == nil {
-					ctx = store.WithTenantID(ctx, tid)
-				}
-			}
 			if agentIDStr != "" {
 				if id, err := uuid.Parse(agentIDStr); err == nil {
 					ctx = store.WithAgentID(ctx, id)
 
-					// Lookup agent from DB to inject key + per-agent config flags.
+					// Inject per-agent shell deny group overrides so the exec tool
+					// respects the same policy as the normal agent loop.
 					if agentStore != nil {
-						if ag, err := agentStore.GetByID(ctx, id); err == nil && ag != nil {
+						ag, err := agentStore.GetByIDUnscoped(ctx, id)
+						if err == nil && ag != nil {
+							groups := ag.ParseShellDenyGroups()
+							if groups != nil {
+								ctx = store.WithShellDenyGroups(ctx, groups)
+							}
+							// Inject agent key for session tools
 							ctx = store.WithAgentKey(ctx, ag.AgentKey)
+							// Inject browser proxy flag if enabled
 							if ag.ParseBrowserUseProxy() {
 								ctx = tools.WithBrowserUseProxy(ctx, true)
 							}
@@ -272,12 +276,19 @@ func bridgeContextMiddleware(gatewayToken string, agentStore store.AgentStore, b
 					}
 				}
 			}
+			if userID != "" {
+				ctx = store.WithUserID(ctx, userID)
+			}
+			// Only inject tenant_id when HMAC actually covers it (level 1).
+			// Fallback levels (pre-tenantID sessions) must not trust unsigned tenant headers.
+			if tenantVerified && tenantIDStr != "" {
+				if tid, err := uuid.Parse(tenantIDStr); err == nil {
+					ctx = store.WithTenantID(ctx, tid)
+				}
+			}
 			// Inject session key from HMAC-verified header.
 			if sessionKey != "" {
 				ctx = tools.WithToolSessionKey(ctx, sessionKey)
-			}
-			if userID != "" {
-				ctx = store.WithUserID(ctx, userID)
 			}
 		}
 
@@ -302,6 +313,15 @@ func bridgeContextMiddleware(gatewayToken string, agentStore store.AgentStore, b
 		// Only when agent context is present (HMAC-protected) to prevent unauthenticated path injection.
 		if workspace != "" && (agentIDStr != "" || userID != "") {
 			ctx = tools.WithToolWorkspace(ctx, workspace)
+		}
+		// Routing context (localKey, sessionKey) is injected unconditionally like channel/chatID.
+		// These are used for message routing (forum topics), not security-sensitive operations.
+		// Without valid agent context, tool execution will fail anyway.
+		if localKey != "" {
+			ctx = tools.WithToolLocalKey(ctx, localKey)
+		}
+		if sessionKey != "" {
+			ctx = tools.WithToolSessionKey(ctx, sessionKey)
 		}
 
 		// Inject builtin tool settings so media tools (read_image, tts, etc.)
@@ -549,6 +569,11 @@ func (s *Server) SetEvolutionHandler(h *httpapi.EvolutionHandler) {
 
 // SetVaultHandler sets the Knowledge Vault document handler.
 func (s *Server) SetVaultHandler(h *httpapi.VaultHandler) { s.handlers = append(s.handlers, h) }
+
+// SetVaultGraphHandler sets the lightweight graph visualization handler.
+func (s *Server) SetVaultGraphHandler(h *httpapi.VaultGraphHandler) {
+	s.handlers = append(s.handlers, h)
+}
 
 // SetEpisodicHandler sets the episodic memory handler.
 func (s *Server) SetEpisodicHandler(h *httpapi.EpisodicHandler) { s.handlers = append(s.handlers, h) }

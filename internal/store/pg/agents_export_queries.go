@@ -309,7 +309,7 @@ func ExportKGEntities(ctx context.Context, db *sql.DB, agentID uuid.UUID) ([]sto
 			break
 		}
 		// Advance cursor: last entity ID
-		lastID := mustParseUUID(batch[len(batch)-1].ID)
+		lastID := parseUUIDOrNil(batch[len(batch)-1].ID)
 		cursor = lastID
 	}
 	return result, nil
@@ -351,7 +351,7 @@ func ExportKGRelations(ctx context.Context, db *sql.DB, agentID uuid.UUID) ([]st
 		if len(batch) < exportBatchSize {
 			break
 		}
-		lastID := mustParseUUID(batch[len(batch)-1].ID)
+		lastID := parseUUIDOrNil(batch[len(batch)-1].ID)
 		cursor = lastID
 	}
 	return result, nil

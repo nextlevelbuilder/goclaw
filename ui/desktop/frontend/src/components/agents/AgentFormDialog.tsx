@@ -41,11 +41,11 @@ export function AgentFormDialog({ open, onOpenChange, agent, onSubmit }: AgentFo
     if (!open) return
     reset({
       displayName: agent?.display_name ?? '',
-      emoji: (agent?.other_config?.emoji as string) ?? '🦊',
+      emoji: agent?.emoji ?? (agent?.other_config?.emoji as string) ?? '🦊',
       agentKey: agent?.agent_key ?? '',
       providerName: agent?.provider ?? '',
       model: agent?.model ?? '',
-      description: (agent?.other_config?.description as string) ?? '',
+      description: agent?.agent_description ?? (agent?.other_config?.description as string) ?? '',
       isDefault: agent?.is_default ?? false,
     })
     setSubmitError('')
@@ -96,9 +96,6 @@ export function AgentFormDialog({ open, onOpenChange, agent, onSubmit }: AgentFo
   const onValid = async (data: AgentFormData) => {
     setSubmitError('')
     try {
-      const otherConfig: Record<string, unknown> = {}
-      if (data.description?.trim()) otherConfig.description = data.description.trim()
-      if (data.emoji?.trim()) otherConfig.emoji = data.emoji.trim()
       await onSubmit({
         agent_key: data.agentKey,
         display_name: data.displayName.trim() || undefined,
@@ -106,7 +103,9 @@ export function AgentFormDialog({ open, onOpenChange, agent, onSubmit }: AgentFo
         model: data.model.trim(),
         agent_type: isEditing ? agent!.agent_type : 'predefined',
         is_default: data.isDefault || undefined,
-        other_config: Object.keys(otherConfig).length > 0 ? otherConfig : undefined,
+        // Promoted fields at top level
+        emoji: data.emoji?.trim() || null,
+        agent_description: data.description?.trim() || null,
       })
       onOpenChange(false)
     } catch (err) {

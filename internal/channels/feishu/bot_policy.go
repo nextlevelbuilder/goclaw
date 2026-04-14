@@ -127,7 +127,7 @@ func (c *Channel) sendPairingReply(ctx context.Context, senderID, chatID string)
 	)
 
 	receiveIDType := resolveReceiveIDType(chatID)
-	if err := c.sendText(context.Background(), chatID, receiveIDType, replyText); err != nil {
+	if err := c.sendText(context.Background(), chatID, receiveIDType, replyText, ""); err != nil {
 		slog.Warn("failed to send feishu pairing reply", "error", err)
 	} else {
 		c.MarkPairingNotifSent(senderID)

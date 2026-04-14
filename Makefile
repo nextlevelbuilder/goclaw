@@ -76,7 +76,23 @@ reset: version-file
 	$(COMPOSE) up -d --build
 
 test:
-	go test -race ./...
+	go test -race -timeout=90s ./...
+
+# ── Layered Testing ──
+# P0: Invariant tests - tenant isolation, permission enforcement (MUST pass)
+test-invariants:
+	go test -race -timeout=90s -tags integration ./tests/invariants/...
+
+# P1: Contract tests - API schema validation (MUST pass)
+test-contracts:
+	go test -race -timeout=90s -tags integration ./tests/contracts/...
+
+# P2: Scenario tests - end-to-end user journeys (warning only)
+test-scenarios:
+	go test -race -timeout=180s -tags integration ./tests/scenarios/...
+
+# Critical tests (P0 + P1) - run before merge
+test-critical: test-invariants test-contracts
 
 vet:
 	go vet ./...

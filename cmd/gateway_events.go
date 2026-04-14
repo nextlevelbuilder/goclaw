@@ -95,13 +95,20 @@ func (d *gatewayDeps) wireTeamProgressNotifySubscriber() {
 				UserID:   meta.UserID,
 				PeerKind: meta.PeerKind,
 				Content:  leaderContent,
-				Metadata: map[string]string{"run_kind": tools.RunKindNotification},
+				Metadata: func() map[string]string {
+					m := map[string]string{"run_kind": tools.RunKindNotification}
+					if meta.LocalKey != "" {
+						m["local_key"] = meta.LocalKey
+					}
+					return m
+				}(),
 			})
 		} else {
 			d.msgBus.PublishOutbound(bus.OutboundMessage{
-				Channel: meta.Channel,
-				ChatID:  meta.ChatID,
-				Content: content,
+				Channel:  meta.Channel,
+				ChatID:   meta.ChatID,
+				Content:  content,
+				Metadata: buildAnnounceOutMeta(meta.LocalKey),
 			})
 		}
 	})
@@ -243,6 +250,7 @@ func (d *gatewayDeps) wireTeamProgressNotifySubscriber() {
 			UserID:    payload.UserID,
 			LeadAgent: leadAgentKey,
 			PeerKind:  payload.PeerKind,
+			LocalKey:  payload.LocalKey,
 		})
 	})
 	slog.Info("team progress notification subscriber registered")

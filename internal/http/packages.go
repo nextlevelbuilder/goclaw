@@ -81,7 +81,15 @@ func parseAndValidatePackage(w http.ResponseWriter, r *http.Request) string {
 
 // handleInstall installs a single package.
 // Body: {"package": "github-cli"} or {"package": "pip:pandas"} or {"package": "npm:typescript"}
+//
+// Phase 0b hotfix: server-wide package installation (pip/npm/apk) must be
+// restricted to master-scope callers. Non-master tenant admins previously
+// reached this handler because the adminAuth middleware only checks role, not
+// tenant scope — a supply-chain vector (CRITICAL-2 in the audit report).
 func (h *PackagesHandler) handleInstall(w http.ResponseWriter, r *http.Request) {
+	if !requireMasterScope(w, r) {
+		return
+	}
 	pkg := parseAndValidatePackage(w, r)
 	if pkg == "" {
 		return
@@ -96,7 +104,13 @@ func (h *PackagesHandler) handleInstall(w http.ResponseWriter, r *http.Request) 
 
 // handleUninstall removes a single package.
 // Body: {"package": "github-cli"} or {"package": "pip:pandas"} or {"package": "npm:typescript"}
+//
+// Phase 0b hotfix: same master-scope guard as handleInstall — uninstall can
+// break system skills, causing server-wide DoS for every tenant.
 func (h *PackagesHandler) handleUninstall(w http.ResponseWriter, r *http.Request) {
+	if !requireMasterScope(w, r) {
+		return
+	}
 	pkg := parseAndValidatePackage(w, r)
 	if pkg == "" {
 		return

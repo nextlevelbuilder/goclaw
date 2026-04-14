@@ -15,7 +15,12 @@ import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { AboutDialog } from "./about-dialog";
 import { SystemSettingsModal } from "./system-settings-modal";
 
-export function Topbar() {
+interface TopbarProps {
+  settingsOpen: boolean;
+  onSettingsOpenChange: (open: boolean) => void;
+}
+
+export function Topbar({ settingsOpen, onSettingsOpenChange }: TopbarProps) {
   const { t } = useTranslation("topbar");
   const theme = useUiStore((s) => s.theme);
   const setTheme = useUiStore((s) => s.setTheme);
@@ -29,7 +34,7 @@ export function Topbar() {
   const isMobile = useIsMobile();
   const isDark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   const { status: embStatus } = useEmbeddingStatus();
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const setSettingsOpen = onSettingsOpenChange;
   const role = useAuthStore((s) => s.role);
   const isAdmin = role === "admin" || role === "owner";
 

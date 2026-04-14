@@ -36,6 +36,8 @@ export function useStorage() {
       const res = await http.get<StorageListResponse>("/v1/storage/files");
       setFiles(res.files ?? []);
       setBaseDir(res.baseDir ?? "");
+    } catch (err) {
+      toast.error(i18next.t("storage:toast.loadFailed", "Failed to load files"), userFriendlyError(err));
     } finally {
       if (!opts?.silent) setLoading(false);
     }

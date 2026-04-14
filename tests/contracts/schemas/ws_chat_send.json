@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WS chat.send response",
+  "type": "object",
+  "required": ["message_id", "content", "role"],
+  "properties": {
+    "message_id": { "type": "string" },
+    "content": { "type": "string" },
+    "role": { "type": "string", "enum": ["assistant", "user", "system"] }
+  }
+}

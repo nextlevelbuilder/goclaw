@@ -127,13 +127,20 @@ func (s *PGCronStore) recomputeStaleJobs() {
 		next := computeNextRun(&schedule, now, s.defaultTZ)
 		if next == nil {
 			if scheduleKind == "at" {
-				s.db.ExecContext(s.baseCtx, "UPDATE cron_jobs SET enabled = false, updated_at = $1 WHERE id = $2", now, id)
+				if _, err := s.db.ExecContext(s.baseCtx, "UPDATE cron_jobs SET enabled = false, updated_at = $1 WHERE id = $2", now, id); err != nil {
+					slog.Warn("cron: failed to disable one-shot job", "id", id, "error", err)
+				}
 			}
 			continue
 		}
 
-		s.db.ExecContext(s.baseCtx, "UPDATE cron_jobs SET next_run_at = $1, updated_at = $2 WHERE id = $3", *next, now, id)
+		if _, err := s.db.ExecContext(s.baseCtx, "UPDATE cron_jobs SET next_run_at = $1, updated_at = $2 WHERE id = $3", *next, now, id); err != nil {
+			slog.Warn("cron: failed to advance stale job", "id", id, "error", err)
+		}
 		fixed++
+	}
+	if err := rows.Err(); err != nil {
+		slog.Warn("cron: recompute stale iteration error", "error", err)
 	}
 
 	if fixed > 0 {
@@ -282,17 +289,21 @@ func (s *PGCronStore) executeOneJob(job store.CronJob, handler func(job *store.C
 		if aid, aidErr := uuid.Parse(job.AgentID); aidErr == nil {
 			agentUUID = &aid
 		}
-		s.db.ExecContext(s.baseCtx,
+		if _, err := s.db.ExecContext(s.baseCtx,
 			`INSERT INTO cron_run_logs (id, job_id, agent_id, status, error, summary, duration_ms, input_tokens, output_tokens, ran_at)
 			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 			logID, id, agentUUID, status, lastError, summary, durationMS, inputTokens, outputTokens, now,
-		)
+		); err != nil {
+			slog.Warn("cron: failed to insert run log", "job_id", job.ID, "error", err)
+		}
 	}
 
 	// Recompute next run or delete
 	if job.DeleteAfterRun {
 		if id, parseErr := uuid.Parse(job.ID); parseErr == nil {
-			s.db.ExecContext(s.baseCtx, "DELETE FROM cron_jobs WHERE id = $1", id)
+			if _, err := s.db.ExecContext(s.baseCtx, "DELETE FROM cron_jobs WHERE id = $1", id); err != nil {
+				slog.Warn("cron: failed to delete one-shot job", "job_id", job.ID, "error", err)
+			}
 		}
 	} else if id, parseErr := uuid.Parse(job.ID); parseErr == nil {
 		schedule := job.Schedule
@@ -318,13 +329,15 @@ func (s *PGCronStore) executeOneJob(job store.CronJob, handler func(job *store.C
 			}
 		}
 
-		s.db.ExecContext(s.baseCtx,
+		if _, err := s.db.ExecContext(s.baseCtx,
 			`UPDATE cron_jobs SET
 			 last_run_at = $1, last_status = $2, last_error = $3, updated_at = $4,
 			 next_run_at = CASE WHEN enabled = true AND next_run_at IS NULL THEN $5 ELSE next_run_at END
 			 WHERE id = $6`,
 			now, status, lastError, now, nextRunValue, id,
-		)
+		); err != nil {
+			slog.Warn("cron: failed to update job after run", "job_id", job.ID, "error", err)
+		}
 	}
 
 	// Emit completion event

@@ -8,14 +8,47 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
+// ListUnenrichedDocs returns documents with empty summary for re-enrichment.
+// limit=0 means no limit.
+func (s *PGVaultStore) ListUnenrichedDocs(ctx context.Context, tenantID string, limit int) ([]store.VaultDocument, error) {
+	tid, err := parseUUID(tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("vault list unenriched: tenant: %w", err)
+	}
+
+	q := `SELECT id, tenant_id, agent_id, team_id, scope, custom_scope, path, path_basename, title, doc_type,
+			content_hash, summary, metadata, created_at, updated_at
+		FROM vault_documents
+		WHERE tenant_id = $1 AND (summary IS NULL OR summary = '')
+		ORDER BY created_at ASC`
+	args := []any{tid}
+
+	if limit > 0 {
+		q += " LIMIT $2"
+		args = append(args, limit)
+	}
+
+	var rows []vaultDocRow
+	if err := pkgSqlxDB.SelectContext(ctx, &rows, q, args...); err != nil {
+		return nil, fmt.Errorf("vault.list_unenriched: %w", err)
+	}
+	return vaultDocRowsToDocs(rows), nil
+}
+
 // UpdateSummaryAndReembed updates the document summary and re-embeds the combined text.
 func (s *PGVaultStore) UpdateSummaryAndReembed(ctx context.Context, tenantID, docID, summary string) error {
-	tid := mustParseUUID(tenantID)
-	did := mustParseUUID(docID)
+	tid, err := parseUUID(tenantID)
+	if err != nil {
+		return fmt.Errorf("vault update summary: tenant: %w", err)
+	}
+	did, err := parseUUID(docID)
+	if err != nil {
+		return fmt.Errorf("vault update summary: doc: %w", err)
+	}
 
 	// Fetch title+path to build embed text.
 	var title, path string
-	err := s.db.QueryRowContext(ctx,
+	err = s.db.QueryRowContext(ctx,
 		`SELECT title, path FROM vault_documents WHERE id = $1 AND tenant_id = $2`,
 		did, tid,
 	).Scan(&title, &path)
@@ -46,13 +79,22 @@ func (s *PGVaultStore) UpdateSummaryAndReembed(ctx context.Context, tenantID, do
 // Returns top-N neighbors excluding the source doc itself.
 // Empty agentID means no agent filter.
 func (s *PGVaultStore) FindSimilarDocs(ctx context.Context, tenantID, agentID, docID string, limit int) ([]store.VaultSearchResult, error) {
-	tid := mustParseUUID(tenantID)
-	aid := optAgentUUID(&agentID)
-	did := mustParseUUID(docID)
+	tid, err := parseUUID(tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("find similar: tenant: %w", err)
+	}
+	aid, err := optAgentUUID(&agentID)
+	if err != nil {
+		return nil, fmt.Errorf("find similar: agent: %w", err)
+	}
+	did, err := parseUUID(docID)
+	if err != nil {
+		return nil, fmt.Errorf("find similar: doc: %w", err)
+	}
 
 	// Fetch source embedding.
 	var embStr *string
-	err := s.db.QueryRowContext(ctx,
+	err = s.db.QueryRowContext(ctx,
 		`SELECT embedding::text FROM vault_documents WHERE id = $1 AND tenant_id = $2`,
 		did, tid,
 	).Scan(&embStr)
@@ -60,7 +102,7 @@ func (s *PGVaultStore) FindSimilarDocs(ctx context.Context, tenantID, agentID, d
 		return nil, nil // no embedding = no neighbors
 	}
 
-	q := `SELECT id, tenant_id, agent_id, team_id, scope, custom_scope, path, title, doc_type,
+	q := `SELECT id, tenant_id, agent_id, team_id, scope, custom_scope, path, path_basename, title, doc_type,
 			content_hash, summary, metadata, created_at, updated_at,
 			1 - (embedding <=> $1::vector) AS score
 		FROM vault_documents

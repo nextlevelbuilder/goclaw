@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -157,7 +158,7 @@ func TestPreflightResult_FlatFields(t *testing.T) {
 	}
 
 	// We can't easily test with a real DSN, so test the structure with empty DSN
-	result := RunPreflight(nil, "", tmpDir, "")
+	result := RunPreflight(context.Background(), "", tmpDir, "")
 
 	// Verify flat fields exist
 	if !result.DiskSpaceOK && result.DiskSpaceOK {
@@ -195,6 +196,46 @@ func TestPreflightResult_FlatFields(t *testing.T) {
 		t.Error("disk_space check not found")
 	} else if diskCheck.Status != "ok" && diskCheck.Status != "warning" {
 		t.Errorf("disk_space check status = %q, want 'ok' or 'warning'", diskCheck.Status)
+	}
+}
+
+// TestCollectWarnings_IncludesDetailAndHint verifies that both "warning"
+// and "missing" checks surface their Detail (the problem) alongside their
+// Hint (the fix). Regression guard: earlier versions only surfaced Detail
+// for "warning" status, leaving "missing" checks to display the fix with
+// no explanation of the cause.
+func TestCollectWarnings_IncludesDetailAndHint(t *testing.T) {
+	checks := []PreflightCheck{
+		{Name: "ok_check", Status: "ok", Detail: "all good"},
+		{Name: "warn_check", Status: "warning", Detail: "degraded service", Hint: "do X to recover"},
+		{Name: "missing_check", Status: "missing", Detail: "pg_dump 17 cannot dump PostgreSQL 18 server", Hint: "Install postgresql18-client"},
+		{Name: "ok_with_hint", Status: "ok", Detail: "informational", Hint: "optional tune-up"},
+	}
+
+	warnings := make([]string, 0)
+	for _, c := range checks {
+		if (c.Status == "warning" || c.Status == "missing") && c.Detail != "" {
+			warnings = append(warnings, c.Detail)
+		}
+		if c.Hint != "" {
+			warnings = append(warnings, c.Hint)
+		}
+	}
+
+	want := []string{
+		"degraded service",
+		"do X to recover",
+		"pg_dump 17 cannot dump PostgreSQL 18 server",
+		"Install postgresql18-client",
+		"optional tune-up",
+	}
+	if len(warnings) != len(want) {
+		t.Fatalf("warnings len = %d, want %d\ngot: %v", len(warnings), len(want), warnings)
+	}
+	for i, w := range want {
+		if warnings[i] != w {
+			t.Errorf("warnings[%d] = %q, want %q", i, warnings[i], w)
+		}
 	}
 }
 

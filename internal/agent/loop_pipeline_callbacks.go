@@ -226,6 +226,7 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 		chatReq.Options[providers.OptChannel] = req.Channel
 		chatReq.Options[providers.OptChatID] = req.ChatID
 		chatReq.Options[providers.OptPeerKind] = req.PeerKind
+		chatReq.Options[providers.OptLocalKey] = req.LocalKey
 		chatReq.Options[providers.OptWorkspace] = tools.ToolWorkspaceFromCtx(ctx)
 		if tid := store.TenantIDFromContext(ctx); tid != uuid.Nil {
 			chatReq.Options[providers.OptTenantID] = tid.String()
@@ -308,7 +309,7 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 
 func (l *Loop) makePruneMessages() func(msgs []providers.Message, budget int) []providers.Message {
 	return func(msgs []providers.Message, budget int) []providers.Message {
-		return pruneContextMessages(msgs, budget, l.contextPruningCfg)
+		return pruneContextMessages(msgs, budget, l.contextPruningCfg, l.tokenCounter, l.model)
 	}
 }
 

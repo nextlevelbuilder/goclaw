@@ -3,6 +3,8 @@
 package integration
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -427,5 +429,105 @@ func TestStoreAgent_CrossTenantMode(t *testing.T) {
 	}
 	if got.ID != agent.ID {
 		t.Errorf("crossTenant: expected ID %v, got %v", agent.ID, got.ID)
+	}
+}
+
+func TestStoreAgent_ConcurrentUpdate(t *testing.T) {
+	db := testDB(t)
+	tenantID, _ := seedTenantAgent(t, db)
+	ctx := tenantCtx(tenantID)
+	as := pg.NewPGAgentStore(db)
+
+	agent := newTestAgent(tenantID, uuid.New().String()[:8])
+	agent.DisplayName = "Initial Name"
+	if err := as.Create(ctx, &agent); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	t.Cleanup(func() { db.Exec("DELETE FROM agents WHERE id = $1", agent.ID) })
+
+	const goroutines = 15
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	errChan := make(chan error, goroutines)
+
+	for i := range goroutines {
+		go func(i int) {
+			defer wg.Done()
+			err := as.Update(ctx, agent.ID, map[string]any{
+				"display_name": fmt.Sprintf("Name-%d", i),
+			})
+			if err != nil {
+				errChan <- fmt.Errorf("Update %d: %w", i, err)
+			}
+		}(i)
+	}
+	wg.Wait()
+	close(errChan)
+
+	for err := range errChan {
+		t.Error(err)
+	}
+
+	// Verify agent still readable and has one of the names
+	got, err := as.GetByID(ctx, agent.ID)
+	if err != nil {
+		t.Fatalf("GetByID after concurrent updates: %v", err)
+	}
+	if got.DisplayName == "" {
+		t.Error("DisplayName empty after concurrent updates")
+	}
+}
+
+func TestStoreAgent_ConcurrentCreateAndList(t *testing.T) {
+	db := testDB(t)
+	tenantID, _ := seedTenantAgent(t, db)
+	ctx := tenantCtx(tenantID)
+	as := pg.NewPGAgentStore(db)
+
+	const goroutines = 10
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	var createdIDs sync.Map
+
+	for i := range goroutines {
+		go func(i int) {
+			defer wg.Done()
+			a := newTestAgent(tenantID, fmt.Sprintf("conc-%d-%s", i, uuid.New().String()[:4]))
+			a.OwnerID = "concurrent-owner"
+			if err := as.Create(ctx, &a); err != nil {
+				t.Errorf("Create agent %d: %v", i, err)
+				return
+			}
+			createdIDs.Store(a.ID, true)
+		}(i)
+	}
+	wg.Wait()
+
+	// Cleanup
+	t.Cleanup(func() {
+		createdIDs.Range(func(key, _ any) bool {
+			db.Exec("DELETE FROM agents WHERE id = $1", key)
+			return true
+		})
+	})
+
+	// Verify all agents can be listed
+	list, err := as.List(ctx, "concurrent-owner")
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	foundCount := 0
+	createdIDs.Range(func(key, _ any) bool {
+		for _, a := range list {
+			if a.ID == key.(uuid.UUID) {
+				foundCount++
+				break
+			}
+		}
+		return true
+	})
+	if foundCount != goroutines {
+		t.Errorf("expected %d agents, found %d", goroutines, foundCount)
 	}
 }

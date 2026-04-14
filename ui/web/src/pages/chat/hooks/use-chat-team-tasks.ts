@@ -91,8 +91,8 @@ export function useChatTeamTasks(
         eventName === "team.task.commented" ||
         eventName === "team.task.attachment_added"
       ) {
-        let icon = "📋";
-        let text = "";
+        let icon: string;
+        let text: string;
         if (eventName === "team.task.completed") { icon = "✅"; text = `Task #${event.task_number} "${event.subject}" completed`; }
         else if (eventName === "team.task.failed") { icon = "❌"; text = `Task #${event.task_number} "${event.subject}" failed${event.reason ? ": " + event.reason : ""}`; }
         else if (eventName === "team.task.commented") { icon = "💬"; text = `Comment on #${event.task_number} "${event.subject}"`; }

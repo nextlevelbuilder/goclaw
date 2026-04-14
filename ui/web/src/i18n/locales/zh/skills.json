@@ -46,7 +46,13 @@
     "validCount": "{{valid}} / {{total}} 有效",
     "uploadCount": "上传 ({{count}})",
     "successCount": "{{success}} / {{total}} 上传成功",
-    "remove": "移除文件"
+    "remove": "移除文件",
+    "tooManySkills": "ZIP 包含过多技能（最多 50 个）",
+    "multiDetected": "检测到 {{count}} 个技能",
+    "skillUnchanged": "内容未更改 — 已跳过",
+    "slugConflict": "Slug 与系统技能冲突",
+    "unchanged": "未更改",
+    "new": "新建"
   },
   "edit": {
     "title": "编辑Skill",

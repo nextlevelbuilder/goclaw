@@ -27,6 +27,8 @@ const (
 	SharedMemoryKey contextKey = "goclaw_shared_memory"
 	// SharedKGKey indicates KG should be shared across all users of the agent (no per-user scoping).
 	SharedKGKey contextKey = "goclaw_shared_kg"
+	// SharedSessionsKey indicates sessions should be shared across all users (no per-group scoping).
+	SharedSessionsKey contextKey = "goclaw_shared_sessions"
 	// ShellDenyGroupsKey holds per-agent shell deny group overrides.
 	ShellDenyGroupsKey contextKey = "goclaw_shell_deny_groups"
 	// AgentKeyKey is the context key for the agent key/name (string identifier, e.g. "default").
@@ -236,6 +238,22 @@ func IsSharedKG(ctx context.Context) bool {
 	return false
 }
 
+// WithSharedSessions returns a context flagged for shared sessions (skip per-group scoping).
+func WithSharedSessions(ctx context.Context) context.Context {
+	return context.WithValue(ctx, SharedSessionsKey, true)
+}
+
+// IsSharedSessions returns true if sessions should be shared across users/groups.
+func IsSharedSessions(ctx context.Context) bool {
+	if v, ok := ctx.Value(SharedSessionsKey).(bool); ok {
+		return v
+	}
+	if rc := RunContextFromCtx(ctx); rc != nil {
+		return rc.SharedSessions
+	}
+	return false
+}
+
 // WithLocale returns a new context with the given locale.
 func WithLocale(ctx context.Context, locale string) context.Context {
 	return context.WithValue(ctx, LocaleKey, locale)
@@ -285,6 +303,24 @@ func IsCrossTenant(ctx context.Context) bool {
 // Replaces IsCrossTenant for permission guards.
 func IsOwnerRole(ctx context.Context) bool {
 	return RoleFromContext(ctx) == string(RoleOwner)
+}
+
+// IsMasterScope reports whether ctx should be treated as master-scope:
+//
+//	(a) system owner role (IsOwnerRole bypass-all), or
+//	(b) tenant id is unset (uuid.Nil — legacy / system callers), or
+//	(c) tenant id equals MasterTenantID.
+//
+// Used by both WS config.* methods and HTTP admin routes that write to
+// global (non-tenant-scoped) tables or execute server-wide side effects
+// (shell, filesystem). Centralises the Phase 1 / Phase 0b hotfix rule
+// so every layer shares one predicate — no drift.
+func IsMasterScope(ctx context.Context) bool {
+	if IsOwnerRole(ctx) {
+		return true
+	}
+	tid := TenantIDFromContext(ctx)
+	return tid == uuid.Nil || tid == MasterTenantID
 }
 
 // RoleOwner is the owner role constant for context checks.

@@ -14,7 +14,7 @@ import {
 import { useHttp } from "@/hooks/use-ws";
 import { useAuthStore } from "@/stores/use-auth-store";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 type ToolsData = Record<string, any>;
 
 interface DenyGroupInfo {

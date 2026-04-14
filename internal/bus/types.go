@@ -142,10 +142,16 @@ type AuditEventPayload struct {
 }
 
 // CacheInvalidatePayload signals cache layers to evict stale entries.
-// Used with protocol.EventCacheInvalidate events.
+// Used with protocol.EventCacheInvalidate events. Events are delivered
+// in-process via MessageBus and never marshaled to the wire, so the json
+// tags are documentation-only (and omitempty on uuid.UUID is a no-op
+// because uuid.UUID is [16]byte — all-zero arrays don't count as empty).
 type CacheInvalidatePayload struct {
 	Kind string `json:"kind"` // CacheKind* constants
 	Key  string `json:"key"`  // agent_key, agent_id, etc. Empty = invalidate all
+	// TenantID scopes the invalidation to a single tenant. uuid.Nil means
+	// global (master admin action) — subscribers treat it as "invalidate all".
+	TenantID uuid.UUID `json:"tenant_id"`
 }
 
 // MessageHandler handles an inbound message from a specific channel.

@@ -150,16 +150,6 @@ func (r *webhookRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	if convType != "INBOX" {
-		slog.Info("pancake: skipping non-inbox conversation event",
-			"page_id", pageID,
-			"conv_id", data.Conversation.ID,
-			"conv_type", convType,
-			"msg_id", data.Message.ID)
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
 	r.mu.RLock()
 	target := r.instances[pageID]
 	r.mu.RUnlock()
@@ -217,6 +207,7 @@ func (r *webhookRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	normalized := MessagingData{
 		PageID:         pageID,
 		ConversationID: data.Conversation.ID,
+		PostID:         data.Conversation.PostID, // present for COMMENT events
 		Type:           convType,
 		Platform:       target.platform,
 		AssigneeIDs:    append([]string(nil), data.Conversation.AssigneeIDs...),
@@ -229,7 +220,16 @@ func (r *webhookRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		},
 	}
 
-	target.handleMessagingEvent(normalized)
+	// Route by conversation type.
+	switch convType {
+	case "INBOX":
+		target.handleMessagingEvent(normalized)
+	case "COMMENT":
+		target.handleCommentEvent(normalized)
+	default:
+		slog.Debug("pancake: skipping unknown conversation type",
+			"page_id", pageID, "conv_type", convType)
+	}
 	w.WriteHeader(http.StatusOK)
 }
 

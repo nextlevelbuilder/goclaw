@@ -11,6 +11,7 @@ interface RescanResult {
   new: number;
   updated: number;
   unchanged: number;
+  reenqueued: number;
   skipped: number;
   errors: number;
   truncated: boolean;
@@ -123,7 +124,8 @@ export function useRescanWorkspace() {
       const parts: string[] = [];
       if (result.new > 0) parts.push(i18n.t("vault:rescanNew", { count: result.new }));
       if (result.updated > 0) parts.push(i18n.t("vault:rescanUpdated", { count: result.updated }));
-      if (result.unchanged > 0) parts.push(i18n.t("vault:rescanUnchanged", { count: result.unchanged }));
+      if (result.reenqueued > 0) parts.push(i18n.t("vault:rescanReenqueued", { count: result.reenqueued }));
+      if (result.unchanged > 0 && result.reenqueued === 0) parts.push(i18n.t("vault:rescanUnchanged", { count: result.unchanged }));
 
       const title = parts.length > 0 ? parts.join(", ") : i18n.t("vault:rescanNoFiles");
       const desc = result.truncated ? i18n.t("vault:rescanTruncated") : undefined;
@@ -143,6 +145,30 @@ export function useRescanWorkspace() {
   }, [http, queryClient]);
 
   return { rescan, isPending };
+}
+
+/** Stop the current enrichment process. */
+export function useStopEnrichment() {
+  const http = useHttp();
+  const [isPending, setIsPending] = useState(false);
+
+  const stop = useCallback(async () => {
+    setIsPending(true);
+    try {
+      const result = await http.post<{ stopped: boolean; message?: string }>(`/v1/vault/enrichment/stop`, {});
+      if (result.stopped) {
+        toast.success(i18n.t("vault:enrichStopped", "Enrichment stopped"));
+      }
+      return result;
+    } catch (err) {
+      toast.error(i18n.t("vault:enrichStopFailed", "Failed to stop enrichment"), err instanceof Error ? err.message : "");
+      throw err;
+    } finally {
+      setIsPending(false);
+    }
+  }, [http]);
+
+  return { stop, isPending };
 }
 
 /** Delete a vault link. */

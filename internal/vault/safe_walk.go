@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -112,6 +113,19 @@ func SafeWalkWorkspace(ctx context.Context, root string, opts WalkOptions) ([]Wa
 		// File-level exclusions.
 		if isExcludedPath(relPath) {
 			stats.SkippedExcluded++
+			return nil
+		}
+
+		// Extension whitelist: reject unknown / unsafe extensions (defense in
+		// depth). strings.ToLower normalizes ASCII (PNG → png); full-width
+		// unicode chars bypass — acceptable for server-side rescans.
+		// Double-extension: filepath.Ext returns only the LAST segment, so
+		// "malicious.txt.exe" → ".exe" → skipped (safe), but
+		// "malicious.exe.txt" → ".txt" → whitelisted as note. Accepted.
+		ext := strings.ToLower(filepath.Ext(relPath))
+		if included, _ := isIncludedExtension(ext); !included {
+			stats.SkippedExcluded++
+			slog.Debug("vault.walk: skipped unknown extension", "path", relPath, "ext", ext)
 			return nil
 		}
 

@@ -46,7 +46,7 @@ export function SkillTableRow({
           <button
             type="button"
             className="font-medium text-left hover:underline cursor-pointer"
-            onClick={() => onView(skill.slug ?? skill.name)}
+            onClick={() => onView(skill.name)}
           >
             {skill.name}
           </button>

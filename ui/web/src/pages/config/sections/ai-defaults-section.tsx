@@ -11,7 +11,7 @@ import { InfoLabel } from "@/components/shared/info-label";
 import { ProviderModelSelect } from "@/components/shared/provider-model-select";
 import { SubSection, Field } from "./ai-defaults-form-controls";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 type AgentsData = Record<string, any>;
 
 const DEFAULT: AgentsData = { defaults: {} };

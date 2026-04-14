@@ -163,6 +163,69 @@ func (c *APIClient) UploadMedia(ctx context.Context, filename string, data io.Re
 	return uploadResp.ID, nil
 }
 
+// ReplyComment sends a reply to a comment on a post (action: "reply_comment").
+func (c *APIClient) ReplyComment(ctx context.Context, conversationID, content string) error {
+	body, _ := json.Marshal(SendMessageRequest{
+		Action:  "reply_comment",
+		Message: content,
+	})
+	url := fmt.Sprintf("%s/pages/%s/conversations/%s/messages", c.pageV1BaseURL, c.pageID, conversationID)
+	if err := c.doRequest(ctx, http.MethodPost, url, bytes.NewReader(body)); err != nil {
+		return fmt.Errorf("pancake: reply comment: %w", err)
+	}
+	return nil
+}
+
+// PrivateReply sends a one-time DM to a commenter (first-inbox, action: "private_reply").
+func (c *APIClient) PrivateReply(ctx context.Context, conversationID, content string) error {
+	body, _ := json.Marshal(SendMessageRequest{
+		Action:  "private_reply",
+		Message: content,
+	})
+	url := fmt.Sprintf("%s/pages/%s/conversations/%s/messages", c.pageV1BaseURL, c.pageID, conversationID)
+	if err := c.doRequest(ctx, http.MethodPost, url, bytes.NewReader(body)); err != nil {
+		return fmt.Errorf("pancake: private reply: %w", err)
+	}
+	return nil
+}
+
+// GetPosts fetches recent posts for the page (used by PostFetcher for comment context enrichment).
+// Bypasses doRequest because it needs to parse a JSON response body (doRequest discards the body).
+// Connection reuse is preserved: defer res.Body.Close() + io.ReadAll drain the body fully.
+func (c *APIClient) GetPosts(ctx context.Context, limit int) ([]PancakePost, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	url := fmt.Sprintf("%s/pages/%s/posts?limit=%d", c.pageV2BaseURL, c.pageID, limit)
+	req, err := c.newPageRequest(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("pancake: build get-posts request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	res, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("pancake: get posts request failed: %w", err)
+	}
+	defer res.Body.Close()
+
+	respBody, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("pancake: read get-posts response: %w", err)
+	}
+	if res.StatusCode >= 400 {
+		return nil, fmt.Errorf("pancake: get posts HTTP %d", res.StatusCode)
+	}
+
+	var result struct {
+		Data []PancakePost `json:"data"`
+	}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("pancake: parse get-posts response: %w", err)
+	}
+	return result.Data, nil
+}
+
 // doRequest executes an authenticated HTTP request using the page_access_token.
 // Always drains and closes the response body to enable connection reuse.
 func (c *APIClient) doRequest(ctx context.Context, method, url string, body io.Reader) error {

@@ -1,0 +1,226 @@
+package pancake
+
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
+
+// --- ReplyComment ---
+
+func TestReplyComment_MatchesOfficialContract(t *testing.T) {
+	transport := &captureTransport{}
+	client := NewAPIClient("user-token", "page-token", "page-123")
+	client.httpClient = &http.Client{Transport: transport}
+
+	if err := client.ReplyComment(context.Background(), "conv-123", "thank you"); err != nil {
+		t.Fatalf("ReplyComment returned error: %v", err)
+	}
+
+	if transport.req == nil {
+		t.Fatal("expected outbound request to be captured")
+	}
+	wantPath := "/api/public_api/v1/pages/page-123/conversations/conv-123/messages"
+	if got := transport.req.URL.Path; got != wantPath {
+		t.Fatalf("request path = %q, want %q", got, wantPath)
+	}
+	if got := transport.req.URL.Query().Get("page_access_token"); got != "page-token" {
+		t.Fatalf("page_access_token = %q, want %q", got, "page-token")
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(transport.body, &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if got, want := payload["action"], "reply_comment"; got != want {
+		t.Fatalf("payload.action = %#v, want %#v", got, want)
+	}
+	if got, want := payload["message"], "thank you"; got != want {
+		t.Fatalf("payload.message = %#v, want %#v", got, want)
+	}
+}
+
+func TestReplyComment_ReturnsError(t *testing.T) {
+	transport := &captureTransport{
+		resp: &http.Response{
+			StatusCode: http.StatusBadRequest,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"code":400,"message":"bad request"}`)),
+		},
+	}
+	client := NewAPIClient("user-token", "page-token", "page-123")
+	client.httpClient = &http.Client{Transport: transport}
+
+	if err := client.ReplyComment(context.Background(), "conv-123", "thank you"); err == nil {
+		t.Fatal("expected ReplyComment to return error on HTTP 400")
+	}
+}
+
+// --- PrivateReply ---
+
+func TestPrivateReply_MatchesOfficialContract(t *testing.T) {
+	transport := &captureTransport{}
+	client := NewAPIClient("user-token", "page-token", "page-123")
+	client.httpClient = &http.Client{Transport: transport}
+
+	if err := client.PrivateReply(context.Background(), "conv-123", "thanks for commenting!"); err != nil {
+		t.Fatalf("PrivateReply returned error: %v", err)
+	}
+
+	if transport.req == nil {
+		t.Fatal("expected outbound request to be captured")
+	}
+	wantPath := "/api/public_api/v1/pages/page-123/conversations/conv-123/messages"
+	if got := transport.req.URL.Path; got != wantPath {
+		t.Fatalf("request path = %q, want %q", got, wantPath)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(transport.body, &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if got, want := payload["action"], "private_reply"; got != want {
+		t.Fatalf("payload.action = %#v, want %#v", got, want)
+	}
+	if got, want := payload["message"], "thanks for commenting!"; got != want {
+		t.Fatalf("payload.message = %#v, want %#v", got, want)
+	}
+}
+
+func TestPrivateReply_ReturnsError(t *testing.T) {
+	transport := &captureTransport{
+		resp: &http.Response{
+			StatusCode: http.StatusBadRequest,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"code":400,"message":"conversation not found"}`)),
+		},
+	}
+	client := NewAPIClient("user-token", "page-token", "page-123")
+	client.httpClient = &http.Client{Transport: transport}
+
+	if err := client.PrivateReply(context.Background(), "conv-123", "hi"); err == nil {
+		t.Fatal("expected PrivateReply to return error on HTTP 400")
+	}
+}
+
+// --- GetPosts ---
+
+func TestGetPosts_ParsesResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"success":true,"data":[{"id":"post-1","message":"Hello world","created_at":"2024-01-01"}]}`))
+	}))
+	defer srv.Close()
+
+	client := NewAPIClient("user-token", "page-token", "page-123")
+	client.pageV2BaseURL = srv.URL
+	client.httpClient = srv.Client()
+
+	posts, err := client.GetPosts(context.Background(), 10)
+	if err != nil {
+		t.Fatalf("GetPosts returned error: %v", err)
+	}
+	if len(posts) != 1 {
+		t.Fatalf("expected 1 post, got %d", len(posts))
+	}
+	if posts[0].ID != "post-1" {
+		t.Errorf("posts[0].ID = %q, want %q", posts[0].ID, "post-1")
+	}
+	if posts[0].Message != "Hello world" {
+		t.Errorf("posts[0].Message = %q, want %q", posts[0].Message, "Hello world")
+	}
+}
+
+func TestGetPosts_EmptyResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"success":true,"data":[]}`))
+	}))
+	defer srv.Close()
+
+	client := NewAPIClient("user-token", "page-token", "page-123")
+	client.pageV2BaseURL = srv.URL
+	client.httpClient = srv.Client()
+
+	posts, err := client.GetPosts(context.Background(), 10)
+	if err != nil {
+		t.Fatalf("GetPosts returned error: %v", err)
+	}
+	if len(posts) != 0 {
+		t.Fatalf("expected 0 posts, got %d", len(posts))
+	}
+}
+
+func TestGetPosts_ErrorResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`internal error`))
+	}))
+	defer srv.Close()
+
+	client := NewAPIClient("user-token", "page-token", "page-123")
+	client.pageV2BaseURL = srv.URL
+	client.httpClient = srv.Client()
+
+	_, err := client.GetPosts(context.Background(), 10)
+	if err == nil {
+		t.Fatal("expected error on HTTP 500")
+	}
+}
+
+// --- Config Parsing ---
+
+func TestConfigParsing_CommentReplyOptions(t *testing.T) {
+	raw := `{
+		"page_id": "123",
+		"features": {"comment_reply": true, "first_inbox": true},
+		"comment_reply_options": {"filter": "keyword", "keywords": ["price", "buy"]},
+		"first_inbox_message": "Thanks!",
+		"post_context_cache_ttl": "30m"
+	}`
+
+	var cfg pancakeInstanceConfig
+	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if !cfg.Features.FirstInbox {
+		t.Error("Features.FirstInbox should be true")
+	}
+	if cfg.CommentReplyOptions.Filter != "keyword" {
+		t.Errorf("Filter = %q, want %q", cfg.CommentReplyOptions.Filter, "keyword")
+	}
+	if len(cfg.CommentReplyOptions.Keywords) != 2 ||
+		cfg.CommentReplyOptions.Keywords[0] != "price" ||
+		cfg.CommentReplyOptions.Keywords[1] != "buy" {
+		t.Errorf("Keywords = %v, want [price buy]", cfg.CommentReplyOptions.Keywords)
+	}
+	if cfg.FirstInboxMessage != "Thanks!" {
+		t.Errorf("FirstInboxMessage = %q, want %q", cfg.FirstInboxMessage, "Thanks!")
+	}
+	if cfg.PostContextCacheTTL != "30m" {
+		t.Errorf("PostContextCacheTTL = %q, want %q", cfg.PostContextCacheTTL, "30m")
+	}
+}
+
+func TestConfigParsing_Defaults(t *testing.T) {
+	raw := `{"page_id":"123","features":{"inbox_reply":true}}`
+
+	var cfg pancakeInstanceConfig
+	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if cfg.Features.FirstInbox {
+		t.Error("Features.FirstInbox should default to false")
+	}
+	if cfg.CommentReplyOptions.Filter != "" {
+		t.Errorf("CommentReplyOptions.Filter should default to empty, got %q", cfg.CommentReplyOptions.Filter)
+	}
+	if cfg.FirstInboxMessage != "" {
+		t.Errorf("FirstInboxMessage should default to empty, got %q", cfg.FirstInboxMessage)
+	}
+}

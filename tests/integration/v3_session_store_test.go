@@ -3,6 +3,8 @@
 package integration
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -291,5 +293,82 @@ func TestStoreSession_TenantIsolation(t *testing.T) {
 	got := ss2.Get(ctxB, key)
 	if got != nil {
 		t.Errorf("tenant isolation broken: tenant B got session created by tenant A")
+	}
+}
+
+func TestStoreSession_ConcurrentAddMessage(t *testing.T) {
+	db := testDB(t)
+	tenantID, _ := seedTenantAgent(t, db)
+	ctx := tenantCtx(tenantID)
+	ss := pg.NewPGSessionStore(db)
+
+	key := "concurrent-sess-" + uuid.New().String()[:8]
+	ss.GetOrCreate(ctx, key)
+
+	const goroutines = 20
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for i := range goroutines {
+		go func(i int) {
+			defer wg.Done()
+			ss.AddMessage(ctx, key, providers.Message{
+				Role:    "user",
+				Content: fmt.Sprintf("message-%d", i),
+			})
+		}(i)
+	}
+	wg.Wait()
+
+	hist := ss.GetHistory(ctx, key)
+	if len(hist) != goroutines {
+		t.Errorf("expected %d messages, got %d", goroutines, len(hist))
+	}
+}
+
+func TestStoreSession_ConcurrentSave(t *testing.T) {
+	db := testDB(t)
+	tenantID, _ := seedTenantAgent(t, db)
+	ctx := tenantCtx(tenantID)
+	ss := pg.NewPGSessionStore(db)
+
+	key := "concurrent-save-" + uuid.New().String()[:8]
+	ss.GetOrCreate(ctx, key)
+
+	// Add messages then race Save() calls
+	for i := range 5 {
+		ss.AddMessage(ctx, key, providers.Message{
+			Role:    "user",
+			Content: fmt.Sprintf("msg-%d", i),
+		})
+	}
+
+	const goroutines = 10
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	errChan := make(chan error, goroutines)
+
+	for range goroutines {
+		go func() {
+			defer wg.Done()
+			if err := ss.Save(ctx, key); err != nil {
+				errChan <- err
+			}
+		}()
+	}
+	wg.Wait()
+	close(errChan)
+
+	for err := range errChan {
+		t.Errorf("concurrent Save failed: %v", err)
+	}
+
+	// Verify session still intact
+	var dbKey string
+	err := db.QueryRow(
+		"SELECT session_key FROM sessions WHERE session_key = $1 AND tenant_id = $2",
+		key, tenantID,
+	).Scan(&dbKey)
+	if err != nil {
+		t.Fatalf("DB verify after concurrent Save: %v", err)
 	}
 }

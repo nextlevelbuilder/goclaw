@@ -3,6 +3,9 @@
 package integration
 
 import (
+	"fmt"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -361,5 +364,150 @@ func TestStoreTask_AccessControl(t *testing.T) {
 	}
 	if has2 {
 		t.Error("HasTeamAccess: expected false after revoke")
+	}
+}
+
+func TestStoreTask_BlockedUnblockFlow(t *testing.T) {
+	db := testDB(t)
+	pg.InitSqlx(db)
+	tenantID, agentID := seedTenantAgent(t, db)
+	ctx := tenantCtx(tenantID)
+	ts := pg.NewPGTeamStore(db)
+
+	teamID, memberID := seedTeam(t, db, tenantID, agentID)
+
+	// Task A: the blocker
+	taskA := makeTask(teamID, "blocker task", store.TeamTaskStatusPending)
+	if err := ts.CreateTask(ctx, taskA); err != nil {
+		t.Fatalf("CreateTask A: %v", err)
+	}
+
+	// Task B: blocked by A
+	taskB := makeTask(teamID, "blocked task", store.TeamTaskStatusPending)
+	if err := ts.CreateTask(ctx, taskB); err != nil {
+		t.Fatalf("CreateTask B: %v", err)
+	}
+
+	// Set B as blocked by A using direct SQL (status update via UpdateTask not allowed)
+	if _, err := db.Exec(
+		`UPDATE team_tasks SET status = 'blocked', blocked_by = $1 WHERE id = $2`,
+		[]uuid.UUID{taskA.ID}, taskB.ID,
+	); err != nil {
+		t.Fatalf("set blocked state: %v", err)
+	}
+
+	// Verify B is blocked
+	gotB, err := ts.GetTask(ctx, taskB.ID)
+	if err != nil {
+		t.Fatalf("GetTask B: %v", err)
+	}
+	if gotB.Status != store.TeamTaskStatusBlocked {
+		t.Errorf("B status: expected %q, got %q", store.TeamTaskStatusBlocked, gotB.Status)
+	}
+	if len(gotB.BlockedBy) != 1 || gotB.BlockedBy[0] != taskA.ID {
+		t.Errorf("B blocked_by: expected [%v], got %v", taskA.ID, gotB.BlockedBy)
+	}
+
+	// Claim and complete A - should trigger unblock of B
+	if err := ts.ClaimTask(ctx, taskA.ID, memberID, teamID); err != nil {
+		t.Fatalf("ClaimTask A: %v", err)
+	}
+	if err := ts.CompleteTask(ctx, taskA.ID, teamID, "done"); err != nil {
+		t.Fatalf("CompleteTask A: %v", err)
+	}
+
+	// Verify B is now pending (unblocked)
+	gotB2, err := ts.GetTask(ctx, taskB.ID)
+	if err != nil {
+		t.Fatalf("GetTask B after unblock: %v", err)
+	}
+	if gotB2.Status != store.TeamTaskStatusPending {
+		t.Errorf("B status after unblock: expected %q, got %q", store.TeamTaskStatusPending, gotB2.Status)
+	}
+	if len(gotB2.BlockedBy) != 0 {
+		t.Errorf("B blocked_by after unblock: expected empty, got %v", gotB2.BlockedBy)
+	}
+}
+
+func TestStoreTask_RaceToClaimSameTask(t *testing.T) {
+	db := testDB(t)
+	pg.InitSqlx(db)
+	tenantID, agentID := seedTenantAgent(t, db)
+	ctx := tenantCtx(tenantID)
+	ts := pg.NewPGTeamStore(db)
+
+	teamID, _ := seedTeam(t, db, tenantID, agentID)
+
+	// Create additional agents and add them as team members
+	var memberAgentIDs []uuid.UUID
+	for i := 0; i < 5; i++ {
+		memberAgentID := uuid.New()
+		memberAgentKey := fmt.Sprintf("race-member-%d-%s", i, memberAgentID.String()[:8])
+		// Insert agent with all required columns
+		if _, err := db.Exec(
+			`INSERT INTO agents (id, tenant_id, agent_key, agent_type, status, provider, model, owner_id)
+			 VALUES ($1, $2, $3, 'predefined', 'active', 'test', 'test-model', 'test-owner')`,
+			memberAgentID, tenantID, memberAgentKey,
+		); err != nil {
+			t.Fatalf("create agent %d: %v", i, err)
+		}
+		// Add as team member
+		if _, err := db.Exec(
+			`INSERT INTO agent_team_members (team_id, agent_id, role, tenant_id)
+			 VALUES ($1, $2, 'member', $3)`,
+			teamID, memberAgentID, tenantID,
+		); err != nil {
+			t.Fatalf("create member %d: %v", i, err)
+		}
+		memberAgentIDs = append(memberAgentIDs, memberAgentID)
+	}
+
+	// Cleanup test members and agents
+	t.Cleanup(func() {
+		for _, aid := range memberAgentIDs {
+			db.Exec("DELETE FROM agent_team_members WHERE agent_id = $1", aid)
+			db.Exec("DELETE FROM agents WHERE id = $1", aid)
+		}
+	})
+
+	task := makeTask(teamID, "race task", store.TeamTaskStatusPending)
+	if err := ts.CreateTask(ctx, task); err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+
+	// Concurrent claims
+	var wg sync.WaitGroup
+	var successCount atomic.Int32
+	var failCount atomic.Int32
+
+	for _, memberID := range memberAgentIDs {
+		wg.Add(1)
+		go func(mid uuid.UUID) {
+			defer wg.Done()
+			err := ts.ClaimTask(ctx, task.ID, mid, teamID)
+			if err == nil {
+				successCount.Add(1)
+			} else {
+				failCount.Add(1)
+			}
+		}(memberID)
+	}
+	wg.Wait()
+
+	// Exactly one should succeed
+	if successCount.Load() != 1 {
+		t.Errorf("race claim: expected 1 success, got %d (failures: %d)", successCount.Load(), failCount.Load())
+	}
+
+	// Verify task is claimed
+	got, err := ts.GetTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("GetTask after race: %v", err)
+	}
+	if got.Status != store.TeamTaskStatusInProgress {
+		t.Errorf("Status after race: expected %q, got %q", store.TeamTaskStatusInProgress, got.Status)
+	}
+	if got.OwnerAgentID == nil {
+		t.Error("OwnerAgentID should be set after race claim")
 	}
 }

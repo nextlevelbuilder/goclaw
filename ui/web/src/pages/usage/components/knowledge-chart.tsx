@@ -19,12 +19,6 @@ export function KnowledgeChart({ data, loading, granularity }: KnowledgeChartPro
   const { t } = useTranslation("usage");
   const timezone = useUiStore((s) => s.timezone);
 
-  const hasData = data.some(
-    (d) => d.memory_docs > 0 || d.memory_chunks > 0 || d.kg_entities > 0 || d.kg_relations > 0,
-  );
-
-  if (!loading && !hasData) return null;
-
   const chartData = useMemo(() => data.map((d) => ({
     label: formatBucketTz(d.bucket_time, timezone, granularity),
     memory_docs: d.memory_docs,
@@ -32,6 +26,12 @@ export function KnowledgeChart({ data, loading, granularity }: KnowledgeChartPro
     kg_entities: d.kg_entities,
     kg_relations: d.kg_relations,
   })), [data, granularity, timezone]);
+
+  const hasData = data.some(
+    (d) => d.memory_docs > 0 || d.memory_chunks > 0 || d.kg_entities > 0 || d.kg_relations > 0,
+  );
+
+  if (!loading && !hasData) return null;
 
   return (
     <ChartWrapper

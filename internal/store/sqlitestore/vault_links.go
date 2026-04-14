@@ -5,6 +5,7 @@ package sqlitestore
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -82,16 +83,26 @@ func (s *SQLiteVaultStore) CreateLinks(ctx context.Context, links []store.VaultL
 	for start := 0; start < len(valid); start += chunkSize {
 		end := min(start+chunkSize, len(valid))
 		chunk := valid[start:end]
-		const cols = 6
+		// id, from_doc_id, to_doc_id, link_type, context, metadata, created_at
+		const cols = 7
 		iArgs := make([]any, 0, len(chunk)*cols)
 		iPh := make([]string, 0, len(chunk))
 		for _, l := range chunk {
-			iPh = append(iPh, "(?,?,?,?,?,?)")
-			iArgs = append(iArgs, uuid.Must(uuid.NewV7()).String(), l.FromDocID, l.ToDocID, l.LinkType, l.Context, now)
+			metaJSON, mErr := json.Marshal(l.Metadata)
+			if mErr != nil || len(metaJSON) == 0 {
+				metaJSON = []byte("{}")
+			}
+			iPh = append(iPh, "(?,?,?,?,?,?,?)")
+			iArgs = append(iArgs,
+				uuid.Must(uuid.NewV7()).String(),
+				l.FromDocID, l.ToDocID,
+				l.LinkType, l.Context, string(metaJSON), now)
 		}
-		q := `INSERT INTO vault_links (id, from_doc_id, to_doc_id, link_type, context, created_at)
+		q := `INSERT INTO vault_links (id, from_doc_id, to_doc_id, link_type, context, metadata, created_at)
 			VALUES ` + strings.Join(iPh, ",") + `
-			ON CONFLICT (from_doc_id, to_doc_id, link_type) DO UPDATE SET context = excluded.context`
+			ON CONFLICT (from_doc_id, to_doc_id, link_type) DO UPDATE SET
+				context = excluded.context,
+				metadata = excluded.metadata`
 		if _, err := s.db.ExecContext(ctx, q, iArgs...); err != nil {
 			return fmt.Errorf("vault batch create links: %w", err)
 		}
@@ -99,7 +110,7 @@ func (s *SQLiteVaultStore) CreateLinks(ctx context.Context, links []store.VaultL
 	return nil
 }
 
-// CreateLink inserts a vault link, updating context on conflict.
+// CreateLink inserts a vault link, updating context+metadata on conflict.
 // Validates same-tenant + same-team boundary before insert.
 func (s *SQLiteVaultStore) CreateLink(ctx context.Context, link *store.VaultLink) error {
 	// Verify both docs exist and belong to same tenant + team boundary.
@@ -124,15 +135,20 @@ func (s *SQLiteVaultStore) CreateLink(ctx context.Context, link *store.VaultLink
 		return fmt.Errorf("vault link: documents belong to different teams")
 	}
 
+	metaJSON, mErr := json.Marshal(link.Metadata)
+	if mErr != nil || len(metaJSON) == 0 {
+		metaJSON = []byte("{}")
+	}
 	id := uuid.Must(uuid.NewV7()).String()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	err = s.db.QueryRowContext(ctx, `
-		INSERT INTO vault_links (id, from_doc_id, to_doc_id, link_type, context, created_at)
-		VALUES (?, ?, ?, ?, ?, ?)
+		INSERT INTO vault_links (id, from_doc_id, to_doc_id, link_type, context, metadata, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (from_doc_id, to_doc_id, link_type) DO UPDATE SET
-			context = excluded.context
+			context = excluded.context,
+			metadata = excluded.metadata
 		RETURNING id`,
-		id, link.FromDocID, link.ToDocID, link.LinkType, link.Context, now,
+		id, link.FromDocID, link.ToDocID, link.LinkType, link.Context, string(metaJSON), now,
 	).Scan(&link.ID)
 	if err != nil {
 		return fmt.Errorf("vault create link: %w", err)
@@ -152,7 +168,7 @@ func (s *SQLiteVaultStore) DeleteLink(ctx context.Context, tenantID, id string) 
 // GetOutLinks returns all links originating from a document, scoped by tenant (F9).
 func (s *SQLiteVaultStore) GetOutLinks(ctx context.Context, tenantID, docID string) ([]store.VaultLink, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT vl.id, vl.from_doc_id, vl.to_doc_id, vl.link_type, vl.context, vl.created_at
+		SELECT vl.id, vl.from_doc_id, vl.to_doc_id, vl.link_type, vl.context, vl.metadata, vl.created_at
 		FROM vault_links vl
 		JOIN vault_documents d ON d.id = vl.from_doc_id
 		WHERE vl.from_doc_id = ? AND d.tenant_id = ?
@@ -176,7 +192,7 @@ func (s *SQLiteVaultStore) GetOutLinksBatch(ctx context.Context, tenantID string
 	}
 	args = append(args, tenantID)
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT vl.id, vl.from_doc_id, vl.to_doc_id, vl.link_type, vl.context, vl.created_at
+		`SELECT vl.id, vl.from_doc_id, vl.to_doc_id, vl.link_type, vl.context, vl.metadata, vl.created_at
 		FROM vault_links vl
 		JOIN vault_documents d ON d.id = vl.from_doc_id
 		WHERE vl.from_doc_id IN (`+ph+`) AND d.tenant_id = ?
@@ -260,11 +276,15 @@ func scanVaultLinkRows(rows *sql.Rows) ([]store.VaultLink, error) {
 	var links []store.VaultLink
 	for rows.Next() {
 		var l store.VaultLink
+		var metaJSON []byte
 		ca := &sqliteTime{}
-		if err := rows.Scan(&l.ID, &l.FromDocID, &l.ToDocID, &l.LinkType, &l.Context, ca); err != nil {
+		if err := rows.Scan(&l.ID, &l.FromDocID, &l.ToDocID, &l.LinkType, &l.Context, &metaJSON, ca); err != nil {
 			return nil, err
 		}
 		l.CreatedAt = ca.Time
+		if len(metaJSON) > 2 {
+			_ = json.Unmarshal(metaJSON, &l.Metadata)
+		}
 		links = append(links, l)
 	}
 	return links, rows.Err()

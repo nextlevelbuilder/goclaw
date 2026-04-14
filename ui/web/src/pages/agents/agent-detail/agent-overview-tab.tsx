@@ -81,8 +81,8 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool
         tools_config: toolsEnabled
           ? { profile: tools.profile, allow: tools.allow, deny: tools.deny, alsoAllow: tools.alsoAllow, byProvider: tools.byProvider }
           : {},
-        // Promoted fields sent at top level
-        emoji: emoji.trim() || null,
+        // Promoted fields sent at top level (NOT NULL columns — send "" not null)
+        emoji: emoji.trim(),
         self_evolve: selfEvolve,
         skill_evolve: skillEvolve,
         skill_nudge_interval: skillEvolve ? skillNudgeInterval : 15,

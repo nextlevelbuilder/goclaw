@@ -12,11 +12,14 @@ import type { SkillInfo, SkillFile, SkillVersions } from "@/types/skill";
 export type { SkillInfo, SkillFile, SkillVersions };
 
 export type SkillUploadResponse = {
-  id: string;
+  /** Absent when status is "unchanged" */
+  id?: string;
   slug: string;
   version: number;
   name: string;
+  /** "active" | "unchanged" | "archived" */
   status?: string;
+  is_new?: boolean;
   deps_warning?: string;
   deps_errors?: string[];
   missing_deps?: string[];
@@ -48,7 +51,7 @@ export function useSkills() {
   // even if the SKILL_DEPS_* events were emitted before the client connected.
   useEffect(() => {
     if (connected) invalidate();
-  }, [connected]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [connected]);  
 
   const getSkill = useCallback(
     async (name: string) => {

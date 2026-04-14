@@ -108,6 +108,9 @@ const (
 
 	// Vault enrichment pipeline progress.
 	EventVaultEnrichProgress = "vault.enrich.progress"
+
+	// Background worker alerts (non-retryable LLM errors).
+	EventBackgroundError = "background.error"
 )
 
 // Agent event subtypes (in payload.type)

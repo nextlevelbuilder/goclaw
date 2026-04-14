@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 
-	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -14,12 +14,18 @@ import (
 
 // ConfigPermissionsMethods handles config.permissions.* RPC methods.
 type ConfigPermissionsMethods struct {
-	permStore  store.ConfigPermissionStore
-	agentStore store.AgentStore
+	permStore   store.ConfigPermissionStore
+	agentStore  store.AgentStore
+	agentRouter *agent.Router // cache-aware agent resolver; nil = DB-only fallback
 }
 
 func NewConfigPermissionsMethods(ps store.ConfigPermissionStore, as store.AgentStore) *ConfigPermissionsMethods {
 	return &ConfigPermissionsMethods{permStore: ps, agentStore: as}
+}
+
+// SetAgentRouter wires the agent router for cache-aware agent_key resolution.
+func (m *ConfigPermissionsMethods) SetAgentRouter(r *agent.Router) {
+	m.agentRouter = r
 }
 
 func (m *ConfigPermissionsMethods) Register(router *gateway.MethodRouter) {
@@ -42,7 +48,7 @@ func (m *ConfigPermissionsMethods) handleList(ctx context.Context, client *gatew
 		return
 	}
 
-	agentUUID, err := uuid.Parse(params.AgentID)
+	agentUUID, err := resolveAgentUUIDCached(ctx, m.agentRouter, m.agentStore, params.AgentID)
 	if err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "invalid agentId"))
 		return
@@ -90,7 +96,7 @@ func (m *ConfigPermissionsMethods) handleGrant(ctx context.Context, client *gate
 		return
 	}
 
-	agentUUID, err := uuid.Parse(params.AgentID)
+	agentUUID, err := resolveAgentUUIDCached(ctx, m.agentRouter, m.agentStore, params.AgentID)
 	if err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "invalid agentId"))
 		return
@@ -149,7 +155,7 @@ func (m *ConfigPermissionsMethods) handleRevoke(ctx context.Context, client *gat
 		return
 	}
 
-	agentUUID, err := uuid.Parse(params.AgentID)
+	agentUUID, err := resolveAgentUUIDCached(ctx, m.agentRouter, m.agentStore, params.AgentID)
 	if err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "invalid agentId"))
 		return

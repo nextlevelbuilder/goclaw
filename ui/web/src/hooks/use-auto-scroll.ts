@@ -49,7 +49,7 @@ export function useAutoScroll<T extends HTMLElement>(
     if (isNearBottom.current) {
       scrollToBottom(true);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, deps);
 
   // Force scroll when trigger increments (e.g. user sends a message) — instant

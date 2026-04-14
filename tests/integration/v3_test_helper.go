@@ -16,6 +16,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
 )
 
 const defaultTestDSN = "postgres://postgres:test@localhost:5433/goclaw_test?sslmode=disable"
@@ -58,6 +59,13 @@ func testDB(t *testing.T) *sql.DB {
 			return
 		}
 		m.Close()
+
+		// Initialize pg package's sqlx wrapper. Without this, any store
+		// method that uses pkgSqlxDB.SelectContext panics on nil deref if
+		// the test runs before any other test happens to call InitSqlx.
+		// Centralizing here removes the ordering-dependency land mine.
+		pg.InitSqlx(db)
+
 		sharedDB = db
 	})
 

@@ -23,15 +23,18 @@ var channelInstanceAllowed = map[string]bool{
 }
 
 // ChannelInstancesMethods handles channel instance CRUD via WebSocket RPC.
+// agentStore is held so the create/update handlers can resolve agent_key or
+// UUID input via resolveAgentUUIDCached.
 type ChannelInstancesMethods struct {
-	store    store.ChannelInstanceStore
-	msgBus   *bus.MessageBus
-	eventBus bus.EventPublisher
+	store      store.ChannelInstanceStore
+	agentStore store.AgentStore
+	msgBus     *bus.MessageBus
+	eventBus   bus.EventPublisher
 }
 
 // NewChannelInstancesMethods creates a new handler for channel instance management.
-func NewChannelInstancesMethods(s store.ChannelInstanceStore, msgBus *bus.MessageBus, eventBus bus.EventPublisher) *ChannelInstancesMethods {
-	return &ChannelInstancesMethods{store: s, msgBus: msgBus, eventBus: eventBus}
+func NewChannelInstancesMethods(s store.ChannelInstanceStore, as store.AgentStore, msgBus *bus.MessageBus, eventBus bus.EventPublisher) *ChannelInstancesMethods {
+	return &ChannelInstancesMethods{store: s, agentStore: as, msgBus: msgBus, eventBus: eventBus}
 }
 
 // Register registers all channel instance RPC methods.
@@ -122,7 +125,10 @@ func (m *ChannelInstancesMethods) handleCreate(ctx context.Context, client *gate
 		return
 	}
 
-	agentID, err := uuid.Parse(params.AgentID)
+	// Accept both agent_key and UUID via resolveAgentUUIDCached. Router is nil
+	// here because channel_instances methods are not wired to the router —
+	// falls back to a pure DB lookup, acceptable given create is a rare op.
+	agentID, err := resolveAgentUUIDCached(ctx, nil, m.agentStore, params.AgentID)
 	if err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidID, "agent_id")))
 		return

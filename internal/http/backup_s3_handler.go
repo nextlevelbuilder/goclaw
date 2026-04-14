@@ -52,6 +52,7 @@ func (h *BackupS3Handler) handleGetConfig(w http.ResponseWriter, r *http.Request
 	locale := extractLocale(r)
 
 	if !h.isOwnerUser(userID) {
+		slog.Warn("security.s3_owner_denied", "user_id", userID, "path", r.URL.Path)
 		writeError(w, http.StatusForbidden, protocol.ErrUnauthorized,
 			i18n.T(locale, i18n.MsgNoAccess, "s3 config"))
 		return
@@ -83,6 +84,7 @@ func (h *BackupS3Handler) handleSaveConfig(w http.ResponseWriter, r *http.Reques
 	locale := extractLocale(r)
 
 	if !h.isOwnerUser(userID) {
+		slog.Warn("security.s3_owner_denied", "user_id", userID, "path", r.URL.Path)
 		writeError(w, http.StatusForbidden, protocol.ErrUnauthorized,
 			i18n.T(locale, i18n.MsgNoAccess, "s3 config"))
 		return
@@ -136,6 +138,7 @@ func (h *BackupS3Handler) handleList(w http.ResponseWriter, r *http.Request) {
 	locale := extractLocale(r)
 
 	if !h.isOwnerUser(userID) {
+		slog.Warn("security.s3_owner_denied", "user_id", userID, "path", r.URL.Path)
 		writeError(w, http.StatusForbidden, protocol.ErrUnauthorized,
 			i18n.T(locale, i18n.MsgNoAccess, "s3 list"))
 		return
@@ -167,6 +170,7 @@ func (h *BackupS3Handler) handleUpload(w http.ResponseWriter, r *http.Request) {
 	locale := extractLocale(r)
 
 	if !h.isOwnerUser(userID) {
+		slog.Warn("security.s3_owner_denied", "user_id", userID, "path", r.URL.Path)
 		writeError(w, http.StatusForbidden, protocol.ErrUnauthorized,
 			i18n.T(locale, i18n.MsgNoAccess, "s3 upload"))
 		return
@@ -234,6 +238,7 @@ func (h *BackupS3Handler) handleBackupAndUpload(w http.ResponseWriter, r *http.R
 	locale := extractLocale(r)
 
 	if !h.isOwnerUser(userID) {
+		slog.Warn("security.s3_owner_denied", "user_id", userID, "path", r.URL.Path)
 		writeError(w, http.StatusForbidden, protocol.ErrUnauthorized,
 			i18n.T(locale, i18n.MsgNoAccess, "s3 backup"))
 		return

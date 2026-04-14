@@ -215,6 +215,12 @@ func (pp *ProcessPool) reapLoop() {
 	}
 }
 
+// processCloseTimeout is the per-process max wait during ProcessPool.Close
+// before we log a warning and move on. Production default = 5s. Exposed as a
+// package var so tests can override to a few ms, avoiding 5s of dead CI time
+// when exercising the "process never exits" path.
+var processCloseTimeout = 5 * time.Second
+
 // Close shuts down all processes gracefully.
 func (pp *ProcessPool) Close() error {
 	pp.closeOnce.Do(func() {
@@ -225,7 +231,7 @@ func (pp *ProcessPool) Close() error {
 			// Wait briefly for process to exit
 			select {
 			case <-proc.exited:
-			case <-time.After(5 * time.Second):
+			case <-time.After(processCloseTimeout):
 				slog.Warn("acp: process did not exit in time", "session_key", key)
 			}
 			pp.processes.Delete(key)

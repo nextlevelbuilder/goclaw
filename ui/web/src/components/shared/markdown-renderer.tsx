@@ -108,7 +108,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({ content, classN
   }, []);
 
   // Stable components config — only recreated when token/callbacks change.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const components = useMemo((): Components & Record<string, any> => ({
     pre({ children }) {
       return <>{children}</>;

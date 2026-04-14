@@ -9,6 +9,7 @@ export interface AgentListItem {
   display_name?: string
   model?: string
   provider?: string
+  emoji?: string | null
   other_config?: Record<string, unknown> | null
 }
 

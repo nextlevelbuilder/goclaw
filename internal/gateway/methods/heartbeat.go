@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
@@ -22,6 +23,7 @@ import (
 type HeartbeatMethods struct {
 	hbStore       store.HeartbeatStore
 	agentStore    store.AgentStore
+	agentRouter   *agent.Router // cache-aware lookup for resolveAgentUUIDCached hot path
 	providerStore store.ProviderStore
 	eventBus      bus.EventPublisher
 	wakeFn        func(uuid.UUID) // triggers immediate heartbeat run
@@ -34,6 +36,12 @@ func NewHeartbeatMethods(hb store.HeartbeatStore, eventBus bus.EventPublisher) *
 // SetAgentStore sets the agent store for HEARTBEAT.md read/write via RPC.
 func (m *HeartbeatMethods) SetAgentStore(as store.AgentStore) {
 	m.agentStore = as
+}
+
+// SetAgentRouter wires the agent router for cache-aware agent_key resolution.
+// Optional — when nil, resolveAgentUUIDCached falls back to a pure DB lookup.
+func (m *HeartbeatMethods) SetAgentRouter(r *agent.Router) {
+	m.agentRouter = r
 }
 
 // SetProviderStore sets the provider store for resolving provider names to UUIDs.
@@ -70,7 +78,7 @@ func (m *HeartbeatMethods) handleGet(ctx context.Context, client *gateway.Client
 		return
 	}
 
-	agentUUID, err := uuid.Parse(params.AgentID)
+	agentUUID, err := resolveAgentUUIDCached(ctx, m.agentRouter, m.agentStore, params.AgentID)
 	if err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "invalid agentId"))
 		return
@@ -116,7 +124,7 @@ func (m *HeartbeatMethods) handleSet(ctx context.Context, client *gateway.Client
 		return
 	}
 
-	agentUUID, err := uuid.Parse(params.AgentID)
+	agentUUID, err := resolveAgentUUIDCached(ctx, m.agentRouter, m.agentStore, params.AgentID)
 	if err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "invalid agentId"))
 		return
@@ -242,7 +250,7 @@ func (m *HeartbeatMethods) handleToggle(ctx context.Context, client *gateway.Cli
 		return
 	}
 
-	agentUUID, err := uuid.Parse(params.AgentID)
+	agentUUID, err := resolveAgentUUIDCached(ctx, m.agentRouter, m.agentStore, params.AgentID)
 	if err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "invalid agentId"))
 		return
@@ -290,7 +298,7 @@ func (m *HeartbeatMethods) handleTest(ctx context.Context, client *gateway.Clien
 		return
 	}
 
-	agentUUID, err := uuid.Parse(params.AgentID)
+	agentUUID, err := resolveAgentUUIDCached(ctx, m.agentRouter, m.agentStore, params.AgentID)
 	if err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "invalid agentId"))
 		return
@@ -325,7 +333,7 @@ func (m *HeartbeatMethods) handleLogs(ctx context.Context, client *gateway.Clien
 		return
 	}
 
-	agentUUID, err := uuid.Parse(params.AgentID)
+	agentUUID, err := resolveAgentUUIDCached(ctx, m.agentRouter, m.agentStore, params.AgentID)
 	if err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "invalid agentId"))
 		return
@@ -360,7 +368,7 @@ func (m *HeartbeatMethods) handleChecklistGet(ctx context.Context, client *gatew
 		return
 	}
 
-	agentUUID, err := uuid.Parse(params.AgentID)
+	agentUUID, err := resolveAgentUUIDCached(ctx, m.agentRouter, m.agentStore, params.AgentID)
 	if err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "invalid agentId"))
 		return
@@ -403,7 +411,7 @@ func (m *HeartbeatMethods) handleChecklistSet(ctx context.Context, client *gatew
 		return
 	}
 
-	agentUUID, err := uuid.Parse(params.AgentID)
+	agentUUID, err := resolveAgentUUIDCached(ctx, m.agentRouter, m.agentStore, params.AgentID)
 	if err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "invalid agentId"))
 		return

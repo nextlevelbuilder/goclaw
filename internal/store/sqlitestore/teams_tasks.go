@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 	"unicode"
@@ -23,7 +24,7 @@ const taskLockDuration = 30 * time.Minute
 const maxListTasksRows = 30
 
 // taskSelectCols is the shared SELECT column list for task queries.
-const taskSelectCols = `t.id, t.team_id, t.subject, t.description, t.status, t.owner_agent_id, t.blocked_by, t.priority, t.result, t.user_id, t.channel,
+const taskSelectCols = `t.id, t.team_id, t.tenant_id, t.subject, t.description, t.status, t.owner_agent_id, t.blocked_by, t.priority, t.result, t.user_id, t.channel,
 		 t.task_type, t.task_number, COALESCE(t.identifier,''), t.created_by_agent_id, COALESCE(t.assignee_user_id,''), t.parent_id,
 		 COALESCE(t.chat_id,''), t.metadata, t.locked_at, t.lock_expires_at, COALESCE(t.progress_percent,0), COALESCE(t.progress_step,''),
 		 t.followup_at, COALESCE(t.followup_count,0), COALESCE(t.followup_max,0), COALESCE(t.followup_message,''), COALESCE(t.followup_channel,''), COALESCE(t.followup_chat_id,''),
@@ -357,7 +358,14 @@ func (s *SQLiteTeamStore) DeleteTask(ctx context.Context, taskID, teamID uuid.UU
 		tenantWhere = " AND tenant_id = ?"
 		args = append(args, tid)
 	}
-	res, err := s.db.ExecContext(ctx,
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("delete task: begin tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	res, err := tx.ExecContext(ctx,
 		`DELETE FROM team_tasks WHERE id = ? AND team_id = ? AND status IN ('completed','failed','cancelled')`+tenantWhere,
 		args...)
 	if err != nil {
@@ -367,7 +375,17 @@ func (s *SQLiteTeamStore) DeleteTask(ctx context.Context, taskID, teamID uuid.UU
 	if n == 0 {
 		return store.ErrTaskNotFound
 	}
-	return nil
+
+	// Phase 04: clean up auto-created vault_links sourced from this task
+	// (task_attachment + defensive delegation_attachment) inside the same tx.
+	if _, derr := tx.ExecContext(ctx, `
+		DELETE FROM vault_links
+		WHERE json_extract(metadata, '$.source') IN (?, ?)
+	`, "task:"+taskID.String(), "delegation:"+taskID.String()); derr != nil {
+		slog.Warn("delete task: vault_links cleanup", "task_id", taskID, "err", derr)
+	}
+
+	return tx.Commit()
 }
 
 func (s *SQLiteTeamStore) DeleteTasks(ctx context.Context, taskIDs []uuid.UUID, teamID uuid.UUID) ([]uuid.UUID, error) {
@@ -415,9 +433,32 @@ func (s *SQLiteTeamStore) DeleteTasks(ctx context.Context, taskIDs []uuid.UUID, 
 	}
 
 	if len(deleted) > 0 {
-		_, err = s.db.ExecContext(ctx, `DELETE FROM team_tasks WHERE `+cond, args...)
-		if err != nil {
+		tx, txErr := s.db.BeginTx(ctx, nil)
+		if txErr != nil {
+			return nil, fmt.Errorf("delete tasks: begin tx: %w", txErr)
+		}
+		defer tx.Rollback() //nolint:errcheck
+
+		if _, err = tx.ExecContext(ctx, `DELETE FROM team_tasks WHERE `+cond, args...); err != nil {
 			return nil, err
+		}
+
+		// Phase 04 bulk cleanup: drop task_attachment / delegation_attachment
+		// links for all deleted task IDs in the same tx.
+		sourceArgs := make([]any, 0, len(deleted)*2)
+		phs := make([]string, 0, len(deleted)*2)
+		for _, id := range deleted {
+			sourceArgs = append(sourceArgs, "task:"+id.String(), "delegation:"+id.String())
+			phs = append(phs, "?", "?")
+		}
+		delQ := `DELETE FROM vault_links WHERE json_extract(metadata, '$.source') IN (` +
+			strings.Join(phs, ",") + `)`
+		if _, derr := tx.ExecContext(ctx, delQ, sourceArgs...); derr != nil {
+			slog.Warn("delete tasks: vault_links cleanup", "count", len(deleted), "err", derr)
+		}
+
+		if err := tx.Commit(); err != nil {
+			return deleted, err
 		}
 	}
 	return deleted, nil
@@ -469,7 +510,7 @@ func scanTaskRowsJoined(rows *sql.Rows) ([]store.TeamTaskData, error) {
 		var followupMessage, followupChannel, followupChatID string
 		createdAt, updatedAt := scanTimePair()
 		if err := rows.Scan(
-			&d.ID, &d.TeamID, &d.Subject, &desc, &d.Status,
+			&d.ID, &d.TeamID, &d.TenantID, &d.Subject, &desc, &d.Status,
 			&ownerID, &blockedByJSON, &d.Priority, &result,
 			&userID, &channel,
 			&d.TaskType, &d.TaskNumber, &identifier, &createdByAgentID, &assigneeUserID, &parentID,

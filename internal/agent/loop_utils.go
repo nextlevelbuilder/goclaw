@@ -64,6 +64,12 @@ func (l *Loop) shouldShareKnowledgeGraph() bool {
 	return l.workspaceSharing != nil && l.workspaceSharing.ShareKnowledgeGraph
 }
 
+// shouldShareSessions returns true if sessions should be shared across
+// all users/groups of the agent (no per-group session scoping).
+func (l *Loop) shouldShareSessions() bool {
+	return l.workspaceSharing != nil && l.workspaceSharing.ShareSessions
+}
+
 // buildChannelMeta extracts channel metadata from RunRequest for bootstrap decisions.
 // Returns nil when channel type is unknown (preserves normal bootstrap flow).
 func (l *Loop) buildChannelMeta(req *RunRequest) *bootstrap.ChannelMeta {

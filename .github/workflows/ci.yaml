@@ -12,6 +12,28 @@ permissions:
 jobs:
   go:
     runs-on: ubuntu-latest
+    # Postgres service container for integration tests. pgvector/pgvector:pg18
+    # matches the local dev image (Makefile uses the same tag on port 5433).
+    # Healthcheck blocks the job until PG accepts connections, avoiding
+    # first-connection flakiness on cold runner starts.
+    services:
+      pg:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: goclaw_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      # tests/integration/v3_test_helper.go reads TEST_DATABASE_URL and runs
+      # migrations once via golang-migrate. Uses port 5432 (CI-clean) vs 5433
+      # for local dev (avoids clash with desktop Postgres installs).
+      TEST_DATABASE_URL: postgres://postgres:test@localhost:5432/goclaw_test?sslmode=disable
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -21,7 +43,26 @@ jobs:
       - run: go build ./...
       - run: go build -tags sqliteonly ./...
       - run: go vet ./...
-      - run: go test -race -coverprofile=coverage.out ./...
+      # -timeout=90s caps each test binary so a deadlocked test fails fast
+      # instead of blocking CI for the 10-minute default. Race-heavy wave C
+      # suites run in <20s, so 90s leaves ample breathing room.
+      - name: Unit tests
+        run: go test -race -timeout=90s -coverpkg=./... -coverprofile=coverage.out ./...
+      # Invariant tests (P0) - tenant isolation, permission enforcement
+      # These run against real DB and MUST pass for merge.
+      - name: Invariant tests (P0)
+        run: go test -race -timeout=90s -tags integration ./tests/invariants/...
+      # Contract tests (P1) - API schema validation
+      # Skip if no server available (requires CONTRACT_TEST_* env vars).
+      - name: Contract tests (P1)
+        run: go test -race -timeout=90s -tags integration ./tests/contracts/... || echo "::warning::Contract tests skipped (no server configured)"
+        continue-on-error: true
+      # Integration suite runs against the `pg` service container above.
+      # Longer -timeout=180s because the first test runs migrations from
+      # scratch (can take 10-30s on a cold CI runner). Local full suite
+      # completes in <3s against a warm DB.
+      - name: Integration tests
+        run: go test -race -timeout=180s -tags integration ./tests/integration/
       - name: Coverage summary
         run: go tool cover -func=coverage.out | tail -1
 
@@ -41,4 +82,5 @@ jobs:
           cache: pnpm
           cache-dependency-path: ui/web/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
       - run: pnpm build

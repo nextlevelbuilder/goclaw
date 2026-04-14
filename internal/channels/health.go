@@ -1,6 +1,9 @@
 package channels
 
 import (
+	"context"
+	"errors"
+	"net"
 	"strings"
 	"time"
 )
@@ -86,7 +89,6 @@ type ChannelErrorInfo struct {
 // This is a best-effort classification based on error message patterns from upstream libraries
 // (telego, discordgo, etc.). If upstream changes error format, the default case returns
 // "unknown + retryable", so misclassification degrades gracefully to generic guidance.
-// TODO: Use errors.As() where upstream libraries expose typed errors.
 func ClassifyChannelError(err error) ChannelErrorInfo {
 	if err == nil {
 		return ChannelErrorInfo{
@@ -97,6 +99,43 @@ func ClassifyChannelError(err error) ChannelErrorInfo {
 		}
 	}
 
+	// Prefer typed error checks over string matching where possible.
+	if errors.Is(err, context.DeadlineExceeded) {
+		return ChannelErrorInfo{
+			Summary:   "Network error",
+			Detail:    "Timed out while reaching the upstream service.",
+			Kind:      ChannelFailureKindNetwork,
+			Retryable: true,
+		}
+	}
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return ChannelErrorInfo{
+			Summary:   "Network error",
+			Detail:    "GoClaw could not resolve the upstream host.",
+			Kind:      ChannelFailureKindNetwork,
+			Retryable: !dnsErr.IsNotFound,
+		}
+	}
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		if opErr.Timeout() {
+			return ChannelErrorInfo{
+				Summary:   "Network error",
+				Detail:    "Timed out while reaching the upstream service.",
+				Kind:      ChannelFailureKindNetwork,
+				Retryable: true,
+			}
+		}
+		return ChannelErrorInfo{
+			Summary:   "Network error",
+			Detail:    "GoClaw could not open a network connection to the upstream service.",
+			Kind:      ChannelFailureKindNetwork,
+			Retryable: true,
+		}
+	}
+
+	// Fall back to string matching for errors without typed wrappers.
 	detail := err.Error()
 	msg := strings.ToLower(detail)
 

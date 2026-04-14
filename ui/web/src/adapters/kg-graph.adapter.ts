@@ -1,5 +1,6 @@
 import Graph from "graphology";
 import type { KGEntity, KGRelation } from "@/types/knowledge-graph";
+import type { KGGraphNode, KGGraphEdge } from "@/types/graph-dto";
 import { getNodeSize, truncateMiddle } from "@/components/graph/graph-utils";
 
 // Solid colors per entity type
@@ -21,6 +22,39 @@ export function computeDegreeMap(entities: KGEntity[], relations: KGRelation[]):
   return deg;
 }
 
+/** Build KG graph from compact DTOs. */
+export function buildKGGraphFromDTO(nodes: KGGraphNode[], edges: KGGraphEdge[]): Graph {
+  const graph = new Graph({ multi: false, type: "directed" });
+  const nodeIds = new Set(nodes.map((n) => n.id));
+
+  // Pre-compute degree from edges (compact DTO doesn't include it)
+  const deg = new Map<string, number>();
+  for (const e of edges) {
+    if (nodeIds.has(e.src)) deg.set(e.src, (deg.get(e.src) ?? 0) + 1);
+    if (nodeIds.has(e.tgt)) deg.set(e.tgt, (deg.get(e.tgt) ?? 0) + 1);
+  }
+
+  for (const n of nodes) {
+    graph.addNode(n.id, {
+      label: truncateMiddle(n.n, 28),
+      x: 0, y: 0,
+      size: getNodeSize(deg.get(n.id) ?? 0, nodes.length),
+      color: KG_TYPE_COLORS[n.t] ?? KG_DEFAULT_COLOR,
+      entityType: n.t,
+    });
+  }
+
+  for (const e of edges) {
+    if (nodeIds.has(e.src) && nodeIds.has(e.tgt) && !graph.hasEdge(e.src, e.tgt)) {
+      graph.addEdgeWithKey(e.id, e.src, e.tgt, {
+        label: e.type.replace(/_/g, " "), type: "curvedArrow",
+      });
+    }
+  }
+
+  return graph;
+}
+
 /** Build a Graphology graph from KG entities and relations. */
 export function buildKGGraph(entities: KGEntity[], allRelations: KGRelation[]): Graph {
   const graph = new Graph({ multi: false, type: "directed" });
@@ -35,7 +69,7 @@ export function buildKGGraph(entities: KGEntity[], allRelations: KGRelation[]): 
         label: truncateMiddle(e.name, 28),
         x: 0,
         y: 0,
-        size: getNodeSize(degree),
+        size: getNodeSize(degree, entities.length),
         color: KG_TYPE_COLORS[e.entity_type] ?? KG_DEFAULT_COLOR,
         entityType: e.entity_type,
       });

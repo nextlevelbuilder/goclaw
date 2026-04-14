@@ -36,10 +36,10 @@ func (m *ConfigMethods) SetSystemConfigSync(fn func(ctx context.Context, cfg *co
 }
 
 func (m *ConfigMethods) Register(router *gateway.MethodRouter) {
-	router.Register(protocol.MethodConfigGet, m.requireOwner(m.handleGet))
-	router.Register(protocol.MethodConfigApply, m.requireOwner(m.handleApply))
-	router.Register(protocol.MethodConfigPatch, m.requireOwner(m.handlePatch))
-	router.Register(protocol.MethodConfigSchema, m.requireOwner(m.handleSchema))
+	router.Register(protocol.MethodConfigGet, m.requireMasterScope(m.requireOwner(m.handleGet)))
+	router.Register(protocol.MethodConfigApply, m.requireMasterScope(m.requireOwner(m.handleApply)))
+	router.Register(protocol.MethodConfigPatch, m.requireMasterScope(m.requireOwner(m.handlePatch)))
+	router.Register(protocol.MethodConfigSchema, m.requireMasterScope(m.requireOwner(m.handleSchema)))
 }
 
 // requireOwner wraps a handler to only allow owner-role users.
@@ -50,6 +50,31 @@ func (m *ConfigMethods) requireOwner(next gateway.MethodHandler) gateway.MethodH
 			client.SendResponse(protocol.NewErrorResponse(
 				req.ID, protocol.ErrUnauthorized,
 				i18n.T(locale, i18n.MsgPermissionDenied, req.Method),
+			))
+			return
+		}
+		next(ctx, client, req)
+	}
+}
+
+// requireMasterScope rejects config.* calls when the caller's ctx is scoped to
+// a non-master tenant. System owner callers (bypass-all) are allowed through.
+//
+// Background: config.* mutates the master in-memory *config.Config and the
+// on-disk config.json. A non-master tenant admin calling config.patch would
+// corrupt master state + leak master config to other tenants. This guard keeps
+// config.* strictly master-scoped until a tenant-aware refactor lands.
+//
+// Shares the predicate with store.IsMasterScope so HTTP and WS layers can't
+// drift — same rule, one source of truth.
+func (m *ConfigMethods) requireMasterScope(next gateway.MethodHandler) gateway.MethodHandler {
+	return func(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+		if !store.IsMasterScope(ctx) {
+			locale := store.LocaleFromContext(ctx)
+			client.SendResponse(protocol.NewErrorResponse(
+				req.ID,
+				protocol.ErrUnauthorized,
+				i18n.T(locale, i18n.MsgConfigMasterScopeOnly),
 			))
 			return
 		}

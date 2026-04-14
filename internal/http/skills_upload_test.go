@@ -365,11 +365,12 @@ func skillMarkdown(name, slug string) string {
 }
 
 type skillManageStoreStub struct {
-	baseDir    string
-	version    int64
-	nextBySlug map[string]int
-	skills     map[uuid.UUID]store.SkillInfo
-	systemDirs map[string]string
+	baseDir      string
+	version      int64
+	nextBySlug   map[string]int
+	skills       map[uuid.UUID]store.SkillInfo
+	systemDirs   map[string]string
+	hashBySlug   map[string]string // slug -> SKILL.md content hash (most recent)
 }
 
 func newSkillManageStoreStub(baseDir string) *skillManageStoreStub {
@@ -378,6 +379,7 @@ func newSkillManageStoreStub(baseDir string) *skillManageStoreStub {
 		nextBySlug: map[string]int{},
 		skills:     map[uuid.UUID]store.SkillInfo{},
 		systemDirs: map[string]string{},
+		hashBySlug: map[string]string{},
 	}
 }
 
@@ -444,7 +446,21 @@ func (s *skillManageStoreStub) CreateSkillManaged(_ context.Context, p store.Ski
 		Enabled:     true,
 		MissingDeps: append([]string(nil), p.MissingDeps...),
 	}
+	// Track the content hash for idempotency checks (mirrors handler behaviour).
+	if p.FileHash != nil {
+		s.hashBySlug[p.Slug] = *p.FileHash
+	}
 	return id, nil
+}
+
+func (s *skillManageStoreStub) GetSkillHashBySlug(_ context.Context, slug string) (string, int, bool) {
+	hash, ok := s.hashBySlug[slug]
+	if !ok {
+		return "", 0, false
+	}
+	// Find the latest version for this slug.
+	version := s.nextBySlug[slug]
+	return hash, version, true
 }
 
 func (s *skillManageStoreStub) UpdateSkill(_ context.Context, id uuid.UUID, updates map[string]any) error {
@@ -528,4 +544,161 @@ func (s *skillManageStoreStub) ListWithGrantStatus(context.Context, uuid.UUID) (
 }
 func (s *skillManageStoreStub) GetSkillFilePath(context.Context, uuid.UUID) (string, string, int, bool, bool) {
 	return "", "", 0, false, false
+}
+
+// ---------------------------------------------------------------------------
+// Hash comparison / idempotency tests
+// ---------------------------------------------------------------------------
+
+func TestHandleUpload_IdenticalContent_ReturnsUnchanged(t *testing.T) {
+	handler, skillStore, ctx, _ := newTestUploadHandler(t)
+	stubUploadDepFns(t,
+		func(context.Context, *skills.SkillManifest, []string) (*skills.InstallResult, error) {
+			return nil, nil
+		},
+		func(*skills.SkillManifest) (bool, []string) { return true, nil },
+	)
+
+	files := map[string]string{
+		"SKILL.md": skillMarkdown("Hash Skill", "hash-skill"),
+	}
+
+	// First upload — expect 201 Created, version 1.
+	req1 := newZipUploadRequest(t, ctx, files)
+	w1 := httptest.NewRecorder()
+	handler.handleUpload(w1, req1)
+	if w1.Code != http.StatusCreated {
+		t.Fatalf("first upload: status = %d, body = %s", w1.Code, w1.Body.String())
+	}
+
+	// Second upload with identical content — expect 200 unchanged.
+	req2 := newZipUploadRequest(t, ctx, files)
+	w2 := httptest.NewRecorder()
+	handler.handleUpload(w2, req2)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("second upload: status = %d, body = %s", w2.Code, w2.Body.String())
+	}
+
+	var resp struct {
+		Status  string `json:"status"`
+		Version int    `json:"version"`
+		Slug    string `json:"slug"`
+		Name    string `json:"name"`
+	}
+	if err := json.NewDecoder(w2.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Status != "unchanged" {
+		t.Fatalf("status = %q, want unchanged", resp.Status)
+	}
+	if resp.Version != 1 {
+		t.Fatalf("version = %d, want 1 (no new version created)", resp.Version)
+	}
+	if resp.Slug != "hash-skill" {
+		t.Fatalf("slug = %q, want hash-skill", resp.Slug)
+	}
+
+	// Verify no second DB row was created.
+	if got := skillStore.nextBySlug["hash-skill"]; got != 1 {
+		t.Fatalf("nextBySlug[hash-skill] = %d, want 1 (unchanged should not create new version)", got)
+	}
+}
+
+func TestHandleUpload_ChangedContent_BumpsVersion(t *testing.T) {
+	handler, skillStore, ctx, _ := newTestUploadHandler(t)
+	stubUploadDepFns(t,
+		func(context.Context, *skills.SkillManifest, []string) (*skills.InstallResult, error) {
+			return nil, nil
+		},
+		func(*skills.SkillManifest) (bool, []string) { return true, nil },
+	)
+
+	// First upload.
+	req1 := newZipUploadRequest(t, ctx, map[string]string{
+		"SKILL.md": "---\nname: Change Skill\nslug: change-skill\n---\nOriginal body\n",
+	})
+	w1 := httptest.NewRecorder()
+	handler.handleUpload(w1, req1)
+	if w1.Code != http.StatusCreated {
+		t.Fatalf("first upload: status = %d, body = %s", w1.Code, w1.Body.String())
+	}
+
+	// Second upload with different SKILL.md content.
+	req2 := newZipUploadRequest(t, ctx, map[string]string{
+		"SKILL.md": "---\nname: Change Skill\nslug: change-skill\n---\nUpdated body with new description\n",
+	})
+	w2 := httptest.NewRecorder()
+	handler.handleUpload(w2, req2)
+	if w2.Code != http.StatusCreated {
+		t.Fatalf("second upload: status = %d, body = %s", w2.Code, w2.Body.String())
+	}
+
+	var resp struct {
+		Status  string `json:"status"`
+		Version int    `json:"version"`
+	}
+	if err := json.NewDecoder(w2.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Status != "active" {
+		t.Fatalf("status = %q, want active", resp.Status)
+	}
+	if resp.Version != 2 {
+		t.Fatalf("version = %d, want 2", resp.Version)
+	}
+
+	// Verify DB has version 2.
+	if got := skillStore.nextBySlug["change-skill"]; got != 2 {
+		t.Fatalf("nextBySlug[change-skill] = %d, want 2", got)
+	}
+}
+
+func TestHandleUpload_ResponseIncludesIsNew(t *testing.T) {
+	handler, _, ctx, _ := newTestUploadHandler(t)
+	stubUploadDepFns(t,
+		func(context.Context, *skills.SkillManifest, []string) (*skills.InstallResult, error) {
+			return nil, nil
+		},
+		func(*skills.SkillManifest) (bool, []string) { return true, nil },
+	)
+
+	// Brand-new skill upload should have is_new=true.
+	req1 := newZipUploadRequest(t, ctx, map[string]string{
+		"SKILL.md": skillMarkdown("IsNew Skill", "isnew-skill"),
+	})
+	w1 := httptest.NewRecorder()
+	handler.handleUpload(w1, req1)
+	if w1.Code != http.StatusCreated {
+		t.Fatalf("first upload: status = %d, body = %s", w1.Code, w1.Body.String())
+	}
+
+	var resp1 struct {
+		IsNew bool `json:"is_new"`
+	}
+	if err := json.NewDecoder(w1.Body).Decode(&resp1); err != nil {
+		t.Fatalf("decode first response: %v", err)
+	}
+	if !resp1.IsNew {
+		t.Fatal("first upload: expected is_new=true")
+	}
+
+	// Changed-content re-upload should have is_new=false.
+	req2 := newZipUploadRequest(t, ctx, map[string]string{
+		"SKILL.md": "---\nname: IsNew Skill\nslug: isnew-skill\n---\nDifferent body content\n",
+	})
+	w2 := httptest.NewRecorder()
+	handler.handleUpload(w2, req2)
+	if w2.Code != http.StatusCreated {
+		t.Fatalf("second upload: status = %d, body = %s", w2.Code, w2.Body.String())
+	}
+
+	var resp2 struct {
+		IsNew bool `json:"is_new"`
+	}
+	if err := json.NewDecoder(w2.Body).Decode(&resp2); err != nil {
+		t.Fatalf("decode second response: %v", err)
+	}
+	if resp2.IsNew {
+		t.Fatal("second upload (changed content): expected is_new=false")
+	}
 }

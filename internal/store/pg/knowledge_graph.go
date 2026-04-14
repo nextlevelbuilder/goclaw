@@ -30,7 +30,10 @@ func (s *PGKnowledgeGraphStore) SetEmbeddingProvider(provider store.EmbeddingPro
 }
 
 func (s *PGKnowledgeGraphStore) UpsertEntity(ctx context.Context, entity *store.Entity) error {
-	aid := mustParseUUID(entity.AgentID)
+	aid, err := parseUUID(entity.AgentID)
+	if err != nil {
+		return fmt.Errorf("kg upsert entity: %w", err)
+	}
 	props, err := json.Marshal(entity.Properties)
 	if err != nil {
 		props = []byte("{}")
@@ -65,8 +68,14 @@ func (s *PGKnowledgeGraphStore) UpsertEntity(ctx context.Context, entity *store.
 }
 
 func (s *PGKnowledgeGraphStore) GetEntity(ctx context.Context, agentID, userID, entityID string) (*store.Entity, error) {
-	aid := mustParseUUID(agentID)
-	eid := mustParseUUID(entityID)
+	aid, err := parseUUID(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("kg get entity: agent: %w", err)
+	}
+	eid, err := parseUUID(entityID)
+	if err != nil {
+		return nil, fmt.Errorf("kg get entity: id: %w", err)
+	}
 
 	var row entityRow
 	if store.IsSharedKG(ctx) {
@@ -103,8 +112,14 @@ func (s *PGKnowledgeGraphStore) GetEntity(ctx context.Context, agentID, userID, 
 }
 
 func (s *PGKnowledgeGraphStore) DeleteEntity(ctx context.Context, agentID, userID, entityID string) error {
-	aid := mustParseUUID(agentID)
-	eid := mustParseUUID(entityID)
+	aid, err := parseUUID(agentID)
+	if err != nil {
+		return fmt.Errorf("kg delete entity: agent: %w", err)
+	}
+	eid, err := parseUUID(entityID)
+	if err != nil {
+		return fmt.Errorf("kg delete entity: id: %w", err)
+	}
 	if store.IsSharedKG(ctx) {
 		tc, tcArgs, _, err := scopeClause(ctx, 3)
 		if err != nil {
@@ -128,7 +143,10 @@ func (s *PGKnowledgeGraphStore) DeleteEntity(ctx context.Context, agentID, userI
 }
 
 func (s *PGKnowledgeGraphStore) ListEntities(ctx context.Context, agentID, userID string, opts store.EntityListOptions) ([]store.Entity, error) {
-	aid := mustParseUUID(agentID)
+	aid, err := parseUUID(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("kg list entities: %w", err)
+	}
 	limit := opts.Limit
 	if limit <= 0 {
 		limit = 50
@@ -177,7 +195,10 @@ func (s *PGKnowledgeGraphStore) ListEntities(ctx context.Context, agentID, userI
 }
 
 func (s *PGKnowledgeGraphStore) SearchEntities(ctx context.Context, agentID, userID, query string, limit int) ([]store.Entity, error) {
-	aid := mustParseUUID(agentID)
+	aid, err := parseUUID(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("kg search entities: %w", err)
+	}
 	if limit <= 0 {
 		limit = 20
 	}

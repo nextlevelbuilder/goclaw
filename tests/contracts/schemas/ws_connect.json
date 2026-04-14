@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WS connect response",
+  "type": "object",
+  "required": ["protocol", "role", "user_id", "tenant_id", "is_owner", "server"],
+  "properties": {
+    "protocol": { "type": "number" },
+    "role": { "type": "string", "enum": ["admin", "operator", "viewer"] },
+    "user_id": { "type": "string" },
+    "tenant_id": { "type": "string" },
+    "is_owner": { "type": "boolean" },
+    "server": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "type": "string", "const": "goclaw" },
+        "version": { "type": "string" }
+      }
+    }
+  }
+}

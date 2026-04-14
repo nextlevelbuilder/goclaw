@@ -147,7 +147,8 @@ func isAdminOnlyEvent(name string) bool {
 	case protocol.EventNodePairRequested, protocol.EventNodePairResolved,
 		protocol.EventDevicePairReq, protocol.EventDevicePairRes,
 		protocol.EventAgentLinkCreated, protocol.EventAgentLinkUpdated, protocol.EventAgentLinkDeleted,
-		protocol.EventWorkspaceFileChanged:
+		protocol.EventWorkspaceFileChanged,
+		protocol.EventBackgroundError:
 		return true
 	}
 	return false

@@ -12,7 +12,7 @@ import (
 // ListEntitiesTemporal queries entities with temporal awareness.
 // AsOf=nil: current facts only (valid_until IS NULL). AsOf set: facts valid at that time.
 func (s *PGKnowledgeGraphStore) ListEntitiesTemporal(ctx context.Context, agentID, userID string, opts store.EntityListOptions, temporal store.TemporalQueryOptions) ([]store.Entity, error) {
-	aid := mustParseUUID(agentID)
+	aid := parseUUIDOrNil(agentID)
 	limit := opts.Limit
 	if limit <= 0 {
 		limit = 100
@@ -68,7 +68,10 @@ func (s *PGKnowledgeGraphStore) ListEntitiesTemporal(ctx context.Context, agentI
 
 // SupersedeEntity atomically expires the old entity and inserts a replacement.
 func (s *PGKnowledgeGraphStore) SupersedeEntity(ctx context.Context, old *store.Entity, replacement *store.Entity) error {
-	aid := mustParseUUID(old.AgentID)
+	aid, err := parseUUID(old.AgentID)
+	if err != nil {
+		return fmt.Errorf("kg supersede entity: %w", err)
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("supersede begin tx: %w", err)

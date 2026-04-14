@@ -19,9 +19,17 @@ type pancakeInstanceConfig struct {
 	Features struct {
 		InboxReply   bool `json:"inbox_reply"`
 		CommentReply bool `json:"comment_reply"`
+		FirstInbox   bool `json:"first_inbox"` // send one-time DM to commenter after comment reply
 	} `json:"features"`
-	AllowFrom  []string `json:"allow_from,omitempty"`
-	BlockReply *bool    `json:"block_reply,omitempty"` // override gateway block_reply (nil = inherit)
+	CommentReplyOptions struct {
+		IncludePostContext bool     `json:"include_post_context"` // prepend post text to comment content
+		Filter             string   `json:"filter"`               // "all" | "keyword" (default: all)
+		Keywords           []string `json:"keywords"`             // required when filter = "keyword"
+	} `json:"comment_reply_options"`
+	FirstInboxMessage   string   `json:"first_inbox_message,omitempty"`    // custom DM text; defaults to built-in message
+	PostContextCacheTTL string   `json:"post_context_cache_ttl,omitempty"` // e.g. "30m"; defaults to 15m
+	AllowFrom           []string `json:"allow_from,omitempty"`
+	BlockReply          *bool    `json:"block_reply,omitempty"` // override gateway block_reply (nil = inherit)
 }
 
 // --- Webhook payload types ---
@@ -45,8 +53,9 @@ type WebhookData struct {
 
 // WebhookConversation holds the conversation metadata from a Pancake webhook.
 type WebhookConversation struct {
-	ID          string        `json:"id"`                    // format: "pageID_senderID"
-	Type        string        `json:"type"`                  // "INBOX" or "COMMENT"
+	ID          string        `json:"id"`                     // format: "pageID_senderID"
+	Type        string        `json:"type"`                   // "INBOX" or "COMMENT"
+	PostID      string        `json:"post_id,omitempty"`      // present for COMMENT events
 	AssigneeIDs []string      `json:"assignee_ids,omitempty"` // Pancake staff IDs assigned to this conversation
 	From        WebhookSender `json:"from"`
 	Snippet     string        `json:"snippet,omitempty"`
@@ -81,6 +90,7 @@ type MessageAttachment struct {
 type MessagingData struct {
 	PageID         string
 	ConversationID string
+	PostID         string // present for COMMENT events; empty for INBOX
 	Type           string // "INBOX" or "COMMENT"
 	Platform       string // "facebook", "zalo", "instagram", "tiktok", "whatsapp", "line"
 	AssigneeIDs    []string
@@ -111,6 +121,13 @@ type SendMessageRequest struct {
 	Action     string   `json:"action"`
 	Message    string   `json:"message,omitempty"`
 	ContentIDs []string `json:"content_ids,omitempty"`
+}
+
+// PancakePost represents a page post from Pancake GET /pages/{id}/posts.
+type PancakePost struct {
+	ID        string `json:"id"`
+	Message   string `json:"message"`
+	CreatedAt string `json:"created_at,omitempty"`
 }
 
 // UploadResponse is returned by POST /pages/{id}/upload_contents.

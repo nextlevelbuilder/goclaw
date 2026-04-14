@@ -44,6 +44,7 @@ func (h *RestoreHandler) handleRestore(w http.ResponseWriter, r *http.Request) {
 	locale := extractLocale(r)
 
 	if !h.isOwnerUser(userID) {
+		slog.Warn("security.restore_owner_denied", "user_id", userID)
 		writeError(w, http.StatusForbidden, protocol.ErrUnauthorized,
 			i18n.T(locale, i18n.MsgNoAccess, "system restore"))
 		return

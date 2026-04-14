@@ -118,6 +118,8 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 						pgMem.UpdateChunkConfig(mem.MaxChunkLen, mem.ChunkOverlap)
 					}
 				}
+				// Note: vault enrichment provider is resolved per-tenant at runtime,
+				// no hot-reload needed here
 				slog.Debug("system_configs refreshed to in-memory config", "keys", len(sysConfigs))
 			}
 		})
@@ -177,7 +179,18 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 	if d.pgStores != nil && d.pgStores.Vault != nil {
 		vh := httpapi.NewVaultHandler(d.pgStores.Vault, d.pgStores.Teams, d.workspace, d.domainBus, d.pgStores.Agents, d.pgStores.Teams)
 		vh.SetEnrichProgress(d.enrichProgress)
+		vh.SetEnrichWorker(d.enrichWorker)
 		d.server.SetVaultHandler(vh)
+
+		// Lightweight graph visualization endpoints (vault + KG).
+		var kgGraph store.KGGraphStore
+		if d.pgStores.KnowledgeGraph != nil {
+			kgGraph = newKGGraphStore(d.pgStores.DB)
+		}
+		vgHandler := httpapi.NewVaultGraphHandler(
+			newVaultGraphStore(d.pgStores.DB), kgGraph, d.pgStores.Teams,
+		)
+		d.server.SetVaultGraphHandler(vgHandler)
 	}
 
 	// V3: Episodic memory summaries API

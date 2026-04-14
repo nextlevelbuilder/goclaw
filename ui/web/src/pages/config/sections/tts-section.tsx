@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ROUTES } from "@/lib/constants";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 interface Props {
   data: Record<string, any> | undefined;
 }

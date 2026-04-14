@@ -9,10 +9,10 @@ export function useAgentDetailState(
   onSave: (id: string, updates: Partial<AgentData>) => Promise<void>,
   onClose: () => void,
 ) {
-  // --- Identity ---
-  const [emoji, setEmoji] = useState((agent.other_config?.emoji as string) ?? '🤖')
+  // --- Identity --- (promoted fields: read top-level, fallback to other_config for legacy data)
+  const [emoji, setEmoji] = useState(agent.emoji ?? (agent.other_config?.emoji as string) ?? '🤖')
   const [displayName, setDisplayName] = useState(agent.display_name ?? '')
-  const [description, setDescription] = useState((agent.other_config?.description as string) ?? '')
+  const [description, setDescription] = useState(agent.agent_description ?? (agent.other_config?.description as string) ?? '')
   const [status, setStatus] = useState(agent.status ?? 'active')
   const [isDefault, setIsDefault] = useState(agent.is_default ?? false)
 
@@ -22,20 +22,22 @@ export function useAgentDetailState(
   const [contextWindow, setContextWindow] = useState(agent.context_window ?? 200000)
   const [maxToolIterations, setMaxToolIterations] = useState(agent.max_tool_iterations ?? 25)
 
-  // --- Evolution ---
-  const [selfEvolve, setSelfEvolve] = useState(!!(agent.other_config?.self_evolve))
-  const [skillLearning, setSkillLearning] = useState(!!(agent.other_config?.skill_learning))
+  // --- Evolution --- (promoted fields with fallback)
+  const [selfEvolve, setSelfEvolve] = useState(!!(agent.self_evolve ?? agent.other_config?.self_evolve))
+  const [skillLearning, setSkillLearning] = useState(!!(agent.skill_evolve ?? agent.other_config?.skill_learning))
   const [skillNudgeInterval, setSkillNudgeInterval] = useState(
-    (agent.other_config?.skill_nudge_interval as number) ?? 15,
+    agent.skill_nudge_interval ?? (agent.other_config?.skill_nudge_interval as number) ?? 15,
   )
 
   // --- Prompt mode ---
   const [promptMode, setPromptMode] = useState((agent.other_config?.prompt_mode as string) || 'full')
 
-  // --- Thinking ---
-  const reasoning = (agent.other_config?.reasoning ?? {}) as AgentReasoningConfig
+  // --- Thinking --- (promoted: reasoning_config + thinking_level, fallback to other_config)
+  const reasoning = (agent.reasoning_config ?? agent.other_config?.reasoning ?? {}) as AgentReasoningConfig
   const [reasoningMode, setReasoningMode] = useState<ReasoningOverrideMode>(reasoning.override_mode ?? 'inherit')
-  const [thinkingLevel, setThinkingLevel] = useState(reasoning.effort ?? 'off')
+  const [thinkingLevel, setThinkingLevel] = useState(
+    agent.thinking_level ?? reasoning.effort ?? 'off',
+  )
 
   // --- Context pruning ---
   const [pruningEnabled, setPruningEnabled] = useState(agent.context_pruning != null)
@@ -70,35 +72,24 @@ export function useAgentDetailState(
     setSaving(true)
     setSaveError('')
     try {
+      // Build other_config for non-promoted fields only
       const otherConfig: Record<string, unknown> = { ...agent.other_config }
-      if (emoji) otherConfig.emoji = emoji
-      if (description.trim()) otherConfig.description = description.trim()
-      else delete otherConfig.description
-      otherConfig.self_evolve = selfEvolve
+      // Remove legacy keys that are now promoted to top-level
+      delete otherConfig.emoji
+      delete otherConfig.description
+      delete otherConfig.self_evolve
+      delete otherConfig.skill_learning
+      delete otherConfig.skill_nudge_interval
+      delete otherConfig.reasoning
 
-      // Skill learning
-      otherConfig.skill_learning = skillLearning
-      if (skillLearning && skillNudgeInterval > 0) {
-        otherConfig.skill_nudge_interval = skillNudgeInterval
-      } else {
-        delete otherConfig.skill_nudge_interval
-      }
-
-      // Prompt mode
+      // Prompt mode (still in other_config)
       if (promptMode && promptMode !== 'full') {
         otherConfig.prompt_mode = promptMode
       } else {
         delete otherConfig.prompt_mode
       }
 
-      // Thinking / reasoning
-      if (reasoningMode === 'custom') {
-        otherConfig.reasoning = { override_mode: 'custom', effort: thinkingLevel }
-      } else {
-        delete otherConfig.reasoning
-      }
-
-      // Pinned skills
+      // Pinned skills (still in other_config)
       if (pinnedSkills.length > 0) {
         otherConfig.pinned_skills = pinnedSkills
       } else {
@@ -107,13 +98,23 @@ export function useAgentDetailState(
 
       await onSave(agent.id, {
         display_name: displayName.trim() || undefined,
+        // Promoted fields at top level
+        emoji: emoji || null,
+        agent_description: description.trim() || null,
+        self_evolve: selfEvolve,
+        skill_evolve: skillLearning,
+        skill_nudge_interval: skillLearning && skillNudgeInterval > 0 ? skillNudgeInterval : null,
+        thinking_level: reasoningMode === 'custom' ? thinkingLevel : null,
+        reasoning_config: reasoningMode === 'custom'
+          ? { override_mode: 'custom', effort: thinkingLevel } : null,
+        // Other fields
         provider,
         model,
         context_window: contextWindow,
         max_tool_iterations: maxToolIterations,
         is_default: isDefault,
         status,
-        other_config: otherConfig,
+        other_config: Object.keys(otherConfig).length > 0 ? otherConfig : null,
         context_pruning: pruningEnabled ? pruningConfig : null,
         compaction_config: compactionConfig,
         subagents_config: subEnabled ? subConfig : null,

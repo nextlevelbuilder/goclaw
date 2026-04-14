@@ -621,7 +621,7 @@ func TestPruneContextMessagesDefaultEnabled(t *testing.T) {
 
 	// With nil config and small context window (to trigger soft trim ratio > 0.3),
 	// pruning should trim the large tool result.
-	result := pruneContextMessages(msgs, 5000, nil)
+	result := pruneContextMessages(msgs, 5000, nil, nil, "")
 
 	// The large tool result should have been trimmed.
 	toolMsg := result[2]
@@ -635,7 +635,7 @@ func TestPruneContextMessagesExplicitOff(t *testing.T) {
 		{Role: "user", Content: "Hello"},
 	}
 	cfg := &config.ContextPruningConfig{Mode: "off"}
-	result := pruneContextMessages(msgs, 200000, cfg)
+	result := pruneContextMessages(msgs, 200000, cfg, nil, "")
 	// Should return original messages unchanged.
 	if len(result) != len(msgs) {
 		t.Errorf("expected %d messages, got %d", len(msgs), len(result))

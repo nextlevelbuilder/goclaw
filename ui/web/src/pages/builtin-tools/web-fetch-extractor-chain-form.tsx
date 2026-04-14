@@ -195,7 +195,7 @@ export function WebFetchExtractorChainForm({ initialSettings, onSave, onCancel }
   const handleSave = async () => {
     setSaving(true);
     try {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+       
       const serialized = entries.map(({ id: _id, ...rest }) => rest);
       await onSave({ extractors: serialized });
     } catch {

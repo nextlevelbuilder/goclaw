@@ -21,6 +21,27 @@ func (m *TeamToolManager) broadcastTeamEvent(ctx context.Context, name string, p
 	bus.BroadcastForTenant(m.msgBus, name, store.TenantIDFromContext(ctx), payload)
 }
 
+func reviewOutboundMessage(task *store.TeamTaskData, content string) bus.OutboundMessage {
+	message := bus.OutboundMessage{
+		Channel: task.Channel,
+		ChatID:  task.ChatID,
+		Content: content,
+	}
+	message.Metadata = TaskLocalKeyMetadata(task)
+	return message
+}
+
+// TaskLocalKeyMetadata extracts local_key from task metadata for Telegram forum topic routing.
+func TaskLocalKeyMetadata(task *store.TeamTaskData) map[string]string {
+	if task == nil || task.Metadata == nil {
+		return nil
+	}
+	if localKey, ok := task.Metadata[TaskMetaLocalKey].(string); ok && localKey != "" {
+		return map[string]string{TaskMetaLocalKey: localKey}
+	}
+	return nil
+}
+
 // resolveTeamRole returns the calling agent's role in the team.
 // Unlike requireLead(), this does NOT bypass for teammate channel —
 // workspace RBAC must respect actual roles even for teammate agents.
@@ -204,9 +225,5 @@ func (m *TeamToolManager) notifyChannelReview(task *store.TeamTaskData) {
 		return
 	}
 	content := fmt.Sprintf("🔔 Escalation: \"%s\" requires human review (task %s).", task.Subject, task.Identifier)
-	m.msgBus.PublishOutbound(bus.OutboundMessage{
-		Channel: task.Channel,
-		ChatID:  task.ChatID,
-		Content: content,
-	})
+	m.msgBus.PublishOutbound(reviewOutboundMessage(task, content))
 }

@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/select";
 import { InfoLabel } from "@/components/shared/info-label";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 type ToolsData = Record<string, any>;
 
 interface Props {

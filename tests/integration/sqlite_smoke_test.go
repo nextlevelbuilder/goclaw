@@ -213,9 +213,10 @@ func TestSQLiteSmokeTest(t *testing.T) {
 
 	// --- VaultStore round-trip ---
 	t.Run("Vault", func(t *testing.T) {
+		aid := agentID.String()
 		doc := &store.VaultDocument{
 			TenantID:    tenantID.String(),
-			AgentID:     agentID.String(),
+			AgentID:     &aid,
 			Scope:       "personal",
 			Path:        "notes/meeting.md",
 			Title:       "Meeting Notes",
@@ -254,7 +255,7 @@ func TestSQLiteSmokeTest(t *testing.T) {
 		// Links
 		doc2 := &store.VaultDocument{
 			TenantID:    tenantID.String(),
-			AgentID:     agentID.String(),
+			AgentID:     &aid,
 			Scope:       "personal",
 			Path:        "notes/followup.md",
 			Title:       "Follow-up",

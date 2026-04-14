@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -134,6 +136,8 @@ func (h *AgentsHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/agents/{id}", h.authMiddleware(h.handleGet))
 	mux.HandleFunc("PUT /v1/agents/{id}", h.adminMiddleware(h.handleUpdate))
 	mux.HandleFunc("DELETE /v1/agents/{id}", h.adminMiddleware(h.handleDelete))
+	// Bulk operations (admin+)
+	mux.HandleFunc("POST /v1/agents/sync-workspace", h.adminMiddleware(h.handleSyncWorkspace))
 	// Sharing (admin+)
 	mux.HandleFunc("GET /v1/agents/{id}/shares", h.authMiddleware(h.handleListShares))
 	mux.HandleFunc("POST /v1/agents/{id}/shares", h.adminMiddleware(h.handleShare))
@@ -347,14 +351,13 @@ func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Only owner can update
+	// Tenant admins can update any agent in their tenant (adminMiddleware already
+	// verified RoleAdmin). System owners can update any agent across tenants.
+	// GetByID respects tenant scoping from context, so if the agent is returned
+	// it belongs to the caller's tenant.
 	ag, err := h.agents.GetByID(r.Context(), id)
 	if err != nil {
 		writeError(w, http.StatusNotFound, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "agent", id.String()))
-		return
-	}
-	if userID != "" && ag.OwnerID != userID && !h.isOwnerUser(userID) {
-		writeError(w, http.StatusForbidden, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgOwnerOnly, "update agent"))
 		return
 	}
 
@@ -367,6 +370,18 @@ func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	// Defense-in-depth against column injection via arbitrary JSON keys.
 	allowed := filterAllowedKeys(updates, agentAllowedFields)
 	allowed["restrict_to_workspace"] = true
+
+	// If agent_key is being changed, enforce the slug format. The router
+	// cache uses `tenantID:agentKey` as its canonical key and splits on the
+	// last colon for exact-segment invalidation — a colon inside agent_key
+	// would silently break invalidation. Slug regex already rejects colons
+	// and any other shell/path-unfriendly characters.
+	if newKey, ok := allowed["agent_key"].(string); ok && newKey != "" {
+		if !isValidSlug(newKey) {
+			writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidSlug, "agent_key"))
+			return
+		}
+	}
 
 	// Validate v3 flag values in other_config (must be boolean).
 	if oc, ok := allowed["other_config"]; ok && oc != nil {
@@ -414,8 +429,9 @@ func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.agents.Update(r.Context(), id, allowed); err != nil {
-		slog.Error("agents.update", "id", id, "error", err)
-		writeError(w, http.StatusInternalServerError, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToUpdate, "agent", "internal error"))
+		slog.Error("agents.update", "id", id, "user_id", userID,
+			"tenant_id", store.TenantIDFromContext(r.Context()), "error", err)
+		writeError(w, http.StatusInternalServerError, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToUpdate, "agent", err.Error()))
 		return
 	}
 
@@ -516,4 +532,63 @@ func (h *AgentsHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
 
 	emitAudit(h.msgBus, r, "agent.deleted", "agent", id.String())
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
+}
+
+// handleSyncWorkspace updates all agents to use the new workspace root.
+// POST /v1/agents/sync-workspace
+// Body: {"workspace": "E:\\project\\workspace"}
+// Requires admin role.
+func (h *AgentsHandler) handleSyncWorkspace(w http.ResponseWriter, r *http.Request) {
+	tenantID := store.TenantIDFromContext(r.Context())
+
+	var req struct {
+		Workspace string `json:"workspace"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, "invalid JSON body")
+		return
+	}
+	if req.Workspace == "" {
+		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, "workspace is required")
+		return
+	}
+	// Path sanity check: reject traversal attempts
+	if strings.Contains(req.Workspace, "..") {
+		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, "workspace path cannot contain '..'")
+		return
+	}
+
+	// List all agents (empty ownerID = all agents)
+	agents, err := h.agents.List(r.Context(), "")
+	if err != nil {
+		slog.Error("agents.sync_workspace: list failed", "error", err)
+		writeError(w, http.StatusInternalServerError, protocol.ErrInternal, "failed to list agents")
+		return
+	}
+
+	// Update each agent's workspace to use the new root
+	newWorkspace := config.ExpandHome(req.Workspace)
+	var updated int
+	for _, ag := range agents {
+		// Skip agents from other tenants
+		if ag.TenantID != tenantID {
+			continue
+		}
+		// Build new workspace path: {newWorkspace}/{agentKey}
+		newPath := filepath.Join(newWorkspace, ag.AgentKey)
+		if ag.Workspace == newPath {
+			continue // already using correct path
+		}
+		// Use Update with map[string]any
+		if err := h.agents.Update(r.Context(), ag.ID, map[string]any{"workspace": newPath}); err != nil {
+			slog.Warn("agents.sync_workspace: update failed", "agent", ag.AgentKey, "error", err)
+			continue
+		}
+		h.emitCacheInvalidate(bus.CacheKindAgent, ag.AgentKey)
+		updated++
+	}
+
+	slog.Info("agents.sync_workspace: completed", "updated", updated, "total", len(agents), "workspace", newWorkspace)
+	emitAudit(h.msgBus, r, "agents.workspace_synced", "updated", strconv.Itoa(updated))
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "updated": updated})
 }

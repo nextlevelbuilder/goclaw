@@ -20,8 +20,9 @@ type messageContext struct {
 	Content     string
 	ContentType string // "text", "post", "image", etc.
 	MentionedBot bool
-	RootID      string // thread root message ID
-	ParentID    string // parent message ID
+	RootID      string // reply-chain root (populated on ANY reply, incl. plain quote reply)
+	ParentID    string // direct parent in reply chain
+	ThreadID    string // set ONLY when message is inside an actual topic thread
 	Mentions    []mentionInfo
 }
 
@@ -57,6 +58,15 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 		return
 	}
 
+	// 2a. Slash commands in DMs are rejected early with a clear hint so
+	// they never reach the agent pipeline (otherwise users typing
+	// "/addwriter" in a DM would waste an LLM turn). The full writer
+	// command router is gated behind group policy below at step 5a.
+	if mc.ChatType != "group" && c.isWriterSlashCommand(mc) {
+		c.sendCommandReply(ctx, mc, "This command only works in group chats.")
+		return
+	}
+
 	// 3. Resolve sender name (cached)
 	senderName := c.resolveSenderName(ctx, mc.SenderID)
 
@@ -82,6 +92,13 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 	if mc.ChatType == "group" {
 		if !c.checkGroupPolicy(ctx, mc.SenderID, mc.ChatID) {
 			slog.Debug("feishu group message rejected by policy", "sender_id", mc.SenderID, "chat_id", mc.ChatID)
+			return
+		}
+
+		// 5a. Writer management slash commands run AFTER the group policy
+		// gate so commands cannot bypass allowlists or pairing. Commands
+		// short-circuit the agent pipeline to avoid consuming LLM tokens.
+		if c.maybeHandleWriterCommand(ctx, mc) {
 			return
 		}
 
@@ -129,7 +146,18 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 		content = "[empty message]"
 	}
 
-	// 7b. Fetch reply context + media if this is a reply to another message
+	// 7a. Lark doc auto-fetch: expand any docx URLs in the message body into
+	// inline context blocks so the agent can read linked docs without a tool
+	// call. Cached per channel for the TTL window. Missing permission / dead
+	// links fail soft with a marker string.
+	content = c.resolveLarkDocs(ctx, content)
+
+	// 7b. Fetch reply context + media if this is a reply to another message.
+	// We intentionally do NOT recurse into resolveLarkDocs for the parent
+	// message body — expanding doc URLs in older messages would bloat the
+	// prompt unpredictably (one quote reply could drag in multiple docs the
+	// user never intended to reference). Users must include the doc URL in
+	// their own new message to get auto-fetch behavior.
 	var replyMediaList []media.MediaInfo
 	if mc.ParentID != "" {
 		replyCtx, replyMedia := c.fetchReplyContext(ctx, mc.ParentID)
@@ -172,6 +200,22 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 		"display_name":  channels.SanitizeDisplayName(senderName),
 		"mentioned_bot": fmt.Sprintf("%t", mc.MentionedBot),
 		"platform":      channels.TypeFeishu,
+	}
+
+	// Thread routing: stamp the triggering message ID ONLY when the inbound
+	// message is inside an actual topic thread (thread_id present per Lark
+	// docs). We deliberately do NOT fire on mc.RootID — Lark populates root_id
+	// on every reply including plain quote replies outside any thread, and
+	// routing those through the reply endpoint would silently promote them to
+	// new threads. thread_id is the definitive signal.
+	//
+	// Outbound Send() reads this key and, when non-empty, routes to the Lark
+	// reply endpoint with reply_in_thread=true so the bot response lands
+	// inside the same thread. Absent on non-thread messages — preserves
+	// existing new-message endpoint behavior for DMs, plain groups, and quote
+	// replies.
+	if mc.ThreadID != "" {
+		metadata["feishu_reply_target_id"] = messageID
 	}
 
 	if sender != nil {

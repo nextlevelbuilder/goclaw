@@ -99,7 +99,7 @@ export function MCPUserCredentialsDialog({
       .then(setStatus)
       .catch((err) => console.error("[MCPUserCredentials] load credentials failed:", err))
       .finally(() => { setLoadingStatus(false); setInitialLoad(false); });
-  }, [open, server.id, onGetCredentials, canManageUsers, selectedUserId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, server.id, onGetCredentials, canManageUsers, selectedUserId]);  
 
   const handleSave = async () => {
     setSaving(true);

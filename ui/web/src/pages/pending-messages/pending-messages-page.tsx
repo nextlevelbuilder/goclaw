@@ -38,6 +38,10 @@ export function PendingMessagesPage() {
 
   useEffect(() => {
     loadGroups();
+    return () => {
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+      if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
+    };
   }, [loadGroups]);
 
   // Clear spinner as soon as the compacting group's has_summary becomes true

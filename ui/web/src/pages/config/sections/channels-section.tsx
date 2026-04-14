@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { MultiUserPicker } from "@/components/shared/multi-user-picker";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 type ChannelsData = Record<string, any>;
 
 const CHANNEL_META: Record<string, { label: string; secretEnv: string; secretField: string }> = {

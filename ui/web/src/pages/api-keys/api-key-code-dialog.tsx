@@ -37,7 +37,7 @@ function highlightLine(line: string, lang: Tab): React.ReactNode | string {
 
   // Simple token-based highlighting
   const parts: React.ReactNode[] = [];
-  let remaining = line;
+  const remaining = line;
   let key = 0;
 
   const kwPatterns = lang === "go"
@@ -67,7 +67,7 @@ function highlightLine(line: string, lang: Tab): React.ReactNode | string {
   // Remaining text after last string
   if (lastIndex < remaining.length) {
     const after = remaining.slice(lastIndex);
-    parts.push(<span key={key++}>{highlightKeywords(after, kwPatterns)}</span>);
+    parts.push(<span key={key}>{highlightKeywords(after, kwPatterns)}</span>);
   }
 
   if (parts.length === 0) return line;

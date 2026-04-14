@@ -106,6 +106,9 @@ func (d *gatewayDeps) runLifecycle(
 		slog.Info("tts config reloaded", "provider", newMgr.PrimaryProvider(), "auto", string(newMgr.AutoMode()))
 	})
 
+	// Note: vault enrichment provider is resolved per-tenant at runtime,
+	// no hot-reload handler needed here
+
 	// Log orphaned providers on agent deletion. Auto-delete is unsafe because
 	// providers can be referenced by heartbeats (FK), OAuth tokens, media chains.
 	d.msgBus.Subscribe("agent-deleted-provider-log", func(evt bus.Event) {

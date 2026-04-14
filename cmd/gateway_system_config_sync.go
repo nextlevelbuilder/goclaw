@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 
@@ -132,5 +133,13 @@ func seedConfigForContext(ctx context.Context, sc store.SystemConfigStore, cfg *
 		setInt("compaction.max_tokens", pc.MaxTokens)
 		set("compaction.provider", pc.Provider)
 		set("compaction.model", pc.Model)
+	}
+
+	// Allowed paths (tenant-scoped filesystem access beyond workspace)
+	// Stored as JSON array, loaded per-tenant at request time.
+	if len(cfg.Agents.Defaults.AllowedPaths) > 0 {
+		if b, err := json.Marshal(cfg.Agents.Defaults.AllowedPaths); err == nil {
+			set("allowed_paths", string(b))
+		}
 	}
 }

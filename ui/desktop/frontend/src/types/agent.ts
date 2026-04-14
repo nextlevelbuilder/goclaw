@@ -88,6 +88,15 @@ export interface AgentData {
   created_at?: string
   updated_at?: string
 
+  // Promoted fields (formerly in other_config, migration 000037 v3)
+  emoji?: string | null
+  agent_description?: string | null
+  thinking_level?: string | null
+  self_evolve?: boolean | null
+  skill_evolve?: boolean | null
+  skill_nudge_interval?: number | null
+  reasoning_config?: AgentReasoningConfig | null
+
   // Per-agent JSONB configs (null/undefined = use global defaults)
   memory_config?: MemoryConfig | null
   compaction_config?: CompactionConfig | null
@@ -108,6 +117,14 @@ export interface AgentInput {
   is_default?: boolean
   context_window?: number
   max_tool_iterations?: number
+  // Promoted fields
+  emoji?: string | null
+  agent_description?: string | null
+  self_evolve?: boolean
+  thinking_level?: string | null
+  reasoning_config?: AgentReasoningConfig | null
+  skill_evolve?: boolean | null
+  skill_nudge_interval?: number | null
   memory_config?: MemoryConfig | null
   other_config?: Record<string, unknown>
 }

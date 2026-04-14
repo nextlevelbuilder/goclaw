@@ -111,6 +111,7 @@ type AgentsConfig struct {
 // AgentDefaults are default settings for all agents.
 type AgentDefaults struct {
 	Workspace           string                `json:"workspace"`
+	AllowedPaths        []string              `json:"allowed_paths,omitempty"` // extra paths agents can access (cross-drive on Windows)
 	RestrictToWorkspace bool                  `json:"restrict_to_workspace"`
 	Provider            string                `json:"provider"`
 	Model               string                `json:"model"`

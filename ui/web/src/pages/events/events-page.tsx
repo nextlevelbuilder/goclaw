@@ -58,7 +58,7 @@ export function EventsPage() {
       if (!teamId) return t("global");
       return teamMap.get(teamId) ?? teamId.slice(0, 8);
     },
-    [teamMap],
+    [teamMap, t],
   );
 
   // Unique teams from events for filter dropdown
@@ -118,7 +118,7 @@ export function EventsPage() {
           e.event.startsWith("team.member."),
       );
     }
-    return userFilteredEvents.filter((e) => e.event.startsWith(categoryFilter));
+    return chatFilteredEvents.filter((e) => e.event.startsWith(categoryFilter));
   }, [chatFilteredEvents, categoryFilter]);
 
   // Auto-scroll to bottom when new events arrive

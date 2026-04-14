@@ -44,6 +44,13 @@ type Channel struct {
 	// recentOutbound suppresses short-lived webhook echoes of our own text replies.
 	recentOutbound sync.Map // conversationID + "\x00" + normalized content → time.Time
 
+	// firstInboxSent tracks which senders have already received the one-time first-inbox DM.
+	// In-memory only: resets on restart (acceptable — re-sending once is benign).
+	firstInboxSent sync.Map // senderID(string) → time.Time
+
+	// postFetcher fetches and caches page post content for comment context enrichment.
+	postFetcher *PostFetcher
+
 	stopCh  chan struct{}
 	stopCtx context.Context
 	stopFn  context.CancelFunc
@@ -66,17 +73,20 @@ func New(cfg pancakeInstanceConfig, creds pancakeCreds,
 	base := channels.NewBaseChannel(channels.TypePancake, msgBus, cfg.AllowFrom)
 	stopCtx, stopFn := context.WithCancel(context.Background())
 
+	apiClient := NewAPIClient(creds.APIKey, creds.PageAccessToken, cfg.PageID)
 	ch := &Channel{
 		BaseChannel:   base,
 		config:        cfg,
-		apiClient:     NewAPIClient(creds.APIKey, creds.PageAccessToken, cfg.PageID),
+		apiClient:     apiClient,
 		pageID:        cfg.PageID,
 		platform:      cfg.Platform,
 		webhookSecret: creds.WebhookSecret,
+		postFetcher:   NewPostFetcher(apiClient, cfg.PostContextCacheTTL),
 		stopCh:        make(chan struct{}),
 		stopCtx:       stopCtx,
 		stopFn:        stopFn,
 	}
+	ch.postFetcher.stopCtx = stopCtx
 
 	return ch, nil
 }
@@ -161,6 +171,7 @@ func (ch *Channel) Stop(_ context.Context) error {
 }
 
 // Send delivers an outbound message via Pancake API.
+// Routes to sendCommentReply or sendInboxReply based on metadata["pancake_mode"].
 func (ch *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 	slog.Debug("pancake: Send called",
 		"page_id", ch.pageID,
@@ -169,11 +180,21 @@ func (ch *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 		"platform", ch.platform,
 		"channel_name", ch.Name())
 
-	conversationID := msg.ChatID
-	if conversationID == "" {
+	if msg.ChatID == "" {
 		return fmt.Errorf("pancake: chat_id (conversation_id) is required for outbound message")
 	}
 
+	switch msg.Metadata["pancake_mode"] {
+	case "comment":
+		return ch.sendCommentReply(ctx, msg)
+	default: // "inbox" or unset — existing behavior
+		return ch.sendInboxReply(ctx, msg)
+	}
+}
+
+// sendInboxReply handles outbound inbox messages (existing logic extracted from Send).
+func (ch *Channel) sendInboxReply(ctx context.Context, msg bus.OutboundMessage) error {
+	conversationID := msg.ChatID
 	text := FormatOutbound(msg.Content, ch.platform)
 
 	// Handle media attachments.
@@ -183,7 +204,6 @@ func (ch *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 			"page_id", ch.pageID, "err", err)
 	}
 
-	// Pancake's official contract makes `message` and `content_ids` mutually exclusive.
 	// Deliver uploaded media first, then follow with text chunks if needed.
 	if len(attachmentIDs) > 0 {
 		if err := ch.apiClient.SendAttachmentMessage(ctx, conversationID, attachmentIDs); err != nil {
@@ -205,13 +225,62 @@ func (ch *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 	for _, part := range parts {
 		if err := ch.apiClient.SendMessage(ctx, conversationID, part); err != nil {
 			ch.handleAPIError(err)
-			// Remove pre-stored echo fingerprints for unsent parts so they
-			// don't suppress genuine customer messages that happen to match.
 			ch.forgetOutboundEcho(conversationID, part)
 			return err
 		}
 	}
 	return nil
+}
+
+// sendCommentReply replies to a comment and optionally sends a one-time first-inbox DM.
+func (ch *Channel) sendCommentReply(ctx context.Context, msg bus.OutboundMessage) error {
+	// Bound API calls: ReplyComment + PrivateReply can hang if Pancake is slow.
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	conversationID := msg.ChatID
+	text := FormatOutbound(msg.Content, ch.platform)
+
+	// Remember echo before sending (same pattern as inbox).
+	parts := splitMessage(text, ch.maxMessageLength())
+	for _, part := range parts {
+		ch.rememberOutboundEcho(conversationID, part)
+	}
+
+	for _, part := range parts {
+		if err := ch.apiClient.ReplyComment(ctx, conversationID, part); err != nil {
+			ch.handleAPIError(err)
+			ch.forgetOutboundEcho(conversationID, part)
+			return err
+		}
+	}
+
+	// First inbox: one-time DM after comment reply (best-effort).
+	if ch.config.Features.FirstInbox {
+		senderID := msg.Metadata["sender_id"]
+		if senderID != "" {
+			ch.sendFirstInbox(ctx, senderID, conversationID)
+		}
+	}
+
+	return nil
+}
+
+// sendFirstInbox sends a one-time DM to a commenter (best-effort, fire-and-forget).
+// If the send fails, the firstInboxSent entry is deleted to allow retry on the next comment.
+func (ch *Channel) sendFirstInbox(ctx context.Context, senderID, conversationID string) {
+	if _, loaded := ch.firstInboxSent.LoadOrStore(senderID, time.Now()); loaded {
+		return // already sent to this sender
+	}
+	message := ch.config.FirstInboxMessage
+	if message == "" {
+		message = "Thanks for your comment! We can assist you further via private message."
+	}
+	if err := ch.apiClient.PrivateReply(ctx, conversationID, message); err != nil {
+		slog.Warn("pancake: first inbox send failed",
+			"sender_id", senderID, "err", err)
+		ch.firstInboxSent.Delete(senderID) // allow retry on next comment
+	}
 }
 
 // BlockReplyEnabled returns the per-channel block_reply override (nil = inherit gateway default).

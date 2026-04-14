@@ -4,7 +4,11 @@ package integration
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"testing"
+
+	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
@@ -179,5 +183,144 @@ func TestStoreTenantConfig_TenantIsolation(t *testing.T) {
 	}
 	if len(disabledA) != 1 {
 		t.Errorf("tenant A sees %d disabled tools, want 1", len(disabledA))
+	}
+}
+
+// ---- Phase 2: tenant settings round-trip + column preservation ----
+
+func TestStoreTenantConfig_SettingsRoundTrip(t *testing.T) {
+	db := testDB(t)
+	tenantID, _ := seedTenantAgent(t, db)
+	s := pg.NewPGBuiltinToolTenantConfigStore(db)
+	pg.InitSqlx(db)
+	ctx := context.Background()
+
+	db.Exec(`INSERT INTO builtin_tools (name, display_name) VALUES ('web_search', 'web_search') ON CONFLICT DO NOTHING`)
+	t.Cleanup(func() {
+		db.Exec("DELETE FROM builtin_tool_tenant_configs WHERE tenant_id = $1", tenantID)
+	})
+
+	raw := json.RawMessage(`{"exa":{"enabled":true,"max_results":15}}`)
+	if err := s.SetSettings(ctx, tenantID, "web_search", raw); err != nil {
+		t.Fatalf("SetSettings: %v", err)
+	}
+	got, err := s.GetSettings(ctx, tenantID, "web_search")
+	if err != nil {
+		t.Fatalf("GetSettings: %v", err)
+	}
+	// PG jsonb may normalize whitespace — decode both sides for equality.
+	var want, have map[string]any
+	if err := json.Unmarshal(raw, &want); err != nil {
+		t.Fatalf("unmarshal want: %v", err)
+	}
+	if err := json.Unmarshal(got, &have); err != nil {
+		t.Fatalf("unmarshal got: %v", err)
+	}
+	if len(have) != len(want) || have["exa"] == nil {
+		t.Errorf("GetSettings round-trip mismatch: got=%v want=%v", have, want)
+	}
+
+	// Missing row → (nil, nil)
+	gotMissing, err := s.GetSettings(ctx, tenantID, "unknown_tool")
+	if err != nil {
+		t.Fatalf("GetSettings missing: %v", err)
+	}
+	if gotMissing != nil {
+		t.Errorf("missing row GetSettings = %s, want nil", gotMissing)
+	}
+}
+
+func TestStoreTenantConfig_SettingsAndEnabledCoexist(t *testing.T) {
+	db := testDB(t)
+	tenantID, _ := seedTenantAgent(t, db)
+	s := pg.NewPGBuiltinToolTenantConfigStore(db)
+	pg.InitSqlx(db)
+	ctx := context.Background()
+
+	db.Exec(`INSERT INTO builtin_tools (name, display_name) VALUES ('web_search', 'web_search') ON CONFLICT DO NOTHING`)
+	t.Cleanup(func() {
+		db.Exec("DELETE FROM builtin_tool_tenant_configs WHERE tenant_id = $1", tenantID)
+	})
+
+	// Set enabled first.
+	if err := s.Set(ctx, tenantID, "web_search", true); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	// SetSettings must preserve enabled.
+	raw := json.RawMessage(`{"brave":{"max_results":20}}`)
+	if err := s.SetSettings(ctx, tenantID, "web_search", raw); err != nil {
+		t.Fatalf("SetSettings: %v", err)
+	}
+	all, err := s.ListAll(ctx, tenantID)
+	if err != nil {
+		t.Fatalf("ListAll: %v", err)
+	}
+	if !all["web_search"] {
+		t.Errorf("enabled flag lost after SetSettings: %#v", all)
+	}
+
+	// Set(enabled=false) must preserve settings.
+	if err := s.Set(ctx, tenantID, "web_search", false); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	got, err := s.GetSettings(ctx, tenantID, "web_search")
+	if err != nil {
+		t.Fatalf("GetSettings: %v", err)
+	}
+	if len(got) == 0 {
+		t.Errorf("settings lost after Set(enabled)")
+	}
+}
+
+func TestStoreTenantConfig_SettingsCrossTenantIsolation(t *testing.T) {
+	db := testDB(t)
+	tenantA, _ := seedTenantAgent(t, db)
+	tenantB, _ := seedTenantAgent(t, db)
+	s := pg.NewPGBuiltinToolTenantConfigStore(db)
+	pg.InitSqlx(db)
+	ctx := context.Background()
+
+	db.Exec(`INSERT INTO builtin_tools (name, display_name) VALUES ('web_search', 'web_search') ON CONFLICT DO NOTHING`)
+	t.Cleanup(func() {
+		db.Exec("DELETE FROM builtin_tool_tenant_configs WHERE tenant_id IN ($1, $2)", tenantA, tenantB)
+	})
+
+	if err := s.SetSettings(ctx, tenantA, "web_search", json.RawMessage(`{"secret":"A"}`)); err != nil {
+		t.Fatalf("A SetSettings: %v", err)
+	}
+	gotB, err := s.GetSettings(ctx, tenantB, "web_search")
+	if err != nil {
+		t.Fatalf("B GetSettings: %v", err)
+	}
+	if gotB != nil {
+		t.Errorf("tenant B leaked tenant A settings: %s", gotB)
+	}
+
+	allB, err := s.ListAllSettings(ctx, tenantB)
+	if err != nil {
+		t.Fatalf("B ListAllSettings: %v", err)
+	}
+	if len(allB) != 0 {
+		t.Errorf("tenant B ListAllSettings = %v, want empty", allB)
+	}
+}
+
+func TestStoreTenantConfig_NilTenant_ReturnsErr(t *testing.T) {
+	db := testDB(t)
+	s := pg.NewPGBuiltinToolTenantConfigStore(db)
+	pg.InitSqlx(db)
+	ctx := context.Background()
+
+	_, err := s.GetSettings(ctx, uuid.Nil, "web_search")
+	if !errors.Is(err, store.ErrInvalidTenant) {
+		t.Errorf("GetSettings nil tenant = %v, want ErrInvalidTenant", err)
+	}
+	err = s.SetSettings(ctx, uuid.Nil, "web_search", json.RawMessage(`{}`))
+	if !errors.Is(err, store.ErrInvalidTenant) {
+		t.Errorf("SetSettings nil tenant = %v, want ErrInvalidTenant", err)
+	}
+	_, err = s.ListAllSettings(ctx, uuid.Nil)
+	if !errors.Is(err, store.ErrInvalidTenant) {
+		t.Errorf("ListAllSettings nil tenant = %v, want ErrInvalidTenant", err)
 	}
 }

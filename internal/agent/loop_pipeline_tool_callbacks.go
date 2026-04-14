@@ -63,9 +63,22 @@ type toolRawResult struct {
 // makeExecuteToolRaw wraps tool I/O only (parallel-safe, no state mutation).
 // Returns tool message + toolRawResult (with timing + spanID) as opaque raw data for ProcessToolResult.
 func (l *Loop) makeExecuteToolRaw(req *RunRequest) func(ctx context.Context, tc providers.ToolCall) (providers.Message, any, error) {
+	emitRun := makeToolEmitRun(l, req)
 	return func(ctx context.Context, tc providers.ToolCall) (providers.Message, any, error) {
 		registryName := l.resolveToolCallName(tc.Name)
 		argsJSON, _ := json.Marshal(tc.Arguments)
+		slog.Info("tool call", "agent", l.id, "tool", tc.Name, "args_len", len(argsJSON))
+
+		// Emit tool.call event at I/O start — parity with sequential path (makeExecuteToolCall).
+		// Without this, parallel tool execution (2+ concurrent tools) never notifies UI of
+		// tool invocation, so `tool.result` arrives with no matching `tool.call` to update.
+		// Bus.Broadcast is RWMutex-guarded; safe to call from parallel goroutines.
+		emitRun(AgentEvent{
+			Type:    protocol.AgentEventToolCall,
+			AgentID: l.id,
+			RunID:   req.RunID,
+			Payload: map[string]any{"name": tc.Name, "id": tc.ID, "arguments": tc.Arguments},
+		})
 
 		// Emit tool span start (goroutine-safe: channel send only).
 		start := time.Now().UTC()

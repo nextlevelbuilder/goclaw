@@ -14,17 +14,14 @@ export function useAgents() {
     try {
       const result = await agentService.listItems()
 
-      const mapped: Agent[] = (result.agents ?? []).map((a) => {
-        const otherCfg = a.other_config ?? {}
-        return {
-          id: a.id,
-          key: a.agent_key,
-          name: a.display_name || a.agent_key,
-          model: a.model ?? 'unknown',
-          status: 'online' as const,
-          emoji: typeof otherCfg.emoji === 'string' ? otherCfg.emoji : undefined,
-        }
-      })
+      const mapped: Agent[] = (result.agents ?? []).map((a) => ({
+        id: a.id,
+        key: a.agent_key,
+        name: a.display_name || a.agent_key,
+        model: a.model ?? 'unknown',
+        status: 'online' as const,
+        emoji: a.emoji ?? (typeof a.other_config?.emoji === 'string' ? a.other_config.emoji : undefined),
+      }))
 
       setAgents(mapped)
       return mapped

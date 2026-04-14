@@ -46,6 +46,20 @@ export function AgentsPage() {
   const ownerIDs = useMemo(() => [...new Set(agents.map((a) => a.owner_id).filter(Boolean))], [agents]);
   const { resolve } = useContactResolver(ownerIDs);
 
+  const filtered = useMemo(() => agents.filter((a) => {
+    if (ownerFilter && a.owner_id !== ownerFilter) return false;
+    if (typeFilter && a.agent_type !== typeFilter) return false;
+    const q = search.toLowerCase();
+    return (
+      a.agent_key.toLowerCase().includes(q) ||
+      (a.display_name ?? "").toLowerCase().includes(q)
+    );
+  }), [agents, ownerFilter, typeFilter, search]);
+
+  const { pageItems, pagination, setPage, setPageSize, resetPage } = usePagination(filtered);
+
+  useEffect(() => { resetPage(); }, [search, ownerFilter, typeFilter, resetPage]);
+
   const handleResummon = async (agent: { id: string; display_name?: string; agent_key: string }) => {
     try {
       await resummonAgent(agent.id);
@@ -64,20 +78,6 @@ export function AgentsPage() {
       />
     );
   }
-
-  const filtered = agents.filter((a) => {
-    if (ownerFilter && a.owner_id !== ownerFilter) return false;
-    if (typeFilter && a.agent_type !== typeFilter) return false;
-    const q = search.toLowerCase();
-    return (
-      a.agent_key.toLowerCase().includes(q) ||
-      (a.display_name ?? "").toLowerCase().includes(q)
-    );
-  });
-
-  const { pageItems, pagination, setPage, setPageSize, resetPage } = usePagination(filtered);
-
-  useEffect(() => { resetPage(); }, [search, ownerFilter, typeFilter, resetPage]);
 
   const resolveOwnerName = (id: string) => {
     const contact = resolve(id);

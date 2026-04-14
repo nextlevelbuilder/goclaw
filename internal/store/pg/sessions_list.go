@@ -16,7 +16,14 @@ import (
 // buildSessionFilter builds a dynamic WHERE clause from SessionListOpts.
 // Returns the WHERE string (with leading " WHERE ") and the positional args.
 // The tableAlias is prepended to column names (e.g. "s" → "s.session_key").
-func buildSessionFilter(opts store.SessionListOpts, tableAlias string) (string, []any) {
+//
+// Tenant isolation precedence:
+//  1. opts.TenantID (if set) wins — admin tooling override path.
+//  2. Else if ctx is NOT cross-tenant, fall back to store.TenantIDFromContext(ctx).
+//     This matches the canonical pattern in List() above and prevents
+//     silent cross-tenant reads from callers that rely on ctx scoping.
+//  3. Else (cross-tenant ctx, no opts override) no tenant filter.
+func buildSessionFilter(ctx context.Context, opts store.SessionListOpts, tableAlias string) (string, []any) {
 	prefix := ""
 	if tableAlias != "" {
 		prefix = tableAlias + "."
@@ -41,9 +48,15 @@ func buildSessionFilter(opts store.SessionListOpts, tableAlias string) (string, 
 		args = append(args, opts.UserID)
 		idx++
 	}
-	if opts.TenantID != uuid.Nil {
+
+	// Resolve tenant filter — opts override beats ctx.
+	tenantID := opts.TenantID
+	if tenantID == uuid.Nil && !store.IsCrossTenant(ctx) {
+		tenantID = store.TenantIDFromContext(ctx)
+	}
+	if tenantID != uuid.Nil {
 		conditions = append(conditions, fmt.Sprintf("%stenant_id = $%d", prefix, idx))
-		args = append(args, opts.TenantID)
+		args = append(args, tenantID)
 		idx++
 	}
 	_ = idx // consumed
@@ -102,7 +115,7 @@ func (s *PGSessionStore) ListPaged(ctx context.Context, opts store.SessionListOp
 	}
 	offset := max(opts.Offset, 0)
 
-	where, whereArgs := buildSessionFilter(opts, "")
+	where, whereArgs := buildSessionFilter(ctx, opts, "")
 
 	// Count total
 	var total int
@@ -137,7 +150,7 @@ func (s *PGSessionStore) ListPagedRich(ctx context.Context, opts store.SessionLi
 	}
 	offset := max(opts.Offset, 0)
 
-	where, whereArgs := buildSessionFilter(opts, "s")
+	where, whereArgs := buildSessionFilter(ctx, opts, "s")
 
 	// Count total
 	var total int

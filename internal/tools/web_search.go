@@ -15,8 +15,24 @@ const (
 	maxSearchCount       = 10
 	searchTimeoutSeconds = 30
 	braveSearchEndpoint  = "https://api.search.brave.com/res/v1/web/search"
+	exaSearchEndpoint    = "https://api.exa.ai/search"
+	tavilySearchEndpoint = "https://api.tavily.com/search"
 	webSearchUserAgent   = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
+
+const (
+	searchProviderExa        = "exa"
+	searchProviderTavily     = "tavily"
+	searchProviderBrave      = "brave"
+	searchProviderDuckDuckGo = "duckduckgo"
+)
+
+var defaultSearchProviderOrder = []string{
+	searchProviderExa,
+	searchProviderTavily,
+	searchProviderBrave,
+	searchProviderDuckDuckGo,
+}
 
 // SearchProvider abstracts a web search backend.
 type SearchProvider interface {
@@ -72,26 +88,8 @@ type WebSearchTool struct {
 	cache     *webCache
 }
 
-// WebSearchConfig holds configuration for the web search tool.
-type WebSearchConfig struct {
-	BraveAPIKey     string
-	BraveEnabled    bool
-	BraveMaxResults int
-	DDGEnabled      bool
-	DDGMaxResults   int
-	CacheTTL        time.Duration
-}
-
 func NewWebSearchTool(cfg WebSearchConfig) *WebSearchTool {
-	var providers []SearchProvider
-
-	// Priority: Brave > DuckDuckGo (matching TS)
-	if cfg.BraveEnabled && cfg.BraveAPIKey != "" {
-		providers = append(providers, newBraveSearchProvider(cfg.BraveAPIKey))
-	}
-	if cfg.DDGEnabled {
-		providers = append(providers, newDuckDuckGoSearchProvider())
-	}
+	providers := buildSearchProviders(cfg)
 
 	if len(providers) == 0 {
 		return nil
@@ -182,9 +180,14 @@ func (t *WebSearchTool) Execute(ctx context.Context, args map[string]any) *Resul
 		return NewResult(cached)
 	}
 
+	// Resolve per-request provider chain (tenant may reorder / disable providers
+	// via builtin_tool_tenant_configs.settings → ctx → ResolveWebSearchChain).
+	// Defaults preserved when no override — backward-compat.
+	chain := ResolveWebSearchChain(ctx, t.providers)
+
 	// Try providers in order (first success wins)
 	var lastErr error
-	for _, provider := range t.providers {
+	for _, provider := range chain {
 		results, err := provider.Search(ctx, params)
 		if err != nil {
 			slog.Warn("web_search provider failed", "provider", provider.Name(), "error", err)
@@ -241,9 +244,3 @@ func formatSearchResults(query string, results []searchResult, provider string) 
 	return sb.String()
 }
 
-func truncateStr(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	return s[:max] + "..."
-}

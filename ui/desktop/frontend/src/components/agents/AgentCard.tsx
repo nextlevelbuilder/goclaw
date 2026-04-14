@@ -14,9 +14,8 @@ export function AgentCard({ agent, onEdit, onDelete, onResummon }: AgentCardProp
   const { t } = useTranslation('agents')
   const displayName = agent.display_name
     || (UUID_RE.test(agent.agent_key) ? 'Unnamed Agent' : agent.agent_key)
-  const otherCfg = (agent.other_config ?? {}) as Record<string, unknown>
-  const selfEvolve = agent.agent_type === 'predefined' && Boolean(otherCfg.self_evolve)
-  const emoji = typeof otherCfg.emoji === 'string' ? otherCfg.emoji : ''
+  const selfEvolve = agent.agent_type === 'predefined' && Boolean(agent.self_evolve ?? agent.other_config?.self_evolve)
+  const emoji = agent.emoji ?? (typeof agent.other_config?.emoji === 'string' ? agent.other_config.emoji : '')
   const showSubtitle = agent.display_name && !UUID_RE.test(agent.agent_key)
   const isSummoning = agent.status === 'summoning'
   const isFailed = agent.status === 'summon_failed'
@@ -77,9 +76,9 @@ export function AgentCard({ agent, onEdit, onDelete, onResummon }: AgentCardProp
       ) : null}
 
       {/* Expertise/frontmatter */}
-      {(agent.frontmatter || otherCfg.description) ? (
+      {(agent.frontmatter || agent.agent_description) ? (
         <div className="line-clamp-3 text-xs text-text-muted/70">
-          {String(agent.frontmatter || otherCfg.description || '')}
+          {String(agent.frontmatter || agent.agent_description || '')}
         </div>
       ) : null}
 

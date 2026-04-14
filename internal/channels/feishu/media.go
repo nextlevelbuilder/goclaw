@@ -34,22 +34,25 @@ func (c *Channel) uploadFile(ctx context.Context, data io.Reader, fileName, file
 
 // --- Send media ---
 
-// sendImage sends an image message using an image_key.
-func (c *Channel) sendImage(ctx context.Context, chatID, receiveIDType, imageKey string) error {
+// sendImage sends an image message using an image_key. When replyTargetID is
+// non-empty, the image is posted through the reply endpoint so it lands inside
+// the same thread as the triggering message. Falls back to the new-message
+// endpoint on reply errors (see deliverMessage).
+func (c *Channel) sendImage(ctx context.Context, chatID, receiveIDType, imageKey, replyTargetID string) error {
 	contentBytes, err := json.Marshal(map[string]string{"image_key": imageKey})
 	if err != nil {
 		return fmt.Errorf("marshal image content: %w", err)
 	}
-	_, err = c.client.SendMessage(ctx, receiveIDType, chatID, "image", string(contentBytes))
-	if err != nil {
+	if err := c.deliverMessage(ctx, chatID, receiveIDType, replyTargetID, "image", string(contentBytes)); err != nil {
 		return fmt.Errorf("feishu send image: %w", err)
 	}
 	return nil
 }
 
-// sendFile sends a file message using a file_key.
-// msgType: "file" for documents, "media" for audio/video.
-func (c *Channel) sendFile(ctx context.Context, chatID, receiveIDType, fileKey, msgType string) error {
+// sendFile sends a file message using a file_key. When replyTargetID is
+// non-empty, the file is posted through the reply endpoint to stay inside the
+// thread. msgType: "file" for documents, "media" for audio/video.
+func (c *Channel) sendFile(ctx context.Context, chatID, receiveIDType, fileKey, msgType, replyTargetID string) error {
 	if msgType == "" {
 		msgType = "file"
 	}
@@ -57,8 +60,7 @@ func (c *Channel) sendFile(ctx context.Context, chatID, receiveIDType, fileKey, 
 	if err != nil {
 		return fmt.Errorf("marshal file content: %w", err)
 	}
-	_, err = c.client.SendMessage(ctx, receiveIDType, chatID, msgType, string(contentBytes))
-	if err != nil {
+	if err := c.deliverMessage(ctx, chatID, receiveIDType, replyTargetID, msgType, string(contentBytes)); err != nil {
 		return fmt.Errorf("feishu send file: %w", err)
 	}
 	return nil
@@ -68,7 +70,9 @@ func (c *Channel) sendFile(ctx context.Context, chatID, receiveIDType, fileKey, 
 
 // sendMediaAttachment uploads and sends a media attachment routed by MIME type.
 // Images → image message, audio/video → media message (inline playable), others → file message.
-func (c *Channel) sendMediaAttachment(ctx context.Context, chatID, receiveIDType string, att bus.MediaAttachment) error {
+// When replyTargetID is non-empty, the message is posted through the Lark
+// reply endpoint so it lands inside the same thread as the triggering message.
+func (c *Channel) sendMediaAttachment(ctx context.Context, chatID, receiveIDType string, att bus.MediaAttachment, replyTargetID string) error {
 	filePath := att.URL
 	if filePath == "" {
 		return nil
@@ -88,7 +92,7 @@ func (c *Channel) sendMediaAttachment(ctx context.Context, chatID, receiveIDType
 		if err != nil {
 			return fmt.Errorf("upload image: %w", err)
 		}
-		return c.sendImage(ctx, chatID, receiveIDType, imageKey)
+		return c.sendImage(ctx, chatID, receiveIDType, imageKey, replyTargetID)
 
 	case strings.HasPrefix(ct, "video/"), strings.HasPrefix(ct, "audio/"):
 		// Lark "media" message type plays audio/video inline.
@@ -98,7 +102,7 @@ func (c *Channel) sendMediaAttachment(ctx context.Context, chatID, receiveIDType
 		if err != nil {
 			return fmt.Errorf("upload media: %w", err)
 		}
-		return c.sendFile(ctx, chatID, receiveIDType, fileKey, "media")
+		return c.sendFile(ctx, chatID, receiveIDType, fileKey, "media", replyTargetID)
 
 	default:
 		fileName := filepath.Base(filePath)
@@ -107,7 +111,7 @@ func (c *Channel) sendMediaAttachment(ctx context.Context, chatID, receiveIDType
 		if err != nil {
 			return fmt.Errorf("upload file: %w", err)
 		}
-		return c.sendFile(ctx, chatID, receiveIDType, fileKey, "file")
+		return c.sendFile(ctx, chatID, receiveIDType, fileKey, "file", replyTargetID)
 	}
 }
 

@@ -110,7 +110,15 @@ func makeToolHandler(reg *tools.Registry, toolName string, msgBus *bus.MessageBu
 		// Emit running tool span if trace context is available (injected by bridge middleware).
 		spanID := emitBridgeToolSpanStart(ctx, start, toolName, args)
 
-		result := reg.Execute(ctx, toolName, args)
+		// Pass routing context (channel, chatID, peerKind, sessionKey) so native
+		// tools can access local_key, session_key etc. for forum topic routing.
+		result := reg.ExecuteWithContext(ctx, toolName, args,
+			tools.ToolChannelFromCtx(ctx),
+			tools.ToolChatIDFromCtx(ctx),
+			tools.ToolPeerKindFromCtx(ctx),
+			tools.ToolSessionKeyFromCtx(ctx),
+			nil,
+		)
 
 		// Finalize the tool span with results.
 		emitBridgeToolSpanEnd(ctx, spanID, start, toolName, result)

@@ -21,7 +21,7 @@ func newVaultStore(db *sql.DB) *pg.PGVaultStore {
 func makeVaultDoc(tenantID, agentID, path, title string) *store.VaultDocument {
 	return &store.VaultDocument{
 		TenantID:    tenantID,
-		AgentID:     agentID,
+		AgentID:     &agentID,
 		Scope:       "personal",
 		Path:        path,
 		Title:       title,

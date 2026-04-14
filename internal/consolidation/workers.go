@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/nextlevelbuilder/goclaw/internal/bgalert"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -21,9 +22,10 @@ type ConsolidationDeps struct {
 	KGStore       store.KnowledgeGraphStore
 	SessionStore  store.SessionCoreStore // for reading session messages during summarization
 	EventBus      eventbus.DomainEventBus
-	Provider      providers.Provider // for LLM summarization
-	Model         string
+	SystemConfigs store.SystemConfigStore // per-tenant provider config
+	Registry      *providers.Registry     // provider resolution
 	Extractor     EntityExtractor
+	AlertDeps     bgalert.AlertDeps // for reporting non-retryable LLM errors
 	// AgentStore is optional: when present, the dreaming worker reads
 	// per-agent overrides from MemoryConfig.Dreaming. If nil, the worker
 	// uses its built-in defaults for every agent.
@@ -34,16 +36,18 @@ type ConsolidationDeps struct {
 // Returns a cleanup function that unsubscribes all handlers.
 func Register(deps ConsolidationDeps) func() {
 	episodic := &episodicWorker{
-		store:    deps.EpisodicStore,
-		sessions: deps.SessionStore,
-		provider: deps.Provider,
-		model:    deps.Model,
-		eventBus: deps.EventBus,
+		store:         deps.EpisodicStore,
+		sessions:      deps.SessionStore,
+		systemConfigs: deps.SystemConfigs,
+		registry:      deps.Registry,
+		eventBus:      deps.EventBus,
+		alertDeps:     deps.AlertDeps,
 	}
 	semantic := &semanticWorker{
 		kgStore:   deps.KGStore,
 		extractor: deps.Extractor,
 		eventBus:  deps.EventBus,
+		alertDeps: deps.AlertDeps,
 	}
 	dedup := &dedupWorker{
 		kgStore: deps.KGStore,
@@ -52,8 +56,9 @@ func Register(deps ConsolidationDeps) func() {
 	dreaming := &dreamingWorker{
 		episodicStore: deps.EpisodicStore,
 		memoryStore:   deps.MemoryStore,
-		provider:      deps.Provider,
-		model:         deps.Model,
+		systemConfigs: deps.SystemConfigs,
+		registry:      deps.Registry,
+		alertDeps:     deps.AlertDeps,
 		threshold:     dreamingDefaultThreshold,
 		debounce:      dreamingDefaultDebounce,
 		resolveConfig: newAgentStoreResolver(deps.AgentStore),

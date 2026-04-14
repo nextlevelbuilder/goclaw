@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -79,6 +80,49 @@ func (t *WebFetchTool) UpdatePolicy(policy string, allowed, blocked []string) {
 	slog.Info("web_fetch policy updated", "policy", policy, "allowed", len(allowed), "blocked", len(blocked))
 }
 
+// webFetchPolicy holds the resolved domain policy for a single request.
+type webFetchPolicy struct {
+	mode           string   // "allow_all" | "allowlist"
+	allowedDomains []string
+	blockedDomains []string
+}
+
+// webFetchPolicyOverride is the tenant settings shape for web_fetch
+// (stored in builtin_tool_tenant_configs.settings).
+type webFetchPolicyOverride struct {
+	Policy         string   `json:"policy,omitempty"`
+	AllowedDomains []string `json:"allowed_domains,omitempty"`
+	BlockedDomains []string `json:"blocked_domains,omitempty"`
+}
+
+// resolvePolicy returns the effective domain policy for this request.
+// Checks tenant override via BuiltinToolSettingsFromCtx first; falls back
+// to the tool's default policy when no override is present.
+func (t *WebFetchTool) resolvePolicy(ctx context.Context) webFetchPolicy {
+	if settings := BuiltinToolSettingsFromCtx(ctx); settings != nil {
+		if raw, ok := settings["web_fetch"]; ok && len(raw) > 0 {
+			var override webFetchPolicyOverride
+			if err := json.Unmarshal(raw, &override); err != nil {
+				slog.Warn("web_fetch: failed to parse tenant override, using defaults", "error", err)
+			} else if override.Policy != "" {
+				return webFetchPolicy{
+					mode:           override.Policy,
+					allowedDomains: override.AllowedDomains,
+					blockedDomains: override.BlockedDomains,
+				}
+			}
+		}
+	}
+	// Fall back to tool defaults
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return webFetchPolicy{
+		mode:           t.policy,
+		allowedDomains: t.allowedDomains,
+		blockedDomains: t.blockedDomains,
+	}
+}
+
 // matchDomainList checks if a hostname matches any pattern in the list.
 // Supports exact match ("github.com") and wildcard prefix ("*.example.com").
 func matchDomainList(hostname string, patterns []string) bool {
@@ -97,22 +141,6 @@ func matchDomainList(hostname string, patterns []string) bool {
 		}
 	}
 	return false
-}
-
-// isDomainAllowed checks if a hostname matches the allowlist.
-func (t *WebFetchTool) isDomainAllowed(hostname string) bool {
-	t.mu.RLock()
-	domains := t.allowedDomains
-	t.mu.RUnlock()
-	return matchDomainList(hostname, domains)
-}
-
-// isDomainBlocked checks if a hostname matches the blocklist.
-func (t *WebFetchTool) isDomainBlocked(hostname string) bool {
-	t.mu.RLock()
-	domains := t.blockedDomains
-	t.mu.RUnlock()
-	return matchDomainList(hostname, domains)
 }
 
 func (t *WebFetchTool) Name() string { return "web_fetch" }
@@ -167,18 +195,17 @@ func (t *WebFetchTool) Execute(ctx context.Context, args map[string]any) *Result
 		return ErrorResult(fmt.Sprintf("SSRF protection: %v", err))
 	}
 
+	// Resolve domain policy (tenant override via ctx, or tool defaults)
+	pol := t.resolvePolicy(ctx)
 	hostname := parsed.Hostname()
 
 	// Domain blocklist check (always enforced regardless of policy)
-	if t.isDomainBlocked(hostname) {
+	if matchDomainList(hostname, pol.blockedDomains) {
 		return ErrorResult(fmt.Sprintf("domain %q is blocked by policy", hostname))
 	}
 
 	// Domain allowlist check
-	t.mu.RLock()
-	policy := t.policy
-	t.mu.RUnlock()
-	if policy == "allowlist" && !t.isDomainAllowed(hostname) {
+	if pol.mode == "allowlist" && !matchDomainList(hostname, pol.allowedDomains) {
 		return ErrorResult(fmt.Sprintf("domain %q is not in the allowed domains list", hostname))
 	}
 
@@ -212,7 +239,7 @@ func (t *WebFetchTool) Execute(ctx context.Context, args map[string]any) *Result
 	}
 
 	// Fetch
-	result, err := t.doFetch(ctx, rawURL, extractMode, maxChars, policy)
+	result, err := t.doFetch(ctx, rawURL, extractMode, maxChars, pol)
 	if err != nil {
 		errMsg := truncateStr(err.Error(), defaultErrorMaxChars)
 		return ErrorResult(fmt.Sprintf("fetch failed: %s", errMsg))
@@ -223,7 +250,7 @@ func (t *WebFetchTool) Execute(ctx context.Context, args map[string]any) *Result
 	return NewResult(wrapped)
 }
 
-func (t *WebFetchTool) doFetch(ctx context.Context, rawURL, extractMode string, maxChars int, policy string) (string, error) {
+func (t *WebFetchTool) doFetch(ctx context.Context, rawURL, extractMode string, maxChars int, pol webFetchPolicy) (string, error) {
 	// For markdown mode, use the extractor chain (Defuddle → InProcess waterfall)
 	// resolved from builtin_tools settings stored in context.
 	// InProcessExtractor delegates to fetchRawContent (same path as doDirectFetch),
@@ -240,7 +267,7 @@ func (t *WebFetchTool) doFetch(ctx context.Context, rawURL, extractMode string, 
 	}
 
 	// Text mode or no chain available — use direct HTTP fetch.
-	return t.doDirectFetch(ctx, rawURL, extractMode, maxChars, policy)
+	return t.doDirectFetch(ctx, rawURL, extractMode, maxChars, pol)
 }
 
 // fetchRawResult holds the output from fetchRawContent.
@@ -254,7 +281,7 @@ type fetchRawResult struct {
 // fetchRawContent performs HTTP GET with full security checks (SSRF, domain policy on
 // redirects) and routes content by type. Returns raw extracted content without formatting.
 // Used by both doDirectFetch (text mode) and InProcessExtractor (chain fallback).
-func (t *WebFetchTool) fetchRawContent(ctx context.Context, rawURL, extractMode string, maxChars int, policy string) (fetchRawResult, error) {
+func (t *WebFetchTool) fetchRawContent(ctx context.Context, rawURL, extractMode string, maxChars int, pol webFetchPolicy) (fetchRawResult, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", rawURL, nil)
 	if err != nil {
 		return fetchRawResult{}, fmt.Errorf("create request: %w", err)
@@ -280,10 +307,10 @@ func (t *WebFetchTool) fetchRawContent(ctx context.Context, rawURL, extractMode 
 				return fmt.Errorf("redirect SSRF protection: %w", err)
 			}
 			redirectHost := req.URL.Hostname()
-			if t.isDomainBlocked(redirectHost) {
+			if matchDomainList(redirectHost, pol.blockedDomains) {
 				return fmt.Errorf("redirect to %q blocked: domain is in blocklist", redirectHost)
 			}
-			if policy == "allowlist" && !t.isDomainAllowed(redirectHost) {
+			if pol.mode == "allowlist" && !matchDomainList(redirectHost, pol.allowedDomains) {
 				return fmt.Errorf("redirect to %q blocked: domain not in allowlist", redirectHost)
 			}
 			return nil
@@ -348,8 +375,8 @@ func (t *WebFetchTool) fetchRawContent(ctx context.Context, rawURL, extractMode 
 
 // doDirectFetch wraps fetchRawContent with full HTTP metadata formatting.
 // Used for text mode extraction and as ultimate fallback.
-func (t *WebFetchTool) doDirectFetch(ctx context.Context, rawURL, extractMode string, maxChars int, policy string) (string, error) {
-	raw, err := t.fetchRawContent(ctx, rawURL, extractMode, maxChars, policy)
+func (t *WebFetchTool) doDirectFetch(ctx context.Context, rawURL, extractMode string, maxChars int, pol webFetchPolicy) (string, error) {
+	raw, err := t.fetchRawContent(ctx, rawURL, extractMode, maxChars, pol)
 	if err != nil {
 		return "", err
 	}

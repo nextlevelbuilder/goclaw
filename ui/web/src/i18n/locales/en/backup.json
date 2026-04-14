@@ -18,8 +18,7 @@
       "freeDisk": "Free disk space",
       "warnings": "Warnings",
       "refresh": "Refresh",
-      "pgDumpMissing": "pg_dump not available",
-      "pgDumpHint": "Install postgresql-client to enable database backups.",
+      "pgDumpMissing": "pg_dump not available or incompatible",
       "goToPackages": "Go to Packages"
     },
     "options": {

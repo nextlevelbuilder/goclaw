@@ -67,9 +67,19 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 	if req.SenderName != "" {
 		ctx = store.WithSenderName(ctx, req.SenderName)
 	}
-	// Inject global builtin tool settings for media tools (provider chain)
+	// Inject global + per-agent builtin tool settings (tier 1+3).
+	// Media/provider-chain tools read the merged view via BuiltinToolSettingsFromCtx.
 	if l.builtinToolSettings != nil {
 		ctx = tools.WithBuiltinToolSettings(ctx, l.builtinToolSettings)
+	}
+	// Inject tenant-layer tool settings (tier 2). Merge with per-agent happens
+	// at read time — per-agent still wins at tool-name level.
+	if l.tenantToolSettings != nil {
+		ctx = tools.WithTenantToolSettings(ctx, l.tenantToolSettings)
+	}
+	// Inject tenant-specific allowed paths for filesystem tools.
+	if len(l.tenantAllowedPaths) > 0 {
+		ctx = tools.WithTenantAllowedPaths(ctx, l.tenantAllowedPaths)
 	}
 	// Inject channel type into context for tools (e.g. message tool needs it for Zalo group routing)
 	if req.ChannelType != "" {
@@ -114,6 +124,9 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 	if req.TeamTaskID != "" {
 		ctx = tools.WithTeamTaskID(ctx, req.TeamTaskID)
 	}
+	if req.DelegationID != "" {
+		ctx = tools.WithDelegationID(ctx, req.DelegationID)
+	}
 
 	// --- Per-user setup: file seeding + workspace resolution ---
 	// Uses userSetups sync.Map to track both concerns atomically per user.
@@ -142,6 +155,9 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 		}
 		if l.shouldShareKnowledgeGraph() {
 			ctx = store.WithSharedKG(ctx)
+		}
+		if l.shouldShareSessions() {
+			ctx = store.WithSharedSessions(ctx)
 		}
 		if err := os.MkdirAll(effectiveWorkspace, 0755); err != nil {
 			slog.Warn("failed to create user workspace directory", "workspace", effectiveWorkspace, "user", req.UserID, "error", err)
@@ -210,16 +226,19 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 		}
 		resolver := workspace.NewResolver()
 		wc, wsErr := resolver.Resolve(ctx, workspace.ResolveParams{
-			AgentID:    l.agentUUID.String(),
+			// Filesystem path segment must use agent_key, not UUID — matches
+			// the v2 path in loop_pipeline_callbacks.go and the session_key
+			// anchor. See docs/agent-identity-conventions.md.
+			AgentID:    l.id,
 			AgentType:  l.agentType,
 			UserID:     req.UserID,
 			ChatID:     req.ChatID,
 			TenantID:   store.TenantIDFromContext(ctx).String(),
 			TenantSlug: store.TenantSlugFromContext(ctx),
 			PeerKind:   req.PeerKind,
-			TeamID:    teamIDPtr,
+			TeamID:     teamIDPtr,
 			TeamConfig: teamWSConfig,
-			BaseDir:   l.dataDir,
+			BaseDir:    l.dataDir,
 		})
 		if wsErr != nil {
 			slog.Warn("workspace resolution failed", "err", wsErr)
@@ -303,6 +322,7 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 		SelfEvolve:          l.selfEvolve,
 		SharedMemory:        store.IsSharedMemory(ctx),
 		SharedKG:            store.IsSharedKG(ctx),
+		SharedSessions:      store.IsSharedSessions(ctx),
 		RestrictToWorkspace: l.restrictToWs != nil && *l.restrictToWs,
 		BuiltinToolSettings: l.builtinToolSettings,
 		ChannelType:         req.ChannelType,
@@ -321,6 +341,7 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 		TeamTaskID:          req.TeamTaskID,
 		LeaderAgentID:       tools.LeaderAgentIDFromCtx(ctx),
 		AgentToolKey:        l.id,
+		TenantAllowedPaths:  l.tenantAllowedPaths,
 	}
 	ctx = store.WithRunContext(ctx, rc)
 

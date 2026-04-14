@@ -108,6 +108,9 @@ type SkillManageStore interface {
 	GetSkillOwnerIDBySlug(ctx context.Context, slug string) (string, bool)
 	GetNextVersion(ctx context.Context, slug string) int
 	GetNextVersionLocked(ctx context.Context, slug string) (int, func() error, error)
+	// GetSkillHashBySlug returns the content hash and version of the latest non-deleted skill
+	// version for the given slug (tenant-scoped). Returns ok=false if no skill exists.
+	GetSkillHashBySlug(ctx context.Context, slug string) (hash string, version int, ok bool)
 	IsSystemSkill(slug string) bool
 	// System skill management
 	ListAllSkills(ctx context.Context) []SkillInfo

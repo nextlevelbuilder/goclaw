@@ -41,6 +41,25 @@ func (h *VaultHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 	agentIDStr := r.FormValue("agent_id")
 	teamIDStr := r.FormValue("team_id")
 
+	// Boundary UUID validation. validateTeamMembership below short-circuits
+	// on owner role + lite edition (nil teamAccess), which would leave a
+	// downstream parseUUIDOrNil(*doc.TeamID) call as a silent-nil trap.
+	// Validate at the HTTP boundary so bad form input is rejected before any
+	// store call or event publish.
+	// See docs/agent-identity-conventions.md.
+	if agentIDStr != "" {
+		if _, err := uuid.Parse(agentIDStr); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid agent_id: must be a UUID"})
+			return
+		}
+	}
+	if teamIDStr != "" {
+		if _, err := uuid.Parse(teamIDStr); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid team_id: must be a UUID"})
+			return
+		}
+	}
+
 	// Validate team membership if provided.
 	if teamIDStr != "" {
 		if !h.validateTeamMembership(r.Context(), w, teamIDStr) {
@@ -110,6 +129,7 @@ func (h *VaultHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 
 	var results []uploadResult
 	var created int
+	var pendingEvents []eventbus.DomainEvent
 
 	for _, fh := range files {
 		// Sanitize filename — basename only, no path traversal.
@@ -189,13 +209,13 @@ func (h *VaultHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		// Publish enrichment event (same pattern as rescan.go).
+		// Collect enrichment events — published after Start() to avoid race.
 		if h.eventBus != nil {
 			agentForEvent := ""
 			if agentIDStr != "" {
 				agentForEvent = agentIDStr
 			}
-			h.eventBus.Publish(eventbus.DomainEvent{
+			pendingEvents = append(pendingEvents, eventbus.DomainEvent{
 				ID:        uuid.Must(uuid.NewV7()).String(),
 				Type:      eventbus.EventVaultDocUpserted,
 				SourceID:  doc.ID + ":" + hash,
@@ -217,9 +237,12 @@ func (h *VaultHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 		created++
 	}
 
-	// Signal enrichment progress for WS subscribers.
+	// Start progress BEFORE publishing events to avoid race with workers.
 	if h.enrichProgress != nil && created > 0 {
 		h.enrichProgress.Start(created, tenantID)
+	}
+	for _, event := range pendingEvents {
+		h.eventBus.Publish(event)
 	}
 
 	slog.Info("vault.upload", "tenant", tenantIDStr, "uploaded", created, "errors", len(files)-created)

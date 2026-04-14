@@ -15,8 +15,14 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 		maxDepth = 3
 	}
 
-	aid := mustParseUUID(agentID)
-	startID := mustParseUUID(startEntityID)
+	aid, err := parseUUID(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("kg traverse: agent: %w", err)
+	}
+	startID, err := parseUUID(startEntityID)
+	if err != nil {
+		return nil, fmt.Errorf("kg traverse: start: %w", err)
+	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

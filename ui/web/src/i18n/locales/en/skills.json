@@ -46,7 +46,13 @@
     "validCount": "{{valid}} of {{total}} valid",
     "uploadCount": "Upload ({{count}})",
     "successCount": "{{success}} of {{total}} uploaded successfully",
-    "remove": "Remove file"
+    "remove": "Remove file",
+    "tooManySkills": "ZIP contains too many skills (max 50)",
+    "multiDetected": "{{count}} skills detected",
+    "skillUnchanged": "Content unchanged — skipped",
+    "slugConflict": "Slug conflicts with a system skill",
+    "unchanged": "Unchanged",
+    "new": "New"
   },
   "edit": {
     "title": "Edit Skill",

@@ -187,9 +187,32 @@ func (s *SQLiteSkillStore) GetSkillFilePath(ctx context.Context, id uuid.UUID) (
 	return filePath, slug, version, isSystem, err == nil
 }
 
+// GetSkillHashBySlug returns the file_hash and version of the latest non-deleted skill
+// version for the given slug, scoped to the current tenant.
+// Returns ok=false when no matching row exists.
+func (s *SQLiteSkillStore) GetSkillHashBySlug(ctx context.Context, slug string) (string, int, bool) {
+	tid := store.TenantIDFromContext(ctx)
+	if tid == uuid.Nil {
+		tid = store.MasterTenantID
+	}
+	var hash string
+	var version int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COALESCE(file_hash, ''), version FROM skills
+		 WHERE slug = ? AND tenant_id = ? AND status != 'deleted'
+		 ORDER BY version DESC LIMIT 1`,
+		slug, tid,
+	).Scan(&hash, &version)
+	return hash, version, err == nil
+}
+
 func (s *SQLiteSkillStore) GetNextVersion(ctx context.Context, slug string) int {
+	tid := store.TenantIDFromContext(ctx)
+	if tid == uuid.Nil {
+		tid = store.MasterTenantID
+	}
 	var maxVersion int
-	s.db.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM skills WHERE slug = ?", slug).Scan(&maxVersion)
+	s.db.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM skills WHERE slug = ? AND tenant_id = ?", slug, tid).Scan(&maxVersion)
 	return maxVersion + 1
 }
 
