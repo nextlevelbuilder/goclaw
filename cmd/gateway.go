@@ -146,6 +146,8 @@ func runGateway() {
 		defer traceCollector.Stop()
 		// OTel OTLP export: compiled via build tags. Build with 'go build -tags otel' to enable.
 		initOTelExporter(context.Background(), cfg, traceCollector)
+		// LangSmith export: compiled via build tags. Build with 'go build -tags langsmith' to enable.
+		initLangSmithExporter(context.Background(), cfg, traceCollector)
 	}
 	if snapshotWorker != nil {
 		defer snapshotWorker.Stop()
@@ -272,6 +274,7 @@ func runGateway() {
 	server.SetPolicyEngine(permPE)
 	server.SetPairingService(pgStores.Pairing)
 	server.SetMessageBus(msgBus)
+	server.SetAnthropicAuthHandler(httpapi.NewAnthropicAuthHandler(cfg.Gateway.Token, pgStores.Providers, providerRegistry, msgBus))
 	server.SetOAuthHandler(httpapi.NewOAuthHandler(pgStores.Providers, pgStores.ConfigSecrets, providerRegistry, msgBus))
 
 	// contextFileInterceptor is created inside wireExtras.

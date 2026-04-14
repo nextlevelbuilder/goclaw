@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"os/exec"
 	"path/filepath"
@@ -113,6 +114,7 @@ func (h *ProvidersHandler) handleVerifyProvider(w http.ResponseWriter, r *http.R
 		},
 	})
 	if err != nil {
+		slog.Warn("providers.verify", "provider", p.Name, "model", req.Model, "error", err.Error())
 		writeJSON(w, http.StatusOK, map[string]any{"valid": false, "error": friendlyVerifyError(err)})
 		return
 	}
@@ -193,18 +195,34 @@ func friendlyVerifyError(err error) string {
 
 	// Try to extract "message" field from embedded JSON
 	if idx := strings.Index(msg, `"message"`); idx >= 0 {
-		// Find the value after "message":
 		rest := msg[idx:]
-		// Look for :"<value>"
 		start := strings.Index(rest, `:`)
 		if start >= 0 {
 			rest = strings.TrimLeft(rest[start+1:], " ")
 			if len(rest) > 0 && rest[0] == '"' {
 				rest = rest[1:]
 				if before, _, ok := strings.Cut(rest, `"`); ok {
-					extracted := before
-					if extracted != "" {
-						return extracted
+					// Skip overly generic messages like "Error" — fall through to type extraction
+					if before != "" && !strings.EqualFold(before, "error") {
+						return before
+					}
+				}
+			}
+		}
+	}
+
+	// Try to extract "type" from nested error object (e.g. "authentication_error")
+	if idx := strings.Index(msg, `"error"`); idx >= 0 {
+		rest := msg[idx:]
+		if typeIdx := strings.Index(rest, `"type"`); typeIdx >= 0 {
+			typeRest := rest[typeIdx:]
+			if start := strings.Index(typeRest, `:`); start >= 0 {
+				typeRest = strings.TrimLeft(typeRest[start+1:], " ")
+				if len(typeRest) > 0 && typeRest[0] == '"' {
+					typeRest = typeRest[1:]
+					if before, _, ok := strings.Cut(typeRest, `"`); ok && before != "" && before != "error" {
+						// Convert snake_case to readable: "authentication_error" → "authentication error"
+						return strings.ReplaceAll(before, "_", " ")
 					}
 				}
 			}

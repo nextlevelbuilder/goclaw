@@ -28,7 +28,7 @@ type CodexProvider struct {
 	routingDefaults *CodexRoutingDefaults
 }
 
-// NewCodexProvider creates a provider for the OpenAI Responses API with OAuth token.
+// NewCodexProvider creates a provider for the OpenAI Responses API with OAuth Token.
 func NewCodexProvider(name string, tokenSource TokenSource, apiBase, defaultModel string) *CodexProvider {
 	if apiBase == "" {
 		apiBase = "https://chatgpt.com/backend-api"

@@ -78,6 +78,16 @@ export function ChatPage() {
     prevIsBusyRef.current = isBusy;
   }, [isBusy, refreshSessions]);
 
+  // Auto-select the most recent session when none is active
+  useEffect(() => {
+    if (!sessionKey && !sessionsLoading && sessions.length > 0) {
+      const { agentId: sessionAgent } = parseSessionKey(sessions[0]!.key);
+      if (sessionAgent === agentId) {
+        navigate(`/chat/${encodeURIComponent(sessions[0]!.key)}`, { replace: true });
+      }
+    }
+  }, [sessionKey, sessionsLoading, sessions, navigate, agentId]);
+
   const isOwn = !sessionKey || isOwnSession(sessionKey, userId);
 
   const handleMessageAdded = useCallback(

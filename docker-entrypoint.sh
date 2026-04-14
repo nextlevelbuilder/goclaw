@@ -3,6 +3,8 @@ set -e
 
 # Set up writable runtime directories for agent-installed packages.
 # Rootfs is read-only; /app/data is a writable Docker volume.
+# Docker named volumes initialize as root:root — fix ownership so goclaw
+# user can write to /app/data (requires CAP_DAC_OVERRIDE + CAP_CHOWN).
 RUNTIME_DIR="/app/data/.runtime"
 # Non-fatal: on first start with a fresh volume the directory may not be
 # writable yet (volume initialisation race on some Docker runtimes).

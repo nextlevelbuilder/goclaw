@@ -20,6 +20,14 @@ export function useChatSessions(agentId: string) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Reset sessions immediately when agent changes (before effects run)
+  const [sessionsAgentId, setSessionsAgentId] = useState(agentId);
+  if (agentId !== sessionsAgentId) {
+    setSessions([]);
+    setLoading(true);
+    setSessionsAgentId(agentId);
+  }
+
   const loadSessions = useCallback(async () => {
     if (!connected) return;
     setLoading(true);

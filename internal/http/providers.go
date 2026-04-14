@@ -145,6 +145,12 @@ func maskAPIKey(p *store.LLMProviderData) {
 	}
 }
 
+// registryNameForProvider returns the in-memory registry name for a provider.
+// Each provider registers under its DB name via WithAnthropicName / provider.Name().
+func registryNameForProvider(p *store.LLMProviderData) string {
+	return p.Name
+}
+
 // registerInMemory adds (or replaces) a provider in the in-memory registry
 // so it's immediately usable for verify/chat without a gateway restart.
 func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
@@ -190,13 +196,14 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 	switch p.ProviderType {
 	case store.ProviderChatGPTOAuth:
 		ts := oauth.NewDBTokenSource(h.store, h.secretStore, p.Name).WithTenantID(p.TenantID)
-		codex := providers.NewCodexProvider(p.Name, ts, apiBase, "")
-		if oauthSettings := store.ParseChatGPTOAuthProviderSettings(p.Settings); oauthSettings != nil {
-			codex.WithRoutingDefaults(oauthSettings.CodexPool.Strategy, oauthSettings.CodexPool.ExtraProviderNames)
+		prov := providers.NewCodexProvider(p.Name, ts, apiBase, "")
+		if ps := store.ParseChatGPTOAuthProviderSettings(p.Settings); ps != nil && ps.CodexPool != nil {
+			prov.WithRoutingDefaults(ps.CodexPool.Strategy, ps.CodexPool.ExtraProviderNames)
 		}
-		h.providerReg.RegisterForTenant(p.TenantID, codex)
-	case store.ProviderAnthropicNative:
+		h.providerReg.RegisterForTenant(p.TenantID, prov)
+	case store.ProviderAnthropicNative, store.ProviderAnthropicOAuth:
 		h.providerReg.RegisterForTenant(p.TenantID, providers.NewAnthropicProvider(p.APIKey,
+			providers.WithAnthropicName(p.Name),
 			providers.WithAnthropicBaseURL(apiBase)))
 	case store.ProviderDashScope:
 		h.providerReg.RegisterForTenant(p.TenantID, providers.NewDashScopeProvider(p.Name, p.APIKey, apiBase, ""))

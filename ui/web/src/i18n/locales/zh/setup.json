@@ -32,6 +32,8 @@
     "displayNamePlaceholder": "主 Codex 账户",
     "apiKey": "API 密钥 *",
     "apiKeyHint": "您的Provider密钥，服务端加密存储，不会在 API 响应中暴露。",
+    "apiKeyHintOAuth": "在终端运行 'claude setup-token' 获取 OAuth 令牌。您的 Provider 机密 OAuth 令牌，服务端加密存储，不会在 API 响应中暴露。",
+    "setupToken": "设置令牌",
     "apiBase": "API 基础 URL",
     "apiBaseHint": "API 请求的端点 URL，根据Provider类型自动填充，仅在使用自定义代理时覆盖。",
     "creating": "创建中...",

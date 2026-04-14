@@ -125,6 +125,11 @@ func (c *Config) applyEnvOverrides() {
 	envStr("GOCLAW_SLACK_APP_TOKEN", &c.Channels.Slack.AppToken)
 	envStr("GOCLAW_SLACK_USER_TOKEN", &c.Channels.Slack.UserToken)
 
+	// Channel reaction levels (off, minimal, full)
+	envStr("GOCLAW_TELEGRAM_REACTION_LEVEL", &c.Channels.Telegram.ReactionLevel)
+	envStr("GOCLAW_SLACK_REACTION_LEVEL", &c.Channels.Slack.ReactionLevel)
+	envStr("GOCLAW_FEISHU_REACTION_LEVEL", &c.Channels.Feishu.ReactionLevel)
+
 	// TTS secrets
 	envStr("GOCLAW_TTS_OPENAI_API_KEY", &c.Tts.OpenAI.APIKey)
 	envStr("GOCLAW_TTS_ELEVENLABS_API_KEY", &c.Tts.ElevenLabs.APIKey)
@@ -200,6 +205,11 @@ func (c *Config) applyEnvOverrides() {
 	if v := os.Getenv("GOCLAW_TELEMETRY_INSECURE"); v != "" {
 		c.Telemetry.Insecure = v == "true" || v == "1"
 	}
+
+	// LangSmith (uses standard LangSmith env var names)
+	envStr("LANGSMITH_API_KEY", &c.LangSmith.APIKey)
+	envStr("LANGSMITH_PROJECT", &c.LangSmith.Project)
+	envStr("LANGSMITH_ENDPOINT", &c.LangSmith.APIUrl)
 
 	// Owner IDs from env (comma-separated, whitespace-trimmed)
 	if v := os.Getenv("GOCLAW_OWNER_IDS"); v != "" {

@@ -4,10 +4,9 @@ package oauth
 import (
 	"context"
 	"crypto/rand"
-	"errors"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -15,10 +14,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os/exec"
 	"sync"
-	"runtime"
-	"time"
 )
 
 const (
@@ -29,12 +25,7 @@ const (
 	OpenAIRedirectURI = "http://localhost:1455/auth/callback"
 
 	callbackPort = "1455"
-
-	tokenHTTPTimeout = 30 * time.Second
 )
-
-// httpClient is used for token exchange/refresh requests with a timeout.
-var httpClient = &http.Client{Timeout: tokenHTTPTimeout}
 
 // OpenAITokenResponse is the response from the OpenAI token endpoint.
 type OpenAITokenResponse struct {
@@ -44,18 +35,6 @@ type OpenAITokenResponse struct {
 	TokenType    string `json:"token_type"`
 	Scope        string `json:"scope"`
 	IDToken      string `json:"id_token,omitempty"`
-}
-
-// generatePKCE generates a PKCE code verifier and S256 challenge.
-func generatePKCE() (verifier, challenge string, err error) {
-	buf := make([]byte, 64)
-	if _, err := rand.Read(buf); err != nil {
-		return "", "", fmt.Errorf("generate random bytes: %w", err)
-	}
-	verifier = base64.RawURLEncoding.EncodeToString(buf)
-	h := sha256.Sum256([]byte(verifier))
-	challenge = base64.RawURLEncoding.EncodeToString(h[:])
-	return verifier, challenge, nil
 }
 
 // PendingLogin represents an in-progress OAuth flow.
@@ -269,24 +248,3 @@ func RefreshOpenAIToken(refreshToken string) (*OpenAITokenResponse, error) {
 	return &tokenResp, nil
 }
 
-// openBrowser tries to open a URL in the user's default browser.
-func openBrowser(url string) {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", url)
-	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
-	default:
-		// Try common Linux openers
-		for _, opener := range []string{"xdg-open", "sensible-browser", "x-www-browser"} {
-			if path, err := exec.LookPath(opener); err == nil {
-				cmd = exec.Command(path, url)
-				break
-			}
-		}
-	}
-	if cmd != nil {
-		_ = cmd.Start()
-	}
-}

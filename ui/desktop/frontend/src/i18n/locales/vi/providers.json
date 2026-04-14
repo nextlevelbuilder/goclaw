@@ -51,8 +51,12 @@
     "saving": "Đang lưu...",
     "creating": "Đang tạo...",
     "alreadyAdded": "(đã thêm)",
-    "nameFixed": "Tên",
     "configure": "Cấu hình kết nối provider LLM.",
+    "setupToken": "Setup Token",
+    "setupTokenHint": "Chạy 'claude setup-token' trong terminal của bạn và dán vào đây.",
+    "setupTokenHintTooltip": "Chạy 'claude setup-token' trong terminal để lấy OAuth token. Đây là OAuth token bí mật của provider. Được mã hóa ở phía máy chủ và không bao giờ lộ trong các phản hồi API.",
+    "setupTokenInvalidPrefix": "Token phải bắt đầu bằng sk-",
+    "setupTokenTooShort": "Token quá ngắn",
     "lowercaseHint": "Chữ thường, số, dấu gạch ngang"
   },
   "delete": {

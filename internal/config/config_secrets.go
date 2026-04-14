@@ -66,6 +66,9 @@ func (c *Config) MaskedCopy() *Config {
 	// Mask Tailscale auth key
 	maskNonEmpty(&cp.Tailscale.AuthKey)
 
+	// Mask LangSmith API key
+	maskNonEmpty(&cp.LangSmith.APIKey)
+
 	return cp
 }
 
@@ -117,6 +120,9 @@ func (c *Config) StripSecrets() {
 
 	// Tailscale auth key
 	c.Tailscale.AuthKey = ""
+
+	// LangSmith API key
+	c.LangSmith.APIKey = ""
 }
 
 // StripMaskedSecrets strips only fields that still contain the mask value "***".
@@ -174,6 +180,9 @@ func (c *Config) StripMaskedSecrets() {
 
 	// Tailscale auth key
 	stripIfMasked(&c.Tailscale.AuthKey)
+
+	// LangSmith API key
+	stripIfMasked(&c.LangSmith.APIKey)
 }
 
 // ApplyDBSecrets overlays secrets from the config_secrets table onto the config.

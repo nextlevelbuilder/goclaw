@@ -21,6 +21,11 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   if (message.isNotification) return null;
   if (message.isBlockReply) return <BlockReplyBubble message={message} />;
 
+  // Hide internal system nudges injected as user messages (e.g. onboarding, task reminders)
+  if (isUser && message.content?.startsWith("[System]")) {
+    return null;
+  }
+
   const isAssistant = message.role === "assistant";
   const hasThinking = isAssistant && !!message.thinking;
   const hasToolDetails = isAssistant && message.toolDetails && message.toolDetails.length > 0;

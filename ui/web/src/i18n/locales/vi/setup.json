@@ -32,6 +32,8 @@
     "displayNamePlaceholder": "Tài khoản Codex chính",
     "apiKey": "API Key *",
     "apiKeyHint": "Khóa bí mật của provider. Được mã hóa phía máy chủ và không bao giờ lộ ra trong phản hồi API.",
+    "apiKeyHintOAuth": "Chạy 'claude setup-token' trong terminal để lấy OAuth token. Token OAuth bí mật của provider. Được mã hóa phía máy chủ và không bao giờ lộ ra trong phản hồi API.",
+    "setupToken": "Setup Token",
     "apiBase": "API Base URL",
     "apiBaseHint": "URL endpoint cho các yêu cầu API. Tự động điền theo loại provider. Chỉ ghi đè nếu dùng proxy tùy chỉnh.",
     "creating": "Đang tạo...",

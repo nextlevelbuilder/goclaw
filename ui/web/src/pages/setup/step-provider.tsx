@@ -47,6 +47,7 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
   const isCLI = providerType === "claude_cli";
   // Local Ollama uses no API key — the server accepts any non-empty Bearer value internally
   const isOllama = providerType === "ollama";
+  const isAnthropicOAuth = providerType === "anthropic_oauth";
 
   const handleTypeChange = (value: string) => {
     setProviderType(value);
@@ -199,15 +200,20 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
             <>
               <div className="space-y-2">
                 <Label className="inline-flex items-center gap-1.5">
-                  {t("provider.apiKey")}
-                  <InfoTip text={t("provider.apiKeyHint")} />
+                  {isAnthropicOAuth ? t("provider.setupToken", "Setup Token") : t("provider.apiKey")}
+                  <InfoTip text={isAnthropicOAuth ? t("provider.setupTokenHintTooltip") : t("provider.apiKeyHint")} />
                 </Label>
                 <Input
                   type="password"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="sk-..."
+                  placeholder={isAnthropicOAuth ? "sk-..." : "sk-..."}
                 />
+                {isAnthropicOAuth && (
+                  <p className="text-xs text-muted-foreground">
+                    {t("provider.setupTokenHint", "Run 'claude setup-token' in your terminal and paste it here.")}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">

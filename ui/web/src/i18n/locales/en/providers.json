@@ -17,6 +17,7 @@
   },
   "apiKey": {
     "oauthToken": "OAuth Token",
+    "expires": "Expires: {{date}}",
     "notSet": "Not set"
   },
   "card": {
@@ -94,6 +95,11 @@
     "oauthAliasHint": "Lowercase alias used in routing and pools.",
     "oauthDisplayNamePlaceholder": "Primary Codex account",
     "oauthDisplayNameHint": "Optional label shown in the dashboard.",
+    "setupToken": "Setup Token",
+    "setupTokenHint": "Run 'claude setup-token' in your terminal and paste it here.",
+    "setupTokenHintTooltip": "Run 'claude setup-token' in your terminal to get OAuth token. Your provider's secret OAuth token. Encrypted server-side and never exposed in API responses.",
+    "setupTokenInvalidPrefix": "Token must start with sk-",
+    "setupTokenTooShort": "Token is too short",
     "lowercaseHint": "Lowercase, numbers, hyphens"
   },
   "delete": {
@@ -113,6 +119,7 @@
     "minimax_native": "MiniMax",
     "cohere": "Cohere",
     "perplexity": "Perplexity",
+    "anthropic_oauth": "Anthropic (OAuth Token)",
     "chatgpt_oauth": "ChatGPT Subscription (OAuth)",
     "yescale": "YesScale",
     "acp": "ACP"

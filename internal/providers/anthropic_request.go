@@ -175,6 +175,27 @@ func (p *AnthropicProvider) buildRequestBody(model string, req ChatRequest, stre
 		}
 	}
 
+	// OAuth setup tokens require the Claude Code system prompt for all requests.
+	if IsAnthropicSetupToken(p.apiKey) {
+		// this is required for the oauth setup token to work
+		const oauthSystem = "You are Claude Code, Anthropic's official CLI for Claude."
+		found := false
+		for _, block := range systemBlocks {
+			if text, ok := block["text"].(string); ok && strings.Contains(text, oauthSystem) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			systemBlocks = append([]map[string]any{{"type": "text", "text": oauthSystem}}, systemBlocks...)
+		}
+	}
+
+	// Add cache_control breakpoint to the last system block (caches system prompt prefix).
+	if len(systemBlocks) > 0 {
+		systemBlocks[len(systemBlocks)-1]["cache_control"] = map[string]any{"type": "ephemeral"}
+	}
+
 	body := map[string]any{
 		"model":      model,
 		"max_tokens": 4096,

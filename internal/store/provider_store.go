@@ -28,9 +28,10 @@ const (
 	ProviderYesScale        = "yescale"
 	ProviderZai             = "zai"
 	ProviderZaiCoding       = "zai_coding"
-	ProviderOllama          = "ollama"       // local or self-hosted Ollama (no API key)
-	ProviderOllamaCloud     = "ollama_cloud" // Ollama Cloud (Bearer token required)
-	ProviderACP             = "acp"          // ACP (Agent Client Protocol) agent subprocess
+	ProviderOllama          = "ollama"          // local or self-hosted Ollama (no API key)
+	ProviderAnthropicOAuth  = "anthropic_oauth" // Anthropic OAuth setup token (sk-)
+	ProviderOllamaCloud     = "ollama_cloud"    // Ollama Cloud (Bearer token required)
+	ProviderACP             = "acp"             // ACP (Agent Client Protocol) agent subprocess
 	ProviderNovita          = "novita"          // Novita AI (OpenAI-compatible endpoint)
 	ProviderBytePlus        = "byteplus"        // BytePlus ModelArk (Seed 2.0 models)
 	ProviderBytePlusCoding  = "byteplus_coding" // BytePlus ModelArk Coding Plan
@@ -68,6 +69,7 @@ var ValidProviderTypes = map[string]bool{
 	ProviderZaiCoding:       true,
 	ProviderOllama:          true,
 	ProviderOllamaCloud:     true,
+	ProviderAnthropicOAuth:  true,
 	ProviderACP:             true,
 	ProviderNovita:          true,
 	ProviderBytePlus:        true,

@@ -17,6 +17,7 @@ func authCmd() *cobra.Command {
 	}
 	cmd.AddCommand(authStatusCmd())
 	cmd.AddCommand(authLogoutCmd())
+	cmd.AddCommand(authAnthropicCmd())
 	return cmd
 }
 
@@ -50,6 +51,7 @@ func authStatusCmd() *cobra.Command {
 				fmt.Printf("No ChatGPT OAuth tokens found for alias '%s'.\n", provider)
 				fmt.Println("Use the web UI to authenticate this ChatGPT OAuth account.")
 			}
+
 			return nil
 		},
 	}

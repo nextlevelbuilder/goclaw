@@ -177,4 +177,7 @@ func runOnboard() {
 	fmt.Println("     → Agent creation")
 	fmt.Println("     → Channel setup (optional)")
 	fmt.Println()
+	fmt.Println("  Tip: Use 'goclaw auth anthropic' to authenticate with an")
+	fmt.Println("  Anthropic setup token (from 'claude setup-token').")
+	fmt.Println()
 }

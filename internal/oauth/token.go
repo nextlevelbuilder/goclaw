@@ -315,10 +315,10 @@ func (ts *DBTokenSource) Token() (string, error) {
 		if err := ts.refresh(ctx); err != nil {
 			// If refresh fails but we still have a token, return it (might still work)
 			if ts.cachedToken != "" {
-				slog.Warn("oauth token refresh failed, using existing token", "error", err)
+				slog.Warn("OAuth Token refresh failed, using existing token", "error", err)
 				return ts.cachedToken, nil
 			}
-			return "", fmt.Errorf("refresh oauth token: %w", err)
+			return "", fmt.Errorf("refresh OAuth Token: %w", err)
 		}
 	}
 
@@ -369,7 +369,7 @@ func (ts *DBTokenSource) refresh(ctx context.Context) error {
 	return nil
 }
 
-// SaveOAuthResult persists OAuth tokens after a successful exchange.
+// SaveOAuthResult persists OAuth Tokens after a successful exchange.
 // Creates or updates the provider in llm_providers and stores refresh token in config_secrets.
 // Returns the provider ID.
 func (ts *DBTokenSource) SaveOAuthResult(ctx context.Context, tokenResp *OpenAITokenResponse) (uuid.UUID, error) {

@@ -70,6 +70,7 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
   const isOAuth = providerType === "chatgpt_oauth";
   const isCLI = providerType === "claude_cli";
   const isACP = providerType === "acp";
+  const isAnthropicOAuth = providerType === "anthropic_oauth";
 
   // Reset form when dialog opens
   useEffect(() => {
@@ -243,6 +244,11 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
                         <Switch id="enabled" checked={field.value} onCheckedChange={field.onChange} />
                       )}
                     />
+                    {isAnthropicOAuth && (
+                      <p className="text-xs text-muted-foreground">
+                        {t("form.setupTokenHint")}
+                      </p>
+                    )}
                   </div>
                   {errors.root && (
                     <p className="text-sm text-destructive">{errors.root.message}</p>

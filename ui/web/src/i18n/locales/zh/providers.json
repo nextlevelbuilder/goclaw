@@ -17,6 +17,7 @@
   },
   "apiKey": {
     "oauthToken": "OAuth 令牌",
+    "expires": "过期：{{date}}",
     "notSet": "未设置"
   },
   "card": {
@@ -108,6 +109,11 @@
     "oauthSetupPoolDesc": "稍后可在 agent 中继续添加已登录别名，用于池成员或 round robin。",
     "oauthAliasBadge": "路由键",
     "oauthDisplayNameBadge": "可选",
+    "setupToken": "Setup 令牌",
+    "setupTokenHint": "在终端中运行 'claude setup-token' 并将其粘贴到此处。",
+    "setupTokenHintTooltip": "在终端中运行 'claude setup-token' 以获取 OAuth 令牌。这是您的提供商的安全 OAuth 令牌。在服务器端加密，永远不会在 API 响应中公开。",
+    "setupTokenInvalidPrefix": "令牌必须以 sk- 开头",
+    "setupTokenTooShort": "令牌太短",
     "lowercaseHint": "小写字母、数字、连字符"
   },
   "delete": {
@@ -127,6 +133,7 @@
     "minimax_native": "MiniMax",
     "cohere": "Cohere",
     "perplexity": "Perplexity",
+    "anthropic_oauth": "Anthropic（设置令牌）",
     "chatgpt_oauth": "ChatGPT Subscription (OAuth)",
     "yescale": "YesScale",
     "acp": "ACP"

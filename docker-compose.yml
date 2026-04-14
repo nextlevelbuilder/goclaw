@@ -63,6 +63,7 @@ services:
       - SETUID
       - SETGID
       - CHOWN
+      - DAC_OVERRIDE
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=256m
     deploy:

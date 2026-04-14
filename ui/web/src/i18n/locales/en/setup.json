@@ -32,6 +32,8 @@
     "displayNamePlaceholder": "Primary Codex account",
     "apiKey": "API Key *",
     "apiKeyHint": "Your provider's secret key. Encrypted server-side and never exposed in API responses.",
+    "apiKeyHintOAuth": "Run 'claude setup-token' in your terminal to get OAuth token. Your provider's secret OAuth token. Encrypted server-side and never exposed in API responses.",
+    "setupToken": "Setup Token",
     "apiBase": "API Base URL",
     "apiBaseHint": "The endpoint URL for API requests. Auto-filled based on provider type. Override only if using a custom proxy.",
     "creating": "Creating...",

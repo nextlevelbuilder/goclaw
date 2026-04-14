@@ -48,23 +48,52 @@ type Server struct {
 	handlers []routeRegistrar
 
 	// Non-handler dependencies (don't implement RegisterRoutes)
-	policyEngine   *permissions.PolicyEngine
-	pairingService store.PairingStore
-	apiKeyStore    store.APIKeyStore  // for API key auth lookup
-	agentStore     store.AgentStore   // for context injection in tools_invoke
-	msgBus         *bus.MessageBus    // for MCP bridge media delivery
+	policyEngine            *permissions.PolicyEngine
+	pairingService          store.PairingStore
+	agentsHandler           *httpapi.AgentsHandler             // agent CRUD API
+	skillsHandler           *httpapi.SkillsHandler             // skill management API
+	tracesHandler           *httpapi.TracesHandler             // LLM trace listing API
+	wakeHandler             *httpapi.WakeHandler               // external wake/trigger API
+	mcpHandler              *httpapi.MCPHandler                // MCP server management API
+	channelInstancesHandler *httpapi.ChannelInstancesHandler   // channel instance CRUD API
+	providersHandler        *httpapi.ProvidersHandler          // provider CRUD API
+	teamEventsHandler       *httpapi.TeamEventsHandler         // team event history API
+	teamAttachmentsHandler  *httpapi.TeamAttachmentsHandler    // team attachment download API
+	workspaceUploadHandler  *httpapi.WorkspaceUploadHandler    // team workspace file upload API
+	builtinToolsHandler     *httpapi.BuiltinToolsHandler       // builtin tool management API
+	pendingMessagesHandler  *httpapi.PendingMessagesHandler    // pending messages API
+	secureCLIHandler        *httpapi.SecureCLIHandler          // secure CLI credential CRUD API
+	mcpUserCredsHandler     *httpapi.MCPUserCredentialsHandler // MCP per-user credentials API
+	packagesHandler         *httpapi.PackagesHandler           // runtime package management API
+	memoryHandler           *httpapi.MemoryHandler             // memory management API
+	kgHandler               *httpapi.KnowledgeGraphHandler     // knowledge graph API
+	oauthHandler            *httpapi.OAuthHandler              // OAuth endpoints
+	anthropicAuthHandler    *httpapi.AnthropicAuthHandler      // Anthropic setup token endpoints
+	filesHandler            *httpapi.FilesHandler              // workspace file serving
+	storageHandler          *httpapi.StorageHandler            // storage file management
+	mediaUploadHandler      *httpapi.MediaUploadHandler        // media upload endpoint
+	mediaServeHandler       *httpapi.MediaServeHandler         // media serve endpoint
+	activityHandler         *httpapi.ActivityHandler           // activity audit log API
+	systemConfigsHandler    *httpapi.SystemConfigsHandler      // system configs API
+	usageHandler            *httpapi.UsageHandler              // usage analytics API
+	apiKeysHandler          *httpapi.APIKeysHandler            // API key management
+	tenantsHandler          *httpapi.TenantsHandler            // tenant management API
+	docsHandler             *httpapi.DocsHandler               // OpenAPI spec + Swagger UI
+	apiKeyStore             store.APIKeyStore                  // for API key auth lookup
+	agentStore              store.AgentStore                   // for context injection in tools_invoke
+	msgBus                  *bus.MessageBus                    // for MCP bridge media delivery
 
 	upgrader    websocket.Upgrader
 	rateLimiter *RateLimiter
 	clients     map[string]*Client
 	mu          sync.RWMutex
 
-	startedAt      time.Time
-	version        string
-	db             interface{ PingContext(context.Context) error } // for health check DB ping
-	updateChecker  *UpdateChecker
+	startedAt     time.Time
+	version       string
+	db            interface{ PingContext(context.Context) error } // for health check DB ping
+	updateChecker *UpdateChecker
 
-	logTee   *LogTee                  // optional; auto-unsubscribes clients on disconnect
+	logTee   *LogTee                 // optional; auto-unsubscribes clients on disconnect
 	postTurn tools.PostTurnProcessor // optional; for team task dispatch in HTTP API paths
 
 	httpServer *http.Server
@@ -175,6 +204,9 @@ func (s *Server) BuildMux() *http.ServeMux {
 		if h != nil {
 			h.RegisterRoutes(mux)
 		}
+	}
+	if s.anthropicAuthHandler != nil {
+		s.anthropicAuthHandler.RegisterRoutes(mux)
 	}
 
 	// MCP bridge: expose GoClaw tools to Claude CLI via streamable-http.
@@ -466,6 +498,11 @@ func (s *Server) SetPackagesHandler(h *httpapi.PackagesHandler) {
 
 // SetOAuthHandler sets the OAuth handler (available in all modes).
 func (s *Server) SetOAuthHandler(h *httpapi.OAuthHandler) { s.handlers = append(s.handlers, h) }
+
+// SetAnthropicAuthHandler sets the Anthropic setup token handler.
+func (s *Server) SetAnthropicAuthHandler(h *httpapi.AnthropicAuthHandler) {
+	s.anthropicAuthHandler = h
+}
 
 // SetAPIKeysHandler sets the API key management handler.
 func (s *Server) SetAPIKeysHandler(h *httpapi.APIKeysHandler) {
