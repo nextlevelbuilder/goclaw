@@ -20,6 +20,7 @@ type telegramCreds struct {
 // telegramInstanceConfig maps the non-secret config JSONB from the channel_instances table.
 type telegramInstanceConfig struct {
 	APIServer       string   `json:"api_server,omitempty"`
+	LocalAPIDataDir string   `json:"local_api_data_dir,omitempty"`
 	Proxy           string   `json:"proxy,omitempty"`
 	DMPolicy        string   `json:"dm_policy,omitempty"`
 	GroupPolicy     string   `json:"group_policy,omitempty"`
@@ -93,7 +94,8 @@ func buildChannel(name string, creds json.RawMessage, cfg json.RawMessage,
 		Enabled:        true,
 		Token:          c.Token,
 		Proxy:          proxy,
-		APIServer:      apiServer,
+		APIServer:       apiServer,
+		LocalAPIDataDir: ic.LocalAPIDataDir,
 		AllowFrom:      ic.AllowFrom,
 		DMPolicy:       ic.DMPolicy,
 		GroupPolicy:    ic.GroupPolicy,

@@ -84,15 +84,17 @@ func mcpConfigBaseDir() string {
 
 // BridgeContext holds per-call context for MCP bridge headers.
 type BridgeContext struct {
-	AgentID   string
-	AgentKey  string // agent string key (e.g. "steward") — needed by sessions tools
-	UserID    string
-	Channel   string
-	ChatID    string
-	PeerKind  string
-	Workspace string
-	TenantID  string
-	LocalKey  string
+	AgentID      string
+	AgentKey     string // agent string key (e.g. "steward") — needed by sessions tools
+	UserID       string
+	Channel      string
+	ChatID       string
+	PeerKind     string
+	Workspace    string
+	TenantID     string
+	LocalKey     string
+	SharedMemory bool // when true, memory_search skips per-user scoping
+	SharedKG     bool // when true, knowledge graph skips per-user scoping
 }
 
 // WriteMCPConfig writes a per-session MCP config file with agent context headers.
@@ -100,10 +102,10 @@ type BridgeContext struct {
 // outside the agent's workDir so tokens are not exposed.
 // Skips write if content is unchanged. Returns the file path.
 func (d *MCPConfigData) WriteMCPConfig(ctx context.Context, sessionKey string, bc BridgeContext) string {
-	return d.writeMCPConfigInternal(ctx, sessionKey, bc.AgentID, bc.AgentKey, bc.UserID, bc.Channel, bc.ChatID, bc.PeerKind, bc.Workspace, bc.TenantID, bc.LocalKey)
+	return d.writeMCPConfigInternal(ctx, sessionKey, bc.AgentID, bc.AgentKey, bc.UserID, bc.Channel, bc.ChatID, bc.PeerKind, bc.Workspace, bc.TenantID, bc.LocalKey, bc.SharedMemory, bc.SharedKG)
 }
 
-func (d *MCPConfigData) writeMCPConfigInternal(ctx context.Context, sessionKey, agentID, agentKey, userID, channel, chatID, peerKind, workspace, tenantID, localKey string) string {
+func (d *MCPConfigData) writeMCPConfigInternal(ctx context.Context, sessionKey, agentID, agentKey, userID, channel, chatID, peerKind, workspace, tenantID, localKey string, sharedMemory, sharedKG bool) string {
 	if d == nil || (len(d.Servers) == 0 && d.GatewayAddr == "" && d.AgentMCPLookup == nil) {
 		return ""
 	}
@@ -164,6 +166,12 @@ func (d *MCPConfigData) writeMCPConfigInternal(ctx context.Context, sessionKey, 
 		}
 		if sessionKey != "" && !strings.ContainsAny(sessionKey, "\r\n\x00") {
 			headers["X-Session-Key"] = sessionKey
+		}
+		if sharedMemory {
+			headers["X-Shared-Memory"] = "1"
+		}
+		if sharedKG {
+			headers["X-Shared-KG"] = "1"
 		}
 		// HMAC signature over all context fields to prevent header forgery
 		if d.GatewayToken != "" && (agentID != "" || userID != "") {

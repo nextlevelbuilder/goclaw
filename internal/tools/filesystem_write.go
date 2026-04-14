@@ -193,6 +193,23 @@ func (t *WriteFileTool) Execute(ctx context.Context, args map[string]any) *Resul
 		}
 	}
 
+	// Deliver-only mode: content is empty + deliver=true + file already exists.
+	// Prevents write_file(content="", deliver=true) from overwriting a file
+	// created by exec/Python with 0 bytes — just queue for delivery instead.
+	if content == "" && deliver && !appendMode {
+		info, statErr := os.Stat(resolved)
+		if statErr == nil && info.Size() > 0 {
+			msg := fmt.Sprintf("File delivered: %s (%d bytes)", path, info.Size())
+			msg += ". File will be automatically delivered to the user — do NOT send it again via message tool."
+			result := SilentResult(msg)
+			result.Media = []bus.MediaFile{{Path: resolved}}
+			if dm := DeliveredMediaFromCtx(ctx); dm != nil {
+				dm.Mark(resolved)
+			}
+			return result
+		}
+	}
+
 	if err := os.MkdirAll(filepath.Dir(resolved), 0755); err != nil {
 		return ErrorResult(fmt.Sprintf("failed to create directory: %v", err))
 	}

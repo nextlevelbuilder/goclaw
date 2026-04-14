@@ -138,6 +138,12 @@ func (t *MessageTool) Execute(ctx context.Context, args map[string]any) *Result 
 	if filePath, ok := t.resolveMediaPath(ctx, message); ok {
 		return t.sendMedia(ctx, channel, target, filePath)
 	}
+	// Standalone MEDIA: that failed to resolve — return error instead of silently
+	// degrading to an empty text send. The agent needs to know the path was invalid.
+	if strings.HasPrefix(strings.TrimSpace(message), "MEDIA:") {
+		raw := strings.TrimSpace(strings.TrimSpace(message)[len("MEDIA:"):])
+		return ErrorResult(fmt.Sprintf("MEDIA file not accessible: %s — check that the file exists and is inside the workspace or team workspace", raw))
+	}
 
 	// Extract embedded MEDIA: paths from multi-line messages.
 	// LLMs may include MEDIA: in conversational text rather than as a standalone prefix.
@@ -394,8 +400,10 @@ func (t *MessageTool) resolveMediaPath(ctx context.Context, s string) (string, b
 	}
 	restrict := effectiveRestrict(ctx, t.restrict)
 
-	// resolvePath handles relative→absolute, symlink, hardlink, boundary checks.
-	resolved, err := resolvePath(raw, workspace, restrict)
+	// resolvePathWithAllowed handles relative→absolute, symlink, hardlink, boundary checks.
+	// Include team workspace as allowed prefix so MEDIA: paths referencing team files work.
+	allowed := allowedWithTeamWorkspace(ctx, nil)
+	resolved, err := resolvePathWithAllowed(raw, workspace, restrict, allowed)
 	if err != nil {
 		// When restricted, also allow /tmp/ paths (used by create_image, create_audio, etc.)
 		// But reject paths that are siblings of the workspace — these are likely traversal

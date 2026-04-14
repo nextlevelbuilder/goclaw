@@ -201,6 +201,9 @@ func setupToolRegistry(
 	toolsReg.Register(tools.NewCreateAudioTool(providerRegistry,
 		cfg.Tts.ElevenLabs.APIKey, cfg.Tts.ElevenLabs.BaseURL))
 
+	// Excel generation tool (structured JSON → xlsx, no Python script output needed)
+	toolsReg.Register(tools.NewCreateXlsxTool())
+
 	// TTS (text-to-speech) system — always create TtsTool so config reload can populate it later
 	ttsMgr := setupTTS(cfg)
 	if ttsMgr == nil {

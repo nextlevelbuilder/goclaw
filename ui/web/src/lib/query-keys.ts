@@ -107,6 +107,9 @@ export const queryKeys = {
     all: ["episodic"] as const,
     list: (agentId: string, params: Record<string, unknown>) => ["episodic", agentId, params] as const,
   },
+  proxyPool: {
+    all: ["proxyPool"] as const,
+  },
   kg: {
     all: ["kg"] as const,
     list: (params: Record<string, unknown>) => ["kg", params] as const,

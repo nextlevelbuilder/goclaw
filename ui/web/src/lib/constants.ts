@@ -52,6 +52,8 @@ export const ROUTES = {
   TENANT_DETAIL: "/admin/tenants/:id",
   SETUP: "/setup",
   SELECT_TENANT: "/select-tenant",
+  BACKUP_RESTORE: "/backup-restore",
+  VAULT: "/vault",
 } as const;
 
 export const LOCAL_STORAGE_KEYS = {

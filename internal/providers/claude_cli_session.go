@@ -14,17 +14,22 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 )
 
-// validCLIModels lists accepted model aliases for the Claude CLI.
-var validCLIModels = map[string]bool{
+// validCLIModelAliases lists accepted short model aliases for the Claude CLI.
+var validCLIModelAliases = map[string]bool{
 	"sonnet": true, "opus": true, "haiku": true,
 }
 
-// validateCLIModel checks if a model alias is supported by the Claude CLI.
+// validateCLIModel checks if a model is supported by the Claude CLI.
+// Accepts short aliases (sonnet, opus, haiku) or full model IDs (claude-opus-4-5, claude-sonnet-4-6, etc.)
 func validateCLIModel(model string) error {
-	if !validCLIModels[model] {
-		return fmt.Errorf("claude-cli: unsupported model %q (valid: sonnet, opus, haiku)", model)
+	if validCLIModelAliases[model] {
+		return nil
 	}
-	return nil
+	// Accept full model IDs: claude-{family}-{version} (e.g., claude-opus-4-5, claude-sonnet-4-6)
+	if strings.HasPrefix(model, "claude-") {
+		return nil
+	}
+	return fmt.Errorf("claude-cli: unsupported model %q (valid: sonnet, opus, haiku, or full model ID like claude-opus-4-5)", model)
 }
 
 // buildArgs constructs CLI arguments.
@@ -160,15 +165,17 @@ func extractBoolOpt(opts map[string]any, key string) bool {
 // bridgeContextFromOpts builds a BridgeContext from the Options map.
 func bridgeContextFromOpts(opts map[string]any) BridgeContext {
 	return BridgeContext{
-		AgentID:   extractStringOpt(opts, OptAgentID),
-		AgentKey:  extractStringOpt(opts, OptAgentKey),
-		UserID:    extractStringOpt(opts, OptUserID),
-		Channel:   extractStringOpt(opts, OptChannel),
-		ChatID:    extractStringOpt(opts, OptChatID),
-		PeerKind:  extractStringOpt(opts, OptPeerKind),
-		Workspace: extractStringOpt(opts, OptWorkspace),
-		TenantID:  extractStringOpt(opts, OptTenantID),
-		LocalKey:  extractStringOpt(opts, OptLocalKey),
+		AgentID:      extractStringOpt(opts, OptAgentID),
+		AgentKey:     extractStringOpt(opts, OptAgentKey),
+		UserID:       extractStringOpt(opts, OptUserID),
+		Channel:      extractStringOpt(opts, OptChannel),
+		ChatID:       extractStringOpt(opts, OptChatID),
+		PeerKind:     extractStringOpt(opts, OptPeerKind),
+		Workspace:    extractStringOpt(opts, OptWorkspace),
+		TenantID:     extractStringOpt(opts, OptTenantID),
+		LocalKey:     extractStringOpt(opts, OptLocalKey),
+		SharedMemory: extractBoolOpt(opts, OptSharedMemory),
+		SharedKG:     extractBoolOpt(opts, OptSharedKG),
 	}
 }
 

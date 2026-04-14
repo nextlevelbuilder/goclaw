@@ -3,6 +3,8 @@ package agent
 import (
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
@@ -10,6 +12,14 @@ import (
 // runLoop (v2 agent iteration loop) was removed in the v3 force migration.
 // All agents now use the v3 pipeline (runViaPipeline in loop_pipeline_adapter.go).
 // Shared helpers below are still used by v3 pipeline callbacks.
+
+// cliToolSpan tracks an in-flight tool span from CLI provider streaming.
+// Used to correlate tool_use → tool_result chunks for trace span finalization.
+type cliToolSpan struct {
+	spanID uuid.UUID
+	start  time.Time
+	name   string
+}
 
 // indexedResult holds the output of a single parallel tool execution, preserving
 // the original call index so results can be sorted back into deterministic order.

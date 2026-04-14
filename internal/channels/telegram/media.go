@@ -33,6 +33,9 @@ const (
 
 	// stallTimeout is how long a download can receive zero bytes before being aborted.
 	stallTimeout = 60 * time.Second
+
+	// localBotAPIContainerDir is the default data directory inside the Local Bot API container.
+	localBotAPIContainerDir = "/var/lib/telegram-bot-api"
 )
 
 // errMediaTooLarge indicates a file exceeded the configured max download size.
@@ -233,12 +236,19 @@ func (c *Channel) downloadMedia(ctx context.Context, fileID string, maxBytes int
 	// serve files over HTTP (/file/ endpoint returns 501). When the path is absolute,
 	// copy directly from the filesystem (requires the data dir to be mounted).
 	if c.config.APIServer != "" && filepath.IsAbs(file.FilePath) {
-		if _, statErr := os.Stat(file.FilePath); statErr == nil {
-			slog.Debug("telegram media: copying from local filesystem",
-				"file_id", fileID, "path", file.FilePath, "size", file.FileSize)
-			return copyLocalFile(file.FilePath, maxBytes)
+		localPath := file.FilePath
+
+		// Remap container path to host path when running outside Docker.
+		if c.config.LocalAPIDataDir != "" && strings.HasPrefix(localPath, localBotAPIContainerDir) {
+			localPath = filepath.Join(c.config.LocalAPIDataDir, localPath[len(localBotAPIContainerDir):])
 		}
-		return "", fmt.Errorf("local bot api file not accessible (mount the data dir into the container): %s", file.FilePath)
+
+		if _, statErr := os.Stat(localPath); statErr == nil {
+			slog.Debug("telegram media: copying from local filesystem",
+				"file_id", fileID, "path", localPath, "size", file.FileSize)
+			return copyLocalFile(localPath, maxBytes)
+		}
+		return "", fmt.Errorf("local bot api file not accessible (mount the data dir or set local_api_data_dir): %s (tried %s)", file.FilePath, localPath)
 	}
 
 	// Download over HTTP: use custom API server if configured (non-local mode),

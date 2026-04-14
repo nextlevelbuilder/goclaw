@@ -323,6 +323,13 @@ func bridgeContextMiddleware(gatewayToken string, agentStore store.AgentStore, b
 		if sessionKey != "" {
 			ctx = tools.WithToolSessionKey(ctx, sessionKey)
 		}
+		// Propagate shared memory/KG flags so bridge tools skip per-user scoping.
+		if r.Header.Get("X-Shared-Memory") == "1" {
+			ctx = store.WithSharedMemory(ctx)
+		}
+		if r.Header.Get("X-Shared-KG") == "1" {
+			ctx = store.WithSharedKG(ctx)
+		}
 
 		// Inject builtin tool settings so media tools (read_image, tts, etc.)
 		// can resolve their provider chains via ResolveMediaProviderChain.

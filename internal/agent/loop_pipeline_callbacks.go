@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -10,10 +11,12 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/pipeline"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
+	"github.com/nextlevelbuilder/goclaw/internal/tracing"
 	"github.com/nextlevelbuilder/goclaw/internal/workspace"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
@@ -231,6 +234,12 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 		if tid := store.TenantIDFromContext(ctx); tid != uuid.Nil {
 			chatReq.Options[providers.OptTenantID] = tid.String()
 		}
+		if l.shouldShareMemory() {
+			chatReq.Options[providers.OptSharedMemory] = true
+		}
+		if l.shouldShareKnowledgeGraph() {
+			chatReq.Options[providers.OptSharedKG] = true
+		}
 
 		// Reasoning decision: resolve effort level for thinking models (o3, DeepSeek-R1, Kimi).
 		reasoningDecision := providers.ResolveReasoningDecision(
@@ -257,9 +266,24 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 		}
 		spanID := l.emitLLMSpanStart(ctx, start, state.Iteration+1, chatReq.Messages, opts...)
 
+		// Register bridge trace context so MCP bridge tool calls from CLI providers
+		// appear as child spans of this LLM span in the trace tree.
+		if l.bridgeTraceReg != nil && tracing.CollectorFromContext(ctx) != nil && spanID != uuid.Nil {
+			traceKey := mcpbridge.BridgeTraceKey(l.agentUUID, req.Channel, req.PeerKind, req.ChatID)
+			l.bridgeTraceReg.Register(traceKey, mcpbridge.BridgeTraceCtx{
+				TraceID:      tracing.TraceIDFromContext(ctx),
+				ParentSpanID: spanID,
+				AgentID:      l.agentUUID,
+				TenantID:     store.TenantIDFromContext(ctx),
+				Collector:    tracing.CollectorFromContext(ctx),
+			})
+			defer l.bridgeTraceReg.Unregister(traceKey)
+		}
+
 		var resp *providers.ChatResponse
 		var err error
 		if req.Stream {
+			cliToolSpans := make(map[string]cliToolSpan)
 			resp, err = provider.ChatStream(ctx, chatReq, func(chunk providers.StreamChunk) {
 				if chunk.Thinking != "" {
 					emitRun(AgentEvent{
@@ -276,6 +300,33 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 						RunID:   req.RunID,
 						Payload: map[string]string{"content": chunk.Content},
 					})
+				}
+				// CLI tool_use → emit trace span start + tool.call event.
+				if chunk.ToolName != "" && chunk.ToolCallID != "" {
+					inputJSON, _ := json.Marshal(chunk.ToolInput)
+					now := time.Now().UTC()
+					sid := l.emitToolSpanStart(ctx, now, chunk.ToolName, chunk.ToolCallID, string(inputJSON))
+					cliToolSpans[chunk.ToolCallID] = cliToolSpan{spanID: sid, start: now, name: chunk.ToolName}
+					emitRun(AgentEvent{
+						Type:    protocol.AgentEventToolCall,
+						AgentID: l.id,
+						RunID:   req.RunID,
+						Payload: map[string]any{"tool": chunk.ToolName, "id": chunk.ToolCallID, "args": chunk.ToolInput},
+					})
+				}
+				// CLI tool_result → emit trace span end + tool.result event.
+				if chunk.ToolResult != "" && chunk.ToolCallID != "" {
+					if span, ok := cliToolSpans[chunk.ToolCallID]; ok {
+						result := &tools.Result{ForLLM: chunk.ToolResult, IsError: chunk.ToolIsError}
+						l.emitToolSpanEnd(ctx, span.spanID, span.start, result)
+						delete(cliToolSpans, chunk.ToolCallID)
+						emitRun(AgentEvent{
+							Type:    protocol.AgentEventToolResult,
+							AgentID: l.id,
+							RunID:   req.RunID,
+							Payload: map[string]any{"tool": span.name, "id": chunk.ToolCallID, "result": truncateStr(chunk.ToolResult, 500)},
+						})
+					}
 				}
 			})
 		} else {

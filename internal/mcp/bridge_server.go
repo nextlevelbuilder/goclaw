@@ -38,6 +38,7 @@ var BridgeToolNames = map[string]bool{
 	// Media
 	"read_image":   true,
 	"create_image": true,
+	"create_xlsx":  true,
 	"tts":          true,
 	// Browser automation
 	"browser": true,
