@@ -22,6 +22,7 @@
     "@tailwindcss/typography": "^0.5.19",
     "@tanstack/react-query": "^5.95.2",
     "@tanstack/react-table": "^8.21.3",
+    "@types/three": "^0.183.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
@@ -40,6 +41,7 @@
     "radix-ui": "^1.4.3",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "react-force-graph-3d": "^1.29.1",
     "react-hook-form": "^7.72.1",
     "react-i18next": "^17.0.1",
     "react-markdown": "^10.1.0",
@@ -51,6 +53,7 @@
     "remark-math": "^6.0.0",
     "sigma": "^3.0.2",
     "tailwind-merge": "^3.5.0",
+    "three": "^0.183.2",
     "unist-util-visit": "^5.1.0",
     "zod": "^4.3.6",
     "zustand": "^5.0.12"

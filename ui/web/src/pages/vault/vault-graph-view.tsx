@@ -1,4 +1,4 @@
-import { useRef, useMemo, useState, useCallback } from "react";
+import { useRef, useMemo, useState, useCallback, lazy, Suspense } from "react";
 import type Sigma from "sigma";
 import { useTranslation } from "react-i18next";
 import { buildVaultGraphFromDTO, VAULT_TYPE_COLORS_LIGHT, VAULT_TYPE_COLORS_DARK } from "@/adapters/vault-graph-adapter";
@@ -11,6 +11,20 @@ import { SigmaGraphMinimap } from "@/components/graph/sigma-graph-minimap";
 import { SigmaGraphKeyboardHelp } from "@/components/graph/sigma-graph-keyboard-help";
 import { useSigmaKeyboard } from "@/components/graph/use-sigma-keyboard";
 import { useVaultGraphData } from "@/hooks/use-vault-graph-data";
+import { Square, Box } from "lucide-react";
+
+// Lazy load 3D graph to reduce initial bundle size
+const ForceGraph3DContainer = lazy(() =>
+  import("@/components/graph/force-graph-3d-container").then((m) => ({ default: m.ForceGraph3DContainer }))
+);
+const ForceGraph3DSearch = lazy(() =>
+  import("@/components/graph/force-graph-3d-search").then((m) => ({ default: m.ForceGraph3DSearch }))
+);
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ForceGraphRef = any;
+
+type ViewMode = "2d" | "3d";
 
 const DEFAULT_NODE_LIMIT = 2000;
 
@@ -30,6 +44,8 @@ export function VaultGraphView({ agentId, teamId, selectedDocId, onNodeSelect, o
   const [nodeLimit, setNodeLimit] = useState(DEFAULT_NODE_LIMIT);
   const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(new Set());
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>("2d");
+  const [forceGraph3DRef, setForceGraph3DRef] = useState<ForceGraphRef>(null);
 
   // Theme-aware node colors — derive from store, not DOM class (avoids stale reads)
   const theme = useUiStore((s) => s.theme);
@@ -82,12 +98,51 @@ export function VaultGraphView({ agentId, teamId, selectedDocId, onNodeSelect, o
         </div>
         {hasData && (
           <div className="flex items-center gap-1 shrink-0 relative">
-            <SigmaGraphSearch
-              sigma={sigma}
-              graph={graph}
-              onNodeSelect={onNodeSelect}
-              placeholder={t("graphSearch", { defaultValue: "Search docs..." })}
-            />
+            {/* 2D/3D Toggle */}
+            <div className="flex items-center rounded-md border bg-muted/50 p-0.5 mr-1">
+              <button
+                onClick={() => setViewMode("2d")}
+                className={`flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors ${
+                  viewMode === "2d"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                title="2D View"
+              >
+                <Square className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">2D</span>
+              </button>
+              <button
+                onClick={() => setViewMode("3d")}
+                className={`flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors ${
+                  viewMode === "3d"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                title="3D View"
+              >
+                <Box className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">3D</span>
+              </button>
+            </div>
+            {viewMode === "2d" ? (
+              <SigmaGraphSearch
+                sigma={sigma}
+                graph={graph}
+                onNodeSelect={onNodeSelect}
+                placeholder={t("graphSearch", { defaultValue: "Search docs..." })}
+              />
+            ) : (
+              <Suspense fallback={<div className="w-56 h-7 bg-muted/50 rounded animate-pulse" />}>
+                <ForceGraph3DSearch
+                  graph={graph}
+                  graphRef={forceGraph3DRef}
+                  onNodeSelect={onNodeSelect}
+                  placeholder={t("graphSearch", { defaultValue: "Search docs..." })}
+                  hiddenTypes={hiddenTypes}
+                />
+              </Suspense>
+            )}
             <SigmaGraphFilters
               graph={graph}
               typeColors={typeColors}
@@ -107,7 +162,7 @@ export function VaultGraphView({ agentId, teamId, selectedDocId, onNodeSelect, o
           <div className="h-full animate-pulse rounded-md bg-muted" />
         ) : !hasData ? (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No documents</div>
-        ) : (
+        ) : viewMode === "2d" ? (
           <>
             <SigmaGraphContainer
               graph={graph}
@@ -122,6 +177,17 @@ export function VaultGraphView({ agentId, teamId, selectedDocId, onNodeSelect, o
               <SigmaGraphMinimap sigma={sigma} graph={graph} size={120} />
             </div>
           </>
+        ) : (
+          <Suspense fallback={<div className="flex h-full items-center justify-center text-sm text-muted-foreground">Loading 3D...</div>}>
+            <ForceGraph3DContainer
+              graph={graph}
+              selectedNodeId={selectedDocId}
+              onNodeSelect={onNodeSelect}
+              onNodeDoubleClick={handleNodeDoubleClick}
+              hiddenTypes={hiddenTypes}
+              onGraphRef={setForceGraph3DRef}
+            />
+          </Suspense>
         )}
       </div>
 
