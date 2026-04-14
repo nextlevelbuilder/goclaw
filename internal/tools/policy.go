@@ -50,6 +50,25 @@ func RegisterToolGroup(name string, members []string) {
 	toolGroupsMu.Unlock()
 }
 
+// MergeToolGroup adds members to an existing tool group without removing existing entries.
+// Used by per-user MCP tool loading to extend the "mcp" group incrementally.
+func MergeToolGroup(name string, members []string) {
+	toolGroupsMu.Lock()
+	defer toolGroupsMu.Unlock()
+	existing := toolGroups[name]
+	seen := make(map[string]bool, len(existing))
+	for _, m := range existing {
+		seen[m] = true
+	}
+	for _, m := range members {
+		if !seen[m] {
+			existing = append(existing, m)
+			seen[m] = true
+		}
+	}
+	toolGroups[name] = existing
+}
+
 // UnregisterToolGroup removes a dynamic tool group.
 func UnregisterToolGroup(name string) {
 	toolGroupsMu.Lock()

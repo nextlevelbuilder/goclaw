@@ -305,6 +305,12 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 				slog.Warn("failed to load MCP servers for agent", "agent", agentKey, "error", err)
 			} else {
 				mcpUserCredSrvs = mcpMgr.UserCredServers()
+				// User-credential servers (Notion, etc.) are deferred at startup
+				// but will produce tools per-request via getUserMCPTools.
+				// Set flag so agentToolPolicyWithMCP injects "group:mcp" into alsoAllow.
+				if len(mcpUserCredSrvs) > 0 {
+					hasMCPTools = true
+				}
 				if mcpMgr.IsSearchMode() {
 					// Search mode: too many tools — register mcp_tool_search meta-tool.
 					// Also wire lazy activator so deferred tools can be called by name directly.
