@@ -7,14 +7,12 @@ pkg-helper
 
 # IDE
 .idea/
-.vscode/
 
 # OS
 .DS_Store
 ._*
 
 # Environment
-.env*
 !.env.example
 
 app
@@ -89,3 +87,5 @@ compose.d/*
 /mise
 /.mise
 goclaw-patched-linux-amd64
+config.bat
+node_modules
