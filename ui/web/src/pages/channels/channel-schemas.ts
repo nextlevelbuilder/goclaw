@@ -10,8 +10,8 @@ export interface FieldDef {
   defaultValue?: string | number | boolean | string[];
   options?: { value: string; label: string }[];
   help?: string;
-  /** Only show this field when another field has a specific value */
-  showWhen?: { key: string; value: string };
+  /** Only show this field when another field has a specific value (or one of several values) */
+  showWhen?: { key: string; value: string | string[] };
   /** Disable this field when another field has a specific value */
   disabledWhen?: { key: string; value: string; hint?: string };
 }
@@ -196,7 +196,8 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "page_id", label: "Page ID", type: "text", required: true, help: "Pancake page ID (numeric, from Pancake dashboard)" },
     { key: "platform", label: "Platform", type: "select", required: true, defaultValue: "", options: pancakePlatformOptions, help: "Select the platform this Pancake page serves." },
     { key: "features.inbox_reply", label: "Inbox Auto-Reply", type: "boolean", defaultValue: true },
-    { key: "features.comment_reply", label: "Comment Reply", type: "boolean", defaultValue: false },
+    { key: "features.comment_reply", label: "Comment Reply", type: "boolean", defaultValue: false,
+      showWhen: { key: "platform", value: ["facebook", "instagram", "threads", "tiktok", "youtube"] } },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "Sender IDs to whitelist. Empty = accept all." },
     { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit" },
   ],
