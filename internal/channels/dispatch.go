@@ -75,6 +75,7 @@ func (m *Manager) dispatchOutbound(ctx context.Context) {
 					"content_len", len(msg.Content),
 					"content_preview", Truncate(msg.Content, 160),
 					"error", err,
+					"has_media", len(msg.Media) > 0,
 				)
 				// Try to send a text-only error notification back to the chat.
 				// Only for media failures — text-only failures likely mean the chat

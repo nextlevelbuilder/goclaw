@@ -40,7 +40,13 @@
   "list": {
     "failureStreak": "{{count}} failures in a row",
     "openChannelDetail": "Open channel detail for the latest diagnosis",
-    "nextStep": "Next step"
+    "nextStep": "Next step",
+    "groupsCount": "{{count}} groups",
+    "showGroups": "Show groups",
+    "hideGroups": "Hide groups",
+    "defaultAgent": "Default",
+    "groupDisabled": "Disabled",
+    "noGroups": "No groups discovered yet. Groups appear after the bot receives messages in WhatsApp groups."
   },
   "failureKind": {
     "auth": "Auth",
@@ -483,5 +489,19 @@
     "relinkDevice": "Re-link Device",
     "connectedSuccess": "✅ WhatsApp connected successfully!",
     "tabQrCode": "QR Code"
+  },
+  "whatsappGroupOverrides": {
+    "title": "WhatsApp Group Agents",
+    "hint": "Assign a specific agent to handle each WhatsApp group. Groups without an override use the default channel agent.",
+    "groupLabel": "Group: {{id}}",
+    "nameLabel": "Group Name",
+    "namePlaceholder": "e.g. Channel Outlook",
+    "agentLabel": "Agent",
+    "selectAgent": "Use channel default",
+    "addGroupPlaceholder": "Group JID (e.g. 123456@g.us)",
+    "addGroup": "Add Group",
+    "knownGroups": "Discovered Groups",
+    "saveGroups": "Save Groups",
+    "saving": "Saving..."
   }
 }

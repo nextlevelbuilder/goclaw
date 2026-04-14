@@ -162,6 +162,7 @@ func (l *InstanceLoader) Stop(ctx context.Context) {
 
 // coerceStringBools converts string "true"/"false" values to JSON booleans
 // in a raw config blob. Older UI versions saved select-based bool fields as strings.
+// Recurses into nested maps (e.g., WhatsApp group overrides).
 func coerceStringBools(data json.RawMessage) json.RawMessage {
 	if len(data) == 0 {
 		return data
@@ -170,10 +171,20 @@ func coerceStringBools(data json.RawMessage) json.RawMessage {
 	if json.Unmarshal(data, &m) != nil {
 		return data
 	}
+	if coerceMap(m) {
+		out, _ := json.Marshal(m)
+		return out
+	}
+	return data
+}
+
+// coerceMap recursively converts string "true"/"false" to JSON booleans in a map.
+func coerceMap(m map[string]any) bool {
 	changed := false
 	for k, v := range m {
-		if s, ok := v.(string); ok {
-			switch s {
+		switch tv := v.(type) {
+		case string:
+			switch tv {
 			case "true":
 				m[k] = true
 				changed = true
@@ -181,13 +192,13 @@ func coerceStringBools(data json.RawMessage) json.RawMessage {
 				m[k] = false
 				changed = true
 			}
+		case map[string]any:
+			if coerceMap(tv) {
+				changed = true
+			}
 		}
 	}
-	if !changed {
-		return data
-	}
-	out, _ := json.Marshal(m)
-	return out
+	return changed
 }
 
 // LoadedNames returns the set of channel names managed by the loader.

@@ -1,4 +1,4 @@
-import { QrCode, Radio, Trash2 } from "lucide-react";
+import { QrCode, Radio, Trash2, ChevronDown, ChevronRight, Users } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,8 @@ import type {
   ChannelInstanceData,
   ChannelRuntimeStatus,
 } from "@/types/channel";
+import type { AgentData } from "@/types/agent";
+import type { ChannelContact } from "@/types/contact";
 import {
   channelTypeLabels,
   getChannelCheckedLabel,
@@ -16,10 +18,36 @@ import {
 } from "./channels-status-view";
 import { channelsWithAuth } from "./channel-wizard-registry";
 
+interface WhatsAppGroupConfig {
+  name?: string;    // human-readable alias
+  agent_id?: string; // agent_key (slug), NOT agent.id
+  enabled?: boolean;
+}
+
+function getWhatsAppGroups(
+  config: Record<string, unknown> | null,
+): Record<string, WhatsAppGroupConfig> {
+  if (!config?.groups) return {};
+  return (config.groups as Record<string, WhatsAppGroupConfig>) ?? {};
+}
+
+function resolveAgentNameByKey(
+  agents: AgentData[],
+  agentKey?: string,
+): string {
+  if (!agentKey) return "";
+  const agent = agents.find((a) => a.agent_key === agentKey);
+  return agent?.display_name || agent?.agent_key || agentKey;
+}
+
 interface ChannelListRowProps {
   instance: ChannelInstanceData;
   status: ChannelRuntimeStatus | null;
   agentName: string;
+  agents: AgentData[];
+  waGroupContacts: ChannelContact[];
+  groupsExpanded: boolean;
+  onToggleGroups: () => void;
   onClick: () => void;
   onAuth?: () => void;
   onDelete?: () => void;
@@ -29,6 +57,10 @@ export function ChannelListRow({
   instance,
   status,
   agentName,
+  agents,
+  waGroupContacts,
+  groupsExpanded,
+  onToggleGroups,
   onClick,
   onAuth,
   onDelete,
@@ -55,6 +87,25 @@ export function ChannelListRow({
     t("list.openChannelDetail", {
       defaultValue: "Open channel detail for the latest diagnosis",
     });
+
+  const isWhatsApp = instance.channel_type === "whatsapp";
+
+  // Merge discovered contacts with configured overrides
+  const configGroups = isWhatsApp
+    ? getWhatsAppGroups(instance.config as Record<string, unknown> | null)
+    : {};
+
+  // Build merged group list: all contacts + any configured-only groups
+  const allGroupJids = new Set<string>();
+  for (const c of waGroupContacts) {
+    allGroupJids.add(c.sender_id);
+  }
+  for (const jid of Object.keys(configGroups)) {
+    allGroupJids.add(jid);
+  }
+
+  const hasGroups = allGroupJids.size > 0;
+  const sortedGroupJids = [...allGroupJids].sort();
 
   return (
     <div
@@ -151,6 +202,92 @@ export function ChannelListRow({
           )}
         </div>
       </div>
+
+      {/* WhatsApp groups section - always visible for WhatsApp instances */}
+      {isWhatsApp && (
+        <div className="border-t">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleGroups();
+            }}
+            className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+          >
+            {groupsExpanded ? (
+              <ChevronDown className="h-4 w-4 shrink-0" />
+            ) : (
+              <ChevronRight className="h-4 w-4 shrink-0" />
+            )}
+            <Users className="h-4 w-4 shrink-0" />
+            <span>
+              {hasGroups
+                ? t("list.groupsCount", { count: allGroupJids.size })
+                : t("list.showGroups")}
+            </span>
+          </button>
+
+          {groupsExpanded && (
+            <div className="border-t px-4 pb-3 pt-1">
+              {hasGroups ? (
+                sortedGroupJids.map((jid) => {
+                  const config = configGroups[jid];
+                  const isOverride =
+                    config?.agent_id && config.agent_id !== "__default__";
+                  const groupAgentName = isOverride
+                    ? resolveAgentNameByKey(agents, config.agent_id)
+                    : agentName;
+                  const isDisabled = config?.enabled === false;
+
+                  return (
+                    <button
+                      key={jid}
+                      type="button"
+                      onClick={onClick}
+                      className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-muted/50"
+                    >
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                        <Users className="h-3.5 w-3.5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        {config?.name ? (
+                          <div className="flex flex-col">
+                            <span className="truncate text-sm">{config.name}</span>
+                            <span className="truncate font-mono text-xs text-muted-foreground">{jid}</span>
+                          </div>
+                        ) : (
+                          <span className="truncate font-mono text-xs text-muted-foreground">
+                            {jid}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        {isDisabled && (
+                          <Badge variant="outline" className="text-xs text-muted-foreground">
+                            {t("list.groupDisabled")}
+                          </Badge>
+                        )}
+                        <Badge
+                          variant={isOverride ? "default" : "secondary"}
+                          className="text-xs-plus"
+                        >
+                          {isOverride
+                            ? groupAgentName
+                            : `${t("list.defaultAgent")} · ${groupAgentName}`}
+                        </Badge>
+                      </div>
+                    </button>
+                  );
+                })
+              ) : (
+                <p className="px-3 py-2 text-xs text-muted-foreground">
+                  {t("list.noGroups")}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

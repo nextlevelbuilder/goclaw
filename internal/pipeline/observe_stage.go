@@ -30,10 +30,9 @@ func (s *ObserveStage) Execute(_ context.Context, state *RunState) error {
 		return nil
 	}
 
-	// 2. Track block replies — only count tool-iteration responses where
-	// EmitBlockReply actually fires (think_stage emits block.reply only when
-	// tool calls are present). The final answer (no tool calls) must NOT be
-	// counted, otherwise the gateway dedup check falsely suppresses delivery.
+	// 2. Track block replies for intermediate responses only (with tool calls).
+	// Final answers (no tool calls) are delivered through the normal consumer path,
+	// not via block.reply — counting them here causes false dedup suppression.
 	if resp.Content != "" && len(resp.ToolCalls) > 0 {
 		state.Observe.BlockReplies++
 		state.Observe.LastBlockReply = resp.Content

@@ -445,8 +445,10 @@ func processNormalMessage(
 		// block reply, suppress the final message to avoid duplicate delivery.
 		// Only applies when blockReply is enabled (otherwise nothing was delivered).
 		if blockReplyEnabled && outcome.Result.BlockReplies > 0 && outcome.Result.Content == outcome.Result.LastBlockReply && len(outcome.Result.Media) == 0 {
-			slog.Debug("inbound: dedup final message (matches last block reply)",
-				"channel", channel, "run_id", rID)
+			slog.Info("inbound: dedup final message (matches last block reply)",
+				"channel", channel, "run_id", rID,
+				"block_replies", outcome.Result.BlockReplies,
+				"content_len", len(outcome.Result.Content))
 			deps.MsgBus.PublishOutbound(bus.OutboundMessage{
 				Channel:  channel,
 				ChatID:   chatID,

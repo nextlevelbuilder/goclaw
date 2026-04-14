@@ -115,8 +115,10 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 	}
 	state.Messages.AppendPending(assistantMsg)
 
-	// Emit block.reply for intermediate assistant content during tool iterations.
+	// 9. Emit block reply for intermediate assistant content during tool iterations.
 	// Non-streaming channels (Zalo, Discord, WhatsApp) need this for delivery.
+	// Only fires for intermediate responses (with tool calls) — final answers
+	// are delivered through the normal consumer path after FinalizeStage sanitization.
 	if resp.Content != "" && s.deps.EmitBlockReply != nil {
 		s.deps.EmitBlockReply(resp.Content)
 	}
