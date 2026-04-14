@@ -69,7 +69,9 @@ export function CLISection({ open, cliType = "claude" }: CLISectionProps) {
     }
   }, [open, checkAuth]);
 
-  const dockerPrefix = cliAuth?.in_docker ? "docker compose exec goclaw " : "";
+  // Use -u goclaw to run as goclaw user, not root. Credentials are stored per-user,
+  // and goclaw process runs as goclaw user, so auth must also run as goclaw user.
+  const dockerPrefix = cliAuth?.in_docker ? "docker compose exec -u goclaw goclaw " : "";
   const authCmd = `${dockerPrefix}${config.authCommand}`;
   const switchCmd = `${dockerPrefix}${config.logoutCommand} && ${dockerPrefix}${config.authCommand}`;
 
