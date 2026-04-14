@@ -409,6 +409,8 @@ Follow-up to Wave 1-3 above. Addresses the 6 modules deferred as too-large/green
 - **Pairing DB errors**: Handle transient errors gracefully
 - **Provider thinking**: Corrected DashScope per-model thinking logic
 - **Pancake Page loop guard**: Narrowed webhook ingress to `messaging` + `INBOX` events and normalized HTML-formatted echoes before short-TTL outbound echo suppression, reducing Facebook Page self-reply loops in Pancake inbox conversations
+- **Pancake comment-reply diagnostics**: Added one-shot runtime log when COMMENT webhooks arrive while `config.features.comment_reply` is disabled, making silent misconfiguration visible in production logs
+- **Pancake comment reply routing**: Preserved `pancake_mode` across inbound run registration and final outbound delivery so page comments reply publicly instead of falling back to inbox
 
 ### Documentation
 

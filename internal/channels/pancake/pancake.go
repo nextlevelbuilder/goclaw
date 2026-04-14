@@ -48,6 +48,10 @@ type Channel struct {
 	// In-memory only: resets on restart (acceptable — re-sending once is benign).
 	firstInboxSent sync.Map // senderID(string) → time.Time
 
+	// commentReplyDisabledOnce prevents repeated info logs when COMMENT webhooks
+	// arrive but the feature is disabled in channel config.
+	commentReplyDisabledOnce sync.Once
+
 	// postFetcher fetches and caches page post content for comment context enrichment.
 	postFetcher *PostFetcher
 
@@ -324,4 +328,3 @@ func (ch *Channel) maxMessageLength() int {
 		return 2000
 	}
 }
-

@@ -1,8 +1,10 @@
 package pancake
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,6 +13,15 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 )
+
+func capturePancakeSlog(t *testing.T) (*bytes.Buffer, func()) {
+	t.Helper()
+	var buf bytes.Buffer
+	handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	prev := slog.Default()
+	slog.SetDefault(slog.New(handler))
+	return &buf, func() { slog.SetDefault(prev) }
+}
 
 // newTestChannel builds a minimal Channel for handler tests.
 // apiSrv may be nil when API calls are not expected.
@@ -75,6 +86,29 @@ func TestHandleCommentEvent_FeatureGated(t *testing.T) {
 	ch, msgBus := newTestChannel(t, "page-1", cfg)
 
 	ch.handleCommentEvent(commentEvent("page-1", "conv-1", "user-1", "msg-1", "hello"))
+
+	_, ok := consumeInbound(t, msgBus, 50*time.Millisecond)
+	if ok {
+		t.Error("expected no message published when CommentReply is disabled")
+	}
+}
+
+func TestHandleCommentEvent_FeatureDisabledLogsDiagnostic(t *testing.T) {
+	cfg := pancakeInstanceConfig{}
+	ch, msgBus := newTestChannel(t, "page-1", cfg)
+	buf, restore := capturePancakeSlog(t)
+	defer restore()
+
+	ch.handleCommentEvent(commentEvent("page-1", "conv-1", "user-1", "msg-1", "hello"))
+	ch.handleCommentEvent(commentEvent("page-1", "conv-2", "user-2", "msg-2", "hello again"))
+
+	out := buf.String()
+	if count := strings.Count(out, "comment_reply disabled"); count != 1 {
+		t.Fatalf("expected exactly one diagnostic log for disabled comment reply, got %d logs:\n%s", count, out)
+	}
+	if !strings.Contains(out, "page-1") {
+		t.Fatalf("expected diagnostic log to include page_id, got:\n%s", out)
+	}
 
 	_, ok := consumeInbound(t, msgBus, 50*time.Millisecond)
 	if ok {
