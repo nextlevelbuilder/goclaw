@@ -35,13 +35,14 @@ func (p *QwenCLIProvider) Chat(ctx context.Context, req ChatRequest) (*ChatRespo
 
 	cliSessionID := deriveSessionUUID(sessionKey)
 	args := p.buildArgs(model, workDir, cliSessionID, "json")
+	// Use -p flag for non-interactive mode with explicit prompt
+	if userMsg != "" {
+		args = append(args, "-p", userMsg)
+	}
 
 	cmd := exec.CommandContext(ctx, p.cliPath, args...)
 	cmd.Dir = workDir
 	cmd.Env = filterQwenCLIEnv(os.Environ())
-
-	// Qwen CLI reads prompt from stdin
-	cmd.Stdin = strings.NewReader(userMsg)
 
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -79,14 +80,15 @@ func (p *QwenCLIProvider) ChatStream(ctx context.Context, req ChatRequest, onChu
 
 	cliSessionID := deriveSessionUUID(sessionKey)
 	args := p.buildArgs(model, workDir, cliSessionID, "stream-json")
+	// Use -p flag for non-interactive mode with explicit prompt
+	if userMsg != "" {
+		args = append(args, "-p", userMsg)
+	}
 
 	cmd := exec.CommandContext(ctx, p.cliPath, args...)
 	cmd.WaitDelay = 5 * time.Second
 	cmd.Dir = workDir
 	cmd.Env = filterQwenCLIEnv(os.Environ())
-
-	// Qwen CLI reads prompt from stdin
-	cmd.Stdin = strings.NewReader(userMsg)
 
 	var stderrBuf bytes.Buffer
 	cmd.Stderr = &stderrBuf
