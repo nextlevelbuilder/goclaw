@@ -11,6 +11,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/telegram/voiceguard"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
@@ -214,20 +215,10 @@ func processNormalMessage(
 
 	// Build outbound metadata for reply-to + thread routing BEFORE RegisterRun
 	// so block.reply handler can use it for routing intermediate messages.
-	outMeta := make(map[string]string)
+	outMeta := channels.CopyFinalRoutingMeta(msg.Metadata)
 	if isGroup {
 		if mid := msg.Metadata["message_id"]; mid != "" {
 			outMeta["reply_to_message_id"] = mid
-		}
-	}
-	// Channel routing keys — keep in sync with routingMetaKeys in channels/events.go.
-	for _, k := range []string{
-		tools.MetaMessageThreadID, "local_key", "placeholder_key", "group_id",
-		"feishu_reply_target_id",
-		"fb_mode", "sender_id", "page_id", "reply_to_comment_id",
-	} {
-		if v := msg.Metadata[k]; v != "" {
-			outMeta[k] = v
 		}
 	}
 
