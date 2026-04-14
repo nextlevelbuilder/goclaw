@@ -210,18 +210,24 @@ func (c *Channel) handleTextMessage(msg *zaloMessage) {
 		content = "[empty message]"
 	}
 
-	slog.Debug("zalo text message received",
-		"sender_id", senderID,
-		"chat_id", chatID,
-		"preview", channels.Truncate(content, 50),
-	)
+	// Resolve sender name (prefer display_name over username)
+	name := msg.From.DisplayName
+	if name == "" {
+		name = msg.From.Username
+	}
+	if name == "" {
+		name = senderID // fallback to ID
+	}
+	// Construct compound senderID (ID|Name) for agent context
+	compoundSenderID := fmt.Sprintf("%s|%s", senderID, name)
 
 	metadata := map[string]string{
-		"message_id": msg.MessageID,
-		"platform":   "zalo",
+		"message_id":   msg.MessageID,
+		"message_type": msg.MessageType,
+		"platform":     "zalo",
 	}
 
-	c.HandleMessage(senderID, chatID, content, nil, metadata, "direct")
+	c.HandleMessage(compoundSenderID, chatID, content, nil, metadata, "direct")
 }
 
 func (c *Channel) handleImageMessage(msg *zaloMessage) {
@@ -274,12 +280,24 @@ func (c *Channel) handleImageMessage(msg *zaloMessage) {
 		"has_media", len(media) > 0,
 	)
 
+	// Resolve sender name (prefer display_name over username)
+	name := msg.From.DisplayName
+	if name == "" {
+		name = msg.From.Username
+	}
+	if name == "" {
+		name = senderID // fallback to ID
+	}
+	// Construct compound senderID (ID|Name) for agent context
+	compoundSenderID := fmt.Sprintf("%s|%s", senderID, name)
+
 	metadata := map[string]string{
-		"message_id": msg.MessageID,
-		"platform":   "zalo",
+		"message_id":   msg.MessageID,
+		"message_type": msg.MessageType,
+		"platform":     "zalo",
 	}
 
-	c.HandleMessage(senderID, chatID, content, media, metadata, "direct")
+	c.HandleMessage(compoundSenderID, chatID, content, media, metadata, "direct")
 }
 
 // --- DM Policy ---
@@ -402,19 +420,22 @@ type zaloBotInfo struct {
 }
 
 type zaloMessage struct {
-	MessageID string   `json:"message_id"`
-	Text      string   `json:"text"`
-	Photo     string   `json:"photo"`
-	PhotoURL  string   `json:"photo_url"`
-	Caption   string   `json:"caption"`
-	From      zaloFrom `json:"from"`
-	Chat      zaloChat `json:"chat"`
-	Date      int64    `json:"date"`
+	MessageID   string   `json:"message_id"`
+	MessageType string   `json:"message_type"`
+	Text        string   `json:"text"`
+	Photo       string   `json:"photo"`
+	PhotoURL    string   `json:"photo_url"`
+	Caption     string   `json:"caption"`
+	From        zaloFrom `json:"from"`
+	Chat        zaloChat `json:"chat"`
+	Date        int64    `json:"date"`
 }
 
 type zaloFrom struct {
-	ID       string `json:"id"`
-	Username string `json:"username"`
+	ID          string `json:"id"`
+	Username    string `json:"username"`
+	DisplayName string `json:"display_name"`
+	IsBot       bool   `json:"is_bot"`
 }
 
 type zaloChat struct {
