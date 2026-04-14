@@ -151,6 +151,19 @@ export function ChannelInstanceFormDialog({
       Object.entries(configValues).filter(([, v]) => v !== undefined && v !== "" && v !== null),
     );
     coerceBoolSelects(cleanConfig, configSchema[values.channelType] ?? []);
+
+    // Config required check (create-only): validate after cleanConfig is built so empty strings are caught.
+    if (!instance) {
+      const cfgSchema = configSchema[values.channelType] ?? [];
+      const missingCfg = cfgSchema.filter(
+        (f: FieldDef) => f.required && (cleanConfig[f.key] === undefined || cleanConfig[f.key] === "" || cleanConfig[f.key] === null),
+      );
+      if (missingCfg.length > 0) {
+        setError(t("form.errors.requiredFields", { fields: missingCfg.map((f: FieldDef) => f.label).join(", ") }));
+        return;
+      }
+    }
+
     const cleanCreds = Object.fromEntries(
       Object.entries(credsValues).filter(([, v]) => v !== undefined && v !== "" && v !== null),
     );
