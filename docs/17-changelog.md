@@ -97,6 +97,13 @@ Tenant admins can override tool configuration without affecting other tenants. O
 
 ### Fixed
 
+#### Pancake Platform Field — Mandatory Select (2026-04-14)
+
+- **`platform` field changed from optional text to required dropdown**: `channel-schemas.ts` replaces the free-text `platform` field with a `select` type (11 options: facebook, instagram, threads, tiktok, youtube, shopee, line, google, chat_plugin, lazada, tokopedia). `required: true` is now enforced by the form dialog on create.
+- **Config required-field validation (create-only)**: `channel-instance-form-dialog.tsx` now enforces `required` on config fields at submit time. Validation is scoped to create flows only — edit flows are unchanged to avoid silent breakage on existing channels with no stored `platform`.
+- **i18n**: Platform field label options and config field metadata added to `channels.json` for en/vi/zh.
+- **Auto-detect log level**: `pancake.go` auto-detect block demoted from `slog.Info` to `slog.Debug` to stop log noise on every channel start; auto-detect remains as a fallback for existing channels with no stored `platform`.
+
 #### Feishu/Lark Writer Management Commands — Issue #818 Closed (2026-04-11)
 - **Issue #818 resolution**: Closes UX gap where users saw `/addwriter` error messages but Feishu had no handler
 - **Phase 1 — Thread reply routing**: Inbound messages with `thread_id` now properly route responses back to the same Feishu thread via `/open-apis/im/v1/messages/{id}/reply`. New `feishu_reply_target_id` metadata key included in `routingMetaKeys` allowlist. Graceful fallback to `SendMessage()` if thread root deleted

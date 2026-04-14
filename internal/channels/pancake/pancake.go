@@ -135,6 +135,8 @@ func (ch *Channel) Start(ctx context.Context) error {
 			slog.Warn("pancake: could not resolve platform from page metadata", "page_id", ch.pageID, "err", err)
 		} else {
 			if page.Platform != "" {
+				slog.Debug("pancake: platform auto-detected; set platform explicitly in config to avoid startup API call",
+					"page_id", ch.pageID, "platform", page.Platform)
 				ch.platform = page.Platform
 			}
 			if page.Name != "" {

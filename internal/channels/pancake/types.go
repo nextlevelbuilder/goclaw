@@ -15,7 +15,9 @@ type pancakeCreds struct {
 // pancakeInstanceConfig holds non-secret config from channel_instances.config JSONB.
 type pancakeInstanceConfig struct {
 	PageID   string `json:"page_id"`
-	Platform string `json:"platform,omitempty"` // auto-detected at Start(): facebook/zalo/instagram/tiktok/whatsapp/line
+	Platform string `json:"platform,omitempty"` // set explicitly via UI; auto-detected at Start() as fallback for existing channels
+	// Known values: facebook/instagram/threads/tiktok/youtube/shopee/line/google/chat_plugin/lazada/tokopedia
+	// Excluded (have native channel implementations): telegram/zalo/whatsapp
 	Features struct {
 		InboxReply   bool `json:"inbox_reply"`
 		CommentReply bool `json:"comment_reply"`
@@ -92,7 +94,7 @@ type MessagingData struct {
 	ConversationID string
 	PostID         string // present for COMMENT events; empty for INBOX
 	Type           string // "INBOX" or "COMMENT"
-	Platform       string // "facebook", "zalo", "instagram", "tiktok", "whatsapp", "line"
+	Platform       string // platform identifier from Pancake: facebook/instagram/tiktok/line/etc. See pancakeInstanceConfig.Platform for full list.
 	AssigneeIDs    []string
 	Message        MessagingMessage
 }

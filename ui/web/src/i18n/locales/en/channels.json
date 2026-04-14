@@ -316,7 +316,8 @@
       "label": "Tool Allowlist",
       "help": "Restrict which tools the agent can use in this group"
     },
-    "system_prompt": { "label": "System Prompt" }
+    "system_prompt": { "label": "System Prompt" },
+    "platform": { "label": "Platform", "help": "Select the platform this Pancake page serves." }
   },
   "fieldOptions": {
     "block_reply": {
@@ -361,6 +362,19 @@
       "auto": "Auto",
       "raw": "Raw",
       "card": "Card"
+    },
+    "platform": {
+      "facebook":    "Facebook",
+      "instagram":   "Instagram",
+      "threads":     "Threads (Beta)",
+      "tiktok":      "TikTok",
+      "youtube":     "YouTube (Beta)",
+      "shopee":      "Shopee",
+      "line":        "Line",
+      "google":      "Google",
+      "chat_plugin": "Chat Plugin",
+      "lazada":      "Lazada",
+      "tokopedia":   "Tokopedia"
     }
   },
   "groupOverrides": {

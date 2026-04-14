@@ -81,6 +81,22 @@ export const credentialsSchema: Record<string, FieldDef[]> = {
   ],
 };
 
+// --- Pancake platform options ---
+
+const pancakePlatformOptions = [
+  { value: "facebook",    label: "Facebook" },
+  { value: "instagram",   label: "Instagram" },
+  { value: "threads",     label: "Threads (Beta)" },
+  { value: "tiktok",      label: "TikTok" },
+  { value: "youtube",     label: "YouTube (Beta)" },
+  { value: "shopee",      label: "Shopee" },
+  { value: "line",        label: "Line" },
+  { value: "google",      label: "Google" },
+  { value: "chat_plugin", label: "Chat Plugin" },
+  { value: "lazada",      label: "Lazada" },
+  { value: "tokopedia",   label: "Tokopedia" },
+];
+
 // --- Config schemas ---
 
 export const configSchema: Record<string, FieldDef[]> = {
@@ -178,7 +194,7 @@ export const configSchema: Record<string, FieldDef[]> = {
   ],
   pancake: [
     { key: "page_id", label: "Page ID", type: "text", required: true, help: "Pancake page ID (numeric, from Pancake dashboard)" },
-    { key: "platform", label: "Platform (auto-detected)", type: "text", placeholder: "Leave empty — resolved at startup", help: "facebook / zalo / instagram / tiktok / whatsapp / line. Auto-detected if empty." },
+    { key: "platform", label: "Platform", type: "select", required: true, defaultValue: "", options: pancakePlatformOptions, help: "Select the platform this Pancake page serves." },
     { key: "features.inbox_reply", label: "Inbox Auto-Reply", type: "boolean", defaultValue: true },
     { key: "features.comment_reply", label: "Comment Reply", type: "boolean", defaultValue: false },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "Sender IDs to whitelist. Empty = accept all." },

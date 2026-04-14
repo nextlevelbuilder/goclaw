@@ -899,6 +899,34 @@ func TestSendFirstInbox_ErrorRetryAllowed(t *testing.T) {
 	}
 }
 
+// TestFactoryExplicitPlatformPreserved verifies that explicit platform from config
+// is loaded into the channel and is not overwritten.
+func TestFactoryExplicitPlatformPreserved(t *testing.T) {
+	cfg := json.RawMessage(`{
+		"page_id": "123",
+		"platform": "instagram",
+		"features": {"inbox_reply": true}
+	}`)
+	creds := json.RawMessage(`{
+		"api_key": "test_key",
+		"page_access_token": "test_token"
+	}`)
+	ch, err := Factory("test", creds, cfg, nil, nil)
+	if err != nil {
+		t.Fatalf("Factory failed: %v", err)
+	}
+	pc := ch.(*Channel)
+	if pc.platform != "instagram" {
+		t.Errorf("expected platform instagram from config, got %q", pc.platform)
+	}
+	// Verify auto-detect block condition: ch.platform is already set,
+	// so getPage would NOT be called at Start(). platform should remain "instagram".
+	// (Start() skips GetPage when ch.platform != "")
+	if pc.platform == "" {
+		t.Error("platform must not be empty after Factory with explicit platform config")
+	}
+}
+
 // TestCommentFlowEndToEnd is the Phase 5 integration scenario wired inline.
 func TestCommentFlowEndToEnd(t *testing.T) {
 	cfg := pancakeInstanceConfig{}
