@@ -183,6 +183,19 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 		h.providerReg.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, "ollama", config.DockerLocalhost(host), "llama3.3"))
 		return
 	}
+	if p.ProviderType == store.ProviderVertex {
+		if p.APIBase == "" {
+			slog.Warn("providers.register.vertex", "name", p.Name, "error", "missing api_base")
+			return
+		}
+		ts, err := providers.NewVertexTokenSource()
+		if err != nil {
+			slog.Warn("providers.register.vertex", "name", p.Name, "error", err)
+			return
+		}
+		h.providerReg.RegisterForTenant(p.TenantID, providers.NewVertexProvider(p.Name, h.resolveAPIBase(p), "google/gemini-2.5-flash", ts))
+		return
+	}
 	if p.APIKey == "" {
 		return
 	}
@@ -286,6 +299,16 @@ func validateProviderURL(rawURL string, providerType string) error {
 	return nil
 }
 
+func validateVertexProviderPolicy(p *store.LLMProviderData) error {
+	if p.ProviderType != store.ProviderVertex {
+		return nil
+	}
+	if strings.TrimSpace(p.APIKey) != "" {
+		return fmt.Errorf("vertex provider does not accept api_key; use ADC on server runtime")
+	}
+	return nil
+}
+
 // --- Provider CRUD ---
 
 func (h *ProvidersHandler) handleListProviders(w http.ResponseWriter, r *http.Request) {
@@ -322,6 +345,10 @@ func (h *ProvidersHandler) handleCreateProvider(w http.ResponseWriter, r *http.R
 	}
 	if !store.ValidProviderTypes[p.ProviderType] {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidRequest, "unsupported provider_type")})
+		return
+	}
+	if err := validateVertexProviderPolicy(&p); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 
@@ -457,6 +484,10 @@ func (h *ProvidersHandler) handleUpdateProvider(w http.ResponseWriter, r *http.R
 			return
 		}
 		candidate.Settings = rawSettings
+	}
+	if err := validateVertexProviderPolicy(&candidate); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
 	}
 
 	// Re-validate URLs against the (possibly new) provider type.

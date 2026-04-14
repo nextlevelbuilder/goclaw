@@ -1,0 +1,8 @@
+services:
+  goclaw:
+    environment:
+      # ADC credential path inside container.
+      - GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/gcp/vertex-sa.json
+    volumes:
+      # Host path -> container path (read-only). Prefer keeping this file outside the repo.
+      - ${HOME}/secrets/gcp/vertex-sa.json:/run/secrets/gcp/vertex-sa.json:ro

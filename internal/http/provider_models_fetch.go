@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
 
 // fetchAnthropicModels calls the Anthropic models API.
@@ -124,6 +125,14 @@ func fetchOpenAIModels(ctx context.Context, apiBase, apiKey string) ([]ModelInfo
 		models = append(models, ModelInfo{ID: m.ID, Name: m.ID})
 	}
 	return models, nil
+}
+
+func fetchOpenAIModelsWithTokenSource(ctx context.Context, apiBase string, ts providers.TokenSource) ([]ModelInfo, error) {
+	token, err := ts.Token()
+	if err != nil {
+		return nil, fmt.Errorf("token source error: %w", err)
+	}
+	return fetchOpenAIModels(ctx, apiBase, token)
 }
 
 // fetchOllamaModels calls Ollama's native /api/tags endpoint to get model metadata

@@ -70,6 +70,7 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
   const isOAuth = providerType === "chatgpt_oauth";
   const isCLI = providerType === "claude_cli";
   const isACP = providerType === "acp";
+  const isVertex = providerType === "vertex";
 
   // Reset form when dialog opens
   useEffect(() => {
@@ -109,7 +110,7 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
       if (Object.keys(settings).length > 0) payload.settings = settings;
     }
 
-    if (data.apiKey && data.apiKey !== "***") {
+    if (data.providerType !== "vertex" && data.apiKey && data.apiKey !== "***") {
       payload.api_key = data.apiKey;
     }
 
@@ -229,6 +230,7 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
                   errors={errors}
                   providerType={providerType}
                   control={control}
+                  isVertex={isVertex}
                 />
               )}
 

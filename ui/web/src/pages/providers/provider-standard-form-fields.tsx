@@ -12,6 +12,7 @@ interface ProviderStandardFormFieldsProps {
   errors: FieldErrors<ProviderCreateFormData>;
   providerType: string;
   control: Control<ProviderCreateFormData>;
+  isVertex?: boolean;
 }
 
 /**
@@ -23,6 +24,7 @@ export function ProviderStandardFormFields({
   errors,
   providerType,
   control,
+  isVertex = false,
 }: ProviderStandardFormFieldsProps) {
   const { t } = useTranslation("providers");
 
@@ -42,16 +44,27 @@ export function ProviderStandardFormFields({
         />
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="apiKey">{t("form.apiKey")}</Label>
-        <Input
-          id="apiKey"
-          type="password"
-          {...register("apiKey")}
-          placeholder={t("form.apiKeyPlaceholder")}
-          className="text-base md:text-sm"
-        />
-      </div>
+      {isVertex && (
+        <div className="space-y-2">
+          <Label>Vertex auth mode</Label>
+          <p className="text-xs text-muted-foreground">
+            ADC only. Configure Google credentials on the server runtime (no API key in UI).
+          </p>
+        </div>
+      )}
+
+      {!isVertex && (
+        <div className="space-y-2">
+          <Label htmlFor="apiKey">{t("form.apiKey")}</Label>
+          <Input
+            id="apiKey"
+            type="password"
+            {...register("apiKey")}
+            placeholder={t("form.apiKeyPlaceholder")}
+            className="text-base md:text-sm"
+          />
+        </div>
+      )}
 
       <div className="flex items-center justify-between">
         <Label htmlFor="enabled">{t("form.enabled")}</Label>

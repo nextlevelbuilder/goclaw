@@ -187,3 +187,63 @@ func TestProvidersHandlerUpdateRejectsIncompatibleEmbeddingDimensions(t *testing
 		t.Fatalf("embedding dimensions = %+v, want 1536 preserved", es)
 	}
 }
+
+func TestProvidersHandlerCreateRejectsVertexAPIKey(t *testing.T) {
+	token := setupProvidersAdminToken(t)
+	providerStore := newMockProviderStore()
+	handler := NewProvidersHandler(providerStore, newMockSecretsStore(), nil, "")
+	mux := http.NewServeMux()
+	handler.RegisterRoutes(mux)
+
+	body := `{
+		"name": "vertex-main",
+		"provider_type": "vertex",
+		"api_base": "https://aiplatform.googleapis.com/v1/projects/p/locations/global/endpoints/openapi",
+		"api_key": "should-not-be-accepted",
+		"enabled": true
+	}`
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/providers", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status code = %d, want %d, body=%s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "does not accept api_key") {
+		t.Fatalf("response body = %q, want vertex api_key rejection", w.Body.String())
+	}
+}
+
+func TestProvidersHandlerUpdateRejectsVertexAPIKey(t *testing.T) {
+	token := setupProvidersAdminToken(t)
+	providerStore := newMockProviderStore()
+	provider := &store.LLMProviderData{
+		BaseModel:    store.BaseModel{ID: uuid.New()},
+		Name:         "vertex-main",
+		ProviderType: store.ProviderVertex,
+		APIBase:      "https://aiplatform.googleapis.com/v1/projects/p/locations/global/endpoints/openapi",
+		Enabled:      true,
+	}
+	if err := providerStore.CreateProvider(context.Background(), provider); err != nil {
+		t.Fatalf("CreateProvider() error = %v", err)
+	}
+
+	handler := NewProvidersHandler(providerStore, newMockSecretsStore(), nil, "")
+	mux := http.NewServeMux()
+	handler.RegisterRoutes(mux)
+
+	body := `{"api_key":"should-not-be-accepted"}`
+	req := httptest.NewRequest(http.MethodPut, "/v1/providers/"+provider.ID.String(), bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status code = %d, want %d, body=%s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "does not accept api_key") {
+		t.Fatalf("response body = %q, want vertex api_key rejection", w.Body.String())
+	}
+}

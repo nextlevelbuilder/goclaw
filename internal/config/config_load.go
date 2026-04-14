@@ -112,6 +112,7 @@ func (c *Config) applyEnvOverrides() {
 	envStr("GOCLAW_OLLAMA_HOST", &c.Providers.Ollama.Host)
 	envStr("GOCLAW_OLLAMA_CLOUD_API_KEY", &c.Providers.OllamaCloud.APIKey)
 	envStr("GOCLAW_OLLAMA_CLOUD_API_BASE", &c.Providers.OllamaCloud.APIBase)
+	envStr("GOCLAW_VERTEX_API_BASE", &c.Providers.Vertex.APIBase)
 	envStr("GOCLAW_GATEWAY_TOKEN", &c.Gateway.Token)
 	envStr("GOCLAW_TELEGRAM_TOKEN", &c.Channels.Telegram.Token)
 	envStr("GOCLAW_DISCORD_TOKEN", &c.Channels.Discord.Token)
@@ -279,7 +280,6 @@ func (c *Config) applyEnvOverrides() {
 		c.Tools.Browser.Enabled = true
 	}
 }
-
 
 // Save writes the config to a JSON file.
 func Save(path string, cfg *Config) error {

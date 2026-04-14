@@ -125,6 +125,7 @@ func runProvidersAdd() {
 		{"OpenAI", "openai"},
 		{"OpenRouter", "openrouter"},
 		{"DashScope (Alibaba)", "dashscope"},
+		{"Google Vertex AI", "vertex"},
 		{"OpenAI-compatible", "openai-compat"},
 	}
 	providerType, err := promptSelect("Provider type", typeOptions, 0)
@@ -140,17 +141,20 @@ func runProvidersAdd() {
 		return
 	}
 
-	// Step 3: API key
-	apiKey, err := promptPassword("API key", "will be encrypted at rest")
-	if err != nil || apiKey == "" {
-		fmt.Println("Cancelled.")
-		return
+	// Step 3: API key (Vertex uses ADC only, so no key prompt).
+	apiKey := ""
+	if providerType != "vertex" {
+		apiKey, err = promptPassword("API key", "will be encrypted at rest")
+		if err != nil || apiKey == "" {
+			fmt.Println("Cancelled.")
+			return
+		}
 	}
 
 	// Step 4: Base URL (pre-fill per type, editable)
 	defaultURL := defaultBaseURL(providerType)
 	baseURL := ""
-	if providerType == "openai-compat" {
+	if providerType == "openai-compat" || providerType == "vertex" {
 		baseURL, err = promptString("Base URL", "e.g. https://api.example.com/v1", defaultURL)
 		if err != nil {
 			fmt.Println("Cancelled.")
@@ -161,8 +165,10 @@ func runProvidersAdd() {
 	body := map[string]any{
 		"name":          name,
 		"provider_type": providerType,
-		"api_key":       apiKey,
 		"enabled":       true,
+	}
+	if apiKey != "" {
+		body["api_key"] = apiKey
 	}
 	if baseURL != "" {
 		body["base_url"] = baseURL
@@ -318,6 +324,8 @@ func defaultBaseURL(providerType string) string {
 		return "https://openrouter.ai/api/v1"
 	case "dashscope":
 		return "https://dashscope.aliyuncs.com/compatible-mode/v1"
+	case "vertex":
+		return "https://aiplatform.googleapis.com/v1/projects/PROJECT_ID/locations/global/endpoints/openapi"
 	default:
 		return ""
 	}

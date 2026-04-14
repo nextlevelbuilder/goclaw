@@ -140,6 +140,19 @@ func registerProviders(registry *providers.Registry, cfg *config.Config, modelRe
 		slog.Info("registered provider", "name", "ollama-cloud")
 	}
 
+	// Google Vertex AI provider (native token source: explicit token or ADC).
+	if cfg.Providers.Vertex.APIBase != "" {
+		base := cfg.Providers.Vertex.APIBase
+		ts, err := providers.NewVertexTokenSource()
+		if err != nil {
+			slog.Warn("vertex provider disabled", "error", err)
+		} else {
+			prov := providers.NewVertexProvider("vertex", base, "google/gemini-2.5-flash", ts)
+			registry.Register(prov)
+			slog.Info("registered provider", "name", "vertex")
+		}
+	}
+
 	// Novita AI — OpenAI-compatible endpoint.
 	if cfg.Providers.Novita.APIKey != "" {
 		base := cfg.Providers.Novita.APIBase
@@ -324,9 +337,6 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 			continue
 		}
 
-		if p.APIKey == "" {
-			continue
-		}
 		// Fall back to config/env api_base when DB provider has none set.
 		if p.APIBase == "" && cfg != nil {
 			if base := cfg.Providers.APIBaseForType(p.ProviderType); base != "" {
@@ -405,7 +415,22 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 			prov := providers.NewOpenAIProvider(p.Name, p.APIKey, base, store.BytePlusDefaultModel)
 			prov.WithProviderType(p.ProviderType)
 			registry.RegisterForTenant(p.TenantID, prov)
+		case store.ProviderVertex:
+			base := p.APIBase
+			if base == "" {
+				slog.Warn("vertex provider skipped: missing api_base", "name", p.Name)
+				continue
+			}
+			ts, err := providers.NewVertexTokenSource()
+			if err != nil {
+				slog.Warn("vertex provider skipped: token source unavailable", "name", p.Name, "error", err)
+				continue
+			}
+			registry.RegisterForTenant(p.TenantID, providers.NewVertexProvider(p.Name, base, "google/gemini-2.5-flash", ts))
 		default:
+			if p.APIKey == "" {
+				continue
+			}
 			prov := providers.NewOpenAIProvider(p.Name, p.APIKey, p.APIBase, "")
 			prov.WithProviderType(p.ProviderType)
 			if p.ProviderType == store.ProviderMiniMax {

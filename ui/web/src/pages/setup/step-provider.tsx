@@ -47,6 +47,7 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
   const isCLI = providerType === "claude_cli";
   // Local Ollama uses no API key — the server accepts any non-empty Bearer value internally
   const isOllama = providerType === "ollama";
+  const isVertex = providerType === "vertex";
 
   const handleTypeChange = (value: string) => {
     setProviderType(value);
@@ -97,7 +98,7 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
 
   const handleSubmit = async () => {
     if (isOAuth) return;
-    if (!isEditing && !isCLI && !isOllama && !apiKey.trim()) { setError(t("provider.errors.apiKeyRequired")); return; }
+    if (!isEditing && !isCLI && !isOllama && !isVertex && !apiKey.trim()) { setError(t("provider.errors.apiKeyRequired")); return; }
     setLoading(true);
     setError("");
     try {
@@ -108,7 +109,7 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
           api_base: apiBase.trim() || undefined,
         };
         // Only include api_key if user entered a new one
-        if (apiKey.trim()) patch.api_key = apiKey.trim();
+        if (!isVertex && apiKey.trim()) patch.api_key = apiKey.trim();
         await updateProvider(existingProvider!.id, patch as Partial<ProviderInput>);
         onComplete({ ...existingProvider!, ...patch } as ProviderData);
       } else {
@@ -116,7 +117,7 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
           name: name.trim(),
           provider_type: providerType,
           api_base: apiBase.trim() || undefined,
-          api_key: isCLI || isOllama || isOAuth ? undefined : apiKey.trim(),
+          api_key: isCLI || isOllama || isOAuth || isVertex ? undefined : apiKey.trim(),
           enabled: true,
         }) as ProviderData;
         onComplete(provider);
@@ -139,6 +140,8 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
                 ? t("provider.descriptionOauth")
                 : isCLI
                 ? t("provider.descriptionCli")
+                : isVertex
+                ? "Connect Vertex AI using server-side Google ADC credentials."
                 : t("provider.description")}
             </p>
           </div>
@@ -197,18 +200,25 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
             <CLISection open={true} />
           ) : (
             <>
-              <div className="space-y-2">
-                <Label className="inline-flex items-center gap-1.5">
-                  {t("provider.apiKey")}
-                  <InfoTip text={t("provider.apiKeyHint")} />
-                </Label>
-                <Input
-                  type="password"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="sk-..."
-                />
-              </div>
+              {!isVertex && (
+                <div className="space-y-2">
+                  <Label className="inline-flex items-center gap-1.5">
+                    {t("provider.apiKey")}
+                    <InfoTip text={t("provider.apiKeyHint")} />
+                  </Label>
+                  <Input
+                    type="password"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="sk-..."
+                  />
+                </div>
+              )}
+              {isVertex && (
+                <p className="text-xs text-muted-foreground">
+                  Vertex runs in ADC-only mode. Configure Google credentials on server runtime.
+                </p>
+              )}
 
               <div className="space-y-2">
                 <Label className="inline-flex items-center gap-1.5">
@@ -228,7 +238,7 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
 
           {!isOAuth && (
             <div className="flex justify-end">
-              <Button onClick={handleSubmit} disabled={loading || (!isEditing && !isCLI && !isOllama && !apiKey.trim())}>
+              <Button onClick={handleSubmit} disabled={loading || (!isEditing && !isCLI && !isOllama && !isVertex && !apiKey.trim())}>
                 {loading
                   ? isEditing ? t("provider.updating", "Updating...") : t("provider.creating")
                   : isEditing ? t("provider.update", "Update") : t("provider.create")}

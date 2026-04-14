@@ -15,8 +15,8 @@ import (
 
 // ModelInfo is a normalized model entry returned by the list-models endpoint.
 type ModelInfo struct {
-	ID        string                        `json:"id"`
-	Name      string                        `json:"name,omitempty"`
+	ID        string                         `json:"id"`
+	Name      string                         `json:"name,omitempty"`
 	Reasoning *providers.ReasoningCapability `json:"reasoning,omitempty"`
 }
 
@@ -86,7 +86,7 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 		return
 	}
 
-	if p.APIKey == "" {
+	if p.APIKey == "" && p.ProviderType != store.ProviderVertex {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgRequired, "API key")})
 		return
 	}
@@ -101,6 +101,18 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 		models, err = fetchAnthropicModels(ctx, p.APIKey, h.resolveAPIBase(p))
 	case "gemini_native":
 		models, err = fetchGeminiModels(ctx, p.APIKey)
+	case store.ProviderVertex:
+		apiBase := strings.TrimRight(h.resolveAPIBase(p), "/")
+		if apiBase == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgRequired, "api_base")})
+			return
+		}
+		ts, tsErr := providers.NewVertexTokenSource()
+		if tsErr != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": tsErr.Error()})
+			return
+		}
+		models, err = fetchOpenAIModelsWithTokenSource(ctx, apiBase, ts)
 	case "bailian":
 		models = bailianModels()
 	case "dashscope":
