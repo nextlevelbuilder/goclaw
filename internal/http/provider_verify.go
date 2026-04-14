@@ -79,6 +79,25 @@ func (h *ProvidersHandler) handleVerifyProvider(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	// Qwen CLI: verify binary exists on the server (no LLM call needed)
+	if p.ProviderType == store.ProviderQwenCLI {
+		binary := p.APIBase
+		if binary == "" {
+			binary = "qwen"
+		}
+		// Validate binary against known allowlist
+		if binary != "qwen" && !filepath.IsAbs(binary) {
+			writeJSON(w, http.StatusOK, map[string]any{"valid": false, "error": "invalid binary path"})
+			return
+		}
+		if _, err := exec.LookPath(binary); err != nil {
+			writeJSON(w, http.StatusOK, map[string]any{"valid": false, "error": "binary not found: " + binary})
+		} else {
+			writeJSON(w, http.StatusOK, map[string]any{"valid": true})
+		}
+		return
+	}
+
 	if h.providerReg == nil {
 		writeJSON(w, http.StatusOK, map[string]any{"valid": false, "error": "no provider registry available"})
 		return
@@ -156,6 +175,45 @@ func (h *ProvidersHandler) handleClaudeCLIAuthStatus(w http.ResponseWriter, r *h
 		"email":             status.Email,
 		"subscription_type": status.SubscriptionType,
 		"in_docker":         inDocker,
+	})
+}
+
+// handleQwenCLIAuthStatus checks whether the Qwen CLI is authenticated on the server.
+//
+//	GET /v1/providers/qwen-cli/auth-status
+//	Response: {"logged_in": true, "auth_method": "Qwen OAuth", "type": "Free tier"}
+//	     or: {"logged_in": false, "error": "..."}
+func (h *ProvidersHandler) handleQwenCLIAuthStatus(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	cliPath := "qwen"
+	if existing, err := h.store.ListProviders(r.Context()); err == nil {
+		for _, p := range existing {
+			if p.ProviderType == "qwen_cli" && p.APIBase != "" {
+				cliPath = p.APIBase
+				break
+			}
+		}
+	}
+
+	inDocker := config.InDocker()
+
+	status, err := providers.CheckQwenAuthStatus(ctx, cliPath)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"logged_in": false,
+			"error":     err.Error(),
+			"in_docker": inDocker,
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"logged_in":   status.LoggedIn,
+		"auth_method": status.AuthMethod,
+		"type":        status.Type,
+		"in_docker":   inDocker,
 	})
 }
 

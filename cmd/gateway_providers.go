@@ -307,6 +307,26 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 			slog.Info("registered provider from DB", "name", p.Name)
 			continue
 		}
+		// Qwen CLI provider — uses qwen binary, no API key needed (OAuth is handled by CLI).
+		if p.ProviderType == store.ProviderQwenCLI {
+			cliPath := p.APIBase // reuse APIBase field for CLI path
+			if cliPath == "" {
+				cliPath = "qwen"
+			}
+			if cliPath != "qwen" && !filepath.IsAbs(cliPath) {
+				slog.Warn("security.qwen_cli: invalid path from DB, using default", "path", cliPath)
+				cliPath = "qwen"
+			}
+			if _, err := exec.LookPath(cliPath); err != nil {
+				slog.Warn("qwen-cli: binary not found, skipping", "path", cliPath, "error", err)
+				continue
+			}
+			var cliOpts []providers.QwenCLIOption
+			cliOpts = append(cliOpts, providers.WithQwenCLIName(p.Name))
+			registry.RegisterForTenant(p.TenantID, providers.NewQwenCLIProvider(cliPath, cliOpts...))
+			slog.Info("registered provider from DB", "name", p.Name, "type", "qwen_cli")
+			continue
+		}
 		// ACP provider — no API key needed (agents manage their own auth).
 		if p.ProviderType == store.ProviderACP {
 			registerACPFromDB(registry, p)

@@ -132,6 +132,9 @@ func (h *ProvidersHandler) RegisterRoutes(mux *http.ServeMux) {
 
 	// Claude CLI auth status (global — not per-provider)
 	mux.HandleFunc("GET /v1/providers/claude-cli/auth-status", h.auth(h.handleClaudeCLIAuthStatus))
+
+	// Qwen CLI auth status (global — not per-provider)
+	mux.HandleFunc("GET /v1/providers/qwen-cli/auth-status", h.auth(h.handleQwenCLIAuthStatus))
 }
 
 func (h *ProvidersHandler) auth(next http.HandlerFunc) http.HandlerFunc {

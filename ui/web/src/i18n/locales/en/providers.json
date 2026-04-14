@@ -179,6 +179,19 @@
     "runOnServer": "Run on the server terminal:",
     "recheckButton": "Re-check"
   },
+  "qwenCli": {
+    "description": "Qwen Code uses your local",
+    "descriptionSuffix": "binary. No API key needed.",
+    "checkingAuth": "Checking authentication...",
+    "authenticatedAs": "Authenticated via",
+    "switchAccount": "Switch account?",
+    "switchAccountInstructions": "Run on the server terminal:",
+    "switchAccountRecheck": "Then click",
+    "switchAccountRecheckSuffix": "to re-check.",
+    "notAuthenticated": "Not authenticated",
+    "runOnServer": "Run on the server terminal:",
+    "recheckButton": "Re-check"
+  },
   "detail": {
     "title": "Provider Details",
     "advanced": "Advanced",

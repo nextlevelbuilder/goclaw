@@ -8,24 +8,58 @@ interface CLIAuthStatus {
   logged_in: boolean;
   email?: string;
   subscription_type?: string;
+  auth_method?: string;
+  type?: string;
   error?: string;
   in_docker?: boolean;
 }
 
-export function CLISection({ open }: { open: boolean }) {
+type CLIType = "claude" | "qwen";
+
+interface CLISectionProps {
+  open: boolean;
+  cliType?: CLIType;
+}
+
+const CLI_CONFIG: Record<CLIType, {
+  binary: string;
+  endpoint: string;
+  translationPrefix: string;
+  authCommand: string;
+  logoutCommand: string;
+}> = {
+  claude: {
+    binary: "claude",
+    endpoint: "/v1/providers/claude-cli/auth-status",
+    translationPrefix: "cli",
+    authCommand: "claude auth login",
+    logoutCommand: "claude auth logout",
+  },
+  qwen: {
+    binary: "qwen",
+    endpoint: "/v1/providers/qwen-cli/auth-status",
+    translationPrefix: "qwenCli",
+    authCommand: "qwen auth",
+    logoutCommand: "rm ~/.qwen/oauth_creds.json && qwen auth",
+  },
+};
+
+export function CLISection({ open, cliType = "claude" }: CLISectionProps) {
   const { t } = useTranslation("providers");
   const http = useHttp();
   const [cliAuth, setCliAuth] = useState<CLIAuthStatus | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const config = CLI_CONFIG[cliType];
+
   const checkAuth = useCallback(() => {
     setLoading(true);
     http
-      .get<CLIAuthStatus>("/v1/providers/claude-cli/auth-status")
+      .get<CLIAuthStatus>(config.endpoint)
       .then(setCliAuth)
       .catch(() => setCliAuth({ logged_in: false, error: "Failed to check auth status" }))
       .finally(() => setLoading(false));
-  }, [http]);
+  }, [http, config.endpoint]);
 
   useEffect(() => {
     if (open) {
@@ -35,15 +69,30 @@ export function CLISection({ open }: { open: boolean }) {
     }
   }, [open, checkAuth]);
 
+  const dockerPrefix = cliAuth?.in_docker ? "docker compose exec goclaw " : "";
+  const authCmd = `${dockerPrefix}${config.authCommand}`;
+  const switchCmd = `${dockerPrefix}${config.logoutCommand} && ${dockerPrefix}${config.authCommand}`;
+
+  // Get authentication display info based on CLI type
+  const getAuthDisplay = () => {
+    if (cliType === "qwen") {
+      const parts: string[] = [];
+      if (cliAuth?.auth_method) parts.push(cliAuth.auth_method);
+      if (cliAuth?.type) parts.push(cliAuth.type);
+      return parts.length > 0 ? parts.join(" - ") : "Authenticated";
+    }
+    return cliAuth?.email || "Authenticated";
+  };
+
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        {t("cli.description")} <code className="rounded bg-muted px-1 py-0.5">claude</code> {t("cli.descriptionSuffix")}
+        {t(`${config.translationPrefix}.description`)} <code className="rounded bg-muted px-1 py-0.5">{config.binary}</code> {t(`${config.translationPrefix}.descriptionSuffix`)}
       </p>
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          {t("cli.checkingAuth")}
+          {t(`${config.translationPrefix}.checkingAuth`)}
         </div>
       ) : cliAuth?.logged_in ? (
         <div className="space-y-2">
@@ -51,8 +100,8 @@ export function CLISection({ open }: { open: boolean }) {
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
               <p className="text-sm text-green-700 dark:text-green-300">
-                {t("cli.authenticatedAs")} <strong>{cliAuth.email}</strong>
-                {cliAuth.subscription_type && (
+                {t(`${config.translationPrefix}.authenticatedAs`)} <strong>{getAuthDisplay()}</strong>
+                {cliType === "claude" && cliAuth.subscription_type && (
                   <span className="ml-1 text-xs opacity-75">({cliAuth.subscription_type})</span>
                 )}
               </p>
@@ -68,15 +117,13 @@ export function CLISection({ open }: { open: boolean }) {
             </Button>
           </div>
           <details className="text-xs text-muted-foreground">
-            <summary className="cursor-pointer hover:text-foreground">{t("cli.switchAccount")}</summary>
+            <summary className="cursor-pointer hover:text-foreground">{t(`${config.translationPrefix}.switchAccount`)}</summary>
             <div className="mt-1.5 space-y-1 rounded-md border bg-muted/50 px-3 py-2">
-              <p>{t("cli.switchAccountInstructions")}</p>
+              <p>{t(`${config.translationPrefix}.switchAccountInstructions`)}</p>
               <code className="block rounded bg-muted px-2 py-1 font-mono">
-                {cliAuth?.in_docker
-                  ? "docker compose exec goclaw claude auth logout && docker compose exec goclaw claude auth login"
-                  : "claude auth logout && claude auth login"}
+                {switchCmd}
               </code>
-              <p>{t("cli.switchAccountRecheck")} <RefreshCw className="inline h-3 w-3" /> {t("cli.switchAccountRecheckSuffix")}</p>
+              <p>{t(`${config.translationPrefix}.switchAccountRecheck`)} <RefreshCw className="inline h-3 w-3" /> {t(`${config.translationPrefix}.switchAccountRecheckSuffix`)}</p>
             </div>
           </details>
         </div>
@@ -85,7 +132,7 @@ export function CLISection({ open }: { open: boolean }) {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-              <p className="text-sm font-medium text-amber-700 dark:text-amber-300">{t("cli.notAuthenticated")}</p>
+              <p className="text-sm font-medium text-amber-700 dark:text-amber-300">{t(`${config.translationPrefix}.notAuthenticated`)}</p>
             </div>
             <Button
               type="button"
@@ -95,14 +142,14 @@ export function CLISection({ open }: { open: boolean }) {
               onClick={checkAuth}
             >
               <RefreshCw className="h-3.5 w-3.5 mr-1" />
-              <span className="text-xs">{t("cli.recheckButton")}</span>
+              <span className="text-xs">{t(`${config.translationPrefix}.recheckButton`)}</span>
             </Button>
           </div>
           <p className="mt-1 text-sm text-amber-600 dark:text-amber-400">
-            {t("cli.runOnServer")}
+            {t(`${config.translationPrefix}.runOnServer`)}
           </p>
           <code className="mt-1 block rounded bg-amber-100 px-2 py-1 text-xs font-mono dark:bg-amber-900 dark:text-amber-300">
-            {cliAuth.in_docker ? "docker compose exec goclaw claude auth login" : "claude auth login"}
+            {authCmd}
           </code>
           {cliAuth.error && (
             <p className="mt-1 text-xs text-amber-500">{cliAuth.error}</p>
