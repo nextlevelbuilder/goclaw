@@ -32,11 +32,11 @@ Actions:
 - start: Launch browser
 - stop: Close browser
 - tabs: List open tabs
-- open: Open a new tab (requires targetUrl)
+- open: Open a new tab (requires http/https targetUrl; localhost/private hosts are blocked unless allowlisted)
 - close: Close a tab (requires targetId)
 - snapshot: Get page accessibility tree with element refs (use targetId, maxChars, interactive, compact, depth)
 - screenshot: Capture page screenshot (use targetId, fullPage)
-- navigate: Navigate tab to URL (requires targetId, targetUrl)
+- navigate: Navigate tab to URL (requires targetId, http/https targetUrl; localhost/private hosts are blocked unless allowlisted)
 - console: Get browser console messages (requires targetId)
 - act: Interact with elements (requires request object with kind, ref, etc.)
 
@@ -62,7 +62,7 @@ func (t *BrowserTool) Parameters() map[string]any {
 			},
 			"targetUrl": map[string]any{
 				"type":        "string",
-				"description": "URL for open/navigate actions",
+				"description": "HTTP/HTTPS URL for open/navigate actions (localhost/private/internal hosts are blocked unless allowlisted)",
 			},
 			"targetId": map[string]any{
 				"type":        "string",

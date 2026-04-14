@@ -13,11 +13,11 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
-	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
@@ -110,6 +110,13 @@ func setupToolRegistry(
 		}
 		if cfg.Tools.Browser.MaxPages > 0 {
 			opts = append(opts, browser.WithMaxPages(cfg.Tools.Browser.MaxPages))
+		}
+		if cfg.Tools.Browser.SSRFPolicy != nil {
+			opts = append(opts, browser.WithSSRFPolicy(browser.SSRFPolicy{
+				AllowPrivateNetwork: cfg.Tools.Browser.SSRFPolicy.AllowPrivateNetwork,
+				AllowedHostnames:    cfg.Tools.Browser.SSRFPolicy.AllowedHostnames,
+				HostnameAllowlist:   cfg.Tools.Browser.SSRFPolicy.HostnameAllowlist,
+			}))
 		}
 		browserMgr = browser.New(opts...)
 		toolsReg.Register(browser.NewBrowserTool(browserMgr))
@@ -586,4 +593,3 @@ func setupSkillsSystem(
 
 	return skillsLoader, skillSearchTool, globalSkillsDir, bundledSkillsDir, builtinSkillsDir
 }
-

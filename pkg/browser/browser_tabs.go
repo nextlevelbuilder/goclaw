@@ -70,6 +70,10 @@ func (m *Manager) ListTabs(ctx context.Context) ([]TabInfo, error) {
 // Pages are created within the tenant's incognito browser context for isolation.
 // If the tenant already has maxPages open, the oldest idle page is closed first.
 func (m *Manager) OpenTab(ctx context.Context, url string) (*TabInfo, error) {
+	if err := validateBrowserTargetURL(url, m.ssrfPolicy); err != nil {
+		return nil, err
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -90,10 +94,6 @@ func (m *Manager) OpenTab(ctx context.Context, url string) (*TabInfo, error) {
 		return nil, fmt.Errorf("open tab: %w", err)
 	}
 
-	if err := page.WaitStable(300 * time.Millisecond); err != nil {
-		return nil, fmt.Errorf("wait stable: %w", err)
-	}
-	info, _ := page.Info()
 	tid := string(page.TargetID)
 	m.pages[tid] = page
 	m.touchPageLocked(tid)
@@ -101,14 +101,28 @@ func (m *Manager) OpenTab(ctx context.Context, url string) (*TabInfo, error) {
 		m.pageTenants[tid] = tenantID
 	}
 
-	// Set up console listener
+	// Set up console listener early so page errors are captured even if
+	// navigation settles with an error page.
 	m.setupConsoleListener(page, tid)
 
-	tab := &TabInfo{TargetID: tid, URL: url}
-	if info != nil {
-		tab.URL = info.URL
-		tab.Title = info.Title
+	if err := page.WaitStable(300 * time.Millisecond); err != nil {
+		m.mu.Lock()
+		m.removePageLocked(tid, page)
+		m.mu.Unlock()
+		return nil, fmt.Errorf("wait stable: %w", err)
 	}
+	info, err := page.Info()
+	if err != nil {
+		m.removePageLocked(tid, page)
+		return nil, fmt.Errorf("read page info: %w", err)
+	}
+	if err := m.guardPageURLLocked(tid, info.URL, page); err != nil {
+		return nil, err
+	}
+
+	tab := &TabInfo{TargetID: tid, URL: url}
+	tab.URL = info.URL
+	tab.Title = info.Title
 	return tab, nil
 }
 

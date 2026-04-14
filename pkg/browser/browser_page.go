@@ -59,6 +59,10 @@ func (m *Manager) Screenshot(ctx context.Context, targetID string, fullPage bool
 
 // Navigate navigates a page to a URL.
 func (m *Manager) Navigate(ctx context.Context, targetID, url string) error {
+	if err := validateBrowserTargetURL(url, m.ssrfPolicy); err != nil {
+		return err
+	}
+
 	tenantID := tenantIDFromCtx(ctx)
 	m.mu.Lock()
 	page, err := m.getPageForTenant(targetID, tenantID)
@@ -73,6 +77,9 @@ func (m *Manager) Navigate(ctx context.Context, targetID, url string) error {
 	}
 	if err := page.WaitStable(300 * time.Millisecond); err != nil {
 		return fmt.Errorf("wait stable after navigate: %w", err)
+	}
+	if err := m.ensurePageURLAllowed(pageTargetID(targetID, page), page); err != nil {
+		return err
 	}
 	return nil
 }

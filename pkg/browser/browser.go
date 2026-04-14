@@ -13,15 +13,16 @@ import (
 
 // Manager handles the Chrome browser lifecycle and page management.
 type Manager struct {
-	mu          sync.Mutex
-	browser     *rod.Browser
-	launcher    *launcher.Launcher // retained for PID-based cleanup on crash
-	refs        *RefStore
-	pages       map[string]*rod.Page        // targetID → page
-	console     map[string][]ConsoleMessage // targetID → console messages
-	tenantCtxs  map[string]*rod.Browser     // tenantID → incognito browser context
-	pageTenants map[string]string           // targetID → tenantID (for filtering)
-	pageLastUsed map[string]time.Time       // targetID → last access time
+	mu            sync.Mutex
+	browser       *rod.Browser
+	launcher      *launcher.Launcher // retained for PID-based cleanup on crash
+	refs          *RefStore
+	pages         map[string]*rod.Page        // targetID → page
+	console       map[string][]ConsoleMessage // targetID → console messages
+	tenantCtxs    map[string]*rod.Browser     // tenantID → incognito browser context
+	pageTenants   map[string]string           // targetID → tenantID (for filtering)
+	pageLastUsed  map[string]time.Time        // targetID → last access time
+	ssrfPolicy    SSRFPolicy
 	headless      bool
 	remoteURL     string        // CDP endpoint for remote Chrome (sidecar); skips local launcher
 	actionTimeout time.Duration // per-action context timeout (default 30s)
@@ -33,6 +34,13 @@ type Manager struct {
 
 // Option configures a Manager.
 type Option func(*Manager)
+
+// SSRFPolicy configures browser navigation allowlists and private-network access.
+type SSRFPolicy struct {
+	AllowPrivateNetwork bool
+	AllowedHostnames    []string
+	HostnameAllowlist   []string
+}
 
 // WithHeadless sets headless mode (default false).
 func WithHeadless(h bool) Option {
@@ -63,6 +71,17 @@ func WithIdleTimeout(d time.Duration) Option {
 // WithMaxPages sets the max open pages per tenant.
 func WithMaxPages(n int) Option {
 	return func(m *Manager) { m.maxPages = n }
+}
+
+// WithSSRFPolicy sets the browser navigation SSRF policy.
+func WithSSRFPolicy(policy SSRFPolicy) Option {
+	return func(m *Manager) {
+		m.ssrfPolicy = SSRFPolicy{
+			AllowPrivateNetwork: policy.AllowPrivateNetwork,
+			AllowedHostnames:    append([]string(nil), policy.AllowedHostnames...),
+			HostnameAllowlist:   append([]string(nil), policy.HostnameAllowlist...),
+		}
+	}
 }
 
 // New creates a Manager with options.

@@ -12,7 +12,7 @@ import (
 
 // Click clicks an element by ref.
 func (m *Manager) Click(ctx context.Context, targetID, ref string, opts ClickOpts) error {
-	_, el, err := m.getPageAndResolve(ctx, targetID, ref)
+	page, el, err := m.getPageAndResolve(ctx, targetID, ref)
 	if err != nil {
 		return err
 	}
@@ -29,7 +29,11 @@ func (m *Manager) Click(ctx context.Context, targetID, ref string, opts ClickOpt
 		clickCount = 2
 	}
 
-	return el.Click(button, clickCount)
+	if err := el.Click(button, clickCount); err != nil {
+		return err
+	}
+	waitStable(page)
+	return m.ensurePageURLAllowed(pageTargetID(targetID, page), page)
 }
 
 // Type types text into an element by ref.
@@ -58,7 +62,8 @@ func (m *Manager) Type(ctx context.Context, targetID, ref, text string, opts Typ
 		_ = page.Keyboard.Press(input.Enter)
 	}
 
-	return nil
+	waitStable(page)
+	return m.ensurePageURLAllowed(pageTargetID(targetID, page), page)
 }
 
 // Press presses a keyboard key.
@@ -72,17 +77,25 @@ func (m *Manager) Press(ctx context.Context, targetID, key string) error {
 	}
 
 	k := mapKey(key)
-	return page.Keyboard.Press(k)
+	if err := page.Keyboard.Press(k); err != nil {
+		return err
+	}
+	waitStable(page)
+	return m.ensurePageURLAllowed(pageTargetID(targetID, page), page)
 }
 
 // Hover hovers over an element by ref.
 func (m *Manager) Hover(ctx context.Context, targetID, ref string) error {
-	_, el, err := m.getPageAndResolve(ctx, targetID, ref)
+	page, el, err := m.getPageAndResolve(ctx, targetID, ref)
 	if err != nil {
 		return err
 	}
 
-	return el.Hover()
+	if err := el.Hover(); err != nil {
+		return err
+	}
+	waitStable(page)
+	return m.ensurePageURLAllowed(pageTargetID(targetID, page), page)
 }
 
 // Wait waits for a condition on a page.
@@ -99,7 +112,6 @@ func (m *Manager) Wait(ctx context.Context, targetID string, opts WaitOpts) erro
 	if opts.TimeMs > 0 {
 		select {
 		case <-time.After(time.Duration(opts.TimeMs) * time.Millisecond):
-			return nil
 		case <-ctx.Done():
 			return ctx.Err()
 		}
@@ -107,9 +119,11 @@ func (m *Manager) Wait(ctx context.Context, targetID string, opts WaitOpts) erro
 
 	// Wait for text to appear
 	if opts.Text != "" {
-		return rod.Try(func() {
-			page.Timeout(30 * time.Second).MustElementR("*", opts.Text)
-		})
+		if err := rod.Try(func() {
+			page.Timeout(30*time.Second).MustElementR("*", opts.Text)
+		}); err != nil {
+			return err
+		}
 	}
 
 	// Wait for text to disappear
@@ -117,6 +131,7 @@ func (m *Manager) Wait(ctx context.Context, targetID string, opts WaitOpts) erro
 		timeout := time.After(30 * time.Second)
 		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
+	textGoneLoop:
 		for {
 			select {
 			case <-timeout:
@@ -124,11 +139,11 @@ func (m *Manager) Wait(ctx context.Context, targetID string, opts WaitOpts) erro
 			case <-ticker.C:
 				has, _, _ := page.Has("*")
 				if !has {
-					return nil
+					break textGoneLoop
 				}
 				el, err := page.ElementR("*", opts.TextGone)
 				if err != nil || el == nil {
-					return nil
+					break textGoneLoop
 				}
 			case <-ctx.Done():
 				return ctx.Err()
@@ -140,12 +155,11 @@ func (m *Manager) Wait(ctx context.Context, targetID string, opts WaitOpts) erro
 	if opts.URL != "" {
 		wait := page.WaitNavigation(proto.PageLifecycleEventNameLoad)
 		wait()
-		return nil
 	}
 
-	// Default: wait for page to stabilize
+	// Default: wait for page to stabilize.
 	waitStable(page)
-	return nil
+	return m.ensurePageURLAllowed(pageTargetID(targetID, page), page)
 }
 
 // Evaluate runs JavaScript on a page.
@@ -161,6 +175,11 @@ func (m *Manager) Evaluate(ctx context.Context, targetID, js string) (string, er
 	result, err := page.Eval(js)
 	if err != nil {
 		return "", fmt.Errorf("evaluate: %w", err)
+	}
+
+	waitStable(page)
+	if err := m.ensurePageURLAllowed(pageTargetID(targetID, page), page); err != nil {
+		return "", err
 	}
 
 	return result.Value.String(), nil
