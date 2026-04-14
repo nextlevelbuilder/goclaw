@@ -183,6 +183,29 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 		h.providerReg.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, "ollama", config.DockerLocalhost(host), "llama3.3"))
 		return
 	}
+	// Vertex supports ADC (empty api_key) — handle before the generic key guard.
+	if p.ProviderType == store.ProviderVertex {
+		vsettings := store.ParseVertexProviderSettings(p.Settings)
+		if vsettings == nil {
+			slog.Warn("vertex: missing project_id/region in settings, cannot register", "name", p.Name)
+			return
+		}
+		vcfg := providers.VertexConfig{
+			Name:            p.Name,
+			CredentialsJSON: p.APIKey,
+			ProjectID:       vsettings.ProjectID,
+			Region:          vsettings.Region,
+			DefaultModel:    vsettings.Model,
+			APIBaseOverride: p.APIBase,
+		}
+		prov, err := providers.NewVertexProviderWithTimeout(vcfg)
+		if err != nil {
+			slog.Warn("vertex: register in-memory failed", "name", p.Name, "error", err)
+			return
+		}
+		h.providerReg.RegisterForTenant(p.TenantID, prov)
+		return
+	}
 	if p.APIKey == "" {
 		return
 	}

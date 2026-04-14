@@ -112,6 +112,14 @@ func (c *Config) applyEnvOverrides() {
 	envStr("GOCLAW_OLLAMA_HOST", &c.Providers.Ollama.Host)
 	envStr("GOCLAW_OLLAMA_CLOUD_API_KEY", &c.Providers.OllamaCloud.APIKey)
 	envStr("GOCLAW_OLLAMA_CLOUD_API_BASE", &c.Providers.OllamaCloud.APIBase)
+	// Google Cloud Vertex AI (OAuth2 service account + ADC).
+	// APIKey may hold inline SA JSON; CredentialsFile is a path to SA JSON.
+	// If both empty, ADC (GOOGLE_APPLICATION_CREDENTIALS / gcloud / GCE metadata) is used.
+	envStr("GOCLAW_VERTEX_API_KEY", &c.Providers.Vertex.APIKey)
+	envStr("GOCLAW_VERTEX_CREDENTIALS_FILE", &c.Providers.Vertex.CredentialsFile)
+	envStr("GOCLAW_VERTEX_PROJECT_ID", &c.Providers.Vertex.ProjectID)
+	envStr("GOCLAW_VERTEX_REGION", &c.Providers.Vertex.Region)
+	envStr("GOCLAW_VERTEX_MODEL", &c.Providers.Vertex.Model)
 	envStr("GOCLAW_GATEWAY_TOKEN", &c.Gateway.Token)
 	envStr("GOCLAW_TELEGRAM_TOKEN", &c.Channels.Telegram.Token)
 	envStr("GOCLAW_DISCORD_TOKEN", &c.Channels.Discord.Token)

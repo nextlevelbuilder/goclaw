@@ -174,6 +174,27 @@ func registerProviders(registry *providers.Registry, cfg *config.Config, modelRe
 		slog.Info("registered provider", "name", "byteplus-coding")
 	}
 
+	// Google Cloud Vertex AI — OAuth2 service account or Application Default Credentials.
+	// Registers when project_id + region are set. Credential sources (priority order):
+	// inline JSON (APIKey) → file path (CredentialsFile) → ADC.
+	if cfg.Providers.Vertex.ProjectID != "" && cfg.Providers.Vertex.Region != "" {
+		vcfg := providers.VertexConfig{
+			Name:            "vertex",
+			CredentialsJSON: cfg.Providers.Vertex.APIKey,
+			CredentialsFile: cfg.Providers.Vertex.CredentialsFile,
+			ProjectID:       cfg.Providers.Vertex.ProjectID,
+			Region:          cfg.Providers.Vertex.Region,
+			DefaultModel:    cfg.Providers.Vertex.Model,
+		}
+		prov, err := providers.NewVertexProviderWithTimeout(vcfg)
+		if err != nil {
+			slog.Warn("vertex: initialization failed", "error", err)
+		} else {
+			registry.Register(prov)
+			slog.Info("registered provider", "name", "vertex", "region", cfg.Providers.Vertex.Region, "project", cfg.Providers.Vertex.ProjectID)
+		}
+	}
+
 	// Claude CLI provider (subscription-based, no API key needed)
 	if cfg.Providers.ClaudeCLI.CLIPath != "" {
 		cliPath := cfg.Providers.ClaudeCLI.CLIPath
@@ -321,6 +342,30 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 			}
 			registry.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, "ollama", config.DockerLocalhost(host), "llama3.3"))
 			slog.Info("registered provider from DB", "name", p.Name)
+			continue
+		}
+		// Vertex supports ADC (empty api_key) — handle before the generic key guard.
+		if p.ProviderType == store.ProviderVertex {
+			vsettings := store.ParseVertexProviderSettings(p.Settings)
+			if vsettings == nil {
+				slog.Warn("vertex: missing project_id/region in settings, skipping", "name", p.Name)
+				continue
+			}
+			vcfg := providers.VertexConfig{
+				Name:            p.Name,
+				CredentialsJSON: p.APIKey,
+				ProjectID:       vsettings.ProjectID,
+				Region:          vsettings.Region,
+				DefaultModel:    vsettings.Model,
+				APIBaseOverride: p.APIBase,
+			}
+			prov, err := providers.NewVertexProviderWithTimeout(vcfg)
+			if err != nil {
+				slog.Warn("vertex: init from DB failed", "name", p.Name, "error", err)
+				continue
+			}
+			registry.RegisterForTenant(p.TenantID, prov)
+			slog.Info("registered provider from DB", "name", p.Name, "type", "vertex", "region", vsettings.Region)
 			continue
 		}
 

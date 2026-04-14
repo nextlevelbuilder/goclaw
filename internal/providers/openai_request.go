@@ -16,9 +16,16 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 
 	// Compute provider capability once: does this endpoint support Google's thought_signature?
 	// We check providerType, name, apiBase, and the model string (robust detection for proxies/OpenRouter).
-	supportsThoughtSignature := strings.Contains(strings.ToLower(p.providerType), "gemini") ||
+	// Vertex AI included: its OpenAI-compat endpoint only serves Gemini-family models
+	// (Claude on Vertex uses Anthropic's native format, not this endpoint). Required to avoid
+	// HTTP 400 on tool-call rounds when the model name doesn't contain "gemini" (e.g. fine-tuned endpoint IDs).
+	lowerProviderType := strings.ToLower(p.providerType)
+	lowerAPIBase := strings.ToLower(p.apiBase)
+	supportsThoughtSignature := strings.Contains(lowerProviderType, "gemini") ||
+		strings.Contains(lowerProviderType, "vertex") ||
 		strings.Contains(strings.ToLower(p.name), "gemini") ||
-		strings.Contains(strings.ToLower(p.apiBase), "generativelanguage") ||
+		strings.Contains(lowerAPIBase, "generativelanguage") ||
+		strings.Contains(lowerAPIBase, "aiplatform") ||
 		strings.Contains(strings.ToLower(model), "gemini")
 
 	if supportsThoughtSignature {

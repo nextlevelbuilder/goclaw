@@ -8,19 +8,20 @@ import (
 // OpenAIProvider implements Provider for OpenAI-compatible APIs
 // (OpenAI, Groq, OpenRouter, DeepSeek, VLLM, etc.)
 type OpenAIProvider struct {
-	name         string
-	apiKey       string
-	apiBase      string
-	chatPath     string // defaults to "/chat/completions"
-	authPrefix   string // auth header prefix, defaults to "Bearer " if empty
-	defaultModel string
-	providerType string // DB provider_type (e.g. "gemini_native", "openai", "minimax_native")
-	siteURL      string // optional site URL for provider identification (e.g. OpenRouter HTTP-Referer)
-	siteTitle    string // optional site title for provider identification (e.g. OpenRouter X-Title)
-	client       *http.Client
-	retryConfig  RetryConfig
-	middlewares  RequestMiddleware // composed middleware chain (nil = no-op)
-	registry     ModelRegistry    // model resolution registry (nil = skip)
+	name           string
+	apiKey         string
+	apiBase        string
+	chatPath       string // defaults to "/chat/completions"
+	authPrefix     string // auth header prefix, defaults to "Bearer " if empty
+	defaultModel   string
+	providerType   string // DB provider_type (e.g. "gemini_native", "openai", "minimax_native")
+	siteURL        string // optional site URL for provider identification (e.g. OpenRouter HTTP-Referer)
+	siteTitle      string // optional site title for provider identification (e.g. OpenRouter X-Title)
+	client         *http.Client
+	retryConfig    RetryConfig
+	middlewares    RequestMiddleware // composed middleware chain (nil = no-op)
+	registry       ModelRegistry     // model resolution registry (nil = skip)
+	skipAuthHeader bool              // when true, doRequest() omits Authorization (transport injects auth, e.g. Vertex oauth2)
 }
 
 func NewOpenAIProvider(name, apiKey, apiBase, defaultModel string) *OpenAIProvider {
@@ -51,6 +52,26 @@ func (p *OpenAIProvider) WithChatPath(path string) *OpenAIProvider {
 // Default is "Bearer " if not set.
 func (p *OpenAIProvider) WithAuthPrefix(prefix string) *OpenAIProvider {
 	p.authPrefix = prefix
+	return p
+}
+
+// WithHTTPClient replaces the default HTTP client. Intended for providers that
+// need a custom transport (e.g. oauth2.Transport for Vertex AI auto-refresh).
+// Pair with WithoutAuthHeader() so the static Authorization header is omitted
+// and the transport's auth injection is not overwritten or duplicated.
+func (p *OpenAIProvider) WithHTTPClient(client *http.Client) *OpenAIProvider {
+	if client != nil {
+		p.client = client
+	}
+	return p
+}
+
+// WithoutAuthHeader disables the default Authorization header injection.
+// Caller must inject auth via the HTTP client's Transport (e.g. oauth2.Transport
+// for Vertex AI service-account auth). Used for providers whose auth tokens
+// expire and must be refreshed — static apiKey is not usable.
+func (p *OpenAIProvider) WithoutAuthHeader() *OpenAIProvider {
+	p.skipAuthHeader = true
 	return p
 }
 
