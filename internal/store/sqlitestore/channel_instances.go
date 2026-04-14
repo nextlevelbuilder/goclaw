@@ -217,6 +217,25 @@ func (s *SQLiteChannelInstanceStore) Update(ctx context.Context, id uuid.UUID, u
 		}
 		updates["credentials"] = credsBytes
 	}
+
+	// Marshal config to JSON bytes for JSON column.
+	if cfgVal, ok := updates["config"]; ok {
+		if cfgVal == nil {
+			updates["config"] = []byte("null")
+		} else {
+			switch v := cfgVal.(type) {
+			case json.RawMessage:
+				// Already raw JSON bytes — use as-is.
+			case []byte:
+				// Already bytes — use as-is.
+			default:
+				if b, err := json.Marshal(cfgVal); err == nil {
+					updates["config"] = json.RawMessage(b)
+				}
+			}
+		}
+	}
+
 	updates["updated_at"] = time.Now()
 	if store.IsCrossTenant(ctx) {
 		return execMapUpdate(ctx, s.db, "channel_instances", id, updates)

@@ -984,12 +984,14 @@ func TestObserveStage_BlockReplies_IncrementedPerContentResponse(t *testing.T) {
 	stage := NewObserveStage(deps)
 	state := defaultState()
 
-	// first response with content
-	state.Think.LastResponse = &providers.ChatResponse{Content: "reply 1", FinishReason: "stop"}
+	// first intermediate response (with tool calls) — counts as block reply
+	state.Think.LastResponse = &providers.ChatResponse{Content: "reply 1", FinishReason: "stop",
+		ToolCalls: []providers.ToolCall{{ID: "1", Name: "tool"}}}
 	_ = stage.Execute(context.Background(), state)
 
-	// second response with content
-	state.Think.LastResponse = &providers.ChatResponse{Content: "reply 2", FinishReason: "stop"}
+	// second intermediate response — counts as block reply
+	state.Think.LastResponse = &providers.ChatResponse{Content: "reply 2", FinishReason: "stop",
+		ToolCalls: []providers.ToolCall{{ID: "2", Name: "tool"}}}
 	_ = stage.Execute(context.Background(), state)
 
 	if state.Observe.BlockReplies != 2 {
@@ -1028,6 +1030,28 @@ func TestObserveStage_EmptyContent_BlockRepliesNotIncremented(t *testing.T) {
 
 	if state.Observe.BlockReplies != 0 {
 		t.Errorf("BlockReplies = %d, want 0 when content empty", state.Observe.BlockReplies)
+	}
+}
+
+func TestObserveStage_FinalAnswer_NotCountedAsBlockReply(t *testing.T) {
+	t.Parallel()
+	deps := &PipelineDeps{}
+	stage := NewObserveStage(deps)
+	state := defaultState()
+
+	// Final answer (no tool calls) — should NOT be counted as block reply
+	state.Think.LastResponse = &providers.ChatResponse{Content: "final answer", FinishReason: "stop"}
+
+	_ = stage.Execute(context.Background(), state)
+
+	if state.Observe.BlockReplies != 0 {
+		t.Errorf("BlockReplies = %d, want 0 for final answer (no tool calls)", state.Observe.BlockReplies)
+	}
+	if state.Observe.LastBlockReply != "" {
+		t.Errorf("LastBlockReply = %q, want empty for final answer", state.Observe.LastBlockReply)
+	}
+	if state.Observe.FinalContent != "final answer" {
+		t.Errorf("FinalContent = %q, want 'final answer'", state.Observe.FinalContent)
 	}
 }
 

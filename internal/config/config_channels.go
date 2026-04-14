@@ -131,15 +131,23 @@ type SlackConfig struct {
 	MediaMaxBytes  int64               `json:"media_max_bytes,omitempty"` // max file download size in bytes (default 20MB)
 }
 
+// WhatsAppGroupConfig defines per-group overrides for a WhatsApp channel.
+type WhatsAppGroupConfig struct {
+	Name    string `json:"name,omitempty"`    // human-readable alias (e.g. "Channel Outlook")
+	AgentID string `json:"agent_id,omitempty"` // agent_key to route to (overrides channel default)
+	Enabled *bool  `json:"enabled,omitempty"`  // disable bot for this group (default: true)
+}
+
 type WhatsAppConfig struct {
-	Enabled        bool                `json:"enabled"`
-	AuthDir        string              `json:"auth_dir,omitempty"`        // optional: SQLite auth dir override (desktop)
-	AllowFrom      FlexibleStringSlice `json:"allow_from"`
-	DMPolicy       string              `json:"dm_policy,omitempty"`       // "pairing" (default for DB instances), "open", "allowlist", "disabled"
-	GroupPolicy    string              `json:"group_policy,omitempty"`    // "pairing" (default for DB instances), "open" (default for config), "allowlist", "disabled"
-	RequireMention *bool               `json:"require_mention,omitempty"` // only respond in groups when bot is @mentioned (default false)
-	HistoryLimit   int                 `json:"history_limit,omitempty"`   // max pending group messages for context (default 200, 0=disabled)
-	BlockReply     *bool               `json:"block_reply,omitempty"`     // override gateway block_reply (nil = inherit)
+	Enabled        bool                             `json:"enabled"`
+	AuthDir        string                           `json:"auth_dir,omitempty"`        // optional: SQLite auth dir override (desktop)
+	AllowFrom      FlexibleStringSlice              `json:"allow_from"`
+	DMPolicy       string                           `json:"dm_policy,omitempty"`       // "pairing" (default for DB instances), "open", "allowlist", "disabled"
+	GroupPolicy    string                           `json:"group_policy,omitempty"`    // "pairing" (default for DB instances), "open" (default for config), "allowlist", "disabled"
+	RequireMention *bool                            `json:"require_mention,omitempty"` // only respond in groups when bot is @mentioned (default false)
+	HistoryLimit   int                              `json:"history_limit,omitempty"`   // max pending group messages for context (default 200, 0=disabled)
+	BlockReply     *bool                            `json:"block_reply,omitempty"`     // override gateway block_reply (nil = inherit)
+	Groups         map[string]*WhatsAppGroupConfig  `json:"groups,omitempty"`          // per-group overrides, keyed by group JID
 }
 
 type ZaloConfig struct {

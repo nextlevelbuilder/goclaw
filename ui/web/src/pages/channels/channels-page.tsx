@@ -2,6 +2,7 @@ import { useState, useRef, lazy, Suspense } from "react";
 import { useParams, useNavigate } from "react-router";
 import { Radio, Plus, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -19,6 +20,9 @@ import { channelsWithAuth, reauthDialogs } from "./channel-wizard-registry";
 import { ChannelDetailPage } from "./channel-detail/channel-detail-page";
 import { ChannelListRow } from "./channel-list-row";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
+import { useHttp } from "@/hooks/use-ws";
+import { queryKeys } from "@/lib/query-keys";
+import type { ChannelContact } from "@/types/contact";
 import { useMinLoading } from "@/hooks/use-min-loading";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import { useDebouncedCallback } from "@/hooks/use-debounced-callback";
@@ -43,6 +47,7 @@ export function ChannelsPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [editInstance, setEditInstance] = useState<ChannelInstanceData | null>(null);
   const [qrTarget, setQrTarget] = useState<ChannelInstanceData | null>(null);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
   const pendingSearchRef = useRef("");
   const flushSearch = useDebouncedCallback(() => {
@@ -65,6 +70,35 @@ export function ChannelsPage() {
     offset: (page - 1) * pageSize,
   });
   const { agents } = useAgents();
+  const http = useHttp();
+
+  // Fetch WhatsApp group contacts for group display in channel list
+  const { data: waGroupContacts } = useQuery({
+    queryKey: queryKeys.channels.waGroups(),
+    queryFn: async () => {
+      const res = await http.get<{ contacts: ChannelContact[] }>("/v1/contacts", {
+        channel_type: "whatsapp",
+        peer_kind: "group",
+        contact_type: "group",
+        limit: "200",
+      });
+      return res.contacts ?? [];
+    },
+    staleTime: 60_000,
+  });
+
+  // Auto-expand WhatsApp groups on first load
+  const initializedRef = useRef(false);
+  if (!initializedRef.current && instances.length > 0) {
+    initializedRef.current = true;
+    const initial: Record<string, boolean> = {};
+    for (const inst of instances) {
+      if (inst.channel_type === "whatsapp") initial[inst.id] = true;
+    }
+    if (Object.keys(initial).length > 0) {
+      setExpandedGroups(initial);
+    }
+  }
 
   const loading = statusLoading || instancesLoading;
   const spinning = useMinLoading(loading);
@@ -174,6 +208,12 @@ export function ChannelsPage() {
                   instance={inst}
                   status={getStatus(inst)}
                   agentName={getAgentName(inst.agent_id)}
+                  agents={agents}
+                  waGroupContacts={inst.channel_type === "whatsapp" ? (waGroupContacts ?? []) : []}
+                  groupsExpanded={!!expandedGroups[inst.id]}
+                  onToggleGroups={() =>
+                    setExpandedGroups((prev) => ({ ...prev, [inst.id]: !prev[inst.id] }))
+                  }
                   onClick={() => navigate(`/channels/${inst.id}`)}
                   onAuth={channelsWithAuth.has(inst.channel_type) ? () => setQrTarget(inst) : undefined}
                   onDelete={!inst.is_default ? () => setDeleteTarget(inst) : undefined}

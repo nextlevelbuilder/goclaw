@@ -40,7 +40,13 @@
   "list": {
     "failureStreak": "{{count}} lỗi liên tiếp",
     "openChannelDetail": "Mở chi tiết channel để xem chẩn đoán mới nhất",
-    "nextStep": "Bước tiếp theo"
+    "nextStep": "Bước tiếp theo",
+    "groupsCount": "{{count}} nhóm",
+    "showGroups": "Hiện nhóm",
+    "hideGroups": "Ẩn nhóm",
+    "defaultAgent": "Mặc định",
+    "groupDisabled": "Đã tắt",
+    "noGroups": "Chưa phát hiện nhóm nào. Nhóm sẽ xuất hiện sau khi bot nhận tin nhắn trong nhóm WhatsApp."
   },
   "failureKind": {
     "auth": "Xác thực",
@@ -398,5 +404,19 @@
     "relinkDevice": "Liên kết lại",
     "connectedSuccess": "✅ Kết nối WhatsApp thành công!",
     "tabQrCode": "Mã QR"
+  },
+  "whatsappGroupOverrides": {
+    "title": "Agent nhóm WhatsApp",
+    "hint": "Gán agent cụ thể để xử lý từng nhóm WhatsApp. Nhóm không có cấu hình sẽ dùng agent mặc định của channel.",
+    "groupLabel": "Nhóm: {{id}}",
+    "nameLabel": "Tên nhóm",
+    "namePlaceholder": "vd: Channel Outlook",
+    "agentLabel": "Agent",
+    "selectAgent": "Dùng mặc định channel",
+    "addGroupPlaceholder": "JID nhóm (vd: 123456@g.us)",
+    "addGroup": "Thêm nhóm",
+    "knownGroups": "Nhóm đã phát hiện",
+    "saveGroups": "Lưu nhóm",
+    "saving": "Đang lưu..."
   }
 }
