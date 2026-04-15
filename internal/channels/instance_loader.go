@@ -325,13 +325,29 @@ func (l *InstanceLoader) loadInstance(ctx context.Context, inst store.ChannelIns
 	l.manager.RegisterChannel(inst.Name, ch)
 
 	// Start the channel if requested (Reload path). LoadAll defers to StartAll.
+	// Use a timeout to prevent one slow channel from blocking all others.
 	if autoStart {
-		if err := ch.Start(ctx); err != nil {
-			l.manager.recordChannelStartFailure(inst.Name, ch, "", err)
-			slog.Error("channel instance start failed", "name", inst.Name, "error", err)
-			// Still registered — will show as not running.
-		} else {
-			l.manager.RecordHealth(inst.Name, snapshotChannelHealth(ch))
+		startCtx, startCancel := context.WithTimeout(ctx, 90*time.Second)
+		startErr := make(chan error, 1)
+		go func() { startErr <- ch.Start(startCtx) }()
+
+		select {
+		case err := <-startErr:
+			startCancel()
+			if err != nil {
+				l.manager.recordChannelStartFailure(inst.Name, ch, "", err)
+				slog.Error("channel instance start failed", "name", inst.Name, "error", err)
+			} else {
+				l.manager.RecordHealth(inst.Name, snapshotChannelHealth(ch))
+			}
+		case <-startCtx.Done():
+			startCancel()
+			// Stop the channel to clean up any partially started resources (polling goroutines, etc.)
+			if stopper, ok := ch.(interface{ Stop(context.Context) error }); ok {
+				_ = stopper.Stop(context.Background())
+			}
+			l.manager.recordChannelStartFailure(inst.Name, ch, "", fmt.Errorf("start timed out after 90s"))
+			slog.Error("channel instance start timed out", "name", inst.Name, "type", inst.ChannelType)
 		}
 	}
 
