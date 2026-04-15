@@ -1,9 +1,11 @@
 package pancake
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 )
@@ -11,13 +13,13 @@ import (
 // handleCommentEvent processes a Pancake COMMENT webhook event.
 // Mirrors the inbox handler pattern with additional comment-specific guards.
 func (ch *Channel) handleCommentEvent(data MessagingData) {
-	// Feature gate.
-	if !ch.config.Features.CommentReply {
+	// Feature gate — exit only if BOTH reply and auto-react are disabled.
+	if !ch.config.Features.CommentReply && !ch.config.Features.AutoReact {
 		ch.commentReplyDisabledOnce.Do(func() {
-			slog.Info("pancake: comment ignored because comment_reply disabled",
+			slog.Info("pancake: comment ignored because comment_reply and auto_react are both disabled",
 				"page_id", ch.pageID,
 				"channel_name", ch.Name(),
-				"hint", "enable config.features.comment_reply to auto-reply page comments")
+				"hint", "enable config.features.comment_reply or config.features.auto_react")
 		})
 		return
 	}
@@ -54,6 +56,24 @@ func (ch *Channel) handleCommentEvent(data MessagingData) {
 			slog.Debug("pancake: duplicate comment skipped", "msg_id", data.Message.ID)
 			return
 		}
+	}
+
+	// Auto-react BEFORE keyword filter — fires on all valid non-duplicate comments.
+	// Independent of comment_reply: reacts even if reply is disabled.
+	if ch.config.Features.AutoReact && ch.platform == "facebook" &&
+		data.ConversationID != "" && data.Message.ID != "" {
+		select {
+		case ch.reactSem <- struct{}{}:
+			go ch.reactCommentAsync(data.ConversationID, data.Message.ID)
+		default:
+			slog.Debug("pancake: react semaphore full, dropping reaction",
+				"page_id", ch.pageID, "comment_id", data.Message.ID)
+		}
+	}
+
+	// Comment reply gate — independent of auto_react above.
+	if !ch.config.Features.CommentReply {
+		return
 	}
 
 	// Comment filter.
@@ -144,6 +164,23 @@ func (ch *Channel) buildCommentContent(data MessagingData) string {
 	}
 
 	return sb.String()
+}
+
+// reactCommentAsync likes the comment on Facebook asynchronously.
+// Respects channel shutdown via stopCtx with 5s cap; releases the semaphore slot on exit.
+func (ch *Channel) reactCommentAsync(conversationID, messageID string) {
+	defer func() { <-ch.reactSem }()
+
+	ctx, cancel := context.WithTimeout(ch.stopCtx, 5*time.Second)
+	defer cancel()
+
+	if err := ch.apiClient.ReactComment(ctx, conversationID, messageID); err != nil {
+		slog.Warn("pancake: auto-react comment failed",
+			"comment_id", messageID, "conv_id", conversationID, "page_id", ch.pageID, "err", err)
+		return
+	}
+	slog.Debug("pancake: auto-reacted to comment",
+		"comment_id", messageID, "page_id", ch.pageID)
 }
 
 // filterComment checks if the comment matches the configured filter.

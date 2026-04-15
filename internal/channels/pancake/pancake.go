@@ -56,6 +56,9 @@ type Channel struct {
 	// arrive but the feature is disabled in channel config.
 	commentReplyDisabledOnce sync.Once
 
+	// reactSem bounds concurrent Facebook comment-like calls (cap 10).
+	reactSem chan struct{}
+
 	stopCh  chan struct{}
 	stopCtx context.Context
 	stopFn  context.CancelFunc
@@ -88,6 +91,7 @@ func New(cfg pancakeInstanceConfig, creds pancakeCreds,
 		platform:      cfg.Platform,
 		webhookSecret: creds.WebhookSecret,
 		postFetcher:   NewPostFetcher(apiClient, cfg.PostContextCacheTTL),
+		reactSem:      make(chan struct{}, 10),
 		stopCh:        make(chan struct{}),
 		stopCtx:       stopCtx,
 		stopFn:        stopFn,
@@ -151,6 +155,15 @@ func (ch *Channel) Start(ctx context.Context) error {
 		slog.Warn("security.pancake_webhook_no_secret",
 			"page_id", ch.pageID,
 			"note", "webhook_secret not configured; incoming webhook requests will not be authenticated")
+	}
+
+	// [F9] Warn if auto_react enabled without webhook signature verification.
+	// Without HMAC, any actor reaching the webhook endpoint can trigger Pancake API calls.
+	if ch.config.Features.AutoReact && ch.webhookSecret == "" {
+		slog.Warn("security.pancake_auto_react_without_hmac: auto_react is enabled but "+
+			"webhook_secret is not set; configure webhook_secret to prevent "+
+			"unauthenticated like-comment triggers",
+			"page_id", ch.pageID)
 	}
 
 	globalRouter.register(ch)

@@ -22,7 +22,8 @@ type pancakeInstanceConfig struct {
 	Features struct {
 		InboxReply   bool `json:"inbox_reply"`
 		CommentReply bool `json:"comment_reply"`
-		FirstInbox   bool `json:"first_inbox"` // send one-time DM to commenter after comment reply
+		FirstInbox   bool `json:"first_inbox"`  // send one-time DM to commenter after comment reply
+		AutoReact    bool `json:"auto_react"`   // auto-like user comments on Facebook (platform=facebook only)
 	} `json:"features"`
 	CommentReplyOptions struct {
 		IncludePostContext bool     `json:"include_post_context"` // prepend post text to comment content
