@@ -142,12 +142,10 @@ func (r *webhookRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// INFO-level: always visible without DEBUG — shows which field sourced the page_id.
-	slog.Info("pancake: webhook page_id resolution",
-		"event_page_id", event.PageID,
-		"data_page_id", data.PageID,
-		"conv_id", data.Conversation.ID,
+	slog.Debug("pancake: webhook event parsed",
+		"event_type", event.EventType,
 		"resolved_page_id", pageID,
+		"conv_id", data.Conversation.ID,
 		"conv_type", convType,
 		"sender_id", data.Conversation.From.ID,
 		"msg_id", data.Message.ID)

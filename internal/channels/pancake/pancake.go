@@ -254,18 +254,20 @@ func (ch *Channel) sendCommentReply(ctx context.Context, msg bus.OutboundMessage
 	defer cancel()
 
 	conversationID := msg.ChatID
-	text := FormatOutbound(msg.Content, ch.platform)
 
-	// Remember echo before sending (same pattern as inbox).
+	// Guard first — otherwise rememberOutboundEcho would stamp phantom echoes
+	// for a send that never happens, polluting future inbound echo dedup.
+	commentID := msg.Metadata["reply_to_comment_id"]
+	if commentID == "" {
+		return fmt.Errorf("pancake: reply_to_comment_id missing in outbound metadata for comment reply")
+	}
+
+	text := FormatOutbound(msg.Content, ch.platform)
 	parts := splitMessage(text, ch.maxMessageLength())
 	for _, part := range parts {
 		ch.rememberOutboundEcho(conversationID, part)
 	}
 
-	commentID := msg.Metadata["reply_to_comment_id"]
-	if commentID == "" {
-		return fmt.Errorf("pancake: reply_to_comment_id missing in outbound metadata for comment reply")
-	}
 	for _, part := range parts {
 		if err := ch.apiClient.ReplyComment(ctx, conversationID, commentID, part); err != nil {
 			ch.handleAPIError(err)
