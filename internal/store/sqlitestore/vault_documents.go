@@ -101,13 +101,13 @@ func (s *SQLiteVaultStore) GetDocument(ctx context.Context, tenantID, agentID, p
 	args := []any{tenantID, path}
 
 	if agentID != "" {
-		q += " AND agent_id = ?"
+		q += " AND (agent_id = ? OR agent_id IS NULL)"
 		args = append(args, agentID)
 	}
 
 	if rc := store.RunContextFromCtx(ctx); rc != nil {
 		if rc.TeamID != "" {
-			q += " AND team_id = ?"
+			q += " AND (team_id = ? OR team_id IS NULL)"
 			args = append(args, rc.TeamID)
 		} else {
 			q += " AND team_id IS NULL"
@@ -172,7 +172,7 @@ func (s *SQLiteVaultStore) GetDocumentByBasename(ctx context.Context, tenantID, 
 		WHERE tenant_id = ? AND lower(replace(path, rtrim(path, replace(path, '/', '')), '')) = lower(?)`
 	args := []any{tenantID, basename}
 	if agentID != "" {
-		q += " AND agent_id = ?"
+		q += " AND (agent_id = ? OR agent_id IS NULL)"
 		args = append(args, agentID)
 	}
 	q += " LIMIT 1"
@@ -188,13 +188,13 @@ func (s *SQLiteVaultStore) DeleteDocument(ctx context.Context, tenantID, agentID
 	args := []any{tenantID, path}
 
 	if agentID != "" {
-		q += " AND agent_id = ?"
+		q += " AND (agent_id = ? OR agent_id IS NULL)"
 		args = append(args, agentID)
 	}
 
 	if rc := store.RunContextFromCtx(ctx); rc != nil {
 		if rc.TeamID != "" {
-			q += " AND team_id = ?"
+			q += " AND (team_id = ? OR team_id IS NULL)"
 			args = append(args, rc.TeamID)
 		} else {
 			q += " AND team_id IS NULL"

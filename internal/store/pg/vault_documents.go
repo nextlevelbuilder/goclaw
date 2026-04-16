@@ -155,7 +155,7 @@ func (s *PGVaultStore) GetDocument(ctx context.Context, tenantID, agentID, path 
 		if err != nil {
 			return nil, fmt.Errorf("vault get document: agent: %w", err)
 		}
-		q += fmt.Sprintf(" AND agent_id = $%d", p)
+		q += fmt.Sprintf(" AND (agent_id = $%d OR agent_id IS NULL)", p)
 		args = append(args, aid)
 		p++
 	}
@@ -166,7 +166,7 @@ func (s *PGVaultStore) GetDocument(ctx context.Context, tenantID, agentID, path 
 			if err != nil {
 				return nil, fmt.Errorf("vault get document: team: %w", err)
 			}
-			q += fmt.Sprintf(" AND team_id = $%d", p)
+			q += fmt.Sprintf(" AND (team_id = $%d OR team_id IS NULL)", p)
 			args = append(args, tmid)
 		} else {
 			q += " AND team_id IS NULL"
@@ -256,7 +256,7 @@ func (s *PGVaultStore) GetDocumentByBasename(ctx context.Context, tenantID, agen
 		if err != nil {
 			return nil, fmt.Errorf("vault get by basename: agent: %w", err)
 		}
-		q += fmt.Sprintf(" AND agent_id = $%d", p)
+		q += fmt.Sprintf(" AND (agent_id = $%d OR agent_id IS NULL)", p)
 		args = append(args, aid)
 	}
 	q += " LIMIT 1"
@@ -292,7 +292,7 @@ func (s *PGVaultStore) DeleteDocument(ctx context.Context, tenantID, agentID, pa
 		if err != nil {
 			return fmt.Errorf("vault delete document: agent: %w", err)
 		}
-		q += fmt.Sprintf(" AND agent_id = $%d", p)
+		q += fmt.Sprintf(" AND (agent_id = $%d OR agent_id IS NULL)", p)
 		args = append(args, aid)
 		p++
 	}
@@ -303,7 +303,7 @@ func (s *PGVaultStore) DeleteDocument(ctx context.Context, tenantID, agentID, pa
 			if err != nil {
 				return fmt.Errorf("vault delete document: team: %w", err)
 			}
-			q += fmt.Sprintf(" AND team_id = $%d", p)
+			q += fmt.Sprintf(" AND (team_id = $%d OR team_id IS NULL)", p)
 			args = append(args, tmid)
 		} else {
 			q += " AND team_id IS NULL"
