@@ -45,15 +45,9 @@ func TestBridgeTool_Execute_RevokeAgentGrant_ReturnsError(t *testing.T) {
 		t.Fatal("expected at least 1 accessible server after grant")
 	}
 
-	// Create a fake MCP client that returns a stub result
-	fakeClient := &fakeMCPClient{result: &mcpgo.CallToolResult{
-		Content: []mcpgo.Content{mcpgo.TextContent{Text: "success"}},
-	}}
-
-	// Create BridgeTool with the fake client
+	// Create BridgeTool with a nil client pointer — the test exercises the
+	// grant-recheck path, which must short-circuit before any client call.
 	clientPtr := &atomic.Pointer[mcpclient.Client]{}
-	// Note: We need to cast the fake client to the interface type
-	// This is a workaround since mcp-go client is a struct, not an interface
 	connected := &atomic.Bool{}
 	connected.Store(true)
 
