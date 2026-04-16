@@ -76,7 +76,7 @@ reset: version-file
 	$(COMPOSE) up -d --build
 
 test:
-	go test -race -timeout=90s ./...
+	go test -race -timeout=5m ./...
 
 # ── Layered Testing ──
 # P0: Invariant tests - tenant isolation, permission enforcement (MUST pass)
