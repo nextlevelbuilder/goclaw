@@ -52,8 +52,11 @@ type Channel struct {
 	// postFetcher fetches and caches page post content for comment context enrichment.
 	postFetcher *PostFetcher
 
+	// reactSem bounds concurrent Facebook comment-like calls (cap 10).
+	reactSem chan struct{}
+
 	// commentReplyDisabledOnce prevents repeated info logs when COMMENT webhooks
-	// arrive but the feature is disabled in channel config.
+	// arrive but both comment_reply and auto_react are disabled in channel config.
 	commentReplyDisabledOnce sync.Once
 
 	stopCh  chan struct{}
@@ -88,6 +91,7 @@ func New(cfg pancakeInstanceConfig, creds pancakeCreds,
 		platform:      cfg.Platform,
 		webhookSecret: creds.WebhookSecret,
 		postFetcher:   NewPostFetcher(apiClient, cfg.PostContextCacheTTL),
+		reactSem:      make(chan struct{}, 10),
 		stopCh:        make(chan struct{}),
 		stopCtx:       stopCtx,
 		stopFn:        stopFn,
@@ -151,6 +155,11 @@ func (ch *Channel) Start(ctx context.Context) error {
 		slog.Warn("security.pancake_webhook_no_secret",
 			"page_id", ch.pageID,
 			"note", "webhook_secret not configured; incoming webhook requests will not be authenticated")
+		if ch.config.Features.AutoReact {
+			slog.Warn("security.pancake_auto_react_without_hmac",
+				"page_id", ch.pageID,
+				"note", "auto_react is enabled but webhook_secret is not set; configure webhook_secret to prevent unauthenticated reaction triggers")
+		}
 	}
 
 	globalRouter.register(ch)
@@ -345,4 +354,3 @@ func (ch *Channel) maxMessageLength() int {
 		return 2000
 	}
 }
-

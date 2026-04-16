@@ -396,3 +396,176 @@ func TestHandleCommentEvent_ChatIDIsConversationID(t *testing.T) {
 func contains(s, substr string) bool {
 	return strings.Contains(s, substr)
 }
+
+// --- AutoReact ---
+
+func TestHandleCommentEvent_AutoReactEnabled(t *testing.T) {
+	done := make(chan string, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/likes") {
+			parts := strings.Split(r.URL.Path, "/")
+			for i, p := range parts {
+				if p == "likes" && i > 0 {
+					select {
+					case done <- parts[i-1]:
+					default:
+					}
+				}
+			}
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"success":true}`))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	cfg := pancakeInstanceConfig{}
+	cfg.Features.CommentReply = true
+	cfg.Features.AutoReact = true
+
+	ch, _ := newTestChannel(t, "page-1", cfg)
+	ch.apiClient.userBaseURL = srv.URL
+	ch.apiClient.httpClient = srv.Client()
+
+	evt := commentEvent("page-1", "conv-abc", "user-1", "msg-xyz", "hello page!")
+	ch.handleCommentEvent(evt)
+
+	select {
+	case gotID := <-done:
+		if gotID != "msg-xyz" {
+			t.Errorf("expected message ID msg-xyz in path, got %q", gotID)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("ReactComment was not called within 2s")
+	}
+}
+
+func TestHandleCommentEvent_AutoReactDisabled(t *testing.T) {
+	reacted := make(chan struct{}, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/likes") {
+			select {
+			case reacted <- struct{}{}:
+			default:
+			}
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	cfg := pancakeInstanceConfig{}
+	cfg.Features.CommentReply = true
+
+	ch, _ := newTestChannel(t, "page-1", cfg)
+	ch.apiClient.userBaseURL = srv.URL
+	ch.apiClient.httpClient = srv.Client()
+
+	evt := commentEvent("page-1", "conv-1", "user-1", "123456789012345", "test comment")
+	ch.handleCommentEvent(evt)
+
+	time.Sleep(100 * time.Millisecond)
+	select {
+	case <-reacted:
+		t.Error("ReactComment must NOT be called when AutoReact=false")
+	default:
+	}
+}
+
+func TestHandleCommentEvent_AutoReact_IndependentOfCommentReply(t *testing.T) {
+	done := make(chan struct{}, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/likes") {
+			select {
+			case done <- struct{}{}:
+			default:
+			}
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	cfg := pancakeInstanceConfig{}
+	cfg.Features.CommentReply = false
+	cfg.Features.AutoReact = true
+
+	ch, _ := newTestChannel(t, "page-1", cfg)
+	ch.apiClient.userBaseURL = srv.URL
+	ch.apiClient.httpClient = srv.Client()
+
+	evt := commentEvent("page-1", "conv-1", "user-1", "123456789012345", "hi!")
+	ch.handleCommentEvent(evt)
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("AutoReact must fire even when CommentReply=false")
+	}
+}
+
+func TestHandleCommentEvent_AutoReact_SkipNonFacebook(t *testing.T) {
+	reacted := make(chan struct{}, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/likes") {
+			select {
+			case reacted <- struct{}{}:
+			default:
+			}
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	cfg := pancakeInstanceConfig{}
+	cfg.Features.AutoReact = true
+	cfg.Features.CommentReply = true
+
+	ch, _ := newTestChannel(t, "page-1", cfg)
+	ch.platform = "instagram"
+	ch.apiClient.userBaseURL = srv.URL
+	ch.apiClient.httpClient = srv.Client()
+
+	evt := commentEvent("page-1", "conv-1", "user-1", "123456789012345", "hi!")
+	evt.Platform = "instagram"
+	ch.handleCommentEvent(evt)
+
+	time.Sleep(100 * time.Millisecond)
+	select {
+	case <-reacted:
+		t.Error("ReactComment must NOT be called for non-Facebook platforms")
+	default:
+	}
+}
+
+func TestHandleCommentEvent_AutoReact_EmptyMessageID(t *testing.T) {
+	reacted := make(chan struct{}, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/likes") {
+			select {
+			case reacted <- struct{}{}:
+			default:
+			}
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	cfg := pancakeInstanceConfig{}
+	cfg.Features.AutoReact = true
+	cfg.Features.CommentReply = true
+
+	ch, _ := newTestChannel(t, "page-1", cfg)
+	ch.apiClient.userBaseURL = srv.URL
+	ch.apiClient.httpClient = srv.Client()
+
+	// Empty message ID → must not react (guards against malformed webhook)
+	evt := commentEvent("page-1", "conv-1", "user-1", "", "hi!")
+	ch.handleCommentEvent(evt)
+
+	time.Sleep(100 * time.Millisecond)
+	select {
+	case <-reacted:
+		t.Error("ReactComment must NOT fire when message ID is empty")
+	default:
+	}
+}
