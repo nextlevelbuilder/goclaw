@@ -23,9 +23,9 @@ import (
 type TTSHandler struct {
 	mu            sync.RWMutex
 	manager       *audio.Manager
-	rateLimiter   func(string) bool         // per-IP/token rate limit check (nil = no limit)
-	systemConfigs store.SystemConfigStore   // per-tenant TTS settings
-	configSecrets store.ConfigSecretsStore  // per-tenant TTS secrets
+	rateLimiter   func(string) bool        // per-IP/token rate limit check (nil = no limit)
+	systemConfigs store.SystemConfigStore  // per-tenant TTS settings
+	configSecrets store.ConfigSecretsStore // per-tenant TTS secrets
 }
 
 // NewTTSHandler creates a TTSHandler backed by the given audio.Manager.
@@ -69,7 +69,7 @@ type synthesizeRequest struct {
 }
 
 const (
-	maxSynthesizeBodyBytes = 4 << 10  // 4KB — enough for 500 chars + metadata
+	maxSynthesizeBodyBytes = 4 << 10 // 4KB — enough for 500 chars + metadata
 	maxSynthesizeTextChars = 500
 	synthesizeTimeout      = 15 * time.Second
 )
@@ -188,7 +188,7 @@ func (h *TTSHandler) resolveTenantProvider(ctx context.Context, explicitProvider
 	}
 
 	// Build ephemeral provider from tenant config
-	req := testConnectionRequest{Provider: providerName}
+	req := testConnectionRequest{Provider: providerName, TimeoutMs: loadTenantTTSTimeoutMs(ctx, h.systemConfigs)}
 
 	switch providerName {
 	case "openai":
@@ -224,6 +224,7 @@ func (h *TTSHandler) resolveTenantProvider(ctx context.Context, explicitProvider
 
 	case "edge":
 		req.VoiceID, _ = h.systemConfigs.Get(ctx, "tts.edge.voice")
+		req.Rate, _ = h.systemConfigs.Get(ctx, "tts.edge.rate")
 
 	default:
 		return nil, "", fmt.Errorf("unsupported provider: %s", providerName)
