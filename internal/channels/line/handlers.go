@@ -2,6 +2,7 @@ package line
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,8 +15,87 @@ import (
 	"github.com/line/line-bot-sdk-go/v7/linebot"
 )
 
+// hookContext returns c.hookCtx or context.Background() if the channel
+// has not been Start'd yet. The fallback exists so unit tests that
+// exercise fan-out helpers directly without calling Start still work.
+func (c *Channel) hookContext() context.Context {
+	if c.hookCtx != nil {
+		return c.hookCtx
+	}
+	return context.Background()
+}
+
+// fanOutAudio delivers an AudioEvent to every registered hook in a goroutine
+// so one slow hook cannot block others. Errors are logged but do not retry.
+// Goroutines are tracked via hookWG so Stop can wait for them to drain.
+func (c *Channel) fanOutAudio(ev AudioEvent) {
+	ctx := c.hookContext()
+	for _, h := range c.hooks {
+		h := h
+		c.hookWG.Add(1)
+		go func() {
+			defer c.hookWG.Done()
+			if err := h.OnAudio(ctx, ev); err != nil {
+				slog.Error("LINE: hook OnAudio failed", "err", err)
+			}
+		}()
+	}
+}
+
+// fanOutText delivers a TextEvent to every registered hook.
+func (c *Channel) fanOutText(ev TextEvent) {
+	ctx := c.hookContext()
+	for _, h := range c.hooks {
+		h := h
+		c.hookWG.Add(1)
+		go func() {
+			defer c.hookWG.Done()
+			if err := h.OnText(ctx, ev); err != nil {
+				slog.Error("LINE: hook OnText failed", "err", err)
+			}
+		}()
+	}
+}
+
+// fanOutPostback delivers a PostbackEvent to every registered hook.
+func (c *Channel) fanOutPostback(ev PostbackEvent) {
+	ctx := c.hookContext()
+	for _, h := range c.hooks {
+		h := h
+		c.hookWG.Add(1)
+		go func() {
+			defer c.hookWG.Done()
+			if err := h.OnPostback(ctx, ev); err != nil {
+				slog.Error("LINE: hook OnPostback failed", "err", err)
+			}
+		}()
+	}
+}
+
 // handleEvent dispatches a single LINE webhook event.
 func (c *Channel) handleEvent(event *linebot.Event) {
+	// Postback events are delivered to every registered MessageHook.
+	// The LINE channel itself has no business-logic opinion on postbacks;
+	// hooks interpret the `data` payload and route to their own state
+	// machine.
+	if event.Type == linebot.EventTypePostback {
+		var uid, cid string
+		switch event.Source.Type {
+		case linebot.EventSourceTypeUser:
+			uid, cid = event.Source.UserID, event.Source.UserID
+		case linebot.EventSourceTypeGroup:
+			uid, cid = event.Source.UserID, event.Source.GroupID
+		case linebot.EventSourceTypeRoom:
+			uid, cid = event.Source.UserID, event.Source.RoomID
+		}
+		c.fanOutPostback(PostbackEvent{
+			UserID:     uid,
+			ChatID:     cid,
+			Data:       event.Postback.Data,
+			ReplyToken: event.ReplyToken,
+		})
+		return
+	}
 	if event.Type != linebot.EventTypeMessage {
 		return
 	}
@@ -62,6 +142,15 @@ func (c *Channel) handleEvent(event *linebot.Event) {
 	switch msg := event.Message.(type) {
 	case *linebot.TextMessage:
 		text = msg.Text
+		// Fan out to hooks for any subscribers. The agent still sees
+		// the original text via HandleMessage below — hooks run in
+		// parallel to the agent path.
+		c.fanOutText(TextEvent{
+			UserID:     userID,
+			ChatID:     chatID,
+			Text:       msg.Text,
+			ReplyToken: event.ReplyToken,
+		})
 	case *linebot.ImageMessage:
 		path, err := c.downloadContent(msg.ID)
 		if err != nil {
@@ -69,6 +158,24 @@ func (c *Channel) handleEvent(event *linebot.Event) {
 			return
 		}
 		mediaFiles = append(mediaFiles, path)
+	case *linebot.AudioMessage:
+		// Audio messages are generic LINE content — download to a tmp
+		// file, then fan out to hooks with TempPath + ContentType set.
+		// Hooks take ownership of the tmp file (move/delete). The channel
+		// itself has no opinion on what to do with audio.
+		tmpPath, contentType, err := c.downloadAudioContent(msg.ID)
+		if err != nil {
+			slog.Error("LINE: failed to download audio", "err", err, "message_id", msg.ID)
+			return
+		}
+		c.fanOutAudio(AudioEvent{
+			UserID:      userID,
+			ChatID:      chatID,
+			MessageID:   msg.ID,
+			ContentType: contentType,
+			TempPath:    tmpPath,
+		})
+		return
 	default:
 		// Unsupported message type — ignore.
 		return
@@ -79,6 +186,34 @@ func (c *Channel) handleEvent(event *linebot.Event) {
 	}
 
 	c.HandleMessage(senderID, chatID, text, mediaFiles, metadata, peerKind)
+}
+
+// downloadAudioContent fetches a LINE audio message body to a temp file and
+// returns the file path plus the response Content-Type. The caller is
+// responsible for moving / renaming the file out of the temp area.
+func (c *Channel) downloadAudioContent(messageID string) (string, string, error) {
+	resp, err := c.bot.GetMessageContent(messageID).Do()
+	if err != nil {
+		return "", "", fmt.Errorf("get audio content: %w", err)
+	}
+	defer resp.Content.Close()
+
+	tmp, err := os.CreateTemp("", "line-audio-*")
+	if err != nil {
+		return "", "", fmt.Errorf("create temp file: %w", err)
+	}
+
+	if _, err := io.Copy(tmp, resp.Content); err != nil {
+		tmp.Close()
+		os.Remove(tmp.Name())
+		return "", "", fmt.Errorf("write audio: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmp.Name())
+		return "", "", fmt.Errorf("close temp file: %w", err)
+	}
+
+	return tmp.Name(), resp.ContentType, nil
 }
 
 // downloadContent downloads message content to a temp file and returns the path.
