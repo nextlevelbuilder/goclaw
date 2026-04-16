@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"golang.org/x/time/rate"
 )
 
@@ -93,8 +94,24 @@ func (rl *perKeyRateLimiter) sweepStale() {
 // plenty of headroom for UX while preventing quota exhaustion.
 var githubReleasesLimiter = newPerKeyRateLimiter(30, 10)
 
-// rateLimitKeyFromRequest returns the user ID if present, else the remote IP.
+// packagesWriteLimiter throttles POST /install and /uninstall. Admin-only
+// endpoints, but a compromised admin token could otherwise flood the upstream
+// GitHub API / pip / npm or spam manifest mutations. 10 req/min/user with
+// burst 3 comfortably covers real admin workflows while breaking automated
+// abuse.
+var packagesWriteLimiter = newPerKeyRateLimiter(10, 3)
+
+// rateLimitKeyFromRequest returns the authenticated user ID if present (from
+// the request context populated by enrichContext/requireAuth), else falls
+// back to the raw X-GoClaw-User-Id header, else the remote IP.
+//
+// Preferring context over header means an admin with a leaked token can't
+// rotate the header mid-session to dodge the per-user bucket — the context
+// is bound to the API-key owner / session principal that survived auth.
 func rateLimitKeyFromRequest(r *http.Request) string {
+	if uid := store.UserIDFromContext(r.Context()); uid != "" {
+		return "uid:" + uid
+	}
 	if uid := extractUserID(r); uid != "" {
 		return "uid:" + uid
 	}
@@ -113,6 +130,22 @@ func enforceGitHubReleasesLimit(w http.ResponseWriter, r *http.Request) bool {
 		return true
 	}
 	slog.Warn("security.rate_limited", "endpoint", "/v1/packages/github-releases", "key", key)
+	w.Header().Set("Retry-After", "60")
+	writeJSON(w, http.StatusTooManyRequests, map[string]string{
+		"error": "rate limit exceeded; try again in 60 seconds",
+	})
+	return false
+}
+
+// enforcePackagesWriteLimit caps POST /install + /uninstall per user.
+// Returns true when the request is within budget; false (after writing 429)
+// when throttled.
+func enforcePackagesWriteLimit(w http.ResponseWriter, r *http.Request, endpoint string) bool {
+	key := rateLimitKeyFromRequest(r)
+	if packagesWriteLimiter.Allow(key) {
+		return true
+	}
+	slog.Warn("security.rate_limited", "endpoint", endpoint, "key", key)
 	w.Header().Set("Retry-After", "60")
 	writeJSON(w, http.StatusTooManyRequests, map[string]string{
 		"error": "rate limit exceeded; try again in 60 seconds",

@@ -248,3 +248,125 @@ func rune2s(i int) string {
 
 // Ensure the compress/bytes/io imports are kept — used only in helpers above.
 var _ = io.EOF
+
+// -------- P1.1: Raw ELF uses caller-supplied logical name --------
+
+func TestExtractArchiveAs_RawELFUsesFallbackName(t *testing.T) {
+	// Write a tiny "ELF" (magic bytes only — format parsing is done by
+	// validateELF in callers, extractRaw just copies bytes).
+	tmp, err := os.CreateTemp("", "goclaw-gh-asset-*.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmp.Name())
+	tmp.Write([]byte{0x7f, 0x45, 0x4c, 0x46, 0x02, 0x01, 0x01, 0x00}) // \x7fELF header stub
+	tmp.Close()
+
+	// Without fallback → takes temp basename (the bug we're fixing).
+	files, err := ExtractArchive(tmp.Name(), 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(filepath.Base(files[0].Name), "goclaw-gh-asset-") {
+		t.Errorf("expected temp basename leakage when no fallback, got %q", files[0].Name)
+	}
+
+	// With fallback → records logical name.
+	files, err = ExtractArchiveAs(tmp.Name(), "lazygit", 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if files[0].Name != "lazygit" {
+		t.Errorf("ExtractArchiveAs with fallbackName=lazygit recorded %q, want %q",
+			files[0].Name, "lazygit")
+	}
+}
+
+// -------- P1.3: Archive entry count cap (DoS protection) --------
+
+func TestExtractTarGz_EntryCountCap(t *testing.T) {
+	// Build a tar archive with more than maxArchiveEntries tiny entries.
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	for i := 0; i < maxArchiveEntries+5; i++ {
+		name := "f" + rune2s(i)
+		hdr := &tar.Header{Name: name, Mode: 0o644, Size: 1, Typeflag: tar.TypeReg}
+		if err := tw.WriteHeader(hdr); err != nil {
+			t.Fatal(err)
+		}
+		tw.Write([]byte{'x'})
+	}
+	tw.Close()
+	gz.Close()
+
+	f, err := os.CreateTemp("", "many-*.tar.gz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(f.Name())
+	f.Write(buf.Bytes())
+	f.Close()
+
+	_, err = ExtractArchive(f.Name(), 100*1024*1024) // Large size cap — only entry cap should trip.
+	if !errors.Is(err, ErrTooManyEntries) {
+		t.Errorf("want ErrTooManyEntries, got %v", err)
+	}
+}
+
+func TestExtractZip_EntryCountCap(t *testing.T) {
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for i := 0; i < maxArchiveEntries+5; i++ {
+		w, err := zw.Create("f" + rune2s(i))
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.Write([]byte{'x'})
+	}
+	zw.Close()
+
+	f, err := os.CreateTemp("", "many-*.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(f.Name())
+	f.Write(buf.Bytes())
+	f.Close()
+
+	_, err = ExtractArchive(f.Name(), 100*1024*1024)
+	if !errors.Is(err, ErrTooManyEntries) {
+		t.Errorf("want ErrTooManyEntries, got %v", err)
+	}
+}
+
+// TestPeekZipEntryCount covers the DoS-preemption path: the EOCD-level check
+// must reject oversized archives BEFORE zip.OpenReader allocates
+// []*zip.File of declared capacity.
+func TestPeekZipEntryCount(t *testing.T) {
+	// Small zip: peek returns exact count.
+	small := writeZip(t, map[string]string{"a": "1", "b": "2", "c": "3"})
+	n, err := peekZipEntryCount(small)
+	if err != nil {
+		t.Fatalf("peek small: %v", err)
+	}
+	if n != 3 {
+		t.Errorf("peek small count = %d, want 3", n)
+	}
+
+	// Non-zip file: peek returns -1 gracefully (no false positive).
+	raw, err := os.CreateTemp("", "raw-*.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(raw.Name())
+	raw.Write([]byte("not a zip file, just random bytes"))
+	raw.Close()
+	n, err = peekZipEntryCount(raw.Name())
+	if err != nil {
+		t.Fatalf("peek raw: %v", err)
+	}
+	if n != -1 {
+		t.Errorf("peek raw should return -1 (EOCD not found), got %d", n)
+	}
+}

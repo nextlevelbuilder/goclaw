@@ -20,6 +20,11 @@ import (
 // Rejects names starting with - to prevent argument injection.
 var validPkgName = regexp.MustCompile(`^[a-zA-Z0-9@][a-zA-Z0-9._+\-/@]*$`)
 
+// validGitHubBareName matches bare manifest names used on the uninstall path
+// (e.g. "gh", "lazygit", "ripgrep-13"). Must not contain `/` or `@` — those
+// forms are handled by the full-spec branch via skills.ParseGitHubSpec.
+var validGitHubBareName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
+
 // validRepoPath matches "owner/repo" used by the releases endpoint.
 // Owner rules mirror skills.gitHubSpecRE — GitHub caps usernames/orgs at 39 chars,
 // no leading/trailing hyphen.
@@ -76,14 +81,23 @@ func parseAndValidatePackage(w http.ResponseWriter, r *http.Request) string {
 		return ""
 	}
 
-	// github: packages carry the scheme prefix through the whole pipeline — validate
-	// the bare spec via the installer parser rather than the generic regex.
+	// github: packages carry the scheme prefix through the whole pipeline.
+	// Accept two forms:
+	//   1. Full spec "github:owner/repo[@tag]" — install + uninstall path.
+	//   2. Bare manifest name "github:<name>" — uninstall path only (the UI
+	//      table surfaces canonical Name which may differ from repo — e.g.
+	//      cli/cli → gh). Install will re-validate via ParseGitHubSpec and
+	//      return a clear ErrInvalidGitHubSpec for bare-name form.
 	if strings.HasPrefix(body.Package, "github:") {
-		if _, err := skills.ParseGitHubSpec(body.Package); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid github spec"})
-			return ""
+		if _, err := skills.ParseGitHubSpec(body.Package); err == nil {
+			return body.Package
 		}
-		return body.Package
+		bare := strings.TrimPrefix(body.Package, "github:")
+		if validGitHubBareName.MatchString(bare) {
+			return body.Package
+		}
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid github spec"})
+		return ""
 	}
 
 	// Strip prefix for validation, then validate the bare package name.
@@ -113,6 +127,9 @@ func (h *PackagesHandler) handleInstall(w http.ResponseWriter, r *http.Request) 
 	if !requireMasterScope(w, r) {
 		return
 	}
+	if !enforcePackagesWriteLimit(w, r, "/v1/packages/install") {
+		return
+	}
 	pkg := parseAndValidatePackage(w, r)
 	if pkg == "" {
 		return
@@ -137,7 +154,20 @@ func (h *PackagesHandler) handleInstall(w http.ResponseWriter, r *http.Request) 
 		entry, err := gh.Install(ctx, pkg)
 		if err != nil {
 			slog.Error("skills: github install failed", "dep", pkg, "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]any{
+			// Classify client-side errors as 400 so the UI can show a clear
+			// validation message instead of a generic 500. The bare-name
+			// form (github:<name>) is accepted by parseAndValidatePackage to
+			// keep the uninstall path alive; Install re-validates strictly
+			// via ParseGitHubSpec and this branch surfaces that to the user.
+			status := http.StatusInternalServerError
+			switch {
+			case errors.Is(err, skills.ErrInvalidGitHubSpec),
+				errors.Is(err, skills.ErrGitHubOrgNotAllowed),
+				errors.Is(err, skills.ErrUnsupportedOS),
+				errors.Is(err, skills.ErrNoMatchingAsset):
+				status = http.StatusBadRequest
+			}
+			writeJSON(w, status, map[string]any{
 				"ok": false, "error": err.Error(),
 			})
 			return
@@ -162,6 +192,9 @@ func (h *PackagesHandler) handleInstall(w http.ResponseWriter, r *http.Request) 
 // break system skills, causing server-wide DoS for every tenant.
 func (h *PackagesHandler) handleUninstall(w http.ResponseWriter, r *http.Request) {
 	if !requireMasterScope(w, r) {
+		return
+	}
+	if !enforcePackagesWriteLimit(w, r, "/v1/packages/uninstall") {
 		return
 	}
 	pkg := parseAndValidatePackage(w, r)

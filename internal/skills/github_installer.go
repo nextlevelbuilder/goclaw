@@ -28,6 +28,7 @@ var (
 	ErrELFArchMismatch     = errors.New("github: ELF architecture mismatch")
 	ErrNoBinaryInArchive   = errors.New("github: no executable found in archive")
 	ErrPackageNotInstalled = errors.New("github: package not installed")
+	ErrUnsupportedOS       = errors.New("github: install only supported on Linux")
 )
 
 // GitHubSpec is the parsed form of a "github:owner/repo[@tag]" identifier.
@@ -252,9 +253,13 @@ func (i *GitHubInstaller) loadManifest() (*GitHubManifest, error) {
 	return &m, nil
 }
 
-// saveManifest writes atomically via temp + rename.
+// saveManifest writes atomically via temp + fsync + rename + dir fsync.
+// The two fsyncs ensure durability across crashes/power-loss: without
+// file fsync the rename commits a possibly-empty inode; without dir fsync
+// the rename itself may be reordered on XFS/ext4 with journal-async.
 func (i *GitHubInstaller) saveManifest(m *GitHubManifest) error {
-	if err := os.MkdirAll(filepath.Dir(i.Config.ManifestPath), 0o755); err != nil {
+	dir := filepath.Dir(i.Config.ManifestPath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 	b, err := json.MarshalIndent(m, "", "  ")
@@ -262,10 +267,36 @@ func (i *GitHubInstaller) saveManifest(m *GitHubManifest) error {
 		return err
 	}
 	tmp := i.Config.ManifestPath + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o640); err != nil {
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o640)
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, i.Config.ManifestPath)
+	if _, err := f.Write(b); err != nil {
+		f.Close()
+		os.Remove(tmp)
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		os.Remove(tmp)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, i.Config.ManifestPath); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	// Best-effort dir fsync — opening a dir as O_RDONLY works on Linux/macOS
+	// but some filesystems (e.g. Windows via WSL paths) may reject it. We
+	// log and proceed — the rename has already happened.
+	if d, derr := os.Open(dir); derr == nil {
+		_ = d.Sync()
+		d.Close()
+	}
+	return nil
 }
 
 // List returns all installed packages from manifest.
@@ -368,6 +399,13 @@ func isLikelyExecutable(f ArchiveFile) bool {
 // Install runs the full pipeline: parse → check org → fetch release → select asset →
 // download → verify → extract → validate ELF → write to bin dir → update manifest.
 func (i *GitHubInstaller) Install(ctx context.Context, spec string) (*GitHubPackageEntry, error) {
+	// The installer ships only Linux ELF asset selection + validation. Guard
+	// non-Linux callers (Windows/macOS desktop host) up front so we don't
+	// waste bandwidth fetching a Linux asset that's going to be rejected at
+	// the ELF-machine check later.
+	if runtime.GOOS != "linux" {
+		return nil, fmt.Errorf("%w (got %s)", ErrUnsupportedOS, runtime.GOOS)
+	}
 	parsed, err := ParseGitHubSpec(spec)
 	if err != nil {
 		return nil, err
@@ -432,7 +470,10 @@ func (i *GitHubInstaller) Install(ctx context.Context, spec string) (*GitHubPack
 		slog.Info("github.installer: no checksum asset available", "asset", asset.Name)
 	}
 
-	files, err := ExtractArchive(tmpPath, 2*maxBytes)
+	// Pass the repo name as the fallback logical name so raw (non-archive)
+	// ELF assets don't end up recorded under the temp filename
+	// "goclaw-gh-asset-XXXX.bin".
+	files, err := ExtractArchiveAs(tmpPath, parsed.Repo, 2*maxBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -455,9 +496,31 @@ func (i *GitHubInstaller) Install(ctx context.Context, spec string) (*GitHubPack
 		return nil, fmt.Errorf("create bin dir: %w", err)
 	}
 
+	// Load manifest first so we can detect basename collisions with other
+	// installed packages. Current policy is still last-writer-wins (changing
+	// that would break re-install), but an operator needs to know when two
+	// packages are fighting over the same binary name.
+	m, err := i.loadManifest()
+	if err != nil {
+		return nil, err
+	}
+	entryRepo := parsed.Owner + "/" + parsed.Repo
+
 	binNames := make([]string, 0, len(binaries))
 	for _, b := range binaries {
 		name := filepath.Base(b.Name)
+		// Warn if another package in the manifest already owns this binary name.
+		for _, p := range m.Packages {
+			if !strings.EqualFold(p.Repo, entryRepo) {
+				for _, pb := range p.Binaries {
+					if pb == name {
+						slog.Warn("github.installer: binary name collision — overwriting",
+							"binary", name, "existing_package", p.Name,
+							"existing_repo", p.Repo, "new_repo", entryRepo)
+					}
+				}
+			}
+		}
 		dst := filepath.Join(i.Config.BinDir, name)
 		if err := os.WriteFile(dst, b.Content, 0o755); err != nil {
 			return nil, fmt.Errorf("write binary %s: %w", name, err)
@@ -467,7 +530,7 @@ func (i *GitHubInstaller) Install(ctx context.Context, spec string) (*GitHubPack
 
 	entry := GitHubPackageEntry{
 		Name:           canonicalPackageName(parsed, binNames),
-		Repo:           parsed.Owner + "/" + parsed.Repo,
+		Repo:           entryRepo,
 		Tag:            release.TagName,
 		Binaries:       binNames,
 		SHA256:         sha,
@@ -477,10 +540,6 @@ func (i *GitHubInstaller) Install(ctx context.Context, spec string) (*GitHubPack
 		InstalledAt:    time.Now().UTC(),
 	}
 
-	m, err := i.loadManifest()
-	if err != nil {
-		return nil, err
-	}
 	// Replace existing entry with same name.
 	found := false
 	for idx := range m.Packages {

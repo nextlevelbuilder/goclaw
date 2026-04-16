@@ -5,6 +5,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -18,10 +19,17 @@ import (
 
 // Sentinel errors for archive extraction.
 var (
-	ErrUnsafePath   = errors.New("archive: unsafe path rejected")
-	ErrZipBomb      = errors.New("archive: uncompressed size exceeds limit (zip bomb protection)")
-	ErrFileTooLarge = errors.New("archive: single file exceeds limit")
+	ErrUnsafePath     = errors.New("archive: unsafe path rejected")
+	ErrZipBomb        = errors.New("archive: uncompressed size exceeds limit (zip bomb protection)")
+	ErrFileTooLarge   = errors.New("archive: single file exceeds limit")
+	ErrTooManyEntries = errors.New("archive: entry count exceeds limit (DoS protection)")
 )
+
+// maxArchiveEntries caps regular file entries per archive. Chosen to cover
+// real-world tooling (Go toolchain has ~4k, Python wheel ~6k) while
+// preventing a 400M×1-byte file entry DoS where `append` growth + per-entry
+// struct alloc (~64B) would OOM the server.
+const maxArchiveEntries = 10_000
 
 // ArchiveFile is a single extracted entry held in memory.
 type ArchiveFile struct {
@@ -40,7 +48,19 @@ var (
 
 // ExtractArchive detects the format by magic bytes + extension fallback and extracts.
 // maxUncompressed caps total uncompressed bytes (zip-bomb protection).
+// Raw (non-archive) inputs are named after filepath.Base(path). Use
+// ExtractArchiveAs when the path is a temp file and a logical name should be
+// recorded instead.
 func ExtractArchive(path string, maxUncompressed int64) ([]ArchiveFile, error) {
+	return ExtractArchiveAs(path, "", maxUncompressed)
+}
+
+// ExtractArchiveAs is ExtractArchive with a caller-supplied fallbackName for
+// raw (non-archive) binary inputs. This matters when `path` is a temp file
+// like `/tmp/goclaw-gh-asset-XXXX.bin` — without a logical name the resulting
+// ArchiveFile.Name leaks the temp filename into downstream install logic.
+// Empty fallbackName falls back to filepath.Base(path).
+func ExtractArchiveAs(path, fallbackName string, maxUncompressed int64) ([]ArchiveFile, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -54,13 +74,18 @@ func ExtractArchive(path string, maxUncompressed int64) ([]ArchiveFile, error) {
 	}
 	prefix := head[:n]
 
+	rawName := fallbackName
+	if rawName == "" {
+		rawName = filepath.Base(path)
+	}
+
 	switch {
 	case bytes.HasPrefix(prefix, magicGzip):
 		return extractTarGz(f, maxUncompressed)
 	case bytes.HasPrefix(prefix, magicZip):
 		return extractZip(path, maxUncompressed)
 	case bytes.HasPrefix(prefix, magicELF):
-		return extractRaw(f, filepath.Base(path), maxUncompressed)
+		return extractRaw(f, rawName, maxUncompressed)
 	}
 	// Fallback on extension.
 	lower := strings.ToLower(path)
@@ -71,7 +96,7 @@ func ExtractArchive(path string, maxUncompressed int64) ([]ArchiveFile, error) {
 		return extractZip(path, maxUncompressed)
 	}
 	// Last resort: treat as raw binary.
-	return extractRaw(f, filepath.Base(path), maxUncompressed)
+	return extractRaw(f, rawName, maxUncompressed)
 }
 
 // sanitizePath rejects absolute, parent-escaping, and Windows-drive paths.
@@ -119,6 +144,12 @@ func extractTarGz(r io.Reader, maxUncompressed int64) ([]ArchiveFile, error) {
 
 	var out []ArchiveFile
 	var total int64
+	// iterations counts ALL tar headers seen (including symlinks/dirs we
+	// skip). A crafted archive can inflate a tiny gzip payload into billions
+	// of zero-size symlink headers (header bytes count against
+	// maxUncompressed only for regular-file payloads); without a header cap,
+	// the loop itself becomes the DoS.
+	var iterations int
 	for {
 		hdr, err := tr.Next()
 		if errors.Is(err, io.EOF) {
@@ -126,6 +157,10 @@ func extractTarGz(r io.Reader, maxUncompressed int64) ([]ArchiveFile, error) {
 		}
 		if err != nil {
 			return nil, fmt.Errorf("tar: %w", err)
+		}
+		iterations++
+		if iterations > maxArchiveEntries {
+			return nil, ErrTooManyEntries
 		}
 
 		switch hdr.Typeflag {
@@ -168,15 +203,77 @@ func extractTarGz(r io.Reader, maxUncompressed int64) ([]ArchiveFile, error) {
 	return out, nil
 }
 
+// peekZipEntryCount reads only the end-of-central-directory record and
+// returns the declared entry count WITHOUT allocating per-entry structs.
+// Returns (-1, nil) when EOCD lookup fails gracefully — callers should fall
+// back to the stdlib parser which has its own stricter format checks.
+//
+// This is a critical DoS guard: zip.OpenReader alloc's a []*File of declared
+// capacity BEFORE our higher-level pre-check runs. A crafted zip claiming
+// 4M entries in a 200MB file could otherwise pin ~1GB of heap per call.
+func peekZipEntryCount(filePath string) (int, error) {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return -1, err
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		return -1, err
+	}
+	size := st.Size()
+	if size < 22 {
+		return -1, nil // too small for any valid zip EOCD
+	}
+	// EOCD record is 22 bytes + variable-length comment (up to 65535 bytes).
+	// Scan the last ≤65557 bytes from the back for the EOCD signature.
+	const eocdSigMax = 65557
+	scanFrom := int64(0)
+	if size > eocdSigMax {
+		scanFrom = size - eocdSigMax
+	}
+	buf := make([]byte, size-scanFrom)
+	if _, err := f.ReadAt(buf, scanFrom); err != nil && !errors.Is(err, io.EOF) {
+		return -1, err
+	}
+	// EOCD magic: 0x06054b50 (little-endian on-disk: 50 4b 05 06).
+	sig := []byte{0x50, 0x4b, 0x05, 0x06}
+	for i := len(buf) - 22; i >= 0; i-- {
+		if buf[i] == sig[0] && bytes.Equal(buf[i:i+4], sig) {
+			// EOCD layout (offsets from record start):
+			//  10: total number of entries in central directory (u16)
+			// A value of 0xFFFF indicates ZIP64 — we conservatively bail
+			// and let the stdlib parser decide (it handles ZIP64 and has
+			// its own entries-vs-size sanity check).
+			n := binary.LittleEndian.Uint16(buf[i+10 : i+12])
+			if n == 0xFFFF {
+				return -1, nil
+			}
+			return int(n), nil
+		}
+	}
+	return -1, nil
+}
+
 // extractZip opens a zip file and returns all regular file entries.
 func extractZip(filePath string, maxUncompressed int64) ([]ArchiveFile, error) {
+	// Pre-check entry count BEFORE zip.OpenReader to prevent the stdlib
+	// from pre-allocating [N]*zip.File for a crafted declared count.
+	if n, err := peekZipEntryCount(filePath); err == nil && n > maxArchiveEntries {
+		return nil, ErrTooManyEntries
+	}
+
 	zr, err := zip.OpenReader(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("zip open: %w", err)
 	}
 	defer zr.Close()
 
-	// Pre-check declared uncompressed sizes.
+	// Post-open recheck covers ZIP64 (where peek returns -1 and the stdlib
+	// parsed the true count) plus declared-vs-actual mismatches.
+	if len(zr.File) > maxArchiveEntries {
+		return nil, ErrTooManyEntries
+	}
 	var sum uint64
 	for _, f := range zr.File {
 		if f.Mode().IsDir() {
@@ -197,6 +294,11 @@ func extractZip(filePath string, maxUncompressed int64) ([]ArchiveFile, error) {
 		if f.Mode()&fs.ModeSymlink != 0 {
 			slog.Warn("archive: skipping symlink entry", "name", f.Name)
 			continue
+		}
+		// Guard against exhausting the cap through streaming reads alone
+		// (pre-check above covers declared counts — this covers runtime).
+		if total >= maxUncompressed {
+			return nil, ErrZipBomb
 		}
 		clean, err := sanitizePath(f.Name)
 		if err != nil {
