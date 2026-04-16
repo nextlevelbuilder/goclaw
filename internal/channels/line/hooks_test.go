@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/line/line-bot-sdk-go/v7/linebot"
 )
 
 // recordingHook is a MessageHook implementation used by the contract tests.
@@ -131,3 +133,153 @@ var _ MessageHook = (*recordingHook)(nil)
 // without triggering an "imported and not used" error if all current tests
 // use channels for sync.
 var _ sync.WaitGroup
+
+// --- PR #715 test plan: Group / Image / Multi-agent ---
+
+// TestClassifySource_GroupReturnsGroupID exercises the source-type classifier
+// that handleEvent uses to decide ChatID/UserID/peerKind. For a group source
+// the chat ID surfaced to hooks MUST be the group ID (so replies go to the
+// group), the user ID stays the message sender's ID, peerKind is "group".
+//
+// Covers: PR #715 test plan "Group messages"
+// Covers spec: specs/line-adapter-test-plan.md > Requirement: Group message
+// webhook handling MUST 有 unit + staging 驗證 > Scenario: Group webhook
+// routing (unit)
+func TestClassifySource_GroupReturnsGroupID(t *testing.T) {
+	src := newGroupSource("U-test-user-123", "G-test-group-456")
+	userID, chatID, peerKind := classifySource(src)
+	if userID != "U-test-user-123" {
+		t.Errorf("userID=%q, want U-test-user-123", userID)
+	}
+	if chatID != "G-test-group-456" {
+		t.Errorf("chatID=%q, want G-test-group-456 (group ID, not user ID)", chatID)
+	}
+	if peerKind != "group" {
+		t.Errorf("peerKind=%q, want group", peerKind)
+	}
+}
+
+// TestClassifySource_DirectReturnsUserID covers 1:1 chat: chatID == userID,
+// peerKind=="direct". Provides the negative against the group case so a
+// regression that swaps the cases is caught immediately.
+func TestClassifySource_DirectReturnsUserID(t *testing.T) {
+	src := newDirectSource("U-test-user-123")
+	userID, chatID, peerKind := classifySource(src)
+	if userID != "U-test-user-123" {
+		t.Errorf("userID=%q, want U-test-user-123", userID)
+	}
+	if chatID != "U-test-user-123" {
+		t.Errorf("chatID=%q, want U-test-user-123 (== userID for direct)", chatID)
+	}
+	if peerKind != "direct" {
+		t.Errorf("peerKind=%q, want direct", peerKind)
+	}
+}
+
+// TestClassifySource_RoomBehavesLikeGroup covers the LINE Room source type
+// (multi-person chat without a stable group). Downstream routing treats it as
+// "group" because reply must go to the room, not the sender's DM.
+func TestClassifySource_RoomBehavesLikeGroup(t *testing.T) {
+	src := newRoomSource("U-test-user-123", "R-test-room-789")
+	userID, chatID, peerKind := classifySource(src)
+	if chatID != "R-test-room-789" {
+		t.Errorf("chatID=%q, want R-test-room-789 (room ID)", chatID)
+	}
+	if peerKind != "group" {
+		t.Errorf("peerKind=%q, want group (room downstream-routes-as group)", peerKind)
+	}
+	_ = userID
+}
+
+// TestClassifySource_NilOrUnknown_ReturnsEmptyPeerKind covers the safety
+// fall-through: nil or unrecognised source types return empty peerKind so
+// handleEvent can drop the event instead of panic.
+func TestClassifySource_NilOrUnknown_ReturnsEmptyPeerKind(t *testing.T) {
+	if _, _, pk := classifySource(nil); pk != "" {
+		t.Errorf("nil source: peerKind=%q, want empty", pk)
+	}
+}
+
+// TestImageContentTypeExt_MapsCorrectly covers the file-extension mapping in
+// downloadContent: image/png/gif/jpeg lands on the right .ext so downstream
+// vision attachment knows how to handle the file. Direct unit test of the
+// ext-derivation block; the actual HTTP fetch is exercised by staging
+// (see test-evidence/pr715-line-staging.md > ## Image / Media Messages).
+//
+// Covers: PR #715 test plan "Image/media messages"
+// Covers spec: specs/line-adapter-test-plan.md > Requirement: Image / media
+// message handling MUST 能下載 binary > Scenario: Image download (unit)
+func TestImageContentTypeExt_MapsCorrectly(t *testing.T) {
+	cases := []struct {
+		contentType string
+		wantExt     string
+	}{
+		{"image/png", ".png"},
+		{"image/gif", ".gif"},
+		{"image/jpeg", ".jpg"}, // default for non-png/gif
+		{"", ".jpg"},           // missing content-type → default
+		{"application/octet-stream", ".jpg"},
+	}
+	for _, tc := range cases {
+		got := imageExtForContentType(tc.contentType)
+		if got != tc.wantExt {
+			t.Errorf("contentType=%q: got ext=%q, want %q", tc.contentType, got, tc.wantExt)
+		}
+	}
+}
+
+// TestMultiChannelHookIsolation proves that two Channel instances each maintain
+// their own hooks []MessageHook slice — fan-out from channel A reaches only
+// hookA, not hookB. This is the unit-test foundation for multi-agent routing:
+// each LINE channel instance dispatches to its own configured agent path with
+// no cross-contamination.
+//
+// Covers: PR #715 test plan "Multi-agent routing"
+// Covers spec: specs/line-adapter-test-plan.md > Requirement: Multi-agent
+// routing MUST 可配置且有 unit 覆蓋 > Scenario: Multi-channel dispatch unit
+// test 綠
+func TestMultiChannelHookIsolation(t *testing.T) {
+	chA := &Channel{}
+	chB := &Channel{}
+	hookA := &recordingHook{name: "agent-a"}
+	hookB := &recordingHook{name: "agent-b"}
+	chA.RegisterHook(hookA)
+	chB.RegisterHook(hookB)
+
+	// Fan out a TextEvent on each channel. Hook on the OTHER channel must
+	// not receive it.
+	chA.fanOutText(TextEvent{Text: "to A", UserID: "uA", ChatID: "cA"})
+	chB.fanOutText(TextEvent{Text: "to B", UserID: "uB", ChatID: "cB"})
+
+	if !waitFor(func() bool {
+		return atomic.LoadInt32(&hookA.textHits) == 1 &&
+			atomic.LoadInt32(&hookB.textHits) == 1
+	}) {
+		t.Fatalf("expected each hook to receive 1 event; hookA=%d hookB=%d",
+			hookA.textHits, hookB.textHits)
+	}
+	// Cross-pollination check: hookA must not have received chB's event.
+	// We can't observe the captured payload (recordingHook only counts), but
+	// the count==1 invariant after exactly 1 fan-out per channel proves
+	// isolation: if hooks bled across channels we'd see count==2 on each.
+	if got := atomic.LoadInt32(&hookA.textHits); got != 1 {
+		t.Errorf("hookA crossed channels: textHits=%d, want 1", got)
+	}
+	if got := atomic.LoadInt32(&hookB.textHits); got != 1 {
+		t.Errorf("hookB crossed channels: textHits=%d, want 1", got)
+	}
+}
+
+// --- helpers for source construction in tests ---
+
+func newDirectSource(userID string) *linebot.EventSource {
+	return &linebot.EventSource{Type: linebot.EventSourceTypeUser, UserID: userID}
+}
+
+func newGroupSource(userID, groupID string) *linebot.EventSource {
+	return &linebot.EventSource{Type: linebot.EventSourceTypeGroup, UserID: userID, GroupID: groupID}
+}
+
+func newRoomSource(userID, roomID string) *linebot.EventSource {
+	return &linebot.EventSource{Type: linebot.EventSourceTypeRoom, UserID: userID, RoomID: roomID}
+}

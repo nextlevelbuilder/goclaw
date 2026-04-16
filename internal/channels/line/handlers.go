@@ -72,6 +72,39 @@ func (c *Channel) fanOutPostback(ev PostbackEvent) {
 	}
 }
 
+// imageExtForContentType maps an HTTP Content-Type header from a LINE Content
+// API response to the file extension we save the image with. Falls back to
+// .jpg for missing or unknown content types so vision providers always get
+// a recognisable extension.
+func imageExtForContentType(contentType string) string {
+	switch contentType {
+	case "image/png":
+		return ".png"
+	case "image/gif":
+		return ".gif"
+	}
+	return ".jpg"
+}
+
+// classifySource derives (userID, chatID, peerKind) from a LINE event source.
+// peerKind is "direct" for 1:1 chats and "group" for both group and room sources
+// (LINE distinguishes Group vs Room but downstream routing treats both as group).
+// Returns empty peerKind for unrecognised source types so callers can drop.
+func classifySource(src *linebot.EventSource) (userID, chatID, peerKind string) {
+	if src == nil {
+		return "", "", ""
+	}
+	switch src.Type {
+	case linebot.EventSourceTypeUser:
+		return src.UserID, src.UserID, "direct"
+	case linebot.EventSourceTypeGroup:
+		return src.UserID, src.GroupID, "group"
+	case linebot.EventSourceTypeRoom:
+		return src.UserID, src.RoomID, "group"
+	}
+	return "", "", ""
+}
+
 // handleEvent dispatches a single LINE webhook event.
 func (c *Channel) handleEvent(event *linebot.Event) {
 	// Postback events are delivered to every registered MessageHook.
@@ -100,22 +133,8 @@ func (c *Channel) handleEvent(event *linebot.Event) {
 		return
 	}
 
-	// Determine sender and chat IDs.
-	var userID, chatID, peerKind string
-	switch event.Source.Type {
-	case linebot.EventSourceTypeUser:
-		userID = event.Source.UserID
-		chatID = event.Source.UserID
-		peerKind = "direct"
-	case linebot.EventSourceTypeGroup:
-		userID = event.Source.UserID
-		chatID = event.Source.GroupID
-		peerKind = "group"
-	case linebot.EventSourceTypeRoom:
-		userID = event.Source.UserID
-		chatID = event.Source.RoomID
-		peerKind = "group"
-	default:
+	userID, chatID, peerKind := classifySource(event.Source)
+	if peerKind == "" {
 		return
 	}
 
@@ -236,15 +255,7 @@ func (c *Channel) downloadContent(messageID string) (string, error) {
 	}
 
 	// Rename with proper extension based on content type.
-	ext := ".jpg" // default
-	if ct := resp.ContentType; ct != "" {
-		switch {
-		case ct == "image/png":
-			ext = ".png"
-		case ct == "image/gif":
-			ext = ".gif"
-		}
-	}
+	ext := imageExtForContentType(resp.ContentType)
 	finalPath := tmpFile.Name() + ext
 	if err := os.Rename(tmpFile.Name(), finalPath); err != nil {
 		return tmpFile.Name(), nil // fallback to original name
