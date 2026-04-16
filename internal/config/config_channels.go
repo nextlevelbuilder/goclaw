@@ -399,9 +399,10 @@ func (c *MCPServerConfig) IsEnabled() bool {
 
 // ExecApprovalCfg configures command execution approval (matching TS exec-approval.ts).
 type ExecApprovalCfg struct {
-	Security  string   `json:"security,omitempty"`  // "deny", "allowlist", "full" (default "full")
-	Ask       string   `json:"ask,omitempty"`       // "off", "on-miss", "always" (default "off")
-	Allowlist []string `json:"allowlist,omitempty"` // glob patterns for allowed commands
+	Security           string   `json:"security,omitempty"`           // "deny", "allowlist", "full" (default "full")
+	Ask                string   `json:"ask,omitempty"`                // "off", "on-miss", "always" (default "off")
+	Allowlist          []string `json:"allowlist,omitempty"`          // glob patterns for allowed commands
+	PackageAutoApprove bool     `json:"packageAutoApprove,omitempty"` // auto-approve package install commands (apk add, pip install, etc.)
 }
 
 // WebFetchPolicyConfig controls domain filtering for the web_fetch tool.

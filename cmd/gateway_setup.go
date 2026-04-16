@@ -188,6 +188,7 @@ func setupToolRegistry(
 		if len(cfg.Tools.ExecApproval.Allowlist) > 0 {
 			approvalCfg.Allowlist = cfg.Tools.ExecApproval.Allowlist
 		}
+		approvalCfg.PackageAutoApprove = cfg.Tools.ExecApproval.PackageAutoApprove
 		execApprovalMgr = tools.NewExecApprovalManager(approvalCfg)
 
 		// Wire approval to exec tools in the registry
