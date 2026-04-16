@@ -115,7 +115,7 @@ func TestCallAPI_MalformedJSONReturnsError(t *testing.T) {
 // TestGetMe_ParsesBotInfo verifies getMe returns the zaloBotInfo struct.
 func TestGetMe_ParsesBotInfo(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"ok":true,"result":{"id":"bot-xyz","name":"TestBot"}}`))
+		_, _ = w.Write([]byte(`{"ok":true,"result":{"id":"bot-xyz","display_name":"TestBot"}}`))
 	}))
 	defer srv.Close()
 
@@ -142,10 +142,10 @@ func TestGetMe_UnmarshalError(t *testing.T) {
 	}
 }
 
-// TestGetUpdates_ParsesUpdateArray verifies getUpdates decodes the updates array.
-func TestGetUpdates_ParsesUpdateArray(t *testing.T) {
+// TestGetUpdates_ParsesSingleUpdate verifies getUpdates decodes the single-object API response.
+func TestGetUpdates_ParsesSingleUpdate(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"ok":true,"result":[{"event_name":"message.text.received","message":{"message_id":"m1","text":"hi","from":{"id":"user1"},"chat":{"id":"user1"}}}]}`))
+		_, _ = w.Write([]byte(`{"ok":true,"result":{"event_name":"message.text.received","message":{"message_id":"m1","text":"hi","from":{"id":"user1"},"chat":{"id":"user1"}}}}`))
 	}))
 	defer srv.Close()
 
@@ -168,7 +168,7 @@ func TestGetUpdates_ParsesUpdateArray(t *testing.T) {
 // TestGetUpdates_UnmarshalError verifies a malformed result surfaces an error.
 func TestGetUpdates_UnmarshalError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"ok":true,"result":"string-instead-of-array"}`))
+		_, _ = w.Write([]byte(`{"ok":true,"result":"not-an-object"}`))
 	}))
 	defer srv.Close()
 
