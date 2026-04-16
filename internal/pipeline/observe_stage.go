@@ -1,6 +1,9 @@
 package pipeline
 
-import "context"
+import (
+	"context"
+	"log/slog"
+)
 
 // ObserveStage runs per iteration after ToolStage. Drains InjectCh,
 // accumulates final content when no tool calls, tracks block replies.
@@ -42,6 +45,19 @@ func (s *ObserveStage) Execute(_ context.Context, state *RunState) error {
 	if len(resp.ToolCalls) == 0 {
 		state.Observe.FinalContent = resp.Content
 		state.Observe.FinalThinking = resp.Thinking
+		// Fallback: some providers (e.g. MiniMax M2.7) return response text in
+		// reasoning_content instead of content. Use thinking as FinalContent.
+		if state.Observe.FinalContent == "" && state.Observe.FinalThinking != "" {
+			state.Observe.FinalContent = state.Observe.FinalThinking
+			state.Observe.FinalThinking = ""
+		}
+	}
+
+	// 4. Warn when the final LLM response is completely empty.
+	if len(resp.ToolCalls) == 0 && resp.Content == "" && resp.Thinking == "" {
+		slog.Warn("pipeline observe: final LLM response has empty content and thinking",
+			"finish_reason", resp.FinishReason,
+		)
 	}
 
 	return nil

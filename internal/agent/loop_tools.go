@@ -2,13 +2,33 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"path/filepath"
+	"unicode/utf8"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
+
+// maxToolResultChars limits tool result content sent to the LLM.
+// Prevents oversized tool outputs (e.g., large API responses) from overwhelming
+// the model's context window, which can cause empty responses from some providers.
+const maxToolResultChars = 50_000
+
+// truncateToolResult truncates tool result content to maxToolResultChars,
+// preserving the head (most relevant data) and appending a truncation notice.
+func truncateToolResult(s string) string {
+	if len(s) <= maxToolResultChars {
+		return s
+	}
+	end := maxToolResultChars
+	for end > 0 && !utf8.RuneStart(s[end]) {
+		end--
+	}
+	return s[:end] + fmt.Sprintf("\n\n[... truncated: original result was %d bytes ...]", len(s))
+}
 
 // toolResultAction describes what the caller should do after processing a tool result.
 type toolResultAction int
@@ -108,7 +128,7 @@ func (l *Loop) processToolResult(
 
 	toolMsg = providers.Message{
 		Role:       "tool",
-		Content:    result.ForLLM,
+		Content:    truncateToolResult(result.ForLLM),
 		ToolCallID: tc.ID,
 		IsError:    result.IsError,
 	}

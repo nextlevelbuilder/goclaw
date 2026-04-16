@@ -41,7 +41,14 @@ func (s *FinalizeStage) Execute(ctx context.Context, state *RunState) error {
 
 	// 2b. Fallback for empty content (matching v2: channels need non-empty content to deliver).
 	if state.Observe.FinalContent == "" && !isSilent {
-		state.Observe.FinalContent = "..."
+		// Defense in depth: if thinking was captured but not promoted in observe stage,
+		// use it as content. Some providers return response text in reasoning_content.
+		if state.Observe.FinalThinking != "" {
+			state.Observe.FinalContent = state.Observe.FinalThinking
+			state.Observe.FinalThinking = ""
+		} else {
+			state.Observe.FinalContent = "..."
+		}
 	}
 
 	// 2c. Append content suffix (e.g. image markdown for WS) with dedup.

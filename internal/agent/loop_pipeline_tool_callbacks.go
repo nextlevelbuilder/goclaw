@@ -80,7 +80,7 @@ func (l *Loop) makeExecuteToolRaw(req *RunRequest) func(ctx context.Context, tc 
 
 		msg := providers.Message{
 			Role:       "tool",
-			Content:    result.ForLLM,
+			Content:    truncateToolResult(result.ForLLM),
 			ToolCallID: tc.ID,
 			IsError:    result.IsError,
 		}
