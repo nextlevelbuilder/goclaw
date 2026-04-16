@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -66,20 +67,37 @@ func CheckFileWriterPermission(ctx context.Context, permStore ConfigPermissionSt
 		return nil // system context (cron, subagent)
 	}
 	numericID := strings.SplitN(senderID, "|", 2)[0]
-	
+
 	// Use ListFileWriters (purpose-built for this check, already used by /addwriter)
 	writers, err := permStore.ListFileWriters(ctx, agentID, userID)
+
+	// DEBUG: log all runtime values so we can compare against the DB grant row.
+	// Remove this block once root cause is confirmed.
+	writerIDs := make([]string, len(writers))
+	for i, w := range writers {
+		writerIDs[i] = w.UserID
+	}
+	slog.Debug("debug.file_writer_permission_check",
+		"scope", userID,
+		"agent_id", agentID,
+		"sender_id", senderID,
+		"numeric_id", numericID,
+		"list_err", err,
+		"writer_count", len(writers),
+		"writer_ids", writerIDs,
+	)
+
 	if err != nil {
 		return nil // fail-open
 	}
-	
+
 	// Check if sender is in the writer allowlist
 	for _, w := range writers {
 		if w.UserID == numericID && w.Permission == "allow" {
 			return nil // found matching writer grant
 		}
 	}
-	
+
 	return fmt.Errorf("permission denied: only file writers can modify files in this group. Use /addwriter to get write access")
 }
 

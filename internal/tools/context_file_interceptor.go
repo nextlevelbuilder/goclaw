@@ -219,9 +219,27 @@ func (b *ContextFileInterceptor) WriteFile(ctx context.Context, path, content st
 			senderID := store.SenderIDFromContext(ctx)
 			if senderID != "" && b.permStore != nil {
 				numericID := strings.SplitN(senderID, "|", 2)[0]
-				
+
 				// Use ListFileWriters (purpose-built for this check, already used by /addwriter)
 				writers, err := b.permStore.ListFileWriters(ctx, agentID, userID)
+
+				// DEBUG: log all runtime values so we can compare against the DB grant row.
+				// Remove this block once root cause is confirmed.
+				writerIDs := make([]string, len(writers))
+				for i, w := range writers {
+					writerIDs[i] = w.UserID
+				}
+				slog.Debug("debug.context_file_writer_permission_check",
+					"scope", userID,
+					"agent_id", agentID,
+					"sender_id", senderID,
+					"numeric_id", numericID,
+					"file", fileName,
+					"list_err", err,
+					"writer_count", len(writers),
+					"writer_ids", writerIDs,
+				)
+
 				if err != nil {
 					slog.Warn("security.group_file_writer_check_failed",
 						"error", err, "sender", numericID, "file", fileName, "group", userID)
