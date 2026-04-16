@@ -219,13 +219,25 @@ func (b *ContextFileInterceptor) WriteFile(ctx context.Context, path, content st
 			senderID := store.SenderIDFromContext(ctx)
 			if senderID != "" && b.permStore != nil {
 				numericID := strings.SplitN(senderID, "|", 2)[0]
-				allowed, err := b.permStore.CheckPermission(ctx, agentID, userID, store.ConfigTypeFileWriter, numericID)
+				
+				// Use ListFileWriters (purpose-built for this check, already used by /addwriter)
+				writers, err := b.permStore.ListFileWriters(ctx, agentID, userID)
 				if err != nil {
 					slog.Warn("security.group_file_writer_check_failed",
 						"error", err, "sender", numericID, "file", fileName, "group", userID)
 					// fail open: allow write if check fails
-				} else if !allowed {
-					return true, fmt.Errorf("permission denied: you are not authorized to modify %s in this group. Ask a group file writer to add you with /addwriter", fileName)
+				} else {
+					// Check if sender is in the writer allowlist
+					isWriter := false
+					for _, w := range writers {
+						if w.UserID == numericID && w.Permission == "allow" {
+							isWriter = true
+							break
+						}
+					}
+					if !isWriter {
+						return true, fmt.Errorf("permission denied: you are not authorized to modify %s in this group. Ask a group file writer to add you with /addwriter", fileName)
+					}
 				}
 			}
 			// senderID empty or no permStore = system context (cron, subagent) → fail open

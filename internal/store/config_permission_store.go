@@ -66,14 +66,21 @@ func CheckFileWriterPermission(ctx context.Context, permStore ConfigPermissionSt
 		return nil // system context (cron, subagent)
 	}
 	numericID := strings.SplitN(senderID, "|", 2)[0]
-	allowed, err := permStore.CheckPermission(ctx, agentID, userID, ConfigTypeFileWriter, numericID)
+	
+	// Use ListFileWriters (purpose-built for this check, already used by /addwriter)
+	writers, err := permStore.ListFileWriters(ctx, agentID, userID)
 	if err != nil {
 		return nil // fail-open
 	}
-	if !allowed {
-		return fmt.Errorf("permission denied: only file writers can modify files in this group. Use /addwriter to get write access")
+	
+	// Check if sender is in the writer allowlist
+	for _, w := range writers {
+		if w.UserID == numericID && w.Permission == "allow" {
+			return nil // found matching writer grant
+		}
 	}
-	return nil
+	
+	return fmt.Errorf("permission denied: only file writers can modify files in this group. Use /addwriter to get write access")
 }
 
 // CheckCronPermission returns an error if the caller is in a group context
