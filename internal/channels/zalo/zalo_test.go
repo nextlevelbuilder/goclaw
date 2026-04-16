@@ -53,13 +53,13 @@ func TestCallAPI_SuccessRoutesOKResponse(t *testing.T) {
 		gotCT = r.Header.Get("Content-Type")
 		raw, _ := io.ReadAll(r.Body)
 		_ = json.Unmarshal(raw, &gotBody)
-		_, _ = w.Write([]byte(`{"ok":true,"result":{"id":"bot-1","name":"Zalobot"}}`))
+		_, _ = w.Write([]byte(`{"ok":true,"result":{"id":"bot-1","display_name":"Zalobot","account_name":"bot.test","account_type":"BASIC"}}`))
 	}))
 	defer srv.Close()
 
 	ch := newTestChannel(t, srv.URL)
 
-	raw, err := ch.callAPI("getMe", nil)
+	raw, err := ch.callAPI(context.Background(), "getMe", nil)
 	if err != nil {
 		t.Fatalf("callAPI: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestCallAPI_ErrorResponseSurfaces(t *testing.T) {
 	defer srv.Close()
 
 	ch := newTestChannel(t, srv.URL)
-	_, err := ch.callAPI("getMe", nil)
+	_, err := ch.callAPI(context.Background(), "getMe", nil)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -106,7 +106,7 @@ func TestCallAPI_MalformedJSONReturnsError(t *testing.T) {
 	defer srv.Close()
 
 	ch := newTestChannel(t, srv.URL)
-	_, err := ch.callAPI("getMe", nil)
+	_, err := ch.callAPI(context.Background(), "getMe", nil)
 	if err == nil {
 		t.Fatal("expected unmarshal error, got nil")
 	}
@@ -115,16 +115,16 @@ func TestCallAPI_MalformedJSONReturnsError(t *testing.T) {
 // TestGetMe_ParsesBotInfo verifies getMe returns the zaloBotInfo struct.
 func TestGetMe_ParsesBotInfo(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"ok":true,"result":{"id":"bot-xyz","name":"TestBot"}}`))
+		_, _ = w.Write([]byte(`{"ok":true,"result":{"id":"bot-xyz","display_name":"TestBot","account_name":"bot.test","account_type":"BASIC"}}`))
 	}))
 	defer srv.Close()
 
 	ch := newTestChannel(t, srv.URL)
-	info, err := ch.getMe()
+	info, err := ch.getMe(context.Background())
 	if err != nil {
 		t.Fatalf("getMe: %v", err)
 	}
-	if info.ID != "bot-xyz" || info.Name != "TestBot" {
+	if info.ID != "bot-xyz" || info.DisplayName != "TestBot" {
 		t.Errorf("info = %+v, want bot-xyz/TestBot", info)
 	}
 }
@@ -137,31 +137,34 @@ func TestGetMe_UnmarshalError(t *testing.T) {
 	defer srv.Close()
 
 	ch := newTestChannel(t, srv.URL)
-	if _, err := ch.getMe(); err == nil {
+	if _, err := ch.getMe(context.Background()); err == nil {
 		t.Fatal("expected unmarshal error, got nil")
 	}
 }
 
-// TestGetUpdates_ParsesUpdateArray verifies getUpdates decodes the updates array.
-func TestGetUpdates_ParsesUpdateArray(t *testing.T) {
+// TestGetUpdates_ParsesSingleUpdate verifies getUpdates decodes a single update object.
+func TestGetUpdates_ParsesSingleUpdate(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"ok":true,"result":[{"event_name":"message.text.received","message":{"message_id":"m1","text":"hi","from":{"id":"user1"},"chat":{"id":"user1"}}}]}`))
+		_, _ = w.Write([]byte(`{"ok":true,"result":{"event_name":"message.text.received","message":{"message_id":"m1","text":"hi","from":{"id":"user1","display_name":"Tester","is_bot":false},"chat":{"id":"user1","chat_type":"private"}}}}`))
 	}))
 	defer srv.Close()
 
 	ch := newTestChannel(t, srv.URL)
-	updates, err := ch.getUpdates(10)
+	update, err := ch.getUpdates(context.Background(), 10)
 	if err != nil {
 		t.Fatalf("getUpdates: %v", err)
 	}
-	if len(updates) != 1 {
-		t.Fatalf("updates len = %d, want 1", len(updates))
+	if update.EventName != "message.text.received" {
+		t.Errorf("EventName = %q", update.EventName)
 	}
-	if updates[0].EventName != "message.text.received" {
-		t.Errorf("EventName = %q", updates[0].EventName)
+	if update.Message == nil || update.Message.Text != "hi" {
+		t.Errorf("Message = %+v", update.Message)
 	}
-	if updates[0].Message == nil || updates[0].Message.Text != "hi" {
-		t.Errorf("Message = %+v", updates[0].Message)
+	if update.Message.From.DisplayName != "Tester" {
+		t.Errorf("From.DisplayName = %q, want Tester", update.Message.From.DisplayName)
+	}
+	if update.Message.Chat.ChatType != "private" {
+		t.Errorf("Chat.ChatType = %q, want private", update.Message.Chat.ChatType)
 	}
 }
 
@@ -173,7 +176,7 @@ func TestGetUpdates_UnmarshalError(t *testing.T) {
 	defer srv.Close()
 
 	ch := newTestChannel(t, srv.URL)
-	if _, err := ch.getUpdates(5); err == nil {
+	if _, err := ch.getUpdates(context.Background(), 5); err == nil {
 		t.Fatal("expected unmarshal error, got nil")
 	}
 }
@@ -398,8 +401,8 @@ func TestProcessUpdate_DispatchesByEventName(t *testing.T) {
 		Message: &zaloMessage{
 			MessageID: "m1",
 			Text:      "hello",
-			From:      zaloFrom{ID: "u1"},
-			Chat:      zaloChat{ID: "u1"},
+			From:      zaloFrom{ID: "u1", DisplayName: "Tester"},
+			Chat:      zaloChat{ID: "u1", ChatType: "private"},
 		},
 	})
 }
@@ -530,5 +533,59 @@ func TestZaloAPIResponse_Roundtrip(t *testing.T) {
 	}
 	if !got.OK {
 		t.Error("OK field lost in round-trip")
+	}
+}
+
+// TestGetUpdates_RejectsArrayFormat is a regression test ensuring the old
+// array-based response format (which was never correct for this API)
+// fails gracefully now that getUpdates expects a single object.
+func TestGetUpdates_RejectsArrayFormat(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"ok":true,"result":[{"event_name":"message.text.received"}]}`))
+	}))
+	defer srv.Close()
+
+	ch := newTestChannel(t, srv.URL)
+	_, err := ch.getUpdates(context.Background(), 2)
+	if err == nil {
+		t.Fatal("expected unmarshal error for array format, got nil")
+	}
+}
+
+// TestGetUpdates_NullResultReturnsZeroValue verifies that when the API returns
+// result:null (ok=true, no pending update), getUpdates returns a zero-value
+// update rather than an error.
+func TestGetUpdates_NullResultReturnsZeroValue(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"ok":true,"result":null}`))
+	}))
+	defer srv.Close()
+
+	ch := newTestChannel(t, srv.URL)
+	update, err := ch.getUpdates(context.Background(), 2)
+	if err != nil {
+		t.Fatalf("getUpdates with null result: %v", err)
+	}
+	if update.EventName != "" {
+		t.Errorf("EventName = %q, want empty for null result", update.EventName)
+	}
+}
+
+// TestDoAPICall_PropagatesContext verifies that doAPICall respects context
+// cancellation — a cancelled context should cause the request to fail.
+func TestDoAPICall_PropagatesContext(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(200 * time.Millisecond)
+		_, _ = w.Write([]byte(`{"ok":true,"result":{}}`))
+	}))
+	defer srv.Close()
+
+	ch := newTestChannel(t, srv.URL)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+
+	_, err := ch.callAPI(ctx, "getMe", nil)
+	if err == nil {
+		t.Fatal("expected error from cancelled context, got nil")
 	}
 }

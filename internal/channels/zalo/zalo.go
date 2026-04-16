@@ -24,11 +24,12 @@ import (
 )
 
 const (
-	defaultPollTimeout = 30
-	maxTextLength      = 2000
-	defaultMediaMaxMB  = 5
-	pollErrorBackoff   = 5 * time.Second
-	pairingDebounce    = 60 * time.Second
+	defaultPollTimeout  = 30
+	maxTextLength       = 2000
+	defaultMediaMaxMB   = 5
+	pollErrorBackoff    = 5 * time.Second
+	pairingDebounce     = 60 * time.Second
+	pollTimeoutHeadroom = 7 * time.Second // network jitter buffer for long-poll
 )
 
 // apiBase is the Zalo Bot API root. Declared as a variable so tests can
@@ -43,8 +44,8 @@ type Channel struct {
 	mediaMaxMB int
 	blockReply *bool
 	stopCh     chan struct{}
-	client     *http.Client
-	// pairingService, pairingDebounce are inherited from channels.BaseChannel.
+	client     *http.Client // general API calls (sendMessage, sendPhoto, getMe)
+	pollClient *http.Client // long-poll getUpdates (no global timeout)
 }
 
 // New creates a new Zalo channel.
@@ -74,6 +75,12 @@ func New(cfg config.ZaloConfig, msgBus *bus.MessageBus, pairingSvc store.Pairing
 		blockReply:  cfg.BlockReply,
 		stopCh:      make(chan struct{}),
 		client:      &http.Client{Timeout: 60 * time.Second},
+		pollClient: &http.Client{
+			Timeout: 0, // no global timeout; per-call context handles it
+			Transport: &http.Transport{
+				IdleConnTimeout: 90 * time.Second,
+			},
+		},
 	}
 	ch.SetPairingService(pairingSvc)
 	return ch, nil
@@ -87,11 +94,11 @@ func (c *Channel) Start(ctx context.Context) error {
 	slog.Info("starting zalo bot (polling mode)")
 
 	// Validate token
-	info, err := c.getMe()
+	info, err := c.getMe(ctx)
 	if err != nil {
 		return fmt.Errorf("zalo getMe failed: %w", err)
 	}
-	slog.Info("zalo bot connected", "bot_id", info.ID, "bot_name", info.Name)
+	slog.Info("zalo bot connected", "bot_id", info.ID, "bot_name", info.DisplayName)
 
 	c.SetRunning(true)
 
@@ -150,7 +157,7 @@ func (c *Channel) pollLoop(ctx context.Context) {
 		default:
 		}
 
-		updates, err := c.getUpdates(defaultPollTimeout)
+		update, err := c.getUpdates(ctx, defaultPollTimeout)
 		if err != nil {
 			// 408 = no updates (timeout), not an error
 			if !strings.Contains(err.Error(), "408") {
@@ -166,9 +173,7 @@ func (c *Channel) pollLoop(ctx context.Context) {
 			continue
 		}
 
-		for _, update := range updates {
-			c.processUpdate(update)
-		}
+		c.processUpdate(*update)
 	}
 }
 
@@ -212,6 +217,7 @@ func (c *Channel) handleTextMessage(msg *zaloMessage) {
 
 	slog.Debug("zalo text message received",
 		"sender_id", senderID,
+		"sender_name", msg.From.DisplayName,
 		"chat_id", chatID,
 		"preview", channels.Truncate(content, 50),
 	)
@@ -397,8 +403,10 @@ type zaloAPIResponse struct {
 }
 
 type zaloBotInfo struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID          string `json:"id"`
+	DisplayName string `json:"display_name"`
+	AccountName string `json:"account_name"`
+	AccountType string `json:"account_type"`
 }
 
 type zaloMessage struct {
@@ -413,13 +421,14 @@ type zaloMessage struct {
 }
 
 type zaloFrom struct {
-	ID       string `json:"id"`
-	Username string `json:"username"`
+	ID          string `json:"id"`
+	DisplayName string `json:"display_name"`
+	IsBot       bool   `json:"is_bot"`
 }
 
 type zaloChat struct {
-	ID   string `json:"id"`
-	Type string `json:"type"`
+	ID       string `json:"id"`
+	ChatType string `json:"chat_type"`
 }
 
 type zaloUpdate struct {
@@ -427,7 +436,11 @@ type zaloUpdate struct {
 	Message   *zaloMessage `json:"message,omitempty"`
 }
 
-func (c *Channel) callAPI(method string, body any) (json.RawMessage, error) {
+func (c *Channel) callAPI(ctx context.Context, method string, body any) (json.RawMessage, error) {
+	return c.doAPICall(ctx, c.client, method, body)
+}
+
+func (c *Channel) doAPICall(ctx context.Context, httpClient *http.Client, method string, body any) (json.RawMessage, error) {
 	url := fmt.Sprintf("%s/bot%s/%s", apiBase, c.token, method)
 
 	var reqBody io.Reader
@@ -439,7 +452,7 @@ func (c *Channel) callAPI(method string, body any) (json.RawMessage, error) {
 		reqBody = bytes.NewReader(data)
 	}
 
-	req, err := http.NewRequest("POST", url, reqBody)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -447,7 +460,7 @@ func (c *Channel) callAPI(method string, body any) (json.RawMessage, error) {
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	resp, err := c.client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("api call %s: %w", method, err)
 	}
@@ -470,8 +483,8 @@ func (c *Channel) callAPI(method string, body any) (json.RawMessage, error) {
 	return apiResp.Result, nil
 }
 
-func (c *Channel) getMe() (*zaloBotInfo, error) {
-	result, err := c.callAPI("getMe", nil)
+func (c *Channel) getMe(ctx context.Context) (*zaloBotInfo, error) {
+	result, err := c.callAPI(ctx, "getMe", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -483,21 +496,25 @@ func (c *Channel) getMe() (*zaloBotInfo, error) {
 	return &info, nil
 }
 
-func (c *Channel) getUpdates(timeout int) ([]zaloUpdate, error) {
+func (c *Channel) getUpdates(ctx context.Context, timeout int) (*zaloUpdate, error) {
 	params := map[string]any{
 		"timeout": timeout,
 	}
 
-	result, err := c.callAPI("getUpdates", params)
+	callTimeout := time.Duration(timeout)*time.Second + pollTimeoutHeadroom
+	ctx, cancel := context.WithTimeout(ctx, callTimeout)
+	defer cancel()
+
+	result, err := c.doAPICall(ctx, c.pollClient, "getUpdates", params)
 	if err != nil {
 		return nil, err
 	}
 
-	var updates []zaloUpdate
-	if err := json.Unmarshal(result, &updates); err != nil {
-		return nil, fmt.Errorf("unmarshal updates: %w", err)
+	var update zaloUpdate
+	if err := json.Unmarshal(result, &update); err != nil {
+		return nil, fmt.Errorf("unmarshal update: %w", err)
 	}
-	return updates, nil
+	return &update, nil
 }
 
 func (c *Channel) sendMessage(chatID, text string) error {
@@ -506,7 +523,7 @@ func (c *Channel) sendMessage(chatID, text string) error {
 		"text":    text,
 	}
 
-	_, err := c.callAPI("sendMessage", params)
+	_, err := c.callAPI(context.Background(), "sendMessage", params)
 	return err
 }
 
@@ -519,6 +536,6 @@ func (c *Channel) sendPhoto(chatID, photoURL, caption string) error {
 		params["caption"] = caption
 	}
 
-	_, err := c.callAPI("sendPhoto", params)
+	_, err := c.callAPI(context.Background(), "sendPhoto", params)
 	return err
 }
