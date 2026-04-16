@@ -67,8 +67,11 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
   const name = watch("name");
 
   const hasClaudeCLI = existingProviders.some((p) => p.provider_type === "claude_cli");
+  const hasQwenCLI = existingProviders.some((p) => p.provider_type === "qwen_cli");
   const isOAuth = providerType === "chatgpt_oauth";
-  const isCLI = providerType === "claude_cli";
+  const isClaudeCLI = providerType === "claude_cli";
+  const isQwenCLI = providerType === "qwen_cli";
+  const isCLI = isClaudeCLI || isQwenCLI;
   const isACP = providerType === "acp";
 
   // Reset form when dialog opens
@@ -141,6 +144,7 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
           <ProviderTypeSelect
             value={providerType}
             hasClaudeCLI={hasClaudeCLI}
+            hasQwenCLI={hasQwenCLI}
             alreadyAddedLabel={t("form.alreadyAdded")}
             providerTypeLabel={t("form.providerType")}
             onChange={handleProviderTypeChange}
@@ -206,7 +210,8 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
                 </div>
               </div>
 
-              {isCLI && <CLISection open={open} />}
+              {isClaudeCLI && <CLISection open={open} cliType="claude" />}
+              {isQwenCLI && <CLISection open={open} cliType="qwen" />}
 
               {isACP && (
                 <ACPSection
@@ -277,13 +282,20 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
   );
 }
 
-function ProviderTypeSelect({ value, hasClaudeCLI, alreadyAddedLabel, providerTypeLabel, onChange }: {
+function ProviderTypeSelect({ value, hasClaudeCLI, hasQwenCLI, alreadyAddedLabel, providerTypeLabel, onChange }: {
   value: string;
   hasClaudeCLI: boolean;
+  hasQwenCLI: boolean;
   alreadyAddedLabel: string;
   providerTypeLabel: string;
   onChange: (value: string) => void;
 }) {
+  const isDisabled = (pt: { value: string }) => {
+    if (pt.value === "claude_cli" && hasClaudeCLI) return true;
+    if (pt.value === "qwen_cli" && hasQwenCLI) return true;
+    return false;
+  };
+
   return (
     <div className="space-y-2">
       <Label>{providerTypeLabel}</Label>
@@ -296,10 +308,10 @@ function ProviderTypeSelect({ value, hasClaudeCLI, alreadyAddedLabel, providerTy
             <SelectItem
               key={pt.value}
               value={pt.value}
-              disabled={pt.value === "claude_cli" && hasClaudeCLI}
+              disabled={isDisabled(pt)}
             >
               {pt.label}
-              {pt.value === "claude_cli" && hasClaudeCLI && (
+              {isDisabled(pt) && (
                 <span className="ml-1 text-xs opacity-60">{alreadyAddedLabel}</span>
               )}
             </SelectItem>

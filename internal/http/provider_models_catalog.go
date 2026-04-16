@@ -72,6 +72,13 @@ func claudeCLIModels() []ModelInfo {
 	}
 }
 
+// qwenCLIModels returns the model aliases accepted by the Qwen CLI.
+func qwenCLIModels() []ModelInfo {
+	return []ModelInfo{
+		{ID: "coder-model", Name: "Coder Model"},
+	}
+}
+
 // acpModels returns the model aliases for ACP-compatible coding agents.
 func acpModels() []ModelInfo {
 	return []ModelInfo{

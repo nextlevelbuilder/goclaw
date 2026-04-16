@@ -100,6 +100,24 @@ if [ -d /app/.claude-host ] && ! command -v claude >/dev/null 2>&1; then
   echo "WARNING: Claude credentials mounted but claude CLI not installed. Rebuild with: --build"
 fi
 
+# Copy Qwen Code credentials from host mount to goclaw-accessible location.
+# /app/.qwen is a symlink → /app/data/.qwen (writable volume, see Dockerfile).
+# Use su-exec to copy as goclaw user since container drops DAC_OVERRIDE capability.
+if [ -d /app/.qwen-host ] && [ "$(ls -A /app/.qwen-host 2>/dev/null)" ]; then
+  (mkdir -p /app/data/.qwen \
+    && if command -v su-exec >/dev/null 2>&1 && [ "$(id -u)" = "0" ]; then
+         su-exec goclaw cp -r /app/.qwen-host/. /app/data/.qwen/
+       else
+         cp -r /app/.qwen-host/. /app/data/.qwen/
+       fi \
+    && echo "Qwen Code credentials synced from host.") || echo "WARNING: Qwen credentials copy failed (non-fatal)"
+fi
+
+# Warn if Qwen credentials are mounted but Qwen Code binary is missing.
+if [ -d /app/.qwen-host ] && ! command -v qwen >/dev/null 2>&1; then
+  echo "WARNING: Qwen credentials mounted but Qwen Code CLI not installed."
+fi
+
 # Run command with privilege drop (su-exec in Docker, direct otherwise).
 run_as_goclaw() {
   if command -v su-exec >/dev/null 2>&1 && [ "$(id -u)" = "0" ]; then

@@ -74,6 +74,7 @@ ARG ENABLE_PYTHON=false
 ARG ENABLE_NODE=false
 ARG ENABLE_FULL_SKILLS=false
 ARG ENABLE_CLAUDE_CLI=false
+ARG ENABLE_QWEN_CLI=true
 
 # Copy pinned Python deps (cleaned up after install).
 # requirements-base.txt: shared deps for ENABLE_PYTHON and ENABLE_FULL_SKILLS.
@@ -100,12 +101,16 @@ RUN set -eux; \
             pip3 install --no-cache-dir --break-system-packages \
                 -r /tmp/requirements-base.txt; \
         fi; \
-        if [ "$ENABLE_NODE" = "true" ] || [ "$ENABLE_CLAUDE_CLI" = "true" ]; then \
+        if [ "$ENABLE_NODE" = "true" ] || [ "$ENABLE_CLAUDE_CLI" = "true" ] || [ "$ENABLE_QWEN_CLI" = "true" ]; then \
             apk add --no-cache nodejs npm; \
         fi; \
     fi; \
     if [ "$ENABLE_CLAUDE_CLI" = "true" ]; then \
         npm install -g --cache /tmp/npm-cache @anthropic-ai/claude-code@^2.1.91; \
+        rm -rf /tmp/npm-cache; \
+    fi; \
+    if [ "$ENABLE_QWEN_CLI" = "true" ]; then \
+        npm install -g --cache /tmp/npm-cache @qwen-code/qwen-code@latest; \
         rm -rf /tmp/npm-cache; \
     fi; \
     rm -f /tmp/requirements-base.txt /tmp/requirements-skills.txt
@@ -143,16 +148,18 @@ RUN chmod +x /app/docker-entrypoint.sh && \
 # .runtime has split ownership: root owns the dir (so pkg-helper can write apk-packages),
 # while pip/npm subdirs are goclaw-owned (runtime installs by the app process).
 # Symlink .claude → data volume so Claude CLI credentials persist across container recreates.
+# Symlink .qwen → data volume so Qwen CLI credentials persist across container recreates.
 RUN mkdir -p /app/workspace /app/data/.runtime/pip /app/data/.runtime/npm-global/lib \
-        /app/data/.runtime/pip-cache /app/data/.claude /app/skills /app/tsnet-state /app/.goclaw \
+        /app/data/.runtime/pip-cache /app/data/.claude /app/data/.qwen /app/skills /app/tsnet-state /app/.goclaw \
     && ln -s /app/data/.claude /app/.claude \
+    && ln -s /app/data/.qwen /app/.qwen \
     && touch /app/data/.runtime/apk-packages \
     && chown -R goclaw:goclaw /app/workspace /app/skills /app/tsnet-state /app/.goclaw \
     && chown goclaw:goclaw /app/bundled-skills /app/data \
     && chown root:goclaw /app/data/.runtime /app/data/.runtime/apk-packages \
     && chmod 0750 /app/data/.runtime \
     && chmod 0640 /app/data/.runtime/apk-packages \
-    && chown -R goclaw:goclaw /app/data/.runtime/pip /app/data/.runtime/npm-global /app/data/.runtime/pip-cache /app/data/.claude
+    && chown -R goclaw:goclaw /app/data/.runtime/pip /app/data/.runtime/npm-global /app/data/.runtime/pip-cache /app/data/.claude /app/data/.qwen
 
 # Default environment
 ENV GOCLAW_CONFIG=/app/config.json \

@@ -202,6 +202,19 @@
     "runOnServer": "在服务器终端运行：",
     "recheckButton": "重新检查"
   },
+  "qwenCli": {
+    "description": "Qwen Code 使用本地",
+    "descriptionSuffix": "二进制文件。无需 API 密钥。",
+    "checkingAuth": "正在检查认证...",
+    "authenticatedAs": "已通过",
+    "switchAccount": "切换账户？",
+    "switchAccountInstructions": "在服务器终端运行：",
+    "switchAccountRecheck": "然后点击",
+    "switchAccountRecheckSuffix": "重新检查。",
+    "notAuthenticated": "未认证",
+    "runOnServer": "在服务器终端运行：",
+    "recheckButton": "重新检查"
+  },
   "detail": {
     "advanced": "高级设置",
     "identity": "身份",

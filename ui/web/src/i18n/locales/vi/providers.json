@@ -184,6 +184,19 @@
     "runOnServer": "Chạy trên terminal máy chủ:",
     "recheckButton": "Kiểm tra lại"
   },
+  "qwenCli": {
+    "description": "Qwen Code sử dụng tệp nhị phân",
+    "descriptionSuffix": "cục bộ của bạn. Không cần API key.",
+    "checkingAuth": "Đang kiểm tra xác thực...",
+    "authenticatedAs": "Đã xác thực qua",
+    "switchAccount": "Chuyển tài khoản?",
+    "switchAccountInstructions": "Chạy trên terminal máy chủ:",
+    "switchAccountRecheck": "Sau đó nhấp",
+    "switchAccountRecheckSuffix": "để kiểm tra lại.",
+    "notAuthenticated": "Chưa xác thực",
+    "runOnServer": "Chạy trên terminal máy chủ:",
+    "recheckButton": "Kiểm tra lại"
+  },
   "detail": {
     "advanced": "Nâng cao",
     "identity": "Danh tính",

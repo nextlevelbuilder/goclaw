@@ -56,6 +56,12 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 		return
 	}
 
+	// Qwen CLI doesn't need an API key — return hardcoded models
+	if p.ProviderType == store.ProviderQwenCLI {
+		respond(qwenCLIModels())
+		return
+	}
+
 	if p.ProviderType == store.ProviderChatGPTOAuth {
 		respond(chatGPTOAuthModels())
 		return

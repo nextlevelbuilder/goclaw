@@ -3,11 +3,12 @@ import type { ChatGPTOAuthRoutingConfig } from "@/types/agent";
 import { normalizeReasoningEffort, normalizeReasoningFallback } from "@/types/provider";
 
 // Provider types that don't use API keys
-export const NO_API_KEY_TYPES = new Set(["claude_cli", "acp", "chatgpt_oauth"]);
+export const NO_API_KEY_TYPES = new Set(["claude_cli", "qwen_cli", "acp", "chatgpt_oauth"]);
 
 // Provider types that don't support embedding
 export const NO_EMBEDDING_TYPES = new Set([
   "claude_cli",
+  "qwen_cli",
   "acp",
   "chatgpt_oauth",
   "anthropic_native",

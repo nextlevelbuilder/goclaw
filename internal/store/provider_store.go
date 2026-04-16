@@ -23,6 +23,7 @@ const (
 	ProviderDashScope       = "dashscope"
 	ProviderBailian         = "bailian"
 	ProviderChatGPTOAuth    = "chatgpt_oauth"
+	ProviderQwenCLI         = "qwen_cli"
 	ProviderClaudeCLI       = "claude_cli"
 	ProviderYesScale        = "yescale"
 	ProviderZai             = "zai"
@@ -60,6 +61,7 @@ var ValidProviderTypes = map[string]bool{
 	ProviderDashScope:       true,
 	ProviderBailian:         true,
 	ProviderChatGPTOAuth:    true,
+	ProviderQwenCLI:         true,
 	ProviderClaudeCLI:       true,
 	ProviderYesScale:        true,
 	ProviderZai:             true,
@@ -177,6 +179,7 @@ func normalizeProviderReasoningConfig(raw *ProviderReasoningConfig) *ProviderRea
 var NoEmbeddingTypes = map[string]bool{
 	ProviderAnthropicNative: true, // uses x-api-key auth, not Bearer; no embedding models
 	ProviderACP:             true,
+	ProviderQwenCLI:         true,
 	ProviderClaudeCLI:       true,
 	ProviderChatGPTOAuth:    true,
 }
