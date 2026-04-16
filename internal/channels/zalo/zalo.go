@@ -116,7 +116,7 @@ func (c *Channel) Stop(_ context.Context) error {
 }
 
 // Send delivers an outbound message to a Zalo chat.
-func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) error {
+func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 	if !c.IsRunning() {
 		return fmt.Errorf("zalo bot not running")
 	}
@@ -132,13 +132,13 @@ func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) error {
 			if end > 0 {
 				photoURL := msg.Content[start+7 : start+end]
 				caption := strings.TrimSpace(msg.Content[:start] + msg.Content[start+end+1:])
-				return c.sendPhoto(msg.ChatID, photoURL, caption)
+				return c.sendPhoto(ctx, msg.ChatID, photoURL, caption)
 			}
 		}
 	}
 
 	// Send as text, chunking if over 2000 chars
-	return c.sendChunkedText(msg.ChatID, msg.Content)
+	return c.sendChunkedText(ctx, msg.ChatID, msg.Content)
 }
 
 // --- Polling ---
@@ -263,7 +263,7 @@ func (c *Channel) handleImageMessage(msg *zaloMessage) {
 	}
 
 	if photoURL != "" {
-		localPath, err := c.downloadMedia(photoURL)
+		localPath, err := c.downloadMedia(ctx, photoURL)
 		if err != nil {
 			slog.Warn("zalo photo download failed, passing URL as fallback",
 				"photo_url", photoURL, "error", err)
@@ -325,7 +325,7 @@ func (c *Channel) sendPairingReply(ctx context.Context, senderID, chatID string)
 		senderID, code, code,
 	)
 
-	if err := c.sendMessage(chatID, replyText); err != nil {
+	if err := c.sendMessage(ctx, chatID, replyText); err != nil {
 		slog.Warn("failed to send zalo pairing reply", "error", err)
 	} else {
 		c.MarkPairingNotifSent(senderID)
@@ -339,8 +339,12 @@ const maxMediaBytes = 10 * 1024 * 1024 // 10MB
 
 // downloadMedia fetches a photo from a Zalo CDN URL and saves it as a local temp file.
 // Zalo CDN URLs are auth-restricted and expire, so we must download immediately.
-func (c *Channel) downloadMedia(url string) (string, error) {
-	resp, err := c.client.Get(url)
+func (c *Channel) downloadMedia(ctx context.Context, url string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return "", fmt.Errorf("create request: %w", err)
+	}
+	resp, err := c.client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("fetch: %w", err)
 	}
@@ -384,9 +388,9 @@ func (c *Channel) downloadMedia(url string) (string, error) {
 
 // --- Chunked text sending ---
 
-func (c *Channel) sendChunkedText(chatID, text string) error {
+func (c *Channel) sendChunkedText(ctx context.Context, chatID, text string) error {
 	for _, chunk := range channels.ChunkMarkdown(text, maxTextLength) {
-		if err := c.sendMessage(chatID, chunk); err != nil {
+		if err := c.sendMessage(ctx, chatID, chunk); err != nil {
 			return err
 		}
 	}
@@ -517,17 +521,17 @@ func (c *Channel) getUpdates(ctx context.Context, timeout int) (*zaloUpdate, err
 	return &update, nil
 }
 
-func (c *Channel) sendMessage(chatID, text string) error {
+func (c *Channel) sendMessage(ctx context.Context, chatID, text string) error {
 	params := map[string]any{
 		"chat_id": chatID,
 		"text":    text,
 	}
 
-	_, err := c.callAPI(context.Background(), "sendMessage", params)
+	_, err := c.callAPI(ctx, "sendMessage", params)
 	return err
 }
 
-func (c *Channel) sendPhoto(chatID, photoURL, caption string) error {
+func (c *Channel) sendPhoto(ctx context.Context, chatID, photoURL, caption string) error {
 	params := map[string]any{
 		"chat_id": chatID,
 		"photo":   photoURL,
@@ -536,6 +540,6 @@ func (c *Channel) sendPhoto(chatID, photoURL, caption string) error {
 		params["caption"] = caption
 	}
 
-	_, err := c.callAPI(context.Background(), "sendPhoto", params)
+	_, err := c.callAPI(ctx, "sendPhoto", params)
 	return err
 }

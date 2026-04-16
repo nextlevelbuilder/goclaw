@@ -193,7 +193,7 @@ func TestSendMessage_PostsBodyWithParams(t *testing.T) {
 	defer srv.Close()
 
 	ch := newTestChannel(t, srv.URL)
-	if err := ch.sendMessage("user-1", "hello"); err != nil {
+	if err := ch.sendMessage(context.Background(), "user-1", "hello"); err != nil {
 		t.Fatalf("sendMessage: %v", err)
 	}
 	if got["chat_id"] != "user-1" {
@@ -218,10 +218,10 @@ func TestSendPhoto_OmitsEmptyCaption(t *testing.T) {
 	defer srv.Close()
 
 	ch := newTestChannel(t, srv.URL)
-	if err := ch.sendPhoto("chat-1", "https://cdn.example.test/a.jpg", ""); err != nil {
+	if err := ch.sendPhoto(context.Background(), "chat-1", "https://cdn.example.test/a.jpg", ""); err != nil {
 		t.Fatalf("sendPhoto: %v", err)
 	}
-	if err := ch.sendPhoto("chat-1", "https://cdn.example.test/b.jpg", "caption"); err != nil {
+	if err := ch.sendPhoto(context.Background(), "chat-1", "https://cdn.example.test/b.jpg", "caption"); err != nil {
 		t.Fatalf("sendPhoto (w/ caption): %v", err)
 	}
 	if len(gotBodies) != 2 {
@@ -248,7 +248,7 @@ func TestSendChunkedText_ChunksLongContent(t *testing.T) {
 	ch := newTestChannel(t, srv.URL)
 	// Build text larger than maxTextLength (2000) to force chunking.
 	long := strings.Repeat("a", maxTextLength*2+10)
-	if err := ch.sendChunkedText("chat-x", long); err != nil {
+	if err := ch.sendChunkedText(context.Background(), "chat-x", long); err != nil {
 		t.Fatalf("sendChunkedText: %v", err)
 	}
 	if got := atomic.LoadInt32(&callCount); got < 2 {
@@ -265,7 +265,7 @@ func TestSendChunkedText_PropagatesFirstError(t *testing.T) {
 	defer srv.Close()
 
 	ch := newTestChannel(t, srv.URL)
-	err := ch.sendChunkedText("chat-x", "short enough")
+	err := ch.sendChunkedText(context.Background(), "chat-x", "short enough")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -449,7 +449,7 @@ func TestDownloadMedia_SuccessWritesTempFile(t *testing.T) {
 
 	mb := bus.New()
 	ch, _ := New(config.ZaloConfig{Token: "t"}, mb, nil)
-	path, err := ch.downloadMedia(srv.URL + "/photo")
+	path, err := ch.downloadMedia(context.Background(), srv.URL+"/photo")
 	if err != nil {
 		t.Fatalf("downloadMedia: %v", err)
 	}
@@ -475,7 +475,7 @@ func TestDownloadMedia_HTTPErrorReturnsError(t *testing.T) {
 	defer srv.Close()
 
 	ch, _ := New(config.ZaloConfig{Token: "t"}, bus.New(), nil)
-	if _, err := ch.downloadMedia(srv.URL); err == nil {
+	if _, err := ch.downloadMedia(context.Background(), srv.URL); err == nil {
 		t.Fatal("expected error on 404, got nil")
 	}
 }
@@ -490,7 +490,7 @@ func TestDownloadMedia_EmptyResponseReturnsError(t *testing.T) {
 	defer srv.Close()
 
 	ch, _ := New(config.ZaloConfig{Token: "t"}, bus.New(), nil)
-	if _, err := ch.downloadMedia(srv.URL); err == nil {
+	if _, err := ch.downloadMedia(context.Background(), srv.URL); err == nil {
 		t.Fatal("expected empty-response error, got nil")
 	}
 }
@@ -505,7 +505,7 @@ func TestDownloadMedia_FallbackJPEGExtension(t *testing.T) {
 	defer srv.Close()
 
 	ch, _ := New(config.ZaloConfig{Token: "t"}, bus.New(), nil)
-	path, err := ch.downloadMedia(srv.URL)
+	path, err := ch.downloadMedia(context.Background(), srv.URL)
 	if err != nil {
 		t.Fatalf("downloadMedia: %v", err)
 	}
