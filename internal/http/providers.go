@@ -162,8 +162,10 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 		if cliPath == "" {
 			cliPath = "claude"
 		}
-		var cliOpts []providers.ClaudeCLIOption
-		cliOpts = append(cliOpts, providers.WithClaudeCLISecurityHooks("", true))
+		cliOpts := []providers.ClaudeCLIOption{
+			providers.WithClaudeCLIName(p.Name),
+			providers.WithClaudeCLISecurityHooks("", true),
+		}
 		if h.gatewayAddr != "" {
 			mcpData := providers.BuildCLIMCPConfigData(nil, h.gatewayAddr, pkgGatewayToken)
 			mcpData.AgentMCPLookup = h.mcpLookup
@@ -197,6 +199,7 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 		h.providerReg.RegisterForTenant(p.TenantID, codex)
 	case store.ProviderAnthropicNative:
 		h.providerReg.RegisterForTenant(p.TenantID, providers.NewAnthropicProvider(p.APIKey,
+			providers.WithAnthropicName(p.Name),
 			providers.WithAnthropicBaseURL(apiBase)))
 	case store.ProviderDashScope:
 		h.providerReg.RegisterForTenant(p.TenantID, providers.NewDashScopeProvider(p.Name, p.APIKey, apiBase, ""))

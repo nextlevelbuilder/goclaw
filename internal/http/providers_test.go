@@ -57,6 +57,66 @@ func TestProvidersHandlerRegisterInMemoryAppliesCodexPoolDefaults(t *testing.T) 
 	}
 }
 
+// TestProvidersHandlerRegisterInMemoryUsesDBNameForAnthropic guards the onboarding verify flow:
+// when an Anthropic provider is created via HTTP with a custom name, the in-memory registry
+// must key the provider by that DB name — not the hardcoded "anthropic" default. Otherwise
+// handleVerifyProvider's GetForTenant(p.TenantID, p.Name) lookup fails with "provider not registered".
+// See commit 7fcf0327 for the matching fix on the startup path (cmd/gateway_providers.go).
+func TestProvidersHandlerRegisterInMemoryUsesDBNameForAnthropic(t *testing.T) {
+	providerReg := providers.NewRegistry(nil)
+	handler := NewProvidersHandler(newMockProviderStore(), newMockSecretsStore(), providerReg, "")
+
+	provider := &store.LLMProviderData{
+		BaseModel:    store.BaseModel{ID: uuid.New()},
+		TenantID:     uuid.New(),
+		Name:         "my-anthropic",
+		ProviderType: store.ProviderAnthropicNative,
+		APIKey:       "sk-ant-test",
+		Enabled:      true,
+	}
+
+	handler.registerInMemory(provider)
+
+	got, err := providerReg.GetForTenant(provider.TenantID, provider.Name)
+	if err != nil {
+		t.Fatalf("GetForTenant(%q) error = %v, want provider registered under DB name", provider.Name, err)
+	}
+	if got.Name() != provider.Name {
+		t.Fatalf("Name() = %q, want %q", got.Name(), provider.Name)
+	}
+
+	// Negative: the hardcoded default "anthropic" must NOT be registered when the user chose a different name.
+	if _, err := providerReg.GetForTenant(provider.TenantID, "anthropic"); err == nil {
+		t.Fatal("GetForTenant(\"anthropic\") succeeded, want not-found — provider should only live under its DB name")
+	}
+}
+
+// TestProvidersHandlerRegisterInMemoryUsesDBNameForClaudeCLI mirrors the Anthropic guard for Claude CLI.
+// Custom-named CLI providers must be registered under their DB name to be locatable via verify.
+func TestProvidersHandlerRegisterInMemoryUsesDBNameForClaudeCLI(t *testing.T) {
+	providerReg := providers.NewRegistry(nil)
+	handler := NewProvidersHandler(newMockProviderStore(), newMockSecretsStore(), providerReg, "")
+
+	provider := &store.LLMProviderData{
+		BaseModel:    store.BaseModel{ID: uuid.New()},
+		TenantID:     uuid.New(),
+		Name:         "claude-max",
+		ProviderType: store.ProviderClaudeCLI,
+		APIBase:      "claude",
+		Enabled:      true,
+	}
+
+	handler.registerInMemory(provider)
+
+	got, err := providerReg.GetForTenant(provider.TenantID, provider.Name)
+	if err != nil {
+		t.Fatalf("GetForTenant(%q) error = %v, want provider registered under DB name", provider.Name, err)
+	}
+	if got.Name() != provider.Name {
+		t.Fatalf("Name() = %q, want %q", got.Name(), provider.Name)
+	}
+}
+
 func setupProvidersAdminToken(t *testing.T) string {
 	t.Helper()
 	token := "system-admin-key"
