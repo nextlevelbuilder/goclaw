@@ -115,6 +115,11 @@ func TestProvidersHandlerRegisterInMemoryUsesDBNameForClaudeCLI(t *testing.T) {
 	if got.Name() != provider.Name {
 		t.Fatalf("Name() = %q, want %q", got.Name(), provider.Name)
 	}
+
+	// Negative: the hardcoded default "claude-cli" must NOT be registered when the user chose a different name.
+	if _, err := providerReg.GetForTenant(provider.TenantID, "claude-cli"); err == nil {
+		t.Fatal("GetForTenant(\"claude-cli\") succeeded, want not-found — provider should only live under its DB name")
+	}
 }
 
 func setupProvidersAdminToken(t *testing.T) string {
