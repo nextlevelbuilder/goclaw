@@ -195,6 +195,27 @@ const (
 	MethodWhatsAppQRStart = "whatsapp.qr.start"
 )
 
+// Workstations (Standard edition only — gated at router)
+const (
+	MethodWorkstationsList        = "workstations.list"
+	MethodWorkstationsGet         = "workstations.get"
+	MethodWorkstationsCreate      = "workstations.create"
+	MethodWorkstationsUpdate      = "workstations.update"
+	MethodWorkstationsDelete      = "workstations.delete"
+	MethodWorkstationsTest        = "workstations.testConnection"
+	MethodWorkstationsLinkAgent   = "workstations.linkAgent"
+	MethodWorkstationsUnlinkAgent = "workstations.unlinkAgent"
+
+	// Workstation permission allowlist CRUD (Phase 6)
+	MethodWorkstationsPermList   = "workstations.permissions.list"
+	MethodWorkstationsPermAdd    = "workstations.permissions.add"
+	MethodWorkstationsPermRemove = "workstations.permissions.remove"
+	MethodWorkstationsPermToggle = "workstations.permissions.toggle"
+
+	// Workstation activity audit log (Phase 7)
+	MethodWorkstationsListActivity = "workstations.activity.list"
+)
+
 // Agent hooks (Phase 3)
 const (
 	MethodHooksList    = "hooks.list"

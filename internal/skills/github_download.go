@@ -22,6 +22,10 @@ var (
 	ErrTooManyRedirect = errors.New("github.download: too many redirects")
 )
 
+// testSkipDownloadValidation skips HTTPS + host + IP checks in tests.
+// Set via withTestInsecureHTTP(t) in test files only.
+var testSkipDownloadValidation bool
+
 // allowedDownloadHosts is the SSRF allowlist for asset downloads.
 var allowedDownloadHosts = map[string]bool{
 	"github.com":                        true,
@@ -34,6 +38,9 @@ var allowedDownloadHosts = map[string]bool{
 // validateDownloadURL ensures the URL is HTTPS and the host is allowlisted.
 // Also blocks private/loopback IPs when the host is an IP literal.
 func validateDownloadURL(rawURL string) error {
+	if testSkipDownloadValidation {
+		return nil
+	}
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return fmt.Errorf("github.download: parse url: %w", err)

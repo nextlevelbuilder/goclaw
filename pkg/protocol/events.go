@@ -113,6 +113,14 @@ const (
 
 	// Background worker alerts (non-retryable LLM errors).
 	EventBackgroundError = "background.error"
+
+	// Workstation exec streaming events.
+	// EventWorkstationExecChunk is emitted for each stdout/stderr chunk during remote exec.
+	// Payload: WorkstationExecChunkPayload.
+	EventWorkstationExecChunk = "workstation.exec.chunk"
+	// EventWorkstationExecDone is emitted when a remote exec command finishes.
+	// Payload: WorkstationExecDonePayload.
+	EventWorkstationExecDone = "workstation.exec.done"
 )
 
 // Agent event subtypes (in payload.type)

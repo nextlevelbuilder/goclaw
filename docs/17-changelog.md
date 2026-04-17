@@ -4,6 +4,97 @@ All notable changes to GoClaw Gateway are documented here. Format follows [Keep 
 
 ---
 
+### Packages Update Flow (Phase 1: GitHub binaries) — #900 (2026-04-16)
+
+Closes Issue #900. Adds proactive update flow for GitHub binary packages —
+"N updates available" badge + per-row `[Update]` + `[Update All]` with atomic
+`.bak` swap, ETag-aware polling, and stale-while-revalidate cache. Pip/npm/apk
+deferred to Phase 2.
+
+#### Added
+
+- **Backend:**
+  - `internal/skills/update_cache.go` — `UpdateInfo` + `UpdateCache` with
+    atomic tmp+rename persistence at `/app/data/.runtime/updates-cache.json`.
+  - `internal/skills/update_registry.go` — `UpdateChecker` + `UpdateExecutor`
+    interfaces + `UpdateRegistry.CheckAll(ctx)` (parallel per source, no
+    cross-cancel) + `RefreshInBackground(ctx, timeout)` with panic-recover.
+  - `internal/skills/package_lock.go` — channel-based keyed mutex; ctx-aware
+    `Acquire(ctx, source, name)`. Shared with installer to serialize
+    install+update on the same package.
+  - `internal/skills/github_update_checker.go` — ETag-aware polling via new
+    `GitHubClient.CondGetRelease` / `CondListReleases`. Uses
+    `golang.org/x/mod/semver.Compare` for ordering; double-gates pre-release
+    detection via regex AND `release.prerelease` flag; falls back to string
+    inequality for non-semver tags (never downgrades).
+  - `internal/skills/github_update_executor.go` — two-phase atomic swap:
+    Phase A renames ALL olds → `.bak.{nanos}`, Phase B renames news → dest.
+    Rolls back on any failure; manifest save retries 3× with backoff.
+    Checksum verification via `crypto/subtle.ConstantTimeCompare`. Explicit
+    `ScratchDir` config (no `..`-based symlink resolution).
+  - `internal/http/packages_updates.go` — 4 new routes:
+    `GET /v1/packages/updates` (operator+),
+    `POST /v1/packages/updates/refresh`,
+    `POST /v1/packages/update`,
+    `POST /v1/packages/updates/apply-all` — writes gated by
+    `requireMasterScope`. Apply-all always returns 200 (failed[] is source of
+    truth).
+  - `cmd/gateway_packages_wiring.go` — wires `UpdateRegistry` + locker +
+    executor alongside the existing `DefaultGitHubInstaller`.
+  - `internal/gateway/event_filter.go` — explicit
+    `package.update.*` branch forwards events to owner clients.
+  - i18n keys `packages.update.*` added to `internal/i18n/keys.go` and all
+    three catalogs (en/vi/zh).
+  - New Go dep: `golang.org/x/mod/semver`.
+
+- **Frontend:**
+  - `ui/web/src/pages/packages/hooks/use-updates.ts` — React Query hook
+    wrapping all 4 endpoints + WS event subscriptions.
+  - `ui/web/src/pages/packages/components/updates-summary-bar.tsx` — badge +
+    Refresh + Update All buttons.
+  - `ui/web/src/pages/packages/components/update-all-modal.tsx` — Radix
+    Dialog with per-package checkboxes, per-row progress icons, mobile
+    full-screen layout.
+  - `ui/web/src/pages/packages/components/update-row-button.tsx` — inline
+    per-package Update button with `current → latest` tooltip; disabled
+    (not hidden) for non-master users.
+  - i18n keys `updates.*` added to `en/vi/zh` `packages.json`.
+
+- **Config:**
+  - `config.packages.github_token` — reserved field for Phase 2 authenticated
+    rate-limit (currently unwired).
+  - `config.packages.updates_check_ttl` — stale threshold (default `1h`,
+    human-readable duration string).
+  - `config.packages.scratch_dir` — optional explicit tmp dir for updates
+    (defaults to `{BinDir}/../tmp`).
+
+#### Security
+
+- All write routes gated by `http.requireMasterScope` (non-master tenant
+  admins denied).
+- SHA256 verification via constant-time compare (`crypto/subtle`).
+- SSRF allowlist enforced on every asset download (including redirects) via
+  existing `validateDownloadURL`.
+- Event filter explicitly routes `package.update.*` to owner clients only
+  (tenant isolation preserved — no cross-tenant activity leak).
+
+#### Tests
+
+- 10+ new unit tests in `internal/skills/` covering ETag 304, semver
+  ordering, pre-release → stable transition, non-semver no-downgrade
+  guarantee, atomic swap rollback, checksum mismatch, nil-safe meta access,
+  keyed-lock serialization.
+- 12 HTTP tests in `internal/http/packages_updates_test.go` — auth matrix
+  (master-scope, admin), body validation, happy path with mocked registry,
+  apply-all always-200 contract, manifest-desync surfacing.
+
+#### See also
+
+- [`docs/packages-github.md`](./packages-github.md) — Updating Installed
+  Packages section (UI/API/troubleshooting).
+
+---
+
 ### ACTOR vs SCOPE — #915 group permission fix + propagation (2026-04-16)
 
 Resolves Issue #915 (Telegram group `write_file` permission denied after `/addwriter`) and closes an adjacent silent-privilege-bypass discovered during the audit.

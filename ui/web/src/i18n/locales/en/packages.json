@@ -41,6 +41,26 @@
       "installedAt": "Installed"
     }
   },
+  "updates": {
+    "available": "{{count}} updates available",
+    "none": "All packages up-to-date",
+    "refresh": "Refresh",
+    "refreshing": "Refreshing...",
+    "lastCheckedAgo": "Last checked {{ago}}",
+    "neverChecked": "Not checked yet",
+    "update": "Update",
+    "updateAll": "Update All",
+    "updating": "Updating {{name}}...",
+    "updateSucceeded": "{{name}} updated to {{version}}",
+    "updateFailed": "Failed to update {{name}}: {{reason}}",
+    "updateAllResult": "{{succeeded}} succeeded, {{failed}} failed",
+    "confirmAllTitle": "Update {{count}} packages?",
+    "confirmAllBody": "This may take several minutes. Individual updates are applied sequentially.",
+    "selected": "{{count}} selected",
+    "manifestDesyncWarn": "Binary was updated but the manifest save failed. Manual recovery required for {{name}}.",
+    "cacheStale": "Updates cache is stale. Please refresh first.",
+    "adminOnly": "Administrator access required"
+  },
   "actions": {
     "install": "Install",
     "uninstall": "Uninstall",

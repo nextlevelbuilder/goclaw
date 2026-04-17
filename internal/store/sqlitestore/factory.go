@@ -35,7 +35,7 @@ func NewSQLiteStores(cfg store.StoreConfig) (*store.Stores, error) {
 		slog.Warn("securecli: encryption key empty, store disabled")
 	}
 
-	return &store.Stores{
+	sqliteStores := &store.Stores{
 		DB:                    db,
 		Sessions:              NewSQLiteSessionStore(db),
 		Agents:                NewSQLiteAgentStore(db),
@@ -71,5 +71,12 @@ func NewSQLiteStores(cfg store.StoreConfig) (*store.Stores, error) {
 		KnowledgeGraph:       NewSQLiteKnowledgeGraphStore(db),
 		Vault:                NewSQLiteVaultStore(db),
 		Hooks:                NewSQLiteHookStore(db),
-	}, nil
+		Workstations:           NewSQLiteWorkstationStore(db, cfg.EncryptionKey),
+		WorkstationLinks:       NewSQLiteAgentWorkstationLinkStore(db),
+		WorkstationPermissions: NewSQLiteWorkstationPermissionStore(db),
+		WorkstationActivity:    NewSQLiteWorkstationActivityStore(db),
+	}
+	// Wire permStore into WorkstationStore so Create seeds allowlist atomically (H5 fix).
+	sqliteStores.Workstations.(*SQLiteWorkstationStore).SetPermStore(sqliteStores.WorkstationPermissions)
+	return sqliteStores, nil
 }

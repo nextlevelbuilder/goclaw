@@ -7,7 +7,12 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { useHttp } from "@/hooks/use-ws";
+import { useAuthStore } from "@/stores/use-auth-store";
 import { queryKeys } from "@/lib/query-keys";
+import { useUpdates } from "./hooks/use-updates";
+import { UpdatesSummaryBar } from "./components/updates-summary-bar";
+import { UpdateAllModal } from "./components/update-all-modal";
+import { UpdateRowButton } from "./components/update-row-button";
 
 // Viewer-safe projection — backend strips asset_url / sha256 / asset_name from
 // the GET /v1/packages response (see GitHubPackageListEntry in Go). The UI
@@ -70,11 +75,27 @@ function isValidFullSpec(spec: string): boolean {
 
 export function GitHubBinariesSection({ packages, onInstall, onUninstall }: Props) {
   const { t } = useTranslation("packages");
+  const isMaster = useAuthStore((s) => s.isMasterScope);
   const [input, setInput] = useState("");
   const [installing, setInstalling] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerRepo, setPickerRepo] = useState("");
   const [uninstallTarget, setUninstallTarget] = useState<string | null>(null);
+  const [updateAllOpen, setUpdateAllOpen] = useState(false);
+
+  // Updates hook — drives summary bar + row buttons
+  const {
+    updates,
+    checkedAt,
+    stale,
+    loading: updatesLoading,
+    refresh: refreshUpdates,
+    updatePackage,
+    applyAll,
+    applyAllPending,
+    applyAllResult,
+  } = useUpdates();
+
   const [dismissed, setDismissed] = useState<boolean>(() => {
     try {
       return window.localStorage.getItem(MUSL_DISMISS_KEY) === "1";
@@ -108,12 +129,27 @@ export function GitHubBinariesSection({ packages, onInstall, onUninstall }: Prop
     if (res.ok) setInput("");
   };
 
+  // Helper: find the pending update for a given installed package by name
+  const updateFor = (pkgName: string) =>
+    updates.find((u) => u.source === "github" && u.name === pkgName);
+
   return (
     <section>
       <div className="flex items-center gap-2 mb-3">
         <GitBranch className="h-4 w-4 text-muted-foreground" />
         <h2 className="text-lg font-medium">{t("github.title")}</h2>
       </div>
+
+      {/* Updates summary bar — shown when updates available or cache stale */}
+      <UpdatesSummaryBar
+        updates={updates}
+        checkedAt={checkedAt}
+        stale={stale}
+        loading={updatesLoading}
+        isMaster={isMaster}
+        onRefresh={refreshUpdates}
+        onUpdateAll={() => setUpdateAllOpen(true)}
+      />
 
       {!dismissed && (
         <Alert className="mb-3 border-amber-200/70 bg-amber-50/70 text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-100">
@@ -199,14 +235,28 @@ export function GitHubBinariesSection({ packages, onInstall, onUninstall }: Prop
                     {new Date(pkg.installed_at).toLocaleDateString()}
                   </td>
                   <td className="py-2 px-3 text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
-                      onClick={() => setUninstallTarget(pkg.name)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                    <div className="flex items-center justify-end gap-1.5">
+                      {/* Show update button when an update is available for this package */}
+                      {(() => {
+                        const upd = updateFor(pkg.name);
+                        return upd ? (
+                          <UpdateRowButton
+                            update={upd}
+                            globalPending={applyAllPending}
+                            isMaster={isMaster}
+                            onUpdate={updatePackage}
+                          />
+                        ) : null;
+                      })()}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => setUninstallTarget(pkg.name)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -214,6 +264,16 @@ export function GitHubBinariesSection({ packages, onInstall, onUninstall }: Prop
           </tbody>
         </table>
       </div>
+
+      {/* Bulk update confirmation modal */}
+      <UpdateAllModal
+        open={updateAllOpen}
+        onOpenChange={setUpdateAllOpen}
+        updates={updates}
+        isPending={applyAllPending}
+        result={applyAllResult}
+        onApply={applyAll}
+      />
 
       <GitHubReleasePicker
         repo={pickerRepo}

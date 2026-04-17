@@ -43,6 +43,7 @@
     "apiDocs": "API Docs",
     "packages": "Packages",
     "tenants": "Tenants",
-    "backupRestore": "Backup & Restore"
+    "backupRestore": "Backup & Restore",
+    "workstations": "Workstations"
   }
 }

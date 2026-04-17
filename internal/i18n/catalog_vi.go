@@ -207,6 +207,16 @@ func init() {
 		MsgVoiceMessageFallback:      "[Tin nhắn thoại]",
 
 		// Hooks
+		// Workstation
+		MsgWorkstationNotFound:     "không tìm thấy máy trạm: %s",
+		MsgWorkstationKeyExists:    "khóa máy trạm đã được sử dụng: %s",
+		MsgInvalidBackend:          "loại backend không hợp lệ: %s (phải là ssh|docker)",
+		MsgWorkstationInactive:     "máy trạm không hoạt động: %s",
+		MsgInvalidMetadataShape:    "metadata không hợp lệ cho backend %s: %s",
+		MsgWorkstationRequired:     "agent chưa được gắn máy trạm; hãy truyền workstation_id",
+		MsgWorkstationAccessDenied: "agent %s không được phép truy cập máy trạm %s",
+		MsgBackendNotReady:         "backend máy trạm chưa sẵn sàng: %s",
+
 		MsgHookInvalidMatcher:          "biểu thức regex matcher không hợp lệ: %s",
 		MsgHookCommandDisabledStandard: "hook loại command chỉ khả dụng trên phiên bản Lite",
 		MsgHookPromptRequiresMatcher:   "hook prompt bắt buộc có matcher hoặc if_expr (chống chi phí vượt kiểm soát)",
@@ -214,5 +224,26 @@ func init() {
 		MsgHookBudgetExceeded:          "tenant đã vượt ngân sách token cho hook",
 		MsgHookPerTurnCapReached:       "đã đạt giới hạn số lần gọi hook trong một lượt",
 		MsgHookBuiltinReadOnly:         "hook dựng sẵn chỉ cho phép bật/tắt, không thể chỉnh sửa",
+
+		// Workstation permissions (Phase 6)
+		MsgWorkstationCmdDenied:    "lệnh bị từ chối bởi chính sách workstation: %s",
+		MsgWorkstationEnvDenied:    "biến môi trường bị từ chối bởi chính sách: %s",
+		MsgWorkstationInputInvalid: "lệnh chứa ký tự không hợp lệ: %s",
+		MsgWorkstationRateLimit:    "đã vượt quá giới hạn tốc độ workstation",
+		MsgWorkstationPermNotFound:  "không tìm thấy mục quyền: %s",
+		// Workstation activity (Phase 7)
+		MsgWorkstationActivityTitle: "Hoạt động gần đây",
+		MsgWorkstationActionExec:    "Thực thi",
+		MsgWorkstationActionDeny:    "Từ chối",
+
+		// Package updates (Phase 4+5)
+		MsgPackageNotInstalled:  "Gói %s chưa được cài đặt",
+		MsgPackageUpdateLocked:  "Gói %s đang được cập nhật bởi một yêu cầu khác",
+		MsgReleaseNotFound:      "Không tìm thấy phiên bản %s cho %s",
+		MsgAssetNotFound:        "Không có tệp tương thích cho %s/%s",
+		MsgChecksumMismatch:     "Checksum không khớp cho %s",
+		MsgUpdateSwapFailed:     "Không cài được %s; đã khôi phục phiên bản cũ",
+		MsgUpdateManifestDesync: "Binary đã cập nhật nhưng lưu manifest thất bại — cần khôi phục thủ công cho %s",
+		MsgUpdateCacheStale:     "Cache cập nhật đã cũ; hãy refresh trước khi áp dụng",
 	})
 }

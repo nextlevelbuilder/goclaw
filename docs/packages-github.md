@@ -139,6 +139,106 @@ the release. Do not force-install; report upstream.
 - No version history / rollback — re-installing replaces in place
 - Global manifest (not per-tenant)
 
+## Updating Installed Packages
+
+Update flow is **Phase 1 GitHub-only** (pip/npm/apk deferred to Phase 2).
+
+### UI
+
+The Runtime & Packages page renders a summary bar above the GitHub Binaries
+section when updates are available:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ 🟡 3 updates available                                   │
+│    Last checked 5m ago   [Refresh]  [Update All]        │
+└─────────────────────────────────────────────────────────┘
+```
+
+Per-row `[Update]` buttons appear next to each package with a newer release.
+Clicking applies the update via atomic `.bak` swap with automatic rollback on
+failure.
+
+### API
+
+All write endpoints require **master-scope admin** (tenant admins are denied):
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /v1/packages/updates` | Cache snapshot + `{stale, ageSeconds, ttlSeconds}` (operator+) |
+| `POST /v1/packages/updates/refresh` | Force sync CheckAll — fetch from GitHub |
+| `POST /v1/packages/update` | Apply one: body `{"package":"github:lazygit","toVersion":"v0.44.5"}` |
+| `POST /v1/packages/updates/apply-all` | Sequential apply; body `{"packages":[...]}` (empty = all). Always returns 200 — inspect `failed[]` |
+
+### Behaviour
+
+- **Stale-while-revalidate**: `GET /updates` returns the cached snapshot
+  immediately and triggers a background refresh if the cache is older than
+  `packages.updates_check_ttl` (default `1h`).
+- **ETag**: responses use `If-None-Match`, so repeated checks cost zero
+  rate-limit budget (304 responses don't count against 60/hr).
+- **Pre-releases**: if your current tag matches `(-alpha|-beta|-rc|-pre|-preview|-dev|-nightly)`,
+  the checker polls both `/releases/latest` and `/releases?per_page=5` and
+  picks the newest via `golang.org/x/mod/semver.Compare`. This correctly
+  handles the `v1.0.0-rc.1 → v1.0.0` stable transition.
+- **Non-semver tags** (e.g. `2024-01-15`): string-compare fallback. Never
+  downgrades — if the candidate string is lexically less than current, the
+  update is suppressed.
+- **Atomic swap**: two-phase rename. Phase A renames ALL current binaries to
+  `{name}.bak.{unixNano}`; Phase B renames the new binaries in place. On any
+  failure during Phase B, Phase A's renames are rolled back. Manifest is
+  persisted AFTER all swaps succeed, with retries (100ms/500ms/1s).
+
+### WebSocket events
+
+Owner clients receive (non-owner master admins use the HTTP API directly):
+
+```
+package.update.checked    {count, checked_at}
+package.update.started    {source, name, from_version, to_version}
+package.update.succeeded  {source, name, from_version, to_version, duration_ms}
+package.update.failed     {source, name, reason}
+```
+
+### Troubleshooting Updates
+
+#### "Binary updated but manifest save failed" (manifestDesynced=true)
+
+The `.bak` files are deleted but the manifest didn't record the new version.
+Next update attempt will re-apply the same version. Manual recovery is not
+required — just run the update again OR restart the gateway (which re-reads
+the manifest). No data loss.
+
+#### Corrupt updates cache
+
+Symptom: UI shows no updates available despite newer releases.
+
+Recovery: delete `/app/data/.runtime/updates-cache.json`, click `[Refresh]`.
+
+#### Rate-limit exhaustion
+
+Symptom: `Refresh` returns 429 or check returns partial results.
+
+Check response header `X-RateLimit-Reset` (Unix epoch). Wait or set
+`packages.github_token` in config (Phase 2 auth — unwired in Phase 1).
+
+#### Scratch dir leftover after crash
+
+Path: `{BinDir}/../tmp/{name}-{tag}-{nanos}/`
+
+Safe to remove any `{name}-*-*` directory under tmp after ensuring no active
+update is in flight. Phase 2 will add startup GC.
+
+#### Mid-swap process crash
+
+Phase 1 leaves `.bak.{nanos}` files on disk. Manual recovery:
+1. Check `{BinDir}` for `*.bak.*` files.
+2. If the main binary is MISSING, rename the `.bak.{nanos}` back to the
+   original name.
+3. If the main binary EXISTS but is the new version you wanted, delete the
+   `.bak.{nanos}`.
+4. Re-run the update via UI — idempotent.
+
 ## See Also
 
 - [`docs/14-skills-runtime.md`](./14-skills-runtime.md) — Overview of the runtime packages system

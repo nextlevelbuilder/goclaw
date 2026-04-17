@@ -42,4 +42,10 @@ type Stores struct {
 	// (hooks package imports store for context helpers).
 	// Callers: type-assert to hooks.HookStore before use.
 	Hooks any
+
+	// Workstations — Standard edition only (gated at router registration).
+	Workstations           WorkstationStore
+	WorkstationLinks       AgentWorkstationLinkStore
+	WorkstationPermissions WorkstationPermissionStore
+	WorkstationActivity    WorkstationActivityStore
 }

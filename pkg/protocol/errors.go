@@ -16,4 +16,5 @@ const (
 	ErrFailedPrecondition  = "FAILED_PRECONDITION"
 	ErrInternal            = "INTERNAL"
 	ErrTenantAccessRevoked = "TENANT_ACCESS_REVOKED"
+	ErrNotImplemented      = "NOT_IMPLEMENTED"
 )

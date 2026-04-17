@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
@@ -31,11 +32,15 @@ var validGitHubBareName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 var validRepoPath = regexp.MustCompile(`^([A-Za-z0-9](?:[A-Za-z0-9-]{0,37})?[A-Za-z0-9]|[A-Za-z0-9])/[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
 // PackagesHandler handles runtime package management HTTP endpoints.
-type PackagesHandler struct{}
+type PackagesHandler struct {
+	Registry  *skills.UpdateRegistry
+	Publisher bus.EventPublisher
+}
 
 // NewPackagesHandler creates a handler for package management endpoints.
-func NewPackagesHandler() *PackagesHandler {
-	return &PackagesHandler{}
+// Pass nil registry/publisher for read-only mode (no update endpoints).
+func NewPackagesHandler(registry *skills.UpdateRegistry, publisher bus.EventPublisher) *PackagesHandler {
+	return &PackagesHandler{Registry: registry, Publisher: publisher}
 }
 
 // RegisterRoutes registers all package management routes on the given mux.
@@ -46,6 +51,11 @@ func (h *PackagesHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/packages/runtimes", h.readAuth(h.handleRuntimes))
 	mux.HandleFunc("GET /v1/packages/github-releases", h.readAuth(h.handleGitHubReleases))
 	mux.HandleFunc("GET /v1/shell-deny-groups", h.readAuth(h.handleDenyGroups))
+	// Update flow (Phase 4+5) — operator+ read, admin+master-scope writes.
+	mux.HandleFunc("GET /v1/packages/updates", h.readAuth(h.handleListUpdates))
+	mux.HandleFunc("POST /v1/packages/updates/refresh", h.adminAuth(h.handleRefreshUpdates))
+	mux.HandleFunc("POST /v1/packages/update", h.adminAuth(h.handleUpdatePackage))
+	mux.HandleFunc("POST /v1/packages/updates/apply-all", h.adminAuth(h.handleApplyAllUpdates))
 }
 
 // readAuth allows viewer+ for read operations.

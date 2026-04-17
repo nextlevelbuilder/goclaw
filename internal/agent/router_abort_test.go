@@ -138,7 +138,6 @@ func TestAbortRun_AlreadyAborting(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(n)
 	for i := range n {
-		i := i
 		go func() {
 			defer wg.Done()
 			results[i] = r.AbortRun(runID, sessionKey)

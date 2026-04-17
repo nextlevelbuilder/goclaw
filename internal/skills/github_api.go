@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -149,6 +150,143 @@ func (c *GitHubClient) ListReleases(ctx context.Context, owner, repo string, lim
 	}
 	c.cacheSet(key, releases)
 	return releases, nil
+}
+
+// ErrGitHubSecondaryRateLimit is returned when GitHub signals a secondary
+// (abuse-detection) rate limit via 403 + Retry-After. The header value is
+// embedded in the error's Error() message; callers may inspect via the
+// SecondaryRateLimit type assertion.
+var ErrGitHubSecondaryRateLimit = errors.New("github: secondary rate limit (Retry-After)")
+
+// CondGetRelease fetches a release with If-None-Match support.
+//
+//	tag==""   → /releases/latest
+//	tag!=""   → /releases/tags/{tag}
+//
+// Returns release==nil AND notModified=true on 304 (no body). Otherwise
+// populates release and newETag. Errors map to the same sentinels as
+// GetRelease. Does NOT consult the 10-minute cache (ETag is the cache now).
+func (c *GitHubClient) CondGetRelease(ctx context.Context, owner, repo, tag, ifNoneMatch string) (rel *GitHubRelease, newETag string, notModified bool, err error) {
+	var path string
+	if tag == "" {
+		path = fmt.Sprintf("/repos/%s/%s/releases/latest",
+			url.PathEscape(owner), url.PathEscape(repo))
+	} else {
+		path = fmt.Sprintf("/repos/%s/%s/releases/tags/%s",
+			url.PathEscape(owner), url.PathEscape(repo), url.PathEscape(tag))
+	}
+	var out GitHubRelease
+	etag, mod, err := c.doJSONConditional(ctx, path, ifNoneMatch, &out)
+	if err != nil {
+		return nil, "", false, err
+	}
+	if mod {
+		return nil, etag, true, nil
+	}
+	return &out, etag, false, nil
+}
+
+// CondListReleases fetches up to `limit` recent releases with If-None-Match
+// support. Returns nil slice AND notModified=true on 304.
+func (c *GitHubClient) CondListReleases(ctx context.Context, owner, repo string, limit int, ifNoneMatch string) (rels []GitHubRelease, newETag string, notModified bool, err error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	path := fmt.Sprintf("/repos/%s/%s/releases?per_page=%d",
+		url.PathEscape(owner), url.PathEscape(repo), limit)
+	var out []GitHubRelease
+	etag, mod, err := c.doJSONConditional(ctx, path, ifNoneMatch, &out)
+	if err != nil {
+		return nil, "", false, err
+	}
+	if mod {
+		return nil, etag, true, nil
+	}
+	return out, etag, false, nil
+}
+
+// doJSONConditional performs a GET with optional If-None-Match.
+// Returns (newETag, notModified, err).
+//
+// Secondary rate limits: GitHub returns 403 with Retry-After header and
+// zero X-RateLimit-Remaining; this path maps to ErrGitHubSecondaryRateLimit
+// when Retry-After is present, preserving the hint via fmt.Errorf wrapping.
+func (c *GitHubClient) doJSONConditional(ctx context.Context, path, ifNoneMatch string, out any) (string, bool, error) {
+	apiURL := c.BaseURL + path
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	if err != nil {
+		return "", false, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	if c.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+	}
+	if ifNoneMatch != "" {
+		req.Header.Set("If-None-Match", ifNoneMatch)
+	}
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return "", false, fmt.Errorf("github: http request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// 304 Not Modified — body empty, preserve the ETag we sent (GitHub repeats
+	// it in the response header for consistency).
+	if resp.StatusCode == http.StatusNotModified {
+		etag := resp.Header.Get("ETag")
+		if etag == "" {
+			etag = ifNoneMatch
+		}
+		return etag, true, nil
+	}
+
+	switch {
+	case resp.StatusCode == http.StatusOK:
+		// fall through
+	case resp.StatusCode == http.StatusNotFound:
+		return "", false, ErrGitHubNotFound
+	case resp.StatusCode == http.StatusUnauthorized:
+		return "", false, ErrGitHubUnauthorized
+	case resp.StatusCode == http.StatusForbidden:
+		// Secondary rate limit (abuse detection) — identifiable by Retry-After.
+		if ra := resp.Header.Get("Retry-After"); ra != "" {
+			return "", false, fmt.Errorf("%w (retry_after=%s)", ErrGitHubSecondaryRateLimit, ra)
+		}
+		remaining := resp.Header.Get("X-RateLimit-Remaining")
+		if remaining == "0" {
+			reset := resp.Header.Get("X-RateLimit-Reset")
+			if n, errConv := strconv.ParseInt(reset, 10, 64); errConv == nil {
+				return "", false, fmt.Errorf("%w (resets at %s)", ErrGitHubRateLimited, time.Unix(n, 0).UTC().Format(time.RFC3339))
+			}
+			return "", false, ErrGitHubRateLimited
+		}
+		return "", false, ErrGitHubUnauthorized
+	case resp.StatusCode == http.StatusTooManyRequests:
+		return "", false, ErrGitHubRateLimited
+	case resp.StatusCode >= 500:
+		return "", false, ErrGitHubServer
+	default:
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return "", false, fmt.Errorf("github: unexpected status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	const maxAPIResponseBytes = 8 * 1024 * 1024
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxAPIResponseBytes)).Decode(out); err != nil {
+		return "", false, fmt.Errorf("github: decode response: %w", err)
+	}
+	// Warn on low rate limit remaining.
+	if rem := resp.Header.Get("X-RateLimit-Remaining"); rem != "" {
+		if n, errConv := strconv.Atoi(rem); errConv == nil && n < 5 {
+			slog.Warn("security.github.ratelimit.low",
+				"remaining", n, "reset", resp.Header.Get("X-RateLimit-Reset"))
+		}
+	}
+	return resp.Header.Get("ETag"), false, nil
 }
 
 // doJSON performs a GET + JSON decode, mapping status codes to sentinel errors.

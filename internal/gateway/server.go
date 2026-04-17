@@ -576,6 +576,11 @@ func (s *Server) SetAgentStore(as store.AgentStore) { s.agentStore = as }
 // SetMessageBus sets the message bus for MCP bridge media delivery.
 func (s *Server) SetMessageBus(mb *bus.MessageBus) { s.msgBus = mb }
 
+// SetWorkstationsHandler sets the workstations CRUD handler (Standard edition only).
+func (s *Server) SetWorkstationsHandler(h *httpapi.WorkstationsHandler) {
+	s.handlers = append(s.handlers, h)
+}
+
 // SetVersion sets the server version for health responses.
 func (s *Server) SetVersion(v string) { s.version = v }
 

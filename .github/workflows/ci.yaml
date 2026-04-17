@@ -43,11 +43,12 @@ jobs:
       - run: go build ./...
       - run: go build -tags sqliteonly ./...
       - run: go vet ./...
-      # -timeout=90s caps each test binary so a deadlocked test fails fast
-      # instead of blocking CI for the 10-minute default. Race-heavy wave C
-      # suites run in <20s, so 90s leaves ample breathing room.
+      # -timeout=120s caps each test binary so a deadlocked test fails fast
+      # instead of blocking CI for the 10-minute default. Bumped from 90s
+      # because hooks/handlers package (goja script tests) needs ~85s on
+      # cold CI runners, leaving too little headroom for HTTP retry tests.
       - name: Unit tests
-        run: go test -race -timeout=90s -coverpkg=./... -coverprofile=coverage.out ./...
+        run: go test -race -timeout=120s -coverpkg=./... -coverprofile=coverage.out ./...
       # Invariant tests (P0) - tenant isolation, permission enforcement
       # These run against real DB and MUST pass for merge.
       - name: Invariant tests (P0)

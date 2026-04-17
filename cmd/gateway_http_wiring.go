@@ -7,6 +7,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/audio"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway/methods"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
@@ -134,8 +135,10 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 	}
 
 	// Runtime package management (install/uninstall system/pip/npm/github packages)
+	// Wire the update registry AFTER initGitHubInstaller so DefaultGitHubInstaller() is set.
 	initGitHubInstaller()
-	d.server.SetPackagesHandler(httpapi.NewPackagesHandler())
+	pkgHandler := wirePackagesHandler(d)
+	d.server.SetPackagesHandler(pkgHandler)
 
 	// API documentation (OpenAPI spec + Swagger UI at /docs)
 	d.server.SetDocsHandler(httpapi.NewDocsHandler())
@@ -267,6 +270,25 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 	// Per-tenant TTS config endpoint — allows tenant admins to configure TTS.
 	if d.pgStores.SystemConfigs != nil && d.pgStores.ConfigSecrets != nil {
 		d.server.SetTTSConfigHandler(httpapi.NewTTSConfigHandler(d.pgStores.SystemConfigs, d.pgStores.ConfigSecrets))
+	}
+
+	// Workstations API — Standard edition only.
+	// Lite edition MUST NOT expose these routes (silent orphan data + contract violation).
+	if edition.Current().Name != "lite" {
+		if d.pgStores != nil && d.pgStores.Workstations != nil && d.pgStores.WorkstationLinks != nil {
+			wsH := httpapi.NewWorkstationsHandler(
+				d.pgStores.Workstations,
+				d.pgStores.WorkstationLinks,
+				d.pgStores.Tenants,
+			)
+			if d.pgStores.WorkstationPermissions != nil {
+				wsH.SetPermStore(d.pgStores.WorkstationPermissions)
+			}
+			if d.pgStores.WorkstationActivity != nil {
+				wsH.SetActivityStore(d.pgStores.WorkstationActivity)
+			}
+			d.server.SetWorkstationsHandler(wsH)
+		}
 	}
 
 	// Seed + apply builtin tool disables

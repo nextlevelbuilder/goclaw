@@ -207,6 +207,16 @@ func init() {
 		MsgVoiceMessageFallback:      "[语音消息]",
 
 		// Hooks
+		// Workstation
+		MsgWorkstationNotFound:     "未找到工作站：%s",
+		MsgWorkstationKeyExists:    "工作站键已被使用：%s",
+		MsgInvalidBackend:          "无效的后端类型：%s（必须是 ssh|docker）",
+		MsgWorkstationInactive:     "工作站未激活：%s",
+		MsgInvalidMetadataShape:    "%s 后端的元数据无效：%s",
+		MsgWorkstationRequired:     "Agent 未绑定工作站，请提供 workstation_id",
+		MsgWorkstationAccessDenied: "Agent %s 无权访问工作站 %s",
+		MsgBackendNotReady:         "工作站后端未就绪：%s",
+
 		MsgHookInvalidMatcher:          "无效的匹配器正则表达式: %s",
 		MsgHookCommandDisabledStandard: "命令类型钩子仅在 Lite 版本可用",
 		MsgHookPromptRequiresMatcher:   "prompt 钩子必须指定 matcher 或 if_expr(成本失控保护)",
@@ -214,5 +224,26 @@ func init() {
 		MsgHookBudgetExceeded:          "租户钩子令牌预算已耗尽",
 		MsgHookPerTurnCapReached:       "单轮钩子调用次数已达上限",
 		MsgHookBuiltinReadOnly:         "内置钩子只读,仅允许切换启用状态",
+
+		// Workstation permissions (Phase 6)
+		MsgWorkstationCmdDenied:    "命令被工作站策略拒绝: %s",
+		MsgWorkstationEnvDenied:    "环境变量被策略拒绝: %s",
+		MsgWorkstationInputInvalid: "命令包含无效字符: %s",
+		MsgWorkstationRateLimit:    "已超过工作站速率限制",
+		MsgWorkstationPermNotFound:  "未找到权限条目: %s",
+		// Workstation activity (Phase 7)
+		MsgWorkstationActivityTitle: "近期活动",
+		MsgWorkstationActionExec:    "执行",
+		MsgWorkstationActionDeny:    "拒绝",
+
+		// Package updates (Phase 4+5)
+		MsgPackageNotInstalled:  "软件包 %s 未安装",
+		MsgPackageUpdateLocked:  "软件包 %s 正在被其他请求更新",
+		MsgReleaseNotFound:      "%s 未找到版本 %s",
+		MsgAssetNotFound:        "没有适用于 %s/%s 的文件",
+		MsgChecksumMismatch:     "%s 校验和不匹配",
+		MsgUpdateSwapFailed:     "安装 %s 失败；已恢复旧版本",
+		MsgUpdateManifestDesync: "二进制文件已更新但清单保存失败 — %s 需要手动恢复",
+		MsgUpdateCacheStale:     "更新缓存已过期；请先刷新再应用更新",
 	})
 }

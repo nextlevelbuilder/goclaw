@@ -41,6 +41,26 @@
       "installedAt": "Ngày cài"
     }
   },
+  "updates": {
+    "available": "{{count}} cập nhật khả dụng",
+    "none": "Tất cả gói đã mới nhất",
+    "refresh": "Làm mới",
+    "refreshing": "Đang làm mới...",
+    "lastCheckedAgo": "Kiểm tra lần cuối {{ago}}",
+    "neverChecked": "Chưa kiểm tra",
+    "update": "Cập nhật",
+    "updateAll": "Cập nhật tất cả",
+    "updating": "Đang cập nhật {{name}}...",
+    "updateSucceeded": "{{name}} đã cập nhật lên {{version}}",
+    "updateFailed": "Cập nhật {{name}} thất bại: {{reason}}",
+    "updateAllResult": "{{succeeded}} thành công, {{failed}} thất bại",
+    "confirmAllTitle": "Cập nhật {{count}} gói?",
+    "confirmAllBody": "Quá trình có thể mất vài phút. Các gói được cập nhật tuần tự.",
+    "selected": "{{count}} đã chọn",
+    "manifestDesyncWarn": "Binary đã cập nhật nhưng lưu manifest thất bại. Cần khôi phục thủ công cho {{name}}.",
+    "cacheStale": "Cache cập nhật đã cũ. Hãy làm mới trước.",
+    "adminOnly": "Cần quyền quản trị viên"
+  },
   "actions": {
     "install": "Cài đặt",
     "uninstall": "Gỡ bỏ",

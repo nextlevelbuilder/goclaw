@@ -41,6 +41,26 @@
       "installedAt": "安装时间"
     }
   },
+  "updates": {
+    "available": "有 {{count}} 个可用更新",
+    "none": "所有软件包已是最新",
+    "refresh": "刷新",
+    "refreshing": "刷新中...",
+    "lastCheckedAgo": "上次检查于 {{ago}}",
+    "neverChecked": "尚未检查",
+    "update": "更新",
+    "updateAll": "全部更新",
+    "updating": "正在更新 {{name}}...",
+    "updateSucceeded": "{{name}} 已更新至 {{version}}",
+    "updateFailed": "{{name}} 更新失败:{{reason}}",
+    "updateAllResult": "{{succeeded}} 成功,{{failed}} 失败",
+    "confirmAllTitle": "更新 {{count}} 个软件包?",
+    "confirmAllBody": "过程可能需要几分钟。更新按顺序应用。",
+    "selected": "已选 {{count}} 个",
+    "manifestDesyncWarn": "二进制文件已更新但清单保存失败。{{name}} 需要手动恢复。",
+    "cacheStale": "更新缓存已过期。请先刷新。",
+    "adminOnly": "需要管理员权限"
+  },
   "actions": {
     "install": "安装",
     "uninstall": "卸载",

@@ -599,6 +599,22 @@ func InjectTeamDispatch(ctx context.Context, postTurn PostTurnProcessor) (contex
 	return ctx, drain
 }
 
+// --- Workstation ID (for tool execution context) ---
+
+const ctxWorkstationID toolContextKey = "tool_workstation_id"
+
+// WithWorkstationID injects the active workstation UUID string into context.
+// Used by workstation execution tools (Phase 5) to identify the target backend.
+func WithWorkstationID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, ctxWorkstationID, id)
+}
+
+// WorkstationIDFromCtx returns the workstation ID from context, or empty string.
+func WorkstationIDFromCtx(ctx context.Context) string {
+	v, _ := ctx.Value(ctxWorkstationID).(string)
+	return v
+}
+
 // --- Delivered media tracker (write_file → message self-send dedup) ---
 
 const ctxDeliveredMedia toolContextKey = "tool_delivered_media"

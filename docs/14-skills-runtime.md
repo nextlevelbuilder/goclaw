@@ -203,6 +203,23 @@ land in `/app/data/.runtime/bin/` (on `$PATH`). See
 [`docs/packages-github.md`](./packages-github.md) for syntax, configuration,
 security posture, and troubleshooting (especially musl/glibc compatibility).
 
+### Update Flow (Phase 1: GitHub only)
+
+GitHub binaries support proactive update checking via:
+
+- UI summary bar on the Runtime & Packages page (badge + Refresh + Update All)
+- `/v1/packages/updates*` endpoints (master-scope for writes)
+- Atomic two-phase `.bak` swap with automatic rollback
+- ETag-aware polling (304 = zero rate-limit cost)
+- Pre-release handling via regex + `release.prerelease` + semver ordering
+
+See [`docs/packages-github.md`](./packages-github.md) § "Updating Installed
+Packages" for the full contract, troubleshooting, and runbook.
+
+Pip/npm/apk update flows are **deferred to Phase 2** — the `UpdateChecker` /
+`UpdateExecutor` interfaces in `internal/skills/update_registry.go` are
+designed for interface-based extension without Phase 1 refactor.
+
 ---
 
 ## 8. Skill Search (v3)

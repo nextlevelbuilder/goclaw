@@ -4,6 +4,18 @@ All notable changes to GoClaw are documented here. For full documentation, see [
 
 ## Unreleased
 
+### Added
+
+- **Packages Update Flow (Phase 1: GitHub binaries)** — closes #900. Proactive
+  "N updates available" badge + per-row `[Update]` + `[Update All]` on the
+  Runtime & Packages page. Backend endpoints under `/v1/packages/updates*`
+  (master-scope). ETag-aware polling (304 responses don't burn rate limit),
+  stale-while-revalidate cache, atomic two-phase `.bak` swap with rollback.
+  Pre-release detection via regex + GitHub API flag; semver ordering via
+  `golang.org/x/mod/semver`; non-semver tags use string-inequality fallback
+  with downgrade protection. WebSocket events `package.update.*` for owner
+  clients. See `docs/packages-github.md` § "Updating Installed Packages".
+
 ### Breaking Changes
 
 - **Context pruning now opt-in.** Previously tool-result trimming ran by default

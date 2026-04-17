@@ -68,3 +68,61 @@ func TestDownloadAsset_MaxSize(t *testing.T) {
 		t.Errorf("want ErrHostNotAllowed for literal-IP host, got %v", err)
 	}
 }
+
+// TestValidateDownloadURL_SSRF_CompleteAllowlist validates that all allowlisted
+// hosts are correctly accepted and all non-allowlisted hosts are rejected,
+// including edge cases like hostname spoofing and cloud metadata endpoints.
+func TestValidateDownloadURL_SSRF_CompleteAllowlist(t *testing.T) {
+	// Red-team comprehensive allowlist validation.
+	testCases := []struct {
+		name   string
+		url    string
+		accept bool
+	}{
+		// Valid allowlisted hosts.
+		{"github.com domain", "https://github.com/org/repo/releases/download/v1.0.0/app.tar.gz", true},
+		{"github.com with path", "https://github.com/releases/asset.tar.gz", true},
+		{"api.github.com", "https://api.github.com/repos/org/repo/releases/latest", true},
+		{"objects.githubusercontent.com", "https://objects.githubusercontent.com/release-assets/123/app.tar.gz", true},
+		{"release-assets.githubusercontent.com", "https://release-assets.githubusercontent.com/app.tar.gz", true},
+		{"codeload.github.com", "https://codeload.github.com/org/repo/tar.gz/v1.0.0", true},
+
+		// Invalid URLs: non-HTTPS.
+		{"HTTP scheme", "http://github.com/asset.tar.gz", false},
+		{"FTP scheme", "ftp://github.com/asset.tar.gz", false},
+		{"File scheme", "file:///etc/passwd", false},
+
+		// Invalid URLs: wrong hosts.
+		{"attacker.com", "https://attacker.com/asset.tar.gz", false},
+		{"github.com.attacker.com (prefix attack)", "https://github.com.attacker.com/asset.tar.gz", false},
+		{"internal.example.com", "https://internal.example.com/api/secret", false},
+		{"private.local", "https://private.local/metadata", false},
+
+		// Invalid URLs: literal IP addresses (even if "allowlisted" as string).
+		{"127.0.0.1 (localhost)", "https://127.0.0.1/metadata", false},
+		{"[::1] (IPv6 loopback)", "https://[::1]/x", false},
+		{"169.254.169.254 (AWS metadata)", "https://169.254.169.254/latest/meta-data/", false},
+		{"10.0.0.1 (private range)", "https://10.0.0.1/internal/asset.tar.gz", false},
+		{"172.16.0.1 (private range)", "https://172.16.0.1/internal/asset.tar.gz", false},
+		{"192.168.1.1 (private range)", "https://192.168.1.1/asset.tar.gz", false},
+
+		// Invalid URLs: cloud metadata endpoints.
+		{"GCP metadata", "https://metadata.google.internal/computeMetadata/v1/?recursive=true", false},
+		{"Alibaba cloud metadata", "https://100.100.100.200/latest/meta-data/", false},
+		{"DigitalOcean metadata", "https://169.254.169.254/metadata", false},
+
+		// Invalid URLs: localhost variations.
+		{"localhost name", "https://localhost/asset.tar.gz", false},
+		{"localhost.localdomain", "https://localhost.localdomain/secret", false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateDownloadURL(tc.url)
+			if (err == nil) != tc.accept {
+				t.Errorf("validateDownloadURL(%q): accept=%v, err=%v",
+					tc.url, tc.accept, err)
+			}
+		})
+	}
+}

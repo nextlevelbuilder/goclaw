@@ -181,6 +181,23 @@ export const Methods = {
   TENANTS_USERS_ADD: "tenants.users.add",
   TENANTS_USERS_REMOVE: "tenants.users.remove",
 
+  // Workstations (Standard edition only)
+  WORKSTATIONS_LIST: "workstations.list",
+  WORKSTATIONS_GET: "workstations.get",
+  WORKSTATIONS_CREATE: "workstations.create",
+  WORKSTATIONS_UPDATE: "workstations.update",
+  WORKSTATIONS_DELETE: "workstations.delete",
+  WORKSTATIONS_TEST: "workstations.test",
+  WORKSTATIONS_LINK_AGENT: "workstations.link_agent",
+  WORKSTATIONS_UNLINK_AGENT: "workstations.unlink_agent",
+  // Phase 6: permissions
+  WORKSTATIONS_PERMS_LIST: "workstations.permissions.list",
+  WORKSTATIONS_PERMS_ADD: "workstations.permissions.add",
+  WORKSTATIONS_PERMS_REMOVE: "workstations.permissions.remove",
+  WORKSTATIONS_PERMS_TOGGLE: "workstations.permissions.toggle",
+  // Phase 7: activity audit log
+  WORKSTATIONS_LIST_ACTIVITY: "workstations.activity.list",
+
   // Phase 3+ - NICE TO HAVE
   LOGS_TAIL: "logs.tail",
 } as const;

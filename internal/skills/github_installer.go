@@ -95,6 +95,11 @@ type GitHubInstaller struct {
 	Client *GitHubClient
 	Config *GitHubPackagesConfig
 
+	// Locker serializes install/update/uninstall on the same package across
+	// the whole installer (shared with update executor). If nil, a process-
+	// local locker is used.
+	Locker *PackageLocker
+
 	mu sync.Mutex // serializes the final disk-write phase: bin dir writes + manifest mutation
 	//             (download, extraction, and ELF validation intentionally run outside the lock)
 }
@@ -105,7 +110,16 @@ func NewGitHubInstaller(client *GitHubClient, cfg *GitHubPackagesConfig) *GitHub
 		cfg = &GitHubPackagesConfig{}
 	}
 	cfg.Defaults()
-	return &GitHubInstaller{Client: client, Config: cfg}
+	return &GitHubInstaller{Client: client, Config: cfg, Locker: NewPackageLocker()}
+}
+
+// SetLocker swaps the package locker. Used to share a locker across the
+// installer and the update executor so install+update serialize on the
+// same package key. Safe to call at setup time only.
+func (i *GitHubInstaller) SetLocker(l *PackageLocker) {
+	if l != nil {
+		i.Locker = l
+	}
 }
 
 // AllowedOrg returns true if owner passes allowlist (empty slice = all allowed).
@@ -412,6 +426,19 @@ func (i *GitHubInstaller) Install(ctx context.Context, spec string) (*GitHubPack
 	}
 	if !i.AllowedOrg(parsed.Owner) {
 		return nil, fmt.Errorf("%w: %s", ErrGitHubOrgNotAllowed, parsed.Owner)
+	}
+
+	// Package-level lock: serializes concurrent install+update+uninstall of
+	// the SAME package across both HTTP handlers and the update executor.
+	// The canonical package name depends on the chosen binaries (see
+	// canonicalPackageName below) so key by repo here — both install paths
+	// and the executor key off repo for parity.
+	if i.Locker != nil {
+		unlock, lerr := i.Locker.Acquire(ctx, "github", parsed.Repo)
+		if lerr != nil {
+			return nil, fmt.Errorf("github: acquire lock: %w", lerr)
+		}
+		defer unlock()
 	}
 
 	release, err := i.Client.GetRelease(ctx, parsed.Owner, parsed.Repo, parsed.Tag)
