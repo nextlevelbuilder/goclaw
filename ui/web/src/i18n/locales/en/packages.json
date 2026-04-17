@@ -59,7 +59,31 @@
     "selected": "{{count}} selected",
     "manifestDesyncWarn": "Binary was updated but the manifest save failed. Manual recovery required for {{name}}.",
     "cacheStale": "Updates cache is stale. Please refresh first.",
-    "adminOnly": "Administrator access required"
+    "adminOnly": "Administrator access required",
+    "empty": "No updates available",
+    "source": {
+      "github": "GitHub",
+      "pip": "pip",
+      "npm": "npm"
+    },
+    "filter": {
+      "all": "All sources",
+      "label": "Filter"
+    },
+    "unavailable": {
+      "pip": "pip not installed",
+      "npm": "npm not installed"
+    },
+    "button": {
+      "tooltip": {
+        "github": "Update from GitHub release",
+        "pip": "Update via pip",
+        "npm": "Update via npm"
+      }
+    },
+    "summary": {
+      "perSource": "{{source}}: {{count}}"
+    }
   },
   "actions": {
     "install": "Install",

@@ -235,19 +235,19 @@ func TestHandleUpdatePackage_InvalidBody(t *testing.T) {
 	}
 }
 
-func TestHandleUpdatePackage_NonGithubSpec(t *testing.T) {
-	// Only "github:" prefix is supported for updates.
+func TestHandleUpdatePackage_UnknownPrefix(t *testing.T) {
+	// Truly unknown prefixes (not github/pip/npm) must return 400.
 	h := NewPackagesHandler(buildTestRegistry(nil), nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/packages/update",
-		bytes.NewBufferString(`{"package":"pip:pandas"}`))
+		bytes.NewBufferString(`{"package":"garbage:pandas"}`))
 	req = req.WithContext(ownerCtx(req.Context(), t.Name()))
 	w := httptest.NewRecorder()
 
 	h.handleUpdatePackage(w, req)
 
 	if w.Code != http.StatusBadRequest {
-		t.Fatalf("want 400 for non-github spec, got %d: %s", w.Code, w.Body.String())
+		t.Fatalf("want 400 for unknown prefix, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
@@ -421,6 +421,112 @@ func TestHandleApplyAllUpdates_InvalidSpecInList(t *testing.T) {
 	failed, _ := resp["failed"].([]any)
 	if len(failed) == 0 {
 		t.Error("expected at least 1 failed entry for invalid/missing spec")
+	}
+}
+
+// ---- resolveUpdateSpec table-driven tests ----
+
+func TestResolveUpdateSpec(t *testing.T) {
+	cases := []struct {
+		input      string
+		wantSource string
+		wantName   string
+		wantOK     bool
+	}{
+		// pip: valid names
+		{"pip:requests", "pip", "requests", true},
+		{"pip:Django", "pip", "Django", true},    // pip allows uppercase
+		{"pip:my-package", "pip", "my-package", true},
+		// npm: valid names
+		{"npm:typescript", "npm", "typescript", true},
+		{"npm:@angular/core", "npm", "@angular/core", true},
+		// pip: invalid names — @version suffix must be rejected
+		{"pip:typescript@latest", "", "", false},
+		{"pip:bad;name", "", "", false},
+		{"pip:", "", "", false},
+		// npm: invalid names
+		{"npm:typescript@latest", "", "", false},
+		{"npm:TypeScript", "", "", false}, // npm forbids uppercase
+		// unknown / malformed prefixes
+		{"garbage:x", "", "", false},
+		{"pip", "", "", false}, // no colon
+		{"", "", "", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.input, func(t *testing.T) {
+			src, name, ok := resolveUpdateSpec(tc.input)
+			if ok != tc.wantOK {
+				t.Fatalf("resolveUpdateSpec(%q): ok=%v, want %v", tc.input, ok, tc.wantOK)
+			}
+			if ok {
+				if src != tc.wantSource {
+					t.Errorf("source=%q, want %q", src, tc.wantSource)
+				}
+				if name != tc.wantName {
+					t.Errorf("name=%q, want %q", name, tc.wantName)
+				}
+			}
+		})
+	}
+}
+
+// ---- lockKeyForSource tests ----
+
+func TestLockKeyForSource(t *testing.T) {
+	cases := []struct {
+		source  string
+		name    string
+		meta    map[string]any
+		wantKey string
+	}{
+		// pip and npm: return name directly (NOT "pip:name" or "npm:name")
+		{"pip", "requests", nil, "requests"},
+		{"npm", "@scope/pkg", nil, "@scope/pkg"},
+		// github: extract repo portion from meta
+		{"github", "lazygit", map[string]any{"repo": "jesseduffield/lazygit"}, "lazygit"},
+		{"github", "gh", map[string]any{"repo": "cli/cli"}, "cli"},
+		// github: fallback to name when meta missing
+		{"github", "fzf", nil, "fzf"},
+		// unknown source: fallback to name
+		{"other", "pkg", nil, "pkg"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.source+"/"+tc.name, func(t *testing.T) {
+			got := lockKeyForSource(tc.source, tc.name, tc.meta)
+			if got != tc.wantKey {
+				t.Errorf("lockKeyForSource(%q, %q, meta): got %q, want %q", tc.source, tc.name, got, tc.wantKey)
+			}
+		})
+	}
+}
+
+// ---- handleListUpdates availability field ----
+
+func TestHandleListUpdates_IncludesAvailability(t *testing.T) {
+	registry := buildTestRegistry(nil)
+	h := NewPackagesHandler(registry, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/packages/updates", nil)
+	req = req.WithContext(store.WithRole(store.WithTenantID(store.WithUserID(req.Context(), "u1"), uuid.Nil), "operator"))
+	w := httptest.NewRecorder()
+
+	h.handleListUpdates(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if _, ok := body["availability"]; !ok {
+		t.Error("response missing 'availability' field")
+	}
+	// availability must be a map (even if empty)
+	if _, ok := body["availability"].(map[string]any); !ok {
+		t.Errorf("availability must be map[string]bool, got %T", body["availability"])
 	}
 }
 

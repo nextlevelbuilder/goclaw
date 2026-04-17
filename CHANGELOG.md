@@ -6,6 +6,13 @@ All notable changes to GoClaw are documented here. For full documentation, see [
 
 ### Added
 
+- **Packages Update Flow (Phase 2a: pip + npm)** — closes #900 (Phase 2a). Extends
+  Phase 1 update infrastructure to pip and npm package sources. `/v1/packages/updates`
+  now returns mixed-source results with an `availability: {github, pip, npm}` map.
+  Multi-source UI with per-source filter pills; unavailable sources (binary not on PATH
+  or Lite edition) hidden automatically. apk deferred to Phase 2b.
+  See `docs/packages-pip-npm.md` for command matrix, runbook, and min versions.
+
 - **Packages Update Flow (Phase 1: GitHub binaries)** — closes #900. Proactive
   "N updates available" badge + per-row `[Update]` + `[Update All]` on the
   Runtime & Packages page. Backend endpoints under `/v1/packages/updates*`

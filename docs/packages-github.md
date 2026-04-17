@@ -241,5 +241,6 @@ Phase 1 leaves `.bak.{nanos}` files on disk. Manual recovery:
 
 ## See Also
 
+- [`docs/packages-pip-npm.md`](./packages-pip-npm.md) — pip + npm package updates (Phase 2a)
 - [`docs/14-skills-runtime.md`](./14-skills-runtime.md) — Overview of the runtime packages system
 - Issue [#741](https://github.com/nextlevelbuilder/goclaw/issues/741) — Original feature request

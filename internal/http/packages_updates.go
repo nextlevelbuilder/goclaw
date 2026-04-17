@@ -83,12 +83,13 @@ func (h *PackagesHandler) handleListUpdates(w http.ResponseWriter, r *http.Reque
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"updates":    updates,
-		"checkedAt":  checkedAt,
-		"ageSeconds": int64(age.Seconds()),
-		"ttlSeconds": int64(ttl.Seconds()),
-		"stale":      stale,
-		"sources":    h.Registry.Sources(),
+		"updates":      updates,
+		"checkedAt":    checkedAt,
+		"ageSeconds":   int64(age.Seconds()),
+		"ttlSeconds":   int64(ttl.Seconds()),
+		"stale":        stale,
+		"sources":      h.Registry.Sources(),
+		"availability": h.Registry.Availability(),
 	})
 }
 
@@ -170,7 +171,7 @@ func (h *PackagesHandler) handleUpdatePackage(w http.ResponseWriter, r *http.Req
 	source, name, ok := resolveUpdateSpec(req.Package)
 	if !ok {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": i18n.T(locale, i18n.MsgInvalidRequest, "package must be github:<name>"),
+			"error": i18n.T(locale, i18n.MsgInvalidRequest, "package must be github:<name>, pip:<name>, or npm:<name>"),
 		})
 		return
 	}
@@ -437,38 +438,55 @@ func (h *PackagesHandler) handleApplyAllUpdates(w http.ResponseWriter, r *http.R
 
 // ---- helpers ----
 
-// resolveUpdateSpec parses a "github:<name>" or "github:owner/repo" spec
-// and returns (source, name, ok). source is always "github" (Phase 1).
-// Bare names like "github:lazygit" are resolved directly; full specs are
-// resolved by extracting the repo name (not owner) for manifest lookup.
+// resolveUpdateSpec parses a package spec and returns (source, name, ok).
+// Supported prefixes: "github:<name>", "pip:<name>", "npm:<name>".
+//
+// github: bare name "github:<name>" or full "github:owner/repo[@tag]".
+// Bare github names are validated against validGitHubBareName; full specs
+// are resolved via the manifest (repo may differ, e.g. cli/cli → gh).
+// pip/npm: name is validated via the strict whitelist validators.
+// Bare-name fallback (without colon) is NOT supported — all sources require
+// an explicit "source:" prefix.
 func resolveUpdateSpec(pkg string) (source, name string, ok bool) {
-	if !strings.HasPrefix(pkg, "github:") {
+	prefix, rest, found := strings.Cut(pkg, ":")
+	if !found || rest == "" {
 		return "", "", false
 	}
-	bare := strings.TrimPrefix(pkg, "github:")
-	if bare == "" {
-		return "", "", false
-	}
-	// Full spec "github:owner/repo[@tag]" — extract bare name = repo component.
-	if spec, err := skills.ParseGitHubSpec(pkg); err == nil {
-		// Resolve name via manifest (repo may differ from binary name, e.g. cli/cli → gh).
-		if installer := skills.DefaultGitHubInstaller(); installer != nil {
-			if entries, lerr := installer.List(); lerr == nil {
-				for _, e := range entries {
-					if strings.EqualFold(e.Repo, spec.Owner+"/"+spec.Repo) {
-						return "github", e.Name, true
+	switch prefix {
+	case "github":
+		// Full spec "github:owner/repo[@tag]" — extract bare name = repo component.
+		if spec, err := skills.ParseGitHubSpec(pkg); err == nil {
+			// Resolve name via manifest (repo may differ from binary name, e.g. cli/cli → gh).
+			if installer := skills.DefaultGitHubInstaller(); installer != nil {
+				if entries, lerr := installer.List(); lerr == nil {
+					for _, e := range entries {
+						if strings.EqualFold(e.Repo, spec.Owner+"/"+spec.Repo) {
+							return "github", e.Name, true
+						}
 					}
 				}
 			}
+			// Fallback: use repo name directly.
+			return "github", spec.Repo, true
 		}
-		// Fallback: use repo name directly.
-		return "github", spec.Repo, true
+		// Bare name form "github:<name>".
+		if validGitHubBareName.MatchString(rest) {
+			return "github", rest, true
+		}
+		return "", "", false
+	case "pip":
+		if err := skills.ValidatePipPackageName(rest); err != nil {
+			return "", "", false
+		}
+		return "pip", rest, true
+	case "npm":
+		if err := skills.ValidateNpmPackageName(rest); err != nil {
+			return "", "", false
+		}
+		return "npm", rest, true
+	default:
+		return "", "", false
 	}
-	// Bare name form "github:<name>".
-	if validGitHubBareName.MatchString(bare) {
-		return "github", bare, true
-	}
-	return "", "", false
 }
 
 // nonNilSlice returns an empty non-nil slice when s is nil, so JSON encodes
@@ -487,18 +505,25 @@ func nonNilSlice[T any](s []T) []T {
 // For github source: installer locks on parsed.Repo (repo-portion only,
 // e.g. "lazygit"). Meta carries repo as "owner/repo" — extract the portion
 // after "/". Fallback to name when meta is nil/missing (stale cache).
+//
+// For pip/npm: PackageLocker internally prefixes by source, so we return
+// name directly (NOT "pip:name" or "npm:name").
 func lockKeyForSource(source, name string, meta map[string]any) string {
-	if source != "github" {
+	switch source {
+	case "pip", "npm":
+		return name
+	case "github":
+		if meta != nil {
+			if v, ok := meta["repo"].(string); ok && v != "" {
+				if i := strings.IndexByte(v, '/'); i > 0 && i < len(v)-1 {
+					return v[i+1:]
+				}
+				return v
+			}
+		}
+		return name
+	default:
 		return name
 	}
-	if meta != nil {
-		if v, ok := meta["repo"].(string); ok && v != "" {
-			if i := strings.IndexByte(v, '/'); i > 0 && i < len(v)-1 {
-				return v[i+1:]
-			}
-			return v
-		}
-	}
-	return name
 }
 

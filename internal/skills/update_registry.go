@@ -24,6 +24,15 @@ type UpdateCheckResult struct {
 	Updates  []UpdateInfo
 	ETags    map[string]string // subset to merge into UpdateCache.GitHubETags
 	Err      error             // per-source error; non-fatal for other checkers
+	// Available signals whether the source is actionable on this host.
+	// false (zero-value) means exec.LookPath / edition gate rejected the source,
+	// or the checker was never run. The HTTP availability map surfaces this so
+	// the UI can hide sources that are not actionable.
+	// Interpretation: false === "not actionable"; a non-error check with
+	// Updates == nil but Available == true means "source reachable, zero updates".
+	// Checkers MUST set Available=true on a normal successful check and leave
+	// it false only on LookPath miss or edition gate rejection.
+	Available bool
 }
 
 // UpdateChecker polls a package source for available updates.
@@ -61,8 +70,9 @@ type UpdateRegistry struct {
 	CachePath string
 	TTL       time.Duration
 
-	mu         sync.RWMutex
-	refreshing atomic.Bool // single-flight gate for background refresh
+	mu           sync.RWMutex
+	refreshing   atomic.Bool     // single-flight gate for background refresh
+	availability map[string]bool // per-source availability from last CheckAll; guarded by mu
 }
 
 // NewUpdateRegistry constructs an empty registry. Register checkers/executors
@@ -75,12 +85,13 @@ func NewUpdateRegistry(cache *UpdateCache, cachePath string, ttl time.Duration) 
 		ttl = time.Hour
 	}
 	return &UpdateRegistry{
-		checkers:  make(map[string]UpdateChecker),
-		executors: make(map[string]UpdateExecutor),
-		Locker:    NewPackageLocker(),
-		Cache:     cache,
-		CachePath: cachePath,
-		TTL:       ttl,
+		checkers:     make(map[string]UpdateChecker),
+		executors:    make(map[string]UpdateExecutor),
+		Locker:       NewPackageLocker(),
+		Cache:        cache,
+		CachePath:    cachePath,
+		TTL:          ttl,
+		availability: make(map[string]bool),
 	}
 }
 
@@ -109,6 +120,27 @@ func (r *UpdateRegistry) Sources() []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// Availability returns a snapshot of per-source availability from the last CheckAll.
+// A missing key means "never checked" — callers should treat a missing key as true
+// (first-boot default: source is visible until confirmed unavailable).
+// The returned map is a safe clone; mutating it does not affect the registry.
+func (r *UpdateRegistry) Availability() map[string]bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make(map[string]bool, len(r.availability))
+	for k, v := range r.availability {
+		out[k] = v
+	}
+	return out
+}
+
+// setAvailability records per-source availability under write lock.
+func (r *UpdateRegistry) setAvailability(source string, available bool) {
+	r.mu.Lock()
+	r.availability[source] = available
+	r.mu.Unlock()
 }
 
 // CheckAll runs every registered checker and merges results into the cache.
@@ -171,6 +203,8 @@ func (r *UpdateRegistry) CheckAll(ctx context.Context) []error {
 		for k, v := range res.ETags {
 			etagMerge[k] = v
 		}
+		// Record per-source availability from this check cycle.
+		r.setAvailability(res.Source, res.Available)
 	}
 
 	now := time.Now().UTC()

@@ -89,6 +89,7 @@ export function GitHubBinariesSection({ packages, onInstall, onUninstall }: Prop
     checkedAt,
     stale,
     loading: updatesLoading,
+    availability,
     refresh: refreshUpdates,
     updatePackage,
     applyAll,
@@ -147,6 +148,7 @@ export function GitHubBinariesSection({ packages, onInstall, onUninstall }: Prop
         stale={stale}
         loading={updatesLoading}
         isMaster={isMaster}
+        availability={availability}
         onRefresh={refreshUpdates}
         onUpdateAll={() => setUpdateAllOpen(true)}
       />

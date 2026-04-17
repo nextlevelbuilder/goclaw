@@ -366,6 +366,16 @@ func TestEditionConcurrentSafety(t *testing.T) {
 	// If this completes without panic, the test passes
 }
 
+// TestSupportsPipNpm verifies the pip/npm feature flag is set correctly per edition.
+func TestSupportsPipNpm(t *testing.T) {
+	if !Standard.SupportsPipNpm {
+		t.Error("Standard.SupportsPipNpm = false, want true")
+	}
+	if Lite.SupportsPipNpm {
+		t.Error("Lite.SupportsPipNpm = true, want false")
+	}
+}
+
 // TestCustomEdition_PartialConfiguration allows custom editions.
 func TestCustomEdition_PartialConfiguration(t *testing.T) {
 	custom := Edition{

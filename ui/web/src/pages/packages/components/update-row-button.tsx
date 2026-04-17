@@ -16,20 +16,24 @@ interface Props {
   globalPending?: boolean;
   isMaster: boolean;
   onUpdate: (spec: string) => void;
+  /** Override source for tooltip / spec generation (defaults to update.source) */
+  source?: string;
 }
 
 /**
- * Inline "Update" button rendered inside each GitHub Binaries table row.
- * - Renders only when an update is available for the row's package.
+ * Inline "Update" button rendered inside each package update table row.
  * - Disabled (not hidden) for non-master users with an explanatory tooltip.
  * - Tracks its own local pending state so rapid clicks don't double-fire.
+ * - Emits `{source}:{name}` spec to onUpdate (e.g. "pip:requests").
  */
-export function UpdateRowButton({ update, globalPending, isMaster, onUpdate }: Props) {
+export function UpdateRowButton({ update, globalPending, isMaster, onUpdate, source }: Props) {
   const { t } = useTranslation("packages");
   const [localPending, setLocalPending] = useState(false);
 
   const isPending = localPending || !!globalPending;
-  const spec = `github:${update.name}`;
+  const effectiveSource = source ?? update.source;
+  // Build spec as "{source}:{name}" for all sources
+  const spec = `${effectiveSource}:${update.name}`;
 
   const handleClick = () => {
     if (isPending || !isMaster) return;
@@ -43,9 +47,13 @@ export function UpdateRowButton({ update, globalPending, isMaster, onUpdate }: P
     }
   };
 
+  // Use source-specific tooltip key if available, fallback to generic
+  const sourceTooltipKey = `updates.button.tooltip.${effectiveSource}`;
   const tooltipText = !isMaster
     ? t("updates.adminOnly")
-    : `${update.currentVersion} → ${update.latestVersion}`;
+    : t(sourceTooltipKey, {
+        defaultValue: `${update.currentVersion} → ${update.latestVersion}`,
+      });
 
   return (
     <TooltipProvider>

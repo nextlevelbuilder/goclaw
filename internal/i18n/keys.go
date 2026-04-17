@@ -123,6 +123,23 @@ const (
 	MsgUpdateManifestDesync = "packages.update.manifest_desync"  // "Binary updated but manifest save failed — manual recovery required for {name}"
 	MsgUpdateCacheStale     = "packages.update.cache_stale"      // "Updates cache stale; run refresh before applying an update"
 
+	// Package update source labels
+	MsgPackagesUpdatesSourceGithub = "packages.updates.source.github" // "GitHub"
+	MsgPackagesUpdatesSourcePip    = "packages.updates.source.pip"    // "pip"
+	MsgPackagesUpdatesSourceNpm    = "packages.updates.source.npm"    // "npm"
+
+	// Package update availability messages
+	MsgPackagesUpdatesUnavailablePip = "packages.updates.unavailable.pip" // "pip not installed on this system"
+	MsgPackagesUpdatesUnavailableNpm = "packages.updates.unavailable.npm" // "npm not installed on this system"
+
+	// Package update failure reasons
+	MsgPackagesUpdatesReasonDependencyConflict = "packages.updates.reason.dependencyConflict" // "Dependency conflict"
+	MsgPackagesUpdatesReasonPermission         = "packages.updates.reason.permission"         // "Permission denied"
+	MsgPackagesUpdatesReasonNetwork            = "packages.updates.reason.network"            // "Network error"
+	MsgPackagesUpdatesReasonNotFound           = "packages.updates.reason.notFound"           // "Package not found"
+	MsgPackagesUpdatesReasonTargetMissing      = "packages.updates.reason.targetMissing"      // "Version not available"
+	MsgPackagesUpdatesReasonExternallyManaged  = "packages.updates.reason.externallyManaged"  // "Environment externally managed"
+
 	// --- Logs ---
 	MsgInvalidLogAction = "error.invalid_log_action" // "action must be 'start' or 'stop'"
 

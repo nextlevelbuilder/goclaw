@@ -1,0 +1,48 @@
+#!/bin/sh
+# Fixture npm for unit tests.
+# Controlled via env vars:
+#   FIXTURE_MODE       — controls `outdated` output: outdated|error|ambiguous|empty (default: outdated)
+#   FIXTURE_NPM_EXIT   — exit code for `install` subcommand (default 0)
+#   FIXTURE_NPM_STDERR — text written to stderr for `install` subcommand (default empty)
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+FIXTURE_DIR="$(dirname "$SCRIPT_DIR")"
+
+if [ "$1" = "outdated" ]; then
+  case "${FIXTURE_MODE:-outdated}" in
+    outdated)
+      cat "$FIXTURE_DIR/outdated-10.json"
+      exit 1
+      ;;
+    error)
+      printf 'npm ERR! code ERESOLVE\nnpm ERR! peer dep conflict\n' >&2
+      exit 1
+      ;;
+    ambiguous)
+      exit 1
+      ;;
+    empty)
+      exit 0
+      ;;
+    *)
+      exit 2
+      ;;
+  esac
+fi
+
+if [ "$1" = "install" ]; then
+  : "${FIXTURE_NPM_EXIT:=0}"
+  : "${FIXTURE_NPM_STDERR:=}"
+  if [ -n "$FIXTURE_NPM_STDERR" ]; then
+    printf '%s\n' "$FIXTURE_NPM_STDERR" >&2
+  fi
+  exit "$FIXTURE_NPM_EXIT"
+fi
+
+if [ "$1" = "cache" ]; then
+  # cleanCaches may invoke npm; succeed silently.
+  exit 0
+fi
+
+# Unknown subcommand.
+exit 2

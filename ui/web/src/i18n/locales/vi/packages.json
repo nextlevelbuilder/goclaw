@@ -59,7 +59,31 @@
     "selected": "{{count}} đã chọn",
     "manifestDesyncWarn": "Binary đã cập nhật nhưng lưu manifest thất bại. Cần khôi phục thủ công cho {{name}}.",
     "cacheStale": "Cache cập nhật đã cũ. Hãy làm mới trước.",
-    "adminOnly": "Cần quyền quản trị viên"
+    "adminOnly": "Cần quyền quản trị viên",
+    "empty": "Không có bản cập nhật",
+    "source": {
+      "github": "GitHub",
+      "pip": "pip",
+      "npm": "npm"
+    },
+    "filter": {
+      "all": "Tất cả nguồn",
+      "label": "Lọc"
+    },
+    "unavailable": {
+      "pip": "Chưa cài pip",
+      "npm": "Chưa cài npm"
+    },
+    "button": {
+      "tooltip": {
+        "github": "Cập nhật từ bản phát hành GitHub",
+        "pip": "Cập nhật qua pip",
+        "npm": "Cập nhật qua npm"
+      }
+    },
+    "summary": {
+      "perSource": "{{source}}: {{count}}"
+    }
   },
   "actions": {
     "install": "Cài đặt",

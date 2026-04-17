@@ -245,5 +245,22 @@ func init() {
 		MsgUpdateSwapFailed:     "安装 %s 失败；已恢复旧版本",
 		MsgUpdateManifestDesync: "二进制文件已更新但清单保存失败 — %s 需要手动恢复",
 		MsgUpdateCacheStale:     "更新缓存已过期；请先刷新再应用更新",
+
+		// Package update source labels
+		MsgPackagesUpdatesSourceGithub: "GitHub",
+		MsgPackagesUpdatesSourcePip:    "pip",
+		MsgPackagesUpdatesSourceNpm:    "npm",
+
+		// Package update availability messages
+		MsgPackagesUpdatesUnavailablePip: "系统中未安装 pip",
+		MsgPackagesUpdatesUnavailableNpm: "系统中未安装 npm",
+
+		// Package update failure reasons
+		MsgPackagesUpdatesReasonDependencyConflict: "依赖冲突",
+		MsgPackagesUpdatesReasonPermission:         "权限被拒绝",
+		MsgPackagesUpdatesReasonNetwork:            "网络错误",
+		MsgPackagesUpdatesReasonNotFound:           "未找到软件包",
+		MsgPackagesUpdatesReasonTargetMissing:      "版本不可用",
+		MsgPackagesUpdatesReasonExternallyManaged:  "环境由外部管理",
 	})
 }

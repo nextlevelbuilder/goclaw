@@ -1,0 +1,46 @@
+#!/bin/sh
+# Fixture pip3 for unit tests.
+# Controlled via env vars:
+#   FIXTURE_PIP_EXIT   — exit code for `install` subcommand (default 0)
+#   FIXTURE_PIP_STDERR — text written to stderr for `install` subcommand (default empty)
+#
+# `list --outdated` emits the JSON fixture files relative to this script's directory.
+# `list --outdated --pre` emits outdated-empty.json (no additional pre-release updates).
+# `install ...` exits with FIXTURE_PIP_EXIT and emits FIXTURE_PIP_STDERR to stderr.
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+FIXTURE_DIR="$(dirname "$SCRIPT_DIR")"
+
+if [ "$1" = "list" ] && [ "$2" = "--outdated" ]; then
+  # Check if --pre flag is present anywhere in args.
+  has_pre=0
+  for arg in "$@"; do
+    if [ "$arg" = "--pre" ]; then
+      has_pre=1
+      break
+    fi
+  done
+  if [ "$has_pre" = "1" ]; then
+    cat "$FIXTURE_DIR/outdated-empty.json" 2>/dev/null || echo "[]"
+  else
+    cat "$FIXTURE_DIR/outdated-23.3.json"
+  fi
+  exit 0
+fi
+
+if [ "$1" = "install" ]; then
+  : "${FIXTURE_PIP_EXIT:=0}"
+  : "${FIXTURE_PIP_STDERR:=}"
+  if [ -n "$FIXTURE_PIP_STDERR" ]; then
+    printf '%s\n' "$FIXTURE_PIP_STDERR" >&2
+  fi
+  exit "$FIXTURE_PIP_EXIT"
+fi
+
+if [ "$1" = "cache" ]; then
+  # cleanCaches calls `pip3 cache purge`; succeed silently.
+  exit 0
+fi
+
+# Unknown subcommand.
+exit 2

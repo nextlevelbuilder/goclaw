@@ -1,0 +1,5 @@
+[
+  {"name":"setuptools","version":"65.5.0","latest_version":"68.2.2","latest_filetype":"wheel"},
+  {"name":"pip","version":"22.3","latest_version":"23.3.1","latest_filetype":"wheel"},
+  {"name":"torch","version":"2.0.0rc1","latest_version":"2.0.0","latest_filetype":"wheel"}
+]

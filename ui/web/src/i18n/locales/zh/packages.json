@@ -59,7 +59,31 @@
     "selected": "已选 {{count}} 个",
     "manifestDesyncWarn": "二进制文件已更新但清单保存失败。{{name}} 需要手动恢复。",
     "cacheStale": "更新缓存已过期。请先刷新。",
-    "adminOnly": "需要管理员权限"
+    "adminOnly": "需要管理员权限",
+    "empty": "没有可用更新",
+    "source": {
+      "github": "GitHub",
+      "pip": "pip",
+      "npm": "npm"
+    },
+    "filter": {
+      "all": "所有来源",
+      "label": "筛选"
+    },
+    "unavailable": {
+      "pip": "未安装 pip",
+      "npm": "未安装 npm"
+    },
+    "button": {
+      "tooltip": {
+        "github": "从 GitHub 发布更新",
+        "pip": "通过 pip 更新",
+        "npm": "通过 npm 更新"
+      }
+    },
+    "summary": {
+      "perSource": "{{source}}: {{count}}"
+    }
   },
   "actions": {
     "install": "安装",

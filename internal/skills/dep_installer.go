@@ -7,10 +7,29 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 )
+
+// sharedLocker is the package-level PackageLocker injected by gateway wiring.
+// It serializes concurrent pip/npm install+update operations on the same package.
+// If nil (default), pip/npm branches run lock-free — backward-compatible for
+// tests and callers that don't wire a locker.
+var sharedLocker atomic.Pointer[PackageLocker]
+
+// SetSharedPackageLocker installs the package-level locker used by
+// InstallSingleDep for pip and npm operations. Wiring MUST call this before
+// the first install/update; otherwise pip/npm paths run lock-free.
+// GitHub installs lock independently via GitHubInstaller.Locker.
+func SetSharedPackageLocker(l *PackageLocker) { sharedLocker.Store(l) }
+
+// sharedPackageLocker returns the current shared PackageLocker, or nil if none
+// was installed via SetSharedPackageLocker.
+func sharedPackageLocker() *PackageLocker { return sharedLocker.Load() }
 
 // InstallTimeout is the wall-clock cap applied to a single package install.
 // Exported so HTTP handlers that bypass InstallSingleDep (e.g. the github:
@@ -68,6 +87,13 @@ func InstallSingleDep(ctx context.Context, dep string) (bool, string) {
 		return true, ""
 	case strings.HasPrefix(dep, "pip:"):
 		pkg := strings.TrimPrefix(dep, "pip:")
+		if l := sharedPackageLocker(); l != nil {
+			release, lerr := l.Acquire(ctx, "pip", pkg)
+			if lerr != nil {
+				return false, fmt.Sprintf("lock acquire: %v", lerr)
+			}
+			defer release()
+		}
 		cmd := exec.CommandContext(ctx, "pip3", "install", "--no-cache-dir", "--break-system-packages", pkg)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
@@ -77,6 +103,13 @@ func InstallSingleDep(ctx context.Context, dep string) (bool, string) {
 		}
 	case strings.HasPrefix(dep, "npm:"):
 		pkg := strings.TrimPrefix(dep, "npm:")
+		if l := sharedPackageLocker(); l != nil {
+			release, lerr := l.Acquire(ctx, "npm", pkg)
+			if lerr != nil {
+				return false, fmt.Sprintf("lock acquire: %v", lerr)
+			}
+			defer release()
+		}
 		cmd := exec.CommandContext(ctx, "npm", "install", "-g", pkg)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
@@ -278,7 +311,20 @@ func apkViaHelper(ctx context.Context, action, pkg string) (bool, string) {
 }
 
 // cleanCaches removes pip and npm caches to save disk space.
+// Uses pipBinary so test fixtures can redirect pip3 invocations.
 func cleanCaches(ctx context.Context) {
-	exec.CommandContext(ctx, "pip3", "cache", "purge").Run()          //nolint:errcheck
-	exec.CommandContext(ctx, "sh", "-c", "rm -rf /tmp/npm-*").Run()  //nolint:errcheck
+	exec.CommandContext(ctx, pipBinary, "cache", "purge").Run() //nolint:errcheck
+	// Remove npm temp dirs using native Go (avoid sh -c shell glob + symlink risk).
+	// Matches only direct entries in /tmp; skips symlinks to prevent attacker-pointed rm.
+	matches, _ := filepath.Glob("/tmp/npm-*")
+	for _, p := range matches {
+		info, lerr := os.Lstat(p)
+		if lerr != nil {
+			continue
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			continue // skip symlinks
+		}
+		_ = os.RemoveAll(p)
+	}
 }

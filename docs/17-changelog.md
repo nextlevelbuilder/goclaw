@@ -4,6 +4,62 @@ All notable changes to GoClaw Gateway are documented here. Format follows [Keep 
 
 ---
 
+### Packages Update Flow (Phase 2a: pip + npm) — #900 (2026-04-17)
+
+Extends Phase 1 update infrastructure to pip and npm package sources. apk deferred to Phase 2b.
+
+#### Added
+
+- **Backend:**
+  - `internal/skills/pip_update_checker.go` — `PipUpdateChecker` using `pip3 list --outdated
+    --format json`. Two-call merge for pre-release currents. `Available:false` on `LookPath` miss.
+  - `internal/skills/pip_update_executor.go` — `PipUpdateExecutor` using `pip3 install --upgrade
+    --break-system-packages --upgrade-strategy only-if-needed`. `--pre` flag auto-added for
+    pre-release targets. `ClassifyPipStderr` maps stderr to 5 sentinel errors.
+  - `internal/skills/npm_update_checker.go` — `NpmUpdateChecker` using `npm outdated --global
+    --json`. Handles npm's non-standard exit-1-on-outdated vs exit-1-on-error disambiguation.
+    Stable-current + pre-release-latest entries are skipped (H5 gate).
+  - `internal/skills/npm_update_executor.go` — `NpmUpdateExecutor` using `npm install --global
+    <name>@<version>`. Explicit version pin (never `@latest`). `ClassifyNpmStderr` maps
+    stderr to 5 sentinel errors.
+  - `internal/skills/pkg_update_helpers.go` — shared helpers: `ValidatePipPackageName`,
+    `ValidateNpmPackageName`, `IsPipPreRelease`, `IsNpmPreRelease`, `ClassifyPipStderr`,
+    `ClassifyNpmStderr`, `truncateStderr`. 10 sentinel error vars.
+  - `internal/skills/update_registry.go` (extended) — `UpdateCheckResult.Available bool` field;
+    `UpdateRegistry.Availability()` map; `setAvailability` per check cycle.
+  - `internal/skills/dep_installer.go` (patched) — `SetSharedPackageLocker` + `sharedPackageLocker`
+    for pip/npm install paths; pip and npm branches acquire shared locker before exec.
+  - `internal/edition/edition.go` (extended) — `Edition.SupportsPipNpm bool` field;
+    `Standard` preset sets it `true`; `Lite` preset leaves it `false`.
+  - `cmd/gateway_packages_wiring.go` (extended) — registers pip/npm checkers/executors
+    behind `edition.Current().SupportsPipNpm` gate.
+  - `internal/http/packages_updates.go` (extended) — `resolveUpdateSpec` accepts `pip:` /
+    `npm:` prefixes with per-source name validation; `lockKeyForSource` returns bare name
+    for pip/npm; `handleListUpdates` includes `availability` map in response.
+  - i18n keys `packages.update.pip.*` + `packages.update.npm.*` added to `keys.go` and all
+    three catalogs (en/vi/zh).
+
+- **Frontend:**
+  - Multi-source filter bar with per-source pills and update counts.
+  - Unavailable sources (pip/npm not on PATH or Lite edition) hidden from filter.
+  - Source pill badge on each update row.
+  - i18n keys `updates.source.*` added to `packages.json` (en/vi/zh).
+
+- **Docs:**
+  - `docs/packages-pip-npm.md` — command matrix, behavior, pre-release handling,
+    availability detection, error classes, runbook, min versions, fixture regen guide.
+
+#### Security
+
+- `ValidatePipPackageName` / `ValidateNpmPackageName` reject shell metacharacters and
+  `@version` suffixes before any exec (P2A-C1 command injection guard).
+- pip/npm update paths share `PackageLocker` with install paths — concurrent
+  install+update on the same package serialized (P2A-C2 regression guard).
+- stderr truncated to 500 chars (ANSI-stripped) before logging to prevent path/PII leak.
+- Edition gate prevents pip/npm checkers from running in Lite edition (P2A-H6).
+
+---
+
 ### Packages Update Flow (Phase 1: GitHub binaries) — #900 (2026-04-16)
 
 Closes Issue #900. Adds proactive update flow for GitHub binary packages —

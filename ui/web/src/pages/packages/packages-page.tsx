@@ -7,7 +7,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { usePackages, type PackageInfo } from "./hooks/use-packages";
 import { usePackageRuntimes } from "./hooks/use-package-runtimes";
+import { useUpdates } from "./hooks/use-updates";
+import { useAuthStore } from "@/stores/use-auth-store";
 import { GitHubBinariesSection } from "./github-binaries-section";
+import { UpdatesList } from "./components/updates-list";
 
 type ActionStatus = "idle" | "loading" | "success" | "error";
 
@@ -15,6 +18,8 @@ export function PackagesPage() {
   const { t } = useTranslation("packages");
   const { packages, loading, refresh, installPackage, uninstallPackage } = usePackages();
   const { runtimes, loading: runtimesLoading, refresh: refreshRuntimes } = usePackageRuntimes();
+  const { updates, availability, loading: updatesLoading, updatePackage } = useUpdates();
+  const isMaster = useAuthStore((s) => s.isMasterScope);
   const hasMissingRuntimes = (runtimes?.runtimes?.some((rt) => !rt.available)) ?? false;
 
   return (
@@ -76,6 +81,15 @@ export function PackagesPage() {
           ))}
         </div>
       </section>
+
+      {/* Unified updates list — all sources (github / pip / npm) */}
+      <UpdatesList
+        updates={updates}
+        availability={availability}
+        loading={updatesLoading}
+        isMaster={isMaster}
+        onUpdate={(spec) => updatePackage(spec)}
+      />
 
       {/* Package Sections */}
       <PackageSection

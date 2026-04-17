@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"path/filepath"
 
+	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 )
@@ -37,6 +38,7 @@ func wirePackagesHandler(d *gatewayDeps) *httpapi.PackagesHandler {
 
 	// Share the installer's locker so Install and Update share per-package locks.
 	registry.Locker = installer.Locker
+	skills.SetSharedPackageLocker(registry.Locker)
 
 	// Register checker + executor for "github" source.
 	registry.RegisterChecker(skills.NewGitHubUpdateChecker(installer))
@@ -46,6 +48,14 @@ func wirePackagesHandler(d *gatewayDeps) *httpapi.PackagesHandler {
 		executor.ScratchDir = d.cfg.Packages.ScratchDir
 	}
 	registry.RegisterExecutor(executor)
+
+	// Register pip + npm checkers/executors when the edition supports them.
+	if edition.Current().SupportsPipNpm {
+		registry.RegisterChecker(skills.NewPipUpdateChecker())
+		registry.RegisterExecutor(skills.NewPipUpdateExecutor())
+		registry.RegisterChecker(skills.NewNpmUpdateChecker())
+		registry.RegisterExecutor(skills.NewNpmUpdateExecutor())
+	}
 
 	slog.Info("packages: update registry wired",
 		"cache", cachePath,

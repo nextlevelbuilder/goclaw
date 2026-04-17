@@ -13,10 +13,11 @@ export interface UpdateMeta {
   assetSizeBytes?: number;
   assetSHA256?: string;
   prerelease?: boolean;
+  [key: string]: unknown;
 }
 
 export interface UpdateInfo {
-  source: "github";
+  source: "github" | "pip" | "npm" | string;
   name: string;
   currentVersion: string;
   latestVersion: string;
@@ -31,6 +32,8 @@ export interface UpdatesResponse {
   ttlSeconds: number;
   stale: boolean;
   sources: string[];
+  /** Map of source → available (false = runtime not present in container) */
+  availability?: Record<string, boolean>;
 }
 
 interface UpdateResult {
@@ -201,6 +204,7 @@ export function useUpdates() {
     checkedAt: data?.checkedAt,
     ageSeconds: data?.ageSeconds,
     stale: data?.stale ?? false,
+    availability: data?.availability,
     loading: loading || refreshMutation.isPending,
     refresh,
     updatePackage,

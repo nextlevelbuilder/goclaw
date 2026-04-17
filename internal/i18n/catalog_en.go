@@ -245,5 +245,22 @@ func init() {
 		MsgUpdateSwapFailed:     "Failed to install %s; previous version restored",
 		MsgUpdateManifestDesync: "Binary updated but manifest save failed — manual recovery required for %s",
 		MsgUpdateCacheStale:     "Updates cache stale; run refresh before applying an update",
+
+		// Package update source labels
+		MsgPackagesUpdatesSourceGithub: "GitHub",
+		MsgPackagesUpdatesSourcePip:    "pip",
+		MsgPackagesUpdatesSourceNpm:    "npm",
+
+		// Package update availability messages
+		MsgPackagesUpdatesUnavailablePip: "pip not installed on this system",
+		MsgPackagesUpdatesUnavailableNpm: "npm not installed on this system",
+
+		// Package update failure reasons
+		MsgPackagesUpdatesReasonDependencyConflict: "Dependency conflict",
+		MsgPackagesUpdatesReasonPermission:         "Permission denied",
+		MsgPackagesUpdatesReasonNetwork:            "Network error",
+		MsgPackagesUpdatesReasonNotFound:           "Package not found",
+		MsgPackagesUpdatesReasonTargetMissing:      "Version not available",
+		MsgPackagesUpdatesReasonExternallyManaged:  "Environment externally managed",
 	})
 }

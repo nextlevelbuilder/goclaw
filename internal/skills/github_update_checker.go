@@ -84,6 +84,8 @@ func (c *GitHubUpdateChecker) Check(ctx context.Context, knownETags map[string]s
 				slog.Warn("security.github.secondary_ratelimit",
 					"repo", entry.Repo, "error", err)
 				out.Err = err
+				// Source is reachable (we got a rate-limit response) — mark available.
+				out.Available = true
 				return out
 			}
 			slog.Warn("skills.update.github: check entry failed",
@@ -94,6 +96,8 @@ func (c *GitHubUpdateChecker) Check(ctx context.Context, knownETags map[string]s
 			out.Updates = append(out.Updates, *info)
 		}
 	}
+	// Manifest was loaded and at least one check cycle completed — source is available.
+	out.Available = true
 	return out
 }
 

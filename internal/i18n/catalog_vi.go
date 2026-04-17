@@ -245,5 +245,22 @@ func init() {
 		MsgUpdateSwapFailed:     "Không cài được %s; đã khôi phục phiên bản cũ",
 		MsgUpdateManifestDesync: "Binary đã cập nhật nhưng lưu manifest thất bại — cần khôi phục thủ công cho %s",
 		MsgUpdateCacheStale:     "Cache cập nhật đã cũ; hãy refresh trước khi áp dụng",
+
+		// Package update source labels
+		MsgPackagesUpdatesSourceGithub: "GitHub",
+		MsgPackagesUpdatesSourcePip:    "pip",
+		MsgPackagesUpdatesSourceNpm:    "npm",
+
+		// Package update availability messages
+		MsgPackagesUpdatesUnavailablePip: "pip chưa cài trên hệ thống",
+		MsgPackagesUpdatesUnavailableNpm: "npm chưa cài trên hệ thống",
+
+		// Package update failure reasons
+		MsgPackagesUpdatesReasonDependencyConflict: "Xung đột phụ thuộc",
+		MsgPackagesUpdatesReasonPermission:         "Bị từ chối quyền",
+		MsgPackagesUpdatesReasonNetwork:            "Lỗi mạng",
+		MsgPackagesUpdatesReasonNotFound:           "Không tìm thấy gói",
+		MsgPackagesUpdatesReasonTargetMissing:      "Phiên bản không tồn tại",
+		MsgPackagesUpdatesReasonExternallyManaged:  "Môi trường được quản lý bên ngoài",
 	})
 }
