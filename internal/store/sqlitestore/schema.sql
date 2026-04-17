@@ -617,6 +617,7 @@ CREATE TABLE IF NOT EXISTS spans (
     tool_call_id   VARCHAR(100),
     input_preview  TEXT,
     output_preview TEXT,
+    system_prompt_preview TEXT,
     metadata       TEXT,
     team_id        TEXT REFERENCES agent_teams(id) ON DELETE SET NULL,
     tenant_id      TEXT NOT NULL REFERENCES tenants(id),

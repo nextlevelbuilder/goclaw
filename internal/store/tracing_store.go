@@ -89,9 +89,10 @@ type SpanData struct {
 	ModelParams   json.RawMessage `json:"model_params,omitempty" db:"model_params"`
 	ToolName      string          `json:"tool_name,omitempty" db:"tool_name"`
 	ToolCallID    string          `json:"tool_call_id,omitempty" db:"tool_call_id"`
-	InputPreview  string          `json:"input_preview,omitempty" db:"input_preview"`
-	OutputPreview string          `json:"output_preview,omitempty" db:"output_preview"`
-	Metadata      json.RawMessage `json:"metadata,omitempty" db:"metadata"`
+	InputPreview        string          `json:"input_preview,omitempty" db:"input_preview"`
+	OutputPreview       string          `json:"output_preview,omitempty" db:"output_preview"`
+	SystemPromptPreview string          `json:"system_prompt_preview,omitempty" db:"system_prompt_preview"`
+	Metadata            json.RawMessage `json:"metadata,omitempty" db:"metadata"`
 	TeamID        *uuid.UUID      `json:"team_id,omitempty" db:"team_id"`
 	TenantID      uuid.UUID       `json:"tenant_id" db:"tenant_id"`
 	CreatedAt     time.Time       `json:"created_at" db:"created_at"`

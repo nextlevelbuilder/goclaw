@@ -191,6 +191,32 @@ func buildSkillsHybridSection(pinnedSummary string, hasSearch, hasManage bool) [
 	return lines
 }
 
+// buildSkillsLoadedSection generates a skills section with full SKILL.md content pre-loaded.
+func buildSkillsLoadedSection(content string, hasSearch, hasManage bool) []string {
+	lines := []string{
+		"## Skills (loaded)",
+		"",
+		"The following skills are loaded with full instructions. Apply them when relevant.",
+		"",
+		content,
+		"",
+	}
+	if hasSearch {
+		lines = append(lines,
+			"Additional skills may be available via `skill_search` with **English keywords**.",
+			"If a match is found, read its SKILL.md at the returned location, then follow it.",
+			"",
+		)
+	}
+	if hasManage {
+		lines = append(lines, "### Skill Creation", "",
+			"After complex tasks (5+ tool calls), create skills for repeatable processes.",
+			"Use: `skill_manage(action=\"create|patch|delete\", ...)`. Only manage your own skills.",
+			"")
+	}
+	return lines
+}
+
 // buildSandboxSection creates the "## Sandbox" section matching TS system-prompt.ts lines 476-519.
 func buildSandboxSection(cfg SystemPromptConfig) []string {
 	lines := []string{

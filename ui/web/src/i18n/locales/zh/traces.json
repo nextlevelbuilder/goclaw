@@ -45,6 +45,7 @@
     "startTime": "开始：",
     "endTime": "结束：",
     "input": "输入：",
+    "systemPrompt": "System Prompt：",
     "model": "模型：",
     "reasoning": "Reasoning：",
     "source": "source",

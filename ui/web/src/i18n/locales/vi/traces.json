@@ -66,6 +66,7 @@
     },
     "createdAt": "Tạo lúc:",
     "input": "Đầu vào:",
+    "systemPrompt": "System Prompt:",
     "output": "Đầu ra:",
     "copy": "Sao chép",
     "startTime": "Bắt đầu:",

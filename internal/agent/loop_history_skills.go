@@ -2,25 +2,40 @@ package agent
 
 import "context"
 
-// Hybrid skill thresholds: when skill count and total token estimate are below
-// these limits, inline all skills as XML in the system prompt (like TS).
-// Above these limits, only include skill_search instructions.
+// SkillMode determines how skills are presented in the system prompt.
+type SkillMode int
+
+const (
+	// SkillModeSearch means too many skills to inline; agent uses skill_search tool.
+	SkillModeSearch SkillMode = iota
+	// SkillModeSummary means skill descriptions (200 chars) are inlined as XML.
+	SkillModeSummary
+	// SkillModeFull means complete SKILL.md content is loaded into the prompt.
+	SkillModeFull
+)
+
+// Skill budget constants.
+const (
+	skillBudgetFraction  = 0.12 // 12% of available context allocated to skills
+	skillBudgetMinTokens = 1000 // minimum skill budget in tokens
+	skillBudgetMaxTokens = 20000
+	skillBudgetMinChars  = 3000  // minimum char budget (~1000 tokens)
+	skillBudgetMaxChars  = 60000 // maximum char budget (~20000 tokens)
+)
+
+// Legacy static thresholds for inline mode (used by resolveSkillsSummary fallback).
 const (
 	skillInlineMaxCount  = 60   // max skills to inline
 	skillInlineMaxTokens = 3000 // max estimated tokens for skill descriptions
 )
 
-// resolveSkillsSummary dynamically builds the skills summary for the system prompt.
-// Called per-message so it picks up hot-reloaded skills automatically.
-// Returns (summary XML, useInline) — useInline=true means skills are inlined and
-// the system prompt should use TS-style "scan <available_skills>" instructions
-// instead of "use skill_search".
+// resolveSkillsSummary builds the skills summary for the system prompt using
+// legacy static thresholds. Kept for backward compatibility.
 func (l *Loop) resolveSkillsSummary(ctx context.Context, skillFilter []string) string {
 	if l.skillsLoader == nil {
 		return ""
 	}
 
-	// Per-request skill filter overrides agent-level allowList.
 	allowList := l.skillAllowList
 	if skillFilter != nil {
 		allowList = skillFilter
@@ -31,21 +46,17 @@ func (l *Loop) resolveSkillsSummary(ctx context.Context, skillFilter []string) s
 		return ""
 	}
 
-	// Estimate tokens: ~1 token per 4 chars for name+description.
-	// Cap description length to match BuildSummary() truncation (skillDescMaxLen=200 runes).
 	totalChars := 0
 	for _, s := range filtered {
 		descLen := min(len(s.Description), 200)
-		totalChars += len(s.Name) + descLen + 10 // +10 for XML tags overhead
+		totalChars += len(s.Name) + descLen + 10
 	}
 	estimatedTokens := totalChars / 4
 
 	if len(filtered) <= skillInlineMaxCount && estimatedTokens <= skillInlineMaxTokens {
-		// Inline mode: build full XML summary
 		return l.skillsLoader.BuildSummary(ctx, allowList)
 	}
 
-	// Search mode: no XML in prompt, agent uses skill_search tool
 	return ""
 }
 
@@ -55,4 +66,69 @@ func (l *Loop) resolvePinnedSkillsSummary(ctx context.Context) string {
 		return ""
 	}
 	return l.skillsLoader.BuildPinnedSummary(ctx, l.pinnedSkills)
+}
+
+// resolveSkillsContent dynamically decides how to include skills in the system prompt.
+// Returns the skill content string and the mode used.
+func (l *Loop) resolveSkillsContent(ctx context.Context, skillFilter []string, contextWindow, overheadTokens int) (string, SkillMode) {
+	if l.skillsLoader == nil {
+		return "", SkillModeSearch
+	}
+
+	allowList := l.skillAllowList
+	if skillFilter != nil {
+		allowList = skillFilter
+	}
+
+	filtered := l.skillsLoader.FilterSkills(ctx, allowList)
+	if len(filtered) == 0 {
+		return "", SkillModeSearch
+	}
+
+	if contextWindow > 0 && overheadTokens > 0 {
+		availableTokens := contextWindow - overheadTokens
+		if availableTokens < skillBudgetMinTokens {
+			return "", SkillModeSearch
+		}
+
+		skillTokenBudget := int(clamp(float64(availableTokens)*skillBudgetFraction, float64(skillBudgetMinTokens), float64(skillBudgetMaxTokens)))
+		charBudget := clampInt(skillTokenBudget*4, skillBudgetMinChars, skillBudgetMaxChars)
+
+		fullSize := l.skillsLoader.EstimateFullContentSize(ctx, allowList)
+		if fullSize <= charBudget {
+			content := l.skillsLoader.LoadSkillsForPrompt(ctx, allowList, charBudget)
+			if content != "" {
+				return content, SkillModeFull
+			}
+		}
+
+		summary := l.skillsLoader.BuildSummary(ctx, allowList)
+		if summary != "" && len(summary) <= charBudget {
+			return summary, SkillModeSummary
+		}
+
+		return "", SkillModeSearch
+	}
+
+	return l.resolveSkillsSummary(ctx, skillFilter), SkillModeSummary
+}
+
+func clamp(val, minVal, maxVal float64) float64 {
+	if val < minVal {
+		return minVal
+	}
+	if val > maxVal {
+		return maxVal
+	}
+	return val
+}
+
+func clampInt(val, minVal, maxVal int) int {
+	if val < minVal {
+		return minVal
+	}
+	if val > maxVal {
+		return maxVal
+	}
+	return val
 }

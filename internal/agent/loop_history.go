@@ -196,6 +196,16 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		}
 	}
 
+	// Resolve skills with dynamic budget: try full content, fall back to summary, then search-only.
+	overheadEstimate := l.effectiveMaxTokens() + l.contextWindow/10
+	skillsContent, skillsMode := l.resolveSkillsContent(ctx, skillFilter, l.contextWindow, overheadEstimate)
+	// SkillsSummary is used for XML summary mode; when full content mode is active, it stays empty.
+	var skillsSummary string
+	if skillsMode == SkillModeSummary {
+		skillsSummary = skillsContent
+		skillsContent = ""
+	}
+
 	systemPrompt := BuildSystemPrompt(SystemPromptConfig{
 		AgentID:                l.id,
 		AgentUUID:              l.agentUUID.String(),
@@ -209,7 +219,9 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		OwnerIDs:               l.ownerIDs,
 		Mode:                   mode,
 		ToolNames:              toolNames,
-		SkillsSummary:          l.resolveSkillsSummary(ctx, skillFilter),
+		SkillsSummary:          skillsSummary,
+		SkillsContent:          skillsContent,
+		SkillMode:              skillsMode,
 		PinnedSkillsSummary:    l.resolvePinnedSkillsSummary(ctx),
 		HasMemory:              l.hasMemory,
 		HasSpawn:               l.tools != nil && hasSpawn,

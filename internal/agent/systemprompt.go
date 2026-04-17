@@ -105,6 +105,8 @@ type SystemPromptConfig struct {
 	Mode          PromptMode             // full or minimal
 	ToolNames     []string               // registered tool names
 	SkillsSummary string                 // XML from skills.Loader.BuildSummary()
+	SkillsContent string                 // full/extended skill content from skills.Loader.LoadSkillsForPrompt()
+	SkillMode     SkillMode              // how skills are presented (search, summary, full)
 	HasMemory     bool                   // memory_search/memory_get available?
 	HasSpawn      bool                   // spawn tool available?
 	IsTeamContext  bool                   // inject team sections (leader inbound OR team dispatch)
@@ -333,10 +335,12 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 	}
 
 	// 4. ## Skills — full + task (pinned skills use hybrid section)
-	if (isFull || isTask) && !cfg.IsBootstrap && (cfg.SkillsSummary != "" || cfg.HasSkillSearch || cfg.HasSkillManage || cfg.PinnedSkillsSummary != "") {
+	if (isFull || isTask) && !cfg.IsBootstrap && (cfg.SkillsSummary != "" || cfg.SkillsContent != "" || cfg.HasSkillSearch || cfg.HasSkillManage || cfg.PinnedSkillsSummary != "") {
 		if cfg.PinnedSkillsSummary != "" {
 			// Hybrid mode: pinned skills inline + search for rest
 			lines = append(lines, buildSkillsHybridSection(cfg.PinnedSkillsSummary, cfg.HasSkillSearch, isFull && cfg.HasSkillManage)...)
+		} else if cfg.SkillMode == SkillModeFull && cfg.SkillsContent != "" {
+			lines = append(lines, buildSkillsLoadedSection(cfg.SkillsContent, cfg.HasSkillSearch, isFull && cfg.HasSkillManage)...)
 		} else if isTask {
 			// Task mode without pinned: search-only
 			lines = append(lines, buildSkillsSection("", cfg.HasSkillSearch, false)...)

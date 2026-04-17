@@ -115,6 +115,7 @@ function SpanDetailPanel({ span }: { span: SpanData }) {
         </div>
       )}
       {span.input_preview && <TracePreviewBlock label={t("span.input")} content={span.input_preview} />}
+      {span.system_prompt_preview && <TracePreviewBlock label={t("span.systemPrompt")} content={span.system_prompt_preview} />}
       {span.output_preview && <TracePreviewBlock label={t("span.output")} content={span.output_preview} />}
       {span.error && <p className="break-all text-xs text-red-300">{span.error}</p>}
     </div>

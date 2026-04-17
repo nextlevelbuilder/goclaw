@@ -122,6 +122,11 @@ func (l *Loop) emitLLMSpanStart(ctx context.Context, start time.Time, iteration 
 		}
 	}
 
+	// Preserve full system prompt separately for debugging (includes skills, context files, etc.)
+	if messages[0].Role == "system" {
+		span.SystemPromptPreview = tracing.TruncateMid(messages[0].Content, systemPromptPreviewMaxLen)
+	}
+
 	collector.EmitSpan(span)
 	return spanID
 }
@@ -396,6 +401,11 @@ func previewLimitForVerbose(verbose bool) int {
 	}
 	return 40_000
 }
+
+// systemPromptPreviewMaxLen is the character limit for the dedicated system prompt
+// preview field in LLM spans. Higher than InputPreview to preserve skills and context
+// files even when the full messages array is too large for the 40K preview.
+const systemPromptPreviewMaxLen = 100_000
 
 func truncateStr(s string, maxLen int) string {
 	s = strings.ToValidUTF8(s, "")

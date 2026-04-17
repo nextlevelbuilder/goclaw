@@ -419,6 +419,61 @@ func (l *Loader) BuildPinnedSummary(ctx context.Context, pinnedNames []string) s
 	return l.BuildSummary(ctx, pinnedNames)
 }
 
+// LoadSkillsForPrompt loads full SKILL.md content for skills up to charBudget characters.
+// Returns the combined content of loaded skills. Skills that don't fit within the budget
+// are omitted — the caller should include search-mode instructions for those.
+func (l *Loader) LoadSkillsForPrompt(ctx context.Context, allowList []string, charBudget int) string {
+	var names []string
+
+	if allowList == nil {
+		for _, s := range l.ListSkills(ctx) {
+			names = append(names, s.Name)
+		}
+	} else {
+		names = allowList
+	}
+
+	if len(names) == 0 {
+		return ""
+	}
+
+	var parts []string
+	used := 0
+	for _, name := range names {
+		content, ok := l.LoadSkill(ctx, name)
+		if !ok {
+			continue
+		}
+		entry := fmt.Sprintf("### Skill: %s\n\n%s", name, content)
+		entryLen := len([]rune(entry))
+		if used+entryLen > charBudget {
+			break
+		}
+		parts = append(parts, entry)
+		used += entryLen
+	}
+
+	if len(parts) == 0 {
+		return ""
+	}
+
+	return "## Loaded Skills\n\n" + strings.Join(parts, "\n\n---\n\n")
+}
+
+// EstimateFullContentSize returns the estimated character count of loading all
+// filtered skills' full SKILL.md content. Uses file sizes for a fast estimate.
+func (l *Loader) EstimateFullContentSize(ctx context.Context, allowList []string) int {
+	filtered := l.FilterSkills(ctx, allowList)
+	total := 0
+	for _, s := range filtered {
+		total += len(s.Name) + 20
+		if fi, err := os.Stat(s.Path); err == nil {
+			total += int(fi.Size())
+		}
+	}
+	return total
+}
+
 // Version returns the current skill snapshot version.
 // Consumers compare this to their cached version to detect changes.
 func (l *Loader) Version() int64 {

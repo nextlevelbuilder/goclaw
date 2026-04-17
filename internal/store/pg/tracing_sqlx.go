@@ -88,8 +88,9 @@ type spanRow struct {
 	ToolName      *string         `json:"tool_name" db:"tool_name"`
 	ToolCallID    *string         `json:"tool_call_id" db:"tool_call_id"`
 	InputPreview  *string         `json:"input_preview" db:"input_preview"`
-	OutputPreview *string         `json:"output_preview" db:"output_preview"`
-	Metadata      json.RawMessage `json:"metadata" db:"metadata"`
+	OutputPreview       *string         `json:"output_preview" db:"output_preview"`
+	SystemPromptPreview *string         `json:"system_prompt_preview" db:"system_prompt_preview"`
+	Metadata            json.RawMessage `json:"metadata" db:"metadata"`
 	TeamID        *uuid.UUID      `json:"team_id" db:"team_id"`
 	CreatedAt     time.Time       `json:"created_at" db:"created_at"`
 }
@@ -105,6 +106,7 @@ func (r *spanRow) toSpanData() store.SpanData {
 		FinishReason: derefStr(r.FinishReason), ModelParams: r.ModelParams,
 		ToolName: derefStr(r.ToolName), ToolCallID: derefStr(r.ToolCallID),
 		InputPreview: derefStr(r.InputPreview), OutputPreview: derefStr(r.OutputPreview),
+		SystemPromptPreview: derefStr(r.SystemPromptPreview),
 		Metadata: r.Metadata, TeamID: r.TeamID, CreatedAt: r.CreatedAt,
 	}
 }

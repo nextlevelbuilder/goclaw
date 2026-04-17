@@ -25,12 +25,13 @@ func (s *SQLiteTracingStore) CreateSpan(ctx context.Context, span *store.SpanDat
 		 start_time, end_time, duration_ms, status, error, level,
 		 model, provider, input_tokens, output_tokens, finish_reason,
 		 model_params, tool_name, tool_call_id, input_preview, output_preview,
-		 metadata, team_id, created_at, tenant_id)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 system_prompt_preview, metadata, team_id, created_at, tenant_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		span.ID, span.TraceID, span.ParentSpanID, span.AgentID, span.SpanType, nilStr(span.Name),
 		span.StartTime, nilTime(span.EndTime), nilInt(span.DurationMS), span.Status, nilStr(span.Error), span.Level,
 		nilStr(span.Model), nilStr(span.Provider), nilInt(span.InputTokens), nilInt(span.OutputTokens), nilStr(span.FinishReason),
 		jsonOrNull(span.ModelParams), nilStr(span.ToolName), nilStr(span.ToolCallID), nilStr(span.InputPreview), nilStr(span.OutputPreview),
+		nilStr(span.SystemPromptPreview),
 		jsonOrNull(span.Metadata), nilUUID(span.TeamID), span.CreatedAt, tenantID,
 	)
 	return err
@@ -46,6 +47,7 @@ func (s *SQLiteTracingStore) GetTraceSpans(ctx context.Context, traceID uuid.UUI
 		 start_time, end_time, duration_ms, status, error, level,
 		 model, provider, input_tokens, output_tokens, finish_reason,
 		 model_params, tool_name, tool_call_id, input_preview, output_preview,
+		 system_prompt_preview,
 		 metadata, team_id, created_at
 		 FROM spans WHERE trace_id = ? ORDER BY start_time`, traceID)
 	if err != nil {
@@ -57,7 +59,7 @@ func (s *SQLiteTracingStore) GetTraceSpans(ctx context.Context, traceID uuid.UUI
 	for rows.Next() {
 		var d store.SpanData
 		var parentSpanID, agentID, teamID *uuid.UUID
-		var name, errStr, level, model, provider, finishReason, toolName, toolCallID, inputPreview, outputPreview *string
+		var name, errStr, level, model, provider, finishReason, toolName, toolCallID, inputPreview, outputPreview, systemPromptPreview *string
 		var status *string
 		var endTimeSt nullSqliteTime
 		var durationMS, inputTokens, outputTokens *int
@@ -68,6 +70,7 @@ func (s *SQLiteTracingStore) GetTraceSpans(ctx context.Context, traceID uuid.UUI
 			&startTime, &endTimeSt, &durationMS, &status, &errStr, &level,
 			&model, &provider, &inputTokens, &outputTokens, &finishReason,
 			&modelParams, &toolName, &toolCallID, &inputPreview, &outputPreview,
+			&systemPromptPreview,
 			&metadata, &teamID, &createdAt); err != nil {
 			slog.Warn("tracing: span scan failed", "trace_id", traceID, "error", err)
 			continue
@@ -107,16 +110,17 @@ func (s *SQLiteTracingStore) GetTraceSpans(ctx context.Context, traceID uuid.UUI
 		d.ToolCallID = derefStr(toolCallID)
 		d.InputPreview = derefStr(inputPreview)
 		d.OutputPreview = derefStr(outputPreview)
+		d.SystemPromptPreview = derefStr(systemPromptPreview)
 		result = append(result, d)
 	}
 	return result, rows.Err()
 }
 
 // sqliteSpanCols is the number of columns in the spans INSERT.
-const sqliteSpanCols = 26
+const sqliteSpanCols = 27
 
-// sqliteSpanBatchSize limits rows per batch: 999 / 26 ≈ 38.
-const sqliteSpanBatchSize = 38
+// sqliteSpanBatchSize limits rows per batch: 999 / 27 ≈ 37.
+const sqliteSpanBatchSize = 37
 
 // BatchCreateSpans inserts spans in batches to stay under SQLite's 999-variable limit.
 func (s *SQLiteTracingStore) BatchCreateSpans(ctx context.Context, spans []store.SpanData) error {
@@ -155,6 +159,7 @@ func (s *SQLiteTracingStore) batchInsertSpans(ctx context.Context, spans []store
 			span.StartTime, nilTime(span.EndTime), nilInt(span.DurationMS), span.Status, nilStr(span.Error), span.Level,
 			nilStr(span.Model), nilStr(span.Provider), nilInt(span.InputTokens), nilInt(span.OutputTokens), nilStr(span.FinishReason),
 			jsonOrNull(span.ModelParams), nilStr(span.ToolName), nilStr(span.ToolCallID), nilStr(span.InputPreview), nilStr(span.OutputPreview),
+			nilStr(span.SystemPromptPreview),
 			jsonOrNull(span.Metadata), nilUUID(span.TeamID), span.CreatedAt, tenantID,
 		)
 	}
@@ -163,7 +168,7 @@ func (s *SQLiteTracingStore) batchInsertSpans(ctx context.Context, spans []store
 		 start_time, end_time, duration_ms, status, error, level,
 		 model, provider, input_tokens, output_tokens, finish_reason,
 		 model_params, tool_name, tool_call_id, input_preview, output_preview,
-		 metadata, team_id, created_at, tenant_id)
+		 system_prompt_preview, metadata, team_id, created_at, tenant_id)
 		 VALUES ` + strings.Join(valueGroups, ", ")
 
 	_, err := s.db.ExecContext(ctx, q, args...)

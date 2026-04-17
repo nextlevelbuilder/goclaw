@@ -16,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 18
+const SchemaVersion = 19
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -458,6 +458,9 @@ CREATE INDEX IF NOT EXISTS idx_vault_docs_delegation
 CREATE INDEX IF NOT EXISTS idx_listen_raw_agent_chat ON listen_raw_messages(agent_id, chat_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_listen_raw_pending ON listen_raw_messages(processed_at) WHERE processed_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_listen_raw_tenant ON listen_raw_messages(tenant_id);`,
+
+	// Version 18 → 19: add system_prompt_preview to spans for debugging full system prompt.
+	18: `ALTER TABLE spans ADD COLUMN system_prompt_preview TEXT;`,
 }
 
 // backfillV16 populates base_name / path_basename for rows that existed

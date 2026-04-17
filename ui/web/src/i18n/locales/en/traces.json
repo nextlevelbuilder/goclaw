@@ -66,6 +66,7 @@
     },
     "createdAt": "Created:",
     "input": "Input:",
+    "systemPrompt": "System Prompt:",
     "output": "Output:",
     "copy": "Copy",
     "startTime": "Start:",
