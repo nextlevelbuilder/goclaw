@@ -1,0 +1,45 @@
+{
+  "title": "Raw Messages",
+  "description": "Messages captured by listen-only channels for knowledge extraction.",
+  "emptyTitle": "No raw messages",
+  "emptyDescription": "Messages from listen-only channels will appear here once captured.",
+  "columns": {
+    "chatName": "Chat",
+    "sender": "Sender",
+    "body": "Message",
+    "agent": "Agent",
+    "graphId": "Graph ID",
+    "timestamp": "Time",
+    "status": "Status"
+  },
+  "filters": {
+    "all": "All",
+    "pending": "Pending",
+    "processed": "Processed"
+  },
+  "status": {
+    "pending": "Pending",
+    "processed": "Processed"
+  },
+  "showing": "Showing {{count}} of {{total}} messages",
+  "pagination": {
+    "page": "Page {{current}} of {{total}}"
+  },
+  "detail": {
+    "title": "Message Detail",
+    "group": "Group",
+    "sender": "Sender",
+    "senderId": "Sender ID",
+    "agent": "Agent",
+    "graphId": "Graph ID",
+    "channel": "Channel",
+    "status": "Status",
+    "messageTime": "Message Time",
+    "createdAt": "Created At",
+    "processedAt": "Processed At",
+    "messageBody": "Message Body",
+    "copy": "Copy",
+    "copied": "Copied",
+    "na": "—"
+  }
+}

@@ -185,5 +185,6 @@ const (
 	MethodZaloPersonalContacts  = "zalo.personal.contacts"
 
 	// WhatsApp
-	MethodWhatsAppQRStart = "whatsapp.qr.start"
+	MethodWhatsAppQRStart       = "whatsapp.qr.start"
+	MethodWhatsAppGroupsRefresh = "whatsapp.groups.refresh"
 )

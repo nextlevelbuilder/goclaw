@@ -413,10 +413,23 @@
     "namePlaceholder": "例如 Channel Outlook",
     "agentLabel": "Agent",
     "selectAgent": "使用 Channel 默认",
+    "listenOnlyLabel": "仅监听模式",
+    "listenOnlyHint": "静默收集消息用于知识图谱提取，不发送回复。",
+    "graphIdLabel": "Graph ID",
+    "graphIdPlaceholder": "例如 project-alpha",
+    "graphIdHint": "共享相同 Graph ID 的群组将统一其知识图谱。留空则使用群组 JID。",
     "addGroupPlaceholder": "群组 JID（例如 123456@g.us）",
     "addGroup": "添加群组",
     "knownGroups": "已发现的群组",
     "saveGroups": "保存群组",
-    "saving": "保存中..."
+    "saving": "保存中...",
+    "requireMentionLabel": "需要 @mention",
+    "requireMentionInherit": "继承（频道默认）",
+    "requireMentionYes": "启用",
+    "requireMentionNo": "禁用",
+    "requireMentionHint": "覆盖此群组是否需要 @mention 才能响应。继承使用频道级别设置。",
+    "refreshGroups": "刷新群组",
+    "refreshing": "刷新中...",
+    "notJoined": "未加入"
   }
 }

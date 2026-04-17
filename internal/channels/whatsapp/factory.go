@@ -20,6 +20,15 @@ type whatsappInstanceConfig struct {
 	HistoryLimit   int      `json:"history_limit,omitempty"`
 	AllowFrom      []string `json:"allow_from,omitempty"`
 	BlockReply     *bool    `json:"block_reply,omitempty"`
+
+	// Listen-only mode settings.
+	ListenOnly      *bool    `json:"listen_only,omitempty"`
+	ListenGraphID   string   `json:"listen_graph_id,omitempty"`
+	ListenProvider  string   `json:"listen_provider,omitempty"`
+	ListenModel     string   `json:"listen_model,omitempty"`
+	ListenFlushSec  int      `json:"listen_flush_sec,omitempty"`
+	ListenMinConf   float64  `json:"listen_min_conf,omitempty"`
+	ListenExtractPollSec int `json:"listen_extract_poll_sec,omitempty"`
 }
 
 // FactoryWithDB returns a ChannelFactory with DB access for whatsmeow auth state.
@@ -59,6 +68,14 @@ func FactoryWithDB(db *sql.DB, pendingStore store.PendingMessageStore, dialect s
 			RequireMention: ic.RequireMention,
 			HistoryLimit:   ic.HistoryLimit,
 			BlockReply:     ic.BlockReply,
+
+			ListenOnly:     ic.ListenOnly,
+			ListenGraphID:  ic.ListenGraphID,
+			ListenProvider: ic.ListenProvider,
+			ListenModel:    ic.ListenModel,
+			ListenFlushSec: ic.ListenFlushSec,
+			ListenMinConf:  ic.ListenMinConf,
+			ListenExtractPollSec: ic.ListenExtractPollSec,
 		}
 
 		// Parse per-group overrides from config JSONB.

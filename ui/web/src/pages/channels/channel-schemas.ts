@@ -162,6 +162,10 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "require_mention", label: "Require @Mention in Groups", type: "boolean", help: "Only respond in group chats when the bot is explicitly @mentioned" },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "WhatsApp user IDs" },
     { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Deliver intermediate text during tool iterations" },
+    { key: "listen_provider", label: "Listen-Only Extraction Provider", type: "text", help: "LLM provider name for knowledge graph extraction from listen-only groups (e.g. openai)" },
+    { key: "listen_model", label: "Listen-Only Extraction Model", type: "text", help: "LLM model for extraction (e.g. gpt-4o-mini)" },
+    { key: "listen_flush_sec", label: "Listen-Only Flush Interval (sec)", type: "number", defaultValue: 300, help: "Seconds to accumulate messages before extracting knowledge graph data (default: 300 = 5 min)" },
+    { key: "listen_min_conf", label: "Listen-Only Min Confidence", type: "number", defaultValue: 0.75, help: "Minimum extraction confidence threshold (0.0-1.0, default: 0.75)" },
   ],
   facebook: [
     { key: "page_id", label: "Page ID", type: "text", required: true, help: "Facebook Page numeric ID" },

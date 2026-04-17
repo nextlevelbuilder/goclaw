@@ -27,6 +27,7 @@
     "nodes": "Nodes",
     "overview": "概览",
     "pendingMessages": "待处理消息",
+    "rawMessages": "原始消息",
     "providers": "Provider",
     "realtimeEvents": "实时事件",
     "sessions": "Session",

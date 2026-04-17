@@ -212,6 +212,19 @@ func runGateway() {
 		}
 	}
 
+		// WhatsApp listen-only KG extraction worker.
+		// Polls listen_raw_messages for unprocessed batches and runs KG extraction.
+		if pgStores.ListenRawMessages != nil && pgStores.KnowledgeGraph != nil && providerRegistry != nil {
+			cleanupExtraction := whatsapp.RegisterExtractionWorker(whatsapp.ExtractionWorkerDeps{
+				RawMsgStore:   pgStores.ListenRawMessages,
+				KGStore:       pgStores.KnowledgeGraph,
+				SystemConfigs: pgStores.SystemConfigs,
+				Registry:      providerRegistry,
+				TenantID:      store.MasterTenantID,
+			})
+			defer cleanupExtraction()
+		}
+
 	// V3: Wire vault enrichment worker (async summary + embedding + auto-linking).
 	// Provider is resolved per-tenant at runtime — no static provider needed.
 	var enrichProgress *vault.EnrichProgress
@@ -317,7 +330,7 @@ func runGateway() {
 	httpapi.InitGatewayToken(cfg.Gateway.Token)
 	exportTokenStore := httpapi.InitExportTokenStore()
 	defer exportTokenStore.Stop()
-	agentsH, skillsH, tracesH, mcpH, channelInstancesH, providersH, builtinToolsH, pendingMessagesH, teamEventsH, secureCLIH, secureCLIGrantH, mcpUserCredsH := wireHTTP(pgStores, cfg.Agents.Defaults.Workspace, dataDir, bundledSkillsDir, msgBus, toolsReg, providerRegistry, permPE.IsOwner, gatewayAddr, mcpToolLister)
+	agentsH, skillsH, tracesH, mcpH, channelInstancesH, providersH, builtinToolsH, pendingMessagesH, listenRawMsgsH, teamEventsH, secureCLIH, secureCLIGrantH, mcpUserCredsH := wireHTTP(pgStores, cfg.Agents.Defaults.Workspace, dataDir, bundledSkillsDir, msgBus, toolsReg, providerRegistry, permPE.IsOwner, gatewayAddr, mcpToolLister)
 
 	// Wire dependencies for system prompt preview parity.
 	if agentsH != nil {
@@ -346,6 +359,7 @@ func runGateway() {
 			providers:        providersH,
 			builtinTools:     builtinToolsH,
 			pendingMessages:  pendingMessagesH,
+			listenRawMsgs:    listenRawMsgsH,
 			teamEvents:       teamEventsH,
 			secureCLI:        secureCLIH,
 			secureCLIGrant:   secureCLIGrantH,
@@ -422,6 +436,7 @@ func runGateway() {
 		instanceLoader = channels.NewInstanceLoader(pgStores.ChannelInstances, pgStores.Agents, channelMgr, msgBus, pgStores.Pairing)
 		instanceLoader.SetProviderRegistry(providerRegistry)
 		instanceLoader.SetPendingCompactionConfig(cfg.Channels.PendingCompaction)
+		instanceLoader.SetListenRawMsgStore(pgStores.ListenRawMessages)
 		instanceLoader.RegisterFactory(channels.TypeTelegram, telegram.FactoryWithStores(pgStores.Agents, pgStores.ConfigPermissions, pgStores.Teams, pgStores.SubagentTasks, pgStores.PendingMessages))
 		instanceLoader.RegisterFactory(channels.TypeDiscord, discord.FactoryWithStores(pgStores.Agents, pgStores.ConfigPermissions, pgStores.PendingMessages))
 		instanceLoader.RegisterFactory(channels.TypeFeishu, feishu.FactoryWithPendingStore(pgStores.PendingMessages))

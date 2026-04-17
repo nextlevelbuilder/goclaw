@@ -180,6 +180,9 @@ export const Methods = {
   TENANTS_USERS_ADD: "tenants.users.add",
   TENANTS_USERS_REMOVE: "tenants.users.remove",
 
+  // WhatsApp
+  WHATSAPP_GROUPS_REFRESH: "whatsapp.groups.refresh",
+
   // Phase 3+ - NICE TO HAVE
   LOGS_TAIL: "logs.tail",
 } as const;

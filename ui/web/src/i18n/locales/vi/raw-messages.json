@@ -1,0 +1,45 @@
+{
+  "title": "Tin nhắn thô",
+  "description": "Tin nhắn được thu thập bởi kênh chỉ-listen để trích xuất kiến thức.",
+  "emptyTitle": "Không có tin nhắn thô",
+  "emptyDescription": "Tin nhắn từ kênh chỉ-listen sẽ xuất hiện ở đây khi được thu thập.",
+  "columns": {
+    "chatName": "Nhóm chat",
+    "sender": "Người gửi",
+    "body": "Tin nhắn",
+    "agent": "Agent",
+    "graphId": "Graph ID",
+    "timestamp": "Thời gian",
+    "status": "Trạng thái"
+  },
+  "filters": {
+    "all": "Tất cả",
+    "pending": "Chờ xử lý",
+    "processed": "Đã xử lý"
+  },
+  "status": {
+    "pending": "Chờ xử lý",
+    "processed": "Đã xử lý"
+  },
+  "showing": "Hiển thị {{count}} / {{total}} tin nhắn",
+  "pagination": {
+    "page": "Trang {{current}} / {{total}}"
+  },
+  "detail": {
+    "title": "Chi tiết tin nhắn",
+    "group": "Nhóm",
+    "sender": "Người gửi",
+    "senderId": "Sender ID",
+    "agent": "Agent",
+    "graphId": "Graph ID",
+    "channel": "Kênh",
+    "status": "Trạng thái",
+    "messageTime": "Thời gian tin nhắn",
+    "createdAt": "Tạo lúc",
+    "processedAt": "Xử lý lúc",
+    "messageBody": "Nội dung tin nhắn",
+    "copy": "Sao chép",
+    "copied": "Đã sao chép",
+    "na": "—"
+  }
+}

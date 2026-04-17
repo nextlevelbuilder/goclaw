@@ -153,6 +153,7 @@ func wireChannelRPCMethods(server *gateway.Server, pgStores *store.Stores, chann
 		zalomethods.NewQRMethods(pgStores.ChannelInstances, msgBus).Register(server.Router())
 		zalomethods.NewContactsMethods(pgStores.ChannelInstances).Register(server.Router())
 		whatsapp.NewQRMethods(pgStores.ChannelInstances, channelMgr).Register(server.Router())
+		whatsapp.NewGroupMethods(pgStores.ChannelInstances, channelMgr).Register(server.Router())
 	}
 
 	// Register agent links WS RPC methods

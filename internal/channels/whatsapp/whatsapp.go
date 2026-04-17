@@ -56,8 +56,23 @@ type Channel struct {
 	// reauthMu serializes Reauth() and StartQRFlow() to prevent race when user clicks reauth rapidly.
 	reauthMu sync.Mutex
 	// pairingService, pairingDebounce, approvedGroups, groupHistory are inherited from channels.BaseChannel.
+
+	// listenBuf accumulates messages for KG extraction in listen-only mode (nil if not configured).
+	listenBuf *ListenBuffer
+	agentUUID string // agent UUID for KG scoping (set via SetAgentUUID)
+
+	// groupAgentUUIDs maps chatID → agent UUID for groups with agent_id overrides.
+	// Used by listen buffer to store raw messages with the correct agent scope.
+	groupAgentUUIDs map[string]string
 }
 
+// SetAgentUUID stores the agent UUID for KG scoping. Called by InstanceLoader.
+func (c *Channel) SetAgentUUID(uuid string) {
+	c.agentUUID = uuid
+	if c.listenBuf != nil {
+		c.listenBuf.SetAgentUUID(uuid)
+	}
+}
 
 // GetLastQRB64 returns the most recent QR PNG (base64).
 func (c *Channel) GetLastQRB64() string {
@@ -99,6 +114,30 @@ func New(cfg config.WhatsAppConfig, msgBus *bus.MessageBus,
 		config:      cfg,
 		container:   container,
 	}
+
+	// Initialize listen-only buffer if configured at any level.
+	if ch.hasListenOnlyConfig() {
+		ch.listenBuf = NewListenBuffer(
+			nil, // rawMsgStore wired later via SetListenOnlyDeps
+			"",  // agentKey set later via SetAgentID
+			cfg.ListenFlushSec,
+		)
+		globalListenOnly := cfg.ListenOnly != nil && *cfg.ListenOnly
+		slog.Info("whatsapp: listen-only buffer initialized",
+			"global", globalListenOnly,
+			"groups_configured", len(cfg.Groups),
+			"flush_sec", cfg.ListenFlushSec)
+		for jid, gc := range cfg.Groups {
+			if gc != nil && gc.ListenOnly != nil {
+				slog.Info("whatsapp: listen-only group", "jid", jid, "listen_only", *gc.ListenOnly)
+			}
+		}
+	} else {
+		slog.Info("whatsapp: listen-only NOT configured",
+			"listen_only_nil", cfg.ListenOnly == nil,
+			"groups_count", len(cfg.Groups))
+	}
+
 	ch.SetPairingService(pairingSvc)
 	ch.SetGroupHistory(channels.MakeHistory("whatsapp", pendingStore, base.TenantID()))
 	return ch, nil
@@ -116,7 +155,6 @@ func (c *Channel) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("whatsapp get device: %w", err)
 	}
-
 
 	c.client = whatsmeow.NewClient(deviceStore, nil)
 	c.client.AddEventHandler(c.handleEvent)
@@ -150,6 +188,11 @@ func (c *Channel) Stop(_ context.Context) error {
 	}
 	if c.client != nil {
 		c.client.Disconnect()
+	}
+
+	// Flush pending listen-only messages before shutdown.
+	if c.listenBuf != nil {
+		c.listenBuf.Close()
 	}
 
 	// Cancel all active typing goroutines.
@@ -218,4 +261,153 @@ func (c *Channel) handleLoggedOut(evt *events.LoggedOut) {
 
 	c.MarkDegraded("WhatsApp logged out", "Re-scan QR to reconnect",
 		channels.ChannelFailureKindAuth, false)
+}
+
+// hasListenOnlyConfig checks if listen-only mode is enabled at any level (global or per-group).
+func (c *Channel) hasListenOnlyConfig() bool {
+	if c.config.ListenOnly != nil && *c.config.ListenOnly {
+		return true
+	}
+	for _, grp := range c.config.Groups {
+		if grp != nil && grp.ListenOnly != nil && *grp.ListenOnly {
+			return true
+		}
+	}
+	return false
+}
+
+// isListenOnly checks whether listen-only mode is active for the given chat.
+func (c *Channel) isListenOnly(chatID, peerKind string) bool {
+	// Per-group config is authoritative for groups.
+	if peerKind == "group" && c.config.Groups != nil {
+		if grp, ok := c.config.Groups[chatID]; ok && grp != nil {
+			if grp.ListenOnly != nil {
+				return *grp.ListenOnly
+			}
+			// Group is explicitly listed but has no listen_only override — default false.
+			return false
+		}
+	}
+	// Fall back to global setting (applies to DMs and unlisted groups).
+	if c.config.ListenOnly != nil {
+		return *c.config.ListenOnly
+	}
+	return false
+}
+
+// effectiveRequireMention returns the effective require_mention setting for a given chat.
+// Per-group override takes precedence; nil = inherit from channel-level setting.
+func (c *Channel) effectiveRequireMention(chatID, peerKind string) *bool {
+	if peerKind == "group" && c.config.Groups != nil {
+		if grp, ok := c.config.Groups[chatID]; ok && grp != nil && grp.RequireMention != nil {
+			return grp.RequireMention
+		}
+	}
+	return c.config.RequireMention
+}
+
+// resolveGraphID returns the graph scope ID for the given chat.
+// Multiple chats sharing the same graphID will have their KG data in the same scope.
+func (c *Channel) resolveGraphID(chatID, peerKind string) string {
+	// Per-group override takes precedence.
+	if peerKind == "group" && c.config.Groups != nil {
+		if grp, ok := c.config.Groups[chatID]; ok && grp != nil {
+			if grp.ListenGraphID != "" {
+				return grp.ListenGraphID
+			}
+		}
+	}
+	// Fall back to global graph ID.
+	if c.config.ListenGraphID != "" {
+		return c.config.ListenGraphID
+	}
+	// Default: use chatID as scope.
+	return chatID
+}
+
+// RefreshedGroup is a lightweight summary of a joined WhatsApp group.
+type RefreshedGroup struct {
+	JID              string `json:"jid"`
+	Name             string `json:"name"`
+	ParticipantCount int    `json:"participant_count"`
+}
+
+// RefreshGroups fetches all joined groups from WhatsApp and upserts them as contacts.
+// Returns the list of joined groups.
+func (c *Channel) RefreshGroups(ctx context.Context) ([]RefreshedGroup, error) {
+	if c.client == nil || !c.IsAuthenticated() {
+		return nil, fmt.Errorf("whatsapp: not authenticated")
+	}
+
+	groups, err := c.client.GetJoinedGroups(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("whatsapp: get joined groups: %w", err)
+	}
+
+	cc := c.ContactCollector()
+	result := make([]RefreshedGroup, 0, len(groups))
+	for _, g := range groups {
+		jidStr := g.JID.String()
+		if cc != nil {
+			cc.EnsureContact(ctx, c.Type(), c.Name(), jidStr, "", g.Name, "", "group", "group", "", "")
+		}
+		result = append(result, RefreshedGroup{
+			JID:              jidStr,
+			Name:             g.Name,
+			ParticipantCount: g.ParticipantCount,
+		})
+	}
+
+	slog.Info("whatsapp: refreshed groups", "count", len(result), "channel", c.Name())
+	return result, nil
+}
+
+// SetListenOnlyDeps wires the raw message store for listen-only mode.
+func (c *Channel) SetListenOnlyDeps(rawMsgStore store.ListenRawMessageStore) {
+	if c.listenBuf == nil {
+		slog.Warn("whatsapp: SetListenOnlyDeps called but listenBuf is nil — listen-only config not detected at construction",
+			"channel", c.Name())
+		return
+	}
+	c.listenBuf.SetRawMsgStore(rawMsgStore)
+	c.listenBuf.SetAgentKey(c.AgentID())
+	c.listenBuf.SetTenantID(c.TenantID())
+	c.listenBuf.SetChannelName("whatsapp")
+	slog.Info("whatsapp: listen-only deps wired",
+		"channel", c.Name(), "agent", c.AgentID(),
+		"rawMsgStore_nil", rawMsgStore == nil)
+}
+
+// ResolveGroupAgentOverrides resolves group override agent_keys to UUIDs using the agent store.
+// Called by InstanceLoader after the channel is created and the primary agent is resolved.
+func (c *Channel) ResolveGroupAgentOverrides(ctx context.Context, agentStore store.AgentStore) {
+	if c.config.Groups == nil || agentStore == nil {
+		return
+	}
+	resolved := make(map[string]string, len(c.config.Groups))
+	for chatID, grp := range c.config.Groups {
+		if grp == nil || grp.AgentID == "" || grp.AgentID == "__default__" {
+			continue
+		}
+		ag, err := agentStore.GetByKey(ctx, grp.AgentID)
+		if err != nil {
+			slog.Warn("whatsapp: failed to resolve group override agent",
+				"chat_id", chatID, "agent_key", grp.AgentID, "error", err)
+			continue
+		}
+		resolved[chatID] = ag.ID.String()
+		slog.Info("whatsapp: group agent override resolved",
+			"chat_id", chatID, "agent_key", grp.AgentID, "agent_uuid", ag.ID.String())
+	}
+	if len(resolved) > 0 {
+		c.groupAgentUUIDs = resolved
+	}
+}
+
+// groupAgentUUID returns the agent UUID for a group override, or empty string if none.
+func (c *Channel) groupAgentUUID(chatID string) string {
+	if c.groupAgentUUIDs == nil {
+		return ""
+	}
+	return c.groupAgentUUIDs[chatID]
 }

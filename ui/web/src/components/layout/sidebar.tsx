@@ -29,6 +29,7 @@ import {
   ArrowLeftRight,
   FileArchive,
   DatabaseBackup,
+  FileText,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { SidebarGroup } from "./sidebar-group";
@@ -92,6 +93,7 @@ export function Sidebar({ collapsed, onNavItemClick }: SidebarProps) {
         <SidebarGroup label={t("groups.conversations")} collapsed={collapsed}>
           <SidebarItem to={ROUTES.SESSIONS} icon={History} label={t("nav.sessions")} collapsed={collapsed} />
           <SidebarItem to={ROUTES.PENDING_MESSAGES} icon={Inbox} label={t("nav.pendingMessages")} collapsed={collapsed} />
+          <SidebarItem to={ROUTES.RAW_MESSAGES} icon={FileText} label={t("nav.rawMessages")} collapsed={collapsed} />
           <SidebarItem to={ROUTES.CONTACTS} icon={Contact} label={t("nav.contacts")} collapsed={collapsed} />
         </SidebarGroup>
 

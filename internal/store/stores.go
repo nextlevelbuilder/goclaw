@@ -38,4 +38,5 @@ type Stores struct {
 	Episodic               EpisodicStore
 	EvolutionMetrics       EvolutionMetricsStore
 	EvolutionSuggestions   EvolutionSuggestionStore
+	ListenRawMessages      ListenRawMessageStore
 }

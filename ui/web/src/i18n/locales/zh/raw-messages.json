@@ -1,0 +1,45 @@
+{
+  "title": "原始消息",
+  "description": "由仅监听频道捕获的消息，用于知识提取。",
+  "emptyTitle": "没有原始消息",
+  "emptyDescription": "仅监听频道捕获的消息将显示在此处。",
+  "columns": {
+    "chatName": "聊天",
+    "sender": "发送者",
+    "body": "消息",
+    "agent": "Agent",
+    "graphId": "Graph ID",
+    "timestamp": "时间",
+    "status": "状态"
+  },
+  "filters": {
+    "all": "全部",
+    "pending": "待处理",
+    "processed": "已处理"
+  },
+  "status": {
+    "pending": "待处理",
+    "processed": "已处理"
+  },
+  "showing": "显示 {{count}} / {{total}} 条消息",
+  "pagination": {
+    "page": "第 {{current}} 页 / 共 {{total}} 页"
+  },
+  "detail": {
+    "title": "消息详情",
+    "group": "群组",
+    "sender": "发送者",
+    "senderId": "Sender ID",
+    "agent": "Agent",
+    "graphId": "Graph ID",
+    "channel": "频道",
+    "status": "状态",
+    "messageTime": "消息时间",
+    "createdAt": "创建时间",
+    "processedAt": "处理时间",
+    "messageBody": "消息正文",
+    "copy": "复制",
+    "copied": "已复制",
+    "na": "—"
+  }
+}

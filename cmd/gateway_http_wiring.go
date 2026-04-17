@@ -23,6 +23,7 @@ type httpHandlers struct {
 	providers        *httpapi.ProvidersHandler
 	builtinTools     *httpapi.BuiltinToolsHandler
 	pendingMessages  *httpapi.PendingMessagesHandler
+	listenRawMsgs    *httpapi.ListenRawMessagesHandler
 	teamEvents       *httpapi.TeamEventsHandler
 	secureCLI        *httpapi.SecureCLIHandler
 	secureCLIGrant   *httpapi.SecureCLIGrantHandler
@@ -84,6 +85,9 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 			h.pendingMessages.SetProviderModel(pc.Provider, pc.Model)
 		}
 		d.server.SetPendingMessagesHandler(h.pendingMessages)
+	}
+	if h.listenRawMsgs != nil {
+		d.server.SetListenRawMessagesHandler(h.listenRawMsgs)
 	}
 	if h.secureCLI != nil {
 		d.server.SetSecureCLIHandler(h.secureCLI)

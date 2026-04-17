@@ -413,10 +413,23 @@
     "namePlaceholder": "vd: Channel Outlook",
     "agentLabel": "Agent",
     "selectAgent": "Dùng mặc định channel",
+    "listenOnlyLabel": "Chế độ chỉ nghe",
+    "listenOnlyHint": "Thu thập tin nhắn âm thầm để trích xuất knowledge graph mà không phản hồi.",
+    "graphIdLabel": "Graph ID",
+    "graphIdPlaceholder": "vd: project-alpha",
+    "graphIdHint": "Các nhóm có cùng Graph ID sẽ chia sẻ knowledge graph. Để trống để dùng JID nhóm.",
     "addGroupPlaceholder": "JID nhóm (vd: 123456@g.us)",
     "addGroup": "Thêm nhóm",
     "knownGroups": "Nhóm đã phát hiện",
     "saveGroups": "Lưu nhóm",
-    "saving": "Đang lưu..."
+    "saving": "Đang lưu...",
+    "requireMentionLabel": "Yêu cầu @mention",
+    "requireMentionInherit": "Kế thừa (mặc định channel)",
+    "requireMentionYes": "Bật",
+    "requireMentionNo": "Tắt",
+    "requireMentionHint": "Ghi đè cài đặt yêu cầu @mention cho nhóm này. Kế thừa dùng cài đặt cấp channel.",
+    "refreshGroups": "Làm mới nhóm",
+    "refreshing": "Đang làm mới...",
+    "notJoined": "Chưa tham gia"
   }
 }

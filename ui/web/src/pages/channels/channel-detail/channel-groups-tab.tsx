@@ -141,8 +141,8 @@ function WhatsAppGroupsContent({
   const { t } = useTranslation("channels");
   const config = (instance.config ?? {}) as Record<string, unknown>;
   const [groups, setGroups] = useState<
-    Record<string, { name?: string; agent_id?: string; enabled?: boolean }>
-  >((config.groups as Record<string, { name?: string; agent_id?: string; enabled?: boolean }>) ?? {});
+    Record<string, { name?: string; agent_id?: string; enabled?: boolean; listen_only?: boolean; listen_graph_id?: string; require_mention?: boolean }>
+  >((config.groups as Record<string, { name?: string; agent_id?: string; enabled?: boolean; listen_only?: boolean; listen_graph_id?: string; require_mention?: boolean }>) ?? {});
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
@@ -171,6 +171,7 @@ function WhatsAppGroupsContent({
         onChange={setGroups}
         listContacts={listContacts}
         agents={agents}
+        instanceId={instance.id}
       />
 
       <div className="flex items-center justify-end gap-2">

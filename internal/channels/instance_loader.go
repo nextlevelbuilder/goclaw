@@ -32,6 +32,7 @@ type InstanceLoader struct {
 	agentStore        store.AgentStore
 	providerReg       *providers.Registry
 	pendingCompactCfg *config.PendingCompactionConfig
+	listenRawMsgStore store.ListenRawMessageStore // for listen-only raw message storage
 	factories         map[string]ChannelFactory
 	manager           *Manager
 	msgBus            *bus.MessageBus
@@ -69,6 +70,12 @@ func (l *InstanceLoader) SetProviderRegistry(reg *providers.Registry) {
 // Must be called before LoadAll/Reload.
 func (l *InstanceLoader) SetPendingCompactionConfig(cfg *config.PendingCompactionConfig) {
 	l.pendingCompactCfg = cfg
+}
+
+// SetListenRawMsgStore sets the raw message store for listen-only mode.
+// Must be called before LoadAll/Reload.
+func (l *InstanceLoader) SetListenRawMsgStore(s store.ListenRawMessageStore) {
+	l.listenRawMsgStore = s
 }
 
 // RegisterFactory registers a factory for a channel type (e.g., "telegram", "discord").
@@ -266,6 +273,10 @@ func (l *InstanceLoader) loadInstance(ctx context.Context, inst store.ChannelIns
 		}
 		base.SetAgentID(ag.AgentKey)
 	}
+	// Propagate agent UUID for KG scoping in listen-only mode.
+	if as, ok := ch.(interface{ SetAgentUUID(string) }); ok && ag != nil {
+		as.SetAgentUUID(ag.ID.String())
+	}
 	// Set the platform type on the channel so Manager.ChannelTypeForName can read it.
 	if base, ok := ch.(interface{ SetType(string) }); ok {
 		base.SetType(inst.ChannelType)
@@ -334,6 +345,20 @@ func (l *InstanceLoader) loadInstance(ctx context.Context, inst store.ChannelIns
 		}
 	}
 	l.manager.RegisterChannel(inst.Name, ch)
+
+	// Wire listen-only raw message store.
+	if l.listenRawMsgStore != nil {
+		if loc, ok := ch.(interface{ SetListenOnlyDeps(store.ListenRawMessageStore) }); ok {
+			loc.SetListenOnlyDeps(l.listenRawMsgStore)
+		}
+	}
+
+	// Resolve per-group agent override UUIDs (e.g., WhatsApp groups with agent_id config).
+	if resolver, ok := ch.(interface {
+		ResolveGroupAgentOverrides(context.Context, store.AgentStore)
+	}); ok {
+		resolver.ResolveGroupAgentOverrides(instCtx, l.agentStore)
+	}
 
 	// Start the channel if requested (Reload path). LoadAll defers to StartAll.
 	if autoStart {

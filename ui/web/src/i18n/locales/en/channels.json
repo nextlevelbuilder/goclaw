@@ -498,10 +498,23 @@
     "namePlaceholder": "e.g. Channel Outlook",
     "agentLabel": "Agent",
     "selectAgent": "Use channel default",
+    "listenOnlyLabel": "Listen-Only Mode",
+    "listenOnlyHint": "Silently collect messages for knowledge graph extraction without responding.",
+    "graphIdLabel": "Graph ID",
+    "graphIdPlaceholder": "e.g. project-alpha",
+    "graphIdHint": "Groups sharing the same Graph ID will have their knowledge graphs unified. Leave empty to use group JID.",
     "addGroupPlaceholder": "Group JID (e.g. 123456@g.us)",
     "addGroup": "Add Group",
     "knownGroups": "Discovered Groups",
     "saveGroups": "Save Groups",
-    "saving": "Saving..."
+    "saving": "Saving...",
+    "requireMentionLabel": "Require @Mention",
+    "requireMentionInherit": "Inherit (channel default)",
+    "requireMentionYes": "Enabled",
+    "requireMentionNo": "Disabled",
+    "requireMentionHint": "Override whether the bot requires an @mention to respond in this group. Inherit uses the channel-level setting.",
+    "refreshGroups": "Refresh Groups",
+    "refreshing": "Refreshing...",
+    "notJoined": "Not joined"
   }
 }

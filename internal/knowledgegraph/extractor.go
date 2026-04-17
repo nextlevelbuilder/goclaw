@@ -22,6 +22,7 @@ type Extractor struct {
 	provider      providers.Provider
 	model         string
 	minConfidence float64
+	systemPrompt  string // override for default extraction prompt
 }
 
 // NewExtractor creates a new Extractor with the given provider, model, and confidence threshold.
@@ -29,7 +30,18 @@ func NewExtractor(provider providers.Provider, model string, minConfidence float
 	if minConfidence <= 0 {
 		minConfidence = 0.75
 	}
-	return &Extractor{provider: provider, model: model, minConfidence: minConfidence}
+	return &Extractor{provider: provider, model: model, minConfidence: minConfidence, systemPrompt: extractionSystemPrompt}
+}
+
+// NewExtractorWithPrompt creates a new Extractor with a custom system prompt.
+func NewExtractorWithPrompt(provider providers.Provider, model string, minConfidence float64, systemPrompt string) *Extractor {
+	if minConfidence <= 0 {
+		minConfidence = 0.75
+	}
+	if systemPrompt == "" {
+		systemPrompt = extractionSystemPrompt
+	}
+	return &Extractor{provider: provider, model: model, minConfidence: minConfidence, systemPrompt: systemPrompt}
 }
 
 const maxChunkChars = 12000
@@ -62,7 +74,7 @@ func (e *Extractor) Extract(ctx context.Context, text string) (*ExtractionResult
 func (e *Extractor) extractChunk(ctx context.Context, text string) (*ExtractionResult, error) {
 	req := providers.ChatRequest{
 		Messages: []providers.Message{
-			{Role: "system", Content: extractionSystemPrompt},
+			{Role: "system", Content: e.systemPrompt},
 			{Role: "user", Content: text},
 		},
 		Model: e.model,

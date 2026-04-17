@@ -133,9 +133,12 @@ type SlackConfig struct {
 
 // WhatsAppGroupConfig defines per-group overrides for a WhatsApp channel.
 type WhatsAppGroupConfig struct {
-	Name    string `json:"name,omitempty"`    // human-readable alias (e.g. "Channel Outlook")
-	AgentID string `json:"agent_id,omitempty"` // agent_key to route to (overrides channel default)
-	Enabled *bool  `json:"enabled,omitempty"`  // disable bot for this group (default: true)
+	Name        string `json:"name,omitempty"`            // human-readable alias (e.g. "Channel Outlook")
+	AgentID     string `json:"agent_id,omitempty"`        // agent_key to route to (overrides channel default)
+	Enabled     *bool  `json:"enabled,omitempty"`         // disable bot for this group (default: true)
+	ListenOnly      *bool  `json:"listen_only,omitempty"`      // enable listen-only mode (collect messages silently)
+	ListenGraphID   string `json:"listen_graph_id,omitempty"`  // shared graph scope (groups with same ID share one KG)
+	RequireMention  *bool  `json:"require_mention,omitempty"`  // override channel-level require_mention (nil = inherit)
 }
 
 type WhatsAppConfig struct {
@@ -148,6 +151,15 @@ type WhatsAppConfig struct {
 	HistoryLimit   int                              `json:"history_limit,omitempty"`   // max pending group messages for context (default 200, 0=disabled)
 	BlockReply     *bool                            `json:"block_reply,omitempty"`     // override gateway block_reply (nil = inherit)
 	Groups         map[string]*WhatsAppGroupConfig  `json:"groups,omitempty"`          // per-group overrides, keyed by group JID
+
+	// Listen-only mode: silently collect messages for KG extraction.
+	ListenOnly      *bool    `json:"listen_only,omitempty"`       // global listen-only for DMs
+	ListenGraphID   string   `json:"listen_graph_id,omitempty"`   // default graph scope for DMs
+	ListenProvider  string   `json:"listen_provider,omitempty"`   // Deprecated: no longer used. Extraction worker uses ResolveBackgroundProvider.
+	ListenModel     string   `json:"listen_model,omitempty"`      // Deprecated: no longer used. Extraction worker uses ResolveBackgroundProvider.
+	ListenFlushSec  int      `json:"listen_flush_sec,omitempty"`  // flush interval seconds (default 300)
+	ListenMinConf   float64  `json:"listen_min_conf,omitempty"`   // Deprecated: no longer used. Extraction worker uses default 0.75.
+	ListenExtractPollSec int `json:"listen_extract_poll_sec,omitempty"` // extraction worker poll interval seconds (default 30)
 }
 
 type ZaloConfig struct {

@@ -444,6 +444,11 @@ func (s *Server) SetPendingMessagesHandler(h *httpapi.PendingMessagesHandler) {
 	s.handlers = append(s.handlers, h)
 }
 
+// SetListenRawMessagesHandler sets the listen-only raw messages handler.
+func (s *Server) SetListenRawMessagesHandler(h *httpapi.ListenRawMessagesHandler) {
+	s.handlers = append(s.handlers, h)
+}
+
 // SetBuiltinToolsHandler sets the builtin tool management handler.
 func (s *Server) SetBuiltinToolsHandler(h *httpapi.BuiltinToolsHandler) {
 	s.handlers = append(s.handlers, h)

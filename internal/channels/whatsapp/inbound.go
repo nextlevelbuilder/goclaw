@@ -89,7 +89,8 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 	if historyLimit == 0 {
 		historyLimit = channels.DefaultGroupHistoryLimit
 	}
-	if peerKind == "group" && c.config.RequireMention != nil && *c.config.RequireMention {
+	requireMention := c.effectiveRequireMention(chatID, peerKind)
+	if peerKind == "group" && requireMention != nil && *requireMention {
 		if !c.isMentioned(evt) {
 			// Not mentioned — record for context and skip.
 			senderLabel := evt.Info.PushName
@@ -137,6 +138,9 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 		}
 	}
 
+	// Save raw content before sender annotation (used by listen-only raw storage).
+	rawContent := content
+
 	// Annotate with sender identity.
 	if senderName := metadata["user_name"]; senderName != "" {
 		content = fmt.Sprintf("[From: %s]\n%s", senderName, content)
@@ -183,6 +187,52 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 			"override_applied", targetAgentID != c.AgentID(),
 			"groups_configured", len(c.config.Groups),
 		)
+	}
+
+	// Listen-only mode: buffer message for raw storage instead of responding.
+	// If require_mention is configured and bot IS mentioned, fall through to normal pipeline.
+	slog.Debug("whatsapp listen-only check",
+		"chat_id", chatID, "peer_kind", peerKind,
+		"listen_only", c.isListenOnly(chatID, peerKind),
+		"listenBuf_nil", c.listenBuf == nil)
+	if c.isListenOnly(chatID, peerKind) {
+		rm := c.effectiveRequireMention(chatID, peerKind)
+		mentioned := peerKind == "group" && rm != nil && *rm && c.isMentioned(evt)
+		if !mentioned {
+			if c.listenBuf != nil {
+				graphID := c.resolveGraphID(chatID, peerKind)
+				senderName := metadata["user_name"]
+				if senderName == "" {
+					senderName = senderID
+				}
+				// Look up group name from config for richer context.
+				chatName := ""
+				if peerKind == "group" && c.config.Groups != nil {
+					if grp, ok := c.config.Groups[chatID]; ok && grp != nil {
+						chatName = grp.Name
+					}
+				}
+				c.listenBuf.Add(graphID, listenEntry{
+					Sender:    senderName,
+					SenderID:  senderID,
+					Content:   rawContent,
+					Timestamp: evt.Info.Timestamp,
+					ChatID:    chatID,
+					ChatName:  chatName,
+					AgentID:   c.groupAgentUUID(chatID),
+				})
+			}
+			// Clean up temp media files (not forwarded to agent pipeline).
+			var tmpPaths []string
+			for _, mf := range mediaFiles {
+				tmpPaths = append(tmpPaths, mf.Path)
+			}
+			scheduleMediaCleanup(tmpPaths, 5*time.Minute)
+			return
+		}
+		// Mentioned in listen-only group — fall through to normal response pipeline.
+		slog.Info("whatsapp listen: bot mentioned, responding normally",
+			"chat_id", chatID)
 	}
 
 	// Typing indicator.
