@@ -367,3 +367,18 @@ func (h *KnowledgeGraphHandler) handleGraph(w http.ResponseWriter, r *http.Reque
 		"relations": relations,
 	})
 }
+
+func (h *KnowledgeGraphHandler) handleReset(w http.ResponseWriter, r *http.Request) {
+	agentID := r.PathValue("agentID")
+	userID := r.URL.Query().Get("user_id")
+
+	deleted, err := h.store.ClearAll(r.Context(), agentID, userID)
+	if err != nil {
+		slog.Warn("kg.reset failed", "error", err, "agent_id", agentID)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"deleted_count": deleted,
+	})
+}

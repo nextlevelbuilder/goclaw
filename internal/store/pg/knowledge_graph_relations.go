@@ -288,6 +288,39 @@ func (s *PGKnowledgeGraphStore) PruneByConfidence(ctx context.Context, agentID, 
 	return int(n), nil
 }
 
+func (s *PGKnowledgeGraphStore) ClearAll(ctx context.Context, agentID, userID string) (int, error) {
+	aid, err := parseUUID(agentID)
+	if err != nil {
+		return 0, fmt.Errorf("kg clear all: %w", err)
+	}
+	userWhere, userArgs := kgUserWhere(ctx, userID, 2)
+	tc, tcArgs, _, tcErr := scopeClause(ctx, 2+len(userArgs))
+	if tcErr != nil {
+		return 0, tcErr
+	}
+	baseArgs := append([]any{aid}, userArgs...)
+	args := append(baseArgs, tcArgs...)
+
+	where := fmt.Sprintf("WHERE agent_id = $1%s", userWhere) + tc
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	var total int
+	for _, table := range []string{"kg_dedup_candidates", "kg_relations", "kg_entities"} {
+		res, delErr := tx.ExecContext(ctx, "DELETE FROM "+table+" "+where, args...)
+		if delErr != nil {
+			return 0, delErr
+		}
+		n, _ := res.RowsAffected()
+		total += int(n)
+	}
+	return total, tx.Commit()
+}
+
 func (s *PGKnowledgeGraphStore) Stats(ctx context.Context, agentID, userID string) (*store.GraphStats, error) {
 	aid, err := parseUUID(agentID)
 	if err != nil {

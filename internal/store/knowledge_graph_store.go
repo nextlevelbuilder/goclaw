@@ -168,6 +168,11 @@ type KnowledgeGraphStore interface {
 
 	Stats(ctx context.Context, agentID, userID string) (*GraphStats, error)
 
+	// ClearAll deletes all KG data (entities, relations, dedup candidates) for an agent.
+	// If userID is non-empty, only clears data for that user scope.
+	// Returns the total number of entities deleted.
+	ClearAll(ctx context.Context, agentID, userID string) (int, error)
+
 	// Temporal queries (v3)
 	ListEntitiesTemporal(ctx context.Context, agentID, userID string, opts EntityListOptions, temporal TemporalQueryOptions) ([]Entity, error)
 	SupersedeEntity(ctx context.Context, old *Entity, replacement *Entity) error
