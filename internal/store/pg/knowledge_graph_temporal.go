@@ -18,14 +18,19 @@ func (s *PGKnowledgeGraphStore) ListEntitiesTemporal(ctx context.Context, agentI
 		limit = 100
 	}
 
-	q := `SELECT id, agent_id, user_id, external_id, name, entity_type, description,
-	             properties, source_id, confidence, created_at, updated_at, valid_from, valid_until, event_time
-	      FROM kg_entities WHERE agent_id = $1 AND user_id = $2`
-	args := []any{aid, userID}
-	argN := 3
+	where := "agent_id = $1 AND valid_until IS NULL"
+	args := []any{aid}
+	argN := 2
+
+	userWhere, userArgs := kgUserWhere(ctx, userID, argN)
+	if userWhere != "" {
+		where += userWhere
+		args = append(args, userArgs...)
+		argN += len(userArgs)
+	}
 
 	if opts.EntityType != "" {
-		q += fmt.Sprintf(` AND entity_type = $%d`, argN)
+		where += fmt.Sprintf(` AND entity_type = $%d`, argN)
 		args = append(args, opts.EntityType)
 		argN++
 	}
@@ -33,12 +38,11 @@ func (s *PGKnowledgeGraphStore) ListEntitiesTemporal(ctx context.Context, agentI
 	// Temporal filter
 	if !temporal.IncludeExpired {
 		if temporal.AsOf != nil {
-			q += fmt.Sprintf(` AND valid_from <= $%d AND (valid_until IS NULL OR valid_until >= $%d)`, argN, argN)
+			where += fmt.Sprintf(` AND valid_from <= $%d AND (valid_until IS NULL OR valid_until >= $%d)`, argN, argN)
 			args = append(args, *temporal.AsOf)
 			argN++
-		} else {
-			q += ` AND valid_until IS NULL`
 		}
+		// default: valid_until IS NULL already in base where
 	}
 
 	// Tenant scope
@@ -47,13 +51,16 @@ func (s *PGKnowledgeGraphStore) ListEntitiesTemporal(ctx context.Context, agentI
 		return nil, err
 	}
 	if tc != "" {
-		q += tc
+		where += tc
 		args = append(args, tcArgs...)
 		argN += len(tcArgs)
 	}
 
-	q += fmt.Sprintf(` ORDER BY created_at DESC LIMIT $%d OFFSET $%d`, argN, argN+1)
 	args = append(args, limit, opts.Offset)
+	q := fmt.Sprintf(`SELECT id, agent_id, user_id, external_id, name, entity_type, description,
+		             properties, source_id, confidence, created_at, updated_at, valid_from, valid_until, event_time
+		      FROM kg_entities WHERE %s
+		      ORDER BY created_at DESC LIMIT $%d OFFSET $%d`, where, argN, argN+1)
 
 	var tRows []entityTemporalRow
 	if err := pkgSqlxDB.SelectContext(ctx, &tRows, q, args...); err != nil {
@@ -157,8 +164,8 @@ func (s *PGKnowledgeGraphStore) SearchEntitiesByEventTime(ctx context.Context, a
 
 	args = append(args, limit)
 	q := fmt.Sprintf(`SELECT id, agent_id, user_id, external_id, name, entity_type, description,
-	             properties, source_id, confidence, created_at, updated_at, valid_from, valid_until, event_time
-	      FROM kg_entities WHERE %s ORDER BY event_time DESC LIMIT $%d`, where, argN)
+		             properties, source_id, confidence, created_at, updated_at, valid_from, valid_until, event_time
+		      FROM kg_entities WHERE %s ORDER BY event_time DESC LIMIT $%d`, where, argN)
 
 	var tRows []entityTemporalRow
 	if err := pkgSqlxDB.SelectContext(ctx, &tRows, q, args...); err != nil {

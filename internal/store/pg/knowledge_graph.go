@@ -173,7 +173,7 @@ func (s *PGKnowledgeGraphStore) ListEntities(ctx context.Context, agentID, userI
 	if tc != "" {
 		where += tc
 		args = append(args, tcArgs...)
-		idx++
+		idx += len(tcArgs)
 	}
 	args = append(args, limit, opts.Offset)
 	query := fmt.Sprintf(`
@@ -267,7 +267,7 @@ func (s *PGKnowledgeGraphStore) ftsSearchEntities(ctx context.Context, agentID u
 	if tc != "" {
 		where += tc
 		args = append(args, tcArgs...)
-		idx++
+		idx += len(tcArgs)
 	}
 	args = append(args, query, limit)
 	q := fmt.Sprintf(`
@@ -308,7 +308,7 @@ func (s *PGKnowledgeGraphStore) vectorSearchEntities(ctx context.Context, embedd
 	if tc != "" {
 		where += tc
 		args = append(args, tcArgs...)
-		idx++
+		idx += len(tcArgs)
 	}
 	args = append(args, vecStr, limit)
 	q := fmt.Sprintf(`
