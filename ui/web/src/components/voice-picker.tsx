@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { RefreshCwIcon, ChevronDownIcon } from "lucide-react";
 import { createPortal } from "react-dom";
@@ -185,11 +185,38 @@ function DynamicVoicePicker({
     refresh();
   };
 
-  const handleBlur = (e: React.FocusEvent) => {
-    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-      setOpen(false);
+  useEffect(() => {
+    if (!open) {
+      return;
     }
-  };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) {
+        return;
+      }
+
+      if (triggerRef.current?.contains(target) || dropdownRef.current?.contains(target)) {
+        return;
+      }
+
+      setOpen(false);
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [open]);
 
   const dropdownContent = open && (
     <div
@@ -253,7 +280,7 @@ function DynamicVoicePicker({
   );
 
   return (
-    <div ref={triggerRef} className="relative" onBlur={handleBlur}>
+    <div ref={triggerRef} className="relative">
       <button
         type="button"
         disabled={disabled}
