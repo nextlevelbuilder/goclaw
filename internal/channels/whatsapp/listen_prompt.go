@@ -49,7 +49,8 @@ Return a single JSON object with "entities" and "relations" arrays:
       "entity_type": "person|organization|project|...",
       "description": "Brief description or context",
       "confidence": 0.0-1.0,
-      "properties": {"role": "developer", ...}
+      "properties": {"role": "developer", ...},
+      "event_time": "ISO 8601 timestamp when the event occurred, from message timestamps. Only set for entity_type='event'. Example: '2026-04-17T14:30:00Z'. Omit for other entity types."
     }
   ],
   "relations": [
@@ -72,5 +73,6 @@ Return a single JSON object with "entities" and "relations" arrays:
 - Merge multiple mentions: if "Alice" appears multiple times, create one entity
 - Include properties for additional context (e.g., {"sender_id": "..."} for persons)
 - Relations should connect entities that have a meaningful connection from the conversation
+- For entity_type='event', extract event_time from the earliest message timestamp discussing this event. Use ISO 8601 format (e.g. '2026-04-17T14:30:00Z'). Omit event_time for non-event entity types.
 - Return valid JSON only, no markdown fences or commentary
 `

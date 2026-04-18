@@ -998,6 +998,7 @@ CREATE TABLE IF NOT EXISTS kg_entities (
     updated_at  TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     valid_from  TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     valid_until TEXT,
+    event_time  TEXT,
     UNIQUE(agent_id, user_id, external_id)
 );
 
@@ -1006,6 +1007,7 @@ CREATE INDEX IF NOT EXISTS idx_kg_entities_type ON kg_entities(agent_id, user_id
 CREATE INDEX IF NOT EXISTS idx_kg_entities_current ON kg_entities(agent_id, user_id) WHERE valid_until IS NULL;
 CREATE INDEX IF NOT EXISTS idx_kg_entities_team ON kg_entities(team_id) WHERE team_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_kg_entities_tenant ON kg_entities(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_kg_entities_event_time ON kg_entities(agent_id, user_id, event_time) WHERE event_time IS NOT NULL;
 
 -- ============================================================
 -- Table: kg_relations

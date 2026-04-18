@@ -170,6 +170,7 @@ func (m *mockKGStore) DismissCandidate(context.Context, string, string) error { 
 func (m *mockKGStore) Stats(context.Context, string, string) (*store.GraphStats, error) { return nil, nil }
 func (m *mockKGStore) ListEntitiesTemporal(context.Context, string, string, store.EntityListOptions, store.TemporalQueryOptions) ([]store.Entity, error) { return nil, nil }
 func (m *mockKGStore) SupersedeEntity(context.Context, *store.Entity, *store.Entity) error { return nil }
+func (m *mockKGStore) SearchEntitiesByEventTime(context.Context, string, string, *time.Time, *time.Time, int) ([]store.Entity, error) { return nil, nil }
 func (m *mockKGStore) SetEmbeddingProvider(store.EmbeddingProvider) {}
 func (m *mockKGStore) Close() error { return nil }
 

@@ -44,8 +44,8 @@ func (s *PGKnowledgeGraphStore) UpsertEntity(ctx context.Context, entity *store.
 	var actualID uuid.UUID
 	if err = s.db.QueryRowContext(ctx, `
 		INSERT INTO kg_entities
-			(id, agent_id, user_id, external_id, name, entity_type, description, properties, source_id, confidence, tenant_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)
+			(id, agent_id, user_id, external_id, name, entity_type, description, properties, source_id, confidence, tenant_id, created_at, updated_at, event_time)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12, $13)
 		ON CONFLICT (agent_id, user_id, external_id) DO UPDATE SET
 			name        = EXCLUDED.name,
 			entity_type = EXCLUDED.entity_type,
@@ -54,10 +54,11 @@ func (s *PGKnowledgeGraphStore) UpsertEntity(ctx context.Context, entity *store.
 			source_id   = EXCLUDED.source_id,
 			confidence  = EXCLUDED.confidence,
 			tenant_id   = EXCLUDED.tenant_id,
-			updated_at  = EXCLUDED.updated_at
+			updated_at  = EXCLUDED.updated_at,
+			event_time  = CASE WHEN EXCLUDED.event_time IS NOT NULL THEN EXCLUDED.event_time ELSE kg_entities.event_time END
 		RETURNING id`,
 		id, aid, entity.UserID, entity.ExternalID, entity.Name, entity.EntityType,
-		entity.Description, props, entity.SourceID, entity.Confidence, tid, now,
+		entity.Description, props, entity.SourceID, entity.Confidence, tid, now, entity.EventTime,
 	).Scan(&actualID); err != nil {
 		return err
 	}

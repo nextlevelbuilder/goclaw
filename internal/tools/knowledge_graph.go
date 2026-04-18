@@ -57,6 +57,14 @@ func (t *KnowledgeGraphSearchTool) Parameters() map[string]any {
 				"type":        "string",
 				"description": "ISO 8601 timestamp for point-in-time query (e.g. '2026-01-15T00:00:00Z'). Omit for current facts only.",
 			},
+			"from_time": map[string]any{
+				"type":        "string",
+				"description": "ISO 8601 start time for event-time range filter (e.g. '2026-04-01T00:00:00Z'). Returns only entities with event_time >= this value.",
+			},
+			"to_time": map[string]any{
+				"type":        "string",
+				"description": "ISO 8601 end time for event-time range filter. Returns only entities with event_time <= this value.",
+			},
 		},
 		"required": []string{"query"},
 	}
@@ -95,6 +103,24 @@ func (t *KnowledgeGraphSearchTool) Execute(ctx context.Context, args map[string]
 		if asOf, err := time.Parse(time.RFC3339, asOfStr); err == nil {
 			temporal.AsOf = &asOf
 		}
+	}
+
+	// Parse event-time range parameters
+	var fromTime, toTime *time.Time
+	if ftStr, ok := args["from_time"].(string); ok && ftStr != "" {
+		if ft, err := time.Parse(time.RFC3339, ftStr); err == nil {
+			fromTime = &ft
+		}
+	}
+	if ttStr, ok := args["to_time"].(string); ok && ttStr != "" {
+		if tt, err := time.Parse(time.RFC3339, ttStr); err == nil {
+			toTime = &tt
+		}
+	}
+
+	// Event-time range mode: from_time or to_time provided
+	if fromTime != nil || toTime != nil {
+		return t.executeEventTimeSearch(ctx, agentID.String(), userID, query, fromTime, toTime)
 	}
 
 	// List-all mode: query="*"
@@ -197,7 +223,55 @@ func (t *KnowledgeGraphSearchTool) executeListAll(ctx context.Context, agentID, 
 	return NewResult(sb.String())
 }
 
-func (t *KnowledgeGraphSearchTool) executeSearch(ctx context.Context, agentID, userID, query string, args map[string]any, _ store.TemporalQueryOptions) *Result {
+// executeEventTimeSearch searches entities by event_time range, optionally filtered by query text.
+func (t *KnowledgeGraphSearchTool) executeEventTimeSearch(ctx context.Context, agentID, userID, query string, fromTime, toTime *time.Time) *Result {
+	entities, err := t.kgStore.SearchEntitiesByEventTime(ctx, agentID, userID, fromTime, toTime, 20)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("event-time search failed: %v", err))
+	}
+	if len(entities) == 0 {
+		return NewResult("No entities with event_time found in the specified time range.")
+	}
+
+	// Optional text filter (post-search)
+	if query != "" && query != "*" {
+		qLower := strings.ToLower(query)
+		filtered := entities[:0]
+		for _, e := range entities {
+			if strings.Contains(strings.ToLower(e.Name), qLower) ||
+				strings.Contains(strings.ToLower(e.Description), qLower) {
+				filtered = append(filtered, e)
+			}
+		}
+		entities = filtered
+		if len(entities) == 0 {
+			return NewResult(fmt.Sprintf("No entities matching %q found in the specified time range.", query))
+		}
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Found %d entities with event_time in range", len(entities)))
+	if fromTime != nil {
+		sb.WriteString(fmt.Sprintf(" from %s", fromTime.Format("2006-01-02 15:04")))
+	}
+	if toTime != nil {
+		sb.WriteString(fmt.Sprintf(" to %s", toTime.Format("2006-01-02 15:04")))
+	}
+	sb.WriteString(":\n\n")
+	for _, e := range entities {
+		sb.WriteString(fmt.Sprintf("- %s [%s]", e.Name, e.EntityType))
+		if e.EventTime != nil {
+			sb.WriteString(fmt.Sprintf(" (event: %s)", e.EventTime.Format("2006-01-02 15:04")))
+		}
+		sb.WriteString("\n")
+		if e.Description != "" {
+			sb.WriteString(fmt.Sprintf("  %s\n", e.Description))
+		}
+	}
+	return NewResult(sb.String())
+}
+
+func (t *KnowledgeGraphSearchTool) executeSearch(ctx context.Context, agentID, userID, query string, args map[string]any, temporal store.TemporalQueryOptions) *Result {
 	entities, err := t.kgStore.SearchEntities(ctx, agentID, userID, query, 10)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("entity search failed: %v", err))

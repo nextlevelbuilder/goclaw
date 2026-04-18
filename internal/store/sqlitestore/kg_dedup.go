@@ -52,8 +52,8 @@ func (s *SQLiteKnowledgeGraphStore) IngestExtraction(ctx context.Context, agentI
 		if err := tx.QueryRowContext(ctx, `
 			INSERT INTO kg_entities
 				(id, agent_id, user_id, external_id, name, entity_type, description,
-				 properties, source_id, confidence, tenant_id, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				 properties, source_id, confidence, tenant_id, created_at, updated_at, event_time)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(agent_id, user_id, external_id) DO UPDATE SET
 				name        = excluded.name,
 				entity_type = excluded.entity_type,
@@ -62,10 +62,12 @@ func (s *SQLiteKnowledgeGraphStore) IngestExtraction(ctx context.Context, agentI
 				source_id   = excluded.source_id,
 				confidence  = excluded.confidence,
 				tenant_id   = excluded.tenant_id,
-				updated_at  = excluded.updated_at
+				updated_at  = excluded.updated_at,
+				event_time  = CASE WHEN excluded.event_time IS NOT NULL THEN excluded.event_time ELSE kg_entities.event_time END
 			RETURNING id`,
 			newID, agentID, userID, e.ExternalID, e.Name, e.EntityType,
 			e.Description, string(props), e.SourceID, e.Confidence, tid, now, now,
+			formatSqliteTime(e.EventTime),
 		).Scan(&actualID); err != nil {
 			return nil, fmt.Errorf("ingest entity %q: %w", e.ExternalID, err)
 		}
