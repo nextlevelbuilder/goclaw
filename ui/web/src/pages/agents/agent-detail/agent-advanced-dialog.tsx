@@ -13,7 +13,7 @@ import type {
 } from "@/types/agent";
 import {
   ChatGPTOAuthRoutingSection, ThinkingSection, WorkspaceSharingSection, CompactionSection,
-  ContextPruningSection, SandboxSection,
+  ContextPruningSection, SandboxSection, BoundChannelsSection,
 } from "./config-sections";
 import { WorkspaceSection } from "./general-sections";
 import { useProviders } from "@/pages/providers/hooks/use-providers";
@@ -154,6 +154,9 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
         <div className="overflow-y-auto min-h-0 -mx-4 px-4 sm:-mx-6 sm:px-6 space-y-4">
           {/* Workspace (read-only) */}
           <WorkspaceSection workspace={agent.workspace} />
+
+          {/* Bound Channels (read-only) */}
+          <BoundChannelsSection agentId={agent.id} />
 
           {/* Workspace Sharing */}
           <WorkspaceSharingSection value={wsSharing} onChange={setWsSharing} />

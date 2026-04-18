@@ -128,10 +128,11 @@ func (s *PGKnowledgeGraphStore) SearchEntitiesByEventTime(ctx context.Context, a
 	args := []any{aid}
 	argN := 2
 
-	if !store.IsSharedKG(ctx) && userID != "" {
-		where += fmt.Sprintf(" AND user_id = $%d", argN)
-		args = append(args, userID)
-		argN++
+	userWhere, userArgs := kgUserWhere(ctx, userID, argN)
+	if userWhere != "" {
+		where += userWhere
+		args = append(args, userArgs...)
+		argN += len(userArgs)
 	}
 	if fromTime != nil {
 		where += fmt.Sprintf(" AND event_time >= $%d", argN)

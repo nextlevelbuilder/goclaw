@@ -150,6 +150,9 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 		}
 		if l.shouldShareKnowledgeGraph() {
 			ctx = store.WithSharedKG(ctx)
+			if len(l.workspaceSharing.SharedKGIDs) > 0 {
+				ctx = store.WithSharedKGIDs(ctx, l.workspaceSharing.SharedKGIDs)
+			}
 		}
 		if l.shouldShareSessions() {
 			ctx = store.WithSharedSessions(ctx)

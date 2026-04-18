@@ -90,6 +90,7 @@ export interface WorkspaceSharingConfig {
   share_memory?: boolean;
   share_knowledge_graph?: boolean;
   share_sessions?: boolean;
+  shared_kg_ids?: string[];
 }
 
 export type ChatGPTOAuthRoutingStrategy =

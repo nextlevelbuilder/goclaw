@@ -13,6 +13,23 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
+// kgUserWhere returns a WHERE fragment and args for user scoping.
+//   - specific IDs: " AND user_id = ANY($N::text[])" with ids
+//   - shared mode:  "" (no filter)
+//   - per-user:     " AND user_id = $N" with userID
+func kgUserWhere(ctx context.Context, userID string, argIdx int) (string, []any) {
+	if ids := store.SharedKGIDsFromCtx(ctx); len(ids) > 0 {
+		return fmt.Sprintf(" AND user_id = ANY($%d::text[])", argIdx), []any{ids}
+	}
+	if store.IsSharedKG(ctx) {
+		return "", nil
+	}
+	if userID == "" {
+		return "", nil
+	}
+	return fmt.Sprintf(" AND user_id = $%d", argIdx), []any{userID}
+}
+
 // PGKnowledgeGraphStore implements store.KnowledgeGraphStore backed by Postgres.
 type PGKnowledgeGraphStore struct {
 	db          *sql.DB
@@ -78,35 +95,23 @@ func (s *PGKnowledgeGraphStore) GetEntity(ctx context.Context, agentID, userID, 
 		return nil, fmt.Errorf("kg get entity: id: %w", err)
 	}
 
+	userWhere, userArgs := kgUserWhere(ctx, userID, 3)
+	args := append([]any{eid, aid}, userArgs...)
+	tc, tcArgs, _, err := scopeClause(ctx, 3+len(userArgs))
+	if err != nil {
+		return nil, err
+	}
+	args = append(args, tcArgs...)
+
 	var row entityRow
-	if store.IsSharedKG(ctx) {
-		tc, tcArgs, _, err := scopeClause(ctx, 3)
-		if err != nil {
-			return nil, err
-		}
-		err = pkgSqlxDB.GetContext(ctx, &row, `
-			SELECT id, agent_id, user_id, external_id, name, entity_type, description,
-			       properties, source_id, confidence, created_at, updated_at
-			FROM kg_entities WHERE id = $1 AND agent_id = $2`+tc,
-			append([]any{eid, aid}, tcArgs...)...,
-		)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		tc, tcArgs, _, err := scopeClause(ctx, 4)
-		if err != nil {
-			return nil, err
-		}
-		err = pkgSqlxDB.GetContext(ctx, &row, `
-			SELECT id, agent_id, user_id, external_id, name, entity_type, description,
-			       properties, source_id, confidence, created_at, updated_at
-			FROM kg_entities WHERE id = $1 AND agent_id = $2 AND user_id = $3`+tc,
-			append([]any{eid, aid, userID}, tcArgs...)...,
-		)
-		if err != nil {
-			return nil, err
-		}
+	err = pkgSqlxDB.GetContext(ctx, &row, `
+		SELECT id, agent_id, user_id, external_id, name, entity_type, description,
+		       properties, source_id, confidence, created_at, updated_at
+		FROM kg_entities WHERE id = $1 AND agent_id = $2`+userWhere+tc,
+		args...,
+	)
+	if err != nil {
+		return nil, err
 	}
 	e := row.toEntity()
 	return &e, nil
@@ -121,24 +126,16 @@ func (s *PGKnowledgeGraphStore) DeleteEntity(ctx context.Context, agentID, userI
 	if err != nil {
 		return fmt.Errorf("kg delete entity: id: %w", err)
 	}
-	if store.IsSharedKG(ctx) {
-		tc, tcArgs, _, err := scopeClause(ctx, 3)
-		if err != nil {
-			return err
-		}
-		_, err = s.db.ExecContext(ctx,
-			`DELETE FROM kg_entities WHERE id = $1 AND agent_id = $2`+tc,
-			append([]any{eid, aid}, tcArgs...)...,
-		)
-		return err
-	}
-	tc, tcArgs, _, err := scopeClause(ctx, 4)
+	userWhere, userArgs := kgUserWhere(ctx, userID, 3)
+	args := append([]any{eid, aid}, userArgs...)
+	tc, tcArgs, _, err := scopeClause(ctx, 3+len(userArgs))
 	if err != nil {
 		return err
 	}
+	args = append(args, tcArgs...)
 	_, err = s.db.ExecContext(ctx,
-		`DELETE FROM kg_entities WHERE id = $1 AND agent_id = $2 AND user_id = $3`+tc,
-		append([]any{eid, aid, userID}, tcArgs...)...,
+		`DELETE FROM kg_entities WHERE id = $1 AND agent_id = $2`+userWhere+tc,
+		args...,
 	)
 	return err
 }
@@ -158,10 +155,11 @@ func (s *PGKnowledgeGraphStore) ListEntities(ctx context.Context, agentID, userI
 	where := "agent_id = $1 AND valid_until IS NULL"
 	args := []any{aid}
 	idx := 2
-	if !store.IsSharedKG(ctx) && userID != "" {
-		where += fmt.Sprintf(" AND user_id = $%d", idx)
-		args = append(args, userID)
-		idx++
+	userWhere, userArgs := kgUserWhere(ctx, userID, idx)
+	if userWhere != "" {
+		where += userWhere
+		args = append(args, userArgs...)
+		idx += len(userArgs)
 	}
 	if opts.EntityType != "" {
 		where += fmt.Sprintf(" AND entity_type = $%d", idx)
@@ -204,10 +202,8 @@ func (s *PGKnowledgeGraphStore) SearchEntities(ctx context.Context, agentID, use
 		limit = 20
 	}
 
-	shared := store.IsSharedKG(ctx)
-
 	// FTS search using tsvector
-	ftsResults, err := s.ftsSearchEntities(ctx, aid, userID, query, limit*2, shared)
+	ftsResults, err := s.ftsSearchEntities(ctx, aid, userID, query, limit*2)
 	if err != nil {
 		return nil, err
 	}
@@ -217,7 +213,7 @@ func (s *PGKnowledgeGraphStore) SearchEntities(ctx context.Context, agentID, use
 	if s.embProvider != nil {
 		embeddings, embErr := s.embProvider.Embed(ctx, []string{query})
 		if embErr == nil && len(embeddings) > 0 {
-			vecResults, err = s.vectorSearchEntities(ctx, embeddings[0], aid, userID, limit*2, shared)
+			vecResults, err = s.vectorSearchEntities(ctx, embeddings[0], aid, userID, limit*2)
 			if err != nil {
 				vecResults = nil
 			}
@@ -254,14 +250,15 @@ type scoredEntity struct {
 	Score  float64
 }
 
-func (s *PGKnowledgeGraphStore) ftsSearchEntities(ctx context.Context, agentID uuid.UUID, userID, query string, limit int, shared bool) ([]scoredEntity, error) {
+func (s *PGKnowledgeGraphStore) ftsSearchEntities(ctx context.Context, agentID uuid.UUID, userID, query string, limit int) ([]scoredEntity, error) {
 	where := "agent_id = $1 AND valid_until IS NULL AND tsv @@ plainto_tsquery('simple', $2)"
 	args := []any{agentID, query}
 	idx := 3
-	if !shared && userID != "" {
-		where += fmt.Sprintf(" AND user_id = $%d", idx)
-		args = append(args, userID)
-		idx++
+	userWhere, userArgs := kgUserWhere(ctx, userID, idx)
+	if userWhere != "" {
+		where += userWhere
+		args = append(args, userArgs...)
+		idx += len(userArgs)
 	}
 	tc, tcArgs, _, err := scopeClause(ctx, idx)
 	if err != nil {
@@ -292,16 +289,17 @@ func (s *PGKnowledgeGraphStore) ftsSearchEntities(ctx context.Context, agentID u
 	return results, nil
 }
 
-func (s *PGKnowledgeGraphStore) vectorSearchEntities(ctx context.Context, embedding []float32, agentID uuid.UUID, userID string, limit int, shared bool) ([]scoredEntity, error) {
+func (s *PGKnowledgeGraphStore) vectorSearchEntities(ctx context.Context, embedding []float32, agentID uuid.UUID, userID string, limit int) ([]scoredEntity, error) {
 	vecStr := vectorToString(embedding)
 
 	where := "agent_id = $1 AND valid_until IS NULL AND embedding IS NOT NULL"
 	args := []any{agentID}
 	idx := 2
-	if !shared && userID != "" {
-		where += fmt.Sprintf(" AND user_id = $%d", idx)
-		args = append(args, userID)
-		idx++
+	userWhere, userArgs := kgUserWhere(ctx, userID, idx)
+	if userWhere != "" {
+		where += userWhere
+		args = append(args, userArgs...)
+		idx += len(userArgs)
 	}
 	tc, tcArgs, _, err := scopeClause(ctx, idx)
 	if err != nil {

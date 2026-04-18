@@ -177,7 +177,8 @@ export function buildAdvancedUpdatePayload(
     (wsSharing.shared_users?.length ?? 0) > 0 ||
     wsSharing.share_memory ||
     wsSharing.share_knowledge_graph ||
-    wsSharing.share_sessions
+    wsSharing.share_sessions ||
+    (wsSharing.shared_kg_ids?.length ?? 0) > 0
   ) {
     updates.workspace_sharing = wsSharing;
   } else {
