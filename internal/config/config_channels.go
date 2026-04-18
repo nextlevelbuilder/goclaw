@@ -160,6 +160,7 @@ type WhatsAppConfig struct {
 	ListenFlushSec  int      `json:"listen_flush_sec,omitempty"`  // flush interval seconds (default 300)
 	ListenMinConf   float64  `json:"listen_min_conf,omitempty"`   // Deprecated: no longer used. Extraction worker uses default 0.75.
 	ListenExtractPollSec int `json:"listen_extract_poll_sec,omitempty"` // extraction worker poll interval seconds (default 30)
+	MediaCaptionDelayMs  int `json:"media_caption_delay_ms,omitempty"`  // wait for caption after media (default 1000ms, -1=disabled)
 }
 
 type ZaloConfig struct {

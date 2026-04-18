@@ -65,6 +65,10 @@ type Channel struct {
 	listenBuf *ListenBuffer
 	agentUUID string // agent UUID for KG scoping (set via SetAgentUUID)
 
+	// captionBuf delays media messages briefly to merge follow-up caption text.
+	// Nil when media_caption_delay_ms is -1 (disabled).
+	captionBuf *MediaCaptionBuffer
+
 	// groupAgentUUIDs maps chatID → agent UUID for groups with agent_id overrides.
 	// Used by listen buffer to store raw messages with the correct agent scope.
 	groupAgentUUIDs map[string]string
@@ -142,6 +146,18 @@ func New(cfg config.WhatsAppConfig, msgBus *bus.MessageBus,
 			"groups_count", len(cfg.Groups))
 	}
 
+	// Media caption buffer: disabled by default. The gateway-level InboundDebouncer
+	// handles media+caption merging. Set media_caption_delay_ms > 0 to enable
+	// an additional WhatsApp-specific buffer for longer merge windows.
+	if cfg.MediaCaptionDelayMs > 0 {
+		ch.captionBuf = NewMediaCaptionBuffer(
+			time.Duration(cfg.MediaCaptionDelayMs)*time.Millisecond,
+			ch.publishBufferedMessage,
+			scheduleMediaCleanup,
+		)
+		slog.Info("whatsapp: media caption buffer initialized", "delay_ms", cfg.MediaCaptionDelayMs)
+	}
+
 	ch.SetPairingService(pairingSvc)
 	ch.SetGroupHistory(channels.MakeHistory("whatsapp", pendingStore, base.TenantID()))
 	return ch, nil
@@ -183,6 +199,11 @@ func (c *Channel) Start(ctx context.Context) error {
 // BlockReplyEnabled returns the per-channel block_reply override (nil = inherit gateway default).
 func (c *Channel) BlockReplyEnabled() *bool { return c.config.BlockReply }
 
+// publishBufferedMessage is the flush callback for the media caption buffer.
+func (c *Channel) publishBufferedMessage(msg bus.InboundMessage) {
+	c.Bus().PublishInbound(msg)
+}
+
 // Stop gracefully shuts down the WhatsApp channel.
 func (c *Channel) Stop(_ context.Context) error {
 	slog.Info("stopping whatsapp channel")
@@ -199,6 +220,11 @@ func (c *Channel) Stop(_ context.Context) error {
 	// Flush pending listen-only messages before shutdown.
 	if c.listenBuf != nil {
 		c.listenBuf.Close()
+	}
+
+	// Flush pending caption-buffered media messages before shutdown.
+	if c.captionBuf != nil {
+		c.captionBuf.FlushAll()
 	}
 
 	// Cancel all active typing goroutines.
