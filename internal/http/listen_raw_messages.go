@@ -42,6 +42,9 @@ func (h *ListenRawMessagesHandler) handleList(w http.ResponseWriter, r *http.Req
 	if v := r.URL.Query().Get("agent_id"); v != "" {
 		opts.AgentID = v
 	}
+	if v := r.URL.Query().Get("graph_id"); v != "" {
+		opts.GraphID = v
+	}
 	if v := r.URL.Query().Get("processed"); v != "" {
 		b := v == "true" || v == "1"
 		opts.Processed = &b

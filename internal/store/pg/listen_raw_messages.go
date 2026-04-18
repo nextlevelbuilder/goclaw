@@ -47,7 +47,7 @@ func (s *PGListenRawMessageStore) AppendBatch(ctx context.Context, msgs []store.
 
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO listen_raw_messages (id, channel_name, chat_id, chat_name, graph_id, sender, sender_id, body, msg_timestamp, agent_id, created_at, tenant_id)
-		 VALUES `+strings.Join(placeholders, ","),
+			 VALUES `+strings.Join(placeholders, ","),
 		args...,
 	)
 	return err
@@ -61,10 +61,10 @@ func (s *PGListenRawMessageStore) ListPending(ctx context.Context, agentID, grap
 	var result []store.ListenRawMessage
 	err = pkgSqlxDB.SelectContext(ctx, &result,
 		`SELECT id, channel_name, chat_id, chat_name, graph_id, sender, sender_id, body, msg_timestamp, agent_id, created_at, processed_at
-		 FROM listen_raw_messages
-		 WHERE agent_id = $1 AND graph_id = $2 AND processed_at IS NULL`+tClause+`
-		 ORDER BY msg_timestamp DESC
-		 LIMIT $3`,
+			 FROM listen_raw_messages
+			 WHERE agent_id = $1 AND graph_id = $2 AND processed_at IS NULL`+tClause+`
+			 ORDER BY msg_timestamp DESC
+			 LIMIT $3`,
 		append([]any{agentID, graphID, maxRows}, tArgs...)...,
 	)
 	return result, err
@@ -169,6 +169,12 @@ func (s *PGListenRawMessageStore) List(ctx context.Context, opts store.ListenRaw
 		args = append(args, opts.AgentID)
 		paramIdx++
 	}
+	if opts.GraphID != "" {
+		where = append(where, fmt.Sprintf("graph_id = $%d", paramIdx))
+		whereM = append(whereM, fmt.Sprintf("m.graph_id = $%d", paramIdx))
+		args = append(args, opts.GraphID)
+		paramIdx++
+	}
 	if opts.Processed != nil {
 		if *opts.Processed {
 			where = append(where, "processed_at IS NOT NULL")
@@ -215,12 +221,12 @@ func (s *PGListenRawMessageStore) List(ctx context.Context, opts store.ListenRaw
 	var result []store.ListenRawMessage
 	err = pkgSqlxDB.SelectContext(ctx, &result,
 		`SELECT m.id, m.channel_name, m.chat_id, m.chat_name, m.graph_id, m.sender, m.sender_id, m.body, m.msg_timestamp, m.agent_id, m.created_at, m.processed_at,
-		        COALESCE(a.display_name, a.agent_key, '') AS agent_name
-		 FROM listen_raw_messages m
-		 LEFT JOIN agents a ON a.id = m.agent_id
-		 WHERE 1=1`+tmClause+whereMClause+`
-		 ORDER BY m.created_at DESC
-		 LIMIT $`+fmt.Sprintf("%d", paramIdx)+` OFFSET $`+fmt.Sprintf("%d", paramIdx+1),
+			        COALESCE(a.display_name, a.agent_key, '') AS agent_name
+			 FROM listen_raw_messages m
+			 LEFT JOIN agents a ON a.id = m.agent_id
+			 WHERE 1=1`+tmClause+whereMClause+`
+			 ORDER BY m.created_at DESC
+			 LIMIT $`+fmt.Sprintf("%d", paramIdx)+` OFFSET $`+fmt.Sprintf("%d", paramIdx+1),
 		pageArgs...,
 	)
 	return result, total, err

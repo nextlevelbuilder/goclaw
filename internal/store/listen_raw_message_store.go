@@ -39,6 +39,7 @@ type ListenRawMessageListOpts struct {
 	ChannelName string
 	ChatID      string
 	AgentID     string
+	GraphID     string
 	Processed   *bool // nil=all, true=processed only, false=pending only
 }
 
