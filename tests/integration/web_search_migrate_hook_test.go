@@ -315,6 +315,16 @@ func TestWebSearchMigrateHook_ExistingSecretNoOverwrite(t *testing.T) {
 // so without this the hook runs only once per test-binary invocation.
 func resetWebSearchMigrateHook(t *testing.T, db *sql.DB) {
 	t.Helper()
+	// Ensure table exists — first test run creates it via RunPendingHooks,
+	// but reset must work on a fresh DB too.
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS data_migrations (
+			name       VARCHAR(255) PRIMARY KEY,
+			version    INT NOT NULL,
+			applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)`); err != nil {
+		t.Fatalf("ensure data_migrations: %v", err)
+	}
 	if _, err := db.Exec(
 		`DELETE FROM data_migrations WHERE name=$1`,
 		"055_web_search_legacy_keys_to_config_secrets"); err != nil {
