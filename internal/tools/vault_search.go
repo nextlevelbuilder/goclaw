@@ -27,7 +27,24 @@ func (t *VaultSearchTool) SetSearchService(svc *vault.VaultSearchService) {
 func (t *VaultSearchTool) Name() string { return "vault_search" }
 
 func (t *VaultSearchTool) Description() string {
-	return "Primary discovery tool: search across ALL knowledge sources (vault docs, memory, knowledge graph). Returns ranked results with source attribution and doc_id — pass the doc_id to vault_read for full content. Use memory_search for memory-only queries, kg_search for relationship traversal."
+	return "Primary discovery tool: search across ALL knowledge sources (vault docs, memory, knowledge graph). Each result ends with a '→ use <tool>' hint identifying the correct next tool for that source — FOLLOW THE HINT EXACTLY; do NOT pass a knowledge-graph or episodic id to vault_read. Narrow the search with types=\"context,note\" or types=\"kg\" when relevant."
+}
+
+// nextToolHint maps a result source to the correct follow-up tool name.
+// Kept narrow to existing tool names — when a direct-read tool does not exist
+// the hint points to the closest search-style accessor so the LLM never sends
+// a foreign-namespace id to vault_read.
+func nextToolHint(source string) string {
+	switch source {
+	case "vault":
+		return " → use vault_read(doc_id)"
+	case "kg":
+		return " → use knowledge_graph_search(query) (kg entity — NOT a vault doc)"
+	case "episodic":
+		return " → use memory_search(types=\"episodic\") (episodic summary — NOT a vault doc)"
+	default:
+		return ""
+	}
 }
 
 func (t *VaultSearchTool) Parameters() map[string]any {
@@ -44,7 +61,7 @@ func (t *VaultSearchTool) Parameters() map[string]any {
 			},
 			"types": map[string]any{
 				"type":        "string",
-				"description": "Comma-separated doc types: context, memory, note, skill, episodic (default: all)",
+				"description": "Comma-separated doc types: context, memory, note, skill, episodic, kg (default: all sources)",
 			},
 			"maxResults": map[string]any{
 				"type":        "number",
@@ -110,6 +127,9 @@ func (t *VaultSearchTool) Execute(ctx context.Context, args map[string]any) *Res
 		sb.WriteString(fmt.Sprintf(" — score: %.2f", r.Score))
 		if r.ID != "" {
 			sb.WriteString(fmt.Sprintf(" — id: %s", r.ID))
+		}
+		if hint := nextToolHint(r.Source); hint != "" {
+			sb.WriteString(hint)
 		}
 		if r.Snippet != "" {
 			sb.WriteString(fmt.Sprintf("\n   %s", r.Snippet))

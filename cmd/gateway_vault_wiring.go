@@ -28,6 +28,14 @@ func wireVault(stores *store.Stores, toolsReg *tools.Registry, workspace string,
 	vaultReadTool := tools.NewVaultReadTool()
 	vaultReadTool.SetVaultStore(stores.Vault)
 	vaultReadTool.SetWorkspace(workspace)
+	// Namespace-fallback stores — nil-safe; used to return a redirect error
+	// when a caller passes a KG / episodic id to vault_read by mistake.
+	if stores.KnowledgeGraph != nil {
+		vaultReadTool.SetKGStore(stores.KnowledgeGraph)
+	}
+	if stores.Episodic != nil {
+		vaultReadTool.SetEpisodicStore(stores.Episodic)
+	}
 	toolsReg.Register(vaultReadTool)
 
 	// Build VaultSearchService: fan-out across vault + KG (episodic store pending impl).
