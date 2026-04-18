@@ -102,13 +102,30 @@ func (s *PGListenRawMessageStore) ListPendingGroups(ctx context.Context) ([]stor
 }
 
 func (s *PGListenRawMessageStore) ResetProcessed(ctx context.Context, agentID, graphID string) (int64, error) {
-	tClause, tArgs, _, err := scopeClause(ctx, 3)
+	var conditions []string
+	var args []any
+	idx := 1
+
+	if agentID != "" {
+		conditions = append(conditions, fmt.Sprintf("agent_id = $%d", idx))
+		args = append(args, agentID)
+		idx++
+	}
+	if graphID != "" {
+		conditions = append(conditions, fmt.Sprintf("graph_id = $%d", idx))
+		args = append(args, graphID)
+		idx++
+	}
+	conditions = append(conditions, "processed_at IS NOT NULL")
+
+	tClause, tArgs, _, err := scopeClause(ctx, idx)
 	if err != nil {
 		return 0, err
 	}
 
-	q := `UPDATE listen_raw_messages SET processed_at = NULL WHERE agent_id = $1 AND graph_id = $2 AND processed_at IS NOT NULL` + tClause
-	args := append([]any{agentID, graphID}, tArgs...)
+	where := strings.Join(conditions, " AND ")
+	q := `UPDATE listen_raw_messages SET processed_at = NULL WHERE ` + where + tClause
+	args = append(args, tArgs...)
 
 	res, err := s.db.ExecContext(ctx, q, args...)
 	if err != nil {

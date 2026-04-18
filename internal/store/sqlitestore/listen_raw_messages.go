@@ -144,13 +144,27 @@ func (s *SQLiteListenRawMessageStore) ListPendingGroups(ctx context.Context) ([]
 }
 
 func (s *SQLiteListenRawMessageStore) ResetProcessed(ctx context.Context, agentID, graphID string) (int64, error) {
+	var conditions []string
+	var args []any
+
+	if agentID != "" {
+		conditions = append(conditions, "agent_id = ?")
+		args = append(args, agentID)
+	}
+	if graphID != "" {
+		conditions = append(conditions, "graph_id = ?")
+		args = append(args, graphID)
+	}
+	conditions = append(conditions, "processed_at IS NOT NULL")
+
 	tClause, tArgs, err := scopeClause(ctx)
 	if err != nil {
 		return 0, err
 	}
 
-	q := `UPDATE listen_raw_messages SET processed_at = NULL WHERE agent_id = ? AND graph_id = ? AND processed_at IS NOT NULL` + tClause
-	args := append([]any{agentID, graphID}, tArgs...)
+	where := strings.Join(conditions, " AND ")
+	q := `UPDATE listen_raw_messages SET processed_at = NULL WHERE ` + where + tClause
+	args = append(args, tArgs...)
 
 	res, err := s.db.ExecContext(ctx, q, args...)
 	if err != nil {

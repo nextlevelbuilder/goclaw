@@ -77,10 +77,6 @@ func (h *ListenRawMessagesHandler) handleList(w http.ResponseWriter, r *http.Req
 func (h *ListenRawMessagesHandler) handleResetProcessed(w http.ResponseWriter, r *http.Request) {
 	agentID := r.URL.Query().Get("agent_id")
 	graphID := r.URL.Query().Get("graph_id")
-	if agentID == "" || graphID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "agent_id and graph_id query params are required"})
-		return
-	}
 
 	affected, err := h.store.ResetProcessed(r.Context(), agentID, graphID)
 	if err != nil {
@@ -88,9 +84,14 @@ func (h *ListenRawMessagesHandler) handleResetProcessed(w http.ResponseWriter, r
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
+	resp := map[string]any{
 		"reset_count": affected,
-		"agent_id":    agentID,
-		"graph_id":    graphID,
-	})
+	}
+	if agentID != "" {
+		resp["agent_id"] = agentID
+	}
+	if graphID != "" {
+		resp["graph_id"] = graphID
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
