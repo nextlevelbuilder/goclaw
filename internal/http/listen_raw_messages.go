@@ -20,6 +20,7 @@ func NewListenRawMessagesHandler(s store.ListenRawMessageStore) *ListenRawMessag
 // RegisterRoutes registers raw message routes on the given mux.
 func (h *ListenRawMessagesHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/listen-raw-messages", h.authMiddleware(h.handleList))
+	mux.HandleFunc("POST /v1/listen-raw-messages/reset-processed", h.authMiddleware(h.handleResetProcessed))
 }
 
 func (h *ListenRawMessagesHandler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
@@ -73,3 +74,23 @@ func (h *ListenRawMessagesHandler) handleList(w http.ResponseWriter, r *http.Req
 	})
 }
 
+func (h *ListenRawMessagesHandler) handleResetProcessed(w http.ResponseWriter, r *http.Request) {
+	agentID := r.URL.Query().Get("agent_id")
+	graphID := r.URL.Query().Get("graph_id")
+	if agentID == "" || graphID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "agent_id and graph_id query params are required"})
+		return
+	}
+
+	affected, err := h.store.ResetProcessed(r.Context(), agentID, graphID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"reset_count": affected,
+		"agent_id":    agentID,
+		"graph_id":    graphID,
+	})
+}
