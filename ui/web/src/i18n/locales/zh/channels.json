@@ -348,6 +348,10 @@
     "whatsapp": {
       "createLabel": "创建并扫码",
       "formBanner": "创建后，请用 WhatsApp 扫描二维码完成认证。"
+    },
+    "wechat": {
+      "createLabel": "创建并扫码",
+      "formBanner": "创建后，请用微信扫描二维码完成认证。"
     }
   },
   "fallback": {
@@ -412,5 +416,17 @@
     "relinkDevice": "重新连接",
     "connectedSuccess": "✅ WhatsApp 连接成功！",
     "tabQrCode": "二维码"
+  },
+  "wechat": {
+    "loginSuccessLoading": "✅ 微信登录成功！正在加载 channel...",
+    "generatingQr": "正在生成二维码...",
+    "scanHint": "请使用微信扫描上方二维码登录",
+    "reauthTitle": "重新连接微信：{{name}}",
+    "waitingForQr": "正在等待二维码...",
+    "connectedSuccess": "✅ 微信连接成功！",
+    "initializing": "初始化中...",
+    "skip": "跳过",
+    "retry": "重试",
+    "close": "关闭"
   }
 }

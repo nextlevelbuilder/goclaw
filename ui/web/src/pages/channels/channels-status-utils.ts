@@ -15,6 +15,9 @@ export const channelTypeLabels: Record<string, string> = {
   zalo_oa: "Zalo OA",
   zalo_personal: "Zalo Personal",
   whatsapp: "WhatsApp",
+  wechat: "WeChat",
+  facebook: "Facebook",
+  pancake: "Pancake",
 };
 
 export type BadgeVariant =

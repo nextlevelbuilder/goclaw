@@ -433,6 +433,10 @@
     "whatsapp": {
       "createLabel": "Create & Scan QR",
       "formBanner": "After creating, scan the QR code with WhatsApp to authenticate."
+    },
+    "wechat": {
+      "createLabel": "Create & Scan QR",
+      "formBanner": "After creating, scan the QR code with WeChat to authenticate."
     }
   },
   "fallback": {
@@ -497,5 +501,17 @@
     "relinkDevice": "Re-link Device",
     "connectedSuccess": "✅ WhatsApp connected successfully!",
     "tabQrCode": "QR Code"
+  },
+  "wechat": {
+    "loginSuccessLoading": "✅ WeChat connected! Loading channel...",
+    "generatingQr": "Generating QR code...",
+    "scanHint": "Scan with WeChat to log in",
+    "reauthTitle": "Reconnect WeChat: {{name}}",
+    "waitingForQr": "Waiting for QR code...",
+    "connectedSuccess": "✅ WeChat connected successfully!",
+    "initializing": "Initializing...",
+    "skip": "Skip",
+    "retry": "Retry",
+    "close": "Close"
   }
 }

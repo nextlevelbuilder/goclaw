@@ -16,7 +16,8 @@
   },
   "channelTypes": {
     "telegram": "Telegram",
-    "discord": "Discord"
+    "discord": "Discord",
+    "wechat": "WeChat"
   },
   "form": {
     "createTitle": "Thêm kênh",

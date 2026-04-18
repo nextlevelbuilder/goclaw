@@ -105,6 +105,10 @@ const (
 	EventWhatsAppQRCode = "whatsapp.qr.code"
 	EventWhatsAppQRDone = "whatsapp.qr.done"
 
+	// WeChat QR login events (client-scoped, not broadcast).
+	EventWeChatQRCode = "wechat.qr.code"
+	EventWeChatQRDone = "wechat.qr.done"
+
 	// Tenant access revocation — forces affected user's UI to logout.
 	EventTenantAccessRevoked = "tenant.access.revoked"
 

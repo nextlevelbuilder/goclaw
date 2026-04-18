@@ -16,7 +16,8 @@
   },
   "channelTypes": {
     "telegram": "Telegram",
-    "discord": "Discord"
+    "discord": "Discord",
+    "wechat": "微信"
   },
   "form": {
     "createTitle": "添加频道",
