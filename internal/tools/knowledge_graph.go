@@ -148,6 +148,9 @@ func (t *KnowledgeGraphSearchTool) executeTraversal(ctx context.Context, agentID
 		sb.WriteString(fmt.Sprintf("Graph traversal from %q (max depth %d):\n\n", entityID, maxDepth))
 		for _, r := range results {
 			sb.WriteString(fmt.Sprintf("- [depth %d] %s (%s)", r.Depth, r.Entity.Name, r.Entity.EntityType))
+			if r.Entity.EventTime != nil {
+				sb.WriteString(fmt.Sprintf(" (event: %s)", r.Entity.EventTime.Format("2006-01-02 15:04")))
+			}
 			if r.Via != "" {
 				if strings.HasPrefix(r.Via, "~") {
 					sb.WriteString(fmt.Sprintf(" ←[%s]—", r.Via[1:]))
@@ -214,7 +217,11 @@ func (t *KnowledgeGraphSearchTool) executeListAll(ctx context.Context, agentID, 
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Knowledge graph has %d entities:\n\n", len(entities)))
 	for _, e := range entities {
-		sb.WriteString(fmt.Sprintf("- %s [%s] (id: %s)\n", e.Name, e.EntityType, e.ID))
+		sb.WriteString(fmt.Sprintf("- %s [%s] (id: %s)", e.Name, e.EntityType, e.ID))
+		if e.EventTime != nil {
+			sb.WriteString(fmt.Sprintf(" (event: %s)", e.EventTime.Format("2006-01-02 15:04")))
+		}
+		sb.WriteString("\n")
 		if e.Description != "" {
 			sb.WriteString(fmt.Sprintf("  %s\n", e.Description))
 		}
@@ -306,7 +313,11 @@ func (t *KnowledgeGraphSearchTool) executeSearch(ctx context.Context, agentID, u
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Found %d entities matching %q:\n\n", len(entities), query))
 	for _, e := range entities {
-		sb.WriteString(fmt.Sprintf("- %s [%s] (id: %s)\n", e.Name, e.EntityType, e.ID))
+		sb.WriteString(fmt.Sprintf("- %s [%s] (id: %s)", e.Name, e.EntityType, e.ID))
+		if e.EventTime != nil {
+			sb.WriteString(fmt.Sprintf(" (event: %s)", e.EventTime.Format("2006-01-02 15:04")))
+		}
+		sb.WriteString("\n")
 		if e.Description != "" {
 			sb.WriteString(fmt.Sprintf("  %s\n", e.Description))
 		}
@@ -353,7 +364,11 @@ func (t *KnowledgeGraphSearchTool) noResultsHint(ctx context.Context, agentID, u
 	sb.WriteString(fmt.Sprintf("No entities found matching %q. ", query))
 	sb.WriteString(fmt.Sprintf("The knowledge graph has %d entities. Here are some available ones:\n\n", len(top)))
 	for _, e := range top {
-		sb.WriteString(fmt.Sprintf("- %s [%s] (id: %s)\n", e.Name, e.EntityType, e.ID))
+		sb.WriteString(fmt.Sprintf("- %s [%s] (id: %s)", e.Name, e.EntityType, e.ID))
+		if e.EventTime != nil {
+			sb.WriteString(fmt.Sprintf(" (event: %s)", e.EventTime.Format("2006-01-02 15:04")))
+		}
+		sb.WriteString("\n")
 	}
 	sb.WriteString("\nTry searching with a specific name from the list above, or use query='*' to see all.")
 	return NewResult(sb.String())

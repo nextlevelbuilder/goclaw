@@ -80,7 +80,7 @@ func (s *SQLiteKnowledgeGraphStore) GetEntity(ctx context.Context, agentID, user
 
 	row := s.db.QueryRowContext(ctx,
 		`SELECT id, agent_id, user_id, external_id, name, entity_type, description,
-		        properties, source_id, confidence, created_at, updated_at
+		        properties, source_id, confidence, created_at, updated_at, event_time
 		 FROM kg_entities
 		 WHERE id = ? AND agent_id = ?`+userClause+sc,
 		args...,
@@ -136,7 +136,7 @@ func (s *SQLiteKnowledgeGraphStore) ListEntities(ctx context.Context, agentID, u
 
 	q := fmt.Sprintf(`
 		SELECT id, agent_id, user_id, external_id, name, entity_type, description,
-		       properties, source_id, confidence, created_at, updated_at
+		       properties, source_id, confidence, created_at, updated_at, event_time
 		FROM kg_entities WHERE %s
 		ORDER BY updated_at DESC LIMIT ? OFFSET ?`, where)
 
@@ -175,7 +175,7 @@ func (s *SQLiteKnowledgeGraphStore) SearchEntities(ctx context.Context, agentID,
 
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, agent_id, user_id, external_id, name, entity_type, description,
-		        properties, source_id, confidence, created_at, updated_at
+		        properties, source_id, confidence, created_at, updated_at, event_time
 		 FROM kg_entities WHERE `+where+` ORDER BY updated_at DESC LIMIT ?`,
 		args...,
 	)

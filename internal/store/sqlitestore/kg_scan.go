@@ -83,18 +83,20 @@ func scanJSONStringMap(data []byte) (map[string]string, error) {
 // scanEntity scans a database row into a store.Entity.
 // Column order: id, agent_id, user_id, external_id, name, entity_type, description,
 //
-//	properties, source_id, confidence, created_at, updated_at
+//	properties, source_id, confidence, created_at, updated_at, event_time
 func scanEntity(rows interface {
 	Scan(dest ...any) error
 }) (store.Entity, error) {
 	var e store.Entity
 	var props []byte
 	var createdAt, updatedAt any
+	var eventTime nullSqliteTime
 	err := rows.Scan(
 		&e.ID, &e.AgentID, &e.UserID, &e.ExternalID,
 		&e.Name, &e.EntityType, &e.Description,
 		&props, &e.SourceID, &e.Confidence,
 		&createdAt, &updatedAt,
+		&eventTime,
 	)
 	if err != nil {
 		return e, err
@@ -104,6 +106,10 @@ func scanEntity(rows interface {
 	if len(props) > 0 {
 		p, _ := scanJSONStringMap(props)
 		e.Properties = p
+	}
+	if eventTime.Valid {
+		t := eventTime.Time
+		e.EventTime = &t
 	}
 	return e, nil
 }

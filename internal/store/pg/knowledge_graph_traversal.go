@@ -54,7 +54,7 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 			e.id, e.agent_id, e.user_id, e.external_id,
 			e.name, e.entity_type, e.description,
 			e.properties, e.source_id, e.confidence,
-			e.created_at, e.updated_at,
+			e.created_at, e.updated_at, e.event_time,
 			1 AS depth,
 			ARRAY[e.id::text] AS path,
 			''::text AS via
@@ -67,7 +67,7 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 			e.id, e.agent_id, e.user_id, e.external_id,
 			e.name, e.entity_type, e.description,
 			e.properties, e.source_id, e.confidence,
-			e.created_at, e.updated_at,
+			e.created_at, e.updated_at, e.event_time,
 			p.depth + 1,
 			p.path || e.id::text,
 			CASE WHEN r.source_entity_id = p.id
@@ -84,7 +84,7 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 		id, agent_id, user_id, external_id,
 		name, entity_type, description,
 		properties, source_id, confidence,
-		created_at, updated_at,
+		created_at, updated_at, event_time,
 		depth, path, via
 	FROM paths WHERE depth > 1`, userWhere, tc, userWhere, userWhere, depthN)
 
