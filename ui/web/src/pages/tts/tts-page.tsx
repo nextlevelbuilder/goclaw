@@ -28,9 +28,9 @@ import { BehaviorSection } from "./sections/behavior-section";
 function getVoiceId(draft: TtsConfig): string {
   switch (draft.provider) {
     case "openai": return draft.openai.voice ?? "";
-    case "elevenlabs": return draft.elevenlabs.voice_id ?? "";
+    case "elevenlabs": return draft.elevenlabs.voice_id ?? draft.elevenlabs.voice ?? "";
     case "edge": return draft.edge.voice ?? "";
-    case "minimax": return draft.minimax.voice_id ?? "";
+    case "minimax": return draft.minimax.voice_id ?? draft.minimax.voice ?? "";
     default: return "";
   }
 }
@@ -38,8 +38,8 @@ function getVoiceId(draft: TtsConfig): string {
 function getModelId(draft: TtsConfig): string {
   switch (draft.provider) {
     case "openai": return draft.openai.model ?? "";
-    case "elevenlabs": return draft.elevenlabs.model_id ?? "";
-    case "minimax": return draft.minimax.model ?? "";
+    case "elevenlabs": return draft.elevenlabs.model_id ?? draft.elevenlabs.model ?? "";
+    case "minimax": return draft.minimax.model_id ?? draft.minimax.model ?? "";
     default: return "";
   }
 }
@@ -49,9 +49,9 @@ type ProviderKey = keyof Pick<TtsConfig, "openai" | "elevenlabs" | "edge" | "min
 function voicePatch(provider: string, value: string): [ProviderKey, Partial<TtsProviderConfig>] | null {
   switch (provider) {
     case "openai": return ["openai", { voice: value }];
-    case "elevenlabs": return ["elevenlabs", { voice_id: value }];
+    case "elevenlabs": return ["elevenlabs", { voice: value, voice_id: value }];
     case "edge": return ["edge", { voice: value }];
-    case "minimax": return ["minimax", { voice_id: value }];
+    case "minimax": return ["minimax", { voice: value, voice_id: value }];
     default: return null;
   }
 }
@@ -59,8 +59,8 @@ function voicePatch(provider: string, value: string): [ProviderKey, Partial<TtsP
 function modelPatch(provider: string, value: string): [ProviderKey, Partial<TtsProviderConfig>] | null {
   switch (provider) {
     case "openai": return ["openai", { model: value }];
-    case "elevenlabs": return ["elevenlabs", { model_id: value }];
-    case "minimax": return ["minimax", { model: value }];
+    case "elevenlabs": return ["elevenlabs", { model: value, model_id: value }];
+    case "minimax": return ["minimax", { model: value, model_id: value }];
     default: return null;
   }
 }

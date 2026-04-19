@@ -101,7 +101,7 @@ export function CredentialsSection({ provider, draft, onUpdate, testConnection, 
               <Label htmlFor="el-base">{t("elevenlabs.baseUrl")}</Label>
               <Input id="el-base" className="text-base md:text-sm"
                 value={draft.elevenlabs.base_url ?? ""}
-                onChange={(e) => onUpdate("elevenlabs", { base_url: e.target.value })}
+                onChange={(e) => onUpdate("elevenlabs", { api_base: e.target.value, base_url: e.target.value })}
                 placeholder="https://api.elevenlabs.io" />
             </div>
           </>
