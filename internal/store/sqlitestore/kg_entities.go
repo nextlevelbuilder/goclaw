@@ -46,8 +46,8 @@ func (s *SQLiteKnowledgeGraphStore) UpsertEntity(ctx context.Context, entity *st
 	err = s.db.QueryRowContext(ctx, `
 		INSERT INTO kg_entities
 			(id, agent_id, user_id, external_id, name, entity_type, description,
-			 properties, source_id, confidence, tenant_id, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			 properties, source_id, confidence, tenant_id, created_at, updated_at, event_time)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(agent_id, user_id, external_id) DO UPDATE SET
 			name        = excluded.name,
 			entity_type = excluded.entity_type,
@@ -56,11 +56,13 @@ func (s *SQLiteKnowledgeGraphStore) UpsertEntity(ctx context.Context, entity *st
 			source_id   = excluded.source_id,
 			confidence  = excluded.confidence,
 			tenant_id   = excluded.tenant_id,
-			updated_at  = excluded.updated_at
+			updated_at  = excluded.updated_at,
+			event_time  = CASE WHEN excluded.event_time IS NOT NULL THEN excluded.event_time ELSE kg_entities.event_time END
 		RETURNING id`,
 		id, entity.AgentID, entity.UserID, entity.ExternalID,
 		entity.Name, entity.EntityType, entity.Description,
 		string(props), entity.SourceID, entity.Confidence, tid, now, now,
+		formatSqliteTime(entity.EventTime),
 	).Scan(&actualID)
 	if err != nil {
 		return err
@@ -284,7 +286,7 @@ func (s *SQLiteKnowledgeGraphStore) ListEntitiesTemporal(ctx context.Context, ag
 
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, agent_id, user_id, external_id, name, entity_type, description,
-		        properties, source_id, confidence, created_at, updated_at, valid_from, valid_until
+		        properties, source_id, confidence, created_at, updated_at, valid_from, valid_until, event_time
 		 FROM kg_entities WHERE `+where+`
 		 ORDER BY created_at DESC LIMIT ? OFFSET ?`,
 		args...,
@@ -336,6 +338,48 @@ func (s *SQLiteKnowledgeGraphStore) SupersedeEntity(ctx context.Context, old *st
 	}
 
 	return tx.Commit()
+}
+
+// SearchEntitiesByEventTime returns entities whose event_time falls within [fromTime, toTime].
+// Either bound may be nil for open-ended ranges. Only returns entities with non-NULL event_time.
+func (s *SQLiteKnowledgeGraphStore) SearchEntitiesByEventTime(ctx context.Context, agentID, userID string, fromTime, toTime *time.Time, limit int) ([]store.Entity, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+
+	uc, ucArgs := kgUserClauseFor(ctx, userID)
+	where := "agent_id = ? AND valid_until IS NULL AND event_time IS NOT NULL" + uc
+	args := []any{agentID}
+	args = append(args, ucArgs...)
+
+	if fromTime != nil {
+		where += " AND event_time >= ?"
+		args = append(args, fromTime.UTC().Format(time.RFC3339Nano))
+	}
+	if toTime != nil {
+		where += " AND event_time <= ?"
+		args = append(args, toTime.UTC().Format(time.RFC3339Nano))
+	}
+
+	sc, scArgs, _ := scopeClause(ctx)
+	if sc != "" {
+		where += sc
+		args = append(args, scArgs...)
+	}
+	args = append(args, limit)
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, agent_id, user_id, external_id, name, entity_type, description,
+		        properties, source_id, confidence, created_at, updated_at, valid_from, valid_until, event_time
+		 FROM kg_entities WHERE `+where+`
+		 ORDER BY event_time DESC LIMIT ?`,
+		args...,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("search entities by event time: %w", err)
+	}
+	defer rows.Close()
+	return scanEntityTemporalRows(rows)
 }
 
 // scanEntityRows scans multiple entity rows (no temporal columns).

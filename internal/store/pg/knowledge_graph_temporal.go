@@ -19,7 +19,7 @@ func (s *PGKnowledgeGraphStore) ListEntitiesTemporal(ctx context.Context, agentI
 	}
 
 	q := `SELECT id, agent_id, user_id, external_id, name, entity_type, description,
-	             properties, source_id, confidence, created_at, updated_at, valid_from, valid_until
+	             properties, source_id, confidence, created_at, updated_at, valid_from, valid_until, event_time
 	      FROM kg_entities WHERE agent_id = $1 AND user_id = $2`
 	args := []any{aid, userID}
 	argN := 3
@@ -113,3 +113,59 @@ func (s *PGKnowledgeGraphStore) SupersedeEntity(ctx context.Context, old *store.
 	return tx.Commit()
 }
 
+// SearchEntitiesByEventTime returns entities whose event_time falls within [fromTime, toTime].
+// Either bound may be nil for open-ended ranges. Only returns entities with non-NULL event_time.
+func (s *PGKnowledgeGraphStore) SearchEntitiesByEventTime(ctx context.Context, agentID, userID string, fromTime, toTime *time.Time, limit int) ([]store.Entity, error) {
+	aid, err := parseUUID(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("kg search by event time: %w", err)
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+
+	where := "agent_id = $1 AND valid_until IS NULL AND event_time IS NOT NULL"
+	args := []any{aid}
+	argN := 2
+
+	if !store.IsSharedKG(ctx) && userID != "" {
+		where += fmt.Sprintf(" AND user_id = $%d", argN)
+		args = append(args, userID)
+		argN++
+	}
+	if fromTime != nil {
+		where += fmt.Sprintf(" AND event_time >= $%d", argN)
+		args = append(args, *fromTime)
+		argN++
+	}
+	if toTime != nil {
+		where += fmt.Sprintf(" AND event_time <= $%d", argN)
+		args = append(args, *toTime)
+		argN++
+	}
+
+	tc, tcArgs, _, err := scopeClause(ctx, argN)
+	if err != nil {
+		return nil, err
+	}
+	if tc != "" {
+		where += tc
+		args = append(args, tcArgs...)
+		argN += len(tcArgs)
+	}
+
+	args = append(args, limit)
+	q := fmt.Sprintf(`SELECT id, agent_id, user_id, external_id, name, entity_type, description,
+	             properties, source_id, confidence, created_at, updated_at, valid_from, valid_until, event_time
+	      FROM kg_entities WHERE %s ORDER BY event_time DESC LIMIT $%d`, where, argN)
+
+	var tRows []entityTemporalRow
+	if err := pkgSqlxDB.SelectContext(ctx, &tRows, q, args...); err != nil {
+		return nil, fmt.Errorf("search entities by event time: %w", err)
+	}
+	entities := make([]store.Entity, len(tRows))
+	for i := range tRows {
+		entities[i] = tRows[i].toEntity()
+	}
+	return entities, nil
+}

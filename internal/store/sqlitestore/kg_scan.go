@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -91,20 +92,21 @@ func scanEntity(rows interface {
 // scanEntityTemporal scans a database row into a store.Entity including temporal fields.
 // Column order: id, agent_id, user_id, external_id, name, entity_type, description,
 //
-//	properties, source_id, confidence, created_at, updated_at, valid_from, valid_until
+//	properties, source_id, confidence, created_at, updated_at, valid_from, valid_until, event_time
 func scanEntityTemporal(rows interface {
 	Scan(dest ...any) error
 }) (store.Entity, error) {
 	var e store.Entity
 	var props []byte
 	var createdAt, updatedAt any
-	var validFrom, validUntil nullSqliteTime
+	var validFrom, validUntil, eventTime nullSqliteTime
 	err := rows.Scan(
 		&e.ID, &e.AgentID, &e.UserID, &e.ExternalID,
 		&e.Name, &e.EntityType, &e.Description,
 		&props, &e.SourceID, &e.Confidence,
 		&createdAt, &updatedAt,
 		&validFrom, &validUntil,
+		&eventTime,
 	)
 	if err != nil {
 		return e, err
@@ -122,6 +124,10 @@ func scanEntityTemporal(rows interface {
 	if validUntil.Valid {
 		t := validUntil.Time
 		e.ValidUntil = &t
+	}
+	if eventTime.Valid {
+		t := eventTime.Time
+		e.EventTime = &t
 	}
 	return e, nil
 }
@@ -150,4 +156,13 @@ func scanRelation(rows interface {
 		r.Properties = p
 	}
 	return r, nil
+}
+
+// formatSqliteTime formats a *time.Time as RFC3339Nano for SQLite TEXT columns.
+// Returns nil if the time is nil (so SQLite stores NULL).
+func formatSqliteTime(t *time.Time) any {
+	if t == nil {
+		return nil
+	}
+	return t.UTC().Format(time.RFC3339Nano)
 }

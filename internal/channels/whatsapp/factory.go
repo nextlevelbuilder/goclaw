@@ -29,6 +29,7 @@ type whatsappInstanceConfig struct {
 	ListenFlushSec  int      `json:"listen_flush_sec,omitempty"`
 	ListenMinConf   float64  `json:"listen_min_conf,omitempty"`
 	ListenExtractPollSec int `json:"listen_extract_poll_sec,omitempty"`
+	MediaCaptionDelayMs  int `json:"media_caption_delay_ms,omitempty"`
 }
 
 // FactoryWithDB returns a ChannelFactory with DB access for whatsmeow auth state.
@@ -76,6 +77,7 @@ func FactoryWithDB(db *sql.DB, pendingStore store.PendingMessageStore, dialect s
 			ListenFlushSec: ic.ListenFlushSec,
 			ListenMinConf:  ic.ListenMinConf,
 			ListenExtractPollSec: ic.ListenExtractPollSec,
+		MediaCaptionDelayMs:  ic.MediaCaptionDelayMs,
 		}
 
 		// Parse per-group overrides from config JSONB.

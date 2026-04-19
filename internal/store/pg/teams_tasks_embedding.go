@@ -70,7 +70,7 @@ func (s *PGTeamStore) BackfillTaskEmbeddings(ctx context.Context) (int, error) {
 			break
 		}
 
-		slog.Info("backfilling task embeddings", "batch", len(pending), "total_so_far", total)
+		slog.Debug("backfilling task embeddings", "batch", len(pending), "total_so_far", total)
 
 		// Batch embed all subjects at once.
 		texts := make([]string, len(pending))

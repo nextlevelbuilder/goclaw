@@ -64,7 +64,7 @@ func (s *PGAgentStore) BackfillAgentEmbeddings(ctx context.Context) (int, error)
 		return 0, nil
 	}
 
-	slog.Info("backfilling agent embeddings", "count", len(pending))
+	slog.Debug("backfilling agent embeddings", "count", len(pending))
 	updated := 0
 	for _, ag := range pending {
 		text := ag.DisplayName

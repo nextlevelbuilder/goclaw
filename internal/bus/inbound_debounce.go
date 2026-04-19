@@ -48,11 +48,13 @@ func (d *InboundDebouncer) Push(msg InboundMessage) {
 
 	key := debounceKey(msg)
 
-	// Media messages bypass debounce — flush any buffered text first, then process media.
+	// Media messages go through the same debounce buffer as text.
+	// This allows follow-up caption text to be merged with the media message
+	// (WhatsApp and similar channels may send media and caption as separate events).
+	// When a media message arrives, flush any previously buffered messages for this key
+	// first to avoid merging unrelated text with media, then buffer the media.
 	if len(msg.Media) > 0 {
 		d.flushKey(key)
-		d.flushFn(msg)
-		return
 	}
 
 	d.mu.Lock()
