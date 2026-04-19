@@ -3,6 +3,7 @@ package pg
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -48,6 +49,13 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 	args = append(args, maxDepth)
 
 	// userWhere is applied to: base entity, recursive relation join, recursive entity join
+	// Qualify user_id with table alias for the recursive JOINs (paths, kg_relations, kg_entities all have user_id).
+	userWhereR := userWhere
+	userWhereE := userWhere
+	if userWhere != "" {
+		userWhereR = strings.Replace(userWhere, "user_id", "r.user_id", 1)
+		userWhereE = strings.Replace(userWhere, "user_id", "e.user_id", 1)
+	}
 	q := fmt.Sprintf(`
 	WITH RECURSIVE paths AS (
 		SELECT
@@ -86,7 +94,7 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 		properties, source_id, confidence,
 		created_at, updated_at, event_time,
 		depth, path, via
-	FROM paths WHERE depth > 1`, userWhere, tc, userWhere, userWhere, depthN)
+	FROM paths WHERE depth > 1`, userWhere, tc, userWhereR, userWhereE, depthN)
 
 	// Use sqlx on the transaction for struct scanning with pq.StringArray support.
 	txSqlx := sqlxTx(tx)
