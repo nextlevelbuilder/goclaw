@@ -19,29 +19,80 @@ pip install shot-scraper
 shot-scraper install  # downloads Chromium browser
 ```
 
-## Workflow: Screenshot → Public Download Link
+## Sharing Mode
 
-After taking a screenshot, always create a shareable download link:
+After taking a screenshot, share it via one of two modes. Check environment variables to determine which mode to use:
+
+### Mode 1: GoClaw Signed URL (default)
+
+Use when `GOCLAW_GATEWAY_TOKEN` and `GOCLAW_SITE_URL` are set. No extra config needed.
 
 ```bash
-# 1. Take screenshot — save to workspace directory
-shot-scraper https://example.com -o /app/workspace/screenshots/example-$(date +%s).png --full-page
+# 1. Take screenshot — save to workspace
+FILENAME="screenshot-$(date +%s).png"
+shot-scraper https://example.com -o "$GOCLAW_WORKSPACE_DIR/screenshots/$FILENAME" --full-page
 
-# 2. Create signed public URL via GoClaw API
-curl -s -X POST http://localhost:18790/v1/files/sign \
+# 2. Sign the file path to get a public token
+SIGN_RESPONSE=$(curl -s -X POST http://localhost:${GOCLAW_PORT:-18790}/v1/files/sign \
   -H "Authorization: Bearer $GOCLAW_GATEWAY_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"path": "/app/workspace/screenshots/example-1234567890.png"}'
-# Returns: {"url": "/v1/files/app/workspace/screenshots/example-1234567890.png?ft=signed_token"}
+  -d "{\"path\": \"$GOCLAW_WORKSPACE_DIR/screenshots/$FILENAME\"}")
 
-# 3. Build full public URL
-# https://<GOCLAW_SITE_URL>/v1/files/app/workspace/screenshots/example-1234567890.png?ft=signed_token
+# 3. Extract URL path and build full public link
+URL_PATH=$(echo "$SIGN_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['url'])")
+PUBLIC_URL="${GOCLAW_SITE_URL}${URL_PATH}"
+
+echo "Download: $PUBLIC_URL"
 ```
 
-**IMPORTANT:** Always follow this 3-step flow:
-1. `shot-scraper` → save file to workspace
-2. Sign the file path via `/v1/files/sign` API
-3. Return the full public URL to the user so they can click to download
+### Mode 2: S3 Upload
+
+Use when S3 environment variables are configured. Supports AWS S3, MinIO, Cloudflare R2, DigitalOcean Spaces, or any S3-compatible service.
+
+**Required env vars:**
+- `SCREENSHOT_S3_BUCKET` — bucket name
+- `SCREENSHOT_S3_REGION` — region (default: us-east-1)
+- `AWS_ACCESS_KEY_ID` — access key
+- `AWS_SECRET_ACCESS_KEY` — secret key
+- `SCREENSHOT_S3_ENDPOINT` — custom endpoint for S3-compatible services (optional)
+- `SCREENSHOT_S3_PREFIX` — key prefix (default: screenshots/)
+- `SCREENSHOT_S3_PUBLIC_URL` — base URL for public access (e.g. https://cdn.example.com)
+
+```bash
+# 1. Take screenshot
+FILENAME="screenshot-$(date +%s).png"
+shot-scraper https://example.com -o "/tmp/$FILENAME" --full-page
+
+# 2. Upload to S3
+S3_KEY="${SCREENSHOT_S3_PREFIX:-screenshots/}$FILENAME"
+
+# For AWS S3:
+aws s3 cp "/tmp/$FILENAME" "s3://${SCREENSHOT_S3_BUCKET}/${S3_KEY}" --acl public-read
+
+# For S3-compatible (MinIO, R2, DO Spaces):
+aws s3 cp "/tmp/$FILENAME" "s3://${SCREENSHOT_S3_BUCKET}/${S3_KEY}" \
+  --endpoint-url "$SCREENSHOT_S3_ENDPOINT" --acl public-read
+
+# 3. Build public URL
+if [ -n "$SCREENSHOT_S3_PUBLIC_URL" ]; then
+  PUBLIC_URL="${SCREENSHOT_S3_PUBLIC_URL}/${S3_KEY}"
+else
+  PUBLIC_URL="https://${SCREENSHOT_S3_BUCKET}.s3.${SCREENSHOT_S3_REGION:-us-east-1}.amazonaws.com/${S3_KEY}"
+fi
+
+echo "Download: $PUBLIC_URL"
+
+# 4. Clean up local file
+rm -f "/tmp/$FILENAME"
+```
+
+### Mode Selection Logic
+
+Use this decision flow:
+1. If `SCREENSHOT_S3_BUCKET` is set → use **S3 mode**
+2. Otherwise → use **GoClaw signed URL mode** (default)
+
+Always return the public URL to the user as a clickable link.
 
 ## Basic Usage
 
@@ -150,5 +201,5 @@ shot-scraper html -i page.html -o output.png
 - Default output is PNG; use `.jpg` extension for JPEG
 - For SPAs, use `--wait` or `--javascript` to ensure content loads
 - Use `--full-page` for long pages, otherwise only viewport is captured
-- Always save to workspace dir so the file is accessible via GoClaw file API
-- Always create a signed URL and return a clickable public link to the user
+- Always return a clickable public download link to the user
+- S3 mode is best for permanent links; GoClaw signed URLs expire after a set TTL
