@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -42,6 +43,10 @@ func (s *SQLiteSecureCLIStore) Create(ctx context.Context, b *store.SecureCLIBin
 	if b.ID == uuid.Nil {
 		b.ID = store.GenNewID()
 	}
+
+	// Normalize binary_name to lowercase so IsRegisteredBinary (which lowercases
+	// the candidate) can match. Admin entering "Gh" becomes "gh".
+	b.BinaryName = strings.ToLower(strings.TrimSpace(b.BinaryName))
 
 	var envBytes []byte
 	if len(b.EncryptedEnv) > 0 && s.encKey != "" {
@@ -188,6 +193,13 @@ func (s *SQLiteSecureCLIStore) Update(ctx context.Context, id uuid.UUID, updates
 	for k := range updates {
 		if !secureCLIAllowedFields[k] {
 			delete(updates, k)
+		}
+	}
+
+	// Normalize binary_name to lowercase if updated (parity with Create).
+	if nameVal, ok := updates["binary_name"]; ok {
+		if nameStr, isStr := nameVal.(string); isStr {
+			updates["binary_name"] = strings.ToLower(strings.TrimSpace(nameStr))
 		}
 	}
 
@@ -408,6 +420,35 @@ func (s *SQLiteSecureCLIStore) ListEnabled(ctx context.Context) ([]store.SecureC
 		return nil, err
 	}
 	return s.scanRows(rows)
+}
+
+// IsRegisteredBinary reports whether a binary requires a grant (is_global=0)
+// and is enabled for the current tenant. See interface godoc for rationale.
+func (s *SQLiteSecureCLIStore) IsRegisteredBinary(ctx context.Context, binaryName string) (bool, error) {
+	name := strings.ToLower(strings.TrimSpace(binaryName))
+	if name == "" {
+		return false, nil
+	}
+	query := `SELECT EXISTS(
+		SELECT 1 FROM secure_cli_binaries
+		WHERE LOWER(binary_name) = ?
+		  AND enabled = 1
+		  AND is_global = 0`
+	args := []any{name}
+	if !store.IsCrossTenant(ctx) {
+		tid := store.TenantIDFromContext(ctx)
+		if tid == uuid.Nil {
+			return false, nil
+		}
+		query += ` AND tenant_id = ?`
+		args = append(args, tid)
+	}
+	query += `)`
+	var exists bool
+	if err := s.db.QueryRowContext(ctx, query, args...).Scan(&exists); err != nil {
+		return false, err
+	}
+	return exists, nil
 }
 
 // ListForAgent returns all CLIs accessible by an agent (global + granted),

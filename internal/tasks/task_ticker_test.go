@@ -470,13 +470,11 @@ func TestTaskTicker_ConcurrentStartStop_Race(t *testing.T) {
 	tt.Start()
 
 	var wg sync.WaitGroup
-	for i := 0; i < 5; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 5 {
+		wg.Go(func() {
 			// Access cooldown map concurrently via pruneCooldowns (uses lock).
 			tt.pruneCooldowns()
-		}()
+		})
 	}
 	wg.Wait()
 	tt.Stop()

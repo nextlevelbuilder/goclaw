@@ -63,7 +63,11 @@ export function useAgentCrud() {
     setAgents((prev) => prev.map((a) => a.id === id ? { ...a, status: 'summoning' } : a))
   }, [])
 
+  const cancelSummonAgent = useCallback(async (id: string) => {
+    await agentService.cancelSummon(id)
+  }, [])
+
   const atLimit = agents.length >= MAX_AGENTS_LITE
 
-  return { agents, loading, atLimit, fetchAgents, createAgent, updateAgent, deleteAgent, resummonAgent }
+  return { agents, loading, atLimit, fetchAgents, createAgent, updateAgent, deleteAgent, resummonAgent, cancelSummonAgent }
 }

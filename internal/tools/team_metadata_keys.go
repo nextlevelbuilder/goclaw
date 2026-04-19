@@ -8,6 +8,14 @@ const (
 	MetaOriginPeerKind   = "origin_peer_kind"
 	MetaOriginChatID     = "origin_chat_id"
 	MetaOriginUserID     = "origin_user_id"
+	// MetaOriginSenderID carries the real acting sender through announce re-ingress
+	// so permission checks (e.g. CheckFileWriterPermission) attribute to the
+	// original user rather than a synthetic "subagent:<id>" / "notification:system" string.
+	MetaOriginSenderID   = "origin_sender_id"
+	// MetaOriginRole carries the caller's RBAC role through dispatch + re-ingress
+	// so permission checks can bypass per-user grants for authenticated admins
+	// (e.g. dashboard user dispatches a task that writes files in a group chat).
+	MetaOriginRole       = "origin_role"
 	MetaOriginLocalKey   = "origin_local_key"
 	MetaOriginSessionKey = "origin_session_key"
 	MetaOriginTraceID    = "origin_trace_id"

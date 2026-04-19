@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
+import { useUiStore } from "@/stores/use-ui-store";
 
 export interface PaginationState {
   page: number;
@@ -23,8 +24,11 @@ export function usePagination<T>(
   items: T[],
   options: UsePaginationOptions = {},
 ): UsePaginationReturn<T> {
+  const globalPageSize = useUiStore((s) => s.pageSize);
+  const setGlobalPageSize = useUiStore((s) => s.setPageSize);
+
   const [page, setPageRaw] = useState(1);
-  const [pageSize, setPageSizeRaw] = useState(options.defaultPageSize ?? 20);
+  const [pageSize, setPageSizeRaw] = useState(options.defaultPageSize ?? globalPageSize);
 
   const total = items.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -45,7 +49,8 @@ export function usePagination<T>(
   const setPageSize = useCallback((size: number) => {
     setPageSizeRaw(size);
     setPageRaw(1);
-  }, []);
+    setGlobalPageSize(size);
+  }, [setGlobalPageSize]);
 
   const resetPage = useCallback(() => setPageRaw(1), []);
 

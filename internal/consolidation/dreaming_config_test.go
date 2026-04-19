@@ -12,7 +12,8 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-func boolPtr(b bool) *bool { return &b }
+//go:fix inline
+func boolPtr(b bool) *bool { return new(b) }
 
 func TestMergeDreamingConfigNilOverrideReturnsBase(t *testing.T) {
 	base := defaultDreamingConfig()
@@ -44,7 +45,7 @@ func TestMergeDreamingConfigPartialOverride(t *testing.T) {
 
 func TestMergeDreamingConfigDisable(t *testing.T) {
 	base := defaultDreamingConfig()
-	override := &config.DreamingConfig{Enabled: boolPtr(false)}
+	override := &config.DreamingConfig{Enabled: new(false)}
 	got := mergeDreamingConfig(base, override)
 	if got.Enabled {
 		t.Errorf("Enabled = true, want false (override)")
@@ -67,7 +68,7 @@ func TestMergeDreamingConfigVerboseLogNilPreservesDefault(t *testing.T) {
 func TestMergeDreamingConfigVerboseLogExplicitFalse(t *testing.T) {
 	base := defaultDreamingConfig()
 	base.VerboseLog = true
-	override := &config.DreamingConfig{VerboseLog: boolPtr(false)}
+	override := &config.DreamingConfig{VerboseLog: new(false)}
 	got := mergeDreamingConfig(base, override)
 	if got.VerboseLog {
 		t.Errorf("VerboseLog = true, want false (explicit override must apply)")
@@ -145,7 +146,7 @@ func TestDreamingWorkerHandleDisabledSkips(t *testing.T) {
 		threshold:     5,
 		debounce:      1 * time.Second,
 		resolveConfig: func(_ context.Context, _ string) *config.DreamingConfig {
-			return &config.DreamingConfig{Enabled: boolPtr(false)}
+			return &config.DreamingConfig{Enabled: new(false)}
 		},
 	}
 

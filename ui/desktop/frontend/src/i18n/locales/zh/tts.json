@@ -1,0 +1,132 @@
+{
+  "title": "语音合成",
+  "description": "配置 TTS Provider和自动应用设置",
+  "save": "保存",
+  "saving": "保存中...",
+  "saveChanges": "保存更改",
+  "status": {
+    "title": "状态",
+    "configured": "已配置",
+    "disabled": "已禁用",
+    "noProvider": "未配置 TTS Provider",
+    "activeProvider": "主要Provider：{{provider}}，自动：{{auto}}"
+  },
+  "general": {
+    "title": "常规设置",
+    "primaryProvider": "主要Provider",
+    "autoApplyMode": "自动应用模式",
+    "replyMode": "回复模式",
+    "maxTextLength": "最大文本长度",
+    "timeout": "超时（毫秒）"
+  },
+  "providers": {
+    "none": "无（已禁用）",
+    "openai": "OpenAI",
+    "elevenlabs": "ElevenLabs",
+    "edge": "Edge（免费）",
+    "minimax": "MiniMax"
+  },
+  "autoModes": {
+    "off": "关闭",
+    "offDesc": "Agent可手动使用 TTS 工具",
+    "always": "始终",
+    "alwaysDesc": "所有回复均生成音频",
+    "inbound": "入站",
+    "inboundDesc": "仅当用户发送语音/音频时",
+    "tagged": "标记",
+    "taggedDesc": "仅当回复包含 [[tts]] 标签时"
+  },
+  "replyModes": {
+    "final": "仅最终回复",
+    "finalDesc": "仅最终回复",
+    "all": "全部",
+    "allDesc": "包括工具/块在内的所有回复"
+  },
+  "providerSettings": "{{provider}} 设置",
+  "openai": {
+    "apiKey": "API Key",
+    "apiBase": "API Base URL",
+    "model": "模型",
+    "voice": "语音"
+  },
+  "elevenlabs": {
+    "apiKey": "API Key",
+    "baseUrl": "Base URL",
+    "voiceId": "Voice ID",
+    "modelId": "Model ID"
+  },
+  "edge": {
+    "voice": "语音",
+    "speechRate": "语速",
+    "hint": "Edge TTS 免费且无需 API Key。安装方式：pip install edge-tts"
+  },
+  "minimax": {
+    "apiKey": "API Key",
+    "groupId": "Group ID *",
+    "groupIdPlaceholder": "MiniMax 必填",
+    "apiBase": "API Base",
+    "model": "模型",
+    "voiceId": "Voice ID"
+  },
+  "voice_label": "声音",
+  "voice_placeholder": "选择声音…",
+  "voice_picker": {
+    "requires_provider": "请先配置 TTS Provider"
+  },
+  "voice_refresh": "刷新",
+  "voice_preview": "试听",
+  "voice_stop_preview": "停止",
+  "voice_no_voices": "暂无声音",
+  "voice_loading": "加载声音中…",
+  "voice_preview_error": "试听失败 — 正在刷新",
+  "model_label": "模型",
+  "model_placeholder": "默认（租户/系统）",
+  "empty_state": {
+    "title": "AI 语音尚未配置",
+    "description": "配置 TTS 让智能体以语音回复",
+    "cta": "配置 TTS",
+    "non_owner_hint": "请联系 owner 启用 AI 语音"
+  },
+  "test": {
+    "button": "测试语音",
+    "sample_text": "你好，这是语音测试。",
+    "title": "试听",
+    "placeholder": "输入文本进行试听…",
+    "play": "播放",
+    "stop": "停止",
+    "error_missing_config": "请先选择提供方并输入 API key",
+    "error_synthesize": "无法生成音频：{{error}}"
+  },
+  "override": {
+    "label": "为此 Agent 覆盖语音",
+    "inherits": "继承: {{provider}} · {{voice}} · {{model}}"
+  },
+  "testConnection": {
+    "label": "测试连接",
+    "testing": "测试中…",
+    "success": "连接成功",
+    "failed": "连接失败"
+  },
+  "connection": {
+    "test": "测试连接",
+    "ok": "连接正常",
+    "fail": "Key 无效或网络错误"
+  },
+  "agent": {
+    "override_label": "为此智能体覆盖语音",
+    "inherits_from_global": "继承自全局：{{provider}} · {{voice}} · {{model}}"
+  },
+  "playground": {
+    "title": "测试播放",
+    "inputLabel": "要合成的文本",
+    "placeholder": "输入文本以试听…",
+    "play": "播放",
+    "stop": "停止",
+    "synthesizing": "合成中…",
+    "playbackFailed": "播放失败",
+    "requiresProvider": "请先选择 Provider 以启用试听。"
+  },
+  "advanced": {
+    "title": "高级设置"
+  }
+}

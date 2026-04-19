@@ -76,10 +76,10 @@ func TestDeref(t *testing.T) {
 		expect string
 	}{
 		{"nil_pointer", nil, ""},
-		{"empty_string", strPtr(""), ""},
-		{"normal_string", strPtr("hello"), "hello"},
-		{"whitespace", strPtr("  "), "  "},
-		{"unicode_string", strPtr("你好"), "你好"},
+		{"empty_string", new(""), ""},
+		{"normal_string", new("hello"), "hello"},
+		{"whitespace", new("  "), "  "},
+		{"unicode_string", new("你好"), "你好"},
 	}
 
 	for _, tt := range tests {
@@ -94,17 +94,17 @@ func TestDeref(t *testing.T) {
 
 func TestProcessResponse(t *testing.T) {
 	tests := []struct {
-		name         string
-		response     string
-		maxChars     int
+		name          string
+		response      string
+		maxChars      int
 		expectDeliver bool
-		description  string
+		description   string
 	}{
 		{
-			name:         "empty_response",
-			response:     "",
+			name:          "empty_response",
+			response:      "",
 			expectDeliver: true,
-			description:  "empty response should deliver (no HEARTBEAT_OK token)",
+			description:   "empty response should deliver (no HEARTBEAT_OK token)",
 		},
 		{
 			name:          "heartbeat_ok_only",
@@ -119,16 +119,16 @@ func TestProcessResponse(t *testing.T) {
 			description:   "HEARTBEAT_OK anywhere in response suppresses delivery",
 		},
 		{
-			name:         "normal_content",
-			response:     "System check: CPU 45%, Memory 60%, Disk 70%",
+			name:          "normal_content",
+			response:      "System check: CPU 45%, Memory 60%, Disk 70%",
 			expectDeliver: true,
-			description:  "normal content without HEARTBEAT_OK is delivered",
+			description:   "normal content without HEARTBEAT_OK is delivered",
 		},
 		{
-			name:         "ok_token_case_sensitive",
-			response:     "heartbeat_ok Status is good",
+			name:          "ok_token_case_sensitive",
+			response:      "heartbeat_ok Status is good",
 			expectDeliver: true,
-			description:  "HEARTBEAT_OK is case-sensitive, lowercase should not suppress",
+			description:   "HEARTBEAT_OK is case-sensitive, lowercase should not suppress",
 		},
 		{
 			name:          "heartbeat_ok_at_start",
@@ -143,10 +143,10 @@ func TestProcessResponse(t *testing.T) {
 			description:   "HEARTBEAT_OK at end suppresses",
 		},
 		{
-			name:         "multiline_without_token",
-			response:     "Line 1\nLine 2\nLine 3",
+			name:          "multiline_without_token",
+			response:      "Line 1\nLine 2\nLine 3",
 			expectDeliver: true,
-			description:  "multiline without HEARTBEAT_OK is delivered",
+			description:   "multiline without HEARTBEAT_OK is delivered",
 		},
 		{
 			name:          "multiline_with_token",
@@ -155,10 +155,10 @@ func TestProcessResponse(t *testing.T) {
 			description:   "HEARTBEAT_OK in middle of multiline suppresses",
 		},
 		{
-			name:         "long_response",
-			response:     "This is a very long response with lots of details about the system status, but no special tokens",
+			name:          "long_response",
+			response:      "This is a very long response with lots of details about the system status, but no special tokens",
 			expectDeliver: true,
-			description:  "long response without token is delivered",
+			description:   "long response without token is delivered",
 		},
 	}
 
@@ -173,8 +173,9 @@ func TestProcessResponse(t *testing.T) {
 	}
 }
 
+//go:fix inline
 func strPtr(s string) *string {
-	return &s
+	return new(s)
 }
 
 func TestIsWithinActiveHours_NoConfig(t *testing.T) {
@@ -192,8 +193,8 @@ func TestIsWithinActiveHours_NoConfig(t *testing.T) {
 func TestIsWithinActiveHours_EmptyConfig(t *testing.T) {
 	// When active hours are empty strings, should always return true
 	hb := &store.AgentHeartbeat{
-		ActiveHoursStart: strPtr(""),
-		ActiveHoursEnd:   strPtr(""),
+		ActiveHoursStart: new(""),
+		ActiveHoursEnd:   new(""),
 	}
 	got := isWithinActiveHours(*hb)
 	if !got {
@@ -219,11 +220,11 @@ func TestIsWithinActiveHours_SimpleWindow(t *testing.T) {
 	}
 
 	tests := []struct {
-		name        string
-		hour        int
-		minute      int
-		startStr    string
-		endStr      string
+		name         string
+		hour         int
+		minute       int
+		startStr     string
+		endStr       string
 		expectInside bool
 	}{
 		// Within window
@@ -270,9 +271,9 @@ func TestIsWithinActiveHours_MidnightWrap(t *testing.T) {
 	}
 
 	tests := []struct {
-		name        string
-		hour        int
-		minute      int
+		name         string
+		hour         int
+		minute       int
 		expectInside bool
 	}{
 		{"midnight_10pm", 22, 0, true},     // 22:00 is in window
@@ -302,5 +303,5 @@ func formatInt(i int) string {
 	if i < 10 {
 		return "0" + string(rune('0'+i))
 	}
-	return string(rune('0' + i/10)) + string(rune('0'+i%10))
+	return string(rune('0'+i/10)) + string(rune('0'+i%10))
 }

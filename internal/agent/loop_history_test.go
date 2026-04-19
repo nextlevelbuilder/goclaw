@@ -602,7 +602,7 @@ func TestEstimateOverhead(t *testing.T) {
 }
 
 func TestPruneContextMessagesDefaultEnabled(t *testing.T) {
-	// With nil config, pruning should run (not return early).
+	// Phase 04: nil config → no pruning (opt-in). To enable, use Mode: "cache-ttl".
 	// Create messages with a large tool result that exceeds soft trim threshold.
 	largeContent := make([]byte, 10000)
 	for i := range largeContent {
@@ -619,9 +619,10 @@ func TestPruneContextMessagesDefaultEnabled(t *testing.T) {
 		{Role: "assistant", Content: "Sure, here you go."},
 	}
 
-	// With nil config and small context window (to trigger soft trim ratio > 0.3),
+	// With cache-ttl mode and small context window (to trigger soft trim ratio > 0.3),
 	// pruning should trim the large tool result.
-	result := pruneContextMessages(msgs, 5000, nil, nil, "")
+	cfg := &config.ContextPruningConfig{Mode: "cache-ttl"}
+	result := pruneContextMessages(msgs, 5000, cfg, nil, "", nil)
 
 	// The large tool result should have been trimmed.
 	toolMsg := result[2]
@@ -635,7 +636,7 @@ func TestPruneContextMessagesExplicitOff(t *testing.T) {
 		{Role: "user", Content: "Hello"},
 	}
 	cfg := &config.ContextPruningConfig{Mode: "off"}
-	result := pruneContextMessages(msgs, 200000, cfg, nil, "")
+	result := pruneContextMessages(msgs, 200000, cfg, nil, "", nil)
 	// Should return original messages unchanged.
 	if len(result) != len(msgs) {
 		t.Errorf("expected %d messages, got %d", len(msgs), len(result))

@@ -373,16 +373,6 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 				base = "https://ollama.com/v1"
 			}
 			registry.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, p.APIKey, base, "llama3.3"))
-		case store.ProviderSuno:
-			// Suno is a media-only provider (music gen). Register as OpenAI-compat
-			// so credentialProvider interface works for API key/base extraction.
-			base := p.APIBase
-			if base == "" {
-				base = "https://api.sunoapi.org"
-			}
-			prov := providers.NewOpenAIProvider(p.Name, p.APIKey, base, "")
-			prov.WithProviderType(p.ProviderType)
-			registry.RegisterForTenant(p.TenantID, prov)
 		case store.ProviderNovita:
 			base := p.APIBase
 			if base == "" {

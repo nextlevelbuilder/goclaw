@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"path/filepath"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
@@ -76,7 +77,7 @@ func (l *Loop) loadHistoricalImagesForTool(ctx context.Context, currentRefs []pr
 			if p == "" {
 				continue
 			}
-			histPaths = append(histPaths, bus.MediaFile{Path: p, MimeType: ref.MimeType})
+			histPaths = append(histPaths, bus.MediaFile{Path: p, MimeType: ref.MimeType, Filename: filepath.Base(p)})
 		}
 		if hasImage {
 			count++

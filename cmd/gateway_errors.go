@@ -32,7 +32,7 @@ func formatAgentError(err error) string {
 	}
 
 	// 4. Rate limit
-	if containsAny(lower, "rate limit", "rate_limit", "too many requests", "429", "quota exceeded", "resource_exhausted") {
+	if containsAny(lower, "rate limit", "rate_limit", "too many requests", "429", "quota exceeded", "resource_exhausted", "usage limit") {
 		return "⚠️ API rate limit reached. Please try again later."
 	}
 
@@ -72,6 +72,27 @@ func isContextOverflowError(lower string) bool {
 		"request exceeds the maximum size",
 	) || (strings.Contains(lower, "context") &&
 		containsAny(lower, "overflow", "too large", "too long", "limit", "exceeded"))
+}
+
+// isExternalChannel reports whether a channel type serves end users on a
+// public-facing platform (Facebook, Telegram, etc.). Internal error details
+// must not be forwarded to these channels — the caller publishes an empty
+// outbound instead so placeholders get cleaned up without leaking technical
+// error text to end users. Internal types ("ws", "") return false.
+func isExternalChannel(channelType string) bool {
+	switch channelType {
+	case channels.TypeFacebook,
+		channels.TypeTelegram,
+		channels.TypeDiscord,
+		channels.TypeFeishu,
+		channels.TypeWhatsApp,
+		channels.TypeZaloOA,
+		channels.TypeZaloPersonal,
+		channels.TypePancake,
+		channels.TypeSlack:
+		return true
+	}
+	return false
 }
 
 // isMessageFormatError checks for tool_use/tool_result mismatch, role ordering,

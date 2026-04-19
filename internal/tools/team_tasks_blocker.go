@@ -60,7 +60,7 @@ func (t *TeamTasksTool) handleBlockerComment(
 		WithTaskInfo(task.TaskNumber, task.Subject),
 		WithOwnerAgentKey(memberKey),
 		WithReason(reason),
-		WithUserID(store.UserIDFromContext(ctx)),
+		WithUserID(store.ActorIDFromContext(ctx)), // audit actor, not scope (#915)
 		WithChannel(task.Channel),
 		WithChatID(task.ChatID),
 		WithPeerKind(blockerPeerKind),
@@ -78,13 +78,22 @@ func (t *TeamTasksTool) handleBlockerComment(
 					"Use team_tasks(action=\"retry\", task_id=\"%s\") to reopen with updated instructions.",
 				memberKey, task.TaskNumber, task.Subject, text, taskID)
 
+			// Escalation metadata: preserve original actor sender through re-ingress
+			// so the leader's response turn can attribute to the real user (#915).
+			escalationMeta := TaskLocalKeyMetadata(task)
+			if escalationMeta == nil {
+				escalationMeta = map[string]string{}
+			}
+			if actorSender := store.SenderIDFromContext(ctx); actorSender != "" {
+				escalationMeta[MetaOriginSenderID] = actorSender
+			}
 			if !t.manager.TryPublishInbound(bus.InboundMessage{
 				Channel:  task.Channel,
 				SenderID: "system:escalation",
 				ChatID:   task.ChatID,
-				Metadata: TaskLocalKeyMetadata(task),
+				Metadata: escalationMeta,
 				Content:  escalationMsg,
-				UserID:   store.UserIDFromContext(ctx),
+				UserID:   store.ActorIDFromContext(ctx), // audit actor (#915)
 				PeerKind: blockerPeerKind,
 				TenantID: store.TenantIDFromContext(ctx),
 				AgentID:  leadAg.AgentKey,

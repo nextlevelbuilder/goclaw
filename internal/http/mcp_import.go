@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -10,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	"github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
 )
@@ -105,6 +107,21 @@ func (h *MCPHandler) doMCPImport(ctx context.Context, r io.Reader, userID string
 		if progressFn != nil {
 			progressFn(ProgressEvent{Phase: "server", Status: "running", Current: i + 1, Total: len(servers), Detail: srv.Name})
 		}
+
+		// Security validation: validate imported server config
+		var args []string
+		if len(srv.Args) > 0 {
+			_ = json.Unmarshal(srv.Args, &args)
+		}
+		if err := mcp.ValidateServerConfig(srv.Transport, srv.Command, args, srv.URL); err != nil {
+			slog.Warn("security.mcp.import_rejected",
+				"name", srv.Name,
+				"reason", err.Error(),
+				"transport", srv.Transport)
+			summary.ServersSkipped++
+			continue
+		}
+
 		id, created, err := pg.ImportMCPServer(ctx, h.db, srv, userID)
 		if err != nil {
 			slog.Warn("mcp.import: create server", "name", srv.Name, "error", err)

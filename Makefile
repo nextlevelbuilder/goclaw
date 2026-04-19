@@ -2,7 +2,7 @@ VERSION ?= $(shell git describe --tags --abbrev=0 --match "v[0-9]*" 2>/dev/null 
 LDFLAGS  = -s -w -X github.com/nextlevelbuilder/goclaw/cmd.Version=$(VERSION)
 BINARY   = goclaw
 
-.PHONY: build build-full build-tui run clean version up down logs reset test vet check-web dev migrate setup ci desktop-dev desktop-build desktop-dmg
+.PHONY: build build-full build-tui run clean version up up-build down logs reset test vet check-web dev migrate setup ci desktop-dev desktop-build desktop-dmg test-hooks test-hooks-unit test-hooks-e2e test-hooks-chaos test-hooks-rbac test-hooks-tracing
 
 # Build backend only (API-only, no embedded web UI)
 build:
@@ -61,8 +61,15 @@ UPGRADE = docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f
 version-file:
 	@echo $(VERSION) > VERSION
 
+# Pull latest published image (if changed) and start. Use for deploy/update flows.
 up: version-file
-	GOCLAW_VERSION=$(VERSION) $(COMPOSE) up -d --build
+	GOCLAW_VERSION=$(VERSION) $(COMPOSE) up -d --pull always
+	$(UPGRADE) run --rm upgrade
+
+# Build image from local source (with pulled base layers), then start. Use for dev changes.
+up-build: version-file
+	GOCLAW_VERSION=$(VERSION) $(COMPOSE) build --pull
+	GOCLAW_VERSION=$(VERSION) $(COMPOSE) up -d
 	$(UPGRADE) run --rm upgrade
 
 down:
@@ -73,10 +80,10 @@ logs:
 
 reset: version-file
 	$(COMPOSE) down -v
-	$(COMPOSE) up -d --build
+	GOCLAW_VERSION=$(VERSION) $(COMPOSE) up -d --pull always
 
 test:
-	go test -race -timeout=90s ./...
+	go test -race -timeout=5m ./...
 
 # ── Layered Testing ──
 # P0: Invariant tests - tenant isolation, permission enforcement (MUST pass)
@@ -93,6 +100,26 @@ test-scenarios:
 
 # Critical tests (P0 + P1) - run before merge
 test-critical: test-invariants test-contracts
+
+# ── Agent Hooks targets (phase 4) ──
+# Requires TEST_DATABASE_URL pointing at a pgvector:pg18 container on :5433
+test-hooks-unit:
+	go test -race ./internal/hooks/... ./internal/gateway/methods/
+
+test-hooks-e2e:
+	go test -race -timeout=180s -tags integration -run "TestHooksE2E" ./tests/integration/
+
+test-hooks-chaos:
+	go test -race -timeout=180s -tags integration -run "TestHooksChaos" ./tests/integration/
+
+test-hooks-rbac:
+	go test -race -timeout=90s -tags integration -run "TestHooksRBAC" ./tests/integration/
+
+test-hooks-tracing:
+	go test -race -timeout=90s -tags integration -run "TestHooksTracing" ./tests/integration/
+
+# Full hook test suite (unit + integration)
+test-hooks: test-hooks-unit test-hooks-e2e test-hooks-chaos test-hooks-rbac test-hooks-tracing
 
 vet:
 	go vet ./...

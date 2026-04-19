@@ -1,11 +1,15 @@
 package orchestration
 
 import (
+	"path/filepath"
+
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 )
 
 // MediaResultToBusFiles converts agent.MediaResult slice to bus.MediaFile slice.
+// Filename is derived from the disk basename so downstream persistMedia
+// sanitizer keeps a meaningful stem (UUID-only disk names become UUID fallback).
 func MediaResultToBusFiles(results []agent.MediaResult) []bus.MediaFile {
 	if len(results) == 0 {
 		return nil
@@ -15,6 +19,7 @@ func MediaResultToBusFiles(results []agent.MediaResult) []bus.MediaFile {
 		files[i] = bus.MediaFile{
 			Path:     r.Path,
 			MimeType: r.ContentType,
+			Filename: filepath.Base(r.Path),
 		}
 	}
 	return files

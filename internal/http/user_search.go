@@ -12,15 +12,19 @@ import (
 )
 
 // UserSearchResult is a unified result from contacts + tenant_users.
+// ID is the user_id string (human-facing identifier). UUID is the tenant_user
+// primary key (only populated when Source == "tenant_user"); callers that need
+// to reference a tenant_user by foreign key (e.g. contact merge) must use UUID.
 type UserSearchResult struct {
-	ID                  string  `json:"id"`
-	DisplayName         *string `json:"display_name,omitempty"`
-	Username            *string `json:"username,omitempty"`
-	Source              string  `json:"source"` // "contact" or "tenant_user"
-	ChannelType         *string `json:"channel_type,omitempty"`
-	PeerKind            *string `json:"peer_kind,omitempty"`
-	MergedTenantUserID  *string `json:"merged_tenant_user_id,omitempty"`
-	Role                *string `json:"role,omitempty"`
+	ID                 string  `json:"id"`
+	UUID               string  `json:"uuid,omitempty"`
+	DisplayName        *string `json:"display_name,omitempty"`
+	Username           *string `json:"username,omitempty"`
+	Source             string  `json:"source"` // "contact" or "tenant_user"
+	ChannelType        *string `json:"channel_type,omitempty"`
+	PeerKind           *string `json:"peer_kind,omitempty"`
+	MergedTenantUserID *string `json:"merged_tenant_user_id,omitempty"`
+	Role               *string `json:"role,omitempty"`
 }
 
 // handleSearchUsers returns unified results from channel_contacts + tenant_users.
@@ -91,6 +95,7 @@ func (h *ChannelInstancesHandler) handleSearchUsers(w http.ResponseWriter, r *ht
 			role := u.Role
 			results = append(results, UserSearchResult{
 				ID:          u.UserID,
+				UUID:        u.ID.String(),
 				DisplayName: u.DisplayName,
 				Source:      "tenant_user",
 				Role:        &role,

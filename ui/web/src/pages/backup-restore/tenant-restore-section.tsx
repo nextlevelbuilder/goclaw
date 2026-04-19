@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Upload, RotateCcw, FileArchive } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Combobox } from "@/components/ui/combobox";
 import { OperationProgress } from "@/components/shared/operation-progress";
@@ -11,6 +12,8 @@ import { useTenantsAdmin } from "@/pages/tenants-admin/hooks/use-tenants-admin";
 import { formatFileSize } from "@/lib/format";
 import { useTenantRestore } from "./hooks/use-tenant-restore";
 
+type RestoreMode = "upsert" | "replace" | "new";
+
 export function TenantRestoreSection() {
   const { t } = useTranslation("backup");
   const { tenants } = useTenantsAdmin();
@@ -18,12 +21,14 @@ export function TenantRestoreSection() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [tenantId, setTenantId] = useState("");
-  const [mode, setMode] = useState("upsert");
+  const [newTenantSlug, setNewTenantSlug] = useState("");
+  const [mode, setMode] = useState<RestoreMode>("upsert");
   const [dryRun, setDryRun] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
+  const isNewMode = mode === "new";
   const tenantOptions = tenants.map((t) => ({ value: t.id, label: t.name || t.slug }));
 
   const handleFile = useCallback((f: File) => setFile(f), []);
@@ -34,14 +39,22 @@ export function TenantRestoreSection() {
   }, [handleFile]);
 
   const handleConfirm = () => {
-    if (!file || !tenantId) return;
+    if (!file) return;
     setConfirmOpen(false);
-    restore.startRestore(file, tenantId, { mode, dryRun });
+    if (isNewMode) {
+      const targetSlug = newTenantSlug.trim();
+      if (!targetSlug) return;
+      restore.startRestore(file, { mode, newTenantSlug: targetSlug, dryRun });
+      return;
+    }
+    if (!tenantId) return;
+    restore.startRestore(file, { mode, tenantId, dryRun });
   };
 
   const handleReset = () => {
     setFile(null);
     setDryRun(false);
+    setNewTenantSlug("");
     restore.reset();
   };
 
@@ -120,19 +133,35 @@ export function TenantRestoreSection() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <Label className="mb-1.5">{t("tenant.selectTenant")}</Label>
-        <Combobox
-          value={tenantId}
-          onChange={setTenantId}
-          options={tenantOptions}
-          placeholder={t("tenant.selectTenantPlaceholder")}
-        />
-      </div>
+      {!isNewMode && (
+        <div>
+          <Label className="mb-1.5">{t("tenant.selectTenant")}</Label>
+          <Combobox
+            value={tenantId}
+            onChange={setTenantId}
+            options={tenantOptions}
+            placeholder={t("tenant.selectTenantPlaceholder")}
+          />
+        </div>
+      )}
+
+      {isNewMode && (
+        <div>
+          <Label className="mb-1.5">{t("tenant.restore.newTenantSlug")}</Label>
+          <Input
+            value={newTenantSlug}
+            onChange={(e) => setNewTenantSlug(e.target.value)}
+            placeholder={t("tenant.restore.newTenantSlugPlaceholder")}
+            className="text-base md:text-sm"
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </div>
+      )}
 
       <div>
         <Label>{t("tenant.restore.mode")}</Label>
-        <Select value={mode} onValueChange={setMode}>
+        <Select value={mode} onValueChange={(value) => setMode(value as RestoreMode)}>
           <SelectTrigger className="mt-1 text-base md:text-sm"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="upsert">{t("tenant.restore.modeUpsert")}</SelectItem>
@@ -183,7 +212,7 @@ export function TenantRestoreSection() {
         <Button
           variant="destructive"
           onClick={() => setConfirmOpen(true)}
-          disabled={!tenantId || !file}
+          disabled={!file || (isNewMode ? !newTenantSlug.trim() : !tenantId)}
         >
           {t("tenant.restore.start")}
         </Button>
@@ -193,7 +222,7 @@ export function TenantRestoreSection() {
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title={t("tenant.restore.confirmTitle")}
-        description={t("tenant.restore.confirmDesc")}
+        description={isNewMode ? t("tenant.restore.confirmDescNew") : t("tenant.restore.confirmDesc")}
         variant="destructive"
         onConfirm={handleConfirm}
       />

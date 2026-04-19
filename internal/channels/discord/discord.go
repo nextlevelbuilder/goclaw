@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/audio"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/typing"
@@ -29,15 +31,17 @@ type Channel struct {
 	typingCtrls     sync.Map // channelID string → *typing.Controller
 	agentStore      store.AgentStore            // for agent key lookup (nil = writer commands disabled)
 	configPermStore store.ConfigPermissionStore // for group file writer management (nil = writer commands disabled)
+	audioMgr        *audio.Manager             // unified STT via audio.Manager (nil = no STT)
 	// pairingService, pairingDebounce, approvedGroups, groupHistory, historyLimit, requireMention
 	// are inherited from channels.BaseChannel.
 }
 
 // New creates a new Discord channel from config.
 // agentStore and configPermStore are optional (nil = writer commands disabled).
+// audioMgr is optional (nil = STT disabled).
 func New(cfg config.DiscordConfig, msgBus *bus.MessageBus, pairingSvc store.PairingStore,
 	agentStore store.AgentStore, configPermStore store.ConfigPermissionStore,
-	pendingStore store.PendingMessageStore) (*Channel, error) {
+	pendingStore store.PendingMessageStore, audioMgr *audio.Manager) (*Channel, error) {
 	session, err := discordgo.New("Bot " + cfg.Token)
 	if err != nil {
 		return nil, fmt.Errorf("create discord session: %w", err)
@@ -67,6 +71,7 @@ func New(cfg config.DiscordConfig, msgBus *bus.MessageBus, pairingSvc store.Pair
 		config:          cfg,
 		agentStore:      agentStore,
 		configPermStore: configPermStore,
+		audioMgr:        audioMgr,
 	}
 	ch.SetRequireMention(requireMention)
 	ch.SetPairingService(pairingSvc)
@@ -126,7 +131,7 @@ func (c *Channel) Stop(_ context.Context) error {
 }
 
 // Send delivers an outbound message to a Discord channel.
-func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) (err error) {
+func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) (err error) {
 	if !c.IsRunning() {
 		return fmt.Errorf("discord bot not running")
 	}
@@ -161,6 +166,42 @@ func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) (err error) {
 	}()
 
 	content := msg.Content
+
+	// TTS auto-apply: convert [[tts]] tagged responses to voice
+	if c.audioMgr != nil && content != "" {
+		isVoiceInbound := msg.Metadata["is_voice_inbound"] == "true"
+		ttsResult, ttsErr := c.audioMgr.AutoApplyToText(ctx, content, "discord", isVoiceInbound, "")
+		if ttsErr != nil {
+			slog.Debug("discord: tts auto-apply error", "error", ttsErr)
+		}
+		if ttsResult != nil && ttsResult.AudioPath != "" {
+			// Send voice file via media API
+			if err := c.sendMediaMessage(channelID, "", []bus.MediaAttachment{{
+				URL:         ttsResult.AudioPath,
+				ContentType: ttsResult.AudioMime,
+			}}); err != nil {
+				slog.Warn("discord: tts auto-apply voice send failed, falling back to text", "error", err)
+			} else {
+				// Voice sent successfully
+				strippedText := strings.TrimSpace(ttsResult.Text)
+				if strippedText == "" {
+					// Voice-only: delete placeholder (no text to show)
+					if pID, ok := c.placeholders.LoadAndDelete(placeholderKey); ok {
+						if msgID, ok := pID.(string); ok {
+							_ = c.session.ChannelMessageDelete(channelID, msgID)
+						}
+					}
+					return nil
+				}
+				// Has remaining text: let normal flow handle placeholder edit
+				content = strippedText
+			}
+		}
+		// Update content with directives stripped (even if TTS not applied)
+		if ttsResult != nil {
+			content = ttsResult.Text
+		}
+	}
 
 	// Handle outbound media attachments: send files via Discord's file upload API.
 	if len(msg.Media) > 0 {

@@ -798,7 +798,64 @@ Workspace file management.
 
 ---
 
-## 22. Media
+## 22. Voices & Audio
+
+Voice discovery for TTS providers (ElevenLabs). All endpoints are tenant-scoped and require tenant admin or operator role.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/voices` | List available voices (in-memory cached, TTL 1h) |
+| `POST` | `/v1/voices/refresh` | Force refresh voice cache (admin-only) |
+
+### `GET /v1/voices`
+
+Fetch available TTS voices for the current tenant's provider.
+
+**Query Parameters:**
+- None
+
+**Response** (200 OK):
+```json
+[
+  {
+    "voice_id": "pMsXgVXv3BLzUgSXRplE",
+    "name": "Alice",
+    "preview_url": "https://...",
+    "category": "premade",
+    "labels": {
+      "use_case": "conversational",
+      "accent": "american"
+    }
+  }
+]
+```
+
+**Errors:**
+- 401: Missing or invalid token
+- 403: Insufficient permissions (requires tenant admin/operator)
+- 500: Provider error (e.g., ElevenLabs API unreachable)
+
+**Caching:**
+- Responses are in-memory cached per tenant with TTL 1h
+- Cache is shared across all HTTP + WebSocket handlers
+- Cache miss triggers immediate fetch from provider
+
+### `POST /v1/voices/refresh`
+
+Invalidate the voice cache for the current tenant, forcing a fresh fetch on the next request.
+
+**Admin-only endpoint.** Useful after voice updates or CDN expiry issues.
+
+**Request body:** (empty)
+
+**Response** (202 Accepted):
+```json
+{ "message": "voice cache invalidated" }
+```
+
+---
+
+## 23. Media
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -807,7 +864,7 @@ Workspace file management.
 
 ---
 
-## 23. Files
+## 24. Files
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -818,7 +875,7 @@ Auth via Bearer token or `?token=` query param (for `<img>` tags). MIME type aut
 
 ---
 
-## 24. API Keys
+## 25. API Keys
 
 Admin-only endpoints for managing gateway API keys. See [20 — API Keys & Auth](20-api-keys-auth.md) for the full authentication and authorization model.
 
@@ -856,7 +913,7 @@ Admin-only endpoints for managing gateway API keys. See [20 — API Keys & Auth]
 
 ---
 
-## 25. OAuth
+## 26. OAuth
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -943,7 +1000,7 @@ Notes:
 
 ---
 
-## 26. Edition
+## 27. Edition
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -951,7 +1008,7 @@ Notes:
 
 ---
 
-## 27. Tenants
+## 28. Tenants
 
 Multi-tenant management (admin only).
 
@@ -967,7 +1024,7 @@ Multi-tenant management (admin only).
 
 ---
 
-## 28. System Configs
+## 29. System Configs
 
 Key-value system configuration store.
 
@@ -980,7 +1037,7 @@ Key-value system configuration store.
 
 ---
 
-## 29. Team Workspace & Attachments
+## 30. Team Workspace & Attachments
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -990,7 +1047,7 @@ Key-value system configuration store.
 
 ---
 
-## 30. Shell Deny Groups
+## 31. Shell Deny Groups
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -998,7 +1055,7 @@ Key-value system configuration store.
 
 ---
 
-## 31. System
+## 32. System
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -1017,7 +1074,7 @@ Key-value system configuration store.
 
 ---
 
-## 32. MCP Bridge
+## 33. MCP Bridge
 
 Exposes GoClaw tools to Claude CLI via streamable HTTP at `/mcp/bridge`. Only listens on localhost. Protected by gateway token with HMAC-signed context headers.
 

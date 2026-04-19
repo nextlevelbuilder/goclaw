@@ -31,8 +31,11 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 	}
 
 	ctx := context.Background()
-	if ta, ok := ch.(interface{ TenantID() uuid.UUID }); ok {
-		ctx = store.WithTenantID(ctx, ta.TenantID())
+	// Use RunContext's TenantID directly (set at RegisterRun time from channel instance)
+	// rather than querying the channel interface - more direct and future-proof for
+	// channels that might serve multiple tenants.
+	if rc.TenantID != uuid.Nil {
+		ctx = store.WithTenantID(ctx, rc.TenantID)
 	}
 
 	// Forward to StreamingChannel (only when streaming is enabled for this run).
@@ -111,6 +114,7 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 					ChatID:   rc.ChatID,
 					Content:  statusText,
 					Metadata: outMeta,
+					TenantID: rc.TenantID,
 				})
 			}
 		case protocol.ChatEventChunk:
@@ -283,6 +287,7 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 			ChatID:   rc.ChatID,
 			Content:  content,
 			Metadata: outMeta,
+			TenantID: rc.TenantID,
 		})
 		return
 	}
@@ -293,9 +298,10 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 		maxAttempts := extractPayloadString(payload, "maxAttempts")
 		retryMsg := fmt.Sprintf("Provider busy, retrying... (%s/%s)", attempt, maxAttempts)
 		m.bus.PublishOutbound(bus.OutboundMessage{
-			Channel: rc.ChannelName,
-			ChatID:  rc.ChatID,
-			Content: retryMsg,
+			Channel:  rc.ChannelName,
+			ChatID:   rc.ChatID,
+			Content:  retryMsg,
+			TenantID: rc.TenantID,
 			Metadata: map[string]string{
 				"placeholder_update": "true",
 			},
@@ -346,32 +352,6 @@ func extractPayloadString(payload any, key string) string {
 	return ""
 }
 
-// routingMetaKeys enumerates the metadata keys that must survive the hop from
-// inbound RunContext.Metadata into outbound OutboundMessage.Metadata so that
-// replies, block replies, retries, and placeholder updates all land in the
-// correct thread / topic / subgroup routing bucket on each channel.
-var routingMetaKeys = []string{
-	"message_thread_id",      // telegram forum topics
-	"local_key",              // composite chat-id suffix
-	"group_id",               // legacy group identifier
-	"feishu_reply_target_id", // feishu/lark thread reply routing
-	"fb_mode",                // facebook messenger vs comment routing
-	"sender_id",              // facebook sender for first-inbox
-	"page_id",                // facebook page routing
-	"reply_to_comment_id",    // facebook comment reply target
-}
-
-// copyRoutingMeta copies channel routing metadata from RunContext.Metadata
-// into a new map suitable for outbound messages.
-func copyRoutingMeta(src map[string]string) map[string]string {
-	out := make(map[string]string)
-	for _, k := range routingMetaKeys {
-		if v := src[k]; v != "" {
-			out[k] = v
-		}
-	}
-	return out
-}
 
 // toolStatusMap maps builtin tool names to user-friendly status messages.
 var toolStatusMap = map[string]string{

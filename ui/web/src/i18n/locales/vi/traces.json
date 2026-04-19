@@ -77,8 +77,11 @@
   },
   "toast": {
     "failedLoad": "Không thể tải dữ liệu theo dõi",
-    "abortSent": "Đã dừng chạy",
-    "abortFailed": "Không thể dừng chạy",
-    "abortNotFound": "Lệnh đã hoàn tất hoặc không tìm thấy"
+    "abortStopped": "Đã dừng tác vụ",
+    "abortForced": "Đã buộc dừng tác vụ (đang dọn dẹp ở nền)",
+    "abortAlreadyAborting": "Đang dừng tác vụ",
+    "abortNotFound": "Tác vụ đã kết thúc",
+    "abortUnauthorized": "Không có quyền dừng tác vụ này",
+    "abortFailed": "Không thể dừng tác vụ"
   }
 }

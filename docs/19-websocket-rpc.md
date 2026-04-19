@@ -501,6 +501,68 @@ Multi-tenant management (admin only).
 
 ---
 
+## 17.1. Voices (Voice Discovery)
+
+Discover available TTS voices for the tenant's configured provider.
+
+| Method | Description |
+|--------|-------------|
+| `voices.list` | Fetch available voices (in-memory cached, TTL 1h) |
+| `voices.refresh` | Force cache invalidation (admin-only) |
+
+### `voices.list` Request
+
+```json
+{
+  "method": "voices.list",
+  "id": 1
+}
+```
+
+**Response** (200 OK):
+```json
+{
+  "id": 1,
+  "result": [
+    {
+      "voice_id": "pMsXgVXv3BLzUgSXRplE",
+      "name": "Alice",
+      "preview_url": "https://...",
+      "category": "premade",
+      "labels": {
+        "use_case": "conversational",
+        "accent": "american"
+      }
+    }
+  ]
+}
+```
+
+**Errors:**
+- `code: -1`: Provider error (e.g., ElevenLabs API unreachable)
+- `code: -2`: Cache miss + no provider context available (desktop edition in Phase 2; HTTP handler resolves provider dynamically)
+
+### `voices.refresh` Request
+
+Admin-only. Invalidate tenant cache, forcing fresh fetch on next list.
+
+```json
+{
+  "method": "voices.refresh",
+  "id": 2
+}
+```
+
+**Response** (200 OK):
+```json
+{
+  "id": 2,
+  "result": { "message": "voice cache invalidated" }
+}
+```
+
+---
+
 ## 18. Browser Automation
 
 | Method | Description |
@@ -727,6 +789,7 @@ The server pushes events to connected clients via event frames. Key event types:
 | `chunk` | Streaming text chunk |
 | `tool.call` | Tool invocation started |
 | `tool.result` | Tool invocation completed |
+| `trace.status` | Trace status changed (cancelled, completed, error) |
 | `session.updated` | Session metadata changed |
 | `agent.updated` | Agent config changed |
 | `cron.fired` | Cron job triggered |
@@ -737,6 +800,7 @@ The server pushes events to connected clients via event frames. Key event types:
 
 | Event | Description | Payload |
 |-------|-------------|---------|
+| `trace.status` | Trace status changed (real-time stop/abort visibility) | `{traceId, status, endedAt?}` |
 | `evolution.metrics.updated` | New evolution metrics recorded | `{agentId, metricType, toolName, value}` |
 | `evolution.suggestion` | New evolution suggestion generated | `{agentId, suggestionId, type, title}` |
 | `episodic.summary` | New episodic summary created/updated | `{agentId, summaryId, userId}` |
@@ -744,6 +808,25 @@ The server pushes events to connected clients via event frames. Key event types:
 | `vault.document.updated` | Vault document updated | `{agentId, docId, title}` |
 | `orchestration.mode.changed` | Agent orchestration mode changed | `{agentId, newMode}` |
 | `v3flags.changed` | V3 feature flags updated | `{agentId, flags}` |
+
+#### `trace.status` Event
+
+Emitted whenever a trace status changes (e.g., `running` → `cancelled`, `running` → `completed`). Allows UI to update trace state in real-time without polling, particularly critical for stop/abort operations.
+
+**Payload:**
+```json
+{
+  "traceId": "uuid",
+  "status": "cancelled",
+  "endedAt": "2026-04-14T12:34:56.789Z"
+}
+```
+
+**Status values:**
+- `cancelled` — User stopped the trace via `chat.abort`
+- `completed` — Trace finished successfully
+- `error` — Trace failed with an error
+- `running` — Emitted when trace transitions from another state (rare; mostly informational)
 
 ---
 

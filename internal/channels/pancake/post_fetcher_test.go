@@ -206,7 +206,7 @@ func TestPostFetcher_GetPost_SingleflightCoalescing(t *testing.T) {
 	const goroutines = 10
 	var wg sync.WaitGroup
 	wg.Add(goroutines)
-	for i := 0; i < goroutines; i++ {
+	for range goroutines {
 		go func() {
 			defer wg.Done()
 			pf.GetPost(context.Background(), "post-1") //nolint:errcheck

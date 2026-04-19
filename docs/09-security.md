@@ -111,6 +111,17 @@ All four filesystem tools (`read_file`, `write_file`, `list_files`, `edit`) impl
 - Sandbox escape → Docker container isolation if sandbox enabled
 - Verbose flag leakage → Separate deny_verbose list blocks verbose/debug output
 
+**Agent-level grant enforcement** -- The gate runs **before** any process spawn, blocking ungranted agents from executing registered binaries:
+
+| Control | Implementation |
+|---------|-----------------|
+| **Grant lookup** | `store.SecureCLIStore.IsRegisteredBinary(ctx, binaryName)` checks `secure_cli_agent_grants` table. Non-global binaries require a row for the calling agent. |
+| **Fail-CLOSED** | If the grant lookup errors (DB down, timeout), exec is denied with retry message. Per-lookup timeout: 2 seconds. |
+| **Env scrubbing** | When a command escapes the credentialed path (e.g., via adversarial `exec` tool), child process env is scrubbed of all credential keys (static deny list + dynamic keys from every registered binary in the tenant) before spawn. Prevents credential leakage into non-credentialed commands. |
+| **Wrapper unwrap** | Blocks shell wrappers (`sh -c`, `bash -c`, etc.) that attempt to evade binary path matching. Checks up to 3 levels of nesting; deeper chains are rejected as adversarial. |
+| **Logging** | Three security events: `security.credentialed_binary_denied` (ungranted agent), `security.credentialed_binary_gate_error` (lookup failure), `security.credentialed_binary_wrapper_too_deep` (nested wrapper attack). All include: binary, wrapper, agent_id, tenant_id, command prefix. |
+| **Subagent wiring** | Subagent `ExecTool`s use the same `SecureCLIStore` via `cmd/gateway_agents.go` → `buildSubagentToolsRegistry`. Parent agents cannot bypass the gate by delegating exec to spawned subagents. |
+
 ### Layer 4: Output Security
 
 | Mechanism | Detail |

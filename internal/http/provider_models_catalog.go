@@ -63,15 +63,6 @@ func dashScopeModels() []ModelInfo {
 	}
 }
 
-// sunoModels returns a hardcoded list of Suno music generation models.
-func sunoModels() []ModelInfo {
-	return []ModelInfo{
-		{ID: "v4.5", Name: "Suno V4.5"},
-		{ID: "v4", Name: "Suno V4"},
-		{ID: "v3.5", Name: "Suno V3.5"},
-	}
-}
-
 // claudeCLIModels returns the model aliases accepted by the Claude CLI.
 func claudeCLIModels() []ModelInfo {
 	return []ModelInfo{

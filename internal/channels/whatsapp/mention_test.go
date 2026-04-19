@@ -6,7 +6,6 @@ import (
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
-	"google.golang.org/protobuf/proto"
 )
 
 func TestIsMentioned(t *testing.T) {
@@ -15,7 +14,7 @@ func TestIsMentioned(t *testing.T) {
 		return &events.Message{
 			Message: &waE2E.Message{
 				ExtendedTextMessage: &waE2E.ExtendedTextMessage{
-					Text: proto.String("hello @bot"),
+					Text: new("hello @bot"),
 					ContextInfo: &waE2E.ContextInfo{
 						MentionedJID: mentionedJIDs,
 					},
@@ -25,11 +24,11 @@ func TestIsMentioned(t *testing.T) {
 	}
 
 	tests := []struct {
-		name    string
-		myJID   string // bot's phone JID
-		myLID   string // bot's LID
+		name     string
+		myJID    string // bot's phone JID
+		myLID    string // bot's LID
 		mentions []string
-		want    bool
+		want     bool
 	}{
 		{
 			name:     "mentioned by phone JID",
@@ -115,7 +114,7 @@ func TestIsMentioned(t *testing.T) {
 				// Plain conversation message — no extended text.
 				evt = &events.Message{
 					Message: &waE2E.Message{
-						Conversation: proto.String("hello"),
+						Conversation: new("hello"),
 					},
 				}
 			} else {

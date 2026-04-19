@@ -245,26 +245,81 @@ Each topic can restrict which tools the agent may use. The `tools` field accepts
 
 The tool allow list is passed via message metadata and applied by the policy engine before the LLM sees the tool definitions.
 
-### Speech-to-Text
+### Voice Message Transcription (STT)
 
-Voice and audio messages can be transcribed via an external STT proxy service.
+Voice and audio messages are transcribed through a unified `audio.Manager` interface. All channels (Telegram, Discord, Feishu, WhatsApp) route transcription requests through the same STT chain.
+
+#### Unified STT Flow
 
 ```mermaid
 flowchart TD
-    VOICE["Voice/audio message"] --> DOWNLOAD["Download audio file<br/>from Telegram"]
-    DOWNLOAD --> STT["POST to STT proxy<br/>(multipart: file + tenant_id)"]
-    STT --> PARSE["Parse transcript"]
-    PARSE --> INJECT["Prepend to message:<br/>[audio: filename] Transcript: text"]
-    INJECT --> AGENT["Agent receives transcribed content"]
-
-    VOICE --> ROUTING{"VoiceAgentID configured?"}
+    VOICE["Voice/audio message"] --> ROUTE{Channel type?}
+    
+    ROUTE -->|Telegram/Discord/Feishu| DOWNLOAD["Download audio file"]
+    ROUTE -->|WhatsApp| WHATSAPP_CHECK{"whatsapp_enabled<br/>in settings?"}
+    
+    WHATSAPP_CHECK -->|No| WA_FALLBACK["[Voice message]<br/>(default opt-out)"]
+    WHATSAPP_CHECK -->|Yes| DOWNLOAD
+    
+    DOWNLOAD --> STT_CHECK{"STT providers<br/>configured?"}
+    STT_CHECK -->|Yes| STT_CHAIN["Try providers in order:<br/>elevenlabs_scribe, proxy"]
+    STT_CHECK -->|No| LEGACY{"Legacy bridge<br/>providers?"}
+    
+    LEGACY -->|Yes| STT_CHAIN
+    LEGACY -->|No| FALLBACK["[Voice message]"]
+    
+    STT_CHAIN -->|Success| TEXT["Transcribed text"]
+    STT_CHAIN -->|Fails/Timeout 10s| FALLBACK
+    
+    TEXT --> INJECT["Prepend to message:<br/>[audio: filename] Transcript: text"]
+    FALLBACK --> FALLBACK_INJECT["[Voice message]"]
+    
+    INJECT --> AGENT["Agent context"]
+    FALLBACK_INJECT --> AGENT
+    
+    VOICE --> ROUTING{"VoiceAgentID<br/>configured<br/>(Telegram)?"}
     ROUTING -->|Yes| VOICE_AGENT["Route to voice-specific agent"]
-    ROUTING -->|No| DEFAULT_AGENT["Route to channel's default agent"]
+    ROUTING -->|No| DEFAULT_AGENT["Default channel agent"]
 ```
 
-**Configuration**: STT proxy URL, timeout (default 30s), optional tenant ID and API key. If transcription fails, the media placeholder remains — no error is surfaced.
+#### Configuration & Decision Rules
 
-**Voice routing**: When `VoiceAgentID` is configured, audio/voice messages are routed to a different agent (e.g., a speech-specialized agent) instead of the channel's default agent.
+**Decision 2 (Conflict rule):** When `builtin_tools[stt].settings.providers[]` is present in the database, it OVERRIDES all legacy channel-specific STT configs. The legacy STT bridge (`STTProxyURL` → `proxy_stt` provider) only activates when the providers list is empty or missing.
+
+| Setting | Behavior |
+|---------|----------|
+| `providers: ["elevenlabs_scribe", "proxy_stt"]` | Try ElevenLabs Scribe first; fall back to legacy proxy |
+| `providers: []` (empty) | Skip all STT; voice → `[Voice message]` fallback |
+| `providers` missing (nil) | Check for legacy bridge at startup; activate if `STTProxyURL` exists |
+
+**Decision 6 (WhatsApp opt-in):** WhatsApp voice message STT is **OFF by default** (`whatsapp_enabled: false`). Rationale: WhatsApp voice messages are end-to-end encrypted; sending audio to an external STT provider breaks E2E encryption. Admins must explicitly toggle STT in the UI at **Config → Audio → STT** and acknowledge the E2E breaking change.
+
+When disabled (default):
+- Voice messages surface in agent context as `[Voice message]` (localized via i18n key `channel.voice_message_fallback`)
+- No audio leaves the device
+
+When enabled:
+- Voice audio is transcribed via the configured STT chain
+- Fallback to `[Voice message]` on failure/timeout (10s wall clock)
+
+#### Per-Channel Behavior
+
+| Channel | STT Support | Notes |
+|---------|:-:|---------|
+| **Telegram** | Yes | Uses unified chain; voice routing via `VoiceAgentID` config |
+| **Discord** | Yes | Standard flow; no special routing |
+| **Feishu** | Yes | Standard flow; no special routing |
+| **WhatsApp** | Yes (opt-in) | Requires explicit admin approval; default OFF |
+
+#### Factory Integration
+
+All channel factories accept `audioMgr *audio.Manager`:
+- Telegram: `FactoryWithStoresAndAudio(..., audioMgr)`
+- Discord: `FactoryWithAudio(..., audioMgr)`
+- Feishu: `FactoryWithStoresAndAudio(..., audioMgr)`
+- WhatsApp: `FactoryWithDBAudio(..., audioMgr, builtinToolStore)`
+
+WhatsApp additionally accepts `builtinToolStore store.BuiltinToolStore` to fetch the per-message `whatsapp_enabled` opt-in flag. Wiring in `cmd/gateway_channels_setup.go:77` + `cmd/gateway.go:433`.
 
 ### Bot Commands
 
@@ -349,6 +404,8 @@ Each update increments a sequence number for ordering. Updates are throttled at 
 | Audio | `.opus` |
 | Video | `.mp4` |
 | Sticker | `.png` |
+
+**Filename preservation**: When a user uploads or shares a file with a recognizable name, the channel adapter populates `bus.MediaFile.Filename` with the original filename (e.g., Feishu file display name, Telegram `file_name`). This filename is then sanitized and persisted to disk in the format `{stem}-{8hex}{ext}` (e.g., `báo-cáo-2024-a1b2c3d4.pdf` → `bao-cao-2024-a1b2c3d4.pdf`). The sanitizer supports Vietnamese diacritics, CJK scripts, and filesystem safety. Media without a user-provided filename (voice notes, clipboard pastes) fall back to UUID-only names. Disk names with semantic stems enable vault enrichment to process documents contextually. See `internal/agent/media_filename.go` for sanitization rules.
 
 **Send (outbound)**: Files are uploaded to Feishu with automatic type detection (opus, mp4, pdf, doc, xls, ppt, or generic stream).
 
@@ -629,7 +686,7 @@ flowchart TD
 | `internal/channels/telegram/handlers.go` | Message handling, media processing, forum topic detection |
 | `internal/channels/telegram/topic_config.go` | Per-topic config layering and resolution |
 | `internal/channels/telegram/commands.go` | Bot commands: /stop, /reset, /tasks, /addwriter, etc. |
-| `internal/channels/telegram/stt.go` | Speech-to-text proxy integration, voice agent routing |
+| `internal/channels/telegram/factory.go` | Channel factory with audio.Manager wiring |
 | `internal/channels/telegram/stream.go` | Streaming placeholder management |
 | `internal/channels/telegram/reactions.go` | Status reactions on messages |
 | `internal/channels/telegram/format.go` | Markdown → Telegram HTML pipeline, table rendering |
@@ -647,11 +704,15 @@ flowchart TD
 | `internal/channels/slack/reactions.go` | Status emoji reactions on messages |
 | `internal/channels/slack/stream.go` | Streaming message updates via placeholder editing |
 | `internal/channels/whatsapp/whatsapp.go` | WhatsApp: direct protocol client, QR auth, database persistence |
-| `internal/channels/whatsapp/factory.go` | Channel factory, database dialect detection |
+| `internal/channels/whatsapp/factory.go` | Channel factory with audio.Manager and builtin-tool store wiring |
+| `internal/channels/whatsapp/stt.go` | Voice transcription with opt-in setting and E2E fallback |
 | `internal/channels/whatsapp/qr_methods.go` | QR code generation and authentication flow |
 | `internal/channels/whatsapp/format.go` | Message formatting (HTML-to-WhatsApp) |
 | `internal/channels/zalo/zalo.go` | Zalo OA: Bot API, long polling |
 | `internal/channels/zalo/personal/channel.go` | Zalo Personal: reverse-engineered protocol |
+| `internal/audio/manager.go` | Audio manager: providers registry, lifecycle |
+| `internal/audio/manager_stt.go` | STT chain resolution, Transcribe() entry point |
+| `internal/audio/legacy_stt_bridge.go` | Backward-compat bridge for legacy STTProxyURL configs |
 | `internal/store/pg/pairing.go` | Pairing: code generation, approval, persistence (database-backed) |
 | `cmd/gateway_consumer.go` | Message routing: prefixes, cancel interception |
 
@@ -666,3 +727,4 @@ flowchart TD
 | [08-scheduling-cron.md](./08-scheduling-cron.md) | /stop and /stopall commands, scheduler lanes, cron |
 | [09-security.md](./09-security.md) | Group file writer restrictions, security logging |
 | [11-agent-teams.md](./11-agent-teams.md) | Team message routing, delegation result delivery |
+| [project-changelog.md](./project-changelog.md) | Phase 5 audio manager & unified STT implementation |

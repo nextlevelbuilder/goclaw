@@ -11,7 +11,7 @@ type facebookCreds struct {
 
 // facebookInstanceConfig holds non-secret config from channel_instances.config JSONB.
 type facebookInstanceConfig struct {
-	PageID   string   `json:"page_id"`
+	PageID   string `json:"page_id"`
 	Features struct {
 		CommentReply       bool `json:"comment_reply"`
 		FirstInbox         bool `json:"first_inbox"`
@@ -24,7 +24,7 @@ type facebookInstanceConfig struct {
 	MessengerOptions struct {
 		SessionTimeout string `json:"session_timeout"`
 	} `json:"messenger_options"`
-	PostContextCacheTTL string   `json:"post_context_cache_ttl"`
+	PostContextCacheTTL string `json:"post_context_cache_ttl"`
 	// FirstInboxMessage is the DM text sent to commenters (first-inbox feature).
 	// Defaults to Vietnamese if empty. Operators should set this to match their page language.
 	FirstInboxMessage string   `json:"first_inbox_message,omitempty"`
@@ -41,7 +41,7 @@ type WebhookPayload struct {
 
 // WebhookEntry is one page's events within a webhook delivery.
 type WebhookEntry struct {
-	ID        string           `json:"id"`   // page_id
+	ID        string           `json:"id"` // page_id
 	Time      int64            `json:"time"`
 	Changes   []WebhookChange  `json:"changes,omitempty"`   // feed events (comments, posts)
 	Messaging []MessagingEvent `json:"messaging,omitempty"` // Messenger events
@@ -56,12 +56,12 @@ type WebhookChange struct {
 // ChangeValue holds the details of a feed change event.
 type ChangeValue struct {
 	From        FBUser `json:"from"`
-	Item        string `json:"item"`      // "comment", "post", "status"
+	Item        string `json:"item"` // "comment", "post", "status"
 	CommentID   string `json:"comment_id"`
 	PostID      string `json:"post_id"`
 	ParentID    string `json:"parent_id"` // parent comment ID for nested replies
 	Message     string `json:"message"`
-	Verb        string `json:"verb"`        // "add", "edit", "remove"
+	Verb        string `json:"verb"` // "add", "edit", "remove"
 	CreatedTime int64  `json:"created_time"`
 }
 
@@ -134,7 +134,7 @@ type GraphPaging struct {
 // GraphListResponse is a generic Graph API list response.
 type GraphListResponse[T any] struct {
 	Data   []T         `json:"data"`
-	Paging GraphPaging `json:"paging,omitempty"`
+	Paging GraphPaging `json:"paging"`
 }
 
 // graphErrorBody is the error envelope returned by Graph API on failures.

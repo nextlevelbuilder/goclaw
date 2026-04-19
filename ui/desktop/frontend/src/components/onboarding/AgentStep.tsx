@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getApiClient } from '../../lib/api'
+import { agentService } from '../../services/agent-service'
 
 import { SummoningModal } from './SummoningModal'
 import type { ProviderData } from '../../types/provider'
@@ -109,6 +110,7 @@ export function AgentStep({ provider, model, onBack, onComplete }: AgentStepProp
         agentId={createdAgent.id}
         agentName={createdAgent.name}
         onContinue={onComplete}
+        onCancel={(id) => agentService.cancelSummon(id)}
       />
     )
   }

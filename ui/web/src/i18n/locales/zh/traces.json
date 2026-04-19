@@ -66,9 +66,12 @@
   "title": "追踪",
   "toast": {
     "failedLoad": "加载追踪失败",
-    "abortSent": "已停止运行",
-    "abortFailed": "停止运行失败",
-    "abortNotFound": "运行已完成或未找到"
+    "abortStopped": "已停止运行",
+    "abortForced": "已强制停止（后台仍在清理）",
+    "abortAlreadyAborting": "停止操作进行中",
+    "abortNotFound": "运行已结束",
+    "abortUnauthorized": "无权停止此运行",
+    "abortFailed": "无法停止运行"
   },
   "source": {
     "direct": "私聊",

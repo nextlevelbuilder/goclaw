@@ -1531,7 +1531,13 @@ CREATE TABLE IF NOT EXISTS vault_documents (
     summary       TEXT NOT NULL DEFAULT '',
     metadata      TEXT DEFAULT '{}',
     created_at    TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at    TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    updated_at    TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    CONSTRAINT vault_documents_scope_consistency CHECK (
+        (scope = 'personal' AND agent_id IS NOT NULL AND team_id IS NULL) OR
+        (scope = 'team'     AND team_id  IS NOT NULL AND agent_id IS NULL) OR
+        (scope = 'shared'   AND agent_id IS NULL     AND team_id  IS NULL) OR
+        scope = 'custom'
+    )
 );
 -- SQLite prohibits expressions in inline UNIQUE constraints; use a unique index instead.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_vault_docs_unique_path
@@ -1568,3 +1574,90 @@ CREATE INDEX IF NOT EXISTS idx_vault_links_to ON vault_links(to_doc_id);
 CREATE INDEX IF NOT EXISTS idx_vault_links_source
     ON vault_links(json_extract(metadata, '$.source'))
     WHERE json_extract(metadata, '$.source') IS NOT NULL;
+
+-- ============================================================
+-- Table: hooks (renamed from agent_hooks, migration 000055)
+-- SQLite translation: JSONB→TEXT, TIMESTAMPTZ→TEXT, UUID→TEXT,
+-- BYTEA→BLOB, DATE→TEXT (ISO8601), CHECK for enums.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS hooks (
+    id           TEXT NOT NULL PRIMARY KEY,
+    tenant_id    TEXT NOT NULL DEFAULT '0193a5b0-7000-7000-8000-000000000001',
+    scope        TEXT NOT NULL CHECK (scope IN ('global', 'tenant', 'agent')),
+    event        TEXT NOT NULL,
+    handler_type TEXT NOT NULL CHECK (handler_type IN ('command', 'http', 'prompt', 'script')),
+    config       TEXT NOT NULL DEFAULT '{}',
+    matcher      TEXT,
+    if_expr      TEXT,
+    timeout_ms   INTEGER NOT NULL DEFAULT 5000,
+    on_timeout   TEXT NOT NULL DEFAULT 'block' CHECK (on_timeout IN ('block', 'allow')),
+    priority     INTEGER NOT NULL DEFAULT 0,
+    enabled      INTEGER NOT NULL DEFAULT 1,
+    version      INTEGER NOT NULL DEFAULT 1,
+    source       TEXT NOT NULL DEFAULT 'ui' CHECK (source IN ('ui', 'api', 'seed', 'builtin')),
+    metadata     TEXT NOT NULL DEFAULT '{}',
+    name         TEXT,
+    created_by   TEXT,
+    created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_hooks_lookup
+    ON hooks (tenant_id, event)
+    WHERE enabled = 1;
+
+-- ============================================================
+-- Table: hook_agents (renamed from agent_hook_agents, N:M junction)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS hook_agents (
+    hook_id  TEXT NOT NULL REFERENCES hooks(id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    PRIMARY KEY (hook_id, agent_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_hook_agents_agent
+    ON hook_agents (agent_id);
+
+-- ============================================================
+-- Table: hook_executions (append-only audit log, migration 000052)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS hook_executions (
+    id           TEXT NOT NULL PRIMARY KEY,
+    hook_id      TEXT REFERENCES hooks(id) ON DELETE SET NULL,
+    session_id   TEXT,
+    event        TEXT NOT NULL,
+    input_hash   TEXT,
+    decision     TEXT NOT NULL CHECK (decision IN ('allow', 'block', 'error', 'timeout')),
+    duration_ms  INTEGER NOT NULL DEFAULT 0,
+    retry        INTEGER NOT NULL DEFAULT 0,
+    dedup_key    TEXT,
+    error        TEXT,
+    error_detail BLOB,
+    metadata     TEXT NOT NULL DEFAULT '{}',
+    created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_hook_executions_session
+    ON hook_executions (session_id, created_at);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_hook_executions_dedup
+    ON hook_executions (dedup_key)
+    WHERE dedup_key IS NOT NULL;
+
+-- ============================================================
+-- Table: tenant_hook_budget (migration 000052)
+-- month_start stored as TEXT ISO8601 date (YYYY-MM-DD).
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS tenant_hook_budget (
+    tenant_id      TEXT NOT NULL PRIMARY KEY,
+    month_start    TEXT NOT NULL,
+    budget_total   INTEGER NOT NULL DEFAULT 0,
+    remaining      INTEGER NOT NULL DEFAULT 0,
+    last_warned_at TEXT,
+    metadata       TEXT NOT NULL DEFAULT '{}',
+    updated_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);

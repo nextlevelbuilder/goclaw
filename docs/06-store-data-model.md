@@ -47,6 +47,7 @@ The `Stores` struct is the top-level container holding all PostgreSQL-backed sto
 | SnapshotStore | `PGSnapshotStore` | Hourly usage snapshots, cost aggregation, time series queries |
 | SecureCLIStore | `PGSecureCLIStore` | CLI binary configs with encrypted credential injection |
 | APIKeyStore | `PGAPIKeyStore` | Gateway API keys, scopes, expiration, revocation |
+| HookStore | `PGHookStore` | Lifecycle hook definitions (event, handler type, matcher, config), execution audit log |
 
 ### SQLite Parity (Lite Edition)
 
@@ -63,6 +64,7 @@ The `Stores` struct is the top-level container holding all PostgreSQL-backed sto
 | AgentLinksStore | `SQLiteAgentLinks` | LIKE search, no vector |
 | SubagentTasksStore | `SQLiteSubagentTasks` | ✓ Parity (json_set for metadata merge) |
 | SecureCLIStore | `SQLiteSecureCLIStore` | ✓ Parity + AES-256-GCM encryption mandatory (GOCLAW_KEY env var required) |
+| HookStore | `SQLiteHookStore` | ✓ Parity (agent_hooks + hook_executions tables, same schema as PG) |
 
 ---
 

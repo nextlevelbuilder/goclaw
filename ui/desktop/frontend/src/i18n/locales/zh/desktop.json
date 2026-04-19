@@ -26,7 +26,10 @@
     "fileLabelSOUL": "核心个性",
     "fileLabelIDENTITY": "身份与知识",
     "agentReady": "{{name}} 已就绪！",
-    "retrying": "重试中..."
+    "retrying": "重试中...",
+    "takingTooLong": "耗时过长？",
+    "cancel": "取消",
+    "cancelling": "正在取消..."
   },
   "settings": {
     "title": "Settings",

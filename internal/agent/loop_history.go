@@ -17,7 +17,7 @@ import (
 // buildMessages constructs the full message list for an LLM request.
 // Returns the messages and whether BOOTSTRAP.md was present in context files
 // (used by the caller for auto-cleanup without an extra DB roundtrip).
-func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, summary, userMessage, extraSystemPrompt, sessionKey, channel, channelType, chatTitle, peerKind, userID string, historyLimit int, skillFilter []string, lightContext bool) ([]providers.Message, bool) {
+func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, summary, userMessage, extraSystemPrompt, sessionKey, channel, channelType, chatTitle, chatID, peerKind, userID string, historyLimit int, skillFilter []string, lightContext bool) ([]providers.Message, bool) {
 	var messages []providers.Message
 
 	// Build system prompt — 3-layer mode resolution: runtime > auto-detect > config
@@ -204,6 +204,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		Workspace:              promptWorkspace,
 		Channel:                channel,
 		ChannelType:            channelType,
+		ChatID:                 chatID,
 		ChatTitle:              chatTitle,
 		PeerKind:               peerKind,
 		OwnerIDs:               l.ownerIDs,
@@ -231,6 +232,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		SandboxWorkspaceAccess: l.sandboxWorkspaceAccess,
 		ShellDenyGroups:        l.shellDenyGroups,
 		SelfEvolve:             l.selfEvolve,
+		TTSAutoMode:            l.ttsAutoMode,
 		ProviderType:           providerTypeOf(l.provider),
 		CredentialCLIContext:   l.buildCredentialCLIContext(ctx),
 		IsBootstrap:            hadBootstrap && l.agentType != store.AgentTypePredefined,
@@ -256,10 +258,10 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		})
 	}
 
-	// History pipeline matching TS: limitHistoryTurns → pruneContext → sanitizeHistory.
+	// History pipeline: limitHistoryTurns → sanitizeHistory.
+	// Pruning is owned by PruneStage in the pipeline (single entry point).
 	trimmed := limitHistoryTurns(history, historyLimit)
-	pruned := pruneContextMessages(trimmed, l.contextWindow, l.contextPruningCfg, l.tokenCounter, l.model)
-	sanitized, droppedCount := sanitizeHistory(pruned)
+	sanitized, droppedCount := sanitizeHistory(trimmed)
 	messages = append(messages, sanitized...)
 
 	// If orphaned messages were found and dropped, persist the cleaned history

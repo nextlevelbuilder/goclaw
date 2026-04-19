@@ -71,6 +71,7 @@ func TestMakeExecuteToolCall_EmitsToolCallEvent(t *testing.T) {
 		RunID:      "run-1",
 		SessionKey: "sess-A",
 		UserID:     "u-1",
+		SenderID:   "sender-1",
 		Channel:    "ws",
 		RunKind:    "",
 	}
@@ -102,6 +103,7 @@ func TestMakeExecuteToolRaw_EmitsToolCallEvent(t *testing.T) {
 		RunID:      "run-2",
 		SessionKey: "sess-B",
 		UserID:     "u-2",
+		SenderID:   "sender-2",
 		Channel:    "ws",
 		RunKind:    "",
 	}
@@ -133,7 +135,7 @@ func TestMakeExecuteToolRaw_ConcurrentCallsEmitAllEvents(t *testing.T) {
 	col := &eventCollector{}
 	l := newTestLoopForToolCallbacks(col.onEvent)
 
-	req := &RunRequest{RunID: "run-3", SessionKey: "sess-C", UserID: "u-3", Channel: "ws"}
+	req := &RunRequest{RunID: "run-3", SessionKey: "sess-C", UserID: "u-3", SenderID: "sender-3", Channel: "ws"}
 	exec := l.makeExecuteToolRaw(req)
 
 	const n = 5
@@ -174,6 +176,9 @@ func assertToolCallPayload(t *testing.T, ev AgentEvent, tc providers.ToolCall, r
 	}
 	if ev.UserID != req.UserID {
 		t.Errorf("UserID: got %q, want %q", ev.UserID, req.UserID)
+	}
+	if ev.SenderID != req.SenderID {
+		t.Errorf("SenderID: got %q, want %q", ev.SenderID, req.SenderID)
 	}
 	payload, ok := ev.Payload.(map[string]any)
 	if !ok {

@@ -50,6 +50,9 @@ func (s *createCaptureStore) List(_ context.Context, _ string) ([]store.AgentDat
 func (s *createCaptureStore) GetDefault(_ context.Context) (*store.AgentData, error) {
 	return nil, nil
 }
+func (s *createCaptureStore) ResetStuckSummoning(_ context.Context) (int64, error) {
+	return 0, nil
+}
 func (s *createCaptureStore) ShareAgent(_ context.Context, _ uuid.UUID, _, _, _ string) error {
 	return nil
 }

@@ -243,7 +243,8 @@
     "thread_ttl": { "label": "TTL tham gia luồng (giờ)", "help": "Số giờ trước khi bot ngừng tự động trả lời trong các luồng đã tham gia. 0 = luôn yêu cầu @đề cập." },
     "skills": { "label": "Bộ lọc skill", "help": "Giới hạn skill khả dụng cho nhóm này" },
     "tools": { "label": "Danh sách công cụ được phép", "help": "Giới hạn công cụ agent có thể dùng trong nhóm này" },
-    "system_prompt": { "label": "Prompt hệ thống" }
+    "system_prompt": { "label": "Prompt hệ thống" },
+    "platform": { "label": "Nền tảng", "help": "Chọn nền tảng mà trang Pancake này phục vụ." }
   },
   "fieldOptions": {
     "block_reply": {
@@ -288,6 +289,19 @@
       "auto": "Tự động",
       "raw": "Thô",
       "card": "Thẻ"
+    },
+    "platform": {
+      "facebook":    "Facebook",
+      "instagram":   "Instagram",
+      "threads":     "Threads (Beta)",
+      "tiktok":      "TikTok",
+      "youtube":     "YouTube (Beta)",
+      "shopee":      "Shopee",
+      "line":        "Line",
+      "google":      "Google",
+      "chat_plugin": "Chat Plugin (Website)",
+      "lazada":      "Lazada",
+      "tokopedia":   "Tokopedia"
     }
   },
   "groupOverrides": {

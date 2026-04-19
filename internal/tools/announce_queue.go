@@ -31,6 +31,8 @@ type AnnounceMetadata struct {
 	OriginPeerKind   string
 	OriginLocalKey   string // composite key with topic/thread suffix for routing
 	OriginUserID     string
+	OriginSenderID   string // real acting sender; preserves permission attribution through re-ingress (#915)
+	OriginRole       string // caller's RBAC role; bypasses per-user grants for admin/operator/owner (#915)
 	OriginSessionKey string // exact parent session key (WS uses non-standard format)
 	OriginTenantID   uuid.UUID // parent tenant for announce routing
 	ParentAgent      string

@@ -31,7 +31,7 @@ export function AgentsPage() {
   const { t } = useTranslation("agents");
   const { id: detailId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { agents, loading, createAgent, deleteAgent, refresh, resummonAgent } = useAgents();
+  const { agents, loading, createAgent, deleteAgent, refresh, resummonAgent, cancelSummonAgent } = useAgents();
   const showSkeleton = useDeferredLoading(loading && agents.length === 0);
 
   const [search, setSearch] = useState("");
@@ -288,6 +288,7 @@ export function AgentsPage() {
           agentName={summoningAgent.name}
           onCompleted={refresh}
           onResummon={resummonAgent}
+          onCancel={cancelSummonAgent}
         />
       )}
     </div>

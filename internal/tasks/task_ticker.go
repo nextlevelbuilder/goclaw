@@ -279,11 +279,26 @@ func (t *TaskTicker) notifyLeaders(ctx context.Context, tasks []store.RecoveredT
 			}
 		}
 
+		// Build metadata: local_key for forum routing + origin sender/role for permission checks.
+		// Ticker context has no real sender, so propagate from task metadata (#915 deferred dispatch).
+		tickerMeta := tools.TaskLocalKeyMetadata(fullTask)
+		if tickerMeta == nil {
+			tickerMeta = map[string]string{}
+		}
+		if fullTask != nil && fullTask.Metadata != nil {
+			if s, ok := fullTask.Metadata["origin_sender_id"].(string); ok && s != "" {
+				tickerMeta[tools.MetaOriginSenderID] = s
+			}
+			if r, ok := fullTask.Metadata["origin_role"].(string); ok && r != "" {
+				tickerMeta[tools.MetaOriginRole] = r
+			}
+		}
+
 		if !t.msgBus.TryPublishInbound(bus.InboundMessage{
 			Channel:  channel,
 			SenderID: "ticker:system",
 			ChatID:   chatID,
-			Metadata: tools.TaskLocalKeyMetadata(fullTask),
+			Metadata: tickerMeta,
 			AgentID:  lead.AgentKey,
 			UserID:   team.CreatedBy,
 			PeerKind: peerKind,

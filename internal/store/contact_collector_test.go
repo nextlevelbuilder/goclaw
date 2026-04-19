@@ -92,7 +92,7 @@ func TestContactCollector_SameTenantDedup(t *testing.T) {
 	tenant := uuid.New()
 	ctx := WithTenantID(context.Background(), tenant)
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		c.EnsureContact(ctx, "telegram", "tg-main", "user-123", "uid-1", "Alice", "alice", "user", "user", "", "")
 	}
 

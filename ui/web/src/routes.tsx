@@ -114,6 +114,9 @@ const TenantDetailPage = lazyWithRetry(() =>
 const BackupRestorePage = lazyWithRetry(() =>
   import("@/pages/backup-restore/backup-restore-page").then((m) => ({ default: m.BackupRestorePage })),
 );
+const HooksPage = lazyWithRetry(() =>
+  import("@/pages/hooks").then((m) => ({ default: m.HooksPage })),
+);
 const TenantSelectorPage = lazyWithRetry(() =>
   import("@/pages/login/tenant-selector").then((m) => ({ default: m.TenantSelectorPage })),
 );
@@ -172,6 +175,8 @@ export function AppRoutes() {
           <Route path={ROUTES.SKILL_DETAIL} element={<SkillsPage key="detail" />} />
           <Route path={ROUTES.CRON} element={<CronPage key="list" />} />
           <Route path={ROUTES.CRON_DETAIL} element={<CronPage key="detail" />} />
+          <Route path={ROUTES.HOOKS} element={<HooksPage key="list" />} />
+          <Route path={ROUTES.HOOK_DETAIL} element={<HooksPage key="detail" />} />
           {/* Admin-only pages */}
           <Route path={ROUTES.CONFIG} element={<RequireCrossTenant><ConfigPage /></RequireCrossTenant>} />
           <Route path={ROUTES.PROVIDERS} element={<RequireAdmin><ProvidersPage key="list" /></RequireAdmin>} />

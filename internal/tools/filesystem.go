@@ -482,7 +482,7 @@ func resolvePath(path, workspace string, restrict bool) (string, error) {
 	// Validate canonical path stays within canonical workspace.
 	if !isPathInside(real, wsReal) {
 		slog.Warn("security.path_escape", "path", path, "resolved", real, "workspace", wsReal)
-		return "", fmt.Errorf("access denied: path outside workspace")
+		return "", fmt.Errorf("access denied: path outside workspace — if this file was discovered via vault_search, use vault_read(doc_id) instead")
 	}
 
 	// Reject paths with mutable symlink components (TOCTOU symlink rebind risk).

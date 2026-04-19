@@ -27,7 +27,7 @@ func (t *VaultSearchTool) SetSearchService(svc *vault.VaultSearchService) {
 func (t *VaultSearchTool) Name() string { return "vault_search" }
 
 func (t *VaultSearchTool) Description() string {
-	return "Primary discovery tool: search across ALL knowledge sources (vault docs, memory, knowledge graph). Returns ranked results with source attribution. Use memory_search for memory-only queries, kg_search for relationship traversal."
+	return "Primary discovery tool: search across ALL knowledge sources (vault docs, memory, knowledge graph). Returns ranked results with source attribution and doc_id — pass the doc_id to vault_read for full content. Use memory_search for memory-only queries, kg_search for relationship traversal."
 }
 
 func (t *VaultSearchTool) Parameters() map[string]any {
@@ -108,6 +108,9 @@ func (t *VaultSearchTool) Execute(ctx context.Context, args map[string]any) *Res
 			sb.WriteString(fmt.Sprintf(" (%s)", r.Path))
 		}
 		sb.WriteString(fmt.Sprintf(" — score: %.2f", r.Score))
+		if r.ID != "" {
+			sb.WriteString(fmt.Sprintf(" — id: %s", r.ID))
+		}
 		if r.Snippet != "" {
 			sb.WriteString(fmt.Sprintf("\n   %s", r.Snippet))
 		}

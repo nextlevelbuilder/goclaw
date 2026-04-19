@@ -22,10 +22,21 @@ type TenantRestoreOptions struct {
 	DB            *sql.DB
 	ArchivePath   string
 	TenantID      uuid.UUID // target tenant; zero = create new (mode "new")
-	TenantSlug    string
+	TenantSlug    string    // target tenant slug; required for mode "new"
 	DataDir       string
 	WorkspacePath string
-	// Mode: "upsert" (default), "new" (create new tenant), "replace" (delete + insert)
+	// Mode selects restore strategy:
+	//   - "upsert"  (default): INSERT ... ON CONFLICT DO NOTHING. Non-destructive.
+	//                          Tenant metadata (name/status/settings) is NOT updated
+	//                          if the tenants row already exists.
+	//   - "replace": DELETE all tenant-scoped data except the tenants row (FK-safe
+	//                with respect to excluded diagnostic tables), then INSERT from
+	//                archive. Metadata on the tenants row is preserved in place.
+	//   - "new":     Create a new tenant from archive metadata (name/status/settings)
+	//                with the provided TenantSlug. All tenant-scoped rows are cloned
+	//                with tenant_id remapped to the new tenant. This includes
+	//                tenant_users, api_keys, llm_providers, config_secrets, etc. —
+	//                effectively a tenant clone under a new slug.
 	Mode       string
 	Force      bool
 	DryRun     bool
@@ -81,22 +92,49 @@ func TenantRestore(ctx context.Context, opts TenantRestoreOptions) (*TenantResto
 				manifest.SchemaVersion, currentSchema))
 	}
 
+	tables := TenantTables()
+	targetTenantID := opts.TenantID
+	var sourceTenant *tenantRestoreRow
+
+	if mode == "new" && strings.TrimSpace(opts.TenantSlug) == "" {
+		return nil, fmt.Errorf("target tenant slug is required for new restore")
+	}
+
+	if mode == "new" {
+		tenantData, ok := tableData["tenants"]
+		if !ok || len(tenantData) == 0 {
+			return nil, fmt.Errorf("archive missing tenants table")
+		}
+
+		tenantRow, err := loadTenantRestoreRow(tenantData)
+		if err != nil {
+			return nil, fmt.Errorf("load tenants row: %w", err)
+		}
+		sourceTenant = tenantRow
+	}
+
+	if mode == "new" && opts.DryRun {
+		if err := ensureTenantSlugAvailable(ctx, opts.TenantSlug, func(ctx context.Context, slug string) (uuid.UUID, error) {
+			return lookupTenantSlugID(ctx, opts.DB, slug)
+		}); err != nil {
+			return nil, fmt.Errorf("validate target tenant slug: %w", err)
+		}
+	}
+
 	if opts.DryRun {
 		progress("dry-run", fmt.Sprintf("manifest ok: schema=%d, tables=%d", manifest.SchemaVersion, len(tableData)))
 		return result, nil
 	}
 
-	tables := TenantTables()
-	targetTenantID := opts.TenantID
-
 	switch mode {
 	case "new":
-		newID, err := createNewTenant(ctx, opts.DB, manifest.TenantSlug, opts.TenantSlug)
+		newID, err := createNewTenant(ctx, opts.DB, sourceTenant, opts.TenantSlug)
 		if err != nil {
 			return nil, fmt.Errorf("create new tenant: %w", err)
 		}
 		targetTenantID = newID
 		result.TenantID = newID.String()
+		result.TablesRestored["tenants"] = 1
 		progress("database", fmt.Sprintf("created new tenant %s", newID))
 
 	case "replace":
@@ -108,6 +146,9 @@ func TenantRestore(ctx context.Context, opts TenantRestoreOptions) (*TenantResto
 
 	// Restore DB tables in forward tier order.
 	for _, table := range tables {
+		if !shouldRestoreTable(mode, table) {
+			continue
+		}
 		data, ok := tableData[table.Name]
 		if !ok || len(data) == 0 {
 			continue

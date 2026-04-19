@@ -18,7 +18,7 @@ import (
 //
 //	clientW → serverR  (test reads what the process sends)
 //	serverW → clientR  (test injects responses to the process)
-func buildACPProcess(handler RequestHandler, notify NotifyHandler) (
+func buildACPProcess(handler RequestHandler, extraNotify NotifyHandler) (
 	proc *ACPProcess,
 	serverW io.WriteCloser,
 	serverR io.ReadCloser,
@@ -26,15 +26,31 @@ func buildACPProcess(handler RequestHandler, notify NotifyHandler) (
 	clientR, sW := io.Pipe() // test writes here → conn reads
 	sR, clientW := io.Pipe() // conn writes here → test reads
 
-	conn := NewConn(clientW, clientR, handler, notify)
-	conn.Start()
-
+	// Create proc first so the notifyHandler closure can reference it.
 	proc = &ACPProcess{
-		conn:   conn,
 		exited: make(chan struct{}),
 		ctx:    context.Background(),
 		cancel: func() {},
 	}
+
+	// Mirror production spawn: always route session/update to proc.dispatchUpdate,
+	// then optionally forward to the test's extra notify hook.
+	internalNotify := func(method string, params json.RawMessage) {
+		if method == "session/update" {
+			var update SessionUpdate
+			if json.Unmarshal(params, &update) == nil {
+				proc.dispatchUpdate(update)
+			}
+		}
+		if extraNotify != nil {
+			extraNotify(method, params)
+		}
+	}
+
+	conn := NewConn(clientW, clientR, handler, internalNotify)
+	conn.Start()
+	proc.conn = conn
+
 	return proc, sW, sR
 }
 
@@ -119,7 +135,7 @@ func TestACPProcess_Initialize_Success(t *testing.T) {
 	defer serverW.Close()
 	defer serverR.Close()
 
-	respJSON := `{"agentInfo":{"name":"claude","version":"1.0"},"capabilities":{"loadSession":true}}`
+	respJSON := `{"agentInfo":{"name":"claude","version":"1.0"},"agentCapabilities":{"loadSession":true}}`
 	done := replyTo(serverR, serverW, respJSON)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -197,11 +213,12 @@ func TestACPProcess_NewSession_Success(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	if err := proc.NewSession(ctx); err != nil {
+	sid, err := proc.NewSession(ctx)
+	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}
-	if proc.sessionID != "sess-xyz" {
-		t.Errorf("expected sessionID='sess-xyz', got %q", proc.sessionID)
+	if sid != "sess-xyz" {
+		t.Errorf("expected sessionID='sess-xyz', got %q", sid)
 	}
 	<-done
 }
@@ -216,7 +233,7 @@ func TestACPProcess_NewSession_Error(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	err := proc.NewSession(ctx)
+	_, err := proc.NewSession(ctx)
 	if err == nil {
 		t.Fatal("expected error from NewSession")
 	}
@@ -230,7 +247,6 @@ func TestACPProcess_NewSession_Error(t *testing.T) {
 
 func TestACPProcess_Prompt_Success(t *testing.T) {
 	proc, serverW, serverR := buildACPProcess(nil, nil)
-	proc.sessionID = "sess-1"
 	defer serverW.Close()
 	defer serverR.Close()
 
@@ -239,7 +255,7 @@ func TestACPProcess_Prompt_Success(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	resp, err := proc.Prompt(ctx, []ContentBlock{{Type: "text", Text: "hi"}}, nil)
+	resp, err := proc.Prompt(ctx, "sess-1", []ContentBlock{{Type: "text", Text: "hi"}}, nil)
 	if err != nil {
 		t.Fatalf("Prompt error: %v", err)
 	}
@@ -260,23 +276,23 @@ func TestACPProcess_Prompt_WithUpdateCallback(t *testing.T) {
 	}
 
 	proc, serverW, serverR := buildACPProcess(nil, notifyHandler)
-	proc.sessionID = "sess-2"
 	defer serverW.Close()
 	defer serverR.Close()
 
+	const sid = "sess-2"
+
 	// Goroutine: send a notification, then a response
 	go func() {
-		// Read the prompt request first
 		buf := make([]byte, 32*1024)
 		n, _ := serverR.Read(buf)
 		var req jsonrpcMessage
 		json.Unmarshal(buf[:n], &req)
 
-		// Send session/update notification
+		// Send session/update notification with matching session ID
 		notif := jsonrpcMessage{
 			JSONRPC: "2.0",
 			Method:  "session/update",
-			Params:  json.RawMessage(`{"kind":"message","stopReason":""}`),
+			Params:  json.RawMessage(`{"sessionId":"sess-2","kind":"message","stopReason":""}`),
 		}
 		nd, _ := json.Marshal(notif)
 		serverW.Write(append(nd, '\n'))
@@ -295,21 +311,23 @@ func TestACPProcess_Prompt_WithUpdateCallback(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	_, err := proc.Prompt(ctx, []ContentBlock{{Type: "text", Text: "hello"}}, func(u SessionUpdate) {
+	_, err := proc.Prompt(ctx, sid, []ContentBlock{{Type: "text", Text: "hello"}}, func(u SessionUpdate) {
 		received = append(received, u)
 	})
 	if err != nil {
 		t.Fatalf("Prompt error: %v", err)
 	}
 
-	// Drain notification channel
+	// Allow notification delivery
 	time.Sleep(20 * time.Millisecond)
-	// The update callback + notify handler may both fire — just check no panic occurred
+	// Verify no panic and at least one update was dispatched
+	if len(received) == 0 {
+		t.Error("expected at least one session/update to be dispatched")
+	}
 }
 
 func TestACPProcess_Prompt_Error(t *testing.T) {
 	proc, serverW, serverR := buildACPProcess(nil, nil)
-	proc.sessionID = "sess-3"
 	defer serverW.Close()
 	defer serverR.Close()
 
@@ -318,7 +336,7 @@ func TestACPProcess_Prompt_Error(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	_, err := proc.Prompt(ctx, []ContentBlock{{Type: "text", Text: "hi"}}, nil)
+	_, err := proc.Prompt(ctx, "sess-3", []ContentBlock{{Type: "text", Text: "hi"}}, nil)
 	if err == nil {
 		t.Fatal("expected error from Prompt")
 	}
@@ -329,15 +347,12 @@ func TestACPProcess_Prompt_Error(t *testing.T) {
 }
 
 func TestACPProcess_Prompt_SetsInUse(t *testing.T) {
-	// Verify inUse counter goes up during Prompt and back to 0 after
 	proc, serverW, serverR := buildACPProcess(nil, nil)
-	proc.sessionID = "sess-4"
 	defer serverW.Close()
 	defer serverR.Close()
 
 	started := make(chan struct{})
 	go func() {
-		// Read and wait a moment before responding
 		buf := make([]byte, 32*1024)
 		n, _ := serverR.Read(buf)
 		var req jsonrpcMessage
@@ -360,7 +375,7 @@ func TestACPProcess_Prompt_SetsInUse(t *testing.T) {
 		defer close(done)
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		proc.Prompt(ctx, []ContentBlock{{Type: "text", Text: "x"}}, nil)
+		proc.Prompt(ctx, "sess-4", []ContentBlock{{Type: "text", Text: "x"}}, nil)
 	}()
 
 	<-started
@@ -378,7 +393,6 @@ func TestACPProcess_Prompt_SetsInUse(t *testing.T) {
 
 func TestACPProcess_Cancel_SendsNotification(t *testing.T) {
 	proc, serverW, serverR := buildACPProcess(nil, nil)
-	proc.sessionID = "sess-cancel"
 	defer serverW.Close()
 
 	received := make(chan string, 1)
@@ -390,7 +404,7 @@ func TestACPProcess_Cancel_SendsNotification(t *testing.T) {
 		received <- msg.Method
 	}()
 
-	err := proc.Cancel()
+	err := proc.Cancel("sess-cancel")
 	if err != nil {
 		t.Fatalf("Cancel error: %v", err)
 	}
@@ -405,30 +419,48 @@ func TestACPProcess_Cancel_SendsNotification(t *testing.T) {
 	}
 }
 
-// --- dispatchUpdate / setUpdateFn ---
+// --- dispatchUpdate / registerUpdateFn ---
 
 func TestACPProcess_DispatchUpdate_NilFn(t *testing.T) {
 	proc := &ACPProcess{}
-	// Should not panic with nil updateFn
-	proc.dispatchUpdate(SessionUpdate{Kind: "message"})
+	// Should not panic with no registered fn for the session ID
+	proc.dispatchUpdate(SessionUpdate{SessionID: "x", Kind: "message"})
 }
 
 func TestACPProcess_DispatchUpdate_CallsFn(t *testing.T) {
 	proc := &ACPProcess{}
 	called := false
-	proc.setUpdateFn(func(u SessionUpdate) {
+	proc.registerUpdateFn("sid-1", func(u SessionUpdate) {
 		called = true
 	})
-	proc.dispatchUpdate(SessionUpdate{Kind: "message"})
+	proc.dispatchUpdate(SessionUpdate{SessionID: "sid-1", Kind: "message"})
 	if !called {
 		t.Error("expected updateFn to be called")
 	}
 }
 
-func TestACPProcess_SetUpdateFn_Nil(t *testing.T) {
+func TestACPProcess_DispatchUpdate_RoutesCorrectSession(t *testing.T) {
 	proc := &ACPProcess{}
-	proc.setUpdateFn(func(u SessionUpdate) {})
-	proc.setUpdateFn(nil)
-	// Should not panic
-	proc.dispatchUpdate(SessionUpdate{Kind: "x"})
+	var calledA, calledB bool
+	proc.registerUpdateFn("sid-A", func(u SessionUpdate) { calledA = true })
+	proc.registerUpdateFn("sid-B", func(u SessionUpdate) { calledB = true })
+
+	proc.dispatchUpdate(SessionUpdate{SessionID: "sid-A"})
+	if !calledA {
+		t.Error("expected fn for sid-A to be called")
+	}
+	if calledB {
+		t.Error("expected fn for sid-B NOT to be called")
+	}
+}
+
+func TestACPProcess_UnregisterUpdateFn(t *testing.T) {
+	proc := &ACPProcess{}
+	called := false
+	proc.registerUpdateFn("sid-x", func(u SessionUpdate) { called = true })
+	proc.unregisterUpdateFn("sid-x")
+	proc.dispatchUpdate(SessionUpdate{SessionID: "sid-x"})
+	if called {
+		t.Error("expected fn to not be called after unregister")
+	}
 }

@@ -94,6 +94,27 @@
       "save": "保存",
       "saving": "保存中..."
     },
+    "sttForm": {
+      "title": "STT 设置",
+      "description": "配置语音转文字 Provider，用于转录语音消息。",
+      "providersLabel": "Provider",
+      "providersPlaceholder": "选择 Provider",
+      "elevenlabsSectionTitle": "ElevenLabs",
+      "elevenlabsApiKeyLabel": "API Key",
+      "elevenlabsDefaultLanguageLabel": "默认语言",
+      "proxySectionTitle": "代理",
+      "proxyUrlLabel": "代理 URL",
+      "proxyApiKeyLabel": "代理 API Key",
+      "proxyTenantIdLabel": "代理租户 ID",
+      "whatsappEnabledLabel": "为 WhatsApp 启用 STT",
+      "whatsappPrivacyWarning": "为 WhatsApp 启用 STT 将破坏发送给此 Agent 的语音消息的端对端加密。",
+      "providersRequiredError": "至少需要选择一个 Provider。",
+      "cancel": "取消",
+      "save": "保存",
+      "saving": "保存中...",
+      "saveSuccess": "STT 设置已保存",
+      "saveFailed": "保存 STT 设置失败"
+    },
     "extractorChain": {
       "title": "Web Fetch — 提取器链",
       "description": "有序内容提取器列表。每个 URL 从上到下依次尝试，直到某个提取器返回高质量内容。",

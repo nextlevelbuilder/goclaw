@@ -11,13 +11,12 @@ import (
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 )
 
 // Send delivers an outbound message to WhatsApp via whatsmeow.
-func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) error {
+func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 	if c.client == nil || !c.client.IsConnected() {
 		return fmt.Errorf("whatsapp not connected")
 	}
@@ -25,6 +24,44 @@ func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) error {
 	chatJID, err := types.ParseJID(msg.ChatID)
 	if err != nil {
 		return fmt.Errorf("invalid whatsapp JID %q: %w", msg.ChatID, err)
+	}
+
+	// TTS auto-apply: convert [[tts]] tagged responses to voice
+	if c.audioMgr != nil && msg.Content != "" {
+		isVoiceInbound := msg.Metadata["is_voice_inbound"] == "true"
+		ttsResult, ttsErr := c.audioMgr.AutoApplyToText(ctx, msg.Content, "whatsapp", isVoiceInbound, "")
+		if ttsErr != nil {
+			slog.Debug("whatsapp: tts auto-apply error", "error", ttsErr)
+		}
+		if ttsResult != nil && ttsResult.AudioPath != "" {
+			// Send audio as voice message
+			audioData, readErr := os.ReadFile(ttsResult.AudioPath)
+			if readErr == nil {
+				waMsg, buildErr := c.buildMediaMessage(audioData, ttsResult.AudioMime, "")
+				if buildErr == nil {
+					// Mark as voice message (PTT) for WhatsApp
+					if waMsg.AudioMessage != nil {
+						waMsg.AudioMessage.PTT = new(true)
+					}
+					if _, sendErr := c.client.SendMessage(c.ctx, chatJID, waMsg); sendErr != nil {
+						slog.Warn("whatsapp: tts auto-apply voice send failed, falling back to text", "error", sendErr)
+					} else {
+						// Voice sent successfully, stop typing and return
+						if cancel, ok := c.typingCancel.LoadAndDelete(msg.ChatID); ok {
+							if fn, ok := cancel.(context.CancelFunc); ok {
+								fn()
+							}
+						}
+						go c.sendPresence(chatJID, types.ChatPresencePaused)
+						return nil
+					}
+				}
+			}
+		}
+		// Update content with directives stripped (even if TTS not applied)
+		if ttsResult != nil {
+			msg.Content = ttsResult.Text
+		}
 	}
 
 	// Send media attachments first.
@@ -61,7 +98,7 @@ func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) error {
 		chunks := chunkText(formatted, maxMessageLen)
 		for _, chunk := range chunks {
 			waMsg := &waE2E.Message{
-				Conversation: proto.String(chunk),
+				Conversation: new(chunk),
 			}
 			if _, err := c.client.SendMessage(c.ctx, chatJID, waMsg); err != nil {
 				return fmt.Errorf("send whatsapp message: %w", err)
@@ -90,14 +127,14 @@ func (c *Channel) buildMediaMessage(data []byte, mime, caption string) (*waE2E.M
 		}
 		return &waE2E.Message{
 			ImageMessage: &waE2E.ImageMessage{
-				Caption:       proto.String(caption),
-				Mimetype:      proto.String(mime),
+				Caption:       new(caption),
+				Mimetype:      new(mime),
 				URL:           &uploaded.URL,
 				DirectPath:    &uploaded.DirectPath,
 				MediaKey:      uploaded.MediaKey,
 				FileEncSHA256: uploaded.FileEncSHA256,
 				FileSHA256:    uploaded.FileSHA256,
-				FileLength:    proto.Uint64(uint64(len(data))),
+				FileLength:    new(uint64(len(data))),
 			},
 		}, nil
 
@@ -108,14 +145,14 @@ func (c *Channel) buildMediaMessage(data []byte, mime, caption string) (*waE2E.M
 		}
 		return &waE2E.Message{
 			VideoMessage: &waE2E.VideoMessage{
-				Caption:       proto.String(caption),
-				Mimetype:      proto.String(mime),
+				Caption:       new(caption),
+				Mimetype:      new(mime),
 				URL:           &uploaded.URL,
 				DirectPath:    &uploaded.DirectPath,
 				MediaKey:      uploaded.MediaKey,
 				FileEncSHA256: uploaded.FileEncSHA256,
 				FileSHA256:    uploaded.FileSHA256,
-				FileLength:    proto.Uint64(uint64(len(data))),
+				FileLength:    new(uint64(len(data))),
 			},
 		}, nil
 
@@ -126,13 +163,13 @@ func (c *Channel) buildMediaMessage(data []byte, mime, caption string) (*waE2E.M
 		}
 		return &waE2E.Message{
 			AudioMessage: &waE2E.AudioMessage{
-				Mimetype:      proto.String(mime),
+				Mimetype:      new(mime),
 				URL:           &uploaded.URL,
 				DirectPath:    &uploaded.DirectPath,
 				MediaKey:      uploaded.MediaKey,
 				FileEncSHA256: uploaded.FileEncSHA256,
 				FileSHA256:    uploaded.FileSHA256,
-				FileLength:    proto.Uint64(uint64(len(data))),
+				FileLength:    new(uint64(len(data))),
 			},
 		}, nil
 
@@ -143,14 +180,14 @@ func (c *Channel) buildMediaMessage(data []byte, mime, caption string) (*waE2E.M
 		}
 		return &waE2E.Message{
 			DocumentMessage: &waE2E.DocumentMessage{
-				Caption:       proto.String(caption),
-				Mimetype:      proto.String(mime),
+				Caption:       new(caption),
+				Mimetype:      new(mime),
 				URL:           &uploaded.URL,
 				DirectPath:    &uploaded.DirectPath,
 				MediaKey:      uploaded.MediaKey,
 				FileEncSHA256: uploaded.FileEncSHA256,
 				FileSHA256:    uploaded.FileSHA256,
-				FileLength:    proto.Uint64(uint64(len(data))),
+				FileLength:    new(uint64(len(data))),
 			},
 		}, nil
 	}

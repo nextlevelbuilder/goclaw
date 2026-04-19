@@ -50,11 +50,30 @@ type Config struct {
 	Sessions  SessionsConfig  `json:"sessions"`
 	Database  DatabaseConfig  `json:"database"`
 	Tts       TtsConfig       `json:"tts"`
+	Audio     *AudioConfig    `json:"audio,omitempty"` // optional STT/Music defaults (Phase 3/4)
 	Cron      CronConfig      `json:"cron"`
 	Telemetry TelemetryConfig `json:"telemetry"`
 	Tailscale TailscaleConfig `json:"tailscale"`
 	Bindings  []AgentBinding  `json:"bindings,omitempty"`
+	Hooks     HooksConfig     `json:"hooks,omitempty"`
 	mu        sync.RWMutex
+}
+
+// HooksConfig tunes the script-hook runtime caps. All zero-valued fields fall
+// back to the handlers package defaults (see handlers.NewScriptHandler).
+//
+// ScriptConcurrency bounds the total concurrent script executions per process.
+// ScriptPerTenantConcurrency bounds a single tenant's share of that pool so a
+// runaway tenant cannot starve global slots. ScriptCacheSize caps the LRU of
+// compiled goja programs keyed by (hookID, version).
+//
+// BuiltinDisable names builtin hook IDs (from Phase 04's builtins.yaml) that
+// the operator wants force-disabled at startup — per-deployment escape hatch.
+type HooksConfig struct {
+	ScriptConcurrency          int      `json:"script_concurrency,omitempty"`
+	ScriptPerTenantConcurrency int      `json:"script_per_tenant_concurrency,omitempty"`
+	ScriptCacheSize            int      `json:"script_cache_size,omitempty"`
+	BuiltinDisable             []string `json:"builtin_disable,omitempty"`
 }
 
 // TailscaleConfig configures the optional Tailscale tsnet listener.
@@ -150,10 +169,15 @@ type MemoryFlushConfig struct {
 }
 
 // ContextPruningConfig configures in-memory context pruning of old tool results.
-// Matching TS src/agents/pi-extensions/context-pruning/settings.ts.
-// Mode "cache-ttl": prune when context exceeds softTrimRatio of context window.
+// Matches TS openclaw/src/agents/pi-hooks/context-pruning/settings.ts.
+//
+// Mode "" (default) or "off" → pruning disabled, zero overhead.
+// Mode "cache-ttl" → prune eligible tool results when ratio exceeds softTrimRatio,
+//
+//	gated by provider prompt-cache TTL (see PruneStage).
 type ContextPruningConfig struct {
-	Mode                 string                   `json:"mode,omitempty"`                 // "off" (default), "cache-ttl"
+	Mode                 string                   `json:"mode,omitempty"`                 // "" (default off), "off", "cache-ttl"
+	TTL                  string                   `json:"ttl,omitempty"`                  // cache TTL gate duration (default "5m"), Go duration string e.g. "5m", "30s"
 	KeepLastAssistants   int                      `json:"keepLastAssistants,omitempty"`   // protect last N assistant msgs (default 3)
 	SoftTrimRatio        float64                  `json:"softTrimRatio,omitempty"`        // start soft trim at this % of window (default 0.3)
 	HardClearRatio       float64                  `json:"hardClearRatio,omitempty"`       // start hard clear at this % (default 0.5)

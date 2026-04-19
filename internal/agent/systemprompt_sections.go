@@ -729,3 +729,22 @@ func buildTeamMembersSection(members []store.TeamMemberData, teamGuidance string
 	lines = append(lines, "")
 	return lines
 }
+
+// buildVoiceResponseSection generates guidance for triggering auto TTS in "tagged" mode.
+// When TTS auto mode is "tagged", agent responses containing [[tts]] are converted to voice.
+func buildVoiceResponseSection() []string {
+	return []string{
+		"## Voice Response",
+		"",
+		"You can respond with voice/audio by wrapping text with `[[tts]]`:",
+		"",
+		"```",
+		"[[tts]]This text will be spoken aloud.[[/tts]]",
+		"```",
+		"",
+		"**ONLY use [[tts]] when the user explicitly asks for voice/audio response.**",
+		"Examples: \"read this aloud\", \"respond with voice\", \"speak this\", \"tell me a story (voice)\".",
+		"Do NOT add [[tts]] just because you think it would be nice — text is the default.",
+		"",
+	}
+}

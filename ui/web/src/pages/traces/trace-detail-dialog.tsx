@@ -56,9 +56,18 @@ export function TraceDetailDialog({ traceId, onClose, getTrace, onNavigateTrace,
       .finally(() => setLoading(false));
   }, [traceId, getTrace]);
 
-  // Auto-refetch when trace aggregates update
+  // Auto-refetch when trace aggregates update (flush-buffered, 5s interval).
   useWsEvent(Events.TRACE_UPDATED, useCallback(
     (payload: unknown) => { const data = payload as { trace_ids?: string[] }; if (data?.trace_ids?.includes(traceId)) fetchTrace(); },
+    [traceId, fetchTrace],
+  ));
+
+  // Immediate status update (fired on every status write, before flush tick).
+  useWsEvent(Events.TRACE_STATUS, useCallback(
+    (payload: unknown) => {
+      const data = payload as { traceId?: string };
+      if (data?.traceId === traceId) fetchTrace();
+    },
     [traceId, fetchTrace],
   ));
 

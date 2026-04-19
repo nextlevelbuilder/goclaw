@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"log/slog"
+	"maps"
 	"sync"
 
 	"github.com/google/uuid"
@@ -255,12 +256,8 @@ func BuiltinToolSettingsFromCtx(ctx context.Context) BuiltinToolSettings {
 
 	// Both tiers present: layer tenant override on top of global defaults.
 	merged := make(BuiltinToolSettings, len(global)+len(tenant))
-	for k, v := range global {
-		merged[k] = v
-	}
-	for k, v := range tenant {
-		merged[k] = v
-	}
+	maps.Copy(merged, global)
+	maps.Copy(merged, tenant)
 	return merged
 }
 

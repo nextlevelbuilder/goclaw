@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html"
 	"log/slog"
+	"slices"
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
@@ -131,10 +132,5 @@ func isAssignedStaff(assigneeIDs []string, senderID string) bool {
 	if senderID == "" {
 		return false
 	}
-	for _, assigneeID := range assigneeIDs {
-		if assigneeID == senderID {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(assigneeIDs, senderID)
 }

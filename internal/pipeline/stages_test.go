@@ -7,9 +7,12 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/workspace"
 )
@@ -344,9 +347,9 @@ func TestPruneStage_UnderBudget_NoOp(t *testing.T) {
 			MaxTokens:     1000,
 		},
 		TokenCounter: &mockTokenCounter{countPerMessage: 1}, // tiny counts
-		PruneMessages: func(msgs []providers.Message, _ int) []providers.Message {
+		PruneMessages: func(msgs []providers.Message, _ int) ([]providers.Message, PruneStats) {
 			pruneCallCount++
-			return msgs
+			return msgs, PruneStats{}
 		},
 	}
 	stage := NewPruneStage(deps, nil)
@@ -380,10 +383,10 @@ func TestPruneStage_Over70Percent_CallsPruneMessages(t *testing.T) {
 			MaxTokens:     1000,
 		},
 		TokenCounter: &mockTokenCounter{countPerMessage: 100},
-		PruneMessages: func(msgs []providers.Message, budget int) []providers.Message {
+		PruneMessages: func(msgs []providers.Message, budget int) ([]providers.Message, PruneStats) {
 			pruneCallCount++
 			// return trimmed history that's under budget
-			return msgs[:1]
+			return msgs[:1], PruneStats{ResultsTrimmed: 1}
 		},
 	}
 	stage := NewPruneStage(deps, nil)
@@ -416,9 +419,9 @@ func TestPruneStage_Over100Percent_CallsCompact(t *testing.T) {
 			MaxTokens:     100,
 		},
 		TokenCounter: &mockTokenCounter{countPerMessage: 100},
-		PruneMessages: func(msgs []providers.Message, _ int) []providers.Message {
+		PruneMessages: func(msgs []providers.Message, _ int) ([]providers.Message, PruneStats) {
 			// return same size — still over budget
-			return msgs
+			return msgs, PruneStats{}
 		},
 		CompactMessages: func(_ context.Context, msgs []providers.Message, _ string) ([]providers.Message, error) {
 			compactCallCount++
@@ -455,8 +458,8 @@ func TestPruneStage_StillOverAfterCompaction_ReturnsAbortRun(t *testing.T) {
 			MaxTokens:     100,
 		},
 		TokenCounter: &mockTokenCounter{countPerMessage: 100},
-		PruneMessages: func(msgs []providers.Message, _ int) []providers.Message {
-			return msgs // no reduction
+		PruneMessages: func(msgs []providers.Message, _ int) ([]providers.Message, PruneStats) {
+			return msgs, PruneStats{} // no reduction
 		},
 		CompactMessages: func(_ context.Context, msgs []providers.Message, _ string) ([]providers.Message, error) {
 			// compaction still returns too many messages
@@ -520,9 +523,9 @@ func TestPruneStage_EffectiveContextWindow_OverridesConfig(t *testing.T) {
 			MaxTokens:     1_000,
 		},
 		TokenCounter: &mockTokenCounter{countPerMessage: 600},
-		PruneMessages: func(msgs []providers.Message, _ int) []providers.Message {
+		PruneMessages: func(msgs []providers.Message, _ int) ([]providers.Message, PruneStats) {
 			pruneCallCount++
-			return msgs
+			return msgs, PruneStats{}
 		},
 	}
 	stage := NewPruneStage(deps, nil)
@@ -632,9 +635,9 @@ func TestPruneStage_ReserveTokens_BuffersBudget(t *testing.T) {
 			ReserveTokens: 2_000,
 		},
 		TokenCounter: &mockTokenCounter{countPerMessage: 100},
-		PruneMessages: func(msgs []providers.Message, _ int) []providers.Message {
+		PruneMessages: func(msgs []providers.Message, _ int) ([]providers.Message, PruneStats) {
 			pruneCallCount++
-			return msgs[:1]
+			return msgs[:1], PruneStats{ResultsTrimmed: 1}
 		},
 	}
 	stage := NewPruneStage(deps, nil)
@@ -666,9 +669,9 @@ func TestPruneStage_EffectiveContextWindow_ZeroFallsBackToConfig(t *testing.T) {
 			MaxTokens:     1_000,
 		},
 		TokenCounter: &mockTokenCounter{countPerMessage: 600},
-		PruneMessages: func(msgs []providers.Message, _ int) []providers.Message {
+		PruneMessages: func(msgs []providers.Message, _ int) ([]providers.Message, PruneStats) {
 			pruneCallCount++
-			return msgs[:1]
+			return msgs[:1], PruneStats{ResultsTrimmed: 1}
 		},
 	}
 	stage := NewPruneStage(deps, nil)
@@ -1766,5 +1769,154 @@ func TestFinalizeStage_DeduplicatesMedia_WithRealFile(t *testing.T) {
 	}
 	if state.Tool.MediaResults[0].Size == 0 {
 		t.Error("Size should be populated from real file")
+	}
+}
+
+// ─── parseTTL (Phase 06) ─────────────────────────────────────────────────
+
+func TestParseTTL_ValidInputs(t *testing.T) {
+	cases := []struct {
+		in   string
+		want time.Duration
+	}{
+		{"", 5 * time.Minute},
+		{"5m", 5 * time.Minute},
+		{"30s", 30 * time.Second},
+		{"1h30m", 90 * time.Minute},
+		{"bogus", 5 * time.Minute},  // invalid → fallback
+		{"-1m", 5 * time.Minute},    // negative → fallback
+	}
+	for _, tc := range cases {
+		got := parseTTL(tc.in)
+		if got != tc.want {
+			t.Errorf("parseTTL(%q) = %v, want %v", tc.in, got, tc.want)
+		}
+	}
+}
+
+// ─── Cache-TTL gate (Phase 06) ───────────────────────────────────────────
+
+// makePruneHistory builds history that exceeds the 70% soft threshold.
+// budget = 10000-0-1000=9000, soft=6300. 100 msgs * 100 = 10000 > 6300.
+func makePruneHistory(n int) []providers.Message {
+	h := make([]providers.Message, n)
+	for i := range h {
+		h[i] = providers.Message{Role: "tool", ToolCallID: "c1", Content: "x"}
+	}
+	return h
+}
+
+func TestPruneStage_CacheTtlGate_SkipsWithinTTL(t *testing.T) {
+	t.Parallel()
+	// cache live (1 min ago), history above soft threshold but below hard budget.
+	var pruneCalled int32
+	deps := &PipelineDeps{
+		Config:       PipelineConfig{ContextWindow: 10000, MaxTokens: 1000},
+		TokenCounter: &mockTokenCounter{countPerMessage: 100},
+		PruneMessages: func(msgs []providers.Message, _ int) ([]providers.Message, PruneStats) {
+			atomic.AddInt32(&pruneCalled, 1)
+			return msgs, PruneStats{}
+		},
+		GetProviderCaps:  func() providers.ProviderCapabilities { return providers.ProviderCapabilities{CacheControl: true} },
+		GetPruningConfig: func() *config.ContextPruningConfig { return &config.ContextPruningConfig{Mode: "cache-ttl", TTL: "5m"} },
+		GetCacheTouch:    func(string) time.Time { return time.Now().Add(-1 * time.Minute) }, // 1m ago, within 5m TTL
+		MarkCacheTouched: func(string) {},
+	}
+	stage := NewPruneStage(deps, nil)
+	state := defaultState()
+	state.Messages.SetHistory(makePruneHistory(50)) // 50*100=5000 tokens; soft=6300, hard=9000; below hard
+
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if atomic.LoadInt32(&pruneCalled) != 0 {
+		t.Error("prune should be skipped when cache is live and below hard budget")
+	}
+}
+
+func TestPruneStage_CacheTtlGate_PrunesAfterTTL(t *testing.T) {
+	t.Parallel()
+	// touch = 6 minutes ago → TTL expired → gate allows prune
+	var pruneCalled int32
+	var touchCalled int32
+	deps := &PipelineDeps{
+		Config:       PipelineConfig{ContextWindow: 10000, MaxTokens: 1000},
+		TokenCounter: &mockTokenCounter{countPerMessage: 100},
+		PruneMessages: func(msgs []providers.Message, _ int) ([]providers.Message, PruneStats) {
+			atomic.AddInt32(&pruneCalled, 1)
+			return msgs[:1], PruneStats{ResultsTrimmed: 1}
+		},
+		GetProviderCaps:  func() providers.ProviderCapabilities { return providers.ProviderCapabilities{CacheControl: true} },
+		GetPruningConfig: func() *config.ContextPruningConfig { return &config.ContextPruningConfig{Mode: "cache-ttl", TTL: "5m"} },
+		GetCacheTouch:    func(string) time.Time { return time.Now().Add(-6 * time.Minute) }, // 6m ago, expired
+		MarkCacheTouched: func(string) { atomic.AddInt32(&touchCalled, 1) },
+	}
+	stage := NewPruneStage(deps, nil)
+	state := defaultState()
+	state.Messages.SetHistory(makePruneHistory(100)) // 100*100=10000; above soft threshold
+
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if atomic.LoadInt32(&pruneCalled) == 0 {
+		t.Error("prune should fire when TTL expired")
+	}
+	if atomic.LoadInt32(&touchCalled) == 0 {
+		t.Error("MarkCacheTouched should be called after mutation")
+	}
+}
+
+func TestPruneStage_CacheTtlGate_NoCacheSupport_Prunes(t *testing.T) {
+	t.Parallel()
+	// CacheControl=false → gate is no-op → normal prune runs
+	var pruneCalled int32
+	deps := &PipelineDeps{
+		Config:       PipelineConfig{ContextWindow: 10000, MaxTokens: 1000},
+		TokenCounter: &mockTokenCounter{countPerMessage: 100},
+		PruneMessages: func(msgs []providers.Message, _ int) ([]providers.Message, PruneStats) {
+			atomic.AddInt32(&pruneCalled, 1)
+			return msgs[:1], PruneStats{ResultsTrimmed: 1}
+		},
+		GetProviderCaps:  func() providers.ProviderCapabilities { return providers.ProviderCapabilities{CacheControl: false} },
+		GetPruningConfig: func() *config.ContextPruningConfig { return &config.ContextPruningConfig{Mode: "cache-ttl", TTL: "5m"} },
+		GetCacheTouch:    func(string) time.Time { return time.Now().Add(-1 * time.Minute) },
+		MarkCacheTouched: func(string) {},
+	}
+	stage := NewPruneStage(deps, nil)
+	state := defaultState()
+	state.Messages.SetHistory(makePruneHistory(100))
+
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if atomic.LoadInt32(&pruneCalled) == 0 {
+		t.Error("prune should fire when provider has no cache support")
+	}
+}
+
+func TestPruneStage_CacheTtlGate_MarkTouchedOnlyOnMutation(t *testing.T) {
+	t.Parallel()
+	// PruneMessages returns zero stats (no mutation) → MarkCacheTouched must NOT be called.
+	var touchCalled int32
+	deps := &PipelineDeps{
+		Config:       PipelineConfig{ContextWindow: 10000, MaxTokens: 1000},
+		TokenCounter: &mockTokenCounter{countPerMessage: 100},
+		PruneMessages: func(msgs []providers.Message, _ int) ([]providers.Message, PruneStats) {
+			return msgs, PruneStats{} // no mutation
+		},
+		GetProviderCaps:  func() providers.ProviderCapabilities { return providers.ProviderCapabilities{CacheControl: true} },
+		GetPruningConfig: func() *config.ContextPruningConfig { return &config.ContextPruningConfig{Mode: "cache-ttl", TTL: "5m"} },
+		GetCacheTouch:    func(string) time.Time { return time.Time{} }, // cold
+		MarkCacheTouched: func(string) { atomic.AddInt32(&touchCalled, 1) },
+	}
+	stage := NewPruneStage(deps, nil)
+	state := defaultState()
+	state.Messages.SetHistory(makePruneHistory(100))
+
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if atomic.LoadInt32(&touchCalled) != 0 {
+		t.Error("MarkCacheTouched should NOT be called when prune returns no mutation")
 	}
 }

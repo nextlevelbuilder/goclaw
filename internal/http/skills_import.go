@@ -15,6 +15,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
 )
@@ -130,6 +131,19 @@ func (h *SkillsHandler) doSkillsImport(ctx context.Context, r io.Reader, userID 
 		if entry.metadata == nil {
 			slog.Warn("skills.import: missing metadata.json", "slug", slug)
 			continue
+		}
+
+		// Security guard: scan SKILL.md for malicious content BEFORE any disk/DB write
+		if entry.skillMD != nil {
+			violations, safe := skills.GuardSkillContent(string(entry.skillMD))
+			if !safe {
+				slog.Warn("security.skills.import_rejected",
+					"slug", slug,
+					"violations", len(violations),
+					"first_rule", violations[0].Reason)
+				summary.SkillsSkipped++
+				continue
+			}
 		}
 
 		var meta struct {

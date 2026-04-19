@@ -318,6 +318,14 @@
     "create": "创建",
     "creating": "创建中..."
   },
+  "rename": {
+    "nameAria": "重命名团队",
+    "descAria": "编辑团队描述",
+    "descPlaceholder": "团队描述",
+    "addDescription": "+ 添加描述",
+    "emptyError": "团队名称不能为空",
+    "staleError": "团队已被其他地方更新 — 您的更改已丢弃"
+  },
   "toast": {
     "created": "Team已创建",
     "deleted": "Team已删除",

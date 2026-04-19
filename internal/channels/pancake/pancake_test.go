@@ -536,6 +536,56 @@ func TestWebhookRouterRoutesCommentEvent(t *testing.T) {
 	}
 }
 
+// TestWebhookRouterRoutesWebhookPageID covers the production Facebook COMMENT case:
+// Pancake sends event.page_id = Facebook native page ID (780222461832476),
+// but the channel is configured with Pancake's internal page ID (1098014820065543).
+// Fix: configure webhook_page_id = "fb-native-id" so the router registers under both.
+func TestWebhookRouterRoutesWebhookPageID(t *testing.T) {
+	cfg := pancakeInstanceConfig{}
+	cfg.Features.CommentReply = true
+	cfg.WebhookPageID = "fb-native-id" // Facebook native page ID sent in webhook event.page_id
+
+	msgBus := bus.New()
+	cfg.PageID = "pancake-internal-id"
+	creds := pancakeCreds{APIKey: "k", PageAccessToken: "t"}
+	ch, err := New(cfg, creds, msgBus, nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ch.platform = "facebook"
+
+	// Simulate register — both IDs should be in the router.
+	router := &webhookRouter{instances: make(map[string]*Channel)}
+	router.register(ch)
+
+	if router.instances["pancake-internal-id"] == nil {
+		t.Error("router should have channel registered under Pancake internal page ID")
+	}
+	if router.instances["fb-native-id"] == nil {
+		t.Error("router should have channel registered under Facebook native page ID (webhook_page_id)")
+	}
+
+	// Webhook arrives with Facebook native page ID — must route to the channel.
+	body := buildWebhookBody("fb-native-id", "conv-1", "COMMENT", "user-1", "msg-1", "hello", "")
+	req := httptest.NewRequest(http.MethodPost, webhookPath, strings.NewReader(body))
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	msg, ok := msgBus.ConsumeInbound(ctx)
+	if !ok {
+		t.Fatal("expected message published: webhook_page_id should route COMMENT to correct channel")
+	}
+	if msg.Metadata["pancake_mode"] != "comment" {
+		t.Errorf("pancake_mode = %q, want comment", msg.Metadata["pancake_mode"])
+	}
+}
+
 func TestWebhookRouterRoutesInboxEvent(t *testing.T) {
 	cfg := pancakeInstanceConfig{}
 	cfg.Features.InboxReply = true
@@ -675,6 +725,26 @@ func TestSend_CommentMode(t *testing.T) {
 	}
 }
 
+func TestSend_CommentMode_MissingCommentID_ReturnsError(t *testing.T) {
+	cfg := pancakeInstanceConfig{}
+	ch, _ := newChannelWithMultiCapture(t, cfg)
+
+	err := ch.Send(context.Background(), bus.OutboundMessage{
+		ChatID:  "conv-123",
+		Content: "reply text",
+		Metadata: map[string]string{
+			"pancake_mode": "comment",
+			// reply_to_comment_id intentionally absent
+		},
+	})
+	if err == nil {
+		t.Fatal("expected error when reply_to_comment_id is missing, got nil")
+	}
+	if !strings.Contains(err.Error(), "reply_to_comment_id") {
+		t.Errorf("error message should mention reply_to_comment_id, got: %v", err)
+	}
+}
+
 func TestSend_CommentMode_WithFirstInbox(t *testing.T) {
 	cfg := pancakeInstanceConfig{}
 	cfg.Features.FirstInbox = true
@@ -685,8 +755,9 @@ func TestSend_CommentMode_WithFirstInbox(t *testing.T) {
 		ChatID:  "conv-123",
 		Content: "reply text",
 		Metadata: map[string]string{
-			"pancake_mode": "comment",
-			"sender_id":    "user-1",
+			"pancake_mode":        "comment",
+			"sender_id":           "user-1",
+			"reply_to_comment_id": "msg-1",
 		},
 	})
 	if err != nil {
@@ -722,12 +793,14 @@ func TestSend_CommentMode_FirstInboxDedup(t *testing.T) {
 		ChatID:  "conv-123",
 		Content: "hi",
 		Metadata: map[string]string{
-			"pancake_mode": "comment",
-			"sender_id":    "user-1",
+			"pancake_mode":        "comment",
+			"sender_id":           "user-1",
+			"reply_to_comment_id": "msg-1",
 		},
 	}
 	ch.Send(context.Background(), outMsg)  //nolint:errcheck
 	outMsg.ChatID = "conv-456"             // second comment, different conv, same sender
+	outMsg.Metadata["reply_to_comment_id"] = "msg-2"
 	ch.Send(context.Background(), outMsg)  //nolint:errcheck
 
 	transport.mu.Lock()
@@ -764,8 +837,9 @@ func TestSend_CommentMode_FirstInboxDisabled(t *testing.T) {
 		ChatID:  "conv-123",
 		Content: "reply",
 		Metadata: map[string]string{
-			"pancake_mode": "comment",
-			"sender_id":    "user-1",
+			"pancake_mode":        "comment",
+			"sender_id":           "user-1",
+			"reply_to_comment_id": "msg-1",
 		},
 	})
 
@@ -813,8 +887,9 @@ func TestSend_CommentMode_EchoRemembered(t *testing.T) {
 		ChatID:  "conv-echo",
 		Content: "some reply",
 		Metadata: map[string]string{
-			"pancake_mode": "comment",
-			"sender_id":    "user-1",
+			"pancake_mode":        "comment",
+			"sender_id":           "user-1",
+			"reply_to_comment_id": "msg-1",
 		},
 	})
 
@@ -896,6 +971,34 @@ func TestSendFirstInbox_ErrorRetryAllowed(t *testing.T) {
 	ch.sendFirstInbox(context.Background(), "user-1", "conv-123")
 	if secondTransport.req == nil {
 		t.Error("expected retry request after error-deletion")
+	}
+}
+
+// TestFactoryExplicitPlatformPreserved verifies that explicit platform from config
+// is loaded into the channel and is not overwritten.
+func TestFactoryExplicitPlatformPreserved(t *testing.T) {
+	cfg := json.RawMessage(`{
+		"page_id": "123",
+		"platform": "instagram",
+		"features": {"inbox_reply": true}
+	}`)
+	creds := json.RawMessage(`{
+		"api_key": "test_key",
+		"page_access_token": "test_token"
+	}`)
+	ch, err := Factory("test", creds, cfg, nil, nil)
+	if err != nil {
+		t.Fatalf("Factory failed: %v", err)
+	}
+	pc := ch.(*Channel)
+	if pc.platform != "instagram" {
+		t.Errorf("expected platform instagram from config, got %q", pc.platform)
+	}
+	// Verify auto-detect block condition: ch.platform is already set,
+	// so getPage would NOT be called at Start(). platform should remain "instagram".
+	// (Start() skips GetPage when ch.platform != "")
+	if pc.platform == "" {
+		t.Error("platform must not be empty after Factory with explicit platform config")
 	}
 }
 

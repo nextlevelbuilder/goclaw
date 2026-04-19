@@ -70,6 +70,7 @@ export const Methods = {
   CONFIG_APPLY: "config.apply",
   CONFIG_PATCH: "config.patch",
   CONFIG_SCHEMA: "config.schema",
+  CONFIG_DEFAULTS: "config.defaults",
 
   // Sessions
   SESSIONS_LIST: "sessions.list",
@@ -246,6 +247,8 @@ export const Events = {
 
   // Trace lifecycle
   TRACE_UPDATED: "trace.updated",
+  // Immediate status change (not flush-buffered; fired on every status write).
+  TRACE_STATUS: "trace.status",
 
   // Skill dependency check (realtime progress during startup/rescan)
   SKILL_DEPS_CHECKED: "skill.deps.checked",

@@ -169,10 +169,9 @@ func (c *InMemoryCache[V]) sweepOnce() {
 		sort.Slice(allAlive, func(i, j int) bool {
 			return allAlive[i].createdAt.Before(allAlive[j].createdAt)
 		})
-		toEvict := len(allAlive) - c.maxSize + (c.maxSize / 5) // bring below cap + 20% headroom
-		if toEvict > len(allAlive) {
-			toEvict = len(allAlive)
-		}
+		toEvict := min(
+			// bring below cap + 20% headroom
+			len(allAlive)-c.maxSize+(c.maxSize/5), len(allAlive))
 		for i := 0; i < toEvict; i++ {
 			c.data.Delete(allAlive[i].key)
 		}

@@ -1,0 +1,23 @@
+{
+  "event": "post_tool_use",
+  "handler_type": "http",
+  "scope": "agent",
+  "matcher": "^(write_file|edit_file)$",
+  "if_expr": "",
+  "config": {
+    "url": "https://ci.internal.example.com/hooks/lint",
+    "headers": {
+      "Authorization": "Bearer REPLACE_ME_ENCRYPTED",
+      "Content-Type": "application/json"
+    }
+  },
+  "timeout_ms": 3000,
+  "on_timeout": "allow",
+  "priority": 10,
+  "enabled": true,
+  "source": "api",
+  "metadata": {
+    "notes": "Fire-and-forget lint ping after file writes. Non-blocking event — won't stall the agent loop.",
+    "tags": ["observability", "quality"]
+  }
+}

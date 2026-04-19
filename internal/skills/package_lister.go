@@ -17,11 +17,25 @@ type PackageInfo struct {
 	Version string `json:"version"`
 }
 
+// GitHubPackageListEntry is a viewer-safe projection of GitHubPackageEntry.
+// Deliberately omits AssetURL / SHA256 / AssetName so viewer-level callers of
+// GET /v1/packages don't receive CDN download URLs or checksum metadata —
+// those are install-time details the UI never renders. Mirrors the same
+// narrowing applied to the release-picker endpoint (`assetPreview`).
+type GitHubPackageListEntry struct {
+	Name        string    `json:"name"`
+	Repo        string    `json:"repo"`
+	Tag         string    `json:"tag"`
+	Binaries    []string  `json:"binaries"`
+	InstalledAt time.Time `json:"installed_at"`
+}
+
 // InstalledPackages groups installed packages by manager.
 type InstalledPackages struct {
-	System []PackageInfo `json:"system"`
-	Pip    []PackageInfo `json:"pip"`
-	Npm    []PackageInfo `json:"npm"`
+	System []PackageInfo            `json:"system"`
+	Pip    []PackageInfo            `json:"pip"`
+	Npm    []PackageInfo            `json:"npm"`
+	GitHub []GitHubPackageListEntry `json:"github,omitempty"`
 }
 
 const listTimeout = 15 * time.Second
@@ -36,6 +50,20 @@ func ListInstalledPackages(ctx context.Context) *InstalledPackages {
 	result.System = listApkUserPackages(ctx)
 	result.Pip = listPipPackages(ctx)
 	result.Npm = listNpmPackages(ctx)
+	if gh := DefaultGitHubInstaller(); gh != nil {
+		if entries, err := gh.List(); err == nil {
+			result.GitHub = make([]GitHubPackageListEntry, 0, len(entries))
+			for _, e := range entries {
+				result.GitHub = append(result.GitHub, GitHubPackageListEntry{
+					Name:        e.Name,
+					Repo:        e.Repo,
+					Tag:         e.Tag,
+					Binaries:    e.Binaries,
+					InstalledAt: e.InstalledAt,
+				})
+			}
+		}
+	}
 	return result
 }
 

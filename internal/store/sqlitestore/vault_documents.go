@@ -25,7 +25,7 @@ func sqliteAppendTeamFilter(q string, args []any, teamID *string, teamIDs []stri
 		}
 	} else if teamID != nil {
 		if *teamID != "" {
-			q += " AND team_id = ?"
+			q += " AND (team_id = ? OR team_id IS NULL)"
 			args = append(args, *teamID)
 		} else {
 			q += " AND team_id IS NULL"
@@ -212,7 +212,7 @@ func (s *SQLiteVaultStore) ListDocuments(ctx context.Context, tenantID, agentID 
 	args := []any{tenantID}
 
 	if agentID != "" {
-		q += " AND agent_id = ?"
+		q += " AND (agent_id = ? OR agent_id IS NULL)"
 		args = append(args, agentID)
 	}
 	q, args = sqliteAppendTeamFilter(q, args, opts.TeamID, opts.TeamIDs)
@@ -263,7 +263,7 @@ func (s *SQLiteVaultStore) CountDocuments(ctx context.Context, tenantID, agentID
 	args := []any{tenantID}
 
 	if agentID != "" {
-		q += " AND agent_id = ?"
+		q += " AND (agent_id = ? OR agent_id IS NULL)"
 		args = append(args, agentID)
 	}
 	q, args = sqliteAppendTeamFilter(q, args, opts.TeamID, opts.TeamIDs)
@@ -362,7 +362,7 @@ func (s *SQLiteVaultStore) Search(ctx context.Context, opts store.VaultSearchOpt
 	args := []any{opts.TenantID, pattern, pattern}
 
 	if opts.AgentID != "" {
-		q += " AND agent_id = ?"
+		q += " AND (agent_id = ? OR agent_id IS NULL)"
 		args = append(args, opts.AgentID)
 	}
 
@@ -501,7 +501,7 @@ func (s *SQLiteVaultStore) ListTreeEntries(ctx context.Context, tenantID string,
 
 func sqliteAppendTreeFilters(q string, args []any, opts store.VaultTreeOptions) (string, []any) {
 	if opts.AgentID != "" {
-		q += " AND agent_id = ?"
+		q += " AND (agent_id = ? OR agent_id IS NULL)"
 		args = append(args, opts.AgentID)
 	}
 	q, args = sqliteAppendTeamFilter(q, args, opts.TeamID, opts.TeamIDs)

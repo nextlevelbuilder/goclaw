@@ -24,6 +24,12 @@ func wireVault(stores *store.Stores, toolsReg *tools.Registry, workspace string,
 	vaultSearchTool := tools.NewVaultSearchTool()
 	toolsReg.Register(vaultSearchTool)
 
+	// vault_read: fetch full content of a vault doc by doc_id (chained from vault_search).
+	vaultReadTool := tools.NewVaultReadTool()
+	vaultReadTool.SetVaultStore(stores.Vault)
+	vaultReadTool.SetWorkspace(workspace)
+	toolsReg.Register(vaultReadTool)
+
 	// Build VaultSearchService: fan-out across vault + KG (episodic store pending impl).
 	// EpisodicStore is nil until a PG implementation exists.
 	searchSvc := vault.NewVaultSearchService(stores.Vault, nil, stores.KnowledgeGraph)
@@ -73,6 +79,6 @@ func wireVault(stores *store.Stores, toolsReg *tools.Registry, workspace string,
 		}
 	}
 
-	slog.Info("vault tools registered", "tools", "vault_search,create_image,create_video,create_audio,tts,edit")
+	slog.Info("vault tools registered", "tools", "vault_search,vault_read,create_image,create_video,create_audio,tts,edit")
 	return vaultIntc
 }

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { ClipboardList, RefreshCw } from "lucide-react";
+import { useUiStore } from "@/stores/use-ui-store";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -30,10 +31,13 @@ export function ActivityPage() {
   const { logs, total, loading, load } = useActivity();
   const spinning = useMinLoading(loading);
   const showSkeleton = useDeferredLoading(loading && logs.length === 0);
+  const globalPageSize = useUiStore((s) => s.pageSize);
+  const setGlobalPageSize = useUiStore((s) => s.setPageSize);
   const [actionFilter, setActionFilter] = useState("all");
   const [entityFilter, setEntityFilter] = useState("all");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [pageSize, setPageSizeRaw] = useState(globalPageSize);
+  const setPageSize = (size: number) => { setPageSizeRaw(size); setPage(1); setGlobalPageSize(size); };
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 

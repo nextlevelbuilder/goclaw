@@ -22,6 +22,25 @@
     "title": "Gói Node",
     "placeholder": "Tên gói (vd: typescript)"
   },
+  "github": {
+    "title": "Binary GitHub",
+    "placeholder": "owner/repo[@tag] (vd: cli/cli@v2.45.0)",
+    "browse": "Xem release",
+    "muslWarning": "Alpine Linux dùng musl libc. Binary biên dịch với glibc có thể fail runtime. Chọn binary static hoặc release musl-compatible.",
+    "muslDismiss": "Đóng",
+    "pickerTitle": "Chọn release từ {{repo}}",
+    "pickerEmpty": "Không tìm thấy release cho {{repo}}",
+    "pickerLoading": "Đang tải releases...",
+    "pickerMatchingAssets": "{{count}} phù hợp / {{total}} tổng",
+    "pickerPrerelease": "Pre-release",
+    "pickerSelect": "Chọn",
+    "columns": {
+      "repo": "Repository",
+      "tag": "Phiên bản",
+      "binaries": "Binaries",
+      "installedAt": "Ngày cài"
+    }
+  },
   "actions": {
     "install": "Cài đặt",
     "uninstall": "Gỡ bỏ",

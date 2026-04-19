@@ -35,6 +35,15 @@ func (l *Loop) makeExecuteToolCall(req *RunRequest, bridgeRS *runState) func(ctx
 		toolStart := time.Now().UTC()
 		toolSpanID := l.emitToolSpanStart(ctx, toolStart, tc.Name, tc.ID, string(argsJSON))
 
+		// Inject agent audio snapshot so TTS tool (and any future audio consumers)
+		// can read agent-level voice/model config without an extra DB lookup.
+		if l.agentUUID != uuid.Nil {
+			ctx = store.WithAgentAudio(ctx, store.AgentAudioSnapshot{
+				AgentID:     l.agentUUID,
+				OtherConfig: append([]byte(nil), l.agentOtherConfig...), // defensive copy at dispatch
+			})
+		}
+
 		result := l.tools.ExecuteWithContext(ctx, registryName, tc.Arguments,
 			req.Channel, req.ChatID, req.PeerKind, req.SessionKey, nil)
 		toolDuration := time.Since(toolStart)
@@ -83,6 +92,14 @@ func (l *Loop) makeExecuteToolRaw(req *RunRequest) func(ctx context.Context, tc 
 		// Emit tool span start (goroutine-safe: channel send only).
 		start := time.Now().UTC()
 		spanID := l.emitToolSpanStart(ctx, start, tc.Name, tc.ID, string(argsJSON))
+
+		// Inject agent audio snapshot (parallel path — same as sequential makeExecuteToolCall).
+		if l.agentUUID != uuid.Nil {
+			ctx = store.WithAgentAudio(ctx, store.AgentAudioSnapshot{
+				AgentID:     l.agentUUID,
+				OtherConfig: append([]byte(nil), l.agentOtherConfig...), // defensive copy at dispatch
+			})
+		}
 
 		result := l.tools.ExecuteWithContext(ctx, registryName, tc.Arguments,
 			req.Channel, req.ChatID, req.PeerKind, req.SessionKey, nil)
@@ -205,6 +222,7 @@ func makeToolEmitRun(l *Loop, req *RunRequest) func(AgentEvent) {
 	return func(event AgentEvent) {
 		event.RunKind = req.RunKind
 		event.SessionKey = req.SessionKey
+		event.SenderID = req.SenderID
 		event.UserID = req.UserID
 		event.Channel = req.Channel
 		l.emit(event)

@@ -86,7 +86,7 @@ func TestBuildSystemPrompt_BootstrapStates(t *testing.T) {
 			wantIn: "only have write_file available",
 		},
 		{
-			name: "predefined agent first run has write_file instruction",
+			name: "predefined agent first run uses softened get-to-know copy",
 			cfg: SystemPromptConfig{
 				IsBootstrap: false,
 				AgentType:   store.AgentTypePredefined,
@@ -95,7 +95,7 @@ func TestBuildSystemPrompt_BootstrapStates(t *testing.T) {
 				},
 				ToolNames: []string{"write_file", "web_search"},
 			},
-			wantIn:    "MUST ALSO call write_file",
+			wantIn:    "GET TO KNOW THE USER",
 			wantNotIn: "only have write_file available",
 		},
 	}
@@ -118,6 +118,108 @@ func TestBuildSystemPrompt_BootstrapStates(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestBuildSystemPrompt_PredefinedBootstrapSoftened verifies that the
+// predefined+BOOTSTRAP.md branch no longer forces write_file on turn 1.
+// Context: Gemini 3 with thinking_level=low exhausted its 8192-token budget
+// before emitting tool args, resulting in write_file({}) → HTTP 400.
+// Removing the MUST-call-write_file-this-turn mandate lets small models
+// respond conversationally when they lack real user info to write.
+// Trace: 019d8f33-2de1-7ab2-9a32-9df92cd610dd.
+func TestBuildSystemPrompt_PredefinedBootstrapSoftened(t *testing.T) {
+	baseCfg := func(channel string) SystemPromptConfig {
+		return SystemPromptConfig{
+			IsBootstrap: false,
+			AgentType:   store.AgentTypePredefined,
+			Channel:     channel,
+			ContextFiles: []bootstrap.ContextFile{
+				{Path: bootstrap.BootstrapFile, Content: "# BOOTSTRAP"},
+			},
+			ToolNames: []string{"write_file", "web_search"},
+		}
+	}
+
+	tests := []struct {
+		name       string
+		cfg        SystemPromptConfig
+		wantIn     []string
+		wantNotIn  []string
+	}{
+		{
+			name: "A: ws channel uses softened copy",
+			cfg:  baseCfg("ws"),
+			wantIn: []string{
+				"GET TO KNOW THE USER",
+			},
+			wantNotIn: []string{
+				"before your response ends",
+				"MUST ALSO call write_file",
+			},
+		},
+		{
+			name: "B: forbids empty/placeholder args explicitly",
+			cfg:  baseCfg("ws"),
+			wantIn: []string{
+				"Do NOT call write_file",
+				"empty or placeholder",
+			},
+		},
+		{
+			name: "C: forbids session-identifier content",
+			cfg:  baseCfg("ws"),
+			wantIn: []string{
+				"never copy session identifiers",
+			},
+		},
+		{
+			name: "D: telegram channel uses same softened copy (uniform)",
+			cfg:  baseCfg("telegram"),
+			wantIn: []string{
+				"GET TO KNOW THE USER",
+			},
+			wantNotIn: []string{
+				"before your response ends",
+				"MUST ALSO call write_file",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prompt := BuildSystemPrompt(tt.cfg)
+			for _, want := range tt.wantIn {
+				if !strings.Contains(prompt, want) {
+					t.Errorf("expected %q in prompt", want)
+				}
+			}
+			for _, notWant := range tt.wantNotIn {
+				if strings.Contains(prompt, notWant) {
+					t.Errorf("unexpected %q in prompt (must be removed)", notWant)
+				}
+			}
+		})
+	}
+}
+
+// TestBuildSystemPrompt_OpenBootstrapUnchanged verifies Phase 04 did NOT
+// touch the open-agent slim branch — its existing mandate copy stays.
+func TestBuildSystemPrompt_OpenBootstrapUnchanged(t *testing.T) {
+	cfg := SystemPromptConfig{
+		IsBootstrap: true,
+		AgentType:   store.AgentTypeOpen,
+		ContextFiles: []bootstrap.ContextFile{
+			{Path: bootstrap.BootstrapFile, Content: "# BOOTSTRAP"},
+		},
+		ToolNames: []string{"write_file"},
+	}
+	prompt := BuildSystemPrompt(cfg)
+	if !strings.Contains(prompt, "Do NOT give a generic greeting") {
+		t.Error("open-bootstrap branch must keep its existing mandate copy")
+	}
+	if !strings.Contains(prompt, "only have write_file available") {
+		t.Error("open-bootstrap branch must keep its tool-limit note")
 	}
 }
 

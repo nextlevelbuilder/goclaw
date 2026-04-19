@@ -17,6 +17,7 @@ type TableDef struct {
 	Name        string // table name
 	Tier        int    // FK dependency tier (1=root, higher=deeper)
 	HasTenantID bool   // direct tenant_id column
+	ScopeColumn string // explicit filter column when not tenant_id (e.g. tenants.id)
 	ParentJoin  string // JOIN clause for tables without direct tenant_id
 }
 
@@ -27,9 +28,10 @@ type TableDef struct {
 func TenantTables() []TableDef {
 	return []TableDef{
 		// Tier 1: root
-		{Name: "tenants", Tier: 1, HasTenantID: true},
+		{Name: "tenants", Tier: 1, ScopeColumn: "id"},
 
 		// Tier 2: direct tenant_id, no cross-table FK
+		{Name: "tenant_users", Tier: 2, HasTenantID: true},
 		{Name: "agents", Tier: 2, HasTenantID: true},
 		{Name: "sessions", Tier: 2, HasTenantID: true},
 		{Name: "api_keys", Tier: 2, HasTenantID: true},
@@ -91,18 +93,44 @@ func TenantTables() []TableDef {
 	}
 }
 
+func (t TableDef) tenantFilterColumn() string {
+	if t.ScopeColumn != "" {
+		return t.ScopeColumn
+	}
+	if t.HasTenantID {
+		return "tenant_id"
+	}
+	return ""
+}
+
+func (t TableDef) exportQuery() (string, error) {
+	if t.ParentJoin != "" {
+		return fmt.Sprintf("SELECT vl.* FROM %s ORDER BY vl.id", t.ParentJoin), nil
+	}
+
+	column := t.tenantFilterColumn()
+	if column == "" {
+		return "", fmt.Errorf("table %s: no tenant filter defined", t.Name)
+	}
+
+	return fmt.Sprintf("SELECT * FROM %s WHERE %s = $1 ORDER BY id", t.Name, column), nil
+}
+
+func (t TableDef) deleteQuery() (string, error) {
+	column := t.tenantFilterColumn()
+	if column == "" {
+		return "", fmt.Errorf("table %s: no tenant filter defined", t.Name)
+	}
+	return fmt.Sprintf("DELETE FROM %s WHERE %s = $1", t.Name, column), nil
+}
+
 // ExportTable writes all rows for a tenant to JSONL format (one JSON object per line).
 // Uses dynamic column discovery via rows.Columns() — no hardcoded schema per table.
 // Returns the number of rows written.
 func ExportTable(ctx context.Context, db *sql.DB, table TableDef, tenantID uuid.UUID, w io.Writer) (int, error) {
-	var query string
-	if table.HasTenantID {
-		query = fmt.Sprintf("SELECT * FROM %s WHERE tenant_id = $1 ORDER BY id", table.Name)
-	} else if table.ParentJoin != "" {
-		// e.g. vault_links: select vl.* via JOIN
-		query = fmt.Sprintf("SELECT vl.* FROM %s ORDER BY vl.id", table.ParentJoin)
-	} else {
-		return 0, fmt.Errorf("table %s: no tenant filter defined", table.Name)
+	query, err := table.exportQuery()
+	if err != nil {
+		return 0, err
 	}
 
 	rows, err := db.QueryContext(ctx, query, tenantID)

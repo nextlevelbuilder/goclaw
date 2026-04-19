@@ -293,6 +293,39 @@ The `exec` tool allows the LLM to run shell commands, with multiple defense laye
 }
 ```
 
+#### Grant enforcement (hard deny)
+
+Registering a binary is not the same as letting every agent exec it. A registered
+binary with `is_global=false` **requires a row in `secure_cli_agent_grants`**
+for the calling agent; otherwise shell exec is denied before any process runs.
+Closes the class of bypass where an ungranted agent could still invoke the
+binary via host fallthrough and pick up inherited env (`$GH_TOKEN`, etc.) or
+on-disk OAuth state (`~/.config/gh`).
+
+- **Enforcement site:** `internal/tools/shell.go` — gate runs after normalization
+  and before exec approval, keyed on `store.SecureCLIStore.IsRegisteredBinary`.
+- **Name matching:** `filepath.Base(strings.TrimSpace(strings.ToLower(name)))` —
+  case-insensitive (macOS APFS), directory-prefix stripped, trims whitespace.
+- **Shell wrapper unwrap:** detects and peels `sh -c / bash -c / zsh -c / dash -c`,
+  leading `env K=V ...`, `nohup`, `stdbuf`, `timeout ...` up to depth 3. Commands
+  nested deeper than 3 wrappers are rejected as adversarial.
+- **Global binaries:** `is_global=true` skips the gate (no grant needed). Shared
+  utilities without per-agent scoping.
+- **Fail-CLOSED:** if the grant lookup errors (DB down, timeout) the exec is
+  denied with a retry message. 2s per-lookup context timeout.
+- **Env scrubbing on fall-through:** when a command bypasses the credentialed
+  path and runs on the host, the child process env is scrubbed of credential
+  keys (static deny list + dynamic keys from every registered binary of the
+  same tenant) before spawn. Prevents `$GH_TOKEN` leaking into a non-gh command.
+- **Log events:**
+  - `security.credentialed_binary_denied` — agent attempted an ungranted
+    registered binary. Fields: `binary, wrapper, agent_id, tenant_id, command_prefix`.
+  - `security.credentialed_binary_gate_error` — lookup failed; exec denied.
+  - `security.credentialed_binary_wrapper_too_deep` — >3 shell wrappers.
+- **Subagents:** subagent `ExecTool`s are wired with the same `SecureCLIStore`
+  (`cmd/gateway_agents.go` → `buildSubagentToolsRegistry`) so a parent cannot
+  bypass the gate by delegating the exec to a spawned child.
+
 ---
 
 ### Deny Patterns
@@ -787,18 +820,38 @@ func (t *MyTool) Execute(ctx context.Context, params MyParams) (*Result, error) 
 }
 ```
 
+### web_search Configuration
+
+**Overview:** web_search is tenant-scoped only (as of v3.2, issue #952). Config is edited exclusively via `/tools/builtin/web_search` UI (or `/v1/tools/builtin/web_search/tenant-config` HTTP API for automation).
+
+**Key behaviors:**
+- Supports provider chain: Exa, Tavily, Brave, DuckDuckGo
+- Tenant admins specify `provider_order` to prioritize which providers to try (in order)
+- Per-provider `enabled` flag gates usage; unknown providers are silently skipped
+- **DuckDuckGo is always appended as the last-resort fallback regardless of tenant `enabled` setting — tenant admins cannot fully disable web_search.**
+- API keys stored in `config_secrets` table (encrypted, tenant-scoped); never in `settings` JSON
+- Defaults to DuckDuckGo only if no other provider keys are configured
+
+**Configuration path (old, removed):** `config.Tools.Web.*` in `config.json5` — no longer supported. Use UI only.
+
+**Migration:** Inline API keys from `config.json5` and legacy `builtin_tool_tenant_configs.settings` blobs are auto-migrated to `config_secrets` on first server startup (data hook 055).
+
 ### Schema Contracts
 
 #### web_search (tenant override shape)
 ```json
 {
-  "provider_order": ["exa", "tavily", "brave", "duckduckgo"],
-  "exa": { "enabled": true, "max_results": 10 },
-  "tavily": { "enabled": true, "max_results": 5 },
+  "provider_order": ["brave", "exa"],
   "brave": { "enabled": true, "max_results": 5 },
-  "duckduckgo": { "enabled": true, "max_results": 10 }
+  "exa": { "enabled": false },
+  "duckduckgo": { "enabled": false }
 }
 ```
+
+**Fields:**
+- `provider_order`: List of provider names in preference order (unknown names silently ignored). Optional.
+- Per-provider object: `enabled` (bool, optional) + `max_results` (int, optional). If `enabled: false`, provider is skipped even if API key exists. DuckDuckGo `enabled: false` is ignored (always-on).
+- Secrets (API keys): Configure via `/v1/tools/builtin/web_search/tenant-config` PUT endpoint, not in this settings blob
 
 #### web_fetch (tenant override shape)
 ```json
@@ -812,9 +865,16 @@ func (t *MyTool) Execute(ctx context.Context, params MyParams) (*Result, error) 
 #### tts (tenant override shape)
 ```json
 {
-  "primary": "elevenlabs"
+  "primary": "elevenlabs",
+  "default_voice_id": "pMsXgVXv3BLzUgSXRplE",
+  "default_model": "eleven_flash_v2_5"
 }
 ```
+
+**Fields:**
+- `primary`: Provider selection (elevenlabs, openai, edge, minimax)
+- `default_voice_id`: Tenant-level voice ID fallback (ElevenLabs); overridable per-agent via `agent.other_config.tts_voice_id`
+- `default_model`: Tenant-level model choice (eleven_v3, eleven_flash_v2_5, eleven_multilingual_v2, eleven_turbo_v2_5); overridable per-agent via `agent.other_config.tts_model_id`
 
 **Secret vs non-secret split:**
 - Non-secret (provider priorities, max_results, allowed_domains): `builtin_tool_tenant_configs.settings` (editable via UI)
@@ -888,8 +948,7 @@ Never put credentials in tool settings JSON — backend does not validate.
 |------|---------|
 | `internal/tools/create_image.go` | create_image tool (OpenAI, Gemini, MiniMax, DashScope) |
 | `internal/tools/create_image_{dashscope,minimax}.go` | Provider-specific image generation |
-| `internal/tools/create_audio.go` | create_audio tool (MiniMax, ElevenLabs, Suno) |
-| `internal/tools/create_audio_{minimax,elevenlabs,suno}.go` | Provider-specific audio generation |
+| `internal/tools/create_audio.go` | create_audio tool — delegates to `audio.Manager` for music/SFX (ElevenLabs, MiniMax) |
 | `internal/tools/create_video.go` | create_video tool (MiniMax) |
 | `internal/tools/tts.go` | tts tool: text-to-speech (OpenAI, ElevenLabs, Edge, MiniMax) |
 | `internal/tools/read_{image,audio,video,document}.go` | Media reading tools (vision, transcription, analysis) |

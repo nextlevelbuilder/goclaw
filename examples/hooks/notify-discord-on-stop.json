@@ -1,0 +1,22 @@
+{
+  "event": "stop",
+  "handler_type": "http",
+  "scope": "tenant",
+  "matcher": "",
+  "if_expr": "",
+  "config": {
+    "url": "https://discord.com/api/webhooks/REPLACE_ME",
+    "headers": {
+      "Content-Type": "application/json"
+    }
+  },
+  "timeout_ms": 3000,
+  "on_timeout": "allow",
+  "priority": 1,
+  "enabled": false,
+  "source": "seed",
+  "metadata": {
+    "notes": "Discord webhook fired on every session stop. Disabled by default — enable after replacing the webhook URL. Discord expects {\"content\":\"...\"} but the hook ships event JSON; consider putting an adapter in front.",
+    "tags": ["notify", "discord", "session"]
+  }
+}

@@ -59,10 +59,12 @@ Once you have their name, language, and timezone — silently use the `write_fil
 
 Do NOT use `rm` or `exec`. The empty write signals the system that onboarding is finished.
 
-## MANDATORY
+## Hard rules for write_file
 
-You MUST call write_file for BOTH USER.md and BOOTSTRAP.md. Do not skip this step. Do not defer to a future turn.
-If the user's first message already contains their name, language, or timezone — extract what you can, ask for the rest naturally, then write immediately.
+- Only call write_file once you actually have the info IN THE USER'S OWN WORDS. Not inferred, not guessed, not assumed from system strings.
+- Never call write_file with empty or placeholder arguments. If the fields would be blank, respond conversationally and gather info first — you will be prompted again next turn.
+- USER.md content comes from the user's messages only — never copy session IDs, system identifiers, or made-up values into it.
+- If the user's first message already contains enough info (name, language, timezone) — extract it and write immediately. Otherwise, ask naturally and write on a later turn.
 
 ---
 

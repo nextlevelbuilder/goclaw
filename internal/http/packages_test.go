@@ -118,9 +118,62 @@ func TestParseAndValidatePackage(t *testing.T) {
 			wantStatusErr: http.StatusBadRequest,
 		},
 		{
-			name:          "starts with @",
-			body:          `{"package":"@scope/pkg"}`,
-			wantEmpty:     false,
+			name:      "starts with @",
+			body:      `{"package":"@scope/pkg"}`,
+			wantEmpty: false,
+		},
+		// github: scheme — full-spec form (install + uninstall)
+		{
+			name:      "github full spec",
+			body:      `{"package":"github:cli/cli"}`,
+			wantEmpty: false,
+		},
+		{
+			name:      "github full spec with tag",
+			body:      `{"package":"github:cli/cli@v2.45.0"}`,
+			wantEmpty: false,
+		},
+		// github: scheme — bare-name form (uninstall path: UI sends github:${pkg.name})
+		{
+			name:      "github bare name (uninstall path)",
+			body:      `{"package":"github:gh"}`,
+			wantEmpty: false,
+		},
+		{
+			name:      "github bare name with dots/hyphens",
+			body:      `{"package":"github:ripgrep-13.0"}`,
+			wantEmpty: false,
+		},
+		// github: scheme — rejected forms (injection vectors)
+		{
+			name:          "github empty after prefix",
+			body:          `{"package":"github:"}`,
+			wantEmpty:     true,
+			wantStatusErr: http.StatusBadRequest,
+		},
+		{
+			name:          "github traversal",
+			body:          `{"package":"github:../evil"}`,
+			wantEmpty:     true,
+			wantStatusErr: http.StatusBadRequest,
+		},
+		{
+			name:          "github with shell injection",
+			body:          `{"package":"github:evil;rm -rf"}`,
+			wantEmpty:     true,
+			wantStatusErr: http.StatusBadRequest,
+		},
+		{
+			name:          "github with space",
+			body:          `{"package":"github:evil tool"}`,
+			wantEmpty:     true,
+			wantStatusErr: http.StatusBadRequest,
+		},
+		{
+			name:          "github starts with hyphen",
+			body:          `{"package":"github:-flag"}`,
+			wantEmpty:     true,
+			wantStatusErr: http.StatusBadRequest,
 		},
 	}
 

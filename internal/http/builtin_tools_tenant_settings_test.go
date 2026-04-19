@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -130,9 +131,7 @@ func (s *stubTenantCfgStore) ListAll(_ context.Context, tid uuid.UUID) (map[stri
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := make(map[string]bool, len(s.enabled))
-	for k, v := range s.enabled {
-		out[k] = v
-	}
+	maps.Copy(out, s.enabled)
 	return out, nil
 }
 

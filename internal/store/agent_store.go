@@ -608,6 +608,9 @@ type AgentCRUDStore interface {
 	Delete(ctx context.Context, id uuid.UUID) error
 	List(ctx context.Context, ownerID string) ([]AgentData, error)
 	GetDefault(ctx context.Context) (*AgentData, error) // agent with is_default=true, or first available
+	// ResetStuckSummoning flips rows with status='summoning' to 'summon_failed'.
+	// Called at startup to recover from crashes where summon goroutine died mid-flight.
+	ResetStuckSummoning(ctx context.Context) (int64, error)
 }
 
 // AgentAccessStore manages agent sharing and access control.

@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/hooks"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // ToolStage runs per iteration after PruneStage. Executes tool calls from
@@ -20,7 +23,7 @@ func NewToolStage(deps *PipelineDeps) *ToolStage {
 	return &ToolStage{deps: deps, result: Continue}
 }
 
-func (s *ToolStage) Name() string       { return "tool" }
+func (s *ToolStage) Name() string        { return "tool" }
 func (s *ToolStage) Result() StageResult { return s.result }
 
 // Execute extracts tool calls, dispatches them, checks exit conditions.
@@ -45,6 +48,30 @@ func (s *ToolStage) Execute(ctx context.Context, state *RunState) error {
 
 	// Sequential fallback: ExecuteToolCall handles both I/O and state mutation.
 	for _, tc := range toolCalls {
+		// Hook: sync PreToolUse — block if hook denies. Builtin-source hooks may
+		// rewrite tc.Arguments via UpdatedToolInput (e.g. path-sanitizer); apply
+		// before ExecuteToolCall so the rewrite is authoritative.
+		if r, _ := s.deps.FireHook(ctx, hooks.Event{
+			EventID:   uuid.NewString(),
+			SessionID: state.Input.SessionKey,
+			TenantID:  store.TenantIDFromContext(ctx),
+			AgentID:   store.AgentIDFromContext(ctx),
+			ToolName:  tc.Name,
+			ToolInput: tc.Arguments,
+			HookEvent: hooks.EventPreToolUse,
+		}); r.Decision == hooks.DecisionBlock {
+			// Inject synthetic blocked tool message and skip actual execution.
+			state.Messages.AppendPending(providers.Message{
+				Role:       "tool",
+				Content:    "Hook blocked: pre_tool_use",
+				ToolCallID: tc.ID,
+			})
+			state.Tool.TotalToolCalls++
+			continue
+		} else if r.UpdatedToolInput != nil {
+			tc.Arguments = r.UpdatedToolInput
+		}
+
 		msgs, err := s.deps.ExecuteToolCall(ctx, state, tc)
 		if err != nil {
 			return fmt.Errorf("execute tool %s: %w", tc.Name, err)
@@ -53,6 +80,21 @@ func (s *ToolStage) Execute(ctx context.Context, state *RunState) error {
 			state.Messages.AppendPending(msg)
 		}
 		state.Tool.TotalToolCalls++
+
+		// Hook: async PostToolUse — fire and forget with detached context.
+		if s.deps.Hooks != nil {
+			detached := context.WithoutCancel(ctx)
+			go s.deps.FireHook(detached, hooks.Event{ //nolint:errcheck
+				EventID:   uuid.NewString(),
+				SessionID: state.Input.SessionKey,
+				TenantID:  store.TenantIDFromContext(ctx),
+				AgentID:   store.AgentIDFromContext(ctx),
+				ToolName:  tc.Name,
+				ToolInput: tc.Arguments,
+				HookEvent: hooks.EventPostToolUse,
+			})
+		}
+
 		if state.Tool.LoopKilled {
 			s.result = BreakLoop
 			return nil
@@ -95,6 +137,22 @@ func (s *ToolStage) executeParallel(ctx context.Context, state *RunState, toolCa
 			state.Messages.AppendPending(msg)
 		}
 		state.Tool.TotalToolCalls++
+
+		// Hook: async PostToolUse for parallel path — fire and forget.
+		// PreToolUse is not instrumented in the parallel path (TODO: add when parallel path matures).
+		if s.deps.Hooks != nil {
+			detached := context.WithoutCancel(ctx)
+			go s.deps.FireHook(detached, hooks.Event{ //nolint:errcheck
+				EventID:   uuid.NewString(),
+				SessionID: state.Input.SessionKey,
+				TenantID:  store.TenantIDFromContext(ctx),
+				AgentID:   store.AgentIDFromContext(ctx),
+				ToolName:  r.tc.Name,
+				ToolInput: r.tc.Arguments,
+				HookEvent: hooks.EventPostToolUse,
+			})
+		}
+
 		if state.Tool.LoopKilled {
 			s.result = BreakLoop
 			return nil

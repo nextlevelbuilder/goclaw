@@ -133,16 +133,28 @@ func (s *PGSkillStore) RevokeFromUser(ctx context.Context, skillID uuid.UUID, us
 // ListAccessible returns skills accessible to a given agent+user combination.
 // Access logic: public → all, private → owner only, internal → check grants.
 // System skills (is_system=true) are always visible regardless of tenant.
+//
+// To preserve visibility across the ACTOR-vs-SCOPE split (#915), the query
+// matches owner_id and user grant rows against BOTH the caller-supplied
+// userID (scope identity, legacy rows) and the actor identity from ctx
+// (individual sender, new rows). In DM contexts these are identical and
+// the OR clause collapses; in group chats they diverge and the OR ensures
+// a publisher can still see their own private skill.
 func (s *PGSkillStore) ListAccessible(ctx context.Context, agentID uuid.UUID, userID string) ([]store.SkillInfo, error) {
+	actorID := store.ActorIDFromContext(ctx)
+	if actorID == "" {
+		actorID = userID
+	}
 	// tenant filter: system skills bypass it, tenant-owned skills are filtered
-	tc, tcArgs, _, err := scopeClause(ctx, 3)
+	// (bumped from $3 to $4 to accommodate the new actorID bind at $3).
+	tc, tcArgs, _, err := scopeClause(ctx, 4)
 	if err != nil {
 		return nil, err
 	}
 	tenantCond := ""
 	if tc != "" {
-		// tc is " AND tenant_id = $3"; we need it as an OR condition inside the WHERE
-		tenantCond = fmt.Sprintf(" AND (s.is_system = true OR s.tenant_id = $%d)", 3)
+		// tc is " AND tenant_id = $4"; we need it as an OR condition inside the WHERE
+		tenantCond = fmt.Sprintf(" AND (s.is_system = true OR s.tenant_id = $%d)", 4)
 		_ = tc // tcArgs carries the value
 	}
 	// LEFT JOIN skill_tenant_configs to exclude per-tenant disabled skills.
@@ -150,20 +162,20 @@ func (s *PGSkillStore) ListAccessible(ctx context.Context, agentID uuid.UUID, us
 	stcJoin := ""
 	stcFilter := ""
 	if len(tcArgs) > 0 {
-		stcJoin = fmt.Sprintf(" LEFT JOIN skill_tenant_configs stc ON s.id = stc.skill_id AND stc.tenant_id = $%d", 3)
+		stcJoin = fmt.Sprintf(" LEFT JOIN skill_tenant_configs stc ON s.id = stc.skill_id AND stc.tenant_id = $%d", 4)
 		stcFilter = " AND (stc.enabled IS NULL OR stc.enabled = true)"
 	}
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT DISTINCT s.name, s.slug, s.description, s.version, s.file_path FROM skills s
 		LEFT JOIN skill_agent_grants sag ON s.id = sag.skill_id AND sag.agent_id = $1
-		LEFT JOIN skill_user_grants sug ON s.id = sug.skill_id AND sug.user_id = $2`+stcJoin+`
+		LEFT JOIN skill_user_grants sug ON s.id = sug.skill_id AND (sug.user_id = $2 OR sug.user_id = $3)`+stcJoin+`
 		WHERE s.status = 'active'`+tenantCond+stcFilter+` AND (
 			s.is_system = true
 			OR s.visibility = 'public'
-			OR (s.visibility = 'private' AND s.owner_id = $2)
+			OR (s.visibility = 'private' AND (s.owner_id = $2 OR s.owner_id = $3))
 			OR (s.visibility = 'internal' AND (sag.id IS NOT NULL OR sug.id IS NOT NULL))
 		)
-		ORDER BY s.name`, append([]any{agentID, userID}, tcArgs...)...)
+		ORDER BY s.name`, append([]any{agentID, userID, actorID}, tcArgs...)...)
 	if err != nil {
 		return nil, err
 	}

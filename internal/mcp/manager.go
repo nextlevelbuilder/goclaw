@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -99,6 +97,9 @@ type Manager struct {
 	// DB-backed servers
 	store store.MCPServerStore
 
+	// Grant checker for runtime grant verification (nil = skip check)
+	grantChecker GrantChecker
+
 	// Shared connection pool (nil = config-only mode)
 	pool          *Pool
 	poolServers   map[string]struct{}  // server names acquired from pool (for cleanup)
@@ -141,6 +142,14 @@ func WithPool(p *Pool) ManagerOption {
 	}
 }
 
+// WithGrantChecker sets the grant checker for runtime grant verification.
+// When set, BridgeTool.Execute rechecks grants before executing tools.
+func WithGrantChecker(gc GrantChecker) ManagerOption {
+	return func(m *Manager) {
+		m.grantChecker = gc
+	}
+}
+
 // NewManager creates a new MCP Manager.
 func NewManager(registry *tools.Registry, opts ...ManagerOption) *Manager {
 	m := &Manager{
@@ -167,7 +176,14 @@ func (m *Manager) Start(ctx context.Context) error {
 			continue
 		}
 
-		if err := m.connectServer(ctx, name, cfg.Transport, cfg.Command, cfg.Args, cfg.Env, cfg.URL, resolveEnvVars(cfg.Headers), cfg.ToolPrefix, cfg.TimeoutSec); err != nil {
+		// Config-path servers have no DB ID — pass uuid.Nil
+		headers, err := resolveEnvVars(cfg.Headers)
+		if err != nil {
+			slog.Warn("security.mcp.env_var_rejected", "server", name, "err", err)
+			errs = append(errs, fmt.Sprintf("%s: %v", name, err))
+			continue
+		}
+		if err := m.connectServer(ctx, name, cfg.Transport, cfg.Command, cfg.Args, cfg.Env, cfg.URL, headers, cfg.ToolPrefix, cfg.TimeoutSec, uuid.Nil); err != nil {
 			slog.Warn("mcp.server.connect_failed", "server", name, "error", err)
 			errs = append(errs, fmt.Sprintf("%s: %v", name, err))
 		}
@@ -210,7 +226,11 @@ func (m *Manager) resolveServerCredentials(ctx context.Context, info store.MCPAc
 
 	args := jsonBytesToStringSlice(srv.Args)
 	env := jsonBytesToStringMap(srv.Env)
-	headers := resolveEnvVars(jsonBytesToStringMap(srv.Headers))
+	headers, err := resolveEnvVars(jsonBytesToStringMap(srv.Headers))
+	if err != nil {
+		slog.Warn("security.mcp.env_var_rejected", "server", srv.Name, "err", err)
+		return nil
+	}
 
 	// Inject APIKey into headers if present (bug fix: was never passed to connections)
 	if srv.APIKey != "" && headers["Authorization"] == "" {
@@ -273,14 +293,14 @@ func (m *Manager) connectAndFilter(ctx context.Context, rs *resolvedServer) erro
 		// Pool mode: acquire shared connection, create per-agent BridgeTools
 		tid := store.TenantIDFromContext(ctx)
 		if err := m.connectViaPool(ctx, tid, srv.Name, srv.Transport, srv.Command,
-			rs.args, rs.env, srv.URL, rs.headers, srv.ToolPrefix, srv.TimeoutSec); err != nil {
+			rs.args, rs.env, srv.URL, rs.headers, srv.ToolPrefix, srv.TimeoutSec, srv.ID); err != nil {
 			return err
 		}
 	} else {
 		// Per-agent mode: create per-agent connection
 		if err := m.connectServer(ctx, srv.Name, srv.Transport, srv.Command,
 			rs.args, rs.env, srv.URL, rs.headers,
-			srv.ToolPrefix, srv.TimeoutSec); err != nil {
+			srv.ToolPrefix, srv.TimeoutSec, srv.ID); err != nil {
 			return err
 		}
 	}
@@ -387,7 +407,7 @@ func (m *Manager) maybeEnterSearchMode() {
 
 	// Update "mcp" group to only the kept inline names.
 	inlineNames := allNames[:mcpToolInlineMaxCount]
-	tools.RegisterToolGroup("mcp", inlineNames)
+	m.registry.RegisterToolGroup("mcp", inlineNames)
 	m.searchMode = true
 
 	slog.Info("mcp.search_mode.enabled",
@@ -459,7 +479,7 @@ func (m *Manager) ActivateTools(names []string) {
 	}
 	m.mu.Unlock()
 
-	tools.RegisterToolGroup("mcp", activeNames)
+	m.registry.RegisterToolGroup("mcp", activeNames)
 	slog.Info("mcp.tools.activated", "tools", activated)
 }
 
@@ -490,7 +510,7 @@ func (m *Manager) ActivateToolIfDeferred(name string) bool {
 
 	// Register in registry outside lock (registry has its own sync).
 	m.registry.Register(bt)
-	tools.RegisterToolGroup("mcp", activeNames)
+	m.registry.RegisterToolGroup("mcp", activeNames)
 	slog.Info("mcp.tools.activated", "tools", []string{name})
 	return true
 }
@@ -551,16 +571,17 @@ func (m *Manager) ServerStatus() []ServerStatus {
 }
 
 // resolveEnvVars returns a copy of m with "env:VARNAME" values resolved to os.Getenv("VARNAME").
-func resolveEnvVars(m map[string]string) map[string]string {
+// Uses fail-closed validation: only allowlisted env vars are permitted.
+func resolveEnvVars(m map[string]string) (map[string]string, error) {
 	out := make(map[string]string, len(m))
 	for k, v := range m {
-		if after, ok := strings.CutPrefix(v, "env:"); ok {
-			out[k] = os.Getenv(after)
-		} else {
-			out[k] = v
+		resolved, err := ValidateAndResolveEnvVar(v)
+		if err != nil {
+			return nil, fmt.Errorf("header %q: %w", k, err)
 		}
+		out[k] = resolved
 	}
-	return out
+	return out, nil
 }
 
 // requireUserCreds checks if an MCP server's settings mandate per-user credentials.
