@@ -92,7 +92,7 @@ func TestVaultNamespaceFix_thuyTienScenario(t *testing.T) {
 		t.Errorf("A: KG leaked into types=context search: %s", res.ForLLM)
 	}
 
-	// --- Scenario B: empty types → both sources + hints present. ---
+	// --- Scenario B: empty types → both sources present with per-source id fields. ---
 	resB := searchTool.Execute(ctx, map[string]any{
 		"query":      "KG_03",
 		"maxResults": float64(10),
@@ -100,8 +100,13 @@ func TestVaultNamespaceFix_thuyTienScenario(t *testing.T) {
 	if resB.IsError {
 		t.Fatalf("B: unexpected error: %s", resB.ForLLM)
 	}
-	if !strings.Contains(resB.ForLLM, "→ use") {
-		t.Errorf("B: tool hint marker missing: %s", resB.ForLLM)
+	// Each source must carry its tool-specific id field (doc_id / entity_id)
+	// so the LLM cannot pattern-match a foreign uuid into vault_read.
+	if !strings.Contains(resB.ForLLM, "doc_id:") {
+		t.Errorf("B: vault result missing doc_id field: %s", resB.ForLLM)
+	}
+	if !strings.Contains(resB.ForLLM, "entity_id:") {
+		t.Errorf("B: kg result missing entity_id field: %s", resB.ForLLM)
 	}
 
 	// --- Scenario C: vault_read(KG id) → redirect, not 'document not found'. ---

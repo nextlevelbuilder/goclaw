@@ -27,23 +27,24 @@ func (t *VaultSearchTool) SetSearchService(svc *vault.VaultSearchService) {
 func (t *VaultSearchTool) Name() string { return "vault_search" }
 
 func (t *VaultSearchTool) Description() string {
-	return "Primary discovery tool: search across ALL knowledge sources (vault docs, memory, knowledge graph). Each result ends with a '→ use <tool>' hint identifying the correct next tool for that source — FOLLOW THE HINT EXACTLY; do NOT pass a knowledge-graph or episodic id to vault_read. Narrow the search with types=\"context,note\" or types=\"kg\" when relevant."
+	return "Primary discovery tool: search across ALL knowledge sources (vault docs, memory, knowledge graph). Each result carries a source-specific id field (doc_id / entity_id / episodic_id) that matches the input param of its follow-up tool — pass doc_id to vault_read, entity_id to knowledge_graph_search, episodic_id to memory_expand. Narrow the search with types=\"context,note\" or types=\"kg\" when relevant."
 }
 
-// nextToolHint maps a result source to the correct follow-up tool name.
-// Kept narrow to existing tool names — when a direct-read tool does not exist
-// the hint points to the closest search-style accessor so the LLM never sends
-// a foreign-namespace id to vault_read.
-func nextToolHint(source string) string {
+// sourceIDField returns the (field-name, follow-up-hint) pair for a result
+// source. Field names intentionally match the input param of the follow-up
+// tool so the LLM cannot misroute an id: `doc_id` is vault_read's param,
+// `entity_id` is knowledge_graph_search's param, `episodic_id` pairs with
+// memory_expand's `id` param (kept distinct to signal namespace).
+func sourceIDField(source string) (field, hint string) {
 	switch source {
 	case "vault":
-		return " → use vault_read(doc_id)"
+		return "doc_id", " → vault_read(doc_id)"
 	case "kg":
-		return " → use knowledge_graph_search(query) (kg entity — NOT a vault doc)"
+		return "entity_id", " → knowledge_graph_search(entity_id) — NOT vault_read"
 	case "episodic":
-		return " → use memory_search(types=\"episodic\") (episodic summary — NOT a vault doc)"
+		return "episodic_id", " → memory_expand(id=episodic_id) — NOT vault_read"
 	default:
-		return ""
+		return "id", ""
 	}
 }
 
@@ -125,10 +126,11 @@ func (t *VaultSearchTool) Execute(ctx context.Context, args map[string]any) *Res
 			sb.WriteString(fmt.Sprintf(" (%s)", r.Path))
 		}
 		sb.WriteString(fmt.Sprintf(" — score: %.2f", r.Score))
+		field, hint := sourceIDField(r.Source)
 		if r.ID != "" {
-			sb.WriteString(fmt.Sprintf(" — id: %s", r.ID))
+			sb.WriteString(fmt.Sprintf(" — %s: %s", field, r.ID))
 		}
-		if hint := nextToolHint(r.Source); hint != "" {
+		if hint != "" {
 			sb.WriteString(hint)
 		}
 		if r.Snippet != "" {

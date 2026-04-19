@@ -38,9 +38,9 @@ func wireVault(stores *store.Stores, toolsReg *tools.Registry, workspace string,
 	}
 	toolsReg.Register(vaultReadTool)
 
-	// Build VaultSearchService: fan-out across vault + KG (episodic store pending impl).
-	// EpisodicStore is nil until a PG implementation exists.
-	searchSvc := vault.NewVaultSearchService(stores.Vault, nil, stores.KnowledgeGraph)
+	// Build VaultSearchService: fan-out across vault + episodic + KG.
+	// Each store is nil-safe inside the service (skipped when absent).
+	searchSvc := vault.NewVaultSearchService(stores.Vault, stores.Episodic, stores.KnowledgeGraph)
 	vaultSearchTool.SetSearchService(searchSvc)
 
 	// Build shared VaultInterceptor for read/write tool vault registration.

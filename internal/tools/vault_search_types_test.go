@@ -66,20 +66,31 @@ func TestVaultSearch_OutputIncludesToolHint(t *testing.T) {
 	}
 	out := res.ForLLM
 
-	// Every source must have an explicit next-tool hint.
+	// Per-source id field names match each downstream tool's input param —
+	// the schema-level fix that prevents LLM from misrouting a foreign id
+	// into vault_read.
+	if !strings.Contains(out, "doc_id: vault-id") {
+		t.Errorf("vault result must use 'doc_id:' field: %s", out)
+	}
+	if !strings.Contains(out, "entity_id: kg-id") {
+		t.Errorf("kg result must use 'entity_id:' field: %s", out)
+	}
+	if !strings.Contains(out, "episodic_id: ep-id") {
+		t.Errorf("episodic result must use 'episodic_id:' field: %s", out)
+	}
+	// Generic `id:` label must not appear — it is the honeypot that caused
+	// the original bug (LLM pattern-matched `id:` regex to doc_id).
+	if strings.Contains(out, " id: ") {
+		t.Errorf("generic ' id: ' label leaked into output: %s", out)
+	}
+	// Follow-up tool hint still present per result as secondary signal.
 	if !strings.Contains(out, "vault_read") {
 		t.Errorf("vault hint missing: %s", out)
 	}
-	// kg source should redirect — accept either `knowledge_graph_search` (current tool)
-	// or `kg_get` / `kg_search`; all flag namespace explicitly.
-	if !strings.Contains(out, "knowledge_graph_search") && !strings.Contains(out, "kg_get") && !strings.Contains(out, "kg_search") {
+	if !strings.Contains(out, "knowledge_graph_search") {
 		t.Errorf("kg hint missing: %s", out)
 	}
-	if !strings.Contains(out, "memory_search") && !strings.Contains(out, "episodic_read") {
+	if !strings.Contains(out, "memory_expand") {
 		t.Errorf("episodic hint missing: %s", out)
-	}
-	// Hint marker "→ use" appears per result line.
-	if strings.Count(out, "→ use") < 3 {
-		t.Errorf("expected ≥3 hint markers, got: %s", out)
 	}
 }

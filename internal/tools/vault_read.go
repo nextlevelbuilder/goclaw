@@ -199,13 +199,13 @@ func (t *VaultReadTool) namespaceRedirect(ctx context.Context, id string) string
 		kgUserID := store.KGUserID(ctx)
 		if ent, err := t.kgStore.GetEntity(ctx, agentID.String(), kgUserID, id); err == nil && ent != nil {
 			slog.Warn("vault_read.namespace_mismatch", "doc_id", id, "source", "kg")
-			return "id belongs to knowledge_graph entity, not a vault document — use knowledge_graph_search(query) to look it up"
+			return fmt.Sprintf("id %q is a knowledge_graph entity_id, not a vault doc_id — call knowledge_graph_search(entity_id=%q) instead", id, id)
 		}
 	}
 	if t.episodicStore != nil {
 		if ep, err := t.episodicStore.Get(ctx, id); err == nil && ep != nil {
 			slog.Warn("vault_read.namespace_mismatch", "doc_id", id, "source", "episodic")
-			return "id belongs to episodic summary, not a vault document — use memory_search(types=\"episodic\")"
+			return fmt.Sprintf("id %q is an episodic_id, not a vault doc_id — call memory_expand(id=%q) instead", id, id)
 		}
 	}
 	return ""

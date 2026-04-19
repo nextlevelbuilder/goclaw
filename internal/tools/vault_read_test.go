@@ -779,8 +779,11 @@ func TestVaultRead_KGIDReturnsRedirect(t *testing.T) {
 	if strings.Contains(res.ForLLM, "document not found") {
 		t.Fatalf("should redirect, not say 'document not found': %s", res.ForLLM)
 	}
-	if !strings.Contains(res.ForLLM, "knowledge_graph_search") && !strings.Contains(res.ForLLM, "kg_get") {
-		t.Fatalf("redirect must reference knowledge_graph tool: %s", res.ForLLM)
+	if !strings.Contains(res.ForLLM, "knowledge_graph_search") {
+		t.Fatalf("redirect must reference knowledge_graph_search: %s", res.ForLLM)
+	}
+	if !strings.Contains(res.ForLLM, "entity_id") {
+		t.Fatalf("redirect must name 'entity_id' param so LLM can self-correct: %s", res.ForLLM)
 	}
 }
 
@@ -804,8 +807,11 @@ func TestVaultRead_EpisodicIDReturnsRedirect(t *testing.T) {
 	if strings.Contains(res.ForLLM, "document not found") {
 		t.Fatalf("should redirect, not say 'document not found': %s", res.ForLLM)
 	}
-	if !strings.Contains(res.ForLLM, "memory_search") && !strings.Contains(res.ForLLM, "episodic_read") {
-		t.Fatalf("redirect must reference episodic/memory tool: %s", res.ForLLM)
+	if !strings.Contains(res.ForLLM, "memory_expand") {
+		t.Fatalf("redirect must reference memory_expand: %s", res.ForLLM)
+	}
+	if !strings.Contains(res.ForLLM, "episodic_id") {
+		t.Fatalf("redirect must name 'episodic_id' so LLM can self-correct: %s", res.ForLLM)
 	}
 }
 
