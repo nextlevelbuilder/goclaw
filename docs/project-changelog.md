@@ -37,6 +37,32 @@ Implementation is evidence-backed against the native ChatGPT Responses API event
 
 ## 2026-04-20
 
+### Pipeline: accurate context token tracking + dynamic compaction
+
+**Features**
+
+- **Session token display from metadata:** `sessions.metadata` now carries `last_prompt_tokens` and `last_message_count` on finalize. List query reads from metadata; fallback to octet/rune heuristic when absent. Fixes stale token display across session re-opens.
+- **Tool-schema token accounting:** `TokenCounter.CountToolSchemas(model, tools)` new method counts tool definitions serialized as JSON. Tool-schema tokens included in `OverheadTokens` at ContextStage.
+- **Dynamic compaction max_tokens:** Compaction `max_tokens` now derived from `in/25` with clamp `[1024, 8192]`. Applied to both summarization flow (`loop_compact.go`) and history sanitization (`loop_history_sanitize.go`). Replaces static 4096 limit — adapts budget to context size.
+
+**Code**
+
+- `internal/store/pg/sessions_list.go` — read/write `last_prompt_tokens` and `last_message_count` in metadata.
+- `internal/store/sqlitestore/sessions*.go` — parity SQLite store updates.
+- `internal/tokencount/token_counter.go` — `CountToolSchemas` interface method + `tiktoken_counter.go` impl.
+- `internal/pipeline/context_stage.go` — include tool overhead in `OverheadTokens`.
+- `internal/agent/loop_compact.go` — `dynamicSummaryMax` function; apply to compaction call.
+- `internal/agent/loop_history_sanitize.go` — apply dynamic max to sanitization.
+
+**Tests**
+
+- `internal/tokencount/count_tool_schemas_test.go` — tool schema token counting.
+- `internal/agent/loop_compact_dynamic_max_test.go` — dynamic max_tokens clamping.
+- `internal/pipeline/context_stage_tool_overhead_test.go` — tool overhead integration.
+- `internal/store/sqlitestore/sessions_display_tokens_integration_test.go` — metadata round-trip.
+
+---
+
 ### TTS: timeout tenant-config + Gemini text-only 400 fix
 
 **Features & Fixes**

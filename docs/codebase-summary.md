@@ -143,7 +143,7 @@ Native `image_generation` support in the Codex provider (`POST /codex/responses`
 ## Key Conventions
 
 - **Store layer:** Interface-based; PG (`store/pg/`) + SQLite (`store/sqlitestore/`). Raw SQL, `$1/$2` params.
-- **Session token display:** v3 compaction now uses dynamic max_tokens; session token display reads from `sessions.metadata.last_prompt_tokens`.
+- **Session token display:** v3 compaction now uses dynamic max_tokens (`in/25` clamped `[1024,8192]`); session token display reads from `sessions.metadata.last_prompt_tokens` and `last_message_count`. Tool schemas counted via `TokenCounter.CountToolSchemas()` and included in ContextStage overhead.
 - **Context propagation:** `store.WithLocale`, `store.WithUserID`, `store.WithTenantID`, etc.
 - **Security logs:** `slog.Warn("security.*")` for all security events.
 - **SSRF prevention:** `validateProviderURL()` in `internal/http/tts_validate.go`.
