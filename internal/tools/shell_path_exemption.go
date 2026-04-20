@@ -23,6 +23,15 @@ func (t *ExecTool) dynamicPathExemptions(ctx context.Context) []string {
 		dirs = append(dirs, teamWorkspace)
 	}
 	if workspace != "" && filepath.Clean(workspace) != filepath.Clean(teamWorkspace) {
+		// Workspace root: needed when workspace sits inside the .goclaw/ relative deny root
+		// (e.g. desktop edition: ~/.goclaw/workspace). On the server, workspace is typically
+		// /app/workspace which doesn't contain /.goclaw/, so this check won't trigger.
+		// Only add workspace root for .goclaw/ paths — upload subdirs handle the dataDir case.
+		sep := string(filepath.Separator)
+		marker := sep + ".goclaw" + sep
+		if strings.Contains(filepath.Clean(workspace)+sep, marker) {
+			dirs = append(dirs, workspace)
+		}
 		dirs = append(dirs, filepath.Join(workspace, ".uploads"))
 		dirs = append(dirs, filepath.Join(workspace, "uploads"))
 	}

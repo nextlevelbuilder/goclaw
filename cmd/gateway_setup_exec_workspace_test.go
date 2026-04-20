@@ -120,6 +120,11 @@ func TestSetupToolRegistryExecWorkspacePaths(t *testing.T) {
 			command:    "printf '%s' " + filepath.Join(workspace, ".goclaw", "secrets.json"),
 			wantDenied: true,
 		},
+		{
+			name:    "dotgoclaw_workspace_relative_allowed",
+			ctx:     tools.WithToolWorkspace(context.Background(), workspace),
+			command: "printf '%s' .goclaw/workspace/readme.md",
+		},
 	}
 
 	for _, tc := range tests {
@@ -136,7 +141,7 @@ func TestSetupToolRegistryExecWorkspacePaths(t *testing.T) {
 				if _, err := os.Stat(tc.wantPath); err != nil {
 					t.Fatalf("expected copied file at %q, got stat error: %v", tc.wantPath, err)
 				}
-			} else if !tc.wantDenied && !strings.Contains(result.ForLLM, "Quarterly Report.png") {
+			} else if !tc.wantDenied && !strings.Contains(result.ForLLM, "Quarterly Report.png") && !strings.Contains(result.ForLLM, ".goclaw/workspace/") {
 				t.Fatalf("expected output to contain quoted file path, got: %s", result.ForLLM)
 			}
 		})

@@ -185,7 +185,12 @@ func TestPathExemptions(t *testing.T) {
 		restrict:  false,
 	}
 	tool.DenyPaths(dataDir, ".goclaw/")
-	tool.AllowPathExemptions(".goclaw/skills-store/", filepath.Join(dataDir, "skills-store")+"/")
+	tool.AllowPathExemptions(
+		".goclaw/skills-store/",
+		".goclaw/workspace/",
+		filepath.Join(dataDir, "skills-store")+"/",
+		filepath.Join(dataDir, "tenants")+"/",
+	)
 
 	cases := []struct {
 		name  string
@@ -216,6 +221,23 @@ func TestPathExemptions(t *testing.T) {
 		{
 			"quoted_double_relative",
 			`python3 ".goclaw/skills-store/tool.py"`,
+			true,
+		},
+
+		// --- Workspace path exemptions ---
+		{
+			"dotgoclaw_workspace_allowed",
+			"cat .goclaw/workspace/report.txt",
+			true,
+		},
+		{
+			"dotgoclaw_workspace_nested_allowed",
+			"python3 .goclaw/workspace/scripts/process.py --input data.csv",
+			true,
+		},
+		{
+			"dotgoclaw_workspace_quoted_allowed",
+			`cat ".goclaw/workspace/data.csv"`,
 			true,
 		},
 
@@ -610,6 +632,104 @@ func TestIsNestedUnderDeniedRoot_RelativeDotGoclaw(t *testing.T) {
 	tool := &ExecTool{pathDenyRoots: []string{".goclaw/"}}
 	if !tool.isNestedUnderDeniedRoot("/app/.goclaw/glm-thuc-bo/ws/user/.uploads") {
 		t.Fatal("expected absolute .goclaw path to be treated as nested under relative deny root")
+	}
+}
+
+func TestDynamicPathExemptions_IncludesWorkspaceRoot(t *testing.T) {
+	t.Run("workspace_under_dotgoclaw", func(t *testing.T) {
+		// Desktop scenario: workspace = ~/.goclaw/workspace (under .goclaw/ deny root)
+		tmpDir := t.TempDir()
+		workspace := filepath.Join(tmpDir, ".goclaw", "workspace")
+		if err := os.MkdirAll(workspace, 0755); err != nil {
+			t.Fatalf("MkdirAll() error = %v", err)
+		}
+		tool := NewExecTool("/workspace", false)
+		tool.DenyPaths(filepath.Join(tmpDir, "data"), ".goclaw/")
+
+		ctx := WithToolWorkspace(context.Background(), workspace)
+		exemptions := tool.dynamicPathExemptions(ctx)
+
+		// Workspace root should be in exemptions (it's under .goclaw/ deny root)
+		found := false
+		for _, ex := range exemptions {
+			if ex == workspace+"/" || ex == workspace {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected workspace root %q in dynamic exemptions, got %v", workspace, exemptions)
+		}
+	})
+
+	t.Run("workspace_not_under_dotgoclaw", func(t *testing.T) {
+		// Server scenario: workspace = /app/workspace (NOT under .goclaw/ deny root)
+		tmpDir := t.TempDir()
+		workspace := filepath.Join(tmpDir, "workspace")
+		if err := os.MkdirAll(workspace, 0755); err != nil {
+			t.Fatalf("MkdirAll() error = %v", err)
+		}
+		tool := NewExecTool("/workspace", false)
+		tool.DenyPaths(filepath.Join(tmpDir, "data"), ".goclaw/")
+
+		ctx := WithToolWorkspace(context.Background(), workspace)
+		exemptions := tool.dynamicPathExemptions(ctx)
+
+		// Workspace root should NOT be in exemptions (it's not under any deny root)
+		for _, ex := range exemptions {
+			if ex == workspace+"/" || ex == workspace {
+				t.Errorf("workspace root %q should NOT be in exemptions when not under deny root", workspace)
+			}
+		}
+	})
+
+	t.Run("workspace_under_datadir_not_dotgoclaw", func(t *testing.T) {
+		// Server scenario: workspace = dataDir/personal (under dataDir deny, NOT .goclaw/)
+		tmpDir := t.TempDir()
+		dataDir := filepath.Join(tmpDir, "data")
+		workspace := filepath.Join(dataDir, "personal")
+		if err := os.MkdirAll(workspace, 0755); err != nil {
+			t.Fatalf("MkdirAll() error = %v", err)
+		}
+		tool := NewExecTool("/workspace", false)
+		tool.DenyPaths(dataDir, ".goclaw/")
+
+		ctx := WithToolWorkspace(context.Background(), workspace)
+		exemptions := tool.dynamicPathExemptions(ctx)
+
+		// Workspace root should NOT be in exemptions — only .uploads/upload dirs
+		// (workspace is under dataDir, not under .goclaw/)
+		for _, ex := range exemptions {
+			if ex == workspace+"/" || ex == workspace {
+				t.Errorf("workspace root %q should NOT be exempted when only under dataDir (not .goclaw/)", workspace)
+			}
+		}
+	})
+}
+
+func TestExecute_DesktopWorkspaceUnderDotGoclaw(t *testing.T) {
+	// Simulates desktop edition: workspace is ~/.goclaw/workspace
+	tmpDir := t.TempDir()
+	workspace := filepath.Join(tmpDir, ".goclaw", "workspace")
+	if err := os.MkdirAll(workspace, 0755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	target := filepath.Join(workspace, "report.txt")
+	if err := os.WriteFile(target, []byte("data"), 0644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	tool := NewExecTool("/workspace", false)
+	tool.DenyPaths(filepath.Join(tmpDir, "data"), ".goclaw/")
+	tool.AllowPathExemptions(".goclaw/workspace/")
+
+	ctx := WithToolWorkspace(context.Background(), workspace)
+	result := tool.Execute(ctx, map[string]any{
+		"command": "cat " + target,
+	})
+
+	if strings.Contains(result.ForLLM, "command denied by safety policy") {
+		t.Fatalf("expected desktop workspace path to bypass .goclaw/ deny, got: %s", result.ForLLM)
 	}
 }
 
