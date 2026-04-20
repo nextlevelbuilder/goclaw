@@ -37,6 +37,29 @@ Implementation is evidence-backed against the native ChatGPT Responses API event
 
 ## 2026-04-20
 
+### TTS: timeout tenant-config + Gemini text-only 400 fix
+
+**Features & Fixes**
+
+- **Tenant-config timeout:** HTTP `/v1/tts/synthesize` and `/v1/tts/test-connection` now read `tts.timeout_ms` from system_configs (default 120s, was hardcoded 15s/10s). Gemini client default bumped 30s→120s for end-to-end alignment.
+- **Gemini text-only error recovery:** Gemini preview models occasionally emit 400 "text generation" responses. Fixed by: (1) prepending inline prefix `"Speak naturally: "` to single-voice synthesis (multi-speaker untouched), (2) 1-retry with stronger prefix `"Read the following text aloud without translating, commenting, or modifying: "`, (3) new sentinel `gemini.ErrTextOnlyResponse` preserved through fallback chain via `errors.Join`.
+- **Error UX:** HTTP returns 422 with localized `MsgTtsGeminiTextOnly` message. Agent TTS tool branches on sentinel to emit locale-translated ForLLM response.
+- **Model default:** Gemini default model bumped `gemini-2.5-flash-preview-tts` → `gemini-3.1-flash-tts-preview` for higher stability.
+- **UI bounds:** TTS timeout input now has `max=300000` (5 min).
+
+**i18n**
+
+- New key `MsgTtsGeminiTextOnly` in EN/VI/ZH catalogs for HTTP 422 + agent-tool ForLLM mapping.
+
+**Code**
+
+- `internal/audio/tts.go` — read tenant timeout in synthesize handlers.
+- `internal/audio/gemini/` — inline prefix logic, retry budget, text-only sentinel.
+- `internal/tools/tts.go` — agent-tool i18n branching on sentinel.
+- `internal/http/methods/tts.go` — HTTP 422 error mapping.
+
+---
+
 ### Tools: `send_file` — explicit workspace file delivery
 
 **Features**

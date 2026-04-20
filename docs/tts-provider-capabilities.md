@@ -323,9 +323,9 @@ For each `ParamSchema`, add:
 
 Gemini TTS uses preview models only (as of 2026-04):
 
+- `gemini-3.1-flash-tts-preview` (**default** — higher Elo, more stable)
 - `gemini-2.5-flash-preview-tts`
 - `gemini-2.5-pro-preview-tts`
-- `gemini-3.1-flash-tts-preview`
 
 The frontend displays a "Preview" badge (i18n key `tts.gemini.previewBadge`).
 

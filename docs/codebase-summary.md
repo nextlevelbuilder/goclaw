@@ -100,7 +100,7 @@ old clients see flat keys; new clients see the full params blob.
 
 ### Gemini Specifics
 
-- Models: `gemini-2.5-flash-preview-tts`, `gemini-2.5-pro-preview-tts` (preview).
+- Models: `gemini-3.1-flash-tts-preview` (default), `gemini-2.5-flash-preview-tts`, `gemini-2.5-pro-preview-tts` (preview).
 - Multi-speaker: up to 2 simultaneous speakers, each with distinct voice + name annotation.
 - Audio tags: inline `<say-as>` / style directives via bracketed prompts.
 - Sentinel errors: `ErrInvalidVoice`, `ErrInvalidModel`, `ErrSpeakerLimit` → HTTP 422 with i18n message.
@@ -143,6 +143,7 @@ Native `image_generation` support in the Codex provider (`POST /codex/responses`
 ## Key Conventions
 
 - **Store layer:** Interface-based; PG (`store/pg/`) + SQLite (`store/sqlitestore/`). Raw SQL, `$1/$2` params.
+- **Session token display:** v3 compaction now uses dynamic max_tokens; session token display reads from `sessions.metadata.last_prompt_tokens`.
 - **Context propagation:** `store.WithLocale`, `store.WithUserID`, `store.WithTenantID`, etc.
 - **Security logs:** `slog.Warn("security.*")` for all security events.
 - **SSRF prevention:** `validateProviderURL()` in `internal/http/tts_validate.go`.
