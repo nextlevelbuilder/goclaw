@@ -69,6 +69,7 @@ Single binary. Production-tested. Agents that orchestrate for you.
 - **Multi-Tenant PostgreSQL** — Per-user workspaces, per-user context files, encrypted API keys (AES-256-GCM), RBAC, isolated sessions
 - **20+ LLM Providers** — Anthropic (native HTTP+SSE with prompt caching), OpenAI, OpenRouter, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, DashScope, Claude CLI, Codex, ACP, and any OpenAI-compatible endpoint
 - **7 Messaging Channels** — Telegram, Discord, Slack, Zalo OA, Zalo Personal, Feishu/Lark, WhatsApp
+- **WhatsApp Group Intelligence** — Per-group settings (agent routing, mention requirements, enable/disable), listen-only agents that silently collect conversations for knowledge graph extraction, raw message buffering, and shared knowledge groups that unify insights across multiple WhatsApp groups into a single knowledge graph scope
 - **Production Security** — 5-layer permission system, rate limiting, prompt injection detection, SSRF protection, AES-256-GCM encryption
 - **Single Binary** — ~25 MB static Go binary, no Node.js runtime, <1s startup, runs on a $5 VPS
 - **Observability** — Built-in LLM call tracing with spans and prompt cache metrics, optional OpenTelemetry OTLP export
@@ -251,6 +252,52 @@ Each agent runs with its own identity, tools, LLM provider, and context files. T
 
 Document registry with `[[wikilinks]]` for bidirectional linking. Hybrid search combines full-text (BM25) and semantic (pgvector) for precise retrieval. Filesystem sync keeps vault in sync with on-disk files.
 
+## WhatsApp Group Intelligence
+
+<p align="center">
+  <img src="_statics/whatsapp-group-intelligence.png" alt="WhatsApp Group Intelligence" width="800" />
+</p>
+
+WhatsApp groups become a rich source of organizational knowledge with four integrated features:
+
+### Per-Group Settings
+
+Each WhatsApp group can have independent overrides configured via the channel's `groups` JSONB setting:
+
+| Setting | Description |
+|---------|-------------|
+| `agent_id` | Route group messages to a specific agent (overrides channel default) |
+| `enabled` | Enable/disable bot for individual groups |
+| `require_mention` | Per-group mention requirement (bot only responds when @mentioned) |
+| `listen_only` | Per-group listen-only mode (collect, don't respond) |
+| `listen_graph_id` | Assign a shared knowledge graph scope for this group |
+| `name` | Human-readable alias for the group |
+
+When `require_mention` is enabled, unmentioned messages are recorded in a group history buffer. When the bot is eventually mentioned, accumulated context is prepended to provide full conversation awareness.
+
+### Listen-Only Agent
+
+Listen-only mode turns the WhatsApp bot into a silent observer that collects conversations for knowledge extraction without responding:
+
+- **Global or per-group** — apply to all chats or specific groups
+- **Raw message buffering** — messages are stored immediately via `ListenBuffer` for asynchronous processing
+- **Extraction pipeline** — a background worker batches pending messages, runs LLM-based entity/relation extraction, and ingests results into the knowledge graph with automatic dedup
+- **Respects @mentions** — if the bot is @mentioned (with `require_mention`), it responds normally instead of buffering
+
+### Knowledge Group Sharing
+
+Multiple WhatsApp groups can share a single knowledge graph scope through `listen_graph_id`:
+
+- Groups configured with the same `listen_graph_id` have their extracted entities and relations unified into one knowledge graph
+- Agent-level sharing via `SharedKGIDs` allows agents to access KG scopes from other agents
+- Default behavior uses the chat ID as the graph scope (each group gets its own KG)
+
+### Group Management
+
+- **Group refresh** — WebSocket method `whatsapp.groups.refresh` fetches and upserts all joined groups as contacts
+- **Auto-discovery** — groups are automatically registered as contacts for UI visibility
+- **Slash commands** — `/reset`, `/stop`, `/stopall`, `/menu` work in both DMs and groups
+
 ## Self-Evolution
 
 <p align="center">
@@ -318,6 +365,10 @@ go test -v ./tests/integration/ -timeout 120s    # Integration tests (requires r
 ## Project Status
 
 See [CHANGELOG.md](CHANGELOG.md) for detailed feature status including what's been tested in production and what's still in progress.
+
+## Upstream Sync
+
+This repository merges upstream changes from [nextlevelbuilder/goclaw](https://github.com/nextlevelbuilder/goclaw) every **2 weeks** to stay current with the latest features, bug fixes, and security patches. WhatsApp Group Intelligence features are maintained in the `dev-370-merge-w3` branch and are integrated alongside upstream updates during each sync cycle.
 
 ## Acknowledgments
 
