@@ -156,8 +156,8 @@ func TestToolGroups_BuiltinGroups_Seeded(t *testing.T) {
 	if !ok {
 		t.Fatal("expected 'web' builtin group to exist")
 	}
-	if !containsTool(web, "web_search") || !containsTool(web, "web_fetch") {
-		t.Errorf("web group should contain web_search and web_fetch, got: %v", web)
+	if !containsTool(web, "web_search") || !containsTool(web, "web_fetch") || !containsTool(web, "github_read") {
+		t.Errorf("web group should contain web_search, web_fetch, and github_read, got: %v", web)
 	}
 }
 

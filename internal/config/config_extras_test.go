@@ -217,6 +217,38 @@ func TestReplaceFrom(t *testing.T) {
 	}
 }
 
+func TestConfig_GitHubTokenSecretHandling(t *testing.T) {
+	cfg := Default()
+	cfg.Tools.GitHub.Token = "ghp_test_token"
+
+	masked := cfg.MaskedCopy()
+	if masked.Tools.GitHub.Token != "***" {
+		t.Fatalf("MaskedCopy should mask GitHub token, got %q", masked.Tools.GitHub.Token)
+	}
+
+	secrets := cfg.ExtractDBSecrets()
+	if secrets["tools.github.token"] != "ghp_test_token" {
+		t.Fatalf("ExtractDBSecrets should include GitHub token, got %q", secrets["tools.github.token"])
+	}
+
+	cfg.StripSecrets()
+	if cfg.Tools.GitHub.Token != "" {
+		t.Fatalf("StripSecrets should clear GitHub token, got %q", cfg.Tools.GitHub.Token)
+	}
+
+	cfg.Tools.GitHub.Token = "***"
+	cfg.StripMaskedSecrets()
+	if cfg.Tools.GitHub.Token != "" {
+		t.Fatalf("StripMaskedSecrets should clear masked GitHub token, got %q", cfg.Tools.GitHub.Token)
+	}
+
+	loaded := Default()
+	loaded.ApplyDBSecrets(map[string]string{"tools.github.token": "db-token"})
+	if loaded.Tools.GitHub.Token != "db-token" {
+		t.Fatalf("ApplyDBSecrets should restore GitHub token, got %q", loaded.Tools.GitHub.Token)
+	}
+}
+
 // --- CronConfig helpers ---
 
 func TestCronConfig_JobTimeoutDuration_Default(t *testing.T) {

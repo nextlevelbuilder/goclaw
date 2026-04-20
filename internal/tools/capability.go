@@ -46,7 +46,7 @@ func inferMetadata(name string) ToolMetadata {
 		name == "memory_search" || name == "memory_get" || name == "memory_expand" ||
 		name == "skill_search" || name == "knowledge_graph_search" ||
 		name == "sessions_list" || name == "session_status" || name == "sessions_history" ||
-		name == "datetime" || name == "web_search" || name == "web_fetch":
+		name == "datetime" || name == "web_search" || name == "web_fetch" || name == "github_read":
 		meta.Capabilities = []ToolCapability{CapReadOnly}
 	case name == "spawn":
 		meta.Capabilities = []ToolCapability{CapAsync}

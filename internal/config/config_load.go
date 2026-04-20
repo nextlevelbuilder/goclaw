@@ -122,6 +122,13 @@ func (c *Config) applyEnvOverrides() {
 	envStr("GOCLAW_SLACK_APP_TOKEN", &c.Channels.Slack.AppToken)
 	envStr("GOCLAW_SLACK_USER_TOKEN", &c.Channels.Slack.UserToken)
 
+	// GitHub token precedence matches the REST-first GitHub tool.
+	// Highest priority wins because envStr overwrites previous values.
+	envStr("GITHUB_TOKEN", &c.Tools.GitHub.Token)
+	envStr("GH_TOKEN", &c.Tools.GitHub.Token)
+	envStr("COPILOT_GITHUB_TOKEN", &c.Tools.GitHub.Token)
+	envStr("GOCLAW_GITHUB_TOKEN", &c.Tools.GitHub.Token)
+
 	// TTS secrets
 	envStr("GOCLAW_TTS_OPENAI_API_KEY", &c.Tts.OpenAI.APIKey)
 	envStr("GOCLAW_TTS_ELEVENLABS_API_KEY", &c.Tts.ElevenLabs.APIKey)

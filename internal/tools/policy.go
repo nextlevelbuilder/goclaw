@@ -14,7 +14,7 @@ import (
 // Do NOT modify at runtime — each Registry gets a deep copy in NewRegistry().
 var builtinToolGroups = map[string][]string{
 	"memory":     {"memory_search", "memory_get"},
-	"web":        {"web_search", "web_fetch"},
+	"web":        {"web_search", "web_fetch", "github_read"},
 	"fs":         {"read_file", "write_file", "list_files", "edit"},
 	"runtime":    {"exec"},
 	"sessions":   {"sessions_list", "sessions_history", "sessions_send", "spawn", "session_status"},
@@ -26,6 +26,7 @@ var builtinToolGroups = map[string][]string{
 	"goclaw": {
 		"read_file", "write_file", "list_files", "edit", "exec",
 		"web_search", "web_fetch", "browser",
+		"github_read",
 		"memory_search", "memory_get", "memory_expand",
 		"knowledge_graph_search", "vault_search", "vault_read",
 		"sessions_list", "sessions_history", "sessions_send", "spawn", "session_status",

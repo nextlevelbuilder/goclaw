@@ -27,6 +27,7 @@ type lifecycleDeps struct {
 	heartbeatTicker   *heartbeat.Ticker
 	quotaChecker      *channels.QuotaChecker
 	webFetchTool      *tools.WebFetchTool
+	githubTool        *tools.GitHubTool
 	ttsTool           *tools.TtsTool
 	sandboxMgr        sandbox.Manager
 	postTurn          tools.PostTurnProcessor
@@ -82,6 +83,27 @@ func (d *gatewayDeps) runLifecycle(
 			return
 		}
 		deps.webFetchTool.UpdatePolicy(updatedCfg.Tools.WebFetch.Policy, updatedCfg.Tools.WebFetch.AllowedDomains, updatedCfg.Tools.WebFetch.BlockedDomains)
+	})
+
+	// Reload GitHub auth on config changes via pub/sub.
+	d.msgBus.Subscribe("github-config-reload", func(evt bus.Event) {
+		if evt.Name != bus.TopicConfigChanged {
+			return
+		}
+		if deps.githubTool == nil {
+			return
+		}
+		updatedCfg, ok := evt.Payload.(*config.Config)
+		if !ok {
+			return
+		}
+		if d.pgStores.ConfigSecrets != nil {
+			if secrets, err := d.pgStores.ConfigSecrets.GetAll(context.Background()); err == nil && len(secrets) > 0 {
+				updatedCfg.ApplyDBSecrets(secrets)
+			}
+		}
+		deps.githubTool.UpdateToken(updatedCfg.Tools.GitHub.Token)
+		slog.Info("github token reloaded", "configured", updatedCfg.Tools.GitHub.Token != "")
 	})
 
 	// Reload TTS providers on config changes via pub/sub.

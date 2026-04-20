@@ -372,6 +372,8 @@ type ToolsConfig struct {
 	ByProvider       map[string]*ToolPolicySpec  `json:"byProvider,omitempty"` // per-provider overrides
 	ExecApproval     ExecApprovalCfg             `json:"execApproval"`         // exec command approval settings
 	WebFetch         WebFetchPolicyConfig        `json:"web_fetch"`            // domain policy for URL fetching
+	GitHub           GitHubToolConfig            `json:"github"`               // GitHub REST API token for github_read
+	Web              WebToolsConfig              `json:"web"`
 	Browser          BrowserToolConfig           `json:"browser"`
 	RateLimitPerHour int                         `json:"rate_limit_per_hour,omitempty"` // max tool executions per hour per session (0 = disabled)
 	ScrubCredentials *bool                       `json:"scrub_credentials,omitempty"`   // auto-redact API keys/tokens in tool output (default true)
@@ -408,6 +410,47 @@ type WebFetchPolicyConfig struct {
 	Policy         string   `json:"policy,omitempty"`          // "allow_all" (default), "allowlist"
 	AllowedDomains []string `json:"allowed_domains,omitempty"` // e.g. ["github.com", "*.example.com"]
 	BlockedDomains []string `json:"blocked_domains,omitempty"` // always checked regardless of policy
+}
+
+// GitHubToolConfig configures the built-in GitHub read-only tool.
+type GitHubToolConfig struct {
+	Token string `json:"token,omitempty"`
+}
+
+// WebToolsConfig controls web search helper configuration.
+type WebToolsConfig struct {
+	ProviderOrder []string         `json:"provider_order,omitempty"`
+	Exa           ExaConfig        `json:"exa"`
+	Tavily        TavilyConfig     `json:"tavily"`
+	Brave         BraveConfig      `json:"brave"`
+	DuckDuckGo    DuckDuckGoConfig `json:"duckduckgo"`
+}
+
+// ExaConfig configures the Exa web search provider.
+type ExaConfig struct {
+	Enabled    bool   `json:"enabled"`
+	APIKey     string `json:"api_key"`
+	MaxResults int    `json:"max_results"`
+}
+
+// TavilyConfig configures the Tavily web search provider.
+type TavilyConfig struct {
+	Enabled    bool   `json:"enabled"`
+	APIKey     string `json:"api_key"`
+	MaxResults int    `json:"max_results"`
+}
+
+// BraveConfig configures the Brave web search provider.
+type BraveConfig struct {
+	Enabled    bool   `json:"enabled"`
+	APIKey     string `json:"api_key"`
+	MaxResults int    `json:"max_results"`
+}
+
+// DuckDuckGoConfig configures the DuckDuckGo web search provider.
+type DuckDuckGoConfig struct {
+	Enabled    bool `json:"enabled"`
+	MaxResults int  `json:"max_results"`
 }
 
 // BrowserToolConfig controls the browser automation tool.

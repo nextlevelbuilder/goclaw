@@ -183,6 +183,7 @@ var coreToolSummaries = map[string]string{
 	"spawn":                  "Spawn a self-clone subagent to handle a task in the background",
 	"web_search":             "Search the web",
 	"web_fetch":              "Fetch and extract content from a URL",
+	"github_read":            "Read GitHub repositories, files, issues, pull requests, and releases",
 	"datetime":               "Get current date/time with timezone — use before creating cron jobs",
 	"cron":                   "Manage scheduled jobs and reminders (e.g. 'remind me at 9am', 'check every morning')",
 	"heartbeat":              "Periodic background monitoring with HEARTBEAT.md. Unlike cron, auto-suppresses 'all OK' via HEARTBEAT_OK",

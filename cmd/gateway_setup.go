@@ -31,7 +31,7 @@ import (
 
 // setupToolRegistry creates the tool registry and registers all tools.
 // Returns the registry, exec approval manager, MCP manager, sandbox manager,
-// browser manager (caller must defer Close), web fetch tool, TTS tool,
+// browser manager (caller must defer Close), web fetch tool, GitHub tool, TTS tool,
 // permission policy engine, tool policy engine, data directory, and resolved agent defaults.
 func setupToolRegistry(
 	cfg *config.Config,
@@ -44,6 +44,7 @@ func setupToolRegistry(
 	sandboxMgr sandbox.Manager,
 	browserMgr *browser.Manager,
 	webFetchTool *tools.WebFetchTool,
+	githubTool *tools.GitHubTool,
 	ttsTool *tools.TtsTool,
 	audioMgr *audio.Manager,
 	permPE *permissions.PolicyEngine,
@@ -125,6 +126,14 @@ func setupToolRegistry(
 	})
 	toolsReg.Register(webFetchTool)
 	slog.Info("web_fetch tool enabled", "policy", cfg.Tools.WebFetch.Policy, "blocked", len(cfg.Tools.WebFetch.BlockedDomains))
+
+	githubTool = tools.NewGitHubTool(tools.GitHubToolConfig{Token: cfg.Tools.GitHub.Token})
+	toolsReg.RegisterWithMetadata(githubTool, tools.ToolMetadata{
+		Capabilities:      []tools.ToolCapability{tools.CapReadOnly},
+		Group:             "web",
+		RequiresWorkspace: false,
+	})
+	slog.Info("github_read tool enabled")
 
 	// Vision fallback tool (for non-vision providers like MiniMax)
 	toolsReg.Register(tools.NewReadImageTool(providerRegistry))

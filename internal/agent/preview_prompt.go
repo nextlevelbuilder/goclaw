@@ -333,6 +333,6 @@ func defaultTeamGuidance() string {
 var fallbackPreviewToolNames = []string{
 	"read_file", "write_file", "list_files", "edit", "exec",
 	"memory_search", "memory_get", "spawn",
-	"web_search", "web_fetch", "skill_search", "use_skill",
+	"web_search", "web_fetch", "github_read", "skill_search", "use_skill",
 	"datetime", "cron",
 }

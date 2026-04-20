@@ -64,6 +64,14 @@ func TestRegistry_Count(t *testing.T) {
 	}
 }
 
+func TestRegistry_GetMetadata_GitHubReadOnly(t *testing.T) {
+	reg := NewRegistry()
+	meta := reg.GetMetadata("github_read")
+	if !meta.IsReadOnly() {
+		t.Fatalf("github_read should infer read-only metadata, got %+v", meta)
+	}
+}
+
 func TestRegistry_ExecuteUnknownTool(t *testing.T) {
 	reg := NewRegistry()
 	result := reg.Execute(context.Background(), "missing", nil)

@@ -130,6 +130,21 @@ func TestLoad_EnvVarAPIKeys(t *testing.T) {
 	}
 }
 
+func TestLoad_EnvVarGitHubTokenPrecedence(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "legacy-token")
+	t.Setenv("GH_TOKEN", "gh-token")
+	t.Setenv("COPILOT_GITHUB_TOKEN", "copilot-token")
+	t.Setenv("GOCLAW_GITHUB_TOKEN", "goclaw-token")
+
+	cfg, err := Load("/nonexistent/path")
+	if err != nil {
+		t.Fatalf("load error: %v", err)
+	}
+	if cfg.Tools.GitHub.Token != "goclaw-token" {
+		t.Fatalf("github token precedence failed: got %q, want goclaw-token", cfg.Tools.GitHub.Token)
+	}
+}
+
 // --- Allowed origins from JSON5 ---
 
 func TestLoad_AllowedOrigins_JSON5(t *testing.T) {
