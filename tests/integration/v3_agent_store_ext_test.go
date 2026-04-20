@@ -355,7 +355,7 @@ func TestStoreAgent_List_MultipleOwners(t *testing.T) {
 		t.Errorf("ownerA list: expected 2 own agents, got %d", countInList(listA, idsA))
 	}
 	if countInList(listA, idsB) != 0 {
-		t.Error("ownerA list contains ownerB agents — isolation broken")
+		t.Error("ownerA list containsSubstring ownerB agents — isolation broken")
 	}
 
 	listB, err := as.List(ctx, ownerB)

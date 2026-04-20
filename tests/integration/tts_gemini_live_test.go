@@ -87,11 +87,11 @@ func isServerError(err error) bool {
 		return false
 	}
 	msg := err.Error()
-	return contains(msg, "500") || contains(msg, "503") || contains(msg, "server error")
+	return containsSubstring(msg, "500") || containsSubstring(msg, "503") || containsSubstring(msg, "server error")
 }
 
-// contains checks if a string contains a substring (case-insensitive).
-func contains(s, substr string) bool {
+// containsSubstring checks if a string containsSubstring a substring (case-insensitive).
+func containsSubstring(s, substr string) bool {
 	for i := 0; i < len(s)-len(substr)+1; i++ {
 		if s[i:i+len(substr)] == substr {
 			return true

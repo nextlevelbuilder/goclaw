@@ -159,7 +159,7 @@ func TestHooksF5_CommandHandlerRejectedOnStandard(t *testing.T) {
 }
 
 // test-F6: hooks.test invoked with the pii-redactor builtin + sample event
-// containing an email → result.UpdatedInput.rawInput contains
+// containing an email → result.UpdatedInput.rawInput containsSubstring
 // [REDACTED_EMAIL]. This is the WS test panel's golden assertion.
 func TestHooksF6_PIIRedactorTestPanel(t *testing.T) {
 	withEdition(t, edition.Standard)
@@ -188,7 +188,7 @@ func TestHooksF6_PIIRedactorTestPanel(t *testing.T) {
 	// (FireResult.UpdatedRawInput) — already covered by TestHooksC2.
 	// Here we instead exercise the runner's decision pathway end-to-end with
 	// the pii-redactor JS so we catch any wiring break in the WS test panel
-	// (the builtin returns decision=allow whether or not the input contains
+	// (the builtin returns decision=allow whether or not the input containsSubstring
 	// PII, so a regression where the sandbox blocks the script would surface
 	// as decision=error here).
 	res := runner.RunTest(context.Background(), cfg, hooks.Event{
