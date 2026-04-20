@@ -140,6 +140,15 @@ const (
 	MsgPackagesUpdatesReasonTargetMissing      = "packages.updates.reason.targetMissing"      // "Version not available"
 	MsgPackagesUpdatesReasonExternallyManaged  = "packages.updates.reason.externallyManaged"  // "Environment externally managed"
 
+	// Package update apk-specific labels (Phase 2b)
+	MsgPackagesUpdatesSourceApk      = "packages.updates.source.apk"      // "apk"
+	MsgPackagesUpdatesUnavailableApk = "packages.updates.unavailable.apk" // "apk not available on this system"
+
+	// Package update apk-specific reasons (Phase 2b)
+	MsgPackagesUpdatesReasonLocked            = "packages.updates.reason.locked"            // "Package database is locked"
+	MsgPackagesUpdatesReasonDiskFull          = "packages.updates.reason.diskFull"          // "Disk full"
+	MsgPackagesUpdatesReasonHelperUnavailable = "packages.updates.reason.helperUnavailable" // "Privileged helper unavailable"
+
 	// --- Logs ---
 	MsgInvalidLogAction = "error.invalid_log_action" // "action must be 'start' or 'stop'"
 

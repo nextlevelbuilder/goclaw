@@ -439,6 +439,18 @@ func TestResolveUpdateSpec(t *testing.T) {
 		// npm: valid names
 		{"npm:typescript", "npm", "typescript", true},
 		{"npm:@angular/core", "npm", "@angular/core", true},
+		// apk: valid names
+		{"apk:ripgrep", "apk", "ripgrep", true},
+		{"apk:node.js", "apk", "node.js", true},    // dot allowed
+		{"apk:py3-numpy", "apk", "py3-numpy", true}, // hyphen allowed
+		{"apk:libstdc++", "apk", "libstdc++", true}, // plus allowed
+		// apk: invalid names
+		{"apk:", "", "", false},                        // empty name
+		{"apk:BAD;rm -rf /", "", "", false},            // semicolon rejected
+		{"apk:/etc/passwd", "", "", false},             // slash rejected
+		{"apk:UPPER", "", "", false},                   // uppercase rejected
+		{"apk:@npm-style", "", "", false},              // at-sign rejected
+		{"APK:ripgrep", "", "", false},                 // case-sensitive prefix
 		// pip: invalid names — @version suffix must be rejected
 		{"pip:typescript@latest", "", "", false},
 		{"pip:bad;name", "", "", false},
@@ -487,6 +499,9 @@ func TestLockKeyForSource(t *testing.T) {
 		{"github", "gh", map[string]any{"repo": "cli/cli"}, "cli"},
 		// github: fallback to name when meta missing
 		{"github", "fzf", nil, "fzf"},
+		// apk: return name directly (same as pip/npm)
+		{"apk", "ripgrep", nil, "ripgrep"},
+		{"apk", "ripgrep", map[string]any{"foo": "bar"}, "ripgrep"}, // meta ignored for apk
 		// unknown source: fallback to name
 		{"other", "pkg", nil, "pkg"},
 	}

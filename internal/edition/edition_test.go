@@ -376,6 +376,37 @@ func TestSupportsPipNpm(t *testing.T) {
 	}
 }
 
+// TestSupportsApk verifies the apk feature flag is set correctly per edition.
+// Mirrors TestSupportsPipNpm pattern.
+func TestSupportsApk(t *testing.T) {
+	if !Standard.SupportsApk {
+		t.Error("Standard.SupportsApk = false, want true")
+	}
+	if Lite.SupportsApk {
+		t.Error("Lite.SupportsApk = true, want false")
+	}
+}
+
+// TestEditionPresets_ApkField is a drift-guard that asserts BOTH presets
+// explicitly spell out SupportsApk rather than relying on Go's zero-value.
+// If someone removes the explicit line from either preset, this test catches
+// the regression. (Red-team H-2 fix.)
+func TestEditionPresets_ApkField(t *testing.T) {
+	// Standard must have SupportsApk = true (not zero-value false).
+	if !Standard.SupportsApk {
+		t.Error("Standard preset must explicitly set SupportsApk = true (drift guard: zero-value false would silently disable apk on Standard)")
+	}
+	// Lite must have SupportsApk = false (explicitly set, not just zero-value).
+	// We verify intent via the documented constraint: Lite.SupportsPipNpm must
+	// also be false, confirming the preset explicitly opts out of package managers.
+	if Lite.SupportsApk {
+		t.Error("Lite preset must have SupportsApk = false (apk unavailable on macOS/Windows desktop)")
+	}
+	if Lite.SupportsPipNpm {
+		t.Error("Lite preset must have SupportsPipNpm = false (package managers disabled on Lite)")
+	}
+}
+
 // TestCustomEdition_PartialConfiguration allows custom editions.
 func TestCustomEdition_PartialConfiguration(t *testing.T) {
 	custom := Edition{

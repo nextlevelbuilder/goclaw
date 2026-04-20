@@ -39,6 +39,12 @@ const InstallTimeout = 5 * time.Minute
 // pkgHelperSocket is the Unix socket path for the root-privileged pkg-helper.
 const pkgHelperSocket = "/tmp/pkg.sock"
 
+// apkHelperCallFunc is the package-level hook for apkHelperCall, allowing tests
+// to inject a stub without starting a real Unix socket server. Production code
+// always uses the default value (apkHelperCall). Tests replace it per-case and
+// restore via t.Cleanup.
+var apkHelperCallFunc = apkHelperCall
+
 // InstallResult holds per-category install outcomes.
 type InstallResult struct {
 	System []string `json:"system,omitempty"`
@@ -273,41 +279,75 @@ func UninstallPackage(ctx context.Context, dep string) (bool, string) {
 	return true, ""
 }
 
-// apkViaHelper sends an install/uninstall request to the root-privileged pkg-helper
-// via Unix socket. The helper runs apk add/del as root and manages the persist file.
-func apkViaHelper(ctx context.Context, action, pkg string) (bool, string) {
+// apkHelperCall dials the pkg-helper v2 Unix socket and invokes action for pkg.
+// Package may be empty for read-only actions (update-index, list-outdated).
+//
+// Return values:
+//   - ok: resp.OK from helper
+//   - code: resp.Code (error classification); "helper_unavailable" on dial fail,
+//     "helper_error" on send/recv/parse failure, "system_error" if helper omits code
+//   - data: resp.Data (stdout payload for list-outdated / update-index)
+//   - errMsg: resp.Error (human-readable reason)
+//
+// Scanner buffer: 64KB initial / 1MB max (CONTRACT). list-outdated output on
+// full-skills images can approach this limit. Any NEW action returning >1MB MUST
+// raise this ceiling AND the matching helper-side write, or split into multiple
+// JSON lines. Violating silently yields helper_error "bufio.Scanner: token too long".
+func apkHelperCall(ctx context.Context, action, pkg string) (ok bool, code, data, errMsg string) {
 	conn, err := net.DialTimeout("unix", pkgHelperSocket, 5*time.Second)
 	if err != nil {
-		return false, fmt.Sprintf("pkg-helper unavailable: %v", err)
+		return false, "helper_unavailable", "", fmt.Sprintf("pkg-helper unavailable: %v", err)
 	}
 	defer conn.Close()
 
-	// Set deadline from context.
-	if deadline, ok := ctx.Deadline(); ok {
+	// Bind connection lifetime to caller's context deadline (primary per-op timeout).
+	// The helper also enforces a 10-min safety ceiling independently.
+	if deadline, hasDeadline := ctx.Deadline(); hasDeadline {
 		conn.SetDeadline(deadline) //nolint:errcheck
 	}
 
-	// Send request as JSON line.
+	// Send request as a newline-delimited JSON line.
 	req := map[string]string{"action": action, "package": pkg}
 	if err := json.NewEncoder(conn).Encode(req); err != nil {
-		return false, fmt.Sprintf("pkg-helper send failed: %v", err)
+		return false, "helper_error", "", fmt.Sprintf("pkg-helper send failed: %v", err)
 	}
 
-	// Read response.
+	// Read single-line JSON response.
+	// Buffer ceiling documented above as a client contract.
 	scanner := bufio.NewScanner(conn)
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 	if !scanner.Scan() {
-		return false, "pkg-helper: no response"
+		scanErr := scanner.Err()
+		if scanErr != nil {
+			return false, "helper_error", "", fmt.Sprintf("pkg-helper: read error: %v", scanErr)
+		}
+		return false, "helper_error", "", "pkg-helper: no response"
 	}
 
 	var resp struct {
 		OK    bool   `json:"ok"`
 		Error string `json:"error"`
+		Code  string `json:"code"`
+		Data  string `json:"data"`
 	}
 	if err := json.Unmarshal(scanner.Bytes(), &resp); err != nil {
-		return false, fmt.Sprintf("pkg-helper: invalid response: %v", err)
+		return false, "helper_error", "", fmt.Sprintf("pkg-helper: invalid response: %v", err)
 	}
 
-	return resp.OK, resp.Error
+	// Default missing code to system_error for v1-era helpers that omit the field.
+	if resp.Code == "" && !resp.OK {
+		resp.Code = "system_error"
+	}
+
+	return resp.OK, resp.Code, resp.Data, resp.Error
+}
+
+// apkViaHelper is the legacy 2-return-value wrapper used by InstallSingleDep,
+// InstallDeps, and UninstallPackage. Delegates to apkHelperCall; callers
+// receive (ok, errMsg) and do not need the code/data fields.
+func apkViaHelper(ctx context.Context, action, pkg string) (bool, string) {
+	ok, _, _, errMsg := apkHelperCall(ctx, action, pkg)
+	return ok, errMsg
 }
 
 // cleanCaches removes pip and npm caches to save disk space.

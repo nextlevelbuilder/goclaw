@@ -3,7 +3,7 @@
 Extends the Phase 1 GitHub binary update flow to system-wide pip and npm packages.
 Closes #900 (Phase 2a).
 
-See also: [GitHub binary updates](./packages-github.md)
+See also: [GitHub binary updates](./packages-github.md) · [apk system package updates](./packages-apk.md)
 
 ---
 

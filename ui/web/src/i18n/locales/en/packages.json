@@ -64,7 +64,8 @@
     "source": {
       "github": "GitHub",
       "pip": "pip",
-      "npm": "npm"
+      "npm": "npm",
+      "apk": "apk"
     },
     "filter": {
       "all": "All sources",
@@ -72,13 +73,15 @@
     },
     "unavailable": {
       "pip": "pip not installed",
-      "npm": "npm not installed"
+      "npm": "npm not installed",
+      "apk": "apk not available on this system"
     },
     "button": {
       "tooltip": {
         "github": "Update from GitHub release",
         "pip": "Update via pip",
-        "npm": "Update via npm"
+        "npm": "Update via npm",
+        "apk": "Update via apk (system package)"
       }
     },
     "summary": {

@@ -17,7 +17,7 @@ export interface UpdateMeta {
 }
 
 export interface UpdateInfo {
-  source: "github" | "pip" | "npm" | string;
+  source: "github" | "pip" | "npm" | "apk" | string;
   name: string;
   currentVersion: string;
   latestVersion: string;

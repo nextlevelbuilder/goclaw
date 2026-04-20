@@ -229,10 +229,12 @@ func init() {
 		MsgPackagesUpdatesSourceGithub: "GitHub",
 		MsgPackagesUpdatesSourcePip:    "pip",
 		MsgPackagesUpdatesSourceNpm:    "npm",
+		MsgPackagesUpdatesSourceApk:    "apk",
 
 		// Package update availability messages
 		MsgPackagesUpdatesUnavailablePip: "pip chưa cài trên hệ thống",
 		MsgPackagesUpdatesUnavailableNpm: "npm chưa cài trên hệ thống",
+		MsgPackagesUpdatesUnavailableApk: "apk không khả dụng trên hệ thống này",
 
 		// Package update failure reasons
 		MsgPackagesUpdatesReasonDependencyConflict: "Xung đột phụ thuộc",
@@ -241,5 +243,8 @@ func init() {
 		MsgPackagesUpdatesReasonNotFound:           "Không tìm thấy gói",
 		MsgPackagesUpdatesReasonTargetMissing:      "Phiên bản không tồn tại",
 		MsgPackagesUpdatesReasonExternallyManaged:  "Môi trường được quản lý bên ngoài",
+		MsgPackagesUpdatesReasonLocked:             "Cơ sở dữ liệu gói đang bị khóa",
+		MsgPackagesUpdatesReasonDiskFull:           "Đĩa đã đầy",
+		MsgPackagesUpdatesReasonHelperUnavailable:  "Dịch vụ đặc quyền không khả dụng",
 	})
 }

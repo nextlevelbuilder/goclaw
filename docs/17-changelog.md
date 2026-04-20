@@ -4,6 +4,37 @@ All notable changes to GoClaw Gateway are documented here. Format follows [Keep 
 
 ---
 
+## v3.1.0 — 2026-04-17
+
+### Added
+
+- **Packages update flow — apk support (Phase 2b).** Alpine system packages now
+  participate in the update checker + executor pipeline. `GET /v1/packages/updates`
+  returns apk updates alongside github/pip/npm. `POST /v1/packages/update` accepts
+  `apk:<name>` specs.
+- `SupportsApk` edition flag: Standard=true, Lite=false (apk unavailable on
+  macOS/Windows desktop).
+- Runtime gate: gateway probes `/etc/alpine-release` at startup; apk registration is
+  skipped automatically on non-Alpine images (Debian, Ubuntu, macOS dev).
+- Frontend: emerald `apk` source pill, source filter, apply-all integration.
+- `docs/packages-apk.md` — user-facing documentation for apk update flow.
+
+### Changed
+
+- **BREAKING: `pkg-helper` protocol upgraded to v2.** The privileged sidecar now
+  supports `upgrade`, `update-index`, and `list-outdated` actions in addition to
+  `install`/`uninstall`. Response struct now carries a `code` field for typed error
+  classification and a `data` field for opaque payloads. Old v1 helpers return
+  `unknown action` errors for new verbs — **rebuild the Docker image to deploy**.
+
+### Fixed
+
+- apk database lock contention: `pkg-helper` now serializes all apk invocations via
+  an in-process `sync.Mutex`. Previously concurrent install + upgrade operations could
+  trigger "unable to lock database" retries.
+
+---
+
 ### Packages Update Flow (Phase 2a: pip + npm) — #900 (2026-04-17)
 
 Extends Phase 1 update infrastructure to pip and npm package sources. apk deferred to Phase 2b.

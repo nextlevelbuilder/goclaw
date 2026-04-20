@@ -229,10 +229,12 @@ func init() {
 		MsgPackagesUpdatesSourceGithub: "GitHub",
 		MsgPackagesUpdatesSourcePip:    "pip",
 		MsgPackagesUpdatesSourceNpm:    "npm",
+		MsgPackagesUpdatesSourceApk:    "apk",
 
 		// Package update availability messages
 		MsgPackagesUpdatesUnavailablePip: "系统中未安装 pip",
 		MsgPackagesUpdatesUnavailableNpm: "系统中未安装 npm",
+		MsgPackagesUpdatesUnavailableApk: "此系统不可用 apk",
 
 		// Package update failure reasons
 		MsgPackagesUpdatesReasonDependencyConflict: "依赖冲突",
@@ -241,5 +243,8 @@ func init() {
 		MsgPackagesUpdatesReasonNotFound:           "未找到软件包",
 		MsgPackagesUpdatesReasonTargetMissing:      "版本不可用",
 		MsgPackagesUpdatesReasonExternallyManaged:  "环境由外部管理",
+		MsgPackagesUpdatesReasonLocked:             "软件包数据库已锁定",
+		MsgPackagesUpdatesReasonDiskFull:           "磁盘已满",
+		MsgPackagesUpdatesReasonHelperUnavailable:  "特权助手不可用",
 	})
 }

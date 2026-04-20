@@ -143,6 +143,15 @@ func (r *UpdateRegistry) setAvailability(source string, available bool) {
 	r.mu.Unlock()
 }
 
+// SetAvailability records per-source availability under write lock.
+// Intended for wiring code to seed availability entries when a source's
+// checker is deliberately not registered (e.g. apk on non-Alpine runtime).
+// Safe to call before the first CheckAll; the value persists until the
+// next CheckAll for this source overwrites it.
+func (r *UpdateRegistry) SetAvailability(source string, available bool) {
+	r.setAvailability(source, available)
+}
+
 // CheckAll runs every registered checker and merges results into the cache.
 // Checkers run in parallel (each is an independent API). A single checker's
 // error does NOT abort siblings (red-team M7 fix — don't use errgroup which

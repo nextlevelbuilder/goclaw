@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { formatRelativeTime } from "@/lib/format";
 import type { UpdateInfo } from "../hooks/use-updates";
 
-const KNOWN_SOURCES = ["github", "pip", "npm"] as const;
+const KNOWN_SOURCES = ["github", "pip", "npm", "apk"] as const;
 
 interface Props {
   updates: UpdateInfo[];

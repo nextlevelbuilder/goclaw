@@ -447,6 +447,44 @@ When concurrency limits are hit, the error message is written for LLM reasoning:
 
 ---
 
+## 13. Package Management Security
+
+### pkg-helper privilege model (v1 / v2)
+
+The `pkg-helper` sidecar is the only root-privileged component of the gateway.
+
+| Boundary | Detail |
+|----------|--------|
+| Socket path | `/tmp/pkg.sock` |
+| Permissions | 0600 — owner `root`, accessible only to `goclaw` uid 1000 |
+| Gateway process | Runs as uid 1000 (goclaw); never calls `apk` directly |
+| Helper process | Runs as root inside the container; started by `docker-entrypoint.sh` before privilege drop |
+
+Package name validation is defense-in-depth at three layers:
+1. HTTP handler (`ValidateApkPackageName` — strict `^[a-z0-9][a-z0-9._+-]*$` regex)
+2. `ApkUpdateExecutor.Update()` — same validator before socket dial
+3. pkg-helper itself — validates again server-side before exec
+
+### pkg-helper v2 (Phase 2b)
+
+- **Trust boundary unchanged from v1:** `/tmp/pkg.sock` 0600 owned by `root`,
+  group-readable by `goclaw`.
+- **New actions** (`upgrade`, `update-index`, `list-outdated`) run under the same
+  root privilege as v1 `install`/`uninstall`. No privilege escalation; same exec
+  path, new action names.
+- **`code` field** on error responses enables HTTP handlers to map errors to
+  appropriate 4xx/5xx statuses without stderr parsing — eliminates the string-grep
+  anti-pattern that risked misclassification.
+- **apk invocation serialization** via process-wide `sync.Mutex` (`apkMutex`)
+  prevents TOCTOU races between concurrent `install` + `upgrade` operations on the
+  `/var/lib/apk/db` lock file.
+- **No new network surface:** pkg-helper has no HTTP listener; it uses the same
+  Unix socket as v1. The socket path (`/tmp/pkg.sock`) is unchanged.
+- **Stderr truncation:** helper stderr captured by the gateway is truncated to
+  500 chars (ANSI-stripped) before logging — prevents path leakage and PII in logs.
+
+---
+
 ## File Reference
 
 | File | Description |

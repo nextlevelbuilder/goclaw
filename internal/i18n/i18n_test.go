@@ -378,3 +378,36 @@ func TestMultipleLocalesIndependent(t *testing.T) {
 		t.Errorf("English message unexpected: %q", msg_en)
 	}
 }
+
+// TestI18n_Apk verifies the 5 new apk i18n keys in all 3 locales (Phase 2b).
+func TestI18n_Apk(t *testing.T) {
+	cases := []struct {
+		locale string
+		key    string
+		want   string
+	}{
+		{LocaleEN, MsgPackagesUpdatesSourceApk, "apk"},
+		{LocaleVI, MsgPackagesUpdatesSourceApk, "apk"},
+		{LocaleZH, MsgPackagesUpdatesSourceApk, "apk"},
+		{LocaleEN, MsgPackagesUpdatesUnavailableApk, "apk not available on this system"},
+		{LocaleVI, MsgPackagesUpdatesUnavailableApk, "apk không khả dụng trên hệ thống này"},
+		{LocaleZH, MsgPackagesUpdatesUnavailableApk, "此系统不可用 apk"},
+		{LocaleEN, MsgPackagesUpdatesReasonLocked, "Package database is locked"},
+		{LocaleVI, MsgPackagesUpdatesReasonLocked, "Cơ sở dữ liệu gói đang bị khóa"},
+		{LocaleZH, MsgPackagesUpdatesReasonLocked, "软件包数据库已锁定"},
+		{LocaleEN, MsgPackagesUpdatesReasonDiskFull, "Disk full"},
+		{LocaleVI, MsgPackagesUpdatesReasonDiskFull, "Đĩa đã đầy"},
+		{LocaleZH, MsgPackagesUpdatesReasonDiskFull, "磁盘已满"},
+		{LocaleEN, MsgPackagesUpdatesReasonHelperUnavailable, "Privileged helper unavailable"},
+		{LocaleVI, MsgPackagesUpdatesReasonHelperUnavailable, "Dịch vụ đặc quyền không khả dụng"},
+		{LocaleZH, MsgPackagesUpdatesReasonHelperUnavailable, "特权助手不可用"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.locale+"/"+tc.key, func(t *testing.T) {
+			got := T(tc.locale, tc.key)
+			if got != tc.want {
+				t.Errorf("T(%q, %q) = %q, want %q", tc.locale, tc.key, got, tc.want)
+			}
+		})
+	}
+}

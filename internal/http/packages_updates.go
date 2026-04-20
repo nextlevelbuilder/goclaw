@@ -484,6 +484,11 @@ func resolveUpdateSpec(pkg string) (source, name string, ok bool) {
 			return "", "", false
 		}
 		return "npm", rest, true
+	case "apk":
+		if err := skills.ValidateApkPackageName(rest); err != nil {
+			return "", "", false
+		}
+		return "apk", rest, true
 	default:
 		return "", "", false
 	}
@@ -510,7 +515,7 @@ func nonNilSlice[T any](s []T) []T {
 // name directly (NOT "pip:name" or "npm:name").
 func lockKeyForSource(source, name string, meta map[string]any) string {
 	switch source {
-	case "pip", "npm":
+	case "pip", "npm", "apk":
 		return name
 	case "github":
 		if meta != nil {

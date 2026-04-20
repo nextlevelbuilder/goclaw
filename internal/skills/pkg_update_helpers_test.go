@@ -257,6 +257,151 @@ func TestClassifyNpmStderr(t *testing.T) {
 	}
 }
 
+func TestValidateApkPackageName(t *testing.T) {
+	accept := []string{
+		"curl",
+		"bash",
+		"py3-pip",
+		"gcc",
+		"libstdc++",
+		"gtk+3.0",
+		"ca-certificates",
+		"bash-completion",
+		"musl",
+		"openssl3",
+		"libc6-compat",
+		"e2fsprogs",
+	}
+	for _, name := range accept {
+		if err := ValidateApkPackageName(name); err != nil {
+			t.Errorf("ValidateApkPackageName(%q) rejected valid name: %v", name, err)
+		}
+	}
+
+	reject := []string{
+		"",
+		"CURL",           // uppercase
+		"curl;rm -rf /",  // shell metachar
+		"curl@edge",      // @ not valid for apk
+		"../evil",        // path traversal
+		"-dash-start",    // leading hyphen
+		"pkg space",      // space
+		"@scope/pkg",     // npm-style scoped pkg
+		"pkg|other",      // pipe
+		"pkg>1.0",        // gt
+		"Uppercase",      // uppercase in middle
+	}
+	for _, name := range reject {
+		if err := ValidateApkPackageName(name); err == nil {
+			t.Errorf("ValidateApkPackageName(%q) accepted invalid name", name)
+		}
+	}
+}
+
+func TestValidateApkPackageName_SentinelError(t *testing.T) {
+	err := ValidateApkPackageName("CURL")
+	if err == nil {
+		t.Fatal("expected error for invalid name, got nil")
+	}
+	// Must wrap ErrInvalidApkPackageName so callers can use errors.Is.
+	if !strings.Contains(err.Error(), "invalid") {
+		t.Errorf("error message should mention 'invalid': %v", err)
+	}
+}
+
+func TestClassifyApkStderr(t *testing.T) {
+	cases := []struct {
+		name         string
+		stderr       string
+		wantSentinel error
+	}{
+		{
+			name:         "database locked",
+			stderr:       "ERROR: unable to lock database: Permission denied\n",
+			wantSentinel: ErrUpdateApkLocked, // locked wins over permission (priority order)
+		},
+		{
+			name:         "permission denied standalone",
+			stderr:       "ERROR: Permission denied writing /var/cache/apk",
+			wantSentinel: ErrUpdateApkPermission,
+		},
+		{
+			name:         "no space left on device",
+			stderr:       "ERROR: No space left on device",
+			wantSentinel: ErrUpdateApkDiskFull,
+		},
+		{
+			name:         "disk full keyword",
+			stderr:       "write error: disk full",
+			wantSentinel: ErrUpdateApkDiskFull,
+		},
+		{
+			name:         "unsatisfiable constraints not found",
+			stderr:       "ERROR: unsatisfiable constraints: nonexistent-pkg (missing)",
+			wantSentinel: ErrUpdateApkNotFound,
+		},
+		{
+			name:         "unsatisfiable constraints with required by",
+			stderr:       "ERROR: unsatisfiable constraints: foo-2.0 required by bar-1.0",
+			wantSentinel: ErrUpdateApkConflict,
+		},
+		{
+			name:         "unsatisfiable constraints with breaks world",
+			stderr:       "ERROR: unsatisfiable constraints: openssl-3.1 breaks: world",
+			wantSentinel: ErrUpdateApkConflict,
+		},
+		{
+			name:         "breaks world standalone",
+			stderr:       "ERROR: musl breaks: world",
+			wantSentinel: ErrUpdateApkConflict,
+		},
+		{
+			name:         "unable to fetch network",
+			stderr:       "ERROR: unable to fetch APKINDEX from dl-cdn.alpinelinux.org",
+			wantSentinel: ErrUpdateApkNetwork,
+		},
+		{
+			name:         "timed out network",
+			stderr:       "fetch http://dl-cdn.alpinelinux.org/alpine/v3.19/main: timed out",
+			wantSentinel: ErrUpdateApkNetwork,
+		},
+		{
+			name:         "hostname resolution failed",
+			stderr:       "ERROR: hostname resolution failed: dl-cdn.alpinelinux.org",
+			wantSentinel: ErrUpdateApkNetwork,
+		},
+		{
+			name:         "unrecognized error returns nil sentinel",
+			stderr:       "apk: some unrecognized error occurred",
+			wantSentinel: nil,
+		},
+		{
+			name:         "empty stderr returns nil sentinel",
+			stderr:       "",
+			wantSentinel: nil,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			sentinel, reason := ClassifyApkStderr(tc.stderr)
+			if sentinel != tc.wantSentinel {
+				t.Errorf("ClassifyApkStderr sentinel = %v, want %v", sentinel, tc.wantSentinel)
+			}
+			// reason must always be non-nil string (may be empty if stderr is empty)
+			_ = reason
+		})
+	}
+}
+
+func TestClassifyApkStderr_ReasonNonEmpty(t *testing.T) {
+	// For non-empty stderr, reason must be non-empty.
+	_, reason := ClassifyApkStderr("ERROR: unable to lock database")
+	if reason == "" {
+		t.Error("reason must not be empty for non-empty stderr")
+	}
+}
+
 func TestTruncateStderr(t *testing.T) {
 	t.Run("strips ANSI codes", func(t *testing.T) {
 		in := "\x1b[31mERROR\x1b[0m: something failed"

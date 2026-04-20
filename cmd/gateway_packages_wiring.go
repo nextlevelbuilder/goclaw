@@ -57,6 +57,26 @@ func wirePackagesHandler(d *gatewayDeps) *httpapi.PackagesHandler {
 		registry.RegisterExecutor(skills.NewNpmUpdateExecutor())
 	}
 
+	// Register apk checker/executor when edition + runtime both permit.
+	// Double gate: edition flag (compile-time) + /etc/alpine-release (runtime).
+	// Rationale: Standard-Debian variants pass the edition gate but fail runtime;
+	// Lite on Alpine fails the edition gate but passes runtime. Both must hold.
+	if edition.Current().SupportsApk && skills.IsAlpineRuntime() {
+		registry.RegisterChecker(skills.NewApkUpdateChecker())
+		registry.RegisterExecutor(skills.NewApkUpdateExecutor())
+		slog.Info("packages: apk updates registered")
+	} else if edition.Current().SupportsApk {
+		// Standard edition but non-Alpine host: emit explicit availability=false
+		// so frontend can distinguish "not applicable to this runtime" from
+		// "checker errored". Lite skips both branches → availability.apk absent.
+		registry.SetAvailability("apk", false)
+		slog.Info("packages: apk updates skipped (non-Alpine runtime)",
+			"is_alpine_runtime", skills.IsAlpineRuntime())
+	} else {
+		// Lite edition: no registration, no availability seed (key absent in response).
+		slog.Info("packages: apk updates skipped (edition does not support apk)")
+	}
+
 	slog.Info("packages: update registry wired",
 		"cache", cachePath,
 		"ttl", ttl,

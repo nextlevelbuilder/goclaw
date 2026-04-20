@@ -59,12 +59,12 @@ export function UpdateAllModal({
     if (!result) return;
     const next: Record<string, RowStatus> = {};
     for (const s of result.succeeded) {
-      // package field is the full spec "github:name"
-      const name = s.package.replace(/^github:/, "");
+      // package field is the full spec "source:name" (e.g. "github:ripgrep", "apk:curl")
+      const name = s.package.replace(/^[^:]+:/, "");
       next[name] = "succeeded";
     }
     for (const f of result.failed) {
-      const name = f.package.replace(/^github:/, "");
+      const name = f.package.replace(/^[^:]+:/, "");
       next[name] = "failed";
     }
     setRowStatus(next);
@@ -93,7 +93,7 @@ export function UpdateAllModal({
   const handleApply = async () => {
     const specs = updates
       .filter((u) => selected.has(u.name))
-      .map((u) => `github:${u.name}`);
+      .map((u) => `${u.source}:${u.name}`);
 
     if (specs.length === 0) return;
 

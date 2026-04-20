@@ -64,7 +64,8 @@
     "source": {
       "github": "GitHub",
       "pip": "pip",
-      "npm": "npm"
+      "npm": "npm",
+      "apk": "apk"
     },
     "filter": {
       "all": "所有来源",
@@ -72,13 +73,15 @@
     },
     "unavailable": {
       "pip": "未安装 pip",
-      "npm": "未安装 npm"
+      "npm": "未安装 npm",
+      "apk": "此系统不可用 apk"
     },
     "button": {
       "tooltip": {
         "github": "从 GitHub 发布更新",
         "pip": "通过 pip 更新",
-        "npm": "通过 npm 更新"
+        "npm": "通过 npm 更新",
+        "apk": "通过 apk 更新（系统包）"
       }
     },
     "summary": {

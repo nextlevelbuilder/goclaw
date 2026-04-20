@@ -12,7 +12,7 @@ import type { UpdateInfo } from "../hooks/use-updates";
 import { SourcePill } from "./source-pill";
 import { UpdateRowButton } from "./update-row-button";
 
-const KNOWN_SOURCES = ["github", "pip", "npm"] as const;
+const KNOWN_SOURCES = ["github", "pip", "npm", "apk"] as const;
 type KnownSource = (typeof KNOWN_SOURCES)[number];
 
 interface Props {
@@ -25,7 +25,7 @@ interface Props {
 }
 
 /**
- * Unified updates table across all package sources (github / pip / npm).
+ * Unified updates table across all package sources (github / pip / npm / apk).
  * - Renders a source filter dropdown when multiple sources have updates.
  * - Delegates per-row update action to UpdateRowButton.
  * - Mobile-safe: overflow-x-auto + min-w-[600px] per CLAUDE.md rules.

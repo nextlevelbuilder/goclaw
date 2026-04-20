@@ -25,6 +25,18 @@ var (
 	ErrUpdateNpmTargetMissing = errors.New("npm update: version/target missing")
 )
 
+// Sentinel errors for apk update failures.
+var (
+	ErrUpdateApkConflict      = errors.New("apk update: dependency conflict")
+	ErrUpdateApkNetwork       = errors.New("apk update: network error")
+	ErrUpdateApkLocked        = errors.New("apk update: database locked")
+	ErrUpdateApkNotFound      = errors.New("apk update: package not found")
+	ErrUpdateApkPermission    = errors.New("apk update: permission denied")
+	ErrUpdateApkDiskFull      = errors.New("apk update: disk full")
+	ErrUpdateApkHelperUnavail = errors.New("apk update: pkg-helper unavailable")
+	ErrInvalidApkPackageName  = errors.New("apk update: invalid package name")
+)
+
 // Compiled regexes — all allocated once at package init.
 var (
 	// pipPreReleaseRE matches PEP 440 pre-release identifiers.
@@ -42,6 +54,12 @@ var (
 	// validNpmName enforces npm package name rules:
 	// optional @scope/ prefix (lowercase), then lowercase alphanumeric + dots/hyphens.
 	validNpmName = regexp.MustCompile(`^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$`)
+
+	// validApkName enforces Alpine package name rules:
+	// lowercase alphanumeric start, plus dots, underscores, plus, hyphens.
+	// Rejects uppercase, slashes, @, shell metacharacters.
+	// Example valid: curl, libstdc++, gtk+3.0, ca-certificates, py3-pip.
+	validApkName = regexp.MustCompile(`^[a-z0-9][a-z0-9._+-]*$`)
 
 	// ansiRE strips ANSI escape sequences from stderr.
 	ansiRE = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
@@ -83,6 +101,25 @@ func ValidateNpmPackageName(name string) error {
 	}
 	if !validNpmName.MatchString(name) {
 		return fmt.Errorf("invalid npm package name: %q", name)
+	}
+	return nil
+}
+
+// ValidateApkPackageName rejects names that Alpine apk would reject or that could
+// inject shell metacharacters. Defence-in-depth with pkg-helper's own regex.
+//
+// Valid: curl, libstdc++, gtk+3.0, ca-certificates, py3-pip.
+// Invalid: CURL (uppercase), curl;rm (metachar), curl@edge (@), -pkg (leading hyphen), empty.
+//
+// Note: intentional divergence from helper's legacy validPkgName regex. The strict
+// validApkName applies only to the upgrade action; install/uninstall keep the legacy
+// regex for pip/npm cross-runtime compatibility. See plan.md §Security Considerations.
+func ValidateApkPackageName(name string) error {
+	if name == "" {
+		return errors.New("apk package name must not be empty")
+	}
+	if !validApkName.MatchString(name) {
+		return fmt.Errorf("%w: %q", ErrInvalidApkPackageName, name)
 	}
 	return nil
 }
@@ -139,6 +176,46 @@ func ClassifyNpmStderr(stderr string) (error, string) {
 		strings.Contains(stderr, "404") ||
 		strings.Contains(stderr, "not in this registry"):
 		return ErrUpdateNpmNotFound, reason
+	default:
+		return nil, reason
+	}
+}
+
+// ClassifyApkStderr inspects stderr from apk and returns a sentinel error plus
+// a truncated reason string (≤500 chars). Pattern priority: most-specific first.
+//
+// Pattern ordering rationale:
+//   - "unable to lock" checked before "Permission denied" — a locked database error
+//     often includes "Permission denied" in the same message; locked is more actionable.
+//   - "unsatisfiable constraints" split by "breaks: world" / "required by" into
+//     conflict vs not-found — missing package and dependency conflict share same prefix.
+//   - Default path returns (nil, reason) so callers can wrap generically.
+func ClassifyApkStderr(stderr string) (error, string) {
+	reason := truncateStderr(stderr, 500)
+	switch {
+	case strings.Contains(stderr, "unable to lock"):
+		return ErrUpdateApkLocked, reason
+	case strings.Contains(stderr, "Permission denied"):
+		return ErrUpdateApkPermission, reason
+	case strings.Contains(stderr, "No space left on device") ||
+		strings.Contains(stderr, "disk full"):
+		return ErrUpdateApkDiskFull, reason
+	case strings.Contains(stderr, "unsatisfiable constraints"):
+		// "breaks: world" or "required by" indicates a dependency conflict with an
+		// existing package; otherwise the package itself is simply not found.
+		if strings.Contains(stderr, "breaks: world") ||
+			strings.Contains(stderr, "required by") {
+			return ErrUpdateApkConflict, reason
+		}
+		return ErrUpdateApkNotFound, reason
+	case strings.Contains(stderr, "breaks: world"):
+		return ErrUpdateApkConflict, reason
+	case strings.Contains(strings.ToLower(stderr), "network") ||
+		strings.Contains(stderr, "unable to fetch") ||
+		strings.Contains(stderr, "connection") ||
+		strings.Contains(stderr, "timed out") ||
+		strings.Contains(stderr, "hostname resolution failed"):
+		return ErrUpdateApkNetwork, reason
 	default:
 		return nil, reason
 	}

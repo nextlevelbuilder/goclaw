@@ -64,7 +64,8 @@
     "source": {
       "github": "GitHub",
       "pip": "pip",
-      "npm": "npm"
+      "npm": "npm",
+      "apk": "apk"
     },
     "filter": {
       "all": "Tất cả nguồn",
@@ -72,13 +73,15 @@
     },
     "unavailable": {
       "pip": "Chưa cài pip",
-      "npm": "Chưa cài npm"
+      "npm": "Chưa cài npm",
+      "apk": "apk không khả dụng trên hệ thống"
     },
     "button": {
       "tooltip": {
         "github": "Cập nhật từ bản phát hành GitHub",
         "pip": "Cập nhật qua pip",
-        "npm": "Cập nhật qua npm"
+        "npm": "Cập nhật qua npm",
+        "apk": "Cập nhật qua apk (gói hệ thống)"
       }
     },
     "summary": {
