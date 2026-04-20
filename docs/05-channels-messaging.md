@@ -158,16 +158,19 @@ flowchart TD
 |---------|----------|-------------|---------|-------|----------|---------|---------------|
 | Connection | Long polling | WS (default) / Webhook | Gateway events | Socket Mode | Direct protocol (in-process) | Long polling | Internal protocol |
 | DM support | Yes | Yes | Yes | Yes | Yes | Yes (DM only) | Yes |
-| Group support | Yes (mention gating) | Yes | Yes | Yes (mention gating + thread cache) | Yes | No | Yes |
+| Group support | Yes (mention gating) | Yes | Yes | Yes (mention gating + thread cache) | Yes (mention gating, per-group overrides) | No | Yes |
 | Forum/Topics | Yes (per-topic config) | Yes (topic session mode) | -- | -- | -- | -- | -- |
-| Message limit | 4,096 chars | Configurable (default 4,000) | 2,000 chars | 4,000 chars | WhatsApp native limit | 2,000 chars | 2,000 chars |
-| Streaming | Typing indicator | Streaming message cards | Edit "Thinking..." | Edit "Thinking..." (throttled 1s) | No | No | No |
-| Media | Photos, voice, files | Images, files (30 MB) | Files, embeds | Files (download w/ SSRF protection) | Images, audio, video, documents | Images (5 MB) | -- |
+| Message limit | 4,096 chars | Configurable (default 4,000) | 2,000 chars | 4,000 chars | 4,096 chars | 2,000 chars | 2,000 chars |
+| Streaming | Typing indicator | Streaming message cards | Edit "Thinking..." | Edit "Thinking..." (throttled 1s) | Typing indicator | No | No |
+| Media | Photos, voice, files | Images, files (30 MB) | Files, embeds | Files (download w/ SSRF protection) | Images, audio, video, documents, stickers (20 MB) | Images (5 MB) | -- |
+| Media caption buffer | -- | -- | -- | -- | Yes (configurable delay) | -- | -- |
 | Speech-to-text | Yes (STT proxy) | -- | -- | -- | -- | -- | -- |
 | Voice routing | Yes (VoiceAgentID) | -- | -- | -- | -- | -- | -- |
-| Rich formatting | Markdown → HTML | Card messages | Markdown | Markdown → mrkdwn | Plain text | Plain text | Plain text |
-| Bot commands | 10+ commands | -- | -- | -- | -- | -- | -- |
+| Rich formatting | Markdown → HTML | Card messages | Markdown | Markdown → mrkdwn | Markdown → WhatsApp native | Plain text | Plain text |
+| Bot commands | 10+ commands | Writer commands | -- | -- | 4 commands (/reset, /stop, /stopall, /menu) | -- | -- |
 | Tool allow list | Per-topic | -- | -- | -- | -- | -- | -- |
+| Listen-only mode | -- | -- | -- | -- | Yes (per-group, KG extraction) | -- | -- |
+| Per-group routing | -- | -- | -- | -- | Yes (agent override per group) | -- | -- |
 | Pairing support | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | Status reactions | Yes | Yes | -- | Yes | -- | -- | -- |
 
@@ -483,18 +486,159 @@ Auto-enables when both bot_token and app_token are set.
 
 ## 9. WhatsApp
 
-The WhatsApp channel connects directly to the WhatsApp network via the multi-device protocol. Authentication state is stored in the database (PostgreSQL standard, SQLite for desktop edition).
+The WhatsApp channel connects directly to the WhatsApp network via the multi-device protocol using the `whatsmeow` library. Authentication state is persisted in the database (PostgreSQL standard, SQLite for desktop edition). No external bridge or HTTP gateway is required — the client runs in-process with direct binary protocol communication.
 
 ### Key Behaviors
 
-- **Direct connection**: In-process WhatsApp client (direct to WhatsApp servers, no external bridge)
-- **Database auth store**: Persists auth state, keys, and device info in the database
-- **QR code authentication**: Interactive QR code for initial pairing, served via WebSocket API
-- **Auto-reconnect**: Built-in reconnection with exponential backoff
-- **DM and group support**: Full group messaging with mention detection via JID format
-- **Media handling**: Direct media download/upload to WhatsApp servers with type detection
-- **Typing indicators**: Typing state managed per chat with auto-refresh
-- **Group mention gating**: Detects when bot is mentioned via LID (Local ID) and JID (standard format)
+- **Direct connection**: In-process WhatsApp client via `whatsmeow` (direct to WhatsApp servers, no external bridge)
+- **Database auth store**: Persists auth state, keys, and device info in the database (dual-backend: PostgreSQL + SQLite)
+- **QR code authentication**: Interactive QR code for initial pairing, served via WebSocket API with PNG encoding
+- **Reconnect watchdog**: Automatic reconnection with exponential backoff (5s steps, max 60s, 5 attempts)
+- **DM and group support**: Full group messaging with mention detection via dual identity (LID + JID)
+- **Per-group configuration**: Agent routing overrides, listen-only toggles, graph scope sharing, mention requirements, enable/disable per group
+- **Listen-only mode**: Silently collects messages for Knowledge Graph extraction without responding
+- **Media handling**: Direct media download/upload to WhatsApp servers with type detection (images, video, audio, documents, stickers, 20 MB max)
+- **Media caption buffer**: Merges media attachments with follow-up caption text sent as separate WhatsApp events
+- **Typing indicators**: Typing state managed per chat with 8-second auto-refresh
+- **Slash commands**: `/reset`, `/stop`, `/stopall`, `/menu`
+- **Markdown formatting**: LLM output converted to WhatsApp native formatting (`*bold*`, `~strike~`, ``` `code` ```)
+
+### Authentication
+
+```mermaid
+flowchart TD
+    START["Channel.Start()"] --> DEVICE{"Existing device<br/>in whatsmeow store?"}
+    DEVICE -->|Yes| CONNECT["Connect immediately"]
+    DEVICE -->|No| WAIT["Mark degraded<br/>'Awaiting QR scan'"]
+    WAIT --> UI["Admin opens UI wizard<br/>→ whatsapp.qr.start"]
+    UI --> QR["Generate QR code<br/>(PNG via WebSocket event)"]
+    QR --> SCAN["User scans with<br/>WhatsApp mobile"]
+    SCAN --> PAIRED["PairSuccess event<br/>→ mark healthy"]
+    PAIRED --> CONNECT
+
+    CONNECT --> AUTH["handleConnected()<br/>Capture myJID + myLID"]
+    AUTH --> READY["Channel ready"]
+```
+
+QR sessions timeout after 3 minutes. The `Reauth()` method clears the existing session (disconnects, deletes device store, re-creates client) for re-pairing. A `reauthMu` mutex serializes concurrent QR/Reauth requests.
+
+### Dual Identity Normalization
+
+WhatsApp uses two identity systems for the same user: phone JID (e.g., `86123456789@s.whatsapp.net`) and LID (Local ID, e.g., `12345:5@lid`). The channel normalizes these:
+
+- **Mention detection**: Checks `ContextInfo.MentionedJID` against both `myJID` and `myLID`
+- **Policy/pairing/allowlist**: When `AddressingMode == LID`, uses `SenderAlt` (phone JID) for consistent identity matching
+- **Fails closed**: If bot identity is unknown, mentions are not detected
+
+### Per-Group Configuration
+
+Groups can override channel-level settings with layered resolution:
+
+```mermaid
+flowchart TD
+    GLOBAL["Channel defaults<br/>(WhatsAppConfig)"] --> GROUP["Per-group override<br/>(config.Groups[chatID])"]
+    GROUP --> RESOLVED["Resolved config"]
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Name` | string | Human-readable alias for the group |
+| `AgentID` | string | Agent key to route to (overrides channel default agent) |
+| `Enabled` | *bool | Disable bot for this group (default true) |
+| `ListenOnly` | *bool | Enable listen-only mode for this group |
+| `ListenGraphID` | string | Shared graph scope — groups with same ID share one Knowledge Graph |
+| `RequireMention` | *bool | Override channel-level `require_mention` for this group |
+
+Group overrides are resolved during inbound message processing. `agent_key` strings are resolved to agent UUIDs via `ResolveGroupAgentOverrides()` called by the InstanceLoader at startup.
+
+### Group Agent Routing
+
+When a per-group `agent_id` override is configured, messages from that group are routed to the specified agent instead of the channel's default agent. The override is stored in `groupAgentUUIDs` map (chatID → agent UUID) and propagated through the message pipeline via the `AgentID` field on `InboundMessage`.
+
+### Listen-Only Mode and Group Intelligence
+
+> **Full documentation:** [25-whatsapp-group-intelligence.md](./25-whatsapp-group-intelligence.md)
+
+WhatsApp groups can operate in listen-only mode, where the bot silently observes conversations and extracts structured knowledge into the Knowledge Graph without responding. This is useful for monitoring team discussions, meeting notes, and information aggregation.
+
+Key points:
+- Per-group or global toggle via `ListenOnly` config
+- Messages buffered in `listen_raw_messages` table for async processing
+- Background extraction worker runs LLM-based entity/relation extraction
+- Scoped by `graphID` — multiple groups can share one Knowledge Graph via `ListenGraphID`
+- Bot mentions in listen-only groups still trigger normal responses
+
+### Media Caption Buffer
+
+WhatsApp sends media and captions as separate events. The `MediaCaptionBuffer` handles this by delaying media messages briefly so follow-up text can be merged:
+
+```mermaid
+flowchart TD
+    MEDIA["Media arrives<br/>(no caption)"] --> BUF["Buffer for<br/>media_caption_delay_ms"]
+    BUF --> TIMER{"Text arrives<br/>within window?"}
+    TIMER -->|Yes| MERGE["Merge text as caption<br/>→ flush immediately"]
+    TIMER -->|No, timeout| FLUSH["Flush media as-is<br/>(no caption)"]
+```
+
+| Configuration | Default | Behavior |
+|---------------|---------|----------|
+| `media_caption_delay_ms` | `1000` (1 second) | Wait time for caption text |
+| `media_caption_delay_ms = -1` or `0` | Disabled | No buffering, rely on gateway-level debouncer |
+
+Rapid media bursts (multiple media before text) flush the previous entry before buffering the new one.
+
+### Outbound Formatting Pipeline
+
+```mermaid
+flowchart TD
+    IN["LLM Output (Markdown)"] --> HTML["Convert HTML tags<br/>to Markdown equivalents"]
+    HTML --> PROTECT["Protect code blocks<br/>with placeholders"]
+    PROTECT --> CONVERT["Convert: **bold**→*bold*<br/>~~strike~~→~strike~<br/># Header→*Header*<br/>[text](url)→text url"]
+    CONVERT --> RESTORE["Restore code blocks"]
+    RESTORE --> CHUNK["Chunk at 4,096 chars<br/>(split at paragraph > line > space)"]
+    CHUNK --> SEND["Send as WhatsApp<br/>native formatting"]
+```
+
+### Slash Commands
+
+Commands are intercepted before the normal message pipeline:
+
+| Command | Description |
+|---------|-------------|
+| `/reset` | Clear conversation history |
+| `/stop` | Cancel current agent run |
+| `/stopall` | Cancel all running agent runs |
+| `/menu` | Show command help text |
+
+`/stop` and `/stopall` publish inbound messages with `metadata["command"]` — feedback is sent by the consumer after the cancel result is known.
+
+### Reconnect Watchdog
+
+On disconnect, a background goroutine attempts reconnection:
+
+| Parameter | Value |
+|-----------|-------|
+| Initial backoff | 5 seconds |
+| Max backoff | 60 seconds |
+| Max attempts | 5 |
+| Trigger events | `Disconnected`, `KeepAliveTimeout` |
+| Idempotent | Yes — new watchdog cancels previous |
+
+Non-recoverable events (`LoggedOut`, `CATRefreshError`) mark the channel as degraded without triggering reconnect.
+
+### Configuration
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `dm_policy` | `"pairing"` (DB instances) | DM access policy |
+| `group_policy` | `"open"` (config) / `"pairing"` (DB) | Group access policy |
+| `require_mention` | `false` | Only respond when @mentioned in groups |
+| `history_limit` | 200 | Max pending group messages for mention context |
+| `block_reply` | nil (inherit gateway) | Override gateway block_reply setting |
+| `listen_only` | false | Global listen-only for DMs |
+| `listen_graph_id` | chatID | Default graph scope for KG extraction |
+| `listen_extract_poll_sec` | 30 | Extraction worker poll interval (seconds) |
+| `media_caption_delay_ms` | 1000 | Media caption merge window (ms, -1=disabled) |
 
 ---
 
@@ -646,10 +790,24 @@ flowchart TD
 | `internal/channels/slack/format.go` | Markdown → Slack mrkdwn pipeline |
 | `internal/channels/slack/reactions.go` | Status emoji reactions on messages |
 | `internal/channels/slack/stream.go` | Streaming message updates via placeholder editing |
-| `internal/channels/whatsapp/whatsapp.go` | WhatsApp: direct protocol client, QR auth, database persistence |
-| `internal/channels/whatsapp/factory.go` | Channel factory, database dialect detection |
-| `internal/channels/whatsapp/qr_methods.go` | QR code generation and authentication flow |
-| `internal/channels/whatsapp/format.go` | Message formatting (HTML-to-WhatsApp) |
+| `internal/channels/whatsapp/whatsapp.go` | WhatsApp: direct protocol client, QR auth, reconnect watchdog, listen-only checks, group overrides |
+| `internal/channels/whatsapp/factory.go` | Channel factory, instance config parsing, legacy bridge detection |
+| `internal/channels/whatsapp/qr_methods.go` | QR code generation and WebSocket authentication flow |
+| `internal/channels/whatsapp/auth.go` | QR flow initiation and reauth (session clearing) |
+| `internal/channels/whatsapp/format.go` | Markdown → WhatsApp native formatting, text chunking |
+| `internal/channels/whatsapp/inbound.go` | Inbound message pipeline: policy, media, mentions, listen-only routing, caption buffer |
+| `internal/channels/whatsapp/outbound.go` | Outbound: media upload, text formatting, typing indicators |
+| `internal/channels/whatsapp/policy.go` | DM/group policy evaluation, pairing code delivery |
+| `internal/channels/whatsapp/commands.go` | Slash commands: /reset, /stop, /stopall, /menu |
+| `internal/channels/whatsapp/group_methods.go` | WebSocket method: whatsapp.groups.refresh for UI |
+| `internal/channels/whatsapp/media_download.go` | Media download from WhatsApp, temp file management |
+| `internal/channels/whatsapp/media_caption_buffer.go` | Media caption merge buffer (delays media for follow-up text) |
+| `internal/channels/whatsapp/listen_buffer.go` | Listen-only message buffer (inserts into raw message store) |
+| `internal/channels/whatsapp/listen_prompt.go` | LLM system prompt for KG extraction from WhatsApp conversations |
+| `internal/channels/whatsapp/extract_worker.go` | Background KG extraction worker: polls raw messages, runs LLM extraction |
+| `internal/store/listen_raw_message_store.go` | Store interface for listen raw messages |
+| `internal/store/pg/listen_raw_messages.go` | PostgreSQL implementation of listen raw message store |
+| `internal/store/sqlitestore/listen_raw_messages.go` | SQLite implementation of listen raw message store |
 | `internal/channels/zalo/zalo.go` | Zalo OA: Bot API, long polling |
 | `internal/channels/zalo/personal/channel.go` | Zalo Personal: reverse-engineered protocol |
 | `internal/store/pg/pairing.go` | Pairing: code generation, approval, persistence (database-backed) |
@@ -666,3 +824,4 @@ flowchart TD
 | [08-scheduling-cron.md](./08-scheduling-cron.md) | /stop and /stopall commands, scheduler lanes, cron |
 | [09-security.md](./09-security.md) | Group file writer restrictions, security logging |
 | [11-agent-teams.md](./11-agent-teams.md) | Team message routing, delegation result delivery |
+| [25-whatsapp-group-intelligence.md](./25-whatsapp-group-intelligence.md) | WhatsApp listen-only mode, KG extraction pipeline, raw message storage |
