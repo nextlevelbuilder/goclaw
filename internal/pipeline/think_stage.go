@@ -3,6 +3,8 @@ package pipeline
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
@@ -57,6 +59,28 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 	}
 	resp, err := s.deps.CallLLM(ctx, state, req)
 	if err != nil {
+		// Issue 958: Check for context overflow — attempt emergency compaction + retry
+		if isContextOverflowErr(err) {
+			if state.Think.OverflowRetries > 0 {
+				return fmt.Errorf("context overflow after compaction: %w", err)
+			}
+			state.Think.OverflowRetries++
+			// Attempt emergency compaction
+			if s.deps.CompactMessages != nil {
+				originalLen := len(state.Messages.History())
+				compacted, compactErr := s.deps.CompactMessages(ctx, state.Messages.History(), state.Model)
+				if compactErr == nil {
+					state.Messages.ReplaceHistory(compacted)
+					slog.Info("emergency_compaction_triggered",
+						"run_id", state.RunID,
+						"original_msgs", originalLen,
+						"compacted_msgs", len(compacted),
+					)
+					return nil // Retry this iteration (Continue result)
+				}
+				slog.Warn("emergency_compaction_failed", "error", compactErr)
+			}
+		}
 		return fmt.Errorf("llm call: %w", err)
 	}
 	state.Think.LastResponse = resp
@@ -92,7 +116,8 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 		state.Messages.AppendPending(providers.Message{Role: "user", Content: hint})
 		return nil // Continue to next iteration for retry
 	}
-	state.Think.TruncRetries = 0 // reset on success
+	state.Think.TruncRetries = 0    // reset on success
+	state.Think.OverflowRetries = 0 // reset on success
 
 	// 7. Uniquify tool call IDs (OpenAI returns 400 on duplicates across iterations).
 	// Skip if raw content present (Anthropic thinking passback) to avoid desync.
@@ -191,4 +216,14 @@ func toolCallsHaveMissingRequiredArgs(calls []providers.ToolCall) bool {
 		}
 	}
 	return false
+}
+
+// isContextOverflowErr checks if an error indicates context window overflow.
+// Uses the exported helper from providers package for pattern matching.
+func isContextOverflowErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	lower := strings.ToLower(err.Error())
+	return providers.IsContextOverflowMessage(lower)
 }

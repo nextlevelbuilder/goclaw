@@ -336,6 +336,118 @@ func TestThinkStage_LLMError_Propagates(t *testing.T) {
 	}
 }
 
+// Issue 958: Context overflow triggers emergency compaction + retry
+
+func TestThinkStage_ContextOverflow_TriggersCompaction(t *testing.T) {
+	t.Parallel()
+	callCount := 0
+	compacted := false
+
+	deps := &PipelineDeps{
+		Config: PipelineConfig{MaxIterations: 10, MaxTokens: 1000},
+		CallLLM: func(_ context.Context, _ *RunState, _ providers.ChatRequest) (*providers.ChatResponse, error) {
+			callCount++
+			if callCount == 1 {
+				return nil, &providers.HTTPError{Status: 400, Body: "Prompt exceeds max length"}
+			}
+			return &providers.ChatResponse{Content: "success after compact", FinishReason: "stop"}, nil
+		},
+		CompactMessages: func(_ context.Context, msgs []providers.Message, _ string) ([]providers.Message, error) {
+			compacted = true
+			return []providers.Message{{Role: "user", Content: "[Summary]"}}, nil
+		},
+	}
+
+	stage := NewThinkStage(deps)
+	state := defaultState()
+	state.Messages.SetHistory([]providers.Message{{Role: "user", Content: "test"}})
+
+	// First call: overflow → compact → retry
+	err := stage.Execute(context.Background(), state)
+	if err != nil {
+		t.Fatalf("first Execute() should trigger retry, got error: %v", err)
+	}
+	if !compacted {
+		t.Error("expected compaction to be triggered")
+	}
+	if state.Think.OverflowRetries != 1 {
+		t.Errorf("expected OverflowRetries=1, got %d", state.Think.OverflowRetries)
+	}
+	// Stage returns Continue (nil error) to signal retry this iteration
+	if stage.Result() != Continue {
+		t.Errorf("Result() = %v after compaction, want Continue", stage.Result())
+	}
+}
+
+func TestThinkStage_ContextOverflow_FailsAfterOneRetry(t *testing.T) {
+	t.Parallel()
+	deps := &PipelineDeps{
+		Config: PipelineConfig{MaxIterations: 10, MaxTokens: 1000},
+		CallLLM: func(_ context.Context, _ *RunState, _ providers.ChatRequest) (*providers.ChatResponse, error) {
+			return nil, &providers.HTTPError{Status: 400, Body: "Prompt exceeds max length"}
+		},
+		CompactMessages: func(_ context.Context, _ []providers.Message, _ string) ([]providers.Message, error) {
+			return []providers.Message{{Role: "user", Content: "[Summary]"}}, nil
+		},
+	}
+
+	stage := NewThinkStage(deps)
+	state := defaultState()
+	state.Think.OverflowRetries = 1 // Already retried once
+
+	err := stage.Execute(context.Background(), state)
+	if err == nil {
+		t.Error("expected error after second overflow")
+	}
+	if !strings.Contains(err.Error(), "context overflow after compaction") {
+		t.Errorf("expected 'context overflow after compaction' message, got %v", err)
+	}
+}
+
+func TestThinkStage_ContextOverflow_NoCompactCallback_FailsGracefully(t *testing.T) {
+	t.Parallel()
+	deps := &PipelineDeps{
+		Config: PipelineConfig{MaxIterations: 10, MaxTokens: 1000},
+		CallLLM: func(_ context.Context, _ *RunState, _ providers.ChatRequest) (*providers.ChatResponse, error) {
+			return nil, &providers.HTTPError{Status: 400, Body: "Prompt exceeds max length"}
+		},
+		CompactMessages: nil, // No compaction available
+	}
+
+	stage := NewThinkStage(deps)
+	state := defaultState()
+
+	err := stage.Execute(context.Background(), state)
+	if err == nil {
+		t.Error("expected error when no compaction available")
+	}
+}
+
+func TestThinkStage_ContextOverflow_CompactionFails_ReturnsOriginalError(t *testing.T) {
+	t.Parallel()
+	deps := &PipelineDeps{
+		Config: PipelineConfig{MaxIterations: 10, MaxTokens: 1000},
+		CallLLM: func(_ context.Context, _ *RunState, _ providers.ChatRequest) (*providers.ChatResponse, error) {
+			return nil, &providers.HTTPError{Status: 400, Body: "Prompt exceeds max length"}
+		},
+		CompactMessages: func(_ context.Context, _ []providers.Message, _ string) ([]providers.Message, error) {
+			return nil, errors.New("compaction failed")
+		},
+	}
+
+	stage := NewThinkStage(deps)
+	state := defaultState()
+
+	err := stage.Execute(context.Background(), state)
+	if err == nil {
+		t.Error("expected error when compaction fails")
+	}
+	// Should return LLM error wrapped, not compaction error
+	if !strings.Contains(err.Error(), "llm call") {
+		t.Errorf("expected 'llm call' in error message, got %v", err)
+	}
+}
+
 // --- PruneStage tests ---
 
 func TestPruneStage_UnderBudget_NoOp(t *testing.T) {

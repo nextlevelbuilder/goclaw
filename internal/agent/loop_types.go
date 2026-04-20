@@ -452,6 +452,15 @@ func (l *Loop) effectiveMaxTokens() int {
 	return defaultMaxTokens
 }
 
+// resolveReserveTokens returns the reserve token buffer from compaction config.
+// Issue 958: Wire ReserveTokensFloor to prevent context overflow before compaction.
+func (l *Loop) resolveReserveTokens() int {
+	if l.compactionCfg != nil && l.compactionCfg.ReserveTokensFloor > 0 {
+		return l.compactionCfg.ReserveTokensFloor
+	}
+	return 0
+}
+
 func NewLoop(cfg LoopConfig) *Loop {
 	if cfg.MaxIterations <= 0 {
 		cfg.MaxIterations = config.DefaultMaxIterations

@@ -442,7 +442,7 @@ type SessionsConfig struct {
 // TtsConfig configures text-to-speech.
 // Matching TS src/config/types.tts.ts.
 type TtsConfig struct {
-	Provider   string              `json:"provider,omitempty"`   // "openai", "elevenlabs", "edge", "minimax"
+	Provider   string              `json:"provider,omitempty"`   // "openai", "elevenlabs", "edge", "minimax", "gemini"
 	Auto       string              `json:"auto,omitempty"`       // "off" (default), "always", "inbound", "tagged"
 	Mode       string              `json:"mode,omitempty"`       // "final" (default), "all"
 	MaxLength  int                 `json:"max_length,omitempty"` // max text length before truncation (default 1500)
@@ -451,6 +451,16 @@ type TtsConfig struct {
 	ElevenLabs TtsElevenLabsConfig `json:"elevenlabs"`
 	Edge       TtsEdgeConfig       `json:"edge"`
 	MiniMax    TtsMiniMaxConfig    `json:"minimax"`
+	Gemini     TtsGeminiConfig     `json:"gemini"`
+}
+
+// TtsGeminiConfig configures the Google Gemini TTS provider.
+type TtsGeminiConfig struct {
+	APIKey   string `json:"api_key,omitempty"`  // required; encrypted at rest
+	APIBase  string `json:"api_base,omitempty"` // custom endpoint (optional; SSRF-gated)
+	Voice    string `json:"voice,omitempty"`    // default "Kore"
+	Model    string `json:"model,omitempty"`    // default "gemini-2.5-flash-preview-tts"
+	Speakers string `json:"speakers,omitempty"` // JSON-encoded []SpeakerVoice for multi-speaker mode
 }
 
 // TtsOpenAIConfig configures the OpenAI TTS provider.

@@ -9,11 +9,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/audio"
 )
+
+// pronunciationDictMaxBytes is the maximum accepted byte length for the
+// pronunciation_dict param value. Finding #6: cap at 8 KB to prevent DoS.
+const pronunciationDictMaxBytes = 8 * 1024
 
 // Config configures the MiniMax TTS provider.
 type Config struct {
@@ -65,6 +70,22 @@ func (p *Provider) Name() string { return "minimax" }
 
 // Synthesize calls MiniMax t2a_v2 (non-streaming). MiniMax returns hex-encoded
 // audio in response.data.audio — we decode before returning.
+//
+// opts.Params keys (nested dot-path):
+//   - "speed"               float64  (0.5–2.0, default 1.0)
+//   - "vol"                 float64  (0.01–10.0, default 1.0; omitted from body at default)
+//   - "pitch"               int      (-12..12, default 0)
+//   - "emotion"             string   (optional)
+//   - "text_normalization"  bool     (optional)
+//   - "audio.format"        string   (mp3/pcm/flac/wav, default "mp3")
+//   - "audio.sample_rate"   string   (optional)
+//   - "audio.bitrate"       string   (optional, mp3 only)
+//   - "audio.channel"       string   (optional)
+//   - "language_boost"      string   (optional, e.g. "Chinese", "English")
+//   - "subtitle_enable"     bool     (optional)
+//   - "pronunciation_dict"  string   (optional JSON array, max 8 KB; Finding #6)
+//
+// MUST NOT mutate opts.Params — reads only.
 func (p *Provider) Synthesize(ctx context.Context, text string, opts audio.TTSOptions) (*audio.SynthResult, error) {
 	voiceID := opts.Voice
 	if voiceID == "" {
@@ -75,32 +96,99 @@ func (p *Provider) Synthesize(ctx context.Context, text string, opts audio.TTSOp
 		model = p.model
 	}
 
-	audioFormat, ext, mime := "mp3", "mp3", "audio/mpeg"
-	if opts.Format == "opus" || opts.Format == "pcm" || opts.Format == "flac" || opts.Format == "wav" {
+	// Resolve audio format — affects both MIME type and audio_setting.format.
+	audioFormat := resolveMiniMaxString(opts.Params, "audio.format", "")
+	if audioFormat == "" {
+		// Fall back to opts.Format (legacy path) then default mp3.
 		audioFormat = opts.Format
-		switch opts.Format {
-		case "pcm":
-			ext, mime = "pcm", "audio/pcm"
-		case "flac":
-			ext, mime = "flac", "audio/flac"
-		case "wav":
-			ext, mime = "wav", "audio/wav"
-		}
+	}
+	if audioFormat == "" || (audioFormat != "pcm" && audioFormat != "flac" && audioFormat != "wav") {
+		audioFormat = "mp3"
+	}
+	ext, mime := audioFormat, "audio/mpeg"
+	switch audioFormat {
+	case "pcm":
+		ext, mime = "pcm", "audio/pcm"
+	case "flac":
+		ext, mime = "flac", "audio/flac"
+	case "wav":
+		ext, mime = "wav", "audio/wav"
+	}
+
+	// Build voice_setting from params with defaults matching characterization.
+	speed := resolveMiniMaxFloat(opts.Params, "speed", 1.0)
+	pitch := resolveMiniMaxInt(opts.Params, "pitch", 0)
+
+	voiceSetting := map[string]any{
+		"voice_id": voiceID,
+		"speed":    speed,
+		"pitch":    pitch,
+	}
+
+	// vol only added when explicitly set and not the default (preserves nil-params body shape).
+	if vol := resolveMiniMaxFloat(opts.Params, "vol", -1); vol > 0 && vol != 1.0 {
+		voiceSetting["vol"] = vol
+	}
+
+	// emotion only added when set.
+	if emotion := resolveMiniMaxString(opts.Params, "emotion", ""); emotion != "" {
+		voiceSetting["emotion"] = emotion
+	}
+
+	// Build audio_setting.
+	audioSetting := map[string]any{
+		"format": audioFormat,
+	}
+	if sr := resolveMiniMaxString(opts.Params, "audio.sample_rate", ""); sr != "" {
+		audioSetting["sample_rate"] = sr
+	}
+	if br := resolveMiniMaxString(opts.Params, "audio.bitrate", ""); br != "" {
+		audioSetting["bitrate"] = br
+	}
+	if ch := resolveMiniMaxString(opts.Params, "audio.channel", ""); ch != "" {
+		audioSetting["channel"] = ch
 	}
 
 	body := map[string]any{
-		"text":   text,
-		"model":  model,
-		"stream": false,
-		"voice_setting": map[string]any{
-			"voice_id": voiceID,
-			"speed":    1.0,
-			"pitch":    0,
-		},
-		"audio_setting": map[string]any{
-			"format": audioFormat,
-		},
+		"text":          text,
+		"model":         model,
+		"stream":        false,
+		"voice_setting": voiceSetting,
+		"audio_setting": audioSetting,
 	}
+
+	// text_normalization only when explicitly set.
+	if tn, ok := resolveMiniMaxBoolExplicit(opts.Params, "text_normalization"); ok {
+		body["text_normalization"] = tn
+	}
+
+	// language_boost: top-level string hint (omit when empty).
+	if lb := resolveMiniMaxString(opts.Params, "language_boost", ""); lb != "" {
+		body["language_boost"] = lb
+	}
+
+	// subtitle_enable: only when explicitly set.
+	if se, ok := resolveMiniMaxBoolExplicit(opts.Params, "subtitle_enable"); ok {
+		body["subtitle_enable"] = se
+	}
+
+	// pronunciation_dict: parse user-pasted JSON array, wrap in {"tone":[...]}.
+	// Finding #6: cap at 8 KB; never log raw value on parse failure — log length only.
+	if pdRaw := resolveMiniMaxString(opts.Params, "pronunciation_dict", ""); pdRaw != "" {
+		if len(pdRaw) > pronunciationDictMaxBytes {
+			slog.Warn("minimax: pronunciation_dict exceeds 8 KB limit, omitting",
+				"length", len(pdRaw))
+		} else {
+			var rules []string
+			if err := json.Unmarshal([]byte(pdRaw), &rules); err != nil {
+				slog.Warn("minimax: invalid pronunciation_dict JSON, omitting",
+					"length", len(pdRaw))
+			} else if len(rules) > 0 {
+				body["pronunciation_dict"] = map[string]any{"tone": rules}
+			}
+		}
+	}
+
 	bodyJSON, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("marshal minimax tts request: %w", err)
@@ -160,4 +248,70 @@ type miniMaxResponse struct {
 	Data struct {
 		Audio string `json:"audio"` // hex-encoded audio bytes
 	} `json:"data"`
+}
+
+func resolveMiniMaxFloat(params map[string]any, key string, def float64) float64 {
+	if params == nil {
+		return def
+	}
+	v, ok := audio.GetNested(params, key)
+	if !ok {
+		return def
+	}
+	switch n := v.(type) {
+	case float64:
+		return n
+	case float32:
+		return float64(n)
+	case int:
+		return float64(n)
+	}
+	return def
+}
+
+func resolveMiniMaxInt(params map[string]any, key string, def int) int {
+	if params == nil {
+		return def
+	}
+	v, ok := audio.GetNested(params, key)
+	if !ok {
+		return def
+	}
+	switch n := v.(type) {
+	case int:
+		return n
+	case int64:
+		return int(n)
+	case float64:
+		return int(n)
+	}
+	return def
+}
+
+func resolveMiniMaxString(params map[string]any, key, def string) string {
+	if params == nil {
+		return def
+	}
+	v, ok := audio.GetNested(params, key)
+	if !ok {
+		return def
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return def
+}
+
+// resolveMiniMaxBoolExplicit returns (value, true) only when the key is explicitly
+// present in params, so callers can omit the field entirely when not set.
+func resolveMiniMaxBoolExplicit(params map[string]any, key string) (bool, bool) {
+	if params == nil {
+		return false, false
+	}
+	v, ok := audio.GetNested(params, key)
+	if !ok {
+		return false, false
+	}
+	b, ok := v.(bool)
+	return b, ok
 }

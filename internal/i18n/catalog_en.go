@@ -199,8 +199,14 @@ func init() {
 		MsgTenantScopeRequired: "tenant scope is required for this operation",
 
 		// TTS / Voices
-		MsgTtsUnknownModel:  "unknown tts model: %s",
-		MsgVoicesListFailed: "failed to list voices: %s",
+		MsgTtsUnknownModel:       "unknown tts model: %s",
+		MsgVoicesListFailed:      "failed to list voices: %s",
+		MsgTtsGeminiInvalidVoice: "invalid Gemini voice: %s",
+		MsgTtsGeminiSpeakerLimit: "Gemini TTS supports at most 2 speakers",
+		MsgTtsGeminiInvalidModel:  "invalid Gemini TTS model: %s",
+		MsgTtsParamOutOfRange:     "TTS param %q value %v is out of range [%v, %v]",
+		MsgTtsParamUnknownKey:     "TTS param %q is not supported by this provider",
+		MsgTtsMiniMaxVoicesFailed: "failed to fetch MiniMax voices: %s",
 
 		// STT
 		MsgSTTAllProvidersFailed:     "All STT providers failed",

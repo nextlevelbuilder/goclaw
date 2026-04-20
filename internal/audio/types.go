@@ -40,11 +40,28 @@ type StreamResult struct {
 	MimeType  string        // e.g. "audio/mpeg", "audio/ogg"
 }
 
-// TTSOptions controls TTS synthesis parameters.
+// TTSOptions carries per-request synthesis parameters.
+//
+// Params is a read-only map view owned by the caller.
+// Implementations MUST NOT mutate it. If a provider needs to merge
+// defaults with caller values, it MUST copy before writing.
+// READ-ONLY constraint is documented here and enforced by convention.
 type TTSOptions struct {
-	Voice  string // provider-specific voice ID
-	Model  string // provider-specific model ID
-	Format string // output format: "mp3", "opus", etc.
+	Voice    string         // provider-specific voice ID
+	Model    string         // provider-specific model ID
+	Format   string         // output format: "mp3", "opus", etc.
+	Speakers []SpeakerVoice // multi-speaker TTS (Gemini); len>0 switches to multi mode
+	// Params is a READ-ONLY map owned by the caller. Provider implementations
+	// MUST NOT mutate it; copy before merging with defaults.
+	Params map[string]any // provider-specific knobs (nested keys like "voice_settings.stability" allowed)
+}
+
+// SpeakerVoice binds a speaker label to a voice ID for multi-speaker TTS.
+// JSON tags match the frontend MultiSpeakerEditor shape so the persisted
+// tts.gemini.speakers blob round-trips without transformation.
+type SpeakerVoice struct {
+	Speaker string `json:"speaker"` // e.g. "host", "guest"
+	VoiceID string `json:"voiceId"` // provider-specific voice ID
 }
 
 // SynthResult is the output of a TTS synthesis call.
@@ -71,6 +88,15 @@ const (
 	ModeFinal Mode = "final" // Only final replies (default)
 	ModeAll   Mode = "all"   // All replies including tool/block
 )
+
+// VoiceListProvider is implemented by TTS providers that support dynamic
+// voice listing. The HTTP voices handler uses this interface so it is not
+// coupled to a specific provider implementation.
+type VoiceListProvider interface {
+	// ListVoices returns the provider's available voices.
+	// Implementations may cache results internally.
+	ListVoices(ctx context.Context) ([]Voice, error)
+}
 
 // ---- STT (Phase 4) ----
 

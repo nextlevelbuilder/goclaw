@@ -12,14 +12,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/stores/use-toast-store";
-import { getProviderDefinition } from "@/data/tts-providers";
 import type { TtsConfig, TtsProviderConfig, TestConnectionParams, TestConnectionResult } from "../hooks/use-tts-config";
 
 interface Props {
   provider: string;
   draft: TtsConfig;
   onUpdate: (
-    providerKey: keyof Pick<TtsConfig, "openai" | "elevenlabs" | "edge" | "minimax">,
+    providerKey: keyof Pick<TtsConfig, "openai" | "elevenlabs" | "edge" | "minimax" | "gemini">,
     patch: Partial<TtsProviderConfig>,
   ) => void;
   testConnection: (params: TestConnectionParams) => Promise<TestConnectionResult>;
@@ -32,15 +31,14 @@ export function CredentialsSection({ provider, draft, onUpdate, testConnection, 
   const { t } = useTranslation("tts");
   const [testing, setTesting] = useState(false);
 
-  const def = getProviderDefinition(provider);
   // Edge TTS is free — no credentials to configure
-  if (!def || !def.requiresApiKey) return null;
+  if (!provider || provider === "edge") return null;
 
   const handleTestConnection = async () => {
     setTesting(true);
     try {
       // Build params from draft credentials — test with unsaved config
-      const cfg = draft[provider as keyof Pick<typeof draft, "openai" | "elevenlabs" | "minimax">];
+      const cfg = draft[provider as keyof Pick<typeof draft, "openai" | "elevenlabs" | "minimax" | "gemini">];
       // Don't send masked API key — backend will reject it
       const apiKey = cfg?.api_key === "***" ? undefined : cfg?.api_key;
       const params: TestConnectionParams = {
@@ -62,8 +60,8 @@ export function CredentialsSection({ provider, draft, onUpdate, testConnection, 
   };
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <Card className="gap-3">
+      <CardHeader>
         <CardTitle className="text-base">
           2. {t("providerSettings", { provider: t(`providers.${provider}`) })}
         </CardTitle>
@@ -129,6 +127,25 @@ export function CredentialsSection({ provider, draft, onUpdate, testConnection, 
                 value={draft.minimax.api_base ?? ""}
                 onChange={(e) => onUpdate("minimax", { api_base: e.target.value })}
                 placeholder="https://api.minimax.io/v1" />
+            </div>
+          </>
+        )}
+
+        {provider === "gemini" && (
+          <>
+            <div className="grid gap-1.5">
+              <Label htmlFor="gm-key">{t("gemini.apiKey", "API Key")}</Label>
+              <Input id="gm-key" type="password" className="text-base md:text-sm"
+                value={draft.gemini.api_key ?? ""}
+                onChange={(e) => onUpdate("gemini", { api_key: e.target.value })}
+                placeholder="AIza..." />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="gm-base">{t("gemini.apiBase", "API Base URL")}</Label>
+              <Input id="gm-base" className="text-base md:text-sm"
+                value={draft.gemini.api_base ?? ""}
+                onChange={(e) => onUpdate("gemini", { api_base: e.target.value })}
+                placeholder="https://generativelanguage.googleapis.com" />
             </div>
           </>
         )}

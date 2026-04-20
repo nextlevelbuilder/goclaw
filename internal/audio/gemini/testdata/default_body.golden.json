@@ -1,0 +1,23 @@
+{
+  "contents": [
+    {
+      "parts": [
+        {
+          "text": "hello"
+        }
+      ]
+    }
+  ],
+  "generationConfig": {
+    "responseModalities": [
+      "AUDIO"
+    ],
+    "speechConfig": {
+      "voiceConfig": {
+        "prebuiltVoiceConfig": {
+          "voiceName": "Kore"
+        }
+      }
+    }
+  }
+}

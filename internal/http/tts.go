@@ -13,6 +13,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/audio"
 	"github.com/nextlevelbuilder/goclaw/internal/audio/elevenlabs"
+	"github.com/nextlevelbuilder/goclaw/internal/audio/gemini"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -58,6 +59,7 @@ func (h *TTSHandler) RegisterRoutes(mux *http.ServeMux) {
 		requireAuth(permissions.RoleOperator, h.handleSynthesize))
 	mux.HandleFunc("POST /v1/tts/test-connection",
 		requireAuth(permissions.RoleOperator, h.handleTestConnection))
+	h.registerCapabilitiesRoute(mux)
 }
 
 // synthesizeRequest is the JSON body for POST /v1/tts/synthesize.
@@ -112,7 +114,7 @@ func (h *TTSHandler) handleSynthesize(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Try per-tenant TTS config first, fall back to global manager.
-	p, name, err := h.resolveTenantProvider(ctx, req.Provider)
+	p, name, tenantParams, err := h.resolveTenantProvider(ctx, req.Provider)
 	if err != nil {
 		// Tenant config lookup failed, try global manager
 		h.mu.RLock()
@@ -143,11 +145,40 @@ func (h *TTSHandler) handleSynthesize(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Validate tenant params against the provider's capability schema (Finding #3).
+	// Rejects unknown keys and out-of-range values before forwarding to the provider.
+	if len(tenantParams) > 0 {
+		if dp, ok := p.(audio.DescribableProvider); ok {
+			caps := dp.Capabilities()
+			if err := audio.ValidateParams(caps.Params, tenantParams); err != nil {
+				slog.Warn("tts.synthesize.invalid-params", "provider", name, "error", err)
+				var ukErr audio.ErrTTSParamUnknownKey
+				var orErr audio.ErrTTSParamOutOfRange
+				switch {
+				case errors.As(err, &ukErr):
+					msg := i18n.T(locale, i18n.MsgTtsParamUnknownKey, ukErr.Key)
+					http.Error(w, fmt.Sprintf(`{"error":%q}`, msg), http.StatusUnprocessableEntity)
+				case errors.As(err, &orErr):
+					msg := i18n.T(locale, i18n.MsgTtsParamOutOfRange, orErr.Key, orErr.Val, orErr.Min, orErr.Max)
+					http.Error(w, fmt.Sprintf(`{"error":%q}`, msg), http.StatusUnprocessableEntity)
+				default:
+					http.Error(w, fmt.Sprintf(`{"error":%q}`, err.Error()), http.StatusUnprocessableEntity)
+				}
+				return
+			}
+		}
+	}
+
 	// Synthesize with a 15-second deadline.
 	synthCtx, cancel := context.WithTimeout(ctx, synthesizeTimeout)
 	defer cancel()
 
-	opts := audio.TTSOptions{Voice: req.VoiceID, Model: req.ModelID}
+	opts := audio.TTSOptions{Voice: req.VoiceID, Model: req.ModelID, Params: tenantParams}
+	// Restore saved multi-speaker defaults (Gemini) so persisted config reactivates
+	// at runtime instead of silently falling through to single-voice mode.
+	if speakers := loadSavedSpeakers(ctx, h.systemConfigs, name); len(speakers) > 0 {
+		opts.Speakers = speakers
+	}
 	start := time.Now()
 	result, err := p.Synthesize(synthCtx, req.Text, opts)
 	dur := time.Since(start)
@@ -158,8 +189,29 @@ func (h *TTSHandler) handleSynthesize(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, `{"error":"synthesis timeout"}`, http.StatusGatewayTimeout)
 			return
 		}
+		// Translate Gemini sentinel errors to 422 Unprocessable Entity with i18n message.
+		if errors.Is(err, gemini.ErrInvalidVoice) {
+			slog.Warn("tts.synthesize.invalid-params", "provider", name, "error", err)
+			msg := i18n.T(locale, i18n.MsgTtsGeminiInvalidVoice, req.VoiceID)
+			http.Error(w, fmt.Sprintf(`{"error":%q}`, msg), http.StatusUnprocessableEntity)
+			return
+		}
+		if errors.Is(err, gemini.ErrSpeakerLimit) {
+			slog.Warn("tts.synthesize.invalid-params", "provider", name, "error", err)
+			msg := i18n.T(locale, i18n.MsgTtsGeminiSpeakerLimit)
+			http.Error(w, fmt.Sprintf(`{"error":%q}`, msg), http.StatusUnprocessableEntity)
+			return
+		}
+		if errors.Is(err, gemini.ErrInvalidModel) {
+			slog.Warn("tts.synthesize.invalid-params", "provider", name, "error", err)
+			msg := i18n.T(locale, i18n.MsgTtsGeminiInvalidModel, req.ModelID)
+			http.Error(w, fmt.Sprintf(`{"error":%q}`, msg), http.StatusUnprocessableEntity)
+			return
+		}
+		// Surface upstream error to caller — opaque "upstream synthesis failed"
+		// makes the test playground useless for debugging provider config.
 		slog.Warn("tts.synthesize.failed", "provider", name, "error", err)
-		http.Error(w, `{"error":"upstream synthesis failed"}`, http.StatusBadGateway)
+		http.Error(w, fmt.Sprintf(`{"error":%q}`, err.Error()), http.StatusBadGateway)
 		return
 	}
 
@@ -171,10 +223,12 @@ func (h *TTSHandler) handleSynthesize(w http.ResponseWriter, r *http.Request) {
 }
 
 // resolveTenantProvider attempts to create a TTS provider from tenant-specific config.
-// Returns (nil, "", error) if tenant has no TTS config — caller should fall back to global manager.
-func (h *TTSHandler) resolveTenantProvider(ctx context.Context, explicitProvider string) (audio.TTSProvider, string, error) {
+// Performs dual-read: reads legacy flat keys AND tts.{p}.params JSON blob.
+// Blob wins on key conflict; legacy flat keys fill gaps.
+// Returns (nil, "", nil, error) if tenant has no TTS config — caller should fall back to global manager.
+func (h *TTSHandler) resolveTenantProvider(ctx context.Context, explicitProvider string) (audio.TTSProvider, string, map[string]any, error) {
 	if h.systemConfigs == nil || h.configSecrets == nil {
-		return nil, "", fmt.Errorf("stores not configured")
+		return nil, "", nil, fmt.Errorf("stores not configured")
 	}
 
 	// Get tenant's configured provider
@@ -183,7 +237,7 @@ func (h *TTSHandler) resolveTenantProvider(ctx context.Context, explicitProvider
 		var err error
 		providerName, err = h.systemConfigs.Get(ctx, "tts.provider")
 		if err != nil || providerName == "" {
-			return nil, "", fmt.Errorf("no tenant tts provider")
+			return nil, "", nil, fmt.Errorf("no tenant tts provider")
 		}
 	}
 
@@ -195,46 +249,103 @@ func (h *TTSHandler) resolveTenantProvider(ctx context.Context, explicitProvider
 		if key, _ := h.configSecrets.Get(ctx, "tts.openai.api_key"); key != "" {
 			req.APIKey = key
 		} else {
-			return nil, "", fmt.Errorf("no api key")
+			return nil, "", nil, fmt.Errorf("no api key")
 		}
 		req.APIBase, _ = h.systemConfigs.Get(ctx, "tts.openai.api_base")
 		req.VoiceID, _ = h.systemConfigs.Get(ctx, "tts.openai.voice")
 		req.ModelID, _ = h.systemConfigs.Get(ctx, "tts.openai.model")
+		req.Params = loadParamsBlob(ctx, h.systemConfigs, "tts.openai.params")
 
 	case "elevenlabs":
 		if key, _ := h.configSecrets.Get(ctx, "tts.elevenlabs.api_key"); key != "" {
 			req.APIKey = key
 		} else {
-			return nil, "", fmt.Errorf("no api key")
+			return nil, "", nil, fmt.Errorf("no api key")
 		}
 		req.APIBase, _ = h.systemConfigs.Get(ctx, "tts.elevenlabs.api_base")
 		req.VoiceID, _ = h.systemConfigs.Get(ctx, "tts.elevenlabs.voice")
 		req.ModelID, _ = h.systemConfigs.Get(ctx, "tts.elevenlabs.model")
+		req.Params = loadParamsBlob(ctx, h.systemConfigs, "tts.elevenlabs.params")
 
 	case "minimax":
 		if key, _ := h.configSecrets.Get(ctx, "tts.minimax.api_key"); key != "" {
 			req.APIKey = key
 		} else {
-			return nil, "", fmt.Errorf("no api key")
+			return nil, "", nil, fmt.Errorf("no api key")
 		}
 		req.GroupID, _ = h.configSecrets.Get(ctx, "tts.minimax.group_id")
 		req.APIBase, _ = h.systemConfigs.Get(ctx, "tts.minimax.api_base")
 		req.VoiceID, _ = h.systemConfigs.Get(ctx, "tts.minimax.voice")
 		req.ModelID, _ = h.systemConfigs.Get(ctx, "tts.minimax.model")
+		req.Params = loadParamsBlob(ctx, h.systemConfigs, "tts.minimax.params")
 
 	case "edge":
 		req.VoiceID, _ = h.systemConfigs.Get(ctx, "tts.edge.voice")
 		req.Rate, _ = h.systemConfigs.Get(ctx, "tts.edge.rate")
+		req.Params = loadParamsBlob(ctx, h.systemConfigs, "tts.edge.params")
+
+	case "gemini":
+		if key, _ := h.configSecrets.Get(ctx, "tts.gemini.api_key"); key != "" {
+			req.APIKey = key
+		} else {
+			return nil, "", nil, fmt.Errorf("no api key")
+		}
+		req.APIBase, _ = h.systemConfigs.Get(ctx, "tts.gemini.api_base")
+		req.VoiceID, _ = h.systemConfigs.Get(ctx, "tts.gemini.voice")
+		req.ModelID, _ = h.systemConfigs.Get(ctx, "tts.gemini.model")
+		req.Params = loadParamsBlob(ctx, h.systemConfigs, "tts.gemini.params")
 
 	default:
-		return nil, "", fmt.Errorf("unsupported provider: %s", providerName)
+		return nil, "", nil, fmt.Errorf("unsupported provider: %s", providerName)
 	}
 
 	provider, err := createEphemeralTTSProvider(req)
 	if err != nil {
-		return nil, "", err
+		return nil, "", nil, err
 	}
 
 	slog.Debug("tts: using tenant provider", "provider", providerName, "tenant", store.TenantIDFromContext(ctx))
-	return provider, providerName, nil
+	return provider, providerName, req.Params, nil
+}
+
+// paramsMaxBytes is the maximum byte length accepted for a stored params blob.
+// Finding #6: cap at 16 KB to prevent oversized JSON DoS.
+const paramsMaxBytes = 16 * 1024
+
+// loadParamsBlob reads a JSON blob from system_configs and returns it as map[string]any.
+// Returns nil when the key is absent, the value exceeds 16 KB, or the value is not valid JSON.
+// Never logs the raw value — logs length only on parse failure (Finding #6).
+func loadParamsBlob(ctx context.Context, sc store.SystemConfigStore, key string) map[string]any {
+	raw, err := sc.Get(ctx, key)
+	if err != nil || raw == "" {
+		return nil
+	}
+	if len(raw) > paramsMaxBytes {
+		slog.Warn("tts: params blob exceeds 16 KB limit, ignoring", "key", key, "length", len(raw))
+		return nil
+	}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(raw), &m); err != nil {
+		slog.Warn("tts: invalid params blob", "key", key, "length", len(raw))
+		return nil
+	}
+	return m
+}
+
+// loadSavedSpeakers reads the per-tenant multi-speaker JSON blob for providers
+// that persist speaker configuration (currently only Gemini). Returns nil when
+// no config exists or decode fails — caller falls back to single-voice mode.
+func loadSavedSpeakers(ctx context.Context, sc store.SystemConfigStore, providerName string) []audio.SpeakerVoice {
+	if sc == nil || providerName != "gemini" {
+		return nil
+	}
+	raw, err := sc.Get(ctx, "tts.gemini.speakers")
+	if err != nil || raw == "" {
+		return nil
+	}
+	var speakers []audio.SpeakerVoice
+	if err := json.Unmarshal([]byte(raw), &speakers); err != nil {
+		return nil
+	}
+	return speakers
 }

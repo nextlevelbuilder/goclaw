@@ -21,7 +21,8 @@ func init() {
 }
 
 // synthesizeWithFactory is used by tests to inject a fake command factory.
-// It mirrors Synthesize but accepts a factory func for the exec call.
+// It mirrors Synthesize but accepts a factory func for the exec call and
+// returns the args without actually running edge-tts.
 func (p *Provider) synthesizeWithFactory(
 	ctx context.Context,
 	text string,
@@ -33,13 +34,24 @@ func (p *Provider) synthesizeWithFactory(
 		voice = opts.Voice
 	}
 
+	// Mirror the params resolution in Synthesize.
+	rateStr := resolveEdgeParam(opts.Params, "rate", sliderToRateString, p.rate)
+	pitchStr := resolveEdgeParam(opts.Params, "pitch", sliderToPitchString, "")
+	volumeStr := resolveEdgeParam(opts.Params, "volume", sliderToVolumeString, "")
+
 	args := []string{
 		"--voice", voice,
 		"--text", text,
 		"--write-media", "/dev/null",
 	}
-	if p.rate != "" {
-		args = append(args, "--rate", p.rate)
+	if rateStr != "" && rateStr != "+0%" {
+		args = append(args, "--rate", rateStr)
+	}
+	if pitchStr != "" && pitchStr != "+0Hz" {
+		args = append(args, "--pitch", pitchStr)
+	}
+	if volumeStr != "" && volumeStr != "+0%" {
+		args = append(args, "--volume", volumeStr)
 	}
 
 	// Return args without actually running: caller asserts them.
@@ -55,7 +67,6 @@ func TestSynthesize_HonorsOptsVoice(t *testing.T) {
 	var gotArgs []string
 	fakeFactory := func(ctx context.Context, name string, args ...string) *exec.Cmd {
 		gotArgs = append([]string{name}, args...)
-		// Return a no-op command so the test never shells out.
 		return exec.Command("true")
 	}
 
@@ -64,9 +75,8 @@ func TestSynthesize_HonorsOptsVoice(t *testing.T) {
 	if err != nil {
 		t.Fatalf("synthesizeWithFactory returned error: %v", err)
 	}
-	_ = gotArgs // populated by factory
+	_ = gotArgs
 
-	// Locate --voice arg in allArgs.
 	voiceVal := ""
 	for i, a := range allArgs {
 		if a == "--voice" && i+1 < len(allArgs) {
@@ -88,7 +98,7 @@ func TestSynthesize_FallsBackToProviderVoice(t *testing.T) {
 		return exec.Command("true")
 	}
 
-	opts := audio.TTSOptions{} // empty Voice
+	opts := audio.TTSOptions{}
 	allArgs, err := p.synthesizeWithFactory(context.Background(), "hello", opts, fakeFactory)
 	if err != nil {
 		t.Fatalf("synthesizeWithFactory returned error: %v", err)

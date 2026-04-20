@@ -27,8 +27,8 @@ export function BehaviorSection({ draft, onUpdate }: Props) {
   const [open, setOpen] = useState(true);
 
   return (
-    <Card>
-      <CardHeader className="pb-0">
+    <Card className="gap-3">
+      <CardHeader>
         <button
           type="button"
           className="flex w-full items-center justify-between py-1 text-left"
@@ -48,7 +48,7 @@ export function BehaviorSection({ draft, onUpdate }: Props) {
       </CardHeader>
 
       {open && (
-        <CardContent className="space-y-4 pt-4">
+        <CardContent className="space-y-4">
           {/* Auto mode */}
           <div className="grid gap-1.5">
             <Label>{t("general.autoApplyMode")}</Label>

@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/stores/use-toast-store";
+import { AudioTagPicker } from "@/components/audio-tag-picker";
 import type { SynthesizeParams } from "../hooks/use-tts-config";
 
 const MAX_CHARS = 500;
@@ -45,14 +46,19 @@ interface Props {
   voiceId: string;
   modelId: string;
   synthesize: (params: SynthesizeParams) => Promise<Blob>;
+  /** When true, renders the Gemini AudioTagPicker above the textarea so tags
+   *  insert directly into the synthesize input. */
+  showAudioTags?: boolean;
 }
 
-export function TestPlayground({ provider, voiceId, modelId, synthesize }: Props) {
+export function TestPlayground({ provider, voiceId, modelId, synthesize, showAudioTags }: Props) {
   const { t } = useTranslation("tts");
   const [text, setText] = useState("");
+  const [caretPos, setCaretPos] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const currentUrlRef = useRef<string | null>(null);
 
   // Revoke the previous object URL to prevent memory leaks
@@ -111,8 +117,8 @@ export function TestPlayground({ provider, voiceId, modelId, synthesize }: Props
   const canPlayNow = canPlay({ text, provider }) && !loading;
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <Card className="gap-3">
+      <CardHeader>
         <CardTitle className="text-base">4. {t("playground.title", "Test Playground")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -125,34 +131,51 @@ export function TestPlayground({ provider, voiceId, modelId, synthesize }: Props
           </div>
           <Textarea
             id="tts-test-text"
+            ref={textareaRef}
             className="text-base md:text-sm min-h-[80px] resize-none"
             placeholder={t("playground.placeholder", "Enter text to hear…")}
             maxLength={MAX_CHARS}
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              setText(e.target.value);
+              setCaretPos(e.target.selectionStart ?? e.target.value.length);
+            }}
+            onSelect={(e) => setCaretPos((e.target as HTMLTextAreaElement).selectionStart ?? 0)}
           />
         </div>
+
+        {showAudioTags && (
+          <AudioTagPicker
+            textValue={text}
+            caretPos={caretPos}
+            onTextChange={(next) => {
+              setText(next);
+              // Refocus the textarea so the user can keep typing right after insertion.
+              requestAnimationFrame(() => textareaRef.current?.focus());
+            }}
+          />
+        )}
 
         <div className="flex gap-2">
           <Button
             type="button"
-            size="default"
-            className="h-11 gap-1.5"
+            size="sm"
+            className="h-9 gap-1.5"
             disabled={!canPlayNow || playing}
             onClick={handlePlay}
           >
-            <Play className="h-4 w-4" />
+            <Play className="h-3.5 w-3.5" />
             {loading ? t("playground.synthesizing", "Synthesizing…") : t("playground.play", "Play")}
           </Button>
           {playing && (
             <Button
               type="button"
               variant="outline"
-              size="default"
-              className="h-11 gap-1.5"
+              size="sm"
+              className="h-9 gap-1.5"
               onClick={handleStop}
             >
-              <Square className="h-4 w-4" />
+              <Square className="h-3.5 w-3.5" />
               {t("playground.stop", "Stop")}
             </Button>
           )}

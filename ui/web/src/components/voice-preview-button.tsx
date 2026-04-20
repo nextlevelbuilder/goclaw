@@ -87,15 +87,15 @@ export function VoicePreviewButton({ previewUrl, voiceName }: Props) {
     <Button
       type="button"
       variant="ghost"
-      size="icon-sm"
+      size="icon-xs"
       title={playing ? t("voice_stop_preview") : t("voice_preview", { name: voiceName })}
       onClick={handlePlay}
       className="shrink-0"
     >
       {playing ? (
-        <StopCircleIcon className="size-4" />
+        <StopCircleIcon className="size-3" />
       ) : (
-        <PlayIcon className="size-4" />
+        <PlayIcon className="size-3" />
       )}
     </Button>
   );

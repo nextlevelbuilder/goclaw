@@ -1,9 +1,10 @@
-import { useMemo, useState, useRef, useEffect, useLayoutEffect } from "react";
+import { useMemo, useState, useRef, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { X, ChevronDownIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSkills } from "@/pages/skills/hooks/use-skills";
+import { usePortalDropdownClose } from "@/hooks/use-portal-dropdown-close";
 
 interface SkillNameSelectProps {
   value: string[];
@@ -50,20 +51,11 @@ export function SkillNameSelect({
     });
   }, [open, search]);
 
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (
-        containerRef.current && !containerRef.current.contains(target) &&
-        (!dropdownRef.current || !dropdownRef.current.contains(target))
-      ) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
+  usePortalDropdownClose({
+    open,
+    onClose: () => setOpen(false),
+    ignore: [containerRef, dropdownRef],
+  });
 
   const addSkill = (name: string) => {
     if (!value.includes(name)) {

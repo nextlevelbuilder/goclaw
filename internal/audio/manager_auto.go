@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"maps"
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -73,10 +74,14 @@ func (m *Manager) MaybeApply(ctx context.Context, text, channel string, isVoiceI
 	}
 
 	// Apply per-agent voice/model override from context (set by dispatch.go from OutboundMessage)
+	var agentGenericTTSParams map[string]any
 	if snap, ok := store.AgentAudioFromCtx(ctx); ok && len(snap.OtherConfig) > 0 {
 		var agentCfg struct {
-			TTSVoiceID string `json:"tts_voice_id,omitempty"`
-			TTSModelID string `json:"tts_model_id,omitempty"`
+			TTSVoiceID string         `json:"tts_voice_id,omitempty"`
+			TTSModelID string         `json:"tts_model_id,omitempty"`
+			// TTSParams carries per-agent generic override keys (speed, emotion, style).
+			// Must be adapted PER-ATTEMPT via AdaptAgentParams (Finding #1 CRITICAL).
+			TTSParams  map[string]any `json:"tts_params,omitempty"`
 		}
 		if err := json.Unmarshal(snap.OtherConfig, &agentCfg); err == nil {
 			if agentCfg.TTSVoiceID != "" {
@@ -85,17 +90,28 @@ func (m *Manager) MaybeApply(ctx context.Context, text, channel string, isVoiceI
 			if agentCfg.TTSModelID != "" {
 				opts.Model = agentCfg.TTSModelID
 			}
+			agentGenericTTSParams = agentCfg.TTSParams
 		}
 	}
 
 	var result *SynthResult
 	var err error
 
-	// Use tenant provider if available, otherwise fall back to global
+	// Use tenant provider if available, otherwise fall back to global.
+	// Params are adapted PER-ATTEMPT so each provider receives its own native keys
+	// (Finding #1 CRITICAL: do NOT adapt once before the branch, adapt inside each path).
 	if hasTenant && tenantProvider != nil {
-		result, err = tenantProvider.Synthesize(ctx, cleanText, opts)
+		tenantOpts := opts
+		if adapted := AdaptAgentParams(agentGenericTTSParams, tenantProvider.Name()); len(adapted) > 0 {
+			merged := make(map[string]any, len(opts.Params)+len(adapted))
+			maps.Copy(merged, opts.Params)
+			maps.Copy(merged, adapted)
+			tenantOpts.Params = merged
+		}
+		result, err = tenantProvider.Synthesize(ctx, cleanText, tenantOpts)
 	} else {
-		result, err = m.SynthesizeWithFallback(ctx, cleanText, opts)
+		// SynthesizeWithFallbackAdapted adapts per-attempt inside the fallback loop.
+		result, err = m.SynthesizeWithFallbackAdapted(ctx, cleanText, opts, agentGenericTTSParams)
 	}
 
 	if err != nil {

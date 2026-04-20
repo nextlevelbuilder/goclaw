@@ -24,7 +24,8 @@
     "openai": "OpenAI",
     "elevenlabs": "ElevenLabs",
     "edge": "Edge (Free)",
-    "minimax": "MiniMax"
+    "minimax": "MiniMax",
+    "gemini": "Google Gemini"
   },
   "autoModes": {
     "off": "Off",
@@ -47,18 +48,80 @@
     "apiKey": "API Key",
     "apiBase": "API Base URL",
     "model": "Model",
-    "voice": "Voice"
+    "voice": "Voice",
+    "speed": {
+      "label": "Speed",
+      "help": "Speech speed multiplier — 0.25 = slowest, 4.0 = fastest."
+    },
+    "responseFormat": {
+      "label": "Output Format",
+      "help": "Audio encoding returned by the API (mp3, opus, aac, flac, wav, pcm)."
+    },
+    "instructions": {
+      "label": "Instructions",
+      "help": "System-level style prompt — only supported on gpt-4o-mini-tts model."
+    }
   },
   "elevenlabs": {
     "apiKey": "API Key",
     "baseUrl": "Base URL",
     "voiceId": "Voice ID",
-    "modelId": "Model ID"
+    "modelId": "Model ID",
+    "voiceSettings": {
+      "stability": {
+        "label": "Stability",
+        "help": "0 = more expressive variation, 1 = more consistent and stable."
+      },
+      "similarityBoost": {
+        "label": "Similarity Boost",
+        "help": "How closely output matches the original voice clone (0 = creative, 1 = similar)."
+      },
+      "style": {
+        "label": "Style Exaggeration",
+        "help": "Amplifies voice style. 0 = none; higher values add more expressiveness."
+      },
+      "useSpeakerBoost": {
+        "label": "Speaker Boost",
+        "help": "Enhances voice clarity and target speaker similarity."
+      },
+      "speed": {
+        "label": "Speed",
+        "help": "Speech speed — range 0.7 (slow) to 1.2 (fast)."
+      }
+    },
+    "applyTextNormalization": {
+      "label": "Text Normalization",
+      "help": "How numbers and abbreviations are expanded (auto, on, or off)."
+    },
+    "seed": {
+      "label": "Seed (Advanced)",
+      "help": "Set a fixed seed for reproducible output. 0 = random."
+    },
+    "optimizeStreamingLatency": {
+      "label": "Streaming Latency (Advanced)",
+      "help": "Latency optimization level: 0 = none, 4 = maximum."
+    },
+    "languageCode": {
+      "label": "Language Code",
+      "help": "ISO 639-1 language hint, e.g. 'en' or 'vi'. Advanced."
+    }
   },
   "edge": {
     "voice": "Voice",
     "speechRate": "Speech Rate",
-    "hint": "Edge TTS is free and requires no API key. Install with: pip install edge-tts"
+    "hint": "Edge TTS is free and requires no API key. Install with: pip install edge-tts",
+    "rate": {
+      "label": "Speech Rate",
+      "help": "Rate adjustment in percent. -50% = much slower, +100% = much faster."
+    },
+    "pitch": {
+      "label": "Pitch",
+      "help": "Pitch shift in Hz relative to neutral. Range: -50 Hz to +50 Hz."
+    },
+    "volume": {
+      "label": "Volume",
+      "help": "Volume adjustment in percent. -50% = quieter, +100% = louder."
+    }
   },
   "minimax": {
     "apiKey": "API Key",
@@ -66,12 +129,91 @@
     "groupIdPlaceholder": "Required for MiniMax",
     "apiBase": "API Base",
     "model": "Model",
-    "voiceId": "Voice ID"
+    "voiceId": "Voice ID",
+    "speed": {
+      "label": "Speed",
+      "help": "Speech speed multiplier — 0.5 = slowest, 2.0 = fastest."
+    },
+    "vol": {
+      "label": "Volume",
+      "help": "Volume multiplier — 0.01 = near-silent, 10.0 = loudest."
+    },
+    "pitch": {
+      "label": "Pitch",
+      "help": "Pitch shift in semitones. -12 = one octave down, +12 = one octave up."
+    },
+    "emotion": {
+      "label": "Emotion",
+      "help": "Emotional tone applied to the synthesized voice."
+    },
+    "textNormalization": {
+      "label": "Text Normalization",
+      "help": "Whether numbers and symbols are expanded before synthesis."
+    },
+    "audio": {
+      "format": {
+        "label": "Audio Format",
+        "help": "Output encoding: mp3, pcm, flac, or wav."
+      },
+      "sampleRate": {
+        "label": "Sample Rate",
+        "help": "Audio sample rate in Hz. Leave as Default for most use cases."
+      },
+      "bitrate": {
+        "label": "Bitrate (MP3 only)",
+        "help": "MP3 bit rate in bps. Only applies when format is mp3."
+      },
+      "channel": {
+        "label": "Channels",
+        "help": "1 = mono (smaller file), 2 = stereo."
+      }
+    }
+  },
+  "gemini": {
+    "apiKey": "API Key",
+    "apiBase": "API Base URL",
+    "voice": "Voice",
+    "model": "Model",
+    "multiSpeaker": "Multi-Speaker",
+    "multiSpeakerHint": "Up to 2 speakers supported",
+    "audioTags": "Audio Tags",
+    "audioTagsHint": "Insert expressive tags like [laughs] directly in your text",
+    "speakerName": "Speaker Name",
+    "speakerVoice": "Speaker Voice",
+    "addSpeaker": "Add Speaker",
+    "removeSpeaker": "Remove",
+    "maxSpeakersReached": "Maximum 2 speakers reached",
+    "filterAll": "All",
+    "filterEmotion": "Emotion",
+    "filterPacing": "Pacing",
+    "filterEffect": "Effect",
+    "filterVoiceQuality": "Voice Quality",
+    "searchPlaceholder": "Search tags…",
+    "insertTag": "Insert",
+    "multiSpeakerMode": {
+      "title": "Multi-Speaker Mode",
+      "addSpeaker": "Add speaker",
+      "speakerName": "Speaker name",
+      "speakerVoice": "Voice",
+      "removeSpeaker": "Remove",
+      "limitReached": "Maximum 2 speakers"
+    },
+    "audioTagsPanel": {
+      "title": "Audio Tags",
+      "search": "Search tags",
+      "categoryEmotion": "Emotion",
+      "categoryPacing": "Pacing",
+      "categoryEffect": "Effect",
+      "categoryVoiceQuality": "Voice quality",
+      "insertHint": "Click a tag to insert at caret"
+    },
+    "previewBadge": "Preview"
   },
   "voice_label": "Voice",
   "voice_placeholder": "Select a voice…",
   "voice_picker": {
-    "requires_provider": "Configure TTS provider first"
+    "requires_provider": "Configure TTS provider first",
+    "enter_voice_id": "Enter voice_id manually"
   },
   "voice_refresh": "Refresh",
   "voice_preview": "Preview",
@@ -99,7 +241,10 @@
   },
   "override": {
     "label": "Override voice for this agent",
-    "inherits": "Inherits: {{provider}} · {{voice}} · {{model}}"
+    "inherits": "Inherits: {{provider}} · {{voice}} · {{model}}",
+    "params": {
+      "title": "Fine-tune"
+    }
   },
   "testConnection": {
     "label": "Test connection",
@@ -127,6 +272,8 @@
     "requiresProvider": "Select a provider above to enable test playback."
   },
   "advanced": {
-    "title": "Advanced settings"
+    "title": "Advanced settings",
+    "count": "{{count}} advanced settings",
+    "count_one": "{{count}} advanced setting"
   }
 }

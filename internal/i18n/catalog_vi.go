@@ -199,8 +199,14 @@ func init() {
 		MsgTenantScopeRequired: "cần xác định tenant để thực hiện thao tác này",
 
 		// TTS / Giọng đọc
-		MsgTtsUnknownModel:  "model tts không hỗ trợ: %s",
-		MsgVoicesListFailed: "không tải được danh sách giọng đọc: %s",
+		MsgTtsUnknownModel:       "model tts không hỗ trợ: %s",
+		MsgVoicesListFailed:      "không tải được danh sách giọng đọc: %s",
+		MsgTtsGeminiInvalidVoice: "giọng đọc Gemini không hợp lệ: %s",
+		MsgTtsGeminiSpeakerLimit: "Gemini TTS hỗ trợ tối đa 2 người nói",
+		MsgTtsGeminiInvalidModel:  "mô hình Gemini TTS không hợp lệ: %s",
+		MsgTtsParamOutOfRange:     "tham số TTS %q có giá trị %v nằm ngoài phạm vi [%v, %v]",
+		MsgTtsParamUnknownKey:     "tham số TTS %q không được nhà cung cấp này hỗ trợ",
+		MsgTtsMiniMaxVoicesFailed: "không tải được danh sách giọng đọc MiniMax: %s",
 
 		// STT
 		MsgSTTAllProvidersFailed:     "Tất cả nhà cung cấp STT đều thất bại",

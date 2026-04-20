@@ -70,6 +70,14 @@ func isContextOverflowError(lower string) bool {
 		"prompt is too long",
 		"exceeds model context window",
 		"request exceeds the maximum size",
+		// Issue 958: Additional patterns (sync with providers/error_classify.go)
+		"prompt exceeds max length", // ZAI/GLM-5
+		"input is too long",         // DashScope
+		"token limit",
+		"too many tokens",
+		"请求输入过长",       // Chinese generic
+		"超出最大长度限制",     // Chinese Qwen
+		"上下文长度",        // Chinese context length
 	) || (strings.Contains(lower, "context") &&
 		containsAny(lower, "overflow", "too large", "too long", "limit", "exceeded"))
 }

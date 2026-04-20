@@ -2,6 +2,7 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { ChevronDownIcon, CheckIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { usePortalDropdownClose } from "@/hooks/use-portal-dropdown-close";
 
 export interface ComboboxOption {
   value: string;
@@ -59,23 +60,16 @@ export function Combobox({
     setSearch(match?.label || value);
   }, [value, options]);
 
-  // Close on outside click
-  React.useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (
-        containerRef.current && !containerRef.current.contains(target) &&
-        (!dropdownRef.current || !dropdownRef.current.contains(target))
-      ) {
-        setOpen(false);
-        setInputDirty(false);
-        inputDirtyRef.current = false;
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
+  // Close on outside interaction (pointer/touch-aware, ignores in-list scroll)
+  usePortalDropdownClose({
+    open,
+    onClose: () => {
+      setOpen(false);
+      setInputDirty(false);
+      inputDirtyRef.current = false;
+    },
+    ignore: [containerRef, dropdownRef],
+  });
 
   // Resolve the actual portal target: explicit prop > closest dialog content > document.body
   const resolvedPortal = React.useMemo(() => {

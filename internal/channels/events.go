@@ -234,8 +234,27 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 				}
 				sc.FinalizeStream(ctx, rc.ChatID, currentStream)
 			}
-		case protocol.AgentEventRunFailed, protocol.AgentEventRunCancelled:
-			// Clean up streaming state on failure or cancellation
+		case protocol.AgentEventRunFailed:
+			// Clean up streaming state on failure
+			rc.mu.Lock()
+			currentStream := rc.stream
+			rc.stream = nil
+			rc.mu.Unlock()
+			if currentStream != nil {
+				_ = currentStream.Stop(ctx)
+			}
+			// Issue 958: Send user-friendly error message instead of silent "..."
+			errStr := extractPayloadString(payload, "error")
+			if friendlyMsg := FormatAgentError(errStr); friendlyMsg != "" {
+				m.bus.PublishOutbound(bus.OutboundMessage{
+					Channel:  rc.ChannelName,
+					ChatID:   rc.ChatID,
+					Content:  friendlyMsg,
+					TenantID: rc.TenantID,
+				})
+			}
+		case protocol.AgentEventRunCancelled:
+			// Clean up streaming state on cancellation
 			rc.mu.Lock()
 			currentStream := rc.stream
 			rc.stream = nil
