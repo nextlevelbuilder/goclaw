@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -265,17 +266,33 @@ func normalizeOllamaAPIBase(p *store.LLMProviderData) {
 }
 
 // localProviderTypes are provider types that legitimately run on localhost
-// (e.g. Ollama, Claude CLI). SSRF checks are skipped for these.
+// (e.g. Ollama, Claude CLI). Private-IP checks are skipped for these,
+// but scheme validation is still enforced.
 var localProviderTypes = map[string]bool{
 	store.ProviderOllama:    true,
 	store.ProviderClaudeCLI: true,
 	store.ProviderACP:       true,
 }
 
+// dnsResolverFn resolves hostnames to IPs. Replaceable in tests.
+var dnsResolverFn = net.LookupHost
+
+// allowPrivateProviderURLsFn reports whether the operator has opted in to
+// permitting private / loopback / link-local / internal-hostname provider base
+// URLs via GOCLAW_ALLOW_PRIVATE_PROVIDER_URLS. Function-valued so tests can
+// override it; production reads the env var once.
+var allowPrivateProviderURLsFn = sync.OnceValue(func() bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("GOCLAW_ALLOW_PRIVATE_PROVIDER_URLS")))
+	return v == "1" || v == "true" || v == "yes"
+})
+
 // validateProviderURL rejects provider base URLs pointing to internal/private networks.
 // Defense-in-depth: prevents SSRF when providers are later used for API calls.
+//
+// The check resolves DNS hostnames so wildcard services (nip.io, sslip.io) or
+// attacker-controlled domains that point to private IPs are blocked.
 func validateProviderURL(rawURL string, providerType string) error {
-	if rawURL == "" || localProviderTypes[providerType] {
+	if rawURL == "" {
 		return nil
 	}
 	u, err := url.Parse(rawURL)
@@ -283,32 +300,64 @@ func validateProviderURL(rawURL string, providerType string) error {
 		return fmt.Errorf("invalid URL: %w", err)
 	}
 	// Only allow http/https schemes — block file://, gopher://, dict://, etc.
+	// Enforced unconditionally for all provider types including local ones.
 	switch u.Scheme {
 	case "http", "https":
 	default:
 		return fmt.Errorf("provider URL must use http or https scheme, got %q", u.Scheme)
 	}
+	// Local provider types (Ollama, Claude CLI, ACP) skip private-network checks
+	// because they legitimately run on localhost.
+	if localProviderTypes[providerType] {
+		return nil
+	}
 	host := u.Hostname()
-	// Block obvious internal targets
+	if allowPrivateProviderURLsFn() {
+		slog.Warn("security.provider_url.private_allowed", "host", host, "provider_type", providerType)
+		return nil
+	}
+	return checkHostPrivate(host)
+}
+
+// checkHostPrivate blocks hosts that resolve to private/loopback/link-local addresses.
+func checkHostPrivate(host string) error {
 	blocked := []string{"localhost", "127.0.0.1", "::1", "0.0.0.0", "169.254.169.254", "metadata.google.internal"}
 	for _, b := range blocked {
 		if strings.EqualFold(host, b) {
 			return fmt.Errorf("provider URL cannot point to %s", b)
 		}
 	}
-	// Block private IP ranges (normalize IPv6-mapped IPv4 to catch ::ffff:127.0.0.1)
-	ip := net.ParseIP(host)
-	if ip != nil {
-		if v4 := ip.To4(); v4 != nil {
-			ip = v4
-		}
-		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
-			return fmt.Errorf("provider URL cannot point to private network: %s", host)
-		}
-	}
-	// Block common internal hostnames
 	if strings.HasSuffix(host, ".internal") || strings.HasSuffix(host, ".local") {
 		return fmt.Errorf("provider URL cannot point to internal hostname: %s", host)
+	}
+	// Check literal IP
+	if ip := net.ParseIP(host); ip != nil {
+		return checkIPPrivate(ip, host)
+	}
+	// Resolve DNS hostname and check every resolved address.
+	// Prevents bypass via wildcard DNS (nip.io, sslip.io) or attacker-controlled
+	// domains that map to private IPs.
+	addrs, err := dnsResolverFn(host)
+	if err != nil {
+		return fmt.Errorf("provider URL hostname %q could not be resolved: %w", host, err)
+	}
+	for _, addr := range addrs {
+		if ip := net.ParseIP(addr); ip != nil {
+			if err := checkIPPrivate(ip, host); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// checkIPPrivate returns an error if ip is loopback, private, or link-local.
+func checkIPPrivate(ip net.IP, label string) error {
+	if v4 := ip.To4(); v4 != nil {
+		ip = v4
+	}
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+		return fmt.Errorf("provider URL cannot point to private network: %s (resolved %s)", label, ip)
 	}
 	return nil
 }
