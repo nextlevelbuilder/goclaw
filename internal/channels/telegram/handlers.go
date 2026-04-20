@@ -361,6 +361,15 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 		}
 	}
 
+	// Strip bot's own @mention so the LLM sees clean content and does not
+	// mistake itself for another bot (cross-channel parity with Slack/Feishu).
+	// Re-check empty state: a message containing only "@botname" becomes empty
+	// after stripping, so we restore the placeholder used for originally-empty inbounds.
+	content = stripBotMention(content, c.bot.Username())
+	if content == "" {
+		content = "[empty message]"
+	}
+
 	// --- Group pairing gate (only reached when bot is mentioned) ---
 	if isGroup && topicCfg.groupPolicy == "pairing" && c.PairingService() != nil {
 		if !c.IsGroupApproved(chatIDStr) {
