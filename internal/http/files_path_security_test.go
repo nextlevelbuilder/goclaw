@@ -189,6 +189,47 @@ func TestFilesAuthMiddleware_InvalidFileToken_Returns401(t *testing.T) {
 	}
 }
 
+// ---- handleServe: expanded deny list ----
+
+func TestFilesHandleServe_HomeDirBlocked(t *testing.T) {
+	h, _ := makeTestFilesHandler(t)
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/files/{path...}", h.handleServe)
+
+	for _, path := range []string{
+		"/v1/files/home/user/.ssh/id_rsa",
+		"/v1/files/Users/admin/.aws/credentials",
+		"/v1/files/var/lib/docker/overlay2/secret",
+		"/v1/files/opt/secrets/key.pem",
+		"/v1/files/srv/www/config.php",
+	} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+
+		if w.Code == http.StatusOK {
+			t.Errorf("path %s should be denied, got 200", path)
+		}
+	}
+}
+
+// ---- handleServe: fail-closed on empty workspace/dataDir ----
+
+func TestFilesHandleServe_EmptyWorkspaceAndDataDir_Denies(t *testing.T) {
+	h := NewFilesHandler("", "")
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/files/{path...}", h.handleServe)
+
+	// Even a "normal" path must be denied when no boundary is configured.
+	req := httptest.NewRequest(http.MethodGet, "/v1/files/tmp/test.txt", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code == http.StatusOK {
+		t.Errorf("empty workspace+dataDir should deny all files, got 200")
+	}
+}
+
 func TestFilesAuthMiddleware_ValidFileToken_Passes(t *testing.T) {
 	h, workspace := makeTestFilesHandler(t)
 

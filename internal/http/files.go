@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
@@ -99,6 +101,18 @@ func (h *FilesHandler) auth(next http.HandlerFunc) http.HandlerFunc {
 		if ft := r.URL.Query().Get("ft"); ft != "" {
 			path := "/v1/files/" + r.PathValue("path")
 			if VerifyFileToken(ft, path, FileSigningKey()) {
+				// When RBAC is enabled and a bearer token is also present,
+				// resolve tenant context so handleServe can enforce tenant-scoped
+				// path isolation. Without this, ft= requests bypass the RBAC
+				// tenant boundary check entirely.
+				if edition.Current().RBACEnabled {
+					if bearer := extractBearerToken(r); bearer != "" {
+						if auth := resolveAuthWithBearer(r, bearer); auth.Authenticated {
+							ctx := enrichContext(r.Context(), r, auth)
+							r = r.WithContext(ctx)
+						}
+					}
+				}
 				next(w, r)
 				return
 			}
@@ -121,7 +135,10 @@ func (h *FilesHandler) auth(next http.HandlerFunc) http.HandlerFunc {
 var deniedFilePrefixes = []string{
 	"/etc/", "/proc/", "/sys/", "/dev/",
 	"/root/", "/boot/", "/run/",
-	"/var/run/", "/var/log/",
+	"/var/run/", "/var/log/", "/var/lib/", "/var/www/",
+	"/home/", "/Users/",
+	"/opt/", "/srv/",
+	"/.ssh/", "/.aws/", "/.kube/", "/.gnupg/", "/.config/",
 }
 
 func (h *FilesHandler) handleServe(w http.ResponseWriter, r *http.Request) {
@@ -157,28 +174,21 @@ func (h *FilesHandler) handleServe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Defense-in-depth: validate workspace/dataDir boundary even for signed file tokens.
-	// The token cryptographically binds the URL path, but we also verify the resolved
-	// absolute path stays within allowed directories to limit blast radius of any
-	// bug in the signing flow.
-	if r.URL.Query().Get("ft") != "" {
+	// Path isolation: validate file path is within allowed directories.
+	// Unified check for both ft= and bearer-authenticated requests.
+	// Previously ft= requests only checked workspace/dataDir boundary without
+	// RBAC tenant-scope enforcement, allowing cross-tenant file access.
+	{
+		allowed := false
 		sep := string(filepath.Separator)
-		inWorkspace := h.workspace != "" && (strings.HasPrefix(absPath, h.workspace+sep) || absPath == h.workspace)
-		inDataDir := h.dataDir != "" && (strings.HasPrefix(absPath, h.dataDir+sep) || absPath == h.dataDir)
-		if !inWorkspace && !inDataDir {
-			slog.Warn("security.files_ft_path_denied", "path", absPath, "workspace", h.workspace, "data_dir", h.dataDir)
+
+		// Fail-closed: reject if neither workspace nor dataDir is configured.
+		if h.workspace == "" && h.dataDir == "" {
+			slog.Warn("security.files_no_boundary", "path", absPath)
 			http.NotFound(w, r)
 			return
 		}
-	}
 
-	// Path isolation: validate file path is within allowed directories.
-	if r.URL.Query().Get("ft") == "" {
-		allowed := false
-
-		// Always allow files within workspace root and data dir root.
-		// These are the two top-level directories that contain all user files.
-		sep := string(filepath.Separator)
 		if h.workspace != "" && (strings.HasPrefix(absPath, h.workspace+sep) || absPath == h.workspace) {
 			allowed = true
 		}
@@ -186,14 +196,21 @@ func (h *FilesHandler) handleServe(w http.ResponseWriter, r *http.Request) {
 			allowed = true
 		}
 
-		// Multi-tenant (standard edition): additionally restrict to tenant-scoped subdirectories.
+		// Multi-tenant (standard edition): restrict to tenant-scoped subdirectories.
+		// Applies to ALL requests (bearer AND ft=) when tenant context is available.
+		// For ft= requests the auth middleware injects tenant context from the
+		// bearer token when present; without it the tenant ID is zero and the
+		// check is skipped (the sign endpoint already enforced tenant scope).
 		if allowed && edition.Current().RBACEnabled {
-			tenantData := config.TenantDataDir(h.dataDir, store.TenantIDFromContext(r.Context()), store.TenantSlugFromContext(r.Context()))
-			tenantWs := h.tenantWorkspace(r)
-			if !strings.HasPrefix(absPath, tenantData+sep) &&
-				!strings.HasPrefix(absPath, tenantWs+sep) &&
-				absPath != tenantData && absPath != tenantWs {
-				allowed = false
+			tenantID := store.TenantIDFromContext(r.Context())
+			if tenantID != uuid.Nil {
+				tenantData := config.TenantDataDir(h.dataDir, tenantID, store.TenantSlugFromContext(r.Context()))
+				tenantWs := h.tenantWorkspace(r)
+				if !strings.HasPrefix(absPath, tenantData+sep) &&
+					!strings.HasPrefix(absPath, tenantWs+sep) &&
+					absPath != tenantData && absPath != tenantWs {
+					allowed = false
+				}
 			}
 		}
 
