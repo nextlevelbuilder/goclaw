@@ -23,6 +23,7 @@ type entityRow struct {
 	Confidence  float64         `db:"confidence"`
 	CreatedAt   time.Time       `db:"created_at"`
 	UpdatedAt   time.Time       `db:"updated_at"`
+	EventTime   *time.Time      `db:"event_time"`
 }
 
 // toEntity converts an entityRow to store.Entity, unmarshaling properties and converting timestamps.
@@ -39,6 +40,7 @@ func (r *entityRow) toEntity() store.Entity {
 		Confidence:  r.Confidence,
 		CreatedAt:   r.CreatedAt.UnixMilli(),
 		UpdatedAt:   r.UpdatedAt.UnixMilli(),
+		EventTime:   r.EventTime,
 	}
 	if len(r.Properties) > 0 {
 		_ = json.Unmarshal(r.Properties, &e.Properties)
@@ -53,6 +55,7 @@ type scoredEntityRow struct {
 }
 
 // entityTemporalRow extends entityRow with valid_from/valid_until for temporal queries.
+// EventTime is inherited from entityRow.
 type entityTemporalRow struct {
 	entityRow
 	ValidFrom  *time.Time `db:"valid_from"`

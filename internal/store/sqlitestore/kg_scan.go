@@ -6,14 +6,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // kgUserClause returns a WHERE fragment and args for user scoping.
-// If IsSharedKG is set, returns empty string (no per-user filter).
+// If SharedKGIDs is set, returns "AND user_id IN (?,?,...)" with specific IDs.
+// If IsSharedKG is set (no specific IDs), returns empty string (no per-user filter).
 // Otherwise returns "AND user_id = ?" with the user ID.
 func kgUserClause(ctx context.Context) (string, []any) {
+	if ids := store.SharedKGIDsFromCtx(ctx); len(ids) > 0 {
+		return buildInClause(ids)
+	}
 	if store.IsSharedKG(ctx) {
 		return "", nil
 	}
@@ -27,6 +33,9 @@ func kgUserClause(ctx context.Context) (string, []any) {
 // kgUserClauseFor is like kgUserClause but uses a given userID instead of ctx.
 // Used when the userID is passed explicitly (e.g. interface methods).
 func kgUserClauseFor(ctx context.Context, userID string) (string, []any) {
+	if ids := store.SharedKGIDsFromCtx(ctx); len(ids) > 0 {
+		return buildInClause(ids)
+	}
 	if store.IsSharedKG(ctx) {
 		return "", nil
 	}
@@ -34,6 +43,17 @@ func kgUserClauseFor(ctx context.Context, userID string) (string, []any) {
 		return "", nil
 	}
 	return " AND user_id = ?", []any{userID}
+}
+
+// buildInClause returns " AND user_id IN (?,?,...)" for the given IDs.
+func buildInClause(ids []string) (string, []any) {
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	return " AND user_id IN (" + strings.Join(placeholders, ",") + ")", args
 }
 
 // scanUnixTimestamp converts a SQLite TEXT timestamp to Unix seconds (int64).
@@ -63,18 +83,20 @@ func scanJSONStringMap(data []byte) (map[string]string, error) {
 // scanEntity scans a database row into a store.Entity.
 // Column order: id, agent_id, user_id, external_id, name, entity_type, description,
 //
-//	properties, source_id, confidence, created_at, updated_at
+//	properties, source_id, confidence, created_at, updated_at, event_time
 func scanEntity(rows interface {
 	Scan(dest ...any) error
 }) (store.Entity, error) {
 	var e store.Entity
 	var props []byte
 	var createdAt, updatedAt any
+	var eventTime nullSqliteTime
 	err := rows.Scan(
 		&e.ID, &e.AgentID, &e.UserID, &e.ExternalID,
 		&e.Name, &e.EntityType, &e.Description,
 		&props, &e.SourceID, &e.Confidence,
 		&createdAt, &updatedAt,
+		&eventTime,
 	)
 	if err != nil {
 		return e, err
@@ -85,26 +107,31 @@ func scanEntity(rows interface {
 		p, _ := scanJSONStringMap(props)
 		e.Properties = p
 	}
+	if eventTime.Valid {
+		t := eventTime.Time
+		e.EventTime = &t
+	}
 	return e, nil
 }
 
 // scanEntityTemporal scans a database row into a store.Entity including temporal fields.
 // Column order: id, agent_id, user_id, external_id, name, entity_type, description,
 //
-//	properties, source_id, confidence, created_at, updated_at, valid_from, valid_until
+//	properties, source_id, confidence, created_at, updated_at, valid_from, valid_until, event_time
 func scanEntityTemporal(rows interface {
 	Scan(dest ...any) error
 }) (store.Entity, error) {
 	var e store.Entity
 	var props []byte
 	var createdAt, updatedAt any
-	var validFrom, validUntil nullSqliteTime
+	var validFrom, validUntil, eventTime nullSqliteTime
 	err := rows.Scan(
 		&e.ID, &e.AgentID, &e.UserID, &e.ExternalID,
 		&e.Name, &e.EntityType, &e.Description,
 		&props, &e.SourceID, &e.Confidence,
 		&createdAt, &updatedAt,
 		&validFrom, &validUntil,
+		&eventTime,
 	)
 	if err != nil {
 		return e, err
@@ -122,6 +149,10 @@ func scanEntityTemporal(rows interface {
 	if validUntil.Valid {
 		t := validUntil.Time
 		e.ValidUntil = &t
+	}
+	if eventTime.Valid {
+		t := eventTime.Time
+		e.EventTime = &t
 	}
 	return e, nil
 }
@@ -150,4 +181,13 @@ func scanRelation(rows interface {
 		r.Properties = p
 	}
 	return r, nil
+}
+
+// formatSqliteTime formats a *time.Time as RFC3339Nano for SQLite TEXT columns.
+// Returns nil if the time is nil (so SQLite stores NULL).
+func formatSqliteTime(t *time.Time) any {
+	if t == nil {
+		return nil
+	}
+	return t.UTC().Format(time.RFC3339Nano)
 }

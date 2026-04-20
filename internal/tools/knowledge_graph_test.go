@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -129,6 +130,10 @@ func (m *mockKGStore) ListEntitiesTemporal(_ context.Context, _, _ string, _ sto
 func (m *mockKGStore) SupersedeEntity(_ context.Context, _ *store.Entity, _ *store.Entity) error {
 	return nil
 }
+func (m *mockKGStore) SearchEntitiesByEventTime(_ context.Context, _, _ string, _, _ *time.Time, _ int) ([]store.Entity, error) {
+	return nil, nil
+}
+func (m *mockKGStore) ClearAll(context.Context, string, string) (int, error) { return 0, nil }
 
 // ── test helpers ───────────────────────────────────────────────────
 

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -31,7 +32,6 @@ func (s *PGKnowledgeGraphStore) DedupAfterExtraction(ctx context.Context, agentI
 	if err != nil {
 		return 0, 0, fmt.Errorf("kg dedup after extraction: %w", err)
 	}
-	shared := store.IsSharedKG(ctx)
 	var merged, flagged int
 
 	for _, eid := range newEntityIDs {
@@ -61,7 +61,7 @@ func (s *PGKnowledgeGraphStore) DedupAfterExtraction(ctx context.Context, agentI
 		}
 
 		// KNN: find top-3 nearest existing entities of same type (exclude self)
-		neighbors, err := s.knnNeighbors(ctx, aid, userID, entityID, entityType, *embeddingStr, shared, 3)
+		neighbors, err := s.knnNeighbors(ctx, aid, userID, entityID, entityType, *embeddingStr, 3)
 		if err != nil {
 			slog.Warn("kg.dedup: knn query failed", "entity_id", eid, "error", err)
 			continue
@@ -105,14 +105,15 @@ type knnNeighbor struct {
 
 // knnNeighbors finds the top-K nearest entities of the same type using HNSW index.
 // embeddingStr is the PG vector text format (e.g. "[0.1,0.2,...]").
-func (s *PGKnowledgeGraphStore) knnNeighbors(ctx context.Context, agentID uuid.UUID, userID string, excludeID uuid.UUID, entityType, embeddingStr string, shared bool, limit int) ([]knnNeighbor, error) {
+func (s *PGKnowledgeGraphStore) knnNeighbors(ctx context.Context, agentID uuid.UUID, userID string, excludeID uuid.UUID, entityType, embeddingStr string, limit int) ([]knnNeighbor, error) {
 	where := "agent_id = $1 AND entity_type = $2 AND id != $3 AND embedding IS NOT NULL"
 	args := []any{agentID, entityType, excludeID}
 	idx := 4
-	if !shared && userID != "" {
-		where += fmt.Sprintf(" AND user_id = $%d", idx)
-		args = append(args, userID)
-		idx++
+	userWhere, userArgs := kgUserWhere(ctx, userID, idx)
+	if userWhere != "" {
+		where += userWhere
+		args = append(args, userArgs...)
+		idx += len(userArgs)
 	}
 	tc, tcArgs, _, err := scopeClause(ctx, idx)
 	if err != nil {
@@ -181,16 +182,15 @@ func (s *PGKnowledgeGraphStore) ScanDuplicates(ctx context.Context, agentID, use
 		limit = 100
 	}
 
-	shared := store.IsSharedKG(ctx)
-
 	where := "a.agent_id = $1"
 	args := []any{aid}
 	idx := 2
 
-	if !shared && userID != "" {
-		where += fmt.Sprintf(" AND a.user_id = $%d", idx)
-		args = append(args, userID)
-		idx++
+	userWhere, userArgs := kgUserWhere(ctx, userID, idx)
+	if userWhere != "" {
+		where += strings.Replace(userWhere, "user_id", "a.user_id", 1)
+		args = append(args, userArgs...)
+		idx += len(userArgs)
 	}
 	tc, tcArgs, _, err := scopeClauseAlias(ctx, idx, "a")
 	if err != nil {
@@ -289,27 +289,16 @@ func (s *PGKnowledgeGraphStore) MergeEntities(ctx context.Context, agentID, user
 	}
 
 	// Verify both entities exist and belong to the same agent + tenant scope.
-	// When userID is empty, skip user_id filter (admin/shared view).
-	shared := store.IsSharedKG(ctx) || userID == ""
 	for _, eid := range []uuid.UUID{tid, sid} {
 		var exists bool
-		var q string
-		var args []any
-		if shared {
-			tc, tcArgs, _, err := scopeClause(ctx, 3)
-			if err != nil {
-				return err
-			}
-			q = `SELECT EXISTS(SELECT 1 FROM kg_entities WHERE id = $1 AND agent_id = $2` + tc + `)`
-			args = append([]any{eid, aid}, tcArgs...)
-		} else {
-			tc, tcArgs, _, err := scopeClause(ctx, 4)
-			if err != nil {
-				return err
-			}
-			q = `SELECT EXISTS(SELECT 1 FROM kg_entities WHERE id = $1 AND agent_id = $2 AND user_id = $3` + tc + `)`
-			args = append([]any{eid, aid, userID}, tcArgs...)
+		userWhere, userArgs := kgUserWhere(ctx, userID, 3)
+		args := append([]any{eid, aid}, userArgs...)
+		tc, tcArgs, _, err := scopeClause(ctx, 3+len(userArgs))
+		if err != nil {
+			return err
 		}
+		args = append(args, tcArgs...)
+		q := `SELECT EXISTS(SELECT 1 FROM kg_entities WHERE id = $1 AND agent_id = $2` + userWhere + tc + `)`
 		if err := tx.QueryRowContext(ctx, q, args...).Scan(&exists); err != nil {
 			return fmt.Errorf("kg.merge: entity check failed: %w", err)
 		}
@@ -382,10 +371,11 @@ func (s *PGKnowledgeGraphStore) ListDedupCandidates(ctx context.Context, agentID
 	where := "c.agent_id = $1 AND c.status = 'pending'"
 	args := []any{aid}
 	idx := 2
-	if !store.IsSharedKG(ctx) && userID != "" {
-		where += fmt.Sprintf(" AND c.user_id = $%d", idx)
-		args = append(args, userID)
-		idx++
+	userWhere, userArgs := kgUserWhere(ctx, userID, idx)
+	if userWhere != "" {
+		where += strings.Replace(userWhere, "user_id", "c.user_id", 1)
+		args = append(args, userArgs...)
+		idx += len(userArgs)
 	}
 	tc, tcArgs, _, err := scopeClauseAlias(ctx, idx, "c")
 	if err != nil {

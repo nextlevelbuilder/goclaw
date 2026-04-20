@@ -141,6 +141,13 @@ func (e *Extractor) extractChunk(ctx context.Context, text string) (*ExtractionR
 			ent.ExternalID = strings.ToLower(strings.TrimSpace(ent.ExternalID))
 			ent.Name = strings.TrimSpace(ent.Name)
 			ent.EntityType = strings.ToLower(strings.TrimSpace(ent.EntityType))
+			// Parse RawEventTime (any type from LLM JSON) into EventTime.
+			if ent.EventTime == nil && ent.RawEventTime != nil {
+				if s, ok := ent.RawEventTime.(string); ok {
+					ent.EventTime = store.ParseFlexibleTime(s)
+				}
+			}
+			ent.RawEventTime = nil
 			filtered.Entities = append(filtered.Entities, ent)
 		}
 	}

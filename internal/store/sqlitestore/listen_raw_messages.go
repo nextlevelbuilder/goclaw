@@ -46,7 +46,7 @@ func (s *SQLiteListenRawMessageStore) AppendBatch(ctx context.Context, msgs []st
 
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO listen_raw_messages (id, channel_name, chat_id, chat_name, graph_id, sender, sender_id, body, msg_timestamp, agent_id, created_at, tenant_id)
-		 VALUES `+strings.Join(placeholders, ","),
+			 VALUES `+strings.Join(placeholders, ","),
 		args...,
 	)
 	return err
@@ -60,10 +60,10 @@ func (s *SQLiteListenRawMessageStore) ListPending(ctx context.Context, agentID, 
 	args := append([]any{agentID, graphID, maxRows}, tArgs...)
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, channel_name, chat_id, chat_name, graph_id, sender, sender_id, body, msg_timestamp, agent_id, created_at, processed_at
-		 FROM listen_raw_messages
-		 WHERE agent_id = ? AND graph_id = ? AND processed_at IS NULL`+tClause+`
-		 ORDER BY msg_timestamp DESC
-		 LIMIT ?`,
+			 FROM listen_raw_messages
+			 WHERE agent_id = ? AND graph_id = ? AND processed_at IS NULL`+tClause+`
+			 ORDER BY msg_timestamp DESC
+			 LIMIT ?`,
 		args...,
 	)
 	if err != nil {
@@ -143,6 +143,36 @@ func (s *SQLiteListenRawMessageStore) ListPendingGroups(ctx context.Context) ([]
 	return result, rows.Err()
 }
 
+func (s *SQLiteListenRawMessageStore) ResetProcessed(ctx context.Context, agentID, graphID string) (int64, error) {
+	var conditions []string
+	var args []any
+
+	if agentID != "" {
+		conditions = append(conditions, "agent_id = ?")
+		args = append(args, agentID)
+	}
+	if graphID != "" {
+		conditions = append(conditions, "graph_id = ?")
+		args = append(args, graphID)
+	}
+	conditions = append(conditions, "processed_at IS NOT NULL")
+
+	tClause, tArgs, err := scopeClause(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	where := strings.Join(conditions, " AND ")
+	q := `UPDATE listen_raw_messages SET processed_at = NULL WHERE ` + where + tClause
+	args = append(args, tArgs...)
+
+	res, err := s.db.ExecContext(ctx, q, args...)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 func (s *SQLiteListenRawMessageStore) List(ctx context.Context, opts store.ListenRawMessageListOpts) ([]store.ListenRawMessage, int, error) {
 	tClause, tArgs, err := scopeClause(ctx)
 	if err != nil {
@@ -163,6 +193,10 @@ func (s *SQLiteListenRawMessageStore) List(ctx context.Context, opts store.Liste
 	if opts.AgentID != "" {
 		conditions = append(conditions, "agent_id = ?")
 		args = append(args, opts.AgentID)
+	}
+	if opts.GraphID != "" {
+		conditions = append(conditions, "graph_id = ?")
+		args = append(args, opts.GraphID)
 	}
 	if opts.Processed != nil {
 		if *opts.Processed {
@@ -203,9 +237,9 @@ func (s *SQLiteListenRawMessageStore) List(ctx context.Context, opts store.Liste
 
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, channel_name, chat_id, chat_name, graph_id, sender, sender_id, body, msg_timestamp, agent_id, created_at, processed_at
-		 FROM listen_raw_messages WHERE 1=1`+tClause+whereClause+`
-		 ORDER BY created_at DESC
-		 LIMIT ? OFFSET ?`,
+			 FROM listen_raw_messages WHERE 1=1`+tClause+whereClause+`
+			 ORDER BY created_at DESC
+			 LIMIT ? OFFSET ?`,
 		pageArgs...,
 	)
 	if err != nil {

@@ -10,7 +10,8 @@ Output valid JSON with this schema:
       "name": "Display Name",
       "entity_type": "person|organization|project|product|technology|task|event|document|concept|location",
       "description": "Brief description of the entity",
-      "confidence": 0.0-1.0
+      "confidence": 0.0-1.0,
+      "event_time": "ISO 8601 timestamp of when the event occurred (optional, only for entity_type='event')"
     }
   ],
   "relations": [
@@ -68,6 +69,7 @@ Choosing between similar types:
 - Skip generic/vague entities ("the system", "the team" without specific name)
 - Do NOT use related_to as a default — if you cannot determine a specific relation, omit it
 - Output ONLY the JSON object, no markdown, no code blocks
+- For event-type entities, include event_time as ISO 8601 if the text provides a clear time reference. Omit for other entity types.
 
 ## Example
 

@@ -2,8 +2,37 @@ package store
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 )
+
+// ParseFlexibleTime attempts to parse a datetime string using multiple common
+// formats. Returns nil if no format matches. Used for LLM-extracted timestamps.
+func ParseFlexibleTime(s string) *time.Time {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	for _, layout := range flexibleLayouts {
+		if t, err := time.Parse(layout, s); err == nil {
+			utc := t.UTC()
+			return &utc
+		}
+	}
+	return nil
+}
+
+var flexibleLayouts = []string{
+	time.RFC3339Nano,
+	time.RFC3339,
+	"2006-01-02T15:04:05Z07:00",
+	"2006-01-02T15:04:05",
+	"2006-01-02 15:04:05 -0700",
+	"2006-01-02 15:04:05",
+	"2006-01-02",
+}
 
 // Entity represents a node in the knowledge graph.
 type Entity struct {
@@ -21,6 +50,34 @@ type Entity struct {
 	UpdatedAt   int64             `json:"updated_at" db:"updated_at"`
 	ValidFrom   *time.Time        `json:"valid_from,omitempty" db:"valid_from"`
 	ValidUntil  *time.Time        `json:"valid_until,omitempty" db:"valid_until"`
+	EventTime   *time.Time        `json:"-" db:"event_time"`
+	// RawEventTime captures the LLM's event_time field for flexible parsing.
+	RawEventTime any `json:"event_time,omitempty" db:"-"`
+}
+
+// UnmarshalJSON implements custom JSON unmarshaling for Entity.
+// Handles cases where LLM returns non-string values in properties (numbers, bools).
+func (e *Entity) UnmarshalJSON(b []byte) error {
+	type Alias Entity
+	aux := &struct {
+		Properties json.RawMessage `json:"properties,omitempty"`
+		*Alias
+	}{
+		Alias: (*Alias)(e),
+	}
+	if err := json.Unmarshal(b, aux); err != nil {
+		return err
+	}
+	if len(aux.Properties) > 0 {
+		var raw map[string]any
+		if err := json.Unmarshal(aux.Properties, &raw); err == nil {
+			e.Properties = make(map[string]string, len(raw))
+			for k, v := range raw {
+				e.Properties[k] = fmt.Sprintf("%v", v)
+			}
+		}
+	}
+	return nil
 }
 
 // Relation represents an edge between two entities.
@@ -78,6 +135,9 @@ type KnowledgeGraphStore interface {
 	DeleteEntity(ctx context.Context, agentID, userID, entityID string) error
 	ListEntities(ctx context.Context, agentID, userID string, opts EntityListOptions) ([]Entity, error)
 	SearchEntities(ctx context.Context, agentID, userID, query string, limit int) ([]Entity, error)
+	// SearchEntitiesByEventTime returns entities whose event_time falls within [fromTime, toTime].
+	// Either bound may be nil for open-ended ranges. Only returns entities with non-NULL event_time.
+	SearchEntitiesByEventTime(ctx context.Context, agentID, userID string, fromTime, toTime *time.Time, limit int) ([]Entity, error)
 
 	UpsertRelation(ctx context.Context, relation *Relation) error
 	DeleteRelation(ctx context.Context, agentID, userID, relationID string) error
@@ -107,6 +167,11 @@ type KnowledgeGraphStore interface {
 	DismissCandidate(ctx context.Context, agentID, candidateID string) error
 
 	Stats(ctx context.Context, agentID, userID string) (*GraphStats, error)
+
+	// ClearAll deletes all KG data (entities, relations, dedup candidates) for an agent.
+	// If userID is non-empty, only clears data for that user scope.
+	// Returns the total number of entities deleted.
+	ClearAll(ctx context.Context, agentID, userID string) (int, error)
 
 	// Temporal queries (v3)
 	ListEntitiesTemporal(ctx context.Context, agentID, userID string, opts EntityListOptions, temporal TemporalQueryOptions) ([]Entity, error)

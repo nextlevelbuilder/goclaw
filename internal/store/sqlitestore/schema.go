@@ -16,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 19
+const SchemaVersion = 20
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -461,6 +461,10 @@ CREATE INDEX IF NOT EXISTS idx_listen_raw_tenant ON listen_raw_messages(tenant_i
 
 	// Version 18 → 19: add system_prompt_preview to spans for debugging full system prompt.
 	18: `ALTER TABLE spans ADD COLUMN system_prompt_preview TEXT;`,
+
+	// Version 19 → 20: add event_time to kg_entities for temporal event correlation.
+	19: `ALTER TABLE kg_entities ADD COLUMN event_time TEXT;
+CREATE INDEX IF NOT EXISTS idx_kg_entities_event_time ON kg_entities(agent_id, user_id, event_time) WHERE event_time IS NOT NULL;`,
 }
 
 // backfillV16 populates base_name / path_basename for rows that existed

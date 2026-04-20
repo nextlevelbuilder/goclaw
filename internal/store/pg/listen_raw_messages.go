@@ -47,7 +47,7 @@ func (s *PGListenRawMessageStore) AppendBatch(ctx context.Context, msgs []store.
 
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO listen_raw_messages (id, channel_name, chat_id, chat_name, graph_id, sender, sender_id, body, msg_timestamp, agent_id, created_at, tenant_id)
-		 VALUES `+strings.Join(placeholders, ","),
+			 VALUES `+strings.Join(placeholders, ","),
 		args...,
 	)
 	return err
@@ -61,10 +61,10 @@ func (s *PGListenRawMessageStore) ListPending(ctx context.Context, agentID, grap
 	var result []store.ListenRawMessage
 	err = pkgSqlxDB.SelectContext(ctx, &result,
 		`SELECT id, channel_name, chat_id, chat_name, graph_id, sender, sender_id, body, msg_timestamp, agent_id, created_at, processed_at
-		 FROM listen_raw_messages
-		 WHERE agent_id = $1 AND graph_id = $2 AND processed_at IS NULL`+tClause+`
-		 ORDER BY msg_timestamp DESC
-		 LIMIT $3`,
+			 FROM listen_raw_messages
+			 WHERE agent_id = $1 AND graph_id = $2 AND processed_at IS NULL`+tClause+`
+			 ORDER BY msg_timestamp DESC
+			 LIMIT $3`,
 		append([]any{agentID, graphID, maxRows}, tArgs...)...,
 	)
 	return result, err
@@ -101,6 +101,39 @@ func (s *PGListenRawMessageStore) ListPendingGroups(ctx context.Context) ([]stor
 	return result, err
 }
 
+func (s *PGListenRawMessageStore) ResetProcessed(ctx context.Context, agentID, graphID string) (int64, error) {
+	var conditions []string
+	var args []any
+	idx := 1
+
+	if agentID != "" {
+		conditions = append(conditions, fmt.Sprintf("agent_id = $%d", idx))
+		args = append(args, agentID)
+		idx++
+	}
+	if graphID != "" {
+		conditions = append(conditions, fmt.Sprintf("graph_id = $%d", idx))
+		args = append(args, graphID)
+		idx++
+	}
+	conditions = append(conditions, "processed_at IS NOT NULL")
+
+	tClause, tArgs, _, err := scopeClause(ctx, idx)
+	if err != nil {
+		return 0, err
+	}
+
+	where := strings.Join(conditions, " AND ")
+	q := `UPDATE listen_raw_messages SET processed_at = NULL WHERE ` + where + tClause
+	args = append(args, tArgs...)
+
+	res, err := s.db.ExecContext(ctx, q, args...)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 func (s *PGListenRawMessageStore) List(ctx context.Context, opts store.ListenRawMessageListOpts) ([]store.ListenRawMessage, int, error) {
 	tClause, tArgs, _, err := scopeClause(ctx, 1)
 	if err != nil {
@@ -134,6 +167,12 @@ func (s *PGListenRawMessageStore) List(ctx context.Context, opts store.ListenRaw
 		where = append(where, fmt.Sprintf("agent_id = $%d", paramIdx))
 		whereM = append(whereM, fmt.Sprintf("m.agent_id = $%d", paramIdx))
 		args = append(args, opts.AgentID)
+		paramIdx++
+	}
+	if opts.GraphID != "" {
+		where = append(where, fmt.Sprintf("graph_id = $%d", paramIdx))
+		whereM = append(whereM, fmt.Sprintf("m.graph_id = $%d", paramIdx))
+		args = append(args, opts.GraphID)
 		paramIdx++
 	}
 	if opts.Processed != nil {
@@ -182,12 +221,12 @@ func (s *PGListenRawMessageStore) List(ctx context.Context, opts store.ListenRaw
 	var result []store.ListenRawMessage
 	err = pkgSqlxDB.SelectContext(ctx, &result,
 		`SELECT m.id, m.channel_name, m.chat_id, m.chat_name, m.graph_id, m.sender, m.sender_id, m.body, m.msg_timestamp, m.agent_id, m.created_at, m.processed_at,
-		        COALESCE(a.display_name, a.agent_key, '') AS agent_name
-		 FROM listen_raw_messages m
-		 LEFT JOIN agents a ON a.id = m.agent_id
-		 WHERE 1=1`+tmClause+whereMClause+`
-		 ORDER BY m.created_at DESC
-		 LIMIT $`+fmt.Sprintf("%d", paramIdx)+` OFFSET $`+fmt.Sprintf("%d", paramIdx+1),
+			        COALESCE(a.display_name, a.agent_key, '') AS agent_name
+			 FROM listen_raw_messages m
+			 LEFT JOIN agents a ON a.id = m.agent_id
+			 WHERE 1=1`+tmClause+whereMClause+`
+			 ORDER BY m.created_at DESC
+			 LIMIT $`+fmt.Sprintf("%d", paramIdx)+` OFFSET $`+fmt.Sprintf("%d", paramIdx+1),
 		pageArgs...,
 	)
 	return result, total, err

@@ -35,10 +35,10 @@ func (s *PGKGGraphStore) ListKGGraphNodes(ctx context.Context, agentID, userID s
 	args := []any{aid, tid}
 	p := 3
 
-	if !store.IsSharedKG(ctx) && userID != "" {
-		q += fmt.Sprintf(" AND user_id = $%d", p)
-		args = append(args, userID)
-		p++
+	if userWhere, userArgs := kgUserWhere(ctx, userID, p); userWhere != "" {
+		q += userWhere
+		args = append(args, userArgs...)
+		p += len(userArgs)
 	}
 
 	q += " ORDER BY updated_at DESC"
@@ -82,10 +82,10 @@ func (s *PGKGGraphStore) ListKGGraphEdges(ctx context.Context, agentID, userID s
 	args := []any{aid, tid}
 	p := 3
 
-	if !store.IsSharedKG(ctx) && userID != "" {
-		q += fmt.Sprintf(" AND user_id = $%d", p)
-		args = append(args, userID)
-		p++
+	if userWhere, userArgs := kgUserWhere(ctx, userID, p); userWhere != "" {
+		q += userWhere
+		args = append(args, userArgs...)
+		p += len(userArgs)
 	}
 
 	q += fmt.Sprintf(" LIMIT $%d", p)

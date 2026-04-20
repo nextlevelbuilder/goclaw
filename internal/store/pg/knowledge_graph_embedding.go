@@ -59,7 +59,7 @@ func (s *PGKnowledgeGraphStore) BackfillKGEmbeddings(ctx context.Context) (int, 
 			break
 		}
 
-		slog.Info("backfilling KG entity embeddings", "batch", len(pending), "total_so_far", total)
+		slog.Debug("backfilling KG entity embeddings", "batch", len(pending), "total_so_far", total)
 
 		texts := make([]string, len(pending))
 		for i, p := range pending {

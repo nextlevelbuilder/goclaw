@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Shield, X, AlertTriangle, Plus, Brain } from "lucide-react";
@@ -10,6 +11,18 @@ import { UserPickerCombobox } from "@/components/shared/user-picker-combobox";
 import { useContactResolver } from "@/hooks/use-contact-resolver";
 import { formatUserLabel } from "@/lib/format-user-label";
 import { InfoLabel } from "./config-section";
+
+/** Convert comma-or-semicolon-separated string to string array, or undefined if empty. */
+function kgIdsToArray(s: string): string[] | undefined {
+  const trimmed = s.trim();
+  if (!trimmed) return undefined;
+  return trimmed.split(/[,;]/).map((t) => t.trim()).filter(Boolean);
+}
+
+/** Convert string array to comma-separated display string. */
+function arrayToKgIds(arr?: string[]): string {
+  return arr?.join(", ") ?? "";
+}
 
 const MAX_SHARED_USERS = 100;
 
@@ -22,6 +35,15 @@ export function WorkspaceSharingSection({ value, onChange }: WorkspaceSharingSec
   const { t } = useTranslation("agents");
   const s = "configSections.workspaceSharing";
   const [contactSearch, setContactSearch] = useState("");
+  const [kgIdsInput, setKgIdsInput] = useState(() => arrayToKgIds(value.shared_kg_ids));
+  // Track the serialized form to detect external changes (e.g. dialog re-open)
+  const [kgIdsSerial, setKgIdsSerial] = useState(() => JSON.stringify(value.shared_kg_ids));
+
+  // Re-sync local state only when the parent value changes externally (not from our own typing)
+  if (JSON.stringify(value.shared_kg_ids) !== kgIdsSerial) {
+    setKgIdsSerial(JSON.stringify(value.shared_kg_ids));
+    setKgIdsInput(arrayToKgIds(value.shared_kg_ids));
+  }
 
   const existingUsers = value.shared_users ?? [];
   const { resolve } = useContactResolver(existingUsers);
@@ -81,9 +103,27 @@ export function WorkspaceSharingSection({ value, onChange }: WorkspaceSharingSec
               />
             </div>
             {value.share_knowledge_graph && (
-              <p className="mt-2 text-xs text-orange-600 dark:text-orange-400">
-                {t(`${s}.shareKGNote`)}
-              </p>
+              <>
+                <p className="mt-2 text-xs text-orange-600 dark:text-orange-400">
+                  {t(`${s}.shareKGNote`)}
+                </p>
+                <div className="mt-3 space-y-1">
+                  <InfoLabel tip={t(`${s}.sharedKGIDsTip`)}>{t(`${s}.sharedKGIDs`)}</InfoLabel>
+                  <Input
+                    value={kgIdsInput}
+                    onChange={(e) => {
+                      setKgIdsInput(e.target.value);
+                      const ids = kgIdsToArray(e.target.value);
+                      onChange({ ...value, shared_kg_ids: ids });
+                    }}
+                    placeholder={t(`${s}.sharedKGIDsPlaceholder`)}
+                    className="font-mono text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t(`${s}.sharedKGIDsHint`)}
+                  </p>
+                </div>
+              </>
             )}
           </div>
 

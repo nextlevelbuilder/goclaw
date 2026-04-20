@@ -17,7 +17,7 @@ import (
 
 const (
 	defaultExtractPollSec = 30
-	extractBatchSize      = 50
+	extractBatchSize      = 20
 )
 
 // ExtractionWorkerDeps bundles dependencies for the listen-only KG extraction worker.
@@ -138,6 +138,19 @@ func processGroupBatch(ctx context.Context, deps ExtractionWorkerDeps, agentID, 
 		result.Relations[i].AgentID = agentID
 		result.Relations[i].UserID = graphID
 		result.Relations[i].ValidFrom = &now
+	}
+
+	// Fallback: for event entities without extracted event_time, derive from message batch.
+	for i := range result.Entities {
+		if result.Entities[i].EntityType == "event" && result.Entities[i].EventTime == nil && len(msgs) > 0 {
+			earliest := msgs[0].MsgTimestamp
+			for _, m := range msgs[1:] {
+				if m.MsgTimestamp.Before(earliest) {
+					earliest = m.MsgTimestamp
+				}
+			}
+			result.Entities[i].EventTime = &earliest
+		}
 	}
 
 	// Ingest into KG store.

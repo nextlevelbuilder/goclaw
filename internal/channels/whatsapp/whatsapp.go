@@ -55,11 +55,19 @@ type Channel struct {
 
 	// reauthMu serializes Reauth() and StartQRFlow() to prevent race when user clicks reauth rapidly.
 	reauthMu sync.Mutex
+
+	// reconnectMu guards the reconnect watchdog goroutine.
+	reconnectMu     sync.Mutex
+	reconnectCancel context.CancelFunc
 	// pairingService, pairingDebounce, approvedGroups, groupHistory are inherited from channels.BaseChannel.
 
 	// listenBuf accumulates messages for KG extraction in listen-only mode (nil if not configured).
 	listenBuf *ListenBuffer
 	agentUUID string // agent UUID for KG scoping (set via SetAgentUUID)
+
+	// captionBuf delays media messages briefly to merge follow-up caption text.
+	// Nil when media_caption_delay_ms is -1 (disabled).
+	captionBuf *MediaCaptionBuffer
 
 	// groupAgentUUIDs maps chatID → agent UUID for groups with agent_id overrides.
 	// Used by listen buffer to store raw messages with the correct agent scope.
@@ -138,6 +146,18 @@ func New(cfg config.WhatsAppConfig, msgBus *bus.MessageBus,
 			"groups_count", len(cfg.Groups))
 	}
 
+	// Media caption buffer: disabled by default. The gateway-level InboundDebouncer
+	// handles media+caption merging. Set media_caption_delay_ms > 0 to enable
+	// an additional WhatsApp-specific buffer for longer merge windows.
+	if cfg.MediaCaptionDelayMs > 0 {
+		ch.captionBuf = NewMediaCaptionBuffer(
+			time.Duration(cfg.MediaCaptionDelayMs)*time.Millisecond,
+			ch.publishBufferedMessage,
+			scheduleMediaCleanup,
+		)
+		slog.Info("whatsapp: media caption buffer initialized", "delay_ms", cfg.MediaCaptionDelayMs)
+	}
+
 	ch.SetPairingService(pairingSvc)
 	ch.SetGroupHistory(channels.MakeHistory("whatsapp", pendingStore, base.TenantID()))
 	return ch, nil
@@ -179,9 +199,16 @@ func (c *Channel) Start(ctx context.Context) error {
 // BlockReplyEnabled returns the per-channel block_reply override (nil = inherit gateway default).
 func (c *Channel) BlockReplyEnabled() *bool { return c.config.BlockReply }
 
+// publishBufferedMessage is the flush callback for the media caption buffer.
+func (c *Channel) publishBufferedMessage(msg bus.InboundMessage) {
+	c.Bus().PublishInbound(msg)
+}
+
 // Stop gracefully shuts down the WhatsApp channel.
 func (c *Channel) Stop(_ context.Context) error {
 	slog.Info("stopping whatsapp channel")
+
+	c.stopReconnectWatchdog()
 
 	if c.cancel != nil {
 		c.cancel()
@@ -193,6 +220,11 @@ func (c *Channel) Stop(_ context.Context) error {
 	// Flush pending listen-only messages before shutdown.
 	if c.listenBuf != nil {
 		c.listenBuf.Close()
+	}
+
+	// Flush pending caption-buffered media messages before shutdown.
+	if c.captionBuf != nil {
+		c.captionBuf.FlushAll()
 	}
 
 	// Cancel all active typing goroutines.
@@ -222,11 +254,32 @@ func (c *Channel) handleEvent(evt any) {
 		c.handleLoggedOut(v)
 	case *events.PairSuccess:
 		slog.Info("whatsapp: pair success", "channel", c.Name())
+	case *events.StreamError:
+		slog.Warn("whatsapp: stream error", "code", v.Code, "channel", c.Name())
+		c.MarkDegraded("WhatsApp stream error", fmt.Sprintf("Code: %s", v.Code),
+			channels.ChannelFailureKindNetwork, true)
+		c.startReconnectWatchdog()
+	case *events.StreamReplaced:
+		slog.Warn("whatsapp: session replaced by another client", "channel", c.Name())
+		c.MarkDegraded("WhatsApp session replaced", "Another client connected",
+			channels.ChannelFailureKindAuth, false)
+	case *events.KeepAliveTimeout:
+		slog.Debug("whatsapp: keepalive timeout", "error_count", v.ErrorCount,
+			"channel", c.Name())
+	case *events.KeepAliveRestored:
+		slog.Info("whatsapp: keepalive restored", "channel", c.Name())
+	case *events.CATRefreshError:
+		slog.Warn("whatsapp: CAT refresh error", "error", v.Error, "channel", c.Name())
+		c.MarkDegraded("WhatsApp CAT refresh failed", v.Error.Error(),
+			channels.ChannelFailureKindNetwork, true)
+		c.startReconnectWatchdog()
 	}
 }
 
 // handleConnected processes the Connected event.
 func (c *Channel) handleConnected() {
+	c.stopReconnectWatchdog()
+
 	c.lastQRMu.Lock()
 	c.waAuthenticated = true
 	c.lastQRB64 = ""
@@ -249,7 +302,8 @@ func (c *Channel) handleDisconnected() {
 
 	c.MarkDegraded("WhatsApp disconnected", "Waiting for reconnect",
 		channels.ChannelFailureKindNetwork, true)
-	// whatsmeow auto-reconnects — no manual reconnect loop needed.
+	// Start safety-net watchdog in case whatsmeow's auto-reconnect fails.
+	c.startReconnectWatchdog()
 }
 
 // handleLoggedOut processes the LoggedOut event.
@@ -261,6 +315,97 @@ func (c *Channel) handleLoggedOut(evt *events.LoggedOut) {
 
 	c.MarkDegraded("WhatsApp logged out", "Re-scan QR to reconnect",
 		channels.ChannelFailureKindAuth, false)
+}
+
+// startReconnectWatchdog starts a background goroutine that periodically
+// attempts to reconnect the WhatsApp client with exponential backoff.
+// Idempotent: if a watchdog is already running, this is a no-op.
+func (c *Channel) startReconnectWatchdog() {
+	c.reconnectMu.Lock()
+	defer c.reconnectMu.Unlock()
+
+	// Already running — skip.
+	if c.reconnectCancel != nil {
+		return
+	}
+
+	parentCtx := c.parentCtx
+	if parentCtx == nil {
+		parentCtx = context.Background()
+	}
+
+	ctx, cancel := context.WithCancel(parentCtx)
+	c.reconnectCancel = cancel
+
+	go func() {
+		defer func() {
+			c.reconnectMu.Lock()
+			c.reconnectCancel = nil
+			c.reconnectMu.Unlock()
+		}()
+
+		const maxAttempts = 5
+		const maxBackoff = 60 * time.Second
+
+		for attempt := 0; attempt < maxAttempts; attempt++ {
+			backoff := time.Duration(attempt+1) * 5 * time.Second
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
+
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(backoff):
+			}
+
+			// Already reconnected (e.g., by whatsmeow's own auto-reconnect)?
+			if c.client != nil && c.client.IsConnected() {
+				slog.Info("whatsapp: reconnect watchdog detected connection restored",
+					"channel", c.Name())
+				return
+			}
+
+			if c.client == nil {
+				slog.Warn("whatsapp: reconnect watchdog: client is nil, giving up",
+					"channel", c.Name())
+				c.MarkFailed("WhatsApp reconnect failed", "Client not initialized",
+					channels.ChannelFailureKindNetwork, false)
+				return
+			}
+
+			slog.Info("whatsapp: reconnect watchdog attempting connect",
+				"channel", c.Name(), "attempt", attempt+1, "max", maxAttempts)
+
+			if err := c.client.Connect(); err != nil {
+				slog.Warn("whatsapp: reconnect watchdog connect failed",
+					"channel", c.Name(), "attempt", attempt+1, "error", err)
+				continue
+			}
+
+			// Connect succeeded — handleConnected will fire via the event handler.
+			slog.Info("whatsapp: reconnect watchdog connected",
+				"channel", c.Name(), "attempt", attempt+1)
+			return
+		}
+
+		// Exhausted all attempts.
+		slog.Warn("whatsapp: reconnect watchdog exhausted retries",
+			"channel", c.Name(), "attempts", maxAttempts)
+		c.MarkFailed("WhatsApp reconnect failed",
+			fmt.Sprintf("Failed after %d attempts — re-auth may be needed", maxAttempts),
+			channels.ChannelFailureKindNetwork, true)
+	}()
+}
+
+// stopReconnectWatchdog cancels any running reconnect watchdog goroutine.
+func (c *Channel) stopReconnectWatchdog() {
+	c.reconnectMu.Lock()
+	defer c.reconnectMu.Unlock()
+	if c.reconnectCancel != nil {
+		c.reconnectCancel()
+		c.reconnectCancel = nil
+	}
 }
 
 // hasListenOnlyConfig checks if listen-only mode is enabled at any level (global or per-group).

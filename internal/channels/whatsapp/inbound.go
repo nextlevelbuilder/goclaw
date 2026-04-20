@@ -84,6 +84,9 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 		content = emptyMessageSentinel
 	}
 
+	// Save original text content (before media tags overwrite it) for caption buffer logic.
+	hasCaption := content != "" && content != emptyMessageSentinel
+
 	// Group history + mention detection.
 	historyLimit := c.config.HistoryLimit
 	if historyLimit == 0 {
@@ -233,6 +236,66 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 		// Mentioned in listen-only group — fall through to normal response pipeline.
 		slog.Info("whatsapp listen: bot mentioned, responding normally",
 			"chat_id", chatID)
+	}
+
+	// --- Media caption buffer (opt-in via media_caption_delay_ms > 0). ---
+	// Default: disabled. The gateway-level InboundDebouncer handles media+caption
+	// merging with the standard debounce window. This buffer provides an additional
+	// WhatsApp-specific merge window for longer gaps.
+	if c.captionBuf != nil {
+		// Case 1: Text-only message. Check if it's a caption for a buffered media message.
+		if len(mediaList) == 0 && rawContent != "" && rawContent != emptyMessageSentinel {
+			if _, matched := c.captionBuf.PushText(chatID, senderID, rawContent); matched {
+				slog.Debug("whatsapp: caption merged into buffered media",
+					"chat_id", chatID, "sender_id", senderID)
+				return
+			}
+		}
+
+		// Case 2: Media with no caption text. Buffer it to wait for a follow-up.
+		if len(mediaList) > 0 && !hasCaption {
+			// Start typing indicator before buffering (good UX).
+			if prevCancel, ok := c.typingCancel.LoadAndDelete(chatID); ok {
+				if fn, ok := prevCancel.(context.CancelFunc); ok {
+					fn()
+				}
+			}
+			typingCtx, typingCancel := context.WithCancel(context.Background())
+			c.typingCancel.Store(chatID, typingCancel)
+			go c.keepTyping(typingCtx, chatJID)
+
+			// Derive userID from senderID.
+			userID := senderID
+			if idx := strings.IndexByte(senderID, '|'); idx > 0 {
+				userID = senderID[:idx]
+			}
+
+			// Build full InboundMessage for deferred publish.
+			inboundMsg := bus.InboundMessage{
+				Channel:  c.Name(),
+				SenderID: senderID,
+				ChatID:   chatID,
+				Content:  content,
+				Media:    mediaFiles,
+				PeerKind: peerKind,
+				UserID:   userID,
+				AgentID:  targetAgentID,
+				TenantID: c.TenantID(),
+				Metadata: metadata,
+			}
+
+			var tmpPaths []string
+			for _, mf := range mediaFiles {
+				tmpPaths = append(tmpPaths, mf.Path)
+			}
+
+			buffered := c.captionBuf.PushMedia(chatID, senderID, inboundMsg, tmpPaths)
+			if buffered {
+				slog.Debug("whatsapp: media buffered, waiting for caption",
+					"chat_id", chatID, "sender_id", senderID)
+				return
+			}
+		}
 	}
 
 	// Typing indicator.

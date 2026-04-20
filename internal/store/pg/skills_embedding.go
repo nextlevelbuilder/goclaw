@@ -90,7 +90,7 @@ func (s *PGSkillStore) BackfillSkillEmbeddings(ctx context.Context) (int, error)
 		return 0, nil
 	}
 
-	slog.Info("backfilling skill embeddings", "count", len(pending))
+	slog.Debug("backfilling skill embeddings", "count", len(pending))
 	updated := 0
 	for _, sk := range pending {
 		text := sk.Name
