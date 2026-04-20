@@ -3,6 +3,7 @@ package providerresolve
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
@@ -52,6 +53,15 @@ func ResolveBackgroundProvider(
 		if model == "" {
 			model = p.DefaultModel()
 		}
+		if model == "" {
+			model = firstAvailableModel(ctx, p, source, tenantID)
+		}
+		if model == "" {
+			slog.Warn("background: provider resolved but model is empty — skipping",
+				"source", source, "name", name, "tenant", tenantID,
+				"hint", "set background.model / agent.default_model in system_configs, or default_model on the provider")
+			return nil, "", false
+		}
 		slog.Debug("background: resolved provider",
 			"source", source, "name", name, "model", model, "tenant", tenantID)
 		return p, model, true
@@ -76,9 +86,45 @@ func ResolveBackgroundProvider(
 		slog.Warn("background: fallback provider failed", "tenant", tenantID, "name", names[0], "error", err)
 		return nil, ""
 	}
+	model := p.DefaultModel()
+	if model == "" {
+		model = firstAvailableModel(ctx, p, "fallback", tenantID)
+	}
+	if model == "" {
+		slog.Warn("background: fallback provider has empty default_model and no upstream models — skipping",
+			"tenant", tenantID, "provider", names[0],
+			"hint", "set background.model / agent.default_model in system_configs, or default_model on the provider")
+		return nil, ""
+	}
 	slog.Warn("background: using fallback provider (no explicit config)",
-		"tenant", tenantID, "provider", names[0], "available", names,
+		"tenant", tenantID, "provider", names[0], "model", model, "available", names,
 		"background.provider", configs["background.provider"],
 		"agent.default_provider", configs["agent.default_provider"])
-	return p, p.DefaultModel()
+	return p, model
+}
+
+// firstAvailableModel asks the provider to enumerate upstream models and
+// returns the first ID, if the provider implements ModelLister. Logs and
+// returns "" on any failure. Used as a last-resort fallback for background
+// workers when no default_model is configured.
+func firstAvailableModel(ctx context.Context, p providers.Provider, source string, tenantID uuid.UUID) string {
+	lister, ok := p.(providers.ModelLister)
+	if !ok {
+		return ""
+	}
+	lctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	models, err := lister.ListModels(lctx)
+	if err != nil {
+		slog.Warn("background: ListModels failed",
+			"source", source, "provider", p.Name(), "tenant", tenantID, "error", err)
+		return ""
+	}
+	if len(models) == 0 {
+		return ""
+	}
+	slog.Info("background: auto-picked first available model",
+		"source", source, "provider", p.Name(), "tenant", tenantID,
+		"model", models[0], "total_available", len(models))
+	return models[0]
 }

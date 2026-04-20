@@ -41,13 +41,24 @@ func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) error {
 
 	content := msg.Content
 
-	// NO_REPLY: delete placeholder, return
+	uploadMedia := func() {
+		for _, media := range msg.Media {
+			if err := c.uploadFile(channelID, threadTS, media); err != nil {
+				slog.Warn("slack: file upload failed",
+					"file", media.URL, "error", err)
+				c.sendChunked(channelID, fmt.Sprintf("[File upload failed: %s]", media.URL), threadTS)
+			}
+		}
+	}
+
+	// NO_REPLY: delete placeholder, still deliver any media attachments
 	if content == "" {
 		if pTS, ok := c.placeholders.Load(placeholderKey); ok {
 			c.placeholders.Delete(placeholderKey)
 			ts := pTS.(string)
 			_, _, _ = c.api.DeleteMessage(channelID, ts)
 		}
+		uploadMedia()
 		return nil
 	}
 
@@ -66,6 +77,7 @@ func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) error {
 		}
 
 		if _, _, _, editErr := c.api.UpdateMessage(channelID, ts, opts...); editErr == nil {
+			uploadMedia()
 			if remaining != "" {
 				return c.sendChunked(channelID, remaining, threadTS)
 			}
@@ -76,14 +88,7 @@ func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) error {
 		}
 	}
 
-	// Handle media attachments
-	for _, media := range msg.Media {
-		if err := c.uploadFile(channelID, threadTS, media); err != nil {
-			slog.Warn("slack: file upload failed",
-				"file", media.URL, "error", err)
-			c.sendChunked(channelID, fmt.Sprintf("[File upload failed: %s]", media.URL), threadTS)
-		}
-	}
+	uploadMedia()
 
 	return c.sendChunked(channelID, content, threadTS)
 }

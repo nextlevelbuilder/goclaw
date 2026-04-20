@@ -71,6 +71,13 @@ type ThinkingCapable interface {
 	SupportsThinking() bool
 }
 
+// ModelLister is optionally implemented by providers that can enumerate
+// available models from the upstream API. Used as a fallback when
+// DefaultModel() is empty (e.g. background workers resolving a model).
+type ModelLister interface {
+	ListModels(ctx context.Context) ([]string, error)
+}
+
 // ChatRequest contains the input for a Chat/ChatStream call.
 type ChatRequest struct {
 	Messages []Message        `json:"messages"`
