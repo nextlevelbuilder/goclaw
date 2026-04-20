@@ -35,6 +35,18 @@ Implementation is evidence-backed against the native ChatGPT Responses API event
 
 ---
 
+## 2026-04-20
+
+### Tools: `send_file` — explicit workspace file delivery
+
+**Features**
+
+- **`send_file` tool** (`internal/tools/send_file.go`): dedicated tool for sending existing workspace files as chat attachments. Takes `path` (required) and `caption` (optional). Replaces implicit `message(MEDIA:path)` convention for re-delivering already-created files. Marks `DeliveredMedia` on success to prevent duplicate delivery.
+- **`DeliveredMedia` mark on `message(MEDIA:)` sends** (`internal/tools/message.go`): patched to call `IsDelivered` / mark after successful MEDIA upload — closes the cross-tool duplicate-delivery gap where a file sent via `message(MEDIA:)` was not tracked and could be re-sent by `send_file`.
+- Registered as builtin tool in `cmd/gateway_tools_wiring.go` and seeded in `cmd/gateway_builtin_tools.go`.
+
+---
+
 ## 2026-04-19
 
 ### TTS: Gemini provider + ProviderCapabilities schema engine
