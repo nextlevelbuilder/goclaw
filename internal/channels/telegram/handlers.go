@@ -595,6 +595,12 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 		metadata[tools.MetaDMThreadID] = fmt.Sprintf("%d", dmThreadID)
 		metadata[tools.MetaMessageThreadID] = fmt.Sprintf("%d", dmThreadID)
 	}
+	// Self-identity hint so the LLM knows its own Telegram handle and does not
+	// confuse other bots' @mentions (preserved after stripBotMention) for its own.
+	if identity := buildSelfIdentityPrompt(c.bot.Username(), c.botDisplayName); identity != "" {
+		metadata[tools.MetaChannelSelfIdentity] = identity
+	}
+
 	if topicCfg.systemPrompt != "" {
 		metadata[tools.MetaTopicSystemPrompt] = topicCfg.systemPrompt
 	}

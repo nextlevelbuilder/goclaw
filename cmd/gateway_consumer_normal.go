@@ -255,6 +255,16 @@ func processNormalMessage(
 		extraPrompt += tsp
 	}
 
+	// Append channel-provided self-identity hint (e.g. "You are @bot (Name) on Telegram").
+	// Prevents the LLM from treating its own platform handle as another bot when users
+	// @mention it directly or reference it alongside another bot in multi-bot groups.
+	if identity := msg.Metadata[tools.MetaChannelSelfIdentity]; identity != "" {
+		if extraPrompt != "" {
+			extraPrompt += "\n\n"
+		}
+		extraPrompt += identity
+	}
+
 	// Per-topic skill filter override (from group/topic config hierarchy).
 	var skillFilter []string
 	if ts := msg.Metadata[tools.MetaTopicSkills]; ts != "" {

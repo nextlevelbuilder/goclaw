@@ -272,6 +272,30 @@ func TestStripBotMention_OnlyMentionBecomesEmpty(t *testing.T) {
 	}
 }
 
+// --- buildSelfIdentityPrompt ---
+
+func TestBuildSelfIdentityPrompt_WithDisplayName(t *testing.T) {
+	got := buildSelfIdentityPrompt("viet_super_bot", "ViệtBot")
+	want := "You are @viet_super_bot (ViệtBot) on this Telegram channel."
+	if got != want {
+		t.Errorf("buildSelfIdentityPrompt = %q, want %q", got, want)
+	}
+}
+
+func TestBuildSelfIdentityPrompt_NoDisplayName(t *testing.T) {
+	got := buildSelfIdentityPrompt("viet_super_bot", "")
+	want := "You are @viet_super_bot on this Telegram channel."
+	if got != want {
+		t.Errorf("buildSelfIdentityPrompt = %q, want %q", got, want)
+	}
+}
+
+func TestBuildSelfIdentityPrompt_EmptyUsername(t *testing.T) {
+	if got := buildSelfIdentityPrompt("", "Name"); got != "" {
+		t.Errorf("buildSelfIdentityPrompt with empty username should return empty; got %q", got)
+	}
+}
+
 // --- isServiceMessage ---
 
 func TestIsServiceMessage_WithText(t *testing.T) {

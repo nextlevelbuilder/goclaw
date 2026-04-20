@@ -1,11 +1,27 @@
 package telegram
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 
 	"github.com/mymmrac/telego"
 )
+
+// buildSelfIdentityPrompt returns a short system-prompt snippet telling the LLM
+// which Telegram handle represents itself, so it does not confuse its own
+// @mention for a different bot — especially useful in multi-bot groups where
+// other bots' mentions remain in the content after stripBotMention.
+// Returns empty string when the bot username has not been resolved yet.
+func buildSelfIdentityPrompt(botUsername, displayName string) string {
+	if botUsername == "" {
+		return ""
+	}
+	if displayName != "" {
+		return fmt.Sprintf("You are @%s (%s) on this Telegram channel.", botUsername, displayName)
+	}
+	return fmt.Sprintf("You are @%s on this Telegram channel.", botUsername)
+}
 
 // stripBotMention removes @botUsername tokens from text (case-insensitive).
 // Applied after the mention gate passes so the LLM does not see its own Telegram handle
