@@ -106,7 +106,7 @@ func (s *PGKnowledgeGraphStore) GetEntity(ctx context.Context, agentID, userID, 
 	var row entityRow
 	err = pkgSqlxDB.GetContext(ctx, &row, `
 		SELECT id, agent_id, user_id, external_id, name, entity_type, description,
-		       properties, source_id, confidence, created_at, updated_at
+		       properties, source_id, confidence, created_at, updated_at, event_time
 		FROM kg_entities WHERE id = $1 AND agent_id = $2`+userWhere+tc,
 		args...,
 	)
@@ -178,7 +178,7 @@ func (s *PGKnowledgeGraphStore) ListEntities(ctx context.Context, agentID, userI
 	args = append(args, limit, opts.Offset)
 	query := fmt.Sprintf(`
 		SELECT id, agent_id, user_id, external_id, name, entity_type, description,
-		       properties, source_id, confidence, created_at, updated_at
+		       properties, source_id, confidence, created_at, updated_at, event_time
 		FROM kg_entities WHERE %s
 		ORDER BY updated_at DESC LIMIT $%d OFFSET $%d`, where, idx, idx+1)
 
@@ -272,7 +272,7 @@ func (s *PGKnowledgeGraphStore) ftsSearchEntities(ctx context.Context, agentID u
 	args = append(args, query, limit)
 	q := fmt.Sprintf(`
 		SELECT id, agent_id, user_id, external_id, name, entity_type, description,
-		       properties, source_id, confidence, created_at, updated_at,
+		       properties, source_id, confidence, created_at, updated_at, event_time,
 		       ts_rank(tsv, plainto_tsquery('simple', $%d)) AS score
 		FROM kg_entities
 		WHERE %s
@@ -313,7 +313,7 @@ func (s *PGKnowledgeGraphStore) vectorSearchEntities(ctx context.Context, embedd
 	args = append(args, vecStr, limit)
 	q := fmt.Sprintf(`
 		SELECT id, agent_id, user_id, external_id, name, entity_type, description,
-		       properties, source_id, confidence, created_at, updated_at,
+		       properties, source_id, confidence, created_at, updated_at, event_time,
 		       1 - (embedding <=> $%d::vector) AS score
 		FROM kg_entities
 		WHERE %s

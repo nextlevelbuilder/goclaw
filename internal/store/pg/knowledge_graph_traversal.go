@@ -3,6 +3,7 @@ package pg
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -48,13 +49,20 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 	args = append(args, maxDepth)
 
 	// userWhere is applied to: base entity, recursive relation join, recursive entity join
+	// Qualify user_id with table alias for the recursive JOINs (paths, kg_relations, kg_entities all have user_id).
+	userWhereR := userWhere
+	userWhereE := userWhere
+	if userWhere != "" {
+		userWhereR = strings.Replace(userWhere, "user_id", "r.user_id", 1)
+		userWhereE = strings.Replace(userWhere, "user_id", "e.user_id", 1)
+	}
 	q := fmt.Sprintf(`
 	WITH RECURSIVE paths AS (
 		SELECT
 			e.id, e.agent_id, e.user_id, e.external_id,
 			e.name, e.entity_type, e.description,
 			e.properties, e.source_id, e.confidence,
-			e.created_at, e.updated_at,
+			e.created_at, e.updated_at, e.event_time,
 			1 AS depth,
 			ARRAY[e.id::text] AS path,
 			''::text AS via
@@ -67,7 +75,7 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 			e.id, e.agent_id, e.user_id, e.external_id,
 			e.name, e.entity_type, e.description,
 			e.properties, e.source_id, e.confidence,
-			e.created_at, e.updated_at,
+			e.created_at, e.updated_at, e.event_time,
 			p.depth + 1,
 			p.path || e.id::text,
 			CASE WHEN r.source_entity_id = p.id
@@ -84,9 +92,9 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 		id, agent_id, user_id, external_id,
 		name, entity_type, description,
 		properties, source_id, confidence,
-		created_at, updated_at,
+		created_at, updated_at, event_time,
 		depth, path, via
-	FROM paths WHERE depth > 1`, userWhere, tc, userWhere, userWhere, depthN)
+	FROM paths WHERE depth > 1`, userWhere, tc, userWhereR, userWhereE, depthN)
 
 	// Use sqlx on the transaction for struct scanning with pq.StringArray support.
 	txSqlx := sqlxTx(tx)
