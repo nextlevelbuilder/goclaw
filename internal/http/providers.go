@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 
@@ -238,17 +239,37 @@ func normalizeOllamaAPIBase(p *store.LLMProviderData) {
 }
 
 // localProviderTypes are provider types that legitimately run on localhost
-// (e.g. Ollama, Claude CLI). SSRF checks are skipped for these.
+// (e.g. Ollama, Claude CLI). These are restricted to localhost-only URLs
+// rather than skipping validation entirely.
 var localProviderTypes = map[string]bool{
 	store.ProviderOllama:    true,
 	store.ProviderClaudeCLI: true,
 	store.ProviderACP:       true,
 }
 
+// allowedLocalHosts are the hostnames permitted for local provider types.
+var allowedLocalHosts = []string{"localhost", "127.0.0.1", "::1", "host.docker.internal"}
+
+// allowPrivateProviderURLsFn reports whether the operator has opted in to
+// permitting private / loopback / link-local / internal-hostname provider base
+// URLs via GOCLAW_ALLOW_PRIVATE_PROVIDER_URLS. Function-valued so tests can
+// override it; production reads the env var once.
+var allowPrivateProviderURLsFn = sync.OnceValue(func() bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("GOCLAW_ALLOW_PRIVATE_PROVIDER_URLS")))
+	return v == "1" || v == "true" || v == "yes"
+})
+
 // validateProviderURL rejects provider base URLs pointing to internal/private networks.
 // Defense-in-depth: prevents SSRF when providers are later used for API calls.
+//
+// Local provider types (Ollama, Claude CLI, ACP) are restricted to localhost-only
+// URLs — they must not be used as a bypass to reach arbitrary internal hosts.
+//
+// Operators running LAN-hosted OpenAI-compatible servers (vLLM, LM Studio, LocalAI,
+// Tabby, etc.) can set GOCLAW_ALLOW_PRIVATE_PROVIDER_URLS=true to opt out of the
+// private-network check. The http/https scheme check is always enforced.
 func validateProviderURL(rawURL string, providerType string) error {
-	if rawURL == "" || localProviderTypes[providerType] {
+	if rawURL == "" {
 		return nil
 	}
 	u, err := url.Parse(rawURL)
@@ -256,12 +277,28 @@ func validateProviderURL(rawURL string, providerType string) error {
 		return fmt.Errorf("invalid URL: %w", err)
 	}
 	// Only allow http/https schemes — block file://, gopher://, dict://, etc.
+	// Enforced unconditionally for all provider types.
 	switch u.Scheme {
 	case "http", "https":
 	default:
 		return fmt.Errorf("provider URL must use http or https scheme, got %q", u.Scheme)
 	}
 	host := u.Hostname()
+	// Local provider types: restrict to known-safe localhost addresses only.
+	if localProviderTypes[providerType] {
+		for _, a := range allowedLocalHosts {
+			if strings.EqualFold(host, a) {
+				return nil
+			}
+		}
+		slog.Warn("security.provider_url.local_type_denied", "host", host, "provider_type", providerType)
+		return fmt.Errorf("provider type %q only allows localhost URLs (localhost, 127.0.0.1, ::1, host.docker.internal), got host %q", providerType, host)
+	}
+	allowPrivate := allowPrivateProviderURLsFn()
+	if allowPrivate {
+		slog.Warn("security.provider_url.private_allowed", "host", host, "provider_type", providerType)
+		return nil
+	}
 	// Block obvious internal targets
 	blocked := []string{"localhost", "127.0.0.1", "::1", "0.0.0.0", "169.254.169.254", "metadata.google.internal"}
 	for _, b := range blocked {
