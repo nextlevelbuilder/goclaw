@@ -34,6 +34,13 @@ type ThinkState struct {
 	TruncRetries    int  // consecutive truncation retries (max 3)
 	OverflowRetries int  // context overflow compact+retry attempts (max 1)
 	StreamingActive bool // true during active stream
+
+	// Tools is populated by ContextStage (iteration=0) for overhead calculation.
+	// It holds the best-effort tool list at run start and is used exclusively by
+	// the overhead counter in ContextStage. ThinkStage does NOT consume this field —
+	// it always calls BuildFilteredTools per iteration because the tool list is
+	// iteration-dependent (final iteration strips all tools).
+	Tools []providers.ToolDefinition
 }
 
 // PruneState: owned by PruneStage.

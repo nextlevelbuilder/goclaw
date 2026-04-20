@@ -129,10 +129,24 @@ func (s *ContextStage) Execute(ctx context.Context, state *RunState) error {
 		}
 	}
 
-	// 5. Compute overhead tokens via TokenCounter (replaces heuristic estimateOverhead)
+	// 4.5. Build filtered tools early so OverheadTokens includes tool-schema tokens.
+	// ThinkStage still calls BuildFilteredTools every iteration (tool list is
+	// iteration-dependent; final iteration strips all tools). This call is
+	// best-effort: errors are silently swallowed and the tool slice stays nil,
+	// which means overhead will under-count but remains safe/conservative.
+	if s.deps.BuildFilteredTools != nil {
+		if tools, err := s.deps.BuildFilteredTools(state); err == nil {
+			state.Think.Tools = tools
+		}
+	}
+
+	// 5. Compute overhead tokens via TokenCounter (replaces heuristic estimateOverhead).
+	// Includes both system-prompt tokens and tool-schema tokens so PruneStage
+	// budget shrinks correctly when tools are large.
 	if s.deps.TokenCounter != nil {
 		system := state.Messages.System()
 		overhead := s.deps.TokenCounter.CountMessages(state.Model, []providers.Message{system})
+		overhead += s.deps.TokenCounter.CountToolSchemas(state.Model, state.Think.Tools)
 		state.Context.OverheadTokens = overhead
 	}
 
