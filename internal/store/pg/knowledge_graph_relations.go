@@ -54,24 +54,16 @@ func (s *PGKnowledgeGraphStore) DeleteRelation(ctx context.Context, agentID, use
 	if err != nil {
 		return fmt.Errorf("kg delete relation: id: %w", err)
 	}
-	if store.IsSharedKG(ctx) {
-		tc, tcArgs, _, err := scopeClause(ctx, 3)
-		if err != nil {
-			return err
-		}
-		_, err = s.db.ExecContext(ctx,
-			`DELETE FROM kg_relations WHERE id = $1 AND agent_id = $2`+tc,
-			append([]any{rid, aid}, tcArgs...)...,
-		)
-		return err
-	}
-	tc, tcArgs, _, err := scopeClause(ctx, 4)
+	userWhere, userArgs := kgUserWhere(ctx, userID, 3)
+	args := append([]any{rid, aid}, userArgs...)
+	tc, tcArgs, _, err := scopeClause(ctx, 3+len(userArgs))
 	if err != nil {
 		return err
 	}
+	args = append(args, tcArgs...)
 	_, err = s.db.ExecContext(ctx,
-		`DELETE FROM kg_relations WHERE id = $1 AND agent_id = $2 AND user_id = $3`+tc,
-		append([]any{rid, aid, userID}, tcArgs...)...,
+		`DELETE FROM kg_relations WHERE id = $1 AND agent_id = $2`+userWhere+tc,
+		args...,
 	)
 	return err
 }
@@ -86,33 +78,22 @@ func (s *PGKnowledgeGraphStore) ListRelations(ctx context.Context, agentID, user
 		return nil, fmt.Errorf("kg list relations: entity: %w", err)
 	}
 
-	var q string
-	var args []any
-	if store.IsSharedKG(ctx) {
-		tc, tcArgs, _, err := scopeClause(ctx, 3)
-		if err != nil {
-			return nil, err
-		}
-		q = `SELECT id, agent_id, user_id, source_entity_id, relation_type, target_entity_id,
-		       confidence, properties, created_at
-		FROM kg_relations
-		WHERE agent_id = $1 AND valid_until IS NULL
-		  AND (source_entity_id = $2 OR target_entity_id = $2)` + tc + `
-		ORDER BY created_at DESC`
-		args = append([]any{aid, eid}, tcArgs...)
-	} else {
-		tc, tcArgs, _, err := scopeClause(ctx, 4)
-		if err != nil {
-			return nil, err
-		}
-		q = `SELECT id, agent_id, user_id, source_entity_id, relation_type, target_entity_id,
-		       confidence, properties, created_at
-		FROM kg_relations
-		WHERE agent_id = $1 AND user_id = $2 AND valid_until IS NULL
-		  AND (source_entity_id = $3 OR target_entity_id = $3)` + tc + `
-		ORDER BY created_at DESC`
-		args = append([]any{aid, userID, eid}, tcArgs...)
+	userWhere, userArgs := kgUserWhere(ctx, userID, 2)
+	eidIdx := 2 + len(userArgs)
+	args := append([]any{aid}, userArgs...)
+	args = append(args, eid)
+	tc, tcArgs, _, err := scopeClause(ctx, eidIdx+1)
+	if err != nil {
+		return nil, err
 	}
+	args = append(args, tcArgs...)
+
+	q := fmt.Sprintf(`SELECT id, agent_id, user_id, source_entity_id, relation_type, target_entity_id,
+		       confidence, properties, created_at
+		FROM kg_relations
+		WHERE agent_id = $1%s AND valid_until IS NULL
+		  AND (source_entity_id = $%d OR target_entity_id = $%d)`+tc+`
+		ORDER BY created_at DESC`, userWhere, eidIdx, eidIdx)
 
 	var rRows []relationRow
 	if err := pkgSqlxDB.SelectContext(ctx, &rRows, q, args...); err != nil {
@@ -136,10 +117,11 @@ func (s *PGKnowledgeGraphStore) ListAllRelations(ctx context.Context, agentID, u
 	where := "agent_id = $1 AND valid_until IS NULL"
 	args := []any{aid}
 	idx := 2
-	if !store.IsSharedKG(ctx) && userID != "" {
-		where += fmt.Sprintf(" AND user_id = $%d", idx)
-		args = append(args, userID)
-		idx++
+	userWhere, userArgs := kgUserWhere(ctx, userID, idx)
+	if userWhere != "" {
+		where += userWhere
+		args = append(args, userArgs...)
+		idx += len(userArgs)
 	}
 	tc, tcArgs, _, err := scopeClause(ctx, idx)
 	if err != nil {
@@ -284,31 +266,59 @@ func (s *PGKnowledgeGraphStore) PruneByConfidence(ctx context.Context, agentID, 
 	if err != nil {
 		return 0, fmt.Errorf("kg prune: %w", err)
 	}
-	var res sql.Result
-	if store.IsSharedKG(ctx) {
-		tc, tcArgs, _, tcErr := scopeClause(ctx, 3)
-		if tcErr != nil {
-			return 0, tcErr
-		}
-		res, err = s.db.ExecContext(ctx,
-			`DELETE FROM kg_entities WHERE agent_id = $1 AND confidence < $2`+tc,
-			append([]any{aid, minConfidence}, tcArgs...)...,
-		)
-	} else {
-		tc, tcArgs, _, tcErr := scopeClause(ctx, 4)
-		if tcErr != nil {
-			return 0, tcErr
-		}
-		res, err = s.db.ExecContext(ctx,
-			`DELETE FROM kg_entities WHERE agent_id = $1 AND user_id = $2 AND confidence < $3`+tc,
-			append([]any{aid, userID, minConfidence}, tcArgs...)...,
-		)
+	userWhere, userArgs := kgUserWhere(ctx, userID, 2)
+	args := append([]any{aid}, userArgs...)
+	confIdx := 2 + len(userArgs)
+	args = append(args, minConfidence)
+	tc, tcArgs, _, tcErr := scopeClause(ctx, confIdx+1)
+	if tcErr != nil {
+		return 0, tcErr
 	}
+	args = append(args, tcArgs...)
+
+	var res sql.Result
+	res, err = s.db.ExecContext(ctx,
+		fmt.Sprintf(`DELETE FROM kg_entities WHERE agent_id = $1%s AND confidence < $%d`, userWhere, confIdx)+tc,
+		args...,
+	)
 	if err != nil {
 		return 0, err
 	}
 	n, _ := res.RowsAffected()
 	return int(n), nil
+}
+
+func (s *PGKnowledgeGraphStore) ClearAll(ctx context.Context, agentID, userID string) (int, error) {
+	aid, err := parseUUID(agentID)
+	if err != nil {
+		return 0, fmt.Errorf("kg clear all: %w", err)
+	}
+	userWhere, userArgs := kgUserWhere(ctx, userID, 2)
+	tc, tcArgs, _, tcErr := scopeClause(ctx, 2+len(userArgs))
+	if tcErr != nil {
+		return 0, tcErr
+	}
+	baseArgs := append([]any{aid}, userArgs...)
+	args := append(baseArgs, tcArgs...)
+
+	where := fmt.Sprintf("WHERE agent_id = $1%s", userWhere) + tc
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	var total int
+	for _, table := range []string{"kg_dedup_candidates", "kg_relations", "kg_entities"} {
+		res, delErr := tx.ExecContext(ctx, "DELETE FROM "+table+" "+where, args...)
+		if delErr != nil {
+			return 0, delErr
+		}
+		n, _ := res.RowsAffected()
+		total += int(n)
+	}
+	return total, tx.Commit()
 }
 
 func (s *PGKnowledgeGraphStore) Stats(ctx context.Context, agentID, userID string) (*store.GraphStats, error) {

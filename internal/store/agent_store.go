@@ -318,6 +318,7 @@ type WorkspaceSharingConfig struct {
 	ShareMemory         bool     `json:"share_memory" db:"-"`
 	ShareKnowledgeGraph bool     `json:"share_knowledge_graph" db:"-"`
 	ShareSessions       bool     `json:"share_sessions" db:"-"`
+	SharedKGIDs         []string `json:"shared_kg_ids,omitempty" db:"-"`
 }
 
 const (
@@ -407,7 +408,7 @@ func (a *AgentData) ParseWorkspaceSharing() *WorkspaceSharingConfig {
 	if json.Unmarshal(a.WorkspaceSharing, &ws) != nil {
 		return nil
 	}
-	if !ws.SharedDM && !ws.SharedGroup && len(ws.SharedUsers) == 0 && !ws.ShareMemory && !ws.ShareKnowledgeGraph && !ws.ShareSessions {
+	if !ws.SharedDM && !ws.SharedGroup && len(ws.SharedUsers) == 0 && !ws.ShareMemory && !ws.ShareKnowledgeGraph && !ws.ShareSessions && len(ws.SharedKGIDs) == 0 {
 		return nil
 	}
 	return &ws

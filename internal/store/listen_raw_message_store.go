@@ -39,6 +39,7 @@ type ListenRawMessageListOpts struct {
 	ChannelName string
 	ChatID      string
 	AgentID     string
+	GraphID     string
 	Processed   *bool // nil=all, true=processed only, false=pending only
 }
 
@@ -61,4 +62,8 @@ type ListenRawMessageStore interface {
 	// List returns raw messages matching the given opts, with total count for pagination.
 	// Results ordered by created_at DESC (newest first).
 	List(ctx context.Context, opts ListenRawMessageListOpts) ([]ListenRawMessage, int, error)
+
+	// ResetProcessed sets processed_at = NULL for messages matching the given filters,
+	// so the extraction worker will re-process them. Returns the number of rows affected.
+	ResetProcessed(ctx context.Context, agentID, graphID string) (int64, error)
 }

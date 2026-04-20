@@ -133,6 +133,7 @@ func (m *mockKGStore) SupersedeEntity(_ context.Context, _ *store.Entity, _ *sto
 func (m *mockKGStore) SearchEntitiesByEventTime(_ context.Context, _, _ string, _, _ *time.Time, _ int) ([]store.Entity, error) {
 	return nil, nil
 }
+func (m *mockKGStore) ClearAll(context.Context, string, string) (int, error) { return 0, nil }
 
 // ── test helpers ───────────────────────────────────────────────────
 

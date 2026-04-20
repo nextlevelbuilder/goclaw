@@ -6,15 +6,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // kgUserClause returns a WHERE fragment and args for user scoping.
-// If IsSharedKG is set, returns empty string (no per-user filter).
+// If SharedKGIDs is set, returns "AND user_id IN (?,?,...)" with specific IDs.
+// If IsSharedKG is set (no specific IDs), returns empty string (no per-user filter).
 // Otherwise returns "AND user_id = ?" with the user ID.
 func kgUserClause(ctx context.Context) (string, []any) {
+	if ids := store.SharedKGIDsFromCtx(ctx); len(ids) > 0 {
+		return buildInClause(ids)
+	}
 	if store.IsSharedKG(ctx) {
 		return "", nil
 	}
@@ -28,6 +33,9 @@ func kgUserClause(ctx context.Context) (string, []any) {
 // kgUserClauseFor is like kgUserClause but uses a given userID instead of ctx.
 // Used when the userID is passed explicitly (e.g. interface methods).
 func kgUserClauseFor(ctx context.Context, userID string) (string, []any) {
+	if ids := store.SharedKGIDsFromCtx(ctx); len(ids) > 0 {
+		return buildInClause(ids)
+	}
 	if store.IsSharedKG(ctx) {
 		return "", nil
 	}
@@ -35,6 +43,17 @@ func kgUserClauseFor(ctx context.Context, userID string) (string, []any) {
 		return "", nil
 	}
 	return " AND user_id = ?", []any{userID}
+}
+
+// buildInClause returns " AND user_id IN (?,?,...)" for the given IDs.
+func buildInClause(ids []string) (string, []any) {
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	return " AND user_id IN (" + strings.Join(placeholders, ",") + ")", args
 }
 
 // scanUnixTimestamp converts a SQLite TEXT timestamp to Unix seconds (int64).

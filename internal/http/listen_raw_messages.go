@@ -20,6 +20,7 @@ func NewListenRawMessagesHandler(s store.ListenRawMessageStore) *ListenRawMessag
 // RegisterRoutes registers raw message routes on the given mux.
 func (h *ListenRawMessagesHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/listen-raw-messages", h.authMiddleware(h.handleList))
+	mux.HandleFunc("POST /v1/listen-raw-messages/reset-processed", h.authMiddleware(h.handleResetProcessed))
 }
 
 func (h *ListenRawMessagesHandler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
@@ -40,6 +41,9 @@ func (h *ListenRawMessagesHandler) handleList(w http.ResponseWriter, r *http.Req
 	}
 	if v := r.URL.Query().Get("agent_id"); v != "" {
 		opts.AgentID = v
+	}
+	if v := r.URL.Query().Get("graph_id"); v != "" {
+		opts.GraphID = v
 	}
 	if v := r.URL.Query().Get("processed"); v != "" {
 		b := v == "true" || v == "1"
@@ -73,3 +77,24 @@ func (h *ListenRawMessagesHandler) handleList(w http.ResponseWriter, r *http.Req
 	})
 }
 
+func (h *ListenRawMessagesHandler) handleResetProcessed(w http.ResponseWriter, r *http.Request) {
+	agentID := r.URL.Query().Get("agent_id")
+	graphID := r.URL.Query().Get("graph_id")
+
+	affected, err := h.store.ResetProcessed(r.Context(), agentID, graphID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	resp := map[string]any{
+		"reset_count": affected,
+	}
+	if agentID != "" {
+		resp["agent_id"] = agentID
+	}
+	if graphID != "" {
+		resp["graph_id"] = graphID
+	}
+	writeJSON(w, http.StatusOK, resp)
+}

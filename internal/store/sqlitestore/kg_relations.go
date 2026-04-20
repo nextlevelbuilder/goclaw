@@ -128,6 +128,32 @@ func upsertRelationTx(ctx context.Context, tx *sql.Tx, agentID, userID string, r
 	return err
 }
 
+func (s *SQLiteKnowledgeGraphStore) ClearAll(ctx context.Context, agentID, userID string) (int, error) {
+	userClause, userArgs := kgUserClauseFor(ctx, userID)
+	sc, scArgs, _ := scopeClause(ctx)
+	args := append([]any{agentID}, userArgs...)
+	args = append(args, scArgs...)
+
+	where := "WHERE agent_id = ?" + userClause + sc
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	var total int
+	for _, table := range []string{"kg_dedup_candidates", "kg_relations", "kg_entities"} {
+		res, delErr := tx.ExecContext(ctx, "DELETE FROM "+table+" "+where, args...)
+		if delErr != nil {
+			return 0, delErr
+		}
+		n, _ := res.RowsAffected()
+		total += int(n)
+	}
+	return total, tx.Commit()
+}
+
 // scanRelationRows iterates sql.Rows and scans each into a store.Relation.
 func scanRelationRows(rows *sql.Rows) ([]store.Relation, error) {
 	var result []store.Relation

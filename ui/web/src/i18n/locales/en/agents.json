@@ -779,9 +779,19 @@
       "shareKG": "Shared Knowledge Graph",
       "shareKGTip": "All users access the same knowledge graph. When off, each user has their own isolated KG with global canonical fallback for read operations.",
       "shareKGNote": "Toggling this does not migrate data — existing per-user KG entities become inaccessible in shared mode.",
+      "sharedKGIDs": "Knowledge Graph IDs",
+      "sharedKGIDsTip": "Graph IDs for cross-channel KG sharing (separated by comma or semicolon). Listen-only agents use these IDs to scope which knowledge graph data they access across channels.",
+      "sharedKGIDsPlaceholder": "graph-1, graph-2, ...",
+      "sharedKGIDsHint": "Enter knowledge graph IDs separated by comma or semicolon. These should match the listen_graph_id values configured in WhatsApp group overrides.",
       "shareSessions": "Share Sessions",
       "shareSessionsTip": "Allow agent to access conversation sessions across all groups. When off, each user's sessions remain isolated.",
       "shareSessionsNote": "Toggling this does not migrate data — existing per-user sessions become inaccessible in shared mode."
+    },
+    "boundChannels": {
+      "title": "Bound Channels",
+      "description": "Channel instances currently bound to this agent",
+      "empty": "No channels bound to this agent",
+      "disabled": "disabled"
     },
     "compaction": {
       "title": "Compaction",

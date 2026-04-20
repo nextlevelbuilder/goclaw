@@ -27,6 +27,8 @@ const (
 	SharedMemoryKey contextKey = "goclaw_shared_memory"
 	// SharedKGKey indicates KG should be shared across all users of the agent (no per-user scoping).
 	SharedKGKey contextKey = "goclaw_shared_kg"
+	// SharedKGIDsKey holds specific graph IDs to scope KG queries (subset of all KG data).
+	SharedKGIDsKey contextKey = "goclaw_shared_kg_ids"
 	// SharedSessionsKey indicates sessions should be shared across all users (no per-group scoping).
 	SharedSessionsKey contextKey = "goclaw_shared_sessions"
 	// ShellDenyGroupsKey holds per-agent shell deny group overrides.
@@ -236,6 +238,19 @@ func IsSharedKG(ctx context.Context) bool {
 		return rc.SharedKG
 	}
 	return false
+}
+
+// WithSharedKGIDs returns a context carrying specific graph IDs for scoped KG queries.
+func WithSharedKGIDs(ctx context.Context, ids []string) context.Context {
+	return context.WithValue(ctx, SharedKGIDsKey, ids)
+}
+
+// SharedKGIDsFromCtx returns specific graph IDs for scoped KG queries, or nil if not set.
+func SharedKGIDsFromCtx(ctx context.Context) []string {
+	if v, ok := ctx.Value(SharedKGIDsKey).([]string); ok {
+		return v
+	}
+	return nil
 }
 
 // WithSharedSessions returns a context flagged for shared sessions (skip per-group scoping).

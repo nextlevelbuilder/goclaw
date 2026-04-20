@@ -17,7 +17,7 @@ import (
 
 const (
 	defaultExtractPollSec = 30
-	extractBatchSize      = 50
+	extractBatchSize      = 20
 )
 
 // ExtractionWorkerDeps bundles dependencies for the listen-only KG extraction worker.
