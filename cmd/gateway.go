@@ -450,6 +450,15 @@ func runGateway() {
 			gl.SetGroupMemberLister(channelMgr.ListGroupMembers)
 		}
 	}
+	// Wire Discord thread creator + tenant checker on create_discord_thread tool
+	if t, ok := toolsReg.Get("create_discord_thread"); ok {
+		if dta, ok := t.(tools.DiscordThreadCreatorAware); ok {
+			dta.SetDiscordThreadCreator(channelMgr.CreateDiscordThread)
+		}
+		if tc, ok := t.(tools.ChannelTenantCheckerAware); ok {
+			tc.SetChannelTenantChecker(channelMgr.ChannelTenantID)
+		}
+	}
 
 	// Load channel instances from DB.
 	var instanceLoader *channels.InstanceLoader
