@@ -29,9 +29,14 @@ var flexibleLayouts = []string{
 	time.RFC3339,
 	"2006-01-02T15:04:05Z07:00",
 	"2006-01-02T15:04:05",
+	"2006-01-02T15:04:05-07:00",
 	"2006-01-02 15:04:05 -0700",
 	"2006-01-02 15:04:05",
 	"2006-01-02",
+	"02-01-2006",
+	"02 January 2006",
+	"02 January 2006 15:04",
+	"02 January 2006 15:04:05",
 }
 
 // Entity represents a node in the knowledge graph.

@@ -30,6 +30,7 @@ Each message includes a sender name, timestamp, and content.
 - **participates_in**: person → group (person is a member of the WhatsApp group)
 - **discusses**: person → concept/topic (actively discussing)
 - **discussed_in**: concept/project/task → group (topic was discussed in a specific group)
+- **has_status**: task → concept (current status, e.g., on hold, in progress, closed)
 - **uses**: person/project → technology (using a tool or framework)
 - **belongs_to**: task → project (task is part of a project)
 - **depends_on**: task/project → task/project (blocking relationship)
@@ -74,6 +75,7 @@ Return a single JSON object with "entities" and "relations" arrays:
 - Include properties for additional context (e.g., {"sender_id": "..."} for persons)
 - Relations should connect entities that have a meaningful connection from the conversation
 - For entity_type='event', extract event_time from the earliest message timestamp discussing this event. Use ISO 8601 format (e.g. '2026-04-17T14:30:00Z'). Omit event_time for non-event entity types.
+- For entity_type='task', include event_time when the content provides a clear date/time reference. Convert non-standard date formats (e.g., "17-04-2026", "21 April 2026", "20.00 WIB") to ISO 8601.
 - Return valid JSON only, no markdown fences or commentary
 
 ## Media Content
@@ -82,4 +84,14 @@ Return a single JSON object with "entities" and "relations" arrays:
 - For images: extract people, objects, text on screen, locations shown
 - For documents: extract projects, tasks, deadlines, organizations mentioned
 - For audio transcripts: treat like regular conversation text
+
+## Structured Data (reports, handovers, tables)
+When messages contain structured/tabular content such as work handover reports, status summaries, or key-value lists:
+- Use the task entity type for ticket/issue items. Store ticket IDs in properties (e.g., {"ticket_id": "#942681"})
+- Store numeric counts in properties (e.g., {"open_tickets": "0", "resolved_tickets": "4"})
+- Store status values in properties (e.g., {"status": "on hold"})
+- Store reference numbers and client/organization context in properties (e.g., {"ref": "2022338375", "client": "BANK MESTIKA DHARMA"})
+- Extract individual ticket line items as separate task entities when detail is available
+- For the overall report/summary, use document entity type with properties like {"report_type": "work handover"}
+- Convert date formats like "21 April 2026", "17-04-2026", or "20.00 WIB" to ISO 8601 (e.g., "2026-04-21T20:00:00+07:00")
 `
