@@ -309,6 +309,21 @@ func (m *Manager) ListGroupMembers(ctx context.Context, channelName, chatID stri
 	return gmp.ListGroupMembers(ctx, chatID)
 }
 
+// CreateDiscordThread delegates to the named channel's DiscordThreadCreator if available.
+func (m *Manager) CreateDiscordThread(ctx context.Context, channelName string, params DiscordThreadParams) (DiscordThreadResult, error) {
+	m.mu.RLock()
+	ch, ok := m.channels[channelName]
+	m.mu.RUnlock()
+	if !ok {
+		return DiscordThreadResult{}, fmt.Errorf("channel %q not found", channelName)
+	}
+	dtc, ok := ch.(DiscordThreadCreator)
+	if !ok {
+		return DiscordThreadResult{}, fmt.Errorf("channel %q does not support thread creation", channelName)
+	}
+	return dtc.CreateThread(ctx, params)
+}
+
 // UnregisterChannel removes a channel from the manager.
 func (m *Manager) UnregisterChannel(name string) {
 	m.mu.Lock()

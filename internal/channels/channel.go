@@ -638,6 +638,32 @@ type GroupMemberProvider interface {
 	ListGroupMembers(ctx context.Context, chatID string) ([]GroupMember, error)
 }
 
+// DiscordThreadParams is the input for creating a Discord thread. Defined in the
+// channels package (not channels/discord) so channels.Manager can reference it
+// without the channels→channels/discord→channels import cycle.
+type DiscordThreadParams struct {
+	ChannelID          string   // parent channel (text or forum)
+	MessageID          string   // optional; if set, create a message-rooted thread
+	Name               string   // required, 1-100 chars
+	AutoArchiveMinutes int      // 60|1440|4320|10080; 0 → default 1440
+	Private            bool     // default false (public thread)
+	InitialMessage     string   // required for forum channels; ignored for text-channel threads
+	AppliedTags        []string // forum-only
+}
+
+// DiscordThreadResult is returned after successfully creating a Discord thread.
+type DiscordThreadResult struct {
+	ThreadID        string `json:"thread_id"`
+	Name            string `json:"name"`
+	ParentChannelID string `json:"parent_channel_id"`
+	IsForum         bool   `json:"is_forum"`
+}
+
+// DiscordThreadCreator is optionally implemented by channels that can create Discord threads.
+type DiscordThreadCreator interface {
+	CreateThread(ctx context.Context, params DiscordThreadParams) (DiscordThreadResult, error)
+}
+
 // PendingCompactable is optionally implemented by channels that have a PendingHistory
 // supporting LLM-based compaction. InstanceLoader uses this to wire compaction config
 // after channel creation.

@@ -51,6 +51,8 @@ func wireExtraTools(
 	toolsReg.Register(tools.NewMessageTool(workspace, agentCfg.RestrictToWorkspace))
 	// Group members tool (list members in group chats)
 	toolsReg.Register(tools.NewListGroupMembersTool())
+	// Discord thread creation tool
+	toolsReg.Register(tools.NewCreateDiscordThreadTool())
 	slog.Info("session + message tools registered")
 
 	// Register legacy tool aliases (backward-compat names from policy.go).

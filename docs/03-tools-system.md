@@ -136,6 +136,7 @@ Memory layers: L1 (`memory_search`) returns ranked abstracts; L2 (`memory_expand
 | `message` | Send a message to a channel |
 | `create_forum_topic` | Create a Telegram forum topic |
 | `list_group_members` | List members in a group chat (Feishu/Lark) |
+| `create_discord_thread` | Create a Discord thread (text channel) or post (forum channel) |
 
 ### Delegation
 
