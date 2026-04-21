@@ -128,7 +128,7 @@ func New(cfg config.SlackConfig, msgBus *bus.MessageBus, pairingSvc store.Pairin
 	ch.SetGroupHistory(channels.MakeHistory(channels.TypeSlack, pendingStore, base.TenantID()))
 	ch.SetHistoryLimit(historyLimit)
 
-	if cfg.SuppressPlaceholder != nil && *cfg.SuppressPlaceholder {
+	if ch.placeholderSuppressed() {
 		dmStream := cfg.DMStream != nil && *cfg.DMStream
 		groupStream := cfg.GroupStream != nil && *cfg.GroupStream
 		if dmStream || groupStream {
@@ -138,6 +138,12 @@ func New(cfg config.SlackConfig, msgBus *bus.MessageBus, pairingSvc store.Pairin
 	}
 
 	return ch, nil
+}
+
+// placeholderSuppressed reports whether the channel is configured to skip the
+// "Thinking..." placeholder message and rely on reactions / no indicator only.
+func (c *Channel) placeholderSuppressed() bool {
+	return c.config.SuppressPlaceholder != nil && *c.config.SuppressPlaceholder
 }
 
 // Start opens the Socket Mode connection and begins receiving events.

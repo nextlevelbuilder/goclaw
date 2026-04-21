@@ -72,7 +72,7 @@ func (s *slackStream) MsgTS() string {
 // When suppress_placeholder is set, streaming is force-disabled because
 // Slack streaming edits the placeholder message and there is none to edit.
 func (c *Channel) StreamEnabled(isGroup bool) bool {
-	if c.config.SuppressPlaceholder != nil && *c.config.SuppressPlaceholder {
+	if c.placeholderSuppressed() {
 		return false
 	}
 	if isGroup {
