@@ -104,6 +104,7 @@ type DiscordConfig struct {
 	HistoryLimit      int                 `json:"history_limit,omitempty"`   // max pending group messages for context (default 50, 0=disabled)
 	BlockReply        *bool               `json:"block_reply,omitempty"`     // override gateway block_reply (nil = inherit)
 	MediaMaxBytes     int64               `json:"media_max_bytes,omitempty"` // max media download size (default 25MB)
+	SuppressPlaceholder *bool               `json:"suppress_placeholder,omitempty"` // skip "Thinking..." placeholder + edit; rely on typing indicator for the full run (default false)
 	STTProxyURL       string              `json:"stt_proxy_url,omitempty"`
 	STTAPIKey         string              `json:"stt_api_key,omitempty"`
 	STTTenantID       string              `json:"stt_tenant_id,omitempty"`
@@ -124,6 +125,7 @@ type SlackConfig struct {
 	DMStream       *bool               `json:"dm_stream,omitempty"`       // enable streaming for DMs (default false)
 	GroupStream    *bool               `json:"group_stream,omitempty"`    // enable streaming for groups (default false)
 	NativeStream   *bool               `json:"native_stream,omitempty"`   // use Slack ChatStreamer API if available (default false)
+	SuppressPlaceholder *bool          `json:"suppress_placeholder,omitempty"` // skip "Thinking..." placeholder + edit; rely on thinking reaction for the full run (default false). Incompatible with streaming.
 	ReactionLevel  string              `json:"reaction_level,omitempty"`  // "off" (default), "minimal", "full"
 	BlockReply     *bool               `json:"block_reply,omitempty"`     // override gateway block_reply (nil = inherit)
 	DebounceDelay  int                 `json:"debounce_delay,omitempty"`  // ms delay before dispatching rapid messages (default 300, 0=disabled)
