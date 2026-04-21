@@ -210,6 +210,7 @@ var coreToolSummaries = map[string]string{
 	"team_tasks":             "Team task board — track progress, manage dependencies (spawn auto-creates delegation tasks)",
 	"list_group_members":     "List all members of the current group chat (Feishu/Lark only)",
 	"create_forum_topic":     "Create a forum topic in a Telegram supergroup",
+	"create_discord_thread":  "Create a new thread in a Discord text channel or post in a Discord forum channel (Discord only, not available in DMs)",
 	"delegate":               "Delegate a task to a linked agent (requires agent_links). See ## Delegation Targets for available agents",
 	"memory_expand":          "Retrieve full session details from episodic memory results — use after memory_search returns episodic hits",
 	"vault_search":           "Search documents in the knowledge vault (hybrid keyword + semantic). Pass the returned doc_id to vault_read for full content",
