@@ -309,6 +309,21 @@ func (m *Manager) ListGroupMembers(ctx context.Context, channelName, chatID stri
 	return gmp.ListGroupMembers(ctx, chatID)
 }
 
+// SendDiscordEmbed delegates to the named channel's DiscordEmbedSender if available.
+func (m *Manager) SendDiscordEmbed(ctx context.Context, channelName string, params DiscordSendEmbedParams) (DiscordSendEmbedResult, error) {
+	m.mu.RLock()
+	ch, ok := m.channels[channelName]
+	m.mu.RUnlock()
+	if !ok {
+		return DiscordSendEmbedResult{}, fmt.Errorf("channel %q not found", channelName)
+	}
+	des, ok := ch.(DiscordEmbedSender)
+	if !ok {
+		return DiscordSendEmbedResult{}, fmt.Errorf("channel %q does not support Discord embeds", channelName)
+	}
+	return des.SendEmbed(ctx, params)
+}
+
 // UnregisterChannel removes a channel from the manager.
 func (m *Manager) UnregisterChannel(name string) {
 	m.mu.Lock()
