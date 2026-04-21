@@ -20,6 +20,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/consolidation"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	kg "github.com/nextlevelbuilder/goclaw/internal/knowledgegraph"
+	"github.com/nextlevelbuilder/goclaw/internal/channels/bitrix24"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/discord"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/facebook"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/pancake"
@@ -466,8 +467,22 @@ func runGateway() {
 		instanceLoader.RegisterFactory(channels.TypeSlack, slackchannel.FactoryWithPendingStore(pgStores.PendingMessages))
 		instanceLoader.RegisterFactory(channels.TypeFacebook, facebook.Factory)
 		instanceLoader.RegisterFactory(channels.TypePancake, pancake.Factory)
+		// Bitrix24: factory needs the portal store + encKey injected so each
+		// Channel can resolve its portal on Start(). The encKey here mirrors
+		// the one used by pg.NewPGStores → NewPGBitrixPortalStore.
+		bitrixEncKey := os.Getenv("GOCLAW_ENCRYPTION_KEY")
+		instanceLoader.RegisterFactory(channels.TypeBitrix24, bitrix24.FactoryWithPortalStore(pgStores.BitrixPortals, bitrixEncKey))
 		if err := instanceLoader.LoadAll(context.Background()); err != nil {
 			slog.Error("failed to load channel instances from DB", "error", err)
+		}
+
+		// Warm the shared Bitrix24 router with every portal row so inbound
+		// webhooks land on the right *Portal even before a channel instance
+		// is loaded for that portal. Idempotent; no-op on sqlite-lite.
+		if pgStores.BitrixPortals != nil {
+			if err := bitrix24.BootstrapPortals(context.Background(), pgStores.BitrixPortals, bitrixEncKey); err != nil {
+				slog.Warn("bitrix24 bootstrap failed", "err", err)
+			}
 		}
 	}
 

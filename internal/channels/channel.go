@@ -71,6 +71,7 @@ const (
 
 // Channel type constants used across channel packages and gateway wiring.
 const (
+	TypeBitrix24     = "bitrix24"
 	TypeDiscord      = "discord"
 	TypeFacebook     = "facebook"
 	TypeFeishu       = "feishu"

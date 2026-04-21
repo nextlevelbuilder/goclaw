@@ -1,0 +1,190 @@
+package bitrix24
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
+)
+
+// bitrixCreds maps the credentials JSON from channel_instances.credentials.
+//
+// Bitrix24 keeps portal-level OAuth (client_id / client_secret / tokens) on the
+// `bitrix_portals` row — not here. A channel_instance is a thin pointer into
+// that portal plus per-bot config, so creds is currently empty. Kept as an
+// explicit struct to reserve the shape for future bot-local secrets (e.g. a
+// per-bot HMAC) without breaking stored rows.
+type bitrixCreds struct{}
+
+// bitrixInstanceConfig maps the non-secret config JSONB from channel_instances.config.
+//
+// Portal + BotCode + BotName are required. Everything else is optional with
+// sensible defaults applied in the factory. Fields are grouped to match the
+// Phase 03 plan — resource link first, then policies, rendering, stream,
+// misc, and a per-instance PublicURL override (used for the webhook URLs
+// sent to imbot.register).
+type bitrixInstanceConfig struct {
+	// Resource link (required)
+	Portal    string `json:"portal"`              // bitrix_portals.name scoped by tenant_id
+	BotCode   string `json:"bot_code"`            // stable key passed to imbot.register / LookupRegisteredBot
+	BotName   string `json:"bot_name"`            // display name
+	BotAvatar string `json:"bot_avatar,omitempty"` // optional URL; factory resolves and base64-encodes at Start()
+
+	// Policies
+	AllowFrom      []string `json:"allow_from,omitempty"`
+	GroupAllowFrom []string `json:"group_allow_from,omitempty"`
+	DMPolicy       string   `json:"dm_policy,omitempty"`
+	GroupPolicy    string   `json:"group_policy,omitempty"`
+	DeptAllowFrom  []int    `json:"dept_allow_from,omitempty"` // Phase 04
+	RequireMention *bool    `json:"require_mention,omitempty"`
+
+	// Rendering
+	TextChunkLimit int `json:"text_chunk_limit,omitempty"` // default 4000
+	MediaMaxMB     int `json:"media_max_mb,omitempty"`     // default 20
+
+	// Stream / reactions (Phase 05, 07)
+	Streaming     *bool  `json:"streaming,omitempty"`
+	ReactionLevel string `json:"reaction_level,omitempty"` // off|minimal|full
+
+	// Misc
+	HistoryLimit int   `json:"history_limit,omitempty"`
+	BlockReply   *bool `json:"block_reply,omitempty"`
+
+	// Webhook endpoint override. Bitrix24 imbot.register requires absolute
+	// URLs for EVENT_MESSAGE_ADD etc. GoClaw has no global GOCLAW_PUBLIC_URL
+	// setting — we let operators configure it per-instance so multiple
+	// gateways fronting different ingresses can co-exist.
+	//
+	// When empty Start() warns and still registers with /bitrix24/events as
+	// a relative path; the admin has to fix the config before webhooks flow.
+	PublicURL string `json:"public_url,omitempty"`
+}
+
+// Factory is the base channels.ChannelFactory signature. Bitrix24 requires a
+// BitrixPortalStore, so this returns an explanatory error — the gateway must
+// register FactoryWithPortalStore() instead. Kept to satisfy anyone who
+// looks for Factory by convention across channel packages.
+func Factory(name string, creds json.RawMessage, cfg json.RawMessage,
+	msgBus *bus.MessageBus, pairingSvc store.PairingStore) (channels.Channel, error) {
+	return nil, errors.New("bitrix24: use FactoryWithPortalStore in gateway wiring — portal store is required")
+}
+
+// FactoryWithPortalStore returns a ChannelFactory closed over the portal
+// store + AES encryption key. Gateway wiring calls this once at startup and
+// hands the returned closure to the InstanceLoader.
+//
+// Responsibilities of the closure:
+//   - Unmarshal and validate cfg (required fields + defaults).
+//   - Resolve the shared Router singleton (creates it on first invocation).
+//   - Build the Channel with pairing + allow lists + mention policy wired up.
+//
+// The closure does NOT resolve/load the Portal or talk to Bitrix24 — that
+// work is deferred to Channel.Start() so a bad row doesn't crash boot.
+func FactoryWithPortalStore(portalStore store.BitrixPortalStore, encKey string) channels.ChannelFactory {
+	return func(name string, creds json.RawMessage, cfg json.RawMessage,
+		msgBus *bus.MessageBus, pairingSvc store.PairingStore) (channels.Channel, error) {
+
+		if portalStore == nil {
+			return nil, errors.New("bitrix24 factory: nil BitrixPortalStore (gateway wiring bug)")
+		}
+
+		// creds is optional for Bitrix24 — the bot has no private secrets of
+		// its own. Decode anyway so a malformed blob surfaces as a boot error.
+		if len(creds) > 0 {
+			var c bitrixCreds
+			if err := json.Unmarshal(creds, &c); err != nil {
+				return nil, fmt.Errorf("decode bitrix24 credentials: %w", err)
+			}
+		}
+
+		var ic bitrixInstanceConfig
+		if len(cfg) > 0 {
+			if err := json.Unmarshal(cfg, &ic); err != nil {
+				return nil, fmt.Errorf("decode bitrix24 config: %w", err)
+			}
+		}
+		if ic.Portal == "" || ic.BotCode == "" || ic.BotName == "" {
+			return nil, errors.New("bitrix24 channel requires portal, bot_code, and bot_name")
+		}
+
+		applyConfigDefaults(&ic)
+
+		// Shared process-wide router. InitWebhookRouter uses sync.Once so the
+		// first caller wins; later callers get the same pointer. Any nil-store
+		// mistake would have panicked on the first call anyway — returning
+		// the error keeps boot diagnostics clean.
+		router, err := InitWebhookRouter(portalStore, encKey, RouterConfig{})
+		if err != nil {
+			return nil, fmt.Errorf("bitrix24 router init: %w", err)
+		}
+
+		ch := &Channel{
+			BaseChannel: channels.NewBaseChannel(name, msgBus, mergeAllowLists(ic.AllowFrom, ic.GroupAllowFrom)),
+			cfg:         ic,
+			portalStore: portalStore,
+			encKey:      encKey,
+			router:      router,
+			stopCh:      make(chan struct{}),
+		}
+		ch.SetType(channels.TypeBitrix24)
+		ch.SetName(name)
+		ch.SetPairingService(pairingSvc)
+		// applyConfigDefaults guarantees RequireMention is non-nil, but guard
+		// the deref anyway so a future refactor of the defaults can't turn this
+		// into a boot-time nil-pointer panic.
+		requireMention := true
+		if ic.RequireMention != nil {
+			requireMention = *ic.RequireMention
+		}
+		ch.SetRequireMention(requireMention)
+		ch.SetHistoryLimit(ic.HistoryLimit)
+		ch.ValidatePolicy(ic.DMPolicy, ic.GroupPolicy)
+		return ch, nil
+	}
+}
+
+// applyConfigDefaults fills in the per-instance knobs a well-behaved portal
+// would have been given at onboard time. Pulled into its own function so
+// tests can exercise the default surface directly.
+func applyConfigDefaults(ic *bitrixInstanceConfig) {
+	if ic.DMPolicy == "" {
+		ic.DMPolicy = string(channels.DMPolicyPairing)
+	}
+	if ic.GroupPolicy == "" {
+		ic.GroupPolicy = string(channels.GroupPolicyOpen)
+	}
+	if ic.TextChunkLimit <= 0 {
+		ic.TextChunkLimit = 4000
+	}
+	if ic.MediaMaxMB <= 0 {
+		ic.MediaMaxMB = 20
+	}
+	if ic.ReactionLevel == "" {
+		ic.ReactionLevel = "minimal"
+	}
+	if ic.RequireMention == nil {
+		t := true
+		ic.RequireMention = &t
+	}
+	if ic.Streaming == nil {
+		t := true
+		ic.Streaming = &t
+	}
+}
+
+// mergeAllowLists concatenates DM and group allow-lists into a single slice
+// that BaseChannel.IsAllowed can check against. Order preserved; empty input
+// slices skipped so the resulting slice stays nil when nothing is configured
+// (BaseChannel treats a nil allow-list as "open").
+func mergeAllowLists(dm, group []string) []string {
+	if len(dm) == 0 && len(group) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(dm)+len(group))
+	out = append(out, dm...)
+	out = append(out, group...)
+	return out
+}
