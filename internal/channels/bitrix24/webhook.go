@@ -186,6 +186,13 @@ func (r *Router) handleInstallLocalApp(w http.ResponseWriter, req *http.Request)
 	}
 	r.mu.Unlock()
 
+	// Visible signal in logs so operators can confirm a Local App reinstall
+	// actually reached the handler. The happy path used to be silent, which
+	// made "did the reinstall POST arrive?" unanswerable from logs alone.
+	slog.Info("bitrix24 install (local): tokens persisted",
+		"tenant", portal.TenantID(), "portal", portal.Name(),
+		"domain", domain, "member_id", memberID, "expires_in", expiresIn)
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write([]byte(installSuccessHTML))
 }
@@ -209,6 +216,14 @@ func (r *Router) handleEvent(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
+	// Entry trace so "did Bitrix POST anything to our events URL?" is
+	// answerable from logs without adding middleware. Keep at INFO for now —
+	// can drop to Debug once the wire-up is stable in production.
+	slog.Info("bitrix24 event: inbound",
+		"remote", req.RemoteAddr,
+		"content_length", req.ContentLength,
+		"user_agent", req.Header.Get("User-Agent"))
 
 	evt, err := ParseEvent(req)
 	if err != nil {
