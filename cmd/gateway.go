@@ -450,6 +450,15 @@ func runGateway() {
 			gl.SetGroupMemberLister(channelMgr.ListGroupMembers)
 		}
 	}
+	// Wire Discord embed sender + tenant checker on send_discord_embed tool
+	if t, ok := toolsReg.Get("send_discord_embed"); ok {
+		if es, ok := t.(tools.DiscordEmbedSenderAware); ok {
+			es.SetDiscordEmbedSender(channelMgr.SendDiscordEmbed)
+		}
+		if tc, ok := t.(tools.ChannelTenantCheckerAware); ok {
+			tc.SetChannelTenantChecker(channelMgr.ChannelTenantID)
+		}
+	}
 
 	// Load channel instances from DB.
 	var instanceLoader *channels.InstanceLoader
