@@ -554,9 +554,13 @@ func (h *ChannelInstancesHandler) handleResolveContacts(w http.ResponseWriter, r
 }
 
 // isValidChannelType checks if the channel type is supported.
+//
+// Keep this list in sync with the WS twin in
+// internal/gateway/methods/channel_instances.go and with CHANNEL_TYPES in
+// ui/web/src/constants/channels.ts.
 func isValidChannelType(ct string) bool {
 	switch ct {
-	case "telegram", "discord", "slack", "whatsapp", "zalo_oa", "zalo_personal", "feishu", "facebook", "pancake":
+	case "telegram", "discord", "slack", "whatsapp", "zalo_oa", "zalo_personal", "feishu", "facebook", "pancake", "bitrix24":
 		return true
 	}
 	return false
