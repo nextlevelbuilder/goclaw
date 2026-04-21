@@ -75,4 +75,11 @@ Return a single JSON object with "entities" and "relations" arrays:
 - Relations should connect entities that have a meaningful connection from the conversation
 - For entity_type='event', extract event_time from the earliest message timestamp discussing this event. Use ISO 8601 format (e.g. '2026-04-17T14:30:00Z'). Omit event_time for non-event entity types.
 - Return valid JSON only, no markdown fences or commentary
+
+## Media Content
+- Messages may include [Media Content Analysis] sections with AI-generated descriptions of images, audio, documents, and video shared in the chat
+- Extract entities and relations from media descriptions the same way you would from text messages
+- For images: extract people, objects, text on screen, locations shown
+- For documents: extract projects, tasks, deadlines, organizations mentioned
+- For audio transcripts: treat like regular conversation text
 `

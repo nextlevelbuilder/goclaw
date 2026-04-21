@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -20,6 +21,12 @@ type listenEntry struct {
 	ChatID    string
 	ChatName  string
 	AgentID   string // per-message agent UUID override (empty = use buffer default)
+	MediaRefs []store.RawMediaRef
+}
+
+// mediaSaver is the interface for persisting media files (satisfied by *media.Store).
+type mediaSaver interface {
+	SaveFile(sessionKey, srcPath, mime string) (id string, dstPath string, err error)
 }
 
 // ListenBuffer inserts messages into the listen_raw_messages store in real-time.
@@ -28,6 +35,7 @@ type listenEntry struct {
 type ListenBuffer struct {
 	mu          sync.Mutex
 	rawMsgStore store.ListenRawMessageStore
+	mediaStore  mediaSaver
 	agentUUID   string
 	tenantID    uuid.UUID
 	channelName string
@@ -73,6 +81,13 @@ func (b *ListenBuffer) SetRawMsgStore(s store.ListenRawMessageStore) {
 	b.rawMsgStore = s
 }
 
+// SetMediaStore sets the media store for persisting media files.
+func (b *ListenBuffer) SetMediaStore(ms mediaSaver) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.mediaStore = ms
+}
+
 // SetAgentKey is a no-op kept for interface compatibility.
 func (b *ListenBuffer) SetAgentKey(_ string) {}
 
@@ -116,6 +131,7 @@ func (b *ListenBuffer) Add(graphID string, entry listenEntry) {
 		MsgTimestamp: entry.Timestamp,
 		AgentID:      effectiveAgentUUID,
 		TenantID:     tenantID,
+		MediaRefs:    entry.MediaRefs,
 	}
 
 	ctx := store.WithTenantID(b.ctx, tenantID)
@@ -128,10 +144,54 @@ func (b *ListenBuffer) Add(graphID string, entry listenEntry) {
 	slog.Info("whatsapp listen: raw message stored",
 		"graph_id", graphID, "sender", entry.Sender,
 		"chat_id", entry.ChatID, "channel", channelName,
-		"agent_id", effectiveAgentUUID, "override", entry.AgentID != "")
+		"agent_id", effectiveAgentUUID, "override", entry.AgentID != "",
+		"media_refs", len(entry.MediaRefs))
 }
 
 // Close cancels the context. No buffered entries to flush — everything is already in the DB.
 func (b *ListenBuffer) Close() {
 	b.cancel()
+}
+
+// PersistMedia moves downloaded media files to durable storage keyed by agentID/graphID.
+// Returns persisted refs for DB storage and paths that failed (for temp cleanup).
+func (b *ListenBuffer) PersistMedia(agentUUID, graphID string, mediaList []media.MediaInfo) ([]store.RawMediaRef, []string) {
+	b.mu.Lock()
+	ms := b.mediaStore
+	b.mu.Unlock()
+
+	if ms == nil {
+		var paths []string
+		for _, mi := range mediaList {
+			if mi.FilePath != "" {
+				paths = append(paths, mi.FilePath)
+			}
+		}
+		return nil, paths
+	}
+
+	sessionKey := agentUUID + "/" + graphID
+	var persisted []store.RawMediaRef
+	var failed []string
+	for _, mi := range mediaList {
+		if mi.FilePath == "" {
+			continue
+		}
+		mediaID, dstPath, err := ms.SaveFile(sessionKey, mi.FilePath, mi.ContentType)
+		if err != nil {
+			slog.Warn("whatsapp listen: media persist failed",
+				"type", mi.Type, "error", err)
+			failed = append(failed, mi.FilePath)
+			continue
+		}
+		persisted = append(persisted, store.RawMediaRef{
+			MediaID:     mediaID,
+			FilePath:    dstPath,
+			MediaType:   mi.Type,
+			ContentType: mi.ContentType,
+			FileName:    mi.FileName,
+			FileSize:    mi.FileSize,
+		})
+	}
+	return persisted, failed
 }

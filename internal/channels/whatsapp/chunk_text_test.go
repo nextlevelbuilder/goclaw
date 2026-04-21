@@ -317,10 +317,3 @@ func TestHTMLTagToWaMd_PlainText(t *testing.T) {
 		t.Errorf("htmlTagToWaMd(plain) = %q, want unchanged", got)
 	}
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}

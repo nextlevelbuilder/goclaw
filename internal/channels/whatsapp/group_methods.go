@@ -51,7 +51,7 @@ func (m *GroupMethods) handleRefreshGroups(ctx context.Context, client *gateway.
 
 	// Resolve the channel from the manager (may need a brief wait for async reload).
 	var wa *Channel
-	for attempt := 0; attempt < 10; attempt++ {
+	for range 10 {
 		if ch, ok := m.manager.GetChannel(inst.Name); ok {
 			if w, ok := ch.(*Channel); ok {
 				wa = w

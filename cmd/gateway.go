@@ -219,8 +219,10 @@ func runGateway() {
 				RawMsgStore:   pgStores.ListenRawMessages,
 				KGStore:       pgStores.KnowledgeGraph,
 				SystemConfigs: pgStores.SystemConfigs,
+				BuiltinTools:  pgStores.BuiltinTools,
 				Registry:      providerRegistry,
 				TenantID:      store.MasterTenantID,
+				MediaAnalyzer: whatsapp.NewMediaAnalyzer(providerRegistry, pgStores.SystemConfigs, pgStores.BuiltinTools, store.MasterTenantID),
 			})
 			defer cleanupExtraction()
 		}
@@ -437,6 +439,7 @@ func runGateway() {
 		instanceLoader.SetProviderRegistry(providerRegistry)
 		instanceLoader.SetPendingCompactionConfig(cfg.Channels.PendingCompaction)
 		instanceLoader.SetListenRawMsgStore(pgStores.ListenRawMessages)
+		instanceLoader.SetMediaStore(mediaStore)
 		instanceLoader.RegisterFactory(channels.TypeTelegram, telegram.FactoryWithStores(pgStores.Agents, pgStores.ConfigPermissions, pgStores.Teams, pgStores.SubagentTasks, pgStores.PendingMessages))
 		instanceLoader.RegisterFactory(channels.TypeDiscord, discord.FactoryWithStores(pgStores.Agents, pgStores.ConfigPermissions, pgStores.PendingMessages))
 		instanceLoader.RegisterFactory(channels.TypeFeishu, feishu.FactoryWithPendingStore(pgStores.PendingMessages))

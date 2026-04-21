@@ -76,6 +76,19 @@
     "maxTokensHint": "Token limit for compacted summary.",
     "info": "When a group chat exceeds the threshold, the LLM automatically summarizes older messages into a single compact entry, keeping the most recent ones intact for context."
   },
+  "ma": {
+    "title": "Media Analysis",
+    "description": "Size limits and settings for analyzing media attachments (images, audio, documents) in listen-only messages.",
+    "enabled": "Enable media analysis",
+    "enabledHint": "Analyze media content from WhatsApp messages for knowledge graph extraction.",
+    "maxImageMb": "Max image (MB)",
+    "maxAudioMb": "Max audio (MB)",
+    "maxDocMb": "Max document (MB)",
+    "maxVideoMb": "Max video (MB)",
+    "maxDefaultMb": "Max other (MB)",
+    "timeoutSec": "Timeout (sec)",
+    "info": "Files exceeding these limits are skipped during analysis. Uses the background worker provider for LLM calls. Disabling saves tokens but loses media-derived knowledge."
+  },
   "moreConfig": "More Config",
   "alert": {
     "message": "Background workers failed: {{reason}}. Features like memory consolidation and vault enrichment may not work.",

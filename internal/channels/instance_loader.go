@@ -33,12 +33,18 @@ type InstanceLoader struct {
 	providerReg       *providers.Registry
 	pendingCompactCfg *config.PendingCompactionConfig
 	listenRawMsgStore store.ListenRawMessageStore // for listen-only raw message storage
+	mediaStore        MediaStore                  // for persisting listen-only media attachments
 	factories         map[string]ChannelFactory
 	manager           *Manager
 	msgBus            *bus.MessageBus
 	pairingSvc        store.PairingStore
 	mu                sync.Mutex
 	loaded            map[string]struct{} // channel names managed by this loader
+}
+
+// MediaStore is the interface for persisting media files (subset of media.Store).
+type MediaStore interface {
+	SaveFile(sessionKey, srcPath, mime string) (id string, dstPath string, err error)
 }
 
 // NewInstanceLoader creates a new InstanceLoader.
@@ -76,6 +82,11 @@ func (l *InstanceLoader) SetPendingCompactionConfig(cfg *config.PendingCompactio
 // Must be called before LoadAll/Reload.
 func (l *InstanceLoader) SetListenRawMsgStore(s store.ListenRawMessageStore) {
 	l.listenRawMsgStore = s
+}
+
+// SetMediaStore sets the media store for persisting listen-only media attachments.
+func (l *InstanceLoader) SetMediaStore(ms MediaStore) {
+	l.mediaStore = ms
 }
 
 // RegisterFactory registers a factory for a channel type (e.g., "telegram", "discord").
@@ -350,6 +361,13 @@ func (l *InstanceLoader) loadInstance(ctx context.Context, inst store.ChannelIns
 	if l.listenRawMsgStore != nil {
 		if loc, ok := ch.(interface{ SetListenOnlyDeps(store.ListenRawMessageStore) }); ok {
 			loc.SetListenOnlyDeps(l.listenRawMsgStore)
+		}
+	}
+
+	// Wire media store for persisting listen-only media attachments.
+	if l.mediaStore != nil {
+		if ms, ok := ch.(interface{ SetMediaStore(MediaStore) }); ok {
+			ms.SetMediaStore(l.mediaStore)
 		}
 	}
 

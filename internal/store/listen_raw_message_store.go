@@ -23,6 +23,17 @@ type ListenRawMessage struct {
 	TenantID     uuid.UUID  `json:"tenant_id" db:"tenant_id"`
 	CreatedAt    time.Time  `json:"created_at" db:"created_at"`
 	ProcessedAt  *time.Time `json:"processed_at,omitempty" db:"processed_at"`
+	MediaRefs    []RawMediaRef `json:"media_refs" db:"media_refs"`
+}
+
+// RawMediaRef stores a reference to a persisted media file attached to a raw message.
+type RawMediaRef struct {
+	MediaID     string `json:"media_id"`
+	FilePath    string `json:"file_path"`
+	MediaType   string `json:"media_type"`    // "image", "video", "audio", "document"
+	ContentType string `json:"content_type"`  // "image/jpeg", "audio/ogg", etc.
+	FileName    string `json:"file_name"`
+	FileSize    int64  `json:"file_size"`
 }
 
 // ListenRawMessageGroup represents a distinct (agent_id, graph_id) pair

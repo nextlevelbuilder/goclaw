@@ -202,8 +202,27 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 		rm := c.effectiveRequireMention(chatID, peerKind)
 		mentioned := peerKind == "group" && rm != nil && *rm && c.isMentioned(evt)
 		if !mentioned {
+			// Persist media files to durable storage before storing the raw message.
+			var persistedRefs []store.RawMediaRef
+			var failedPaths []string
+			effectiveAgentUUID := c.groupAgentUUID(chatID)
+			graphID := c.resolveGraphID(chatID, peerKind)
+			if len(mediaList) > 0 && c.listenBuf != nil {
+				persistedRefs, failedPaths = c.listenBuf.PersistMedia(
+					effectiveAgentUUID, graphID, mediaList,
+				)
+			} else {
+				// No listen buffer — all media goes to cleanup.
+				for _, mi := range mediaList {
+					if mi.FilePath != "" {
+						failedPaths = append(failedPaths, mi.FilePath)
+					}
+				}
+			}
+			// Clean up only media that failed to persist.
+			scheduleMediaCleanup(failedPaths, 5*time.Minute)
+
 			if c.listenBuf != nil {
-				graphID := c.resolveGraphID(chatID, peerKind)
 				senderName := metadata["user_name"]
 				if senderName == "" {
 					senderName = senderID
@@ -222,15 +241,10 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 					Timestamp: evt.Info.Timestamp,
 					ChatID:    chatID,
 					ChatName:  chatName,
-					AgentID:   c.groupAgentUUID(chatID),
+					AgentID:   effectiveAgentUUID,
+					MediaRefs: persistedRefs,
 				})
 			}
-			// Clean up temp media files (not forwarded to agent pipeline).
-			var tmpPaths []string
-			for _, mf := range mediaFiles {
-				tmpPaths = append(tmpPaths, mf.Path)
-			}
-			scheduleMediaCleanup(tmpPaths, 5*time.Minute)
 			return
 		}
 		// Mentioned in listen-only group — fall through to normal response pipeline.

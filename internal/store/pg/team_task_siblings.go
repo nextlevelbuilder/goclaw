@@ -48,10 +48,7 @@ func (s *PGTeamStore) BatchGetTaskSiblingsByBasenames(
 	const chunkSize = 500
 
 	for start := 0; start < len(clean); start += chunkSize {
-		end := start + chunkSize
-		if end > len(clean) {
-			end = len(clean)
-		}
+		end := min(start+chunkSize, len(clean))
 		chunk := clean[start:end]
 
 		const q = `

@@ -129,16 +129,14 @@ func handleSubagentAnnounce(
 	// Enqueue into producer-consumer queue using tenant-scoped key from routing.
 	isProcessor := enqueueSubagentAnnounce(queueKey, entry)
 	if isProcessor {
-		deps.BgWg.Add(1)
-		go func() {
-			defer deps.BgWg.Done()
+		deps.BgWg.Go(func() {
 			defer safego.Recover(nil, "component", "subagent_announce_loop", "session", sessionKey)
 
 			// Fetch live roster for merged announce context.
 			roster := deps.SubagentMgr.RosterForParent(parentAgent)
 
 			processSubagentAnnounceLoop(ctx, routing, roster, deps.SubagentMgr, deps.Sched, deps.MsgBus, deps.Cfg)
-		}()
+		})
 	}
 
 	return true

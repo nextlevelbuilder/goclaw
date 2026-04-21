@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"go.mau.fi/whatsmeow/proto/waE2E"
-	"google.golang.org/protobuf/proto"
 )
 
 // --- extractTextContent ---
@@ -18,7 +17,7 @@ func TestExtractTextContent_Nil(t *testing.T) {
 }
 
 func TestExtractTextContent_Conversation(t *testing.T) {
-	msg := &waE2E.Message{Conversation: proto.String("hello world")}
+	msg := &waE2E.Message{Conversation: new("hello world")}
 	got := extractTextContent(msg)
 	if got != "hello world" {
 		t.Errorf("extractTextContent(Conversation) = %q, want %q", got, "hello world")
@@ -28,7 +27,7 @@ func TestExtractTextContent_Conversation(t *testing.T) {
 func TestExtractTextContent_ExtendedText(t *testing.T) {
 	msg := &waE2E.Message{
 		ExtendedTextMessage: &waE2E.ExtendedTextMessage{
-			Text: proto.String("extended message"),
+			Text: new("extended message"),
 		},
 	}
 	got := extractTextContent(msg)
@@ -40,10 +39,10 @@ func TestExtractTextContent_ExtendedText(t *testing.T) {
 func TestExtractTextContent_ExtendedTextWithQuote(t *testing.T) {
 	msg := &waE2E.Message{
 		ExtendedTextMessage: &waE2E.ExtendedTextMessage{
-			Text: proto.String("my reply"),
+			Text: new("my reply"),
 			ContextInfo: &waE2E.ContextInfo{
 				QuotedMessage: &waE2E.Message{
-					Conversation: proto.String("original message"),
+					Conversation: new("original message"),
 				},
 			},
 		},
@@ -60,10 +59,10 @@ func TestExtractTextContent_ExtendedTextWithQuote(t *testing.T) {
 func TestExtractTextContent_QuoteOnlyNoText(t *testing.T) {
 	msg := &waE2E.Message{
 		ExtendedTextMessage: &waE2E.ExtendedTextMessage{
-			Text: proto.String(""),
+			Text: new(""),
 			ContextInfo: &waE2E.ContextInfo{
 				QuotedMessage: &waE2E.Message{
-					Conversation: proto.String("quoted"),
+					Conversation: new("quoted"),
 				},
 			},
 		},
@@ -77,7 +76,7 @@ func TestExtractTextContent_QuoteOnlyNoText(t *testing.T) {
 func TestExtractTextContent_ImageCaption(t *testing.T) {
 	msg := &waE2E.Message{
 		ImageMessage: &waE2E.ImageMessage{
-			Caption: proto.String("look at this photo"),
+			Caption: new("look at this photo"),
 		},
 	}
 	got := extractTextContent(msg)
@@ -89,7 +88,7 @@ func TestExtractTextContent_ImageCaption(t *testing.T) {
 func TestExtractTextContent_VideoCaption(t *testing.T) {
 	msg := &waE2E.Message{
 		VideoMessage: &waE2E.VideoMessage{
-			Caption: proto.String("cool video"),
+			Caption: new("cool video"),
 		},
 	}
 	got := extractTextContent(msg)
@@ -101,7 +100,7 @@ func TestExtractTextContent_VideoCaption(t *testing.T) {
 func TestExtractTextContent_DocumentCaption(t *testing.T) {
 	msg := &waE2E.Message{
 		DocumentMessage: &waE2E.DocumentMessage{
-			Caption: proto.String("see this document"),
+			Caption: new("see this document"),
 		},
 	}
 	got := extractTextContent(msg)
@@ -128,7 +127,7 @@ func TestExtractQuotedText_Nil(t *testing.T) {
 }
 
 func TestExtractQuotedText_Conversation(t *testing.T) {
-	msg := &waE2E.Message{Conversation: proto.String("quoted text")}
+	msg := &waE2E.Message{Conversation: new("quoted text")}
 	got := extractQuotedText(msg)
 	if got != "quoted text" {
 		t.Errorf("extractQuotedText(Conversation) = %q, want %q", got, "quoted text")
@@ -138,7 +137,7 @@ func TestExtractQuotedText_Conversation(t *testing.T) {
 func TestExtractQuotedText_ExtendedText(t *testing.T) {
 	msg := &waE2E.Message{
 		ExtendedTextMessage: &waE2E.ExtendedTextMessage{
-			Text: proto.String("extended quoted"),
+			Text: new("extended quoted"),
 		},
 	}
 	got := extractQuotedText(msg)
@@ -149,7 +148,7 @@ func TestExtractQuotedText_ExtendedText(t *testing.T) {
 
 func TestExtractQuotedText_ImageCaption(t *testing.T) {
 	msg := &waE2E.Message{
-		ImageMessage: &waE2E.ImageMessage{Caption: proto.String("img caption")},
+		ImageMessage: &waE2E.ImageMessage{Caption: new("img caption")},
 	}
 	got := extractQuotedText(msg)
 	if got != "img caption" {
@@ -159,7 +158,7 @@ func TestExtractQuotedText_ImageCaption(t *testing.T) {
 
 func TestExtractQuotedText_VideoCaption(t *testing.T) {
 	msg := &waE2E.Message{
-		VideoMessage: &waE2E.VideoMessage{Caption: proto.String("vid caption")},
+		VideoMessage: &waE2E.VideoMessage{Caption: new("vid caption")},
 	}
 	got := extractQuotedText(msg)
 	if got != "vid caption" {
@@ -170,7 +169,7 @@ func TestExtractQuotedText_VideoCaption(t *testing.T) {
 func TestExtractQuotedText_EmptyCaption(t *testing.T) {
 	// Image with empty caption → falls through to empty.
 	msg := &waE2E.Message{
-		ImageMessage: &waE2E.ImageMessage{Caption: proto.String("")},
+		ImageMessage: &waE2E.ImageMessage{Caption: new("")},
 	}
 	got := extractQuotedText(msg)
 	if got != "" {

@@ -44,6 +44,13 @@ export interface InitState {
   kgMinConfidence: string;
   bgProvider: string;
   bgModel: string;
+  maEnabled: boolean;
+  maMaxImageMb: string;
+  maMaxAudioMb: string;
+  maMaxDocMb: string;
+  maMaxVideoMb: string;
+  maMaxDefaultMb: string;
+  maTimeoutSec: string;
 }
 
 export const DEFAULTS: InitState = {
@@ -54,6 +61,9 @@ export const DEFAULTS: InitState = {
   compThreshold: "", compKeepRecent: "", compMaxTokens: "",
   kgProvider: "", kgModel: "", kgMinConfidence: "0.75",
   bgProvider: "", bgModel: "",
+  maEnabled: true, maMaxImageMb: "10", maMaxAudioMb: "50",
+  maMaxDocMb: "20", maMaxVideoMb: "100", maMaxDefaultMb: "20",
+  maTimeoutSec: "30",
 };
 
 export function parseBool(v: string | undefined, fallback: boolean): boolean {

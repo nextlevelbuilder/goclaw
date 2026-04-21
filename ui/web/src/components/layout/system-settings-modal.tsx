@@ -17,7 +17,7 @@ import { toast } from "@/stores/use-toast-store";
 import { EMBEDDING_MODELS, DEFAULT_EMBEDDING_MODELS, DEFAULTS, parseBool, type InitState } from "./system-settings-constants";
 import { SystemSettingsEmbeddingCard } from "./system-settings-embedding-card";
 import { SystemSettingsCompactionCard } from "./system-settings-compaction-card";
-import { Eye, MessageSquareText, Brain } from "lucide-react";
+import { Eye, MessageSquareText, Brain, Image } from "lucide-react";
 
 interface SystemSettingsModalProps {
   open: boolean;
@@ -61,6 +61,15 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
   const [bgProvider, setBgProvider] = useState("");
   const [bgModel, setBgModel] = useState("");
 
+  // Media Analysis
+  const [maEnabled, setMaEnabled] = useState(true);
+  const [maMaxImageMb, setMaMaxImageMb] = useState("10");
+  const [maMaxAudioMb, setMaMaxAudioMb] = useState("50");
+  const [maMaxDocMb, setMaMaxDocMb] = useState("20");
+  const [maMaxVideoMb, setMaMaxVideoMb] = useState("100");
+  const [maMaxDefaultMb, setMaMaxDefaultMb] = useState("20");
+  const [maTimeoutSec, setMaTimeoutSec] = useState("30");
+
   const applyConfigs = useCallback((
     configs: Record<string, string>,
     kgSettings?: { extraction_provider?: string; extraction_model?: string; min_confidence?: number },
@@ -76,6 +85,13 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
       kgProvider: kgSettings?.extraction_provider ?? "", kgModel: kgSettings?.extraction_model ?? "",
       kgMinConfidence: String(kgSettings?.min_confidence ?? 0.75),
       bgProvider: configs["background.provider"] ?? "", bgModel: configs["background.model"] ?? "",
+      maEnabled: parseBool(configs["listen.media_analysis.enabled"], true),
+      maMaxImageMb: configs["listen.media_analysis.max_image_mb"] || "10",
+      maMaxAudioMb: configs["listen.media_analysis.max_audio_mb"] || "50",
+      maMaxDocMb: configs["listen.media_analysis.max_document_mb"] || "20",
+      maMaxVideoMb: configs["listen.media_analysis.max_video_mb"] || "100",
+      maMaxDefaultMb: configs["listen.media_analysis.max_default_mb"] || "20",
+      maTimeoutSec: configs["listen.media_analysis.timeout_sec"] || "30",
     };
     setInit(s);
     setEmbProvider(s.embProvider); setEmbModel(s.embModel); setEmbMaxChunkLen(s.embMaxChunkLen); setEmbChunkOverlap(s.embChunkOverlap);
@@ -83,6 +99,9 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
     setCompProvider(s.compProvider); setCompModel(s.compModel); setCompThreshold(s.compThreshold); setCompKeepRecent(s.compKeepRecent); setCompMaxTokens(s.compMaxTokens);
     setKgProvider(s.kgProvider); setKgModel(s.kgModel); setKgMinConfidence(s.kgMinConfidence);
     setBgProvider(s.bgProvider); setBgModel(s.bgModel);
+    setMaEnabled(s.maEnabled); setMaMaxImageMb(s.maMaxImageMb); setMaMaxAudioMb(s.maMaxAudioMb);
+    setMaMaxDocMb(s.maMaxDocMb); setMaMaxVideoMb(s.maMaxVideoMb); setMaMaxDefaultMb(s.maMaxDefaultMb);
+    setMaTimeoutSec(s.maTimeoutSec);
     resetEmb();
   }, [resetEmb]);
 
@@ -126,6 +145,13 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
       if (compMaxTokens !== init.compMaxTokens) updates["compaction.max_tokens"] = compMaxTokens;
       if (bgProvider !== init.bgProvider) updates["background.provider"] = bgProvider;
       if (bgModel !== init.bgModel) updates["background.model"] = bgModel;
+      if (maEnabled !== init.maEnabled) updates["listen.media_analysis.enabled"] = String(maEnabled);
+      if (maMaxImageMb !== init.maMaxImageMb) updates["listen.media_analysis.max_image_mb"] = maMaxImageMb;
+      if (maMaxAudioMb !== init.maMaxAudioMb) updates["listen.media_analysis.max_audio_mb"] = maMaxAudioMb;
+      if (maMaxDocMb !== init.maMaxDocMb) updates["listen.media_analysis.max_document_mb"] = maMaxDocMb;
+      if (maMaxVideoMb !== init.maMaxVideoMb) updates["listen.media_analysis.max_video_mb"] = maMaxVideoMb;
+      if (maMaxDefaultMb !== init.maMaxDefaultMb) updates["listen.media_analysis.max_default_mb"] = maMaxDefaultMb;
+      if (maTimeoutSec !== init.maTimeoutSec) updates["listen.media_analysis.timeout_sec"] = maTimeoutSec;
       for (const [key, value] of Object.entries(updates)) await http.put(`/v1/system-configs/${key}`, { value });
       const kgChanged = kgProvider !== init.kgProvider || kgModel !== init.kgModel || kgMinConfidence !== init.kgMinConfidence;
       if (kgChanged) {
@@ -197,6 +223,54 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
                 <ProviderModelSelect provider={bgProvider} onProviderChange={(v) => { setBgProvider(v); setBgModel(""); }} model={bgModel} onModelChange={setBgModel} allowEmpty providerLabel={t("bg.provider")} modelLabel={t("bg.model")} providerTip={t("bg.providerTip")} modelTip={t("bg.modelTip")} providerPlaceholder={t("bg.providerPlaceholder")} modelPlaceholder={t("bg.modelPlaceholder")} />
                 <div className="flex items-start gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-950/30 dark:text-slate-300">
                   <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span>{t("bg.info")}</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Media Analysis */}
+            <Card className="border-amber-200 dark:border-amber-800">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base"><Image className="h-4 w-4 text-amber-500" />{t("ma.title")}</CardTitle>
+                <CardDescription>{t("ma.description")}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 pt-0">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label className="text-sm">{t("ma.enabled")}</Label>
+                    <p className="text-xs text-muted-foreground">{t("ma.enabledHint")}</p>
+                  </div>
+                  <input type="checkbox" checked={maEnabled} onChange={(e) => setMaEnabled(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
+                </div>
+                {maEnabled && (
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    <div className="space-y-1">
+                      <Label htmlFor="maMaxImage" className="text-xs">{t("ma.maxImageMb")}</Label>
+                      <Input id="maMaxImage" type="number" min={1} placeholder="10" value={maMaxImageMb} onChange={(e) => setMaMaxImageMb(e.target.value)} className="text-base md:text-sm" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="maMaxAudio" className="text-xs">{t("ma.maxAudioMb")}</Label>
+                      <Input id="maMaxAudio" type="number" min={1} placeholder="50" value={maMaxAudioMb} onChange={(e) => setMaMaxAudioMb(e.target.value)} className="text-base md:text-sm" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="maMaxDoc" className="text-xs">{t("ma.maxDocMb")}</Label>
+                      <Input id="maMaxDoc" type="number" min={1} placeholder="20" value={maMaxDocMb} onChange={(e) => setMaMaxDocMb(e.target.value)} className="text-base md:text-sm" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="maMaxVideo" className="text-xs">{t("ma.maxVideoMb")}</Label>
+                      <Input id="maMaxVideo" type="number" min={1} placeholder="100" value={maMaxVideoMb} onChange={(e) => setMaMaxVideoMb(e.target.value)} className="text-base md:text-sm" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="maMaxDefault" className="text-xs">{t("ma.maxDefaultMb")}</Label>
+                      <Input id="maMaxDefault" type="number" min={1} placeholder="20" value={maMaxDefaultMb} onChange={(e) => setMaMaxDefaultMb(e.target.value)} className="text-base md:text-sm" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="maTimeout" className="text-xs">{t("ma.timeoutSec")}</Label>
+                      <Input id="maTimeout" type="number" min={5} placeholder="30" value={maTimeoutSec} onChange={(e) => setMaTimeoutSec(e.target.value)} className="text-base md:text-sm" />
+                    </div>
+                  </div>
+                )}
+                <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                  <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span>{t("ma.info")}</span>
                 </div>
               </CardContent>
             </Card>

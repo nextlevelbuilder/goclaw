@@ -13,7 +13,6 @@ import (
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
@@ -28,7 +27,7 @@ const (
 
 func init() {
 	// Set device name shown in WhatsApp's "Linked Devices" screen (once at package init).
-	wastore.DeviceProps.Os = proto.String("GoClaw")
+	wastore.DeviceProps.Os = new("GoClaw")
 }
 
 // Channel connects directly to WhatsApp via go.mau.fi/whatsmeow.
@@ -347,7 +346,7 @@ func (c *Channel) startReconnectWatchdog() {
 		const maxAttempts = 5
 		const maxBackoff = 60 * time.Second
 
-		for attempt := 0; attempt < maxAttempts; attempt++ {
+		for attempt := range maxAttempts {
 			backoff := time.Duration(attempt+1) * 5 * time.Second
 			if backoff > maxBackoff {
 				backoff = maxBackoff
@@ -521,6 +520,14 @@ func (c *Channel) SetListenOnlyDeps(rawMsgStore store.ListenRawMessageStore) {
 	slog.Info("whatsapp: listen-only deps wired",
 		"channel", c.Name(), "agent", c.AgentID(),
 		"rawMsgStore_nil", rawMsgStore == nil)
+}
+
+// SetMediaStore wires the media store for persisting listen-only media attachments.
+func (c *Channel) SetMediaStore(ms channels.MediaStore) {
+	if c.listenBuf == nil {
+		return
+	}
+	c.listenBuf.SetMediaStore(ms)
 }
 
 // ResolveGroupAgentOverrides resolves group override agent_keys to UUIDs using the agent store.

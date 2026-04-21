@@ -5,6 +5,7 @@ package sqlitestore
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -28,7 +29,7 @@ func (s *SQLiteListenRawMessageStore) AppendBatch(ctx context.Context, msgs []st
 		return nil
 	}
 
-	const cols = 12
+	const cols = 13
 	placeholders := make([]string, len(msgs))
 	args := make([]any, 0, len(msgs)*cols)
 	now := time.Now()
@@ -38,15 +39,16 @@ func (s *SQLiteListenRawMessageStore) AppendBatch(ctx context.Context, msgs []st
 		if msgs[i].ID == uuid.Nil {
 			msgs[i].ID = uuid.Must(uuid.NewV7())
 		}
-		placeholders[i] = "(?,?,?,?,?,?,?,?,?,?,?,?)"
+		mediaJSON, _ := json.Marshal(msgs[i].MediaRefs)
+		placeholders[i] = "(?,?,?,?,?,?,?,?,?,?,?,?,?)"
 		args = append(args, msgs[i].ID, msgs[i].ChannelName, msgs[i].ChatID,
 			msgs[i].ChatName, msgs[i].GraphID, msgs[i].Sender, msgs[i].SenderID,
-			msgs[i].Body, msgs[i].MsgTimestamp, msgs[i].AgentID, now, tid)
+			msgs[i].Body, msgs[i].MsgTimestamp, msgs[i].AgentID, now, tid, string(mediaJSON))
 	}
 
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO listen_raw_messages (id, channel_name, chat_id, chat_name, graph_id, sender, sender_id, body, msg_timestamp, agent_id, created_at, tenant_id)
-			 VALUES `+strings.Join(placeholders, ","),
+		`INSERT INTO listen_raw_messages (id, channel_name, chat_id, chat_name, graph_id, sender, sender_id, body, msg_timestamp, agent_id, created_at, tenant_id, media_refs)
+				 VALUES `+strings.Join(placeholders, ","),
 		args...,
 	)
 	return err
@@ -59,11 +61,11 @@ func (s *SQLiteListenRawMessageStore) ListPending(ctx context.Context, agentID, 
 	}
 	args := append([]any{agentID, graphID, maxRows}, tArgs...)
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, channel_name, chat_id, chat_name, graph_id, sender, sender_id, body, msg_timestamp, agent_id, created_at, processed_at
-			 FROM listen_raw_messages
-			 WHERE agent_id = ? AND graph_id = ? AND processed_at IS NULL`+tClause+`
-			 ORDER BY msg_timestamp DESC
-			 LIMIT ?`,
+		`SELECT id, channel_name, chat_id, chat_name, graph_id, sender, sender_id, body, msg_timestamp, agent_id, created_at, processed_at, media_refs
+				 FROM listen_raw_messages
+				 WHERE agent_id = ? AND graph_id = ? AND processed_at IS NULL`+tClause+`
+				 ORDER BY msg_timestamp DESC
+				 LIMIT ?`,
 		args...,
 	)
 	if err != nil {
@@ -77,9 +79,10 @@ func (s *SQLiteListenRawMessageStore) ListPending(ctx context.Context, agentID, 
 		var processedAt sql.NullString
 		var createdAt sql.NullString
 		var msgTimestamp sql.NullString
+		var mediaRefsJSON string
 		if err := rows.Scan(&m.ID, &m.ChannelName, &m.ChatID, &m.ChatName,
 			&m.GraphID, &m.Sender, &m.SenderID, &m.Body,
-			&msgTimestamp, &m.AgentID, &createdAt, &processedAt); err != nil {
+			&msgTimestamp, &m.AgentID, &createdAt, &processedAt, &mediaRefsJSON); err != nil {
 			return nil, err
 		}
 		if msgTimestamp.Valid {
@@ -93,6 +96,9 @@ func (s *SQLiteListenRawMessageStore) ListPending(ctx context.Context, agentID, 
 		if processedAt.Valid && processedAt.String != "" {
 			t, _ := time.Parse(time.RFC3339Nano, processedAt.String)
 			m.ProcessedAt = &t
+		}
+		if mediaRefsJSON != "" && mediaRefsJSON != "[]" {
+			_ = json.Unmarshal([]byte(mediaRefsJSON), &m.MediaRefs)
 		}
 		result = append(result, m)
 	}
@@ -259,10 +265,10 @@ func (s *SQLiteListenRawMessageStore) List(ctx context.Context, opts store.Liste
 	pageArgs = append(pageArgs, limit, offset)
 
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, channel_name, chat_id, chat_name, graph_id, sender, sender_id, body, msg_timestamp, agent_id, created_at, processed_at
-			 FROM listen_raw_messages WHERE 1=1`+tClause+whereClause+`
-			 ORDER BY created_at DESC
-			 LIMIT ? OFFSET ?`,
+		`SELECT id, channel_name, chat_id, chat_name, graph_id, sender, sender_id, body, msg_timestamp, agent_id, created_at, processed_at, media_refs
+				 FROM listen_raw_messages WHERE 1=1`+tClause+whereClause+`
+				 ORDER BY created_at DESC
+				 LIMIT ? OFFSET ?`,
 		pageArgs...,
 	)
 	if err != nil {
@@ -276,9 +282,10 @@ func (s *SQLiteListenRawMessageStore) List(ctx context.Context, opts store.Liste
 		var processedAt sql.NullString
 		var createdAt sql.NullString
 		var msgTimestamp sql.NullString
+		var mediaRefsJSON string
 		if err := rows.Scan(&m.ID, &m.ChannelName, &m.ChatID, &m.ChatName,
 			&m.GraphID, &m.Sender, &m.SenderID, &m.Body,
-			&msgTimestamp, &m.AgentID, &createdAt, &processedAt); err != nil {
+			&msgTimestamp, &m.AgentID, &createdAt, &processedAt, &mediaRefsJSON); err != nil {
 			return nil, 0, err
 		}
 		if msgTimestamp.Valid {
@@ -292,6 +299,9 @@ func (s *SQLiteListenRawMessageStore) List(ctx context.Context, opts store.Liste
 		if processedAt.Valid && processedAt.String != "" {
 			t, _ := time.Parse(time.RFC3339Nano, processedAt.String)
 			m.ProcessedAt = &t
+		}
+		if mediaRefsJSON != "" && mediaRefsJSON != "[]" {
+			_ = json.Unmarshal([]byte(mediaRefsJSON), &m.MediaRefs)
 		}
 		result = append(result, m)
 	}

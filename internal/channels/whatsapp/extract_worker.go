@@ -2,6 +2,7 @@ package whatsapp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -25,9 +26,11 @@ type ExtractionWorkerDeps struct {
 	RawMsgStore   store.ListenRawMessageStore
 	KGStore       store.KnowledgeGraphStore
 	SystemConfigs store.SystemConfigStore
+	BuiltinTools  store.BuiltinToolStore
 	Registry      *providers.Registry
 	TenantID      uuid.UUID
 	PollSec       int // poll interval in seconds (default 30)
+	MediaAnalyzer *MediaAnalyzer
 }
 
 // RegisterExtractionWorker starts a background goroutine that periodically polls
@@ -60,7 +63,8 @@ func RegisterExtractionWorker(deps ExtractionWorkerDeps) func() {
 	}()
 
 	slog.Info("whatsapp extraction worker: started",
-		"poll_interval", pollInterval, "batch_size", extractBatchSize)
+		"poll_interval", pollInterval, "batch_size", extractBatchSize,
+		"media_analyzer", deps.MediaAnalyzer != nil)
 	return func() { close(stopCh) }
 }
 
@@ -102,8 +106,48 @@ func processGroupBatch(ctx context.Context, deps ExtractionWorkerDeps, agentID, 
 		return
 	}
 
-	// Resolve background LLM provider.
-	p, model := providerresolve.ResolveBackgroundProvider(ctx, deps.TenantID, deps.Registry, deps.SystemConfigs)
+	// Analyze media attachments and augment the text.
+	mediaSummary := mediaRefsSummary(msgs)
+	if mediaSummary != "" {
+		slog.Info("whatsapp extraction worker: analyzing media attachments",
+			"agent_id", agentID, "graph_id", graphID, "media", mediaSummary)
+		mediaDescs := analyzeMediaAttachments(ctx, msgs, deps.MediaAnalyzer)
+		if len(mediaDescs) > 0 {
+			var mediaText strings.Builder
+			mediaText.WriteString("\n\n[Media Content Analysis]\n")
+			for _, m := range msgs {
+				if desc, ok := mediaDescs[m.ID]; ok {
+					ts := m.MsgTimestamp.Format("2006-01-02 15:04:05")
+					fmt.Fprintf(&mediaText, "\n[%s] %s:\n%s\n", ts, m.Sender, desc)
+				}
+			}
+			mediaStr := mediaText.String()
+			text += mediaStr
+			slog.Info("whatsapp extraction worker: media analysis result",
+				"agent_id", agentID, "graph_id", graphID,
+				"media_text_len", len(mediaStr))
+		}
+	}
+
+	// Resolve KG extraction provider: prefer the KG-specific provider/model from
+	// builtin_tools settings (same as the main KG extraction pipeline), fall back
+	// to the background provider chain.
+	var p providers.Provider
+	var model string
+	var minConfidence float64 = 0.75
+	var providerSource string
+
+	if deps.BuiltinTools != nil {
+		p, model, minConfidence, providerSource = resolveKGProvider(ctx, deps)
+	}
+
+	if p == nil {
+		p, model = providerresolve.ResolveBackgroundProvider(ctx, deps.TenantID, deps.Registry, deps.SystemConfigs)
+		if p != nil {
+			providerSource = "background"
+		}
+	}
+
 	if p == nil {
 		slog.Warn("whatsapp extraction worker: no LLM provider available",
 			"agent_id", agentID, "graph_id", graphID)
@@ -111,10 +155,24 @@ func processGroupBatch(ctx context.Context, deps ExtractionWorkerDeps, agentID, 
 	}
 
 	slog.Info("whatsapp extraction worker: extracting KG from batch",
-		"agent_id", agentID, "graph_id", graphID, "messages", len(msgs), "text_len", len(text))
+		"agent_id", agentID, "graph_id", graphID,
+		"messages", len(msgs), "text_len", len(text),
+		"provider", p.Name(), "model", model,
+		"provider_source", providerSource, "min_confidence", minConfidence)
+
+	// Log the full text being sent for extraction (truncated for readability).
+	if len(text) > 500 {
+		slog.Debug("whatsapp extraction worker: extraction text (truncated)",
+			"agent_id", agentID, "graph_id", graphID,
+			"text", text[:500]+"...")
+	} else {
+		slog.Debug("whatsapp extraction worker: extraction text",
+			"agent_id", agentID, "graph_id", graphID,
+			"text", text)
+	}
 
 	// Extract entities and relations using the conversation-optimized prompt.
-	extractor := knowledgegraph.NewExtractorWithPrompt(p, model, 0.75, listenExtractSystemPrompt)
+	extractor := knowledgegraph.NewExtractorWithPrompt(p, model, minConfidence, listenExtractSystemPrompt)
 	result, err := extractor.Extract(ctx, text)
 	if err != nil {
 		slog.Warn("whatsapp extraction worker: extraction failed",
@@ -125,6 +183,18 @@ func processGroupBatch(ctx context.Context, deps ExtractionWorkerDeps, agentID, 
 		slog.Debug("whatsapp extraction worker: no entities extracted",
 			"agent_id", agentID, "graph_id", graphID, "messages", len(msgs))
 		// Still mark as processed so we don't re-process empty batches.
+	}
+
+	// Log extracted entities and relations for debugging.
+	for i, e := range result.Entities {
+		slog.Debug("whatsapp extraction worker: extracted entity",
+			"agent_id", agentID, "graph_id", graphID,
+			"idx", i, "name", e.Name, "type", e.EntityType, "confidence", fmt.Sprintf("%.2f", e.Confidence))
+	}
+	for i, r := range result.Relations {
+		slog.Debug("whatsapp extraction worker: extracted relation",
+			"agent_id", agentID, "graph_id", graphID,
+			"idx", i, "source", r.SourceEntityID, "target", r.TargetEntityID, "type", r.RelationType)
 	}
 
 	// Scope entities/relations to (agentID, graphID).
@@ -226,4 +296,44 @@ func buildConversationTextFromRaw(msgs []store.ListenRawMessage) string {
 		}
 	}
 	return b.String()
+}
+
+// kgExtractionSettings mirrors the builtin_tools knowledge_graph_search settings JSON.
+type kgExtractionSettings struct {
+	ExtractionProvider string  `json:"extraction_provider"`
+	ExtractionModel    string  `json:"extraction_model"`
+	MinConfidence      float64 `json:"min_confidence"`
+}
+
+// resolveKGProvider reads KG extraction provider/model from builtin_tools settings.
+// Returns the provider, model, min confidence, and source description.
+func resolveKGProvider(ctx context.Context, deps ExtractionWorkerDeps) (providers.Provider, string, float64, string) {
+	raw, err := deps.BuiltinTools.GetSettings(ctx, "knowledge_graph_search")
+	if err != nil || raw == nil {
+		slog.Debug("whatsapp extraction worker: no KG settings in builtin_tools", "error", err)
+		return nil, "", 0.75, ""
+	}
+	var settings kgExtractionSettings
+	if err := json.Unmarshal(raw, &settings); err != nil {
+		slog.Debug("whatsapp extraction worker: invalid KG settings", "error", err)
+		return nil, "", 0.75, ""
+	}
+	if settings.ExtractionProvider == "" {
+		return nil, "", 0.75, ""
+	}
+	p, err := deps.Registry.Get(ctx, settings.ExtractionProvider)
+	if err != nil || p == nil {
+		slog.Warn("whatsapp extraction worker: KG provider not found",
+			"provider", settings.ExtractionProvider, "error", err)
+		return nil, "", 0.75, ""
+	}
+	model := settings.ExtractionModel
+	if model == "" {
+		model = p.DefaultModel()
+	}
+	minConf := settings.MinConfidence
+	if minConf <= 0 {
+		minConf = 0.75
+	}
+	return p, model, minConf, "kg_settings"
 }

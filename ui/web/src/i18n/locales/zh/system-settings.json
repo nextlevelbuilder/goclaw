@@ -76,6 +76,19 @@
     "maxTokensHint": "压缩摘要的Token限制。",
     "info": "当群聊超过阈值时，LLM自动将旧消息总结为一条紧凑记录，保留最近的消息以保持上下文。"
   },
+  "ma": {
+    "title": "媒体分析",
+    "description": "分析监听消息中的媒体附件（图片、音频、文档）的大小限制和设置。",
+    "enabled": "启用媒体分析",
+    "enabledHint": "分析WhatsApp消息中的媒体内容以提取知识图谱。",
+    "maxImageMb": "最大图片 (MB)",
+    "maxAudioMb": "最大音频 (MB)",
+    "maxDocMb": "最大文档 (MB)",
+    "maxVideoMb": "最大视频 (MB)",
+    "maxDefaultMb": "最大其他 (MB)",
+    "timeoutSec": "超时 (秒)",
+    "info": "超过限制的文件将被跳过。使用后台工作Provider进行LLM调用。禁用可节省Token但会丢失媒体来源的知识。"
+  },
   "moreConfig": "更多配置",
   "alert": {
     "message": "后台任务失败：{{reason}}。记忆整合和知识库增强等功能可能无法正常工作。",
