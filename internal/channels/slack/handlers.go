@@ -214,22 +214,27 @@ func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
 		"sender_id", senderID, "channel_id", channelID,
 		"is_dm", isDM, "preview", channels.Truncate(content, 50))
 
-	// Send "Thinking..." placeholder
+	// Send "Thinking..." placeholder unless suppressed via config.
+	// When suppressed, no placeholder is created; the final response is posted
+	// as a new message. The thinking_face reaction (when reaction_level is
+	// enabled) remains the only in-progress indicator.
 	replyThreadTS := threadTS
 	if !isDM && replyThreadTS == "" {
 		replyThreadTS = ev.TimeStamp // start thread from the triggering message
 	}
 
-	placeholderOpts := []slackapi.MsgOption{
-		slackapi.MsgOptionText("Thinking...", false),
-	}
-	if replyThreadTS != "" {
-		placeholderOpts = append(placeholderOpts, slackapi.MsgOptionTS(replyThreadTS))
-	}
+	if c.config.SuppressPlaceholder == nil || !*c.config.SuppressPlaceholder {
+		placeholderOpts := []slackapi.MsgOption{
+			slackapi.MsgOptionText("Thinking...", false),
+		}
+		if replyThreadTS != "" {
+			placeholderOpts = append(placeholderOpts, slackapi.MsgOptionTS(replyThreadTS))
+		}
 
-	_, placeholderTS, err := c.api.PostMessage(channelID, placeholderOpts...)
-	if err == nil {
-		c.placeholders.Store(localKey, placeholderTS)
+		_, placeholderTS, err := c.api.PostMessage(channelID, placeholderOpts...)
+		if err == nil {
+			c.placeholders.Store(localKey, placeholderTS)
+		}
 	}
 
 	// Build final content with group history context
