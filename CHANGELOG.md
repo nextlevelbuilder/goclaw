@@ -40,18 +40,23 @@ All notable changes to GoClaw are documented here. For full documentation, see [
   actionable errors. Tool schema includes usage recipes (success card,
   error card, stats grid, article card, alert) so the LLM knows when and
   how to reach for it. Added to the `messaging` tool group.
-- **Discord slash commands.** Discord channels now register seven built-in
+- **Discord slash commands.** Discord channels now register five built-in
   slash commands on startup via `ApplicationCommandsBulkOverwrite`:
-  `/ask <prompt> [private]`, `/reset`, `/status`, `/stop`, `/help`,
-  `/recall <query>`, `/summarize [count]`. Bulk-overwrite semantics mean
-  stale commands from any previous backend using the same Discord
-  application are removed automatically. `/ask`, `/recall`, and
-  `/summarize` defer their ACK and reply via interaction token so the
-  response appears inline against the slash command in Discord's UI, with
-  automatic fallback to a regular channel post if the agent run exceeds
-  Discord's 15-minute interaction-token lifetime. Disable with
-  `discord.slash_commands: false`; register per-guild (instant, for dev)
-  via `discord.test_guild_id`. Requires `applications.commands` OAuth scope.
+  `/ask <prompt> [private]`, `/status`, `/help`, `/recall <query>`,
+  `/summarize [count]`. Bulk-overwrite semantics mean stale commands from
+  any previous backend using the same Discord application are removed
+  automatically. `/ask`, `/recall`, and `/summarize` defer their ACK and
+  reply via interaction token so the response appears inline against the
+  slash command in Discord's UI. Fallback to a regular channel post kicks
+  in when the interaction token expires or the edit fails, except for
+  ephemeral (private:true) replies in guild channels where the fallback
+  is suppressed to avoid leaking the private content to the full channel.
+  A background sweeper drops expired interaction-token entries every
+  5 min so the per-invocation map doesn't grow without bound. Disable
+  with `discord.slash_commands: false`; register per-guild (instant,
+  for dev) via `discord.test_guild_id`. Requires `applications.commands`
+  OAuth scope. `/reset`, `/stop`, and `/thread` will land in follow-ups
+  once their backing dependencies are available.
 - **Context pruning cleanup.** Removed redundant Pass 0 (per-result 30% guard),
   deduplicated double prune call per iteration, added SanitizeHistory to
   PruneStage for broken tool_use/tool_result pair cleanup.

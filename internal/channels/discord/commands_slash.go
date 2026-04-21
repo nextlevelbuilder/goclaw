@@ -16,16 +16,28 @@ type SlashCommandName string
 
 const (
 	SlashCommandAsk       SlashCommandName = "ask"
-	SlashCommandReset     SlashCommandName = "reset"
 	SlashCommandStatus    SlashCommandName = "status"
-	SlashCommandStop      SlashCommandName = "stop"
 	SlashCommandHelp      SlashCommandName = "help"
 	SlashCommandRecall    SlashCommandName = "recall"
 	SlashCommandSummarize SlashCommandName = "summarize"
-	// SlashCommandThread is intentionally not registered here yet — the
-	// create_discord_thread tool ships in a separate upstream PR, and we keep
-	// this PR self-contained against upstream/dev. Added in a follow-up once
-	// the thread tool lands upstream.
+	// SlashCommandReset, SlashCommandStop, and SlashCommandThread are
+	// intentionally not registered in this PR:
+	//   - /reset needs a SessionClearer dependency injected from the gateway
+	//     to actually clear the agent's view of the conversation. Shipping
+	//     the command as a stub that says "not wired yet" would be a worse
+	//     UX than not showing it at all.
+	//   - /stop needs a scheduler-cancel hook on channels.Manager to cancel
+	//     the in-flight run. Clearing the typing indicator alone leaves the
+	//     agent running, so a naive stub misleads the user.
+	//   - /thread wraps the create_discord_thread tool, which lives in a
+	//     separate upstream PR. We keep this PR self-contained against
+	//     upstream/dev.
+	// Each lands in its own follow-up once the backing dependency is
+	// available. Until then they stay as constants only — not registered,
+	// not routed.
+	SlashCommandReset  SlashCommandName = "reset"
+	SlashCommandStop   SlashCommandName = "stop"
+	SlashCommandThread SlashCommandName = "thread"
 )
 
 // DefaultSlashCommands returns the command set we register on every goclaw
@@ -34,16 +46,14 @@ const (
 // list is automatically removed from Discord on the next sidecar boot.
 //
 // Command categories (see handler_interaction.go for routing):
-//   - meta: ask (routes to agent), reset, status, stop, help
+//   - meta: ask (routes to agent), status, help
 //   - agent-backed tools: recall (memory_search), summarize (sessions_history)
-//   - direct tool: thread (wraps create_discord_thread)
 //
 // All fields are plain types so Discord's slash-command param UI can render
 // them; commands that conceptually take richer structured input (e.g.
 // send_discord_embed) are intentionally NOT surfaced as slash commands — they
 // stay agent-only.
 func DefaultSlashCommands() []*discordgo.ApplicationCommand {
-	boolFalse := false
 	return []*discordgo.ApplicationCommand{
 		{
 			Name:        string(SlashCommandAsk),
@@ -64,17 +74,8 @@ func DefaultSlashCommands() []*discordgo.ApplicationCommand {
 			},
 		},
 		{
-			Name:        string(SlashCommandReset),
-			Description: "Reset the current session. Clears conversation history the agent sees on your next message.",
-			DMPermission: &boolFalse, // reset has user-scoped effect even in DMs, but ACK pattern below handles both
-		},
-		{
 			Name:        string(SlashCommandStatus),
 			Description: "Show what the agent is doing right now in this channel (idle, thinking, running a tool).",
-		},
-		{
-			Name:        string(SlashCommandStop),
-			Description: "Cancel the agent's current run in this channel.",
 		},
 		{
 			Name:        string(SlashCommandHelp),

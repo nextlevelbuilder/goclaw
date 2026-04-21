@@ -105,7 +105,7 @@ type DiscordConfig struct {
 	BlockReply        *bool               `json:"block_reply,omitempty"`     // override gateway block_reply (nil = inherit)
 	MediaMaxBytes     int64               `json:"media_max_bytes,omitempty"` // max media download size (default 25MB)
 	SuppressPlaceholder *bool             `json:"suppress_placeholder,omitempty"` // skip "Thinking..." placeholder + edit; rely on typing indicator for the full run (default false)
-	SlashCommands     *bool               `json:"slash_commands,omitempty"`  // register /ask, /reset, /status, /stop, /help, /recall, /summarize on startup (default true)
+	SlashCommands     *bool               `json:"slash_commands,omitempty"`  // register /ask, /status, /help, /recall, /summarize on startup (default true)
 	TestGuildID       string              `json:"test_guild_id,omitempty"`   // dev escape hatch: register slash commands to this guild only (instant) instead of globally (~1h propagation)
 	STTProxyURL       string              `json:"stt_proxy_url,omitempty"`
 	STTAPIKey         string              `json:"stt_api_key,omitempty"`
