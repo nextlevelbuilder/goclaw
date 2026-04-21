@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -17,9 +18,29 @@ const maxInstallBodyBytes = 64 << 10 // 64 KiB
 
 // handleInstall serves /bitrix24/install.
 //
-// Bitrix24 redirects admins here after the OAuth consent step with:
+// Supports both Bitrix24 app install mechanisms — they look almost identical
+// on the wire but neither shares its critical fields with the other:
 //
-//	GET /bitrix24/install?code=<authcode>&domain=<portal>&state=<tenant_uuid>:<portal_name>&member_id=<mem>
+//  1. OAuth2 Marketplace app:
+//     GET /bitrix24/install?code=<authcode>&domain=<portal>&state=<tenant>:<name>
+//     Bitrix24 issues an authorization_code that the app exchanges for tokens.
+//
+//  2. Local application:
+//     POST /bitrix24/install
+//     body: AUTH_ID, REFRESH_ID, AUTH_EXPIRES, member_id, DOMAIN,
+//           application_token, PROTOCOL, LANG, APP_SID, status, PLACEMENT
+//     Tokens are already minted — no exchange call — so we skip ExchangeAuthCode
+//     and persist the tokens directly.
+//
+// Flow detection: the two modes are disambiguated by which field the caller
+// supplies. `code` + `state` present → OAuth. `AUTH_ID` + `REFRESH_ID` present
+// → Local App. Presence of both is treated as Local App (Bitrix24 never sends
+// both, but Local App's fields are the richer payload; prefer them).
+//
+// Portal resolution differs per flow: OAuth has the `state` parameter we put
+// into the install URL and it disambiguates tenant + name. Local App has no
+// state — Bitrix24 just POSTs the handler URL verbatim — so we resolve by
+// `DOMAIN`, which is unique per installed portal.
 //
 // Success response is a small auto-close HTML page so the install popup
 // doesn't leave an orphan tab; errors are plain text with short messages
@@ -41,12 +62,22 @@ func (r *Router) handleInstall(w http.ResponseWriter, req *http.Request) {
 
 	// Bitrix will POST with form body on some flows; parse both.
 	_ = req.ParseForm()
+
+	// Local App fields (case-sensitive per Bitrix24 convention).
+	authID := strings.TrimSpace(req.Form.Get("AUTH_ID"))
+	refreshID := strings.TrimSpace(req.Form.Get("REFRESH_ID"))
+	if authID != "" && refreshID != "" {
+		r.handleInstallLocalApp(w, req)
+		return
+	}
+
+	// OAuth2 Marketplace fields.
 	code := strings.TrimSpace(req.Form.Get("code"))
 	stateParam := strings.TrimSpace(req.Form.Get("state"))
 	domain := strings.TrimSpace(req.Form.Get("domain"))
 
 	if code == "" || stateParam == "" {
-		http.Error(w, "missing code or state", http.StatusBadRequest)
+		http.Error(w, "missing code or state (OAuth) / AUTH_ID+REFRESH_ID (Local App)", http.StatusBadRequest)
 		return
 	}
 
@@ -85,6 +116,73 @@ func (r *Router) handleInstall(w http.ResponseWriter, req *http.Request) {
 	r.mu.Lock()
 	if d := strings.ToLower(strings.TrimSpace(portal.Domain())); d != "" {
 		r.domains[d] = portalKey(tid, name)
+	}
+	r.mu.Unlock()
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write([]byte(installSuccessHTML))
+}
+
+// handleInstallLocalApp finishes install for a Bitrix24 Local App. Body already
+// parsed by the caller; AUTH_ID + REFRESH_ID presence already checked.
+//
+// Portal resolution is by DOMAIN. Local Apps don't round-trip through our
+// install URL so there's no state param to carry (tenant, name) — the only
+// stable identifier in the POST body is DOMAIN, which matches the `domain`
+// column on `bitrix_portals`. PortalByDomain enforces this is O(1) via the
+// Router's domain index.
+func (r *Router) handleInstallLocalApp(w http.ResponseWriter, req *http.Request) {
+	authID := strings.TrimSpace(req.Form.Get("AUTH_ID"))
+	refreshID := strings.TrimSpace(req.Form.Get("REFRESH_ID"))
+	domain := strings.TrimSpace(req.Form.Get("DOMAIN"))
+	memberID := strings.TrimSpace(req.Form.Get("member_id"))
+	appToken := strings.TrimSpace(req.Form.Get("application_token"))
+	expiresStr := strings.TrimSpace(req.Form.Get("AUTH_EXPIRES"))
+
+	if domain == "" {
+		http.Error(w, "missing DOMAIN", http.StatusBadRequest)
+		return
+	}
+
+	portal, ok := r.PortalByDomain(domain)
+	if !ok {
+		slog.Warn("bitrix24 install (local): unknown portal domain", "domain", domain)
+		http.Error(w, "unknown portal", http.StatusNotFound)
+		return
+	}
+
+	// Parse AUTH_EXPIRES — Bitrix24 sends seconds as a decimal string. A
+	// missing/unparseable value falls through to Portal.applyTokenResponse's
+	// defaultTokenTTL clamp, so no extra branch here.
+	var expiresIn int64
+	if expiresStr != "" {
+		if v, err := strconv.ParseInt(expiresStr, 10, 64); err == nil && v > 0 {
+			expiresIn = v
+		}
+	}
+
+	tr := &TokenResponse{
+		AccessToken:      authID,
+		RefreshToken:     refreshID,
+		ExpiresIn:        expiresIn,
+		Domain:           domain,
+		MemberID:         memberID,
+		ApplicationToken: appToken,
+	}
+
+	ctx := store.WithTenantID(req.Context(), portal.TenantID())
+	if err := portal.InstallFromTokens(ctx, tr); err != nil {
+		slog.Warn("bitrix24 install (local): persist failed",
+			"tenant", portal.TenantID(), "portal", portal.Name(), "err", err)
+		http.Error(w, "install failed", http.StatusBadGateway)
+		return
+	}
+
+	// Refresh domain index in case the first install landed before RegisterPortal
+	// could read a stored domain (mirrors OAuth path above).
+	r.mu.Lock()
+	if d := strings.ToLower(domain); d != "" {
+		r.domains[d] = portalKey(portal.TenantID(), portal.Name())
 	}
 	r.mu.Unlock()
 

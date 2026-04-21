@@ -209,6 +209,35 @@ func (p *Portal) SaveMediaFolder(ctx context.Context, code, folderID string) err
 	return p.writeState(ctx, stateCopy)
 }
 
+// InstallFromTokens persists tokens handed over directly by Bitrix24 without
+// running the OAuth authorization_code exchange. This is the "Local application"
+// install flow: Bitrix24 POSTs `AUTH_ID` / `REFRESH_ID` / `AUTH_EXPIRES` /
+// `application_token` / `member_id` / `DOMAIN` into the handler path and there
+// is no `code` to exchange — the tokens are already minted.
+//
+// Callers build a TokenResponse from the form body so we can reuse the same
+// applyTokenResponse + persistState path that Exchange uses on OAuth2 apps.
+// Any missing critical field (access_token OR refresh_token) is rejected:
+// persisting a half-install would leave the portal permanently wedged
+// until a full reinstall.
+func (p *Portal) InstallFromTokens(ctx context.Context, tr *TokenResponse) error {
+	if tr == nil {
+		return errors.New("bitrix24 install: nil token response")
+	}
+	if tr.AccessToken == "" || tr.RefreshToken == "" {
+		return errors.New("bitrix24 install: AUTH_ID and REFRESH_ID required")
+	}
+	if tr.Domain != "" && !strings.EqualFold(tr.Domain, p.domain) {
+		slog.Warn("bitrix24 install: domain mismatch",
+			"portal", p.name, "expected", p.domain, "received", tr.Domain)
+	}
+	p.applyTokenResponse(tr)
+	// Detach context for the same reason Exchange does: once Bitrix has handed
+	// us tokens we MUST get them to disk, even if the install-callback
+	// goroutine's context is about to be canceled.
+	return p.persistState(context.WithoutCancel(ctx))
+}
+
 // Exchange runs on the OAuth install callback: trade `code` for tokens,
 // persist them, and prime the refresh loop.
 func (p *Portal) Exchange(ctx context.Context, code string) error {
