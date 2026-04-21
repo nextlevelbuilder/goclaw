@@ -5,12 +5,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
+
+// discordThreadAutoArchiveAllowed lists the exact auto-archive durations the
+// Discord API accepts, in minutes. Any other value is rejected by Discord
+// with a 400; validating at the tool layer surfaces a clearer error to the
+// LLM before the HTTP round-trip. See
+// https://discord.com/developers/docs/resources/channel#channel-object-channel-flags
+var discordThreadAutoArchiveAllowed = []int{60, 1440, 4320, 10080}
 
 // DiscordThreadCreatorFn creates a Discord thread on the named channel.
 // Implemented by channels.Manager.CreateDiscordThread.
@@ -101,7 +109,9 @@ func (t *CreateDiscordThreadTool) Execute(ctx context.Context, args map[string]a
 		return ErrorResult("create_discord_thread: no Discord thread creator available")
 	}
 
-	channel, _ := args["channel"].(string)
+	// argString rather than plain .(string) so a Discord snowflake ID emitted
+	// by the LLM as a JSON number doesn't silently fall back to context.
+	channel := argString(args, "channel")
 	if channel == "" {
 		channel = ToolChannelFromCtx(ctx)
 	}
@@ -109,7 +119,7 @@ func (t *CreateDiscordThreadTool) Execute(ctx context.Context, args map[string]a
 		return ErrorResult("channel is required (no current channel in context)")
 	}
 
-	channelID, _ := args["channel_id"].(string)
+	channelID := argString(args, "channel_id")
 	if channelID == "" {
 		channelID = ToolChatIDFromCtx(ctx)
 	}
@@ -117,7 +127,7 @@ func (t *CreateDiscordThreadTool) Execute(ctx context.Context, args map[string]a
 		return ErrorResult("channel_id is required (no current channel_id in context)")
 	}
 
-	name, _ := args["name"].(string)
+	name := strings.TrimSpace(argString(args, "name"))
 	if l := len([]rune(name)); l < 1 || l > 100 {
 		return ErrorResult(fmt.Sprintf("name must be 1-100 characters (got %d)", l))
 	}
@@ -154,7 +164,18 @@ func (t *CreateDiscordThreadTool) Execute(ctx context.Context, args map[string]a
 		InitialMessage: argString(args, "initial_message"),
 	}
 	if v, ok := args["auto_archive_minutes"].(float64); ok {
-		params.AutoArchiveMinutes = int(v)
+		mins := int(v)
+		valid := false
+		for _, allowed := range discordThreadAutoArchiveAllowed {
+			if mins == allowed {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			return ErrorResult(fmt.Sprintf("auto_archive_minutes must be one of %v (got %d)", discordThreadAutoArchiveAllowed, mins))
+		}
+		params.AutoArchiveMinutes = mins
 	}
 	if raw, ok := args["applied_tags"].([]any); ok {
 		tags := make([]string, 0, len(raw))
