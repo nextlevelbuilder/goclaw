@@ -38,7 +38,8 @@
   "actions": {
     "resetToPending": "Đặt lại thành Chờ xử lý",
     "resetConfirm": "Đặt lại {{count}} tin nhắn về trạng thái chờ xử lý?",
-    "resetSuccess": "{{count}} tin nhắn đã được đặt lại"
+    "resetSuccess": "{{count}} tin nhắn đã được đặt lại",
+    "resetFailed": "Không thể đặt lại tin nhắn"
   },
   "detail": {
     "title": "Chi tiết tin nhắn",

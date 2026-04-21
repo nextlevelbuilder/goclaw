@@ -38,7 +38,8 @@
   "actions": {
     "resetToPending": "Reset to Pending",
     "resetConfirm": "Reset {{count}} message(s) to pending?",
-    "resetSuccess": "{{count}} message(s) reset to pending"
+    "resetSuccess": "{{count}} message(s) reset to pending",
+    "resetFailed": "Failed to reset messages"
   },
   "detail": {
     "title": "Message Detail",

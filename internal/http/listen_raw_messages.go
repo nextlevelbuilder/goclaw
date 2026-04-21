@@ -2,6 +2,7 @@ package http
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -107,6 +108,7 @@ func (h *ListenRawMessagesHandler) handleResetByIDs(w http.ResponseWriter, r *ht
 		IDs []string `json:"ids"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		slog.Warn("http.reset_by_ids: invalid body", "error", err)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
 		return
 	}
@@ -119,6 +121,7 @@ func (h *ListenRawMessagesHandler) handleResetByIDs(w http.ResponseWriter, r *ht
 	for _, s := range body.IDs {
 		id, err := uuid.Parse(s)
 		if err != nil {
+			slog.Warn("http.reset_by_ids: invalid id", "id", s, "error", err)
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id: " + s})
 			return
 		}
@@ -127,10 +130,12 @@ func (h *ListenRawMessagesHandler) handleResetByIDs(w http.ResponseWriter, r *ht
 
 	affected, err := h.store.ResetProcessedByIDs(r.Context(), ids)
 	if err != nil {
+		slog.Error("http.reset_by_ids: store error", "count", len(ids), "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 
+	slog.Info("http.reset_by_ids: ok", "requested", len(ids), "affected", affected)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"reset_count": affected,
 	})

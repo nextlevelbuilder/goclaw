@@ -38,7 +38,8 @@
   "actions": {
     "resetToPending": "重置为待处理",
     "resetConfirm": "将 {{count}} 条消息重置为待处理？",
-    "resetSuccess": "{{count}} 条消息已重置为待处理"
+    "resetSuccess": "{{count}} 条消息已重置为待处理",
+    "resetFailed": "重置消息失败"
   },
   "detail": {
     "title": "消息详情",

@@ -178,12 +178,17 @@ func (s *SQLiteListenRawMessageStore) ResetProcessedByIDs(ctx context.Context, i
 		return 0, nil
 	}
 	placeholders := make([]string, len(ids))
-	args := make([]any, len(ids))
+	args := make([]any, 0, len(ids)+2)
 	for i, id := range ids {
 		placeholders[i] = "?"
-		args[i] = id
+		args = append(args, id)
 	}
-	q := `UPDATE listen_raw_messages SET processed_at = NULL WHERE id IN (` + strings.Join(placeholders, ",") + `) AND processed_at IS NOT NULL`
+	tClause, tArgs, err := scopeClause(ctx)
+	if err != nil {
+		return 0, err
+	}
+	args = append(args, tArgs...)
+	q := `UPDATE listen_raw_messages SET processed_at = NULL WHERE id IN (` + strings.Join(placeholders, ",") + `) AND processed_at IS NOT NULL` + tClause
 	res, err := s.db.ExecContext(ctx, q, args...)
 	if err != nil {
 		return 0, err

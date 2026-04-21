@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { FileText, RefreshCw, X, Filter, RotateCcw } from "lucide-react";
+import { toast } from "@/stores/use-toast-store";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -180,10 +181,10 @@ export function RawMessagesPage() {
       const count = await resetToPending([...selectedIds]);
       setSelectedIds(new Set());
       handleRefresh();
-      // Brief toast via badge update
-      alert(t("actions.resetSuccess", { count }));
-    } catch {
-      // ignore
+      toast.success(t("actions.resetSuccess", { count }));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(t("actions.resetFailed"), msg);
     }
   };
 
@@ -192,8 +193,10 @@ export function RawMessagesPage() {
       await resetToPending([msg.id]);
       setSelectedMsg(null);
       handleRefresh();
-    } catch {
-      // ignore
+      toast.success(t("actions.resetSuccess", { count: 1 }));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(t("actions.resetFailed"), msg);
     }
   };
 
