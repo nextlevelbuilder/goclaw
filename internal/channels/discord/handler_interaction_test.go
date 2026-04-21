@@ -10,34 +10,62 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 )
 
-func TestChunkForDiscord(t *testing.T) {
-	cases := []struct {
-		name   string
-		in     string
-		maxLen int
-		want   []string
+// (chunkForDiscord test removed — trySendViaInteraction now delegates to
+// channels.ChunkMarkdown which has its own coverage in internal/channels/chunking_test.go.)
+
+// TestEphemeralSuppressesFallback exercises the security-critical guard that
+// prevents a /ask private:true reply from leaking into a public guild channel
+// when the interaction-token reply path fails or expires. The matrix must be
+// exact: any drift here turns "the private reply was lost" into "the private
+// reply was posted publicly."
+func TestEphemeralSuppressesFallback(t *testing.T) {
+	tests := []struct {
+		name string
+		echo *interactionEcho
+		want bool
 	}{
-		{"empty", "", 10, nil},
-		{"fits", "hello", 10, []string{"hello"}},
-		{"exact", "abcdefghij", 10, []string{"abcdefghij"}},
-		// Newline at index 7 is in second half of 10-char window → split there.
-		{"split at newline in second half", "aaaaaaa\nbbbbbbbbbb", 10, []string{"aaaaaaa\n", "bbbbbbbbbb"}},
-		// Newline at index 2 is in first half → fall back to hard split at maxLen.
-		{"newline in first half is ignored", "aa\nbbbbbbbbbbbbbbb", 10, []string{"aa\nbbbbbbb", "bbbbbbbb"}},
-		{"no newline, hard split", "abcdefghijklmnopqrst", 10, []string{"abcdefghij", "klmnopqrst"}},
+		{"nil echo → no suppression", nil, false},
+		{"public in guild → fall through OK", &interactionEcho{Ephemeral: false, GuildID: "g1"}, false},
+		{"public in DM → fall through OK", &interactionEcho{Ephemeral: false, GuildID: ""}, false},
+		// Ephemeral in DM: the DM channel is already 1:1 private, so posting
+		// there doesn't leak. Allow fallback.
+		{"ephemeral in DM → fall through OK", &interactionEcho{Ephemeral: true, GuildID: ""}, false},
+		// Ephemeral in guild: this is the leak we're guarding against.
+		{"ephemeral in guild → suppress", &interactionEcho{Ephemeral: true, GuildID: "g1"}, true},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := chunkForDiscord(tc.in, tc.maxLen)
-			if len(got) != len(tc.want) {
-				t.Fatalf("chunk count = %d, want %d (got %#v)", len(got), len(tc.want), got)
-			}
-			for i := range got {
-				if got[i] != tc.want[i] {
-					t.Errorf("chunk[%d] = %q, want %q", i, got[i], tc.want[i])
-				}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ephemeralSuppressesFallback(tt.echo); got != tt.want {
+				t.Errorf("got %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// TestSweepInteractionTokens verifies the background cleanup drops expired
+// entries and leaves fresh ones intact. Without this sweeper the map grows
+// monotonically on every slash invocation whose agent run never triggers Send.
+func TestSweepInteractionTokens(t *testing.T) {
+	c := &Channel{}
+
+	fresh := &interactionEcho{CreatedAt: time.Now()}
+	old := &interactionEcho{CreatedAt: time.Now().Add(-discordInteractionTTL - time.Minute)}
+	c.interactionTokens.Store("fresh", fresh)
+	c.interactionTokens.Store("old", old)
+	c.interactionTokens.Store("bogus", "not-an-echo") // hostile entry shouldn't crash the sweep
+
+	c.sweepInteractionTokens()
+
+	if _, ok := c.interactionTokens.Load("fresh"); !ok {
+		t.Error("fresh entry should survive the sweep")
+	}
+	if _, ok := c.interactionTokens.Load("old"); ok {
+		t.Error("expired entry should be dropped")
+	}
+	// Non-*interactionEcho values are ignored (not dropped, not panicking).
+	// The sweep is a safety net, not a full garbage collector.
+	if _, ok := c.interactionTokens.Load("bogus"); !ok {
+		t.Error("non-echo entry should be ignored, not dropped")
 	}
 }
 

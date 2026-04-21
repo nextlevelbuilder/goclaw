@@ -31,7 +31,7 @@ type Channel struct {
 	testGuildID     string   // optional: dev-only guild for instant command propagation (empty = global)
 	placeholders    sync.Map // placeholderKey string → messageID string
 	typingCtrls     sync.Map // channelID string → *typing.Controller
-	interactionTokens sync.Map // inboundMessageID string → *interactionEcho (reply via interaction token)
+	interactionTokens sync.Map // discord interaction ID string → *interactionEcho (reply via interaction token)
 	agentStore      store.AgentStore            // for agent key lookup (nil = writer commands disabled)
 	configPermStore store.ConfigPermissionStore // for group file writer management (nil = writer commands disabled)
 	audioMgr        *audio.Manager             // unified STT via audio.Manager (nil = no STT)
@@ -85,7 +85,7 @@ func New(cfg config.DiscordConfig, msgBus *bus.MessageBus, pairingSvc store.Pair
 }
 
 // Start opens the Discord gateway connection and begins receiving events.
-func (c *Channel) Start(_ context.Context) error {
+func (c *Channel) Start(ctx context.Context) error {
 	c.GroupHistory().StartFlusher()
 	slog.Info("starting discord bot")
 
@@ -122,11 +122,21 @@ func (c *Channel) Start(_ context.Context) error {
 	slog.Info("discord bot connected",
 		"username", user.Username, "id", user.ID, "app_id", c.applicationID)
 
-	// Register slash commands (non-blocking, retries on transient errors).
-	// Bulk-overwrite replaces the full command list, so any stale commands
-	// from a previous backend are automatically removed on first boot.
-	if c.slashCommandsEnabled() && c.applicationID != "" {
-		c.startSlashCommandSync(context.Background())
+	// Slash commands: opt-in (default true). If the app-ID fetch failed above
+	// we can't register, so surface that as a separate log line instead of
+	// merging the two gate conditions into one opaque branch.
+	if !c.slashCommandsEnabled() {
+		// user explicitly disabled — no action
+	} else if c.applicationID == "" {
+		slog.Warn("discord: skipping slash command sync (no application ID — check applications.commands OAuth scope on bot token)")
+	} else {
+		// Register slash commands (non-blocking, retries on transient errors).
+		// Bulk-overwrite replaces the full command list, so any stale commands
+		// from a previous backend are automatically removed on first boot.
+		c.startSlashCommandSync(ctx)
+		// Background sweeper for the per-interaction echo map. Ties its
+		// lifetime to the channel's ctx so Stop() terminates it.
+		c.startInteractionSweeper(ctx)
 	}
 
 	return nil
@@ -199,8 +209,13 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) (err error)
 	// the interaction ID and the outbound metadata carries the token. Route
 	// via InteractionResponseEdit + followups instead of ChannelMessageSend
 	// so the reply appears inline against the slash command in Discord's UI.
-	// Falls through to the regular message path if the token has expired
-	// (15-min limit) — same user-visible outcome, just a new channel post.
+	//
+	// Falls through to the regular channel-post path if the token has expired
+	// or the edit failed UNLESS the reply was marked ephemeral in a guild
+	// channel (discord_interaction_flags=ephemeral). In that case
+	// trySendViaInteraction returns handled=true and we drop the reply rather
+	// than leak private content to the full channel — see
+	// ephemeralSuppressesFallback.
 	if tok := msg.Metadata["discord_interaction_token"]; tok != "" {
 		if handled, sendErr := c.trySendViaInteraction(ctx, msg, tok); handled {
 			return sendErr

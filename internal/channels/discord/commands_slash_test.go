@@ -36,11 +36,14 @@ func (f *fakeSlashAPI) applicationCommandsBulkOverwrite(appID, guildID string, c
 func TestDefaultSlashCommands(t *testing.T) {
 	cmds := DefaultSlashCommands()
 
+	// The set is intentionally minimal: /reset, /stop, and /thread are
+	// registered only once their backing dependencies land (see comments on
+	// the SlashCommandName constants). Adding a command here without wiring
+	// the handler in handler_interaction.go is a UX regression — every user
+	// who clicks the slash gets "Unknown command" — so the test guards it.
 	want := []SlashCommandName{
 		SlashCommandAsk,
-		SlashCommandReset,
 		SlashCommandStatus,
-		SlashCommandStop,
 		SlashCommandHelp,
 		SlashCommandRecall,
 		SlashCommandSummarize,

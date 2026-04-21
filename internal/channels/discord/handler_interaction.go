@@ -5,33 +5,46 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
+const (
+	// discordInteractionTTL is the Discord interaction-token lifetime. Tokens
+	// become invalid 15 min after the interaction fires.
+	discordInteractionTTL = 15 * time.Minute
+	// interactionExpirySafety is the safety margin we keep below the TTL so a
+	// token we decide to use doesn't expire mid-flight due to clock skew or
+	// in-flight latency. 1 min covers typical request durations.
+	interactionExpirySafety = 1 * time.Minute
+	// interactionSweepInterval is how often the background goroutine walks
+	// interactionTokens to drop expired entries (see startInteractionSweeper).
+	// 5 min is a compromise between timely cleanup and wasted scheduler work.
+	interactionSweepInterval = 5 * time.Minute
+)
+
 // interactionEcho holds the Discord interaction context needed to reply to an
 // agent-backed slash command. The token is valid for 15 minutes after the
-// interaction; past that, Send() must fall back to a regular channel post
-// because InteractionResponseEdit / FollowupMessageCreate will be rejected.
+// interaction; past that, the interaction path is abandoned (see expired + the
+// fallback branch in Send()) because InteractionResponseEdit /
+// FollowupMessageCreate will be rejected.
 type interactionEcho struct {
-	AppID      string
-	Token      string
-	Ephemeral  bool
-	CreatedAt  time.Time
-	FirstChunk sync.Once // guards the initial InteractionResponseEdit (replaces the deferred ACK)
+	AppID     string
+	Token     string
+	Ephemeral bool
+	GuildID   string // empty = DM; used by the fallback path to avoid leaking ephemeral replies into a guild channel
+	CreatedAt time.Time
 }
 
-// expired reports whether the interaction token is past its 15-minute lifetime.
+// expired reports whether the interaction token is past its safe lifetime.
 // Called by Send() to decide between the interaction path and a channel post.
 func (e *interactionEcho) expired() bool {
-	return time.Since(e.CreatedAt) > 14*time.Minute // 1-min safety margin
+	return time.Since(e.CreatedAt) > discordInteractionTTL-interactionExpirySafety
 }
 
 // agentBackedCommands lists the slash commands that route into the agent
@@ -87,14 +100,8 @@ func (c *Channel) handleInteraction(_ *discordgo.Session, i *discordgo.Interacti
 
 	// State commands — respond inline, no agent loop.
 	switch name {
-	case SlashCommandReset:
-		c.handleResetCommand(ctx, i, invoker, invokerTag, channelID, peerKind)
-		return
 	case SlashCommandStatus:
 		c.handleStatusCommand(i, channelID)
-		return
-	case SlashCommandStop:
-		c.handleStopCommand(i, channelID)
 		return
 	case SlashCommandHelp:
 		c.handleHelpCommand(i)
@@ -132,13 +139,13 @@ func (c *Channel) handleInteraction(_ *discordgo.Session, i *discordgo.Interacti
 	// Audio routing (same policy as plain-message handler).
 	targetAgentID := c.AgentID()
 
-	// Stash the interaction echo keyed by a synthetic message ID so the
+	// Stash the interaction echo keyed by the Discord interaction ID so the
 	// outbound dispatcher can find it via discord_interaction_token metadata.
-	// We key by interaction ID (unique per invocation); Send() reads it back.
 	echo := &interactionEcho{
 		AppID:     c.applicationID,
 		Token:     i.Token,
 		Ephemeral: ephemeral,
+		GuildID:   i.GuildID,
 		CreatedAt: time.Now(),
 	}
 	c.interactionTokens.Store(i.ID, echo)
@@ -215,22 +222,6 @@ func (c *Channel) buildAgentPrompt(name SlashCommandName, data discordgo.Applica
 	return "", false, false
 }
 
-// handleResetCommand clears the session for the invoker in this channel.
-// Keyed by the (channel, user) pair to mirror how Discord session keys are
-// computed elsewhere in the pipeline.
-func (c *Channel) handleResetCommand(_ context.Context, i *discordgo.InteractionCreate, invoker, invokerTag, channelID, peerKind string) {
-	// Session clearing is not implemented in the current channel layer —
-	// sessions are owned by the pipeline. Best we can do from the channel
-	// is publish a synthetic "[reset]" inbound, but that muddies conversation
-	// history. For v1 we respond with instructions and leave the actual
-	// clearing to a follow-up that wires a SessionClearer dependency.
-	_ = invokerTag
-	_ = channelID
-	_ = peerKind
-	_ = invoker
-	c.respondEphemeral(i, "Reset is not yet wired through to the session store. Track: a follow-up PR will add a SessionClearer dependency so /reset clears the agent's view of this conversation. Use /stop to cancel an in-flight run today.")
-}
-
 // handleStatusCommand reports whether there is an active agent run in this
 // channel. Uses the channel's local placeholders/typing state as a proxy —
 // we don't have direct access to channels.Manager's RunContext from here,
@@ -250,25 +241,6 @@ func (c *Channel) handleStatusCommand(i *discordgo.InteractionCreate, channelID 
 	c.respondEphemeral(i, "Active: "+strings.Join(parts, "; "))
 }
 
-// handleStopCommand attempts to cancel the current run by stopping the typing
-// indicator. A full cancel would need a hook into the scheduler, which is a
-// broader refactor — v1 just turns off the visible signal so the user knows
-// we've acknowledged the stop request.
-func (c *Channel) handleStopCommand(i *discordgo.InteractionCreate, channelID string) {
-	stopped := false
-	if v, ok := c.typingCtrls.LoadAndDelete(channelID); ok {
-		if ctrl, ok := v.(interface{ Stop() }); ok {
-			ctrl.Stop()
-			stopped = true
-		}
-	}
-	if stopped {
-		c.respondEphemeral(i, "Typing indicator cleared. The agent may still finish its current run; a full cancel hook is a follow-up.")
-		return
-	}
-	c.respondEphemeral(i, "Nothing in flight in this channel.")
-}
-
 // handleHelpCommand renders a static help message from DefaultSlashCommands.
 // Keeping it generated from the same source of truth means new commands
 // automatically appear in the help output.
@@ -285,13 +257,14 @@ func (c *Channel) handleHelpCommand(i *discordgo.InteractionCreate) {
 // interaction reply path. Returns (handled, err):
 //   - handled=true : this function took ownership of the delivery (whether
 //     successful or failed — err reflects that). Send() must NOT continue.
-//   - handled=false: the interaction echo is missing or expired. Send()
-//     should fall through to the regular channel-post flow.
+//   - handled=false: the interaction echo is missing or expired AND falling
+//     through to a regular channel post is safe (not ephemeral, or a DM).
+//     Send() should fall through to the regular channel-post flow.
 //
 // First chunk edits the deferred response (promoting it from "thinking..."
-// to the real reply). Subsequent chunks are posted as interaction followups.
-// Content longer than 2000 chars is split at a newline boundary between
-// chunks, matching the regular Discord send path.
+// to the real reply). Subsequent chunks are posted as interaction followups
+// via channels.ChunkMarkdown so the same markdown-aware chunking applied to
+// regular Discord posts is used here too (avoids splitting code fences).
 func (c *Channel) trySendViaInteraction(_ context.Context, msg bus.OutboundMessage, token string) (bool, error) {
 	interactionID := msg.Metadata["discord_interaction_id"]
 	if interactionID == "" {
@@ -309,9 +282,9 @@ func (c *Channel) trySendViaInteraction(_ context.Context, msg bus.OutboundMessa
 	}
 	if echo.expired() {
 		c.interactionTokens.Delete(interactionID)
-		slog.Warn("discord: interaction token expired, falling back to channel post",
+		slog.Warn("discord: interaction token expired",
 			"interaction_id", interactionID, "age", time.Since(echo.CreatedAt))
-		return false, nil
+		return ephemeralSuppressesFallback(echo), nil
 	}
 
 	content := msg.Content
@@ -320,7 +293,7 @@ func (c *Channel) trySendViaInteraction(_ context.Context, msg bus.OutboundMessa
 		// the user doesn't see a permanent "thinking..." state.
 		_, editErr := c.session.InteractionResponseEdit(
 			&discordgo.Interaction{AppID: echo.AppID, Token: echo.Token},
-			&discordgo.WebhookEdit{Content: stringPtr("(no reply)")},
+			&discordgo.WebhookEdit{Content: pointerTo("(no reply)")},
 		)
 		c.interactionTokens.Delete(interactionID)
 		if editErr != nil {
@@ -330,7 +303,7 @@ func (c *Channel) trySendViaInteraction(_ context.Context, msg bus.OutboundMessa
 		return true, nil
 	}
 
-	chunks := chunkForDiscord(content, 2000)
+	chunks := channels.ChunkMarkdown(content, 2000)
 	if len(chunks) == 0 {
 		return true, nil
 	}
@@ -338,15 +311,21 @@ func (c *Channel) trySendViaInteraction(_ context.Context, msg bus.OutboundMessa
 	// First chunk: edit the deferred response to surface the reply.
 	_, editErr := c.session.InteractionResponseEdit(
 		&discordgo.Interaction{AppID: echo.AppID, Token: echo.Token},
-		&discordgo.WebhookEdit{Content: stringPtr(chunks[0])},
+		&discordgo.WebhookEdit{Content: pointerTo(chunks[0])},
 	)
 	if editErr != nil {
-		// Edit failed — token may have been revoked. Drop the echo and let
-		// the caller fall through. We return false here so Send() can retry
-		// via the regular channel path and the user still gets the reply.
+		// Edit failed — token may have been revoked. Drop the echo and decide
+		// whether the caller may fall through. For ephemeral replies in a
+		// guild channel, falling through would post the private content
+		// publicly — we must not do that (see ephemeralSuppressesFallback).
 		c.interactionTokens.Delete(interactionID)
-		slog.Warn("discord: interaction edit failed, falling back to channel post",
+		slog.Warn("discord: interaction edit failed",
 			"interaction_id", interactionID, "error", editErr)
+		if suppress := ephemeralSuppressesFallback(echo); suppress {
+			// Swallow the reply — safer than leaking. User sees the stuck
+			// "thinking..." state until Discord expires the interaction.
+			return true, nil
+		}
 		return false, nil
 	}
 
@@ -371,30 +350,44 @@ func (c *Channel) trySendViaInteraction(_ context.Context, msg bus.OutboundMessa
 	return true, nil
 }
 
-// chunkForDiscord splits content at the given length, preferring to break on
-// a newline within the second half of the window. Matches the policy used by
-// sendChunked for regular message posts so the UX is consistent whether the
-// reply goes via interaction path or channel post.
-func chunkForDiscord(content string, maxLen int) []string {
-	if content == "" {
-		return nil
-	}
-	var out []string
-	for len(content) > maxLen {
-		cutAt := maxLen
-		if idx := lastIndexByte(content[:maxLen], '\n'); idx > maxLen/2 {
-			cutAt = idx + 1
-		}
-		out = append(out, content[:cutAt])
-		content = content[cutAt:]
-	}
-	if content != "" {
-		out = append(out, content)
-	}
-	return out
+// ephemeralSuppressesFallback reports whether the fallback-to-public-channel-post
+// path in Send() must be suppressed to avoid leaking a reply the invoker asked
+// to be private. True when the reply was ephemeral AND the interaction happened
+// in a guild (DMs are already private; an ephemeral fallback in a DM is fine).
+func ephemeralSuppressesFallback(echo *interactionEcho) bool {
+	return echo != nil && echo.Ephemeral && echo.GuildID != ""
 }
 
-func stringPtr(s string) *string { return &s }
+// startInteractionSweeper periodically walks interactionTokens and drops
+// expired entries. Without it, any slash invocation whose agent run never
+// fires Send() with matching metadata (panic, pipeline drop, backpressure)
+// leaks forever. Stops when ctx is cancelled — Channel.Stop passes the
+// poll context through.
+func (c *Channel) startInteractionSweeper(ctx context.Context) {
+	go func() {
+		ticker := time.NewTicker(interactionSweepInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				c.sweepInteractionTokens()
+			}
+		}
+	}()
+}
+
+// sweepInteractionTokens drops expired entries from the interactionTokens
+// sync.Map. Extracted from the sweeper goroutine for testability.
+func (c *Channel) sweepInteractionTokens() {
+	c.interactionTokens.Range(func(k, v any) bool {
+		if echo, ok := v.(*interactionEcho); ok && echo != nil && echo.expired() {
+			c.interactionTokens.Delete(k)
+		}
+		return true
+	})
+}
 
 // respondEphemeral sends a short ephemeral reply to the invoker. Used for all
 // state/direct commands and for validation / policy errors.
@@ -468,6 +461,3 @@ func optionInt(data discordgo.ApplicationCommandInteractionData, name string) in
 	return 0
 }
 
-// Unused but imported to keep the import block stable if future edits
-// reference uuid in the interaction path (e.g. tenant-aware tracing).
-var _ = uuid.Nil
