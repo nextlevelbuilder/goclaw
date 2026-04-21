@@ -82,6 +82,38 @@ export function useKnowledgeGraph(filters: KGFilters) {
     [http, filters.agentId, invalidate],
   );
 
+  const deleteEntities = useCallback(
+    async (entityIds: string[], userId?: string) => {
+      try {
+        const res = await http.post<{ deleted_count: number }>(
+          `/v1/agents/${filters.agentId}/kg/entities/batch-delete`,
+          { entity_ids: entityIds, user_id: userId || "" },
+        );
+        await invalidate();
+        toast.success(i18n.t("memory:toast.entitiesDeleted", { count: res.deleted_count }));
+      } catch (err) {
+        toast.error(i18n.t("memory:toast.entitiesDeleteFailed"), err instanceof Error ? err.message : i18n.t("memory:toast.unknownError"));
+        throw err;
+      }
+    },
+    [http, filters.agentId, invalidate],
+  );
+
+  const deleteAll = useCallback(
+    async (userId?: string) => {
+      try {
+        const qs = userId ? `?user_id=${encodeURIComponent(userId)}` : "";
+        await http.post(`/v1/agents/${filters.agentId}/kg/reset${qs}`);
+        await invalidate();
+        toast.success(i18n.t("memory:toast.kgReset"));
+      } catch (err) {
+        toast.error(i18n.t("memory:toast.kgResetFailed"), err instanceof Error ? err.message : i18n.t("memory:toast.unknownError"));
+        throw err;
+      }
+    },
+    [http, filters.agentId, invalidate],
+  );
+
   const extractFromText = useCallback(
     async (text: string, provider: string, model: string, userId?: string) => {
       try {
@@ -108,6 +140,8 @@ export function useKnowledgeGraph(filters: KGFilters) {
     getEntityWithRelations,
     upsertEntity,
     deleteEntity,
+    deleteEntities,
+    deleteAll,
     extractFromText,
   };
 }

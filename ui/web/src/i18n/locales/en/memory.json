@@ -136,6 +136,18 @@
       "description": "Delete \"{{name}}\"? This will also delete all associated relations.",
       "confirmLabel": "Delete"
     },
+    "deleteAll": {
+      "button": "Delete All",
+      "title": "Delete All Entities",
+      "description": "Delete ALL knowledge graph entities, relations, and dedup candidates for this agent? This cannot be undone.",
+      "confirmLabel": "Delete All"
+    },
+    "deleteSelected": {
+      "button": "Delete Selected ({{count}})",
+      "title": "Delete Selected Entities",
+      "description": "Delete {{count}} selected entities? This will also delete all associated relations.",
+      "confirmLabel": "Delete"
+    },
     "entity": {
       "externalId": "External ID:",
       "confidence": "Confidence:",
@@ -198,6 +210,10 @@
     "entitySaveFailed": "Failed to save entity",
     "entityDeleted": "Entity deleted",
     "entityDeleteFailed": "Failed to delete entity",
+    "entitiesDeleted": "{{count}} entities deleted",
+    "entitiesDeleteFailed": "Failed to delete entities",
+    "kgReset": "Knowledge graph cleared",
+    "kgResetFailed": "Failed to clear knowledge graph",
     "extractionComplete": "Extraction complete",
     "extractionFailed": "Extraction failed",
     "traversalFailed": "Traversal failed",

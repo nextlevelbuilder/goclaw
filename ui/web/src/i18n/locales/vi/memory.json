@@ -136,6 +136,18 @@
       "description": "Xóa \"{{name}}\"? Tất cả quan hệ liên quan cũng sẽ bị xóa.",
       "confirmLabel": "Xóa"
     },
+    "deleteAll": {
+      "button": "Xóa tất cả",
+      "title": "Xóa tất cả thực thể",
+      "description": "Xóa TẤT CẢ thực thể, quan hệ và ứng viên trùng lặp của agent này? Thao tác này không thể hoàn tác.",
+      "confirmLabel": "Xóa tất cả"
+    },
+    "deleteSelected": {
+      "button": "Xóa đã chọn ({{count}})",
+      "title": "Xóa thực thể đã chọn",
+      "description": "Xóa {{count}} thực thể đã chọn? Tất cả quan hệ liên quan cũng sẽ bị xóa.",
+      "confirmLabel": "Xóa"
+    },
     "entity": {
       "externalId": "ID ngoài:",
       "confidence": "Độ tin cậy:",
@@ -198,6 +210,10 @@
     "entitySaveFailed": "Không thể lưu thực thể",
     "entityDeleted": "Đã xóa thực thể",
     "entityDeleteFailed": "Không thể xóa thực thể",
+    "entitiesDeleted": "Đã xóa {{count}} thực thể",
+    "entitiesDeleteFailed": "Không thể xóa thực thể",
+    "kgReset": "Đã xóa đồ thị tri thức",
+    "kgResetFailed": "Không thể xóa đồ thị tri thức",
     "extractionComplete": "Trích xuất hoàn tất",
     "extractionFailed": "Trích xuất thất bại",
     "traversalFailed": "Duyệt thất bại",

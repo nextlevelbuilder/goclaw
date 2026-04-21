@@ -136,6 +136,18 @@
       "description": "删除「{{name}}」？这将同时移除所有关联关系。",
       "confirmLabel": "删除"
     },
+    "deleteAll": {
+      "button": "全部删除",
+      "title": "删除所有实体",
+      "description": "删除该Agent的所有知识图谱实体、关系和去重候选项？此操作不可撤销。",
+      "confirmLabel": "全部删除"
+    },
+    "deleteSelected": {
+      "button": "删除所选 ({{count}})",
+      "title": "删除所选实体",
+      "description": "删除 {{count}} 个已选实体？所有关联关系也将被移除。",
+      "confirmLabel": "删除"
+    },
     "entity": {
       "externalId": "外部 ID：",
       "confidence": "置信度：",
@@ -198,6 +210,10 @@
     "entitySaveFailed": "保存实体失败",
     "entityDeleted": "实体已删除",
     "entityDeleteFailed": "删除实体失败",
+    "entitiesDeleted": "已删除 {{count}} 个实体",
+    "entitiesDeleteFailed": "删除实体失败",
+    "kgReset": "知识图谱已清空",
+    "kgResetFailed": "清空知识图谱失败",
     "extractionComplete": "提取完成",
     "extractionFailed": "提取失败",
     "traversalFailed": "遍历失败",

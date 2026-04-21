@@ -1,4 +1,4 @@
-import { useState, useMemo, lazy, Suspense } from "react";
+import { useState, useMemo, useCallback, lazy, Suspense } from "react";
 import { Network, Trash2, Search, GitFork, Sparkles, RefreshCw, LayoutGrid, Share2, Merge } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,8 +35,12 @@ export function KGEntitiesTab({ agentId, userId }: KGEntitiesTabProps) {
   const [extractOpen, setExtractOpen] = useState(false);
   const [dedupOpen, setDedupOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("graph");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
+  const [deleteSelectedOpen, setDeleteSelectedOpen] = useState(false);
+  const [batchLoading, setBatchLoading] = useState(false);
 
-  const { entities, loading, fetching, refresh, deleteEntity, getEntityWithRelations, extractFromText } = useKnowledgeGraph({
+  const { entities, loading, fetching, refresh, deleteEntity, deleteEntities, deleteAll, getEntityWithRelations, extractFromText } = useKnowledgeGraph({
     agentId,
     userId,
     query: appliedQuery || undefined,
@@ -79,8 +83,49 @@ export function KGEntitiesTab({ agentId, userId }: KGEntitiesTabProps) {
     }
   };
 
+  const handleDeleteAll = async () => {
+    setBatchLoading(true);
+    try {
+      await deleteAll(userId);
+      setDeleteAllOpen(false);
+      setSelectedIds(new Set());
+    } finally {
+      setBatchLoading(false);
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    setBatchLoading(true);
+    try {
+      await deleteEntities(Array.from(selectedIds), userId);
+      setSelectedIds(new Set());
+      setDeleteSelectedOpen(false);
+    } finally {
+      setBatchLoading(false);
+    }
+  };
+
   const handleExtract = (text: string, provider: string, model: string) =>
     extractFromText(text, provider, model, userId);
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    if (selectedIds.size === entities.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(entities.map((e) => e.id)));
+    }
+  }, [selectedIds.size, entities]);
+
+  const allSelected = entities.length > 0 && selectedIds.size === entities.length;
 
   return (
     <div className="flex h-full flex-col">
@@ -133,6 +178,28 @@ export function KGEntitiesTab({ agentId, userId }: KGEntitiesTabProps) {
         <Button variant="outline" size="sm" onClick={() => setExtractOpen(true)} className="gap-1 h-8 px-2.5">
           <Sparkles className="h-3.5 w-3.5" /> {t("kg.extract")}
         </Button>
+
+        {/* Delete buttons */}
+        {selectedIds.size > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setDeleteSelectedOpen(true)}
+            disabled={batchLoading}
+            className="gap-1 h-8 px-2.5 text-destructive hover:text-destructive"
+          >
+            <Trash2 className="h-3.5 w-3.5" /> {t("kg.deleteSelected.button", { count: selectedIds.size })}
+          </Button>
+        )}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setDeleteAllOpen(true)}
+          disabled={batchLoading || entities.length === 0}
+          className="gap-1 h-8 px-2.5 text-destructive hover:text-destructive"
+        >
+          <Trash2 className="h-3.5 w-3.5" /> {t("kg.deleteAll.button")}
+        </Button>
       </div>
 
       {/* Stats row — separate line for entity type breakdown */}
@@ -168,6 +235,15 @@ export function KGEntitiesTab({ agentId, userId }: KGEntitiesTabProps) {
           <table className="w-full min-w-[600px] text-sm">
             <thead>
               <tr className="border-b bg-muted/50">
+                <th className="px-3 py-3 w-10">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={toggleSelectAll}
+                    className="h-4 w-4 rounded border-muted-foreground/40"
+                    aria-label="Select all"
+                  />
+                </th>
                 <th className="px-4 py-3 text-left font-medium">{t("kg.columns.name")}</th>
                 <th className="px-4 py-3 text-left font-medium">{t("kg.columns.type")}</th>
                 <th className="px-4 py-3 text-left font-medium">{t("kg.columns.description")}</th>
@@ -177,7 +253,16 @@ export function KGEntitiesTab({ agentId, userId }: KGEntitiesTabProps) {
             </thead>
             <tbody>
               {entities.map((entity) => (
-                <tr key={entity.id} className="border-b last:border-0 hover:bg-muted/30">
+                <tr key={entity.id} className={`border-b last:border-0 hover:bg-muted/30${selectedIds.has(entity.id) ? " bg-muted/40" : ""}`}>
+                  <td className="px-3 py-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(entity.id)}
+                      onChange={() => toggleSelect(entity.id)}
+                      className="h-4 w-4 rounded border-muted-foreground/40"
+                      aria-label={`Select ${entity.name}`}
+                    />
+                  </td>
                   <td className="px-4 py-3">
                     <button
                       className="text-left hover:underline cursor-pointer font-medium"
@@ -246,7 +331,7 @@ export function KGEntitiesTab({ agentId, userId }: KGEntitiesTabProps) {
         onExtract={handleExtract}
       />
 
-      {/* Delete confirmation */}
+      {/* Single entity delete confirmation */}
       <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
@@ -256,6 +341,30 @@ export function KGEntitiesTab({ agentId, userId }: KGEntitiesTabProps) {
         variant="destructive"
         onConfirm={handleDelete}
         loading={deleteLoading}
+      />
+
+      {/* Delete All confirmation */}
+      <ConfirmDialog
+        open={deleteAllOpen}
+        onOpenChange={setDeleteAllOpen}
+        title={t("kg.deleteAll.title")}
+        description={t("kg.deleteAll.description")}
+        confirmLabel={t("kg.deleteAll.confirmLabel")}
+        variant="destructive"
+        onConfirm={handleDeleteAll}
+        loading={batchLoading}
+      />
+
+      {/* Delete Selected confirmation */}
+      <ConfirmDialog
+        open={deleteSelectedOpen}
+        onOpenChange={setDeleteSelectedOpen}
+        title={t("kg.deleteSelected.title")}
+        description={t("kg.deleteSelected.description", { count: selectedIds.size })}
+        confirmLabel={t("kg.deleteSelected.confirmLabel")}
+        variant="destructive"
+        onConfirm={handleDeleteSelected}
+        loading={batchLoading}
       />
     </div>
   );
