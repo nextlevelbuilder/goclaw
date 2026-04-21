@@ -120,6 +120,32 @@ func TestSendEmbed_TotalCharCap(t *testing.T) {
 	}
 }
 
+// TestSendEmbed_ContentDoesNotCountTowardEmbedCap proves the fix for the bug
+// where params.Content was added to the embed 6000-char total. Discord caps
+// content separately (2000 — see TestSendEmbed_ContentTooLong); including it
+// in the embed cap rejected legitimate Content+Embeds<=6000 sends.
+func TestSendEmbed_ContentDoesNotCountTowardEmbedCap(t *testing.T) {
+	f := &fakeEmbedAPI{}
+	// Content near its 2000 cap + two embeds totaling 5500 chars = 7400
+	// combined. Embed-only is 5500, under Discord's 6000 cap. Before the fix
+	// the sum was compared against 6000 and rejected; after the fix only the
+	// 5500 embed total is checked and the send proceeds.
+	_, err := sendEmbed(context.Background(), f, channels.DiscordSendEmbedParams{
+		ChannelID: "c1",
+		Content:   strings.Repeat("x", 1900),
+		Embeds: []channels.DiscordEmbed{
+			{Description: strings.Repeat("y", 3000)},
+			{Description: strings.Repeat("z", 2500)},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !f.called {
+		t.Fatal("API not called — send should have succeeded")
+	}
+}
+
 func TestSendEmbed_ContentTooLong(t *testing.T) {
 	_, err := sendEmbed(context.Background(), &fakeEmbedAPI{}, channels.DiscordSendEmbedParams{
 		ChannelID: "c1",
