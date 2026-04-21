@@ -177,6 +177,49 @@ func TestSendDiscordEmbed_TenantBlock(t *testing.T) {
 	}
 }
 
+// TestSendDiscordEmbed_ChannelNotFound covers the tenant-checker path where
+// the named channel instance does not exist in the manager. Mirrors the same
+// test in create_discord_thread so the coverage shape is consistent.
+func TestSendDiscordEmbed_ChannelNotFound(t *testing.T) {
+	f := &fakeEmbedSender{}
+	tool := NewSendDiscordEmbedTool()
+	tool.SetDiscordEmbedSender(f.fn)
+	tool.SetChannelTenantChecker(func(_ string) (uuid.UUID, bool) { return uuid.Nil, false })
+
+	res := tool.Execute(embedCtx(), map[string]any{
+		"embeds": []any{map[string]any{"title": "x"}},
+	})
+	if res == nil || !res.IsError || !strings.Contains(res.ForLLM, "not found") {
+		t.Fatalf("expected channel-not-found error, got %+v", res)
+	}
+	if f.called {
+		t.Fatal("sender should not be invoked when channel is unknown")
+	}
+}
+
+// TestSendDiscordEmbed_LegacyChannelBypassesTenantCheck covers the code path
+// where the channel instance is tenant-less (uuid.Nil — legacy/config-based
+// channels). The tenant check should fall through and the send should
+// proceed regardless of any tenant on the context.
+func TestSendDiscordEmbed_LegacyChannelBypassesTenantCheck(t *testing.T) {
+	f := &fakeEmbedSender{result: channels.DiscordSendEmbedResult{MessageID: "m1"}}
+	tool := NewSendDiscordEmbedTool()
+	tool.SetDiscordEmbedSender(f.fn)
+	tool.SetChannelTenantChecker(func(_ string) (uuid.UUID, bool) { return uuid.Nil, true })
+
+	// A context tenant is set; channel is legacy (uuid.Nil), so mismatch doesn't apply.
+	ctx := store.WithTenantID(embedCtx(), uuid.New())
+	res := tool.Execute(ctx, map[string]any{
+		"embeds": []any{map[string]any{"title": "x"}},
+	})
+	if res == nil || res.IsError {
+		t.Fatalf("expected success on legacy channel, got %+v", res)
+	}
+	if !f.called {
+		t.Fatal("sender should run for legacy channel regardless of ctx tenant")
+	}
+}
+
 func TestSendDiscordEmbed_SenderError(t *testing.T) {
 	f := &fakeEmbedSender{err: errors.New("HTTP 403")}
 	tool := NewSendDiscordEmbedTool()

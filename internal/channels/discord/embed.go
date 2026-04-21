@@ -62,7 +62,11 @@ func sendEmbed(ctx context.Context, api embedAPI, params channels.DiscordSendEmb
 	}
 
 	embeds := make([]*discordgo.MessageEmbed, 0, len(params.Embeds))
-	total := len([]rune(params.Content))
+	// Discord's 6000-char cap applies to embed text only. message.content has
+	// its own 2000 cap (enforced above) and does NOT count toward this total.
+	// Earlier this function counted params.Content here, rejecting legitimate
+	// Content+Embeds sends with a spurious "combined embed text exceeds 6000".
+	total := 0
 	for i := range params.Embeds {
 		e, chars, err := convertEmbed(params.Embeds[i])
 		if err != nil {
