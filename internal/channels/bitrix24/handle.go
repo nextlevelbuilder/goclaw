@@ -61,7 +61,13 @@ func (c *Channel) DispatchEvent(ctx context.Context, evt *Event) {
 			return
 		}
 		// Reuse Stop() so the teardown path matches channel-shutdown exactly
-		// (Router unregister + SetRunning(false) + MarkStopped + close(stopCh)).
+		// (Router unregister + SetRunning(false) + MarkStopped("") + close(stopCh)).
+		// Stop() records the generic "Stopped" summary; immediately overwrite it
+		// with the ONIMBOTDELETE-specific reason so operators viewing channel
+		// health can distinguish "user deleted our bot on the portal" from a
+		// normal shutdown. Stop() currently can't return an error — ignored on
+		// purpose; if that changes we'll need to decide whether teardown errors
+		// should block the health-override or propagate.
 		_ = c.Stop(ctx)
 		c.MarkStopped("Bot deleted on portal")
 	case EventMessageUpdate, EventMessageDelete:
@@ -202,13 +208,15 @@ func (c *Channel) isMentioned(msg string) bool {
 }
 
 // stripMention removes all [USER=<bot_id>]…[/USER] / [BOT=<bot_id>]…[/BOT]
-// fragments belonging to this bot, leaving other mentions intact.
+// fragments belonging to this bot, leaving other mentions intact. The result
+// may have leading/trailing whitespace — trimming is the caller's job
+// (handleMessage already TrimSpaces both DM and group paths uniformly).
 func (c *Channel) stripMention(msg string) string {
 	m := c.mention()
 	if m == nil || m.stripRe == nil {
 		return msg
 	}
-	return strings.TrimSpace(m.stripRe.ReplaceAllString(msg, ""))
+	return m.stripRe.ReplaceAllString(msg, "")
 }
 
 // mention returns the cached matcher for this bot's id, building it lazily
