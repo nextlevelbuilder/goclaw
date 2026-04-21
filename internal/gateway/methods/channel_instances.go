@@ -277,9 +277,15 @@ func maskInstance(inst store.ChannelInstanceData) map[string]any {
 }
 
 // isValidChannelType checks if the channel type is supported.
+//
+// Keep this list in sync with the HTTP twin in internal/http/channel_instances.go
+// and with CHANNEL_TYPES in ui/web/src/constants/channels.ts. When the two
+// backend switches drift (as happened with facebook/pancake/bitrix24), the
+// WS-driven UI rejects channels the HTTP API accepts, and the dropdown offers
+// channels neither API accepts.
 func isValidChannelType(ct string) bool {
 	switch ct {
-	case "telegram", "discord", "slack", "whatsapp", "zalo_oa", "zalo_personal", "feishu":
+	case "telegram", "discord", "slack", "whatsapp", "zalo_oa", "zalo_personal", "feishu", "facebook", "pancake", "bitrix24":
 		return true
 	}
 	return false
