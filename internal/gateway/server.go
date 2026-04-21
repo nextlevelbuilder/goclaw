@@ -198,9 +198,17 @@ func (s *Server) BuildMux() *http.ServeMux {
 	}
 
 	// Embedded web UI (built with -tags embedui). Catch-all after all API routes.
+	// When the build does NOT include the embedui tag, webui.Handler() returns nil
+	// and there's no handler for "/" — http.ServeMux would then return an opaque
+	// 404 for the root URL, confusing operators who open the deployed URL in a
+	// browser to check the service. Install a minimal JSON index handler in that
+	// case so the root responds with something useful (and any unmatched path
+	// still returns 404, just with a JSON body).
 	if h := webui.Handler(); h != nil {
 		mux.Handle("/", h)
 		slog.Info("serving embedded web UI")
+	} else {
+		mux.HandleFunc("/", s.handleIndex)
 	}
 
 	s.mux = mux
@@ -370,6 +378,24 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, `{"status":"ok","protocol":%d}`, protocol.ProtocolVersion)
+}
+
+// handleIndex is the fallback "/" handler when no embedded web UI is present.
+// It returns a small JSON service-info document for exact-match "/" requests
+// and a JSON 404 for everything else — http.ServeMux routes "/" as a
+// catch-all, so unrelated paths fall through here too.
+func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if r.URL.Path != "/" {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":"not found"}`))
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintf(w,
+		`{"service":"goclaw","status":"ok","protocol":%d,`+
+			`"endpoints":["/health","/v1/chat/completions","/v1/responses","/v1/tools/invoke","/ws"]}`,
+		protocol.ProtocolVersion)
 }
 
 // clientIP extracts the real client IP from the request, checking proxy headers first.
