@@ -50,9 +50,10 @@ func TestCreateDiscordThread_NameValidation(t *testing.T) {
 	tool.SetDiscordThreadCreator(f.fn)
 
 	cases := map[string]any{
-		"missing": nil,
-		"empty":   "",
-		"too-long": strings.Repeat("a", 101),
+		"missing":        nil,
+		"empty":          "",
+		"whitespace-only": "   ",
+		"too-long":       strings.Repeat("a", 101),
 	}
 	for label, name := range cases {
 		args := map[string]any{}
@@ -67,6 +68,48 @@ func TestCreateDiscordThread_NameValidation(t *testing.T) {
 			t.Fatalf("%s: creator should not be called for invalid name", label)
 		}
 	}
+}
+
+// TestCreateDiscordThread_AutoArchiveEnum covers the Discord-enum validation
+// on auto_archive_minutes — the spec allows exactly {60, 1440, 4320, 10080}
+// and any other value is rejected with a 400 at Discord. Validating locally
+// gives the LLM a clearer, cheaper error.
+func TestCreateDiscordThread_AutoArchiveEnum(t *testing.T) {
+	f := &fakeCreator{result: channels.DiscordThreadResult{ThreadID: "t1", Name: "ok"}}
+	tool := NewCreateDiscordThreadTool()
+	tool.SetDiscordThreadCreator(f.fn)
+
+	t.Run("invalid value rejected before API", func(t *testing.T) {
+		f.called = false
+		res := tool.Execute(baseCtx(), map[string]any{
+			"name":                 "ok",
+			"auto_archive_minutes": float64(120),
+		})
+		if res == nil || !res.IsError || !strings.Contains(res.ForLLM, "auto_archive_minutes") {
+			t.Fatalf("expected auto_archive_minutes rejection, got %+v", res)
+		}
+		if f.called {
+			t.Fatal("creator should not be called on invalid enum")
+		}
+	})
+
+	t.Run("each allowed value passes through", func(t *testing.T) {
+		for _, v := range []int{60, 1440, 4320, 10080} {
+			f.called = false
+			f.gotParam = channels.DiscordThreadParams{}
+			res := tool.Execute(baseCtx(), map[string]any{
+				"name":                 "ok",
+				"auto_archive_minutes": float64(v),
+			})
+			if res == nil || res.IsError {
+				t.Errorf("auto_archive=%d: expected success, got %+v", v, res)
+				continue
+			}
+			if f.gotParam.AutoArchiveMinutes != v {
+				t.Errorf("auto_archive=%d: param value = %d", v, f.gotParam.AutoArchiveMinutes)
+			}
+		}
+	})
 }
 
 func TestCreateDiscordThread_ContextFallback(t *testing.T) {
