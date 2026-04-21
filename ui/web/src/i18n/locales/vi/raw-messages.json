@@ -13,9 +13,19 @@
     "status": "Trạng thái"
   },
   "filters": {
+    "title": "Bộ lọc",
+    "status": "Trạng thái",
     "all": "Tất cả",
     "pending": "Chờ xử lý",
-    "processed": "Đã xử lý"
+    "processed": "Đã xử lý",
+    "agent": "Agent",
+    "allAgents": "Tất cả agent",
+    "channel": "Kênh",
+    "graphId": "Graph ID",
+    "searchChat": "Tìm nhóm chat…",
+    "searchSender": "Tìm người gửi…",
+    "searchBody": "Tìm tin nhắn…",
+    "clearAll": "Xóa tất cả"
   },
   "status": {
     "pending": "Chờ xử lý",
@@ -24,6 +34,11 @@
   "showing": "Hiển thị {{count}} / {{total}} tin nhắn",
   "pagination": {
     "page": "Trang {{current}} / {{total}}"
+  },
+  "actions": {
+    "resetToPending": "Đặt lại thành Chờ xử lý",
+    "resetConfirm": "Đặt lại {{count}} tin nhắn về trạng thái chờ xử lý?",
+    "resetSuccess": "{{count}} tin nhắn đã được đặt lại"
   },
   "detail": {
     "title": "Chi tiết tin nhắn",
@@ -40,6 +55,7 @@
     "messageBody": "Nội dung tin nhắn",
     "copy": "Sao chép",
     "copied": "Đã sao chép",
-    "na": "—"
+    "na": "—",
+    "resetToPending": "Đặt lại thành Chờ xử lý"
   }
 }

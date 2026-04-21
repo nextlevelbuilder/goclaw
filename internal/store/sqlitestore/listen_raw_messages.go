@@ -173,6 +173,24 @@ func (s *SQLiteListenRawMessageStore) ResetProcessed(ctx context.Context, agentI
 	return res.RowsAffected()
 }
 
+func (s *SQLiteListenRawMessageStore) ResetProcessedByIDs(ctx context.Context, ids []uuid.UUID) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	q := `UPDATE listen_raw_messages SET processed_at = NULL WHERE id IN (` + strings.Join(placeholders, ",") + `) AND processed_at IS NOT NULL`
+	res, err := s.db.ExecContext(ctx, q, args...)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 func (s *SQLiteListenRawMessageStore) List(ctx context.Context, opts store.ListenRawMessageListOpts) ([]store.ListenRawMessage, int, error) {
 	tClause, tArgs, err := scopeClause(ctx)
 	if err != nil {

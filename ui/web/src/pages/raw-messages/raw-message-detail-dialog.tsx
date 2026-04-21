@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Copy, Check } from "lucide-react";
+import { Copy, Check, RotateCcw } from "lucide-react";
 import { formatDate } from "@/lib/format";
 import { useClipboard } from "@/hooks/use-clipboard";
 import type { RawMessage } from "./hooks/use-raw-messages";
@@ -10,9 +10,10 @@ import type { RawMessage } from "./hooks/use-raw-messages";
 interface RawMessageDetailDialogProps {
   message: RawMessage;
   onClose: () => void;
+  onReset?: () => void;
 }
 
-export function RawMessageDetailDialog({ message, onClose }: RawMessageDetailDialogProps) {
+export function RawMessageDetailDialog({ message, onClose, onReset }: RawMessageDetailDialogProps) {
   const { t } = useTranslation("raw-messages");
   const { copied, copy } = useClipboard();
 
@@ -59,15 +60,28 @@ export function RawMessageDetailDialog({ message, onClose }: RawMessageDetailDia
           <div className="mt-4 border-t pt-4">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-xs font-medium text-muted-foreground">{t("detail.messageBody")}</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 gap-1 text-xs"
-                onClick={() => copy(message.body)}
-              >
-                {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                {copied ? t("detail.copied") : t("detail.copy")}
-              </Button>
+              <div className="flex items-center gap-1">
+                {onReset && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1 text-xs"
+                    onClick={onReset}
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    {t("detail.resetToPending")}
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1 text-xs"
+                  onClick={() => copy(message.body)}
+                >
+                  {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                  {copied ? t("detail.copied") : t("detail.copy")}
+                </Button>
+              </div>
             </div>
             <div className="rounded-md bg-muted/50 p-3 text-sm whitespace-pre-wrap break-words max-h-[40vh] overflow-y-auto">
               {message.body || t("detail.na")}

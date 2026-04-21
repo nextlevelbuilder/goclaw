@@ -13,9 +13,19 @@
     "status": "Status"
   },
   "filters": {
+    "title": "Filters",
+    "status": "Status",
     "all": "All",
     "pending": "Pending",
-    "processed": "Processed"
+    "processed": "Processed",
+    "agent": "Agent",
+    "allAgents": "All agents",
+    "channel": "Channel",
+    "graphId": "Graph ID",
+    "searchChat": "Search chat…",
+    "searchSender": "Search sender…",
+    "searchBody": "Search message…",
+    "clearAll": "Clear all"
   },
   "status": {
     "pending": "Pending",
@@ -24,6 +34,11 @@
   "showing": "Showing {{count}} of {{total}} messages",
   "pagination": {
     "page": "Page {{current}} of {{total}}"
+  },
+  "actions": {
+    "resetToPending": "Reset to Pending",
+    "resetConfirm": "Reset {{count}} message(s) to pending?",
+    "resetSuccess": "{{count}} message(s) reset to pending"
   },
   "detail": {
     "title": "Message Detail",
@@ -40,6 +55,7 @@
     "messageBody": "Message Body",
     "copy": "Copy",
     "copied": "Copied",
-    "na": "—"
+    "na": "—",
+    "resetToPending": "Reset to Pending"
   }
 }

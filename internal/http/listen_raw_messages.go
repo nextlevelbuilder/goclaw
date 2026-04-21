@@ -1,9 +1,11 @@
 package http
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 
+	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -21,6 +23,7 @@ func NewListenRawMessagesHandler(s store.ListenRawMessageStore) *ListenRawMessag
 func (h *ListenRawMessagesHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/listen-raw-messages", h.authMiddleware(h.handleList))
 	mux.HandleFunc("POST /v1/listen-raw-messages/reset-processed", h.authMiddleware(h.handleResetProcessed))
+	mux.HandleFunc("POST /v1/listen-raw-messages/reset", h.authMiddleware(h.handleResetByIDs))
 }
 
 func (h *ListenRawMessagesHandler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
@@ -97,4 +100,38 @@ func (h *ListenRawMessagesHandler) handleResetProcessed(w http.ResponseWriter, r
 		resp["graph_id"] = graphID
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *ListenRawMessagesHandler) handleResetByIDs(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		IDs []string `json:"ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	if len(body.IDs) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "ids is required"})
+		return
+	}
+
+	ids := make([]uuid.UUID, 0, len(body.IDs))
+	for _, s := range body.IDs {
+		id, err := uuid.Parse(s)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id: " + s})
+			return
+		}
+		ids = append(ids, id)
+	}
+
+	affected, err := h.store.ResetProcessedByIDs(r.Context(), ids)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"reset_count": affected,
+	})
 }

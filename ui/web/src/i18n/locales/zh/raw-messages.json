@@ -13,9 +13,19 @@
     "status": "状态"
   },
   "filters": {
+    "title": "筛选",
+    "status": "状态",
     "all": "全部",
     "pending": "待处理",
-    "processed": "已处理"
+    "processed": "已处理",
+    "agent": "Agent",
+    "allAgents": "所有 Agent",
+    "channel": "频道",
+    "graphId": "Graph ID",
+    "searchChat": "搜索聊天…",
+    "searchSender": "搜索发送者…",
+    "searchBody": "搜索消息…",
+    "clearAll": "清除全部"
   },
   "status": {
     "pending": "待处理",
@@ -24,6 +34,11 @@
   "showing": "显示 {{count}} / {{total}} 条消息",
   "pagination": {
     "page": "第 {{current}} 页 / 共 {{total}} 页"
+  },
+  "actions": {
+    "resetToPending": "重置为待处理",
+    "resetConfirm": "将 {{count}} 条消息重置为待处理？",
+    "resetSuccess": "{{count}} 条消息已重置为待处理"
   },
   "detail": {
     "title": "消息详情",
@@ -40,6 +55,7 @@
     "messageBody": "消息正文",
     "copy": "复制",
     "copied": "已复制",
-    "na": "—"
+    "na": "—",
+    "resetToPending": "重置为待处理"
   }
 }

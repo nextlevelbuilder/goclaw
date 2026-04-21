@@ -24,6 +24,10 @@ interface RawMessagesResponse {
   offset: number;
 }
 
+interface ResetResponse {
+  reset_count: number;
+}
+
 export function useRawMessages() {
   const http = useHttp();
   const [messages, setMessages] = useState<RawMessage[]>([]);
@@ -31,7 +35,15 @@ export function useRawMessages() {
   const [loading, setLoading] = useState(false);
 
   const loadMessages = useCallback(
-    async (params?: { processed?: boolean; limit?: number; offset?: number }) => {
+    async (params?: {
+      processed?: boolean;
+      limit?: number;
+      offset?: number;
+      channelName?: string;
+      chatId?: string;
+      agentId?: string;
+      graphId?: string;
+    }) => {
       setLoading(true);
       try {
         const query: Record<string, string> = {};
@@ -43,6 +55,18 @@ export function useRawMessages() {
         }
         if (params?.offset) {
           query.offset = String(params.offset);
+        }
+        if (params?.channelName) {
+          query.channel_name = params.channelName;
+        }
+        if (params?.chatId) {
+          query.chat_id = params.chatId;
+        }
+        if (params?.agentId) {
+          query.agent_id = params.agentId;
+        }
+        if (params?.graphId) {
+          query.graph_id = params.graphId;
         }
         const res = await http.get<RawMessagesResponse>("/v1/listen-raw-messages", query);
         setMessages(res?.messages ?? []);
@@ -56,5 +80,13 @@ export function useRawMessages() {
     [http],
   );
 
-  return { messages, total, loading, loadMessages };
+  const resetToPending = useCallback(
+    async (ids: string[]): Promise<number> => {
+      const res = await http.post<ResetResponse>("/v1/listen-raw-messages/reset", { ids });
+      return res?.reset_count ?? 0;
+    },
+    [http],
+  );
+
+  return { messages, total, loading, loadMessages, resetToPending };
 }

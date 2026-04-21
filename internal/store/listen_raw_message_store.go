@@ -66,4 +66,8 @@ type ListenRawMessageStore interface {
 	// ResetProcessed sets processed_at = NULL for messages matching the given filters,
 	// so the extraction worker will re-process them. Returns the number of rows affected.
 	ResetProcessed(ctx context.Context, agentID, graphID string) (int64, error)
+
+	// ResetProcessedByIDs sets processed_at = NULL for messages with the given IDs.
+	// Returns the number of rows affected.
+	ResetProcessedByIDs(ctx context.Context, ids []uuid.UUID) (int64, error)
 }
