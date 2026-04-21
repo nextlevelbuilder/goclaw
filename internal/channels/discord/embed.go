@@ -89,6 +89,13 @@ func sendEmbed(ctx context.Context, api embedAPI, params channels.DiscordSendEmb
 			ChannelID: params.ChannelID,
 		}
 	}
+	if len(params.Components) > 0 {
+		components, err := convertComponents(params.Components)
+		if err != nil {
+			return channels.DiscordSendEmbedResult{}, err
+		}
+		send.Components = components
+	}
 
 	msg, err := api.channelMessageSendComplex(ctx, params.ChannelID, send)
 	if err != nil {
@@ -202,4 +209,103 @@ func convertEmbed(in channels.DiscordEmbed) (*discordgo.MessageEmbed, int, error
 	}
 
 	return out, chars, nil
+}
+
+// Discord message-component limits. Enforced before the API call so agents get
+// a readable error instead of a less-friendly Discord rejection.
+// Reference: https://discord.com/developers/docs/interactions/message-components#anatomy-of-a-component
+const (
+	componentMaxActionRowsPerMsg = 5
+	componentMaxButtonsPerRow    = 5
+	componentButtonLabelMax      = 80
+	componentButtonCustomIDMax   = 100
+)
+
+// convertComponents validates a slice of action rows and converts them to the
+// discordgo shape. Each row must have 1-5 buttons; up to 5 rows per message.
+// Non-link buttons require CustomID; link buttons require URL (and only URL).
+func convertComponents(in []channels.DiscordMessageComponent) ([]discordgo.MessageComponent, error) {
+	if len(in) > componentMaxActionRowsPerMsg {
+		return nil, fmt.Errorf("too many action rows: %d (max %d)", len(in), componentMaxActionRowsPerMsg)
+	}
+	out := make([]discordgo.MessageComponent, 0, len(in))
+	for rowIdx, row := range in {
+		if len(row.ActionRow) == 0 {
+			return nil, fmt.Errorf("action_row[%d] is empty", rowIdx)
+		}
+		if len(row.ActionRow) > componentMaxButtonsPerRow {
+			return nil, fmt.Errorf("action_row[%d]: too many buttons (%d, max %d)", rowIdx, len(row.ActionRow), componentMaxButtonsPerRow)
+		}
+		buttons := make([]discordgo.MessageComponent, 0, len(row.ActionRow))
+		for btnIdx, b := range row.ActionRow {
+			btn, err := convertButton(b)
+			if err != nil {
+				return nil, fmt.Errorf("action_row[%d].buttons[%d]: %w", rowIdx, btnIdx, err)
+			}
+			buttons = append(buttons, btn)
+		}
+		out = append(out, discordgo.ActionsRow{Components: buttons})
+	}
+	return out, nil
+}
+
+func convertButton(b channels.DiscordButton) (discordgo.Button, error) {
+	if b.Label == "" {
+		return discordgo.Button{}, errors.New("label is required")
+	}
+	if l := len([]rune(b.Label)); l > componentButtonLabelMax {
+		return discordgo.Button{}, fmt.Errorf("label exceeds %d characters (got %d)", componentButtonLabelMax, l)
+	}
+
+	var style discordgo.ButtonStyle
+	switch b.Style {
+	case channels.DiscordButtonPrimary:
+		style = discordgo.PrimaryButton
+	case channels.DiscordButtonSecondary:
+		style = discordgo.SecondaryButton
+	case channels.DiscordButtonSuccess:
+		style = discordgo.SuccessButton
+	case channels.DiscordButtonDanger:
+		style = discordgo.DangerButton
+	case channels.DiscordButtonLink:
+		style = discordgo.LinkButton
+	case "":
+		return discordgo.Button{}, errors.New("style is required")
+	default:
+		return discordgo.Button{}, fmt.Errorf("unknown style %q (expected one of primary/secondary/success/danger/link)", b.Style)
+	}
+
+	// Validate style-dependent fields. Link buttons use URL + no custom_id;
+	// all other styles use custom_id + no URL. Discord rejects violations,
+	// but the API error is less clear than the one we produce here.
+	if b.Style == channels.DiscordButtonLink {
+		if b.URL == "" {
+			return discordgo.Button{}, errors.New("url is required for link-style buttons")
+		}
+		if b.CustomID != "" {
+			return discordgo.Button{}, errors.New("custom_id must be empty for link-style buttons")
+		}
+	} else {
+		if b.CustomID == "" {
+			return discordgo.Button{}, errors.New("custom_id is required for non-link buttons")
+		}
+		if l := len([]rune(b.CustomID)); l > componentButtonCustomIDMax {
+			return discordgo.Button{}, fmt.Errorf("custom_id exceeds %d characters (got %d)", componentButtonCustomIDMax, l)
+		}
+		if b.URL != "" {
+			return discordgo.Button{}, errors.New("url must be empty for non-link buttons")
+		}
+	}
+
+	btn := discordgo.Button{
+		Label:    b.Label,
+		Style:    style,
+		CustomID: b.CustomID,
+		URL:      b.URL,
+		Disabled: b.Disabled,
+	}
+	if b.Emoji != "" {
+		btn.Emoji = &discordgo.ComponentEmoji{Name: b.Emoji}
+	}
+	return btn, nil
 }

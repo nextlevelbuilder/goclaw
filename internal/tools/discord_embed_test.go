@@ -232,3 +232,53 @@ func TestSendDiscordEmbed_SenderError(t *testing.T) {
 		t.Fatalf("expected wrapped error, got %+v", res)
 	}
 }
+
+func TestSendDiscordEmbed_Components(t *testing.T) {
+	f := &fakeEmbedSender{}
+	tool := NewSendDiscordEmbedTool()
+	tool.SetDiscordEmbedSender(f.fn)
+
+	res := tool.Execute(embedCtx(), map[string]any{
+		"embeds": []any{map[string]any{"title": "Triage"}},
+		"components": []any{
+			map[string]any{"buttons": []any{
+				map[string]any{"label": "Suppress", "style": "danger", "custom_id": "triage:suppress:abc"},
+				map[string]any{"label": "Open issue", "style": "primary", "custom_id": "triage:issue:abc"},
+				map[string]any{"label": "Docs", "style": "link", "url": "https://x/docs"},
+			}},
+		},
+	})
+	if res == nil || res.IsError {
+		t.Fatalf("expected success, got %+v", res)
+	}
+	if len(f.gotParam.Components) != 1 {
+		t.Fatalf("expected 1 action row passed through, got %d", len(f.gotParam.Components))
+	}
+	row := f.gotParam.Components[0].ActionRow
+	if len(row) != 3 {
+		t.Fatalf("expected 3 buttons, got %d", len(row))
+	}
+	if row[0].CustomID != "triage:suppress:abc" || row[0].Style != channels.DiscordButtonDanger {
+		t.Errorf("button[0] = %+v; want suppress/danger", row[0])
+	}
+	if row[2].Style != channels.DiscordButtonLink || row[2].URL != "https://x/docs" {
+		t.Errorf("button[2] = %+v; want link with URL", row[2])
+	}
+}
+
+func TestSendDiscordEmbed_ComponentsShapeErrors(t *testing.T) {
+	f := &fakeEmbedSender{}
+	tool := NewSendDiscordEmbedTool()
+	tool.SetDiscordEmbedSender(f.fn)
+
+	res := tool.Execute(embedCtx(), map[string]any{
+		"embeds":     []any{map[string]any{"title": "x"}},
+		"components": "not-an-array",
+	})
+	if res == nil || !res.IsError || !strings.Contains(res.ForLLM, "components must be an array") {
+		t.Fatalf("expected shape error, got %+v", res)
+	}
+	if f.called {
+		t.Fatal("sender should not be invoked on shape error")
+	}
+}
