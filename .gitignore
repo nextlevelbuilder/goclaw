@@ -1,9 +1,12 @@
 # Test artifacts
 tests/integration/testdata/
 
-# Binary
-openclaw-go
-pkg-helper
+# Binary (anchored to repo root so we don't accidentally ignore
+# the cmd/pkg-helper/ source directory, which breaks Docker builds
+# on uploaders that pattern-match .gitignore against the whole tree
+# — notably `railway up`).
+/openclaw-go
+/pkg-helper
 
 # IDE
 .idea/
