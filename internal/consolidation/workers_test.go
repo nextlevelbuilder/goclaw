@@ -155,6 +155,7 @@ func (m *mockKGStore) DedupAfterExtraction(_ context.Context, _, _ string, _ []s
 func (m *mockKGStore) UpsertEntity(context.Context, *store.Entity) error { return nil }
 func (m *mockKGStore) GetEntity(context.Context, string, string, string) (*store.Entity, error) { return nil, nil }
 func (m *mockKGStore) DeleteEntity(context.Context, string, string, string) error { return nil }
+func (m *mockKGStore) DeleteEntities(context.Context, string, string, []string) (int, error) { return 0, nil }
 func (m *mockKGStore) ListEntities(context.Context, string, string, store.EntityListOptions) ([]store.Entity, error) { return nil, nil }
 func (m *mockKGStore) SearchEntities(context.Context, string, string, string, int) ([]store.Entity, error) { return nil, nil }
 func (m *mockKGStore) UpsertRelation(context.Context, *store.Relation) error { return nil }

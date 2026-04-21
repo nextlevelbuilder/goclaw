@@ -39,6 +39,7 @@ func (m *mockKGStore) GetEntity(_ context.Context, _, _, entityID string) (*stor
 }
 
 func (m *mockKGStore) DeleteEntity(context.Context, string, string, string) error { return nil }
+func (m *mockKGStore) DeleteEntities(context.Context, string, string, []string) (int, error) { return 0, nil }
 
 func (m *mockKGStore) ListEntities(_ context.Context, _, _ string, opts store.EntityListOptions) ([]store.Entity, error) {
 	var out []store.Entity

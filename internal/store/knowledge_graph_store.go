@@ -133,6 +133,9 @@ type KnowledgeGraphStore interface {
 	UpsertEntity(ctx context.Context, entity *Entity) error
 	GetEntity(ctx context.Context, agentID, userID, entityID string) (*Entity, error)
 	DeleteEntity(ctx context.Context, agentID, userID, entityID string) error
+	// DeleteEntities deletes multiple entities by ID. Also removes relations referencing them.
+	// Returns the number of entities deleted.
+	DeleteEntities(ctx context.Context, agentID, userID string, entityIDs []string) (int, error)
 	ListEntities(ctx context.Context, agentID, userID string, opts EntityListOptions) ([]Entity, error)
 	SearchEntities(ctx context.Context, agentID, userID, query string, limit int) ([]Entity, error)
 	// SearchEntitiesByEventTime returns entities whose event_time falls within [fromTime, toTime].

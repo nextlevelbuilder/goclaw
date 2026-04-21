@@ -118,6 +118,31 @@ func (h *KnowledgeGraphHandler) handleDeleteEntity(w http.ResponseWriter, r *htt
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
+func (h *KnowledgeGraphHandler) handleBatchDeleteEntities(w http.ResponseWriter, r *http.Request) {
+	locale := extractLocale(r)
+	agentID := r.PathValue("agentID")
+
+	var body struct {
+		EntityIDs []string `json:"entity_ids"`
+		UserID    string   `json:"user_id"`
+	}
+	if !bindJSON(w, r, locale, &body) {
+		return
+	}
+	if len(body.EntityIDs) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgEntityIDRequired)})
+		return
+	}
+
+	deleted, err := h.store.DeleteEntities(r.Context(), agentID, body.UserID, body.EntityIDs)
+	if err != nil {
+		slog.Warn("kg.batch_delete_entities failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"deleted_count": deleted})
+}
+
 func (h *KnowledgeGraphHandler) handleTraverse(w http.ResponseWriter, r *http.Request) {
 	locale := extractLocale(r)
 	agentID := r.PathValue("agentID")

@@ -140,6 +140,66 @@ func (s *PGKnowledgeGraphStore) DeleteEntity(ctx context.Context, agentID, userI
 	return err
 }
 
+func (s *PGKnowledgeGraphStore) DeleteEntities(ctx context.Context, agentID, userID string, entityIDs []string) (int, error) {
+	if len(entityIDs) == 0 {
+		return 0, nil
+	}
+	aid, err := parseUUID(agentID)
+	if err != nil {
+		return 0, fmt.Errorf("kg delete entities: agent: %w", err)
+	}
+	pgIDs := make([]uuid.UUID, len(entityIDs))
+	for i, id := range entityIDs {
+		pgIDs[i], err = parseUUID(id)
+		if err != nil {
+			return 0, fmt.Errorf("kg delete entities: id[%d]: %w", i, err)
+		}
+	}
+
+	userWhere, userArgs := kgUserWhere(ctx, userID, 3)
+	tc, tcArgs, _, tcErr := scopeClause(ctx, 3+len(userArgs))
+	if tcErr != nil {
+		return 0, tcErr
+	}
+	scopeSuffix := userWhere + tc
+	args := append([]any{pgIDs, aid}, userArgs...)
+	args = append(args, tcArgs...)
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	// Delete relations referencing these entities
+	relWhere := "agent_id = $2" + scopeSuffix
+	_, delErr := tx.ExecContext(ctx,
+		"DELETE FROM kg_relations WHERE (source_entity_id = ANY($1) OR target_entity_id = ANY($1)) AND "+relWhere,
+		args...,
+	)
+	if delErr != nil {
+		return 0, delErr
+	}
+	// Delete dedup candidates referencing these entities
+	_, delErr = tx.ExecContext(ctx,
+		"DELETE FROM kg_dedup_candidates WHERE (entity_a_id = ANY($1) OR entity_b_id = ANY($1)) AND agent_id = $2"+scopeSuffix,
+		args...,
+	)
+	if delErr != nil {
+		return 0, delErr
+	}
+
+	res, err := tx.ExecContext(ctx,
+		"DELETE FROM kg_entities WHERE id = ANY($1) AND agent_id = $2"+scopeSuffix,
+		args...,
+	)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return int(n), tx.Commit()
+}
+
 func (s *PGKnowledgeGraphStore) ListEntities(ctx context.Context, agentID, userID string, opts store.EntityListOptions) ([]store.Entity, error) {
 	aid, err := parseUUID(agentID)
 	if err != nil {

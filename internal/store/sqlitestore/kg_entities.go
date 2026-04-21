@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -105,6 +106,70 @@ func (s *SQLiteKnowledgeGraphStore) DeleteEntity(ctx context.Context, agentID, u
 		args...,
 	)
 	return err
+}
+
+func (s *SQLiteKnowledgeGraphStore) DeleteEntities(ctx context.Context, agentID, userID string, entityIDs []string) (int, error) {
+	if len(entityIDs) == 0 {
+		return 0, nil
+	}
+	userClause, userArgs := kgUserClauseFor(ctx, userID)
+	sc, scArgs, _ := scopeClause(ctx)
+	scopeSuffix := userClause + sc
+
+	// Build (?, ?, ...) placeholder list for entity IDs
+	placeholders := make([]string, len(entityIDs))
+	idArgs := make([]any, len(entityIDs))
+	for i, id := range entityIDs {
+		placeholders[i] = "?"
+		idArgs[i] = id
+	}
+	inList := strings.Join(placeholders, ",")
+
+	// Helper to build args: idArgs (×count) + agentID + scope args
+	buildArgs := func(inCount int) []any {
+		a := make([]any, 0, inCount*len(idArgs)+1+len(userArgs)+len(scArgs))
+		for i := 0; i < inCount; i++ {
+			a = append(a, idArgs...)
+		}
+		a = append(a, agentID)
+		a = append(a, userArgs...)
+		a = append(a, scArgs...)
+		return a
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	// Delete relations referencing these entities (2 IN clauses: source + target)
+	_, delErr := tx.ExecContext(ctx,
+		`DELETE FROM kg_relations WHERE (source_entity_id IN (`+inList+`) OR target_entity_id IN (`+inList+`)) AND agent_id = ?`+scopeSuffix,
+		buildArgs(2)...,
+	)
+	if delErr != nil {
+		return 0, delErr
+	}
+	// Delete dedup candidates referencing these entities (2 IN clauses: entity_a + entity_b)
+	_, delErr = tx.ExecContext(ctx,
+		`DELETE FROM kg_dedup_candidates WHERE (entity_a_id IN (`+inList+`) OR entity_b_id IN (`+inList+`)) AND agent_id = ?`+scopeSuffix,
+		buildArgs(2)...,
+	)
+	if delErr != nil {
+		return 0, delErr
+	}
+
+	// Delete entities (1 IN clause)
+	res, err := tx.ExecContext(ctx,
+		`DELETE FROM kg_entities WHERE id IN (`+inList+`) AND agent_id = ?`+scopeSuffix,
+		buildArgs(1)...,
+	)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return int(n), tx.Commit()
 }
 
 func (s *SQLiteKnowledgeGraphStore) ListEntities(ctx context.Context, agentID, userID string, opts store.EntityListOptions) ([]store.Entity, error) {
