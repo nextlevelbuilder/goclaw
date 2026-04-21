@@ -161,7 +161,7 @@ func TestNoneModeNoTime(t *testing.T) {
 	cfg := fullTestConfig()
 	cfg.Mode = PromptNone
 	prompt := BuildSystemPrompt(cfg)
-	if strings.Contains(prompt, "Current date:") {
+	if strings.Contains(prompt, "Current date/time:") {
 		t.Error("none mode should not have time section")
 	}
 }

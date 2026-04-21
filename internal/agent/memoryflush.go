@@ -76,16 +76,18 @@ func buildMemoryFlushPromptConfig(
 	toolNames []string,
 	hasMemory bool,
 	providerType string,
+	defaultTimezone string,
 ) SystemPromptConfig {
 	return SystemPromptConfig{
-		AgentID:      agentID,
-		AgentUUID:    agentUUID,
-		Model:        model,
-		Workspace:    workspace,
-		Mode:         PromptMinimal,
-		ToolNames:    toolNames,
-		HasMemory:    hasMemory,
-		ProviderType: providerType,
+		AgentID:         agentID,
+		AgentUUID:       agentUUID,
+		Model:           model,
+		Workspace:       workspace,
+		Mode:            PromptMinimal,
+		ToolNames:       toolNames,
+		HasMemory:       hasMemory,
+		ProviderType:    providerType,
+		DefaultTimezone: defaultTimezone,
 	}
 }
 
@@ -141,6 +143,7 @@ func (l *Loop) runMemoryFlush(ctx context.Context, sessionKey string, settings *
 		l.filteredToolNames(),
 		l.hasMemory,
 		providerTypeOf(l.provider),
+		l.defaultTimezone,
 	))
 	systemPrompt += "\n\n" + flushSystemPrompt
 

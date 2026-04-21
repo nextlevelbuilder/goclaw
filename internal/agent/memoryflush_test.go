@@ -21,6 +21,7 @@ func TestBuildMemoryFlushPromptConfig_AgentUUIDPopulated(t *testing.T) {
 		[]string{"read_file", "write_file"},
 		true,
 		"anthropic",
+		"Asia/Ho_Chi_Minh",
 	)
 
 	if cfg.AgentUUID != u.String() {
@@ -63,6 +64,7 @@ func TestBuildMemoryFlushPromptConfig_ZeroUUIDStringified(t *testing.T) {
 		nil,
 		false,
 		"p",
+		"",
 	)
 
 	if cfg.AgentUUID != uuid.Nil.String() {

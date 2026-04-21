@@ -308,12 +308,20 @@ func buildUserIdentitySection(ownerIDs []string) []string {
 	}
 }
 
-func buildTimeSection() []string {
+func buildTimeSection(defaultTimezone string) []string {
 	now := time.Now()
-	return []string{
-		fmt.Sprintf("Current date: %s (UTC)", now.UTC().Format("2006-01-02 Monday")),
-		"",
+	utcNow := now.UTC()
+	dateLine := fmt.Sprintf("Current date/time: %s %s (UTC)", utcNow.Format("2006-01-02 Monday"), utcNow.Format("15:04"))
+	if defaultTimezone != "" {
+		if loc, err := time.LoadLocation(defaultTimezone); err == nil {
+			localNow := now.In(loc)
+			dateLine = fmt.Sprintf("Current date/time: %s %s (UTC) / %s %s (%s)",
+				utcNow.Format("2006-01-02 Monday"), utcNow.Format("15:04"),
+				localNow.Format("2006-01-02 Monday"), localNow.Format("15:04"),
+				defaultTimezone)
+		}
 	}
+	return []string{dateLine, ""}
 }
 
 // buildProjectContextSection renders context files with an optional header.

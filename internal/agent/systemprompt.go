@@ -155,6 +155,10 @@ type SystemPromptConfig struct {
 
 	// Provider-specific prompt customizations (nil = defaults).
 	ProviderContribution *providers.PromptContribution
+
+	// DefaultTimezone is the system's configured IANA timezone (e.g. "Asia/Ho_Chi_Minh").
+	// Used to show local date/time alongside UTC in the time section.
+	DefaultTimezone string
 }
 
 // sectionContent returns override content if provider contribution has one,
@@ -430,7 +434,7 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 
 	// 8. Time (below boundary — date changes don't bust the stable cache)
 	if !isNone {
-		lines = append(lines, buildTimeSection()...)
+		lines = append(lines, buildTimeSection(cfg.DefaultTimezone)...)
 	}
 
 	// 9.5. Channel formatting hints — full mode only

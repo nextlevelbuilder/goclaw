@@ -36,28 +36,50 @@ func TestTimeSectionContainsDate(t *testing.T) {
 	}
 }
 
-// TestTimeSectionDateOnly verifies the time section uses date+weekday only,
-// not HH:MM:SS which would bust the cache every second.
-func TestTimeSectionDateOnly(t *testing.T) {
-	lines := buildTimeSection()
+// TestTimeSectionWithTimezone verifies local time appears when DefaultTimezone is set.
+func TestTimeSectionWithTimezone(t *testing.T) {
+	prompt := BuildSystemPrompt(SystemPromptConfig{Mode: PromptFull, DefaultTimezone: "Asia/Ho_Chi_Minh"})
+	if !strings.Contains(prompt, "Asia/Ho_Chi_Minh") {
+		t.Error("prompt should contain timezone name when DefaultTimezone is set")
+	}
+	if !strings.Contains(prompt, "(UTC) /") {
+		t.Error("prompt should contain both UTC and local time")
+	}
+}
+
+// TestTimeSectionWithoutTimezone verifies UTC-only format when no timezone is set.
+func TestTimeSectionWithoutTimezone(t *testing.T) {
+	lines := buildTimeSection("")
 	if len(lines) == 0 {
 		t.Fatal("buildTimeSection returned empty")
 	}
-	// The date line should contain "Current date:" and a weekday, but no colon-separated time.
 	dateLine := lines[0]
-	if !strings.Contains(dateLine, "Current date:") {
+	if !strings.Contains(dateLine, "(UTC)") {
+		t.Errorf("UTC-only format should contain (UTC): %s", dateLine)
+	}
+	// " / " is the separator between UTC and local time — should not appear when no timezone set.
+	if strings.Contains(dateLine, " / ") {
+		t.Errorf("UTC-only format should not contain local time separator: %s", dateLine)
+	}
+}
+
+// TestTimeSectionFormat verifies the time section includes HH:MM (not HH:MM:SS).
+func TestTimeSectionFormat(t *testing.T) {
+	lines := buildTimeSection("Asia/Ho_Chi_Minh")
+	if len(lines) == 0 {
+		t.Fatal("buildTimeSection returned empty")
+	}
+	dateLine := lines[0]
+	if !strings.Contains(dateLine, "Current date/time:") {
 		t.Fatalf("unexpected date line: %s", dateLine)
 	}
-	// Strip the "Current date: " prefix, then check no HH:MM pattern remains.
-	after := strings.TrimPrefix(dateLine, "Current date: ")
-	// Remove "(UTC)" suffix for clean check.
-	after = strings.TrimSuffix(after, " (UTC)")
-	after = strings.TrimSpace(after)
-	// Format is "2006-01-02 Monday" — no ":" should appear in the date/weekday part.
-	parts := strings.FieldsSeq(after)
-	for p := range parts {
-		if strings.Count(p, ":") >= 2 {
-			t.Errorf("time section contains time component: %s", dateLine)
+	// Should contain HH:MM format (e.g. "15:04") but NOT HH:MM:SS
+	if strings.Contains(dateLine, ":") && strings.Count(dateLine, ":") > 2 {
+		// Check for seconds pattern (HH:MM:SS) — should not be present
+		for _, part := range strings.Fields(dateLine) {
+			if strings.Count(part, ":") == 2 && len(part) == 8 {
+				t.Errorf("time section should not include seconds: %s", dateLine)
+			}
 		}
 	}
 }
@@ -74,7 +96,7 @@ func TestCacheBoundaryMarkerPresent(t *testing.T) {
 func TestCacheBoundaryBeforeTime(t *testing.T) {
 	prompt := BuildSystemPrompt(SystemPromptConfig{Mode: PromptFull})
 	boundaryIdx := strings.Index(prompt, CacheBoundaryMarker)
-	timeIdx := strings.Index(prompt, "Current date:")
+	timeIdx := strings.Index(prompt, "Current date/time:")
 	if boundaryIdx < 0 || timeIdx < 0 {
 		t.Fatal("missing boundary or time section")
 	}
@@ -115,13 +137,13 @@ func TestCacheBoundaryPosition(t *testing.T) {
 		}
 	}
 	// Dynamic should contain these sections
-	for _, want := range []string{"Current date:", "## Runtime"} {
+	for _, want := range []string{"Current date/time:", "## Runtime"} {
 		if !strings.Contains(dynamic, want) {
 			t.Errorf("dynamic suffix missing %q", want)
 		}
 	}
 	// Time must NOT be in stable
-	if strings.Contains(stable, "Current date:") {
+	if strings.Contains(stable, "Current date/time:") {
 		t.Error("stable prefix should not contain time section")
 	}
 }
