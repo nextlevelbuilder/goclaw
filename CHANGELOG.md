@@ -40,6 +40,18 @@ All notable changes to GoClaw are documented here. For full documentation, see [
   actionable errors. Tool schema includes usage recipes (success card,
   error card, stats grid, article card, alert) so the LLM knows when and
   how to reach for it. Added to the `messaging` tool group.
+- **Discord slash commands.** Discord channels now register seven built-in
+  slash commands on startup via `ApplicationCommandsBulkOverwrite`:
+  `/ask <prompt> [private]`, `/reset`, `/status`, `/stop`, `/help`,
+  `/recall <query>`, `/summarize [count]`. Bulk-overwrite semantics mean
+  stale commands from any previous backend using the same Discord
+  application are removed automatically. `/ask`, `/recall`, and
+  `/summarize` defer their ACK and reply via interaction token so the
+  response appears inline against the slash command in Discord's UI, with
+  automatic fallback to a regular channel post if the agent run exceeds
+  Discord's 15-minute interaction-token lifetime. Disable with
+  `discord.slash_commands: false`; register per-guild (instant, for dev)
+  via `discord.test_guild_id`. Requires `applications.commands` OAuth scope.
 - **Context pruning cleanup.** Removed redundant Pass 0 (per-result 30% guard),
   deduplicated double prune call per iteration, added SanitizeHistory to
   PruneStage for broken tool_use/tool_result pair cleanup.

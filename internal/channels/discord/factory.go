@@ -26,6 +26,8 @@ type discordInstanceConfig struct {
 	BlockReply          *bool    `json:"block_reply,omitempty"`
 	MediaMaxBytes       int64    `json:"media_max_bytes,omitempty"`
 	SuppressPlaceholder *bool    `json:"suppress_placeholder,omitempty"`
+	SlashCommands       *bool    `json:"slash_commands,omitempty"`
+	TestGuildID         string   `json:"test_guild_id,omitempty"`
 	STTProxyURL         string   `json:"stt_proxy_url,omitempty"`
 	STTAPIKey           string   `json:"stt_api_key,omitempty"`
 	STTTenantID         string   `json:"stt_tenant_id,omitempty"`
@@ -85,6 +87,8 @@ func buildChannel(name string, creds json.RawMessage, cfg json.RawMessage,
 		BlockReply:          ic.BlockReply,
 		MediaMaxBytes:       ic.MediaMaxBytes,
 		SuppressPlaceholder: ic.SuppressPlaceholder,
+		SlashCommands:       ic.SlashCommands,
+		TestGuildID:         ic.TestGuildID,
 		STTProxyURL:         ic.STTProxyURL,
 		STTAPIKey:           ic.STTAPIKey,
 		STTTenantID:         ic.STTTenantID,
