@@ -492,6 +492,7 @@ The Discord channel uses the `discordgo` library to connect via the Discord Gate
 - **Bot identity**: Fetches `@me` on startup to detect and ignore own messages
 - **Typing indicator**: 9-second keepalive while agent processes
 - **Group history**: Pending message buffer for context when mentioned
+- **Slash commands**: Seven built-in commands registered on startup via `ApplicationCommandsBulkOverwrite` — `/ask <prompt> [private]`, `/reset`, `/status`, `/stop`, `/help`, `/recall <query>`, `/summarize [count]`. Bulk-overwrite semantics remove stale commands from any previous backend using the same Discord application. `/ask`, `/recall`, `/summarize` defer their ACK and reply via interaction token (inline reply against the slash command; 15-min token lifetime with automatic fallback to a regular channel post for longer agent runs). `/reset`, `/status`, `/stop`, `/help` respond inline + ephemeral. Disable with `slash_commands: false`. Set `test_guild_id: "123"` to register per-guild (instant) during dev; otherwise commands are global (~1h propagation). Requires the `applications.commands` OAuth scope on the bot's installation.
 
 ---
 
