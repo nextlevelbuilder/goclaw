@@ -71,5 +71,7 @@ func NewSQLiteStores(cfg store.StoreConfig) (*store.Stores, error) {
 		KnowledgeGraph:       NewSQLiteKnowledgeGraphStore(db),
 		Vault:                NewSQLiteVaultStore(db),
 		Hooks:                NewSQLiteHookStore(db),
+		Webhooks:             NewSQLiteWebhookStore(db),
+		WebhookCalls:         NewSQLiteWebhookCallStore(db),
 	}, nil
 }

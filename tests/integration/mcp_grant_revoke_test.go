@@ -245,15 +245,6 @@ func containsGrantRevoked(s string) bool {
 	return len(s) > 0 && (contains(s, "grant revoked") || contains(s, "grant denied"))
 }
 
-func contains(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
-
 // fakeMCPClient is a stub for testing. Since mcpclient.Client is a struct
 // and not an interface, we cannot directly mock it. The test relies on
 // the clientPtr being nil or the connection being marked as disconnected.

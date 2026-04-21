@@ -42,7 +42,7 @@ func TestResolveChain_CacheHit(t *testing.T) {
 		t.Errorf("chain length mismatch: %d vs %d", len(chain1), len(chain2))
 	}
 
-	for i := 0; i < len(chain1); i++ {
+	for i := range chain1 {
 		if chain1[i].Name() != chain2[i].Name() {
 			t.Errorf("provider %d: %s vs %s", i, chain1[i].Name(), chain2[i].Name())
 		}

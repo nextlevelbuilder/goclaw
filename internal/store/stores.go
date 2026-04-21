@@ -42,4 +42,7 @@ type Stores struct {
 	// (hooks package imports store for context helpers).
 	// Callers: type-assert to hooks.HookStore before use.
 	Hooks any
+
+	Webhooks     WebhookStore
+	WebhookCalls WebhookCallStore
 }

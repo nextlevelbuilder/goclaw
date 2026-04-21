@@ -119,6 +119,58 @@ Parity enforced by `ui/web/src/__tests__/i18n-tts-key-parity.test.ts` (vitest).
 
 ---
 
+## Webhook Subsystem
+
+External systems invoke agents or send channel messages via webhooks without gateway tokens.
+
+### Components
+
+| Path | Purpose |
+|------|---------|
+| `internal/http/webhooks_admin.go` | CRUD handlers (create, list, get, patch, rotate, revoke) |
+| `internal/http/webhooks_auth.go` | Bearer + HMAC signature verification, IPAllowlist, tenant scope |
+| `internal/http/webhooks_nonce.go` | Per-process HMAC replay cache (320s TTL) |
+| `internal/http/webhooks_llm.go` | `POST /v1/webhooks/llm` endpoint (sync 30s / async) |
+| `internal/http/webhooks_message.go` | `POST /v1/webhooks/message` endpoint (channel delivery) |
+| `internal/http/webhooks_ratelimit.go` | Per-webhook + per-tenant rate limiting |
+| `internal/http/webhooks_idempotency.go` | `Idempotency-Key` header dedup cache (24h TTL) |
+| `internal/http/webhooks_media_fetch.go` | SSRF-guarded media URL fetch + MIME validation |
+| `internal/webhooks/worker.go` | Async callback poller + delivery goroutines |
+| `internal/webhooks/backoff.go` | Exponential retry schedule `[30s, 2m, 10m, 1h, 6h]` |
+| `internal/webhooks/sign.go` | HMAC-SHA256 signing for outbound callbacks |
+| `internal/webhooks/limiter.go` | Shared rate limiter for callback delivery |
+| `internal/store/webhook_store.go` | `WebhookStore` interface + `WebhookCallStore` |
+| `internal/store/pg/webhook_store.go` | PostgreSQL implementation (tenant-scoped) |
+| `internal/store/sqlitestore/webhook_store.go` | SQLite implementation (Lite edition) |
+| `migrations/` | PG migrations 000056–000058 (webhooks + lease token + encrypted secret) |
+
+### Auth Flow
+
+1. **Bearer auth**: Hash the token, lookup `secret_hash` globally (via `GetByHashUnscoped`) → return webhook + tenantID.
+2. **HMAC auth**: Parse `X-Webhook-Id` header, lookup webhook globally → verify signature timestamp + nonce.
+3. **Tenant inject**: Re-scope context with webhook's tenantID for all downstream calls.
+4. **IP allowlist**: If non-empty, check request source IP (CIDR or exact) against list. Empty = allow all.
+5. **Rate limit**: Check per-webhook + per-tenant buckets. Either rejects = 429.
+
+### Idempotency & Lease Tokens
+
+- **Inbound**: `Idempotency-Key` header dedup (24h cache). Same key + same body = cached response; same key + different body = 409 Conflict.
+- **Outbound**: Each `webhook_calls` row has `lease_token` (UUID). Worker claims row with CAS. On update, token proves ownership — prevents stale receivers from overwriting.
+
+### Secret Encryption
+
+Raw webhook secret encrypted at rest via AES-256-GCM using `GOCLAW_ENCRYPTION_KEY` (same as LLM provider keys).
+- Database: stores `encrypted_secret` column + `secret_hash` (for bearer lookups).
+- DB compromise does not leak HMAC material.
+- Clients receive plaintext secret once (create/rotate response) — must store securely.
+
+### Audit Payload
+
+All webhook calls logged with canonical `{"body_hash":"<sha256-hex>","meta":{...}}` shape in `webhook_calls.request_payload` (JSON).
+Used by idempotency checker to detect body mismatches on replay.
+
+---
+
 ## Key Conventions
 
 - **Store layer:** Interface-based; PG (`store/pg/`) + SQLite (`store/sqlitestore/`). Raw SQL, `$1/$2` params.

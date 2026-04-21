@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS webhook_calls;
+DROP TABLE IF EXISTS webhooks;

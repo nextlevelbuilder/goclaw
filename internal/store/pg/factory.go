@@ -59,5 +59,7 @@ func NewPGStores(cfg store.StoreConfig) (*store.Stores, error) {
 		EvolutionMetrics:      NewPGEvolutionMetricsStore(db),
 		EvolutionSuggestions:  NewPGEvolutionSuggestionStore(db),
 		Hooks:                 NewPGHookStore(db),
+		Webhooks:              NewPGWebhookStore(db),
+		WebhookCalls:          NewPGWebhookCallStore(db),
 	}, nil
 }

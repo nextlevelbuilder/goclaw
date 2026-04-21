@@ -3,6 +3,7 @@ package edge
 import (
 	"context"
 	"os/exec"
+	"strings"
 	"testing"
 
 	"github.com/nextlevelbuilder/goclaw/internal/audio"
@@ -50,12 +51,12 @@ func TestDefaults_PreserveLegacyArgs(t *testing.T) {
 }
 
 func joinArgs(args []string) string {
-	result := ""
+	var result strings.Builder
 	for i, a := range args {
 		if i > 0 {
-			result += " "
+			result.WriteString(" ")
 		}
-		result += a
+		result.WriteString(a)
 	}
-	return result
+	return result.String()
 }

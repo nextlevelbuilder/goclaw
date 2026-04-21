@@ -214,10 +214,7 @@ func TestStdoutCapTruncates(t *testing.T) {
 		t.Fatalf("stdout exceeded cap: %d bytes", len(res.Stdout))
 	}
 	if !strings.Contains(res.Stdout, "truncated") {
-		end := 200
-		if end > len(res.Stdout) {
-			end = len(res.Stdout)
-		}
+		end := min(200, len(res.Stdout))
 		t.Fatalf("truncation marker missing: %q", res.Stdout[:end])
 	}
 }

@@ -4,6 +4,39 @@ Significant changes, features, and fixes in reverse chronological order.
 
 ---
 
+## 2026-04-21
+
+### Webhook fixes (post-review security & idempotency hardening)
+
+**Fixes**
+
+- **K1: Auth context isolation** — Webhook auth middleware now resolves secret/HMAC signature before tenant injection (eliminating 401 due to tenant scope applied too early). Unscoped store methods `GetByHashUnscoped` + `GetByIDUnscoped` added to WebhookStore interface.
+- **K7: IP allowlist enforcement** — Inbound webhook calls now check `ip_allowlist` field (CIDR + exact IP) after bearer/HMAC auth. Empty list = allow all (back-compat). Rejected requests return HTTP 403 with log `security.webhook.ip_denied`.
+- **K8: HMAC replay protection** — Per-process nonce cache (key = `sha256(tenant_id + "|" + signature_hex)`) with 320s TTL rejects duplicate signatures within the skew window. Single-node caveat documented. Log: `security.webhook.hmac_replay`.
+- **K2: `request_payload` canonical shape** — All webhook audit rows now store `{"body_hash":"<hex64>","meta":{...}}` JSON instead of raw bytes. Idempotency checker compares body hashes to detect replays with different payloads (409 Conflict).
+- **K3: Body hash extraction** — `extractBodyHash()` now parses canonical audit payload structure (previously had parsing bugs leading to missed hash validation).
+- **K9: Invariant test column fix** — Webhook tenant isolation test now references correct schema columns (`encrypted_secret`, `lease_token`).
+- **K4: Worker slot drain** — Fixed channel leak in webhook worker that prevented slot release on successful claims. Concurrency now scales properly under load.
+- **K5: Lease-token CAS on UpdateStatus** — Stale webhook receivers can no longer overwrite delivery status. Status updates use optimistic concurrency on `lease_token` (UUID), ensuring only the owning worker can mark the call done. Prevents duplicate delivery from slow receivers.
+- **K6: HMAC signing key encryption** — Raw secret (from which `hmac_signing_key = hex(SHA-256(secret))` is derived) is now encrypted at rest via AES-256-GCM using `GOCLAW_ENCRYPTION_KEY`. Database compromise no longer = HMAC key compromise. Clients receive plaintext secret once (create/rotate response) and must store securely.
+- **K10: Shared rate limiter instance** — Fixed duplicate `webhookLimiter` instantiation causing doubled RPM enforcement. Single limiter now shared across all webhook endpoints.
+
+**Migrations**
+
+- PostgreSQL: Migration `000057` adds `lease_token` column to `webhook_calls`. Migration `000058` adds `encrypted_secret` column to `webhooks`.
+- SQLite: Schema v28 includes both new columns.
+
+**Docs**
+
+- `docs/webhooks.md`: Section 3 clarified bearer/HMAC auth contract + IP allowlist behavior. New Section 14 explains encryption at rest, key contract, DB compromise boundary.
+- `docs/00-architecture-overview.md`: Section 12 (Webhook Subsystem) updated to mention lease-token CAS semantics and secret encryption.
+
+**Environment**
+
+- `GOCLAW_ENCRYPTION_KEY` is now **required** for webhook HMAC auth. Same key also encrypts LLM provider credentials.
+
+---
+
 ## 2026-04-19
 
 ### TTS: Gemini provider + ProviderCapabilities schema engine

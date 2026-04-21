@@ -81,3 +81,9 @@ func (e Edition) ChannelLimit(channelType string) int {
 	}
 	return e.MaxChannels[channelType]
 }
+
+// AllowsChannels reports whether this edition permits channel-based webhook routes
+// (kind="message"). Standard edition allows channels; Lite does not.
+func (e Edition) AllowsChannels() bool {
+	return e.Name == "standard"
+}

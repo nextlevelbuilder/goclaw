@@ -160,6 +160,36 @@ func (m *Manager) SendToChannel(ctx context.Context, channelName, chatID, conten
 	return channel.Send(ctx, msg)
 }
 
+// SendMediaToChannel delivers a message with media attachments to a specific channel by name.
+// media must be non-empty; use SendToChannel for text-only messages.
+// Returns ErrMediaUnsupported if the channel type does not support media.
+func (m *Manager) SendMediaToChannel(ctx context.Context, channelName, chatID, content string, media []bus.MediaAttachment) error {
+	if len(media) == 0 {
+		return fmt.Errorf("SendMediaToChannel: media slice must not be empty; use SendToChannel for text-only messages")
+	}
+
+	m.mu.RLock()
+	channel, exists := m.channels[channelName]
+	m.mu.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("channel %s not found", channelName)
+	}
+
+	if !IsMediaCapable(channel.Type()) {
+		return fmt.Errorf("%w: %s (%s)", ErrMediaUnsupported, channelName, channel.Type())
+	}
+
+	msg := bus.OutboundMessage{
+		Channel: channelName,
+		ChatID:  chatID,
+		Content: content,
+		Media:   media,
+	}
+
+	return channel.Send(ctx, msg)
+}
+
 // --- Send error notification helpers ---
 
 // telegramAPIDescRe extracts the human-readable description from Telegram Bot API errors.
