@@ -230,12 +230,12 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 
 	// Send typing indicator with keepalive + TTL safety net.
 	// Discord typing expires after 10s, so keepalive every 9s.
-	// TTL auto-stops after 60s (or 10min when the placeholder is suppressed)
-	// to prevent stuck indicators.
+	// TTL auto-stops to prevent stuck indicators when a run ends without a Send()
+	// (e.g. silent run.failed / run.cancelled).
 	suppressPlaceholder := c.config.SuppressPlaceholder != nil && *c.config.SuppressPlaceholder
-	typingTTL := 60 * time.Second
+	typingTTL := defaultTypingTTL
 	if suppressPlaceholder {
-		typingTTL = 10 * time.Minute
+		typingTTL = suppressedPlaceholderTypingTTL
 	}
 	typingCtrl := typing.New(typing.Options{
 		MaxDuration:       typingTTL,

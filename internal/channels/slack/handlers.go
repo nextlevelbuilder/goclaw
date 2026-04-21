@@ -223,7 +223,7 @@ func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
 		replyThreadTS = ev.TimeStamp // start thread from the triggering message
 	}
 
-	if c.config.SuppressPlaceholder == nil || !*c.config.SuppressPlaceholder {
+	if !c.placeholderSuppressed() {
 		placeholderOpts := []slackapi.MsgOption{
 			slackapi.MsgOptionText("Thinking...", false),
 		}

@@ -68,7 +68,7 @@ func (c *Channel) handleAppMention(ev *slackevents.AppMentionEvent) {
 	}
 
 	// Send "Thinking..." placeholder unless suppressed via config.
-	if c.config.SuppressPlaceholder == nil || !*c.config.SuppressPlaceholder {
+	if !c.placeholderSuppressed() {
 		placeholderOpts := []slackapi.MsgOption{
 			slackapi.MsgOptionText("Thinking...", false),
 		}

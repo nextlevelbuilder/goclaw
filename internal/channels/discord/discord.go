@@ -19,7 +19,17 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-const pairingDebounceTime = 60 * time.Second
+const (
+	pairingDebounceTime = 60 * time.Second
+	// defaultTypingTTL caps the typing indicator when the "Thinking..." placeholder is shown —
+	// the placeholder carries the in-progress signal, so typing only needs to cover the first
+	// flush. When suppress_placeholder is set the indicator is the sole signal for the whole
+	// turn, so we raise the cap via suppressedPlaceholderTypingTTL. 30 min is a pragmatic
+	// ceiling: it covers long multi-step tool chains while still stopping a stuck indicator
+	// if a run fails silently without any Send() call on the channel.
+	defaultTypingTTL               = 60 * time.Second
+	suppressedPlaceholderTypingTTL = 30 * time.Minute
+)
 
 // Channel connects to Discord via the Bot API using gateway events.
 type Channel struct {
