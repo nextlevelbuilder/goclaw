@@ -664,6 +664,71 @@ type DiscordThreadCreator interface {
 	CreateThread(ctx context.Context, params DiscordThreadParams) (DiscordThreadResult, error)
 }
 
+// DiscordEmbed is a rich embed payload matching the Discord embed object shape.
+//
+// All fields are optional at the type level; per-field validation (length
+// limits, required sub-fields) happens at the channel implementation layer so
+// errors come back with the Discord API's own messages where possible.
+type DiscordEmbed struct {
+	Title       string              `json:"title,omitempty"`       // 256 char limit
+	Description string              `json:"description,omitempty"` // 4096 char limit
+	URL         string              `json:"url,omitempty"`         // makes the title a link
+	Color       int                 `json:"color,omitempty"`       // decimal RGB (e.g. 0x5865F2 = Discord blurple)
+	Timestamp   string              `json:"timestamp,omitempty"`   // ISO 8601 (RFC 3339)
+	Footer      *DiscordEmbedFooter `json:"footer,omitempty"`
+	Image       *DiscordEmbedMedia  `json:"image,omitempty"`
+	Thumbnail   *DiscordEmbedMedia  `json:"thumbnail,omitempty"`
+	Author      *DiscordEmbedAuthor `json:"author,omitempty"`
+	Fields      []DiscordEmbedField `json:"fields,omitempty"` // max 25
+}
+
+// DiscordEmbedFooter is the footer block shown at the bottom of an embed.
+type DiscordEmbedFooter struct {
+	Text    string `json:"text"`               // required if Footer is set (2048 char limit)
+	IconURL string `json:"icon_url,omitempty"` // http(s) or attachment:// URL
+}
+
+// DiscordEmbedMedia represents an embed image or thumbnail.
+type DiscordEmbedMedia struct {
+	URL string `json:"url"` // http(s) URL
+}
+
+// DiscordEmbedAuthor is the author block shown at the top of an embed.
+type DiscordEmbedAuthor struct {
+	Name    string `json:"name"`               // required if Author is set (256 char limit)
+	URL     string `json:"url,omitempty"`      // makes the name a link
+	IconURL string `json:"icon_url,omitempty"` // avatar shown next to the name
+}
+
+// DiscordEmbedField is a single key/value row inside an embed.
+// Up to 25 fields per embed. Set Inline=true to pack up to three fields on one row.
+type DiscordEmbedField struct {
+	Name   string `json:"name"`             // required (256 char limit)
+	Value  string `json:"value"`            // required (1024 char limit)
+	Inline bool   `json:"inline,omitempty"` // render inline with adjacent inline fields
+}
+
+// DiscordSendEmbedParams is the input for sending a Discord message with one
+// or more rich embeds. Discord allows up to 10 embeds per message and a
+// combined character budget of 6000 across all embed text in a single message.
+type DiscordSendEmbedParams struct {
+	ChannelID string         // target channel (or thread) ID
+	Content   string         // optional plain text shown above the embeds (2000 char limit)
+	Embeds    []DiscordEmbed // 1-10 embeds
+	ReplyTo   string         // optional message ID to reply to
+}
+
+// DiscordSendEmbedResult is returned after a successful embed send.
+type DiscordSendEmbedResult struct {
+	MessageID string `json:"message_id"`
+	ChannelID string `json:"channel_id"`
+}
+
+// DiscordEmbedSender is optionally implemented by channels that can send Discord rich embeds.
+type DiscordEmbedSender interface {
+	SendEmbed(ctx context.Context, params DiscordSendEmbedParams) (DiscordSendEmbedResult, error)
+}
+
 // PendingCompactable is optionally implemented by channels that have a PendingHistory
 // supporting LLM-based compaction. InstanceLoader uses this to wire compaction config
 // after channel creation.

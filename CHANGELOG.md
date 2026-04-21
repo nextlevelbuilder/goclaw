@@ -31,6 +31,15 @@ All notable changes to GoClaw are documented here. For full documentation, see [
   reaction from `reaction_level: minimal|full` acts as the in-progress signal.
   Tradeoff: LLM retry notifications and tool-status updates (which ride on
   placeholder edits) are silently dropped — that's the point of the toggle.
+- **`send_discord_embed` tool.** Agents can post Discord rich embeds (full
+  embed schema: title, description, url, color, timestamp, author, footer,
+  image, thumbnail, fields) via a dedicated tool that mirrors the
+  `create_discord_thread` pattern. Supports 1-10 embeds per call, optional
+  plain-text content, optional reply-to. Validates all Discord embed limits
+  (256/4096/2048/6000/25 rules) before hitting the API so the LLM gets
+  actionable errors. Tool schema includes usage recipes (success card,
+  error card, stats grid, article card, alert) so the LLM knows when and
+  how to reach for it. Added to the `messaging` tool group.
 - **Context pruning cleanup.** Removed redundant Pass 0 (per-result 30% guard),
   deduplicated double prune call per iteration, added SanitizeHistory to
   PruneStage for broken tool_use/tool_result pair cleanup.

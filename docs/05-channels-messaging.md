@@ -492,6 +492,7 @@ The Discord channel uses the `discordgo` library to connect via the Discord Gate
 - **Bot identity**: Fetches `@me` on startup to detect and ignore own messages
 - **Typing indicator**: 9-second keepalive while agent processes
 - **Group history**: Pending message buffer for context when mentioned
+- **Rich embeds**: Agents can post Discord rich embeds via the `send_discord_embed` tool. Supports all embed fields (title, description, url, color, timestamp, author, footer, image, thumbnail, fields), up to 10 embeds per message, and optional plain-text content + reply-to. Validation mirrors Discord's embed limits so the LLM gets a clear error instead of a generic API rejection.
 
 ---
 

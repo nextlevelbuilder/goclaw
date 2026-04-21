@@ -53,6 +53,8 @@ func wireExtraTools(
 	toolsReg.Register(tools.NewListGroupMembersTool())
 	// Discord thread creation tool
 	toolsReg.Register(tools.NewCreateDiscordThreadTool())
+	// Discord rich embed tool
+	toolsReg.Register(tools.NewSendDiscordEmbedTool())
 	slog.Info("session + message tools registered")
 
 	// Register legacy tool aliases (backward-compat names from policy.go).
