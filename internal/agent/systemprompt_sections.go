@@ -123,6 +123,7 @@ func buildExecutionBiasSection() []string {
 		"",
 		"If the user asks you to do work, start doing it in the same turn.",
 		"Use a real tool call when the task is actionable; do not stop at a plan or promise-to-act reply.",
+		"For file-access requests, attempt one real read_file call before claiming a path is inaccessible.",
 		"Commentary-only turns are incomplete when tools are available and the next action is clear.",
 		"",
 	}

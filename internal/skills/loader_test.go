@@ -8,6 +8,16 @@ import (
 	"testing"
 )
 
+func init() {
+	home, err := os.MkdirTemp("", "skills-loader-home-*")
+	if err != nil {
+		panic(err)
+	}
+	if err := os.Setenv("HOME", home); err != nil {
+		panic(err)
+	}
+}
+
 // makeSkillDir creates a skill directory with a SKILL.md file.
 func makeSkillDir(t *testing.T, parent, slug, content string) string {
 	t.Helper()
@@ -602,10 +612,10 @@ description: plain
 			want: nil,
 		},
 		{
-			name: "crlf",
+			name:    "crlf",
 			content: "deps:\r\n  - pip:a\r\n  - pip:b\r\n",
-			key:    "deps",
-			want:   []string{"pip:a", "pip:b"},
+			key:     "deps",
+			want:    []string{"pip:a", "pip:b"},
 		},
 		{
 			name: "scalar skipped",

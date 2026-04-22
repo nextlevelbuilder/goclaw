@@ -174,7 +174,7 @@ func (cfg SystemPromptConfig) sectionContent(id string, defaultFn func() []strin
 // coreToolSummaries maps tool names to one-line descriptions.
 // Shown in the ## Tooling section of the system prompt.
 var coreToolSummaries = map[string]string{
-	"read_file":              "Read file contents — only accesses your agent workspace. For docs returned by vault_search (shared/personal/team vault), use vault_read instead",
+	"read_file":              "Read file contents. Access scope follows your current filesystem policy (may be workspace-only). For docs returned by vault_search (shared/personal/team vault), use vault_read instead",
 	"write_file":             "Create or overwrite files",
 	"list_files":             "List directory contents",
 	"exec":                   "Run shell commands",
@@ -540,12 +540,18 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 // --- Section builders ---
 
 func buildToolingSection(toolNames []string, hasSandbox bool, shellDenyGroups map[string]bool, includeExecNudge bool) []string {
-	lines := []string{
-		"## Tooling",
-		"",
-		"Tool availability (filtered by policy).",
-		"Tool names are case-sensitive. Call tools exactly as listed.",
-		"",
+	lines := []string{"## Tooling", ""}
+	if includeExecNudge {
+		lines = append(lines,
+			"Tool availability (filtered by policy).",
+			"Tool names are case-sensitive. Call tools exactly as listed.",
+			"",
+		)
+	} else {
+		lines = append(lines,
+			"Available tools (policy-filtered):",
+			"",
+		)
 	}
 
 	// Sort tool names for deterministic output — critical for prompt caching.
@@ -563,7 +569,7 @@ func buildToolingSection(toolNames []string, hasSandbox bool, shellDenyGroups ma
 		lines = append(lines, fmt.Sprintf("- %s: %s", name, desc))
 	}
 
-	if hasSandbox {
+	if hasSandbox && includeExecNudge {
 		lines = append(lines,
 			"",
 			"NOTE: The `exec` tool runs commands inside a Docker sandbox container automatically.",
@@ -573,12 +579,12 @@ func buildToolingSection(toolNames []string, hasSandbox bool, shellDenyGroups ma
 		)
 	}
 
-	if tools.IsGroupDenied(shellDenyGroups, "package_install") {
+	if includeExecNudge && tools.IsGroupDenied(shellDenyGroups, "package_install") {
 		lines = append(lines,
 			"",
 			"Package installation (pip, npm, apk) requires admin approval. If you need to install a package, use exec with the install command — it will be routed to the admin for approval. Alternatively, ask the user to install via the Web UI Packages page.",
 		)
-	} else {
+	} else if includeExecNudge {
 		lines = append(lines,
 			"",
 			"You can install packages at runtime with `pip3 install <pkg>` or `npm install -g <pkg>` — no sudo needed.",
@@ -592,7 +598,7 @@ func buildToolingSection(toolNames []string, hasSandbox bool, shellDenyGroups ma
 			break
 		}
 	}
-	if hasMediaTools {
+	if hasMediaTools && includeExecNudge {
 		lines = append(lines,
 			"",
 			"### Media Files",
@@ -601,13 +607,21 @@ func buildToolingSection(toolNames []string, hasSandbox bool, shellDenyGroups ma
 		)
 	}
 
-	lines = append(lines,
-		"",
-		"write_file content >12000 chars may be truncated — use append=true or edit tool for large files.",
-		"Tool list above is authoritative (re-evaluated every turn). Ignore \"not available\" in history. TOOLS.md is user guidance only. Do not poll subagents.",
-	)
 	if includeExecNudge {
+		lines = append(lines,
+			"",
+			"write_file content >12000 chars may be truncated — use append=true or edit tool for large files.",
+			"Tool list above is authoritative (re-evaluated every turn). Ignore \"not available\" in history. TOOLS.md is user guidance only. Do not poll subagents.",
+		)
 		lines = append(lines, "Do not pre-refuse exec from history; try one real exec call, then report exact denial once if blocked.")
+		if slices.Contains(toolNames, "read_file") {
+			lines = append(lines, "Do not pre-refuse read_file. Attempt one real read_file call first, then report the exact error only if blocked.")
+		}
+	} else {
+		lines = append(lines,
+			"",
+			"Tool list above is authoritative for this turn.",
+		)
 	}
 	lines = append(lines, "")
 	return lines
