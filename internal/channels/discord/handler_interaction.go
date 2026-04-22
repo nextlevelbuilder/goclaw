@@ -62,10 +62,23 @@ var agentBackedCommands = map[SlashCommandName]bool{
 // we send a deferred ACK immediately and let the agent pipeline reply via
 // InteractionResponseEdit / FollowupMessageCreate once it finishes.
 func (c *Channel) handleInteraction(_ *discordgo.Session, i *discordgo.InteractionCreate) {
-	if i == nil || i.Type != discordgo.InteractionApplicationCommand {
-		return // ignore button clicks, modal submits, autocomplete — out of scope for this PR
+	if i == nil {
+		return
 	}
+	switch i.Type {
+	case discordgo.InteractionApplicationCommand:
+		c.handleSlashCommand(i)
+	case discordgo.InteractionMessageComponent:
+		c.handleComponentInteraction(i)
+	default:
+		// Autocomplete + modal submissions: not yet supported.
+	}
+}
 
+// handleSlashCommand is the original slash-command dispatch path. Split out of
+// handleInteraction so the latter can fan out by interaction type. Logic is
+// unchanged from the previous single-purpose handler.
+func (c *Channel) handleSlashCommand(i *discordgo.InteractionCreate) {
 	data := i.ApplicationCommandData()
 	name := SlashCommandName(data.Name)
 	invoker, invokerTag := resolveInteractionUser(i)
@@ -459,5 +472,118 @@ func optionInt(data discordgo.ApplicationCommandInteractionData, name string) in
 		}
 	}
 	return 0
+}
+
+// handleComponentInteraction routes a message-component click (today: buttons)
+// through the same inbound-bus path a text message takes. The button's
+// CustomID becomes the inbound prompt so skills can dispatch off a stable
+// string (e.g. "triage:suppress:<sig>" -> the error-triage-response skill).
+// The original message content is stashed in metadata so skills can parse
+// whatever state markers the sender embedded in the message body.
+//
+// Link-style buttons don't fire interactions — Discord opens the URL without
+// calling back — so this path is only hit for primary/secondary/success/
+// danger styles.
+func (c *Channel) handleComponentInteraction(i *discordgo.InteractionCreate) {
+	data := i.MessageComponentData()
+	if data.ComponentType != discordgo.ButtonComponent {
+		// Select menus / text inputs: not yet routed.
+		return
+	}
+	invoker, invokerTag := resolveInteractionUser(i)
+	channelID := i.ChannelID
+	isDM := i.GuildID == ""
+	peerKind := "group"
+	if isDM {
+		peerKind = "direct"
+	}
+
+	ctx := store.WithTenantID(context.Background(), c.TenantID())
+
+	// Policy checks mirror the slash-command path. We respond ephemerally on
+	// refusal so the user sees why nothing happened.
+	if isDM {
+		if !c.checkDMPolicy(ctx, invoker, channelID) {
+			c.respondEphemeral(i, "Access not configured. Ask the bot owner to pair your user ID.")
+			return
+		}
+	} else {
+		if !c.checkGroupPolicy(ctx, invoker, channelID) {
+			c.respondEphemeral(i, "This channel isn't authorized for the bot.")
+			return
+		}
+	}
+	if !c.IsAllowed(invoker) {
+		c.respondEphemeral(i, "Your user isn't on the allowlist for this bot.")
+		return
+	}
+
+	// Button clicks are always non-ephemeral — the click itself is visible to
+	// the channel (Discord's own UI shows "user clicked X"), so there's no
+	// secrecy gain from an ephemeral ACK and plenty of audit value from a
+	// public one.
+	if err := c.session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+	}); err != nil {
+		slog.Warn("discord: deferred ACK failed for component interaction", "custom_id", data.CustomID, "error", err)
+		// Keep going — the agent reply will fall back to a regular channel
+		// post when Send() can't find a usable interaction token.
+	}
+
+	echo := &interactionEcho{
+		AppID:     c.applicationID,
+		Token:     i.Token,
+		Ephemeral: false,
+		GuildID:   i.GuildID,
+		CreatedAt: time.Now(),
+	}
+	c.interactionTokens.Store(i.ID, echo)
+
+	metadata := map[string]string{
+		"message_id":   i.ID,
+		"user_id":      invoker,
+		"username":     invokerTag,
+		"display_name": channels.SanitizeDisplayName(invokerTag),
+		"guild_id":     i.GuildID,
+		"channel_id":   channelID,
+		"is_dm":        fmt.Sprintf("%t", isDM),
+		// Interaction reply path (same keys as slash-command dispatch).
+		"discord_interaction_token": i.Token,
+		"discord_interaction_id":    i.ID,
+		"discord_interaction_appid": c.applicationID,
+		// Component-specific routing keys. Skills can branch on
+		// interaction_kind=component, read button_custom_id as the action,
+		// and recover prior state from component_parent_content (the original
+		// message body, including any HTML-comment markers the sender
+		// embedded for state handoff).
+		"interaction_kind": "component",
+		"component_type":   "button",
+		"button_custom_id": data.CustomID,
+	}
+	// Parent-message fields only populate if Discord actually delivered the
+	// resolved message. discordgo.InteractionCreate.Message is nominally
+	// non-nil for button clicks, but guard defensively — a nil dereference
+	// here would panic mid-handler and the interaction would stay un-ACKed.
+	if i.Message != nil {
+		metadata["component_parent_message"] = i.Message.ID
+		metadata["component_parent_channel"] = i.Message.ChannelID
+		metadata["component_parent_content"] = i.Message.Content
+	}
+
+	if cc := c.ContactCollector(); cc != nil {
+		cc.EnsureContact(ctx, c.Type(), c.Name(), invoker, invoker, invokerTag, invokerTag, peerKind, "user", "", "")
+	}
+
+	c.Bus().PublishInbound(bus.InboundMessage{
+		Channel:  c.Name(),
+		SenderID: invoker,
+		ChatID:   channelID,
+		Content:  data.CustomID, // prompt = custom_id; skills route off this
+		PeerKind: peerKind,
+		UserID:   invoker,
+		AgentID:  c.AgentID(),
+		TenantID: c.TenantID(),
+		Metadata: metadata,
+	})
 }
 

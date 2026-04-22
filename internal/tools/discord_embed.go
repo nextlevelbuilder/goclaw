@@ -88,6 +88,55 @@ var embedFieldSchema = map[string]any{
 	"required": []string{"name", "value"},
 }
 
+// buttonSchema is the JSON schema for a single interactive button inside an
+// action row. Non-link buttons fire an interaction back to the agent with
+// custom_id as the inbound prompt; link buttons open a URL and don't
+// call back.
+var buttonSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"label": map[string]any{
+			"type":        "string",
+			"description": "Button text (1-80 chars).",
+		},
+		"style": map[string]any{
+			"type":        "string",
+			"enum":        []string{"primary", "secondary", "success", "danger", "link"},
+			"description": "Visual style: primary (blurple CTA), secondary (grey), success (green), danger (red), link (opens URL).",
+		},
+		"custom_id": map[string]any{
+			"type":        "string",
+			"description": "Required for non-link styles (1-100 chars). Discord echoes this back as the inbound prompt when clicked, so skills route on it (e.g. \"triage:suppress:<sig>\"). Must be empty for link-style buttons.",
+		},
+		"url": map[string]any{
+			"type":        "string",
+			"description": "Required for link-style buttons (opens in the user's browser). Must be empty for all other styles.",
+		},
+		"disabled": map[string]any{
+			"type":        "boolean",
+			"description": "Render as unclickable grey. Use to lock a button after first click when you update the message.",
+		},
+		"emoji": map[string]any{
+			"type":        "string",
+			"description": "Optional unicode emoji rendered to the left of the label (e.g. \"🚫\", \"✅\").",
+		},
+	},
+	"required": []string{"label", "style"},
+}
+
+// actionRowSchema is one row of 1-5 buttons. A message can have up to 5 rows.
+var actionRowSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"buttons": map[string]any{
+			"type":        "array",
+			"items":       buttonSchema,
+			"description": "1-5 buttons shown on one row. Arrange the most-likely choice first; Discord renders left-to-right.",
+		},
+	},
+	"required": []string{"buttons"},
+}
+
 // embedSchema is the JSON schema for a single embed object.
 var embedSchema = map[string]any{
 	"type": "object",
@@ -180,6 +229,11 @@ func (t *SendDiscordEmbedTool) Parameters() map[string]any {
 				"items":       embedSchema,
 				"description": "1 to 10 embeds to send in a single message. Combined text across all embeds is capped at 6000 chars by Discord.",
 			},
+			"components": map[string]any{
+				"type":        "array",
+				"items":       actionRowSchema,
+				"description": "Optional: 0 to 5 action rows of interactive buttons rendered below the embed. Use to capture a scoped decision from a human — e.g. triage outcomes, confirmation prompts, navigation. Non-link buttons echo their custom_id back as the inbound prompt on click, so pick stable strings that route on your end (e.g. \"triage:suppress:<sig>\"). Link-style buttons open URLs without a callback.",
+			},
 		},
 		"required": []string{"embeds"},
 	}
@@ -240,11 +294,17 @@ func (t *SendDiscordEmbedTool) Execute(ctx context.Context, args map[string]any)
 		}
 	}
 
+	components, err := decodeComponents(args["components"])
+	if err != nil {
+		return ErrorResult(err.Error())
+	}
+
 	params := channels.DiscordSendEmbedParams{
-		ChannelID: channelID,
-		Content:   argString(args, "content"),
-		ReplyTo:   argString(args, "reply_to"),
-		Embeds:    embeds,
+		ChannelID:  channelID,
+		Content:    argString(args, "content"),
+		ReplyTo:    argString(args, "reply_to"),
+		Embeds:     embeds,
+		Components: components,
 	}
 
 	result, err := t.sender(ctx, channel, params)
@@ -305,5 +365,48 @@ func decodeEmbed(m map[string]any) (channels.DiscordEmbed, error) {
 		}
 	}
 
+	return out, nil
+}
+
+// decodeComponents converts the untyped tool-args component payload into the
+// structured channels slice. Shape + count validation happens here and in the
+// convertComponents path inside the Discord channel; errors surface to the
+// LLM as a plain text tool error.
+func decodeComponents(raw any) ([]channels.DiscordMessageComponent, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	rawRows, ok := raw.([]any)
+	if !ok {
+		return nil, fmt.Errorf("components must be an array")
+	}
+	out := make([]channels.DiscordMessageComponent, 0, len(rawRows))
+	for rowIdx, r := range rawRows {
+		row, ok := r.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("components[%d] must be an object", rowIdx)
+		}
+		rawButtons, ok := row["buttons"].([]any)
+		if !ok {
+			return nil, fmt.Errorf("components[%d].buttons is required", rowIdx)
+		}
+		buttons := make([]channels.DiscordButton, 0, len(rawButtons))
+		for btnIdx, br := range rawButtons {
+			bm, ok := br.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("components[%d].buttons[%d] must be an object", rowIdx, btnIdx)
+			}
+			disabled, _ := bm["disabled"].(bool)
+			buttons = append(buttons, channels.DiscordButton{
+				Label:    argString(bm, "label"),
+				Style:    channels.DiscordButtonStyle(argString(bm, "style")),
+				CustomID: argString(bm, "custom_id"),
+				URL:      argString(bm, "url"),
+				Disabled: disabled,
+				Emoji:    argString(bm, "emoji"),
+			})
+		}
+		out = append(out, channels.DiscordMessageComponent{ActionRow: buttons})
+	}
 	return out, nil
 }

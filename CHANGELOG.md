@@ -20,6 +20,28 @@ All notable changes to GoClaw are documented here. For full documentation, see [
   }
   ```
 
+### Features
+
+- **Discord message components (buttons).** `send_discord_embed` now accepts an
+  optional `components` array of action rows, each containing 1-5 buttons.
+  Styles: `primary`, `secondary`, `success`, `danger`, `link`. Non-link buttons
+  require `custom_id`; link buttons require `url`. Up to 5 action rows per
+  message (Discord limit).
+
+  When a user clicks a non-link button, Discord fires an interaction that
+  goclaw routes to the owning agent via the existing inbound-bus path. The
+  button's `custom_id` becomes the inbound `Content` so skills can switch on
+  a stable routing string, and three new metadata keys scope the event:
+  `interaction_kind=component`, `component_type=button`,
+  `button_custom_id=<id>`. The parent message content is preserved as
+  `component_parent_content` so skills can parse state markers the sender
+  embedded (e.g. HTML comments carrying the state handle).
+
+  Replies to a button click flow through the same interaction-token path as
+  slash commands: deferred ACK within 3s, followup via
+  `InteractionResponseEdit` / `FollowupMessageCreate`, fall back to a regular
+  channel post past the 15-min token TTL.
+
 ### Improvements
 
 - **`suppress_placeholder` toggle for Discord and Slack.** New optional boolean

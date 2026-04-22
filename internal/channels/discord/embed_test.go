@@ -241,3 +241,147 @@ func makeFields(n int) []channels.DiscordEmbedField {
 	}
 	return out
 }
+
+// --- component / button tests ---
+
+func TestSendEmbed_ComponentsPassThroughToSend(t *testing.T) {
+	f := &fakeEmbedAPI{}
+	_, err := sendEmbed(context.Background(), f, channels.DiscordSendEmbedParams{
+		ChannelID: "c1",
+		Embeds:    []channels.DiscordEmbed{basicEmbed()},
+		Components: []channels.DiscordMessageComponent{
+			{ActionRow: []channels.DiscordButton{
+				{Label: "Suppress", Style: channels.DiscordButtonDanger, CustomID: "triage:suppress:abc"},
+				{Label: "Open issue", Style: channels.DiscordButtonPrimary, CustomID: "triage:issue:abc"},
+				{Label: "Docs", Style: channels.DiscordButtonLink, URL: "https://example.com/docs"},
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("sendEmbed: %v", err)
+	}
+	if len(f.gotData.Components) != 1 {
+		t.Fatalf("expected 1 action row, got %d", len(f.gotData.Components))
+	}
+	row, ok := f.gotData.Components[0].(discordgo.ActionsRow)
+	if !ok {
+		t.Fatalf("expected ActionsRow, got %T", f.gotData.Components[0])
+	}
+	if len(row.Components) != 3 {
+		t.Fatalf("expected 3 buttons, got %d", len(row.Components))
+	}
+	// Spot-check the style translation — danger red, primary blurple, link.
+	for idx, want := range []discordgo.ButtonStyle{discordgo.DangerButton, discordgo.PrimaryButton, discordgo.LinkButton} {
+		btn, ok := row.Components[idx].(discordgo.Button)
+		if !ok {
+			t.Fatalf("component[%d] not a Button: %T", idx, row.Components[idx])
+		}
+		if btn.Style != want {
+			t.Errorf("component[%d].Style = %v, want %v", idx, btn.Style, want)
+		}
+	}
+	// Link button must carry URL and no CustomID.
+	link, _ := row.Components[2].(discordgo.Button)
+	if link.URL == "" || link.CustomID != "" {
+		t.Errorf("link button: URL=%q CustomID=%q; want URL set, CustomID empty", link.URL, link.CustomID)
+	}
+}
+
+func TestSendEmbed_ComponentsValidation(t *testing.T) {
+	f := &fakeEmbedAPI{}
+	tests := []struct {
+		name       string
+		components []channels.DiscordMessageComponent
+		errSubstr  string
+	}{
+		{
+			name: "non-link button missing custom_id",
+			components: []channels.DiscordMessageComponent{
+				{ActionRow: []channels.DiscordButton{{Label: "Go", Style: channels.DiscordButtonPrimary}}},
+			},
+			errSubstr: "custom_id is required",
+		},
+		{
+			name: "link button missing url",
+			components: []channels.DiscordMessageComponent{
+				{ActionRow: []channels.DiscordButton{{Label: "Open", Style: channels.DiscordButtonLink}}},
+			},
+			errSubstr: "url is required",
+		},
+		{
+			name: "link button must not carry custom_id",
+			components: []channels.DiscordMessageComponent{
+				{ActionRow: []channels.DiscordButton{{Label: "Open", Style: channels.DiscordButtonLink, URL: "https://x", CustomID: "nope"}}},
+			},
+			errSubstr: "custom_id must be empty",
+		},
+		{
+			name: "non-link button must not carry url",
+			components: []channels.DiscordMessageComponent{
+				{ActionRow: []channels.DiscordButton{{Label: "Go", Style: channels.DiscordButtonPrimary, CustomID: "x", URL: "https://y"}}},
+			},
+			errSubstr: "url must be empty",
+		},
+		{
+			name: "missing label",
+			components: []channels.DiscordMessageComponent{
+				{ActionRow: []channels.DiscordButton{{Style: channels.DiscordButtonPrimary, CustomID: "x"}}},
+			},
+			errSubstr: "label is required",
+		},
+		{
+			name: "unknown style",
+			components: []channels.DiscordMessageComponent{
+				{ActionRow: []channels.DiscordButton{{Label: "Go", Style: "rainbow", CustomID: "x"}}},
+			},
+			errSubstr: "unknown style",
+		},
+		{
+			name:       "too many action rows",
+			components: makeRows(6, channels.DiscordButton{Label: "x", Style: channels.DiscordButtonPrimary, CustomID: "x"}),
+			errSubstr:  "too many action rows",
+		},
+		{
+			name: "too many buttons in a row",
+			components: []channels.DiscordMessageComponent{
+				{ActionRow: makeButtons(6)},
+			},
+			errSubstr: "too many buttons",
+		},
+		{
+			name: "empty action row",
+			components: []channels.DiscordMessageComponent{
+				{ActionRow: nil},
+			},
+			errSubstr: "is empty",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := sendEmbed(context.Background(), f, channels.DiscordSendEmbedParams{
+				ChannelID:  "c1",
+				Embeds:     []channels.DiscordEmbed{basicEmbed()},
+				Components: tt.components,
+			})
+			if err == nil || !strings.Contains(err.Error(), tt.errSubstr) {
+				t.Fatalf("expected error containing %q, got %v", tt.errSubstr, err)
+			}
+		})
+	}
+}
+
+func makeRows(n int, prototype channels.DiscordButton) []channels.DiscordMessageComponent {
+	out := make([]channels.DiscordMessageComponent, n)
+	for i := range out {
+		out[i] = channels.DiscordMessageComponent{ActionRow: []channels.DiscordButton{prototype}}
+	}
+	return out
+}
+
+func makeButtons(n int) []channels.DiscordButton {
+	out := make([]channels.DiscordButton, n)
+	for i := range out {
+		out[i] = channels.DiscordButton{Label: "x", Style: channels.DiscordButtonPrimary, CustomID: "x"}
+	}
+	return out
+}

@@ -711,12 +711,53 @@ type DiscordEmbedField struct {
 // DiscordSendEmbedParams is the input for sending a Discord message with one
 // or more rich embeds. Discord allows up to 10 embeds per message and a
 // combined character budget of 6000 across all embed text in a single message.
+//
+// Components (optional) attach up to five interactive action rows below the
+// embed. When a user clicks a non-link button, Discord fires an interaction
+// that goclaw routes back to the owning agent with the button's custom_id as
+// the inbound prompt; link buttons open a URL without a callback.
 type DiscordSendEmbedParams struct {
-	ChannelID string         // target channel (or thread) ID
-	Content   string         // optional plain text shown above the embeds (2000 char limit)
-	Embeds    []DiscordEmbed // 1-10 embeds
-	ReplyTo   string         // optional message ID to reply to
+	ChannelID  string                    // target channel (or thread) ID
+	Content    string                    // optional plain text shown above the embeds (2000 char limit)
+	Embeds     []DiscordEmbed            // 1-10 embeds
+	ReplyTo    string                    // optional message ID to reply to
+	Components []DiscordMessageComponent // optional; 0-5 action rows of buttons
 }
+
+// DiscordMessageComponent is one row of interactive components attached to a
+// Discord message. Today only action rows of buttons are supported; select
+// menus / text inputs can follow the same pattern when needed.
+type DiscordMessageComponent struct {
+	// ActionRow holds 1-5 buttons rendered as a single row below the message.
+	ActionRow []DiscordButton
+}
+
+// DiscordButton is a clickable button rendered inside an action row. Discord
+// splits buttons into two flavors: "callback" buttons (primary/secondary/
+// success/danger) that require a CustomID and fire an interaction when
+// clicked, and "link" buttons that take a URL and open it externally without
+// a callback.
+//
+// Reference: https://discord.com/developers/docs/interactions/message-components#buttons
+type DiscordButton struct {
+	Label    string             // required (1-80 chars)
+	Style    DiscordButtonStyle // required
+	CustomID string             // required for non-link styles (1-100 chars). Routed back to the agent as the prompt + metadata on click.
+	URL      string             // required for Link style (and only valid for Link)
+	Disabled bool               // render as disabled (visible but not clickable)
+	Emoji    string             // optional unicode emoji (single grapheme)
+}
+
+// DiscordButtonStyle mirrors Discord's button style enum.
+type DiscordButtonStyle string
+
+const (
+	DiscordButtonPrimary   DiscordButtonStyle = "primary"   // blurple; call-to-action
+	DiscordButtonSecondary DiscordButtonStyle = "secondary" // grey; secondary action
+	DiscordButtonSuccess   DiscordButtonStyle = "success"   // green; positive confirmation
+	DiscordButtonDanger    DiscordButtonStyle = "danger"    // red; destructive / warning
+	DiscordButtonLink      DiscordButtonStyle = "link"      // grey + external icon; opens URL
+)
 
 // DiscordSendEmbedResult is returned after a successful embed send.
 type DiscordSendEmbedResult struct {
