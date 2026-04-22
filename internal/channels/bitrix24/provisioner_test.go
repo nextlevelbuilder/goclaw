@@ -466,12 +466,21 @@ func TestInitMCPProvisioner_DisabledModes(t *testing.T) {
 	})
 
 	t.Run("missing_admin_token", func(t *testing.T) {
+		// Both token sources empty: process env var unset AND server row's
+		// Env has no BITRIX_MCP_ADMIN_TOKEN. Server row itself DOES exist,
+		// so the "server not found" branch doesn't fire first — this is
+		// specifically exercising the all-sources-empty path.
 		t.Setenv(mcpAdminTokenEnv, "") // explicitly unset
 		fs := newFakeStore()
 		resetWebhookRouterForTest()
 		defer resetWebhookRouterForTest()
 
 		mcpStore := newFakeMCPStore()
+		mcpStore.serversByName["bitrix-mcp"] = &store.MCPServerData{
+			BaseModel: store.BaseModel{ID: uuid.New()},
+			Name:      "bitrix-mcp",
+			// Env intentionally empty: no admin token in DB.
+		}
 		fn := FactoryWithPortalStoreAndMCP(fs, mcpStore, "")
 		ch, _ := fn("b1", nil, json.RawMessage(`{"portal":"p","bot_code":"c","bot_name":"n","mcp_server_name":"bitrix-mcp","mcp_base_url":"http://x"}`),
 			bus.New(), nil)
@@ -481,6 +490,9 @@ func TestInitMCPProvisioner_DisabledModes(t *testing.T) {
 		}
 		if bc.mcpClient != nil {
 			t.Errorf("missing admin token should leave mcpClient nil")
+		}
+		if bc.mcpServerID != uuid.Nil {
+			t.Errorf("missing admin token should leave mcpServerID zero, got %v", bc.mcpServerID)
 		}
 	})
 
@@ -504,6 +516,324 @@ func TestInitMCPProvisioner_DisabledModes(t *testing.T) {
 			t.Errorf("missing server row should leave provisioner off")
 		}
 	})
+}
+
+// TestResolveMCPAdminToken covers the two-source token resolution policy:
+// per-server env JSONB wins over process env var fallback. The source
+// label is what operators see in "provisioning enabled" log lines, so
+// we assert it too — a silent flip from "mcp_servers.env" back to "env"
+// would mean a multi-tenant deployment regressed to sharing a single
+// token across tenants without any visible signal.
+func TestResolveMCPAdminToken(t *testing.T) {
+	// Build a server row once; each sub-case tweaks the Env field.
+	newServer := func(envJSON string) *store.MCPServerData {
+		s := &store.MCPServerData{
+			BaseModel: store.BaseModel{ID: uuid.New()},
+			Name:      "bitrix-mcp",
+		}
+		if envJSON != "" {
+			s.Env = json.RawMessage(envJSON)
+		}
+		return s
+	}
+
+	t.Run("per_server_env_preferred", func(t *testing.T) {
+		t.Setenv(mcpAdminTokenEnv, "legacy-global")
+		srv := newServer(`{"BITRIX_MCP_ADMIN_TOKEN":"per-server"}`)
+		tok, src := resolveMCPAdminToken(srv)
+		if tok != "per-server" {
+			t.Errorf("token = %q; want per-server", tok)
+		}
+		if src != "mcp_servers.env" {
+			t.Errorf("source = %q; want mcp_servers.env", src)
+		}
+	})
+
+	t.Run("fallback_to_env_var", func(t *testing.T) {
+		t.Setenv(mcpAdminTokenEnv, "legacy-global")
+		srv := newServer("") // no per-server env
+		tok, src := resolveMCPAdminToken(srv)
+		if tok != "legacy-global" {
+			t.Errorf("token = %q; want legacy-global", tok)
+		}
+		if src != "env" {
+			t.Errorf("source = %q; want env", src)
+		}
+	})
+
+	t.Run("env_has_other_keys_but_not_admin_token", func(t *testing.T) {
+		t.Setenv(mcpAdminTokenEnv, "legacy-global")
+		srv := newServer(`{"SOME_OTHER_KEY":"x"}`)
+		tok, src := resolveMCPAdminToken(srv)
+		if tok != "legacy-global" || src != "env" {
+			t.Errorf("expected fallback to env var, got (%q, %q)", tok, src)
+		}
+	})
+
+	t.Run("both_empty_returns_empty", func(t *testing.T) {
+		t.Setenv(mcpAdminTokenEnv, "") // explicit unset
+		srv := newServer("")
+		tok, src := resolveMCPAdminToken(srv)
+		if tok != "" || src != "" {
+			t.Errorf("expected ('',''), got (%q, %q)", tok, src)
+		}
+	})
+
+	t.Run("whitespace_only_per_server_falls_back", func(t *testing.T) {
+		// An accidental `"BITRIX_MCP_ADMIN_TOKEN": "   "` in the DB shouldn't
+		// count as "set" — fall through to the env var so operators who
+		// intended to disable the per-server override by clearing the value
+		// don't silently break provisioning.
+		t.Setenv(mcpAdminTokenEnv, "legacy-global")
+		srv := newServer(`{"BITRIX_MCP_ADMIN_TOKEN":"   "}`)
+		tok, src := resolveMCPAdminToken(srv)
+		if tok != "legacy-global" || src != "env" {
+			t.Errorf("whitespace per-server should fall back; got (%q, %q)", tok, src)
+		}
+	})
+
+	t.Run("malformed_env_json_falls_back", func(t *testing.T) {
+		// Partner's store writes valid JSON, but a hand-edited row could be
+		// malformed. Treat as "not set" rather than hard-failing the channel.
+		t.Setenv(mcpAdminTokenEnv, "legacy-global")
+		srv := newServer(`{"BITRIX_MCP_ADMIN_TOKEN":`) // truncated
+		tok, src := resolveMCPAdminToken(srv)
+		if tok != "legacy-global" || src != "env" {
+			t.Errorf("malformed env should fall back; got (%q, %q)", tok, src)
+		}
+	})
+}
+
+// TestInitMCPProvisioner_UsesPerServerToken is the end-to-end version of
+// TestResolveMCPAdminToken: wire up a full Channel, seed the server row
+// with a per-server token, leave the process env var UNSET, and confirm
+// the mcpClient ends up with the per-server token (by observing the
+// Authorization header that an auto-onboard call carries). Also confirms
+// the channel doesn't silently fall back to the env var when the server
+// row has a token — a regression here would reintroduce the multi-tenant
+// token-leak bug we're fixing.
+func TestInitMCPProvisioner_UsesPerServerToken(t *testing.T) {
+	var gotAuthHeader string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuthHeader = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"api_key":"k","user_id":"u","tenant_id":"t","created":true}`))
+	}))
+	defer srv.Close()
+
+	// Explicitly unset the legacy env var — we want to prove the per-server
+	// token is what flows through, independent of any process-level config.
+	t.Setenv(mcpAdminTokenEnv, "")
+
+	fs := newFakeStore()
+	resetWebhookRouterForTest()
+	defer resetWebhookRouterForTest()
+
+	mcpStore := newFakeMCPStore()
+	mcpStore.serversByName["bitrix-mcp"] = &store.MCPServerData{
+		BaseModel: store.BaseModel{ID: uuid.New()},
+		Name:      "bitrix-mcp",
+		Env:       json.RawMessage(`{"BITRIX_MCP_ADMIN_TOKEN":"per-server-tok"}`),
+	}
+
+	fn := FactoryWithPortalStoreAndMCP(fs, mcpStore, "")
+	cfgJSON := `{"portal":"p","bot_code":"c","bot_name":"n","bot_type":"B",` +
+		`"mcp_server_name":"bitrix-mcp","mcp_base_url":"` + srv.URL + `"}`
+	ch, err := fn("b1", nil, json.RawMessage(cfgJSON), bus.New(), nil)
+	if err != nil {
+		t.Fatalf("factory: %v", err)
+	}
+	bc := ch.(*Channel)
+	bc.SetTenantID(store.GenNewID())
+	bc.startMu.Lock()
+	bc.botID = 1
+	bc.client = NewClient("p.bitrix24.com", nil)
+	bc.startMu.Unlock()
+
+	if err := bc.initMCPProvisioner(context.Background()); err != nil {
+		t.Fatalf("initMCPProvisioner: %v", err)
+	}
+	if bc.mcpClient == nil {
+		t.Fatal("mcpClient should be wired from per-server token even with empty env var")
+	}
+
+	// Trigger an auto-onboard so we can inspect the header the client sent.
+	if err := bc.provisionIfMissing(context.Background(), "42", validAuth()); err != nil {
+		t.Fatalf("provisionIfMissing: %v", err)
+	}
+	if gotAuthHeader != "Bearer per-server-tok" {
+		t.Errorf("Authorization header = %q; want Bearer per-server-tok", gotAuthHeader)
+	}
+}
+
+// newBareChannelForNotifyTest builds a Channel that's wired enough for
+// notifyUserOfMCPIssueOnce tests but skips MCP provisioner setup — the
+// function under test only touches c.notifyMu / c.notifyDebounce and then
+// delegates to sendChunk, which is out of scope here (send.go owns it).
+//
+// sendChunk will fail immediately with "portal not bound" because the test
+// Client has no Portal attached — notifyUserOfMCPIssueOnce swallows that
+// error via slog.Debug, so the debounce state is still the primary
+// observable. Tests that care about the wire-level Send behavior should
+// use the full newProvisionerTestChannel + portal helper instead.
+func newBareChannelForNotifyTest(t *testing.T) *Channel {
+	t.Helper()
+	fs := newFakeStore()
+	resetWebhookRouterForTest()
+	t.Cleanup(resetWebhookRouterForTest)
+
+	fn := FactoryWithPortalStore(fs, "")
+	ch, err := fn("b1", nil,
+		json.RawMessage(`{"portal":"p","bot_code":"c","bot_name":"n"}`),
+		bus.New(), nil)
+	if err != nil {
+		t.Fatalf("factory: %v", err)
+	}
+	bc := ch.(*Channel)
+	bc.SetTenantID(store.GenNewID())
+	bc.startMu.Lock()
+	bc.botID = 1
+	bc.client = NewClient("p.bitrix24.com", nil)
+	bc.startMu.Unlock()
+	return bc
+}
+
+// TestNotifyUserOfMCPIssueOnce_FirstCallMarksDebounce verifies the first
+// notification for a user stamps the debounce map, regardless of whether
+// the downstream sendChunk actually delivered the message. The debounce
+// stamp is what prevents a webhook retry burst from flooding the user —
+// if we only stamped on successful Send, a Bitrix-portal outage would
+// simultaneously block delivery AND disable the rate limit, giving the
+// user a queue of identical notices once the portal recovers.
+func TestNotifyUserOfMCPIssueOnce_FirstCallMarksDebounce(t *testing.T) {
+	bc := newBareChannelForNotifyTest(t)
+
+	before := time.Now()
+	bc.notifyUserOfMCPIssueOnce(context.Background(), "user-42", "chat-9")
+	after := time.Now()
+
+	bc.notifyMu.Lock()
+	defer bc.notifyMu.Unlock()
+	ts, ok := bc.notifyDebounce["user-42"]
+	if !ok {
+		t.Fatalf("first notify did not stamp debounce map for user-42")
+	}
+	if ts.Before(before) || ts.After(after) {
+		t.Errorf("debounce timestamp %v out of window [%v, %v]", ts, before, after)
+	}
+}
+
+// TestNotifyUserOfMCPIssueOnce_SecondCallWithinTTLIsDebounced verifies
+// that a second call within mcpUserNotifyDebounceTTL does NOT refresh
+// the stamp. Two invariants matter:
+//  1. Rate limit holds — user gets exactly one notice per TTL window.
+//  2. Timestamp stays pinned to the FIRST call, so the window rolls
+//     forward from there (not from every subsequent silenced call).
+//     Otherwise a sustained outage + steady webhook retry traffic
+//     would keep bumping the stamp forward and the user would never
+//     see a refreshed notice when the TTL legitimately expired.
+func TestNotifyUserOfMCPIssueOnce_SecondCallWithinTTLIsDebounced(t *testing.T) {
+	bc := newBareChannelForNotifyTest(t)
+
+	bc.notifyUserOfMCPIssueOnce(context.Background(), "user-42", "chat-9")
+	bc.notifyMu.Lock()
+	firstStamp := bc.notifyDebounce["user-42"]
+	bc.notifyMu.Unlock()
+
+	// Small sleep so a naive "refresh stamp every call" bug would produce
+	// a strictly later timestamp than firstStamp. 10ms is enough resolution
+	// on every supported platform.
+	time.Sleep(10 * time.Millisecond)
+
+	bc.notifyUserOfMCPIssueOnce(context.Background(), "user-42", "chat-9")
+
+	bc.notifyMu.Lock()
+	defer bc.notifyMu.Unlock()
+	secondStamp := bc.notifyDebounce["user-42"]
+	if !secondStamp.Equal(firstStamp) {
+		t.Errorf("debounced call should not refresh stamp: first=%v second=%v", firstStamp, secondStamp)
+	}
+}
+
+// TestNotifyUserOfMCPIssueOnce_ExpiredDebounceAllowsNewNotice verifies
+// the stamp gets refreshed once the TTL elapses. We manipulate the
+// debounce map directly (planting a stale timestamp) to avoid a real
+// 5-minute test runtime — this is the standard pattern for testing
+// TTL-based caches without the wall-clock penalty.
+func TestNotifyUserOfMCPIssueOnce_ExpiredDebounceAllowsNewNotice(t *testing.T) {
+	bc := newBareChannelForNotifyTest(t)
+
+	// Plant a stamp that's safely outside the TTL window.
+	stale := time.Now().Add(-(mcpUserNotifyDebounceTTL + time.Minute))
+	bc.notifyMu.Lock()
+	bc.notifyDebounce = map[string]time.Time{"user-42": stale}
+	bc.notifyMu.Unlock()
+
+	bc.notifyUserOfMCPIssueOnce(context.Background(), "user-42", "chat-9")
+
+	bc.notifyMu.Lock()
+	defer bc.notifyMu.Unlock()
+	got := bc.notifyDebounce["user-42"]
+	if !got.After(stale) {
+		t.Errorf("expired stamp should have been refreshed: stale=%v got=%v", stale, got)
+	}
+	if time.Since(got) > time.Second {
+		t.Errorf("refreshed stamp should be ~now, got age=%v", time.Since(got))
+	}
+}
+
+// TestNotifyUserOfMCPIssueOnce_EmptyInputsAreNoop guards the two
+// defensive branches at the top of notifyUserOfMCPIssueOnce: empty
+// chatID (no reply target) and empty userID (shouldn't reach here
+// from handle.go but cheap to defend). Either one must short-circuit
+// BEFORE the debounce map is touched — otherwise a webhook with a
+// blank FromUserID could silently poison the "" key and prevent
+// legitimate future notices from firing.
+func TestNotifyUserOfMCPIssueOnce_EmptyInputsAreNoop(t *testing.T) {
+	cases := []struct {
+		name   string
+		userID string
+		chatID string
+	}{
+		{"empty_chat_id", "user-42", ""},
+		{"whitespace_chat_id", "user-42", "   "},
+		{"empty_user_id", "", "chat-9"},
+		{"whitespace_user_id", "\t", "chat-9"},
+		{"both_empty", "", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			bc := newBareChannelForNotifyTest(t)
+			bc.notifyUserOfMCPIssueOnce(context.Background(), tc.userID, tc.chatID)
+
+			bc.notifyMu.Lock()
+			defer bc.notifyMu.Unlock()
+			if len(bc.notifyDebounce) != 0 {
+				t.Errorf("no-op case must leave debounce map empty, got %v", bc.notifyDebounce)
+			}
+		})
+	}
+}
+
+// TestNotifyUserOfMCPIssueOnce_DifferentUsersIndependent verifies per-
+// user debounce isolation: user A hitting the rate limit must not
+// silence notices for user B. This matters when a single MCP outage
+// affects many users — each should be independently informed on their
+// next message.
+func TestNotifyUserOfMCPIssueOnce_DifferentUsersIndependent(t *testing.T) {
+	bc := newBareChannelForNotifyTest(t)
+
+	bc.notifyUserOfMCPIssueOnce(context.Background(), "alice", "chat-1")
+	bc.notifyUserOfMCPIssueOnce(context.Background(), "bob", "chat-2")
+
+	bc.notifyMu.Lock()
+	defer bc.notifyMu.Unlock()
+	if _, ok := bc.notifyDebounce["alice"]; !ok {
+		t.Errorf("alice missing from debounce map: %v", bc.notifyDebounce)
+	}
+	if _, ok := bc.notifyDebounce["bob"]; !ok {
+		t.Errorf("bob missing from debounce map: %v", bc.notifyDebounce)
+	}
 }
 
 // TestFactory_HalfConfigRejected codifies the "both or neither" rule for

@@ -69,6 +69,22 @@ type Channel struct {
 	mcpServerID  uuid.UUID
 	mcpProvMu    sync.Mutex
 	mcpDebounce  map[mcpDebounceKey]time.Time
+
+	// User-facing degradation notice state. When provisionIfMissing fails
+	// in an UNEXPECTED way (HTTP failure, persist failure, not one of the
+	// typed skip sentinels), the channel best-effort sends a one-shot
+	// message to the user so they're not left wondering why their agent
+	// responses suddenly lack MCP tools. The notify map keeps per-user
+	// debounce timestamps so a sustained MCP outage or a webhook retry
+	// burst doesn't flood the user's DM with duplicates. TTL is defined
+	// as mcpUserNotifyDebounceTTL in provisioner.go.
+	//
+	// Separate mutex from mcpProvMu because notify happens on the logging
+	// branch after provisioning has already returned — no need to
+	// serialize the two paths, and keeping them independent means a slow
+	// Bitrix Send() can't stall the next provisioning decision.
+	notifyMu       sync.Mutex
+	notifyDebounce map[string]time.Time
 }
 
 // Type returns the platform identifier used by the router / health pages.

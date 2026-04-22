@@ -197,6 +197,12 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 			// message still flows through to the agent.
 			slog.Warn("bitrix24 mcp: provisioning failed",
 				"channel", c.Name(), "user", senderID, "err", err)
+			// Best-effort degradation notice so the user knows to contact
+			// admin instead of silently getting tool-less replies. Debounced
+			// 5min per-user inside the helper so a retry storm / sustained
+			// outage won't spam the DM. See notifyUserOfMCPIssueOnce
+			// docstring for the design rationale.
+			c.notifyUserOfMCPIssueOnce(ctx, senderID, chatID)
 		}
 	}
 
