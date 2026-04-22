@@ -111,6 +111,7 @@ type TraversalResult struct {
 // EntityListOptions configures a list query for entities.
 type EntityListOptions struct {
 	EntityType string
+	ScopeID    string // filter by user_id (graph scope, e.g. "project-sovereign")
 	Limit      int
 	Offset     int
 }

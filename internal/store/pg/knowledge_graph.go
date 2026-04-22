@@ -221,6 +221,11 @@ func (s *PGKnowledgeGraphStore) ListEntities(ctx context.Context, agentID, userI
 		args = append(args, userArgs...)
 		idx += len(userArgs)
 	}
+	if opts.ScopeID != "" {
+		where += fmt.Sprintf(" AND user_id = $%d", idx)
+		args = append(args, opts.ScopeID)
+		idx++
+	}
 	if opts.EntityType != "" {
 		where += fmt.Sprintf(" AND entity_type = $%d", idx)
 		args = append(args, opts.EntityType)

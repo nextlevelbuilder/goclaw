@@ -65,6 +65,10 @@ func (t *KnowledgeGraphSearchTool) Parameters() map[string]any {
 				"type":        "string",
 				"description": "ISO 8601 end time for event-time range filter. Returns only entities with event_time <= this value.",
 			},
+			"scope": map[string]any{
+				"type":        "string",
+				"description": "Graph scope ID to filter results (e.g. 'project-sovereign', 'project-gpu-elephant'). Lists entities within a specific knowledge graph scope.",
+			},
 		},
 		"required": []string{"query"},
 	}
@@ -121,6 +125,12 @@ func (t *KnowledgeGraphSearchTool) Execute(ctx context.Context, args map[string]
 	// Event-time range mode: from_time or to_time provided
 	if fromTime != nil || toTime != nil {
 		return t.executeEventTimeSearch(ctx, agentID.String(), userID, query, fromTime, toTime)
+	}
+
+	// Scope mode: filter by graph scope ID
+	scope, _ := args["scope"].(string)
+	if scope != "" {
+		return t.executeScopeSearch(ctx, agentID.String(), userID, scope, query, args, temporal)
 	}
 
 	// List-all mode: query="*"
@@ -355,7 +365,32 @@ func (t *KnowledgeGraphSearchTool) resolveEntityName(ctx context.Context, agentI
 }
 
 // noResultsHint returns top entities so the model knows what's available.
+// Falls back to scope-based listing if the query matches a graph scope ID.
 func (t *KnowledgeGraphSearchTool) noResultsHint(ctx context.Context, agentID, userID, query string) *Result {
+	// Fallback: try matching query as a graph scope ID (user_id)
+	if query != "" && query != "*" {
+		scopeEntities, scopeErr := t.kgStore.ListEntities(ctx, agentID, userID, store.EntityListOptions{
+			ScopeID: query,
+			Limit:   15,
+		})
+		if scopeErr == nil && len(scopeEntities) > 0 {
+			var sb strings.Builder
+			sb.WriteString(fmt.Sprintf("Found %d entities in scope %q:\n\n", len(scopeEntities), query))
+			for _, e := range scopeEntities {
+				sb.WriteString(fmt.Sprintf("- %s [%s]", e.Name, e.EntityType))
+				if e.EventTime != nil {
+					sb.WriteString(fmt.Sprintf(" (event: %s)", e.EventTime.Format("2006-01-02 15:04")))
+				}
+				sb.WriteString("\n")
+				if e.Description != "" {
+					sb.WriteString(fmt.Sprintf("  %s\n", e.Description))
+				}
+			}
+			sb.WriteString(fmt.Sprintf("\nTip: Use entity_id parameter to traverse relationships from a specific entity."))
+			return NewResult(sb.String())
+		}
+	}
+
 	top, _ := t.kgStore.ListEntities(ctx, agentID, userID, store.EntityListOptions{Limit: 10})
 	if len(top) == 0 {
 		return NewResult("Knowledge graph is empty. No entities have been extracted yet.")
@@ -371,5 +406,60 @@ func (t *KnowledgeGraphSearchTool) noResultsHint(ctx context.Context, agentID, u
 		sb.WriteString("\n")
 	}
 	sb.WriteString("\nTry searching with a specific name from the list above, or use query='*' to see all.")
+	return NewResult(sb.String())
+}
+
+// executeScopeSearch lists entities within a specific graph scope, optionally filtered by query text.
+func (t *KnowledgeGraphSearchTool) executeScopeSearch(ctx context.Context, agentID, userID, scope, query string, args map[string]any, temporal store.TemporalQueryOptions) *Result {
+	entityType, _ := args["entity_type"].(string)
+	opts := store.EntityListOptions{
+		ScopeID:    scope,
+		EntityType: entityType,
+		Limit:      30,
+	}
+
+	var entities []store.Entity
+	var err error
+	if temporal.AsOf != nil {
+		entities, err = t.kgStore.ListEntitiesTemporal(ctx, agentID, userID, opts, temporal)
+	} else {
+		entities, err = t.kgStore.ListEntities(ctx, agentID, userID, opts)
+	}
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("scope search failed: %v", err))
+	}
+	if len(entities) == 0 {
+		return NewResult(fmt.Sprintf("No entities found in scope %q.", scope))
+	}
+
+	// Optional text filter (post-search)
+	if query != "" && query != "*" {
+		qLower := strings.ToLower(query)
+		filtered := entities[:0]
+		for _, e := range entities {
+			if strings.Contains(strings.ToLower(e.Name), qLower) ||
+				strings.Contains(strings.ToLower(e.Description), qLower) {
+				filtered = append(filtered, e)
+			}
+		}
+		entities = filtered
+		if len(entities) == 0 {
+			return NewResult(fmt.Sprintf("No entities matching %q found in scope %q.", query, scope))
+		}
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Found %d entities in scope %q:\n\n", len(entities), scope))
+	for _, e := range entities {
+		sb.WriteString(fmt.Sprintf("- %s [%s] (id: %s)", e.Name, e.EntityType, e.ID))
+		if e.EventTime != nil {
+			sb.WriteString(fmt.Sprintf(" (event: %s)", e.EventTime.Format("2006-01-02 15:04")))
+		}
+		sb.WriteString("\n")
+		if e.Description != "" {
+			sb.WriteString(fmt.Sprintf("  %s\n", e.Description))
+		}
+	}
+	sb.WriteString("\nTip: Use entity_id parameter to traverse relationships from a specific entity.")
 	return NewResult(sb.String())
 }
