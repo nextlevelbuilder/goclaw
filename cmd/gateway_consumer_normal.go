@@ -402,7 +402,11 @@ func processNormalMessage(
 	})
 
 	// Handle result asynchronously to not block the flush callback.
-	go func(agentKey, channel, chatID, session, rID, peerKind, inboundContent string, meta map[string]string, blockReplyEnabled bool, ptd *tools.PendingTeamDispatch) {
+	inboundLocale := msg.Metadata["locale"]
+	if inboundLocale == "" {
+		inboundLocale = "en"
+	}
+	go func(agentKey, channel, chatID, session, rID, peerKind, inboundContent, locale string, meta map[string]string, blockReplyEnabled bool, ptd *tools.PendingTeamDispatch) {
 		outcome := <-outCh
 
 		// Release team create lock — tasks already visible in DB, other goroutines can list.
@@ -436,13 +440,17 @@ func processNormalMessage(
 				return
 			}
 			slog.Error("inbound: agent run failed", "error", outcome.Err, "channel", channel)
-			// Suppress technical error text on public-facing channels (FB, Telegram, etc.)
-			// Empty Content still triggers placeholder/typing cleanup downstream.
+			// On external channels (Telegram, FB, Zalo, etc.) the raw technical error text
+			// is noise to end-users. But publishing empty Content was silently
+			// abandoning the user with a stopped typing indicator and no explanation —
+			// users had no way to tell whether the bot died or was still thinking.
+			// Surface a localized, generic fallback so they know to retry.
 			errContent := formatAgentError(outcome.Err)
 			if deps.ChannelMgr != nil {
 				if ct := deps.ChannelMgr.ChannelTypeForName(channel); isExternalChannel(ct) {
-					slog.Info("inbound: suppressed error for external channel", "channel", channel, "type", ct)
-					errContent = ""
+					errContent = i18n.T(locale, i18n.MsgAgentErrorGeneric)
+					slog.Info("inbound: sent generic fallback for external channel error",
+						"channel", channel, "type", ct, "locale", locale)
 				}
 			}
 			deps.MsgBus.PublishOutbound(bus.OutboundMessage{
@@ -511,5 +519,5 @@ func processNormalMessage(
 		if deps.TeamStore != nil && channel != tools.ChannelSystem && channel != tools.ChannelTeammate && channel != tools.ChannelDashboard {
 			go autoSetFollowup(ctx, deps.TeamStore, deps.AgentStore, agentKey, channel, chatID, replyContent)
 		}
-	}(agentID, msg.Channel, msg.ChatID, sessionKey, runID, peerKind, msg.Content, outMeta, blockReply, ptd)
+	}(agentID, msg.Channel, msg.ChatID, sessionKey, runID, peerKind, msg.Content, inboundLocale, outMeta, blockReply, ptd)
 }

@@ -49,6 +49,15 @@ func markdownToTelegramHTML(text string) string {
 	// by escapeHTML() and displayed as literal "<b>bold</b>" text.
 	text = htmlTagToMarkdown(text)
 
+	// Balance unclosed bold/italic markers BEFORE formatting. When the LLM gets
+	// cut off mid-bold (max_tokens truncation, finish_reason=length, stream
+	// terminate), the raw content ends with "... : **70" and the non-greedy
+	// regex below silently passes it through as literal `**`. Users then see
+	// `• Anh thực nhận: **70` on Telegram. Stripping the lone marker is
+	// cleaner than appending a closing one (which would bold a partial word).
+	text = balanceMarkdownMarker(text, "**")
+	text = balanceMarkdownMarker(text, "__")
+
 	// Extract markdown tables FIRST — uses dedicated \x00TB placeholders.
 	// Tables render as <pre> (monospace block) WITHOUT <code> wrapper,
 	// so Telegram shows them as preformatted text, not as "code" with copy button.
@@ -448,5 +457,125 @@ func chunkHTML(text string, maxLen int) []string {
 		remaining = strings.TrimLeft(remaining[cutAt:], " \n")
 	}
 
-	return chunks
+	return balanceChunkTags(chunks)
+}
+
+// balanceMarkdownMarker strips the last unclosed marker pair (e.g. "**" or "__").
+// Telegram's non-greedy bold regex silently drops unmatched markers, so the
+// literal "**" leaks through to the rendered message. When the LLM is cut off
+// mid-bold, we'd rather lose the bold styling than render a literal "**".
+func balanceMarkdownMarker(text, marker string) string {
+	if !strings.Contains(text, marker) {
+		return text
+	}
+	if strings.Count(text, marker)%2 == 0 {
+		return text
+	}
+	last := strings.LastIndex(text, marker)
+	if last < 0 {
+		return text
+	}
+	return text[:last] + text[last+len(marker):]
+}
+
+// inlineFormattingTags enumerates Telegram HTML tags that can legitimately span
+// cross-chunk if the content is long. We close them at the end of the chunk
+// and re-open them at the start of the next so each chunk is a valid Telegram
+// HTML fragment.
+var inlineFormattingTags = []string{"b", "i", "u", "s", "code"}
+
+// balanceChunkTags closes any still-open inline formatting tags at the end of
+// each chunk and re-opens them at the start of the next. Without this, a
+// paragraph like `<b>foo\n\nbar</b>` split at `\n\n` would produce chunk 1
+// `<b>foo` (unclosed, Telegram rejects) and chunk 2 `bar</b>` (orphan close).
+func balanceChunkTags(chunks []string) []string {
+	if len(chunks) <= 1 {
+		return chunks
+	}
+	out := make([]string, 0, len(chunks))
+	var carry []string // tag names still open, to re-open at start of next chunk
+	for _, chunk := range chunks {
+		if len(carry) > 0 {
+			var b strings.Builder
+			for _, name := range carry {
+				b.WriteString("<")
+				b.WriteString(name)
+				b.WriteString(">")
+			}
+			b.WriteString(chunk)
+			chunk = b.String()
+		}
+		closed, stillOpen := closeUnclosedInlineTags(chunk)
+		out = append(out, closed)
+		carry = stillOpen
+	}
+	return out
+}
+
+// closeUnclosedInlineTags scans chunk, appends close tags for any unclosed
+// inline formatting tag, and returns the list of tag names that were unclosed
+// (so they can be re-opened in the next chunk). Tags with attributes (like
+// `<a href>`) and non-inline tags (`<pre>`, `<code class=...>`) are ignored —
+// the chunkHTML boundary logic already avoids splitting inside a tag.
+func closeUnclosedInlineTags(chunk string) (string, []string) {
+	var stack []string
+	i := 0
+	for i < len(chunk) {
+		lt := strings.IndexByte(chunk[i:], '<')
+		if lt < 0 {
+			break
+		}
+		i += lt
+		gt := strings.IndexByte(chunk[i:], '>')
+		if gt < 0 {
+			break
+		}
+		raw := chunk[i+1 : i+gt]
+		i += gt + 1
+		isClose := strings.HasPrefix(raw, "/")
+		if isClose {
+			raw = raw[1:]
+		}
+		// Tag name is everything up to the first space (strips attrs on opens).
+		name := strings.ToLower(strings.TrimSpace(raw))
+		if sp := strings.IndexByte(name, ' '); sp >= 0 {
+			name = name[:sp]
+		}
+		if !isInlineFormattingTag(name) {
+			continue
+		}
+		if isClose {
+			// Pop the most recent matching open from the stack.
+			for j := len(stack) - 1; j >= 0; j-- {
+				if stack[j] == name {
+					stack = append(stack[:j], stack[j+1:]...)
+					break
+				}
+			}
+		} else {
+			stack = append(stack, name)
+		}
+	}
+	if len(stack) == 0 {
+		return chunk, nil
+	}
+	var b strings.Builder
+	b.WriteString(chunk)
+	// Close in reverse order to maintain proper nesting.
+	for j := len(stack) - 1; j >= 0; j-- {
+		b.WriteString("</")
+		b.WriteString(stack[j])
+		b.WriteString(">")
+	}
+	// Reopen list preserves original nesting order.
+	return b.String(), append([]string(nil), stack...)
+}
+
+func isInlineFormattingTag(name string) bool {
+	for _, t := range inlineFormattingTags {
+		if t == name {
+			return true
+		}
+	}
+	return false
 }

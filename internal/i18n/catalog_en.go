@@ -143,6 +143,7 @@ func init() {
 		MsgStatusPhaseDefault:  "Phase: Processing...",
 		MsgCancelledReply:      "✋ Cancelled. What would you like to do next?",
 		MsgInjectedAck:         "Got it, I'll incorporate that into what I'm working on.",
+		MsgAgentErrorGeneric:   "😔 Something went wrong processing your message. Please try again in a moment.",
 
 		// Knowledge Graph
 		MsgEntityIDRequired:       "entity_id is required",

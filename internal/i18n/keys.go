@@ -144,6 +144,7 @@ const (
 	MsgStatusPhaseDefault  = "status.phase_default"   // "Phase: Processing..."
 	MsgCancelledReply      = "status.cancelled"       // "✋ Cancelled. What would you like to do next?"
 	MsgInjectedAck         = "status.injected_ack"    // "Got it, I'll incorporate that into what I'm working on."
+	MsgAgentErrorGeneric   = "status.agent_error"     // user-facing fallback when agent run errors on external channel
 
 	// --- Knowledge Graph ---
 	MsgEntityIDRequired           = "error.entity_id_required"            // "entity_id is required"

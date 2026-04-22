@@ -3,6 +3,7 @@ package pipeline
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
@@ -75,6 +76,20 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 	// args on allowlisted mutating tools. Nullary tools (datetime, heartbeat) skip
 	// the heuristic so their legitimate empty-args calls pass through.
 	// Text-only truncation (no tool calls) is a valid long answer — deliver it.
+	// But log when it happens so operators can see max_tokens pressure — text-only
+	// truncation can still present to the user as a cut message (e.g. bold marker
+	// left unclosed). The telegram formatter strips dangling `**` defensively.
+	if resp.FinishReason == "length" && len(resp.ToolCalls) == 0 {
+		slog.Warn("think_stage: response truncated (finish_reason=length, text-only)",
+			"content_len", len(resp.Content),
+			"completion_tokens", func() int {
+				if resp.Usage != nil {
+					return resp.Usage.CompletionTokens
+				}
+				return 0
+			}(),
+		)
+	}
 	truncated := len(resp.ToolCalls) > 0 && (resp.FinishReason == "length" ||
 		(resp.FinishReason == "tool_calls" && toolCallsHaveMissingRequiredArgs(resp.ToolCalls)))
 	parseErr := !truncated && toolCallsHaveParseErrors(resp.ToolCalls)
