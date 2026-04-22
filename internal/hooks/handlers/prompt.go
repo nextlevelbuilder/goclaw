@@ -263,7 +263,7 @@ func (h *PromptHandler) buildChatRequest(cfg hooks.HookConfig, ev hooks.Event, m
 		},
 		Tools: []providers.ToolDefinition{{
 			Type: "function",
-			Function: providers.ToolFunctionSchema{
+			Function: &providers.ToolFunctionSchema{
 				Name:        promptDecideToolName,
 				Description: "Return the hook evaluation decision.",
 				Parameters: map[string]any{

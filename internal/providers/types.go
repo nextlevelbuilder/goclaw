@@ -98,19 +98,25 @@ type ChatResponse struct {
 	// ThinkingSignature is the accumulated signature from streaming thinking blocks.
 	// Required by Anthropic API for tool use passback when thinking is enabled.
 	ThinkingSignature string `json:"-"`
+
+	// Images holds generated images returned by image_generation_call tools (Codex).
+	// Not persisted to DB; populated at runtime from provider response.
+	Images []ImageContent `json:"-"`
 }
 
 // StreamChunk is a piece of a streaming response.
 type StreamChunk struct {
-	Content  string `json:"content,omitempty"`
-	Thinking string `json:"thinking,omitempty"`
-	Done     bool   `json:"done,omitempty"`
+	Content  string         `json:"content,omitempty"`
+	Thinking string         `json:"thinking,omitempty"`
+	Done     bool           `json:"done,omitempty"`
+	Images   []ImageContent `json:"images,omitempty"` // image generation frames (Codex)
 }
 
 // ImageContent represents a base64-encoded image for vision-capable models.
 type ImageContent struct {
-	MimeType string `json:"mime_type"` // e.g. "image/jpeg"
-	Data     string `json:"data"`      // base64-encoded image bytes
+	MimeType string `json:"mime_type"`         // e.g. "image/jpeg"
+	Data     string `json:"data"`              // base64-encoded image bytes
+	Partial  bool   `json:"partial,omitempty"` // true for intermediate frames (Codex image_generation_call)
 }
 
 // MediaRef is a lightweight reference to a persistently stored media file.
@@ -160,9 +166,12 @@ type ToolCall struct {
 }
 
 // ToolDefinition describes a tool available to the LLM.
+// Type is "function" for standard function tools, or a native provider tool type
+// (e.g. "image_generation") for first-class provider-native tools.
+// Function is nil when Type is not "function".
 type ToolDefinition struct {
-	Type     string             `json:"type"` // "function"
-	Function ToolFunctionSchema `json:"function"`
+	Type     string              `json:"type"`               // "function" | "image_generation" | ...
+	Function *ToolFunctionSchema `json:"function,omitempty"` // nil when Type != "function"
 }
 
 // ToolFunctionSchema is the schema for a function tool.
