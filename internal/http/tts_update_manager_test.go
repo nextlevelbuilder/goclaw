@@ -66,9 +66,9 @@ func TestTTSHandler_UpdateManager_SwapsProvider(t *testing.T) {
 func TestTTSHandler_UpdateManager_ConcurrentSafe(t *testing.T) {
 	setupTestToken(t, "") // dev mode
 
-	// Use stateless mock — each provider is separate instance
+	// Use stateless mock to avoid race on capturedOpts
 	mgr := audio.NewManager(audio.ManagerConfig{Primary: "mock"})
-	mgr.RegisterTTS(&mockTTSProvider{name: "mock"})
+	mgr.RegisterTTS(&mockTTSProvider{name: "mock", stateless: true})
 
 	h := NewTTSHandler(mgr)
 	mux := http.NewServeMux()
@@ -96,7 +96,7 @@ func TestTTSHandler_UpdateManager_ConcurrentSafe(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		newMgr := audio.NewManager(audio.ManagerConfig{Primary: "mock-new"})
-		newMgr.RegisterTTS(&mockTTSProvider{name: "mock-new"})
+		newMgr.RegisterTTS(&mockTTSProvider{name: "mock-new", stateless: true})
 		h.UpdateManager(newMgr)
 	}()
 

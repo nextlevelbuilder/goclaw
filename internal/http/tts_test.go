@@ -25,12 +25,15 @@ type mockTTSProvider struct {
 	result       *audio.SynthResult
 	err          error
 	block        bool // if true, blocks until ctx is cancelled (timeout test)
+	stateless    bool // if true, don't capture opts (for concurrent tests)
 }
 
 func (m *mockTTSProvider) Name() string { return m.name }
 
 func (m *mockTTSProvider) Synthesize(ctx context.Context, text string, opts audio.TTSOptions) (*audio.SynthResult, error) {
-	m.capturedOpts = opts
+	if !m.stateless {
+		m.capturedOpts = opts
+	}
 	if m.block {
 		<-ctx.Done()
 		return nil, ctx.Err()

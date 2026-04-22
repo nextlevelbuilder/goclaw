@@ -200,6 +200,9 @@ type Loop struct {
 	// Self-evolve: predefined agents can update SOUL.md through chat
 	selfEvolve bool
 
+	// TTS auto mode from config: "off", "always", "inbound", "tagged"
+	ttsAutoMode string
+
 	// Skill learning loop: when skillEvolve=true, the loop injects nudges reminding
 	// the agent to capture reusable patterns as skills via skill_manage.
 	skillEvolve        bool
@@ -388,6 +391,10 @@ type LoopConfig struct {
 	// Self-evolve: predefined agents can update SOUL.md (style/tone) through chat
 	SelfEvolve bool
 
+	// TTS auto mode from config: "off", "always", "inbound", "tagged"
+	// When "tagged", inject [[tts]] directive guidance into system prompt.
+	TTSAutoMode string
+
 	// Skill evolution: agent learning loop config (from other_config JSONB)
 	SkillEvolve        bool
 	SkillNudgeInterval int // 0 = disabled, 15 = default
@@ -529,6 +536,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		promptMode:             cfg.PromptMode,
 		pinnedSkills:           cfg.PinnedSkills,
 		selfEvolve:             cfg.SelfEvolve,
+		ttsAutoMode:            cfg.TTSAutoMode,
 		skillEvolve:            cfg.SkillEvolve,
 		skillNudgeInterval:     cfg.SkillNudgeInterval,
 		isTeamLead:             cfg.IsTeamLead,

@@ -137,6 +137,10 @@ type SystemPromptConfig struct {
 	// Self-evolution: predefined agents can update SOUL.md (style/tone)
 	SelfEvolve bool
 
+	// TTSAutoMode: "off", "always", "inbound", "tagged". When "tagged", inject
+	// [[tts]] directive guidance so the agent knows how to trigger voice responses.
+	TTSAutoMode string
+
 	// ShellDenyGroups holds effective deny group overrides for this agent.
 	// nil = all defaults. Used to adapt system prompt instructions.
 	ShellDenyGroups map[string]bool
@@ -331,6 +335,11 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 	// 2.5. Credentialed CLI context — full mode only
 	if isFull && !cfg.IsBootstrap && cfg.CredentialCLIContext != "" && slices.Contains(cfg.ToolNames, "exec") {
 		lines = append(lines, cfg.CredentialCLIContext, "")
+	}
+
+	// 2.6. ## Voice Response — inject when TTS auto mode is "tagged"
+	if (isFull || isTask) && !cfg.IsBootstrap && cfg.TTSAutoMode == "tagged" {
+		lines = append(lines, buildVoiceResponseSection()...)
 	}
 
 	// 3. ## Safety — task/none get slim version (keeps prompt injection defense)

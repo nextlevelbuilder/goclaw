@@ -235,6 +235,7 @@ func wireExtras(
 		SkillTenantCfgs:        stores.SkillTenantCfgs,
 		SystemConfigs:          stores.SystemConfigs,
 		Workspace:              workspace,
+		TTSAutoMode:            appCfg.Tts.Auto,
 		AutoInjector:           autoInjector,
 		EvolutionMetricsStore:  stores.EvolutionMetrics,
 		DomainBus:              domainBus,

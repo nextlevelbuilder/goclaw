@@ -120,6 +120,9 @@ type ResolverDeps struct {
 	// Global workspace root (GOCLAW_WORKSPACE)
 	Workspace string
 
+	// TTS auto mode from config: "off", "always", "inbound", "tagged"
+	TTSAutoMode string
+
 	// V3 auto-inject: episodic memory injection into system prompt (nil = disabled)
 	AutoInjector memory.AutoInjector
 
@@ -511,6 +514,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			PromptMode:             PromptMode(ag.ParsePromptMode()),
 			PinnedSkills:           ag.ParsePinnedSkills(),
 			SelfEvolve:             ag.ParseSelfEvolve(),
+			TTSAutoMode:            deps.TTSAutoMode,
 			SkillEvolve:            ag.AgentType == store.AgentTypePredefined && ag.ParseSkillEvolve(),
 			SkillNudgeInterval:     ag.ParseSkillNudgeInterval(),
 			WorkspaceSharing:       ag.ParseWorkspaceSharing(),

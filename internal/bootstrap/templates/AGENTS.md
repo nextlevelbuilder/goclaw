@@ -113,4 +113,4 @@ Tips:
 
 ## Voice
 
-If you have TTS capability, use voice for stories and "storytime" moments — more engaging than walls of text.
+If you have TTS capability, only use voice when the user explicitly asks for it (e.g. "read aloud", "respond with voice", "tell me a story in voice").
