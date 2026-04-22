@@ -277,3 +277,53 @@ func TestAdaptAgentParams_MaybeApply(t *testing.T) {
 		t.Errorf("want emotion=excited in MiniMax, got %v", stub.lastOpts.Params["emotion"])
 	}
 }
+
+func TestTtsTool_UsesTenantProviderWhenAvailable(t *testing.T) {
+	t.Parallel()
+
+	edgeStub := &stubProvider{name: "edge", shouldErr: true}
+	tenantStub := &stubProvider{name: "openai"}
+
+	mgr := tts.NewManager(tts.ManagerConfig{Primary: "edge"})
+	mgr.RegisterTTS(edgeStub)
+	mgr.SetTenantResolver(func(_ context.Context) (audio.TTSProvider, string, audio.AutoMode, error) {
+		return tenantStub, "openai", audio.AutoOff, nil
+	})
+
+	tool := NewTtsTool(mgr)
+	result := tool.Execute(context.Background(), map[string]any{"text": "hello from tenant provider"})
+	if result.IsError {
+		t.Fatalf("unexpected error: %s", result.ForLLM)
+	}
+	if tenantStub.calls == 0 {
+		t.Fatal("tenant provider should be called")
+	}
+	if edgeStub.calls != 0 {
+		t.Fatalf("global edge provider should not run when tenant provider succeeds; calls=%d", edgeStub.calls)
+	}
+}
+
+func TestTtsTool_ExplicitProvider_UsesMatchingTenantProvider(t *testing.T) {
+	t.Parallel()
+
+	edgeStub := &stubProvider{name: "edge", shouldErr: true}
+	tenantStub := &stubProvider{name: "openai"}
+
+	mgr := tts.NewManager(tts.ManagerConfig{Primary: "edge"})
+	mgr.RegisterTTS(edgeStub) // no global openai registered
+	mgr.SetTenantResolver(func(_ context.Context) (audio.TTSProvider, string, audio.AutoMode, error) {
+		return tenantStub, "openai", audio.AutoOff, nil
+	})
+
+	tool := NewTtsTool(mgr)
+	result := tool.Execute(context.Background(), map[string]any{
+		"text":     "hello explicit tenant provider",
+		"provider": "openai",
+	})
+	if result.IsError {
+		t.Fatalf("unexpected error: %s", result.ForLLM)
+	}
+	if tenantStub.calls == 0 {
+		t.Fatal("tenant provider should be called for explicit provider=openai")
+	}
+}

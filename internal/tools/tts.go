@@ -234,16 +234,39 @@ func (t *TtsTool) Execute(ctx context.Context, args map[string]any) *Result {
 
 	if providerName != "" {
 		// Use specific provider (explicit call param takes precedence).
-		// Adapt generic agent params to this specific provider's native keys.
-		p, ok := mgr.GetProvider(providerName)
-		if !ok {
-			return &Result{ForLLM: fmt.Sprintf("error: tts provider not found: %s", providerName), IsError: true}
+		// First prefer tenant-scoped provider when name matches, because tenant
+		// secrets may exist only in config store (not global env registry).
+		if tenantProvider, tenantName, _, ok := mgr.ResolveTenantProvider(ctx); ok && tenantProvider != nil && tenantName == providerName {
+			if adapted := audio.AdaptAgentParams(genericAgentParams, providerName); len(adapted) > 0 {
+				opts.Params = mergeParams(opts.Params, adapted)
+			}
+			result, err = tenantProvider.Synthesize(ctx, text, opts)
+		} else {
+			// Fallback to globally registered provider.
+			p, ok := mgr.GetProvider(providerName)
+			if !ok {
+				return &Result{ForLLM: fmt.Sprintf("error: tts provider not found: %s", providerName), IsError: true}
+			}
+			if adapted := audio.AdaptAgentParams(genericAgentParams, providerName); len(adapted) > 0 {
+				opts.Params = mergeParams(opts.Params, adapted)
+			}
+			result, err = p.Synthesize(ctx, text, opts)
 		}
-		if adapted := audio.AdaptAgentParams(genericAgentParams, providerName); len(adapted) > 0 {
-			opts.Params = mergeParams(opts.Params, adapted)
-		}
-		result, err = p.Synthesize(ctx, text, opts)
 	} else {
+		// Prefer tenant provider when available (same behavior as channel auto-apply).
+		if tenantProvider, tenantName, _, ok := mgr.ResolveTenantProvider(ctx); ok && tenantProvider != nil {
+			tenantOpts := opts
+			if adapted := audio.AdaptAgentParams(genericAgentParams, tenantName); len(adapted) > 0 {
+				tenantOpts.Params = mergeParams(opts.Params, adapted)
+			}
+			result, err = tenantProvider.Synthesize(ctx, text, tenantOpts)
+			if err == nil {
+				goto synthDone
+			}
+			// Continue to global fallback chain if tenant provider fails.
+			slog.Warn("tts tenant provider failed, trying global fallback", "provider", tenantName, "error", err)
+		}
+
 		// Resolve primary from tenant settings or default.
 		primary := t.resolvePrimary(ctx, mgr)
 		if p, ok := mgr.GetProvider(primary); ok {
@@ -265,6 +288,7 @@ func (t *TtsTool) Execute(ctx context.Context, args map[string]any) *Result {
 		}
 	}
 
+synthDone:
 	if err != nil {
 		return &Result{ForLLM: fmt.Sprintf("error: tts failed: %s", err.Error()), IsError: true}
 	}
