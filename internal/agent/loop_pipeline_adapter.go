@@ -246,6 +246,7 @@ func convertRunResult(pr *pipeline.RunResult) *RunResult {
 			ContentType: m.ContentType,
 			Size:        m.Size,
 			AsVoice:     m.AsVoice,
+			Prompt:      m.Prompt,
 		}
 	}
 	return &RunResult{

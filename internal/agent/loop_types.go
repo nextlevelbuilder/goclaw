@@ -667,6 +667,9 @@ type MediaResult struct {
 	ContentType string `json:"content_type,omitempty"` // MIME type
 	Size        int64  `json:"size,omitempty"`         // file size in bytes
 	AsVoice     bool   `json:"as_voice,omitempty"`     // send as voice message (Telegram OGG)
+	// Prompt is the generation prompt for AI-generated media (e.g. create_image).
+	// Empty for user-uploaded or non-generated files.
+	Prompt string `json:"prompt,omitempty"`
 }
 
 // runState encapsulates all mutable state for a single agent run.

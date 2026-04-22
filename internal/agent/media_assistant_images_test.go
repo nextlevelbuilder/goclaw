@@ -223,6 +223,39 @@ func TestPersistAssistantImages_MultipleDistinct(t *testing.T) {
 	}
 }
 
+// TestPersistAssistantImages_PromptNotPropagated verifies that persistAssistantImages
+// does NOT set MediaRef.Prompt (it only handles image bytes; prompt threading happens
+// in the tools layer via result.MediaPrompts and in finalize_stage via MediaResult.Prompt).
+// This test documents the current contract so any future signature change is caught.
+func TestPersistAssistantImages_PromptNotPropagated(t *testing.T) {
+	workspace := t.TempDir()
+	imgData := base64.StdEncoding.EncodeToString(minimalPNG)
+
+	msg := &providers.Message{
+		Images: []providers.ImageContent{{
+			MimeType: "image/png",
+			Data:     imgData,
+			Partial:  false,
+		}},
+	}
+
+	persistAssistantImages(msg, workspace)
+
+	if len(msg.MediaRefs) != 1 {
+		t.Fatalf("expected 1 MediaRef, got %d", len(msg.MediaRefs))
+	}
+	// persistAssistantImages has no access to prompts; Prompt must be empty here.
+	// The pipeline's finalize_stage sets Prompt on MediaRefs built from tool
+	// MediaResults (create_image path), not from Codex assistant image refs.
+	ref := msg.MediaRefs[0]
+	if ref.Prompt != "" {
+		t.Errorf("expected MediaRef.Prompt empty from persistAssistantImages, got %q", ref.Prompt)
+	}
+	if ref.Kind != "image" {
+		t.Errorf("MediaRef.Kind = %q, want image", ref.Kind)
+	}
+}
+
 // TestPersistAssistantImages_PathInsideMediaDir verifies the hash-derived filename
 // is exactly {sha256hex}.{ext} and lives directly under workspace/media/.
 func TestPersistAssistantImages_PathInsideMediaDir(t *testing.T) {

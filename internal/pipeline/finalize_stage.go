@@ -100,6 +100,7 @@ func (s *FinalizeStage) Execute(ctx context.Context, state *RunState) error {
 			MimeType: mr.ContentType,
 			Kind:     kind,
 			Path:     mr.Path,
+			Prompt:   mr.Prompt,
 		})
 	}
 	// Append persisted assistant image refs (Codex image_generation_call output).
