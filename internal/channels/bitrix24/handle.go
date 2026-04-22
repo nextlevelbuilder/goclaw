@@ -104,7 +104,7 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 		return
 	}
 
-	isGroup := evt.Params.MessageType == "chat"
+	isGroup := isGroupMessageType(evt.Params.MessageType)
 	text := evt.Params.Message
 	if isGroup {
 		mentioned := c.isMentioned(text)
@@ -291,3 +291,17 @@ func (c *Channel) portalDomainSafe() string {
 // pairingDebounce throttles the logPairingNeeded warnings so a spammy
 // sender can't flood the log. 60s matches the Telegram channel convention.
 const pairingDebounce = 60 * time.Second
+
+// isGroupMessageType normalises Bitrix24 MESSAGE_TYPE to group-or-not.
+// Webhook events use short codes ("P" private, "C" chat, "O" open channel)
+// while some legacy payloads spell the full word. We accept both; anything
+// else (including the empty string) is treated as a direct message so
+// stricter DM policies apply.
+func isGroupMessageType(mt string) bool {
+	switch strings.ToUpper(strings.TrimSpace(mt)) {
+	case "C", "CHAT", "O", "OPEN":
+		return true
+	default:
+		return false
+	}
+}
