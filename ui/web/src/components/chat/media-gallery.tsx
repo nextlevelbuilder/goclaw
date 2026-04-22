@@ -111,37 +111,47 @@ export function MediaGallery({ items }: MediaGalleryProps) {
       {images.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {images.map((item, i) => (
-            <div key={i} className="group relative overflow-hidden rounded-lg border">
-              <button
-                type="button"
-                onClick={() => openImage(item.path)}
-                className="block w-full cursor-pointer"
-              >
-                <CachedImage
-                  src={item.path}
-                  alt={item.fileName ?? ""}
-                  className="h-40 w-full object-cover"
-                  loading="lazy"
-                />
-              </button>
-              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-              <div className="absolute inset-x-0 bottom-0 flex items-end justify-between px-2 pb-1.5 opacity-0 transition-opacity group-hover:opacity-100">
-                <div className="flex min-w-0 flex-col text-xs text-white drop-shadow-sm">
-                  {item.fileName && <span className="truncate">{item.fileName}</span>}
-                  {item.size != null && item.size > 0 && (
-                    <span className="text-white/70">{formatSize(item.size)}</span>
-                  )}
-                </div>
-                <a
-                  href={toDownloadUrl(item.path)}
-                  download={resolveImageDownloadName(item)}
-                  onClick={(e) => e.stopPropagation()}
-                  className="shrink-0 rounded-lg bg-white/90 dark:bg-neutral-800/90 p-1.5 text-neutral-700 dark:text-neutral-200 shadow-md ring-1 ring-black/10 dark:ring-white/10 hover:bg-white dark:hover:bg-neutral-700 transition-colors cursor-pointer"
-                  title="Download"
+            <div key={i} className="flex flex-col overflow-hidden rounded-lg border">
+              <div className="group relative">
+                <button
+                  type="button"
+                  onClick={() => openImage(item.path)}
+                  className="block w-full cursor-pointer"
                 >
-                  <Download className="h-4.5 w-4.5" />
-                </a>
+                  <CachedImage
+                    src={item.path}
+                    alt={item.fileName ?? ""}
+                    className="h-40 w-full object-cover"
+                    loading="lazy"
+                  />
+                </button>
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+                <div className="absolute inset-x-0 bottom-0 flex items-end justify-between px-2 pb-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+                  <div className="flex min-w-0 flex-col text-xs text-white drop-shadow-sm">
+                    {item.fileName && <span className="truncate">{item.fileName}</span>}
+                    {item.size != null && item.size > 0 && (
+                      <span className="text-white/70">{formatSize(item.size)}</span>
+                    )}
+                  </div>
+                  <a
+                    href={toDownloadUrl(item.path)}
+                    download={resolveImageDownloadName(item)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="shrink-0 rounded-lg bg-white/90 dark:bg-neutral-800/90 p-1.5 text-neutral-700 dark:text-neutral-200 shadow-md ring-1 ring-black/10 dark:ring-white/10 hover:bg-white dark:hover:bg-neutral-700 transition-colors cursor-pointer"
+                    title="Download"
+                  >
+                    <Download className="h-4.5 w-4.5" />
+                  </a>
+                </div>
               </div>
+              {item.prompt && (
+                <div
+                  className="px-2 py-1 text-xs text-muted-foreground italic line-clamp-2"
+                  title={item.prompt}
+                >
+                  {item.prompt}
+                </div>
+              )}
             </div>
           ))}
         </div>

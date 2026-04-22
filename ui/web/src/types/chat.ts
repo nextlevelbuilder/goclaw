@@ -33,6 +33,8 @@ export interface MediaItem {
   fileName?: string;
   size?: number;
   kind: "image" | "video" | "audio" | "document" | "code";
+  /** Prompt that generated this asset (create_image, native Codex image_generation_call). */
+  prompt?: string;
 }
 
 /** Extended message with UI-specific fields */
