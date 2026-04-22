@@ -1,0 +1,48 @@
+---
+name: GoClaw Gateway
+version: "1.0.0"
+slug: goclaw
+description: >-
+  PostgreSQL multi-tenant AI agent gateway with WebSocket RPC, HTTP API,
+  and browser automation. Connects to TimescaleDB addon for PostgreSQL
+  and optionally to a Redis addon for caching.
+url: https://github.com/nextlevelbuilder/goclaw
+arch:
+  - aarch64
+  - amd64
+startup: application
+ports:
+  18790/tcp: 18790
+  9222/tcp: null
+ports_description:
+  18790/tcp: "GoClaw API & Web Dashboard"
+  9222/tcp: "Chrome DevTools Protocol (optional, for debugging)"
+map:
+  - share:rw
+tmpfs: true
+options:
+  postgres_host: a0d7b954-timescaledb
+  postgres_port: 5432
+  postgres_user: postgres
+  postgres_password: homeassistant
+  postgres_database: goclaw
+  redis_host: ""
+  redis_port: 6379
+  enable_browser: true
+  gateway_token: ""
+  encryption_key: ""
+  log_level: info
+  trace_verbose: false
+schema:
+  postgres_host: str
+  postgres_port: port
+  postgres_user: str
+  postgres_password: password
+  postgres_database: str
+  redis_host: "str?"
+  redis_port: port
+  enable_browser: bool
+  gateway_token: "str?"
+  encryption_key: "str?"
+  log_level: "list(trace|debug|info|warn|error)"
+  trace_verbose: bool

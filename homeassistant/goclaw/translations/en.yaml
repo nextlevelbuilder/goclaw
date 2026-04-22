@@ -1,0 +1,53 @@
+---
+configuration:
+  postgres_host:
+    name: PostgreSQL Host
+    description: >-
+      Hostname of the PostgreSQL server. Use the TimescaleDB addon hostname
+      (find it on the addon info page, e.g. "a0d7b954-timescaledb").
+  postgres_port:
+    name: PostgreSQL Port
+    description: PostgreSQL server port (default 5432).
+  postgres_user:
+    name: PostgreSQL User
+    description: PostgreSQL username (TimescaleDB default is "postgres").
+  postgres_password:
+    name: PostgreSQL Password
+    description: PostgreSQL password (TimescaleDB default is "homeassistant").
+  postgres_database:
+    name: PostgreSQL Database
+    description: >-
+      Database name. Must be created in the TimescaleDB addon first
+      by adding it to the "databases" list in its configuration.
+  redis_host:
+    name: Redis Host
+    description: >-
+      Hostname of the Redis addon. Leave empty to skip Redis.
+      Find the hostname on the Redis addon info page.
+  redis_port:
+    name: Redis Port
+    description: Redis server port (default 6379).
+  enable_browser:
+    name: Enable Browser Automation
+    description: >-
+      Start headless Chromium for browser automation tools.
+      Adds ~200MB memory usage.
+  gateway_token:
+    name: Gateway Token
+    description: >-
+      Authentication token for WebSocket connections. Leave empty to
+      allow unauthenticated access (not recommended for production).
+  encryption_key:
+    name: Encryption Key
+    description: >-
+      AES-256-GCM key for encrypting API keys stored in the database.
+      Generate with: openssl rand -hex 32
+  log_level:
+    name: Log Level
+    description: Application log level.
+  trace_verbose:
+    name: Verbose Tracing
+    description: Enable verbose LLM call tracing for debugging.
+network:
+  18790/tcp: GoClaw API & Web Dashboard
+  9222/tcp: Chrome DevTools Protocol (optional)

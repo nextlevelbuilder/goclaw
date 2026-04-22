@@ -1,0 +1,4 @@
+---
+build_from:
+  aarch64: ghcr.io/nextlevelbuilder/goclaw:latest
+  amd64: ghcr.io/nextlevelbuilder/goclaw:latest
