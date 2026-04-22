@@ -214,7 +214,7 @@ func (m *ChatMethods) handleSend(ctx context.Context, client *gateway.Client, re
 
 	// Create cancellable context for abort support (matching TS AbortController pattern).
 	runCtx, cancel := context.WithCancel(runCtxBase)
-	injectCh := m.agents.RegisterRun(runID, sessionKey, params.AgentID, cancel)
+	injectCh := m.agents.RegisterRun(runCtxBase, runID, sessionKey, params.AgentID, cancel)
 
 	// Run agent asynchronously - events are broadcast via the event system
 	go func() {
@@ -230,7 +230,7 @@ func (m *ChatMethods) handleSend(ctx context.Context, client *gateway.Client, re
 		var mediaInfos []media.MediaInfo
 		for _, item := range items {
 			mimeType := media.DetectMIMEType(item.Path)
-			mediaFiles = append(mediaFiles, bus.MediaFile{Path: item.Path, MimeType: mimeType})
+			mediaFiles = append(mediaFiles, bus.MediaFile{Path: item.Path, MimeType: mimeType, Filename: item.Filename})
 			mediaInfos = append(mediaInfos, media.MediaInfo{
 				Type:        media.MediaKindFromMime(mimeType),
 				FilePath:    item.Path,
@@ -261,6 +261,11 @@ func (m *ChatMethods) handleSend(ctx context.Context, client *gateway.Client, re
 			UserID:     userID,
 			Stream:     params.Stream,
 			InjectCh:   injectCh,
+			// Wire trace ID back to the active run so force-abort can mark the
+			// correct trace as cancelled if the goroutine does not exit within 3s.
+			OnTraceCreated: func(traceID uuid.UUID) {
+				m.agents.SetRunTraceID(runID, traceID)
+			},
 		})
 
 		if err != nil {
@@ -418,7 +423,8 @@ func (m *ChatMethods) handleInject(ctx context.Context, client *gateway.Client, 
 //
 // Response:
 //
-//	{ ok: true, aborted: bool, runIds: []string }
+//	{ ok: true, aborted: bool, stopped: bool, forced: bool,
+//	  alreadyAborting: bool, notFound: bool, unauthorized: bool, runIds: []string }
 func (m *ChatMethods) handleAbort(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	locale := store.LocaleFromContext(ctx)
 	var params struct {
@@ -446,21 +452,53 @@ func (m *ChatMethods) handleAbort(ctx context.Context, client *gateway.Client, r
 		return
 	}
 
-	var abortedIDs []string
+	isAdmin := canSeeAll(client.Role(), m.cfg.Gateway.OwnerIDs, client.UserID())
 
+	// Collect abort results.
+	var results []agent.AbortResult
 	if params.RunID != "" {
-		// Abort specific run (with sessionKey authorization)
-		if m.agents.AbortRun(params.RunID, params.SessionKey) {
-			abortedIDs = append(abortedIDs, params.RunID)
-		}
+		results = []agent.AbortResult{m.agents.AbortRun(params.RunID, params.SessionKey)}
 	} else {
-		// Abort all runs for session
-		abortedIDs = m.agents.AbortRunsForSession(params.SessionKey)
+		results = m.agents.AbortRunsForSession(params.SessionKey)
+	}
+
+	// Aggregate counts and run IDs.
+	var runIDs []string
+	stopped, forced, alreadyAborting, notFound, unauthorized := 0, 0, 0, 0, 0
+	for _, r := range results {
+		runIDs = append(runIDs, r.RunID)
+		switch {
+		case r.Stopped:
+			stopped++
+		case r.Forced:
+			forced++
+		case r.AlreadyAborting:
+			alreadyAborting++
+		case r.NotFound:
+			notFound++
+		case r.Unauthorized:
+			unauthorized++
+			slog.Warn("chat.abort: unauthorized run abort attempt",
+				"runId", r.RunID, "userID", client.UserID())
+		}
+	}
+
+	// Security: collapse Unauthorized → NotFound for non-admin callers so run
+	// existence is not leaked to unprivileged clients.
+	respUnauthorized := unauthorized
+	if !isAdmin && unauthorized > 0 {
+		notFound += unauthorized
+		respUnauthorized = 0
 	}
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
-		"ok":      true,
-		"aborted": len(abortedIDs) > 0,
-		"runIds":  abortedIDs,
+		"ok":              true,
+		"aborted":         stopped+forced > 0,
+		"stopped":         stopped > 0,
+		"forced":          forced > 0,
+		"alreadyAborting": alreadyAborting > 0,
+		"notFound":        notFound > 0 && stopped+forced+alreadyAborting == 0,
+		"unauthorized":    respUnauthorized > 0,
+		"runIds":          runIDs,
 	}))
 }

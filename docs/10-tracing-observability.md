@@ -30,9 +30,16 @@ flowchart LR
 
 ### Cancel Handling
 
-When a run is cancelled via `/stop` or `/stopall`, the run context is cancelled but trace finalization still needs to persist. `FinishTrace()` detects `ctx.Err() != nil` and switches to `context.Background()` for the final database write. The trace status is set to `"cancelled"` instead of `"error"`.
+When a run is cancelled via `chat.abort` (WS) or manual stop, the router atomically transitions to "aborting" state, cancels the request context, and waits 3 seconds for the agent goroutine to exit. If it doesn't, the trace is force-marked `cancelled` to prevent orphaned traces.
 
-Context values (traceID, collector) survive cancellation -- only `ctx.Done()` and `ctx.Err()` change. This allows trace finalization to find everything it needs with a fresh context for the DB call.
+During cancellation:
+- HTTP provider streams close immediately (context-aware transport with `ResponseHeaderTimeout`; SSE body closes via goroutine wrapper to unblock socket read)
+- Tool execution terminates (shell: process-group kill; browser: page close)
+- Agent loop receives `ctx.Done()` and propagates cancellation up
+
+Trace finalization persists independently with a detached context (`context.WithoutCancel`), 5-second timeout, and exponential backoff retry (3 tries, max 10 total via retry queue). This ensures trace status writes don't fail silently due to cancellation.
+
+Stale recovery is **currently disabled**. The implementation exists but the background loop is not started in `Collector.Start()`. Reason: the sweep condition is `start_time < NOW() - threshold`, which measures trace age rather than inactivity. Any threshold low enough to be useful (2–10 min) would kill healthy long-running agent runs (research chains, large code generation, extended shell commands). Re-enable only after adding a `last_span_at` column so recovery can gate on "no activity for N minutes" instead of "started > N min ago". Until then, zombie traces from gateway crashes may remain `running` in the DB — an accepted safety-net gap traded against false kills. The primary abort path (router 2-phase abort + `trace.status` WS event) handles the common case. Context values (traceID, collector) survive cancellation — only `ctx.Done()` and `ctx.Err()` change.
 
 ---
 

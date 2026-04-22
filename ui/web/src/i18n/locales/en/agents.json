@@ -593,7 +593,7 @@
     "saving": "Saving...",
     "saved": "Saved",
     "failedToSave": "Failed to save",
-    "usingGlobalDefaults": "Using global defaults from config.json"
+    "usingGlobalDefaults": "Using system defaults"
   },
   "files": {
     "readOnly": "Read-only",
@@ -743,6 +743,7 @@
       "maxSpawnDepth": "Max Spawn Depth",
       "maxChildrenPerAgent": "Max Children Per Agent",
       "archiveAfter": "Archive After (minutes)",
+      "maxRetries": "Max Retries",
       "modelOverride": "Model Override",
       "inheritFromAgent": "(inherit from agent)"
     },
@@ -806,7 +807,7 @@
     "contextPruning": {
       "title": "Context Pruning",
       "description": "Trim old tool results to save context window",
-      "descriptionSimple": "Automatically trims old tool results to prevent context overflow. Enabled by default.",
+      "descriptionSimple": "Automatically trims old tool results to prevent context overflow. Set mode to 'cache-ttl' to enable.",
       "mode": "Mode",
       "keepLastAssistants": "Keep Last Assistants",
       "softTrimRatio": "Soft Trim Ratio (0-1)",
@@ -819,6 +820,7 @@
       "hardClear": "Hard Clear",
       "enabled": "Enabled",
       "placeholderText": "Placeholder Text",
+      "cacheTtl": "Cache TTL",
       "advanced": "Advanced"
     },
     "sandbox": {

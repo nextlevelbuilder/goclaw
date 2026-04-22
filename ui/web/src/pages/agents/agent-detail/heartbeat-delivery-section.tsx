@@ -41,10 +41,10 @@ export function HeartbeatDeliverySection({
               value={channel || "__none__"}
               onValueChange={(v) => { setChannel(v === "__none__" ? "" : v); setChatId(""); }}
             >
-              <SelectTrigger className="text-base md:text-sm">
+              <SelectTrigger className="w-full text-base md:text-sm">
                 <SelectValue placeholder={t("heartbeat.channelPlaceholder")} />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent position="popper">
                 <SelectItem value="__none__">{t("heartbeat.channelNone")}</SelectItem>
                 {channelNames.map((ch) => (
                   <SelectItem key={ch} value={ch}>{ch}</SelectItem>
@@ -70,10 +70,10 @@ export function HeartbeatDeliverySection({
             if (filtered.length > 0) {
               return (
                 <Select value={chatId || "__none__"} onValueChange={(v) => setChatId(v === "__none__" ? "" : v)}>
-                  <SelectTrigger className="text-base md:text-sm">
+                  <SelectTrigger className="w-full text-base md:text-sm">
                     <SelectValue placeholder={t("heartbeat.chatIdPlaceholder")} />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent position="popper">
                     <SelectItem value="__none__">{t("heartbeat.channelNone")}</SelectItem>
                     {filtered.map((tgt) => (
                       <SelectItem key={tgt.chatId} value={tgt.chatId}>

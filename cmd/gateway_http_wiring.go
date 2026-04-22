@@ -3,8 +3,11 @@ package cmd
 import (
 	"context"
 	"log/slog"
+	"time"
 
+	"github.com/nextlevelbuilder/goclaw/internal/audio"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/gateway/methods"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
@@ -134,7 +137,8 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 		d.server.SetUsageHandler(httpapi.NewUsageHandler(d.pgStores.Snapshots, d.pgStores.DB))
 	}
 
-	// Runtime package management (install/uninstall system/pip/npm packages)
+	// Runtime package management (install/uninstall system/pip/npm/github packages)
+	initGitHubInstaller()
 	d.server.SetPackagesHandler(httpapi.NewPackagesHandler())
 
 	// API documentation (OpenAPI spec + Swagger UI at /docs)
@@ -224,6 +228,38 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 	// Media serve endpoint — serves persisted media files by ID for WS/web clients.
 	if mediaStore != nil {
 		d.server.SetMediaServeHandler(httpapi.NewMediaServeHandler(mediaStore))
+	}
+
+	// ElevenLabs voice list + refresh endpoints (GET /v1/voices, POST /v1/voices/refresh).
+	// VoiceCache is shared between the HTTP handler and the WS voices.list method.
+	// TTL 1h + LRU cap 1000 tenants.
+	{
+		voiceCache := audio.NewVoiceCache(1*time.Hour, 1000)
+		var secretStore store.ConfigSecretsStore
+		if d.pgStores != nil && d.pgStores.ConfigSecrets != nil {
+			secretStore = d.pgStores.ConfigSecrets
+		}
+		var tenantStore store.TenantStore
+		if d.pgStores != nil && d.pgStores.Tenants != nil {
+			tenantStore = d.pgStores.Tenants
+		}
+		voicesH := httpapi.NewVoicesHandler(voiceCache, secretStore, tenantStore)
+		d.server.SetVoicesHandler(voicesH)
+		// Wire WS method — provider nil means each request resolves key via secretStore at HTTP layer.
+		// For WS, use same cache. Provider is resolved via secretStore at WS level in a future phase.
+		methods.NewVoicesMethods(voiceCache, nil).Register(d.server.Router())
+	}
+
+	// TTS synthesize endpoint — shares audio.Manager with setupTTS.
+	if d.audioMgr != nil {
+		ttsH := httpapi.NewTTSHandler(d.audioMgr)
+		// Reuse the server's rate limiter (per-IP/token; NOT per-user).
+		// Server.RateLimiter() is non-nil by construction (server.go:104).
+		if rl := d.server.RateLimiter(); rl != nil && rl.Enabled() {
+			ttsH.SetRateLimiter(rl.Allow)
+		}
+		d.server.SetTTSHandler(ttsH)
+		d.ttsHandler = ttsH // store for hot-reload
 	}
 
 	// Seed + apply builtin tool disables

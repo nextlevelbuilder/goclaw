@@ -31,6 +31,14 @@ func init() {
 		MsgUserIDRequired:    "user_id là bắt buộc",
 		MsgMsgRequired:       "tin nhắn là bắt buộc",
 
+		// Abort
+		MsgAbortStopped:         "đã dừng tác vụ",
+		MsgAbortForced:          "buộc dừng tác vụ (vượt quá thời gian chờ 3s)",
+		MsgAbortAlreadyAborting: "đang dừng tác vụ",
+		MsgAbortNotFound:        "không tìm thấy tác vụ hoặc đã kết thúc",
+		MsgAbortUnauthorized:    "không có quyền dừng tác vụ này",
+		MsgAbortFailed:          "không thể dừng tác vụ: %s",
+
 		// Channel instances
 		MsgInvalidChannelType: "loại channel không hợp lệ",
 		MsgInstanceNotFound:   "không tìm thấy phiên bản",
@@ -66,6 +74,9 @@ func init() {
 		MsgSummoningUnavailable:  "triệu hồi không khả dụng",
 		MsgNoDescription:         "agent không có mô tả để triệu hồi lại",
 		MsgInvalidPath:           "đường dẫn không hợp lệ",
+
+		// Tenant backup / restore
+		MsgRestoreNewModeRejectsTenantID: "mode=new tạo tenant mới; dùng tenant_slug (không phải tenant_id) làm slug cho tenant mới",
 
 		// Scheduler
 		MsgQueueFull:    "hàng đợi session đã đầy",
@@ -184,5 +195,24 @@ func init() {
 		MsgTenantUserNotFound:  "không tìm thấy tenant user",
 		MsgTenantMismatch:      "tenant user không thuộc tenant này",
 		MsgTenantScopeRequired: "cần xác định tenant để thực hiện thao tác này",
+
+		// TTS / Giọng đọc
+		MsgTtsUnknownModel:  "model tts không hỗ trợ: %s",
+		MsgVoicesListFailed: "không tải được danh sách giọng đọc: %s",
+
+		// STT
+		MsgSTTAllProvidersFailed:     "Tất cả nhà cung cấp STT đều thất bại",
+		MsgSTTLegacyConfigDeprecated: "Cấu hình STT cũ đã lỗi thời; hãy chuyển sang builtin_tools[stt]",
+		MsgSTTWhatsappPrivacyWarning: "Bật STT cho WhatsApp sẽ phá vỡ mã hóa đầu cuối cho tin nhắn thoại gửi đến agent này.",
+		MsgVoiceMessageFallback:      "[Tin nhắn thoại]",
+
+		// Hooks
+		MsgHookInvalidMatcher:          "biểu thức regex matcher không hợp lệ: %s",
+		MsgHookCommandDisabledStandard: "hook loại command chỉ khả dụng trên phiên bản Lite",
+		MsgHookPromptRequiresMatcher:   "hook prompt bắt buộc có matcher hoặc if_expr (chống chi phí vượt kiểm soát)",
+		MsgHookCircuitBreakerTripped:   "hook đã tự tắt sau nhiều lần thất bại liên tiếp",
+		MsgHookBudgetExceeded:          "tenant đã vượt ngân sách token cho hook",
+		MsgHookPerTurnCapReached:       "đã đạt giới hạn số lần gọi hook trong một lượt",
+		MsgHookBuiltinReadOnly:         "hook dựng sẵn chỉ cho phép bật/tắt, không thể chỉnh sửa",
 	})
 }

@@ -90,9 +90,16 @@ func (m *Manager) OpenTab(ctx context.Context, url string) (*TabInfo, error) {
 		return nil, fmt.Errorf("open tab: %w", err)
 	}
 
+	// Watchdog: close page on ctx cancel to unblock WaitStable CDP call.
+	stopWatchdog := watchPageClose(ctx, page)
 	if err := page.WaitStable(300 * time.Millisecond); err != nil {
+		stopWatchdog()
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		return nil, fmt.Errorf("wait stable: %w", err)
 	}
+	stopWatchdog()
 	info, _ := page.Info()
 	tid := string(page.TargetID)
 	m.pages[tid] = page

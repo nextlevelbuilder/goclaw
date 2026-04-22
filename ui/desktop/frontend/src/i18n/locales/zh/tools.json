@@ -142,6 +142,24 @@
       "skill_search": "按关键字或描述搜索可用Skill以找到相关能力",
       "use_skill": "激活Skill以使用其专业能力（追踪标记）",
       "team_tasks": "查看、创建、更新和完成团队任务板上的任务"
+    },
+    "sttForm": {
+      "title": "STT 设置",
+      "description": "配置语音转文字 Provider 以转录语音消息。",
+      "providersLabel": "Provider",
+      "elevenlabsSectionTitle": "ElevenLabs",
+      "elevenlabsApiKeyLabel": "API Key",
+      "elevenlabsDefaultLanguageLabel": "默认语言",
+      "proxySectionTitle": "代理",
+      "proxyUrlLabel": "代理 URL",
+      "proxyApiKeyLabel": "代理 API Key",
+      "proxyTenantIdLabel": "代理 Tenant ID",
+      "whatsappEnabledLabel": "为 WhatsApp 启用 STT",
+      "whatsappPrivacyWarning": "为 WhatsApp 启用 STT 将破坏发送给此 Agent 的语音消息的端对端加密。",
+      "providersRequiredError": "必须至少选择一个 Provider。",
+      "cancel": "取消",
+      "save": "保存",
+      "saving": "保存中..."
     }
   },
   "custom": {

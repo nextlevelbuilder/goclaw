@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"strings"
 
 	"github.com/google/uuid"
@@ -103,6 +104,7 @@ func processAnnounceLoop(
 				req.ForwardMedia = append(req.ForwardMedia, bus.MediaFile{
 					Path:     mr.Path,
 					MimeType: mr.ContentType,
+					Filename: filepath.Base(mr.Path), // preserve sanitized stem from producer
 				})
 			}
 		}

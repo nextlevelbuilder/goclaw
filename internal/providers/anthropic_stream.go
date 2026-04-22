@@ -26,7 +26,9 @@ func (p *AnthropicProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 	if err != nil {
 		return nil, err
 	}
-	defer respBody.Close()
+	// Wrap respBody so ctx cancellation closes the socket, unblocking bufio.Scanner.
+	cb := NewCtxBody(ctx, respBody)
+	defer cb.Close()
 
 	result := &ChatResponse{FinishReason: "stop"}
 	// Accumulate raw JSON fragments for each tool call by index
@@ -39,7 +41,7 @@ func (p *AnthropicProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 	thinkingChars := 0
 	var thinkingSignature strings.Builder
 
-	sse := NewSSEScanner(respBody)
+	sse := NewSSEScanner(cb)
 	for sse.Next() {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()

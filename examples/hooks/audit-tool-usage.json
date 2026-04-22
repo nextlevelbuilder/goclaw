@@ -1,0 +1,23 @@
+{
+  "event": "post_tool_use",
+  "handler_type": "http",
+  "scope": "tenant",
+  "matcher": "",
+  "if_expr": "",
+  "config": {
+    "url": "https://audit.internal.example.com/hooks/tool-usage",
+    "headers": {
+      "Authorization": "Bearer REPLACE_ME_ENCRYPTED",
+      "X-Goclaw-Audit": "tool-usage"
+    }
+  },
+  "timeout_ms": 2000,
+  "on_timeout": "allow",
+  "priority": 1,
+  "enabled": true,
+  "source": "seed",
+  "metadata": {
+    "notes": "Streams every tool invocation to an external audit sink for compliance. Tenant-wide.",
+    "tags": ["observability", "compliance", "audit"]
+  }
+}

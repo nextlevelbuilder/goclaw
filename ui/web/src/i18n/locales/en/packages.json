@@ -22,6 +22,25 @@
     "title": "Node Packages",
     "placeholder": "Package name (e.g. typescript)"
   },
+  "github": {
+    "title": "GitHub Binaries",
+    "placeholder": "owner/repo[@tag] (e.g. cli/cli@v2.45.0)",
+    "browse": "Browse releases",
+    "muslWarning": "Alpine Linux uses musl libc. Binaries compiled against glibc may fail at runtime. Prefer static or musl-compatible releases.",
+    "muslDismiss": "Dismiss",
+    "pickerTitle": "Select release from {{repo}}",
+    "pickerEmpty": "No releases found for {{repo}}",
+    "pickerLoading": "Loading releases...",
+    "pickerMatchingAssets": "{{count}} matching / {{total}} total",
+    "pickerPrerelease": "Pre-release",
+    "pickerSelect": "Select",
+    "columns": {
+      "repo": "Repository",
+      "tag": "Version",
+      "binaries": "Binaries",
+      "installedAt": "Installed"
+    }
+  },
   "actions": {
     "install": "Install",
     "uninstall": "Uninstall",

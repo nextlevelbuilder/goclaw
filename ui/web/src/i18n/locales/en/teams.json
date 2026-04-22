@@ -318,6 +318,14 @@
     "create": "Create",
     "creating": "Creating..."
   },
+  "rename": {
+    "nameAria": "Rename team",
+    "descAria": "Edit team description",
+    "descPlaceholder": "Team description",
+    "addDescription": "+ Add description",
+    "emptyError": "Team name is required",
+    "staleError": "Team was updated elsewhere — your change was discarded"
+  },
   "toast": {
     "created": "Team created",
     "deleted": "Team deleted",

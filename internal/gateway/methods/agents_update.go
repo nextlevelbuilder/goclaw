@@ -156,10 +156,9 @@ func (m *AgentsMethods) handleUpdate(ctx context.Context, client *gateway.Client
 			updates["skill_evolve"] = *params.SkillEvolve
 		}
 		if params.SkillNudgeInterval != nil {
-			v := *params.SkillNudgeInterval
-			if v <= 0 {
-				v = 0 // DB column is NOT NULL DEFAULT 0
-			}
+			v := max(*params.SkillNudgeInterval,
+				// DB column is NOT NULL DEFAULT 0
+				0)
 			updates["skill_nudge_interval"] = v
 		}
 		if len(params.ReasoningConfig) > 0 {

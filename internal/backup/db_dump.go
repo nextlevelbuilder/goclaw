@@ -84,11 +84,11 @@ func PgDumpVersion(ctx context.Context) (string, error) {
 //	"pg_dump (PostgreSQL) 18.3"                          -> 18
 func ParsePgDumpMajor(version string) int {
 	const marker = "(PostgreSQL) "
-	idx := strings.Index(version, marker)
-	if idx < 0 {
+	_, after, ok := strings.Cut(version, marker)
+	if !ok {
 		return 0
 	}
-	rest := version[idx+len(marker):]
+	rest := after
 	end := 0
 	for end < len(rest) && rest[end] >= '0' && rest[end] <= '9' {
 		end++

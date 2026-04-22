@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/nextlevelbuilder/goclaw/internal/audio/elevenlabs"
+	minimaxaudio "github.com/nextlevelbuilder/goclaw/internal/audio/minimax"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/memory"
@@ -187,6 +189,9 @@ func setupSubagents(providerReg *providers.Registry, cfg *config.Config, msgBus 
 		if sc.ArchiveAfterMinutes > 0 {
 			subCfg.ArchiveAfterMinutes = sc.ArchiveAfterMinutes
 		}
+		if sc.MaxRetries > 0 {
+			subCfg.MaxRetries = sc.MaxRetries
+		}
 		if sc.Model != "" {
 			subCfg.Model = sc.Model
 		}
@@ -273,4 +278,56 @@ func setupTTS(cfg *config.Config) *tts.Manager {
 	}
 
 	return mgr
+}
+
+// setupAudioExtras wires Music and SFX providers into the audio Manager.
+// ElevenLabs is registered for both SFX and Music when an API key is present.
+// MiniMax music is registered when cfg.Audio.Music is configured with a key.
+// Phase 4 will add STT providers here.
+func setupAudioExtras(cfg *config.Config, mgr *tts.Manager) {
+	ellKey := cfg.Tts.ElevenLabs.APIKey
+	ellBase := cfg.Tts.ElevenLabs.BaseURL
+
+	// ElevenLabs SFX — reuse TTS credentials.
+	if ellKey != "" {
+		mgr.RegisterSFX(elevenlabs.NewSFXProvider(elevenlabs.Config{
+			APIKey:  ellKey,
+			BaseURL: ellBase,
+		}))
+		slog.Info("audio.sfx: elevenlabs registered")
+	}
+
+	// ElevenLabs Music — same credentials, uses /v1/music endpoint.
+	if ellKey != "" {
+		mgr.RegisterMusic(elevenlabs.NewMusicProvider(elevenlabs.Config{
+			APIKey:  ellKey,
+			BaseURL: ellBase,
+		}))
+		slog.Info("audio.music: elevenlabs registered")
+	}
+
+	// MiniMax Music — optional, from cfg.Audio.Music block.
+	if cfg.Audio != nil && cfg.Audio.Music != nil {
+		mc := cfg.Audio.Music
+		if mc.APIKey != "" {
+			mgr.RegisterMusic(minimaxaudio.NewMusicProvider(minimaxaudio.MusicConfig{
+				APIKey:  mc.APIKey,
+				APIBase: mc.BaseURL,
+				Model:   mc.Model,
+			}))
+			slog.Info("audio.music: minimax registered")
+		}
+	}
+
+	// ElevenLabs STT (Scribe v2) — reuse TTS credentials. Registered as tenant-scope
+	// default; per-request tenant override lands via builtin_tools[stt] in Phase 5
+	// channel migration. Legacy per-channel STTProxyURL is bridged separately.
+	if ellKey != "" {
+		mgr.RegisterSTT(elevenlabs.NewSTTProvider(elevenlabs.Config{
+			APIKey:  ellKey,
+			BaseURL: ellBase,
+		}))
+		mgr.SetSTTChain([]string{"elevenlabs", "proxy"})
+		slog.Info("audio.stt: elevenlabs registered")
+	}
 }

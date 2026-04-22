@@ -204,6 +204,15 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 	if rootSpanID := tracing.ParentSpanIDFromContext(ctx); rootSpanID != uuid.Nil {
 		taskMeta[TaskMetaOriginRootSpan] = rootSpanID.String()
 	}
+	// Persist the real acting sender so deferred/dashboard dispatches can
+	// restore permission attribution when the teammate runs (#915 Flow F).
+	if sender := store.SenderIDFromContext(ctx); sender != "" {
+		taskMeta["origin_sender_id"] = sender
+	}
+	// Persist caller role for RBAC-aware bypass at dispatch time.
+	if role := store.RoleFromContext(ctx); role != "" {
+		taskMeta["origin_role"] = role
+	}
 
 	task := &store.TeamTaskData{
 		TeamID:           team.ID,
@@ -212,6 +221,10 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 		Status:           status,
 		BlockedBy:        blockedBy,
 		Priority:         priority,
+		// SCOPE-intentional (#915 audit 2026-04-16): team task visibility is
+		// per-chat, not per-user. team_tasks_read.go filters end-user lists by
+		// this same UserID. Migrating to ActorIDFromContext would hide group
+		// members' shared work from each other.
 		UserID:           store.UserIDFromContext(ctx),
 		Channel:          ToolChannelFromCtx(ctx),
 		TaskType:         taskType,

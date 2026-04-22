@@ -14,6 +14,7 @@ import (
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 
+	"github.com/nextlevelbuilder/goclaw/internal/audio"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
@@ -40,7 +41,9 @@ type Channel struct {
 	mu        sync.Mutex
 	ctx       context.Context
 	cancel    context.CancelFunc
-	parentCtx context.Context // stored from Start() for Reauth() context chain
+	parentCtx        context.Context       // stored from Start() for Reauth() context chain
+	audioMgr         *audio.Manager        // unified STT via audio.Manager (nil = no STT)
+	builtinToolStore store.BuiltinToolStore // reads stt settings (whatsapp_enabled) per voice message; nil = opt-out
 
 	// QR state
 	lastQRMu        sync.RWMutex
@@ -104,9 +107,12 @@ func (c *Channel) cacheQR(pngB64 string) {
 
 // New creates a new WhatsApp channel backed by whatsmeow.
 // dialect must be "pgx" (PostgreSQL) or "sqlite3" (SQLite/desktop).
+// audioMgr is optional (nil = STT disabled).
+// builtinToolStore is optional (nil = STT permanently opt-out regardless of admin toggle).
 func New(cfg config.WhatsAppConfig, msgBus *bus.MessageBus,
 	pairingSvc store.PairingStore, db *sql.DB,
-	pendingStore store.PendingMessageStore, dialect string) (*Channel, error) {
+	pendingStore store.PendingMessageStore, dialect string, audioMgr *audio.Manager,
+	builtinToolStore store.BuiltinToolStore) (*Channel, error) {
 
 	base := channels.NewBaseChannel(channels.TypeWhatsApp, msgBus, cfg.AllowFrom)
 	base.ValidatePolicy(cfg.DMPolicy, cfg.GroupPolicy)
@@ -117,9 +123,11 @@ func New(cfg config.WhatsAppConfig, msgBus *bus.MessageBus,
 	}
 
 	ch := &Channel{
-		BaseChannel: base,
-		config:      cfg,
-		container:   container,
+		BaseChannel:      base,
+		config:           cfg,
+		container:        container,
+		audioMgr:         audioMgr,
+		builtinToolStore: builtinToolStore,
 	}
 
 	// Initialize listen-only buffer if configured at any level.

@@ -78,3 +78,46 @@ func TestResolvePrimary_EmptyOverride_FallsBack(t *testing.T) {
 		t.Errorf("got %q, want openai (default)", got)
 	}
 }
+
+// TestResolvePrimary_LegacyConfig verifies that pre-existing
+// builtin_tool_tenant_configs[tts] rows (legacy from before the /tts page
+// migration) are handled gracefully — no crash, no Error-level log.
+func TestResolvePrimary_LegacyConfig(t *testing.T) {
+	cases := []struct {
+		name        string
+		rawSettings BuiltinToolSettings // simulates row from builtin_tool_tenant_configs
+		want        string              // expected resolved provider
+	}{
+		{
+			name:        "valid legacy JSON returns configured provider",
+			rawSettings: BuiltinToolSettings{"tts": []byte(`{"primary":"elevenlabs"}`)},
+			want:        "elevenlabs",
+		},
+		{
+			name:        "malformed JSON falls back to manager primary",
+			rawSettings: BuiltinToolSettings{"tts": []byte(`not-an-object`)},
+			want:        "openai",
+		},
+		{
+			name:        "empty settings map falls back to manager primary",
+			rawSettings: BuiltinToolSettings{},
+			want:        "openai",
+		},
+		{
+			name:        "missing tts key falls back to manager primary",
+			rawSettings: BuiltinToolSettings{"stt": []byte(`{"primary":"whisper"}`)},
+			want:        "openai",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tool := NewTtsTool(makeTTSManager("openai", "elevenlabs", "edge"))
+			ctx := WithBuiltinToolSettings(context.Background(), tc.rawSettings)
+			got := tool.resolvePrimary(ctx, tool.manager)
+			if got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

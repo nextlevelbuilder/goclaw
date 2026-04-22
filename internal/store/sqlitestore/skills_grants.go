@@ -133,7 +133,12 @@ func (s *SQLiteSkillStore) RevokeFromUser(ctx context.Context, skillID uuid.UUID
 }
 
 // ListAccessible returns skills accessible to a given agent+user combination.
+// See PGSkillStore.ListAccessible for the ACTOR-vs-SCOPE dual-match rationale.
 func (s *SQLiteSkillStore) ListAccessible(ctx context.Context, agentID uuid.UUID, userID string) ([]store.SkillInfo, error) {
+	actorID := store.ActorIDFromContext(ctx)
+	if actorID == "" {
+		actorID = userID
+	}
 	tClause, tArgs, err := scopeClauseAlias(ctx, "s")
 	if err != nil {
 		return nil, err
@@ -147,8 +152,8 @@ func (s *SQLiteSkillStore) ListAccessible(ctx context.Context, agentID uuid.UUID
 		stcFilter = " AND (stc.enabled IS NULL OR stc.enabled = 1)"
 	}
 
-	// Build args: agentID, userID, [tenantID for tenant cond, tenantID for stc join]
-	queryArgs := []any{agentID, userID}
+	// Positional args: agentID, userID, actorID, [tenantID x2 if tenant-scoped], userID, actorID (private-owner clause)
+	queryArgs := []any{agentID, userID, actorID}
 	if len(tArgs) > 0 {
 		queryArgs = append(queryArgs, tArgs...) // tenant cond
 		queryArgs = append(queryArgs, tArgs...) // stc join
@@ -159,15 +164,15 @@ func (s *SQLiteSkillStore) ListAccessible(ctx context.Context, agentID uuid.UUID
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT DISTINCT s.name, s.slug, s.description, s.version, s.file_path FROM skills s
 		LEFT JOIN skill_agent_grants sag ON s.id = sag.skill_id AND sag.agent_id = ?
-		LEFT JOIN skill_user_grants sug ON s.id = sug.skill_id AND sug.user_id = ?`+stcJoin+`
+		LEFT JOIN skill_user_grants sug ON s.id = sug.skill_id AND (sug.user_id = ? OR sug.user_id = ?)`+stcJoin+`
 		WHERE s.status = 'active'`+tenantCond+stcFilter+` AND (
 			s.is_system = 1
 			OR s.visibility = 'public'
-			OR (s.visibility = 'private' AND s.owner_id = ?)
+			OR (s.visibility = 'private' AND (s.owner_id = ? OR s.owner_id = ?))
 			OR (s.visibility = 'internal' AND (sag.id IS NOT NULL OR sug.id IS NOT NULL))
 		)
 		ORDER BY s.name`,
-		append(queryArgs, userID)...,
+		append(queryArgs, userID, actorID)...,
 	)
 	if err != nil {
 		return nil, err

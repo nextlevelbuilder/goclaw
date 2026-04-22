@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -32,17 +33,25 @@ type AgentActivityStatus struct {
 	StartedAt time.Time
 }
 
+// TraceCollector is a minimal interface for marking a trace as aborted.
+// Defined here (not in internal/tracing) to avoid import cycles.
+// *tracing.Collector implements this interface implicitly.
+type TraceCollector interface {
+	FinishTrace(ctx context.Context, traceID uuid.UUID, status, errMsg, outputPreview string)
+}
+
 // Router manages multiple agent Loop instances.
 // Each agent has a unique ID and its own provider/model/tools config.
 // Cached Loops expire after TTL (safety net for multi-instance).
 type Router struct {
-	agents        map[string]*agentEntry
-	mu            sync.RWMutex
-	activeRuns    sync.Map     // runID → *ActiveRun
-	sessionRuns   sync.Map     // sessionKey → runID (secondary index for O(1) IsSessionBusy)
-	agentActivity sync.Map     // sessionKey → *AgentActivityStatus
-	resolver      ResolverFunc // optional: lazy creation from DB
-	ttl           time.Duration
+	agents          map[string]*agentEntry
+	mu              sync.RWMutex
+	activeRuns      sync.Map     // runID → *ActiveRun
+	sessionRuns     sync.Map     // sessionKey → runID (secondary index for O(1) IsSessionBusy)
+	agentActivity   sync.Map     // sessionKey → *AgentActivityStatus
+	resolver        ResolverFunc // optional: lazy creation from DB
+	ttl             time.Duration
+	traceCollector  TraceCollector // optional: for force-marking aborted traces
 }
 
 func NewRouter() *Router {
@@ -50,6 +59,11 @@ func NewRouter() *Router {
 		agents: make(map[string]*agentEntry),
 		ttl:    defaultRouterTTL,
 	}
+}
+
+// SetTraceCollector wires the trace collector so forceMarkTraceAborted can update DB.
+func (r *Router) SetTraceCollector(c TraceCollector) {
+	r.traceCollector = c
 }
 
 // SetResolver sets a resolver function for lazy agent creation.
@@ -243,11 +257,38 @@ type ActiveRun struct {
 	Cancel     context.CancelFunc
 	StartedAt  time.Time
 	InjectCh   chan InjectedMessage // buffered channel for mid-run user message injection
+	Done       chan struct{}        // closed when goroutine actually exits (via UnregisterRun)
+	State      atomic.Int32        // 0=running, 1=aborting, 2=done
+	TraceID    uuid.UUID           // set after trace creation via SetRunTraceID
+	TenantID   uuid.UUID           // captured at RegisterRun for forceMarkTraceAborted
+}
+
+// AbortResult describes the outcome of a single AbortRun call.
+type AbortResult struct {
+	RunID           string
+	Stopped         bool // graceful stop within abortGraceTimeout
+	Forced          bool // timeout exceeded; trace force-marked cancelled
+	AlreadyAborting bool // 2nd click while phase 2 still in flight
+	NotFound        bool // run never existed or already finished
+	Unauthorized    bool // sessionKey mismatch
+}
+
+// abortGraceTimeout is the maximum time AbortRun waits for a goroutine to exit
+// before force-marking the trace as cancelled.
+const abortGraceTimeout = 3 * time.Second
+
+// safeClose closes ch without panicking if ch is already closed.
+// recover-based: cheaper than a sync.Once per ActiveRun because it avoids an
+// extra heap allocation per run on the common (single-close) path.
+func safeClose(ch chan struct{}) {
+	defer func() { _ = recover() }()
+	close(ch)
 }
 
 // RegisterRun records an active run so it can be aborted later.
+// ctx is used to capture the tenant ID for forceMarkTraceAborted.
 // Returns a receive-only channel for mid-run message injection.
-func (r *Router) RegisterRun(runID, sessionKey, agentID string, cancel context.CancelFunc) <-chan InjectedMessage {
+func (r *Router) RegisterRun(ctx context.Context, runID, sessionKey, agentID string, cancel context.CancelFunc) <-chan InjectedMessage {
 	injectCh := make(chan InjectedMessage, injectBufferSize)
 	r.activeRuns.Store(runID, &ActiveRun{
 		RunID:      runID,
@@ -256,39 +297,120 @@ func (r *Router) RegisterRun(runID, sessionKey, agentID string, cancel context.C
 		Cancel:     cancel,
 		StartedAt:  time.Now(),
 		InjectCh:   injectCh,
+		Done:       make(chan struct{}),
+		TenantID:   store.TenantIDFromContext(ctx),
 	})
 	r.sessionRuns.Store(sessionKey, runID)
 	return injectCh
 }
 
+// SetRunTraceID associates a trace UUID with an active run.
+// Called from loop_run.go after CreateTrace succeeds so forceMarkTraceAborted
+// can update the correct trace record on a 3s timeout.
+func (r *Router) SetRunTraceID(runID string, traceID uuid.UUID) {
+	if val, ok := r.activeRuns.Load(runID); ok {
+		val.(*ActiveRun).TraceID = traceID
+	}
+}
+
 // UnregisterRun removes a completed/cancelled run from tracking.
+// Closes Done BEFORE deleting from maps so any concurrent AbortRun waiting
+// on Done sees the signal before the entry disappears.
 func (r *Router) UnregisterRun(runID string) {
 	if val, ok := r.activeRuns.Load(runID); ok {
 		run := val.(*ActiveRun)
+		run.State.Store(2) // mark done
+		safeClose(run.Done)
 		r.sessionRuns.Delete(run.SessionKey)
 	}
 	r.activeRuns.Delete(runID)
 }
 
-// AbortRun cancels a single run by ID. sessionKey is validated for authorization
-// (matching TS chat-abort.ts: verify sessionKey matches before aborting).
-// Returns true if the run was found and cancelled.
-func (r *Router) AbortRun(runID, sessionKey string) bool {
+// AbortRun cancels a single run by ID using a 2-phase verified abort.
+//
+// Phase 1: CAS state 0→1 (idempotent, prevents double-cancel).
+// Phase 2: wait ≤abortGraceTimeout for goroutine to exit via Done channel.
+// On timeout: force-mark trace as cancelled so the UI moves on.
+//
+// sessionKey is validated for authorization when non-empty.
+func (r *Router) AbortRun(runID, sessionKey string) AbortResult {
+	res := AbortResult{RunID: runID}
+
 	val, ok := r.activeRuns.Load(runID)
 	if !ok {
-		return false
+		res.NotFound = true
+		return res
 	}
 	run := val.(*ActiveRun)
 
 	// Authorization: sessionKey must match (matching TS behavior)
 	if sessionKey != "" && run.SessionKey != sessionKey {
-		return false
+		res.Unauthorized = true
+		return res
+	}
+
+	// CAS 0→1: transition Running → Aborting.
+	// Any failure means abort is already in flight (state==1) or run is done (state==2).
+	if !run.State.CompareAndSwap(0, 1) {
+		if run.State.Load() == 2 {
+			// Race: run finished between Load and CAS
+			res.NotFound = true
+		} else {
+			res.AlreadyAborting = true
+		}
+		return res
 	}
 
 	run.Cancel()
-	r.sessionRuns.Delete(run.SessionKey)
-	r.activeRuns.Delete(runID)
-	return true
+
+	select {
+	case <-run.Done:
+		res.Stopped = true
+	case <-time.After(abortGraceTimeout):
+		// Goroutine is stuck; force trace status so the UI does not hang.
+		r.forceMarkTraceAborted(runID)
+		res.Forced = true
+	}
+	return res
+}
+
+// forceMarkTraceAborted marks a trace as cancelled in DB when the 3s grace
+// period expires and the goroutine has not yet exited.
+// Uses a detached background context scoped to the run's tenant so the DB
+// write is not blocked by the caller's (already-cancelled) run context.
+func (r *Router) forceMarkTraceAborted(runID string) {
+	if r.traceCollector == nil {
+		return
+	}
+	val, ok := r.activeRuns.Load(runID)
+	if !ok {
+		return
+	}
+	run := val.(*ActiveRun)
+	if run.TraceID == uuid.Nil {
+		return
+	}
+	ctx := context.Background()
+	if run.TenantID != uuid.Nil {
+		ctx = store.WithTenantID(ctx, run.TenantID)
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	r.traceCollector.FinishTrace(ctx, run.TraceID, "cancelled", "force-aborted (3s grace exceeded)", "")
+}
+
+// AbortRunsForSession cancels all active runs for a session key.
+// Returns rich results for each run (one timer per run is fine for typical 1–2 runs/session).
+func (r *Router) AbortRunsForSession(sessionKey string) []AbortResult {
+	var results []AbortResult
+	r.activeRuns.Range(func(key, val any) bool {
+		run := val.(*ActiveRun)
+		if run.SessionKey == sessionKey {
+			results = append(results, r.AbortRun(run.RunID, ""))
+		}
+		return true
+	})
+	return results
 }
 
 // InjectMessage sends a user message to the running loop for a session.
@@ -372,21 +494,4 @@ func (r *Router) SessionRunID(sessionKey string) (string, bool) {
 		return "", false
 	}
 	return val.(string), true
-}
-
-// AbortRunsForSession cancels all active runs for a session key.
-// Returns the list of aborted run IDs.
-func (r *Router) AbortRunsForSession(sessionKey string) []string {
-	var aborted []string
-	r.activeRuns.Range(func(key, val any) bool {
-		run := val.(*ActiveRun)
-		if run.SessionKey == sessionKey {
-			run.Cancel()
-			r.activeRuns.Delete(key)
-			r.sessionRuns.Delete(sessionKey)
-			aborted = append(aborted, run.RunID)
-		}
-		return true
-	})
-	return aborted
 }

@@ -260,10 +260,10 @@ func (m *TeamsMethods) handleTaskActiveBySession(ctx context.Context, client *ga
 // --- Update (settings) ---
 
 type teamsUpdateParams struct {
-	TeamID      string         `json:"teamId"`
-	Name        string         `json:"name,omitempty"`
-	Description *string        `json:"description,omitempty"`
-	Settings    map[string]any `json:"settings"`
+	TeamID      string          `json:"teamId"`
+	Name        string          `json:"name,omitempty"`
+	Description *string         `json:"description,omitempty"`
+	Settings    *map[string]any `json:"settings,omitempty"`
 }
 
 func (m *TeamsMethods) handleUpdate(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
@@ -330,20 +330,33 @@ func (m *TeamsMethods) handleUpdate(ctx context.Context, client *gateway.Client,
 			Enabled *bool `json:"enabled,omitempty"`
 		} `json:"blocker_escalation,omitempty"`
 	}
-	raw, _ := json.Marshal(params.Settings)
-	var access teamAccessSettings
-	if err := json.Unmarshal(raw, &access); err != nil {
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidRequest, err.Error())))
-		return
-	}
-	cleaned, _ := json.Marshal(access)
 
-	updates := map[string]any{"settings": json.RawMessage(cleaned)}
+	updates := map[string]any{}
+
+	// Only touch settings when client actually sent the field. Otherwise partial
+	// updates (e.g. rename-only via inline edit) would wipe existing settings.
+	if params.Settings != nil {
+		raw, _ := json.Marshal(*params.Settings)
+		var access teamAccessSettings
+		if err := json.Unmarshal(raw, &access); err != nil {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidRequest, err.Error())))
+			return
+		}
+		cleaned, _ := json.Marshal(access)
+		updates["settings"] = json.RawMessage(cleaned)
+	}
+
 	if params.Name != "" {
 		updates["name"] = params.Name
 	}
 	if params.Description != nil {
 		updates["description"] = *params.Description
+	}
+
+	// Nothing to update — treat as no-op success to keep client UX simple.
+	if len(updates) == 0 {
+		client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"ok": true}))
+		return
 	}
 	if err := m.teamStore.UpdateTeam(ctx, teamID, updates); err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToUpdate, "team", err.Error())))

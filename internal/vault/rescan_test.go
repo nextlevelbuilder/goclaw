@@ -16,61 +16,61 @@ func TestInferOwnerFromPath(t *testing.T) {
 	}
 
 	tests := []struct {
-		path            string
-		wantAgentID     *string
-		wantTeamID      *string
-		wantScope       string
+		path             string
+		wantAgentID      *string
+		wantTeamID       *string
+		wantScope        string
 		wantStrippedPath string
 	}{
 		// Legacy agents/{key}/... → personal scope, full path preserved
 		{
-			path:            "agents/my-bot/notes/todo.md",
-			wantAgentID:     strPtr("uuid-1"),
-			wantScope:       "personal",
+			path:             "agents/my-bot/notes/todo.md",
+			wantAgentID:      new("uuid-1"),
+			wantScope:        "personal",
 			wantStrippedPath: "agents/my-bot/notes/todo.md",
 		},
 		{
-			path:            "agents/my-bot/file.md",
-			wantAgentID:     strPtr("uuid-1"),
-			wantScope:       "personal",
+			path:             "agents/my-bot/file.md",
+			wantAgentID:      new("uuid-1"),
+			wantScope:        "personal",
 			wantStrippedPath: "agents/my-bot/file.md",
 		},
 		// Root-level {agent_key}/... → personal scope (workspace layout)
 		{
-			path:            "my-bot/telegram/123/report.md",
-			wantAgentID:     strPtr("uuid-1"),
-			wantScope:       "personal",
+			path:             "my-bot/telegram/123/report.md",
+			wantAgentID:      new("uuid-1"),
+			wantScope:        "personal",
 			wantStrippedPath: "my-bot/telegram/123/report.md",
 		},
 		{
-			path:            "other-bot/docs/guide.md",
-			wantAgentID:     strPtr("uuid-2"),
-			wantScope:       "personal",
+			path:             "other-bot/docs/guide.md",
+			wantAgentID:      new("uuid-2"),
+			wantScope:        "personal",
 			wantStrippedPath: "other-bot/docs/guide.md",
 		},
 		// teams/{uuid}/... → team scope, full path preserved
 		{
-			path:            "teams/" + validUUID + "/doc.md",
-			wantTeamID:      strPtr(validUUID),
-			wantScope:       "team",
+			path:             "teams/" + validUUID + "/doc.md",
+			wantTeamID:       new(validUUID),
+			wantScope:        "team",
 			wantStrippedPath: "teams/" + validUUID + "/doc.md",
 		},
 		{
-			path:            "teams/" + validUUID + "/deep/nested.md",
-			wantTeamID:      strPtr(validUUID),
-			wantScope:       "team",
+			path:             "teams/" + validUUID + "/deep/nested.md",
+			wantTeamID:       new(validUUID),
+			wantScope:        "team",
 			wantStrippedPath: "teams/" + validUUID + "/deep/nested.md",
 		},
 		// Root-level file (no slash) → shared
 		{
-			path:            "README.md",
-			wantScope:       "shared",
+			path:             "README.md",
+			wantScope:        "shared",
 			wantStrippedPath: "README.md",
 		},
 		// Nested file not matching any agent key → shared
 		{
-			path:            "docs/guide.md",
-			wantScope:       "shared",
+			path:             "docs/guide.md",
+			wantScope:        "shared",
 			wantStrippedPath: "docs/guide.md",
 		},
 		// Unknown agent under agents/ prefix → skip
@@ -90,8 +90,8 @@ func TestInferOwnerFromPath(t *testing.T) {
 		},
 		// Unknown root folder (not an agent key) → shared
 		{
-			path:            "telegram/group/file.md",
-			wantScope:       "shared",
+			path:             "telegram/group/file.md",
+			wantScope:        "shared",
 			wantStrippedPath: "telegram/group/file.md",
 		},
 	}
@@ -203,4 +203,5 @@ func TestInferTitle(t *testing.T) {
 	}
 }
 
-func strPtr(s string) *string { return &s }
+//go:fix inline
+func strPtr(s string) *string { return new(s) }

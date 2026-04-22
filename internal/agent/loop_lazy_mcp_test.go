@@ -337,13 +337,15 @@ func TestLoop_LazyMCP_DenyList_GroupDeny(t *testing.T) {
 		return true
 	})
 
-	// Register a custom group containing the MCP tool.
-	tools.RegisterToolGroup("mcp_test", []string{"mcp_svc__get_data"})
-	defer tools.UnregisterToolGroup("mcp_test")
+	// Register a custom group containing the MCP tool (using per-Registry method).
+	reg.RegisterToolGroup("mcp_test", []string{"mcp_svc__get_data"})
+	defer reg.UnregisterToolGroup("mcp_test")
 
 	pe := tools.NewPolicyEngine(&config.ToolsConfig{
 		Deny: []string{"group:mcp_test"},
 	})
+	// PolicyEngine needs registry to expand group:mcp_test
+	pe.SetRegistry(reg)
 
 	if !pe.IsDenied("mcp_svc__get_data", nil) {
 		t.Error("tool should be denied via group: pattern")

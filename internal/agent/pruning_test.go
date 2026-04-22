@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/pipeline"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
 
@@ -191,7 +192,7 @@ func TestPruneContextMessages_ModeOff_ReturnsOriginal(t *testing.T) {
 		{Role: "assistant", Content: "hello"},
 	}
 	cfg := &config.ContextPruningConfig{Mode: "off"}
-	got := pruneContextMessages(msgs, 100000, cfg, nil, "")
+	got := pruneContextMessages(msgs, 100000, cfg, nil, "", nil)
 	if len(got) != len(msgs) {
 		t.Error("mode=off should return original slice")
 	}
@@ -199,7 +200,7 @@ func TestPruneContextMessages_ModeOff_ReturnsOriginal(t *testing.T) {
 
 func TestPruneContextMessages_ZeroWindow_ReturnsOriginal(t *testing.T) {
 	msgs := []providers.Message{{Role: "user", Content: "hi"}}
-	got := pruneContextMessages(msgs, 0, nil, nil, "")
+	got := pruneContextMessages(msgs, 0, nil, nil, "", nil)
 	if len(got) != len(msgs) {
 		t.Error("zero context window should return original")
 	}
@@ -214,7 +215,7 @@ func TestPruneContextMessages_SmallContext_NoChange(t *testing.T) {
 		{Role: "assistant", Content: "done"},
 	}
 	// Very large window → ratio tiny → nothing pruned.
-	got := pruneContextMessages(msgs, 1_000_000, nil, nil, "")
+	got := pruneContextMessages(msgs, 1_000_000, nil, nil, "", nil)
 	if len(got) != len(msgs) {
 		t.Errorf("small context: len=%d, want %d", len(got), len(msgs))
 	}
@@ -238,8 +239,9 @@ func TestPruneContextMessages_SoftTrim_LongToolResult(t *testing.T) {
 	}
 
 	cfg := &config.ContextPruningConfig{
-		SoftTrimRatio: 0.01, // threshold very low → prune immediately
-		HardClearRatio: 0.99, // don't hard clear
+		Mode:          "cache-ttl", // enable pruning
+		SoftTrimRatio: 0.01,        // threshold very low → prune immediately
+		HardClearRatio: 0.99,       // don't hard clear
 		SoftTrim: &config.ContextPruningSoftTrim{
 			MaxChars:  100,
 			HeadChars: 50,
@@ -247,7 +249,7 @@ func TestPruneContextMessages_SoftTrim_LongToolResult(t *testing.T) {
 		},
 	}
 	// Use a context window that makes ratio exceed threshold.
-	got := pruneContextMessages(msgs, 100, cfg, nil, "")
+	got := pruneContextMessages(msgs, 100, cfg, nil, "", nil)
 
 	// Tool result should be trimmed — shorter than original.
 	for _, m := range got {
@@ -279,6 +281,7 @@ func TestPruneContextMessages_HardClear_WhenRatioVeryHigh(t *testing.T) {
 
 	enabled := true
 	cfg := &config.ContextPruningConfig{
+		Mode:                 "cache-ttl", // enable pruning
 		SoftTrimRatio:        0.001,
 		HardClearRatio:       0.001,
 		MinPrunableToolChars: 1, // very low threshold
@@ -293,7 +296,7 @@ func TestPruneContextMessages_HardClear_WhenRatioVeryHigh(t *testing.T) {
 		},
 	}
 
-	got := pruneContextMessages(msgs, 10, cfg, nil, "")
+	got := pruneContextMessages(msgs, 10, cfg, nil, "", nil)
 
 	// Tool result should be replaced by placeholder or heavily trimmed.
 	for _, m := range got {
@@ -331,13 +334,14 @@ func TestPruneContextMessages_MediaToolHigherBudget(t *testing.T) {
 	}
 
 	cfg := &config.ContextPruningConfig{
-		SoftTrimRatio:  0.01,  // force prune
-		HardClearRatio: 0.999, // don't hard clear
+		Mode:           "cache-ttl", // enable pruning
+		SoftTrimRatio:  0.01,        // force prune
+		HardClearRatio: 0.999,       // don't hard clear
 	}
 
 	// Use 7000 tokens (28K chars) so per-result guard (30% = 8.4K) doesn't
 	// trigger on 7K-char results, isolating the soft trim behavior.
-	got := pruneContextMessages(msgs, 7000, cfg, nil, "")
+	got := pruneContextMessages(msgs, 7000, cfg, nil, "", nil)
 
 	// read_image result (7000 chars < 8000 media budget) → NOT trimmed
 	imgResult := got[2]
@@ -373,6 +377,7 @@ func TestPruneContextMessages_MediaToolSkipsHardClear(t *testing.T) {
 
 	enabled := true
 	cfg := &config.ContextPruningConfig{
+		Mode:                 "cache-ttl", // enable pruning
 		SoftTrimRatio:        0.001,
 		HardClearRatio:       0.001,
 		MinPrunableToolChars: 1,
@@ -382,7 +387,7 @@ func TestPruneContextMessages_MediaToolSkipsHardClear(t *testing.T) {
 		},
 	}
 
-	got := pruneContextMessages(msgs, 5000, cfg, nil, "")
+	got := pruneContextMessages(msgs, 5000, cfg, nil, "", nil)
 
 	// read_image result should survive hard clear (only soft-trimmed at most)
 	imgResult := got[2]
@@ -437,4 +442,131 @@ func TestHasImportantTail_ShortContentNoMatch(t *testing.T) {
 	if hasImportantTail("no important content here at all") {
 		t.Error("expected no important tail")
 	}
+}
+
+// ─── Characterization tests (Phase 01) ────────────────────────────────────
+// Lock current (buggy-vs-TS) behavior before refactoring. Subsequent phases
+// update these tests to new expected values.
+
+// makeLargeHistoryFixture creates a history with a large tool result for opt-in tests.
+// contextWindow=5000 → charWindow=20000, total ~8030 chars → ratio ~40% ≥ 25%.
+func makeLargeHistoryFixture() []providers.Message {
+	return []providers.Message{
+		{Role: "user", Content: "q"},
+		{Role: "assistant", Content: "", ToolCalls: []providers.ToolCall{{ID: "c1", Name: "read_file"}}},
+		{Role: "tool", ToolCallID: "c1", Content: strings.Repeat("x", 8000)},
+		{Role: "assistant", Content: "a1"},
+		{Role: "assistant", Content: "a2"},
+		{Role: "assistant", Content: "a3"},
+	}
+}
+
+func TestPruneContextMessages_NilCfg_NoOp(t *testing.T) {
+	// Phase 04: nil cfg → no pruning (opt-in). Matches TS design.
+	msgs := makeLargeHistoryFixture()
+	got := pruneContextMessages(msgs, 5000, nil, nil, "", nil)
+	if estimateMessageChars(got[2]) != 8000 {
+		t.Errorf("nil cfg should be no-op (opt-in). Got %d chars", estimateMessageChars(got[2]))
+	}
+}
+
+func TestPruneContextMessages_EmptyMode_NoOp(t *testing.T) {
+	cfg := &config.ContextPruningConfig{Mode: ""}
+	msgs := makeLargeHistoryFixture()
+	got := pruneContextMessages(msgs, 5000, cfg, nil, "", nil)
+	if estimateMessageChars(got[2]) != 8000 {
+		t.Errorf("empty mode should be no-op. Got %d chars", estimateMessageChars(got[2]))
+	}
+}
+
+func TestPruneContextMessages_UnknownMode_NoOp(t *testing.T) {
+	cfg := &config.ContextPruningConfig{Mode: "bogus"}
+	msgs := makeLargeHistoryFixture()
+	got := pruneContextMessages(msgs, 5000, cfg, nil, "", nil)
+	if estimateMessageChars(got[2]) != 8000 {
+		t.Errorf("unknown mode should be no-op. Got %d chars", estimateMessageChars(got[2]))
+	}
+}
+
+func TestPruneContextMessages_CacheTtlMode_Prunes(t *testing.T) {
+	cfg := &config.ContextPruningConfig{Mode: "cache-ttl"}
+	msgs := makeLargeHistoryFixture()
+	got := pruneContextMessages(msgs, 5000, cfg, nil, "", nil)
+	if estimateMessageChars(got[2]) >= 8000 {
+		t.Errorf("cache-ttl mode should prune. Got unchanged content.")
+	}
+}
+
+func TestPruneContextMessages_Pass0_RemovedSuffixAbsent(t *testing.T) {
+	// Phase 02: Pass 0 removed. This test asserts the distinctive suffix is GONE.
+	// Pass 1 still trims via ratio gate, but with different suffix format.
+	//
+	// contextWindow=10000 → charWindow=40000; msg=15000 chars = 37.5% ≥ 25% softTrimRatio.
+	// Pass 1 trims the large result.
+	msgs := []providers.Message{
+		{Role: "user", Content: "q"},
+		{Role: "assistant", Content: "", ToolCalls: []providers.ToolCall{{ID: "c1", Name: "read_file"}}},
+		{Role: "tool", ToolCallID: "c1", Content: strings.Repeat("x", 15000)},
+		{Role: "assistant", Content: "a1"},
+		{Role: "assistant", Content: "a2"},
+		{Role: "assistant", Content: "a3"},
+	}
+	cfg := &config.ContextPruningConfig{Mode: "cache-ttl"}
+	got := pruneContextMessages(msgs, 10000, cfg, nil, "", nil)
+
+	content := got[2].Content
+	// Pass 0 suffix markers must be GONE after Phase 02 deletion.
+	if strings.Contains(content, "Single tool result trimmed:") {
+		t.Errorf("Pass 0 suffix should be removed; got: %q", testTruncate(content, 200))
+	}
+	if strings.Contains(content, "⚠️ [... middle content omitted ...]") {
+		t.Errorf("Pass 0 middle-omitted marker should be removed; got: %q", testTruncate(content, 200))
+	}
+	// Must still be trimmed by Pass 1 (smaller than original).
+	if estimateMessageChars(got[2]) >= 15000 {
+		t.Errorf("Pass 1 should still trim the large result via ratio gate; got %d chars", estimateMessageChars(got[2]))
+	}
+}
+
+// ─── PruneStats (Phase 05) ────────────────────────────────────────────────
+
+func TestPruneContextMessages_Stats_TrimmedPopulated(t *testing.T) {
+	// Large tool result that will be soft-trimmed.
+	msgs := []providers.Message{
+		{Role: "user", Content: "q"},
+		{Role: "assistant", Content: "", ToolCalls: []providers.ToolCall{{ID: "c1", Name: "read_file"}}},
+		{Role: "tool", ToolCallID: "c1", Content: strings.Repeat("x", 15000)},
+		{Role: "assistant", Content: "a1"},
+		{Role: "assistant", Content: "a2"},
+		{Role: "assistant", Content: "a3"},
+	}
+	cfg := &config.ContextPruningConfig{Mode: "cache-ttl"}
+	var stats pipeline.PruneStats
+	pruneContextMessages(msgs, 5000, cfg, nil, "", &stats)
+	if stats.ResultsTrimmed == 0 {
+		t.Error("expected at least one ResultsTrimmed, got 0")
+	}
+}
+
+func TestPruneContextMessages_Stats_NilSafe(t *testing.T) {
+	// Passing nil stats must not panic.
+	msgs := []providers.Message{
+		{Role: "user", Content: "q"},
+		{Role: "assistant", Content: "", ToolCalls: []providers.ToolCall{{ID: "c1", Name: "read_file"}}},
+		{Role: "tool", ToolCallID: "c1", Content: strings.Repeat("x", 15000)},
+		{Role: "assistant", Content: "a1"},
+		{Role: "assistant", Content: "a2"},
+		{Role: "assistant", Content: "a3"},
+	}
+	cfg := &config.ContextPruningConfig{Mode: "cache-ttl"}
+	_ = pruneContextMessages(msgs, 5000, cfg, nil, "", nil) // must not panic
+}
+
+// ─── parseTTL (Phase 06) ─────────────────────────────────────────────────
+
+func testTruncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
 }

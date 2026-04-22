@@ -10,6 +10,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/audio"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/typing"
@@ -29,15 +30,17 @@ type Channel struct {
 	typingCtrls     sync.Map // channelID string → *typing.Controller
 	agentStore      store.AgentStore            // for agent key lookup (nil = writer commands disabled)
 	configPermStore store.ConfigPermissionStore // for group file writer management (nil = writer commands disabled)
+	audioMgr        *audio.Manager             // unified STT via audio.Manager (nil = no STT)
 	// pairingService, pairingDebounce, approvedGroups, groupHistory, historyLimit, requireMention
 	// are inherited from channels.BaseChannel.
 }
 
 // New creates a new Discord channel from config.
 // agentStore and configPermStore are optional (nil = writer commands disabled).
+// audioMgr is optional (nil = STT disabled).
 func New(cfg config.DiscordConfig, msgBus *bus.MessageBus, pairingSvc store.PairingStore,
 	agentStore store.AgentStore, configPermStore store.ConfigPermissionStore,
-	pendingStore store.PendingMessageStore) (*Channel, error) {
+	pendingStore store.PendingMessageStore, audioMgr *audio.Manager) (*Channel, error) {
 	session, err := discordgo.New("Bot " + cfg.Token)
 	if err != nil {
 		return nil, fmt.Errorf("create discord session: %w", err)
@@ -67,6 +70,7 @@ func New(cfg config.DiscordConfig, msgBus *bus.MessageBus, pairingSvc store.Pair
 		config:          cfg,
 		agentStore:      agentStore,
 		configPermStore: configPermStore,
+		audioMgr:        audioMgr,
 	}
 	ch.SetRequireMention(requireMention)
 	ch.SetPairingService(pairingSvc)

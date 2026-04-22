@@ -142,6 +142,11 @@ func (m *TeamToolManager) dispatchTaskToAgent(ctx context.Context, task *store.T
 		originUserID = originChatID
 	}
 
+	// Preserve real acting sender so permission checks on the teammate's
+	// turn (e.g. write_file in group chat) attribute to the original user
+	// rather than the synthetic "teammate:dashboard" sender (#915).
+	originSenderID := store.SenderIDFromContext(ctx)
+
 	// Resolve peer kind from context; fallback to task metadata, then "direct".
 	originPeerKind := ToolPeerKindFromCtx(ctx)
 	if originPeerKind == "" {
@@ -162,6 +167,12 @@ func (m *TeamToolManager) dispatchTaskToAgent(ctx context.Context, task *store.T
 		MetaToAgentDisplay:  ag.DisplayName,
 		MetaTeamTaskID:      task.ID.String(),
 		MetaTeamID:          teamID.String(),
+	}
+	if originSenderID != "" {
+		meta[MetaOriginSenderID] = originSenderID
+	}
+	if originRole := store.RoleFromContext(ctx); originRole != "" {
+		meta[MetaOriginRole] = originRole
 	}
 	// Resolve local key from context; fallback to task metadata for deferred dispatches.
 	localKey := ToolLocalKeyFromCtx(ctx)

@@ -189,6 +189,20 @@ To add a new package to the Docker image:
 
 For packages only needed by specific skills, prefer runtime installation (Option B) to keep the image lean.
 
+### GitHub Releases Installer
+
+For CLI tools distributed as GitHub Releases (lazygit, starship, ripgrep, gh, etc.)
+that aren't packaged via apk/pip/npm, use the `github:` runtime installer:
+
+```
+github:owner/repo[@tag]
+```
+
+Admin-only, SHA256-verified, ELF-validated, with a release-picker UI. Binaries
+land in `/app/data/.runtime/bin/` (on `$PATH`). See
+[`docs/packages-github.md`](./packages-github.md) for syntax, configuration,
+security posture, and troubleshooting (especially musl/glibc compatibility).
+
 ---
 
 ## 8. Skill Search (v3)

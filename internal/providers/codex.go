@@ -43,7 +43,7 @@ func NewCodexProvider(name string, tokenSource TokenSource, apiBase, defaultMode
 		name:         name,
 		apiBase:      apiBase,
 		defaultModel: defaultModel,
-		client:       &http.Client{Timeout: DefaultHTTPTimeout},
+		client:       NewDefaultHTTPClient(),
 		retryConfig:  DefaultRetryConfig(),
 		tokenSource:  tokenSource,
 	}
@@ -131,13 +131,15 @@ func (p *CodexProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk
 	if err != nil {
 		return nil, err
 	}
-	defer respBody.Close()
+	// Wrap respBody so ctx cancellation closes the socket, unblocking bufio.Scanner.
+	cb := NewCtxBody(ctx, respBody)
+	defer cb.Close()
 
 	result := &ChatResponse{FinishReason: "stop"}
 	toolCalls := make(map[string]*codexToolCallAcc) // keyed by item_id
 	streamState := newCodexMessageStreamState()
 
-	sse := NewSSEScanner(respBody)
+	sse := NewSSEScanner(cb)
 	for sse.Next() {
 		data := sse.Data()
 

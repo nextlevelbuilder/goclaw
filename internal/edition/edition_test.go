@@ -346,7 +346,7 @@ func TestEditionConcurrentSafety(t *testing.T) {
 
 	// Goroutine 1: repeatedly read
 	go func() {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			_ = Current()
 		}
 		done <- true

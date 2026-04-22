@@ -180,6 +180,27 @@
       "save": "Save",
       "saving": "Saving..."
     },
+    "sttForm": {
+      "title": "STT Settings",
+      "description": "Configure speech-to-text providers for transcribing voice messages.",
+      "providersLabel": "Providers",
+      "providersPlaceholder": "Select providers",
+      "elevenlabsSectionTitle": "ElevenLabs",
+      "elevenlabsApiKeyLabel": "API Key",
+      "elevenlabsDefaultLanguageLabel": "Default Language",
+      "proxySectionTitle": "Proxy",
+      "proxyUrlLabel": "Proxy URL",
+      "proxyApiKeyLabel": "Proxy API Key",
+      "proxyTenantIdLabel": "Proxy Tenant ID",
+      "whatsappEnabledLabel": "Enable STT for WhatsApp",
+      "whatsappPrivacyWarning": "Enabling STT for WhatsApp breaks end-to-end encryption for voice messages sent to this agent.",
+      "providersRequiredError": "At least one provider must be selected.",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving...",
+      "saveSuccess": "STT settings saved",
+      "saveFailed": "Failed to save STT settings"
+    },
     "extractorChain": {
       "title": "Web Fetch — Extractor Chain",
       "description": "Ordered list of content extractors. Each URL is tried top-to-bottom until one returns quality content.",

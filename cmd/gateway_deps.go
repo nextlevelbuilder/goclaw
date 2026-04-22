@@ -2,12 +2,14 @@ package cmd
 
 import (
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
+	"github.com/nextlevelbuilder/goclaw/internal/audio"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/cache"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
+	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -33,4 +35,6 @@ type gatewayDeps struct {
 	workspace        string
 	dataDir          string
 	domainBus        eventbus.DomainEventBus
+	audioMgr         *audio.Manager      // nil if TTS not configured; used by TTSHandler
+	ttsHandler       *httpapi.TTSHandler // nil if TTS not configured; for hot-reload
 }

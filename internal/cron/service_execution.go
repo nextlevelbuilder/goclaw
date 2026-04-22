@@ -139,10 +139,17 @@ func (cs *Service) recordRunLocked(jobID string, err error, resultText string) {
 // runLoopTickInterval is the cron run loop tick rate. Production default = 1s.
 // Tests override this via the setFastTick(t) helper to avoid waiting >1s per
 // scheduled-job test. Production behavior is unchanged.
+//
+// The value is read synchronously inside Start() before the runLoop goroutine
+// is spawned — runLoop itself takes `tick` as a parameter so it never reads
+// this package-level var. This avoids a cross-test race where test A's Stop()
+// returns before its runLoop has executed the ticker-construction line, and
+// test B subsequently calls setFastTick(), mutating the var while test A's
+// goroutine is still racing to read it.
 var runLoopTickInterval = 1 * time.Second
 
-func (cs *Service) runLoop(stopChan chan struct{}) {
-	ticker := time.NewTicker(runLoopTickInterval)
+func (cs *Service) runLoop(stopChan chan struct{}, tick time.Duration) {
+	ticker := time.NewTicker(tick)
 	defer ticker.Stop()
 
 	for {

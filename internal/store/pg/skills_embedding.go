@@ -29,7 +29,7 @@ func (s *PGSkillStore) SearchByEmbedding(ctx context.Context, embedding []float3
 	tenantCond := buildSkillEmbeddingTenantCond(tc)
 	orderN := nextParam
 	limitN := orderN + 1
-	q := fmt.Sprintf(`SELECT name, slug, COALESCE(description, ''), version, file_path,
+	q := fmt.Sprintf(`SELECT name, slug, COALESCE(description, '') AS description, version, file_path,
 			1 - (embedding <=> $1::vector) AS score
 		FROM skills
 		WHERE status = 'active' AND enabled = true AND embedding IS NOT NULL

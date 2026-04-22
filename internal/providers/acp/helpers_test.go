@@ -209,12 +209,10 @@ func TestLimitedWriter_ZeroMax(t *testing.T) {
 func TestLimitedWriter_ConcurrentWrites(t *testing.T) {
 	lw := &limitedWriter{max: 1000}
 	var wg sync.WaitGroup
-	for i := 0; i < 20; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 20 {
+		wg.Go(func() {
 			lw.Write([]byte("data"))
-		}()
+		})
 	}
 	wg.Wait()
 	// No panic and output <= max

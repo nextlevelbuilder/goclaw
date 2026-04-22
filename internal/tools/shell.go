@@ -307,12 +307,20 @@ func matchesAny(command string, patterns []*regexp.Regexp) bool {
 }
 
 // executeOnHost runs a command directly on the host (original behavior).
+// ctx cancellation (e.g. agent abort) triggers SIGTERM → 3s grace → SIGKILL on the
+// entire process group so forked children are also cleaned up (no orphans).
 func (t *ExecTool) executeOnHost(ctx context.Context, command, cwd string) *Result {
 	ctx, cancel := context.WithTimeout(ctx, t.timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "sh", "-c", command)
+	// Use plain exec.Command (not CommandContext) so we control the kill sequence.
+	// CommandContext would SIGKILL only the direct child, leaving forked grandchildren alive.
+	cmd := exec.Command("sh", "-c", command)
 	cmd.Dir = cwd
+
+	// Place the child in its own process group so killProcessGroup(-pgid, sig)
+	// reaches the shell and all of its forked children.
+	setProcessGroup(cmd)
 
 	// Limit output to 1MB to prevent OOM from runaway commands.
 	stdout := &limitedBuffer{max: 1 << 20}
@@ -320,8 +328,38 @@ func (t *ExecTool) executeOnHost(ctx context.Context, command, cwd string) *Resu
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 
-	err := cmd.Run()
+	if err := cmd.Start(); err != nil {
+		return ErrorResult(fmt.Sprintf("failed to start command: %v", err))
+	}
 
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+
+	select {
+	case err := <-done:
+		// Normal completion (success or non-zero exit).
+		return buildHostResult(err, stdout, stderr, ctx, t.timeout)
+
+	case <-ctx.Done():
+		// Context cancelled or timed out — kill the process group gracefully then forcefully.
+		_ = killProcessGroup(cmd, syscallSIGTERM)
+		select {
+		case <-done:
+			// Exited cleanly after SIGTERM.
+		case <-time.After(3 * time.Second):
+			// Still alive after grace period — force kill.
+			_ = killProcessGroup(cmd, syscallSIGKILL)
+			<-done
+		}
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return ErrorResult(fmt.Sprintf("command timed out after %s", t.timeout))
+		}
+		return ErrorResult("command aborted")
+	}
+}
+
+// buildHostResult formats the result of a completed host command execution.
+func buildHostResult(err error, stdout, stderr *limitedBuffer, ctx context.Context, timeout time.Duration) *Result {
 	var result string
 	if stdout.Len() > 0 {
 		result = stdout.String()
@@ -335,7 +373,7 @@ func (t *ExecTool) executeOnHost(ctx context.Context, command, cwd string) *Resu
 
 	if err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return ErrorResult(fmt.Sprintf("command timed out after %s", t.timeout))
+			return ErrorResult(fmt.Sprintf("command timed out after %s", timeout))
 		}
 		if result == "" {
 			result = err.Error()
@@ -346,7 +384,6 @@ func (t *ExecTool) executeOnHost(ctx context.Context, command, cwd string) *Resu
 	if result == "" {
 		result = "(command completed with no output)"
 	}
-
 	return SilentResult(capExecOutput(result, execMaxOutputChars))
 }
 

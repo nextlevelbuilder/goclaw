@@ -17,6 +17,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/audio"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
@@ -49,6 +50,7 @@ type Channel struct {
 	stopCh          chan struct{}
 	httpServer      *http.Server
 	wsClient        *WSClient
+	audioMgr        *audio.Manager // unified STT via audio.Manager (nil = no STT)
 	// pairingService, pairingDebounce, approvedGroups, groupHistory, historyLimit
 	// are inherited from channels.BaseChannel.
 }
@@ -91,7 +93,8 @@ type senderCacheEntry struct {
 }
 
 // New creates a new Feishu/Lark channel.
-func New(cfg config.FeishuConfig, msgBus *bus.MessageBus, pairingSvc store.PairingStore, pendingStore store.PendingMessageStore, opts ...Option) (*Channel, error) {
+// audioMgr is optional (nil = STT disabled).
+func New(cfg config.FeishuConfig, msgBus *bus.MessageBus, pairingSvc store.PairingStore, pendingStore store.PendingMessageStore, audioMgr *audio.Manager, opts ...Option) (*Channel, error) {
 	if cfg.AppID == "" || cfg.AppSecret == "" {
 		return nil, fmt.Errorf("feishu app_id and app_secret are required")
 	}
@@ -116,6 +119,7 @@ func New(cfg config.FeishuConfig, msgBus *bus.MessageBus, pairingSvc store.Pairi
 		docCache:       newDocCache(larkDocCacheSize, larkDocCacheTTL),
 		groupAllowList: cfg.GroupAllowFrom,
 		stopCh:         make(chan struct{}),
+		audioMgr:       audioMgr,
 	}
 	ch.SetPairingService(pairingSvc)
 	ch.SetGroupHistory(channels.MakeHistory(channels.TypeFeishu, pendingStore, base.TenantID()))

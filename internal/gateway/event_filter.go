@@ -82,6 +82,11 @@ func clientCanReceiveEvent(c *Client, event bus.Event) bool {
 		return true
 	}
 
+	// Immediate trace status events: broadcast to all tenant clients (no per-user routing).
+	if event.Name == protocol.EventTraceStatusChanged {
+		return true
+	}
+
 	// Team events: filter by TeamID.
 	if strings.HasPrefix(event.Name, "team.") || strings.HasPrefix(event.Name, "delegation.") {
 		if tid := extractTeamID(event); tid != "" {

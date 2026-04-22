@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/cache"
+	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
@@ -299,12 +300,21 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 }
 
 func (r *MethodRouter) sendConnectResponse(ctx context.Context, client *Client, reqID string) {
+	// Build scoped ctx that store.IsMasterScope expects: role + tenant.
+	// Owner role short-circuits regardless of tenant; non-owner relies on
+	// tenant_id == MasterTenantID. See store.IsMasterScope at context.go:346.
+	scopedCtx := store.WithTenantID(ctx, client.tenantID)
+	if client.IsOwner() {
+		scopedCtx = store.WithRole(scopedCtx, store.RoleOwner)
+	}
 	resp := map[string]any{
-		"protocol":  protocol.ProtocolVersion,
-		"role":      string(client.role),
-		"user_id":   client.userID,
-		"tenant_id": client.tenantID.String(),
-		"is_owner":  client.IsOwner(),
+		"protocol":        protocol.ProtocolVersion,
+		"role":            string(client.role),
+		"user_id":         client.userID,
+		"tenant_id":       client.tenantID.String(),
+		"is_owner":        client.IsOwner(),
+		"is_master_scope": store.IsMasterScope(scopedCtx),
+		"edition":         edition.Current().Name,
 		"server": map[string]any{
 			"name":    "goclaw",
 			"version": r.server.version,

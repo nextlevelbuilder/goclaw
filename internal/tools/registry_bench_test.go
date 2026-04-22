@@ -32,7 +32,7 @@ func (m *MockTool) Execute(ctx context.Context, args map[string]any) *Result {
 // BenchmarkRegistry_Get_50Tools benchmarks tool lookup in registry with 50 tools.
 func BenchmarkRegistry_Get_50Tools(b *testing.B) {
 	reg := NewRegistry()
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		tool := &MockTool{
 			name:        fmt.Sprintf("tool_%02d", i),
 			description: "Mock tool for benchmarking",
@@ -58,7 +58,7 @@ func BenchmarkRegistry_Get_50Tools(b *testing.B) {
 // BenchmarkRegistry_Get_100Tools benchmarks tool lookup in registry with 100 tools.
 func BenchmarkRegistry_Get_100Tools(b *testing.B) {
 	reg := NewRegistry()
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		tool := &MockTool{
 			name:        fmt.Sprintf("tool_%03d", i),
 			description: "Mock tool for benchmarking",
@@ -84,7 +84,7 @@ func BenchmarkRegistry_Get_100Tools(b *testing.B) {
 // BenchmarkRegistry_List_50Tools benchmarks listing tools from registry with 50 tools.
 func BenchmarkRegistry_List_50Tools(b *testing.B) {
 	reg := NewRegistry()
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		tool := &MockTool{
 			name:        fmt.Sprintf("tool_%02d", i),
 			description: "Mock tool for benchmarking",
@@ -102,7 +102,7 @@ func BenchmarkRegistry_List_50Tools(b *testing.B) {
 // BenchmarkRegistry_List_100Tools benchmarks listing tools from registry with 100 tools.
 func BenchmarkRegistry_List_100Tools(b *testing.B) {
 	reg := NewRegistry()
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		tool := &MockTool{
 			name:        fmt.Sprintf("tool_%03d", i),
 			description: "Mock tool for benchmarking",
@@ -120,7 +120,7 @@ func BenchmarkRegistry_List_100Tools(b *testing.B) {
 // BenchmarkRegistry_ProviderDefs_50Tools benchmarks generating provider definitions for 50 tools.
 func BenchmarkRegistry_ProviderDefs_50Tools(b *testing.B) {
 	reg := NewRegistry()
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		tool := &MockTool{
 			name:        fmt.Sprintf("tool_%02d", i),
 			description: "Mock tool for benchmarking",
@@ -144,7 +144,7 @@ func BenchmarkRegistry_ProviderDefs_50Tools(b *testing.B) {
 // BenchmarkRegistry_Alias_50Tools benchmarks tool lookup with aliases in registry.
 func BenchmarkRegistry_Alias_50Tools(b *testing.B) {
 	reg := NewRegistry()
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		tool := &MockTool{
 			name:        fmt.Sprintf("tool_%02d", i),
 			description: "Mock tool for benchmarking",
@@ -165,7 +165,7 @@ func BenchmarkRegistry_Alias_50Tools(b *testing.B) {
 // BenchmarkRegistry_Disable_Enable benchmarks disabling and enabling tools.
 func BenchmarkRegistry_Disable_Enable(b *testing.B) {
 	reg := NewRegistry()
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		tool := &MockTool{
 			name:        fmt.Sprintf("tool_%02d", i),
 			description: "Mock tool for benchmarking",
@@ -185,7 +185,7 @@ func BenchmarkRegistry_Disable_Enable(b *testing.B) {
 // BenchmarkRegistry_Count benchmarks counting tools in registry.
 func BenchmarkRegistry_Count(b *testing.B) {
 	reg := NewRegistry()
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		tool := &MockTool{
 			name:        fmt.Sprintf("tool_%02d", i),
 			description: "Mock tool for benchmarking",
@@ -203,7 +203,7 @@ func BenchmarkRegistry_Count(b *testing.B) {
 // BenchmarkRegistry_Resolve_WithDisabled benchmarks resolving tools with some disabled.
 func BenchmarkRegistry_Resolve_WithDisabled(b *testing.B) {
 	reg := NewRegistry()
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		tool := &MockTool{
 			name:        fmt.Sprintf("tool_%02d", i),
 			description: "Mock tool for benchmarking",
@@ -212,7 +212,7 @@ func BenchmarkRegistry_Resolve_WithDisabled(b *testing.B) {
 	}
 
 	// Disable half the tools
-	for i := 0; i < 25; i++ {
+	for i := range 25 {
 		reg.Disable(fmt.Sprintf("tool_%02d", i))
 	}
 

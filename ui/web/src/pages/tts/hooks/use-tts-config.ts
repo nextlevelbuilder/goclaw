@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useWs } from "@/hooks/use-ws";
+import { useWs, useHttp } from "@/hooks/use-ws";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { Methods } from "@/api/protocol";
 import { queryKeys } from "@/lib/query-keys";
@@ -45,8 +45,16 @@ const DEFAULT_TTS: TtsConfig = {
   minimax: {},
 };
 
+export interface SynthesizeParams {
+  text: string;
+  provider?: string;
+  voice_id?: string;
+  model_id?: string;
+}
+
 export function useTtsConfig() {
   const ws = useWs();
+  const http = useHttp();
   const connected = useAuthStore((s) => s.connected);
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
@@ -88,5 +96,23 @@ export function useTtsConfig() {
     [ws, invalidate],
   );
 
-  return { tts, loading, saving, error, refresh: invalidate, save };
+  // POST→Blob not in HttpClient; use fetch + getAuthHeaders() for tenant/user header parity.
+  // See: http-client.ts:107-109 — getAuthHeaders() returns Authorization + X-GoClaw-* headers.
+  const synthesize = useCallback(
+    async (params: SynthesizeParams): Promise<Blob> => {
+      const res = await fetch("/v1/tts/synthesize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...http.getAuthHeaders() },
+        body: JSON.stringify(params),
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || `Synthesis failed (${res.status})`);
+      }
+      return res.blob();
+    },
+    [http],
+  );
+
+  return { tts, loading, saving, error, refresh: invalidate, save, synthesize };
 }

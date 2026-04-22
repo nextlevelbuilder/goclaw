@@ -132,11 +132,11 @@ The dual-identity pattern is a **codebase-wide convention**, not agent-specific:
 | Entity | UUID field | Key field | Notes |
 |---|---|---|---|
 | Agent | `agents.id uuid` | `agents.agent_key text` | Dual-tenant: same key across tenants is allowed |
-| Team | `agent_teams.id uuid` | `agent_teams.team_key text` | Team members reference agents by UUID |
+| Team | `agent_teams.id uuid` | (no key field) | Teams use UUID only; no slug or key field |
 | Tenant | `tenants.id uuid` | `tenants.tenant_slug text` | Slug used in URLs and onboarding wizard |
 | Session | `sessions.session_key text` | (no separate UUID) | Session key is the only identifier — safe by construction |
 
-The rules in section 2 apply verbatim to `team_id`/`team_key` and `tenant_id`/`tenant_slug`. In particular:
+The rules in section 2 apply to agents and tenants. For **teams**:
 
 - `WithTenantID(ctx, ...)` takes a `uuid.UUID`. Never pass a slug.
 - `TeamMember.AgentID` is the canonical team-membership FK and must be a UUID.
@@ -255,9 +255,111 @@ Consequences for code:
 - Log formatting: prefer `{"agent": "tieu-ho", "tenant": "master"}` together, or just the UUID. Never log `agent_key` alone without a tenant.
 - When designing new tables with agent_key columns, the unique index must include `tenant_id`. Scoping to tenant_id prevents the same error class in future features.
 
+**Note on teams:** Unlike agents, `agent_teams` table uses **UUID only**. There is no `team_key` or slug field. Always reference teams by `id` (UUID). Teams are not dual-identity.
+
 ## Appendix — TL;DR one-liner
 
 - Use **`l.agentUUID.String()`** when setting `DomainEvent.AgentID`, store model fields, SQL query parameters, OTel span attributes, FK constraints, and any tenant-scoped unique key.
 - Use **`l.id`** when logging, emitting `AgentEvent` for the UI, rendering the system prompt, building filesystem paths, setting the key context (`WithAgentKey`), and doing router lookups.
+
+---
+
+## ActorID vs UserID in Group Chats
+
+A second identity pattern complements agent identity: **who is acting** vs
+**which scope the action belongs to**. The pattern mirrors agent UUID/key
+but applies to end users in group contexts (Telegram, Discord, Feishu, Zalo).
+
+### The two identities
+
+| Identity | Context key | Helper | Meaning |
+|---|---|---|---|
+| **SCOPE** — namespace / memory | `UserIDKey` | `store.UserIDFromContext(ctx)` | `group:telegram:<chatID>` in Telegram groups; `guild:<guildID>:user:<senderID>` in Discord guilds; sender ID in DMs |
+| **ACTOR** — acting principal | `SenderIDKey` | `store.SenderIDFromContext(ctx)` | Always the individual sender's numeric ID (never group-scoped) |
+| (combined) | — | `store.ActorIDFromContext(ctx)` | `SenderID` if set, else falls back to `UserID` |
+
+### When to use each
+
+| Purpose | Helper | Why |
+|---|---|---|
+| Memory / KG / session key | `UserIDFromContext` / `MemoryUserID` / `KGUserID` | Memory is per-group by design — all members share conversational context |
+| File / path scope | `UserIDFromContext` | Per-group workspace; group members share files |
+| **Permission check** | `SenderIDFromContext` | Checks attribute to the real user, not the group |
+| **Audit trail** (`initiated_by`, event `UserID`) | `ActorIDFromContext` | Traces the real user action across wrappers |
+| **Ownership** (`OwnerID`, creator fields) | `ActorIDFromContext` | A skill published in a group belongs to the individual user |
+| Role / RBAC | `ActorIDFromContext` | Role applies to the human, not the group |
+
+### Group behavior table
+
+| Context | `UserID` | `SenderID` | `ActorID` |
+|---|---|---|---|
+| Telegram DM | sender numeric | sender numeric | sender numeric |
+| Telegram group | `group:telegram:<chatID>` | sender numeric | sender numeric |
+| Discord DM | sender snowflake | sender snowflake | sender snowflake |
+| Discord guild | `guild:<guildID>:user:<senderID>` | sender snowflake | sender snowflake |
+| HTTP API | HTTP user ID | (empty) | HTTP user ID |
+| Cron / subagent system ctx | (inherited / empty) | (empty or propagated) | same as SenderID, else UserID |
+
+### Propagation through wrappers (#915)
+
+When a tool wrapper synthesizes an inbound message (subagent announce,
+delegate announce, teammate dispatch, session_send), the synthetic
+`SenderID` carries routing identity (e.g. `subagent:<taskID>`) — NOT a
+real user. The real acting sender must travel through `InboundMessage.Metadata`
+under `tools.MetaOriginSenderID`, and the next-turn builder copies it to
+`RunRequest.SenderID`. Without this propagation:
+
+- Permission checks against `bus.IsInternalSender(...)` prefixes → **denied**
+  (synthetic senders never match a grant)
+- Empty sender → **denied** (`CheckFileWriterPermission` group-context fail-closed
+  policy)
+
+Code path:
+
+```
+SubagentTask.OriginSenderID
+  → AnnounceMetadata.OriginSenderID
+  → InboundMessage.Metadata[MetaOriginSenderID]
+  → subagentAnnounceRouting.SenderID
+  → RunRequest.SenderID
+  → loop_context.go:WithSenderID(ctx, …)
+  → SenderIDFromContext(ctx) in permission checks
+```
+
+Same chain for delegate (`delegate_tool.announceToParent`) and teammate
+dispatch (`team_tool_dispatch.go`).
+
+### Group permission check policy
+
+`store.CheckFileWriterPermission` / `store.CheckCronPermission` in group
+or guild context (`UserID` starts with `group:` or `guild:`):
+
+- empty `SenderID` → **DENY** (system context must not gain write access silently)
+- synthetic-prefix `SenderID` → **DENY** (`subagent:`, `notification:`, `teammate:`,
+  `system:`, `ticker:`, `session_send_tool`)
+- real numeric `SenderID` → DB lookup; DENY if no `file_writer` allow grant for this sender
+- DB error → fail-open (availability over strictness)
+
+In DM / HTTP / cron-direct context (no group/guild prefix): always allow.
+No per-user writer gate applies.
+
+### Legacy-data tolerance for skill ownership
+
+Skills / cron / delegate audit trails created before #915 migration store
+`UserIDFromContext` values (possibly `group:*` prefixed) in `owner_id` /
+`user_id` columns. Ownership checks at `skill_manage.go` (patch/delete)
+accept either `ActorIDFromContext` (new) or `UserIDFromContext` (legacy).
+This lets existing group-scoped rows remain accessible without a
+destructive backfill. When a user re-publishes a skill, the new row uses
+actor ownership (tighter by default).
+
+### Related code
+
+- `internal/store/context.go` — helper definitions
+- `internal/store/config_permission_store.go` — group permission policy
+- `internal/tools/subagent_spawn.go`, `subagent_exec.go` — subagent propagation
+- `internal/tools/delegate_tool.go` — delegate propagation
+- `cmd/gateway_subagent_announce_queue.go`, `gateway_consumer_handlers.go` — re-ingress reconstruction
+- `tests/integration/telegram_group_write_file_permission_test.go` — regression fixtures
 
 When in doubt, walk the four-step checklist in section 4.

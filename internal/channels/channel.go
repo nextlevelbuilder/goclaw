@@ -12,6 +12,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -602,10 +603,12 @@ func (c *BaseChannel) HandleMessage(senderID, chatID, content string, media []st
 		userID = senderID[:idx]
 	}
 
-	// Convert string paths to MediaFile (for channels that haven't been updated yet).
+	// Convert string paths to MediaFile (legacy path-only callers).
+	// Use filepath.Base(p) as filename so persistMedia's sanitizer gets a
+	// meaningful stem instead of falling back to UUID.
 	var mediaFiles []bus.MediaFile
 	for _, p := range media {
-		mediaFiles = append(mediaFiles, bus.MediaFile{Path: p})
+		mediaFiles = append(mediaFiles, bus.MediaFile{Path: p, Filename: filepath.Base(p)})
 	}
 
 	msg := bus.InboundMessage{

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
+	"github.com/nextlevelbuilder/goclaw/internal/audio"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/discord"
@@ -27,7 +28,8 @@ import (
 )
 
 // registerConfigChannels registers config-based channels as fallback when no DB instances are loaded.
-func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, msgBus *bus.MessageBus, pgStores *store.Stores, instanceLoader *channels.InstanceLoader) {
+// audioMgr is optional (nil = STT disabled for channels).
+func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, msgBus *bus.MessageBus, pgStores *store.Stores, instanceLoader *channels.InstanceLoader, audioMgr *audio.Manager) {
 	if instanceLoader != nil {
 		return
 	}
@@ -46,7 +48,7 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 	if cfg.Channels.Telegram.Enabled {
 		if cfg.Channels.Telegram.Token == "" {
 			recordMissingConfig(channels.TypeTelegram, "Set channels.telegram.token in config.")
-		} else if tg, err := telegram.New(cfg.Channels.Telegram, msgBus, pgStores.Pairing); err != nil {
+		} else if tg, err := telegram.New(cfg.Channels.Telegram, msgBus, pgStores.Pairing, audioMgr); err != nil {
 			channelMgr.RecordFailure(channels.TypeTelegram, "", err)
 			slog.Error("failed to initialize telegram channel", "error", err)
 		} else {
@@ -58,7 +60,7 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 	if cfg.Channels.Discord.Enabled {
 		if cfg.Channels.Discord.Token == "" {
 			recordMissingConfig(channels.TypeDiscord, "Set channels.discord.token in config.")
-		} else if dc, err := discord.New(cfg.Channels.Discord, msgBus, nil, nil, nil, nil); err != nil {
+		} else if dc, err := discord.New(cfg.Channels.Discord, msgBus, nil, nil, nil, nil, audioMgr); err != nil {
 			channelMgr.RecordFailure(channels.TypeDiscord, "", err)
 			slog.Error("failed to initialize discord channel", "error", err)
 		} else {
@@ -72,7 +74,7 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 		if strings.Contains(fmt.Sprintf("%T", pgStores.DB.Driver()), "sqlite") {
 			waDialect = "sqlite3"
 		}
-		wa, err := whatsapp.New(cfg.Channels.WhatsApp, msgBus, pgStores.Pairing, pgStores.DB, pgStores.PendingMessages, waDialect)
+		wa, err := whatsapp.New(cfg.Channels.WhatsApp, msgBus, pgStores.Pairing, pgStores.DB, pgStores.PendingMessages, waDialect, audioMgr, pgStores.BuiltinTools)
 		if err != nil {
 			channelMgr.RecordFailure(channels.TypeWhatsApp, "", err)
 			slog.Error("failed to initialize whatsapp channel", "error", err)
@@ -131,7 +133,7 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 				feishu.WithAgentStore(pgStores.Agents),
 				feishu.WithConfigPermStore(pgStores.ConfigPermissions),
 			}
-			if f, err := feishu.New(cfg.Channels.Feishu, msgBus, pgStores.Pairing, nil, feishuOpts...); err != nil {
+			if f, err := feishu.New(cfg.Channels.Feishu, msgBus, pgStores.Pairing, nil, audioMgr, feishuOpts...); err != nil {
 				channelMgr.RecordFailure(channels.TypeFeishu, "", err)
 				slog.Error("failed to initialize feishu channel", "error", err)
 			} else {

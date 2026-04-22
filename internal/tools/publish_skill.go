@@ -129,17 +129,18 @@ func (t *PublishSkillTool) Execute(ctx context.Context, args map[string]any) *Re
 		return ErrorResult(fmt.Sprintf("failed to copy skill files: %v", err))
 	}
 
-	// Insert into DB
-	userID := store.UserIDFromContext(ctx)
-	if userID == "" {
-		userID = "system" // fallback for agent-only contexts
+	// Insert into DB — owner = actor (real sender) so a skill published in a
+	// group chat belongs to the individual user, not the group principal (#915).
+	ownerID := store.ActorIDFromContext(ctx)
+	if ownerID == "" {
+		ownerID = "system" // fallback for agent-only contexts
 	}
 	desc := description
 	params := store.SkillCreateParams{
 		Name:        name,
 		Slug:        slug,
 		Description: &desc,
-		OwnerID:     userID,
+		OwnerID:     ownerID,
 		Visibility:  "private",
 		Version:     version,
 		FilePath:    destDir,
@@ -153,12 +154,12 @@ func (t *PublishSkillTool) Execute(ctx context.Context, args map[string]any) *Re
 		return ErrorResult(fmt.Sprintf("failed to register skill: %v", err))
 	}
 
-	slog.Info("skill published", "id", id, "slug", slug, "version", version, "owner", userID)
+	slog.Info("skill published", "id", id, "slug", slug, "version", version, "owner", ownerID)
 
-	// Auto-grant to calling agent
+	// Auto-grant to calling agent (granted-by = owner, same as CreateSkillManaged)
 	agentID := store.AgentIDFromContext(ctx)
 	if agentID != uuid.Nil {
-		if err := t.skills.GrantToAgent(ctx, id, agentID, version, userID); err != nil {
+		if err := t.skills.GrantToAgent(ctx, id, agentID, version, ownerID); err != nil {
 			slog.Warn("publish_skill: auto-grant failed", "error", err)
 		}
 	}

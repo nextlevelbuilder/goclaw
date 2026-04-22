@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -102,6 +103,20 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.TrimSpace(skillContent) == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidRequest, "SKILL.md is empty")})
+		return
+	}
+
+	// Security guard: scan for malicious content BEFORE any disk/DB write
+	violations, safe := skills.GuardSkillContent(skillContent)
+	if !safe {
+		slog.Warn("security.skills.upload_rejected",
+			"user_id", userID,
+			"violations", len(violations),
+			"first_rule", violations[0].Reason)
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"error":      i18n.T(locale, i18n.MsgInvalidRequest, "skill content failed security scan"),
+			"violations": skills.FormatGuardViolations(violations),
+		})
 		return
 	}
 
@@ -232,9 +247,7 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 			)
 			skill.Status = depState.status
 			skill.MissingDeps = depState.missing
-			for key, value := range depState.response {
-				response[key] = value
-			}
+			maps.Copy(response, depState.response)
 		}
 	}
 

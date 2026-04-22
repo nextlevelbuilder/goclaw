@@ -114,11 +114,11 @@ export function useAgentDetailState(
         max_tool_iterations: maxToolIterations,
         is_default: isDefault,
         status,
-        other_config: Object.keys(otherConfig).length > 0 ? otherConfig : null,
+        other_config: Object.keys(otherConfig).length > 0 ? otherConfig : {},
         context_pruning: pruningEnabled ? pruningConfig : null,
         compaction_config: compactionConfig,
         subagents_config: subEnabled ? subConfig : null,
-        tools_config: toolsEnabled ? toolsConfig : null,
+        tools_config: toolsEnabled ? toolsConfig : {},
         sandbox_config: sandboxEnabled ? sandboxConfig : null,
       })
       onClose()

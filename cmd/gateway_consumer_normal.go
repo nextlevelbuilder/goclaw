@@ -11,6 +11,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/telegram/voiceguard"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
@@ -214,20 +215,10 @@ func processNormalMessage(
 
 	// Build outbound metadata for reply-to + thread routing BEFORE RegisterRun
 	// so block.reply handler can use it for routing intermediate messages.
-	outMeta := make(map[string]string)
+	outMeta := channels.CopyFinalRoutingMeta(msg.Metadata)
 	if isGroup {
 		if mid := msg.Metadata["message_id"]; mid != "" {
 			outMeta["reply_to_message_id"] = mid
-		}
-	}
-	// Channel routing keys — keep in sync with routingMetaKeys in channels/events.go.
-	for _, k := range []string{
-		tools.MetaMessageThreadID, "local_key", "placeholder_key", "group_id",
-		"feishu_reply_target_id",
-		"fb_mode", "sender_id", "page_id", "reply_to_comment_id",
-	} {
-		if v := msg.Metadata[k]; v != "" {
-			outMeta[k] = v
 		}
 	}
 
@@ -355,6 +346,29 @@ func processNormalMessage(
 		schedCtx = tools.WithRunKind(schedCtx, rk)
 	}
 
+	// Resolve effective sender: prefer MetaOriginSenderID when the on-wire
+	// SenderID is an internal/synthetic one (e.g. "notification:progress",
+	// "ticker:system", "system:escalation", "session_send_tool"). This lets
+	// system-initiated turns that DO have a real user behind them (because
+	// they propagated the origin via metadata) attribute actions to that user
+	// — e.g. for CheckFileWriterPermission in group chats (#915). Synthetic
+	// senders without propagation keep their on-wire value and hit F1's
+	// deny-in-group rule (safe default).
+	effectiveSenderID := msg.SenderID
+	if bus.IsInternalSender(effectiveSenderID) {
+		// Defense-in-depth: if a propagation bug ever writes a synthetic
+		// value into MetaOriginSenderID, do NOT honour it. We want only real
+		// user senders to override the on-wire synthetic.
+		if realSender := msg.Metadata[tools.MetaOriginSenderID]; realSender != "" && !bus.IsInternalSender(realSender) {
+			effectiveSenderID = realSender
+		}
+	}
+	// Role propagation: carry the RBAC role of the originating actor so
+	// permission checks during the re-ingress turn can bypass per-user
+	// grants for authenticated admins (#915). Only present when the
+	// upstream dispatch set MetaOriginRole.
+	effectiveRole := msg.Metadata[tools.MetaOriginRole]
+
 	// Schedule through main lane (per-session concurrency controlled by maxConcurrent)
 	outCh := deps.Sched.ScheduleWithOpts(schedCtx, "main", agent.RunRequest{
 		SessionKey:        sessionKey,
@@ -368,7 +382,8 @@ func processNormalMessage(
 		PeerKind:          peerKind,
 		LocalKey:          msg.Metadata["local_key"],
 		UserID:            userID,
-		SenderID:          msg.SenderID,
+		SenderID:          effectiveSenderID,
+		Role:              effectiveRole,
 		SenderName:        resolveSenderName(msg),
 		RunID:             runID,
 		Stream:            enableStream,
@@ -415,10 +430,19 @@ func processNormalMessage(
 				return
 			}
 			slog.Error("inbound: agent run failed", "error", outcome.Err, "channel", channel)
+			// Suppress technical error text on public-facing channels (FB, Telegram, etc.)
+			// Empty Content still triggers placeholder/typing cleanup downstream.
+			errContent := formatAgentError(outcome.Err)
+			if deps.ChannelMgr != nil {
+				if ct := deps.ChannelMgr.ChannelTypeForName(channel); isExternalChannel(ct) {
+					slog.Info("inbound: suppressed error for external channel", "channel", channel, "type", ct)
+					errContent = ""
+				}
+			}
 			deps.MsgBus.PublishOutbound(bus.OutboundMessage{
 				Channel:  channel,
 				ChatID:   chatID,
-				Content:  formatAgentError(outcome.Err),
+				Content:  errContent,
 				Metadata: meta,
 			})
 			return

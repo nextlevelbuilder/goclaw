@@ -104,6 +104,12 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 				ctx = tracing.WithTraceTeamID(ctx, *trace.TeamID)
 			}
 
+			// Notify the gateway so it can associate this traceID with the active run
+			// entry for force-abort (forceMarkTraceAborted needs traceID at abort time).
+			if req.OnTraceCreated != nil {
+				req.OnTraceCreated(traceID)
+			}
+
 			// Pre-generate root "agent" span ID so LLM/tool spans can reference it as parent.
 			agentSpanID = store.GenNewID()
 			ctx = tracing.WithParentSpanID(ctx, agentSpanID)

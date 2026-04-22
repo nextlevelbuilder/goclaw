@@ -1,0 +1,132 @@
+{
+  "title": "Chuyển văn bản thành giọng nói",
+  "description": "Cấu hình provider TTS và cài đặt tự động",
+  "save": "Lưu",
+  "saving": "Đang lưu...",
+  "saveChanges": "Lưu thay đổi",
+  "status": {
+    "title": "Trạng thái",
+    "configured": "Đã cấu hình",
+    "disabled": "Đã tắt",
+    "noProvider": "Chưa cấu hình provider TTS",
+    "activeProvider": "Provider đang hoạt động: {{provider}}, Tự động: {{auto}}"
+  },
+  "general": {
+    "title": "Cài đặt chung",
+    "primaryProvider": "Provider chính",
+    "autoApplyMode": "Chế độ tự động phát",
+    "replyMode": "Chế độ trả lời",
+    "maxTextLength": "Độ dài text tối đa",
+    "timeout": "Thời gian chờ (ms)"
+  },
+  "providers": {
+    "none": "Không có (Tắt)",
+    "openai": "OpenAI",
+    "elevenlabs": "ElevenLabs",
+    "edge": "Edge (Miễn phí)",
+    "minimax": "MiniMax"
+  },
+  "autoModes": {
+    "off": "Tắt",
+    "offDesc": "Agent có thể dùng công cụ TTS thủ công",
+    "always": "Luôn luôn",
+    "alwaysDesc": "Tất cả phản hồi đều có âm thanh",
+    "inbound": "Đầu vào",
+    "inboundDesc": "Chỉ khi người dùng gửi giọng nói/âm thanh",
+    "tagged": "Đánh dấu",
+    "taggedDesc": "Chỉ khi phản hồi chứa thẻ [[tts]]"
+  },
+  "replyModes": {
+    "final": "Chỉ phản hồi cuối",
+    "finalDesc": "Chỉ phản hồi cuối cùng",
+    "all": "Tất cả",
+    "allDesc": "Tất cả phản hồi bao gồm công cụ/khối"
+  },
+  "providerSettings": "Cài đặt {{provider}}",
+  "openai": {
+    "apiKey": "API Key",
+    "apiBase": "API Base URL",
+    "model": "Model",
+    "voice": "Giọng nói"
+  },
+  "elevenlabs": {
+    "apiKey": "API Key",
+    "baseUrl": "Base URL",
+    "voiceId": "Voice ID",
+    "modelId": "Model ID"
+  },
+  "edge": {
+    "voice": "Giọng nói",
+    "speechRate": "Tốc độ nói",
+    "hint": "Edge TTS miễn phí, không cần API key. Cài đặt: pip install edge-tts"
+  },
+  "minimax": {
+    "apiKey": "API Key",
+    "groupId": "Group ID *",
+    "groupIdPlaceholder": "Bắt buộc cho MiniMax",
+    "apiBase": "API Base",
+    "model": "Model",
+    "voiceId": "Voice ID"
+  },
+  "voice_label": "Giọng đọc",
+  "voice_placeholder": "Chọn giọng đọc…",
+  "voice_picker": {
+    "requires_provider": "Vui lòng cấu hình provider TTS trước"
+  },
+  "voice_refresh": "Làm mới",
+  "voice_preview": "Nghe thử",
+  "voice_stop_preview": "Dừng",
+  "voice_no_voices": "Chưa có giọng đọc",
+  "voice_loading": "Đang tải giọng đọc…",
+  "voice_preview_error": "Không nghe thử được — đang làm mới",
+  "model_label": "Mô hình",
+  "model_placeholder": "Mặc định (tenant/hệ thống)",
+  "empty_state": {
+    "title": "Giọng đọc AI chưa được cấu hình",
+    "description": "Cấu hình TTS để agent trả lời bằng giọng nói",
+    "cta": "Cấu hình TTS",
+    "non_owner_hint": "Liên hệ owner để bật giọng đọc AI"
+  },
+  "test": {
+    "button": "Thử giọng đọc",
+    "sample_text": "Xin chào, đây là giọng đọc thử.",
+    "title": "Nghe thử",
+    "placeholder": "Nhập text để nghe thử...",
+    "play": "Phát",
+    "stop": "Dừng",
+    "error_missing_config": "Chọn provider và nhập API key trước",
+    "error_synthesize": "Không tạo được audio: {{error}}"
+  },
+  "override": {
+    "label": "Ghi đè giọng đọc cho agent này",
+    "inherits": "Kế thừa: {{provider}} · {{voice}} · {{model}}"
+  },
+  "testConnection": {
+    "label": "Kiểm tra kết nối",
+    "testing": "Đang kiểm tra…",
+    "success": "Kết nối thành công",
+    "failed": "Kết nối thất bại"
+  },
+  "connection": {
+    "test": "Kiểm tra kết nối",
+    "ok": "Kết nối OK",
+    "fail": "Key không hợp lệ hoặc network lỗi"
+  },
+  "agent": {
+    "override_label": "Ghi đè voice cho agent này",
+    "inherits_from_global": "Kế thừa từ global: {{provider}} · {{voice}} · {{model}}"
+  },
+  "playground": {
+    "title": "Thử nghiệm",
+    "inputLabel": "Văn bản cần đọc",
+    "placeholder": "Nhập văn bản để nghe thử…",
+    "play": "Phát",
+    "stop": "Dừng",
+    "synthesizing": "Đang tổng hợp…",
+    "playbackFailed": "Phát âm thất bại",
+    "requiresProvider": "Chọn provider ở trên để bật phát thử."
+  },
+  "advanced": {
+    "title": "Cài đặt nâng cao"
+  }
+}

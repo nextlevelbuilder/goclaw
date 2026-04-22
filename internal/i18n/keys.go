@@ -32,6 +32,14 @@ const (
 	MsgUserIDRequired    = "error.user_id_required"    // "user_id is required"
 	MsgMsgRequired       = "error.message_required"    // "message is required"
 
+	// --- Abort ---
+	MsgAbortStopped         = "abort.stopped"          // "run stopped"
+	MsgAbortForced          = "abort.forced"           // "run force-aborted (3s grace exceeded)"
+	MsgAbortAlreadyAborting = "abort.already_aborting" // "abort already in progress"
+	MsgAbortNotFound        = "abort.not_found"        // "run not found or already finished"
+	MsgAbortUnauthorized    = "abort.unauthorized"     // "not authorized to abort this run"
+	MsgAbortFailed          = "abort.failed"           // "failed to abort run: %s"
+
 	// --- Channel instances ---
 	MsgInvalidChannelType = "error.invalid_channel_type" // "invalid channel_type"
 	MsgInstanceNotFound   = "error.instance_not_found"   // "instance not found"
@@ -67,6 +75,9 @@ const (
 	MsgSummoningUnavailable = "error.summoning_unavailable"     // "summoning not available"
 	MsgNoDescription        = "error.no_description"            // "agent has no description to resummon from"
 	MsgInvalidPath          = "error.invalid_path"              // "invalid path"
+
+	// --- Tenant backup / restore ---
+	MsgRestoreNewModeRejectsTenantID = "error.restore_new_mode_rejects_tenant_id" // "mode=new uses tenant_slug; tenant_id is not accepted"
 
 	// --- Scheduler ---
 	MsgQueueFull       = "error.queue_full"       // "session queue is full"
@@ -182,10 +193,29 @@ const (
 	// --- Tenants ---
 	MsgInvalidRole = "error.invalid_role" // "invalid role: allowed values are owner, admin, operator, member, viewer"
 
+	// --- TTS / Voices ---
+	MsgTtsUnknownModel   = "error.tts_unknown_model"  // "unknown tts model: %s"
+	MsgVoicesListFailed  = "error.voices_list_failed" // "failed to list voices: %s"
+
+	// --- STT ---
+	MsgSTTAllProvidersFailed    = "error.stt_all_providers_failed"    // "All STT providers failed"
+	MsgSTTLegacyConfigDeprecated = "warn.stt_legacy_config_deprecated" // "Legacy STT config deprecated; migrate to builtin_tools[stt]"
+	MsgSTTWhatsappPrivacyWarning = "warn.stt_whatsapp_privacy"         // "Enabling STT for WhatsApp breaks end-to-end encryption for voice messages sent to this agent."
+	MsgVoiceMessageFallback     = "channel.voice_message_fallback"    // "[Voice message]" — used when STT unavailable/disabled/timed-out
+
 	// --- Contact merge ---
 	MsgContactIDsRequired  = "error.contact_ids_required"  // "contact_ids is required"
 	MsgMergeTargetRequired = "error.merge_target_required"  // "exactly one of tenant_user_id or create_user is required"
 	MsgTenantUserNotFound  = "error.tenant_user_not_found"  // "tenant user not found"
 	MsgTenantMismatch      = "error.tenant_mismatch"        // "tenant user does not belong to this tenant"
 	MsgTenantScopeRequired = "error.tenant_scope_required"  // "tenant scope is required for this operation"
+
+	// --- Hooks ---
+	MsgHookInvalidMatcher           = "hook.invalid_matcher"            // "invalid matcher regex: %s"
+	MsgHookCommandDisabledStandard  = "hook.command_disabled_standard"  // "command-type hooks are only available on Lite edition"
+	MsgHookPromptRequiresMatcher    = "hook.prompt_requires_matcher"    // "prompt hooks require a matcher or if_expr (runaway-cost guard)"
+	MsgHookCircuitBreakerTripped    = "hook.circuit_breaker_tripped"    // "hook auto-disabled after repeated failures"
+	MsgHookBudgetExceeded           = "hook.budget_exceeded"            // "tenant hook token budget exceeded"
+	MsgHookPerTurnCapReached        = "hook.per_turn_cap_reached"       // "hook invocation per-turn cap reached"
+	MsgHookBuiltinReadOnly          = "hook.builtin_readonly"           // "builtin hooks are read-only except for the enabled toggle"
 )

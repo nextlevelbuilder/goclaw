@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/audio"
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
@@ -44,6 +45,7 @@ func setupToolRegistry(
 	browserMgr *browser.Manager,
 	webFetchTool *tools.WebFetchTool,
 	ttsTool *tools.TtsTool,
+	audioMgr *audio.Manager,
 	permPE *permissions.PolicyEngine,
 	toolPE *tools.PolicyEngine,
 	dataDir string,
@@ -133,15 +135,19 @@ func setupToolRegistry(
 	toolsReg.Register(tools.NewReadImageTool(providerRegistry))
 	toolsReg.Register(tools.NewCreateImageTool(providerRegistry))
 
-	// Audio generation tool (MiniMax music + ElevenLabs sound effects)
-	toolsReg.Register(tools.NewCreateAudioTool(providerRegistry,
-		cfg.Tts.ElevenLabs.APIKey, cfg.Tts.ElevenLabs.BaseURL))
-
-	// TTS (text-to-speech) system — always create TtsTool so config reload can populate it later
+	// Audio system: build Manager first so Music/SFX providers are registered
+	// before the create_audio tool is constructed.
 	ttsMgr := setupTTS(cfg)
 	if ttsMgr == nil {
 		ttsMgr = tts.NewManager(tts.ManagerConfig{})
 	}
+	setupAudioExtras(cfg, ttsMgr)      // Phase 3: registers Music + SFX providers.
+	audio.BridgeLegacySTT(ttsMgr, cfg) // Phase 4: bridge per-channel STTProxyURL → channel-scoped providers.
+	audioMgr = ttsMgr                  // expose to caller for channel STT wiring (Phase 5)
+
+	// Audio generation tool — backed by audio.Manager (Music + SFX).
+	toolsReg.Register(tools.NewCreateAudioTool(ttsMgr))
+
 	ttsTool = tools.NewTtsTool(ttsMgr)
 	toolsReg.Register(ttsTool)
 	if ttsMgr.HasProviders() {
@@ -298,6 +304,14 @@ func wireTracingAndCron(
 				Payload: map[string]any{"trace_ids": ids},
 			})
 		}
+		// Immediate status broadcast on every successful status write (bypasses 5s flush).
+		traceCollector.SetStatusBroadcaster(func(p tracing.TraceStatusPayload, tid uuid.UUID) {
+			msgBus.Broadcast(bus.Event{
+				Name:     protocol.EventTraceStatusChanged,
+				Payload:  p,
+				TenantID: tid,
+			})
+		})
 		traceCollector.Start()
 		slog.Info("LLM tracing enabled")
 	}

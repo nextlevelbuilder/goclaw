@@ -31,6 +31,14 @@ func init() {
 		MsgUserIDRequired:    "user_id 是必填项",
 		MsgMsgRequired:       "消息是必填项",
 
+		// Abort
+		MsgAbortStopped:         "已停止运行",
+		MsgAbortForced:          "已强制中止运行（超过 3 秒宽限期）",
+		MsgAbortAlreadyAborting: "正在中止中",
+		MsgAbortNotFound:        "运行未找到或已结束",
+		MsgAbortUnauthorized:    "无权中止此运行",
+		MsgAbortFailed:          "无法中止运行：%s",
+
 		// Channel instances
 		MsgInvalidChannelType: "Channel类型无效",
 		MsgInstanceNotFound:   "未找到实例",
@@ -66,6 +74,9 @@ func init() {
 		MsgSummoningUnavailable:  "召唤功能不可用",
 		MsgNoDescription:         "Agent没有可供重新召唤的描述",
 		MsgInvalidPath:           "路径无效",
+
+		// Tenant backup / restore
+		MsgRestoreNewModeRejectsTenantID: "mode=new 会创建新租户；请传 tenant_slug（而非 tenant_id）作为新租户的 slug",
 
 		// Scheduler
 		MsgQueueFull:    "Session队列已满",
@@ -184,5 +195,24 @@ func init() {
 		MsgTenantUserNotFound:  "未找到租户用户",
 		MsgTenantMismatch:      "租户用户不属于此租户",
 		MsgTenantScopeRequired: "此操作需要指定租户范围",
+
+		// TTS / 声音
+		MsgTtsUnknownModel:  "未知的 tts 模型：%s",
+		MsgVoicesListFailed: "获取声音列表失败：%s",
+
+		// STT
+		MsgSTTAllProvidersFailed:     "所有 STT 提供商均失败",
+		MsgSTTLegacyConfigDeprecated: "旧版 STT 配置已弃用；请迁移至 builtin_tools[stt]",
+		MsgSTTWhatsappPrivacyWarning: "为 WhatsApp 启用 STT 将破坏发送至此 Agent 的语音消息的端对端加密。",
+		MsgVoiceMessageFallback:      "[语音消息]",
+
+		// Hooks
+		MsgHookInvalidMatcher:          "无效的匹配器正则表达式: %s",
+		MsgHookCommandDisabledStandard: "命令类型钩子仅在 Lite 版本可用",
+		MsgHookPromptRequiresMatcher:   "prompt 钩子必须指定 matcher 或 if_expr(成本失控保护)",
+		MsgHookCircuitBreakerTripped:   "钩子在多次失败后已自动禁用",
+		MsgHookBudgetExceeded:          "租户钩子令牌预算已耗尽",
+		MsgHookPerTurnCapReached:       "单轮钩子调用次数已达上限",
+		MsgHookBuiltinReadOnly:         "内置钩子只读,仅允许切换启用状态",
 	})
 }
