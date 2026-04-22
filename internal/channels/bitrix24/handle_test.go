@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/cache"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -330,5 +333,177 @@ func TestDispatchEvent_MessageEditAndDeleteIgnored(t *testing.T) {
 	})
 	if _, ok := drainOne(mb, 50*time.Millisecond); ok {
 		t.Error("edit/delete events must not produce inbound messages in Phase 03")
+	}
+}
+
+// --- ContactCollector wiring tests (Phase B) -----------------------------
+
+// fakeContactStore captures UpsertContact calls so handle_test can verify
+// the channel invokes ContactCollector.EnsureContact the same way Telegram
+// does. Only implements the methods ContactCollector actually exercises.
+type fakeContactStore struct {
+	mu      sync.Mutex
+	upserts []fakeUpsertCall
+}
+
+type fakeUpsertCall struct {
+	channelType     string
+	channelInstance string
+	senderID        string
+	userID          string
+	peerKind        string
+	contactType     string
+	threadID        string
+}
+
+func (f *fakeContactStore) UpsertContact(_ context.Context, channelType, channelInstance, senderID, userID, _, _, peerKind, contactType, threadID, _ string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.upserts = append(f.upserts, fakeUpsertCall{
+		channelType:     channelType,
+		channelInstance: channelInstance,
+		senderID:        senderID,
+		userID:          userID,
+		peerKind:        peerKind,
+		contactType:     contactType,
+		threadID:        threadID,
+	})
+	return nil
+}
+
+func (f *fakeContactStore) ResolveTenantUserID(_ context.Context, _, _ string) (string, error) {
+	return "", nil
+}
+func (f *fakeContactStore) ListContacts(_ context.Context, _ store.ContactListOpts) ([]store.ChannelContact, error) {
+	return nil, nil
+}
+func (f *fakeContactStore) CountContacts(_ context.Context, _ store.ContactListOpts) (int, error) {
+	return 0, nil
+}
+func (f *fakeContactStore) GetContactsBySenderIDs(_ context.Context, _ []string) (map[string]store.ChannelContact, error) {
+	return nil, nil
+}
+func (f *fakeContactStore) GetContactByID(_ context.Context, _ uuid.UUID) (*store.ChannelContact, error) {
+	return nil, nil
+}
+func (f *fakeContactStore) GetSenderIDsByContactIDs(_ context.Context, _ []uuid.UUID) ([]string, error) {
+	return nil, nil
+}
+func (f *fakeContactStore) MergeContacts(_ context.Context, _ []uuid.UUID, _ uuid.UUID) error {
+	return nil
+}
+func (f *fakeContactStore) UnmergeContacts(_ context.Context, _ []uuid.UUID) error { return nil }
+func (f *fakeContactStore) GetContactsByMergedID(_ context.Context, _ uuid.UUID) ([]store.ChannelContact, error) {
+	return nil, nil
+}
+
+func (f *fakeContactStore) snapshot() []fakeUpsertCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]fakeUpsertCall, len(f.upserts))
+	copy(out, f.upserts)
+	return out
+}
+
+func newChannelWithContactCollector(t *testing.T, botID int, requireMention bool) (*Channel, *bus.MessageBus, *fakeContactStore) {
+	t.Helper()
+	ch, mb := newHandleTestChannel(t, botID, requireMention)
+	fakeStore := &fakeContactStore{}
+	ch.SetContactCollector(store.NewContactCollector(fakeStore, cache.NewInMemoryCache[bool]()))
+	return ch, mb, fakeStore
+}
+
+func TestHandleMessage_DM_CollectsSenderContact(t *testing.T) {
+	ch, _, cs := newChannelWithContactCollector(t, 101, false)
+	defer resetWebhookRouterForTest()
+
+	ch.DispatchEvent(context.Background(), &Event{
+		Type: EventMessageAdd,
+		Params: EventParams{
+			FromUserID:  "42",
+			DialogID:    "42",
+			MessageID:   "m-1",
+			MessageType: "P", // DM short code
+			Message:     "hi",
+		},
+	})
+
+	calls := cs.snapshot()
+	if len(calls) != 1 {
+		t.Fatalf("expected 1 contact upsert for DM, got %d: %+v", len(calls), calls)
+	}
+	c := calls[0]
+	if c.channelType != ch.Type() || c.channelInstance != ch.Name() {
+		t.Errorf("wrong channel routing: %+v", c)
+	}
+	if c.senderID != "42" || c.userID != "42" {
+		t.Errorf("sender/userID mismatch; want both '42', got sender=%q userID=%q", c.senderID, c.userID)
+	}
+	if c.peerKind != "direct" || c.contactType != "user" {
+		t.Errorf("peerKind/contactType mismatch; want direct/user, got %q/%q", c.peerKind, c.contactType)
+	}
+	if c.threadID != "" {
+		t.Errorf("DM must not set threadID, got %q", c.threadID)
+	}
+}
+
+func TestHandleMessage_Group_CollectsBothSenderAndGroupContact(t *testing.T) {
+	ch, _, cs := newChannelWithContactCollector(t, 101, false)
+	defer resetWebhookRouterForTest()
+
+	ch.DispatchEvent(context.Background(), &Event{
+		Type: EventMessageAdd,
+		Params: EventParams{
+			FromUserID:  "42",
+			DialogID:    "chat10",
+			MessageID:   "m-2",
+			MessageType: "C", // group short code
+			Message:     "team ping",
+		},
+	})
+
+	calls := cs.snapshot()
+	if len(calls) != 2 {
+		t.Fatalf("expected 2 contact upserts (sender + group), got %d: %+v", len(calls), calls)
+	}
+
+	// Call 0 = sender as user contact
+	if calls[0].senderID != "42" || calls[0].peerKind != "group" || calls[0].contactType != "user" {
+		t.Errorf("call[0] wrong; expected sender=42 peer=group ctype=user, got %+v", calls[0])
+	}
+	// Call 1 = group as group contact
+	if calls[1].senderID != "chat10" || calls[1].peerKind != "group" || calls[1].contactType != "group" {
+		t.Errorf("call[1] wrong; expected sender=chat10 peer=group ctype=group, got %+v", calls[1])
+	}
+}
+
+func TestHandleMessage_Blocked_DoesNotCollectContact(t *testing.T) {
+	ch, _, cs := newChannelWithContactCollector(t, 101, false)
+	defer resetWebhookRouterForTest()
+
+	// System message is filtered BEFORE contact collection — must not record.
+	ch.DispatchEvent(context.Background(), &Event{
+		Type: EventMessageAdd,
+		Params: EventParams{
+			FromUserID:    "42",
+			DialogID:      "42",
+			MessageType:   "P",
+			Message:       "user X joined",
+			SystemMessage: true,
+		},
+	})
+	// Empty content also filtered — must not record.
+	ch.DispatchEvent(context.Background(), &Event{
+		Type: EventMessageAdd,
+		Params: EventParams{
+			FromUserID:  "42",
+			DialogID:    "42",
+			MessageType: "P",
+			Message:     "   ",
+		},
+	})
+
+	if n := len(cs.snapshot()); n != 0 {
+		t.Errorf("blocked messages must not record contacts, got %d upserts", n)
 	}
 }

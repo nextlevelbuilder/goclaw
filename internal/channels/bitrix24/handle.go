@@ -161,6 +161,21 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 		meta["bitrix_chat_id"] = evt.Params.ChatID
 	}
 
+	// Collect contact for processed messages (matches Telegram pattern at
+	// channels/telegram/handlers.go:617-630). Runs AFTER policy gating so
+	// blocked senders aren't recorded, and BEFORE HandleMessage so the
+	// contact row exists by the time the agent (on the other side of the
+	// bus) resolves userID → MCP credentials via MCPServerStore. Bitrix
+	// webhooks don't carry display_name / username; leave those empty —
+	// enrichment via user.get can be added later without breaking the
+	// upsert key.
+	if cc := c.ContactCollector(); cc != nil {
+		cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, "", "", peerKind, "user", "", "")
+		if isGroup && chatID != "" {
+			cc.EnsureContact(ctx, c.Type(), c.Name(), chatID, "", "", "", "group", "group", "", "")
+		}
+	}
+
 	// Phase 06 will populate media paths after downloading from disk.getExternalLink;
 	// Phase 03 passes an empty slice so text-only flow is correct end-to-end.
 	var media []string
