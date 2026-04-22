@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
@@ -82,6 +83,34 @@ type bitrixInstanceConfig struct {
 	// When empty Start() warns and still registers with /bitrix24/events as
 	// a relative path; the admin has to fix the config before webhooks flow.
 	PublicURL string `json:"public_url,omitempty"`
+
+	// Optional MCP lazy-provisioning binding (Phase C).
+	//
+	// When MCPServerName + MCPBaseURL are set AND the factory variant that
+	// accepts a MCPServerStore is used (FactoryWithPortalStoreAndMCP) AND
+	// env GOCLAW_BITRIX_MCP_ADMIN_TOKEN is non-empty, the channel tries to
+	// mint per-user MCP credentials on first message:
+	//
+	//   1. Channel receives message from user U with OAuth tokens in event.
+	//   2. Channel looks up MCPUserCredentials(serverID, senderID). Present
+	//      → skip. Absent → POST /api/auto-onboard on MCPBaseURL using
+	//      admin token + U's OAuth tokens. MCP server responds with a
+	//      per-user api_key, which channel stores via SetUserCredentials.
+	//   3. Agent pipeline downstream reads those creds naturally.
+	//
+	// Best-effort: if any step fails, channel logs a warning and forwards
+	// the message anyway — agent loop will just see no creds and skip
+	// that MCP server's tools. User gets a response, albeit without MCP.
+	//
+	// Half-config fails at factory load: both fields set or both empty.
+	// The admin token lives in env (not config) because the config JSON
+	// is not encrypted at rest; revisit in Phase D RFC for per-tenant
+	// secret store.
+	//
+	// Skipped entirely for Open Channel bots (bot_type=O) — transient
+	// customers don't map to tenant_users.
+	MCPServerName string `json:"mcp_server_name,omitempty"` // mcp_servers.name
+	MCPBaseURL    string `json:"mcp_base_url,omitempty"`    // HTTPS root
 }
 
 // Factory is the base channels.ChannelFactory signature. Bitrix24 requires a
@@ -97,6 +126,11 @@ func Factory(name string, creds json.RawMessage, cfg json.RawMessage,
 // store + AES encryption key. Gateway wiring calls this once at startup and
 // hands the returned closure to the InstanceLoader.
 //
+// This variant leaves MCP lazy-provisioning disabled. Use
+// FactoryWithPortalStoreAndMCP when the gateway is configured with an
+// MCPServerStore and you want channels to auto-onboard per-user MCP
+// credentials on first message.
+//
 // Responsibilities of the closure:
 //   - Unmarshal and validate cfg (required fields + defaults).
 //   - Resolve the shared Router singleton (creates it on first invocation).
@@ -105,6 +139,20 @@ func Factory(name string, creds json.RawMessage, cfg json.RawMessage,
 // The closure does NOT resolve/load the Portal or talk to Bitrix24 — that
 // work is deferred to Channel.Start() so a bad row doesn't crash boot.
 func FactoryWithPortalStore(portalStore store.BitrixPortalStore, encKey string) channels.ChannelFactory {
+	return FactoryWithPortalStoreAndMCP(portalStore, nil, encKey)
+}
+
+// FactoryWithPortalStoreAndMCP is the MCP-aware variant of
+// FactoryWithPortalStore. When mcpStore is non-nil AND the instance config
+// has both mcp_server_name + mcp_base_url set AND the env var
+// GOCLAW_BITRIX_MCP_ADMIN_TOKEN is non-empty at Channel.Start() time, the
+// channel enables lazy provisioning: on first message from each user, it
+// POSTs to {mcp_base_url}/api/auto-onboard to mint per-user MCP
+// credentials, which downstream agent pipeline reads naturally.
+//
+// Pass nil mcpStore to disable provisioning even if config has the fields.
+// Half-config (only one of mcp_server_name / mcp_base_url set) fails fast.
+func FactoryWithPortalStoreAndMCP(portalStore store.BitrixPortalStore, mcpStore store.MCPServerStore, encKey string) channels.ChannelFactory {
 	return func(name string, creds json.RawMessage, cfg json.RawMessage,
 		msgBus *bus.MessageBus, pairingSvc store.PairingStore) (channels.Channel, error) {
 
@@ -145,6 +193,15 @@ func FactoryWithPortalStore(portalStore store.BitrixPortalStore, encKey string) 
 			return nil, fmt.Errorf("bitrix24: invalid bot_type %q (must be \"B\" or \"O\")", ic.BotType)
 		}
 
+		// MCP provisioning config is all-or-nothing. Catching half-config here
+		// prevents a silent "provisioning disabled but you meant to enable it"
+		// surprise — admin either sets both or neither.
+		hasServerName := strings.TrimSpace(ic.MCPServerName) != ""
+		hasBaseURL := strings.TrimSpace(ic.MCPBaseURL) != ""
+		if hasServerName != hasBaseURL {
+			return nil, errors.New("bitrix24: mcp_server_name and mcp_base_url must both be set, or both empty")
+		}
+
 		// Shared process-wide router. InitWebhookRouter uses sync.Once so the
 		// first caller wins; later callers get the same pointer. Any nil-store
 		// mistake would have panicked on the first call anyway — returning
@@ -161,6 +218,7 @@ func FactoryWithPortalStore(portalStore store.BitrixPortalStore, encKey string) 
 			encKey:      encKey,
 			router:      router,
 			stopCh:      make(chan struct{}),
+			mcpStore:    mcpStore, // may be nil; provisionIfMissing treats nil as disabled
 		}
 		ch.SetType(channels.TypeBitrix24)
 		ch.SetName(name)

@@ -2,6 +2,7 @@ package bitrix24
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"regexp"
@@ -173,6 +174,29 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 		cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, "", "", peerKind, "user", "", "")
 		if isGroup && chatID != "" {
 			cc.EnsureContact(ctx, c.Type(), c.Name(), chatID, "", "", "", "group", "group", "", "")
+		}
+	}
+
+	// MCP lazy provisioning (Phase C). Best-effort: any failure is logged
+	// and swallowed — agent loop downstream will just see no creds and skip
+	// the MCP server's tools, which is strictly better UX than the channel
+	// denying the message. The typed errors let tests assert behavior
+	// without string matching.
+	if err := c.provisionIfMissing(ctx, senderID, evt.Auth); err != nil {
+		switch {
+		case errors.Is(err, ErrProvisionDisabled),
+			errors.Is(err, ErrProvisionSkippedOpenChannel),
+			errors.Is(err, ErrProvisionDebounced):
+			// Expected no-ops — don't spam logs. Debug level is enough
+			// for troubleshooting "why didn't this user get MCP tools?"
+			slog.Debug("bitrix24 mcp: provisioning skipped",
+				"channel", c.Name(), "user", senderID, "reason", err)
+		default:
+			// Unexpected error (HTTP failure, persist failure, auth
+			// validation). Warn so operators see it, but DO NOT return —
+			// message still flows through to the agent.
+			slog.Warn("bitrix24 mcp: provisioning failed",
+				"channel", c.Name(), "user", senderID, "err", err)
 		}
 	}
 

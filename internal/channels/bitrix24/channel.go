@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -53,6 +54,21 @@ type Channel struct {
 	// so the hot read path doesn't contend with Start/Stop on startMu.
 	mentionMu sync.Mutex
 	mentionRe *mentionMatcher
+
+	// MCP lazy provisioner (Phase C). All fields nil / zero when
+	// provisioning is disabled — channel then works exactly as before
+	// (messages flow through without trying to mint MCP credentials).
+	//
+	// mcpStore comes from the MCP-aware factory variant; mcpClient is
+	// built at Start() iff config has mcp_server_name + mcp_base_url AND
+	// env GOCLAW_BITRIX_MCP_ADMIN_TOKEN is set. mcpServerID is resolved
+	// once at Start() via mcpStore.GetServerByName and then cached —
+	// avoids looking up the server on every inbound message.
+	mcpStore     store.MCPServerStore
+	mcpClient    *mcpClient
+	mcpServerID  uuid.UUID
+	mcpProvMu    sync.Mutex
+	mcpDebounce  map[mcpDebounceKey]time.Time
 }
 
 // Type returns the platform identifier used by the router / health pages.
@@ -149,6 +165,14 @@ func (c *Channel) Start(ctx context.Context) error {
 	c.startMu.Unlock()
 
 	c.router.RegisterBot(botID, c)
+
+	// MCP lazy-provisioner wiring — safe to ignore errors; initMCPProvisioner
+	// already logs warnings and leaves fields zero when provisioning can't be
+	// enabled, which is a non-fatal "channel works, just no MCP" state.
+	if err := c.initMCPProvisioner(ctx); err != nil {
+		slog.Warn("bitrix24: MCP provisioner init returned error (non-fatal)",
+			"name", c.Name(), "err", err)
+	}
 
 	c.SetRunning(true)
 	c.MarkHealthy("Connected")
