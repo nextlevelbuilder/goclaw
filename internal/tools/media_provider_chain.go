@@ -20,8 +20,8 @@ type MediaProviderEntry struct {
 	Provider   string         `json:"provider"`              // name for registry.Get()
 	Model      string         `json:"model"`
 	Enabled    bool           `json:"enabled"`
-	Timeout    int            `json:"timeout"`          // seconds, default 120
-	MaxRetries int            `json:"max_retries"`      // default 2
+	Timeout    int            `json:"timeout"`          // seconds, default 600 (10 min — image/video gen is slow)
+	MaxRetries int            `json:"max_retries"`      // default 1 (image gen rarely succeeds on retry)
 	Params     map[string]any `json:"params,omitempty"` // provider-specific config
 }
 
@@ -33,12 +33,23 @@ type mediaProviderChain struct {
 }
 
 // applyDefaults fills in zero-value fields with sensible defaults.
+//
+// Timeout: 600s (10 min). Native image_generation on gpt-image-2 can legitimately
+// take 4-8 min for complex prompts with heavy in-image text (e.g. infographics).
+// 120s — the old default — routinely truncated real work mid-generation and
+// surfaced as 'context deadline exceeded'. Lowering this risks re-introducing
+// that footgun; operators can still set a tighter value explicitly.
+//
+// MaxRetries: 1. Image generation is stateful per upstream run — a mid-flight
+// timeout leaves orphan server-side work. Retrying a fresh generation (new
+// upstream run) doubles cost and rarely succeeds where the first attempt timed
+// out. Surface the failure fast so the user can adjust the timeout.
 func (e *MediaProviderEntry) applyDefaults() {
 	if e.Timeout <= 0 {
-		e.Timeout = 120
+		e.Timeout = 600
 	}
 	if e.MaxRetries <= 0 {
-		e.MaxRetries = 2
+		e.MaxRetries = 1
 	}
 }
 
