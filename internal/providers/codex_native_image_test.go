@@ -8,38 +8,34 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
 // minimalPNGForProviders is a 1x1 transparent PNG in base64 used by native image tests.
 const minimalPNGForProviders = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
 
-// TestCodexGenerateImage_BuildsNativeRequest verifies that GenerateImage sends the
-// correct JSON body to the Responses API: model, stream:false, input, tools, and
-// tool_choice. The test captures the raw request body from a mock server and
-// asserts each required field is present and well-formed.
-func TestCodexGenerateImage_BuildsNativeRequest(t *testing.T) {
-	var captured []byte
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Capture request body for inspection.
+// mockImageServer returns a test server that captures request bodies and returns a
+// minimal successful image generation response. The captured pointer is written on
+// each request.
+func mockImageServer(t *testing.T, captured *[]byte) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			t.Errorf("read body: %v", err)
 			http.Error(w, "read error", http.StatusInternalServerError)
 			return
 		}
-		captured = body
+		*captured = body
 
-		// Return a minimal non-streaming JSON response with an image result.
-		imgB64 := minimalPNGForProviders
 		resp := map[string]any{
 			"id":     "resp_test",
 			"status": "completed",
 			"output": []map[string]any{
 				{
 					"type":          "image_generation_call",
-					"result":        imgB64,
+					"result":        minimalPNGForProviders,
 					"output_format": "png",
 				},
 			},
@@ -49,6 +45,20 @@ func TestCodexGenerateImage_BuildsNativeRequest(t *testing.T) {
 			t.Errorf("encode response: %v", err)
 		}
 	}))
+}
+
+// TestCodexGenerateImage_BuildsNativeRequest verifies that GenerateImage sends the
+// correct JSON body to the Responses API: model, stream:false, input, tools, and
+// tool_choice. The test captures the raw request body from a mock server and
+// asserts each required field is present and well-formed.
+//
+// Sub-cases:
+//   - Default (empty ImageModel) → tools[0].model == "gpt-image-2"
+//   - Legacy (ImageModel: "gpt-image-1.5") → tools[0].model == "gpt-image-1.5"
+//   - Rejected (ImageModel: "dall-e-3") → GenerateImage returns error containing "unsupported image model"
+func TestCodexGenerateImage_BuildsNativeRequest(t *testing.T) {
+	var captured []byte
+	server := mockImageServer(t, &captured)
 	defer server.Close()
 
 	p := NewCodexProvider("codex-test", &staticTokenSource{token: "tok"}, server.URL, "gpt-image-2")
@@ -74,14 +84,20 @@ func TestCodexGenerateImage_BuildsNativeRequest(t *testing.T) {
 		t.Fatalf("unmarshal captured body: %v", err)
 	}
 
-	// model field
+	// model field (outer Responses API model, not image model)
 	if model, _ := body["model"].(string); model != "gpt-image-2" {
 		t.Errorf("body[model] = %q, want %q", model, "gpt-image-2")
 	}
 
-	// stream must be false (non-streaming for create_image)
-	if stream, _ := body["stream"].(bool); stream {
-		t.Error("body[stream] should be false")
+	// Responses API requires stream:true — non-streaming requests are rejected with
+	// HTTP 400 "Stream must be set to true". Final image is assembled from SSE events.
+	if stream, _ := body["stream"].(bool); !stream {
+		t.Error("body[stream] must be true (Responses API rejects stream:false)")
+	}
+
+	// instructions is required by Responses API — must be non-empty.
+	if instr, _ := body["instructions"].(string); instr == "" {
+		t.Error("body[instructions] must be non-empty (Responses API rejects requests without instructions)")
 	}
 
 	// input must be an array with one user message
@@ -131,6 +147,10 @@ func TestCodexGenerateImage_BuildsNativeRequest(t *testing.T) {
 	if fmt.Sprint(tool["output_format"]) != "png" {
 		t.Errorf("tools[0].output_format = %v, want png", tool["output_format"])
 	}
+	// tools[0].model must be gpt-image-2 (default when ImageModel is empty)
+	if imgModel, _ := tool["model"].(string); imgModel != DefaultImageModel {
+		t.Errorf("tools[0].model = %q, want %q (default)", imgModel, DefaultImageModel)
+	}
 
 	// tool_choice must force image_generation
 	toolChoice, ok := body["tool_choice"].(map[string]any)
@@ -139,6 +159,101 @@ func TestCodexGenerateImage_BuildsNativeRequest(t *testing.T) {
 	}
 	if typ, _ := toolChoice["type"].(string); typ != "image_generation" {
 		t.Errorf("tool_choice.type = %q, want %q", typ, "image_generation")
+	}
+}
+
+// TestCodexGenerateImage_ImageModelDefault verifies that an empty ImageModel results
+// in the default gpt-image-2 model in the outbound tools[0].model field.
+func TestCodexGenerateImage_ImageModelDefault(t *testing.T) {
+	var captured []byte
+	server := mockImageServer(t, &captured)
+	defer server.Close()
+
+	p := NewCodexProvider("codex-test", &staticTokenSource{token: "tok"}, server.URL, "gpt-image-2")
+	p.retryConfig.Attempts = 1
+
+	_, err := p.GenerateImage(context.Background(), NativeImageRequest{
+		Prompt:      "test",
+		ImageModel:  "", // explicitly empty — should default to gpt-image-2
+		AspectRatio: "1:1",
+	})
+	if err != nil {
+		t.Fatalf("GenerateImage returned error: %v", err)
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal(captured, &body); err != nil {
+		t.Fatalf("unmarshal captured body: %v", err)
+	}
+	tools, _ := body["tools"].([]any)
+	if len(tools) == 0 {
+		t.Fatal("tools array is empty")
+	}
+	tool, _ := tools[0].(map[string]any)
+	if imgModel, _ := tool["model"].(string); imgModel != "gpt-image-2" {
+		t.Errorf("tools[0].model = %q, want gpt-image-2 (default)", imgModel)
+	}
+}
+
+// TestCodexGenerateImage_ImageModelLegacy verifies that ImageModel "gpt-image-1.5"
+// is forwarded to the outbound tools[0].model field.
+func TestCodexGenerateImage_ImageModelLegacy(t *testing.T) {
+	var captured []byte
+	server := mockImageServer(t, &captured)
+	defer server.Close()
+
+	p := NewCodexProvider("codex-test", &staticTokenSource{token: "tok"}, server.URL, "gpt-image-2")
+	p.retryConfig.Attempts = 1
+
+	_, err := p.GenerateImage(context.Background(), NativeImageRequest{
+		Prompt:      "test",
+		ImageModel:  "gpt-image-1.5",
+		AspectRatio: "1:1",
+	})
+	if err != nil {
+		t.Fatalf("GenerateImage returned error: %v", err)
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal(captured, &body); err != nil {
+		t.Fatalf("unmarshal captured body: %v", err)
+	}
+	tools, _ := body["tools"].([]any)
+	if len(tools) == 0 {
+		t.Fatal("tools array is empty")
+	}
+	tool, _ := tools[0].(map[string]any)
+	if imgModel, _ := tool["model"].(string); imgModel != "gpt-image-1.5" {
+		t.Errorf("tools[0].model = %q, want gpt-image-1.5 (legacy)", imgModel)
+	}
+}
+
+// TestCodexGenerateImage_ImageModelRejected verifies that an unsupported image model
+// causes GenerateImage to return an error containing "unsupported image model" before
+// making any HTTP request.
+func TestCodexGenerateImage_ImageModelRejected(t *testing.T) {
+	requestMade := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestMade = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	p := NewCodexProvider("codex-test", &staticTokenSource{token: "tok"}, server.URL, "gpt-image-2")
+	p.retryConfig.Attempts = 1
+
+	_, err := p.GenerateImage(context.Background(), NativeImageRequest{
+		Prompt:     "test",
+		ImageModel: "dall-e-3",
+	})
+	if err == nil {
+		t.Fatal("expected error for unsupported image model, got nil")
+	}
+	if !strings.Contains(err.Error(), "unsupported image model") {
+		t.Errorf("error %q does not contain 'unsupported image model'", err.Error())
+	}
+	if requestMade {
+		t.Error("HTTP request was made despite invalid image model (should have been rejected before the request)")
 	}
 }
 

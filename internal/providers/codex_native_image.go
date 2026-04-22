@@ -28,6 +28,12 @@ func (p *CodexProvider) GenerateImage(ctx context.Context, req NativeImageReques
 		model = p.defaultModel
 	}
 
+	imageModel, err := ValidateImageModel(req.ImageModel)
+	if err != nil {
+		return nil, err
+	}
+	req.ImageModel = imageModel
+
 	body := p.buildNativeImageRequestBody(model, req)
 
 	respBody, err := RetryDo(ctx, p.retryConfig, func() (io.ReadCloser, error) {
@@ -47,12 +53,15 @@ func (p *CodexProvider) GenerateImage(ctx context.Context, req NativeImageReques
 }
 
 // buildNativeImageRequestBody constructs the minimal Responses API body for image generation.
-// Uses stream:false — image generation does not benefit from streaming and simplifies parsing.
+// The Responses API rejects non-streaming requests with HTTP 400 "Stream must be set to true",
+// so stream is always true. Final assembly happens in parseNativeImageSSE which scans the
+// event stream for response.output_item.done (image item) or response.completed output walk.
 func (p *CodexProvider) buildNativeImageRequestBody(model string, req NativeImageRequest) map[string]any {
 	return map[string]any{
-		"model":  model,
-		"stream": false,
-		"store":  false,
+		"model":        model,
+		"stream":       true,
+		"store":        false,
+		"instructions": "Generate an image matching the user's description using the image_generation tool. Return only the image; do not describe it in text.",
 		"input": []any{
 			map[string]any{
 				"role": "user",
@@ -65,7 +74,7 @@ func (p *CodexProvider) buildNativeImageRequestBody(model string, req NativeImag
 			{
 				"type":          "image_generation",
 				"action":        "generate",
-				"model":         "gpt-image-2",
+				"model":         req.ImageModel,
 				"output_format": req.OutputFormat,
 				"size":          SizeFromAspect(req.AspectRatio),
 			},
