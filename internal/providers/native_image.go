@@ -1,6 +1,9 @@
 package providers
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 // NativeImageProvider is implemented by OAuth-backed providers whose upstream
 // exposes an image_generation native tool (ChatGPT Responses API style).
@@ -10,11 +13,43 @@ type NativeImageProvider interface {
 	GenerateImage(ctx context.Context, req NativeImageRequest) (*NativeImageResult, error)
 }
 
+// DefaultImageModel is the image model used by the Responses API image_generation
+// tool when the caller does not specify one. gpt-image-2 is the current (2026-Q2)
+// quality baseline; gpt-image-1.5 is available as a legacy fallback.
+const DefaultImageModel = "gpt-image-2"
+
+// allowedImageModels enumerates the image models the native ChatGPT Responses API
+// image_generation tool will accept. Constraining to this whitelist prevents
+// silent upstream rejections from arbitrary model names (e.g. "dall-e-3") and
+// keeps the PR's motivation — gpt-image-2 quality — as the default everywhere.
+var allowedImageModels = map[string]bool{
+	"gpt-image-2":   true, // default — latest quality
+	"gpt-image-1.5": true, // legacy fallback
+}
+
+// ValidateImageModel returns the model to use, or an error if the caller
+// supplied an unsupported value. Empty input returns DefaultImageModel.
+func ValidateImageModel(model string) (string, error) {
+	if model == "" {
+		return DefaultImageModel, nil
+	}
+	if !allowedImageModels[model] {
+		return "", fmt.Errorf("unsupported image model %q; allowed: gpt-image-2 (default), gpt-image-1.5 (legacy)", model)
+	}
+	return model, nil
+}
+
 // NativeImageRequest describes a single image generation request.
 type NativeImageRequest struct {
-	// Model to use for image generation (e.g. "gpt-image-2").
-	// If empty, the provider uses its own default.
+	// Model is the parent LLM model for the Responses API call (e.g. "gpt-5.4").
+	// NOT the image model — see ImageModel below.
+	// If empty, the provider uses its own default LLM model.
 	Model string
+
+	// ImageModel is the image-generation model attached to the image_generation
+	// tool (e.g. "gpt-image-2"). Must be a value accepted by ValidateImageModel;
+	// empty falls back to DefaultImageModel.
+	ImageModel string
 
 	// Prompt is the text description of the image.
 	Prompt string

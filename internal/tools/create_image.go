@@ -172,8 +172,10 @@ func (t *CreateImageTool) callProvider(ctx context.Context, cp credentialProvide
 		if np, ok := rawProvider.(providers.NativeImageProvider); ok {
 			prompt := GetParamString(params, "prompt", "")
 			aspectRatio := GetParamString(params, "aspect_ratio", "1:1")
+			imageModel := GetParamString(params, "image_model", "")
 			result, err := np.GenerateImage(ctx, providers.NativeImageRequest{
 				Model:        model,
+				ImageModel:   imageModel,
 				Prompt:       prompt,
 				AspectRatio:  aspectRatio,
 				OutputFormat: "png",

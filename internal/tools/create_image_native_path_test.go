@@ -173,3 +173,86 @@ func TestCreateImageTool_RoutesNativePath_WithPrompt(t *testing.T) {
 		t.Errorf("result.Media length = %d, want 1", len(result.Media))
 	}
 }
+
+// TestCreateImageTool_ThreadsImageModel verifies that params["image_model"] from the
+// chain entry is forwarded into NativeImageRequest.ImageModel. This covers the data
+// flow: chain entry JSON → callProvider → GenerateImage.
+func TestCreateImageTool_ThreadsImageModel(t *testing.T) {
+	pngMagic := []byte{
+		0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, // PNG signature
+		0x00, 0x00, 0x00, 0x00,
+		0x49, 0x45, 0x4e, 0x44,
+		0xae, 0x42, 0x60, 0x82,
+	}
+
+	tests := []struct {
+		name            string
+		chainImageModel string
+		wantImageModel  string
+	}{
+		{
+			name:            "default (empty params.image_model)",
+			chainImageModel: "",
+			wantImageModel:  "", // provider validator defaults to gpt-image-2
+		},
+		{
+			name:            "legacy gpt-image-1.5",
+			chainImageModel: "gpt-image-1.5",
+			wantImageModel:  "gpt-image-1.5",
+		},
+		{
+			name:            "explicit gpt-image-2",
+			chainImageModel: "gpt-image-2",
+			wantImageModel:  "gpt-image-2",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fakeProvider := &nativeImageProvider{
+				name:       "openai-codex",
+				model:      "gpt-image-2",
+				returnData: pngMagic,
+			}
+
+			reg := providers.NewRegistry(nil)
+			reg.Register(fakeProvider)
+
+			// Build chain entry with optional image_model param.
+			entryParams := map[string]any{
+				"prompt":       "test image",
+				"aspect_ratio": "1:1",
+			}
+			if tc.chainImageModel != "" {
+				entryParams["image_model"] = tc.chainImageModel
+			}
+			chain := []MediaProviderEntry{
+				{
+					Provider:   "openai-codex",
+					Model:      "gpt-image-2",
+					Enabled:    true,
+					Timeout:    30,
+					MaxRetries: 1,
+					Params:     entryParams,
+				},
+			}
+
+			ctx := WithToolWorkspace(context.Background(), t.TempDir())
+			tool := NewCreateImageTool(reg)
+
+			_, err := ExecuteWithChain(ctx, chain, reg, tool.callProvider)
+			if err != nil {
+				t.Fatalf("ExecuteWithChain returned error: %v", err)
+			}
+
+			if fakeProvider.calledWith == nil {
+				t.Fatal("GenerateImage was not called on the native provider")
+			}
+
+			gotImageModel := fakeProvider.calledWith.ImageModel
+			if gotImageModel != tc.wantImageModel {
+				t.Errorf("NativeImageRequest.ImageModel = %q, want %q", gotImageModel, tc.wantImageModel)
+			}
+		})
+	}
+}
