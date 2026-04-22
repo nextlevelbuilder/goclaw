@@ -22,11 +22,11 @@ Implementation is evidence-backed against the native ChatGPT Responses API event
 
 **i18n**
 
-- 3 new UI keys (`imageGenToggle`, `imageGenGenerating`, `imageGenDownloadName`) in `ui/web/src/i18n/locales/{en,vi,zh}/chat.json`.
+- 1 UI key (`imageGenDownloadName`) in `ui/web/src/i18n/locales/{en,vi,zh}/chat.json` — download filename for generated images.
 
 **Tests**
 
-- 29 new unit tests across providers (Codex native + OpenAI-compat), agent media persistence, HTTP header parsing, store config, UI toggle hook. Full test sweep: 2843 pass.
+- Unit tests across providers (Codex native + OpenAI-compat), agent media persistence, store config. Full test sweep: 2618 pass.
 
 **Internal docs**
 

@@ -136,7 +136,7 @@ Native `image_generation` support in the Codex provider (`POST /codex/responses`
 
 **Persistence:** `internal/agent/media.go persistAssistantImages()` writes final images to `{workspace}/media/{sha256}.{ext}`, returns `MediaRef` entries, clears inline `Images[]`. Idempotent on hash. Invoked from `pipeline.FinalizeStage` via `Deps.PersistAssistantImages` callback.
 
-**Web UI:** Per-agent toggle chip in `ui/web/src/components/chat/chat-input.tsx`, streaming skeleton in `ui/web/src/components/chat/active-run-zone.tsx`, download filename resolver in `ui/web/src/components/chat/media-gallery.tsx`. Persistence hook: `ui/web/src/hooks/use-image-gen-toggle.ts`.
+**Web UI:** Download filename resolver (`imageGenDownloadName`) in `ui/web/src/components/chat/media-gallery.tsx`. Image generation works automatically when the agent has the `create_image` tool — no user-facing toggle.
 
 ---
 
