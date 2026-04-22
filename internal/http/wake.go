@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -15,10 +16,16 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
+// agentGetter is the minimal surface WakeHandler needs from *agent.Router.
+// Extracted so tests can stub the lookup without standing up a live router.
+type agentGetter interface {
+	Get(ctx context.Context, agentID string) (agent.Agent, error)
+}
+
 // WakeHandler handles POST /v1/agents/{id}/wake — external trigger API.
 // Allows orchestrators (Paperclip, n8n, etc.) to trigger agent runs via HTTP.
 type WakeHandler struct {
-	agents   *agent.Router
+	agents   agentGetter
 	postTurn tools.PostTurnProcessor
 }
 
@@ -122,6 +129,12 @@ func (h *WakeHandler) handleWake(w http.ResponseWriter, r *http.Request) {
 
 	runID := uuid.NewString()
 	slog.Info("wake request", "agent", agentID, "user", userID, "session", sessionKey)
+
+	// Expose request-level metadata to downstream tools. External triggers
+	// (e.g. the cartridge-gg/internal GitHub App webhook) pack data like
+	// `check_run_id` here so tools such as `github_complete_check` can read
+	// it without having the agent parse it out of the message text.
+	ctx = tools.WithWakeMetadata(ctx, req.Metadata)
 
 	ctx, drainTeamDispatch := tools.InjectTeamDispatch(ctx, h.postTurn)
 	defer drainTeamDispatch()

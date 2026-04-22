@@ -708,6 +708,31 @@ func SandboxConfigFromCtx(ctx context.Context) *sandbox.Config {
 	return nil
 }
 
+// --- Wake metadata (external trigger payload → tools) ---
+
+const ctxWakeMetadata toolContextKey = "tool_wake_metadata"
+
+// WithWakeMetadata stores the free-form metadata map that accompanied an
+// external wake trigger (POST /v1/agents/{id}/wake). Tools invoked during
+// that run can read trigger-specific values (e.g. `check_run_id` for a
+// GitHub PR-review wake) without parsing it out of the agent's message.
+// Returns ctx unchanged when md is empty so callers don't need to guard.
+func WithWakeMetadata(ctx context.Context, md map[string]any) context.Context {
+	if len(md) == 0 {
+		return ctx
+	}
+	return context.WithValue(ctx, ctxWakeMetadata, md)
+}
+
+// WakeMetadataFromCtx returns the wake trigger metadata map. Returns nil
+// when this run didn't originate from an external wake or no metadata was
+// supplied. Callers should treat missing keys as "not applicable" rather
+// than an error — the same tool is valid to invoke from non-wake runs too.
+func WakeMetadataFromCtx(ctx context.Context) map[string]any {
+	v, _ := ctx.Value(ctxWakeMetadata).(map[string]any)
+	return v
+}
+
 // --- Per-tenant allowed paths (filesystem tool access beyond workspace) ---
 
 const ctxTenantAllowedPaths toolContextKey = "tool_tenant_allowed_paths"

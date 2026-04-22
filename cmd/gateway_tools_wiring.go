@@ -55,6 +55,19 @@ func wireExtraTools(
 	toolsReg.Register(tools.NewCreateDiscordThreadTool())
 	// Discord rich embed tool
 	toolsReg.Register(tools.NewSendDiscordEmbedTool())
+	// GitHub check-run completion callback (closes the "Code Review" check run
+	// opened by cartridge-gg/internal when a PR webhook fires). Config is env-
+	// driven: CARTRIDGE_INTERNAL_BASE_URL + CARTRIDGE_INTERNAL_WEBHOOK_SECRET.
+	// When unset the tool registers but Execute short-circuits with a clear
+	// error — agents that aren't integrated with internal simply won't call it.
+	ghCompleteTool := tools.NewGitHubCompleteCheckTool()
+	if baseURL, secret := os.Getenv("CARTRIDGE_INTERNAL_BASE_URL"), os.Getenv("CARTRIDGE_INTERNAL_WEBHOOK_SECRET"); baseURL != "" && secret != "" {
+		ghCompleteTool.SetCompletionEndpoint(baseURL, secret)
+		slog.Info("github_complete_check tool configured", "base_url", baseURL)
+	} else {
+		slog.Debug("github_complete_check tool registered but not configured (CARTRIDGE_INTERNAL_BASE_URL/SECRET unset)")
+	}
+	toolsReg.Register(ghCompleteTool)
 	slog.Info("session + message tools registered")
 
 	// Register legacy tool aliases (backward-compat names from policy.go).
