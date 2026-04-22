@@ -176,12 +176,15 @@ func ExecuteWithChain(
 		// callProvider falls back to using the provider's Chat() API.
 		cp, _ := p.(credentialProvider)
 
-		// Inject resolved provider type into params so callProvider can route correctly.
-		// Clone params to avoid mutating the original entry config.
+		// Inject resolved provider type and the raw provider object into params so
+		// callProvider can route correctly. Clone params to avoid mutating entry config.
 		resolvedType := ResolveProviderType(p)
-		callParams := make(map[string]any, len(entry.Params)+1)
+		callParams := make(map[string]any, len(entry.Params)+2)
 		maps.Copy(callParams, entry.Params)
 		callParams["_provider_type"] = resolvedType
+		// "_native_provider" carries the providers.Provider instance so callProvider
+		// can type-assert to NativeImageProvider without a separate registry lookup.
+		callParams["_native_provider"] = p
 
 		// Retry loop for this provider
 		for attempt := 1; attempt <= entry.MaxRetries; attempt++ {
