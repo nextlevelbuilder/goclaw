@@ -7,6 +7,13 @@ tests/integration/testdata/
 # — notably `railway up`).
 /openclaw-go
 /pkg-helper
+/goclaw.exe
+/goclaw-local.exe
+
+# Ad-hoc debug probes live here — never commit (they import internal/
+# packages from outside cmd/ and only exist for one-shot diagnostics).
+/tmp-reset-bot/
+/tmp-probe*/
 
 # IDE
 .idea/
