@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"sort"
 	"strings"
@@ -235,5 +236,94 @@ func appendCodexContent(result *ChatResponse, text string, onChunk func(StreamCh
 	result.Content += text
 	if onChunk != nil {
 		onChunk(StreamChunk{Content: text})
+	}
+}
+
+// codexImageAccum tracks streaming image generation items keyed by item_id.
+// It stores the last-seen partial frame (deduplicated via SHA256) and the final result.
+// Not thread-safe — designed for sequential SSE processing in a single goroutine.
+type codexImageAccum struct {
+	outputFormat    string
+	lastPartialHash [sha256.Size]byte // SHA256 of last partial_image_b64; zeroed if none
+	hasPartial      bool              // true once at least one partial is recorded
+	finalB64        string            // filled on response.output_item.done or response.completed
+}
+
+// codexImageState tracks all image accumulators for a single streaming response.
+type codexImageState struct {
+	items       map[string]*codexImageAccum // keyed by item_id
+	insertOrder []string                    // preserves emission order for final assembly
+}
+
+func newCodexImageState() *codexImageState {
+	return &codexImageState{items: make(map[string]*codexImageAccum)}
+}
+
+func (s *codexImageState) ensureItem(itemID, outputFormat string) *codexImageAccum {
+	if acc, ok := s.items[itemID]; ok {
+		return acc
+	}
+	acc := &codexImageAccum{outputFormat: outputFormat}
+	s.items[itemID] = acc
+	s.insertOrder = append(s.insertOrder, itemID)
+	return acc
+}
+
+// recordPartial stores a partial frame, deduplicating by SHA256.
+// Returns true if the frame is new (not a duplicate) and was recorded.
+func (s *codexImageState) recordPartial(itemID, outputFormat, b64 string) bool {
+	if b64 == "" {
+		return false
+	}
+	acc := s.ensureItem(itemID, outputFormat)
+	if outputFormat != "" {
+		acc.outputFormat = outputFormat
+	}
+	h := sha256.Sum256([]byte(b64))
+	if acc.hasPartial && acc.lastPartialHash == h {
+		return false // duplicate frame
+	}
+	acc.lastPartialHash = h
+	acc.hasPartial = true
+	return true
+}
+
+// recordFinal stores the final base64 image for an item.
+func (s *codexImageState) recordFinal(itemID, outputFormat, b64 string) {
+	if b64 == "" {
+		return
+	}
+	acc := s.ensureItem(itemID, outputFormat)
+	if outputFormat != "" {
+		acc.outputFormat = outputFormat
+	}
+	acc.finalB64 = b64
+}
+
+// appendToResponse appends all completed images (those with a final) to result.Images
+// in insertion order. Deduplication by item_id is implicit (each item appears once).
+func (s *codexImageState) appendToResponse(result *ChatResponse) {
+	for _, id := range s.insertOrder {
+		acc := s.items[id]
+		if acc.finalB64 == "" {
+			continue
+		}
+		result.Images = append(result.Images, ImageContent{
+			MimeType: mimeFromFormat(acc.outputFormat),
+			Data:     acc.finalB64,
+		})
+	}
+}
+
+// mimeFromFormat converts an output_format string to a MIME type.
+// Defaults to "image/png" for unknown or empty formats.
+func mimeFromFormat(format string) string {
+	switch format {
+	case "jpg", "jpeg":
+		return "image/jpeg"
+	case "webp":
+		return "image/webp"
+	default:
+		return "image/png"
 	}
 }

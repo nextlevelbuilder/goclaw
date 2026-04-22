@@ -1,0 +1,38 @@
+[
+  {
+    "type": "response.image_generation_call.partial_image",
+    "item_id": "ig_abc123",
+    "output_format": "png",
+    "partial_image_b64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC",
+    "partial_image_index": 0
+  },
+  {
+    "type": "response.output_item.done",
+    "item": {
+      "id": "ig_abc123",
+      "type": "image_generation_call",
+      "output_format": "png",
+      "result": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
+    }
+  },
+  {
+    "type": "response.completed",
+    "response": {
+      "id": "resp_img1",
+      "status": "completed",
+      "output": [
+        {
+          "type": "image_generation_call",
+          "id": "ig_abc123",
+          "output_format": "png",
+          "result": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
+        }
+      ],
+      "usage": {
+        "input_tokens": 10,
+        "output_tokens": 5,
+        "total_tokens": 15
+      }
+    }
+  }
+]
