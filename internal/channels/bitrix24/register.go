@@ -109,9 +109,11 @@ func (c *Channel) registerParams(ctx context.Context) map[string]any {
 	}
 
 	handlerURL := c.eventHandlerURL()
+	// BotType is validated at factory load to be "B" or "O"; applyConfigDefaults
+	// fills "" → "B". Pass through verbatim — Bitrix rejects unknown values.
 	return map[string]any{
 		"CODE":                  c.cfg.BotCode,
-		"TYPE":                  "B",
+		"TYPE":                  c.cfg.BotType,
 		"EVENT_MESSAGE_ADD":     handlerURL,
 		"EVENT_WELCOME_MESSAGE": handlerURL,
 		"EVENT_BOT_DELETE":      handlerURL,

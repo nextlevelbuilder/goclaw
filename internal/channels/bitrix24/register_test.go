@@ -1,10 +1,48 @@
 package bitrix24
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"testing"
 )
+
+// TestRegisterParams_TYPE verifies registerParams forwards cfg.BotType
+// verbatim to Bitrix24's imbot.register TYPE field. Hardcoding "B" here
+// was the old behavior — now both "B" and "O" must flow through so
+// Open Channel bots can be registered.
+func TestRegisterParams_TYPE(t *testing.T) {
+	cases := []struct {
+		name  string
+		bType string
+	}{
+		{"standard_B", "B"},
+		{"open_channel_O", "O"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fs := newFakeStore()
+			resetWebhookRouterForTest()
+			defer resetWebhookRouterForTest()
+
+			fn := FactoryWithPortalStore(fs, "")
+			cfg := json.RawMessage(`{"portal":"p","bot_code":"c","bot_name":"n","public_url":"https://example.test","bot_type":"` + tc.bType + `"}`)
+			ch, err := fn("b1", nil, cfg, nil, nil)
+			if err != nil {
+				t.Fatalf("factory: %v", err)
+			}
+			bc := ch.(*Channel)
+			params := bc.registerParams(context.Background())
+			got, ok := params["TYPE"].(string)
+			if !ok {
+				t.Fatalf("TYPE missing or wrong type in params: %+v", params["TYPE"])
+			}
+			if got != tc.bType {
+				t.Errorf("TYPE = %q; want %q (hardcode regression?)", got, tc.bType)
+			}
+		})
+	}
+}
 
 func TestIntFromResult_PlainInt(t *testing.T) {
 	r := &RawResult{Result: json.RawMessage(`42`)}

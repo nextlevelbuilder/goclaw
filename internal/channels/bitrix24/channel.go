@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/google/uuid"
@@ -74,6 +75,18 @@ func (c *Channel) PortalName() string { return c.cfg.Portal }
 
 // Config returns a copy of the instance config. Exported for tests.
 func (c *Channel) Config() bitrixInstanceConfig { return c.cfg }
+
+// IsOpenChannelBot reports whether this channel was registered as a Bitrix24
+// Open Channel bot (TYPE "O"), i.e. a customer-facing bot attached to an
+// Open Channel queue. Standard internal bots (TYPE "B") return false.
+//
+// Phase C provisioner uses this to skip per-user MCP credential minting:
+// Open Channel senders are transient customers without tenant_users mapping,
+// so minting credentials for each one would bloat the DB and leak internal
+// permissions. Shared-credential support is deferred to Phase E.
+func (c *Channel) IsOpenChannelBot() bool {
+	return strings.EqualFold(strings.TrimSpace(c.cfg.BotType), "O")
+}
 
 // Start brings the channel online:
 //  1. Resolve the portal (load from store on cold path via the Router).

@@ -68,6 +68,12 @@ func TestFactoryWithPortalStore_AppliesDefaults(t *testing.T) {
 		t.Fatalf("want *Channel, got %T", ch)
 	}
 	cfg := bc.Config()
+	if cfg.BotType != "B" {
+		t.Errorf("BotType default = %q; want \"B\" (Bitrix24 imbot.register default)", cfg.BotType)
+	}
+	if bc.IsOpenChannelBot() {
+		t.Errorf("default bot must not report IsOpenChannelBot()=true")
+	}
 	if cfg.DMPolicy != string(channels.DMPolicyPairing) {
 		t.Errorf("DMPolicy = %q; want pairing", cfg.DMPolicy)
 	}
@@ -168,6 +174,7 @@ func TestFactoryWithPortalStore_WebhookHandlerFirstClaimWins(t *testing.T) {
 func TestApplyConfigDefaults_RespectsExplicit(t *testing.T) {
 	no := false
 	cfg := bitrixInstanceConfig{
+		BotType:        "O",
 		DMPolicy:       "open",
 		GroupPolicy:    "allowlist",
 		TextChunkLimit: 1000,
@@ -177,12 +184,64 @@ func TestApplyConfigDefaults_RespectsExplicit(t *testing.T) {
 		Streaming:      &no,
 	}
 	applyConfigDefaults(&cfg)
+	if cfg.BotType != "O" {
+		t.Errorf("explicit BotType was overwritten: %q", cfg.BotType)
+	}
 	if cfg.DMPolicy != "open" || cfg.GroupPolicy != "allowlist" ||
 		cfg.TextChunkLimit != 1000 || cfg.MediaMaxMB != 5 || cfg.ReactionLevel != "off" {
 		t.Errorf("explicit values were overwritten: %+v", cfg)
 	}
 	if *cfg.RequireMention || *cfg.Streaming {
 		t.Errorf("explicit bool pointers lost: %+v", cfg)
+	}
+}
+
+// TestFactoryWithPortalStore_BotType covers all three outcomes of the
+// bot_type field: (1) default when omitted, (2) accepted values flow
+// through verbatim, and (3) anything else is rejected at load.
+//
+// Validation happens AFTER applyConfigDefaults, so the "" case exercises
+// the default → "B" path, not the rejection path.
+func TestFactoryWithPortalStore_BotType(t *testing.T) {
+	cases := []struct {
+		name    string
+		cfg     string
+		wantErr bool
+		wantTyp string
+		wantOC  bool // IsOpenChannelBot()
+	}{
+		{"default_is_B", `{"portal":"p","bot_code":"c","bot_name":"n"}`, false, "B", false},
+		{"explicit_B", `{"portal":"p","bot_code":"c","bot_name":"n","bot_type":"B"}`, false, "B", false},
+		{"explicit_O_is_open_channel", `{"portal":"p","bot_code":"c","bot_name":"n","bot_type":"O"}`, false, "O", true},
+		{"reject_lowercase_b", `{"portal":"p","bot_code":"c","bot_name":"n","bot_type":"b"}`, true, "", false},
+		{"reject_unknown_H", `{"portal":"p","bot_code":"c","bot_name":"n","bot_type":"H"}`, true, "", false},
+		{"reject_empty_string_only_if_whitespace", `{"portal":"p","bot_code":"c","bot_name":"n","bot_type":" "}`, true, "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fs := newFakeStore()
+			resetWebhookRouterForTest()
+			defer resetWebhookRouterForTest()
+			fn := FactoryWithPortalStore(fs, "")
+
+			ch, err := fn("b1", nil, json.RawMessage(tc.cfg), &bus.MessageBus{}, nil)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected error for bot_type validation, got nil (cfg=%s)", tc.cfg)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			bc := ch.(*Channel)
+			if got := bc.Config().BotType; got != tc.wantTyp {
+				t.Errorf("BotType = %q; want %q", got, tc.wantTyp)
+			}
+			if got := bc.IsOpenChannelBot(); got != tc.wantOC {
+				t.Errorf("IsOpenChannelBot() = %v; want %v", got, tc.wantOC)
+			}
+		})
 	}
 }
 

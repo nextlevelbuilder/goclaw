@@ -33,6 +33,27 @@ type bitrixInstanceConfig struct {
 	BotName   string `json:"bot_name"`            // display name
 	BotAvatar string `json:"bot_avatar,omitempty"` // optional URL; factory resolves and base64-encodes at Start()
 
+	// BotType — forwarded verbatim to imbot.register TYPE param.
+	//
+	//   "B" = standard chatbot (default; matches Bitrix24 docs default).
+	//         Nhân viên nội bộ; sees DMs always, sees group messages only
+	//         when @mentioned. Pairs with tenant_users via ContactCollector
+	//         and receives per-user MCP credentials (Phase C provisioner).
+	//         Recommended: dm_policy=pairing, group_policy=open.
+	//
+	//   "O" = Open Channel bot. Khách hàng từ widget external chat (imol|…).
+	//         Admin phải gắn bot vào Open Channel queue qua UI Bitrix sau
+	//         register.
+	//         Recommended: dm_policy=open, group_policy=open (khách không
+	//         pair được). MCP credentials bị skip cho bot này — nếu cần
+	//         MCP tools, admin phải setup shared credential (Phase E tương
+	//         lai). Factory does NOT auto-relax dm_policy — admin phải
+	//         explicit set open, hoặc bot sẽ im lặng với khách (logs chỉ
+	//         rõ "pairing needed").
+	//
+	// Anything else rejected at factory load.
+	BotType string `json:"bot_type,omitempty"`
+
 	// Policies
 	AllowFrom      []string `json:"allow_from,omitempty"`
 	GroupAllowFrom []string `json:"group_allow_from,omitempty"`
@@ -112,6 +133,18 @@ func FactoryWithPortalStore(portalStore store.BitrixPortalStore, encKey string) 
 
 		applyConfigDefaults(&ic)
 
+		// Validate bot_type AFTER defaults so empty → "B" passes the check.
+		// Keep the set small and explicit — other values (e.g. "H" hidden
+		// helper) may appear in Bitrix docs but we haven't verified the
+		// event semantics, so refusing unknown types avoids shipping a bot
+		// that silently receives no events.
+		switch ic.BotType {
+		case "B", "O":
+			// ok
+		default:
+			return nil, fmt.Errorf("bitrix24: invalid bot_type %q (must be \"B\" or \"O\")", ic.BotType)
+		}
+
 		// Shared process-wide router. InitWebhookRouter uses sync.Once so the
 		// first caller wins; later callers get the same pointer. Any nil-store
 		// mistake would have panicked on the first call anyway — returning
@@ -150,6 +183,12 @@ func FactoryWithPortalStore(portalStore store.BitrixPortalStore, encKey string) 
 // would have been given at onboard time. Pulled into its own function so
 // tests can exercise the default surface directly.
 func applyConfigDefaults(ic *bitrixInstanceConfig) {
+	// bot_type default matches Bitrix24 imbot.register TYPE default.
+	// Keep this BEFORE the policy defaults so future logic can branch on
+	// bot_type if needed — currently it does not (see type docstring).
+	if ic.BotType == "" {
+		ic.BotType = "B"
+	}
 	if ic.DMPolicy == "" {
 		ic.DMPolicy = string(channels.DMPolicyPairing)
 	}
