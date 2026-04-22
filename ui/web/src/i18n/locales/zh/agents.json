@@ -170,7 +170,9 @@
       "links": "链接",
       "skills": "Skill",
       "instances": "用户实例",
-      "permissions": "权限"
+      "permissions": "权限",
+      "evolution": "进化",
+      "hooks": "钩子"
     },
     "summonFailed": "召唤失败",
     "evolving": "进化中",
@@ -963,6 +965,25 @@
     "refresh": "刷新",
     "noLogs": "暂无心跳日志。",
     "logsPagination": "{{from}}–{{to}} / 共 {{total}}"
+  },
+  "hooks": {
+    "card": {
+      "title": "钩子",
+      "loading": "加载钩子中...",
+      "empty": "未配置钩子",
+      "emptyDesc": "钩子拦截代理生命周期事件，如工具调用。",
+      "viewAll": "查看全部 {{count}} 个钩子",
+      "addHook": "添加钩子",
+      "nHooks": "{{count}} 个钩子"
+    },
+    "tab": {
+      "refresh": "刷新",
+      "create": "创建钩子",
+      "emptyTitle": "未配置钩子",
+      "emptyDesc": "钩子拦截代理生命周期事件，如工具调用、会话开始/结束等。",
+      "createFirst": "创建第一个钩子",
+      "deleteConfirm": "删除 \"{{event}}\" 的钩子？此操作无法撤销。"
+    }
   },
   "permissions": {
     "title": "权限管理",

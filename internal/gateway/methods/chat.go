@@ -9,6 +9,7 @@ import (
 	"log/slog"
 
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
+	"github.com/nextlevelbuilder/goclaw/internal/audio"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
@@ -30,10 +31,16 @@ type ChatMethods struct {
 	rateLimiter *gateway.RateLimiter
 	eventBus    bus.EventPublisher
 	postTurn    tools.PostTurnProcessor
+	audioMgr    *audio.Manager // for TTS auto-apply on WS responses (nil = disabled)
 }
 
 func NewChatMethods(agents *agent.Router, sess store.SessionStore, cfg *config.Config, rl *gateway.RateLimiter, eventBus bus.EventPublisher) *ChatMethods {
 	return &ChatMethods{agents: agents, sessions: sess, cfg: cfg, rateLimiter: rl, eventBus: eventBus}
+}
+
+// SetAudioManager sets the audio manager for TTS auto-apply on WS responses.
+func (m *ChatMethods) SetAudioManager(mgr *audio.Manager) {
+	m.audioMgr = mgr
 }
 
 // SetPostTurnProcessor sets the post-turn processor for team task dispatch.
@@ -195,6 +202,23 @@ func (m *ChatMethods) handleSend(ctx context.Context, client *gateway.Client, re
 	// Mid-run injection: if session already has an active run, inject the message
 	// into the running loop instead of starting a new concurrent run.
 	if m.agents.IsSessionBusy(sessionKey) {
+		// Exact cancel keyword detection: auto-abort when user sends "stop", "cancel", etc.
+		if agent.IsExactCancelKeyword(params.Message) {
+			results := m.agents.AbortRunsForSession(sessionKey)
+			aborted := false
+			for _, r := range results {
+				if r.Stopped || r.Forced {
+					aborted = true
+					break
+				}
+			}
+			client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
+				"cancelled": true,
+				"aborted":   aborted,
+			}))
+			return
+		}
+
 		injected := m.agents.InjectMessage(sessionKey, agent.InjectedMessage{
 			Content: params.Message,
 			UserID:  userID,
@@ -304,16 +328,40 @@ func (m *ChatMethods) handleSend(ctx context.Context, client *gateway.Client, re
 			}()
 		}
 
+		// TTS auto-apply: convert [[tts]] tagged responses to voice audio
+		content := result.Content
+		var ttsAudio *agent.MediaResult
+		if m.audioMgr != nil && content != "" {
+			// For WS, we don't have voice inbound info - use "tagged" mode only
+			ttsResult, _ := m.audioMgr.AutoApplyToText(runCtx, content, "ws", false, "")
+			if ttsResult != nil && ttsResult.AudioPath != "" {
+				// Include audio in media results
+				ttsAudio = &agent.MediaResult{
+					Path:        httpapi.SignMediaPath(ttsResult.AudioPath, httpapi.FileSigningKey()),
+					ContentType: ttsResult.AudioMime,
+					AsVoice:     true,
+				}
+				content = ttsResult.Text // Use stripped text
+			} else if ttsResult != nil {
+				content = ttsResult.Text // Strip directives even if TTS not applied
+			}
+		}
+
 		resp := map[string]any{
 			"runId":   result.RunID,
-			"content": result.Content,
+			"content": content,
 			"usage":   result.Usage,
 		}
 		if result.Thinking != "" {
 			resp["thinking"] = result.Thinking
 		}
-		if len(result.Media) > 0 {
-			resp["media"] = result.Media
+		// Combine existing media with TTS audio
+		mediaResults := result.Media
+		if ttsAudio != nil {
+			mediaResults = append([]agent.MediaResult{*ttsAudio}, mediaResults...)
+		}
+		if len(mediaResults) > 0 {
+			resp["media"] = mediaResults
 		}
 		client.SendResponse(protocol.NewOKResponse(req.ID, resp))
 	}()

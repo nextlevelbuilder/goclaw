@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Send, Square, Paperclip, X } from "lucide-react";
+import { Send, Square, Paperclip, X, Mic } from "lucide-react";
+import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
 
 export interface AttachedFile {
   file: File;
@@ -23,6 +24,29 @@ export function ChatInput({ onSend, onAbort, isBusy, disabled, files, onFilesCha
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const voiceRecorder = useVoiceRecorder();
+
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const handleVoiceToggle = useCallback(async () => {
+    if (voiceRecorder.isRecording) {
+      const blob = await voiceRecorder.stopRecording();
+      if (blob) {
+        const file = new File([blob], `voice-${Date.now()}.webm`, { type: blob.type });
+        onFilesChange([...files, { file }]);
+      }
+    } else {
+      await voiceRecorder.startRecording();
+    }
+  }, [voiceRecorder, files, onFilesChange]);
+
+  const handleCancelRecording = useCallback(() => {
+    voiceRecorder.cancelRecording();
+  }, [voiceRecorder]);
 
   const handleSend = useCallback(() => {
     if ((!value.trim() && files.length === 0) || disabled) return;
@@ -109,29 +133,82 @@ export function ChatInput({ onSend, onAbort, isBusy, disabled, files, onFilesCha
         <button
           type="button"
           onClick={handleFileSelect}
-          disabled={disabled || isBusy}
+          disabled={disabled || isBusy || voiceRecorder.isRecording}
           title={t("attachFile")}
           className="shrink-0 p-3 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40 cursor-pointer"
         >
           <Paperclip className="h-4 w-4" />
         </button>
 
-        {/* Textarea — no border, transparent bg */}
-        <textarea
-          ref={textareaRef}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onInput={handleInput}
-          placeholder={t("sendMessage")}
-          disabled={disabled}
-          rows={1}
-          className="flex-1 resize-none bg-transparent py-3 px-0 text-base md:text-sm placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
-        />
+        {/* Voice record button - hidden when recording */}
+        {!voiceRecorder.isRecording && (
+          <button
+            type="button"
+            onClick={handleVoiceToggle}
+            disabled={disabled || isBusy}
+            title={t("recordVoice")}
+            className="shrink-0 p-3 text-muted-foreground hover:text-foreground transition-colors cursor-pointer disabled:opacity-40"
+          >
+            <Mic className="h-4 w-4" />
+          </button>
+        )}
 
-        {/* Send / Stop buttons */}
+        {/* Textarea or Recording indicator */}
+        {voiceRecorder.isRecording ? (
+          <div className="flex-1 flex items-center gap-3 py-3 px-2">
+            {/* Waveform animation */}
+            <div className="flex items-center gap-0.5">
+              {[...Array(5)].map((_, i) => (
+                <span
+                  key={i}
+                  className="w-1 bg-destructive rounded-full animate-pulse"
+                  style={{
+                    height: `${12 + Math.sin(i * 0.8) * 8}px`,
+                    animationDelay: `${i * 0.1}s`,
+                  }}
+                />
+              ))}
+            </div>
+            <span className="text-sm font-medium tabular-nums">
+              {formatDuration(voiceRecorder.duration)}
+            </span>
+          </div>
+        ) : (
+          <textarea
+            ref={textareaRef}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onInput={handleInput}
+            placeholder={t("sendMessage")}
+            disabled={disabled}
+            rows={1}
+            className="flex-1 resize-none bg-transparent py-3 px-0 text-base md:text-sm placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
+          />
+        )}
+
+        {/* Send / Stop / Recording buttons */}
         <div className="shrink-0 p-2 flex items-center gap-1">
-          {isBusy ? (
+          {voiceRecorder.isRecording ? (
+            <>
+              <button
+                type="button"
+                onClick={handleCancelRecording}
+                title={t("cancelRecording")}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={handleVoiceToggle}
+                title={t("stopRecording")}
+                className="flex h-8 w-8 items-center justify-center rounded-lg bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
+              >
+                <Square className="h-3.5 w-3.5" />
+              </button>
+            </>
+          ) : isBusy ? (
             <>
               <button
                 type="button"

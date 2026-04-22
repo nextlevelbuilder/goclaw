@@ -32,6 +32,7 @@ type RunContext struct {
 	ChatID            string
 	MessageID         string            // platform message ID (string to support Feishu "om_xxx", Telegram "12345", etc.)
 	Metadata          map[string]string // outbound routing metadata (thread_id, local_key, group_id)
+	TenantID          uuid.UUID         // tenant scope for per-tenant TTS
 	Streaming         bool              // whether run uses streaming (to avoid double-delivery of block replies)
 	BlockReplyEnabled bool              // whether block.reply delivery is enabled for this run (resolved at RegisterRun time)
 	ToolStatusEnabled bool              // whether tool name shows in streaming preview during tool execution

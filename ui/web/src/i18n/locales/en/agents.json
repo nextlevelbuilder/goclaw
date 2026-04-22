@@ -169,7 +169,8 @@
       "skills": "Skills",
       "instances": "Instances",
       "permissions": "Permissions",
-      "evolution": "Evolution"
+      "evolution": "Evolution",
+      "hooks": "Hooks"
     },
     "summonFailed": "Summon Failed",
     "evolving": "Evolving",
@@ -979,6 +980,25 @@
     "refresh": "Refresh",
     "noLogs": "No heartbeat logs yet.",
     "logsPagination": "{{from}}–{{to}} of {{total}}"
+  },
+  "hooks": {
+    "card": {
+      "title": "Hooks",
+      "loading": "Loading hooks...",
+      "empty": "No hooks configured",
+      "emptyDesc": "Hooks intercept agent lifecycle events like tool calls.",
+      "viewAll": "View all {{count}} hooks",
+      "addHook": "Add hook",
+      "nHooks": "{{count}} hooks"
+    },
+    "tab": {
+      "refresh": "Refresh",
+      "create": "Create Hook",
+      "emptyTitle": "No hooks configured",
+      "emptyDesc": "Hooks intercept agent lifecycle events like tool calls, session start/stop, and more.",
+      "createFirst": "Create your first hook",
+      "deleteConfirm": "Delete hook for \"{{event}}\"? This cannot be undone."
+    }
   },
   "permissions": {
     "title": "Permissions",

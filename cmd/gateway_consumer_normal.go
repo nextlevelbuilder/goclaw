@@ -233,7 +233,7 @@ func processNormalMessage(
 	blockReply := deps.ChannelMgr != nil && deps.ChannelMgr.ResolveBlockReply(msg.Channel, deps.Cfg.Gateway.BlockReply)
 	toolStatus := deps.Cfg.Gateway.ToolStatus == nil || *deps.Cfg.Gateway.ToolStatus // default true
 	if deps.ChannelMgr != nil {
-		deps.ChannelMgr.RegisterRun(runID, msg.Channel, chatIDForRun, messageID, outMeta, enableStream, blockReply, toolStatus)
+		deps.ChannelMgr.RegisterRun(runID, msg.Channel, chatIDForRun, messageID, outMeta, msg.TenantID, enableStream, blockReply, toolStatus)
 	}
 
 	// Group-aware system prompt: help the LLM adapt tone and behavior for group chats.
@@ -396,7 +396,7 @@ func processNormalMessage(
 	})
 
 	// Handle result asynchronously to not block the flush callback.
-	go func(agentKey, channel, chatID, session, rID, peerKind, inboundContent string, meta map[string]string, blockReplyEnabled bool, ptd *tools.PendingTeamDispatch) {
+	go func(agentKey, channel, chatID, session, rID, peerKind, inboundContent string, meta map[string]string, blockReplyEnabled bool, ptd *tools.PendingTeamDispatch, tenantID, agentUUID uuid.UUID, agentOtherConfig []byte) {
 		outcome := <-outCh
 
 		// Release team create lock — tasks already visible in DB, other goroutines can list.
@@ -426,6 +426,8 @@ func processNormalMessage(
 					ChatID:   chatID,
 					Content:  "",
 					Metadata: meta,
+					TenantID: tenantID,
+					AgentID:  agentUUID,
 				})
 				return
 			}
@@ -444,6 +446,8 @@ func processNormalMessage(
 				ChatID:   chatID,
 				Content:  errContent,
 				Metadata: meta,
+				TenantID: tenantID,
+				AgentID:  agentUUID,
 			})
 			return
 		}
@@ -461,6 +465,8 @@ func processNormalMessage(
 				ChatID:   chatID,
 				Content:  "",
 				Metadata: meta,
+				TenantID: tenantID,
+				AgentID:  agentUUID,
 			})
 			return
 		}
@@ -478,6 +484,8 @@ func processNormalMessage(
 				ChatID:   chatID,
 				Content:  "",
 				Metadata: meta,
+				TenantID: tenantID,
+				AgentID:  agentUUID,
 			})
 			return
 		}
@@ -493,10 +501,13 @@ func processNormalMessage(
 
 		// Publish response back to the channel
 		outMsg := bus.OutboundMessage{
-			Channel:  channel,
-			ChatID:   chatID,
-			Content:  replyContent,
-			Metadata: meta,
+			Channel:          channel,
+			ChatID:           chatID,
+			Content:          replyContent,
+			Metadata:         meta,
+			TenantID:         tenantID,
+			AgentID:          agentUUID,
+			AgentOtherConfig: agentOtherConfig,
 		}
 
 		appendMediaToOutbound(&outMsg, outcome.Result.Media)
@@ -507,5 +518,5 @@ func processNormalMessage(
 		if deps.TeamStore != nil && channel != tools.ChannelSystem && channel != tools.ChannelTeammate && channel != tools.ChannelDashboard {
 			go autoSetFollowup(ctx, deps.TeamStore, deps.AgentStore, agentKey, channel, chatID, replyContent)
 		}
-	}(agentID, msg.Channel, msg.ChatID, sessionKey, runID, peerKind, msg.Content, outMeta, blockReply, ptd)
+	}(agentID, msg.Channel, msg.ChatID, sessionKey, runID, peerKind, msg.Content, outMeta, blockReply, ptd, msg.TenantID, agentLoop.UUID(), agentLoop.OtherConfig())
 }

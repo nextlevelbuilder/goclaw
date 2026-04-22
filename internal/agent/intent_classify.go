@@ -40,6 +40,23 @@ var cancelKeywords = []string{
 	"nevermind", "never mind",
 }
 
+// exactCancelKeywords is a set of keywords that trigger immediate abort when
+// sent as the entire message (exact match, case-insensitive, trimmed).
+// Used by chat.send to auto-abort when user sends "stop" during an active run.
+var exactCancelKeywords = map[string]bool{
+	"stop": true, "cancel": true, "abort": true,
+	"thôi": true, "dừng": true, "hủy": true,
+	"取消": true, "停": true,
+	"nevermind": true, "never mind": true,
+}
+
+// IsExactCancelKeyword returns true if the message is an exact cancel keyword
+// (case-insensitive, whitespace-trimmed). Used by chat.send to auto-abort
+// running agent loops when user explicitly sends a stop command.
+func IsExactCancelKeyword(msg string) bool {
+	return exactCancelKeywords[strings.ToLower(strings.TrimSpace(msg))]
+}
+
 // quickClassify attempts keyword-based classification for ultra-short messages
 // before calling the LLM. Only messages ≤ 15 runes are fast-pathed; longer
 // messages always go to LLM for proper context understanding.

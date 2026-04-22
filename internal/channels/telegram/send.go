@@ -252,6 +252,39 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 		return err
 	}
 
+	// TTS auto-apply: convert [[tts]] tagged responses to voice
+	if c.audioMgr != nil && msg.Content != "" {
+		isVoiceInbound := msg.Metadata["is_voice_inbound"] == "true"
+		ttsResult, ttsErr := c.audioMgr.AutoApplyToText(ctx, msg.Content, "telegram", isVoiceInbound, "")
+		if ttsErr != nil {
+			slog.Debug("telegram: tts auto-apply error", "error", ttsErr)
+		}
+		if ttsResult != nil && ttsResult.AudioPath != "" {
+			// Send voice message instead of text
+			if err := c.sendVoice(ctx, tu.ID(chatID), ttsResult.AudioPath, "", replyToMsgID, threadID); err != nil {
+				slog.Warn("telegram: tts auto-apply voice send failed, falling back to text", "error", err)
+			} else {
+				// Voice sent successfully
+				strippedText := strings.TrimSpace(ttsResult.Text)
+				if strippedText == "" {
+					// Voice-only: delete placeholder (no text to show)
+					if pID, ok := c.placeholders.LoadAndDelete(localKey); ok {
+						if msgID, ok := pID.(int); ok && msgID > 0 {
+							_ = c.deleteMessage(ctx, chatID, msgID)
+						}
+					}
+					return nil
+				}
+				// Has remaining text: let normal flow handle placeholder edit
+				msg.Content = strippedText
+			}
+		}
+		// Update content with directives stripped (even if TTS not applied)
+		if ttsResult != nil {
+			msg.Content = ttsResult.Text
+		}
+	}
+
 	// Text-only message
 	htmlContent := markdownToTelegramHTML(msg.Content)
 	chunks := chunkHTML(htmlContent, telegramMaxMessageLen)

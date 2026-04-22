@@ -94,7 +94,9 @@ func (d *gatewayDeps) runLifecycle(
 			return
 		}
 		if d.pgStores.ConfigSecrets != nil {
-			if secrets, err := d.pgStores.ConfigSecrets.GetAll(context.Background()); err == nil && len(secrets) > 0 {
+			// Use master tenant context to load global TTS secrets
+			masterCtx := store.WithTenantID(context.Background(), store.MasterTenantID)
+			if secrets, err := d.pgStores.ConfigSecrets.GetAll(masterCtx); err == nil && len(secrets) > 0 {
 				updatedCfg.ApplyDBSecrets(secrets)
 			}
 		}

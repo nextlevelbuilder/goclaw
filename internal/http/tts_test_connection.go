@@ -92,7 +92,7 @@ func (h *TTSHandler) handleTestConnection(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if providersRequiringAPIKey[req.Provider] && req.APIKey == "" {
+	if providersRequiringAPIKey[req.Provider] && (req.APIKey == "" || req.APIKey == "***") {
 		http.Error(w, fmt.Sprintf(`{"error":"api_key is required for %s"}`, req.Provider), http.StatusBadRequest)
 		return
 	}

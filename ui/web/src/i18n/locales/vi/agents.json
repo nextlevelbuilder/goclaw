@@ -170,7 +170,9 @@
       "links": "Liên kết",
       "skills": "Skill",
       "instances": "Phiên bản người dùng",
-      "permissions": "Phân quyền"
+      "permissions": "Phân quyền",
+      "evolution": "Tiến Hóa",
+      "hooks": "Hooks"
     },
     "summonFailed": "Triệu hồi thất bại",
     "evolving": "Đang tiến hóa",
@@ -963,6 +965,25 @@
     "refresh": "Làm mới",
     "noLogs": "Chưa có nhật ký heartbeat.",
     "logsPagination": "{{from}}–{{to}} / {{total}}"
+  },
+  "hooks": {
+    "card": {
+      "title": "Hooks",
+      "loading": "Đang tải hooks...",
+      "empty": "Chưa có hook nào",
+      "emptyDesc": "Hooks chặn các sự kiện trong vòng đời agent như gọi tool.",
+      "viewAll": "Xem tất cả {{count}} hooks",
+      "addHook": "Thêm hook",
+      "nHooks": "{{count}} hooks"
+    },
+    "tab": {
+      "refresh": "Làm mới",
+      "create": "Tạo Hook",
+      "emptyTitle": "Chưa có hook nào",
+      "emptyDesc": "Hooks chặn các sự kiện trong vòng đời agent như gọi tool, bắt đầu/kết thúc phiên, v.v.",
+      "createFirst": "Tạo hook đầu tiên",
+      "deleteConfirm": "Xóa hook cho \"{{event}}\"? Hành động này không thể hoàn tác."
+    }
   },
   "permissions": {
     "title": "Quyền hạn",

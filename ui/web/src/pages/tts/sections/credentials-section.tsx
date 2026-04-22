@@ -41,9 +41,11 @@ export function CredentialsSection({ provider, draft, onUpdate, testConnection, 
     try {
       // Build params from draft credentials — test with unsaved config
       const cfg = draft[provider as keyof Pick<typeof draft, "openai" | "elevenlabs" | "minimax">];
+      // Don't send masked API key — backend will reject it
+      const apiKey = cfg?.api_key === "***" ? undefined : cfg?.api_key;
       const params: TestConnectionParams = {
         provider,
-        api_key: cfg?.api_key,
+        api_key: apiKey,
         api_base: cfg?.api_base || cfg?.base_url,
         voice_id: cfg?.voice_id || cfg?.voice,
         model_id: cfg?.model_id || cfg?.model,

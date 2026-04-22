@@ -23,6 +23,11 @@ func channelFromCtx(ctx context.Context) string {
 	return v
 }
 
+// TenantTTSResolver resolves per-tenant TTS provider and config.
+// Returns (provider, providerName, autoMode, error). If error is non-nil,
+// caller should fall back to global manager config.
+type TenantTTSResolver func(ctx context.Context) (TTSProvider, string, AutoMode, error)
+
 // Manager orchestrates audio providers across TTS, STT, Music, and SFX
 // operations. Each op has its own provider map + primary/fallback chain.
 //
@@ -43,6 +48,8 @@ type Manager struct {
 	mode      Mode
 	maxLength int // max text length before truncation (default 1500)
 	timeoutMs int // provider timeout (default 30000)
+
+	tenantResolver TenantTTSResolver // per-tenant TTS config resolver (nil = use global)
 }
 
 // ManagerConfig configures the audio manager. Preserved from legacy TTS
@@ -125,6 +132,23 @@ func (m *Manager) GetProvider(name string) (TTSProvider, bool) {
 
 // PrimaryProvider returns the primary TTS provider name.
 func (m *Manager) PrimaryProvider() string { return m.primary }
+
+// SetTenantResolver sets the per-tenant TTS config resolver.
+// Channels use this to resolve tenant-specific TTS providers.
+func (m *Manager) SetTenantResolver(r TenantTTSResolver) { m.tenantResolver = r }
+
+// ResolveTenantProvider attempts to get tenant-specific TTS provider.
+// Returns (provider, name, autoMode, ok). If ok=false, caller uses global config.
+func (m *Manager) ResolveTenantProvider(ctx context.Context) (TTSProvider, string, AutoMode, bool) {
+	if m.tenantResolver == nil {
+		return nil, "", "", false
+	}
+	p, name, auto, err := m.tenantResolver(ctx)
+	if err != nil {
+		return nil, "", "", false
+	}
+	return p, name, auto, true
+}
 
 // AutoMode returns the current auto-apply mode.
 func (m *Manager) AutoMode() AutoMode { return m.auto }
