@@ -577,7 +577,7 @@
     "saving": "Đang lưu...",
     "saved": "Đã lưu",
     "failedToSave": "Lưu thất bại",
-    "usingGlobalDefaults": "Đang dùng mặc định toàn cục từ config.json"
+    "usingGlobalDefaults": "Đang dùng mặc định hệ thống"
   },
   "files": {
     "readOnly": "Chỉ đọc",
@@ -727,6 +727,7 @@
       "maxSpawnDepth": "Độ sâu sinh sản tối đa",
       "maxChildrenPerAgent": "Con tối đa mỗi agent",
       "archiveAfter": "Lưu trữ sau (phút)",
+      "maxRetries": "Số lần thử lại tối đa",
       "modelOverride": "Ghi đè model",
       "inheritFromAgent": "(kế thừa từ agent)"
     },
@@ -802,7 +803,8 @@
       "hardClear": "Xóa cứng",
       "enabled": "Đã bật",
       "placeholderText": "Văn bản thay thế",
-      "descriptionSimple": "Tự động cắt bớt kết quả công cụ cũ để tránh tràn ngữ cảnh. Bật mặc định.",
+      "cacheTtl": "Cache TTL",
+      "descriptionSimple": "Tự động cắt bớt kết quả công cụ cũ để tránh tràn ngữ cảnh. Đặt chế độ 'cache-ttl' để bật.",
       "advanced": "Nâng cao"
     },
     "sandbox": {

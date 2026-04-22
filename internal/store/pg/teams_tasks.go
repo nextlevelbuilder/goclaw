@@ -22,7 +22,7 @@ import (
 const taskLockDuration = 60 * time.Minute
 
 // taskSelectCols is the shared SELECT column list for task queries (must match scanTaskRowsJoined).
-const taskSelectCols = `t.id, t.team_id, t.subject, t.description, t.status, t.owner_agent_id, t.blocked_by, t.priority, t.result, t.user_id, t.channel,
+const taskSelectCols = `t.id, t.team_id, t.tenant_id, t.subject, t.description, t.status, t.owner_agent_id, t.blocked_by, t.priority, t.result, t.user_id, t.channel,
 		 t.task_type, t.task_number, COALESCE(t.identifier,''), t.created_by_agent_id, COALESCE(t.assignee_user_id,''), t.parent_id,
 		 COALESCE(t.chat_id,''), t.metadata, t.locked_at, t.lock_expires_at, COALESCE(t.progress_percent,0), COALESCE(t.progress_step,''),
 		 t.followup_at, COALESCE(t.followup_count,0), COALESCE(t.followup_max,0), COALESCE(t.followup_message,''), COALESCE(t.followup_channel,''), COALESCE(t.followup_chat_id,''),
@@ -560,7 +560,7 @@ func scanTaskRowsJoined(rows *sql.Rows) ([]store.TeamTaskData, error) {
 		var followupCount, followupMax int
 		var followupMessage, followupChannel, followupChatID string
 		if err := rows.Scan(
-			&d.ID, &d.TeamID, &d.Subject, &desc, &d.Status,
+			&d.ID, &d.TeamID, &d.TenantID, &d.Subject, &desc, &d.Status,
 			&ownerID, pq.Array(&blockedBy), &d.Priority, &result,
 			&userID, &channel,
 			&d.TaskType, &d.TaskNumber, &identifier, &createdByAgentID, &assigneeUserID, &parentID,

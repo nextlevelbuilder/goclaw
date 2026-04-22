@@ -76,7 +76,7 @@ func TestAdapterRegistry_ConcurrentRegister(t *testing.T) {
 	})
 
 	var wg sync.WaitGroup
-	for i := 0; i < 32; i++ {
+	for i := range 32 {
 		wg.Add(2)
 		go func(id int) {
 			defer wg.Done()
@@ -144,5 +144,5 @@ func (s *stubAdapter) Capabilities() ProviderCapabilities { return ProviderCapab
 func (s *stubAdapter) ToRequest(ChatRequest) ([]byte, http.Header, error) {
 	return nil, nil, nil
 }
-func (s *stubAdapter) FromResponse([]byte) (*ChatResponse, error)    { return nil, nil }
+func (s *stubAdapter) FromResponse([]byte) (*ChatResponse, error)   { return nil, nil }
 func (s *stubAdapter) FromStreamChunk([]byte) (*StreamChunk, error) { return nil, nil }

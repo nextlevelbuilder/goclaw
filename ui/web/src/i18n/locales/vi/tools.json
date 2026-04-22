@@ -180,6 +180,27 @@
       "save": "Lưu",
       "saving": "Đang lưu..."
     },
+    "sttForm": {
+      "title": "Cài đặt STT",
+      "description": "Cấu hình nhà cung cấp chuyển giọng nói thành văn bản cho tin nhắn thoại.",
+      "providersLabel": "Nhà cung cấp",
+      "providersPlaceholder": "Chọn nhà cung cấp",
+      "elevenlabsSectionTitle": "ElevenLabs",
+      "elevenlabsApiKeyLabel": "API Key",
+      "elevenlabsDefaultLanguageLabel": "Ngôn ngữ mặc định",
+      "proxySectionTitle": "Proxy",
+      "proxyUrlLabel": "URL Proxy",
+      "proxyApiKeyLabel": "API Key Proxy",
+      "proxyTenantIdLabel": "Tenant ID Proxy",
+      "whatsappEnabledLabel": "Bật STT cho WhatsApp",
+      "whatsappPrivacyWarning": "Bật STT cho WhatsApp sẽ phá vỡ mã hóa đầu cuối cho tin nhắn thoại gửi đến agent này.",
+      "providersRequiredError": "Phải chọn ít nhất một nhà cung cấp.",
+      "cancel": "Hủy",
+      "save": "Lưu",
+      "saving": "Đang lưu...",
+      "saveSuccess": "Đã lưu cài đặt STT",
+      "saveFailed": "Lưu cài đặt STT thất bại"
+    },
     "extractorChain": {
       "title": "Web Fetch — Chuỗi bộ trích xuất",
       "description": "Danh sách bộ trích xuất nội dung theo thứ tự. Mỗi URL được thử từ trên xuống cho đến khi một bộ trả về nội dung chất lượng.",

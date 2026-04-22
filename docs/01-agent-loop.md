@@ -59,15 +59,16 @@ Finalize (runs once, uses background context if cancelled)
 - Resolve workspace + context files dynamically
 - Build system prompt (15+ sections)
 - Inject conversation summary if exists
-- Run history pipeline (limitHistoryTurns → pruneContextMessages → sanitizeHistory)
+- Run history pipeline (limitHistoryTurns → sanitizeHistory)
 - Filter tools through PolicyEngine (RBAC)
 - Call LLM, record span with token counts
 - Emit `chunk` events (streaming) or single response
 
-**PruneStage**
+**PruneStage** (opt-in via `contextPruning.mode: "cache-ttl"`)
 - Estimate token ratio vs context window
-- If >= 30%, run soft trim pass (keep first/last 1500 chars, replace middle with "...")
+- If >= 25%, run soft trim pass (keep first/last 3000 chars, replace middle with "...")
 - If >= 50%, run hard clear pass (replace with placeholder)
+- Run sanitizeHistory to fix broken tool_use/tool_result pairs after prune
 - Trigger memory flush (synchronous) if compaction threshold exceeded
 
 **ToolStage**
@@ -183,7 +184,7 @@ flowchart TD
 
     subgraph PH3["Phase 3: Build Messages"]
         P3A[Build system prompt - 15+ sections] --> P3B[Inject conversation summary if present]
-        P3B --> P3C["History pipeline: limitHistoryTurns --> pruneContextMessages --> sanitizeHistory"]
+        P3B --> P3C["History pipeline: limitHistoryTurns --> sanitizeHistory"]
         P3C --> P3D[Append current user message]
         P3D --> P3E[Buffer user message locally - deferred write]
     end
@@ -398,25 +399,20 @@ All security events use the `slog.Warn("security.injection_detected")` conventio
 
 ## 5. History Pipeline
 
-The history pipeline prepares conversation history before sending it to the LLM. It runs in three sequential stages.
+The history pipeline prepares conversation history before sending it to the LLM. It runs in two sequential stages. Context pruning is handled separately by PruneStage (opt-in via `contextPruning.mode: "cache-ttl"`).
 
 ```mermaid
 flowchart TD
     RAW[Raw Session History] --> S1
     S1["Stage 1: limitHistoryTurns<br/>Keep the last N user turns<br/>plus their associated assistant/tool messages"] --> S2
-    S2["Stage 2: pruneContextMessages<br/>2-pass tool result trimming<br/>(see Section 6)"] --> S3
-    S3["Stage 3: sanitizeHistory<br/>Repair broken tool_use / tool_result pairing<br/>after truncation"] --> OUT[Cleaned History]
+    S2["Stage 2: sanitizeHistory<br/>Repair broken tool_use / tool_result pairing<br/>after truncation"] --> OUT[Cleaned History]
 ```
 
 ### Stage 1: limitHistoryTurns
 
 Takes the raw session history and a `historyLimit` parameter. Keeps only the last N user turns along with all associated assistant and tool messages that belong to those turns. Earlier messages are discarded.
 
-### Stage 2: pruneContextMessages
-
-Applies the 2-pass context pruning algorithm described in Section 6.
-
-### Stage 3: sanitizeHistory
+### Stage 2: sanitizeHistory
 
 Repairs tool message pairing that may have been broken by truncation or compaction:
 
@@ -429,15 +425,17 @@ Repairs tool message pairing that may have been broken by truncation or compacti
 
 ## 6. Context Pruning
 
-Context pruning reduces oversized tool results using a 2-pass algorithm. It only activates when the estimated token-to-context-window ratio crosses a threshold.
+Context pruning reduces oversized tool results using a 2-pass algorithm. **It is opt-in** — configure `contextPruning.mode: "cache-ttl"` to enable. When disabled (default), zero overhead. Owned by PruneStage in the agent pipeline.
 
 ```mermaid
 flowchart TD
-    START[Estimate token ratio vs context window] --> CHECK{Ratio >= softTrimRatio 0.3?}
+    START[Check mode == cache-ttl?] --> GATE{Mode enabled?}
+    GATE -->|No| SKIP[No pruning - zero overhead]
+    GATE -->|Yes| CHECK{Ratio >= softTrimRatio 0.25?}
     CHECK -->|No| DONE[No pruning needed]
     CHECK -->|Yes| PASS1
 
-    PASS1["Pass 1: Soft Trim<br/>For each eligible tool result > 4000 chars:<br/>Keep first 1500 chars + last 1500 chars<br/>Replace middle with '...'"]
+    PASS1["Pass 1: Soft Trim<br/>For each eligible tool result > 6000 chars:<br/>Keep first 3000 chars + last 3000 chars<br/>Replace middle with '...'"]
     PASS1 --> CHECK2{"Ratio >= hardClearRatio 0.5?"}
     CHECK2 -->|No| DONE
     CHECK2 -->|Yes| PASS2
@@ -446,12 +444,25 @@ flowchart TD
     PASS2 --> DONE
 ```
 
+### Configuration
+
+Enable pruning by setting `contextPruning.mode` in agent defaults:
+
+```json5
+agents: {
+  defaults: {
+    contextPruning: { mode: "cache-ttl" }
+  }
+}
+```
+
 ### Defaults
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
+| `mode` | `""` (disabled) | `""` or `"off"` = disabled; `"cache-ttl"` = enabled |
 | `keepLastAssistants` | 3 | Number of recent assistant messages protected from pruning |
-| `softTrimRatio` | 0.3 | Token ratio threshold to trigger Pass 1 |
+| `softTrimRatio` | 0.25 | Token ratio threshold to trigger Pass 1 |
 | `hardClearRatio` | 0.5 | Token ratio threshold to trigger Pass 2 |
 | `minPrunableToolChars` | 50,000 | Minimum tool result length eligible for hard clear |
 
@@ -719,8 +730,8 @@ Enabled via the `GOCLAW_TRACE_VERBOSE=1` environment variable.
 | `internal/agent/loop_run.go` | Run() entry point: dual-mode gate (v2 vs v3), trace creation, span management |
 | `internal/agent/loop_pipeline_adapter.go` | Bridge v2 Loop to v3 Pipeline: state conversion, dependency injection, callback wiring |
 | `internal/agent/loop.go` | runLoop() core loop: LLM iteration, tool execution, message buffering (v2 path) |
-| `internal/agent/loop_history.go` | History pipeline: limitHistoryTurns, pruneContextMessages, sanitizeHistory, summary injection |
-| `internal/agent/pruning.go` | Context pruning: 2-pass soft trim and hard clear algorithm |
+| `internal/agent/loop_history.go` | History pipeline: limitHistoryTurns, sanitizeHistory, summary injection |
+| `internal/agent/pruning.go` | Context pruning: 2-pass soft trim and hard clear algorithm (opt-in via PruneStage) |
 | `internal/agent/loop_compact.go` | Mid-loop compaction: in-memory message summarization during iterations |
 | `internal/agent/systemprompt.go` | System prompt assembly (19+ sections), PromptFull and PromptMinimal modes |
 | `internal/agent/systemprompt_sections.go` | Individual section builders (tooling, workspace, sandbox, skills, MCP, etc.) |

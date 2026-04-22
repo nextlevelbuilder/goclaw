@@ -40,6 +40,7 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
           const client = wsRef.current;
           store.setRole(client.role || "");
           store.setTenant(client.tenantId, client.tenantName, client.tenantSlug, client.isOwner);
+          store.setConnectInfo({ isMasterScope: client.isMasterScope, edition: client.edition });
           // Fetch tenant memberships asynchronously
           client.call<{ tenants: TenantMembership[] }>(Methods.TENANTS_MINE)
             .then((res) => {
@@ -78,6 +79,7 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
         if (state === "disconnected") {
           store.setRole("");
           store.setTenant("", "", "", false);
+          store.setConnectInfo({ isMasterScope: false, edition: "standard" });
           store.setAvailableTenants([]);
           store.setTenantSelected(false);
         }

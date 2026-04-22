@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"slices"
 	"strings"
 	"time"
 
@@ -98,12 +99,7 @@ func NormalizeWebSearchProviderOrder(order []string) []string {
 }
 
 func isKnownSearchProvider(id string) bool {
-	for _, p := range defaultSearchProviderOrder {
-		if p == id {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(defaultSearchProviderOrder, id)
 }
 
 // --- Shared provider helpers ---

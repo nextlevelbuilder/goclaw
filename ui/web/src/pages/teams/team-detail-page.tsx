@@ -22,7 +22,7 @@ export function TeamDetailPage({ teamId, onBack }: TeamDetailPageProps) {
   const { t } = useTranslation("teams");
   const {
     getTeam, getTeamTasks, getTeamScopes, addMember, removeMember, deleteTeam,
-    getTaskDetail, getTaskLight, deleteTask, deleteTasksBulk, addTaskComment,
+    getTaskDetail, getTaskLight, deleteTask, deleteTasksBulk, addTaskComment, updateTeam,
   } = useTeams();
 
   // Wrap addTaskComment to match (teamId, taskId, content) signature expected by UI components.
@@ -82,6 +82,16 @@ export function TeamDetailPage({ teamId, onBack }: TeamDetailPageProps) {
     await reload();
   }, [teamId, removeMember, reload]);
 
+  const handleRenameTeam = useCallback(async (newName: string) => {
+    await updateTeam(teamId, { name: newName });
+    await reload();
+  }, [teamId, updateTeam, reload]);
+
+  const handleUpdateDescription = useCallback(async (newDesc: string) => {
+    await updateTeam(teamId, { description: newDesc });
+    await reload();
+  }, [teamId, updateTeam, reload]);
+
   if (loading || !team) {
     return <DetailPageSkeleton tabs={3} />;
   }
@@ -98,6 +108,7 @@ export function TeamDetailPage({ teamId, onBack }: TeamDetailPageProps) {
         onDelete={() => setDeleteOpen(true)}
         onSettings={() => setInfoOpen(true)}
         onMembers={() => setMembersOpen(true)}
+        onRenameTeam={handleRenameTeam}
       />
 
       <BoardContainer
@@ -122,6 +133,7 @@ export function TeamDetailPage({ teamId, onBack }: TeamDetailPageProps) {
         teamId={teamId}
         members={members}
         onSaved={reload}
+        onUpdateDescription={handleUpdateDescription}
       />
 
       {/* Members dialog */}

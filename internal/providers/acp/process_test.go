@@ -91,7 +91,7 @@ func TestProcessPool_Close_WithFakeProcesses(t *testing.T) {
 	pp := NewProcessPool("x", nil, "", time.Minute)
 
 	// Insert fake ACPProcess entries that are already exited
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		exitedCh := make(chan struct{})
 		close(exitedCh) // pre-exited
 		proc := &ACPProcess{

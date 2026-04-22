@@ -13,7 +13,14 @@ import (
 )
 
 // handleRestore accepts a multipart tar.gz upload and restores a tenant via SSE.
-// Query params: tenant_id, tenant_slug, mode (upsert|replace|new), dry_run
+// Query params:
+//   - mode (upsert|replace|new): restore strategy. Default "upsert".
+//   - dry_run (true|1): inspect archive without applying changes.
+//   - tenant_id | tenant_slug: target tenant for mode=upsert|replace.
+//   - tenant_slug (required for mode=new): slug for the new tenant to create.
+//     tenant_id is rejected for mode=new — the new tenant's UUID is generated
+//     server-side; the archived tenant metadata (name/status/settings) is used
+//     and bound to the provided slug.
 // Only system owners may restore (cross-tenant operation).
 func (h *TenantBackupHandler) handleRestore(w http.ResponseWriter, r *http.Request) {
 	userID := store.UserIDFromContext(r.Context())
@@ -33,9 +40,8 @@ func (h *TenantBackupHandler) handleRestore(w http.ResponseWriter, r *http.Reque
 	}
 	dryRun := q.Get("dry_run") == "true" || q.Get("dry_run") == "1"
 
-	// For "new" mode the tenant does not need to exist yet.
-	tenantID, tenantSlug, ok := h.resolveTenant(w, r)
-	if !ok && mode != "new" {
+	tenantID, tenantSlug, ok := h.resolveRestoreTarget(w, r, mode)
+	if !ok {
 		return
 	}
 

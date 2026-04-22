@@ -60,7 +60,7 @@ func NewAnthropicProvider(apiKey string, opts ...AnthropicOption) *AnthropicProv
 		apiKey:       apiKey,
 		baseURL:      anthropicAPIBase,
 		defaultModel: defaultClaudeModel,
-		client:       &http.Client{Timeout: DefaultHTTPTimeout},
+		client:       NewDefaultHTTPClient(),
 		retryConfig:  DefaultRetryConfig(),
 		// No CacheMiddleware: Anthropic uses block-level cache_control in buildRequestBody
 		middlewares: ComposeMiddlewares(FastModeMiddleware, ServiceTierMiddleware),

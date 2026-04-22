@@ -270,14 +270,31 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 			"",
 		)
 	} else if hasBootstrapFile(cfg.ContextFiles) {
-		// Predefined agents: full capabilities, but MUST complete bootstrap
+		// Predefined agents: soft onboarding. Small models (e.g. Gemini 3 Flash
+		// with low thinking budget) were emitting write_file({}) to satisfy a
+		// MUST-call mandate when they had no real user info — causing HTTP 400
+		// on the Google shim. The USER PROFILE INCOMPLETE branch below
+		// guarantees the model keeps getting nudged on subsequent turns, so
+		// deferring the write until info is gathered is safe.
+		// Trace: 019d8f33-2de1-7ab2-9a32-9df92cd610dd.
 		lines = append(lines,
-			"## FIRST RUN — MANDATORY",
+			"## FIRST RUN — GET TO KNOW THE USER",
 			"",
 			"BOOTSTRAP.md is loaded below. This is your FIRST interaction with this user.",
-			"You MUST complete the onboarding described in BOOTSTRAP.md.",
-			"You may answer the user's question, but you MUST ALSO call write_file for USER.md and BOOTSTRAP.md before your response ends.",
-			"If the user's first message contains enough info (name, language, timezone), write USER.md immediately — do NOT wait for multiple turns.",
+			"",
+			"Your goal: have a short, warm conversation and learn their name, preferred language,",
+			"and timezone naturally. Ask at most 1-2 questions per turn — don't interrogate.",
+			"",
+			"Once you actually have this info FROM THE USER'S OWN WORDS, silently call write_file",
+			"for USER.md (their profile) and write_file for BOOTSTRAP.md with empty content (to",
+			"mark onboarding complete).",
+			"",
+			"Hard rules:",
+			"- Do NOT call write_file on this turn if you haven't heard the info from the user yet.",
+			"- Do NOT call write_file with empty or placeholder arguments. If arguments would be",
+			"  blank, respond conversationally instead and gather info first.",
+			"- USER.md content must come from the user's own messages — never copy session identifiers, system strings, or made-up values.",
+			"- You may answer their question in the same turn as asking for their info.",
 			"",
 		)
 	} else if content := findContextFileContent(cfg.ContextFiles, bootstrap.UserFile); content != "" && !isUserFilePopulated(content) {

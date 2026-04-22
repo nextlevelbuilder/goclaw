@@ -29,6 +29,34 @@
     "timeout": "超时（毫秒）",
     "title": "常规设置"
   },
+  "voice_label": "声音",
+  "voice_placeholder": "选择声音…",
+  "voice_picker": {
+    "requires_provider": "请先配置 TTS Provider"
+  },
+  "voice_refresh": "刷新",
+  "voice_preview": "试听",
+  "voice_stop_preview": "停止",
+  "voice_no_voices": "暂无声音",
+  "voice_save_config_first": "请先保存 API Key 以加载声音",
+  "voice_loading": "加载声音中…",
+  "voice_preview_error": "试听失败 — 正在刷新",
+  "model_label": "模型",
+  "model_placeholder": "默认（租户/系统）",
+  "empty_state": {
+    "title": "未配置 TTS",
+    "description": "配置 TTS Provider 以为 Agent 启用语音。",
+    "cta": "配置 TTS",
+    "non_owner_hint": "请联系工作区所有者配置 TTS。"
+  },
+  "override": {
+    "label": "为此 Agent 覆盖语音",
+    "inherits": "继承: {{provider}} · {{voice}} · {{model}}"
+  },
+  "test": {
+    "button": "测试语音",
+    "sample_text": "你好，这是语音测试。"
+  },
   "minimax": {
     "apiBase": "API Base",
     "apiKey": "API Key",
@@ -67,5 +95,24 @@
     "noProvider": "未配置 TTS Provider",
     "title": "状态"
   },
-  "title": "语音合成"
+  "title": "语音合成",
+  "testConnection": {
+    "label": "测试连接",
+    "testing": "测试中…",
+    "success": "连接成功",
+    "failed": "连接失败"
+  },
+  "playground": {
+    "title": "测试播放",
+    "inputLabel": "要合成的文本",
+    "placeholder": "输入文本以试听…",
+    "play": "播放",
+    "stop": "停止",
+    "synthesizing": "合成中…",
+    "playbackFailed": "播放失败",
+    "requiresProvider": "请先选择 Provider 以启用试听。"
+  },
+  "advanced": {
+    "title": "高级设置"
+  }
 }

@@ -318,6 +318,14 @@
     "create": "Tạo",
     "creating": "Đang tạo..."
   },
+  "rename": {
+    "nameAria": "Đổi tên nhóm",
+    "descAria": "Sửa mô tả nhóm",
+    "descPlaceholder": "Mô tả nhóm",
+    "addDescription": "+ Thêm mô tả",
+    "emptyError": "Tên nhóm là bắt buộc",
+    "staleError": "Nhóm đã được cập nhật ở nơi khác — thay đổi của bạn bị huỷ"
+  },
   "toast": {
     "created": "Đã tạo nhóm",
     "deleted": "Đã xóa nhóm",

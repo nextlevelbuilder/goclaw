@@ -60,6 +60,34 @@
     "speechRate": "Speech Rate",
     "hint": "Edge TTS is free and requires no API key. Install with: pip install edge-tts"
   },
+  "voice_label": "Voice",
+  "voice_placeholder": "Select a voice…",
+  "voice_picker": {
+    "requires_provider": "Configure TTS provider first"
+  },
+  "voice_refresh": "Refresh",
+  "voice_preview": "Preview",
+  "voice_stop_preview": "Stop",
+  "voice_no_voices": "No voices available",
+  "voice_save_config_first": "Save API key first to load voices",
+  "voice_loading": "Loading voices…",
+  "voice_preview_error": "Preview failed — refreshing list",
+  "model_label": "Model",
+  "model_placeholder": "Default (tenant/system)",
+  "empty_state": {
+    "title": "TTS not configured",
+    "description": "Configure a TTS provider to enable voice for agents.",
+    "cta": "Configure TTS",
+    "non_owner_hint": "Contact the workspace owner to configure TTS."
+  },
+  "override": {
+    "label": "Override voice for this agent",
+    "inherits": "Inherits: {{provider}} · {{voice}} · {{model}}"
+  },
+  "test": {
+    "button": "Test this voice",
+    "sample_text": "Hello, this is a voice test."
+  },
   "minimax": {
     "apiKey": "API Key",
     "groupId": "Group ID *",
@@ -67,5 +95,24 @@
     "apiBase": "API Base",
     "model": "Model",
     "voiceId": "Voice ID"
+  },
+  "testConnection": {
+    "label": "Test connection",
+    "testing": "Testing…",
+    "success": "Connection successful",
+    "failed": "Connection failed"
+  },
+  "playground": {
+    "title": "Test Playground",
+    "inputLabel": "Text to synthesize",
+    "placeholder": "Enter text to hear…",
+    "play": "Play",
+    "stop": "Stop",
+    "synthesizing": "Synthesizing…",
+    "playbackFailed": "Playback failed",
+    "requiresProvider": "Select a provider above to enable test playback."
+  },
+  "advanced": {
+    "title": "Advanced settings"
   }
 }

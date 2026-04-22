@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
+	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
 
@@ -26,6 +28,23 @@ func NewPruneStage(deps *PipelineDeps, memFlush *MemoryFlushStage) *PruneStage {
 
 func (s *PruneStage) Name() string       { return "prune" }
 func (s *PruneStage) Result() StageResult { return s.result }
+
+// defaultCachePruneTTL is used when cfg.TTL is empty or invalid.
+const defaultCachePruneTTL = 5 * time.Minute
+
+// parseTTL parses a Go duration string (e.g. "5m"). Falls back to 5m default on
+// empty/invalid input with a warning log. Negative durations treated as invalid.
+func parseTTL(s string) time.Duration {
+	if s == "" {
+		return defaultCachePruneTTL
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil || d <= 0 {
+		slog.Warn("context_pruning: invalid ttl, using 5m default", "ttl", s, "err", err)
+		return defaultCachePruneTTL
+	}
+	return d
+}
 
 // Execute checks history tokens against budget, prunes/compacts as needed.
 func (s *PruneStage) Execute(ctx context.Context, state *RunState) error {
@@ -52,18 +71,97 @@ func (s *PruneStage) Execute(ctx context.Context, state *RunState) error {
 	// Count current history tokens
 	historyTokens := s.countHistory(state)
 	state.Prune.HistoryTokens = historyTokens
+	tokensBefore := historyTokens
 
 	softThreshold := budget * 70 / 100
 	if historyTokens <= softThreshold {
 		return nil // under budget, no action needed
 	}
 
-	// Phase 1: soft prune at 70% budget
-	if s.deps.PruneMessages != nil {
-		pruned := s.deps.PruneMessages(state.Messages.History(), budget)
-		state.Messages.SetHistory(pruned)
-		historyTokens = s.countHistory(state)
-		state.Prune.HistoryTokens = historyTokens
+	sessionKey := state.Input.SessionKey
+	skipSoftPrune := false
+
+	// Cache-TTL gate (provider-aware, per-session).
+	// Only activates when all 4 callbacks are wired and mode == "cache-ttl".
+	if s.deps.GetPruningConfig != nil && s.deps.GetProviderCaps != nil && s.deps.GetCacheTouch != nil {
+		cfg := s.deps.GetPruningConfig()
+		if cfg != nil && cfg.Mode == "cache-ttl" {
+			caps := s.deps.GetProviderCaps()
+			if caps.CacheControl {
+				ttl := parseTTL(cfg.TTL)
+				touch := s.deps.GetCacheTouch(sessionKey)
+				if !touch.IsZero() && time.Since(touch) < ttl {
+					if historyTokens <= budget {
+						return nil // cache still live, below hard budget — preserve prefix
+					}
+					// Over hard budget despite live cache — safety valve: skip soft prune,
+					// fall through to compaction only.
+					slog.Info("context.cache_ttl_overridden",
+						"session_key", sessionKey,
+						"tokens", historyTokens,
+						"budget", budget,
+					)
+					skipSoftPrune = true
+				}
+			}
+		}
+	}
+
+	// Phase 1: soft prune at 70% budget (unless TTL gate routed to compact-only).
+	var pruneStats PruneStats
+	if !skipSoftPrune && s.deps.PruneMessages != nil {
+		var pruned []providers.Message
+		pruned, pruneStats = s.deps.PruneMessages(state.Messages.History(), budget)
+		mutated := pruneStats.ResultsTrimmed > 0 || pruneStats.ResultsCleared > 0
+		if mutated {
+			// Sanitize after prune to fix broken tool_use/tool_result pairs.
+			// Applied in-memory only — prune-induced orphans are ephemeral.
+			if s.deps.SanitizeHistory != nil {
+				pruned, _ = s.deps.SanitizeHistory(pruned)
+			}
+			state.Messages.SetHistory(pruned)
+			historyTokens = s.countHistory(state)
+			state.Prune.HistoryTokens = historyTokens
+			// Match TS semantics: touch recorded ONLY after prune mutates messages.
+			if s.deps.MarkCacheTouched != nil && sessionKey != "" {
+				s.deps.MarkCacheTouched(sessionKey)
+			}
+		}
+	}
+
+	// Emit observability event + slog when pruning actually mutated messages.
+	if pruneStats.ResultsTrimmed > 0 || pruneStats.ResultsCleared > 0 || pruneStats.Compacted {
+		trigger := "soft"
+		if pruneStats.Compacted {
+			trigger = "compact"
+		} else if pruneStats.ResultsCleared > 0 {
+			trigger = "hard"
+		}
+		if s.deps.EventBus != nil {
+			s.deps.EventBus.Publish(eventbus.DomainEvent{
+				Type:     eventbus.EventContextPruned,
+				SourceID: sessionKey,
+				Payload: &eventbus.ContextPrunedPayload{
+					SessionKey:     sessionKey,
+					TokensBefore:   tokensBefore,
+					TokensAfter:    historyTokens,
+					Budget:         budget,
+					ResultsTrimmed: pruneStats.ResultsTrimmed,
+					ResultsCleared: pruneStats.ResultsCleared,
+					Compacted:      pruneStats.Compacted,
+					Trigger:        trigger,
+				},
+			})
+		}
+		slog.Info("context.pruned",
+			"session_key", sessionKey,
+			"tokens_before", tokensBefore,
+			"tokens_after", historyTokens,
+			"trimmed", pruneStats.ResultsTrimmed,
+			"cleared", pruneStats.ResultsCleared,
+			"compacted", pruneStats.Compacted,
+			"trigger", trigger,
+		)
 	}
 
 	if historyTokens <= budget {

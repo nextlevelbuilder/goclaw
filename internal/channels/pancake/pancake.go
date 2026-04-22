@@ -34,6 +34,7 @@ type Channel struct {
 	config        pancakeInstanceConfig
 	apiClient     *APIClient
 	pageID        string
+	webhookPageID string // native platform ID used in webhook event.page_id (may differ from Pancake internal pageID)
 	pageName      string // resolved from Pancake page metadata at Start()
 	platform      string // resolved from Pancake page metadata at Start()
 	webhookSecret string // optional HMAC-SHA256 secret for webhook verification
@@ -50,6 +51,13 @@ type Channel struct {
 
 	// postFetcher fetches and caches page post content for comment context enrichment.
 	postFetcher *PostFetcher
+
+	// commentReplyDisabledOnce prevents repeated info logs when COMMENT webhooks
+	// arrive but the feature is disabled in channel config.
+	commentReplyDisabledOnce sync.Once
+
+	// reactSem bounds concurrent Facebook comment-like calls (cap 10).
+	reactSem chan struct{}
 
 	stopCh  chan struct{}
 	stopCtx context.Context
@@ -79,9 +87,11 @@ func New(cfg pancakeInstanceConfig, creds pancakeCreds,
 		config:        cfg,
 		apiClient:     apiClient,
 		pageID:        cfg.PageID,
+		webhookPageID: cfg.WebhookPageID,
 		platform:      cfg.Platform,
 		webhookSecret: creds.WebhookSecret,
 		postFetcher:   NewPostFetcher(apiClient, cfg.PostContextCacheTTL),
+		reactSem:      make(chan struct{}, 10),
 		stopCh:        make(chan struct{}),
 		stopCtx:       stopCtx,
 		stopFn:        stopFn,
@@ -131,6 +141,8 @@ func (ch *Channel) Start(ctx context.Context) error {
 			slog.Warn("pancake: could not resolve platform from page metadata", "page_id", ch.pageID, "err", err)
 		} else {
 			if page.Platform != "" {
+				slog.Debug("pancake: platform auto-detected; set platform explicitly in config to avoid startup API call",
+					"page_id", ch.pageID, "platform", page.Platform)
 				ch.platform = page.Platform
 			}
 			if page.Name != "" {
@@ -143,6 +155,14 @@ func (ch *Channel) Start(ctx context.Context) error {
 		slog.Warn("security.pancake_webhook_no_secret",
 			"page_id", ch.pageID,
 			"note", "webhook_secret not configured; incoming webhook requests will not be authenticated")
+	}
+
+	// Without HMAC, any actor reaching the webhook endpoint can trigger Pancake API calls.
+	if ch.config.Features.AutoReact && ch.webhookSecret == "" {
+		slog.Warn("security.pancake_auto_react_without_hmac: auto_react is enabled but "+
+			"webhook_secret is not set; configure webhook_secret to prevent "+
+			"unauthenticated like-comment triggers",
+			"page_id", ch.pageID)
 	}
 
 	globalRouter.register(ch)
@@ -161,7 +181,7 @@ func (ch *Channel) Start(ctx context.Context) error {
 
 // Stop gracefully shuts down the channel.
 func (ch *Channel) Stop(_ context.Context) error {
-	globalRouter.unregister(ch.pageID)
+	globalRouter.unregister(ch.pageID, ch.webhookPageID)
 	ch.stopFn()
 	close(ch.stopCh)
 	ch.SetRunning(false)
@@ -182,6 +202,13 @@ func (ch *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 
 	if msg.ChatID == "" {
 		return fmt.Errorf("pancake: chat_id (conversation_id) is required for outbound message")
+	}
+
+	// NO_REPLY / suppressed-error path: empty content with no media means the
+	// caller wants downstream cleanup only. Pancake API rejects empty payloads,
+	// so short-circuit before dispatch.
+	if msg.Content == "" && len(msg.Media) == 0 {
+		return nil
 	}
 
 	switch msg.Metadata["pancake_mode"] {
@@ -239,16 +266,22 @@ func (ch *Channel) sendCommentReply(ctx context.Context, msg bus.OutboundMessage
 	defer cancel()
 
 	conversationID := msg.ChatID
-	text := FormatOutbound(msg.Content, ch.platform)
 
-	// Remember echo before sending (same pattern as inbox).
+	// Guard first — otherwise rememberOutboundEcho would stamp phantom echoes
+	// for a send that never happens, polluting future inbound echo dedup.
+	commentID := msg.Metadata["reply_to_comment_id"]
+	if commentID == "" {
+		return fmt.Errorf("pancake: reply_to_comment_id missing in outbound metadata for comment reply")
+	}
+
+	text := FormatOutbound(msg.Content, ch.platform)
 	parts := splitMessage(text, ch.maxMessageLength())
 	for _, part := range parts {
 		ch.rememberOutboundEcho(conversationID, part)
 	}
 
 	for _, part := range parts {
-		if err := ch.apiClient.ReplyComment(ctx, conversationID, part); err != nil {
+		if err := ch.apiClient.ReplyComment(ctx, conversationID, commentID, part); err != nil {
 			ch.handleAPIError(err)
 			ch.forgetOutboundEcho(conversationID, part)
 			return err

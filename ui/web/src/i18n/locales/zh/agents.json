@@ -577,7 +577,7 @@
     "saving": "保存中...",
     "saved": "已保存",
     "failedToSave": "保存失败",
-    "usingGlobalDefaults": "使用 config.json 中的全局默认值"
+    "usingGlobalDefaults": "使用系统默认值"
   },
   "files": {
     "readOnly": "只读",
@@ -727,6 +727,7 @@
       "maxSpawnDepth": "最大生成深度",
       "maxChildrenPerAgent": "每Agent最大子数",
       "archiveAfter": "归档时间（分钟）",
+      "maxRetries": "最大重试次数",
       "modelOverride": "模型覆盖",
       "inheritFromAgent": "（继承自Agent）"
     },
@@ -802,7 +803,8 @@
       "hardClear": "硬清除",
       "enabled": "已启用",
       "placeholderText": "占位符文本",
-      "descriptionSimple": "自动裁剪旧工具结果以防止上下文溢出。默认启用。",
+      "cacheTtl": "缓存 TTL",
+      "descriptionSimple": "自动裁剪旧工具结果以防止上下文溢出。设置模式为 'cache-ttl' 以启用。",
       "advanced": "高级"
     },
     "sandbox": {

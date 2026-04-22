@@ -32,6 +32,10 @@ export class WsClient {
   tenantName = "";
   tenantSlug = "";
   isOwner = false;
+  /** Server-derived: caller qualifies for master-only actions (owner OR on master tenant). Advisory UI hint only — backend still enforces. */
+  isMasterScope = false;
+  /** Server edition, drives UI feature gating. */
+  edition: "standard" | "lite" = "standard";
   serverVersion = "";
 
   private readonly maxReconnectDelay = 30_000;
@@ -209,6 +213,8 @@ export class WsClient {
         tenant_name?: string;
         tenant_slug?: string;
         is_owner?: boolean;
+        is_master_scope?: boolean;
+        edition?: "standard" | "lite";
         server?: { name?: string; version?: string };
       }>("connect", {
         token: this.getToken(),
@@ -246,6 +252,8 @@ export class WsClient {
       this.tenantName = res?.tenant_name ?? "";
       this.tenantSlug = res?.tenant_slug ?? "";
       this.isOwner = res?.is_owner ?? false;
+      this.isMasterScope = res?.is_master_scope ?? false;
+      this.edition = res?.edition ?? "standard";
       this.serverVersion = res?.server?.version ?? "";
       this.onStateChange("connected");
     } catch (e) {

@@ -206,6 +206,24 @@
       "skill_search": "Tìm kiếm skill khả dụng theo từ khóa hoặc mô tả để tìm khả năng phù hợp",
       "use_skill": "Kích hoạt skill để sử dụng khả năng chuyên biệt (đánh dấu tracing)",
       "team_tasks": "Xem, tạo, cập nhật và hoàn thành tác vụ trên bảng tác vụ nhóm"
+    },
+    "sttForm": {
+      "title": "Cài đặt STT",
+      "description": "Cấu hình provider chuyển giọng nói thành văn bản.",
+      "providersLabel": "Provider",
+      "elevenlabsSectionTitle": "ElevenLabs",
+      "elevenlabsApiKeyLabel": "API Key",
+      "elevenlabsDefaultLanguageLabel": "Ngôn ngữ mặc định",
+      "proxySectionTitle": "Proxy",
+      "proxyUrlLabel": "URL Proxy",
+      "proxyApiKeyLabel": "API Key Proxy",
+      "proxyTenantIdLabel": "Tenant ID Proxy",
+      "whatsappEnabledLabel": "Bật STT cho WhatsApp",
+      "whatsappPrivacyWarning": "Bật STT cho WhatsApp sẽ phá vỡ mã hóa đầu cuối cho tin nhắn thoại gửi đến agent này.",
+      "providersRequiredError": "Phải chọn ít nhất một provider.",
+      "cancel": "Hủy",
+      "save": "Lưu",
+      "saving": "Đang lưu..."
     }
   }
 }

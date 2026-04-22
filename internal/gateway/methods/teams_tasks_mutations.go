@@ -398,6 +398,28 @@ func (m *TeamsMethods) dispatchTaskToAgent(ctx context.Context, task *store.Team
 			meta["origin_local_key"] = lk
 		}
 	}
+	// Preserve acting sender through dashboard dispatch: prefer the live WS
+	// caller's sender (rarely set) then fall back to the stored origin sender
+	// from the task at creation time. Without this, group-scope tasks
+	// dispatched from the dashboard would hit the empty-sender DENY rule in
+	// CheckFileWriterPermission (#915 Flow F).
+	if dispatchSender := store.SenderIDFromContext(ctx); dispatchSender != "" {
+		meta["origin_sender_id"] = dispatchSender
+	} else if task.Metadata != nil {
+		if taskSender, _ := task.Metadata["origin_sender_id"].(string); taskSender != "" {
+			meta["origin_sender_id"] = taskSender
+		}
+	}
+	// Propagate RBAC role so the teammate's permission checks can bypass
+	// per-user grants for authenticated admin dispatchers (#915). Live WS
+	// caller's role wins; falls back to role stored on the task at create.
+	if dispatchRole := store.RoleFromContext(ctx); dispatchRole != "" {
+		meta["origin_role"] = dispatchRole
+	} else if task.Metadata != nil {
+		if taskRole, _ := task.Metadata["origin_role"].(string); taskRole != "" {
+			meta["origin_role"] = taskRole
+		}
+	}
 
 	m.msgBus.PublishInbound(bus.InboundMessage{
 		Channel:  "system",

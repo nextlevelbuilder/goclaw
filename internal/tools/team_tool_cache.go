@@ -42,9 +42,9 @@ func (m *TeamToolManager) resolveTeam(ctx context.Context) (*store.TeamData, uui
 		ce := entry.(*teamCacheEntry)
 		if time.Since(ce.cachedAt) < teamCacheTTL {
 			// Cache hit — still check access (user/channel vary per call)
-			userID := store.UserIDFromContext(ctx)
+			actorID := store.ActorIDFromContext(ctx)
 			channel := ToolChannelFromCtx(ctx)
-			if err := checkTeamAccess(ce.team.Settings, userID, channel); err != nil {
+			if err := checkTeamAccess(ce.team.Settings, actorID, channel); err != nil {
 				return nil, uuid.Nil, err
 			}
 			return ce.team, agentID, nil
@@ -67,10 +67,10 @@ func (m *TeamToolManager) resolveTeam(ctx context.Context) (*store.TeamData, uui
 	members, _ := m.teamStore.ListMembers(ctx, team.ID)
 	m.teamCache.Store(agentID, &teamCacheEntry{team: team, members: members, cachedAt: time.Now()})
 
-	// Check access
-	userID := store.UserIDFromContext(ctx)
+	// Check access (ACTOR = real sender, matches per-user allow/deny lists in group chats #915)
+	actorID := store.ActorIDFromContext(ctx)
 	channel := ToolChannelFromCtx(ctx)
-	if err := checkTeamAccess(team.Settings, userID, channel); err != nil {
+	if err := checkTeamAccess(team.Settings, actorID, channel); err != nil {
 		return nil, uuid.Nil, err
 	}
 

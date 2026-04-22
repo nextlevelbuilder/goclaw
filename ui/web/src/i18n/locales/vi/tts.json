@@ -29,6 +29,34 @@
     "timeout": "Thời gian chờ",
     "title": "Cài đặt chung"
   },
+  "voice_label": "Giọng đọc",
+  "voice_placeholder": "Chọn giọng đọc…",
+  "voice_picker": {
+    "requires_provider": "Vui lòng cấu hình provider TTS trước"
+  },
+  "voice_refresh": "Làm mới",
+  "voice_preview": "Nghe thử",
+  "voice_stop_preview": "Dừng",
+  "voice_no_voices": "Chưa có giọng đọc",
+  "voice_save_config_first": "Lưu API key trước để tải giọng đọc",
+  "voice_loading": "Đang tải giọng đọc…",
+  "voice_preview_error": "Không nghe thử được — đang làm mới",
+  "model_label": "Mô hình",
+  "model_placeholder": "Mặc định (tenant/hệ thống)",
+  "empty_state": {
+    "title": "Chưa cấu hình TTS",
+    "description": "Cấu hình provider TTS để bật giọng đọc cho agent.",
+    "cta": "Cấu hình TTS",
+    "non_owner_hint": "Liên hệ chủ workspace để cấu hình TTS."
+  },
+  "override": {
+    "label": "Ghi đè giọng đọc cho agent này",
+    "inherits": "Kế thừa: {{provider}} · {{voice}} · {{model}}"
+  },
+  "test": {
+    "button": "Thử giọng đọc",
+    "sample_text": "Xin chào, đây là giọng đọc thử."
+  },
   "minimax": {
     "apiBase": "API Base",
     "apiKey": "API Key",
@@ -67,5 +95,24 @@
     "noProvider": "Chưa cấu hình provider TTS",
     "title": "Trạng thái"
   },
-  "title": "Chuyển văn bản thành giọng nói"
+  "title": "Chuyển văn bản thành giọng nói",
+  "testConnection": {
+    "label": "Kiểm tra kết nối",
+    "testing": "Đang kiểm tra…",
+    "success": "Kết nối thành công",
+    "failed": "Kết nối thất bại"
+  },
+  "playground": {
+    "title": "Thử nghiệm",
+    "inputLabel": "Văn bản cần đọc",
+    "placeholder": "Nhập văn bản để nghe thử…",
+    "play": "Phát",
+    "stop": "Dừng",
+    "synthesizing": "Đang tổng hợp…",
+    "playbackFailed": "Phát âm thất bại",
+    "requiresProvider": "Chọn provider ở trên để bật phát thử."
+  },
+  "advanced": {
+    "title": "Cài đặt nâng cao"
+  }
 }

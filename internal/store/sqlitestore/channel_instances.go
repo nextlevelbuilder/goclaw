@@ -223,7 +223,7 @@ func (s *SQLiteChannelInstanceStore) Update(ctx context.Context, id uuid.UUID, u
 		if cfgVal == nil {
 			updates["config"] = []byte("null")
 		} else {
-			switch v := cfgVal.(type) {
+			switch cfgVal.(type) {
 			case json.RawMessage:
 				// Already raw JSON bytes — use as-is.
 			case []byte:

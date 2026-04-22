@@ -221,7 +221,7 @@ func newLifecycleTestChannel(t *testing.T) *Channel {
 		AppID:     "test-app-id",
 		AppSecret: "test-app-secret",
 	}
-	ch, err := New(cfg, nil, nil, nil)
+	ch, err := New(cfg, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("newTestChannel: New() error: %v", err)
 	}

@@ -99,7 +99,7 @@ func TestSafeWalkWorkspace_ExcludedPaths(t *testing.T) {
 
 func TestSafeWalkWorkspace_MaxFileLimit(t *testing.T) {
 	dir := t.TempDir()
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		writeFile(t, dir, filepath.Join("files", string(rune('a'+i))+".txt"), "data")
 	}
 
@@ -122,7 +122,7 @@ func TestSafeWalkWorkspace_MaxTotalBytes(t *testing.T) {
 	// Create files that exceed total byte limit. Use a whitelisted extension
 	// (.txt) so the files actually register — Phase 01 whitelist would skip .bin.
 	bigContent := make([]byte, 1024) // 1KB each
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		writeFile(t, dir, filepath.Join("data", string(rune('a'+i))+".txt"), string(bigContent))
 	}
 
@@ -143,7 +143,7 @@ func TestSafeWalkWorkspace_MaxTotalBytes(t *testing.T) {
 
 func TestSafeWalkWorkspace_ContextCancel(t *testing.T) {
 	dir := t.TempDir()
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		writeFile(t, dir, filepath.Join("files", string(rune('a'+i/26))+"_"+string(rune('a'+i%26))+".txt"), "data")
 	}
 
@@ -208,7 +208,7 @@ func TestIsExcludedPath(t *testing.T) {
 		{"images/screenshot.png", false},
 		{"teams/abc-123/doc.md", false},
 		{"soul-notes.md", false},
-		{"deep/SOUL.md", false},   // not root-level context file
+		{"deep/SOUL.md", false}, // not root-level context file
 		{".uploads/photo.jpg", false},
 		{"report.pdf", false},
 	}

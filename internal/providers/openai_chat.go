@@ -84,12 +84,14 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 	if err != nil {
 		return nil, err
 	}
-	defer respBody.Close()
+	// Wrap respBody so ctx cancellation closes the socket, unblocking bufio.Scanner.
+	cb := NewCtxBody(ctx, respBody)
+	defer cb.Close()
 
 	result := &ChatResponse{FinishReason: "stop"}
 	accumulators := make(map[int]*toolCallAccumulator)
 
-	sse := NewSSEScanner(respBody)
+	sse := NewSSEScanner(cb)
 	for sse.Next() {
 		data := sse.Data()
 

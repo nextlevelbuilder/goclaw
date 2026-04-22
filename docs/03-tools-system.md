@@ -812,9 +812,16 @@ func (t *MyTool) Execute(ctx context.Context, params MyParams) (*Result, error) 
 #### tts (tenant override shape)
 ```json
 {
-  "primary": "elevenlabs"
+  "primary": "elevenlabs",
+  "default_voice_id": "pMsXgVXv3BLzUgSXRplE",
+  "default_model": "eleven_flash_v2_5"
 }
 ```
+
+**Fields:**
+- `primary`: Provider selection (elevenlabs, openai, edge, minimax)
+- `default_voice_id`: Tenant-level voice ID fallback (ElevenLabs); overridable per-agent via `agent.other_config.tts_voice_id`
+- `default_model`: Tenant-level model choice (eleven_v3, eleven_flash_v2_5, eleven_multilingual_v2, eleven_turbo_v2_5); overridable per-agent via `agent.other_config.tts_model_id`
 
 **Secret vs non-secret split:**
 - Non-secret (provider priorities, max_results, allowed_domains): `builtin_tool_tenant_configs.settings` (editable via UI)
@@ -888,8 +895,7 @@ Never put credentials in tool settings JSON — backend does not validate.
 |------|---------|
 | `internal/tools/create_image.go` | create_image tool (OpenAI, Gemini, MiniMax, DashScope) |
 | `internal/tools/create_image_{dashscope,minimax}.go` | Provider-specific image generation |
-| `internal/tools/create_audio.go` | create_audio tool (MiniMax, ElevenLabs, Suno) |
-| `internal/tools/create_audio_{minimax,elevenlabs,suno}.go` | Provider-specific audio generation |
+| `internal/tools/create_audio.go` | create_audio tool — delegates to `audio.Manager` for music/SFX (ElevenLabs, MiniMax) |
 | `internal/tools/create_video.go` | create_video tool (MiniMax) |
 | `internal/tools/tts.go` | tts tool: text-to-speech (OpenAI, ElevenLabs, Edge, MiniMax) |
 | `internal/tools/read_{image,audio,video,document}.go` | Media reading tools (vision, transcription, analysis) |

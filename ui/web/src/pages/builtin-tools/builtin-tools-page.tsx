@@ -19,6 +19,10 @@ const CATEGORY_ORDER = [
   "sessions", "messaging", "scheduling", "subagents", "skills", "delegation", "teams",
 ];
 
+// Tools that have dedicated configuration pages elsewhere and should not appear
+// in the builtin-tools list. TTS config moved to /tts page.
+const HIDDEN_TOOL_NAMES = new Set(["tts"]);
+
 // Hardcoded master tenant UUID; mirrors backend store.MasterTenantID. When
 // the current tenant is NOT the master, UI routes settings writes through
 // the tenant-config endpoint. Backend enforces the same rule defensively —
@@ -60,12 +64,14 @@ export function BuiltinToolsPage() {
     [tools],
   );
 
-  const filtered = tools.filter(
-    (t) =>
-      t.name.toLowerCase().includes(search.toLowerCase()) ||
-      t.display_name.toLowerCase().includes(search.toLowerCase()) ||
-      t.description.toLowerCase().includes(search.toLowerCase()),
-  );
+  const filtered = tools
+    .filter((t) => !HIDDEN_TOOL_NAMES.has(t.name))
+    .filter(
+      (t) =>
+        t.name.toLowerCase().includes(search.toLowerCase()) ||
+        t.display_name.toLowerCase().includes(search.toLowerCase()) ||
+        t.description.toLowerCase().includes(search.toLowerCase()),
+    );
 
   const grouped = new Map<string, BuiltinToolData[]>();
   for (const tool of filtered) {

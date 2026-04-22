@@ -150,6 +150,10 @@ func (t *CronTool) Execute(ctx context.Context, args map[string]any) *Result {
 	}
 
 	agentID := resolveAgentIDString(ctx)
+	// SCOPE-intentional (#915 audit 2026-04-16): cron jobs follow the per-group
+	// memory model — all group members share the same cron_jobs rows via the
+	// group-scope user_id. Migrating to ActorIDFromContext would split jobs
+	// per-individual and break collaborative /cron list/add/remove UX.
 	userID := store.UserIDFromContext(ctx)
 
 	switch action {

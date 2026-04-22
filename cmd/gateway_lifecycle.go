@@ -103,6 +103,9 @@ func (d *gatewayDeps) runLifecycle(
 			return
 		}
 		deps.ttsTool.UpdateManager(newMgr)
+		if d.ttsHandler != nil {
+			d.ttsHandler.UpdateManager(newMgr)
+		}
 		slog.Info("tts config reloaded", "provider", newMgr.PrimaryProvider(), "auto", string(newMgr.AutoMode()))
 	})
 

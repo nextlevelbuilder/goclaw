@@ -304,7 +304,6 @@ var dbTypeToMediaType = map[string]string{
 	"dashscope":        "dashscope",
 	"bailian":          "dashscope",
 	"anthropic_native": "anthropic",
-	"suno":             "suno",
 	"byteplus":         "byteplus",
 	"byteplus_coding":  "byteplus",
 }
@@ -345,8 +344,6 @@ func providerTypeFromName(name string) string {
 		return "openai"
 	case name == "anthropic":
 		return "anthropic"
-	case name == "suno" || strings.HasPrefix(name, "suno"):
-		return "suno"
 	case name == "byteplus" || strings.HasPrefix(name, "byteplus"):
 		return "byteplus"
 	case name == "yescale":

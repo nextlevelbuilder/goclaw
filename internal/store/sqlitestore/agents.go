@@ -140,10 +140,20 @@ func (s *SQLiteAgentStore) Update(ctx context.Context, id uuid.UUID, updates map
 			updates[col] = ""
 		}
 	}
-	// Promoted INT columns: null → 0.
-	for _, col := range []string{"skill_nudge_interval", "max_tokens"} {
+	// Promoted INT/BOOL columns: null → 0/false.
+	for _, col := range []string{"skill_nudge_interval", "max_tokens", "self_evolve", "skill_evolve", "is_default"} {
 		if v, ok := updates[col]; ok && v == nil {
-			updates[col] = 0
+			if col == "self_evolve" || col == "skill_evolve" || col == "is_default" {
+				updates[col] = false
+			} else {
+				updates[col] = 0
+			}
+		}
+	}
+	// NOT NULL JSON columns: null → empty object.
+	for _, col := range []string{"other_config", "tools_config", "reasoning_config", "workspace_sharing", "chatgpt_oauth_routing", "shell_deny_groups", "kg_dedup_config"} {
+		if v, ok := updates[col]; ok && v == nil {
+			updates[col] = []byte("{}")
 		}
 	}
 

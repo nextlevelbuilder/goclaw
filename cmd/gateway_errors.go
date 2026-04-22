@@ -74,6 +74,27 @@ func isContextOverflowError(lower string) bool {
 		containsAny(lower, "overflow", "too large", "too long", "limit", "exceeded"))
 }
 
+// isExternalChannel reports whether a channel type serves end users on a
+// public-facing platform (Facebook, Telegram, etc.). Internal error details
+// must not be forwarded to these channels — the caller publishes an empty
+// outbound instead so placeholders get cleaned up without leaking technical
+// error text to end users. Internal types ("ws", "") return false.
+func isExternalChannel(channelType string) bool {
+	switch channelType {
+	case channels.TypeFacebook,
+		channels.TypeTelegram,
+		channels.TypeDiscord,
+		channels.TypeFeishu,
+		channels.TypeWhatsApp,
+		channels.TypeZaloOA,
+		channels.TypeZaloPersonal,
+		channels.TypePancake,
+		channels.TypeSlack:
+		return true
+	}
+	return false
+}
+
 // isMessageFormatError checks for tool_use/tool_result mismatch, role ordering,
 // and other message format errors that indicate corrupted session history.
 func isMessageFormatError(lower string) bool {

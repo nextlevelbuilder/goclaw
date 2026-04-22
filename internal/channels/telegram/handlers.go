@@ -10,6 +10,7 @@ import (
 	"github.com/mymmrac/telego"
 	tu "github.com/mymmrac/telego/telegoutil"
 
+	"github.com/nextlevelbuilder/goclaw/internal/audio"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/typing"
@@ -407,7 +408,18 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 			m := &mediaList[i]
 			switch m.Type {
 			case "audio", "voice":
-				transcript, sttErr := c.transcribeAudio(ctx, m.FilePath)
+				var transcript string
+				var sttErr error
+				if c.audioMgr != nil {
+					sttCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+					res, err := c.audioMgr.Transcribe(sttCtx, audio.STTInput{FilePath: m.FilePath, MimeType: "audio/ogg"}, audio.STTOptions{})
+					cancel()
+					if err == nil && res != nil {
+						transcript = res.Text
+					} else {
+						sttErr = err
+					}
+				}
 				if sttErr != nil {
 					slog.Warn("telegram: STT transcription failed",
 						"type", m.Type, "error", sttErr)
@@ -430,6 +442,7 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 				mediaFiles = append(mediaFiles, bus.MediaFile{
 					Path:     m.FilePath,
 					MimeType: m.ContentType,
+					Filename: m.FileName,
 				})
 			}
 		}
@@ -495,6 +508,7 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 					mediaFiles = append(mediaFiles, bus.MediaFile{
 						Path:     m.FilePath,
 						MimeType: m.ContentType,
+						Filename: m.FileName,
 					})
 				}
 				if len(histMedia) > 0 {

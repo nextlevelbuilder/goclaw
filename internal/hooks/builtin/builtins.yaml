@@ -1,0 +1,56 @@
+# GoClaw builtin hooks registry.
+#
+# Each entry is shipped with the binary (`//go:embed *.js`) and seeded into
+# agent_hooks at startup with source='builtin' and a stable UUIDv5. Users may
+# toggle `enabled` on these rows but cannot edit content — the embedded JS is
+# the canonical source at every boot.
+#
+# Schema:
+#   id             kebab-case stable identifier (never rename — breaks UUIDv5)
+#   version        integer; bump to force startup overwrite of matching rows
+#   events         list of HookEvent values (session_start, user_prompt_submit,
+#                  pre_tool_use, post_tool_use, stop, subagent_start,
+#                  subagent_stop). One DB row is created per event.
+#   scope          global | tenant | agent (builtins default to global)
+#   matcher        optional regex applied to tool_name (pre/post_tool_use only)
+#   if_expr        optional CEL expression pre-filter
+#   timeout_ms     per-hook wall-clock budget
+#   on_timeout     allow | block (fail-closed for blocking events)
+#   priority       higher = runs earlier in the chain
+#   mutable_fields per-hook allowlist of dotted paths the script may mutate
+#                  via updatedInput (e.g. rawInput, toolInput.command)
+#   source_file    name of the .js file sitting next to this YAML
+#   description    short human summary; surfaced in docs/UI
+#
+# Phase 04 ships this registry empty. Phase 05 adds the first exemplar
+# (pii-redactor). When adding a builtin, also add the .js file + remove
+# the _placeholder.js once at least one real source_file exists.
+builtins:
+  - id: pii-redactor
+    # v2: default_disabled introduced — one-shot auto-flips existing enabled
+    # rows to disabled (input-mutation opt-in policy). Bump again for any
+    # future content change.
+    version: 2
+    events: [user_prompt_submit, pre_tool_use]
+    scope: global
+    matcher: ""
+    if_expr: ""
+    timeout_ms: 2000
+    # Fail-open on timeout: missing one redaction is less harmful than
+    # blocking the whole conversation. Operators who want strict behavior
+    # can toggle the row to matcher/disabled via config.
+    on_timeout: allow
+    # High priority so the redactor runs BEFORE other hooks see raw input.
+    priority: 900
+    mutable_fields:
+      - rawInput
+      - toolInput.command
+      - toolInput.query
+      - toolInput.content
+    source_file: pii-redactor.js
+    description: "Masks email addresses and E.164-ish phone numbers in user input and common tool-input fields."
+    # Off by default — input mutation should be an explicit opt-in. Operators
+    # turn on via the UI toggle once they verify the regex behavior matches
+    # their tenant's content. Existing rows in the DB keep their user-set
+    # toggle; this only affects fresh installs / new event-row inserts.
+    default_disabled: true

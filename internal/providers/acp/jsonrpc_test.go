@@ -470,13 +470,6 @@ func TestConn_ReadLoop_MalformedInputNoPanic(t *testing.T) {
 	}
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 func TestConn_IDIncrement(t *testing.T) {
 	// Verify each Call gets a unique ID by capturing two requests
 	clientR, serverW := io.Pipe()
@@ -489,7 +482,7 @@ func TestConn_IDIncrement(t *testing.T) {
 
 	// Goroutine that reads requests and responds
 	go func() {
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			buf := make([]byte, 4096)
 			n, _ := serverR.Read(buf)
 			var req jsonrpcMessage

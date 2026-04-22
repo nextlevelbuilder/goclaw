@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
 
+	"github.com/nextlevelbuilder/goclaw/internal/security"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
 )
@@ -181,6 +182,14 @@ func crossTenantCtx() context.Context {
 	return store.WithCrossTenant(
 		store.WithTenantID(context.Background(), store.MasterTenantID),
 	)
+}
+
+func allowLoopbackForTest(t *testing.T) {
+	t.Helper()
+	security.SetAllowLoopbackForTest(true)
+	t.Cleanup(func() {
+		security.SetAllowLoopbackForTest(false)
+	})
 }
 
 // testEncryptionKey is a fixed 32-byte key for stores that require AES-256-GCM encryption in tests.

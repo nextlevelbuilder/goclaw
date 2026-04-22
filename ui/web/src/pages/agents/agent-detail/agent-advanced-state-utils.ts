@@ -97,7 +97,7 @@ export function deriveState(
       {}
     ) as WorkspaceSharingConfig,
     comp: agent.compaction_config ?? {},
-    pruneEnabled: agent.context_pruning?.mode !== "off",
+    pruneEnabled: agent.context_pruning?.mode === "cache-ttl",
     prune: agent.context_pruning ?? {},
     sbEnabled: agent.sandbox_config != null,
     sb: agent.sandbox_config ?? {},
@@ -146,7 +146,7 @@ export function buildAdvancedUpdatePayload(
   const updates: Record<string, unknown> = {
     compaction_config: comp,
     context_pruning: pruneEnabled
-      ? (Object.keys(prune).length > 0 ? prune : null)
+      ? { mode: "cache-ttl", ...prune }
       : { mode: "off" },
     sandbox_config: sbEnabled ? sb : null,
     ...routingPayload,

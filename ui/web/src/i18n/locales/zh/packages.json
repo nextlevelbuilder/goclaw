@@ -22,6 +22,25 @@
     "title": "Node 软件包",
     "placeholder": "包名（例如 typescript）"
   },
+  "github": {
+    "title": "GitHub 二进制",
+    "placeholder": "owner/repo[@tag]（例如 cli/cli@v2.45.0）",
+    "browse": "浏览版本",
+    "muslWarning": "Alpine Linux 使用 musl libc。使用 glibc 编译的二进制文件可能在运行时失败。优先选择静态或 musl 兼容版本。",
+    "muslDismiss": "关闭",
+    "pickerTitle": "从 {{repo}} 选择版本",
+    "pickerEmpty": "{{repo}} 没有发行版",
+    "pickerLoading": "正在加载发行版...",
+    "pickerMatchingAssets": "{{count}} 匹配 / {{total}} 总计",
+    "pickerPrerelease": "预发行版",
+    "pickerSelect": "选择",
+    "columns": {
+      "repo": "仓库",
+      "tag": "版本",
+      "binaries": "二进制",
+      "installedAt": "安装时间"
+    }
+  },
   "actions": {
     "install": "安装",
     "uninstall": "卸载",

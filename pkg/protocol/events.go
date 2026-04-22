@@ -73,6 +73,8 @@ const (
 
 	// Trace lifecycle events (realtime trace/span updates).
 	EventTraceUpdated = "trace.updated"
+	// Immediate status change event (not flush-buffered; fired on every status write).
+	EventTraceStatusChanged = "trace.status"
 
 	// Skill dependency check events (realtime progress during startup/rescan).
 	EventSkillDepsChecked  = "skill.deps.checked"

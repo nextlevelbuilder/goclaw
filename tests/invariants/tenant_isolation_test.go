@@ -341,7 +341,7 @@ func TestTenantIsolation_VaultStore(t *testing.T) {
 	docID := uuid.New()
 	_, err := db.Exec(
 		`INSERT INTO vault_documents (id, tenant_id, title, path, doc_type, content_hash, scope, created_at, updated_at)
-		 VALUES ($1, $2, 'secret-doc', '/tmp/secret.md', 'document', 'abc123', 'personal', NOW(), NOW())`,
+		 VALUES ($1, $2, 'secret-doc', '/tmp/secret.md', 'document', 'abc123', 'custom', NOW(), NOW())`,
 		docID, tenantA)
 	if err != nil {
 		t.Fatalf("create vault doc: %v", err)

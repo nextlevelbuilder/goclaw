@@ -195,27 +195,59 @@ func (t *TaskTicker) notifyLeaders(ctx context.Context, tasks []store.RecoveredT
 	}
 
 	// Cache team+lead lookups (same team may have multiple scopes).
-	teamCache := map[uuid.UUID]*store.TeamData{}
-	leadCache := map[uuid.UUID]*store.AgentData{}
+	// Composite key includes TenantID to clarify multi-tenant intent (UUIDs are globally
+	// unique but composite key makes the isolation boundary explicit and future-proof).
+	type teamCacheKey struct {
+		TeamID   uuid.UUID
+		TenantID uuid.UUID
+	}
+	type leadCacheKey struct {
+		AgentID  uuid.UUID
+		TenantID uuid.UUID
+	}
+	teamCache := map[teamCacheKey]*store.TeamData{}
+	leadCache := map[leadCacheKey]*store.AgentData{}
 
 	for scope, scopeTasks := range byScope {
-		team := teamCache[scope.TeamID]
+		// Inject tenant into ctx so store lookups (GetTeam, GetByID, GetTask) apply the
+		// correct tenant filter. Without this, PGTeamStore.GetTeam silently returns
+		// (nil, nil) when ctx has no tenant — causing a nil-deref panic on team.LeadAgentID.
+		scopeCtx := ctx
+		if scope.TenantID != uuid.Nil {
+			scopeCtx = store.WithTenantID(ctx, scope.TenantID)
+		}
+
+		teamKey := teamCacheKey{TeamID: scope.TeamID, TenantID: scope.TenantID}
+		team := teamCache[teamKey]
 		if team == nil {
 			var err error
-			team, err = t.teams.GetTeam(ctx, scope.TeamID)
+			team, err = t.teams.GetTeam(scopeCtx, scope.TeamID)
 			if err != nil {
+				slog.Warn("task_ticker: get team failed", "team_id", scope.TeamID, "tenant_id", scope.TenantID, "error", err)
 				continue
 			}
-			teamCache[scope.TeamID] = team
+			if team == nil {
+				// GetTeam can return (nil, nil) when tenant ctx is missing or team is deleted.
+				slog.Warn("task_ticker: team not found (nil)", "team_id", scope.TeamID, "tenant_id", scope.TenantID)
+				continue
+			}
+			teamCache[teamKey] = team
 		}
-		lead := leadCache[team.LeadAgentID]
+
+		leadKey := leadCacheKey{AgentID: team.LeadAgentID, TenantID: scope.TenantID}
+		lead := leadCache[leadKey]
 		if lead == nil {
 			var err error
-			lead, err = t.agents.GetByID(ctx, team.LeadAgentID)
+			lead, err = t.agents.GetByID(scopeCtx, team.LeadAgentID)
 			if err != nil {
+				slog.Warn("task_ticker: get lead agent failed", "agent_id", team.LeadAgentID, "tenant_id", scope.TenantID, "error", err)
 				continue
 			}
-			leadCache[team.LeadAgentID] = lead
+			if lead == nil {
+				slog.Warn("task_ticker: lead agent not found (nil)", "agent_id", team.LeadAgentID, "tenant_id", scope.TenantID)
+				continue
+			}
+			leadCache[leadKey] = lead
 		}
 
 		// Build batched task list with clear actionable hints.
@@ -238,7 +270,7 @@ func (t *TaskTicker) notifyLeaders(ctx context.Context, tasks []store.RecoveredT
 		// Resolve PeerKind from first task's metadata for correct session routing (#266).
 		var peerKind string
 		var fullTask *store.TeamTaskData
-		if task, err := t.teams.GetTask(ctx, scopeTasks[0].ID); err == nil {
+		if task, err := t.teams.GetTask(scopeCtx, scopeTasks[0].ID); err == nil {
 			fullTask = task
 			if fullTask != nil && fullTask.Metadata != nil {
 				if pk, ok := fullTask.Metadata["peer_kind"].(string); ok {
@@ -304,12 +336,27 @@ func (t *TaskTicker) processFollowups(ctx context.Context) {
 		byTeam[task.TeamID] = append(byTeam[task.TeamID], task)
 	}
 	for teamID, teamTasks := range byTeam {
-		team, err := t.teams.GetTeam(ctx, teamID)
+		if len(teamTasks) == 0 {
+			continue
+		}
+		tenantID := teamTasks[0].TenantID
+		scopeCtx := ctx
+		if tenantID != uuid.Nil {
+			scopeCtx = store.WithTenantID(ctx, tenantID)
+		}
+		team, err := t.teams.GetTeam(scopeCtx, teamID)
 		if err != nil {
+			slog.Warn("task_ticker: followups get team failed",
+				"team_id", teamID, "tenant_id", tenantID, "error", err)
+			continue
+		}
+		if team == nil {
+			slog.Warn("task_ticker: followups team not found (nil)",
+				"team_id", teamID, "tenant_id", tenantID)
 			continue
 		}
 		interval := followupInterval(*team)
-		t.processTeamFollowups(ctx, teamTasks, interval)
+		t.processTeamFollowups(scopeCtx, teamTasks, interval)
 	}
 }
 

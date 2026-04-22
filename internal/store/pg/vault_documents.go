@@ -27,7 +27,7 @@ func appendTeamFilter(q string, args []any, p int, teamID *string, teamIDs []str
 		q += " AND (team_id IS NULL OR team_id IN (" + strings.Join(ph, ",") + "))"
 	} else if teamID != nil {
 		if *teamID != "" {
-			q += fmt.Sprintf(" AND team_id = $%d", p)
+			q += fmt.Sprintf(" AND (team_id = $%d OR team_id IS NULL)", p)
 			args = append(args, parseUUIDOrNil(*teamID))
 			p++
 		} else {
@@ -332,7 +332,7 @@ func (s *PGVaultStore) ListDocuments(ctx context.Context, tenantID, agentID stri
 		if err != nil {
 			return nil, fmt.Errorf("vault list documents: agent: %w", err)
 		}
-		q += fmt.Sprintf(" AND agent_id = $%d", p)
+		q += fmt.Sprintf(" AND (agent_id = $%d OR agent_id IS NULL)", p)
 		args = append(args, aid)
 		p++
 	}
@@ -391,7 +391,7 @@ func (s *PGVaultStore) CountDocuments(ctx context.Context, tenantID, agentID str
 		if err != nil {
 			return 0, fmt.Errorf("vault count documents: agent: %w", err)
 		}
-		q += fmt.Sprintf(" AND agent_id = $%d", p)
+		q += fmt.Sprintf(" AND (agent_id = $%d OR agent_id IS NULL)", p)
 		args = append(args, aid)
 		p++
 	}
@@ -526,7 +526,7 @@ func (tf searchTeamFilter) append(q string, args []any, p int) (string, []any, i
 		}
 		q += " AND (team_id IS NULL OR team_id IN (" + strings.Join(ph, ",") + "))"
 	} else if tf.teamID != nil {
-		q += fmt.Sprintf(" AND team_id = $%d", p)
+		q += fmt.Sprintf(" AND (team_id = $%d OR team_id IS NULL)", p)
 		args = append(args, *tf.teamID)
 		p++
 	} else {
@@ -544,7 +544,7 @@ func (s *PGVaultStore) ftsSearch(ctx context.Context, query string, tenantID uui
 	p := 3
 
 	if agentID != nil {
-		q += fmt.Sprintf(" AND agent_id = $%d", p)
+		q += fmt.Sprintf(" AND (agent_id = $%d OR agent_id IS NULL)", p)
 		args = append(args, *agentID)
 		p++
 	}
@@ -582,7 +582,7 @@ func (s *PGVaultStore) vectorSearch(ctx context.Context, embedding []float32, te
 	p := 3
 
 	if agentID != nil {
-		q += fmt.Sprintf(" AND agent_id = $%d", p)
+		q += fmt.Sprintf(" AND (agent_id = $%d OR agent_id IS NULL)", p)
 		args = append(args, *agentID)
 		p++
 	}
@@ -771,7 +771,7 @@ func appendTreeFilters(q string, args []any, p int, opts store.VaultTreeOptions)
 	if opts.AgentID != "" {
 		aid, err := parseUUID(opts.AgentID)
 		if err == nil {
-			q += fmt.Sprintf(" AND agent_id = $%d", p)
+			q += fmt.Sprintf(" AND (agent_id = $%d OR agent_id IS NULL)", p)
 			args = append(args, aid)
 			p++
 		}

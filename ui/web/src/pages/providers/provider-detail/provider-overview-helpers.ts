@@ -10,7 +10,6 @@ export const NO_EMBEDDING_TYPES = new Set([
   "claude_cli",
   "acp",
   "chatgpt_oauth",
-  "suno",
   "anthropic_native",
 ]);
 

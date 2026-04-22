@@ -125,6 +125,80 @@ func TestEnsureSchema_MigrationV11_SeedsAgentFiles(t *testing.T) {
 	}
 }
 
+// TestSQLiteSchemaUpgrade_23_to_24 verifies the v23→24 migration creates both
+// scope-consistency triggers on an existing DB.
+func TestSQLiteSchemaUpgrade_23_to_24(t *testing.T) {
+	db := openTestDBAtVersion(t, 23)
+
+	if err := EnsureSchema(db); err != nil {
+		t.Fatalf("EnsureSchema (v23→24) failed: %v", err)
+	}
+
+	var version int
+	db.QueryRow("SELECT version FROM schema_version LIMIT 1").Scan(&version)
+	if version != SchemaVersion {
+		t.Errorf("schema version = %d, want %d", version, SchemaVersion)
+	}
+
+	// Verify both triggers exist in sqlite_master.
+	for _, trigName := range []string{
+		"trg_vault_docs_scope_consistency_ins",
+		"trg_vault_docs_scope_consistency_upd",
+	} {
+		var count int
+		db.QueryRow(
+			`SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name=?`, trigName,
+		).Scan(&count)
+		if count != 1 {
+			t.Errorf("trigger %q not found after migration", trigName)
+		}
+	}
+}
+
+// TestSQLiteVaultStore_UpsertTriggerEnforcesCheck verifies the v24 triggers
+// fire on both the INSERT path and the UPDATE path (UPSERT ON CONFLICT).
+func TestSQLiteVaultStore_UpsertTriggerEnforcesCheck(t *testing.T) {
+	db := openTestDB(t)
+	if err := EnsureSchema(db); err != nil {
+		t.Fatalf("EnsureSchema: %v", err)
+	}
+
+	// Seed required FK rows: tenant + agent.
+	tenantID := "00000000-0000-0000-0000-000000000001"
+	agentID := "00000000-0000-0000-0000-000000000002"
+	db.Exec(`INSERT INTO tenants (id, name, slug, status) VALUES (?, 'T', 't', 'active')`, tenantID)
+	db.Exec(`INSERT INTO agents (id, agent_key, display_name, status, tenant_id, owner_id, model, provider)
+		VALUES (?, 'agt', 'A', 'active', ?, 'owner', 'gpt-4o', 'openai')`, agentID, tenantID)
+
+	// 1. Valid INSERT (personal + agent_id set) must succeed.
+	_, err := db.Exec(
+		`INSERT INTO vault_documents (id, tenant_id, agent_id, team_id, scope, path, path_basename, title, doc_type, content_hash)
+		 VALUES ('doc-1', ?, ?, NULL, 'personal', '/a/b.md', 'b.md', 'T', 'note', 'h1')`,
+		tenantID, agentID)
+	if err != nil {
+		t.Fatalf("valid INSERT failed: %v", err)
+	}
+
+	// 2. Invalid fresh INSERT (personal + agent_id NULL) must abort.
+	_, err = db.Exec(
+		`INSERT INTO vault_documents (id, tenant_id, agent_id, team_id, scope, path, path_basename, title, doc_type, content_hash)
+		 VALUES ('doc-2', ?, NULL, NULL, 'personal', '/a/c.md', 'c.md', 'T2', 'note', 'h2')`,
+		tenantID)
+	if err == nil {
+		t.Fatal("expected INSERT to fail scope_consistency check, but it succeeded")
+	}
+
+	// 3. UPSERT that would make scope inconsistent must abort on UPDATE path.
+	_, err = db.Exec(
+		`INSERT INTO vault_documents (id, tenant_id, agent_id, team_id, scope, path, path_basename, title, doc_type, content_hash)
+		 VALUES ('doc-1', ?, NULL, NULL, 'personal', '/a/b.md', 'b.md', 'T-upd', 'note', 'h1')
+		 ON CONFLICT(id) DO UPDATE SET agent_id = NULL, scope = 'personal'`,
+		tenantID)
+	if err == nil {
+		t.Fatal("expected UPSERT to fail scope_consistency check on UPDATE path, but it succeeded")
+	}
+}
+
 func openTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 	db, err := OpenDB(filepath.Join(t.TempDir(), "test.db"))

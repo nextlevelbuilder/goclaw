@@ -266,11 +266,12 @@ func sanitizePathSegment(s string) string {
 // Payload: agentID|userID|channel|chatID|peerKind|workspace|tenantID
 func SignBridgeContext(key, agentID, userID, channel, chatID, peerKind, workspace, tenantID string, extra ...string) string {
 	mac := hmac.New(sha256.New, []byte(key))
-	payload := agentID + "|" + userID + "|" + channel + "|" + chatID + "|" + peerKind + "|" + workspace + "|" + tenantID
+	var payload strings.Builder
+	payload.WriteString(agentID + "|" + userID + "|" + channel + "|" + chatID + "|" + peerKind + "|" + workspace + "|" + tenantID)
 	for _, e := range extra {
-		payload += "|" + e
+		payload.WriteString("|" + e)
 	}
-	mac.Write([]byte(payload))
+	mac.Write([]byte(payload.String()))
 	return hex.EncodeToString(mac.Sum(nil))
 }
 

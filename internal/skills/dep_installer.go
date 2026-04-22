@@ -12,7 +12,10 @@ import (
 	"time"
 )
 
-const installTimeout = 5 * time.Minute
+// InstallTimeout is the wall-clock cap applied to a single package install.
+// Exported so HTTP handlers that bypass InstallSingleDep (e.g. the github:
+// fast path) can wrap their context with the same deadline.
+const InstallTimeout = 5 * time.Minute
 
 // pkgHelperSocket is the Unix socket path for the root-privileged pkg-helper.
 const pkgHelperSocket = "/tmp/pkg.sock"
@@ -46,12 +49,23 @@ func AggregateMissingDeps(skillDirs map[string]string) (*SkillManifest, []string
 // InstallSingleDep installs one dependency (format: "pip:pkg", "npm:pkg", or plain binary name).
 // Returns (ok, errorMessage). Logs progress via slog so the Log page can show install status.
 func InstallSingleDep(ctx context.Context, dep string) (bool, string) {
-	ctx, cancel := context.WithTimeout(ctx, installTimeout)
+	ctx, cancel := context.WithTimeout(ctx, InstallTimeout)
 	defer cancel()
 
 	slog.Info("skills: installing dep", "dep", dep)
 
 	switch {
+	case strings.HasPrefix(dep, "github:"):
+		gh := DefaultGitHubInstaller()
+		if gh == nil {
+			return false, "github installer not configured"
+		}
+		if _, err := gh.Install(ctx, dep); err != nil {
+			slog.Error("skills: github install failed", "dep", dep, "error", err)
+			return false, err.Error()
+		}
+		slog.Info("skills: dep installed", "dep", dep)
+		return true, ""
 	case strings.HasPrefix(dep, "pip:"):
 		pkg := strings.TrimPrefix(dep, "pip:")
 		cmd := exec.CommandContext(ctx, "pip3", "install", "--no-cache-dir", "--break-system-packages", pkg)
@@ -87,7 +101,7 @@ func InstallSingleDep(ctx context.Context, dep string) (bool, string) {
 // InstallDeps installs missing packages by category.
 // Uses PIP_TARGET and NPM_CONFIG_PREFIX from env (set by docker-entrypoint.sh).
 func InstallDeps(ctx context.Context, manifest *SkillManifest, missing []string) (*InstallResult, error) {
-	ctx, cancel := context.WithTimeout(ctx, installTimeout)
+	ctx, cancel := context.WithTimeout(ctx, InstallTimeout)
 	defer cancel()
 
 	result := &InstallResult{}
@@ -156,12 +170,46 @@ func InstallDeps(ctx context.Context, manifest *SkillManifest, missing []string)
 // UninstallPackage removes one package (format: "pip:pkg", "npm:pkg", or plain apk name).
 // Returns (ok, errorMessage).
 func UninstallPackage(ctx context.Context, dep string) (bool, string) {
-	ctx, cancel := context.WithTimeout(ctx, installTimeout)
+	ctx, cancel := context.WithTimeout(ctx, InstallTimeout)
 	defer cancel()
 
 	slog.Info("skills: uninstalling package", "dep", dep)
 
 	switch {
+	case strings.HasPrefix(dep, "github:"):
+		gh := DefaultGitHubInstaller()
+		if gh == nil {
+			return false, "github installer not configured"
+		}
+		// Accept either "github:name" (manifest name only) or the full
+		// "github:owner/repo[@tag]". For the full form we look up the manifest
+		// entry by owner/repo so packages whose binary name differs from the
+		// repo name (e.g. cli/cli → gh) can still be uninstalled via spec.
+		name := strings.TrimPrefix(dep, "github:")
+		if spec, err := ParseGitHubSpec(dep); err == nil {
+			name = spec.Repo
+			if entries, lerr := gh.List(); lerr == nil {
+				want := spec.Owner + "/" + spec.Repo
+				for _, e := range entries {
+					if strings.EqualFold(e.Repo, want) {
+						name = e.Name
+						break
+					}
+				}
+			}
+		} else if slash := strings.Index(name, "/"); slash >= 0 {
+			// Tolerate bare "owner/repo" without the scheme prefix.
+			name = name[slash+1:]
+			if at := strings.IndexByte(name, '@'); at >= 0 {
+				name = name[:at]
+			}
+		}
+		if err := gh.Uninstall(ctx, name); err != nil {
+			slog.Error("skills: github uninstall failed", "dep", dep, "error", err)
+			return false, err.Error()
+		}
+		slog.Info("skills: package uninstalled", "dep", dep)
+		return true, ""
 	case strings.HasPrefix(dep, "pip:"):
 		pkg := strings.TrimPrefix(dep, "pip:")
 		cmd := exec.CommandContext(ctx, "pip3", "uninstall", "-y", pkg)

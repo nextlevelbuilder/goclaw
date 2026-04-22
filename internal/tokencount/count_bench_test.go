@@ -67,7 +67,7 @@ func BenchmarkCountMessages(b *testing.B) {
 func BenchmarkCountMessages_LargeHistory(b *testing.B) {
 	tc := NewTiktokenCounter()
 	msgs := make([]providers.Message, 50)
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		role := "user"
 		if i%2 == 1 {
 			role = "assistant"

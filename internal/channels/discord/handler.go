@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
 
+	"github.com/nextlevelbuilder/goclaw/internal/audio"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
@@ -113,7 +115,18 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 
 			switch mi.Type {
 			case media.TypeAudio, media.TypeVoice:
-				transcript, sttErr := c.transcribeAudio(context.Background(), mi.FilePath)
+				var transcript string
+				var sttErr error
+				if c.audioMgr != nil {
+					sttCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+					res, err := c.audioMgr.Transcribe(sttCtx, audio.STTInput{FilePath: mi.FilePath, MimeType: "audio/ogg"}, audio.STTOptions{})
+					cancel()
+					if err == nil && res != nil {
+						transcript = res.Text
+					} else {
+						sttErr = err
+					}
+				}
 				if sttErr != nil {
 					slog.Warn("discord: STT transcription failed",
 						"type", mi.Type, "error", sttErr,
@@ -137,6 +150,7 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 				mediaFiles = append(mediaFiles, bus.MediaFile{
 					Path:     mi.FilePath,
 					MimeType: mi.ContentType,
+					Filename: mi.FileName,
 				})
 			}
 		}
@@ -253,9 +267,11 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 			finalContent = annotated
 		}
 		// Collect media from pending history entries (sent before this @mention).
+		// Original filename not retained by CollectMedia; use disk basename so
+		// persistMedia's sanitizer gets a meaningful stem instead of UUID fallback.
 		if histMediaPaths := c.GroupHistory().CollectMedia(channelID); len(histMediaPaths) > 0 {
 			for _, p := range histMediaPaths {
-				mediaFiles = append(mediaFiles, bus.MediaFile{Path: p})
+				mediaFiles = append(mediaFiles, bus.MediaFile{Path: p, Filename: filepath.Base(p)})
 			}
 		}
 	}

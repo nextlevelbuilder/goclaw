@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { MediaProviderChainForm } from './MediaProviderChainForm'
 import { ExtractorChainForm } from './extractor-chain-form'
 import { JsonSettingsForm } from './json-settings-form'
+import { SttProviderForm } from '../builtin-tools/stt-provider-form'
 import type { BuiltinToolData } from '../../types/builtin-tool'
 
 const MEDIA_TOOLS = new Set([
@@ -44,6 +45,12 @@ export function ToolSettingsDialog({ open, onOpenChange, tool, onSave }: ToolSet
           <ExtractorChainForm tool={tool} onSave={onSave} onClose={handleClose} />
         ) : MEDIA_TOOLS.has(tool.name) ? (
           <MediaProviderChainForm tool={tool} onSave={onSave} onClose={handleClose} />
+        ) : tool.name === 'stt' ? (
+          <SttProviderForm
+            initialSettings={(tool.settings ?? {}) as Record<string, unknown>}
+            onSave={(settings) => onSave(tool.name, settings)}
+            onCancel={handleClose}
+          />
         ) : (
           <JsonSettingsForm tool={tool} onSave={onSave} onClose={handleClose} />
         )}
