@@ -1,8 +1,7 @@
 import { useState, useRef, useCallback, useLayoutEffect, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Send, Square, Paperclip, X, Mic, ImageIcon } from "lucide-react";
+import { Send, Square, Paperclip, X, Mic } from "lucide-react";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
-import { useImageGenToggle } from "@/hooks/use-image-gen-toggle";
 
 export interface AttachedFile {
   file: File;
@@ -11,29 +10,14 @@ export interface AttachedFile {
 }
 
 interface ChatInputProps {
-  onSend: (message: string, files?: AttachedFile[], noImageGen?: boolean) => void;
+  onSend: (message: string, files?: AttachedFile[]) => void;
   onAbort: () => void;
   /** True when main agent or team tasks are active — controls stop button, file attach */
   isBusy: boolean;
   disabled?: boolean;
   files: AttachedFile[];
   onFilesChange: (files: AttachedFile[]) => void;
-  /**
-   * Provider type for the currently-selected agent (from AgentData.provider).
-   * When set to "chatgpt_oauth", the image-generation toggle chip is shown.
-   */
-  agentProvider?: string;
-  /** Stable agent key used to scope the image-gen preference in localStorage. */
-  agentKey?: string;
 }
-
-/**
- * Provider ids that support the native `image_generation` tool.
- * Matches ChatGPT OAuth direct + any Codex-routed variant (e.g. `cliproxy-codex`).
- */
-const IMAGE_GEN_PROVIDER_IDS = new Set(["chatgpt_oauth", "codex"]);
-const supportsImageGenProvider = (p?: string) =>
-  !!p && (IMAGE_GEN_PROVIDER_IDS.has(p) || /codex/i.test(p));
 
 export function ChatInput({
   onSend,
@@ -42,19 +26,12 @@ export function ChatInput({
   disabled,
   files,
   onFilesChange,
-  agentProvider,
-  agentKey = "",
 }: ChatInputProps) {
   const { t } = useTranslation("common");
-  const { t: tChat } = useTranslation("chat");
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const voiceRecorder = useVoiceRecorder();
-
-  // Image-gen toggle — only relevant when provider supports it
-  const supportsImageGen = supportsImageGenProvider(agentProvider);
-  const [imageGenEnabled, setImageGenEnabled] = useImageGenToggle(agentKey);
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -80,15 +57,13 @@ export function ChatInput({
 
   const handleSend = useCallback(() => {
     if ((!value.trim() && files.length === 0) || disabled) return;
-    // Pass noImageGen=true when the toggle is visible and turned off
-    const noImageGen = supportsImageGen && !imageGenEnabled;
-    onSend(value, files.length > 0 ? files : undefined, noImageGen);
+    onSend(value, files.length > 0 ? files : undefined);
     setValue("");
     onFilesChange([]);
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
-  }, [value, files, onSend, onFilesChange, disabled, supportsImageGen, imageGenEnabled]);
+  }, [value, files, onSend, onFilesChange, disabled]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -154,30 +129,6 @@ export function ChatInput({
               </button>
             </span>
           ))}
-        </div>
-      )}
-
-      {/* Image-gen toggle chip — visible only for providers that support it.
-          Uses text-base md:text-sm per mobile UI rules; min 44px hit area via padding. */}
-      {supportsImageGen && (
-        <div className="flex items-center gap-1.5 mb-2">
-          <button
-            type="button"
-            onClick={() => setImageGenEnabled(!imageGenEnabled)}
-            aria-pressed={imageGenEnabled}
-            title={tChat("imageGenToggle")}
-            className={[
-              "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5",
-              "text-base md:text-sm font-medium transition-colors select-none",
-              "min-h-[44px] md:min-h-0",
-              imageGenEnabled
-                ? "border-primary bg-primary/10 text-primary"
-                : "border-border bg-muted text-muted-foreground",
-            ].join(" ")}
-          >
-            <ImageIcon className="h-3.5 w-3.5 shrink-0" />
-            {tChat("imageGenToggle")}
-          </button>
         </div>
       )}
 

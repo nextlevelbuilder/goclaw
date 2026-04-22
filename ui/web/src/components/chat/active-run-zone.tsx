@@ -1,5 +1,4 @@
 import { memo } from "react";
-import { useTranslation } from "react-i18next";
 import { Bot } from "lucide-react";
 import { ActivityIndicator } from "./activity-indicator";
 import { BlockReplyBubble } from "./block-reply-bubble";
@@ -15,12 +14,6 @@ interface ActiveRunZoneProps {
   streamText: string | null;
   toolStream: ToolStreamEntry[];
   blockReplies: ChatMessage[];
-  /**
-   * When true, a blurred image-gen skeleton placeholder is shown in the
-   * streaming bubble. Set by ChatThread when the current agent uses a
-   * provider that supports native image generation and the toggle is on.
-   */
-  showImageGenPlaceholder?: boolean;
 }
 
 export const ActiveRunZone = memo(function ActiveRunZone({
@@ -30,9 +23,7 @@ export const ActiveRunZone = memo(function ActiveRunZone({
   streamText,
   toolStream,
   blockReplies,
-  showImageGenPlaceholder = false,
 }: ActiveRunZoneProps) {
-  const { t } = useTranslation("chat");
   const hasContent =
     blockReplies.length > 0 ||
     toolStream.length > 0 ||
@@ -62,7 +53,7 @@ export const ActiveRunZone = memo(function ActiveRunZone({
         )}
 
         {/* Streaming text: wrap in bubble matching MessageBubble's assistant style */}
-        {(thinkingText !== null || streamText !== null || (isRunning && showImageGenPlaceholder)) && (
+        {(thinkingText !== null || streamText !== null) && (
           <div className="flex-1 min-w-0 rounded-lg px-4 py-2 bg-card text-card-foreground border border-border shadow-sm">
             {thinkingText !== null && (
               <div className={streamText !== null ? "mb-2" : ""}>
@@ -70,17 +61,6 @@ export const ActiveRunZone = memo(function ActiveRunZone({
               </div>
             )}
             {streamText !== null && <StreamingText text={streamText} />}
-            {/* Image-gen skeleton: visible from run start until run.completed delivers the image */}
-            {isRunning && showImageGenPlaceholder && (
-              <div className="mt-2 flex flex-col gap-1.5">
-                <div className="h-40 w-full max-w-[240px] rounded-lg bg-muted animate-pulse overflow-hidden relative">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
-                  </div>
-                </div>
-                <span className="text-xs text-muted-foreground">{t("imageGenGenerating")}</span>
-              </div>
-            )}
           </div>
         )}
 

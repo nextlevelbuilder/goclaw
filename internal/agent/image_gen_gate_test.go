@@ -1,11 +1,10 @@
 package agent
 
-// Tests for the tri-level image_generation gate in buildFilteredTools.
+// Tests for the two-tier image_generation gate in buildFilteredTools.
 //
 // Gate conditions (ALL must be true to inject the native tool):
 //   (1) provider implements CapabilitiesAware and Capabilities().ImageGeneration == true
-//   (2) Loop.allowImageGeneration == true  (agent config, defaults true)
-//   (3) req.NoImageGen == false            (per-request opt-out via X-Goclaw-No-Image-Gen)
+//   (2) Loop.allowImageGeneration == true  (agent config, defaults true; admin-only control)
 //
 // Additionally: final-iteration stripping takes priority — all tools removed.
 
@@ -100,38 +99,6 @@ func TestImageGenGate_AgentConfigDisabled_ToolAbsent(t *testing.T) {
 
 	if hasImageGenTool(defs) {
 		t.Error("image_generation must NOT be in tools when agent config disables it")
-	}
-}
-
-// ─── Gate: request opt-out → tool absent ─────────────────────────────────
-
-func TestImageGenGate_RequestOptOut_ToolAbsent(t *testing.T) {
-	prov := &imageCapableProvider{imageGen: true}
-	l := buildImageGenLoop(true, prov)
-
-	defs, _, _ := l.buildFilteredTools(&RunRequest{NoImageGen: true}, false, 1, 10, nil)
-
-	if hasImageGenTool(defs) {
-		t.Error("image_generation must NOT be in tools when NoImageGen=true (X-Goclaw-No-Image-Gen header)")
-	}
-}
-
-// ─── Opt-out is per-turn: subsequent request without header re-enables ───
-
-func TestImageGenGate_OptOutPerTurn_NextTurnReenabled(t *testing.T) {
-	prov := &imageCapableProvider{imageGen: true}
-	l := buildImageGenLoop(true, prov)
-
-	// Turn 1: opt-out
-	defs1, _, _ := l.buildFilteredTools(&RunRequest{NoImageGen: true}, false, 1, 10, nil)
-	if hasImageGenTool(defs1) {
-		t.Error("turn 1: tool should be absent with opt-out")
-	}
-
-	// Turn 2: no opt-out (fresh request, header not present)
-	defs2, _, _ := l.buildFilteredTools(&RunRequest{NoImageGen: false}, false, 1, 10, nil)
-	if !hasImageGenTool(defs2) {
-		t.Error("turn 2: tool should be present when opt-out is not set")
 	}
 }
 

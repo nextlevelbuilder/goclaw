@@ -33,7 +33,7 @@ export function useChatSend({
   const [error, setError] = useState<string | null>(null);
 
   const send = useCallback(
-    async (message: string, sessionKey: string, files?: AttachedFile[], noImageGen?: boolean) => {
+    async (message: string, sessionKey: string, files?: AttachedFile[]) => {
       const hasMessage = message.trim().length > 0;
       const hasFiles = files && files.length > 0;
       if (!ws.isConnected) {
@@ -87,9 +87,6 @@ export function useChatSend({
             message: trimmed,
             stream: true,
             ...(mediaItems && { media: mediaItems }),
-            // Per-request image-gen opt-out. Omit the field entirely when not
-            // opted out so the server keeps default (enabled) behaviour.
-            ...(noImageGen && { noImageGen: true }),
           },
           600_000,
         );

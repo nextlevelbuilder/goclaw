@@ -111,11 +111,11 @@ func (l *Loop) buildFilteredTools(req *RunRequest, hadBootstrap bool, iteration,
 		return toolDefs, allowedTools, messages
 	}
 
-	// Tri-level image generation gate:
+	// Two-tier image generation gate:
 	//   (1) provider supports native image_generation (ImageGeneration capability)
-	//   (2) agent config allows it (allowImageGeneration — defaults true)
-	//   (3) this request has not opted out (req.NoImageGen from X-Goclaw-No-Image-Gen header)
-	if l.allowImageGeneration && !req.NoImageGen {
+	//   (2) agent config allows it (allowImageGeneration — defaults true, set false via
+	//       other_config.allow_image_generation = false in the admin agent configuration)
+	if l.allowImageGeneration {
 		if aware, ok := l.provider.(providers.CapabilitiesAware); ok {
 			if aware.Capabilities().ImageGeneration {
 				toolDefs = append(toolDefs, imageGenToolDef)

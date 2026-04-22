@@ -617,11 +617,6 @@ type RunRequest struct {
 	HideInput     bool   // don't persist input message in session history (announce runs)
 	ContentSuffix string // appended to assistant response before saving (e.g. image markdown for WS)
 
-	// NoImageGen suppresses the native image_generation tool for this turn only.
-	// Set when X-Goclaw-No-Image-Gen: true header is present on HTTP requests.
-	// Does not affect subsequent turns (no session-level persistence).
-	NoImageGen bool
-
 	// Mid-run message injection channel (nil = disabled).
 	// When set, the loop drains this channel at turn boundaries to inject
 	// user follow-up messages into the running conversation.

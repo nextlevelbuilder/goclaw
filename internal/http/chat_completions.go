@@ -172,17 +172,6 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-// parseNoImageGen returns true when the X-Goclaw-No-Image-Gen header is set to
-// a truthy value ("1", "true", "yes"). Returns false (tool enabled) otherwise.
-func parseNoImageGen(r *http.Request) bool {
-	v := r.Header.Get("X-Goclaw-No-Image-Gen")
-	switch v {
-	case "1", "true", "yes", "True", "TRUE", "YES":
-		return true
-	}
-	return false
-}
-
 func (h *ChatCompletionsHandler) handleNonStream(w http.ResponseWriter, r *http.Request, loop agent.Agent, runID, sessionKey, message, model, userID string) {
 	ctx, drainTeamDispatch := tools.InjectTeamDispatch(r.Context(), h.postTurn)
 	defer drainTeamDispatch()
@@ -195,7 +184,6 @@ func (h *ChatCompletionsHandler) handleNonStream(w http.ResponseWriter, r *http.
 		RunID:      runID,
 		UserID:     userID,
 		Stream:     false,
-		NoImageGen: parseNoImageGen(r),
 	})
 
 	if err != nil {
@@ -257,7 +245,6 @@ func (h *ChatCompletionsHandler) handleStream(w http.ResponseWriter, r *http.Req
 		RunID:      runID,
 		UserID:     userID,
 		Stream:     true,
-		NoImageGen: parseNoImageGen(r),
 	})
 
 	if err != nil {

@@ -30,7 +30,5 @@
     "title": "Chọn agent",
     "description": "Chọn agent để bắt đầu trò chuyện"
   },
-  "imageGenToggle": "Hình ảnh",
-  "imageGenGenerating": "Đang tạo hình ảnh...",
   "imageGenDownloadName": "generated-{{timestamp}}.png"
 }
