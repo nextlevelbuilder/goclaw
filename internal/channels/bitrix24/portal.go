@@ -520,13 +520,26 @@ func (p *Portal) HandleInstall(w http.ResponseWriter, r *http.Request) {
 }
 
 // installSuccessHTML is shown in the install popup after a successful OAuth
-// exchange. Auto-closes the window after a short delay, falling back to a
-// visible success message if the window can't close (cross-origin policies).
+// exchange OR Local Application install POST. It MUST load the BX24 JS SDK
+// and call BX24.installFinish() — without that signal Bitrix24 leaves
+// app.info.INSTALLED at false, and INSTALLED=false silently suppresses every
+// imbot event (ONIMBOTMESSAGEADD, etc.) even though the handler URLs are
+// bound in event.get. We discovered this the hard way: after a fresh
+// imbot.register the EVENT_* URLs pointed at our /bitrix24/events endpoint
+// yet no POST ever arrived from Bitrix on chat. Reason: our prior HTML only
+// closed the popup; BX24.installFinish() was never invoked so Bitrix treated
+// the app as "install incomplete" and declined to deliver events.
+//
+// The script src is scheme-relative (`//api.bitrix24.com/api/v1/`) so it
+// inherits https from the parent iframe. BX24.init() auto-detects the host
+// portal from the iframe's query string, which is why no DOMAIN/AUTH values
+// are needed inline.
 const installSuccessHTML = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <title>Bitrix24 installation complete</title>
+<script src="//api.bitrix24.com/api/v1/"></script>
 <style>
   body { font: 15px/1.5 system-ui, sans-serif; padding: 2rem; color: #222; }
   h1 { color: #1db954; margin: 0 0 .5rem 0; }
@@ -536,7 +549,20 @@ const installSuccessHTML = `<!doctype html>
 <body>
 <h1>Installation successful</h1>
 <p>GoClaw is now connected to your Bitrix24 portal. You can close this window.</p>
-<script>setTimeout(function(){ try { window.close(); } catch (e) {} }, 800);</script>
+<script>
+  // Signal install completion to Bitrix24. Without this the app stays at
+  // INSTALLED=false and imbot events are suppressed server-side.
+  try {
+    BX24.init(function(){
+      try { BX24.installFinish(); } catch (e) {}
+    });
+  } catch (e) {
+    // BX24 may fail to load if the handler was opened outside the Bitrix24
+    // iframe (e.g. operator hitting the URL directly for a smoke test). Fall
+    // back to self-close so the page isn't orphaned.
+    setTimeout(function(){ try { window.close(); } catch (e) {} }, 800);
+  }
+</script>
 </body>
 </html>`
 
