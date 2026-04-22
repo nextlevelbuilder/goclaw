@@ -16,3 +16,10 @@ tmp
 tmp-*
 *.exe
 ._*
+_statics
+_readmes
+examples
+CHANGELOG.md
+CONTRIBUTING.md
+api-reference.md
+websocket-protocol.md

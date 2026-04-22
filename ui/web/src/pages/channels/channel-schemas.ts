@@ -242,6 +242,10 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "portal", label: "Portal", type: "text", required: true, placeholder: "my-portal", help: "bitrix_portals.name for this tenant. Authorize the portal at /bitrix24/install first." },
     { key: "bot_code", label: "Bot Code", type: "text", required: true, placeholder: "support_bot", help: "Stable key passed to imbot.register. Must be unique per portal." },
     { key: "bot_name", label: "Bot Name", type: "text", required: true, placeholder: "Support Bot", help: "Display name shown in Bitrix24 chats." },
+    { key: "bot_type", label: "Bot Type", type: "select", options: [
+      { value: "B", label: "B — Standard internal bot (default)" },
+      { value: "O", label: "O — Open Channel bot (customer-facing queue)" },
+    ], defaultValue: "B", help: "Forwarded verbatim to imbot.register TYPE. \"B\" = standard internal bot for portal users. \"O\" = Open Channel bot attached to a queue; per-user MCP credential minting is skipped because senders are transient customers." },
     { key: "bot_avatar", label: "Bot Avatar URL", type: "text", placeholder: "https://...", help: "Optional avatar URL — fetched and base64-encoded at Start()." },
     { key: "public_url", label: "Public URL", type: "text", required: true, placeholder: "https://gateway.example.com", help: "Public base URL of this gateway. Bitrix24 imbot.register requires absolute URLs for event callbacks." },
     { key: "dm_policy", label: "DM Policy", type: "select", options: dmPolicyOptions, defaultValue: "pairing" },
@@ -255,6 +259,8 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "allow_from", label: "Allowed Users (DM)", type: "tags", help: "Bitrix24 user IDs allowed to DM the bot. Empty = no allowlist filter." },
     { key: "group_allow_from", label: "Allowed Users (Group)", type: "tags", help: "Separate allowlist for group senders." },
     { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Deliver intermediate text during tool iterations." },
+    { key: "mcp_server_name", label: "MCP Server Name", type: "text", advanced: true, placeholder: "bitrix24-prod", help: "Optional — name from mcp_servers table. Must be set together with MCP Base URL to enable per-user MCP credential auto-onboard. Leave both empty to disable." },
+    { key: "mcp_base_url", label: "MCP Base URL", type: "text", advanced: true, placeholder: "https://mcp.example.com", help: "Optional — HTTPS root of the partner MCP server. Channel POSTs {mcp_base_url}/api/auto-onboard to mint per-user credentials on first-sight. Requires GOCLAW_BITRIX_MCP_ADMIN_TOKEN env var." },
   ],
 };
 
