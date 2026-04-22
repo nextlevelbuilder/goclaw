@@ -140,20 +140,18 @@ POST /v1/agents/{id}/wake
 
 Response: `{content, run_id, usage?}`. Used by orchestrators (n8n, Paperclip) to trigger agent runs.
 
-### Codex/OpenAI OAuth Routing in `other_config`
+### Codex/OpenAI OAuth Routing in `chatgpt_oauth_routing`
 
-For agents whose main `provider` is a `chatgpt_oauth` provider, `other_config.chatgpt_oauth_routing`
+For agents whose main `provider` is a `chatgpt_oauth` provider, top-level `chatgpt_oauth_routing`
 can override or inherit routing behavior while keeping the main `provider` field as the preferred/default account alias.
 
 ```json
 {
   "provider": "openai-codex",
   "model": "gpt-5.4",
-  "other_config": {
-    "chatgpt_oauth_routing": {
-      "override_mode": "custom",
-      "strategy": "round_robin"
-    }
+  "chatgpt_oauth_routing": {
+    "override_mode": "custom",
+    "strategy": "round_robin"
   }
 }
 ```
@@ -164,10 +162,10 @@ Rules:
 - A provider listed in another pool cannot also manage its own pool.
 - `override_mode: "inherit"` tells the agent to follow those provider defaults.
 - `override_mode: "custom"` stores an agent-local routing override for that provider-owned pool.
-- `strategy: "primary_first"` keeps the main `provider` as the preferred account. When saved as a custom override with no extra names, it disables pooling for that agent.
 - Provider aliases are arbitrary. `openai-codex`, `codex-work`, and `codex-team` are examples, not required prefixes.
 - `strategy: "round_robin"` rotates requests across the main provider plus the provider-owned extra authenticated OpenAI Codex OAuth providers.
 - `strategy: "priority_order"` tries the main provider first, then drains the provider-owned extra providers in order.
+- Legacy `primary_first` payloads are normalized to `priority_order` on read. Existing agent overrides that explicitly saved `extra_provider_names: []` still remain single-account-only after migration.
 - Retryable upstream failures can fall through to the next eligible OpenAI Codex OAuth provider in the same request.
 - Only enabled and authenticated `chatgpt_oauth` providers participate.
 - Provider-scoped auth remains unchanged: `cmd/auth` and `/v1/auth/chatgpt/{provider}/*` still operate on explicit providers.
@@ -209,30 +207,28 @@ Rules:
 - the final runtime effort is still normalized against the agent's selected model capabilities
 - if no provider default is saved, inherit mode resolves to reasoning `off`
 
-### Agent reasoning policy in `other_config`
+### Agent reasoning policy in `reasoning_config`
 
-Agents can now store capability-aware GPT-5/Codex reasoning intent under `other_config.reasoning`.
+Agents can now store capability-aware GPT-5/Codex reasoning intent under top-level `reasoning_config`.
 
 ```json
 {
   "provider": "openai-codex",
   "model": "gpt-5.4",
-  "other_config": {
-    "reasoning": {
-      "override_mode": "inherit"
-    }
+  "reasoning_config": {
+    "override_mode": "inherit"
   }
 }
 ```
 
 Rules:
-- `reasoning.override_mode` supports `inherit|custom`
+- `reasoning_config.override_mode` supports `inherit|custom`
 - `override_mode: "inherit"` tells the agent to follow `settings.reasoning_defaults`
 - `override_mode: "custom"` stores an agent-local override; the dashboard also writes a derived `thinking_level` shim for rollback safety
 - `thinking_level` remains the coarse compatibility shim: `off|low|medium|high`
-- `reasoning.effort` supports `off|auto|none|minimal|low|medium|high|xhigh`
-- `reasoning.fallback` supports `downgrade|off|provider_default`
-- existing `reasoning` payloads without `override_mode` continue to behave as custom overrides
+- `reasoning_config.effort` supports `off|auto|none|minimal|low|medium|high|xhigh`
+- `reasoning_config.fallback` supports `downgrade|off|provider_default`
+- existing legacy `other_config.reasoning` payloads without `override_mode` continue to behave as custom overrides
 - unset reasoning resolves to `off`
 - the runtime may normalize unsupported efforts, and the actual decision is surfaced in trace span metadata
 
@@ -266,7 +262,7 @@ Query parameters:
 - `limit` optional, defaults to `18`, max `50`
 
 Response fields:
-- `strategy`: effective routing strategy (`primary_first`, `round_robin`, or `priority_order`)
+- `strategy`: effective routing strategy (`round_robin` or `priority_order`)
 - `pool_providers`: configured primary + extra provider aliases in pool order
 - `stats_sample_size`: number of recent routed `llm_call` spans used to derive runtime health. The server derives health from `max(limit, 120)` recent spans even when `recent_requests` is still capped by the requested `limit`.
 - `provider_counts`: per-alias routing evidence:

@@ -179,24 +179,39 @@ func TestParseChatGPTOAuthRoutingNormalizesNames(t *testing.T) {
 	}
 }
 
-func TestParseChatGPTOAuthRoutingFallsBackToManual(t *testing.T) {
-	agent := &AgentData{
-		ChatGPTOAuthRouting: json.RawMessage(`{
-			"strategy": "something_else",
-			"extra_provider_names": ["openai-codex-backup"]
-		}`),
-	}
+func TestPublicChatGPTOAuthRoutingMigratesLegacyStrategiesToPriorityOrder(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		strategy string
+	}{
+		{name: "unknown", strategy: "something_else"},
+		{name: "manual", strategy: "manual"},
+		{name: "primary_first", strategy: "primary_first"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			agent := &AgentData{
+				ChatGPTOAuthRouting: json.RawMessage(`{
+					"strategy": "` + tc.strategy + `",
+					"extra_provider_names": ["openai-codex-backup"]
+				}`),
+			}
 
-	got := agent.ParseChatGPTOAuthRouting()
-	if got == nil {
-		t.Fatal("ParseChatGPTOAuthRouting() = nil, want config")
-	}
-	if got.Strategy != ChatGPTOAuthStrategyPrimaryFirst {
-		t.Fatalf("Strategy = %q, want %q", got.Strategy, ChatGPTOAuthStrategyPrimaryFirst)
+			got := agent.ParseChatGPTOAuthRouting()
+			if got == nil {
+				t.Fatal("ParseChatGPTOAuthRouting() = nil, want config")
+			}
+			public := PublicChatGPTOAuthRouting(got)
+			if public == nil {
+				t.Fatal("PublicChatGPTOAuthRouting() = nil, want config")
+			}
+			if public.Strategy != ChatGPTOAuthStrategyPriority {
+				t.Fatalf("Strategy = %q, want %q", public.Strategy, ChatGPTOAuthStrategyPriority)
+			}
+		})
 	}
 }
 
-func TestParseChatGPTOAuthRoutingManualWithoutExtrasPreservesExplicitSingleAccount(t *testing.T) {
+func TestPublicChatGPTOAuthRoutingCanonicalizesSingleAccountOverrideToPriorityOrder(t *testing.T) {
 	agent := &AgentData{
 		ChatGPTOAuthRouting: json.RawMessage(`{
 			"strategy": "manual",
@@ -211,8 +226,15 @@ func TestParseChatGPTOAuthRoutingManualWithoutExtrasPreservesExplicitSingleAccou
 	if got.OverrideMode != ChatGPTOAuthOverrideCustom {
 		t.Fatalf("OverrideMode = %q, want %q", got.OverrideMode, ChatGPTOAuthOverrideCustom)
 	}
-	if got.Strategy != ChatGPTOAuthStrategyPrimaryFirst {
-		t.Fatalf("Strategy = %q, want %q", got.Strategy, ChatGPTOAuthStrategyPrimaryFirst)
+	public := PublicChatGPTOAuthRouting(got)
+	if public == nil {
+		t.Fatal("PublicChatGPTOAuthRouting() = nil, want config")
+	}
+	if public.Strategy != ChatGPTOAuthStrategyPriority {
+		t.Fatalf("Strategy = %q, want %q", public.Strategy, ChatGPTOAuthStrategyPriority)
+	}
+	if got.ExtraProviderNames == nil {
+		t.Fatal("ExtraProviderNames = nil, want explicit empty slice preserved")
 	}
 }
 
@@ -230,8 +252,12 @@ func TestParseChatGPTOAuthRoutingPreservesExplicitInheritMode(t *testing.T) {
 	if got.OverrideMode != ChatGPTOAuthOverrideInherit {
 		t.Fatalf("OverrideMode = %q, want %q", got.OverrideMode, ChatGPTOAuthOverrideInherit)
 	}
-	if got.Strategy != ChatGPTOAuthStrategyPrimaryFirst {
-		t.Fatalf("Strategy = %q, want %q", got.Strategy, ChatGPTOAuthStrategyPrimaryFirst)
+	public := PublicChatGPTOAuthRouting(got)
+	if public == nil {
+		t.Fatal("PublicChatGPTOAuthRouting() = nil, want config")
+	}
+	if public.Strategy != ChatGPTOAuthStrategyPriority {
+		t.Fatalf("Strategy = %q, want %q", public.Strategy, ChatGPTOAuthStrategyPriority)
 	}
 }
 
@@ -291,19 +317,40 @@ func TestResolveEffectiveChatGPTOAuthRoutingAllowsCustomSingleAccountToDisableDe
 		ExtraProviderNames: []string{"codex-work"},
 	}
 	override := &ChatGPTOAuthRoutingConfig{
-		OverrideMode: ChatGPTOAuthOverrideCustom,
-		Strategy:     ChatGPTOAuthStrategyPrimaryFirst,
+		OverrideMode:       ChatGPTOAuthOverrideCustom,
+		Strategy:           ChatGPTOAuthStrategyPriority,
+		ExtraProviderNames: []string{},
 	}
 
 	got := ResolveEffectiveChatGPTOAuthRouting(defaults, override)
 	if got == nil {
 		t.Fatal("ResolveEffectiveChatGPTOAuthRouting() = nil, want config")
 	}
-	if got.Strategy != ChatGPTOAuthStrategyPrimaryFirst {
-		t.Fatalf("Strategy = %q, want %q", got.Strategy, ChatGPTOAuthStrategyPrimaryFirst)
+	if got.Strategy != ChatGPTOAuthStrategyPriority {
+		t.Fatalf("Strategy = %q, want %q", got.Strategy, ChatGPTOAuthStrategyPriority)
 	}
 	if len(got.ExtraProviderNames) != 0 {
 		t.Fatalf("ExtraProviderNames = %#v, want empty", got.ExtraProviderNames)
+	}
+}
+
+func TestResolveEffectiveChatGPTOAuthRoutingRoundRobinEmptyExtrasKeepsDefaults(t *testing.T) {
+	defaults := &ChatGPTOAuthRoutingConfig{
+		Strategy:           ChatGPTOAuthStrategyRoundRobin,
+		ExtraProviderNames: []string{"codex-work"},
+	}
+	override := &ChatGPTOAuthRoutingConfig{
+		OverrideMode:       ChatGPTOAuthOverrideCustom,
+		Strategy:           ChatGPTOAuthStrategyRoundRobin,
+		ExtraProviderNames: []string{},
+	}
+
+	got := ResolveEffectiveChatGPTOAuthRouting(defaults, override)
+	if got == nil {
+		t.Fatal("ResolveEffectiveChatGPTOAuthRouting() = nil, want config")
+	}
+	if !reflect.DeepEqual(got.ExtraProviderNames, defaults.ExtraProviderNames) {
+		t.Fatalf("ExtraProviderNames = %#v, want %#v", got.ExtraProviderNames, defaults.ExtraProviderNames)
 	}
 }
 

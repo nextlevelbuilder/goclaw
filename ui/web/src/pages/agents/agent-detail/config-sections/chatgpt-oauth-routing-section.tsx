@@ -128,7 +128,7 @@ export function ChatGPTOAuthRoutingSection({
   const selectedStrategy: EffectiveChatGPTOAuthRoutingStrategy =
     value.strategy === "round_robin" || value.strategy === "priority_order"
       ? value.strategy
-      : "primary_first";
+      : "priority_order";
   const canEditMembership = canManageProviders && membershipEditable;
   const canUsePoolStrategies =
     canManageProviders &&
@@ -243,16 +243,7 @@ export function ChatGPTOAuthRoutingSection({
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {t("chatgptOAuthRouting.strategyLabel")}
           </p>
-          <div className="grid gap-2 sm:grid-cols-3">
-            <Button
-              type="button"
-              variant={selectedStrategy === "primary_first" ? "default" : "outline"}
-              onClick={() => setStrategy("primary_first")}
-              disabled={!canManageProviders || mode === "inherit"}
-              className="h-9 text-xs sm:text-sm [@media(max-height:760px)]:h-8"
-            >
-              {t("chatgptOAuthRouting.strategy.primaryFirst")}
-            </Button>
+          <div className="grid gap-2 sm:grid-cols-2">
             <Button
               type="button"
               variant={selectedStrategy === "round_robin" ? "default" : "outline"}

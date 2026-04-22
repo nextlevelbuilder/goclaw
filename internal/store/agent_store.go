@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -343,10 +344,10 @@ type WorkspaceSharingConfig struct {
 }
 
 const (
-	ReasoningSourceUnset             = "unset"
-	ReasoningSourceLegacy            = "thinking_level"
-	ReasoningSourceAdvanced          = "reasoning"
-	ReasoningSourceProviderDefault   = "provider_default"
+	ReasoningSourceUnset           = "unset"
+	ReasoningSourceLegacy          = "thinking_level"
+	ReasoningSourceAdvanced        = "reasoning"
+	ReasoningSourceProviderDefault = "provider_default"
 	// Reasoning fallback constants — canonical definitions in providers package.
 	ReasoningFallbackDowngrade       = providers.ReasoningFallbackDowngrade
 	ReasoningFallbackDisable         = providers.ReasoningFallbackDisable
@@ -457,11 +458,18 @@ func (a *AgentData) ParseChatGPTOAuthRouting() *ChatGPTOAuthRoutingConfig {
 		if explicitOverrideMode {
 			overrideMode = normalizeChatGPTOAuthOverrideMode(raw.OverrideMode)
 		}
+		extraProviderNames := normalizeProviderNames(raw.ExtraProviderNames)
+		if explicitExtras && extraProviderNames == nil {
+			extraProviderNames = []string{}
+		}
 		return &ChatGPTOAuthRoutingConfig{
 			OverrideMode:       overrideMode,
 			Strategy:           normalizeChatGPTOAuthStrategy(raw.Strategy),
-			ExtraProviderNames: normalizeProviderNames(raw.ExtraProviderNames),
+			ExtraProviderNames: extraProviderNames,
 		}
+	}
+	if explicitExtras && routing.ExtraProviderNames == nil {
+		routing.ExtraProviderNames = []string{}
 	}
 	if explicitOverrideMode {
 		return routing
@@ -471,7 +479,7 @@ func (a *AgentData) ParseChatGPTOAuthRouting() *ChatGPTOAuthRoutingConfig {
 		return routing
 	}
 	routing.OverrideMode = ""
-	if routing.Strategy == ChatGPTOAuthStrategyPrimaryFirst && len(routing.ExtraProviderNames) == 0 {
+	if routing.Strategy == ChatGPTOAuthStrategyPriority && len(routing.ExtraProviderNames) == 0 {
 		return nil
 	}
 	return routing
@@ -486,7 +494,10 @@ func normalizeChatGPTOAuthRoutingConfig(cfg *ChatGPTOAuthRoutingConfig) *ChatGPT
 		Strategy:           normalizeChatGPTOAuthStrategy(cfg.Strategy),
 		ExtraProviderNames: normalizeProviderNames(cfg.ExtraProviderNames),
 	}
-	if routing.OverrideMode == "" && routing.Strategy == ChatGPTOAuthStrategyPrimaryFirst && len(routing.ExtraProviderNames) == 0 {
+	if cfg.ExtraProviderNames != nil && routing.ExtraProviderNames == nil {
+		routing.ExtraProviderNames = []string{}
+	}
+	if routing.OverrideMode == "" && routing.Strategy == ChatGPTOAuthStrategyPriority && len(routing.ExtraProviderNames) == 0 {
 		return nil
 	}
 	return routing
@@ -514,12 +525,28 @@ func normalizeChatGPTOAuthStrategy(value string) string {
 	}
 }
 
+func PublicChatGPTOAuthStrategy(value string) string {
+	if value == ChatGPTOAuthStrategyRoundRobin {
+		return ChatGPTOAuthStrategyRoundRobin
+	}
+	return ChatGPTOAuthStrategyPriority
+}
+
+func PublicChatGPTOAuthRouting(cfg *ChatGPTOAuthRoutingConfig) *ChatGPTOAuthRoutingConfig {
+	if cfg == nil {
+		return nil
+	}
+	clone := CloneChatGPTOAuthRoutingConfig(cfg)
+	clone.Strategy = PublicChatGPTOAuthStrategy(clone.Strategy)
+	return clone
+}
+
 func CloneChatGPTOAuthRoutingConfig(cfg *ChatGPTOAuthRoutingConfig) *ChatGPTOAuthRoutingConfig {
 	if cfg == nil {
 		return nil
 	}
 	clone := *cfg
-	clone.ExtraProviderNames = append([]string(nil), cfg.ExtraProviderNames...)
+	clone.ExtraProviderNames = slices.Clone(cfg.ExtraProviderNames)
 	return &clone
 }
 
@@ -538,14 +565,15 @@ func ResolveEffectiveChatGPTOAuthRouting(defaults, agentRouting *ChatGPTOAuthRou
 	}
 	effective.OverrideMode = ""
 	if normalizedDefaults != nil && len(normalizedDefaults.ExtraProviderNames) > 0 {
-		if effective.Strategy == ChatGPTOAuthStrategyPrimaryFirst &&
-			len(normalizedAgent.ExtraProviderNames) == 0 {
-			effective.ExtraProviderNames = nil
+		if normalizedAgent.ExtraProviderNames != nil &&
+			len(normalizedAgent.ExtraProviderNames) == 0 &&
+			effective.Strategy != ChatGPTOAuthStrategyRoundRobin {
+			effective.ExtraProviderNames = slices.Clone(normalizedAgent.ExtraProviderNames)
 		} else {
-			effective.ExtraProviderNames = append([]string(nil), normalizedDefaults.ExtraProviderNames...)
+			effective.ExtraProviderNames = slices.Clone(normalizedDefaults.ExtraProviderNames)
 		}
 	}
-	if effective.Strategy == ChatGPTOAuthStrategyPrimaryFirst &&
+	if effective.Strategy == ChatGPTOAuthStrategyPriority &&
 		len(effective.ExtraProviderNames) == 0 &&
 		normalizedAgent.OverrideMode != ChatGPTOAuthOverrideCustom {
 		return nil

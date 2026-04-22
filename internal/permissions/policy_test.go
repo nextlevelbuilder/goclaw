@@ -125,6 +125,7 @@ func TestCanAccess_WriteMethods(t *testing.T) {
 	writeMethods := []string{
 		protocol.MethodChatSend,
 		protocol.MethodSessionsDelete,
+		protocol.MethodSessionsCompact,
 		protocol.MethodCronCreate,
 	}
 	for _, method := range writeMethods {

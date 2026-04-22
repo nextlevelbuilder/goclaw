@@ -33,8 +33,6 @@ Implementation is evidence-backed against the native ChatGPT Responses API event
 - `plans/260422-1349-goclaw-chatgpt-image-gen/` — plan + phase files.
 - `plans/reports/researcher-260422-1414-codex-native-image-events.md` — native event schema.
 
----
-
 ## 2026-04-20
 
 ### Pipeline: accurate context token tracking + dynamic compaction
@@ -95,6 +93,21 @@ Implementation is evidence-backed against the native ChatGPT Responses API event
 - Registered as builtin tool in `cmd/gateway_tools_wiring.go` and seeded in `cmd/gateway_builtin_tools.go`.
 
 ---
+
+## 2026-04-22
+
+### Codex OAuth pool routing strategy cleanup
+
+**Changes**
+
+- Removed `primary_first` from the public Codex OAuth routing strategy surface. The API, OpenAPI schema, and web UI now expose only `round_robin` and `priority_order`.
+- Legacy `primary_first` and `manual` routing values now normalize to `priority_order` on read in the backend store layer.
+- Activity endpoints now default empty/no-pool responses to `priority_order` instead of `primary_first`.
+- Agent overrides that explicitly persist `extra_provider_names: []` continue to behave as single-account-only routing after the migration.
+
+**Docs**
+
+- Updated `docs/02-providers.md` and `docs/18-http-api.md` to describe the two-strategy model and the compatibility migration.
 
 ## 2026-04-19
 

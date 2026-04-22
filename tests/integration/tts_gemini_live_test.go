@@ -87,6 +87,6 @@ func isServerError(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := err.Error()
+	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "500") || strings.Contains(msg, "503") || strings.Contains(msg, "server error")
 }
