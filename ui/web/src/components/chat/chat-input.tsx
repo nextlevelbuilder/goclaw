@@ -27,8 +27,13 @@ interface ChatInputProps {
   agentKey?: string;
 }
 
-/** Provider types that support the native image_generation tool (Codex / ChatGPT OAuth). */
-const IMAGE_GEN_PROVIDERS = new Set(["chatgpt_oauth"]);
+/**
+ * Provider ids that support the native `image_generation` tool.
+ * Matches ChatGPT OAuth direct + any Codex-routed variant (e.g. `cliproxy-codex`).
+ */
+const IMAGE_GEN_PROVIDER_IDS = new Set(["chatgpt_oauth", "codex"]);
+const supportsImageGenProvider = (p?: string) =>
+  !!p && (IMAGE_GEN_PROVIDER_IDS.has(p) || /codex/i.test(p));
 
 export function ChatInput({
   onSend,
@@ -48,7 +53,7 @@ export function ChatInput({
   const voiceRecorder = useVoiceRecorder();
 
   // Image-gen toggle — only relevant when provider supports it
-  const supportsImageGen = !!agentProvider && IMAGE_GEN_PROVIDERS.has(agentProvider);
+  const supportsImageGen = supportsImageGenProvider(agentProvider);
   const [imageGenEnabled, setImageGenEnabled] = useImageGenToggle(agentKey);
 
   const formatDuration = (seconds: number) => {

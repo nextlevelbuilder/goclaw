@@ -59,8 +59,10 @@ export function ChatPage() {
 
   // Read the per-agent image-gen toggle to drive the streaming placeholder.
   // Same localStorage key as ChatInput — no state duplication.
-  const IMAGE_GEN_PROVIDERS = new Set(["chatgpt_oauth"]);
-  const agentSupportsImageGen = !!currentAgent?.provider && IMAGE_GEN_PROVIDERS.has(currentAgent.provider);
+  // Matches ChatGPT OAuth direct + any Codex-routed variant (e.g. `cliproxy-codex`).
+  const agentSupportsImageGen =
+    !!currentAgent?.provider &&
+    (currentAgent.provider === "chatgpt_oauth" || /codex/i.test(currentAgent.provider));
   const [imageGenEnabled] = useImageGenToggle(currentAgent?.agent_key ?? "");
   const showImageGenPlaceholder = agentSupportsImageGen && imageGenEnabled;
 
