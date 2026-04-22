@@ -17,7 +17,20 @@ func applyStrictMode(schema map[string]any, depth int) map[string]any {
 	typ, _ := schema["type"].(string)
 	props, hasProps := schema["properties"].(map[string]any)
 
-	if typ != "object" || !hasProps {
+	if typ != "object" {
+		return schema
+	}
+	// Bare object schema (type:"object" with no inner "properties"). OpenAI
+	// strict mode still requires additionalProperties:false on such nodes —
+	// otherwise the later makeNullable transform turns this into
+	// type:["object","null"] and the strict validator rejects the null-guarded
+	// "object" variant for lacking additionalProperties. Set it here so tool
+	// authors who write `{"type":"object","description":"..."}` for a bag of
+	// free-form params don't produce invalid_function_parameters errors.
+	if !hasProps {
+		if _, already := schema["additionalProperties"]; !already {
+			schema["additionalProperties"] = false
+		}
 		return schema
 	}
 
