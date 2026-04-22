@@ -8,6 +8,11 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
+// imageGenToolDef is the native image_generation tool sentinel. Its Type-only form
+// is passed through by the Codex/OpenAI request builder as a bare {"type":"image_generation"}
+// object — no "function" wrapper, no parameters.
+var imageGenToolDef = providers.ToolDefinition{Type: "image_generation"}
+
 // buildFilteredTools resolves the per-iteration tool definitions based on policy,
 // disabled tools, bootstrap mode, skill visibility, channel type, and iteration budget.
 // Per-user MCP tools must be registered in the Registry before calling this function
@@ -103,6 +108,19 @@ func (l *Loop) buildFilteredTools(req *RunRequest, hadBootstrap bool, iteration,
 			Role:    "user",
 			Content: "[System] Final iteration reached. Summarize all findings and respond to the user now. No more tool calls allowed.",
 		})
+		return toolDefs, allowedTools, messages
+	}
+
+	// Tri-level image generation gate:
+	//   (1) provider supports native image_generation (ImageGeneration capability)
+	//   (2) agent config allows it (allowImageGeneration — defaults true)
+	//   (3) this request has not opted out (req.NoImageGen from X-Goclaw-No-Image-Gen header)
+	if l.allowImageGeneration && !req.NoImageGen {
+		if aware, ok := l.provider.(providers.CapabilitiesAware); ok {
+			if aware.Capabilities().ImageGeneration {
+				toolDefs = append(toolDefs, imageGenToolDef)
+			}
+		}
 	}
 
 	return toolDefs, allowedTools, messages

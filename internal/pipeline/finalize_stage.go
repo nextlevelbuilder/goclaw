@@ -61,7 +61,25 @@ func (s *FinalizeStage) Execute(ctx context.Context, state *RunState) error {
 	// 3. Deduplicate + populate media sizes
 	s.processMedia(state)
 
-	// 3b. Build final assistant message with MediaRefs for session persistence.
+	// 3b. Persist assistant-generated images (Codex image_generation_call) to disk
+	// BEFORE building the assistant message so MediaRefs are included in the session store.
+	// Partial streaming frames are skipped; inline base64 is cleared after writing.
+	var assistantImageRefs []providers.MediaRef
+	if s.deps.PersistAssistantImages != nil && state.Think.LastResponse != nil && len(state.Think.LastResponse.Images) > 0 {
+		workspace := ""
+		if state.Workspace != nil {
+			workspace = state.Workspace.ActivePath
+		}
+		// Build a scratch message carrying only Images so PersistAssistantImages can
+		// decode/hash/write them and populate MediaRefs. The caller clears Images on
+		// the scratch message — we harvest MediaRefs from there.
+		scratch := &providers.Message{Images: state.Think.LastResponse.Images}
+		s.deps.PersistAssistantImages(scratch, workspace)
+		assistantImageRefs = scratch.MediaRefs
+		state.Think.LastResponse.Images = nil // prevent double-processing on future calls
+	}
+
+	// 3c. Build final assistant message with MediaRefs for session persistence.
 	assistantMsg := providers.Message{
 		Role:     "assistant",
 		Content:  state.Observe.FinalContent,
@@ -84,6 +102,8 @@ func (s *FinalizeStage) Execute(ctx context.Context, state *RunState) error {
 			Path:     mr.Path,
 		})
 	}
+	// Append persisted assistant image refs (Codex image_generation_call output).
+	assistantMsg.MediaRefs = append(assistantMsg.MediaRefs, assistantImageRefs...)
 	state.Messages.AppendPending(assistantMsg)
 
 	// 4. Flush remaining pending messages to session store

@@ -200,6 +200,11 @@ type Loop struct {
 	// Self-evolve: predefined agents can update SOUL.md through chat
 	selfEvolve bool
 
+	// allowImageGeneration: gate for native image_generation tool injection.
+	// Tri-level: provider supports it AND this flag is true AND request hasn't opted out.
+	// Defaults to true; set false via other_config.allow_image_generation = false.
+	allowImageGeneration bool
+
 	// TTS auto mode from config: "off", "always", "inbound", "tagged"
 	ttsAutoMode string
 
@@ -392,6 +397,10 @@ type LoopConfig struct {
 	// Self-evolve: predefined agents can update SOUL.md (style/tone) through chat
 	SelfEvolve bool
 
+	// AllowImageGeneration: whether the native image_generation tool may be attached.
+	// Defaults to true; set false to disable image generation for this agent.
+	AllowImageGeneration bool
+
 	// TTS auto mode from config: "off", "always", "inbound", "tagged"
 	// When "tagged", inject [[tts]] directive guidance into system prompt.
 	TTSAutoMode string
@@ -546,6 +555,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		promptMode:             cfg.PromptMode,
 		pinnedSkills:           cfg.PinnedSkills,
 		selfEvolve:             cfg.SelfEvolve,
+		allowImageGeneration:   cfg.AllowImageGeneration,
 		ttsAutoMode:            cfg.TTSAutoMode,
 		skillEvolve:            cfg.SkillEvolve,
 		skillNudgeInterval:     cfg.SkillNudgeInterval,
@@ -606,6 +616,11 @@ type RunRequest struct {
 	RunKind       string // "delegation", "announce" — empty for user-initiated runs
 	HideInput     bool   // don't persist input message in session history (announce runs)
 	ContentSuffix string // appended to assistant response before saving (e.g. image markdown for WS)
+
+	// NoImageGen suppresses the native image_generation tool for this turn only.
+	// Set when X-Goclaw-No-Image-Gen: true header is present on HTTP requests.
+	// Does not affect subsequent turns (no session-level persistence).
+	NoImageGen bool
 
 	// Mid-run message injection channel (nil = disabled).
 	// When set, the loop drains this channel at turn boundaries to inject

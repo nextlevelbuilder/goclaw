@@ -229,6 +229,28 @@ func (a *AgentData) ParseSelfEvolve() bool { return a.SelfEvolve }
 // ParseSkillEvolve returns whether the agent's skill learning loop is enabled.
 func (a *AgentData) ParseSkillEvolve() bool { return a.SkillEvolve }
 
+// ParseAllowImageGeneration returns whether the native image_generation tool
+// is allowed for this agent. Defaults to true (enabled) when not set in
+// other_config, so existing agents automatically get image generation with
+// Codex providers. Operators can explicitly disable it by setting
+// other_config.allow_image_generation = false.
+// No DB column — code-only default to avoid a migration for a feature flag.
+func (a *AgentData) ParseAllowImageGeneration() bool {
+	if len(a.OtherConfig) <= 2 {
+		return true // default: enabled
+	}
+	var bag struct {
+		AllowImageGeneration *bool `json:"allow_image_generation"`
+	}
+	if json.Unmarshal(a.OtherConfig, &bag) != nil {
+		return true // malformed config → default: enabled
+	}
+	if bag.AllowImageGeneration == nil {
+		return true // not set → default: enabled
+	}
+	return *bag.AllowImageGeneration
+}
+
 // validPromptModes is the set of allowed prompt_mode values.
 var validPromptModes = map[string]bool{
 	"full": true, "task": true, "minimal": true, "none": true,
