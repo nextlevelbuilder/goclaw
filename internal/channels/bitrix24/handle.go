@@ -166,12 +166,16 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 	// channels/telegram/handlers.go:617-630). Runs AFTER policy gating so
 	// blocked senders aren't recorded, and BEFORE HandleMessage so the
 	// contact row exists by the time the agent (on the other side of the
-	// bus) resolves userID → MCP credentials via MCPServerStore. Bitrix
-	// webhooks don't carry display_name / username; leave those empty —
-	// enrichment via user.get can be added later without breaking the
-	// upsert key.
+	// bus) resolves userID → MCP credentials via MCPServerStore.
+	//
+	// Bitrix24 webhooks don't ship display_name / username, so we enrich
+	// via user.get on first sight (cached per-channel; see
+	// contact_enrich.go). Best-effort — if the RPC fails or scope is
+	// missing we still create the contact row with empty fields, which
+	// matches the pre-enrichment behavior and causes no regression.
 	if cc := c.ContactCollector(); cc != nil {
-		cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, "", "", peerKind, "user", "", "")
+		contactName, contactUsername := c.resolveContactName(ctx, senderID)
+		cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, contactName, contactUsername, peerKind, "user", "", "")
 		if isGroup && chatID != "" {
 			cc.EnsureContact(ctx, c.Type(), c.Name(), chatID, "", "", "", "group", "group", "", "")
 		}

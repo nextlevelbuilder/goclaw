@@ -85,6 +85,16 @@ type Channel struct {
 	// Bitrix Send() can't stall the next provisioning decision.
 	notifyMu       sync.Mutex
 	notifyDebounce map[string]time.Time
+
+	// Contact-name enrichment cache. Bitrix24 webhooks don't carry
+	// display_name / username, so the channel lazily resolves them via
+	// user.get on first sight of each sender. Cache is per-channel (not
+	// per-portal) to keep the lock narrow and let per-bot debouncing
+	// compose naturally; cross-bot duplicate lookups for the same user
+	// are fine at this scale. See contact_enrich.go for TTL policy and
+	// the negative-cache rationale.
+	nameCacheMu sync.Mutex
+	nameCache   map[string]nameCacheEntry
 }
 
 // Type returns the platform identifier used by the router / health pages.
