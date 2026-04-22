@@ -27,7 +27,17 @@ func (p *CursorCLIProvider) Chat(ctx context.Context, req ChatRequest) (*ChatRes
 	defer unlock()
 
 	workDir := p.ensureWorkDir(sessionKey)
-	args := p.buildArgs(model, workDir, sessionKey, false)
+
+	var chatID string
+	if sessionKey != "" {
+		var err error
+		chatID, err = p.getOrCreateChatID(ctx, sessionKey)
+		if err != nil {
+			slog.Warn("cursor-cli: failed to get/create chat ID, starting fresh chat", "session_key", sessionKey, "error", err)
+			chatID = ""
+		}
+	}
+	args := p.buildArgs(model, workDir, chatID, false)
 
 	// Prepend system prompt to user message if present
 	prompt := userMsg
@@ -69,7 +79,17 @@ func (p *CursorCLIProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 	}()
 
 	workDir := p.ensureWorkDir(sessionKey)
-	args := p.buildArgs(model, workDir, sessionKey, true)
+
+	var chatID string
+	if sessionKey != "" {
+		var err error
+		chatID, err = p.getOrCreateChatID(ctx, sessionKey)
+		if err != nil {
+			slog.Warn("cursor-cli: failed to get/create chat ID, starting fresh chat", "session_key", sessionKey, "error", err)
+			chatID = ""
+		}
+	}
+	args := p.buildArgs(model, workDir, chatID, true)
 
 	prompt := userMsg
 	if systemPrompt != "" {

@@ -19,6 +19,15 @@ type CursorCLIProvider struct {
 	sessionMu    sync.Map // key: string, value: *sync.Mutex
 }
 
+// cursorChatIDRegistries maps baseWorkDir -> *sync.Map (sessionKey -> cursorChatID).
+// Package-level so ResetCursorCLISession can invalidate entries without a provider pointer.
+var cursorChatIDRegistries sync.Map // key: string, value: *sync.Map
+
+func getCursorChatIDRegistry(baseWorkDir string) *sync.Map {
+	actual, _ := cursorChatIDRegistries.LoadOrStore(baseWorkDir, &sync.Map{})
+	return actual.(*sync.Map)
+}
+
 // CursorCLIOption configures the provider.
 type CursorCLIOption func(*CursorCLIProvider)
 

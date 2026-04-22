@@ -1,12 +1,13 @@
 package providers
 
 import (
+	"context"
+	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
-
-	"github.com/google/uuid"
 )
 
 // validCursorModes lists accepted working modes for the Cursor CLI.
@@ -16,7 +17,7 @@ var validCursorModes = map[string]bool{
 	"ask":   true,
 }
 
-func (p *CursorCLIProvider) buildArgs(model, workDir, sessionKey string, streaming bool) []string {
+func (p *CursorCLIProvider) buildArgs(model, workDir, chatID string, streaming bool) []string {
 	args := []string{
 		"-p",
 		"--force",
@@ -36,14 +37,8 @@ func (p *CursorCLIProvider) buildArgs(model, workDir, sessionKey string, streami
 	if mode != "agent" {
 		args = append(args, "--mode", mode)
 	}
-	if sessionKey != "" {
-		// Cursor Agent CLI versions may not support `--session-id`.
-		// For compatibility, only attempt `--resume` when a transcript for this
-		// deterministic session ID already exists.
-		sid := deriveCursorSessionUUID(sessionKey).String()
-		if cursorSessionFileExists(workDir, sid) {
-			args = append(args, "--resume", sid)
-		}
+	if chatID != "" {
+		args = append(args, "--resume", chatID)
 	}
 	return args
 }
@@ -60,51 +55,72 @@ func (p *CursorCLIProvider) ensureWorkDir(sessionKey string) string {
 	return dir
 }
 
-func deriveCursorSessionUUID(sessionKey string) uuid.UUID {
+func (p *CursorCLIProvider) getOrCreateChatID(ctx context.Context, sessionKey string) (string, error) {
 	if sessionKey == "" {
-		return uuid.New()
+		return "", nil
 	}
-	return uuid.NewSHA1(uuid.NameSpaceDNS, []byte("cursor:"+sessionKey))
+
+	registry := getCursorChatIDRegistry(p.baseWorkDir)
+	if cached, ok := registry.Load(sessionKey); ok {
+		return cached.(string), nil
+	}
+
+	workDir := p.ensureWorkDir(sessionKey)
+	chatIDFile := filepath.Join(workDir, ".cursor", "chatid")
+	if data, err := os.ReadFile(chatIDFile); err == nil {
+		chatID := strings.TrimSpace(string(data))
+		if chatID != "" {
+			registry.Store(sessionKey, chatID)
+			return chatID, nil
+		}
+	}
+
+	chatID, err := p.createChat(ctx)
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(filepath.Dir(chatIDFile), 0755); err == nil {
+		if err := os.WriteFile(chatIDFile, []byte(chatID), 0600); err != nil {
+			slog.Warn("cursor-cli: failed to write chat ID file", "path", chatIDFile, "error", err)
+		}
+	}
+	registry.Store(sessionKey, chatID)
+	slog.Info("cursor-cli: created new chat", "session_key", sessionKey, "chat_id", chatID)
+	return chatID, nil
 }
 
-func cursorSessionFileExists(workDir, sessionID string) bool {
-	home, err := os.UserHomeDir()
+func (p *CursorCLIProvider) createChat(ctx context.Context) (string, error) {
+	cmd := exec.CommandContext(ctx, p.cliPath, "create-chat")
+	cmd.Env = filterCursorEnv(os.Environ())
+
+	output, err := cmd.Output()
 	if err != nil {
-		return false
+		return "", fmt.Errorf("cursor-cli create-chat: %w", err)
 	}
-	// Cursor stores sessions at: ~/.cursor/projects/<encoded-path>/agent-transcripts/<session-id>/<session-id>.jsonl
-	// Path encoding: replace path separators and special chars with "-"
-	resolved, err := filepath.EvalSymlinks(workDir)
-	if err != nil {
-		resolved = workDir
+
+	chatID := strings.TrimSpace(string(output))
+	if chatID == "" {
+		return "", fmt.Errorf("cursor-cli create-chat: empty response")
 	}
-	encoded := strings.NewReplacer(string(filepath.Separator), "-", "_", "-", ".", "-", ":", "-", " ", "-").Replace(resolved)
-	encoded = strings.Trim(encoded, "-")
-	sessionFile := filepath.Join(home, ".cursor", "projects", encoded, "agent-transcripts", sessionID, sessionID+".jsonl")
-	_, err = os.Stat(sessionFile)
-	return err == nil
+	return chatID, nil
 }
 
-// ResetCursorCLISession deletes the Cursor CLI session file for a given session key.
+// ResetCursorCLISession deletes the Cursor CLI session state for a given session key.
+// Called on /reset so the next message starts a fresh chat.
 func ResetCursorCLISession(baseWorkDir, sessionKey string) {
 	if baseWorkDir == "" {
 		baseWorkDir = defaultCursorWorkDir()
 	}
+
+	registry := getCursorChatIDRegistry(baseWorkDir)
+	if _, ok := registry.Load(sessionKey); ok {
+		registry.Delete(sessionKey)
+	}
+
 	safe := sanitizePathSegment(sessionKey)
 	workDir := filepath.Join(baseWorkDir, safe)
-	sessionID := deriveCursorSessionUUID(sessionKey).String()
-
-	home, err := os.UserHomeDir()
-	if err == nil {
-		resolved, err := filepath.EvalSymlinks(workDir)
-		if err != nil {
-			resolved = workDir
-		}
-		encoded := strings.NewReplacer(string(filepath.Separator), "-", "_", "-", ".", "-", ":", "-", " ", "-").Replace(resolved)
-		encoded = strings.Trim(encoded, "-")
-		sessionFile := filepath.Join(home, ".cursor", "projects", encoded, "agent-transcripts", sessionID, sessionID+".jsonl")
-		if err := os.Remove(sessionFile); err == nil {
-			slog.Info("cursor-cli: deleted session file on /reset", "path", sessionFile)
-		}
+	chatIDFile := filepath.Join(workDir, ".cursor", "chatid")
+	if err := os.Remove(chatIDFile); err == nil {
+		slog.Info("cursor-cli: cleared chat ID on /reset", "session_key", sessionKey)
 	}
 }

@@ -413,6 +413,7 @@ func handleResetCommand(
 	deps.SessStore.Reset(ctx, sessionKey)
 	deps.SessStore.Save(ctx, sessionKey)
 	providers.ResetCLISession("", sessionKey)
+	providers.ResetCursorCLISession("", sessionKey)
 	slog.Info("inbound: /reset command", "session", sessionKey)
 
 	return true
