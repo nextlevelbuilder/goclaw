@@ -38,9 +38,9 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 	if !c.IsRunning() {
 		return errors.New("bitrix24: channel not running")
 	}
-	client := c.Client()
-	botID := c.BotID()
-	if client == nil || botID <= 0 {
+	// Liveness-only check — sendChunk re-fetches client/botID under its
+	// own lock so we don't hold stale references across the chunk loop.
+	if c.Client() == nil || c.BotID() <= 0 {
 		return errors.New("bitrix24: channel not initialised")
 	}
 	if strings.TrimSpace(msg.ChatID) == "" {
@@ -57,6 +57,23 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 	if text == "" {
 		return nil
 	}
+
+	// Convert LLM Markdown output to Bitrix24 BBCode BEFORE chunking. The
+	// chunker then operates on the final wire shape — whatever it cuts on
+	// is what Bitrix24 renders, and we can't leak half-converted Markdown
+	// markers (e.g. a lone `**`) to the client. See format.go for the full
+	// mapping (bold/italic/code/links/headers/lists/tables).
+	//
+	// Caveat: the chunker is tag-agnostic. A BBCode pair straddling the
+	// 4000-rune boundary can still be split across chunks — Bitrix renders
+	// the unclosed tag literally. LLM replies rarely push the limit in
+	// practice; if this becomes visible, teach findChunkBoundary to avoid
+	// cutting inside [tag] or [tag=…] … [/tag] spans.
+	//
+	// Idempotency: applying markdownToBitrixBBCode to an already-BBCode
+	// string is a no-op — the conversion regexes key off Markdown markers
+	// that don't appear in [b]/[i]/[code]/[url=…] syntax.
+	text = markdownToBitrixBBCode(text)
 
 	// TextChunkLimit is always populated by applyConfigDefaults (4000) —
 	// chunkText also treats limit<=0 as "use default" as a safety net, so we
@@ -78,6 +95,11 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 func (c *Channel) sendChunk(ctx context.Context, chatID, chunk string) error {
 	client := c.Client()
 	botID := c.BotID()
+	if client == nil || botID <= 0 {
+		// Channel was shut down between Send's liveness check and here.
+		// Report as a transport error so the caller can retry if desired.
+		return errors.New("bitrix24: channel lost during send")
+	}
 
 	params := map[string]any{
 		"BOT_ID":    botID,
