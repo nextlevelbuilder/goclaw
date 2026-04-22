@@ -2,14 +2,24 @@ package pipeline
 
 import (
 	"context"
+	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
+	"github.com/nextlevelbuilder/goclaw/internal/hooks"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/tokencount"
 	"github.com/nextlevelbuilder/goclaw/internal/workspace"
 )
+
+// PruneStats holds counts from a single pruneContextMessages invocation.
+// Populated by the pruning function; read by PruneStage for event emission.
+type PruneStats struct {
+	ResultsTrimmed int  // Pass 1: soft-trimmed count
+	ResultsCleared int  // Pass 2: hard-cleared count
+	Compacted      bool // LLM compaction ran this cycle
+}
 
 // PipelineDeps bundles all external dependencies stages need.
 // Passed to NewDefaultPipeline; individual stages receive what they need via closure or direct field access.
@@ -17,6 +27,8 @@ type PipelineDeps struct {
 	TokenCounter tokencount.TokenCounter
 	EventBus     eventbus.DomainEventBus
 	Config       PipelineConfig
+	// Hooks is the hook dispatcher. nil = no hooks (zero-overhead fast path).
+	Hooks hooks.Dispatcher
 
 	// ResolveContextWindow returns the effective context window (in tokens) for
 	// a given provider/model pair. Nil = always use Config.ContextWindow.
@@ -55,8 +67,15 @@ type PipelineDeps struct {
 	EmitBlockReply      func(content string) // emit block.reply for intermediate assistant content
 
 	// Prune callbacks (PruneStage)
-	PruneMessages   func(msgs []providers.Message, budget int) []providers.Message
+	PruneMessages   func(msgs []providers.Message, budget int) ([]providers.Message, PruneStats)
+	SanitizeHistory func(msgs []providers.Message) ([]providers.Message, int)
 	CompactMessages func(ctx context.Context, msgs []providers.Message, model string) ([]providers.Message, error)
+
+	// Cache-TTL gate callbacks (Phase 06). All optional (nil = feature disabled).
+	GetProviderCaps  func() providers.ProviderCapabilities  // provider capabilities for cache detection
+	GetPruningConfig func() *config.ContextPruningConfig    // pruning config (TTL field)
+	GetCacheTouch    func(sessionKey string) time.Time      // per-session last prune-mutation timestamp
+	MarkCacheTouched func(sessionKey string)                // record mutation timestamp AFTER prune mutates
 
 	// Memory flush callbacks (MemoryFlushStage, invoked by PruneStage)
 	RunMemoryFlush func(ctx context.Context, state *RunState) error
@@ -89,6 +108,17 @@ type PipelineDeps struct {
 	UpdateMetadata         func(ctx context.Context, sessionKey string, usage providers.Usage) error
 	BootstrapCleanup       func(ctx context.Context, state *RunState) error
 	MaybeSummarize         func(ctx context.Context, sessionKey string)
+}
+
+// FireHook is nil-safe. Returns FireResult{Decision: DecisionAllow} when no
+// dispatcher is wired. Callers on blocking events should abort the stage on
+// result.Decision == DecisionBlock and apply result.UpdatedToolInput /
+// UpdatedRawInput to their local state when non-nil (builtin-hook mutations).
+func (d *PipelineDeps) FireHook(ctx context.Context, ev hooks.Event) (hooks.FireResult, error) {
+	if d == nil || d.Hooks == nil {
+		return hooks.FireResult{Decision: hooks.DecisionAllow}, nil
+	}
+	return d.Hooks.Fire(ctx, ev)
 }
 
 // PipelineConfig holds pipeline-level settings.

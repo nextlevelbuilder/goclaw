@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -21,6 +22,8 @@ type stubAgent struct {
 }
 
 func (s *stubAgent) ID() string                                          { return s.id }
+func (s *stubAgent) UUID() uuid.UUID                                     { return uuid.Nil }
+func (s *stubAgent) OtherConfig() json.RawMessage                        { return nil }
 func (s *stubAgent) Run(context.Context, RunRequest) (*RunResult, error) { return nil, nil }
 func (s *stubAgent) IsRunning() bool                                     { return s.running }
 func (s *stubAgent) Model() string                                       { return "test-model" }

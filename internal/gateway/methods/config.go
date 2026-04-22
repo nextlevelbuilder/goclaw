@@ -40,6 +40,10 @@ func (m *ConfigMethods) Register(router *gateway.MethodRouter) {
 	router.Register(protocol.MethodConfigApply, m.requireMasterScope(m.requireOwner(m.handleApply)))
 	router.Register(protocol.MethodConfigPatch, m.requireMasterScope(m.requireOwner(m.handlePatch)))
 	router.Register(protocol.MethodConfigSchema, m.requireMasterScope(m.requireOwner(m.handleSchema)))
+	// config.defaults is read-only + secret-free (Go consts + agents.defaults overlay),
+	// so it only needs requireMasterScope — owner gating would spam auth errors for
+	// operators viewing agent detail pages.
+	router.Register(protocol.MethodConfigDefaults, m.requireMasterScope(m.handleDefaults))
 }
 
 // requireOwner wraps a handler to only allow owner-role users.

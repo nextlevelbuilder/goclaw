@@ -189,8 +189,95 @@ To add a new package to the Docker image:
 
 For packages only needed by specific skills, prefer runtime installation (Option B) to keep the image lean.
 
+### GitHub Releases Installer
+
+For CLI tools distributed as GitHub Releases (lazygit, starship, ripgrep, gh, etc.)
+that aren't packaged via apk/pip/npm, use the `github:` runtime installer:
+
+```
+github:owner/repo[@tag]
+```
+
+Admin-only, SHA256-verified, ELF-validated, with a release-picker UI. Binaries
+land in `/app/data/.runtime/bin/` (on `$PATH`). See
+[`docs/packages-github.md`](./packages-github.md) for syntax, configuration,
+security posture, and troubleshooting (especially musl/glibc compatibility).
+
 ---
 
 ## 8. Skill Search (v3)
 
 Skills are searchable via BM25 keyword + semantic similarity matching (in `internal/skills/search.go`). The skill loader indexes all available skills from workspace/project/global/builtin sources. Skill discovery combines keyword matching with embeddings for improved recall of relevant tools to agent tasks.
+
+---
+
+## 9. Declaring Dependencies in SKILL.md
+
+Auto-scan (`internal/skills/dep_scanner.go`) parses Python imports and npm requires from `scripts/` — adequate for most cases but has two limitations:
+
+1. **Import name ≠ pip package name** for many packages (e.g. `import psycopg2` → must `pip install psycopg2-binary` because the sdist-only `psycopg2` package requires `pg_config` at build time). An import-to-pip alias table in `dep_checker.go` handles common cases (`psycopg2→psycopg2-binary`, `psycopg→psycopg[binary]`, `MySQLdb→mysqlclient`, `Crypto→pycryptodome`, `serial→pyserial`, `skimage→scikit-image`, `Levenshtein→python-Levenshtein`, plus the existing `cv2/PIL/yaml/sklearn/bs4/dateutil/dotenv/pptx/docx/attr/gi` set).
+2. **False positives** — local helper modules detected as external deps.
+
+Skill authors can override auto-scan with two optional frontmatter fields:
+
+```yaml
+---
+name: my-skill
+description: does things
+deps:            # authoritative: when present, supersedes auto-scan for install
+  - pip:psycopg2-binary
+  - pip:requests>=2.31
+  - pip:psycopg[binary]
+  - npm:typescript
+  - system:ffmpeg
+  - github:cli/cli@v2.40.0
+exclude_deps:    # filter false positives from auto-scan; ignored when deps: is set
+  - pip:my_local_helper
+---
+```
+
+**Prefix semantics:**
+
+| Prefix | Effect | Example |
+|--------|--------|---------|
+| `pip:` | Python pip install | `pip:psycopg2-binary`, `pip:requests>=2.31` |
+| `npm:` | Global npm install | `npm:typescript` |
+| `github:` | GitHub Releases installer (admin) | `github:cli/cli@v2.40.0` |
+| `system:` | apk package via pkg-helper | `system:ffmpeg` |
+| (bare) | Treated as system binary | `pandoc` |
+
+**Precedence:**
+
+| `deps:` | `exclude_deps:` | Behavior |
+|---------|-----------------|----------|
+| absent  | absent | Auto-scan as today |
+| absent  | present | Auto-scan minus `exclude_deps` entries |
+| present | — | Explicit deps used (authoritative); auto-scan kept only for advisory log |
+
+**v1 limitations:**
+
+- Version pins in `pip:requests>=2.31` are stripped when checking whether the import is available (checker imports `requests`); the installer currently installs latest. Full pin pass-through is planned for v2.
+- `deps:` bypasses the import-to-pip alias map, so authors must declare the exact pip package name (e.g. `pip:psycopg2-binary`, not `pip:psycopg2`).
+- Unknown prefixes in `deps:` are treated as system binaries.
+- `exclude_deps` matches surface in `slog.Debug` only; no UI diagnostic yet.
+
+**Validation & safety:**
+
+Manifest dep strings are passed to `python3 -c` / `node -e` at check time, so each entry is validated against a per-category allowlist before use:
+
+| Category | Allowed chars | Example reject |
+|----------|---------------|----------------|
+| `pip:` | `[A-Za-z_][A-Za-z0-9_.-]*` | `pip:foo;__import__('os')...` |
+| `npm:` | `^(@scope/)?[a-z0-9][a-z0-9_.-]*` | `npm:a');require(...` |
+| `system:` / bare | `[A-Za-z0-9][A-Za-z0-9._+-]*` | `rm -rf /`, `$(evil)` |
+
+Invalid entries are dropped with `slog.Warn("skills: dropping invalid manifest dep", ...)`. Malformed specs like `pip:>=1.0` (no package name) or `pip:[binary]` (extras only) are also dropped.
+
+**YAML grammar subset accepted by the loader:**
+
+- Flat list only: `deps:\n  - item1\n  - item2`
+- Quoted items OK (`"..."` or `'...'`)
+- CRLF normalized
+- Flow-style `[a, b]` NOT supported (returns empty)
+- Dash without space `-item` NOT supported
+- Nested maps dropped with warning (avoids silent prefix-loss miscategorization)

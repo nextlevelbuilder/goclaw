@@ -90,7 +90,7 @@ export class HttpClient {
       throw new ApiError(code, message);
     }
 
-    return res.json() as Promise<T>;
+    return this.readJson<T>(res);
   }
 
   private buildUrl(path: string, params?: Record<string, string>): string {
@@ -150,6 +150,19 @@ export class HttpClient {
       throw new ApiError(code, message);
     }
 
-    return res.json() as Promise<T>;
+    return this.readJson<T>(res);
+  }
+
+  private async readJson<T>(res: Response): Promise<T> {
+    if (res.status === 204 || res.headers.get("content-length") === "0") {
+      return undefined as T;
+    }
+
+    const text = await res.text();
+    if (text.trim().length === 0) {
+      return undefined as T;
+    }
+
+    return JSON.parse(text) as T;
   }
 }

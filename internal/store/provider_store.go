@@ -24,7 +24,6 @@ const (
 	ProviderBailian         = "bailian"
 	ProviderChatGPTOAuth    = "chatgpt_oauth"
 	ProviderClaudeCLI       = "claude_cli"
-	ProviderSuno            = "suno"
 	ProviderYesScale        = "yescale"
 	ProviderZai             = "zai"
 	ProviderZaiCoding       = "zai_coding"
@@ -62,7 +61,6 @@ var ValidProviderTypes = map[string]bool{
 	ProviderBailian:         true,
 	ProviderChatGPTOAuth:    true,
 	ProviderClaudeCLI:       true,
-	ProviderSuno:            true,
 	ProviderYesScale:        true,
 	ProviderZai:             true,
 	ProviderZaiCoding:       true,
@@ -181,7 +179,6 @@ var NoEmbeddingTypes = map[string]bool{
 	ProviderACP:             true,
 	ProviderClaudeCLI:       true,
 	ProviderChatGPTOAuth:    true,
-	ProviderSuno:            true,
 }
 
 // ProviderStore manages LLM providers.

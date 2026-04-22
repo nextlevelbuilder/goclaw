@@ -10,10 +10,12 @@ export interface FieldDef {
   defaultValue?: string | number | boolean | string[];
   options?: { value: string; label: string }[];
   help?: string;
-  /** Only show this field when another field has a specific value */
-  showWhen?: { key: string; value: string };
+  /** Only show this field when another field has a specific value (or one of several values) */
+  showWhen?: { key: string; value: string | string[] };
   /** Disable this field when another field has a specific value */
   disabledWhen?: { key: string; value: string; hint?: string };
+  /** Hide in an "Advanced" collapsible section — for rarely-needed fields */
+  advanced?: boolean;
 }
 
 // --- Shared option lists ---
@@ -80,6 +82,22 @@ export const credentialsSchema: Record<string, FieldDef[]> = {
     { key: "webhook_secret", label: "Webhook Secret (Optional)", type: "password", help: "HMAC-SHA256 secret for webhook signature verification. Leave empty to skip verification." },
   ],
 };
+
+// --- Pancake platform options ---
+
+const pancakePlatformOptions = [
+  { value: "facebook",    label: "Facebook" },
+  { value: "instagram",   label: "Instagram" },
+  { value: "threads",     label: "Threads (Beta)" },
+  { value: "tiktok",      label: "TikTok" },
+  { value: "youtube",     label: "YouTube (Beta)" },
+  { value: "shopee",      label: "Shopee" },
+  { value: "line",        label: "Line" },
+  { value: "google",      label: "Google" },
+  { value: "chat_plugin", label: "Chat Plugin" },
+  { value: "lazada",      label: "Lazada" },
+  { value: "tokopedia",   label: "Tokopedia" },
+];
 
 // --- Config schemas ---
 
@@ -177,10 +195,28 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit" },
   ],
   pancake: [
-    { key: "page_id", label: "Page ID", type: "text", required: true, help: "Pancake page ID (numeric, from Pancake dashboard)" },
-    { key: "platform", label: "Platform (auto-detected)", type: "text", placeholder: "Leave empty — resolved at startup", help: "facebook / zalo / instagram / tiktok / whatsapp / line. Auto-detected if empty." },
+    { key: "page_id", label: "Page ID", type: "text", required: true, help: "Pancake internal page ID (numeric, from Pancake dashboard)" },
+    { key: "webhook_page_id", label: "Webhook Page ID", type: "text", help: "Only needed when the native platform page ID in webhooks differs from the Pancake page ID above (rare). Leave empty if both are the same.", advanced: true },
+    { key: "platform", label: "Platform", type: "select", required: true, defaultValue: "", options: pancakePlatformOptions, help: "Select the platform this Pancake page serves." },
     { key: "features.inbox_reply", label: "Inbox Auto-Reply", type: "boolean", defaultValue: true },
-    { key: "features.comment_reply", label: "Comment Reply", type: "boolean", defaultValue: false },
+    { key: "features.comment_reply", label: "Comment Reply", type: "boolean", defaultValue: false,
+      showWhen: { key: "platform", value: ["facebook", "instagram", "threads", "tiktok", "youtube"] } },
+    { key: "features.auto_react", label: "Auto-React (Like) Comments", type: "boolean",
+      defaultValue: false,
+      showWhen: { key: "platform", value: "facebook" },
+      help: "Automatically like Facebook comments. Set webhook_secret for security." },
+    { key: "auto_react_options.allow_post_ids", label: "Auto-React: Allow Post IDs", type: "tags",
+      showWhen: { key: "features.auto_react", value: "true" },
+      help: "Only react on these post IDs. Empty = all posts. Deny list overrides." },
+    { key: "auto_react_options.deny_post_ids", label: "Auto-React: Deny Post IDs", type: "tags",
+      showWhen: { key: "features.auto_react", value: "true" },
+      help: "Never react on these post IDs." },
+    { key: "auto_react_options.allow_user_ids", label: "Auto-React: Allow User IDs", type: "tags",
+      showWhen: { key: "features.auto_react", value: "true" },
+      help: "Only react to comments from these user IDs. Empty = all users. Deny list overrides." },
+    { key: "auto_react_options.deny_user_ids", label: "Auto-React: Deny User IDs", type: "tags",
+      showWhen: { key: "features.auto_react", value: "true" },
+      help: "Never react to comments from these user IDs." },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "Sender IDs to whitelist. Empty = accept all." },
     { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit" },
   ],

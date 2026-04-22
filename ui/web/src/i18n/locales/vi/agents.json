@@ -170,7 +170,9 @@
       "links": "Liên kết",
       "skills": "Skill",
       "instances": "Phiên bản người dùng",
-      "permissions": "Phân quyền"
+      "permissions": "Phân quyền",
+      "evolution": "Tiến Hóa",
+      "hooks": "Hooks"
     },
     "summonFailed": "Triệu hồi thất bại",
     "evolving": "Đang tiến hóa",
@@ -577,7 +579,7 @@
     "saving": "Đang lưu...",
     "saved": "Đã lưu",
     "failedToSave": "Lưu thất bại",
-    "usingGlobalDefaults": "Đang dùng mặc định toàn cục từ config.json"
+    "usingGlobalDefaults": "Đang dùng mặc định hệ thống"
   },
   "files": {
     "readOnly": "Chỉ đọc",
@@ -707,7 +709,10 @@
     "retrying": "Đang thử lại...",
     "done": "xong",
     "fileLabelSOUL": "Linh hồn & Tính cách",
-    "fileLabelIDENTITY": "Thẻ danh tính"
+    "fileLabelIDENTITY": "Thẻ danh tính",
+    "takingTooLong": "Mất quá nhiều thời gian?",
+    "cancel": "Huỷ",
+    "cancelling": "Đang huỷ..."
   },
   "configGroups": {
     "core": "Cốt lõi",
@@ -727,6 +732,7 @@
       "maxSpawnDepth": "Độ sâu sinh sản tối đa",
       "maxChildrenPerAgent": "Con tối đa mỗi agent",
       "archiveAfter": "Lưu trữ sau (phút)",
+      "maxRetries": "Số lần thử lại tối đa",
       "modelOverride": "Ghi đè model",
       "inheritFromAgent": "(kế thừa từ agent)"
     },
@@ -792,7 +798,8 @@
       "hardClear": "Xóa cứng",
       "enabled": "Đã bật",
       "placeholderText": "Văn bản thay thế",
-      "descriptionSimple": "Tự động cắt bớt kết quả công cụ cũ để tránh tràn ngữ cảnh. Bật mặc định.",
+      "cacheTtl": "Cache TTL",
+      "descriptionSimple": "Tự động cắt bớt kết quả công cụ cũ để tránh tràn ngữ cảnh. Đặt chế độ 'cache-ttl' để bật.",
       "advanced": "Nâng cao"
     },
     "sandbox": {
@@ -952,6 +959,25 @@
     "noLogs": "Chưa có nhật ký heartbeat.",
     "logsPagination": "{{from}}–{{to}} / {{total}}"
   },
+  "hooks": {
+    "card": {
+      "title": "Hooks",
+      "loading": "Đang tải hooks...",
+      "empty": "Chưa có hook nào",
+      "emptyDesc": "Hooks chặn các sự kiện trong vòng đời agent như gọi tool.",
+      "viewAll": "Xem tất cả {{count}} hooks",
+      "addHook": "Thêm hook",
+      "nHooks": "{{count}} hooks"
+    },
+    "tab": {
+      "refresh": "Làm mới",
+      "create": "Tạo Hook",
+      "emptyTitle": "Chưa có hook nào",
+      "emptyDesc": "Hooks chặn các sự kiện trong vòng đời agent như gọi tool, bắt đầu/kết thúc phiên, v.v.",
+      "createFirst": "Tạo hook đầu tiên",
+      "deleteConfirm": "Xóa hook cho \"{{event}}\"? Hành động này không thể hoàn tác."
+    }
+  },
   "permissions": {
     "title": "Quyền hạn",
     "description": "Quản lý ai được phép thay đổi cấu hình agent và file. Chủ sở hữu luôn có quyền đầy đủ.",
@@ -961,6 +987,7 @@
     "noRules": "Chưa có quy tắc. Chủ sở hữu mặc định có đầy đủ quyền.",
     "userIdPlaceholder": "Tìm liên hệ hoặc nhập ID...",
     "scopePlaceholder": "Chọn hoặc nhập phạm vi...",
+    "unknownWriterLabel": "Người dùng {{id}}",
     "types": {
       "file_writer": "Quyền viết file",
       "file_writer_desc": "Ai được chỉnh sửa file và quản lý cron trong nhóm chat. Người đầu tiên tự động được thêm.",

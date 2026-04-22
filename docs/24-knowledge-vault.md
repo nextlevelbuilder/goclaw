@@ -46,6 +46,27 @@ Documents are scoped by **tenant** (isolation), **agent** (per-agent namespace),
 - **team**: Team workspace documents (team_context_files)
 - **shared**: Cross-tenant shared knowledge (future)
 
+### Document Scope & Ownership
+
+| scope | agent_id | team_id | Visibility |
+|-------|----------|---------|------------|
+| personal | set  | NULL   | Owning agent only (within tenant) |
+| team     | NULL | set    | Members of the team (within tenant) |
+| shared   | NULL | NULL   | All agents within the tenant |
+| custom   | any  | any    | User-defined via `custom_scope` |
+
+#### DB Invariant (migration 000055)
+
+A CHECK constraint enforces the above table: `vault_documents_scope_consistency`. Rejects inserts/updates that violate the scope × ownership relationship. `scope='custom'` is unconstrained (user-defined scopes).
+
+#### Agent Read Semantics
+
+`vault_search`, `ListDocuments`, `CountDocuments` return:
+- Docs owned by the agent (`agent_id = <agent>`)
+- PLUS shared docs (`agent_id IS NULL`)
+
+Within a team context (RunContext with TeamID set), results also include team-scoped docs for that team. Tenant isolation (`tenant_id = <tenant>`) is always enforced.
+
 ---
 
 ## 2. Data Model
@@ -524,10 +545,12 @@ Response (parallel results from vault + episodic + KG):
 
 ---
 
-## File References
+## File Reference
 
-- **Vault service:** `internal/vault/*.go`
-- **Store interface:** `internal/store/vault_store.go`
-- **HTTP handlers:** `internal/http/vault_handlers.go`
-- **Tools:** `internal/tools/vault_*.go`
-- **Migration:** `migrations/000038_vault_tables.up.sql`
+| Module | Path | Purpose |
+|---|---|---|
+| Vault service & sync | `internal/vault/` | VaultStore, VaultService, VaultSyncWorker, VaultRetriever, wikilink parsing |
+| Store & HTTP | `internal/store/vault_store.go`, `internal/http/vault_handlers.go` | Store interface, REST endpoints (list, get, search, links) |
+| Tools & migration | `internal/tools/vault_*.go`, `migrations/000038_vault_tables.up.sql` | vault_search and vault_link tools, schema migration |
+
+Use `grep` or your editor's symbol search for specific files.

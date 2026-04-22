@@ -107,8 +107,6 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 		models = dashScopeModels()
 	case "minimax_native":
 		models = minimaxModels()
-	case "suno":
-		models = sunoModels()
 	default:
 		// All other types use OpenAI-compatible /models endpoint
 		apiBase := strings.TrimRight(h.resolveAPIBase(p), "/")

@@ -170,7 +170,9 @@
       "links": "链接",
       "skills": "Skill",
       "instances": "用户实例",
-      "permissions": "权限"
+      "permissions": "权限",
+      "evolution": "进化",
+      "hooks": "钩子"
     },
     "summonFailed": "召唤失败",
     "evolving": "进化中",
@@ -577,7 +579,7 @@
     "saving": "保存中...",
     "saved": "已保存",
     "failedToSave": "保存失败",
-    "usingGlobalDefaults": "使用 config.json 中的全局默认值"
+    "usingGlobalDefaults": "使用系统默认值"
   },
   "files": {
     "readOnly": "只读",
@@ -707,7 +709,10 @@
     "retrying": "重试中...",
     "done": "完成",
     "fileLabelSOUL": "灵魂与个性",
-    "fileLabelIDENTITY": "身份卡"
+    "fileLabelIDENTITY": "身份卡",
+    "takingTooLong": "耗时过长？",
+    "cancel": "取消",
+    "cancelling": "正在取消..."
   },
   "configGroups": {
     "core": "核心",
@@ -727,6 +732,7 @@
       "maxSpawnDepth": "最大生成深度",
       "maxChildrenPerAgent": "每Agent最大子数",
       "archiveAfter": "归档时间（分钟）",
+      "maxRetries": "最大重试次数",
       "modelOverride": "模型覆盖",
       "inheritFromAgent": "（继承自Agent）"
     },
@@ -792,7 +798,8 @@
       "hardClear": "硬清除",
       "enabled": "已启用",
       "placeholderText": "占位符文本",
-      "descriptionSimple": "自动裁剪旧工具结果以防止上下文溢出。默认启用。",
+      "cacheTtl": "缓存 TTL",
+      "descriptionSimple": "自动裁剪旧工具结果以防止上下文溢出。设置模式为 'cache-ttl' 以启用。",
       "advanced": "高级"
     },
     "sandbox": {
@@ -952,6 +959,25 @@
     "noLogs": "暂无心跳日志。",
     "logsPagination": "{{from}}–{{to}} / 共 {{total}}"
   },
+  "hooks": {
+    "card": {
+      "title": "钩子",
+      "loading": "加载钩子中...",
+      "empty": "未配置钩子",
+      "emptyDesc": "钩子拦截代理生命周期事件，如工具调用。",
+      "viewAll": "查看全部 {{count}} 个钩子",
+      "addHook": "添加钩子",
+      "nHooks": "{{count}} 个钩子"
+    },
+    "tab": {
+      "refresh": "刷新",
+      "create": "创建钩子",
+      "emptyTitle": "未配置钩子",
+      "emptyDesc": "钩子拦截代理生命周期事件，如工具调用、会话开始/结束等。",
+      "createFirst": "创建第一个钩子",
+      "deleteConfirm": "删除 \"{{event}}\" 的钩子？此操作无法撤销。"
+    }
+  },
   "permissions": {
     "title": "权限管理",
     "description": "控制谁可以修改代理配置和文件。所有者始终拥有完全访问权限。",
@@ -961,6 +987,7 @@
     "noRules": "暂无权限规则。所有者默认拥有完全访问权限。",
     "userIdPlaceholder": "搜索联系人或输入ID...",
     "scopePlaceholder": "选择或输入范围...",
+    "unknownWriterLabel": "用户 {{id}}",
     "types": {
       "file_writer": "文件编辑",
       "file_writer_desc": "控制谁可以在群聊中编辑文件和管理定时任务。首位用户自动添加。",

@@ -372,7 +372,6 @@ type ToolsConfig struct {
 	ByProvider       map[string]*ToolPolicySpec  `json:"byProvider,omitempty"` // per-provider overrides
 	ExecApproval     ExecApprovalCfg             `json:"execApproval"`         // exec command approval settings
 	WebFetch         WebFetchPolicyConfig        `json:"web_fetch"`            // domain policy for URL fetching
-	Web              WebToolsConfig              `json:"web"`
 	Browser          BrowserToolConfig           `json:"browser"`
 	RateLimitPerHour int                         `json:"rate_limit_per_hour,omitempty"` // max tool executions per hour per session (0 = disabled)
 	ScrubCredentials *bool                       `json:"scrub_credentials,omitempty"`   // auto-redact API keys/tokens in tool output (default true)
@@ -431,36 +430,6 @@ type ToolPolicySpec struct {
 	ToolCallPrefix string `json:"toolCallPrefix,omitempty"` // prefix to strip from model's tool call names before registry lookup
 }
 
-type WebToolsConfig struct {
-	ProviderOrder []string         `json:"provider_order,omitempty"`
-	Exa           ExaConfig        `json:"exa"`
-	Tavily        TavilyConfig     `json:"tavily"`
-	Brave         BraveConfig      `json:"brave"`
-	DuckDuckGo    DuckDuckGoConfig `json:"duckduckgo"`
-}
-
-type ExaConfig struct {
-	Enabled    bool   `json:"enabled"`
-	APIKey     string `json:"api_key"`
-	MaxResults int    `json:"max_results"`
-}
-
-type TavilyConfig struct {
-	Enabled    bool   `json:"enabled"`
-	APIKey     string `json:"api_key"`
-	MaxResults int    `json:"max_results"`
-}
-
-type BraveConfig struct {
-	Enabled    bool   `json:"enabled"`
-	APIKey     string `json:"api_key"`
-	MaxResults int    `json:"max_results"`
-}
-
-type DuckDuckGoConfig struct {
-	Enabled    bool `json:"enabled"`
-	MaxResults int  `json:"max_results"`
-}
 
 // SessionsConfig controls session behavior.
 // Matching TS src/config/sessions/types.ts + src/config/types.base.ts.
@@ -473,7 +442,7 @@ type SessionsConfig struct {
 // TtsConfig configures text-to-speech.
 // Matching TS src/config/types.tts.ts.
 type TtsConfig struct {
-	Provider   string              `json:"provider,omitempty"`   // "openai", "elevenlabs", "edge", "minimax"
+	Provider   string              `json:"provider,omitempty"`   // "openai", "elevenlabs", "edge", "minimax", "gemini"
 	Auto       string              `json:"auto,omitempty"`       // "off" (default), "always", "inbound", "tagged"
 	Mode       string              `json:"mode,omitempty"`       // "final" (default), "all"
 	MaxLength  int                 `json:"max_length,omitempty"` // max text length before truncation (default 1500)
@@ -482,6 +451,16 @@ type TtsConfig struct {
 	ElevenLabs TtsElevenLabsConfig `json:"elevenlabs"`
 	Edge       TtsEdgeConfig       `json:"edge"`
 	MiniMax    TtsMiniMaxConfig    `json:"minimax"`
+	Gemini     TtsGeminiConfig     `json:"gemini"`
+}
+
+// TtsGeminiConfig configures the Google Gemini TTS provider.
+type TtsGeminiConfig struct {
+	APIKey   string `json:"api_key,omitempty"`  // required; encrypted at rest
+	APIBase  string `json:"api_base,omitempty"` // custom endpoint (optional; SSRF-gated)
+	Voice    string `json:"voice,omitempty"`    // default "Kore"
+	Model    string `json:"model,omitempty"`    // default "gemini-2.5-flash-preview-tts"
+	Speakers string `json:"speakers,omitempty"` // JSON-encoded []SpeakerVoice for multi-speaker mode
 }
 
 // TtsOpenAIConfig configures the OpenAI TTS provider.

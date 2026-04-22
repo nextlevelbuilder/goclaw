@@ -11,6 +11,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -226,23 +227,10 @@ func (c *Channel) handleListWriters(m *discordgo.MessageCreate) {
 		return
 	}
 
-	type fwMeta struct {
-		DisplayName string `json:"displayName"`
-		Username    string `json:"username"`
-	}
-
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("File writers for this server (%d):\n", len(writers)))
 	for i, w := range writers {
-		var meta fwMeta
-		_ = json.Unmarshal(w.Metadata, &meta)
-		label := w.UserID
-		if meta.Username != "" {
-			label = meta.Username
-		} else if meta.DisplayName != "" {
-			label = meta.DisplayName
-		}
-		sb.WriteString(fmt.Sprintf("%d. %s (<@%s>)\n", i+1, label, w.UserID))
+		sb.WriteString(fmt.Sprintf("%d. %s (<@%s>)\n", i+1, channels.WriterLabel(w.Metadata, w.UserID), w.UserID))
 	}
 	send(sb.String())
 }

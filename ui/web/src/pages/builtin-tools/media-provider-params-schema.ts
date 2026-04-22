@@ -112,26 +112,6 @@ export const MEDIA_PARAMS_SCHEMA: Record<string, Record<string, ParamField[]>> =
         ],
       },
     ],
-    suno: [
-      {
-        key: "style",
-        label: "Style",
-        type: "text",
-        default: "",
-        description: "e.g. Pop, Classical, Jazz",
-      },
-      {
-        key: "vocal_gender",
-        label: "Vocal Gender",
-        type: "select",
-        default: "",
-        options: [
-          { value: "", label: "Any" },
-          { value: "m", label: "Male" },
-          { value: "f", label: "Female" },
-        ],
-      },
-    ],
   },
 };
 

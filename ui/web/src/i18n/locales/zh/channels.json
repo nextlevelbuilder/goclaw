@@ -243,7 +243,8 @@
     "thread_ttl": { "label": "线程参与 TTL（小时）", "help": "Bot 停止自动回复已参与线程的小时数。0 = 始终需要 @提及。" },
     "skills": { "label": "Skill过滤", "help": "限制此群组可用的Skill" },
     "tools": { "label": "工具白名单", "help": "限制Agent在此群组中可使用的工具" },
-    "system_prompt": { "label": "系统提示词" }
+    "system_prompt": { "label": "系统提示词" },
+    "platform": { "label": "平台", "help": "选择此 Pancake 页面所服务的平台。" }
   },
   "fieldOptions": {
     "block_reply": {
@@ -288,6 +289,19 @@
       "auto": "自动",
       "raw": "原始",
       "card": "卡片"
+    },
+    "platform": {
+      "facebook":    "Facebook",
+      "instagram":   "Instagram",
+      "threads":     "Threads (测试版)",
+      "tiktok":      "TikTok",
+      "youtube":     "YouTube (测试版)",
+      "shopee":      "Shopee",
+      "line":        "Line",
+      "google":      "Google",
+      "chat_plugin": "Chat Plugin",
+      "lazada":      "Lazada",
+      "tokopedia":   "Tokopedia"
     }
   },
   "groupOverrides": {

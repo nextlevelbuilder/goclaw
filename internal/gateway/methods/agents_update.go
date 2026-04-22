@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/nextlevelbuilder/goclaw/internal/audio"
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
@@ -133,6 +134,16 @@ func (m *AgentsMethods) handleUpdate(ctx context.Context, client *gateway.Client
 					client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, err.Error()))
 					return
 				}
+				// Finding #5: validate tts_params allow-list via shared audio validator
+				// (Action D: single source of truth in internal/audio).
+				if tp, ok := otherMap["tts_params"]; ok && tp != nil {
+					if tpMap, ok := tp.(map[string]any); ok {
+						if err := audio.ValidateAgentTTSParams(tpMap); err != nil {
+							client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, err.Error()))
+							return
+						}
+					}
+				}
 			}
 			updates["other_config"] = []byte(params.OtherConfig)
 		}
@@ -156,10 +167,9 @@ func (m *AgentsMethods) handleUpdate(ctx context.Context, client *gateway.Client
 			updates["skill_evolve"] = *params.SkillEvolve
 		}
 		if params.SkillNudgeInterval != nil {
-			v := *params.SkillNudgeInterval
-			if v <= 0 {
-				v = 0 // DB column is NOT NULL DEFAULT 0
-			}
+			v := max(*params.SkillNudgeInterval,
+				// DB column is NOT NULL DEFAULT 0
+				0)
 			updates["skill_nudge_interval"] = v
 		}
 		if len(params.ReasoningConfig) > 0 {

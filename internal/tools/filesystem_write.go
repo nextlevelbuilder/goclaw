@@ -230,7 +230,7 @@ func (t *WriteFileTool) Execute(ctx context.Context, args map[string]any) *Resul
 	result := SilentResult(msg)
 	result.Deliverable = content
 	if deliver {
-		result.Media = []bus.MediaFile{{Path: resolved}}
+		result.Media = []bus.MediaFile{{Path: resolved, Filename: filepath.Base(resolved)}}
 		// Track delivered path so message tool's self-send guard can detect duplicates.
 		if dm := DeliveredMediaFromCtx(ctx); dm != nil {
 			dm.Mark(resolved)
@@ -276,7 +276,7 @@ func (t *WriteFileTool) executeInSandbox(ctx context.Context, path, content, san
 			workspace = t.workspace
 		}
 		hostPath := filepath.Join(workspace, path)
-		result.Media = []bus.MediaFile{{Path: hostPath}}
+		result.Media = []bus.MediaFile{{Path: hostPath, Filename: filepath.Base(hostPath)}}
 		if dm := DeliveredMediaFromCtx(ctx); dm != nil {
 			dm.Mark(hostPath)
 		}

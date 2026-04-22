@@ -11,6 +11,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -164,10 +165,12 @@ func (c *APIClient) UploadMedia(ctx context.Context, filename string, data io.Re
 }
 
 // ReplyComment sends a reply to a comment on a post (action: "reply_comment").
-func (c *APIClient) ReplyComment(ctx context.Context, conversationID, content string) error {
+// messageID is the ID of the comment being replied to — required by Pancake API.
+func (c *APIClient) ReplyComment(ctx context.Context, conversationID, messageID, content string) error {
 	body, _ := json.Marshal(SendMessageRequest{
-		Action:  "reply_comment",
-		Message: content,
+		Action:    "reply_comment",
+		Message:   content,
+		MessageID: messageID,
 	})
 	url := fmt.Sprintf("%s/pages/%s/conversations/%s/messages", c.pageV1BaseURL, c.pageID, conversationID)
 	if err := c.doRequest(ctx, http.MethodPost, url, bytes.NewReader(body)); err != nil {
@@ -281,6 +284,52 @@ func (c *APIClient) newPageRequest(ctx context.Context, method, rawURL string, b
 	// Keep the header for compatibility; official docs require the query token.
 	req.Header.Set("Authorization", "Bearer "+c.pageAccessToken)
 	return req, nil
+}
+
+// ReactComment toggles the page's like on a comment via Pancake user API:
+// POST {userAPI}/pages/{pageID}/conversations/{convID}/messages/{msgID}/likes
+// with multipart body (action=like_toggle, user_likes=false). Server flips the
+// current state, so call once per fresh comment (dedup prevents double-toggle).
+func (c *APIClient) ReactComment(ctx context.Context, conversationID, messageID string) error {
+	if conversationID == "" || messageID == "" {
+		return fmt.Errorf("pancake: react-comment requires conversation_id and message_id")
+	}
+	if strings.ContainsAny(conversationID, "/?#\\") || strings.ContainsAny(messageID, "/?#\\") {
+		return fmt.Errorf("pancake: invalid character in conversation_id or message_id")
+	}
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	_ = mw.WriteField("action", "like_toggle")
+	_ = mw.WriteField("user_likes", "false")
+	mw.Close()
+
+	url := fmt.Sprintf("%s/pages/%s/conversations/%s/messages/%s/likes",
+		c.userBaseURL, c.pageID, conversationID, messageID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, &buf)
+	if err != nil {
+		return fmt.Errorf("pancake: build react-comment request: %w", err)
+	}
+	q := req.URL.Query()
+	q.Set("access_token", c.apiKey)
+	req.URL.RawQuery = q.Encode()
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+
+	res, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("pancake: react-comment request failed: %w", err)
+	}
+	defer res.Body.Close()
+
+	body, _ := io.ReadAll(res.Body)
+	if res.StatusCode >= 400 {
+		snippet := string(body)
+		if len(snippet) > 300 {
+			snippet = snippet[:300]
+		}
+		return fmt.Errorf("pancake: react-comment HTTP %d: %s", res.StatusCode, snippet)
+	}
+	return nil
 }
 
 // isAuthError checks if an error is an authentication/authorization failure.

@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -43,7 +44,7 @@ func NewCodexProvider(name string, tokenSource TokenSource, apiBase, defaultMode
 		name:         name,
 		apiBase:      apiBase,
 		defaultModel: defaultModel,
-		client:       &http.Client{Timeout: DefaultHTTPTimeout},
+		client:       NewDefaultHTTPClient(),
 		retryConfig:  DefaultRetryConfig(),
 		tokenSource:  tokenSource,
 	}
@@ -131,13 +132,15 @@ func (p *CodexProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk
 	if err != nil {
 		return nil, err
 	}
-	defer respBody.Close()
+	// Wrap respBody so ctx cancellation closes the socket, unblocking bufio.Scanner.
+	cb := NewCtxBody(ctx, respBody)
+	defer cb.Close()
 
 	result := &ChatResponse{FinishReason: "stop"}
 	toolCalls := make(map[string]*codexToolCallAcc) // keyed by item_id
 	streamState := newCodexMessageStreamState()
 
-	sse := NewSSEScanner(respBody)
+	sse := NewSSEScanner(cb)
 	for sse.Next() {
 		data := sse.Data()
 
@@ -146,7 +149,9 @@ func (p *CodexProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk
 			continue
 		}
 
-		p.processSSEEvent(&event, result, toolCalls, streamState, onChunk, stripThinking)
+		if err := p.processSSEEvent(&event, result, toolCalls, streamState, onChunk, stripThinking); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := sse.Err(); err != nil {
@@ -187,7 +192,7 @@ func (p *CodexProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk
 // processSSEEvent handles a single SSE event during streaming.
 // stripThinking drops reasoning summaries from user-visible output while
 // leaving billing counters (Usage.ThinkingTokens) untouched.
-func (p *CodexProvider) processSSEEvent(event *codexSSEEvent, result *ChatResponse, toolCalls map[string]*codexToolCallAcc, streamState *codexMessageStreamState, onChunk func(StreamChunk), stripThinking bool) {
+func (p *CodexProvider) processSSEEvent(event *codexSSEEvent, result *ChatResponse, toolCalls map[string]*codexToolCallAcc, streamState *codexMessageStreamState, onChunk func(StreamChunk), stripThinking bool) error {
 	switch event.Type {
 	case "response.output_item.added":
 		if event.Item != nil {
@@ -247,7 +252,7 @@ func (p *CodexProvider) processSSEEvent(event *codexSSEEvent, result *ChatRespon
 			}
 		}
 
-	case "response.completed", "response.incomplete", "response.failed":
+	case "response.completed", "response.incomplete":
 		if event.Response != nil {
 			if result.Content == "" {
 				streamState.ingestCompletedResponse(event.Response)
@@ -269,5 +274,17 @@ func (p *CodexProvider) processSSEEvent(event *codexSSEEvent, result *ChatRespon
 				result.FinishReason = "length"
 			}
 		}
+
+	case "response.failed":
+		errMsg := "codex: response failed during generation"
+		if event.Response != nil && event.Response.Error != nil {
+			if event.Response.Error.Message != "" {
+				errMsg = fmt.Sprintf("codex: response failed: %s", event.Response.Error.Message)
+			} else if event.Response.Error.Code != "" {
+				errMsg = fmt.Sprintf("codex: response failed: %s", event.Response.Error.Code)
+			}
+		}
+		return errors.New(errMsg)
 	}
+	return nil
 }

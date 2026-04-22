@@ -30,7 +30,7 @@ type TenantBackupOptions struct {
 // TenantBackupManifest describes the contents of a tenant backup archive.
 type TenantBackupManifest struct {
 	Version       int            `json:"version"`
-	Format        string         `json:"format"`         // "goclaw-tenant-backup"
+	Format        string         `json:"format"` // "goclaw-tenant-backup"
 	TenantID      string         `json:"tenant_id"`
 	TenantSlug    string         `json:"tenant_slug"`
 	SchemaVersion int            `json:"schema_version"`
@@ -44,7 +44,7 @@ type TenantBackupManifest struct {
 // Archive layout:
 //
 //	manifest.json
-//	tables/{table}.jsonl   — one file per table, JSONL rows filtered by tenant_id
+//	tables/{table}.jsonl   — one file per table, JSONL rows filtered by tenant scope
 //	workspace/             — TenantWorkspace contents
 //	data/                  — TenantDataDir contents
 func TenantBackup(ctx context.Context, opts TenantBackupOptions) (*TenantBackupManifest, error) {
@@ -91,7 +91,8 @@ func TenantBackup(ctx context.Context, opts TenantBackupOptions) (*TenantBackupM
 		// Buffer the table JSONL in a temp file to get byte count for tar header.
 		tmp, err := os.CreateTemp("", "goclaw-tenant-table-*.jsonl")
 		if err != nil {
-			tw.Close(); gw.Close()
+			tw.Close()
+			gw.Close()
 			return nil, fmt.Errorf("create temp for %s: %w", table.Name, err)
 		}
 		tmpPath := tmp.Name()
@@ -101,7 +102,8 @@ func TenantBackup(ctx context.Context, opts TenantBackupOptions) (*TenantBackupM
 
 		if exportErr != nil {
 			os.Remove(tmpPath)
-			tw.Close(); gw.Close()
+			tw.Close()
+			gw.Close()
 			return nil, fmt.Errorf("export %s: %w", table.Name, exportErr)
 		}
 
@@ -110,7 +112,8 @@ func TenantBackup(ctx context.Context, opts TenantBackupOptions) (*TenantBackupM
 		// Add JSONL to tar regardless of row count (empty files are valid).
 		if err := addFileToTar(tw, tmpPath, "tables/"+table.Name+".jsonl"); err != nil {
 			os.Remove(tmpPath)
-			tw.Close(); gw.Close()
+			tw.Close()
+			gw.Close()
 			return nil, fmt.Errorf("archive %s: %w", table.Name, err)
 		}
 		os.Remove(tmpPath)
@@ -123,7 +126,8 @@ func TenantBackup(ctx context.Context, opts TenantBackupOptions) (*TenantBackupM
 		progress("filesystem", "archiving workspace")
 		wFiles, wBytes, err := ArchiveDirectory(tw, opts.WorkspacePath, "workspace", nil)
 		if err != nil {
-			tw.Close(); gw.Close()
+			tw.Close()
+			gw.Close()
 			return nil, fmt.Errorf("archive workspace: %w", err)
 		}
 		manifest.Stats.FilesystemFiles += wFiles
@@ -135,7 +139,8 @@ func TenantBackup(ctx context.Context, opts TenantBackupOptions) (*TenantBackupM
 		progress("filesystem", "archiving data dir")
 		dFiles, dBytes, err := ArchiveDirectory(tw, opts.DataDir, "data", nil)
 		if err != nil {
-			tw.Close(); gw.Close()
+			tw.Close()
+			gw.Close()
 			return nil, fmt.Errorf("archive data dir: %w", err)
 		}
 		manifest.Stats.FilesystemFiles += dFiles
@@ -146,11 +151,13 @@ func TenantBackup(ctx context.Context, opts TenantBackupOptions) (*TenantBackupM
 	// -- Manifest (last, stats complete) ----------------------------------------
 	manifestJSON, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
-		tw.Close(); gw.Close()
+		tw.Close()
+		gw.Close()
 		return nil, fmt.Errorf("marshal manifest: %w", err)
 	}
 	if err := addBytesToTar(tw, "manifest.json", manifestJSON); err != nil {
-		tw.Close(); gw.Close()
+		tw.Close()
+		gw.Close()
 		return nil, fmt.Errorf("write manifest.json: %w", err)
 	}
 

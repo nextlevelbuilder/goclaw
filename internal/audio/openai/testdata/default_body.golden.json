@@ -1,0 +1,7 @@
+{
+  "input": "hello",
+  "model": "gpt-4o-mini-tts",
+  "response_format": "mp3",
+  "speed": 1,
+  "voice": "alloy"
+}

@@ -125,7 +125,7 @@ func TestSplitChunks_Empty(t *testing.T) {
 func TestSplitChunks_MultipleChunks(t *testing.T) {
 	// 5 paragraphs of 40 chars each; max=50 → multiple chunks.
 	var paras []string
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		paras = append(paras, strings.Repeat(fmt.Sprintf("%d", i), 40))
 	}
 	text := strings.Join(paras, "\n\n")
@@ -341,7 +341,7 @@ func TestExtract_LongText_SplitsIntoChunks(t *testing.T) {
 	// Build text longer than maxChunkChars (12000) with paragraph breaks.
 	para := strings.Repeat("word ", 200) // ~1000 chars per para
 	var paras []string
-	for i := 0; i < 15; i++ {
+	for range 15 {
 		paras = append(paras, para)
 	}
 	longText := strings.Join(paras, "\n\n") // ~15000+ chars

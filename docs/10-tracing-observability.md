@@ -30,9 +30,16 @@ flowchart LR
 
 ### Cancel Handling
 
-When a run is cancelled via `/stop` or `/stopall`, the run context is cancelled but trace finalization still needs to persist. `FinishTrace()` detects `ctx.Err() != nil` and switches to `context.Background()` for the final database write. The trace status is set to `"cancelled"` instead of `"error"`.
+When a run is cancelled via `chat.abort` (WS) or manual stop, the router atomically transitions to "aborting" state, cancels the request context, and waits 3 seconds for the agent goroutine to exit. If it doesn't, the trace is force-marked `cancelled` to prevent orphaned traces.
 
-Context values (traceID, collector) survive cancellation -- only `ctx.Done()` and `ctx.Err()` change. This allows trace finalization to find everything it needs with a fresh context for the DB call.
+During cancellation:
+- HTTP provider streams close immediately (context-aware transport with `ResponseHeaderTimeout`; SSE body closes via goroutine wrapper to unblock socket read)
+- Tool execution terminates (shell: process-group kill; browser: page close)
+- Agent loop receives `ctx.Done()` and propagates cancellation up
+
+Trace finalization persists independently with a detached context (`context.WithoutCancel`), 5-second timeout, and exponential backoff retry (3 tries, max 10 total via retry queue). This ensures trace status writes don't fail silently due to cancellation.
+
+Stale recovery is **currently disabled**. The implementation exists but the background loop is not started in `Collector.Start()`. Reason: the sweep condition is `start_time < NOW() - threshold`, which measures trace age rather than inactivity. Any threshold low enough to be useful (2–10 min) would kill healthy long-running agent runs (research chains, large code generation, extended shell commands). Re-enable only after adding a `last_span_at` column so recovery can gate on "no activity for N minutes" instead of "started > N min ago". Until then, zombie traces from gateway crashes may remain `running` in the DB — an accepted safety-net gap traded against false kills. The primary abort path (router 2-phase abort + `trace.status` WS event) handles the common case. Context values (traceID, collector) survive cancellation — only `ctx.Done()` and `ctx.Err()` change.
 
 ---
 
@@ -211,20 +218,14 @@ Delegation history is automatically recorded by `DelegateManager.saveDelegationH
 
 ## File Reference
 
-| File | Description |
-|------|-------------|
-| `internal/tracing/collector.go` | Collector buffer-flush, EmitSpan, FinishTrace, verbose mode |
-| `internal/tracing/context.go` | Trace context propagation (TraceID, ParentSpanID, DelegateParentTraceID) |
-| `internal/tracing/cost.go` | Cost calculation and pricing lookup |
-| `internal/tracing/snapshot_worker.go` | Hourly usage aggregation into snapshots |
-| `internal/tracing/otelexport/exporter.go` | OTel OTLP exporter (gRPC + HTTP) |
-| `internal/store/tracing_store.go` | TracingStore interface, span/trace type constants |
-| `internal/store/pg/tracing.go` | PostgreSQL trace/span persistence + aggregation |
-| `internal/http/traces.go` | Trace HTTP API handler (GET /v1/traces) |
-| `internal/agent/loop_tracing.go` | Span emission from agent loop (LLM, tool, agent spans) |
-| `internal/http/delegations.go` | Delegation history HTTP API handler |
-| `internal/gateway/methods/delegations.go` | Delegation history RPC handlers |
-| `internal/pipeline/` | v3 agent loop pipeline (stages route to agent loop for span emission) |
+| Module | Path | Purpose |
+|---|---|---|
+| Tracing engine | `internal/tracing/` | Collector (buffer-flush, EmitSpan, FinishTrace), context propagation, cost calculation, OTel OTLP exporter |
+| Store & snapshots | `internal/store/tracing_store.go`, `internal/store/pg/tracing.go`, `internal/tracing/snapshot_worker.go` | TracingStore interface, PostgreSQL persistence + aggregation, hourly usage snapshots |
+| Agent & pipeline integration | `internal/agent/loop_tracing.go`, `internal/pipeline/` | Span emission from agent loop (LLM, tool, agent spans), pipeline stage tracing |
+| HTTP & RPC handlers | `internal/http/traces.go`, `internal/http/delegations.go`, `internal/gateway/methods/delegations.go` | GET /v1/traces, delegation history HTTP + RPC handlers |
+
+Use `grep` or your editor's symbol search for specific files.
 
 ---
 

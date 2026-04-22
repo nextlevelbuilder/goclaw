@@ -142,6 +142,18 @@ func (m *TeamToolManager) dispatchTaskToAgent(ctx context.Context, task *store.T
 		originUserID = originChatID
 	}
 
+	// Preserve real acting sender so permission checks on the teammate's
+	// turn (e.g. write_file in group chat) attribute to the original user
+	// rather than the synthetic "teammate:dashboard" sender (#915).
+	// For deferred dispatches (ticker/unblock), context has no sender — fall back
+	// to origin_sender_id stored in task metadata at creation time.
+	originSenderID := store.SenderIDFromContext(ctx)
+	if originSenderID == "" || bus.IsInternalSender(originSenderID) {
+		if s, ok := task.Metadata["origin_sender_id"].(string); ok && s != "" && !bus.IsInternalSender(s) {
+			originSenderID = s
+		}
+	}
+
 	// Resolve peer kind from context; fallback to task metadata, then "direct".
 	originPeerKind := ToolPeerKindFromCtx(ctx)
 	if originPeerKind == "" {
@@ -162,6 +174,19 @@ func (m *TeamToolManager) dispatchTaskToAgent(ctx context.Context, task *store.T
 		MetaToAgentDisplay:  ag.DisplayName,
 		MetaTeamTaskID:      task.ID.String(),
 		MetaTeamID:          teamID.String(),
+	}
+	if originSenderID != "" {
+		meta[MetaOriginSenderID] = originSenderID
+	}
+	// Role propagation: prefer context, fall back to task metadata for deferred dispatches.
+	originRole := store.RoleFromContext(ctx)
+	if originRole == "" {
+		if r, ok := task.Metadata["origin_role"].(string); ok && r != "" {
+			originRole = r
+		}
+	}
+	if originRole != "" {
+		meta[MetaOriginRole] = originRole
 	}
 	// Resolve local key from context; fallback to task metadata for deferred dispatches.
 	localKey := ToolLocalKeyFromCtx(ctx)

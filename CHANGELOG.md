@@ -2,6 +2,35 @@
 
 All notable changes to GoClaw are documented here. For full documentation, see [docs.goclaw.sh](https://docs.goclaw.sh).
 
+## Unreleased
+
+### Breaking Changes
+
+- **Context pruning now opt-in.** Previously tool-result trimming ran by default
+  for all providers; now requires explicit `contextPruning.mode: "cache-ttl"` in
+  `config.agents.defaults` to enable. Matches upstream TS design and prevents
+  silent prompt-cache invalidation on Anthropic.
+
+  Migration — add to `config.json5`:
+  ```json5
+  agents: {
+    defaults: {
+      contextPruning: { mode: "cache-ttl" }
+    }
+  }
+  ```
+
+### Improvements
+
+- **Context pruning cleanup.** Removed redundant Pass 0 (per-result 30% guard),
+  deduplicated double prune call per iteration, added SanitizeHistory to
+  PruneStage for broken tool_use/tool_result pair cleanup.
+- **Context pruning config backfill (migration).** Agents with existing custom
+  `context_pruning` config (e.g., `softTrimRatio`, `keepLastAssistants`) but
+  missing a `mode` field get auto-backfilled with `mode: "cache-ttl"` to
+  preserve their intent after the opt-in flip. Rows with NULL config stay
+  NULL (new opt-in default applies). PG migration 51; SQLite schema v19.
+
 ## Project Status
 
 ### Implemented & Tested in Production

@@ -6,7 +6,10 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/hooks"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // FinalizeStage runs once after the iteration loop exits. Sanitizes content,
@@ -129,8 +132,19 @@ func (s *FinalizeStage) Execute(ctx context.Context, state *RunState) error {
 		state.Observe.FinalContent = ""
 	}
 
+	// 11. Hook: async EventStop — fire and forget.
 	// run.completed event is emitted by loop_run.go after Pipeline.Run() returns,
 	// with full tracing context. No duplicate emission here.
+	if s.deps.Hooks != nil {
+		detached := context.WithoutCancel(ctx)
+		go s.deps.FireHook(detached, hooks.Event{ //nolint:errcheck
+			EventID:   uuid.NewString(),
+			SessionID: state.Input.SessionKey,
+			TenantID:  store.TenantIDFromContext(ctx),
+			AgentID:   store.AgentIDFromContext(ctx),
+			HookEvent: hooks.EventStop,
+		})
+	}
 
 	return nil
 }

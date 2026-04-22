@@ -3,6 +3,8 @@ package pipeline
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
@@ -57,6 +59,28 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 	}
 	resp, err := s.deps.CallLLM(ctx, state, req)
 	if err != nil {
+		// Issue 958: Check for context overflow — attempt emergency compaction + retry
+		if isContextOverflowErr(err) {
+			if state.Think.OverflowRetries > 0 {
+				return fmt.Errorf("context overflow after compaction: %w", err)
+			}
+			state.Think.OverflowRetries++
+			// Attempt emergency compaction
+			if s.deps.CompactMessages != nil {
+				originalLen := len(state.Messages.History())
+				compacted, compactErr := s.deps.CompactMessages(ctx, state.Messages.History(), state.Model)
+				if compactErr == nil {
+					state.Messages.ReplaceHistory(compacted)
+					slog.Info("emergency_compaction_triggered",
+						"run_id", state.RunID,
+						"original_msgs", originalLen,
+						"compacted_msgs", len(compacted),
+					)
+					return nil // Retry this iteration (Continue result)
+				}
+				slog.Warn("emergency_compaction_failed", "error", compactErr)
+			}
+		}
 		return fmt.Errorf("llm call: %w", err)
 	}
 	state.Think.LastResponse = resp
@@ -69,9 +93,14 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 		state.Think.TotalUsage.ThinkingTokens += resp.Usage.ThinkingTokens
 	}
 
-	// 6. Handle truncation: only retry when tool call args are truncated or malformed.
+	// 6. Handle truncation: retry when tool call args are truncated or malformed.
+	// Gemini returns finish_reason="tool_calls" (not "length") even when the thinking
+	// budget exhausted max_tokens before args could be emitted — detect via empty
+	// args on allowlisted mutating tools. Nullary tools (datetime, heartbeat) skip
+	// the heuristic so their legitimate empty-args calls pass through.
 	// Text-only truncation (no tool calls) is a valid long answer — deliver it.
-	truncated := resp.FinishReason == "length" && len(resp.ToolCalls) > 0
+	truncated := len(resp.ToolCalls) > 0 && (resp.FinishReason == "length" ||
+		(resp.FinishReason == "tool_calls" && toolCallsHaveMissingRequiredArgs(resp.ToolCalls)))
 	parseErr := !truncated && toolCallsHaveParseErrors(resp.ToolCalls)
 	if truncated || parseErr {
 		state.Think.TruncRetries++
@@ -87,7 +116,8 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 		state.Messages.AppendPending(providers.Message{Role: "user", Content: hint})
 		return nil // Continue to next iteration for retry
 	}
-	state.Think.TruncRetries = 0 // reset on success
+	state.Think.TruncRetries = 0    // reset on success
+	state.Think.OverflowRetries = 0 // reset on success
 
 	// 7. Uniquify tool call IDs (OpenAI returns 400 on duplicates across iterations).
 	// Skip if raw content present (Anthropic thinking passback) to avoid desync.
@@ -156,4 +186,44 @@ func toolCallsHaveParseErrors(calls []providers.ToolCall) bool {
 		}
 	}
 	return false
+}
+
+// mutatingToolsRequireArgs is the static allowlist of tools where empty
+// arguments are virtually never legitimate. Production telemetry (30d) shows
+// 1/211 tool_call spans had empty args (the Gemini-3 budget-exhaustion trace);
+// datetime/heartbeat/web_search always carry args. Conservative scope — expand
+// only with telemetry justification.
+var mutatingToolsRequireArgs = map[string]struct{}{
+	"write_file":   {},
+	"edit":         {},
+	"exec":         {},
+	"create_image": {},
+	"read_file":    {},
+}
+
+// toolCallsHaveMissingRequiredArgs returns true when any call in the batch
+// targets a mutating tool from the allowlist but carries empty Arguments.
+// This is the Gemini-3 truncation signal: finish_reason="tool_calls" with
+// len(args)==0 on a tool we know requires params means the budget ran out
+// before args could be emitted.
+func toolCallsHaveMissingRequiredArgs(calls []providers.ToolCall) bool {
+	for _, tc := range calls {
+		if _, requires := mutatingToolsRequireArgs[tc.Name]; !requires {
+			continue
+		}
+		if len(tc.Arguments) == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// isContextOverflowErr checks if an error indicates context window overflow.
+// Uses the exported helper from providers package for pattern matching.
+func isContextOverflowErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	lower := strings.ToLower(err.Error())
+	return providers.IsContextOverflowMessage(lower)
 }

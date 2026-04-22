@@ -17,9 +17,12 @@ interface SummoningModalProps {
   agentName: string;
   onCompleted: () => void;
   onResummon: (agentId: string) => Promise<void>;
+  onCancel?: (agentId: string) => Promise<void>;
   hideClose?: boolean;
   onContinue?: () => void;
 }
+
+const CANCEL_THRESHOLD_SEC = 60;
 
 const SUMMONING_FILES = [
   { name: "SOUL.md", required: true },
@@ -33,6 +36,7 @@ export function SummoningModal({
   agentName,
   onCompleted,
   onResummon,
+  onCancel,
   hideClose = false,
   onContinue,
 }: SummoningModalProps) {
@@ -41,6 +45,7 @@ export function SummoningModal({
   const [status, setStatus] = useState<"summoning" | "completed" | "failed">("summoning");
   const [errorMsg, setErrorMsg] = useState("");
   const [retrying, setRetrying] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -99,6 +104,19 @@ export function SummoningModal({
   );
 
   useWsEvent("agent.summoning", handleSummoningEvent);
+
+  const handleCancel = async () => {
+    if (!onCancel) return;
+    setCancelling(true);
+    try {
+      await onCancel(agentId);
+      // BE emits WS type=failed → existing handler closes modal
+    } catch {
+      // keep modal open
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   const handleRetry = async () => {
     setRetrying(true);
@@ -233,6 +251,15 @@ export function SummoningModal({
             <p className="text-center text-xs text-muted-foreground tabular-nums">
               {t("summoning.wait")} ({Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, "0")})
             </p>
+          )}
+
+          {status === "summoning" && elapsed >= CANCEL_THRESHOLD_SEC && onCancel && (
+            <div className="flex flex-col items-center gap-1">
+              <p className="text-xs text-muted-foreground">{t("summoning.takingTooLong")}</p>
+              <Button variant="ghost" size="sm" onClick={handleCancel} disabled={cancelling}>
+                {cancelling ? t("summoning.cancelling") : t("summoning.cancel")}
+              </Button>
+            </div>
           )}
 
           {status === "completed" && onContinue && (

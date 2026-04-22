@@ -15,6 +15,9 @@ import (
 // connections are established via pool.AcquireUser() and BridgeTools created.
 func (l *Loop) getUserMCPTools(ctx context.Context, userID string) []tools.Tool {
 	if len(l.mcpUserCredSrvs) == 0 || l.mcpPool == nil || l.mcpStore == nil || userID == "" {
+		if userID == "" && len(l.mcpUserCredSrvs) > 0 {
+			slog.Debug("mcp.user_tools_skipped", "reason", "empty_user_id", "servers", len(l.mcpUserCredSrvs))
+		}
 		return nil
 	}
 
@@ -86,7 +89,7 @@ func (l *Loop) getUserMCPTools(ctx context.Context, userID string) []tools.Tool 
 		// shared tool registry so ExecuteWithContext can resolve them by name.
 		reg, _ := l.tools.(*tools.Registry)
 		for _, mcpTool := range entry.MCPTools() {
-			bt := mcpbridge.NewBridgeTool(srv.Name, mcpTool, entry.ClientPtr(), srv.ToolPrefix, srv.TimeoutSec, entry.Connected())
+			bt := mcpbridge.NewBridgeTool(srv.Name, mcpTool, entry.ClientPtr(), srv.ToolPrefix, srv.TimeoutSec, entry.Connected(), srv.ID, l.mcpGrantChecker)
 			// Register in registry so ExecuteWithContext can find them.
 			// Skip if already registered (another user loaded this server with same tool names).
 			if reg != nil {
@@ -100,6 +103,13 @@ func (l *Loop) getUserMCPTools(ctx context.Context, userID string) []tools.Tool 
 
 	if len(userTools) > 0 {
 		l.mcpUserTools.Store(userID, userTools)
+		// Update "mcp" tool group so policy expansion via alsoAllow includes
+		// per-user tools. MergeToolGroup is additive — safe for concurrent users.
+		var names []string
+		for _, t := range userTools {
+			names = append(names, t.Name())
+		}
+		l.registry.MergeToolGroup("mcp", names)
 		slog.Info("mcp.user_tools_loaded", "user", userID, "tools", len(userTools))
 	}
 	return userTools

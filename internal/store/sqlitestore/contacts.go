@@ -155,11 +155,15 @@ func (s *SQLiteContactStore) GetContactsBySenderIDs(ctx context.Context, senderI
 		placeholders[i] = "?"
 		args[i] = id
 	}
+	// Tenant scope — parity with PG store. Prevents cross-tenant probing of
+	// displayName/username by a tenant-A user supplying tenant-B sender_ids.
+	tid := store.TenantIDFromContext(ctx)
+	args = append(args, tid)
 
 	// SQLite has no DISTINCT ON; emulate with GROUP BY + MAX rowid trick via subquery
 	query := `SELECT ` + contactSelectCols + `
 		FROM channel_contacts
-		WHERE sender_id IN (` + strings.Join(placeholders, ",") + `)
+		WHERE sender_id IN (` + strings.Join(placeholders, ",") + `) AND tenant_id = ?
 		GROUP BY sender_id
 		ORDER BY sender_id, last_seen_at DESC`
 

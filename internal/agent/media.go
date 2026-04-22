@@ -104,7 +104,29 @@ func (l *Loop) persistMedia(sessionKey string, files []bus.MediaFile, workspace 
 		if ext == "" {
 			ext = filepath.Ext(srcPath) // fallback to source extension
 		}
-		dstPath := filepath.Join(uploadsDir, id+ext)
+
+		// Disk-naming: preserve user filename when present so vault enrichment
+		// can process uploads (UUID-only names are skipped by enrich_skip_filter).
+		// Empty Filename (voice note, clipboard paste, tool-generated) →
+		// fall back to UUID, keeping legacy behavior.
+		diskName := id + ext
+		if stem := sanitizeFilename(f.Filename); stem != "" {
+			diskName = stem + "-" + shortID(8) + ext
+		}
+		dstPath := filepath.Join(uploadsDir, diskName)
+
+		// Traversal guard: ensure resolved path is inside uploadsDir.
+		// sanitizeFilename already strips ".." / "/" / "\\", but this is
+		// a defense-in-depth check covering any future regressions.
+		cleanDst := filepath.Clean(dstPath) + string(os.PathSeparator)
+		cleanUploads := filepath.Clean(uploadsDir) + string(os.PathSeparator)
+		if !strings.HasPrefix(cleanDst, cleanUploads) {
+			slog.Warn("media: refusing to persist outside uploadsDir", "dst", dstPath, "uploads", uploadsDir)
+			if sanitizedTemp != "" {
+				os.Remove(sanitizedTemp)
+			}
+			continue
+		}
 
 		if err := copyMediaFile(srcPath, dstPath); err != nil {
 			slog.Warn("media: failed to persist file", "path", f.Path, "error", err)
@@ -467,7 +489,7 @@ func (l *Loop) reloadMediaForMessages(msgs []providers.Message, maxMessages int)
 			if p == "" {
 				continue
 			}
-			imageFiles = append(imageFiles, bus.MediaFile{Path: p, MimeType: ref.MimeType})
+			imageFiles = append(imageFiles, bus.MediaFile{Path: p, MimeType: ref.MimeType, Filename: filepath.Base(p)})
 		}
 
 		if !hasImageRef {

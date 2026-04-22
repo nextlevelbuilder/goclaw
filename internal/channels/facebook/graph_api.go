@@ -189,7 +189,7 @@ var graphBackoffBase = 1 * time.Second
 func (g *GraphClient) doRequest(ctx context.Context, method, path string, body any) ([]byte, error) {
 	apiURL := fmt.Sprintf("%s/%s%s", graphAPIBase, graphAPIVersion, path)
 
-	for attempt := 0; attempt < maxRetries; attempt++ {
+	for attempt := range maxRetries {
 		if attempt > 0 {
 			backoff := time.Duration(1<<uint(attempt-1)) * graphBackoffBase
 			select {

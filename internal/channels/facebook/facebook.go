@@ -198,6 +198,14 @@ func (ch *Channel) isBotEcho(chatID string, eventAt time.Time) bool {
 
 // Send delivers an outbound message. Dispatches to comment reply or Messenger based on fb_mode metadata.
 func (ch *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
+	// NO_REPLY / suppressed-error path: empty content with no media means the
+	// caller wants downstream cleanup (placeholder, typing) but no user-visible
+	// message. Graph API rejects empty text, so short-circuit here — matches
+	// the pattern used by Telegram, Discord and Slack.
+	if msg.Content == "" && len(msg.Media) == 0 {
+		return nil
+	}
+
 	mode := msg.Metadata["fb_mode"]
 
 	switch mode {

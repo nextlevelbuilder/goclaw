@@ -5,13 +5,26 @@ import (
 	"fmt"
 	"os"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/google/uuid"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/spf13/cobra"
 
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
 )
+
+func openTenantBackupDB(cfg *config.Config) (*sql.DB, error) {
+	dsn := cfg.Database.PostgresDSN
+	if dsn == "" {
+		return nil, fmt.Errorf("GOCLAW_POSTGRES_DSN not configured")
+	}
+
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("open db: %w", err)
+	}
+	return db, nil
+}
 
 // resolveTenantForCLI opens the DB, looks up the tenant by slug or UUID,
 // and returns the resolved tenant ID, slug, and an open *sql.DB (caller must close).
@@ -20,14 +33,9 @@ func resolveTenantForCLI(cmd *cobra.Command, cfg *config.Config, rawID, slug str
 		return uuid.Nil, "", nil, fmt.Errorf("--tenant <slug> or --tenant-id <uuid> is required")
 	}
 
-	dsn := cfg.Database.PostgresDSN
-	if dsn == "" {
-		return uuid.Nil, "", nil, fmt.Errorf("GOCLAW_POSTGRES_DSN not configured")
-	}
-
-	db, err := sql.Open("pgx", dsn)
+	db, err := openTenantBackupDB(cfg)
 	if err != nil {
-		return uuid.Nil, "", nil, fmt.Errorf("open db: %w", err)
+		return uuid.Nil, "", nil, err
 	}
 
 	ts := pg.NewPGTenantStore(db)

@@ -27,6 +27,11 @@ const (
 	RoleAdmin    Role = "admin"    // Full access to all methods
 	RoleOperator Role = "operator" // Read + write access (no admin operations)
 	RoleViewer   Role = "viewer"   // Read-only access
+
+	// RoleNone is a sentinel returned by MethodRole for methods that have no
+	// explicit classification. The router treats it as deny-for-everyone so
+	// newly-added RPCs are secure-by-default (fail-closed).
+	RoleNone Role = ""
 )
 
 // Scope represents a specific permission scope.
@@ -88,8 +93,14 @@ func (pe *PolicyEngine) IsOwner(senderID string) bool {
 }
 
 // CanAccess checks if a role has access to a gateway RPC method.
+// Unclassified methods (MethodRole == RoleNone) are denied for every role
+// including owner — callers must surface an explicit PERMISSION_DENIED/
+// UNAUTHORIZED and never silently permit.
 func (pe *PolicyEngine) CanAccess(role Role, method string) bool {
 	requiredRole := MethodRole(method)
+	if requiredRole == RoleNone {
+		return false
+	}
 	return roleLevel(role) >= roleLevel(requiredRole)
 }
 
@@ -130,7 +141,18 @@ func RoleFromScopes(scopes []Scope) Role {
 }
 
 // MethodRole returns the minimum role required for a given RPC method.
+//
+// Policy is fail-closed (default-deny): methods absent from every allowlist
+// return RoleNone. The gateway dispatcher must reject RoleNone with an
+// UNAUTHORIZED / PERMISSION_DENIED error rather than granting viewer access.
+// This is the fix for issue #866 where default-permit let unauthenticated
+// clients invoke mutation/exfiltration RPCs (heartbeat.*, logs.tail, etc.).
 func MethodRole(method string) Role {
+	// System methods that bypass auth entirely (pre-auth handshake only).
+	if isPublicMethod(method) {
+		return RoleViewer
+	}
+
 	// Admin-only methods
 	if isAdminMethod(method) {
 		return RoleAdmin
@@ -141,8 +163,26 @@ func MethodRole(method string) Role {
 		return RoleOperator
 	}
 
-	// Everything else is read-only (viewer can access)
-	return RoleViewer
+	// Read-only methods (viewer and above)
+	if isReadMethod(method) {
+		return RoleViewer
+	}
+
+	// Fail-closed: unknown / unclassified method → deny.
+	return RoleNone
+}
+
+// isPublicMethod lists methods every authenticated (and some pre-auth) client
+// is allowed to call. Kept tiny on purpose — do not expand without review.
+func isPublicMethod(method string) bool {
+	switch method {
+	case protocol.MethodConnect,
+		protocol.MethodHealth,
+		protocol.MethodStatus,
+		protocol.MethodBrowserPairingStatus:
+		return true
+	}
+	return false
 }
 
 // MethodScopes returns the scopes required for a method.
@@ -164,38 +204,91 @@ func MethodScopes(method string) []Scope {
 
 func isAdminMethod(method string) bool {
 	adminMethods := []string{
+		// Config — admin/owner only. Additional master-scope/owner guards live
+		// in the handler middleware, but classify here for defense-in-depth.
+		protocol.MethodConfigGet,
 		protocol.MethodConfigApply,
 		protocol.MethodConfigPatch,
+		protocol.MethodConfigSchema,
+		protocol.MethodConfigDefaults,
+		protocol.MethodConfigPermissionsList,
+		protocol.MethodConfigPermissionsGrant,
+		protocol.MethodConfigPermissionsRevoke,
+
+		// Agents — create/update/delete and link mutations.
 		protocol.MethodAgentsCreate,
 		protocol.MethodAgentsUpdate,
 		protocol.MethodAgentsDelete,
-		protocol.MethodAgentsLinksList,
 		protocol.MethodAgentsLinksCreate,
 		protocol.MethodAgentsLinksUpdate,
 		protocol.MethodAgentsLinksDelete,
+
+		// Channels.
 		protocol.MethodChannelsToggle,
+		protocol.MethodChannelInstancesCreate,
+		protocol.MethodChannelInstancesUpdate,
+		protocol.MethodChannelInstancesDelete,
+
+		// Pairing management (approve/revoke/list/deny require admin).
 		protocol.MethodPairingApprove,
+		protocol.MethodPairingDeny,
+		protocol.MethodPairingList,
 		protocol.MethodPairingRevoke,
-		protocol.MethodTeamsList,
+
+		// Teams — create/delete/update/member management.
 		protocol.MethodTeamsCreate,
-		protocol.MethodTeamsGet,
 		protocol.MethodTeamsDelete,
-		protocol.MethodTeamsTaskList,
-		protocol.MethodTeamsTaskGet,
-		protocol.MethodTeamsTaskComments,
-		protocol.MethodTeamsTaskEvents,
+		protocol.MethodTeamsUpdate,
+		protocol.MethodTeamsMembersAdd,
+		protocol.MethodTeamsMembersRemove,
+		protocol.MethodTeamsTaskDelete,
+		protocol.MethodTeamsTaskDeleteBulk,
+
+		// Tenants — write paths.
+		"tenants.create",
+		"tenants.update",
+		"tenants.users.add",
+		"tenants.users.remove",
+
+		// API keys expose secret material — gate list + mutations as admin.
 		protocol.MethodAPIKeysList,
 		protocol.MethodAPIKeysCreate,
 		protocol.MethodAPIKeysRevoke,
+
+		// Skills (can rewrite agent behavior).
 		protocol.MethodSkillsUpdate,
+
+		// Heartbeat — any write/test path (closes CVE #866 step 2 + step 4).
+		protocol.MethodHeartbeatSet,
+		protocol.MethodHeartbeatToggle,
+		protocol.MethodHeartbeatTest,
+		protocol.MethodHeartbeatChecklistSet,
+
+		// Live server logs — data exfiltration risk (closes CVE #866 step 3).
+		protocol.MethodLogsTail,
+
+		// Hooks mutations (the handler middleware also enforces this).
+		protocol.MethodHooksCreate,
+		protocol.MethodHooksUpdate,
+		protocol.MethodHooksDelete,
+		protocol.MethodHooksToggle,
+
+		// Voice catalogue refresh touches provider credentials.
+		protocol.MethodVoicesRefresh,
+
+		// TTS config mutations touch provider credentials / global state.
+		protocol.MethodTTSEnable,
+		protocol.MethodTTSDisable,
+		protocol.MethodTTSSetProvider,
 	}
 	return slices.Contains(adminMethods, method)
 }
 
 func isWriteMethod(method string) bool {
-	writePrefixes := []string{
+	writeExact := []string{
 		protocol.MethodChatSend,
 		protocol.MethodChatAbort,
+		protocol.MethodChatInject,
 		protocol.MethodSessionsDelete,
 		protocol.MethodSessionsReset,
 		protocol.MethodSessionsPatch,
@@ -203,23 +296,126 @@ func isWriteMethod(method string) bool {
 		protocol.MethodCronUpdate,
 		protocol.MethodCronDelete,
 		protocol.MethodCronToggle,
-		"pairing.",
-		"device.pair.",
-		"approvals.",
-		"exec.approval.",
+		protocol.MethodCronRun,
 		protocol.MethodSend,
+		protocol.MethodAgentsFileSet,
 		protocol.MethodTeamsTaskApprove,
 		protocol.MethodTeamsTaskReject,
 		protocol.MethodTeamsTaskComment,
 		protocol.MethodTeamsTaskCreate,
 		protocol.MethodTeamsTaskAssign,
+		protocol.MethodTeamsWorkspaceDelete,
+		protocol.MethodHooksTest,
+		protocol.MethodPairingRequest,
+		protocol.MethodApprovalsApprove,
+		protocol.MethodApprovalsDeny,
+
+		// TTS synthesis — invokes provider API (quota/credentials).
+		protocol.MethodTTSConvert,
+
+		// Browser automation — performs side-effecting actions.
+		protocol.MethodBrowserAct,
+
+		// Channel pairing starts (QR scan flows).
+		protocol.MethodZaloPersonalQRStart,
+		protocol.MethodWhatsAppQRStart,
 	}
-	for _, prefix := range writePrefixes {
-		if strings.HasPrefix(method, prefix) {
-			return true
-		}
+	return slices.Contains(writeExact, method)
+}
+
+// isReadMethod is the explicit viewer-allowlist for read-only RPCs. Keeping
+// this as a closed list (rather than "everything else") is what turns the
+// policy into fail-closed. New read RPCs must be added here explicitly.
+func isReadMethod(method string) bool {
+	readMethods := []string{
+		// Agent identity / wait
+		protocol.MethodAgent,
+		protocol.MethodAgentWait,
+		protocol.MethodAgentIdentityGet,
+
+		// Chat read
+		protocol.MethodChatHistory,
+		protocol.MethodChatSessionStatus,
+
+		// Agents read
+		protocol.MethodAgentsList,
+		protocol.MethodAgentsFileList,
+		protocol.MethodAgentsFileGet,
+		protocol.MethodAgentsLinksList,
+
+		// Sessions read
+		protocol.MethodSessionsList,
+		protocol.MethodSessionsPreview,
+
+		// Skills read
+		protocol.MethodSkillsList,
+		protocol.MethodSkillsGet,
+
+		// Cron read
+		protocol.MethodCronList,
+		protocol.MethodCronStatus,
+		protocol.MethodCronRuns,
+
+		// Channels read
+		protocol.MethodChannelsList,
+		protocol.MethodChannelsStatus,
+		protocol.MethodChannelInstancesList,
+		protocol.MethodChannelInstancesGet,
+
+		// Usage / quota
+		protocol.MethodUsageGet,
+		protocol.MethodUsageSummary,
+		protocol.MethodQuotaUsage,
+
+		// Heartbeat read
+		protocol.MethodHeartbeatGet,
+		protocol.MethodHeartbeatLogs,
+		protocol.MethodHeartbeatChecklistGet,
+		protocol.MethodHeartbeatTargets,
+
+		// Voices
+		protocol.MethodVoicesList,
+
+		// Tenants read
+		"tenants.list",
+		"tenants.get",
+		"tenants.users.list",
+		"tenants.mine",
+
+		// Teams read
+		protocol.MethodTeamsList,
+		protocol.MethodTeamsGet,
+		protocol.MethodTeamsTaskList,
+		protocol.MethodTeamsTaskGet,
+		protocol.MethodTeamsTaskGetLight,
+		protocol.MethodTeamsTaskComments,
+		protocol.MethodTeamsTaskEvents,
+		protocol.MethodTeamsTaskActiveBySession,
+		protocol.MethodTeamsWorkspaceList,
+		protocol.MethodTeamsWorkspaceRead,
+		protocol.MethodTeamsEventsList,
+		protocol.MethodTeamsKnownUsers,
+		protocol.MethodTeamsScopes,
+
+		// Hooks read
+		protocol.MethodHooksList,
+		protocol.MethodHooksHistory,
+
+		// Approvals read-only listing
+		protocol.MethodApprovalsList,
+
+		// TTS read-only (status/providers listing)
+		protocol.MethodTTSStatus,
+		protocol.MethodTTSProviders,
+
+		// Browser observation (no side effects)
+		protocol.MethodBrowserSnapshot,
+		protocol.MethodBrowserScreenshot,
+
+		// Zalo personal contacts listing
+		protocol.MethodZaloPersonalContacts,
 	}
-	return false
+	return slices.Contains(readMethods, method)
 }
 
 // HasMinRole checks if the given role meets the minimum required level.

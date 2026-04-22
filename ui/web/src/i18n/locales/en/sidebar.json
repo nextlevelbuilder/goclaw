@@ -19,6 +19,7 @@
     "contacts": "Contacts",
     "skills": "Skills",
     "cron": "Cron",
+    "hooks": "Hooks",
     "customTools": "Custom Tools",
     "builtinTools": "Built-in Tools",
     "mcpServers": "MCP Servers",

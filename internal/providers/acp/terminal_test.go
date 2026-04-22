@@ -76,7 +76,7 @@ func TestCappedBuffer_OverflowExceedsExistingBuf(t *testing.T) {
 
 func TestCappedBuffer_MultipleSmallWrites(t *testing.T) {
 	cb := &cappedBuffer{max: 10}
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		cb.Write([]byte("ab"))
 	}
 	got := cb.String()
@@ -101,12 +101,10 @@ func TestCappedBuffer_ZeroMax(t *testing.T) {
 func TestCappedBuffer_ConcurrentWrites(t *testing.T) {
 	cb := &cappedBuffer{max: 100}
 	var wg sync.WaitGroup
-	for i := 0; i < 50; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 50 {
+		wg.Go(func() {
 			cb.Write([]byte("data"))
-		}()
+		})
 	}
 	wg.Wait()
 	s := cb.String()

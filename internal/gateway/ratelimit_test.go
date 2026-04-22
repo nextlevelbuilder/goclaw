@@ -10,7 +10,7 @@ func TestRateLimiter_DisabledWhenZeroRPM(t *testing.T) {
 	if rl.Enabled() {
 		t.Fatal("expected disabled when rpm=0")
 	}
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		if !rl.Allow("key") {
 			t.Fatal("expected allow when disabled")
 		}
@@ -43,7 +43,7 @@ func TestRateLimiter_BurstAllowed(t *testing.T) {
 	rl := NewRateLimiter(1, burst)
 	key := "test-burst"
 	allowed := 0
-	for i := 0; i < burst; i++ {
+	for range burst {
 		if rl.Allow(key) {
 			allowed++
 		}
@@ -97,7 +97,7 @@ func TestRateLimiter_DefaultBurstWhenZero(t *testing.T) {
 	key := "burst-default"
 	// Should be able to consume at least 5 tokens from the default burst.
 	allowed := 0
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		if rl.Allow(key) {
 			allowed++
 		}

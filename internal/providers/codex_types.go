@@ -3,12 +3,18 @@ package providers
 // Wire types for the OpenAI Responses API (Codex flow).
 
 type codexAPIResponse struct {
-	ID     string      `json:"id"`
-	Object string      `json:"object"`
-	Model  string      `json:"model"`
-	Output []codexItem `json:"output"`
-	Usage  *codexUsage `json:"usage,omitempty"`
-	Status string      `json:"status"`
+	ID     string            `json:"id"`
+	Object string            `json:"object"`
+	Model  string            `json:"model"`
+	Output []codexItem       `json:"output"`
+	Usage  *codexUsage       `json:"usage,omitempty"`
+	Status string            `json:"status"`
+	Error  *codexErrorDetail `json:"error,omitempty"` // set when status="failed"
+}
+
+type codexErrorDetail struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
 }
 
 type codexItem struct {

@@ -6,9 +6,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/workspace"
 )
@@ -332,6 +336,118 @@ func TestThinkStage_LLMError_Propagates(t *testing.T) {
 	}
 }
 
+// Issue 958: Context overflow triggers emergency compaction + retry
+
+func TestThinkStage_ContextOverflow_TriggersCompaction(t *testing.T) {
+	t.Parallel()
+	callCount := 0
+	compacted := false
+
+	deps := &PipelineDeps{
+		Config: PipelineConfig{MaxIterations: 10, MaxTokens: 1000},
+		CallLLM: func(_ context.Context, _ *RunState, _ providers.ChatRequest) (*providers.ChatResponse, error) {
+			callCount++
+			if callCount == 1 {
+				return nil, &providers.HTTPError{Status: 400, Body: "Prompt exceeds max length"}
+			}
+			return &providers.ChatResponse{Content: "success after compact", FinishReason: "stop"}, nil
+		},
+		CompactMessages: func(_ context.Context, msgs []providers.Message, _ string) ([]providers.Message, error) {
+			compacted = true
+			return []providers.Message{{Role: "user", Content: "[Summary]"}}, nil
+		},
+	}
+
+	stage := NewThinkStage(deps)
+	state := defaultState()
+	state.Messages.SetHistory([]providers.Message{{Role: "user", Content: "test"}})
+
+	// First call: overflow → compact → retry
+	err := stage.Execute(context.Background(), state)
+	if err != nil {
+		t.Fatalf("first Execute() should trigger retry, got error: %v", err)
+	}
+	if !compacted {
+		t.Error("expected compaction to be triggered")
+	}
+	if state.Think.OverflowRetries != 1 {
+		t.Errorf("expected OverflowRetries=1, got %d", state.Think.OverflowRetries)
+	}
+	// Stage returns Continue (nil error) to signal retry this iteration
+	if stage.Result() != Continue {
+		t.Errorf("Result() = %v after compaction, want Continue", stage.Result())
+	}
+}
+
+func TestThinkStage_ContextOverflow_FailsAfterOneRetry(t *testing.T) {
+	t.Parallel()
+	deps := &PipelineDeps{
+		Config: PipelineConfig{MaxIterations: 10, MaxTokens: 1000},
+		CallLLM: func(_ context.Context, _ *RunState, _ providers.ChatRequest) (*providers.ChatResponse, error) {
+			return nil, &providers.HTTPError{Status: 400, Body: "Prompt exceeds max length"}
+		},
+		CompactMessages: func(_ context.Context, _ []providers.Message, _ string) ([]providers.Message, error) {
+			return []providers.Message{{Role: "user", Content: "[Summary]"}}, nil
+		},
+	}
+
+	stage := NewThinkStage(deps)
+	state := defaultState()
+	state.Think.OverflowRetries = 1 // Already retried once
+
+	err := stage.Execute(context.Background(), state)
+	if err == nil {
+		t.Error("expected error after second overflow")
+	}
+	if !strings.Contains(err.Error(), "context overflow after compaction") {
+		t.Errorf("expected 'context overflow after compaction' message, got %v", err)
+	}
+}
+
+func TestThinkStage_ContextOverflow_NoCompactCallback_FailsGracefully(t *testing.T) {
+	t.Parallel()
+	deps := &PipelineDeps{
+		Config: PipelineConfig{MaxIterations: 10, MaxTokens: 1000},
+		CallLLM: func(_ context.Context, _ *RunState, _ providers.ChatRequest) (*providers.ChatResponse, error) {
+			return nil, &providers.HTTPError{Status: 400, Body: "Prompt exceeds max length"}
+		},
+		CompactMessages: nil, // No compaction available
+	}
+
+	stage := NewThinkStage(deps)
+	state := defaultState()
+
+	err := stage.Execute(context.Background(), state)
+	if err == nil {
+		t.Error("expected error when no compaction available")
+	}
+}
+
+func TestThinkStage_ContextOverflow_CompactionFails_ReturnsOriginalError(t *testing.T) {
+	t.Parallel()
+	deps := &PipelineDeps{
+		Config: PipelineConfig{MaxIterations: 10, MaxTokens: 1000},
+		CallLLM: func(_ context.Context, _ *RunState, _ providers.ChatRequest) (*providers.ChatResponse, error) {
+			return nil, &providers.HTTPError{Status: 400, Body: "Prompt exceeds max length"}
+		},
+		CompactMessages: func(_ context.Context, _ []providers.Message, _ string) ([]providers.Message, error) {
+			return nil, errors.New("compaction failed")
+		},
+	}
+
+	stage := NewThinkStage(deps)
+	state := defaultState()
+
+	err := stage.Execute(context.Background(), state)
+	if err == nil {
+		t.Error("expected error when compaction fails")
+	}
+	// Should return LLM error wrapped, not compaction error
+	if !strings.Contains(err.Error(), "llm call") {
+		t.Errorf("expected 'llm call' in error message, got %v", err)
+	}
+}
+
 // --- PruneStage tests ---
 
 func TestPruneStage_UnderBudget_NoOp(t *testing.T) {
@@ -343,9 +459,9 @@ func TestPruneStage_UnderBudget_NoOp(t *testing.T) {
 			MaxTokens:     1000,
 		},
 		TokenCounter: &mockTokenCounter{countPerMessage: 1}, // tiny counts
-		PruneMessages: func(msgs []providers.Message, _ int) []providers.Message {
+		PruneMessages: func(msgs []providers.Message, _ int) ([]providers.Message, PruneStats) {
 			pruneCallCount++
-			return msgs
+			return msgs, PruneStats{}
 		},
 	}
 	stage := NewPruneStage(deps, nil)
@@ -379,10 +495,10 @@ func TestPruneStage_Over70Percent_CallsPruneMessages(t *testing.T) {
 			MaxTokens:     1000,
 		},
 		TokenCounter: &mockTokenCounter{countPerMessage: 100},
-		PruneMessages: func(msgs []providers.Message, budget int) []providers.Message {
+		PruneMessages: func(msgs []providers.Message, budget int) ([]providers.Message, PruneStats) {
 			pruneCallCount++
 			// return trimmed history that's under budget
-			return msgs[:1]
+			return msgs[:1], PruneStats{ResultsTrimmed: 1}
 		},
 	}
 	stage := NewPruneStage(deps, nil)
@@ -415,9 +531,9 @@ func TestPruneStage_Over100Percent_CallsCompact(t *testing.T) {
 			MaxTokens:     100,
 		},
 		TokenCounter: &mockTokenCounter{countPerMessage: 100},
-		PruneMessages: func(msgs []providers.Message, _ int) []providers.Message {
+		PruneMessages: func(msgs []providers.Message, _ int) ([]providers.Message, PruneStats) {
 			// return same size — still over budget
-			return msgs
+			return msgs, PruneStats{}
 		},
 		CompactMessages: func(_ context.Context, msgs []providers.Message, _ string) ([]providers.Message, error) {
 			compactCallCount++
@@ -454,8 +570,8 @@ func TestPruneStage_StillOverAfterCompaction_ReturnsAbortRun(t *testing.T) {
 			MaxTokens:     100,
 		},
 		TokenCounter: &mockTokenCounter{countPerMessage: 100},
-		PruneMessages: func(msgs []providers.Message, _ int) []providers.Message {
-			return msgs // no reduction
+		PruneMessages: func(msgs []providers.Message, _ int) ([]providers.Message, PruneStats) {
+			return msgs, PruneStats{} // no reduction
 		},
 		CompactMessages: func(_ context.Context, msgs []providers.Message, _ string) ([]providers.Message, error) {
 			// compaction still returns too many messages
@@ -519,9 +635,9 @@ func TestPruneStage_EffectiveContextWindow_OverridesConfig(t *testing.T) {
 			MaxTokens:     1_000,
 		},
 		TokenCounter: &mockTokenCounter{countPerMessage: 600},
-		PruneMessages: func(msgs []providers.Message, _ int) []providers.Message {
+		PruneMessages: func(msgs []providers.Message, _ int) ([]providers.Message, PruneStats) {
 			pruneCallCount++
-			return msgs
+			return msgs, PruneStats{}
 		},
 	}
 	stage := NewPruneStage(deps, nil)
@@ -631,9 +747,9 @@ func TestPruneStage_ReserveTokens_BuffersBudget(t *testing.T) {
 			ReserveTokens: 2_000,
 		},
 		TokenCounter: &mockTokenCounter{countPerMessage: 100},
-		PruneMessages: func(msgs []providers.Message, _ int) []providers.Message {
+		PruneMessages: func(msgs []providers.Message, _ int) ([]providers.Message, PruneStats) {
 			pruneCallCount++
-			return msgs[:1]
+			return msgs[:1], PruneStats{ResultsTrimmed: 1}
 		},
 	}
 	stage := NewPruneStage(deps, nil)
@@ -665,9 +781,9 @@ func TestPruneStage_EffectiveContextWindow_ZeroFallsBackToConfig(t *testing.T) {
 			MaxTokens:     1_000,
 		},
 		TokenCounter: &mockTokenCounter{countPerMessage: 600},
-		PruneMessages: func(msgs []providers.Message, _ int) []providers.Message {
+		PruneMessages: func(msgs []providers.Message, _ int) ([]providers.Message, PruneStats) {
 			pruneCallCount++
-			return msgs[:1]
+			return msgs[:1], PruneStats{ResultsTrimmed: 1}
 		},
 	}
 	stage := NewPruneStage(deps, nil)
@@ -783,6 +899,66 @@ func TestToolStage_MultipleTools_Sequential_MessagesInOrder(t *testing.T) {
 	}
 	if pending[2].Content != "result:tool_c" {
 		t.Errorf("pending[2] = %q, want result:tool_c", pending[2].Content)
+	}
+	if state.Tool.TotalToolCalls != 3 {
+		t.Errorf("TotalToolCalls = %d, want 3", state.Tool.TotalToolCalls)
+	}
+}
+
+// Regression: v3 parallel path invokes ExecuteToolRaw + ProcessToolResult
+// for every tool call. If this breaks, the `tool.call` WS event emitted
+// inside makeExecuteToolRaw (loop_pipeline_tool_callbacks.go) stops firing
+// and UIs go silent during real-time tool execution.
+func TestToolStage_MultipleTools_ParallelPath_InvokesRawAndProcessForEach(t *testing.T) {
+	t.Parallel()
+	var rawMu, procMu sync.Mutex
+	rawCalls := []string{}
+	procCalls := []string{}
+	deps := &PipelineDeps{
+		// Parallel path requires all three callbacks. ExecuteToolCall is required
+		// upfront (nil-guard) even though the parallel branch won't invoke it.
+		ExecuteToolCall: func(_ context.Context, _ *RunState, _ providers.ToolCall) ([]providers.Message, error) {
+			t.Fatal("ExecuteToolCall must NOT be called when parallel path is active")
+			return nil, nil
+		},
+		ExecuteToolRaw: func(_ context.Context, tc providers.ToolCall) (providers.Message, any, error) {
+			rawMu.Lock()
+			rawCalls = append(rawCalls, tc.ID)
+			rawMu.Unlock()
+			return providers.Message{Role: "tool", Content: "raw:" + tc.Name, ToolCallID: tc.ID}, nil, nil
+		},
+		ProcessToolResult: func(_ context.Context, _ *RunState, tc providers.ToolCall, rawMsg providers.Message, _ any) []providers.Message {
+			procMu.Lock()
+			procCalls = append(procCalls, tc.ID)
+			procMu.Unlock()
+			return []providers.Message{rawMsg}
+		},
+	}
+	stage := NewToolStage(deps)
+	state := defaultState()
+	state.Think.LastResponse = &providers.ChatResponse{
+		ToolCalls: []providers.ToolCall{
+			{ID: "1", Name: "tool_a"},
+			{ID: "2", Name: "tool_b"},
+			{ID: "3", Name: "tool_c"},
+		},
+	}
+
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+
+	// Each tool must be passed through BOTH ExecuteToolRaw (where tool.call emits)
+	// AND ProcessToolResult (where tool.result emits). Missing either breaks UIs.
+	if len(rawCalls) != 3 {
+		t.Errorf("ExecuteToolRaw called %d times, want 3 (one per tool)", len(rawCalls))
+	}
+	if len(procCalls) != 3 {
+		t.Errorf("ProcessToolResult called %d times, want 3", len(procCalls))
+	}
+	// ProcessToolResult must run sequentially in original order (deterministic state mutation)
+	if len(procCalls) == 3 && (procCalls[0] != "1" || procCalls[1] != "2" || procCalls[2] != "3") {
+		t.Errorf("ProcessToolResult order = %v, want [1 2 3]", procCalls)
 	}
 	if state.Tool.TotalToolCalls != 3 {
 		t.Errorf("TotalToolCalls = %d, want 3", state.Tool.TotalToolCalls)
@@ -1705,5 +1881,154 @@ func TestFinalizeStage_DeduplicatesMedia_WithRealFile(t *testing.T) {
 	}
 	if state.Tool.MediaResults[0].Size == 0 {
 		t.Error("Size should be populated from real file")
+	}
+}
+
+// ─── parseTTL (Phase 06) ─────────────────────────────────────────────────
+
+func TestParseTTL_ValidInputs(t *testing.T) {
+	cases := []struct {
+		in   string
+		want time.Duration
+	}{
+		{"", 5 * time.Minute},
+		{"5m", 5 * time.Minute},
+		{"30s", 30 * time.Second},
+		{"1h30m", 90 * time.Minute},
+		{"bogus", 5 * time.Minute},  // invalid → fallback
+		{"-1m", 5 * time.Minute},    // negative → fallback
+	}
+	for _, tc := range cases {
+		got := parseTTL(tc.in)
+		if got != tc.want {
+			t.Errorf("parseTTL(%q) = %v, want %v", tc.in, got, tc.want)
+		}
+	}
+}
+
+// ─── Cache-TTL gate (Phase 06) ───────────────────────────────────────────
+
+// makePruneHistory builds history that exceeds the 70% soft threshold.
+// budget = 10000-0-1000=9000, soft=6300. 100 msgs * 100 = 10000 > 6300.
+func makePruneHistory(n int) []providers.Message {
+	h := make([]providers.Message, n)
+	for i := range h {
+		h[i] = providers.Message{Role: "tool", ToolCallID: "c1", Content: "x"}
+	}
+	return h
+}
+
+func TestPruneStage_CacheTtlGate_SkipsWithinTTL(t *testing.T) {
+	t.Parallel()
+	// cache live (1 min ago), history above soft threshold but below hard budget.
+	var pruneCalled int32
+	deps := &PipelineDeps{
+		Config:       PipelineConfig{ContextWindow: 10000, MaxTokens: 1000},
+		TokenCounter: &mockTokenCounter{countPerMessage: 100},
+		PruneMessages: func(msgs []providers.Message, _ int) ([]providers.Message, PruneStats) {
+			atomic.AddInt32(&pruneCalled, 1)
+			return msgs, PruneStats{}
+		},
+		GetProviderCaps:  func() providers.ProviderCapabilities { return providers.ProviderCapabilities{CacheControl: true} },
+		GetPruningConfig: func() *config.ContextPruningConfig { return &config.ContextPruningConfig{Mode: "cache-ttl", TTL: "5m"} },
+		GetCacheTouch:    func(string) time.Time { return time.Now().Add(-1 * time.Minute) }, // 1m ago, within 5m TTL
+		MarkCacheTouched: func(string) {},
+	}
+	stage := NewPruneStage(deps, nil)
+	state := defaultState()
+	state.Messages.SetHistory(makePruneHistory(50)) // 50*100=5000 tokens; soft=6300, hard=9000; below hard
+
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if atomic.LoadInt32(&pruneCalled) != 0 {
+		t.Error("prune should be skipped when cache is live and below hard budget")
+	}
+}
+
+func TestPruneStage_CacheTtlGate_PrunesAfterTTL(t *testing.T) {
+	t.Parallel()
+	// touch = 6 minutes ago → TTL expired → gate allows prune
+	var pruneCalled int32
+	var touchCalled int32
+	deps := &PipelineDeps{
+		Config:       PipelineConfig{ContextWindow: 10000, MaxTokens: 1000},
+		TokenCounter: &mockTokenCounter{countPerMessage: 100},
+		PruneMessages: func(msgs []providers.Message, _ int) ([]providers.Message, PruneStats) {
+			atomic.AddInt32(&pruneCalled, 1)
+			return msgs[:1], PruneStats{ResultsTrimmed: 1}
+		},
+		GetProviderCaps:  func() providers.ProviderCapabilities { return providers.ProviderCapabilities{CacheControl: true} },
+		GetPruningConfig: func() *config.ContextPruningConfig { return &config.ContextPruningConfig{Mode: "cache-ttl", TTL: "5m"} },
+		GetCacheTouch:    func(string) time.Time { return time.Now().Add(-6 * time.Minute) }, // 6m ago, expired
+		MarkCacheTouched: func(string) { atomic.AddInt32(&touchCalled, 1) },
+	}
+	stage := NewPruneStage(deps, nil)
+	state := defaultState()
+	state.Messages.SetHistory(makePruneHistory(100)) // 100*100=10000; above soft threshold
+
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if atomic.LoadInt32(&pruneCalled) == 0 {
+		t.Error("prune should fire when TTL expired")
+	}
+	if atomic.LoadInt32(&touchCalled) == 0 {
+		t.Error("MarkCacheTouched should be called after mutation")
+	}
+}
+
+func TestPruneStage_CacheTtlGate_NoCacheSupport_Prunes(t *testing.T) {
+	t.Parallel()
+	// CacheControl=false → gate is no-op → normal prune runs
+	var pruneCalled int32
+	deps := &PipelineDeps{
+		Config:       PipelineConfig{ContextWindow: 10000, MaxTokens: 1000},
+		TokenCounter: &mockTokenCounter{countPerMessage: 100},
+		PruneMessages: func(msgs []providers.Message, _ int) ([]providers.Message, PruneStats) {
+			atomic.AddInt32(&pruneCalled, 1)
+			return msgs[:1], PruneStats{ResultsTrimmed: 1}
+		},
+		GetProviderCaps:  func() providers.ProviderCapabilities { return providers.ProviderCapabilities{CacheControl: false} },
+		GetPruningConfig: func() *config.ContextPruningConfig { return &config.ContextPruningConfig{Mode: "cache-ttl", TTL: "5m"} },
+		GetCacheTouch:    func(string) time.Time { return time.Now().Add(-1 * time.Minute) },
+		MarkCacheTouched: func(string) {},
+	}
+	stage := NewPruneStage(deps, nil)
+	state := defaultState()
+	state.Messages.SetHistory(makePruneHistory(100))
+
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if atomic.LoadInt32(&pruneCalled) == 0 {
+		t.Error("prune should fire when provider has no cache support")
+	}
+}
+
+func TestPruneStage_CacheTtlGate_MarkTouchedOnlyOnMutation(t *testing.T) {
+	t.Parallel()
+	// PruneMessages returns zero stats (no mutation) → MarkCacheTouched must NOT be called.
+	var touchCalled int32
+	deps := &PipelineDeps{
+		Config:       PipelineConfig{ContextWindow: 10000, MaxTokens: 1000},
+		TokenCounter: &mockTokenCounter{countPerMessage: 100},
+		PruneMessages: func(msgs []providers.Message, _ int) ([]providers.Message, PruneStats) {
+			return msgs, PruneStats{} // no mutation
+		},
+		GetProviderCaps:  func() providers.ProviderCapabilities { return providers.ProviderCapabilities{CacheControl: true} },
+		GetPruningConfig: func() *config.ContextPruningConfig { return &config.ContextPruningConfig{Mode: "cache-ttl", TTL: "5m"} },
+		GetCacheTouch:    func(string) time.Time { return time.Time{} }, // cold
+		MarkCacheTouched: func(string) { atomic.AddInt32(&touchCalled, 1) },
+	}
+	stage := NewPruneStage(deps, nil)
+	state := defaultState()
+	state.Messages.SetHistory(makePruneHistory(100))
+
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if atomic.LoadInt32(&touchCalled) != 0 {
+		t.Error("MarkCacheTouched should NOT be called when prune returns no mutation")
 	}
 }

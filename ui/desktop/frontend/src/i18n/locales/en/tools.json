@@ -206,6 +206,24 @@
       "skill_search": "Search for available skills by keyword or description to find relevant capabilities",
       "use_skill": "Activate a skill to use its specialized capabilities (tracing marker)",
       "team_tasks": "View, create, update, and complete tasks on the team task board"
+    },
+    "sttForm": {
+      "title": "STT Settings",
+      "description": "Configure speech-to-text providers for transcribing voice messages.",
+      "providersLabel": "Providers",
+      "elevenlabsSectionTitle": "ElevenLabs",
+      "elevenlabsApiKeyLabel": "API Key",
+      "elevenlabsDefaultLanguageLabel": "Default Language",
+      "proxySectionTitle": "Proxy",
+      "proxyUrlLabel": "Proxy URL",
+      "proxyApiKeyLabel": "Proxy API Key",
+      "proxyTenantIdLabel": "Proxy Tenant ID",
+      "whatsappEnabledLabel": "Enable STT for WhatsApp",
+      "whatsappPrivacyWarning": "Enabling STT for WhatsApp breaks end-to-end encryption for voice messages sent to this agent.",
+      "providersRequiredError": "At least one provider must be selected.",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving..."
     }
   }
 }

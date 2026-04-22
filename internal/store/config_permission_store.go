@@ -47,8 +47,19 @@ type ConfigPermissionStore interface {
 
 // CheckFileWriterPermission returns an error if the caller is in a group context
 // and is not a file writer. Returns nil if write is allowed.
-// Fail-open: returns nil on DB errors or missing context (cron, subagent).
-// Replaces the deleted CheckGroupWritePermission / GroupWriterCache.
+//
+// Policy in group/guild context (#915):
+//   - empty SenderID        → DENY  (system turn lost the real user — security gap if allowed)
+//   - synthetic SenderID    → DENY  (subagent:, notification:, teammate:, system:, ticker:, session_send_tool)
+//   - real numeric SenderID → DB lookup; deny if no grant
+//   - DB errors             → fail-open (preserve availability over strictness)
+//
+// Outside group/guild context (DM, HTTP, cron-direct): always allow — no per-user
+// writer gate applies.
+//
+// Upstream callers should propagate the real acting sender through wrappers
+// (subagent announce, delegate announce, teammate dispatch) so legitimate
+// re-ingress turns carry the original user's sender.
 func CheckFileWriterPermission(ctx context.Context, permStore ConfigPermissionStore) error {
 	if permStore == nil {
 		return nil
@@ -61,14 +72,21 @@ func CheckFileWriterPermission(ctx context.Context, permStore ConfigPermissionSt
 	if agentID == uuid.Nil {
 		return nil // no agent context
 	}
+	// RBAC bypass: admin / operator / owner roles are pre-authenticated by
+	// the tenant RBAC system (dashboard users, tenant admins). File-writer
+	// grants exist to gate random group members; authenticated admins
+	// shouldn't trip over them when dispatching work that writes files.
+	if isAdminRole(ctx) {
+		return nil
+	}
 	senderID := SenderIDFromContext(ctx)
-	if senderID == "" {
-		return nil // system context (cron, subagent)
+	if senderID == "" || isSyntheticSender(senderID) {
+		return fmt.Errorf("permission denied: system context cannot write files in group chats. If this is a legitimate user action, ensure the acting sender is preserved through the tool chain")
 	}
 	numericID := strings.SplitN(senderID, "|", 2)[0]
 	allowed, err := permStore.CheckPermission(ctx, agentID, userID, ConfigTypeFileWriter, numericID)
 	if err != nil {
-		return nil // fail-open
+		return nil // fail-open on DB error only (availability)
 	}
 	if !allowed {
 		return fmt.Errorf("permission denied: only file writers can modify files in this group. Use /addwriter to get write access")
@@ -76,9 +94,34 @@ func CheckFileWriterPermission(ctx context.Context, permStore ConfigPermissionSt
 	return nil
 }
 
+// isAdminRole reports whether ctx carries an elevated RBAC role
+// (admin / operator / owner) that should bypass per-user file-writer
+// grants. Tenant-authenticated identities pre-pass RBAC at the gateway
+// edge; re-checking per-channel grants here is redundant and blocks
+// legitimate dashboard-dispatched work (#915).
+func isAdminRole(ctx context.Context) bool {
+	switch RoleFromContext(ctx) {
+	case "admin", "operator", RoleOwner:
+		return true
+	}
+	return false
+}
+
+// isSyntheticSender reports whether senderID is an internal system component
+// (not a real user). Mirrors bus.IsInternalSender — kept here to avoid the
+// store→bus import dependency. If prefixes change, update both.
+func isSyntheticSender(senderID string) bool {
+	return strings.HasPrefix(senderID, "system:") ||
+		strings.HasPrefix(senderID, "notification:") ||
+		strings.HasPrefix(senderID, "teammate:") ||
+		strings.HasPrefix(senderID, "ticker:") ||
+		strings.HasPrefix(senderID, "subagent:") ||
+		senderID == "session_send_tool"
+}
+
 // CheckCronPermission returns an error if the caller is in a group context
 // and does not have cron or file_writer permission. Returns nil if allowed.
-// Fail-open: returns nil on DB errors or missing context (cron, subagent).
+// Same sender-policy as CheckFileWriterPermission (see that fn's docstring).
 func CheckCronPermission(ctx context.Context, permStore ConfigPermissionStore) error {
 	if permStore == nil {
 		return nil
@@ -91,9 +134,12 @@ func CheckCronPermission(ctx context.Context, permStore ConfigPermissionStore) e
 	if agentID == uuid.Nil {
 		return nil // no agent context
 	}
+	if isAdminRole(ctx) {
+		return nil // RBAC bypass (admin/operator/owner)
+	}
 	senderID := SenderIDFromContext(ctx)
-	if senderID == "" {
-		return nil // system context (cron, subagent)
+	if senderID == "" || isSyntheticSender(senderID) {
+		return fmt.Errorf("permission denied: system context cannot manage cron jobs in group chats")
 	}
 	numericID := strings.SplitN(senderID, "|", 2)[0]
 

@@ -6,13 +6,13 @@ import "github.com/nextlevelbuilder/goclaw/internal/memory"
 // Each bool field maps to a named template block.
 type PromptConfig struct {
 	// Section toggles
-	Identity     bool
-	Persona      bool // SOUL.md content
-	Instructions bool // AGENTS.md content
-	Tools        bool
-	Skills       bool
-	Team         bool
-	Workspace    bool
+	Identity      bool
+	Persona       bool // SOUL.md content
+	Instructions  bool // AGENTS.md content
+	Tools         bool
+	Skills        bool
+	Team          bool
+	Workspace     bool
 	Memory        bool // auto-inject L0 section
 	Sandbox       bool
 	Orchestration bool // v3 orchestration delegation targets
@@ -43,6 +43,7 @@ type IdentityData struct {
 	Emoji     string
 	Model     string
 	Channel   string
+	ChatID    string // current reply target chat id
 	ChatTitle string
 	PeerKind  string // "direct" or "group"
 }

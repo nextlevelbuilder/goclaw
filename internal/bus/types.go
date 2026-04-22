@@ -13,6 +13,7 @@ import (
 type MediaFile struct {
 	Path     string `json:"path"`
 	MimeType string `json:"mime_type,omitempty"` // e.g. "application/pdf", "image/jpeg"
+	Filename string `json:"filename,omitempty"`  // original user-provided filename, e.g. "Báo cáo Q4.pdf"; empty → UUID fallback in persistMedia
 }
 
 // InboundMessage represents a message received from a channel (Telegram, Discord, etc.)
@@ -34,11 +35,14 @@ type InboundMessage struct {
 
 // OutboundMessage represents a message to be sent to a channel.
 type OutboundMessage struct {
-	Channel  string            `json:"channel"`
-	ChatID   string            `json:"chat_id"`
-	Content  string            `json:"content"`
-	Media    []MediaAttachment `json:"media,omitempty"`    // optional media attachments
-	Metadata map[string]string `json:"metadata,omitempty"` // channel-specific metadata
+	Channel         string            `json:"channel"`
+	ChatID          string            `json:"chat_id"`
+	Content         string            `json:"content"`
+	Media           []MediaAttachment `json:"media,omitempty"`              // optional media attachments
+	Metadata        map[string]string `json:"metadata,omitempty"`           // channel-specific metadata
+	TenantID        uuid.UUID         `json:"tenant_id,omitempty"`          // tenant scope for per-tenant TTS
+	AgentID         uuid.UUID         `json:"agent_id,omitempty"`           // agent scope for per-agent TTS voice override
+	AgentOtherConfig []byte           `json:"agent_other_config,omitempty"` // agent's other_config for TTS voice/model
 }
 
 // MediaAttachment represents a media file to be sent with a message.
@@ -177,11 +181,13 @@ type MessageRouter interface {
 }
 
 // IsInternalSender returns true if the senderID belongs to an internal system
-// component (not a real channel user). These should not be stored as contacts.
+// component (not a real channel user). These should not be stored as contacts
+// and must be rejected by per-user permission checks in group contexts (#915).
 func IsInternalSender(senderID string) bool {
 	return strings.HasPrefix(senderID, "system:") ||
 		strings.HasPrefix(senderID, "notification:") ||
 		strings.HasPrefix(senderID, "teammate:") ||
 		strings.HasPrefix(senderID, "ticker:") ||
+		strings.HasPrefix(senderID, "subagent:") ||
 		senderID == "session_send_tool"
 }

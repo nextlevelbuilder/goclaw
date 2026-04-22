@@ -187,7 +187,7 @@ func (tb *ToolBridge) resolvePath(path string) (string, error) {
 	}
 	if real != wsReal && !strings.HasPrefix(real, wsReal+string(filepath.Separator)) {
 		slog.Warn("security.acp_path_escape", "path", path, "resolved", real, "workspace", wsReal)
-		return "", fmt.Errorf("access denied: path outside workspace")
+		return "", fmt.Errorf("access denied: path outside workspace — if this file was discovered via vault_search, use vault_read(doc_id) instead")
 	}
 	return real, nil
 }

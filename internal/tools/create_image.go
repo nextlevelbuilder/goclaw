@@ -127,7 +127,7 @@ func (t *CreateImageTool) Execute(ctx context.Context, args map[string]any) *Res
 	}
 
 	result := &Result{ForLLM: fmt.Sprintf("MEDIA:%s\nUse the EXACT filename when referencing: %s", imagePath, filepath.Base(imagePath))}
-	result.Media = []bus.MediaFile{{Path: imagePath, MimeType: "image/png"}}
+	result.Media = []bus.MediaFile{{Path: imagePath, MimeType: "image/png", Filename: filepath.Base(imagePath)}}
 	result.Deliverable = fmt.Sprintf("[Generated image: %s]\nPrompt: %s", filepath.Base(imagePath), prompt)
 	if t.vaultIntc != nil {
 		go t.vaultIntc.AfterWriteMedia(context.WithoutCancel(ctx), imagePath, prompt, "image/png")

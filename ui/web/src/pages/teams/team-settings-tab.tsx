@@ -47,7 +47,7 @@ function deriveDefaults(team: TeamData): TeamSettingsFormData {
 
 export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps) {
   const { t } = useTranslation("teams");
-  const { updateTeamSettings } = useTeams();
+  const { updateTeam } = useTeams();
 
   // UI-only state
   const [saving, setSaving] = useState(false);
@@ -120,13 +120,13 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
       settings.followup_interval_minutes = data.followupInterval;
       settings.followup_max_reminders = data.followupMaxReminders;
       settings.workspace_scope = data.workspaceScope || "isolated";
-      await updateTeamSettings(teamId, settings);
+      await updateTeam(teamId, { settings });
       onSaved();
     } catch { // toast shown by hook
     } finally {
       setSaving(false);
     }
-  }, [teamId, form, initial, escalationMode, escalationActions, updateTeamSettings, onSaved]);
+  }, [teamId, form, initial, escalationMode, escalationActions, updateTeam, onSaved]);
 
   const channelOptions = CHANNEL_TYPES.map((c) => ({ value: c.value, label: c.label }));
 

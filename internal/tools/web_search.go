@@ -7,6 +7,12 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
 // Matching TS src/agents/tools/web-search.ts constants.
@@ -82,28 +88,43 @@ func normalizeFreshness(value string) string {
 
 // --- WebSearchTool ---
 
-// WebSearchTool implements the web_search tool matching TS src/agents/tools/web-search.ts.
+// WebSearchTool implements the web_search tool with per-tenant provider chain
+// resolution. Providers are resolved per-request from config_secrets and
+// builtin_tool_tenant_configs.settings, cached per tenant for 60 seconds.
 type WebSearchTool struct {
-	providers []SearchProvider
-	cache     *webCache
+	secrets    store.ConfigSecretsStore
+	cache      *webCache
+	chainCache *tenantChainCache
 }
 
-func NewWebSearchTool(cfg WebSearchConfig) *WebSearchTool {
-	providers := buildSearchProviders(cfg)
-
-	if len(providers) == 0 {
-		return nil
+// NewWebSearchTool constructs a WebSearchTool. msgBus may be nil (e.g. desktop
+// edition) — cache invalidation then relies on TTL alone.
+func NewWebSearchTool(secrets store.ConfigSecretsStore, msgBus *bus.MessageBus) *WebSearchTool {
+	t := &WebSearchTool{
+		secrets:    secrets,
+		cache:      newWebCache(defaultCacheMaxEntries, defaultCacheTTL),
+		chainCache: newTenantChainCache(),
 	}
 
-	ttl := cfg.CacheTTL
-	if ttl <= 0 {
-		ttl = defaultCacheTTL
+	if msgBus != nil {
+		msgBus.Subscribe("web_search:cache_invalidate", func(event bus.Event) {
+			if event.Name != protocol.EventCacheInvalidate {
+				return
+			}
+			payload, ok := event.Payload.(bus.CacheInvalidatePayload)
+			if !ok || payload.Kind != bus.CacheKindBuiltinTools || payload.Key != "web_search" {
+				return
+			}
+			if payload.TenantID == uuid.Nil {
+				// Master admin write — wipe all tenants.
+				t.chainCache.InvalidateAll()
+			} else {
+				t.chainCache.Invalidate(payload.TenantID)
+			}
+		})
 	}
 
-	return &WebSearchTool{
-		providers: providers,
-		cache:     newWebCache(defaultCacheMaxEntries, ttl),
-	}
+	return t
 }
 
 func (t *WebSearchTool) Name() string { return "web_search" }
@@ -180,10 +201,8 @@ func (t *WebSearchTool) Execute(ctx context.Context, args map[string]any) *Resul
 		return NewResult(cached)
 	}
 
-	// Resolve per-request provider chain (tenant may reorder / disable providers
-	// via builtin_tool_tenant_configs.settings → ctx → ResolveWebSearchChain).
-	// Defaults preserved when no override — backward-compat.
-	chain := ResolveWebSearchChain(ctx, t.providers)
+	// Resolve per-request provider chain from tenant config_secrets + settings overlay.
+	chain := t.resolveChain(ctx)
 
 	// Try providers in order (first success wins)
 	var lastErr error
@@ -243,4 +262,3 @@ func formatSearchResults(query string, results []searchResult, provider string) 
 	}
 	return sb.String()
 }
-

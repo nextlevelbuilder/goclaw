@@ -67,6 +67,12 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 	if req.SenderName != "" {
 		ctx = store.WithSenderName(ctx, req.SenderName)
 	}
+	// Inject caller role so RBAC-aware permission checks (CheckFileWriterPermission,
+	// CheckCronPermission) can bypass per-user grants for authenticated admins
+	// dispatched from dashboard or other trusted sources (#915).
+	if req.Role != "" {
+		ctx = store.WithRole(ctx, req.Role)
+	}
 	// Inject global + per-agent builtin tool settings (tier 1+3).
 	// Media/provider-chain tools read the merged view via BuiltinToolSettingsFromCtx.
 	if l.builtinToolSettings != nil {

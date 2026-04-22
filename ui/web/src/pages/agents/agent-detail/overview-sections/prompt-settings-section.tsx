@@ -2,9 +2,32 @@ import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/stores/use-toast-store";
+import { useAuthStore } from "@/stores/use-auth-store";
 import type { AgentData } from "@/types/agent";
 import { readPromptMode } from "../agent-display-utils";
 import { PromptModeCards, type PromptMode } from "../../prompt-mode-cards";
+import { useTtsConfig } from "@/pages/tts/hooks/use-tts-config";
+import { TtsEmptyState } from "./tts-empty-state";
+import { TtsOverrideBlock } from "./tts-override-block";
+import { PROVIDER_MODEL_CATALOG, type TtsProviderId, type TtsModelOption } from "@/data/tts-providers";
+import type { ParamValue } from "@/components/dynamic-param-form";
+
+/**
+ * Pure helper — exported for unit testing.
+ * Returns true when TTS is configured globally and the TTS subsection should render.
+ */
+export function shouldRenderTTSSection(globalTts: { provider?: string }): boolean {
+  return !!globalTts.provider;
+}
+
+/**
+ * Pure helper — exported for unit testing.
+ * Returns model options for a given provider id from the static catalog fallback.
+ * Source of truth is GET /v1/tts/capabilities; this fallback covers non-React contexts.
+ */
+export function getModelOptions(providerId: string): TtsModelOption[] {
+  return PROVIDER_MODEL_CATALOG[providerId as TtsProviderId] ?? [];
+}
 
 interface Props {
   agent: AgentData;
@@ -13,27 +36,90 @@ interface Props {
 
 export function PromptSettingsSection({ agent, onUpdate }: Props) {
   const { t } = useTranslation("agents");
+  const { t: tTts } = useTranslation("tts");
+  const isOwner = useAuthStore((s) => s.isOwner);
+  const { tts: globalTts, synthesize } = useTtsConfig();
+  const globalProvider = globalTts.provider;
+
+  const otherConfig = (agent.other_config ?? {}) as Record<string, unknown>;
   const savedMode = readPromptMode(agent) as PromptMode;
+  const savedVoiceId = (otherConfig.tts_voice_id as string) ?? "";
+  const savedModelId = (otherConfig.tts_model_id as string) ?? "";
+  const savedTtsParams = (otherConfig.tts_params as Record<string, ParamValue>) ?? {};
+
   const [mode, setMode] = useState<PromptMode>(savedMode);
+  const [ttsVoiceId, setTtsVoiceId] = useState<string>(savedVoiceId);
+  const [ttsModelId, setTtsModelId] = useState<string>(savedModelId);
+  const [ttsParams, setTtsParams] = useState<Record<string, ParamValue>>(savedTtsParams);
+  const [override, setOverride] = useState<boolean>(!!(savedVoiceId || savedModelId));
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { setMode(readPromptMode(agent) as PromptMode); }, [agent.other_config]);
+  useEffect(() => {
+    const cfg = (agent.other_config ?? {}) as Record<string, unknown>;
+    const voice = (cfg.tts_voice_id as string) ?? "";
+    const model = (cfg.tts_model_id as string) ?? "";
+    const params = (cfg.tts_params as Record<string, ParamValue>) ?? {};
+    setMode(readPromptMode(agent) as PromptMode);
+    setTtsVoiceId(voice);
+    setTtsModelId(model);
+    setTtsParams(params);
+    setOverride(!!(voice || model));
+  }, [agent.other_config]);
 
-  const dirty = mode !== savedMode;
+  const savedOverride = !!(savedVoiceId || savedModelId);
+  const ttsParamsDirty = JSON.stringify(ttsParams) !== JSON.stringify(savedTtsParams);
+  const dirty =
+    mode !== savedMode ||
+    ttsVoiceId !== savedVoiceId ||
+    ttsModelId !== savedModelId ||
+    override !== savedOverride ||
+    ttsParamsDirty;
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const bag = { ...((agent.other_config ?? {}) as Record<string, unknown>) };
+      // Finding #13 (honest): we spread the last-loaded otherConfig prop as a
+      // base, then overwrite only the fields this section owns. Concurrent-tab
+      // clobber is NOT mitigated — a second tab saving an unrelated field
+      // between our last load and this PUT will lose that update.
+      // Server-side JSON-merge-patch endpoint is the correct v2 fix (deferred;
+      // see plan §Open Questions). Refetch before PUT is intentionally omitted:
+      // it would add latency for a race that is rare in practice for local-first
+      // desktop/single-user deployments.
+      const bag = { ...otherConfig };
       if (mode && mode !== "full") {
         bag.prompt_mode = mode;
       } else {
         delete bag.prompt_mode;
       }
+      // Write TTS override only when checkbox enabled and value provided
+      if (override && ttsVoiceId) {
+        bag.tts_voice_id = ttsVoiceId;
+      } else {
+        delete bag.tts_voice_id;
+      }
+      if (override && ttsModelId) {
+        bag.tts_model_id = ttsModelId;
+      } else {
+        delete bag.tts_model_id;
+      }
+      // Write tts_params when override is enabled and params are non-empty.
+      // Agent stores GENERIC keys (speed, emotion, style) — the bidirectional
+      // adapter in TtsOverrideBlock handles native↔generic conversion at load/save.
+      if (override && Object.keys(ttsParams).length > 0) {
+        bag.tts_params = ttsParams;
+      } else {
+        delete bag.tts_params;
+      }
       await onUpdate({ other_config: bag });
       const modeRank: Record<string, number> = { none: 0, minimal: 1, task: 2, full: 3 };
       if ((modeRank[mode] ?? 3) > (modeRank[savedMode] ?? 3)) {
-        toast.info(t("detail.prompt.upgradeWarning", "Mode upgraded. Some files may need regeneration — use Resummon or Edit with AI in the Files tab."));
+        toast.info(
+          t(
+            "detail.prompt.upgradeWarning",
+            "Mode upgraded. Some files may need regeneration — use Resummon or Edit with AI in the Files tab.",
+          ),
+        );
       }
     } finally {
       setSaving(false);
@@ -52,6 +138,29 @@ export function PromptSettingsSection({ agent, onUpdate }: Props) {
       </div>
 
       <PromptModeCards value={mode} onChange={setMode} />
+
+      {/* TTS subsection */}
+      <div className="space-y-3 border-t pt-3">
+        <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          {tTts("title")}
+        </h4>
+        {!globalProvider ? (
+          <TtsEmptyState isOwner={isOwner} />
+        ) : (
+          <TtsOverrideBlock
+            globalProvider={globalProvider}
+            voiceId={ttsVoiceId}
+            modelId={ttsModelId}
+            onVoiceChange={setTtsVoiceId}
+            onModelChange={setTtsModelId}
+            overrideEnabled={override}
+            onOverrideChange={setOverride}
+            synthesize={synthesize}
+            ttsParams={ttsParams}
+            onTtsParamsChange={setTtsParams}
+          />
+        )}
+      </div>
     </section>
   );
 }

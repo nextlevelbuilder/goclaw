@@ -1,71 +1,265 @@
 {
+  "title": "语音合成",
+  "description": "配置 TTS Provider 和自动应用设置",
+  "save": "保存",
+  "saving": "保存中...",
+  "saveChanges": "保存更改",
+  "status": {
+    "title": "状态",
+    "configured": "已配置",
+    "disabled": "已禁用",
+    "noProvider": "未配置 TTS Provider",
+    "activeProvider": "主要Provider：{{provider}}，自动：{{auto}}"
+  },
+  "general": {
+    "title": "常规设置",
+    "primaryProvider": "主要Provider",
+    "autoApplyMode": "自动应用模式",
+    "replyMode": "回复模式",
+    "maxTextLength": "最大文本长度",
+    "timeout": "超时（毫秒）"
+  },
+  "providers": {
+    "none": "无（已禁用）",
+    "openai": "OpenAI",
+    "elevenlabs": "ElevenLabs",
+    "edge": "Edge（免费）",
+    "minimax": "MiniMax",
+    "gemini": "Google Gemini"
+  },
   "autoModes": {
+    "off": "关闭",
+    "offDesc": "Agent可手动使用 TTS 工具",
     "always": "始终",
     "alwaysDesc": "所有回复均生成音频",
     "inbound": "入站",
     "inboundDesc": "仅当用户发送语音/音频时",
-    "off": "关闭",
-    "offDesc": "Agent可手动使用 TTS 工具",
     "tagged": "标记",
     "taggedDesc": "仅当回复包含 [[tts]] 标签时"
   },
-  "description": "配置 TTS Provider和自动应用设置",
-  "edge": {
-    "hint": "Edge TTS 免费且无需 API Key。安装方式：pip install edge-tts",
-    "speechRate": "语速",
-    "voice": "语音"
+  "replyModes": {
+    "final": "仅最终回复",
+    "finalDesc": "仅最终回复",
+    "all": "全部",
+    "allDesc": "包括工具/块在内的所有回复"
+  },
+  "providerSettings": "{{provider}} 设置",
+  "openai": {
+    "apiKey": "API Key",
+    "apiBase": "API Base URL",
+    "model": "模型",
+    "voice": "语音",
+    "speed": {
+      "label": "语速",
+      "help": "语速倍数 — 0.25 = 最慢，4.0 = 最快。"
+    },
+    "responseFormat": {
+      "label": "输出格式",
+      "help": "API 返回的音频编码格式（mp3、opus、aac、flac、wav、pcm）。"
+    },
+    "instructions": {
+      "label": "指令",
+      "help": "系统级风格提示词 — 仅 gpt-4o-mini-tts 模型支持。"
+    }
   },
   "elevenlabs": {
     "apiKey": "API Key",
     "baseUrl": "Base URL",
+    "voiceId": "Voice ID",
     "modelId": "Model ID",
-    "voiceId": "Voice ID"
+    "voiceSettings": {
+      "stability": {
+        "label": "稳定性",
+        "help": "0 = 变化更多、更富表现力，1 = 更一致、更稳定。"
+      },
+      "similarityBoost": {
+        "label": "相似度增强",
+        "help": "与原始声音克隆的接近程度 — 0 = 更有创意，1 = 更相似。"
+      },
+      "style": {
+        "label": "风格夸张度",
+        "help": "放大声音风格特征。0 = 无；值越高表现力越强。"
+      },
+      "useSpeakerBoost": {
+        "label": "发言人增强",
+        "help": "提升声音清晰度和目标发言人相似度。"
+      },
+      "speed": {
+        "label": "语速",
+        "help": "语速范围 — 0.7（慢）到 1.2（快）。"
+      }
+    },
+    "applyTextNormalization": {
+      "label": "文本规范化",
+      "help": "数字和缩写词的展开方式（auto、on 或 off）。"
+    },
+    "seed": {
+      "label": "随机种子（高级）",
+      "help": "设置固定种子以获得可复现的输出。0 = 随机。"
+    },
+    "optimizeStreamingLatency": {
+      "label": "流式延迟优化（高级）",
+      "help": "延迟优化级别：0 = 不优化，4 = 最大优化。"
+    },
+    "languageCode": {
+      "label": "语言代码",
+      "help": "ISO 639-1 语言提示，如 'en' 或 'zh'。高级选项。"
+    }
   },
-  "general": {
-    "autoApplyMode": "自动应用模式",
-    "maxTextLength": "最大文本长度",
-    "primaryProvider": "主要Provider",
-    "replyMode": "回复模式",
-    "timeout": "超时（毫秒）",
-    "title": "常规设置"
+  "edge": {
+    "voice": "语音",
+    "speechRate": "语速",
+    "hint": "Edge TTS 免费且无需 API Key。安装方式：pip install edge-tts",
+    "rate": {
+      "label": "语速",
+      "help": "语速百分比调整。-50% = 慢很多，+100% = 快很多。"
+    },
+    "pitch": {
+      "label": "音调",
+      "help": "相对于中性音调的 Hz 偏移。范围：-50 Hz 至 +50 Hz。"
+    },
+    "volume": {
+      "label": "音量",
+      "help": "音量百分比调整。-50% = 更小声，+100% = 更响。"
+    }
   },
   "minimax": {
-    "apiBase": "API Base",
     "apiKey": "API Key",
-    "groupId": "Group ID",
+    "groupId": "Group ID *",
     "groupIdPlaceholder": "MiniMax 必填",
+    "apiBase": "API Base",
     "model": "模型",
-    "voiceId": "Voice ID"
+    "voiceId": "Voice ID",
+    "speed": {
+      "label": "语速",
+      "help": "语速倍数 — 0.5 = 最慢，2.0 = 最快。"
+    },
+    "vol": {
+      "label": "音量",
+      "help": "音量倍数 — 0.01 = 近乎静音，10.0 = 最大音量。"
+    },
+    "pitch": {
+      "label": "音调",
+      "help": "音调偏移（半音）。-12 = 低一个八度，+12 = 高一个八度。"
+    },
+    "emotion": {
+      "label": "情感",
+      "help": "应用于合成语音的情感色彩。"
+    },
+    "textNormalization": {
+      "label": "文本规范化",
+      "help": "是否在合成前展开数字和符号。"
+    },
+    "audio": {
+      "format": {
+        "label": "音频格式",
+        "help": "输出编码格式：mp3、pcm、flac 或 wav。"
+      },
+      "sampleRate": {
+        "label": "采样率",
+        "help": "音频采样率（Hz）。大多数场景保持默认即可。"
+      },
+      "bitrate": {
+        "label": "比特率（仅 MP3）",
+        "help": "MP3 比特率（bps）。仅当格式为 mp3 时生效。"
+      },
+      "channel": {
+        "label": "声道",
+        "help": "1 = 单声道（文件较小），2 = 立体声。"
+      }
+    }
   },
-  "openai": {
-    "apiBase": "API Base URL",
+  "gemini": {
     "apiKey": "API Key",
+    "apiBase": "API Base URL",
+    "voice": "语音",
     "model": "模型",
-    "voice": "语音"
+    "multiSpeaker": "多人说话",
+    "multiSpeakerHint": "最多支持 2 位发言人",
+    "audioTags": "音频标签",
+    "audioTagsHint": "在文本中直接插入 [laughs] 等表情标签",
+    "speakerName": "发言人名称",
+    "speakerVoice": "语音",
+    "addSpeaker": "添加发言人",
+    "removeSpeaker": "删除",
+    "maxSpeakersReached": "已达到最多 2 位发言人",
+    "filterAll": "全部",
+    "filterEmotion": "情感",
+    "filterPacing": "节奏",
+    "filterEffect": "效果",
+    "filterVoiceQuality": "语音质量",
+    "searchPlaceholder": "搜索标签…",
+    "insertTag": "插入",
+    "multiSpeakerMode": {
+      "title": "多人说话模式",
+      "addSpeaker": "添加发言人",
+      "speakerName": "发言人名称",
+      "speakerVoice": "语音",
+      "removeSpeaker": "删除",
+      "limitReached": "最多 2 位发言人"
+    },
+    "audioTagsPanel": {
+      "title": "音频标签",
+      "search": "搜索标签",
+      "categoryEmotion": "情感",
+      "categoryPacing": "节奏",
+      "categoryEffect": "效果",
+      "categoryVoiceQuality": "语音质量",
+      "insertHint": "点击标签插入到光标位置"
+    },
+    "previewBadge": "预览版"
   },
-  "providerSettings": "{{provider}} 设置",
-  "providers": {
-    "edge": "Edge（免费）",
-    "elevenlabs": "ElevenLabs",
-    "minimax": "MiniMax",
-    "none": "无（已禁用）",
-    "openai": "OpenAI"
+  "voice_label": "声音",
+  "voice_placeholder": "选择声音…",
+  "voice_picker": {
+    "requires_provider": "请先配置 TTS Provider",
+    "enter_voice_id": "手动输入 voice_id"
   },
-  "replyModes": {
-    "all": "全部",
-    "allDesc": "包括工具/块在内的所有回复",
-    "final": "仅最终回复",
-    "finalDesc": "仅最终回复"
+  "voice_refresh": "刷新",
+  "voice_preview": "试听",
+  "voice_stop_preview": "停止",
+  "voice_no_voices": "暂无声音",
+  "voice_save_config_first": "请先保存 API Key 以加载声音",
+  "voice_loading": "加载声音中…",
+  "voice_preview_error": "试听失败 — 正在刷新",
+  "model_label": "模型",
+  "model_placeholder": "默认（租户/系统）",
+  "empty_state": {
+    "title": "未配置 TTS",
+    "description": "配置 TTS Provider 以为 Agent 启用语音。",
+    "cta": "配置 TTS",
+    "non_owner_hint": "请联系工作区所有者配置 TTS。"
   },
-  "save": "保存",
-  "saveChanges": "保存更改",
-  "saving": "保存中...",
-  "status": {
-    "activeProvider": "主要Provider：{{provider}}，自动：{{auto}}",
-    "configured": "已配置",
-    "disabled": "已禁用",
-    "noProvider": "未配置 TTS Provider",
-    "title": "状态"
+  "override": {
+    "label": "为此 Agent 覆盖语音",
+    "inherits": "继承: {{provider}} · {{voice}} · {{model}}",
+    "params": {
+      "title": "精细调整"
+    }
   },
-  "title": "语音合成"
+  "test": {
+    "button": "测试语音",
+    "sample_text": "你好，这是语音测试。"
+  },
+  "testConnection": {
+    "label": "测试连接",
+    "testing": "测试中…",
+    "success": "连接成功",
+    "failed": "连接失败"
+  },
+  "playground": {
+    "title": "测试播放",
+    "inputLabel": "要合成的文本",
+    "placeholder": "输入文本以试听…",
+    "play": "播放",
+    "stop": "停止",
+    "synthesizing": "合成中…",
+    "playbackFailed": "播放失败",
+    "requiresProvider": "请先选择 Provider 以启用试听。"
+  },
+  "advanced": {
+    "title": "高级设置",
+    "count": "{{count}} 项高级设置",
+    "count_one": "{{count}} 项高级设置"
+  }
 }

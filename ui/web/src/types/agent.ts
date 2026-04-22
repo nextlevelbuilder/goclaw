@@ -16,6 +16,7 @@ export interface SubagentsConfig {
   maxSpawnDepth?: number;
   maxChildrenPerAgent?: number;
   archiveAfterMinutes?: number;
+  maxRetries?: number;
   model?: string;
 }
 
@@ -31,6 +32,7 @@ export interface CompactionConfig {
 
 export interface ContextPruningConfig {
   mode?: "off" | "cache-ttl";
+  ttl?: string;             // cache TTL gate duration, e.g. "5m" (default). Only used when mode="cache-ttl"
   keepLastAssistants?: number;
   softTrimRatio?: number;
   hardClearRatio?: number;

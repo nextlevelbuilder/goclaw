@@ -1,625 +1,287 @@
 # WebSocket Team & Delegation Events
 
-Complete reference for all WS events related to team agent operations, delegation lifecycle, and admin CRUD.
+Complete reference for all WS events related to team operations, delegation lifecycle, and admin CRUD.
 
-All events are delivered as JSON frames via the WebSocket protocol:
+---
+
+## 1. Overview
+
+Events are emitted via `msgBus.Broadcast(bus.Event{})` and forwarded to all connected WS clients by the gateway subscriber. The domain event bus (`internal/eventbus`) is internal-only and does **not** forward to WS clients.
+
+Wire frame:
 ```json
 {"type": "event", "event": "<event_name>", "payload": { ... }}
 ```
 
-Events are emitted via `msgBus.Broadcast(bus.Event{})` and forwarded to all connected WS clients (filtered by gateway subscriber at `server.go`).
+---
+
+## 2. Event Envelope
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `type` | string | Always `"event"` |
+| `event` | string | Event name (e.g. `"delegation.started"`) |
+| `payload` | object | Event-specific payload (see §3) |
 
 ---
 
-## Event Catalog
+## 3. Payload Base Types
 
-### Delegation Lifecycle Events
+Defined in `pkg/protocol/team_events.go`. Each event in §4 lists which base it uses plus any delta fields.
 
-#### `delegation.started`
-Emitted when a lead agent initiates a delegation to a member agent.
+### 3.1 DelegationEventPayload
+
+Used by: `delegation.started/completed/failed/cancelled`.
+
+Fields: `delegation_id`, `source_agent_id`, `source_agent_key`, `source_display_name?`, `target_agent_id`, `target_agent_key`, `target_display_name?`, `user_id`, `channel`, `chat_id`, `mode` (`async`/`sync`), `task?`, `team_id?`, `team_task_id?`, `status?`, `elapsed_ms?`, `error?`, `created_at`.
 
 ```json
 {
   "delegation_id": "a1b2c3d4",
-  "source_agent_id": "019c839b-...",
+  "source_agent_id": "<source-agent-id>",
   "source_agent_key": "default",
   "source_display_name": "Default Agent",
-  "target_agent_id": "019ca748-...",
-  "target_agent_key": "tieu-la",
-  "target_display_name": "Tieu La",
-  "user_id": "user123",
+  "target_agent_id": "<target-agent-id>",
+  "target_agent_key": "content-writer",
+  "target_display_name": "Content Writer",
+  "user_id": "<user-id>",
   "channel": "telegram",
-  "chat_id": "-100123456",
+  "chat_id": "<chat-id>",
   "mode": "async",
-  "task": "Create Instagram image for new product",
-  "team_id": "019c9503-...",
-  "team_task_id": "019ca84f-...",
+  "task": "Create Instagram image",
+  "team_id": "<team-id>",
+  "team_task_id": "<team-task-id>",
   "status": "running",
   "created_at": "2026-03-05T10:00:00Z"
 }
 ```
 
-#### `delegation.completed`
-Emitted when a delegation finishes successfully.
+### 3.2 DelegationProgressPayload
 
-Same payload as `delegation.started` with:
-- `status`: `"completed"`
-- `elapsed_ms`: total duration in milliseconds
+Used by: `delegation.progress`.
 
-#### `delegation.failed`
-Emitted when a delegation fails (agent error).
-
-Same payload as `delegation.started` with:
-- `status`: `"failed"`
-- `error`: error message string
-- `elapsed_ms`: total duration
-
-#### `delegation.cancelled`
-Emitted when a delegation is cancelled (via `/stopall`, team task cancel, or direct cancel).
-
-Same payload as `delegation.started` with:
-- `status`: `"cancelled"`
-- `elapsed_ms`: total duration
-
-#### `delegation.progress`
-Emitted periodically (~30s) for active async delegations. Groups all active delegations from the same source agent.
+Fields: `source_agent_id`, `source_agent_key`, `user_id`, `channel`, `chat_id`, `team_id?`, `active_delegations[]` — each item: `delegation_id`, `target_agent_key`, `target_display_name?`, `elapsed_ms`, `team_task_id?`, `activity?` (`thinking`/`tool_exec`/`compacting`), `tool?`.
 
 ```json
 {
-  "source_agent_id": "019c839b-...",
+  "source_agent_id": "<source-agent-id>",
   "source_agent_key": "default",
-  "user_id": "user123",
+  "user_id": "<user-id>",
   "channel": "telegram",
-  "chat_id": "-100123456",
-  "team_id": "019c9503-...",
+  "chat_id": "<chat-id>",
+  "team_id": "<team-id>",
   "active_delegations": [
-    {
-      "delegation_id": "a1b2c3d4",
-      "target_agent_key": "tieu-la",
-      "target_display_name": "Tieu La",
-      "elapsed_ms": 45000,
-      "team_task_id": "019ca84f-..."
-    },
-    {
-      "delegation_id": "e5f6g7h8",
-      "target_agent_key": "tieu-ngon",
-      "target_display_name": "Tieu Ngon",
-      "elapsed_ms": 30000,
-      "team_task_id": "019ca850-..."
-    }
+    {"delegation_id": "a1b2c3d4", "target_agent_key": "content-writer", "elapsed_ms": 45000, "activity": "tool_exec", "tool": "create_image"}
   ]
 }
 ```
 
-#### `delegation.accumulated`
-Emitted when an async delegation completes but sibling delegations are still running. The result is accumulated and will be announced when all siblings finish.
+### 3.3 DelegationAccumulatedPayload
+
+Used by: `delegation.accumulated`.
+
+Fields: `delegation_id`, `source_agent_id`, `source_agent_key`, `target_agent_key`, `target_display_name?`, `user_id`, `channel`, `chat_id`, `team_id?`, `team_task_id?`, `siblings_remaining`, `elapsed_ms?`.
 
 ```json
 {
   "delegation_id": "a1b2c3d4",
-  "source_agent_id": "019c839b-...",
+  "source_agent_id": "<source-agent-id>",
   "source_agent_key": "default",
-  "target_agent_key": "tieu-la",
-  "target_display_name": "Tieu La",
-  "user_id": "user123",
+  "target_agent_key": "content-writer",
+  "user_id": "<user-id>",
   "channel": "telegram",
-  "chat_id": "-100123456",
-  "team_id": "019c9503-...",
-  "team_task_id": "019ca84f-...",
+  "chat_id": "<chat-id>",
+  "team_id": "<team-id>",
+  "team_task_id": "<team-task-id>",
   "siblings_remaining": 1,
   "elapsed_ms": 45300
 }
 ```
 
-#### `delegation.announce`
-Emitted when the last sibling delegation completes and all accumulated results are sent back to the lead agent.
+### 3.4 DelegationAnnouncePayload
+
+Used by: `delegation.announce`.
+
+Fields: `source_agent_id`, `source_agent_key`, `source_display_name?`, `user_id`, `channel`, `chat_id`, `team_id?`, `results[]` (`agent_key`, `display_name?`, `has_media`, `content_preview?`), `completed_task_ids?[]`, `total_elapsed_ms`, `has_media`.
 
 ```json
 {
-  "source_agent_id": "019c839b-...",
+  "source_agent_id": "<source-agent-id>",
   "source_agent_key": "default",
   "source_display_name": "Default Agent",
-  "user_id": "user123",
+  "user_id": "<user-id>",
   "channel": "telegram",
-  "chat_id": "-100123456",
-  "team_id": "019c9503-...",
+  "chat_id": "<chat-id>",
+  "team_id": "<team-id>",
   "results": [
-    {
-      "agent_key": "tieu-la",
-      "display_name": "Tieu La",
-      "has_media": true,
-      "content_preview": "Created Instagram post image..."
-    },
-    {
-      "agent_key": "tieu-ngon",
-      "display_name": "Tieu Ngon",
-      "has_media": false,
-      "content_preview": "Wrote caption for you..."
-    }
+    {"agent_key": "content-writer", "display_name": "Content Writer", "has_media": true, "content_preview": "Created image..."},
+    {"agent_key": "copywriter", "has_media": false, "content_preview": "Wrote caption..."}
   ],
-  "completed_task_ids": ["019ca84f-...", "019ca850-..."],
+  "completed_task_ids": ["<task-id-1>", "<task-id-2>"],
   "total_elapsed_ms": 52000,
   "has_media": true
 }
 ```
 
----
+### 3.5 TeamTaskEventPayload
 
-### Team Task Events
+Used by: all `team.task.*` events.
 
-#### `team.task.created`
-Emitted when a new team task is created (manual or auto-created by delegation).
+Fields: `team_id`, `task_id`, `task_number?`, `subject?`, `status`, `owner_agent_key?`, `owner_display_name?`, `reason?`, `user_id`, `channel`, `chat_id`, `peer_kind?` (`group`/`direct`), `local_key?`, `timestamp`, `comment_text?`, `progress_percent?`, `progress_step?`, `actor_type?` (`agent`/`human`/`system`), `actor_id?`.
 
 ```json
 {
-  "team_id": "019c9503-...",
-  "task_id": "019ca84f-...",
+  "team_id": "<team-id>",
+  "task_id": "<task-id>",
+  "task_number": 5,
   "subject": "Create Instagram image",
   "status": "pending",
   "owner_agent_key": "",
-  "user_id": "user123",
+  "user_id": "<user-id>",
   "channel": "dashboard",
-  "chat_id": "-100123456",
+  "chat_id": "<chat-id>",
   "timestamp": "2026-03-05T10:00:00Z",
   "actor_type": "human",
-  "actor_id": "user123"
+  "actor_id": "<user-id>"
 }
 ```
 
-#### `team.task.claimed`
-Emitted when an agent claims a task (reserved for future use; not currently emitted).
+### 3.6 Team CRUD / Misc Payloads
 
-```json
-{
-  "team_id": "019c9503-...",
-  "task_id": "019ca84f-...",
-  "status": "in_progress",
-  "owner_agent_key": "tieu-la",
-  "owner_display_name": "Tieu La",
-  "user_id": "user123",
-  "channel": "system",
-  "chat_id": "-100123456",
-  "timestamp": "2026-03-05T10:00:01Z"
-}
-```
+**TeamCreatedPayload** (`team.created`): `team_id`, `team_name`, `lead_agent_key`, `lead_display_name?`, `member_count`.
 
-#### `team.task.assigned`
-Emitted when a task is assigned to an agent (either auto-assigned at creation or manually via `teams.tasks.assign` RPC).
+**TeamUpdatedPayload** (`team.updated`): `team_id`, `team_name`, `changes[]`.
 
-```json
-{
-  "team_id": "019c9503-...",
-  "task_id": "019ca84f-...",
-  "status": "in_progress",
-  "owner_agent_key": "tieu-la",
-  "user_id": "user123",
-  "channel": "dashboard",
-  "chat_id": "-100123456",
-  "timestamp": "2026-03-05T10:00:01Z",
-  "actor_type": "human",
-  "actor_id": "user123"
-}
-```
+**TeamDeletedPayload** (`team.deleted`): `team_id`, `team_name`.
 
-#### `team.task.completed`
-Emitted when a task is completed (auto-completed by delegation or marked complete by agent).
+**TeamMemberAddedPayload** (`team.member.added`): `team_id`, `team_name`, `agent_id`, `agent_key`, `display_name?`, `role`.
 
-```json
-{
-  "team_id": "019c9503-...",
-  "task_id": "019ca84f-...",
-  "status": "completed",
-  "owner_agent_key": "tieu-la",
-  "owner_display_name": "Tieu La",
-  "user_id": "user123",
-  "channel": "system",
-  "chat_id": "-100123456",
-  "timestamp": "2026-03-05T10:00:45Z"
-}
-```
+**TeamMemberRemovedPayload** (`team.member.removed`): `team_id`, `team_name`, `agent_id`, `agent_key`, `display_name?`.
 
-#### `team.task.cancelled`
-Emitted when a task is cancelled. Separated from `team.task.completed` for correct semantics.
+**TeamMessageEventPayload** (`team.message.sent`): `team_id`, `from_agent_key`, `from_display_name?`, `to_agent_key` (`"broadcast"` for team broadcast), `to_display_name?`, `message_type`, `preview`, `task_id?`, `user_id`, `channel`, `chat_id`.
 
-```json
-{
-  "team_id": "019c9503-...",
-  "task_id": "019ca84f-...",
-  "status": "cancelled",
-  "reason": "Task no longer needed",
-  "user_id": "user123",
-  "channel": "dashboard",
-  "chat_id": "-100123456",
-  "timestamp": "2026-03-05T10:01:00Z"
-}
-```
+**AgentLinkCreatedPayload** (`agent_link.created`): `link_id`, `source_agent_id`, `source_agent_key`, `target_agent_id`, `target_agent_key`, `direction`, `team_id?`, `status`.
 
-#### `team.task.approved`
-Emitted when a human approves a task via the dashboard (status becomes completed).
+**AgentLinkUpdatedPayload** (`agent_link.updated`): `link_id`, `source_agent_key`, `target_agent_key`, `direction?`, `status?`, `changes[]`.
 
-```json
-{
-  "team_id": "019c9503-...",
-  "task_id": "019ca84f-...",
-  "status": "completed",
-  "user_id": "user123",
-  "channel": "dashboard",
-  "chat_id": "-100123456",
-  "timestamp": "2026-03-05T10:02:00Z",
-  "actor_type": "human",
-  "actor_id": "user123"
-}
-```
-
-#### `team.task.rejected`
-Emitted when a human rejects a task via the dashboard (status becomes cancelled with reason).
-
-```json
-{
-  "team_id": "019c9503-...",
-  "task_id": "019ca84f-...",
-  "status": "cancelled",
-  "reason": "Image aspect ratio should be 4:5",
-  "user_id": "user123",
-  "channel": "dashboard",
-  "chat_id": "-100123456",
-  "timestamp": "2026-03-05T10:02:30Z",
-  "actor_type": "human",
-  "actor_id": "user123"
-}
-```
-
-#### `team.task.commented`
-Emitted when a human or agent adds a comment to a task. For agent blocker comments, also triggers task failure and leader escalation (see below).
-
-```json
-{
-  "team_id": "019c9503-...",
-  "task_id": "019ca84f-...",
-  "user_id": "user123",
-  "channel": "dashboard",
-  "chat_id": "-100123456",
-  "timestamp": "2026-03-05T10:02:45Z",
-  "actor_type": "human",
-  "actor_id": "user123"
-}
-```
-
-**Agent blocker comments** (type='blocker') trigger special handling:
-- Comment is saved with `comment_type='blocker'`
-- Task is auto-failed (transitions to failed status)
-- `EventTeamTaskFailed` is emitted (see below)
-- Lead agent receives escalation message via `system:escalation`
-- Member's session is cancelled
-
-#### `team.task.deleted`
-Emitted when a terminal-status task is hard-deleted via the dashboard.
-
-```json
-{
-  "team_id": "019c9503-...",
-  "task_id": "019ca84f-...",
-  "status": "completed",
-  "user_id": "user123",
-  "channel": "dashboard",
-  "chat_id": "-100123456",
-  "timestamp": "2026-03-05T10:03:00Z",
-  "actor_type": "human",
-  "actor_id": "user123"
-}
-```
-
-#### `team.task.failed`
-Emitted when a task is auto-failed due to blocker escalation or system errors.
-
-```json
-{
-  "team_id": "019c9503-...",
-  "task_id": "019ca84f-...",
-  "task_number": 5,
-  "subject": "Create Instagram image",
-  "status": "failed",
-  "reason": "Blocked: Cannot find API documentation",
-  "owner_agent_key": "tieu-la",
-  "owner_display_name": "Tieu La",
-  "user_id": "user123",
-  "channel": "telegram",
-  "chat_id": "-100123456",
-  "timestamp": "2026-03-05T10:02:15Z",
-  "actor_type": "system",
-  "actor_id": "blocker-escalation"
-}
-```
-
-#### `team.task.reviewed`
-Emitted when a member submits a task for review via `team_tasks(action="review", task_id="...")`.
-
-```json
-{
-  "team_id": "019c9503-...",
-  "task_id": "019ca84f-...",
-  "status": "in_review",
-  "owner_agent_key": "tieu-la",
-  "owner_display_name": "Tieu La",
-  "user_id": "user123",
-  "channel": "dashboard",
-  "chat_id": "-100123456",
-  "timestamp": "2026-03-05T10:02:30Z",
-  "actor_type": "agent",
-  "actor_id": "tieu-la"
-}
-```
-
-#### `team.task.progress`
-Emitted when a member updates task progress via `team_tasks(action="progress", task_id="...", progress_percent=..., progress_step="...")`.
-
-```json
-{
-  "team_id": "019c9503-...",
-  "task_id": "019ca84f-...",
-  "progress_percent": 50,
-  "progress_step": "Waiting for API response",
-  "user_id": "user123",
-  "channel": "system",
-  "chat_id": "-100123456",
-  "timestamp": "2026-03-05T10:02:00Z",
-  "actor_type": "agent",
-  "actor_id": "tieu-la"
-}
-```
-
-#### `team.task.updated`
-Emitted when task metadata (priority, description, etc.) is updated via `team_tasks(action="update", task_id="...", ...)`.
-
-```json
-{
-  "team_id": "019c9503-...",
-  "task_id": "019ca84f-...",
-  "changes": ["priority", "description"],
-  "user_id": "user123",
-  "channel": "dashboard",
-  "chat_id": "-100123456",
-  "timestamp": "2026-03-05T10:01:30Z",
-  "actor_type": "human",
-  "actor_id": "user123"
-}
-```
-
-#### `team.task.stale`
-Emitted when a task hasn't been updated within a timeout threshold and is marked as stale by the system.
-
-```json
-{
-  "team_id": "019c9503-...",
-  "task_id": "019ca84f-...",
-  "status": "stale",
-  "reason": "No activity for 7 days",
-  "user_id": "user123",
-  "channel": "system",
-  "chat_id": "-100123456",
-  "timestamp": "2026-03-05T10:00:00Z",
-  "actor_type": "system",
-  "actor_id": "stale-detector"
-}
-```
+**AgentLinkDeletedPayload** (`agent_link.deleted`): `link_id`, `source_agent_key`, `target_agent_key`.
 
 ---
 
-### Workspace Events
+## 4. Event Catalog
 
-#### `workspace.file.changed`
-Emitted when a file in a team's workspace directory is created, modified, or deleted. This event is reserved for future implementation; not currently broadcasted.
+### 4.1 Delegation Events
 
-```json
-{
-  "team_id": "019c9503-...",
-  "chat_id": "-100123456",
-  "file_name": "project/notes.md",
-  "change_type": "created",
-  "timestamp": "2026-03-05T10:00:00Z"
-}
-```
+| Event | Base | Delta Fields | Notes |
+|-------|------|-------------|-------|
+| `delegation.started` | `DelegationEventPayload` | `status="running"` | Lead initiates delegation to member |
+| `delegation.completed` | `DelegationEventPayload` | `status="completed"`, `+elapsed_ms` | Member completed successfully |
+| `delegation.failed` | `DelegationEventPayload` | `status="failed"`, `+elapsed_ms`, `+error` | Member failed |
+| `delegation.cancelled` | `DelegationEventPayload` | `status="cancelled"`, `+elapsed_ms` | Via `/stopall`, task cancel, or direct cancel |
+| `delegation.progress` | `DelegationProgressPayload` | — | Periodic (~30s) snapshot of all active async delegations |
+| `delegation.accumulated` | `DelegationAccumulatedPayload` | — | Member done but siblings still running; result held |
+| `delegation.announce` | `DelegationAnnouncePayload` | — | Last sibling done; all results returned to lead |
 
-**Potential field values:**
-- `change_type`: `"created"`, `"modified"`, `"deleted"`
+### 4.2 Team Task Events
 
----
+| Event | Base | Delta Fields | Notes |
+|-------|------|-------------|-------|
+| `team.task.created` | `TeamTaskEventPayload` | `status="pending"` | New task (manual or via delegation) |
+| `team.task.assigned` | `TeamTaskEventPayload` | `status="in_progress"`, `+owner_agent_key` | Auto-assigned at creation or via `teams.tasks.assign` RPC |
+| `team.task.dispatched` | `TeamTaskEventPayload` | `status="in_progress"`, `+owner_agent_key` | Leader dispatches pending task to member |
+| `team.task.claimed` | `TeamTaskEventPayload` | `status="in_progress"`, `+owner_agent_key`, `+owner_display_name` | Reserved; not currently emitted |
+| `team.task.progress` | `TeamTaskEventPayload` | `+progress_percent`, `+progress_step` | Member calls `team_tasks(action="progress")` |
+| `team.task.reviewed` | `TeamTaskEventPayload` | `status="in_review"`, `+owner_agent_key`, `+owner_display_name` | Member submits for review |
+| `team.task.approved` | `TeamTaskEventPayload` | `status="completed"` | Human approves via dashboard |
+| `team.task.rejected` | `TeamTaskEventPayload` | `status="cancelled"`, `+reason` | Human rejects via dashboard |
+| `team.task.completed` | `TeamTaskEventPayload` | `status="completed"`, `+owner_agent_key`, `+owner_display_name` | Auto-completed by delegation or agent |
+| `team.task.failed` | `TeamTaskEventPayload` | `status="failed"`, `+reason`, `+owner_agent_key`, `+task_number`, `+subject` | Blocker escalation or system error |
+| `team.task.cancelled` | `TeamTaskEventPayload` | `status="cancelled"`, `+reason?` | Explicit cancel |
+| `team.task.stale` | `TeamTaskEventPayload` | `status="stale"`, `+reason` | No activity within timeout |
+| `team.task.commented` | `TeamTaskEventPayload` | `+comment_text` | Blocker-type comment also auto-fails task + escalates lead |
+| `team.task.updated` | `TeamTaskEventPayload` | `+changes[]` | Metadata update via `team_tasks(action="update")` |
+| `team.task.deleted` | `TeamTaskEventPayload` | `status=<terminal>` | Hard-delete of terminal-status task |
+| `team.task.attachment_added` | `TeamTaskEventPayload` | `+task_number`, `+subject` | File attached via `team_tasks(action="attach")` |
 
-### Team Message Events
+### 4.3 Team Leader Events
 
-#### `team.message.sent`
-Emitted when an agent sends a message to another agent or broadcasts to the team.
+| Event | Payload | Notes |
+|-------|---------|-------|
+| `team.leader.processing` | `{agentId: string, tasks: int}` | Bridge: announce queue draining; fires before leader `run.started`. Emitted from `cmd/gateway_subagent_announce_queue.go` |
 
-```json
-{
-  "team_id": "019c9503-...",
-  "from_agent_key": "default",
-  "from_display_name": "Default Agent",
-  "to_agent_key": "tieu-la",
-  "to_display_name": "Tieu La",
-  "message_type": "chat",
-  "preview": "Please create an Instagram image...",
-  "task_id": "",
-  "user_id": "user123",
-  "channel": "telegram",
-  "chat_id": "-100123456"
-}
-```
+### 4.4 Team CRUD Events (Admin)
 
-For broadcast messages: `to_agent_key = "broadcast"`, `to_display_name = ""`.
+No routing context (`user_id`/`channel`/`chat_id`) — admin operations only.
 
----
+| Event | Base |
+|-------|------|
+| `team.created` | `TeamCreatedPayload` |
+| `team.updated` | `TeamUpdatedPayload` |
+| `team.deleted` | `TeamDeletedPayload` |
+| `team.member.added` | `TeamMemberAddedPayload` |
+| `team.member.removed` | `TeamMemberRemovedPayload` |
 
-### Team CRUD Events (Admin)
+### 4.5 Agent Link Events (Admin)
 
-These events are emitted from RPC handlers when teams are managed via the Web UI. No routing context (user_id/channel/chat_id) since these are admin operations.
+| Event | Base |
+|-------|------|
+| `agent_link.created` | `AgentLinkCreatedPayload` |
+| `agent_link.updated` | `AgentLinkUpdatedPayload` |
+| `agent_link.deleted` | `AgentLinkDeletedPayload` |
 
-#### `team.created`
-```json
-{
-  "team_id": "019c9503-...",
-  "team_name": "Content Team",
-  "lead_agent_key": "default",
-  "lead_display_name": "Default Agent",
-  "member_count": 3
-}
-```
+### 4.6 Workspace Events
 
-#### `team.updated`
-```json
-{
-  "team_id": "019c9503-...",
-  "team_name": "Content Team",
-  "changes": ["settings"]
-}
-```
+| Event | Payload | Notes |
+|-------|---------|-------|
+| `workspace.file.changed` | `{team_id, chat_id, file_name, change_type, timestamp}` | Reserved — not currently emitted. `change_type`: `created`/`modified`/`deleted` |
 
-#### `team.deleted`
-```json
-{
-  "team_id": "019c9503-...",
-  "team_name": "Content Team"
-}
-```
+### 4.7 Team Message Events
 
-#### `team.member.added`
-```json
-{
-  "team_id": "019c9503-...",
-  "team_name": "Content Team",
-  "agent_id": "019ca748-...",
-  "agent_key": "tieu-la",
-  "display_name": "Tieu La",
-  "role": "member"
-}
-```
+| Event | Base | Notes |
+|-------|------|-------|
+| `team.message.sent` | `TeamMessageEventPayload` | `to_agent_key="broadcast"` for team-wide messages |
 
-#### `team.member.removed`
-```json
-{
-  "team_id": "019c9503-...",
-  "team_name": "Content Team",
-  "agent_id": "019ca748-...",
-  "agent_key": "tieu-la",
-  "display_name": "Tieu La"
-}
-```
+### 4.8 Agent Events (Delegation Context)
 
----
+Agent events use top-level `"event": "agent"`. The `type` field inside the payload is the subtype. When running inside a delegation, extra context fields are present.
 
-### Agent Events (Delegation Context)
-
-`AgentEvent` payloads (broadcast as `"event": "agent"`) now include optional delegation and routing context:
-
-**`tool.call` example** (member agent inside delegation):
-```json
-{
-  "type": "tool.call",
-  "agentId": "tieu-la",
-  "runId": "delegate-a1b2c3d4",
-  "delegationId": "a1b2c3d4",
-  "teamId": "019c9503-...",
-  "teamTaskId": "019ca84f-...",
-  "parentAgentId": "default",
-  "userId": "user123",
-  "channel": "telegram",
-  "chatId": "-100123456",
-  "payload": {"name": "create_image", "id": "call_xxx"}
-}
-```
-
-**`tool.result` example:**
-```json
-{
-  "type": "tool.result",
-  "agentId": "tieu-la",
-  "runId": "delegate-a1b2c3d4",
-  "delegationId": "a1b2c3d4",
-  "teamId": "019c9503-...",
-  "teamTaskId": "019ca84f-...",
-  "parentAgentId": "default",
-  "userId": "user123",
-  "channel": "telegram",
-  "chatId": "-100123456",
-  "payload": {"name": "create_image", "id": "call_xxx", "is_error": false}
-}
-```
-
-> **Note:** Tool arguments and result content are intentionally omitted from payloads to avoid leaking sensitive data over WS. Only tool name, call ID, and error status are included.
-
-**Agent event subtypes** (the `type` field inside the payload):
+Delegation-only fields: `delegationId`, `teamId`, `teamTaskId`, `parentAgentId` (lead agent key). Always-present when available: `userId`, `channel`, `chatId`. Distinguish lead vs member: `parentAgentId` absent = lead, present = member.
 
 | Constant | Type | Description |
 |----------|------|-------------|
 | `AgentEventRunStarted` | `run.started` | Agent run begins |
-| `AgentEventRunCompleted` | `run.completed` | Agent run finished successfully |
+| `AgentEventRunCompleted` | `run.completed` | Agent run finished |
 | `AgentEventRunFailed` | `run.failed` | Agent run failed |
-| `AgentEventRunRetrying` | `run.retrying` | Agent run retrying after error |
-| `AgentEventToolCall` | `tool.call` | Agent calling a tool |
-| `AgentEventToolResult` | `tool.result` | Tool execution completed |
-| *(chat events)* | `chunk` | Streaming text chunk |
-| *(chat events)* | `thinking` | Extended thinking content |
+| `AgentEventRunCancelled` | `run.cancelled` | Agent run cancelled |
+| `AgentEventRunRetrying` | `run.retrying` | Retrying after error |
+| `AgentEventToolCall` | `tool.call` | Tool invoked — name + call ID only (no args) |
+| `AgentEventToolResult` | `tool.result` | Tool done — name + call ID + `is_error` (no content) |
+| `AgentEventBlockReply` | `block.reply` | Block-level reply |
+| `AgentEventActivity` | `activity` | Phase: `thinking`, `tool_exec`, `compacting` |
+| *(chat)* | `chunk` | Streaming text fragment |
+| *(chat)* | `thinking` | Extended thinking content |
+| *(chat)* | `message` | Full message (non-streaming) |
 
-**Note:** When `Stream: true`, `chunk` and `thinking` are emitted incrementally (one event per streamed fragment). When `Stream: false` (e.g. delegate runs), they are emitted as a single event containing the full content after the LLM response is received. Both paths carry full delegation context.
-
-Fields present only when the agent is running inside a delegation:
-- `delegationId` — correlation ID for this delegation
-- `teamId` — team scope (if team-based)
-- `teamTaskId` — associated team task
-- `parentAgentId` — lead agent key that initiated the delegation
-
-Fields always present when available:
-- `userId` — scoped user ID (group chats: `"group:{channel}:{chatID}"`)
-- `channel` — origin channel (telegram, discord, web, etc.)
-- `chatId` — origin chat/conversation ID
-
-Client can distinguish lead vs member agent events:
-- `parentAgentId` absent → lead agent event
-- `parentAgentId` present → member agent event (delegation)
+> When `Stream: true`, `chunk`/`thinking` emit incrementally. When `Stream: false` (delegate runs), emit once with full content.
 
 ---
 
-## Event Flow Timeline
+## 5. Correlation Rules
 
-```
-User sends "Create Instagram post" to Default Agent (lead)
-  |
-  v
-[agent] run.started          agentId=default
-[agent] chunk                agentId=default, content="Let me assign..."
-[agent] tool.call            agentId=default, tool=delegate
-  |
-  |-- [delegation.started]   target=tieu-la, task="Create image", mode=async
-  |-- [delegation.started]   target=tieu-ngon, task="Write caption", mode=async
-  |
-  |   (member agents run in parallel)
-  |
-  |-- [agent] run.started    agentId=tieu-la, delegationId=xxx, parentAgentId=default
-  |-- [agent] run.started    agentId=tieu-ngon, delegationId=yyy, parentAgentId=default
-  |
-  |-- [agent] tool.call      agentId=tieu-la, tool=create_image, delegationId=xxx
-  |-- [agent] tool.result    agentId=tieu-la, delegationId=xxx
-  |
-  |-- [delegation.progress]  active=[{tieu-la, 30s}, {tieu-ngon, 30s}]
-  |
-  |-- [agent] run.completed  agentId=tieu-la, delegationId=xxx
-  |-- [delegation.completed] target=tieu-la, elapsed_ms=35000
-  |-- [delegation.accumulated] target=tieu-la, siblings_remaining=1
-  |
-  |-- [agent] run.completed  agentId=tieu-ngon, delegationId=yyy
-  |-- [delegation.completed] target=tieu-ngon, elapsed_ms=42000
-  |-- [delegation.announce]  results=[{tieu-la, has_media}, {tieu-ngon}]
-  |
-  |   (lead receives announce, processes results)
-  |
-  |-- [agent] run.started    agentId=default
-  |-- [agent] chunk          agentId=default, content="Here are the results..."
-  +-- [agent] run.completed  agentId=default
-```
+| Source Event | Correlated Event(s) | Key | Notes |
+|-------------|---------------------|-----|-------|
+| `delegation.started` | `delegation.completed/failed/cancelled` | `delegation_id` | Lifecycle pair |
+| `delegation.completed` (async) | `delegation.accumulated` → `delegation.announce` | `delegation_id`, `team_id` | Accumulated per member; announce once when last sibling done |
+| `delegation.progress` | — | `source_agent_id` | Groups all active delegations from same leader |
+| `team.task.created` | `team.task.assigned` / `team.task.dispatched` | `task_id` | Assignment follows creation |
+| `team.task.reviewed` | `team.task.approved` / `team.task.rejected` | `task_id` | Human review loop |
+| `team.task.commented` (blocker) | `team.task.failed` | `task_id` | Blocker comment auto-fails task + escalates lead |
+| last `team.task.completed` (batch) | `team.leader.processing` → leader `run.started` | `team_id`, `agentId` | Bridge: announce queue start → leader run |
+| `agent run.started` (member) | `agent run.completed/failed` | `runId`, `delegationId` | Member run lifecycle |
 
 ---
 
-## Constants Reference
+## 6. Constants Reference
 
 All event name constants are defined in `pkg/protocol/events.go`:
 
@@ -640,6 +302,7 @@ All event name constants are defined in `pkg/protocol/events.go`:
 | `EventTeamTaskCreated` | `team.task.created` | Active |
 | `EventTeamTaskClaimed` | `team.task.claimed` | Reserved (not emitted) |
 | `EventTeamTaskAssigned` | `team.task.assigned` | Active |
+| `EventTeamTaskDispatched` | `team.task.dispatched` | Active |
 | `EventTeamTaskCompleted` | `team.task.completed` | Active |
 | `EventTeamTaskCancelled` | `team.task.cancelled` | Active |
 | `EventTeamTaskApproved` | `team.task.approved` | Active |
@@ -651,6 +314,8 @@ All event name constants are defined in `pkg/protocol/events.go`:
 | `EventTeamTaskProgress` | `team.task.progress` | Active |
 | `EventTeamTaskUpdated` | `team.task.updated` | Active |
 | `EventTeamTaskStale` | `team.task.stale` | Active |
+| `EventTeamTaskAttachmentAdded` | `team.task.attachment_added` | Active |
+| `EventTeamLeaderProcessing` | `team.leader.processing` | Active |
 
 ### Team CRUD Events
 | Constant | Event Name |
@@ -660,6 +325,13 @@ All event name constants are defined in `pkg/protocol/events.go`:
 | `EventTeamDeleted` | `team.deleted` |
 | `EventTeamMemberAdded` | `team.member.added` |
 | `EventTeamMemberRemoved` | `team.member.removed` |
+
+### Agent Link Events
+| Constant | Event Name |
+|----------|-----------|
+| `EventAgentLinkCreated` | `agent_link.created` |
+| `EventAgentLinkUpdated` | `agent_link.updated` |
+| `EventAgentLinkDeleted` | `agent_link.deleted` |
 
 ### Workspace Events
 | Constant | Event Name | Status |
@@ -671,4 +343,4 @@ All event name constants are defined in `pkg/protocol/events.go`:
 |----------|-----------|
 | `EventTeamMessageSent` | `team.message.sent` |
 
-**Payload structs:** Typed payloads are defined in `pkg/protocol/team_events.go` (e.g., `TeamTaskEventPayload`, `DelegationEventPayload`, etc.).
+**Payload structs** in `pkg/protocol/team_events.go`: `DelegationEventPayload`, `DelegationProgressPayload`, `DelegationAccumulatedPayload`, `DelegationAnnouncePayload`, `TeamTaskEventPayload`, `TeamMessageEventPayload`, `TeamCreatedPayload`, `TeamUpdatedPayload`, `TeamDeletedPayload`, `TeamMemberAddedPayload`, `TeamMemberRemovedPayload`, `AgentLinkCreatedPayload`, `AgentLinkUpdatedPayload`, `AgentLinkDeletedPayload`.

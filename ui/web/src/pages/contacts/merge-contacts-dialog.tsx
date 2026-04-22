@@ -117,6 +117,7 @@ export function MergeContactsDialog({
                   onChange={setSelectedUserId}
                   placeholder={t("merge.selectUser")}
                   source="tenant_user"
+                  valueMode="uuid"
                 />
               </div>
             )}

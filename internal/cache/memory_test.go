@@ -95,7 +95,7 @@ func TestInMemoryCache_Clear(t *testing.T) {
 // the background sweep goroutine (not just lazy on Get).
 func TestInMemoryCache_PeriodicSweep(t *testing.T) {
 	c := NewInMemoryCache[string](
-		WithSweepInterval[string](20*time.Millisecond),
+		WithSweepInterval[string](20 * time.Millisecond),
 	)
 	defer c.Close()
 	ctx := context.Background()
@@ -126,7 +126,7 @@ func TestInMemoryCache_MaxSizeEviction(t *testing.T) {
 	ctx := context.Background()
 
 	// Insert 10 entries with distinct creation times to ensure oldest-first ordering
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		c.Set(ctx, string(rune('a'+i)), i, 0)
 		time.Sleep(2 * time.Millisecond)
 	}
@@ -142,7 +142,7 @@ func TestInMemoryCache_MaxSizeEviction(t *testing.T) {
 // TestInMemoryCache_Close verifies Close stops the sweep goroutine (no leak).
 func TestInMemoryCache_Close(t *testing.T) {
 	c := NewInMemoryCache[string](
-		WithSweepInterval[string](10*time.Millisecond),
+		WithSweepInterval[string](10 * time.Millisecond),
 	)
 	ctx := context.Background()
 	c.Set(ctx, "k", "v", 0)
@@ -168,13 +168,13 @@ func TestInMemoryCache_ConcurrentSweepAndSet(t *testing.T) {
 
 	done := make(chan bool)
 	go func() {
-		for i := 0; i < 500; i++ {
+		for i := range 500 {
 			c.Set(ctx, string(rune('a'+(i%26))), i, 5*time.Millisecond)
 		}
 		done <- true
 	}()
 	go func() {
-		for i := 0; i < 500; i++ {
+		for i := range 500 {
 			_, _ = c.Get(ctx, string(rune('a'+(i%26))))
 		}
 		done <- true

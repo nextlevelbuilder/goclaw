@@ -24,19 +24,30 @@ type Registry struct {
 	rateLimiter *ToolRateLimiter // nil = no rate limiting
 	scrubbing   bool             // scrub credentials from output (default true)
 
+	// Per-registry tool groups (eliminates global map race condition).
+	// MCP tools register their groups here so each Loop has isolated namespace.
+	toolGroups   map[string][]string
+	toolGroupsMu sync.RWMutex
+
 	// deferredActivator is called when a tool is not in the registry but may be
 	// a deferred MCP tool. Returns true if the tool was successfully activated.
 	deferredActivator func(name string) bool
 }
 
 func NewRegistry() *Registry {
-	return &Registry{
-		tools:     make(map[string]Tool),
-		metadata:  make(map[string]ToolMetadata),
-		aliases:   make(map[string]string),
-		disabled:  make(map[string]bool),
-		scrubbing: true, // enabled by default
+	r := &Registry{
+		tools:      make(map[string]Tool),
+		metadata:   make(map[string]ToolMetadata),
+		aliases:    make(map[string]string),
+		disabled:   make(map[string]bool),
+		toolGroups: make(map[string][]string),
+		scrubbing:  true, // enabled by default
 	}
+	// Seed built-in tool groups (deep copy from package-level constant data)
+	for name, members := range builtinToolGroups {
+		r.toolGroups[name] = append([]string(nil), members...)
+	}
+	return r
 }
 
 // SetDeferredActivator registers a callback that activates deferred tools on demand.
@@ -337,11 +348,15 @@ func (r *Registry) Count() int {
 func (r *Registry) Clone() *Registry {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	r.toolGroupsMu.RLock()
+	defer r.toolGroupsMu.RUnlock()
+
 	clone := &Registry{
 		tools:       make(map[string]Tool, len(r.tools)),
 		metadata:    make(map[string]ToolMetadata, len(r.metadata)),
 		aliases:     make(map[string]string, len(r.aliases)),
 		disabled:    make(map[string]bool, len(r.disabled)),
+		toolGroups:  make(map[string][]string, len(r.toolGroups)),
 		rateLimiter: r.rateLimiter,
 		scrubbing:   r.scrubbing,
 	}
@@ -349,5 +364,102 @@ func (r *Registry) Clone() *Registry {
 	maps.Copy(clone.metadata, r.metadata)
 	maps.Copy(clone.aliases, r.aliases)
 	maps.Copy(clone.disabled, r.disabled)
+	// Deep-copy toolGroups (each slice must be copied)
+	for name, members := range r.toolGroups {
+		clone.toolGroups[name] = append([]string(nil), members...)
+	}
 	return clone
+}
+
+// RegisterToolGroup adds or replaces a dynamic tool group.
+// Used by the MCP manager to register "mcp" and "mcp:{serverName}" groups.
+func (r *Registry) RegisterToolGroup(name string, members []string) {
+	r.toolGroupsMu.Lock()
+	r.toolGroups[name] = members
+	r.toolGroupsMu.Unlock()
+}
+
+// MergeToolGroup adds members to an existing tool group without removing existing entries.
+// Used by per-user MCP tool loading to extend the "mcp" group incrementally.
+func (r *Registry) MergeToolGroup(name string, members []string) {
+	r.toolGroupsMu.Lock()
+	defer r.toolGroupsMu.Unlock()
+	existing := r.toolGroups[name]
+	seen := make(map[string]bool, len(existing))
+	for _, m := range existing {
+		seen[m] = true
+	}
+	for _, m := range members {
+		if !seen[m] {
+			existing = append(existing, m)
+			seen[m] = true
+		}
+	}
+	r.toolGroups[name] = existing
+}
+
+// UnregisterToolGroup removes a dynamic tool group.
+func (r *Registry) UnregisterToolGroup(name string) {
+	r.toolGroupsMu.Lock()
+	delete(r.toolGroups, name)
+	r.toolGroupsMu.Unlock()
+}
+
+// GetToolGroup returns the members of a tool group (thread-safe).
+func (r *Registry) GetToolGroup(name string) ([]string, bool) {
+	r.toolGroupsMu.RLock()
+	defer r.toolGroupsMu.RUnlock()
+	members, ok := r.toolGroups[name]
+	if !ok {
+		return nil, false
+	}
+	// Return a copy to prevent mutation
+	return append([]string(nil), members...), true
+}
+
+// ExpandToolGroups expands a spec list (which may contain "group:xxx") into concrete tool names,
+// filtered against available tools. Thread-safe.
+func (r *Registry) ExpandToolGroups(available []string, spec []string) []string {
+	r.toolGroupsMu.RLock()
+	defer r.toolGroupsMu.RUnlock()
+
+	expanded := make(map[string]bool)
+	for _, s := range spec {
+		if after, ok := strings.CutPrefix(s, "group:"); ok {
+			if members, ok := r.toolGroups[after]; ok {
+				for _, m := range members {
+					expanded[m] = true
+				}
+			}
+		} else {
+			expanded[s] = true
+		}
+	}
+
+	var result []string
+	for _, t := range available {
+		if expanded[t] {
+			result = append(result, t)
+		}
+	}
+	return result
+}
+
+// MatchDenySpec returns true if name matches any entry in the deny spec (with group expansion).
+func (r *Registry) MatchDenySpec(name string, spec []string) bool {
+	r.toolGroupsMu.RLock()
+	defer r.toolGroupsMu.RUnlock()
+
+	for _, s := range spec {
+		if after, ok := strings.CutPrefix(s, "group:"); ok {
+			if members, ok := r.toolGroups[after]; ok {
+				if slices.Contains(members, name) {
+					return true
+				}
+			}
+		} else if s == name {
+			return true
+		}
+	}
+	return false
 }

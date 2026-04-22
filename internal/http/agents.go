@@ -134,6 +134,11 @@ func (h *AgentsHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/agents", h.authMiddleware(h.handleList))
 	mux.HandleFunc("POST /v1/agents", h.adminMiddleware(h.handleCreate))
 	mux.HandleFunc("GET /v1/agents/{id}", h.authMiddleware(h.handleGet))
+	// Finding #15: PUT /v1/agents/{id} is gated by adminMiddleware (RoleAdmin required).
+	// Admin-only access significantly reduces abuse risk — rapid writes by a malicious admin
+	// are an insider threat with broader capabilities than tts_params mutation.
+	// No additional per-user rate limiter is added at this time (YAGNI). Re-evaluate
+	// if non-admin write paths are ever added or the endpoint is exposed via OAuth scopes.
 	mux.HandleFunc("PUT /v1/agents/{id}", h.adminMiddleware(h.handleUpdate))
 	mux.HandleFunc("DELETE /v1/agents/{id}", h.adminMiddleware(h.handleDelete))
 	// Bulk operations (admin+)
@@ -145,6 +150,7 @@ func (h *AgentsHandler) RegisterRoutes(mux *http.ServeMux) {
 	// Agent operations (admin+)
 	mux.HandleFunc("POST /v1/agents/{id}/regenerate", h.adminMiddleware(h.handleRegenerate))
 	mux.HandleFunc("POST /v1/agents/{id}/resummon", h.adminMiddleware(h.handleResummon))
+	mux.HandleFunc("POST /v1/agents/{id}/cancel-summon", h.adminMiddleware(h.handleCancelSummon))
 	// Export (agent owner or system owner)
 	mux.HandleFunc("GET /v1/agents/{id}/system-prompt-preview", h.adminMiddleware(h.handleSystemPromptPreview))
 	mux.HandleFunc("GET /v1/agents/{id}/export/preview", h.authMiddleware(h.handleExportPreview))
@@ -343,6 +349,10 @@ func (h *AgentsHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
+	// Finding #6: cap request body to 64 KB — prevents heap pressure from
+	// malicious large payloads stored in JSONB fields like tts_params.
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+
 	userID := store.UserIDFromContext(r.Context())
 	locale := store.LocaleFromContext(r.Context())
 	id, err := uuid.Parse(r.PathValue("id"))
@@ -357,6 +367,14 @@ func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	// it belongs to the caller's tenant.
 	ag, err := h.agents.GetByID(r.Context(), id)
 	if err != nil {
+		writeError(w, http.StatusNotFound, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "agent", id.String()))
+		return
+	}
+
+	// Finding #12: explicit tenant-scope guard as defense-in-depth.
+	// GetByID already scopes by tenant_id from context, but if a future refactor
+	// swaps to an unscoped variant this guard prevents cross-tenant mutation.
+	if ag.TenantID != store.TenantIDFromContext(r.Context()) {
 		writeError(w, http.StatusNotFound, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "agent", id.String()))
 		return
 	}
@@ -384,12 +402,23 @@ func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate v3 flag values in other_config (must be boolean).
+	// Also validate tts_params allow-list (Finding #5).
 	if oc, ok := allowed["other_config"]; ok && oc != nil {
 		switch v := oc.(type) {
 		case map[string]any:
 			if err := store.ValidateV3Flags(v); err != nil {
 				writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, err.Error())
 				return
+			}
+			// Finding #5: enforce tts_params key allow-list so arbitrary keys
+			// (e.g. __proto__, voice_settings.stability) cannot persist in JSONB.
+			if tp, ok := v["tts_params"]; ok && tp != nil {
+				if tpMap, ok := tp.(map[string]any); ok {
+					if err := validateAgentTTSParams(tpMap); err != nil {
+						writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, err.Error())
+						return
+					}
+				}
 			}
 		}
 	}

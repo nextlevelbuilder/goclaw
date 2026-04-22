@@ -1,6 +1,7 @@
 import { useState, useMemo, lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { Plus, RefreshCw, Search, Database } from "lucide-react";
+import { useUiStore } from "@/stores/use-ui-store";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -38,9 +39,12 @@ export function MemoryPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [indexAllLoading, setIndexAllLoading] = useState(false);
+  const globalPageSize = useUiStore((s) => s.pageSize);
+  const setGlobalPageSize = useUiStore((s) => s.setPageSize);
   const [activeTab, setActiveTab] = useState("documents");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [pageSize, setPageSizeRaw] = useState(globalPageSize);
+  const setPageSize = (size: number) => { setPageSizeRaw(size); setPage(1); setGlobalPageSize(size); };
 
   const {
     documents,

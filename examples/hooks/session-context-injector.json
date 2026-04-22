@@ -1,0 +1,22 @@
+{
+  "event": "session_start",
+  "handler_type": "http",
+  "scope": "agent",
+  "matcher": "",
+  "if_expr": "",
+  "config": {
+    "url": "https://ctx.internal.example.com/hooks/session-bootstrap",
+    "headers": {
+      "Authorization": "Bearer REPLACE_ME_ENCRYPTED"
+    }
+  },
+  "timeout_ms": 4000,
+  "on_timeout": "allow",
+  "priority": 50,
+  "enabled": true,
+  "source": "api",
+  "metadata": {
+    "notes": "On session_start, fetches project-specific metadata and injects via additionalContext. The remote endpoint should respond with {\"decision\":\"allow\",\"additionalContext\":\"...\"}.",
+    "tags": ["context", "session", "bootstrap"]
+  }
+}

@@ -10,7 +10,10 @@ import (
 	"maps"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
+	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -20,6 +23,141 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
+
+// maxWrapperDepth is the hard cap on shell-wrapper unwrapping. Commands nested
+// deeper than this are denied unconditionally as adversarial — real commands
+// never wrap beyond depth 3.
+const maxWrapperDepth = 3
+
+// wrapperBinaries identifies shell/exec wrappers whose first arg after -c is
+// the real command to gate. Key is the normalized base name.
+var wrapperBinaries = map[string]bool{
+	"sh": true, "bash": true, "zsh": true, "dash": true,
+	"env": true, "nohup": true, "stdbuf": true, "timeout": true,
+}
+
+// normalizeBinaryName returns the lowercased file base of a binary reference.
+// Examples: "/usr/bin/gh" → "gh", "./GH" → "gh", "  Gh  " → "gh".
+// Applied at BOTH the gate lookup and lookupCredentialedBinary so the two
+// layers agree on identity. (Red Team F5)
+func normalizeBinaryName(s string) string {
+	return filepath.Base(strings.TrimSpace(strings.ToLower(s)))
+}
+
+// detectWrapper recognises shell-wrapper invocations and returns the inner
+// command string. Supported shapes:
+//
+//	sh -c "<inner>"          (also bash / zsh / dash / /bin/sh / /usr/bin/env sh ...)
+//	env [K=V ...] <cmd> ...  (no -c; the real binary is <cmd>)
+//	nohup <cmd> ...
+//	stdbuf -oL <cmd> ...
+//	timeout 10 <cmd> ...
+//
+// Returns wrapper=normalized wrapper name, innerCmd=remaining command string.
+// ok=false when cmd is not a recognised wrapper or parsing fails.
+func detectWrapper(cmd string) (wrapper string, innerCmd string, ok bool) {
+	parser := shellwords.NewParser()
+	parser.ParseBacktick = false
+	parser.ParseEnv = false
+	words, err := parser.Parse(cmd)
+	if err != nil || len(words) == 0 {
+		return "", "", false
+	}
+	head := normalizeBinaryName(words[0])
+	if !wrapperBinaries[head] {
+		return "", "", false
+	}
+
+	switch head {
+	case "sh", "bash", "zsh", "dash":
+		// sh -c "<inner>" → inner is word[2].
+		for i := 1; i < len(words); i++ {
+			if words[i] == "-c" && i+1 < len(words) {
+				return head, words[i+1], true
+			}
+		}
+		return "", "", false
+	case "env":
+		// env [K=V ...] <cmd> [args...] OR env -S "<cmd args>"
+		for i := 1; i < len(words); i++ {
+			w := words[i]
+			if strings.Contains(w, "=") && !strings.HasPrefix(w, "-") {
+				continue // env var assignment, skip
+			}
+			if w == "-i" || w == "-u" || w == "-" {
+				continue
+			}
+			if strings.HasPrefix(w, "-") {
+				// Unknown env flag — bail out of wrapper detection.
+				return "", "", false
+			}
+			// First non-assignment, non-flag token is the real command.
+			return "env", strings.Join(append([]string{w}, words[i+1:]...), " "), true
+		}
+		return "", "", false
+	case "nohup":
+		if len(words) < 2 {
+			return "", "", false
+		}
+		return "nohup", strings.Join(words[1:], " "), true
+	case "stdbuf":
+		// stdbuf [-oL -eL -iL ...] <cmd> ...
+		for i := 1; i < len(words); i++ {
+			if strings.HasPrefix(words[i], "-") {
+				continue
+			}
+			return "stdbuf", strings.Join(words[i:], " "), true
+		}
+		return "", "", false
+	case "timeout":
+		// timeout [--foreground] [-k DUR] <DURATION> <cmd> ...
+		for i := 1; i < len(words); i++ {
+			w := words[i]
+			if strings.HasPrefix(w, "-") {
+				continue
+			}
+			// First non-flag token is the DURATION — skip it.
+			if i+1 < len(words) {
+				return "timeout", strings.Join(words[i+1:], " "), true
+			}
+			return "", "", false
+		}
+		return "", "", false
+	}
+	return "", "", false
+}
+
+// gateCandidate is one step of wrapper unwrapping; it captures the binary
+// name to gate and (optionally) the wrapper token that introduced it.
+type gateCandidate struct {
+	binary  string // normalized (lowercase, file base)
+	wrapper string // "" for outermost direct invocation; else wrapper name
+}
+
+// collectGateCandidates returns the ordered list of binaries extracted from
+// a command via recursive wrapper unwrapping (outermost → innermost).
+// tooDeep=true when unwrapping exceeds maxWrapperDepth — callers must deny.
+func collectGateCandidates(cmd string) (candidates []gateCandidate, tooDeep bool) {
+	current := cmd
+	wrapper := ""
+	for depth := 0; ; depth++ {
+		bin, _, err := parseCommandBinary(current)
+		if err != nil || bin == "" {
+			return candidates, false
+		}
+		norm := normalizeBinaryName(bin)
+		candidates = append(candidates, gateCandidate{binary: norm, wrapper: wrapper})
+		w, inner, ok := detectWrapper(current)
+		if !ok || strings.TrimSpace(inner) == "" {
+			return candidates, false
+		}
+		if depth+1 > maxWrapperDepth {
+			return candidates, true
+		}
+		wrapper = w
+		current = inner
+	}
+}
 
 // shellOperatorPattern detects shell metacharacters that indicate command chaining.
 // These are unsafe in credentialed mode because they allow reading injected env vars.
@@ -140,6 +278,7 @@ func resolveAndMatchBinary(binaryName string, configPath *string) (string, error
 }
 
 // matchesBinaryDeny checks if the joined args string matches any per-binary deny pattern.
+// Used for deny_args where patterns span multiple args (e.g. `auth\s+login`, `repo\s+delete`).
 // Returns the matched pattern string, or empty if allowed.
 func matchesBinaryDeny(args []string, denyPatternsJSON json.RawMessage) string {
 	if len(denyPatternsJSON) == 0 {
@@ -157,6 +296,38 @@ func matchesBinaryDeny(args []string, denyPatternsJSON json.RawMessage) string {
 			continue
 		}
 		if re.MatchString(argsStr) {
+			return p
+		}
+	}
+	return ""
+}
+
+// matchesBinaryVerbose checks each arg token against verbose/debug flag patterns.
+// Patterns are anchored at the START of each arg (but not the end), which allows:
+//   - `-v` to match `-v`, `-vv`, `-vvv` (verbosity escalation), `-v=1`, `-vq` (combined flags)
+//   - `--verbose` to match `--verbose`, `--verbose=true`
+//   - `-v` to NOT match `--version` (char 1 is `-`, not `v`)
+//   - `--verbose` to NOT match `--version` (diverges at char 5)
+//
+// This is intentional: verbose flags leak sensitive output (tokens in HTTP headers,
+// API response bodies, OAuth flows). Start-anchored per-arg matching catches the
+// real verbose family without false-positive on safe flags like `--version`.
+// Returns the matched pattern string, or empty if allowed.
+func matchesBinaryVerbose(args []string, denyPatternsJSON json.RawMessage) string {
+	if len(denyPatternsJSON) == 0 {
+		return ""
+	}
+	var patterns []string
+	if err := json.Unmarshal(denyPatternsJSON, &patterns); err != nil || len(patterns) == 0 {
+		return ""
+	}
+	for _, p := range patterns {
+		re, err := regexp.Compile("^(?:" + p + ")")
+		if err != nil {
+			slog.Warn("secure_cli.invalid_deny_pattern", "pattern", p, "error", err)
+			continue
+		}
+		if slices.ContainsFunc(args, re.MatchString) {
 			return p
 		}
 	}
@@ -196,8 +367,9 @@ func (t *ExecTool) executeCredentialed(ctx context.Context, cred *store.SecureCL
 	if p := matchesBinaryDeny(args, cred.DenyArgs); p != "" {
 		return credentialedDenyError(binary, args, p)
 	}
-	// Per-binary verbose deny check (deny_verbose)
-	if p := matchesBinaryDeny(args, cred.DenyVerbose); p != "" {
+	// Per-binary verbose deny check (deny_verbose) — per-arg start-anchored match
+	// so `-v` blocks `-v`/`-vv`/`-v=1` but not `--version`.
+	if p := matchesBinaryVerbose(args, cred.DenyVerbose); p != "" {
 		return credentialedDenyError(binary, args, p)
 	}
 
@@ -237,14 +409,19 @@ func (t *ExecTool) executeCredentialed(ctx context.Context, cred *store.SecureCL
 
 // executeCredentialedHost runs a credentialed command directly on the host.
 // Uses exec.Command (no shell) with credentials as env vars.
+// ctx cancellation triggers SIGTERM → 3s grace → SIGKILL via process-group helpers.
 func (t *ExecTool) executeCredentialedHost(ctx context.Context, absPath string, args []string,
 	cwd string, envMap map[string]string, timeout time.Duration) *Result {
 
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, absPath, args...)
+	// Plain exec.Command (not CommandContext) so we own the kill sequence.
+	cmd := exec.Command(absPath, args...)
 	cmd.Dir = cwd
+
+	// Process group so abort reaches the whole tree (mirrors executeOnHost).
+	setProcessGroup(cmd)
 
 	// Build env: inherit minimal PATH + HOME, add credentials
 	cmd.Env = buildCredentialedEnv(envMap)
@@ -253,8 +430,30 @@ func (t *ExecTool) executeCredentialedHost(ctx context.Context, absPath string, 
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	err := cmd.Run()
-	return formatCredentialedResult(absPath, args, stdout.String(), stderr.String(), err, ctx, timeout)
+	if err := cmd.Start(); err != nil {
+		return ErrorResult(fmt.Sprintf("credentialed exec: failed to start %s: %v", absPath, err))
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+
+	select {
+	case err := <-done:
+		return formatCredentialedResult(absPath, args, stdout.String(), stderr.String(), err, ctx, timeout)
+
+	case <-ctx.Done():
+		_ = killProcessGroup(cmd, syscallSIGTERM)
+		select {
+		case <-done:
+		case <-time.After(3 * time.Second):
+			_ = killProcessGroup(cmd, syscallSIGKILL)
+			<-done
+		}
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return ErrorResult(fmt.Sprintf("[CREDENTIALED EXEC] Command timed out after %s.\nBinary: %s", timeout, absPath))
+		}
+		return ErrorResult(fmt.Sprintf("[CREDENTIALED EXEC] Command aborted.\nBinary: %s", absPath))
+	}
 }
 
 // executeCredentialedSandbox runs a credentialed command inside a Docker sandbox.
@@ -297,12 +496,41 @@ func (t *ExecTool) executeCredentialedSandbox(ctx context.Context, absPath strin
 
 // buildCredentialedEnv creates a minimal environment with injected credentials.
 // Inherits PATH and HOME from parent process, adds credential env vars.
+// On Windows, also passes through SYSTEMROOT / TEMP / APPDATA / etc. — these
+// are not secrets and many native CLIs (gh, az, aws, npm) require them to run.
 func buildCredentialedEnv(envMap map[string]string) []string {
-	env := []string{
-		"PATH=" + getenvDefault("PATH", "/usr/local/bin:/usr/bin:/bin"),
-		"HOME=" + getenvDefault("HOME", "/tmp"),
-		"LANG=" + getenvDefault("LANG", "en_US.UTF-8"),
-		"USER=" + getenvDefault("USER", "goclaw"),
+	var env []string
+	if runtime.GOOS == "windows" {
+		pathDefault := "C:\\Windows\\system32;C:\\Windows;C:\\Windows\\System32\\Wbem"
+		homeDefault := os.Getenv("USERPROFILE")
+		if homeDefault == "" {
+			homeDefault = "C:\\Users\\Default"
+		}
+		env = []string{
+			"PATH=" + getenvDefault("PATH", pathDefault),
+			"HOME=" + getenvDefault("HOME", homeDefault),
+			"LANG=" + getenvDefault("LANG", "en_US.UTF-8"),
+			"USERNAME=" + getenvDefault("USERNAME", "goclaw"),
+		}
+		// Pass through Windows runtime vars that native tools expect.
+		// Missing SYSTEMROOT breaks networking/registry in most Win32 programs.
+		for _, k := range []string{
+			"SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "PATHEXT",
+			"TEMP", "TMP", "USERPROFILE", "APPDATA", "LOCALAPPDATA",
+			"PROGRAMFILES", "PROGRAMFILES(X86)", "PROGRAMDATA",
+			"HOMEDRIVE", "HOMEPATH", "COMPUTERNAME",
+		} {
+			if v := os.Getenv(k); v != "" {
+				env = append(env, k+"="+v)
+			}
+		}
+	} else {
+		env = []string{
+			"PATH=" + getenvDefault("PATH", "/usr/local/bin:/usr/bin:/bin"),
+			"HOME=" + getenvDefault("HOME", "/tmp"),
+			"LANG=" + getenvDefault("LANG", "en_US.UTF-8"),
+			"USER=" + getenvDefault("USER", "goclaw"),
+		}
 	}
 	for k, v := range envMap {
 		env = append(env, k+"="+v)
@@ -355,6 +583,10 @@ func (t *ExecTool) lookupCredentialedBinary(ctx context.Context, command string)
 	if err != nil {
 		return nil, "", nil
 	}
+	// Normalize lookup key so path/case variants (/usr/bin/gh, ./gh, GH) all
+	// resolve to the same registry row. Same helper is used by the gate
+	// branch in Execute — identity must agree at both layers. (Red Team F5)
+	normBinary := normalizeBinaryName(binary)
 	// Get agent ID from context for scoped lookup
 	agentID := store.AgentIDFromContext(ctx)
 	var agentIDPtr *uuid.UUID
@@ -365,7 +597,7 @@ func (t *ExecTool) lookupCredentialedBinary(ctx context.Context, command string)
 	// Uses CredentialUserIDFromContext to pick up merged tenant user identity
 	// (falls back to UserIDFromContext when not set).
 	userID := store.CredentialUserIDFromContext(ctx)
-	cred, err := t.secureCLIStore.LookupByBinary(ctx, binary, agentIDPtr, userID)
+	cred, err := t.secureCLIStore.LookupByBinary(ctx, normBinary, agentIDPtr, userID)
 	if err != nil {
 		slog.Warn("secure_cli.lookup: query failed", "binary", binary, "agent_id", agentID, "error", err)
 		return nil, "", nil

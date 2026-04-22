@@ -193,7 +193,7 @@ export function CronRunHistoryTab({ job, getRunLog, onRefresh }: CronRunHistoryT
                 totalPages={runLogTotalPages}
                 onPageChange={(p) => { setRunLogPage(p); loadRunLog(p); }}
                 onPageSizeChange={(s) => { setRunLogPageSize(s); setRunLogPage(1); loadRunLog(1, s); }}
-                pageSizes={[10, 20, 50]}
+                pageSizes={[10, 20, 50, 100, 200]}
               />
             </div>
           )}

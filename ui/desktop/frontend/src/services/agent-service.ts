@@ -38,6 +38,10 @@ export const agentService = {
     return getApiClient().post<void>(`/v1/agents/${id}/resummon`, {})
   },
 
+  cancelSummon(id: string): Promise<void> {
+    return getApiClient().post<void>(`/v1/agents/${id}/cancel-summon`, {})
+  },
+
   resummonWs(agentId: string): Promise<unknown> {
     return getWsClient().call('agents.resummon', { agentId })
   },

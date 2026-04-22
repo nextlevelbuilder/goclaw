@@ -4,6 +4,9 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/nextlevelbuilder/goclaw/internal/audio/elevenlabs"
+	geminiaudio "github.com/nextlevelbuilder/goclaw/internal/audio/gemini"
+	minimaxaudio "github.com/nextlevelbuilder/goclaw/internal/audio/minimax"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/memory"
@@ -156,7 +159,7 @@ func buildEmbeddingProvider(
 	return nil
 }
 
-func setupSubagents(providerReg *providers.Registry, cfg *config.Config, msgBus *bus.MessageBus, toolsReg *tools.Registry, workspace string, sandboxMgr sandbox.Manager) *tools.SubagentManager {
+func setupSubagents(providerReg *providers.Registry, cfg *config.Config, msgBus *bus.MessageBus, toolsReg *tools.Registry, workspace string, sandboxMgr sandbox.Manager, secureCLIStore store.SecureCLIStore) *tools.SubagentManager {
 	names := providerReg.List(context.Background())
 	if len(names) == 0 {
 		return nil
@@ -187,6 +190,9 @@ func setupSubagents(providerReg *providers.Registry, cfg *config.Config, msgBus 
 		if sc.ArchiveAfterMinutes > 0 {
 			subCfg.ArchiveAfterMinutes = sc.ArchiveAfterMinutes
 		}
+		if sc.MaxRetries > 0 {
+			subCfg.MaxRetries = sc.MaxRetries
+		}
 		if sc.Model != "" {
 			subCfg.Model = sc.Model
 		}
@@ -197,22 +203,46 @@ func setupSubagents(providerReg *providers.Registry, cfg *config.Config, msgBus 
 	// NOTE: SubagentManager.applyDenyList() handles deny lists after createTools(),
 	// so we don't apply deny lists here.
 	toolsFactory := func() *tools.Registry {
-		reg := toolsReg.Clone()
-		if sandboxMgr != nil {
-			reg.Register(tools.NewSandboxedReadFileTool(workspace, agentCfg.RestrictToWorkspace, sandboxMgr))
-			reg.Register(tools.NewSandboxedWriteFileTool(workspace, agentCfg.RestrictToWorkspace, sandboxMgr))
-			reg.Register(tools.NewSandboxedListFilesTool(workspace, agentCfg.RestrictToWorkspace, sandboxMgr))
-			reg.Register(tools.NewSandboxedExecTool(workspace, agentCfg.RestrictToWorkspace, sandboxMgr))
-		} else {
-			reg.Register(tools.NewReadFileTool(workspace, agentCfg.RestrictToWorkspace))
-			reg.Register(tools.NewWriteFileTool(workspace, agentCfg.RestrictToWorkspace))
-			reg.Register(tools.NewListFilesTool(workspace, agentCfg.RestrictToWorkspace))
-			reg.Register(tools.NewExecTool(workspace, agentCfg.RestrictToWorkspace))
-		}
+		reg, _ := buildSubagentToolsRegistry(toolsReg, workspace, agentCfg.RestrictToWorkspace, sandboxMgr, secureCLIStore)
 		return reg
 	}
 
 	return tools.NewSubagentManager(provider, providerReg, agentCfg.Model, msgBus, toolsFactory, subCfg)
+}
+
+// buildSubagentToolsRegistry produces a cloned tool registry for a subagent
+// with workspace-scoped file/exec tools registered. The returned ExecTool is
+// also returned for test assertion (Red Team F3): callers verify that the
+// secureCLIStore is wired so the subagent's exec path enforces the gate.
+func buildSubagentToolsRegistry(
+	parentReg *tools.Registry,
+	workspace string,
+	restrict bool,
+	sandboxMgr sandbox.Manager,
+	secureCLIStore store.SecureCLIStore,
+) (*tools.Registry, *tools.ExecTool) {
+	reg := parentReg.Clone()
+	var execTool *tools.ExecTool
+	if sandboxMgr != nil {
+		reg.Register(tools.NewSandboxedReadFileTool(workspace, restrict, sandboxMgr))
+		reg.Register(tools.NewSandboxedWriteFileTool(workspace, restrict, sandboxMgr))
+		reg.Register(tools.NewSandboxedListFilesTool(workspace, restrict, sandboxMgr))
+		execTool = tools.NewSandboxedExecTool(workspace, restrict, sandboxMgr)
+		reg.Register(execTool)
+	} else {
+		reg.Register(tools.NewReadFileTool(workspace, restrict))
+		reg.Register(tools.NewWriteFileTool(workspace, restrict))
+		reg.Register(tools.NewListFilesTool(workspace, restrict))
+		execTool = tools.NewExecTool(workspace, restrict)
+		reg.Register(execTool)
+	}
+	// Red Team F3: subagent ExecTool must enforce the secure-CLI gate
+	// (and env scrub on fall-through) — without this, a parent agent
+	// can spawn a subagent to bypass the gate via host-inherited env.
+	if secureCLIStore != nil {
+		execTool.SetSecureCLIStore(secureCLIStore)
+	}
+	return reg, execTool
 }
 
 // setupTTS creates the TTS manager from config and registers providers.
@@ -268,9 +298,71 @@ func setupTTS(cfg *config.Config) *tts.Manager {
 		}))
 	}
 
+	if key := ttsCfg.Gemini.APIKey; key != "" {
+		mgr.RegisterProvider(geminiaudio.NewProvider(geminiaudio.Config{
+			APIKey:    key,
+			APIBase:   ttsCfg.Gemini.APIBase,
+			Voice:     ttsCfg.Gemini.Voice,
+			Model:     ttsCfg.Gemini.Model,
+			TimeoutMs: ttsCfg.TimeoutMs,
+		}))
+	}
+
 	if !mgr.HasProviders() {
 		return nil
 	}
 
 	return mgr
+}
+
+// setupAudioExtras wires Music and SFX providers into the audio Manager.
+// ElevenLabs is registered for both SFX and Music when an API key is present.
+// MiniMax music is registered when cfg.Audio.Music is configured with a key.
+// Phase 4 will add STT providers here.
+func setupAudioExtras(cfg *config.Config, mgr *tts.Manager) {
+	ellKey := cfg.Tts.ElevenLabs.APIKey
+	ellBase := cfg.Tts.ElevenLabs.BaseURL
+
+	// ElevenLabs SFX — reuse TTS credentials.
+	if ellKey != "" {
+		mgr.RegisterSFX(elevenlabs.NewSFXProvider(elevenlabs.Config{
+			APIKey:  ellKey,
+			BaseURL: ellBase,
+		}))
+		slog.Info("audio.sfx: elevenlabs registered")
+	}
+
+	// ElevenLabs Music — same credentials, uses /v1/music endpoint.
+	if ellKey != "" {
+		mgr.RegisterMusic(elevenlabs.NewMusicProvider(elevenlabs.Config{
+			APIKey:  ellKey,
+			BaseURL: ellBase,
+		}))
+		slog.Info("audio.music: elevenlabs registered")
+	}
+
+	// MiniMax Music — optional, from cfg.Audio.Music block.
+	if cfg.Audio != nil && cfg.Audio.Music != nil {
+		mc := cfg.Audio.Music
+		if mc.APIKey != "" {
+			mgr.RegisterMusic(minimaxaudio.NewMusicProvider(minimaxaudio.MusicConfig{
+				APIKey:  mc.APIKey,
+				APIBase: mc.BaseURL,
+				Model:   mc.Model,
+			}))
+			slog.Info("audio.music: minimax registered")
+		}
+	}
+
+	// ElevenLabs STT (Scribe v2) — reuse TTS credentials. Registered as tenant-scope
+	// default; per-request tenant override lands via builtin_tools[stt] in Phase 5
+	// channel migration. Legacy per-channel STTProxyURL is bridged separately.
+	if ellKey != "" {
+		mgr.RegisterSTT(elevenlabs.NewSTTProvider(elevenlabs.Config{
+			APIKey:  ellKey,
+			BaseURL: ellBase,
+		}))
+		mgr.SetSTTChain([]string{"elevenlabs", "proxy"})
+		slog.Info("audio.stt: elevenlabs registered")
+	}
 }

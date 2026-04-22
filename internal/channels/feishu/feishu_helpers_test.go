@@ -180,14 +180,6 @@ func TestShouldUseCard(t *testing.T) {
 	}
 }
 
-// min is a local helper for Go < 1.21 compatibility in test labels.
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // --- isDuplicate ---
 
 func TestIsDuplicate_FirstTimeFalse(t *testing.T) {

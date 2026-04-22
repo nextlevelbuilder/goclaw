@@ -24,9 +24,23 @@ func wireVault(stores *store.Stores, toolsReg *tools.Registry, workspace string,
 	vaultSearchTool := tools.NewVaultSearchTool()
 	toolsReg.Register(vaultSearchTool)
 
-	// Build VaultSearchService: fan-out across vault + KG (episodic store pending impl).
-	// EpisodicStore is nil until a PG implementation exists.
-	searchSvc := vault.NewVaultSearchService(stores.Vault, nil, stores.KnowledgeGraph)
+	// vault_read: fetch full content of a vault doc by doc_id (chained from vault_search).
+	vaultReadTool := tools.NewVaultReadTool()
+	vaultReadTool.SetVaultStore(stores.Vault)
+	vaultReadTool.SetWorkspace(workspace)
+	// Namespace-fallback stores — nil-safe; used to return a redirect error
+	// when a caller passes a KG / episodic id to vault_read by mistake.
+	if stores.KnowledgeGraph != nil {
+		vaultReadTool.SetKGStore(stores.KnowledgeGraph)
+	}
+	if stores.Episodic != nil {
+		vaultReadTool.SetEpisodicStore(stores.Episodic)
+	}
+	toolsReg.Register(vaultReadTool)
+
+	// Build VaultSearchService: fan-out across vault + episodic + KG.
+	// Each store is nil-safe inside the service (skipped when absent).
+	searchSvc := vault.NewVaultSearchService(stores.Vault, stores.Episodic, stores.KnowledgeGraph)
 	vaultSearchTool.SetSearchService(searchSvc)
 
 	// Build shared VaultInterceptor for read/write tool vault registration.
@@ -73,6 +87,6 @@ func wireVault(stores *store.Stores, toolsReg *tools.Registry, workspace string,
 		}
 	}
 
-	slog.Info("vault tools registered", "tools", "vault_search,create_image,create_video,create_audio,tts,edit")
+	slog.Info("vault tools registered", "tools", "vault_search,vault_read,create_image,create_video,create_audio,tts,edit")
 	return vaultIntc
 }

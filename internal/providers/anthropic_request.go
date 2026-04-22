@@ -15,14 +15,14 @@ const CacheBoundaryMarker = "<!-- GOCLAW_CACHE_BOUNDARY -->"
 // Returns 1 block with cache_control if no boundary (backwards compat).
 func splitSystemPromptForCache(content string) []map[string]any {
 	ephemeral := map[string]any{"type": "ephemeral"}
-	idx := strings.Index(content, CacheBoundaryMarker)
-	if idx == -1 {
+	before, after, ok := strings.Cut(content, CacheBoundaryMarker)
+	if !ok {
 		return []map[string]any{
 			{"type": "text", "text": content, "cache_control": ephemeral},
 		}
 	}
-	stable := strings.TrimSpace(content[:idx])
-	dynamic := strings.TrimSpace(content[idx+len(CacheBoundaryMarker):])
+	stable := strings.TrimSpace(before)
+	dynamic := strings.TrimSpace(after)
 	blocks := []map[string]any{
 		{"type": "text", "text": stable, "cache_control": ephemeral},
 	}

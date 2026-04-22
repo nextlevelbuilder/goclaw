@@ -5,11 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+
+	"github.com/nextlevelbuilder/goclaw/internal/audio"
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tts"
 )
 
@@ -55,6 +61,10 @@ func (t *TtsTool) Parameters() map[string]any {
 				"type":        "string",
 				"description": "Voice ID (provider-specific). Optional — uses default if omitted.",
 			},
+			"model": map[string]any{
+				"type":        "string",
+				"description": "Model ID (provider-specific, e.g. eleven_v3). Optional — uses default if omitted.",
+			},
 			"provider": map[string]any{
 				"type":        "string",
 				"description": "TTS provider: openai, elevenlabs, edge, minimax. Optional — uses primary if omitted.",
@@ -67,7 +77,74 @@ func (t *TtsTool) Parameters() map[string]any {
 // ttsOverride is the tenant settings shape for tts
 // (stored in builtin_tool_tenant_configs.settings).
 type ttsOverride struct {
-	Primary string `json:"primary,omitempty"` // override primary provider name
+	Primary        string `json:"primary,omitempty"`          // override primary provider name
+	DefaultVoiceID string `json:"default_voice_id,omitempty"` // tenant-default voice id
+	DefaultModel   string `json:"default_model,omitempty"`    // tenant-default model id
+}
+
+// agentAudioConfig is the JSON shape read from AgentAudioSnapshot.OtherConfig
+// for per-agent TTS tuning. Keys match the agents.other_config column.
+type agentAudioConfig struct {
+	TTSVoiceID string         `json:"tts_voice_id,omitempty"`
+	TTSModelID string         `json:"tts_model_id,omitempty"`
+	// TTSParams carries the per-agent generic TTS override keys (speed, emotion, style).
+	// Stored as generic keys; AdaptAgentParams converts to provider-specific keys per attempt.
+	TTSParams  map[string]any `json:"tts_params,omitempty"`
+}
+
+// resolveVoiceAndModel computes the effective voice + model IDs for the
+// request using the documented precedence order:
+//
+//	args > agent (store.AgentAudioFromCtx OtherConfig) > tenant (BuiltinToolSettings) > empty.
+//
+// Empty return values signal "use provider default" downstream — they are not
+// errors. Missing agent snapshot emits slog.Warn so operators can spot
+// dispatch-layer regressions; missing tenant settings are quiet (common).
+func (t *TtsTool) resolveVoiceAndModel(ctx context.Context, argVoice, argModel string) (voice, model string) {
+	voice, model = argVoice, argModel
+
+	// Pull agent-level config from the dispatcher-injected snapshot.
+	var agentCfg agentAudioConfig
+	if snap, ok := store.AgentAudioFromCtx(ctx); ok {
+		if len(snap.OtherConfig) > 0 {
+			if err := json.Unmarshal(snap.OtherConfig, &agentCfg); err != nil {
+				slog.Warn("tts: failed to parse agent OtherConfig", "error", err, "agent_id", snap.AgentID)
+			}
+		}
+	} else if agentID := store.AgentIDFromContext(ctx); agentID != uuid.Nil {
+		// Producer-consumer contract violation: when an agent ctx is in play
+		// (AgentIDFromContext returns non-nil), AgentAudioSnapshot should have
+		// been injected by the dispatcher. Log as Warn so ops can spot a
+		// dispatch-layer regression. Silent when no agent is scoped (unit
+		// tests and callers outside the agent loop).
+		slog.Warn("tts: agent audio snapshot missing — dispatcher producer may be offline", "agent_id", agentID)
+	}
+
+	// Pull tenant defaults from builtin tool settings.
+	var tenantCfg ttsOverride
+	if settings := BuiltinToolSettingsFromCtx(ctx); settings != nil {
+		if raw, ok := settings["tts"]; ok && len(raw) > 0 {
+			if err := json.Unmarshal(raw, &tenantCfg); err != nil {
+				slog.Warn("tts: failed to parse tenant settings for voice/model", "error", err)
+			}
+		}
+	}
+
+	if voice == "" {
+		if agentCfg.TTSVoiceID != "" {
+			voice = agentCfg.TTSVoiceID
+		} else if tenantCfg.DefaultVoiceID != "" {
+			voice = tenantCfg.DefaultVoiceID
+		}
+	}
+	if model == "" {
+		if agentCfg.TTSModelID != "" {
+			model = agentCfg.TTSModelID
+		} else if tenantCfg.DefaultModel != "" {
+			model = tenantCfg.DefaultModel
+		}
+	}
+	return voice, model
 }
 
 // resolvePrimary returns the effective primary provider name for the request.
@@ -90,8 +167,38 @@ func (t *TtsTool) resolvePrimary(ctx context.Context, mgr *tts.Manager) string {
 	return mgr.PrimaryProvider()
 }
 
+// resolveAgentGenericTTSParams reads the per-agent TTSParams generic map from
+// the dispatcher-injected AgentAudioSnapshot. Returns nil when no snapshot
+// is present or no tts_params are configured. The caller is responsible for
+// calling audio.AdaptAgentParams(generic, providerName) PER-ATTEMPT to convert
+// generic keys to provider-specific keys (Finding #1 CRITICAL).
+func (t *TtsTool) resolveAgentGenericTTSParams(ctx context.Context) map[string]any {
+	snap, ok := store.AgentAudioFromCtx(ctx)
+	if !ok || len(snap.OtherConfig) == 0 {
+		return nil
+	}
+	var agentCfg agentAudioConfig
+	if err := json.Unmarshal(snap.OtherConfig, &agentCfg); err != nil {
+		slog.Warn("tts: failed to parse agent OtherConfig for tts_params", "error", err)
+		return nil
+	}
+	return agentCfg.TTSParams
+}
+
 // SetContext is a no-op; channel is now read from ctx (thread-safe).
 func (t *TtsTool) SetContext(channel, _ string) {}
+
+// mergeParams returns a new map with base keys overwritten by overrides.
+// Returns overrides directly when base is nil (avoids allocation).
+func mergeParams(base, overrides map[string]any) map[string]any {
+	if len(base) == 0 {
+		return overrides
+	}
+	out := make(map[string]any, len(base)+len(overrides))
+	maps.Copy(out, base)
+	maps.Copy(out, overrides)
+	return out
+}
 
 func (t *TtsTool) Execute(ctx context.Context, args map[string]any) *Result {
 	text, _ := args["text"].(string)
@@ -99,8 +206,16 @@ func (t *TtsTool) Execute(ctx context.Context, args map[string]any) *Result {
 		return &Result{ForLLM: "error: text is required", IsError: true}
 	}
 
-	voice, _ := args["voice"].(string)
+	argVoice, _ := args["voice"].(string)
+	argModel, _ := args["model"].(string)
 	providerName, _ := args["provider"].(string)
+
+	// Resolve voice/model via args > agent (ctx snapshot) > tenant > default.
+	voice, model := t.resolveVoiceAndModel(ctx, argVoice, argModel)
+
+	// Read generic agent TTS params once; adapt PER-ATTEMPT below (Finding #1 CRITICAL).
+	// Storing generic keys here so each fallback provider gets its own adapted copy.
+	genericAgentParams := t.resolveAgentGenericTTSParams(ctx)
 
 	// Snapshot manager pointer under read lock so config reloads don't race.
 	t.mu.RLock()
@@ -109,7 +224,7 @@ func (t *TtsTool) Execute(ctx context.Context, args map[string]any) *Result {
 
 	// Determine format based on channel (read from ctx — thread-safe)
 	channel := ToolChannelFromCtx(ctx)
-	opts := tts.Options{Voice: voice}
+	opts := tts.Options{Voice: voice, Model: model}
 	if channel == "telegram" {
 		opts.Format = "opus"
 	}
@@ -118,23 +233,35 @@ func (t *TtsTool) Execute(ctx context.Context, args map[string]any) *Result {
 	var err error
 
 	if providerName != "" {
-		// Use specific provider (explicit call param takes precedence)
+		// Use specific provider (explicit call param takes precedence).
+		// Adapt generic agent params to this specific provider's native keys.
 		p, ok := mgr.GetProvider(providerName)
 		if !ok {
 			return &Result{ForLLM: fmt.Sprintf("error: tts provider not found: %s", providerName), IsError: true}
 		}
+		if adapted := audio.AdaptAgentParams(genericAgentParams, providerName); len(adapted) > 0 {
+			opts.Params = mergeParams(opts.Params, adapted)
+		}
 		result, err = p.Synthesize(ctx, text, opts)
 	} else {
-		// Resolve primary from tenant settings or default
+		// Resolve primary from tenant settings or default.
 		primary := t.resolvePrimary(ctx, mgr)
 		if p, ok := mgr.GetProvider(primary); ok {
-			result, err = p.Synthesize(ctx, text, opts)
+			// Adapt for the primary provider attempt specifically.
+			primaryOpts := opts
+			if adapted := audio.AdaptAgentParams(genericAgentParams, primary); len(adapted) > 0 {
+				primaryOpts.Params = mergeParams(opts.Params, adapted)
+			}
+			result, err = p.Synthesize(ctx, text, primaryOpts)
 			if err != nil {
 				slog.Warn("tts primary provider failed, trying fallback", "provider", primary, "error", err)
-				result, err = mgr.SynthesizeWithFallback(ctx, text, opts)
+				// SynthesizeWithFallbackAdapted adapts genericAgentParams per-attempt
+				// (Finding #1 CRITICAL): each fallback provider receives its own
+				// provider-native keys, not the primary's adapted map.
+				result, err = mgr.SynthesizeWithFallbackAdapted(ctx, text, opts, genericAgentParams)
 			}
 		} else {
-			result, err = mgr.SynthesizeWithFallback(ctx, text, opts)
+			result, err = mgr.SynthesizeWithFallbackAdapted(ctx, text, opts, genericAgentParams)
 		}
 	}
 
@@ -163,7 +290,22 @@ func (t *TtsTool) Execute(ctx context.Context, args map[string]any) *Result {
 	}
 
 	forLLM := fmt.Sprintf("%sMEDIA:%s", voiceTag, audioPath)
-	r := &Result{ForLLM: forLLM}
+	// Set Result.Media explicitly (matching create_audio) so the agent loop's
+	// media collector uses the authoritative path even when the ForLLM
+	// MEDIA: prefix is reshaped by a provider bridge (e.g. claude_cli MCP).
+	// Prefer the provider-supplied MimeType ("audio/mpeg", "audio/ogg") over
+	// "audio/"+Extension — the latter yields the non-standard "audio/mp3".
+	mimeType := result.MimeType
+	if mimeType == "" {
+		mimeType = "audio/" + result.Extension
+	}
+	r := &Result{
+		ForLLM: forLLM,
+		Media: []bus.MediaFile{{
+			Path:     audioPath,
+			MimeType: mimeType,
+		}},
+	}
 	r.Deliverable = fmt.Sprintf("[Generated audio: %s]\nText: %s", filepath.Base(audioPath), text)
 	if t.vaultIntc != nil {
 		mimeType := "audio/" + result.Extension

@@ -155,7 +155,17 @@ func isContextOverflow(lower string) bool {
 		// Chinese patterns (Qwen/DashScope)
 		"超出最大长度限制",
 		"上下文长度",
+		// Issue 958: Additional patterns
+		"prompt exceeds max length", // ZAI/GLM-5
+		"request_too_large",         // Generic
+		"input is too long",         // DashScope
+		"请求输入过长",                    // Chinese generic
 	)
+}
+
+// IsContextOverflowMessage exports overflow detection for use by pipeline.
+func IsContextOverflowMessage(lower string) bool {
+	return isContextOverflow(lower)
 }
 
 // isNetworkError checks if an error is a network-level failure.

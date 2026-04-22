@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo, useRef, useLayoutEffect } from "react";
+import { useState, useMemo, useRef, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
 import { X, ChevronDownIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { usePortalDropdownClose } from "@/hooks/use-portal-dropdown-close";
 import type { MCPToolInfo } from "./hooks/use-mcp";
 
 interface ToolMultiSelectProps {
@@ -32,17 +33,12 @@ export function ToolMultiSelect({
       .filter((t) => !q || t.name.toLowerCase().includes(q) || (t.description ?? "").toLowerCase().includes(q));
   }, [options, value, search]);
 
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      const target = e.target as Node;
-      const inContainer = containerRef.current?.contains(target);
-      const inPortal = portalContainer?.current?.contains(target);
-      if (!inContainer && !inPortal) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open, portalContainer]);
+  usePortalDropdownClose({
+    open,
+    onClose: () => setOpen(false),
+    // portalContainer is a whole modal container wrapping the dropdown; treat as inside.
+    ignore: [containerRef, ...(portalContainer ? [portalContainer] : [])],
+  });
 
   const addTool = (name: string) => {
     if (!value.includes(name)) onChange([...value, name]);

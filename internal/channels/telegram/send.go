@@ -92,11 +92,26 @@ func isPostConnectNetworkErr(err error) bool {
 		strings.Contains(s, "EOF")) && !strings.Contains(s, "lookup")
 }
 
+// mediaSendMethods lists sendX calls that upload a file body and therefore
+// need the longer sendMediaOverallTimeout budget. Keyed by the `name` argument
+// passed to retrySend so no call site has to change when we bump the budget.
+var mediaSendMethods = map[string]struct{}{
+	"sendPhoto":    {},
+	"sendVideo":    {},
+	"sendAudio":    {},
+	"sendVoice":    {},
+	"sendDocument": {},
+}
+
 // retrySend wraps a Telegram send call with retry logic for transient network errors.
 // Parse errors are NOT retried (handled by caller's HTML fallback).
 // resetFn is called before each retry (e.g. to seek file handles back to start). Can be nil.
 func (c *Channel) retrySend(ctx context.Context, name string, resetFn func(), fn func(context.Context) error) error {
-	ctx, cancel := context.WithTimeout(ctx, sendOverallTimeout)
+	overall := sendOverallTimeout
+	if _, isMedia := mediaSendMethods[name]; isMedia {
+		overall = sendMediaOverallTimeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, overall)
 	defer cancel()
 
 	var err error
@@ -252,6 +267,39 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 		return err
 	}
 
+	// TTS auto-apply: convert [[tts]] tagged responses to voice
+	if c.audioMgr != nil && msg.Content != "" {
+		isVoiceInbound := msg.Metadata["is_voice_inbound"] == "true"
+		ttsResult, ttsErr := c.audioMgr.AutoApplyToText(ctx, msg.Content, "telegram", isVoiceInbound, "")
+		if ttsErr != nil {
+			slog.Debug("telegram: tts auto-apply error", "error", ttsErr)
+		}
+		if ttsResult != nil && ttsResult.AudioPath != "" {
+			// Send voice message instead of text
+			if err := c.sendVoice(ctx, tu.ID(chatID), ttsResult.AudioPath, "", replyToMsgID, threadID); err != nil {
+				slog.Warn("telegram: tts auto-apply voice send failed, falling back to text", "error", err)
+			} else {
+				// Voice sent successfully
+				strippedText := strings.TrimSpace(ttsResult.Text)
+				if strippedText == "" {
+					// Voice-only: delete placeholder (no text to show)
+					if pID, ok := c.placeholders.LoadAndDelete(localKey); ok {
+						if msgID, ok := pID.(int); ok && msgID > 0 {
+							_ = c.deleteMessage(ctx, chatID, msgID)
+						}
+					}
+					return nil
+				}
+				// Has remaining text: let normal flow handle placeholder edit
+				msg.Content = strippedText
+			}
+		}
+		// Update content with directives stripped (even if TTS not applied)
+		if ttsResult != nil {
+			msg.Content = ttsResult.Text
+		}
+	}
+
 	// Text-only message
 	htmlContent := markdownToTelegramHTML(msg.Content)
 	chunks := chunkHTML(htmlContent, telegramMaxMessageLen)
@@ -374,8 +422,15 @@ func (c *Channel) sendMediaMessage(ctx context.Context, chatID int64, msg bus.Ou
 				return err
 			}
 		case strings.HasPrefix(ct, "audio/"):
-			if err := c.sendAudio(ctx, chatIDObj, media.URL, caption, replyTo, threadID); err != nil {
-				return err
+			// Voice message: use SendVoice for inline playback bubble.
+			if msg.Metadata["audio_as_voice"] == "true" && isVoiceCompatible(ct) {
+				if err := c.sendVoice(ctx, chatIDObj, media.URL, caption, replyTo, threadID); err != nil {
+					return err
+				}
+			} else {
+				if err := c.sendAudio(ctx, chatIDObj, media.URL, caption, replyTo, threadID); err != nil {
+					return err
+				}
 			}
 		default:
 			if err := c.sendDocument(ctx, chatIDObj, media.URL, caption, replyTo, threadID); err != nil {
@@ -628,6 +683,57 @@ func (c *Channel) sendAudio(ctx context.Context, chatID telego.ChatID, filePath,
 		_, err = c.bot.SendAudio(ctx, params)
 	}
 	return err
+}
+
+// sendVoice sends an audio file as a voice message (inline playable bubble).
+// Telegram supports OGG (Opus), MP3, and M4A for voice messages.
+func (c *Channel) sendVoice(ctx context.Context, chatID telego.ChatID, filePath, caption string, replyTo, threadID int) error {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("open voice %s: %w", filePath, err)
+	}
+	defer file.Close()
+
+	params := &telego.SendVoiceParams{
+		ChatID:  chatID,
+		Voice:   telego.InputFile{File: file},
+		Caption: caption,
+	}
+	if caption != "" {
+		params.ParseMode = telego.ModeHTML
+	}
+	if sendThreadID := resolveThreadIDForSend(threadID); sendThreadID > 0 {
+		params.MessageThreadID = sendThreadID
+	}
+	if replyTo > 0 {
+		params.ReplyParameters = &telego.ReplyParameters{MessageID: replyTo, AllowSendingWithoutReply: true}
+	}
+
+	err = c.retrySend(ctx, "sendVoice", func() { file.Seek(0, 0) }, func(ctx context.Context) error {
+		_, e := c.bot.SendVoice(ctx, params)
+		return e
+	})
+	if err != nil && parseErrRe.MatchString(err.Error()) {
+		slog.Warn("sendVoice: HTML parse failed, retrying with plain text caption", "error", err)
+		file.Seek(0, 0)
+		params.ParseMode = ""
+		params.Caption = stripHTML(params.Caption)
+		_, err = c.bot.SendVoice(ctx, params)
+	}
+	if err != nil && params.MessageThreadID != 0 && threadNotFoundRe.MatchString(err.Error()) {
+		slog.Warn("sendVoice: thread not found, retrying without thread", "thread_id", params.MessageThreadID)
+		file.Seek(0, 0)
+		params.MessageThreadID = 0
+		_, err = c.bot.SendVoice(ctx, params)
+	}
+	return err
+}
+
+// isVoiceCompatible returns true if content-type is supported by Telegram SendVoice.
+// Supported: OGG (Opus), MP3, M4A per Telegram Bot API docs.
+func isVoiceCompatible(ct string) bool {
+	return ct == "audio/ogg" || ct == "audio/mpeg" || ct == "audio/mp3" ||
+		ct == "audio/m4a" || ct == "audio/x-m4a"
 }
 
 // sendDocument sends a document/file message.

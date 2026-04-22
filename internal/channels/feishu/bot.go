@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"time"
 
+	"github.com/nextlevelbuilder/goclaw/internal/audio"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
@@ -251,7 +253,8 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 	if mc.ChatType == "group" && c.HistoryLimit() > 0 {
 		if histMediaPaths := c.GroupHistory().CollectMedia(chatID); len(histMediaPaths) > 0 {
 			for _, p := range histMediaPaths {
-				mediaFiles = append(mediaFiles, bus.MediaFile{Path: p}) // cannot use append(slice, other...) — different types
+				// Original filename not retained in pending-history paths; fall back to basename.
+				mediaFiles = append(mediaFiles, bus.MediaFile{Path: p, Filename: filepath.Base(p)}) // cannot use append(slice, other...) — different types
 			}
 		}
 	}
@@ -264,7 +267,18 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 
 			switch m.Type {
 			case media.TypeAudio, media.TypeVoice:
-				transcript, sttErr := c.transcribeAudio(ctx, m.FilePath)
+				var transcript string
+				var sttErr error
+				if c.audioMgr != nil {
+					sttCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+					res, err := c.audioMgr.Transcribe(sttCtx, audio.STTInput{FilePath: m.FilePath, MimeType: "audio/ogg"}, audio.STTOptions{})
+					cancel()
+					if err == nil && res != nil {
+						transcript = res.Text
+					} else {
+						sttErr = err
+					}
+				}
 				if sttErr != nil {
 					slog.Warn("feishu: STT transcription failed",
 						"type", m.Type, "error", sttErr,
@@ -288,6 +302,7 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 				mediaFiles = append(mediaFiles, bus.MediaFile{
 					Path:     m.FilePath,
 					MimeType: m.ContentType,
+					Filename: m.FileName,
 				})
 			}
 		}

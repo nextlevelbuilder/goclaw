@@ -9,12 +9,17 @@ import (
 )
 
 // SkillManifest holds dependency info for a skill.
-// Populated by ScanSkillDeps via static analysis of scripts/ directory.
+// Populated by ScanSkillDeps via static analysis of scripts/ directory,
+// optionally overridden/filtered by SKILL.md frontmatter (deps: / exclude_deps:).
 type SkillManifest struct {
 	Requires       []string `json:"requires,omitempty"`        // system binaries (python3, pandoc, ffmpeg)
 	RequiresPython []string `json:"requires_python,omitempty"` // raw Python import names (e.g. "openpyxl", "cv2")
 	RequiresNode   []string `json:"requires_node,omitempty"`   // npm package names (e.g. "docx", "pptxgenjs")
 	ScriptsDir     string   `json:"-"`                         // absolute path to scripts/ dir, used for PYTHONPATH
+	// Manifest-origin fields — populated when SKILL.md declares deps:/exclude_deps:.
+	Explicit     []string `json:"explicit,omitempty"`      // raw dep strings from SKILL.md deps: (e.g. "pip:psycopg2-binary")
+	ExcludeDeps  []string `json:"exclude_deps,omitempty"`  // filter list from SKILL.md exclude_deps:
+	FromManifest bool     `json:"from_manifest,omitempty"` // true when Explicit was the authoritative source
 }
 
 // IsEmpty returns true if the manifest has no dependencies.
@@ -22,9 +27,26 @@ func (m *SkillManifest) IsEmpty() bool {
 	return len(m.Requires) == 0 && len(m.RequiresPython) == 0 && len(m.RequiresNode) == 0
 }
 
-// ScanSkillDeps auto-detects dependencies by statically analyzing the scripts/ directory.
+// ScanSkillDeps auto-detects dependencies by statically analyzing the scripts/ directory,
+// then applies any SKILL.md frontmatter overrides (deps: / exclude_deps:).
 func ScanSkillDeps(skillDir string) *SkillManifest {
-	return scanScriptsDir(filepath.Join(skillDir, "scripts"))
+	scan := scanScriptsDir(filepath.Join(skillDir, "scripts"))
+	deps, excludeDeps := parseSkillManifestFile(skillMdPath(skillDir))
+	if len(deps) == 0 && len(excludeDeps) == 0 {
+		return scan
+	}
+	merged := applyManifestOverride(scan, deps, excludeDeps)
+	if merged.FromManifest {
+		slog.Debug("dep_scanner: manifest override applied",
+			"dir", skillDir,
+			"explicit_count", len(deps),
+			"scan_py", len(scan.RequiresPython),
+			"scan_node", len(scan.RequiresNode))
+	} else if len(excludeDeps) > 0 {
+		slog.Debug("dep_scanner: manifest exclude applied",
+			"dir", skillDir, "exclude_count", len(excludeDeps))
+	}
+	return merged
 }
 
 // scanScriptsDir statically analyzes script files to detect dependencies.
@@ -182,6 +204,8 @@ func normalizeNodePkg(pkg string) string {
 }
 
 // MergeDeps merges two manifests, deduplicating entries.
+// Manifest-origin fields (Explicit, ExcludeDeps, FromManifest) are OR-folded /
+// unioned so the merged result remains authoritative if either side was.
 func MergeDeps(a, b *SkillManifest) *SkillManifest {
 	if a == nil {
 		return b
@@ -193,6 +217,9 @@ func MergeDeps(a, b *SkillManifest) *SkillManifest {
 		Requires:       mergeUnique(a.Requires, b.Requires),
 		RequiresPython: mergeUnique(a.RequiresPython, b.RequiresPython),
 		RequiresNode:   mergeUnique(a.RequiresNode, b.RequiresNode),
+		Explicit:       mergeUnique(a.Explicit, b.Explicit),
+		ExcludeDeps:    mergeUnique(a.ExcludeDeps, b.ExcludeDeps),
+		FromManifest:   a.FromManifest || b.FromManifest,
 	}
 }
 

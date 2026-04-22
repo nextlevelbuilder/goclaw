@@ -1,0 +1,19 @@
+{
+  "event": "pre_tool_use",
+  "handler_type": "command",
+  "scope": "agent",
+  "matcher": "^(exec|shell)$",
+  "if_expr": "",
+  "config": {
+    "command": "grep -qE 'rm +-[rR][fF]? +/' && exit 2 || exit 0"
+  },
+  "timeout_ms": 2000,
+  "on_timeout": "block",
+  "priority": 100,
+  "enabled": true,
+  "source": "api",
+  "metadata": {
+    "notes": "Blocks `rm -rf /` style commands before exec. Lite edition only.",
+    "tags": ["safety", "command"]
+  }
+}

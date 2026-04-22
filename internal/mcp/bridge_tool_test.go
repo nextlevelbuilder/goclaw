@@ -3,6 +3,7 @@ package mcp
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -93,7 +94,7 @@ func TestBridgeToolNaming(t *testing.T) {
 	}
 
 	// Without prefix → auto-derived from server name
-	bt := NewBridgeTool("myserver", mcpTool, nil, "", 30, nil)
+	bt := NewBridgeTool("myserver", mcpTool, nil, "", 30, nil, uuid.Nil, nil)
 	if bt.Name() != "mcp_myserver__query" {
 		t.Errorf("expected name=mcp_myserver__query, got %s", bt.Name())
 	}
@@ -105,7 +106,7 @@ func TestBridgeToolNaming(t *testing.T) {
 	}
 
 	// With non-mcp_ prefix → gets mcp_ prepended
-	bt2 := NewBridgeTool("myserver", mcpTool, nil, "pg", 0, nil)
+	bt2 := NewBridgeTool("myserver", mcpTool, nil, "pg", 0, nil, uuid.Nil, nil)
 	if bt2.Name() != "mcp_pg__query" {
 		t.Errorf("expected name=mcp_pg__query, got %s", bt2.Name())
 	}
@@ -114,13 +115,13 @@ func TestBridgeToolNaming(t *testing.T) {
 	}
 
 	// With mcp_ prefix → unchanged
-	bt3 := NewBridgeTool("myserver", mcpTool, nil, "mcp_pg", 0, nil)
+	bt3 := NewBridgeTool("myserver", mcpTool, nil, "mcp_pg", 0, nil, uuid.Nil, nil)
 	if bt3.Name() != "mcp_pg__query" {
 		t.Errorf("expected name=mcp_pg__query, got %s", bt3.Name())
 	}
 
 	// Server name with hyphens → sanitized to underscores
-	bt4 := NewBridgeTool("my-server", mcpTool, nil, "", 0, nil)
+	bt4 := NewBridgeTool("my-server", mcpTool, nil, "", 0, nil, uuid.Nil, nil)
 	if bt4.Name() != "mcp_my_server__query" {
 		t.Errorf("expected name=mcp_my_server__query, got %s", bt4.Name())
 	}

@@ -38,6 +38,7 @@ flowchart TD
         SCHED[Scheduler -- 4 Lanes]
         AR[Agent Router]
         LOOP[Agent Loop -- Think / Act / Observe]
+        HOOKS[Hook Dispatcher -- Lifecycle Events]
     end
 
     subgraph Providers["LLM Providers"]
@@ -120,7 +121,8 @@ flowchart TD
 | `internal/permissions/` | RBAC policy engine (admin, operator, viewer roles) |
 | `internal/store/pg/pairing.go` | DM/device pairing service (8-character codes, database-backed) |
 | `internal/sandbox/` | Docker-based code execution sandbox |
-| `internal/tts/` | Text-to-Speech providers: OpenAI, ElevenLabs, Edge, MiniMax |
+| `internal/audio/` | Unified audio manager: 4 provider interfaces (TTS active; STT/Music/SFX stubbed/partial). Orchestrates ElevenLabs, OpenAI, Edge, MiniMax TTS providers. `internal/tts/` retained as backward-compat alias |
+| `internal/tts/` | Backward-compat alias layer (24 symbols) — all pre-refactor callers compile unchanged |
 | `internal/http/` | HTTP API handlers: /v1/chat/completions, /v1/agents, /v1/skills, /v1/traces, /v1/mcp, /v1/delegations, summoner |
 | `internal/crypto/` | AES-256-GCM encryption for API keys |
 | `internal/tracing/` | LLM call tracing (traces + spans), in-memory buffer with periodic store flush |
@@ -142,6 +144,67 @@ flowchart TD
 | `internal/workspace/` | Workspace context resolver: 6 scenarios (agent default, team lead, team member, dispatch, subagent, cron) |
 | `internal/vault/` | Knowledge Vault: wikilinks (semantic mesh), hybrid search (BM25+vector), filesystem sync, L0 auto-injection |
 | `internal/channels/whatsapp/` | Native WhatsApp channel via whatsmeow (replaces WhatsApp API), QR auth, media handling |
+| `internal/hooks/` | Agent lifecycle hooks: event dispatcher (sync/async), concrete handlers (command/http), matchers (regex + CEL), audit logging, edition gating, cost safeguards. Events: SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop, SubagentStart/Stop. Handlers: CommandHandler (shell, Lite-only), HTTPHandler (SSRF-hardened, auth decrypt) |
+| `internal/hooks/handlers/` | Concrete hook handler implementations: `CommandHandler` (exec wrapper, JSON I/O, env allowlist, edition recheck), `HTTPHandler` (SSRF-hardened HTTP client, retry-once on 5xx, no redirects, encrypted auth headers) |
+
+---
+
+## 3.5 Agent Hooks System
+
+**Lifecycle hooks** allow agents to perform custom logic at key execution points. The system is event-driven (sync/async), integrated into the 8-stage pipeline, and includes audit logging, edition gating, and security safeguards.
+
+### Event Types
+
+| Event | Stage | Sync/Async | Purpose |
+|-------|-------|-----------|---------|
+| **SessionStart** | ContextStage | Async | Fires once per session (first turn); before history loading |
+| **UserPromptSubmit** | ContextStage | Sync | Fires on user message arrival; blocks with hook reason or mutates input |
+| **PreToolUse** | ToolStage | Sync | Fires before each tool execution; blocks tool or mutates arguments |
+| **PostToolUse** | ToolStage | Async | Fires after tool result is processed; non-blocking |
+| **Stop** | FinalizeStage | Async | Fires when session terminates (stop/complete/error) |
+| **SubagentStart** | (Delegate tool) | Sync | Fires before delegated task spawns; blocks delegation |
+| **SubagentStop** | (Domain events) | Async | Fires on delegation completion/failure; non-blocking |
+
+### Handler Types
+
+| Handler | Edition | Config | Semantics |
+|---------|---------|--------|-----------|
+| **Command** | Lite only | `cmd`, `allowedEnvVars` | Exec shell command; stdin=event JSON; stdout=decision JSON; exit 0→allow, exit 2→block; timeout→block (fail-closed) |
+| **HTTP** | All | `url`, `headers` | POST event JSON to webhook URL; parse response for decision, additionalContext, updatedInput; 5xx retry once; 4xx error no-retry; SSRF-hardened with pinned IP |
+| **Prompt** | Phase 3+ | TBD | Integrates custom prompting logic (deferred) |
+
+### Sync vs Async
+
+**Sync hooks** (UserPromptSubmit, PreToolUse, SubagentStart):
+- Block pipeline until decision received
+- Support Copy-on-Write (COW) staged mutations: `updatedInput` buffered, committed only if ALL sync hooks succeed
+- Timeout ≤5s per hook; chain total ≤10s wall-time
+- Rejection blocks the step (e.g., tool not executed, user message not processed)
+
+**Async hooks** (SessionStart, PostToolUse, Stop, SubagentStop):
+- Fire-and-forget via worker pool (default 16 workers, bounded queue 512)
+- Non-blocking (pipeline continues immediately)
+- Timeout per hook; chain budget enforced but no blocking
+
+### Security Model
+
+- **Edition gating**: `CommandHandler` only on Lite edition; attempts on Standard/other editions rejected (defense-in-depth)
+- **SSRF hardening (HTTPHandler)**: Caller supplies net.Dialer pinning resolved IP, blocking loopback/link-local/private ranges; no HTTP redirects (CheckRedirect returns ErrUseLastResponse)
+- **Auth header encryption**: `Authorization` + other sensitive fields in cfg.Config["headers"] encrypted at rest via AES-256-GCM; decrypted only at HTTP send-time
+- **Audit logging**: All hook invocations logged to `hook_executions` table (encrypted, PII-redacted) with dedup_key for idempotency
+- **Loop-depth guard (M5)**: SubagentStart checks recursion depth; max 3 levels prevents infinite delegation chains
+- **Circuit breaker**: Auto-disables hook after 3 consecutive failures in recent window (C4 mitigation)
+
+### Pipeline Integration
+
+Dispatcher wired into `PipelineDeps.HookDispatcher` (nil-safe noop fallback). All 8 stages support hook firing with zero overhead when dispatcher not configured. Example sync hook flow:
+
+```
+1. ContextStage: UserPromptSubmit → Hooks.Fire(sync)
+2. Sync hooks buffer mutations (updatedInput)
+3. All hooks succeed? → Commit mutations, proceed
+4. Any hook rejects? → Discard buffer, abort pipeline, user sees reason
+```
 
 ---
 
@@ -397,25 +460,14 @@ flowchart TD
 
 ## 11. File Reference
 
-| File | Purpose |
-|------|---------|
-| `cmd/root.go` | Cobra CLI entry point, flag parsing |
-| `cmd/gateway.go` | Gateway startup orchestrator (`runGateway()`) |
-| `cmd/gateway_managed.go` | Database wiring (`wireManagedExtras()`, `wireManagedHTTP()`) |
-| `cmd/gateway_callbacks.go` | Shared callbacks (user seeding, context file loading) |
-| `cmd/gateway_consumer.go` | Inbound message consumer (subagent, teammate routing) |
-| `cmd/gateway_providers.go` | Provider registration (config-based + DB-based) |
-| `cmd/gateway_methods.go` | RPC method registration |
-| `internal/config/config.go` | Config struct definitions |
-| `internal/config/config_load.go` | JSON5 loading + env overlay |
-| `internal/config/config_channels.go` | Channel config structs |
-| `internal/gateway/server.go` | WS + HTTP server, CORS, rate limiter setup |
-| `internal/gateway/client.go` | WebSocket client handling, read limit (512KB) |
-| `internal/gateway/router.go` | RPC method routing |
-| `internal/scheduler/lanes.go` | Lane definitions, semaphore-based concurrency |
-| `internal/scheduler/queue.go` | Per-session queue, queue modes, debounce |
-| `internal/store/stores.go` | `Stores` container struct (all 22+ store interfaces) |
-| `internal/store/types.go` | `StoreConfig`, `BaseModel` |
+| Module | Path | Purpose |
+|---|---|---|
+| CLI & startup | `cmd/` | Cobra entry point, gateway orchestrator, DB wiring, provider registration, RPC method registration |
+| Gateway server | `internal/gateway/` | WS + HTTP server, client lifecycle, method router, rate limiter |
+| Config | `internal/config/` | JSON5 config loading, env overlay, channel config structs |
+| Store layer | `internal/store/` | `Stores` container, `BaseModel`, `StoreConfig`, `GenNewID()` |
+
+Use `grep` or your editor's symbol search for specific files.
 
 ---
 
@@ -473,6 +525,29 @@ Six distinct workspace scenarios:
 - **Hybrid Search**: BM25 keyword search + vector similarity (pgvector) combined via RRF (reciprocal rank fusion)
 - **L0 Auto-Injection**: Top-K vault entries injected into system prompt as "relevant context from vault"
 - **Filesystem Sync**: Vault entries exported as `.md` files for manual editing, re-imported with change tracking
+
+### Audio & Voice System (ElevenLabs + Streaming TTS)
+
+**Provider architecture** (`internal/audio/`):
+- **`Manager`**: Central orchestrator dispatching TTS/STT/Music/SFX requests to pluggable providers
+- **`TTSProvider` interface**: Core text-to-speech contract (blocking, buffered response)
+- **`StreamingTTSProvider` interface**: Optional interface for ElevenLabs `/stream` endpoint (chunked audio via `io.ReadCloser`)
+- **Implementations**: ElevenLabs, OpenAI, Edge, MiniMax (phase-gated; STT/Music/SFX partial)
+
+**Voice discovery & caching**:
+- **Voice cache** (`internal/audio/voice_cache.go`): In-memory LRU (cap 1000 tenants, TTL 1h) shared by HTTP `/v1/voices` + WS `voices.list` handlers. Thread-safe with `sync.Mutex` (LRU updates require write lock)
+- **Cache miss recovery**: HTTP handler auto-fetches from ElevenLabs; WS handler requires prior cache warm (provider resolution deferred to Phase 3)
+- **Agent audio context** (`store.WithAgentAudio` / `AgentAudioFromCtx`): Immutable snapshot bundle (AgentID + OtherConfig JSONB) injected by dispatcher before tool dispatch; consumed by `TtsTool.Execute` for voice/model resolution
+
+**Agent-level configuration** (`agents.other_config` JSONB):
+- `tts_voice_id`: ElevenLabs voice ID (e.g., "pMsXgVXv3BLzUgSXRplE")
+- `tts_model_id`: Model choice (eleven_v3, eleven_flash_v2_5, eleven_multilingual_v2, eleven_turbo_v2_5)
+- Resolution precedence: CLI args → agent config → tenant override → provider default
+
+**Web UI voice picker** (`ui/web/src/components/voice-picker.tsx`):
+- Combobox with BM25 search, preview playback button (HTML `<audio>`)
+- Handles preview CDN 403 (expiry) via `onError` → auto-refresh cache
+- Embedded in PromptSettingsSection, bound to `other_config.tts_voice_id`
 
 ---
 

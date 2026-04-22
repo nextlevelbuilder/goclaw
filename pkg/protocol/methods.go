@@ -27,10 +27,11 @@ const (
 	MethodAgentsFileSet  = "agents.files.set"
 
 	// Config
-	MethodConfigGet    = "config.get"
-	MethodConfigApply  = "config.apply"
-	MethodConfigPatch  = "config.patch"
-	MethodConfigSchema = "config.schema"
+	MethodConfigGet      = "config.get"
+	MethodConfigApply    = "config.apply"
+	MethodConfigPatch    = "config.patch"
+	MethodConfigSchema   = "config.schema"
+	MethodConfigDefaults = "config.defaults"
 
 	// Sessions
 	MethodSessionsList    = "sessions.list"
@@ -38,6 +39,7 @@ const (
 	MethodSessionsPatch   = "sessions.patch"
 	MethodSessionsDelete  = "sessions.delete"
 	MethodSessionsReset   = "sessions.reset"
+	MethodSessionsCompact = "sessions.compact"
 
 	// System
 	MethodConnect = "connect"
@@ -165,6 +167,12 @@ const (
 	MethodAPIKeysRevoke = "api_keys.revoke"
 )
 
+// Voices (ElevenLabs voice picker)
+const (
+	MethodVoicesList    = "voices.list"
+	MethodVoicesRefresh = "voices.refresh"
+)
+
 // Phase 3+ - NICE TO HAVE methods
 const (
 	MethodLogsTail = "logs.tail"
@@ -186,4 +194,15 @@ const (
 
 	// WhatsApp
 	MethodWhatsAppQRStart = "whatsapp.qr.start"
+)
+
+// Agent hooks (Phase 3)
+const (
+	MethodHooksList    = "hooks.list"
+	MethodHooksCreate  = "hooks.create"
+	MethodHooksUpdate  = "hooks.update"
+	MethodHooksDelete  = "hooks.delete"
+	MethodHooksToggle  = "hooks.toggle"
+	MethodHooksTest    = "hooks.test"
+	MethodHooksHistory = "hooks.history"
 )

@@ -88,9 +88,13 @@ func (t *TeamTasksTool) executeComplete(ctx context.Context, args map[string]any
 	completedTask, _ := t.manager.Store().GetTask(ctx, taskID)
 	var taskNumber int
 	var taskSubject string
+	var taskLocalKey string
 	if completedTask != nil {
 		taskNumber = completedTask.TaskNumber
 		taskSubject = completedTask.Subject
+		if lk, ok := completedTask.Metadata[TaskMetaLocalKey].(string); ok {
+			taskLocalKey = lk
+		}
 	}
 	t.manager.BroadcastTeamEvent(ctx, protocol.EventTeamTaskCompleted, BuildTaskEventPayload(
 		team.ID.String(), taskID.String(),
@@ -99,6 +103,7 @@ func (t *TeamTasksTool) executeComplete(ctx context.Context, args map[string]any
 		WithTaskInfo(taskNumber, taskSubject),
 		WithOwner(ownerKey, t.manager.AgentDisplayName(ctx, ownerKey)),
 		WithContextInfo(ctx),
+		WithLocalKey(taskLocalKey),
 	))
 
 	// Dependent tasks are dispatched by the consumer after this agent's turn ends

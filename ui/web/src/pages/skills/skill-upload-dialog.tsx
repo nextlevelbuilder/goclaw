@@ -10,8 +10,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { validateMultiSkillZip } from "./lib/validate-skill-zip";
 import { createSkillSubZip } from "./lib/create-skill-sub-zip";
+import { resolveUploadSkills } from "./lib/resolve-upload-skills";
 import { uniqueId } from "@/lib/utils";
 import type { SkillUploadResponse } from "./hooks/use-skills";
 import type { FileEntry, SkillStatus } from "./lib/skill-upload-types";
@@ -54,39 +54,14 @@ export function SkillUploadDialog({ open, onOpenChange, onUpload }: SkillUploadD
     // Validate all files concurrently
     const results = await Promise.all(
       pending.map(async (entry) => {
-        try {
-          const validation = await validateMultiSkillZip(entry.file);
-          const placeholderId = entry.skills[0]?.id ?? uniqueId();
-          if (validation.error) {
-            return {
-              id: entry.id,
-              skills: [{ id: placeholderId, dir: "", status: "invalid" as SkillStatus, error: validation.error }],
-            };
-          }
-          if (validation.skills.length === 0) {
-            return {
-              id: entry.id,
-              skills: [{ id: placeholderId, dir: "", status: "invalid" as SkillStatus, error: "upload.noSkillMd" }],
-            };
-          }
-          return {
-            id: entry.id,
-            skills: validation.skills.map((s) => ({
-              id: uniqueId(),
-              dir: s.dir,
-              status: s.valid ? ("valid" as SkillStatus) : ("invalid" as SkillStatus),
-              name: s.name,
-              slug: s.slug,
-              contentHash: s.contentHash,
-              error: s.error,
-            })),
-          };
-        } catch {
-          return {
-            id: entry.id,
-            skills: [{ id: entry.skills[0]?.id ?? uniqueId(), dir: "", status: "invalid" as SkillStatus, error: "upload.invalidZip" }],
-          };
-        }
+        const resolved = await resolveUploadSkills(entry.file);
+        return {
+          id: entry.id,
+          skills: resolved.map((skill) => ({
+            id: uniqueId(),
+            ...skill,
+          })),
+        };
       }),
     );
 

@@ -2,9 +2,11 @@ package agent
 
 import (
 	"fmt"
+	"log/slog"
 	"unicode/utf8"
 
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/pipeline"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/tokencount"
 )
@@ -12,13 +14,15 @@ import (
 // Context pruning defaults matching TS DEFAULT_CONTEXT_PRUNING_SETTINGS.
 const (
 	defaultKeepLastAssistants   = 3
-	defaultSoftTrimRatio        = 0.25
+	defaultSoftTrimRatio        = 0.3
 	defaultHardClearRatio       = 0.5
+	defaultPruningMode          = "cache-ttl"
 	defaultMinPrunableToolChars = 50000
 	defaultSoftTrimMaxChars     = 6000
 	defaultSoftTrimHeadChars    = 3000
 	defaultSoftTrimTailChars    = 3000
 	defaultHardClearPlaceholder = "[Old tool result content cleared]"
+	defaultCacheTTL             = "5m"
 	charsPerTokenEstimate       = 4
 
 	// Media tool results contain irreplaceable vision/audio descriptions
@@ -27,6 +31,40 @@ const (
 	mediaSoftTrimHeadChars = 4000
 	mediaSoftTrimTailChars = 4000
 )
+
+// PruningDefaults mirrors the private pruning const block for external
+// consumers (e.g. config.defaults RPC). Values are the SSoT the resolver uses
+// when a user config leaves a field unset.
+type PruningDefaults struct {
+	KeepLastAssistants   int
+	SoftTrimRatio        float64
+	HardClearRatio       float64
+	MinPrunableToolChars int
+	SoftTrimMaxChars     int
+	SoftTrimHeadChars    int
+	SoftTrimTailChars    int
+	HardClearEnabled     bool
+	HardClearPlaceholder string
+	TTL                  string
+}
+
+// DefaultPruningValues returns the private pruning consts packaged for
+// cross-package consumption. The resolver in resolvePruningSettings uses these
+// same values.
+func DefaultPruningValues() PruningDefaults {
+	return PruningDefaults{
+		KeepLastAssistants:   defaultKeepLastAssistants,
+		SoftTrimRatio:        defaultSoftTrimRatio,
+		HardClearRatio:       defaultHardClearRatio,
+		MinPrunableToolChars: defaultMinPrunableToolChars,
+		SoftTrimMaxChars:     defaultSoftTrimMaxChars,
+		SoftTrimHeadChars:    defaultSoftTrimHeadChars,
+		SoftTrimTailChars:    defaultSoftTrimTailChars,
+		HardClearEnabled:     true,
+		HardClearPlaceholder: defaultHardClearPlaceholder,
+		TTL:                  defaultCacheTTL,
+	}
+}
 
 // pruningEstimator wraps either a tiktoken counter or the legacy char-based heuristic.
 // When counter is nil, falls back to rune_count / charsPerTokenEstimate.
@@ -134,9 +172,17 @@ func resolvePruningSettings(cfg *config.ContextPruningConfig) *effectivePruningS
 // When tc is non-nil, token counting uses tiktoken for accuracy (especially
 // for non-ASCII content like Vietnamese/Chinese). When nil, falls back to the
 // legacy rune_count/charsPerTokenEstimate heuristic so existing tests pass.
-func pruneContextMessages(msgs []providers.Message, contextWindowTokens int, cfg *config.ContextPruningConfig, tc tokencount.TokenCounter, model string) []providers.Message {
-	// Pruning runs by default for all providers. Only skip when explicitly disabled.
-	if cfg != nil && cfg.Mode == "off" {
+func pruneContextMessages(msgs []providers.Message, contextWindowTokens int, cfg *config.ContextPruningConfig, tc tokencount.TokenCounter, model string, stats *pipeline.PruneStats) []providers.Message {
+	// Resolve effective mode: empty defaults to "cache-ttl" (enabled by default).
+	mode := defaultPruningMode
+	if cfg != nil && cfg.Mode != "" {
+		mode = cfg.Mode
+	}
+	if mode == "off" {
+		return msgs
+	}
+	if mode != "cache-ttl" {
+		slog.Warn("context_pruning: unknown mode, disabled", "mode", mode)
 		return msgs
 	}
 	if contextWindowTokens <= 0 || len(msgs) == 0 {
@@ -201,51 +247,11 @@ func pruneContextMessages(msgs []providers.Message, contextWindowTokens int, cfg
 		return msgs
 	}
 
-	// Pass 0: Per-result context guard — force-trim any single tool result
-	// exceeding 30% of the context window. Catches outlier outputs even
-	// when overall context ratio is low.
-	maxSingleResultTokens := tokenWindow * 3 / 10
-	// Char budget for actual string slicing (always char-based regardless of estimator).
-	maxSingleResultChars := maxSingleResultTokens
-	if tc != nil {
-		maxSingleResultChars = maxSingleResultTokens * charsPerTokenEstimate
-	}
-	var result []providers.Message
-	for _, idx := range prunableIndexes {
-		msgTokens := est.estimateTokens(msgs[idx].Content)
-		if msgTokens > maxSingleResultTokens {
-			if result == nil {
-				result = make([]providers.Message, len(msgs))
-				copy(result, msgs)
-			}
-			msg := msgs[idx]
-			head := takeHead(msg.Content, maxSingleResultChars*7/10)
-			tail := takeTail(msg.Content, maxSingleResultChars*3/10)
-			msgChars := utf8.RuneCountInString(msg.Content)
-			trimmed := fmt.Sprintf("%s\n\n⚠️ [... middle content omitted ...]\n\n%s\n\n[Single tool result trimmed: %d chars exceeded per-result limit of %d chars.]",
-				head, tail, msgChars, maxSingleResultChars)
-			result[idx] = providers.Message{
-				Role:       msg.Role,
-				Content:    trimmed,
-				ToolCallID: msg.ToolCallID,
-			}
-			totalTokens += est.estimateTokens(trimmed) - msgTokens
-		}
-	}
-	if result != nil {
-		msgs = result
-		result = nil
-		// Re-check ratio after per-result guard.
-		ratio = float64(totalTokens) / float64(tokenWindow)
-		if ratio < settings.softTrimRatio {
-			return msgs
-		}
-	}
-
 	// Build tool call name map for media tool detection in soft trim.
 	toolCallNames := buildToolCallNameMap(msgs)
 
 	// Pass 1: Soft trim long tool results.
+	var result []providers.Message
 	for i := range prunableIndexes {
 		idx := prunableIndexes[i]
 		msg := msgs[idx]
@@ -295,6 +301,9 @@ func pruneContextMessages(msgs []providers.Message, contextWindowTokens int, cfg
 			ToolCallID: msg.ToolCallID,
 		}
 		totalTokens += est.estimateTokens(trimmed) - msgTokens
+		if stats != nil {
+			stats.ResultsTrimmed++
+		}
 	}
 
 	output := msgs
@@ -347,6 +356,9 @@ func pruneContextMessages(msgs []providers.Message, contextWindowTokens int, cfg
 		afterTokens := est.estimateTokens(settings.hardClearPlaceholder)
 		totalTokens += afterTokens - beforeTokens
 		ratio = float64(totalTokens) / float64(tokenWindow)
+		if stats != nil {
+			stats.ResultsCleared++
+		}
 	}
 
 	return output

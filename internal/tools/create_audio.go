@@ -8,36 +8,22 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/nextlevelbuilder/goclaw/internal/audio"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
-	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
 
-// audioGenProviderPriority is the default fallback order for music generation providers.
-var audioGenProviderPriority = []string{"minimax"}
-
-// audioGenModelDefaults maps provider names to default audio generation models.
-var audioGenModelDefaults = map[string]string{
-	"minimax": "music-2.5+",
-}
-
-// CreateAudioTool generates music or sound effects using AI audio generation APIs.
+// CreateAudioTool generates music or sound effects using the audio.Manager.
+// Provider selection and fallback are handled by the Manager's chain logic.
 type CreateAudioTool struct {
-	registry          *providers.Registry
-	elevenlabsAPIKey  string
-	elevenlabsBaseURL string
-	vaultIntc         *VaultInterceptor
+	audioMgr  *audio.Manager
+	vaultIntc *VaultInterceptor
 }
 
 func (t *CreateAudioTool) SetVaultInterceptor(v *VaultInterceptor) { t.vaultIntc = v }
 
-// NewCreateAudioTool creates a CreateAudioTool.
-// elevenlabsKey and elevenlabsBase are used for ElevenLabs sound effects generation.
-func NewCreateAudioTool(registry *providers.Registry, elevenlabsKey, elevenlabsBase string) *CreateAudioTool {
-	return &CreateAudioTool{
-		registry:          registry,
-		elevenlabsAPIKey:  elevenlabsKey,
-		elevenlabsBaseURL: elevenlabsBase,
-	}
+// NewCreateAudioTool creates a CreateAudioTool backed by the audio.Manager.
+func NewCreateAudioTool(audioMgr *audio.Manager) *CreateAudioTool {
+	return &CreateAudioTool{audioMgr: audioMgr}
 }
 
 func (t *CreateAudioTool) Name() string { return "create_audio" }
@@ -70,10 +56,6 @@ func (t *CreateAudioTool) Parameters() map[string]any {
 				"type":        "boolean",
 				"description": "No vocals (default: false).",
 			},
-			"provider": map[string]any{
-				"type":        "string",
-				"description": "Force a specific provider (e.g. 'minimax').",
-			},
 			"filename_hint": map[string]any{
 				"type":        "string",
 				"description": "Short descriptive filename (no extension). Example: 'epic-battle-theme', 'rain-ambience'.",
@@ -101,56 +83,37 @@ func (t *CreateAudioTool) Execute(ctx context.Context, args map[string]any) *Res
 
 	lyrics, _ := args["lyrics"].(string)
 	instrumental, _ := args["instrumental"].(bool)
-	forceProvider, _ := args["provider"].(string)
 	filenameHint, _ := args["filename_hint"].(string)
 
-	var audioBytes []byte
-	var usage *providers.Usage
-	var providerName, model string
+	var res *audio.AudioResult
+	var err error
 
-	// Sound effects: route directly to ElevenLabs if credentials available.
-	if audioType == "sound_effect" {
-		if t.elevenlabsAPIKey == "" {
-			return ErrorResult("sound_effect generation requires ElevenLabs credentials (elevenlabs.api_key in config)")
-		}
-		var err error
-		audioBytes, err = t.callElevenLabsSoundEffect(ctx, prompt, duration)
+	switch audioType {
+	case "sound_effect":
+		res, err = t.audioMgr.GenerateSFX(ctx, audio.SFXOptions{
+			Prompt:   prompt,
+			Duration: duration,
+		})
 		if err != nil {
-			return ErrorResult(fmt.Sprintf("ElevenLabs sound effect generation failed: %v", err))
+			return ErrorResult(fmt.Sprintf("sound effect generation failed: %v", err))
 		}
-		providerName = "elevenlabs"
-		model = "sound-generation"
-	} else {
-		// Music: use the provider chain.
-		chain := ResolveMediaProviderChain(ctx, "create_audio", forceProvider, "",
-			audioGenProviderPriority, audioGenModelDefaults, t.registry)
-
-		// Inject prompt and music-specific params into each chain entry.
-		for i := range chain {
-			if chain[i].Params == nil {
-				chain[i].Params = make(map[string]any)
-			}
-			chain[i].Params["prompt"] = prompt
-			chain[i].Params["lyrics"] = lyrics
-			chain[i].Params["instrumental"] = instrumental
-		}
-
-		// Override timeout to 300s for music generation (slow API).
-		for i := range chain {
-			if chain[i].Timeout < 300 {
-				chain[i].Timeout = 300
-			}
-		}
-
-		chainResult, err := ExecuteWithChain(ctx, chain, t.registry, t.callProvider)
+	case "music":
+		res, err = t.audioMgr.GenerateMusic(ctx, audio.MusicOptions{
+			Prompt:       prompt,
+			Lyrics:       lyrics,
+			Instrumental: instrumental,
+			TimeoutSec:   300,
+		})
 		if err != nil {
-			return ErrorResult(fmt.Sprintf("audio generation failed: %v", err))
+			return ErrorResult(fmt.Sprintf("music generation failed: %v", err))
 		}
-		audioBytes = chainResult.Data
-		usage = chainResult.Usage
-		providerName = chainResult.Provider
-		model = chainResult.Model
+	default:
+		return ErrorResult(fmt.Sprintf("unsupported audio type: %s", audioType))
 	}
+
+	audioBytes := res.Audio
+	providerName := res.Provider
+	model := res.Model
 
 	// Save to workspace under date-based folder.
 	workspace := ToolWorkspaceFromCtx(ctx)
@@ -171,39 +134,18 @@ func (t *CreateAudioTool) Execute(ctx context.Context, args map[string]any) *Res
 		slog.Warn("create_audio: file missing immediately after write", "path", audioPath, "error", err)
 		return ErrorResult(fmt.Sprintf("generated audio file missing after write: %v", err))
 	} else {
-		slog.Info("create_audio: file saved", "path", audioPath, "size", fi.Size(), "data_len", len(audioBytes), "provider", providerName, "type", audioType)
+		slog.Info("create_audio: file saved",
+			"path", audioPath, "size", fi.Size(),
+			"data_len", len(audioBytes), "model", model, "type", audioType)
 	}
 
 	result := &Result{ForLLM: fmt.Sprintf("MEDIA:%s\nUse the EXACT filename when referencing: %s", audioPath, filepath.Base(audioPath))}
-	result.Media = []bus.MediaFile{{Path: audioPath, MimeType: "audio/mpeg"}}
+	result.Media = []bus.MediaFile{{Path: audioPath, MimeType: "audio/mpeg", Filename: filepath.Base(audioPath)}}
 	result.Deliverable = fmt.Sprintf("[Generated audio: %s]\nPrompt: %s", filepath.Base(audioPath), prompt)
 	if t.vaultIntc != nil {
 		go t.vaultIntc.AfterWriteMedia(context.WithoutCancel(ctx), audioPath, prompt, "audio/mpeg")
 	}
 	result.Provider = providerName
 	result.Model = model
-	if usage != nil {
-		result.Usage = usage
-	}
 	return result
-}
-
-// callProvider dispatches to the correct music generation implementation based on provider type.
-func (t *CreateAudioTool) callProvider(ctx context.Context, cp credentialProvider, providerName, model string, params map[string]any) ([]byte, *providers.Usage, error) {
-	if cp == nil {
-		return nil, nil, fmt.Errorf("provider %q does not expose API credentials required for audio generation", providerName)
-	}
-	prompt := GetParamString(params, "prompt", "")
-
-	slog.Info("create_audio: calling music generation API",
-		"provider", providerName, "model", model)
-
-	switch GetParamString(params, "_provider_type", providerTypeFromName(providerName)) {
-	case "minimax":
-		return callMinimaxMusicGen(ctx, cp.APIKey(), cp.APIBase(), model, prompt, params)
-	case "suno":
-		return callSunoMusicGen(ctx, cp.APIKey(), cp.APIBase(), model, prompt, params)
-	default:
-		return nil, nil, fmt.Errorf("unsupported provider for audio generation: %q", providerName)
-	}
 }

@@ -4,6 +4,22 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!--
+      Content-Security-Policy (Phase 06):
+      - default-src 'self' — deny everything by default.
+      - script-src 'self' — no 'unsafe-eval'; Prism uses static highlighting only
+        so the script editor stays XSS-safe even when users paste malicious JS
+        source (it is rendered as text, never executed in-page).
+      - style-src 'self' 'unsafe-inline' — Tailwind/inline loader keyframes +
+        Google Fonts stylesheet require inline styles.
+      - font-src self + gstatic — Google Fonts woff2 files.
+      - img-src self + data: + blob: — base64 avatars/thumbnails, blob previews.
+      - media-src self + blob: — TTS audio playback via blob URLs.
+      - connect-src self + ws:/wss: — websocket to gateway. Same-origin only;
+        if the gateway is hosted on a different domain in production, add the
+        explicit origin here rather than wildcard-allowing all http(s):.
+    -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' ws: wss:; base-uri 'self';" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />

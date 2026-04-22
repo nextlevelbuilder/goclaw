@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useLayoutEffect, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
+import { usePortalDropdownClose } from '@/hooks/use-portal-dropdown-close'
 
 interface ComboboxOption {
   value: string
@@ -50,17 +51,13 @@ export function Combobox({ value, onChange, options, placeholder, loading, allow
     }
   }, [open])
 
-  // Close on outside click
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: MouseEvent) => {
-      if (dropdownRef.current?.contains(e.target as Node)) return
-      if (inputRef.current?.contains(e.target as Node)) return
-      setOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
+  usePortalDropdownClose({
+    open,
+    onClose: () => setOpen(false),
+    ignore: [inputRef, dropdownRef],
+    // Scroll is used by useLayoutEffect above to REPOSITION, not close.
+    closeOnOutsideScroll: false,
+  })
 
   const handleSelect = useCallback((val: string) => {
     onChange(val)

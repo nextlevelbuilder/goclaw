@@ -30,6 +30,7 @@ func (m *SessionsMethods) Register(router *gateway.MethodRouter) {
 	router.Register(protocol.MethodSessionsPatch, m.handlePatch)
 	router.Register(protocol.MethodSessionsDelete, m.handleDelete)
 	router.Register(protocol.MethodSessionsReset, m.handleReset)
+	router.Register(protocol.MethodSessionsCompact, m.handleCompact)
 }
 
 type sessionsListParams struct {
@@ -229,4 +230,66 @@ func (m *SessionsMethods) handleReset(ctx context.Context, client *gateway.Clien
 		"ok": true,
 	}))
 	emitAudit(m.eventBus, client, "session.reset", "session", params.Key)
+}
+
+type sessionCompactParams struct {
+	Key      string `json:"key"`
+	KeepLast int    `json:"keepLast,omitempty"` // default 4
+}
+
+// handleCompact truncates session history to the last N messages.
+// Issue 958: Manual session compaction API (truncate-only, no LLM summarization).
+func (m *SessionsMethods) handleCompact(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+	locale := store.LocaleFromContext(ctx)
+	var params sessionCompactParams
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidJSON)))
+		return
+	}
+
+	if params.Key == "" {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "key is required"))
+		return
+	}
+
+	keepLast := params.KeepLast
+	if keepLast <= 0 {
+		keepLast = 4 // default: keep last 2 exchanges
+	}
+
+	// Auth check
+	sess := m.sessions.Get(ctx, params.Key)
+	if sess == nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "session", params.Key)))
+		return
+	}
+	if !canSeeAll(client.Role(), m.cfg.Gateway.OwnerIDs, client.UserID()) {
+		if sess.UserID != client.UserID() {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgPermissionDenied, "session")))
+			return
+		}
+	}
+
+	history := m.sessions.GetHistory(ctx, params.Key)
+	originalLen := len(history)
+	if originalLen < 6 {
+		client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
+			"ok":      true,
+			"message": "session too short to compact",
+			"kept":    originalLen,
+		}))
+		return
+	}
+
+	// Truncate history to last N messages
+	m.sessions.TruncateHistory(ctx, params.Key, keepLast)
+	m.sessions.IncrementCompaction(ctx, params.Key)
+	m.sessions.Save(ctx, params.Key)
+
+	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
+		"ok":       true,
+		"original": originalLen,
+		"kept":     keepLast,
+	}))
+	emitAudit(m.eventBus, client, "session.compacted", "session", params.Key)
 }
