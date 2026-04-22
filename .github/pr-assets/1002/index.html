@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>PR #1002 — Native image_generation UX trace</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --bg:#0d0d0d; --fg:#e8e4df; --card:#1a1714; --border:#2d2923;
+    --muted:#8a837d; --accent:#ef4444; --good:#22c55e; --code:#151210;
+  }
+  html.light {
+    --bg:#f8f6f3; --fg:#1a1714; --card:#ffffff; --border:#e5e0da;
+    --muted:#6b6560; --accent:#dc2626; --good:#15803d; --code:#f3f0eb;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif; line-height:1.55; }
+  header { padding:32px 40px 20px; border-bottom:1px solid var(--border); display:flex; align-items:flex-start; justify-content:space-between; gap:24px; flex-wrap:wrap; }
+  h1 { margin:0 0 6px; font-size:22px; font-weight:700; letter-spacing:-0.01em; }
+  .env { color:var(--muted); font-size:13px; line-height:1.6; }
+  .toggle { background:var(--card); color:var(--fg); border:1px solid var(--border); padding:8px 14px; border-radius:999px; cursor:pointer; font-size:13px; font-weight:500; }
+  .toggle:hover { background:var(--border); }
+  main { max-width:1100px; margin:0 auto; padding:28px 40px 60px; }
+  .summary { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:32px; }
+  .sum-card { background:var(--card); border:1px solid var(--border); padding:16px 18px; border-radius:10px; }
+  .sum-card h3 { margin:0 0 6px; font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; }
+  .sum-card p { margin:0; font-size:14px; }
+  section { margin-bottom:40px; }
+  .section-head { background:var(--card); border:1px solid var(--border); padding:14px 18px; border-radius:10px 10px 0 0; border-bottom:0; }
+  .section-head h2 { margin:0 0 4px; font-size:16px; font-weight:600; }
+  .section-head .state { color:var(--muted); font-size:13px; }
+  .shot { background:var(--card); border:1px solid var(--border); border-radius:0 0 10px 10px; overflow:hidden; }
+  .shot-header { display:flex; align-items:center; gap:10px; padding:10px 18px; border-bottom:1px solid var(--border); font-size:12px; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted); font-weight:600; }
+  .shot-header .chip { display:inline-block; padding:2px 10px; border-radius:999px; font-size:11px; letter-spacing:0.04em; border:1px solid var(--border); }
+  .chip.ok { color:var(--good); border-color:var(--good); }
+  .chip.neutral { color:var(--muted); }
+  .chip.warn { color:var(--accent); border-color:var(--accent); }
+  .shot img { display:block; width:100%; height:auto; }
+  .notes { padding:14px 18px; font-size:14px; color:var(--fg); border-top:1px solid var(--border); }
+  .notes .label { font-weight:600; }
+  code { background:var(--code); padding:1px 5px; border-radius:4px; font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:12.5px; color:var(--fg); }
+  .banner { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:16px 20px; margin-bottom:28px; font-size:14px; }
+  .banner strong { color:var(--accent); }
+  @media (max-width:900px) { .summary { grid-template-columns:1fr; } main { padding:20px; } header { padding:20px; } }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>PR #1002 · Native image_generation — UX integration trace</h1>
+    <div class="env">
+      Backend: claw (<code>goclaw-goclaw-1</code>) running PR binary against real Postgres &amp; Codex OAuth accounts ·
+      Agent: <code>ngu-tu-cao</code> (provider <code>cliproxy-codex</code>, model <code>gpt-5.4</code>) ·
+      Light theme · Targeted mode (new feature, no meaningful <em>before</em> state)
+    </div>
+  </div>
+  <button class="toggle" id="theme-btn">○ Light</button>
+</header>
+
+<main>
+
+<div class="banner">
+  <strong>Context for reviewers:</strong> this PR adds a native <code>image_generation</code> tool for Codex-routed agents.
+  The captures below trace the UX integration: the per-agent toggle chip, the streaming placeholder during generation,
+  and an observed fallback path. End-to-end success (inline final image + download) was <em>not</em> captured in this session
+  because the Codex pool account on claw fell through to an older BytePlus-backed <code>create_image</code> skill which is
+  misconfigured on this environment — see Capture 3 for the honest failure mode.
+</div>
+
+<div class="summary">
+  <div class="sum-card">
+    <h3>What changed (UI)</h3>
+    <p>Composer exposes an <code>Images</code> toggle chip only when the selected agent routes through a Codex provider
+    (<code>chatgpt_oauth</code> or <code>cliproxy-codex</code>). Per-agent localStorage persistence.</p>
+  </div>
+  <div class="sum-card">
+    <h3>Why it matters</h3>
+    <p>Users can opt out per-agent without leaving the chat. The toggle sends <code>noImageGen:true</code> over the WS
+    send method → upstream drops the <code>image_generation</code> tool from the request.</p>
+  </div>
+  <div class="sum-card">
+    <h3>Review cue</h3>
+    <p>Red callouts mark the new surface. Focus on <em>where</em> the PR adds UI, not on the specific prompt content.</p>
+  </div>
+</div>
+
+<section>
+  <div class="section-head">
+    <h2>1 · Composer surfaces the Images toggle</h2>
+    <span class="state">Agent <code>ngu-tu-cao</code> selected · provider <code>cliproxy-codex</code> · toggle visible, default ON.</span>
+  </div>
+  <div class="shot">
+    <div class="shot-header">
+      <span class="chip ok">Implemented</span>
+      <span>/ chat · new conversation · composer bottom bar</span>
+    </div>
+    <img src="01-composer-toggle.png" alt="Chat page with Images toggle chip visible in composer" />
+    <div class="notes">
+      <span class="label">What the callout marks:</span> the pill-shaped <code>Images</code> chip rendered by
+      <code>chat-input.tsx</code>. Source of truth for its visibility is
+      <code>supportsImageGenProvider(agentProvider)</code> — matches the literal ids <code>chatgpt_oauth</code> /
+      <code>codex</code> plus any string containing <code>codex</code> (e.g. <code>cliproxy-codex</code>).
+      <br /><span class="label">Behavior:</span> click toggles persisted state in
+      <code>localStorage["goclaw.agent.{agentKey}.imageGenEnabled"]</code>. When OFF, the composer adds
+      <code>noImageGen:true</code> to the WS send payload.
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="section-head">
+    <h2>2 · Streaming placeholder while partial frames arrive</h2>
+    <span class="state">After send · agent routing pipeline active · skeleton visible in the active-run zone.</span>
+  </div>
+  <div class="shot">
+    <div class="shot-header">
+      <span class="chip ok">Implemented</span>
+      <span>/ chat · right after send · <code>ActiveRunZone</code></span>
+    </div>
+    <img src="02-streaming-placeholder.png" alt="Skeleton placeholder with spinner and 'Generating image...' caption" />
+    <div class="notes">
+      <span class="label">What this shows:</span> the <code>showImageGenPlaceholder</code> branch of
+      <code>ActiveRunZone</code> renders a bounded skeleton with spinner and a localized
+      <code>imageGenGenerating</code> caption. Gate:
+      <code>agentSupportsImageGen &amp;&amp; imageGenEnabled &amp;&amp; isRunning</code>.
+      <br /><span class="label">What it looks like for real image gen:</span> in the success path,
+      <code>response.image_generation_call.partial_image</code> frames would progressively fill this box before
+      <code>response.output_item.done</code> replaces it with the final PNG via <code>MediaGallery</code>.
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="section-head">
+    <h2>3 · Honest failure path — fallback to textual prompt</h2>
+    <span class="state">Observed on claw: agent chose the legacy <code>create_image</code> builtin (BytePlus Seedream) which is unconfigured on this env.</span>
+  </div>
+  <div class="shot">
+    <div class="shot-header">
+      <span class="chip warn">Observed</span>
+      <span>/ chat · after run completed · assistant message area</span>
+    </div>
+    <img src="03-error-fallback.png" alt="Assistant message offering a detailed prompt after create_image failed twice" />
+    <div class="notes">
+      <span class="label">What happened:</span> the model (<code>gpt-5.4</code>) invoked
+      <code>create_image</code> — a pre-existing BytePlus Seedream-backed builtin tool — which failed twice.
+      It did <em>not</em> invoke the new native <code>image_generation</code> pathway added by this PR.
+      The agent then gracefully degraded by offering a detailed prompt the user can run in an external model.
+      <br /><span class="label">Why this still belongs in the trace:</span> it highlights that routing between
+      the existing <code>create_image</code> skill and the new native tool is a <em>model-level decision</em>.
+      Making the agent prefer the native path likely requires either:
+      (a) removing / deprioritizing <code>create_image</code> from the agent's available tools, or
+      (b) tightening the system prompt to reference <code>image_generation</code> directly.
+      <br /><span class="label">Not in scope for this PR:</span> the fix for that routing preference;
+      the native pathway itself (capability flag, request wiring, SSE event parsing, media persistence,
+      UI toggle + placeholder) is complete and verified by the backend unit tests.
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="section-head">
+    <h2>Coverage note — what is <em>not</em> in this trace</h2>
+    <span class="state">Honest gap log.</span>
+  </div>
+  <div class="shot" style="border-radius:10px;">
+    <div class="notes" style="border-top:none;">
+      <p><strong>Not captured:</strong></p>
+      <ul>
+        <li>Native <code>response.image_generation_call.partial_image</code> frames actually resolving into a final PNG — the agent did not reach this path on this run.</li>
+        <li>Final image rendered inline via <code>MediaGallery</code> with <code>generated-YYYYMMDD-HHmmss.png</code> download filename.</li>
+        <li>Reload persistence of the <code>MediaRef</code>.</li>
+        <li>Toggle-OFF flow (prompt without <code>image_generation</code> tool attached).</li>
+      </ul>
+      <p><strong>Why these are still trustworthy without a screenshot:</strong> each is covered by unit tests in the PR
+      (see <code>internal/providers/codex_image_test.go</code>, <code>internal/agent/media_assistant_images_test.go</code>,
+      <code>internal/agent/image_gen_gate_test.go</code>, plus the UI vitest for the toggle hook). The visual path above
+      (toggle + placeholder) is the part that unit tests cannot verify.</p>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<script>
+  const btn = document.getElementById('theme-btn');
+  const html = document.documentElement;
+  function apply(mode) {
+    if (mode === 'light') { html.classList.add('light'); btn.textContent = '● Light'; }
+    else { html.classList.remove('light'); btn.textContent = '○ Light'; }
+    try { localStorage.setItem('pr-1002-theme', mode); } catch {}
+  }
+  const pref = (() => { try { return localStorage.getItem('pr-1002-theme'); } catch { return null; } })();
+  apply(pref || 'light');
+  btn.onclick = () => apply(html.classList.contains('light') ? 'dark' : 'light');
+</script>
+</body>
+</html>
