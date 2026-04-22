@@ -1,0 +1,51 @@
+# Local test harness for the HA addon.
+# Simulates TimescaleDB addon (postgres) + optional Redis addon.
+#
+# Usage:
+#   cd homeassistant && docker compose -f docker-compose.test.yaml up --build
+#   # Dashboard: http://localhost:18790
+#
+# With Redis:
+#   cd homeassistant && docker compose -f docker-compose.test.yaml --profile redis up --build
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    environment:
+      POSTGRES_USER: goclaw
+      POSTGRES_PASSWORD: goclaw
+      POSTGRES_DB: goclaw
+    volumes:
+      - pg-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U goclaw -d goclaw"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    profiles:
+      - redis
+
+  goclaw:
+    build:
+      context: goclaw
+      args:
+        BUILD_FROM: ghcr.io/nextlevelbuilder/goclaw:latest
+    ports:
+      - "18790:18790"
+      - "9222:9222"
+    volumes:
+      - goclaw-data:/data
+      - ./test-options.json:/data/options.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  pg-data:
+  goclaw-data:

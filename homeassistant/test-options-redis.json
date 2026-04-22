@@ -1,0 +1,14 @@
+{
+  "postgres_host": "postgres",
+  "postgres_port": 5432,
+  "postgres_user": "goclaw",
+  "postgres_password": "goclaw",
+  "postgres_database": "goclaw",
+  "redis_host": "redis",
+  "redis_port": 6379,
+  "enable_browser": true,
+  "gateway_token": "",
+  "encryption_key": "",
+  "log_level": "info",
+  "trace_verbose": false
+}

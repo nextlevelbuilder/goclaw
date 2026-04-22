@@ -2,7 +2,7 @@ VERSION ?= $(shell git describe --tags --abbrev=0 --match "v[0-9]*" 2>/dev/null 
 LDFLAGS  = -s -w -X github.com/nextlevelbuilder/goclaw/cmd.Version=$(VERSION)
 BINARY   = goclaw
 
-.PHONY: build build-full build-tui run clean version up down logs reset test vet check-web dev migrate setup ci desktop-dev desktop-build desktop-dmg
+.PHONY: build build-full build-tui run clean version up down logs reset test vet check-web dev migrate setup ci desktop-dev desktop-build desktop-dmg ha-addon ha-test ha-test-redis ha-test-down
 
 # Build backend only (API-only, no embedded web UI)
 build:
@@ -130,3 +130,22 @@ desktop-dmg: desktop-build
 		-ov -format UDZO "goclaw-lite-$(VERSION)-darwin-$$(uname -m | sed 's/x86_64/amd64/').dmg"
 	rm -rf /tmp/goclaw-dmg-staging
 	@echo "DMG created: goclaw-lite-$(VERSION)-darwin-$$(uname -m | sed 's/x86_64/amd64/').dmg"
+
+# ── Home Assistant Addon ──
+# Uses ghcr.io/nextlevelbuilder/goclaw as base, adds Chromium.
+# HA Supervisor builds this automatically; these targets are for local testing.
+
+HA_COMPOSE = docker compose -f homeassistant/docker-compose.test.yaml
+
+ha-addon:
+	$(HA_COMPOSE) build goclaw
+
+ha-test:
+	$(HA_COMPOSE) up --build
+
+ha-test-redis:
+	cp homeassistant/test-options-redis.json homeassistant/test-options.json
+	$(HA_COMPOSE) --profile redis up --build
+
+ha-test-down:
+	$(HA_COMPOSE) --profile redis down -v
