@@ -458,7 +458,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			evoMetricsStore = deps.EvolutionMetricsStore
 		}
 
-		restrictVal := true // always restrict agents to their workspace
+		restrictVal := ag.RestrictToWorkspace
 		loop := NewLoop(LoopConfig{
 			ID:                     ag.AgentKey,
 			DisplayName:            ag.DisplayName,

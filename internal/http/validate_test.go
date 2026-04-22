@@ -63,3 +63,23 @@ func TestFilterAllowedKeys(t *testing.T) {
 		})
 	}
 }
+
+func TestFilterAllowedKeys_AgentRestrictToWorkspaceAllowed(t *testing.T) {
+	input := map[string]any{
+		"restrict_to_workspace": false,
+		"display_name":          "Fox Spirit",
+		"evil_field":            true,
+	}
+
+	result := filterAllowedKeys(input, agentAllowedFields)
+
+	if v, ok := result["restrict_to_workspace"]; !ok || v != false {
+		t.Fatalf("expected restrict_to_workspace=false to be retained, got: %#v", result["restrict_to_workspace"])
+	}
+	if _, ok := result["display_name"]; !ok {
+		t.Fatalf("expected display_name to be retained")
+	}
+	if _, ok := result["evil_field"]; ok {
+		t.Fatalf("expected evil_field to be stripped")
+	}
+}

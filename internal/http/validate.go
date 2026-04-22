@@ -44,7 +44,7 @@ var agentAllowedFields = map[string]bool{
 	"agent_key": true, "agent_type": true, "display_name": true,
 	"provider": true, "model": true, "status": true,
 	"context_window": true, "max_tool_iterations": true,
-	"workspace": true,
+	"workspace": true, "restrict_to_workspace": true,
 	"frontmatter": true, "compaction_config": true,
 	"memory_config": true, "other_config": true, "tools_config": true,
 	"sandbox_config": true, "context_pruning": true,

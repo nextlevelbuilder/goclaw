@@ -89,9 +89,8 @@ func TestResolveMediaPath(t *testing.T) {
 		}
 	})
 
-	// effectiveRestrict() always returns true (multi-tenant security hardening),
-	// so even tools created with restrict=false behave as restricted.
-	t.Run("unrestricted_tool_still_restricted", func(t *testing.T) {
+	// Tools created with restrict=false should allow paths outside workspace.
+	t.Run("unrestricted_tool_allows_outside_workspace", func(t *testing.T) {
 		tool := NewMessageTool(workspaceCanonical, false)
 		ctx := context.Background()
 
@@ -100,11 +99,11 @@ func TestResolveMediaPath(t *testing.T) {
 			input  string
 			wantOK bool
 		}{
-			// Outside workspace → blocked (effectiveRestrict overrides to true)
-			{"absolute outside workspace", "MEDIA:" + outsidePath(workspaceCanonical, "etc/hostname"), false},
+			// Outside workspace → allowed (unrestricted mode)
+			{"absolute outside workspace", "MEDIA:" + outsidePath(workspaceCanonical, "etc/hostname"), true},
 			// Workspace-relative → allowed
 			{"workspace relative", "MEDIA:docs/report.pdf", true},
-			// /tmp/ → allowed (temp dir exception in restricted mode)
+			// /tmp/ → allowed
 			{"temp file", "MEDIA:" + filepath.Join(tmpDir, "test.png"), true},
 		}
 

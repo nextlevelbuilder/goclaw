@@ -131,3 +131,25 @@ func TestToolContextKeys_MultipleValues(t *testing.T) {
 		t.Errorf("sandboxKey: expected sandbox-1, got %q", v)
 	}
 }
+
+func TestEffectiveRestrict_UsesToolDefaultWhenNoOverride(t *testing.T) {
+	ctx := context.Background()
+	if got := effectiveRestrict(ctx, true); !got {
+		t.Fatalf("expected true when tool default is true, got %v", got)
+	}
+	if got := effectiveRestrict(ctx, false); got {
+		t.Fatalf("expected false when tool default is false, got %v", got)
+	}
+}
+
+func TestEffectiveRestrict_ContextOverrideWins(t *testing.T) {
+	ctx := WithRestrictToWorkspace(context.Background(), false)
+	if got := effectiveRestrict(ctx, true); got {
+		t.Fatalf("expected context override false to win, got %v", got)
+	}
+
+	ctx = WithRestrictToWorkspace(context.Background(), true)
+	if got := effectiveRestrict(ctx, false); !got {
+		t.Fatalf("expected context override true to win, got %v", got)
+	}
+}
