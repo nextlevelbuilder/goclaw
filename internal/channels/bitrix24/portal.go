@@ -156,6 +156,61 @@ func (p *Portal) AppToken() string {
 	return p.state.AppToken
 }
 
+// BootstrapAppToken persists auth.application_token on the first authenticated
+// event when the install POST itself did not carry it. The Bitrix24 Local App
+// install form sends AUTH_ID / REFRESH_ID / member_id / DOMAIN but OMITS
+// application_token — the token only becomes visible once Bitrix starts
+// POSTing events (ONAPPINSTALL / ONIMBOTMESSAGEADD / …). Without a bootstrap
+// path we reject every event with "portal not installed", the bot never
+// replies, and the only way out is a manual DB patch.
+//
+// Trust boundary: accept the event's app_token ONLY if all of (a)–(c) hold:
+//
+//	(a) We have NO stored app_token yet — never overwrite a good value.
+//	(b) The portal already has a non-empty stored MemberID (i.e. install
+//	    persisted it). We REFUSE to seed MemberID from the event body: if
+//	    install didn't populate it, something is wrong upstream and we must
+//	    not let the first event — potentially spoofed — decide the portal's
+//	    identity. Legacy rows without MemberID require a manual reinstall.
+//	(c) The event's memberID matches the stored one.
+//
+// Any failure returns an error so the caller can 401 and log a security
+// event. Idempotent: a second call after a successful bootstrap is a no-op.
+func (p *Portal) BootstrapAppToken(ctx context.Context, memberID, appToken string) error {
+	if appToken == "" {
+		return errors.New("bitrix24 bootstrap: empty app_token")
+	}
+	p.mu.Lock()
+	if p.state.AppToken != "" {
+		p.mu.Unlock()
+		return nil
+	}
+	// MemberID MUST be pre-seeded by the install flow. If it isn't, refuse —
+	// we'd otherwise be letting the first inbound event (possibly a spoof)
+	// pin the portal's identity. The legitimate fix for such a row is a
+	// fresh install via /bitrix24/install, which runs under DOMAIN-scoped
+	// portal lookup and writes MemberID from the form body.
+	if p.state.MemberID == "" {
+		p.mu.Unlock()
+		return errors.New("bitrix24 bootstrap: stored member_id empty — reinstall required")
+	}
+	if memberID == "" {
+		p.mu.Unlock()
+		return errors.New("bitrix24 bootstrap: event member_id empty, stored non-empty")
+	}
+	if p.state.MemberID != memberID {
+		stored := p.state.MemberID
+		p.mu.Unlock()
+		return fmt.Errorf("bitrix24 bootstrap: member_id mismatch: stored=%q event=%q", stored, memberID)
+	}
+	p.state.AppToken = appToken
+	stateCopy := p.state
+	p.mu.Unlock()
+	// Detach context: bootstrap must succeed even if the request context is
+	// about to be cancelled — we already decided to trust the event.
+	return p.writeState(context.WithoutCancel(ctx), stateCopy)
+}
+
 // LookupRegisteredBot returns the bot id previously registered under a code.
 // Phase 03 uses it to decide whether imbot.register needs to run at startup.
 func (p *Portal) LookupRegisteredBot(code string) (int, bool) {

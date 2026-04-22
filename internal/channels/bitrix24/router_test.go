@@ -306,6 +306,119 @@ func TestRouter_HandleEvent_SpoofAppToken_401(t *testing.T) {
 	}
 }
 
+// TestRouter_HandleEvent_BootstrapAppToken_200 covers the Local App install
+// flow where the install POST did not carry application_token — the first
+// event seeds portal.AppToken() from evt.Auth.AppToken provided the event's
+// member_id matches what install persisted. Second event should now auth
+// normally against the seeded value.
+func TestRouter_HandleEvent_BootstrapAppToken_200(t *testing.T) {
+	fs := newFakeStore()
+	tid := uuid.New()
+	p := newInstalledPortal(t, fs, tid, "p", "portal.bitrix24.com", "") // empty AppToken, MemberID="mem1"
+	r := newRouterForTest()
+	defer r.Stop()
+	r.RegisterPortal(p)
+	disp := newFakeDispatcher(914, tid, "p")
+	r.RegisterBot(914, disp)
+
+	req := httptest.NewRequest(http.MethodPost, "/bitrix24/events",
+		buildEventBody("portal.bitrix24.com", "SEEDED_APP", 914, "m1"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	if got := p.AppToken(); got != "SEEDED_APP" {
+		t.Fatalf("AppToken after bootstrap = %q, want SEEDED_APP", got)
+	}
+	select {
+	case <-disp.events:
+		// ok — dispatcher ran
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("dispatcher did not receive bootstrapped event")
+	}
+}
+
+// TestRouter_HandleEvent_BootstrapAppToken_MemberIDMismatch_401 asserts that
+// the TOFU path refuses to seed an app_token when the event's member_id does
+// not match what install stored. This is the critical guard against a spoofed
+// first event poisoning the portal's stored token.
+func TestRouter_HandleEvent_BootstrapAppToken_MemberIDMismatch_401(t *testing.T) {
+	fs := newFakeStore()
+	tid := uuid.New()
+	p := newInstalledPortal(t, fs, tid, "p", "portal.bitrix24.com", "") // MemberID="mem1"
+	r := newRouterForTest()
+	defer r.Stop()
+	r.RegisterPortal(p)
+
+	v := url.Values{}
+	v.Set("event", "ONIMBOTMESSAGEADD")
+	v.Set("auth[domain]", "portal.bitrix24.com")
+	v.Set("auth[application_token]", "SPOOF")
+	v.Set("auth[member_id]", "mem-attacker") // wrong
+	v.Set("data[PARAMS][MESSAGE_ID]", "m1")
+	v.Set("data[BOT][914][BOT_ID]", "914")
+	req := httptest.NewRequest(http.MethodPost, "/bitrix24/events", strings.NewReader(v.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+	if got := p.AppToken(); got != "" {
+		t.Fatalf("AppToken after rejected bootstrap = %q, want empty", got)
+	}
+}
+
+// TestRouter_HandleEvent_BootstrapAppToken_NoStoredMemberID_401 asserts the
+// tightened guard: a portal row with empty stored MemberID (legacy / bad
+// install) must NOT be auto-healed by the first inbound event. Prior to the
+// fix, BootstrapAppToken fell through to "seed MemberID from event body" —
+// that opened a spoof window where any attacker who knew DOMAIN could pin
+// both MemberID and AppToken from their own event. The only safe recovery
+// for a MemberID-less row is a fresh /bitrix24/install round-trip.
+func TestRouter_HandleEvent_BootstrapAppToken_NoStoredMemberID_401(t *testing.T) {
+	fs := newFakeStore()
+	tid := uuid.New()
+	// Seed portal manually so MemberID stays empty — newInstalledPortal
+	// always writes "mem1", which would bypass the guard we're testing.
+	creds, _ := json.Marshal(store.BitrixPortalCredentials{ClientID: "cid", ClientSecret: "secret"})
+	st := store.BitrixPortalState{
+		AccessToken:  "AT",
+		RefreshToken: "RT",
+		ExpiresAt:    time.Now().Add(1 * time.Hour),
+		// AppToken + MemberID both empty
+	}
+	stateBytes, _ := json.Marshal(st)
+	fs.seed(tid, "p", "portal.bitrix24.com", creds, stateBytes)
+	p, err := NewPortal(context.Background(), tid, "p", fs, "")
+	if err != nil {
+		t.Fatalf("NewPortal: %v", err)
+	}
+	r := newRouterForTest()
+	defer r.Stop()
+	r.RegisterPortal(p)
+
+	req := httptest.NewRequest(http.MethodPost, "/bitrix24/events",
+		buildEventBody("portal.bitrix24.com", "SPOOF_APP", 914, "m1"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+	if got := p.AppToken(); got != "" {
+		t.Fatalf("AppToken after rejected bootstrap = %q, want empty", got)
+	}
+}
+
+// TestRouter_HandleEvent_PortalNotInstalled_401 keeps the classic rejection
+// path: no stored app_token AND the event carries no app_token either — we
+// have nothing to seed or compare, so 401 is the only safe outcome.
 func TestRouter_HandleEvent_PortalNotInstalled_401(t *testing.T) {
 	fs := newFakeStore()
 	tid := uuid.New()
@@ -314,8 +427,9 @@ func TestRouter_HandleEvent_PortalNotInstalled_401(t *testing.T) {
 	defer r.Stop()
 	r.RegisterPortal(p)
 
+	// Event with EMPTY auth[application_token] — no seed material available.
 	req := httptest.NewRequest(http.MethodPost, "/bitrix24/events",
-		buildEventBody("portal.bitrix24.com", "ANY", 914, "m1"))
+		buildEventBody("portal.bitrix24.com", "", 914, "m1"))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)

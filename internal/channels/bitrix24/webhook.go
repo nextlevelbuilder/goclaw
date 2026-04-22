@@ -5,11 +5,99 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"os"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
+
+// bitrix24LogRawEvent is an opt-in debug switch. When set (env
+// BITRIX24_LOG_RAW_EVENT=1 at process start), handleEvent dumps the
+// full parsed form body of every inbound event, with OAuth credentials
+// redacted. Leave OFF in steady-state: the dump leaks message text to
+// logs and is noisy — intended for one-shot capture during debugging.
+var bitrix24LogRawEvent = strings.TrimSpace(os.Getenv("BITRIX24_LOG_RAW_EVENT")) == "1"
+
+// isRedactedEventKey returns true for form keys whose values carry OAuth
+// credentials that must never appear verbatim in logs. Bitrix24 duplicates
+// the same tokens under multiple paths — top-level `auth[access_token]` AND
+// `data[BOT][<id>][access_token]` AND `data[BOT][<id>][AUTH][access_token]`
+// all carry the SAME secret. Earlier version only guarded the top-level
+// path and leaked tokens through the nested duplicates. This version
+// match-by-suffix on the leaf key name, which catches all three locations
+// plus any new `data[...]` nesting Bitrix24 adds in future releases.
+//
+// Leaf keys considered sensitive:
+//   - access_token        (1h OAuth bearer)
+//   - refresh_token       (long-lived; can mint new access_token)
+//   - application_token   (stable per-install webhook secret)
+//   - client_id + client_secret (app identity; client_id is not secret
+//     per OAuth spec but pairs with client_secret in app registration
+//     so we redact both to avoid admin confusion)
+//   - AUTH_ID / REFRESH_ID (install POST variants of the above)
+func isRedactedEventKey(k string) bool {
+	// Strip bracket path, keep the trailing leaf name.
+	// "data[BOT][924][AUTH][access_token]" -> "access_token"
+	leaf := k
+	if i := strings.LastIndex(k, "["); i >= 0 && strings.HasSuffix(k, "]") {
+		leaf = k[i+1 : len(k)-1]
+	}
+	switch strings.ToLower(leaf) {
+	case "access_token",
+		"refresh_token",
+		"application_token",
+		"client_secret",
+		"client_id",
+		"auth_id",
+		"refresh_id":
+		return true
+	}
+	return false
+}
+
+// dumpRawEvent logs the parsed form body of a Bitrix24 event with
+// credentials redacted. Invoked only when bitrix24LogRawEvent is true —
+// the cost of key sort + string build is intentional (one-shot debug
+// capture, not a hot path). Output is a sorted multi-line dump so
+// successive events are diffable in log archives.
+func dumpRawEvent(evt *Event) {
+	if evt == nil || evt.Raw == nil {
+		// parseJSONEvent doesn't populate Raw. Log a marker so operators
+		// realise the JSON variant bypasses the dump.
+		if evt != nil {
+			slog.Info("bitrix24 event: raw dump (json variant — no raw form)",
+				"event_type", evt.Type, "domain", evt.Auth.Domain)
+		}
+		return
+	}
+	keys := make([]string, 0, len(evt.Raw))
+	for k := range evt.Raw {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var b strings.Builder
+	for _, k := range keys {
+		for _, v := range evt.Raw[k] {
+			b.WriteString(k)
+			b.WriteByte('=')
+			if isRedactedEventKey(k) {
+				b.WriteString("<redacted len=")
+				b.WriteString(strconv.Itoa(len(v)))
+				b.WriteByte('>')
+			} else {
+				b.WriteString(v)
+			}
+			b.WriteByte('\n')
+		}
+	}
+	slog.Info("bitrix24 event: raw dump (debug)",
+		"event_type", evt.Type,
+		"domain", evt.Auth.Domain,
+		"body", b.String())
+}
+
 
 // maxInstallBodyBytes caps the /bitrix24/install body. Real install callbacks
 // are a few hundred bytes; the cap is only defense-in-depth against a public
@@ -232,6 +320,13 @@ func (r *Router) handleEvent(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Opt-in raw-body dump for debugging. Gated by BITRIX24_LOG_RAW_EVENT
+	// env at process start — never on in steady-state because the dump
+	// leaks user message text to logs.
+	if bitrix24LogRawEvent {
+		dumpRawEvent(evt)
+	}
+
 	if evt.Auth.Domain == "" {
 		writeJSONError(w, http.StatusBadRequest, "missing auth.domain")
 		return
@@ -251,11 +346,30 @@ func (r *Router) handleEvent(w http.ResponseWriter, req *http.Request) {
 	want := portal.AppToken()
 	got := evt.Auth.AppToken
 	if want == "" {
-		// Portal not yet installed — reject rather than accept unsigned events.
-		slog.Warn("security.bitrix24_apptoken_missing",
-			"tenant", portal.TenantID(), "portal", portal.Name(), "domain", evt.Auth.Domain)
-		writeJSONError(w, http.StatusUnauthorized, "portal not installed")
-		return
+		// Bootstrap path: Bitrix24 Local App install POST does NOT include
+		// application_token (only AUTH_ID / REFRESH_ID / member_id are sent).
+		// The token first appears in the event stream. Seed state from this
+		// event iff member_id matches what install persisted — see
+		// Portal.BootstrapAppToken for the full trust argument.
+		if got != "" {
+			if err := portal.BootstrapAppToken(req.Context(), evt.Auth.MemberID, got); err != nil {
+				slog.Warn("security.bitrix24_apptoken_bootstrap_failed",
+					"tenant", portal.TenantID(), "portal", portal.Name(),
+					"domain", evt.Auth.Domain, "event", evt.Type, "err", err)
+				writeJSONError(w, http.StatusUnauthorized, "app_token bootstrap rejected")
+				return
+			}
+			slog.Info("bitrix24 event: app_token bootstrapped on first event",
+				"tenant", portal.TenantID(), "portal", portal.Name(),
+				"domain", evt.Auth.Domain, "event", evt.Type,
+				"member_id", evt.Auth.MemberID)
+			want = got // proceed to secureEqual below — will now match
+		} else {
+			slog.Warn("security.bitrix24_apptoken_missing",
+				"tenant", portal.TenantID(), "portal", portal.Name(), "domain", evt.Auth.Domain)
+			writeJSONError(w, http.StatusUnauthorized, "portal not installed")
+			return
+		}
 	}
 	if !secureEqual(want, got) {
 		slog.Warn("security.bitrix24_apptoken_mismatch",
