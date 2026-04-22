@@ -187,6 +187,11 @@ func (s *SQLiteKnowledgeGraphStore) ListEntities(ctx context.Context, agentID, u
 		args = append(args, userArgs...)
 	}
 
+	if opts.ScopeID != "" {
+		where += " AND user_id = ?"
+		args = append(args, opts.ScopeID)
+	}
+
 	if opts.EntityType != "" {
 		where += " AND entity_type = ?"
 		args = append(args, opts.EntityType)

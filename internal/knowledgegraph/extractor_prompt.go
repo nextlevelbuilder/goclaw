@@ -11,7 +11,8 @@ Output valid JSON with this schema:
       "entity_type": "person|organization|project|product|technology|task|event|document|concept|location",
       "description": "Brief description of the entity",
       "confidence": 0.0-1.0,
-      "event_time": "ISO 8601 timestamp of when the event occurred (optional, only for entity_type='event')"
+      "properties": {"key": "value"},
+      "event_time": "ISO 8601 timestamp (optional, for entity_type='event' or 'task' when a date/time is stated)"
     }
   ],
   "relations": [
@@ -28,6 +29,7 @@ Output valid JSON with this schema:
 - Use consistent, canonical lowercase IDs with hyphens
 - For people: use full name when known (e.g., "john-doe"), not partial ("john")
 - For projects/products: use official name (e.g., "project-alpha", "goclaw")
+- For ticket items: use a stable ID like "ticket-942681" (based on the ticket number)
 - Same real-world entity MUST always get the same external_id across extractions
 - When a pronoun or partial reference clearly refers to a named entity, use that entity's ID — do NOT create a new entity
 
@@ -58,10 +60,11 @@ Choosing between similar types:
 - uses, implements, integrates_with (technology)
 - authored, references (documents: who wrote it, what it refers to)
 - provides, requires (capabilities: what an entity offers or needs)
+- has_status (task→concept: current status, e.g., on hold, in progress, closed)
 - related_to (LAST RESORT — if no specific relation fits, prefer omitting the relation entirely)
 
 ## Rules
-- Extract 3-15 entities depending on text density. Short text = fewer entities
+- Extract 3-15 entities depending on text density. Short text = fewer entities. Structured documents with many line items may warrant more entities.
 - Confidence: 1.0 = explicitly stated fact, 0.8 = strongly implied, 0.5 = inferred from context
 - Use varied confidence — NOT everything is 1.0. Reserve 1.0 for direct, unambiguous statements
 - Keep names in original language
@@ -69,7 +72,18 @@ Choosing between similar types:
 - Skip generic/vague entities ("the system", "the team" without specific name)
 - Do NOT use related_to as a default — if you cannot determine a specific relation, omit it
 - Output ONLY the JSON object, no markdown, no code blocks
-- For event-type entities, include event_time as ISO 8601 if the text provides a clear time reference. Omit for other entity types.
+- For event-type and task-type entities, include event_time as ISO 8601 if the text provides a clear date/time reference. Convert non-standard formats (e.g., "17-04-2026", "21 April 2026", "20.00 WIB") to ISO 8601. Preserve timezone info when present. Omit for other entity types.
+- Use properties to capture structured metadata that does not fit into top-level fields (ticket IDs, status values, numeric counts, client names, reference numbers, etc.)
+
+## Structured Data (reports, handovers, tables, forms)
+When the input contains structured/tabular data such as work handover documents, status reports, or key-value lists:
+- Use the task entity type for ticket/issue items. Put the ticket ID in properties (e.g., {"ticket_id": "#942681"})
+- Put numeric counts in properties (e.g., {"open_tickets": "0", "resolved_tickets": "4"})
+- Put status values in properties (e.g., {"status": "on hold"})
+- Put reference numbers and client names in properties (e.g., {"ref": "2022338375", "client": "BANK MESTIKA DHARMA"})
+- For the overall report/summary, use the document entity type with properties like {"report_type": "work handover"} and include summary metrics
+- Extract individual ticket line items as separate task entities when detail is available (ticket ID + description pair)
+- Convert date formats like "21 April 2026", "17-04-2026", or "20.00 WIB" to ISO 8601 (e.g., "2026-04-21T20:00:00+07:00")
 
 ## Example
 
@@ -91,5 +105,41 @@ Output:
     {"source_entity_id": "goclaw", "relation_type": "uses", "target_entity_id": "postgresql", "confidence": 1.0},
     {"source_entity_id": "postgresql", "relation_type": "integrates_with", "target_entity_id": "pgvector", "confidence": 0.8},
     {"source_entity_id": "migration-guide", "relation_type": "references", "target_entity_id": "goclaw-migration", "confidence": 1.0}
+  ]
+}
+
+## Structured Data Example
+
+Input: "WORK HANDOVER INFORMATION
+Date : 21 April 2026
+Time : 20.00 WIB
+Ticket Open : 0
+Ticket Onhold : 3
+Ticket Closed : 4
+-(17-04-2026) (On Hold) #942681 2022338375 - BANK MESTIKA DHARMA - Perpanjang Sertifikat
+Desc : Masih progres oleh tim LMD info mas muklis sedang di coba reset password root nya
+-(20-04-2026) (On Hold) #945375 - CHAILEASE FINANCE INDONESIA - Update Veeam Backup & Replication
+Desc : Akan dilanjut besok Rabu, 22 April 2026, Pukul 15.00 WIB."
+
+Output:
+{
+  "entities": [
+    {"external_id": "work-handover-2026-04-21", "name": "Work Handover 21 April 2026", "entity_type": "document", "description": "Work handover report for 21 April 2026 shift", "confidence": 1.0, "properties": {"report_type": "work handover", "open_tickets": "0", "onhold_tickets": "3", "closed_tickets": "4"}, "event_time": "2026-04-21T20:00:00+07:00"},
+    {"external_id": "ticket-942681", "name": "Ticket #942681 - BANK MESTIKA DHARMA", "entity_type": "task", "description": "Perpanjang Sertifikat, on hold, progres oleh tim LMD", "confidence": 1.0, "properties": {"ticket_id": "#942681", "ref": "2022338375", "status": "on hold", "client": "BANK MESTIKA DHARMA"}, "event_time": "2026-04-17T00:00:00Z"},
+    {"external_id": "ticket-945375", "name": "Ticket #945375 - CHAILEASE FINANCE INDONESIA", "entity_type": "task", "description": "Update Veeam Backup & Replication, on hold, to be continued 22 April 2026", "confidence": 1.0, "properties": {"ticket_id": "#945375", "status": "on hold", "client": "CHAILEASE FINANCE INDONESIA"}, "event_time": "2026-04-20T00:00:00Z"},
+    {"external_id": "bank-mestika-dharma", "name": "BANK MESTIKA DHARMA", "entity_type": "organization", "description": "Client mentioned in work handover ticket", "confidence": 1.0},
+    {"external_id": "chailease-finance-indonesia", "name": "CHAILEASE FINANCE INDONESIA", "entity_type": "organization", "description": "Client mentioned in work handover ticket", "confidence": 1.0},
+    {"external_id": "mas-muklis", "name": "Mas Muklis", "entity_type": "person", "description": "Working on password reset for ticket #942681", "confidence": 0.9},
+    {"external_id": "tim-lmd", "name": "Tim LMD", "entity_type": "organization", "description": "Team handling BANK MESTIKA DHARMA ticket", "confidence": 0.9},
+    {"external_id": "veeam-backup-replication", "name": "Veeam Backup & Replication", "entity_type": "technology", "description": "Backup software to be updated for CHAILEASE FINANCE", "confidence": 1.0}
+  ],
+  "relations": [
+    {"source_entity_id": "ticket-942681", "relation_type": "belongs_to", "target_entity_id": "work-handover-2026-04-21", "confidence": 1.0},
+    {"source_entity_id": "ticket-945375", "relation_type": "belongs_to", "target_entity_id": "work-handover-2026-04-21", "confidence": 1.0},
+    {"source_entity_id": "ticket-942681", "relation_type": "references", "target_entity_id": "bank-mestika-dharma", "confidence": 1.0},
+    {"source_entity_id": "ticket-945375", "relation_type": "references", "target_entity_id": "chailease-finance-indonesia", "confidence": 1.0},
+    {"source_entity_id": "mas-muklis", "relation_type": "works_on", "target_entity_id": "ticket-942681", "confidence": 0.9},
+    {"source_entity_id": "tim-lmd", "relation_type": "assigned_to", "target_entity_id": "ticket-942681", "confidence": 0.9},
+    {"source_entity_id": "ticket-945375", "relation_type": "uses", "target_entity_id": "veeam-backup-replication", "confidence": 1.0}
   ]
 }`
