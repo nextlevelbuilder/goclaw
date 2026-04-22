@@ -1,10 +1,24 @@
 package telegram
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/mymmrac/telego"
 )
+
+// typingKeyFromIDs builds the typingCtrls key for a specific inbound message.
+// Keying by (localKey + message ID) rather than just localKey lets concurrent
+// inbounds on the same chat each own their typing controller, so Send() for
+// one message can't yank another message's still-active typing indicator.
+// The `0` sentinel means "no inbound ID known" and is used for the fallback
+// path in outbound handlers when metadata doesn't carry inbound_message_id.
+func typingKeyFromIDs(localKey string, inboundMsgID int) string {
+	if inboundMsgID == 0 {
+		return localKey
+	}
+	return fmt.Sprintf("%s#%d", localKey, inboundMsgID)
+}
 
 // detectMention checks if a Telegram message mentions the bot.
 // Checks both msg.Text/Entities (text messages) and msg.Caption/CaptionEntities (photo/media messages).

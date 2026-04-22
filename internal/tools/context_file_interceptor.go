@@ -69,7 +69,14 @@ func isContextFile(path, workspace string) (fileName string, ok bool) {
 	return "", false
 }
 
-const defaultContextCacheTTL = 5 * time.Minute
+// defaultContextCacheTTL bounds how long SOUL.md/IDENTITY.md/USER.md stay
+// cached between reads. The previous 5-minute window was long enough that an
+// agent writing USER.md mid-conversation wouldn't see its own update for up
+// to 5 minutes — e.g. a user reports income, the agent acks + writes USER.md,
+// the next turn still reads the stale cached file and "forgets" the report.
+// 1 minute is a pragmatic compromise: handles bursty conversational writes
+// while still absorbing most of the I/O load for active sessions.
+const defaultContextCacheTTL = 1 * time.Minute
 
 // ContextFileInterceptor routes context file reads/writes to the agent store.
 // Keeps SOUL.md, IDENTITY.md etc. in Postgres.

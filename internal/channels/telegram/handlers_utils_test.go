@@ -6,6 +6,39 @@ import (
 	"github.com/mymmrac/telego"
 )
 
+// --- typingKeyFromIDs ---
+
+func TestTypingKeyFromIDs_DistinctPerMessage(t *testing.T) {
+	// Two inbounds on the same chat must produce different keys so Send()
+	// for one message doesn't steal the other's typing controller.
+	localKey := "1234:topic:5"
+	k1 := typingKeyFromIDs(localKey, 100)
+	k2 := typingKeyFromIDs(localKey, 101)
+	if k1 == k2 {
+		t.Fatalf("keys for distinct msg IDs should differ: k1=%q k2=%q", k1, k2)
+	}
+	if k1 == localKey || k2 == localKey {
+		t.Fatalf("keys with msg ID set should include it, got k1=%q k2=%q", k1, k2)
+	}
+}
+
+func TestTypingKeyFromIDs_ZeroIDFallsBackToLocalKey(t *testing.T) {
+	// When no inbound message id is known (e.g. outbound not originated from
+	// a Telegram inbound), the key falls back to localKey for back-compat.
+	got := typingKeyFromIDs("chat-42", 0)
+	if got != "chat-42" {
+		t.Errorf("zero msg id should fall back to localKey, got %q", got)
+	}
+}
+
+func TestTypingKeyFromIDs_StableForSameInputs(t *testing.T) {
+	a := typingKeyFromIDs("foo", 42)
+	b := typingKeyFromIDs("foo", 42)
+	if a != b {
+		t.Errorf("deterministic key should be stable: a=%q b=%q", a, b)
+	}
+}
+
 // --- detectMention ---
 
 func TestDetectMention_EmptyBotUsername(t *testing.T) {

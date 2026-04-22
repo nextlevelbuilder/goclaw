@@ -544,11 +544,13 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 			return c.bot.SendChatAction(ctx, action)
 		},
 	})
-	// Stop previous typing controller for this chat/topic (if any)
-	if prev, ok := c.typingCtrls.Load(localKey); ok {
-		prev.(*typing.Controller).Stop()
-	}
-	c.typingCtrls.Store(localKey, typingCtrl)
+	// Key typing by inbound message ID so each concurrent inbound has its own
+	// controller. Previously keyed by localKey — when msg2 arrived while msg1
+	// was still queued (scheduler maxConcurrent=1), msg2's Send would yank
+	// msg1's typing prematurely, then msg2's run started with no indicator.
+	// With runID-scoped keying, each Send only stops its own typing.
+	typingKey := typingKeyFromIDs(localKey, message.MessageID)
+	c.typingCtrls.Store(typingKey, typingCtrl)
 	typingCtrl.Start()
 
 	// Stop previous thinking animation for this chat/topic

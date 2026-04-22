@@ -217,8 +217,19 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 		c.stopThinking.Delete(localKey)
 	}
 
-	// Stop typing indicator controller (TTL keepalive)
-	if ctrl, ok := c.typingCtrls.LoadAndDelete(localKey); ok {
+	// Stop typing indicator controller (TTL keepalive).
+	// Prefer looking up by inbound_message_id so we only stop this outbound's
+	// own typing — not a concurrent sibling inbound's. Fall back to localKey
+	// for outbound paths that don't carry the metadata (non-Telegram origin,
+	// legacy internal messages).
+	typingKey := localKey
+	if mid := msg.Metadata["inbound_message_id"]; mid != "" {
+		var parsed int
+		if _, err := fmt.Sscanf(mid, "%d", &parsed); err == nil && parsed != 0 {
+			typingKey = typingKeyFromIDs(localKey, parsed)
+		}
+	}
+	if ctrl, ok := c.typingCtrls.LoadAndDelete(typingKey); ok {
 		ctrl.(*typing.Controller).Stop()
 	}
 

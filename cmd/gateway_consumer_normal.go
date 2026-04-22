@@ -221,6 +221,12 @@ func processNormalMessage(
 			outMeta["reply_to_message_id"] = mid
 		}
 	}
+	// Propagate originating inbound message id so channels can scope per-inbound
+	// state (typing controllers, placeholders) when multiple inbounds for the
+	// same chat interleave. Safe for all channels — ignored if not recognised.
+	if mid := msg.Metadata["message_id"]; mid != "" {
+		outMeta["inbound_message_id"] = mid
+	}
 
 	// Register run with channel manager for streaming/reaction event forwarding.
 	// Use localKey (composite key with topic suffix) so streaming/reaction events
