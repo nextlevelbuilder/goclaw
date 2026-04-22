@@ -84,6 +84,24 @@ func (d *gatewayDeps) runLifecycle(
 		deps.webFetchTool.UpdatePolicy(updatedCfg.Tools.WebFetch.Policy, updatedCfg.Tools.WebFetch.AllowedDomains, updatedCfg.Tools.WebFetch.BlockedDomains)
 	})
 
+	// Reload global shell deny-group toggles on config changes via pub/sub.
+	// Without this, Config page changes only apply after process restart.
+	d.msgBus.Subscribe("shell-deny-groups-config-reload", func(evt bus.Event) {
+		if evt.Name != bus.TopicConfigChanged {
+			return
+		}
+		updatedCfg, ok := evt.Payload.(*config.Config)
+		if !ok {
+			return
+		}
+		if execTool, ok := d.toolsReg.Get("exec"); ok {
+			if et, ok := execTool.(*tools.ExecTool); ok {
+				et.SetGlobalShellDenyGroups(updatedCfg.Tools.ShellDenyGroups)
+				slog.Info("shell deny groups reloaded via pub/sub", "groups", len(updatedCfg.Tools.ShellDenyGroups))
+			}
+		}
+	})
+
 	// Reload TTS providers on config changes via pub/sub.
 	d.msgBus.Subscribe("tts-config-reload", func(evt bus.Event) {
 		if evt.Name != bus.TopicConfigChanged {

@@ -39,6 +39,9 @@ type ExecTool struct {
 	pathDenyRoots    []string         // raw deny roots for nested workspace exemptions
 	denyExemptions   []string         // substrings that exempt a command from deny
 	restrict         bool
+	// globalDenyGroups holds global shell deny-group toggles from config.tools.
+	// Per-agent overrides from context take precedence per group.
+	globalDenyGroups map[string]bool
 	sandboxMgr       sandbox.Manager      // nil = no sandbox, execute on host
 	approvalMgr      *ExecApprovalManager // nil = no approval needed
 	agentID          string               // for approval request context
@@ -111,6 +114,20 @@ func (t *ExecTool) SetSecureCLIStore(s store.SecureCLIStore) {
 	t.secureCLIStore = s
 }
 
+// SetGlobalShellDenyGroups sets global shell deny-group overrides from config.
+// A nil/empty map means "use registry defaults".
+func (t *ExecTool) SetGlobalShellDenyGroups(groups map[string]bool) {
+	if len(groups) == 0 {
+		t.globalDenyGroups = nil
+		return
+	}
+	cp := make(map[string]bool, len(groups))
+	for k, v := range groups {
+		cp[k] = v
+	}
+	t.globalDenyGroups = cp
+}
+
 // HasSecureCLIStore reports whether a credential store is wired.
 // Intended for wiring-check tests that verify subagent ExecTools also enforce
 // the secure-CLI gate (Red Team F3).
@@ -152,8 +169,9 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 	// Unicode-based pattern bypass while preserving functional command content.
 	normalizedCommand := normalizeCommand(command)
 
-	// Resolve deny patterns: per-agent overrides from context, fallback to all defaults.
-	denyOverrides := store.ShellDenyGroupsFromContext(ctx)
+	// Resolve deny patterns with precedence:
+	// per-agent context override > global config.tools shellDenyGroups > registry default.
+	denyOverrides := t.effectiveDenyGroups(ctx)
 	groupPatterns := ResolveDenyPatterns(denyOverrides)
 
 	// Also resolve package_install patterns separately for approval routing.
@@ -342,6 +360,26 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 
 	// Host execution
 	return t.executeOnHost(ctx, command, cwd)
+}
+
+// effectiveDenyGroups merges global deny-group config with per-agent overrides.
+// Agent overrides win per-group; nil means "use built-in defaults".
+func (t *ExecTool) effectiveDenyGroups(ctx context.Context) map[string]bool {
+	agent := store.ShellDenyGroupsFromContext(ctx)
+	if len(t.globalDenyGroups) == 0 {
+		return agent
+	}
+	if len(agent) == 0 {
+		return t.globalDenyGroups
+	}
+	merged := make(map[string]bool, len(t.globalDenyGroups)+len(agent))
+	for k, v := range t.globalDenyGroups {
+		merged[k] = v
+	}
+	for k, v := range agent {
+		merged[k] = v
+	}
+	return merged
 }
 
 // matchesAny checks if a command matches any pattern in the list.

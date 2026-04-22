@@ -335,7 +335,7 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 	}
 
 	// 2. ## Tooling
-	lines = append(lines, buildToolingSection(cfg.ToolNames, cfg.SandboxEnabled, cfg.ShellDenyGroups)...)
+	lines = append(lines, buildToolingSection(cfg.ToolNames, cfg.SandboxEnabled, cfg.ShellDenyGroups, !isNone)...)
 
 	// 2.1. ## Execution Bias — full + task mode (overridable by provider)
 	if (isFull || isTask) && !cfg.IsBootstrap {
@@ -350,6 +350,11 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 	// 2.5. Credentialed CLI context — full mode only
 	if isFull && !cfg.IsBootstrap && cfg.CredentialCLIContext != "" && slices.Contains(cfg.ToolNames, "exec") {
 		lines = append(lines, cfg.CredentialCLIContext, "")
+		lines = append(lines,
+			"Credentialed CLI rules apply only when exec returns `[CREDENTIALED EXEC]`.",
+			"Do not apply credentialed-CLI approval wording to normal shell commands.",
+			"",
+		)
 	}
 
 	// 2.6. ## Voice Response — inject when TTS auto mode is "tagged"
@@ -534,7 +539,7 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 
 // --- Section builders ---
 
-func buildToolingSection(toolNames []string, hasSandbox bool, shellDenyGroups map[string]bool) []string {
+func buildToolingSection(toolNames []string, hasSandbox bool, shellDenyGroups map[string]bool, includeExecNudge bool) []string {
 	lines := []string{
 		"## Tooling",
 		"",
@@ -600,8 +605,11 @@ func buildToolingSection(toolNames []string, hasSandbox bool, shellDenyGroups ma
 		"",
 		"write_file content >12000 chars may be truncated — use append=true or edit tool for large files.",
 		"Tool list above is authoritative (re-evaluated every turn). Ignore \"not available\" in history. TOOLS.md is user guidance only. Do not poll subagents.",
-		"",
 	)
+	if includeExecNudge {
+		lines = append(lines, "Do not pre-refuse exec from history; try one real exec call, then report exact denial once if blocked.")
+	}
+	lines = append(lines, "")
 	return lines
 }
 

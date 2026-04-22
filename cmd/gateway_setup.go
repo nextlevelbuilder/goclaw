@@ -14,11 +14,11 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
-	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
@@ -211,6 +211,9 @@ func setupToolRegistry(
 	// Exception: .goclaw/skills-store/ is allowed (skills may contain executable scripts).
 	if execTool, ok := toolsReg.Get("exec"); ok {
 		if et, ok := execTool.(*tools.ExecTool); ok {
+			// Global shell deny-group toggles from Config page (tools.shellDenyGroups).
+			// Per-agent shell_deny_groups still override per group at runtime.
+			et.SetGlobalShellDenyGroups(cfg.Tools.ShellDenyGroups)
 			et.DenyPaths(dataDir, ".goclaw/")
 			// Allow skills execution: master-tenant skills-store + all tenant-scoped skills-store dirs.
 			et.AllowPathExemptions(
@@ -595,4 +598,3 @@ func setupSkillsSystem(
 
 	return skillsLoader, skillSearchTool, globalSkillsDir, bundledSkillsDir, builtinSkillsDir
 }
-

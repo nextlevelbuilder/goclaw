@@ -81,10 +81,23 @@ func (t *ReadAudioTool) callProvider(ctx context.Context, cp credentialProvider,
 	// Provider-specific paths require API credentials; skip when cp is nil
 	// (e.g. OAuth-based providers that don't expose static keys).
 	ptype := GetParamString(params, "_provider_type", providerTypeFromName(providerName))
-	if cp == nil && (ptype == "gemini" || ptype == "openai") {
-		slog.Info("read_audio: no API credentials, falling back to Chat API", "provider", providerName)
+	if cp == nil && (ptype == "gemini" || ptype == "openai" || isTranscriptionModel(model)) {
+		return nil, nil, fmt.Errorf("provider %q requires API credentials for audio/transcription endpoint", providerName)
 	}
 	if cp != nil {
+		// OpenAI-compatible transcription path:
+		// If model is a transcription model, prefer /v1/audio/transcriptions even when
+		// provider_type is openai_compat. This keeps read_audio aligned with explicit
+		// transcription-model configs instead of falling back to chat/completions.
+		if isTranscriptionModel(model) {
+			slog.Info("read_audio: using transcription API", "provider", providerName, "model", model, "size", len(data), "mime", mime)
+			resp, err := openaiTranscriptionCall(ctx, cp.APIKey(), cp.APIBase(), model, data, mime)
+			if err != nil {
+				return nil, nil, fmt.Errorf("transcription call: %w", err)
+			}
+			return []byte(resp.Content), resp.Usage, nil
+		}
+
 		// Gemini: use File API (inlineData doesn't work for audio).
 		if ptype == "gemini" {
 			slog.Info("read_audio: using gemini file API", "provider", providerName, "model", model, "size", len(data), "mime", mime)
@@ -95,17 +108,8 @@ func (t *ReadAudioTool) callProvider(ctx context.Context, cp credentialProvider,
 			return []byte(resp.Content), resp.Usage, nil
 		}
 
-		// OpenAI: transcription models need /v1/audio/transcriptions (multipart);
-		// chat-audio models use /chat/completions with input_audio content part.
+		// OpenAI-native audio-chat models use /chat/completions with input_audio content part.
 		if ptype == "openai" {
-			if isTranscriptionModel(model) {
-				slog.Info("read_audio: using openai transcription API", "provider", providerName, "model", model, "size", len(data), "mime", mime)
-				resp, err := openaiTranscriptionCall(ctx, cp.APIKey(), cp.APIBase(), model, data, mime)
-				if err != nil {
-					return nil, nil, fmt.Errorf("openai transcription call: %w", err)
-				}
-				return []byte(resp.Content), resp.Usage, nil
-			}
 			slog.Info("read_audio: using openai input_audio API", "provider", providerName, "model", model, "size", len(data), "mime", mime)
 			resp, err := openaiAudioCall(ctx, cp.APIKey(), cp.APIBase(), model, prompt, data, mime)
 			if err != nil {
