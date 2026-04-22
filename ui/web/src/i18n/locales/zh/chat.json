@@ -29,5 +29,8 @@
   "selectAgent": {
     "title": "选择Agent",
     "description": "选择Agent开始对话"
-  }
+  },
+  "imageGenToggle": "图片生成",
+  "imageGenGenerating": "正在生成图片...",
+  "imageGenDownloadName": "generated-{{timestamp}}.png"
 }

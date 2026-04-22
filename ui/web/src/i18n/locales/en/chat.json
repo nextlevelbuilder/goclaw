@@ -29,5 +29,8 @@
   "selectAgent": {
     "title": "Select an agent",
     "description": "Choose an agent to start chatting"
-  }
+  },
+  "imageGenToggle": "Images",
+  "imageGenGenerating": "Generating image...",
+  "imageGenDownloadName": "generated-{{timestamp}}.png"
 }

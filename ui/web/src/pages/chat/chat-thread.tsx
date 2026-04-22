@@ -25,6 +25,8 @@ interface ChatThreadProps {
   loading?: boolean;
   scrollTrigger?: number;
   onToggleTaskPanel?: () => void;
+  /** Forwarded to ActiveRunZone to show image-gen skeleton during streaming. */
+  showImageGenPlaceholder?: boolean;
 }
 
 /** Check if a message is tool-only (no user-visible text content) */
@@ -77,6 +79,7 @@ function buildDisplayItems(messages: ChatMessage[]): DisplayItem[] {
 export const ChatThread = memo(function ChatThread({
   messages, streamText, thinkingText, toolStream, blockReplies,
   activity, teamTasks, isRunning, isBusy, loading, scrollTrigger = 0, onToggleTaskPanel,
+  showImageGenPlaceholder = false,
 }: ChatThreadProps) {
   const { t } = useTranslation("chat");
   const { ref, onScroll } = useAutoScroll<HTMLDivElement>(
@@ -171,6 +174,7 @@ export const ChatThread = memo(function ChatThread({
             streamText={streamText}
             toolStream={toolStream}
             blockReplies={blockReplies}
+            showImageGenPlaceholder={showImageGenPlaceholder}
           />
         </div>
       </div>

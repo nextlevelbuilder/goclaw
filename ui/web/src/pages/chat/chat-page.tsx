@@ -14,6 +14,8 @@ import { AgentPickerPrompt } from "@/components/chat/agent-picker-prompt";
 import { useChatSessions } from "./hooks/use-chat-sessions";
 import { useChatMessages } from "./hooks/use-chat-messages";
 import { useChatSend } from "./hooks/use-chat-send";
+import { useAgents } from "@/pages/agents/hooks/use-agents";
+import { useImageGenToggle } from "@/hooks/use-image-gen-toggle";
 import { isOwnSession, parseSessionKey } from "@/lib/session-key";
 import { useVirtualKeyboard } from "@/hooks/use-virtual-keyboard";
 import { TaskPanel } from "@/components/chat/task-panel";
@@ -45,6 +47,22 @@ export function ChatPage() {
     }
     return agentIdFallback;
   }, [urlSessionKey, agentIdFallback]);
+
+  const { agents } = useAgents();
+
+  // Resolve the full agent record so we can read its provider type for the
+  // image-gen toggle. Keyed by agent_key which is the stable UI identifier.
+  const currentAgent = useMemo(
+    () => agents.find((a) => a.agent_key === agentId) ?? null,
+    [agents, agentId],
+  );
+
+  // Read the per-agent image-gen toggle to drive the streaming placeholder.
+  // Same localStorage key as ChatInput — no state duplication.
+  const IMAGE_GEN_PROVIDERS = new Set(["chatgpt_oauth"]);
+  const agentSupportsImageGen = !!currentAgent?.provider && IMAGE_GEN_PROVIDERS.has(currentAgent.provider);
+  const [imageGenEnabled] = useImageGenToggle(currentAgent?.agent_key ?? "");
+  const showImageGenPlaceholder = agentSupportsImageGen && imageGenEnabled;
 
   const {
     sessions,
@@ -129,13 +147,13 @@ export function ChatPage() {
   );
 
   const handleSend = useCallback(
-    (message: string, sendFiles?: AttachedFile[]) => {
+    (message: string, sendFiles?: AttachedFile[], noImageGen?: boolean) => {
       let key = sessionKey;
       if (!key) {
         key = buildNewSessionKey();
         navigate(`/chat/${encodeURIComponent(key)}`, { replace: true });
       }
-      send(message, key, sendFiles);
+      send(message, key, sendFiles, noImageGen);
       setScrollTrigger((n) => n + 1);
     },
     [sessionKey, send, buildNewSessionKey, navigate],
@@ -266,6 +284,7 @@ export function ChatPage() {
             loading={messagesLoading}
             scrollTrigger={scrollTrigger}
             onToggleTaskPanel={() => setTaskPanelOpen((v) => !v)}
+            showImageGenPlaceholder={showImageGenPlaceholder}
           />
 
           {!isOwn ? (
@@ -283,6 +302,8 @@ export function ChatPage() {
               disabled={!connected}
               files={files}
               onFilesChange={setFiles}
+              agentProvider={currentAgent?.provider}
+              agentKey={currentAgent?.agent_key}
             />
           )}
         </DropZone>

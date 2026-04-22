@@ -12,6 +12,35 @@ import {
 } from "@/components/ui/dialog";
 import type { MediaItem } from "@/types/chat";
 
+/** Hex/UUID filename pattern — matches assistant-generated image basenames
+ *  such as `a1b2c3d4e5f6.png` or `550e8400-e29b-41d4-a716-446655440000.png`. */
+const GENERATED_FILENAME_RE = /^[0-9a-f-]{8,}\.png$/i;
+
+/**
+ * Format a Date as YYYYMMDD-HHmmss for use in download filenames.
+ * Uses local time so filenames match the user's clock.
+ */
+function formatTimestamp(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}` +
+    `-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`
+  );
+}
+
+/**
+ * Returns the download filename for an image MediaItem.
+ * For assistant-generated PNGs (hex/UUID basename), uses a descriptive
+ * `generated-YYYYMMDD-HHmmss.png` name instead of the opaque server hash.
+ */
+function resolveImageDownloadName(item: MediaItem): string {
+  const base = item.fileName ?? "image";
+  if (item.mimeType === "image/png" && GENERATED_FILENAME_RE.test(base)) {
+    return `generated-${formatTimestamp(new Date())}.png`;
+  }
+  return base;
+}
+
 interface MediaGalleryProps {
   items: MediaItem[];
 }
@@ -105,7 +134,7 @@ export function MediaGallery({ items }: MediaGalleryProps) {
                 </div>
                 <a
                   href={toDownloadUrl(item.path)}
-                  download={item.fileName ?? "image"}
+                  download={resolveImageDownloadName(item)}
                   onClick={(e) => e.stopPropagation()}
                   className="shrink-0 rounded-lg bg-white/90 dark:bg-neutral-800/90 p-1.5 text-neutral-700 dark:text-neutral-200 shadow-md ring-1 ring-black/10 dark:ring-white/10 hover:bg-white dark:hover:bg-neutral-700 transition-colors cursor-pointer"
                   title="Download"
