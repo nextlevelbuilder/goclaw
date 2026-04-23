@@ -125,10 +125,17 @@ export function ChatGPTOAuthRoutingSection({
   const blockedEntries = selectedEntries.filter((e) => e.routeReadiness === "blocked");
   const routerActiveEntries = healthyEntries;
 
-  const selectedStrategy: EffectiveChatGPTOAuthRoutingStrategy =
+  // When the agent inherits from the provider, paint the Traffic Policy
+  // buttons with the provider's effective strategy so the UI reflects what
+  // will actually run. Otherwise derive from the draft (custom override).
+  const draftStrategy: EffectiveChatGPTOAuthRoutingStrategy =
     value.strategy === "round_robin" || value.strategy === "priority_order"
       ? value.strategy
       : "priority_order";
+  const selectedStrategy: EffectiveChatGPTOAuthRoutingStrategy =
+    mode === "inherit" && defaultRouting
+      ? defaultRouting.strategy
+      : draftStrategy;
   const canEditMembership = canManageProviders && membershipEditable;
   const canUsePoolStrategies =
     canManageProviders &&
