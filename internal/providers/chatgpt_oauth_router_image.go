@@ -21,7 +21,7 @@ var _ NativeImageProvider = (*ChatGPTOAuthRouter)(nil)
 // advance=true), regardless of which member ultimately serves the response.
 // This matches the Chat path semantics documented on call().
 func (p *ChatGPTOAuthRouter) GenerateImage(ctx context.Context, req NativeImageRequest) (*NativeImageResult, error) {
-	ordered, err := p.orderedProviders(ctx, true)
+	ordered, err := p.orderedProviders(ctx, chatGPTOAuthModalityImage, true)
 	if err != nil {
 		return nil, err
 	}
