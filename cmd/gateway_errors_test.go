@@ -20,6 +20,7 @@ func TestIsExternalChannel(t *testing.T) {
 	}{
 		// Public-facing platforms — errors must be suppressed.
 		{"facebook", channels.TypeFacebook, true},
+		{"instagram", channels.TypeInstagram, true},
 		{"telegram", channels.TypeTelegram, true},
 		{"discord", channels.TypeDiscord, true},
 		{"feishu", channels.TypeFeishu, true},

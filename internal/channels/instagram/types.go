@@ -12,7 +12,7 @@ type instagramInstanceConfig struct {
 	InstagramUserID string `json:"instagram_user_id"` // IG_ID - Instagram Business Account ID
 	Features        struct {
 		AutoReply bool `json:"auto_reply"`
-		Typing    bool `json:"typing_indicator"`
+		Typing    bool `json:"typing"`
 	} `json:"features"`
 	SessionOptions struct {
 		SessionTimeout string `json:"session_timeout"`

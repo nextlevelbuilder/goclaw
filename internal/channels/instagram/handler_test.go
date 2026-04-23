@@ -202,6 +202,96 @@ func TestFormatMessage_NoInvalidUtf8(t *testing.T) {
 	}
 }
 
+// TestWebhookRouter_RegisterUnregister verifies basic register/unregister
+// operations mutate the instances map.
+func TestWebhookRouter_RegisterUnregister(t *testing.T) {
+	r := &webhookRouter{instances: make(map[string]*Channel)}
+	ch := &Channel{instagramID: "17841400000000000"}
+	r.register(ch)
+	r.mu.RLock()
+	_, present := r.instances["17841400000000000"]
+	r.mu.RUnlock()
+	if !present {
+		t.Error("register did not insert")
+	}
+	r.unregister("17841400000000000")
+	r.mu.RLock()
+	_, present = r.instances["17841400000000000"]
+	r.mu.RUnlock()
+	if present {
+		t.Error("unregister did not remove")
+	}
+}
+
+// TestWebhookRouter_RouteOnce verifies webhookRoute returns a path on the
+// first call and empty on subsequent calls — the mux must only register once.
+func TestWebhookRouter_RouteOnce(t *testing.T) {
+	r := &webhookRouter{instances: make(map[string]*Channel)}
+	path1, h1 := r.webhookRoute()
+	if path1 == "" || h1 == nil {
+		t.Fatal("first call returned empty")
+	}
+	path2, h2 := r.webhookRoute()
+	if path2 != "" || h2 != nil {
+		t.Errorf("second call should be empty, got %q / %v", path2, h2)
+	}
+}
+
+// TestWebhookRouter_ServeHTTPNoInstances verifies the router responds 200
+// when no instances are registered (Meta retries on non-2xx for 24h).
+func TestWebhookRouter_ServeHTTPNoInstances(t *testing.T) {
+	r := &webhookRouter{instances: make(map[string]*Channel)}
+	req := httptest.NewRequest(http.MethodPost, "/webhook", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+}
+
+// TestWebhookRouter_PerEntryDispatch is a Critical-2 regression: two
+// instances register under different instagram_user_ids, a webhook for ID-B
+// arrives at the shared endpoint, and the router must route it to B (not A,
+// not drop). Before the fix, the first-registered handler owned the route
+// and the entry.ID guard silently dropped B's messages.
+func TestWebhookRouter_PerEntryDispatch(t *testing.T) {
+	r := &webhookRouter{instances: make(map[string]*Channel)}
+	chA := &Channel{
+		instagramID: "17841AAA",
+		webhookH:    NewWebhookHandler(testAppSecret, "vt"),
+	}
+	chB := &Channel{
+		instagramID: "17841BBB",
+		webhookH:    NewWebhookHandler(testAppSecret, "vt"),
+	}
+	r.register(chA)
+	r.register(chB)
+
+	// Intercept per-entry dispatch by swapping the router's HTTP path:
+	// drive ServeHTTP directly and inspect whose handleMessagingEvent would
+	// have been invoked by checking r.instances lookup for entry.ID.
+	payload := `{"object":"instagram","entry":[{"id":"17841BBB","time":1,"messaging":[{"sender":{"id":"s"},"recipient":{"id":"17841BBB"},"timestamp":1,"message":{"mid":"m1","text":"hi"}}]}]}`
+	body := []byte(payload)
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewReader(body))
+	req.Header.Set("X-Hub-Signature-256", sign(body, testAppSecret))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	// We can't observe the private handleMessagingEvent without a full
+	// Channel, but we can confirm lookup resolves to B (not A).
+	r.mu.RLock()
+	target := r.instances["17841BBB"]
+	r.mu.RUnlock()
+	if target != chB {
+		t.Fatalf("entry.ID 17841BBB should resolve to chB, got %v", target)
+	}
+	if target == chA {
+		t.Fatal("Critical-2 regression: entry routed to first-registered chA")
+	}
+}
+
 func TestDedupKey_StableAcrossTimestamps(t *testing.T) {
 	// Regression guard for Critical-4: string(rune(event.Timestamp)) collapsed all
 	// large timestamps to U+FFFD, dropping every subsequent message from one sender

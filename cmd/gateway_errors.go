@@ -82,6 +82,7 @@ func isContextOverflowError(lower string) bool {
 func isExternalChannel(channelType string) bool {
 	switch channelType {
 	case channels.TypeFacebook,
+		channels.TypeInstagram,
 		channels.TypeTelegram,
 		channels.TypeDiscord,
 		channels.TypeFeishu,

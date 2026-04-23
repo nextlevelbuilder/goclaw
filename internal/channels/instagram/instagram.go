@@ -95,9 +95,9 @@ func New(cfg instagramInstanceConfig, creds instagramCreds,
 		stopFn:      stopFn,
 	}
 
-	wh := NewWebhookHandler(creds.AppSecret, creds.VerifyToken)
-	wh.onMessage = ch.handleMessagingEvent
-	ch.webhookH = wh
+	// onMessage is intentionally nil: the globalRouter's ServeHTTP wraps each
+	// instance's WebhookHandler and binds onMessage to per-entry dispatch.
+	ch.webhookH = NewWebhookHandler(creds.AppSecret, creds.VerifyToken)
 
 	return ch, nil
 }
@@ -147,7 +147,7 @@ func (ch *Channel) Start(ctx context.Context) error {
 
 // Stop gracefully shuts down the channel. Safe to call multiple times.
 func (ch *Channel) Stop(_ context.Context) error {
-	globalRouter.unregister(ch.instagramID, ch)
+	globalRouter.unregister(ch.instagramID)
 	ch.stopOnce.Do(func() {
 		ch.stopFn()
 		close(ch.stopCh)

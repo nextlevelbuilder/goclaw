@@ -15,9 +15,10 @@ import (
 
 // WebhookHandler implements http.Handler for Instagram webhook.
 type WebhookHandler struct {
-	appSecret   string
-	verifyToken string
-	onMessage   func(entry WebhookEntry, event MessagingEvent)
+	appSecret    string
+	verifyToken  string
+	extraSecrets []string // additional app secrets for multi-Meta-App deployments
+	onMessage    func(entry WebhookEntry, event MessagingEvent)
 }
 
 // NewWebhookHandler creates a new WebhookHandler.
@@ -90,7 +91,17 @@ func (wh *WebhookHandler) handleEvent(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	if !verifySignature(body, r.Header.Get("X-Hub-Signature-256"), wh.appSecret) {
+	sig := r.Header.Get("X-Hub-Signature-256")
+	accepted := verifySignature(body, sig, wh.appSecret)
+	if !accepted {
+		for _, s := range wh.extraSecrets {
+			if verifySignature(body, sig, s) {
+				accepted = true
+				break
+			}
+		}
+	}
+	if !accepted {
 		slog.Warn("security.instagram_webhook_signature_invalid", "remote_addr", r.RemoteAddr)
 		w.WriteHeader(http.StatusOK)
 		return

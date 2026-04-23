@@ -143,8 +143,17 @@ func (g *GraphClient) doRequest(ctx context.Context, method, path string, body a
 			var apiErr graphErrorBody
 			if json.Unmarshal(respBody, &apiErr) == nil && apiErr.Error.Code != 0 {
 				// 24h messaging window violation.
-				if apiErr.Error.Code == 551 || apiErr.Error.Subcode == 2018109 {
-					slog.Warn("instagram: 24h messaging window expired", "code", apiErr.Error.Code)
+				// Instagram DM primarily reports this via subcode 2534014
+				// ("human agent required" / "Message Not Sent"). Messenger
+				// uses 551 / 2018109 — accept both to stay compatible in
+				// case Meta normalizes codes across the shared webhook
+				// surface. Misclassification here leaks into MarkDegraded
+				// and causes unbounded pipeline retries.
+				if apiErr.Error.Code == 551 ||
+					apiErr.Error.Subcode == 2018109 ||
+					apiErr.Error.Subcode == 2534014 {
+					slog.Warn("instagram: 24h messaging window expired",
+						"code", apiErr.Error.Code, "subcode", apiErr.Error.Subcode)
 					return nil, &graphAPIError{code: apiErr.Error.Code, msg: apiErr.Error.Message}
 				}
 				// Rate limited: sleep and retry.
