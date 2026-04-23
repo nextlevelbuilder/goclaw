@@ -38,7 +38,7 @@ func TestMCPClient_AutoOnboard_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := newMCPClient(srv.URL, "admintok", 2*time.Second)
+	c := newMCPClient(srv.URL, 2*time.Second)
 	req := validReq()
 	req.DisplayName = "Alice"
 	resp, err := c.autoOnboard(context.Background(), req)
@@ -51,8 +51,10 @@ func TestMCPClient_AutoOnboard_Success(t *testing.T) {
 	if gotPath != "/api/auto-onboard" {
 		t.Fatalf("wrong path: %q", gotPath)
 	}
-	if gotAuth != "Bearer admintok" {
-		t.Fatalf("wrong auth: %q", gotAuth)
+	// Path B: no Authorization header — MCP server authenticates via the
+	// caller-supplied Bitrix access_token in the body, not a bearer token.
+	if gotAuth != "" {
+		t.Fatalf("expected no Authorization header under Path B, got: %q", gotAuth)
 	}
 	if gotCT != "application/json" {
 		t.Fatalf("wrong content-type: %q", gotCT)
@@ -69,11 +71,11 @@ func TestMCPClient_AutoOnboard_4xxNoRetry(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		w.WriteHeader(http.StatusUnauthorized)
-		_, _ = w.Write([]byte("bad admin token"))
+		_, _ = w.Write([]byte("invalid_bitrix_user"))
 	}))
 	defer srv.Close()
 
-	c := newMCPClient(srv.URL, "admintok", time.Second)
+	c := newMCPClient(srv.URL, time.Second)
 	_, err := c.autoOnboard(context.Background(), validReq())
 	if err == nil {
 		t.Fatalf("expected error on 401")
@@ -99,7 +101,7 @@ func TestMCPClient_AutoOnboard_5xxRetriesOnce(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := newMCPClient(srv.URL, "tok", time.Second)
+	c := newMCPClient(srv.URL, time.Second)
 	resp, err := c.autoOnboard(context.Background(), validReq())
 	if err != nil {
 		t.Fatalf("expected success after retry: %v", err)
@@ -118,7 +120,7 @@ func TestMCPClient_AutoOnboard_RejectsEmptyAPIKey(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := newMCPClient(srv.URL, "tok", time.Second)
+	c := newMCPClient(srv.URL, time.Second)
 	_, err := c.autoOnboard(context.Background(), validReq())
 	if err == nil {
 		t.Fatalf("expected error on incomplete response")
@@ -136,7 +138,7 @@ func TestMCPClient_AutoOnboard_TenantNotInstalled(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := newMCPClient(srv.URL, "tok", time.Second)
+	c := newMCPClient(srv.URL, time.Second)
 	_, err := c.autoOnboard(context.Background(), validReq())
 	if err == nil {
 		t.Fatalf("expected error on 404 tenant_not_installed")
@@ -155,7 +157,7 @@ func TestMCPClient_AutoOnboard_404OtherBodyFallsThroughAs4xx(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := newMCPClient(srv.URL, "tok", time.Second)
+	c := newMCPClient(srv.URL, time.Second)
 	_, err := c.autoOnboard(context.Background(), validReq())
 	if err == nil {
 		t.Fatalf("expected generic 4xx error")
@@ -170,17 +172,12 @@ func TestMCPClient_AutoOnboard_404OtherBodyFallsThroughAs4xx(t *testing.T) {
 
 func TestMCPClient_AutoOnboard_RejectsMissingConfig(t *testing.T) {
 	// Empty base URL
-	c := newMCPClient("", "tok", time.Second)
+	c := newMCPClient("", time.Second)
 	if _, err := c.autoOnboard(context.Background(), validReq()); err == nil {
 		t.Fatalf("expected error on missing base URL")
 	}
-	// Empty admin token
-	c = newMCPClient("http://x", "", time.Second)
-	if _, err := c.autoOnboard(context.Background(), validReq()); err == nil {
-		t.Fatalf("expected error on missing admin token")
-	}
 	// Missing request fields (empty)
-	c = newMCPClient("http://x", "tok", time.Second)
+	c = newMCPClient("http://x", time.Second)
 	if _, err := c.autoOnboard(context.Background(), autoOnboardRequest{}); err == nil {
 		t.Fatalf("expected error on empty request")
 	}

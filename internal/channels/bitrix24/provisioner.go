@@ -2,11 +2,9 @@ package bitrix24
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -22,29 +20,6 @@ import (
 // events in a burst on transient 5xx) but short enough that a recovered MCP
 // server is usable again within one minute.
 const mcpProvisionDebounceTTL = 60 * time.Second
-
-// mcpAdminTokenEnvKey is the key looked up inside mcp_servers.env for the
-// admin token that authorizes POST /api/auto-onboard. This is the
-// *primary* source — per-server, per-tenant, AES-encrypted at rest by
-// partner's MCPServerStore. Multiple tenants each register their own MCP
-// server row with their own admin token, so tenant isolation holds.
-//
-// Key is the SAME string the MCP server process receives as an environment
-// variable at spawn time (partner's bridge passes srv.Env through to the
-// server), so admin only sets the secret in one place.
-const mcpAdminTokenEnvKey = "BITRIX_MCP_ADMIN_TOKEN"
-
-// mcpAdminTokenEnv is a legacy *process-level* env var fallback. Predates
-// the per-server token (pre-1.2 deployments set this directly on the
-// goclaw process). Kept as a fallback so single-tenant self-hosts that
-// already deployed Phase C don't have to migrate the token to DB before
-// upgrading — they can do it whenever.
-//
-// DEPRECATED for multi-tenant: this is a single global value, so it can't
-// distinguish between tenant A's MCP server and tenant B's. New
-// deployments should set BITRIX_MCP_ADMIN_TOKEN inside the target
-// mcp_servers row's env JSONB instead.
-const mcpAdminTokenEnv = "GOCLAW_BITRIX_MCP_ADMIN_TOKEN"
 
 // mcpDebounceKey keys the in-memory rate-limit map. ServerID + UserID is
 // sufficient — different Bitrix portals route to different channel instances
@@ -65,10 +40,10 @@ var (
 	ErrProvisionSkippedOpenChannel = errors.New("bitrix24 mcp: provisioning skipped for Open Channel bot")
 
 	// ErrProvisionDisabled means the channel was built without MCP wiring
-	// (nil MCPServerStore, empty mcp_server_name/mcp_base_url, missing
-	// admin token env). Not an error — the channel simply operates
-	// without MCP credentials for its users. Agent loop already handles
-	// "no creds → skip this server" gracefully.
+	// (nil MCPServerStore, empty mcp_server_name/mcp_base_url, server row
+	// not found). Not an error — the channel simply operates without MCP
+	// credentials for its users. Agent loop already handles "no creds →
+	// skip this server" gracefully.
 	ErrProvisionDisabled = errors.New("bitrix24 mcp: provisioning disabled")
 
 	// ErrProvisionDebounced means an auto-onboard for this (server, user)
@@ -82,19 +57,17 @@ var (
 // Safe to call even when provisioning is disabled — in that case it just
 // returns nil without touching mcpStore.
 //
-// Four things have to line up before provisioner can run:
+// Three things have to line up before provisioner can run:
 //  1. Factory was called with a non-nil MCPServerStore.
 //  2. Instance config has both mcp_server_name and mcp_base_url set.
 //  3. The mcp_servers row exists (looked up by name).
-//  4. An admin token is available — EITHER in that row's env JSONB under
-//     key BITRIX_MCP_ADMIN_TOKEN (per-tenant, encrypted; preferred) OR in
-//     the process-level env var GOCLAW_BITRIX_MCP_ADMIN_TOKEN (legacy
-//     single-tenant fallback).
 //
-// The per-server token is looked up FIRST because it's the only path that
-// preserves multi-tenant isolation — the process env var can't distinguish
-// between tenants sharing the same goclaw deployment. Legacy env var
-// remains as a migration ramp for existing single-tenant self-hosts.
+// Path B authentication (see mcp_client.go doc): the MCP server
+// authenticates each /api/auto-onboard call via the caller-supplied Bitrix
+// access_token by calling Bitrix `profile` and matching the token-owner
+// ID against bitrix_user_id — no shared admin secret is required, so
+// multi-tenant isolation holds naturally (each portal's users authenticate
+// with their own per-portal OAuth tokens).
 //
 // Any single missing piece leaves the channel usable but with
 // provisioning off — that's the operator's "staged rollout" path: install
@@ -127,66 +100,15 @@ func (c *Channel) initMCPProvisioner(ctx context.Context) error {
 		return nil
 	}
 
-	// Resolve admin token: per-server env first (multi-tenant safe,
-	// encrypted in DB by MCPServerStore), legacy process env var as
-	// fallback (single-tenant deployments predating this refactor).
-	adminToken, tokenSource := resolveMCPAdminToken(server)
-	if adminToken == "" {
-		// This case IS worth a Warn: admin set mcp_server_name + mcp_base_url
-		// so they clearly intended provisioning, but no token was found in
-		// either source. Surfacing it in logs helps catch the misconfiguration
-		// before users start hitting "no MCP tools" surprises.
-		slog.Warn("bitrix24 mcp: provisioning disabled — admin token missing",
-			"channel", c.Name(),
-			"primary_source", "mcp_servers.env["+mcpAdminTokenEnvKey+"]",
-			"fallback_source", "env "+mcpAdminTokenEnv)
-		return nil
-	}
-
 	c.mcpServerID = server.ID
-	c.mcpClient = newMCPClient(c.cfg.MCPBaseURL, adminToken, 10*time.Second)
+	c.mcpClient = newMCPClient(c.cfg.MCPBaseURL, 10*time.Second)
 	c.mcpDebounce = make(map[mcpDebounceKey]time.Time)
 
-	// token_source tells operators whether the deployment is already on the
-	// multi-tenant-safe per-server token (tokenSource="mcp_servers.env") or
-	// still riding the legacy global env var (tokenSource="env"). The latter
-	// is a migration signal, not an error.
 	slog.Info("bitrix24 mcp: provisioning enabled",
 		"channel", c.Name(),
 		"mcp_server", c.cfg.MCPServerName,
-		"mcp_server_id", server.ID,
-		"token_source", tokenSource)
+		"mcp_server_id", server.ID)
 	return nil
-}
-
-// resolveMCPAdminToken returns the admin token for this MCP server using
-// the two-source lookup: server.Env first, then process env var fallback.
-// Returns (token, sourceLabel) where sourceLabel is one of:
-//   - "mcp_servers.env"   — primary, per-tenant, encrypted in DB
-//   - "env"               — legacy process-level global
-//   - "" (empty token)    — neither source had a value
-//
-// Kept separate from initMCPProvisioner so the fallback logic is unit-
-// testable without spinning up a full Channel, and so the resolution
-// policy is one place to change if/when the env var is fully retired.
-func resolveMCPAdminToken(server *store.MCPServerData) (token, source string) {
-	// Primary: per-server env JSONB. Parsed lazily — most deployments will
-	// have srv.Env empty or non-JSON-object, which we treat as "not set"
-	// silently (no log spam). Partner decrypts srv.Env before we see it,
-	// so we parse plaintext JSON here.
-	if len(server.Env) > 0 {
-		var envMap map[string]string
-		if err := json.Unmarshal(server.Env, &envMap); err == nil {
-			if tok := strings.TrimSpace(envMap[mcpAdminTokenEnvKey]); tok != "" {
-				return tok, "mcp_servers.env"
-			}
-		}
-	}
-	// Fallback: process env var (legacy single-tenant deployments).
-	if tok := strings.TrimSpace(os.Getenv(mcpAdminTokenEnv)); tok != "" {
-		return tok, "env"
-	}
-	return "", ""
 }
 
 // provisionIfMissing mints per-user MCP credentials on first sight of a user

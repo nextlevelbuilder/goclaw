@@ -129,7 +129,6 @@ func (f *fakeMCPStore) DeleteUserCredentials(_ context.Context, _ uuid.UUID, _ s
 // by the happy-path tests that need the full provisioner wired up.
 func newProvisionerTestChannel(t *testing.T, mcpStore *fakeMCPStore, mcpBaseURL string, botType string) *Channel {
 	t.Helper()
-	t.Setenv(mcpAdminTokenEnv, "admintok")
 
 	fs := newFakeStore()
 	resetWebhookRouterForTest()
@@ -187,7 +186,6 @@ func validAuth() EventAuth {
 // Phase C skip (not failure) and is the expected outcome for every
 // message delivered to an Open Channel bot.
 func TestProvisionIfMissing_OpenChannelBot_Skipped(t *testing.T) {
-	t.Setenv(mcpAdminTokenEnv, "admintok")
 	fs := newFakeStore()
 	resetWebhookRouterForTest()
 	defer resetWebhookRouterForTest()
@@ -375,7 +373,7 @@ func TestProvisionIfMissing_Debounce(t *testing.T) {
 func TestProvisionIfMissing_HTTPFailure_Surfaces(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
-		_, _ = w.Write([]byte(`{"error":"bad_admin_token"}`))
+		_, _ = w.Write([]byte(`{"error":"invalid_bitrix_user"}`))
 	}))
 	defer srv.Close()
 
@@ -438,15 +436,22 @@ func TestProvisionIfMissing_MissingAuthBlock(t *testing.T) {
 	}
 }
 
-// TestInitMCPProvisioner_DisabledModes covers the four configurations
-// that leave the provisioner off at startup (all non-fatal):
+// TestInitMCPProvisioner_DisabledModes covers the configurations that
+// leave the provisioner off at startup (all non-fatal):
 //   - nil MCPServerStore
-//   - empty mcp_server_name or mcp_base_url
-//   - missing admin token env var
 //   - mcp_server_name points at a server that doesn't exist in the store
+//
+// (Half-config — only one of mcp_server_name / mcp_base_url set —
+// is rejected earlier at factory load; see TestFactory_HalfConfigRejected.
+// Both-empty is accepted with provisioning off, covered by
+// TestProvisionIfMissing_Disabled.)
 //
 // Each case should leave mcpClient nil + mcpServerID zero, so
 // provisionIfMissing returns ErrProvisionDisabled.
+//
+// Path B auth note: there is no longer an admin-token branch to test —
+// the MCP server authenticates each /api/auto-onboard call via the
+// caller-supplied Bitrix access_token, not a shared bearer.
 func TestInitMCPProvisioner_DisabledModes(t *testing.T) {
 	t.Run("nil_mcp_store", func(t *testing.T) {
 		fs := newFakeStore()
@@ -465,39 +470,7 @@ func TestInitMCPProvisioner_DisabledModes(t *testing.T) {
 		}
 	})
 
-	t.Run("missing_admin_token", func(t *testing.T) {
-		// Both token sources empty: process env var unset AND server row's
-		// Env has no BITRIX_MCP_ADMIN_TOKEN. Server row itself DOES exist,
-		// so the "server not found" branch doesn't fire first — this is
-		// specifically exercising the all-sources-empty path.
-		t.Setenv(mcpAdminTokenEnv, "") // explicitly unset
-		fs := newFakeStore()
-		resetWebhookRouterForTest()
-		defer resetWebhookRouterForTest()
-
-		mcpStore := newFakeMCPStore()
-		mcpStore.serversByName["bitrix-mcp"] = &store.MCPServerData{
-			BaseModel: store.BaseModel{ID: uuid.New()},
-			Name:      "bitrix-mcp",
-			// Env intentionally empty: no admin token in DB.
-		}
-		fn := FactoryWithPortalStoreAndMCP(fs, mcpStore, "")
-		ch, _ := fn("b1", nil, json.RawMessage(`{"portal":"p","bot_code":"c","bot_name":"n","mcp_server_name":"bitrix-mcp","mcp_base_url":"http://x"}`),
-			bus.New(), nil)
-		bc := ch.(*Channel)
-		if err := bc.initMCPProvisioner(context.Background()); err != nil {
-			t.Fatalf("init: %v", err)
-		}
-		if bc.mcpClient != nil {
-			t.Errorf("missing admin token should leave mcpClient nil")
-		}
-		if bc.mcpServerID != uuid.Nil {
-			t.Errorf("missing admin token should leave mcpServerID zero, got %v", bc.mcpServerID)
-		}
-	})
-
 	t.Run("server_not_found", func(t *testing.T) {
-		t.Setenv(mcpAdminTokenEnv, "admintok")
 		fs := newFakeStore()
 		resetWebhookRouterForTest()
 		defer resetWebhookRouterForTest()
@@ -516,154 +489,6 @@ func TestInitMCPProvisioner_DisabledModes(t *testing.T) {
 			t.Errorf("missing server row should leave provisioner off")
 		}
 	})
-}
-
-// TestResolveMCPAdminToken covers the two-source token resolution policy:
-// per-server env JSONB wins over process env var fallback. The source
-// label is what operators see in "provisioning enabled" log lines, so
-// we assert it too — a silent flip from "mcp_servers.env" back to "env"
-// would mean a multi-tenant deployment regressed to sharing a single
-// token across tenants without any visible signal.
-func TestResolveMCPAdminToken(t *testing.T) {
-	// Build a server row once; each sub-case tweaks the Env field.
-	newServer := func(envJSON string) *store.MCPServerData {
-		s := &store.MCPServerData{
-			BaseModel: store.BaseModel{ID: uuid.New()},
-			Name:      "bitrix-mcp",
-		}
-		if envJSON != "" {
-			s.Env = json.RawMessage(envJSON)
-		}
-		return s
-	}
-
-	t.Run("per_server_env_preferred", func(t *testing.T) {
-		t.Setenv(mcpAdminTokenEnv, "legacy-global")
-		srv := newServer(`{"BITRIX_MCP_ADMIN_TOKEN":"per-server"}`)
-		tok, src := resolveMCPAdminToken(srv)
-		if tok != "per-server" {
-			t.Errorf("token = %q; want per-server", tok)
-		}
-		if src != "mcp_servers.env" {
-			t.Errorf("source = %q; want mcp_servers.env", src)
-		}
-	})
-
-	t.Run("fallback_to_env_var", func(t *testing.T) {
-		t.Setenv(mcpAdminTokenEnv, "legacy-global")
-		srv := newServer("") // no per-server env
-		tok, src := resolveMCPAdminToken(srv)
-		if tok != "legacy-global" {
-			t.Errorf("token = %q; want legacy-global", tok)
-		}
-		if src != "env" {
-			t.Errorf("source = %q; want env", src)
-		}
-	})
-
-	t.Run("env_has_other_keys_but_not_admin_token", func(t *testing.T) {
-		t.Setenv(mcpAdminTokenEnv, "legacy-global")
-		srv := newServer(`{"SOME_OTHER_KEY":"x"}`)
-		tok, src := resolveMCPAdminToken(srv)
-		if tok != "legacy-global" || src != "env" {
-			t.Errorf("expected fallback to env var, got (%q, %q)", tok, src)
-		}
-	})
-
-	t.Run("both_empty_returns_empty", func(t *testing.T) {
-		t.Setenv(mcpAdminTokenEnv, "") // explicit unset
-		srv := newServer("")
-		tok, src := resolveMCPAdminToken(srv)
-		if tok != "" || src != "" {
-			t.Errorf("expected ('',''), got (%q, %q)", tok, src)
-		}
-	})
-
-	t.Run("whitespace_only_per_server_falls_back", func(t *testing.T) {
-		// An accidental `"BITRIX_MCP_ADMIN_TOKEN": "   "` in the DB shouldn't
-		// count as "set" — fall through to the env var so operators who
-		// intended to disable the per-server override by clearing the value
-		// don't silently break provisioning.
-		t.Setenv(mcpAdminTokenEnv, "legacy-global")
-		srv := newServer(`{"BITRIX_MCP_ADMIN_TOKEN":"   "}`)
-		tok, src := resolveMCPAdminToken(srv)
-		if tok != "legacy-global" || src != "env" {
-			t.Errorf("whitespace per-server should fall back; got (%q, %q)", tok, src)
-		}
-	})
-
-	t.Run("malformed_env_json_falls_back", func(t *testing.T) {
-		// Partner's store writes valid JSON, but a hand-edited row could be
-		// malformed. Treat as "not set" rather than hard-failing the channel.
-		t.Setenv(mcpAdminTokenEnv, "legacy-global")
-		srv := newServer(`{"BITRIX_MCP_ADMIN_TOKEN":`) // truncated
-		tok, src := resolveMCPAdminToken(srv)
-		if tok != "legacy-global" || src != "env" {
-			t.Errorf("malformed env should fall back; got (%q, %q)", tok, src)
-		}
-	})
-}
-
-// TestInitMCPProvisioner_UsesPerServerToken is the end-to-end version of
-// TestResolveMCPAdminToken: wire up a full Channel, seed the server row
-// with a per-server token, leave the process env var UNSET, and confirm
-// the mcpClient ends up with the per-server token (by observing the
-// Authorization header that an auto-onboard call carries). Also confirms
-// the channel doesn't silently fall back to the env var when the server
-// row has a token — a regression here would reintroduce the multi-tenant
-// token-leak bug we're fixing.
-func TestInitMCPProvisioner_UsesPerServerToken(t *testing.T) {
-	var gotAuthHeader string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotAuthHeader = r.Header.Get("Authorization")
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"api_key":"k","user_id":"u","tenant_id":"t","created":true}`))
-	}))
-	defer srv.Close()
-
-	// Explicitly unset the legacy env var — we want to prove the per-server
-	// token is what flows through, independent of any process-level config.
-	t.Setenv(mcpAdminTokenEnv, "")
-
-	fs := newFakeStore()
-	resetWebhookRouterForTest()
-	defer resetWebhookRouterForTest()
-
-	mcpStore := newFakeMCPStore()
-	mcpStore.serversByName["bitrix-mcp"] = &store.MCPServerData{
-		BaseModel: store.BaseModel{ID: uuid.New()},
-		Name:      "bitrix-mcp",
-		Env:       json.RawMessage(`{"BITRIX_MCP_ADMIN_TOKEN":"per-server-tok"}`),
-	}
-
-	fn := FactoryWithPortalStoreAndMCP(fs, mcpStore, "")
-	cfgJSON := `{"portal":"p","bot_code":"c","bot_name":"n","bot_type":"B",` +
-		`"mcp_server_name":"bitrix-mcp","mcp_base_url":"` + srv.URL + `"}`
-	ch, err := fn("b1", nil, json.RawMessage(cfgJSON), bus.New(), nil)
-	if err != nil {
-		t.Fatalf("factory: %v", err)
-	}
-	bc := ch.(*Channel)
-	bc.SetTenantID(store.GenNewID())
-	bc.startMu.Lock()
-	bc.botID = 1
-	bc.client = NewClient("p.bitrix24.com", nil)
-	bc.startMu.Unlock()
-
-	if err := bc.initMCPProvisioner(context.Background()); err != nil {
-		t.Fatalf("initMCPProvisioner: %v", err)
-	}
-	if bc.mcpClient == nil {
-		t.Fatal("mcpClient should be wired from per-server token even with empty env var")
-	}
-
-	// Trigger an auto-onboard so we can inspect the header the client sent.
-	if err := bc.provisionIfMissing(context.Background(), "42", validAuth()); err != nil {
-		t.Fatalf("provisionIfMissing: %v", err)
-	}
-	if gotAuthHeader != "Bearer per-server-tok" {
-		t.Errorf("Authorization header = %q; want Bearer per-server-tok", gotAuthHeader)
-	}
 }
 
 // newBareChannelForNotifyTest builds a Channel that's wired enough for

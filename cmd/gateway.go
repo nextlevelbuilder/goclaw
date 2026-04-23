@@ -473,10 +473,12 @@ func runGateway() {
 		bitrixEncKey := os.Getenv("GOCLAW_ENCRYPTION_KEY")
 		// Use the MCP-aware factory variant so channels that opt into
 		// lazy per-user credential provisioning (via mcp_server_name +
-		// mcp_base_url in their instance config AND GOCLAW_BITRIX_MCP_ADMIN_TOKEN
-		// env var) can reach the partner's MCPServerStore. Channels with
-		// none of those set operate identically to before — the MCPStore
-		// arg is nil-safe inside the factory.
+		// mcp_base_url in their instance config) can reach the partner's
+		// MCPServerStore. The MCP server authenticates each onboard call
+		// via the caller-supplied Bitrix access_token (Path B) — no shared
+		// admin secret is required. Channels with none of those set operate
+		// identically to before — the MCPStore arg is nil-safe inside the
+		// factory.
 		instanceLoader.RegisterFactory(channels.TypeBitrix24, bitrix24.FactoryWithPortalStoreAndMCP(pgStores.BitrixPortals, pgStores.MCP, bitrixEncKey))
 		if err := instanceLoader.LoadAll(context.Background()); err != nil {
 			slog.Error("failed to load channel instances from DB", "error", err)

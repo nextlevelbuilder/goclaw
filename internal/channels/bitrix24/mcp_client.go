@@ -17,11 +17,13 @@ import (
 // When a Bitrix24 user sends their first message, the bitrix24 channel
 // doesn't yet know which per-user MCP API key that user should use. It POSTs
 // to the MCP server — which is the authoritative identity provider for this
-// integration — with an admin bearer token AND the triggering user's OAuth
-// tokens (access_token + refresh_token + expires_in) harvested from the
-// Bitrix event auth block. The MCP server upserts its own tenants +
-// bitrix_users tables keyed by (domain, bitrix_user_id) and returns the
-// per-user api_key we persist via mcp_user_credentials.
+// integration — with the triggering user's OAuth tokens (access_token +
+// refresh_token + expires_in) harvested from the Bitrix event auth block.
+// The MCP server verifies the access_token against Bitrix `profile` to
+// confirm the caller actually owns bitrix_user_id (Path B — no shared admin
+// secret required), then upserts its own tenants + bitrix_users tables keyed
+// by (domain, bitrix_user_id) and returns the per-user api_key we persist
+// via mcp_user_credentials.
 //
 // The client is deliberately thin:
 //   - No retries on 4xx (auth config wrong → operator must fix).
@@ -35,7 +37,6 @@ import (
 type mcpClient struct {
 	httpClient *http.Client
 	baseURL    string
-	adminToken string
 }
 
 // ErrTenantNotInstalled is returned when the MCP server reports 404
@@ -45,17 +46,18 @@ type mcpClient struct {
 // instead of the generic "try again later" debounce.
 var ErrTenantNotInstalled = errors.New("mcp auto-onboard: tenant_not_installed")
 
-// newMCPClient builds a client pointed at baseURL using adminToken for auth.
+// newMCPClient builds a client pointed at baseURL. The MCP server
+// authenticates each auto-onboard call via the caller-supplied Bitrix
+// access_token (Path B) — no shared admin secret is required.
 // baseURL MUST be the MCP server root (e.g. https://mcp.example.com) — we
 // append /api/auto-onboard internally so channel config stays minimal.
-func newMCPClient(baseURL, adminToken string, timeout time.Duration) *mcpClient {
+func newMCPClient(baseURL string, timeout time.Duration) *mcpClient {
 	if timeout <= 0 {
 		timeout = 10 * time.Second
 	}
 	return &mcpClient{
 		httpClient: &http.Client{Timeout: timeout},
 		baseURL:    strings.TrimRight(baseURL, "/"),
-		adminToken: adminToken,
 	}
 }
 
@@ -90,9 +92,9 @@ type autoOnboardResponse struct {
 }
 
 // autoOnboard POSTs to {baseURL}/api/auto-onboard and returns the resolved
-// per-user api_key. Fails closed on: missing base URL / admin token,
-// missing domain / bitrix_user_id / tokens, 4xx (config error), 5xx after
-// one retry, malformed JSON, or empty api_key.
+// per-user api_key. Fails closed on: missing base URL, missing domain /
+// bitrix_user_id / tokens, 4xx (config error), 5xx after one retry,
+// malformed JSON, or empty api_key.
 //
 // On 404 with body {"error":"tenant_not_installed"} returns
 // ErrTenantNotInstalled so the caller can render a specific "admin must
@@ -100,9 +102,6 @@ type autoOnboardResponse struct {
 func (c *mcpClient) autoOnboard(ctx context.Context, req autoOnboardRequest) (*autoOnboardResponse, error) {
 	if c.baseURL == "" {
 		return nil, errors.New("mcp auto-onboard: base URL not configured")
-	}
-	if c.adminToken == "" {
-		return nil, errors.New("mcp auto-onboard: admin token not configured")
 	}
 	if req.Domain == "" || req.BitrixUserID == "" || req.AccessToken == "" || req.RefreshToken == "" {
 		return nil, errors.New("mcp auto-onboard: domain, bitrix_user_id, access_token, refresh_token all required")
@@ -133,7 +132,6 @@ func (c *mcpClient) autoOnboard(ctx context.Context, req autoOnboardRequest) (*a
 			return nil, fmt.Errorf("mcp auto-onboard: new request: %w", err)
 		}
 		httpReq.Header.Set("Content-Type", "application/json")
-		httpReq.Header.Set("Authorization", "Bearer "+c.adminToken)
 
 		resp, err := c.httpClient.Do(httpReq)
 		if err != nil {
@@ -163,7 +161,7 @@ func (c *mcpClient) autoOnboard(ctx context.Context, req autoOnboardRequest) (*a
 			return nil, ErrTenantNotInstalled
 		case resp.StatusCode >= 400 && resp.StatusCode < 500:
 			// Auth / config errors are non-retryable — surface the body so
-			// operators can see the admin token / domain mismatch.
+			// operators can see the domain / access_token mismatch.
 			return nil, fmt.Errorf("mcp auto-onboard: %d %s: %s", resp.StatusCode, http.StatusText(resp.StatusCode), truncateMCPBody(string(out), 500))
 		default:
 			lastErr = fmt.Errorf("mcp auto-onboard: %d %s: %s", resp.StatusCode, http.StatusText(resp.StatusCode), truncateMCPBody(string(out), 500))

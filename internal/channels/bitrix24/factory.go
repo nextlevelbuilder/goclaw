@@ -87,15 +87,16 @@ type bitrixInstanceConfig struct {
 	// Optional MCP lazy-provisioning binding (Phase C).
 	//
 	// When MCPServerName + MCPBaseURL are set AND the factory variant that
-	// accepts a MCPServerStore is used (FactoryWithPortalStoreAndMCP) AND
-	// env GOCLAW_BITRIX_MCP_ADMIN_TOKEN is non-empty, the channel tries to
-	// mint per-user MCP credentials on first message:
+	// accepts a MCPServerStore is used (FactoryWithPortalStoreAndMCP), the
+	// channel tries to mint per-user MCP credentials on first message:
 	//
 	//   1. Channel receives message from user U with OAuth tokens in event.
 	//   2. Channel looks up MCPUserCredentials(serverID, senderID). Present
-	//      → skip. Absent → POST /api/auto-onboard on MCPBaseURL using
-	//      admin token + U's OAuth tokens. MCP server responds with a
-	//      per-user api_key, which channel stores via SetUserCredentials.
+	//      → skip. Absent → POST /api/auto-onboard on MCPBaseURL forwarding
+	//      U's OAuth tokens. MCP server authenticates the call via Bitrix
+	//      `profile` against the supplied access_token (Path B — no shared
+	//      admin secret required) and responds with a per-user api_key,
+	//      which channel stores via SetUserCredentials.
 	//   3. Agent pipeline downstream reads those creds naturally.
 	//
 	// Best-effort: if any step fails, channel logs a warning and forwards
@@ -103,9 +104,6 @@ type bitrixInstanceConfig struct {
 	// that MCP server's tools. User gets a response, albeit without MCP.
 	//
 	// Half-config fails at factory load: both fields set or both empty.
-	// The admin token lives in env (not config) because the config JSON
-	// is not encrypted at rest; revisit in Phase D RFC for per-tenant
-	// secret store.
 	//
 	// Skipped entirely for Open Channel bots (bot_type=O) — transient
 	// customers don't map to tenant_users.
@@ -144,11 +142,12 @@ func FactoryWithPortalStore(portalStore store.BitrixPortalStore, encKey string) 
 
 // FactoryWithPortalStoreAndMCP is the MCP-aware variant of
 // FactoryWithPortalStore. When mcpStore is non-nil AND the instance config
-// has both mcp_server_name + mcp_base_url set AND the env var
-// GOCLAW_BITRIX_MCP_ADMIN_TOKEN is non-empty at Channel.Start() time, the
-// channel enables lazy provisioning: on first message from each user, it
-// POSTs to {mcp_base_url}/api/auto-onboard to mint per-user MCP
-// credentials, which downstream agent pipeline reads naturally.
+// has both mcp_server_name + mcp_base_url set, the channel enables lazy
+// provisioning: on first message from each user, it POSTs to
+// {mcp_base_url}/api/auto-onboard to mint per-user MCP credentials,
+// which downstream agent pipeline reads naturally. The MCP server
+// authenticates each call via the caller-supplied Bitrix access_token
+// (Path B) — no shared admin secret is required.
 //
 // Pass nil mcpStore to disable provisioning even if config has the fields.
 // Half-config (only one of mcp_server_name / mcp_base_url set) fails fast.

@@ -60,10 +60,12 @@ type Channel struct {
 	// (messages flow through without trying to mint MCP credentials).
 	//
 	// mcpStore comes from the MCP-aware factory variant; mcpClient is
-	// built at Start() iff config has mcp_server_name + mcp_base_url AND
-	// env GOCLAW_BITRIX_MCP_ADMIN_TOKEN is set. mcpServerID is resolved
-	// once at Start() via mcpStore.GetServerByName and then cached —
-	// avoids looking up the server on every inbound message.
+	// built at Start() iff config has mcp_server_name + mcp_base_url and
+	// the named mcp_servers row exists. Path B: the MCP server
+	// authenticates each onboard call via the caller-supplied Bitrix
+	// access_token — no shared admin secret is required. mcpServerID is
+	// resolved once at Start() via mcpStore.GetServerByName and then
+	// cached — avoids looking up the server on every inbound message.
 	mcpStore     store.MCPServerStore
 	mcpClient    *mcpClient
 	mcpServerID  uuid.UUID
