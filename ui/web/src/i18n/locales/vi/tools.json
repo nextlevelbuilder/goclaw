@@ -235,11 +235,7 @@
       "saving": "Đang lưu...",
       "imageModelLabel": "Mô hình ảnh",
       "imageModelDefaultOption": "Mặc định · gpt-image-2 (khuyến nghị)",
-      "imageModelLegacyOption": "Cũ · gpt-image-1.5",
-      "poolBadge": "Pool · {{strategy}}",
-      "poolBadgeTooltip": "Provider này là một Codex pool. Failover giữa các thành viên trong pool được xử lý nội bộ trước khi chuyển sang mục tiếp theo trong chuỗi.",
-      "poolStrategyRoundRobin": "Round-robin",
-      "poolStrategyPriorityOrder": "Ưu tiên thứ tự"
+      "imageModelLegacyOption": "Cũ · gpt-image-1.5"
     },
     "toast": {
       "toggled": "Đã cập nhật công cụ",

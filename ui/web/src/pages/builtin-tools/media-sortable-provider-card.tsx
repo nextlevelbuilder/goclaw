@@ -1,14 +1,12 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -19,9 +17,10 @@ import {
 import { Combobox } from "@/components/ui/combobox";
 import { useProviders } from "@/pages/providers/hooks/use-providers";
 import { useProviderModels } from "@/pages/providers/hooks/use-provider-models";
+import { getChatGPTOAuthPoolOwnership } from "@/pages/providers/provider-utils";
 import { MEDIA_PARAMS_SCHEMA } from "./media-provider-params-schema";
 import { ParamFieldControl } from "./media-param-field-control";
-import { buildDefaultParams, poolStrategyOf } from "./media-provider-chain-helpers";
+import { buildDefaultParams } from "./media-provider-chain-helpers";
 
 import type { ProviderEntry } from "./media-provider-chain-helpers";
 
@@ -57,8 +56,19 @@ export function SortableProviderCard({
     opacity: isDragging ? 0.5 : 1,
   };
 
+  // Pool-aware dropdown: hide pool members so the user can only pick pool
+  // owners (or standalone providers). Mirrors the Create Agent dropdown
+  // pattern (`components/shared/provider-model-select.tsx`).
+  const poolOwnership = useMemo(
+    () => getChatGPTOAuthPoolOwnership(enabledProviders),
+    [enabledProviders],
+  );
+  const dropdownProviders = useMemo(
+    () => enabledProviders.filter((p) => !poolOwnership.ownerByMember.has(p.name)),
+    [enabledProviders, poolOwnership],
+  );
+
   const selectedProvider = enabledProviders.find((p) => p.id === entry.provider_id);
-  const poolStrategy = poolStrategyOf(selectedProvider);
   const { models, loading: modelsLoading } = useProviderModels(
     entry.provider_id || undefined,
   );
@@ -111,26 +121,6 @@ export function SortableProviderCard({
           {selectedProvider?.display_name || entry.provider || t("builtin.mediaChain.newProvider")}
         </span>
 
-        {poolStrategy && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Badge variant="secondary" className="shrink-0 cursor-default">
-                  {t("builtin.mediaChain.poolBadge", {
-                    strategy:
-                      poolStrategy === "round_robin"
-                        ? t("builtin.mediaChain.poolStrategyRoundRobin")
-                        : t("builtin.mediaChain.poolStrategyPriorityOrder"),
-                  })}
-                </Badge>
-              </TooltipTrigger>
-              <TooltipContent side="top">
-                {t("builtin.mediaChain.poolBadgeTooltip")}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
-
         <Button
           type="button"
           variant="ghost"
@@ -151,9 +141,16 @@ export function SortableProviderCard({
               <SelectValue placeholder={t("builtin.mediaChain.selectProvider")} />
             </SelectTrigger>
             <SelectContent>
-              {enabledProviders.map((p) => (
+              {dropdownProviders.map((p) => (
                 <SelectItem key={p.id} value={p.name}>
-                  {p.display_name || p.name}
+                  <span className="flex items-center gap-2">
+                    {p.display_name || p.name}
+                    {poolOwnership.membersByOwner.has(p.name) && (
+                      <span className="rounded border border-primary/30 bg-primary/10 px-1.5 py-px text-2xs font-medium text-primary">
+                        {t("providers:list.poolBadge")}
+                      </span>
+                    )}
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>
