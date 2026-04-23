@@ -10,6 +10,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/cache"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
+	"github.com/nextlevelbuilder/goclaw/internal/channels/whatsapp"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/heartbeat"
@@ -240,6 +241,21 @@ func (d *gatewayDeps) runLifecycle(
 		slog.Info("cors: allowed_origins configured", "origins", d.cfg.Gateway.AllowedOrigins)
 	} else if !edition.Current().IsLimited() {
 		slog.Warn("security.cors_open: no allowed_origins configured — all WebSocket origins accepted. Set gateway.allowed_origins or GOCLAW_ALLOWED_ORIGINS for production")
+	}
+
+	// WhatsApp listen-only KG extraction worker.
+	// Registered here (after all setup) so the server is up before any extraction begins.
+	if d.pgStores.ListenRawMessages != nil && d.pgStores.KnowledgeGraph != nil && d.providerRegistry != nil {
+		cleanupExtraction := whatsapp.RegisterExtractionWorker(whatsapp.ExtractionWorkerDeps{
+			RawMsgStore:   d.pgStores.ListenRawMessages,
+			KGStore:       d.pgStores.KnowledgeGraph,
+			SystemConfigs: d.pgStores.SystemConfigs,
+			BuiltinTools:  d.pgStores.BuiltinTools,
+			Registry:      d.providerRegistry,
+			TenantID:      store.MasterTenantID,
+			MediaAnalyzer: whatsapp.NewMediaAnalyzer(d.providerRegistry, d.pgStores.SystemConfigs, d.pgStores.BuiltinTools, store.MasterTenantID),
+		})
+		defer cleanupExtraction()
 	}
 
 	if err := d.server.Start(ctx); err != nil {

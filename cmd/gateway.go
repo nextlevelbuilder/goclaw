@@ -234,20 +234,6 @@ func runGateway() {
 		}
 	}
 
-		// WhatsApp listen-only KG extraction worker.
-		// Polls listen_raw_messages for unprocessed batches and runs KG extraction.
-		if pgStores.ListenRawMessages != nil && pgStores.KnowledgeGraph != nil && providerRegistry != nil {
-			cleanupExtraction := whatsapp.RegisterExtractionWorker(whatsapp.ExtractionWorkerDeps{
-				RawMsgStore:   pgStores.ListenRawMessages,
-				KGStore:       pgStores.KnowledgeGraph,
-				SystemConfigs: pgStores.SystemConfigs,
-				BuiltinTools:  pgStores.BuiltinTools,
-				Registry:      providerRegistry,
-				TenantID:      store.MasterTenantID,
-				MediaAnalyzer: whatsapp.NewMediaAnalyzer(providerRegistry, pgStores.SystemConfigs, pgStores.BuiltinTools, store.MasterTenantID),
-			})
-			defer cleanupExtraction()
-		}
 
 	// V3: Wire vault enrichment worker (async summary + embedding + auto-linking).
 	// Provider is resolved per-tenant at runtime — no static provider needed.
