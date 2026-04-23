@@ -29,7 +29,20 @@ type discordInstanceConfig struct {
 	STTAPIKey         string   `json:"stt_api_key,omitempty"`
 	STTTenantID       string   `json:"stt_tenant_id,omitempty"`
 	STTTimeoutSeconds int      `json:"stt_timeout_seconds,omitempty"`
-	VoiceAgentID      string   `json:"voice_agent_id,omitempty"`
+	VoiceAgentID      string   `json:"voice_agent_id,omitempty"` // NOT the real-time voice feature — see VoiceChannelEnabled below.
+
+	// Real-time voice-channel join + transcription. VoiceChannelEnabled
+	// gates the feature; VoiceChannelID, VoiceChannelGuildID, and
+	// VoiceChannelTranscriptChannelID are required when enabled. See
+	// internal/channels/discord/voice/.
+	VoiceChannelEnabled             *bool  `json:"voice_channel_enabled,omitempty"`
+	VoiceChannelGuildID             string `json:"voice_channel_guild_id,omitempty"`
+	VoiceChannelID                  string `json:"voice_channel_id,omitempty"`
+	VoiceChannelTranscriptChannelID string `json:"voice_channel_transcript_channel_id,omitempty"`
+	VoiceChannelIdleLeaveSeconds    int    `json:"voice_channel_idle_leave_seconds,omitempty"`
+	VoiceChannelMinUtteranceMs      int    `json:"voice_channel_min_utterance_ms,omitempty"`
+	VoiceChannelMaxUtteranceMs      int    `json:"voice_channel_max_utterance_ms,omitempty"`
+	VoiceChannelDailyCapSeconds     int    `json:"voice_channel_daily_cap_seconds,omitempty"`
 }
 
 // Factory creates a Discord channel from DB instance data (no extra stores).
@@ -88,6 +101,15 @@ func buildChannel(name string, creds json.RawMessage, cfg json.RawMessage,
 		STTTenantID:       ic.STTTenantID,
 		STTTimeoutSeconds: ic.STTTimeoutSeconds,
 		VoiceAgentID:      ic.VoiceAgentID,
+
+		VoiceChannelEnabled:             ic.VoiceChannelEnabled,
+		VoiceChannelGuildID:             ic.VoiceChannelGuildID,
+		VoiceChannelID:                  ic.VoiceChannelID,
+		VoiceChannelTranscriptChannelID: ic.VoiceChannelTranscriptChannelID,
+		VoiceChannelIdleLeaveSeconds:    ic.VoiceChannelIdleLeaveSeconds,
+		VoiceChannelMinUtteranceMs:      ic.VoiceChannelMinUtteranceMs,
+		VoiceChannelMaxUtteranceMs:      ic.VoiceChannelMaxUtteranceMs,
+		VoiceChannelDailyCapSeconds:     ic.VoiceChannelDailyCapSeconds,
 	}
 
 	// DB instances default to "pairing" for groups (secure by default).
