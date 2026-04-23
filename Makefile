@@ -1,4 +1,4 @@
-VERSION ?= $(shell git describe --tags --abbrev=0 --match "v[0-9]*" 2>/dev/null || echo dev)
+VERSION ?= $(shell git describe --tags --abbrev=0 --match "v*-rclaw" 2>/dev/null || git describe --tags --abbrev=0 2>/dev/null || echo dev)
 LDFLAGS  = -s -w -X github.com/nextlevelbuilder/goclaw/cmd.Version=$(VERSION)
 BINARY   = goclaw
 
