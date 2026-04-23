@@ -235,7 +235,11 @@
       "saving": "Saving...",
       "imageModelLabel": "Image model",
       "imageModelDefaultOption": "Default · gpt-image-2 (recommended)",
-      "imageModelLegacyOption": "Legacy · gpt-image-1.5"
+      "imageModelLegacyOption": "Legacy · gpt-image-1.5",
+      "poolBadge": "Pool · {{strategy}}",
+      "poolBadgeTooltip": "This provider is a Codex pool. Failover between pool members is handled internally before falling through to the next chain entry.",
+      "poolStrategyRoundRobin": "Round-robin",
+      "poolStrategyPriorityOrder": "Priority order"
     },
     "toast": {
       "toggled": "Tool updated",

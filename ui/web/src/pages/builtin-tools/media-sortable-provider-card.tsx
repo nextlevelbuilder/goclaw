@@ -4,9 +4,11 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -19,7 +21,7 @@ import { useProviders } from "@/pages/providers/hooks/use-providers";
 import { useProviderModels } from "@/pages/providers/hooks/use-provider-models";
 import { MEDIA_PARAMS_SCHEMA } from "./media-provider-params-schema";
 import { ParamFieldControl } from "./media-param-field-control";
-import { buildDefaultParams } from "./media-provider-chain-helpers";
+import { buildDefaultParams, poolStrategyOf } from "./media-provider-chain-helpers";
 
 import type { ProviderEntry } from "./media-provider-chain-helpers";
 
@@ -56,6 +58,7 @@ export function SortableProviderCard({
   };
 
   const selectedProvider = enabledProviders.find((p) => p.id === entry.provider_id);
+  const poolStrategy = poolStrategyOf(selectedProvider);
   const { models, loading: modelsLoading } = useProviderModels(
     entry.provider_id || undefined,
   );
@@ -107,6 +110,26 @@ export function SortableProviderCard({
         <span className="text-sm font-medium truncate">
           {selectedProvider?.display_name || entry.provider || t("builtin.mediaChain.newProvider")}
         </span>
+
+        {poolStrategy && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="secondary" className="shrink-0 cursor-default">
+                  {t("builtin.mediaChain.poolBadge", {
+                    strategy:
+                      poolStrategy === "round_robin"
+                        ? t("builtin.mediaChain.poolStrategyRoundRobin")
+                        : t("builtin.mediaChain.poolStrategyPriorityOrder"),
+                  })}
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                {t("builtin.mediaChain.poolBadgeTooltip")}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
 
         <Button
           type="button"

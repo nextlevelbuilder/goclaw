@@ -1,5 +1,7 @@
 import { uniqueId } from "@/lib/utils";
 import { MEDIA_PARAMS_SCHEMA } from "./media-provider-params-schema";
+import { getChatGPTOAuthProviderRouting } from "@/types/provider";
+import type { ProviderData } from "@/types/provider";
 export interface ProviderEntry {
   id: string;
   provider_id: string;
@@ -80,4 +82,24 @@ export function parseInitialEntries(
   }
 
   return [];
+}
+
+/**
+ * Returns true if the provider is a Codex pool (chatgpt_oauth with a
+ * non-trivial codex_pool routing config — round_robin or priority_order with
+ * at least one extra member).
+ */
+export function isPoolProvider(p: ProviderData | undefined): boolean {
+  if (!p || p.provider_type !== "chatgpt_oauth") return false;
+  return getChatGPTOAuthProviderRouting(p.settings) !== null;
+}
+
+/**
+ * Returns the pool strategy string ("round_robin" | "priority_order") for a
+ * Codex pool provider, or null if the provider is not a pool.
+ */
+export function poolStrategyOf(p: ProviderData | undefined): string | null {
+  if (!p || p.provider_type !== "chatgpt_oauth") return null;
+  const routing = getChatGPTOAuthProviderRouting(p.settings);
+  return routing?.strategy ?? null;
 }
