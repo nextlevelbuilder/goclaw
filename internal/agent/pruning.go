@@ -14,8 +14,9 @@ import (
 // Context pruning defaults matching TS DEFAULT_CONTEXT_PRUNING_SETTINGS.
 const (
 	defaultKeepLastAssistants   = 3
-	defaultSoftTrimRatio        = 0.25
+	defaultSoftTrimRatio        = 0.3
 	defaultHardClearRatio       = 0.5
+	defaultPruningMode          = "cache-ttl"
 	defaultMinPrunableToolChars = 50000
 	defaultSoftTrimMaxChars     = 6000
 	defaultSoftTrimHeadChars    = 3000
@@ -172,12 +173,16 @@ func resolvePruningSettings(cfg *config.ContextPruningConfig) *effectivePruningS
 // for non-ASCII content like Vietnamese/Chinese). When nil, falls back to the
 // legacy rune_count/charsPerTokenEstimate heuristic so existing tests pass.
 func pruneContextMessages(msgs []providers.Message, contextWindowTokens int, cfg *config.ContextPruningConfig, tc tokencount.TokenCounter, model string, stats *pipeline.PruneStats) []providers.Message {
-	// Opt-in: require explicit mode. Matches TS computeEffectiveSettings in settings.ts.
-	if cfg == nil || cfg.Mode == "" || cfg.Mode == "off" {
+	// Resolve effective mode: empty defaults to "cache-ttl" (enabled by default).
+	mode := defaultPruningMode
+	if cfg != nil && cfg.Mode != "" {
+		mode = cfg.Mode
+	}
+	if mode == "off" {
 		return msgs
 	}
-	if cfg.Mode != "cache-ttl" {
-		slog.Warn("context_pruning: unknown mode, disabled", "mode", cfg.Mode)
+	if mode != "cache-ttl" {
+		slog.Warn("context_pruning: unknown mode, disabled", "mode", mode)
 		return msgs
 	}
 	if contextWindowTokens <= 0 || len(msgs) == 0 {

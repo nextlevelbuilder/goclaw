@@ -448,8 +448,8 @@ func TestHasImportantTail_ShortContentNoMatch(t *testing.T) {
 // Lock current (buggy-vs-TS) behavior before refactoring. Subsequent phases
 // update these tests to new expected values.
 
-// makeLargeHistoryFixture creates a history with a large tool result for opt-in tests.
-// contextWindow=5000 → charWindow=20000, total ~8030 chars → ratio ~40% ≥ 25%.
+// makeLargeHistoryFixture creates a history with a large tool result for default-enabled tests.
+// contextWindow=5000 → charWindow=20000, total ~8030 chars → ratio ~40% ≥ 30% (softTrimRatio).
 func makeLargeHistoryFixture() []providers.Message {
 	return []providers.Message{
 		{Role: "user", Content: "q"},
@@ -461,21 +461,25 @@ func makeLargeHistoryFixture() []providers.Message {
 	}
 }
 
-func TestPruneContextMessages_NilCfg_NoOp(t *testing.T) {
-	// Phase 04: nil cfg → no pruning (opt-in). Matches TS design.
+func TestPruneContextMessages_NilCfg_DefaultEnabled(t *testing.T) {
+	// nil cfg defaults to "cache-ttl" mode (enabled by default).
+	// Tool result 8000 chars > 6000 threshold → trimmed to ~6000.
 	msgs := makeLargeHistoryFixture()
 	got := pruneContextMessages(msgs, 5000, nil, nil, "", nil)
-	if estimateMessageChars(got[2]) != 8000 {
-		t.Errorf("nil cfg should be no-op (opt-in). Got %d chars", estimateMessageChars(got[2]))
+	chars := estimateMessageChars(got[2])
+	if chars >= 8000 {
+		t.Errorf("nil cfg should enable pruning (default cache-ttl). Got %d chars, expected < 8000", chars)
 	}
 }
 
-func TestPruneContextMessages_EmptyMode_NoOp(t *testing.T) {
+func TestPruneContextMessages_EmptyMode_DefaultEnabled(t *testing.T) {
+	// Empty mode defaults to "cache-ttl" (enabled by default).
 	cfg := &config.ContextPruningConfig{Mode: ""}
 	msgs := makeLargeHistoryFixture()
 	got := pruneContextMessages(msgs, 5000, cfg, nil, "", nil)
-	if estimateMessageChars(got[2]) != 8000 {
-		t.Errorf("empty mode should be no-op. Got %d chars", estimateMessageChars(got[2]))
+	chars := estimateMessageChars(got[2])
+	if chars >= 8000 {
+		t.Errorf("empty mode should enable pruning (default cache-ttl). Got %d chars, expected < 8000", chars)
 	}
 }
 

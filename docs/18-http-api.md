@@ -513,6 +513,14 @@ Text-to-speech synthesis and configuration.
 | `GET` | `/v1/tts/config` | Get tenant TTS configuration (admin) |
 | `POST` | `/v1/tts/config` | Save tenant TTS configuration (admin) |
 
+### Provider Capabilities
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/tts/capabilities` | Get `ProviderCapabilities` schema for all registered providers (operator role) |
+
+The capabilities endpoint returns the dynamic param schema for each provider — param types, ranges, defaults, `dependsOn` conditions, and custom feature flags. Used by the UI to render per-provider param editors without hard-coded field lists. See [`docs/tts-provider-capabilities.md`](tts-provider-capabilities.md) for schema details.
+
 ---
 
 ## 10. Memory

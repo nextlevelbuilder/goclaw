@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -50,9 +51,7 @@ func (s *validationSystemConfigStore) List(ctx context.Context) (map[string]stri
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := make(map[string]string, len(s.data))
-	for k, v := range s.data {
-		out[k] = v
-	}
+	maps.Copy(out, s.data)
 	return out, nil
 }
 
@@ -88,9 +87,7 @@ func (s *validationSecretsStore) GetAll(ctx context.Context) (map[string]string,
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := make(map[string]string, len(s.data))
-	for k, v := range s.data {
-		out[k] = v
-	}
+	maps.Copy(out, s.data)
 	return out, nil
 }
 
@@ -208,6 +205,69 @@ func TestTTSConfigGet_RoundTripsCompatibilityFields(t *testing.T) {
 	}
 	if got, ok := edge["enabled"].(bool); !ok || got {
 		t.Fatalf("want edge enabled=false, got %#v", edge["enabled"])
+	}
+}
+
+// TestSaveAndLoad_Gemini verifies that Gemini config round-trips through save/load.
+func TestSaveAndLoad_Gemini(t *testing.T) {
+	setupTestToken(t, "")
+
+	sc := &validationSystemConfigStore{data: map[string]string{}}
+	cs := &validationSecretsStore{data: map[string]string{}}
+	mux := newValidationTTSConfigMux(sc, cs)
+
+	// Save
+	req := httptest.NewRequest("POST", "/v1/tts/config", ttsBody(t, map[string]any{
+		"provider": "gemini",
+		"gemini": map[string]string{
+			"api_key":  "gm-test-key",
+			"voice":    "Kore",
+			"model":    "gemini-2.5-flash-preview-tts",
+			"speakers": `[{"speaker":"Joe","voice_id":"Kore"}]`,
+		},
+	}))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("save: want 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// Verify system_configs
+	if got := sc.data["tts.gemini.voice"]; got != "Kore" {
+		t.Errorf("tts.gemini.voice = %q, want Kore", got)
+	}
+	if got := sc.data["tts.gemini.model"]; got != "gemini-2.5-flash-preview-tts" {
+		t.Errorf("tts.gemini.model = %q, want gemini-2.5-flash-preview-tts", got)
+	}
+	if got := sc.data["tts.gemini.speakers"]; got == "" {
+		t.Error("tts.gemini.speakers not persisted")
+	}
+	// Verify secret stored
+	if got := cs.data["tts.gemini.api_key"]; got != "gm-test-key" {
+		t.Errorf("tts.gemini.api_key = %q, want gm-test-key", got)
+	}
+
+	// Load (GET)
+	getReq := httptest.NewRequest("GET", "/v1/tts/config", nil)
+	getRR := httptest.NewRecorder()
+	mux.ServeHTTP(getRR, getReq)
+	if getRR.Code != http.StatusOK {
+		t.Fatalf("get: want 200, got %d: %s", getRR.Code, getRR.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(getRR.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	geminiResp, _ := body["gemini"].(map[string]any)
+	if geminiResp == nil {
+		t.Fatal("gemini block missing in response")
+	}
+	if got, _ := geminiResp["api_key"].(string); got != "***" {
+		t.Errorf("gemini api_key = %q, want masked '***'", got)
+	}
+	if got, _ := geminiResp["voice"].(string); got != "Kore" {
+		t.Errorf("gemini voice = %q, want Kore", got)
 	}
 }
 

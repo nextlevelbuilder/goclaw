@@ -3,6 +3,8 @@ package http
 import (
 	"log/slog"
 	"regexp"
+
+	"github.com/nextlevelbuilder/goclaw/internal/audio"
 )
 
 var slugRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
@@ -25,6 +27,13 @@ func filterAllowedKeys(updates map[string]any, allowed map[string]bool) map[stri
 		}
 	}
 	return filtered
+}
+
+// validateAgentTTSParams is a thin wrapper around audio.ValidateAgentTTSParams
+// so HTTP handlers can call it without importing the audio package directly.
+// The allow-list is owned by internal/audio (single source of truth, Action D).
+func validateAgentTTSParams(ttsParams map[string]any) error {
+	return audio.ValidateAgentTTSParams(ttsParams)
 }
 
 // --- Field allowlists for update endpoints ---

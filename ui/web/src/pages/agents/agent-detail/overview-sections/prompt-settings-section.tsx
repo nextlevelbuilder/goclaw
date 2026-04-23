@@ -9,8 +9,8 @@ import { PromptModeCards, type PromptMode } from "../../prompt-mode-cards";
 import { useTtsConfig } from "@/pages/tts/hooks/use-tts-config";
 import { TtsEmptyState } from "./tts-empty-state";
 import { TtsOverrideBlock } from "./tts-override-block";
-import { getProviderDefinition, type TtsProviderId } from "@/data/tts-providers";
-import type { TtsModelOption } from "@/data/tts-providers";
+import { PROVIDER_MODEL_CATALOG, type TtsProviderId, type TtsModelOption } from "@/data/tts-providers";
+import type { ParamValue } from "@/components/dynamic-param-form";
 
 /**
  * Pure helper — exported for unit testing.
@@ -22,11 +22,11 @@ export function shouldRenderTTSSection(globalTts: { provider?: string }): boolea
 
 /**
  * Pure helper — exported for unit testing.
- * Returns model options for a given provider id from the catalog.
+ * Returns model options for a given provider id from the static catalog fallback.
+ * Source of truth is GET /v1/tts/capabilities; this fallback covers non-React contexts.
  */
 export function getModelOptions(providerId: string): TtsModelOption[] {
-  const def = getProviderDefinition(providerId as TtsProviderId);
-  return def?.models ?? [];
+  return PROVIDER_MODEL_CATALOG[providerId as TtsProviderId] ?? [];
 }
 
 interface Props {
@@ -45,10 +45,12 @@ export function PromptSettingsSection({ agent, onUpdate }: Props) {
   const savedMode = readPromptMode(agent) as PromptMode;
   const savedVoiceId = (otherConfig.tts_voice_id as string) ?? "";
   const savedModelId = (otherConfig.tts_model_id as string) ?? "";
+  const savedTtsParams = (otherConfig.tts_params as Record<string, ParamValue>) ?? {};
 
   const [mode, setMode] = useState<PromptMode>(savedMode);
   const [ttsVoiceId, setTtsVoiceId] = useState<string>(savedVoiceId);
   const [ttsModelId, setTtsModelId] = useState<string>(savedModelId);
+  const [ttsParams, setTtsParams] = useState<Record<string, ParamValue>>(savedTtsParams);
   const [override, setOverride] = useState<boolean>(!!(savedVoiceId || savedModelId));
   const [saving, setSaving] = useState(false);
 
@@ -56,22 +58,34 @@ export function PromptSettingsSection({ agent, onUpdate }: Props) {
     const cfg = (agent.other_config ?? {}) as Record<string, unknown>;
     const voice = (cfg.tts_voice_id as string) ?? "";
     const model = (cfg.tts_model_id as string) ?? "";
+    const params = (cfg.tts_params as Record<string, ParamValue>) ?? {};
     setMode(readPromptMode(agent) as PromptMode);
     setTtsVoiceId(voice);
     setTtsModelId(model);
+    setTtsParams(params);
     setOverride(!!(voice || model));
   }, [agent.other_config]);
 
   const savedOverride = !!(savedVoiceId || savedModelId);
+  const ttsParamsDirty = JSON.stringify(ttsParams) !== JSON.stringify(savedTtsParams);
   const dirty =
     mode !== savedMode ||
     ttsVoiceId !== savedVoiceId ||
     ttsModelId !== savedModelId ||
-    override !== savedOverride;
+    override !== savedOverride ||
+    ttsParamsDirty;
 
   const handleSave = async () => {
     setSaving(true);
     try {
+      // Finding #13 (honest): we spread the last-loaded otherConfig prop as a
+      // base, then overwrite only the fields this section owns. Concurrent-tab
+      // clobber is NOT mitigated — a second tab saving an unrelated field
+      // between our last load and this PUT will lose that update.
+      // Server-side JSON-merge-patch endpoint is the correct v2 fix (deferred;
+      // see plan §Open Questions). Refetch before PUT is intentionally omitted:
+      // it would add latency for a race that is rare in practice for local-first
+      // desktop/single-user deployments.
       const bag = { ...otherConfig };
       if (mode && mode !== "full") {
         bag.prompt_mode = mode;
@@ -88,6 +102,14 @@ export function PromptSettingsSection({ agent, onUpdate }: Props) {
         bag.tts_model_id = ttsModelId;
       } else {
         delete bag.tts_model_id;
+      }
+      // Write tts_params when override is enabled and params are non-empty.
+      // Agent stores GENERIC keys (speed, emotion, style) — the bidirectional
+      // adapter in TtsOverrideBlock handles native↔generic conversion at load/save.
+      if (override && Object.keys(ttsParams).length > 0) {
+        bag.tts_params = ttsParams;
+      } else {
+        delete bag.tts_params;
       }
       await onUpdate({ other_config: bag });
       const modeRank: Record<string, number> = { none: 0, minimal: 1, task: 2, full: 3 };
@@ -134,6 +156,8 @@ export function PromptSettingsSection({ agent, onUpdate }: Props) {
             overrideEnabled={override}
             onOverrideChange={setOverride}
             synthesize={synthesize}
+            ttsParams={ttsParams}
+            onTtsParamsChange={setTtsParams}
           />
         )}
       </div>

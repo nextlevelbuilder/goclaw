@@ -1,0 +1,16 @@
+{
+  "body": {
+    "audio_setting": {
+      "format": "mp3"
+    },
+    "model": "speech-02-hd",
+    "stream": false,
+    "text": "hello",
+    "voice_setting": {
+      "pitch": 0,
+      "speed": 1,
+      "voice_id": "Wise_Woman"
+    }
+  },
+  "url": "/t2a_v2?GroupId=grp1"
+}

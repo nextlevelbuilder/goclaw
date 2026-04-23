@@ -197,8 +197,14 @@ const (
 	MsgInvalidRole = "error.invalid_role" // "invalid role: allowed values are owner, admin, operator, member, viewer"
 
 	// --- TTS / Voices ---
-	MsgTtsUnknownModel  = "error.tts_unknown_model"  // "unknown tts model: %s"
-	MsgVoicesListFailed = "error.voices_list_failed" // "failed to list voices: %s"
+	MsgTtsUnknownModel          = "error.tts_unknown_model"           // "unknown tts model: %s"
+	MsgVoicesListFailed         = "error.voices_list_failed"          // "failed to list voices: %s"
+	MsgTtsGeminiInvalidVoice    = "error.tts_gemini_invalid_voice"    // "invalid Gemini voice: %s"
+	MsgTtsGeminiSpeakerLimit    = "error.tts_gemini_speaker_limit"    // "Gemini TTS supports at most 2 speakers"
+	MsgTtsGeminiInvalidModel    = "error.tts_gemini_invalid_model"    // "invalid Gemini TTS model: %s"
+	MsgTtsParamOutOfRange       = "error.tts_param_out_of_range"      // "TTS param %q value %v is out of range [%v, %v]"
+	MsgTtsParamUnknownKey       = "error.tts_param_unknown_key"       // "TTS param %q is not supported by this provider"
+	MsgTtsMiniMaxVoicesFailed   = "error.tts_minimax_voices_failed"   // "failed to fetch MiniMax voices: %s"
 
 	// --- STT ---
 	MsgSTTAllProvidersFailed     = "error.stt_all_providers_failed"    // "All STT providers failed"

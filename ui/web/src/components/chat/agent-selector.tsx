@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Bot, ChevronDown } from "lucide-react";
 import { useHttp } from "@/hooks/use-ws";
+import { usePortalDropdownClose } from "@/hooks/use-portal-dropdown-close";
 import { useAuthStore } from "@/stores/use-auth-store";
 import type { AgentData } from "@/types/agent";
 
@@ -49,20 +50,11 @@ export function AgentSelector({ value, onChange }: AgentSelectorProps) {
     });
   }, [open]);
 
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (
-        containerRef.current && !containerRef.current.contains(target) &&
-        (!dropdownRef.current || !dropdownRef.current.contains(target))
-      ) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
+  usePortalDropdownClose({
+    open,
+    onClose: () => setOpen(false),
+    ignore: [containerRef, dropdownRef],
+  });
 
   const selected = agents.find((a) => a.agent_key === value);
   const selectedEmoji = selected ? agentEmoji(selected) : undefined;

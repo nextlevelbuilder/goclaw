@@ -9,7 +9,7 @@
     "configured": "Đã cấu hình",
     "disabled": "Đã tắt",
     "noProvider": "Chưa cấu hình provider TTS",
-    "activeProvider": "Provider đang hoạt động: {{provider}}, Tự động: {{auto}}"
+    "activeProvider": "Provider chính: {{provider}}, Tự động: {{auto}}"
   },
   "general": {
     "title": "Cài đặt chung",
@@ -24,7 +24,8 @@
     "openai": "OpenAI",
     "elevenlabs": "ElevenLabs",
     "edge": "Edge (Miễn phí)",
-    "minimax": "MiniMax"
+    "minimax": "MiniMax",
+    "gemini": "Google Gemini"
   },
   "autoModes": {
     "off": "Tắt",
@@ -47,18 +48,80 @@
     "apiKey": "API Key",
     "apiBase": "API Base URL",
     "model": "Model",
-    "voice": "Giọng nói"
+    "voice": "Giọng nói",
+    "speed": {
+      "label": "Tốc độ",
+      "help": "Hệ số tốc độ nói — 0.25 = chậm nhất, 4.0 = nhanh nhất."
+    },
+    "responseFormat": {
+      "label": "Định dạng đầu ra",
+      "help": "Định dạng mã hoá âm thanh trả về từ API (mp3, opus, aac, flac, wav, pcm)."
+    },
+    "instructions": {
+      "label": "Hướng dẫn",
+      "help": "Prompt phong cách hệ thống — chỉ hỗ trợ với model gpt-4o-mini-tts."
+    }
   },
   "elevenlabs": {
     "apiKey": "API Key",
     "baseUrl": "Base URL",
     "voiceId": "Voice ID",
-    "modelId": "Model ID"
+    "modelId": "Model ID",
+    "voiceSettings": {
+      "stability": {
+        "label": "Độ ổn định",
+        "help": "0 = biến đổi nhiều hơn, 1 = nhất quán và ổn định hơn."
+      },
+      "similarityBoost": {
+        "label": "Độ tương đồng",
+        "help": "Mức độ bám sát giọng gốc — 0 = sáng tạo hơn, 1 = giống gốc hơn."
+      },
+      "style": {
+        "label": "Phóng đại phong cách",
+        "help": "Khuếch đại phong cách giọng. 0 = không; giá trị cao hơn = biểu cảm hơn."
+      },
+      "useSpeakerBoost": {
+        "label": "Tăng cường giọng",
+        "help": "Cải thiện độ rõ ràng và mức độ giống giọng đích."
+      },
+      "speed": {
+        "label": "Tốc độ",
+        "help": "Tốc độ nói — từ 0.7 (chậm) đến 1.2 (nhanh)."
+      }
+    },
+    "applyTextNormalization": {
+      "label": "Chuẩn hoá văn bản",
+      "help": "Cách xử lý số và viết tắt trước khi tổng hợp (auto, on hoặc off)."
+    },
+    "seed": {
+      "label": "Seed (Nâng cao)",
+      "help": "Đặt seed cố định để tái tạo kết quả giống nhau. 0 = ngẫu nhiên."
+    },
+    "optimizeStreamingLatency": {
+      "label": "Độ trễ streaming (Nâng cao)",
+      "help": "Mức tối ưu hoá độ trễ: 0 = không tối ưu, 4 = tối ưu tối đa."
+    },
+    "languageCode": {
+      "label": "Mã ngôn ngữ",
+      "help": "Gợi ý ngôn ngữ ISO 639-1, ví dụ: 'en' hoặc 'vi'. Nâng cao."
+    }
   },
   "edge": {
     "voice": "Giọng nói",
     "speechRate": "Tốc độ nói",
-    "hint": "Edge TTS miễn phí, không cần API key. Cài đặt: pip install edge-tts"
+    "hint": "Edge TTS miễn phí, không cần API key. Cài đặt: pip install edge-tts",
+    "rate": {
+      "label": "Tốc độ nói",
+      "help": "Điều chỉnh tốc độ theo phần trăm. -50% = chậm hơn nhiều, +100% = nhanh hơn nhiều."
+    },
+    "pitch": {
+      "label": "Cao độ",
+      "help": "Dịch chuyển cao độ theo Hz so với mức trung tính. Từ -50 Hz đến +50 Hz."
+    },
+    "volume": {
+      "label": "Âm lượng",
+      "help": "Điều chỉnh âm lượng theo phần trăm. -50% = nhỏ hơn, +100% = to hơn."
+    }
   },
   "minimax": {
     "apiKey": "API Key",
@@ -66,12 +129,91 @@
     "groupIdPlaceholder": "Bắt buộc cho MiniMax",
     "apiBase": "API Base",
     "model": "Model",
-    "voiceId": "Voice ID"
+    "voiceId": "Voice ID",
+    "speed": {
+      "label": "Tốc độ",
+      "help": "Hệ số tốc độ nói — 0.5 = chậm nhất, 2.0 = nhanh nhất."
+    },
+    "vol": {
+      "label": "Âm lượng",
+      "help": "Hệ số âm lượng — 0.01 = gần như không nghe được, 10.0 = to nhất."
+    },
+    "pitch": {
+      "label": "Cao độ",
+      "help": "Dịch chuyển cao độ theo nửa cung. -12 = thấp hơn một quãng tám, +12 = cao hơn một quãng tám."
+    },
+    "emotion": {
+      "label": "Cảm xúc",
+      "help": "Sắc thái cảm xúc áp dụng cho giọng đọc tổng hợp."
+    },
+    "textNormalization": {
+      "label": "Chuẩn hoá văn bản",
+      "help": "Có mở rộng số và ký hiệu trước khi tổng hợp hay không."
+    },
+    "audio": {
+      "format": {
+        "label": "Định dạng âm thanh",
+        "help": "Định dạng đầu ra: mp3, pcm, flac hoặc wav."
+      },
+      "sampleRate": {
+        "label": "Tần số lấy mẫu",
+        "help": "Tần số lấy mẫu tính bằng Hz. Để mặc định cho hầu hết trường hợp."
+      },
+      "bitrate": {
+        "label": "Bitrate (chỉ MP3)",
+        "help": "Tốc độ bit MP3 tính bằng bps. Chỉ áp dụng khi định dạng là mp3."
+      },
+      "channel": {
+        "label": "Kênh âm thanh",
+        "help": "1 = mono (file nhỏ hơn), 2 = stereo."
+      }
+    }
+  },
+  "gemini": {
+    "apiKey": "API Key",
+    "apiBase": "API Base URL",
+    "voice": "Giọng đọc",
+    "model": "Mô hình",
+    "multiSpeaker": "Nhiều người nói",
+    "multiSpeakerHint": "Hỗ trợ tối đa 2 người nói",
+    "audioTags": "Thẻ âm thanh",
+    "audioTagsHint": "Chèn thẻ biểu cảm như [laughs] trực tiếp vào văn bản",
+    "speakerName": "Tên người nói",
+    "speakerVoice": "Giọng đọc",
+    "addSpeaker": "Thêm người nói",
+    "removeSpeaker": "Xóa",
+    "maxSpeakersReached": "Đã đạt tối đa 2 người nói",
+    "filterAll": "Tất cả",
+    "filterEmotion": "Cảm xúc",
+    "filterPacing": "Nhịp độ",
+    "filterEffect": "Hiệu ứng",
+    "filterVoiceQuality": "Chất lượng giọng",
+    "searchPlaceholder": "Tìm thẻ…",
+    "insertTag": "Chèn",
+    "multiSpeakerMode": {
+      "title": "Chế độ nhiều người nói",
+      "addSpeaker": "Thêm người nói",
+      "speakerName": "Tên người nói",
+      "speakerVoice": "Giọng đọc",
+      "removeSpeaker": "Xóa",
+      "limitReached": "Tối đa 2 người nói"
+    },
+    "audioTagsPanel": {
+      "title": "Thẻ âm thanh",
+      "search": "Tìm thẻ",
+      "categoryEmotion": "Cảm xúc",
+      "categoryPacing": "Nhịp độ",
+      "categoryEffect": "Hiệu ứng",
+      "categoryVoiceQuality": "Chất lượng giọng",
+      "insertHint": "Nhấp vào thẻ để chèn tại vị trí con trỏ"
+    },
+    "previewBadge": "Xem trước"
   },
   "voice_label": "Giọng đọc",
   "voice_placeholder": "Chọn giọng đọc…",
   "voice_picker": {
-    "requires_provider": "Vui lòng cấu hình provider TTS trước"
+    "requires_provider": "Vui lòng cấu hình provider TTS trước",
+    "enter_voice_id": "Nhập voice_id thủ công"
   },
   "voice_refresh": "Làm mới",
   "voice_preview": "Nghe thử",
@@ -99,7 +241,10 @@
   },
   "override": {
     "label": "Ghi đè giọng đọc cho agent này",
-    "inherits": "Kế thừa: {{provider}} · {{voice}} · {{model}}"
+    "inherits": "Kế thừa: {{provider}} · {{voice}} · {{model}}",
+    "params": {
+      "title": "Tinh chỉnh"
+    }
   },
   "testConnection": {
     "label": "Kiểm tra kết nối",
@@ -127,6 +272,8 @@
     "requiresProvider": "Chọn provider ở trên để bật phát thử."
   },
   "advanced": {
-    "title": "Cài đặt nâng cao"
+    "title": "Cài đặt nâng cao",
+    "count": "{{count}} cài đặt nâng cao",
+    "count_one": "{{count}} cài đặt nâng cao"
   }
 }

@@ -1,0 +1,14 @@
+{
+  "body": {
+    "model_id": "eleven_multilingual_v2",
+    "text": "hello",
+    "voice_settings": {
+      "similarity_boost": 0.75,
+      "speed": 1,
+      "stability": 0.5,
+      "style": 0,
+      "use_speaker_boost": true
+    }
+  },
+  "path": "/v1/text-to-speech/test-voice?output_format=mp3_44100_128"
+}

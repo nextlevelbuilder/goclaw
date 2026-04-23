@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/nextlevelbuilder/goclaw/internal/audio/elevenlabs"
+	geminiaudio "github.com/nextlevelbuilder/goclaw/internal/audio/gemini"
 	minimaxaudio "github.com/nextlevelbuilder/goclaw/internal/audio/minimax"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
@@ -293,6 +294,16 @@ func setupTTS(cfg *config.Config) *tts.Manager {
 			APIBase:   ttsCfg.MiniMax.APIBase,
 			Model:     ttsCfg.MiniMax.Model,
 			VoiceID:   ttsCfg.MiniMax.VoiceID,
+			TimeoutMs: ttsCfg.TimeoutMs,
+		}))
+	}
+
+	if key := ttsCfg.Gemini.APIKey; key != "" {
+		mgr.RegisterProvider(geminiaudio.NewProvider(geminiaudio.Config{
+			APIKey:    key,
+			APIBase:   ttsCfg.Gemini.APIBase,
+			Voice:     ttsCfg.Gemini.Voice,
+			Model:     ttsCfg.Gemini.Model,
 			TimeoutMs: ttsCfg.TimeoutMs,
 		}))
 	}

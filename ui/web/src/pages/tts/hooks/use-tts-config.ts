@@ -18,6 +18,12 @@ export interface TtsProviderConfig {
   enabled?: boolean;
   rate?: string;
   group_id?: string;
+  /**
+   * Generic params blob (Phase C dual-write).
+   * Mirrors the tts.{provider}.params JSON stored in system_configs.
+   * Backend reads this with precedence over legacy flat keys.
+   */
+  params?: Record<string, unknown>;
 }
 
 export interface TtsConfig {
@@ -30,6 +36,7 @@ export interface TtsConfig {
   elevenlabs: TtsProviderConfig;
   edge: TtsProviderConfig;
   minimax: TtsProviderConfig;
+  gemini: TtsProviderConfig;
 }
 
 const DEFAULT_TTS: TtsConfig = {
@@ -42,6 +49,7 @@ const DEFAULT_TTS: TtsConfig = {
   elevenlabs: {},
   edge: {},
   minimax: {},
+  gemini: {},
 };
 
 export interface SynthesizeParams {

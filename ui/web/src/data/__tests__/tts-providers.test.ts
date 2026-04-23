@@ -1,10 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { TTS_PROVIDERS, getProviderDefinition, type TtsProviderId } from "../tts-providers";
+import {
+  TTS_PROVIDERS,
+  PROVIDER_MODEL_CATALOG,
+  getProviderDefinition,
+  type TtsProviderId,
+} from "../tts-providers";
 
-describe("TTS_PROVIDERS catalog", () => {
-  const ids: TtsProviderId[] = ["openai", "elevenlabs", "edge", "minimax"];
+describe("TTS_PROVIDERS catalog (reduced shape)", () => {
+  const ids: TtsProviderId[] = ["openai", "elevenlabs", "edge", "minimax", "gemini"];
 
-  it("has exactly 4 provider entries matching known IDs", () => {
+  it("has 5 provider entries matching known IDs", () => {
     expect(Object.keys(TTS_PROVIDERS).sort()).toEqual([...ids].sort());
   });
 
@@ -12,62 +17,14 @@ describe("TTS_PROVIDERS catalog", () => {
     expect(TTS_PROVIDERS[id].id).toBe(id);
   });
 
-  it("ElevenLabs is dynamic, others are not", () => {
-    expect(TTS_PROVIDERS.elevenlabs.dynamic).toBe(true);
-    expect(TTS_PROVIDERS.openai.dynamic).toBe(false);
-    expect(TTS_PROVIDERS.edge.dynamic).toBe(false);
-    expect(TTS_PROVIDERS.minimax.dynamic).toBe(false);
+  it.each(ids)("%s has non-empty title and desc", (id) => {
+    expect(TTS_PROVIDERS[id].title.length).toBeGreaterThan(0);
+    expect(TTS_PROVIDERS[id].desc.length).toBeGreaterThan(0);
   });
 
-  it.each(ids.filter((id) => TTS_PROVIDERS[id].models.length > 0))(
-    "%s.defaultModel is in its models list",
-    (id) => {
-      const def = TTS_PROVIDERS[id];
-      if (def.defaultModel) {
-        const modelValues = def.models.map((m) => m.value);
-        expect(modelValues).toContain(def.defaultModel);
-      }
-    },
-  );
-
-  it.each(ids.filter((id) => !TTS_PROVIDERS[id].dynamic))(
-    "%s.defaultVoice is in its voices list",
-    (id) => {
-      const def = TTS_PROVIDERS[id];
-      if (def.defaultVoice) {
-        const voiceValues = def.voices.map((v) => v.value);
-        expect(voiceValues).toContain(def.defaultVoice);
-      }
-    },
-  );
-
-  it("Edge requires no API key", () => {
-    expect(TTS_PROVIDERS.edge.requiresApiKey).toBe(false);
-  });
-
-  it("OpenAI and MiniMax require an API key", () => {
-    expect(TTS_PROVIDERS.openai.requiresApiKey).toBe(true);
-    expect(TTS_PROVIDERS.minimax.requiresApiKey).toBe(true);
-  });
-
-  it("ElevenLabs exposes all 4 backend-allowlisted models", () => {
-    const modelIds = TTS_PROVIDERS.elevenlabs.models.map((m) => m.value);
-    expect(modelIds).toContain("eleven_v3");
-    expect(modelIds).toContain("eleven_flash_v2_5");
-    expect(modelIds).toContain("eleven_multilingual_v2");
-    expect(modelIds).toContain("eleven_turbo_v2_5");
-    expect(modelIds).toHaveLength(4);
-  });
-
-  it("Edge has 20 hardcoded voices", () => {
-    expect(TTS_PROVIDERS.edge.voices).toHaveLength(20);
-  });
-
-  it("OpenAI models include the 3 standard model IDs", () => {
-    const ids = TTS_PROVIDERS.openai.models.map((m) => m.value);
-    expect(ids).toContain("gpt-4o-mini-tts");
-    expect(ids).toContain("tts-1");
-    expect(ids).toContain("tts-1-hd");
+  it.each(ids)("%s has a color string", (id) => {
+    expect(typeof TTS_PROVIDERS[id].color).toBe("string");
+    expect(TTS_PROVIDERS[id].color.length).toBeGreaterThan(0);
   });
 
   it("getProviderDefinition returns null for unknown id", () => {
@@ -77,5 +34,34 @@ describe("TTS_PROVIDERS catalog", () => {
 
   it("getProviderDefinition returns correct definition for known id", () => {
     expect(getProviderDefinition("openai")?.id).toBe("openai");
+  });
+});
+
+describe("PROVIDER_MODEL_CATALOG (static fallback)", () => {
+  it("ElevenLabs exposes all 4 backend-allowlisted models", () => {
+    const modelIds = PROVIDER_MODEL_CATALOG.elevenlabs.map((m) => m.value);
+    expect(modelIds).toContain("eleven_v3");
+    expect(modelIds).toContain("eleven_flash_v2_5");
+    expect(modelIds).toContain("eleven_multilingual_v2");
+    expect(modelIds).toContain("eleven_turbo_v2_5");
+    expect(modelIds).toHaveLength(4);
+  });
+
+  it("OpenAI models include the 3 standard model IDs", () => {
+    const modelIds = PROVIDER_MODEL_CATALOG.openai.map((m) => m.value);
+    expect(modelIds).toContain("gpt-4o-mini-tts");
+    expect(modelIds).toContain("tts-1");
+    expect(modelIds).toContain("tts-1-hd");
+  });
+
+  it("Edge has no models (voice-only provider)", () => {
+    expect(PROVIDER_MODEL_CATALOG.edge).toHaveLength(0);
+  });
+
+  it("MiniMax has at least 2 models", () => {
+    expect(PROVIDER_MODEL_CATALOG.minimax.length).toBeGreaterThanOrEqual(2);
+    const ids = PROVIDER_MODEL_CATALOG.minimax.map((m) => m.value);
+    expect(ids).toContain("speech-02-hd");
+    expect(ids).toContain("speech-02-turbo");
   });
 });
