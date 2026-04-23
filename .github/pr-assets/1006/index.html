@@ -40,23 +40,23 @@
 <button class="toggle" onclick="document.documentElement.classList.toggle('light')">○ Light</button>
 <div class="wrap">
   <h1>PR 1006 · Codex pool refactor + pool-aware create_image</h1>
-  <div class="sub">Closes #1001 and #1008. Captures: staging gateway on <code>claw</code>, master tenant, light theme, <code>openai-codex</code> provider configured as a 2-member <code>round_robin</code> pool.</div>
+  <div class="sub">Closes #1001 and #1008. Captures: staging gateway on <code>claw</code>, master tenant, light theme, <code>openai-codex</code> provider configured as a 2-member <code>round_robin</code> pool with <code>openai-codex-2</code> as a member.</div>
 
   <div class="grid3">
     <div class="card"><h3>What changed</h3><p>Chain entries pointing at a Codex OAuth pool now route through the pool's own strategy with internal failover. The outer chain only advances after the pool is fully exhausted.</p></div>
-    <div class="card"><h3>Why it matters</h3><p>Before: selecting a pool silently used a single backing account, ignoring the pool's grouping. After: pool membership drives routing inside the entry, chain-level fallback stays for cross-provider fallback.</p></div>
-    <div class="card"><h3>Review cue</h3><p>The read-only badge on the chain entry card proves the UI detects pool config. Backend failover is proven by 5 integration scenarios in <code>create_image_pool_chain_test.go</code>.</p></div>
+    <div class="card"><h3>Why it matters</h3><p>Before: users could accidentally select a pool member in the chain and bypass pool semantics. Now: the dropdown hides pool members and tags owners with an inline <code>Pool</code> chip — mirrors the Create Agent dropdown.</p></div>
+    <div class="card"><h3>Review cue</h3><p>The inline <code>Pool</code> chip next to <code>openai-codex</code> — and the absence of <code>openai-codex-2</code> from the list — proves the UX unification. Backend failover is proven by 5 integration scenarios in <code>create_image_pool_chain_test.go</code>.</p></div>
   </div>
 
   <div class="section">
-    <h2>1. Pool badge on chain entry card</h2>
-    <div class="note">Red callout box marks the new <code>Pool · Round-robin</code> badge rendered next to the provider name when the selected provider carries <code>settings.codex_pool</code> with extras. Badge hides for solo Codex and non-Codex providers.</div>
+    <h2>1. Pool-filtered Provider dropdown</h2>
+    <div class="note">Red callout marks the <code>openai-codex</code> option tagged with an inline <code>Pool</code> chip. <code>openai-codex-2</code> (a pool member) is no longer listed — pool routing is reached only by picking the owner, matching the existing Create Agent dropdown pattern.</div>
     <div class="shot">
       <div class="shot-header">
         <span class="label">Implemented</span>
-        <span class="state">Create Image — Provider Chain dialog, openai-codex (pool: round_robin + 1 extra)</span>
+        <span class="state">Create Image — Provider Chain dialog, Provider dropdown open</span>
       </div>
-      <img src="pool-badge-round-robin.png" alt="Pool badge rendered on chain entry card"/>
+      <img src="pool-dropdown-filtered.png" alt="Pool-filtered dropdown with inline Pool chip on owner"/>
     </div>
   </div>
 
@@ -67,7 +67,8 @@
 <span class="hl-good">go build -tags sqliteonly ./...          — ok (Desktop)</span>
 <span class="hl-good">go vet ./...                             — no issues</span>
 <span class="hl-good">go test ./internal/tools/... ./internal/providers/...   — 1599 passed</span>
-<span class="hl-good">Integration: 5 pool-chain scenarios × 5 runs under -race — 25/25 deterministic</span></pre>
+<span class="hl-good">Integration: 5 pool-chain scenarios × 5 runs under -race — 25/25 deterministic</span>
+<span class="hl-good">pnpm --dir ui/web tsc --noEmit           — no errors</span></pre>
   </div>
 </div>
 </body>
