@@ -26,7 +26,7 @@ interface StepAgentProps {
 
 export function StepAgent({ provider, model, onComplete, onBack, existingAgent }: StepAgentProps) {
   const { t } = useTranslation("setup");
-  const { createAgent, updateAgent, deleteAgent, resummonAgent } = useAgents();
+  const { createAgent, updateAgent, deleteAgent, resummonAgent, cancelSummonAgent } = useAgents();
   const agentPresets = useAgentPresets();
 
   const isEditing = !!existingAgent;
@@ -274,6 +274,7 @@ export function StepAgent({ provider, model, onComplete, onBack, existingAgent }
           agentName={createdAgent.name}
           onCompleted={handleSummoningComplete}
           onResummon={resummonAgent}
+          onCancel={cancelSummonAgent}
           hideClose
           onContinue={summoningOutcome === "success" ? handleContinue : undefined}
         />

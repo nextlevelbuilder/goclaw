@@ -85,7 +85,7 @@ func TestNewSessionResponse_RoundTrip(t *testing.T) {
 func TestPromptRequest_RoundTrip(t *testing.T) {
 	req := PromptRequest{
 		SessionID: "sess-1",
-		Content: []ContentBlock{
+		Prompt: []ContentBlock{
 			{Type: "text", Text: "hello"},
 			{Type: "image", Data: "base64data", MimeType: "image/png"},
 		},
@@ -94,14 +94,14 @@ func TestPromptRequest_RoundTrip(t *testing.T) {
 	if got.SessionID != "sess-1" {
 		t.Errorf("SessionID: got %q", got.SessionID)
 	}
-	if len(got.Content) != 2 {
-		t.Fatalf("expected 2 content blocks, got %d", len(got.Content))
+	if len(got.Prompt) != 2 {
+		t.Fatalf("expected 2 content blocks, got %d", len(got.Prompt))
 	}
-	if got.Content[0].Type != "text" || got.Content[0].Text != "hello" {
-		t.Errorf("content[0]: got type=%q text=%q", got.Content[0].Type, got.Content[0].Text)
+	if got.Prompt[0].Type != "text" || got.Prompt[0].Text != "hello" {
+		t.Errorf("content[0]: got type=%q text=%q", got.Prompt[0].Type, got.Prompt[0].Text)
 	}
-	if got.Content[1].Type != "image" || got.Content[1].Data != "base64data" {
-		t.Errorf("content[1]: got type=%q data=%q", got.Content[1].Type, got.Content[1].Data)
+	if got.Prompt[1].Type != "image" || got.Prompt[1].Data != "base64data" {
+		t.Errorf("content[1]: got type=%q data=%q", got.Prompt[1].Type, got.Prompt[1].Data)
 	}
 }
 

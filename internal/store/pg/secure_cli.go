@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -40,6 +41,10 @@ func (s *PGSecureCLIStore) Create(ctx context.Context, b *store.SecureCLIBinary)
 	if b.ID == uuid.Nil {
 		b.ID = store.GenNewID()
 	}
+
+	// Normalize binary_name to lowercase so IsRegisteredBinary (which lowercases
+	// the candidate) can match. Admin entering "Gh" becomes "gh".
+	b.BinaryName = strings.ToLower(strings.TrimSpace(b.BinaryName))
 
 	// Encrypt env if provided
 	var envBytes []byte
@@ -180,6 +185,13 @@ func (s *PGSecureCLIStore) Update(ctx context.Context, id uuid.UUID, updates map
 	for k := range updates {
 		if !secureCLIAllowedFields[k] {
 			delete(updates, k)
+		}
+	}
+
+	// Normalize binary_name to lowercase if updated (parity with Create).
+	if nameVal, ok := updates["binary_name"]; ok {
+		if nameStr, isStr := nameVal.(string); isStr {
+			updates["binary_name"] = strings.ToLower(strings.TrimSpace(nameStr))
 		}
 	}
 
@@ -406,6 +418,35 @@ func (s *PGSecureCLIStore) ListEnabled(ctx context.Context) ([]store.SecureCLIBi
 		return nil, err
 	}
 	return s.scanRows(rows)
+}
+
+// IsRegisteredBinary reports whether a binary requires a grant (is_global=false)
+// and is enabled for the current tenant. See interface godoc for rationale.
+func (s *PGSecureCLIStore) IsRegisteredBinary(ctx context.Context, binaryName string) (bool, error) {
+	name := strings.ToLower(strings.TrimSpace(binaryName))
+	if name == "" {
+		return false, nil
+	}
+	query := `SELECT EXISTS(
+		SELECT 1 FROM secure_cli_binaries
+		WHERE LOWER(binary_name) = $1
+		  AND enabled = true
+		  AND is_global = false`
+	args := []any{name}
+	if !store.IsCrossTenant(ctx) {
+		tid := store.TenantIDFromContext(ctx)
+		if tid == uuid.Nil {
+			return false, nil
+		}
+		query += ` AND tenant_id = $2`
+		args = append(args, tid)
+	}
+	query += `)`
+	var exists bool
+	if err := s.db.QueryRowContext(ctx, query, args...).Scan(&exists); err != nil {
+		return false, err
+	}
+	return exists, nil
 }
 
 // ListForAgent returns all CLIs accessible by an agent (global + granted),

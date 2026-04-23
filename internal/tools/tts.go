@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tts"
 )
@@ -238,7 +239,22 @@ func (t *TtsTool) Execute(ctx context.Context, args map[string]any) *Result {
 	}
 
 	forLLM := fmt.Sprintf("%sMEDIA:%s", voiceTag, audioPath)
-	r := &Result{ForLLM: forLLM}
+	// Set Result.Media explicitly (matching create_audio) so the agent loop's
+	// media collector uses the authoritative path even when the ForLLM
+	// MEDIA: prefix is reshaped by a provider bridge (e.g. claude_cli MCP).
+	// Prefer the provider-supplied MimeType ("audio/mpeg", "audio/ogg") over
+	// "audio/"+Extension — the latter yields the non-standard "audio/mp3".
+	mimeType := result.MimeType
+	if mimeType == "" {
+		mimeType = "audio/" + result.Extension
+	}
+	r := &Result{
+		ForLLM: forLLM,
+		Media: []bus.MediaFile{{
+			Path:     audioPath,
+			MimeType: mimeType,
+		}},
+	}
 	r.Deliverable = fmt.Sprintf("[Generated audio: %s]\nText: %s", filepath.Base(audioPath), text)
 	if t.vaultIntc != nil {
 		mimeType := "audio/" + result.Extension

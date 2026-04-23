@@ -40,19 +40,34 @@ const FALLBACK_TIMEZONES: string[] = [
   "Pacific/Auckland",
 ];
 
+/** Resolve to canonical IANA name (drops deprecated aliases like Asia/Saigon → Asia/Ho_Chi_Minh). */
+function canonicalizeTimezone(tz: string): string | null {
+  try {
+    return new Intl.DateTimeFormat("en-US", { timeZone: tz }).resolvedOptions().timeZone;
+  } catch {
+    return null;
+  }
+}
+
 /** All IANA timezones with dynamic UTC offsets, sorted by offset then name. */
 export function getAllIanaTimezones(): TzOption[] {
   if (_cachedTimezones) return _cachedTimezones;
   let tzNames: string[];
   try {
-     
+
     tzNames = (Intl as any).supportedValuesOf("timeZone") as string[];
   } catch {
     tzNames = FALLBACK_TIMEZONES;
   }
   // Chrome may omit "UTC" from the list
   if (!tzNames.includes("UTC")) tzNames = ["UTC", ...tzNames];
-  const entries = tzNames.map((tz: string) => {
+  // Canonicalize + dedupe so deprecated aliases (e.g. Asia/Saigon) collapse into their canonical form.
+  const canonical = new Set<string>();
+  for (const tz of tzNames) {
+    const c = canonicalizeTimezone(tz);
+    if (c) canonical.add(c);
+  }
+  const entries = Array.from(canonical).map((tz: string) => {
     const offset = formatUtcOffset(tz);
     return { value: tz, label: `${tz} (${offset})`, _offset: parseOffsetMinutes(offset) };
   });

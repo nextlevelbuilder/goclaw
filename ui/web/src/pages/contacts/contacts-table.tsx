@@ -95,8 +95,12 @@ export function ContactsTable({
               </td>
               <td className="px-3 py-2.5">
                 <Badge
-                  variant={c.contact_type === "user" ? "default" : c.contact_type === "topic" ? "outline" : "secondary"}
-                  className="text-xs-plus"
+                  variant={c.contact_type === "user" ? "outline" : c.contact_type === "topic" ? "outline" : "secondary"}
+                  className={
+                    c.contact_type === "user"
+                      ? "text-xs-plus bg-primary/10 text-primary border-primary/30 dark:bg-primary/20 dark:text-primary-foreground dark:border-primary/40"
+                      : "text-xs-plus"
+                  }
                 >
                   {c.contact_type === "user" ? t("types.user") : c.contact_type === "topic" ? t("types.topic", "Topic") : t("types.group")}
                 </Badge>

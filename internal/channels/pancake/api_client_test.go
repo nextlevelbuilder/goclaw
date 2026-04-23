@@ -210,6 +210,62 @@ func TestConfigParsing_CommentReplyOptions(t *testing.T) {
 	}
 }
 
+func TestPancakeConfig_AutoReactOptionsRoundtrip(t *testing.T) {
+	src := `{
+	  "page_id": "123",
+	  "platform": "facebook",
+	  "features": {"auto_react": true},
+	  "auto_react_options": {
+	    "allow_post_ids": ["post-1", "post-2"],
+	    "deny_post_ids": ["post-3"],
+	    "allow_user_ids": ["user-a"],
+	    "deny_user_ids": ["user-b", "user-c"]
+	  }
+	}`
+	var cfg pancakeInstanceConfig
+	if err := json.Unmarshal([]byte(src), &cfg); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if cfg.AutoReactOptions == nil {
+		t.Fatal("AutoReactOptions should be non-nil when JSON has auto_react_options")
+	}
+	if len(cfg.AutoReactOptions.AllowPostIDs) != 2 {
+		t.Errorf("AllowPostIDs len = %d, want 2", len(cfg.AutoReactOptions.AllowPostIDs))
+	}
+	if cfg.AutoReactOptions.DenyPostIDs[0] != "post-3" {
+		t.Errorf("DenyPostIDs[0] = %q, want post-3", cfg.AutoReactOptions.DenyPostIDs[0])
+	}
+	if len(cfg.AutoReactOptions.DenyUserIDs) != 2 {
+		t.Errorf("DenyUserIDs len = %d, want 2", len(cfg.AutoReactOptions.DenyUserIDs))
+	}
+	if cfg.AutoReactOptions.AllowUserIDs[0] != "user-a" {
+		t.Errorf("AllowUserIDs[0] = %q, want user-a", cfg.AutoReactOptions.AllowUserIDs[0])
+	}
+}
+
+func TestPancakeConfig_AutoReactOptionsOmitempty(t *testing.T) {
+	var cfg pancakeInstanceConfig
+	cfg.PageID = "123"
+	b, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(b), "auto_react_options") {
+		t.Errorf("empty AutoReactOptions should be omitted, got: %s", b)
+	}
+}
+
+func TestPancakeConfig_AutoReactOptionsDefaultsEmpty(t *testing.T) {
+	src := `{"page_id": "123"}`
+	var cfg pancakeInstanceConfig
+	if err := json.Unmarshal([]byte(src), &cfg); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if cfg.AutoReactOptions != nil {
+		t.Errorf("AutoReactOptions should be nil when absent, got %+v", cfg.AutoReactOptions)
+	}
+}
+
 func TestConfigParsing_Defaults(t *testing.T) {
 	raw := `{"page_id":"123","features":{"inbox_reply":true}}`
 

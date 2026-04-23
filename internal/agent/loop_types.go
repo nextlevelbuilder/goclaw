@@ -277,6 +277,7 @@ type AgentEvent struct {
 	ParentAgentID string `json:"parentAgentId,omitempty"`
 
 	// Routing context (helps WS clients filter by user/channel/session)
+	SenderID   string `json:"senderId,omitempty"` // original acting user; differs from UserID in group chats
 	UserID     string `json:"userId,omitempty"`
 	Channel    string `json:"channel,omitempty"`
 	ChatID     string `json:"chatId,omitempty"`

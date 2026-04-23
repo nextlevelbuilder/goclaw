@@ -26,7 +26,10 @@
     "fileLabelSOUL": "Core personality",
     "fileLabelIDENTITY": "Identity & knowledge",
     "agentReady": "{{name}} is ready!",
-    "retrying": "Retrying..."
+    "retrying": "Retrying...",
+    "takingTooLong": "Taking too long?",
+    "cancel": "Cancel",
+    "cancelling": "Cancelling..."
   },
   "settings": {
     "title": "Settings",

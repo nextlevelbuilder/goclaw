@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, type KeyboardEvent } from "react";
+import { useState, useRef, useCallback, useLayoutEffect, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Send, Square, Paperclip, X, Mic } from "lucide-react";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
@@ -75,6 +75,12 @@ export function ChatInput({ onSend, onAbort, isBusy, disabled, files, onFilesCha
     el.style.height = Math.min(el.scrollHeight, 200) + "px";
   }, []);
 
+  // Sync textarea height on mount and whenever value changes externally (e.g. after send).
+  // Prevents browser's default rows=1 height from leaving a gap above the icons.
+  useLayoutEffect(() => {
+    handleInput();
+  }, [value, handleInput]);
+
   const handleFileSelect = useCallback(() => {
     fileInputRef.current?.click();
   }, []);
@@ -127,7 +133,8 @@ export function ChatInput({ onSend, onAbort, isBusy, disabled, files, onFilesCha
         className="hidden"
       />
 
-      {/* Input container — attach + textarea + send/stop inside one rounded box */}
+      {/* Input container — attach + textarea + send/stop inside one rounded box.
+          items-end aligns icons with bottom of textarea when multi-line; single-line stays tight because textarea auto-sizes via useLayoutEffect above. */}
       <div className="flex items-end rounded-xl border bg-background/95 backdrop-blur-sm shadow-sm transition-colors focus-within:ring-1 focus-within:ring-ring">
         {/* Attach button inside input */}
         <button
@@ -135,7 +142,7 @@ export function ChatInput({ onSend, onAbort, isBusy, disabled, files, onFilesCha
           onClick={handleFileSelect}
           disabled={disabled || isBusy || voiceRecorder.isRecording}
           title={t("attachFile")}
-          className="shrink-0 p-3 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40 cursor-pointer"
+          className="shrink-0 py-3 pl-3 pr-1 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40 cursor-pointer"
         >
           <Paperclip className="h-4 w-4" />
         </button>
@@ -147,7 +154,7 @@ export function ChatInput({ onSend, onAbort, isBusy, disabled, files, onFilesCha
             onClick={handleVoiceToggle}
             disabled={disabled || isBusy}
             title={t("recordVoice")}
-            className="shrink-0 p-3 text-muted-foreground hover:text-foreground transition-colors cursor-pointer disabled:opacity-40"
+            className="shrink-0 py-3 pl-1 pr-2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer disabled:opacity-40"
           >
             <Mic className="h-4 w-4" />
           </button>

@@ -40,4 +40,24 @@ describe("pancake configSchema", () => {
     expect(values).not.toContain("whatsapp");
     expect(values).not.toContain("zalo_oa");
   });
+
+  it("has features.auto_react boolean toggle gated on platform=facebook", () => {
+    const f = pancakeConfig.find((x) => x.key === "features.auto_react");
+    expect(f).toBeDefined();
+    expect(f!.type).toBe("boolean");
+    expect(f!.defaultValue).toBe(false);
+    expect(f!.showWhen).toEqual({ key: "platform", value: "facebook" });
+  });
+
+  it.each([
+    "auto_react_options.allow_post_ids",
+    "auto_react_options.deny_post_ids",
+    "auto_react_options.allow_user_ids",
+    "auto_react_options.deny_user_ids",
+  ])("has %s as tags field gated by features.auto_react", (key) => {
+    const f = pancakeConfig.find((x) => x.key === key);
+    expect(f).toBeDefined();
+    expect(f!.type).toBe("tags");
+    expect(f!.showWhen).toEqual({ key: "features.auto_react", value: "true" });
+  });
 });

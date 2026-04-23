@@ -98,6 +98,7 @@ func resolveTeamTaskOutcome(
 	taskChannel := meta.Channel
 	taskChatID := meta.ChatID
 	taskPeerKind := meta.PeerKind
+	var taskLocalKey string
 
 	// Enrich with live task data if available.
 	if currentTask != nil {
@@ -113,9 +114,15 @@ func resolveTeamTaskOutcome(
 		if currentTask.ChatID != "" {
 			taskChatID = currentTask.ChatID
 		}
-		if taskPeerKind == "" && currentTask.Metadata != nil {
-			if pk, ok := currentTask.Metadata[tools.TaskMetaPeerKind].(string); ok && pk != "" {
-				taskPeerKind = pk
+		if currentTask.Metadata != nil {
+			if taskPeerKind == "" {
+				if pk, ok := currentTask.Metadata[tools.TaskMetaPeerKind].(string); ok && pk != "" {
+					taskPeerKind = pk
+				}
+			}
+			// local_key is required for forum topic routing (e.g. Telegram supergroup threads).
+			if lk, ok := currentTask.Metadata[tools.TaskMetaLocalKey].(string); ok {
+				taskLocalKey = lk
 			}
 		}
 	}
@@ -137,6 +144,7 @@ func resolveTeamTaskOutcome(
 				tools.WithChannel(taskChannel),
 				tools.WithChatID(taskChatID),
 				tools.WithPeerKind(taskPeerKind),
+				tools.WithLocalKey(taskLocalKey),
 				tools.WithTimestamp(now),
 			))
 		}
@@ -171,6 +179,7 @@ func resolveTeamTaskOutcome(
 				tools.WithChannel(taskChannel),
 				tools.WithChatID(taskChatID),
 				tools.WithPeerKind(taskPeerKind),
+				tools.WithLocalKey(taskLocalKey),
 				tools.WithTimestamp(now),
 			))
 		}
@@ -205,6 +214,7 @@ func resolveTeamTaskOutcome(
 				tools.WithChannel(taskChannel),
 				tools.WithChatID(taskChatID),
 				tools.WithPeerKind(taskPeerKind),
+				tools.WithLocalKey(taskLocalKey),
 				tools.WithTimestamp(now),
 			))
 		}

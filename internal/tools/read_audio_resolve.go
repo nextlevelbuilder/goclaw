@@ -95,6 +95,7 @@ func (t *ReadAudioTool) callProvider(ctx context.Context, cp credentialProvider,
 			return []byte(resp.Content), resp.Usage, nil
 		}
 
+
 		// OpenAI: route based on model type.
 		if ptype == "openai" {
 			if isTranscriptionModel(model) {

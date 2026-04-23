@@ -84,6 +84,7 @@ func (n noopAgentCRUD) Update(_ context.Context, _ uuid.UUID, _ map[string]any) 
 func (n noopAgentCRUD) Delete(_ context.Context, _ uuid.UUID) error                    { return nil }
 func (n noopAgentCRUD) List(_ context.Context, _ string) ([]store.AgentData, error)    { return nil, nil }
 func (n noopAgentCRUD) GetDefault(_ context.Context) (*store.AgentData, error)         { return nil, nil }
+func (n noopAgentCRUD) ResetStuckSummoning(_ context.Context) (int64, error)            { return 0, nil }
 
 // --- helpers ---
 

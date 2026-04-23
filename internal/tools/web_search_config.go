@@ -3,69 +3,27 @@ package tools
 import (
 	"slices"
 	"strings"
-	"time"
-
-	"github.com/nextlevelbuilder/goclaw/internal/config"
 )
 
-// WebSearchConfig holds configuration for the web search tool.
-type WebSearchConfig struct {
-	ProviderOrder    []string
-	ExaAPIKey        string
-	ExaEnabled       bool
-	ExaMaxResults    int
-	TavilyAPIKey     string
-	TavilyEnabled    bool
-	TavilyMaxResults int
-	BraveAPIKey      string
-	BraveEnabled     bool
-	BraveMaxResults  int
-	DDGEnabled       bool
-	DDGMaxResults    int
-	CacheTTL         time.Duration
-}
-
-// WebSearchConfigFromConfig creates a WebSearchConfig from the global config.
-func WebSearchConfigFromConfig(cfg *config.Config) WebSearchConfig {
-	return WebSearchConfig{
-		ProviderOrder:    cfg.Tools.Web.ProviderOrder,
-		ExaEnabled:       cfg.Tools.Web.Exa.Enabled,
-		ExaAPIKey:        cfg.Tools.Web.Exa.APIKey,
-		ExaMaxResults:    cfg.Tools.Web.Exa.MaxResults,
-		TavilyEnabled:    cfg.Tools.Web.Tavily.Enabled,
-		TavilyAPIKey:     cfg.Tools.Web.Tavily.APIKey,
-		TavilyMaxResults: cfg.Tools.Web.Tavily.MaxResults,
-		BraveEnabled:     cfg.Tools.Web.Brave.Enabled,
-		BraveAPIKey:      cfg.Tools.Web.Brave.APIKey,
-		BraveMaxResults:  cfg.Tools.Web.Brave.MaxResults,
-		DDGEnabled:       true,
-		DDGMaxResults:    cfg.Tools.Web.DuckDuckGo.MaxResults,
+// buildProviderByName returns the SearchProvider for a known name.
+// Returns nil for unknown names. DDG ignores apiKey (not required).
+// maxResults <= 0 falls back to defaultSearchCount.
+func buildProviderByName(name, apiKey string, maxResults int) SearchProvider {
+	if maxResults <= 0 {
+		maxResults = defaultSearchCount
 	}
-}
-
-func buildSearchProviders(cfg WebSearchConfig) []SearchProvider {
-	var providers []SearchProvider
-	for _, providerID := range NormalizeWebSearchProviderOrder(cfg.ProviderOrder) {
-		switch providerID {
-		case searchProviderExa:
-			if cfg.ExaEnabled && cfg.ExaAPIKey != "" {
-				providers = append(providers, newExaSearchProvider(cfg.ExaAPIKey, cfg.ExaMaxResults))
-			}
-		case searchProviderTavily:
-			if cfg.TavilyEnabled && cfg.TavilyAPIKey != "" {
-				providers = append(providers, newTavilySearchProvider(cfg.TavilyAPIKey, cfg.TavilyMaxResults))
-			}
-		case searchProviderBrave:
-			if cfg.BraveEnabled && cfg.BraveAPIKey != "" {
-				providers = append(providers, newBraveSearchProvider(cfg.BraveAPIKey, cfg.BraveMaxResults))
-			}
-		case searchProviderDuckDuckGo:
-			if cfg.DDGEnabled {
-				providers = append(providers, newDuckDuckGoSearchProvider(cfg.DDGMaxResults))
-			}
-		}
+	switch name {
+	case searchProviderExa:
+		return newExaSearchProvider(apiKey, maxResults)
+	case searchProviderTavily:
+		return newTavilySearchProvider(apiKey, maxResults)
+	case searchProviderBrave:
+		return newBraveSearchProvider(apiKey, maxResults)
+	case searchProviderDuckDuckGo:
+		return newDuckDuckGoSearchProvider(maxResults)
+	default:
+		return nil
 	}
-	return providers
 }
 
 // NormalizeWebSearchProviderOrder normalizes user-specified provider order.

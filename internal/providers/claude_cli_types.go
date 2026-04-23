@@ -29,6 +29,8 @@ type cliStreamEvent struct {
 	Model   string        `json:"model,omitempty"`
 	CostUSD float64       `json:"cost_usd,omitempty"`
 	Usage   *cliUsage     `json:"usage,omitempty"`
+	IsError bool          `json:"is_error,omitempty"` // true when subtype="error"
+	Error   string        `json:"error,omitempty"`    // error message (may be set when result is empty)
 }
 
 // cliStreamMsg wraps content blocks inside an assistant message event.

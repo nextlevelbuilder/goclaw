@@ -56,7 +56,7 @@ func (w *episodicWorker) Handle(ctx context.Context, event eventbus.DomainEvent)
 
 	// Build source_id for idempotency
 	sourceID := fmt.Sprintf("%s:%d", payload.SessionKey, payload.CompactionCount)
-	exists, err := w.store.ExistsBySourceID(ctx, event.AgentID, event.UserID, sourceID)
+	exists, err := w.store.ExistsBySourceID(ctx, agentUUID.String(), event.UserID, sourceID)
 	if err != nil {
 		return fmt.Errorf("episodic: check source_id: %w", err)
 	}

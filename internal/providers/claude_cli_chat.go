@@ -45,7 +45,8 @@ func (p *ClaudeCLIProvider) Chat(ctx context.Context, req ChatRequest) (*ChatRes
 	if len(images) > 0 {
 		outputFmt = "stream-json"
 	}
-	args := p.buildArgs(model, workDir, mcpPath, cliSessionID, outputFmt, len(images) > 0, disableTools)
+	effortLevel := extractStringOpt(req.Options, OptThinkingLevel)
+	args := p.buildArgs(model, workDir, mcpPath, cliSessionID, outputFmt, len(images) > 0, disableTools, effortLevel)
 
 	var stdin *bytes.Reader
 	if len(images) > 0 {
@@ -57,6 +58,10 @@ func (p *ClaudeCLIProvider) Chat(ctx context.Context, req ChatRequest) (*ChatRes
 	cmd := exec.CommandContext(ctx, p.cliPath, args...)
 	cmd.Dir = workDir
 	cmd.Env = filterCLIEnv(os.Environ())
+	if effortLevel != "" && effortLevel != "off" {
+		// Explicit --effort flag takes precedence; drop env to avoid ambiguity.
+		cmd.Env = removeEnvKey(cmd.Env, "CLAUDE_CODE_EFFORT_LEVEL")
+	}
 	if stdin != nil {
 		cmd.Stdin = stdin
 	}
@@ -102,7 +107,8 @@ func (p *ClaudeCLIProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 	disableTools := extractBoolOpt(req.Options, OptDisableTools)
 	bc := bridgeContextFromOpts(req.Options)
 	mcpPath := p.resolveMCPConfigPath(ctx, sessionKey, bc)
-	args := p.buildArgs(model, workDir, mcpPath, cliSessionID, "stream-json", len(images) > 0, disableTools)
+	effortLevel := extractStringOpt(req.Options, OptThinkingLevel)
+	args := p.buildArgs(model, workDir, mcpPath, cliSessionID, "stream-json", len(images) > 0, disableTools, effortLevel)
 
 	var stdin *bytes.Reader
 	if len(images) > 0 {
@@ -115,6 +121,9 @@ func (p *ClaudeCLIProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 	cmd.WaitDelay = 5 * time.Second // force-close pipes if process lingers after kill
 	cmd.Dir = workDir
 	cmd.Env = filterCLIEnv(os.Environ())
+	if effortLevel != "" && effortLevel != "off" {
+		cmd.Env = removeEnvKey(cmd.Env, "CLAUDE_CODE_EFFORT_LEVEL")
+	}
 	if stdin != nil {
 		cmd.Stdin = stdin
 	}
@@ -150,6 +159,7 @@ func (p *ClaudeCLIProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 
 	var finalResp ChatResponse
 	var contentBuf strings.Builder
+	var streamErrMsg string // error message from stream-json result event
 
 	for scanner.Scan() {
 		if ctx.Err() != nil {
@@ -192,8 +202,14 @@ func (p *ClaudeCLIProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 				finalResp.Content = contentBuf.String()
 			}
 			finalResp.FinishReason = "stop"
-			if ev.Subtype == "error" {
+			if ev.Subtype == "error" || ev.IsError {
 				finalResp.FinishReason = "error"
+				// Prefer ev.Error (result may be empty for usage/rate limit errors).
+				if ev.Error != "" {
+					streamErrMsg = ev.Error
+				} else if ev.Result != "" {
+					streamErrMsg = ev.Result
+				}
 			}
 			if ev.Usage != nil {
 				finalResp.Usage = &Usage{
@@ -223,7 +239,16 @@ func (p *ClaudeCLIProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 		if finalResp.Content != "" {
 			return &finalResp, nil
 		}
-		return nil, fmt.Errorf("claude-cli: %w (stderr: %s)", err, stderrBuf.String())
+		stderrStr := strings.TrimSpace(stderrBuf.String())
+		if stderrStr == "" && finalResp.FinishReason == "error" {
+			// claude-cli communicates API errors via stream-json stdout, not stderr.
+			if streamErrMsg != "" {
+				stderrStr = "stream: " + streamErrMsg
+			} else {
+				stderrStr = "stream error (no message)"
+			}
+		}
+		return nil, fmt.Errorf("claude-cli: %w (stderr: %s)", err, stderrStr)
 	}
 	if debugFile != nil && stderrBuf.Len() > 0 {
 		fmt.Fprintf(debugFile, "\n=== STDERR:\n%s\n", stderrBuf.String())

@@ -28,6 +28,7 @@ func (l *Loop) pipelineCallbacks(req *RunRequest, bridgeRS *runState) pipelineCa
 		event.TeamID = req.TeamID
 		event.TeamTaskID = req.TeamTaskID
 		event.ParentAgentID = req.ParentAgentID
+		event.SenderID = req.SenderID
 		event.UserID = req.UserID
 		event.Channel = req.Channel
 		event.ChatID = req.ChatID
@@ -128,7 +129,7 @@ func (l *Loop) makeBuildMessages() func(ctx context.Context, input *pipeline.Run
 		msgs, _ := l.buildMessages(ctx, history, summary,
 			input.Message, input.ExtraSystemPrompt,
 			input.SessionKey, input.Channel, input.ChannelType,
-			input.ChatTitle, input.PeerKind, input.UserID,
+			input.ChatTitle, input.ChatID, input.PeerKind, input.UserID,
 			input.HistoryLimit, input.SkillFilter, input.LightContext)
 		return msgs, nil
 	}
@@ -427,4 +428,3 @@ func (l *Loop) makeBootstrapCleanup() func(ctx context.Context, state *pipeline.
 		return l.bootstrapCleanup(ctx, l.agentUUID, state.Input.UserID)
 	}
 }
-

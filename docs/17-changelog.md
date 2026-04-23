@@ -4,6 +4,65 @@ All notable changes to GoClaw Gateway are documented here. Format follows [Keep 
 
 ---
 
+### web_search now tenant-scoped only (2026-04-18)
+
+Completes issue #952: moved `web_search` configuration to tenant-exclusive settings. Global `config.Tools.Web.*` path in `config.json5` is no longer supported. All configuration is now per-tenant via `/tools/builtin/web_search` UI or `/v1/tools/builtin/web_search/tenant-config` HTTP API.
+
+#### Breaking
+
+- `config.json5` path `tools.web.*` removed (no longer parsed). Migration hook auto-migrates inline keys to `config_secrets` on startup.
+- Builtin tool tenant config is tenant-scoped; per-agent overrides reserved for future.
+
+#### Non-breaking
+
+- DuckDuckGo remains always-on as last-resort fallback (free, no API key required)
+- Existing secrets auto-migrated from legacy `builtin_tool_tenant_configs.settings` JSON blobs to encrypted `config_secrets` rows (idempotent hook 055)
+- Tenant isolation verified: two tenants with different Brave/Exa keys get independent chains with no cross-tenant leakage
+
+---
+
+### Pancake auto-react allow/deny scope filter (2026-04-17)
+
+Extends the existing Facebook comment auto-react (like) feature with per-channel scope control.
+
+#### Added
+
+- `pancakeInstanceConfig.AutoReactOptions` (pointer type) in `internal/channels/pancake/types.go` — `allow_post_ids`, `deny_post_ids`, `allow_user_ids`, `deny_user_ids` string slices. Nil = no filter (react all).
+- `filterAutoReact()` + `containsString()` helpers in `internal/channels/pancake/comment_handler.go`. Pure function; deny lists override allow lists; whitespace-trimmed string equality.
+- Rollout-phase `slog.Info("pancake: auto-react filtered by allow/deny list")` fires when a gate-passing comment gets filtered (downgrade to Debug after ~2 weeks).
+- UI: `features.auto_react` toggle surface fix (previously required raw JSON edit) + 4 tags fields in `ui/web/src/pages/channels/channel-schemas.ts`, gated on `platform=facebook` + `features.auto_react=true`.
+
+#### Behaviour
+
+- Zero-config (existing channels) = no scope filter = existing react-all behaviour. Backward compatible.
+- Deny list entry with matching post/user ID → skip react. Empty allow list = no allow filter.
+
+---
+
+### Secure CLI grant enforcement — registered binaries now hard-deny ungranted exec (2026-04-17)
+
+Closes a credential-scope bypass: an agent with no `secure_cli_agent_grants` row for a registered binary could still invoke it via shell fallthrough (`gh ...`, `sh -c 'gh ...'`) and pick up inherited env (`$GH_TOKEN`) or on-disk OAuth state (`~/.config/gh`). Registration is now an authorization boundary, not only a credential-injection hint.
+
+#### Security
+
+- **Shell gate (`internal/tools/shell.go`):** new enforcement branch runs after command normalization and before exec approval. Queries `SecureCLIStore.IsRegisteredBinary` per candidate; registered-but-ungranted binaries return `Binary %q requires a secure CLI grant. Ask admin to grant access to this agent.` Case-insensitive match (`filepath.Base(strings.ToLower(name))`) — macOS APFS safe.
+- **Wrapper unwrap (depth 3):** strips leading `sh -c / bash -c / zsh -c / dash -c`, `env K=V ...`, `nohup`, `stdbuf`, `timeout ...` before the check, so `sh -c 'gh api ...'` still denies. Nesting beyond 3 is rejected as adversarial.
+- **Fail-CLOSED:** lookup errors (DB down, 2s timeout) deny exec with a retry message, never fall through to host exec. New log events: `security.credentialed_binary_denied`, `security.credentialed_binary_gate_error`, `security.credentialed_binary_wrapper_too_deep`.
+- **Env scrubbing on fall-through (`internal/tools/env_scrub.go`):** child-process env is stripped of credential keys before spawn — static deny list (`GH_TOKEN`, `AWS_SECRET_ACCESS_KEY`, `OPENAI_API_KEY`, …) plus dynamic keys collected from every registered binary of the tenant. `HOME`, `PATH`, `TERM`, `LANG`, `USER`, `TZ` preserved. Prevents a non-`gh` command from inheriting `$GH_TOKEN`.
+- **Subagent wiring (`cmd/gateway_agents.go`):** subagent `ExecTool` registrations now receive the same `SecureCLIStore` via `buildSubagentToolsRegistry`. Parent agent can no longer bypass the gate by delegating the exec to a spawned child.
+- **`store.SecureCLIStore.IsRegisteredBinary`:** new method on both PG (`internal/store/pg/secure_cli.go`) and SQLite (`internal/store/sqlitestore/secure-cli.go`) backends. Scoped to tenant, returns case-insensitive match.
+
+#### Affected editions
+
+- **Standard (PG):** full gate.
+- **Lite (desktop/SQLite):** same gate via SQLite-backed `SecureCLIStore` — build-tag `sqliteonly` verified.
+
+#### Migration
+
+None. Existing binaries default `is_global=true` (no grant required) so current deployments are unaffected. To restrict a binary, set `is_global=false` and insert `secure_cli_agent_grants` rows per agent.
+
+---
+
 ### ACTOR vs SCOPE — #915 group permission fix + propagation (2026-04-16)
 
 Resolves Issue #915 (Telegram group `write_file` permission denied after `/addwriter`) and closes an adjacent silent-privilege-bypass discovered during the audit.

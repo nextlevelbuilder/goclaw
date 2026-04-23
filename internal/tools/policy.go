@@ -27,7 +27,7 @@ var builtinToolGroups = map[string][]string{
 		"read_file", "write_file", "list_files", "edit", "exec",
 		"web_search", "web_fetch", "browser",
 		"memory_search", "memory_get", "memory_expand",
-		"knowledge_graph_search", "vault_search",
+		"knowledge_graph_search", "vault_search", "vault_read",
 		"sessions_list", "sessions_history", "sessions_send", "spawn", "session_status",
 		"delegate",
 		"cron", "datetime", "heartbeat",

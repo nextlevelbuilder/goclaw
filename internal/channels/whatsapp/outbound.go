@@ -38,7 +38,7 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 			// Send audio as voice message
 			audioData, readErr := os.ReadFile(ttsResult.AudioPath)
 			if readErr == nil {
-				waMsg, buildErr := c.buildMediaMessage(audioData, ttsResult.AudioMime, "")
+				waMsg, buildErr := c.buildMediaMessage(audioData, ttsResult.AudioMime, "", "")
 				if buildErr == nil {
 					// Mark as voice message (PTT) for WhatsApp
 					if waMsg.AudioMessage != nil {

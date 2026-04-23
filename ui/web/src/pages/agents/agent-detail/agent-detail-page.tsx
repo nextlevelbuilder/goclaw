@@ -35,7 +35,7 @@ export function AgentDetailPage({ agentId, onBack }: AgentDetailPageProps) {
   const navigate = useNavigate();
   const { agent, files, loading, updateAgent, getFile, setFile, regenerateAgent, resummonAgent, refresh } =
     useAgentDetail(agentId);
-  const { deleteAgent: deleteAgentById } = useAgents();
+  const { deleteAgent: deleteAgentById, cancelSummonAgent } = useAgents();
   const hb = useAgentHeartbeat(agentId);
   const [summoningOpen, setSummoningOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("agent");
@@ -161,6 +161,7 @@ export function AgentDetailPage({ agentId, onBack }: AgentDetailPageProps) {
         agentName={title}
         onCompleted={() => {}}
         onResummon={async () => { await resummonAgent(); }}
+        onCancel={cancelSummonAgent}
       />
 
       {heartbeatOpen && (

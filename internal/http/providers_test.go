@@ -6,6 +6,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -55,6 +59,159 @@ func TestProvidersHandlerRegisterInMemoryAppliesCodexPoolDefaults(t *testing.T) 
 	if len(defaults.ExtraProviderNames) != 1 || defaults.ExtraProviderNames[0] != "codex-work" {
 		t.Fatalf("ExtraProviderNames = %#v, want [\"codex-work\"]", defaults.ExtraProviderNames)
 	}
+}
+
+// TestProvidersHandlerRegisterInMemoryUsesDBNameForAnthropic guards the onboarding verify flow:
+// when an Anthropic provider is created via HTTP with a custom name, the in-memory registry
+// must key the provider by that DB name — not the hardcoded "anthropic" default. Otherwise
+// handleVerifyProvider's GetForTenant(p.TenantID, p.Name) lookup fails with "provider not registered".
+// See commit 7fcf0327 for the matching fix on the startup path (cmd/gateway_providers.go).
+func TestProvidersHandlerRegisterInMemoryUsesDBNameForAnthropic(t *testing.T) {
+	providerReg := providers.NewRegistry(nil)
+	handler := NewProvidersHandler(newMockProviderStore(), newMockSecretsStore(), providerReg, "")
+
+	provider := &store.LLMProviderData{
+		BaseModel:    store.BaseModel{ID: uuid.New()},
+		TenantID:     uuid.New(),
+		Name:         "my-anthropic",
+		ProviderType: store.ProviderAnthropicNative,
+		APIKey:       "sk-ant-test",
+		Enabled:      true,
+	}
+
+	handler.registerInMemory(provider)
+
+	got, err := providerReg.GetForTenant(provider.TenantID, provider.Name)
+	if err != nil {
+		t.Fatalf("GetForTenant(%q) error = %v, want provider registered under DB name", provider.Name, err)
+	}
+	if got.Name() != provider.Name {
+		t.Fatalf("Name() = %q, want %q", got.Name(), provider.Name)
+	}
+
+	// Negative: the hardcoded default "anthropic" must NOT be registered when the user chose a different name.
+	if _, err := providerReg.GetForTenant(provider.TenantID, "anthropic"); err == nil {
+		t.Fatal("GetForTenant(\"anthropic\") succeeded, want not-found — provider should only live under its DB name")
+	}
+}
+
+// TestProvidersHandlerRegisterInMemoryUsesDBNameForClaudeCLI mirrors the Anthropic guard for Claude CLI.
+// Custom-named CLI providers must be registered under their DB name to be locatable via verify.
+func TestProvidersHandlerRegisterInMemoryUsesDBNameForClaudeCLI(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on Windows: shell-script fake binary not portable")
+	}
+	providerReg := providers.NewRegistry(nil)
+	handler := NewProvidersHandler(newMockProviderStore(), newMockSecretsStore(), providerReg, "")
+
+	// Create a fake executable so exec.LookPath succeeds — the binary-existence guard
+	// added in registerInMemory (parity with startup path) would otherwise skip registration
+	// when the test runner has no real `claude` binary in PATH.
+	fakeCLI := writeFakeClaudeBinary(t)
+
+	provider := &store.LLMProviderData{
+		BaseModel:    store.BaseModel{ID: uuid.New()},
+		TenantID:     uuid.New(),
+		Name:         "claude-max",
+		ProviderType: store.ProviderClaudeCLI,
+		APIBase:      fakeCLI,
+		Enabled:      true,
+	}
+
+	handler.registerInMemory(provider)
+
+	got, err := providerReg.GetForTenant(provider.TenantID, provider.Name)
+	if err != nil {
+		t.Fatalf("GetForTenant(%q) error = %v, want provider registered under DB name", provider.Name, err)
+	}
+	if got.Name() != provider.Name {
+		t.Fatalf("Name() = %q, want %q", got.Name(), provider.Name)
+	}
+
+	// Negative: the hardcoded default "claude-cli" must NOT be registered when the user chose a different name.
+	if _, err := providerReg.GetForTenant(provider.TenantID, "claude-cli"); err == nil {
+		t.Fatal("GetForTenant(\"claude-cli\") succeeded, want not-found — provider should only live under its DB name")
+	}
+}
+
+// TestProvidersHandlerRegisterInMemorySkipsClaudeCLIWhenBinaryMissing guards the binary-existence check
+// added to mirror cmd/gateway_providers.go. If the configured CLI path does not resolve via exec.LookPath,
+// registerInMemory must return without registering — otherwise verify would succeed on a provider that
+// cannot actually spawn the CLI.
+func TestProvidersHandlerRegisterInMemorySkipsClaudeCLIWhenBinaryMissing(t *testing.T) {
+	providerReg := providers.NewRegistry(nil)
+	handler := NewProvidersHandler(newMockProviderStore(), newMockSecretsStore(), providerReg, "")
+
+	// Absolute path to a file that cannot exist — exec.LookPath must fail.
+	missingPath := filepath.Join(t.TempDir(), "definitely-not-claude")
+
+	provider := &store.LLMProviderData{
+		BaseModel:    store.BaseModel{ID: uuid.New()},
+		TenantID:     uuid.New(),
+		Name:         "claude-broken",
+		ProviderType: store.ProviderClaudeCLI,
+		APIBase:      missingPath,
+		Enabled:      true,
+	}
+
+	handler.registerInMemory(provider)
+
+	if _, err := providerReg.GetForTenant(provider.TenantID, provider.Name); err == nil {
+		t.Fatal("GetForTenant succeeded, want not-found — registration should be skipped when binary missing")
+	}
+}
+
+// TestProvidersHandlerRegisterInMemoryAnthropicUsesModelRegistry verifies the HTTP onboarding path
+// wires the forward-compat ModelRegistry into Anthropic providers, matching the startup path behavior
+// (cmd/gateway_providers.go:349). Without this, model alias resolution and token counting fall back
+// to static defaults — affects cost accounting and forward-compat for new model IDs.
+func TestProvidersHandlerRegisterInMemoryAnthropicUsesModelRegistry(t *testing.T) {
+	providerReg := providers.NewRegistry(nil)
+	handler := NewProvidersHandler(newMockProviderStore(), newMockSecretsStore(), providerReg, "")
+
+	modelReg := providers.NewInMemoryRegistry()
+	handler.SetModelRegistry(modelReg)
+
+	provider := &store.LLMProviderData{
+		BaseModel:    store.BaseModel{ID: uuid.New()},
+		TenantID:     uuid.New(),
+		Name:         "my-anthropic",
+		ProviderType: store.ProviderAnthropicNative,
+		APIKey:       "sk-ant-test",
+		Enabled:      true,
+	}
+
+	handler.registerInMemory(provider)
+
+	got, err := providerReg.GetForTenant(provider.TenantID, provider.Name)
+	if err != nil {
+		t.Fatalf("GetForTenant() error = %v", err)
+	}
+
+	// Reflection probe: the AnthropicProvider stores its registry in an unexported "registry" field.
+	// No public getter exists, but this wiring is small enough that a structural check is warranted —
+	// the alternative is no coverage, and the field name is stable (see internal/providers/anthropic.go).
+	v := reflect.ValueOf(got).Elem().FieldByName("registry")
+	if !v.IsValid() {
+		t.Fatal("AnthropicProvider.registry field not found — implementation drift")
+	}
+	// Field is an interface; .IsNil() panics on non-interface kinds, so guard.
+	if v.Kind() == reflect.Interface && v.IsNil() {
+		t.Fatal("AnthropicProvider.registry is nil, want ModelRegistry set via SetModelRegistry")
+	}
+}
+
+// writeFakeClaudeBinary creates an executable stub in a temp dir so exec.LookPath resolves it.
+// Returns the absolute path suitable for use as APIBase on a Claude CLI provider record.
+func writeFakeClaudeBinary(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "claude-stub")
+	// Minimal POSIX script — registerInMemory only cares that the path resolves, not what it does.
+	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("write fake binary: %v", err)
+	}
+	return path
 }
 
 func setupProvidersAdminToken(t *testing.T) string {

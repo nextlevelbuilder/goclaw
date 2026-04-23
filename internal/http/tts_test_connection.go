@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,12 +22,15 @@ import (
 
 // testConnectionRequest is the JSON body for POST /v1/tts/test-connection.
 type testConnectionRequest struct {
-	Provider string `json:"provider"`
-	APIKey   string `json:"api_key,omitempty"`
-	APIBase  string `json:"api_base,omitempty"`
-	VoiceID  string `json:"voice_id,omitempty"`
-	ModelID  string `json:"model_id,omitempty"`
-	GroupID  string `json:"group_id,omitempty"` // MiniMax requires group_id
+	Provider  string `json:"provider"`
+	APIKey    string `json:"api_key,omitempty"`
+	APIBase   string `json:"api_base,omitempty"`
+	BaseURL   string `json:"base_url,omitempty"`
+	VoiceID   string `json:"voice_id,omitempty"`
+	ModelID   string `json:"model_id,omitempty"`
+	GroupID   string `json:"group_id,omitempty"` // MiniMax requires group_id
+	Rate      string `json:"rate,omitempty"`
+	TimeoutMs int    `json:"timeout_ms,omitempty"`
 }
 
 // testConnectionResponse is the JSON response for POST /v1/tts/test-connection.
@@ -97,6 +101,15 @@ func (h *TTSHandler) handleTestConnection(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	if req.APIBase == "" {
+		req.APIBase = req.BaseURL
+	}
+
+	if err := validateProviderURL(req.APIBase, req.Provider); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":%q}`, err.Error()), http.StatusBadRequest)
+		return
+	}
+
 	// Create ephemeral provider.
 	provider, err := createEphemeralTTSProvider(req)
 	if err != nil {
@@ -142,31 +155,51 @@ func createEphemeralTTSProvider(req testConnectionRequest) (audio.TTSProvider, e
 	switch req.Provider {
 	case "openai":
 		return openai.NewProvider(openai.Config{
-			APIKey:  req.APIKey,
-			APIBase: req.APIBase,
-			Model:   req.ModelID,
-			Voice:   req.VoiceID,
+			APIKey:    req.APIKey,
+			APIBase:   req.APIBase,
+			Model:     req.ModelID,
+			Voice:     req.VoiceID,
+			TimeoutMs: req.TimeoutMs,
 		}), nil
 	case "elevenlabs":
 		return elevenlabs.NewTTSProvider(elevenlabs.Config{
-			APIKey:  req.APIKey,
-			BaseURL: req.APIBase,
-			VoiceID: req.VoiceID,
-			ModelID: req.ModelID,
+			APIKey:    req.APIKey,
+			BaseURL:   req.APIBase,
+			VoiceID:   req.VoiceID,
+			ModelID:   req.ModelID,
+			TimeoutMs: req.TimeoutMs,
 		}), nil
 	case "edge":
 		return edge.NewProvider(edge.Config{
-			Voice: req.VoiceID,
+			Voice:     req.VoiceID,
+			Rate:      req.Rate,
+			TimeoutMs: req.TimeoutMs,
 		}), nil
 	case "minimax":
 		return minimax.NewProvider(minimax.Config{
-			APIKey:  req.APIKey,
-			APIBase: req.APIBase,
-			GroupID: req.GroupID,
-			VoiceID: req.VoiceID,
-			Model:   req.ModelID,
+			APIKey:    req.APIKey,
+			APIBase:   req.APIBase,
+			GroupID:   req.GroupID,
+			VoiceID:   req.VoiceID,
+			Model:     req.ModelID,
+			TimeoutMs: req.TimeoutMs,
 		}), nil
 	default:
 		return nil, fmt.Errorf("unsupported provider: %s", req.Provider)
 	}
+}
+
+func loadTenantTTSTimeoutMs(ctx context.Context, sc store.SystemConfigStore) int {
+	if sc == nil {
+		return 0
+	}
+	raw, err := sc.Get(ctx, "tts.timeout_ms")
+	if err != nil || raw == "" {
+		return 0
+	}
+	timeoutMs, err := strconv.Atoi(raw)
+	if err != nil || timeoutMs <= 0 {
+		return 0
+	}
+	return timeoutMs
 }

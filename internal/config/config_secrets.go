@@ -58,11 +58,6 @@ func (c *Config) MaskedCopy() *Config {
 	maskNonEmpty(&cp.Tts.ElevenLabs.APIKey)
 	maskNonEmpty(&cp.Tts.MiniMax.APIKey)
 
-	// Mask web tool keys
-	maskNonEmpty(&cp.Tools.Web.Exa.APIKey)
-	maskNonEmpty(&cp.Tools.Web.Tavily.APIKey)
-	maskNonEmpty(&cp.Tools.Web.Brave.APIKey)
-
 	// Mask Tailscale auth key
 	maskNonEmpty(&cp.Tailscale.AuthKey)
 
@@ -109,11 +104,6 @@ func (c *Config) StripSecrets() {
 	c.Tts.OpenAI.APIKey = ""
 	c.Tts.ElevenLabs.APIKey = ""
 	c.Tts.MiniMax.APIKey = ""
-
-	// Web tool keys
-	c.Tools.Web.Exa.APIKey = ""
-	c.Tools.Web.Tavily.APIKey = ""
-	c.Tools.Web.Brave.APIKey = ""
 
 	// Tailscale auth key
 	c.Tailscale.AuthKey = ""
@@ -167,11 +157,6 @@ func (c *Config) StripMaskedSecrets() {
 	stripIfMasked(&c.Tts.ElevenLabs.APIKey)
 	stripIfMasked(&c.Tts.MiniMax.APIKey)
 
-	// Web tool keys
-	stripIfMasked(&c.Tools.Web.Exa.APIKey)
-	stripIfMasked(&c.Tools.Web.Tavily.APIKey)
-	stripIfMasked(&c.Tools.Web.Brave.APIKey)
-
 	// Tailscale auth key
 	stripIfMasked(&c.Tailscale.AuthKey)
 }
@@ -191,9 +176,6 @@ func (c *Config) ApplyDBSecrets(secrets map[string]string) {
 	apply("tts.elevenlabs.api_key", &c.Tts.ElevenLabs.APIKey)
 	apply("tts.minimax.api_key", &c.Tts.MiniMax.APIKey)
 	apply("tts.minimax.group_id", &c.Tts.MiniMax.GroupID)
-	apply("tools.web.exa.api_key", &c.Tools.Web.Exa.APIKey)
-	apply("tools.web.tavily.api_key", &c.Tools.Web.Tavily.APIKey)
-	apply("tools.web.brave.api_key", &c.Tools.Web.Brave.APIKey)
 	apply("tailscale.auth_key", &c.Tailscale.AuthKey)
 }
 
@@ -213,9 +195,6 @@ func (c *Config) ExtractDBSecrets() map[string]string {
 	collect("tts.elevenlabs.api_key", c.Tts.ElevenLabs.APIKey)
 	collect("tts.minimax.api_key", c.Tts.MiniMax.APIKey)
 	collect("tts.minimax.group_id", c.Tts.MiniMax.GroupID)
-	collect("tools.web.exa.api_key", c.Tools.Web.Exa.APIKey)
-	collect("tools.web.tavily.api_key", c.Tools.Web.Tavily.APIKey)
-	collect("tools.web.brave.api_key", c.Tools.Web.Brave.APIKey)
 	collect("tailscale.auth_key", c.Tailscale.AuthKey)
 
 	return secrets

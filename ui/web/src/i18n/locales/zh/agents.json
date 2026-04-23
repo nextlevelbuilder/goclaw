@@ -709,7 +709,10 @@
     "retrying": "重试中...",
     "done": "完成",
     "fileLabelSOUL": "灵魂与个性",
-    "fileLabelIDENTITY": "身份卡"
+    "fileLabelIDENTITY": "身份卡",
+    "takingTooLong": "耗时过长？",
+    "cancel": "取消",
+    "cancelling": "正在取消..."
   },
   "configGroups": {
     "core": "核心",

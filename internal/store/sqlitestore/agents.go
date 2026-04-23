@@ -327,3 +327,15 @@ func scanAgentRows(rows *sql.Rows) ([]store.AgentData, error) {
 	}
 	return result, rows.Err()
 }
+
+// ResetStuckSummoning flips rows with status='summoning' to 'summon_failed'.
+// Called at startup to recover from crashes where summon goroutines died mid-flight.
+func (s *SQLiteAgentStore) ResetStuckSummoning(ctx context.Context) (int64, error) {
+	const q = `UPDATE agents SET status = ? WHERE status = ?`
+	res, err := s.db.ExecContext(ctx, q, store.AgentStatusSummonFailed, store.AgentStatusSummoning)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}

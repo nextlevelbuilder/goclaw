@@ -30,10 +30,20 @@ type pancakeInstanceConfig struct {
 		Filter             string   `json:"filter"`               // "all" | "keyword" (default: all)
 		Keywords           []string `json:"keywords"`             // required when filter = "keyword"
 	} `json:"comment_reply_options"`
-	FirstInboxMessage   string   `json:"first_inbox_message,omitempty"`    // custom DM text; defaults to built-in message
-	PostContextCacheTTL string   `json:"post_context_cache_ttl,omitempty"` // e.g. "30m"; defaults to 15m
-	AllowFrom           []string `json:"allow_from,omitempty"`
-	BlockReply          *bool    `json:"block_reply,omitempty"` // override gateway block_reply (nil = inherit)
+	AutoReactOptions    *AutoReactOptions `json:"auto_react_options,omitempty"`
+	FirstInboxMessage   string            `json:"first_inbox_message,omitempty"`    // custom DM text; defaults to built-in message
+	PostContextCacheTTL string            `json:"post_context_cache_ttl,omitempty"` // e.g. "30m"; defaults to 15m
+	AllowFrom           []string          `json:"allow_from,omitempty"`
+	BlockReply          *bool             `json:"block_reply,omitempty"` // override gateway block_reply (nil = inherit)
+}
+
+// AutoReactOptions holds per-page scope filters for Facebook auto-react.
+// Nil = no scope filter (react all). Deny lists override allow lists.
+type AutoReactOptions struct {
+	AllowPostIDs []string `json:"allow_post_ids,omitempty"`
+	DenyPostIDs  []string `json:"deny_post_ids,omitempty"`
+	AllowUserIDs []string `json:"allow_user_ids,omitempty"`
+	DenyUserIDs  []string `json:"deny_user_ids,omitempty"`
 }
 
 // --- Webhook payload types ---

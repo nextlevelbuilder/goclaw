@@ -709,7 +709,10 @@
     "retrying": "Đang thử lại...",
     "done": "xong",
     "fileLabelSOUL": "Linh hồn & Tính cách",
-    "fileLabelIDENTITY": "Thẻ danh tính"
+    "fileLabelIDENTITY": "Thẻ danh tính",
+    "takingTooLong": "Mất quá nhiều thời gian?",
+    "cancel": "Huỷ",
+    "cancelling": "Đang huỷ..."
   },
   "configGroups": {
     "core": "Cốt lõi",

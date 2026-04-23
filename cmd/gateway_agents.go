@@ -158,7 +158,7 @@ func buildEmbeddingProvider(
 	return nil
 }
 
-func setupSubagents(providerReg *providers.Registry, cfg *config.Config, msgBus *bus.MessageBus, toolsReg *tools.Registry, workspace string, sandboxMgr sandbox.Manager) *tools.SubagentManager {
+func setupSubagents(providerReg *providers.Registry, cfg *config.Config, msgBus *bus.MessageBus, toolsReg *tools.Registry, workspace string, sandboxMgr sandbox.Manager, secureCLIStore store.SecureCLIStore) *tools.SubagentManager {
 	names := providerReg.List(context.Background())
 	if len(names) == 0 {
 		return nil
@@ -202,22 +202,46 @@ func setupSubagents(providerReg *providers.Registry, cfg *config.Config, msgBus 
 	// NOTE: SubagentManager.applyDenyList() handles deny lists after createTools(),
 	// so we don't apply deny lists here.
 	toolsFactory := func() *tools.Registry {
-		reg := toolsReg.Clone()
-		if sandboxMgr != nil {
-			reg.Register(tools.NewSandboxedReadFileTool(workspace, agentCfg.RestrictToWorkspace, sandboxMgr))
-			reg.Register(tools.NewSandboxedWriteFileTool(workspace, agentCfg.RestrictToWorkspace, sandboxMgr))
-			reg.Register(tools.NewSandboxedListFilesTool(workspace, agentCfg.RestrictToWorkspace, sandboxMgr))
-			reg.Register(tools.NewSandboxedExecTool(workspace, agentCfg.RestrictToWorkspace, sandboxMgr))
-		} else {
-			reg.Register(tools.NewReadFileTool(workspace, agentCfg.RestrictToWorkspace))
-			reg.Register(tools.NewWriteFileTool(workspace, agentCfg.RestrictToWorkspace))
-			reg.Register(tools.NewListFilesTool(workspace, agentCfg.RestrictToWorkspace))
-			reg.Register(tools.NewExecTool(workspace, agentCfg.RestrictToWorkspace))
-		}
+		reg, _ := buildSubagentToolsRegistry(toolsReg, workspace, agentCfg.RestrictToWorkspace, sandboxMgr, secureCLIStore)
 		return reg
 	}
 
 	return tools.NewSubagentManager(provider, providerReg, agentCfg.Model, msgBus, toolsFactory, subCfg)
+}
+
+// buildSubagentToolsRegistry produces a cloned tool registry for a subagent
+// with workspace-scoped file/exec tools registered. The returned ExecTool is
+// also returned for test assertion (Red Team F3): callers verify that the
+// secureCLIStore is wired so the subagent's exec path enforces the gate.
+func buildSubagentToolsRegistry(
+	parentReg *tools.Registry,
+	workspace string,
+	restrict bool,
+	sandboxMgr sandbox.Manager,
+	secureCLIStore store.SecureCLIStore,
+) (*tools.Registry, *tools.ExecTool) {
+	reg := parentReg.Clone()
+	var execTool *tools.ExecTool
+	if sandboxMgr != nil {
+		reg.Register(tools.NewSandboxedReadFileTool(workspace, restrict, sandboxMgr))
+		reg.Register(tools.NewSandboxedWriteFileTool(workspace, restrict, sandboxMgr))
+		reg.Register(tools.NewSandboxedListFilesTool(workspace, restrict, sandboxMgr))
+		execTool = tools.NewSandboxedExecTool(workspace, restrict, sandboxMgr)
+		reg.Register(execTool)
+	} else {
+		reg.Register(tools.NewReadFileTool(workspace, restrict))
+		reg.Register(tools.NewWriteFileTool(workspace, restrict))
+		reg.Register(tools.NewListFilesTool(workspace, restrict))
+		execTool = tools.NewExecTool(workspace, restrict)
+		reg.Register(execTool)
+	}
+	// Red Team F3: subagent ExecTool must enforce the secure-CLI gate
+	// (and env scrub on fall-through) — without this, a parent agent
+	// can spawn a subagent to bypass the gate via host-inherited env.
+	if secureCLIStore != nil {
+		execTool.SetSecureCLIStore(secureCLIStore)
+	}
+	return reg, execTool
 }
 
 // setupTTS creates the TTS manager from config and registers providers.

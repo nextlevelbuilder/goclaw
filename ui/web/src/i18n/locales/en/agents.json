@@ -724,7 +724,10 @@
     "retrying": "Retrying...",
     "done": "done",
     "fileLabelSOUL": "Soul & Personality",
-    "fileLabelIDENTITY": "Identity Card"
+    "fileLabelIDENTITY": "Identity Card",
+    "takingTooLong": "Taking too long?",
+    "cancel": "Cancel",
+    "cancelling": "Cancelling..."
   },
   "configGroups": {
     "core": "Core",

@@ -81,6 +81,9 @@ func runClientMode(cfg *config.Config, addr, agentName, message, sessionKey stri
 // wsConnect sends the connect RPC and waits for auth response.
 func wsConnect(conn *websocket.Conn, token string) error {
 	params := map[string]string{}
+	userId := os.Getenv("GOCLAW_USER_ID")
+	if userId == "" { userId = "system" }
+	params["user_id"] = userId
 	if token != "" {
 		params["token"] = token
 	}

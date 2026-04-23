@@ -92,11 +92,26 @@ func isPostConnectNetworkErr(err error) bool {
 		strings.Contains(s, "EOF")) && !strings.Contains(s, "lookup")
 }
 
+// mediaSendMethods lists sendX calls that upload a file body and therefore
+// need the longer sendMediaOverallTimeout budget. Keyed by the `name` argument
+// passed to retrySend so no call site has to change when we bump the budget.
+var mediaSendMethods = map[string]struct{}{
+	"sendPhoto":    {},
+	"sendVideo":    {},
+	"sendAudio":    {},
+	"sendVoice":    {},
+	"sendDocument": {},
+}
+
 // retrySend wraps a Telegram send call with retry logic for transient network errors.
 // Parse errors are NOT retried (handled by caller's HTML fallback).
 // resetFn is called before each retry (e.g. to seek file handles back to start). Can be nil.
 func (c *Channel) retrySend(ctx context.Context, name string, resetFn func(), fn func(context.Context) error) error {
-	ctx, cancel := context.WithTimeout(ctx, sendOverallTimeout)
+	overall := sendOverallTimeout
+	if _, isMedia := mediaSendMethods[name]; isMedia {
+		overall = sendMediaOverallTimeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, overall)
 	defer cancel()
 
 	var err error

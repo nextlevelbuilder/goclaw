@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -38,9 +39,36 @@ func resolveMigrationsDir() string {
 	return filepath.Join(filepath.Dir(exe), "migrations")
 }
 
+// absoluteToFileURI formats an already-absolute path into an RFC 8089-compliant
+// file:// URL. golang-migrate's file source driver rejects Windows paths like
+// "file://F:\\project\\migrations" because "F" is parsed as the host and
+// ":\\..." as the port. The fix is shape-driven (presence of a drive-letter
+// colon at index 1), so no runtime.GOOS branch is needed — the same code is
+// correct for POSIX inputs ("/app/x" → "file:///app/x") and for Windows inputs
+// on any OS ("F:\\x" → "file:///F:/x"). strings.ReplaceAll covers the case
+// where a Windows path is seen on a non-Windows runner (filepath.ToSlash is a
+// no-op outside Windows).
+func absoluteToFileURI(abs string) string {
+	abs = strings.ReplaceAll(filepath.ToSlash(abs), `\`, `/`)
+	if len(abs) >= 2 && abs[1] == ':' {
+		abs = "/" + abs
+	}
+	return "file://" + abs
+}
+
+// migrationsSourceURL resolves dir to an absolute path and formats it for
+// golang-migrate's file source driver.
+func migrationsSourceURL(dir string) string {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		abs = dir
+	}
+	return absoluteToFileURI(abs)
+}
+
 func newMigrator(dsn string) (*migrate.Migrate, error) {
 	dir := resolveMigrationsDir()
-	m, err := migrate.New("file://"+dir, dsn)
+	m, err := migrate.New(migrationsSourceURL(dir), dsn)
 	if err != nil {
 		return nil, fmt.Errorf("create migrator: %w", err)
 	}

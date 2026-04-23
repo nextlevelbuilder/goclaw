@@ -132,3 +132,41 @@ func TestTestConnection_BelowOperator(t *testing.T) {
 		t.Errorf("want 403, got %d: %s", rr.Code, rr.Body.String())
 	}
 }
+
+// TestTestConnection_BlockedAPIBase verifies test-connection reuses provider URL SSRF validation.
+func TestTestConnection_BlockedAPIBase(t *testing.T) {
+	setupTestToken(t, ttsTestToken)
+
+	operatorRaw := "test-conn-operator-key"
+	setupTestCache(t, map[string]*store.APIKeyData{
+		crypto.HashAPIKey(operatorRaw): {
+			ID:     uuid.New(),
+			Scopes: []string{"operator.write"},
+		},
+	})
+
+	mgr := audio.NewManager(audio.ManagerConfig{})
+	mux := newTTSMux(mgr)
+
+	req := httptest.NewRequest("POST", "/v1/tts/test-connection",
+		ttsBody(t, map[string]string{
+			"provider": "openai",
+			"api_key":  "sk-test",
+			"api_base": "http://127.0.0.1:8080/v1",
+		}))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+operatorRaw)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if errStr, _ := resp["error"].(string); errStr != "provider URL cannot point to 127.0.0.1" {
+		t.Fatalf("unexpected error: %q", errStr)
+	}
+}

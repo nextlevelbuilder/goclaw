@@ -14,31 +14,37 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
 
-// isTranscriptionModel returns true for OpenAI models that use the dedicated
-// /v1/audio/transcriptions endpoint rather than /chat/completions.
+// isTranscriptionModel returns true for OpenAI models that require the
+// /v1/audio/transcriptions endpoint instead of /chat/completions.
+// Covers whisper and the gpt-4o-(mini-)transcribe family.
 func isTranscriptionModel(model string) bool {
-	if model == "whisper-1" {
+	m := strings.ToLower(strings.TrimSpace(model))
+	if m == "" {
+		return false
+	}
+	if strings.HasPrefix(m, "whisper") {
 		return true
 	}
-	// gpt-4o-transcribe, gpt-4o-mini-transcribe, gpt-4o-transcribe-diarize, etc.
-	if strings.HasSuffix(model, "-transcribe") || strings.Contains(model, "-transcribe-") {
-		return true
-	}
-	return false
+	// gpt-4o-transcribe, gpt-4o-mini-transcribe, and future variants.
+	return strings.Contains(m, "transcribe")
 }
 
-// extFromMime maps a MIME type to a file extension for the multipart filename.
+// extFromMime maps an audio MIME type to a file extension accepted by
+// OpenAI's transcription endpoint. Falls back to .mp3 for unknown types.
 func extFromMime(mime string) string {
+	m := strings.ToLower(mime)
 	switch {
-	case strings.Contains(mime, "wav"):
+	case strings.Contains(m, "wav"):
 		return ".wav"
-	case strings.Contains(mime, "mp4"), strings.Contains(mime, "m4a"):
+	case strings.Contains(m, "mp3"), strings.Contains(m, "mpeg"):
+		return ".mp3"
+	case strings.Contains(m, "m4a"), strings.Contains(m, "mp4"):
 		return ".m4a"
-	case strings.Contains(mime, "ogg"), strings.Contains(mime, "opus"):
+	case strings.Contains(m, "ogg"), strings.Contains(m, "opus"):
 		return ".ogg"
-	case strings.Contains(mime, "flac"):
+	case strings.Contains(m, "flac"):
 		return ".flac"
-	case strings.Contains(mime, "webm"):
+	case strings.Contains(m, "webm"):
 		return ".webm"
 	default:
 		return ".mp3"

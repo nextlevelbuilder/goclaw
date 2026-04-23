@@ -54,17 +54,27 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, "failed to create temp file")})
 		return
 	}
-	defer os.Remove(tmp.Name())
-	defer tmp.Close()
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
 
 	size, err := io.Copy(tmp, file)
 	if err != nil {
+		tmp.Close()
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, "failed to save upload")})
+		return
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, "failed to finalize upload")})
+		return
+	}
+	if err := tmp.Close(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, "failed to finalize upload")})
 		return
 	}
 
 	// Open as zip
-	zr, err := zip.OpenReader(tmp.Name())
+	zr, err := zip.OpenReader(tmpName)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidRequest, "invalid ZIP file")})
 		return
