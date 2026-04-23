@@ -88,8 +88,10 @@ func (l *Loop) getUserMCPTools(ctx context.Context, userID string) []tools.Tool 
 		// Create BridgeTools pointing to user's connection and register in the
 		// shared tool registry so ExecuteWithContext can resolve them by name.
 		reg, _ := l.tools.(*tools.Registry)
+		hints := mcpbridge.ParseToolHints(srv.Settings)
 		for _, mcpTool := range entry.MCPTools() {
-			bt := mcpbridge.NewBridgeTool(srv.Name, mcpTool, entry.ClientPtr(), srv.ToolPrefix, srv.TimeoutSec, entry.Connected(), srv.ID, l.mcpGrantChecker)
+			bt := mcpbridge.NewBridgeTool(srv.Name, mcpTool, entry.ClientPtr(), srv.ToolPrefix, srv.TimeoutSec, entry.Connected(), srv.ID, l.mcpGrantChecker).
+				WithHints(hints.Global, hints.HintFor(mcpTool.Name))
 			// Register in registry so ExecuteWithContext can find them.
 			// Skip if already registered (another user loaded this server with same tool names).
 			if reg != nil {

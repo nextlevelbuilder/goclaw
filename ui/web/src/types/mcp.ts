@@ -10,7 +10,13 @@ export interface MCPServerData {
   env: Record<string, string> | null;
   tool_prefix: string;
   timeout_sec: number;
-  settings?: { require_user_credentials?: boolean };
+  settings?: {
+    require_user_credentials?: boolean;
+    tool_hints?: {
+      global?: string;
+      tools?: Record<string, string>;
+    };
+  };
   enabled: boolean;
   created_by: string;
   agent_count?: number;
@@ -29,7 +35,13 @@ export interface MCPServerInput {
   env?: Record<string, string>;
   tool_prefix?: string;
   timeout_sec?: number;
-  settings?: { require_user_credentials?: boolean };
+  settings?: {
+    require_user_credentials?: boolean;
+    tool_hints?: {
+      global?: string;
+      tools?: Record<string, string>;
+    };
+  };
   enabled?: boolean;
 }
 

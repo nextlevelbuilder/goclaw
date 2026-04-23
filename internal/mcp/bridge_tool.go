@@ -20,17 +20,18 @@ import (
 // The client pointer is loaded atomically from clientPtr to support
 // safe reconnection without data races.
 type BridgeTool struct {
-	serverName     string
-	serverID       uuid.UUID    // MCP server ID (for grant recheck)
-	toolName       string       // original MCP tool name
-	registeredName string       // may include prefix: "{prefix}__{toolName}"
-	description    string
-	inputSchema    map[string]any // JSON Schema for parameters
-	requiredSet    map[string]bool
-	clientPtr      *atomic.Pointer[mcpclient.Client] // shared with serverState for atomic swap on reconnect
-	timeoutSec     int
-	connected      *atomic.Bool
-	grantChecker   GrantChecker // for runtime grant recheck (nil = skip check)
+	serverName        string
+	serverID          uuid.UUID    // MCP server ID (for grant recheck)
+	toolName          string       // original MCP tool name
+	registeredName    string       // may include prefix: "{prefix}__{toolName}"
+	description       string
+	descriptionSuffix string         // admin-authored hints appended to description (see WithHints)
+	inputSchema       map[string]any // JSON Schema for parameters
+	requiredSet       map[string]bool
+	clientPtr         *atomic.Pointer[mcpclient.Client] // shared with serverState for atomic swap on reconnect
+	timeoutSec        int
+	connected         *atomic.Bool
+	grantChecker      GrantChecker // for runtime grant recheck (nil = skip check)
 }
 
 // NewBridgeTool creates a BridgeTool from an MCP Tool definition.
@@ -92,9 +93,41 @@ func ensureMCPPrefix(prefix, serverName string) string {
 	return prefix
 }
 
-func (t *BridgeTool) Name() string               { return t.registeredName }
-func (t *BridgeTool) Description() string        { return t.description }
+func (t *BridgeTool) Name() string { return t.registeredName }
+func (t *BridgeTool) Description() string {
+	if t.descriptionSuffix == "" {
+		return t.description
+	}
+	return t.description + t.descriptionSuffix
+}
 func (t *BridgeTool) Parameters() map[string]any { return t.inputSchema }
+
+// WithHints attaches admin-authored description hints to this tool. Hints are
+// appended to Description() so the LLM sees server-specific quirks (e.g. "no
+// trailing semicolons in code args") without modifying the upstream MCP server.
+// Empty global and toolHint render no suffix. Returns t for chaining.
+//
+// Wire hints from MCPServerData.Settings via ParseToolHints:
+//
+//	hints := ParseToolHints(srv.Settings)
+//	bt := NewBridgeTool(...).WithHints(hints.Global, hints.HintFor(mcpTool.Name))
+func (t *BridgeTool) WithHints(global, toolHint string) *BridgeTool {
+	g := strings.TrimSpace(global)
+	h := strings.TrimSpace(toolHint)
+	if g == "" && h == "" {
+		t.descriptionSuffix = ""
+		return t
+	}
+	var parts []string
+	if g != "" {
+		parts = append(parts, "[Server hint] "+g)
+	}
+	if h != "" {
+		parts = append(parts, "[Tool hint] "+h)
+	}
+	t.descriptionSuffix = "\n\n" + strings.Join(parts, "\n\n")
+	return t
+}
 
 // ServerName returns the name of the MCP server this tool belongs to.
 func (t *BridgeTool) ServerName() string { return t.serverName }

@@ -66,6 +66,8 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit, onTest }: 
       timeout: 60,
       enabled: true,
       requireUserCreds: false,
+      toolHintsGlobal: "",
+      toolHintsTools: {},
     },
   });
 
@@ -93,6 +95,8 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit, onTest }: 
         timeout: server?.timeout_sec ?? 60,
         enabled: server?.enabled ?? true,
         requireUserCreds: server?.settings?.require_user_credentials ?? false,
+        toolHintsGlobal: server?.settings?.tool_hints?.global ?? "",
+        toolHintsTools: server?.settings?.tool_hints?.tools ?? {},
       });
       setError("");
       setTestResult(null);
@@ -149,13 +153,33 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit, onTest }: 
     setLoading(true);
     setError("");
     try {
+      // Build settings payload: include tool_hints only when at least one field
+      // is populated, so servers without hints keep a clean settings object.
+      const trimmedGlobal = data.toolHintsGlobal.trim();
+      const trimmedTools: Record<string, string> = {};
+      for (const [k, v] of Object.entries(data.toolHintsTools)) {
+        const key = k.trim();
+        const val = v.trim();
+        if (key && val) trimmedTools[key] = val;
+      }
+      const hasHints = trimmedGlobal !== "" || Object.keys(trimmedTools).length > 0;
+      const settings: NonNullable<MCPServerInput["settings"]> = {
+        require_user_credentials: data.requireUserCreds,
+      };
+      if (hasHints) {
+        settings.tool_hints = {
+          ...(trimmedGlobal ? { global: trimmedGlobal } : {}),
+          ...(Object.keys(trimmedTools).length > 0 ? { tools: trimmedTools } : {}),
+        };
+      }
+
       await onSubmit({
         name: data.name.trim(),
         display_name: data.displayName.trim() || undefined,
         ...buildConnectionData(),
         tool_prefix: data.toolPrefix.trim() || undefined,
         timeout_sec: data.timeout,
-        settings: { require_user_credentials: data.requireUserCreds },
+        settings,
         enabled: data.enabled,
       });
       onOpenChange(false);
