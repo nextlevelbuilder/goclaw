@@ -14,6 +14,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/audio"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
+	"github.com/nextlevelbuilder/goclaw/internal/channels/discord/voice"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/typing"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -45,6 +46,7 @@ type Channel struct {
 	agentStore      store.AgentStore            // for agent key lookup (nil = writer commands disabled)
 	configPermStore store.ConfigPermissionStore // for group file writer management (nil = writer commands disabled)
 	audioMgr        *audio.Manager             // unified STT via audio.Manager (nil = no STT)
+	voiceSupervisor *voice.Supervisor           // real-time voice-channel join + transcription (nil = disabled)
 	// pairingService, pairingDebounce, approvedGroups, groupHistory, historyLimit, requireMention
 	// are inherited from channels.BaseChannel.
 }
@@ -60,10 +62,17 @@ func New(cfg config.DiscordConfig, msgBus *bus.MessageBus, pairingSvc store.Pair
 		return nil, fmt.Errorf("create discord session: %w", err)
 	}
 
-	// Request necessary intents
+	// Request necessary intents. Voice-state events are gated by their own
+	// intent + a privileged toggle in the Discord Developer Portal; we
+	// request the intent unconditionally because the voice-channel feature
+	// may be enabled at runtime via channel instance config. Guild/guild
+	// members are required alongside voice states so we can resolve user
+	// display names for transcripts.
 	session.Identify.Intents = discordgo.IntentsGuildMessages |
 		discordgo.IntentsDirectMessages |
-		discordgo.IntentsMessageContent
+		discordgo.IntentsMessageContent |
+		discordgo.IntentsGuilds |
+		discordgo.IntentsGuildVoiceStates
 
 	base := channels.NewBaseChannel(channels.TypeDiscord, msgBus, cfg.AllowFrom)
 	base.ValidatePolicy(cfg.DMPolicy, cfg.GroupPolicy)
@@ -149,6 +158,58 @@ func (c *Channel) Start(ctx context.Context) error {
 		c.startInteractionSweeper(ctx)
 	}
 
+	// Real-time voice-channel transcription. Opt-in per-instance via
+	// voice_channel_enabled; requires audioMgr + transcript channel + guild.
+	// Start after the session is open and we have the bot user ID so the
+	// supervisor can ignore its own VoiceStateUpdate echoes.
+	if err := c.startVoiceSupervisor(ctx); err != nil {
+		// Treat misconfiguration as fatal for this Channel; a bot that
+		// enables voice but can't transcribe is worse than one that doesn't
+		// try. The caller decides whether to abort process startup.
+		c.session.Close()
+		return fmt.Errorf("discord: voice supervisor: %w", err)
+	}
+
+	return nil
+}
+
+// startVoiceSupervisor is a no-op when voice_channel_enabled is unset or
+// false. When enabled, it validates the instance config (required fields,
+// audioMgr presence) and starts the Supervisor.
+func (c *Channel) startVoiceSupervisor(ctx context.Context) error {
+	if c.config.VoiceChannelEnabled == nil || !*c.config.VoiceChannelEnabled {
+		return nil
+	}
+	if c.audioMgr == nil {
+		return fmt.Errorf("voice_channel_enabled=true but no audio.Manager wired (check STT provider config)")
+	}
+	// GuildID defaults to the testGuildID when set and the voice-channel-
+	// guild-id is empty — matches the convention of other Discord features
+	// that use TestGuildID as a dev guild override.
+	guildID := c.config.VoiceChannelGuildID
+	if guildID == "" {
+		guildID = c.testGuildID
+	}
+	vcfg := voice.Config{
+		GuildID:             guildID,
+		VoiceChannelID:      c.config.VoiceChannelID,
+		TranscriptChannelID: c.config.VoiceChannelTranscriptChannelID,
+		IdleLeaveSeconds:    c.config.VoiceChannelIdleLeaveSeconds,
+		MinUtteranceMs:      c.config.VoiceChannelMinUtteranceMs,
+		MaxUtteranceMs:      c.config.VoiceChannelMaxUtteranceMs,
+		DailyCapSeconds:     c.config.VoiceChannelDailyCapSeconds,
+	}
+	sup, err := voice.NewSupervisor(vcfg, c.session, c.audioMgr, voice.DefaultTmpDir(), c.botUserID, slog.Default())
+	if err != nil {
+		return err
+	}
+	sup.Start(ctx)
+	c.voiceSupervisor = sup
+	slog.Info("discord: voice supervisor started",
+		"guild_id", vcfg.GuildID,
+		"voice_channel_id", vcfg.VoiceChannelID,
+		"transcript_channel_id", vcfg.TranscriptChannelID,
+	)
 	return nil
 }
 
@@ -176,8 +237,15 @@ func (c *Channel) SetPendingHistoryTenantID(id uuid.UUID) {
 	}
 }
 
-// Stop closes the Discord gateway connection.
-func (c *Channel) Stop(_ context.Context) error {
+// Stop closes the Discord gateway connection. Voice supervisor is torn
+// down first so its Disconnect call can drain cleanly before the session
+// websocket closes — discordgo doesn't reliably reap voice goroutines
+// otherwise.
+func (c *Channel) Stop(ctx context.Context) error {
+	if c.voiceSupervisor != nil {
+		c.voiceSupervisor.Stop(ctx)
+		c.voiceSupervisor = nil
+	}
 	c.GroupHistory().StopFlusher()
 	slog.Info("stopping discord bot")
 	c.SetRunning(false)

@@ -4,6 +4,55 @@ All notable changes to GoClaw are documented here. For full documentation, see [
 
 ## Unreleased
 
+### Features
+
+- **Discord real-time voice-channel transcription.** New opt-in feature that
+  joins a designated voice channel when humans are present, captures each
+  speaker's Opus frames via `discordgo.VoiceConnection.OpusRecv`, packages
+  per-speaker utterances into Ogg/Opus (via `pion/webrtc/v4/pkg/media/oggwriter`,
+  no PCM decode), and posts `<DisplayName>: <transcript>` lines through
+  `audio.Manager.Transcribe` to a configured text channel.
+
+  Enable per-instance by setting these fields on `discordInstanceConfig` /
+  `DiscordConfig`:
+  - `voice_channel_enabled` (required, bool): master switch.
+  - `voice_channel_guild_id` (required): guild containing the voice channel.
+  - `voice_channel_id` (required): voice channel to monitor + join.
+  - `voice_channel_transcript_channel_id` (required): text channel for transcripts.
+  - `voice_channel_idle_leave_seconds` (default 60): disconnect after this
+    many seconds of no humans.
+  - `voice_channel_min_utterance_ms` (default 400): drop shorter fragments.
+  - `voice_channel_max_utterance_ms` (default 10000): force-flush ceiling.
+  - `voice_channel_daily_cap_seconds` (default 7200 = 2h): per-day STT budget.
+    When exceeded, the bot stays joined but stops transcribing until UTC
+    rollover — bounds runaway cost from music or open channels.
+
+  Intents added unconditionally: `IntentsGuilds | IntentsGuildVoiceStates`.
+  The Discord Developer Portal must have the "Server Voice State" privileged
+  intent toggled ON for bots that use this feature.
+
+  Implementation notes:
+  - Drain goroutine is strictly non-blocking — OpusRecv is buffered to only
+    2 packets in discordgo, so any I/O in the consumer loop drops frames.
+    Stress test verifies zero-drop at 1000 packets/sec.
+  - Join uses `deaf=false` (required for OpusRecv; common footgun).
+  - Stop explicitly calls `VoiceConnection.Disconnect()` and drains
+    goroutines for up to 2s — discordgo otherwise leaks voice loops.
+  - Panic safety via `safego.Recover` on every new goroutine; a voice-path
+    panic cannot take down text handling.
+  - Per-speaker diarization via SSRC→UserID mapping from
+    `VoiceSpeakingUpdate`; packets arriving before the mapping land get
+    their userID retroactively attached.
+  - Display names cached locally (1h TTL) to avoid a `GuildMember` API call
+    per transcript line.
+  - STT error taxonomy: transient (5xx/network) → drop with warn; quota
+    (429) → 60s circuit; auth (401/403) → disable for session.
+  - Orphan tmpfile sweeper runs every 5min to clean anything a panicking
+    worker left behind.
+
+  Distinct from the pre-existing `voice_agent_id` field, which routes
+  *uploaded* voice-message file attachments to a specific agent.
+
 ### Breaking Changes
 
 - **Context pruning now opt-in.** Previously tool-result trimming ran by default
