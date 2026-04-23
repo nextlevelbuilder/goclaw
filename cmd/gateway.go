@@ -144,6 +144,16 @@ func runGateway() {
 
 	pgStores, traceCollector, snapshotWorker := setupStoresAndTracing(cfg, dataDir, msgBus)
 
+	// Rebuild TTS manager after DB secrets are loaded — setupToolRegistry runs
+	// before setupStoresAndTracing, so providers whose API keys live only in the
+	// config_secrets table (e.g. ElevenLabs) were not registered on first pass.
+	if newTTS := setupTTS(cfg); newTTS != nil {
+		setupAudioExtras(cfg, newTTS)
+		ttsTool.UpdateManager(newTTS)
+		audioMgr = newTTS
+		slog.Info("tts rebuilt after DB secrets loaded", "provider", newTTS.PrimaryProvider(), "auto", string(newTTS.AutoMode()))
+	}
+
 	// Recover from crashes: flip ghost 'summoning' rows to 'summon_failed'.
 	// Summon goroutines don't survive process restart; stale DB rows would trap the UI.
 	if pgStores.Agents != nil {

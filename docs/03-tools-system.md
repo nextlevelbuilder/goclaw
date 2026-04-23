@@ -409,6 +409,18 @@ GoClaw integrates with Model Context Protocol (MCP) servers. The MCP Manager con
 | `sse` | Connect to SSE endpoint via URL |
 | `streamable-http` | Connect to HTTP streaming endpoint |
 
+**Command allowlist (stdio transport):** For security, only well-known runtime commands are permitted by default: `node`, `npx`, `npm`, `python`, `python3`, `ruby`, `go`, `cargo`, `java`, `dotnet`, `php`, `uvx`, `uv`, `pipx`, `deno`, `bun`. To use custom binaries (e.g. `mcp-cldkctl`), add them to `tools.allowed_commands` in config:
+
+```json5
+{
+  "tools": {
+    "allowed_commands": ["mcp-cldkctl", "my-custom-mcp"]
+  }
+}
+```
+
+This can also be configured via the web UI: **Settings → Tools → MCP Allowed Commands**. Changes take effect immediately without restart.
+
 **Reliability:** Health checks every 30 seconds. Reconnection via exponential backoff (2s initial, 60s max, 10 attempts).
 
 **Access control:**
