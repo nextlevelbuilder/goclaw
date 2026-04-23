@@ -4,18 +4,24 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 )
 
 // markdownToWhatsApp converts Markdown-formatted LLM output to WhatsApp's native
 // formatting syntax. WhatsApp supports: *bold*, _italic_, ~strikethrough~, ```code```.
-// Unsupported features are simplified: headers → bold, links → "text url", tables → plain.
-func markdownToWhatsApp(text string) string {
+// Unsupported features are simplified: headers → bold, links → "text url".
+// Tables are rendered according to tableMode (default "auto" → cards for wide tables).
+func markdownToWhatsApp(text, tableMode string) string {
 	if text == "" {
 		return ""
 	}
 
 	// Pre-process: convert HTML tags from LLM output to Markdown equivalents.
 	text = htmlTagToWaMd(text)
+
+	// Extract and render markdown tables before the rest of the pipeline.
+	text = waRenderTables(text, tableMode)
 
 	// Extract and protect fenced code blocks — WhatsApp renders ``` the same way.
 	codeBlocks := waExtractCodeBlocks(text)
@@ -54,6 +60,45 @@ func markdownToWhatsApp(text string) string {
 	text = regexp.MustCompile(`\n{3,}`).ReplaceAllString(text, "\n\n")
 
 	return strings.TrimSpace(text)
+}
+
+var (
+	waTblLineRe = regexp.MustCompile(`^\s*\|.*\|\s*$`)
+	waTblSepRe  = regexp.MustCompile(`^\s*\|[\s:]*-+[\s:]*(\|[\s:]*-+[\s:]*)*\|\s*$`)
+)
+
+// waRenderTables finds markdown tables in text and replaces them with the
+// rendered form according to tableMode. Default mode is "auto" (cards for
+// wide tables, plain bullet list for narrow). Mode "off" passes tables through.
+func waRenderTables(text, tableMode string) string {
+	mode := channels.ParseTableMode(tableMode)
+	if mode == channels.TableModeOff {
+		return text
+	}
+	// Default WhatsApp to "cards" when mode is "auto" — WhatsApp is mobile-first
+	// and ASCII tables never render well in WhatsApp's monospace-free format.
+	if mode == channels.TableModeAuto {
+		mode = channels.TableModeCards
+	}
+
+	lines := strings.Split(text, "\n")
+	var result []string
+	i := 0
+	for i < len(lines) {
+		if i+1 < len(lines) && waTblLineRe.MatchString(lines[i]) && waTblSepRe.MatchString(lines[i+1]) {
+			start := i
+			i += 2 // skip header + separator
+			for i < len(lines) && waTblLineRe.MatchString(lines[i]) {
+				i++
+			}
+			parsed := channels.ParseMarkdownTableRows(lines[start:i])
+			result = append(result, channels.RenderTable(mode, parsed))
+		} else {
+			result = append(result, lines[i])
+			i++
+		}
+	}
+	return strings.Join(result, "\n")
 }
 
 // htmlTagToWaMd converts common HTML tags in LLM output to Markdown equivalents

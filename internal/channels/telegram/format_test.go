@@ -3,6 +3,8 @@ package telegram
 import (
 	"strings"
 	"testing"
+
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 )
 
 func TestDisplayWidth(t *testing.T) {
@@ -36,7 +38,7 @@ func TestRenderTableAsCode_Vietnamese(t *testing.T) {
 		"| Hardware tối thiểu | Mac mini $599 | $10 (bao gồm cả Raspberry Pi) |",
 	}
 
-	result := renderTableAsCode(lines)
+	result := channels.RenderTable(channels.TableModeASCII, channels.ParseMarkdownTableRows(lines))
 
 	// Every non-separator line should have the same number of pipes
 	resultLines := strings.Split(result, "\n")
@@ -103,7 +105,7 @@ func TestMarkdownToTelegramHTML_Mentions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := markdownToTelegramHTML(tt.input)
+			got := markdownToTelegramHTML(tt.input, "")
 			if !strings.Contains(got, tt.want) {
 				t.Errorf("expected %q in output, got: %s", tt.want, got)
 			}
@@ -211,7 +213,7 @@ func TestMarkdownToTelegramHTML_URLsWithUnderscores(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := markdownToTelegramHTML(tt.input)
+			got := markdownToTelegramHTML(tt.input, "")
 			if !strings.Contains(got, tt.want) {
 				t.Errorf("expected %q in output, got: %s", tt.want, got)
 			}
