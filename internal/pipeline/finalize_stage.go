@@ -63,9 +63,11 @@ func (s *FinalizeStage) Execute(ctx context.Context, state *RunState) error {
 
 	// 3b. Persist assistant-generated images (Codex image_generation_call) to disk
 	// BEFORE building the assistant message so MediaRefs are included in the session store.
-	// Partial streaming frames are skipped; inline base64 is cleared after writing.
+	// Source is state.Observe.AssistantImages, which ObserveStage accumulates across
+	// every iteration — required because LastResponse holds only the final iteration's
+	// response (an image emitted mid-loop alongside a tool call would otherwise be lost).
 	var assistantImageRefs []providers.MediaRef
-	if s.deps.PersistAssistantImages != nil && state.Think.LastResponse != nil && len(state.Think.LastResponse.Images) > 0 {
+	if s.deps.PersistAssistantImages != nil && len(state.Observe.AssistantImages) > 0 {
 		workspace := ""
 		if state.Workspace != nil {
 			workspace = state.Workspace.ActivePath
@@ -73,10 +75,10 @@ func (s *FinalizeStage) Execute(ctx context.Context, state *RunState) error {
 		// Build a scratch message carrying only Images so PersistAssistantImages can
 		// decode/hash/write them and populate MediaRefs. The caller clears Images on
 		// the scratch message — we harvest MediaRefs from there.
-		scratch := &providers.Message{Images: state.Think.LastResponse.Images}
+		scratch := &providers.Message{Images: state.Observe.AssistantImages}
 		s.deps.PersistAssistantImages(scratch, workspace)
 		assistantImageRefs = scratch.MediaRefs
-		state.Think.LastResponse.Images = nil // prevent double-processing on future calls
+		state.Observe.AssistantImages = nil // prevent double-processing on retries
 	}
 
 	// 3c. Build final assistant message with MediaRefs for session persistence.

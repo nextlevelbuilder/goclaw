@@ -59,6 +59,14 @@ type ObserveState struct {
 	FinalThinking  string // reasoning output
 	BlockReplies   int
 	LastBlockReply string
+
+	// AssistantImages accumulates final (non-partial) images from every iteration's
+	// ChatResponse.Images. FinalizeStage persists these to workspace/media/.
+	// Accumulation is required because LastResponse holds only the final iteration's
+	// response — if the LLM emits an image_generation_call alongside a function_call
+	// in iter N and responds text-only in iter N+1, reading only LastResponse.Images
+	// would lose the image.
+	AssistantImages []providers.ImageContent
 }
 
 // CompactState: owned by CheckpointStage + MemoryFlushStage.
