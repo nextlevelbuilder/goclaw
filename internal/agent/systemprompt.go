@@ -685,16 +685,13 @@ func buildSkillsSection(skillsSummary string, hasSkillSearch, hasSkillManage boo
 }
 
 func buildWorkspaceSection(workspace string, sandboxEnabled bool, containerDir string) []string {
-	// Matching TS: when sandboxed, display container workdir; add guidance about host paths for file tools.
+	// Matching TS intent: when sandboxed, display container workdir and keep guidance
+	// sandbox-centric (do not leak host path as primary file-tool base).
 	displayDir := workspace
 	guidance := "All file tool paths resolve relative to this directory. Use relative paths (e.g. \"docs/notes.md\", \".\") — do not guess absolute paths."
 	if sandboxEnabled && containerDir != "" {
 		displayDir = containerDir
-		guidance = fmt.Sprintf(
-			"For read_file/write_file/list_files, file paths resolve against host workspace: %s. "+
-				"Prefer relative paths so both sandboxed exec and file tools work consistently.",
-			workspace,
-		)
+		guidance = "All file tool paths resolve relative to this sandbox workdir. Use relative paths so exec and file tools stay consistent."
 	}
 
 	return []string{

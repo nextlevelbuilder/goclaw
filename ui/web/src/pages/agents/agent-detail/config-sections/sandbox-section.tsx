@@ -38,7 +38,7 @@ export function SandboxSection({ enabled, value, onToggle, onChange }: SandboxSe
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="docker">docker</SelectItem>
-              <SelectItem value="bwrap">bwrap</SelectItem>
+              <SelectItem value="bwrap">Bubblewrap</SelectItem>
             </SelectContent>
           </Select>
         </div>
