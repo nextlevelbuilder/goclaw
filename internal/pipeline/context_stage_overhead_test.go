@@ -35,7 +35,7 @@ func fixtureTools(n int) []providers.ToolDefinition {
 	for i := range tools {
 		tools[i] = providers.ToolDefinition{
 			Type: "function",
-			Function: providers.ToolFunctionSchema{
+			Function: &providers.ToolFunctionSchema{
 				Name:        "tool_fixture",
 				Description: "A fixture tool for testing overhead calculation.",
 				Parameters:  map[string]any{"type": "object", "properties": map[string]any{}},

@@ -13,7 +13,7 @@ const testModel = "claude-sonnet-4-5-20250929"
 func smallTool() providers.ToolDefinition {
 	return providers.ToolDefinition{
 		Type: "function",
-		Function: providers.ToolFunctionSchema{
+		Function: &providers.ToolFunctionSchema{
 			Name:        "get_time",
 			Description: "Returns the current UTC time.",
 			Parameters:  map[string]any{"type": "object", "properties": map[string]any{}},
@@ -25,7 +25,7 @@ func smallTool() providers.ToolDefinition {
 func largeTool(name string) providers.ToolDefinition {
 	return providers.ToolDefinition{
 		Type: "function",
-		Function: providers.ToolFunctionSchema{
+		Function: &providers.ToolFunctionSchema{
 			Name: name,
 			Description: "Reads, writes, and appends content to files in the workspace. " +
 				"Supports binary and text modes. Path must be relative to the active workspace root. " +

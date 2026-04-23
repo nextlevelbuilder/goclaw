@@ -39,7 +39,7 @@ func buildRealisticToolDefinitions(n int) []providers.ToolDefinition {
 		}
 		tools[i] = providers.ToolDefinition{
 			Type: "function",
-			Function: providers.ToolFunctionSchema{
+			Function: &providers.ToolFunctionSchema{
 				Name: "realistic_tool",
 				Description: strings.Repeat(
 					"A realistic tool that performs complex file and system operations. "+
