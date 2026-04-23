@@ -17,7 +17,7 @@ env:
 jobs:
   # Build cross-platform binaries and create prerelease
   build-binaries:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         include:
@@ -64,7 +64,7 @@ jobs:
   # Create GitHub prerelease with binaries
   create-prerelease:
     needs: build-binaries
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -86,69 +86,21 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # Build and push Docker images tagged as beta
+  # Docker beta images: 2 variants on both registries, multi-arch
   docker-images:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - variant: latest
-            suffix: ""
-            enable_otel: "false"
-            enable_embedui: "true"
-            enable_python: "true"
-            enable_full_skills: "false"
-          - variant: full
-            suffix: "-full"
-            enable_otel: "false"
-            enable_embedui: "true"
-            enable_python: "true"
-            enable_full_skills: "true"
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: docker/setup-qemu-action@v3
-
-      - uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            ${{ env.GHCR_IMAGE }}
-            ${{ env.DOCKERHUB_IMAGE }}
-          tags: |
-            type=raw,value=${{ github.ref_name }},suffix=${{ matrix.suffix }}
-            type=raw,value=beta,enable=${{ matrix.suffix == '' }},suffix=
-            type=raw,value=beta${{ matrix.suffix }},enable=${{ matrix.suffix != '' }}
-
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            ENABLE_OTEL=${{ matrix.enable_otel }}
-            ENABLE_EMBEDUI=${{ matrix.enable_embedui }}
-            ENABLE_PYTHON=${{ matrix.enable_python }}
-            ENABLE_FULL_SKILLS=${{ matrix.enable_full_skills }}
-            VERSION=${{ github.ref_name }}
-          cache-from: type=gha,scope=beta-${{ matrix.variant }}
-          cache-to: type=gha,mode=max,scope=beta-${{ matrix.variant }}
+    uses: ./.github/workflows/docker-multiarch.yaml
+    with:
+      variants-json: >-
+        [
+          {"name":"latest","suffix":"","enable_otel":"false","enable_embedui":"true","enable_python":"true","enable_full_skills":"false"},
+          {"name":"full","suffix":"-full","enable_otel":"false","enable_embedui":"true","enable_python":"true","enable_full_skills":"true"}
+        ]
+      tag-rules: |
+        type=raw,value=${{ github.ref_name }},suffix={{suffix}}
+        type=raw,value=beta,enable={{is_latest}},suffix=
+        type=raw,value=beta{{suffix}},enable={{is_variant}}
+      cache-prefix: beta
+      version: ${{ github.ref_name }}
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}

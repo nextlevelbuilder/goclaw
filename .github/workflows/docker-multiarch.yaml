@@ -1,0 +1,197 @@
+name: Docker Multi-Arch Build & Push
+
+on:
+  workflow_call:
+    inputs:
+      image-suffix:
+        description: 'Suffix appended to image name (e.g. "-web" or "")'
+        default: ''
+        type: string
+      build-context:
+        description: 'Docker build context path'
+        default: '.'
+        type: string
+      variants-json:
+        description: |
+          JSON array of variant objects. Each must include: name, suffix,
+          enable_otel, enable_embedui, enable_python, enable_full_skills.
+          For web-only (no backend args), pass a 1-variant sentinel.
+        required: true
+        type: string
+      tag-rules:
+        description: |
+          Multiline tag template for docker/metadata-action `tags` field.
+          May reference placeholders {{name}}, {{suffix}}, {{is_latest}},
+          {{is_variant}}. Callers cannot use matrix expressions directly
+          because matrix context is not available at caller scope.
+          Placeholders resolve inside the merge job at matrix-expansion time.
+        required: true
+        type: string
+      cache-prefix:
+        description: 'Cache scope prefix (e.g. "release", "beta", "web")'
+        required: true
+        type: string
+      version:
+        description: 'VERSION build-arg value'
+        required: true
+        type: string
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: true
+      DOCKERHUB_TOKEN:
+        required: true
+
+env:
+  # NOTE: DOCKERHUB_IMAGE is patched per-repo. Upstream: digitop/goclaw.
+  # Forks override locally (e.g. dataplanelabs/goclaw) on their test branch.
+  GHCR_IMAGE: ghcr.io/${{ github.repository }}${{ inputs.image-suffix }}
+  DOCKERHUB_IMAGE: digitop/goclaw${{ inputs.image-suffix }}
+
+jobs:
+  build:
+    runs-on: ${{ matrix.platform.runs_on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: ${{ fromJSON(inputs.variants-json) }}
+        platform:
+          - { name: "linux/amd64", runs_on: ubuntu-24.04,     arch: amd64 }
+          - { name: "linux/arm64", runs_on: ubuntu-24.04-arm, arch: arm64 }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: ./.github/actions/docker-registry-login
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.GHCR_IMAGE }}
+            ${{ env.DOCKERHUB_IMAGE }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.build-context }}
+          platforms: ${{ matrix.platform.name }}
+          outputs: type=image,"name=${{ env.GHCR_IMAGE }},${{ env.DOCKERHUB_IMAGE }}",push-by-digest=true,name-canonical=true,push=true
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            ENABLE_OTEL=${{ matrix.variant.enable_otel }}
+            ENABLE_EMBEDUI=${{ matrix.variant.enable_embedui }}
+            ENABLE_PYTHON=${{ matrix.variant.enable_python }}
+            ENABLE_FULL_SKILLS=${{ matrix.variant.enable_full_skills }}
+            VERSION=${{ inputs.version }}
+          cache-from: type=gha,scope=${{ inputs.cache-prefix }}-${{ matrix.variant.name }}-${{ matrix.platform.arch }}
+          cache-to: type=gha,mode=max,scope=${{ inputs.cache-prefix }}-${{ matrix.variant.name }}-${{ matrix.platform.arch }}
+
+      - name: Export digest
+        # Filename IS the digest sha; merge job reads filenames to rebuild
+        # content-addressable image refs. File content is intentionally empty.
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ inputs.cache-prefix }}-${{ matrix.variant.name }}-${{ matrix.platform.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    needs: build
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: ${{ fromJSON(inputs.variants-json) }}
+    steps:
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/docker-registry-login
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          pattern: digest-${{ inputs.cache-prefix }}-${{ matrix.variant.name }}-*
+          path: /tmp/digests
+          merge-multiple: true
+
+      # Resolve {{name}}/{{suffix}}/{{is_latest}}/{{is_variant}} placeholders.
+      # Why bash-substitution instead of GHA's `${{ matrix.* }}`:
+      # GHA evaluates expressions in a caller's `with:` inputs at CALLER scope,
+      # where `matrix` is undefined (the matrix lives inside this reusable
+      # workflow, not in the caller). Passing `${{ matrix.variant.x }}` from a
+      # caller therefore fails workflow parse. Placeholders let the caller
+      # write template strings that this job resolves at matrix-expansion time.
+      - name: Resolve tag rules
+        id: tagrules
+        env:
+          TAG_RULES: ${{ inputs.tag-rules }}
+          NAME: ${{ matrix.variant.name }}
+          SUFFIX: ${{ matrix.variant.suffix }}
+        run: |
+          # Derive boolean placeholders from suffix presence
+          if [ -z "$SUFFIX" ]; then
+            IS_LATEST=true; IS_VARIANT=false
+          else
+            IS_LATEST=false; IS_VARIANT=true
+          fi
+          RESOLVED="$TAG_RULES"
+          RESOLVED="${RESOLVED//\{\{name\}\}/$NAME}"
+          RESOLVED="${RESOLVED//\{\{suffix\}\}/$SUFFIX}"
+          RESOLVED="${RESOLVED//\{\{is_latest\}\}/$IS_LATEST}"
+          RESOLVED="${RESOLVED//\{\{is_variant\}\}/$IS_VARIANT}"
+          {
+            echo 'rules<<RULES_EOF'
+            printf '%s\n' "$RESOLVED"
+            echo 'RULES_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.GHCR_IMAGE }}
+            ${{ env.DOCKERHUB_IMAGE }}
+          tags: ${{ steps.tagrules.outputs.rules }}
+
+      - name: Create and push multi-arch manifest (GHCR)
+        run: |
+          cd /tmp/digests
+          DIGESTS=$(printf "${{ env.GHCR_IMAGE }}@sha256:%s " *)
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map(select(startswith("ghcr.io")) | "-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $DIGESTS
+
+      - name: Create and push multi-arch manifest (Docker Hub)
+        run: |
+          cd /tmp/digests
+          DIGESTS=$(printf "${{ env.GHCR_IMAGE }}@sha256:%s " *)
+          docker buildx imagetools create \
+            $(jq -cr --arg p "${{ env.DOCKERHUB_IMAGE }}" '.tags | map(select(startswith($p)) | "-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $DIGESTS
+
+      - name: Inspect manifests
+        run: |
+          for tag in $(jq -r '.tags[]' <<< "$DOCKER_METADATA_OUTPUT_JSON"); do
+            docker buildx imagetools inspect "$tag"
+          done

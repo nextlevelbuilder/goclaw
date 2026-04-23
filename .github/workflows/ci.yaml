@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   go:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Postgres service container for integration tests. pgvector/pgvector:pg18
     # matches the local dev image (Makefile uses the same tag on port 5433).
     # Healthcheck blocks the job until PG accepts connections, avoiding
@@ -70,7 +70,7 @@ jobs:
         run: go tool cover -func=coverage.out | tail -1
 
   web:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: ui/web

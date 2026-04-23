@@ -148,7 +148,7 @@ jobs:
   # ── Create GitHub Release ──
   create-release:
     needs: [build-macos, build-windows]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
