@@ -209,6 +209,10 @@
   "tools.execAskModeTip": "Khi nào nhắc người dùng phê duyệt trước khi thực thi lệnh.",
   "tools.execAllowlistLabel": "Lệnh được phép (mỗi dòng một mẫu)",
   "tools.scrubCredentials": "Ẩn thông tin xác thực",
+  "tools.mcpCommands": "Lệnh MCP được phép",
+  "tools.mcpCommandsLabel": "Lệnh bổ sung",
+  "tools.mcpCommandsTip": "Tên binary tùy chỉnh được phép làm lệnh MCP server (stdio transport). Các runtime mặc định (node, python, v.v.) luôn được phép.",
+  "tools.mcpCommandsPlaceholder": "Nhập tên lệnh và nhấn Enter",
 
   "tts.title": "Chuyển văn bản thành giọng nói",
   "tts.configured": "Đã cấu hình",
