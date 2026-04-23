@@ -291,7 +291,6 @@ func isWriteMethod(method string) bool {
 		protocol.MethodChatInject,
 		protocol.MethodSessionsDelete,
 		protocol.MethodSessionsReset,
-		protocol.MethodSessionsCompact,
 		protocol.MethodSessionsPatch,
 		protocol.MethodSessionsCompact,
 		protocol.MethodCronCreate,
