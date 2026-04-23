@@ -1012,6 +1012,7 @@
     "noRules": "No permission rules. Owner has implicit full access.",
     "userIdPlaceholder": "Search contacts or type ID...",
     "scopePlaceholder": "Select or type scope...",
+    "unknownWriterLabel": "User {{id}}",
     "types": {
       "file_writer": "File Writer",
       "file_writer_desc": "Controls who can edit files and manage cron in group chats. First user auto-added.",

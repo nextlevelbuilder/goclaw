@@ -997,6 +997,7 @@
     "noRules": "Chưa có quy tắc. Chủ sở hữu mặc định có đầy đủ quyền.",
     "userIdPlaceholder": "Tìm liên hệ hoặc nhập ID...",
     "scopePlaceholder": "Chọn hoặc nhập phạm vi...",
+    "unknownWriterLabel": "Người dùng {{id}}",
     "types": {
       "file_writer": "Quyền viết file",
       "file_writer_desc": "Ai được chỉnh sửa file và quản lý cron trong nhóm chat. Người đầu tiên tự động được thêm.",

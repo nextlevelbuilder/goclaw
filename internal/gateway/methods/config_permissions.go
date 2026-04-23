@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -14,9 +15,10 @@ import (
 
 // ConfigPermissionsMethods handles config.permissions.* RPC methods.
 type ConfigPermissionsMethods struct {
-	permStore   store.ConfigPermissionStore
-	agentStore  store.AgentStore
-	agentRouter *agent.Router // cache-aware agent resolver; nil = DB-only fallback
+	permStore      store.ConfigPermissionStore
+	agentStore     store.AgentStore
+	agentRouter    *agent.Router           // cache-aware agent resolver; nil = DB-only fallback
+	memberResolver channels.MemberResolver // optional — enriches file_writer metadata on grant
 }
 
 func NewConfigPermissionsMethods(ps store.ConfigPermissionStore, as store.AgentStore) *ConfigPermissionsMethods {
@@ -26,6 +28,12 @@ func NewConfigPermissionsMethods(ps store.ConfigPermissionStore, as store.AgentS
 // SetAgentRouter wires the agent router for cache-aware agent_key resolution.
 func (m *ConfigPermissionsMethods) SetAgentRouter(r *agent.Router) {
 	m.agentRouter = r
+}
+
+// SetMemberResolver wires a channel member resolver so Grant can auto-enrich
+// file_writer metadata when the caller supplies none (e.g. Web UI path).
+func (m *ConfigPermissionsMethods) SetMemberResolver(r channels.MemberResolver) {
+	m.memberResolver = r
 }
 
 func (m *ConfigPermissionsMethods) Register(router *gateway.MethodRouter) {
@@ -110,6 +118,16 @@ func (m *ConfigPermissionsMethods) handleGrant(ctx context.Context, client *gate
 		}
 	}
 
+	// Auto-enrich file_writer metadata for group scopes when caller supplied none.
+	// Best-effort: failure (bot offline, user left group, channel not supported)
+	// leaves params.Metadata as-is and the store's own fallback ("{}") applies.
+	metadata := params.Metadata
+	if params.ConfigType == store.ConfigTypeFileWriter && channels.IsEmptyWriterMetadata(metadata) {
+		if enriched, ok := channels.EnrichFileWriterMetadata(ctx, m.memberResolver, params.Scope, params.UserID); ok {
+			metadata = enriched
+		}
+	}
+
 	perm := &store.ConfigPermission{
 		AgentID:    agentUUID,
 		Scope:      params.Scope,
@@ -117,7 +135,7 @@ func (m *ConfigPermissionsMethods) handleGrant(ctx context.Context, client *gate
 		UserID:     params.UserID,
 		Permission: params.Permission,
 		GrantedBy:  grantedBy,
-		Metadata:   params.Metadata,
+		Metadata:   metadata,
 	}
 
 	if err := m.permStore.Grant(ctx, perm); err != nil {

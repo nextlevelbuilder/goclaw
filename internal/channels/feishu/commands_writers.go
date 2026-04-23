@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -272,19 +273,10 @@ func (c *Channel) handleFeishuListWriters(parentCtx context.Context, mc *message
 		return
 	}
 
-	type fwMeta struct {
-		DisplayName string `json:"displayName"`
-	}
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "File writers for this group (%d):\n", len(writers))
 	for i, w := range writers {
-		var meta fwMeta
-		_ = json.Unmarshal(w.Metadata, &meta)
-		label := w.UserID
-		if meta.DisplayName != "" {
-			label = meta.DisplayName
-		}
-		fmt.Fprintf(&sb, "%d. %s (ID: %s)\n", i+1, label, w.UserID)
+		fmt.Fprintf(&sb, "%d. %s (ID: %s)\n", i+1, channels.WriterLabel(w.Metadata, w.UserID), w.UserID)
 	}
 	c.sendCommandReply(ctx, mc, sb.String())
 }

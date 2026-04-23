@@ -997,6 +997,7 @@
     "noRules": "暂无权限规则。所有者默认拥有完全访问权限。",
     "userIdPlaceholder": "搜索联系人或输入ID...",
     "scopePlaceholder": "选择或输入范围...",
+    "unknownWriterLabel": "用户 {{id}}",
     "types": {
       "file_writer": "文件编辑",
       "file_writer_desc": "控制谁可以在群聊中编辑文件和管理定时任务。首位用户自动添加。",

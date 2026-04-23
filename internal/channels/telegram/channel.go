@@ -48,7 +48,8 @@ type Channel struct {
 	reconnectMu sync.Mutex
 	reconnecting bool
 	audioMgr          *audio.Manager    // unified STT via audio.Manager (nil = no STT)
-
+	writerHealMu      sync.Mutex         // guards writerHealLastTry for /writers self-heal
+	writerHealLastTry map[string]time.Time // key "chatID|userID" → last attempt timestamp
 	// pairingService, approvedGroups, pairingDebounce, groupHistory, historyLimit, requireMention
 	// are inherited from channels.BaseChannel.
 }
