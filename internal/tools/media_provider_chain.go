@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // MediaProviderEntry represents a single provider in an ordered fallback chain.
@@ -182,6 +183,11 @@ func ExecuteWithChain(
 			continue
 		}
 
+		// Wrap Codex pool-base providers in a ChatGPTOAuthRouter so that
+		// _native_provider delivers pool-aware image generation to callProvider.
+		// Solo Codex providers (no routing defaults) pass through unchanged.
+		p = wrapPoolProvider(ctx, registry, entry.Provider, p)
+
 		// credentialProvider is optional — providers that don't expose static
 		// credentials (e.g. OAuth-based CodexProvider) pass nil and each
 		// callProvider falls back to using the provider's Chat() API.
@@ -340,6 +346,60 @@ func ResolveProviderType(p providers.Provider) string {
 	}
 	// Fallback: infer from provider name (for config-registered and openai_compat providers)
 	return providerTypeFromName(p.Name())
+}
+
+// wrapPoolProvider inspects the resolved provider and, when it is a
+// *providers.CodexProvider whose RoutingDefaults indicate a multi-member pool
+// (round_robin or priority_order strategy), wraps it in a *ChatGPTOAuthRouter.
+// The router satisfies NativeImageProvider, enabling pool-aware image generation
+// inside callProvider without changing any caller of ExecuteWithChain.
+//
+// Wrap conditions (all must hold):
+//  1. resolved is *providers.CodexProvider
+//  2. codex.RoutingDefaults() is non-nil
+//  3. strategy is round_robin or priority_order (OR extras ≥ 1)
+//  4. tenant UUID is present in ctx (uuid.Nil → safe degrade, return original)
+//  5. router.HasRegisteredProviders() is true (broken router guard)
+//
+// Returns resolved unchanged for every other case.
+func wrapPoolProvider(ctx context.Context, reg *providers.Registry, entryProvider string, resolved providers.Provider) providers.Provider {
+	codex, ok := resolved.(*providers.CodexProvider)
+	if !ok {
+		return resolved
+	}
+
+	defaults := codex.RoutingDefaults()
+	if defaults == nil {
+		return resolved
+	}
+
+	// Only wrap when the strategy is explicitly multi-member.
+	isMultiMemberStrategy := defaults.Strategy == "round_robin" || defaults.Strategy == "priority_order"
+	if !isMultiMemberStrategy && len(defaults.ExtraProviderNames) == 0 {
+		return resolved
+	}
+
+	tenantID := store.TenantIDFromContext(ctx)
+	if tenantID.String() == "00000000-0000-0000-0000-000000000000" {
+		// No tenant in context — cannot build a scoped router safely.
+		return resolved
+	}
+
+	router := providers.NewChatGPTOAuthRouter(
+		tenantID,
+		reg,
+		entryProvider,
+		defaults.Strategy,
+		defaults.ExtraProviderNames,
+	)
+
+	// Guard: if the router cannot resolve any member, injecting it would break
+	// the image gen path. Fall back to the bare Codex provider.
+	if !router.HasRegisteredProviders() {
+		return resolved
+	}
+
+	return router
 }
 
 // providerTypeFromName infers provider type from naming patterns.
