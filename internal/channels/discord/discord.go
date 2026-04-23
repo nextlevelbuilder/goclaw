@@ -27,8 +27,11 @@ type Channel struct {
 	session         *discordgo.Session
 	config          config.DiscordConfig
 	botUserID       string   // populated on start
+	applicationID   string   // populated on start; required for slash-command registration
+	testGuildID     string   // optional: dev-only guild for instant command propagation (empty = global)
 	placeholders    sync.Map // placeholderKey string → messageID string
 	typingCtrls     sync.Map // channelID string → *typing.Controller
+	interactionTokens sync.Map // discord interaction ID string → *interactionEcho (reply via interaction token)
 	agentStore      store.AgentStore            // for agent key lookup (nil = writer commands disabled)
 	configPermStore store.ConfigPermissionStore // for group file writer management (nil = writer commands disabled)
 	audioMgr        *audio.Manager             // unified STT via audio.Manager (nil = no STT)
@@ -69,6 +72,7 @@ func New(cfg config.DiscordConfig, msgBus *bus.MessageBus, pairingSvc store.Pair
 		BaseChannel:     base,
 		session:         session,
 		config:          cfg,
+		testGuildID:     cfg.TestGuildID,
 		agentStore:      agentStore,
 		configPermStore: configPermStore,
 		audioMgr:        audioMgr,
@@ -81,11 +85,12 @@ func New(cfg config.DiscordConfig, msgBus *bus.MessageBus, pairingSvc store.Pair
 }
 
 // Start opens the Discord gateway connection and begins receiving events.
-func (c *Channel) Start(_ context.Context) error {
+func (c *Channel) Start(ctx context.Context) error {
 	c.GroupHistory().StartFlusher()
 	slog.Info("starting discord bot")
 
 	c.session.AddHandler(c.handleMessage)
+	c.session.AddHandler(c.handleInteraction)
 
 	if err := c.session.Open(); err != nil {
 		return fmt.Errorf("open discord session: %w", err)
@@ -99,10 +104,49 @@ func (c *Channel) Start(_ context.Context) error {
 	}
 	c.botUserID = user.ID
 
+	// Fetch application ID — required for slash-command registration. Slash
+	// commands are owned by the application, not the bot user, and the two
+	// can differ (the bot is part of the application).
+	app, appErr := c.session.Application("@me")
+	if appErr != nil {
+		// Non-fatal: the channel still runs, just without slash commands.
+		// Typical cause: token lacks applications.commands scope on its
+		// OAuth2 installation. Surface the reason in the log and move on.
+		slog.Warn("discord: failed to fetch application ID (slash commands disabled)",
+			"error", appErr)
+	} else if app != nil {
+		c.applicationID = app.ID
+	}
+
 	c.SetRunning(true)
-	slog.Info("discord bot connected", "username", user.Username, "id", user.ID)
+	slog.Info("discord bot connected",
+		"username", user.Username, "id", user.ID, "app_id", c.applicationID)
+
+	// Slash commands: opt-in (default true). If the app-ID fetch failed above
+	// we can't register, so surface that as a separate log line instead of
+	// merging the two gate conditions into one opaque branch.
+	if !c.slashCommandsEnabled() {
+		// user explicitly disabled — no action
+	} else if c.applicationID == "" {
+		slog.Warn("discord: skipping slash command sync (no application ID — check applications.commands OAuth scope on bot token)")
+	} else {
+		// Register slash commands (non-blocking, retries on transient errors).
+		// Bulk-overwrite replaces the full command list, so any stale commands
+		// from a previous backend are automatically removed on first boot.
+		c.startSlashCommandSync(ctx)
+		// Background sweeper for the per-interaction echo map. Ties its
+		// lifetime to the channel's ctx so Stop() terminates it.
+		c.startInteractionSweeper(ctx)
+	}
 
 	return nil
+}
+
+// slashCommandsEnabled returns whether slash-command registration is on
+// for this channel. Default: true — opt out by setting slash_commands=false
+// in the channel config.
+func (c *Channel) slashCommandsEnabled() bool {
+	return c.config.SlashCommands == nil || *c.config.SlashCommands
 }
 
 // BlockReplyEnabled returns the per-channel block_reply override (nil = inherit gateway default).
@@ -158,6 +202,24 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) (err error)
 			}
 		}
 		return nil
+	}
+
+	// Slash-command interaction reply path. When the inbound came from a
+	// slash command, handleInteraction stashed an interactionEcho keyed by
+	// the interaction ID and the outbound metadata carries the token. Route
+	// via InteractionResponseEdit + followups instead of ChannelMessageSend
+	// so the reply appears inline against the slash command in Discord's UI.
+	//
+	// Falls through to the regular channel-post path if the token has expired
+	// or the edit failed UNLESS the reply was marked ephemeral in a guild
+	// channel (discord_interaction_flags=ephemeral). In that case
+	// trySendViaInteraction returns handled=true and we drop the reply rather
+	// than leak private content to the full channel — see
+	// ephemeralSuppressesFallback.
+	if tok := msg.Metadata["discord_interaction_token"]; tok != "" {
+		if handled, sendErr := c.trySendViaInteraction(ctx, msg, tok); handled {
+			return sendErr
+		}
 	}
 
 	typingCtrl := c.currentTypingCtrl(channelID)
