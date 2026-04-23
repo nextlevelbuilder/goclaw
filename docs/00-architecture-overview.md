@@ -460,25 +460,14 @@ flowchart TD
 
 ## 11. File Reference
 
-| File | Purpose |
-|------|---------|
-| `cmd/root.go` | Cobra CLI entry point, flag parsing |
-| `cmd/gateway.go` | Gateway startup orchestrator (`runGateway()`) |
-| `cmd/gateway_managed.go` | Database wiring (`wireManagedExtras()`, `wireManagedHTTP()`) |
-| `cmd/gateway_callbacks.go` | Shared callbacks (user seeding, context file loading) |
-| `cmd/gateway_consumer.go` | Inbound message consumer (subagent, teammate routing) |
-| `cmd/gateway_providers.go` | Provider registration (config-based + DB-based) |
-| `cmd/gateway_methods.go` | RPC method registration |
-| `internal/config/config.go` | Config struct definitions |
-| `internal/config/config_load.go` | JSON5 loading + env overlay |
-| `internal/config/config_channels.go` | Channel config structs |
-| `internal/gateway/server.go` | WS + HTTP server, CORS, rate limiter setup |
-| `internal/gateway/client.go` | WebSocket client handling, read limit (512KB) |
-| `internal/gateway/router.go` | RPC method routing |
-| `internal/scheduler/lanes.go` | Lane definitions, semaphore-based concurrency |
-| `internal/scheduler/queue.go` | Per-session queue, queue modes, debounce |
-| `internal/store/stores.go` | `Stores` container struct (all 22+ store interfaces) |
-| `internal/store/types.go` | `StoreConfig`, `BaseModel` |
+| Module | Path | Purpose |
+|---|---|---|
+| CLI & startup | `cmd/` | Cobra entry point, gateway orchestrator, DB wiring, provider registration, RPC method registration |
+| Gateway server | `internal/gateway/` | WS + HTTP server, client lifecycle, method router, rate limiter |
+| Config | `internal/config/` | JSON5 config loading, env overlay, channel config structs |
+| Store layer | `internal/store/` | `Stores` container, `BaseModel`, `StoreConfig`, `GenNewID()` |
+
+Use `grep` or your editor's symbol search for specific files.
 
 ---
 

@@ -133,14 +133,7 @@ No skill is created without explicit user approval ("save as skill" or "skip").
 
 Both stored in `agents.other_config` JSONB. Parsed by `ParseSkillEvolve()` and `ParseSkillNudgeInterval()` in `agent_store.go`.
 
-**Predefined agents only.** Enforced at resolver level:
-
-```go
-// resolver.go:346
-SkillEvolve: ag.AgentType == "predefined" && ag.ParseSkillEvolve(),
-```
-
-Open agents always get `skillEvolve=false` regardless of DB setting.
+**Predefined agents only.** Enforced at the resolver level: `SkillEvolve` is set to `true` only when `AgentType == "predefined"` and the `skill_evolve` config flag is enabled. Open agents always get `skillEvolve=false` regardless of DB setting.
 
 **UI:** Config tab → Skill Learning section (toggle + interval input).
 
@@ -254,8 +247,8 @@ reusable skill? Reply "save as skill" or "skip"._
 
 When `skill_evolve=false`, `skill_manage` is completely hidden from the LLM:
 
-1. **API params** (`loop.go:528-537`): filtered from `toolDefs` before sending to provider
-2. **System prompt tooling** (`loop_history.go:135-144`): filtered from `toolNames` used in prompt construction
+1. **API params**: filtered from `toolDefs` before sending to provider
+2. **System prompt tooling**: filtered from `toolNames` used in prompt construction
 
 The tool remains in the shared registry (admin can see it) but the agent has zero awareness of it.
 
@@ -504,35 +497,14 @@ When both features are disabled (default), zero token overhead.
 
 ## 7. File Reference
 
-| File | Purpose |
-|------|---------|
-| `internal/agent/systemprompt.go` | `buildSelfEvolveSection()`, `buildSkillsSection()` |
-| `internal/agent/loop.go` | Budget nudges (70%/90%), postscript, tool gating |
-| `internal/agent/loop_history.go` | `HasSkillManage` flag, tool name filtering |
-| `internal/agent/resolver.go` | Predefined-only enforcement for both features |
-| `internal/store/agent_store.go` | `ParseSelfEvolve()`, `ParseSkillEvolve()`, `ParseSkillNudgeInterval()` |
-| `internal/tools/skill_manage.go` | `skill_manage` tool (create/patch/delete) |
-| `internal/tools/publish_skill.go` | `publish_skill` tool (directory-based) |
-| `internal/tools/context_file_interceptor.go` | SOUL.md write validation for self-evolve |
-| `internal/skills/guard.go` | Content security scanner (25 regex rules) |
-| `internal/store/pg/skills_crud.go` | `CreateSkillManaged`, `GetNextVersionLocked`, advisory lock |
-| `internal/store/pg/skills_content.go` | `GetSkillOwnerID`, `GetSkillOwnerIDBySlug` |
-| `internal/store/pg/skills_grants.go` | Grant/revoke operations, visibility auto-promotion |
-| `internal/http/skills.go` | HTTP skill management endpoints |
-| `internal/http/skills_grants.go` | HTTP grant/revoke endpoints |
-| `internal/gateway/methods/skills.go` | WebSocket skill methods |
-| `internal/i18n/keys.go` | `MsgSkillNudgePostscript`, `MsgSkillNudge70Pct`, `MsgSkillNudge90Pct` |
-| `internal/i18n/catalog_en.go` | English nudge translations |
-| `internal/i18n/catalog_vi.go` | Vietnamese nudge translations |
-| `internal/i18n/catalog_zh.go` | Chinese nudge translations |
-| `cmd/gateway_builtin_tools.go` | `skill_manage` builtin tool seed entry |
-| `internal/agent/suggestion_engine.go` | SuggestionEngine + pluggable rules interface |
-| `internal/agent/suggestion_rules.go` | Concrete rules: LowRetrievalUsageRule, ToolFailureRule, RepeatedToolRule |
-| `internal/agent/evolution_guardrails.go` | Guardrail validation, apply/rollback logic |
-| `internal/store/evolution_store.go` | Store interfaces: EvolutionMetricsStore, EvolutionSuggestionStore |
-| `internal/store/pg/evolution_metrics.go` | PostgreSQL evolution metrics CRUD + aggregation |
-| `internal/store/pg/evolution_suggestions.go` | PostgreSQL evolution suggestions CRUD + status updates |
-| `cmd/gateway_evolution_cron.go` | Daily cron job scheduler for suggestion generation |
+| Module | Path | Purpose |
+|---|---|---|
+| Agent loop & system prompt | `internal/agent/systemprompt.go`, `internal/agent/loop.go`, `internal/agent/loop_history.go`, `internal/agent/resolver.go` | Self-evolve/skill sections, budget nudges, tool gating, predefined-only enforcement |
+| Skill tools & security | `internal/tools/skill_manage.go`, `internal/tools/publish_skill.go`, `internal/tools/context_file_interceptor.go`, `internal/skills/guard.go` | skill_manage/publish_skill tools, SOUL.md validation, content security scanner |
+| Skill store, HTTP & gateway | `internal/store/pg/skills_*.go`, `internal/http/skills*.go`, `internal/gateway/methods/skills.go`, `internal/store/agent_store.go` | Skill CRUD, grants, versioning, HTTP + WS methods, ParseSkillEvolve helpers |
+| Evolution metrics & i18n | `internal/agent/suggestion_engine.go`, `internal/agent/evolution_guardrails.go`, `internal/store/pg/evolution_*.go`, `internal/i18n/`, `cmd/gateway_evolution_cron.go` | SuggestionEngine, guardrails, metrics/suggestions persistence, nudge translations, cron |
+
+Use `grep` or your editor's symbol search for specific files.
 
 ---
 
@@ -637,7 +609,7 @@ Evolution analysis runs as a periodic cron job (default: daily).
 
 ### 8.5 API & WebSocket
 
-**HTTP Endpoints** (see [22 — V3 HTTP Endpoints](22-v3-http-endpoints.md)):
+**HTTP Endpoints** (see [18 — HTTP REST API](18-http-api.md#14-evolution-metrics--suggestions)):
 - `GET /v1/agents/{agentID}/evolution/metrics` — Query/aggregate metrics
 - `GET /v1/agents/{agentID}/evolution/suggestions` — List suggestions
 - `PATCH /v1/agents/{agentID}/evolution/suggestions/{suggestionID}` — Approve/reject/rollback
@@ -674,4 +646,4 @@ Defaults used if keys absent. Set `evolution_enabled: false` to disable metrics 
 - [15 - Core Skills System](./15-core-skills-system.md) — Bundled system skills, startup seeding, dependency checking
 - [16 - Skill Publishing System](./16-skill-publishing.md) — `publish_skill` tool and `skill-creator` core skill
 - [19 - WebSocket RPC Methods](./19-websocket-rpc.md) — V3 WebSocket methods for evolution, episodic, vault
-- [22 - V3 HTTP Endpoints](./22-v3-http-endpoints.md) — HTTP REST endpoints for evolution metrics, suggestions, episodic memory, vault documents
+- [18 - HTTP REST API](./18-http-api.md) — HTTP REST endpoints for evolution metrics, suggestions, episodic memory, vault documents

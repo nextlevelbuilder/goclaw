@@ -322,7 +322,7 @@ All channel factories accept `audioMgr *audio.Manager`:
 - Feishu: `FactoryWithStoresAndAudio(..., audioMgr)`
 - WhatsApp: `FactoryWithDBAudio(..., audioMgr, builtinToolStore)`
 
-WhatsApp additionally accepts `builtinToolStore store.BuiltinToolStore` to fetch the per-message `whatsapp_enabled` opt-in flag. Wiring in `cmd/gateway_channels_setup.go:77` + `cmd/gateway.go:433`.
+WhatsApp additionally accepts `builtinToolStore store.BuiltinToolStore` to fetch the per-message `whatsapp_enabled` opt-in flag. Wiring is in `cmd/gateway_channels_setup.go` and `cmd/gateway.go`.
 
 ### Bot Commands
 

@@ -19,8 +19,10 @@ import (
 // Provides access to shared/personal/team vault docs that read_file cannot
 // reach because the path lies outside the agent's canonical workspace.
 type VaultReadTool struct {
-	vaultStore store.VaultStore
-	workspace  string
+	vaultStore    store.VaultStore
+	kgStore       store.KnowledgeGraphStore
+	episodicStore store.EpisodicStore
+	workspace     string
 }
 
 // Defaults / limits for max_bytes.
@@ -63,6 +65,14 @@ func NewVaultReadTool() *VaultReadTool { return &VaultReadTool{} }
 
 // SetVaultStore injects the VaultStore dependency (wired at boot).
 func (t *VaultReadTool) SetVaultStore(vs store.VaultStore) { t.vaultStore = vs }
+
+// SetKGStore injects an optional KnowledgeGraphStore used for namespace-fallback
+// lookup when vault lookup misses. nil is safe.
+func (t *VaultReadTool) SetKGStore(kg store.KnowledgeGraphStore) { t.kgStore = kg }
+
+// SetEpisodicStore injects an optional EpisodicStore used for namespace-fallback
+// lookup when vault lookup misses. nil is safe.
+func (t *VaultReadTool) SetEpisodicStore(es store.EpisodicStore) { t.episodicStore = es }
 
 // SetWorkspace injects the tenant workspace root (wired at boot).
 func (t *VaultReadTool) SetWorkspace(ws string) { t.workspace = ws }
@@ -112,6 +122,12 @@ func (t *VaultReadTool) Execute(ctx context.Context, args map[string]any) *Resul
 
 	doc, err := t.vaultStore.GetDocumentByID(ctx, tenantID.String(), docID.String())
 	if err != nil || doc == nil {
+		// Namespace fallback: the id may belong to a knowledge-graph entity or
+		// an episodic summary. Return a redirect error instead of the generic
+		// "document not found" so the caller can pick the right tool.
+		if redirect := t.namespaceRedirect(ctx, docID.String()); redirect != "" {
+			return ErrorResult(redirect)
+		}
 		return ErrorResult("document not found")
 	}
 
@@ -170,6 +186,29 @@ func (t *VaultReadTool) Execute(ctx context.Context, args map[string]any) *Resul
 	}
 	sb.WriteString(t.buildOutlinksFooter(ctx, tenantID.String(), doc.ID))
 	return NewResult(sb.String())
+}
+
+// namespaceRedirect probes the KG and episodic stores for the given id. When
+// a match is found returns a user-facing message telling the caller which tool
+// to use; otherwise returns "" (caller falls back to "document not found").
+// Store lookup errors are swallowed — fallback is best-effort and must never
+// mask the original not-found signal.
+func (t *VaultReadTool) namespaceRedirect(ctx context.Context, id string) string {
+	if t.kgStore != nil {
+		agentID := store.AgentIDFromContext(ctx)
+		kgUserID := store.KGUserID(ctx)
+		if ent, err := t.kgStore.GetEntity(ctx, agentID.String(), kgUserID, id); err == nil && ent != nil {
+			slog.Warn("vault_read.namespace_mismatch", "doc_id", id, "source", "kg")
+			return fmt.Sprintf("id %q is a knowledge_graph entity_id, not a vault doc_id — call knowledge_graph_search(entity_id=%q) instead", id, id)
+		}
+	}
+	if t.episodicStore != nil {
+		if ep, err := t.episodicStore.Get(ctx, id); err == nil && ep != nil {
+			slog.Warn("vault_read.namespace_mismatch", "doc_id", id, "source", "episodic")
+			return fmt.Sprintf("id %q is an episodic_id, not a vault doc_id — call memory_expand(id=%q) instead", id, id)
+		}
+	}
+	return ""
 }
 
 // buildOutlinksFooter returns a "## Links" section listing scope-accessible

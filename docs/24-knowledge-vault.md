@@ -545,10 +545,12 @@ Response (parallel results from vault + episodic + KG):
 
 ---
 
-## File References
+## File Reference
 
-- **Vault service:** `internal/vault/*.go`
-- **Store interface:** `internal/store/vault_store.go`
-- **HTTP handlers:** `internal/http/vault_handlers.go`
-- **Tools:** `internal/tools/vault_*.go`
-- **Migration:** `migrations/000038_vault_tables.up.sql`
+| Module | Path | Purpose |
+|---|---|---|
+| Vault service & sync | `internal/vault/` | VaultStore, VaultService, VaultSyncWorker, VaultRetriever, wikilink parsing |
+| Store & HTTP | `internal/store/vault_store.go`, `internal/http/vault_handlers.go` | Store interface, REST endpoints (list, get, search, links) |
+| Tools & migration | `internal/tools/vault_*.go`, `migrations/000038_vault_tables.up.sql` | vault_search and vault_link tools, schema migration |
+
+Use `grep` or your editor's symbol search for specific files.

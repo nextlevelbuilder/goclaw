@@ -280,18 +280,13 @@ This makes silent downgrades or provider-default decisions visible in traces ins
 
 ## File Reference
 
-| File | Purpose |
-|------|---------|
-| `internal/providers/types.go` | ThinkingCapable interface, StreamChunk.Thinking field, Opt* thinking constants |
-| `internal/providers/anthropic.go` | Anthropic: budget mapping (4K/10K/32K), beta header injection, temperature stripping |
-| `internal/providers/anthropic_stream.go` | Anthropic streaming: thinking_delta handling, raw block accumulation |
-| `internal/providers/anthropic_request.go` | Anthropic request: thinking block preservation for tool loops |
-| `internal/providers/openai.go` | OpenAI-compat: reasoning_effort mapping, reasoning_content streaming |
-| `internal/providers/reasoning_capability.go` | Static GPT-5/Codex capability registry |
-| `internal/providers/reasoning_resolution.go` | Requested-to-effective reasoning decision engine |
-| `internal/providers/reasoning_observation.go` | Trace metadata merge helpers for reasoning decisions |
-| `internal/providers/dashscope.go` | DashScope: model-specific thinking guard, budget mapping, tools+streaming fallback |
-| `internal/providers/codex.go` | Codex: reasoning event streaming, OutputTokensDetails.ReasoningTokens tracking |
+| Module | Path | Purpose |
+|---|---|---|
+| Provider types & reasoning | `internal/providers/types.go`, `internal/providers/reasoning_capability.go`, `internal/providers/reasoning_resolution.go`, `internal/providers/reasoning_observation.go` | ThinkingCapable interface, GPT-5/Codex capability registry, reasoning decision engine, trace metadata |
+| Anthropic thinking | `internal/providers/anthropic.go`, `internal/providers/anthropic_stream.go`, `internal/providers/anthropic_request.go` | Budget mapping, beta header, thinking_delta streaming, block preservation for tool loops |
+| OpenAI-compat, DashScope & Codex | `internal/providers/openai.go`, `internal/providers/dashscope.go`, `internal/providers/codex.go` | Reasoning effort mapping, DashScope tools+streaming fallback, Codex reasoning event streaming |
+
+Use `grep` or your editor's symbol search for specific files.
 
 ---
 

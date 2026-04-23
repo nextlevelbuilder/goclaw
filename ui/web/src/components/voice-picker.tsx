@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useEffect, useId, useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { RefreshCwIcon, ChevronDownIcon } from "lucide-react";
 import { createPortal } from "react-dom";
@@ -43,6 +43,8 @@ function VoiceRow({ voice, selected, onSelect }: { voice: Voice; selected: boole
 
   return (
     <div
+      role="option"
+      aria-selected={selected}
       className={cn(
         "flex items-center gap-2 rounded-sm px-2 py-1.5 cursor-pointer hover:bg-accent hover:text-accent-foreground",
         selected && "bg-accent/60",
@@ -158,6 +160,7 @@ function DynamicVoicePicker({
   const [search, setSearch] = useState("");
   const triggerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const listboxId = useId();
 
   const { data: voices = [], isLoading } = useVoices();
   const { mutate: refresh, isPending: refreshing } = useRefreshVoices();
@@ -168,10 +171,13 @@ function DynamicVoicePicker({
     ? voices.filter((v) => v.name.toLowerCase().includes(search.toLowerCase()))
     : voices;
 
-  const handleOpen = () => {
+  const handleToggle = () => {
     if (disabled) return;
-    setOpen(true);
-    setSearch("");
+    setOpen((prev) => {
+      if (prev) return false;
+      setSearch("");
+      return true;
+    });
   };
 
   const handleSelect = (voice: Voice) => {
@@ -185,15 +191,53 @@ function DynamicVoicePicker({
     refresh();
   };
 
-  const handleBlur = (e: React.FocusEvent) => {
-    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-      setOpen(false);
+  useEffect(() => {
+    if (!open) {
+      return;
     }
-  };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) {
+        return;
+      }
+
+      if (triggerRef.current?.contains(target) || dropdownRef.current?.contains(target)) {
+        return;
+      }
+
+      setOpen(false);
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+
+    // Close on scroll/resize — position:fixed dropdown does not reflow with
+    // the viewport, so leaving it open in the wrong place is worse than closing.
+    const handleReposition = () => setOpen(false);
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+    window.addEventListener("scroll", handleReposition, true);
+    window.addEventListener("resize", handleReposition);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+      window.removeEventListener("scroll", handleReposition, true);
+      window.removeEventListener("resize", handleReposition);
+    };
+  }, [open]);
 
   const dropdownContent = open && (
     <div
       ref={dropdownRef}
+      id={listboxId}
+      role="listbox"
+      aria-label={t("voice_placeholder")}
       className="pointer-events-auto z-50 min-w-[280px] rounded-md border bg-popover text-popover-foreground shadow-md"
       style={(() => {
         if (!triggerRef.current) return {};
@@ -253,11 +297,14 @@ function DynamicVoicePicker({
   );
 
   return (
-    <div ref={triggerRef} className="relative" onBlur={handleBlur}>
+    <div ref={triggerRef} className="relative">
       <button
         type="button"
         disabled={disabled}
-        onClick={handleOpen}
+        onClick={handleToggle}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={open ? listboxId : undefined}
         className={cn(
           "border-input dark:bg-input/30 flex h-9 w-full items-center justify-between gap-2 rounded-md border bg-transparent px-3 py-2 text-base md:text-sm shadow-xs transition-[color,box-shadow] outline-none",
           "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-1",

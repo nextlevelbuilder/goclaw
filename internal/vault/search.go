@@ -4,11 +4,22 @@ package vault
 
 import (
 	"context"
+	"slices"
 	"sort"
 	"sync"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
+
+// shouldFanout returns true when a store with the given key participates in
+// the current fan-out. An empty DocTypes list fans out to all sources
+// (backwards-compatible default); otherwise the key must be present.
+func shouldFanout(docTypes []string, key string) bool {
+	if len(docTypes) == 0 {
+		return true
+	}
+	return slices.Contains(docTypes, key)
+}
 
 // SearchWeights controls relative weighting of each search source.
 type SearchWeights struct {
@@ -111,7 +122,7 @@ func (s *VaultSearchService) Search(ctx context.Context, opts UnifiedSearchOptio
 	}
 
 	// Fan-out: episodic
-	if s.episodicStore != nil {
+	if s.episodicStore != nil && shouldFanout(opts.DocTypes, "episodic") {
 		wg.Go(func() {
 			results, err := s.episodicStore.Search(ctx, opts.Query, opts.AgentID, opts.UserID, store.EpisodicSearchOptions{
 				MaxResults: opts.MaxResults * 2,
@@ -139,7 +150,7 @@ func (s *VaultSearchService) Search(ctx context.Context, opts UnifiedSearchOptio
 	}
 
 	// Fan-out: knowledge graph
-	if s.kgStore != nil {
+	if s.kgStore != nil && shouldFanout(opts.DocTypes, "kg") {
 		wg.Go(func() {
 			entities, err := s.kgStore.SearchEntities(ctx, opts.AgentID, opts.UserID, opts.Query, opts.MaxResults*2)
 			if err != nil {

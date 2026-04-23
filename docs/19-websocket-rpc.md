@@ -832,43 +832,11 @@ Emitted whenever a trace status changes (e.g., `running` → `cancelled`, `runni
 
 ## File Reference
 
-| File | Purpose |
-|------|---------|
-| `internal/gateway/router.go` | Method dispatch + auth + connect handler |
-| `internal/gateway/client.go` | WebSocket client + frame reading |
-| `internal/gateway/server.go` | Server + mux setup |
-| `internal/gateway/methods/chat.go` | Chat send/history/abort/inject |
-| `internal/gateway/methods/agents.go` | Agent list/status |
-| `internal/gateway/methods/agents_create.go` | Agent creation |
-| `internal/gateway/methods/agents_update.go` | Agent update |
-| `internal/gateway/methods/agents_delete.go` | Agent deletion |
-| `internal/gateway/methods/agents_files.go` | Agent context files |
-| `internal/gateway/methods/agents_identity.go` | Agent identity |
-| `internal/gateway/methods/config.go` | Config get/apply/patch/schema |
-| `internal/gateway/methods/sessions.go` | Session CRUD |
-| `internal/gateway/methods/skills.go` | Skill list/get/update |
-| `internal/gateway/methods/cron.go` | Cron job management |
-| `internal/gateway/methods/channels.go` | Channel listing |
-| `internal/gateway/methods/channel_instances.go` | Channel instance CRUD |
-| `internal/gateway/methods/pairing.go` | Device pairing flow |
-| `internal/gateway/methods/teams.go` | Team list, create, get, delete, context methods |
-| `internal/gateway/methods/teams_crud.go` | Team CRUD operations |
-| `internal/gateway/methods/teams_members.go` | Team membership |
-| `internal/gateway/methods/teams_tasks.go` | Team task management |
-| `internal/gateway/methods/teams_workspace.go` | Team workspace |
-| `internal/gateway/methods/exec_approval.go` | Exec approval flow |
-| `internal/gateway/methods/agent_links.go` | Agent links management |
-| `internal/gateway/methods/tenants.go` | Tenant management |
-| `internal/gateway/methods/usage.go` | Usage records |
-| `internal/gateway/methods/quota_methods.go` | Quota consumption |
-| `internal/gateway/methods/api_keys.go` | API key management |
-| `internal/gateway/methods/send.go` | Outbound messaging |
-| `internal/gateway/methods/logs.go` | Log tailing |
-| `internal/gateway/methods/agent_evolution.go` | Evolution metrics + suggestions + apply + rollback |
-| `internal/gateway/methods/agent_episodic.go` | Episodic memory list + search |
-| `internal/gateway/methods/agent_vault.go` | Knowledge vault documents + search + links |
-| `internal/gateway/methods/agent_orchestration.go` | Orchestration mode info |
-| `internal/gateway/methods/agent_v3flags.go` | V3 feature flags get/update |
-| `internal/permissions/policy.go` | RBAC policy engine |
-| `pkg/protocol/methods.go` | Method name constants |
-| `pkg/protocol/events.go` | Event type constants (incl. v3 events) |
+| Module | Path | Purpose |
+|---|---|---|
+| Gateway core | `internal/gateway/router.go`, `internal/gateway/client.go`, `internal/gateway/server.go` | Method dispatch, auth, WebSocket client, server mux |
+| RPC method handlers | `internal/gateway/methods/` | One file per domain: chat, agents, config, sessions, skills, cron, channels, pairing, teams, exec_approval, agent_links, tenants, usage, api_keys, agent_evolution, agent_episodic, agent_vault, agent_orchestration, agent_v3flags |
+| Auth & permissions | `internal/permissions/policy.go` | RBAC policy engine, role derivation |
+| Wire protocol | `pkg/protocol/methods.go`, `pkg/protocol/events.go` | Method name constants, event type constants |
+
+Use `grep` or your editor's symbol search for specific files.

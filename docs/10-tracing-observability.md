@@ -218,20 +218,14 @@ Delegation history is automatically recorded by `DelegateManager.saveDelegationH
 
 ## File Reference
 
-| File | Description |
-|------|-------------|
-| `internal/tracing/collector.go` | Collector buffer-flush, EmitSpan, FinishTrace, verbose mode |
-| `internal/tracing/context.go` | Trace context propagation (TraceID, ParentSpanID, DelegateParentTraceID) |
-| `internal/tracing/cost.go` | Cost calculation and pricing lookup |
-| `internal/tracing/snapshot_worker.go` | Hourly usage aggregation into snapshots |
-| `internal/tracing/otelexport/exporter.go` | OTel OTLP exporter (gRPC + HTTP) |
-| `internal/store/tracing_store.go` | TracingStore interface, span/trace type constants |
-| `internal/store/pg/tracing.go` | PostgreSQL trace/span persistence + aggregation |
-| `internal/http/traces.go` | Trace HTTP API handler (GET /v1/traces) |
-| `internal/agent/loop_tracing.go` | Span emission from agent loop (LLM, tool, agent spans) |
-| `internal/http/delegations.go` | Delegation history HTTP API handler |
-| `internal/gateway/methods/delegations.go` | Delegation history RPC handlers |
-| `internal/pipeline/` | v3 agent loop pipeline (stages route to agent loop for span emission) |
+| Module | Path | Purpose |
+|---|---|---|
+| Tracing engine | `internal/tracing/` | Collector (buffer-flush, EmitSpan, FinishTrace), context propagation, cost calculation, OTel OTLP exporter |
+| Store & snapshots | `internal/store/tracing_store.go`, `internal/store/pg/tracing.go`, `internal/tracing/snapshot_worker.go` | TracingStore interface, PostgreSQL persistence + aggregation, hourly usage snapshots |
+| Agent & pipeline integration | `internal/agent/loop_tracing.go`, `internal/pipeline/` | Span emission from agent loop (LLM, tool, agent spans), pipeline stage tracing |
+| HTTP & RPC handlers | `internal/http/traces.go`, `internal/http/delegations.go`, `internal/gateway/methods/delegations.go` | GET /v1/traces, delegation history HTTP + RPC handlers |
+
+Use `grep` or your editor's symbol search for specific files.
 
 ---
 

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -285,6 +286,8 @@ func apkViaHelper(ctx context.Context, action, pkg string) (bool, string) {
 
 // cleanCaches removes pip and npm caches to save disk space.
 func cleanCaches(ctx context.Context) {
-	exec.CommandContext(ctx, "pip3", "cache", "purge").Run()          //nolint:errcheck
-	exec.CommandContext(ctx, "sh", "-c", "rm -rf /tmp/npm-*").Run()  //nolint:errcheck
+	exec.CommandContext(ctx, "pip3", "cache", "purge").Run() //nolint:errcheck
+	if runtime.GOOS != "windows" {
+		exec.CommandContext(ctx, "sh", "-c", "rm -rf /tmp/npm-*").Run() //nolint:errcheck
+	}
 }

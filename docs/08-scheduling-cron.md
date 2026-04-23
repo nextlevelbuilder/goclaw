@@ -204,40 +204,14 @@ Both jobs run with 5-minute timeout and tenant-scoped context. Failed analyses l
 
 ## File Reference
 
-### Scheduler (Lane-Based Concurrency)
-| File | Description |
-|------|-------------|
-| `internal/scheduler/lanes.go` | Lane and LaneManager (semaphore-based worker pools) |
-| `internal/scheduler/queue.go` | SessionQueue, Scheduler, drop policies, debounce, cancel mechanics |
-| `internal/scheduler/scheduler.go` | Scheduler top-level API, draining mode for graceful shutdown |
-| `internal/scheduler/errors.go` | Error types: ErrQueueFull, ErrQueueDropped, ErrMessageStale, ErrGatewayDraining, ErrLaneCleared |
+| Module | Path | Purpose |
+|---|---|---|
+| Scheduler | `internal/scheduler/` | Lane-based concurrency (lanes, queue, drop policies, debounce, cancel, draining) |
+| Cron service | `internal/cron/` | In-memory run loop (1s tick), job CRUD, retry with backoff, schedule parsing, types |
+| Cron store | `internal/store/pg/cron*.go`, `internal/store/cron_store.go` | CronStore interface + PostgreSQL persistence (create, list, update, delete, execution, scanning) |
+| Gateway wiring | `cmd/gateway_cron.go`, `internal/gateway/methods/cron.go` | Scheduler lane routing, RPC handlers (list, create, update, delete, toggle, run, runs) |
 
-### Cron Service (In-Memory)
-| File | Description |
-|------|-------------|
-| `internal/cron/service.go` | Cron service lifecycle (start/stop), job CRUD |
-| `internal/cron/service_execution.go` | Run loop (every 1s), job execution, schedule parsing, persistence |
-| `internal/cron/retry.go` | Retry with exponential backoff + jitter, output truncation |
-| `internal/cron/types.go` | Job, Schedule, JobState, RunLogEntry types |
-
-### Cron Persistence (PostgreSQL)
-| File | Description |
-|------|-------------|
-| `internal/store/cron_store.go` | CronStore interface (jobs + run logs) |
-| `internal/store/pg/cron.go` | PostgreSQL cron operations (create, list, update, delete) |
-| `internal/store/pg/cron_crud.go` | CRUD helpers for job mutations |
-| `internal/store/pg/cron_scheduler.go` | PG job cache, due-job detection, execution |
-| `internal/store/pg/cron_exec.go` | Execution flow and result recording |
-| `internal/store/pg/cron_scan.go` | Row scanning for jobs and run logs |
-| `internal/store/pg/cron_update.go` | Job state updates in PostgreSQL |
-
-### Gateway Integration
-| File | Description |
-|------|-------------|
-| `cmd/gateway_cron.go` | makeCronJobHandler (routes cron execution to scheduler) |
-| `cmd/gateway_evolution_cron.go` | Evolution daily/weekly background jobs (v3 suggestion analysis + rollback evaluation) |
-| `cmd/gateway_agents.go` | Agent initialization and run loop setup |
-| `internal/gateway/methods/cron.go` | RPC method handlers (list, create, update, delete, toggle, run, runs) |
+Use `grep` or your editor's symbol search for specific files.
 
 ---
 

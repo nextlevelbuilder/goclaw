@@ -574,56 +574,11 @@ Error responses include `retryable` (boolean) and `retryAfterMs` (integer) field
 
 ## File Reference
 
-| File | Purpose |
-|------|---------|
-| `internal/gateway/server.go` | Server: WebSocket upgrade, HTTP mux, CORS check, client lifecycle |
-| `internal/gateway/client.go` | Client: connection management, read/write pumps, send buffer |
-| `internal/gateway/router.go` | MethodRouter: handler registration, permission-checked dispatch |
-| `internal/gateway/ratelimit.go` | RateLimiter: token bucket per key, cleanup loop |
-| `internal/gateway/methods/chat.go` | chat.send, chat.history, chat.abort, chat.inject handlers |
-| `internal/gateway/methods/agents.go` | agents.list, agents.create/update/delete, agents.files.* handlers |
-| `internal/gateway/methods/sessions.go` | sessions.list/preview/patch/delete/reset handlers |
-| `internal/gateway/methods/config.go` | config.get/apply/patch/schema handlers |
-| `internal/gateway/methods/skills.go` | skills.list/get/update handlers |
-| `internal/gateway/methods/cron.go` | cron.list/create/update/delete/toggle/run/runs handlers |
-| `internal/gateway/methods/teams.go` | teams.* handlers + auto-linking teammates |
-| `internal/gateway/methods/teams_workspace.go` | teams.workspace.* handlers (file management) |
-| `internal/gateway/methods/delegations.go` | delegations.list/get handlers |
-| `internal/gateway/methods/channels.go` | channels.list/status/toggle handlers |
-| `internal/gateway/methods/channel_instances.go` | channels.instances.* handlers (CRUD) |
-| `internal/gateway/methods/pairing.go` | device.pair.* and browser.pairing.* handlers |
-| `internal/gateway/methods/exec_approval.go` | exec.approval.* handlers |
-| `internal/gateway/methods/usage.go` | usage.get/summary handlers |
-| `internal/gateway/methods/api_keys.go` | api_keys.list/create/revoke handlers |
-| `internal/gateway/methods/send.go` | send handler (direct message to channel) |
-| `internal/gateway/methods/agent_links.go` | agent_links.* handlers (v3 delegation links) |
-| `internal/http/chat_completions.go` | POST /v1/chat/completions (OpenAI-compatible) |
-| `internal/http/responses.go` | POST /v1/responses (OpenResponses protocol) |
-| `internal/http/tools_invoke.go` | POST /v1/tools/invoke (direct tool execution) |
-| `internal/http/agents.go` | Agent CRUD HTTP handlers (/v1/agents, /v1/agents/{id}/sharing) |
-| `internal/http/skills.go` | Skills HTTP handlers (/v1/skills, upload, dependencies) |
-| `internal/http/traces.go` | Traces HTTP handlers (/v1/traces) |
-| `internal/http/delegations.go` | Delegation history HTTP handlers (/v1/delegations) |
-| `internal/http/channel_instances.go` | Channel instance CRUD handlers (/v1/channel-instances) |
-| `internal/http/providers.go` | LLM provider CRUD handlers (/v1/providers) |
-| `internal/http/memory.go` | Memory management handlers (/v1/memory) |
-| `internal/http/knowledge_graph.go` | Knowledge graph handlers (/v1/kg) |
-| `internal/http/files.go` | Workspace file serving handlers (/v1/files) |
-| `internal/http/storage.go` | Storage file CRUD handlers (/v1/storage) |
-| `internal/http/media_upload.go` | Media upload handlers (/v1/media/upload) |
-| `internal/http/media_serve.go` | Media serving handlers (/v1/media/{id}) |
-| `internal/http/activity.go` | Activity audit log handlers (/v1/activity) |
-| `internal/http/usage.go` | Usage analytics handlers (/v1/usage) |
-| `internal/http/api_keys.go` | API key management handlers (/v1/api-keys) |
-| `internal/http/custom_tools.go` | Custom tool CRUD handlers (/v1/tools/custom) |
-| `internal/http/mcp.go` | MCP server management handlers (/v1/mcp) |
-| `internal/http/summoner.go` | LLM-powered agent setup (XML parsing, context file generation) |
-| `internal/http/auth.go` | Bearer token authentication, timing-safe comparison |
-| `internal/http/oauth.go` | OAuth authentication endpoints (/oauth) |
-| `internal/http/docs.go` | OpenAPI documentation handlers (/docs) |
-| `internal/mcp/bridge.go` | MCP bridge for Claude CLI integration (/mcp/bridge) |
-| `internal/permissions/policy.go` | PolicyEngine: role hierarchy, method-to-role mapping |
-| `pkg/protocol/frames.go` | Frame types: RequestFrame, ResponseFrame, EventFrame, ErrorShape |
-| `pkg/protocol/methods.go` | RPC method name constants (Phase 1-3) |
-| `pkg/protocol/events.go` | WebSocket event names and event subtypes |
-| `pkg/protocol/errors.go` | Error code constants and error factories |
+| Module | Path | Purpose |
+|---|---|---|
+| Gateway core | `internal/gateway/` | WS server, HTTP mux, method router, rate limiter, client lifecycle |
+| RPC handlers | `internal/gateway/methods/` | All WS RPC handlers: chat, agents, sessions, config, skills, cron, teams, channels, pairing, exec approval, usage, API keys |
+| HTTP handlers | `internal/http/` | All REST endpoints: /v1/chat/completions, /v1/agents, /v1/skills, /v1/traces, /v1/mcp, auth, OAuth, summoner |
+| Protocol types | `pkg/protocol/` | Frame types, RPC method constants, event names, error codes |
+
+Use `grep` or your editor's symbol search for specific files.

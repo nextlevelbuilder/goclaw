@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -495,12 +496,41 @@ func (t *ExecTool) executeCredentialedSandbox(ctx context.Context, absPath strin
 
 // buildCredentialedEnv creates a minimal environment with injected credentials.
 // Inherits PATH and HOME from parent process, adds credential env vars.
+// On Windows, also passes through SYSTEMROOT / TEMP / APPDATA / etc. — these
+// are not secrets and many native CLIs (gh, az, aws, npm) require them to run.
 func buildCredentialedEnv(envMap map[string]string) []string {
-	env := []string{
-		"PATH=" + getenvDefault("PATH", "/usr/local/bin:/usr/bin:/bin"),
-		"HOME=" + getenvDefault("HOME", "/tmp"),
-		"LANG=" + getenvDefault("LANG", "en_US.UTF-8"),
-		"USER=" + getenvDefault("USER", "goclaw"),
+	var env []string
+	if runtime.GOOS == "windows" {
+		pathDefault := "C:\\Windows\\system32;C:\\Windows;C:\\Windows\\System32\\Wbem"
+		homeDefault := os.Getenv("USERPROFILE")
+		if homeDefault == "" {
+			homeDefault = "C:\\Users\\Default"
+		}
+		env = []string{
+			"PATH=" + getenvDefault("PATH", pathDefault),
+			"HOME=" + getenvDefault("HOME", homeDefault),
+			"LANG=" + getenvDefault("LANG", "en_US.UTF-8"),
+			"USERNAME=" + getenvDefault("USERNAME", "goclaw"),
+		}
+		// Pass through Windows runtime vars that native tools expect.
+		// Missing SYSTEMROOT breaks networking/registry in most Win32 programs.
+		for _, k := range []string{
+			"SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "PATHEXT",
+			"TEMP", "TMP", "USERPROFILE", "APPDATA", "LOCALAPPDATA",
+			"PROGRAMFILES", "PROGRAMFILES(X86)", "PROGRAMDATA",
+			"HOMEDRIVE", "HOMEPATH", "COMPUTERNAME",
+		} {
+			if v := os.Getenv(k); v != "" {
+				env = append(env, k+"="+v)
+			}
+		}
+	} else {
+		env = []string{
+			"PATH=" + getenvDefault("PATH", "/usr/local/bin:/usr/bin:/bin"),
+			"HOME=" + getenvDefault("HOME", "/tmp"),
+			"LANG=" + getenvDefault("LANG", "en_US.UTF-8"),
+			"USER=" + getenvDefault("USER", "goclaw"),
+		}
 	}
 	for k, v := range envMap {
 		env = append(env, k+"="+v)

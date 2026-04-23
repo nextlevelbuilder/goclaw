@@ -657,59 +657,14 @@ WHERE agent_id = $1
 
 ## File Reference
 
-### Bootstrap Files & Constants
-| File | Description |
-|------|-------------|
-| `internal/bootstrap/files.go` | File constants (AgentsFile, SoulFile, UserPredefinedFile, DelegationFile, TeamFile, AvailabilityFile, MemoryFile, etc.), loading, session filtering |
-| `internal/bootstrap/seed.go` | Workspace bootstrap seeding (EnsureWorkspaceFiles, embedded template FS) |
-| `internal/bootstrap/seed_store.go` | Store seeding (SeedToStore for agent-level, SeedUserFiles for per-user) |
-| `internal/bootstrap/load_store.go` | Load context files from DB (LoadFromStore) |
-| `internal/bootstrap/truncate.go` | Truncation pipeline (head/tail split, budget clamping) |
-| `internal/bootstrap/templates/*.md` | Embedded template files: AGENTS.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, USER_PREDEFINED.md, BOOTSTRAP.md, BOOTSTRAP_PREDEFINED.md |
+| Module | Path | Purpose |
+|---|---|---|
+| Bootstrap & seeding | `internal/bootstrap/` | File constants, truncation pipeline, workspace seeding, store seeding, embedded template files |
+| System prompt & agent resolver | `internal/agent/` | `BuildSystemPrompt`, section renderers, virtual file injection, context file merging, memory flush |
+| Skills | `internal/skills/` | 5-tier loader, BM25 search, fsnotify hot-reload; grant management in `internal/store/pg/skills*.go` |
+| Memory & consolidation | `internal/memory/`, `internal/consolidation/` | Auto-injector (L0), unified search (L1), consolidation workers (episodic, semantic, dedup, dreaming) |
 
-### System Prompt & Context Injection
-| File | Description |
-|------|-------------|
-| `internal/agent/systemprompt.go` | System prompt builder (BuildSystemPrompt, PromptFull/PromptMinimal modes) |
-| `internal/agent/systemprompt_sections.go` | Section renderers (17+ sections), virtual file handling (DELEGATION.md, TEAM.md, AVAILABILITY.md) |
-| `internal/agent/resolver.go` | Agent resolution, virtual file injection, negative context blocks |
-| `internal/agent/loop_history.go` | Context file merging (base + per-user, base-only preserved) |
-| `internal/agent/memoryflush.go` | Memory flush logic (shouldRunMemoryFlush, runMemoryFlush) |
-| `internal/http/summoner.go` | Agent summoning -- LLM-powered context file generation |
-| `internal/tools/filesystem.go` | File access interception (write_file, read_file), virtual file reminder handling |
-
-### Skills System
-| File | Description |
-|------|-------------|
-| `internal/skills/loader.go` | Skill loader (5-tier hierarchy, BuildSummary, inline/search mode decision) |
-| `internal/skills/search.go` | BM25 search index (tokenization, IDF scoring) |
-| `internal/skills/watcher.go` | fsnotify watcher (500ms debounce, hot-reload, version bumping) |
-| `internal/store/pg/skills.go` | Managed skill store (embedding search, auto-backfill) |
-| `internal/store/pg/skills_grants.go` | Skill grants (agent/user visibility, version pinning, RBAC) |
-
-### V3 Memory System (New)
-| File | Description |
-|------|-------------|
-| `internal/memory/auto_injector.go` | AutoInjector interface for L0 auto-injection into system prompt |
-| `internal/memory/auto_injector_impl.go` | AutoInjector implementation (episodic search + relevance filtering) |
-| `internal/memory/unified_search.go` | Hybrid search across episodic summaries + KG |
-| `internal/memory/l1_cache.go` | L1 cache for fast episodic lookups |
-| `internal/consolidation/workers.go` | Worker registration + event subscriptions |
-| `internal/consolidation/episodic_worker.go` | Extract summaries from sessions → episodic_summaries |
-| `internal/consolidation/semantic_worker.go` | Extract entities/relations from episodic → KG |
-| `internal/consolidation/dedup_worker.go` | Merge duplicate entities via embeddings |
-| `internal/consolidation/dreaming_worker.go` | Batch synthesis of episodic → long-term memory (10m debounce) |
-| `internal/consolidation/l0_abstract.go` | L0 abstract generation (~50 tokens) |
-
-### Memory Store
-| File | Description |
-|------|-------------|
-| `internal/store/episodic_store.go` | EpisodicStore interface (CRUD, search, promotion lifecycle) |
-| `internal/store/evolution_store.go` | EvolutionMetricsStore, EvolutionSuggestionStore interfaces |
-| `internal/store/vault_store.go` | VaultStore interface (document registry, links, search) |
-| `internal/store/pg/episodic*.go` | PG implementation of episodic store |
-| `internal/store/pg/memory_docs.go` | Memory document store (chunking, indexing, embedding, scoping) |
-| `internal/store/pg/memory_search.go` | Hybrid search (FTS + vector merge, weighted scoring, scope filtering) |
+Use `grep` or your editor's symbol search for specific files.
 
 ---
 
