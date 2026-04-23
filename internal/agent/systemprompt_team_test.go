@@ -148,3 +148,24 @@ func TestBuildSystemPrompt_TeamContextInjection(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildSystemPrompt_TeamWorkspacePathSandboxed(t *testing.T) {
+	hostTeamPath := "/home/tui/.goclaw/data/teams/019dbaf7-786c-7187-9073-fe27b3b7577a"
+	cfg := SystemPromptConfig{
+		IsTeamContext:        true,
+		ToolNames:            []string{"team_tasks", "read_file"},
+		TeamWorkspace:        hostTeamPath,
+		Workspace:            "/home/tui/repos/goclaw",
+		SandboxEnabled:       true,
+		SandboxContainerDir:  "/workspace",
+		AgentType:            store.AgentTypePredefined,
+	}
+
+	prompt := BuildSystemPrompt(cfg)
+	if strings.Contains(prompt, hostTeamPath) {
+		t.Fatalf("expected sandboxed prompt to hide host team workspace path")
+	}
+	if !strings.Contains(prompt, "Team shared workspace: /workspace/teams/019dbaf7-786c-7187-9073-fe27b3b7577a") {
+		t.Fatalf("expected sandbox-safe team workspace path in prompt")
+	}
+}

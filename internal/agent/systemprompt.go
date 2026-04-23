@@ -3,6 +3,7 @@ package agent
 import (
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -413,7 +414,12 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 	// 6.3. ## Team Workspace — only when team context is active (leader inbound OR team dispatch)
 	// None mode skips team sections entirely — identity-only prompt has no team awareness.
 	if !isNone && !cfg.IsBootstrap && cfg.IsTeamContext && hasTeamWorkspace(cfg.ToolNames) {
-		lines = append(lines, buildTeamWorkspaceSection(cfg.TeamWorkspace)...)
+		lines = append(lines, buildTeamWorkspaceSection(displayTeamWorkspacePath(
+			cfg.TeamWorkspace,
+			cfg.Workspace,
+			cfg.SandboxEnabled,
+			cfg.SandboxContainerDir,
+		))...)
 	}
 
 	// 6.4. ## Team Members — inject roster so agent knows who to assign tasks to
@@ -701,4 +707,24 @@ func buildWorkspaceSection(workspace string, sandboxEnabled bool, containerDir s
 		guidance,
 		"",
 	}
+}
+
+func displayTeamWorkspacePath(teamWorkspace, workspace string, sandboxEnabled bool, containerDir string) string {
+	if teamWorkspace == "" {
+		return ""
+	}
+	if !sandboxEnabled || containerDir == "" {
+		return teamWorkspace
+	}
+	if workspace != "" {
+		if mapped, err := tools.SandboxHostPathToContainer(teamWorkspace, workspace, containerDir); err == nil {
+			return mapped
+		}
+	}
+	// Fallback: still avoid leaking host paths in sandboxed prompts.
+	teamID := filepath.Base(filepath.Clean(teamWorkspace))
+	if teamID == "" || teamID == "." || teamID == string(filepath.Separator) {
+		return filepath.Join(containerDir, "team-workspace")
+	}
+	return filepath.Join(containerDir, "teams", teamID)
 }
