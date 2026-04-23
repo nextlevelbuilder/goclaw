@@ -63,7 +63,16 @@
       "connectionFailed": "连接失败"
     },
     "requireUserCredentials": "要求用户凭据",
-    "requireUserCredentialsHint": "每个用户必须配置自己的凭据。未设置凭据的用户将无法使用此服务器。"
+    "requireUserCredentialsHint": "每个用户必须配置自己的凭据。未设置凭据的用户将无法使用此服务器。",
+    "toolHints": "AI 智能体提示（可选）",
+    "toolHintsHint": "管理员手写的说明，会附加到每个工具的描述中，让 LLM 了解此服务器的特殊用法。",
+    "toolHintsGlobal": "通用提示",
+    "toolHintsGlobalPlaceholder": "例如：本服务器的工具只接受 JS 表达式，末尾不要加分号。",
+    "toolHintsGlobalHint": "对此服务器所有工具生效。",
+    "toolHintsPerTool": "针对单个工具的提示",
+    "toolHintsToolNamePlaceholder": "工具名称（例如 search）",
+    "toolHintsToolValuePlaceholder": "发送给 LLM 的提示内容",
+    "toolHintsAdd": "添加提示"
   },
   "grants": {
     "title": "Agent授权 - {{name}}",
