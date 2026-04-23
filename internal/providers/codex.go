@@ -56,6 +56,14 @@ func (p *CodexProvider) WithMiddlewares(mws ...RequestMiddleware) *CodexProvider
 	return p
 }
 
+// WithRetryConfig overrides the default per-provider retry config. Useful for
+// tests and for callers that manage retry semantics at a higher layer (e.g.
+// the pool router fails over on single-attempt member errors).
+func (p *CodexProvider) WithRetryConfig(rc RetryConfig) *CodexProvider {
+	p.retryConfig = rc
+	return p
+}
+
 func (p *CodexProvider) Name() string           { return p.name }
 func (p *CodexProvider) DefaultModel() string   { return p.defaultModel }
 func (p *CodexProvider) SupportsThinking() bool { return true }

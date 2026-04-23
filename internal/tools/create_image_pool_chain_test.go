@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/providers/providertest"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -107,8 +108,8 @@ func TestCreateImagePoolChain_PoolMemberFailover_FallbackNotCalled(t *testing.T)
 	serverA := pool429Server(t, &hitsA)
 	serverB := poolSSEServer(t, &hitsB)
 
-	baseA := providers.NewTestCodexProviderFast("pool-a", serverA.URL)
-	memberB := providers.NewTestCodexProviderFast("pool-b", serverB.URL)
+	baseA := providertest.NewCodexProviderFast("pool-a", serverA.URL)
+	memberB := providertest.NewCodexProviderFast("pool-b", serverB.URL)
 	baseA.WithRoutingDefaults("round_robin", []string{"pool-b"})
 
 	reg := buildPoolChainRegistry(tenantID, baseA, memberB)
@@ -159,8 +160,8 @@ func TestCreateImagePoolChain_PoolExhausted_FallsThroughToFallback(t *testing.T)
 	serverA := pool429Server(t, &hitsA)
 	serverB := pool429Server(t, &hitsB)
 
-	baseA := providers.NewTestCodexProviderFast("pool-a2", serverA.URL)
-	memberB := providers.NewTestCodexProviderFast("pool-b2", serverB.URL)
+	baseA := providertest.NewCodexProviderFast("pool-a2", serverA.URL)
+	memberB := providertest.NewCodexProviderFast("pool-b2", serverB.URL)
 	baseA.WithRoutingDefaults("round_robin", []string{"pool-b2"})
 
 	reg := buildPoolChainRegistry(tenantID, baseA, memberB)
@@ -209,8 +210,8 @@ func TestCreateImagePoolChain_AllFail_ErrorSurfaces(t *testing.T) {
 	serverA := pool429Server(t, &hitsA)
 	serverB := pool429Server(t, &hitsB)
 
-	baseA := providers.NewTestCodexProviderFast("pool-a3", serverA.URL)
-	memberB := providers.NewTestCodexProviderFast("pool-b3", serverB.URL)
+	baseA := providertest.NewCodexProviderFast("pool-a3", serverA.URL)
+	memberB := providertest.NewCodexProviderFast("pool-b3", serverB.URL)
 	baseA.WithRoutingDefaults("round_robin", []string{"pool-b3"})
 
 	reg := buildPoolChainRegistry(tenantID, baseA, memberB)
@@ -256,7 +257,7 @@ func TestCreateImagePoolChain_SingleMemberPool_NoWrapOverhead(t *testing.T) {
 	serverA := poolSSEServer(t, &hitsA)
 
 	// Solo provider — no WithRoutingDefaults → wrapPoolProvider returns it unchanged.
-	soloA := providers.NewTestCodexProviderFast("solo-a", serverA.URL)
+	soloA := providertest.NewCodexProviderFast("solo-a", serverA.URL)
 
 	reg := buildPoolChainRegistry(tenantID, soloA)
 
@@ -288,8 +289,8 @@ func TestCreateImagePoolChain_RoundRobin_RotatesAcrossTwoCalls(t *testing.T) {
 	serverA := poolSSEServer(t, &hitsA)
 	serverB := poolSSEServer(t, &hitsB)
 
-	baseA := providers.NewTestCodexProviderFast("rr-a", serverA.URL)
-	memberB := providers.NewTestCodexProviderFast("rr-b", serverB.URL)
+	baseA := providertest.NewCodexProviderFast("rr-a", serverA.URL)
+	memberB := providertest.NewCodexProviderFast("rr-b", serverB.URL)
 	baseA.WithRoutingDefaults("round_robin", []string{"rr-b"})
 
 	reg := buildPoolChainRegistry(tenantID, baseA, memberB)

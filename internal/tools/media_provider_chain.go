@@ -373,9 +373,10 @@ func wrapPoolProvider(ctx context.Context, reg *providers.Registry, entryProvide
 		return resolved
 	}
 
-	// Only wrap when the strategy is explicitly multi-member.
-	isMultiMemberStrategy := defaults.Strategy == "round_robin" || defaults.Strategy == "priority_order"
-	if !isMultiMemberStrategy && len(defaults.ExtraProviderNames) == 0 {
+	// A pool needs at least one extra member to be worth wrapping; with zero
+	// extras there is nothing to rotate or fail over to, so keep the bare
+	// CodexProvider (skip router overhead for solo Codex entries).
+	if len(defaults.ExtraProviderNames) == 0 {
 		return resolved
 	}
 
