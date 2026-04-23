@@ -19,7 +19,14 @@ interface ChatInputProps {
   onFilesChange: (files: AttachedFile[]) => void;
 }
 
-export function ChatInput({ onSend, onAbort, isBusy, disabled, files, onFilesChange }: ChatInputProps) {
+export function ChatInput({
+  onSend,
+  onAbort,
+  isBusy,
+  disabled,
+  files,
+  onFilesChange,
+}: ChatInputProps) {
   const { t } = useTranslation("common");
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);

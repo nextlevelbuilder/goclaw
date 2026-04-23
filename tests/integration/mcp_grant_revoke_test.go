@@ -5,6 +5,7 @@ package integration
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -242,16 +243,7 @@ func grantUserAccess(t *testing.T, db *sql.DB, tenantID, serverID uuid.UUID, use
 }
 
 func containsGrantRevoked(s string) bool {
-	return len(s) > 0 && (contains(s, "grant revoked") || contains(s, "grant denied"))
-}
-
-func contains(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
+	return len(s) > 0 && (strings.Contains(s, "grant revoked") || strings.Contains(s, "grant denied"))
 }
 
 // fakeMCPClient is a stub for testing. Since mcpclient.Client is a struct

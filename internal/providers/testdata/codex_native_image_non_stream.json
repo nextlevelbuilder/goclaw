@@ -1,0 +1,30 @@
+[
+  {
+    "type": "response.completed",
+    "response": {
+      "id": "resp_img2",
+      "status": "completed",
+      "output": [
+        {
+          "type": "message",
+          "id": "msg_001",
+          "role": "assistant",
+          "content": [
+            {"type": "output_text", "text": "Here is your image."}
+          ]
+        },
+        {
+          "type": "image_generation_call",
+          "id": "ig_xyz789",
+          "output_format": "png",
+          "result": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
+        }
+      ],
+      "usage": {
+        "input_tokens": 8,
+        "output_tokens": 3,
+        "total_tokens": 11
+      }
+    }
+  }
+]

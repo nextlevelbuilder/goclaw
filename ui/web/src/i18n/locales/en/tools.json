@@ -232,7 +232,10 @@
       "addProvider": "Add Provider",
       "cancel": "Cancel",
       "save": "Save",
-      "saving": "Saving..."
+      "saving": "Saving...",
+      "imageModelLabel": "Image model",
+      "imageModelDefaultOption": "Default · gpt-image-2 (recommended)",
+      "imageModelLegacyOption": "Legacy · gpt-image-1.5"
     },
     "toast": {
       "toggled": "Tool updated",

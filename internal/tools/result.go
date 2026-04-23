@@ -17,6 +17,11 @@ type Result struct {
 	// Media holds media files to forward as output (e.g. images from delegation).
 	Media []bus.MediaFile `json:"-"`
 
+	// MediaPrompts maps each Media[i] index to the generation prompt that produced it.
+	// Used to populate MediaRef.Prompt when the pipeline persists tool-generated images.
+	// Nil means no prompt metadata available.
+	MediaPrompts map[int]string `json:"-"`
+
 	// Deliverable holds the primary work output from this tool execution.
 	// Used to capture actual content (e.g. written file text, image prompt) for team
 	// task results instead of relying on the LLM's summary response.

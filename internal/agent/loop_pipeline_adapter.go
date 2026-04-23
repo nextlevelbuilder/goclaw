@@ -160,6 +160,7 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 
 		// Checkpoint + Finalize
 		FlushMessages:          cb.flushMessages,
+		PersistAssistantImages: persistAssistantImages,
 		SkillPostscript:        l.makeSkillPostscript(),
 		SanitizeContent:        cb.sanitizeContent,
 		StripMessageDirectives: StripMessageDirectives,
@@ -245,6 +246,7 @@ func convertRunResult(pr *pipeline.RunResult) *RunResult {
 			ContentType: m.ContentType,
 			Size:        m.Size,
 			AsVoice:     m.AsVoice,
+			Prompt:      m.Prompt,
 		}
 	}
 	return &RunResult{
