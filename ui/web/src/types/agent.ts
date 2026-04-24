@@ -95,13 +95,10 @@ export interface WorkspaceSharingConfig {
 }
 
 export type ChatGPTOAuthRoutingStrategy =
-  | "manual"
-  | "primary_first"
   | "round_robin"
   | "priority_order";
 
 export type EffectiveChatGPTOAuthRoutingStrategy =
-  | "primary_first"
   | "round_robin"
   | "priority_order";
 

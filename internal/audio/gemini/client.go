@@ -25,7 +25,7 @@ func newClient(apiKey, apiBase string, timeoutMs int) *client {
 		base = defaultAPIBase
 	}
 	if timeoutMs <= 0 {
-		timeoutMs = 30000
+		timeoutMs = 120000 // match handler default; tenant Config.TimeoutMs=0 → 120s (was 30s)
 	}
 	return &client{apiKey: apiKey, apiBase: base, timeoutMs: timeoutMs}
 }

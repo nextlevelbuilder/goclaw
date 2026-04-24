@@ -39,6 +39,7 @@ type Channel struct {
 	reactions         sync.Map                    // localKey string → *StatusReactionController
 	threadIDs         sync.Map                    // localKey string → messageThreadID int (for forum topic routing)
 	mentionMode       string             // "strict" (default) or "yield"
+	botDisplayName    string             // bot's first_name from GetMe (e.g. "ViệtBot"); captured once at Start
 	pollCancel        context.CancelFunc // cancels the long polling context
 	pollDone          chan struct{}      // closed when polling goroutine exits
 	handlerWg         sync.WaitGroup     // tracks in-flight handler goroutines for graceful shutdown
@@ -189,6 +190,7 @@ func (c *Channel) Start(ctx context.Context) error {
 	username := ""
 	if me != nil {
 		username = me.Username
+		c.botDisplayName = me.FirstName
 	}
 
 	// Create a cancellable context for the polling goroutine.

@@ -282,10 +282,12 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 		}
 		prompt.WriteString(sb.String())
 
+		inTokens := l.estimateSummaryInputTokens(toSummarize)
+		slog.Info("compact_budget", "agent", l.id, "in_tokens", inTokens, "out_tokens", dynamicSummaryMax(inTokens))
 		resp, err := l.provider.Chat(sctx, providers.ChatRequest{
 			Messages: []providers.Message{{Role: "user", Content: prompt.String()}},
 			Model:    l.model,
-			Options:  map[string]any{"max_tokens": 1024, "temperature": 0.3},
+			Options:  map[string]any{"max_tokens": dynamicSummaryMax(inTokens), "temperature": 0.3},
 		})
 		if err != nil {
 			slog.Warn("summarization failed", "session", sessionKey, "error", err)

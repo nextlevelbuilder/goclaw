@@ -119,8 +119,16 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 	if req.WorkspaceChannel != "" {
 		ctx = tools.WithWorkspaceChannel(ctx, req.WorkspaceChannel)
 	}
-	if req.WorkspaceChatID != "" {
-		ctx = tools.WithWorkspaceChatID(ctx, req.WorkspaceChatID)
+	// WorkspaceChatID drives vault chat_id isolation in isolated teams. Callers
+	// that don't set it explicitly fall back to req.ChatID — the chat segment
+	// used for workspace path layering — so the vault filter activates uniformly
+	// across every RunRequest entry point (WS direct, HTTP, cron, subagent).
+	effectiveWorkspaceChatID := req.WorkspaceChatID
+	if effectiveWorkspaceChatID == "" {
+		effectiveWorkspaceChatID = req.ChatID
+	}
+	if effectiveWorkspaceChatID != "" {
+		ctx = tools.WithWorkspaceChatID(ctx, effectiveWorkspaceChatID)
 	}
 	if req.TeamTaskID != "" {
 		ctx = tools.WithTeamTaskID(ctx, req.TeamTaskID)
@@ -178,6 +186,15 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 	}
 	if req.TeamID != "" {
 		ctx = tools.WithToolTeamID(ctx, req.TeamID)
+		// Team root for dispatched tasks: resolve the UserChatLayer-stripped root
+		// so the dispatched agent can still read peer-scoped files in the same team.
+		if teamUUID, err := uuid.Parse(req.TeamID); err == nil && l.dataDir != "" {
+			teamRoot := tools.ResolveWorkspace(l.dataDir,
+				tools.TenantLayer(store.TenantIDFromContext(ctx), store.TenantSlugFromContext(ctx)),
+				tools.TeamLayer(teamUUID),
+			)
+			ctx = tools.WithToolTeamRoot(ctx, teamRoot)
+		}
 	}
 	if req.LeaderAgentID != "" {
 		ctx = tools.WithLeaderAgentID(ctx, req.LeaderAgentID)
@@ -186,6 +203,15 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 	// Team workspace: auto-resolve for agents with team membership (not dispatched).
 	// Lead agents default to team workspace; non-lead members keep own workspace.
 	var resolvedTeamSettings json.RawMessage
+	// Dispatched tasks already have TeamWorkspace set but still need team settings
+	// for TeamIsolated flag. Fetch by explicit TeamID in that branch.
+	if req.TeamWorkspace != "" && req.TeamID != "" && l.teamStore != nil {
+		if teamUUID, err := uuid.Parse(req.TeamID); err == nil {
+			if team, _ := l.teamStore.GetTeam(ctx, teamUUID); team != nil {
+				resolvedTeamSettings = team.Settings
+			}
+		}
+	}
 	if req.TeamWorkspace == "" && l.teamStore != nil && l.agentUUID != uuid.Nil {
 		if team, _ := l.teamStore.GetTeamForAgent(ctx, l.agentUUID); team != nil {
 			resolvedTeamSettings = team.Settings
@@ -204,6 +230,15 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 				slog.Warn("failed to create team workspace directory", "workspace", wsDir, "error", err)
 			}
 			ctx = tools.WithToolTeamWorkspace(ctx, wsDir)
+			// Team root (no UserChatLayer): lets any team agent — leader or member —
+			// read files produced by peers under different chat/user scopes within
+			// the same team. Writes still default to wsDir above; team root only
+			// widens the allowed-prefix set for path boundary checks.
+			teamRoot := tools.ResolveWorkspace(l.dataDir,
+				tools.TenantLayer(store.TenantIDFromContext(ctx), store.TenantSlugFromContext(ctx)),
+				tools.TeamLayer(team.ID),
+			)
+			ctx = tools.WithToolTeamRoot(ctx, teamRoot)
 			// Leader keeps personal workspace (set at line 110-132) as default.
 			// Team workspace accessible via ToolTeamWorkspaceFromCtx for delegation.
 			if req.TeamID == "" {
@@ -337,7 +372,8 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 		TeamWorkspace:       tools.ToolTeamWorkspaceFromCtx(ctx),
 		TeamID:              tools.ToolTeamIDFromCtx(ctx),
 		WorkspaceChannel:    req.WorkspaceChannel,
-		WorkspaceChatID:     req.WorkspaceChatID,
+		WorkspaceChatID:     effectiveWorkspaceChatID,
+		TeamIsolated:        resolvedTeamSettings != nil && !tools.IsSharedWorkspace(resolvedTeamSettings),
 		TeamTaskID:          req.TeamTaskID,
 		LeaderAgentID:       tools.LeaderAgentIDFromCtx(ctx),
 		AgentToolKey:        l.id,

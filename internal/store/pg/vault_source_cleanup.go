@@ -71,7 +71,7 @@ func (s *PGVaultStore) BatchFindByDelegationIDs(
 	q := `
 WITH ranked AS (
   SELECT
-    vd.id, vd.tenant_id, vd.agent_id, vd.team_id, vd.scope, vd.custom_scope,
+    vd.id, vd.tenant_id, vd.agent_id, vd.team_id, vd.chat_id, vd.scope, vd.custom_scope,
     vd.path, vd.path_basename, vd.title, vd.doc_type, vd.content_hash,
     vd.summary, vd.metadata, vd.created_at, vd.updated_at,
     vd.metadata->>'delegation_id' AS deleg_id,
@@ -90,7 +90,7 @@ WITH ranked AS (
 		args = append(args, pqStringArray(excludeUUIDs))
 	}
 	q += `)
-SELECT id, tenant_id, agent_id, team_id, scope, custom_scope, path, path_basename,
+SELECT id, tenant_id, agent_id, team_id, chat_id, scope, custom_scope, path, path_basename,
        title, doc_type, content_hash, summary, metadata, created_at, updated_at, deleg_id
 FROM ranked
 WHERE rn <= $` + fmt.Sprintf("%d", len(args)+1) + `
@@ -109,6 +109,7 @@ ORDER BY deleg_id, created_at DESC
 		var (
 			id, tenantIDVal      uuid.UUID
 			agentID, teamID      *uuid.UUID
+			chatID               *string
 			customScope          *string
 			metaJSON             []byte
 			delegID              string
@@ -118,11 +119,15 @@ ORDER BY deleg_id, created_at DESC
 		)
 		doc := store.VaultDocument{}
 		if err := rows.Scan(
-			&id, &tenantIDVal, &agentID, &teamID, &scope, &customScope,
+			&id, &tenantIDVal, &agentID, &teamID, &chatID, &scope, &customScope,
 			&path, &pathBase, &title, &docTyp, &contentHash,
 			&summary, &metaJSON, &doc.CreatedAt, &doc.UpdatedAt, &delegID,
 		); err != nil {
 			return nil, err
+		}
+		if chatID != nil {
+			v := *chatID
+			doc.ChatID = &v
 		}
 		doc.ID = id.String()
 		doc.TenantID = tenantIDVal.String()

@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,7 +26,6 @@ interface PoolSetupWizardDialogProps {
 }
 
 const STRATEGIES: { value: EffectiveChatGPTOAuthRoutingStrategy; labelKey: string }[] = [
-  { value: "primary_first", labelKey: "list.strategy.primaryFirst" },
   { value: "round_robin", labelKey: "list.strategy.roundRobin" },
   { value: "priority_order", labelKey: "list.strategy.priorityOrder" },
 ];
@@ -43,8 +42,16 @@ export function PoolSetupWizardDialog({
   const [selectedMemberIds, setSelectedMemberIds] = useState<Set<string>>(
     () => new Set(unpooledProviders.slice(1).map((p) => p.id)),
   );
-  const [strategy, setStrategy] = useState<EffectiveChatGPTOAuthRoutingStrategy>("primary_first");
+  const [strategy, setStrategy] = useState<EffectiveChatGPTOAuthRoutingStrategy>("priority_order");
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const nextOwnerId = unpooledProviders[0]?.id ?? "";
+    setOwnerId(nextOwnerId);
+    setSelectedMemberIds(new Set(unpooledProviders.slice(1).map((provider) => provider.id)));
+    setStrategy("priority_order");
+  }, [open, unpooledProviders]);
 
   // When owner changes, auto-exclude owner from members
   const handleOwnerChange = useCallback((id: string) => {

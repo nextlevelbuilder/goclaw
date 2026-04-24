@@ -115,17 +115,15 @@ func TestTenantChainCache_ConcurrentReaders(t *testing.T) {
 
 	// Spawn 10 concurrent readers
 	var wg sync.WaitGroup
-	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for j := 0; j < 100; j++ {
+	for range 10 {
+		wg.Go(func() {
+			for range 100 {
 				got, ok := c.Get(tid)
 				if !ok || len(got) != 2 {
 					t.Errorf("concurrent read failed")
 				}
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -138,12 +136,12 @@ func TestTenantChainCache_ConcurrentMutations(t *testing.T) {
 
 	// Spawn concurrent writers for different tenants
 	var wg sync.WaitGroup
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
 			tid := uuid.New()
-			for j := 0; j < 10; j++ {
+			for j := range 10 {
 				c.Set(tid, []SearchProvider{&fakeSearchProvider{"brave"}})
 				c.Get(tid)
 				if j%3 == 0 {

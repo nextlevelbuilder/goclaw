@@ -100,7 +100,7 @@ old clients see flat keys; new clients see the full params blob.
 
 ### Gemini Specifics
 
-- Models: `gemini-2.5-flash-preview-tts`, `gemini-2.5-pro-preview-tts` (preview).
+- Models: `gemini-3.1-flash-tts-preview` (default), `gemini-2.5-flash-preview-tts`, `gemini-2.5-pro-preview-tts` (preview).
 - Multi-speaker: up to 2 simultaneous speakers, each with distinct voice + name annotation.
 - Audio tags: inline `<say-as>` / style directives via bracketed prompts.
 - Sentinel errors: `ErrInvalidVoice`, `ErrInvalidModel`, `ErrSpeakerLimit` → HTTP 422 with i18n message.
@@ -119,9 +119,31 @@ Parity enforced by `ui/web/src/__tests__/i18n-tts-key-parity.test.ts` (vitest).
 
 ---
 
+## Image Generation
+
+Native `image_generation` support in the Codex provider (`POST /codex/responses`) + passthrough in the OpenAI-compat path.
+
+**Provider flag:** `ProviderCapabilities.ImageGeneration bool` (`internal/providers/capabilities.go`). Codex sets `true`; other providers default `false`.
+
+**Gate (agent loop):** `ToolDefinition{Type:"image_generation"}` appended iff (provider capability) AND (`AgentConfig.AllowImageGeneration`, default true) AND (request lacks `x-goclaw-no-image-gen` header). Gate logic in `internal/agent/loop_tool_filter.go`.
+
+**Codex native events** (`internal/providers/codex.go`):
+- `response.image_generation_call.partial_image` → `ChatResponse.Images` entry with `Partial:true`.
+- `response.output_item.done` with `item.type == "image_generation_call"` → final `ChatResponse.Images` entry; partial frames for same `item_id` replaced.
+- `response.completed` walks `response.output[]` for image items (non-stream).
+
+**OpenAI-compat parsing:** `choices[0].message.images[]` + `choices[0].delta.images[]` with `data:image/...;base64,...` URLs decoded in `internal/providers/openai_http.go` and `internal/providers/openai_chat.go`. Helper: `parseDataURL()` in `internal/providers/openai_image_url.go`.
+
+**Persistence:** `internal/agent/media.go persistAssistantImages()` writes final images to `{workspace}/media/{sha256}.{ext}`, returns `MediaRef` entries, clears inline `Images[]`. Idempotent on hash. Invoked from `pipeline.FinalizeStage` via `Deps.PersistAssistantImages` callback.
+
+**Web UI:** Download filename resolver (`imageGenDownloadName`) in `ui/web/src/components/chat/media-gallery.tsx`. Image generation works automatically when the agent has the `create_image` tool — no user-facing toggle.
+
+---
+
 ## Key Conventions
 
 - **Store layer:** Interface-based; PG (`store/pg/`) + SQLite (`store/sqlitestore/`). Raw SQL, `$1/$2` params.
+- **Session token display:** v3 compaction now uses dynamic max_tokens (`in/25` clamped `[1024,8192]`); session token display reads from `sessions.metadata.last_prompt_tokens` and `last_message_count`. Tool schemas counted via `TokenCounter.CountToolSchemas()` and included in ContextStage overhead.
 - **Context propagation:** `store.WithLocale`, `store.WithUserID`, `store.WithTenantID`, etc.
 - **Security logs:** `slog.Warn("security.*")` for all security events.
 - **SSRF prevention:** `validateProviderURL()` in `internal/http/tts_validate.go`.

@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"slices"
 	"sync"
 	"testing"
 )
@@ -162,10 +163,5 @@ func TestToolGroups_BuiltinGroups_Seeded(t *testing.T) {
 }
 
 func containsTool(tools []string, name string) bool {
-	for _, t := range tools {
-		if t == name {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(tools, name)
 }

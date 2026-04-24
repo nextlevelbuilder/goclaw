@@ -86,12 +86,16 @@ func (l *Loop) processToolResult(
 	// Collect MEDIA: paths from tool results.
 	// Prefer result.Media (explicit) over ForLLM MEDIA: prefix (legacy) to avoid duplicates.
 	if len(result.Media) > 0 {
-		for _, mf := range result.Media {
+		for i, mf := range result.Media {
 			ct := mf.MimeType
 			if ct == "" {
 				ct = mimeFromExt(filepath.Ext(mf.Path))
 			}
-			rs.mediaResults = append(rs.mediaResults, MediaResult{Path: mf.Path, ContentType: ct})
+			mr := MediaResult{Path: mf.Path, ContentType: ct}
+			if result.MediaPrompts != nil {
+				mr.Prompt = result.MediaPrompts[i]
+			}
+			rs.mediaResults = append(rs.mediaResults, mr)
 		}
 	} else if mr := parseMediaResult(result.ForLLM); mr != nil {
 		rs.mediaResults = append(rs.mediaResults, *mr)

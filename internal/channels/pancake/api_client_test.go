@@ -180,9 +180,9 @@ func TestGetPosts_ErrorResponse(t *testing.T) {
 func TestConfigParsing_CommentReplyOptions(t *testing.T) {
 	raw := `{
 		"page_id": "123",
-		"features": {"comment_reply": true, "first_inbox": true},
+		"features": {"comment_reply": true, "private_reply": true},
 		"comment_reply_options": {"filter": "keyword", "keywords": ["price", "buy"]},
-		"first_inbox_message": "Thanks!",
+		"private_reply_message": "Thanks!",
 		"post_context_cache_ttl": "30m"
 	}`
 
@@ -191,8 +191,8 @@ func TestConfigParsing_CommentReplyOptions(t *testing.T) {
 		t.Fatalf("unmarshal: %v", err)
 	}
 
-	if !cfg.Features.FirstInbox {
-		t.Error("Features.FirstInbox should be true")
+	if !cfg.Features.PrivateReply {
+		t.Error("Features.PrivateReply should be true")
 	}
 	if cfg.CommentReplyOptions.Filter != "keyword" {
 		t.Errorf("Filter = %q, want %q", cfg.CommentReplyOptions.Filter, "keyword")
@@ -202,8 +202,8 @@ func TestConfigParsing_CommentReplyOptions(t *testing.T) {
 		cfg.CommentReplyOptions.Keywords[1] != "buy" {
 		t.Errorf("Keywords = %v, want [price buy]", cfg.CommentReplyOptions.Keywords)
 	}
-	if cfg.FirstInboxMessage != "Thanks!" {
-		t.Errorf("FirstInboxMessage = %q, want %q", cfg.FirstInboxMessage, "Thanks!")
+	if cfg.PrivateReplyMessage != "Thanks!" {
+		t.Errorf("PrivateReplyMessage = %q, want %q", cfg.PrivateReplyMessage, "Thanks!")
 	}
 	if cfg.PostContextCacheTTL != "30m" {
 		t.Errorf("PostContextCacheTTL = %q, want %q", cfg.PostContextCacheTTL, "30m")
@@ -274,14 +274,14 @@ func TestConfigParsing_Defaults(t *testing.T) {
 		t.Fatalf("unmarshal: %v", err)
 	}
 
-	if cfg.Features.FirstInbox {
-		t.Error("Features.FirstInbox should default to false")
+	if cfg.Features.PrivateReply {
+		t.Error("Features.PrivateReply should default to false")
 	}
 	if cfg.CommentReplyOptions.Filter != "" {
 		t.Errorf("CommentReplyOptions.Filter should default to empty, got %q", cfg.CommentReplyOptions.Filter)
 	}
-	if cfg.FirstInboxMessage != "" {
-		t.Errorf("FirstInboxMessage should default to empty, got %q", cfg.FirstInboxMessage)
+	if cfg.PrivateReplyMessage != "" {
+		t.Errorf("PrivateReplyMessage should default to empty, got %q", cfg.PrivateReplyMessage)
 	}
 }
 

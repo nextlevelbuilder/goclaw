@@ -114,6 +114,7 @@ export function BehaviorSection({ draft, onUpdate }: Props) {
                 value={draft.timeout_ms}
                 onChange={(e) => onUpdate({ timeout_ms: Number(e.target.value) })}
                 min={1000}
+                max={300000}
               />
             </div>
           </div>

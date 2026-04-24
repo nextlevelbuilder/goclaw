@@ -53,7 +53,7 @@ func (h *ProvidersHandler) handleProviderCodexPoolActivity(w http.ResponseWriter
 	const maxPoolCandidates = 20
 	settings := store.ParseChatGPTOAuthProviderSettings(provider.Settings)
 	poolCandidates := []string{provider.Name}
-	strategy := store.ChatGPTOAuthStrategyPrimaryFirst
+	strategy := store.ChatGPTOAuthStrategyPriority
 	if settings != nil && settings.CodexPool != nil {
 		if settings.CodexPool.Strategy != "" {
 			strategy = settings.CodexPool.Strategy
@@ -125,7 +125,7 @@ func (h *ProvidersHandler) handleProviderCodexPoolActivity(w http.ResponseWriter
 
 func emptyProviderPoolActivityResponse() map[string]any {
 	return map[string]any{
-		"strategy":          store.ChatGPTOAuthStrategyPrimaryFirst,
+		"strategy":          store.ChatGPTOAuthStrategyPriority,
 		"pool_providers":    []string{},
 		"stats_sample_size": 0,
 		"provider_counts":   []codexPoolProviderCount{},

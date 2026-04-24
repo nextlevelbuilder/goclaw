@@ -172,7 +172,7 @@ func (c *InMemoryCache[V]) sweepOnce() {
 		toEvict := min(
 			// bring below cap + 20% headroom
 			len(allAlive)-c.maxSize+(c.maxSize/5), len(allAlive))
-		for i := 0; i < toEvict; i++ {
+		for i := range toEvict {
 			c.data.Delete(allAlive[i].key)
 		}
 	}

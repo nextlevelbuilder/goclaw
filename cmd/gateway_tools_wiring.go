@@ -49,9 +49,11 @@ func wireExtraTools(
 
 	// Message tool (send to channels)
 	toolsReg.Register(tools.NewMessageTool(workspace, agentCfg.RestrictToWorkspace))
+	// Send file tool (deliver existing workspace file as attachment)
+	toolsReg.Register(tools.NewSendFileTool(workspace, agentCfg.RestrictToWorkspace))
 	// Group members tool (list members in group chats)
 	toolsReg.Register(tools.NewListGroupMembersTool())
-	slog.Info("session + message tools registered")
+	slog.Info("session + message + send_file tools registered")
 
 	// Register legacy tool aliases (backward-compat names from policy.go).
 	for alias, canonical := range tools.LegacyToolAliases() {
@@ -114,6 +116,12 @@ func wireExtraTools(
 	}
 	if editTool, ok := toolsReg.Get("edit"); ok {
 		if pa, ok := editTool.(tools.PathAllowable); ok {
+			pa.AllowPaths(userAllowPaths...)
+		}
+	}
+	if sendFileTool, ok := toolsReg.Get("send_file"); ok {
+		if pa, ok := sendFileTool.(tools.PathAllowable); ok {
+			pa.AllowPaths(skillsAllowPaths...)
 			pa.AllowPaths(userAllowPaths...)
 		}
 	}

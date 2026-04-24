@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -116,8 +117,9 @@ func TestSynthesize_SingleVoice_RequestShape(t *testing.T) {
 	part0 := contents[0].(map[string]any)
 	parts, _ := part0["parts"].([]any)
 	text, _ := parts[0].(map[string]any)["text"].(string)
-	if text != "Hello world" {
-		t.Errorf("text = %q, want Hello world", text)
+	wantText := DefaultTextPrefix + "Hello world"
+	if text != wantText {
+		t.Errorf("text = %q, want %q", text, wantText)
 	}
 
 	// result
@@ -144,6 +146,17 @@ func TestSynthesize_MultiSpeaker_RequestShape(t *testing.T) {
 	}
 	if _, err := p.Synthesize(context.Background(), "Joe: Hi\nJane: Hello", opts); err != nil {
 		t.Fatalf("Synthesize error: %v", err)
+	}
+
+	// Verify transcript passed through unchanged — no inline prefix in multi-speaker mode.
+	contents, _ := cap.body["contents"].([]any)
+	if len(contents) == 0 {
+		t.Fatal("contents empty")
+	}
+	msparts, _ := contents[0].(map[string]any)["parts"].([]any)
+	mstext, _ := msparts[0].(map[string]any)["text"].(string)
+	if mstext != "Joe: Hi\nJane: Hello" {
+		t.Errorf("multi-speaker text = %q, want %q (no prefix)", mstext, "Joe: Hi\nJane: Hello")
 	}
 
 	gc, _ := cap.body["generationConfig"].(map[string]any)
@@ -363,5 +376,261 @@ func TestSynthesize_BadBase64(t *testing.T) {
 	_, err := p.Synthesize(context.Background(), "test", audio.TTSOptions{})
 	if err == nil {
 		t.Fatal("expected base64 decode error")
+	}
+}
+
+// TestSynthesize_PrependsInlinePrefix verifies the inline style prefix is prepended
+// to user text in contents[0].parts[0].text for single-voice synthesis.
+func TestSynthesize_PrependsInlinePrefix(t *testing.T) {
+	pcm := make([]byte, 64)
+	b64 := base64.StdEncoding.EncodeToString(pcm)
+	srv, cap := newMockServer(t, http.StatusOK, geminiResponseWith(b64))
+
+	p := NewProvider(Config{APIKey: "k", APIBase: srv.URL})
+	if _, err := p.Synthesize(context.Background(), "hello", audio.TTSOptions{}); err != nil {
+		t.Fatalf("Synthesize error: %v", err)
+	}
+
+	contents, _ := cap.body["contents"].([]any)
+	if len(contents) == 0 {
+		t.Fatal("contents empty")
+	}
+	parts, _ := contents[0].(map[string]any)["parts"].([]any)
+	text, _ := parts[0].(map[string]any)["text"].(string)
+
+	want := DefaultTextPrefix + "hello"
+	if text != want {
+		t.Errorf("text = %q, want %q (prefix must be prepended)", text, want)
+	}
+}
+
+// TestBuildStyledText verifies BuildStyledText pure helper behaviour.
+func TestBuildStyledText(t *testing.T) {
+	cases := []struct {
+		prefix, text, want string
+	}{
+		{"Say: ", "hi", "Say: hi"},
+		{"", "hi", "hi"},
+		{"P: ", "", "P: "},
+	}
+	for _, c := range cases {
+		got := BuildStyledText(c.prefix, c.text)
+		if got != c.want {
+			t.Errorf("BuildStyledText(%q, %q) = %q, want %q", c.prefix, c.text, got, c.want)
+		}
+	}
+}
+
+// TestSynthesize_Returns_ErrTextOnlyResponse_On400 verifies that a 400 with
+// text-only phrasing is detected and returned as ErrTextOnlyResponse.
+// Both calls return 400 (retry also fails); final error must match sentinel.
+func TestSynthesize_Returns_ErrTextOnlyResponse_On400(t *testing.T) {
+	body := []byte(`{"error":{"message":"The model returned text when audio was expected","code":400}}`)
+	srv, _ := newMockServer(t, http.StatusBadRequest, body)
+	p := NewProvider(Config{APIKey: "k", APIBase: srv.URL})
+	_, err := p.Synthesize(context.Background(), "x", audio.TTSOptions{})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !errors.Is(err, ErrTextOnlyResponse) {
+		t.Errorf("got %v, want ErrTextOnlyResponse", err)
+	}
+}
+
+// TestSynthesize_Retries_With_StrongerPrefix_On_TextOnly400 verifies that on a
+// 400 text-only error the second call uses StrongerTextPrefix and succeeds.
+func TestSynthesize_Retries_With_StrongerPrefix_On_TextOnly400(t *testing.T) {
+	pcm := make([]byte, 64)
+	b64 := base64.StdEncoding.EncodeToString(pcm)
+	successBody := geminiResponseWith(b64)
+	textOnlyBody := []byte(`{"error":{"message":"returned text instead of audio","code":400}}`)
+
+	var calls int
+	var bodies []map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		var b map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		bodies = append(bodies, b)
+		if calls == 1 {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write(textOnlyBody)
+		} else {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(successBody)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	p := NewProvider(Config{APIKey: "k", APIBase: srv.URL})
+	_, err := p.Synthesize(context.Background(), "hello", audio.TTSOptions{})
+	if err != nil {
+		t.Fatalf("Synthesize: %v", err)
+	}
+	if calls != 2 {
+		t.Errorf("expected 2 calls, got %d", calls)
+	}
+
+	extractText := func(b map[string]any) string {
+		contents, _ := b["contents"].([]any)
+		if len(contents) == 0 {
+			return ""
+		}
+		parts, _ := contents[0].(map[string]any)["parts"].([]any)
+		if len(parts) == 0 {
+			return ""
+		}
+		text, _ := parts[0].(map[string]any)["text"].(string)
+		return text
+	}
+
+	want1 := DefaultTextPrefix + "hello"
+	if got := extractText(bodies[0]); got != want1 {
+		t.Errorf("call1 text = %q, want %q", got, want1)
+	}
+	want2 := StrongerTextPrefix + "hello"
+	if got := extractText(bodies[1]); got != want2 {
+		t.Errorf("call2 text = %q, want %q", got, want2)
+	}
+}
+
+// TestIsTextOnlyError is a table-driven unit test for the isTextOnlyError helper.
+func TestIsTextOnlyError(t *testing.T) {
+	cases := []struct {
+		status int
+		body   string
+		want   bool
+	}{
+		{400, `{"error":{"message":"returned text when audio was expected"}}`, true},
+		{400, `{"error":{"message":"The model tried to generate text"}}`, true}, // case-insensitive
+		{400, `{"error":{"message":"got text instead of audio"}}`, true},
+		{400, `{"error":{"message":"unable to generate text in format"}}`, false}, // bare "generate text" not in list
+		{400, `{"error":{"message":"rate limit"}}`, false},
+		{400, `{"error":{"message":"invalid voice"}}`, false},
+		{400, `not-json`, false}, // no substring match
+		{500, `{"error":{"message":"returned text"}}`, false}, // only 400
+		{400, ``, false},                                       // empty
+		{400, `{"error":{"message":"text-only output detected"}}`, true},
+		{400, `{"error":{"message":"text output returned"}}`, true},
+	}
+	for _, c := range cases {
+		got := isTextOnlyError(c.status, []byte(c.body))
+		if got != c.want {
+			t.Errorf("isTextOnlyError(%d, %q) = %v, want %v", c.status, c.body, got, c.want)
+		}
+	}
+}
+
+// TestSynthesize_Generic400_Unchanged verifies non-text-only 400 errors do not
+// match ErrTextOnlyResponse and still surface "unexpected status 400".
+func TestSynthesize_Generic400_Unchanged(t *testing.T) {
+	body := []byte(`{"error":{"message":"invalid voice name"}}`)
+	srv, _ := newMockServer(t, http.StatusBadRequest, body)
+	p := NewProvider(Config{APIKey: "k", APIBase: srv.URL})
+	_, err := p.Synthesize(context.Background(), "x", audio.TTSOptions{})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if errors.Is(err, ErrTextOnlyResponse) {
+		t.Errorf("non-text-only 400 should not match ErrTextOnlyResponse")
+	}
+	if !strings.Contains(err.Error(), "unexpected status 400") {
+		t.Errorf("error %q should contain 'unexpected status 400'", err.Error())
+	}
+}
+
+// TestSynthesize_RetryRespectsContextCancel verifies that context cancellation
+// during the retry backoff aborts without issuing a second request.
+func TestSynthesize_RetryRespectsContextCancel(t *testing.T) {
+	textOnlyBody := []byte(`{"error":{"message":"returned text when audio was expected","code":400}}`)
+	var calls int
+	// firstCallDone is closed after the first request handler returns,
+	// so the test can cancel ctx immediately after the first call completes.
+	firstCallDone := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write(textOnlyBody)
+		// Signal after first call and cancel immediately so backoff sees ctx.Done().
+		if calls == 1 {
+			close(firstCallDone)
+			cancel()
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	p := NewProvider(Config{APIKey: "k", APIBase: srv.URL})
+	_, err := p.Synthesize(ctx, "x", audio.TTSOptions{})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if calls != 1 {
+		t.Errorf("expected 1 call (no retry after cancel), got %d", calls)
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("expected context.Canceled, got %v", err)
+	}
+}
+
+// TestSynthesize_MultiSpeaker_TextOnly_NotRetried verifies that multi-speaker
+// mode returns ErrTextOnlyResponse unretried (exactly 1 call, no stronger prefix retry).
+func TestSynthesize_MultiSpeaker_TextOnly_NotRetried(t *testing.T) {
+	body := []byte(`{"error":{"message":"returned text when audio was expected","code":400}}`)
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(srv.Close)
+
+	p := NewProvider(Config{APIKey: "k", APIBase: srv.URL})
+	opts := audio.TTSOptions{
+		Speakers: []audio.SpeakerVoice{
+			{Speaker: "Joe", VoiceID: "Kore"},
+			{Speaker: "Jane", VoiceID: "Puck"},
+		},
+	}
+	_, err := p.Synthesize(context.Background(), "Joe: Hi\nJane: Hello", opts)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !errors.Is(err, ErrTextOnlyResponse) {
+		t.Errorf("got %v, want ErrTextOnlyResponse", err)
+	}
+	if calls != 1 {
+		t.Errorf("multi-speaker must not retry: expected 1 call, got %d", calls)
+	}
+}
+
+// TestSynthesize_MultiSpeaker_NoPrefix pins the invariant that multi-speaker
+// transcripts pass through unchanged — no inline prefix applied.
+func TestSynthesize_MultiSpeaker_NoPrefix(t *testing.T) {
+	pcm := make([]byte, 64)
+	b64 := base64.StdEncoding.EncodeToString(pcm)
+	srv, cap := newMockServer(t, http.StatusOK, geminiResponseWith(b64))
+
+	p := NewProvider(Config{APIKey: "k", APIBase: srv.URL})
+	opts := audio.TTSOptions{
+		Speakers: []audio.SpeakerVoice{
+			{Speaker: "Joe", VoiceID: "Kore"},
+			{Speaker: "Jane", VoiceID: "Puck"},
+		},
+	}
+	transcript := "Joe: Hi\nJane: Hello"
+	if _, err := p.Synthesize(context.Background(), transcript, opts); err != nil {
+		t.Fatalf("Synthesize error: %v", err)
+	}
+
+	contents, _ := cap.body["contents"].([]any)
+	if len(contents) == 0 {
+		t.Fatal("contents empty")
+	}
+	parts, _ := contents[0].(map[string]any)["parts"].([]any)
+	text, _ := parts[0].(map[string]any)["text"].(string)
+
+	if text != transcript {
+		t.Errorf("multi-speaker text = %q, want %q (prefix must NOT apply)", text, transcript)
 	}
 }

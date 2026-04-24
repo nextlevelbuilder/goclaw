@@ -29,5 +29,6 @@
   "selectAgent": {
     "title": "Select an agent",
     "description": "Choose an agent to start chatting"
-  }
+  },
+  "imageGenDownloadName": "generated-{{timestamp}}.png"
 }
