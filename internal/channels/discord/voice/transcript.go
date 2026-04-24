@@ -61,24 +61,47 @@ type transcriber struct {
 	capCounter  *dailyCapCounter
 	sttDisabled atomic.Bool  // set when we hit an auth error; stays off until Stop
 	circuitOpen atomic.Int64 // unix-nano deadline when quota-circuit reopens
+
+	// guildID is the Supervisor's resolved guild ID, passed here for the
+	// GuildMember REST call. Not a Config field because Config is operator-
+	// facing and the guild is auto-resolved per-session in the supervisor.
+	guildID string
+
+	// output receives finished transcript lines + speaker notifications.
+	// Set once per session via setOutput() right after newTranscriber and
+	// before start(); never mutated after start(). Nil means the session
+	// wasn't wired with an output (shouldn't happen in production, but the
+	// worker degrades to drop-with-warn on the rare race).
+	output *sessionOutput
 }
+
+// setOutput wires the per-session output sink. Called by the supervisor's
+// onJoinSuccess after newSessionOutput has finished its initial REST calls
+// and before the transcriber goroutines start processing utterances.
+func (t *transcriber) setOutput(out *sessionOutput) { t.output = out }
 
 // discordSession is the subset of *discordgo.Session we need. Matched by
 // method set, so production code passes *discordgo.Session directly while
-// tests pass a fake.
+// tests pass a fake. The extra methods (Channel, ChannelMessageEdit,
+// MessageThreadStart) are consumed by sessionOutput for summary+thread.
 type discordSession interface {
 	GuildMember(guildID, userID string, options ...discordgo.RequestOption) (*discordgo.Member, error)
 	ChannelMessageSend(channelID, content string, options ...discordgo.RequestOption) (*discordgo.Message, error)
+	ChannelMessageEdit(channelID, messageID, content string, options ...discordgo.RequestOption) (*discordgo.Message, error)
+	Channel(channelID string, options ...discordgo.RequestOption) (*discordgo.Channel, error)
+	MessageThreadStart(channelID, messageID string, name string, archiveDuration int, options ...discordgo.RequestOption) (*discordgo.Channel, error)
 }
 
 // newTranscriber wires but does not start. Call start() after the voice
-// connection is established.
-func newTranscriber(cfg Config, session discordSession, audioMgr *audio.Manager, tmpDir string, log *slog.Logger) *transcriber {
+// connection is established. The guildID is the Supervisor's resolved
+// guild (auto-discovered from VoiceChannelID at session open).
+func newTranscriber(cfg Config, session discordSession, audioMgr *audio.Manager, tmpDir, guildID string, log *slog.Logger) *transcriber {
 	return &transcriber{
 		cfg:        cfg,
 		session:    session,
 		audioMgr:   audioMgr,
 		tmpDir:     tmpDir,
+		guildID:    guildID,
 		log:        log,
 		in:         make(chan utterance, cfg.UtteranceQueueDepth),
 		stopCh:     make(chan struct{}),
@@ -245,39 +268,44 @@ func (t *transcriber) handleSTTError(err error, u utterance) {
 	}
 }
 
-// postTranscript sends "<DisplayName>: <text>" to the configured transcript
-// channel. DisplayName is cached to avoid a GuildMember API call per line.
+// postTranscript sends "<DisplayName>: <text>" through the session's
+// sessionOutput (thread attached to the session's summary message). Falls
+// back to a direct parent-channel post if no output is wired (rare race
+// during teardown).
 func (t *transcriber) postTranscript(ctx context.Context, u utterance, text string) {
 	name := t.resolveDisplayName(ctx, u.ssrc, u.userID)
-	line := fmt.Sprintf("%s: %s", name, strings.TrimSpace(text))
-	// Discord message cap is 2000 chars. Scribe utterances are ≤10s; even
-	// speedtalkers rarely exceed a few hundred chars per utterance, so cut
-	// conservatively at 1900 to leave headroom for the name prefix.
-	if len(line) > 1900 {
-		line = line[:1897] + "..."
-	}
+
 	// Per-call timeout prevents a Discord REST stall from pinning the worker
 	// and backing up the utterance queue (demux would start dropping at
 	// capacity if this blocked too long).
 	postCtx, cancel := context.WithTimeout(ctx, channelSendTimeout)
 	defer cancel()
+
+	if t.output != nil {
+		t.output.PostLine(postCtx, name, text)
+		return
+	}
+	// Defensive fallback: no session output wired. Write directly to the
+	// transcript channel with the legacy per-line shape so a teardown-race
+	// transcript still reaches the operator.
+	line := fmt.Sprintf("%s: %s", channels.SanitizeDisplayName(name), strings.TrimSpace(text))
+	if len(line) > 1900 {
+		line = line[:1897] + "..."
+	}
 	if _, err := t.session.ChannelMessageSend(
 		t.cfg.TranscriptChannelID,
 		line,
 		discordgo.WithContext(postCtx),
 	); err != nil {
-		// A missing channel (10003) or missing-permissions response happens
-		// if the channel was deleted or perms changed mid-session. Accepted
-		// v1 behaviour: warn-log, keep running. If the channel stays gone,
-		// every line will warn — future work tracks the "unknown channel"
-		// code and disables for the session (see plan TODO 6).
-		t.log.Warn("voice: transcript post failed",
+		t.log.Warn("voice: fallback transcript post failed",
 			"err", err, "channel_id", t.cfg.TranscriptChannelID, "ssrc", u.ssrc)
 	}
 }
 
 // resolveDisplayName returns a human-readable speaker label. Falls back to
-// "user:<ssrc>" when GuildMember is unavailable and userID is empty.
+// "user:<ssrc>" when GuildMember is unavailable and userID is empty. When
+// a fresh display name is resolved (not a cache hit), we notify the
+// session output so the running summary can update its speaker list.
 func (t *transcriber) resolveDisplayName(ctx context.Context, ssrc uint32, userID string) string {
 	if userID == "" {
 		return fmt.Sprintf("user:%d", ssrc)
@@ -291,18 +319,39 @@ func (t *transcriber) resolveDisplayName(ctx context.Context, ssrc uint32, userI
 	// timeout so a Discord REST stall can't pin the worker.
 	lookupCtx, cancel := context.WithTimeout(ctx, guildMemberTimeout)
 	defer cancel()
-	member, err := t.session.GuildMember(t.cfg.GuildID, userID, discordgo.WithContext(lookupCtx))
+	member, err := t.session.GuildMember(t.guildID, userID, discordgo.WithContext(lookupCtx))
 	if err != nil || member == nil {
 		t.log.Debug("voice: GuildMember lookup failed; falling back to userID",
 			"err", err, "user_id", userID)
 		// Cache the userID itself so we don't hammer Discord on every
 		// utterance for a user Discord doesn't know about.
 		t.nameCache.set(userID, userID)
-		return channels.SanitizeDisplayName(userID)
+		displayed := channels.SanitizeDisplayName(userID)
+		t.noteSpeaker(ctx, userID, displayed)
+		return displayed
 	}
 	name := memberDisplayName(member)
 	t.nameCache.set(userID, name)
-	return channels.SanitizeDisplayName(name)
+	displayed := channels.SanitizeDisplayName(name)
+	t.noteSpeaker(ctx, userID, displayed)
+	return displayed
+}
+
+// noteSpeaker forwards a newly-resolved speaker to the session output so the
+// running summary can track who's appeared. Called only on cache MISS paths
+// (i.e., first time we resolve this user in the session), so the output sees
+// exactly one note per new speaker. Safe to call with a nil output; the
+// sessionOutput method itself is nil-safe, but the guard keeps the hot path
+// free of an unnecessary ctx.WithTimeout in the default wiring.
+func (t *transcriber) noteSpeaker(ctx context.Context, userID, displayName string) {
+	if t.output == nil || userID == "" {
+		return
+	}
+	// Short deadline — this is a fire-and-forget UX update. If Discord is
+	// slow we'd rather move on than back the worker up.
+	noteCtx, cancel := context.WithTimeout(ctx, channelSendTimeout)
+	defer cancel()
+	t.output.NoteSpeaker(noteCtx, userID, displayName)
 }
 
 // memberDisplayName pulls the best available display string off a Member:

@@ -4,6 +4,29 @@ All notable changes to GoClaw are documented here. For full documentation, see [
 
 ## Unreleased
 
+### Improvements
+
+- **Discord voice transcription output: summary message + thread.** Voice
+  sessions now produce ONE summary message in the transcript text channel
+  per session, with the raw per-speaker transcript posted inside an attached
+  thread. On join: "🎤 Voice session started in #chill". The summary edits
+  live as speakers join (throttled to one edit per ~4s per channel). On
+  leave: "✅ Voice session ended in #chill — 23m · 3 speakers · 142
+  utterances". Keeps the transcript channel readable for operators who
+  don't want every individual utterance in their main feed. Thread
+  auto-archives after 24h.
+  - Graceful degradation: if thread creation fails (rate limit, missing
+    perms), per-line transcripts still post to the parent channel.
+  - Thread message cap (~1000 messages) spills overflow to the parent
+    channel with a one-shot warn — late-session transcripts still reach
+    operators even on a high-volume call.
+- **Discord voice config: auto-resolve guild ID.** Dropped the
+  `voice_channel_guild_id` config field. The supervisor now resolves the
+  guild from `voice_channel_id` via `session.Channel(...)` at Start.
+  Operators paste one ID instead of two. Failure (bot not in guild,
+  missing perms) surfaces as a loud error log and the voice supervisor
+  no-ops; text handling is unaffected.
+
 ### Features
 
 - **Discord real-time voice-channel transcription.** New opt-in feature that

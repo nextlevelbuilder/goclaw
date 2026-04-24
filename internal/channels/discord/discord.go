@@ -183,15 +183,9 @@ func (c *Channel) startVoiceSupervisor(ctx context.Context) error {
 	if c.audioMgr == nil {
 		return fmt.Errorf("voice_channel_enabled=true but no audio.Manager wired (check STT provider config)")
 	}
-	// GuildID defaults to the testGuildID when set and the voice-channel-
-	// guild-id is empty — matches the convention of other Discord features
-	// that use TestGuildID as a dev guild override.
-	guildID := c.config.VoiceChannelGuildID
-	if guildID == "" {
-		guildID = c.testGuildID
-	}
+	// Guild is auto-resolved inside the supervisor via session.Channel() —
+	// no operator-supplied guild_id needed.
 	vcfg := voice.Config{
-		GuildID:             guildID,
 		VoiceChannelID:      c.config.VoiceChannelID,
 		TranscriptChannelID: c.config.VoiceChannelTranscriptChannelID,
 		IdleLeaveSeconds:    c.config.VoiceChannelIdleLeaveSeconds,
@@ -206,7 +200,6 @@ func (c *Channel) startVoiceSupervisor(ctx context.Context) error {
 	sup.Start(ctx)
 	c.voiceSupervisor = sup
 	slog.Info("discord: voice supervisor started",
-		"guild_id", vcfg.GuildID,
 		"voice_channel_id", vcfg.VoiceChannelID,
 		"transcript_channel_id", vcfg.TranscriptChannelID,
 	)

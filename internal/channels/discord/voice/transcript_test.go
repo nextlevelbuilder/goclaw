@@ -13,16 +13,36 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-// fakeSession implements discordSession for tests. GuildMember and
-// ChannelMessageSend are hookable; default behaviour returns zero values.
+// fakeSession implements discordSession for tests. Hookable methods return
+// zero values by default; set the Fn fields to override per-test.
 type fakeSession struct {
-	mu                sync.Mutex
-	guildMemberFn     func(guildID, userID string) (*discordgo.Member, error)
-	channelSendFn     func(channelID, content string) (*discordgo.Message, error)
+	mu sync.Mutex
+
+	guildMemberFn      func(guildID, userID string) (*discordgo.Member, error)
+	channelSendFn      func(channelID, content string) (*discordgo.Message, error)
+	channelEditFn      func(channelID, messageID, content string) (*discordgo.Message, error)
+	channelFn          func(channelID string) (*discordgo.Channel, error)
+	messageThreadStart func(channelID, messageID, name string, archive int) (*discordgo.Channel, error)
+
 	guildMemberCalls  int
 	channelSendCalls  int
+	channelEditCalls  int
+	channelCalls      int
+	threadStartCalls  int
 	lastSentChannelID string
 	lastSentContent   string
+	lastEditChannelID string
+	lastEditMessageID string
+	lastEditContent   string
+	lastThreadName    string
+	sendsByChannel    map[string][]string
+}
+
+func (f *fakeSession) recordSend(channelID, content string) {
+	if f.sendsByChannel == nil {
+		f.sendsByChannel = make(map[string][]string)
+	}
+	f.sendsByChannel[channelID] = append(f.sendsByChannel[channelID], content)
 }
 
 func (f *fakeSession) GuildMember(guildID, userID string, _ ...discordgo.RequestOption) (*discordgo.Member, error) {
@@ -41,12 +61,50 @@ func (f *fakeSession) ChannelMessageSend(channelID, content string, _ ...discord
 	f.channelSendCalls++
 	f.lastSentChannelID = channelID
 	f.lastSentContent = content
+	f.recordSend(channelID, content)
 	fn := f.channelSendFn
 	f.mu.Unlock()
 	if fn == nil {
 		return &discordgo.Message{ID: "msg-1"}, nil
 	}
 	return fn(channelID, content)
+}
+
+func (f *fakeSession) ChannelMessageEdit(channelID, messageID, content string, _ ...discordgo.RequestOption) (*discordgo.Message, error) {
+	f.mu.Lock()
+	f.channelEditCalls++
+	f.lastEditChannelID = channelID
+	f.lastEditMessageID = messageID
+	f.lastEditContent = content
+	fn := f.channelEditFn
+	f.mu.Unlock()
+	if fn == nil {
+		return &discordgo.Message{ID: messageID}, nil
+	}
+	return fn(channelID, messageID, content)
+}
+
+func (f *fakeSession) Channel(channelID string, _ ...discordgo.RequestOption) (*discordgo.Channel, error) {
+	f.mu.Lock()
+	f.channelCalls++
+	fn := f.channelFn
+	f.mu.Unlock()
+	if fn == nil {
+		return &discordgo.Channel{ID: channelID, Name: "test-channel"}, nil
+	}
+	return fn(channelID)
+}
+
+func (f *fakeSession) MessageThreadStart(channelID, messageID, name string, archive int, _ ...discordgo.RequestOption) (*discordgo.Channel, error) {
+	f.mu.Lock()
+	f.threadStartCalls++
+	f.lastThreadName = name
+	fn := f.messageThreadStart
+	f.mu.Unlock()
+	if fn == nil {
+		return &discordgo.Channel{ID: "thread-1"}, nil
+	}
+	return fn(channelID, messageID, name, archive)
 }
 
 // --- display name cache ----------------------------------------------------
@@ -89,8 +147,6 @@ func Test_displayNameCache_sweepExpired_drops_stale_entries(t *testing.T) {
 
 	c.sweepExpired()
 
-	// alice and bob were both set at now; both are expired at now+TTL+1m.
-	// charlie was set at now+TTL+1m, still fresh.
 	c.mu.Lock()
 	_, aliceStillCached := c.m["alice"]
 	_, bobStillCached := c.m["bob"]
@@ -127,21 +183,15 @@ func Test_dailyCapCounter_rejects_over_cap(t *testing.T) {
 	if c.tryConsume(2_000) {
 		t.Fatal("expected consume over cap to be rejected")
 	}
-	// A smaller consume that fits should still succeed (partial budget remains).
 	if !c.tryConsume(1_000) {
 		t.Fatal("expected consume using remaining 1s of budget to succeed")
 	}
 }
 
-// capMs <= 0 means unlimited. Defensive — the adversarial review found that
-// a zero-cap counter would silently block every utterance because
-// consumedMs+durMs > 0 for any positive durMs. Production paths set a
-// default via ApplyDefaults, but a future builder/test that constructs
-// the counter directly with 0 should not accidentally block everything.
 func Test_dailyCapCounter_zero_cap_is_unlimited(t *testing.T) {
 	c := newDailyCapCounter(0)
 	for i := 0; i < 1000; i++ {
-		if !c.tryConsume(60_000) { // 1 minute each, 1000 times = 16+ hours of audio
+		if !c.tryConsume(60_000) {
 			t.Fatal("zero-cap counter rejected an utterance; expected unlimited")
 		}
 	}
@@ -157,7 +207,6 @@ func Test_dailyCapCounter_rolls_over_at_UTC_day_boundary(t *testing.T) {
 	if c.tryConsume(1) {
 		t.Fatal("expected day1 over-cap reject")
 	}
-	// Advance to day 2 — counter should reset.
 	day2 := time.Date(2026, 4, 24, 0, 0, 1, 0, time.UTC)
 	c.nowFn = func() time.Time { return day2 }
 	if !c.tryConsume(5_000) {
@@ -168,7 +217,13 @@ func Test_dailyCapCounter_rolls_over_at_UTC_day_boundary(t *testing.T) {
 // --- display name resolution -----------------------------------------------
 
 func Test_resolveDisplayName_empty_userID_uses_ssrc_fallback(t *testing.T) {
-	tr := &transcriber{cfg: Config{GuildID: "g"}, session: &fakeSession{}, log: discardLogger(), nameCache: newDisplayNameCache()}
+	tr := &transcriber{
+		cfg:       Config{},
+		session:   &fakeSession{},
+		log:       discardLogger(),
+		nameCache: newDisplayNameCache(),
+		guildID:   "g",
+	}
 	got := tr.resolveDisplayName(context.Background(), 1234, "")
 	if got != "user:1234" {
 		t.Fatalf("expected user:1234 fallback, got %q", got)
@@ -181,7 +236,13 @@ func Test_resolveDisplayName_cache_hit_avoids_api_call(t *testing.T) {
 			return &discordgo.Member{Nick: "Alice"}, nil
 		},
 	}
-	tr := &transcriber{cfg: Config{GuildID: "g"}, session: fs, log: discardLogger(), nameCache: newDisplayNameCache()}
+	tr := &transcriber{
+		cfg:       Config{},
+		session:   fs,
+		log:       discardLogger(),
+		nameCache: newDisplayNameCache(),
+		guildID:   "g",
+	}
 	tr.nameCache.set("u1", "CachedAlice")
 	got := tr.resolveDisplayName(context.Background(), 0, "u1")
 	if got != "CachedAlice" {
@@ -198,7 +259,13 @@ func Test_resolveDisplayName_api_error_falls_back_to_userID(t *testing.T) {
 			return nil, errors.New("permissions")
 		},
 	}
-	tr := &transcriber{cfg: Config{GuildID: "g"}, session: fs, log: discardLogger(), nameCache: newDisplayNameCache()}
+	tr := &transcriber{
+		cfg:       Config{},
+		session:   fs,
+		log:       discardLogger(),
+		nameCache: newDisplayNameCache(),
+		guildID:   "g",
+	}
 	got := tr.resolveDisplayName(context.Background(), 7, "u7")
 	if got != "u7" {
 		t.Fatalf("expected userID fallback, got %q", got)
@@ -236,11 +303,12 @@ func Test_memberDisplayName_precedence(t *testing.T) {
 
 func newTestTranscriber(fs *fakeSession) *transcriber {
 	return &transcriber{
-		cfg:        ApplyDefaults(Config{GuildID: "g", VoiceChannelID: "c", TranscriptChannelID: "t"}),
+		cfg:        ApplyDefaults(Config{VoiceChannelID: "c", TranscriptChannelID: "t"}),
 		session:    fs,
 		log:        discardLogger(),
 		nameCache:  newDisplayNameCache(),
 		capCounter: newDailyCapCounter(7200),
+		guildID:    "g",
 	}
 }
 
@@ -280,42 +348,61 @@ func Test_handleSTTError_transient_leaves_state_untouched(t *testing.T) {
 
 // --- postTranscript --------------------------------------------------------
 
-func Test_postTranscript_formats_displayname_prefix(t *testing.T) {
+// With sessionOutput wired, PostTranscript routes lines through the output.
+// The output falls through to its PostLine, which posts to the thread when
+// set or to the parent transcript channel when not. Here we verify via a
+// session-output whose thread is unwired (falls back to transcript channel).
+func Test_postTranscript_routes_through_sessionOutput(t *testing.T) {
 	fs := &fakeSession{
 		guildMemberFn: func(_, _ string) (*discordgo.Member, error) {
 			return &discordgo.Member{Nick: "Alice"}, nil
 		},
 	}
 	tr := newTestTranscriber(fs)
+	// Build an output with empty thread and summary (both REST calls fail
+	// silently here because the default fakeSession returns success but we
+	// manually construct the output to bypass the init path).
+	out := &sessionOutput{
+		session:             fs,
+		transcriptChannelID: tr.cfg.TranscriptChannelID,
+		voiceChannelID:      tr.cfg.VoiceChannelID,
+		log:                 discardLogger(),
+		speakers:            make(map[string]string),
+		startedAt:           time.Now(),
+		summaryMsgID:        "summary-1",
+		threadChannelID:     "thread-1",
+	}
+	tr.setOutput(out)
 	tr.postTranscript(context.Background(), utterance{ssrc: 1, userID: "u1"}, "hello world")
-	if fs.channelSendCalls != 1 {
-		t.Fatalf("expected 1 send, got %d", fs.channelSendCalls)
+
+	if got := fs.sendsByChannel["thread-1"]; len(got) != 1 {
+		t.Fatalf("expected one post to thread-1, got %d", len(got))
 	}
-	if fs.lastSentChannelID != tr.cfg.TranscriptChannelID {
-		t.Fatalf("wrong channel: %q", fs.lastSentChannelID)
+	line := fs.sendsByChannel["thread-1"][0]
+	if !strings.HasPrefix(line, "Alice:") {
+		t.Fatalf("expected 'Alice:' prefix, got %q", line)
 	}
-	if !strings.HasPrefix(fs.lastSentContent, "Alice:") {
-		t.Fatalf("expected 'Alice:' prefix, got %q", fs.lastSentContent)
-	}
-	if !strings.Contains(fs.lastSentContent, "hello world") {
-		t.Fatalf("expected transcript body, got %q", fs.lastSentContent)
+	if !strings.Contains(line, "hello world") {
+		t.Fatalf("expected transcript body, got %q", line)
 	}
 }
 
-func Test_postTranscript_truncates_over_discord_limit(t *testing.T) {
+func Test_postTranscript_fallback_when_no_output_wired(t *testing.T) {
 	fs := &fakeSession{
 		guildMemberFn: func(_, _ string) (*discordgo.Member, error) {
-			return &discordgo.Member{Nick: "A"}, nil
+			return &discordgo.Member{Nick: "Alice"}, nil
 		},
 	}
 	tr := newTestTranscriber(fs)
-	long := strings.Repeat("x", 3000)
-	tr.postTranscript(context.Background(), utterance{ssrc: 1, userID: "u1"}, long)
-	if len(fs.lastSentContent) > 1900 {
-		t.Fatalf("did not truncate: len=%d", len(fs.lastSentContent))
+	// No setOutput call — output stays nil. postTranscript should fall back
+	// to posting directly in the transcript channel.
+	tr.postTranscript(context.Background(), utterance{ssrc: 1, userID: "u1"}, "fallback line")
+
+	if got := fs.sendsByChannel[tr.cfg.TranscriptChannelID]; len(got) != 1 {
+		t.Fatalf("expected one send in fallback to transcript channel, got %d", len(got))
 	}
-	if !strings.HasSuffix(fs.lastSentContent, "...") {
-		t.Fatalf("expected trailing ellipsis on truncation, got %q", fs.lastSentContent[len(fs.lastSentContent)-10:])
+	if !strings.Contains(fs.sendsByChannel[tr.cfg.TranscriptChannelID][0], "fallback line") {
+		t.Fatalf("fallback line content missing: %q", fs.sendsByChannel[tr.cfg.TranscriptChannelID][0])
 	}
 }
 
@@ -332,7 +419,6 @@ func Test_sweepOnce_removes_old_orphan_and_keeps_recent(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// Back-date old to past the threshold.
 	past := time.Now().Add(-orphanMaxAge - time.Minute)
 	if err := os.Chtimes(old, past, past); err != nil {
 		t.Fatal(err)

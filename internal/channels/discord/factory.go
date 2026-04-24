@@ -36,9 +36,10 @@ type discordInstanceConfig struct {
 
 	// Real-time voice-channel join + transcription. VoiceChannelEnabled gates
 	// the feature; VoiceChannelID and VoiceChannelTranscriptChannelID are
-	// required when enabled. See internal/channels/discord/voice/.
+	// required when enabled. The guild is auto-resolved from the voice
+	// channel at supervisor start, so operators don't paste it twice.
+	// See internal/channels/discord/voice/.
 	VoiceChannelEnabled             *bool  `json:"voice_channel_enabled,omitempty"`
-	VoiceChannelGuildID             string `json:"voice_channel_guild_id,omitempty"`
 	VoiceChannelID                  string `json:"voice_channel_id,omitempty"`
 	VoiceChannelTranscriptChannelID string `json:"voice_channel_transcript_channel_id,omitempty"`
 	VoiceChannelIdleLeaveSeconds    int    `json:"voice_channel_idle_leave_seconds,omitempty"`
@@ -108,7 +109,6 @@ func buildChannel(name string, creds json.RawMessage, cfg json.RawMessage,
 		VoiceAgentID:        ic.VoiceAgentID,
 
 		VoiceChannelEnabled:             ic.VoiceChannelEnabled,
-		VoiceChannelGuildID:             ic.VoiceChannelGuildID,
 		VoiceChannelID:                  ic.VoiceChannelID,
 		VoiceChannelTranscriptChannelID: ic.VoiceChannelTranscriptChannelID,
 		VoiceChannelIdleLeaveSeconds:    ic.VoiceChannelIdleLeaveSeconds,

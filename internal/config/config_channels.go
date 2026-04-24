@@ -120,8 +120,7 @@ type DiscordConfig struct {
 	// channel. Distinct from VoiceAgentID above (which concerns uploaded
 	// audio attachments, not real-time voice channels).
 	VoiceChannelEnabled             *bool  `json:"voice_channel_enabled,omitempty"`
-	VoiceChannelGuildID             string `json:"voice_channel_guild_id,omitempty"`              // guild containing VoiceChannelID
-	VoiceChannelID                  string `json:"voice_channel_id,omitempty"`                    // voice channel to monitor + join
+	VoiceChannelID                  string `json:"voice_channel_id,omitempty"` // voice channel to monitor + join; guild is auto-resolved from this ID
 	VoiceChannelTranscriptChannelID string `json:"voice_channel_transcript_channel_id,omitempty"` // text channel where transcripts post (REQUIRED when enabled)
 	VoiceChannelIdleLeaveSeconds    int    `json:"voice_channel_idle_leave_seconds,omitempty"`    // leave after this many seconds of no humans (default 60)
 	VoiceChannelMinUtteranceMs      int    `json:"voice_channel_min_utterance_ms,omitempty"`      // drop utterances shorter than this (default 400)

@@ -32,10 +32,13 @@ func DefaultTmpDir() string { return os.TempDir() }
 
 // Config governs a Supervisor. Zero values fall back to package defaults
 // via ApplyDefaults, so callers only set what they care about.
+//
+// GuildID is deliberately NOT a field: the supervisor resolves it from
+// VoiceChannelID via session.Channel(...) at Start time. This kept an
+// operator from having to paste two IDs where one would do.
 type Config struct {
-	GuildID             string // guild the bot listens in (required)
 	VoiceChannelID      string // voice channel to monitor + join (required)
-	TranscriptChannelID string // text channel where transcripts post (required)
+	TranscriptChannelID string // text channel where session summaries post (required)
 
 	IdleLeaveSeconds    int           // seconds after humans→0 before leaving; default 60
 	MinUtteranceMs      int           // drop utterances shorter than this; default 400
@@ -50,8 +53,8 @@ type Config struct {
 }
 
 // ApplyDefaults returns a copy of c with zero fields replaced by defaults.
-// Required fields (GuildID, VoiceChannelID, TranscriptChannelID) are left
-// untouched; Validate surfaces missing ones.
+// Required fields (VoiceChannelID, TranscriptChannelID) are left untouched;
+// NewSupervisor surfaces missing ones.
 func ApplyDefaults(c Config) Config {
 	if c.IdleLeaveSeconds == 0 {
 		c.IdleLeaveSeconds = 60

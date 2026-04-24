@@ -40,6 +40,12 @@ type Supervisor struct {
 	log       *slog.Logger
 	botUserID string
 
+	// resolvedGuildID is populated by Start via session.Channel(VoiceChannelID).
+	// Empty means the lookup failed — voice is dormant for this pod until
+	// config is fixed. We don't require the operator to pass a guild ID
+	// alongside the voice channel ID; the two are always related 1:1.
+	resolvedGuildID string
+
 	// state is everything mutated under mu. Kept in a dedicated struct so
 	// we don't accidentally take the lock for cheap reads like cfg.
 	mu    sync.Mutex
@@ -72,6 +78,15 @@ type supState struct {
 	demux       *demux
 	transcriber *transcriber
 
+	// sessionOutput owns the per-session summary message + thread. Paired
+	// with demux/transcriber lifetime; leaveLocked calls Close on it before
+	// disconnecting.
+	output *sessionOutput
+
+	// sessionStartedAt is the wall-clock of onJoinSuccess; used for the
+	// final summary's duration stat.
+	sessionStartedAt time.Time
+
 	// joinScheduled is set while a join attempt is pending/in-flight to
 	// coalesce presence events into a single attempt.
 	joinScheduled bool
@@ -95,10 +110,11 @@ type supState struct {
 
 // NewSupervisor validates config and wires the type. Caller must invoke
 // Start on it before expecting any join behaviour.
+//
+// The guild ID is deliberately NOT a config input — it's resolved at
+// Start() time via session.Channel(VoiceChannelID).GuildID. That keeps the
+// operator from having to paste the same ID twice.
 func NewSupervisor(cfg Config, session *discordgo.Session, audioMgr *audio.Manager, tmpDir, botUserID string, log *slog.Logger) (*Supervisor, error) {
-	if cfg.GuildID == "" {
-		return nil, fmt.Errorf("%w: GuildID", ErrMissingConfig)
-	}
 	if cfg.VoiceChannelID == "" {
 		return nil, fmt.Errorf("%w: VoiceChannelID", ErrMissingConfig)
 	}
@@ -120,7 +136,7 @@ func NewSupervisor(cfg Config, session *discordgo.Session, audioMgr *audio.Manag
 		session:   session,
 		audioMgr:  audioMgr,
 		tmpDir:    tmpDir,
-		log:       log.With("component", "voice.supervisor", "guild_id", cfg.GuildID, "voice_channel_id", cfg.VoiceChannelID),
+		log:       log.With("component", "voice.supervisor", "voice_channel_id", cfg.VoiceChannelID),
 		botUserID: botUserID,
 		state:     supState{humans: make(map[string]struct{})},
 		stopCh:    make(chan struct{}),
@@ -130,7 +146,25 @@ func NewSupervisor(cfg Config, session *discordgo.Session, audioMgr *audio.Manag
 
 // Start registers Discord gateway handlers and returns. Actual joining
 // happens lazily in response to VoiceStateUpdate events.
+//
+// Before registering handlers, Start resolves the voice channel's guild
+// via session.Channel(...). Failure (bot not in guild, no perms, network)
+// is NOT fatal: the supervisor records empty resolvedGuildID, logs a loud
+// error, and no-ops on every subsequent VoiceStateUpdate. Text handling is
+// unaffected either way.
 func (s *Supervisor) Start(ctx context.Context) {
+	// Resolve guild. 5s budget — Channel() is a single REST call.
+	resolveCtx, cancelResolve := context.WithTimeout(ctx, 5*time.Second)
+	ch, err := s.session.Channel(s.cfg.VoiceChannelID, discordgo.WithContext(resolveCtx))
+	cancelResolve()
+	if err != nil || ch == nil {
+		s.log.Error("voice: cannot resolve guild for voice channel — supervisor will no-op",
+			"err", err, "voice_channel_id", s.cfg.VoiceChannelID)
+	} else {
+		s.resolvedGuildID = ch.GuildID
+		s.log = s.log.With("guild_id", s.resolvedGuildID)
+	}
+
 	s.removers = append(s.removers,
 		s.session.AddHandler(s.onVoiceStateUpdate),
 		s.session.AddHandler(s.onGuildCreate),
@@ -139,6 +173,7 @@ func (s *Supervisor) Start(ctx context.Context) {
 		"transcript_channel", s.cfg.TranscriptChannelID,
 		"idle_leave_s", s.cfg.IdleLeaveSeconds,
 		"daily_cap_s", s.cfg.DailyCapSeconds,
+		"resolved_guild_id", s.resolvedGuildID,
 	)
 	// Guild may have already been cached (ready fired before we registered).
 	// Prime presence from the state if available. Best-effort: State may be
@@ -220,8 +255,8 @@ func (s *Supervisor) onVoiceStateUpdate(_ *discordgo.Session, ev *discordgo.Voic
 	if ev == nil || ev.VoiceState == nil {
 		return
 	}
-	if ev.GuildID != s.cfg.GuildID {
-		return // another guild; not ours
+	if s.resolvedGuildID == "" || ev.GuildID != s.resolvedGuildID {
+		return // guild lookup failed at start, or event from a different guild
 	}
 
 	// Handle the bot's own voice state first — if someone (or we) moved it
@@ -257,7 +292,7 @@ func (s *Supervisor) onGuildCreate(_ *discordgo.Session, ev *discordgo.GuildCrea
 	if s.stopped.Load() || ev == nil || ev.Guild == nil {
 		return
 	}
-	if ev.Guild.ID != s.cfg.GuildID {
+	if s.resolvedGuildID == "" || ev.Guild.ID != s.resolvedGuildID {
 		return
 	}
 	s.mu.Lock()
@@ -307,10 +342,10 @@ func (s *Supervisor) onOwnVoiceState(ev *discordgo.VoiceStateUpdate) {
 // primeFromState reads discordgo.State if enabled and seeds humans[] so we
 // can join immediately on boot if a call is already in progress.
 func (s *Supervisor) primeFromState() {
-	if s.session.State == nil {
+	if s.session.State == nil || s.resolvedGuildID == "" {
 		return
 	}
-	guild, err := s.session.State.Guild(s.cfg.GuildID)
+	guild, err := s.session.State.Guild(s.resolvedGuildID)
 	if err != nil || guild == nil {
 		return
 	}
@@ -407,7 +442,7 @@ func (s *Supervisor) joinWorker() {
 		s.mu.Unlock()
 
 		attempt++
-		vc, err := s.session.ChannelVoiceJoin(s.cfg.GuildID, s.cfg.VoiceChannelID, true /*mute*/, false /*deaf — MUST be false or OpusRecv stays empty*/)
+		vc, err := s.session.ChannelVoiceJoin(s.resolvedGuildID, s.cfg.VoiceChannelID, true /*mute*/, false /*deaf — MUST be false or OpusRecv stays empty*/)
 		if err == nil && vc != nil {
 			s.onJoinSuccess(vc)
 			return
@@ -447,13 +482,35 @@ func (s *Supervisor) joinWorker() {
 	}
 }
 
+// onJoinSuccess handles a successful ChannelVoiceJoin by creating the
+// session's Discord artefacts (summary message + thread) and wiring the
+// demux + transcriber. The sessionOutput's initial REST calls are made
+// OUTSIDE the mu critical section (s.mu is briefly released around them)
+// because each can take hundreds of milliseconds on a slow network;
+// holding the supervisor lock for that long would block every concurrent
+// VoiceStateUpdate handler.
 func (s *Supervisor) onJoinSuccess(vc *discordgo.VoiceConnection) {
+	// REST-heavy setup BEFORE taking the lock. sessionOutput construction
+	// issues up to three REST calls (Channel lookup, ChannelMessageSend,
+	// MessageThreadStart). Total budget: 10s — enough for all three to
+	// complete on a tail-latency network, short enough that a wedged call
+	// doesn't keep the session half-wired.
+	setupCtx, cancelSetup := context.WithTimeout(context.Background(), 10*time.Second)
+	output := newSessionOutput(setupCtx, s.session, s.cfg.TranscriptChannelID, s.cfg.VoiceChannelID, s.log)
+	cancelSetup()
+	startedAt := s.nowFn()
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	if s.stopped.Load() {
-		// Beat: we successfully joined but supervisor is shutting down.
-		// Disconnect immediately (without holding mu beyond the check).
+		// Shutdown arrived while we were creating the session output. Close
+		// the output we just built and disconnect the VC. Run on a detached
+		// goroutine so we don't pay REST latency under mu.
 		go func() {
+			closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			output.Close(closeCtx, 0)
+			cancel()
 			if err := vc.Disconnect(); err != nil {
 				s.log.Debug("voice: post-stop Disconnect error (ignored)", "err", err)
 			}
@@ -462,6 +519,8 @@ func (s *Supervisor) onJoinSuccess(vc *discordgo.VoiceConnection) {
 	}
 
 	s.state.vc = vc
+	s.state.output = output
+	s.state.sessionStartedAt = startedAt
 	s.state.joinFailures = 0
 	s.state.circuitOpenUntil = time.Time{}
 	// kickedUntil is normally in the past by the time a successful join
@@ -472,8 +531,10 @@ func (s *Supervisor) onJoinSuccess(vc *discordgo.VoiceConnection) {
 	s.log.Info("voice: joined voice channel", "channel_id", s.cfg.VoiceChannelID)
 
 	// Start the transcriber first so its queue is ready before demux starts
-	// enqueueing utterances.
-	tr := newTranscriber(s.cfg, s.session, s.audioMgr, s.tmpDir, s.log)
+	// enqueueing utterances. Wire the output BEFORE start() so the first
+	// utterance processed sees a non-nil output.
+	tr := newTranscriber(s.cfg, s.session, s.audioMgr, s.tmpDir, s.resolvedGuildID, s.log)
+	tr.setOutput(output)
 	tr.start(context.Background())
 	s.state.transcriber = tr
 
@@ -488,15 +549,19 @@ func (s *Supervisor) leaveLocked(reason string) {
 	vc := s.state.vc
 	dm := s.state.demux
 	tr := s.state.transcriber
+	output := s.state.output
+	startedAt := s.state.sessionStartedAt
 	s.state.vc = nil
 	s.state.demux = nil
 	s.state.transcriber = nil
+	s.state.output = nil
+	s.state.sessionStartedAt = time.Time{}
 	if s.state.idleLeaveTimer != nil {
 		s.state.idleLeaveTimer.Stop()
 		s.state.idleLeaveTimer = nil
 	}
 
-	if vc == nil && dm == nil && tr == nil {
+	if vc == nil && dm == nil && tr == nil && output == nil {
 		return
 	}
 
@@ -506,6 +571,15 @@ func (s *Supervisor) leaveLocked(reason string) {
 	// consumers. Each stop is synchronous and drains its own goroutines.
 	// Run the shutdown on a detached goroutine so handlers holding mu
 	// don't block on our own goroutines (which may want the lock back).
+	//
+	// Ordering rationale:
+	//   1. demux.stop() — stops producing utterances; flushes in-flight.
+	//   2. transcriber.stop() — drains queued utterances; stops posting.
+	//   3. output.Close() — edits the summary with final stats. Runs AFTER
+	//      transcriber stops so its utterance count is stable.
+	//   4. vc.Disconnect() — tears down the voice socket; fires our own
+	//      VoiceStateUpdate which the bot-self handler sees as a kick but
+	//      we've already cleared state so that path no-ops.
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
@@ -515,6 +589,15 @@ func (s *Supervisor) leaveLocked(reason string) {
 		}
 		if tr != nil {
 			tr.stop()
+		}
+		if output != nil {
+			duration := time.Duration(0)
+			if !startedAt.IsZero() {
+				duration = time.Since(startedAt)
+			}
+			closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			output.Close(closeCtx, duration)
+			cancel()
 		}
 		if vc != nil {
 			if err := vc.Disconnect(); err != nil {

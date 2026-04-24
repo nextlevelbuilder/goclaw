@@ -11,15 +11,20 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/audio"
 )
 
+// testGuildID is injected into Supervisor.resolvedGuildID by newTestSupervisor
+// so event handlers match incoming VoiceStateUpdate.GuildID without needing
+// a live session.Channel() REST call.
+const testGuildID = "guild-1"
+
 // newTestSupervisor wires a Supervisor without starting it. Useful for
 // state-machine tests that exercise the event handlers directly without
 // needing a live Discord session.
+//
+// The supervisor's resolvedGuildID is seeded manually because Start (the
+// method that normally resolves it via session.Channel) requires a live
+// session. Tests that need guild filtering to work use this seeded value.
 func newTestSupervisor(t *testing.T, cfg Config) *Supervisor {
 	t.Helper()
-	// Fill required fields for constructor validation.
-	if cfg.GuildID == "" {
-		cfg.GuildID = "guild-1"
-	}
 	if cfg.VoiceChannelID == "" {
 		cfg.VoiceChannelID = "vc-1"
 	}
@@ -37,6 +42,9 @@ func newTestSupervisor(t *testing.T, cfg Config) *Supervisor {
 	if err != nil {
 		t.Fatalf("NewSupervisor: %v", err)
 	}
+	// Pre-seed the resolved guild so event handlers match. Production wiring
+	// does this in Supervisor.Start via session.Channel(...).
+	sup.resolvedGuildID = testGuildID
 	return sup
 }
 
@@ -48,9 +56,8 @@ func Test_NewSupervisor_rejects_missing_required_fields(t *testing.T) {
 		name string
 		cfg  Config
 	}{
-		{"no guild", Config{VoiceChannelID: "v", TranscriptChannelID: "t"}},
-		{"no vc", Config{GuildID: "g", TranscriptChannelID: "t"}},
-		{"no transcript", Config{GuildID: "g", VoiceChannelID: "v"}},
+		{"no vc", Config{TranscriptChannelID: "t"}},
+		{"no transcript", Config{VoiceChannelID: "v"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -62,7 +69,7 @@ func Test_NewSupervisor_rejects_missing_required_fields(t *testing.T) {
 }
 
 func Test_NewSupervisor_rejects_nil_session_or_manager(t *testing.T) {
-	cfg := Config{GuildID: "g", VoiceChannelID: "v", TranscriptChannelID: "t"}
+	cfg := Config{VoiceChannelID: "v", TranscriptChannelID: "t"}
 	if _, err := NewSupervisor(cfg, nil, audio.NewManager(audio.ManagerConfig{}), t.TempDir(), "bot", discardLogger()); err == nil {
 		t.Fatal("expected err for nil session")
 	}
@@ -71,8 +78,9 @@ func Test_NewSupervisor_rejects_nil_session_or_manager(t *testing.T) {
 	}
 }
 
-// --- onVoiceStateUpdate tests ---------------------------------------------
-
+// Events with GuildID mismatching the resolved guild are ignored. This is
+// how a single bot installed in multiple guilds (unsupported today but
+// defensive against future misconfig) avoids cross-guild bleed.
 func Test_onVoiceStateUpdate_ignores_other_guild(t *testing.T) {
 	sup := newTestSupervisor(t, Config{})
 	sup.onVoiceStateUpdate(nil, &discordgo.VoiceStateUpdate{
@@ -90,12 +98,33 @@ func Test_onVoiceStateUpdate_ignores_other_guild(t *testing.T) {
 	}
 }
 
+// When guild lookup failed at Start (resolvedGuildID is empty), events
+// must be ignored even if they otherwise look like they belong to our
+// guild. Prevents a missing-perms boot from accidentally joining later.
+func Test_onVoiceStateUpdate_ignores_all_when_guild_unresolved(t *testing.T) {
+	sup := newTestSupervisor(t, Config{})
+	sup.resolvedGuildID = "" // simulate failed resolve at Start
+	sup.onVoiceStateUpdate(nil, &discordgo.VoiceStateUpdate{
+		VoiceState: &discordgo.VoiceState{
+			GuildID:   testGuildID,
+			ChannelID: sup.cfg.VoiceChannelID,
+			UserID:    "u1",
+		},
+	})
+	sup.mu.Lock()
+	got := len(sup.state.humans)
+	sup.mu.Unlock()
+	if got != 0 {
+		t.Fatalf("event processed despite unresolved guild: %d humans tracked", got)
+	}
+}
+
 func Test_onVoiceStateUpdate_adds_and_removes_humans(t *testing.T) {
 	sup := newTestSupervisor(t, Config{})
 	// Human joins our channel.
 	sup.onVoiceStateUpdate(nil, &discordgo.VoiceStateUpdate{
 		VoiceState: &discordgo.VoiceState{
-			GuildID:   sup.cfg.GuildID,
+			GuildID:   sup.resolvedGuildID,
 			ChannelID: sup.cfg.VoiceChannelID,
 			UserID:    "u1",
 		},
@@ -114,7 +143,7 @@ func Test_onVoiceStateUpdate_adds_and_removes_humans(t *testing.T) {
 	// Human leaves (ChannelID="" means left all channels).
 	sup.onVoiceStateUpdate(nil, &discordgo.VoiceStateUpdate{
 		VoiceState: &discordgo.VoiceState{
-			GuildID:   sup.cfg.GuildID,
+			GuildID:   sup.resolvedGuildID,
 			ChannelID: "",
 			UserID:    "u1",
 		},
@@ -130,7 +159,7 @@ func Test_onVoiceStateUpdate_adds_and_removes_humans(t *testing.T) {
 func Test_onVoiceStateUpdate_ignores_mute_toggle_on_same_channel(t *testing.T) {
 	sup := newTestSupervisor(t, Config{})
 	ev := &discordgo.VoiceStateUpdate{VoiceState: &discordgo.VoiceState{
-		GuildID:   sup.cfg.GuildID,
+		GuildID:   sup.resolvedGuildID,
 		ChannelID: sup.cfg.VoiceChannelID,
 		UserID:    "u1",
 	}}
@@ -167,7 +196,7 @@ func Test_onOwnVoiceState_detects_kick_when_connected(t *testing.T) {
 
 	// Bot's own state suddenly says we're in a different channel → kick.
 	sup.onOwnVoiceState(&discordgo.VoiceStateUpdate{VoiceState: &discordgo.VoiceState{
-		GuildID:   sup.cfg.GuildID,
+		GuildID:   sup.resolvedGuildID,
 		ChannelID: "some-other-channel",
 		UserID:    sup.botUserID,
 	}})
@@ -186,7 +215,7 @@ func Test_onOwnVoiceState_ignores_when_not_connected(t *testing.T) {
 	sup := newTestSupervisor(t, Config{})
 	// No active vc.
 	sup.onOwnVoiceState(&discordgo.VoiceStateUpdate{VoiceState: &discordgo.VoiceState{
-		GuildID:   sup.cfg.GuildID,
+		GuildID:   sup.resolvedGuildID,
 		ChannelID: "",
 		UserID:    sup.botUserID,
 	}})
@@ -214,7 +243,7 @@ func Test_reconcile_arms_idle_leave_timer(t *testing.T) {
 
 	// Human leaves; timer should arm.
 	sup.onVoiceStateUpdate(nil, &discordgo.VoiceStateUpdate{VoiceState: &discordgo.VoiceState{
-		GuildID: sup.cfg.GuildID, ChannelID: "", UserID: "u1",
+		GuildID: sup.resolvedGuildID, ChannelID: "", UserID: "u1",
 	}})
 	sup.mu.Lock()
 	defer sup.mu.Unlock()
@@ -234,7 +263,7 @@ func Test_reconcile_cancels_idle_timer_on_rejoin(t *testing.T) {
 
 	// Human joins; reconcile should cancel the timer.
 	sup.onVoiceStateUpdate(nil, &discordgo.VoiceStateUpdate{VoiceState: &discordgo.VoiceState{
-		GuildID:   sup.cfg.GuildID,
+		GuildID:   sup.resolvedGuildID,
 		ChannelID: sup.cfg.VoiceChannelID,
 		UserID:    "u-new",
 	}})
