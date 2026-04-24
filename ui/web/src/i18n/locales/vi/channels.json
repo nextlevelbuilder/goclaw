@@ -245,6 +245,7 @@
     "tools": { "label": "Danh sách công cụ được phép", "help": "Giới hạn công cụ agent có thể dùng trong nhóm này" },
     "system_prompt": { "label": "Prompt hệ thống" },
     "platform": { "label": "Nền tảng", "help": "Chọn nền tảng mà trang Pancake này phục vụ." },
+    "tiktok_type": { "label": "Loại tài khoản TikTok", "help": "Chọn loại tài khoản TikTok cho trang này" },
     "features.private_reply": {
       "label": "Private Reply (Comment → DM)",
       "help": "Gửi tin nhắn riêng cho người bình luận sau khi đã trả lời công khai. Chỉ Facebook/Instagram. Meta cho phép DM trong vòng 7 ngày kể từ khi có bình luận."

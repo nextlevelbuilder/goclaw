@@ -318,6 +318,7 @@
     },
     "system_prompt": { "label": "System Prompt" },
     "platform": { "label": "Platform", "help": "Select the platform this Pancake page serves." },
+    "tiktok_type": { "label": "TikTok Type", "help": "Select the TikTok account type for this page" },
     "features.private_reply": {
       "label": "Private Reply (Comment → DM)",
       "help": "Send a one-time DM to commenters after the public reply. Facebook/Instagram only. Meta allows DM within 7 days of the comment."

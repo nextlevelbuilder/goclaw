@@ -261,6 +261,9 @@ var (
 	platformPrefixesMu sync.RWMutex
 	platformPrefixes   = map[string]struct{}{
 		"spo": {}, // Shopee — verified via curl 2026-04-20
+		"tt":  {}, // TikTok Livestream AIO
+		"ttm": {}, // TikTok Business Messaging
+		"tts": {}, // TikTok Shop
 	}
 )
 

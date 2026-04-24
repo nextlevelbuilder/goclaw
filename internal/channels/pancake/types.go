@@ -16,10 +16,11 @@ type pancakeCreds struct {
 type pancakeInstanceConfig struct {
 	PageID        string `json:"page_id"`
 	WebhookPageID string `json:"webhook_page_id,omitempty"` // native platform page ID sent in webhooks (e.g. Facebook page ID vs Pancake internal ID)
-	Platform      string `json:"platform,omitempty"` // set explicitly via UI; auto-detected at Start() as fallback for existing channels
+	Platform      string `json:"platform,omitempty"`        // set explicitly via UI; auto-detected at Start() as fallback for existing channels
 	// Known values: facebook/instagram/threads/tiktok/youtube/shopee/line/google/chat_plugin/lazada/tokopedia
 	// Excluded (have native channel implementations): telegram/zalo/whatsapp
-	Features struct {
+	TikTokType string `json:"tiktok_type,omitempty"` // livestream|messaging|shop — only meaningful when Platform=tiktok
+	Features   struct {
 		InboxReply   bool `json:"inbox_reply"`
 		CommentReply bool `json:"comment_reply"`
 		PrivateReply bool `json:"private_reply"` // send one-time DM to commenter (after comment reply or standalone)
@@ -30,7 +31,7 @@ type pancakeInstanceConfig struct {
 		Filter             string   `json:"filter"`               // "all" | "keyword" (default: all)
 		Keywords           []string `json:"keywords"`             // required when filter = "keyword"
 	} `json:"comment_reply_options"`
-	PrivateReplyMessage string            `json:"private_reply_message,omitempty"`  // custom DM text; defaults to built-in message. Supports {{commenter_name}} / {{post_title}} vars.
+	PrivateReplyMessage string            `json:"private_reply_message,omitempty"` // custom DM text; defaults to built-in message. Supports {{commenter_name}} / {{post_title}} vars.
 	AutoReactOptions    *AutoReactOptions `json:"auto_react_options,omitempty"`
 	PostContextCacheTTL string            `json:"post_context_cache_ttl,omitempty"` // e.g. "30m"; defaults to 15m
 	AllowFrom           []string          `json:"allow_from,omitempty"`
@@ -134,7 +135,7 @@ type PageInfo struct {
 type SendMessageRequest struct {
 	Action     string   `json:"action"`
 	Message    string   `json:"message,omitempty"`
-	MessageID  string   `json:"message_id,omitempty"`  // required for reply_comment: ID of the comment being replied to
+	MessageID  string   `json:"message_id,omitempty"` // required for reply_comment: ID of the comment being replied to
 	ContentIDs []string `json:"content_ids,omitempty"`
 }
 

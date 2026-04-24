@@ -99,6 +99,12 @@ const pancakePlatformOptions = [
   { value: "tokopedia",   label: "Tokopedia" },
 ];
 
+const tiktokTypeOptions = [
+  { value: "livestream", label: "Livestream AIO" },
+  { value: "messaging",  label: "Business Messaging" },
+  { value: "shop",       label: "TikTok Shop" },
+];
+
 // --- Config schemas ---
 
 export const configSchema: Record<string, FieldDef[]> = {
@@ -198,6 +204,7 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "page_id", label: "Page ID", type: "text", required: true, help: "Pancake internal page ID (numeric, from Pancake dashboard)" },
     { key: "webhook_page_id", label: "Webhook Page ID", type: "text", help: "Only needed when the native platform page ID in webhooks differs from the Pancake page ID above (rare). Leave empty if both are the same.", advanced: true },
     { key: "platform", label: "Platform", type: "select", required: true, defaultValue: "", options: pancakePlatformOptions, help: "Select the platform this Pancake page serves." },
+    { key: "tiktok_type", label: "TikTok Type", type: "select", options: tiktokTypeOptions, showWhen: { key: "platform", value: "tiktok" }, help: "Select the TikTok account type for this page" },
     { key: "features.inbox_reply", label: "Inbox Auto-Reply", type: "boolean", defaultValue: true },
     { key: "features.comment_reply", label: "Comment Reply", type: "boolean", defaultValue: false,
       showWhen: { key: "platform", value: ["facebook", "instagram", "threads", "tiktok", "youtube"] } },

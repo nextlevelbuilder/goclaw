@@ -245,6 +245,7 @@
     "tools": { "label": "工具白名单", "help": "限制Agent在此群组中可使用的工具" },
     "system_prompt": { "label": "系统提示词" },
     "platform": { "label": "平台", "help": "选择此 Pancake 页面所服务的平台。" },
+    "tiktok_type": { "label": "TikTok 类型", "help": "选择此页面的 TikTok 账户类型" },
     "features.private_reply": {
       "label": "私信回复（评论 → 私信）",
       "help": "在公开回复后向评论者发送一次性私信。仅支持 Facebook/Instagram，Meta 允许在评论后 7 天内发送。"
