@@ -101,34 +101,6 @@ func processGroupBatch(ctx context.Context, deps ExtractionWorkerDeps, agentID, 
 		return
 	}
 
-	text := buildConversationTextFromRaw(msgs)
-	if text == "" {
-		return
-	}
-
-	// Analyze media attachments and augment the text.
-	mediaSummary := mediaRefsSummary(msgs)
-	if mediaSummary != "" {
-		slog.Info("whatsapp extraction worker: analyzing media attachments",
-			"agent_id", agentID, "graph_id", graphID, "media", mediaSummary)
-		mediaDescs := analyzeMediaAttachments(ctx, msgs, deps.MediaAnalyzer)
-		if len(mediaDescs) > 0 {
-			var mediaText strings.Builder
-			mediaText.WriteString("\n\n[Media Content Analysis]\n")
-			for _, m := range msgs {
-				if desc, ok := mediaDescs[m.ID]; ok {
-					ts := m.MsgTimestamp.Format("2006-01-02 15:04:05")
-					fmt.Fprintf(&mediaText, "\n[%s] %s:\n%s\n", ts, m.Sender, desc)
-				}
-			}
-			mediaStr := mediaText.String()
-			text += mediaStr
-			slog.Info("whatsapp extraction worker: media analysis result",
-				"agent_id", agentID, "graph_id", graphID,
-				"media_text_len", len(mediaStr))
-		}
-	}
-
 	// Resolve KG extraction provider: prefer the KG-specific provider/model from
 	// builtin_tools settings (same as the main KG extraction pipeline), fall back
 	// to the background provider chain.
@@ -156,19 +128,61 @@ func processGroupBatch(ctx context.Context, deps ExtractionWorkerDeps, agentID, 
 
 	slog.Info("whatsapp extraction worker: extracting KG from batch",
 		"agent_id", agentID, "graph_id", graphID,
-		"messages", len(msgs), "text_len", len(text),
+		"messages", len(msgs),
 		"provider", p.Name(), "model", model,
 		"provider_source", providerSource, "min_confidence", minConfidence)
 
-	// Step 1: Summarize the conversation into polished text (preserving key details).
-	extractionText := text
-	summary, summarizeErr := summarizeConversation(ctx, p, model, text)
-	if summarizeErr != nil {
-		slog.Warn("whatsapp extraction worker: summarization failed, falling back to raw text",
-			"agent_id", agentID, "graph_id", graphID, "error", summarizeErr)
-		// Fallback: extract directly from raw text using the WhatsApp-optimized prompt.
+	// Build full raw text (used for fallback path).
+	fullText := buildConversationTextFromRaw(msgs)
+	if fullText == "" {
+		return
+	}
+
+	// Group messages by date, build text per date, analyze media per date,
+	// then summarize each date separately for coherent narratives.
+	dateGroups := groupMessagesByDate(msgs)
+	var combinedSummary strings.Builder
+	summarizeOK := true
+
+	for _, date := range dateGroups.order {
+		dayMsgs := dateGroups.groups[date]
+		dayText := buildConversationTextFromRaw(dayMsgs)
+		if dayText == "" {
+			continue
+		}
+
+		// Analyze media for this date's messages.
+		dayText = appendMediaAnalysis(ctx, deps, dayMsgs, dayText, agentID, graphID)
+
+		summary, err := summarizeConversation(ctx, p, model, dayText)
+		if err != nil {
+			slog.Warn("whatsapp extraction worker: summarization failed for date, falling back to raw text",
+				"agent_id", agentID, "graph_id", graphID, "date", date, "error", err)
+			summarizeOK = false
+			break
+		}
+
+		if combinedSummary.Len() > 0 {
+			combinedSummary.WriteString("\n\n")
+		}
+		fmt.Fprintf(&combinedSummary, "== %s ==\n%s", date, summary)
+
+		if knowledgegraph.VerboseLogging() {
+			preview := summary
+			if len(preview) > 300 {
+				preview = preview[:300] + "..."
+			}
+			slog.Info("whatsapp extraction worker: summarized date",
+				"agent_id", agentID, "graph_id", graphID,
+				"date", date, "raw_len", len(dayText), "summary_len", len(summary), "summary", preview)
+		}
+	}
+
+	if !summarizeOK {
+		// Fallback: extract directly from full raw text using the WhatsApp-optimized prompt.
+		fullText = appendMediaAnalysis(ctx, deps, msgs, fullText, agentID, graphID)
 		extractor := knowledgegraph.NewExtractorWithPrompt(p, model, minConfidence, listenExtractSystemPrompt)
-		result, err := extractor.Extract(ctx, text)
+		result, err := extractor.Extract(ctx, fullText)
 		if err != nil {
 			slog.Warn("whatsapp extraction worker: extraction failed",
 				"agent_id", agentID, "graph_id", graphID, "error", err)
@@ -178,20 +192,8 @@ func processGroupBatch(ctx context.Context, deps ExtractionWorkerDeps, agentID, 
 		return
 	}
 
-	if summary != "" {
-		extractionText = summary
-		if knowledgegraph.VerboseLogging() {
-			preview := summary
-			if len(preview) > 500 {
-				preview = preview[:500] + "..."
-			}
-			slog.Info("whatsapp extraction worker: summarized",
-				"agent_id", agentID, "graph_id", graphID,
-				"raw_len", len(text), "summary_len", len(summary), "summary", preview)
-		}
-	}
-
-	// Step 2: Extract KG from the polished summary using the default extraction prompt.
+	// Extract KG from the combined per-date summaries using the default extraction prompt.
+	extractionText := combinedSummary.String()
 	extractor := knowledgegraph.NewExtractor(p, model, minConfidence)
 	result, err := extractor.Extract(ctx, extractionText)
 	if err != nil {
@@ -307,6 +309,53 @@ func summarizeConversation(ctx context.Context, p providers.Provider, model, tex
 		return "", fmt.Errorf("summarize conversation: %w", err)
 	}
 	return strings.TrimSpace(resp.Content), nil
+}
+
+// dateGroups holds messages grouped by date string with insertion order preserved.
+type dateGroups struct {
+	order  []string
+	groups map[string][]store.ListenRawMessage
+}
+
+// groupMessagesByDate splits messages into groups keyed by their local date (YYYY-MM-DD).
+func groupMessagesByDate(msgs []store.ListenRawMessage) dateGroups {
+	dg := dateGroups{groups: make(map[string][]store.ListenRawMessage)}
+	for _, m := range msgs {
+		date := m.MsgTimestamp.Format("2006-01-02")
+		if _, exists := dg.groups[date]; !exists {
+			dg.order = append(dg.order, date)
+		}
+		dg.groups[date] = append(dg.groups[date], m)
+	}
+	return dg
+}
+
+// appendMediaAnalysis analyzes media attachments for the given messages and appends
+// descriptions to the text. Returns text unchanged if no media or no analyzer.
+func appendMediaAnalysis(ctx context.Context, deps ExtractionWorkerDeps, msgs []store.ListenRawMessage, text, agentID, graphID string) string {
+	mediaSummary := mediaRefsSummary(msgs)
+	if mediaSummary == "" {
+		return text
+	}
+	slog.Info("whatsapp extraction worker: analyzing media attachments",
+		"agent_id", agentID, "graph_id", graphID, "media", mediaSummary)
+	mediaDescs := analyzeMediaAttachments(ctx, msgs, deps.MediaAnalyzer)
+	if len(mediaDescs) == 0 {
+		return text
+	}
+	var mediaText strings.Builder
+	mediaText.WriteString("\n\n[Media Content Analysis]\n")
+	for _, m := range msgs {
+		if desc, ok := mediaDescs[m.ID]; ok {
+			ts := m.MsgTimestamp.Format("2006-01-02 15:04:05")
+			fmt.Fprintf(&mediaText, "\n[%s] %s:\n%s\n", ts, m.Sender, desc)
+		}
+	}
+	mediaStr := mediaText.String()
+	slog.Info("whatsapp extraction worker: media analysis result",
+		"agent_id", agentID, "graph_id", graphID,
+		"media_text_len", len(mediaStr))
+	return text + mediaStr
 }
 
 // buildConversationTextFromRaw formats raw messages into structured text for LLM extraction.
