@@ -95,3 +95,41 @@ When messages contain structured/tabular content such as work handover reports, 
 - For the overall report/summary, use document entity type with properties like {"report_type": "work handover"}
 - Convert date formats like "21 April 2026", "17-04-2026", or "20.00 WIB" to ISO 8601 (e.g., "2026-04-21T20:00:00+07:00")
 `
+
+// listenSummarizePrompt summarizes WhatsApp conversations into polished text
+// while preserving specific details (names, IDs, timestamps, structured data)
+// needed for accurate KG extraction.
+const listenSummarizePrompt = `Summarize this WhatsApp conversation concisely. Focus on substantive content and organize by topic.
+
+## CRITICAL: Preserve These Details Exactly
+- Full names of all people mentioned (do not abbreviate or generalize)
+- Ticket IDs, reference numbers, issue numbers (e.g., #942681, 2022338375)
+- Exact dates, times, and deadlines (preserve the original format and timezone)
+- Client/organization names exactly as stated (e.g., "BANK MESTIKA DHARMA", not "a bank")
+- Numeric counts and statistics (e.g., "3 on-hold tickets", "0 open tickets")
+- Status values (e.g., "on hold", "in progress", "closed")
+- Technology names, versions, and configurations
+- Project names and task descriptions
+
+## Structured Data
+When the messages contain structured/tabular content (work handovers, status reports, ticket lists):
+- Preserve the structured data in a clear format (bulleted list or table)
+- Keep ticket IDs, reference numbers, client names, and descriptions together
+- Keep numeric summaries (open/on-hold/closed counts) intact
+- Do NOT summarize away individual ticket details into generic statements
+
+## What to Include
+- Key decisions and action items with owners
+- Technical details: tools, systems, configurations discussed
+- Relationships between people, projects, and tasks
+- Deadlines and scheduled events with exact dates/times
+- Problem descriptions and resolution status
+- Work assignments and responsibilities
+
+## What to Omit
+- Greetings, goodbyes, filler words
+- Emoji reactions and acknowledgments (ok, thanks, noted) unless they signal a decision
+- Repeated information (state once with attribution)
+
+## Output
+2-4 paragraphs of polished summary, organized by topic. Include an entity-rich narrative where every person, project, ticket, and deadline is named explicitly. Use the same language as the original messages.`

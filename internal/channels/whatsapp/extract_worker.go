@@ -160,41 +160,65 @@ func processGroupBatch(ctx context.Context, deps ExtractionWorkerDeps, agentID, 
 		"provider", p.Name(), "model", model,
 		"provider_source", providerSource, "min_confidence", minConfidence)
 
-	// Log the full text being sent for extraction (truncated for readability).
-	if len(text) > 500 {
-		slog.Debug("whatsapp extraction worker: extraction text (truncated)",
-			"agent_id", agentID, "graph_id", graphID,
-			"text", text[:500]+"...")
-	} else {
-		slog.Debug("whatsapp extraction worker: extraction text",
-			"agent_id", agentID, "graph_id", graphID,
-			"text", text)
+	// Step 1: Summarize the conversation into polished text (preserving key details).
+	extractionText := text
+	summary, summarizeErr := summarizeConversation(ctx, p, model, text)
+	if summarizeErr != nil {
+		slog.Warn("whatsapp extraction worker: summarization failed, falling back to raw text",
+			"agent_id", agentID, "graph_id", graphID, "error", summarizeErr)
+		// Fallback: extract directly from raw text using the WhatsApp-optimized prompt.
+		extractor := knowledgegraph.NewExtractorWithPrompt(p, model, minConfidence, listenExtractSystemPrompt)
+		result, err := extractor.Extract(ctx, text)
+		if err != nil {
+			slog.Warn("whatsapp extraction worker: extraction failed",
+				"agent_id", agentID, "graph_id", graphID, "error", err)
+			return
+		}
+		ingestAndFinalize(ctx, deps, result, agentID, graphID, msgs)
+		return
 	}
 
-	// Extract entities and relations using the conversation-optimized prompt.
-	extractor := knowledgegraph.NewExtractorWithPrompt(p, model, minConfidence, listenExtractSystemPrompt)
-	result, err := extractor.Extract(ctx, text)
+	if summary != "" {
+		extractionText = summary
+		if knowledgegraph.VerboseLogging() {
+			preview := summary
+			if len(preview) > 500 {
+				preview = preview[:500] + "..."
+			}
+			slog.Info("whatsapp extraction worker: summarized",
+				"agent_id", agentID, "graph_id", graphID,
+				"raw_len", len(text), "summary_len", len(summary), "summary", preview)
+		}
+	}
+
+	// Step 2: Extract KG from the polished summary using the default extraction prompt.
+	extractor := knowledgegraph.NewExtractor(p, model, minConfidence)
+	result, err := extractor.Extract(ctx, extractionText)
 	if err != nil {
 		slog.Warn("whatsapp extraction worker: extraction failed",
 			"agent_id", agentID, "graph_id", graphID, "error", err)
 		return
 	}
+
+	ingestAndFinalize(ctx, deps, result, agentID, graphID, msgs)
+}
+
+// ingestAndFinalize handles entity scoping, KG ingestion, dedup, and marking messages as processed.
+func ingestAndFinalize(ctx context.Context, deps ExtractionWorkerDeps, result *knowledgegraph.ExtractionResult, agentID, graphID string, msgs []store.ListenRawMessage) {
 	if len(result.Entities) == 0 && len(result.Relations) == 0 {
 		slog.Debug("whatsapp extraction worker: no entities extracted",
 			"agent_id", agentID, "graph_id", graphID, "messages", len(msgs))
-		// Still mark as processed so we don't re-process empty batches.
-	}
-
-	// Log extracted entities and relations for debugging.
-	for i, e := range result.Entities {
-		slog.Debug("whatsapp extraction worker: extracted entity",
-			"agent_id", agentID, "graph_id", graphID,
-			"idx", i, "name", e.Name, "type", e.EntityType, "confidence", fmt.Sprintf("%.2f", e.Confidence))
-	}
-	for i, r := range result.Relations {
-		slog.Debug("whatsapp extraction worker: extracted relation",
-			"agent_id", agentID, "graph_id", graphID,
-			"idx", i, "source", r.SourceEntityID, "target", r.TargetEntityID, "type", r.RelationType)
+	} else {
+		for i, e := range result.Entities {
+			slog.Debug("whatsapp extraction worker: extracted entity",
+				"agent_id", agentID, "graph_id", graphID,
+				"idx", i, "name", e.Name, "type", e.EntityType, "confidence", fmt.Sprintf("%.2f", e.Confidence))
+		}
+		for i, r := range result.Relations {
+			slog.Debug("whatsapp extraction worker: extracted relation",
+				"agent_id", agentID, "graph_id", graphID,
+				"idx", i, "source", r.SourceEntityID, "target", r.TargetEntityID, "type", r.RelationType)
+		}
 	}
 
 	// Scope entities/relations to (agentID, graphID).
@@ -230,24 +254,24 @@ func processGroupBatch(ctx context.Context, deps ExtractionWorkerDeps, agentID, 
 		if err != nil {
 			slog.Warn("whatsapp extraction worker: KG ingest failed",
 				"agent_id", agentID, "graph_id", graphID, "error", err)
-			return
-		}
+			// Still mark as processed to avoid retrying a failed ingest indefinitely.
+		} else {
+			slog.Info("whatsapp extraction worker: KG extraction complete",
+				"agent_id", agentID, "graph_id", graphID,
+				"entities", len(result.Entities),
+				"relations", len(result.Relations),
+				"ingested_ids", len(entityIDs))
 
-		slog.Info("whatsapp extraction worker: KG extraction complete",
-			"agent_id", agentID, "graph_id", graphID,
-			"entities", len(result.Entities),
-			"relations", len(result.Relations),
-			"ingested_ids", len(entityIDs))
-
-		// Run inline dedup on newly upserted entities (best-effort).
-		if len(entityIDs) > 0 {
-			if merged, flagged, dedupErr := deps.KGStore.DedupAfterExtraction(ctx, agentID, graphID, entityIDs); dedupErr != nil {
-				slog.Debug("whatsapp extraction worker: dedup failed",
-					"agent_id", agentID, "graph_id", graphID, "error", dedupErr)
-			} else if merged > 0 || flagged > 0 {
-				slog.Info("whatsapp extraction worker: dedup results",
-					"agent_id", agentID, "graph_id", graphID,
-					"merged", merged, "flagged", flagged)
+			// Run inline dedup on newly upserted entities (best-effort).
+			if len(entityIDs) > 0 {
+				if merged, flagged, dedupErr := deps.KGStore.DedupAfterExtraction(ctx, agentID, graphID, entityIDs); dedupErr != nil {
+					slog.Debug("whatsapp extraction worker: dedup failed",
+						"agent_id", agentID, "graph_id", graphID, "error", dedupErr)
+				} else if merged > 0 || flagged > 0 {
+					slog.Info("whatsapp extraction worker: dedup results",
+						"agent_id", agentID, "graph_id", graphID,
+						"merged", merged, "flagged", flagged)
+				}
 			}
 		}
 	}
@@ -261,6 +285,28 @@ func processGroupBatch(ctx context.Context, deps ExtractionWorkerDeps, agentID, 
 		slog.Warn("whatsapp extraction worker: failed to mark processed",
 			"agent_id", agentID, "graph_id", graphID, "error", err)
 	}
+}
+
+// summarizeConversation calls the LLM to summarize raw WhatsApp text into polished narrative
+// while preserving specific details (names, IDs, timestamps, structured data).
+func summarizeConversation(ctx context.Context, p providers.Provider, model, text string) (string, error) {
+	req := providers.ChatRequest{
+		Messages: []providers.Message{
+			{Role: "system", Content: listenSummarizePrompt},
+			{Role: "user", Content: text},
+		},
+		Model: model,
+		Options: map[string]any{
+			"max_tokens":  2048,
+			"temperature": 0.3,
+		},
+	}
+
+	resp, err := p.Chat(ctx, req)
+	if err != nil {
+		return "", fmt.Errorf("summarize conversation: %w", err)
+	}
+	return strings.TrimSpace(resp.Content), nil
 }
 
 // buildConversationTextFromRaw formats raw messages into structured text for LLM extraction.

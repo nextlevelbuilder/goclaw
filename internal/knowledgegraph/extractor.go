@@ -17,6 +17,16 @@ type ExtractionResult struct {
 	Relations []store.Relation `json:"relations"`
 }
 
+// verboseLogging enables detailed KG extraction input/output logging.
+// Controlled via GOCLAW_KG_VERBOSE env var.
+var verboseLogging bool
+
+// SetVerboseLogging enables or disables detailed KG extraction logging.
+func SetVerboseLogging(v bool) { verboseLogging = v }
+
+// VerboseLogging reports whether detailed KG extraction logging is enabled.
+func VerboseLogging() bool { return verboseLogging }
+
 // Extractor extracts entities and relations from text using an LLM.
 type Extractor struct {
 	provider      providers.Provider
@@ -49,9 +59,21 @@ const maxChunkChars = 12000
 // Extract calls the LLM to extract entities and relations from text.
 // For long texts, it splits into chunks, extracts from each, and merges results.
 func (e *Extractor) Extract(ctx context.Context, text string) (*ExtractionResult, error) {
+	if verboseLogging {
+		preview := text
+		if len(preview) > 500 {
+			preview = preview[:500] + "..."
+		}
+		slog.Info("kg extraction: input", "text_len", len(text), "preview", preview)
+	}
+
 	// Short text: single extraction
 	if len(text) <= maxChunkChars {
-		return e.extractChunk(ctx, text)
+		result, err := e.extractChunk(ctx, text)
+		if verboseLogging && err == nil {
+			logExtractionResult(result)
+		}
+		return result, err
 	}
 
 	// Long text: split into chunks and merge
@@ -60,14 +82,45 @@ func (e *Extractor) Extract(ctx context.Context, text string) (*ExtractionResult
 
 	merged := &ExtractionResult{}
 	for i, chunk := range chunks {
+		if verboseLogging {
+			slog.Info("kg extraction: processing chunk", "chunk", i+1, "total", len(chunks), "chunk_len", len(chunk))
+		}
 		result, err := e.extractChunk(ctx, chunk)
 		if err != nil {
 			slog.Warn("kg extraction: chunk failed", "chunk", i+1, "total", len(chunks), "error", err)
 			continue // skip failed chunk, extract what we can
 		}
+		if verboseLogging {
+			logExtractionResult(result)
+		}
 		merged = mergeResults(merged, result)
 	}
+
+	if verboseLogging {
+		slog.Info("kg extraction: merged result", "entities", len(merged.Entities), "relations", len(merged.Relations))
+	}
 	return merged, nil
+}
+
+// logExtractionResult logs detailed entity and relation data.
+func logExtractionResult(r *ExtractionResult) {
+	for _, ent := range r.Entities {
+		slog.Info("kg extraction: entity",
+			"external_id", ent.ExternalID,
+			"name", ent.Name,
+			"type", ent.EntityType,
+			"confidence", ent.Confidence,
+			"description", ent.Description,
+		)
+	}
+	for _, rel := range r.Relations {
+		slog.Info("kg extraction: relation",
+			"source", rel.SourceEntityID,
+			"type", rel.RelationType,
+			"target", rel.TargetEntityID,
+			"confidence", rel.Confidence,
+		)
+	}
 }
 
 // extractChunk extracts entities from a single chunk of text.
@@ -84,9 +137,25 @@ func (e *Extractor) extractChunk(ctx context.Context, text string) (*ExtractionR
 		},
 	}
 
+	if verboseLogging {
+		inputPreview := text
+		if len(inputPreview) > 1000 {
+			inputPreview = inputPreview[:1000] + "..."
+		}
+		slog.Info("kg extraction: LLM request", "model", e.model, "input_len", len(text), "input", inputPreview)
+	}
+
 	resp, err := e.provider.Chat(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("kg extraction LLM call: %w", err)
+	}
+
+	if verboseLogging {
+		respPreview := resp.Content
+		if len(respPreview) > 2000 {
+			respPreview = respPreview[:2000] + "..."
+		}
+		slog.Info("kg extraction: LLM response", "finish_reason", resp.FinishReason, "content_len", len(resp.Content), "response", respPreview)
 	}
 
 	// If response was truncated, retry with shorter input

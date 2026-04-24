@@ -67,6 +67,12 @@ func runGateway() {
 			fmt.Fprintf(os.Stderr, "warning: unknown GOCLAW_LOG_LEVEL=%q, using info\n", lvl)
 		}
 	}
+
+	// Per-component verbose logging: KG extraction input/output.
+	if v := os.Getenv("GOCLAW_KG_VERBOSE"); v == "true" || v == "1" {
+		kg.SetVerboseLogging(true)
+		slog.Info("kg extraction: verbose logging enabled (GOCLAW_KG_VERBOSE)")
+	}
 	textHandler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: logLevel,
 	})
