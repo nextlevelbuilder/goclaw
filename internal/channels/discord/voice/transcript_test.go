@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bwmarrin/discordgo"
+	"github.com/cartridge-gg/discordgo"
 )
 
 // fakeSession implements discordSession for tests. Hookable methods return

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/bwmarrin/discordgo"
+	"github.com/cartridge-gg/discordgo"
 )
 
 type fakeSlashAPI struct {

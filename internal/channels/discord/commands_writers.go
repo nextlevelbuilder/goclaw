@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bwmarrin/discordgo"
+	"github.com/cartridge-gg/discordgo"
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
