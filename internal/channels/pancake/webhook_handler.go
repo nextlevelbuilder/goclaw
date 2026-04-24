@@ -254,15 +254,36 @@ func truncateBody(body []byte, maxLen int) string {
 // Default: "spo" (Shopee) only. "lzd" (Lazada) and "tpd" (Tokopedia) are
 // NOT added by default because neither has been verified against a live
 // Pancake payload. Use RegisterPlatformPrefix to add verified platforms.
-var platformPrefixes = map[string]struct{}{
-	"spo": {}, // Shopee — verified via curl 2026-04-20
-}
+//
+// Guarded by platformPrefixesMu so RegisterPlatformPrefix can be called
+// concurrently with webhook handling without data races.
+var (
+	platformPrefixesMu sync.RWMutex
+	platformPrefixes   = map[string]struct{}{
+		"spo": {}, // Shopee — verified via curl 2026-04-20
+	}
+)
 
 // RegisterPlatformPrefix registers a marketplace prefix for convID parsing.
 // Use this to add verified platforms (e.g. "lzd" for Lazada) after capturing
-// live webhook payloads. Thread-safe for use during init().
+// live webhook payloads. Safe to call from any goroutine at any time.
+//
+// NOTE: Currently unused — kept as an extension point for future marketplace
+// platforms (Lazada, Tokopedia, etc.) that may be added in a follow-up PR
+// once their convID shape is verified against live Pancake payloads.
 func RegisterPlatformPrefix(prefix string) {
+	platformPrefixesMu.Lock()
+	defer platformPrefixesMu.Unlock()
 	platformPrefixes[prefix] = struct{}{}
+}
+
+// isKnownPlatformPrefix reports whether prefix is registered as a marketplace
+// platform with a 2-segment page identifier. Read-locked for concurrent safety.
+func isKnownPlatformPrefix(prefix string) bool {
+	platformPrefixesMu.RLock()
+	defer platformPrefixesMu.RUnlock()
+	_, ok := platformPrefixes[prefix]
+	return ok
 }
 
 // resolvePageIDFromConvID extracts the page identifier from a Pancake
@@ -277,7 +298,7 @@ func resolvePageIDFromConvID(convID string) string {
 	if len(parts) < 2 {
 		return ""
 	}
-	_, knownPrefix := platformPrefixes[parts[0]]
+	knownPrefix := isKnownPlatformPrefix(parts[0])
 	// M2: 2-segment convID with known prefix is a full pageID (system event
 	// without sender). Return as-is — do NOT drop the event.
 	if knownPrefix && len(parts) == 2 {
