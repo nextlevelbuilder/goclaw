@@ -9,7 +9,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.14
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.22.13
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.99.0
-	github.com/bwmarrin/discordgo v0.29.0
+	github.com/cartridge-gg/discordgo v0.29.1-dave.1
 	github.com/charmbracelet/bubbletea v1.3.6
 	github.com/charmbracelet/huh v0.8.0
 	github.com/charmbracelet/lipgloss v1.1.0
@@ -27,6 +27,8 @@ require (
 	github.com/mattn/go-runewidth v0.0.16
 	github.com/mattn/go-shellwords v1.0.12
 	github.com/mymmrac/telego v1.6.0
+	github.com/pion/rtp v1.10.1
+	github.com/pion/webrtc/v4 v4.2.11
 	github.com/pkoukk/tiktoken-go v0.1.8
 	github.com/redis/go-redis/v9 v9.18.0
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
@@ -125,8 +127,6 @@ require (
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/petermattis/goid v0.0.0-20260113132338-7c7de50cc741 // indirect
 	github.com/pion/randutil v0.1.0 // indirect
-	github.com/pion/rtp v1.10.1 // indirect
-	github.com/pion/webrtc/v4 v4.2.11 // indirect
 	github.com/pires/go-proxyproto v0.8.1 // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/pkg/errors v0.9.1 // indirect

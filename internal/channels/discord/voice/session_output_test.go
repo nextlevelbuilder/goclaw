@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bwmarrin/discordgo"
+	"github.com/cartridge-gg/discordgo"
 )
 
 // On a successful wire-up, the session output posts an initial summary

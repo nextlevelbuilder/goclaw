@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bwmarrin/discordgo"
+	"github.com/cartridge-gg/discordgo"
 )
 
 // discardLogger is a slog.Logger that drops everything. Tests that care

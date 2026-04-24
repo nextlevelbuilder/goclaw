@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/bwmarrin/discordgo"
+	"github.com/cartridge-gg/discordgo"
 )
 
 // SlashCommandName is a canonical identifier for each command we register.

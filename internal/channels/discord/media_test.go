@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/bwmarrin/discordgo"
+	"github.com/cartridge-gg/discordgo"
 
 	sharedmedia "github.com/nextlevelbuilder/goclaw/internal/channels/media"
 )
