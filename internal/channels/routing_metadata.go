@@ -10,10 +10,12 @@ var routingMetaKeys = []string{
 	"group_id",               // legacy group identifier
 	"feishu_reply_target_id", // feishu/lark thread reply routing
 	"fb_mode",                // facebook messenger vs comment routing
-	"sender_id",              // facebook sender for first-inbox / pancake sender for first-inbox
+	"sender_id",              // facebook sender for first-inbox / pancake sender for private-reply
 	"page_id",                // facebook page routing
 	"reply_to_comment_id",    // facebook/pancake comment reply target
 	"pancake_mode",           // pancake inbox vs comment routing
+	"post_id",                // pancake: post id for template vars
+	"display_name",           // pancake: commenter display name for template vars
 }
 
 var finalReplyMetaKeys = append([]string{

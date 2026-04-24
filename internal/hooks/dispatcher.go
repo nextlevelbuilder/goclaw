@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -276,9 +277,7 @@ func (d *stdDispatcher) runSync(ctx context.Context, ev Event, chain []HookConfi
 // blocks or the chain aborts.
 func cloneMap(m map[string]any) map[string]any {
 	out := make(map[string]any, len(m))
-	for k, v := range m {
-		out[k] = v
-	}
+	maps.Copy(out, m)
 	return out
 }
 
@@ -303,9 +302,7 @@ func applyBuiltinMutation(ev *Event, updated map[string]any, allowlist []string)
 			if ev.ToolInput == nil {
 				ev.ToolInput = map[string]any{}
 			}
-			for k, v := range m {
-				ev.ToolInput[k] = v
-			}
+			maps.Copy(ev.ToolInput, m)
 		} else {
 			for k, v := range m {
 				if _, ok := allowSet["toolInput."+k]; ok {

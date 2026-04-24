@@ -15,9 +15,9 @@ func TestParamSchema_RoundTrip(t *testing.T) {
 		Label:       "Stability",
 		Description: "Voice stability",
 		Default:     0.5,
-		Min:         floatPtr(0.0),
-		Max:         floatPtr(1.0),
-		Step:        floatPtr(0.01),
+		Min:         new(0.0),
+		Max:         new(1.0),
+		Step:        new(0.01),
 		Enum:        []EnumOption{{Value: "auto", Label: "Auto"}},
 		DependsOn: []Dependency{
 			{Field: "model", Op: "eq", Value: "eleven_v3"},
@@ -55,7 +55,9 @@ func TestParamSchema_RoundTrip(t *testing.T) {
 }
 
 // floatPtr is a helper for pointer-to-float64 in tests.
-func floatPtr(v float64) *float64 { return &v }
+//
+//go:fix inline
+func floatPtr(v float64) *float64 { return new(v) }
 
 // TestDependency_AndSemantics verifies evaluateDependsOn returns true only when ALL deps match.
 func TestDependency_AndSemantics(t *testing.T) {

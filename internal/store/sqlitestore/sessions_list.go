@@ -183,7 +183,10 @@ func (s *SQLiteSessionStore) ListPagedRich(ctx context.Context, opts store.Sessi
 		s.label, s.channel, s.user_id, COALESCE(s.metadata, '{}'),
 		s.model, s.provider, s.input_tokens, s.output_tokens,
 		COALESCE(a.display_name, ''),
-		length(s.messages) / 4 + 12000,
+		COALESCE(
+		  CAST(json_extract(s.metadata, '$.last_prompt_tokens') AS INTEGER),
+		  length(s.messages) / 4 + 12000
+		),
 		COALESCE(a.context_window, 200000),
 		s.compaction_count`
 

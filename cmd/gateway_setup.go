@@ -273,6 +273,11 @@ func setupToolRegistry(
 			t.DenyPaths(internalDenyPaths...)
 		}
 	}
+	if sf, ok := toolsReg.Get("send_file"); ok {
+		if t, ok := sf.(*tools.SendFileTool); ok {
+			t.DenyPaths(internalDenyPaths...)
+		}
+	}
 
 	return
 }

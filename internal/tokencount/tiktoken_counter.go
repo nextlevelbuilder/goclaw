@@ -1,6 +1,7 @@
 package tokencount
 
 import (
+	"encoding/json"
 	"hash/fnv"
 	"log/slog"
 	"sync"
@@ -78,6 +79,24 @@ func (c *tiktokenCounter) CountMessages(model string, msgs []providers.Message) 
 		total += count
 	}
 	return total
+}
+
+// CountToolSchemas returns BPE token count for the JSON-serialised tool list.
+// Falls back to FallbackCounter if the encoder is unavailable.
+// Returns 0 for nil or empty slice.
+func (c *tiktokenCounter) CountToolSchemas(model string, tools []providers.ToolDefinition) int {
+	if len(tools) == 0 {
+		return 0
+	}
+	enc := c.encoderForModel(model)
+	if enc == nil {
+		return c.fallback.CountToolSchemas(model, tools)
+	}
+	blob, err := json.Marshal(tools)
+	if err != nil {
+		return 0
+	}
+	return len(enc.Encode(string(blob), nil, nil))
 }
 
 // ModelContextWindow delegates to FallbackCounter (same prefix-match logic).

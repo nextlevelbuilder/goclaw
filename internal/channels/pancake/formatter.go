@@ -1,6 +1,7 @@
 package pancake
 
 import (
+	"log/slog"
 	"regexp"
 	"strings"
 )
@@ -15,8 +16,8 @@ func FormatOutbound(content string, platform string) string {
 		return formatForWhatsApp(content)
 	case "zalo", "instagram", "line":
 		return stripMarkdown(content)
-	case "tiktok":
-		return stripMarkdown(truncateForTikTok(content))
+	case "tiktok", "shopee":
+		return stripMarkdown(truncateRuneSafe(content, 500))
 	default:
 		return stripMarkdown(content)
 	}
@@ -62,13 +63,20 @@ func stripMarkdown(content string) string {
 	return strings.TrimSpace(content)
 }
 
-// truncateForTikTok truncates content to TikTok DM limit (500 runes).
-// Uses rune slicing to avoid corrupting multi-byte UTF-8 (CJK, Vietnamese, emoji).
-func truncateForTikTok(content string) string {
-	const limit = 500
+// truncateRuneSafe truncates content to `limit` runes, avoiding multi-byte
+// UTF-8 corruption (CJK, Vietnamese, emoji). Used by platforms with short
+// DM limits (TikTok, Shopee: 500 runes). Logs a warning when truncation
+// occurs so the user isn't silently trimmed (M7).
+func truncateRuneSafe(content string, limit int) string {
 	runes := []rune(content)
 	if len(runes) <= limit {
 		return content
+	}
+	slog.Warn("pancake: message truncated",
+		"orig_runes", len(runes),
+		"limit", limit)
+	if limit <= 3 {
+		return string(runes[:limit])
 	}
 	return string(runes[:limit-3]) + "..."
 }

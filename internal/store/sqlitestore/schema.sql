@@ -1521,6 +1521,7 @@ CREATE TABLE IF NOT EXISTS vault_documents (
     tenant_id     TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     agent_id      TEXT REFERENCES agents(id) ON DELETE SET NULL,
     team_id       TEXT REFERENCES agent_teams(id) ON DELETE SET NULL,
+    chat_id       TEXT,  -- NULL = team-wide (shared / legacy); non-NULL = scoped to specific chat for isolated teams
     scope         TEXT NOT NULL DEFAULT 'personal',
     custom_scope  TEXT,
     path          TEXT NOT NULL,
@@ -1547,6 +1548,7 @@ CREATE INDEX IF NOT EXISTS idx_vault_docs_agent_scope ON vault_documents(agent_i
 CREATE INDEX IF NOT EXISTS idx_vault_docs_type ON vault_documents(agent_id, doc_type);
 CREATE INDEX IF NOT EXISTS idx_vault_docs_hash ON vault_documents(content_hash);
 CREATE INDEX IF NOT EXISTS idx_vault_docs_team ON vault_documents(team_id);
+CREATE INDEX IF NOT EXISTS idx_vault_docs_team_chat ON vault_documents(team_id, chat_id) WHERE team_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_vault_docs_basename ON vault_documents(tenant_id, path_basename);
 CREATE INDEX IF NOT EXISTS idx_vault_docs_path_prefix ON vault_documents(tenant_id, path);
 CREATE INDEX IF NOT EXISTS idx_vault_docs_delegation

@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -14,7 +15,9 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/audio"
+	"github.com/nextlevelbuilder/goclaw/internal/audio/gemini"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tts"
 )
@@ -266,6 +269,11 @@ func (t *TtsTool) Execute(ctx context.Context, args map[string]any) *Result {
 	}
 
 	if err != nil {
+		if errors.Is(err, gemini.ErrTextOnlyResponse) {
+			locale := store.LocaleFromContext(ctx)
+			msg := i18n.T(locale, i18n.MsgTtsGeminiTextOnly)
+			return &Result{ForLLM: "error: " + msg, IsError: true}
+		}
 		return &Result{ForLLM: fmt.Sprintf("error: tts failed: %s", err.Error()), IsError: true}
 	}
 

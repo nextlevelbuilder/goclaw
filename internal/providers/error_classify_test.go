@@ -324,3 +324,37 @@ func TestClassifyUnknownError(t *testing.T) {
 		t.Errorf("expected FailoverUnknown, got %s", result.Reason)
 	}
 }
+
+// Issue 958: New context overflow patterns for ZAI/GLM, DashScope, generic
+
+func TestClassifyPromptExceedsMaxLength(t *testing.T) {
+	classifier := NewDefaultClassifier()
+	result := classifier.Classify(nil, 400, `{"error":{"code":"1261","message":"Prompt exceeds max length"}}`)
+	if result.Kind != "context_overflow" {
+		t.Errorf("expected context_overflow, got %s (reason: %s)", result.Kind, result.Reason)
+	}
+}
+
+func TestClassifyInputTooLong(t *testing.T) {
+	classifier := NewDefaultClassifier()
+	result := classifier.Classify(nil, 400, "Input is too long for this model")
+	if result.Kind != "context_overflow" {
+		t.Errorf("expected context_overflow, got %s (reason: %s)", result.Kind, result.Reason)
+	}
+}
+
+func TestClassifyRequestTooLarge(t *testing.T) {
+	classifier := NewDefaultClassifier()
+	result := classifier.Classify(nil, 400, "request_too_large: payload exceeds limit")
+	if result.Kind != "context_overflow" {
+		t.Errorf("expected context_overflow, got %s (reason: %s)", result.Kind, result.Reason)
+	}
+}
+
+func TestClassifyChineseInputTooLong(t *testing.T) {
+	classifier := NewDefaultClassifier()
+	result := classifier.Classify(nil, 400, "请求输入过长")
+	if result.Kind != "context_overflow" {
+		t.Errorf("expected context_overflow, got %s (reason: %s)", result.Kind, result.Reason)
+	}
+}

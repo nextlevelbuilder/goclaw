@@ -58,6 +58,7 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 			CheckpointInterval: 5,
 			ContextWindow:      l.contextWindow,
 			MaxTokens:          l.effectiveMaxTokens(),
+			ReserveTokens:      l.resolveReserveTokens(),
 			Compaction:         l.compactionCfg,
 			// V3 memory/retrieval flags removed — always true at runtime.
 		},
@@ -159,6 +160,7 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 
 		// Checkpoint + Finalize
 		FlushMessages:          cb.flushMessages,
+		PersistAssistantImages: persistAssistantImages,
 		SkillPostscript:        l.makeSkillPostscript(),
 		SanitizeContent:        cb.sanitizeContent,
 		StripMessageDirectives: StripMessageDirectives,
@@ -244,6 +246,7 @@ func convertRunResult(pr *pipeline.RunResult) *RunResult {
 			ContentType: m.ContentType,
 			Size:        m.Size,
 			AsVoice:     m.AsVoice,
+			Prompt:      m.Prompt,
 		}
 	}
 	return &RunResult{

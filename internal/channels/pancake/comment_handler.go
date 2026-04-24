@@ -13,13 +13,13 @@ import (
 // handleCommentEvent processes a Pancake COMMENT webhook event.
 // Mirrors the inbox handler pattern with additional comment-specific guards.
 func (ch *Channel) handleCommentEvent(data MessagingData) {
-	// Feature gate — exit only if BOTH reply and auto-react are disabled.
+	// Feature gate — exit if nothing to do.
 	if !ch.config.Features.CommentReply && !ch.config.Features.AutoReact {
 		ch.commentReplyDisabledOnce.Do(func() {
-			slog.Info("pancake: comment ignored because comment_reply and auto_react are both disabled",
+			slog.Info("pancake: comment ignored because comment_reply and auto_react are disabled",
 				"page_id", ch.pageID,
 				"channel_name", ch.Name(),
-				"hint", "enable config.features.comment_reply or config.features.auto_react")
+				"hint", "enable config.features.comment_reply or auto_react")
 		})
 		return
 	}
@@ -85,7 +85,6 @@ func (ch *Channel) handleCommentEvent(data MessagingData) {
 		return
 	}
 
-	// Comment filter.
 	if !ch.filterComment(data.Message.Content) {
 		slog.Debug("pancake: comment filtered out",
 			"page_id", ch.pageID, "msg_id", data.Message.ID)

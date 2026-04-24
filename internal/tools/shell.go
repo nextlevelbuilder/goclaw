@@ -323,7 +323,12 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 			if wsBase == "" {
 				wsBase = t.workspace
 			}
-			allowed := allowedWithTeamWorkspace(ctx, nil)
+			// Shell is an arbitrary executor — a cross-chat cwd would let the
+			// command mutate files in another chat's workspace. Enforce the
+			// stricter write-allowed prefixes (team root excluded) to block
+			// cross-chat cwd even for "read-only" commands like cat, since we
+			// cannot prove the shell command will not write.
+			allowed := allowedWriteWithTeamWorkspace(ctx, nil)
 			resolved, err := resolvePathWithAllowed(wd, wsBase, true, allowed)
 			if err != nil {
 				return ErrorResult(err.Error())

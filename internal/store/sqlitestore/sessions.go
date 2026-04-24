@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"maps"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -301,6 +302,18 @@ func (s *SQLiteSessionStore) loadFromDB(ctx context.Context, key string) *store.
 		json.Unmarshal(*metaJSON, &meta)
 	}
 
+	// Restore adaptive-throttle fields from metadata so GetLastPromptTokens()
+	// returns the persisted value after a server restart (clean cache).
+	var lastPromptTokens, lastMessageCount int
+	if meta != nil {
+		if v := meta["last_prompt_tokens"]; v != "" {
+			lastPromptTokens, _ = strconv.Atoi(v)
+		}
+		if v := meta["last_message_count"]; v != "" {
+			lastMessageCount, _ = strconv.Atoi(v)
+		}
+	}
+
 	return &store.SessionData{
 		Key:                        sessionKey,
 		Messages:                   msgs,
@@ -322,6 +335,8 @@ func (s *SQLiteSessionStore) loadFromDB(ctx context.Context, key string) *store.
 		SpawnedBy:                  derefStr(spawnedBy),
 		SpawnDepth:                 spawnDepth,
 		Metadata:                   meta,
+		LastPromptTokens:           lastPromptTokens,
+		LastMessageCount:           lastMessageCount,
 	}
 }
 

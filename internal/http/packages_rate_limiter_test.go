@@ -10,7 +10,7 @@ func TestPerKeyRateLimiter_AllowThenBlock(t *testing.T) {
 	rl := newPerKeyRateLimiter(60, 2) // 1 rps, burst 2
 
 	// First two requests for key A succeed (burst).
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		if !rl.Allow("A") {
 			t.Fatalf("request %d should be allowed", i)
 		}
@@ -27,7 +27,7 @@ func TestPerKeyRateLimiter_AllowThenBlock(t *testing.T) {
 
 func TestPerKeyRateLimiter_Disabled(t *testing.T) {
 	rl := newPerKeyRateLimiter(0, 5)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		if !rl.Allow("x") {
 			t.Fatalf("disabled limiter should always allow (i=%d)", i)
 		}

@@ -71,9 +71,9 @@ type synthesizeRequest struct {
 }
 
 const (
-	maxSynthesizeBodyBytes = 4 << 10 // 4KB — enough for 500 chars + metadata
-	maxSynthesizeTextChars = 500
-	synthesizeTimeout      = 15 * time.Second
+	maxSynthesizeBodyBytes      = 4 << 10 // 4KB — enough for 500 chars + metadata
+	maxSynthesizeTextChars      = 500
+	defaultSynthesizeTimeoutMs  = 120000 // 120s default; tenant tts.timeout_ms overrides
 )
 
 // handleSynthesize serves POST /v1/tts/synthesize.
@@ -169,8 +169,12 @@ func (h *TTSHandler) handleSynthesize(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Synthesize with a 15-second deadline.
-	synthCtx, cancel := context.WithTimeout(ctx, synthesizeTimeout)
+	// Synthesize with tenant-configured deadline; fall back to 120s default.
+	timeoutMs := loadTenantTTSTimeoutMs(ctx, h.systemConfigs)
+	if timeoutMs <= 0 {
+		timeoutMs = defaultSynthesizeTimeoutMs
+	}
+	synthCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
 	defer cancel()
 
 	opts := audio.TTSOptions{Voice: req.VoiceID, Model: req.ModelID, Params: tenantParams}
@@ -205,6 +209,12 @@ func (h *TTSHandler) handleSynthesize(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, gemini.ErrInvalidModel) {
 			slog.Warn("tts.synthesize.invalid-params", "provider", name, "error", err)
 			msg := i18n.T(locale, i18n.MsgTtsGeminiInvalidModel, req.ModelID)
+			http.Error(w, fmt.Sprintf(`{"error":%q}`, msg), http.StatusUnprocessableEntity)
+			return
+		}
+		if errors.Is(err, gemini.ErrTextOnlyResponse) {
+			slog.Warn("tts.synthesize.text-only", "provider", name, "error", err)
+			msg := i18n.T(locale, i18n.MsgTtsGeminiTextOnly)
 			http.Error(w, fmt.Sprintf(`{"error":%q}`, msg), http.StatusUnprocessableEntity)
 			return
 		}

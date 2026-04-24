@@ -12,6 +12,13 @@ import (
 const chatGPTOAuthStrategyRoundRobin = "round_robin"
 const chatGPTOAuthStrategyPriorityOrder = "priority_order"
 
+// Modality keys used to scope round-robin counters so that chat and image
+// traffic rotate independently within the same pool. See registry.RoundRobinNext.
+const (
+	chatGPTOAuthModalityChat  = "chat"
+	chatGPTOAuthModalityImage = "image"
+)
+
 // ChatGPTOAuthRouter routes a ChatGPT OAuth-backed agent across multiple
 // authenticated Codex providers while keeping the agent's primary provider as
 // the preferred/default account.
@@ -46,7 +53,7 @@ func NewChatGPTOAuthRouter(
 }
 
 func (p *ChatGPTOAuthRouter) Name() string {
-	selection, err := p.orderedProviders(context.Background(), false)
+	selection, err := p.orderedProviders(context.Background(), chatGPTOAuthModalityChat, false)
 	if err != nil || len(selection) == 0 {
 		return p.defaultProviderName
 	}
@@ -54,7 +61,7 @@ func (p *ChatGPTOAuthRouter) Name() string {
 }
 
 func (p *ChatGPTOAuthRouter) DefaultModel() string {
-	selection, err := p.orderedProviders(context.Background(), false)
+	selection, err := p.orderedProviders(context.Background(), chatGPTOAuthModalityChat, false)
 	if err != nil || len(selection) == 0 {
 		return ""
 	}
@@ -70,7 +77,7 @@ func (p *ChatGPTOAuthRouter) HasRegisteredProviders() bool {
 // HasAvailableProviders reports whether at least one registered Codex provider is
 // route-eligible right now after auth/quota readiness filtering.
 func (p *ChatGPTOAuthRouter) HasAvailableProviders() bool {
-	_, err := p.orderedProviders(context.Background(), false)
+	_, err := p.orderedProviders(context.Background(), chatGPTOAuthModalityChat, false)
 	return err == nil
 }
 
@@ -87,7 +94,7 @@ func (p *ChatGPTOAuthRouter) ChatStream(ctx context.Context, req ChatRequest, on
 }
 
 func (p *ChatGPTOAuthRouter) call(ctx context.Context, fn func(Provider) (*ChatResponse, error)) (*ChatResponse, error) {
-	ordered, err := p.orderedProviders(ctx, true)
+	ordered, err := p.orderedProviders(ctx, chatGPTOAuthModalityChat, true)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +130,7 @@ func (p *ChatGPTOAuthRouter) call(ctx context.Context, fn func(Provider) (*ChatR
 	return nil, lastErr
 }
 
-func (p *ChatGPTOAuthRouter) orderedProviders(ctx context.Context, advance bool) ([]Provider, error) {
+func (p *ChatGPTOAuthRouter) orderedProviders(ctx context.Context, modality string, advance bool) ([]Provider, error) {
 	candidates := p.routeCandidates(ctx)
 	if len(candidates) == 0 {
 		return nil, fmt.Errorf("no authenticated chatgpt_oauth providers available")
@@ -162,8 +169,7 @@ func (p *ChatGPTOAuthRouter) orderedProviders(ctx context.Context, advance bool)
 		return ordered, nil
 	}
 
-	rrKey := compoundKey(p.tenantID, p.defaultProviderName)
-	start := p.registry.RoundRobinNext(rrKey, len(active), advance)
+	start := p.registry.RoundRobinNext(p.tenantID, p.defaultProviderName, modality, len(active), advance)
 
 	ordered := make([]Provider, 0, len(active)+len(fallback))
 	ordered = append(ordered, active[start:]...)

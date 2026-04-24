@@ -392,6 +392,75 @@ func TestSynthesize_ValidElevenLabsModel(t *testing.T) {
 	}
 }
 
+// TestSynthesize_TextOnlyErrorMappedTo422 verifies that ErrTextOnlyResponse
+// is mapped to HTTP 422 with the EN i18n message in the response body.
+func TestSynthesize_TextOnlyErrorMappedTo422(t *testing.T) {
+	setupTestToken(t, "") // dev mode
+
+	mock := &mockTTSProvider{
+		name:      "gemini",
+		stateless: true,
+		err:       fmt.Errorf("wrap: %w", geminiPkg.ErrTextOnlyResponse),
+	}
+	mgr := audio.NewManager(audio.ManagerConfig{Primary: "gemini"})
+	mgr.RegisterProvider(mock)
+	mux := newTTSMux(mgr)
+
+	req := httptest.NewRequest("POST", "/v1/tts/synthesize",
+		ttsBody(t, map[string]any{"text": "hello", "provider": "gemini"}))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("want 422, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	got, _ := resp["error"].(string)
+	want := i18n.T("en", i18n.MsgTtsGeminiTextOnly)
+	if got != want {
+		t.Errorf("want error %q, got %q", want, got)
+	}
+}
+
+// TestSynthesize_TextOnly_LocaleVI verifies that the VI locale translation
+// is returned when Accept-Language: vi is set.
+func TestSynthesize_TextOnly_LocaleVI(t *testing.T) {
+	setupTestToken(t, "") // dev mode
+
+	mock := &mockTTSProvider{
+		name:      "gemini",
+		stateless: true,
+		err:       fmt.Errorf("wrap: %w", geminiPkg.ErrTextOnlyResponse),
+	}
+	mgr := audio.NewManager(audio.ManagerConfig{Primary: "gemini"})
+	mgr.RegisterProvider(mock)
+	mux := newTTSMux(mgr)
+
+	req := httptest.NewRequest("POST", "/v1/tts/synthesize",
+		ttsBody(t, map[string]any{"text": "hello", "provider": "gemini"}))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept-Language", "vi")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("want 422, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	got, _ := resp["error"].(string)
+	want := i18n.T("vi", i18n.MsgTtsGeminiTextOnly)
+	if got != want {
+		t.Errorf("want VI error %q, got %q", want, got)
+	}
+}
+
 // TestSynthesize_GeminiInvalidVoice_I18n verifies that 422 responses for
 // Gemini ErrInvalidVoice use i18n.T(locale, ...) — not err.Error() — so
 // VI and ZH callers receive translated messages (M2-b carry-over).

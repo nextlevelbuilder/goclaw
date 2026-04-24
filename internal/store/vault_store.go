@@ -11,6 +11,7 @@ type VaultDocument struct {
 	TenantID     string         `json:"tenant_id" db:"tenant_id"`
 	AgentID      *string        `json:"agent_id,omitempty" db:"agent_id"`
 	TeamID       *string        `json:"team_id,omitempty" db:"team_id"`
+	ChatID       *string        `json:"chat_id,omitempty" db:"chat_id"` // nil = team-wide (shared / legacy); non-nil = scoped to specific chat in isolated teams
 	Scope        string         `json:"scope" db:"scope"` // personal, team, shared
 	CustomScope  *string        `json:"custom_scope,omitempty" db:"custom_scope"`
 	Path         string         `json:"path" db:"path"`                             // workspace-relative path
@@ -58,6 +59,8 @@ type VaultSearchOptions struct {
 	TenantID   string
 	TeamID     *string  // nil = no filter, ptr-to-empty = personal (NULL team_id), ptr-to-uuid = specific team
 	TeamIDs    []string // non-nil = personal (NULL) + these team UUIDs (used for "all accessible" view)
+	ChatID     *string  // isolated-team scope: when non-nil + TeamIsolated, filter (chat_id = ChatID OR chat_id IS NULL)
+	TeamIsolated bool   // true = apply ChatID filter; false = shared/no-team mode (ignore ChatID)
 	Scope      string   // empty = all scopes
 	DocTypes   []string // empty = all types
 	MaxResults int      // default 10

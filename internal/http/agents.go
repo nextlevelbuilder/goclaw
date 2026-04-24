@@ -35,16 +35,16 @@ type AgentsHandler struct {
 	kgStore          store.KnowledgeGraphStore // for import (nil = disabled)
 	episodicStore    store.EpisodicStore       // for import (nil in SQLite/lite builds)
 	vaultStore       store.VaultStore          // for vault import (nil = disabled)
-	toolsReg         ToolPreviewLister          // for system prompt preview tool resolution (nil = fallback)
-	skillsLoader     SkillPreviewBuilder        // for system prompt preview pinned skills (nil = skip)
-	skillAccessStore store.SkillAccessStore     // for system prompt preview skill filtering (nil = skip)
+	toolsReg         ToolPreviewLister         // for system prompt preview tool resolution (nil = fallback)
+	skillsLoader     SkillPreviewBuilder       // for system prompt preview pinned skills (nil = skip)
+	skillAccessStore store.SkillAccessStore    // for system prompt preview skill filtering (nil = skip)
 	teamStore        store.TeamStore           // for system prompt preview team context (nil = skip)
 	agentLinkStore   store.AgentLinkStore      // for system prompt preview delegation targets (nil = skip)
-	defaultWorkspace string                   // default workspace path template (e.g. "~/.goclaw/workspace")
-	dataDir          string                   // resolved data directory (e.g. "~/.goclaw/data") — for team workspace export
-	msgBus           *bus.MessageBus          // for cache invalidation events (nil = no events)
-	summoner         *AgentSummoner           // LLM-based agent setup (nil = disabled)
-	isOwner          func(string) bool        // checks if user ID is a system owner (nil = no owners configured)
+	defaultWorkspace string                    // default workspace path template (e.g. "~/.goclaw/workspace")
+	dataDir          string                    // resolved data directory (e.g. "~/.goclaw/data") — for team workspace export
+	msgBus           *bus.MessageBus           // for cache invalidation events (nil = no events)
+	summoner         *AgentSummoner            // LLM-based agent setup (nil = disabled)
+	isOwner          func(string) bool         // checks if user ID is a system owner (nil = no owners configured)
 }
 
 // NewAgentsHandler creates a handler for agent management endpoints.
@@ -205,7 +205,11 @@ func (h *AgentsHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"agents": agents})
+	publicAgents := make([]store.AgentData, 0, len(agents))
+	for i := range agents {
+		publicAgents = append(publicAgents, canonicalizeAgentForResponse(&agents[i]))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"agents": publicAgents})
 }
 
 func (h *AgentsHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
@@ -306,7 +310,8 @@ func (h *AgentsHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	emitAudit(h.msgBus, r, "agent.created", "agent", req.ID.String())
-	writeJSON(w, http.StatusCreated, req)
+	publicAgent := canonicalizeAgentForResponse(&req)
+	writeJSON(w, http.StatusCreated, publicAgent)
 }
 
 func (h *AgentsHandler) handleGet(w http.ResponseWriter, r *http.Request) {
@@ -328,7 +333,8 @@ func (h *AgentsHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		writeJSON(w, http.StatusOK, ag)
+		publicAgent := canonicalizeAgentForResponse(ag)
+		writeJSON(w, http.StatusOK, publicAgent)
 		return
 	}
 
@@ -345,7 +351,8 @@ func (h *AgentsHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusOK, ag)
+	publicAgent := canonicalizeAgentForResponse(ag)
+	writeJSON(w, http.StatusOK, publicAgent)
 }
 
 func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
