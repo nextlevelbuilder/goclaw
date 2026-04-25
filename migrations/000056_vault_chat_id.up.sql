@@ -7,6 +7,16 @@ CREATE INDEX IF NOT EXISTS idx_vault_docs_team_chat
     ON vault_documents(team_id, chat_id)
     WHERE team_id IS NOT NULL;
 
+-- Drop scope-consistency CHECK before backfill UPDATEs. Constraint was added
+-- NOT VALID in migration 55, which skips existing rows but still re-checks
+-- on every UPDATE. Legacy data (pre-M46 when agent_id was NOT NULL, pre-M43
+-- before team_id existed) often has rows that violate the invariant, causing
+-- the backfill UPDATEs below to abort and leave migration 56 in a dirty
+-- state (issue #1035). Drop now, re-add at end so fresh installs proceed
+-- cleanly. Constraint stays NOT VALID — legacy bad rows still tolerated;
+-- a future migration can clean + VALIDATE.
+ALTER TABLE vault_documents DROP CONSTRAINT IF EXISTS vault_documents_scope_consistency;
+
 -- -----------------------------------------------------------------------------
 -- Backfill 1: team-scoped docs (scope='team', team_id set).
 -- Two path layouts:
@@ -69,3 +79,15 @@ WHERE chat_id IS NULL
     OR path ~ '^group_[^/]+_-?[0-9]+/'
     OR path ~ '^[^/]+/[^/]+/(group_[^/]+_-?[0-9]+|[0-9]+)/'
   );
+
+-- Re-add the scope-consistency constraint dropped above. NOT VALID matches
+-- migration 55's original semantics — existing rows pass without validation,
+-- new INSERT/UPDATE are checked. Run `VALIDATE CONSTRAINT` after audit cleanup.
+ALTER TABLE vault_documents
+    ADD CONSTRAINT vault_documents_scope_consistency
+    CHECK (
+        (scope = 'personal' AND agent_id IS NOT NULL AND team_id IS NULL) OR
+        (scope = 'team'     AND team_id  IS NOT NULL AND agent_id IS NULL) OR
+        (scope = 'shared'   AND agent_id IS NULL     AND team_id  IS NULL) OR
+        scope = 'custom'
+    ) NOT VALID;
