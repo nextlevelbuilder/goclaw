@@ -3,6 +3,7 @@ package pg
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -111,18 +112,26 @@ func mergeEpisodicScores(fts, vec []episodicScored, textWeight, vecWeight float6
 }
 
 // scanEpisodic scans a single row into EpisodicSummary. Column order matches
-// the SELECT list in PGEpisodicStore.Get (17 columns incl. recall signals).
+// the SELECT list in PGEpisodicStore.Get (18 columns incl. recall signals + metadata).
 func scanEpisodic(row *sql.Row) (*store.EpisodicSummary, error) {
 	var ep store.EpisodicSummary
 	var topics pq.StringArray
+	var metadataBytes []byte
 	err := row.Scan(&ep.ID, &ep.TenantID, &ep.AgentID, &ep.UserID, &ep.SessionKey,
 		&ep.Summary, &topics, &ep.TurnCount, &ep.TokenCount,
 		&ep.L0Abstract, &ep.SourceID, &ep.SourceType, &ep.CreatedAt, &ep.ExpiresAt,
-		&ep.RecallCount, &ep.RecallScore, &ep.LastRecalledAt)
+		&ep.RecallCount, &ep.RecallScore, &ep.LastRecalledAt, &metadataBytes)
 	if err != nil {
 		return nil, err
 	}
 	ep.KeyTopics = []string(topics)
+	// Parse metadata JSONB if present
+	if len(metadataBytes) > 0 {
+		var meta store.EpisodicMetadata
+		if err := json.Unmarshal(metadataBytes, &meta); err == nil {
+			ep.Metadata = &meta
+		}
+	}
 	return &ep, nil
 }
 

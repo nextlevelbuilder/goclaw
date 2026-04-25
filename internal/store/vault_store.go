@@ -115,6 +115,10 @@ type VaultStore interface {
 	GetDocumentsByIDs(ctx context.Context, tenantID string, docIDs []string) ([]VaultDocument, error)
 	// GetDocumentByBasename finds a document by path basename (case-insensitive).
 	GetDocumentByBasename(ctx context.Context, tenantID, agentID, basename string) (*VaultDocument, error)
+	// ResolveWikilinkTargets batch-resolves wikilink targets in a single query.
+	// Returns map[target]→*VaultDocument for matched targets. Uses case-insensitive
+	// matching on both full path and basename (with/without .md suffix).
+	ResolveWikilinkTargets(ctx context.Context, tenantID, agentID string, targets []string) (map[string]*VaultDocument, error)
 
 	// Search (FTS + vector hybrid)
 	Search(ctx context.Context, opts VaultSearchOptions) ([]VaultSearchResult, error)

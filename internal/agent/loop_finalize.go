@@ -189,7 +189,8 @@ func (l *Loop) finalizeRun(
 	rs.finalContent = StripMessageDirectives(rs.finalContent)
 	if isSilent {
 		slog.Info("agent loop: NO_REPLY detected, suppressing delivery",
-			"agent", l.id, "session", req.SessionKey)
+			"agent", l.id, "session", req.SessionKey,
+			"was_mentioned", req.WasMentioned)
 		rs.finalContent = ""
 	}
 
@@ -198,6 +199,9 @@ func (l *Loop) finalizeRun(
 
 	// V3: emit session.completed for consolidation pipeline (episodic → semantic → dreaming)
 	if l.domainBus != nil {
+		// Include existing session summary for episodic creation.
+		// maybeSummarize() runs async, but previous summaries are available.
+		existingSummary := l.sessions.GetSummary(ctx, req.SessionKey)
 		l.domainBus.Publish(eventbus.DomainEvent{
 			Type:     eventbus.EventSessionCompleted,
 			TenantID: l.tenantID.String(),
@@ -208,6 +212,7 @@ func (l *Loop) finalizeRun(
 				SessionKey:      req.SessionKey,
 				MessageCount:    len(history) + len(rs.pendingMsgs),
 				TokensUsed:      rs.totalUsage.PromptTokens + rs.totalUsage.CompletionTokens,
+				Summary:         existingSummary,
 				CompactionCount: l.sessions.GetCompactionCount(ctx, req.SessionKey),
 			},
 		})

@@ -32,7 +32,7 @@ func (w *episodicWorker) resolveProvider(ctx context.Context, tenantID uuid.UUID
 
 // Handle processes a session.completed event into an episodic summary.
 func (w *episodicWorker) Handle(ctx context.Context, event eventbus.DomainEvent) error {
-	slog.Debug("episodic: received session.completed",
+	slog.Info("episodic: received session.completed",
 		"agent", event.AgentID, "user", event.UserID,
 		"source", event.SourceID, "payload_type", fmt.Sprintf("%T", event.Payload))
 
@@ -67,14 +67,20 @@ func (w *episodicWorker) Handle(ctx context.Context, event eventbus.DomainEvent)
 
 	// Use compaction summary if available, else call LLM
 	summary := payload.Summary
+	slog.Info("episodic: processing", "session", payload.SessionKey,
+		"summary_len", len(payload.Summary), "msg_count", payload.MessageCount)
 	if summary == "" {
 		provider, model := w.resolveProvider(ctx, tenantUUID)
+		slog.Info("episodic: summary empty, trying LLM fallback",
+			"session", payload.SessionKey, "provider_resolved", provider != nil, "model", model)
 		if provider != nil {
 			summary, err = w.summarizeSession(ctx, provider, model, payload)
 			if err != nil {
+				slog.Warn("episodic: LLM summarize failed", "session", payload.SessionKey, "error", err)
 				bgalert.ReportProviderError(ctx, w.alertDeps, "episodic", err)
 				return fmt.Errorf("episodic: summarize: %w", err)
 			}
+			slog.Info("episodic: LLM summarize success", "session", payload.SessionKey, "summary_len", len(summary))
 		}
 	}
 	if summary == "" {
@@ -90,6 +96,20 @@ func (w *episodicWorker) Handle(ctx context.Context, event eventbus.DomainEvent)
 	entities := extractEntityNames(summary)
 	expiresAt := time.Now().UTC().Add(90 * 24 * time.Hour)
 
+	// Extract structured metadata (decisions, actions, entities) from summary.
+	// Uses same provider resolved above. Failures are non-fatal.
+	var metadata *store.EpisodicMetadata
+	provider, model := w.resolveProvider(ctx, tenantUUID)
+	if provider != nil {
+		metadata = ExtractMetadata(ctx, provider, model, summary)
+		if metadata != nil {
+			slog.Debug("episodic: extracted metadata",
+				"decisions", len(metadata.Decisions),
+				"actions", len(metadata.ActionItems),
+				"entities", len(metadata.Entities))
+		}
+	}
+
 	ep := &store.EpisodicSummary{
 		TenantID:   tenantUUID,
 		AgentID:    agentUUID,
@@ -103,6 +123,7 @@ func (w *episodicWorker) Handle(ctx context.Context, event eventbus.DomainEvent)
 		SourceID:   sourceID,
 		SourceType: "session",
 		ExpiresAt:  &expiresAt,
+		Metadata:   metadata,
 	}
 	if err := w.store.Create(ctx, ep); err != nil {
 		return fmt.Errorf("episodic: create: %w", err)
@@ -123,7 +144,8 @@ func (w *episodicWorker) Handle(ctx context.Context, event eventbus.DomainEvent)
 		},
 	})
 
-	slog.Info("episodic: created summary", "session", payload.SessionKey, "l0_len", len(l0))
+	slog.Info("episodic: created summary successfully", "session", payload.SessionKey,
+		"l0_len", len(l0), "summary_len", len(summary))
 	return nil
 }
 

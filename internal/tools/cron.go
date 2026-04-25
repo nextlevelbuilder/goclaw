@@ -149,6 +149,19 @@ func (t *CronTool) Execute(ctx context.Context, args map[string]any) *Result {
 		}
 	}
 
+	// Team member guard: members must not create/update/remove cron jobs.
+	// Cron jobs should only be owned by the team leader (the agent that
+	// communicates with users). Members receive delegated tasks and return
+	// results — they should never self-schedule recurring work.
+	if action == "add" || action == "update" || action == "remove" {
+		if leaderID := LeaderAgentIDFromCtx(ctx); leaderID != "" {
+			agentStr := resolveAgentIDString(ctx)
+			if agentStr != leaderID {
+				return ErrorResult("team members cannot manage cron jobs — request the team leader to create the schedule instead")
+			}
+		}
+	}
+
 	agentID := resolveAgentIDString(ctx)
 	userID := store.UserIDFromContext(ctx)
 

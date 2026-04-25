@@ -90,19 +90,30 @@ func (s *PGVaultGraphStore) ListGraphNodes(ctx context.Context, tenantID, agentI
 func (s *PGVaultGraphStore) ListGraphEdges(ctx context.Context, tenantID, agentID string, opts store.VaultGraphListOptions) ([]store.GraphEdge, int, error) {
 	tid := parseUUIDOrNil(tenantID)
 
-	// Subquery selects doc IDs in scope (same filters as ListGraphNodes).
-	subQ := `SELECT id FROM vault_documents WHERE tenant_id = $1`
+	// Subquery selects doc IDs in scope with same ordering as ListGraphNodes.
+	// Uses degree-based ordering to ensure edges match the top N nodes by link count.
+	subQ := `SELECT vd.id FROM vault_documents vd
+		LEFT JOIN (
+			SELECT doc_id, COUNT(*) AS cnt FROM (
+				SELECT from_doc_id AS doc_id FROM vault_links vl
+				JOIN vault_documents d ON d.id = vl.from_doc_id AND d.tenant_id = $1
+				UNION ALL
+				SELECT to_doc_id AS doc_id FROM vault_links vl
+				JOIN vault_documents d ON d.id = vl.to_doc_id AND d.tenant_id = $1
+			) sub GROUP BY doc_id
+		) deg ON deg.doc_id = vd.id
+		WHERE vd.tenant_id = $1`
 	args := []any{tid}
 	p := 2
 
 	if agentID != "" {
 		aid := parseUUIDOrNil(agentID)
-		subQ += fmt.Sprintf(" AND agent_id = $%d", p)
+		subQ += fmt.Sprintf(" AND vd.agent_id = $%d", p)
 		args = append(args, aid)
 		p++
 	}
 
-	subQ, args, p = appendGraphTeamFilter(subQ, args, p, "", opts.TeamID, opts.TeamIDs)
+	subQ, args, p = appendGraphTeamFilter(subQ, args, p, "vd", opts.TeamID, opts.TeamIDs)
 
 	limit := opts.Limit
 	if limit <= 0 {
@@ -111,6 +122,7 @@ func (s *PGVaultGraphStore) ListGraphEdges(ctx context.Context, tenantID, agentI
 	if limit > 10000 {
 		limit = 10000
 	}
+	subQ += " ORDER BY COALESCE(deg.cnt, 0) DESC, vd.updated_at DESC"
 	subQ += fmt.Sprintf(" LIMIT $%d", p)
 	args = append(args, limit)
 	p++

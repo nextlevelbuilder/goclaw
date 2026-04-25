@@ -32,14 +32,22 @@ var BridgeToolNames = map[string]bool{
 	"web_search": true,
 	"web_fetch":  true,
 	// Memory & knowledge
-	"memory_search": true,
-	"memory_get":    true,
-	"skill_search":  true,
+	"memory_search":          true,
+	"memory_get":             true,
+	"memory_expand":          true,
+	"skill_search":           true,
+	"vault_search":           true,
+	"knowledge_graph_search": true,
 	// Media
-	"read_image":   true,
-	"create_image": true,
-	"create_xlsx":  true,
-	"tts":          true,
+	"read_image":    true,
+	"read_audio":    true,
+	"read_video":    true,
+	"read_document": true,
+	"create_image":  true,
+	"create_audio":  true,
+	"create_video":  true,
+	"create_xlsx":   true,
+	"tts":           true,
 	// Browser automation
 	"browser": true,
 	// Scheduler
@@ -53,6 +61,12 @@ var BridgeToolNames = map[string]bool{
 	"sessions_send":    true,
 	// Team tools (context from X-Agent-ID/X-Channel/X-Chat-ID headers)
 	"team_tasks": true,
+	"delegate":   true,
+	// Utility
+	"datetime":           true,
+	"heartbeat":          true,
+	"list_group_members": true,
+	"defuddle":           true,
 }
 
 // NewBridgeServer creates a StreamableHTTPServer that exposes GoClaw tools as MCP tools.

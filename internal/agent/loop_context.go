@@ -141,12 +141,13 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 	// Two entry modes: solo agent (base = l.workspace) or team context (base = l.dataDir).
 	// Result is always a single folder set via WithToolWorkspace.
 	if l.workspace != "" && req.UserID != "" {
+		// Check sharing first to determine base workspace.
+		shared := l.shouldShareWorkspace(req.UserID, req.PeerKind)
 		ws := setup.workspace
-		if ws == "" {
-			ws = l.workspace
+		if ws == "" || shared {
+			ws = l.workspace // Use agent's base workspace when sharing enabled
 		}
 		// Apply user isolation layer via pipeline.
-		shared := l.shouldShareWorkspace(req.UserID, req.PeerKind)
 		effectiveWorkspace := tools.ResolveWorkspace(ws,
 			tools.UserChatLayer(tools.SanitizePathSegment(req.UserID), shared),
 		)

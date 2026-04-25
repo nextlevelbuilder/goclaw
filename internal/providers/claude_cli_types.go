@@ -39,13 +39,18 @@ type cliStreamMsg struct {
 // cliContentBlock is a single content block (text, thinking, tool_use, tool_result).
 type cliContentBlock struct {
 	Type     string `json:"type"`               // "text", "thinking", "tool_use", "tool_result"
-	Text     string `json:"text,omitempty"`     // for type="text"
-	Thinking string `json:"thinking,omitempty"` // for type="thinking"
+	Text     string `json:"text,omitempty"`      // for type="text"
+	Thinking string `json:"thinking,omitempty"`  // for type="thinking"
 
 	// tool_use fields — parsed for tracing (CLI executes tools itself via MCP).
-	ToolID    string         `json:"id,omitempty"`    // tool call ID
+	ToolID    string         `json:"id,omitempty"`    // tool call ID (tool_use)
 	ToolName  string         `json:"name,omitempty"`  // tool name
 	ToolInput map[string]any `json:"input,omitempty"` // tool arguments
+
+	// tool_result fields
+	ToolUseID   string                 `json:"tool_use_id,omitempty"` // references the tool_use id
+	IsError     bool                   `json:"is_error,omitempty"`
+	Content     []cliToolResultContent `json:"content,omitempty"` // nested content array
 }
 
 // cliToolResultContent is the inner content of a tool_result block.

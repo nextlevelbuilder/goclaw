@@ -18,6 +18,7 @@ import (
 // ConsolidationDeps bundles all dependencies for the consolidation pipeline.
 type ConsolidationDeps struct {
 	EpisodicStore store.EpisodicStore
+	DigestStore   store.DailyDigestStore // for daily digest aggregation
 	MemoryStore   store.MemoryStore
 	KGStore       store.KnowledgeGraphStore
 	SessionStore  store.SessionCoreStore // for reading session messages during summarization

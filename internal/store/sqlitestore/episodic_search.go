@@ -78,6 +78,19 @@ func (s *SQLiteEpisodicStore) Search(ctx context.Context, query string, agentID,
 		scoredRows = append(scoredRows, scored{raw: r, score: sc})
 	}
 
+	// Apply session-aware score boost for same-context memories.
+	if opts.SessionKeyPrefix != "" {
+		boost := opts.SameSessionBoost
+		if boost == 0 {
+			boost = 0.3 // default boost
+		}
+		for i := range scoredRows {
+			if strings.HasPrefix(scoredRows[i].raw.sessionKey, opts.SessionKeyPrefix) {
+				scoredRows[i].score += boost
+			}
+		}
+	}
+
 	// Sort by score DESC, then created_at DESC
 	sort.SliceStable(scoredRows, func(i, j int) bool {
 		if scoredRows[i].score != scoredRows[j].score {

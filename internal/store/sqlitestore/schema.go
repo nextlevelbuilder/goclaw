@@ -16,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 17
+const SchemaVersion = 18
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -438,6 +438,35 @@ CREATE INDEX IF NOT EXISTS idx_vault_docs_delegation
 
 	// Version 16 → 17: path prefix index for vault tree lazy-load queries.
 	16: `CREATE INDEX IF NOT EXISTS idx_vault_docs_path_prefix ON vault_documents(tenant_id, path);`,
+
+	// Version 17 → 18: Phase 2-3 episodic metadata + daily digests.
+	// Mirrors PG migration 000050.
+	17: `-- Add metadata column for structured extraction (decisions, actions, entities)
+ALTER TABLE episodic_summaries ADD COLUMN metadata TEXT NOT NULL DEFAULT '{}';
+
+-- Create daily_digests table for end-of-day aggregation
+CREATE TABLE IF NOT EXISTS daily_digests (
+    id                 TEXT NOT NULL PRIMARY KEY,
+    tenant_id          TEXT NOT NULL REFERENCES tenants(id),
+    agent_id           TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    user_id            VARCHAR(255) NOT NULL DEFAULT '',
+    channel_scope      VARCHAR(100) DEFAULT '',
+    session_key_prefix TEXT DEFAULT '',
+    digest_date        TEXT NOT NULL,
+    decisions          TEXT DEFAULT '[]',
+    action_items       TEXT DEFAULT '[]',
+    key_topics         TEXT DEFAULT '[]',
+    summary            TEXT DEFAULT '',
+    session_count      INTEGER DEFAULT 0,
+    message_count      INTEGER DEFAULT 0,
+    created_at         TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at         TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_daily_digests_agent_date ON daily_digests(agent_id, digest_date);
+CREATE INDEX IF NOT EXISTS idx_daily_digests_tenant ON daily_digests(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_daily_digests_lookup ON daily_digests(agent_id, user_id, digest_date);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_digests_unique ON daily_digests(tenant_id, agent_id, user_id, digest_date, channel_scope);`,
 }
 
 // backfillV16 populates base_name / path_basename for rows that existed

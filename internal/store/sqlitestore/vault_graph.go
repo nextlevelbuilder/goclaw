@@ -84,16 +84,27 @@ func (s *SQLiteVaultGraphStore) ListGraphNodes(ctx context.Context, tenantID, ag
 
 // ListGraphEdges returns lightweight vault edges for nodes in scope.
 func (s *SQLiteVaultGraphStore) ListGraphEdges(ctx context.Context, tenantID, agentID string, opts store.VaultGraphListOptions) ([]store.GraphEdge, int, error) {
-	// Build subquery for doc IDs in scope.
-	subQ := `SELECT id FROM vault_documents WHERE tenant_id = ?`
-	subArgs := []any{tenantID}
+	// Build subquery for doc IDs in scope with same ordering as ListGraphNodes.
+	// Uses degree-based ordering to ensure edges match the top N nodes by link count.
+	subQ := `SELECT vd.id FROM vault_documents vd
+		LEFT JOIN (
+			SELECT doc_id, COUNT(*) AS cnt FROM (
+				SELECT from_doc_id AS doc_id FROM vault_links vl
+				JOIN vault_documents d ON d.id = vl.from_doc_id AND d.tenant_id = ?
+				UNION ALL
+				SELECT to_doc_id AS doc_id FROM vault_links vl
+				JOIN vault_documents d ON d.id = vl.to_doc_id AND d.tenant_id = ?
+			) sub GROUP BY doc_id
+		) deg ON deg.doc_id = vd.id
+		WHERE vd.tenant_id = ?`
+	subArgs := []any{tenantID, tenantID, tenantID}
 
 	if agentID != "" {
-		subQ += " AND agent_id = ?"
+		subQ += " AND vd.agent_id = ?"
 		subArgs = append(subArgs, agentID)
 	}
 
-	subQ, subArgs = sqliteAppendGraphTeamFilter(subQ, subArgs, "", opts.TeamID, opts.TeamIDs)
+	subQ, subArgs = sqliteAppendGraphTeamFilter(subQ, subArgs, "vd", opts.TeamID, opts.TeamIDs)
 
 	limit := opts.Limit
 	if limit <= 0 {
@@ -102,6 +113,7 @@ func (s *SQLiteVaultGraphStore) ListGraphEdges(ctx context.Context, tenantID, ag
 	if limit > 10000 {
 		limit = 10000
 	}
+	subQ += " ORDER BY COALESCE(deg.cnt, 0) DESC, vd.updated_at DESC"
 	subQ += " LIMIT ?"
 	subArgs = append(subArgs, limit)
 

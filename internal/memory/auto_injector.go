@@ -21,6 +21,12 @@ type InjectParams struct {
 	TenantID    string
 	UserMessage string
 
+	// SessionKey is the current session identifier (e.g., "agent:X:channel:group:-123").
+	// Used for context-aware retrieval: memories from the same session/group get
+	// a score boost, and results are grouped by source for clarity.
+	// Empty = no source-aware boosting (legacy behaviour).
+	SessionKey string
+
 	// RecentContext carries a short snippet of recent conversation (typically
 	// the last 1-2 user turns concatenated) used to enrich the search query.
 	// Context-aware recall: without this, vector search on "what's my favorite?"

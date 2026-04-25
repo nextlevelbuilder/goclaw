@@ -1422,7 +1422,9 @@ CREATE TABLE IF NOT EXISTS episodic_summaries (
     -- hit scores). See internal/consolidation/scoring.go::ComputeRecallScore.
     recall_count     INTEGER NOT NULL DEFAULT 0,
     recall_score     REAL    NOT NULL DEFAULT 0,
-    last_recalled_at TEXT
+    last_recalled_at TEXT,
+    -- Structured extraction from summary (decisions, actions, entities)
+    metadata         TEXT NOT NULL DEFAULT '{}'
 );
 
 CREATE INDEX IF NOT EXISTS idx_episodic_agent_user ON episodic_summaries(agent_id, user_id);
@@ -1433,6 +1435,33 @@ CREATE INDEX IF NOT EXISTS idx_episodic_unpromoted ON episodic_summaries(agent_i
     WHERE promoted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_episodic_recall_unpromoted ON episodic_summaries(agent_id, user_id, recall_score DESC)
     WHERE promoted_at IS NULL;
+
+-- ============================================================
+-- Table: daily_digests (aggregated daily reports)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS daily_digests (
+    id                 TEXT NOT NULL PRIMARY KEY,
+    tenant_id          TEXT NOT NULL REFERENCES tenants(id),
+    agent_id           TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    user_id            VARCHAR(255) NOT NULL DEFAULT '',
+    channel_scope      VARCHAR(100) DEFAULT '',
+    session_key_prefix TEXT DEFAULT '',
+    digest_date        TEXT NOT NULL,
+    decisions          TEXT DEFAULT '[]',
+    action_items       TEXT DEFAULT '[]',
+    key_topics         TEXT DEFAULT '[]',
+    summary            TEXT DEFAULT '',
+    session_count      INTEGER DEFAULT 0,
+    message_count      INTEGER DEFAULT 0,
+    created_at         TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at         TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_daily_digests_agent_date ON daily_digests(agent_id, digest_date);
+CREATE INDEX IF NOT EXISTS idx_daily_digests_tenant ON daily_digests(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_daily_digests_lookup ON daily_digests(agent_id, user_id, digest_date);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_digests_unique ON daily_digests(tenant_id, agent_id, user_id, digest_date, channel_scope);
 
 -- ============================================================
 -- Table: agent_evolution_metrics (V3 self-evolution Stage 1)

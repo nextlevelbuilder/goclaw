@@ -180,6 +180,103 @@ func (s *SQLiteVaultStore) GetDocumentByBasename(ctx context.Context, tenantID, 
 	return scanVaultDoc(row)
 }
 
+// ResolveWikilinkTargets batch-resolves wikilink targets.
+// SQLite version uses multiple queries for simplicity (Lite edition has fewer docs).
+func (s *SQLiteVaultStore) ResolveWikilinkTargets(ctx context.Context, tenantID, agentID string, targets []string) (map[string]*store.VaultDocument, error) {
+	if len(targets) == 0 {
+		return make(map[string]*store.VaultDocument), nil
+	}
+
+	// Prepare search values: for each target, we search by full path, path+.md, basename, basename+.md
+	searchSet := make(map[string]bool)
+	targetToSearches := make(map[string][]string)
+	for _, t := range targets {
+		lower := strings.ToLower(t)
+		patterns := []string{lower}
+		if !strings.HasSuffix(lower, ".md") {
+			patterns = append(patterns, lower+".md")
+		}
+		// Add basename variants
+		base := lower
+		if idx := strings.LastIndex(lower, "/"); idx >= 0 {
+			base = lower[idx+1:]
+		}
+		if base != lower {
+			patterns = append(patterns, base)
+			if !strings.HasSuffix(base, ".md") {
+				patterns = append(patterns, base+".md")
+			}
+		}
+		targetToSearches[t] = patterns
+		for _, p := range patterns {
+			searchSet[p] = true
+		}
+	}
+
+	searchPatterns := make([]string, 0, len(searchSet))
+	for p := range searchSet {
+		searchPatterns = append(searchPatterns, p)
+	}
+
+	// Build query with IN clause
+	placeholders := strings.Repeat("?,", len(searchPatterns)-1) + "?"
+	q := `SELECT id, tenant_id, agent_id, team_id, scope, custom_scope, path, path_basename, title, doc_type, content_hash, summary, metadata, created_at, updated_at
+		FROM vault_documents
+		WHERE tenant_id = ? AND (lower(path) IN (` + placeholders + `) OR lower(path_basename) IN (` + placeholders + `))`
+	args := []any{tenantID}
+	for _, p := range searchPatterns {
+		args = append(args, p)
+	}
+	for _, p := range searchPatterns {
+		args = append(args, p)
+	}
+
+	if agentID != "" {
+		q += " AND agent_id = ?"
+		args = append(args, agentID)
+	}
+
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("vault resolve wikilinks: %w", err)
+	}
+	defer rows.Close()
+
+	// Index docs by lowercase path and basename
+	docByPath := make(map[string]*store.VaultDocument)
+	docByBasename := make(map[string]*store.VaultDocument)
+	for rows.Next() {
+		doc, scanErr := scanVaultDocRow(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		docByPath[strings.ToLower(doc.Path)] = doc
+		if doc.PathBasename != "" {
+			docByBasename[strings.ToLower(doc.PathBasename)] = doc
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Resolve each target using priority order
+	result := make(map[string]*store.VaultDocument, len(targets))
+	for _, t := range targets {
+		for _, pattern := range targetToSearches[t] {
+			if doc, ok := docByPath[pattern]; ok {
+				result[t] = doc
+				break
+			}
+			if doc, ok := docByBasename[pattern]; ok {
+				result[t] = doc
+				break
+			}
+		}
+	}
+
+	return result, nil
+}
+
 // DeleteDocument removes a vault document (FK cascades delete vault_links).
 // Empty agentID means no agent filter.
 // Team scoping via RunContext (same rules as GetDocument).

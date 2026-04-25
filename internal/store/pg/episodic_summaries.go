@@ -3,9 +3,11 @@ package pg
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -46,16 +48,25 @@ func (s *PGEpisodicStore) Create(ctx context.Context, ep *store.EpisodicSummary)
 		}
 	}
 
+	// Serialize metadata to JSON if present
+	var metadataBytes []byte
+	if ep.Metadata != nil {
+		metadataBytes, _ = json.Marshal(ep.Metadata)
+	}
+	if metadataBytes == nil {
+		metadataBytes = []byte("{}")
+	}
+
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO episodic_summaries
 			(id, tenant_id, agent_id, user_id, session_key, summary, key_topics,
 			 turn_count, token_count, embedding, l0_abstract, source_id,
-			 source_type, created_at, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+			 source_type, created_at, expires_at, metadata)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 		ON CONFLICT (agent_id, user_id, source_id) WHERE source_id IS NOT NULL DO NOTHING`,
 		id, ep.TenantID, ep.AgentID, ep.UserID, ep.SessionKey,
 		ep.Summary, topics, ep.TurnCount, ep.TokenCount,
-		embStr, ep.L0Abstract, ep.SourceID, ep.SourceType, now, ep.ExpiresAt)
+		embStr, ep.L0Abstract, ep.SourceID, ep.SourceType, now, ep.ExpiresAt, metadataBytes)
 	if err != nil {
 		return fmt.Errorf("episodic create: %w", err)
 	}
@@ -68,7 +79,7 @@ func (s *PGEpisodicStore) Get(ctx context.Context, id string) (*store.EpisodicSu
 	row := s.db.QueryRowContext(ctx, `
 		SELECT id, tenant_id, agent_id, user_id, session_key, summary, key_topics,
 		       turn_count, token_count, l0_abstract, source_id, source_type,
-		       created_at, expires_at, recall_count, recall_score, last_recalled_at
+		       created_at, expires_at, recall_count, recall_score, last_recalled_at, metadata
 		FROM episodic_summaries WHERE id = $1 AND tenant_id = $2`,
 		id, store.TenantIDFromContext(ctx))
 	return scanEpisodic(row)
@@ -95,7 +106,7 @@ func (s *PGEpisodicStore) List(ctx context.Context, agentID, userID string, limi
 		q = `SELECT id, tenant_id, agent_id, user_id, session_key, summary, key_topics,
 			       turn_count, token_count, l0_abstract, source_id, source_type,
 			       created_at, expires_at,
-			       recall_count, recall_score, last_recalled_at
+			       recall_count, recall_score, last_recalled_at, metadata
 			FROM episodic_summaries
 			WHERE agent_id = $1 AND user_id = $2 AND tenant_id = $5
 			ORDER BY created_at DESC LIMIT $3 OFFSET $4`
@@ -104,7 +115,7 @@ func (s *PGEpisodicStore) List(ctx context.Context, agentID, userID string, limi
 		q = `SELECT id, tenant_id, agent_id, user_id, session_key, summary, key_topics,
 			       turn_count, token_count, l0_abstract, source_id, source_type,
 			       created_at, expires_at,
-			       recall_count, recall_score, last_recalled_at
+			       recall_count, recall_score, last_recalled_at, metadata
 			FROM episodic_summaries
 			WHERE agent_id = $1 AND tenant_id = $4
 			ORDER BY created_at DESC LIMIT $2 OFFSET $3`
@@ -151,6 +162,21 @@ func (s *PGEpisodicStore) Search(ctx context.Context, query, agentID, userID str
 
 	// Merge by combined score
 	merged := mergeEpisodicScores(ftsResults, vecResults, tw, vw)
+
+	// Apply session-aware score boost for same-context memories.
+	// Memories from the same group/session rank higher, reducing context mixing.
+	if opts.SessionKeyPrefix != "" {
+		boost := opts.SameSessionBoost
+		if boost == 0 {
+			boost = 0.3 // default boost
+		}
+		for i := range merged {
+			if strings.HasPrefix(merged[i].sessionKey, opts.SessionKeyPrefix) {
+				merged[i].score += boost
+			}
+		}
+	}
+
 	sort.Slice(merged, func(i, j int) bool { return merged[i].score > merged[j].score })
 
 	if len(merged) > maxResults {
@@ -219,7 +245,7 @@ func (s *PGEpisodicStore) listUnpromoted(ctx context.Context, agentID, userID st
 		SELECT id, tenant_id, agent_id, user_id, session_key, summary, key_topics,
 		       turn_count, token_count, l0_abstract, source_id, source_type,
 		       created_at, expires_at,
-		       recall_count, recall_score, last_recalled_at
+		       recall_count, recall_score, last_recalled_at, metadata
 		FROM episodic_summaries
 		WHERE agent_id = $1 AND user_id = $2 AND tenant_id = $3 AND promoted_at IS NULL
 		ORDER BY ` + orderBy + ` LIMIT $4`
@@ -294,4 +320,25 @@ func (s *PGEpisodicStore) CountUnpromoted(ctx context.Context, agentID, userID s
 		return 0, fmt.Errorf("episodic count_unpromoted: %w", err)
 	}
 	return count, nil
+}
+
+// UpdateMetadata updates the metadata JSONB for an existing episodic summary.
+// Used by consolidation workers to populate structured extraction (decisions, actions, entities).
+func (s *PGEpisodicStore) UpdateMetadata(ctx context.Context, id string, meta *store.EpisodicMetadata) error {
+	if id == "" || meta == nil {
+		return nil
+	}
+	metadataBytes, err := json.Marshal(meta)
+	if err != nil {
+		return fmt.Errorf("episodic update_metadata marshal: %w", err)
+	}
+	tenantID := store.TenantIDFromContext(ctx)
+	_, err = s.db.ExecContext(ctx, `
+		UPDATE episodic_summaries SET metadata = $1
+		WHERE id = $2 AND tenant_id = $3`,
+		metadataBytes, id, tenantID)
+	if err != nil {
+		return fmt.Errorf("episodic update_metadata: %w", err)
+	}
+	return nil
 }

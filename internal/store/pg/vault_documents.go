@@ -807,3 +807,99 @@ func extractFolderNames(prefix string, deepPaths []string) []string {
 	return folders
 }
 
+// ResolveWikilinkTargets batch-resolves wikilink targets in a single query.
+// Strategy: match full path (case-insensitive), path with .md, basename, or basename with .md.
+// Returns map[target]→*VaultDocument for matched targets.
+func (s *PGVaultStore) ResolveWikilinkTargets(ctx context.Context, tenantID, agentID string, targets []string) (map[string]*store.VaultDocument, error) {
+	if len(targets) == 0 {
+		return make(map[string]*store.VaultDocument), nil
+	}
+
+	tid, err := parseUUID(tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("vault resolve wikilinks: tenant: %w", err)
+	}
+
+	// Prepare search values: for each target, we search by full path, path+.md, basename, basename+.md
+	// Dedup and lowercase all search patterns.
+	searchSet := make(map[string]bool)
+	targetToSearches := make(map[string][]string) // target → list of search patterns
+	for _, t := range targets {
+		lower := strings.ToLower(t)
+		patterns := []string{lower}
+		if !strings.HasSuffix(lower, ".md") {
+			patterns = append(patterns, lower+".md")
+		}
+		// Add basename variants
+		base := lower
+		if idx := strings.LastIndex(lower, "/"); idx >= 0 {
+			base = lower[idx+1:]
+		}
+		if base != lower {
+			patterns = append(patterns, base)
+			if !strings.HasSuffix(base, ".md") {
+				patterns = append(patterns, base+".md")
+			}
+		}
+		targetToSearches[t] = patterns
+		for _, p := range patterns {
+			searchSet[p] = true
+		}
+	}
+
+	// Convert to slice for SQL
+	searchPatterns := make([]string, 0, len(searchSet))
+	for p := range searchSet {
+		searchPatterns = append(searchPatterns, p)
+	}
+
+	// Single query: match on lower(path) or path_basename
+	q := `SELECT id, tenant_id, agent_id, team_id, scope, custom_scope, path, path_basename, title, doc_type, content_hash, summary, metadata, created_at, updated_at
+		FROM vault_documents
+		WHERE tenant_id = $1 AND (lower(path) = ANY($2) OR path_basename = ANY($2))`
+	args := []any{tid, pqStringArray(searchPatterns)}
+	p := 3
+
+	if agentID != "" {
+		aid, err := parseUUID(agentID)
+		if err != nil {
+			return nil, fmt.Errorf("vault resolve wikilinks: agent: %w", err)
+		}
+		q += fmt.Sprintf(" AND agent_id = $%d", p)
+		args = append(args, aid)
+	}
+
+	var scanned []vaultDocRow
+	if err := pkgSqlxDB.SelectContext(ctx, &scanned, q, args...); err != nil {
+		return nil, fmt.Errorf("vault resolve wikilinks: %w", err)
+	}
+
+	// Build result map: index docs by lowercase path and basename
+	docByPath := make(map[string]*store.VaultDocument)
+	docByBasename := make(map[string]*store.VaultDocument)
+	for i := range scanned {
+		doc := scanned[i].toVaultDocument()
+		docByPath[strings.ToLower(doc.Path)] = &doc
+		if doc.PathBasename != "" {
+			docByBasename[doc.PathBasename] = &doc
+		}
+	}
+
+	// Resolve each target using priority: exact path → path+.md → basename → basename+.md
+	result := make(map[string]*store.VaultDocument, len(targets))
+	for _, t := range targets {
+		for _, pattern := range targetToSearches[t] {
+			if doc, ok := docByPath[pattern]; ok {
+				result[t] = doc
+				break
+			}
+			if doc, ok := docByBasename[pattern]; ok {
+				result[t] = doc
+				break
+			}
+		}
+	}
+
+	return result, nil
+}
+

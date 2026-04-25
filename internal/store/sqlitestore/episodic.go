@@ -5,6 +5,7 @@ package sqlitestore
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -44,18 +45,26 @@ func (s *SQLiteEpisodicStore) Create(ctx context.Context, ep *store.EpisodicSumm
 		expiresAt = &v
 	}
 
+	// Serialize metadata to JSON if present
+	metadataStr := "{}"
+	if ep.Metadata != nil {
+		if b, err := json.Marshal(ep.Metadata); err == nil {
+			metadataStr = string(b)
+		}
+	}
+
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO episodic_summaries
 			(id, tenant_id, agent_id, user_id, session_key, summary, key_topics,
 			 turn_count, token_count, l0_abstract, source_id, source_type,
-			 created_at, expires_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			 created_at, expires_at, metadata)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (agent_id, user_id, source_id) WHERE source_id IS NOT NULL DO NOTHING`,
 		id.String(), ep.TenantID.String(), ep.AgentID.String(),
 		ep.UserID, ep.SessionKey, ep.Summary, topics,
 		ep.TurnCount, ep.TokenCount, ep.L0Abstract,
 		ep.SourceID, ep.SourceType,
-		now.Format(time.RFC3339Nano), expiresAt)
+		now.Format(time.RFC3339Nano), expiresAt, metadataStr)
 	if err != nil {
 		return fmt.Errorf("episodic create: %w", err)
 	}
@@ -69,7 +78,7 @@ func (s *SQLiteEpisodicStore) Get(ctx context.Context, id string) (*store.Episod
 	row := s.db.QueryRowContext(ctx, `
 		SELECT id, tenant_id, agent_id, user_id, session_key, summary, key_topics,
 		       turn_count, token_count, l0_abstract, source_id, source_type,
-		       created_at, expires_at, recall_count, recall_score, last_recalled_at
+		       created_at, expires_at, recall_count, recall_score, last_recalled_at, metadata
 		FROM episodic_summaries WHERE id = ? AND tenant_id = ?`,
 		id, tenantID.String())
 	return scanSQLiteEpisodic(row)
@@ -96,7 +105,7 @@ func (s *SQLiteEpisodicStore) List(ctx context.Context, agentID, userID string, 
 	if userID != "" {
 		q = `SELECT id, tenant_id, agent_id, user_id, session_key, summary, key_topics,
 			       turn_count, token_count, l0_abstract, source_id, source_type,
-			       created_at, expires_at, recall_count, recall_score, last_recalled_at
+			       created_at, expires_at, recall_count, recall_score, last_recalled_at, metadata
 			FROM episodic_summaries
 			WHERE agent_id = ? AND user_id = ? AND tenant_id = ?
 			ORDER BY created_at DESC LIMIT ? OFFSET ?`
@@ -104,7 +113,7 @@ func (s *SQLiteEpisodicStore) List(ctx context.Context, agentID, userID string, 
 	} else {
 		q = `SELECT id, tenant_id, agent_id, user_id, session_key, summary, key_topics,
 			       turn_count, token_count, l0_abstract, source_id, source_type,
-			       created_at, expires_at, recall_count, recall_score, last_recalled_at
+			       created_at, expires_at, recall_count, recall_score, last_recalled_at, metadata
 			FROM episodic_summaries
 			WHERE agent_id = ? AND tenant_id = ?
 			ORDER BY created_at DESC LIMIT ? OFFSET ?`
@@ -170,7 +179,7 @@ func (s *SQLiteEpisodicStore) listUnpromoted(ctx context.Context, agentID, userI
 		SELECT id, tenant_id, agent_id, user_id, session_key, summary, key_topics,
 		       turn_count, token_count, l0_abstract, source_id, source_type,
 		       created_at, expires_at,
-		       recall_count, recall_score, last_recalled_at
+		       recall_count, recall_score, last_recalled_at, metadata
 		FROM episodic_summaries
 		WHERE agent_id = ? AND user_id = ? AND tenant_id = ? AND promoted_at IS NULL
 		ORDER BY ` + orderBy + ` LIMIT ?`
@@ -256,12 +265,13 @@ func (s *SQLiteEpisodicStore) CountUnpromoted(ctx context.Context, agentID, user
 }
 
 // scanSQLiteEpisodic scans a single row into EpisodicSummary. Column order
-// matches the SELECT lists in Get / List / ListUnpromoted* (17 columns incl.
-// Phase 10 recall signals).
+// matches the SELECT lists in Get / List / ListUnpromoted* (18 columns incl.
+// Phase 10 recall signals + metadata).
 func scanSQLiteEpisodic(row *sql.Row) (*store.EpisodicSummary, error) {
 	var ep store.EpisodicSummary
 	var idStr, tenantStr, agentStr string
 	var topicsBytes []byte
+	var metadataBytes []byte
 	var createdAt sqliteTime
 	var expiresAt nullSqliteTime
 	var lastRecalledAt nullSqliteTime
@@ -270,7 +280,7 @@ func scanSQLiteEpisodic(row *sql.Row) (*store.EpisodicSummary, error) {
 		&ep.Summary, &topicsBytes, &ep.TurnCount, &ep.TokenCount,
 		&ep.L0Abstract, &ep.SourceID, &ep.SourceType,
 		&createdAt, &expiresAt,
-		&ep.RecallCount, &ep.RecallScore, &lastRecalledAt)
+		&ep.RecallCount, &ep.RecallScore, &lastRecalledAt, &metadataBytes)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -290,6 +300,13 @@ func scanSQLiteEpisodic(row *sql.Row) (*store.EpisodicSummary, error) {
 		t := lastRecalledAt.Time
 		ep.LastRecalledAt = &t
 	}
+	// Parse metadata JSON if present
+	if len(metadataBytes) > 0 {
+		var meta store.EpisodicMetadata
+		if err := json.Unmarshal(metadataBytes, &meta); err == nil {
+			ep.Metadata = &meta
+		}
+	}
 	return &ep, nil
 }
 
@@ -300,6 +317,7 @@ func scanSQLiteEpisodicRows(rows *sql.Rows) ([]store.EpisodicSummary, error) {
 		var ep store.EpisodicSummary
 		var idStr, tenantStr, agentStr string
 		var topicsBytes []byte
+		var metadataBytes []byte
 		var createdAt sqliteTime
 		var expiresAt nullSqliteTime
 		var lastRecalledAt nullSqliteTime
@@ -308,7 +326,7 @@ func scanSQLiteEpisodicRows(rows *sql.Rows) ([]store.EpisodicSummary, error) {
 			&ep.Summary, &topicsBytes, &ep.TurnCount, &ep.TokenCount,
 			&ep.L0Abstract, &ep.SourceID, &ep.SourceType,
 			&createdAt, &expiresAt,
-			&ep.RecallCount, &ep.RecallScore, &lastRecalledAt); err != nil {
+			&ep.RecallCount, &ep.RecallScore, &lastRecalledAt, &metadataBytes); err != nil {
 			return nil, err
 		}
 		ep.ID, _ = uuid.Parse(idStr)
@@ -324,7 +342,35 @@ func scanSQLiteEpisodicRows(rows *sql.Rows) ([]store.EpisodicSummary, error) {
 			t := lastRecalledAt.Time
 			ep.LastRecalledAt = &t
 		}
+		// Parse metadata JSON if present
+		if len(metadataBytes) > 0 {
+			var meta store.EpisodicMetadata
+			if err := json.Unmarshal(metadataBytes, &meta); err == nil {
+				ep.Metadata = &meta
+			}
+		}
 		results = append(results, ep)
 	}
 	return results, rows.Err()
+}
+
+// UpdateMetadata updates the metadata JSON for an existing episodic summary.
+// Used by consolidation workers to populate structured extraction (decisions, actions, entities).
+func (s *SQLiteEpisodicStore) UpdateMetadata(ctx context.Context, id string, meta *store.EpisodicMetadata) error {
+	if id == "" || meta == nil {
+		return nil
+	}
+	metadataBytes, err := json.Marshal(meta)
+	if err != nil {
+		return fmt.Errorf("episodic update_metadata marshal: %w", err)
+	}
+	tenantID := tenantIDForInsert(ctx)
+	_, err = s.db.ExecContext(ctx, `
+		UPDATE episodic_summaries SET metadata = ?
+		WHERE id = ? AND tenant_id = ?`,
+		string(metadataBytes), id, tenantID.String())
+	if err != nil {
+		return fmt.Errorf("episodic update_metadata: %w", err)
+	}
+	return nil
 }

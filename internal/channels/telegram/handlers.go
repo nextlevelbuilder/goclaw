@@ -250,6 +250,7 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 	//   "strict" (default): only respond when explicitly @mentioned (require_mention=true)
 	//   "yield": respond to all messages UNLESS another bot/user is @mentioned (and not us)
 	//            — enables "shared group" where all bots listen, but yield when someone is called by name
+	wasMentioned := false // hoisted for metadata propagation
 	mentionMode := topicCfg.effectiveMentionMode(c.mentionMode)
 	if isGroup && (topicCfg.effectiveRequireMention(c.RequireMention()) || mentionMode == "yield") {
 		botUsername := c.bot.Username()
@@ -286,7 +287,7 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 			return
 		}
 
-		wasMentioned := c.detectMention(message, botUsername)
+		wasMentioned = c.detectMention(message, botUsername)
 
 		// Reply to bot's message counts as implicit mention
 		if !wasMentioned && msgCtx.ReplyInfo != nil && msgCtx.ReplyInfo.IsBotReply {
@@ -560,6 +561,9 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 		"first_name": user.FirstName,
 		"is_group":   fmt.Sprintf("%t", isGroup),
 		"local_key":  localKey,
+	}
+	if isGroup && wasMentioned {
+		metadata["was_mentioned"] = "true"
 	}
 	if message.Chat.Title != "" {
 		metadata[tools.MetaChatTitle] = message.Chat.Title

@@ -47,6 +47,7 @@ func init() {
 	rootCmd.AddCommand(restoreCmd())
 	rootCmd.AddCommand(tenantBackupCmd())
 	rootCmd.AddCommand(tenantRestoreCmd())
+	rootCmd.AddCommand(migrateOpenClawCmd())
 	rootCmd.AddCommand(authCmd())
 	rootCmd.AddCommand(setupCmd())
 }

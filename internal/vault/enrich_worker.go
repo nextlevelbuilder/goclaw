@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/bgalert"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/providerresolve"
@@ -47,6 +48,8 @@ type EnrichWorkerDeps struct {
 	MsgBus        bus.EventPublisher        // for WS event broadcast
 	TeamStore     store.TaskCommentStore    // for Phase 2.5 task-based auto-linking (nil-safe)
 	AlertDeps     bgalert.AlertDeps         // for reporting non-retryable LLM errors
+	TenantStore   store.TenantStore         // for periodic enrichment tenant iteration (nil-safe)
+	DataDir       string                    // base data directory for workspace resolution
 }
 
 // RegisterEnrichWorker subscribes the enrichment worker to vault doc events.
@@ -60,6 +63,9 @@ func RegisterEnrichWorker(deps EnrichWorkerDeps) (func(), *EnrichProgress, *Enri
 		registry:      deps.Registry,
 		msgBus:        deps.MsgBus,
 		alertDeps:     deps.AlertDeps,
+		eventBus:      deps.EventBus,
+		tenantStore:   deps.TenantStore,
+		dataDir:       deps.DataDir,
 		dedup:         make(map[string]string),
 		sem:           semaphore.NewWeighted(enrichMaxConcurrent),
 		progress:      progress,
@@ -79,6 +85,9 @@ type EnrichWorker struct {
 	registry      *providers.Registry         // provider resolution
 	msgBus        bus.EventPublisher          // for error event broadcast
 	alertDeps     bgalert.AlertDeps           // for reporting non-retryable LLM errors
+	eventBus      eventbus.DomainEventBus     // for periodic enqueue
+	tenantStore   store.TenantStore           // for periodic enrichment tenant iteration
+	dataDir       string                      // base data directory for workspace resolution
 	queue         enrichBatchQueue
 	progress      *EnrichProgress
 
@@ -89,6 +98,9 @@ type EnrichWorker struct {
 
 	// Per-tenant cancel functions for stop capability
 	cancelFuncs *sync.Map // key: tenantID string, value: context.CancelFunc
+
+	// Periodic ticker stop channel
+	periodicStop chan struct{}
 }
 
 // resolveProviderForTenant delegates to shared background provider resolution.
@@ -163,6 +175,73 @@ func (w *EnrichWorker) EnqueueUnenriched(ctx context.Context, tenantID, workspac
 
 	slog.Info("vault.enrich: enqueued unenriched", "tenant", tenantID, "count", count)
 	return count, nil
+}
+
+// StartPeriodicEnrich starts a background ticker that periodically enqueues
+// unenriched documents for all tenants. Returns a stop function.
+// Interval defaults to 30 minutes if zero. Limit is max docs per tenant per tick.
+func (w *EnrichWorker) StartPeriodicEnrich(interval time.Duration, limit int) func() {
+	if w.tenantStore == nil || w.eventBus == nil {
+		slog.Warn("vault.enrich: periodic enrich disabled - missing tenantStore or eventBus")
+		return func() {}
+	}
+	if interval <= 0 {
+		interval = 30 * time.Minute
+	}
+	if limit <= 0 {
+		limit = 500
+	}
+
+	w.periodicStop = make(chan struct{})
+	ticker := time.NewTicker(interval)
+
+	go func() {
+		slog.Info("vault.enrich: periodic enrichment started", "interval", interval, "limit", limit)
+		for {
+			select {
+			case <-w.periodicStop:
+				ticker.Stop()
+				slog.Info("vault.enrich: periodic enrichment stopped")
+				return
+			case <-ticker.C:
+				w.runPeriodicTick(limit)
+			}
+		}
+	}()
+
+	return func() {
+		close(w.periodicStop)
+	}
+}
+
+// runPeriodicTick iterates all active tenants and enqueues unenriched docs.
+func (w *EnrichWorker) runPeriodicTick(limit int) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	tenants, err := w.tenantStore.ListTenants(ctx)
+	if err != nil {
+		slog.Warn("vault.enrich: periodic tick list tenants", "err", err)
+		return
+	}
+
+	totalEnqueued := 0
+	for _, t := range tenants {
+		if t.Status != store.TenantStatusActive {
+			continue
+		}
+		workspace := config.TenantWorkspace(w.dataDir, t.ID, t.Slug)
+		count, err := w.EnqueueUnenriched(ctx, t.ID.String(), workspace, w.eventBus, limit)
+		if err != nil {
+			slog.Warn("vault.enrich: periodic tick enqueue", "tenant", t.Slug, "err", err)
+			continue
+		}
+		totalEnqueued += count
+	}
+
+	if totalEnqueued > 0 {
+		slog.Info("vault.enrich: periodic tick complete", "tenants", len(tenants), "enqueued", totalEnqueued)
+	}
 }
 
 // enrichTaskSiblingCap bounds the number of auto-linked siblings per

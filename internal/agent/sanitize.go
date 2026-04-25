@@ -406,6 +406,18 @@ func IsSilentReply(text string) bool {
 	return false
 }
 
+// StripNoReply removes the NO_REPLY token from text, returning remaining content.
+// Used when overriding a false NO_REPLY (e.g. user @mentioned the bot).
+func StripNoReply(text string) string {
+	const token = "NO_REPLY"
+	result := strings.ReplaceAll(text, token, "")
+	result = strings.TrimSpace(result)
+	if result == "" {
+		result = "..."
+	}
+	return result
+}
+
 func isWordChar(r rune) bool {
 	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_'
 }

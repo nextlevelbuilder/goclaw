@@ -148,6 +148,7 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 		StripMessageDirectives: StripMessageDirectives,
 		DeduplicateMediaSuffix: deduplicateMediaSuffix,
 		IsSilentReply:          IsSilentReply,
+		StripNoReply:           StripNoReply,
 		EmitSessionCompleted: func(ctx context.Context, sessionKey string, msgCount, tokensUsed, compactionCount int) {
 			if l.domainBus != nil {
 				// Include existing session summary (from previous compaction cycles).
@@ -191,6 +192,7 @@ func convertRunInput(req *RunRequest) *pipeline.RunInput {
 		ChatTitle:         req.ChatTitle,
 		ChatID:            req.ChatID,
 		PeerKind:          req.PeerKind,
+		WasMentioned:      req.WasMentioned,
 		RunID:             req.RunID,
 		UserID:            req.UserID,
 		SenderID:          req.SenderID,
@@ -248,15 +250,20 @@ func convertRunResult(pr *pipeline.RunResult) *RunResult {
 // Returns nil if autoInjector is not configured (v3 retrieval disabled or no episodic store).
 // Phase 9: plumbs recentContext through to enrich vector search queries for
 // context-aware recall.
+// Phase 10: plumbs sessionKey for context-aware retrieval (same-group memories boosted).
 func (l *Loop) makeAutoInjectCallback(req *RunRequest) func(ctx context.Context, userMessage, userID, recentContext string) (string, error) {
 	if l.autoInjector == nil {
 		return nil
 	}
+	// Capture session key for context-aware retrieval.
+	// Memories from the same group/session get score boost to reduce context mixing.
+	sessionKey := req.SessionKey
 	return func(ctx context.Context, userMessage, userID, recentContext string) (string, error) {
 		result, err := l.autoInjector.Inject(ctx, memory.InjectParams{
 			AgentID:       l.agentUUID.String(),
 			UserID:        store.MemoryUserID(ctx),
 			TenantID:      store.TenantIDFromContext(ctx).String(),
+			SessionKey:    sessionKey,
 			UserMessage:   userMessage,
 			RecentContext: recentContext,
 		})

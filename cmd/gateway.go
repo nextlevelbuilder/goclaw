@@ -225,10 +225,17 @@ func runGateway() {
 			MsgBus:        msgBus,
 			TeamStore:     pgStores.Teams,
 			AlertDeps:     bgalert.AlertDeps{SystemConfigs: pgStores.SystemConfigs, MsgBus: msgBus},
+			TenantStore:   pgStores.Tenants,
+			DataDir:       dataDir,
 		})
 		enrichProgress = ep
 		enrichWorker = ew
 		defer cleanupVaultEnrich()
+
+		// Start periodic enrichment (30min interval, 500 docs/tenant/tick)
+		stopPeriodicEnrich := ew.StartPeriodicEnrich(30*time.Minute, 500)
+		defer stopPeriodicEnrich()
+
 		slog.Info("vault enrichment worker registered (per-tenant provider resolution)")
 	}
 

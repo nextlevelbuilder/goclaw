@@ -48,13 +48,19 @@ func (a *pgAutoInjector) Inject(ctx context.Context, params InjectParams) (*Inje
 	// follow-up semantics and returns materially better matches.
 	searchQuery := buildRecallQuery(params.UserMessage, params.RecentContext)
 
+	// Extract session key prefix for context-aware retrieval.
+	// e.g., "agent:nta-leader:nta-telegram-ops:group:-123" → same group gets boosted
+	sessionKeyPrefix := params.SessionKey
+
 	// Search with FTS bias (faster than vector for auto-inject)
 	results, err := a.episodicStore.Search(ctx, searchQuery, params.AgentID, params.UserID,
 		store.EpisodicSearchOptions{
-			MaxResults:   maxEntries * 2, // fetch more, filter by threshold
-			MinScore:     threshold,
-			VectorWeight: 0.3,
-			TextWeight:   0.7,
+			MaxResults:       maxEntries * 2, // fetch more, filter by threshold
+			MinScore:         threshold,
+			VectorWeight:     0.3,
+			TextWeight:       0.7,
+			SessionKeyPrefix: sessionKeyPrefix,
+			SameSessionBoost: 0.3, // boost same-context memories
 		})
 	if err != nil {
 		return nil, fmt.Errorf("auto-inject search: %w", err)
@@ -63,25 +69,60 @@ func (a *pgAutoInjector) Inject(ctx context.Context, params InjectParams) (*Inje
 		return &InjectResult{}, nil
 	}
 
-	// Build prompt section from L0 abstracts
-	var sb strings.Builder
-	sb.WriteString("## Memory Context\n\nRelevant memories from past sessions (use memory_search for details):\n")
-
-	injected := 0
-	var topScore float64
+	// Separate results into same-session and cross-session groups.
+	// This provides clear source attribution to reduce context mixing.
+	var sameSession, crossSession []store.EpisodicSearchResult
 	for _, r := range results {
-		if injected >= maxEntries {
-			break
-		}
 		if r.L0Abstract == "" {
 			continue
 		}
-		sb.WriteString("- ")
-		sb.WriteString(r.L0Abstract)
-		sb.WriteString("\n")
-		injected++
-		if r.Score > topScore {
-			topScore = r.Score
+		if sessionKeyPrefix != "" && strings.HasPrefix(r.SessionKey, sessionKeyPrefix) {
+			sameSession = append(sameSession, r)
+		} else {
+			crossSession = append(crossSession, r)
+		}
+	}
+
+	// Build prompt section with source-grouped L0 abstracts
+	var sb strings.Builder
+	sb.WriteString("## Memory Context\n")
+
+	injected := 0
+	var topScore float64
+
+	// First: memories from current context (same group/session)
+	if len(sameSession) > 0 {
+		sb.WriteString("\n📍 From this conversation context:\n")
+		for _, r := range sameSession {
+			if injected >= maxEntries {
+				break
+			}
+			sb.WriteString("- ")
+			sb.WriteString(r.L0Abstract)
+			sb.WriteString("\n")
+			injected++
+			if r.Score > topScore {
+				topScore = r.Score
+			}
+		}
+	}
+
+	// Second: memories from other contexts (reference only)
+	remaining := maxEntries - injected
+	if remaining > 0 && len(crossSession) > 0 {
+		sb.WriteString("\n📍 From other contexts (reference):\n")
+		for _, r := range crossSession {
+			if remaining <= 0 {
+				break
+			}
+			sb.WriteString("- ")
+			sb.WriteString(r.L0Abstract)
+			sb.WriteString("\n")
+			injected++
+			remaining--
+			if r.Score > topScore {
+				topScore = r.Score
+			}
 		}
 	}
 

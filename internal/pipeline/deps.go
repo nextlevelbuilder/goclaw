@@ -85,6 +85,7 @@ type PipelineDeps struct {
 	StripMessageDirectives   func(content string) string
 	DeduplicateMediaSuffix   func(content, suffix string) string
 	IsSilentReply          func(content string) bool
+	StripNoReply           func(content string) string
 	EmitSessionCompleted   func(ctx context.Context, sessionKey string, msgCount, tokensUsed, compactionCount int)
 	UpdateMetadata         func(ctx context.Context, sessionKey string, usage providers.Usage) error
 	BootstrapCleanup       func(ctx context.Context, state *RunState) error

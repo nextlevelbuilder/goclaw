@@ -1,6 +1,7 @@
 package pg
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/lib/pq"
@@ -119,6 +120,7 @@ type episodicSummaryRow struct {
 	RecallCount    int            `db:"recall_count"`
 	RecallScore    float64        `db:"recall_score"`
 	LastRecalledAt *time.Time     `db:"last_recalled_at"`
+	Metadata       []byte         `db:"metadata"` // JSONB → []byte for unmarshaling
 }
 
 func (r *episodicSummaryRow) toEpisodicSummary() store.EpisodicSummary {
@@ -141,6 +143,13 @@ func (r *episodicSummaryRow) toEpisodicSummary() store.EpisodicSummary {
 	_ = ep.TenantID.Scan(r.TenantID)
 	_ = ep.AgentID.Scan(r.AgentID)
 	ep.KeyTopics = []string(r.KeyTopics)
+	// Parse metadata JSONB if present
+	if len(r.Metadata) > 0 {
+		var meta store.EpisodicMetadata
+		if err := json.Unmarshal(r.Metadata, &meta); err == nil {
+			ep.Metadata = &meta
+		}
+	}
 	return ep
 }
 

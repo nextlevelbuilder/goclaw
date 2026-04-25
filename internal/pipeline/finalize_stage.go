@@ -123,9 +123,11 @@ func (s *FinalizeStage) Execute(ctx context.Context, state *RunState) error {
 	}
 
 	// 10. Suppress NO_REPLY (after session flush — content is persisted for context).
+	// Note: @mention override is handled at consumer level (retry mechanism).
 	if isSilent {
 		slog.Info("v3 pipeline: NO_REPLY detected, suppressing delivery",
-			"session", state.Input.SessionKey)
+			"session", state.Input.SessionKey,
+			"was_mentioned", state.Input.WasMentioned)
 		state.Observe.FinalContent = ""
 	}
 

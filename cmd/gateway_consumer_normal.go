@@ -219,6 +219,9 @@ func processNormalMessage(
 		if mid := msg.Metadata["message_id"]; mid != "" {
 			outMeta["reply_to_message_id"] = mid
 		}
+		if msg.Metadata["was_mentioned"] == "true" {
+			outMeta["was_mentioned"] = "true"
+		}
 	}
 	// Channel routing keys — keep in sync with routingMetaKeys in channels/events.go.
 	for _, k := range []string{
@@ -247,13 +250,17 @@ func processNormalMessage(
 
 	// Group-aware system prompt: help the LLM adapt tone and behavior for group chats.
 	var extraPrompt string
+	wasMentioned := msg.Metadata["was_mentioned"] == "true"
 	if peerKind == string(sessions.PeerGroup) {
 		extraPrompt = "You are in a GROUP chat (multiple participants), not a private 1-on-1 DM.\n" +
 			"- Messages may include a [Chat messages since your last reply] section with recent group history. Each history line shows \"sender [time]: message\".\n" +
-			"- The current message includes a [From: sender_name] tag identifying who @mentioned you.\n" +
+			"- The current message includes a [From: sender_name] tag identifying who sent it.\n" +
 			"- Keep responses concise and focused; long replies are disruptive in groups.\n" +
 			"- Write like a human. Avoid Markdown tables. Use real line breaks sparingly.\n" +
 			"- Address the group naturally. If the history shows a multi-person conversation, consider the full context before answering."
+		if wasMentioned {
+			extraPrompt += "\n\n⚠️ **You were explicitly @mentioned in this message. You MUST reply. Do NOT use NO_REPLY.**"
+		}
 	}
 
 	// Append per-topic system prompt (from group/topic config hierarchy).
@@ -366,6 +373,7 @@ func processNormalMessage(
 		ChatTitle:         msg.Metadata[tools.MetaChatTitle],
 		ChatID:            msg.ChatID,
 		PeerKind:          peerKind,
+		WasMentioned:      wasMentioned,
 		LocalKey:          msg.Metadata["local_key"],
 		UserID:            userID,
 		SenderID:          msg.SenderID,
@@ -426,19 +434,53 @@ func processNormalMessage(
 
 		// Suppress empty/NO_REPLY responses (matching TS normalize-reply.ts).
 		// Still publish an empty outbound so channels can clean up placeholder/thinking indicators.
+		// Exception: if user explicitly @mentioned the bot, retry once with a forced prompt.
 		if outcome.Result.Content == "" || agent.IsSilentReply(outcome.Result.Content) {
-			slog.Info("inbound: suppressed silent/empty reply",
-				"channel", channel,
-				"chat_id", chatID,
-				"session", session,
-			)
-			deps.MsgBus.PublishOutbound(bus.OutboundMessage{
-				Channel:  channel,
-				ChatID:   chatID,
-				Content:  "",
-				Metadata: meta,
-			})
-			return
+			if meta["was_mentioned"] == "true" {
+				slog.Warn("inbound: NO_REPLY with @mention — scheduling retry",
+					"channel", channel, "chat_id", chatID, "session", session)
+
+				retryReq := agent.RunRequest{
+					SessionKey:   session,
+					Message:      "[SYSTEM] You replied NO_REPLY but the user explicitly @mentioned you. This is wrong — they expect a response. Read the previous message again carefully and provide a helpful reply. Do NOT use NO_REPLY.",
+					Channel:      channel,
+					ChannelType:  resolveChannelType(deps.ChannelMgr, channel),
+					ChatID:       chatID,
+					PeerKind:     peerKind,
+					UserID:       meta["user_id"],
+					RunID:        rID + "-retry",
+					Stream:       false,
+					WasMentioned: false,
+				}
+				retryOutCh := deps.Sched.Schedule(ctx, "main", retryReq)
+				retryOutcome := <-retryOutCh
+				if retryOutcome.Err == nil && retryOutcome.Result != nil &&
+					retryOutcome.Result.Content != "" && !agent.IsSilentReply(retryOutcome.Result.Content) {
+					outcome = retryOutcome
+					slog.Info("inbound: retry succeeded after @mention NO_REPLY override",
+						"channel", channel, "session", session)
+				} else {
+					slog.Warn("inbound: retry also failed, suppressing",
+						"channel", channel, "session", session)
+					deps.MsgBus.PublishOutbound(bus.OutboundMessage{
+						Channel: channel, ChatID: chatID, Content: "", Metadata: meta,
+					})
+					return
+				}
+			} else {
+				slog.Info("inbound: suppressed silent/empty reply",
+					"channel", channel,
+					"chat_id", chatID,
+					"session", session,
+				)
+				deps.MsgBus.PublishOutbound(bus.OutboundMessage{
+					Channel:  channel,
+					ChatID:   chatID,
+					Content:  "",
+					Metadata: meta,
+				})
+				return
+			}
 		}
 
 		// Dedup: if block replies were delivered and the final content matches the last

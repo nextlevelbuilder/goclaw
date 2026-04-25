@@ -83,6 +83,7 @@ func ResolveWikilinkTarget(ctx context.Context, vs store.VaultStore, target, ten
 
 // SyncDocLinks extracts wikilinks from content, resolves targets,
 // and replaces all vault_links for the source document.
+// Uses batch resolution (single DB query) for efficiency.
 func SyncDocLinks(ctx context.Context, vs store.VaultStore, doc *store.VaultDocument, content, tenantID, agentID string) error {
 	matches := ExtractWikilinks(content)
 	if len(matches) == 0 {
@@ -96,16 +97,30 @@ func SyncDocLinks(ctx context.Context, vs store.VaultStore, doc *store.VaultDocu
 		return err
 	}
 
-	// Resolve all wikilinks, then batch-create links in a single call.
-	var links []store.VaultLink
+	// Collect unique targets for batch resolution.
+	targetSet := make(map[string]bool)
 	for _, m := range matches {
-		target, err := ResolveWikilinkTarget(ctx, vs, m.Target, tenantID, agentID)
-		if err != nil {
-			slog.Debug("vault.link_resolve_error", "target", m.Target, "err", err)
-			continue
-		}
+		targetSet[m.Target] = true
+	}
+	targets := make([]string, 0, len(targetSet))
+	for t := range targetSet {
+		targets = append(targets, t)
+	}
+
+	// Batch-resolve all targets in a single DB query.
+	resolved, err := vs.ResolveWikilinkTargets(ctx, tenantID, agentID, targets)
+	if err != nil {
+		slog.Warn("vault.link_batch_resolve_error", "doc", doc.Path, "err", err)
+		return err
+	}
+
+	// Build links from resolved targets.
+	var links []store.VaultLink
+	var unresolvedCount int
+	for _, m := range matches {
+		target := resolved[m.Target]
 		if target == nil {
-			slog.Debug("vault.link_unresolved", "target", m.Target)
+			unresolvedCount++
 			continue
 		}
 		links = append(links, store.VaultLink{
@@ -115,6 +130,20 @@ func SyncDocLinks(ctx context.Context, vs store.VaultStore, doc *store.VaultDocu
 			Context:   m.Context,
 		})
 	}
+
+	// Log summary (WARN level for visibility).
+	if unresolvedCount > 0 {
+		slog.Warn("vault.wikilinks_unresolved",
+			"doc", doc.Path,
+			"resolved", len(links),
+			"unresolved", unresolvedCount,
+			"total", len(matches))
+	} else if len(links) > 0 {
+		slog.Info("vault.wikilinks_resolved",
+			"doc", doc.Path,
+			"count", len(links))
+	}
+
 	if len(links) == 0 {
 		return nil
 	}
