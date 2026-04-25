@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
   DndContext,
@@ -40,7 +40,7 @@ export function MediaProviderChainForm({
 }: MediaProviderChainFormProps) {
   const { t } = useTranslation("tools");
   const { providers } = useProviders();
-  const enabledProviders = providers.filter((p) => p.enabled);
+  const enabledProviders = useMemo(() => providers.filter((p) => p.enabled), [providers]);
   const portalRef = useRef<HTMLDivElement | null>(null);
 
   const [entries, setEntries] = useState<ProviderEntry[]>(() =>

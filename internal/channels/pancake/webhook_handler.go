@@ -119,16 +119,13 @@ func (r *webhookRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Resolve page_id: top-level field takes priority, then data-level, then first conv ID segment.
+	// Resolve page_id: top-level field takes priority, then data-level, then conv ID parse.
 	pageID := event.PageID
 	if pageID == "" {
 		pageID = data.PageID
 	}
 	if pageID == "" {
-		// Last resort: extract from conversation ID (format: pageID_senderID for INBOX events).
-		if idx := strings.Index(data.Conversation.ID, "_"); idx > 0 {
-			pageID = data.Conversation.ID[:idx]
-		}
+		pageID = resolvePageIDFromConvID(data.Conversation.ID)
 	}
 
 	// Resolve conversation type.
@@ -249,4 +246,69 @@ func truncateBody(body []byte, maxLen int) string {
 		return string(body)
 	}
 	return string(body[:maxLen]) + "..."
+}
+
+// platformPrefixes lists marketplace platform tokens where convID uses a
+// 2-segment page identifier (e.g. "spo_25409726_senderID").
+//
+// Default: "spo" (Shopee) only. "lzd" (Lazada) and "tpd" (Tokopedia) are
+// NOT added by default because neither has been verified against a live
+// Pancake payload. Use RegisterPlatformPrefix to add verified platforms.
+//
+// Guarded by platformPrefixesMu so RegisterPlatformPrefix can be called
+// concurrently with webhook handling without data races.
+var (
+	platformPrefixesMu sync.RWMutex
+	platformPrefixes   = map[string]struct{}{
+		"spo": {}, // Shopee — verified via curl 2026-04-20
+		"tt":  {}, // TikTok Livestream AIO
+		"ttm": {}, // TikTok Business Messaging
+		"tts": {}, // TikTok Shop
+	}
+)
+
+// RegisterPlatformPrefix registers a marketplace prefix for convID parsing.
+// Use this to add verified platforms (e.g. "lzd" for Lazada) after capturing
+// live webhook payloads. Safe to call from any goroutine at any time.
+//
+// NOTE: Currently unused — kept as an extension point for future marketplace
+// platforms (Lazada, Tokopedia, etc.) that may be added in a follow-up PR
+// once their convID shape is verified against live Pancake payloads.
+func RegisterPlatformPrefix(prefix string) {
+	platformPrefixesMu.Lock()
+	defer platformPrefixesMu.Unlock()
+	platformPrefixes[prefix] = struct{}{}
+}
+
+// isKnownPlatformPrefix reports whether prefix is registered as a marketplace
+// platform with a 2-segment page identifier. Read-locked for concurrent safety.
+func isKnownPlatformPrefix(prefix string) bool {
+	platformPrefixesMu.RLock()
+	defer platformPrefixesMu.RUnlock()
+	_, ok := platformPrefixes[prefix]
+	return ok
+}
+
+// resolvePageIDFromConvID extracts the page identifier from a Pancake
+// conversation ID. Facebook/IG use "{pageID}_{senderID}"; Shopee uses
+// "{prefix}_{pageNumeric}_{senderID}" for buyer DMs and possibly
+// "{prefix}_{pageNumeric}" for system events without a sender.
+func resolvePageIDFromConvID(convID string) string {
+	if convID == "" {
+		return ""
+	}
+	parts := strings.Split(convID, "_")
+	if len(parts) < 2 {
+		return ""
+	}
+	knownPrefix := isKnownPlatformPrefix(parts[0])
+	// M2: 2-segment convID with known prefix is a full pageID (system event
+	// without sender). Return as-is — do NOT drop the event.
+	if knownPrefix && len(parts) == 2 {
+		return convID
+	}
+	if knownPrefix && len(parts) >= 3 {
+		return parts[0] + "_" + parts[1]
+	}
+	return parts[0]
 }

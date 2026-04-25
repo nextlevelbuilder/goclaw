@@ -3,14 +3,16 @@ package telegram
 import (
 	"strings"
 	"testing"
+
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 )
 
 // --- markdownToTelegramHTML: core formatting ---
 
 func TestMarkdownToTelegramHTML_Empty(t *testing.T) {
-	got := markdownToTelegramHTML("")
+	got := markdownToTelegramHTML("", "")
 	if got != "" {
-		t.Errorf("markdownToTelegramHTML(\"\") = %q, want empty", got)
+		t.Errorf("markdownToTelegramHTML(\"\", \"\") = %q, want empty", got)
 	}
 }
 
@@ -26,37 +28,37 @@ func TestMarkdownToTelegramHTML_Bold(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := markdownToTelegramHTML(tt.input)
+			got := markdownToTelegramHTML(tt.input, "")
 			if !strings.Contains(got, tt.want) {
-				t.Errorf("markdownToTelegramHTML(%q) = %q, want substring %q", tt.input, got, tt.want)
+				t.Errorf("markdownToTelegramHTML(%q, \"\") = %q, want substring %q", tt.input, got, tt.want)
 			}
 		})
 	}
 }
 
 func TestMarkdownToTelegramHTML_Italic(t *testing.T) {
-	got := markdownToTelegramHTML("_italic_")
+	got := markdownToTelegramHTML("_italic_", "")
 	if !strings.Contains(got, "<i>italic</i>") {
-		t.Errorf("markdownToTelegramHTML(_italic_) = %q, want <i>italic</i>", got)
+		t.Errorf("markdownToTelegramHTML(_italic_, \"\") = %q, want <i>italic</i>", got)
 	}
 }
 
 func TestMarkdownToTelegramHTML_Strikethrough(t *testing.T) {
-	got := markdownToTelegramHTML("~~strike~~")
+	got := markdownToTelegramHTML("~~strike~~", "")
 	if !strings.Contains(got, "<s>strike</s>") {
-		t.Errorf("markdownToTelegramHTML(~~strike~~) = %q, want <s>strike</s>", got)
+		t.Errorf("markdownToTelegramHTML(~~strike~~, \"\") = %q, want <s>strike</s>", got)
 	}
 }
 
 func TestMarkdownToTelegramHTML_InlineCode(t *testing.T) {
-	got := markdownToTelegramHTML("`myvar`")
+	got := markdownToTelegramHTML("`myvar`", "")
 	if !strings.Contains(got, "<code>myvar</code>") {
-		t.Errorf("markdownToTelegramHTML(`myvar`) = %q, want <code>myvar</code>", got)
+		t.Errorf("markdownToTelegramHTML(`myvar`, \"\") = %q, want <code>myvar</code>", got)
 	}
 }
 
 func TestMarkdownToTelegramHTML_CodeBlock(t *testing.T) {
-	got := markdownToTelegramHTML("```\ncode here\n```")
+	got := markdownToTelegramHTML("```\ncode here\n```", "")
 	if !strings.Contains(got, "<pre><code>") {
 		t.Errorf("code block should produce <pre><code>, got: %q", got)
 	}
@@ -66,7 +68,7 @@ func TestMarkdownToTelegramHTML_CodeBlock(t *testing.T) {
 }
 
 func TestMarkdownToTelegramHTML_CodeBlockWithLanguage(t *testing.T) {
-	got := markdownToTelegramHTML("```python\nprint('hi')\n```")
+	got := markdownToTelegramHTML("```python\nprint('hi')\n```", "")
 	if !strings.Contains(got, "<pre><code>") {
 		t.Errorf("code block with language should produce <pre><code>, got: %q", got)
 	}
@@ -88,7 +90,7 @@ func TestMarkdownToTelegramHTML_Headers(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			got := markdownToTelegramHTML(tt.input)
+			got := markdownToTelegramHTML(tt.input, "")
 			if strings.Contains(got, tt.deny) {
 				t.Errorf("header marker %q should be stripped, got: %q", tt.deny, got)
 			}
@@ -101,7 +103,7 @@ func TestMarkdownToTelegramHTML_Headers(t *testing.T) {
 
 func TestMarkdownToTelegramHTML_Blockquote(t *testing.T) {
 	// Blockquotes should be stripped.
-	got := markdownToTelegramHTML("> quoted text")
+	got := markdownToTelegramHTML("> quoted text", "")
 	if strings.Contains(got, "&gt;") {
 		t.Errorf("blockquote > should be stripped, got: %q", got)
 	}
@@ -120,16 +122,16 @@ func TestMarkdownToTelegramHTML_ListItems(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			got := markdownToTelegramHTML(tt.input)
+			got := markdownToTelegramHTML(tt.input, "")
 			if !strings.Contains(got, tt.want) {
-				t.Errorf("markdownToTelegramHTML(%q) = %q, want substring %q", tt.input, got, tt.want)
+				t.Errorf("markdownToTelegramHTML(%q, \"\") = %q, want substring %q", tt.input, got, tt.want)
 			}
 		})
 	}
 }
 
 func TestMarkdownToTelegramHTML_Link(t *testing.T) {
-	got := markdownToTelegramHTML("[click here](https://example.com)")
+	got := markdownToTelegramHTML("[click here](https://example.com)", "")
 	if !strings.Contains(got, `href="https://example.com"`) {
 		t.Errorf("link should produce href, got: %q", got)
 	}
@@ -140,7 +142,7 @@ func TestMarkdownToTelegramHTML_Link(t *testing.T) {
 
 func TestMarkdownToTelegramHTML_HTMLEscaping(t *testing.T) {
 	// Plain text with special chars should be escaped.
-	got := markdownToTelegramHTML("a & b < c > d")
+	got := markdownToTelegramHTML("a & b < c > d", "")
 	if !strings.Contains(got, "&amp;") {
 		t.Errorf("& should be escaped, got: %q", got)
 	}
@@ -156,38 +158,38 @@ func TestMarkdownToTelegramHTML_HTMLTagsConvertedFirst(t *testing.T) {
 	// LLM-emitted HTML tags should be converted to markdown first, then re-rendered as Telegram HTML.
 	// <b> → **bold** → <b>bold</b>; <i> → _italic_ → <i>italic</i>, etc.
 	t.Run("html bold tag round-trips", func(t *testing.T) {
-		got := markdownToTelegramHTML("<b>bold</b>")
+		got := markdownToTelegramHTML("<b>bold</b>", "")
 		if !strings.Contains(got, "<b>bold</b>") {
 			t.Errorf("<b>bold</b> should remain bold in output, got: %q", got)
 		}
 	})
 	t.Run("html italic tag round-trips", func(t *testing.T) {
 		// <i>italic</i> → _italic_ → <i>italic</i> through the full pipeline.
-		got := markdownToTelegramHTML("<i>italic</i>")
+		got := markdownToTelegramHTML("<i>italic</i>", "")
 		if !strings.Contains(got, "<i>italic</i>") {
 			t.Errorf("<i>italic</i> should remain italic in output, got: %q", got)
 		}
 	})
 	t.Run("html em tag round-trips", func(t *testing.T) {
-		got := markdownToTelegramHTML("<em>emphasis</em>")
+		got := markdownToTelegramHTML("<em>emphasis</em>", "")
 		if !strings.Contains(got, "<i>emphasis</i>") {
 			t.Errorf("<em>emphasis</em> should become <i>emphasis</i>, got: %q", got)
 		}
 	})
 	t.Run("html strike tag round-trips", func(t *testing.T) {
-		got := markdownToTelegramHTML("<s>struck</s>")
+		got := markdownToTelegramHTML("<s>struck</s>", "")
 		if !strings.Contains(got, "<s>struck</s>") {
 			t.Errorf("<s>struck</s> should remain as strike in output, got: %q", got)
 		}
 	})
 	t.Run("html code tag round-trips", func(t *testing.T) {
-		got := markdownToTelegramHTML("<code>var</code>")
+		got := markdownToTelegramHTML("<code>var</code>", "")
 		if !strings.Contains(got, "<code>var</code>") {
 			t.Errorf("<code>var</code> should produce code element, got: %q", got)
 		}
 	})
 	t.Run("html br produces newline", func(t *testing.T) {
-		got := markdownToTelegramHTML("line1<br>line2")
+		got := markdownToTelegramHTML("line1<br>line2", "")
 		if !strings.Contains(got, "line1") || !strings.Contains(got, "line2") {
 			t.Errorf("both lines should appear after <br> conversion, got: %q", got)
 		}
@@ -198,7 +200,7 @@ func TestMarkdownToTelegramHTML_HTMLTagsConvertedFirst(t *testing.T) {
 
 func TestExtractMarkdownTables_Simple(t *testing.T) {
 	input := "| Col1 | Col2 |\n|------|------|\n| A | B |"
-	tm := extractMarkdownTables(input)
+	tm := extractMarkdownTables(input, "")
 
 	if len(tm.rendered) != 1 {
 		t.Fatalf("expected 1 table, got %d", len(tm.rendered))
@@ -210,7 +212,7 @@ func TestExtractMarkdownTables_Simple(t *testing.T) {
 
 func TestExtractMarkdownTables_NoTable(t *testing.T) {
 	input := "just plain text\nno table here"
-	tm := extractMarkdownTables(input)
+	tm := extractMarkdownTables(input, "")
 
 	if len(tm.rendered) != 0 {
 		t.Errorf("expected 0 tables, got %d", len(tm.rendered))
@@ -222,7 +224,7 @@ func TestExtractMarkdownTables_NoTable(t *testing.T) {
 
 func TestExtractMarkdownTables_MultipleTables(t *testing.T) {
 	input := "| A | B |\n|---|---|\n| 1 | 2 |\n\nText\n\n| C | D |\n|---|---|\n| 3 | 4 |"
-	tm := extractMarkdownTables(input)
+	tm := extractMarkdownTables(input, "")
 
 	if len(tm.rendered) != 2 {
 		t.Errorf("expected 2 tables, got %d", len(tm.rendered))
@@ -232,7 +234,7 @@ func TestExtractMarkdownTables_MultipleTables(t *testing.T) {
 func TestExtractMarkdownTables_TableInTelegramHTML(t *testing.T) {
 	// End-to-end: table in final HTML should be inside <pre> not <pre><code>.
 	input := "| Name | Value |\n|------|-------|\n| foo | bar |"
-	got := markdownToTelegramHTML(input)
+	got := markdownToTelegramHTML(input, "")
 
 	if !strings.Contains(got, "<pre>") {
 		t.Errorf("table should be wrapped in <pre>, got: %q", got)
@@ -243,29 +245,20 @@ func TestExtractMarkdownTables_TableInTelegramHTML(t *testing.T) {
 }
 
 // --- renderTableAsCode ---
+// --- Table rendering (via channels.RenderTable) ---
 
-func TestRenderTableAsCode_Basic(t *testing.T) {
+func TestTable_ASCII_RowsHaveEqualWidth(t *testing.T) {
 	lines := []string{
 		"| Name | Score |",
 		"|------|-------|",
 		"| Alice | 100 |",
 		"| Bob | 85 |",
 	}
-	result := renderTableAsCode(lines)
+	result := channels.RenderTable(channels.TableModeASCII, channels.ParseMarkdownTableRows(lines))
 	resultLines := strings.Split(result, "\n")
-
-	if len(resultLines) < 4 { // header + sep + 2 data rows
+	if len(resultLines) < 4 {
 		t.Fatalf("expected at least 4 output lines, got %d: %q", len(resultLines), result)
 	}
-
-	// All rows should start and end with |.
-	for i, line := range resultLines {
-		if !strings.HasPrefix(line, "|") || !strings.HasSuffix(line, "|") {
-			t.Errorf("line %d should start and end with |, got: %q", i, line)
-		}
-	}
-
-	// All rows should have equal display width.
 	headerWidth := displayWidth(resultLines[0])
 	for i := 1; i < len(resultLines); i++ {
 		if displayWidth(resultLines[i]) != headerWidth {
@@ -274,67 +267,52 @@ func TestRenderTableAsCode_Basic(t *testing.T) {
 	}
 }
 
-func TestRenderTableAsCode_TooFewLines(t *testing.T) {
-	// Less than 2 lines → return as-is.
-	lines := []string{"| Only header |"}
-	result := renderTableAsCode(lines)
-	if result != "| Only header |" {
-		t.Errorf("single-line table should return as-is, got: %q", result)
+func TestTable_ParseMarkdownTableRows_Cells(t *testing.T) {
+	lines := []string{
+		"| A | B | C |",
+		"|---|---|---|",
+		"| 1 | 2 | 3 |",
+	}
+	parsed := channels.ParseMarkdownTableRows(lines)
+	if parsed == nil {
+		t.Fatal("ParseMarkdownTableRows returned nil")
+	}
+	if len(parsed.Header) != 3 {
+		t.Fatalf("expected 3 headers, got %d: %v", len(parsed.Header), parsed.Header)
+	}
+	if len(parsed.Rows) != 1 || len(parsed.Rows[0]) != 3 {
+		t.Fatalf("expected 1 row with 3 cells, got: %v", parsed.Rows)
 	}
 }
 
-// --- parseTableRow ---
-
-func TestParseTableRow(t *testing.T) {
-	tests := []struct {
-		input string
-		want  []string
-	}{
-		{"| A | B | C |", []string{"A", "B", "C"}},
-		{"| **Bold** | _italic_ |", []string{"Bold", "italic"}},
-		{"| `code` | normal |", []string{"code", "normal"}},
-		{"| ~~strike~~ | text |", []string{"strike", "text"}},
+func TestTable_AutoMode_WideTableUsesCards(t *testing.T) {
+	// A 5-column table (>3 cols) should use cards mode in auto.
+	// In Telegram, cards are wrapped in <pre> for line breaks.
+	input := "| A | B | C | D | E |\n|---|---|---|---|---|\n| 1 | 2 | 3 | 4 | 5 |"
+	got := markdownToTelegramHTML(input, "auto")
+	// Card format: first col value is title, rest are "Header : Value" lines.
+	// "1" is the A-column value (title); "B", "C" appear as field labels.
+	if !strings.Contains(got, "1") || !strings.Contains(got, "B") {
+		t.Errorf("auto wide table should contain data, got: %q", got)
 	}
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			got := parseTableRow(tt.input)
-			if len(got) != len(tt.want) {
-				t.Fatalf("parseTableRow(%q) = %v, want %v", tt.input, got, tt.want)
-			}
-			for i := range got {
-				if got[i] != tt.want[i] {
-					t.Errorf("cell[%d] = %q, want %q", i, got[i], tt.want[i])
-				}
-			}
-		})
+	// Cards output is still wrapped in <pre> in Telegram for line-break preservation.
+	if !strings.Contains(got, "<pre>") {
+		t.Errorf("auto wide table (cards) should use <pre>, got: %q", got)
+	}
+	// Must NOT contain a pipe-aligned ASCII table (which would look like | A | B |...).
+	if strings.Contains(got, "| A |") {
+		t.Errorf("auto wide table should not use ASCII pipe table, got: %q", got)
 	}
 }
 
-// --- stripInlineMarkdown ---
-
-func TestStripInlineMarkdown(t *testing.T) {
-	tests := []struct {
-		input string
-		want  string
-	}{
-		{"**bold**", "bold"},
-		{"__bold__", "bold"},
-		{"_italic_", "italic"},
-		{"*italic*", "italic"},
-		{"~~strike~~", "strike"},
-		{"`code`", "code"},
-		{"plain text", "plain text"},
-		{"**bold** and _italic_", "bold and italic"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			got := stripInlineMarkdown(tt.input)
-			if got != tt.want {
-				t.Errorf("stripInlineMarkdown(%q) = %q, want %q", tt.input, got, tt.want)
-			}
-		})
+func TestTable_OffMode_PassesThrough(t *testing.T) {
+	input := "| Name | Score |\n|------|-------|\n| Alice | 100 |"
+	got := markdownToTelegramHTML(input, "off")
+	if !strings.Contains(got, "|") {
+		t.Errorf("off mode should pass table pipes through, got: %q", got)
 	}
 }
+
 
 // --- escapeHTML ---
 

@@ -29,5 +29,6 @@
   "selectAgent": {
     "title": "Chọn agent",
     "description": "Chọn agent để bắt đầu trò chuyện"
-  }
+  },
+  "imageGenDownloadName": "generated-{{timestamp}}.png"
 }

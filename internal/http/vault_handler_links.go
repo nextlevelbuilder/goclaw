@@ -30,6 +30,7 @@ func (h *VaultHandler) doSearch(w http.ResponseWriter, r *http.Request, agentID 
 		DocTypes   []string `json:"doc_types"`
 		MaxResults int      `json:"max_results"`
 		TeamID     string   `json:"team_id"`
+		ChatID     string   `json:"chat_id"` // optional: when set with TeamID, restrict to same-chat + team-wide docs (isolated semantics)
 	}
 	if !bindJSON(w, r, locale, &body) {
 		return
@@ -59,6 +60,12 @@ func (h *VaultHandler) doSearch(w http.ResponseWriter, r *http.Request, agentID 
 			return
 		}
 		searchOpts.TeamID = &body.TeamID
+		// Caller-supplied chat scope: apply isolation filter when searching a specific chat.
+		if body.ChatID != "" {
+			cid := body.ChatID
+			searchOpts.ChatID = &cid
+			searchOpts.TeamIsolated = true
+		}
 	} else if !store.IsOwnerRole(r.Context()) {
 		if ids := h.userAccessibleTeamIDs(r.Context()); len(ids) > 0 {
 			searchOpts.TeamIDs = ids

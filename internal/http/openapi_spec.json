@@ -373,7 +373,7 @@
                   "type": "object",
                   "required": ["strategy", "pool_providers", "stats_sample_size", "provider_counts", "recent_requests"],
                   "properties": {
-                    "strategy": { "type": "string", "enum": ["primary_first", "round_robin", "priority_order"] },
+                    "strategy": { "type": "string", "enum": ["round_robin", "priority_order"] },
                     "pool_providers": {
                       "type": "array",
                       "items": { "type": "string" }
@@ -887,42 +887,35 @@
           "provider": { "type": "string", "description": "LLM provider name" },
           "model": { "type": "string", "description": "Model ID" },
                   "system_prompt": { "type": "string" },
-                  "other_config": {
-                    "type": "object",
-                    "description": "Optional per-agent JSON config.",
-                    "properties": {
-                      "thinking_level": {
-                        "type": "string",
-                        "enum": ["off", "low", "medium", "high"],
-                        "description": "Legacy coarse reasoning shim. Unset means off."
-                      },
-                      "reasoning": {
-                        "type": "object",
-                        "description": "Capability-aware reasoning policy for GPT-5/Codex models.",
-                        "properties": {
-                          "override_mode": {
-                            "type": "string",
-                            "enum": ["inherit", "custom"]
-                          },
-                          "effort": {
-                            "type": "string",
-                            "enum": ["off", "auto", "none", "minimal", "low", "medium", "high", "xhigh"]
-                          },
-                          "fallback": {
-                            "type": "string",
-                            "enum": ["downgrade", "off", "provider_default"]
-                          }
-                        }
-                      },
-                      "chatgpt_oauth_routing": {
-                        "type": "object",
-                        "description": "Optional agent-side routing override for ChatGPT OAuth providers. The main provider field remains the preferred/default account, while provider settings may supply inherited defaults.",
-                "properties": {
-                  "override_mode": { "type": "string", "enum": ["inherit", "custom"] },
-                  "strategy": { "type": "string", "enum": ["manual", "primary_first", "round_robin", "priority_order"] },
-                  "extra_provider_names": { "type": "array", "items": { "type": "string" } }
-                }
+          "other_config": {
+            "type": "object",
+            "description": "Optional legacy/extensibility bag. Do not nest reasoning or Codex routing here in new writes."
+          },
+          "reasoning_config": {
+            "type": "object",
+            "description": "Capability-aware reasoning policy for GPT-5/Codex models.",
+            "properties": {
+              "override_mode": {
+                "type": "string",
+                "enum": ["inherit", "custom"]
+              },
+              "effort": {
+                "type": "string",
+                "enum": ["off", "auto", "none", "minimal", "low", "medium", "high", "xhigh"]
+              },
+              "fallback": {
+                "type": "string",
+                "enum": ["downgrade", "off", "provider_default"]
               }
+            }
+          },
+          "chatgpt_oauth_routing": {
+            "type": "object",
+            "description": "Optional agent-side routing override for ChatGPT OAuth providers. The main provider field remains the preferred/default account, while provider settings may supply inherited defaults.",
+            "properties": {
+              "override_mode": { "type": "string", "enum": ["inherit", "custom"] },
+              "strategy": { "type": "string", "enum": ["round_robin", "priority_order"] },
+              "extra_provider_names": { "type": "array", "items": { "type": "string" } }
             }
           }
         }
@@ -959,7 +952,7 @@
                 "properties": {
                   "strategy": {
                     "type": "string",
-                    "enum": ["manual", "primary_first", "round_robin", "priority_order"]
+                    "enum": ["round_robin", "priority_order"]
                   },
                   "extra_provider_names": {
                     "type": "array",

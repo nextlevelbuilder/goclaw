@@ -8,7 +8,7 @@ Extended thinking allows LLM providers to "think out loud" before producing a fi
 
 ## 1. Configuration
 
-The reusable default now lives on the provider in `settings.reasoning_defaults`. Agents consume that default by inheriting it, or store a custom override in `other_config.reasoning`. `thinking_level` remains the backward-compatible coarse shim for older builds.
+The reusable default now lives on the provider in `settings.reasoning_defaults`. Agents consume that default by inheriting it, or store a custom override in top-level `reasoning_config`. `thinking_level` remains the backward-compatible coarse shim for older builds.
 
 | Level | Behavior |
 |-------|----------|
@@ -35,10 +35,8 @@ The reusable default now lives on the provider in `settings.reasoning_defaults`.
 
 ```json
 {
-  "other_config": {
-    "reasoning": {
-      "override_mode": "inherit"
-    }
+  "reasoning_config": {
+    "override_mode": "inherit"
   }
 }
 ```
@@ -47,13 +45,11 @@ The reusable default now lives on the provider in `settings.reasoning_defaults`.
 
 ```json
 {
-  "other_config": {
-    "thinking_level": "high",
-    "reasoning": {
-      "override_mode": "custom",
-      "effort": "xhigh",
-      "fallback": "downgrade"
-    }
+  "thinking_level": "high",
+  "reasoning_config": {
+    "override_mode": "custom",
+    "effort": "xhigh",
+    "fallback": "downgrade"
   }
 }
 ```
@@ -61,11 +57,11 @@ The reusable default now lives on the provider in `settings.reasoning_defaults`.
 Rules:
 - Unset provider defaults and unset agent reasoning both resolve to `off`.
 - `settings.reasoning_defaults` is provider-owned and reusable across agents.
-- `reasoning.override_mode` accepts `inherit|custom`.
+- `reasoning_config.override_mode` accepts `inherit|custom`.
 - `thinking_level` still accepts `off|low|medium|high`.
-- `reasoning.effort` accepts `off|auto|none|minimal|low|medium|high|xhigh`.
-- `reasoning.fallback` accepts `downgrade|off|provider_default`.
-- Existing `reasoning` payloads without `override_mode` are treated as custom overrides for backward compatibility.
+- `reasoning_config.effort` accepts `off|auto|none|minimal|low|medium|high|xhigh`.
+- `reasoning_config.fallback` accepts `downgrade|off|provider_default`.
+- Existing legacy `other_config.reasoning` payloads without `override_mode` are treated as custom overrides for backward compatibility.
 - Read path resolves provider defaults first, then applies agent inherit/custom semantics, then falls back to legacy `thinking_level`.
 - Write path keeps a derived coarse `thinking_level` only for custom agent overrides so rollback to older GoClaw builds stays safe.
 

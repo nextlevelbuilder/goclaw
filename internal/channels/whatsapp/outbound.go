@@ -70,7 +70,7 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 		for i, m := range msg.Media {
 			caption := m.Caption
 			if caption == "" && i == 0 && msg.Content != "" {
-				caption = markdownToWhatsApp(msg.Content)
+				caption = markdownToWhatsApp(msg.Content, c.config.TableMode)
 			}
 
 			data, readErr := os.ReadFile(m.URL)
@@ -101,7 +101,7 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 
 	// Send text (chunked if exceeding limit).
 	if msg.Content != "" {
-		formatted := markdownToWhatsApp(msg.Content)
+		formatted := markdownToWhatsApp(msg.Content, c.config.TableMode)
 		chunks := chunkText(formatted, maxMessageLen)
 		for _, chunk := range chunks {
 			waMsg := &waE2E.Message{

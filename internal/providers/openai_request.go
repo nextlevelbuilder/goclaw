@@ -147,7 +147,7 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 	}
 
 	if len(req.Tools) > 0 {
-		body["tools"] = CleanToolSchemas(p.schemaProviderName(), req.Tools)
+		body["tools"] = buildToolsPayload(p.schemaProviderName(), req.Tools)
 		body["tool_choice"] = "auto"
 	}
 
@@ -291,6 +291,44 @@ func openAIModelSupportsReasoningEffort(model string) bool {
 		}
 	}
 	return false
+}
+
+// buildToolsPayload serializes tools for the OpenAI-compat tools array.
+//   - function tools → {"type":"function","function":{cleaned schema}}
+//   - native tools (e.g. "image_generation") → {"type": t.Type} bare object
+//
+// Ordering is preserved.
+func buildToolsPayload(schemaProvider string, tools []ToolDefinition) []map[string]any {
+	cleaned := CleanToolSchemas(schemaProvider, tools)
+	out := make([]map[string]any, 0, len(cleaned))
+	for _, t := range cleaned {
+		switch t.Type {
+		case "function":
+			if t.Function == nil {
+				continue
+			}
+			params := t.Function.Parameters
+			fn := map[string]any{
+				"name":        t.Function.Name,
+				"description": t.Function.Description,
+				"parameters":  params,
+			}
+			if t.Function.Strict != nil {
+				fn["strict"] = *t.Function.Strict
+			}
+			out = append(out, map[string]any{
+				"type":     "function",
+				"function": fn,
+			})
+		default:
+			// Native provider tool — emit as bare {"type": X}.
+			// Richer field serialization is deferred to later phases.
+			out = append(out, map[string]any{
+				"type": t.Type,
+			})
+		}
+	}
+	return out
 }
 
 // openAIWireAssistantReasoningContent is true when assistant message objects may include

@@ -516,6 +516,11 @@ CREATE TRIGGER IF NOT EXISTS trg_vault_docs_scope_consistency_upd
   BEGIN
     SELECT RAISE(ABORT, 'vault_documents_scope_consistency violation');
   END;`,
+
+	// Version 24 → 25: add chat_id column + composite index (mirrors PG migration 000056).
+	// SQLite lacks regex by default — skip backfill (desktop is single-user; cross-chat risk minimal).
+	24: `ALTER TABLE vault_documents ADD COLUMN chat_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_vault_docs_team_chat ON vault_documents(team_id, chat_id) WHERE team_id IS NOT NULL;`,
 }
 
 // addHooksTables is the SQLite incremental migration for schema v19 → v20.

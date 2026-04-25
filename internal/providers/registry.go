@@ -21,8 +21,10 @@ type Registry struct {
 	mu            sync.RWMutex
 	tenantFromCtx func(context.Context) uuid.UUID // injected to avoid circular import with store
 
-	// roundRobinCounters stores shared round-robin state keyed by "tenantID/providerName"
-	// so that ChatGPTOAuthRouter instances (created per-request) share rotation state.
+	// roundRobinCounters stores shared round-robin state keyed by "tenantID/providerName/modality"
+	// so that ChatGPTOAuthRouter instances (created per-request) share rotation state
+	// within a modality (e.g. chat) while keeping distinct modalities (e.g. image)
+	// rotating on independent counters — see RoundRobinNext.
 	roundRobinMu       sync.Mutex
 	roundRobinCounters map[string]int
 }
@@ -37,10 +39,17 @@ func NewRegistry(tenantFromCtx func(context.Context) uuid.UUID) *Registry {
 	}
 }
 
-// RoundRobinNext returns the current round-robin index for the given key and
-// optionally advances it. Used by ChatGPTOAuthRouter to persist rotation state
-// across per-request router instances.
-func (r *Registry) RoundRobinNext(key string, poolSize int, advance bool) int {
+// RoundRobinNext returns the current round-robin index for the given
+// (tenant, base provider, modality) triple and optionally advances it.
+// Used by ChatGPTOAuthRouter to persist rotation state across per-request
+// router instances. The modality segment (e.g. "chat", "image") keeps
+// independent counters per modality so that bursty traffic on one modality
+// cannot skew the offset used by another.
+func (r *Registry) RoundRobinNext(tenantID uuid.UUID, baseProviderName, modality string, poolSize int, advance bool) int {
+	if poolSize <= 0 {
+		return 0
+	}
+	key := roundRobinKey(tenantID, baseProviderName, modality)
 	r.roundRobinMu.Lock()
 	defer r.roundRobinMu.Unlock()
 	idx := r.roundRobinCounters[key] % poolSize
@@ -48,6 +57,11 @@ func (r *Registry) RoundRobinNext(key string, poolSize int, advance bool) int {
 		r.roundRobinCounters[key] = (idx + 1) % poolSize
 	}
 	return idx
+}
+
+// roundRobinKey builds the compound key for a tenant-scoped, per-modality counter.
+func roundRobinKey(tenantID uuid.UUID, baseProviderName, modality string) string {
+	return tenantID.String() + "/" + baseProviderName + "/" + modality
 }
 
 // compoundKey returns "tenantID/name" for registry lookup.

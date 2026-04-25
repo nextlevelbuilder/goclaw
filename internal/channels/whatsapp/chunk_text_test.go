@@ -121,14 +121,14 @@ func TestChunkText_ChunksDoNotExceedMaxLen(t *testing.T) {
 // --- markdownToWhatsApp: additional edge cases ---
 
 func TestMarkdownToWhatsApp_Empty(t *testing.T) {
-	got := markdownToWhatsApp("")
+	got := markdownToWhatsApp("", "")
 	if got != "" {
 		t.Errorf("markdownToWhatsApp(\"\") = %q, want empty", got)
 	}
 }
 
 func TestMarkdownToWhatsApp_OnlyWhitespace(t *testing.T) {
-	got := markdownToWhatsApp("   \n\n   ")
+	got := markdownToWhatsApp("   \n\n   ", "")
 	// TrimSpace at end should produce empty.
 	if got != "" {
 		t.Errorf("markdownToWhatsApp(whitespace) = %q, want empty", got)
@@ -136,7 +136,7 @@ func TestMarkdownToWhatsApp_OnlyWhitespace(t *testing.T) {
 }
 
 func TestMarkdownToWhatsApp_CollapseBlankLines(t *testing.T) {
-	got := markdownToWhatsApp("a\n\n\n\n\nb")
+	got := markdownToWhatsApp("a\n\n\n\n\nb", "")
 	if strings.Contains(got, "\n\n\n") {
 		t.Errorf("blank lines not collapsed, got: %q", got)
 	}
@@ -147,7 +147,7 @@ func TestMarkdownToWhatsApp_CollapseBlankLines(t *testing.T) {
 
 func TestMarkdownToWhatsApp_MixedFormatting(t *testing.T) {
 	input := "# Title\n\n**bold** and ~~strike~~ and `code` and [link](https://x.com)"
-	got := markdownToWhatsApp(input)
+	got := markdownToWhatsApp(input, "")
 
 	// Header should become bold.
 	if !strings.Contains(got, "*Title*") {
@@ -175,7 +175,7 @@ func TestMarkdownToWhatsApp_CodeBlockPreservedInternals(t *testing.T) {
 	// Internal formatting inside code blocks must not be mangled by outer regex passes.
 	// waExtractCodeBlocks pulls out the block before bold/italic regexes run, then restores it verbatim.
 	input := "```\n**not bold** and _not italic_\n```"
-	got := markdownToWhatsApp(input)
+	got := markdownToWhatsApp(input, "")
 
 	// The raw markdown inside the block must be restored as-is (not converted to *not bold*).
 	if !strings.Contains(got, "**not bold**") {
@@ -190,7 +190,7 @@ func TestMarkdownToWhatsApp_CodeBlockPreservedInternals(t *testing.T) {
 func TestMarkdownToWhatsApp_OrderedListPassthrough(t *testing.T) {
 	// Ordered lists (1. item) are not converted — WhatsApp has no ordered list syntax.
 	input := "1. first\n2. second\n3. third"
-	got := markdownToWhatsApp(input)
+	got := markdownToWhatsApp(input, "")
 	// Numbers should survive (not be mangled).
 	if !strings.Contains(got, "first") || !strings.Contains(got, "second") {
 		t.Errorf("ordered list content lost, got: %q", got)
@@ -198,14 +198,14 @@ func TestMarkdownToWhatsApp_OrderedListPassthrough(t *testing.T) {
 }
 
 func TestMarkdownToWhatsApp_HTMLStrongTag(t *testing.T) {
-	got := markdownToWhatsApp("<strong>bold</strong>")
+	got := markdownToWhatsApp("<strong>bold</strong>", "")
 	if !strings.Contains(got, "*bold*") {
 		t.Errorf("<strong>bold</strong> should become *bold*, got: %q", got)
 	}
 }
 
 func TestMarkdownToWhatsApp_HTMLParagraph(t *testing.T) {
-	got := markdownToWhatsApp("<p>paragraph</p>")
+	got := markdownToWhatsApp("<p>paragraph</p>", "")
 	if !strings.Contains(got, "paragraph") {
 		t.Errorf("paragraph content should survive <p> tag conversion, got: %q", got)
 	}
@@ -213,7 +213,7 @@ func TestMarkdownToWhatsApp_HTMLParagraph(t *testing.T) {
 
 func TestMarkdownToWhatsApp_MultipleCodeBlocks(t *testing.T) {
 	input := "```go\nfmt.Println(\"hi\")\n```\n\nText\n\n```py\nprint('hello')\n```"
-	got := markdownToWhatsApp(input)
+	got := markdownToWhatsApp(input, "")
 
 	// Both code blocks must survive.
 	if !strings.Contains(got, "fmt.Println") {

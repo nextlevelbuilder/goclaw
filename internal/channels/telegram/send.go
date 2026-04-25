@@ -92,26 +92,11 @@ func isPostConnectNetworkErr(err error) bool {
 		strings.Contains(s, "EOF")) && !strings.Contains(s, "lookup")
 }
 
-// mediaSendMethods lists sendX calls that upload a file body and therefore
-// need the longer sendMediaOverallTimeout budget. Keyed by the `name` argument
-// passed to retrySend so no call site has to change when we bump the budget.
-var mediaSendMethods = map[string]struct{}{
-	"sendPhoto":    {},
-	"sendVideo":    {},
-	"sendAudio":    {},
-	"sendVoice":    {},
-	"sendDocument": {},
-}
-
 // retrySend wraps a Telegram send call with retry logic for transient network errors.
 // Parse errors are NOT retried (handled by caller's HTML fallback).
 // resetFn is called before each retry (e.g. to seek file handles back to start). Can be nil.
 func (c *Channel) retrySend(ctx context.Context, name string, resetFn func(), fn func(context.Context) error) error {
-	overall := sendOverallTimeout
-	if _, isMedia := mediaSendMethods[name]; isMedia {
-		overall = sendMediaOverallTimeout
-	}
-	ctx, cancel := context.WithTimeout(ctx, overall)
+	ctx, cancel := context.WithTimeout(ctx, sendOverallTimeout)
 	defer cancel()
 
 	var err error
@@ -301,7 +286,7 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 	}
 
 	// Text-only message
-	htmlContent := markdownToTelegramHTML(msg.Content)
+	htmlContent := markdownToTelegramHTML(msg.Content, c.config.TableMode)
 	chunks := chunkHTML(htmlContent, telegramMaxMessageLen)
 
 	// If a stream message exists (stored by FinalizeStream), edit the first chunk
@@ -379,7 +364,7 @@ func (c *Channel) sendMediaMessage(ctx context.Context, chatID int64, msg bus.Ou
 		// can split tags (e.g. cut inside <code>...</code>) causing parse errors.
 		var followUpText string
 		if caption != "" {
-			caption = markdownToTelegramHTML(caption)
+			caption = markdownToTelegramHTML(caption, c.config.TableMode)
 			if len(caption) > telegramCaptionMaxLen {
 				followUpText = caption
 				caption = ""

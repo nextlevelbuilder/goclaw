@@ -134,6 +134,7 @@ Memory layers: L1 (`memory_search`) returns ranked abstracts; L2 (`memory_expand
 | Tool | Description |
 |---|---|
 | `message` | Send a message to a channel |
+| `send_file` | Send an existing workspace file as a chat attachment (with optional caption); marks `DeliveredMedia` to prevent duplicate delivery |
 | `create_forum_topic` | Create a Telegram forum topic |
 | `list_group_members` | List members in a group chat (Feishu/Lark) |
 
@@ -313,7 +314,7 @@ flowchart TD
 
 | Group | Members |
 |---|---|
-| `fs` | `read_file`, `write_file`, `list_files`, `edit` |
+| `fs` | `read_file`, `write_file`, `list_files`, `edit`, `send_file` |
 | `runtime` | `exec` |
 | `web` | `web_search`, `web_fetch` |
 | `memory` | `memory_search`, `memory_get` |
@@ -394,6 +395,38 @@ Never put credentials in the settings JSON blob — backend does not validate th
 **Master-scope guard:** Writes to global `builtin_tools` table require master tenant scope. Tenant admins use the `/tenant-config` endpoint. Same guard applies on the WS config methods.
 
 Current adopters: `web_search`, `web_fetch`, `tts`, `create_image`, `read_image`, `create_audio`, `read_audio`, `knowledge_graph_search`.
+
+### Shell Deny-Groups (Runtime Config)
+
+**Global shell deny-groups** are controlled via `config.tools.shellDenyGroups` (map[string]bool). Operators can toggle deny-group classes (e.g. `package_install`, `env_dump`) at runtime from the /config Web UI without restarting the gateway.
+
+**Merge semantics:**
+- Global config serves as base (`config.tools.shellDenyGroups`)
+- Per-agent overrides in `agents.other_config.shell_deny_groups` (if set)
+- Per-key: agent value takes precedence over global value
+- Multi-tenant invariant: each tenant's config is isolated
+
+**Live reload:** Changes to `config.tools.shellDenyGroups` propagate via `bus.TopicConfigChanged` pub/sub. Next agent turn automatically applies new toggles.
+
+**Deny-group classes** (from `internal/tools/shell_deny_groups.go` — all denied by default):
+
+| Class | Blocks |
+|---|---|
+| `destructive_ops` | rm -rf, dd, mkfs, shutdown, fork bombs |
+| `data_exfiltration` | curl/wget piped to shell, curl POST, DNS tools, /dev/tcp |
+| `reverse_shell` | nc, bash -i, sh -i, reverse-shell payloads |
+| `code_injection` | eval/exec on untrusted input, dynamic code loaders |
+| `privilege_escalation` | sudo, su, setuid abuse |
+| `dangerous_paths` | writes to /etc, /root, system dirs |
+| `env_injection` | export of sensitive env, LD_PRELOAD tricks |
+| `container_escape` | mount, nsenter, capability changes |
+| `crypto_mining` | xmrig and other miners |
+| `filter_bypass` | encoding/quoting tricks to evade pattern matching |
+| `network_recon` | nmap, masscan and similar scanners |
+| `package_install` | apt, yum, brew, pip, npm install (separately routes to approval) |
+| `persistence` | cron edits, systemd unit writes, rc.local |
+| `process_control` | kill -9 of arbitrary PIDs, killall |
+| `env_dump` | env, printenv (full-environment dumps) |
 
 ---
 

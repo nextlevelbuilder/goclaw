@@ -43,6 +43,53 @@ type ExecTool struct {
 	approvalMgr      *ExecApprovalManager // nil = no approval needed
 	agentID          string               // for approval request context
 	secureCLIStore   store.SecureCLIStore // nil = no credentialed exec
+	// globalDenyGroups holds global shell deny-group toggles from config.tools.
+	// Per-agent overrides from context (store.WithShellDenyGroups) win per-key.
+	// Updated at startup and via TopicConfigChanged pub/sub for runtime reload.
+	globalDenyGroups map[string]bool
+}
+
+// SetGlobalShellDenyGroups replaces the global shell deny-group toggles. The
+// caller's map is defensively copied so later mutations cannot leak into the
+// tool's internal state. Passing nil or an empty map clears the global config
+// (per-agent context overrides, if any, still apply on their own).
+func (t *ExecTool) SetGlobalShellDenyGroups(groups map[string]bool) {
+	if len(groups) == 0 {
+		t.globalDenyGroups = nil
+		return
+	}
+	cp := make(map[string]bool, len(groups))
+	for k, v := range groups {
+		cp[k] = v
+	}
+	t.globalDenyGroups = cp
+}
+
+// effectiveDenyGroups merges the per-agent context override with the global
+// config. Precedence: per-agent context (per-key) > global. When one side is
+// empty, the other is returned directly (no allocation).
+func (t *ExecTool) effectiveDenyGroups(ctx context.Context) map[string]bool {
+	agent := store.ShellDenyGroupsFromContext(ctx)
+	if len(t.globalDenyGroups) == 0 {
+		return agent
+	}
+	if len(agent) == 0 {
+		return t.globalDenyGroups
+	}
+	merged := make(map[string]bool, len(t.globalDenyGroups)+len(agent))
+	for k, v := range t.globalDenyGroups {
+		merged[k] = v
+	}
+	for k, v := range agent {
+		merged[k] = v // agent wins per-key
+	}
+	return merged
+}
+
+// EffectiveDenyGroupsForTest exposes effectiveDenyGroups for cross-package tests
+// (e.g. cmd pub/sub regression). Not for production callers.
+func (t *ExecTool) EffectiveDenyGroupsForTest(ctx context.Context) map[string]bool {
+	return t.effectiveDenyGroups(ctx)
 }
 
 // NewExecTool creates an exec tool that runs commands directly on the host.
@@ -152,8 +199,9 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 	// Unicode-based pattern bypass while preserving functional command content.
 	normalizedCommand := normalizeCommand(command)
 
-	// Resolve deny patterns: per-agent overrides from context, fallback to all defaults.
-	denyOverrides := store.ShellDenyGroupsFromContext(ctx)
+	// Resolve deny patterns: merge per-agent context overrides with global
+	// config (per-key agent precedence), fallback to all registry defaults.
+	denyOverrides := t.effectiveDenyGroups(ctx)
 	groupPatterns := ResolveDenyPatterns(denyOverrides)
 
 	// Also resolve package_install patterns separately for approval routing.
@@ -323,7 +371,12 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 			if wsBase == "" {
 				wsBase = t.workspace
 			}
-			allowed := allowedWithTeamWorkspace(ctx, nil)
+			// Shell is an arbitrary executor — a cross-chat cwd would let the
+			// command mutate files in another chat's workspace. Enforce the
+			// stricter write-allowed prefixes (team root excluded) to block
+			// cross-chat cwd even for "read-only" commands like cat, since we
+			// cannot prove the shell command will not write.
+			allowed := allowedWriteWithTeamWorkspace(ctx, nil)
 			resolved, err := resolvePathWithAllowed(wd, wsBase, true, allowed)
 			if err != nil {
 				return ErrorResult(err.Error())

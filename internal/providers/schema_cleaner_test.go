@@ -7,7 +7,7 @@ import (
 func TestCleanToolSchemas_Gemini(t *testing.T) {
 	tools := []ToolDefinition{{
 		Type: "function",
-		Function: ToolFunctionSchema{
+		Function: &ToolFunctionSchema{
 			Name:        "test",
 			Description: "desc",
 			Parameters: map[string]any{
@@ -91,7 +91,7 @@ func TestCleanToolSchemas_Anthropic(t *testing.T) {
 func TestCleanToolSchemas_Unknown(t *testing.T) {
 	tools := []ToolDefinition{{
 		Type: "function",
-		Function: ToolFunctionSchema{
+		Function: &ToolFunctionSchema{
 			Name: "test",
 			Parameters: map[string]any{
 				"type": "object",
@@ -266,7 +266,7 @@ func TestIsMultiActionSchema(t *testing.T) {
 func TestCleanToolSchemas_OpenAI_MultiActionExempt(t *testing.T) {
 	multiAction := ToolDefinition{
 		Type: "function",
-		Function: ToolFunctionSchema{
+		Function: &ToolFunctionSchema{
 			Name:        "team_tasks",
 			Description: "multi-action tool",
 			Parameters: map[string]any{
@@ -291,7 +291,7 @@ func TestCleanToolSchemas_OpenAI_MultiActionExempt(t *testing.T) {
 	}
 	simple := ToolDefinition{
 		Type: "function",
-		Function: ToolFunctionSchema{
+		Function: &ToolFunctionSchema{
 			Name:        "read_file",
 			Description: "simple tool",
 			Parameters: map[string]any{

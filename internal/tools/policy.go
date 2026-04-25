@@ -22,6 +22,7 @@ var builtinToolGroups = map[string][]string{
 	"automation": {"cron"},
 	"messaging":  {"message", "create_forum_topic", "list_group_members"},
 	"team":       {"team_tasks"},
+	"vault":      {"vault_search", "vault_read"},
 	// Composite group: all goclaw native tools (excludes MCP/custom plugins).
 	"goclaw": {
 		"read_file", "write_file", "list_files", "edit", "exec",
@@ -46,8 +47,8 @@ var builtinToolGroups = map[string][]string{
 // Tool profiles define preset allow sets.
 var toolProfiles = map[string][]string{
 	"minimal":   {"session_status"},
-	"coding":    {"group:fs", "group:runtime", "group:sessions", "group:memory", "group:web", "read_image", "create_image", "skill_search"},
-	"messaging": {"group:messaging", "group:web", "sessions_list", "sessions_history", "sessions_send", "session_status", "read_image", "skill_search"},
+	"coding":    {"group:fs", "group:runtime", "group:sessions", "group:memory", "group:web", "group:vault", "read_image", "create_image", "skill_search"},
+	"messaging": {"group:messaging", "group:web", "group:vault", "sessions_list", "sessions_history", "sessions_send", "session_status", "read_image", "skill_search"},
 	"full":      {}, // empty = no restrictions
 }
 
@@ -163,7 +164,7 @@ func (pe *PolicyEngine) FilterTools(
 		if tool, ok := registry.Get(canonical); ok {
 			defs = append(defs, providers.ToolDefinition{
 				Type: "function",
-				Function: providers.ToolFunctionSchema{
+				Function: &providers.ToolFunctionSchema{
 					Name:        alias,
 					Description: tool.Description(),
 					Parameters:  tool.Parameters(),

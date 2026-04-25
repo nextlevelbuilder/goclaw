@@ -45,10 +45,6 @@ type Channel struct {
 	// recentOutbound suppresses short-lived webhook echoes of our own text replies.
 	recentOutbound sync.Map // conversationID + "\x00" + normalized content → time.Time
 
-	// firstInboxSent tracks which senders have already received the one-time first-inbox DM.
-	// In-memory only: resets on restart (acceptable — re-sending once is benign).
-	firstInboxSent sync.Map // senderID(string) → time.Time
-
 	// postFetcher fetches and caches page post content for comment context enrichment.
 	postFetcher *PostFetcher
 
@@ -259,16 +255,16 @@ func (ch *Channel) sendInboxReply(ctx context.Context, msg bus.OutboundMessage) 
 	return nil
 }
 
-// sendCommentReply replies to a comment and optionally sends a one-time first-inbox DM.
+// sendCommentReply posts a public reply to a comment and optionally sends a
+// one-time private DM to the commenter (best-effort). Stateless — no GoClaw
+// dedup state; webhook-level comment_id dedup + FB platform per-comment
+// idempotency prevent duplicates.
 func (ch *Channel) sendCommentReply(ctx context.Context, msg bus.OutboundMessage) error {
-	// Bound API calls: ReplyComment + PrivateReply can hang if Pancake is slow.
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	conversationID := msg.ChatID
 
-	// Guard first — otherwise rememberOutboundEcho would stamp phantom echoes
-	// for a send that never happens, polluting future inbound echo dedup.
 	commentID := msg.Metadata["reply_to_comment_id"]
 	if commentID == "" {
 		return fmt.Errorf("pancake: reply_to_comment_id missing in outbound metadata for comment reply")
@@ -279,7 +275,6 @@ func (ch *Channel) sendCommentReply(ctx context.Context, msg bus.OutboundMessage
 	for _, part := range parts {
 		ch.rememberOutboundEcho(conversationID, part)
 	}
-
 	for _, part := range parts {
 		if err := ch.apiClient.ReplyComment(ctx, conversationID, commentID, part); err != nil {
 			ch.handleAPIError(err)
@@ -288,32 +283,50 @@ func (ch *Channel) sendCommentReply(ctx context.Context, msg bus.OutboundMessage
 		}
 	}
 
-	// First inbox: one-time DM after comment reply (best-effort).
-	if ch.config.Features.FirstInbox {
+	if ch.config.Features.PrivateReply {
 		senderID := msg.Metadata["sender_id"]
 		if senderID != "" {
-			ch.sendFirstInbox(ctx, senderID, conversationID)
+			ch.sendPrivateReply(
+				ctx,
+				senderID,
+				conversationID,
+				msg.Metadata["post_id"],
+				msg.Metadata["display_name"],
+			)
 		}
 	}
 
 	return nil
 }
 
-// sendFirstInbox sends a one-time DM to a commenter (best-effort, fire-and-forget).
-// If the send fails, the firstInboxSent entry is deleted to allow retry on the next comment.
-func (ch *Channel) sendFirstInbox(ctx context.Context, senderID, conversationID string) {
-	if _, loaded := ch.firstInboxSent.LoadOrStore(senderID, time.Now()); loaded {
-		return // already sent to this sender
+// sendPrivateReply sends a one-time DM to a commenter (best-effort,
+// fire-and-forget). Idempotency relies on the caller-side webhook dedup +
+// Facebook's per-comment private_replies endpoint returning an error when a
+// DM was already sent — we log the warn and move on.
+func (ch *Channel) sendPrivateReply(ctx context.Context, senderID, conversationID, postID, commenterName string) {
+	if !ch.config.Features.PrivateReply || senderID == "" {
+		return
 	}
-	message := ch.config.FirstInboxMessage
-	if message == "" {
-		message = "Thanks for your comment! We can assist you further via private message."
+
+	postTitle := ""
+	if postID != "" && ch.postFetcher != nil {
+		if post, perr := ch.postFetcher.GetPost(ctx, postID); perr == nil && post != nil {
+			postTitle = post.Message
+		}
 	}
+
+	message := renderPrivateReplyMessage(ch.config.PrivateReplyMessage, map[string]string{
+		"commenter_name": commenterName,
+		"post_title":     postTitle,
+	})
+
 	if err := ch.apiClient.PrivateReply(ctx, conversationID, message); err != nil {
-		slog.Warn("pancake: first inbox send failed",
-			"sender_id", senderID, "err", err)
-		ch.firstInboxSent.Delete(senderID) // allow retry on next comment
+		slog.Warn("pancake: private_reply send failed",
+			"page_id", ch.pageID, "sender_id", senderID, "conv_id", conversationID, "err", err)
+		return
 	}
+	slog.Debug("pancake: private_reply sent",
+		"page_id", ch.pageID, "sender_id", senderID, "conv_id", conversationID)
 }
 
 // BlockReplyEnabled returns the per-channel block_reply override (nil = inherit gateway default).
@@ -343,7 +356,7 @@ func (ch *Channel) handleAPIError(err error) {
 // maxMessageLength returns the platform-specific character limit.
 func (ch *Channel) maxMessageLength() int {
 	switch ch.platform {
-	case "tiktok":
+	case "tiktok", "shopee":
 		return 500
 	case "instagram":
 		return 1000

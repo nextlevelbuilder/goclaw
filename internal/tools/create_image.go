@@ -104,6 +104,10 @@ func (t *CreateImageTool) Execute(ctx context.Context, args map[string]any) *Res
 		return ErrorResult(fmt.Sprintf("image generation failed: %v", err))
 	}
 
+	// Embed prompt into PNG tEXt metadata before writing to disk.
+	// If embedding fails (malformed bytes, non-PNG) the original data is used unchanged.
+	imageData := embedPromptIntoPNG(chainResult.Data, prompt)
+
 	// Save to workspace under date-based folder (e.g. generated/2026-03-02/)
 	workspace := ToolWorkspaceFromCtx(ctx)
 	if workspace == "" {
@@ -114,7 +118,7 @@ func (t *CreateImageTool) Execute(ctx context.Context, args map[string]any) *Res
 		return ErrorResult(fmt.Sprintf("failed to create output directory: %v", err))
 	}
 	imagePath := filepath.Join(dateDir, mediaFileName(ctx, "image", filenameHint, "png"))
-	if err := os.WriteFile(imagePath, chainResult.Data, 0644); err != nil {
+	if err := os.WriteFile(imagePath, imageData, 0644); err != nil {
 		return ErrorResult(fmt.Sprintf("failed to save generated image: %v", err))
 	}
 
@@ -123,11 +127,12 @@ func (t *CreateImageTool) Execute(ctx context.Context, args map[string]any) *Res
 		slog.Warn("create_image: file missing immediately after write", "path", imagePath, "error", err)
 		return ErrorResult(fmt.Sprintf("generated image file missing after write: %v", err))
 	} else {
-		slog.Info("create_image: file saved", "path", imagePath, "size", fi.Size(), "data_len", len(chainResult.Data))
+		slog.Info("create_image: file saved", "path", imagePath, "size", fi.Size(), "data_len", len(imageData))
 	}
 
 	result := &Result{ForLLM: fmt.Sprintf("MEDIA:%s\nUse the EXACT filename when referencing: %s", imagePath, filepath.Base(imagePath))}
 	result.Media = []bus.MediaFile{{Path: imagePath, MimeType: "image/png", Filename: filepath.Base(imagePath)}}
+	result.MediaPrompts = map[int]string{0: prompt}
 	result.Deliverable = fmt.Sprintf("[Generated image: %s]\nPrompt: %s", filepath.Base(imagePath), prompt)
 	if t.vaultIntc != nil {
 		go t.vaultIntc.AfterWriteMedia(context.WithoutCancel(ctx), imagePath, prompt, "image/png")
@@ -140,8 +145,48 @@ func (t *CreateImageTool) Execute(ctx context.Context, args map[string]any) *Res
 	return result
 }
 
+// embedPromptIntoPNG wraps agent.EmbedPNGPrompt for the tools package.
+// Logs a warning on error but always returns usable bytes.
+func embedPromptIntoPNG(data []byte, prompt string) []byte {
+	if prompt == "" {
+		return data
+	}
+	// Import cycle guard: tools → agent is not allowed. Use the local pngEmbed function.
+	out, err := pngEmbedPrompt(data, prompt)
+	if err != nil {
+		slog.Warn("create_image: failed to embed prompt into PNG metadata", "error", err)
+		return data
+	}
+	return out
+}
+
 // callProvider dispatches to the correct image generation implementation based on provider type.
+// If the resolved provider implements NativeImageProvider (e.g. CodexProvider via OAuth),
+// the native path is used and cp may be nil. The credentialProvider path is only reached
+// for API-key-backed providers.
 func (t *CreateImageTool) callProvider(ctx context.Context, cp credentialProvider, providerName, model string, params map[string]any) ([]byte, *providers.Usage, error) {
+	// Native path: provider implements the image_generation tool natively (e.g. Codex/OAuth).
+	// The raw provider object is injected into params["_native_provider"] by ExecuteWithChain.
+	// Must check before the cp==nil guard — these providers intentionally have no APIKey/APIBase.
+	if rawProvider, ok := params["_native_provider"]; ok {
+		if np, ok := rawProvider.(providers.NativeImageProvider); ok {
+			prompt := GetParamString(params, "prompt", "")
+			aspectRatio := GetParamString(params, "aspect_ratio", "1:1")
+			imageModel := GetParamString(params, "image_model", "")
+			result, err := np.GenerateImage(ctx, providers.NativeImageRequest{
+				Model:        model,
+				ImageModel:   imageModel,
+				Prompt:       prompt,
+				AspectRatio:  aspectRatio,
+				OutputFormat: "png",
+			})
+			if err != nil {
+				return nil, nil, fmt.Errorf("native image generation: %w", err)
+			}
+			return result.Data, result.Usage, nil
+		}
+	}
+
 	if cp == nil {
 		return nil, nil, fmt.Errorf("provider %q does not expose API credentials required for image generation", providerName)
 	}

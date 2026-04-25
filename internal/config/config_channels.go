@@ -43,6 +43,7 @@ type TelegramConfig struct {
 	LinkPreview    *bool               `json:"link_preview,omitempty"`    // enable URL previews in messages (default true)
 	BlockReply     *bool               `json:"block_reply,omitempty"`     // override gateway block_reply (nil = inherit)
 	ForceIPv4      bool                `json:"force_ipv4,omitempty"`      // force IPv4 for all Telegram API requests (use when IPv6 routing is broken)
+	TableMode      string              `json:"table_mode,omitempty"`      // "auto" (default), "ascii", "cards", "list", "off"
 
 	// Optional STT (Speech-to-Text) pipeline for voice/audio inbound messages.
 	// When stt_proxy_url is set, audio/voice messages are transcribed before being forwarded to the agent.
@@ -150,6 +151,7 @@ type WhatsAppConfig struct {
 	RequireMention *bool                            `json:"require_mention,omitempty"` // only respond in groups when bot is @mentioned (default false)
 	HistoryLimit   int                              `json:"history_limit,omitempty"`   // max pending group messages for context (default 200, 0=disabled)
 	BlockReply     *bool                            `json:"block_reply,omitempty"`     // override gateway block_reply (nil = inherit)
+	TableMode      string                           `json:"table_mode,omitempty"`      // "auto" (default), "ascii", "cards", "list", "off"
 	Groups         map[string]*WhatsAppGroupConfig  `json:"groups,omitempty"`          // per-group overrides, keyed by group JID
 
 	// Listen-only mode: silently collect messages for KG extraction.
@@ -390,8 +392,9 @@ type ToolsConfig struct {
 	Allow            []string                    `json:"allow,omitempty"`      // global allow list (tool names or "group:xxx")
 	Deny             []string                    `json:"deny,omitempty"`       // global deny list
 	AlsoAllow        []string                    `json:"alsoAllow,omitempty"`  // additive: adds without removing existing
-	ByProvider       map[string]*ToolPolicySpec  `json:"byProvider,omitempty"` // per-provider overrides
-	ExecApproval     ExecApprovalCfg             `json:"execApproval"`         // exec command approval settings
+	ByProvider       map[string]*ToolPolicySpec  `json:"byProvider,omitempty"`      // per-provider overrides
+	ShellDenyGroups  map[string]bool             `json:"shellDenyGroups,omitempty"` // global shell deny-group toggles (group name -> denied); per-agent overrides win per-key
+	ExecApproval     ExecApprovalCfg             `json:"execApproval"`              // exec command approval settings
 	WebFetch         WebFetchPolicyConfig        `json:"web_fetch"`            // domain policy for URL fetching
 	Browser          BrowserToolConfig           `json:"browser"`
 	RateLimitPerHour int                         `json:"rate_limit_per_hour,omitempty"` // max tool executions per hour per session (0 = disabled)

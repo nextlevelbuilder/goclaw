@@ -13,11 +13,24 @@ type openAIChoice struct {
 }
 
 type openAIMessage struct {
-	Role             string           `json:"role"`
-	Content          string           `json:"content"`
-	ReasoningContent string           `json:"reasoning_content,omitempty"`
-	Reasoning        string           `json:"reasoning,omitempty"` // Ollama alias for reasoning_content
-	ToolCalls        []openAIToolCall `json:"tool_calls,omitempty"`
+	Role             string            `json:"role"`
+	Content          string            `json:"content"`
+	ReasoningContent string            `json:"reasoning_content,omitempty"`
+	Reasoning        string            `json:"reasoning,omitempty"` // Ollama alias for reasoning_content
+	ToolCalls        []openAIToolCall  `json:"tool_calls,omitempty"`
+	Images           []openAIImagePart `json:"images,omitempty"`
+}
+
+// openAIImagePart represents an image entry in the images[] array returned by
+// OpenAI-compat endpoints that generate images (e.g. gpt-image-1 via chat completions).
+type openAIImagePart struct {
+	Type     string               `json:"type"`
+	ImageURL openAIImageURLObject `json:"image_url"`
+}
+
+// openAIImageURLObject holds the data URL (data:<mime>;base64,<b64>) for an image.
+type openAIImageURLObject struct {
+	URL string `json:"url"`
 }
 
 type openAIToolCall struct {
@@ -65,6 +78,7 @@ type openAIStreamDelta struct {
 	ReasoningContent string                 `json:"reasoning_content,omitempty"`
 	Reasoning        string                 `json:"reasoning,omitempty"` // Ollama alias for reasoning_content
 	ToolCalls        []openAIStreamToolCall `json:"tool_calls,omitempty"`
+	Images           []openAIImagePart      `json:"images,omitempty"`
 }
 
 type openAIStreamToolCall struct {

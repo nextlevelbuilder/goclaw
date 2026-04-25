@@ -208,6 +208,94 @@ func TestHasOtherMention_CaptionWithOtherMention(t *testing.T) {
 	}
 }
 
+// --- stripBotMention ---
+
+func TestStripBotMention_RemovesMention(t *testing.T) {
+	got := stripBotMention("@viet_super_bot vẽ ảnh minh họa", "viet_super_bot")
+	want := "vẽ ảnh minh họa"
+	if got != want {
+		t.Errorf("stripBotMention = %q, want %q", got, want)
+	}
+}
+
+func TestStripBotMention_CaseInsensitive(t *testing.T) {
+	got := stripBotMention("@Viet_Super_Bot hello", "viet_super_bot")
+	if got != "hello" {
+		t.Errorf("stripBotMention case-insensitive = %q, want %q", got, "hello")
+	}
+}
+
+func TestStripBotMention_PreservesOtherMentions(t *testing.T) {
+	got := stripBotMention("@viet_super_bot hỏi @alice về X", "viet_super_bot")
+	want := "hỏi @alice về X"
+	if got != want {
+		t.Errorf("stripBotMention = %q, want %q", got, want)
+	}
+}
+
+func TestStripBotMention_WordBoundary(t *testing.T) {
+	// @viet_super_bot2 must NOT match @viet_super_bot (different bot with similar prefix).
+	got := stripBotMention("@viet_super_bot2 hello", "viet_super_bot")
+	if got != "@viet_super_bot2 hello" {
+		t.Errorf("stripBotMention should not match prefix; got %q", got)
+	}
+}
+
+func TestStripBotMention_EmptyUsername(t *testing.T) {
+	text := "@anything else"
+	if got := stripBotMention(text, ""); got != text {
+		t.Errorf("stripBotMention with empty botUsername should return text unchanged; got %q", got)
+	}
+}
+
+func TestStripBotMention_MultipleOccurrences(t *testing.T) {
+	got := stripBotMention("hey @viet_super_bot, @viet_super_bot help!", "viet_super_bot")
+	// Both removed; internal spacing/punctuation preserved.
+	want := "hey ,  help!"
+	if got != want {
+		t.Errorf("stripBotMention multi = %q, want %q", got, want)
+	}
+}
+
+func TestStripBotMention_PreservesEmailLike(t *testing.T) {
+	// "@viet_super_bot" embedded inside a word (e.g. email/URL) must NOT be stripped.
+	// Telegram mentions require a leading word-boundary, so inline matches are false positives.
+	in := "contact@viet_super_bot.com please"
+	if got := stripBotMention(in, "viet_super_bot"); got != in {
+		t.Errorf("stripBotMention should not strip mention embedded in word; got %q, want %q", got, in)
+	}
+}
+
+func TestStripBotMention_OnlyMentionBecomesEmpty(t *testing.T) {
+	if got := stripBotMention("@viet_super_bot", "viet_super_bot"); got != "" {
+		t.Errorf("mention-only input should become empty; got %q", got)
+	}
+}
+
+// --- buildSelfIdentityPrompt ---
+
+func TestBuildSelfIdentityPrompt_WithDisplayName(t *testing.T) {
+	got := buildSelfIdentityPrompt("viet_super_bot", "ViệtBot")
+	want := "You are @viet_super_bot (ViệtBot) on this Telegram channel."
+	if got != want {
+		t.Errorf("buildSelfIdentityPrompt = %q, want %q", got, want)
+	}
+}
+
+func TestBuildSelfIdentityPrompt_NoDisplayName(t *testing.T) {
+	got := buildSelfIdentityPrompt("viet_super_bot", "")
+	want := "You are @viet_super_bot on this Telegram channel."
+	if got != want {
+		t.Errorf("buildSelfIdentityPrompt = %q, want %q", got, want)
+	}
+}
+
+func TestBuildSelfIdentityPrompt_EmptyUsername(t *testing.T) {
+	if got := buildSelfIdentityPrompt("", "Name"); got != "" {
+		t.Errorf("buildSelfIdentityPrompt with empty username should return empty; got %q", got)
+	}
+}
+
 // --- isServiceMessage ---
 
 func TestIsServiceMessage_WithText(t *testing.T) {

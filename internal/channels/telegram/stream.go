@@ -91,12 +91,13 @@ type DraftStream struct {
 	useDraft        bool   // true = draft transport, false = message transport
 	draftFailed     bool   // true = draft API rejected permanently, using message transport
 	sendMayHaveLanded bool   // true = initial sendMessage was attempted and may have landed (even if timed out)
+	tableMode         string // table rendering mode ("auto", "ascii", "cards", "list", "off")
 }
 
 // NewDraftStream creates a new streaming preview manager.
 // When useDraft is true, the stream will attempt to use sendMessageDraft (Bot API 9.3+)
 // and automatically fall back to sendMessage+editMessageText if the API rejects it.
-func NewDraftStream(bot *telego.Bot, chatID int64, throttleMs int, messageThreadID int, useDraft bool) *DraftStream {
+func NewDraftStream(bot *telego.Bot, chatID int64, throttleMs int, messageThreadID int, useDraft bool, tableMode string) *DraftStream {
 	throttle := defaultStreamThrottle
 	if throttleMs > 0 {
 		throttle = time.Duration(throttleMs) * time.Millisecond
@@ -112,6 +113,7 @@ func NewDraftStream(bot *telego.Bot, chatID int64, throttleMs int, messageThread
 		throttle:        throttle,
 		useDraft:        useDraft,
 		draftID:         draftID,
+		tableMode:       tableMode,
 	}
 }
 
@@ -161,7 +163,7 @@ func (ds *DraftStream) flush(ctx context.Context) error {
 	text := ds.pending
 	// Strip TTS directives before displaying (they'll be processed by Send() later)
 	text = audio.StripTTSDirectives(text)
-	htmlText := markdownToTelegramHTML(text)
+	htmlText := markdownToTelegramHTML(text, ds.tableMode)
 
 	// --- Draft transport (sendMessageDraft) ---
 	if ds.useDraft && !ds.draftFailed {
@@ -308,7 +310,7 @@ func (c *Channel) CreateStream(ctx context.Context, chatID string, firstStream b
 	// reasoning lane — draft messages are ephemeral and would disappear
 	// when the answer stream starts.
 	useDraft := isDM && !firstStream && c.draftTransportEnabled()
-	ds := NewDraftStream(c.bot, id, 0, threadID, useDraft)
+	ds := NewDraftStream(c.bot, id, 0, threadID, useDraft, c.config.TableMode)
 
 	// No placeholder seeding — DraftStream creates its own message on first flush().
 	// This avoids "reply to deleted/non-existent message" artifacts.

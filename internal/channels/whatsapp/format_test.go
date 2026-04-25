@@ -40,7 +40,7 @@ func TestMarkdownToWhatsApp(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := markdownToWhatsApp(tt.in)
+			got := markdownToWhatsApp(tt.in, "")
 			if got != tt.want {
 				t.Errorf("markdownToWhatsApp(%q)\n got: %q\nwant: %q", tt.in, got, tt.want)
 			}

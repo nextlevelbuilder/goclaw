@@ -121,7 +121,8 @@ func TestCodexProviderBuildRequestBodyWithTools(t *testing.T) {
 		Messages: []Message{{Role: "user", Content: "What's the weather?"}},
 		Tools: []ToolDefinition{
 			{
-				Function: ToolFunctionSchema{
+				Type: "function",
+				Function: &ToolFunctionSchema{
 					Name:        "get_weather",
 					Description: "Get current weather",
 					Parameters: map[string]any{
@@ -929,6 +930,114 @@ func TestCodexProviderTokenSource(t *testing.T) {
 
 	if capturedAuth != "Bearer my-oauth-token" {
 		t.Errorf("Authorization = %q, want 'Bearer my-oauth-token'", capturedAuth)
+	}
+}
+
+// TestCodexBuildRequestBodyImageGenerationTool verifies that a ToolDefinition with
+// Type="image_generation" produces a native image_generation object in the tools array,
+// not a function-shaped entry.
+func TestCodexBuildRequestBodyImageGenerationTool(t *testing.T) {
+	p := NewCodexProvider("test", &staticTokenSource{token: "test"}, "", "gpt-4o")
+
+	req := ChatRequest{
+		Messages: []Message{{Role: "user", Content: "Draw a cat"}},
+		Tools: []ToolDefinition{
+			{Type: "image_generation"},
+		},
+	}
+
+	body := p.buildRequestBody(req, false)
+
+	tools, ok := body["tools"].([]map[string]any)
+	if !ok {
+		t.Fatalf("tools is not []map[string]any: %T", body["tools"])
+	}
+	if len(tools) != 1 {
+		t.Fatalf("tools length = %d, want 1", len(tools))
+	}
+
+	tool := tools[0]
+	if tool["type"] != "image_generation" {
+		t.Errorf("tool[type] = %v, want image_generation", tool["type"])
+	}
+	if tool["action"] != "generate" {
+		t.Errorf("tool[action] = %v, want generate", tool["action"])
+	}
+	if tool["model"] != "gpt-image-2" {
+		t.Errorf("tool[model] = %v, want gpt-image-2", tool["model"])
+	}
+	if tool["output_format"] != "png" {
+		t.Errorf("tool[output_format] = %v, want png", tool["output_format"])
+	}
+	if tool["partial_images"] != 1 {
+		t.Errorf("tool[partial_images] = %v, want 1", tool["partial_images"])
+	}
+	// Must NOT contain function-specific fields.
+	if _, has := tool["name"]; has {
+		t.Error("image_generation tool must not have 'name' field")
+	}
+	if _, has := tool["parameters"]; has {
+		t.Error("image_generation tool must not have 'parameters' field")
+	}
+}
+
+// TestCodexBuildRequestBodyMixedTools verifies that a request containing both function
+// tools and an image_generation tool produces both in the correct shapes, in order.
+func TestCodexBuildRequestBodyMixedTools(t *testing.T) {
+	p := NewCodexProvider("test", &staticTokenSource{token: "test"}, "", "gpt-4o")
+
+	req := ChatRequest{
+		Messages: []Message{{Role: "user", Content: "Search and draw"}},
+		Tools: []ToolDefinition{
+			{
+				Type: "function",
+				Function: &ToolFunctionSchema{
+					Name:        "web_search",
+					Description: "Search the web",
+					Parameters: map[string]any{
+						"type":       "object",
+						"properties": map[string]any{"query": map[string]any{"type": "string"}},
+						"required":   []string{"query"},
+					},
+				},
+			},
+			{Type: "image_generation"},
+		},
+	}
+
+	body := p.buildRequestBody(req, false)
+
+	tools, ok := body["tools"].([]map[string]any)
+	if !ok {
+		t.Fatalf("tools is not []map[string]any: %T", body["tools"])
+	}
+	if len(tools) != 2 {
+		t.Fatalf("tools length = %d, want 2", len(tools))
+	}
+
+	// First tool: function shape.
+	fn := tools[0]
+	if fn["type"] != "function" {
+		t.Errorf("tools[0] type = %v, want function", fn["type"])
+	}
+	if fn["name"] != "web_search" {
+		t.Errorf("tools[0] name = %v, want web_search", fn["name"])
+	}
+
+	// Second tool: native image_generation shape.
+	img := tools[1]
+	if img["type"] != "image_generation" {
+		t.Errorf("tools[1] type = %v, want image_generation", img["type"])
+	}
+	if img["action"] != "generate" {
+		t.Errorf("tools[1] action = %v, want generate", img["action"])
+	}
+	if img["model"] != "gpt-image-2" {
+		t.Errorf("tools[1] model = %v, want gpt-image-2", img["model"])
+	}
+	// Function field must not bleed into image tool.
+	if _, has := img["name"]; has {
+		t.Error("image_generation tool must not contain 'name'")
 	}
 }
 

@@ -85,8 +85,8 @@ func TestAnthropicAdapterToRequest_CacheControl(t *testing.T) {
 			{Role: "user", Content: "Hello"},
 		},
 		Tools: []ToolDefinition{
-			{Type: "function", Function: ToolFunctionSchema{Name: "tool1", Description: "desc1", Parameters: map[string]any{"type": "object"}}},
-			{Type: "function", Function: ToolFunctionSchema{Name: "tool2", Description: "desc2", Parameters: map[string]any{"type": "object"}}},
+			{Type: "function", Function: &ToolFunctionSchema{Name: "tool1", Description: "desc1", Parameters: map[string]any{"type": "object"}}},
+			{Type: "function", Function: &ToolFunctionSchema{Name: "tool2", Description: "desc2", Parameters: map[string]any{"type": "object"}}},
 		},
 	}
 	data, _, err := adapter.ToRequest(req)

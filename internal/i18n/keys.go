@@ -202,6 +202,7 @@ const (
 	MsgTtsGeminiInvalidVoice    = "error.tts_gemini_invalid_voice"    // "invalid Gemini voice: %s"
 	MsgTtsGeminiSpeakerLimit    = "error.tts_gemini_speaker_limit"    // "Gemini TTS supports at most 2 speakers"
 	MsgTtsGeminiInvalidModel    = "error.tts_gemini_invalid_model"    // "invalid Gemini TTS model: %s"
+	MsgTtsGeminiTextOnly        = "error.tts_gemini_text_only"        // "Gemini refused to generate audio; try simpler text without translation or commentary"
 	MsgTtsParamOutOfRange       = "error.tts_param_out_of_range"      // "TTS param %q value %v is out of range [%v, %v]"
 	MsgTtsParamUnknownKey       = "error.tts_param_unknown_key"       // "TTS param %q is not supported by this provider"
 	MsgTtsMiniMaxVoicesFailed   = "error.tts_minimax_voices_failed"   // "failed to fetch MiniMax voices: %s"

@@ -172,11 +172,12 @@ func TestResolveConfiguredProviderKeepsExplicitSingleAccountOverride(t *testing.
 	if err != nil {
 		t.Fatalf("ResolveConfiguredProvider() error = %v", err)
 	}
-	if _, ok := resolved.(*providers.ChatGPTOAuthRouter); ok {
-		t.Fatalf("ResolveConfiguredProvider() returned %T, want base Codex provider", resolved)
+	router, ok := resolved.(*providers.ChatGPTOAuthRouter)
+	if !ok {
+		t.Fatalf("ResolveConfiguredProvider() returned %T, want *providers.ChatGPTOAuthRouter", resolved)
 	}
-	if resolved.Name() != "openai-codex" {
-		t.Fatalf("resolved.Name() = %q, want %q", resolved.Name(), "openai-codex")
+	if router.Name() != "openai-codex" {
+		t.Fatalf("router.Name() = %q, want %q", router.Name(), "openai-codex")
 	}
 }
 

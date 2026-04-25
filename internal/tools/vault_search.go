@@ -92,9 +92,15 @@ func (t *VaultSearchTool) Execute(ctx context.Context, args map[string]any) *Res
 		UserID:   userID,
 		TenantID: tenantID.String(),
 	}
-	// Team context from RunContext — cannot be spoofed via tool args.
+	// Team + chat context from RunContext — cannot be spoofed via tool args.
 	if rc := store.RunContextFromCtx(ctx); rc != nil && rc.TeamID != "" {
 		opts.TeamID = &rc.TeamID
+		if rc.TeamIsolated {
+			opts.TeamIsolated = true
+			if chatID := WorkspaceChatIDFromCtx(ctx); chatID != "" {
+				opts.ChatID = &chatID
+			}
+		}
 	}
 
 	if scope, ok := args["scope"].(string); ok && scope != "" {

@@ -39,17 +39,13 @@ type Channel struct {
 	reactions         sync.Map                    // localKey string → *StatusReactionController
 	threadIDs         sync.Map                    // localKey string → messageThreadID int (for forum topic routing)
 	mentionMode       string             // "strict" (default) or "yield"
+	botDisplayName    string             // bot's first_name from GetMe (e.g. "ViệtBot"); captured once at Start
 	pollCancel        context.CancelFunc // cancels the long polling context
+	pollDone          chan struct{}      // closed when polling goroutine exits
 	handlerWg         sync.WaitGroup     // tracks in-flight handler goroutines for graceful shutdown
 	handlerSem        chan struct{}      // bounded semaphore for concurrent handler goroutines
 	pendingDraftID    sync.Map           // localKey string → int (draftID)
-
-	// reconnectMu guards the reconnect state.
-	reconnectMu sync.Mutex
-	reconnecting bool
 	audioMgr          *audio.Manager    // unified STT via audio.Manager (nil = no STT)
-	writerHealMu      sync.Mutex         // guards writerHealLastTry for /writers self-heal
-	writerHealLastTry map[string]time.Time // key "chatID|userID" → last attempt timestamp
 	// pairingService, approvedGroups, pairingDebounce, groupHistory, historyLimit, requireMention
 	// are inherited from channels.BaseChannel.
 }
@@ -115,13 +111,7 @@ func New(cfg config.TelegramConfig, msgBus *bus.MessageBus, pairingSvc store.Pai
 	}
 
 	httpClient := &http.Client{
-		// Must exceed getUpdates long-poll Timeout (25s, #361) AND cover the
-		// longest per-attempt media upload. A 60s cap was killing multi-MB
-		// photo uploads on slow networks mid-flight (#628), even when the
-		// per-call ctx deadline was generous. 3 min matches
-		// sendMediaOverallTimeout so a single upload attempt can consume the
-		// full media budget when needed.
-		Timeout:   3 * time.Minute,
+		Timeout:   60 * time.Second, // Must exceed getUpdates Timeout to avoid long-poll race (#361)
 		Transport: transport,
 	}
 	// Apply ForceIPv4 at init if configured (explicit, predictable, no runtime heuristic).
@@ -192,31 +182,15 @@ func (c *Channel) Start(ctx context.Context) error {
 	username := ""
 	if me != nil {
 		username = me.Username
+		c.botDisplayName = me.FirstName
 	}
 
 	// Create a cancellable context for the polling goroutine.
 	// Stop() cancels this context to cleanly shut down long polling.
 	pollCtx, cancel := context.WithCancel(ctx)
 	c.pollCancel = cancel
-	c.handlerSem = make(chan struct{}, 20) // limit concurrent message handlers
+	c.pollDone = make(chan struct{})
 
-	c.SetRunning(true)
-	c.MarkHealthy(connectedSummary(username))
-	if gh := c.GroupHistory(); gh != nil {
-		gh.StartFlusher()
-	}
-	slog.Info("telegram bot connected", "username", username)
-
-	// Start the initial polling loop.
-	c.startPolling(pollCtx, username)
-
-	return nil
-}
-
-// startPolling starts the long polling loop and the reconnect watchdog.
-// When the updates channel closes unexpectedly, the watchdog retries
-// with exponential backoff (5s → 60s cap, max 5 attempts).
-func (c *Channel) startPolling(pollCtx context.Context, username string) {
 	updates, err := c.bot.UpdatesViaLongPolling(pollCtx, &telego.GetUpdatesParams{
 		Timeout: 25, // Long-poll seconds; keep below HTTP client Timeout (#361)
 		AllowedUpdates: []string{
@@ -227,11 +201,17 @@ func (c *Channel) startPolling(pollCtx context.Context, username string) {
 		},
 	})
 	if err != nil {
-		slog.Error("telegram: failed to start long polling", "error", err)
-		c.MarkFailed("Telegram polling failed", err.Error(),
-			channels.ChannelFailureKindNetwork, true)
-		return
+		cancel()
+		return fmt.Errorf("start long polling: %w", err)
 	}
+
+	c.SetRunning(true)
+	c.MarkHealthy(connectedSummary(username))
+	if gh := c.GroupHistory(); gh != nil {
+		gh.StartFlusher()
+	}
+	c.handlerSem = make(chan struct{}, 20) // limit concurrent message handlers
+	slog.Info("telegram bot connected", "username", username)
 
 	// Register bot menu commands with retry.
 	go func() {
@@ -262,19 +242,17 @@ func (c *Channel) startPolling(pollCtx context.Context, username string) {
 	}()
 
 	go func() {
+		defer close(c.pollDone)
 		for {
 			select {
 			case <-pollCtx.Done():
 				return
 			case update, ok := <-updates:
 				if !ok {
-					slog.Info("telegram updates channel closed")
 					if pollCtx.Err() == nil {
-						c.MarkDegraded("Telegram polling stopped",
-							"Updates channel closed, starting reconnect watchdog",
-							channels.ChannelFailureKindNetwork, true)
-						go c.reconnectWatchdog(pollCtx, username)
+						c.MarkFailed("Polling stopped unexpectedly", "Telegram updates channel closed unexpectedly.", channels.ChannelFailureKindNetwork, true)
 					}
+					slog.Info("telegram updates channel closed")
 					return
 				}
 				if update.Message != nil {
@@ -319,64 +297,8 @@ func (c *Channel) startPolling(pollCtx context.Context, username string) {
 			}
 		}
 	}()
-}
 
-// reconnectWatchdog attempts to restart polling with exponential backoff.
-// Runs in a background goroutine. Stops when polling is restored or context is cancelled.
-func (c *Channel) reconnectWatchdog(ctx context.Context, username string) {
-	c.reconnectMu.Lock()
-	if c.reconnecting {
-		c.reconnectMu.Unlock()
-		return
-	}
-	c.reconnecting = true
-	c.reconnectMu.Unlock()
-
-	defer func() {
-		c.reconnectMu.Lock()
-		c.reconnecting = false
-		c.reconnectMu.Unlock()
-	}()
-
-	const maxAttempts = 5
-	const maxBackoff = 60 * time.Second
-
-	for attempt := 0; attempt < maxAttempts; attempt++ {
-		backoff := time.Duration(attempt+1) * 5 * time.Second
-		if backoff > maxBackoff {
-			backoff = maxBackoff
-		}
-
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(backoff):
-		}
-
-		slog.Info("telegram: reconnect watchdog attempting restart",
-			"attempt", attempt+1, "max", maxAttempts)
-
-		// Re-validate bot connection before retrying.
-		probeCtx, probeCancel := context.WithTimeout(ctx, probeOverallTimeout)
-		_, err := c.bot.GetMe(probeCtx)
-		probeCancel()
-		if err != nil {
-			slog.Warn("telegram: reconnect watchdog probe failed",
-				"attempt", attempt+1, "error", err)
-			continue
-		}
-
-		// Bot is reachable — restart polling.
-		c.startPolling(ctx, username)
-		c.MarkHealthy(connectedSummary(username))
-		slog.Info("telegram: reconnected", "attempt", attempt+1)
-		return
-	}
-
-	slog.Warn("telegram: reconnect watchdog exhausted retries", "attempts", maxAttempts)
-	c.MarkFailed("Telegram reconnect failed",
-		fmt.Sprintf("Failed after %d attempts", maxAttempts),
-		channels.ChannelFailureKindNetwork, true)
+	return nil
 }
 
 // StreamEnabled reports whether streaming is active for the given chat type.
@@ -440,6 +362,17 @@ func (c *Channel) Stop(_ context.Context) error {
 
 	if c.pollCancel != nil {
 		c.pollCancel()
+	}
+
+	// Wait for the polling goroutine to fully exit so that
+	// Telegram releases the getUpdates lock before a new instance starts.
+	if c.pollDone != nil {
+		select {
+		case <-c.pollDone:
+			slog.Info("telegram polling goroutine stopped")
+		case <-time.After(10 * time.Second):
+			slog.Warn("telegram polling goroutine did not exit within timeout")
+		}
 	}
 
 	// Wait for in-flight handler goroutines to finish processing.

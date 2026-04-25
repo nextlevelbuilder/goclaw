@@ -39,6 +39,7 @@ const (
 	MethodSessionsPatch   = "sessions.patch"
 	MethodSessionsDelete  = "sessions.delete"
 	MethodSessionsReset   = "sessions.reset"
+	MethodSessionsCompact = "sessions.compact"
 
 	// System
 	MethodConnect = "connect"
