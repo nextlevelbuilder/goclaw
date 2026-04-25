@@ -176,9 +176,9 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 	}
 
 	// Resolve group-specific agent override.
-	targetAgentID := c.AgentID()
+	targetAgentID := c.resolveAgentID(chatID, peerKind)
 	if peerKind == "group" {
-		slog.Info("whatsapp group routing", "chat_id", chatID, "default_agent", targetAgentID,
+		slog.Info("whatsapp group routing", "chat_id", chatID, "default_agent", c.AgentID(),
 			"groups_count", len(c.config.Groups))
 		if c.config.Groups != nil {
 			if grp, ok := c.config.Groups[chatID]; ok && grp != nil {
@@ -187,7 +187,6 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 					return
 				}
 				if grp.AgentID != "" && grp.AgentID != "__default__" {
-					targetAgentID = grp.AgentID
 					slog.Info("whatsapp group agent override applied", "chat_id", chatID, "agent_id", targetAgentID)
 				}
 			} else {

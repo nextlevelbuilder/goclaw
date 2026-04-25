@@ -477,6 +477,20 @@ func (c *Channel) resolveGraphID(chatID, peerKind string) string {
 	return chatID
 }
 
+// resolveAgentID returns the effective agent ID for a chat, applying
+// group-specific overrides from config when applicable.
+func (c *Channel) resolveAgentID(chatID, peerKind string) string {
+	agentID := c.AgentID()
+	if peerKind == "group" && c.config.Groups != nil {
+		if grp, ok := c.config.Groups[chatID]; ok && grp != nil {
+			if grp.AgentID != "" && grp.AgentID != "__default__" {
+				agentID = grp.AgentID
+			}
+		}
+	}
+	return agentID
+}
+
 // RefreshedGroup is a lightweight summary of a joined WhatsApp group.
 type RefreshedGroup struct {
 	JID              string `json:"jid"`
