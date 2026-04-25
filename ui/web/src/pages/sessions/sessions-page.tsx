@@ -6,9 +6,11 @@ import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { SearchInput } from "@/components/shared/search-input";
 import { Pagination } from "@/components/shared/pagination";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
+import { useMinLoading } from "@/hooks/use-min-loading";
 import { useUiStore } from "@/stores/use-ui-store";
 import { useSessions } from "./hooks/use-sessions";
 import { SessionDetailPage } from "./session-detail-page";
@@ -27,10 +29,11 @@ export function SessionsPage() {
   const [pageSize, setPageSizeRaw] = useState(globalPageSize);
   const setPageSize = (size: number) => { setPageSizeRaw(size); setPage(1); setGlobalPageSize(size); };
 
-  const { sessions, total, loading, preview, deleteSession, resetSession, patchSession } = useSessions({
+  const { sessions, total, loading, fetching, refresh, preview, deleteSession, resetSession, patchSession } = useSessions({
     limit: pageSize,
     offset: (page - 1) * pageSize,
   });
+  const spinning = useMinLoading(fetching);
   const showSkeleton = useDeferredLoading(loading && sessions.length === 0);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -69,7 +72,16 @@ export function SessionsPage() {
 
   return (
     <div className="p-4 sm:p-6 pb-10">
-      <PageHeader title={t("title")} description={t("description")} />
+      <PageHeader
+        title={t("title")}
+        description={t("description")}
+        actions={
+          <Button variant="outline" size="sm" onClick={refresh} disabled={spinning} className="gap-1">
+            <RefreshCw className={"h-3.5 w-3.5" + (spinning ? " animate-spin" : "")} />
+            {t("refresh")}
+          </Button>
+        }
+      />
 
       <div className="mt-4">
         <SearchInput

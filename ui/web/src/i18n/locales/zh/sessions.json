@@ -6,6 +6,7 @@
   "emptyDescription": "开始聊天后Session将显示在此处。",
   "noMatchTitle": "未找到匹配的Session",
   "noMatchDescription": "请尝试其他搜索词。",
+  "refresh": "刷新",
   "columns": {
     "session": "Session",
     "agent": "Agent",

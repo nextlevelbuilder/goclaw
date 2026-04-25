@@ -6,6 +6,7 @@
   "emptyDescription": "Sessions will appear here once you start chatting.",
   "noMatchTitle": "No matching sessions",
   "noMatchDescription": "Try a different search term.",
+  "refresh": "Refresh",
   "columns": {
     "session": "Session",
     "agent": "Agent",

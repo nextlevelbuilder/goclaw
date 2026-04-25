@@ -6,6 +6,7 @@
   "emptyDescription": "Các session sẽ xuất hiện ở đây khi bạn bắt đầu trò chuyện.",
   "noMatchTitle": "Không tìm thấy session phù hợp",
   "noMatchDescription": "Thử từ khóa tìm kiếm khác.",
+  "refresh": "Làm mới",
   "columns": {
     "session": "Session",
     "agent": "Agent",

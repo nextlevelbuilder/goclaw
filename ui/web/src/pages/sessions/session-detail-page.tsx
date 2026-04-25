@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, Trash2, RotateCcw, Eye, Pencil, Check, X } from "lucide-react";
+import { ArrowLeft, Trash2, RotateCcw, Eye, Pencil, Check, X, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { MessageBubble } from "@/components/chat/message-bubble";
@@ -57,6 +57,7 @@ export function SessionDetailPage({
   const [loading, setLoading] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
 
@@ -206,6 +207,13 @@ export function SessionDetailPage({
           </div>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" size="sm" disabled={refreshing} className="gap-1" onClick={() => {
+            setRefreshing(true);
+            loadMessages();
+            setTimeout(() => setRefreshing(false), 600);
+          }}>
+            <RefreshCw className={"h-3.5 w-3.5" + (refreshing ? " animate-spin" : "")} />
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setConfirmReset(true)} className="gap-1">
             <RotateCcw className="h-3.5 w-3.5" /> {t("detail.reset")}
           </Button>

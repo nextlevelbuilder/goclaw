@@ -23,7 +23,7 @@ export function useSessions(opts: UseSessionsOptions = {}) {
 
   const queryKey = queryKeys.sessions.list({ agentFilter, limit, offset });
 
-  const { data, isPending: loading } = useQuery({
+  const { data, isPending: loading, isFetching: fetching } = useQuery({
     queryKey,
     queryFn: async () => {
       if (!ws.isConnected) return { sessions: [] as SessionInfo[], total: 0 };
@@ -104,5 +104,5 @@ export function useSessions(opts: UseSessionsOptions = {}) {
     [ws, invalidate],
   );
 
-  return { sessions, total, loading, refresh: invalidate, preview, deleteSession, resetSession, patchSession };
+  return { sessions, total, loading, fetching, refresh: invalidate, preview, deleteSession, resetSession, patchSession };
 }
