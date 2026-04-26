@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Settings2, Loader2, Save, AlertTriangle, Info, ExternalLink, Network, Cog, Activity } from "lucide-react";
+import { Settings2, Loader2, Save, AlertTriangle, Info, ExternalLink, Network, Cog } from "lucide-react";
 import { Link } from "react-router";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -70,12 +70,6 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
   const [maMaxDefaultMb, setMaMaxDefaultMb] = useState("20");
   const [maTimeoutSec, setMaTimeoutSec] = useState("30");
 
-  // MCP Health
-  const [mcpHealthFailThreshold, setMcpHealthFailThreshold] = useState("3");
-  const [mcpHealthCheckInterval, setMcpHealthCheckInterval] = useState("30");
-  const [mcpMaxReconnectAttempts, setMcpMaxReconnectAttempts] = useState("10");
-  const [mcpReconnectCooldown, setMcpReconnectCooldown] = useState("300");
-
   const applyConfigs = useCallback((
     configs: Record<string, string>,
     kgSettings?: { extraction_provider?: string; extraction_model?: string; min_confidence?: number },
@@ -98,10 +92,6 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
       maMaxVideoMb: configs["listen.media_analysis.max_video_mb"] || "100",
       maMaxDefaultMb: configs["listen.media_analysis.max_default_mb"] || "20",
       maTimeoutSec: configs["listen.media_analysis.timeout_sec"] || "30",
-      mcpHealthFailThreshold: configs["mcp.health_fail_threshold"] || "3",
-      mcpHealthCheckInterval: configs["mcp.health_check_interval"] || "30",
-      mcpMaxReconnectAttempts: configs["mcp.max_reconnect_attempts"] || "10",
-      mcpReconnectCooldown: configs["mcp.reconnect_cooldown"] || "300",
     };
     setInit(s);
     setEmbProvider(s.embProvider); setEmbModel(s.embModel); setEmbMaxChunkLen(s.embMaxChunkLen); setEmbChunkOverlap(s.embChunkOverlap);
@@ -112,8 +102,6 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
     setMaEnabled(s.maEnabled); setMaMaxImageMb(s.maMaxImageMb); setMaMaxAudioMb(s.maMaxAudioMb);
     setMaMaxDocMb(s.maMaxDocMb); setMaMaxVideoMb(s.maMaxVideoMb); setMaMaxDefaultMb(s.maMaxDefaultMb);
     setMaTimeoutSec(s.maTimeoutSec);
-    setMcpHealthFailThreshold(s.mcpHealthFailThreshold); setMcpHealthCheckInterval(s.mcpHealthCheckInterval);
-    setMcpMaxReconnectAttempts(s.mcpMaxReconnectAttempts); setMcpReconnectCooldown(s.mcpReconnectCooldown);
     resetEmb();
   }, [resetEmb]);
 
@@ -164,10 +152,6 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
       if (maMaxVideoMb !== init.maMaxVideoMb) updates["listen.media_analysis.max_video_mb"] = maMaxVideoMb;
       if (maMaxDefaultMb !== init.maMaxDefaultMb) updates["listen.media_analysis.max_default_mb"] = maMaxDefaultMb;
       if (maTimeoutSec !== init.maTimeoutSec) updates["listen.media_analysis.timeout_sec"] = maTimeoutSec;
-      if (mcpHealthFailThreshold !== init.mcpHealthFailThreshold) updates["mcp.health_fail_threshold"] = mcpHealthFailThreshold;
-      if (mcpHealthCheckInterval !== init.mcpHealthCheckInterval) updates["mcp.health_check_interval"] = mcpHealthCheckInterval;
-      if (mcpMaxReconnectAttempts !== init.mcpMaxReconnectAttempts) updates["mcp.max_reconnect_attempts"] = mcpMaxReconnectAttempts;
-      if (mcpReconnectCooldown !== init.mcpReconnectCooldown) updates["mcp.reconnect_cooldown"] = mcpReconnectCooldown;
       for (const [key, value] of Object.entries(updates)) await http.put(`/v1/system-configs/${key}`, { value });
       const kgChanged = kgProvider !== init.kgProvider || kgModel !== init.kgModel || kgMinConfidence !== init.kgMinConfidence;
       if (kgChanged) {
@@ -287,41 +271,6 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
                 )}
                 <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
                   <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span>{t("ma.info")}</span>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* MCP Health */}
-            <Card className="border-teal-200 dark:border-teal-800">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base"><Activity className="h-4 w-4 text-teal-500" />{t("mcp.title")}</CardTitle>
-                <CardDescription>{t("mcp.description")}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4 pt-0">
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  <div className="space-y-1">
-                    <Label htmlFor="mcpFailThreshold" className="text-xs">{t("mcp.healthFailThreshold")}</Label>
-                    <Input id="mcpFailThreshold" type="number" min={1} placeholder="3" value={mcpHealthFailThreshold} onChange={(e) => setMcpHealthFailThreshold(e.target.value)} className="text-base md:text-sm" />
-                    <p className="text-[10px] text-muted-foreground">{t("mcp.healthFailThresholdHint")}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="mcpCheckInterval" className="text-xs">{t("mcp.healthCheckInterval")}</Label>
-                    <Input id="mcpCheckInterval" type="number" min={5} placeholder="30" value={mcpHealthCheckInterval} onChange={(e) => setMcpHealthCheckInterval(e.target.value)} className="text-base md:text-sm" />
-                    <p className="text-[10px] text-muted-foreground">{t("mcp.healthCheckIntervalHint")}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="mcpMaxReconnect" className="text-xs">{t("mcp.maxReconnectAttempts")}</Label>
-                    <Input id="mcpMaxReconnect" type="number" min={1} placeholder="10" value={mcpMaxReconnectAttempts} onChange={(e) => setMcpMaxReconnectAttempts(e.target.value)} className="text-base md:text-sm" />
-                    <p className="text-[10px] text-muted-foreground">{t("mcp.maxReconnectAttemptsHint")}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="mcpCooldown" className="text-xs">{t("mcp.reconnectCooldown")}</Label>
-                    <Input id="mcpCooldown" type="number" min={10} placeholder="300" value={mcpReconnectCooldown} onChange={(e) => setMcpReconnectCooldown(e.target.value)} className="text-base md:text-sm" />
-                    <p className="text-[10px] text-muted-foreground">{t("mcp.reconnectCooldownHint")}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-2 rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-xs text-teal-700 dark:border-teal-800 dark:bg-teal-950/30 dark:text-teal-300">
-                  <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span>{t("mcp.info")}</span>
                 </div>
               </CardContent>
             </Card>

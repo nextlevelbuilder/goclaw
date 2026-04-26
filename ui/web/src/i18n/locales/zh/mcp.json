@@ -70,7 +70,16 @@
       "connectionFailed": "连接失败"
     },
     "requireUserCredentials": "要求用户凭据",
-    "requireUserCredentialsHint": "每个用户必须配置自己的凭据。未设置凭据的用户将无法使用此服务器。"
+    "requireUserCredentialsHint": "每个用户必须配置自己的凭据。未设置凭据的用户将无法使用此服务器。",
+    "healthTitle": "健康监控",
+    "healthFailThreshold": "失败阈值",
+    "healthFailThresholdHint": "触发重连前的连续 ping 失败次数（0 = 全局）。",
+    "healthCheckInterval": "检查间隔（秒）",
+    "healthCheckIntervalHint": "健康 ping 之间的秒数（0 = 全局）。",
+    "maxReconnectAttempts": "最大重连尝试",
+    "maxReconnectAttemptsHint": "进入冷却前的尝试次数（0 = 全局）。",
+    "reconnectCooldown": "重连冷却（秒）",
+    "reconnectCooldownHint": "耗尽尝试后的等待秒数（0 = 全局）。"
   },
   "grants": {
     "title": "Agent授权 - {{name}}",
@@ -139,6 +148,7 @@
   },
   "health": {
     "title": "健康历史 — {{name}}",
+    "buttonTitle": "健康历史",
     "summary": {
       "total": "总检查次数",
       "avgLatency": "平均延迟"

@@ -647,7 +647,7 @@ func (e *poolEntry) MCPTools() []mcpgo.Tool { return e.tools }
 // a fresh client, mirroring the Manager.tryReconnect slow path.
 // When a HealthCheckWriter is configured, each check result is persisted.
 func (p *Pool) poolHealthLoop(ctx context.Context, ss *serverState) {
-	ticker := newHealthTicker()
+	ticker := time.NewTicker(time.Duration(ss.getHealthCheckInterval()) * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -677,7 +677,7 @@ func (p *Pool) poolHealthLoop(ctx context.Context, ss *serverState) {
 
 				p.writeHealthCheck(ctx, ss, "unhealthy", 0, err.Error())
 
-				if failures >= int(healthFailThreshold.Load()) {
+				if failures >= ss.getHealthFailThreshold() {
 					ss.connected.Store(false)
 					p.writeHealthCheck(ctx, ss, "reconnecting", 0, err.Error())
 					poolTryReconnect(ctx, ss)
@@ -722,7 +722,7 @@ func (p *Pool) writeHealthCheck(ctx context.Context, ss *serverState, status str
 // poolUserHealthLoop is a lightweight health loop for user-scoped connections
 // (no health persistence since these are ephemeral per-user connections).
 func poolUserHealthLoop(ctx context.Context, ss *serverState) {
-	ticker := newHealthTicker()
+	ticker := time.NewTicker(time.Duration(ss.getHealthCheckInterval()) * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -746,7 +746,7 @@ func poolUserHealthLoop(ctx context.Context, ss *serverState) {
 
 				slog.Warn("mcp.pool.health_failed", "server", ss.name, "error", err, "consecutive", failures)
 
-				if failures >= int(healthFailThreshold.Load()) {
+				if failures >= ss.getHealthFailThreshold() {
 					ss.connected.Store(false)
 					poolTryReconnect(ctx, ss)
 				}

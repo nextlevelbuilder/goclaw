@@ -1,6 +1,6 @@
 import { useState, useEffect, lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
-import { Plug, Plus, RefreshCw, RotateCcw, Pencil, Trash2, Users, Wrench, KeyRound, Activity } from "lucide-react";
+import { Plug, Plus, RefreshCw, RotateCcw, Pencil, Trash2, Users, Wrench, KeyRound, Activity, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/shared/page-header";
@@ -12,6 +12,7 @@ import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { useMCP, type MCPServerData, type MCPServerInput } from "./hooks/use-mcp";
 import { MCPFormDialog } from "./mcp-form-dialog";
+import { MCPGlobalSettingsDialog } from "./mcp-global-settings-dialog";
 import { MCPToolsDialog } from "./mcp-tools-dialog";
 import { useMinLoading } from "@/hooks/use-min-loading";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
@@ -56,6 +57,7 @@ export function MCPPage() {
   const [credentialsServer, setCredentialsServer] = useState<MCPServerData | null>(null);
   const [healthServer, setHealthServer] = useState<MCPServerData | null>(null);
   const [reconnectingId, setReconnectingId] = useState<string | null>(null);
+  const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
 
   const filtered = servers.filter(
     (s) =>
@@ -99,6 +101,9 @@ export function MCPPage() {
             </Button>
             <Button variant="outline" size="sm" onClick={refresh} disabled={spinning} className="gap-1">
               <RefreshCw className={"h-3.5 w-3.5" + (spinning ? " animate-spin" : "")} /> {tc("refresh")}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setGlobalSettingsOpen(true)} className="gap-1">
+              <Settings2 className="h-3.5 w-3.5" />
             </Button>
           </div>
         }
@@ -162,10 +167,13 @@ export function MCPPage() {
                       </Badge>
                     </td>
                     <td className="px-4 py-3">
-                      {(() => {
-                        const hb = serverHealthBadge(srv.health_status);
-                        return <StatusBadge status={hb.status} label={t(hb.label)} />;
-                      })()}
+                      {srv.health_status
+                        ? (() => {
+                            const hb = serverHealthBadge(srv.health_status);
+                            return <StatusBadge status={hb.status} label={t(hb.label)} />;
+                          })()
+                        : <span className="text-muted-foreground">—</span>
+                      }
                     </td>
                     <td className="px-4 py-3 text-center">
                       <Button
@@ -192,7 +200,7 @@ export function MCPPage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => setHealthServer(srv)}
-                          title={t("health.title")}
+                          title={t("health.buttonTitle")}
                         >
                           <Activity className="h-3.5 w-3.5" />
                         </Button>
@@ -324,6 +332,11 @@ export function MCPPage() {
           />
         </Suspense>
       )}
+
+      <MCPGlobalSettingsDialog
+        open={globalSettingsOpen}
+        onOpenChange={setGlobalSettingsOpen}
+      />
     </div>
   );
 }

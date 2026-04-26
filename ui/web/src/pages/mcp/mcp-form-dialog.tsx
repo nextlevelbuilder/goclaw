@@ -66,6 +66,10 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit, onTest }: 
       timeout: 60,
       enabled: true,
       requireUserCreds: false,
+      healthFailThreshold: 0,
+      healthCheckInterval: 0,
+      maxReconnectAttempts: 0,
+      reconnectCooldown: 0,
     },
   });
 
@@ -93,6 +97,10 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit, onTest }: 
         timeout: server?.timeout_sec ?? 60,
         enabled: server?.enabled ?? true,
         requireUserCreds: server?.settings?.require_user_credentials ?? false,
+        healthFailThreshold: server?.settings?.health_fail_threshold ?? 0,
+        healthCheckInterval: server?.settings?.health_check_interval ?? 0,
+        maxReconnectAttempts: server?.settings?.max_reconnect_attempts ?? 0,
+        reconnectCooldown: server?.settings?.reconnect_cooldown ?? 0,
       });
       setError("");
       setTestResult(null);
@@ -155,7 +163,13 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit, onTest }: 
         ...buildConnectionData(),
         tool_prefix: data.toolPrefix.trim() || undefined,
         timeout_sec: data.timeout,
-        settings: { require_user_credentials: data.requireUserCreds },
+        settings: {
+          require_user_credentials: data.requireUserCreds,
+          health_fail_threshold: data.healthFailThreshold || undefined,
+          health_check_interval: data.healthCheckInterval || undefined,
+          max_reconnect_attempts: data.maxReconnectAttempts || undefined,
+          reconnect_cooldown: data.reconnectCooldown || undefined,
+        },
         enabled: data.enabled,
       });
       onOpenChange(false);

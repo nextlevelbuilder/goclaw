@@ -70,7 +70,16 @@
       "connectionFailed": "Kết nối thất bại"
     },
     "requireUserCredentials": "Yêu cầu Credentials riêng",
-    "requireUserCredentialsHint": "Mỗi user phải cấu hình credentials riêng. Server bị vô hiệu cho user chưa có credentials."
+    "requireUserCredentialsHint": "Mỗi user phải cấu hình credentials riêng. Server bị vô hiệu cho user chưa có credentials.",
+    "healthTitle": "Giám sát sức khỏe",
+    "healthFailThreshold": "Ngưỡng lỗi",
+    "healthFailThresholdHint": "Số lần ping thất bại liên tiếp trước khi kết nối lại (0 = toàn cục).",
+    "healthCheckInterval": "Chu kỳ kiểm tra (giây)",
+    "healthCheckIntervalHint": "Số giây giữa các lần ping (0 = toàn cục).",
+    "maxReconnectAttempts": "Số lần kết nối lại tối đa",
+    "maxReconnectAttemptsHint": "Số lần thử trước khi nghỉ (0 = toàn cục).",
+    "reconnectCooldown": "Thời gian chờ kết nối lại (giây)",
+    "reconnectCooldownHint": "Số giây chờ sau khi hết lần thử (0 = toàn cục)."
   },
   "grants": {
     "title": "Quyền agent - {{name}}",
@@ -139,6 +148,7 @@
   },
   "health": {
     "title": "Lịch sử sức khỏe — {{name}}",
+    "buttonTitle": "Lịch sử sức khỏe",
     "summary": {
       "total": "Tổng kiểm tra",
       "avgLatency": "Độ trễ TB"

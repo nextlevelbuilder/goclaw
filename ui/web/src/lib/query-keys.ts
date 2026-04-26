@@ -31,6 +31,7 @@ export const queryKeys = {
   },
   mcp: {
     all: ["mcp"] as const,
+    globalSettings: ["mcp", "global-settings"] as const,
   },
   channels: {
     all: ["channels"] as const,

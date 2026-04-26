@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -101,11 +102,18 @@ func connectAndDiscover(ctx context.Context, name, transportType, command string
 
 // connectServer creates a client, initializes the connection, discovers tools, and registers them.
 // serverID is the MCP server UUID from DB (uuid.Nil for config-path servers).
-func (m *Manager) connectServer(ctx context.Context, name, transportType, command string, args []string, env map[string]string, url string, headers map[string]string, toolPrefix string, timeoutSec int, serverID uuid.UUID) error {
+func (m *Manager) connectServer(ctx context.Context, name, transportType, command string, args []string, env map[string]string, url string, headers map[string]string, toolPrefix string, timeoutSec int, serverID uuid.UUID, settings json.RawMessage) error {
 	ss, mcpTools, err := connectAndDiscover(ctx, name, transportType, command, args, env, url, headers, timeoutSec)
 	if err != nil {
 		return err
 	}
+
+	// Apply per-server health settings from settings JSON blob
+	hs := parseHealthSettings(settings)
+	ss.healthFailThreshold = hs.HealthFailThreshold
+	ss.healthCheckInterval = hs.HealthCheckInterval
+	ss.maxReconnectAttempts = hs.MaxReconnectAttempts
+	ss.reconnectCooldown = hs.ReconnectCooldown
 
 	// Register tools
 	registeredNames := m.registerBridgeTools(ss, mcpTools, name, toolPrefix, timeoutSec, serverID)
@@ -162,11 +170,18 @@ func (m *Manager) registerBridgeTools(ss *serverState, mcpTools []mcpgo.Tool, se
 // connectViaPool acquires a shared connection from the pool and creates
 // per-agent BridgeTools pointing to the shared client/connected pointers.
 // serverID is the MCP server UUID from DB.
-func (m *Manager) connectViaPool(ctx context.Context, tenantID uuid.UUID, name, transportType, command string, args []string, env map[string]string, url string, headers map[string]string, toolPrefix string, timeoutSec int, serverID uuid.UUID) error {
+func (m *Manager) connectViaPool(ctx context.Context, tenantID uuid.UUID, name, transportType, command string, args []string, env map[string]string, url string, headers map[string]string, toolPrefix string, timeoutSec int, serverID uuid.UUID, settings json.RawMessage) error {
 	entry, err := m.pool.Acquire(ctx, tenantID, serverID, name, transportType, command, args, env, url, headers, timeoutSec)
 	if err != nil {
 		return err
 	}
+
+	// Apply per-server health settings to the pool entry's serverState
+	hs := parseHealthSettings(settings)
+	entry.state.healthFailThreshold = hs.HealthFailThreshold
+	entry.state.healthCheckInterval = hs.HealthCheckInterval
+	entry.state.maxReconnectAttempts = hs.MaxReconnectAttempts
+	entry.state.reconnectCooldown = hs.ReconnectCooldown
 
 	// Create per-agent BridgeTools from the pool's shared connection
 	registeredNames := m.registerPoolBridgeTools(entry, name, toolPrefix, timeoutSec, serverID)
@@ -267,7 +282,7 @@ func isMethodNotFound(err error) bool {
 
 // healthLoop periodically pings the MCP server and attempts reconnection on failure.
 func (m *Manager) healthLoop(ctx context.Context, ss *serverState) {
-	ticker := newHealthTicker()
+	ticker := time.NewTicker(time.Duration(ss.getHealthCheckInterval()) * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -295,7 +310,7 @@ func (m *Manager) healthLoop(ctx context.Context, ss *serverState) {
 
 				// Only mark disconnected and attempt reconnect after consecutive failures
 				// to tolerate transient errors (e.g. 504 from upstream proxy).
-				if failures >= int(healthFailThreshold.Load()) {
+				if failures >= ss.getHealthFailThreshold() {
 					ss.connected.Store(false)
 					m.tryReconnect(ctx, ss)
 				}
@@ -322,8 +337,8 @@ func (m *Manager) tryReconnect(ctx context.Context, ss *serverState) {
 // slow-path full reconnect (dead server-side session).
 // logPrefix distinguishes log entries (e.g. "mcp.server" vs "mcp.pool").
 func reconnectWithBackoff(ctx context.Context, ss *serverState, logPrefix string) {
-	maxAttempts := int(maxReconnectAttempts.Load())
-	cooldown := time.Duration(reconnectCooldown.Load()) * time.Second
+	maxAttempts := ss.getMaxReconnectAttempts()
+	cooldown := ss.getReconnectCooldown()
 	ss.mu.Lock()
 	if ss.reconnAttempts >= maxAttempts {
 		ss.lastErr = fmt.Sprintf("max reconnect attempts (%d) reached, entering cooldown", maxAttempts)

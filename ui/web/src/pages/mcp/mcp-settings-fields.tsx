@@ -24,6 +24,10 @@ export function McpSettingsFields({ form }: McpSettingsFieldsProps) {
   const name = watch("name");
   const enabled = watch("enabled");
   const requireUserCreds = watch("requireUserCreds");
+  const healthFailThreshold = watch("healthFailThreshold") ?? 0;
+  const healthCheckInterval = watch("healthCheckInterval") ?? 0;
+  const maxReconnectAttempts = watch("maxReconnectAttempts") ?? 0;
+  const reconnectCooldown = watch("reconnectCooldown") ?? 0;
 
   return (
     <>
@@ -89,6 +93,64 @@ export function McpSettingsFields({ form }: McpSettingsFieldsProps) {
           <Label htmlFor="mcp-require-creds">{t("form.requireUserCredentials")}</Label>
         </div>
         <p className="text-xs text-muted-foreground pl-9">{t("form.requireUserCredentialsHint")}</p>
+      </div>
+
+      <div className="space-y-3 pt-2">
+        <Label className="text-sm font-medium">{t("form.healthTitle")}</Label>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <Label htmlFor="mcp-hft" className="text-xs">{t("form.healthFailThreshold")}</Label>
+            <Input
+              id="mcp-hft"
+              type="number"
+              min={0}
+              placeholder="0"
+              value={healthFailThreshold || ""}
+              onChange={(e) => setValue("healthFailThreshold", Number(e.target.value) || 0)}
+              className="text-base md:text-sm"
+            />
+            <p className="text-[10px] text-muted-foreground">{t("form.healthFailThresholdHint")}</p>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="mcp-hci" className="text-xs">{t("form.healthCheckInterval")}</Label>
+            <Input
+              id="mcp-hci"
+              type="number"
+              min={0}
+              placeholder="0"
+              value={healthCheckInterval || ""}
+              onChange={(e) => setValue("healthCheckInterval", Number(e.target.value) || 0)}
+              className="text-base md:text-sm"
+            />
+            <p className="text-[10px] text-muted-foreground">{t("form.healthCheckIntervalHint")}</p>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="mcp-mra" className="text-xs">{t("form.maxReconnectAttempts")}</Label>
+            <Input
+              id="mcp-mra"
+              type="number"
+              min={0}
+              placeholder="0"
+              value={maxReconnectAttempts || ""}
+              onChange={(e) => setValue("maxReconnectAttempts", Number(e.target.value) || 0)}
+              className="text-base md:text-sm"
+            />
+            <p className="text-[10px] text-muted-foreground">{t("form.maxReconnectAttemptsHint")}</p>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="mcp-rc" className="text-xs">{t("form.reconnectCooldown")}</Label>
+            <Input
+              id="mcp-rc"
+              type="number"
+              min={0}
+              placeholder="0"
+              value={reconnectCooldown || ""}
+              onChange={(e) => setValue("reconnectCooldown", Number(e.target.value) || 0)}
+              className="text-base md:text-sm"
+            />
+            <p className="text-[10px] text-muted-foreground">{t("form.reconnectCooldownHint")}</p>
+          </div>
+        </div>
       </div>
     </>
   );

@@ -13,6 +13,10 @@ export const mcpFormSchema = z.object({
   timeout: z.number().min(1),
   enabled: z.boolean(),
   requireUserCreds: z.boolean(),
+  healthFailThreshold: z.number().min(0),
+  healthCheckInterval: z.number().min(0),
+  maxReconnectAttempts: z.number().min(0),
+  reconnectCooldown: z.number().min(0),
 });
 
 export type MCPFormData = z.infer<typeof mcpFormSchema>;

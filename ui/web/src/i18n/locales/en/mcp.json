@@ -70,7 +70,16 @@
       "connectionFailed": "Connection failed"
     },
     "requireUserCredentials": "Require User Credentials",
-    "requireUserCredentialsHint": "Each user must configure their own credentials. Server is disabled for users without personal credentials."
+    "requireUserCredentialsHint": "Each user must configure their own credentials. Server is disabled for users without personal credentials.",
+    "healthTitle": "Health Monitoring",
+    "healthFailThreshold": "Fail Threshold",
+    "healthFailThresholdHint": "Consecutive ping failures before reconnect (0 = global).",
+    "healthCheckInterval": "Check Interval (sec)",
+    "healthCheckIntervalHint": "Seconds between health pings (0 = global).",
+    "maxReconnectAttempts": "Max Reconnect Attempts",
+    "maxReconnectAttemptsHint": "Reconnect tries before cooldown (0 = global).",
+    "reconnectCooldown": "Reconnect Cooldown (sec)",
+    "reconnectCooldownHint": "Seconds to wait after exhausting attempts (0 = global)."
   },
   "grants": {
     "title": "Agent Grants - {{name}}",
@@ -139,6 +148,7 @@
   },
   "health": {
     "title": "Health History — {{name}}",
+    "buttonTitle": "Health History",
     "summary": {
       "total": "Total Checks",
       "avgLatency": "Avg Latency"

@@ -147,6 +147,56 @@ type serverState struct {
 	reconnAttempts  int
 	healthFailures  int // consecutive ping failures (resets on success)
 	lastErr         string
+
+	// Per-server health overrides (0 = use global atomic)
+	healthFailThreshold  int
+	healthCheckInterval  int
+	maxReconnectAttempts int
+	reconnectCooldown    int
+}
+
+func (ss *serverState) getHealthFailThreshold() int {
+	if ss.healthFailThreshold > 0 {
+		return ss.healthFailThreshold
+	}
+	return int(healthFailThreshold.Load())
+}
+
+func (ss *serverState) getHealthCheckInterval() int {
+	if ss.healthCheckInterval > 0 {
+		return ss.healthCheckInterval
+	}
+	return int(healthCheckInterval.Load())
+}
+
+func (ss *serverState) getMaxReconnectAttempts() int {
+	if ss.maxReconnectAttempts > 0 {
+		return ss.maxReconnectAttempts
+	}
+	return int(maxReconnectAttempts.Load())
+}
+
+func (ss *serverState) getReconnectCooldown() time.Duration {
+	if ss.reconnectCooldown > 0 {
+		return time.Duration(ss.reconnectCooldown) * time.Second
+	}
+	return time.Duration(reconnectCooldown.Load()) * time.Second
+}
+
+// healthSettings holds per-server health config parsed from the settings JSON blob.
+type healthSettings struct {
+	HealthFailThreshold  int `json:"health_fail_threshold"`
+	HealthCheckInterval  int `json:"health_check_interval"`
+	MaxReconnectAttempts int `json:"max_reconnect_attempts"`
+	ReconnectCooldown    int `json:"reconnect_cooldown"`
+}
+
+func parseHealthSettings(raw json.RawMessage) healthSettings {
+	var h healthSettings
+	if len(raw) > 0 {
+		_ = json.Unmarshal(raw, &h)
+	}
+	return h
 }
 
 // Manager orchestrates MCP server connections and tool registration.
@@ -256,7 +306,7 @@ func (m *Manager) Start(ctx context.Context) error {
 			errs = append(errs, fmt.Sprintf("%s: %v", name, err))
 			continue
 		}
-		if err := m.connectServer(ctx, name, cfg.Transport, cfg.Command, cfg.Args, cfg.Env, cfg.URL, headers, cfg.ToolPrefix, cfg.TimeoutSec, uuid.Nil); err != nil {
+		if err := m.connectServer(ctx, name, cfg.Transport, cfg.Command, cfg.Args, cfg.Env, cfg.URL, headers, cfg.ToolPrefix, cfg.TimeoutSec, uuid.Nil, nil); err != nil {
 			slog.Warn("mcp.server.connect_failed", "server", name, "error", err)
 			errs = append(errs, fmt.Sprintf("%s: %v", name, err))
 		}
@@ -366,14 +416,14 @@ func (m *Manager) connectAndFilter(ctx context.Context, rs *resolvedServer) erro
 		// Pool mode: acquire shared connection, create per-agent BridgeTools
 		tid := store.TenantIDFromContext(ctx)
 		if err := m.connectViaPool(ctx, tid, srv.Name, srv.Transport, srv.Command,
-			rs.args, rs.env, srv.URL, rs.headers, srv.ToolPrefix, srv.TimeoutSec, srv.ID); err != nil {
+			rs.args, rs.env, srv.URL, rs.headers, srv.ToolPrefix, srv.TimeoutSec, srv.ID, srv.Settings); err != nil {
 			return err
 		}
 	} else {
 		// Per-agent mode: create per-agent connection
 		if err := m.connectServer(ctx, srv.Name, srv.Transport, srv.Command,
 			rs.args, rs.env, srv.URL, rs.headers,
-			srv.ToolPrefix, srv.TimeoutSec, srv.ID); err != nil {
+			srv.ToolPrefix, srv.TimeoutSec, srv.ID, srv.Settings); err != nil {
 			return err
 		}
 	}
