@@ -1,0 +1,239 @@
+{
+  "title": "메모리",
+  "description": "에이전트 메모리 문서, 청크, 임베딩 탐색 및 관리",
+  "search": "검색",
+  "create": "만들기",
+  "indexAll": "전체 인덱싱",
+  "indexing": "인덱싱 중...",
+  "emptyTitle": "메모리 문서 없음",
+  "emptyAgentDescription": "이 에이전트에는 아직 메모리 문서가 없습니다.",
+  "emptyGlobalDescription": "모든 에이전트에서 메모리 문서를 찾을 수 없습니다.",
+  "filters": {
+    "agent": "에이전트",
+    "allAgents": "모든 에이전트",
+    "scope": "범위",
+    "allScope": "전체 (전체 + 개인)",
+    "selectAgent": "에이전트 선택"
+  },
+  "tabs": {
+    "documents": "문서",
+    "knowledgeGraph": "지식 그래프"
+  },
+  "columns": {
+    "path": "경로",
+    "agent": "에이전트",
+    "scope": "범위",
+    "hash": "해시",
+    "updated": "업데이트됨",
+    "actions": "작업"
+  },
+  "scopeLabel": {
+    "personal": "개인",
+    "global": "전체"
+  },
+  "delete": {
+    "title": "메모리 문서 삭제",
+    "description": "\"{{path}}\"를 삭제하시겠습니까? 관련된 모든 청크와 임베딩도 삭제됩니다.",
+    "confirmLabel": "삭제"
+  },
+  "createDialog": {
+    "title": "메모리 문서 만들기",
+    "path": "경로 *",
+    "pathPlaceholder": "예: notes/project-overview.md",
+    "content": "내용 *",
+    "contentPlaceholder": "문서 내용...",
+    "agentId": "에이전트 *",
+    "agentIdPlaceholder": "에이전트 선택...",
+    "scope": "범위",
+    "existingScope": "기존 범위",
+    "customScope": "사용자 지정",
+    "selectGroupUser": "그룹/사용자 선택...",
+    "scopeHint": "전체 = 모든 사용자 공유. 개인 = 특정 사용자 또는 그룹 채팅으로 범위 지정.",
+    "autoIndex": "생성 후 자동 인덱싱",
+    "agentRequired": "에이전트를 선택해 주세요",
+    "pathRequired": "경로가 필요합니다",
+    "contentRequired": "내용이 필요합니다",
+    "cancel": "취소",
+    "create": "만들기",
+    "creating": "만드는 중..."
+  },
+  "documentDialog": {
+    "title": "메모리 문서",
+    "path": "경로:",
+    "agent": "에이전트:",
+    "scope": "범위:",
+    "hash": "해시:",
+    "updated": "업데이트됨:",
+    "content": "내용",
+    "chunks": "청크 ({{count}}개)",
+    "chunkIndex": "청크 {{index}}",
+    "noChunks": "청크 없음",
+    "embedded": "임베딩됨",
+    "noEmbedding": "임베딩 없음"
+  },
+  "searchDialog": {
+    "title": "메모리 검색",
+    "query": "검색어",
+    "queryPlaceholder": "검색어 입력...",
+    "agentId": "에이전트 ID",
+    "agentIdPlaceholder": "에이전트로 필터...",
+    "limit": "제한",
+    "search": "검색",
+    "searching": "검색 중...",
+    "results": "결과",
+    "noResults": "결과 없음",
+    "similarity": "유사도",
+    "path": "경로:"
+  },
+  "kg": {
+    "pageTitle": "지식 그래프",
+    "pageDescription": "에이전트 메모리에서 추출된 엔티티와 관계를 탐색합니다.",
+    "selectAgentTitle": "에이전트 선택",
+    "selectAgentDescription": "에이전트를 선택하면 지식 그래프를 볼 수 있습니다.",
+    "emptyTitle": "엔티티 없음",
+    "emptyDescription": "이 에이전트의 지식 그래프 엔티티가 아직 없습니다.",
+    "emptySearchDescription": "검색에 일치하는 엔티티가 없습니다.",
+    "stats": {
+      "entities": "엔티티: {{count}}개",
+      "relations": "관계: {{count}}개"
+    },
+    "search": {
+      "placeholder": "엔티티 검색...",
+      "button": "검색",
+      "clear": "지우기"
+    },
+    "refresh": "새로 고침",
+    "extract": "추출",
+    "columns": {
+      "name": "이름",
+      "type": "유형",
+      "description": "설명",
+      "confidence": "신뢰도",
+      "actions": "작업",
+      "observations": "관찰",
+      "relations": "관계"
+    },
+    "dedup": {
+      "button": "중복 제거",
+      "title": "중복 엔티티",
+      "description": "임베딩 유사도를 기반으로 중복 가능성이 있는 엔티티를 검토하고 병합합니다.",
+      "noCandidates": "중복 후보를 찾을 수 없습니다.",
+      "similar": "유사함",
+      "merge": "병합",
+      "dismiss": "무시",
+      "merged": "엔티티가 성공적으로 병합되었습니다.",
+      "mergeFailed": "엔티티 병합 실패.",
+      "dismissed": "후보가 무시되었습니다.",
+      "dismissFailed": "후보 무시 실패.",
+      "scan": "전체 검사",
+      "scanning": "검사 중...",
+      "scanComplete": "검사 완료.",
+      "scanFailed": "검사 실패.",
+      "count": "{{count}}개 후보"
+    },
+    "deleteEntity": {
+      "title": "엔티티 삭제",
+      "description": "\"{{name}}\"을/를 삭제하시겠습니까? 관련된 모든 관계도 삭제됩니다.",
+      "confirmLabel": "삭제"
+    },
+    "entity": {
+      "externalId": "외부 ID:",
+      "confidence": "신뢰도:",
+      "description": "설명:",
+      "source": "출처:",
+      "properties": "속성:",
+      "relations": "관계",
+      "traverse": "순회",
+      "depthOption": "{{depth}}홉",
+      "tabs": {
+        "table": "테이블",
+        "graph": "그래프"
+      },
+      "traversing": "순회 중...",
+      "loading": "불러오는 중...",
+      "noRelations": "관계가 없습니다.",
+      "showAll": "전체 보기",
+      "traversalResults": "순회 결과 ({{count}}개)",
+      "direction": {
+        "outgoing": "→ 나가는",
+        "incoming": "← 들어오는"
+      },
+      "columns": {
+        "direction": "방향",
+        "relation": "관계",
+        "target": "대상",
+        "confidence": "신뢰도"
+      }
+    },
+    "extractDialog": {
+      "title": "텍스트에서 엔티티 추출",
+      "providerLabel": "추출 공급자",
+      "modelLabel": "추출 모델",
+      "textLabel": "추출할 텍스트",
+      "textPlaceholder": "엔티티와 관계를 추출할 대화 텍스트, 메모 또는 내용을 붙여넣기...",
+      "extract": "추출",
+      "extracting": "추출 중...",
+      "cancel": "취소",
+      "agentId": "에이전트 ID",
+      "agentIdPlaceholder": "전체는 비워두기"
+    },
+    "graphView": {
+      "loading": "그래프 불러오는 중...",
+      "empty": "시각화할 엔티티 없음",
+      "nodes": "{{count}}개 노드",
+      "edges": "{{count}}개 엣지",
+      "selected": "선택됨: {{name}}",
+      "limitNote": "전체 {{total}}개 중 상위 {{limit}}개 표시",
+      "limitHint": "성능을 위해 그래프는 {{limit}}개 엔티티로 제한됩니다. 전체 {{total}}개 엔티티를 탐색하려면 테이블 보기를 사용하세요."
+    }
+  },
+  "toast": {
+    "created": "메모리 문서 생성됨",
+    "deleted": "메모리 문서 삭제됨",
+    "indexed": "모든 문서 인덱싱됨",
+    "failedCreate": "문서 생성 실패",
+    "failedDelete": "문서 삭제 실패",
+    "failedIndex": "문서 인덱싱 실패",
+    "entitySaved": "엔티티 저장됨",
+    "entitySaveFailed": "엔티티 저장 실패",
+    "entityDeleted": "엔티티 삭제됨",
+    "entityDeleteFailed": "엔티티 삭제 실패",
+    "extractionComplete": "추출 완료",
+    "extractionFailed": "추출 실패",
+    "traversalFailed": "순회 실패",
+    "unknownError": "알 수 없는 오류",
+    "docCreated": "문서 생성됨",
+    "docCreateFailed": "문서 생성 실패",
+    "docUpdated": "문서 업데이트됨",
+    "docUpdateFailed": "문서 업데이트 실패",
+    "docDeleted": "문서 삭제됨",
+    "docDeleteFailed": "문서 삭제 실패",
+    "docIndexed": "문서 인덱싱됨",
+    "docIndexFailed": "문서 인덱싱 실패",
+    "allIndexed": "모든 문서 인덱싱됨",
+    "allIndexFailed": "전체 인덱싱 실패",
+    "searchFailed": "검색 실패",
+    "docLoadFailed": "문서 로드 실패"
+  },
+  "tabs": {
+    "documents": "문서",
+    "episodic": "에피소딕 메모리"
+  },
+  "episodic": {
+    "noData": "아직 에피소딕 메모리 없음",
+    "noDataHint": "요약은 에이전트 세션에서 자동으로 생성됩니다",
+    "selectAgent": "에피소딕 메모리를 보려면 에이전트를 선택하세요",
+    "searchPlaceholder": "에피소딕 메모리 검색...",
+    "clearSearch": "지우기",
+    "results": "결과",
+    "turns": "턴",
+    "tokens": "토큰",
+    "expand": "전체 요약 보기",
+    "collapse": "요약 숨기기",
+    "source": {
+      "session": "세션",
+      "v2_daily": "일별",
+      "manual": "수동"
+    }
+  }
+}

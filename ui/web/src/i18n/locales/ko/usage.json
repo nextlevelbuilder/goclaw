@@ -1,0 +1,97 @@
+{
+  "title": "사용량",
+  "description": "에이전트별 토큰 사용량 및 비용",
+  "emptyTitle": "사용량 데이터 없음",
+  "emptyDescription": "에이전트가 요청을 처리하면 여기에 사용량 데이터가 나타납니다.",
+  "summary": {
+    "sessions": "{{count}}개 세션",
+    "inputTokens": "입력 토큰",
+    "outputTokens": "출력 토큰",
+    "total": "합계"
+  },
+  "recentRecords": "최근 기록",
+  "columns": {
+    "agent": "에이전트",
+    "model": "모델",
+    "provider": "공급자",
+    "input": "입력",
+    "output": "출력",
+    "total": "합계",
+    "channel": "채널",
+    "cost": "비용",
+    "status": "상태"
+  },
+  "analytics": {
+    "title": "사용량 분석",
+    "period24h": "24시간",
+    "period7d": "7일",
+    "period30d": "30일",
+    "periodCustom": "사용자 지정",
+    "allAgents": "모든 에이전트",
+    "allProviders": "모든 공급자",
+    "allChannels": "모든 채널",
+    "activeFilters": "활성 필터",
+    "clearAll": "전체 지우기",
+    "exportCsv": "CSV 내보내기",
+    "requests": "요청",
+    "tokens": "토큰",
+    "cost": "비용",
+    "errors": "오류",
+    "uniqueUsers": "고유 사용자",
+    "llmCalls": "LLM 호출",
+    "toolCalls": "도구 호출",
+    "trendUp": "+{{value}}%",
+    "trendDown": "{{value}}%",
+    "vsPrevious": "이전 기간 대비",
+    "configurePricing": "비용 추적을 위한 모델 가격 설정",
+    "noData": "선택한 기간의 데이터 없음",
+    "tokenChart": {
+      "title": "시간별 토큰 사용량",
+      "input": "입력 토큰",
+      "output": "출력 토큰",
+      "cache": "캐시 읽기 토큰",
+      "thinking": "사고 토큰",
+      "total": "합계"
+    },
+    "requestChart": {
+      "title": "요청 수량 & 오류",
+      "requests": "요청",
+      "errors": "오류",
+      "errorRate": "오류율"
+    },
+    "distribution": {
+      "provider": "공급자 분포",
+      "model": "모델 분포",
+      "channel": "채널 분포",
+      "other": "기타",
+      "calls": "호출"
+    },
+    "durationChart": {
+      "title": "소요 시간 & 성능",
+      "avgDuration": "평균 소요 시간",
+      "errorRate": "오류율 %"
+    },
+    "knowledgeChart": {
+      "title": "메모리 & 지식 그래프 증가",
+      "memoryDocs": "메모리 문서",
+      "memoryChunks": "메모리 청크",
+      "kgEntities": "KG 엔티티",
+      "kgRelations": "KG 관계"
+    },
+    "topModels": {
+      "title": "상위 모델",
+      "model": "모델",
+      "provider": "공급자",
+      "llmCalls": "LLM 호출",
+      "inputTokens": "입력 토큰",
+      "outputTokens": "출력 토큰",
+      "avgDuration": "평균 소요 시간",
+      "cost": "비용"
+    },
+    "tooltip": {
+      "date": "날짜",
+      "total": "합계",
+      "errorRate": "오류율 {{value}}%"
+    }
+  }
+}

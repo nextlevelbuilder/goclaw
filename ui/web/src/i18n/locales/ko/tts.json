@@ -1,0 +1,71 @@
+{
+  "title": "텍스트 음성 변환",
+  "description": "TTS 공급자 및 자동 적용 설정",
+  "save": "저장",
+  "saving": "저장 중...",
+  "saveChanges": "변경사항 저장",
+  "status": {
+    "title": "상태",
+    "configured": "설정됨",
+    "disabled": "사용 안 함",
+    "noProvider": "설정된 TTS 공급자 없음",
+    "activeProvider": "기본 공급자: {{provider}}, 자동: {{auto}}"
+  },
+  "general": {
+    "title": "일반 설정",
+    "primaryProvider": "기본 공급자",
+    "autoApplyMode": "자동 적용 모드",
+    "replyMode": "답장 모드",
+    "maxTextLength": "최대 텍스트 길이",
+    "timeout": "제한 시간 (ms)"
+  },
+  "providers": {
+    "none": "없음 (사용 안 함)",
+    "openai": "OpenAI",
+    "elevenlabs": "ElevenLabs",
+    "edge": "Edge (무료)",
+    "minimax": "MiniMax"
+  },
+  "autoModes": {
+    "off": "끄기",
+    "offDesc": "에이전트가 TTS 도구를 수동으로 사용할 수 있음",
+    "always": "항상",
+    "alwaysDesc": "모든 답장에 오디오 적용",
+    "inbound": "수신",
+    "inboundDesc": "사용자가 음성/오디오를 보낼 때만",
+    "tagged": "태그됨",
+    "taggedDesc": "답장에 [[tts]] 태그가 있을 때만"
+  },
+  "replyModes": {
+    "final": "최종만",
+    "finalDesc": "최종 답장만",
+    "all": "전체",
+    "allDesc": "도구/블록 포함 모든 답장"
+  },
+  "providerSettings": "{{provider}} 설정",
+  "openai": {
+    "apiKey": "API 키",
+    "apiBase": "API 기본 URL",
+    "model": "모델",
+    "voice": "음성"
+  },
+  "elevenlabs": {
+    "apiKey": "API 키",
+    "baseUrl": "기본 URL",
+    "voiceId": "음성 ID",
+    "modelId": "모델 ID"
+  },
+  "edge": {
+    "voice": "음성",
+    "speechRate": "발화 속도",
+    "hint": "Edge TTS는 무료이며 API 키가 필요 없습니다. 설치 명령: pip install edge-tts"
+  },
+  "minimax": {
+    "apiKey": "API 키",
+    "groupId": "그룹 ID *",
+    "groupIdPlaceholder": "MiniMax에 필요",
+    "apiBase": "API 기본",
+    "model": "모델",
+    "voiceId": "음성 ID"
+  }
+}

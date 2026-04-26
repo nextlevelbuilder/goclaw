@@ -1,0 +1,15 @@
+{
+  "title": "로그",
+  "description": "실시간 로그 스트리밍",
+  "descriptionLive": "{{level}} 레벨 실시간 스트리밍 중",
+  "live": "실시간",
+  "start": "시작",
+  "stop": "정지",
+  "clear": "지우기",
+  "filterPlaceholder": "로그 필터...",
+  "logLevelTitle": "로그 레벨",
+  "emptyWaiting": "로그를 기다리는 중...",
+  "emptyFilter": "필터에 일치하는 로그가 없습니다.",
+  "emptyStart": "\"시작\"을 클릭하면 로그 스트리밍이 시작됩니다.",
+  "count": "{{filtered}}/{{total}}"
+}

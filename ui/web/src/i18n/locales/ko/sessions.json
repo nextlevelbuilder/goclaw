@@ -1,0 +1,45 @@
+{
+  "title": "세션",
+  "description": "대화 세션 탐색",
+  "searchPlaceholder": "세션 검색...",
+  "emptyTitle": "아직 세션 없음",
+  "emptyDescription": "채팅을 시작하면 여기에 세션이 나타납니다.",
+  "noMatchTitle": "일치하는 세션 없음",
+  "noMatchDescription": "다른 검색어를 사용해 보세요.",
+  "columns": {
+    "session": "세션",
+    "agent": "에이전트",
+    "context": "컨텍스트",
+    "messages": "메시지",
+    "updated": "업데이트됨"
+  },
+  "contextBar": {
+    "compacted": "{{count}}회 압축됨"
+  },
+  "detail": {
+    "reset": "초기화",
+    "delete": "삭제",
+    "deleteTitle": "세션 삭제",
+    "deleteDescription": "이 세션의 모든 메시지가 영구적으로 삭제됩니다.",
+    "resetTitle": "세션 초기화",
+    "resetDescription": "모든 메시지가 지워지지만 세션은 유지됩니다.",
+    "confirmDelete": "삭제",
+    "confirmReset": "초기화",
+    "noMessages": "이 세션에 메시지가 없습니다",
+    "summary": "요약",
+    "showMore": "더 보기",
+    "showLess": "접기",
+    "showDetails": "세부 정보 보기",
+    "hide": "숨기기",
+    "systemMessage": "시스템 메시지",
+    "messages": "메시지"
+  },
+  "toast": {
+    "deleted": "세션 삭제됨",
+    "deleteFailed": "세션 삭제 실패",
+    "reset": "세션 초기화됨",
+    "resetFailed": "세션 초기화 실패",
+    "updated": "세션 업데이트됨",
+    "updateFailed": "세션 업데이트 실패"
+  }
+}

@@ -46,6 +46,10 @@ func (h *spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Static assets: set long cache for /assets/* (Vite hashed filenames).
 		if strings.HasPrefix(r.URL.Path, "/assets/") {
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			// index.html and other root files must never be cached so the
+			// browser always gets the latest asset manifest after a deploy.
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		}
 		h.fileServer.ServeHTTP(w, r)
 		return

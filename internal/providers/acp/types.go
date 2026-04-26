@@ -61,9 +61,57 @@ type MCPCaps struct {
 
 // --- Session Methods ---
 
+// McpServer is a discriminated-union transport descriptor for MCP servers.
+// Concrete types: McpServerHTTP, McpServerStdio (SSE unimplemented).
+// Per ACP spec (zed-industries/agent-client-protocol), the wire format is a
+// JSON object tagged by `type`; Go's encoding/json handles this via concrete
+// values held in the interface.
+type McpServer interface{ mcpServerKind() }
+
+// McpServerHTTP carries HTTP transport MCP config.
+// Headers is a {name,value} array — Gemini CLI 0.36.x rejects object-shaped
+// headers with schema error "expected array, received object", so we diverge
+// from the zed-industries ACP schema (which specifies object) to match the
+// implementation that actually consumes the payload.
+type McpServerHTTP struct {
+	Type    string         `json:"type"` // always "http"
+	Name    string         `json:"name"`
+	URL     string         `json:"url"`
+	Headers []McpServerKV  `json:"headers"`
+}
+
+func (McpServerHTTP) mcpServerKind() {}
+
+// McpServerStdio carries stdio transport MCP config.
+type McpServerStdio struct {
+	Type    string        `json:"type"` // always "stdio"
+	Name    string        `json:"name"`
+	Command string        `json:"command"`
+	Args    []string      `json:"args"`
+	Env     []McpServerKV `json:"env"`
+}
+
+func (McpServerStdio) mcpServerKind() {}
+
+// McpServerKV is a {name, value} pair used for both HTTP headers and stdio env.
+type McpServerKV struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+// Alias retained for backward compatibility with any caller that constructed
+// env entries by the older name. New code should use McpServerKV directly.
+type McpServerEnv = McpServerKV
+
+// NewHTTPMcpServer returns an HTTP-transport McpServer with an empty headers
+// slice (the field must be present per schema).
+func NewHTTPMcpServer(name, url string) McpServer {
+	return McpServerHTTP{Type: "http", Name: name, URL: url, Headers: []McpServerKV{}}
+}
+
 type NewSessionRequest struct {
-	Cwd        string   `json:"cwd"`
-	McpServers []string `json:"mcpServers"`
+	Cwd        string      `json:"cwd"`
+	McpServers []McpServer `json:"mcpServers"`
 }
 
 type NewSessionResponse struct {
@@ -71,9 +119,9 @@ type NewSessionResponse struct {
 }
 
 type LoadSessionRequest struct {
-	SessionID  string   `json:"sessionId"`
-	Cwd        string   `json:"cwd,omitempty"`
-	McpServers []string `json:"mcpServers"`
+	SessionID  string      `json:"sessionId"`
+	Cwd        string      `json:"cwd,omitempty"`
+	McpServers []McpServer `json:"mcpServers"`
 }
 
 type LoadSessionResponse struct {
@@ -205,4 +253,36 @@ type RequestPermissionRequest struct {
 
 type RequestPermissionResponse struct {
 	Outcome string `json:"outcome"` // "proceed_always", "approved", "denied"
+}
+
+// SessionRequestPermissionRequest is sent by Gemini CLI (method "session/request_permission")
+// to request approval before executing an MCP tool.
+type SessionRequestPermissionRequest struct {
+	SessionID string             `json:"sessionId"`
+	Options   []SessionPermOpt   `json:"options"`
+	ToolCall  SessionPermTool    `json:"toolCall"`
+}
+
+type SessionPermOpt struct {
+	OptionID string `json:"optionId"`
+	Name     string `json:"name"`
+	Kind     string `json:"kind"`
+}
+
+type SessionPermTool struct {
+	ToolCallID string `json:"toolCallId"`
+	Status     string `json:"status"`
+	Title      string `json:"title"`
+	Kind       string `json:"kind,omitempty"`
+}
+
+// SessionRequestPermissionResponse matches Gemini CLI's RequestPermissionResponseSchema.
+// Wire format: {"outcome":{"outcome":"cancelled"}} or {"outcome":{"outcome":"selected","optionId":"..."}}
+type SessionRequestPermissionResponse struct {
+	Outcome SessionPermOutcome `json:"outcome"`
+}
+
+type SessionPermOutcome struct {
+	Outcome  string `json:"outcome"`           // "cancelled" or "selected"
+	OptionID string `json:"optionId,omitempty"` // required when outcome="selected"
 }

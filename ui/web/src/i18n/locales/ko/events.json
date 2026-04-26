@@ -1,0 +1,36 @@
+{
+  "title": "실시간 이벤트",
+  "description": "모든 팀 및 에이전트의 실시간 WebSocket 이벤트",
+  "live": "실시간",
+  "paused": "일시 정지됨",
+  "resume": "재개",
+  "pause": "일시 정지",
+  "clear": "지우기",
+  "scrollToBottom": "맨 아래로 스크롤",
+  "eventCount": "{{count}}개 이벤트",
+  "eventCountPlural": "{{count}}개 이벤트",
+  "categories": {
+    "all": "전체",
+    "task": "태스크",
+    "message": "메시지",
+    "agent": "에이전트",
+    "teamCrud": "팀 CRUD",
+    "agentLink": "에이전트 링크"
+  },
+  "filters": {
+    "allTeams": "모든 팀",
+    "allUsers": "모든 사용자",
+    "allChats": "모든 채팅"
+  },
+  "global": "전체",
+  "emptyTitle": "이벤트 없음",
+  "emptyPaused": "이벤트 캡처가 일시 정지되었습니다. 재개하면 새 이벤트가 표시됩니다.",
+  "emptyWaiting": "실시간 이벤트를 기다리는 중... 에이전트가 작업하면 이벤트가 나타납니다.",
+  "detail": {
+    "copy": "복사",
+    "copied": "복사됨"
+  },
+  "toolBadge": { "error": "오류", "activated": "활성화됨", "ok": "확인" },
+  "moreArgs": "...{{count}}개 더",
+  "parentLabel": "부모:"
+}

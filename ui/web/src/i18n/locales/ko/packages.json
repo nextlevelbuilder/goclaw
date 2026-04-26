@@ -1,0 +1,47 @@
+{
+  "title": "런타임 & 패키지",
+  "description": "활성 GoClaw 런타임 컨테이너 내 런타임 및 설치된 패키지 관리",
+  "runtimes": {
+    "title": "런타임",
+    "scopeTitle": "컨테이너 범위 런타임 상태",
+    "scopeDesc": "이 검사는 활성 GoClaw 런타임 컨테이너 내에서 실행됩니다. 호스트에 설치된 런타임, 셸 프로파일 변경, nvm 관리 바이너리는 여기서 사용되지 않습니다.",
+    "minimalImageHint": "게시된 최신 이미지는 최소 구성이므로 Python이나 Node 런타임이 없을 수 있습니다. python, node 또는 full 이미지 변형을 사용하거나, ENABLE_PYTHON=true / ENABLE_NODE=true / ENABLE_FULL_SKILLS=true로 재빌드하거나, 이 컨테이너에 런타임을 수동으로 설치하세요.",
+    "available": "사용 가능",
+    "missing": "없음",
+    "missingInContainer": "컨테이너에 없음"
+  },
+  "system": {
+    "title": "시스템 패키지",
+    "placeholder": "패키지 이름 (예: github-cli)"
+  },
+  "pip": {
+    "title": "Python 패키지",
+    "placeholder": "패키지 이름 (예: pandas)"
+  },
+  "npm": {
+    "title": "Node 패키지",
+    "placeholder": "패키지 이름 (예: typescript)"
+  },
+  "actions": {
+    "install": "설치",
+    "uninstall": "제거",
+    "installing": "설치 중...",
+    "uninstalling": "제거 중..."
+  },
+  "messages": {
+    "installSuccess": "{{name}} 설치 완료",
+    "installError": "{{name}} 설치 실패",
+    "uninstallSuccess": "{{name}} 제거 완료",
+    "uninstallError": "{{name}} 제거 실패"
+  },
+  "confirmUninstall": {
+    "title": "제거 확인",
+    "description": "{{name}}을/를 제거하시겠습니까? 이 작업은 취소할 수 없습니다."
+  },
+  "table": {
+    "name": "이름",
+    "version": "버전",
+    "actions": "작업",
+    "empty": "설치된 패키지 없음"
+  }
+}

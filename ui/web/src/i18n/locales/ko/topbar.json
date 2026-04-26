@@ -1,0 +1,35 @@
+{
+  "expandSidebar": "사이드바 펼치기",
+  "collapseSidebar": "사이드바 접기",
+  "openMenu": "메뉴 열기",
+  "systemSettings": "시스템 설정",
+  "toggleTheme": "테마 전환",
+  "logout": "로그아웃",
+  "logoutConfirm": "정말 로그아웃하시겠습니까?",
+  "language": "언어",
+  "timezone": "시간대",
+  "pairingRequests": "페어링 요청",
+  "pendingPairingRequest": "{{count}}개 페어링 요청 대기 중",
+  "pendingPairingRequests": "{{count}}개 페어링 요청 대기 중",
+  "apiKeys": "API 키",
+  "documents": "문서",
+  "about": {
+    "menuItem": "정보",
+    "title": "GoClaw 정보",
+    "version": "버전",
+    "sourceCode": "소스 코드",
+    "license": "라이선스",
+    "documentation": "문서",
+    "reportBug": "버그 신고",
+    "upToDate": "최신 버전",
+    "updateAvailable": "업데이트 가능: {{version}}",
+    "viewRelease": "릴리스 노트 보기 →",
+    "releaseNotes": "릴리스 노트"
+  },
+  "languages": {
+    "en": "English",
+    "vi": "Tiếng Việt",
+    "zh": "中文",
+    "ko": "한국어"
+  }
+}

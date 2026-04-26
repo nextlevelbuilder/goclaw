@@ -1,0 +1,87 @@
+{
+  "title": "API 키",
+  "description": "세밀한 권한이 있는 게이트웨이 API 키 관리.",
+  "addKey": "API 키 만들기",
+  "searchPlaceholder": "키 검색...",
+  "emptyTitle": "API 키 없음",
+  "emptyDescription": "게이트웨이 인증을 위한 첫 번째 API 키를 만드세요.",
+  "columns": {
+    "name": "이름",
+    "prefix": "키",
+    "scopes": "범위",
+    "lastUsed": "마지막 사용",
+    "created": "생성됨",
+    "status": "상태",
+    "actions": "작업"
+  },
+  "status": {
+    "active": "활성",
+    "revoked": "취소됨",
+    "expired": "만료됨"
+  },
+  "form": {
+    "title": "API 키 만들기",
+    "name": "이름",
+    "namePlaceholder": "예: ci-deploy, dashboard-readonly",
+    "scopes": "범위",
+    "scopeDescriptions": {
+      "operator.admin": "전체 관리자 접근",
+      "operator.read": "읽기 전용 접근",
+      "operator.write": "읽기 + 쓰기 접근",
+      "operator.approvals": "실행 승인 관리",
+      "operator.pairing": "기기 페어링 관리",
+      "operator.provision": "새 테넌트 프로비전"
+    },
+    "tenant": "테넌트",
+    "tenantSystem": "시스템 (모든 테넌트)",
+    "expiry": "만료",
+    "expiryOptions": {
+      "never": "만료 없음",
+      "7d": "7일",
+      "30d": "30일",
+      "90d": "90일"
+    },
+    "cancel": "취소",
+    "create": "만들기",
+    "creating": "만드는 중..."
+  },
+  "created": {
+    "title": "API 키 생성됨",
+    "description": "지금 이 키를 복사하세요 — 다시 표시되지 않습니다.",
+    "copied": "복사됨!",
+    "copy": "클립보드에 복사",
+    "done": "완료"
+  },
+  "revoke": {
+    "title": "API 키 취소",
+    "description": "\"{{name}}\"을/를 취소하시겠습니까? 이 작업은 취소할 수 없습니다.",
+    "confirmLabel": "취소"
+  },
+  "toast": {
+    "created": "API 키 생성됨",
+    "revoked": "API 키 취소됨",
+    "failedCreate": "API 키 생성 실패",
+    "failedRevoke": "API 키 취소 실패"
+  },
+  "never": "없음",
+  "neverUsed": "사용된 적 없음",
+  "tenantBadgeSystem": "시스템",
+  "tenantBadgeUnknown": "알 수 없음",
+  "columns.expiry": "만료",
+  "codeDialog": {
+    "title": "API 키 사용법",
+    "description": "게이트웨이 HTTP API 인증에 이 API 키를 사용하세요.",
+    "copy": "복사",
+    "copied": "복사됨!",
+    "tabs": {
+      "curl": "cURL",
+      "typescript": "TypeScript",
+      "go": "Go"
+    },
+    "comments": {
+      "chat": "에이전트와 채팅 (OpenAI 호환)",
+      "listAgents": "에이전트 목록",
+      "listSessions": "세션 목록"
+    }
+  }
+}

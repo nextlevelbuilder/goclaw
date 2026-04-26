@@ -12,69 +12,71 @@ import (
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
-// BridgeToolNames is the subset of GoClaw tools exposed via the MCP bridge.
-// Excluded: spawn (agent loop), create_forum_topic (channels).
-var BridgeToolNames = map[string]bool{
-	// Filesystem
-	"read_file":  true,
-	"write_file": true,
-	"list_files": true,
-	"edit":       true,
-	"exec":       true,
-	// Web
-	"web_search": true,
-	"web_fetch":  true,
-	// Memory & knowledge
-	"memory_search": true,
-	"memory_get":    true,
-	"skill_search":  true,
-	// Media
-	"read_image":   true,
-	"create_image": true,
-	"tts":          true,
-	// Browser automation
-	"browser": true,
-	// Scheduler
-	"cron": true,
-	// Messaging (send text/files to channels)
-	"message": true,
-	// Sessions (read + send)
-	"sessions_list":    true,
-	"session_status":   true,
-	"sessions_history": true,
-	"sessions_send":    true,
-	// Team tools (context from X-Agent-ID/X-Channel/X-Chat-ID headers)
-	"team_tasks": true,
+// bridgeAlwaysExcluded lists tools that must never be exposed through the
+// MCP bridge regardless of UI toggle state, because they are internal to the
+// agent runtime rather than externally-callable capabilities.
+var bridgeAlwaysExcluded = map[string]bool{
+	"spawn":              true, // starts a nested agent loop
+	"create_forum_topic": true, // channel-internal
+	"heartbeat":          true, // internal health signal
 }
 
-// NewBridgeServer creates a StreamableHTTPServer that exposes GoClaw tools as MCP tools.
-// It reads tools from the registry, filters to BridgeToolNames, and serves them
-// over streamable-http transport (stateless mode).
-// msgBus is optional; when non-nil, tools that produce media (deliver:true) will
-// publish file attachments directly to the outbound bus.
-func NewBridgeServer(reg *tools.Registry, version string, msgBus *bus.MessageBus) *mcpserver.StreamableHTTPServer {
+// NewBridgeServer creates a StreamableHTTPServer that exposes the GoClaw
+// tools enabled in the BuiltinToolStore as MCP tools over streamable-http
+// transport (stateless mode).
+//
+// Tool selection sources:
+//  1. BuiltinToolStore.ListEnabled — UI/seed-managed canonical list; any tool
+//     toggled off in the builtin-tools page is immediately removed on next
+//     startup (or cache rebuild).
+//  2. bridgeAlwaysExcluded — safety whitelist (spawn, heartbeat, etc.).
+//
+// When btStore is nil (e.g. very early boot before stores are wired), the
+// bridge falls back to an empty tool set rather than exposing everything.
+//
+// msgBus is optional; when non-nil, tools that produce media (deliver:true)
+// will publish file attachments directly to the outbound bus.
+func NewBridgeServer(reg *tools.Registry, btStore store.BuiltinToolStore, version string, msgBus *bus.MessageBus) *mcpserver.StreamableHTTPServer {
 	srv := mcpserver.NewMCPServer("goclaw-bridge", version,
 		mcpserver.WithToolCapabilities(false),
 	)
 
-	// Register each safe tool from the GoClaw registry
 	var registered int
-	for name := range BridgeToolNames {
-		t, ok := reg.Get(name)
-		if !ok {
-			continue
-		}
+	var skippedDisabled, skippedMissing, skippedExcluded int
 
-		mcpTool := convertToMCPTool(t)
-		handler := makeToolHandler(reg, name, msgBus)
-		srv.AddTool(mcpTool, handler)
-		registered++
+	if btStore != nil {
+		enabled, err := btStore.ListEnabled(context.Background())
+		if err != nil {
+			slog.Error("mcp.bridge: failed to list enabled builtin tools", "error", err)
+		} else {
+			for _, def := range enabled {
+				if bridgeAlwaysExcluded[def.Name] {
+					skippedExcluded++
+					continue
+				}
+				t, ok := reg.Get(def.Name)
+				if !ok {
+					skippedMissing++
+					continue
+				}
+				mcpTool := convertToMCPTool(t)
+				handler := makeToolHandler(reg, def.Name, msgBus)
+				srv.AddTool(mcpTool, handler)
+				registered++
+			}
+		}
 	}
 
-	slog.Info("mcp.bridge: tools registered", "count", registered)
+	slog.Info("mcp.bridge: tools registered",
+		"count", registered,
+		"skipped_disabled", skippedDisabled,
+		"skipped_missing", skippedMissing,
+		"skipped_excluded", skippedExcluded,
+	)
 
 	return mcpserver.NewStreamableHTTPServer(srv,
 		mcpserver.WithStateLess(true),

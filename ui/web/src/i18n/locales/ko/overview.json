@@ -1,0 +1,93 @@
+{
+  "title": "대시보드",
+  "description": "게이트웨이 개요 및 할당량 사용량",
+  "tabs": {
+    "overview": "개요",
+    "usage": "사용량"
+  },
+  "statCards": {
+    "requestsToday": "오늘 요청",
+    "tokensToday": "오늘 토큰",
+    "costToday": "오늘 비용",
+    "agents": "에이전트",
+    "channels": "채널",
+    "channelsAttention": "{{count}}개 주의 필요",
+    "running": "실행 중",
+    "online": "온라인",
+    "users": "{{count}}명 사용자",
+    "inOut": "{{input}} in / {{output}} out"
+  },
+  "providers": {
+    "noProvidersTitle": "설정된 LLM 공급자 없음",
+    "noEnabledTitle": "활성화된 LLM 공급자 없음",
+    "noProvidersDesc": "에이전트가 작동하려면 LLM 공급자를 최소 한 개 추가해야 합니다. ",
+    "noEnabledDesc": "모든 공급자가 현재 비활성화되어 있습니다. 에이전트를 사용하려면 최소 한 개를 활성화하세요. ",
+    "goToSettings": "공급자 설정으로 이동"
+  },
+  "systemHealth": {
+    "title": "시스템 상태",
+    "uptime": "업타임",
+    "version": "버전",
+    "database": "데이터베이스",
+    "providers": "공급자",
+    "tools": "도구",
+    "sessions": "세션",
+    "clients": "클라이언트",
+    "channels": "채널",
+    "needsAttention": "주의 필요",
+    "channelsNeedingAttention": "{{count}}개 채널",
+    "failedCount": "{{count}}개 실패",
+    "warningCountOne": "{{count}}개 경고",
+    "warningCountOther": "{{count}}개 경고",
+    "moreAttention": "+{{count}}개 더",
+    "active": "{{count}}개 활성",
+    "none": "없음",
+    "runtimes": "런타임"
+  },
+  "connectedClients": {
+    "title": "연결된 클라이언트",
+    "noClients": "연결된 클라이언트 없음",
+    "columns": {
+      "ip": "IP",
+      "user": "사용자",
+      "role": "역할",
+      "connected": "연결됨"
+    },
+    "you": "나"
+  },
+  "cronJobs": {
+    "title": "Cron 작업",
+    "manage": "관리",
+    "noJobs": "설정된 Cron 작업 없음",
+    "disabled": "비활성화됨"
+  },
+  "recentRequests": {
+    "title": "최근 요청",
+    "viewAll": "전체 보기",
+    "noRequests": "최근 요청 없음",
+    "columns": {
+      "time": "시간",
+      "name": "이름",
+      "user": "사용자",
+      "channel": "채널",
+      "tokens": "토큰",
+      "duration": "소요 시간",
+      "status": "상태"
+    }
+  },
+  "quotaUsage": {
+    "title": "할당량 사용량",
+    "columns": {
+      "userGroup": "사용자 / 그룹",
+      "hour": "시간",
+      "day": "일",
+      "week": "주"
+    },
+    "noLimit": "제한 없음"
+  },
+  "embedding": {
+    "title": "임베딩",
+    "notConfigured": "설정되지 않음",
+    "configure": "공급자에서 설정 →"
+  }
+}

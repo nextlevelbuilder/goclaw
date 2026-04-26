@@ -1,0 +1,126 @@
+{
+  "title": "백업 & 복원",
+  "description": "시스템 백업 생성, 아카이브에서 복원, S3 스토리지 관리",
+  "tabs": {
+    "systemBackup": "시스템 백업",
+    "systemRestore": "시스템 복원",
+    "s3Config": "S3 스토리지",
+    "tenantBackup": "테넌트 백업"
+  },
+  "backup": {
+    "preflight": {
+      "title": "시스템 확인",
+      "pgDump": "pg_dump 사용 가능",
+      "diskSpace": "충분한 디스크 공간",
+      "dbSize": "데이터베이스 크기",
+      "dataDir": "데이터 디렉터리",
+      "workspace": "워크스페이스",
+      "freeDisk": "여유 디스크 공간",
+      "warnings": "경고",
+      "refresh": "새로 고침",
+      "pgDumpMissing": "pg_dump를 사용할 수 없거나 호환되지 않음",
+      "goToPackages": "패키지로 이동"
+    },
+    "options": {
+      "includeDb": "데이터베이스 포함",
+      "includeFiles": "파일 포함",
+      "destination": "백업 대상",
+      "local": "로컬로 다운로드",
+      "s3": "S3에 업로드"
+    },
+    "start": "백업 시작",
+    "running": "백업 중...",
+    "complete": "백업 완료",
+    "download": "백업 다운로드",
+    "uploadS3": "S3에 업로드",
+    "newBackup": "새 백업",
+    "fileSize": "파일 크기",
+    "schemaVersion": "스키마 버전",
+    "s3History": {
+      "title": "S3 백업",
+      "empty": "S3에서 백업을 찾을 수 없음",
+      "name": "파일",
+      "size": "크기",
+      "date": "날짜"
+    },
+    "errorTitle": "백업 실패"
+  },
+  "restore": {
+    "warning": "복원하면 기존 데이터를 덮어씁니다. 이 작업은 취소할 수 없습니다. 먼저 백업을 만드세요.",
+    "dropzone": ".tar.gz 백업 아카이브를 여기에 놓기",
+    "dropzoneHint": "또는 클릭하여 찾아보기",
+    "options": {
+      "restoreDb": "데이터베이스 복원",
+      "restoreFiles": "파일 복원",
+      "dryRun": "미리 보기 (변경 없음)"
+    },
+    "start": "복원",
+    "confirmTitle": "시스템 복원 확인",
+    "confirmDesc": "현재 데이터베이스와 파일이 백업 내용으로 덮어쓰입니다. 계속하시겠습니까?",
+    "running": "복원 중...",
+    "doNotClose": "복원 중에 이 페이지를 닫지 마세요",
+    "complete": "복원 완료",
+    "dryRunNote": "미리 보기 실행이었습니다. 변경사항이 적용되지 않았습니다.",
+    "dbRestored": "데이터베이스 복원됨",
+    "filesExtracted": "파일 추출됨",
+    "bytesExtracted": "데이터 복원됨",
+    "schemaVersion": "스키마 버전",
+    "warnings": "경고",
+    "newRestore": "새 복원",
+    "errorTitle": "복원 실패",
+    "tryAgain": "다시 시도"
+  },
+  "s3": {
+    "title": "S3 스토리지 설정",
+    "description": "원격 백업을 위한 S3 호환 스토리지 설정",
+    "status": {
+      "configured": "설정됨",
+      "notConfigured": "설정되지 않음"
+    },
+    "fields": {
+      "accessKeyId": "액세스 키 ID",
+      "secretAccessKey": "시크릿 액세스 키",
+      "secretPlaceholder": "업데이트하려면 입력",
+      "bucket": "버킷",
+      "region": "리전",
+      "endpoint": "엔드포인트 (선택사항)",
+      "endpointHint": "S3 호환 서비스 (MinIO, R2 등)",
+      "prefix": "키 접두사"
+    },
+    "save": "저장 & 연결 테스트",
+    "saving": "연결 테스트 중...",
+    "saveSuccess": "S3 설정이 저장되었고 연결이 확인되었습니다",
+    "saveError": "S3 설정 저장 실패"
+  },
+  "tenant": {
+    "title": "테넌트 백업 & 복원",
+    "description": "개별 테넌트 데이터 백업 또는 복원",
+    "selectTenant": "테넌트 선택",
+    "selectTenantPlaceholder": "테넌트 선택...",
+    "backup": {
+      "start": "테넌트 백업",
+      "running": "테넌트 백업 중...",
+      "complete": "테넌트 백업 완료",
+      "download": "다운로드",
+      "tableCounts": "백업된 테이블",
+      "newBackup": "새 백업"
+    },
+    "restore": {
+      "mode": "복원 모드",
+      "modeUpsert": "병합 (upsert)",
+      "modeReplace": "전체 교체",
+      "modeNew": "새 테넌트",
+      "dropzone": "테넌트 백업 아카이브를 여기에 놓기",
+      "dryRun": "미리 보기 (변경 없음)",
+      "start": "테넌트 복원",
+      "confirmTitle": "테넌트 복원 확인",
+      "confirmDesc": "선택한 테넌트의 데이터가 수정됩니다. 계속하시겠습니까?",
+      "running": "테넌트 복원 중...",
+      "complete": "테넌트 복원 완료",
+      "tablesRestored": "테이블 복원됨",
+      "filesExtracted": "파일 추출됨",
+      "dryRunNote": "미리 보기 실행 — 변경사항 없음",
+      "newRestore": "새 복원"
+    }
+  }
+}

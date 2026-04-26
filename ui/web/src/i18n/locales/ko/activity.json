@@ -1,0 +1,26 @@
+{
+  "title": "활동 로그",
+  "description": "관리자 및 설정 변경의 감사 추적.",
+  "filters": {
+    "action": "작업",
+    "allActions": "모든 작업",
+    "agentCreated": "에이전트 생성됨",
+    "agentUpdated": "에이전트 업데이트됨",
+    "agentDeleted": "에이전트 삭제됨",
+    "entityType": "엔티티 유형",
+    "allEntities": "모든 엔티티",
+    "agent": "에이전트"
+  },
+  "table": {
+    "action": "작업",
+    "actor": "실행자",
+    "entity": "엔티티",
+    "entityId": "엔티티 ID",
+    "ip": "IP 주소",
+    "time": "시간"
+  },
+  "empty": {
+    "title": "활동 로그 없음",
+    "description": "관리자 작업이 수행되면 여기에 활동 로그가 나타납니다."
+  }
+}

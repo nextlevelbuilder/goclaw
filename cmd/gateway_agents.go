@@ -134,6 +134,29 @@ func buildEmbeddingProvider(
 			"provider", dbp.Name, "requested", es.Dimensions, "required", store.RequiredMemoryEmbeddingDimensions)
 	}
 
+	// Gemini native provider — uses its own embedding API (not OpenAI-compatible).
+	if dbp.ProviderType == store.ProviderGeminiNative {
+		apiKey := dbp.APIKey
+		if providerReg != nil {
+			if regProv, regErr := providerReg.Get(context.Background(), dbp.Name); regErr == nil {
+				if gp, ok := regProv.(interface{ APIKey() string }); ok && gp.APIKey() != "" {
+					apiKey = gp.APIKey()
+				}
+			}
+		}
+		if apiKey == "" {
+			slog.Warn("gemini embedding provider has no API key", "name", dbp.Name)
+			return nil
+		}
+		if model == "" {
+			model = memory.GeminiDefaultEmbeddingModel
+		}
+		ep := memory.NewGeminiEmbeddingProvider(dbp.Name, apiKey, apiBase, model)
+		ep.WithDimensions(dims)
+		slog.Info("gemini embedding provider configured", "name", dbp.Name, "model", model, "dims", dims)
+		return ep
+	}
+
 	// Try registry first for the actual API key / base (handles runtime-registered providers)
 	if providerReg != nil {
 		if regProv, regErr := providerReg.Get(context.Background(), dbp.Name); regErr == nil {

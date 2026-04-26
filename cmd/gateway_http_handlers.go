@@ -9,7 +9,7 @@ import (
 )
 
 // wireHTTP creates HTTP handlers (agents + skills + traces + MCP + channel instances + providers + builtin tools + pending messages).
-func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir string, msgBus *bus.MessageBus, toolsReg *tools.Registry, providerReg *providers.Registry, modelReg providers.ModelRegistry, isOwner func(string) bool, gatewayAddr string, mcpToolLister httpapi.MCPToolLister) (*httpapi.AgentsHandler, *httpapi.SkillsHandler, *httpapi.TracesHandler, *httpapi.MCPHandler, *httpapi.ChannelInstancesHandler, *httpapi.ProvidersHandler, *httpapi.BuiltinToolsHandler, *httpapi.PendingMessagesHandler, *httpapi.TeamEventsHandler, *httpapi.SecureCLIHandler, *httpapi.SecureCLIGrantHandler, *httpapi.MCPUserCredentialsHandler) {
+func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir string, msgBus *bus.MessageBus, toolsReg *tools.Registry, providerReg *providers.Registry, modelReg providers.ModelRegistry, isOwner func(string) bool, gatewayAddr, gatewayToken string, mcpToolLister httpapi.MCPToolLister) (*httpapi.AgentsHandler, *httpapi.SkillsHandler, *httpapi.TracesHandler, *httpapi.MCPHandler, *httpapi.ChannelInstancesHandler, *httpapi.ProvidersHandler, *httpapi.BuiltinToolsHandler, *httpapi.PendingMessagesHandler, *httpapi.TeamEventsHandler, *httpapi.SecureCLIHandler, *httpapi.SecureCLIGrantHandler, *httpapi.MCPUserCredentialsHandler) {
 	var agentsH *httpapi.AgentsHandler
 	var skillsH *httpapi.SkillsHandler
 	var tracesH *httpapi.TracesHandler
@@ -67,9 +67,14 @@ func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir 
 		if stores.SystemConfigs != nil {
 			providersH.SetSystemConfigStore(stores.SystemConfigs)
 		}
+		var acpMCPLookup providers.MCPServerLookup
 		if stores.MCP != nil {
 			providersH.SetMCPServerLookup(buildMCPServerLookup(stores.MCP))
+			acpMCPLookup = buildACPMCPServerLookup(stores.MCP)
 		}
+		providersH.SetACPRegisterFn(func(p *store.LLMProviderData) {
+			registerACPFromDB(providerReg, *p, gatewayAddr, gatewayToken, acpMCPLookup, defaultWorkspace)
+		})
 		if stores.Tracing != nil {
 			providersH.SetTracingStore(stores.Tracing)
 		}

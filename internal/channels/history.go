@@ -60,13 +60,14 @@ type PendingHistory struct {
 	order   []string                  // insertion order for LRU eviction
 
 	// Persistence (optional — nil means RAM-only)
-	channelName string
-	store       store.PendingMessageStore
-	flushMu     sync.Mutex
-	flushBuf    []store.PendingMessage
-	flushSignal chan struct{}
-	stopCh      chan struct{}
-	stopped     chan struct{}
+	channelName    string
+	store          store.PendingMessageStore
+	flushMu        sync.Mutex
+	flushBuf       []store.PendingMessage
+	flushSignal    chan struct{}
+	stopCh         chan struct{}
+	stopped        chan struct{}
+	flusherStarted bool // true after StartFlusher() — guards StopFlusher against unstarted state
 
 	// Tenant isolation for DB operations.
 	tenantID uuid.UUID

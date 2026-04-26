@@ -1,0 +1,117 @@
+{
+  "layout": {
+    "subtitle": "게이트웨이를 설정하고 실행해 봅시다"
+  },
+  "steps": {
+    "provider": "공급자",
+    "model": "모델",
+    "agent": "에이전트",
+    "channel": "채널",
+    "channelOptional": "(선택사항)"
+  },
+  "complete": {
+    "title": "설정 완료!",
+    "ready": "시스템이 준비되었습니다!",
+    "description": "공급자, 에이전트, 채널이 설정되었습니다. 대시보드에서 언제든지 관리할 수 있습니다.",
+    "goToDashboard": "대시보드로 이동"
+  },
+  "provider": {
+    "title": "LLM 공급자 설정",
+    "descriptionCli": "로컬 Claude CLI 설치를 사용하여 연결합니다. API 키가 필요하지 않습니다.",
+    "descriptionOauth": "하나의 OpenAI Codex OAuth 계정을 생성합니다. 지금 별칭을 지정한 후, 나중에 풀 멤버나 라운드 로빈을 위한 별칭을 추가할 수 있습니다.",
+    "description": "에이전트를 구동할 AI 공급자에 연결합니다. API 키가 필요합니다.",
+    "providerType": "공급자 유형",
+    "providerTypeHint": "연결할 LLM 서비스입니다. 여러 모델에 접근하려면 OpenRouter를 권장합니다.",
+    "name": "이름",
+    "nameHint": "이 공급자의 내부 식별자입니다. 공급자 유형에서 자동 생성됩니다.",
+    "oauthAlias": "계정 별칭",
+    "oauthAliasPlaceholder": "예: primary",
+    "oauthAliasHint": "이 OpenAI/Codex 계정에 대해 primary, work, team 같은 고유 소문자 별칭을 사용하세요. 별칭은 에이전트가 사용하는 공급자/모델 접두사가 됩니다.",
+    "displayName": "표시 이름 (선택사항)",
+    "displayNameHint": "이 OpenAI/Codex 계정의 친화적 레이블입니다. 나중에 별칭을 추가할 때 유용합니다.",
+    "displayNamePlaceholder": "기본 Codex 계정",
+    "apiKey": "API 키 *",
+    "apiKeyHint": "공급자의 시크릿 키입니다. 서버 측에서 암호화되며 API 응답에 노출되지 않습니다.",
+    "apiBase": "API 기본 URL",
+    "apiBaseHint": "API 요청의 엔드포인트 URL입니다. 공급자 유형에 따라 자동 입력됩니다. 커스텀 프록시를 사용하는 경우에만 변경하세요.",
+    "creating": "생성 중...",
+    "create": "공급자 생성",
+    "errors": {
+      "apiKeyRequired": "API 키가 필요합니다",
+      "oauthProviderNotFound": "OAuth 인증에 성공했지만 공급자를 찾을 수 없습니다. 다시 시도해 주세요.",
+      "failedCreate": "공급자 생성 실패"
+    }
+  },
+  "model": {
+    "title": "모델 선택 및 확인",
+    "description": "모델을 선택하고 공급자 연결이 작동하는지 확인하세요.",
+    "provider": "공급자:",
+    "model": "모델 *",
+    "modelHint": "사용할 AI 모델입니다. 목록에서 선택하거나 목록에 없는 경우 모델 ID를 직접 입력하세요.",
+    "loadingModels": "모델 불러오는 중...",
+    "selectModel": "모델 선택 또는 모델 ID 입력",
+    "noModelsHint": "이 공급자는 모델 목록을 제공하지 않습니다 — 모델 ID를 직접 입력하세요.",
+    "verified": "확인됨",
+    "verify": "확인",
+    "verifying": "확인 중...",
+    "continue": "계속",
+    "modelVerified": "모델 확인됨",
+    "modelVerifiedDesc": "{{model}}이 정상적으로 작동합니다",
+    "verificationFailed": "확인 실패. API 키와 모델을 확인하세요."
+  },
+  "agent": {
+    "title": "첫 번째 에이전트 만들기",
+    "description": "에이전트는 AI 어시스턴트입니다. 이름과 성격을 설정하세요.",
+    "provider": "공급자:",
+    "model": "모델:",
+    "displayName": "표시 이름",
+    "displayNameHint": "소환 중 에이전트 성격에 따라 자동 생성됩니다.",
+    "agentKey": "에이전트 키",
+    "agentKeyHint": "에이전트의 고유 식별자입니다. 소문자, 숫자, 하이픈만 사용 가능합니다.",
+    "agentKeyPlaceholder": "my-agent",
+    "personality": "에이전트 성격",
+    "personalityHint": "에이전트의 역할과 행동을 설명하세요. AI가 소환 중에 이를 기반으로 컨텍스트 파일을 생성합니다.",
+    "personalityPlaceholder": "에이전트의 성격, 목적, 행동 방식을 설명하세요...",
+    "personalityHintBottom": "이 프롬프트를 커스터마이즈하여 에이전트의 성격과 전문성을 설정하세요.",
+    "selfEvolve": "자기 진화",
+    "selfEvolveDesc": "에이전트가 SOUL.md를 통해 시간이 지남에 따라 커뮤니케이션 스타일을 진화시킬 수 있도록 합니다",
+    "creating": "생성 중...",
+    "create": "에이전트 생성",
+    "summoningFailed": "소환 실패. 설정을 조정하고 다시 시도하세요.",
+    "errors": {
+      "noProvider": "사용 가능한 공급자 없음",
+      "failedCreate": "에이전트 생성 실패"
+    }
+  },
+  "channel": {
+    "title": "채널 연결",
+    "description": "에이전트에 메시징 플랫폼을 연결하세요. 나중에 언제든지 채널을 추가할 수 있습니다.",
+    "skip": "건너뛰기",
+    "skipFinish": "건너뛰고 완료",
+    "agent": "에이전트:",
+    "channelType": "채널 유형",
+    "channelTypeHint": "연결할 메시징 플랫폼입니다. 예: Telegram, Discord, Zalo.",
+    "name": "이름",
+    "nameHint": "이 채널 인스턴스의 내부 식별자입니다. 채널 유형에서 자동 생성됩니다.",
+    "namePlaceholder": "my-telegram",
+    "displayName": "표시 이름",
+    "displayNameHint": "UI에 표시되는 친화적 이름입니다. 선택사항.",
+    "displayNamePlaceholder": "판매 봇",
+    "credentials": "자격증명",
+    "credentialsHint": "서버 측에서 암호화됩니다. API 응답에 반환되지 않습니다.",
+    "creating": "생성 중...",
+    "create": "채널 생성",
+    "errors": {
+      "noAgent": "사용 가능한 에이전트 없음",
+      "requiredFields": "필수 항목: {{fields}}",
+      "failedCreate": "채널 생성 실패"
+    }
+  },
+  "common": {
+    "back": "뒤로"
+  },
+  "skipSetup": "설정을 건너뛰고 대시보드로 이동",
+  "skipSetupConfirm": "설정을 건너뛰시겠습니까? 대시보드에서 나중에 언제든지 공급자와 에이전트를 설정할 수 있습니다.",
+  "switchTenant": "전환",
+  "allTenants": "모든 테넌트"
+}

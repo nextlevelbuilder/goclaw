@@ -1,0 +1,123 @@
+{
+  "title": "스킬",
+  "description": "에이전트 스킬 및 기능 관리",
+  "searchPlaceholder": "스킬 검색...",
+  "emptyTitle": "스킬 없음",
+  "emptyDescription": "아직 등록된 스킬이 없습니다.",
+  "noMatchTitle": "일치하는 스킬 없음",
+  "noMatchDescription": "다른 검색어를 사용해 보세요.",
+  "columns": {
+    "name": "이름",
+    "description": "설명",
+    "source": "출처",
+    "author": "작성자",
+    "visibility": "공개 범위",
+    "status": "상태",
+    "actions": "작업"
+  },
+  "noDescription": "설명 없음",
+  "visibility": {
+    "clickToCycle": "클릭하여 공개 범위 변경"
+  },
+  "delete": {
+    "title": "스킬 삭제",
+    "description": "\"{{name}}\"을/를 삭제하시겠습니까? 이 작업은 취소할 수 없습니다.",
+    "confirmLabel": "삭제"
+  },
+  "upload": {
+    "title": "스킬 업로드",
+    "description": "YAML 프론트매터(name, description, slug)가 있는 SKILL.md가 포함된 ZIP 파일을 업로드하세요.",
+    "button": "업로드",
+    "uploading": "업로드 중...",
+    "dropOrClick": ".zip 파일을 클릭하거나 끌어다 놓기",
+    "dropHere": ".zip 파일을 여기에 놓기",
+    "onlyZip": ".zip 파일만 허용됩니다",
+    "cancel": "취소",
+    "done": "완료",
+    "tooLarge": "파일이 20MB 제한을 초과합니다",
+    "invalidZip": "유효하지 않은 ZIP 파일",
+    "noSkillMd": "ZIP에는 루트에 SKILL.md가 있어야 합니다",
+    "emptySkillMd": "SKILL.md가 비어 있습니다",
+    "noFrontmatter": "SKILL.md에 YAML 프론트매터가 없습니다",
+    "nameRequired": "SKILL.md 프론트매터에 name이 필요합니다",
+    "invalidSlug": "유효하지 않은 슬러그 형식",
+    "failed": "업로드 실패",
+    "validating": "유효성 검사 중...",
+    "validCount": "{{total}}개 중 {{valid}}개 유효",
+    "uploadCount": "업로드 ({{count}}개)",
+    "successCount": "{{total}}개 중 {{success}}개 성공적으로 업로드됨",
+    "remove": "파일 제거"
+  },
+  "edit": {
+    "title": "스킬 편집",
+    "name": "이름",
+    "description": "설명",
+    "visibility": "공개 범위",
+    "tags": "태그",
+    "addTag": "태그 추가...",
+    "add": "추가",
+    "cancel": "취소",
+    "save": "저장",
+    "saving": "저장 중...",
+    "privateOption": "비공개 (소유자만)",
+    "internalOption": "내부 (허가된 에이전트/사용자)",
+    "publicOption": "공개 (모든 에이전트)"
+  },
+  "system": "시스템",
+  "tabs": {
+    "core": "핵심",
+    "custom": "사용자 지정"
+  },
+  "toggle": {
+    "enable": "스킬 활성화",
+    "disable": "스킬 비활성화",
+    "disabled": "비활성화됨"
+  },
+  "tenant": {
+    "enabled": "활성화됨",
+    "disabled": "비활성화됨",
+    "default": "기본값",
+    "overrideHint": "이 스킬의 테넌트별 재정의",
+    "resetDefault": "기본값으로 초기화"
+  },
+  "deps": {
+    "rescan": "의존성 재검사",
+    "rescanning": "검사 중...",
+    "rescanSuccess": "{{count}}개 스킬 업데이트됨",
+    "missing": "없음: {{deps}}",
+    "install": "의존성 설치",
+    "installing": "설치 중...",
+    "installSuccess": "의존성 설치 완료",
+    "installPartial": "일부 의존성 설치 실패",
+    "installItem": "설치",
+    "itemSuccess": "설치됨",
+    "itemError": "실패",
+    "missingTitle": "없는 의존성",
+    "systemLabel": "시스템",
+    "pythonLabel": "Python",
+    "nodeLabel": "Node.js",
+    "statusActive": "활성",
+    "statusArchived": "의존성 없음",
+    "runtimeMissing": "런타임 전제 조건 없음",
+    "runtimeMissingDesc": "핵심 스킬은 GoClaw 런타임 컨테이너 내에 Python 및/또는 Node.js 런타임이 필요합니다. 호스트에 설치된 런타임은 사용되지 않습니다.",
+    "runtimeMissingAction": "패키지를 열어 이 컨테이너에 런타임을 확인하거나 설치하세요.",
+    "runtimeRequired": "먼저 컨테이너 런타임 설치"
+  },
+  "detail": {
+    "title": "스킬 세부 정보",
+    "content": "내용",
+    "files": "파일",
+    "version": "버전:",
+    "current": "(현재)",
+    "noContent": "사용 가능한 내용이 없습니다."
+  },
+  "toast": {
+    "updated": "스킬 업데이트됨",
+    "updateFailed": "스킬 업데이트 실패",
+    "deleted": "스킬 삭제됨",
+    "deleteFailed": "스킬 삭제 실패",
+    "rescanUpdated": "{{count}}개 스킬 업데이트됨",
+    "rescanNoChanges": "모든 스킬 최신 상태",
+    "rescanFailed": "의존성 재검사 실패"
+  }
+}

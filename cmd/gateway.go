@@ -286,6 +286,7 @@ func runGateway() {
 	server.SetDB(pgStores.DB)
 	server.SetPolicyEngine(permPE)
 	server.SetPairingService(pgStores.Pairing)
+	server.SetBuiltinToolsStore(pgStores.BuiltinTools)
 	server.SetMessageBus(msgBus)
 	server.SetOAuthHandler(httpapi.NewOAuthHandler(pgStores.Providers, pgStores.ConfigSecrets, providerRegistry, msgBus))
 
@@ -333,7 +334,7 @@ func runGateway() {
 	httpapi.InitGatewayToken(cfg.Gateway.Token)
 	exportTokenStore := httpapi.InitExportTokenStore()
 	defer exportTokenStore.Stop()
-	agentsH, skillsH, tracesH, mcpH, channelInstancesH, providersH, builtinToolsH, pendingMessagesH, teamEventsH, secureCLIH, secureCLIGrantH, mcpUserCredsH := wireHTTP(pgStores, cfg.Agents.Defaults.Workspace, dataDir, bundledSkillsDir, msgBus, toolsReg, providerRegistry, modelReg, permPE.IsOwner, gatewayAddr, mcpToolLister)
+	agentsH, skillsH, tracesH, mcpH, channelInstancesH, providersH, builtinToolsH, pendingMessagesH, teamEventsH, secureCLIH, secureCLIGrantH, mcpUserCredsH := wireHTTP(pgStores, cfg.Agents.Defaults.Workspace, dataDir, bundledSkillsDir, msgBus, toolsReg, providerRegistry, modelReg, permPE.IsOwner, gatewayAddr, cfg.Gateway.Token, mcpToolLister)
 
 	// Wire dependencies for system prompt preview parity.
 	if agentsH != nil {

@@ -4,13 +4,43 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
+
+// reBotToken matches Telegram bot tokens in URLs (bot<id>:<secret>/).
+var reBotToken = regexp.MustCompile(`bot\d+:[A-Za-z0-9_-]+/`)
+
+// MaskBotToken replaces bot tokens in error messages with "bot***/".
+func MaskBotToken(err error) string {
+	if err == nil {
+		return ""
+	}
+	return reBotToken.ReplaceAllString(err.Error(), "bot***/")
+}
+
+// maskBotToken is a package-level alias for backward compatibility.
+func maskBotToken(err error) string { return MaskBotToken(err) }
+
+// watchdogRetrySchedule defines successive wait durations between retry attempts.
+// After the last entry the final value is reused indefinitely.
+var watchdogRetrySchedule = []time.Duration{
+	30 * time.Second,
+	1 * time.Minute,
+	2 * time.Minute,
+	5 * time.Minute,
+}
+
+type failedEntry struct {
+	channel  Channel
+	attempts int
+}
 
 // ChannelStream is the per-run streaming handle stored on RunContext.
 // Each channel implementation returns a ChannelStream from CreateStream().
@@ -54,6 +84,8 @@ type Manager struct {
 	bus              *bus.MessageBus
 	runs             sync.Map // runID string → *RunContext
 	dispatchTask     *asyncTask
+	watchdogTask     *asyncTask
+	failed           map[string]*failedEntry // channels that failed to start; retried by watchdog
 	mu               sync.RWMutex
 	contactCollector *store.ContactCollector
 }
@@ -68,6 +100,7 @@ func NewManager(msgBus *bus.MessageBus) *Manager {
 	return &Manager{
 		channels: make(map[string]Channel),
 		health:   make(map[string]ChannelHealth),
+		failed:   make(map[string]*failedEntry),
 		bus:      msgBus,
 	}
 }
@@ -99,13 +132,24 @@ func (m *Manager) StartAll(ctx context.Context) error {
 		m.syncChannelHealthLocked(name, channel)
 		if err := channel.Start(ctx); err != nil {
 			m.recordChannelStartFailureLocked(name, channel, "", err)
-			slog.Error("failed to start channel", "channel", name, "error", err)
+			slog.Error("failed to start channel", "channel", name, "error", maskBotToken(err))
+			info := ClassifyChannelError(err)
+			if info.Retryable {
+				m.failed[name] = &failedEntry{channel: channel}
+			}
 			continue
 		}
 		m.syncChannelHealthLocked(name, channel)
 	}
 
 	slog.Info("all channels started")
+
+	if len(m.failed) > 0 {
+		watchdogCtx, cancel := context.WithCancel(ctx)
+		m.watchdogTask = &asyncTask{cancel: cancel}
+		go m.runWatchdog(watchdogCtx)
+	}
+
 	return nil
 }
 
@@ -119,6 +163,11 @@ func (m *Manager) StopAll(ctx context.Context) error {
 	if m.dispatchTask != nil {
 		m.dispatchTask.cancel()
 		m.dispatchTask = nil
+	}
+
+	if m.watchdogTask != nil {
+		m.watchdogTask.cancel()
+		m.watchdogTask = nil
 	}
 
 	for name, channel := range m.channels {
@@ -183,11 +232,42 @@ func (m *Manager) RegisterChannel(name string, channel Channel) {
 			bc.SetContactCollector(m.contactCollector)
 		}
 	}
+	// Wire auto-retry: when the channel disconnects at runtime it calls back into RetryChannel.
+	if bc, ok := channel.(interface{ SetOnDisconnect(func()) }); ok {
+		bc.SetOnDisconnect(func() { m.RetryChannel(name) })
+	}
 	m.channels[name] = channel
 	if hc, ok := channel.(interface{ MarkRegistered(string) }); ok {
 		hc.MarkRegistered("Configured")
 	}
 	m.syncChannelHealthLocked(name, channel)
+}
+
+// RetryChannel enqueues a running channel for reconnection after an unexpected disconnect.
+// Safe to call from any goroutine (e.g. a channel's polling loop).
+func (m *Manager) RetryChannel(name string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	ch, ok := m.channels[name]
+	if !ok {
+		return
+	}
+	if _, alreadyQueued := m.failed[name]; alreadyQueued {
+		return
+	}
+	slog.Warn("channel disconnected at runtime, queuing for reconnect", "channel", name)
+	m.failed[name] = &failedEntry{channel: ch}
+
+	// Start watchdog if not already running (e.g. all startup failures had already recovered).
+	if m.watchdogTask == nil && m.dispatchTask != nil {
+		// Reuse the same lifetime as the dispatch loop — both live until StopAll.
+		// We derive a fresh context from Background because the original StartAll ctx
+		// may have been cancelled; dispatchTask being non-nil means the manager is alive.
+		watchdogCtx, cancel := context.WithCancel(context.Background())
+		m.watchdogTask = &asyncTask{cancel: cancel}
+		go m.runWatchdog(watchdogCtx)
+	}
 }
 
 // RecordHealth stores runtime health for an instance, including failures before registration.
@@ -334,6 +414,80 @@ func (m *Manager) recordHealthLocked(name string, snapshot ChannelHealth) {
 
 func (m *Manager) syncChannelHealthLocked(name string, channel Channel) {
 	m.recordHealthLocked(name, snapshotChannelHealth(channel))
+}
+
+// runWatchdog periodically retries channels that failed to start with a retryable error.
+// Backoff schedule: 30s → 1m → 2m → 5m (held at 5m thereafter).
+// Exits when all failed channels have recovered or the context is cancelled.
+func (m *Manager) runWatchdog(ctx context.Context) {
+	retryDelay := func(attempts int) time.Duration {
+		idx := attempts
+		if idx >= len(watchdogRetrySchedule) {
+			idx = len(watchdogRetrySchedule) - 1
+		}
+		return watchdogRetrySchedule[idx]
+	}
+
+	// nextRetry tracks when each channel should next be attempted.
+	nextRetry := make(map[string]time.Time)
+	m.mu.RLock()
+	for name, fe := range m.failed {
+		nextRetry[name] = time.Now().Add(retryDelay(fe.attempts))
+	}
+	m.mu.RUnlock()
+
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-ticker.C:
+			m.mu.Lock()
+			if len(m.failed) == 0 {
+				m.watchdogTask = nil
+				m.mu.Unlock()
+				return
+			}
+
+			for name, fe := range m.failed {
+				if now.Before(nextRetry[name]) {
+					continue
+				}
+
+				slog.Info("channel watchdog: retrying failed channel", "channel", name, "attempt", fe.attempts+1)
+				// Stop first to clean up any residual state (e.g. GroupHistory flusher)
+				// before re-starting. Errors are non-fatal — channel may already be stopped.
+				_ = fe.channel.Stop(ctx)
+				if hc, ok := fe.channel.(interface{ MarkStarting(string) }); ok {
+					hc.MarkStarting("Reconnecting")
+				}
+				m.syncChannelHealthLocked(name, fe.channel)
+
+				if err := fe.channel.Start(ctx); err != nil {
+					fe.attempts++
+					info := ClassifyChannelError(err)
+					m.recordChannelStartFailureLocked(name, fe.channel, "", err)
+					slog.Warn("channel watchdog: retry failed", "channel", name, "attempt", fe.attempts, "error", maskBotToken(err))
+					if !info.Retryable {
+						slog.Error("channel watchdog: non-retryable error, giving up", "channel", name)
+						delete(m.failed, name)
+						delete(nextRetry, name)
+					} else {
+						nextRetry[name] = time.Now().Add(retryDelay(fe.attempts))
+					}
+					continue
+				}
+
+				slog.Info("channel watchdog: channel recovered", "channel", name, "attempts", fe.attempts+1)
+				m.syncChannelHealthLocked(name, fe.channel)
+				delete(m.failed, name)
+				delete(nextRetry, name)
+			}
+			m.mu.Unlock()
+		}
+	}
 }
 
 func snapshotChannelHealth(channel Channel) ChannelHealth {

@@ -48,11 +48,12 @@ type Server struct {
 	handlers []routeRegistrar
 
 	// Non-handler dependencies (don't implement RegisterRoutes)
-	policyEngine   *permissions.PolicyEngine
-	pairingService store.PairingStore
-	apiKeyStore    store.APIKeyStore  // for API key auth lookup
-	agentStore     store.AgentStore   // for context injection in tools_invoke
-	msgBus         *bus.MessageBus    // for MCP bridge media delivery
+	policyEngine    *permissions.PolicyEngine
+	pairingService  store.PairingStore
+	apiKeyStore     store.APIKeyStore       // for API key auth lookup
+	agentStore      store.AgentStore        // for context injection in tools_invoke
+	msgBus          *bus.MessageBus         // for MCP bridge media delivery
+	builtinToolsStore store.BuiltinToolStore // source of truth for MCP bridge tool selection
 
 	upgrader    websocket.Upgrader
 	rateLimiter *RateLimiter
@@ -183,7 +184,7 @@ func (s *Server) BuildMux() *http.ServeMux {
 	// prevent unauthenticated tool invocations if port is exposed.
 	if s.tools != nil {
 		if s.cfg.Gateway.Token != "" {
-			bridgeHandler := mcpbridge.NewBridgeServer(s.tools, "1.0.0", s.msgBus)
+			bridgeHandler := mcpbridge.NewBridgeServer(s.tools, s.builtinToolsStore, "1.0.0", s.msgBus)
 			handler := tokenAuthMiddleware(s.cfg.Gateway.Token,
 				bridgeContextMiddleware(s.cfg.Gateway.Token, s.agentStore, bridgeHandler))
 			mux.Handle("/mcp/bridge", handler)
@@ -305,9 +306,11 @@ func bridgeContextMiddleware(gatewayToken string, agentStore store.AgentStore, n
 // tokenAuthMiddleware wraps an http.Handler with Bearer token authentication.
 func tokenAuthMiddleware(token string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		slog.Info("http: incoming request", "method", r.Method, "path", r.URL.Path, "remote", r.RemoteAddr, "agent_id", r.Header.Get("X-Agent-ID"))
 		auth := r.Header.Get("Authorization")
 		provided := strings.TrimPrefix(auth, "Bearer ")
 		if !strings.HasPrefix(auth, "Bearer ") || subtle.ConstantTimeCompare([]byte(provided), []byte(token)) != 1 {
+			slog.Warn("http: unauthorized request", "path", r.URL.Path, "remote", r.RemoteAddr)
 			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 			return
 		}
@@ -395,6 +398,10 @@ func (s *Server) SetPolicyEngine(pe *permissions.PolicyEngine) { s.policyEngine 
 
 // SetPairingService sets the pairing service for channel authentication.
 func (s *Server) SetPairingService(ps store.PairingStore) { s.pairingService = ps }
+
+// SetBuiltinToolsStore provides the MCP bridge with the canonical enabled-tool
+// list. Must be called before BuildMux() (which constructs the bridge server).
+func (s *Server) SetBuiltinToolsStore(bt store.BuiltinToolStore) { s.builtinToolsStore = bt }
 
 // SetAgentsHandler sets the agent CRUD handler.
 func (s *Server) SetAgentsHandler(h *httpapi.AgentsHandler) { s.handlers = append(s.handlers, h) }

@@ -1,0 +1,25 @@
+{
+  "title": "스토리지",
+  "description": "워크스페이스 파일 탐색기",
+  "descriptionWithPath": "{{path}} — {{size}}",
+  "sizeCacheInfo": "스토리지 크기는 60분간 캐시됩니다",
+  "unsupportedFile": "이 파일 유형은 미리보기를 지원하지 않습니다",
+  "download": "다운로드",
+  "delete": {
+    "fileTitle": "파일 삭제",
+    "folderTitle": "폴더 삭제",
+    "description": "{{name}}을/를 삭제하시겠습니까?",
+    "folderWarning": " 모든 내용이 재귀적으로 제거됩니다.",
+    "undone": " 이 작업은 취소할 수 없습니다.",
+    "deleting": "삭제 중...",
+    "confirmLabel": "삭제"
+  },
+  "upload": {
+    "title": "스토리지에 업로드",
+    "description": "데이터 디렉터리에 파일 업로드"
+  },
+  "toast": {
+    "deleted": "파일 삭제됨",
+    "deleteFailed": "파일 삭제 실패"
+  }
+}

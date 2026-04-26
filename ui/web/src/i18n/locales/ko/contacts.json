@@ -1,0 +1,58 @@
+{
+  "title": "연락처",
+  "description": "모든 채널 상호작용에서 자동으로 수집된 연락처.",
+  "searchPlaceholder": "이름, 사용자명 또는 ID로 검색...",
+  "filter": "필터",
+  "emptyTitle": "연락처 없음",
+  "emptyDescription": "사용자가 채널을 통해 에이전트와 상호작용하면 여기에 연락처가 나타납니다.",
+  "noMatchTitle": "일치하는 연락처 없음",
+  "noMatchDescription": "다른 검색어나 필터를 사용해 보세요.",
+  "columns": {
+    "name": "이름",
+    "username": "사용자명",
+    "senderId": "발신자 ID",
+    "channelType": "채널",
+    "peerKind": "유형",
+    "lastSeen": "마지막 접속",
+    "merged": "병합됨"
+  },
+  "permissionsNote": {
+    "title": "연락처 이름에 대한 채널 권한",
+    "telegram": "Telegram — 이름과 사용자명이 자동으로 제공됩니다.",
+    "discord": "Discord — 표시 이름과 사용자명이 자동으로 제공됩니다.",
+    "zalo": "Zalo — 표시 이름이 자동으로 제공됩니다.",
+    "slack": "Slack — Slack API를 통해 표시 이름이 해석됩니다 (봇이 워크스페이스에 있어야 함).",
+    "feishu": "Feishu/Lark — contact:user.base:readonly 권한이 필요합니다. 없으면 이름이 비어 있습니다."
+  },
+  "selectedCount": "{{count}}개 선택됨",
+  "merge": {
+    "button": "병합",
+    "unmergeButton": "병합 해제",
+    "dialogTitle": "연락처 병합",
+    "dialogDescription": "선택한 연락처를 테넌트 사용자 신원에 연결합니다. 이를 통해 여러 채널에서 동일한 사람으로 식별됩니다.",
+    "linkExisting": "기존 사용자에 연결",
+    "createNew": "새 사용자 만들기",
+    "selectUser": "테넌트 사용자 선택...",
+    "displayName": "표시 이름",
+    "displayNamePlaceholder": "예: 홍길동",
+    "userId": "사용자 ID",
+    "userIdPlaceholder": "고유 식별자",
+    "confirm": "병합",
+    "cancel": "취소",
+    "success": "연락처가 성공적으로 병합되었습니다",
+    "unmergeSuccess": "연락처 병합이 성공적으로 해제되었습니다",
+    "error": "연락처 병합 실패",
+    "unmergeError": "연락처 병합 해제 실패",
+    "comingSoon": "이 기능은 개발 중이며 아직 사용할 수 없습니다."
+  },
+  "types": {
+    "user": "사용자",
+    "group": "그룹"
+  },
+  "filters": {
+    "allChannels": "모든 채널",
+    "allTypes": "모든 유형",
+    "direct": "직접",
+    "group": "그룹"
+  }
+}

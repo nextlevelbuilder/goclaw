@@ -187,6 +187,8 @@ type BaseChannel struct {
 	approvedGroups  sync.Map // chatID → true (in-memory cache for paired group approval)
 	pairingDebounce sync.Map // senderID → time.Time (debounce pairing reply sends)
 	requireMention  bool
+
+	onDisconnect func() // optional: called on unexpected runtime disconnection for auto-retry
 }
 
 // NewBaseChannel creates a new BaseChannel with the given parameters.
@@ -467,6 +469,20 @@ func (c *BaseChannel) MarkDegraded(summary, detail string, kind ChannelFailureKi
 		summary = "Running with warnings"
 	}
 	c.setHealth(NewChannelHealth(ChannelHealthStateDegraded, summary, detail, kind, retryable))
+}
+
+// SetOnDisconnect sets a callback invoked when the channel disconnects unexpectedly at runtime.
+// Used by Manager to wire auto-retry without the channel needing to know about Manager.
+func (c *BaseChannel) SetOnDisconnect(fn func()) {
+	c.onDisconnect = fn
+}
+
+// NotifyDisconnect calls the onDisconnect callback if set.
+// Channel implementations call this when polling/streaming stops unexpectedly.
+func (c *BaseChannel) NotifyDisconnect() {
+	if c.onDisconnect != nil {
+		c.onDisconnect()
+	}
 }
 
 // MarkFailed records a startup or runtime failure.

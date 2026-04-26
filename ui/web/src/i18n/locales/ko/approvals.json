@@ -1,0 +1,33 @@
+{
+  "title": "승인",
+  "description": "대기 중인 실행 승인",
+  "pending": "{{count}}개 대기 중",
+  "emptyTitle": "대기 중인 승인 없음",
+  "emptyDescription": "모든 실행 요청이 처리되었습니다. 새 요청은 실시간으로 여기에 나타납니다.",
+  "allowOnce": "한 번 허용",
+  "allowAlways": "항상 허용",
+  "deny": "거부",
+  "confirmAllowOnce": {
+    "title": "한 번 허용",
+    "description": "에이전트 \"{{agentId}}\"에서 \"{{command}}\" 실행을 허용하시겠습니까?"
+  },
+  "confirmAllowAlways": {
+    "title": "항상 허용",
+    "description": "에이전트 \"{{agentId}}\"에 \"{{command}}\"을/를 영구적으로 허용하시겠습니까? 이 명령은 앞으로 자동으로 승인됩니다."
+  },
+  "confirmDeny": {
+    "title": "실행 거부",
+    "description": "에이전트 \"{{agentId}}\"에서 요청한 \"{{command}}\" 실행을 거부하시겠습니까?",
+    "confirmLabel": "거부"
+  },
+  "toast": {
+    "approved": "승인됨",
+    "approvedAlways": "명령이 항상 허용됨",
+    "approvedOnce": "명령이 승인됨",
+    "approveFailed": "승인 실패",
+    "denied": "거부됨",
+    "deniedDesc": "명령이 거부됨",
+    "denyFailed": "거부 실패",
+    "unknownError": "알 수 없는 오류"
+  }
+}

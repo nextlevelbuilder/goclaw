@@ -165,7 +165,7 @@ func (w *episodicWorker) summarizeFromMessages(ctx context.Context, provider pro
 		}
 	}
 
-	sctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	sctx, cancel := context.WithTimeout(ctx, 120*time.Second)
 	defer cancel()
 
 	resp, err := provider.Chat(sctx, providers.ChatRequest{

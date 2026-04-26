@@ -139,7 +139,7 @@ func TestResolvePath_NonExistentFile_AllowedForWrites(t *testing.T) {
 
 func TestHandlePermission_ApproveAll(t *testing.T) {
 	tb, _ := newTestBridge(t, WithPermMode("approve-all"))
-	resp, err := tb.handlePermission(RequestPermissionRequest{ToolName: "bash", Description: "run"})
+	resp, err := tb.handlePermission(context.Background(), RequestPermissionRequest{ToolName: "bash", Description: "run"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestHandlePermission_ApproveAll(t *testing.T) {
 
 func TestHandlePermission_DenyAll(t *testing.T) {
 	tb, _ := newTestBridge(t, WithPermMode("deny-all"))
-	resp, err := tb.handlePermission(RequestPermissionRequest{ToolName: "any_tool"})
+	resp, err := tb.handlePermission(context.Background(), RequestPermissionRequest{ToolName: "any_tool"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -164,7 +164,7 @@ func TestHandlePermission_ApproveReads_ReadTool(t *testing.T) {
 	cases := []string{"readFile", "glob_files", "search_code", "list_dir", "grep_search", "view_file"}
 	for _, name := range cases {
 		t.Run(name, func(t *testing.T) {
-			resp, err := tb.handlePermission(RequestPermissionRequest{ToolName: name})
+			resp, err := tb.handlePermission(context.Background(), RequestPermissionRequest{ToolName: name})
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -177,7 +177,7 @@ func TestHandlePermission_ApproveReads_ReadTool(t *testing.T) {
 
 func TestHandlePermission_ApproveReads_WriteTool(t *testing.T) {
 	tb, _ := newTestBridge(t, WithPermMode("approve-reads"))
-	resp, err := tb.handlePermission(RequestPermissionRequest{ToolName: "write_file"})
+	resp, err := tb.handlePermission(context.Background(), RequestPermissionRequest{ToolName: "write_file"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -189,7 +189,7 @@ func TestHandlePermission_ApproveReads_WriteTool(t *testing.T) {
 func TestHandlePermission_DefaultMode_Approves(t *testing.T) {
 	// permMode = "" defaults to "approve-all" behaviour (unknown → approve)
 	tb := &ToolBridge{permMode: "unknown-mode"}
-	resp, err := tb.handlePermission(RequestPermissionRequest{ToolName: "anything"})
+	resp, err := tb.handlePermission(context.Background(), RequestPermissionRequest{ToolName: "anything"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

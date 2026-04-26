@@ -231,7 +231,7 @@ func (c *Channel) Start(ctx context.Context) error {
 		for attempt := 1; attempt <= 3; attempt++ {
 			if err := c.SyncMenuCommands(syncCtx, commands); err != nil {
 				lastErr = err
-				slog.Warn("failed to sync telegram menu commands", "error", err, "attempt", attempt)
+				slog.Warn("failed to sync telegram menu commands", "error", channels.MaskBotToken(err), "attempt", attempt)
 				if attempt < 3 {
 					select {
 					case <-syncCtx.Done():
@@ -259,8 +259,11 @@ func (c *Channel) Start(ctx context.Context) error {
 				if !ok {
 					if pollCtx.Err() == nil {
 						c.MarkFailed("Polling stopped unexpectedly", "Telegram updates channel closed unexpectedly.", channels.ChannelFailureKindNetwork, true)
+						slog.Warn("telegram polling stopped unexpectedly, queuing for reconnect", "channel", c.Name())
+						c.NotifyDisconnect()
+					} else {
+						slog.Info("telegram updates channel closed")
 					}
-					slog.Info("telegram updates channel closed")
 					return
 				}
 				if update.Message != nil {

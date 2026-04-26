@@ -83,6 +83,46 @@ import viV3Capabilities from "./locales/vi/v3-capabilities.json";
 import viBackup from "./locales/vi/backup.json";
 import viHooks from "./locales/vi/hooks.json";
 
+// --- KO namespaces ---
+import koCommon from "./locales/ko/common.json";
+import koSidebar from "./locales/ko/sidebar.json";
+import koTopbar from "./locales/ko/topbar.json";
+import koLogin from "./locales/ko/login.json";
+import koOverview from "./locales/ko/overview.json";
+import koChat from "./locales/ko/chat.json";
+import koAgents from "./locales/ko/agents.json";
+import koTeams from "./locales/ko/teams.json";
+import koSessions from "./locales/ko/sessions.json";
+import koSkills from "./locales/ko/skills.json";
+import koCron from "./locales/ko/cron.json";
+import koConfig from "./locales/ko/config.json";
+import koChannels from "./locales/ko/channels.json";
+import koProviders from "./locales/ko/providers.json";
+import koTraces from "./locales/ko/traces.json";
+import koEvents from "./locales/ko/events.json";
+import koUsage from "./locales/ko/usage.json";
+import koApprovals from "./locales/ko/approvals.json";
+import koNodes from "./locales/ko/nodes.json";
+import koLogs from "./locales/ko/logs.json";
+import koTools from "./locales/ko/tools.json";
+import koMcp from "./locales/ko/mcp.json";
+import koTts from "./locales/ko/tts.json";
+import koSetup from "./locales/ko/setup.json";
+import koMemory from "./locales/ko/memory.json";
+import koVault from "./locales/ko/vault.json";
+import koStorage from "./locales/ko/storage.json";
+import koPendingMessages from "./locales/ko/pending-messages.json";
+import koContacts from "./locales/ko/contacts.json";
+import koActivity from "./locales/ko/activity.json";
+import koApiKeys from "./locales/ko/api-keys.json";
+import koCliCredentials from "./locales/ko/cli-credentials.json";
+import koPackages from "./locales/ko/packages.json";
+import koTenants from "./locales/ko/tenants.json";
+import koSystemSettings from "./locales/ko/system-settings.json";
+import koImportExport from "./locales/ko/import-export.json";
+import koV3Capabilities from "./locales/ko/v3-capabilities.json";
+import koBackup from "./locales/ko/backup.json";
+
 // --- ZH namespaces ---
 import zhCommon from "./locales/zh/common.json";
 import zhSidebar from "./locales/zh/sidebar.json";
@@ -128,10 +168,11 @@ const STORAGE_KEY = "goclaw:language";
 
 function getInitialLanguage(): string {
   const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === "en" || stored === "vi" || stored === "zh") return stored;
+  if (stored === "en" || stored === "vi" || stored === "zh" || stored === "ko") return stored;
   const lang = navigator.language.toLowerCase();
   if (lang.startsWith("vi")) return "vi";
   if (lang.startsWith("zh")) return "zh";
+  if (lang.startsWith("ko")) return "ko";
   return "en";
 }
 
@@ -205,6 +246,24 @@ i18n.use(initReactI18next).init({
       "v3-capabilities": zhV3Capabilities,
       backup: zhBackup,
       hooks: zhHooks,
+    },
+    ko: {
+      common: koCommon, sidebar: koSidebar, topbar: koTopbar, login: koLogin,
+      overview: koOverview, chat: koChat, agents: koAgents, teams: koTeams,
+      sessions: koSessions, skills: koSkills, cron: koCron, config: koConfig,
+      channels: koChannels, providers: koProviders, traces: koTraces,
+      events: koEvents, usage: koUsage,
+      approvals: koApprovals, nodes: koNodes, logs: koLogs, tools: koTools,
+      mcp: koMcp, tts: koTts, setup: koSetup, memory: koMemory, vault: koVault, storage: koStorage,
+      "pending-messages": koPendingMessages,
+      contacts: koContacts, activity: koActivity, "api-keys": koApiKeys,
+      "cli-credentials": koCliCredentials,
+      packages: koPackages,
+      tenants: koTenants,
+      "system-settings": koSystemSettings,
+      "import-export": koImportExport,
+      "v3-capabilities": koV3Capabilities,
+      backup: koBackup,
     },
   },
   ns: [...ns],

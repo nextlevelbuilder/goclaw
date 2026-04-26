@@ -1,0 +1,50 @@
+{
+  "title": "대기 메시지",
+  "description": "에이전트 처리를 기다리는 버퍼링된 채널 메시지",
+  "emptyTitle": "대기 중인 메시지 없음",
+  "emptyDescription": "버퍼링된 메시지 그룹이 없습니다. 채널이 에이전트 처리 전에 메시지를 버퍼링할 때 여기에 나타납니다.",
+  "howItWorks": {
+    "title": "작동 방식",
+    "step1": "채널(Telegram, Discord 등)의 메시지는 에이전트가 바쁘거나 오프라인일 때 여기에 버퍼링됩니다.",
+    "step2": "버퍼가 임계값(기본값: 메시지 50개)에 도달하면 자동 압축이 시작됩니다 — LLM이 오래된 메시지를 요약하고 최근 15개만 유지합니다.",
+    "step3": "에이전트의 다음 턴에서 압축된 요약 + 최근 메시지가 컨텍스트로 삽입되어, 에이전트가 과부하 없이 따라잡을 수 있습니다.",
+    "compactAction": "압축 — LLM 요약을 지금 수동으로 트리거합니다. 에이전트가 원시 메시지 홍수 대신 깔끔한 요약을 처리하게 하려는 경우 유용합니다.",
+    "clearAction": "지우기 — 그룹의 모든 버퍼링된 메시지를 영구적으로 삭제합니다. 메시지가 더 이상 관련이 없을 때 사용하세요."
+  },
+  "columns": {
+    "channel": "채널",
+    "group": "그룹",
+    "messages": "메시지",
+    "status": "상태",
+    "lastActivity": "마지막 활동",
+    "actions": "작업"
+  },
+  "status": {
+    "compacted": "압축됨",
+    "raw": "원시"
+  },
+  "compact": "압축",
+  "compacting": "압축 중…",
+  "clear": "지우기",
+  "confirmClear": {
+    "title": "메시지를 지우시겠습니까?",
+    "description": "{{channel}} / {{key}}의 모든 메시지가 영구적으로 삭제됩니다. 이 작업은 취소할 수 없습니다.",
+    "cancel": "취소",
+    "confirm": "지우기"
+  },
+  "dialog": {
+    "title": "메시지 — {{name}}",
+    "noMessages": "메시지가 없습니다.",
+    "summary": "요약"
+  },
+  "toast": {
+    "compacted": "압축 완료",
+    "compactedSummarized": "{{count}}개 메시지로 요약됨",
+    "compactedDeleted": "모든 메시지 삭제됨 (LLM 공급자 없음)",
+    "compacting": "압축 중…",
+    "compactingDesc": "LLM 요약이 백그라운드에서 실행 중입니다. 목록이 자동으로 새로 고쳐집니다.",
+    "failedCompact": "압축 실패",
+    "cleared": "메시지 지워짐",
+    "failedClear": "메시지 지우기 실패"
+  }
+}

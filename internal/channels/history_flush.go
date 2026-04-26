@@ -13,12 +13,13 @@ func (ph *PendingHistory) StartFlusher() {
 	if ph.store == nil {
 		return
 	}
+	ph.flusherStarted = true
 	go ph.flushLoop()
 }
 
-// StopFlusher stops the background flusher and flushes remaining buffer. No-op if RAM-only.
+// StopFlusher stops the background flusher and flushes remaining buffer. No-op if RAM-only or never started.
 func (ph *PendingHistory) StopFlusher() {
-	if ph.store == nil {
+	if ph.store == nil || !ph.flusherStarted {
 		return
 	}
 	close(ph.stopCh)
