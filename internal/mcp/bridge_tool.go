@@ -68,6 +68,7 @@ func NewBridgeTool(serverName string, mcpTool mcpgo.Tool, clientPtr *atomic.Poin
 		timeoutSec:     timeoutSec,
 		connected:      connected,
 		grantChecker:   grantChecker,
+		touchFunc:     touchFunc,
 	}
 }
 

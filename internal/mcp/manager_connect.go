@@ -294,6 +294,24 @@ func (m *Manager) healthLoop(ctx context.Context, ss *serverState) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			// Check idle timeout before pinging
+			if timeout := ss.getIdleTimeout(); timeout > 0 {
+				lastUsed := time.Unix(ss.lastUsed.Load(), 0)
+				if time.Since(lastUsed) > timeout {
+					slog.Info("mcp.server.idle_disconnect", "server", ss.name, "idle", time.Since(lastUsed).Round(time.Second))
+					ss.connected.Store(false)
+					m.mu.Lock()
+					delete(m.servers, ss.name)
+					m.mu.Unlock()
+					for _, toolName := range ss.toolNames {
+						m.registry.Unregister(toolName)
+					}
+					m.registry.UnregisterToolGroup("mcp:" + ss.name)
+					m.updateMCPGroup()
+					return
+				}
+			}
+
 			start := time.Now()
 			if err := ss.client.Ping(ctx); err != nil {
 				if isMethodNotFound(err) {

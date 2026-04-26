@@ -146,6 +146,9 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 				if v := d.cfg.Tools.MCPReconnectCooldown; v > 0 {
 					mcpbridge.SetReconnectCooldownSec(int64(v))
 				}
+				if v := d.cfg.Tools.MCPIdleTimeout; v > 0 {
+					mcpbridge.SetIdleTimeoutSec(int64(v))
+				}
 
 				slog.Debug("system_configs refreshed to in-memory config", "keys", len(sysConfigs))
 			}
