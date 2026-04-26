@@ -378,13 +378,24 @@ func (c *Channel) portalDomainSafe() string {
 const pairingDebounce = 60 * time.Second
 
 // isGroupMessageType normalises Bitrix24 MESSAGE_TYPE to group-or-not.
-// Webhook events use short codes ("P" private, "C" chat, "O" open channel)
-// while some legacy payloads spell the full word. We accept both; anything
-// else (including the empty string) is treated as a direct message so
-// stricter DM policies apply.
+// Webhook events use short codes:
+//
+//   - "P" / "private" — direct message between two users
+//   - "C" / "chat"    — generic multi-user group chat (also CRM Deal chats)
+//   - "O" / "open"    — Open Channel session (customer-service widget)
+//   - "X"             — entity-bound group chat (Tasks, Workgroups, etc.).
+//     Observed empirically with CHAT_ENTITY_TYPE=TASKS_TASK; treated as
+//     group because CHAT_USER_COUNT>1 and the @mention semantics match
+//     plain "C" chats. Without this branch task chats fall through to
+//     direct-message handling, which bypasses the require-mention gate
+//     and routes traffic to a `direct:chatNN` session key instead of
+//     `group:chatNN`, mixing per-task context into per-user history.
+//
+// Anything else (including the empty string) is treated as a direct
+// message so stricter DM policies apply.
 func isGroupMessageType(mt string) bool {
 	switch strings.ToUpper(strings.TrimSpace(mt)) {
-	case "C", "CHAT", "O", "OPEN":
+	case "C", "CHAT", "O", "OPEN", "X":
 		return true
 	default:
 		return false

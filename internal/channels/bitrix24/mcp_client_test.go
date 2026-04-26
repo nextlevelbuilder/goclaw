@@ -219,6 +219,12 @@ func TestIsGroupMessageType(t *testing.T) {
 		"CHAT":    true,
 		"O":       true,
 		"open":    true,
+		// "X" = entity-bound group chat (Tasks, Workgroups). Observed on
+		// real ONIMBOTMESSAGEADD payloads where CHAT_ENTITY_TYPE=TASKS_TASK
+		// and CHAT_USER_COUNT>1.
+		"X":       true,
+		"x":       true,
+		" X ":     true,
 		"unknown": false,
 	}
 	for input, want := range cases {
