@@ -265,6 +265,34 @@ func processNormalMessage(
 		extraPrompt += identity
 	}
 
+	// Append Bitrix24 entity binding hint so MCP-equipped agents can resolve
+	// "this deal/task/lead" deterministically. The channel layer (bitrix24/handle.go)
+	// forwards data[PARAMS][CHAT_ENTITY_TYPE] + CHAT_ENTITY_ID into Metadata
+	// whenever the chat is bound to a Bitrix24 module entity. Plain user-created
+	// chats omit both keys → no hint added (avoids polluting unrelated chats).
+	//
+	// We deliberately keep this simple "system prompt injection" approach for now.
+	// The LLM still has to call MCP tools to fetch fresh data — we only tell it
+	// WHICH entity is in scope, not WHAT the data is. See
+	// plans/bitrix24-mcp-refactor/reports/event-payloads.md for the metadata
+	// contract and the phase plan for the optional pre-fetch upgrade.
+	if et := msg.Metadata["bitrix_chat_entity_type"]; et != "" {
+		if eid := msg.Metadata["bitrix_chat_entity_id"]; eid != "" {
+			if extraPrompt != "" {
+				extraPrompt += "\n\n"
+			}
+			extraPrompt += fmt.Sprintf(
+				"## Channel context — Bitrix24 entity binding\n"+
+					"This chat is bound to a Bitrix24 entity (type=%s, id=%s).\n"+
+					"When the user refers to \"this deal\", \"this task\", \"this lead\", or similar deictic phrases, treat them as referring to id %s.\n"+
+					"CRM ids use pipe format (e.g. \"DEAL|2064\" — split on '|' and use the numeric part with the matching MCP tool such as crm.deal.get / crm.lead.get / crm.contact.get / crm.company.get).\n"+
+					"Tasks ids are plain numbers — pass directly to tasks.task.get.\n"+
+					"Do not ask the user which deal/task this is; you already know.",
+				et, eid, eid,
+			)
+		}
+	}
+
 	// Per-topic skill filter override (from group/topic config hierarchy).
 	var skillFilter []string
 	if ts := msg.Metadata[tools.MetaTopicSkills]; ts != "" {
