@@ -166,6 +166,17 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 	if evt.Params.ChatID != "" {
 		meta["bitrix_chat_id"] = evt.Params.ChatID
 	}
+	// Entity binding lets MCP tools resolve "this deal" / "this task" without
+	// parsing CHAT_TITLE strings. Examples:
+	//   bitrix_chat_entity_type=CRM        bitrix_chat_entity_id=DEAL|2064
+	//   bitrix_chat_entity_type=TASKS_TASK bitrix_chat_entity_id=2704
+	// Plain user-created chats omit both fields.
+	if evt.Params.ChatEntityType != "" {
+		meta["bitrix_chat_entity_type"] = evt.Params.ChatEntityType
+	}
+	if evt.Params.ChatEntityID != "" {
+		meta["bitrix_chat_entity_id"] = evt.Params.ChatEntityID
+	}
 
 	// Collect contact for processed messages (matches Telegram pattern at
 	// channels/telegram/handlers.go:617-630). Runs AFTER policy gating so

@@ -74,6 +74,20 @@ type EventParams struct {
 	// Bitrix24 emits on group messages. Highest-authority mention source —
 	// no regex / Unicode edge cases. Absent (nil) on DMs.
 	MentionedList map[string]string
+
+	// ChatEntityType + ChatEntityID expose the entity binding for chats that
+	// belong to a Bitrix24 module (CRM Deal/Lead/Contact, Tasks task,
+	// Workgroup, Open Channel session). Examples:
+	//
+	//   CRM Deal:  ChatEntityType="CRM"        ChatEntityID="DEAL|2064"
+	//   CRM Lead:  ChatEntityType="CRM"        ChatEntityID="LEAD|123"
+	//   Task:      ChatEntityType="TASKS_TASK" ChatEntityID="2704"
+	//   Plain:     ChatEntityType=""           ChatEntityID=""
+	//
+	// Forwarded to the agent via metadata so MCP tools can resolve "this
+	// deal/task" deterministically without parsing CHAT_TITLE strings.
+	ChatEntityType string
+	ChatEntityID   string
 }
 
 // EventFile is one attachment element extracted from
@@ -174,6 +188,8 @@ func parseFormEvent(v url.Values) (*Event, error) {
 		MessageOriginal: formGet(v, "data", "PARAMS", "MESSAGE_ORIGINAL"),
 		MessageType:     formGet(v, "data", "PARAMS", "MESSAGE_TYPE"),
 		ReplyToMID:      formGet(v, "data", "PARAMS", "REPLY_TO_MESSAGE_ID"),
+		ChatEntityType:  formGet(v, "data", "PARAMS", "CHAT_ENTITY_TYPE"),
+		ChatEntityID:    formGet(v, "data", "PARAMS", "CHAT_ENTITY_ID"),
 	}
 	if s := formGet(v, "data", "PARAMS", "SYSTEM"); s == "Y" {
 		p.SystemMessage = true
@@ -279,6 +295,8 @@ func parseJSONEvent(body io.ReadCloser) (*Event, error) {
 				MessageType     string           `json:"MESSAGE_TYPE"`
 				System          string           `json:"SYSTEM"`
 				ReplyToMID      any              `json:"REPLY_TO_MESSAGE_ID"`
+				ChatEntityType  string           `json:"CHAT_ENTITY_TYPE"`
+				ChatEntityID    string           `json:"CHAT_ENTITY_ID"`
 				Files           []map[string]any `json:"FILES"`
 			} `json:"PARAMS"`
 		} `json:"data"`
@@ -332,6 +350,8 @@ func parseJSONEvent(body io.ReadCloser) (*Event, error) {
 	p.MessageType = raw.Data.Params.MessageType
 	p.SystemMessage = raw.Data.Params.System == "Y"
 	p.ReplyToMID = asString(raw.Data.Params.ReplyToMID)
+	p.ChatEntityType = raw.Data.Params.ChatEntityType
+	p.ChatEntityID = raw.Data.Params.ChatEntityID
 	if len(raw.Data.Params.MentionedList) > 0 {
 		p.MentionedList = make(map[string]string, len(raw.Data.Params.MentionedList))
 		for id, val := range raw.Data.Params.MentionedList {

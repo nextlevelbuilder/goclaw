@@ -248,6 +248,83 @@ func TestParseEvent_NilRequest(t *testing.T) {
 	}
 }
 
+// TestParseEvent_Form_ChatEntity verifies CHAT_ENTITY_TYPE + CHAT_ENTITY_ID
+// surface on EventParams for both CRM-bound and Tasks-bound chats. These
+// fields drive MCP "this deal/task" resolution downstream — without parsing
+// them the agent has no deterministic way to know which entity the chat
+// belongs to. Fixtures match real Bitrix24 webhooks captured against
+// tamgiac.bitrix24.com (see plans/.../reports/event-payloads/05 + 07).
+func TestParseEvent_Form_ChatEntity(t *testing.T) {
+	cases := []struct {
+		name           string
+		entityType     string
+		entityID       string
+		messageType    string
+	}{
+		{name: "crm_deal", entityType: "CRM", entityID: "DEAL|2064", messageType: "C"},
+		{name: "crm_lead", entityType: "CRM", entityID: "LEAD|7", messageType: "C"},
+		{name: "tasks_task", entityType: "TASKS_TASK", entityID: "2704", messageType: "X"},
+		{name: "plain_group_no_entity", entityType: "", entityID: "", messageType: "C"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			v := buildBitrixForm()
+			v.Set("data[PARAMS][MESSAGE_TYPE]", tc.messageType)
+			if tc.entityType != "" {
+				v.Set("data[PARAMS][CHAT_ENTITY_TYPE]", tc.entityType)
+			}
+			if tc.entityID != "" {
+				v.Set("data[PARAMS][CHAT_ENTITY_ID]", tc.entityID)
+			}
+			req := httptest.NewRequest(http.MethodPost, "/bitrix24/events", strings.NewReader(v.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+			evt, err := ParseEvent(req)
+			if err != nil {
+				t.Fatalf("ParseEvent: %v", err)
+			}
+			if evt.Params.ChatEntityType != tc.entityType {
+				t.Errorf("ChatEntityType = %q; want %q", evt.Params.ChatEntityType, tc.entityType)
+			}
+			if evt.Params.ChatEntityID != tc.entityID {
+				t.Errorf("ChatEntityID = %q; want %q", evt.Params.ChatEntityID, tc.entityID)
+			}
+		})
+	}
+}
+
+// TestParseEvent_JSON_ChatEntity is the JSON-payload counterpart. Bitrix24
+// rarely sends JSON in production but the parser accepts it, so we keep the
+// two paths in lockstep.
+func TestParseEvent_JSON_ChatEntity(t *testing.T) {
+	payload := map[string]any{
+		"event": "ONIMBOTMESSAGEADD",
+		"auth":  map[string]any{"domain": "portal.bitrix24.com", "application_token": "X"},
+		"data": map[string]any{
+			"BOT": map[string]any{"914": map[string]any{"BOT_ID": 914}},
+			"PARAMS": map[string]any{
+				"MESSAGE_TYPE":     "X",
+				"CHAT_ENTITY_TYPE": "TASKS_TASK",
+				"CHAT_ENTITY_ID":   "2704",
+			},
+		},
+	}
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/bitrix24/events", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	evt, err := ParseEvent(req)
+	if err != nil {
+		t.Fatalf("ParseEvent: %v", err)
+	}
+	if evt.Params.ChatEntityType != "TASKS_TASK" {
+		t.Errorf("ChatEntityType = %q", evt.Params.ChatEntityType)
+	}
+	if evt.Params.ChatEntityID != "2704" {
+		t.Errorf("ChatEntityID = %q", evt.Params.ChatEntityID)
+	}
+}
+
 func TestFormGet(t *testing.T) {
 	v := url.Values{}
 	v.Set("a[b][c]", "deep")

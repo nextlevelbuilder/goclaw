@@ -477,6 +477,80 @@ func TestHandleMessage_Group_CollectsBothSenderAndGroupContact(t *testing.T) {
 	}
 }
 
+// TestHandleMessage_ChatEntityForwardedAsMetadata proves the bus.InboundMessage
+// carries the entity binding so MCP tools can resolve "this deal" / "this task"
+// without the agent guessing from CHAT_TITLE strings. Plain user-created chats
+// (no entity binding) must NOT add stale or empty metadata keys — downstream
+// readers do `_, ok := metadata["bitrix_chat_entity_id"]` checks.
+func TestHandleMessage_ChatEntityForwardedAsMetadata(t *testing.T) {
+	cases := []struct {
+		name         string
+		entityType   string
+		entityID     string
+		messageType  string
+		wantTypeMeta string // "" means key must be absent
+		wantIDMeta   string
+	}{
+		{
+			name: "crm_deal_chat",
+			entityType: "CRM", entityID: "DEAL|2064", messageType: "C",
+			wantTypeMeta: "CRM", wantIDMeta: "DEAL|2064",
+		},
+		{
+			name: "tasks_chat_X_type",
+			entityType: "TASKS_TASK", entityID: "2704", messageType: "X",
+			wantTypeMeta: "TASKS_TASK", wantIDMeta: "2704",
+		},
+		{
+			name: "plain_group_omits_keys",
+			entityType: "", entityID: "", messageType: "C",
+			wantTypeMeta: "", wantIDMeta: "",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ch, mb := newHandleTestChannel(t, 101, false)
+			defer resetWebhookRouterForTest()
+
+			ch.DispatchEvent(context.Background(), &Event{
+				Type: EventMessageAdd,
+				Params: EventParams{
+					FromUserID:     "42",
+					DialogID:       "chat999",
+					MessageID:      "m-entity",
+					MessageType:    tc.messageType,
+					Message:        "anything",
+					MessageOriginal: "[USER=101]Bot[/USER] anything", // pass mention check for groups
+					MentionedList:  map[string]string{"101": "101"},
+					ChatEntityType: tc.entityType,
+					ChatEntityID:   tc.entityID,
+				},
+			})
+			msg, ok := drainOne(mb, 500*time.Millisecond)
+			if !ok {
+				t.Fatal("expected inbound message")
+			}
+			gotType, hasType := msg.Metadata["bitrix_chat_entity_type"]
+			gotID, hasID := msg.Metadata["bitrix_chat_entity_id"]
+			if tc.wantTypeMeta == "" {
+				if hasType {
+					t.Errorf("bitrix_chat_entity_type unexpectedly set: %q", gotType)
+				}
+				if hasID {
+					t.Errorf("bitrix_chat_entity_id unexpectedly set: %q", gotID)
+				}
+				return
+			}
+			if gotType != tc.wantTypeMeta {
+				t.Errorf("bitrix_chat_entity_type = %q; want %q", gotType, tc.wantTypeMeta)
+			}
+			if gotID != tc.wantIDMeta {
+				t.Errorf("bitrix_chat_entity_id = %q; want %q", gotID, tc.wantIDMeta)
+			}
+		})
+	}
+}
+
 func TestHandleMessage_Blocked_DoesNotCollectContact(t *testing.T) {
 	ch, _, cs := newChannelWithContactCollector(t, 101, false)
 	defer resetWebhookRouterForTest()
