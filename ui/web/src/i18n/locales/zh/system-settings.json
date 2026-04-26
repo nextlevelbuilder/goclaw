@@ -100,6 +100,8 @@
     "maxReconnectAttemptsHint": "进入冷却前的尝试次数（默认：10）。",
     "reconnectCooldown": "重连冷却（秒）",
     "reconnectCooldownHint": "耗尽尝试后的等待秒数（默认：300）。",
+    "idleTimeout": "空闲超时（秒）",
+    "idleTimeoutHint": "空闲连接在此秒数后断开（0 = 永不断开）。",
     "info": "更改在下一个健康检查周期生效。更高的失败阈值可以容忍暂时的网络波动。"
   },
   "moreConfig": "更多配置",

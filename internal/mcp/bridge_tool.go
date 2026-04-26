@@ -31,6 +31,7 @@ type BridgeTool struct {
 	timeoutSec     int
 	connected      *atomic.Bool
 	grantChecker   GrantChecker // for runtime grant recheck (nil = skip check)
+	touchFunc     func()        // called on tool invocation to track usage (nil = skip)
 }
 
 // NewBridgeTool creates a BridgeTool from an MCP Tool definition.
@@ -39,7 +40,7 @@ type BridgeTool struct {
 // clientPtr is a shared atomic pointer from serverState — reconnection swaps it
 // atomically, and all BridgeTools see the new client without explicit notification.
 // serverID and grantChecker are optional — pass uuid.Nil and nil for config-path mode.
-func NewBridgeTool(serverName string, mcpTool mcpgo.Tool, clientPtr *atomic.Pointer[mcpclient.Client], prefix string, timeoutSec int, connected *atomic.Bool, serverID uuid.UUID, grantChecker GrantChecker) *BridgeTool {
+func NewBridgeTool(serverName string, mcpTool mcpgo.Tool, clientPtr *atomic.Pointer[mcpclient.Client], prefix string, timeoutSec int, connected *atomic.Bool, serverID uuid.UUID, grantChecker GrantChecker, touchFunc func()) *BridgeTool {
 	name := mcpTool.Name
 	effectivePrefix := ensureMCPPrefix(prefix, serverName)
 	registered := effectivePrefix + "__" + name
@@ -113,6 +114,10 @@ func (t *BridgeTool) Execute(ctx context.Context, args map[string]any) *tools.Re
 		if !t.grantChecker.IsAllowed(ctx, agentID, userID, t.serverID, t.toolName) {
 			return tools.ErrorResult(fmt.Sprintf("MCP tool %q: grant revoked", t.registeredName))
 		}
+	}
+
+	if t.touchFunc != nil {
+		t.touchFunc()
 	}
 
 	if !t.connected.Load() {

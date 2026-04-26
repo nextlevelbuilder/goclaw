@@ -10,6 +10,7 @@ const DEFAULTS: Record<string, string> = {
   "mcp.health_check_interval": "30",
   "mcp.max_reconnect_attempts": "10",
   "mcp.reconnect_cooldown": "300",
+  "mcp.idle_timeout": "0",
 };
 
 export interface MCPGlobalHealthSettings {
@@ -17,6 +18,7 @@ export interface MCPGlobalHealthSettings {
   healthCheckInterval: string;
   maxReconnectAttempts: string;
   reconnectCooldown: string;
+  idleTimeout: string;
 }
 
 function getOr(configs: Record<string, string | undefined>, key: string): string {
@@ -36,6 +38,7 @@ export function useMCPGlobalSettings() {
         healthCheckInterval: getOr(configs, "mcp.health_check_interval"),
         maxReconnectAttempts: getOr(configs, "mcp.max_reconnect_attempts"),
         reconnectCooldown: getOr(configs, "mcp.reconnect_cooldown"),
+        idleTimeout: getOr(configs, "mcp.idle_timeout"),
       };
     },
     staleTime: 60_000,
@@ -52,6 +55,8 @@ export function useMCPGlobalSettings() {
         updates["mcp.max_reconnect_attempts"] = values.maxReconnectAttempts;
       if (values.reconnectCooldown !== init.reconnectCooldown)
         updates["mcp.reconnect_cooldown"] = values.reconnectCooldown;
+      if (values.idleTimeout !== init.idleTimeout)
+        updates["mcp.idle_timeout"] = values.idleTimeout;
 
       if (Object.keys(updates).length === 0) return;
 

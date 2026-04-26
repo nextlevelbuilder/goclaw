@@ -100,6 +100,8 @@
     "maxReconnectAttemptsHint": "Tries before cooldown (default: 10).",
     "reconnectCooldown": "Reconnect Cooldown (sec)",
     "reconnectCooldownHint": "Seconds to wait after exhausting attempts (default: 300).",
+    "idleTimeout": "Idle Timeout (sec)",
+    "idleTimeoutHint": "Disconnect idle connections after this many seconds (0 = never).",
     "info": "Changes take effect on the next health check cycle. Higher fail thresholds tolerate transient network blips."
   },
   "moreConfig": "More Config",

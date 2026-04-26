@@ -79,7 +79,9 @@
     "maxReconnectAttempts": "Max Reconnect Attempts",
     "maxReconnectAttemptsHint": "Reconnect tries before cooldown (0 = global).",
     "reconnectCooldown": "Reconnect Cooldown (sec)",
-    "reconnectCooldownHint": "Seconds to wait after exhausting attempts (0 = global)."
+    "reconnectCooldownHint": "Seconds to wait after exhausting attempts (0 = global).",
+    "idleTimeout": "Idle Timeout (sec)",
+    "idleTimeoutHint": "Disconnect after inactivity (0 = global)."
   },
   "grants": {
     "title": "Agent Grants - {{name}}",

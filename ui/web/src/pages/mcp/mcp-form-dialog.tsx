@@ -70,6 +70,7 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit, onTest }: 
       healthCheckInterval: 0,
       maxReconnectAttempts: 0,
       reconnectCooldown: 0,
+      idleTimeout: 0,
     },
   });
 
@@ -101,6 +102,7 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit, onTest }: 
         healthCheckInterval: server?.settings?.health_check_interval ?? 0,
         maxReconnectAttempts: server?.settings?.max_reconnect_attempts ?? 0,
         reconnectCooldown: server?.settings?.reconnect_cooldown ?? 0,
+        idleTimeout: server?.settings?.idle_timeout ?? 0,
       });
       setError("");
       setTestResult(null);
@@ -169,6 +171,7 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit, onTest }: 
           health_check_interval: data.healthCheckInterval || undefined,
           max_reconnect_attempts: data.maxReconnectAttempts || undefined,
           reconnect_cooldown: data.reconnectCooldown || undefined,
+          idle_timeout: data.idleTimeout || undefined,
         },
         enabled: data.enabled,
       });

@@ -79,7 +79,9 @@
     "maxReconnectAttempts": "最大重连尝试",
     "maxReconnectAttemptsHint": "进入冷却前的尝试次数（0 = 全局）。",
     "reconnectCooldown": "重连冷却（秒）",
-    "reconnectCooldownHint": "耗尽尝试后的等待秒数（0 = 全局）。"
+    "reconnectCooldownHint": "耗尽尝试后的等待秒数（0 = 全局）。",
+    "idleTimeout": "空闲超时（秒）",
+    "idleTimeoutHint": "不活动后断开连接（0 = 全局）。"
   },
   "grants": {
     "title": "Agent授权 - {{name}}",

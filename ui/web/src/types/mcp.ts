@@ -23,6 +23,7 @@ export interface MCPServerData {
     health_check_interval?: number;
     max_reconnect_attempts?: number;
     reconnect_cooldown?: number;
+    idle_timeout?: number;
   };
   enabled: boolean;
   created_by: string;
@@ -49,6 +50,7 @@ export interface MCPServerInput {
     health_check_interval?: number;
     max_reconnect_attempts?: number;
     reconnect_cooldown?: number;
+    idle_timeout?: number;
   };
   enabled?: boolean;
 }

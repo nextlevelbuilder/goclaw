@@ -307,6 +307,13 @@ type mcpHealthWriter struct {
 	store store.MCPServerStore
 }
 
+func newMCPHealthWriter(s store.MCPServerStore) mcpbridge.HealthCheckWriter {
+	if s == nil {
+		return nil
+	}
+	return &mcpHealthWriter{store: s}
+}
+
 func (w *mcpHealthWriter) WriteHealthCheck(ctx context.Context, entry mcpbridge.HealthCheckEntry) error {
 	var latencyPtr *int
 	if entry.LatencyMs > 0 {
@@ -322,6 +329,7 @@ func (w *mcpHealthWriter) WriteHealthCheck(ctx context.Context, entry mcpbridge.
 		Error:          entry.Error,
 		ToolCount:      entry.ToolCount,
 		HealthFailures: entry.HealthFailures,
+		CheckedAt:      time.Now().UTC(),
 	}
 	return w.store.InsertHealthCheck(ctx, check)
 }

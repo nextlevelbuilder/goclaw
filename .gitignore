@@ -89,5 +89,7 @@ compose.d/*
 /mise
 /.mise
 *.test
-goclaw-patched-linux-amd64
+goclaw-*
 ui/web/nginx.staging.conf
+migrations/
+logs/

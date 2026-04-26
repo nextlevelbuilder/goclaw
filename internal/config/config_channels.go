@@ -405,6 +405,7 @@ type ToolsConfig struct {
 	MCPHealthCheckInterval  int `json:"mcp_health_check_interval,omitempty"`  // seconds between health pings (default 30)
 	MCPMaxReconnectAttempts int `json:"mcp_max_reconnect_attempts,omitempty"` // max reconnect tries before cooldown (default 10)
 	MCPReconnectCooldown    int `json:"mcp_reconnect_cooldown,omitempty"`     // cooldown seconds after exhausting attempts (default 300)
+	MCPIdleTimeout          int `json:"mcp_idle_timeout,omitempty"`           // idle disconnect timeout in seconds (default 0 = never)
 }
 
 // MCPServerConfig configures a single external MCP server connection.

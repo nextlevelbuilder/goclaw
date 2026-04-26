@@ -21,6 +21,7 @@ const FIELDS: { key: keyof MCPGlobalHealthSettings; labelKey: string; hintKey: s
   { key: "healthCheckInterval", labelKey: "mcp.healthCheckInterval", hintKey: "mcp.healthCheckIntervalHint", placeholder: "30", min: 5 },
   { key: "maxReconnectAttempts", labelKey: "mcp.maxReconnectAttempts", hintKey: "mcp.maxReconnectAttemptsHint", placeholder: "10", min: 1 },
   { key: "reconnectCooldown", labelKey: "mcp.reconnectCooldown", hintKey: "mcp.reconnectCooldownHint", placeholder: "300", min: 10 },
+  { key: "idleTimeout", labelKey: "mcp.idleTimeout", hintKey: "mcp.idleTimeoutHint", placeholder: "0", min: 0 },
 ];
 
 interface MCPGlobalSettingsDialogProps {
@@ -37,6 +38,7 @@ export function MCPGlobalSettingsDialog({ open, onOpenChange }: MCPGlobalSetting
     healthCheckInterval: "30",
     maxReconnectAttempts: "10",
     reconnectCooldown: "300",
+    idleTimeout: "0",
   });
   const [init, setInit] = useState<MCPGlobalHealthSettings>(values);
 

@@ -96,6 +96,7 @@ func connectAndDiscover(ctx context.Context, name, transportType, command string
 	}
 	ss.clientPtr.Store(client)
 	ss.connected.Store(true)
+	ss.lastUsed.Store(time.Now().Unix())
 
 	return ss, toolsResult.Tools, nil
 }
@@ -114,6 +115,7 @@ func (m *Manager) connectServer(ctx context.Context, name, transportType, comman
 	ss.healthCheckInterval = hs.HealthCheckInterval
 	ss.maxReconnectAttempts = hs.MaxReconnectAttempts
 	ss.reconnectCooldown = hs.ReconnectCooldown
+	ss.idleTimeout = hs.IdleTimeout
 
 	// Register tools
 	registeredNames := m.registerBridgeTools(ss, mcpTools, name, toolPrefix, timeoutSec, serverID)
@@ -149,8 +151,9 @@ func (m *Manager) connectServer(ctx context.Context, name, transportType, comman
 // serverID is the MCP server UUID (uuid.Nil for config-path servers).
 func (m *Manager) registerBridgeTools(ss *serverState, mcpTools []mcpgo.Tool, serverName, toolPrefix string, timeoutSec int, serverID uuid.UUID) []string {
 	var registeredNames []string
+	touch := func() { ss.lastUsed.Store(time.Now().Unix()) }
 	for _, mcpTool := range mcpTools {
-		bt := NewBridgeTool(serverName, mcpTool, &ss.clientPtr, toolPrefix, timeoutSec, &ss.connected, serverID, m.grantChecker)
+		bt := NewBridgeTool(serverName, mcpTool, &ss.clientPtr, toolPrefix, timeoutSec, &ss.connected, serverID, m.grantChecker, touch)
 
 		if _, exists := m.registry.Get(bt.Name()); exists {
 			slog.Warn("mcp.tool.name_collision",
@@ -182,6 +185,7 @@ func (m *Manager) connectViaPool(ctx context.Context, tenantID uuid.UUID, name, 
 	entry.state.healthCheckInterval = hs.HealthCheckInterval
 	entry.state.maxReconnectAttempts = hs.MaxReconnectAttempts
 	entry.state.reconnectCooldown = hs.ReconnectCooldown
+	entry.state.idleTimeout = hs.IdleTimeout
 
 	// Create per-agent BridgeTools from the pool's shared connection
 	registeredNames := m.registerPoolBridgeTools(entry, name, toolPrefix, timeoutSec, serverID)
@@ -225,7 +229,7 @@ func (m *Manager) connectViaPool(ctx context.Context, tenantID uuid.UUID, name, 
 func (m *Manager) registerPoolBridgeTools(entry *poolEntry, serverName, toolPrefix string, timeoutSec int, serverID uuid.UUID) []string {
 	var registeredNames []string
 	for _, mcpTool := range entry.tools {
-		bt := NewBridgeTool(serverName, mcpTool, &entry.state.clientPtr, toolPrefix, timeoutSec, &entry.state.connected, serverID, m.grantChecker)
+		bt := NewBridgeTool(serverName, mcpTool, &entry.state.clientPtr, toolPrefix, timeoutSec, &entry.state.connected, serverID, m.grantChecker, nil)
 
 		if _, exists := m.registry.Get(bt.Name()); exists {
 			slog.Warn("mcp.tool.name_collision",
@@ -290,6 +294,7 @@ func (m *Manager) healthLoop(ctx context.Context, ss *serverState) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			start := time.Now()
 			if err := ss.client.Ping(ctx); err != nil {
 				if isMethodNotFound(err) {
 					ss.connected.Store(true)
@@ -298,6 +303,7 @@ func (m *Manager) healthLoop(ctx context.Context, ss *serverState) {
 					ss.healthFailures = 0
 					ss.lastErr = ""
 					ss.mu.Unlock()
+					m.writeHealthCheck(ctx, ss, "healthy", int(time.Since(start).Milliseconds()), "")
 					continue
 				}
 				ss.mu.Lock()
@@ -307,11 +313,13 @@ func (m *Manager) healthLoop(ctx context.Context, ss *serverState) {
 				ss.mu.Unlock()
 
 				slog.Warn("mcp.server.health_failed", "server", ss.name, "error", err, "consecutive", failures)
+				m.writeHealthCheck(ctx, ss, "unhealthy", 0, err.Error())
 
 				// Only mark disconnected and attempt reconnect after consecutive failures
 				// to tolerate transient errors (e.g. 504 from upstream proxy).
 				if failures >= ss.getHealthFailThreshold() {
 					ss.connected.Store(false)
+					m.writeHealthCheck(ctx, ss, "reconnecting", 0, err.Error())
 					m.tryReconnect(ctx, ss)
 				}
 			} else {
@@ -321,6 +329,7 @@ func (m *Manager) healthLoop(ctx context.Context, ss *serverState) {
 				ss.healthFailures = 0
 				ss.lastErr = ""
 				ss.mu.Unlock()
+				m.writeHealthCheck(ctx, ss, "healthy", int(time.Since(start).Milliseconds()), "")
 			}
 		}
 	}

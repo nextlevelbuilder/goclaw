@@ -100,6 +100,8 @@
     "maxReconnectAttemptsHint": "Số lần thử trước khi nghỉ (mặc định: 10).",
     "reconnectCooldown": "Thời gian chờ kết nối lại (giây)",
     "reconnectCooldownHint": "Số giây chờ sau khi hết lần thử (mặc định: 300).",
+    "idleTimeout": "Thời gian chờ rảnh (giây)",
+    "idleTimeoutHint": "Ngắt kết nối sau số giây không hoạt động (0 = không bao giờ).",
     "info": "Thay đổi có hiệu lực ở chu kỳ kiểm tra tiếp theo. Ngưỡng lỗi cao hơn giúp chịu được lỗi mạng tạm thời."
   },
   "moreConfig": "Cấu hình thêm",

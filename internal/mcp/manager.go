@@ -34,6 +34,7 @@ var (
 	healthFailThreshold  atomic.Int32 // consecutive failures (default 3)
 	maxReconnectAttempts atomic.Int32 // attempts before cooldown (default 10)
 	reconnectCooldown    atomic.Int64 // seconds (default 300)
+	idleTimeout         atomic.Int64 // seconds (default 0 = never)
 )
 
 func init() {
@@ -41,6 +42,7 @@ func init() {
 	healthFailThreshold.Store(3)
 	maxReconnectAttempts.Store(10)
 	reconnectCooldown.Store(300)
+	idleTimeout.Store(0)
 }
 
 // SetHealthFailThreshold sets the consecutive failure count before triggering reconnect.
@@ -82,6 +84,14 @@ func SetReconnectCooldownSec(n int64) {
 
 // GetReconnectCooldownSec returns the current reconnect cooldown in seconds.
 func GetReconnectCooldownSec() int64 { return reconnectCooldown.Load() }
+
+// SetIdleTimeoutSec sets the idle disconnect timeout in seconds (0 = never disconnect).
+func SetIdleTimeoutSec(n int64) {
+	idleTimeout.Store(n)
+}
+
+// GetIdleTimeoutSec returns the current idle disconnect timeout in seconds.
+func GetIdleTimeoutSec() int64 { return idleTimeout.Load() }
 
 // ServerStatus reports the connection status of an MCP server.
 type ServerStatus struct {
@@ -153,6 +163,9 @@ type serverState struct {
 	healthCheckInterval  int
 	maxReconnectAttempts int
 	reconnectCooldown    int
+	idleTimeout          int // seconds (0 = use global; global 0 = never disconnect)
+
+	lastUsed atomic.Int64 // Unix timestamp of last tool invocation
 }
 
 func (ss *serverState) getHealthFailThreshold() int {
@@ -183,12 +196,24 @@ func (ss *serverState) getReconnectCooldown() time.Duration {
 	return time.Duration(reconnectCooldown.Load()) * time.Second
 }
 
+func (ss *serverState) getIdleTimeout() time.Duration {
+	if ss.idleTimeout > 0 {
+		return time.Duration(ss.idleTimeout) * time.Second
+	}
+	g := idleTimeout.Load()
+	if g > 0 {
+		return time.Duration(g) * time.Second
+	}
+	return 0
+}
+
 // healthSettings holds per-server health config parsed from the settings JSON blob.
 type healthSettings struct {
 	HealthFailThreshold  int `json:"health_fail_threshold"`
 	HealthCheckInterval  int `json:"health_check_interval"`
 	MaxReconnectAttempts int `json:"max_reconnect_attempts"`
 	ReconnectCooldown    int `json:"reconnect_cooldown"`
+	IdleTimeout          int `json:"idle_timeout"`
 }
 
 func parseHealthSettings(raw json.RawMessage) healthSettings {
@@ -222,6 +247,9 @@ type Manager struct {
 
 	// Grant checker for runtime grant verification (nil = skip check)
 	grantChecker GrantChecker
+
+	// Health writer for persisting health check results (nil = skip)
+	healthWriter HealthCheckWriter
 
 	// Shared connection pool (nil = config-only mode)
 	pool          *Pool
@@ -270,6 +298,37 @@ func WithPool(p *Pool) ManagerOption {
 func WithGrantChecker(gc GrantChecker) ManagerOption {
 	return func(m *Manager) {
 		m.grantChecker = gc
+	}
+}
+
+// WithHealthWriter sets the health writer for persisting health check results.
+func WithHealthWriter(w HealthCheckWriter) ManagerOption {
+	return func(m *Manager) {
+		m.healthWriter = w
+	}
+}
+
+// writeHealthCheck persists a health check result if a writer is configured.
+func (m *Manager) writeHealthCheck(ctx context.Context, ss *serverState, status string, latencyMs int, errStr string) {
+	if m.healthWriter == nil || ss.serverID == uuid.Nil {
+		return
+	}
+	ss.mu.Lock()
+	hf := ss.healthFailures
+	toolCount := len(ss.toolNames)
+	ss.mu.Unlock()
+	entry := HealthCheckEntry{
+		ServerID:       ss.serverID,
+		ServerName:     ss.name,
+		TenantID:       ss.tenantID,
+		Status:         status,
+		LatencyMs:      latencyMs,
+		Error:          errStr,
+		ToolCount:      toolCount,
+		HealthFailures: hf,
+	}
+	if err := m.healthWriter.WriteHealthCheck(ctx, entry); err != nil {
+		slog.Debug("mcp.health_write_failed", "server", ss.name, "error", err)
 	}
 }
 

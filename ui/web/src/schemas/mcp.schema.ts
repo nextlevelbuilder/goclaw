@@ -17,6 +17,7 @@ export const mcpFormSchema = z.object({
   healthCheckInterval: z.number().min(0),
   maxReconnectAttempts: z.number().min(0),
   reconnectCooldown: z.number().min(0),
+  idleTimeout: z.number().min(0),
 });
 
 export type MCPFormData = z.infer<typeof mcpFormSchema>;

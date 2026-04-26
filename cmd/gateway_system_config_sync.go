@@ -121,6 +121,7 @@ func seedConfigForContext(ctx context.Context, sc store.SystemConfigStore, cfg *
 	setInt("mcp.health_check_interval", cfg.Tools.MCPHealthCheckInterval)
 	setInt("mcp.max_reconnect_attempts", cfg.Tools.MCPMaxReconnectAttempts)
 	setInt("mcp.reconnect_cooldown", cfg.Tools.MCPReconnectCooldown)
+	setInt("mcp.idle_timeout", cfg.Tools.MCPIdleTimeout)
 
 	// TTS
 	set("tts.provider", cfg.Tts.Provider)

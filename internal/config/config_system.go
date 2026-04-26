@@ -67,6 +67,7 @@ func (c *Config) ApplySystemConfigs(configs map[string]string) {
 	integer("mcp.health_check_interval", &c.Tools.MCPHealthCheckInterval)
 	integer("mcp.max_reconnect_attempts", &c.Tools.MCPMaxReconnectAttempts)
 	integer("mcp.reconnect_cooldown", &c.Tools.MCPReconnectCooldown)
+	integer("mcp.idle_timeout", &c.Tools.MCPIdleTimeout)
 
 	// TTS
 	str("tts.provider", &c.Tts.Provider)

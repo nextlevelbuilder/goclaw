@@ -224,6 +224,7 @@ func wireExtras(
 		MCPStore:               stores.MCP,
 		MCPPool:                mcpPool,
 		MCPGrantChecker:        mcpGrantChecker,
+		MCPHealthWriter:        newMCPHealthWriter(stores.MCP),
 		ConfigPermStore:        stores.ConfigPermissions,
 		MediaStore:             mediaStore,
 		ModelPricing:           appCfg.Telemetry.ModelPricing,

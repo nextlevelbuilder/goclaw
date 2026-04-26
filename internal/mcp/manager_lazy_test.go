@@ -16,7 +16,7 @@ func makeBridgeTool(serverName, toolName string) *BridgeTool {
 		Name:        toolName,
 		Description: "test tool " + toolName,
 		InputSchema: mcpgo.ToolInputSchema{Type: "object"},
-	}, nil, "", 30, nil, uuid.Nil, nil)
+	}, nil, "", 30, nil, uuid.Nil, nil, nil)
 }
 
 // setupSearchModeManager returns a Manager already in search mode with the given

@@ -503,10 +503,15 @@ func (p *Pool) evictIdle() {
 		}
 	}
 
-	// Evict user connections idle > UserIdleTTL
+	// Evict user connections idle > configured TTL
 	for key, entry := range p.userServers {
-		if entry.refCount == 0 && now.Sub(entry.lastUsed) > p.cfg.UserIdleTTL {
-			if entry.state.cancel != nil {
+		if entry.refCount == 0 {
+			timeout := entry.state.getIdleTimeout()
+			if timeout == 0 {
+				timeout = p.cfg.UserIdleTTL
+			}
+			if now.Sub(entry.lastUsed) > timeout {
+				if entry.state.cancel != nil {
 				entry.state.cancel()
 			}
 			if client := entry.state.clientPtr.Load(); client != nil {
@@ -525,7 +530,8 @@ func (p *Pool) evictIdle() {
 					break
 				}
 			}
-			slog.Debug("mcp.pool.user.evicted", "key", key, "reason", "idle_ttl")
+				slog.Debug("mcp.pool.user.evicted", "key", key, "reason", "idle_ttl")
+			}
 		}
 	}
 }

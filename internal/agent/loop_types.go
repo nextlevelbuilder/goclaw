@@ -142,6 +142,7 @@ type Loop struct {
 	mcpUserCredSrvs []store.MCPAccessInfo   // servers needing per-user creds
 	mcpUserTools    sync.Map                // userID → []tools.Tool (cached per-user tools)
 	mcpGrantChecker mcpbridge.GrantChecker  // runtime grant verification (nil = skip)
+	mcpHealthWriter mcpbridge.HealthCheckWriter // persists health check results (nil = skip)
 
 	// Compaction config (memory flush settings)
 	compactionCfg *config.CompactionConfig
@@ -439,6 +440,7 @@ type LoopConfig struct {
 	MCPPool         *mcpbridge.Pool         // user-keyed connection pool
 	MCPUserCredSrvs []store.MCPAccessInfo   // servers needing per-user creds
 	MCPGrantChecker mcpbridge.GrantChecker  // runtime grant verification (nil = skip)
+		MCPHealthWriter mcpbridge.HealthCheckWriter // persists health check results (nil = skip)
 
 	// V3 orchestration mode (resolved by resolver, controls tool visibility)
 	OrchMode          OrchestrationMode

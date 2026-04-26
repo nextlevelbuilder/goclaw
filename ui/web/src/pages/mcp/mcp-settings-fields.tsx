@@ -28,6 +28,7 @@ export function McpSettingsFields({ form }: McpSettingsFieldsProps) {
   const healthCheckInterval = watch("healthCheckInterval") ?? 0;
   const maxReconnectAttempts = watch("maxReconnectAttempts") ?? 0;
   const reconnectCooldown = watch("reconnectCooldown") ?? 0;
+  const idleTimeout = watch("idleTimeout") ?? 0;
 
   return (
     <>
@@ -149,6 +150,19 @@ export function McpSettingsFields({ form }: McpSettingsFieldsProps) {
               className="text-base md:text-sm"
             />
             <p className="text-[10px] text-muted-foreground">{t("form.reconnectCooldownHint")}</p>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="mcp-it" className="text-xs">{t("form.idleTimeout")}</Label>
+            <Input
+              id="mcp-it"
+              type="number"
+              min={0}
+              placeholder="0"
+              value={idleTimeout || ""}
+              onChange={(e) => setValue("idleTimeout", Number(e.target.value) || 0)}
+              className="text-base md:text-sm"
+            />
+            <p className="text-[10px] text-muted-foreground">{t("form.idleTimeoutHint")}</p>
           </div>
         </div>
       </div>

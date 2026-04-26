@@ -82,6 +82,7 @@ type ResolverDeps struct {
 
 	// MCP grant checker — for runtime grant verification at BridgeTool.Execute
 	MCPGrantChecker mcpbridge.GrantChecker
+	MCPHealthWriter mcpbridge.HealthCheckWriter
 
 	// Skill access store — for per-agent skill visibility filtering
 	SkillAccessStore store.SkillAccessStore
