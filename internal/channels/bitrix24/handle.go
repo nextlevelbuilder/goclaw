@@ -108,7 +108,12 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 	isGroup := isGroupMessageType(evt.Params.MessageType)
 	text := evt.Params.Message
 	if isGroup {
-		mentioned := c.isMentioned(text)
+		// Authority-ordered fallback: structured MENTIONED_LIST → raw
+		// MESSAGE_ORIGINAL → stripped MESSAGE. In group chats Bitrix24 strips
+		// the @mention from MESSAGE before sending the webhook, so checking
+		// MESSAGE alone misses every group mention. See
+		// plans/bitrix24-mcp-refactor/reports/retrospective.md §2 for context.
+		mentioned := c.isMentionedParams(&evt.Params)
 		if c.RequireMention() && !mentioned {
 			return
 		}
@@ -238,6 +243,37 @@ func (c *Channel) handleJoin(ctx context.Context, evt *Event) {
 		slog.Warn("bitrix24: welcome message send failed",
 			"dialog_id", evt.Params.DialogID, "err", err)
 	}
+}
+
+// isMentionedParams checks all three sources Bitrix24 may use to convey a
+// bot mention, in authority order:
+//
+//  1. data[PARAMS][MENTIONED_LIST][<bot_id>] — structured map populated by
+//     Bitrix on group messages. Highest authority (no regex, no Unicode
+//     edge cases). Absent on DMs.
+//  2. data[PARAMS][MESSAGE_ORIGINAL] — raw BBCode (`[USER=<bot_id>]…[/USER]`).
+//     Group-only. Reliable when MENTIONED_LIST is absent (older portals).
+//  3. data[PARAMS][MESSAGE] — stripped plain text. Bitrix removes the
+//     @mention from this in group chats, so it only matches in DMs.
+//
+// Without this fallback chain group @mentions silently drop because
+// MESSAGE has the mention stripped before the webhook is sent.
+func (c *Channel) isMentionedParams(p *EventParams) bool {
+	if p == nil {
+		return false
+	}
+	botID := c.BotID()
+	if botID <= 0 {
+		return false
+	}
+	id := strconv.Itoa(botID)
+	if _, ok := p.MentionedList[id]; ok {
+		return true
+	}
+	if p.MessageOriginal != "" && c.isMentioned(p.MessageOriginal) {
+		return true
+	}
+	return c.isMentioned(p.Message)
 }
 
 // isMentioned returns true when the message contains a [USER=<bot_id>] or

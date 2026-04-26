@@ -58,17 +58,22 @@ type EventAuth struct {
 // BotID is lifted from `data[BOT][<botID>][BOT_ID]` since multiple bots may
 // coexist on a portal and the payload tags which bot the event targets.
 type EventParams struct {
-	MessageID      string
-	BotID          int
-	DialogID       string // "chatNN" for group chats, numeric user id for DMs
-	ChatID         string // data[PARAMS][CHAT_ID] (numeric, DM side may be 0)
-	FromUserID     string
-	ToUserID       string
-	Message        string // raw BBCode / text
-	MessageType    string // "private" | "chat"
-	SystemMessage  bool
-	ReplyToMID     string
-	Files          []EventFile
+	MessageID       string
+	BotID           int
+	DialogID        string // "chatNN" for group chats, numeric user id for DMs
+	ChatID          string // data[PARAMS][CHAT_ID] (numeric, DM side may be 0)
+	FromUserID      string
+	ToUserID        string
+	Message         string // stripped text — Bitrix removes @mentions on group chats
+	MessageOriginal string // raw BBCode (`[USER=<id>]…[/USER]`); group chat only, "" on DMs
+	MessageType     string // "private" | "chat"
+	SystemMessage   bool
+	ReplyToMID      string
+	Files           []EventFile
+	// MentionedList is the structured map data[PARAMS][MENTIONED_LIST][<id>]=<id>
+	// Bitrix24 emits on group messages. Highest-authority mention source —
+	// no regex / Unicode edge cases. Absent (nil) on DMs.
+	MentionedList map[string]string
 }
 
 // EventFile is one attachment element extracted from
@@ -160,17 +165,36 @@ func parseFormEvent(v url.Values) (*Event, error) {
 
 	// data[PARAMS][...]
 	p := EventParams{
-		MessageID:   formGet(v, "data", "PARAMS", "MESSAGE_ID"),
-		DialogID:    formGet(v, "data", "PARAMS", "DIALOG_ID"),
-		ChatID:      formGet(v, "data", "PARAMS", "CHAT_ID"),
-		FromUserID:  formGet(v, "data", "PARAMS", "FROM_USER_ID"),
-		ToUserID:    formGet(v, "data", "PARAMS", "TO_USER_ID"),
-		Message:     formGet(v, "data", "PARAMS", "MESSAGE"),
-		MessageType: formGet(v, "data", "PARAMS", "MESSAGE_TYPE"),
-		ReplyToMID:  formGet(v, "data", "PARAMS", "REPLY_TO_MESSAGE_ID"),
+		MessageID:       formGet(v, "data", "PARAMS", "MESSAGE_ID"),
+		DialogID:        formGet(v, "data", "PARAMS", "DIALOG_ID"),
+		ChatID:          formGet(v, "data", "PARAMS", "CHAT_ID"),
+		FromUserID:      formGet(v, "data", "PARAMS", "FROM_USER_ID"),
+		ToUserID:        formGet(v, "data", "PARAMS", "TO_USER_ID"),
+		Message:         formGet(v, "data", "PARAMS", "MESSAGE"),
+		MessageOriginal: formGet(v, "data", "PARAMS", "MESSAGE_ORIGINAL"),
+		MessageType:     formGet(v, "data", "PARAMS", "MESSAGE_TYPE"),
+		ReplyToMID:      formGet(v, "data", "PARAMS", "REPLY_TO_MESSAGE_ID"),
 	}
 	if s := formGet(v, "data", "PARAMS", "SYSTEM"); s == "Y" {
 		p.SystemMessage = true
+	}
+
+	// MENTIONED_LIST: data[PARAMS][MENTIONED_LIST][<user_id>]=<user_id>.
+	// Iterate all form keys to discover the structured map; key format is
+	// stable across portals. Empty if absent (DMs).
+	const mentionedPrefix = "data[PARAMS][MENTIONED_LIST]["
+	for key, vals := range v {
+		if !strings.HasPrefix(key, mentionedPrefix) || !strings.HasSuffix(key, "]") {
+			continue
+		}
+		id := key[len(mentionedPrefix) : len(key)-1]
+		if id == "" || len(vals) == 0 {
+			continue
+		}
+		if p.MentionedList == nil {
+			p.MentionedList = make(map[string]string)
+		}
+		p.MentionedList[id] = strings.TrimSpace(vals[0])
 	}
 
 	// BOT_ID: inspect every key starting with `data[BOT][<id>][BOT_ID]`.
@@ -250,6 +274,8 @@ func parseJSONEvent(body io.ReadCloser) (*Event, error) {
 				FromUserID      any              `json:"FROM_USER_ID"`
 				ToUserID        any              `json:"TO_USER_ID"`
 				Message         string           `json:"MESSAGE"`
+				MessageOriginal string           `json:"MESSAGE_ORIGINAL"`
+				MentionedList   map[string]any   `json:"MENTIONED_LIST"`
 				MessageType     string           `json:"MESSAGE_TYPE"`
 				System          string           `json:"SYSTEM"`
 				ReplyToMID      any              `json:"REPLY_TO_MESSAGE_ID"`
@@ -302,9 +328,16 @@ func parseJSONEvent(body io.ReadCloser) (*Event, error) {
 	p.FromUserID = asString(raw.Data.Params.FromUserID)
 	p.ToUserID = asString(raw.Data.Params.ToUserID)
 	p.Message = raw.Data.Params.Message
+	p.MessageOriginal = raw.Data.Params.MessageOriginal
 	p.MessageType = raw.Data.Params.MessageType
 	p.SystemMessage = raw.Data.Params.System == "Y"
 	p.ReplyToMID = asString(raw.Data.Params.ReplyToMID)
+	if len(raw.Data.Params.MentionedList) > 0 {
+		p.MentionedList = make(map[string]string, len(raw.Data.Params.MentionedList))
+		for id, val := range raw.Data.Params.MentionedList {
+			p.MentionedList[id] = asString(val)
+		}
+	}
 
 	for _, f := range raw.Data.Params.Files {
 		url := asString(f["urlMachine"])
