@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"github.com/google/uuid"
 
@@ -26,13 +27,19 @@ type MCPPoolEvictor interface {
 	Evict(tenantID uuid.UUID, serverName string)
 }
 
+// MCPPoolStatusReporter returns runtime health status for pool-managed MCP connections.
+type MCPPoolStatusReporter interface {
+	ServerStatus(tenantID uuid.UUID) []mcp.PoolServerStatus
+}
+
 // MCPHandler handles MCP server management HTTP endpoints.
 type MCPHandler struct {
 	store       store.MCPServerStore
 	msgBus      *bus.MessageBus
-	mgr         MCPToolLister  // optional, nil when Manager not available
-	poolEvictor MCPPoolEvictor // optional, nil when pool not available
-	db          *sql.DB        // for export/import direct queries
+	mgr         MCPToolLister        // optional, nil when Manager not available
+	poolEvictor MCPPoolEvictor       // optional, nil when pool not available
+	poolStatus  MCPPoolStatusReporter // optional, nil when pool not available
+	db          *sql.DB              // for export/import direct queries
 }
 
 // NewMCPHandler creates a handler for MCP server management endpoints.
@@ -42,6 +49,9 @@ func NewMCPHandler(s store.MCPServerStore, msgBus *bus.MessageBus, mgr MCPToolLi
 
 // SetPoolEvictor sets the pool evictor for credential rotation handling.
 func (h *MCPHandler) SetPoolEvictor(e MCPPoolEvictor) { h.poolEvictor = e }
+
+// SetPoolStatusReporter sets the pool status reporter for health data.
+func (h *MCPHandler) SetPoolStatusReporter(r MCPPoolStatusReporter) { h.poolStatus = r }
 
 func (h *MCPHandler) emitCacheInvalidate() {
 	if h.msgBus == nil {
@@ -67,6 +77,9 @@ func (h *MCPHandler) RegisterRoutes(mux *http.ServeMux) {
 
 	// Reconnect (admin+ — evict pooled connection)
 	mux.HandleFunc("POST /v1/mcp/servers/{id}/reconnect", h.adminAuth(h.handleReconnectServer))
+
+	// Health history (viewer+)
+	mux.HandleFunc("GET /v1/mcp/servers/{id}/health", h.auth(h.handleServerHealth))
 
 	// Server tools (read-only: viewer+)
 	mux.HandleFunc("GET /v1/mcp/servers/{id}/tools", h.auth(h.handleListServerTools))
@@ -101,10 +114,19 @@ func (h *MCPHandler) adminAuth(next http.HandlerFunc) http.HandlerFunc {
 
 // --- Server CRUD ---
 
-// mcpServerWithCounts extends MCPServerData with agent grant count for list responses.
+// mcpServerHealthStatus holds runtime health data for an MCP server.
+type mcpServerHealthStatus struct {
+	Connected      bool   `json:"connected"`
+	HealthFailures int    `json:"health_failures"`
+	ReconnAttempts int    `json:"reconnect_attempts"`
+	Error          string `json:"error,omitempty"`
+}
+
+// mcpServerWithCounts extends MCPServerData with agent grant count and health status for list responses.
 type mcpServerWithCounts struct {
 	store.MCPServerData
-	AgentCount int `json:"agent_count"`
+	AgentCount   int                    `json:"agent_count"`
+	HealthStatus *mcpServerHealthStatus `json:"health_status,omitempty"`
 }
 
 func (h *MCPHandler) handleListServers(w http.ResponseWriter, r *http.Request) {
@@ -118,9 +140,29 @@ func (h *MCPHandler) handleListServers(w http.ResponseWriter, r *http.Request) {
 
 	// Enrich with agent grant counts
 	counts, _ := h.store.CountAgentGrantsByServer(r.Context())
+
+	// Enrich with pool health status
+	var statusMap map[string]mcp.PoolServerStatus
+	if h.poolStatus != nil {
+		tid := store.TenantIDFromContext(r.Context())
+		statuses := h.poolStatus.ServerStatus(tid)
+		statusMap = make(map[string]mcp.PoolServerStatus, len(statuses))
+		for _, s := range statuses {
+			statusMap[s.Name] = s
+		}
+	}
+
 	result := make([]mcpServerWithCounts, len(servers))
 	for i, srv := range servers {
 		result[i] = mcpServerWithCounts{MCPServerData: srv, AgentCount: counts[srv.ID]}
+		if ps, ok := statusMap[srv.Name]; ok {
+			result[i].HealthStatus = &mcpServerHealthStatus{
+				Connected:      ps.Connected,
+				HealthFailures: ps.HealthFailures,
+				ReconnAttempts: ps.ReconnAttempts,
+				Error:          ps.Error,
+			}
+		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"servers": result})
@@ -331,4 +373,35 @@ func (h *MCPHandler) handleReconnectServer(w http.ResponseWriter, r *http.Reques
 	emitAudit(h.msgBus, r, "mcp_server.reconnected", "mcp_server", id.String())
 	slog.Info("mcp.server.reconnect_requested", "server", srv.Name, "id", id)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "reconnected"})
+}
+
+func (h *MCPHandler) handleServerHealth(w http.ResponseWriter, r *http.Request) {
+	locale := store.LocaleFromContext(r.Context())
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidID, "server")})
+		return
+	}
+
+	limit := 50
+	offset := 0
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 200 {
+			limit = n
+		}
+	}
+	if v := r.URL.Query().Get("offset"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			offset = n
+		}
+	}
+
+	checks, total, err := h.store.ListHealthChecks(r.Context(), id, limit, offset)
+	if err != nil {
+		slog.Error("mcp.list_health_checks", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"checks": checks, "total": total})
 }

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/audio"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway/methods"
@@ -59,6 +60,10 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 	if h.mcp != nil {
 		if mcpPool != nil {
 			h.mcp.SetPoolEvictor(mcpPool)
+			h.mcp.SetPoolStatusReporter(mcpPool)
+			if d.pgStores != nil && d.pgStores.MCP != nil {
+				mcpPool.SetHealthWriter(&mcpHealthWriter{store: d.pgStores.MCP})
+			}
 		}
 		d.server.SetMCPHandler(h.mcp)
 	}
@@ -127,6 +132,21 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 				}
 				// Note: vault enrichment provider is resolved per-tenant at runtime,
 				// no hot-reload needed here
+
+				// Hot-reload MCP health parameters
+				if v := d.cfg.Tools.MCPHealthFailThreshold; v > 0 {
+					mcpbridge.SetHealthFailThreshold(int32(v))
+				}
+				if v := d.cfg.Tools.MCPHealthCheckInterval; v > 0 {
+					mcpbridge.SetHealthCheckIntervalSec(int64(v))
+				}
+				if v := d.cfg.Tools.MCPMaxReconnectAttempts; v > 0 {
+					mcpbridge.SetMaxReconnectAttempts(int32(v))
+				}
+				if v := d.cfg.Tools.MCPReconnectCooldown; v > 0 {
+					mcpbridge.SetReconnectCooldownSec(int64(v))
+				}
+
 				slog.Debug("system_configs refreshed to in-memory config", "keys", len(sysConfigs))
 			}
 		})
@@ -279,5 +299,49 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 		migrateBuiltinToolSettings(context.Background(), d.pgStores.BuiltinTools)
 		backfillWebFetchSettings(context.Background(), d.pgStores.BuiltinTools)
 		applyBuiltinToolDisables(context.Background(), d.pgStores.BuiltinTools, d.toolsReg)
+	}
+}
+
+// mcpHealthWriter adapts store.MCPServerStore to the mcp.HealthCheckWriter interface.
+type mcpHealthWriter struct {
+	store store.MCPServerStore
+}
+
+func (w *mcpHealthWriter) WriteHealthCheck(ctx context.Context, entry mcpbridge.HealthCheckEntry) error {
+	var latencyPtr *int
+	if entry.LatencyMs > 0 {
+		latencyPtr = &entry.LatencyMs
+	}
+	check := &store.MCPHealthCheck{
+		ID:             uuid.New(),
+		ServerID:       entry.ServerID,
+		ServerName:     entry.ServerName,
+		TenantID:       entry.TenantID,
+		Status:         entry.Status,
+		LatencyMs:      latencyPtr,
+		Error:          entry.Error,
+		ToolCount:      entry.ToolCount,
+		HealthFailures: entry.HealthFailures,
+	}
+	return w.store.InsertHealthCheck(ctx, check)
+}
+
+// mcpHealthRetentionCleanup runs hourly and deletes health check records older than 30 days.
+func mcpHealthRetentionCleanup(ctx context.Context, s store.MCPServerStore) {
+	ticker := time.NewTicker(1 * time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			cutoff := time.Now().Add(-30 * 24 * time.Hour)
+			n, err := s.DeleteHealthChecksBefore(ctx, cutoff)
+			if err != nil {
+				slog.Error("mcp.health_retention_cleanup", "error", err)
+			} else if n > 0 {
+				slog.Info("mcp.health_retention_cleanup", "deleted", n)
+			}
+		}
 	}
 }

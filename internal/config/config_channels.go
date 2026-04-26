@@ -401,6 +401,10 @@ type ToolsConfig struct {
 	ScrubCredentials *bool                       `json:"scrub_credentials,omitempty"`   // auto-redact API keys/tokens in tool output (default true)
 	McpServers       map[string]*MCPServerConfig `json:"mcp_servers,omitempty"`         // external MCP server connections
 	AllowedCommands  []string                    `json:"allowed_commands,omitempty"`    // extra commands allowed for MCP stdio transport
+	MCPHealthFailThreshold  int `json:"mcp_health_fail_threshold,omitempty"`  // consecutive ping failures before reconnect (default 3)
+	MCPHealthCheckInterval  int `json:"mcp_health_check_interval,omitempty"`  // seconds between health pings (default 30)
+	MCPMaxReconnectAttempts int `json:"mcp_max_reconnect_attempts,omitempty"` // max reconnect tries before cooldown (default 10)
+	MCPReconnectCooldown    int `json:"mcp_reconnect_cooldown,omitempty"`     // cooldown seconds after exhausting attempts (default 300)
 }
 
 // MCPServerConfig configures a single external MCP server connection.

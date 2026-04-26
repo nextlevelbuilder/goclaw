@@ -10,11 +10,18 @@
   "columns": {
     "name": "Name",
     "transport": "Transport",
+    "status": "Status",
     "tools": "Tools",
     "agents": "Agents",
     "enabled": "Enabled",
     "createdBy": "Created By",
     "actions": "Actions"
+  },
+  "status": {
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "reconnecting": "Reconnecting",
+    "notLoaded": "Not Loaded"
   },
   "viewTools": "View tools",
   "manageGrants": "Manage grants",
@@ -129,5 +136,20 @@
     "saveFailed": "Failed to save credentials",
     "deleteFailed": "Failed to delete credentials",
     "mergeHint": "Chat users (Telegram, Discord, etc.) must be merged into a tenant user first via Contacts page before they can have per-user credentials."
+  },
+  "health": {
+    "title": "Health History — {{name}}",
+    "summary": {
+      "total": "Total Checks",
+      "avgLatency": "Avg Latency"
+    },
+    "status": {
+      "healthy": "Healthy",
+      "unhealthy": "Unhealthy",
+      "reconnecting": "Reconnecting"
+    },
+    "latency": "{{ms}}ms",
+    "failures": "{{count}} consecutive failures",
+    "noHistory": "No health checks recorded yet."
   }
 }

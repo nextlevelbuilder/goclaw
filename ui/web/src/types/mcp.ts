@@ -1,3 +1,10 @@
+export interface MCPHealthStatus {
+  connected: boolean;
+  health_failures: number;
+  reconnect_attempts: number;
+  error?: string;
+}
+
 export interface MCPServerData {
   id: string;
   name: string;
@@ -14,6 +21,7 @@ export interface MCPServerData {
   enabled: boolean;
   created_by: string;
   agent_count?: number;
+  health_status?: MCPHealthStatus;
   created_at: string;
   updated_at: string;
 }
@@ -60,4 +68,16 @@ export interface MCPUserCredentialInput {
   api_key?: string;
   headers?: Record<string, string>;
   env?: Record<string, string>;
+}
+
+export interface MCPHealthCheck {
+  id: string;
+  server_id: string;
+  server_name: string;
+  status: "healthy" | "unhealthy" | "reconnecting";
+  latency_ms?: number;
+  error?: string;
+  tool_count: number;
+  health_failures: number;
+  checked_at: string;
 }

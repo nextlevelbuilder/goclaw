@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -67,6 +68,15 @@ func (m *mockMCPStore) SetUserCredentials(ctx context.Context, serverID uuid.UUI
 }
 func (m *mockMCPStore) DeleteUserCredentials(ctx context.Context, serverID uuid.UUID, userID string) error {
 	return nil
+}
+func (m *mockMCPStore) InsertHealthCheck(ctx context.Context, check *store.MCPHealthCheck) error {
+	return nil
+}
+func (m *mockMCPStore) ListHealthChecks(ctx context.Context, serverID uuid.UUID, limit, offset int) ([]store.MCPHealthCheck, int, error) {
+	return nil, 0, nil
+}
+func (m *mockMCPStore) DeleteHealthChecksBefore(ctx context.Context, before time.Time) (int64, error) {
+	return 0, nil
 }
 
 func TestStoreGrantChecker_CacheHit(t *testing.T) {

@@ -116,6 +116,12 @@ func seedConfigForContext(ctx context.Context, sc store.SystemConfigStore, cfg *
 	setInt("tools.rate_limit_per_hour", cfg.Tools.RateLimitPerHour)
 	setBool("tools.scrub_credentials", cfg.Tools.ScrubCredentials)
 
+	// MCP health
+	setInt("mcp.health_fail_threshold", cfg.Tools.MCPHealthFailThreshold)
+	setInt("mcp.health_check_interval", cfg.Tools.MCPHealthCheckInterval)
+	setInt("mcp.max_reconnect_attempts", cfg.Tools.MCPMaxReconnectAttempts)
+	setInt("mcp.reconnect_cooldown", cfg.Tools.MCPReconnectCooldown)
+
 	// TTS
 	set("tts.provider", cfg.Tts.Provider)
 	set("tts.auto", cfg.Tts.Auto)

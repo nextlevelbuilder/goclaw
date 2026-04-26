@@ -62,6 +62,12 @@ func (c *Config) ApplySystemConfigs(configs map[string]string) {
 	integer("tools.rate_limit_per_hour", &c.Tools.RateLimitPerHour)
 	boolean("tools.scrub_credentials", &c.Tools.ScrubCredentials)
 
+	// MCP health
+	integer("mcp.health_fail_threshold", &c.Tools.MCPHealthFailThreshold)
+	integer("mcp.health_check_interval", &c.Tools.MCPHealthCheckInterval)
+	integer("mcp.max_reconnect_attempts", &c.Tools.MCPMaxReconnectAttempts)
+	integer("mcp.reconnect_cooldown", &c.Tools.MCPReconnectCooldown)
+
 	// TTS
 	str("tts.provider", &c.Tts.Provider)
 	str("tts.auto", &c.Tts.Auto)

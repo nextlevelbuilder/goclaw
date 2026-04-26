@@ -1,6 +1,6 @@
 import { useState, useEffect, lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
-import { Plug, Plus, RefreshCw, RotateCcw, Pencil, Trash2, Users, Wrench, KeyRound } from "lucide-react";
+import { Plug, Plus, RefreshCw, RotateCcw, Pencil, Trash2, Users, Wrench, KeyRound, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/shared/page-header";
@@ -9,6 +9,7 @@ import { SearchInput } from "@/components/shared/search-input";
 import { Pagination } from "@/components/shared/pagination";
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
 import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
+import { StatusBadge } from "@/components/shared/status-badge";
 import { useMCP, type MCPServerData, type MCPServerInput } from "./hooks/use-mcp";
 import { MCPFormDialog } from "./mcp-form-dialog";
 import { MCPToolsDialog } from "./mcp-tools-dialog";
@@ -22,6 +23,9 @@ const MCPGrantsDialog = lazy(() =>
 const MCPUserCredentialsDialog = lazy(() =>
   import("./mcp-user-credentials-dialog").then((m) => ({ default: m.MCPUserCredentialsDialog }))
 );
+const MCPHealthDialog = lazy(() =>
+  import("./mcp-health-dialog").then((m) => ({ default: m.MCPHealthDialog }))
+);
 
 const transportBadge: Record<string, string> = {
   stdio: "default",
@@ -29,10 +33,17 @@ const transportBadge: Record<string, string> = {
   "streamable-http": "outline",
 };
 
+function serverHealthBadge(hs: MCPServerData["health_status"]) {
+  if (!hs) return { status: "default" as const, label: "mcp:status.notLoaded" };
+  if (hs.connected) return { status: "success" as const, label: "mcp:status.connected" };
+  if (hs.reconnect_attempts > 0) return { status: "warning" as const, label: "mcp:status.reconnecting" };
+  return { status: "error" as const, label: "mcp:status.disconnected" };
+}
+
 export function MCPPage() {
   const { t } = useTranslation("mcp");
   const { t: tc } = useTranslation("common");
-  const { servers, loading, fetching, refresh, createServer, updateServer, deleteServer, grantAgent, revokeAgent, listAgentGrants, testConnection, reconnectServer, listServerTools, getUserCredentials, setUserCredentials, deleteUserCredentials } = useMCP();
+  const { servers, loading, fetching, refresh, createServer, updateServer, deleteServer, grantAgent, revokeAgent, listAgentGrants, testConnection, reconnectServer, listServerTools, getUserCredentials, setUserCredentials, deleteUserCredentials, listHealthChecks } = useMCP();
   const spinning = useMinLoading(fetching);
   const showSkeleton = useDeferredLoading(loading && servers.length === 0);
   const [search, setSearch] = useState("");
@@ -43,6 +54,7 @@ export function MCPPage() {
   const [deleteTarget, setDeleteTarget] = useState<MCPServerData | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [credentialsServer, setCredentialsServer] = useState<MCPServerData | null>(null);
+  const [healthServer, setHealthServer] = useState<MCPServerData | null>(null);
   const [reconnectingId, setReconnectingId] = useState<string | null>(null);
 
   const filtered = servers.filter(
@@ -117,6 +129,7 @@ export function MCPPage() {
                 <tr className="border-b bg-muted/50">
                   <th className="px-4 py-3 text-left font-medium">{t("columns.name")}</th>
                   <th className="px-4 py-3 text-left font-medium">{t("columns.transport")}</th>
+                  <th className="px-4 py-3 text-left font-medium">{t("columns.status")}</th>
                   <th className="px-4 py-3 text-center font-medium">{t("columns.tools")}</th>
                   <th className="px-4 py-3 text-center font-medium">{t("columns.agents")}</th>
                   <th className="px-4 py-3 text-left font-medium">{t("columns.enabled")}</th>
@@ -148,6 +161,12 @@ export function MCPPage() {
                         {srv.transport}
                       </Badge>
                     </td>
+                    <td className="px-4 py-3">
+                      {(() => {
+                        const hb = serverHealthBadge(srv.health_status);
+                        return <StatusBadge status={hb.status} label={t(hb.label)} />;
+                      })()}
+                    </td>
                     <td className="px-4 py-3 text-center">
                       <Button
                         variant="ghost"
@@ -169,6 +188,14 @@ export function MCPPage() {
                     <td className="px-4 py-3 text-muted-foreground">{srv.created_by || "-"}</td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setHealthServer(srv)}
+                          title={t("health.title")}
+                        >
+                          <Activity className="h-3.5 w-3.5" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -283,6 +310,17 @@ export function MCPPage() {
             onGetCredentials={getUserCredentials}
             onSetCredentials={setUserCredentials}
             onDeleteCredentials={deleteUserCredentials}
+          />
+        </Suspense>
+      )}
+
+      {healthServer && (
+        <Suspense fallback={null}>
+          <MCPHealthDialog
+            open={!!healthServer}
+            onOpenChange={(open) => !open && setHealthServer(null)}
+            server={healthServer}
+            onLoadChecks={listHealthChecks}
           />
         </Suspense>
       )}

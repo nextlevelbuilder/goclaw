@@ -10,11 +10,18 @@
   "columns": {
     "name": "Tên",
     "transport": "Giao thức",
+    "status": "Trạng thái",
     "tools": "Công cụ",
     "agents": "Agents",
     "enabled": "Bật",
     "createdBy": "Tạo bởi",
     "actions": "Thao tác"
+  },
+  "status": {
+    "connected": "Đã kết nối",
+    "disconnected": "Ngắt kết nối",
+    "reconnecting": "Đang kết nối lại",
+    "notLoaded": "Chưa tải"
   },
   "viewTools": "Xem công cụ",
   "manageGrants": "Quản lý quyền",
@@ -129,5 +136,20 @@
     "saveFailed": "Lưu credentials thất bại",
     "deleteFailed": "Xóa credentials thất bại",
     "mergeHint": "Người dùng chat (Telegram, Discord...) cần được gộp vào tenant user qua trang Contacts trước khi có thể thiết lập credentials riêng."
+  },
+  "health": {
+    "title": "Lịch sử sức khỏe — {{name}}",
+    "summary": {
+      "total": "Tổng kiểm tra",
+      "avgLatency": "Độ trễ TB"
+    },
+    "status": {
+      "healthy": "Khỏe",
+      "unhealthy": "Không khỏe",
+      "reconnecting": "Đang kết nối lại"
+    },
+    "latency": "{{ms}}ms",
+    "failures": "{{count}} lỗi liên tiếp",
+    "noHistory": "Chưa có dữ liệu kiểm tra sức khỏe."
   }
 }

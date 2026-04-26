@@ -322,6 +322,9 @@ func runGateway() {
 	contextFileInterceptor, mcpPool, mediaStore, postTurn = wireExtras(pgStores, agentRouter, providerRegistry, modelReg, msgBus, pgStores.Sessions, toolsReg, toolPE, skillsLoader, hasMemory, traceCollector, workspace, cfg.Gateway.InjectionAction, cfg, sandboxMgr, redisClient, domainBus)
 	if mcpPool != nil {
 		defer mcpPool.Stop()
+		if pgStores.MCP != nil {
+			go mcpHealthRetentionCleanup(context.Background(), pgStores.MCP)
+		}
 	}
 
 	// Populate shared deps struct used by extracted helper methods.

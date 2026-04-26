@@ -83,6 +83,20 @@ type MCPUserCredentials struct {
 	Env     map[string]string `json:"env,omitempty" db:"-"`      // decrypted
 }
 
+// MCPHealthCheck represents a single health check result for an MCP server.
+type MCPHealthCheck struct {
+	ID             uuid.UUID `json:"id" db:"id"`
+	ServerID       uuid.UUID `json:"server_id" db:"server_id"`
+	ServerName     string    `json:"server_name" db:"server_name"`
+	TenantID       uuid.UUID `json:"tenant_id" db:"tenant_id"`
+	Status         string    `json:"status" db:"status"` // "healthy", "unhealthy", "reconnecting"
+	LatencyMs      *int      `json:"latency_ms,omitempty" db:"latency_ms"`
+	Error          string    `json:"error,omitempty" db:"error"`
+	ToolCount      int       `json:"tool_count" db:"tool_count"`
+	HealthFailures int       `json:"health_failures" db:"health_failures"`
+	CheckedAt      time.Time `json:"checked_at" db:"checked_at"`
+}
+
 // MCPServerStore manages MCP server configs and access grants.
 type MCPServerStore interface {
 	// Server CRUD
@@ -118,4 +132,9 @@ type MCPServerStore interface {
 	GetUserCredentials(ctx context.Context, serverID uuid.UUID, userID string) (*MCPUserCredentials, error)
 	SetUserCredentials(ctx context.Context, serverID uuid.UUID, userID string, creds MCPUserCredentials) error
 	DeleteUserCredentials(ctx context.Context, serverID uuid.UUID, userID string) error
+
+	// Health check history
+	InsertHealthCheck(ctx context.Context, check *MCPHealthCheck) error
+	ListHealthChecks(ctx context.Context, serverID uuid.UUID, limit, offset int) ([]MCPHealthCheck, int, error)
+	DeleteHealthChecksBefore(ctx context.Context, before time.Time) (int64, error)
 }

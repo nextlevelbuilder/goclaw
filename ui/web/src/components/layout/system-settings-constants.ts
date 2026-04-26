@@ -51,6 +51,10 @@ export interface InitState {
   maMaxVideoMb: string;
   maMaxDefaultMb: string;
   maTimeoutSec: string;
+  mcpHealthFailThreshold: string;
+  mcpHealthCheckInterval: string;
+  mcpMaxReconnectAttempts: string;
+  mcpReconnectCooldown: string;
 }
 
 export const DEFAULTS: InitState = {
@@ -64,6 +68,8 @@ export const DEFAULTS: InitState = {
   maEnabled: true, maMaxImageMb: "10", maMaxAudioMb: "50",
   maMaxDocMb: "20", maMaxVideoMb: "100", maMaxDefaultMb: "20",
   maTimeoutSec: "30",
+  mcpHealthFailThreshold: "3", mcpHealthCheckInterval: "30",
+  mcpMaxReconnectAttempts: "10", mcpReconnectCooldown: "300",
 };
 
 export function parseBool(v: string | undefined, fallback: boolean): boolean {

@@ -18,12 +18,8 @@ import (
 )
 
 const (
-	healthCheckInterval  = 30 * time.Second
-	healthFailThreshold  = 3 // consecutive ping failures before marking disconnected
-	initialBackoff       = 2 * time.Second
-	maxBackoff           = 60 * time.Second
-	maxReconnectAttempts = 10
-	reconnectCooldown    = 5 * time.Minute // wait after exhausting reconnect attempts before retrying
+	initialBackoff = 2 * time.Second
+	maxBackoff     = 60 * time.Second
 
 	// mcpToolInlineMaxCount is the threshold above which MCP tools switch
 	// to search mode (deferred loading via mcp_tool_search) instead of
@@ -31,13 +27,71 @@ const (
 	mcpToolInlineMaxCount = 40
 )
 
+// Configurable health parameters — defaults match the original constants.
+// Updated at runtime via SetHealth* functions when system configs change.
+var (
+	healthCheckInterval  atomic.Int64 // seconds (default 30)
+	healthFailThreshold  atomic.Int32 // consecutive failures (default 3)
+	maxReconnectAttempts atomic.Int32 // attempts before cooldown (default 10)
+	reconnectCooldown    atomic.Int64 // seconds (default 300)
+)
+
+func init() {
+	healthCheckInterval.Store(30)
+	healthFailThreshold.Store(3)
+	maxReconnectAttempts.Store(10)
+	reconnectCooldown.Store(300)
+}
+
+// SetHealthFailThreshold sets the consecutive failure count before triggering reconnect.
+func SetHealthFailThreshold(n int32) {
+	if n > 0 {
+		healthFailThreshold.Store(n)
+	}
+}
+
+// GetHealthFailThreshold returns the current health fail threshold.
+func GetHealthFailThreshold() int32 { return healthFailThreshold.Load() }
+
+// SetHealthCheckIntervalSec sets the health check interval in seconds.
+func SetHealthCheckIntervalSec(n int64) {
+	if n > 0 {
+		healthCheckInterval.Store(n)
+	}
+}
+
+// GetHealthCheckIntervalSec returns the current health check interval in seconds.
+func GetHealthCheckIntervalSec() int64 { return healthCheckInterval.Load() }
+
+// SetMaxReconnectAttempts sets the max reconnect attempts before cooldown.
+func SetMaxReconnectAttempts(n int32) {
+	if n > 0 {
+		maxReconnectAttempts.Store(n)
+	}
+}
+
+// GetMaxReconnectAttempts returns the current max reconnect attempts.
+func GetMaxReconnectAttempts() int32 { return maxReconnectAttempts.Load() }
+
+// SetReconnectCooldownSec sets the reconnect cooldown in seconds.
+func SetReconnectCooldownSec(n int64) {
+	if n > 0 {
+		reconnectCooldown.Store(n)
+	}
+}
+
+// GetReconnectCooldownSec returns the current reconnect cooldown in seconds.
+func GetReconnectCooldownSec() int64 { return reconnectCooldown.Load() }
+
 // ServerStatus reports the connection status of an MCP server.
 type ServerStatus struct {
-	Name      string `json:"name"`
-	Transport string `json:"transport"`
-	Connected bool   `json:"connected"`
-	ToolCount int    `json:"tool_count"`
-	Error     string `json:"error,omitempty"`
+	Name           string `json:"name"`
+	Transport      string `json:"transport"`
+	Connected      bool   `json:"connected"`
+	ToolCount      int    `json:"tool_count"`
+	HealthFailures int    `json:"health_failures"`
+	ReconnAttempts int    `json:"reconnect_attempts"`
+	Error          string `json:"error,omitempty"`
 }
 
 // connParams stores connection parameters needed to re-establish a dead connection.
@@ -48,6 +102,23 @@ type connParams struct {
 	env     map[string]string
 	url     string
 	headers map[string]string
+}
+
+// HealthCheckEntry holds data for a single health check to be persisted.
+type HealthCheckEntry struct {
+	ServerID       uuid.UUID
+	ServerName     string
+	TenantID       uuid.UUID
+	Status         string // "healthy", "unhealthy", "reconnecting"
+	LatencyMs      int
+	Error          string
+	ToolCount      int
+	HealthFailures int
+}
+
+// HealthCheckWriter persists health check results. Implemented by a store adapter.
+type HealthCheckWriter interface {
+	WriteHealthCheck(ctx context.Context, entry HealthCheckEntry) error
 }
 
 // serverState tracks a single MCP server connection.
@@ -62,6 +133,8 @@ type connParams struct {
 type serverState struct {
 	name       string
 	transport  string
+	serverID   uuid.UUID // DB server UUID (zero for config-based servers)
+	tenantID   uuid.UUID // tenant scope (zero for config-based servers)
 	client     *mcpclient.Client               // direct ref for health checks (single-goroutine access)
 	clientPtr  atomic.Pointer[mcpclient.Client] // shared atomic ref for BridgeTools (multi-goroutine safe)
 	connected  atomic.Bool
@@ -559,13 +632,17 @@ func (m *Manager) ServerStatus() []ServerStatus {
 
 	statuses := make([]ServerStatus, 0, len(m.servers))
 	for _, ss := range m.servers {
+		ss.mu.Lock()
 		statuses = append(statuses, ServerStatus{
-			Name:      ss.name,
-			Transport: ss.transport,
-			Connected: ss.connected.Load(),
-			ToolCount: len(ss.toolNames),
-			Error:     ss.lastErr,
+			Name:           ss.name,
+			Transport:      ss.transport,
+			Connected:      ss.connected.Load(),
+			ToolCount:      len(ss.toolNames),
+			HealthFailures: ss.healthFailures,
+			ReconnAttempts: ss.reconnAttempts,
+			Error:          ss.lastErr,
 		})
+		ss.mu.Unlock()
 	}
 	return statuses
 }

@@ -4,9 +4,9 @@ import i18next from "i18next";
 import { useHttp } from "@/hooks/use-ws";
 import { queryKeys } from "@/lib/query-keys";
 import { toast } from "@/stores/use-toast-store";
-import type { MCPServerData, MCPServerInput, MCPAgentGrant, MCPToolInfo, MCPUserCredentialStatus, MCPUserCredentialInput } from "@/types/mcp";
+import type { MCPServerData, MCPServerInput, MCPAgentGrant, MCPToolInfo, MCPUserCredentialStatus, MCPUserCredentialInput, MCPHealthCheck } from "@/types/mcp";
 
-export type { MCPServerData, MCPServerInput, MCPAgentGrant, MCPToolInfo, MCPUserCredentialStatus, MCPUserCredentialInput };
+export type { MCPServerData, MCPServerInput, MCPAgentGrant, MCPToolInfo, MCPUserCredentialStatus, MCPUserCredentialInput, MCPHealthCheck };
 
 export function useMCP() {
   const http = useHttp();
@@ -160,6 +160,16 @@ export function useMCP() {
     [http],
   );
 
+  const listHealthChecks = useCallback(
+    async (serverId: string, limit = 50, offset = 0) => {
+      const res = await http.get<{ checks: MCPHealthCheck[]; total: number }>(
+        `/v1/mcp/servers/${serverId}/health?limit=${limit}&offset=${offset}`,
+      );
+      return { checks: res.checks ?? [], total: res.total ?? 0 };
+    },
+    [http],
+  );
+
   return {
     servers,
     loading,
@@ -178,5 +188,6 @@ export function useMCP() {
     getUserCredentials,
     setUserCredentials,
     deleteUserCredentials,
+    listHealthChecks,
   };
 }

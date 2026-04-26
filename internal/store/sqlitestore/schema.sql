@@ -750,6 +750,26 @@ CREATE INDEX IF NOT EXISTS idx_mcp_user_credentials_tenant ON mcp_user_credentia
 CREATE INDEX IF NOT EXISTS idx_mcp_user_credentials_server ON mcp_user_credentials(server_id);
 
 -- ============================================================
+-- Table: mcp_health_checks
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS mcp_health_checks (
+    id              TEXT NOT NULL PRIMARY KEY,
+    server_id       TEXT NOT NULL REFERENCES mcp_servers(id) ON DELETE CASCADE,
+    server_name     TEXT NOT NULL,
+    tenant_id       TEXT NOT NULL,
+    status          TEXT NOT NULL,
+    latency_ms      INTEGER,
+    error           TEXT,
+    tool_count      INTEGER DEFAULT 0,
+    health_failures INTEGER DEFAULT 0,
+    checked_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_mcp_health_server_time ON mcp_health_checks(server_id, checked_at DESC);
+CREATE INDEX IF NOT EXISTS idx_mcp_health_tenant_time ON mcp_health_checks(tenant_id, checked_at DESC);
+
+-- ============================================================
 -- Table: channel_instances
 -- ============================================================
 

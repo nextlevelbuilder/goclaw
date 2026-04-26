@@ -89,6 +89,19 @@
     "timeoutSec": "超时 (秒)",
     "info": "超过限制的文件将被跳过。使用后台工作Provider进行LLM调用。禁用可节省Token但会丢失媒体来源的知识。"
   },
+  "mcp": {
+    "title": "MCP 健康",
+    "description": "配置 MCP 服务器连接的健康监控和重连行为。",
+    "healthFailThreshold": "失败阈值",
+    "healthFailThresholdHint": "触发重连前的连续 ping 失败次数（默认：3）。",
+    "healthCheckInterval": "检查间隔（秒）",
+    "healthCheckIntervalHint": "健康 ping 之间的秒数（默认：30）。",
+    "maxReconnectAttempts": "最大重连尝试",
+    "maxReconnectAttemptsHint": "进入冷却前的尝试次数（默认：10）。",
+    "reconnectCooldown": "重连冷却（秒）",
+    "reconnectCooldownHint": "耗尽尝试后的等待秒数（默认：300）。",
+    "info": "更改在下一个健康检查周期生效。更高的失败阈值可以容忍暂时的网络波动。"
+  },
   "moreConfig": "更多配置",
   "alert": {
     "message": "后台任务失败：{{reason}}。记忆整合和知识库增强等功能可能无法正常工作。",

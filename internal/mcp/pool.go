@@ -44,20 +44,26 @@ type poolEntry struct {
 	tools    []mcpgo.Tool // discovered MCP tool definitions
 	refCount int          // number of active Manager references
 	lastUsed time.Time    // last Acquire/Release time for idle eviction
+	serverID uuid.UUID    // DB server UUID (for health check persistence)
+	tenantID uuid.UUID    // tenant scope
 }
 
 // Pool manages shared MCP server connections across agents.
 // Connections are keyed by tenantID/serverName for tenant isolation.
 // Per-user connections are keyed by tenantID/serverName/user:userID.
 type Pool struct {
-	mu          sync.Mutex
-	servers     map[string]*poolEntry            // shared connections: tenantID/serverName
-	userServers map[string]*poolEntry            // user connections: tenantID/serverName/user:userID
-	userSlots   map[string]chan struct{}          // per-server semaphores: tenantID/serverName → capacity MaxUserConns
-	cfg         PoolConfig
-	slot        chan struct{} // semaphore for MaxSize
-	stopCh      chan struct{}
+	mu           sync.Mutex
+	servers      map[string]*poolEntry            // shared connections: tenantID/serverName
+	userServers  map[string]*poolEntry            // user connections: tenantID/serverName/user:userID
+	userSlots    map[string]chan struct{}          // per-server semaphores: tenantID/serverName → capacity MaxUserConns
+	cfg          PoolConfig
+	slot         chan struct{} // semaphore for MaxSize
+	stopCh       chan struct{}
+	healthWriter HealthCheckWriter // optional, persists health check results
 }
+
+// SetHealthWriter sets the health check persistence writer.
+func (p *Pool) SetHealthWriter(w HealthCheckWriter) { p.healthWriter = w }
 
 // NewPool creates a shared MCP connection pool with idle eviction.
 func NewPool(cfg PoolConfig) *Pool {
@@ -114,7 +120,7 @@ func userSlotKey(tenantID uuid.UUID, serverName string) string {
 // Acquire returns a shared connection for the named server scoped to a tenant.
 // If no connection exists, it connects using the provided config.
 // Blocks up to AcquireTimeout if pool is at MaxSize.
-func (p *Pool) Acquire(ctx context.Context, tenantID uuid.UUID, name, transportType, command string, args []string, env map[string]string, url string, headers map[string]string, timeoutSec int) (*poolEntry, error) {
+func (p *Pool) Acquire(ctx context.Context, tenantID, serverID uuid.UUID, name, transportType, command string, args []string, env map[string]string, url string, headers map[string]string, timeoutSec int) (*poolEntry, error) {
 	key := poolKey(tenantID, name)
 
 	p.mu.Lock()
@@ -162,13 +168,17 @@ func (p *Pool) Acquire(ctx context.Context, tenantID uuid.UUID, name, transportT
 	// Start health loop
 	hctx, hcancel := context.WithCancel(context.Background())
 	ss.cancel = hcancel
-	go poolHealthLoop(hctx, ss)
+	ss.serverID = serverID
+	ss.tenantID = tenantID
+	go p.poolHealthLoop(hctx, ss)
 
 	entry := &poolEntry{
 		state:    ss,
 		tools:    mcpTools,
 		refCount: 1,
 		lastUsed: time.Now(),
+		serverID: serverID,
+		tenantID: tenantID,
 	}
 
 	p.mu.Lock()
@@ -255,7 +265,7 @@ func (p *Pool) AcquireUser(ctx context.Context, tenantID uuid.UUID, name, userID
 	// Start health loop
 	hctx, hcancel := context.WithCancel(context.Background())
 	ss.cancel = hcancel
-	go poolHealthLoop(hctx, ss)
+	go poolUserHealthLoop(hctx, ss)
 
 	entry := &poolEntry{
 		state:    ss,
@@ -588,6 +598,40 @@ func (p *Pool) evictOldestIdleLocked() bool {
 	return true
 }
 
+// PoolServerStatus reports the runtime health of a single pool-managed MCP connection.
+type PoolServerStatus struct {
+	Name           string `json:"name"`
+	Connected      bool   `json:"connected"`
+	HealthFailures int    `json:"health_failures"`
+	ReconnAttempts int    `json:"reconnect_attempts"`
+	Error          string `json:"error,omitempty"`
+}
+
+// ServerStatus returns health status for all shared pool entries matching the given tenant.
+func (p *Pool) ServerStatus(tenantID uuid.UUID) []PoolServerStatus {
+	prefix := tenantID.String() + "/"
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	out := make([]PoolServerStatus, 0, len(p.servers))
+	for key, entry := range p.servers {
+		if !strings.HasPrefix(key, prefix) {
+			continue
+		}
+		name := strings.TrimPrefix(key, prefix)
+		entry.state.mu.Lock()
+		out = append(out, PoolServerStatus{
+			Name:           name,
+			Connected:      entry.state.connected.Load(),
+			HealthFailures: entry.state.healthFailures,
+			ReconnAttempts: entry.state.reconnAttempts,
+			Error:          entry.state.lastErr,
+		})
+		entry.state.mu.Unlock()
+	}
+	return out
+}
+
 // ClientPtr returns the atomic client pointer for this pool entry.
 // Used by BridgeTools to atomically load the current client during reconnect.
 func (e *poolEntry) ClientPtr() *atomic.Pointer[mcpclient.Client] { return &e.state.clientPtr }
@@ -598,10 +642,86 @@ func (e *poolEntry) Connected() *atomic.Bool { return &e.state.connected }
 // MCPTools returns the discovered MCP tool definitions for this pool entry.
 func (e *poolEntry) MCPTools() []mcpgo.Tool { return e.tools }
 
-// poolHealthLoop is a standalone health loop for pool-managed connections.
+// poolHealthLoop is a health loop for pool-managed connections.
 // After consecutive ping failures, it attempts a full reconnect by creating
 // a fresh client, mirroring the Manager.tryReconnect slow path.
-func poolHealthLoop(ctx context.Context, ss *serverState) {
+// When a HealthCheckWriter is configured, each check result is persisted.
+func (p *Pool) poolHealthLoop(ctx context.Context, ss *serverState) {
+	ticker := newHealthTicker()
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			start := time.Now()
+			err := ss.client.Ping(ctx)
+			latencyMs := int(time.Since(start).Milliseconds())
+			if err != nil {
+				if isMethodNotFound(err) {
+					ss.connected.Store(true)
+					ss.mu.Lock()
+					ss.healthFailures = 0
+					ss.mu.Unlock()
+					p.writeHealthCheck(ctx, ss, "healthy", latencyMs, "")
+					continue
+				}
+				ss.mu.Lock()
+				ss.healthFailures++
+				failures := ss.healthFailures
+				ss.lastErr = err.Error()
+				ss.mu.Unlock()
+
+				slog.Warn("mcp.pool.health_failed", "server", ss.name, "error", err, "consecutive", failures)
+
+				p.writeHealthCheck(ctx, ss, "unhealthy", 0, err.Error())
+
+				if failures >= int(healthFailThreshold.Load()) {
+					ss.connected.Store(false)
+					p.writeHealthCheck(ctx, ss, "reconnecting", 0, err.Error())
+					poolTryReconnect(ctx, ss)
+				}
+			} else {
+				ss.connected.Store(true)
+				ss.mu.Lock()
+				ss.reconnAttempts = 0
+				ss.healthFailures = 0
+				ss.lastErr = ""
+				ss.mu.Unlock()
+				p.writeHealthCheck(ctx, ss, "healthy", latencyMs, "")
+			}
+		}
+	}
+}
+
+// writeHealthCheck persists a health check result if a writer is configured.
+func (p *Pool) writeHealthCheck(ctx context.Context, ss *serverState, status string, latencyMs int, errStr string) {
+	if p.healthWriter == nil || ss.serverID == uuid.Nil {
+		return
+	}
+	ss.mu.Lock()
+	hf := ss.healthFailures
+	toolCount := len(ss.toolNames)
+	ss.mu.Unlock()
+	entry := HealthCheckEntry{
+		ServerID:       ss.serverID,
+		ServerName:     ss.name,
+		TenantID:       ss.tenantID,
+		Status:         status,
+		LatencyMs:      latencyMs,
+		Error:          errStr,
+		ToolCount:      toolCount,
+		HealthFailures: hf,
+	}
+	if err := p.healthWriter.WriteHealthCheck(ctx, entry); err != nil {
+		slog.Debug("mcp.pool.health_write_failed", "server", ss.name, "error", err)
+	}
+}
+
+// poolUserHealthLoop is a lightweight health loop for user-scoped connections
+// (no health persistence since these are ephemeral per-user connections).
+func poolUserHealthLoop(ctx context.Context, ss *serverState) {
 	ticker := newHealthTicker()
 	defer ticker.Stop()
 
@@ -626,7 +746,7 @@ func poolHealthLoop(ctx context.Context, ss *serverState) {
 
 				slog.Warn("mcp.pool.health_failed", "server", ss.name, "error", err, "consecutive", failures)
 
-				if failures >= healthFailThreshold {
+				if failures >= int(healthFailThreshold.Load()) {
 					ss.connected.Store(false)
 					poolTryReconnect(ctx, ss)
 				}

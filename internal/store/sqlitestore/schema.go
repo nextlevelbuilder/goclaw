@@ -16,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 25
+const SchemaVersion = 26
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -519,8 +519,24 @@ CREATE TRIGGER IF NOT EXISTS trg_vault_docs_scope_consistency_upd
 
 	// Version 24 → 25: add chat_id column + composite index (mirrors PG migration 000056).
 	// SQLite lacks regex by default — skip backfill (desktop is single-user; cross-chat risk minimal).
-	24: `ALTER TABLE vault_documents ADD COLUMN chat_id TEXT;
+	25: `ALTER TABLE vault_documents ADD COLUMN chat_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_vault_docs_team_chat ON vault_documents(team_id, chat_id) WHERE team_id IS NOT NULL;`,
+
+	// Version 25 → 26: MCP health checks table (mirrors PG migration 000060).
+	26: `CREATE TABLE IF NOT EXISTS mcp_health_checks (
+    id              TEXT NOT NULL PRIMARY KEY,
+    server_id       TEXT NOT NULL REFERENCES mcp_servers(id) ON DELETE CASCADE,
+    server_name     TEXT NOT NULL,
+    tenant_id       TEXT NOT NULL,
+    status          TEXT NOT NULL,
+    latency_ms      INTEGER,
+    error           TEXT,
+    tool_count      INTEGER DEFAULT 0,
+    health_failures INTEGER DEFAULT 0,
+    checked_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_mcp_health_server_time ON mcp_health_checks(server_id, checked_at DESC);
+CREATE INDEX IF NOT EXISTS idx_mcp_health_tenant_time ON mcp_health_checks(tenant_id, checked_at DESC);`,
 }
 
 // addHooksTables is the SQLite incremental migration for schema v19 → v20.

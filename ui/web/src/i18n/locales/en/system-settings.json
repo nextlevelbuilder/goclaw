@@ -89,6 +89,19 @@
     "timeoutSec": "Timeout (sec)",
     "info": "Files exceeding these limits are skipped during analysis. Uses the background worker provider for LLM calls. Disabling saves tokens but loses media-derived knowledge."
   },
+  "mcp": {
+    "title": "MCP Health",
+    "description": "Configure health monitoring and reconnection behavior for MCP server connections.",
+    "healthFailThreshold": "Fail Threshold",
+    "healthFailThresholdHint": "Consecutive ping failures before reconnect (default: 3).",
+    "healthCheckInterval": "Check Interval (sec)",
+    "healthCheckIntervalHint": "Seconds between health pings (default: 30).",
+    "maxReconnectAttempts": "Max Reconnect Attempts",
+    "maxReconnectAttemptsHint": "Tries before cooldown (default: 10).",
+    "reconnectCooldown": "Reconnect Cooldown (sec)",
+    "reconnectCooldownHint": "Seconds to wait after exhausting attempts (default: 300).",
+    "info": "Changes take effect on the next health check cycle. Higher fail thresholds tolerate transient network blips."
+  },
   "moreConfig": "More Config",
   "alert": {
     "message": "Background workers failed: {{reason}}. Features like memory consolidation and vault enrichment may not work.",

@@ -89,6 +89,19 @@
     "timeoutSec": "Timeout (giây)",
     "info": "Tệp vượt giới hạn sẽ bị bỏ qua. Sử dụng provider tác vụ nền để gọi LLM. Tắt tiết kiệm token nhưng mất kiến thức từ media."
   },
+  "mcp": {
+    "title": "Sức khỏe MCP",
+    "description": "Cấu hình theo dõi sức khỏe và hành vi kết nối lại cho các kết nối máy chủ MCP.",
+    "healthFailThreshold": "Ngưỡng lỗi",
+    "healthFailThresholdHint": "Số lần ping thất bại liên tiếp trước khi kết nối lại (mặc định: 3).",
+    "healthCheckInterval": "Chu kỳ kiểm tra (giây)",
+    "healthCheckIntervalHint": "Số giây giữa các lần ping kiểm tra (mặc định: 30).",
+    "maxReconnectAttempts": "Số lần kết nối lại tối đa",
+    "maxReconnectAttemptsHint": "Số lần thử trước khi nghỉ (mặc định: 10).",
+    "reconnectCooldown": "Thời gian chờ kết nối lại (giây)",
+    "reconnectCooldownHint": "Số giây chờ sau khi hết lần thử (mặc định: 300).",
+    "info": "Thay đổi có hiệu lực ở chu kỳ kiểm tra tiếp theo. Ngưỡng lỗi cao hơn giúp chịu được lỗi mạng tạm thời."
+  },
   "moreConfig": "Cấu hình thêm",
   "alert": {
     "message": "Tác vụ nền gặp lỗi: {{reason}}. Các tính năng như tổng hợp bộ nhớ và làm giàu vault có thể không hoạt động.",

@@ -163,7 +163,7 @@ func (m *Manager) registerBridgeTools(ss *serverState, mcpTools []mcpgo.Tool, se
 // per-agent BridgeTools pointing to the shared client/connected pointers.
 // serverID is the MCP server UUID from DB.
 func (m *Manager) connectViaPool(ctx context.Context, tenantID uuid.UUID, name, transportType, command string, args []string, env map[string]string, url string, headers map[string]string, toolPrefix string, timeoutSec int, serverID uuid.UUID) error {
-	entry, err := m.pool.Acquire(ctx, tenantID, name, transportType, command, args, env, url, headers, timeoutSec)
+	entry, err := m.pool.Acquire(ctx, tenantID, serverID, name, transportType, command, args, env, url, headers, timeoutSec)
 	if err != nil {
 		return err
 	}
@@ -254,9 +254,9 @@ func createClient(transportType, command string, args []string, env map[string]s
 	}
 }
 
-// newHealthTicker creates a ticker for health check intervals.
+// newHealthTicker creates a ticker using the current configurable health check interval.
 func newHealthTicker() *time.Ticker {
-	return time.NewTicker(healthCheckInterval)
+	return time.NewTicker(time.Duration(healthCheckInterval.Load()) * time.Second)
 }
 
 // isMethodNotFound returns true if the error indicates the server
@@ -295,7 +295,7 @@ func (m *Manager) healthLoop(ctx context.Context, ss *serverState) {
 
 				// Only mark disconnected and attempt reconnect after consecutive failures
 				// to tolerate transient errors (e.g. 504 from upstream proxy).
-				if failures >= healthFailThreshold {
+				if failures >= int(healthFailThreshold.Load()) {
 					ss.connected.Store(false)
 					m.tryReconnect(ctx, ss)
 				}
@@ -322,15 +322,17 @@ func (m *Manager) tryReconnect(ctx context.Context, ss *serverState) {
 // slow-path full reconnect (dead server-side session).
 // logPrefix distinguishes log entries (e.g. "mcp.server" vs "mcp.pool").
 func reconnectWithBackoff(ctx context.Context, ss *serverState, logPrefix string) {
+	maxAttempts := int(maxReconnectAttempts.Load())
+	cooldown := time.Duration(reconnectCooldown.Load()) * time.Second
 	ss.mu.Lock()
-	if ss.reconnAttempts >= maxReconnectAttempts {
-		ss.lastErr = fmt.Sprintf("max reconnect attempts (%d) reached, entering cooldown", maxReconnectAttempts)
+	if ss.reconnAttempts >= maxAttempts {
+		ss.lastErr = fmt.Sprintf("max reconnect attempts (%d) reached, entering cooldown", maxAttempts)
 		ss.mu.Unlock()
-		slog.Warn(logPrefix+".reconnect_cooldown", "server", ss.name, "cooldown", reconnectCooldown)
+		slog.Warn(logPrefix+".reconnect_cooldown", "server", ss.name, "cooldown", cooldown)
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(reconnectCooldown):
+		case <-time.After(cooldown):
 		}
 		ss.mu.Lock()
 		ss.reconnAttempts = 0
