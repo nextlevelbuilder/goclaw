@@ -107,14 +107,7 @@ func (t *EditTool) Execute(ctx context.Context, args map[string]any) *Result {
 		return ErrorResult("old_string and new_string are identical")
 	}
 
-	// Group write permission check
-	if t.permStore != nil {
-		if err := store.CheckFileWriterPermission(ctx, t.permStore); err != nil {
-			return ErrorResult(err.Error())
-		}
-	}
-
-	// Virtual FS: context files
+	// Virtual FS: context files (before permission check — DB-stored, not filesystem)
 	if t.contextFileIntc != nil {
 		if content, handled, err := t.contextFileIntc.ReadFile(ctx, path); handled {
 			if err != nil {
@@ -134,7 +127,7 @@ func (t *EditTool) Execute(ctx context.Context, args map[string]any) *Result {
 		}
 	}
 
-	// Virtual FS: memory files
+	// Virtual FS: memory files (before permission check — DB-stored, not filesystem)
 	if t.memIntc != nil {
 		if content, handled, err := t.memIntc.ReadFile(ctx, path); handled {
 			if err != nil {
@@ -156,6 +149,13 @@ func (t *EditTool) Execute(ctx context.Context, args map[string]any) *Result {
 				msg += "\n\n[Knowledge graph extraction triggered in background. The knowledge system may take a moment to fully update with new entities and relationships.]"
 			}
 			return SilentResult(msg)
+		}
+	}
+
+	// Group write permission check (only for actual filesystem writes)
+	if t.permStore != nil {
+		if err := store.CheckFileWriterPermission(ctx, t.permStore); err != nil {
+			return ErrorResult(err.Error())
 		}
 	}
 

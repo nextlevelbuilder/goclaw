@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"go.mau.fi/whatsmeow/types"
+	"go.mau.fi/whatsmeow/types/events"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
@@ -14,12 +15,15 @@ const menuHelpText = "Available commands:\n" +
 	"/reset — Reset conversation history\n" +
 	"/stop — Stop current running task\n" +
 	"/stopall — Stop all running tasks\n" +
+	"/addwriter — Add a file writer (reply to their message or @mention)\n" +
+	"/removewriter — Remove a file writer (reply to their message or @mention)\n" +
+	"/writers — List file writers for this group\n" +
 	"/menu — Show this help message\n" +
 	"\nJust send a message to chat with the AI."
 
 // handleCommand checks if the message is a known slash command and handles it.
 // Returns true if the message was handled (caller should stop processing).
-func (c *Channel) handleCommand(ctx context.Context, text, senderID, chatID, peerKind string, chatJID types.JID) bool {
+func (c *Channel) handleCommand(ctx context.Context, text, senderID, chatID, peerKind string, chatJID types.JID, evt *events.Message) bool {
 	if len(text) == 0 || text[0] != '/' {
 		return false
 	}
@@ -77,6 +81,30 @@ func (c *Channel) handleCommand(ctx context.Context, text, senderID, chatID, pee
 			},
 		})
 		// Feedback is sent by the consumer after cancel result is known.
+		return true
+
+	case "/addwriter":
+		if peerKind != "group" {
+			c.sendText(chatJID, "This command only works in group chats.")
+			return true
+		}
+		c.handleWriterCommand(ctx, evt, senderID, chatID, chatJID, "add")
+		return true
+
+	case "/removewriter":
+		if peerKind != "group" {
+			c.sendText(chatJID, "This command only works in group chats.")
+			return true
+		}
+		c.handleWriterCommand(ctx, evt, senderID, chatID, chatJID, "remove")
+		return true
+
+	case "/writers":
+		if peerKind != "group" {
+			c.sendText(chatJID, "This command only works in group chats.")
+			return true
+		}
+		c.handleListWriters(ctx, chatID, chatJID)
 		return true
 
 	case "/menu":

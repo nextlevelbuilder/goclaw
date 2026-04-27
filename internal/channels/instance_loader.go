@@ -41,6 +41,7 @@ type InstanceLoader struct {
 	pendingCompactCfg *config.PendingCompactionConfig
 	listenRawMsgStore store.ListenRawMessageStore // for listen-only raw message storage
 	mediaStore        MediaStore                  // for persisting listen-only media attachments
+	configPermStore   store.ConfigPermissionStore // for group file writer management
 	factories         map[string]ChannelFactory
 	manager           *Manager
 	msgBus            *bus.MessageBus
@@ -94,6 +95,11 @@ func (l *InstanceLoader) SetListenRawMsgStore(s store.ListenRawMessageStore) {
 // SetMediaStore sets the media store for persisting listen-only media attachments.
 func (l *InstanceLoader) SetMediaStore(ms MediaStore) {
 	l.mediaStore = ms
+}
+
+// SetConfigPermStore sets the config permission store for group file writer management.
+func (l *InstanceLoader) SetConfigPermStore(s store.ConfigPermissionStore) {
+	l.configPermStore = s
 }
 
 // RegisterFactory registers a factory for a channel type (e.g., "telegram", "discord").
@@ -375,6 +381,13 @@ func (l *InstanceLoader) loadInstance(ctx context.Context, inst store.ChannelIns
 	if l.mediaStore != nil {
 		if ms, ok := ch.(interface{ SetMediaStore(MediaStore) }); ok {
 			ms.SetMediaStore(l.mediaStore)
+		}
+	}
+
+	// Wire config permission store for group file writer management.
+	if l.configPermStore != nil {
+		if cps, ok := ch.(interface{ SetConfigPermStore(store.ConfigPermissionStore) }); ok {
+			cps.SetConfigPermStore(l.configPermStore)
 		}
 	}
 

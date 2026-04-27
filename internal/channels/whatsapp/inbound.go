@@ -70,7 +70,7 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 	content := extractTextContent(evt.Message)
 
 	// Command interception: check for slash commands before the normal pipeline.
-	if handled := c.handleCommand(ctx, content, senderID, chatID, peerKind, chatJID); handled {
+	if handled := c.handleCommand(ctx, content, senderID, chatID, peerKind, chatJID, evt); handled {
 		return
 	}
 

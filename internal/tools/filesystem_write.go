@@ -115,14 +115,7 @@ func (t *WriteFileTool) Execute(ctx context.Context, args map[string]any) *Resul
 		return ErrorResult("path is required")
 	}
 
-	// Group write permission check
-	if t.permStore != nil {
-		if err := store.CheckFileWriterPermission(ctx, t.permStore); err != nil {
-			return ErrorResult(err.Error())
-		}
-	}
-
-	// Virtual FS: route context files to DB
+	// Virtual FS: route context files to DB (before permission check — DB-stored, not filesystem)
 	if t.contextFileIntc != nil {
 		if handled, err := t.contextFileIntc.WriteFile(ctx, path, content); handled {
 			if err != nil {
@@ -132,7 +125,7 @@ func (t *WriteFileTool) Execute(ctx context.Context, args map[string]any) *Resul
 		}
 	}
 
-	// Virtual FS: route memory files to DB
+	// Virtual FS: route memory files to DB (before permission check — DB-stored, not filesystem)
 	if t.memIntc != nil {
 		if mwr, err := t.memIntc.WriteFile(ctx, path, content, appendMode); mwr.Handled {
 			if err != nil {
@@ -155,6 +148,13 @@ func (t *WriteFileTool) Execute(ctx context.Context, args map[string]any) *Resul
 					len([]rune(mwr.PreviousContent)), prev)
 			}
 			return SilentResult(msg)
+		}
+	}
+
+	// Group write permission check (only for actual filesystem writes)
+	if t.permStore != nil {
+		if err := store.CheckFileWriterPermission(ctx, t.permStore); err != nil {
+			return ErrorResult(err.Error())
 		}
 	}
 
