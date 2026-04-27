@@ -169,11 +169,23 @@ func (t *MessageTool) Execute(ctx context.Context, args map[string]any) *Result 
 			forwardReason = reason
 		}
 	}
-	// noticeOnSuccess posts the cross-target breadcrumb back to origin iff the
-	// forward succeeded (res.IsError == false). Guarantees we never announce
-	// a fake delivery when the downstream sender/bus publish fails.
+	// noticeOnSuccess posts the cross-target breadcrumb back to origin iff
+	// the forward succeeded (res.IsError == false). Guarantees we never
+	// announce a fake delivery when the downstream sender/bus publish fails.
+	//
+	// Suppressed for SAME-CHANNEL forwards (channel == ctxChannel,
+	// target != ctxChatID). Those are nearly always intra-platform thread
+	// moves — e.g. Gillen creating a Discord thread off a parent channel
+	// message and posting the plan into the thread, where the parent
+	// channel is the origin and the thread_id is the target. Posting
+	// "📤 Forwarded to <thread_id>: <reason>" back into the parent
+	// channel for every plan-flow turn was loud noise the user explicitly
+	// asked us to remove. Cross-CHANNEL forwards (Discord → Telegram, or
+	// one Discord channel → another) still emit the breadcrumb so users
+	// see the unusual hop. The slog.Warn audit line above always fires,
+	// so we keep server-side traceability either way.
 	noticeOnSuccess := func(res *Result) *Result {
-		if forwardReason != "" && res != nil && !res.IsError {
+		if forwardReason != "" && res != nil && !res.IsError && channel != ctxChannel {
 			t.postCrossTargetNotice(ctx, target, forwardReason)
 		}
 		return res

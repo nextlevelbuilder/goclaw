@@ -604,14 +604,36 @@ func TestMessageToolCrossTargetGuard(t *testing.T) {
 			wantErr:    true,
 		},
 		{
-			name:         "3_dm_cross_target_forward_pass",
+			// Same-channel forward (telegram → telegram, different chat).
+			// Used to also produce a "📤 Forwarded to..." notice back to
+			// the origin chat (wantOutbound: 2). User feedback on the
+			// Discord plan flow flagged that breadcrumb as noise — every
+			// thread post inside the same Discord channel was tripping
+			// it. Notice now suppressed for same-channel forwards; the
+			// slog audit line still fires server-side. Cross-CHANNEL
+			// forwards still get the breadcrumb (see case 3b below).
+			name:         "3_dm_cross_target_forward_pass_same_channel",
 			sessionKey:   agentDM,
 			ctxChannel:   "telegram",
 			ctxChatID:    "U1",
 			peerKind:     "direct",
 			args:         baseArgs(map[string]any{"channel": "telegram", "target": "-100G", "forward": true, "forward_reason": "user asked to forward"}),
+			wantOutbound: 1,
+			wantTargets:  []string{"-100G"},
+		},
+		{
+			// Cross-channel forward (telegram → discord). Different
+			// platform / channel-instance hop is unusual enough that the
+			// breadcrumb still has audit value. Origin chat sees the
+			// notice posted into U1.
+			name:         "3b_dm_cross_target_forward_pass_cross_channel",
+			sessionKey:   agentDM,
+			ctxChannel:   "telegram",
+			ctxChatID:    "U1",
+			peerKind:     "direct",
+			args:         baseArgs(map[string]any{"channel": "discord-eng", "target": "1217", "forward": true, "forward_reason": "user asked to forward"}),
 			wantOutbound: 2,
-			wantTargets:  []string{"-100G", "U1"},
+			wantTargets:  []string{"1217", "U1"},
 		},
 		{
 			name:         "4_group_same_target_pass",
@@ -775,6 +797,12 @@ func TestMessageToolCrossTargetGuard_TraceReplay(t *testing.T) {
 
 // Sender-only deployment (no msgBus): notice falls back through t.sender so
 // the origin chat still gets the audit breadcrumb. Verifies P1 fix.
+//
+// Uses a CROSS-CHANNEL forward (telegram → discord-eng) because the notice
+// is now suppressed for same-channel forwards (origin and target share
+// `channel`, only `chat_id` differs — typically a Discord thread move
+// inside the same channel-instance). Cross-channel hops still emit the
+// notice since they're rare and unexpected enough to warrant a breadcrumb.
 func TestMessageToolCrossTargetGuard_NoticeFallbackSender(t *testing.T) {
 	tool := NewMessageTool(t.TempDir(), false)
 	type sent struct{ channel, target, message string }
@@ -791,9 +819,9 @@ func TestMessageToolCrossTargetGuard_NoticeFallbackSender(t *testing.T) {
 	ctx = WithToolPeerKind(ctx, "direct")
 
 	res := tool.Execute(ctx, map[string]any{
-		"action": "send", "channel": "telegram", "target": "-100G",
+		"action": "send", "channel": "discord-eng", "target": "1217211714185986128",
 		"forward": true, "forward_reason": "user asked forward",
-		"message": "hello group",
+		"message": "hello discord",
 	})
 	if res == nil || res.IsError {
 		t.Fatalf("expected success, got: %+v", res)
@@ -801,14 +829,50 @@ func TestMessageToolCrossTargetGuard_NoticeFallbackSender(t *testing.T) {
 	if len(calls) != 2 {
 		t.Fatalf("expected 2 sender calls (forward + notice), got %d: %+v", len(calls), calls)
 	}
-	if calls[0].target != "-100G" {
-		t.Errorf("forward target: got %q want -100G", calls[0].target)
+	if calls[0].target != "1217211714185986128" {
+		t.Errorf("forward target: got %q want 1217211714185986128", calls[0].target)
 	}
 	if calls[1].target != "U1" {
 		t.Errorf("notice target: got %q want U1 (origin)", calls[1].target)
 	}
 	if !strings.Contains(calls[1].message, "user asked forward") {
 		t.Errorf("notice missing reason: %q", calls[1].message)
+	}
+}
+
+// Same-channel forward with the same sender-only setup: notice MUST be
+// suppressed. Companion to the cross-channel test above — together they
+// pin down the "skip for same-channel" rule.
+func TestMessageToolCrossTargetGuard_NoNoticeForSameChannelForward(t *testing.T) {
+	tool := NewMessageTool(t.TempDir(), false)
+	type sent struct{ channel, target, message string }
+	var calls []sent
+	tool.SetChannelSender(func(_ context.Context, ch, tgt, msg string) error {
+		calls = append(calls, sent{ch, tgt, msg})
+		return nil
+	})
+
+	ctx := context.Background()
+	ctx = WithToolSessionKey(ctx, "agent:a:discord-eng:group:parent")
+	ctx = WithToolChannel(ctx, "discord-eng")
+	ctx = WithToolChatID(ctx, "parent-channel-id")
+	ctx = WithToolPeerKind(ctx, "group")
+
+	// Posting plan into a thread off the parent channel — same channel
+	// instance, different chat_id. This is the Gillen plan-flow case.
+	res := tool.Execute(ctx, map[string]any{
+		"action": "send", "channel": "discord-eng", "target": "thread-id-12345",
+		"forward": true, "forward_reason": "user requested plan in the thread",
+		"message": "## Plan\n\nfoo bar baz",
+	})
+	if res == nil || res.IsError {
+		t.Fatalf("expected success, got: %+v", res)
+	}
+	if len(calls) != 1 {
+		t.Fatalf("same-channel forward must NOT post notice; got %d sender calls: %+v", len(calls), calls)
+	}
+	if calls[0].target != "thread-id-12345" {
+		t.Errorf("forward target: got %q want thread-id-12345", calls[0].target)
 	}
 }
 
