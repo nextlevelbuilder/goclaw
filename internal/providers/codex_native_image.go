@@ -139,7 +139,7 @@ func parseNativeImageSSE(data []byte) (*NativeImageResult, error) {
 	var outputFormat string
 	var usage *Usage
 
-	for _, line := range bytes.Split(data, []byte("\n")) {
+	for line := range bytes.SplitSeq(data, []byte("\n")) {
 		if !bytes.HasPrefix(line, []byte("data: ")) {
 			continue
 		}

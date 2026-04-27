@@ -1295,7 +1295,7 @@ CREATE TABLE IF NOT EXISTS agent_heartbeats (
     enabled            BOOLEAN NOT NULL DEFAULT 0,
     interval_sec       INT NOT NULL DEFAULT 1800,
     prompt             TEXT,
-    provider_id        TEXT REFERENCES llm_providers(id),
+    provider_id        TEXT REFERENCES llm_providers(id) ON DELETE SET NULL,
     model              VARCHAR(200),
     isolated_session   BOOLEAN NOT NULL DEFAULT 1,
     light_context      BOOLEAN NOT NULL DEFAULT 0,

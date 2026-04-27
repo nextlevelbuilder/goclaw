@@ -137,10 +137,7 @@ func (l *Loop) compactMessagesInPlace(ctx context.Context, messages []providers.
 // clamped to [1024, 8192]. Floor keeps short summaries coherent; cap prevents
 // runaway output billing on pathological inputs.
 func dynamicSummaryMax(inputTokens int) int {
-	out := max(inputTokens/25, 1024)
-	if out > 8192 {
-		out = 8192
-	}
+	out := min(max(inputTokens/25, 1024), 8192)
 	return out
 }
 

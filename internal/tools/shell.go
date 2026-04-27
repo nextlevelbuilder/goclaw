@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"os/exec"
 	"regexp"
@@ -59,9 +60,7 @@ func (t *ExecTool) SetGlobalShellDenyGroups(groups map[string]bool) {
 		return
 	}
 	cp := make(map[string]bool, len(groups))
-	for k, v := range groups {
-		cp[k] = v
-	}
+	maps.Copy(cp, groups)
 	t.globalDenyGroups = cp
 }
 
@@ -77,12 +76,9 @@ func (t *ExecTool) effectiveDenyGroups(ctx context.Context) map[string]bool {
 		return t.globalDenyGroups
 	}
 	merged := make(map[string]bool, len(t.globalDenyGroups)+len(agent))
-	for k, v := range t.globalDenyGroups {
-		merged[k] = v
-	}
-	for k, v := range agent {
-		merged[k] = v // agent wins per-key
-	}
+	maps.Copy(merged, t.globalDenyGroups)
+	// agent wins per-key
+	maps.Copy(merged, agent)
 	return merged
 }
 

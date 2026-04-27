@@ -543,9 +543,9 @@
       "post": {
         "tags": ["Providers"],
         "summary": "Verify provider connection",
-        "description": "Test provider connectivity with a minimal LLM call.",
+        "description": "Empty body or omitted model = ping mode (provider registered/reachable check). With model = full chat-verify against the upstream provider.",
         "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
-        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "model": { "type": "string" } } } } } },
+        "requestBody": { "required": false, "content": { "application/json": { "schema": { "type": "object", "properties": { "model": { "type": "string", "description": "Optional. Omit (or send empty body) for ping mode." } } } } } },
         "responses": { "200": { "description": "Verification result", "content": { "application/json": { "schema": { "type": "object", "properties": { "valid": { "type": "boolean" }, "error": { "type": "string" } } } } } } }
       }
     },

@@ -206,7 +206,7 @@ func TestChatGPTOAuthRouter_IntrospectionDoesNotAdvanceCounter(t *testing.T) {
 	router := NewChatGPTOAuthRouter(tenantID, registry, "acct-a", "round_robin", []string{"acct-b", "acct-c"})
 
 	// Call introspection 20 times — counter must stay at 0.
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		_ = router.Name()
 		_ = router.DefaultModel()
 		_ = router.HasAvailableProviders()
@@ -441,7 +441,7 @@ func TestChatGPTOAuthRouter_ChatAndImageConcurrent_CountersIndependent(t *testin
 	const perModality = 90 // divisible by 3 so even distribution is achievable
 	var wg sync.WaitGroup
 	wg.Add(perModality * 2)
-	for i := 0; i < perModality; i++ {
+	for range perModality {
 		go func() {
 			defer wg.Done()
 			if _, err := router.Chat(context.Background(), ChatRequest{
@@ -473,7 +473,7 @@ func TestChatGPTOAuthRouter_ChatAndImageConcurrent_CountersIndependent(t *testin
 	// member is starved and none is over-served beyond a small tolerance.
 	expected := int64(perModality / 3)
 	const slack = int64(5) // generous — any real bug produces much larger skew
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if chatHits[i] < expected-slack || chatHits[i] > expected+slack {
 			t.Errorf("chat server %d hits = %d, want ~%d (±%d); all=%v",
 				i, chatHits[i], expected, slack, chatHits)

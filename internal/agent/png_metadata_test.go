@@ -121,9 +121,9 @@ func parsePNGTextChunks(data []byte) map[string]string {
 		chunkData := data[pos+8 : pos+8+chunkLen]
 		if chunkType == "tEXt" {
 			// tEXt format: keyword\0text
-			if nul := bytes.IndexByte(chunkData, 0x00); nul >= 0 {
-				keyword := string(chunkData[:nul])
-				text := string(chunkData[nul+1:])
+			if before, after, ok := bytes.Cut(chunkData, []byte{0x00}); ok {
+				keyword := string(before)
+				text := string(after)
 				result[keyword] = text
 			}
 		}

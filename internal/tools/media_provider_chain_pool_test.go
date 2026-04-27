@@ -203,7 +203,7 @@ func TestParamsInjection(t *testing.T) {
 	}}
 
 	// capturedNative captures whatever _native_provider lands in callParams.
-	var capturedNative interface{}
+	var capturedNative any
 	fn := func(fnCtx context.Context, cp credentialProvider, providerName, model string, params map[string]any) ([]byte, *providers.Usage, error) {
 		capturedNative = params["_native_provider"]
 		return []byte("ok"), nil, nil

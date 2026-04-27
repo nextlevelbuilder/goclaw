@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 	"time"
@@ -205,9 +206,7 @@ func (s *PGSessionStore) Save(ctx context.Context, key string) error {
 	// Deep-copy Metadata under RLock so subsequent mutation does not race with
 	// concurrent readers holding data.Metadata via GetSessionMetadata.
 	metaCopy := make(map[string]string, len(data.Metadata)+2)
-	for k, v := range data.Metadata {
-		metaCopy[k] = v
-	}
+	maps.Copy(metaCopy, data.Metadata)
 	snapshot.Metadata = metaCopy
 	s.mu.RUnlock()
 
