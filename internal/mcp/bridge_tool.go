@@ -32,7 +32,8 @@ type BridgeTool struct {
 	connected      *atomic.Bool
 	grantChecker   GrantChecker // for runtime grant recheck (nil = skip check)
 	touchFunc     func()        // called on tool invocation to track usage (nil = skip)
-	reconnectFunc func() error  // lazy reconnect for idle-disconnected servers (nil = no reconnect)
+	reconnectFunc    func() error // lazy reconnect for disconnected servers (nil = no reconnect)
+	markDisconnected func()      // called on tool timeout to invalidate connection (nil = no-op)
 }
 
 // NewBridgeTool creates a BridgeTool from an MCP Tool definition.
@@ -41,7 +42,7 @@ type BridgeTool struct {
 // clientPtr is a shared atomic pointer from serverState — reconnection swaps it
 // atomically, and all BridgeTools see the new client without explicit notification.
 // serverID and grantChecker are optional — pass uuid.Nil and nil for config-path mode.
-func NewBridgeTool(serverName string, mcpTool mcpgo.Tool, clientPtr *atomic.Pointer[mcpclient.Client], prefix string, timeoutSec int, connected *atomic.Bool, serverID uuid.UUID, grantChecker GrantChecker, touchFunc func(), reconnectFunc func() error) *BridgeTool {
+func NewBridgeTool(serverName string, mcpTool mcpgo.Tool, clientPtr *atomic.Pointer[mcpclient.Client], prefix string, timeoutSec int, connected *atomic.Bool, serverID uuid.UUID, grantChecker GrantChecker, touchFunc func(), reconnectFunc func() error, markDisconnected func()) *BridgeTool {
 	name := mcpTool.Name
 	effectivePrefix := ensureMCPPrefix(prefix, serverName)
 	registered := effectivePrefix + "__" + name
@@ -70,7 +71,8 @@ func NewBridgeTool(serverName string, mcpTool mcpgo.Tool, clientPtr *atomic.Poin
 		connected:      connected,
 		grantChecker:   grantChecker,
 		touchFunc:     touchFunc,
-		reconnectFunc: reconnectFunc,
+		reconnectFunc:    reconnectFunc,
+		markDisconnected: markDisconnected,
 	}
 }
 
@@ -153,6 +155,11 @@ func (t *BridgeTool) Execute(ctx context.Context, args map[string]any) *tools.Re
 	result, err := client.CallTool(callCtx, req)
 	if err != nil {
 		if errors.Is(callCtx.Err(), context.DeadlineExceeded) {
+			// Connection is likely stale (dead TCP, CLOSE_WAIT). Invalidate it
+			// and trigger async reconnect so the next call succeeds.
+			if t.markDisconnected != nil {
+				t.markDisconnected()
+			}
 			return tools.ErrorResult(fmt.Sprintf("MCP tool %q timeout after %ds", t.registeredName, t.timeoutSec))
 		}
 		return tools.ErrorResult(fmt.Sprintf("MCP tool %q error: %v", t.registeredName, err))

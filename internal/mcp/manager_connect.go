@@ -152,9 +152,21 @@ func (m *Manager) connectServer(ctx context.Context, name, transportType, comman
 func (m *Manager) registerBridgeTools(ss *serverState, mcpTools []mcpgo.Tool, serverName, toolPrefix string, timeoutSec int, serverID uuid.UUID) []string {
 	var registeredNames []string
 	touch := func() { ss.lastUsed.Store(time.Now().Unix()) }
-	reconnect := func() error { return m.reconnectIdle(ss) }
+	reconnect := func() error { return m.reconnectIfNeeded(ss) }
+	markDisconnected := func() {
+		ss.mu.Lock()
+		ss.needsReconnect = true
+		ss.mu.Unlock()
+		ss.connected.Store(false)
+		go func() {
+			slog.Info("mcp.server.timeout_reconnect", "server", ss.name)
+			if err := m.reconnectIfNeeded(ss); err != nil {
+				slog.Warn("mcp.server.timeout_reconnect_failed", "server", ss.name, "error", err)
+			}
+		}()
+	}
 	for _, mcpTool := range mcpTools {
-		bt := NewBridgeTool(serverName, mcpTool, &ss.clientPtr, toolPrefix, timeoutSec, &ss.connected, serverID, m.grantChecker, touch, reconnect)
+		bt := NewBridgeTool(serverName, mcpTool, &ss.clientPtr, toolPrefix, timeoutSec, &ss.connected, serverID, m.grantChecker, touch, reconnect, markDisconnected)
 
 		if _, exists := m.registry.Get(bt.Name()); exists {
 			slog.Warn("mcp.tool.name_collision",
@@ -229,8 +241,14 @@ func (m *Manager) connectViaPool(ctx context.Context, tenantID uuid.UUID, name, 
 // serverID is the MCP server UUID from DB.
 func (m *Manager) registerPoolBridgeTools(entry *poolEntry, serverName, toolPrefix string, timeoutSec int, serverID uuid.UUID) []string {
 	var registeredNames []string
+	markDisconnected := func() {
+		entry.state.connected.Store(false)
+		if c := entry.state.clientPtr.Load(); c != nil {
+			_ = c.Close()
+		}
+	}
 	for _, mcpTool := range entry.tools {
-		bt := NewBridgeTool(serverName, mcpTool, &entry.state.clientPtr, toolPrefix, timeoutSec, &entry.state.connected, serverID, m.grantChecker, nil, nil)
+		bt := NewBridgeTool(serverName, mcpTool, &entry.state.clientPtr, toolPrefix, timeoutSec, &entry.state.connected, serverID, m.grantChecker, nil, nil, markDisconnected)
 
 		if _, exists := m.registry.Get(bt.Name()); exists {
 			slog.Warn("mcp.tool.name_collision",
@@ -305,7 +323,7 @@ func (m *Manager) healthLoop(ctx context.Context, ss *serverState) {
 						_ = c.Close()
 					}
 					ss.connected.Store(false)
-					ss.idleDisconnected = true
+					ss.needsReconnect = true
 					return
 				}
 			}
@@ -351,11 +369,11 @@ func (m *Manager) healthLoop(ctx context.Context, ss *serverState) {
 	}
 }
 
-// reconnectIdle reconnects a server that was disconnected by idle timeout.
+// reconnectIfNeeded reconnects a server that was disconnected by idle timeout.
 // Called lazily from BridgeTool.Execute() when a tool is invoked on a disconnected server.
-func (m *Manager) reconnectIdle(ss *serverState) error {
+func (m *Manager) reconnectIfNeeded(ss *serverState) error {
 	ss.mu.Lock()
-	if !ss.idleDisconnected {
+	if !ss.needsReconnect {
 		ss.mu.Unlock()
 		return nil // not idle-disconnected, nothing to do
 	}
@@ -401,7 +419,7 @@ func (m *Manager) reconnectIdle(ss *serverState) error {
 	ss.reconnAttempts = 0
 	ss.healthFailures = 0
 	ss.lastErr = ""
-	ss.idleDisconnected = false
+	ss.needsReconnect = false
 	ss.mu.Unlock()
 
 	// Restart health loop

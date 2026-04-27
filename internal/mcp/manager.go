@@ -167,7 +167,7 @@ type serverState struct {
 
 	lastUsed atomic.Int64 // Unix timestamp of last tool invocation
 
-	idleDisconnected bool // set when disconnected by idle timeout (triggers lazy reconnect)
+	needsReconnect bool // connection is known-bad (idle or timeout); triggers lazy reconnect
 }
 
 func (ss *serverState) getHealthFailThreshold() int {
