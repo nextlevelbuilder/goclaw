@@ -9,6 +9,45 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
+// resolveActorUserID picks the user identifier used for per-user resource
+// lookups (MCP credentials, RBAC grants, audit attribution) given the routing
+// fields carried on a pipeline.RunInput / agent.RunRequest.
+//
+// In DMs, UserID == SenderID — this function returns UserID unchanged.
+//
+// In group chats the gateway consumer (cmd/gateway_consumer_normal.go) rewrites
+// UserID to a group-scope composite key ("group:<channel>:<chatID>" or
+// "guild:<guildID>:user:<senderID>" for Discord) so multiple users in the
+// same group share conversation memory and session state. That composite is
+// correct for *memory*, but wrong for resources scoped per-actor:
+//
+//   - MCP credentials are minted per-user via the Phase C lazy provisioner
+//     (e.g. Bitrix24 channels/bitrix24/provisioner.go) and keyed by the real
+//     external user id (= SenderID). Looking them up by the group-composite
+//     key always misses the row, so MCP tools silently disappear in group
+//     chats. This is the bug this helper fixes.
+//   - RBAC grants and audit attribution must reflect the real actor, not the
+//     group container — otherwise every member of a chat appears identical
+//     to the policy engine.
+//
+// SenderID is preserved unchanged on every InboundMessage / RunRequest, so
+// this helper can always recover actor identity from the routing fields it
+// already has. When SenderID is empty (synthetic ticker / notification
+// senders) the function falls back to UserID — those events do not own
+// per-user credentials and the lookup will return nil safely either way.
+//
+// Channels other than Bitrix24 currently do not provision per-user MCP
+// credentials, so for them this function is a no-op (the lookup returns nil
+// regardless of which key is used). When Telegram / Slack / Discord later
+// add per-user MCP integrations the same routing already flows through this
+// helper — no per-channel branching needed.
+func resolveActorUserID(userID, senderID, peerKind string) string {
+	if peerKind != "group" || senderID == "" {
+		return userID
+	}
+	return senderID
+}
+
 // getUserMCPTools returns per-user MCP tools for servers requiring user credentials.
 // Tools are cached per-user in mcpUserTools sync.Map and registered in the shared
 // tool registry so ExecuteWithContext can resolve them. On first call for a user,

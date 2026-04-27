@@ -197,7 +197,15 @@ func (l *Loop) makeBuildFilteredTools(req *RunRequest) func(state *pipeline.RunS
 		// Load per-user MCP tools (Notion, etc.) into registry before filtering.
 		// Servers with require_user_credentials are deferred at startup and
 		// connected per-request here with the actual user's credentials.
-		l.getUserMCPTools(state.Ctx, state.Input.UserID)
+		//
+		// Use resolveActorUserID — for group chats the consumer rewrites
+		// state.Input.UserID to a group-scope composite for memory sharing,
+		// which does NOT match the per-user key the MCP provisioner stored
+		// credentials under. SenderID is the real actor and is what
+		// MCPUserCredentials rows are keyed by. See helper docstring for
+		// the full rationale + which channels this affects.
+		actorUserID := resolveActorUserID(state.Input.UserID, state.Input.SenderID, state.Input.PeerKind)
+		l.getUserMCPTools(state.Ctx, actorUserID)
 
 		maxIter := l.maxIterations
 		if req.MaxIterations > 0 && req.MaxIterations < maxIter {
