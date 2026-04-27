@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -75,6 +76,16 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 	// that don't appear in [b]/[i]/[code]/[url=…] syntax.
 	text = markdownToBitrixBBCode(text)
 
+	// Prepend an @mention BBCode so multi-user group chats know which user
+	// the bot is replying to. Consumer (cmd/gateway_consumer_normal.go) sets
+	// the address user_id for group inbounds; DM and synthetic-sender flows
+	// leave it empty so this is a no-op there. Prepending BEFORE chunkText
+	// guarantees the mention only appears on the first chunk regardless of
+	// how the body splits.
+	if mention := buildAddressMention(msg.Metadata, c.BotID()); mention != "" {
+		text = mention + " " + text
+	}
+
 	// TextChunkLimit is always populated by applyConfigDefaults (4000) —
 	// chunkText also treats limit<=0 as "use default" as a safety net, so we
 	// don't duplicate the fallback here.
@@ -127,6 +138,32 @@ func (c *Channel) sendChunk(ctx context.Context, chatID, chunk string) error {
 	}
 	_, err = client.Call(ctx, "imbot.message.add", params)
 	return err
+}
+
+// buildAddressMention returns the Bitrix24 BBCode @mention prefix for the
+// addressee of an outbound message, or "" when no addressee is set or the
+// addressee is the bot itself (self-mention guard).
+//
+// Format is `[USER=<id>][/USER]` — empty inner content. Bitrix renders the
+// user's current display name from the id at delivery time, sidestepping
+// any escaping concerns with names that contain BBCode metacharacters or
+// were renamed since the inbound event was captured.
+//
+// The metadata key is set by cmd/gateway_consumer_normal.go for group-chat
+// outbounds. DM, synthetic-sender, and non-Bitrix channels leave it empty.
+func buildAddressMention(meta map[string]string, botID int) string {
+	userID := strings.TrimSpace(meta["bitrix_address_user_id"])
+	if userID == "" {
+		return ""
+	}
+	// Self-mention guard: bot replying to its own synthetic relay, or a
+	// future code path injecting the bot's id by mistake. Don't @mention
+	// the bot to itself — Bitrix would render "@Bot Synity" in the bot's
+	// own message which is confusing.
+	if botID > 0 && userID == strconv.Itoa(botID) {
+		return ""
+	}
+	return "[USER=" + userID + "][/USER]"
 }
 
 // isRateLimitErr detects Bitrix24's rate-limit response. The canonical code

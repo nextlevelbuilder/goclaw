@@ -228,3 +228,84 @@ func TestSend_EmptyContentIsNoOp(t *testing.T) {
 		t.Errorf("empty content should be no-op, got %v", err)
 	}
 }
+
+// TestBuildAddressMention covers the address-user resolver that prepends the
+// `[USER=<id>][/USER]` BBCode to outbound replies in group chats. The format
+// is intentionally empty-named so Bitrix renders the user's current display
+// name from id at delivery time (sidesteps escaping for names with BBCode
+// metacharacters and reflects renames between turns).
+//
+// Consumer-side gating (cmd/gateway_consumer_normal.go) is responsible for
+// only setting `bitrix_address_user_id` in group inbounds and skipping
+// synthetic senders. This test pins the channel-side behaviour given that
+// gating contract.
+func TestBuildAddressMention(t *testing.T) {
+	cases := []struct {
+		name  string
+		meta  map[string]string
+		botID int
+		want  string
+	}{
+		{
+			name:  "no_metadata_returns_empty",
+			meta:  nil,
+			botID: 940,
+			want:  "",
+		},
+		{
+			name:  "empty_user_id_returns_empty",
+			meta:  map[string]string{"bitrix_address_user_id": ""},
+			botID: 940,
+			want:  "",
+		},
+		{
+			name:  "whitespace_user_id_returns_empty",
+			meta:  map[string]string{"bitrix_address_user_id": "   "},
+			botID: 940,
+			want:  "",
+		},
+		{
+			name:  "real_user_id_returns_bbcode",
+			meta:  map[string]string{"bitrix_address_user_id": "62"},
+			botID: 940,
+			want:  "[USER=62][/USER]",
+		},
+		{
+			name:  "trims_user_id_whitespace",
+			meta:  map[string]string{"bitrix_address_user_id": "  62  "},
+			botID: 940,
+			want:  "[USER=62][/USER]",
+		},
+		{
+			// Self-mention guard: bot's own numeric id matches addressee →
+			// suppress to avoid weird "@Bot Synity" prefix in bot's own message.
+			name:  "self_mention_suppressed",
+			meta:  map[string]string{"bitrix_address_user_id": "940"},
+			botID: 940,
+			want:  "",
+		},
+		{
+			// Bot id unknown (channel not yet started) → don't apply guard,
+			// trust the consumer's gating. Returning the BBCode is harmless;
+			// Bitrix will render whatever user the id resolves to.
+			name:  "unknown_bot_id_skips_self_guard",
+			meta:  map[string]string{"bitrix_address_user_id": "940"},
+			botID: 0,
+			want:  "[USER=940][/USER]",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := buildAddressMention(tc.meta, tc.botID)
+			if got != tc.want {
+				t.Errorf("buildAddressMention(%v, %d) = %q; want %q", tc.meta, tc.botID, got, tc.want)
+			}
+		})
+	}
+}
+
+// (Send() integration with httptest server is covered by existing send tests
+// — adding a new httptest pipeline just for the prepend would duplicate that
+// scaffolding for what is logically a single string-concat call site. The
+// helper test above pins the behaviour; trust the existing send pipeline
+// for chunk routing.)

@@ -220,6 +220,14 @@ func processNormalMessage(
 		if mid := msg.Metadata["message_id"]; mid != "" {
 			outMeta["reply_to_message_id"] = mid
 		}
+		// Address the asker so multi-user group chats render a clear "this
+		// reply is for X" signal. Today this is Bitrix24-specific (channel
+		// renders [USER=<id>][/USER] BBCode); other channels ignore the key.
+		// Skip synthetic senders (ticker, notification, system) — those have
+		// no real user to @mention.
+		if msg.SenderID != "" && !bus.IsInternalSender(msg.SenderID) {
+			outMeta["bitrix_address_user_id"] = msg.SenderID
+		}
 	}
 
 	// Register run with channel manager for streaming/reaction event forwarding.
