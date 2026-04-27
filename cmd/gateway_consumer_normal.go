@@ -232,8 +232,14 @@ func processNormalMessage(
 	}
 	blockReply := deps.ChannelMgr != nil && deps.ChannelMgr.ResolveBlockReply(msg.Channel, deps.Cfg.Gateway.BlockReply)
 	toolStatus := deps.Cfg.Gateway.ToolStatus == nil || *deps.Cfg.Gateway.ToolStatus // default true
+	// VerboseThread mode: when an inbound arrived in a Discord thread,
+	// the channel handler stamps metadata["is_thread"]="true". The
+	// gateway propagates the flag here so the per-event forwarder
+	// (channels/events.go) can publish reasoning + tool calls as
+	// discrete messages in the thread instead of swallowing them.
+	verboseThread := msg.Metadata["is_thread"] == "true"
 	if deps.ChannelMgr != nil {
-		deps.ChannelMgr.RegisterRun(runID, msg.Channel, chatIDForRun, messageID, outMeta, msg.TenantID, enableStream, blockReply, toolStatus)
+		deps.ChannelMgr.RegisterRun(runID, msg.Channel, chatIDForRun, messageID, outMeta, msg.TenantID, enableStream, blockReply, toolStatus, verboseThread)
 	}
 
 	// Group-aware system prompt: help the LLM adapt tone and behavior for group chats.

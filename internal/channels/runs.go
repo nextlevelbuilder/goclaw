@@ -5,8 +5,14 @@ import "github.com/google/uuid"
 // --- Run tracking for streaming/reaction event forwarding ---
 
 // RegisterRun associates a run ID with a channel context so agent events
-// (chunks, tool calls, completion) can be forwarded to the originating channel.
-func (m *Manager) RegisterRun(runID, channelName, chatID, messageID string, metadata map[string]string, tenantID uuid.UUID, streaming, blockReply, toolStatus bool) {
+// (chunks, tool calls, completion) can be forwarded to the originating
+// channel.
+//
+// verboseThread indicates the inbound message arrived in a Discord thread
+// (or future per-platform analogue). Run forwarders use this to surface
+// reasoning flushes and tool calls as discrete messages in the thread —
+// see RunContext.VerboseThread.
+func (m *Manager) RegisterRun(runID, channelName, chatID, messageID string, metadata map[string]string, tenantID uuid.UUID, streaming, blockReply, toolStatus, verboseThread bool) {
 	m.runs.Store(runID, &RunContext{
 		ChannelName:       channelName,
 		ChatID:            chatID,
@@ -16,6 +22,7 @@ func (m *Manager) RegisterRun(runID, channelName, chatID, messageID string, meta
 		Streaming:         streaming,
 		BlockReplyEnabled: blockReply,
 		ToolStatusEnabled: toolStatus,
+		VerboseThread:     verboseThread,
 	})
 }
 

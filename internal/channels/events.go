@@ -38,6 +38,18 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 		ctx = store.WithTenantID(ctx, rc.TenantID)
 	}
 
+	// VerboseThread mode (Discord threads etc.): publish each LLM
+	// reasoning flush + tool call as its own OutboundMessage so the user
+	// sees the agent "work" inside the thread. The parent channel still
+	// gets just the final answer via the normal block-reply / run-
+	// completed path. This block is independent of (and parallel to)
+	// StreamingChannel handling — Discord doesn't implement that
+	// interface so the streaming block below is a no-op for it. Keeping
+	// these orthogonal lets future channels opt into either or both.
+	if rc.VerboseThread {
+		m.handleVerboseThreadEvent(rc, eventType, payload)
+	}
+
 	// Forward to StreamingChannel (only when streaming is enabled for this run).
 	// Without this gate, channels that implement StreamingChannel but have streaming
 	// disabled (e.g. group_stream=false) would create stream messages AND emit

@@ -297,6 +297,27 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 		"placeholder_key": m.ID, // keyed by inbound message ID for placeholder lookup
 	}
 
+	// Detect Discord thread context (parent channel vs thread vs forum post).
+	// Threads carry a different ChannelType than the parent text channel; the
+	// session has the channel cached from prior gateway events so this is a
+	// constant-time map lookup, not an API call. We surface it as
+	// metadata["is_thread"] so downstream (RunContext, events.go) can
+	// flip into "verbose" mode and surface the model's reasoning + each
+	// tool call as its own message inside the thread, the way the user
+	// sees the agent "work" on Cursor or Claude Code. Parent-channel
+	// messages stay terse (just the final answer), preserving the
+	// "summary in main, trace in thread" UX.
+	if !isDM {
+		if ch, err := c.session.State.Channel(channelID); err == nil && ch != nil {
+			switch ch.Type {
+			case discordgo.ChannelTypeGuildPublicThread,
+				discordgo.ChannelTypeGuildPrivateThread,
+				discordgo.ChannelTypeGuildNewsThread:
+				metadata["is_thread"] = "true"
+			}
+		}
+	}
+
 	// Voice agent routing
 	targetAgentID := c.AgentID()
 	if c.config.VoiceAgentID != "" {

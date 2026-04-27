@@ -36,14 +36,22 @@ type RunContext struct {
 	Streaming         bool              // whether run uses streaming (to avoid double-delivery of block replies)
 	BlockReplyEnabled bool              // whether block.reply delivery is enabled for this run (resolved at RegisterRun time)
 	ToolStatusEnabled bool              // whether tool name shows in streaming preview during tool execution
-	mu                sync.Mutex
-	streamBuffer      string        // accumulated streaming text (chunks are deltas)
-	inToolPhase       bool          // true after tool.call, reset on next chunk (new LLM iteration)
-	stream            ChannelStream // per-run stream handle (replaces per-chat sync.Map in channel impls)
-	thinkingBuffer    string        // accumulated thinking/reasoning text
-	hasThinking       bool          // true if any thinking events received this iteration
-	thinkingDone      bool          // true after first chunk arrives (reasoning→answer transition complete)
-	tagParseSkipped   bool          // true after first chunk with no <think> tags (skip re-parsing)
+	// VerboseThread, when true, makes the event forwarder publish each
+	// LLM reasoning flush and tool call as a discrete OutboundMessage
+	// back into ChatID instead of the usual stream-edit-placeholder
+	// path. Set by the gateway when the inbound message arrived in a
+	// Discord thread (handler.go writes metadata["is_thread"]=true).
+	// Designed for the agent plan flow: parent channels stay terse
+	// (final answer only), threads get the full work trace.
+	VerboseThread   bool
+	mu              sync.Mutex
+	streamBuffer    string        // accumulated streaming text (chunks are deltas)
+	inToolPhase     bool          // true after tool.call, reset on next chunk (new LLM iteration)
+	stream          ChannelStream // per-run stream handle (replaces per-chat sync.Map in channel impls)
+	thinkingBuffer  string        // accumulated thinking/reasoning text
+	hasThinking     bool          // true if any thinking events received this iteration
+	thinkingDone    bool          // true after first chunk arrives (reasoning→answer transition complete)
+	tagParseSkipped bool          // true after first chunk with no <think> tags (skip re-parsing)
 }
 
 // Manager manages all registered channels, handling their lifecycle
