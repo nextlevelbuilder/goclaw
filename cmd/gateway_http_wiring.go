@@ -155,6 +155,23 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 		})
 	}
 
+	// Seed MCP health atomics from loaded config (hot-reload handler above only fires on UI saves).
+	if v := d.cfg.Tools.MCPHealthFailThreshold; v > 0 {
+		mcpbridge.SetHealthFailThreshold(int32(v))
+	}
+	if v := d.cfg.Tools.MCPHealthCheckInterval; v > 0 {
+		mcpbridge.SetHealthCheckIntervalSec(int64(v))
+	}
+	if v := d.cfg.Tools.MCPMaxReconnectAttempts; v > 0 {
+		mcpbridge.SetMaxReconnectAttempts(int32(v))
+	}
+	if v := d.cfg.Tools.MCPReconnectCooldown; v > 0 {
+		mcpbridge.SetReconnectCooldownSec(int64(v))
+	}
+	if v := d.cfg.Tools.MCPIdleTimeout; v > 0 {
+		mcpbridge.SetIdleTimeoutSec(int64(v))
+	}
+
 	// Usage analytics API
 	if d.pgStores.Snapshots != nil {
 		d.server.SetUsageHandler(httpapi.NewUsageHandler(d.pgStores.Snapshots, d.pgStores.DB))

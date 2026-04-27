@@ -166,6 +166,8 @@ type serverState struct {
 	idleTimeout          int // seconds (0 = use global; global 0 = never disconnect)
 
 	lastUsed atomic.Int64 // Unix timestamp of last tool invocation
+
+	idleDisconnected bool // set when disconnected by idle timeout (triggers lazy reconnect)
 }
 
 func (ss *serverState) getHealthFailThreshold() int {

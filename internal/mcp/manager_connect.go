@@ -152,8 +152,9 @@ func (m *Manager) connectServer(ctx context.Context, name, transportType, comman
 func (m *Manager) registerBridgeTools(ss *serverState, mcpTools []mcpgo.Tool, serverName, toolPrefix string, timeoutSec int, serverID uuid.UUID) []string {
 	var registeredNames []string
 	touch := func() { ss.lastUsed.Store(time.Now().Unix()) }
+	reconnect := func() error { return m.reconnectIdle(ss) }
 	for _, mcpTool := range mcpTools {
-		bt := NewBridgeTool(serverName, mcpTool, &ss.clientPtr, toolPrefix, timeoutSec, &ss.connected, serverID, m.grantChecker, touch)
+		bt := NewBridgeTool(serverName, mcpTool, &ss.clientPtr, toolPrefix, timeoutSec, &ss.connected, serverID, m.grantChecker, touch, reconnect)
 
 		if _, exists := m.registry.Get(bt.Name()); exists {
 			slog.Warn("mcp.tool.name_collision",
@@ -229,7 +230,7 @@ func (m *Manager) connectViaPool(ctx context.Context, tenantID uuid.UUID, name, 
 func (m *Manager) registerPoolBridgeTools(entry *poolEntry, serverName, toolPrefix string, timeoutSec int, serverID uuid.UUID) []string {
 	var registeredNames []string
 	for _, mcpTool := range entry.tools {
-		bt := NewBridgeTool(serverName, mcpTool, &entry.state.clientPtr, toolPrefix, timeoutSec, &entry.state.connected, serverID, m.grantChecker, nil)
+		bt := NewBridgeTool(serverName, mcpTool, &entry.state.clientPtr, toolPrefix, timeoutSec, &entry.state.connected, serverID, m.grantChecker, nil, nil)
 
 		if _, exists := m.registry.Get(bt.Name()); exists {
 			slog.Warn("mcp.tool.name_collision",
@@ -299,15 +300,12 @@ func (m *Manager) healthLoop(ctx context.Context, ss *serverState) {
 				lastUsed := time.Unix(ss.lastUsed.Load(), 0)
 				if time.Since(lastUsed) > timeout {
 					slog.Info("mcp.server.idle_disconnect", "server", ss.name, "idle", time.Since(lastUsed).Round(time.Second))
-					ss.connected.Store(false)
-					m.mu.Lock()
-					delete(m.servers, ss.name)
-					m.mu.Unlock()
-					for _, toolName := range ss.toolNames {
-						m.registry.Unregister(toolName)
+					// Close client but keep serverState and tools registered for lazy reconnect.
+					if c := ss.clientPtr.Load(); c != nil {
+						_ = c.Close()
 					}
-					m.registry.UnregisterToolGroup("mcp:" + ss.name)
-					m.updateMCPGroup()
+					ss.connected.Store(false)
+					ss.idleDisconnected = true
 					return
 				}
 			}
@@ -351,6 +349,72 @@ func (m *Manager) healthLoop(ctx context.Context, ss *serverState) {
 			}
 		}
 	}
+}
+
+// reconnectIdle reconnects a server that was disconnected by idle timeout.
+// Called lazily from BridgeTool.Execute() when a tool is invoked on a disconnected server.
+func (m *Manager) reconnectIdle(ss *serverState) error {
+	ss.mu.Lock()
+	if !ss.idleDisconnected {
+		ss.mu.Unlock()
+		return nil // not idle-disconnected, nothing to do
+	}
+	ss.mu.Unlock()
+
+	m.mu.RLock()
+	_, exists := m.servers[ss.name]
+	m.mu.RUnlock()
+	if !exists {
+		return fmt.Errorf("server %q removed from manager", ss.name)
+	}
+
+	ctx := context.Background()
+	slog.Info("mcp.server.idle_reconnect", "server", ss.name)
+
+	newSS, _, err := connectAndDiscover(ctx, ss.name, ss.transport, ss.conn.command, ss.conn.args, ss.conn.env, ss.conn.url, ss.conn.headers, ss.timeoutSec)
+	if err != nil {
+		return fmt.Errorf("reconnect: %w", err)
+	}
+
+	// Copy per-server settings
+	newSS.healthFailThreshold = ss.healthFailThreshold
+	newSS.healthCheckInterval = ss.healthCheckInterval
+	newSS.maxReconnectAttempts = ss.maxReconnectAttempts
+	newSS.reconnectCooldown = ss.reconnectCooldown
+	newSS.idleTimeout = ss.idleTimeout
+	newSS.toolNames = ss.toolNames
+	newSS.serverID = ss.serverID
+	newSS.tenantID = ss.tenantID
+
+	// Swap client atomically so BridgeTools pick up the new client
+	oldClient := ss.clientPtr.Swap(newSS.clientPtr.Load())
+	if oldClient != nil {
+		_ = oldClient.Close()
+	}
+	ss.client = newSS.client
+
+	// Update tool clientPtr/connected to point to new state (they already point to ss fields)
+	ss.connected.Store(true)
+	ss.lastUsed.Store(time.Now().Unix())
+
+	ss.mu.Lock()
+	ss.reconnAttempts = 0
+	ss.healthFailures = 0
+	ss.lastErr = ""
+	ss.idleDisconnected = false
+	ss.mu.Unlock()
+
+	// Restart health loop
+	hctx, hcancel := context.WithCancel(context.Background())
+	// Cancel old context if still active
+	if ss.cancel != nil {
+		ss.cancel()
+	}
+	ss.cancel = hcancel
+	go m.healthLoop(hctx, ss)
+
+	slog.Info("mcp.server.idle_reconnected", "server", ss.name, "tools", len(ss.toolNames))
+	return nil
 }
 
 // tryReconnect attempts to reconnect with exponential backoff.

@@ -176,6 +176,23 @@ func setupToolRegistry(
 		slog.Info("MCP servers initialized", "configured", len(cfg.Tools.McpServers), "tools", len(mcpMgr.ToolNames()))
 	}
 
+	// Seed MCP health atomics from config (covers desktop/SQLite path; PG path also seeds in wireHTTPHandlersOnServer).
+	if v := cfg.Tools.MCPHealthFailThreshold; v > 0 {
+		mcpbridge.SetHealthFailThreshold(int32(v))
+	}
+	if v := cfg.Tools.MCPHealthCheckInterval; v > 0 {
+		mcpbridge.SetHealthCheckIntervalSec(int64(v))
+	}
+	if v := cfg.Tools.MCPMaxReconnectAttempts; v > 0 {
+		mcpbridge.SetMaxReconnectAttempts(int32(v))
+	}
+	if v := cfg.Tools.MCPReconnectCooldown; v > 0 {
+		mcpbridge.SetReconnectCooldownSec(int64(v))
+	}
+	if v := cfg.Tools.MCPIdleTimeout; v > 0 {
+		mcpbridge.SetIdleTimeoutSec(int64(v))
+	}
+
 	// Exec approval system — always active (deny patterns + safe bins + configurable ask mode)
 	{
 		approvalCfg := tools.DefaultExecApprovalConfig()
