@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/cache"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
@@ -133,6 +134,19 @@ func (d *gatewayDeps) runLifecycle(
 	if d.pgStores.Contacts != nil {
 		contactCollector = store.NewContactCollector(d.pgStores.Contacts, cache.NewInMemoryCache[bool]())
 		d.channelMgr.SetContactCollector(contactCollector)
+	}
+
+	// Subagent recovery: scan rows left in `running` by the previous goclaw
+	// process, mark them interrupted, and post a recovery notice into the
+	// originating chat. Runs once at boot — must come BEFORE
+	// consumeInboundMessages so a fresh inbound message can't race the
+	// recovery post (would land out of order). We use a 30s deadline so
+	// a stuck channel API never blocks readiness; recovery is best-effort
+	// and any individual failure is logged + swallowed inside the call.
+	if d.pgStores.SubagentTasks != nil {
+		recoveryCtx, recoveryCancel := context.WithTimeout(ctx, 30*time.Second)
+		agent.RecoverInterruptedSubagents(recoveryCtx, d.pgStores.SubagentTasks, d.channelMgr, 0)
+		recoveryCancel()
 	}
 
 	go consumeInboundMessages(ctx, d.msgBus, d.agentRouter, d.cfg, deps.sched, d.channelMgr, deps.consumerTeamStore, deps.quotaChecker, d.pgStores.Sessions, d.pgStores.Agents, contactCollector, deps.postTurn, deps.subagentMgr)

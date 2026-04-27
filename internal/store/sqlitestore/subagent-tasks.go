@@ -188,6 +188,25 @@ func (s *SQLiteSubagentTaskStore) ListBySession(
 	return collectTasks(rows)
 }
 
+// ListRunningAcrossTenants returns every subagent task currently in the
+// `running` status across every tenant. Used by goclaw startup recovery
+// to find work that was in flight when the previous pod died. Sibling of
+// the PG implementation — see that comment for the full contract.
+func (s *SQLiteSubagentTaskStore) ListRunningAcrossTenants(ctx context.Context, limit int) ([]store.SubagentTaskData, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	q := fmt.Sprintf(`SELECT %s FROM subagent_tasks
+		WHERE status = 'running' AND archived_at IS NULL
+		ORDER BY created_at ASC LIMIT ?`, subagentTaskSelectCols)
+	rows, err := s.db.QueryContext(ctx, q, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return collectTasks(rows)
+}
+
 // Archive marks old completed/failed/cancelled tasks as archived.
 func (s *SQLiteSubagentTaskStore) Archive(ctx context.Context, olderThan time.Duration) (int64, error) {
 	cutoff := time.Now().UTC().Add(-olderThan).Format(time.RFC3339Nano)

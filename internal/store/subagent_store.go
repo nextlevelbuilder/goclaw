@@ -53,6 +53,16 @@ type SubagentTaskStore interface {
 	// ListBySession returns tasks for a specific session key (tenant-scoped).
 	ListBySession(ctx context.Context, sessionKey string) ([]SubagentTaskData, error)
 
+	// ListRunningAcrossTenants returns every subagent task currently in the
+	// `running` status across every tenant. Master-scope: caller is
+	// responsible for verifying authority. Used by goclaw startup recovery
+	// to find work that was in flight when the previous pod died, before
+	// any user/tenant context exists. Bounded by `limit` (defaults to 100
+	// when limit <= 0) so a stuck SubagentManager that left hundreds of
+	// rows in `running` doesn't block boot. Ordered by created_at ASC so
+	// older interrupted work surfaces first.
+	ListRunningAcrossTenants(ctx context.Context, limit int) ([]SubagentTaskData, error)
+
 	// Archive marks old completed/failed/cancelled tasks as archived.
 	// Returns the number of rows affected.
 	Archive(ctx context.Context, olderThan time.Duration) (int64, error)
