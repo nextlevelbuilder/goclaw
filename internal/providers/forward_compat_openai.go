@@ -14,6 +14,10 @@ var openAIForwardCompatMap = map[string]struct {
 		Template: "gpt-5.4",
 		Patch:    &ModelSpec{ContextWindow: 1_000_000, MaxTokens: 200_000},
 	},
+	"gpt-5.5-mini": {
+		Template: "gpt-5.4-mini",
+		Patch:    &ModelSpec{ContextWindow: 500_000, MaxTokens: 100_000},
+	},
 	"gpt-5.6": {
 		Template: "gpt-5.4",
 		Patch:    &ModelSpec{ContextWindow: 2_000_000, MaxTokens: 200_000},

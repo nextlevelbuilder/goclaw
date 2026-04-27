@@ -112,6 +112,12 @@ type StreamChunk struct {
 	ToolInput   map[string]any `json:"tool_input,omitempty"`
 	ToolResult  string         `json:"tool_result,omitempty"`   // set when tool_result block received
 	ToolIsError bool           `json:"tool_is_error,omitempty"` // tool returned error
+
+	// CLI turn boundary signals (CLI provider only — other providers never set these).
+	TurnStart bool   `json:"turn_start,omitempty"`
+	TurnEnd   bool   `json:"turn_end,omitempty"`
+	TurnModel string `json:"turn_model,omitempty"`
+	TurnUsage *Usage `json:"turn_usage,omitempty"`
 }
 
 // ImageContent represents a base64-encoded image for vision-capable models.

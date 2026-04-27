@@ -16,8 +16,10 @@ type cliJSONResponse struct {
 
 // cliUsage maps Claude CLI usage counters.
 type cliUsage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
+	InputTokens              int `json:"input_tokens"`
+	OutputTokens             int `json:"output_tokens"`
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
+	CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
 }
 
 // cliStreamEvent is a single line from `--output-format stream-json`.
@@ -34,6 +36,8 @@ type cliStreamEvent struct {
 // cliStreamMsg wraps content blocks inside an assistant message event.
 type cliStreamMsg struct {
 	Content []cliContentBlock `json:"content"`
+	Model   string            `json:"model,omitempty"`
+	Usage   *cliUsage         `json:"usage,omitempty"`
 }
 
 // cliContentBlock is a single content block (text, thinking, tool_use, tool_result).

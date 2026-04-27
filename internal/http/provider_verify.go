@@ -168,6 +168,7 @@ func isNonChatModel(model string) bool {
 		"gemini-2.5-flash-image", "google/gemini-2.5-flash-image",
 		"grok-imagine", // xAI video generation (grok-imagine-video)
 		"grok-2-image", // xAI image generation
+		"gpt-image",    // OpenAI/ChatGPT image generation (gpt-image-2, gpt-image-1.5)
 	}
 	m := strings.ToLower(model)
 	for _, prefix := range nonChatPrefixes {

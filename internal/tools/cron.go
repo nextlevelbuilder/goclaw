@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -42,9 +44,10 @@ VALID ACTIONS AND EXACT PAYLOAD SHAPES:
 {
   "action": "add",
   "job": {
-    "name": "string",             // required, lowercase slug: [a-z0-9-]+
+    "name": "string",             // required, format: {agent}/{project}/{task} e.g. "nta-leader/security/scan-data-leak"
     "schedule": { ... },          // required
-    "message": "string",          // required
+    "message": "string",          // required (or use promptFile)
+    "promptFile": "string",       // optional, workspace-relative .md/.txt file path (loaded at runtime, supports {{date}} etc.)
     "deliver": true|false,        // optional, default false
     "channel": "string",          // optional, auto-filled from current channel context
     "to": "string",               // optional
@@ -89,10 +92,11 @@ RULES:
 - For action="update", send changes inside "patch". Do not place patch fields at the root level.
 - Always use "jobId". Do not use "id".
 - "name", "schedule", and "message" are required for add.
-- "name" must match: lowercase letters, numbers, hyphens only.
+- "name" must follow {agent}/{project}/{task} format (lowercase, hyphens, slashes).
+- "promptFile" loads prompt from workspace file at runtime. Supports template vars: {{date}}, {{date_vn}}, {{weekday}}, {{month}}, {{agent}}, {{project}}, {{task}}.
 - Before creating or updating a scheduled job, call the datetime tool first to get the precise current time and unix_ms timestamp. Never guess timestamps.
 - Omit optional fields when unknown; do not invent placeholder values like "", 0, or null unless required.
-- Jobs run as isolated agent turns using the provided "message".`
+- Jobs run as isolated agent turns using the provided "message" (or promptFile content).`
 }
 
 func (t *CronTool) Parameters() map[string]any {
@@ -210,8 +214,8 @@ func (t *CronTool) handleAdd(ctx context.Context, args map[string]any, agentID, 
 	}
 
 	name, _ := jobObj["name"].(string)
-	if name == "" {
-		return ErrorResult("job.name is required")
+	if err := store.ValidateCronName(name); err != nil {
+		return ErrorResult(err.Error())
 	}
 
 	scheduleObj, ok := jobObj["schedule"].(map[string]any)
@@ -220,8 +224,18 @@ func (t *CronTool) handleAdd(ctx context.Context, args map[string]any, agentID, 
 	}
 
 	message, _ := jobObj["message"].(string)
-	if message == "" {
-		return ErrorResult("job.message is required")
+	promptFile, _ := jobObj["promptFile"].(string)
+	if message == "" && promptFile == "" {
+		return ErrorResult("job.message or job.promptFile is required")
+	}
+	if promptFile != "" {
+		if filepath.IsAbs(promptFile) || strings.Contains(promptFile, "..") {
+			return ErrorResult("job.promptFile must be a relative path without '..' components")
+		}
+		ext := filepath.Ext(promptFile)
+		if ext != ".md" && ext != ".txt" {
+			return ErrorResult("job.promptFile must be a .md or .txt file")
+		}
 	}
 
 	// Parse schedule
@@ -306,11 +320,22 @@ func (t *CronTool) handleAdd(ctx context.Context, args map[string]any, agentID, 
 		return ErrorResult(fmt.Sprintf("failed to create cron job: %v", err))
 	}
 
-	// Set wake_heartbeat if requested (triggers heartbeat after cron job completes)
-	if wh, _ := jobObj["wake_heartbeat"].(bool); wh {
-		wakeTrue := true
-		if updated, uErr := t.cronStore.UpdateJob(ctx, job.ID, store.CronJobPatch{WakeHeartbeat: &wakeTrue}); uErr == nil {
-			job = updated
+	// Apply optional fields not in AddJob signature via immediate patch.
+	{
+		patch := store.CronJobPatch{}
+		needPatch := false
+		if wh, _ := jobObj["wake_heartbeat"].(bool); wh {
+			patch.WakeHeartbeat = &wh
+			needPatch = true
+		}
+		if promptFile != "" {
+			patch.PromptFile = &promptFile
+			needPatch = true
+		}
+		if needPatch {
+			if updated, uErr := t.cronStore.UpdateJob(ctx, job.ID, patch); uErr == nil {
+				job = updated
+			}
 		}
 	}
 

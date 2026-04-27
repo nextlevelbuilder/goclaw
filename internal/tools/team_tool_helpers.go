@@ -227,3 +227,49 @@ func (m *TeamToolManager) notifyChannelReview(task *store.TeamTaskData) {
 	content := fmt.Sprintf("🔔 Escalation: \"%s\" requires human review (task %s).", task.Subject, task.Identifier)
 	m.msgBus.PublishOutbound(reviewOutboundMessage(task, content))
 }
+
+// AutoSendTaskMedia sends media attachments from a completed task to the origin channel.
+// Called automatically when a team task completes with attached media files.
+func (m *TeamToolManager) AutoSendTaskMedia(ctx context.Context, taskID uuid.UUID, task *store.TeamTaskData) {
+	if m.msgBus == nil || task.Channel == "" || task.ChatID == "" {
+		return
+	}
+
+	attachments, err := m.teamStore.ListTaskAttachments(ctx, taskID)
+	if err != nil || len(attachments) == 0 {
+		return
+	}
+
+	// Filter to media files only (images, video, audio)
+	var mediaAttachments []bus.MediaAttachment
+	for _, att := range attachments {
+		mime := att.MimeType
+		if mime == "" {
+			mime = mimeFromPath(att.Path)
+		}
+		if isMediaMime(mime) {
+			mediaAttachments = append(mediaAttachments, bus.MediaAttachment{
+				URL:         att.Path,
+				ContentType: mime,
+			})
+		}
+	}
+
+	if len(mediaAttachments) == 0 {
+		return
+	}
+
+	// Send media to origin channel
+	outMsg := bus.OutboundMessage{
+		Channel:  task.Channel,
+		ChatID:   task.ChatID,
+		Media:    mediaAttachments,
+		Metadata: TaskLocalKeyMetadata(task),
+	}
+	m.msgBus.PublishOutbound(outMsg)
+}
+
+// isMediaMime returns true if the MIME type is an image, video, or audio type.
+func isMediaMime(mime string) bool {
+	return len(mime) > 6 && (mime[:6] == "image/" || mime[:6] == "video/" || mime[:6] == "audio/")
+}

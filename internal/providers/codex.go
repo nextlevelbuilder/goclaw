@@ -59,6 +59,16 @@ func (p *CodexProvider) Name() string           { return p.name }
 func (p *CodexProvider) DefaultModel() string   { return p.defaultModel }
 func (p *CodexProvider) SupportsThinking() bool { return true }
 
+// ProviderType returns the DB provider_type for media chain routing.
+func (p *CodexProvider) ProviderType() string { return "chatgpt_oauth" }
+
+// OAuthToken returns a fresh OAuth bearer token for use by media tools
+// (e.g. create_image) that need to call ChatGPT endpoints directly.
+func (p *CodexProvider) OAuthToken() (string, error) { return p.tokenSource.Token() }
+
+// OAuthAPIBase returns the ChatGPT backend API base URL.
+func (p *CodexProvider) OAuthAPIBase() string { return p.apiBase }
+
 // Capabilities implements CapabilitiesAware for pipeline code-path selection.
 func (p *CodexProvider) Capabilities() ProviderCapabilities {
 	return ProviderCapabilities{

@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -94,10 +97,22 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 			sessionMgr.Save(cronCtx, sessionKey)
 		}
 
+		// Resolve message: prompt file (if set) → template variable expansion.
+		message := job.Payload.Message
+		if job.Payload.PromptFile != "" {
+			if content, err := loadCronPromptFile(agentID, job.Payload.PromptFile); err == nil {
+				message = content
+			} else {
+				slog.Warn("cron: promptFile not found, falling back to inline message",
+					"job", job.Name, "file", job.Payload.PromptFile, "error", err)
+			}
+		}
+		message = expandCronVars(message, job)
+
 		// Schedule through cron lane — scheduler handles agent resolution and concurrency
 		outCh := sched.Schedule(cronCtx, scheduler.LaneCron, agent.RunRequest{
 			SessionKey:        sessionKey,
-			Message:           job.Payload.Message,
+			Message:           message,
 			Channel:           channel,
 			ChannelType:       channelType,
 			ChatID:            job.DeliverTo,
@@ -165,4 +180,62 @@ func resolveCronPeerKind(job *store.CronJob) string {
 		return "group"
 	}
 	return ""
+}
+
+// expandCronVars replaces template variables in cron messages with runtime values.
+func expandCronVars(message string, job *store.CronJob) string {
+	if !strings.Contains(message, "{{") {
+		return message
+	}
+	now := time.Now()
+	if job.Schedule.TZ != "" {
+		if loc, err := time.LoadLocation(job.Schedule.TZ); err == nil {
+			now = now.In(loc)
+		}
+	}
+	segments := strings.SplitN(job.Name, "/", 3)
+	agentSeg, projectSeg, taskSeg := "", "", ""
+	if len(segments) >= 1 {
+		agentSeg = segments[0]
+	}
+	if len(segments) >= 2 {
+		projectSeg = segments[1]
+	}
+	if len(segments) >= 3 {
+		taskSeg = segments[2]
+	}
+	r := strings.NewReplacer(
+		"{{date}}", now.Format("2006-01-02"),
+		"{{date_vn}}", now.Format("02/01/2006"),
+		"{{datetime}}", now.Format(time.RFC3339),
+		"{{weekday}}", now.Weekday().String(),
+		"{{month}}", now.Format("2006-01"),
+		"{{agent}}", agentSeg,
+		"{{project}}", projectSeg,
+		"{{task}}", taskSeg,
+		"{{job_name}}", job.Name,
+		"{{job_id}}", job.ID,
+	)
+	return r.Replace(message)
+}
+
+// loadCronPromptFile reads a prompt file from the agent's workspace.
+func loadCronPromptFile(agentKey, relativePath string) (string, error) {
+	if filepath.IsAbs(relativePath) || strings.Contains(relativePath, "..") {
+		return "", fmt.Errorf("invalid prompt file path: must be relative without '..'")
+	}
+	ext := filepath.Ext(relativePath)
+	if ext != ".md" && ext != ".txt" {
+		return "", fmt.Errorf("invalid prompt file extension: only .md and .txt allowed")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	fullPath := filepath.Join(home, ".goclaw", "workspace", agentKey, relativePath)
+	data, err := os.ReadFile(fullPath)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(data)), nil
 }

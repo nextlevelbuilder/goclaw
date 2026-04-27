@@ -101,6 +101,13 @@ func (t *TeamTasksTool) executeComplete(ctx context.Context, args map[string]any
 		WithContextInfo(ctx),
 	))
 
+	// Auto-send media attachments to origin channel when task completes.
+	// This ensures images/videos created by member agents are delivered to the user
+	// without requiring the agent to explicitly call message(MEDIA:).
+	if completedTask != nil {
+		t.manager.AutoSendTaskMedia(ctx, taskID, completedTask)
+	}
+
 	// Dependent tasks are dispatched by the consumer after this agent's turn ends
 	// (post-turn), not mid-turn. This prevents dependent tasks from completing and
 	// announcing to the leader before this agent's own run finishes.

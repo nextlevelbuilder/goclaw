@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
-	"regexp"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
@@ -14,8 +13,6 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
-
-var cronSlugRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
 
 // CronMethods handles cron.list, cron.create, cron.update, cron.delete, cron.toggle.
 type CronMethods struct {
@@ -65,6 +62,7 @@ func (m *CronMethods) handleCreate(ctx context.Context, client *gateway.Client, 
 		Name           string             `json:"name"`
 		Schedule       store.CronSchedule `json:"schedule"`
 		Message        string             `json:"message"`
+		PromptFile     string             `json:"promptFile"`
 		Deliver        bool               `json:"deliver"`
 		DeliverChannel string             `json:"deliverChannel"`
 		DeliverTo      string             `json:"deliverTo"`
@@ -76,15 +74,11 @@ func (m *CronMethods) handleCreate(ctx context.Context, client *gateway.Client, 
 		json.Unmarshal(req.Params, &params)
 	}
 
-	if params.Name == "" {
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "name")))
+	if err := store.ValidateCronName(params.Name); err != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, err.Error()))
 		return
 	}
-	if !cronSlugRe.MatchString(params.Name) {
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidSlug, "name")))
-		return
-	}
-	if params.Message == "" {
+	if params.Message == "" && params.PromptFile == "" {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgMsgRequired)))
 		return
 	}
@@ -105,6 +99,9 @@ func (m *CronMethods) handleCreate(ctx context.Context, client *gateway.Client, 
 		patch := store.CronJobPatch{Stateless: &statelessVal}
 		if params.WakeHeartbeat {
 			patch.WakeHeartbeat = &params.WakeHeartbeat
+		}
+		if params.PromptFile != "" {
+			patch.PromptFile = &params.PromptFile
 		}
 		if updated, pErr := m.service.UpdateJob(ctx, job.ID, patch); pErr == nil {
 			job = updated

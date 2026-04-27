@@ -4,12 +4,28 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"time"
 
 	"github.com/adhocore/gronx"
 	"github.com/google/uuid"
 )
+
+// cronNameRe enforces the naming convention: {agent}/{project}/{task}
+// Each segment: lowercase alphanumeric + hyphens, 1-50 chars.
+var cronNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,49}/[a-z0-9][a-z0-9-]{0,49}/[a-z0-9][a-z0-9-]{0,49}$`)
+
+// ValidateCronName checks that name follows the {agent}/{project}/{task} convention.
+func ValidateCronName(name string) error {
+	if name == "" {
+		return fmt.Errorf("cron name is required")
+	}
+	if !cronNameRe.MatchString(name) {
+		return fmt.Errorf("cron name must follow format: {agent}/{project}/{task} (lowercase, hyphens allowed). Example: nta-leader/security/scan-data-leak")
+	}
+	return nil
+}
 
 var (
 	ErrCronJobNotFound    = errors.New("cron job not found")
@@ -48,9 +64,10 @@ type CronSchedule struct {
 
 // CronPayload describes what a job does when triggered.
 type CronPayload struct {
-	Kind    string `json:"kind" db:"-"`
-	Message string `json:"message" db:"-"`
-	Command string `json:"command,omitempty" db:"-"`
+	Kind       string `json:"kind" db:"-"`
+	Message    string `json:"message" db:"-"`
+	Command    string `json:"command,omitempty" db:"-"`
+	PromptFile string `json:"promptFile,omitempty" db:"-"`
 }
 
 // CronJobState tracks runtime state for a job.
@@ -88,6 +105,7 @@ type CronJobPatch struct {
 	Enabled        *bool         `json:"enabled,omitempty" db:"-"`
 	Schedule       *CronSchedule `json:"schedule,omitempty" db:"-"`
 	Message        string        `json:"message,omitempty" db:"-"`
+	PromptFile     *string       `json:"promptFile,omitempty" db:"-"`
 	DeleteAfterRun *bool         `json:"deleteAfterRun,omitempty" db:"-"`
 	Stateless      *bool         `json:"stateless,omitempty" db:"-"`
 	Deliver        *bool         `json:"deliver,omitempty" db:"-"`

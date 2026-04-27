@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -284,7 +285,54 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 		var err error
 		if req.Stream {
 			cliToolSpans := make(map[string]cliToolSpan)
+
+			// CLI per-turn sub-span tracking: each assistant event becomes a child LLM span.
+			var currentTurnSpanID uuid.UUID
+			var currentTurnStart time.Time
+			var currentTurnCtx context.Context
+			turnCounter := 0
+
 			resp, err = provider.ChatStream(ctx, chatReq, func(chunk providers.StreamChunk) {
+				// CLI turn start → create per-turn LLM sub-span (child of outer LLM span).
+				if chunk.TurnStart {
+					turnCounter++
+					now := time.Now().UTC()
+					currentTurnStart = now
+					subCtx := tracing.WithParentSpanID(ctx, spanID)
+					turnModel := chunk.TurnModel
+					if turnModel == "" {
+						turnModel = model
+					}
+					var turnOpts []spanOption
+					turnOpts = append(turnOpts, withModel(turnModel))
+					if provider != nil {
+						turnOpts = append(turnOpts, withProvider(provider.Name()))
+					}
+					currentTurnSpanID = l.emitLLMSpanStart(subCtx, now, turnCounter, nil, turnOpts...)
+					currentTurnCtx = tracing.WithParentSpanID(ctx, currentTurnSpanID)
+					// Update bridge trace parent so MCP bridge tool calls nest under the current turn.
+					if l.bridgeTraceReg != nil && currentTurnSpanID != uuid.Nil {
+						traceKey := mcpbridge.BridgeTraceKey(l.agentUUID, req.Channel, req.PeerKind, req.ChatID)
+						l.bridgeTraceReg.Register(traceKey, mcpbridge.BridgeTraceCtx{
+							TraceID:      tracing.TraceIDFromContext(ctx),
+							ParentSpanID: currentTurnSpanID,
+							AgentID:      l.agentUUID,
+							TenantID:     store.TenantIDFromContext(ctx),
+							Collector:    tracing.CollectorFromContext(ctx),
+						})
+					}
+				}
+				// CLI turn end → close per-turn LLM sub-span with usage.
+				if chunk.TurnEnd && currentTurnSpanID != uuid.Nil {
+					turnResp := &providers.ChatResponse{FinishReason: "stop"}
+					if chunk.TurnUsage != nil {
+						turnResp.Usage = chunk.TurnUsage
+					}
+					l.emitLLMSpanEnd(ctx, currentTurnSpanID, currentTurnStart, turnResp, nil, opts...)
+					currentTurnSpanID = uuid.Nil
+					currentTurnCtx = nil
+				}
+
 				if chunk.Thinking != "" {
 					emitRun(AgentEvent{
 						Type:    protocol.ChatEventThinking,
@@ -305,7 +353,11 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 				if chunk.ToolName != "" && chunk.ToolCallID != "" {
 					inputJSON, _ := json.Marshal(chunk.ToolInput)
 					now := time.Now().UTC()
-					sid := l.emitToolSpanStart(ctx, now, chunk.ToolName, chunk.ToolCallID, string(inputJSON))
+					spanCtx := ctx
+					if currentTurnCtx != nil {
+						spanCtx = currentTurnCtx
+					}
+					sid := l.emitToolSpanStart(spanCtx, now, chunk.ToolName, chunk.ToolCallID, string(inputJSON))
 					cliToolSpans[chunk.ToolCallID] = cliToolSpan{spanID: sid, start: now, name: chunk.ToolName}
 					emitRun(AgentEvent{
 						Type:    protocol.AgentEventToolCall,
@@ -329,6 +381,20 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 					}
 				}
 			})
+			// Close any unclosed turn sub-span after streaming completes.
+			if currentTurnSpanID != uuid.Nil {
+				l.emitLLMSpanEnd(ctx, currentTurnSpanID, currentTurnStart, nil, nil, opts...)
+			}
+			// Rename outer LLM span to "session" when per-turn sub-spans were created.
+			if turnCounter > 0 {
+				if collector := tracing.CollectorFromContext(ctx); collector != nil {
+					traceID := tracing.TraceIDFromContext(ctx)
+					_, provName := l.resolveSpan(opts)
+					collector.EmitSpanUpdate(spanID, traceID, map[string]any{
+						"name": fmt.Sprintf("%s/%s session", provName, model),
+					})
+				}
+			}
 		} else {
 			resp, err = provider.Chat(ctx, chatReq)
 		}

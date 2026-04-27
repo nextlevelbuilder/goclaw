@@ -72,6 +72,20 @@ func (l *Loop) finalizeRun(
 		rs.finalContent += deduplicateMediaSuffix(rs.finalContent, req.ContentSuffix)
 	}
 
+	// Extract MEDIA: prefix from assistant content (fallback for agents that manually
+	// create media files via exec/browser tools instead of create_image/create_video).
+	if mr := parseMediaResult(rs.finalContent); mr != nil {
+		rs.mediaResults = append(rs.mediaResults, *mr)
+		slog.Debug("finalize: extracted MEDIA from assistant content", "path", mr.Path)
+	}
+
+	// Auto-detect workspace media paths in assistant content (even without MEDIA: prefix).
+	// Agents that manually create files via exec/browser sometimes output paths as plain text.
+	for _, mr := range extractWorkspaceMedia(rs.finalContent) {
+		rs.mediaResults = append(rs.mediaResults, mr)
+		slog.Info("finalize: auto-detected workspace media", "path", mr.Path, "mime", mr.ContentType)
+	}
+
 	// Collect forwarded media + dedup + populate sizes BEFORE saving to session,
 	// so we can attach output MediaRefs to the assistant message for history reload.
 	for _, mf := range req.ForwardMedia {

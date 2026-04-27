@@ -123,6 +123,20 @@ func buildDefaultChain(
 ) []MediaProviderEntry {
 	var chain []MediaProviderEntry
 	for _, name := range priority {
+		// Virtual provider types (e.g. "chatgpt_oauth") aren't registered by name.
+		// Find the first registered provider matching that DB type.
+		if name == "chatgpt_oauth" {
+			if found := findProviderByType(ctx, registry, "chatgpt_oauth"); found != "" {
+				entry := MediaProviderEntry{
+					Provider: found,
+					Model:    defaultModels[name],
+					Enabled:  true,
+				}
+				entry.applyDefaults()
+				chain = append(chain, entry)
+			}
+			continue
+		}
 		if _, err := registry.Get(ctx, name); err == nil {
 			entry := MediaProviderEntry{
 				Provider: name,
@@ -134,6 +148,20 @@ func buildDefaultChain(
 		}
 	}
 	return chain
+}
+
+// findProviderByType returns the first registered provider name matching the given DB type.
+func findProviderByType(ctx context.Context, registry *providers.Registry, dbType string) string {
+	for _, name := range registry.List(ctx) {
+		p, err := registry.Get(ctx, name)
+		if err != nil {
+			continue
+		}
+		if tp, ok := p.(typedProvider); ok && tp.ProviderType() == dbType {
+			return name
+		}
+	}
+	return ""
 }
 
 // ChainCallFn is the function signature for provider-specific API calls.
@@ -165,6 +193,13 @@ func ExecuteWithChain(
 	for _, entry := range chain {
 		p, err := registry.Get(ctx, entry.Provider)
 		if err != nil {
+			// Virtual provider types (e.g. "chatgpt_oauth") aren't registered by name.
+			// Resolve by scanning for a provider with a matching DB type.
+			if resolved := findProviderByType(ctx, registry, entry.Provider); resolved != "" {
+				p, err = registry.Get(ctx, resolved)
+			}
+		}
+		if err != nil {
 			slog.Warn("media_chain: provider not found, skipping",
 				"provider", entry.Provider, "error", err)
 			lastErr = fmt.Errorf("provider %q not available", entry.Provider)
@@ -179,9 +214,11 @@ func ExecuteWithChain(
 		// Inject resolved provider type into params so callProvider can route correctly.
 		// Clone params to avoid mutating the original entry config.
 		resolvedType := ResolveProviderType(p)
-		callParams := make(map[string]any, len(entry.Params)+1)
+		callParams := make(map[string]any, len(entry.Params)+2)
 		maps.Copy(callParams, entry.Params)
 		callParams["_provider_type"] = resolvedType
+		// Pass the raw provider so OAuth-based callProvider paths can get tokens.
+		callParams["_oauth_provider"] = p
 
 		// Retry loop for this provider
 		for attempt := 1; attempt <= entry.MaxRetries; attempt++ {
@@ -298,6 +335,7 @@ type typedProvider interface {
 // dbTypeToMediaType maps DB provider_type values to the media routing type
 // used by callProvider switch statements.
 var dbTypeToMediaType = map[string]string{
+	"chatgpt_oauth":    "chatgpt_oauth",
 	"gemini_native":    "gemini",
 	"openrouter":       "openrouter",
 	"minimax_native":   "minimax",

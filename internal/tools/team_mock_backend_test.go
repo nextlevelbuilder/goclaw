@@ -828,6 +828,7 @@ func (mb *mockBackend) TryPublishInbound(msg bus.InboundMessage) bool {
 	return true
 }
 
+func (mb *mockBackend) AutoSendTaskMedia(_ context.Context, _ uuid.UUID, _ *store.TeamTaskData) {}
 func (mb *mockBackend) BuildBlockerResultsSummary(_ context.Context, _ *store.TeamTaskData) string { return "" }
 func (mb *mockBackend) BuildRecentCommentsSummary(_ context.Context, _ uuid.UUID) string           { return "" }
 func (mb *mockBackend) RestoreTraceContext(ctx context.Context, _ *store.TeamTaskData) context.Context {

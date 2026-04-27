@@ -41,6 +41,15 @@ func (a *pgAutoInjector) Inject(ctx context.Context, params InjectParams) (*Inje
 		threshold = 0.3
 	}
 
+	// Broad-query detection: when the user asks about "all projects",
+	// multiple topics, or comprehensive listings, a 5-entry cap loses
+	// results spread across projects. Bump to 12 so each project gets
+	// adequate coverage.
+	broad := isBroadQuery(params.UserMessage)
+	if broad && maxEntries < 12 {
+		maxEntries = 12
+	}
+
 	// Phase 9: context-aware recall. When the caller supplied RecentContext,
 	// build a richer search query that captures conversational intent. Without
 	// this, vector search on "what's my favorite?" misses memories about the
@@ -127,7 +136,21 @@ func (a *pgAutoInjector) Inject(ctx context.Context, params InjectParams) (*Inje
 	}
 
 	if injected == 0 {
+		if broad || isTaskQuery(params.UserMessage) {
+			return &InjectResult{
+				Section:    "## Memory Context\n\nNo auto-injected memories matched. **You MUST call memory_search and vault_search** before answering — do not rely on conversation history alone for task/project queries.\n",
+				MatchCount: len(results),
+			}, nil
+		}
 		return &InjectResult{MatchCount: len(results)}, nil
+	}
+
+	// Append recall hints based on query type.
+	switch {
+	case broad:
+		sb.WriteString("\n⚠️ Broad/multi-project query detected. The above memory is a partial snapshot — **you MUST call memory_search and vault_search** with targeted queries per project/topic to ensure complete results.\n")
+	case isTaskQuery(params.UserMessage):
+		sb.WriteString("\n⚠️ Task/project query detected. Auto-injected memory above is a summary only — **call memory_search and vault_search** for complete task details, deadlines, and action items before answering.\n")
 	}
 
 	result := &InjectResult{

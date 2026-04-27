@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
@@ -24,17 +25,25 @@ type credentialProvider interface {
 	APIBase() string
 }
 
+// oauthImageProvider is implemented by OAuth-based providers (e.g. CodexProvider)
+// that can generate images via the ChatGPT conversation API.
+type oauthImageProvider interface {
+	OAuthToken() (string, error)
+	OAuthAPIBase() string
+}
+
 // imageGenProviderPriority is the default order for image generation providers.
-var imageGenProviderPriority = []string{"openrouter", "gemini", "openai", "minimax", "dashscope", "byteplus"}
+var imageGenProviderPriority = []string{"chatgpt_oauth", "openrouter", "gemini", "openai", "minimax", "dashscope", "byteplus"}
 
 // imageGenModelDefaults maps provider names to default image generation models.
 var imageGenModelDefaults = map[string]string{
-	"openrouter": "google/gemini-2.5-flash-image",
-	"openai":     "gpt-image-1.5",
-	"gemini":     "gemini-2.5-flash-image",
-	"minimax":    "image-01",
-	"dashscope":  "wan2.6-image",
-	"byteplus":   "seedream-5-0-260128",
+	"chatgpt_oauth": "gpt-image-2",
+	"openrouter":    "google/gemini-2.5-flash-image",
+	"openai":        "gpt-image-1.5",
+	"gemini":        "gemini-2.5-flash-image",
+	"minimax":       "image-01",
+	"dashscope":     "wan2.6-image",
+	"byteplus":      "seedream-5-0-260128",
 }
 
 // CreateImageTool generates images using an image generation API.
@@ -142,16 +151,28 @@ func (t *CreateImageTool) Execute(ctx context.Context, args map[string]any) *Res
 
 // callProvider dispatches to the correct image generation implementation based on provider type.
 func (t *CreateImageTool) callProvider(ctx context.Context, cp credentialProvider, providerName, model string, params map[string]any) ([]byte, *providers.Usage, error) {
-	if cp == nil {
-		return nil, nil, fmt.Errorf("provider %q does not expose API credentials required for image generation", providerName)
-	}
 	prompt := GetParamString(params, "prompt", "")
 	aspectRatio := GetParamString(params, "aspect_ratio", "1:1")
 
 	slog.Info("create_image: calling image generation API",
 		"provider", providerName, "model", model, "aspect_ratio", aspectRatio)
 
-	switch GetParamString(params, "_provider_type", providerTypeFromName(providerName)) {
+	providerType := GetParamString(params, "_provider_type", providerTypeFromName(providerName))
+
+	// OAuth-based providers (ChatGPT) use conversation API — no static credentials needed.
+	if providerType == "chatgpt_oauth" {
+		oap, _ := params["_oauth_provider"].(oauthImageProvider)
+		if oap == nil {
+			return nil, nil, fmt.Errorf("provider %q: OAuth token source not available", providerName)
+		}
+		return t.callChatGPTImageGen(ctx, oap, model, prompt, aspectRatio)
+	}
+
+	if cp == nil {
+		return nil, nil, fmt.Errorf("provider %q does not expose API credentials required for image generation", providerName)
+	}
+
+	switch providerType {
 	case "gemini":
 		return t.callGeminiNativeImageGen(ctx, cp.APIKey(), cp.APIBase(), model, prompt, params)
 	case "openrouter":
@@ -266,6 +287,223 @@ func (t *CreateImageTool) callStandardImageGenAPI(ctx context.Context, apiKey, a
 	imageBytes, err := base64.StdEncoding.DecodeString(imgResp.Data[0].B64JSON)
 	if err != nil {
 		return nil, nil, fmt.Errorf("decode base64: %w", err)
+	}
+
+	return imageBytes, nil, nil
+}
+
+// callChatGPTImageGen uses the ChatGPT conversation API to generate images via OAuth.
+// This calls /backend-api/conversation (not /codex/responses) which supports image models.
+func (t *CreateImageTool) callChatGPTImageGen(ctx context.Context, oap oauthImageProvider, model, prompt, aspectRatio string) ([]byte, *providers.Usage, error) {
+	token, err := oap.OAuthToken()
+	if err != nil {
+		return nil, nil, fmt.Errorf("get OAuth token: %w", err)
+	}
+
+	apiBase := strings.TrimRight(oap.OAuthAPIBase(), "/")
+
+	// Fetch sentinel chat-requirements token (required by ChatGPT backend).
+	sentinelToken := t.fetchSentinelToken(ctx, apiBase, token)
+	slog.Info("create_image: chatgpt sentinel", "has_token", sentinelToken != "", "token_len", len(sentinelToken))
+
+	msgID := uuid.New().String()
+	parentID := uuid.New().String()
+
+	fullPrompt := prompt
+	if aspectRatio != "" && aspectRatio != "1:1" {
+		fullPrompt += fmt.Sprintf(" (aspect ratio: %s)", aspectRatio)
+	}
+
+	now := float64(time.Now().Unix())
+	body := map[string]any{
+		"action": "next",
+		"messages": []map[string]any{
+			{
+				"id":     msgID,
+				"author": map[string]any{"role": "user"},
+				"content": map[string]any{
+					"content_type": "text",
+					"parts":        []string{fullPrompt},
+				},
+				"metadata": map[string]any{
+					"serialization_metadata": map[string]any{"custom_symbol_offsets": []any{}},
+					"system_hints":           []string{"picture_v2"},
+				},
+				"create_time": now,
+			},
+		},
+		"parent_message_id":                  parentID,
+		"model":                              "auto",
+		"conversation_mode":                  map[string]any{"kind": "primary_assistant"},
+		"system_hints":                       []string{"picture_v2"},
+		"timezone_offset_min":                -420,
+		"timezone":                           "Asia/Ho_Chi_Minh",
+		"enable_message_followups":           true,
+		"supports_buffering":                 true,
+		"supported_encodings":                []string{"v1"},
+		"paragen_cot_summary_display_override": "allow",
+		"client_contextual_info": map[string]any{
+			"is_dark_mode":    false,
+			"time_since_loaded": 30,
+			"page_height":     900,
+			"page_width":      1440,
+			"pixel_ratio":     2,
+			"screen_height":   900,
+			"screen_width":    1440,
+		},
+		"history_and_training_disabled": true,
+	}
+
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	url := apiBase + "/conversation"
+	slog.Debug("create_image: chatgpt request body", "body", string(jsonBody))
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonBody))
+	if err != nil {
+		return nil, nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "text/event-stream")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+	req.Header.Set("Origin", "https://chatgpt.com")
+	req.Header.Set("Referer", "https://chatgpt.com/")
+	if sentinelToken != "" {
+		req.Header.Set("Openai-Sentinel-Chat-Requirements-Token", sentinelToken)
+	}
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, nil, fmt.Errorf("http request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		slog.Warn("create_image: chatgpt conversation error", "status", resp.StatusCode, "body", string(respBody), "has_sentinel", sentinelToken != "")
+		return nil, nil, fmt.Errorf("ChatGPT API error %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	slog.Info("create_image: chatgpt conversation streaming started")
+	return t.parseChatGPTImageSSE(ctx, resp.Body, token, apiBase)
+}
+
+// fetchSentinelToken retrieves the chat-requirements token from ChatGPT backend.
+func (t *CreateImageTool) fetchSentinelToken(ctx context.Context, apiBase, token string) string {
+	url := apiBase + "/sentinel/chat-requirements"
+	body := []byte(`{"p":null}`)
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
+	if err != nil {
+		slog.Warn("create_image: sentinel request creation failed", "error", err)
+		return ""
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		slog.Warn("create_image: sentinel request failed", "error", err)
+		return ""
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+
+	var result struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return ""
+	}
+	return result.Token
+}
+
+// parseChatGPTImageSSE reads the SSE stream from ChatGPT conversation API
+// and extracts the generated image URL, then downloads it.
+func (t *CreateImageTool) parseChatGPTImageSSE(ctx context.Context, body io.Reader, token, apiBase string) ([]byte, *providers.Usage, error) {
+	scanner := providers.NewSSEScanner(body)
+	var imageURL string
+
+	for scanner.Next() {
+		data := scanner.Data()
+		if data == "[DONE]" {
+			break
+		}
+
+		var event struct {
+			Message *struct {
+				Content struct {
+					ContentType string `json:"content_type"`
+					Parts       []any  `json:"parts"`
+				} `json:"content"`
+				Metadata *struct {
+					Dalle *struct {
+						PromptRevision string `json:"prompt_revision,omitempty"`
+					} `json:"dalle,omitempty"`
+				} `json:"metadata,omitempty"`
+			} `json:"message,omitempty"`
+		}
+
+		if err := json.Unmarshal([]byte(data), &event); err != nil {
+			continue
+		}
+
+		if event.Message == nil {
+			continue
+		}
+
+		ct := event.Message.Content.ContentType
+		if ct == "multimodal_text" || ct == "image_asset_pointer" {
+			for _, part := range event.Message.Content.Parts {
+				partMap, ok := part.(map[string]any)
+				if !ok {
+					continue
+				}
+				// Image asset pointer format
+				if assetPointer, ok := partMap["asset_pointer"].(string); ok && strings.HasPrefix(assetPointer, "file-service://") {
+					fileID := strings.TrimPrefix(assetPointer, "file-service://")
+					imageURL = apiBase + "/files/" + fileID + "/download"
+				}
+			}
+		}
+	}
+
+	if imageURL == "" {
+		return nil, nil, fmt.Errorf("no image generated in ChatGPT response")
+	}
+
+	// Download the image using the same OAuth token
+	slog.Info("create_image: downloading ChatGPT generated image", "url", imageURL)
+	imgReq, err := http.NewRequestWithContext(ctx, "GET", imageURL, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create download request: %w", err)
+	}
+	imgReq.Header.Set("Authorization", "Bearer "+token)
+
+	client := &http.Client{}
+	imgResp, err := client.Do(imgReq)
+	if err != nil {
+		return nil, nil, fmt.Errorf("download image: %w", err)
+	}
+	defer imgResp.Body.Close()
+
+	if imgResp.StatusCode != http.StatusOK {
+		return nil, nil, fmt.Errorf("image download error %d", imgResp.StatusCode)
+	}
+
+	imageBytes, err := limitedReadAll(imgResp.Body, maxMediaDownloadBytes)
+	if err != nil {
+		return nil, nil, fmt.Errorf("read image: %w", err)
 	}
 
 	return imageBytes, nil, nil

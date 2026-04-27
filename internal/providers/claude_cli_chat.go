@@ -169,6 +169,9 @@ func (p *ClaudeCLIProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 
 	var finalResp ChatResponse
 	var contentBuf strings.Builder
+	var turnOpen bool
+	var turnModel string
+	var turnUsage *cliUsage
 
 	for scanner.Scan() {
 		if ctx.Err() != nil {
@@ -195,6 +198,15 @@ func (p *ClaudeCLIProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 			if ev.Message == nil {
 				continue
 			}
+			// Close previous turn before starting a new one.
+			if turnOpen {
+				onChunk(StreamChunk{TurnEnd: true, TurnModel: turnModel, TurnUsage: cliUsageToUsage(turnUsage)})
+			}
+			turnModel = ev.Message.Model
+			turnUsage = ev.Message.Usage
+			turnOpen = true
+			onChunk(StreamChunk{TurnStart: true, TurnModel: turnModel})
+
 			text, thinking, toolChunks := extractStreamContentWithTools(ev.Message)
 			if text != "" {
 				contentBuf.WriteString(text)
@@ -207,7 +219,20 @@ func (p *ClaudeCLIProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 				onChunk(tc)
 			}
 
+		case "user":
+			if ev.Message == nil {
+				continue
+			}
+			_, _, toolChunks := extractStreamContentWithTools(ev.Message)
+			for _, tc := range toolChunks {
+				onChunk(tc)
+			}
+
 		case "result":
+			if turnOpen {
+				onChunk(StreamChunk{TurnEnd: true, TurnModel: turnModel, TurnUsage: cliUsageToUsage(turnUsage)})
+				turnOpen = false
+			}
 			if ev.Result != "" {
 				finalResp.Content = ev.Result
 			} else {
@@ -225,6 +250,10 @@ func (p *ClaudeCLIProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 				}
 			}
 		}
+	}
+	// Close any remaining open turn after stream ends.
+	if turnOpen {
+		onChunk(StreamChunk{TurnEnd: true, TurnModel: turnModel, TurnUsage: cliUsageToUsage(turnUsage)})
 	}
 
 	// Context cancelled (abort): best-effort reap (bounded by WaitDelay), then return.
@@ -259,4 +288,17 @@ func (p *ClaudeCLIProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 
 	onChunk(StreamChunk{Done: true})
 	return &finalResp, nil
+}
+
+func cliUsageToUsage(u *cliUsage) *Usage {
+	if u == nil {
+		return nil
+	}
+	return &Usage{
+		PromptTokens:        u.InputTokens,
+		CompletionTokens:    u.OutputTokens,
+		TotalTokens:         u.InputTokens + u.OutputTokens,
+		CacheCreationTokens: u.CacheCreationInputTokens,
+		CacheReadTokens:     u.CacheReadInputTokens,
+	}
 }
