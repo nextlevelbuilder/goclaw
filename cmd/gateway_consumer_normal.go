@@ -284,8 +284,13 @@ func processNormalMessage(
 	// WHICH entity is in scope, not WHAT the data is. See
 	// plans/bitrix24-mcp-refactor/reports/event-payloads.md for the metadata
 	// contract and the phase plan for the optional pre-fetch upgrade.
-	if et := msg.Metadata["bitrix_chat_entity_type"]; et != "" {
-		if eid := msg.Metadata["bitrix_chat_entity_id"]; eid != "" {
+	if et, eid := msg.Metadata["bitrix_chat_entity_type"], msg.Metadata["bitrix_chat_entity_id"]; et != "" && eid != "" {
+		// Defense-in-depth against prompt injection from webhook-sourced metadata.
+		// Bitrix server-side normally constrains these to short alphanumeric ids
+		// (e.g. "DEAL|2064", "TASKS"), but treating them as untrusted prevents a
+		// malicious or compromised portal from steering the system prompt via
+		// crafted CHAT_ENTITY_ID values.
+		if isSafeBitrixEntityToken(et, 64) && isSafeBitrixEntityToken(eid, 128) {
 			if extraPrompt != "" {
 				extraPrompt += "\n\n"
 			}
@@ -298,6 +303,9 @@ func processNormalMessage(
 					"Do not ask the user which deal/task this is; you already know.",
 				et, eid, eid,
 			)
+		} else {
+			slog.Warn("security.bitrix24.entity_metadata_rejected",
+				"channel", msg.Channel, "et_len", len(et), "eid_len", len(eid))
 		}
 	}
 
@@ -564,4 +572,23 @@ func processNormalMessage(
 			go autoSetFollowup(ctx, deps.TeamStore, deps.AgentStore, agentKey, channel, chatID, replyContent)
 		}
 	}(agentID, msg.Channel, msg.ChatID, sessionKey, runID, peerKind, msg.Content, outMeta, blockReply, ptd, msg.TenantID, agentLoop.UUID(), agentLoop.OtherConfig())
+}
+
+// isSafeBitrixEntityToken validates a webhook-sourced Bitrix entity token before
+// it is interpolated into the agent system prompt. Rejects empty, oversized, or
+// control-character payloads to prevent prompt-injection from a crafted portal
+// event. Allowed character set is intentionally permissive (Bitrix entity ids
+// include letters, digits, '|', '_', '-') — the goal is to block newlines and
+// formatting characters that could break out of the prompt template, not to
+// enforce a strict id grammar.
+func isSafeBitrixEntityToken(s string, maxLen int) bool {
+	if s == "" || len(s) > maxLen {
+		return false
+	}
+	for _, r := range s {
+		if r < 0x20 || r == 0x7f {
+			return false
+		}
+	}
+	return true
 }
