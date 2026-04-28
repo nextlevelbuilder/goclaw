@@ -79,6 +79,13 @@ func CheckFileWriterPermission(ctx context.Context, permStore ConfigPermissionSt
 	if isAdminRole(ctx) {
 		return nil
 	}
+	// Bootstrap: if no file_writer grants exist for this agent+scope, allow.
+	// Matches buildGroupWriterPrompt's fail-open when len(writers)==0.
+	// Once the first /addwriter creates a grant, the permission gate activates.
+	writers, wErr := permStore.ListFileWriters(ctx, agentID, userID)
+	if wErr == nil && len(writers) == 0 {
+		return nil
+	}
 	senderID := SenderIDFromContext(ctx)
 	if senderID == "" || isSyntheticSender(senderID) {
 		return fmt.Errorf("permission denied: system context cannot write files in group chats. If this is a legitimate user action, ensure the acting sender is preserved through the tool chain")

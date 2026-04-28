@@ -431,6 +431,7 @@ func extractQuotedText(msg *waE2E.Message) string {
 
 // isMentioned checks if the linked account is @mentioned in a group message.
 // WhatsApp uses dual identity: phone JID and LID. Mentions may use either format.
+// Detects: explicit @mention, reply-to-bot (implicit), and @mention in media captions.
 func (c *Channel) isMentioned(evt *events.Message) bool {
 	c.lastQRMu.RLock()
 	myJID := c.myJID
@@ -441,19 +442,72 @@ func (c *Channel) isMentioned(evt *events.Message) bool {
 		return false // fail closed: unknown identity = not mentioned
 	}
 
-	// Check mentioned JIDs from extended text.
+	// 1. ExtendedTextMessage — explicit @mention + reply-to-bot detection.
 	if ext := evt.Message.GetExtendedTextMessage(); ext != nil {
 		if ci := ext.GetContextInfo(); ci != nil {
-			for _, jidStr := range ci.GetMentionedJID() {
-				mentioned, _ := types.ParseJID(jidStr)
-				if !myJID.IsEmpty() && mentioned.User == myJID.User {
-					return true
-				}
-				if !myLID.IsEmpty() && mentioned.User == myLID.User {
+			if c.checkMentionedJIDs(ci.GetMentionedJID(), myJID, myLID) {
+				return true
+			}
+			// Reply to bot's message = implicit mention.
+			// WhatsApp sets Participant to the sender JID of the quoted message.
+			if p := ci.GetParticipant(); p != "" {
+				if c.jidMatchesBot(p, myJID, myLID) {
 					return true
 				}
 			}
 		}
+	}
+
+	// 2. Media messages — @mention in caption.
+	// ImageMessage, VideoMessage, DocumentMessage each carry their own ContextInfo
+	// with MentionedJID when the caption contains @mentions.
+	if img := evt.Message.GetImageMessage(); img != nil {
+		if ci := img.GetContextInfo(); ci != nil {
+			if c.checkMentionedJIDs(ci.GetMentionedJID(), myJID, myLID) {
+				return true
+			}
+		}
+	}
+	if vid := evt.Message.GetVideoMessage(); vid != nil {
+		if ci := vid.GetContextInfo(); ci != nil {
+			if c.checkMentionedJIDs(ci.GetMentionedJID(), myJID, myLID) {
+				return true
+			}
+		}
+	}
+	if doc := evt.Message.GetDocumentMessage(); doc != nil {
+		if ci := doc.GetContextInfo(); ci != nil {
+			if c.checkMentionedJIDs(ci.GetMentionedJID(), myJID, myLID) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// checkMentionedJIDs checks if any of the mentioned JIDs match the bot's identity.
+func (c *Channel) checkMentionedJIDs(jids []string, myJID, myLID types.JID) bool {
+	for _, jidStr := range jids {
+		mentioned, _ := types.ParseJID(jidStr)
+		if !myJID.IsEmpty() && mentioned.User == myJID.User {
+			return true
+		}
+		if !myLID.IsEmpty() && mentioned.User == myLID.User {
+			return true
+		}
+	}
+	return false
+}
+
+// jidMatchesBot checks if a JID string matches the bot's phone JID or LID.
+func (c *Channel) jidMatchesBot(jidStr string, myJID, myLID types.JID) bool {
+	parsed, _ := types.ParseJID(jidStr)
+	if !myJID.IsEmpty() && parsed.User == myJID.User {
+		return true
+	}
+	if !myLID.IsEmpty() && parsed.User == myLID.User {
+		return true
 	}
 	return false
 }
