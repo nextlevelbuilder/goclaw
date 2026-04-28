@@ -489,7 +489,16 @@ func runGateway() {
 		// is loaded for that portal. Idempotent; no-op on sqlite-lite.
 		if pgStores.BitrixPortals != nil {
 			if err := bitrix24.BootstrapPortals(context.Background(), pgStores.BitrixPortals, bitrixEncKey); err != nil {
-				slog.Warn("bitrix24 bootstrap failed", "err", err)
+				// Surface the missing-table case loudly so an operator notices
+				// without having to grep logs — bitrix24 channels silently
+				// no-op until `goclaw migrate up` runs migration 000058.
+				if strings.Contains(err.Error(), "bitrix_portals") &&
+					(strings.Contains(err.Error(), "does not exist") || strings.Contains(err.Error(), "no such table")) {
+					slog.Warn("bitrix24 bootstrap skipped — bitrix_portals table missing; run `goclaw migrate up` (migration 000058) to enable Bitrix24 channels",
+						"err", err)
+				} else {
+					slog.Warn("bitrix24 bootstrap failed", "err", err)
+				}
 			}
 		}
 	}
