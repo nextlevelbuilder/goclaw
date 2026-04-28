@@ -48,6 +48,7 @@ type RunContext struct {
 
 	// Workspace
 	Workspace          string
+	DefaultTimezone    string // system default IANA timezone (e.g. "Asia/Ho_Chi_Minh")
 	TeamWorkspace      string
 	TeamID             string
 	WorkspaceChannel   string

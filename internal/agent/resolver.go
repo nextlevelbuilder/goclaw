@@ -497,7 +497,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			ContextFileLoader:      deps.ContextFileLoader,
 			BootstrapCleanup:       deps.BootstrapCleanup,
 			CacheInvalidate:        deps.CacheInvalidate,
-			DefaultTimezone:        deps.DefaultTimezone,
+			DefaultTimezone:        resolveDefaultTimezone(ctx, deps),
 			OnEvent:                deps.OnEvent,
 			TraceCollector:         deps.TraceCollector,
 			InjectionAction:        deps.InjectionAction,
@@ -609,4 +609,16 @@ func derefInt(p *int) int {
 		return 0
 	}
 	return *p
+}
+
+// resolveDefaultTimezone reads the current cron.default_timezone from the
+// SystemConfigs store so newly-resolved Loops always get the latest DB value
+// (not the frozen startup snapshot in deps.DefaultTimezone).
+func resolveDefaultTimezone(ctx context.Context, deps ResolverDeps) string {
+	if deps.SystemConfigs != nil {
+		if raw, err := deps.SystemConfigs.Get(ctx, "cron.default_timezone"); err == nil && raw != "" {
+			return raw
+		}
+	}
+	return deps.DefaultTimezone
 }

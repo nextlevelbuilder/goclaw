@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -331,6 +332,8 @@ func buildTimeSection(defaultTimezone string) []string {
 				utcNow.Format("2006-01-02 Monday"), utcNow.Format("15:04"),
 				localNow.Format("2006-01-02 Monday"), localNow.Format("15:04"),
 				defaultTimezone)
+		} else {
+			slog.Warn("agent.invalid_default_timezone", "tz", defaultTimezone, "err", err)
 		}
 	}
 	return []string{dateLine, ""}
