@@ -164,6 +164,10 @@ type SystemPromptConfig struct {
 	// DefaultTimezone is the system's configured IANA timezone (e.g. "Asia/Ho_Chi_Minh").
 	// Used to show local date/time alongside UTC in the time section.
 	DefaultTimezone string
+
+	// SharedKGIDs lists the agent's knowledge graph scope IDs (e.g. "project-sovereign").
+	// Populated from WorkspaceSharingConfig when ShareKnowledgeGraph is enabled.
+	SharedKGIDs []string
 }
 
 // sectionContent returns override content if provider contribution has one,
@@ -452,9 +456,9 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 	if cfg.HasMemory {
 		if isFull {
 			hasMemoryGet := slices.Contains(cfg.ToolNames, "memory_get")
-			lines = append(lines, buildMemoryRecallSection(hasMemoryGet, cfg.HasMemoryExpand, cfg.HasKnowledgeGraph)...)
+			lines = append(lines, buildMemoryRecallSection(hasMemoryGet, cfg.HasMemoryExpand, cfg.HasKnowledgeGraph, cfg.SharedKGIDs)...)
 		} else if isTask {
-			lines = append(lines, buildMemoryRecallSlimSection(cfg.HasMemoryExpand)...)
+			lines = append(lines, buildMemoryRecallSlimSection(cfg.HasMemoryExpand, cfg.SharedKGIDs)...)
 		} else if isMinimal {
 			lines = append(lines, buildMemoryRecallMinimalSection()...)
 		}

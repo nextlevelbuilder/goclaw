@@ -85,13 +85,20 @@ func buildSafetySlimSection() []string {
 }
 
 // buildMemoryRecallSlimSection generates a concise memory instruction for task mode.
-func buildMemoryRecallSlimSection(hasMemoryExpand bool) []string {
+func buildMemoryRecallSlimSection(hasMemoryExpand bool, sharedKGIDs []string) []string {
 	line := "Before answering about prior work/decisions: call memory_search."
 	if hasMemoryExpand {
 		line += " Use memory_expand(id) for full session details from episodic results."
 	}
 	line += " If no results, say so naturally."
-	return []string{line, ""}
+	lines := []string{line}
+	if len(sharedKGIDs) > 0 {
+		lines = append(lines,
+			fmt.Sprintf("Your knowledge graph scopes (%d): %s. Use the `scope` parameter in knowledge_graph_search to filter by a specific scope.",
+				len(sharedKGIDs), strings.Join(sharedKGIDs, ", ")))
+	}
+	lines = append(lines, "")
+	return lines
 }
 
 // buildMemoryRecallMinimalSection generates a 1-line memory instruction for minimal mode.
@@ -259,7 +266,7 @@ func buildToolCallStyleSection() []string {
 }
 
 // buildMemoryRecallSection generates the ## Memory Recall section for the system prompt.
-func buildMemoryRecallSection(hasMemoryGet, hasMemoryExpand, hasKG bool) []string {
+func buildMemoryRecallSection(hasMemoryGet, hasMemoryExpand, hasKG bool, sharedKGIDs []string) []string {
 	lines := []string{"## Memory Recall", ""}
 
 	// 3-tier explanation so agent understands the architecture
@@ -293,6 +300,11 @@ func buildMemoryRecallSection(hasMemoryGet, hasMemoryExpand, hasKG bool) []strin
 		lines = append(lines,
 			"Also run knowledge_graph_search when the question involves people, teams, projects, or connections — "+
 				"it finds multi-hop relationship paths that memory_search misses.")
+		if len(sharedKGIDs) > 0 {
+			lines = append(lines,
+				fmt.Sprintf("Your knowledge graph scopes (%d): %s. Use the `scope` parameter in knowledge_graph_search to filter by a specific scope.",
+					len(sharedKGIDs), strings.Join(sharedKGIDs, ", ")))
+		}
 	}
 
 	lines = append(lines, "")

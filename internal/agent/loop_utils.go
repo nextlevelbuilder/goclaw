@@ -64,6 +64,14 @@ func (l *Loop) shouldShareKnowledgeGraph() bool {
 	return l.workspaceSharing != nil && l.workspaceSharing.ShareKnowledgeGraph
 }
 
+// sharedKGIDs returns the list of knowledge graph scope IDs configured for this agent.
+func (l *Loop) sharedKGIDs() []string {
+	if l.workspaceSharing == nil || !l.workspaceSharing.ShareKnowledgeGraph {
+		return nil
+	}
+	return l.workspaceSharing.SharedKGIDs
+}
+
 // shouldShareSessions returns true if sessions should be shared across
 // all users/groups of the agent (no per-group session scoping).
 func (l *Loop) shouldShareSessions() bool {
