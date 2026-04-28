@@ -16,6 +16,11 @@ type TokenCounter interface {
 	// including per-message overhead (role tokens, separators).
 	CountMessages(model string, msgs []providers.Message) int
 
+	// CountToolSchemas returns token count for a slice of tool definitions
+	// serialised as JSON (the form sent to the LLM provider).
+	// Returns 0 for nil or empty slice.
+	CountToolSchemas(model string, tools []providers.ToolDefinition) int
+
 	// ModelContextWindow returns max context tokens for a model.
 	// Falls back to provider default if model unknown.
 	ModelContextWindow(model string) int

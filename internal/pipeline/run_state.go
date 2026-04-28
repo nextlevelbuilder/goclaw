@@ -111,4 +111,7 @@ type MediaResult struct {
 	ContentType string
 	Size        int64
 	AsVoice     bool
+	// Prompt is the generation prompt for AI-generated media (e.g. create_image).
+	// Empty for user-uploaded or non-generated files.
+	Prompt string
 }

@@ -232,7 +232,10 @@
       "addProvider": "Thêm provider",
       "cancel": "Hủy",
       "save": "Lưu",
-      "saving": "Đang lưu..."
+      "saving": "Đang lưu...",
+      "imageModelLabel": "Mô hình ảnh",
+      "imageModelDefaultOption": "Mặc định · gpt-image-2 (khuyến nghị)",
+      "imageModelLegacyOption": "Cũ · gpt-image-1.5"
     },
     "toast": {
       "toggled": "Đã cập nhật công cụ",

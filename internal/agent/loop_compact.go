@@ -87,13 +87,15 @@ func (l *Loop) compactMessagesInPlace(ctx context.Context, messages []providers.
 	sctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
+	inTokens := l.estimateSummaryInputTokens(toSummarize)
+	slog.Info("compact_budget", "agent", l.id, "in_tokens", inTokens, "out_tokens", dynamicSummaryMax(inTokens))
 	resp, err := l.provider.Chat(sctx, providers.ChatRequest{
 		Messages: []providers.Message{{
 			Role:    "user",
 			Content: compactionSummaryPrompt + sb.String(),
 		}},
 		Model:   l.model,
-		Options: map[string]any{"max_tokens": 1024, "temperature": 0.3},
+		Options: map[string]any{"max_tokens": dynamicSummaryMax(inTokens), "temperature": 0.3},
 	})
 	if err != nil {
 		slog.Warn("mid_loop_compaction_failed", "agent", l.id, "error", err)
@@ -128,4 +130,26 @@ func (l *Loop) compactMessagesInPlace(ctx context.Context, messages []providers.
 		"kept", len(result))
 
 	return result
+}
+
+// dynamicSummaryMax returns the output-token budget for a compaction or
+// summarization call, scaled to input size. Formula: in/25 (~4% compression),
+// clamped to [1024, 8192]. Floor keeps short summaries coherent; cap prevents
+// runaway output billing on pathological inputs.
+func dynamicSummaryMax(inputTokens int) int {
+	out := min(max(inputTokens/25, 1024), 8192)
+	return out
+}
+
+// estimateSummaryInputTokens returns a best-effort input-token count. Prefers
+// TokenCounter when attached; else rune/3 fallback (~±15% for UTF-8).
+func (l *Loop) estimateSummaryInputTokens(messages []providers.Message) int {
+	if l.tokenCounter != nil {
+		return l.tokenCounter.CountMessages(l.model, messages)
+	}
+	total := 0
+	for _, m := range messages {
+		total += len([]rune(m.Content)) / 3
+	}
+	return total
 }

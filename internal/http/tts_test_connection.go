@@ -60,7 +60,7 @@ var providersRequiringAPIKey = map[string]bool{
 	"gemini":     true,
 }
 
-const testConnectionTimeout = 10 * time.Second
+const defaultTestConnectionTimeoutMs = 120000 // 120s default; req.TimeoutMs > tenant > default
 
 // handleTestConnection serves POST /v1/tts/test-connection.
 // Creates an ephemeral provider from request credentials and tests synthesis.
@@ -127,8 +127,15 @@ func (h *TTSHandler) handleTestConnection(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Synthesize short test text.
-	synthCtx, cancel := context.WithTimeout(ctx, testConnectionTimeout)
+	// Synthesize short test text — req.TimeoutMs overrides tenant which overrides default 120s.
+	effectiveMs := req.TimeoutMs
+	if effectiveMs <= 0 {
+		effectiveMs = loadTenantTTSTimeoutMs(ctx, h.systemConfigs)
+	}
+	if effectiveMs <= 0 {
+		effectiveMs = defaultTestConnectionTimeoutMs
+	}
+	synthCtx, cancel := context.WithTimeout(ctx, time.Duration(effectiveMs)*time.Millisecond)
 	defer cancel()
 
 	start := time.Now()
@@ -162,6 +169,13 @@ func (h *TTSHandler) handleTestConnection(w http.ResponseWriter, r *http.Request
 			slog.Warn("tts.test-connection.invalid-params", "provider", req.Provider, "error", err)
 			writeJSON(w, http.StatusUnprocessableEntity, testConnectionResponse{
 				Success: false, Error: i18n.T(locale, i18n.MsgTtsGeminiInvalidModel, req.ModelID),
+			})
+			return
+		}
+		if errors.Is(err, gemini.ErrTextOnlyResponse) {
+			slog.Warn("tts.test-connection.text-only", "provider", req.Provider, "error", err)
+			writeJSON(w, http.StatusUnprocessableEntity, testConnectionResponse{
+				Success: false, Error: i18n.T(locale, i18n.MsgTtsGeminiTextOnly),
 			})
 			return
 		}

@@ -35,9 +35,9 @@ type ProvidersHandler struct {
 	cliMu           sync.Mutex                       // serializes Claude CLI provider create to prevent duplicates
 	msgBus          *bus.MessageBus
 	sysConfigStore  store.SystemConfigStore
-	tracingStore    store.TracingStore        // optional: for provider-scoped pool activity
-	agents          store.AgentCRUDStore      // optional: for provider pool activity agent lookup
-	modelReg        providers.ModelRegistry   // optional: forward-compat model resolver for Anthropic
+	tracingStore    store.TracingStore      // optional: for provider-scoped pool activity
+	agents          store.AgentCRUDStore    // optional: for provider pool activity agent lookup
+	modelReg        providers.ModelRegistry // optional: forward-compat model resolver for Anthropic
 }
 
 // NewProvidersHandler creates a handler for provider management endpoints.
@@ -328,7 +328,11 @@ func (h *ProvidersHandler) handleListProviders(w http.ResponseWriter, r *http.Re
 		maskAPIKey(&providers[i])
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"providers": providers})
+	publicProviders := make([]store.LLMProviderData, 0, len(providers))
+	for i := range providers {
+		publicProviders = append(publicProviders, canonicalizeProviderForResponse(&providers[i]))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"providers": publicProviders})
 }
 
 func (h *ProvidersHandler) handleCreateProvider(w http.ResponseWriter, r *http.Request) {
@@ -399,7 +403,8 @@ func (h *ProvidersHandler) handleCreateProvider(w http.ResponseWriter, r *http.R
 
 	emitAudit(h.msgBus, r, "provider.created", "provider", p.ID.String())
 	maskAPIKey(&p)
-	writeJSON(w, http.StatusCreated, p)
+	publicProvider := canonicalizeProviderForResponse(&p)
+	writeJSON(w, http.StatusCreated, publicProvider)
 }
 
 func (h *ProvidersHandler) handleGetProvider(w http.ResponseWriter, r *http.Request) {
@@ -417,7 +422,8 @@ func (h *ProvidersHandler) handleGetProvider(w http.ResponseWriter, r *http.Requ
 	}
 
 	maskAPIKey(p)
-	writeJSON(w, http.StatusOK, p)
+	publicProvider := canonicalizeProviderForResponse(p)
+	writeJSON(w, http.StatusOK, publicProvider)
 }
 
 func (h *ProvidersHandler) handleUpdateProvider(w http.ResponseWriter, r *http.Request) {

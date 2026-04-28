@@ -92,7 +92,7 @@ All notable changes to GoClaw are documented here. For full documentation, see [
   }
   ```
 
-### Features
+### New Features
 
 - **Discord message components (buttons).** `send_discord_embed` now accepts an
   optional `components` array of action rows, each containing 1-5 buttons.
@@ -113,6 +113,19 @@ All notable changes to GoClaw are documented here. For full documentation, see [
   slash commands: deferred ACK within 3s, followup via
   `InteractionResponseEdit` / `FollowupMessageCreate`, fall back to a regular
   channel post past the 15-min token TTL.
+
+- **Pancake private-reply (comment → DM).** Enables a one-time DM to commenters
+  after the public reply. Stateless on GoClaw side — no DB dedup table, no
+  in-memory state:
+  - Config: `features.private_reply` (bool) + `private_reply_message` (text).
+  - **Template variables** `{{commenter_name}}` and `{{post_title}}` with
+    literal-replace semantics (pre-sanitizes `{{`/`}}` from var values to
+    prevent var-in-var substitution).
+  - Empty `private_reply_message` → English fallback constant.
+  - **Dedup strategy**: webhook-level comment_id dedup (already in
+    `comment_handler.go`) + Facebook's per-comment idempotent `private_replies`
+    endpoint handle duplicates platform-side. No GoClaw state required.
+  - No DB migration.
 
 ### Improvements
 
@@ -159,6 +172,10 @@ All notable changes to GoClaw are documented here. For full documentation, see [
   missing a `mode` field get auto-backfilled with `mode: "cache-ttl"` to
   preserve their intent after the opt-in flip. Rows with NULL config stay
   NULL (new opt-in default applies). PG migration 51; SQLite schema v19.
+- **Pancake channel metadata routing.** Whitelist in
+  `internal/channels/routing_metadata.go` now preserves `post_id` and
+  `display_name` across the inbound → outbound hop so the private-reply
+  template variables survive the agent pipeline round-trip.
 
 ## Project Status
 

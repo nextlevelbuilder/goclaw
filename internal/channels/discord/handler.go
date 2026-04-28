@@ -58,15 +58,6 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 		}
 	}
 
-	// Check allowlist (for "open" policy, still apply allowlist if configured)
-	if !c.IsAllowed(senderID) {
-		slog.Debug("discord message rejected by allowlist",
-			"user_id", senderID,
-			"username", senderName,
-		)
-		return
-	}
-
 	// Handle bot commands (writer management, etc.) before further processing.
 	if c.tryHandleCommand(m) {
 		return

@@ -146,7 +146,10 @@
       "selectModel": "选择模型",
       "selectProvider": "选择Provider",
       "settings": "设置",
-      "timeout": "超时"
+      "timeout": "超时",
+      "imageModelLabel": "图像模型",
+      "imageModelDefaultOption": "默认 · gpt-image-2（推荐）",
+      "imageModelLegacyOption": "旧版 · gpt-image-1.5"
     },
     "noMatchDescription": "请尝试其他搜索词。",
     "noMatchTitle": "未找到匹配工具",

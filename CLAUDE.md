@@ -155,9 +155,10 @@ Published to GHCR (`ghcr.io/nextlevelbuilder/goclaw`) and Docker Hub (`digitop/g
 | latest | `:latest`, `:vX.Y.Z` | Backend + web UI + Python |
 | base | `:base`, `:vX.Y.Z-base` | Backend only, no UI/runtimes |
 | full | `:full`, `:vX.Y.Z-full` | All runtimes + skills pre-installed |
-| otel | `:otel`, `:vX.Y.Z-otel` | Latest + OpenTelemetry tracing |
 | web | `-web:latest` | Standalone web UI (Nginx) |
 | beta | `:beta`, `:vX.Y.Z-beta.N` | Beta builds from dev |
+
+OTel and Tailscale variants are not pre-built — build from source with the appropriate `--build-arg ENABLE_OTEL=true` or `-tags tsnet` flag if needed.
 
 ### Tag Pattern Safety
 

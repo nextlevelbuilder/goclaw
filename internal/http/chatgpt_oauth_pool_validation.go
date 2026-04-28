@@ -213,7 +213,7 @@ func validateChatGPTOAuthAgentRouting(
 	}
 
 	if len(defaultMembers) == 0 {
-		if routing.Strategy != store.ChatGPTOAuthStrategyPrimaryFirst || len(routing.ExtraProviderNames) > 0 {
+		if len(routing.ExtraProviderNames) > 0 {
 			return fmt.Errorf("configure OpenAI Codex pool members on provider %q before enabling agent-level routing", providerName)
 		}
 		return nil

@@ -294,7 +294,7 @@ func (r *Registry) ProviderDefs() []providers.ToolDefinition {
 		}
 		defs = append(defs, providers.ToolDefinition{
 			Type: "function",
-			Function: providers.ToolFunctionSchema{
+			Function: &providers.ToolFunctionSchema{
 				Name:        alias,
 				Description: tool.Description(),
 				Parameters:  tool.Parameters(),

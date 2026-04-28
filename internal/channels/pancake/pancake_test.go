@@ -373,25 +373,68 @@ func TestAPIClientSendMessageReturnsBodyLevelError(t *testing.T) {
 	}
 }
 
-// TestTruncateForTikTok_MultiByteCharacters verifies rune-safe truncation for
+// TestTruncateRuneSafe_MultiByteCharacters verifies rune-safe truncation for
 // Vietnamese diacritics and emoji (multi-byte UTF-8 sequences).
-func TestTruncateForTikTok_MultiByteCharacters(t *testing.T) {
+func TestTruncateRuneSafe_MultiByteCharacters(t *testing.T) {
 	// Vietnamese text with diacritics (multi-byte UTF-8)
 	input := strings.Repeat("Xin chào ", 100) // ~900 bytes, <500 runes
-	result := truncateForTikTok(input)
+	result := truncateRuneSafe(input, 500)
 	if !utf8.ValidString(result) {
-		t.Fatal("truncateForTikTok produced invalid UTF-8")
+		t.Fatal("truncateRuneSafe produced invalid UTF-8")
 	}
 
 	// Emoji string exceeding 500 runes
 	emoji := strings.Repeat("😊", 600)
-	result = truncateForTikTok(emoji)
+	result = truncateRuneSafe(emoji, 500)
 	runes := []rune(result)
 	if len(runes) > 500 {
 		t.Errorf("expected <=500 runes, got %d", len(runes))
 	}
 	if !utf8.ValidString(result) {
 		t.Fatal("emoji truncation produced invalid UTF-8")
+	}
+}
+
+// --- Shopee platform support tests (Phase 1: TDD red state) ---
+
+// TestMaxMessageLength_Shopee verifies shopee returns 500 char limit.
+func TestMaxMessageLength_Shopee(t *testing.T) {
+	ch := &Channel{platform: "shopee"}
+	if got := ch.maxMessageLength(); got != 500 {
+		t.Fatalf("shopee maxMessageLength = %d, want 500", got)
+	}
+	// Regression guards for existing platforms.
+	for _, tc := range []struct {
+		p    string
+		want int
+	}{
+		{"tiktok", 500}, {"facebook", 2000}, {"whatsapp", 4096},
+	} {
+		ch.platform = tc.p
+		if got := ch.maxMessageLength(); got != tc.want {
+			t.Fatalf("%s maxMessageLength = %d, want %d", tc.p, got, tc.want)
+		}
+	}
+}
+
+// TestTruncateRuneSafe_Shopee verifies FormatOutbound truncates shopee to 500 runes.
+// Uses Vietnamese diacritics and emoji to catch byte-vs-rune bugs.
+func TestTruncateRuneSafe_Shopee(t *testing.T) {
+	// Vietnamese text: 600 "Xin chào " iterations → >500 runes.
+	input := strings.Repeat("Xin chào ", 100)
+	out := FormatOutbound(input, "shopee")
+	if utf8.RuneCountInString(out) > 500 {
+		t.Fatalf("shopee output = %d runes, want <=500", utf8.RuneCountInString(out))
+	}
+	if !utf8.ValidString(out) {
+		t.Fatal("shopee truncation produced invalid UTF-8")
+	}
+
+	// Emoji-only input exceeding 500 runes.
+	emoji := strings.Repeat("😊", 600)
+	out = FormatOutbound(emoji, "shopee")
+	if utf8.RuneCountInString(out) > 500 {
+		t.Fatalf("emoji shopee output = %d runes, want <=500", utf8.RuneCountInString(out))
 	}
 }
 
@@ -745,10 +788,10 @@ func TestSend_CommentMode_MissingCommentID_ReturnsError(t *testing.T) {
 	}
 }
 
-func TestSend_CommentMode_WithFirstInbox(t *testing.T) {
+func TestSend_CommentMode_WithPrivateReply(t *testing.T) {
 	cfg := pancakeInstanceConfig{}
-	cfg.Features.FirstInbox = true
-	cfg.FirstInboxMessage = "Thanks!"
+	cfg.Features.PrivateReply = true
+	cfg.PrivateReplyMessage = "Thanks!"
 	ch, transport := newChannelWithMultiCapture(t, cfg)
 
 	err := ch.Send(context.Background(), bus.OutboundMessage{
@@ -783,10 +826,13 @@ func TestSend_CommentMode_WithFirstInbox(t *testing.T) {
 	}
 }
 
-func TestSend_CommentMode_FirstInboxDedup(t *testing.T) {
+func TestSend_CommentMode_PrivateReplyStateless(t *testing.T) {
+	// Stateless: each Send() with PrivateReply enabled fires a DM.
+	// Dedup responsibility lives at the webhook layer (comment_id) and
+	// at Facebook's platform (per-comment private_replies idempotency).
 	cfg := pancakeInstanceConfig{}
-	cfg.Features.FirstInbox = true
-	cfg.FirstInboxMessage = "DM!"
+	cfg.Features.PrivateReply = true
+	cfg.PrivateReplyMessage = "DM!"
 	ch, transport := newChannelWithMultiCapture(t, cfg)
 
 	outMsg := bus.OutboundMessage{
@@ -798,39 +844,33 @@ func TestSend_CommentMode_FirstInboxDedup(t *testing.T) {
 			"reply_to_comment_id": "msg-1",
 		},
 	}
-	ch.Send(context.Background(), outMsg)  //nolint:errcheck
-	outMsg.ChatID = "conv-456"             // second comment, different conv, same sender
+	ch.Send(context.Background(), outMsg) //nolint:errcheck
+	outMsg.ChatID = "conv-456"
 	outMsg.Metadata["reply_to_comment_id"] = "msg-2"
-	ch.Send(context.Background(), outMsg)  //nolint:errcheck
+	ch.Send(context.Background(), outMsg) //nolint:errcheck
 
 	transport.mu.Lock()
 	defer transport.mu.Unlock()
-	// Expected: reply_comment x2, private_reply x1 (deduped on sender)
-	if len(transport.reqs) != 3 {
-		t.Fatalf("expected 3 requests (2x reply_comment + 1x private_reply), got %d", len(transport.reqs))
+	// 2x reply_comment + 2x private_reply = 4 requests (stateless)
+	if len(transport.reqs) != 4 {
+		t.Fatalf("expected 4 requests (2x reply_comment + 2x private_reply, stateless), got %d", len(transport.reqs))
 	}
-	var actions []string
+	var privateCount int
 	for _, body := range transport.bodies {
 		var p map[string]any
 		json.Unmarshal(body, &p)
-		if a, ok := p["action"].(string); ok {
-			actions = append(actions, a)
-		}
-	}
-	privateCount := 0
-	for _, a := range actions {
-		if a == "private_reply" {
+		if p["action"] == "private_reply" {
 			privateCount++
 		}
 	}
-	if privateCount != 1 {
-		t.Errorf("expected exactly 1 private_reply, got %d (actions: %v)", privateCount, actions)
+	if privateCount != 2 {
+		t.Errorf("expected 2 private_reply calls (stateless), got %d", privateCount)
 	}
 }
 
-func TestSend_CommentMode_FirstInboxDisabled(t *testing.T) {
+func TestSend_CommentMode_PrivateReplyDisabled(t *testing.T) {
 	cfg := pancakeInstanceConfig{}
-	cfg.Features.FirstInbox = false
+	cfg.Features.PrivateReply = false
 	ch, transport := newChannelWithMultiCapture(t, cfg)
 
 	ch.Send(context.Background(), bus.OutboundMessage{ //nolint:errcheck
@@ -851,7 +891,7 @@ func TestSend_CommentMode_FirstInboxDisabled(t *testing.T) {
 	var p map[string]any
 	json.Unmarshal(transport.bodies[0], &p)
 	if p["action"] == "private_reply" {
-		t.Error("should not send private_reply when FirstInbox is disabled")
+		t.Error("should not send private_reply when PrivateReply is disabled")
 	}
 }
 
@@ -898,14 +938,15 @@ func TestSend_CommentMode_EchoRemembered(t *testing.T) {
 	}
 }
 
-// --- First Inbox ---
+// --- Private Reply ---
 
-func TestSendFirstInbox_DefaultMessage(t *testing.T) {
+func TestSendPrivateReply_DefaultMessage(t *testing.T) {
 	cfg := pancakeInstanceConfig{}
-	cfg.FirstInboxMessage = "" // empty = use default
+	cfg.Features.PrivateReply = true
+	cfg.PrivateReplyMessage = "" // empty = use default
 	ch, transport := newChannelWithMultiCapture(t, cfg)
 
-	ch.sendFirstInbox(context.Background(), "user-1", "conv-123")
+	ch.sendPrivateReply(context.Background(), "user-1", "conv-123", "", "")
 
 	transport.mu.Lock()
 	defer transport.mu.Unlock()
@@ -919,16 +960,17 @@ func TestSendFirstInbox_DefaultMessage(t *testing.T) {
 	}
 	msg, _ := p["message"].(string)
 	if msg == "" {
-		t.Error("expected non-empty default first inbox message")
+		t.Error("expected non-empty default private reply message")
 	}
 }
 
-func TestSendFirstInbox_CustomMessage(t *testing.T) {
+func TestSendPrivateReply_CustomMessage(t *testing.T) {
 	cfg := pancakeInstanceConfig{}
-	cfg.FirstInboxMessage = "Thanks for your comment!"
+	cfg.Features.PrivateReply = true
+	cfg.PrivateReplyMessage = "Thanks for your comment!"
 	ch, transport := newChannelWithMultiCapture(t, cfg)
 
-	ch.sendFirstInbox(context.Background(), "user-1", "conv-123")
+	ch.sendPrivateReply(context.Background(), "user-1", "conv-123", "", "")
 
 	transport.mu.Lock()
 	defer transport.mu.Unlock()
@@ -942,7 +984,9 @@ func TestSendFirstInbox_CustomMessage(t *testing.T) {
 	}
 }
 
-func TestSendFirstInbox_ErrorRetryAllowed(t *testing.T) {
+func TestSendPrivateReply_APIErrorLoggedAndNonBlocking(t *testing.T) {
+	// Stateless: API errors are logged (warn) but do not prevent subsequent
+	// sends. No state to release. Second call still attempts the API.
 	errorTransport := &captureTransport{
 		resp: &http.Response{
 			StatusCode: http.StatusInternalServerError,
@@ -951,26 +995,25 @@ func TestSendFirstInbox_ErrorRetryAllowed(t *testing.T) {
 		},
 	}
 	cfg := pancakeInstanceConfig{}
-	cfg.FirstInboxMessage = "DM"
+	cfg.Features.PrivateReply = true
+	cfg.PrivateReplyMessage = "DM"
 	msgBus := bus.New()
 	cfg.PageID = "page-123"
 	creds := pancakeCreds{APIKey: "k", PageAccessToken: "t"}
 	ch, _ := New(cfg, creds, msgBus, nil)
 	ch.apiClient.httpClient = &http.Client{Transport: errorTransport}
 
-	// First call: API error → firstInboxSent entry should be deleted (allows retry).
-	ch.sendFirstInbox(context.Background(), "user-1", "conv-123")
-	_, alreadyStored := ch.firstInboxSent.Load("user-1")
-	if alreadyStored {
-		t.Error("firstInboxSent should be deleted on error (allow retry)")
+	ch.sendPrivateReply(context.Background(), "user-1", "conv-123", "", "")
+	if errorTransport.req == nil {
+		t.Fatal("expected first API call to be attempted even when it errors")
 	}
 
-	// Second call: should attempt again (retry allowed).
+	// Second call: still attempts the API — stateless behaviour.
 	secondTransport := &captureTransport{}
 	ch.apiClient.httpClient = &http.Client{Transport: secondTransport}
-	ch.sendFirstInbox(context.Background(), "user-1", "conv-123")
+	ch.sendPrivateReply(context.Background(), "user-1", "conv-123", "", "")
 	if secondTransport.req == nil {
-		t.Error("expected retry request after error-deletion")
+		t.Error("expected retry request after previous failure (stateless, no per-sender dedup)")
 	}
 }
 
@@ -1006,8 +1049,8 @@ func TestFactoryExplicitPlatformPreserved(t *testing.T) {
 func TestCommentFlowEndToEnd(t *testing.T) {
 	cfg := pancakeInstanceConfig{}
 	cfg.Features.CommentReply = true
-	cfg.Features.FirstInbox = true
-	cfg.FirstInboxMessage = "Welcome!"
+	cfg.Features.PrivateReply = true
+	cfg.PrivateReplyMessage = "Welcome!"
 	transport := &multiCaptureTransport{}
 	msgBus := bus.New()
 	cfg.PageID = "page-e2e"
@@ -1076,7 +1119,7 @@ func TestCommentFlowEndToEnd(t *testing.T) {
 		t.Errorf("second action = %q, want private_reply", actions[1])
 	}
 
-	// Step 6: Second comment from same sender — no second DM.
+	// Step 6: Second comment from same sender — stateless: another DM fires.
 	body2 := buildWebhookBody("page-e2e", "conv-e2e", "COMMENT", "user-e2e", "msg-e2e-2", "another comment", "")
 	req2 := httptest.NewRequest(http.MethodPost, webhookPath, strings.NewReader(body2))
 	w2 := httptest.NewRecorder()
@@ -1089,8 +1132,8 @@ func TestCommentFlowEndToEnd(t *testing.T) {
 		t.Fatal("expected second inbound message")
 	}
 	outMsg2 := bus.OutboundMessage{
-		ChatID:  inMsg2.ChatID,
-		Content: "thanks again",
+		ChatID:   inMsg2.ChatID,
+		Content:  "thanks again",
 		Metadata: inMsg2.Metadata,
 	}
 	ch.Send(context.Background(), outMsg2) //nolint:errcheck
@@ -1099,8 +1142,9 @@ func TestCommentFlowEndToEnd(t *testing.T) {
 	finalCount := len(transport.reqs)
 	transport.mu.Unlock()
 
-	// 2 (first round) + 1 (second reply_comment only, no second private_reply)
-	if finalCount != 3 {
-		t.Errorf("expected 3 total requests after dedup, got %d", finalCount)
+	// 2 (first round: reply_comment + private_reply) + 2 (second: reply_comment + private_reply)
+	// Stateless — no per-sender dedup. FB's per-comment idempotency handles duplicates platform-side.
+	if finalCount != 4 {
+		t.Errorf("expected 4 total requests (stateless: 2 rounds × (reply + DM)), got %d", finalCount)
 	}
 }

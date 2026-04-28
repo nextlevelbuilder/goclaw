@@ -45,5 +45,24 @@ func (s *ObserveStage) Execute(_ context.Context, state *RunState) error {
 		state.Observe.FinalThinking = resp.Thinking
 	}
 
+	// 4. Accumulate assistant-generated final images across iterations.
+	// The LLM may emit image_generation_call in iter N alongside a function_call,
+	// then respond text-only in iter N+1 — LastResponse.Images would then be empty
+	// at finalize time and the iter-N image would be lost. Drain Images here so
+	// FinalizeStage sees every image regardless of which iteration produced it.
+	// Partial streaming frames are filtered out at source (codex.go only sets
+	// non-partial entries via imageState.recordFinal); a defensive filter here
+	// avoids coupling to that invariant.
+	if len(resp.Images) > 0 {
+		for _, img := range resp.Images {
+			if img.Partial {
+				continue
+			}
+			state.Observe.AssistantImages = append(state.Observe.AssistantImages, img)
+		}
+		// Clear on response so a re-processing pass (e.g. retry) doesn't double-count.
+		resp.Images = nil
+	}
+
 	return nil
 }

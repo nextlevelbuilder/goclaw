@@ -3,6 +3,7 @@ package edge
 import (
 	"context"
 	"os/exec"
+	"slices"
 	"testing"
 
 	"github.com/nextlevelbuilder/goclaw/internal/audio"
@@ -14,8 +15,9 @@ import (
 //
 // Edge TTS has no HTTP body to capture; the "wire format" is the subprocess
 // args passed to edge-tts. The characterization fixture is:
-//   --voice en-US-MichelleNeural --text <text> --write-media <path>
-//   (no --rate flag when rate is empty/zero-default)
+//
+//	--voice en-US-MichelleNeural --text <text> --write-media <path>
+//	(no --rate flag when rate is empty/zero-default)
 func TestCharacterization_Edge_DefaultOpts(t *testing.T) {
 	p := NewProvider(Config{}) // empty = defaults
 
@@ -71,10 +73,5 @@ func assertArg(t *testing.T, args []string, flag, want string) {
 
 // hasFlag returns true if flag appears anywhere in args.
 func hasFlag(args []string, flag string) bool {
-	for _, a := range args {
-		if a == flag {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(args, flag)
 }

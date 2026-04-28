@@ -194,7 +194,7 @@ func checkDBChannels(db *sql.DB) {
 
 func checkDBProviders(db *sql.DB) {
 	rows, err := db.QueryContext(context.Background(),
-		"SELECT name, COALESCE(display_name, name), enabled, (api_key IS NOT NULL AND api_key != '') AS has_key FROM llm_providers ORDER BY name")
+		"SELECT name, COALESCE(NULLIF(display_name, ''), name), enabled, (api_key IS NOT NULL AND api_key != '') AS has_key FROM llm_providers ORDER BY name")
 	if err != nil {
 		fmt.Printf("    (could not query providers: %s)\n", err)
 		return

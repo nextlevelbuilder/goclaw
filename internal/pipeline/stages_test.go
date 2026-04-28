@@ -45,7 +45,8 @@ func (m *mockTokenCounter) Count(_ string, _ string) int { return m.countPerMess
 func (m *mockTokenCounter) CountMessages(_ string, msgs []providers.Message) int {
 	return len(msgs) * m.countPerMessage
 }
-func (m *mockTokenCounter) ModelContextWindow(_ string) int { return 200_000 }
+func (m *mockTokenCounter) CountToolSchemas(_ string, _ []providers.ToolDefinition) int { return 0 }
+func (m *mockTokenCounter) ModelContextWindow(_ string) int                              { return 200_000 }
 
 // --- ThinkStage tests ---
 
@@ -1241,6 +1242,155 @@ func TestObserveStage_EmptyContent_BlockRepliesNotIncremented(t *testing.T) {
 	}
 }
 
+// --- ObserveStage image accumulation (regression for mid-loop image loss) ---
+//
+// These tests cover the bug where LLM emits an image_generation_call alongside
+// a function_call in iter N, then responds text-only in iter N+1. Without
+// accumulation in Observe, FinalizeStage would only see LastResponse.Images
+// (which is empty at iter N+1) and drop the iter-N image.
+
+// Case 1: single iteration with image only → accumulated.
+func TestObserveStage_ImageAccumulation_SingleIterImageOnly(t *testing.T) {
+	t.Parallel()
+	stage := NewObserveStage(&PipelineDeps{})
+	state := defaultState()
+	state.Think.LastResponse = &providers.ChatResponse{
+		FinishReason: "stop",
+		Images: []providers.ImageContent{
+			{MimeType: "image/png", Data: "imgA"},
+		},
+	}
+	_ = stage.Execute(context.Background(), state)
+	if got := len(state.Observe.AssistantImages); got != 1 {
+		t.Fatalf("AssistantImages len = %d, want 1", got)
+	}
+	if state.Observe.AssistantImages[0].Data != "imgA" {
+		t.Errorf("image data = %q, want %q", state.Observe.AssistantImages[0].Data, "imgA")
+	}
+	// Source response.Images must be cleared to prevent double-counting on re-exec.
+	if state.Think.LastResponse.Images != nil {
+		t.Error("LastResponse.Images must be cleared after draining")
+	}
+}
+
+// Case 2: image + tool_call in same iter → image accumulated, tool_call flows through think.
+func TestObserveStage_ImageAccumulation_ImagePlusToolCall(t *testing.T) {
+	t.Parallel()
+	stage := NewObserveStage(&PipelineDeps{})
+	state := defaultState()
+	state.Think.LastResponse = &providers.ChatResponse{
+		FinishReason: "tool_calls",
+		ToolCalls:    []providers.ToolCall{{ID: "1", Name: "search"}},
+		Images: []providers.ImageContent{
+			{MimeType: "image/png", Data: "imgMid"},
+		},
+	}
+	_ = stage.Execute(context.Background(), state)
+	if got := len(state.Observe.AssistantImages); got != 1 {
+		t.Fatalf("AssistantImages len = %d, want 1 (image must survive tool_calls path)", got)
+	}
+}
+
+// Case 3: mid-loop image in iter 1 + text-only iter 2 → image from iter 1 retained.
+//
+// This is the regression scenario that motivated the accumulator. Without the fix
+// FinalizeStage reads LastResponse (iter 2) and drops iter-1 image.
+func TestObserveStage_ImageAccumulation_MidLoopImagePreservedAcrossIterations(t *testing.T) {
+	t.Parallel()
+	stage := NewObserveStage(&PipelineDeps{})
+	state := defaultState()
+
+	// Iter 1: image + tool call.
+	state.Think.LastResponse = &providers.ChatResponse{
+		FinishReason: "tool_calls",
+		ToolCalls:    []providers.ToolCall{{ID: "1", Name: "search"}},
+		Images:       []providers.ImageContent{{MimeType: "image/png", Data: "iter1img"}},
+	}
+	_ = stage.Execute(context.Background(), state)
+
+	// Iter 2: text-only final response — no Images.
+	state.Think.LastResponse = &providers.ChatResponse{
+		FinishReason: "stop",
+		Content:      "Done.",
+	}
+	_ = stage.Execute(context.Background(), state)
+
+	if got := len(state.Observe.AssistantImages); got != 1 {
+		t.Fatalf("AssistantImages len = %d, want 1 (iter-1 image must survive)", got)
+	}
+	if state.Observe.AssistantImages[0].Data != "iter1img" {
+		t.Errorf("image data = %q, want %q", state.Observe.AssistantImages[0].Data, "iter1img")
+	}
+}
+
+// Case 4: multiple images emitted across multiple iterations → all retained in order.
+func TestObserveStage_ImageAccumulation_MultipleImagesAcrossIterations(t *testing.T) {
+	t.Parallel()
+	stage := NewObserveStage(&PipelineDeps{})
+	state := defaultState()
+
+	// Iter 1: two images + tool call.
+	state.Think.LastResponse = &providers.ChatResponse{
+		FinishReason: "tool_calls",
+		ToolCalls:    []providers.ToolCall{{ID: "1", Name: "t"}},
+		Images: []providers.ImageContent{
+			{MimeType: "image/png", Data: "A"},
+			{MimeType: "image/png", Data: "B"},
+		},
+	}
+	_ = stage.Execute(context.Background(), state)
+
+	// Iter 2: one image standalone.
+	state.Think.LastResponse = &providers.ChatResponse{
+		FinishReason: "stop",
+		Images:       []providers.ImageContent{{MimeType: "image/png", Data: "C"}},
+	}
+	_ = stage.Execute(context.Background(), state)
+
+	if got := len(state.Observe.AssistantImages); got != 3 {
+		t.Fatalf("AssistantImages len = %d, want 3", got)
+	}
+	for i, want := range []string{"A", "B", "C"} {
+		if state.Observe.AssistantImages[i].Data != want {
+			t.Errorf("image[%d] = %q, want %q", i, state.Observe.AssistantImages[i].Data, want)
+		}
+	}
+}
+
+// Case 5: partial frames must be filtered out — only final (non-partial) images accumulate.
+func TestObserveStage_ImageAccumulation_PartialFramesFiltered(t *testing.T) {
+	t.Parallel()
+	stage := NewObserveStage(&PipelineDeps{})
+	state := defaultState()
+	state.Think.LastResponse = &providers.ChatResponse{
+		FinishReason: "stop",
+		Images: []providers.ImageContent{
+			{MimeType: "image/png", Data: "partial1", Partial: true},
+			{MimeType: "image/png", Data: "final1"},
+			{MimeType: "image/png", Data: "partial2", Partial: true},
+		},
+	}
+	_ = stage.Execute(context.Background(), state)
+	if got := len(state.Observe.AssistantImages); got != 1 {
+		t.Fatalf("AssistantImages len = %d, want 1 (partials filtered)", got)
+	}
+	if state.Observe.AssistantImages[0].Data != "final1" {
+		t.Errorf("image data = %q, want %q", state.Observe.AssistantImages[0].Data, "final1")
+	}
+}
+
+// Case 6: nil response → no panic, accumulator unchanged.
+func TestObserveStage_ImageAccumulation_NilResponseSafe(t *testing.T) {
+	t.Parallel()
+	stage := NewObserveStage(&PipelineDeps{})
+	state := defaultState()
+	state.Think.LastResponse = nil
+	_ = stage.Execute(context.Background(), state)
+	if state.Observe.AssistantImages != nil {
+		t.Errorf("AssistantImages = %v, want nil", state.Observe.AssistantImages)
+	}
+}
+
 // --- CheckpointStage tests ---
 
 func TestCheckpointStage_SkipsIteration0(t *testing.T) {
@@ -1405,6 +1555,75 @@ func TestFinalizeStage_DeduplicatesMediaByPath(t *testing.T) {
 	}
 	if len(state.Tool.MediaResults) != 2 {
 		t.Errorf("MediaResults len = %d after dedup, want 2", len(state.Tool.MediaResults))
+	}
+}
+
+// TestFinalizeStage_PersistsFromObserveAccumulator verifies that FinalizeStage
+// sources assistant images from state.Observe.AssistantImages, NOT from
+// LastResponse.Images. This guards against the regression where a mid-loop
+// image_generation_call is lost when the final iteration responds text-only.
+func TestFinalizeStage_PersistsFromObserveAccumulator(t *testing.T) {
+	t.Parallel()
+	var persistedImages []providers.ImageContent
+	deps := &PipelineDeps{
+		PersistAssistantImages: func(msg *providers.Message, _ string) {
+			// Capture what was handed to the persist callback.
+			persistedImages = append([]providers.ImageContent(nil), msg.Images...)
+			// Simulate hash→MediaRef mapping.
+			for range msg.Images {
+				msg.MediaRefs = append(msg.MediaRefs, providers.MediaRef{
+					Kind: "image", MimeType: "image/png", Path: "/tmp/img.png",
+				})
+			}
+			msg.Images = nil
+		},
+		FlushMessages: func(_ context.Context, _ string, _ []providers.Message) error { return nil },
+	}
+	stage := NewFinalizeStage(deps)
+	state := defaultState()
+
+	// Observe has accumulated an image from an earlier iteration.
+	state.Observe.AssistantImages = []providers.ImageContent{
+		{MimeType: "image/png", Data: "iterMidImage"},
+	}
+	// LastResponse is the final iteration — text-only, no Images.
+	state.Think.LastResponse = &providers.ChatResponse{FinishReason: "stop", Content: "Done."}
+	state.Observe.FinalContent = "Done."
+
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if len(persistedImages) != 1 {
+		t.Fatalf("persisted images len = %d, want 1 (accumulator-sourced image must be persisted)", len(persistedImages))
+	}
+	if persistedImages[0].Data != "iterMidImage" {
+		t.Errorf("persisted image data = %q, want %q", persistedImages[0].Data, "iterMidImage")
+	}
+	// Accumulator must be drained.
+	if state.Observe.AssistantImages != nil {
+		t.Errorf("AssistantImages = %v, want nil after drain", state.Observe.AssistantImages)
+	}
+}
+
+// TestFinalizeStage_NoPersistWhenAccumulatorEmpty verifies no-op when no images
+// were emitted across any iteration. Prevents regression where a non-nil
+// LastResponse with empty Images would still call PersistAssistantImages.
+func TestFinalizeStage_NoPersistWhenAccumulatorEmpty(t *testing.T) {
+	t.Parallel()
+	persistCalled := false
+	deps := &PipelineDeps{
+		PersistAssistantImages: func(_ *providers.Message, _ string) { persistCalled = true },
+		FlushMessages:          func(_ context.Context, _ string, _ []providers.Message) error { return nil },
+	}
+	stage := NewFinalizeStage(deps)
+	state := defaultState()
+	state.Think.LastResponse = &providers.ChatResponse{FinishReason: "stop", Content: "hi"}
+
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if persistCalled {
+		t.Error("PersistAssistantImages must not be called when accumulator is empty")
 	}
 }
 

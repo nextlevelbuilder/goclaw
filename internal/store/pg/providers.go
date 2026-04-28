@@ -165,11 +165,47 @@ func (s *PGProviderStore) DeleteProvider(ctx context.Context, id uuid.UUID) erro
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	// Safe no-op after Commit (returns sql.ErrTxDone, ignored).
+	defer tx.Rollback()
+
+	// Defensive: disable heartbeats so the next scheduler tick after delete
+	// cannot fire stale config. FK ON DELETE SET NULL clears provider_id auto.
+	// Tenant-scope the UPDATE through agents to prevent cross-tenant side effects:
+	// even though provider IDs are UUIDs (globally unique), an attacker who guessed
+	// or leaked one could otherwise disable another tenant's heartbeats.
+	// IsCrossTenant (master scope) bypasses scoping for legitimate cross-tenant admin.
+	var updateQuery string
+	var updateArgs []any
+	if store.IsCrossTenant(ctx) {
+		updateQuery = "UPDATE agent_heartbeats SET enabled = false WHERE provider_id = $1"
+		updateArgs = []any{id}
+	} else {
+		tid := store.TenantIDFromContext(ctx)
+		updateQuery = `UPDATE agent_heartbeats SET enabled = false
+		               WHERE provider_id = $1
+		                 AND agent_id IN (SELECT id FROM agents WHERE tenant_id = $2)`
+		updateArgs = []any{id, tid}
+	}
+	res, err := tx.ExecContext(ctx, updateQuery, updateArgs...)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		slog.Warn("heartbeat.provider_cleared",
+			"provider_id", id, "heartbeats_disabled", n)
+	}
+
+	if _, err := tx.ExecContext(ctx,
 		"DELETE FROM llm_providers WHERE id = $1"+tClause,
 		append([]any{id}, tArgs...)...,
-	)
-	return err
+	); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *PGProviderStore) decryptKey(apiKey, providerName string) string {

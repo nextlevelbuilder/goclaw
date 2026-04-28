@@ -279,7 +279,7 @@ Extended thinking allows LLMs to generate internal reasoning tokens before produ
 
 ```mermaid
 flowchart TD
-    LEVEL["provider.settings.reasoning_defaults<br/>+ agent other_config.reasoning"] --> CHECK{"Provider<br/>supports thinking?"}
+    LEVEL["provider.settings.reasoning_defaults<br/>+ agent reasoning_config"] --> CHECK{"Provider<br/>supports thinking?"}
     CHECK -->|No| SKIP["Skip — normal request"]
     CHECK -->|Yes| TYPE{"Provider type?"}
 
@@ -668,12 +668,10 @@ Agent override example:
 ```json
 {
   "provider": "openai-codex",
-  "other_config": {
-    "reasoning": {
-      "override_mode": "custom",
-      "effort": "xhigh",
-      "fallback": "downgrade"
-    }
+  "reasoning_config": {
+    "override_mode": "custom",
+    "effort": "xhigh",
+    "fallback": "downgrade"
   }
 }
 ```
@@ -685,18 +683,18 @@ Routing behavior:
 - A provider listed in another pool cannot also manage its own pool.
 - `override_mode: "inherit"` uses the primary provider's `settings.codex_pool`.
 - `override_mode: "custom"` is limited to routing behavior for that provider-owned pool.
-- `primary_first` keeps the preferred account fixed. When saved as a custom override with no extra names, it disables the pool for that agent and keeps the agent on the primary account only.
 - `round_robin` rotates requests across the preferred account plus the provider-owned extra authenticated OpenAI Codex OAuth accounts.
 - `priority_order` tries the preferred account first, then drains the provider-owned extra accounts in order.
+- Legacy `primary_first` configs are read back as `priority_order`. Existing agent overrides that explicitly saved an empty `extra_provider_names` list still remain single-account-only after migration.
 - Retryable upstream failures can fall through to the next eligible OpenAI Codex OAuth account in the same request.
 - Explicit provider names remain explicit. OAuth auth/logout is still provider-scoped.
 - Runtime observability for one agent is available at `GET /v1/agents/{id}/codex-pool-activity`, which exposes recent routed traces plus per-alias health derived from those traces.
 
 Reasoning behavior:
 - `settings.reasoning_defaults` is provider-owned and reusable across agents.
-- `reasoning.override_mode: "inherit"` follows the provider default.
-- `reasoning.override_mode: "custom"` stores an agent-local reasoning policy.
-- Existing `reasoning` payloads without `override_mode` still behave as custom overrides.
+- `reasoning_config.override_mode: "inherit"` follows the provider default.
+- `reasoning_config.override_mode: "custom"` stores an agent-local reasoning policy.
+- Existing legacy `other_config.reasoning` payloads without `override_mode` still behave as custom overrides.
 - If no provider default is saved, inherit resolves to reasoning `off`.
 - Trace metadata surfaces the reasoning `source` so provider-default behavior is no longer implicit.
 

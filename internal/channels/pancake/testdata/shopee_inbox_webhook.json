@@ -1,0 +1,18 @@
+{
+  "_comment": "Assumed-shape fixture — verify against real Pancake payload in Phase 3",
+  "event_type": "messaging",
+  "page_id": "",
+  "data": {
+    "page_id": "",
+    "conversation": {
+      "id": "spo_25409726_109139680425439630",
+      "type": "INBOX",
+      "from": {"id": "109139680425439630", "name": "Test Buyer"}
+    },
+    "message": {
+      "id": "spo_msg_1",
+      "content": "Shop oi con hang khong?",
+      "from": {"id": "109139680425439630"}
+    }
+  }
+}

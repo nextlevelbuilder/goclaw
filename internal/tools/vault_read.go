@@ -326,7 +326,19 @@ func (t *VaultReadTool) allowed(ctx context.Context, doc *store.VaultDocument) b
 		if rc == nil || rc.TeamID == "" {
 			return false
 		}
-		return rc.TeamID == *doc.TeamID
+		if rc.TeamID != *doc.TeamID {
+			return false
+		}
+		// Chat scope: isolated teams restrict cross-chat reads. Docs with
+		// chat_id = NULL are team-wide (legacy or shared-mode writes); docs
+		// with chat_id set must match caller's WorkspaceChatID.
+		if rc.TeamIsolated && doc.ChatID != nil && *doc.ChatID != "" {
+			callerChat := WorkspaceChatIDFromCtx(ctx)
+			if callerChat == "" || callerChat != *doc.ChatID {
+				return false
+			}
+		}
+		return true
 	default:
 		return false
 	}

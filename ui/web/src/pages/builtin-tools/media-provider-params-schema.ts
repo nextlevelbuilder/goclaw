@@ -12,6 +12,18 @@ export type ParamField = {
 
 export const MEDIA_PARAMS_SCHEMA: Record<string, Record<string, ParamField[]>> = {
   create_image: {
+    chatgpt_oauth: [
+      {
+        key: "image_model",
+        label: "Image model",
+        type: "select",
+        default: "gpt-image-2",
+        options: [
+          { value: "gpt-image-2", label: "Default · gpt-image-2 (recommended)" },
+          { value: "gpt-image-1.5", label: "Legacy · gpt-image-1.5" },
+        ],
+      },
+    ],
     minimax_native: [],
     bailian: [
       {

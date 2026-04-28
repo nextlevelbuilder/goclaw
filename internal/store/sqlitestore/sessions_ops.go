@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,7 +25,21 @@ func (s *SQLiteSessionStore) Save(ctx context.Context, key string) error {
 	msgs := make([]providers.Message, len(data.Messages))
 	copy(msgs, data.Messages)
 	snapshot.Messages = msgs
+	// Deep-copy Metadata under RLock so later mutation does not race with
+	// concurrent readers holding data.Metadata via GetSessionMetadata.
+	metaCopy := make(map[string]string, len(data.Metadata)+2)
+	for k, v := range data.Metadata {
+		metaCopy[k] = v
+	}
+	snapshot.Metadata = metaCopy
 	s.mu.RUnlock()
+
+	// Persist adaptive-throttle numbers into metadata JSON so list queries can
+	// read accurate token counts without a dedicated column.
+	if snapshot.LastPromptTokens > 0 {
+		snapshot.Metadata["last_prompt_tokens"] = strconv.Itoa(snapshot.LastPromptTokens)
+		snapshot.Metadata["last_message_count"] = strconv.Itoa(snapshot.LastMessageCount)
+	}
 
 	msgsJSON, _ := json.Marshal(snapshot.Messages)
 	metaJSON := []byte("{}")

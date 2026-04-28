@@ -2,6 +2,7 @@ package tokencount
 
 import (
 	"cmp"
+	"encoding/json"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -36,6 +37,16 @@ func (c *FallbackCounter) CountMessages(_ string, msgs []providers.Message) int 
 		}
 	}
 	return total
+}
+
+// CountToolSchemas returns rune/3 heuristic count for the JSON-serialised tool list.
+// Returns 0 for nil or empty slice.
+func (c *FallbackCounter) CountToolSchemas(_ string, tools []providers.ToolDefinition) int {
+	if len(tools) == 0 {
+		return 0
+	}
+	blob, _ := json.Marshal(tools)
+	return utf8.RuneCountInString(string(blob)) / 3
 }
 
 // ModelContextWindow uses longest-prefix-match to avoid ambiguity

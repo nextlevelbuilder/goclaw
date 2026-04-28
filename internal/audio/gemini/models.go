@@ -11,7 +11,7 @@ var geminiModels = []string{
 }
 
 // defaultModel is the model used when none is specified.
-const defaultModel = "gemini-2.5-flash-preview-tts"
+const defaultModel = "gemini-3.1-flash-tts-preview"
 
 // isValidModel reports whether id is in the static model catalog.
 func isValidModel(id string) bool {
