@@ -93,7 +93,17 @@ func (c *Channel) initMCPProvisioner(ctx context.Context) error {
 	// wrong or the row doesn't exist yet, log and disable provisioning —
 	// don't block channel startup. Admin can create the server + reload
 	// the channel later.
-	server, err := c.mcpStore.GetServerByName(ctx, c.cfg.MCPServerName)
+	//
+	// PGMCPServerStore.GetServerByName scopes the lookup by tenant_id from
+	// context (multi-tenant isolation). Channel.Start receives ctx from the
+	// instance loader without that scope set — wrap it explicitly with the
+	// channel's own tenant id so the lookup matches the row a tenant admin
+	// created via `bitrix-portal create` / dashboard.
+	lookupCtx := ctx
+	if tid := c.TenantID(); tid != uuid.Nil {
+		lookupCtx = store.WithTenantID(ctx, tid)
+	}
+	server, err := c.mcpStore.GetServerByName(lookupCtx, c.cfg.MCPServerName)
 	if err != nil || server == nil {
 		slog.Warn("bitrix24 mcp: provisioning disabled — server not found",
 			"channel", c.Name(), "mcp_server_name", c.cfg.MCPServerName, "err", err)
