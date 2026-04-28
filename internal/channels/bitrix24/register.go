@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	neturl "net/url"
+	"os"
 	"strings"
 	"time"
 )
@@ -45,15 +46,27 @@ func (c *Channel) registerBot(ctx context.Context) (int, error) {
 		return 0, errors.New("bitrix24 register: portal/client not initialised")
 	}
 
+	// BITRIX24_FORCE_REREGISTER=1 bypasses the persisted-state cache so the
+	// next Start() always pushes the current public_url + bot config back
+	// through imbot.register. Use this when public_url changes (tunnel URL
+	// rotated, deployed to new host, …) and Bitrix-side event handler URLs
+	// must be refreshed without recreating the bot row.
+	forceReregister := strings.TrimSpace(os.Getenv("BITRIX24_FORCE_REREGISTER")) == "1"
+
 	// Path 1: recover from persisted state.
-	if id, ok := portal.LookupRegisteredBot(c.cfg.BotCode); ok && id > 0 {
-		exists, err := c.verifyBot(ctx, id)
-		if err != nil {
-			slog.Warn("bitrix24 register: verify cached bot failed — will attempt re-register",
-				"portal", c.cfg.Portal, "bot_code", c.cfg.BotCode, "cached_bot_id", id, "err", err)
-		} else if exists {
-			return id, nil
+	if !forceReregister {
+		if id, ok := portal.LookupRegisteredBot(c.cfg.BotCode); ok && id > 0 {
+			exists, err := c.verifyBot(ctx, id)
+			if err != nil {
+				slog.Warn("bitrix24 register: verify cached bot failed — will attempt re-register",
+					"portal", c.cfg.Portal, "bot_code", c.cfg.BotCode, "cached_bot_id", id, "err", err)
+			} else if exists {
+				return id, nil
+			}
 		}
+	} else {
+		slog.Info("bitrix24 register: BITRIX24_FORCE_REREGISTER=1 — bypassing cache, will call imbot.register",
+			"portal", c.cfg.Portal, "bot_code", c.cfg.BotCode)
 	}
 
 	// Path 2: fresh register. Abort up-front when public_url is missing —

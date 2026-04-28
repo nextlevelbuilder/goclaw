@@ -49,6 +49,8 @@ services:
       - GOCLAW_SKILLS_DIR=/app/data/skills
       # Debug
       - GOCLAW_TRACE_VERBOSE=${GOCLAW_TRACE_VERBOSE:-0}
+      - BITRIX24_LOG_RAW_EVENT=${BITRIX24_LOG_RAW_EVENT:-0}
+      - BITRIX24_FORCE_REREGISTER=${BITRIX24_FORCE_REREGISTER:-0}
     volumes:
       - goclaw-data:/app/data
       - goclaw-workspace:/app/workspace
