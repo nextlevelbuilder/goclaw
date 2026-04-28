@@ -125,7 +125,7 @@ func runProvidersAdd() {
 		{"OpenAI", "openai"},
 		{"OpenRouter", "openrouter"},
 		{"DashScope (Alibaba)", "dashscope"},
-		{"OpenAI-compatible", "openai-compat"},
+		{"OpenAI-compatible", "openai_compat"},
 	}
 	providerType, err := promptSelect("Provider type", typeOptions, 0)
 	if err != nil {
@@ -150,7 +150,7 @@ func runProvidersAdd() {
 	// Step 4: Base URL (pre-fill per type, editable)
 	defaultURL := defaultBaseURL(providerType)
 	baseURL := ""
-	if providerType == "openai-compat" {
+	if providerType == "openai_compat" {
 		baseURL, err = promptString("Base URL", "e.g. https://api.example.com/v1", defaultURL)
 		if err != nil {
 			fmt.Println("Cancelled.")

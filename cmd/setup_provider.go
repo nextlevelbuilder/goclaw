@@ -49,7 +49,7 @@ func addProvider() {
 		{"OpenAI", "openai"},
 		{"OpenRouter", "openrouter"},
 		{"DashScope (Alibaba)", "dashscope"},
-		{"OpenAI-compatible", "openai-compat"},
+		{"OpenAI-compatible", "openai_compat"},
 	}
 	providerType, err := promptSelect("Provider type", typeOptions, 0)
 	if err != nil {
@@ -68,7 +68,7 @@ func addProvider() {
 	}
 
 	baseURL := ""
-	if providerType == "openai-compat" {
+	if providerType == "openai_compat" {
 		baseURL, err = promptString("Base URL", "e.g. https://api.example.com/v1", "")
 		if err != nil {
 			return
