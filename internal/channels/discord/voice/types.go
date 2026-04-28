@@ -21,9 +21,24 @@
 package voice
 
 import (
+	"context"
 	"os"
 	"time"
 )
+
+// TranscriptSummarizer turns a session's full "<DisplayName>: <text>"
+// transcript into a short Discord-channel-friendly summary that gets
+// pinned to the parent summary message at session close. The
+// implementation is supplied by the caller of NewSupervisor (so the
+// voice package stays free of any LLM-provider import). Returning a
+// non-nil error or an empty string causes Close to keep the legacy
+// stats line ("✅ Voice session ended in #X — Nm · Y speakers · Z
+// utterances") instead.
+//
+// ctx carries Close's REST timeout — typically 30s. Implementations
+// should respect it; long LLM calls block the supervisor's teardown
+// goroutine until they complete or the deadline fires.
+type TranscriptSummarizer func(ctx context.Context, transcript string) (string, error)
 
 // DefaultTmpDir returns an OS-appropriate tmp directory for ogg utterance
 // files. Separate func (not a package var) so tests can override with
@@ -50,6 +65,12 @@ type Config struct {
 	JoinBackoffMax      time.Duration // retry cap; default 5m
 	JoinMaxAttempts     int           // circuit-break threshold; default 10
 	KickCooldown        time.Duration // don't rejoin after admin kick; default 5m
+
+	// TranscriptSummarizer, if set, is called from sessionOutput.Close
+	// when the session produced ≥1 transcribed utterance. The returned
+	// text replaces the parent summary message body. Optional — leaving
+	// it nil keeps the legacy stats-line behaviour. See type doc.
+	TranscriptSummarizer TranscriptSummarizer
 }
 
 // ApplyDefaults returns a copy of c with zero fields replaced by defaults.
