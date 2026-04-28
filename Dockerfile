@@ -2,7 +2,7 @@
 
 # ENABLE_EMBEDUI controls whether the web UI is built and embedded.
 # Must be declared before first FROM to use in stage selector.
-ARG ENABLE_EMBEDUI=false
+ARG ENABLE_EMBEDUI=true
 
 # ── Stage 0: Build Web UI ──
 # BuildKit skips this stage entirely when ENABLE_EMBEDUI=false
@@ -39,7 +39,7 @@ COPY . .
 ARG ENABLE_OTEL=false
 ARG ENABLE_TSNET=false
 ARG ENABLE_REDIS=false
-ARG ENABLE_EMBEDUI=false
+ARG ENABLE_EMBEDUI=true
 ARG VERSION=
 
 # Copy web UI dist — from web-builder when ENABLE_EMBEDUI=true, empty dir otherwise.
@@ -70,8 +70,8 @@ RUN set -eux; \
 FROM alpine:3.23
 
 ARG ENABLE_SANDBOX=false
-ARG ENABLE_PYTHON=false
-ARG ENABLE_NODE=false
+ARG ENABLE_PYTHON=true
+ARG ENABLE_NODE=true
 ARG ENABLE_FULL_SKILLS=false
 ARG ENABLE_CLAUDE_CLI=false
 
@@ -143,12 +143,12 @@ RUN chmod +x /app/docker-entrypoint.sh && \
 # .runtime has split ownership: root owns the dir (so pkg-helper can write apk-packages),
 # while pip/npm subdirs are goclaw-owned (runtime installs by the app process).
 # Symlink .claude → data volume so Claude CLI credentials persist across container recreates.
-RUN mkdir -p /app/workspace /app/data/.runtime/pip /app/data/.runtime/npm-global/lib \
+RUN mkdir -p /app/workspace /app/data/skills /app/data/.runtime/pip /app/data/.runtime/npm-global/lib \
         /app/data/.runtime/pip-cache /app/data/.runtime/bin /app/data/.claude /app/skills \
         /app/tsnet-state /app/.goclaw \
     && ln -s /app/data/.claude /app/.claude \
     && touch /app/data/.runtime/apk-packages \
-    && chown -R goclaw:goclaw /app/workspace /app/skills /app/tsnet-state /app/.goclaw \
+    && chown -R goclaw:goclaw /app/workspace /app/skills /app/data/skills /app/tsnet-state /app/.goclaw \
     && chown goclaw:goclaw /app/bundled-skills /app/data \
     && chown root:goclaw /app/data/.runtime /app/data/.runtime/apk-packages \
     && chmod 0750 /app/data/.runtime \
@@ -157,10 +157,10 @@ RUN mkdir -p /app/workspace /app/data/.runtime/pip /app/data/.runtime/npm-global
     && chmod 0755 /app/data/.runtime/bin
 
 # Default environment
-ENV GOCLAW_CONFIG=/app/config.json \
+ENV GOCLAW_CONFIG=/app/data/config.json \
     GOCLAW_WORKSPACE=/app/workspace \
     GOCLAW_DATA_DIR=/app/data \
-    GOCLAW_SKILLS_DIR=/app/skills \
+    GOCLAW_SKILLS_DIR=/app/data/skills \
     GOCLAW_MIGRATIONS_DIR=/app/migrations \
     GOCLAW_HOST=0.0.0.0 \
     GOCLAW_PORT=18790

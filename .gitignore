@@ -50,6 +50,9 @@ goclaw-lite-*.zip
 .mcp.json
 tmp
 .claude/
+backups/
+data/
+goclaw-volumes*.tar.gz
 
 deploy-*.sh
 

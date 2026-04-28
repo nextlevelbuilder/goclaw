@@ -13,6 +13,9 @@ tests/
 openclaw-go
 *.exe
 tmp/
+backups/
+data/
+goclaw-volumes*.tar.gz
 .claude/
 .vscode/
 .idea/
