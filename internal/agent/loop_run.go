@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/internal/tracing"
@@ -216,6 +217,25 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 		if isChildTrace && l.traceCollector != nil && traceID != uuid.Nil {
 			l.traceCollector.SetTraceStatus(ctx, traceID, store.TraceStatusCompleted)
 		}
+
+		provider := l.provider
+		if req.ProviderOverride != nil {
+			provider = req.ProviderOverride
+		}
+		model := l.model
+		if req.ModelOverride != "" {
+			model = req.ModelOverride
+		}
+		reasoningDecision := providers.ResolveReasoningDecision(
+			provider, model,
+			l.reasoningConfig.Effort,
+			l.reasoningConfig.Fallback,
+			l.reasoningConfig.Source,
+		)
+		if reasoningDecision.StripThinking {
+			result.Thinking = ""
+		}
+
 		completedPayload := map[string]any{"content": result.Content}
 		if result.Thinking != "" {
 			completedPayload["thinking"] = result.Thinking

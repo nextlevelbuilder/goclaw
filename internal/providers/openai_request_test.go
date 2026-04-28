@@ -187,3 +187,57 @@ func TestBuildRequestBody_NativeToolInBody(t *testing.T) {
 		t.Error("native tool must not have 'function' field in request body")
 	}
 }
+
+// TestBuildRequestBody_DeepSeekReasoningContent verifies that deepseek models
+// unconditionally get reasoning_content: "" when m.Thinking is empty and tool_calls exist,
+// while other models (like gpt-4) do not get the field injected.
+func TestBuildRequestBody_DeepSeekReasoningContent(t *testing.T) {
+	p := NewOpenAIProvider("openai", "sk-test", "https://api.openai.com/v1", "deepseek-v4-pro")
+	
+	req := ChatRequest{
+		Model: "deepseek-v4-pro",
+		Messages: []Message{
+			{Role: "user", Content: "hello"},
+			{
+				Role:      "assistant",
+				Content:   "",
+				Thinking:  "", // Empty thinking
+				ToolCalls: []ToolCall{{ID: "call_123", Name: "test_tool"}},
+			},
+			{Role: "user", Content: "continue"}, // Prevent being stripped as trailing assistant prefill
+		},
+	}
+	
+	body := p.buildRequestBody("deepseek-v4-pro", req, false)
+	msgs, ok := body["messages"].([]map[string]any)
+	if !ok || len(msgs) == 0 {
+		t.Fatalf("failed to build messages")
+	}
+	
+	// DeepSeek should have reasoning_content injected
+	if val, exists := msgs[1]["reasoning_content"]; !exists || val != "" {
+		t.Errorf("expected reasoning_content to be present and empty for deepseek, got exists=%v val=%v", exists, val)
+	}
+	
+	// Test with GPT-4o (should not have reasoning_content injected)
+	p2 := NewOpenAIProvider("openai", "sk-test", "https://api.openai.com/v1", "gpt-4o")
+	req2 := ChatRequest{
+		Model: "gpt-4o",
+		Messages: []Message{
+			{Role: "user", Content: "hello"},
+			{
+				Role:      "assistant",
+				Content:   "",
+				Thinking:  "",
+				ToolCalls: []ToolCall{{ID: "call_123", Name: "test_tool"}},
+			},
+			{Role: "user", Content: "continue"},
+		},
+	}
+	
+	body2 := p2.buildRequestBody("gpt-4o", req2, false)
+	msgs2 := body2["messages"].([]map[string]any)
+	if _, exists := msgs2[1]["reasoning_content"]; exists {
+		t.Errorf("expected reasoning_content to NOT be present for gpt-4o")
+	}
+}
