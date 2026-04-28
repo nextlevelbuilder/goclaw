@@ -244,6 +244,93 @@ func TestVaultRead_TeamScope_NoContext_Deny(t *testing.T) {
 	}
 }
 
+// --- 5a. isolated team, cross-chat doc → deny. ---
+func TestVaultRead_TeamScope_IsolatedCrossChat_Deny(t *testing.T) {
+	tenantID := uuid.New()
+	agentID := uuid.New()
+	docID := uuid.New()
+	teamID := uuid.New().String()
+	tid := teamID
+	chatA := "chatA"
+	doc := &store.VaultDocument{
+		ID: docID.String(), TenantID: tenantID.String(),
+		TeamID: &tid, ChatID: &chatA,
+		Scope: "team", Path: "team/doc.md",
+		Title: "Team Doc", DocType: "note",
+	}
+	tool, ws := newVaultReadTestTool(t, doc)
+	writeFile(t, ws, "team/doc.md", "team body")
+
+	// Caller bound to chatB in isolated team → deny.
+	ctx := store.WithRunContext(
+		makeCtx(tenantID, agentID),
+		&store.RunContext{
+			TenantID: tenantID, AgentID: agentID,
+			TeamID: teamID, TeamIsolated: true, WorkspaceChatID: "chatB",
+		})
+	res := tool.Execute(ctx, map[string]any{"doc_id": docID.String()})
+	if !res.IsError || !strings.Contains(res.ForLLM, "not accessible") {
+		t.Fatalf("expected cross-chat deny, got: %s", res.ForLLM)
+	}
+}
+
+// --- 5b. isolated team, same-chat doc → allow. ---
+func TestVaultRead_TeamScope_IsolatedSameChat_Allow(t *testing.T) {
+	tenantID := uuid.New()
+	agentID := uuid.New()
+	docID := uuid.New()
+	teamID := uuid.New().String()
+	tid := teamID
+	chatA := "chatA"
+	doc := &store.VaultDocument{
+		ID: docID.String(), TenantID: tenantID.String(),
+		TeamID: &tid, ChatID: &chatA,
+		Scope: "team", Path: "team/doc.md",
+		Title: "Team Doc", DocType: "note",
+	}
+	tool, ws := newVaultReadTestTool(t, doc)
+	writeFile(t, ws, "team/doc.md", "team body")
+
+	ctx := store.WithRunContext(
+		makeCtx(tenantID, agentID),
+		&store.RunContext{
+			TenantID: tenantID, AgentID: agentID,
+			TeamID: teamID, TeamIsolated: true, WorkspaceChatID: "chatA",
+		})
+	res := tool.Execute(ctx, map[string]any{"doc_id": docID.String()})
+	if res.IsError {
+		t.Fatalf("expected allow for same-chat, got error: %s", res.ForLLM)
+	}
+}
+
+// --- 5c. isolated team, team-wide doc (chat_id NULL) → allow regardless of chat. ---
+func TestVaultRead_TeamScope_IsolatedTeamWide_Allow(t *testing.T) {
+	tenantID := uuid.New()
+	agentID := uuid.New()
+	docID := uuid.New()
+	teamID := uuid.New().String()
+	tid := teamID
+	doc := &store.VaultDocument{
+		ID: docID.String(), TenantID: tenantID.String(),
+		TeamID: &tid, ChatID: nil, // team-wide
+		Scope: "team", Path: "team/doc.md",
+		Title: "Team Doc", DocType: "note",
+	}
+	tool, ws := newVaultReadTestTool(t, doc)
+	writeFile(t, ws, "team/doc.md", "team body")
+
+	ctx := store.WithRunContext(
+		makeCtx(tenantID, agentID),
+		&store.RunContext{
+			TenantID: tenantID, AgentID: agentID,
+			TeamID: teamID, TeamIsolated: true, WorkspaceChatID: "chatZ",
+		})
+	res := tool.Execute(ctx, map[string]any{"doc_id": docID.String()})
+	if res.IsError {
+		t.Fatalf("team-wide doc should be accessible in isolated team, got: %s", res.ForLLM)
+	}
+}
+
 // --- 6. cross-tenant (different tenant in ctx) → not-found. ---
 func TestVaultRead_CrossTenant_NotFound(t *testing.T) {
 	tenantA := uuid.New()

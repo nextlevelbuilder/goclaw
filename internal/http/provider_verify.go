@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +17,14 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
+
+// HandleVerifyProviderForTest invokes the verify handler directly without auth
+// middleware. Integration tests must inject the desired tenant_id into the
+// request context before calling. Production code MUST go through RegisterRoutes
+// so the auth/locale/tenant pipeline runs first.
+func (h *ProvidersHandler) HandleVerifyProviderForTest(w http.ResponseWriter, r *http.Request) {
+	h.handleVerifyProvider(w, r)
+}
 
 // handleVerifyProvider tests a provider+model combination with a minimal LLM call.
 //
@@ -33,14 +42,17 @@ func (h *ProvidersHandler) handleVerifyProvider(w http.ResponseWriter, r *http.R
 	var req struct {
 		Model string `json:"model"`
 	}
+	// Empty body == ping mode (connectivity check only). Truncated/malformed
+	// JSON still returns 400. io.EOF on Decode unambiguously means no body;
+	// io.ErrUnexpectedEOF is what truncated JSON returns.
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
-		return
+		if !errors.Is(err, io.EOF) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
+			return
+		}
+		// empty body — req.Model stays "" → pingMode below
 	}
-	if req.Model == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgRequired, "model")})
-		return
-	}
+	pingMode := req.Model == ""
 
 	// Look up provider record from DB to get the provider name
 	p, err := h.store.GetProvider(r.Context(), id)
@@ -51,6 +63,10 @@ func (h *ProvidersHandler) handleVerifyProvider(w http.ResponseWriter, r *http.R
 
 	// ACP: verify binary exists on the server (no LLM call needed)
 	if p.ProviderType == store.ProviderACP {
+		if pingMode {
+			writeJSON(w, http.StatusOK, map[string]any{"valid": true})
+			return
+		}
 		binary := p.APIBase
 		if binary == "" {
 			binary = "claude"
@@ -70,6 +86,10 @@ func (h *ProvidersHandler) handleVerifyProvider(w http.ResponseWriter, r *http.R
 
 	// Claude CLI: validate model alias locally (no LLM call needed)
 	if p.ProviderType == "claude_cli" {
+		if pingMode {
+			writeJSON(w, http.StatusOK, map[string]any{"valid": true})
+			return
+		}
 		validModels := map[string]bool{"sonnet": true, "opus": true, "haiku": true}
 		if validModels[req.Model] {
 			writeJSON(w, http.StatusOK, map[string]any{"valid": true})
@@ -89,6 +109,11 @@ func (h *ProvidersHandler) handleVerifyProvider(w http.ResponseWriter, r *http.R
 	provider, err := h.providerReg.GetForTenant(p.TenantID, p.Name)
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{"valid": false, "error": "provider not registered: " + p.Name})
+		return
+	}
+
+	if pingMode {
+		writeJSON(w, http.StatusOK, map[string]any{"valid": true})
 		return
 	}
 

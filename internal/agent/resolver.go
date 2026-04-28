@@ -514,6 +514,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			PromptMode:             PromptMode(ag.ParsePromptMode()),
 			PinnedSkills:           ag.ParsePinnedSkills(),
 			SelfEvolve:             ag.ParseSelfEvolve(),
+			AllowImageGeneration:   ag.ParseAllowImageGeneration(),
 			TTSAutoMode:            deps.TTSAutoMode,
 			SkillEvolve:            ag.AgentType == store.AgentTypePredefined && ag.ParseSkillEvolve(),
 			SkillNudgeInterval:     ag.ParseSkillNudgeInterval(),

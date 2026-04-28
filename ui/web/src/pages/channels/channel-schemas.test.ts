@@ -41,6 +41,37 @@ describe("pancake configSchema", () => {
     expect(values).not.toContain("zalo_oa");
   });
 
+  it("exposes private_reply feature toggle gated on fb/ig only", () => {
+    const feat = pancakeConfig.find((f) => f.key === "features.private_reply");
+    expect(feat).toBeDefined();
+    expect(feat!.type).toBe("boolean");
+    expect(feat!.defaultValue).toBe(false);
+    expect(feat!.showWhen).toMatchObject({
+      key: "platform",
+      value: ["facebook", "instagram"],
+    });
+  });
+
+  it("exposes private_reply_message gated by the feature toggle", () => {
+    const msg = pancakeConfig.find((f) => f.key === "private_reply_message");
+    expect(msg).toBeDefined();
+    expect(msg!.type).toBe("textarea");
+    expect(msg!.showWhen).toEqual({ key: "features.private_reply", value: "true" });
+  });
+
+  it("does NOT expose removed private_reply config fields", () => {
+    const removed = [
+      "private_reply_mode",
+      "private_reply_only",
+      "private_reply_ttl_days",
+      "private_reply_options.allow_post_ids",
+      "private_reply_options.deny_post_ids",
+    ];
+    for (const key of removed) {
+      expect(pancakeConfig.find((f) => f.key === key), `field ${key} should be removed`).toBeUndefined();
+    }
+  });
+
   it("has features.auto_react boolean toggle gated on platform=facebook", () => {
     const f = pancakeConfig.find((x) => x.key === "features.auto_react");
     expect(f).toBeDefined();

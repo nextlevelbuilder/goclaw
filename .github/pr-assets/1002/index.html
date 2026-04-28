@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>PR #1002 — Native image_generation UX trace</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --bg:#0d0d0d; --fg:#e8e4df; --card:#1a1714; --border:#2d2923;
+    --muted:#8a837d; --accent:#ef4444; --good:#22c55e; --code:#151210;
+  }
+  html.light {
+    --bg:#f8f6f3; --fg:#1a1714; --card:#ffffff; --border:#e5e0da;
+    --muted:#6b6560; --accent:#dc2626; --good:#15803d; --code:#f3f0eb;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif; line-height:1.55; }
+  header { padding:32px 40px 20px; border-bottom:1px solid var(--border); display:flex; align-items:flex-start; justify-content:space-between; gap:24px; flex-wrap:wrap; }
+  h1 { margin:0 0 6px; font-size:22px; font-weight:700; letter-spacing:-0.01em; }
+  .env { color:var(--muted); font-size:13px; line-height:1.6; max-width:800px; }
+  .toggle { background:var(--card); color:var(--fg); border:1px solid var(--border); padding:8px 14px; border-radius:999px; cursor:pointer; font-size:13px; font-weight:500; }
+  .toggle:hover { background:var(--border); }
+  main { max-width:1100px; margin:0 auto; padding:28px 40px 60px; }
+  .summary { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:32px; }
+  .sum-card { background:var(--card); border:1px solid var(--border); padding:16px 18px; border-radius:10px; }
+  .sum-card h3 { margin:0 0 6px; font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; }
+  .sum-card p { margin:0; font-size:14px; }
+  section { margin-bottom:40px; }
+  .section-head { background:var(--card); border:1px solid var(--border); padding:14px 18px; border-radius:10px 10px 0 0; border-bottom:0; }
+  .section-head h2 { margin:0 0 4px; font-size:16px; font-weight:600; }
+  .section-head .state { color:var(--muted); font-size:13px; }
+  .shot { background:var(--card); border:1px solid var(--border); border-radius:0 0 10px 10px; overflow:hidden; }
+  .shot-header { display:flex; align-items:center; gap:10px; padding:10px 18px; border-bottom:1px solid var(--border); font-size:12px; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted); font-weight:600; }
+  .shot-header .chip { display:inline-block; padding:2px 10px; border-radius:999px; font-size:11px; letter-spacing:0.04em; border:1px solid var(--border); }
+  .chip.ok { color:var(--good); border-color:var(--good); }
+  .chip.neutral { color:var(--muted); }
+  .shot img { display:block; width:100%; height:auto; background:#fff; }
+  .notes { padding:16px 18px; font-size:14px; color:var(--fg); border-top:1px solid var(--border); }
+  .notes .label { font-weight:600; color:var(--muted); text-transform:uppercase; font-size:11px; letter-spacing:0.06em; display:block; margin-bottom:4px; margin-top:10px; }
+  .notes .label:first-child { margin-top:0; }
+  code { background:var(--code); padding:1px 5px; border-radius:4px; font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:12.5px; color:var(--fg); }
+  .breadcrumb { background:var(--code); padding:10px 14px; border-radius:6px; font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:13px; color:var(--fg); display:inline-block; margin:6px 0; }
+  .breadcrumb .sep { color:var(--muted); padding:0 8px; }
+  ul { margin:6px 0; padding-left:22px; }
+  li { margin-bottom:4px; }
+  .panel { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:20px 22px; }
+  table { width:100%; border-collapse:collapse; font-size:13.5px; margin:8px 0; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.05em; }
+  td:first-child, th:first-child { padding-left:0; }
+  td:last-child, th:last-child { padding-right:0; }
+  @media (max-width:900px) { .summary { grid-template-columns:1fr; } main { padding:20px; } header { padding:20px; } }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>PR #1002 · Native image_generation — UX trace</h1>
+    <div class="env">
+      Captured against a live backend running the PR binary · agent <code>chatgpt-image-gen</code> (provider <code>cliproxy-codex</code>, model <code>gpt-5.4</code>) · image model <code>gpt-image-2</code> · real ChatGPT OAuth · real Postgres · session <code>23cb257e</code>.
+    </div>
+  </div>
+  <button class="toggle" id="theme-btn">○ Light</button>
+</header>
+
+<main>
+
+<div class="summary">
+  <div class="sum-card">
+    <h3>What this shows</h3>
+    <p>Real end-to-end run of the unified <code>create_image → NativeImageProvider → Codex</code> pathway against a complex Vietnamese infographic prompt. Tool completes with <code>Done</code>, image renders inline with the prompt as caption, and the image model is user-configurable from the existing Chain dialog.</p>
+  </div>
+  <div class="sum-card">
+    <h3>Why it matters</h3>
+    <p>Before this PR, routing <code>create_image</code> to <code>openai-codex</code> failed with <code>provider "openai-codex" does not expose API credentials required for image generation</code>. The new <code>NativeImageProvider</code> interface bridges OAuth-backed providers without exposing static keys — and locks in <code>gpt-image-2</code> as the quality default.</p>
+  </div>
+  <div class="sum-card">
+    <h3>Review cue</h3>
+    <p>The generated PNG is intentionally compact (thumbnail + expanded view) rather than a raw file attachment, so the PR itself stays small. The captures are here to show the surface, not to ship the asset.</p>
+  </div>
+</div>
+
+<section>
+  <div class="section-head">
+    <h2>1 · Inline result · <code>create_image</code> returns <code>Done</code>, image + prompt caption render</h2>
+    <span class="state">Tail of the Vietnamese Red Fox encyclopedia prompt, then the tool-result row, then the assistant reply with image and caption.</span>
+  </div>
+  <div class="shot">
+    <div class="shot-header">
+      <span class="chip ok">Implemented</span>
+      <span>/ chat / <code>chatgpt-image-gen</code></span>
+    </div>
+    <img src="01-tool-flow.png" alt="Chat view showing the end of the user's Vietnamese infographic prompt, then create_image Done, then the assistant's Vietnamese reply with the generated infographic rendered inline and the prompt as an italic muted caption beneath it." />
+    <div class="notes">
+      <span class="label">What this demonstrates</span>
+      The user's infographic prompt flows through to a <code>create_image</code> call that completes with <code>Done</code>. The assistant acknowledges in Vietnamese and the generated image renders inline via <code>MediaGallery</code>. Beneath the image, in muted italic, is the <strong>prompt caption</strong> — one of the two new UX surfaces this PR adds. The prompt is also embedded into the PNG's <code>tEXt</code> chunk on write, so downloaded files carry their own provenance.
+      <span class="label">Backend trace</span>
+      Log sequence: <code>tool call create_image args_len=N</code> → (4–8 min of work upstream) → <code>create_image: file saved path=/app/workspace/…/generated/…/cao-do-infographic-vietnamese_….png size=…</code> → <code>v3.run.completed</code>.
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="section-head">
+    <h2>2 · Expanded view · click the image, MediaGallery lightbox</h2>
+    <span class="state">Clicking the inline image opens the existing <code>MediaGallery</code> lightbox. Download button top-right. Full-resolution view confirms the generated asset is what reached the client — no placeholder, no degraded render.</span>
+  </div>
+  <div class="shot">
+    <div class="shot-header">
+      <span class="chip ok">Implemented</span>
+      <span>MediaGallery · lightbox overlay</span>
+    </div>
+    <img src="02-image-expanded.png" alt="Lightbox overlay showing the full vertical Red Fox encyclopedia infographic in Vietnamese, with download button top-right, image filename visible bottom-center" />
+    <div class="notes">
+      <span class="label">What this proves</span>
+      The full 1024×1792 PNG, streamed out of the native Codex Responses API, persisted to the workspace, surfaced through the existing <code>MediaGallery</code> render path with no new plumbing — that's the value of routing through the pre-existing <code>create_image</code> tool rather than inventing a new rail.
+      <span class="label">Download UX</span>
+      Filename is <code>cao-do-infographic-vietnamese_YYYYMMDD-HHmmss_hash.png</code> — resolved by the tool's <code>filename_hint</code> arg + timestamp, not a random UUID. Discoverable in the assistant's workspace at <code>{workspace}/media/{sha256}.{ext}</code> (deduped on hash) and also under the tool's <code>generated/YYYY-MM-DD/</code> folder.
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="section-head">
+    <h2>3 · Where to configure the image model</h2>
+    <span class="state">Whitelist select in the existing "Create Image — Provider Chain" dialog. Default <code>gpt-image-2</code>, legacy <code>gpt-image-1.5</code>, nothing else.</span>
+  </div>
+  <div class="shot">
+    <div class="shot-header">
+      <span class="chip ok">Configurable</span>
+      <span>Built-in Tools → create_image → Provider Chain</span>
+    </div>
+    <img src="03-image-model-dropdown.png" alt="Create Image Provider Chain modal with openai-codex row expanded. Model GPT-5.4, Timeout 600s, Retries 1. Settings panel open. Image model dropdown expanded showing Default · gpt-image-2 (recommended) selected, and Legacy · gpt-image-1.5 as the second option." />
+    <div class="notes">
+      <span class="label">Navigation path</span>
+      <div class="breadcrumb">
+        Sidebar <span class="sep">›</span>
+        Built-in Tools <span class="sep">›</span>
+        <code>create_image</code> row <span class="sep">›</span>
+        <strong>Settings</strong> <span class="sep">›</span>
+        Create Image — Provider Chain <span class="sep">›</span>
+        <code>openai-codex</code> card <span class="sep">›</span>
+        <strong>Settings</strong> (expand) <span class="sep">›</span>
+        <strong>Image model</strong>
+      </div>
+      <span class="label">Options (whitelist — enforced server-side)</span>
+      <table>
+        <thead><tr><th>Label</th><th>Value</th><th>When to pick</th></tr></thead>
+        <tbody>
+          <tr><td>Default · gpt-image-2</td><td><code>gpt-image-2</code></td><td>Quality baseline. The motivation of this PR. Recommended for everyone.</td></tr>
+          <tr><td>Legacy · gpt-image-1.5</td><td><code>gpt-image-1.5</code></td><td>Only if a pool account lacks gpt-image-2 entitlement or you're cost-tuning.</td></tr>
+          <tr><td>Anything else</td><td>—</td><td>Rejected by <code>ValidateImageModel</code> with <code>unsupported image model "…"; allowed: gpt-image-2 (default), gpt-image-1.5 (legacy)</code>. Prevents silent upstream 400s.</td></tr>
+        </tbody>
+      </table>
+      <span class="label">Where it's stored · how it's threaded</span>
+      Per chain entry, under <code>params.image_model</code> in the <code>create_image</code> tool settings JSON. At runtime: <code>create_image.callProvider</code> reads <code>entry.Params["image_model"]</code> → <code>NativeImageRequest.ImageModel</code> → <code>ValidateImageModel</code> (defaults empty to <code>gpt-image-2</code>) → outbound <code>tools[0].model</code> on <code>POST /codex/responses</code>.
+      <span class="label">Why surface this at all</span>
+      Most operators never need to touch it. It exists so that when Codex eventually rotates image models, or when an account's entitlement differs, the fallback is a clean UI toggle rather than a code change. The whitelist keeps the selector honest — no arbitrary strings, no silent upstream rejections.
+      <span class="label">Also visible in this screenshot</span>
+      <code>Timeout: 600s</code> and <code>Retries: 1</code> — the new defaults for this chain entry. Image generation of complex prompts legitimately runs 4–8 minutes; the old default of 120s × 2 retries routinely timed out mid-flight with <code>context deadline exceeded</code>. See §4.
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="section-head">
+    <h2>4 · What changed — honest summary</h2>
+    <span class="state">Before/after, no hand-waving.</span>
+  </div>
+  <div class="panel">
+    <table>
+      <thead><tr><th>Area</th><th>Before</th><th>After</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Routing <code>create_image</code> → <code>openai-codex</code></td>
+          <td>Failed. <code>credentialProvider</code> required static <code>APIKey</code> / <code>APIBase</code>; OAuth providers don't satisfy it.</td>
+          <td>Works. New <code>NativeImageProvider.GenerateImage</code>. <code>CodexProvider</code> implements it via <code>POST /codex/responses</code> with the native <code>image_generation</code> tool.</td>
+        </tr>
+        <tr>
+          <td>Responses API wire format</td>
+          <td>—</td>
+          <td><code>stream:true</code> (API rejects <code>false</code>), <code>instructions</code> populated (API rejects missing), <code>tool_choice</code> forces <code>image_generation</code>. SSE stream parsed for <code>response.output_item.done</code> image items and <code>response.completed</code> output walk.</td>
+        </tr>
+        <tr>
+          <td>Image model selection</td>
+          <td>Hardcoded literal.</td>
+          <td>Whitelisted: <code>gpt-image-2</code> (default) + <code>gpt-image-1.5</code> (legacy). Selector in the Chain dialog. Server validator rejects anything else.</td>
+        </tr>
+        <tr>
+          <td>Default chain timeout</td>
+          <td>120s × 2 retries · image gen routinely died with <code>context deadline exceeded</code> while upstream was still generating.</td>
+          <td>600s × 1 retry · matches realistic gpt-image-2 completion time. Retries reduced to 1 — stateful upstream runs don't benefit from retry.</td>
+        </tr>
+        <tr>
+          <td>Assistant images in UI</td>
+          <td>Rendered inline, no provenance.</td>
+          <td>Prompt caption beneath image (muted italic, line-clamp-2, full text in tooltip). Prompt also embedded in PNG <code>tEXt</code> chunk so downloaded files carry provenance.</td>
+        </tr>
+        <tr>
+          <td>Per-request user toggle</td>
+          <td>Added in earlier commits of this PR branch.</td>
+          <td>Removed. Users toggling it off then forgetting = support footgun. Emergency admin kill-switch still exists via <code>AgentConfig.AllowImageGeneration</code> (stored in <code>other_config</code>).</td>
+        </tr>
+        <tr>
+          <td>CI drift (unrelated — fixed in-PR)</td>
+          <td><code>sessions.compact</code> unclassified → RBAC drift test fail. <code>contains()</code> declared twice in <code>tests/integration</code> → compile fail.</td>
+          <td>Classified, deduped. Green.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="section-head">
+    <h2>Out of scope / follow-ups</h2>
+    <span class="state">Honest gap log.</span>
+  </div>
+  <div class="panel">
+    <ul>
+      <li>Desktop (Wails) surface — UI changes live only in <code>ui/web/</code>. Desktop shell unchanged.</li>
+      <li>Video / audio generation chains — only <code>create_image</code> is routed through <code>NativeImageProvider</code>; <code>create_video</code> / <code>create_audio</code> still use the <code>credentialProvider</code> path.</li>
+      <li>OpenAI-compat track (non-Codex providers sending <code>message.images[]</code>) is wired but untested against a live OpenAI-compat image endpoint — forward-compat infrastructure only.</li>
+    </ul>
+  </div>
+</section>
+
+</main>
+
+<script>
+  const btn = document.getElementById('theme-btn');
+  const html = document.documentElement;
+  function apply(mode) {
+    if (mode === 'light') { html.classList.add('light'); btn.textContent = '● Light'; }
+    else { html.classList.remove('light'); btn.textContent = '○ Light'; }
+    try { localStorage.setItem('pr-1002-theme', mode); } catch {}
+  }
+  const pref = (() => { try { return localStorage.getItem('pr-1002-theme'); } catch { return null; } })();
+  apply(pref || 'light');
+  btn.onclick = () => apply(html.classList.contains('light') ? 'dark' : 'light');
+</script>
+</body>
+</html>

@@ -99,6 +99,11 @@ type PipelineDeps struct {
 	FlushMessages func(ctx context.Context, sessionKey string, msgs []providers.Message) error
 
 	// Finalize callbacks (FinalizeStage)
+	// PersistAssistantImages writes final (non-partial) images from the assistant
+	// response to workspace disk, appends MediaRefs, and clears inline base64.
+	// Called BEFORE building the assistant message for session persistence.
+	// nil = feature disabled (no Codex image gen or no workspace).
+	PersistAssistantImages   func(msg *providers.Message, workspace string)
 	SkillPostscript          func(ctx context.Context, content string, totalToolCalls int) string // skill evolution nudge (nil = disabled)
 	SanitizeContent          func(content string) string
 	StripMessageDirectives   func(content string) string

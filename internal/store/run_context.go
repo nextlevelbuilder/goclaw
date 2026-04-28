@@ -52,6 +52,7 @@ type RunContext struct {
 	TeamID             string
 	WorkspaceChannel   string
 	WorkspaceChatID    string
+	TeamIsolated       bool   // true when team.workspace_scope != "shared" — drives chat_id filtering in vault search
 	TeamTaskID         string
 	DelegationID       string   // delegation identifier for vault auto-linking (empty when not in delegation)
 	LeaderAgentID      string   // leader's agent UUID for member memory read fallback

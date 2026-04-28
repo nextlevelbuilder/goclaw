@@ -81,8 +81,7 @@ export function normalizeChatGPTOAuthStrategy(
   strategy: unknown,
 ): EffectiveChatGPTOAuthRoutingStrategy {
   if (strategy === "round_robin") return "round_robin";
-  if (strategy === "priority_order") return "priority_order";
-  return "primary_first";
+  return "priority_order";
 }
 
 export function normalizeReasoningEffort(value: unknown): string {
@@ -140,7 +139,7 @@ export function getChatGPTOAuthProviderRouting(
   const pool = rawPool as Record<string, unknown>;
   const strategy = normalizeChatGPTOAuthStrategy(pool.strategy);
   const extraProviderNames = normalizeProviderNames(pool.extra_provider_names);
-  if (strategy === "primary_first" && extraProviderNames.length === 0) {
+  if (strategy === "priority_order" && extraProviderNames.length === 0) {
     return null;
   }
   return {
@@ -158,7 +157,7 @@ export function buildProviderSettingsWithChatGPTOAuthRouting(
   const extraProviderNames = normalizeProviderNames(routing.extra_provider_names);
 
   delete next.codex_pool;
-  if (strategy !== "primary_first" || extraProviderNames.length > 0) {
+  if (extraProviderNames.length > 0) {
     next.codex_pool = {
       strategy,
       extra_provider_names: extraProviderNames,

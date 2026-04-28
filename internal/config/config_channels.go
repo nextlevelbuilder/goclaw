@@ -389,8 +389,9 @@ type ToolsConfig struct {
 	Allow            []string                    `json:"allow,omitempty"`      // global allow list (tool names or "group:xxx")
 	Deny             []string                    `json:"deny,omitempty"`       // global deny list
 	AlsoAllow        []string                    `json:"alsoAllow,omitempty"`  // additive: adds without removing existing
-	ByProvider       map[string]*ToolPolicySpec  `json:"byProvider,omitempty"` // per-provider overrides
-	ExecApproval     ExecApprovalCfg             `json:"execApproval"`         // exec command approval settings
+	ByProvider       map[string]*ToolPolicySpec  `json:"byProvider,omitempty"`      // per-provider overrides
+	ShellDenyGroups  map[string]bool             `json:"shellDenyGroups,omitempty"` // global shell deny-group toggles (group name -> denied); per-agent overrides win per-key
+	ExecApproval     ExecApprovalCfg             `json:"execApproval"`              // exec command approval settings
 	WebFetch         WebFetchPolicyConfig        `json:"web_fetch"`            // domain policy for URL fetching
 	Browser          BrowserToolConfig           `json:"browser"`
 	RateLimitPerHour int                         `json:"rate_limit_per_hour,omitempty"` // max tool executions per hour per session (0 = disabled)

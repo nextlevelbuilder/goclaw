@@ -31,19 +31,29 @@ export interface ChatGPTOAuthPoolOwnership {
 
 export function getChatGPTOAuthPoolOwnership(
   providers: ProviderData[],
+  options?: { enabledOnly?: boolean },
 ): ChatGPTOAuthPoolOwnership {
   const membersByOwner = new Map<string, string[]>();
   const ownerByMember = new Map<string, string>();
   const strategyByOwner = new Map<string, EffectiveChatGPTOAuthRoutingStrategy>();
+  const enabledOnly = options?.enabledOnly ?? false;
+  const eligibleProviders = enabledOnly
+    ? providers.filter((provider) => provider.provider_type === "chatgpt_oauth" && provider.enabled)
+    : providers.filter((provider) => provider.provider_type === "chatgpt_oauth");
+  const eligibleProvidersByName = new Map(
+    eligibleProviders.map((provider) => [provider.name, provider]),
+  );
 
   for (const provider of providers) {
     if (provider.provider_type !== "chatgpt_oauth") continue;
+    if (enabledOnly && !provider.enabled) continue;
     const routing = getChatGPTOAuthProviderRouting(provider.settings);
     if (!routing) continue;
     strategyByOwner.set(provider.name, routing.strategy);
-    if (routing.extraProviderNames.length === 0) continue;
-    membersByOwner.set(provider.name, routing.extraProviderNames);
-    for (const memberName of routing.extraProviderNames) {
+    const eligibleMembers = routing.extraProviderNames.filter((memberName) => eligibleProvidersByName.has(memberName));
+    if (eligibleMembers.length === 0) continue;
+    membersByOwner.set(provider.name, eligibleMembers);
+    for (const memberName of eligibleMembers) {
       if (!ownerByMember.has(memberName)) {
         ownerByMember.set(memberName, provider.name);
       }

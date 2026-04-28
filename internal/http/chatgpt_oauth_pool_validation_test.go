@@ -164,6 +164,31 @@ func TestValidateChatGPTOAuthAgentRoutingAllowsStrategyOnlyOverride(t *testing.T
 	}
 }
 
+func TestValidateChatGPTOAuthAgentRoutingAllowsPriorityOrderWithoutProviderPool(t *testing.T) {
+	providerStore := newMockProviderStore()
+	tenantID := uuid.New()
+	ctx := store.WithTenantID(context.Background(), tenantID)
+
+	if err := providerStore.CreateProvider(ctx, &store.LLMProviderData{
+		BaseModel:    store.BaseModel{ID: uuid.New()},
+		TenantID:     tenantID,
+		Name:         "openai-codex",
+		ProviderType: store.ProviderChatGPTOAuth,
+		Enabled:      true,
+	}); err != nil {
+		t.Fatalf("CreateProvider() error = %v", err)
+	}
+
+	routing := &store.ChatGPTOAuthRoutingConfig{
+		OverrideMode: store.ChatGPTOAuthOverrideCustom,
+		Strategy:     store.ChatGPTOAuthStrategyPriority,
+	}
+
+	if err := validateChatGPTOAuthAgentRouting(ctx, providerStore, "openai-codex", routing); err != nil {
+		t.Fatalf("validateChatGPTOAuthAgentRouting() error = %v, want nil", err)
+	}
+}
+
 // TestValidatePoolGraphIgnoresDisabledProviders verifies that disabled providers'
 // stale pool configs do not block validation for active providers.
 func TestValidatePoolGraphIgnoresDisabledProviders(t *testing.T) {
@@ -208,7 +233,7 @@ func TestValidatePoolGraphIgnoresDisabledProviders(t *testing.T) {
 		Enabled:      true,
 		Settings: json.RawMessage(`{
 			"codex_pool": {
-				"strategy": "primary_first",
+				"strategy": "priority_order",
 				"extra_provider_names": ["codex-work"]
 			}
 		}`),
@@ -261,7 +286,7 @@ func TestValidatePoolGraphRejectsConflictWithEnabledProviders(t *testing.T) {
 		Enabled:      true,
 		Settings: json.RawMessage(`{
 			"codex_pool": {
-				"strategy": "primary_first",
+				"strategy": "priority_order",
 				"extra_provider_names": ["codex-work"]
 			}
 		}`),

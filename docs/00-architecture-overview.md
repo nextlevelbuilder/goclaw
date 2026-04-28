@@ -481,7 +481,7 @@ V3 introduces a **pluggable 8-stage pipeline** (replacing the monolithic `runLoo
 
 | Stage | Phase | Responsibility |
 |-------|-------|-----------------|
-| **ContextStage** | Setup (once) | Inject agent/user/workspace context, compute per-user files |
+| **ContextStage** | Setup (once) | Inject agent/user/workspace context, compute per-user files, calculate token overhead (system prompt, tools, etc.) |
 | **ThinkStage** | Iteration | Build system prompt, filter tools by policy, call LLM |
 | **PruneStage** | Iteration | Context pruning (2-pass: soft trim → hard clear), run memory flush if compaction triggered |
 | **ToolStage** | Iteration | Execute tool calls (parallel goroutines for multiple calls) |

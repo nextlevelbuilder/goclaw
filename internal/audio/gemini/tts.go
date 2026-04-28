@@ -7,18 +7,38 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/audio"
 )
+
+// DefaultTextPrefix is the inline style directive prepended to user text
+// for every Gemini TTS single-voice request. Gemini TTS preview models do not
+// accept systemInstruction; inline prefix is the ONLY supported style control.
+// See research/researcher-01-gemini-tts-api.md Q1,Q3.
+const DefaultTextPrefix = "Speak naturally: "
+
+// StrongerTextPrefix is the retry prefix used after a 400 "text generation"
+// response. Explicitly forbids translation/commentary to force TTS-only mode.
+const StrongerTextPrefix = "Read the following text aloud without translating, commenting, or modifying: "
+
+// BuildStyledText prepends prefix to text. Empty prefix returns text unchanged.
+// Exported for retry logic that may use a stronger prefix (Phase 03).
+func BuildStyledText(prefix, text string) string {
+	if prefix == "" {
+		return text
+	}
+	return prefix + text
+}
 
 // Config bundles credentials and TTS defaults for Google Gemini.
 type Config struct {
 	APIKey    string
 	APIBase   string // custom endpoint (optional); must pass validateProviderURL
 	Voice     string // default "Kore"
-	Model     string // default "gemini-2.5-flash-preview-tts"
-	TimeoutMs int    // default 30000
+	Model     string // default "gemini-3.1-flash-tts-preview"
+	TimeoutMs int    // default 120000
 }
 
 // Provider implements audio.TTSProvider and audio.DescribableProvider for Gemini.
@@ -124,21 +144,33 @@ func (p *Provider) Synthesize(ctx context.Context, text string, opts audio.TTSOp
 		generationConfig["frequencyPenalty"] = fp
 	}
 
-	reqBody := map[string]any{
-		"contents": []map[string]any{
-			{"parts": []map[string]any{{"text": text}}},
-		},
-		"generationConfig": generationConfig,
+	// Phase 02 gating: multi-speaker keeps raw transcript; single-voice gets prefix.
+	isSingleVoice := len(opts.Speakers) == 0
+
+	// buildBody constructs the request JSON with the given style prefix.
+	// Multi-speaker mode ignores prefix — raw transcript is passed unchanged.
+	buildBody := func(prefix string) ([]byte, error) {
+		sendText := text
+		if isSingleVoice {
+			sendText = BuildStyledText(prefix, text)
+		}
+		rb := map[string]any{
+			"contents": []map[string]any{
+				{"parts": []map[string]any{{"text": sendText}}},
+			},
+			"generationConfig": generationConfig,
+		}
+		return json.Marshal(rb)
 	}
 
-	bodyBytes, err := json.Marshal(reqBody)
+	bodyBytes, err := buildBody(DefaultTextPrefix)
 	if err != nil {
 		return nil, fmt.Errorf("gemini: marshal request: %w", err)
 	}
 
-	// Single retry on transient no-audio responses (finishReason=OTHER) — the
-	// preview TTS endpoint is flaky and usually succeeds on the second try.
-	// Anything else (auth, rate limit, safety, invalid model) is returned as-is.
+	// Retry logic — two independent retry branches, mutually exclusive:
+	//   1. errTransientNoAudio (200 OK, finishReason=OTHER): retry with SAME body.
+	//   2. ErrTextOnlyResponse (400 text-only): retry with STRONGER prefix body (single-voice only).
 	res, err := p.requestAudio(ctx, model, bodyBytes)
 	if err != nil && errors.Is(err, errTransientNoAudio) {
 		select {
@@ -146,7 +178,19 @@ func (p *Provider) Synthesize(ctx context.Context, text string, opts audio.TTSOp
 			return nil, ctx.Err()
 		case <-time.After(retryBackoff):
 		}
-		res, err = p.requestAudio(ctx, model, bodyBytes)
+		res, err = p.requestAudio(ctx, model, bodyBytes) // SAME body
+	} else if err != nil && errors.Is(err, ErrTextOnlyResponse) && isSingleVoice {
+		// Multi-speaker + text-only → return sentinel unretried; caller decides.
+		strongerBody, bErr := buildBody(StrongerTextPrefix)
+		if bErr != nil {
+			return nil, fmt.Errorf("gemini: marshal retry request: %w", bErr)
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(retryBackoff):
+		}
+		res, err = p.requestAudio(ctx, model, strongerBody) // NEW body with stronger prefix
 	}
 	return res, err
 }
@@ -170,6 +214,13 @@ func (p *Provider) requestAudio(ctx context.Context, model string, bodyBytes []b
 		return nil, fmt.Errorf("gemini: auth error (401) — check api key")
 	case http.StatusTooManyRequests:
 		return nil, fmt.Errorf("gemini: rate limit exceeded (429)")
+	}
+	if isTextOnlyError(status, respBytes) {
+		snippet := string(respBytes)
+		if len(snippet) > 200 {
+			snippet = snippet[:200] + "…"
+		}
+		return nil, fmt.Errorf("%w: %s", ErrTextOnlyResponse, snippet)
 	}
 	if status != http.StatusOK {
 		return nil, fmt.Errorf("gemini: unexpected status %d: %s", status, string(respBytes))
@@ -294,6 +345,29 @@ func resolveGeminiIntExplicit(params map[string]any, key string) (int, bool) {
 		return int(n), true
 	}
 	return 0, false
+}
+
+// isTextOnlyError returns true when the response is an HTTP 400 whose body
+// suggests the model returned text instead of audio. Case-insensitive
+// substring match on known Gemini error phrasings. Needles are kept narrow to
+// avoid false positives on unrelated "generate text" errors.
+func isTextOnlyError(status int, body []byte) bool {
+	if status != http.StatusBadRequest || len(body) == 0 {
+		return false
+	}
+	lower := strings.ToLower(string(body))
+	for _, needle := range []string{
+		"model tried to generate text", // exact phrase from user bug report
+		"returned text",                // "returned text when audio was expected"
+		"text instead of audio",
+		"text-only",
+		"text output",
+	} {
+		if strings.Contains(lower, needle) {
+			return true
+		}
+	}
+	return false
 }
 
 // isTransientFinishReason reports whether a Gemini finishReason represents a

@@ -330,6 +330,13 @@ func openTestDBAtVersion(t *testing.T, targetVersion int) *sql.DB {
 		db.Exec(`DROP TABLE episodic_summaries_old`)
 	}
 
+	if targetVersion < 25 {
+		// Migration 24→25 adds vault_documents.chat_id + idx_vault_docs_team_chat.
+		// Drop both so the migration's ALTER TABLE / CREATE INDEX succeed.
+		db.Exec(`DROP INDEX IF EXISTS idx_vault_docs_team_chat`)
+		db.Exec(`ALTER TABLE vault_documents DROP COLUMN chat_id`)
+	}
+
 	// Set version back to target.
 	db.Exec("UPDATE schema_version SET version = ?", targetVersion)
 	return db

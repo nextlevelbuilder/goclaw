@@ -276,13 +276,14 @@ func (m *ChatMethods) handleSend(ctx context.Context, client *gateway.Client, re
 		}
 
 		result, err := loop.Run(runCtx, agent.RunRequest{
-			SessionKey: sessionKey,
-			Message:    message,
-			Media:      mediaFiles,
-			Channel:    "ws",
-			ChatID:     userID, // use stable userID for team/workspace isolation (not ephemeral client.ID())
-			RunID:      runID,
-			UserID:     userID,
+			SessionKey:      sessionKey,
+			Message:         message,
+			Media:           mediaFiles,
+			Channel:         "ws",
+			ChatID:          userID, // use stable userID for team/workspace isolation (not ephemeral client.ID())
+			WorkspaceChatID: userID, // mirror ChatID so vault chat_id isolation activates for WS direct flow
+			RunID:           runID,
+			UserID:          userID,
 			Stream:     params.Stream,
 			InjectCh:   injectCh,
 			// Wire trace ID back to the active run so force-abort can mark the

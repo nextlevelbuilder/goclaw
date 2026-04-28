@@ -98,7 +98,7 @@ func TestInferOwnerFromPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
-			gotAgentID, gotTeamID, gotScope, gotPath := inferOwnerFromPath(tt.path, agentMap, teamSet)
+			gotAgentID, gotTeamID, _, gotScope, gotPath := inferOwnerFromPath(tt.path, agentMap, teamSet)
 
 			if gotScope != tt.wantScope {
 				t.Errorf("scope = %q, want %q", gotScope, tt.wantScope)

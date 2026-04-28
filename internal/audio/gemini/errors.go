@@ -20,4 +20,10 @@ var (
 	// finishReason=OTHER). These are flaky on the preview TTS endpoints and
 	// usually succeed on a single retry.
 	errTransientNoAudio = errors.New("gemini: transient no-audio response")
+
+	// ErrTextOnlyResponse is returned when Gemini TTS responds 400 indicating it
+	// attempted text generation rather than speech synthesis. This typically
+	// happens when the input is vague or contains translation/manipulation
+	// intent. Retryable once with a stronger prefix (see tts.go retry logic).
+	ErrTextOnlyResponse = errors.New("gemini: text-only response (model refused to synthesize audio)")
 )

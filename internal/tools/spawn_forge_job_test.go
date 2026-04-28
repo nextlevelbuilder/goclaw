@@ -263,8 +263,9 @@ func TestSpawnForgeJob_RowWriteFailureSkipsPost(t *testing.T) {
 // Sanity: the HMAC helper produces a stable hex-encoded sha256.
 func TestComputeHMACSignature(t *testing.T) {
 	got := computeHMACSignature([]byte("hello"), []byte("k"))
-	// hex-encoded HMAC-SHA256 of "hello" with key "k". Pre-computed.
-	want := "98ada3ed8ec3a72c2dd03022a8366c0c4124170020c4e9a3f6f9bf02b9b87f4d"
+	// hex-encoded HMAC-SHA256 of "hello" with key "k". Verify with:
+	//   python3 -c 'import hmac,hashlib; print(hmac.new(b"k", b"hello", hashlib.sha256).hexdigest())'
+	want := "406e4b43f87095aa86ca6299d25e875921fefa180f02043bb29bec5681c0c2d0"
 	if got != want {
 		t.Errorf("HMAC mismatch:\n got  %s\n want %s", got, want)
 	}

@@ -11,6 +11,62 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
+func canonicalizeChatGPTOAuthRoutingForResponse(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 {
+		return nil
+	}
+	agent := &store.AgentData{ChatGPTOAuthRouting: raw}
+	routing := store.PublicChatGPTOAuthRouting(agent.ParseChatGPTOAuthRouting())
+	if routing == nil {
+		return nil
+	}
+	out, err := json.Marshal(routing)
+	if err != nil {
+		return raw
+	}
+	return out
+}
+
+func canonicalizeProviderSettingsForResponse(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 {
+		return nil
+	}
+	var settings map[string]any
+	if err := json.Unmarshal(raw, &settings); err != nil {
+		return raw
+	}
+	providerSettings := store.ParseChatGPTOAuthProviderSettings(raw)
+	if providerSettings == nil || providerSettings.CodexPool == nil {
+		delete(settings, "codex_pool")
+	} else {
+		routing := store.PublicChatGPTOAuthRouting(providerSettings.CodexPool)
+		settings["codex_pool"] = map[string]any{
+			"strategy":             routing.Strategy,
+			"extra_provider_names": routing.ExtraProviderNames,
+		}
+	}
+	if len(settings) == 0 {
+		return nil
+	}
+	out, err := json.Marshal(settings)
+	if err != nil {
+		return raw
+	}
+	return out
+}
+
+func canonicalizeAgentForResponse(ag *store.AgentData) store.AgentData {
+	clone := *ag
+	clone.ChatGPTOAuthRouting = canonicalizeChatGPTOAuthRoutingForResponse(ag.ChatGPTOAuthRouting)
+	return clone
+}
+
+func canonicalizeProviderForResponse(p *store.LLMProviderData) store.LLMProviderData {
+	clone := *p
+	clone.Settings = canonicalizeProviderSettingsForResponse(p.Settings)
+	return clone
+}
+
 // addToTar adds a single file to the tar archive with a standard header.
 func addToTar(tw *tar.Writer, name string, data []byte) error {
 	hdr := &tar.Header{
@@ -97,7 +153,7 @@ func marshalAgentConfig(ag *store.AgentData) ([]byte, error) {
 		SkillNudgeInterval:  ag.SkillNudgeInterval,
 		ReasoningConfig:     ag.ReasoningConfig,
 		WorkspaceSharing:    ag.WorkspaceSharing,
-		ChatGPTOAuthRouting: ag.ChatGPTOAuthRouting,
+		ChatGPTOAuthRouting: canonicalizeChatGPTOAuthRoutingForResponse(ag.ChatGPTOAuthRouting),
 		ShellDenyGroups:     ag.ShellDenyGroups,
 		KGDedupConfig:       ag.KGDedupConfig,
 	}, "", "  ")

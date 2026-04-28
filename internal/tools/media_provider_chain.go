@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // MediaProviderEntry represents a single provider in an ordered fallback chain.
@@ -20,8 +21,8 @@ type MediaProviderEntry struct {
 	Provider   string         `json:"provider"`              // name for registry.Get()
 	Model      string         `json:"model"`
 	Enabled    bool           `json:"enabled"`
-	Timeout    int            `json:"timeout"`          // seconds, default 120
-	MaxRetries int            `json:"max_retries"`      // default 2
+	Timeout    int            `json:"timeout"`          // seconds, default 600 (10 min — image/video gen is slow)
+	MaxRetries int            `json:"max_retries"`      // default 1 (image gen rarely succeeds on retry)
 	Params     map[string]any `json:"params,omitempty"` // provider-specific config
 }
 
@@ -33,12 +34,23 @@ type mediaProviderChain struct {
 }
 
 // applyDefaults fills in zero-value fields with sensible defaults.
+//
+// Timeout: 600s (10 min). Native image_generation on gpt-image-2 can legitimately
+// take 4-8 min for complex prompts with heavy in-image text (e.g. infographics).
+// 120s — the old default — routinely truncated real work mid-generation and
+// surfaced as 'context deadline exceeded'. Lowering this risks re-introducing
+// that footgun; operators can still set a tighter value explicitly.
+//
+// MaxRetries: 1. Image generation is stateful per upstream run — a mid-flight
+// timeout leaves orphan server-side work. Retrying a fresh generation (new
+// upstream run) doubles cost and rarely succeeds where the first attempt timed
+// out. Surface the failure fast so the user can adjust the timeout.
 func (e *MediaProviderEntry) applyDefaults() {
 	if e.Timeout <= 0 {
-		e.Timeout = 120
+		e.Timeout = 600
 	}
 	if e.MaxRetries <= 0 {
-		e.MaxRetries = 2
+		e.MaxRetries = 1
 	}
 }
 
@@ -171,17 +183,25 @@ func ExecuteWithChain(
 			continue
 		}
 
+		// Wrap Codex pool-base providers in a ChatGPTOAuthRouter so that
+		// _native_provider delivers pool-aware image generation to callProvider.
+		// Solo Codex providers (no routing defaults) pass through unchanged.
+		p = wrapPoolProvider(ctx, registry, entry.Provider, p)
+
 		// credentialProvider is optional — providers that don't expose static
 		// credentials (e.g. OAuth-based CodexProvider) pass nil and each
 		// callProvider falls back to using the provider's Chat() API.
 		cp, _ := p.(credentialProvider)
 
-		// Inject resolved provider type into params so callProvider can route correctly.
-		// Clone params to avoid mutating the original entry config.
+		// Inject resolved provider type and the raw provider object into params so
+		// callProvider can route correctly. Clone params to avoid mutating entry config.
 		resolvedType := ResolveProviderType(p)
-		callParams := make(map[string]any, len(entry.Params)+1)
+		callParams := make(map[string]any, len(entry.Params)+2)
 		maps.Copy(callParams, entry.Params)
 		callParams["_provider_type"] = resolvedType
+		// "_native_provider" carries the providers.Provider instance so callProvider
+		// can type-assert to NativeImageProvider without a separate registry lookup.
+		callParams["_native_provider"] = p
 
 		// Retry loop for this provider
 		for attempt := 1; attempt <= entry.MaxRetries; attempt++ {
@@ -326,6 +346,61 @@ func ResolveProviderType(p providers.Provider) string {
 	}
 	// Fallback: infer from provider name (for config-registered and openai_compat providers)
 	return providerTypeFromName(p.Name())
+}
+
+// wrapPoolProvider inspects the resolved provider and, when it is a
+// *providers.CodexProvider whose RoutingDefaults indicate a multi-member pool
+// (round_robin or priority_order strategy), wraps it in a *ChatGPTOAuthRouter.
+// The router satisfies NativeImageProvider, enabling pool-aware image generation
+// inside callProvider without changing any caller of ExecuteWithChain.
+//
+// Wrap conditions (all must hold):
+//  1. resolved is *providers.CodexProvider
+//  2. codex.RoutingDefaults() is non-nil
+//  3. strategy is round_robin or priority_order (OR extras ≥ 1)
+//  4. tenant UUID is present in ctx (uuid.Nil → safe degrade, return original)
+//  5. router.HasRegisteredProviders() is true (broken router guard)
+//
+// Returns resolved unchanged for every other case.
+func wrapPoolProvider(ctx context.Context, reg *providers.Registry, entryProvider string, resolved providers.Provider) providers.Provider {
+	codex, ok := resolved.(*providers.CodexProvider)
+	if !ok {
+		return resolved
+	}
+
+	defaults := codex.RoutingDefaults()
+	if defaults == nil {
+		return resolved
+	}
+
+	// A pool needs at least one extra member to be worth wrapping; with zero
+	// extras there is nothing to rotate or fail over to, so keep the bare
+	// CodexProvider (skip router overhead for solo Codex entries).
+	if len(defaults.ExtraProviderNames) == 0 {
+		return resolved
+	}
+
+	tenantID := store.TenantIDFromContext(ctx)
+	if tenantID.String() == "00000000-0000-0000-0000-000000000000" {
+		// No tenant in context — cannot build a scoped router safely.
+		return resolved
+	}
+
+	router := providers.NewChatGPTOAuthRouter(
+		tenantID,
+		reg,
+		entryProvider,
+		defaults.Strategy,
+		defaults.ExtraProviderNames,
+	)
+
+	// Guard: if the router cannot resolve any member, injecting it would break
+	// the image gen path. Fall back to the bare Codex provider.
+	if !router.HasRegisteredProviders() {
+		return resolved
+	}
+
+	return router
 }
 
 // providerTypeFromName infers provider type from naming patterns.

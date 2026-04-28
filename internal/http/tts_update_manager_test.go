@@ -92,13 +92,11 @@ func TestTTSHandler_UpdateManager_ConcurrentSafe(t *testing.T) {
 	}
 
 	// Mid-way call UpdateManager with new manager
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		newMgr := audio.NewManager(audio.ManagerConfig{Primary: "mock-new"})
 		newMgr.RegisterTTS(&mockTTSProvider{name: "mock-new", stateless: true})
 		h.UpdateManager(newMgr)
-	}()
+	})
 
 	wg.Wait()
 	// If we reach here without panic/race in handler code, test passes.

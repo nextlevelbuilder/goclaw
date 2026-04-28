@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -15,6 +16,132 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/media"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
+
+// mediaWorkspaceDiskWarnThreshold is the size in bytes at which a warn-level
+// log is emitted for the workspace/media/ directory. 500 MB.
+const mediaWorkspaceDiskWarnThreshold = 500 * 1024 * 1024
+
+// persistAssistantImages writes final (non-partial) images from msg.Images to
+// {workspace}/media/{sha256}.{ext}, replaces them with MediaRefs, and clears
+// msg.Images to prevent large base64 blobs from bloating the session store.
+//
+// Dedup: SHA256 hash is used as the filename, so writing the same image twice
+// results in only one disk file. Idempotent: if the file already exists, the
+// write is skipped but a new MediaRef is still appended (so the message
+// correctly references the image regardless of dedup).
+//
+// Partial frames (Partial == true) are skipped — they are preview-only and
+// must not be persisted to disk.
+func persistAssistantImages(msg *providers.Message, workspace string) {
+	if workspace == "" || len(msg.Images) == 0 {
+		return
+	}
+
+	mediaDir := filepath.Join(workspace, "media")
+	if err := os.MkdirAll(mediaDir, 0755); err != nil {
+		slog.Warn("media: failed to create workspace/media dir", "dir", mediaDir, "error", err)
+		return
+	}
+	// Symlink guard — identical to the pattern used for .uploads.
+	if fi, err := os.Lstat(mediaDir); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+		slog.Warn("media: workspace/media is a symlink, refusing to use", "dir", mediaDir)
+		return
+	}
+
+	var refs []providers.MediaRef
+	var totalBytes int64
+
+	for _, img := range msg.Images {
+		if img.Partial {
+			// Skip intermediate streaming frames — not final images.
+			continue
+		}
+		if img.Data == "" || img.MimeType == "" {
+			continue
+		}
+
+		raw, err := base64.StdEncoding.DecodeString(img.Data)
+		if err != nil {
+			slog.Warn("media: failed to decode assistant image base64", "error", err)
+			continue
+		}
+		if len(raw) == 0 {
+			continue
+		}
+
+		// Derive extension from MIME type.
+		ext := media.ExtFromMime(img.MimeType)
+		if ext == "" {
+			ext = ".bin"
+		}
+
+		// SHA256 hash → deterministic filename enables free dedup.
+		sum := sha256.Sum256(raw)
+		hashHex := fmt.Sprintf("%x", sum)
+		filename := hashHex + ext
+		dstPath := filepath.Join(mediaDir, filename)
+
+		// Traversal guard: resolved path must be inside mediaDir.
+		cleanDst := filepath.Clean(dstPath)
+		cleanMedia := filepath.Clean(mediaDir)
+		if !strings.HasPrefix(cleanDst+string(os.PathSeparator), cleanMedia+string(os.PathSeparator)) {
+			slog.Warn("media: refusing to persist outside workspace/media", "dst", dstPath, "media", mediaDir)
+			continue
+		}
+
+		// Write only if the file does not already exist (idempotent on hash).
+		if _, statErr := os.Lstat(dstPath); os.IsNotExist(statErr) {
+			if writeErr := os.WriteFile(dstPath, raw, 0644); writeErr != nil {
+				slog.Warn("media: failed to write assistant image", "path", dstPath, "error", writeErr)
+				continue
+			}
+			slog.Debug("media: persisted assistant image", "path", dstPath, "mime", img.MimeType, "bytes", len(raw))
+		} else {
+			slog.Debug("media: assistant image already on disk (dedup)", "path", dstPath)
+		}
+
+		totalBytes += int64(len(raw))
+		refs = append(refs, providers.MediaRef{
+			ID:       uuid.New().String(),
+			MimeType: img.MimeType,
+			Kind:     "image",
+			Path:     dstPath,
+		})
+	}
+
+	if len(refs) == 0 {
+		return
+	}
+
+	// Attach refs to the message and clear inline base64 to save session store space.
+	msg.MediaRefs = append(msg.MediaRefs, refs...)
+	msg.Images = nil
+
+	// Warn if workspace/media is growing large (quota enforcement deferred per phase spec).
+	go warnIfMediaDirLarge(mediaDir)
+}
+
+// warnIfMediaDirLarge emits a warn log when {mediaDir} exceeds the disk threshold.
+// Called in a goroutine to avoid blocking the pipeline finalize path.
+func warnIfMediaDirLarge(mediaDir string) {
+	entries, err := os.ReadDir(mediaDir)
+	if err != nil {
+		return
+	}
+	var total int64
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		if info, err := e.Info(); err == nil {
+			total += info.Size()
+		}
+	}
+	if total > mediaWorkspaceDiskWarnThreshold {
+		slog.Warn("media: workspace/media dir exceeds 500 MB threshold",
+			"dir", mediaDir, "bytes", total)
+	}
+}
 
 // maxImageBytes is the safety limit for reading image files (10MB).
 const maxImageBytes = 10 * 1024 * 1024

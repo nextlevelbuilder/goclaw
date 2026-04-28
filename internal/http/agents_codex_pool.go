@@ -201,7 +201,7 @@ func (h *AgentsHandler) handleCodexPoolActivity(w http.ResponseWriter, r *http.R
 	statsLimit := maxInt(limit, codexPoolRuntimeHealthSampleSize)
 
 	baseProviderType, routing, poolProviders := resolveCodexPoolRouting(r.Context(), h.providers, h.providerReg, agent)
-	strategy := store.ChatGPTOAuthStrategyPrimaryFirst
+	strategy := store.ChatGPTOAuthStrategyPriority
 	if routing != nil && routing.Strategy != "" {
 		strategy = routing.Strategy
 	}

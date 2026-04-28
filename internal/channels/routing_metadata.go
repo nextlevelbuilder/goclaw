@@ -5,19 +5,21 @@ package channels
 // replies, block replies, retries, and placeholder updates all land in the
 // correct thread / topic / subgroup routing bucket on each channel.
 var routingMetaKeys = []string{
-	"message_thread_id",          // telegram forum topics
-	"local_key",                  // composite chat-id suffix
-	"group_id",                   // legacy group identifier
-	"feishu_reply_target_id",     // feishu/lark thread reply routing
-	"fb_mode",                    // facebook messenger vs comment routing
-	"sender_id",                  // facebook sender for first-inbox / pancake sender for first-inbox
-	"page_id",                    // facebook page routing
-	"reply_to_comment_id",        // facebook/pancake comment reply target
-	"pancake_mode",               // pancake inbox vs comment routing
-	"discord_interaction_token",  // discord slash-command reply token (15-min lifetime)
-	"discord_interaction_id",     // discord interaction id (for audit trace)
-	"discord_interaction_appid",  // discord application id owning the interaction
-	"discord_interaction_flags",  // optional ephemeral flag propagation ("ephemeral" when set)
+	"message_thread_id",         // telegram forum topics
+	"local_key",                 // composite chat-id suffix
+	"group_id",                  // legacy group identifier
+	"feishu_reply_target_id",    // feishu/lark thread reply routing
+	"fb_mode",                   // facebook messenger vs comment routing
+	"sender_id",                 // facebook sender for first-inbox / pancake sender for private-reply
+	"page_id",                   // facebook page routing
+	"reply_to_comment_id",       // facebook/pancake comment reply target
+	"pancake_mode",              // pancake inbox vs comment routing
+	"post_id",                   // pancake: post id for template vars
+	"display_name",              // pancake: commenter display name for template vars
+	"discord_interaction_token", // discord slash-command reply token (15-min lifetime)
+	"discord_interaction_id",    // discord interaction id (for audit trace)
+	"discord_interaction_appid", // discord application id owning the interaction
+	"discord_interaction_flags", // optional ephemeral flag propagation ("ephemeral" when set)
 }
 
 var finalReplyMetaKeys = append([]string{
