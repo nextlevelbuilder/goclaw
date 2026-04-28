@@ -260,9 +260,10 @@ func (d *demux) flushSSRC(ssrc uint32, reason string) {
 	// Detach the buffer and clear the map entry BEFORE releasing the lock
 	// so a subsequent packet creates a fresh buffer with a correct
 	// startedAt. (No lock held during enqueue is deliberate.)
+	userID := buf.userID
 	u := utterance{
 		ssrc:         buf.ssrc,
-		userID:       buf.userID,
+		userID:       userID,
 		opusFrames:   buf.opusFrames,
 		rtpTimestamp: buf.rtpTimestamp,
 		startedAt:    buf.startedAt,
@@ -270,6 +271,18 @@ func (d *demux) flushSSRC(ssrc uint32, reason string) {
 	}
 	delete(d.ssrcBufs, ssrc)
 	d.mu.Unlock()
+
+	// If our own VoiceSpeakingUpdate handler hadn't been registered yet
+	// when discordgo dispatched the initial Speaking=true for this SSRC,
+	// buf.userID stays empty and the transcriber falls back to
+	// "user:<ssrc>" attribution. discordgo records the SSRC→userID map
+	// unconditionally on every OP5; pull from that as a backstop so we
+	// get proper display names even on the first utterance after join.
+	if u.userID == "" {
+		if late := d.vc.SSRCUserID(buf.ssrc); late != "" {
+			u.userID = late
+		}
+	}
 
 	if u.durationMs < d.cfg.MinUtteranceMs {
 		// Drop sub-threshold utterances (clicks, short coughs) without
