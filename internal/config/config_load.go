@@ -110,6 +110,14 @@ func (c *Config) applyEnvOverrides() {
 	envStr("GOCLAW_OLLAMA_CLOUD_API_KEY", &c.Providers.OllamaCloud.APIKey)
 	envStr("GOCLAW_OLLAMA_CLOUD_API_BASE", &c.Providers.OllamaCloud.APIBase)
 	envStr("GOCLAW_GATEWAY_TOKEN", &c.Gateway.Token)
+	// Shared HMAC for the forge-Job callback path (/v1/agents/jobs/{id}/{progress,complete}).
+	// Reuses CARTRIDGE_WEBHOOK_SECRET (the same env var stream-review's wrapper reads)
+	// so secret rotation is one event. The Job pod gets it via the agent-runtime CSI mount.
+	envStr("CARTRIDGE_WEBHOOK_SECRET", &c.Gateway.JobsCallbackSecret)
+	// In-pod URL for the sibling agent service. Default http://127.0.0.1:18789 (the
+	// existing internalListen the token endpoints already use). Override via env in
+	// tests / non-pod contexts.
+	envStr("GOCLAW_AGENT_SERVICE_URL", &c.Gateway.AgentServiceURL)
 	envStr("GOCLAW_TELEGRAM_TOKEN", &c.Channels.Telegram.Token)
 	envStr("GOCLAW_DISCORD_TOKEN", &c.Channels.Discord.Token)
 	envStr("GOCLAW_ZALO_TOKEN", &c.Channels.Zalo.Token)
