@@ -88,7 +88,9 @@ type discordSession interface {
 	GuildMember(guildID, userID string, options ...discordgo.RequestOption) (*discordgo.Member, error)
 	ChannelMessageSend(channelID, content string, options ...discordgo.RequestOption) (*discordgo.Message, error)
 	ChannelMessageEdit(channelID, messageID, content string, options ...discordgo.RequestOption) (*discordgo.Message, error)
+	ChannelMessageDelete(channelID, messageID string, options ...discordgo.RequestOption) error
 	Channel(channelID string, options ...discordgo.RequestOption) (*discordgo.Channel, error)
+	ChannelDelete(channelID string, options ...discordgo.RequestOption) (*discordgo.Channel, error)
 	MessageThreadStart(channelID, messageID string, name string, archiveDuration int, options ...discordgo.RequestOption) (*discordgo.Channel, error)
 }
 

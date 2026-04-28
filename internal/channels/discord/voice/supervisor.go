@@ -496,7 +496,7 @@ func (s *Supervisor) onJoinSuccess(vc *discordgo.VoiceConnection) {
 	// complete on a tail-latency network, short enough that a wedged call
 	// doesn't keep the session half-wired.
 	setupCtx, cancelSetup := context.WithTimeout(context.Background(), 10*time.Second)
-	output := newSessionOutput(setupCtx, s.session, s.cfg.TranscriptChannelID, s.cfg.VoiceChannelID, s.log)
+	output := newSessionOutput(setupCtx, s.session, s.cfg.TranscriptChannelID, s.cfg.VoiceChannelID, s.log, s.cfg.TranscriptSummarizer)
 	cancelSetup()
 	startedAt := s.nowFn()
 
@@ -595,7 +595,12 @@ func (s *Supervisor) leaveLocked(reason string) {
 			if !startedAt.IsZero() {
 				duration = time.Since(startedAt)
 			}
-			closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			// Budget covers up to two REST calls (delete-thread +
+			// delete-summary on the empty-session path) OR an LLM
+			// summarizer call + summary-message edit on the
+			// non-empty path. 30s is generous for both; a wedged
+			// provider can't pin the supervisor longer than that.
+			closeCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			output.Close(closeCtx, duration)
 			cancel()
 		}

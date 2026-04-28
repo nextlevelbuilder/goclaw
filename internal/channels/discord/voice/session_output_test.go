@@ -15,7 +15,7 @@ import (
 // should go to the thread, not the parent channel.
 func Test_newSessionOutput_happy_path_posts_summary_and_creates_thread(t *testing.T) {
 	fs := &fakeSession{}
-	out := newSessionOutput(context.Background(), fs, "transcript-ch", "voice-ch", discardLogger())
+	out := newSessionOutput(context.Background(), fs, "transcript-ch", "voice-ch", discardLogger(), nil)
 	if fs.channelCalls != 1 {
 		t.Errorf("expected one Channel() lookup for channel name; got %d", fs.channelCalls)
 	}
@@ -48,7 +48,7 @@ func Test_newSessionOutput_channel_lookup_failure_falls_back_to_id(t *testing.T)
 	fs := &fakeSession{
 		channelFn: func(_ string) (*discordgo.Channel, error) { return nil, errors.New("no perms") },
 	}
-	out := newSessionOutput(context.Background(), fs, "transcript-ch", "voice-ch-xyz", discardLogger())
+	out := newSessionOutput(context.Background(), fs, "transcript-ch", "voice-ch-xyz", discardLogger(), nil)
 	if !strings.Contains(fs.lastSentContent, "voice-ch-xyz") {
 		t.Errorf("fallback should use raw voice channel ID in summary: %q", fs.lastSentContent)
 	}
@@ -70,7 +70,7 @@ func Test_newSessionOutput_summary_post_failure_keeps_output_usable(t *testing.T
 			return &discordgo.Message{ID: "msg-x"}, nil
 		},
 	}
-	out := newSessionOutput(context.Background(), fs, "transcript-ch", "voice-ch", discardLogger())
+	out := newSessionOutput(context.Background(), fs, "transcript-ch", "voice-ch", discardLogger(), nil)
 	if out.summaryMsgID != "" {
 		t.Error("summaryMsgID should be empty after failed post")
 	}
@@ -92,7 +92,7 @@ func Test_newSessionOutput_thread_failure_falls_back_to_parent(t *testing.T) {
 			return nil, errors.New("rate limit")
 		},
 	}
-	out := newSessionOutput(context.Background(), fs, "transcript-ch", "voice-ch", discardLogger())
+	out := newSessionOutput(context.Background(), fs, "transcript-ch", "voice-ch", discardLogger(), nil)
 	if out.summaryMsgID == "" {
 		t.Error("summary should have been posted before thread create failed")
 	}
@@ -110,7 +110,7 @@ func Test_newSessionOutput_thread_failure_falls_back_to_parent(t *testing.T) {
 // speaker don't re-edit (no change to the list).
 func Test_NoteSpeaker_updates_summary_and_dedupes(t *testing.T) {
 	fs := &fakeSession{}
-	out := newSessionOutput(context.Background(), fs, "transcript-ch", "voice-ch", discardLogger())
+	out := newSessionOutput(context.Background(), fs, "transcript-ch", "voice-ch", discardLogger(), nil)
 	// Force the edit-throttle timer to the distant past so our edits fire.
 	out.lastEditAt = time.Time{}
 
@@ -129,11 +129,11 @@ func Test_NoteSpeaker_updates_summary_and_dedupes(t *testing.T) {
 	}
 }
 
-// Throttle suppresses mid-burst edits but Close always flushes the final
-// state regardless of recency.
+// Throttle suppresses mid-burst edits but Close on a non-empty session
+// always flushes the final state regardless of recency.
 func Test_NoteSpeaker_throttled_but_Close_always_edits(t *testing.T) {
 	fs := &fakeSession{}
-	out := newSessionOutput(context.Background(), fs, "transcript-ch", "voice-ch", discardLogger())
+	out := newSessionOutput(context.Background(), fs, "transcript-ch", "voice-ch", discardLogger(), nil)
 	// First speaker: open the throttle window.
 	out.NoteSpeaker(context.Background(), "u1", "Alice")
 	// Second speaker immediately — within the throttle window.
@@ -143,8 +143,15 @@ func Test_NoteSpeaker_throttled_but_Close_always_edits(t *testing.T) {
 	if fs.channelEditCalls > 1 {
 		t.Errorf("expected throttle to suppress second edit; got %d edits", fs.channelEditCalls)
 	}
-	// Close forces a final edit with the complete speaker list.
+	// Post a transcript line so Close takes the non-empty path. With
+	// utteranceCount==0 Close deletes the summary instead of editing
+	// (verified separately in Test_Close_empty_session_deletes_summary).
+	out.PostLine(context.Background(), "Alice", "hi")
+	editsBefore := fs.channelEditCalls
 	out.Close(context.Background(), 42*time.Second)
+	if fs.channelEditCalls <= editsBefore {
+		t.Fatalf("Close on non-empty session should fire a final edit; calls %d -> %d", editsBefore, fs.channelEditCalls)
+	}
 	if !strings.Contains(fs.lastEditContent, "ended") {
 		t.Errorf("Close should edit with 'ended' marker: %q", fs.lastEditContent)
 	}
@@ -154,22 +161,104 @@ func Test_NoteSpeaker_throttled_but_Close_always_edits(t *testing.T) {
 }
 
 // Close is idempotent and safe on a nil or uninitialized output.
+// Empty session (no PostLine calls) deletes the summary + thread on
+// the first Close; second Close is a no-op.
 func Test_Close_idempotent_and_nil_safe(t *testing.T) {
 	var nilOut *sessionOutput
 	nilOut.Close(context.Background(), 0) // nil receiver is allowed
 
 	fs := &fakeSession{}
-	out := newSessionOutput(context.Background(), fs, "transcript-ch", "voice-ch", discardLogger())
-	before := fs.channelEditCalls
+	out := newSessionOutput(context.Background(), fs, "transcript-ch", "voice-ch", discardLogger(), nil)
+	beforeDel := fs.channelMessageDeleteCalls
+	beforeChDel := fs.channelDeleteCalls
 	out.Close(context.Background(), time.Second)
-	after1 := fs.channelEditCalls
+	afterDel1 := fs.channelMessageDeleteCalls
+	afterChDel1 := fs.channelDeleteCalls
 	out.Close(context.Background(), time.Second)
-	after2 := fs.channelEditCalls
-	if after1 <= before {
-		t.Errorf("first Close should edit the summary; got %d -> %d", before, after1)
+	afterDel2 := fs.channelMessageDeleteCalls
+	afterChDel2 := fs.channelDeleteCalls
+	if afterDel1 <= beforeDel {
+		t.Errorf("first Close on empty session should delete the summary message; got %d -> %d", beforeDel, afterDel1)
 	}
-	if after2 != after1 {
-		t.Errorf("second Close should be a no-op; got %d -> %d", after1, after2)
+	if afterChDel1 <= beforeChDel {
+		t.Errorf("first Close on empty session should delete the thread; got %d -> %d", beforeChDel, afterChDel1)
+	}
+	if afterDel2 != afterDel1 || afterChDel2 != afterChDel1 {
+		t.Errorf("second Close should be a no-op; deletes %d -> %d, channel deletes %d -> %d",
+			afterDel1, afterDel2, afterChDel1, afterChDel2)
+	}
+}
+
+// Empty session (zero utterances): Close deletes both the parent
+// summary message and the attached thread to keep the transcript
+// channel quiet for sessions where no human spoke.
+func Test_Close_empty_session_deletes_summary_and_thread(t *testing.T) {
+	fs := &fakeSession{}
+	out := newSessionOutput(context.Background(), fs, "transcript-ch", "voice-ch", discardLogger(), nil)
+	editsBefore := fs.channelEditCalls
+	out.Close(context.Background(), time.Minute)
+	if fs.channelMessageDeleteCalls != 1 {
+		t.Errorf("empty session should delete exactly one summary message; got %d", fs.channelMessageDeleteCalls)
+	}
+	if fs.channelDeleteCalls != 1 {
+		t.Errorf("empty session should delete exactly one thread; got %d", fs.channelDeleteCalls)
+	}
+	if fs.channelEditCalls != editsBefore {
+		t.Errorf("empty session should NOT edit the summary (just delete); edits %d -> %d", editsBefore, fs.channelEditCalls)
+	}
+	if fs.lastDeletedChannelID != "transcript-ch" {
+		t.Errorf("summary delete should target the transcript channel; got %q", fs.lastDeletedChannelID)
+	}
+}
+
+// When a TranscriptSummarizer is configured and the session has at
+// least one transcribed utterance, Close runs the summarizer and uses
+// its output as the final summary message body (with the stats line
+// appended).
+func Test_Close_runs_summarizer_when_set(t *testing.T) {
+	fs := &fakeSession{}
+	called := false
+	var seenTranscript string
+	summarizer := func(_ context.Context, transcript string) (string, error) {
+		called = true
+		seenTranscript = transcript
+		return "Discussed the new feature rollout.", nil
+	}
+	out := newSessionOutput(context.Background(), fs, "transcript-ch", "voice-ch", discardLogger(), summarizer)
+	out.PostLine(context.Background(), "Alice", "we're rolling out the new feature next week")
+	out.PostLine(context.Background(), "Bob", "anything I should help with?")
+	out.Close(context.Background(), 5*time.Minute)
+	if !called {
+		t.Fatal("summarizer should have been invoked")
+	}
+	if !strings.Contains(seenTranscript, "Alice: we're rolling out") {
+		t.Errorf("summarizer received unexpected transcript: %q", seenTranscript)
+	}
+	if !strings.Contains(seenTranscript, "Bob: anything I should help with") {
+		t.Errorf("summarizer should see all lines: %q", seenTranscript)
+	}
+	if !strings.Contains(fs.lastEditContent, "Discussed the new feature rollout.") {
+		t.Errorf("summary edit should contain summarizer output: %q", fs.lastEditContent)
+	}
+	if !strings.Contains(fs.lastEditContent, "ended") {
+		t.Errorf("summary edit should still include stats line: %q", fs.lastEditContent)
+	}
+}
+
+// Summarizer returning an error → fall back to the legacy stats line.
+func Test_Close_summarizer_error_falls_back_to_stats(t *testing.T) {
+	fs := &fakeSession{}
+	summarizer := func(_ context.Context, _ string) (string, error) {
+		return "", errors.New("provider down")
+	}
+	out := newSessionOutput(context.Background(), fs, "transcript-ch", "voice-ch", discardLogger(), summarizer)
+	out.PostLine(context.Background(), "Alice", "hi")
+	out.Close(context.Background(), time.Minute)
+	if strings.Contains(fs.lastEditContent, "provider") {
+		t.Errorf("error string should not leak into summary: %q", fs.lastEditContent)
+	}
+	if !strings.Contains(fs.lastEditContent, "1 utterance") {
+		t.Errorf("fallback should include stats line: %q", fs.lastEditContent)
 	}
 }
 
@@ -180,7 +269,7 @@ func Test_Close_noop_when_summary_post_failed(t *testing.T) {
 			return nil, errors.New("forbidden")
 		},
 	}
-	out := newSessionOutput(context.Background(), fs, "transcript-ch", "voice-ch", discardLogger())
+	out := newSessionOutput(context.Background(), fs, "transcript-ch", "voice-ch", discardLogger(), nil)
 	before := fs.channelEditCalls
 	out.Close(context.Background(), time.Minute)
 	if fs.channelEditCalls != before {
@@ -192,7 +281,7 @@ func Test_Close_noop_when_summary_post_failed(t *testing.T) {
 // summary's stats line.
 func Test_Close_reports_utterance_count(t *testing.T) {
 	fs := &fakeSession{}
-	out := newSessionOutput(context.Background(), fs, "transcript-ch", "voice-ch", discardLogger())
+	out := newSessionOutput(context.Background(), fs, "transcript-ch", "voice-ch", discardLogger(), nil)
 	for i := 0; i < 3; i++ {
 		out.PostLine(context.Background(), "alice", "hi")
 	}
@@ -209,7 +298,7 @@ func Test_Close_reports_utterance_count(t *testing.T) {
 // so late-session transcripts still reach operators.
 func Test_PostLine_falls_back_to_parent_on_thread_cap(t *testing.T) {
 	fs := &fakeSession{}
-	out := newSessionOutput(context.Background(), fs, "transcript-ch", "voice-ch", discardLogger())
+	out := newSessionOutput(context.Background(), fs, "transcript-ch", "voice-ch", discardLogger(), nil)
 	out.mu.Lock()
 	out.utteranceCount = threadMessageCap // simulate cap already hit
 	out.mu.Unlock()

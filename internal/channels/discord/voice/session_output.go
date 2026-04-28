@@ -55,6 +55,7 @@ type sessionOutput struct {
 	voiceChannelID      string
 	voiceChannelName    string // fallback "<id>" if Channel lookup failed
 	log                 *slog.Logger
+	summarizer          TranscriptSummarizer // optional; nil → keep legacy stats line on Close
 
 	mu              sync.Mutex
 	summaryMsgID    string            // "" if initial post failed
@@ -66,20 +67,36 @@ type sessionOutput struct {
 	droppedOnCap    int               // posts that spilled to the parent channel after hitting threadMessageCap
 	lastEditAt      time.Time         // last summary-edit request start; used for rate-throttle
 	closed          bool
+
+	// transcriptLines accumulates "<DisplayName>: <text>" entries in
+	// post order so Close can hand the full session to the summarizer.
+	// Capped at transcriptCaptureMax so a runaway speaker can't OOM the
+	// supervisor; older entries get dropped silently (the summary is
+	// best-effort and a 30-min, 3000-utterance session is well over what
+	// any LLM context window can hold anyway).
+	transcriptLines []string
 }
+
+// transcriptCaptureMax bounds the in-memory transcript we retain for
+// the close-time summarization. ~3000 lines × ~200 bytes ≈ 600KB; any
+// LLM-friendly summary input is well under that.
+const transcriptCaptureMax = 3000
 
 // newSessionOutput posts the initial summary message and starts the thread.
 // REST failures are logged + recorded in the returned object's state so the
 // caller can proceed even on a degraded setup. Never returns an error;
 // sessionOutput is always usable (falls back to parent-channel posts).
 //
+// summarizer is optional; if nil, Close keeps the legacy stats-line summary.
+//
 // Caller's ctx governs the two REST calls; budget ~5s total.
-func newSessionOutput(ctx context.Context, session discordSession, transcriptChID, voiceChID string, log *slog.Logger) *sessionOutput {
+func newSessionOutput(ctx context.Context, session discordSession, transcriptChID, voiceChID string, log *slog.Logger, summarizer TranscriptSummarizer) *sessionOutput {
 	out := &sessionOutput{
 		session:             session,
 		transcriptChannelID: transcriptChID,
 		voiceChannelID:      voiceChID,
 		log:                 log,
+		summarizer:          summarizer,
 		speakers:            make(map[string]string),
 		startedAt:           time.Now(),
 	}
@@ -158,6 +175,9 @@ func (o *sessionOutput) PostLine(ctx context.Context, displayName, text string) 
 	}
 	o.mu.Lock()
 	o.utteranceCount++
+	if len(o.transcriptLines) < transcriptCaptureMax {
+		o.transcriptLines = append(o.transcriptLines, line)
+	}
 	o.mu.Unlock()
 }
 
@@ -206,9 +226,26 @@ func (o *sessionOutput) NoteSpeaker(ctx context.Context, userID, displayName str
 	}
 }
 
-// Close writes the final summary and marks the output closed. Subsequent
-// calls are no-ops. Always attempts the final edit even if intermediate
-// edits were throttled, so the last-seen state reflects the full session.
+// Close finalizes the session. Subsequent calls are no-ops.
+//
+// Two finishing modes:
+//
+//  1. Empty session (utteranceCount == 0): the bot joined but no human
+//     speech reached STT. The summary message + thread are pure noise
+//     for the channel — delete both. Best-effort: a delete failure is
+//     logged at warn but doesn't propagate.
+//
+//  2. Non-empty session (utteranceCount > 0): if a TranscriptSummarizer
+//     is wired, run it over the captured "<DisplayName>: <text>" lines
+//     and use the result as the summary message body (with the stats
+//     line appended). If no summarizer or the call fails, fall back to
+//     the legacy stats-only line so the summary message still reflects
+//     the final state.
+//
+// In both modes the operation is wrapped in the caller's ctx — Close
+// runs from the supervisor's teardown goroutine which gives us a 30s
+// budget (long enough for an LLM call but bounded so a wedged provider
+// doesn't pin the supervisor).
 func (o *sessionOutput) Close(ctx context.Context, duration time.Duration) {
 	if o == nil {
 		return
@@ -220,17 +257,62 @@ func (o *sessionOutput) Close(ctx context.Context, duration time.Duration) {
 	}
 	o.closed = true
 	msgID := o.summaryMsgID
+	threadID := o.threadChannelID
 	speakerCount := len(o.speakers)
 	utterances := o.utteranceCount
-	text := o.finalSummaryTextLocked(duration, speakerCount, utterances)
+	transcriptCopy := append([]string(nil), o.transcriptLines...)
 	o.mu.Unlock()
 
 	if msgID == "" {
-		// Initial post failed; nothing to close.
+		// Initial post failed; nothing to clean up. (No thread either —
+		// MessageThreadStart only runs after a successful summary post.)
 		return
 	}
-	if _, err := o.session.ChannelMessageEdit(o.transcriptChannelID, msgID, text, discordgo.WithContext(ctx)); err != nil {
+
+	// Empty session → delete the summary + thread artefacts.
+	if utterances == 0 {
+		o.cleanupEmpty(ctx, msgID, threadID)
+		return
+	}
+
+	// Non-empty session → write a real summary if we have a summarizer,
+	// otherwise keep the legacy stats line.
+	finalText := o.finalSummaryTextLocked(duration, speakerCount, utterances)
+	if o.summarizer != nil && len(transcriptCopy) > 0 {
+		summary, err := o.summarizer(ctx, strings.Join(transcriptCopy, "\n"))
+		switch {
+		case err != nil:
+			o.log.Warn("voice: transcript summarizer failed; falling back to stats line",
+				"err", err, "lines", len(transcriptCopy))
+		case strings.TrimSpace(summary) == "":
+			o.log.Debug("voice: transcript summarizer returned empty; falling back to stats line",
+				"lines", len(transcriptCopy))
+		default:
+			finalText = strings.TrimSpace(summary) + "\n\n" + finalText
+		}
+	}
+
+	if _, err := o.session.ChannelMessageEdit(o.transcriptChannelID, msgID, finalText, discordgo.WithContext(ctx)); err != nil {
 		o.log.Warn("voice: final summary edit failed", "err", err)
+	}
+}
+
+// cleanupEmpty deletes the parent summary message and the attached
+// thread (if any). Best-effort: each failure is logged but doesn't
+// propagate. Order matters: delete the thread first so a successful
+// summary delete doesn't orphan a dangling thread reference (Discord
+// auto-archives orphan threads but the channel still shows them
+// briefly).
+func (o *sessionOutput) cleanupEmpty(ctx context.Context, summaryMsgID, threadChannelID string) {
+	if threadChannelID != "" {
+		if _, err := o.session.ChannelDelete(threadChannelID, discordgo.WithContext(ctx)); err != nil {
+			o.log.Warn("voice: empty-session thread delete failed",
+				"err", err, "thread_channel_id", threadChannelID)
+		}
+	}
+	if err := o.session.ChannelMessageDelete(o.transcriptChannelID, summaryMsgID, discordgo.WithContext(ctx)); err != nil {
+		o.log.Warn("voice: empty-session summary message delete failed",
+			"err", err, "transcript_channel_id", o.transcriptChannelID, "summary_msg_id", summaryMsgID)
 	}
 }
 

@@ -18,24 +18,30 @@ import (
 type fakeSession struct {
 	mu sync.Mutex
 
-	guildMemberFn      func(guildID, userID string) (*discordgo.Member, error)
-	channelSendFn      func(channelID, content string) (*discordgo.Message, error)
-	channelEditFn      func(channelID, messageID, content string) (*discordgo.Message, error)
-	channelFn          func(channelID string) (*discordgo.Channel, error)
-	messageThreadStart func(channelID, messageID, name string, archive int) (*discordgo.Channel, error)
+	guildMemberFn        func(guildID, userID string) (*discordgo.Member, error)
+	channelSendFn        func(channelID, content string) (*discordgo.Message, error)
+	channelEditFn        func(channelID, messageID, content string) (*discordgo.Message, error)
+	channelMessageDelFn  func(channelID, messageID string) error
+	channelFn            func(channelID string) (*discordgo.Channel, error)
+	channelDeleteFn      func(channelID string) (*discordgo.Channel, error)
+	messageThreadStart   func(channelID, messageID, name string, archive int) (*discordgo.Channel, error)
 
-	guildMemberCalls  int
-	channelSendCalls  int
-	channelEditCalls  int
-	channelCalls      int
-	threadStartCalls  int
-	lastSentChannelID string
-	lastSentContent   string
-	lastEditChannelID string
-	lastEditMessageID string
-	lastEditContent   string
-	lastThreadName    string
-	sendsByChannel    map[string][]string
+	guildMemberCalls         int
+	channelSendCalls         int
+	channelEditCalls         int
+	channelMessageDeleteCalls int
+	channelCalls             int
+	channelDeleteCalls       int
+	threadStartCalls         int
+	lastSentChannelID        string
+	lastSentContent          string
+	lastEditChannelID        string
+	lastEditMessageID        string
+	lastEditContent          string
+	lastDeletedMessageID     string
+	lastDeletedChannelID     string
+	lastThreadName           string
+	sendsByChannel           map[string][]string
 }
 
 func (f *fakeSession) recordSend(channelID, content string) {
@@ -91,6 +97,30 @@ func (f *fakeSession) Channel(channelID string, _ ...discordgo.RequestOption) (*
 	f.mu.Unlock()
 	if fn == nil {
 		return &discordgo.Channel{ID: channelID, Name: "test-channel"}, nil
+	}
+	return fn(channelID)
+}
+
+func (f *fakeSession) ChannelMessageDelete(channelID, messageID string, _ ...discordgo.RequestOption) error {
+	f.mu.Lock()
+	f.channelMessageDeleteCalls++
+	f.lastDeletedChannelID = channelID
+	f.lastDeletedMessageID = messageID
+	fn := f.channelMessageDelFn
+	f.mu.Unlock()
+	if fn == nil {
+		return nil
+	}
+	return fn(channelID, messageID)
+}
+
+func (f *fakeSession) ChannelDelete(channelID string, _ ...discordgo.RequestOption) (*discordgo.Channel, error) {
+	f.mu.Lock()
+	f.channelDeleteCalls++
+	fn := f.channelDeleteFn
+	f.mu.Unlock()
+	if fn == nil {
+		return &discordgo.Channel{ID: channelID}, nil
 	}
 	return fn(channelID)
 }

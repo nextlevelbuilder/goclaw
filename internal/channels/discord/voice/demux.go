@@ -278,7 +278,7 @@ func (d *demux) flushSSRC(ssrc uint32, reason string) {
 	// "user:<ssrc>" attribution. discordgo records the SSRC→userID map
 	// unconditionally on every OP5; pull from that as a backstop so we
 	// get proper display names even on the first utterance after join.
-	if u.userID == "" {
+	if u.userID == "" && d.vc != nil {
 		if late := d.vc.SSRCUserID(buf.ssrc); late != "" {
 			u.userID = late
 		}
