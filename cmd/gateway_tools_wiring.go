@@ -55,6 +55,16 @@ func wireExtraTools(
 	toolsReg.Register(tools.NewCreateDiscordThreadTool())
 	// Discord rich embed tool
 	toolsReg.Register(tools.NewSendDiscordEmbedTool())
+	// Forge-job spawning tool. Constructed with empty
+	// AgentServiceURL/HmacSecret here — gateway.go injects the real
+	// values via SetAgentServiceURL/SetHMACSecret after config is
+	// loaded (avoids an extra cfg param on every tool wiring func).
+	// Tool's Execute errors cleanly when secret is unset, so dev /
+	// non-cluster builds where the agent service isn't reachable
+	// just see a runtime error from Gillen, no crash at boot.
+	toolsReg.Register(tools.NewSpawnForgeJobTool(pgStores.SubagentTasks, "", nil))
+	slog.Info("spawn_forge_job tool registered")
+
 	slog.Info("session + message tools registered")
 
 	// Register legacy tool aliases (backward-compat names from policy.go).

@@ -468,6 +468,36 @@ func runGateway() {
 			tc.SetChannelTenantChecker(channelMgr.ChannelTenantID)
 		}
 	}
+	// Wire spawn_forge_job tool: tenant checker for channel guard,
+	// plus the agent-service URL + HMAC secret loaded from cfg.
+	// Tool is registered globally in gateway_tools_wiring.go with
+	// empty values; here we inject the runtime config.
+	if t, ok := toolsReg.Get("spawn_forge_job"); ok {
+		if tc, ok := t.(tools.ChannelTenantCheckerAware); ok {
+			tc.SetChannelTenantChecker(channelMgr.ChannelTenantID)
+		}
+		if sf, ok := t.(*tools.SpawnForgeJobTool); ok {
+			sf.SetAgentServiceURL(cfg.Gateway.AgentServiceURL)
+			if cfg.Gateway.JobsCallbackSecret != "" {
+				sf.SetHMACSecret([]byte(cfg.Gateway.JobsCallbackSecret))
+			}
+		}
+	}
+
+	// forge-Job callback API. Receives HMAC-signed POSTs from
+	// stream-task (running inside Job pods) and from the agent
+	// service's k8s informer (synthetic completes for OOM/Eviction).
+	// Posts results to the originating Discord thread via the
+	// channel manager. Only wired when the secret is configured —
+	// in tests / dev-without-jobs the endpoints simply don't exist.
+	if cfg.Gateway.JobsCallbackSecret != "" && pgStores.SubagentTasks != nil {
+		jobsH := httpapi.NewJobsHandler(
+			pgStores.SubagentTasks,
+			channelMgr,
+			[]byte(cfg.Gateway.JobsCallbackSecret),
+		)
+		deps.server.SetJobsHandler(jobsH)
+	}
 
 	// Load channel instances from DB.
 	var instanceLoader *channels.InstanceLoader

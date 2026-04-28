@@ -379,6 +379,8 @@ type GatewayConfig struct {
 	TaskRecoveryIntervalSec int          `json:"task_recovery_interval_sec,omitempty"` // team task recovery ticker interval in seconds (default 300 = 5min)
 	BackgroundProvider      string       `json:"background_provider,omitempty"`        // LLM provider for background workers (vault enrichment, consolidation)
 	BackgroundModel         string       `json:"background_model,omitempty"`           // LLM model for background workers
+	JobsCallbackSecret      string       `json:"jobs_callback_secret,omitempty"`       // HMAC secret for /v1/agents/jobs/{id}/{progress,complete} callbacks (shared with the agent service's webhook secret)
+	AgentServiceURL         string       `json:"agent_service_url,omitempty"`          // in-pod URL for the sibling agent service (default http://127.0.0.1:18789); spawn_forge_job tool POSTs /jobs here
 }
 
 // ToolsConfig controls tool availability, policy, and web search.
