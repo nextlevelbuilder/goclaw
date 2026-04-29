@@ -93,3 +93,7 @@ goclaw-*
 ui/web/nginx.staging.conf
 migrations/
 logs/
+.playwright-mcp/
+.gitignore
+mfa_screenshots/
+.gitignore

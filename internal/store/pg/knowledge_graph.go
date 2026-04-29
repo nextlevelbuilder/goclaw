@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -294,7 +295,7 @@ func (s *PGKnowledgeGraphStore) SearchEntities(ctx context.Context, agentID, use
 		for i, r := range ftsResults {
 			entities[i] = r.Entity
 		}
-		return entities, nil
+		return dedupByName(entities), nil
 	}
 
 	// Hybrid merge with weights: 0.3 FTS, 0.7 vector
@@ -317,16 +318,37 @@ type scoredEntity struct {
 
 func (s *PGKnowledgeGraphStore) ftsSearchEntities(ctx context.Context, agentID uuid.UUID, userID, query string, limit int) ([]scoredEntity, error) {
 	// Try AND search first (all tokens must match)
-	results, err := s.ftsSearch(ctx, agentID, userID, query, "AND", limit)
+	andResults, err := s.ftsSearch(ctx, agentID, userID, query, "AND", limit)
 	if err != nil {
 		return nil, err
 	}
-	if len(results) > 0 {
-		return results, nil
+	if len(andResults) >= limit {
+		return andResults, nil
 	}
 
-	// Fallback to OR search (any token matches)
-	return s.ftsSearch(ctx, agentID, userID, query, "OR", limit)
+	// Supplement with OR search to find near-duplicates the AND missed.
+	// This enables dedupByName to merge stale entities with their updated versions.
+	orResults, orErr := s.ftsSearch(ctx, agentID, userID, query, "OR", limit)
+	if orErr != nil || len(orResults) == 0 {
+		if len(andResults) > 0 {
+			return andResults, nil
+		}
+		return orResults, orErr
+	}
+
+	// Merge: AND results first (higher relevance), then OR results not already present
+	seen := make(map[string]bool, len(andResults))
+	for _, r := range andResults {
+		seen[r.Entity.ID] = true
+	}
+	merged := andResults
+	for _, r := range orResults {
+		if !seen[r.Entity.ID] {
+			merged = append(merged, r)
+			seen[r.Entity.ID] = true
+		}
+	}
+	return merged, nil
 }
 
 // ftsSearch runs a full-text search with the given mode ("AND" or "OR").
@@ -340,7 +362,7 @@ func (s *PGKnowledgeGraphStore) ftsSearch(ctx context.Context, agentID uuid.UUID
 
 	// Include event_time date tokens in the searchable tsvector
 	// so queries like "28 april" match entities with event_time on that date.
-	combinedTsv := "(tsv || to_tsvector('simple', COALESCE(to_char(event_time, 'DD Month YYYY'), '')))"
+	combinedTsv := "(tsv || to_tsvector('simple', COALESCE(to_char(event_time, 'DD Month YYYY'), '')) || to_tsvector('simple', COALESCE(properties::text, '')))"
 	where := fmt.Sprintf("agent_id = $1 AND valid_until IS NULL AND %s @@ %s", combinedTsv, tsqueryExpr)
 	args := []any{agentID, query}
 	idx := 3
@@ -366,7 +388,7 @@ func (s *PGKnowledgeGraphStore) ftsSearch(ctx context.Context, agentID uuid.UUID
 		       ts_rank(%s, %s) * %f AS score
 		FROM kg_entities
 		WHERE %s
-		ORDER BY score DESC LIMIT $%d`, combinedTsv, tsqueryExpr, 0.5, where, idx)
+		ORDER BY score DESC, updated_at DESC LIMIT $%d`, combinedTsv, tsqueryExpr, 0.5, where, idx)
 
 	var sRows []scoredEntityRow
 	if err = pkgSqlxDB.SelectContext(ctx, &sRows, q, args...); err != nil {
@@ -407,7 +429,7 @@ func (s *PGKnowledgeGraphStore) vectorSearchEntities(ctx context.Context, embedd
 		       1 - (embedding <=> $%d::vector) AS score
 		FROM kg_entities
 		WHERE %s
-		ORDER BY embedding <=> $%d::vector LIMIT $%d`, idx, where, idx, idx+1)
+		ORDER BY embedding <=> $%d::vector, updated_at DESC LIMIT $%d`, idx, where, idx, idx+1)
 
 	var sRows []scoredEntityRow
 	if err = pkgSqlxDB.SelectContext(ctx, &sRows, q, args...); err != nil {
@@ -455,4 +477,81 @@ func hybridMergeEntities(ilike, vec []scoredEntity, textWeight, vectorWeight flo
 	})
 
 	return results
+}
+
+// dedupByName removes near-duplicate entities by normalizing names.
+// When multiple entities share the same normalized name, keeps the most recently
+// updated one and merges properties from older duplicates.
+func dedupByName(entities []store.Entity) []store.Entity {
+	if len(entities) <= 1 {
+		return entities
+	}
+
+	type entry struct {
+		entity store.Entity
+		keep   bool
+	}
+
+	entries := make([]entry, len(entities))
+	for i, e := range entities {
+		entries[i] = entry{entity: e, keep: true}
+	}
+
+	for i := range entries {
+		if !entries[i].keep {
+			continue
+		}
+		ni := normalizeEntityName(entries[i].entity.Name)
+		for j := i + 1; j < len(entries); j++ {
+			if !entries[j].keep {
+				continue
+			}
+			nj := normalizeEntityName(entries[j].entity.Name)
+			if ni == nj {
+				// Keep the newer one (entities come sorted by updated_at DESC)
+				if entries[j].entity.UpdatedAt > entries[i].entity.UpdatedAt {
+					mergeProps(&entries[j].entity, entries[i].entity.Properties)
+					entries[i].keep = false
+				} else {
+					mergeProps(&entries[i].entity, entries[j].entity.Properties)
+					entries[j].keep = false
+				}
+			}
+		}
+	}
+
+	result := make([]store.Entity, 0, len(entities))
+	for _, e := range entries {
+		if e.keep {
+			result = append(result, e.entity)
+		}
+	}
+	return result
+}
+
+// normalizeEntityName strips common prefixes and lowercases for comparison.
+func normalizeEntityName(name string) string {
+	s := strings.ToLower(name)
+	// Strip common prefixes that vary between extractions
+	s = strings.TrimPrefix(s, "migrasi ")
+	s = strings.TrimPrefix(s, "status ")
+	s = strings.TrimPrefix(s, "task: ")
+	// Trim spaces
+	s = strings.TrimSpace(s)
+	return s
+}
+
+// mergeProps merges source properties into target, only adding keys not already present.
+func mergeProps(target *store.Entity, source map[string]string) {
+	if source == nil {
+		return
+	}
+	if target.Properties == nil {
+		target.Properties = make(map[string]string, len(source))
+	}
+	for k, v := range source {
+		if _, exists := target.Properties[k]; !exists && v != "" {
+			target.Properties[k] = v
+		}
+	}
 }
