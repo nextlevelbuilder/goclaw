@@ -20,6 +20,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -775,6 +776,36 @@ type DiscordEmbedSender interface {
 // after channel creation.
 type PendingCompactable interface {
 	SetPendingCompaction(cfg *CompactionConfig)
+}
+
+// VoiceTranscriptSummarizable is optionally implemented by channels that
+// support voice transcription with LLM-backed session summaries. The
+// instance_loader wires the same provider/model that powers history
+// compaction into a transcript summarizer; channels that take voice
+// (currently just Discord) consume it and pass it to their voice
+// supervisor's Config.TranscriptSummarizer.
+//
+// `cfg` is nil when no provider is available — implementations should
+// treat that as "no summarization, fall back to the legacy stats line"
+// rather than refuse to start.
+type VoiceTranscriptSummarizable interface {
+	SetVoiceTranscriptSummarizer(cfg *VoiceTranscriptSummarizerConfig)
+}
+
+// VoiceTranscriptSummarizerConfig pairs an LLM provider with a model
+// for summarizing voice-session transcripts at session close. Built by
+// the instance_loader and handed to channels via the
+// VoiceTranscriptSummarizable interface; the channel wraps it into a
+// voice.TranscriptSummarizer at supervisor-start time.
+type VoiceTranscriptSummarizerConfig struct {
+	Provider providers.Provider
+	Model    string
+
+	// MaxOutputTokens caps the LLM's response length. Default 512 if
+	// zero — that's roughly 4 paragraphs which is the sweet spot for a
+	// Discord summary message that still fits in the 2000-char limit
+	// after the legacy stats line gets appended.
+	MaxOutputTokens int
 }
 
 // Truncate shortens a string to maxLen, appending "..." if truncated.

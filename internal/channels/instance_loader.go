@@ -317,6 +317,19 @@ func (l *InstanceLoader) loadInstance(ctx context.Context, inst store.ChannelIns
 			pc.SetPendingCompaction(cc)
 			slog.Debug("pending compaction configured", "channel", inst.Name, "provider", p.Name(), "model", model,
 				"threshold", cc.Threshold, "keep_recent", cc.KeepRecent, "max_tokens", cc.MaxTokens)
+
+			// Reuse the same provider/model for voice transcript
+			// summarization if the channel exposes the hook. The
+			// summarizer is invoked at voice-session close from the
+			// supervisor's teardown goroutine; nil-safe at every layer.
+			if vs, ok := ch.(VoiceTranscriptSummarizable); ok {
+				vs.SetVoiceTranscriptSummarizer(&VoiceTranscriptSummarizerConfig{
+					Provider: p,
+					Model:    model,
+				})
+				slog.Debug("voice transcript summarizer configured",
+					"channel", inst.Name, "provider", p.Name(), "model", model)
+			}
 		} else {
 			attemptedProvider := ""
 			if l.pendingCompactCfg != nil {

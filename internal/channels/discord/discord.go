@@ -47,6 +47,7 @@ type Channel struct {
 	configPermStore   store.ConfigPermissionStore // for group file writer management (nil = writer commands disabled)
 	audioMgr          *audio.Manager              // unified STT via audio.Manager (nil = no STT)
 	voiceSupervisor   *voice.Supervisor           // real-time voice-channel join + transcription (nil = disabled)
+	voiceSummarizerCfg *channels.VoiceTranscriptSummarizerConfig // optional LLM summarizer for voice session close (nil = stats line only)
 	// pairingService, pairingDebounce, approvedGroups, groupHistory, historyLimit, requireMention
 	// are inherited from channels.BaseChannel.
 }
@@ -193,6 +194,13 @@ func (c *Channel) startVoiceSupervisor(ctx context.Context) error {
 		MaxUtteranceMs:      c.config.VoiceChannelMaxUtteranceMs,
 		DailyCapSeconds:     c.config.VoiceChannelDailyCapSeconds,
 	}
+	if summarizer := channels.BuildVoiceTranscriptSummarizer(c.voiceSummarizerCfg); summarizer != nil {
+		vcfg.TranscriptSummarizer = summarizer
+		slog.Info("discord: voice transcript summarizer wired",
+			"provider", c.voiceSummarizerCfg.Provider.Name(),
+			"model", c.voiceSummarizerCfg.Model,
+		)
+	}
 	sup, err := voice.NewSupervisor(vcfg, c.session, c.audioMgr, voice.DefaultTmpDir(), c.botUserID, slog.Default())
 	if err != nil {
 		return err
@@ -221,6 +229,16 @@ func (c *Channel) SetPendingCompaction(cfg *channels.CompactionConfig) {
 	if gh := c.GroupHistory(); gh != nil {
 		gh.SetCompactionConfig(cfg)
 	}
+}
+
+// SetVoiceTranscriptSummarizer caches the LLM provider/model the
+// instance loader chose for this channel's voice transcripts. The
+// summarizer is consumed at supervisor-start time; calling this after
+// startVoiceSupervisor has already run is a no-op for the active
+// supervisor (voice config is captured at construction). The wiring
+// can land in either order in instance_loader.
+func (c *Channel) SetVoiceTranscriptSummarizer(cfg *channels.VoiceTranscriptSummarizerConfig) {
+	c.voiceSummarizerCfg = cfg
 }
 
 // SetPendingHistoryTenantID propagates tenant_id to the pending history for DB operations.
