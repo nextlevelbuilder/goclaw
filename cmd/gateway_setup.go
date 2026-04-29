@@ -37,6 +37,7 @@ func setupToolRegistry(
 	cfg *config.Config,
 	workspace string,
 	providerRegistry *providers.Registry,
+	msgBus *bus.MessageBus,
 ) (
 	toolsReg *tools.Registry,
 	execApprovalMgr *tools.ExecApprovalManager,
@@ -207,6 +208,9 @@ func setupToolRegistry(
 			approvalCfg.Allowlist = cfg.Tools.ExecApproval.Allowlist
 		}
 		execApprovalMgr = tools.NewExecApprovalManager(approvalCfg)
+			if msgBus != nil {
+				execApprovalMgr.SetMessageBus(msgBus)
+			}
 
 		// Wire approval to exec tools in the registry
 		if execTool, ok := toolsReg.Get("exec"); ok {

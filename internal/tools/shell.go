@@ -149,6 +149,19 @@ func (t *ExecTool) SetApprovalManager(mgr *ExecApprovalManager, agentID string) 
 	t.agentID = agentID
 }
 
+// buildApprovalContext extracts channel routing info from the tool context.
+func (t *ExecTool) buildApprovalContext(ctx context.Context) ApprovalContext {
+	ac := ApprovalContext{
+		Channel:  ToolChannelFromCtx(ctx),
+		ChatID:   ToolChatIDFromCtx(ctx),
+		TenantID: store.TenantIDFromContext(ctx).String(),
+	}
+	if rc := store.RunContextFromCtx(ctx); rc != nil {
+		ac.SenderID = rc.SenderID
+	}
+	return ac
+}
+
 // SetSecureCLIStore sets the credential store for credentialed exec.
 func (t *ExecTool) SetSecureCLIStore(s store.SecureCLIStore) {
 	t.secureCLIStore = s
@@ -257,7 +270,7 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 			// This lets agents "request permission" from admin to install packages.
 			if t.approvalMgr != nil && matchesAny(normalizedCommand, pkgInstallPatterns) {
 				slog.Info("exec: package install requires approval", "command", truncateCmd(command, 100), "agent", t.agentID)
-				decision, err := t.approvalMgr.RequestApproval(command, t.agentID, 2*time.Minute)
+				decision, err := t.approvalMgr.RequestApproval(command, t.agentID, 2*time.Minute, t.buildApprovalContext(ctx))
 				if err != nil {
 					return ErrorResult(fmt.Sprintf("package install approval: %v", err))
 				}
@@ -342,7 +355,7 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 		case "deny":
 			return ErrorResult("command denied by exec approval policy")
 		case "ask":
-			decision, err := t.approvalMgr.RequestApproval(command, t.agentID, 2*time.Minute)
+			decision, err := t.approvalMgr.RequestApproval(command, t.agentID, 2*time.Minute, t.buildApprovalContext(ctx))
 			if err != nil {
 				return ErrorResult(fmt.Sprintf("exec approval: %v", err))
 			}

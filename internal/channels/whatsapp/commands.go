@@ -2,6 +2,7 @@ package whatsapp
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"go.mau.fi/whatsmeow/types"
@@ -15,6 +16,8 @@ const menuHelpText = "Available commands:\n" +
 	"/reset — Reset conversation history\n" +
 	"/stop — Stop current running task\n" +
 	"/stopall — Stop all running tasks\n" +
+	"/approve <code> — Approve a pending command execution\n" +
+	"/deny <code> — Deny a pending command execution\n" +
 	"/addwriter — Add a file writer (reply to their message or @mention)\n" +
 	"/removewriter — Remove a file writer (reply to their message or @mention)\n" +
 	"/writers — List file writers for this group\n" +
@@ -110,6 +113,14 @@ func (c *Channel) handleCommand(ctx context.Context, text, senderID, chatID, pee
 	case "/menu":
 		c.sendText(chatJID, menuHelpText)
 		return true
+
+	case "/approve":
+		c.handleExecApprovalCommand(ctx, text, chatJID, tools.ApprovalAllowOnce)
+		return true
+
+	case "/deny":
+		c.handleExecApprovalCommand(ctx, text, chatJID, tools.ApprovalDeny)
+		return true
 	}
 
 	return false
@@ -121,4 +132,92 @@ func stripSenderUserID(senderID string) string {
 		return senderID[:idx]
 	}
 	return senderID
+}
+
+// handleExecApprovalCommand handles /approve <code> and /deny <code> commands.
+func (c *Channel) handleExecApprovalCommand(ctx context.Context, text string, chatJID types.JID, decision tools.ApprovalDecision) {
+	if c.execApprovalMgr == nil {
+		c.sendText(chatJID, "Approval system not available.")
+		return
+	}
+
+	parts := strings.SplitN(strings.TrimSpace(text), " ", 2)
+	if len(parts) < 2 || strings.TrimSpace(parts[1]) == "" {
+		c.sendText(chatJID, "Usage: /approve <code> or /deny <code>")
+		return
+	}
+	code := strings.ToUpper(strings.TrimSpace(parts[1]))
+
+	err := c.execApprovalMgr.ResolveByShortCode(code, decision)
+	if err != nil {
+		c.sendText(chatJID, fmt.Sprintf("Error: %s", err.Error()))
+		return
+	}
+
+	if decision == tools.ApprovalDeny {
+		c.sendText(chatJID, "Command denied.")
+	} else {
+		c.sendText(chatJID, "Command approved.")
+	}
+}
+
+// TryExecApprovalText detects natural language approval patterns in non-slash messages.
+// Returns true if the message was handled as an approval response.
+func (c *Channel) TryExecApprovalText(text string, chatJID types.JID) bool {
+	if c.execApprovalMgr == nil {
+		return false
+	}
+
+	text = strings.TrimSpace(text)
+	if len(text) == 0 {
+		return false
+	}
+
+	// Match patterns: "approve CODE", "deny CODE", "approved CODE", "denied CODE"
+	// Also match "approve CODE" with casual text like "yes approve CODE"
+	lower := strings.ToLower(text)
+
+	var decision tools.ApprovalDecision
+	var code string
+
+	if idx := strings.Index(lower, "approve"); idx >= 0 {
+		rest := strings.TrimSpace(text[idx+len("approve"):])
+		// Extract the code (first word after "approve")
+		fields := strings.Fields(rest)
+		if len(fields) > 0 {
+			code = strings.ToUpper(fields[0])
+			decision = tools.ApprovalAllowOnce
+		}
+	} else if idx := strings.Index(lower, "deny"); idx >= 0 {
+		rest := strings.TrimSpace(text[idx+len("deny"):])
+		fields := strings.Fields(rest)
+		if len(fields) > 0 {
+			code = strings.ToUpper(fields[0])
+			decision = tools.ApprovalDeny
+		}
+	}
+
+	if code == "" || len(code) != 6 {
+		return false
+	}
+
+	// Validate code format (only chars from our charset)
+	for _, ch := range code {
+		if !((ch >= 'A' && ch <= 'Z') || (ch >= '2' && ch <= '9')) {
+			return false
+		}
+	}
+
+	err := c.execApprovalMgr.ResolveByShortCode(code, decision)
+	if err != nil {
+		c.sendText(chatJID, fmt.Sprintf("Approval: %s", err.Error()))
+		return true
+	}
+
+	if decision == tools.ApprovalDeny {
+		c.sendText(chatJID, "Command denied.")
+	} else {
+		c.sendText(chatJID, "Command approved.")
+	}
+	return true
 }

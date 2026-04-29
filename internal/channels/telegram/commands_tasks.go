@@ -208,6 +208,11 @@ func (c *Channel) handleCallbackQuery(ctx context.Context, query *telego.Callbac
 		return
 	}
 
+	if strings.HasPrefix(query.Data, "ea:") {
+		c.handleExecApprovalCallback(ctx, query)
+		return
+	}
+
 	if !strings.HasPrefix(query.Data, "td:") {
 		return
 	}

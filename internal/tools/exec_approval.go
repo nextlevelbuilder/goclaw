@@ -1,12 +1,17 @@
 package tools
 
 import (
+	"crypto/rand"
 	"fmt"
 	"log/slog"
+	"math/big"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
 // ExecSecurity determines the overall security mode for command execution.
@@ -91,25 +96,87 @@ type PendingApproval struct {
 	Command   string    `json:"command"`
 	AgentID   string    `json:"agentId"`
 	CreatedAt time.Time `json:"createdAt"`
+	ShortCode string    `json:"shortCode"` // 6-char code for text-based approval
+	Channel   string    `json:"channel"`   // originating channel name
+	ChatID    string    `json:"chatId"`    // originating chat ID
+	SenderID  string    `json:"senderId"`  // user who triggered the run
+	TenantID  string    `json:"tenantId"`  // tenant scope
 	resultCh  chan ApprovalDecision
+}
+
+// PendingApprovalSnapshot is a sanitized copy for event payloads (no channel field).
+type PendingApprovalSnapshot struct {
+	ID        string    `json:"id"`
+	Command   string    `json:"command"`
+	AgentID   string    `json:"agentId"`
+	CreatedAt time.Time `json:"createdAt"`
+	ShortCode string    `json:"shortCode"`
+	Channel   string    `json:"channel"`
+	ChatID    string    `json:"chatId"`
+	SenderID  string    `json:"senderId"`
+	TenantID  string    `json:"tenantId"`
+}
+
+// Snapshot returns a sanitized copy of the approval for event payloads.
+func (pa *PendingApproval) Snapshot() PendingApprovalSnapshot {
+	return PendingApprovalSnapshot{
+		ID:        pa.ID,
+		Command:   pa.Command,
+		AgentID:   pa.AgentID,
+		CreatedAt: pa.CreatedAt,
+		ShortCode: pa.ShortCode,
+		Channel:   pa.Channel,
+		ChatID:    pa.ChatID,
+		SenderID:  pa.SenderID,
+		TenantID:  pa.TenantID,
+	}
+}
+
+// ApprovalContext carries channel routing info for approval notifications.
+type ApprovalContext struct {
+	Channel  string
+	ChatID   string
+	SenderID string
+	TenantID string
+}
+
+// shortCodeCharset excludes I, O, 0, 1 to avoid visual confusion.
+const shortCodeCharset = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+func generateShortCode() string {
+	code := make([]byte, 6)
+	max := big.NewInt(int64(len(shortCodeCharset)))
+	for i := range code {
+		n, _ := rand.Int(rand.Reader, max)
+		code[i] = shortCodeCharset[n.Int64()]
+	}
+	return string(code)
 }
 
 // ExecApprovalManager manages pending approval requests and the dynamic allowlist.
 type ExecApprovalManager struct {
-	config       ExecApprovalConfig
-	pending      map[string]*PendingApproval
-	alwaysAllow  map[string]bool // patterns added via "allow-always" decisions
-	mu           sync.Mutex
-	nextID       int
+	config          ExecApprovalConfig
+	pending         map[string]*PendingApproval
+	shortCodeIndex  map[string]string // shortCode → approval ID
+	alwaysAllow     map[string]bool   // patterns added via "allow-always" decisions
+	mu              sync.Mutex
+	nextID          int
+	msgBus          *bus.MessageBus
 }
 
 // NewExecApprovalManager creates an approval manager with the given config.
 func NewExecApprovalManager(cfg ExecApprovalConfig) *ExecApprovalManager {
 	return &ExecApprovalManager{
-		config:      cfg,
-		pending:     make(map[string]*PendingApproval),
-		alwaysAllow: make(map[string]bool),
+		config:         cfg,
+		pending:        make(map[string]*PendingApproval),
+		shortCodeIndex: make(map[string]string),
+		alwaysAllow:    make(map[string]bool),
 	}
+}
+
+// SetMessageBus wires the message bus for broadcasting approval events.
+func (m *ExecApprovalManager) SetMessageBus(b *bus.MessageBus) {
+	m.msgBus = b
 }
 
 // CheckCommand evaluates whether a command should be executed, blocked, or needs approval.
@@ -149,27 +216,54 @@ func (m *ExecApprovalManager) CheckCommand(command string) string {
 }
 
 // RequestApproval creates a pending approval and blocks until resolved or timeout.
-func (m *ExecApprovalManager) RequestApproval(command, agentID string, timeout time.Duration) (ApprovalDecision, error) {
+func (m *ExecApprovalManager) RequestApproval(command, agentID string, timeout time.Duration, approvalCtx ...ApprovalContext) (ApprovalDecision, error) {
 	m.mu.Lock()
 	m.nextID++
 	id := fmt.Sprintf("exec-%d", m.nextID)
+
+	// Generate a unique short code
+	shortCode := generateShortCode()
+	for m.shortCodeIndex[shortCode] != "" {
+		shortCode = generateShortCode()
+	}
+
+	var ctx ApprovalContext
+	if len(approvalCtx) > 0 {
+		ctx = approvalCtx[0]
+	}
+
 	pa := &PendingApproval{
 		ID:        id,
 		Command:   command,
 		AgentID:   agentID,
 		CreatedAt: time.Now(),
+		ShortCode: shortCode,
+		Channel:   ctx.Channel,
+		ChatID:    ctx.ChatID,
+		SenderID:  ctx.SenderID,
+		TenantID:  ctx.TenantID,
 		resultCh:  make(chan ApprovalDecision, 1),
 	}
 	m.pending[id] = pa
+	m.shortCodeIndex[shortCode] = id
 	m.mu.Unlock()
 
-	slog.Info("exec approval requested", "id", id, "command", truncateCmd(command, 100))
+	slog.Info("exec approval requested", "id", id, "shortCode", shortCode, "command", truncateCmd(command, 100), "channel", ctx.Channel, "chatId", ctx.ChatID)
+
+	// Broadcast the approval request event for channel notification
+	if m.msgBus != nil && ctx.Channel != "" {
+		m.msgBus.Broadcast(bus.Event{
+			Name:    protocol.EventExecApprovalReq,
+			Payload: pa.Snapshot(),
+		})
+	}
 
 	// Wait for resolution or timeout
 	select {
 	case decision := <-pa.resultCh:
 		m.mu.Lock()
 		delete(m.pending, id)
+		delete(m.shortCodeIndex, shortCode)
 		m.mu.Unlock()
 
 		// If allow-always, add the command's base binary to the dynamic allowlist
@@ -188,6 +282,7 @@ func (m *ExecApprovalManager) RequestApproval(command, agentID string, timeout t
 	case <-time.After(timeout):
 		m.mu.Lock()
 		delete(m.pending, id)
+		delete(m.shortCodeIndex, shortCode)
 		m.mu.Unlock()
 		return ApprovalDeny, fmt.Errorf("approval timed out after %s", timeout)
 	}
@@ -196,14 +291,35 @@ func (m *ExecApprovalManager) RequestApproval(command, agentID string, timeout t
 // Resolve resolves a pending approval request.
 func (m *ExecApprovalManager) Resolve(id string, decision ApprovalDecision) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	pa, ok := m.pending[id]
 	if !ok {
+		m.mu.Unlock()
 		return fmt.Errorf("approval %q not found or already resolved", id)
 	}
 
+	delete(m.shortCodeIndex, pa.ShortCode)
 	pa.resultCh <- decision
+	m.mu.Unlock()
+	return nil
+}
+
+// ResolveByShortCode resolves a pending approval using its short code.
+func (m *ExecApprovalManager) ResolveByShortCode(code string, decision ApprovalDecision) error {
+	m.mu.Lock()
+	id, ok := m.shortCodeIndex[code]
+	if !ok {
+		m.mu.Unlock()
+		return fmt.Errorf("approval code %q not found or already resolved", code)
+	}
+	pa, ok := m.pending[id]
+	if !ok {
+		m.mu.Unlock()
+		return fmt.Errorf("approval code %q not found or already resolved", code)
+	}
+	delete(m.shortCodeIndex, code)
+	pa.resultCh <- decision
+	m.mu.Unlock()
 	return nil
 }
 

@@ -41,7 +41,8 @@ type InstanceLoader struct {
 	pendingCompactCfg *config.PendingCompactionConfig
 	listenRawMsgStore store.ListenRawMessageStore // for listen-only raw message storage
 	mediaStore        MediaStore                  // for persisting listen-only media attachments
-	configPermStore   store.ConfigPermissionStore // for group file writer management
+	configPermStore   store.ConfigPermissionStore  // for group file writer management
+	execApprovalMgr   any                          // *tools.ExecApprovalManager — stored as any to avoid import cycle
 	factories         map[string]ChannelFactory
 	manager           *Manager
 	msgBus            *bus.MessageBus
@@ -100,6 +101,12 @@ func (l *InstanceLoader) SetMediaStore(ms MediaStore) {
 // SetConfigPermStore sets the config permission store for group file writer management.
 func (l *InstanceLoader) SetConfigPermStore(s store.ConfigPermissionStore) {
 	l.configPermStore = s
+}
+
+// SetExecApprovalManager sets the exec approval manager for channel-based approval.
+// Stored as any to avoid import cycle with tools package.
+func (l *InstanceLoader) SetExecApprovalManager(mgr any) {
+	l.execApprovalMgr = mgr
 }
 
 // RegisterFactory registers a factory for a channel type (e.g., "telegram", "discord").
@@ -388,6 +395,13 @@ func (l *InstanceLoader) loadInstance(ctx context.Context, inst store.ChannelIns
 	if l.configPermStore != nil {
 		if cps, ok := ch.(interface{ SetConfigPermStore(store.ConfigPermissionStore) }); ok {
 			cps.SetConfigPermStore(l.configPermStore)
+		}
+	}
+
+	// Wire exec approval manager for channel-based approval.
+	if l.execApprovalMgr != nil {
+		if eam, ok := ch.(interface{ SetExecApprovalManager(any) }); ok {
+			eam.SetExecApprovalManager(l.execApprovalMgr)
 		}
 	}
 

@@ -333,12 +333,29 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 	}
 
 	// Send remaining chunks (or all chunks if no stream message was edited).
+	var approvalMarkup *telego.InlineKeyboardMarkup
+	if approvalID := msg.Metadata["exec_approval_id"]; approvalID != "" {
+		approvalMarkup = &telego.InlineKeyboardMarkup{InlineKeyboard: [][]telego.InlineKeyboardButton{
+			{
+				{Text: "Approve", CallbackData: "ea:" + approvalID + ":allow"},
+				{Text: "Always", CallbackData: "ea:" + approvalID + ":always"},
+			},
+			{
+				{Text: "Deny", CallbackData: "ea:" + approvalID + ":deny"},
+			},
+		}}
+	}
 	for i := startChunk; i < len(chunks); i++ {
 		replyTo := 0
 		if i == 0 {
 			replyTo = replyToMsgID // only first chunk replies to user's message
 		}
-		if err := c.sendHTML(ctx, chatID, chunks[i], replyTo, threadID); err != nil {
+		// Attach approval keyboard to the last chunk only.
+		var markup *telego.InlineKeyboardMarkup
+		if approvalMarkup != nil && i == len(chunks)-1 {
+			markup = approvalMarkup
+		}
+		if err := c.sendHTMLWithMarkup(ctx, chatID, chunks[i], replyTo, threadID, markup); err != nil {
 			return err
 		}
 	}
@@ -443,10 +460,15 @@ func (c *Channel) sendMediaMessage(ctx context.Context, chatID int64, msg bus.Ou
 // sendHTML sends a single HTML message, falling back to plain text if Telegram rejects the HTML.
 // replyTo and threadID are optional (0 = omit). General topic (1) is handled by resolveThreadIDForSend.
 func (c *Channel) sendHTML(ctx context.Context, chatID int64, htmlContent string, replyTo, threadID int) error {
-	return c.sendHTMLWithDepth(ctx, chatID, htmlContent, replyTo, threadID, 0)
+	return c.sendHTMLWithDepth(ctx, chatID, htmlContent, replyTo, threadID, 0, nil)
 }
 
-func (c *Channel) sendHTMLWithDepth(ctx context.Context, chatID int64, htmlContent string, replyTo, threadID, depth int) error {
+// sendHTMLWithMarkup sends a single HTML message with an optional inline keyboard.
+func (c *Channel) sendHTMLWithMarkup(ctx context.Context, chatID int64, htmlContent string, replyTo, threadID int, markup *telego.InlineKeyboardMarkup) error {
+	return c.sendHTMLWithDepth(ctx, chatID, htmlContent, replyTo, threadID, 0, markup)
+}
+
+func (c *Channel) sendHTMLWithDepth(ctx context.Context, chatID int64, htmlContent string, replyTo, threadID, depth int, markup *telego.InlineKeyboardMarkup) error {
 	tgMsg := tu.Message(tu.ID(chatID), htmlContent)
 	tgMsg.ParseMode = telego.ModeHTML
 
@@ -459,6 +481,9 @@ func (c *Channel) sendHTMLWithDepth(ctx context.Context, chatID int64, htmlConte
 			MessageID:                replyTo,
 			AllowSendingWithoutReply: true, // don't fail if replied-to message was deleted
 		}
+	}
+	if markup != nil {
+		tgMsg.ReplyMarkup = markup
 	}
 
 	err := c.retrySend(ctx, "sendMessage", nil, func(ctx context.Context) error {
@@ -473,7 +498,7 @@ func (c *Channel) sendHTMLWithDepth(ctx context.Context, chatID int64, htmlConte
 				"old_chat_id", chatID, "new_chat_id", newChatID)
 			c.migrateGroupChat(ctx, chatID, newChatID)
 			if depth < maxSplitDepth {
-				return c.sendHTMLWithDepth(ctx, newChatID, htmlContent, replyTo, threadID, depth+1)
+				return c.sendHTMLWithDepth(ctx, newChatID, htmlContent, replyTo, threadID, depth+1, markup)
 			}
 			return fmt.Errorf("migration retry depth exceeded: %w", err)
 		}
@@ -497,7 +522,7 @@ func (c *Channel) sendHTMLWithDepth(ctx context.Context, chatID int64, htmlConte
 				if i == 0 {
 					r = replyTo
 				}
-				if sendErr := c.sendHTMLWithDepth(ctx, chatID, chunk, r, threadID, depth+1); sendErr != nil {
+				if sendErr := c.sendHTMLWithDepth(ctx, chatID, chunk, r, threadID, depth+1, nil); sendErr != nil {
 					return sendErr
 				}
 			}

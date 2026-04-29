@@ -74,6 +74,12 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 		return
 	}
 
+	// Natural language exec approval: detect "approve CODE" / "deny CODE" patterns
+	// before sending to the agent pipeline.
+	if content != "" && c.TryExecApprovalText(content, chatJID) {
+		return
+	}
+
 	var mediaList []media.MediaInfo
 	mediaList = c.downloadMedia(evt)
 

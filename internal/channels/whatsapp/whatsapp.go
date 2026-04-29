@@ -19,6 +19,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
 const (
@@ -44,7 +45,8 @@ type Channel struct {
 	parentCtx        context.Context       // stored from Start() for Reauth() context chain
 	audioMgr         *audio.Manager        // unified STT via audio.Manager (nil = no STT)
 	builtinToolStore store.BuiltinToolStore // reads stt settings (whatsapp_enabled) per voice message; nil = opt-out
-	configPermStore  store.ConfigPermissionStore // group file writer ACL (nil = no writer management)
+	configPermStore    store.ConfigPermissionStore // group file writer ACL (nil = no writer management)
+	execApprovalMgr    *tools.ExecApprovalManager  // channel-based exec approval (nil = not wired)
 
 	// QR state
 	lastQRMu        sync.RWMutex
@@ -88,6 +90,13 @@ func (c *Channel) SetAgentUUID(uuid string) {
 // SetConfigPermStore wires the config permission store for group file writer management.
 func (c *Channel) SetConfigPermStore(s store.ConfigPermissionStore) {
 	c.configPermStore = s
+}
+
+// SetExecApprovalManager wires the exec approval manager for channel-based approval.
+func (c *Channel) SetExecApprovalManager(mgr any) {
+	if m, ok := mgr.(*tools.ExecApprovalManager); ok {
+		c.execApprovalMgr = m
+	}
 }
 
 // GetLastQRB64 returns the most recent QR PNG (base64).

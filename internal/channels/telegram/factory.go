@@ -9,6 +9,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
 // telegramCreds maps the credentials JSON from the channel_instances table.
@@ -53,16 +54,24 @@ func FactoryWithStores(agentStore store.AgentStore, configPermStore store.Config
 }
 
 // FactoryWithStoresAndAudio returns a ChannelFactory with all stores and STT support.
-func FactoryWithStoresAndAudio(agentStore store.AgentStore, configPermStore store.ConfigPermissionStore, teamStore store.TeamStore, subagentTaskStore store.SubagentTaskStore, pendingStore store.PendingMessageStore, audioMgr *audio.Manager) channels.ChannelFactory {
+func FactoryWithStoresAndAudio(agentStore store.AgentStore, configPermStore store.ConfigPermissionStore, teamStore store.TeamStore, subagentTaskStore store.SubagentTaskStore, pendingStore store.PendingMessageStore, audioMgr *audio.Manager, execApprovalMgr ...*tools.ExecApprovalManager) channels.ChannelFactory {
+	var mgr *tools.ExecApprovalManager
+	if len(execApprovalMgr) > 0 {
+		mgr = execApprovalMgr[0]
+	}
 	return func(name string, creds json.RawMessage, cfg json.RawMessage,
 		msgBus *bus.MessageBus, pairingSvc store.PairingStore) (channels.Channel, error) {
-		return buildChannel(name, creds, cfg, msgBus, pairingSvc, audioMgr,
+		opts := []Option{
 			WithAgentStore(agentStore),
 			WithConfigPermStore(configPermStore),
 			WithTeamStore(teamStore),
 			WithSubagentTaskStore(subagentTaskStore),
 			WithPendingMessageStore(pendingStore),
-		)
+		}
+		if mgr != nil {
+			opts = append(opts, WithExecApprovalManager(mgr))
+		}
+		return buildChannel(name, creds, cfg, msgBus, pairingSvc, audioMgr, opts...)
 	}
 }
 

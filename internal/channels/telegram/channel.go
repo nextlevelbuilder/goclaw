@@ -19,6 +19,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
 // Channel connects to Telegram via the Bot API using long polling.
@@ -33,6 +34,7 @@ type Channel struct {
 	configPermStore   store.ConfigPermissionStore // for group file writer management (nil if not configured)
 	teamStore         store.TeamStore             // for /tasks, /task_detail commands (nil if not configured)
 	subagentTaskStore store.SubagentTaskStore     // for /subagents, /subagent commands (nil if not configured)
+	execApprovalMgr   *tools.ExecApprovalManager   // for channel-based exec approval (nil if not configured)
 	placeholders      sync.Map                    // localKey string → messageID int
 	stopThinking      sync.Map                    // localKey string → *thinkingCancel
 	typingCtrls       sync.Map                    // localKey string → *typing.Controller
@@ -84,6 +86,11 @@ func WithPendingMessageStore(s store.PendingMessageStore) Option {
 	return func(c *Channel) {
 		c.SetGroupHistory(channels.MakeHistory(channels.TypeTelegram, s, c.TenantID()))
 	}
+}
+
+// WithExecApprovalManager sets the exec approval manager for channel-based approval.
+func WithExecApprovalManager(mgr *tools.ExecApprovalManager) Option {
+	return func(c *Channel) { c.execApprovalMgr = mgr }
 }
 
 // New creates a new Telegram channel from config.

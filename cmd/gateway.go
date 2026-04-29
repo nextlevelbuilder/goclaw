@@ -140,7 +140,7 @@ func runGateway() {
 		tools.DetectServerIPs(context.Background())
 	}
 
-	toolsReg, execApprovalMgr, mcpMgr, sandboxMgr, browserMgr, webFetchTool, ttsTool, audioMgr, permPE, toolPE, dataDir, agentCfg := setupToolRegistry(cfg, workspace, providerRegistry)
+	toolsReg, execApprovalMgr, mcpMgr, sandboxMgr, browserMgr, webFetchTool, ttsTool, audioMgr, permPE, toolPE, dataDir, agentCfg := setupToolRegistry(cfg, workspace, providerRegistry, msgBus)
 	if browserMgr != nil {
 		defer browserMgr.Close()
 	}
@@ -481,7 +481,8 @@ func runGateway() {
 		instanceLoader.SetListenRawMsgStore(pgStores.ListenRawMessages)
 		instanceLoader.SetMediaStore(mediaStore)
 		instanceLoader.SetConfigPermStore(pgStores.ConfigPermissions)
-		instanceLoader.RegisterFactory(channels.TypeTelegram, telegram.FactoryWithStoresAndAudio(pgStores.Agents, pgStores.ConfigPermissions, pgStores.Teams, pgStores.SubagentTasks, pgStores.PendingMessages, audioMgr))
+			instanceLoader.SetExecApprovalManager(execApprovalMgr)
+		instanceLoader.RegisterFactory(channels.TypeTelegram, telegram.FactoryWithStoresAndAudio(pgStores.Agents, pgStores.ConfigPermissions, pgStores.Teams, pgStores.SubagentTasks, pgStores.PendingMessages, audioMgr, execApprovalMgr))
 		instanceLoader.RegisterFactory(channels.TypeDiscord, discord.FactoryWithStoresAndAudio(pgStores.Agents, pgStores.ConfigPermissions, pgStores.PendingMessages, audioMgr))
 		instanceLoader.RegisterFactory(channels.TypeFeishu, feishu.FactoryWithPendingStoreAndAudio(pgStores.PendingMessages, audioMgr))
 		instanceLoader.RegisterFactory(channels.TypeZaloOA, zalo.Factory)
@@ -550,6 +551,9 @@ func runGateway() {
 
 	// Slow tool notification subscriber — direct outbound when tool exceeds adaptive threshold.
 	wireSlowToolNotifySubscriber(msgBus)
+
+	// Exec approval notification — push approval requests through originating channel.
+	wireExecApprovalNotifySubscriber(msgBus)
 
 	// Inbound message consumer setup
 	consumerTeamStore := pgStores.Teams
