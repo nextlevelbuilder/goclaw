@@ -94,7 +94,8 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 		properties, source_id, confidence,
 		created_at, updated_at, event_time,
 		depth, path, via
-	FROM paths WHERE depth > 1`, userWhere, tc, userWhereR, userWhereE, depthN)
+	FROM paths WHERE depth > 1
+		ORDER BY depth, event_time DESC NULLS LAST, updated_at DESC`, userWhere, tc, userWhereR, userWhereE, depthN)
 
 	// Use sqlx on the transaction for struct scanning with pq.StringArray support.
 	txSqlx := sqlxTx(tx)

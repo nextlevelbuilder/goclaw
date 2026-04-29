@@ -152,7 +152,7 @@ func (t *KnowledgeGraphSearchTool) executeTraversal(ctx context.Context, agentID
 		return ErrorResult(fmt.Sprintf("graph traversal failed: %v", err))
 	}
 	if len(results) > 0 {
-		const maxTraversalResults = 20
+		const maxTraversalResults = 30
 		totalResults := len(results)
 		if totalResults > maxTraversalResults {
 			results = results[:maxTraversalResults]
@@ -261,11 +261,9 @@ func (t *KnowledgeGraphSearchTool) executeEventTimeSearch(ctx context.Context, a
 
 	// Optional text filter (post-search)
 	if query != "" && query != "*" {
-		qLower := strings.ToLower(query)
 		filtered := entities[:0]
 		for _, e := range entities {
-			if strings.Contains(strings.ToLower(e.Name), qLower) ||
-				strings.Contains(strings.ToLower(e.Description), qLower) {
+			if matchesQuery(e, query) {
 				filtered = append(filtered, e)
 			}
 		}
@@ -396,6 +394,25 @@ func formatProperties(props map[string]string) string {
 	return strings.Join(parts, ", ")
 }
 
+// matchesQuery checks if an entity matches a multi-word query.
+// Each word must appear in the entity's name, description, or properties.
+func matchesQuery(e store.Entity, query string) bool {
+	words := strings.Fields(strings.ToLower(query))
+	if len(words) == 0 {
+		return true
+	}
+	text := strings.ToLower(e.Name + " " + e.Description)
+	for k, v := range e.Properties {
+		text += " " + k + " " + v
+	}
+	for _, w := range words {
+		if !strings.Contains(text, w) {
+			return false
+		}
+	}
+	return true
+}
+
 // noResultsHint returns top entities so the model knows what's available.
 // Falls back to scope-based listing if the query matches a graph scope ID.
 func (t *KnowledgeGraphSearchTool) noResultsHint(ctx context.Context, agentID, userID, query string) *Result {
@@ -473,11 +490,9 @@ func (t *KnowledgeGraphSearchTool) executeScopeSearch(ctx context.Context, agent
 
 	// Optional text filter (post-search)
 	if query != "" && query != "*" {
-		qLower := strings.ToLower(query)
 		filtered := entities[:0]
 		for _, e := range entities {
-			if strings.Contains(strings.ToLower(e.Name), qLower) ||
-				strings.Contains(strings.ToLower(e.Description), qLower) {
+			if matchesQuery(e, query) {
 				filtered = append(filtered, e)
 			}
 		}

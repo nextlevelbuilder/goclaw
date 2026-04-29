@@ -66,6 +66,7 @@ func (s *SQLiteKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userI
 		       properties, source_id, confidence, created_at, updated_at,
 		       depth, path, via
 		FROM paths WHERE depth > 1
+		ORDER BY depth, CASE WHEN event_time IS NOT NULL THEN 0 ELSE 1 END, event_time DESC, updated_at DESC
 		LIMIT 500`
 
 		args = append([]any{startEntityID, agentID}, scArgs...)
@@ -111,6 +112,7 @@ func (s *SQLiteKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userI
 		       properties, source_id, confidence, created_at, updated_at,
 		       depth, path, via
 		FROM paths WHERE depth > 1
+		ORDER BY depth, CASE WHEN event_time IS NOT NULL THEN 0 ELSE 1 END, event_time DESC, updated_at DESC
 		LIMIT 500`
 
 		args = append([]any{startEntityID, agentID, userID}, scArgs...)
