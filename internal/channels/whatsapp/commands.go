@@ -16,8 +16,8 @@ const menuHelpText = "Available commands:\n" +
 	"/reset — Reset conversation history\n" +
 	"/stop — Stop current running task\n" +
 	"/stopall — Stop all running tasks\n" +
-	"/approve <code> — Approve a pending command execution\n" +
-	"/deny <code> — Deny a pending command execution\n" +
+	"/approve <code> — Approve a pending command (or reply 1)\n" +
+	"/deny <code> — Deny a pending command (or reply 2)\n" +
 	"/addwriter — Add a file writer (reply to their message or @mention)\n" +
 	"/removewriter — Remove a file writer (reply to their message or @mention)\n" +
 	"/writers — List file writers for this group\n" +
@@ -161,9 +161,11 @@ func (c *Channel) handleExecApprovalCommand(ctx context.Context, text string, ch
 	}
 }
 
-// TryExecApprovalText detects natural language approval patterns in non-slash messages.
+// TryExecApprovalText detects approval responses in non-slash messages.
+// Priority: "1" = approve, "2" = deny (by channel+chatID lookup), then
+// "approve CODE" / "deny CODE" (by short code).
 // Returns true if the message was handled as an approval response.
-func (c *Channel) TryExecApprovalText(text string, chatJID types.JID) bool {
+func (c *Channel) TryExecApprovalText(text string, chatJID types.JID, chatID string) bool {
 	if c.execApprovalMgr == nil {
 		return false
 	}
@@ -173,16 +175,33 @@ func (c *Channel) TryExecApprovalText(text string, chatJID types.JID) bool {
 		return false
 	}
 
-	// Match patterns: "approve CODE", "deny CODE", "approved CODE", "denied CODE"
-	// Also match "approve CODE" with casual text like "yes approve CODE"
+	channelName := c.Name()
 	lower := strings.ToLower(text)
 
+	// Priority 1: Simple numbered reply — "1" (approve) or "2" (deny).
+	if lower == "1" || lower == "2" {
+		decision := tools.ApprovalAllowOnce
+		if lower == "2" {
+			decision = tools.ApprovalDeny
+		}
+		err := c.execApprovalMgr.ResolveByChannel(channelName, chatID, decision)
+		if err != nil {
+			return false // no pending approval for this chat — treat as normal message
+		}
+		if decision == tools.ApprovalDeny {
+			c.sendText(chatJID, "Command denied.")
+		} else {
+			c.sendText(chatJID, "Command approved.")
+		}
+		return true
+	}
+
+	// Priority 2: Natural language — "approve CODE" or "deny CODE".
 	var decision tools.ApprovalDecision
 	var code string
 
 	if idx := strings.Index(lower, "approve"); idx >= 0 {
 		rest := strings.TrimSpace(text[idx+len("approve"):])
-		// Extract the code (first word after "approve")
 		fields := strings.Fields(rest)
 		if len(fields) > 0 {
 			code = strings.ToUpper(fields[0])

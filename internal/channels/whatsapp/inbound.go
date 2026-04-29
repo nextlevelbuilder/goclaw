@@ -74,9 +74,9 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 		return
 	}
 
-	// Natural language exec approval: detect "approve CODE" / "deny CODE" patterns
-	// before sending to the agent pipeline.
-	if content != "" && c.TryExecApprovalText(content, chatJID) {
+	// Natural language exec approval: detect "1" (approve) / "2" (deny) or
+	// "approve CODE" / "deny CODE" patterns before sending to the agent pipeline.
+	if content != "" && c.TryExecApprovalText(content, chatJID, chatID) {
 		return
 	}
 

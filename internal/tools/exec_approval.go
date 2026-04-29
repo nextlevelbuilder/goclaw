@@ -323,6 +323,28 @@ func (m *ExecApprovalManager) ResolveByShortCode(code string, decision ApprovalD
 	return nil
 }
 
+// ResolveByChannel resolves the most recent pending approval for a channel+chatID pair.
+// Used when users reply with simple "1" (approve) or "2" (deny) without a short code.
+func (m *ExecApprovalManager) ResolveByChannel(channel, chatID string, decision ApprovalDecision) error {
+	m.mu.Lock()
+	var match *PendingApproval
+	for _, pa := range m.pending {
+		if pa.Channel == channel && pa.ChatID == chatID {
+			if match == nil || pa.CreatedAt.After(match.CreatedAt) {
+				match = pa
+			}
+		}
+	}
+	if match == nil {
+		m.mu.Unlock()
+		return fmt.Errorf("no pending approval found for this chat")
+	}
+	delete(m.shortCodeIndex, match.ShortCode)
+	match.resultCh <- decision
+	m.mu.Unlock()
+	return nil
+}
+
 // ListPending returns all pending approval requests.
 func (m *ExecApprovalManager) ListPending() []*PendingApproval {
 	m.mu.Lock()

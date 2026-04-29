@@ -21,18 +21,23 @@ func wireExecApprovalNotifySubscriber(msgBus *bus.MessageBus) {
 			return
 		}
 
-		content := fmt.Sprintf(
-			"Command approval required [%s]\nCommand: %s\n\nReply: /approve %s or /deny %s",
-			snapshot.ShortCode,
-			truncateApprovalCmd(snapshot.Command, 200),
-			snapshot.ShortCode,
-			snapshot.ShortCode,
-		)
-
+		// Message 1: the command that needs approval.
 		msgBus.PublishOutbound(bus.OutboundMessage{
-			Channel:  snapshot.Channel,
-			ChatID:   snapshot.ChatID,
-			Content:  content,
+			Channel: snapshot.Channel,
+			ChatID:  snapshot.ChatID,
+			Content: fmt.Sprintf("Command approval required [%s]\nCommand: %s",
+				snapshot.ShortCode,
+				truncateApprovalCmd(snapshot.Command, 200),
+			),
+		})
+
+		// Message 2: the approval/deny action with inline keyboard (Telegram) or
+		// simple numbered reply (WhatsApp, etc.). Metadata signals the channel to
+		// attach interactive elements when supported.
+		msgBus.PublishOutbound(bus.OutboundMessage{
+			Channel: snapshot.Channel,
+			ChatID:  snapshot.ChatID,
+			Content: "1. Approve\n2. Deny\n\nReply 1 or 2",
 			Metadata: map[string]string{
 				"exec_approval_id":   snapshot.ID,
 				"exec_approval_code": snapshot.ShortCode,
