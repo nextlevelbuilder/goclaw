@@ -1,0 +1,87 @@
+{
+  "title": "API-ключи",
+  "description": "Управление API-ключами шлюза с детальными разрешениями.",
+  "addKey": "Создать API-ключ",
+  "searchPlaceholder": "Поиск ключей...",
+  "emptyTitle": "Нет API-ключей",
+  "emptyDescription": "Создайте свой первый API-ключ для аутентификации со шлюзом.",
+  "columns": {
+    "name": "Имя",
+    "prefix": "Ключ",
+    "scopes": "Области доступа (Scopes)",
+    "lastUsed": "Последнее использование",
+    "created": "Создан",
+    "status": "Статус",
+    "actions": "Действия"
+  },
+  "status": {
+    "active": "Активен",
+    "revoked": "Отозван",
+    "expired": "Истёк"
+  },
+  "form": {
+    "title": "Создать API-ключ",
+    "name": "Имя",
+    "namePlaceholder": "например, ci-deploy, dashboard-readonly",
+    "scopes": "Области доступа (Scopes)",
+    "scopeDescriptions": {
+      "operator.admin": "Полный административный доступ",
+      "operator.read": "Доступ только для чтения",
+      "operator.write": "Доступ на чтение и запись",
+      "operator.approvals": "Управление одобрениями команд",
+      "operator.pairing": "Управление сопряжением устройств",
+      "operator.provision": "Инициализация новых тенантов"
+    },
+    "tenant": "Тенант",
+    "tenantSystem": "Система (все тенанты)",
+    "expiry": "Срок действия",
+    "expiryOptions": {
+      "never": "Никогда",
+      "7d": "7 дней",
+      "30d": "30 дней",
+      "90d": "90 дней"
+    },
+    "cancel": "Отмена",
+    "create": "Создать",
+    "creating": "Создание..."
+  },
+  "created": {
+    "title": "API-ключ создан",
+    "description": "Скопируйте этот ключ прямо сейчас — он больше не будет показан.",
+    "copied": "Скопировано!",
+    "copy": "Копировать в буфер обмена",
+    "done": "Готово"
+  },
+  "revoke": {
+    "title": "Отозвать API-ключ",
+    "description": "Вы уверены, что хотите отозвать \"{{name}}\"? Это действие нельзя отменить.",
+    "confirmLabel": "Отозвать"
+  },
+  "toast": {
+    "created": "API-ключ создан",
+    "revoked": "API-ключ отозван",
+    "failedCreate": "Не удалось создать API-ключ",
+    "failedRevoke": "Не удалось отозвать API-ключ"
+  },
+  "never": "Никогда",
+  "neverUsed": "Ни разу не использовался",
+  "tenantBadgeSystem": "Система",
+  "tenantBadgeUnknown": "Неизвестно",
+  "columns.expiry": "Срок действия",
+  "codeDialog": {
+    "title": "Использование API-ключа",
+    "description": "Используйте этот API-ключ для аутентификации с HTTP API шлюза.",
+    "copy": "Копировать",
+    "copied": "Скопировано!",
+    "tabs": {
+      "curl": "cURL",
+      "typescript": "TypeScript",
+      "go": "Go"
+    },
+    "comments": {
+      "chat": "Общение с агентом (OpenAI-совместимый)",
+      "listAgents": "Список агентов",
+      "listSessions": "Список сессий"
+    }
+  }
+}

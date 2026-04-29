@@ -9,6 +9,7 @@ import "fmt"
 // Supported locales.
 const (
 	LocaleEN = "en"
+	LocaleRU = "ru"
 	LocaleVI = "vi"
 	LocaleZH = "zh"
 
@@ -58,7 +59,7 @@ func lookup(locale, key string) string {
 // IsSupported returns true if the locale is a known language.
 func IsSupported(locale string) bool {
 	switch locale {
-	case LocaleEN, LocaleVI, LocaleZH:
+	case LocaleEN, LocaleRU, LocaleVI, LocaleZH:
 		return true
 	}
 	return false

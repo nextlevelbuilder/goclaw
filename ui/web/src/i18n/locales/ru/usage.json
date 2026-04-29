@@ -1,0 +1,97 @@
+{
+  "title": "Использование",
+  "description": "Потребление токенов и затраты по агентам",
+  "emptyTitle": "Нет данных об использовании",
+  "emptyDescription": "Данные об использовании появятся здесь после того, как агенты обработают запросы.",
+  "summary": {
+    "sessions": "{{count}} сессий",
+    "inputTokens": "Входные токены",
+    "outputTokens": "Выходные токены",
+    "total": "Всего"
+  },
+  "recentRecords": "Последние записи",
+  "columns": {
+    "agent": "Агент",
+    "model": "Модель",
+    "provider": "Провайдер",
+    "input": "Вход",
+    "output": "Выход",
+    "total": "Всего",
+    "channel": "Канал",
+    "cost": "Стоимость",
+    "status": "Статус"
+  },
+  "analytics": {
+    "title": "Аналитика использования",
+    "period24h": "24ч",
+    "period7d": "7 дней",
+    "period30d": "30 дней",
+    "periodCustom": "Произвольный",
+    "allAgents": "Все агенты",
+    "allProviders": "Все провайдеры",
+    "allChannels": "Все каналы",
+    "activeFilters": "Активные фильтры",
+    "clearAll": "Очистить все",
+    "exportCsv": "Экспорт в CSV",
+    "requests": "Запросы",
+    "tokens": "Токены",
+    "cost": "Стоимость",
+    "errors": "Ошибки",
+    "uniqueUsers": "Уникальные пользователи",
+    "llmCalls": "Вызовы LLM",
+    "toolCalls": "Вызовы инструментов",
+    "trendUp": "+{{value}}%",
+    "trendDown": "{{value}}%",
+    "vsPrevious": "по сравнению с пред. периодом",
+    "configurePricing": "Настройте цены на модели для отслеживания расходов",
+    "noData": "Нет данных за выбранный период",
+    "tokenChart": {
+      "title": "Использование токенов во времени",
+      "input": "Входные токены",
+      "output": "Выходные токены",
+      "cache": "Чтение из кэша",
+      "thinking": "Токены рассуждения (Thinking)",
+      "total": "Всего"
+    },
+    "requestChart": {
+      "title": "Объем запросов и ошибки",
+      "requests": "Запросы",
+      "errors": "Ошибки",
+      "errorRate": "Процент ошибок"
+    },
+    "distribution": {
+      "provider": "Распределение по провайдерами",
+      "model": "Распределение по моделям",
+      "channel": "Распределение по каналам",
+      "other": "Другое",
+      "calls": "вызовов"
+    },
+    "durationChart": {
+      "title": "Продолжительность и производительность",
+      "avgDuration": "Средняя продолжительность",
+      "errorRate": "% ошибок"
+    },
+    "knowledgeChart": {
+      "title": "Рост памяти и графа знаний",
+      "memoryDocs": "Документы памяти",
+      "memoryChunks": "Фрагменты (chunks) памяти",
+      "kgEntities": "Сущности графа",
+      "kgRelations": "Связи графа"
+    },
+    "topModels": {
+      "title": "Популярные модели",
+      "model": "Модель",
+      "provider": "Провайдер",
+      "llmCalls": "Вызовы LLM",
+      "inputTokens": "Входные токены",
+      "outputTokens": "Выходные токены",
+      "avgDuration": "Среднее время",
+      "cost": "Стоимость"
+    },
+    "tooltip": {
+      "date": "Дата",
+      "total": "Всего",
+      "errorRate": "{{value}}% ошибок"
+    }
+  }
+}

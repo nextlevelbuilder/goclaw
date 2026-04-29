@@ -124,14 +124,56 @@ import zhV3Capabilities from "./locales/zh/v3-capabilities.json";
 import zhBackup from "./locales/zh/backup.json";
 import zhHooks from "./locales/zh/hooks.json";
 
+// --- RU namespaces ---
+import ruCommon from "./locales/ru/common.json";
+import ruSidebar from "./locales/ru/sidebar.json";
+import ruTopbar from "./locales/ru/topbar.json";
+import ruLogin from "./locales/ru/login.json";
+import ruOverview from "./locales/ru/overview.json";
+import ruChat from "./locales/ru/chat.json";
+import ruAgents from "./locales/ru/agents.json";
+import ruTeams from "./locales/ru/teams.json";
+import ruSessions from "./locales/ru/sessions.json";
+import ruSkills from "./locales/ru/skills.json";
+import ruCron from "./locales/ru/cron.json";
+import ruConfig from "./locales/ru/config.json";
+import ruChannels from "./locales/ru/channels.json";
+import ruProviders from "./locales/ru/providers.json";
+import ruTraces from "./locales/ru/traces.json";
+import ruEvents from "./locales/ru/events.json";
+import ruUsage from "./locales/ru/usage.json";
+import ruApprovals from "./locales/ru/approvals.json";
+import ruNodes from "./locales/ru/nodes.json";
+import ruLogs from "./locales/ru/logs.json";
+import ruTools from "./locales/ru/tools.json";
+import ruMcp from "./locales/ru/mcp.json";
+import ruTts from "./locales/ru/tts.json";
+import ruSetup from "./locales/ru/setup.json";
+import ruMemory from "./locales/ru/memory.json";
+import ruVault from "./locales/ru/vault.json";
+import ruStorage from "./locales/ru/storage.json";
+import ruPendingMessages from "./locales/ru/pending-messages.json";
+import ruContacts from "./locales/ru/contacts.json";
+import ruActivity from "./locales/ru/activity.json";
+import ruApiKeys from "./locales/ru/api-keys.json";
+import ruCliCredentials from "./locales/ru/cli-credentials.json";
+import ruPackages from "./locales/ru/packages.json";
+import ruTenants from "./locales/ru/tenants.json";
+import ruSystemSettings from "./locales/ru/system-settings.json";
+import ruImportExport from "./locales/ru/import-export.json";
+import ruV3Capabilities from "./locales/ru/v3-capabilities.json";
+import ruBackup from "./locales/ru/backup.json";
+import ruHooks from "./locales/ru/hooks.json";
+
 const STORAGE_KEY = "goclaw:language";
 
 function getInitialLanguage(): string {
   const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === "en" || stored === "vi" || stored === "zh") return stored;
+  if (stored === "en" || stored === "vi" || stored === "zh" || stored === "ru") return stored;
   const lang = navigator.language.toLowerCase();
   if (lang.startsWith("vi")) return "vi";
   if (lang.startsWith("zh")) return "zh";
+  if (lang.startsWith("ru")) return "ru";
   return "en";
 }
 
@@ -205,6 +247,25 @@ i18n.use(initReactI18next).init({
       "v3-capabilities": zhV3Capabilities,
       backup: zhBackup,
       hooks: zhHooks,
+    },
+    ru: {
+      common: ruCommon, sidebar: ruSidebar, topbar: ruTopbar, login: ruLogin,
+      overview: ruOverview, chat: ruChat, agents: ruAgents, teams: ruTeams,
+      sessions: ruSessions, skills: ruSkills, cron: ruCron, config: ruConfig,
+      channels: ruChannels, providers: ruProviders, traces: ruTraces,
+      events: ruEvents, usage: ruUsage,
+      approvals: ruApprovals, nodes: ruNodes, logs: ruLogs, tools: ruTools,
+      mcp: ruMcp, tts: ruTts, setup: ruSetup, memory: ruMemory, vault: ruVault, storage: ruStorage,
+      "pending-messages": ruPendingMessages,
+      contacts: ruContacts, activity: ruActivity, "api-keys": ruApiKeys,
+      "cli-credentials": ruCliCredentials,
+      packages: ruPackages,
+      tenants: ruTenants,
+      "system-settings": ruSystemSettings,
+      "import-export": ruImportExport,
+      "v3-capabilities": ruV3Capabilities,
+      backup: ruBackup,
+      hooks: ruHooks,
     },
   },
   ns: [...ns],

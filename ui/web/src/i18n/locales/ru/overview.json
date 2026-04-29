@@ -1,0 +1,93 @@
+{
+  "title": "Дашборд",
+  "description": "Обзор шлюза и использование квот",
+  "tabs": {
+    "overview": "Обзор",
+    "usage": "Использование"
+  },
+  "statCards": {
+    "requestsToday": "Запросов сегодня",
+    "tokensToday": "Токенов сегодня",
+    "costToday": "Стоимость сегодня",
+    "agents": "Агенты",
+    "channels": "Каналы",
+    "channelsAttention": "{{count}} требуют внимания",
+    "running": "работает",
+    "online": "в сети",
+    "users": "{{count}} пользователей",
+    "inOut": "Вход: {{input}} / Выход: {{output}}"
+  },
+  "providers": {
+    "noProvidersTitle": "Провайдеры LLM не настроены",
+    "noEnabledTitle": "Нет включенных провайдеров LLM",
+    "noProvidersDesc": "Вам необходимо добавить хотя бы одного провайдера LLM, прежде чем агенты смогут работать.",
+    "noEnabledDesc": "Все провайдеры в данный момент отключены. Включите хотя бы одного, чтобы начать использовать агентов.",
+    "goToSettings": "Перейти к настройкам провайдеров"
+  },
+  "systemHealth": {
+    "title": "Состояние системы",
+    "uptime": "Аптайм (время работы)",
+    "version": "Версия",
+    "database": "База данных",
+    "providers": "Провайдеры",
+    "tools": "Инструменты",
+    "sessions": "Сессии",
+    "clients": "Клиенты",
+    "channels": "Каналы",
+    "needsAttention": "Требуют внимания",
+    "channelsNeedingAttention": "{{count}} каналов",
+    "failedCount": "{{count}} с ошибкой",
+    "warningCountOne": "{{count}} предупреждение",
+    "warningCountOther": "{{count}} предупреждений",
+    "moreAttention": "+ еще {{count}}",
+    "active": "{{count}} активно",
+    "none": "нет",
+    "runtimes": "Среды выполнения"
+  },
+  "connectedClients": {
+    "title": "Подключенные клиенты",
+    "noClients": "Нет подключенных клиентов",
+    "columns": {
+      "ip": "IP",
+      "user": "Пользователь",
+      "role": "Роль",
+      "connected": "Подключен"
+    },
+    "you": "вы"
+  },
+  "cronJobs": {
+    "title": "Cron-задачи",
+    "manage": "Управление",
+    "noJobs": "Нет настроенных cron-задач",
+    "disabled": "отключено"
+  },
+  "recentRequests": {
+    "title": "Последние запросы",
+    "viewAll": "Посмотреть все",
+    "noRequests": "Нет последних запросов",
+    "columns": {
+      "time": "Время",
+      "name": "Имя",
+      "user": "Пользователь",
+      "channel": "Канал",
+      "tokens": "Токены",
+      "duration": "Длительность",
+      "status": "Статус"
+    }
+  },
+  "quotaUsage": {
+    "title": "Использование квот",
+    "columns": {
+      "userGroup": "Пользователь / Группа",
+      "hour": "Час",
+      "day": "День",
+      "week": "Неделя"
+    },
+    "noLimit": "без лимита"
+  },
+  "embedding": {
+    "title": "Эмбеддинг (Embedding)",
+    "notConfigured": "Не настроено",
+    "configure": "Настроить в Провайдерах →"
+  }
+}
