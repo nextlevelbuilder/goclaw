@@ -370,11 +370,38 @@ func TestResolveAuth_BrowserPairingScopesToMemberTenant(t *testing.T) {
 	if !auth.Authenticated {
 		t.Fatal("expected authenticated")
 	}
-	if auth.Role != permissions.RoleOperator {
-		t.Fatalf("role = %v, want operator", auth.Role)
+	// Paired session inherits the user's tenant_users.role for the resolved
+	// tenant: admin in acme → permissions.RoleAdmin (not the legacy hard-coded
+	// RoleOperator).
+	if auth.Role != permissions.RoleAdmin {
+		t.Fatalf("role = %v, want admin", auth.Role)
 	}
 	if auth.TenantID != tenantID {
 		t.Fatalf("tenantID = %v, want %v", auth.TenantID, tenantID)
+	}
+}
+
+func TestResolveAuth_BrowserPairingFallsBackToOperatorWithoutMembership(t *testing.T) {
+	setupTestToken(t, "gateway-token")
+	ps := newMockPairingStore()
+	ps.paired["browser-1:browser"] = true
+	setupTestPairingStore(t, ps)
+	ts := newMockTenantStore()
+	setupTestTenantStore(t, ts)
+
+	r := httptest.NewRequest("GET", "/v1/agents", nil)
+	r.Header.Set("X-GoClaw-Sender-Id", "browser-1")
+	r.Header.Set("X-GoClaw-User-Id", "user-1")
+
+	auth := resolveAuth(r)
+	if !auth.Authenticated {
+		t.Fatal("expected authenticated")
+	}
+	// No membership row: preserve the pre-3.11 RoleOperator default so this
+	// change is backward compatible for users that pair without a tenant
+	// membership.
+	if auth.Role != permissions.RoleOperator {
+		t.Fatalf("role = %v, want operator (legacy fallback)", auth.Role)
 	}
 }
 

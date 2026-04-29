@@ -212,16 +212,33 @@ func resolveAuthWithBearer(r *http.Request, bearer string) authResult {
 		}
 		return res
 	}
-	// Browser pairing → operator (via X-GoClaw-Sender-Id header)
+	// Browser pairing → role derived from tenant_users.role (via
+	// X-GoClaw-Sender-Id header). Falls back to RoleOperator when the user
+	// has no membership row, preserving pre-3.11 behaviour.
 	if senderID := r.Header.Get("X-GoClaw-Sender-Id"); senderID != "" && pkgPairingStore != nil {
 		paired, err := pkgPairingStore.IsPaired(r.Context(), senderID, "browser")
 		if err == nil && paired {
-			tenantID, allowed := resolveTenantHint(r.Context(), r.Header.Get("X-GoClaw-Tenant-Id"), extractUserID(r))
+			userID := extractUserID(r)
+			hint := r.Header.Get("X-GoClaw-Tenant-Id")
+			tenantID, allowed := resolveTenantHint(r.Context(), hint, userID)
 			if !allowed {
 				return authResult{}
 			}
+			// No hint and resolution fell back to master: infer the user's
+			// working tenant when they have exactly one membership.
+			if hint == "" && tenantID == store.MasterTenantID && pkgTenantCache != nil && userID != "" {
+				if memberships, err := pkgTenantCache.store.ListUserTenants(r.Context(), userID); err == nil && len(memberships) == 1 {
+					tenantID = memberships[0].TenantID
+				}
+			}
+			role := permissions.RoleOperator
+			if pkgTenantCache != nil && userID != "" {
+				if tRole, err := pkgTenantCache.store.GetUserRole(r.Context(), tenantID, userID); err == nil && tRole != "" {
+					role = permissions.RoleFromTenantRole(tRole)
+				}
+			}
 			return authResult{
-				Role:          permissions.RoleOperator,
+				Role:          role,
 				Authenticated: true,
 				TenantID:      tenantID,
 				TenantSlug:    resolveTenantSlug(r.Context(), tenantID),

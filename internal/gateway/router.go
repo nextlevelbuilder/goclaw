@@ -258,9 +258,8 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 			return
 		}
 		if paired {
-			client.role = permissions.RoleOperator
 			client.authenticated = true
-		client.userID = params.UserID
+			client.userID = params.UserID
 			client.pairedSenderID = params.SenderID
 			client.pairedChannel = "browser"
 			tid, errCode := r.resolveTenantHint(ctx, params.TenantHint, params.UserID)
@@ -268,8 +267,35 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 				client.SendResponse(protocol.NewErrorResponse(req.ID, errCode, "tenant access revoked"))
 				return
 			}
+			// When the caller didn't pass a tenant hint and resolution fell
+			// back to master, try to infer a working tenant from the user's
+			// memberships. A single membership is unambiguous; with multiple,
+			// require an explicit hint and stay on master.
+			hint := params.TenantHint
+			if hint == "" {
+				hint = params.TenantID
+			}
+			if hint == "" && tid == store.MasterTenantID && r.tenantStore != nil && params.UserID != "" {
+				if memberships, err := r.tenantStore.ListUserTenants(ctx, params.UserID); err == nil && len(memberships) == 1 {
+					tid = memberships[0].TenantID
+				}
+			}
 			client.tenantID = tid
-			slog.Info("browser pairing authenticated", "sender_id", params.SenderID, "client", client.id, "tenant_id", client.tenantID)
+			// Derive the gateway role from the user's tenant_users.role for
+			// the resolved tenant. Falling back to RoleOperator preserves the
+			// pre-3.11 behaviour for users without a tenant membership row.
+			client.role = permissions.RoleOperator
+			if r.tenantStore != nil && params.UserID != "" {
+				if tRole, _ := r.getUserTenantRole(ctx, tid, params.UserID); tRole != "" {
+					client.role = permissions.RoleFromTenantRole(tRole)
+				}
+			}
+			slog.Info("browser pairing authenticated",
+				"sender_id", params.SenderID,
+				"client", client.id,
+				"tenant_id", client.tenantID,
+				"role", string(client.role),
+			)
 			r.sendConnectResponse(ctx, client, req.ID)
 			return
 		}
