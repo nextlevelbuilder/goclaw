@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -70,7 +71,7 @@ func (t *KnowledgeGraphSearchTool) Parameters() map[string]any {
 				"description": "Graph scope ID to filter results (e.g. 'project-sovereign', 'project-gpu-elephant'). Lists entities within a specific knowledge graph scope.",
 			},
 		},
-		"required": []string{"query"},
+		"required": []string{},
 	}
 }
 
@@ -86,9 +87,6 @@ func (t *KnowledgeGraphSearchTool) Execute(ctx context.Context, args map[string]
 	userID := store.KGUserID(ctx)
 
 	query, _ := args["query"].(string)
-	if query == "" {
-		return ErrorResult("query parameter is required")
-	}
 
 	entityID, _ := args["entity_id"].(string)
 	maxDepth := 2
@@ -99,6 +97,11 @@ func (t *KnowledgeGraphSearchTool) Execute(ctx context.Context, args map[string]
 	// Traversal mode: entity_id provided
 	if entityID != "" {
 		return t.executeTraversal(ctx, agentID.String(), userID, entityID, maxDepth, query)
+	}
+
+	// Need query for all non-traversal modes
+	if query == "" {
+		return ErrorResult("query parameter is required (or use entity_id for traversal)")
 	}
 
 	// Parse temporal as_of parameter
@@ -171,6 +174,9 @@ func (t *KnowledgeGraphSearchTool) executeTraversal(ctx context.Context, agentID
 			if r.Entity.Description != "" {
 				sb.WriteString(fmt.Sprintf("\n  %s", r.Entity.Description))
 			}
+			if p := formatProperties(r.Entity.Properties); p != "" {
+				sb.WriteString(fmt.Sprintf("\n  [%s]", p))
+			}
 			if len(r.Path) > 0 {
 				sb.WriteString(fmt.Sprintf("\n  path: %s", strings.Join(r.Path, " → ")))
 			}
@@ -235,6 +241,9 @@ func (t *KnowledgeGraphSearchTool) executeListAll(ctx context.Context, agentID, 
 		if e.Description != "" {
 			sb.WriteString(fmt.Sprintf("  %s\n", e.Description))
 		}
+		if p := formatProperties(e.Properties); p != "" {
+			sb.WriteString(fmt.Sprintf("  [%s]\n", p))
+		}
 	}
 	sb.WriteString("\nTip: Use entity_id parameter to traverse relationships from a specific entity.")
 	return NewResult(sb.String())
@@ -284,6 +293,9 @@ func (t *KnowledgeGraphSearchTool) executeEventTimeSearch(ctx context.Context, a
 		if e.Description != "" {
 			sb.WriteString(fmt.Sprintf("  %s\n", e.Description))
 		}
+		if p := formatProperties(e.Properties); p != "" {
+			sb.WriteString(fmt.Sprintf("  [%s]\n", p))
+		}
 	}
 	return NewResult(sb.String())
 }
@@ -331,6 +343,9 @@ func (t *KnowledgeGraphSearchTool) executeSearch(ctx context.Context, agentID, u
 		if e.Description != "" {
 			sb.WriteString(fmt.Sprintf("  %s\n", e.Description))
 		}
+		if p := formatProperties(e.Properties); p != "" {
+			sb.WriteString(fmt.Sprintf("  [%s]\n", p))
+		}
 
 		// Fetch relations to show connections with names (cap 5 per entity)
 		relations, err := t.kgStore.ListRelations(ctx, agentID, userID, e.ID)
@@ -364,6 +379,23 @@ func (t *KnowledgeGraphSearchTool) resolveEntityName(ctx context.Context, agentI
 	return entityID[:8] // fallback: short UUID
 }
 
+// formatProperties returns a compact "key: value" line from entity properties.
+func formatProperties(props map[string]string) string {
+	if len(props) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(props))
+	for k := range props {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	parts := make([]string, len(keys))
+	for i, k := range keys {
+		parts[i] = k + ": " + props[k]
+	}
+	return strings.Join(parts, ", ")
+}
+
 // noResultsHint returns top entities so the model knows what's available.
 // Falls back to scope-based listing if the query matches a graph scope ID.
 func (t *KnowledgeGraphSearchTool) noResultsHint(ctx context.Context, agentID, userID, query string) *Result {
@@ -385,6 +417,9 @@ func (t *KnowledgeGraphSearchTool) noResultsHint(ctx context.Context, agentID, u
 				if e.Description != "" {
 					sb.WriteString(fmt.Sprintf("  %s\n", e.Description))
 				}
+				if p := formatProperties(e.Properties); p != "" {
+					sb.WriteString(fmt.Sprintf("  [%s]\n", p))
+				}
 			}
 			sb.WriteString(fmt.Sprintf("\nTip: Use entity_id parameter to traverse relationships from a specific entity."))
 			return NewResult(sb.String())
@@ -395,9 +430,13 @@ func (t *KnowledgeGraphSearchTool) noResultsHint(ctx context.Context, agentID, u
 	if len(top) == 0 {
 		return NewResult("Knowledge graph is empty. No entities have been extracted yet.")
 	}
+	total := len(top)
+	if stats, serr := t.kgStore.Stats(ctx, agentID, userID); serr == nil && stats.EntityCount > 0 {
+		total = stats.EntityCount
+	}
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("No entities found matching %q. ", query))
-	sb.WriteString(fmt.Sprintf("The knowledge graph has %d entities. Here are some available ones:\n\n", len(top)))
+	sb.WriteString(fmt.Sprintf("The knowledge graph has %d entities. Here are some available ones:\n\n", total))
 	for _, e := range top {
 		sb.WriteString(fmt.Sprintf("- %s [%s] (id: %s)", e.Name, e.EntityType, e.ID))
 		if e.EventTime != nil {
@@ -458,6 +497,9 @@ func (t *KnowledgeGraphSearchTool) executeScopeSearch(ctx context.Context, agent
 		sb.WriteString("\n")
 		if e.Description != "" {
 			sb.WriteString(fmt.Sprintf("  %s\n", e.Description))
+		}
+		if p := formatProperties(e.Properties); p != "" {
+			sb.WriteString(fmt.Sprintf("  [%s]\n", p))
 		}
 	}
 	sb.WriteString("\nTip: Use entity_id parameter to traverse relationships from a specific entity.")

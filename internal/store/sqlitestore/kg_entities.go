@@ -226,13 +226,46 @@ func (s *SQLiteKnowledgeGraphStore) SearchEntities(ctx context.Context, agentID,
 		limit = 20
 	}
 
-	pattern := "%" + escapeLike(query) + "%"
+	// Try full-phrase LIKE first
+	results, err := s.sqliteSearch(ctx, agentID, userID, query, limit, false)
+	if err != nil {
+		return nil, err
+	}
+	if len(results) > 0 {
+		return results, nil
+	}
 
+	// Fallback: split into words, match any word (OR)
+	words := strings.Fields(query)
+	if len(words) <= 1 {
+		return nil, nil
+	}
+	return s.sqliteSearch(ctx, agentID, userID, strings.Join(words, " "), limit, true)
+}
+
+func (s *SQLiteKnowledgeGraphStore) sqliteSearch(ctx context.Context, agentID, userID, query string, limit int, anyWord bool) ([]store.Entity, error) {
 	userClause, userArgs := kgUserClauseFor(ctx, userID)
 	sc, scArgs, _ := scopeClause(ctx)
 
-	where := "agent_id = ? AND valid_until IS NULL AND (name || ' ' || COALESCE(description, '')) LIKE ? ESCAPE '\\'"
-	args := []any{agentID, pattern}
+	var where string
+	args := []any{agentID}
+
+	searchExpr := "name || ' ' || COALESCE(description, '') || ' ' || COALESCE(strftime('%d %m %Y', event_time), '')"
+
+	if anyWord {
+		words := strings.Fields(query)
+		conditions := make([]string, len(words))
+		for i, w := range words {
+			conditions[i] = searchExpr + " LIKE ? ESCAPE '\\'"
+			args = append(args, "%"+escapeLike(w)+"%")
+		}
+		where = "agent_id = ? AND valid_until IS NULL AND (" + strings.Join(conditions, " OR ") + ")"
+	} else {
+		pattern := "%" + escapeLike(query) + "%"
+		where = "agent_id = ? AND valid_until IS NULL AND " + searchExpr + " LIKE ? ESCAPE '\\'"
+		args = append(args, pattern)
+	}
+
 	if userClause != "" {
 		where += userClause
 		args = append(args, userArgs...)

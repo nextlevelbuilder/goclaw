@@ -316,7 +316,32 @@ type scoredEntity struct {
 }
 
 func (s *PGKnowledgeGraphStore) ftsSearchEntities(ctx context.Context, agentID uuid.UUID, userID, query string, limit int) ([]scoredEntity, error) {
-	where := "agent_id = $1 AND valid_until IS NULL AND tsv @@ plainto_tsquery('simple', $2)"
+	// Try AND search first (all tokens must match)
+	results, err := s.ftsSearch(ctx, agentID, userID, query, "AND", limit)
+	if err != nil {
+		return nil, err
+	}
+	if len(results) > 0 {
+		return results, nil
+	}
+
+	// Fallback to OR search (any token matches)
+	return s.ftsSearch(ctx, agentID, userID, query, "OR", limit)
+}
+
+// ftsSearch runs a full-text search with the given mode ("AND" or "OR").
+// The search tsvector includes event_time date tokens so date-based queries match.
+func (s *PGKnowledgeGraphStore) ftsSearch(ctx context.Context, agentID uuid.UUID, userID, query, mode string, limit int) ([]scoredEntity, error) {
+	// Build the tsquery: AND uses plainto_tsquery, OR replaces '&' with '|'
+	tsqueryExpr := fmt.Sprintf("plainto_tsquery('simple', $2)")
+	if mode == "OR" {
+		tsqueryExpr = fmt.Sprintf("to_tsquery('simple', replace(plainto_tsquery('simple', $2)::text, '&', '|'))")
+	}
+
+	// Include event_time date tokens in the searchable tsvector
+	// so queries like "28 april" match entities with event_time on that date.
+	combinedTsv := "(tsv || to_tsvector('simple', COALESCE(to_char(event_time, 'DD Month YYYY'), '')))"
+	where := fmt.Sprintf("agent_id = $1 AND valid_until IS NULL AND %s @@ %s", combinedTsv, tsqueryExpr)
 	args := []any{agentID, query}
 	idx := 3
 	userWhere, userArgs := kgUserWhere(ctx, userID, idx)
@@ -334,14 +359,14 @@ func (s *PGKnowledgeGraphStore) ftsSearchEntities(ctx context.Context, agentID u
 		args = append(args, tcArgs...)
 		idx += len(tcArgs)
 	}
-	args = append(args, query, limit)
+	args = append(args, limit)
 	q := fmt.Sprintf(`
 		SELECT id, agent_id, user_id, external_id, name, entity_type, description,
 		       properties, source_id, confidence, created_at, updated_at, event_time,
-		       ts_rank(tsv, plainto_tsquery('simple', $%d)) AS score
+		       ts_rank(%s, %s) * %f AS score
 		FROM kg_entities
 		WHERE %s
-		ORDER BY score DESC LIMIT $%d`, idx, where, idx+1)
+		ORDER BY score DESC LIMIT $%d`, combinedTsv, tsqueryExpr, 0.5, where, idx)
 
 	var sRows []scoredEntityRow
 	if err = pkgSqlxDB.SelectContext(ctx, &sRows, q, args...); err != nil {
