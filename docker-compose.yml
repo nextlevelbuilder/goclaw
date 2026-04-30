@@ -78,7 +78,7 @@ volumes:
     driver_opts:
       type: 'none'
       o: 'bind'
-      # Укажите полный путь к папке на вашем компьютере
+      # Set the absolute path to the directory on your machine
       device: '/opt/goclawAI/data'
 
   goclaw-workspace:
@@ -86,14 +86,14 @@ volumes:
     driver_opts:
       type: 'none'
       o: 'bind'
-      # Укажите полный путь к папке на вашем компьютере
+      # Set the absolute path to the directory on your machine
       device: '/opt/goclawAI/workspace'
   goclaw-ssh:
     driver: local
     driver_opts:
       type: 'none'
       o: 'bind'
-      # Укажите полный путь к папке на вашем компьютере
+      # Set the absolute path to the directory on your machine
       device: '/root/.ssh/'
 networks:
   goclaw-net:
