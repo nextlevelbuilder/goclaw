@@ -24,12 +24,14 @@ const (
 	ProviderBailian         = "bailian"
 	ProviderChatGPTOAuth    = "chatgpt_oauth"
 	ProviderClaudeCLI       = "claude_cli"
+	ProviderCodexCLI        = "codex_cli"
+	ProviderGeminiCLI       = "gemini_cli"
 	ProviderYesScale        = "yescale"
 	ProviderZai             = "zai"
 	ProviderZaiCoding       = "zai_coding"
-	ProviderOllama          = "ollama"       // local or self-hosted Ollama (no API key)
-	ProviderOllamaCloud     = "ollama_cloud" // Ollama Cloud (Bearer token required)
-	ProviderACP             = "acp"          // ACP (Agent Client Protocol) agent subprocess
+	ProviderOllama          = "ollama"          // local or self-hosted Ollama (no API key)
+	ProviderOllamaCloud     = "ollama_cloud"    // Ollama Cloud (Bearer token required)
+	ProviderACP             = "acp"             // ACP (Agent Client Protocol) agent subprocess
 	ProviderNovita          = "novita"          // Novita AI (OpenAI-compatible endpoint)
 	ProviderBytePlus        = "byteplus"        // BytePlus ModelArk (Seed 2.0 models)
 	ProviderBytePlusCoding  = "byteplus_coding" // BytePlus ModelArk Coding Plan
@@ -61,6 +63,8 @@ var ValidProviderTypes = map[string]bool{
 	ProviderBailian:         true,
 	ProviderChatGPTOAuth:    true,
 	ProviderClaudeCLI:       true,
+	ProviderCodexCLI:        true,
+	ProviderGeminiCLI:       true,
 	ProviderYesScale:        true,
 	ProviderZai:             true,
 	ProviderZaiCoding:       true,
@@ -178,6 +182,8 @@ var NoEmbeddingTypes = map[string]bool{
 	ProviderAnthropicNative: true, // uses x-api-key auth, not Bearer; no embedding models
 	ProviderACP:             true,
 	ProviderClaudeCLI:       true,
+	ProviderCodexCLI:        true,
+	ProviderGeminiCLI:       true,
 	ProviderChatGPTOAuth:    true,
 }
 

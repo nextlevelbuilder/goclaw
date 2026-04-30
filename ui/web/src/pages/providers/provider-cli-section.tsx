@@ -12,20 +12,48 @@ interface CLIAuthStatus {
   in_docker?: boolean;
 }
 
-export function CLISection({ open }: { open: boolean }) {
+type CLIKind = "claude" | "codex" | "gemini";
+
+export function CLISection({ open, kind = "claude" }: { open: boolean; kind?: CLIKind }) {
   const { t } = useTranslation("providers");
   const http = useHttp();
   const [cliAuth, setCliAuth] = useState<CLIAuthStatus | null>(null);
   const [loading, setLoading] = useState(false);
+  const binary = kind === "codex" ? "codex" : kind === "gemini" ? "gemini" : "claude";
+  const authPath = kind === "codex"
+    ? "/v1/providers/codex-cli/auth-status"
+    : kind === "gemini"
+    ? "/v1/providers/gemini-cli/auth-status"
+    : "/v1/providers/claude-cli/auth-status";
+  const loginCommand = kind === "codex"
+    ? "codex login"
+    : kind === "gemini"
+    ? "gemini login"
+    : "claude auth login";
+  const switchCommand = kind === "codex"
+    ? "codex logout && codex login --device-auth"
+    : kind === "gemini"
+    ? "gemini logout && gemini login"
+    : "claude auth logout && claude auth login";
+  const dockerLoginCommand = kind === "codex"
+    ? "docker compose exec -u goclaw goclaw codex login --device-auth"
+    : kind === "gemini"
+    ? "docker compose exec -u goclaw goclaw gemini login"
+    : "docker compose exec -u goclaw goclaw claude auth login";
+  const dockerSwitchCommand = kind === "codex"
+    ? "docker compose exec -u goclaw goclaw codex logout && docker compose exec -u goclaw goclaw codex login --device-auth"
+    : kind === "gemini"
+    ? "docker compose exec -u goclaw goclaw gemini logout && docker compose exec -u goclaw goclaw gemini login"
+    : "docker compose exec -u goclaw goclaw claude auth logout && docker compose exec -u goclaw goclaw claude auth login";
 
   const checkAuth = useCallback(() => {
     setLoading(true);
     http
-      .get<CLIAuthStatus>("/v1/providers/claude-cli/auth-status")
+      .get<CLIAuthStatus>(authPath)
       .then(setCliAuth)
       .catch(() => setCliAuth({ logged_in: false, error: "Failed to check auth status" }))
       .finally(() => setLoading(false));
-  }, [http]);
+  }, [http, authPath]);
 
   useEffect(() => {
     if (open) {
@@ -38,7 +66,7 @@ export function CLISection({ open }: { open: boolean }) {
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        {t("cli.description")} <code className="rounded bg-muted px-1 py-0.5">claude</code> {t("cli.descriptionSuffix")}
+        {t("cli.description")} <code className="rounded bg-muted px-1 py-0.5">{binary}</code> {t("cli.descriptionSuffix")}
       </p>
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -73,8 +101,8 @@ export function CLISection({ open }: { open: boolean }) {
               <p>{t("cli.switchAccountInstructions")}</p>
               <code className="block rounded bg-muted px-2 py-1 font-mono">
                 {cliAuth?.in_docker
-                  ? "docker compose exec goclaw claude auth logout && docker compose exec goclaw claude auth login"
-                  : "claude auth logout && claude auth login"}
+                  ? dockerSwitchCommand
+                  : switchCommand}
               </code>
               <p>{t("cli.switchAccountRecheck")} <RefreshCw className="inline h-3 w-3" /> {t("cli.switchAccountRecheckSuffix")}</p>
             </div>
@@ -102,7 +130,7 @@ export function CLISection({ open }: { open: boolean }) {
             {t("cli.runOnServer")}
           </p>
           <code className="mt-1 block rounded bg-amber-100 px-2 py-1 text-xs font-mono dark:bg-amber-900 dark:text-amber-300">
-            {cliAuth.in_docker ? "docker compose exec goclaw claude auth login" : "claude auth login"}
+            {cliAuth.in_docker ? dockerLoginCommand : loginCommand}
           </code>
           {cliAuth.error && (
             <p className="mt-1 text-xs text-amber-500">{cliAuth.error}</p>

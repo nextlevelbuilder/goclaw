@@ -15,8 +15,8 @@ import (
 
 // ModelInfo is a normalized model entry returned by the list-models endpoint.
 type ModelInfo struct {
-	ID        string                        `json:"id"`
-	Name      string                        `json:"name,omitempty"`
+	ID        string                         `json:"id"`
+	Name      string                         `json:"name,omitempty"`
 	Reasoning *providers.ReasoningCapability `json:"reasoning,omitempty"`
 }
 
@@ -58,6 +58,16 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 
 	if p.ProviderType == store.ProviderChatGPTOAuth {
 		respond(chatGPTOAuthModels())
+		return
+	}
+
+	if p.ProviderType == store.ProviderCodexCLI {
+		respond(codexCLIModels())
+		return
+	}
+
+	if p.ProviderType == store.ProviderGeminiCLI {
+		respond(geminiCLIModels())
 		return
 	}
 

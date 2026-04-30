@@ -69,6 +69,8 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
   const hasClaudeCLI = existingProviders.some((p) => p.provider_type === "claude_cli");
   const isOAuth = providerType === "chatgpt_oauth";
   const isCLI = providerType === "claude_cli";
+  const isCodexCLI = providerType === "codex_cli";
+  const isGeminiCLI = providerType === "gemini_cli";
   const isACP = providerType === "acp";
 
   // Reset form when dialog opens
@@ -99,6 +101,13 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
       enabled: data.enabled,
     };
 
+    if (isCodexCLI) {
+      payload.api_base = data.apiBase || "codex";
+    }
+    if (isGeminiCLI) {
+      payload.api_base = data.apiBase || "gemini";
+    }
+
     if (isACP) {
       payload.api_base = data.acpBinary || undefined;
       const settings: Record<string, unknown> = {};
@@ -121,6 +130,14 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
     setValue("providerType", v, { shouldValidate: true });
     const preset = PROVIDER_TYPES.find((pt) => pt.value === v);
     setValue("apiBase", preset?.apiBase || "");
+    if (v === "codex_cli") {
+      setValue("name", "codex-cli", { shouldValidate: true });
+      setValue("displayName", "Codex CLI");
+    }
+    if (v === "gemini_cli") {
+      setValue("name", "gemini-cli", { shouldValidate: true });
+      setValue("displayName", "Gemini CLI");
+    }
     if (v === "chatgpt_oauth") {
       if (!name || providerType !== "chatgpt_oauth") {
         setValue("name", suggestUniqueProviderAlias(existingProviders));
@@ -206,7 +223,9 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
                 </div>
               </div>
 
-              {isCLI && <CLISection open={open} />}
+              {isCLI && <CLISection open={open} kind="claude" />}
+              {isCodexCLI && <CLISection open={open} kind="codex" />}
+              {isGeminiCLI && <CLISection open={open} kind="gemini" />}
 
               {isACP && (
                 <ACPSection
@@ -223,7 +242,7 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
                 />
               )}
 
-              {!isCLI && !isACP && (
+              {!isCLI && !isCodexCLI && !isGeminiCLI && !isACP && (
                 <ProviderStandardFormFields
                   register={register}
                   errors={errors}
@@ -232,7 +251,7 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
                 />
               )}
 
-              {(isCLI || isACP) && (
+              {(isCLI || isCodexCLI || isGeminiCLI || isACP) && (
                 <>
                   <div className="flex items-center justify-between">
                     <Label htmlFor="enabled">{t("form.enabled")}</Label>

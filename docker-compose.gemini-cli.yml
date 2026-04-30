@@ -1,0 +1,7 @@
+services:
+  goclaw:
+    build:
+      args:
+        ENABLE_GEMINI_CLI: "true"
+    volumes:
+      - ${HOME}/.gemini:/app/.gemini-host:ro

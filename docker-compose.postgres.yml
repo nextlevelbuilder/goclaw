@@ -38,4 +38,17 @@ services:
 
 volumes:
   postgres-data:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: 'bind'
+      # Укажите полный путь к папке на вашем компьютере
+      device: '/opt/goclawAI/postgres'
   goclaw-skills:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: 'bind'
+      # Укажите полный путь к папке на вашем компьютере
+      device: '/opt/goclawAI/skills' 
+

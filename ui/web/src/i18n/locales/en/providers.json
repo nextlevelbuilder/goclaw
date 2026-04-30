@@ -114,6 +114,8 @@
     "cohere": "Cohere",
     "perplexity": "Perplexity",
     "chatgpt_oauth": "ChatGPT Subscription (OAuth)",
+    "codex_cli": "Codex CLI",
+    "gemini_cli": "Gemini CLI",
     "yescale": "YesScale",
     "acp": "ACP"
   },

@@ -74,6 +74,8 @@ ARG ENABLE_PYTHON=false
 ARG ENABLE_NODE=false
 ARG ENABLE_FULL_SKILLS=false
 ARG ENABLE_CLAUDE_CLI=false
+ARG ENABLE_CODEX_CLI=false
+ARG ENABLE_GEMINI_CLI=false
 
 # Copy pinned Python deps (cleaned up after install).
 # requirements-base.txt: shared deps for ENABLE_PYTHON and ENABLE_FULL_SKILLS.
@@ -100,12 +102,25 @@ RUN set -eux; \
             pip3 install --no-cache-dir --break-system-packages \
                 -r /tmp/requirements-base.txt; \
         fi; \
-        if [ "$ENABLE_NODE" = "true" ] || [ "$ENABLE_CLAUDE_CLI" = "true" ]; then \
+        if [ "$ENABLE_NODE" = "true" ] || [ "$ENABLE_CLAUDE_CLI" = "true" ] || [ "$ENABLE_CODEX_CLI" = "true" ] || [ "$ENABLE_GEMINI_CLI" = "true" ]; then \
             apk add --no-cache nodejs npm; \
         fi; \
     fi; \
+    if [ "$ENABLE_CODEX_CLI" = "true" ]; then \
+        apk add --no-cache gcompat libstdc++; \
+    fi; \
     if [ "$ENABLE_CLAUDE_CLI" = "true" ]; then \
         npm install -g --cache /tmp/npm-cache @anthropic-ai/claude-code@^2.1.91; \
+        rm -rf /tmp/npm-cache; \
+    fi; \
+    if [ "$ENABLE_CODEX_CLI" = "true" ]; then \
+        npm install -g --cache /tmp/npm-cache @openai/codex; \
+        codex --version; \
+        rm -rf /tmp/npm-cache; \
+    fi; \
+    if [ "$ENABLE_GEMINI_CLI" = "true" ]; then \
+        npm install -g --cache /tmp/npm-cache @google/gemini-cli; \
+        gemini --version; \
         rm -rf /tmp/npm-cache; \
     fi; \
     rm -f /tmp/requirements-base.txt /tmp/requirements-skills.txt
@@ -138,22 +153,23 @@ RUN set -eux; \
 
 RUN chmod +x /app/docker-entrypoint.sh && \
     chmod 755 /app/pkg-helper && chown root:root /app/pkg-helper
-
 # Create data directories.
 # .runtime has split ownership: root owns the dir (so pkg-helper can write apk-packages),
 # while pip/npm subdirs are goclaw-owned (runtime installs by the app process).
-# Symlink .claude → data volume so Claude CLI credentials persist across container recreates.
+# Symlink CLI config dirs to the data volume so credentials persist across container recreates.
 RUN mkdir -p /app/workspace /app/data/.runtime/pip /app/data/.runtime/npm-global/lib \
-        /app/data/.runtime/pip-cache /app/data/.runtime/bin /app/data/.claude /app/skills \
+        /app/data/.runtime/pip-cache /app/data/.runtime/bin /app/data/.claude /app/data/.codex /app/data/.gemini /app/skills \
         /app/tsnet-state /app/.goclaw \
     && ln -s /app/data/.claude /app/.claude \
+    && ln -s /app/data/.codex /app/.codex \
+    && ln -s /app/data/.gemini /app/.gemini \
     && touch /app/data/.runtime/apk-packages \
     && chown -R goclaw:goclaw /app/workspace /app/skills /app/tsnet-state /app/.goclaw \
     && chown goclaw:goclaw /app/bundled-skills /app/data \
     && chown root:goclaw /app/data/.runtime /app/data/.runtime/apk-packages \
     && chmod 0750 /app/data/.runtime \
     && chmod 0640 /app/data/.runtime/apk-packages \
-    && chown -R goclaw:goclaw /app/data/.runtime/pip /app/data/.runtime/npm-global /app/data/.runtime/pip-cache /app/data/.runtime/bin /app/data/.claude \
+    && chown -R goclaw:goclaw /app/data/.runtime/pip /app/data/.runtime/npm-global /app/data/.runtime/pip-cache /app/data/.runtime/bin /app/data/.claude /app/data/.codex /app/data/.gemini \
     && chmod 0755 /app/data/.runtime/bin
 
 # Default environment
@@ -162,6 +178,7 @@ ENV GOCLAW_CONFIG=/app/config.json \
     GOCLAW_DATA_DIR=/app/data \
     GOCLAW_SKILLS_DIR=/app/skills \
     GOCLAW_MIGRATIONS_DIR=/app/migrations \
+    CODEX_HOME=/app/data/.codex \
     GOCLAW_HOST=0.0.0.0 \
     GOCLAW_PORT=18790
 

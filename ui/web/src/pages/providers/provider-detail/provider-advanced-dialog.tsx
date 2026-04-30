@@ -51,9 +51,11 @@ export function ProviderAdvancedDialog({
   const { t } = useTranslation("providers");
 
   const isACP = provider.provider_type === "acp";
+  const isCodexCLI = provider.provider_type === "codex_cli";
+  const isGeminiCLI = provider.provider_type === "gemini_cli";
   const isCLI = provider.provider_type === "claude_cli";
   const isOAuth = provider.provider_type === "chatgpt_oauth";
-  const isStandard = !isACP && !isCLI && !isOAuth;
+  const isStandard = !isACP && !isCLI && !isCodexCLI && !isGeminiCLI && !isOAuth;
 
   const typeInfo = PROVIDER_TYPES.find((pt) => pt.value === provider.provider_type);
 
@@ -230,14 +232,14 @@ export function ProviderAdvancedDialog({
             </>
           )}
 
-          {/* Claude CLI */}
-          {isCLI && (
+          {/* Local CLI */}
+          {(isCLI || isCodexCLI || isGeminiCLI) && (
             <>
               <ConfigGroupHeader
-                title={t("detail.cliConfig")}
+                title={isCodexCLI ? "Codex CLI" : isGeminiCLI ? "Gemini CLI" : t("detail.cliConfig")}
                 description={t("detail.cliConfigDesc")}
               />
-              <CLISection open={open} />
+              <CLISection open={open} kind={isCodexCLI ? "codex" : isGeminiCLI ? "gemini" : "claude"} />
             </>
           )}
 

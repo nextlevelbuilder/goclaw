@@ -18,12 +18,12 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/hooks"
 	hookbuiltin "github.com/nextlevelbuilder/goclaw/internal/hooks/builtin"
-	"github.com/nextlevelbuilder/goclaw/internal/orchestration"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	kg "github.com/nextlevelbuilder/goclaw/internal/knowledgegraph"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
 	memorypkg "github.com/nextlevelbuilder/goclaw/internal/memory"
+	"github.com/nextlevelbuilder/goclaw/internal/orchestration"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
@@ -667,20 +667,26 @@ func wireExtras(
 		if payload.Key == "" {
 			return
 		}
-		// Re-register from DB if provider still exists and is ACP type
+		// Re-register from DB if provider still exists and is an ACP-backed type
 		provCtx := store.WithTenantID(context.Background(), event.TenantID)
 		p, err := stores.Providers.GetProviderByName(provCtx, payload.Key)
 		if err != nil {
 			// Provider was deleted or not found — already unregistered by handler
 			return
 		}
-		if p.ProviderType != store.ProviderACP {
+		if p.ProviderType != store.ProviderACP && p.ProviderType != store.ProviderCodexCLI && p.ProviderType != store.ProviderGeminiCLI {
 			return
 		}
 		// Unregister old instance (closes ProcessPool) then re-register
 		providerReg.Unregister(p.Name)
 		if p.Enabled {
-			registerACPFromDB(providerReg, *p)
+			if p.ProviderType == store.ProviderCodexCLI || isLegacyCodexCLIProvider(*p) {
+				registerCodexCLIFromDB(providerReg, *p)
+			} else if p.ProviderType == store.ProviderGeminiCLI {
+				registerGeminiCLIFromDB(providerReg, *p)
+			} else {
+				registerACPFromDB(providerReg, *p)
+			}
 		}
 	})
 
