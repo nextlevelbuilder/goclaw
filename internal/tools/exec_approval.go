@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"math/big"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -325,7 +326,8 @@ func (m *ExecApprovalManager) ResolveByShortCode(code string, decision ApprovalD
 
 // ResolveByChannel resolves the most recent pending approval for a channel+chatID pair.
 // Used when users reply with simple "1" (approve) or "2" (deny) without a short code.
-func (m *ExecApprovalManager) ResolveByChannel(channel, chatID string, decision ApprovalDecision) error {
+// Returns the short code and truncated command of the resolved approval.
+func (m *ExecApprovalManager) ResolveByChannel(channel, chatID string, decision ApprovalDecision) (string, string, error) {
 	m.mu.Lock()
 	var match *PendingApproval
 	for _, pa := range m.pending {
@@ -337,12 +339,32 @@ func (m *ExecApprovalManager) ResolveByChannel(channel, chatID string, decision 
 	}
 	if match == nil {
 		m.mu.Unlock()
-		return fmt.Errorf("no pending approval found for this chat")
+		return "", "", fmt.Errorf("no pending approval found for this chat")
 	}
+	shortCode := match.ShortCode
+	cmd := truncateCmd(match.Command, 80)
 	delete(m.shortCodeIndex, match.ShortCode)
 	match.resultCh <- decision
 	m.mu.Unlock()
-	return nil
+	return shortCode, cmd, nil
+}
+
+// ListPendingByChannel returns all pending approvals for a given channel+chatID pair,
+// sorted by creation time (oldest first).
+func (m *ExecApprovalManager) ListPendingByChannel(channel, chatID string) []*PendingApproval {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var result []*PendingApproval
+	for _, pa := range m.pending {
+		if pa.Channel == channel && pa.ChatID == chatID {
+			result = append(result, pa)
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].CreatedAt.Before(result[j].CreatedAt)
+	})
+	return result
 }
 
 // ListPending returns all pending approval requests.

@@ -175,6 +175,11 @@ func (c *Channel) TryExecApprovalText(text string, chatJID types.JID, chatID str
 		return false
 	}
 
+	// Strip WhatsApp reply-to context prefix so that "1"/"2" replies
+	// to approval notifications are detected correctly.
+	// extractTextContent prepends "[Replying to: ...]\n" for quoted replies.
+	text = stripReplyContext(text)
+
 	channelName := c.Name()
 	lower := strings.ToLower(text)
 
@@ -184,14 +189,27 @@ func (c *Channel) TryExecApprovalText(text string, chatJID types.JID, chatID str
 		if lower == "2" {
 			decision = tools.ApprovalDeny
 		}
-		err := c.execApprovalMgr.ResolveByChannel(channelName, chatID, decision)
+		code, cmd, err := c.execApprovalMgr.ResolveByChannel(channelName, chatID, decision)
 		if err != nil {
 			return false // no pending approval for this chat — treat as normal message
 		}
+
+		verb := "Approved"
 		if decision == tools.ApprovalDeny {
-			c.sendText(chatJID, "Command denied.")
-		} else {
-			c.sendText(chatJID, "Command approved.")
+			verb = "Denied"
+		}
+		c.sendText(chatJID, fmt.Sprintf("%s [%s]: %s", verb, code, cmd))
+
+		// List remaining pending approvals for this chat.
+		remaining := c.execApprovalMgr.ListPendingByChannel(channelName, chatID)
+		if len(remaining) > 0 {
+			var b strings.Builder
+			b.WriteString(fmt.Sprintf("\n%d pending approval(s) remaining:", len(remaining)))
+			for _, pa := range remaining {
+				b.WriteString(fmt.Sprintf("\n  [%s] %s", pa.ShortCode, truncateCmdLocal(pa.Command, 80)))
+			}
+			b.WriteString("\n\nReply \"approve CODE\" or \"deny CODE\" to target a specific one.")
+			c.sendText(chatJID, b.String())
 		}
 		return true
 	}
@@ -239,4 +257,26 @@ func (c *Channel) TryExecApprovalText(text string, chatJID types.JID, chatID str
 		c.sendText(chatJID, "Command approved.")
 	}
 	return true
+}
+
+// stripReplyContext removes the "[Replying to: ...]" prefix that extractTextContent
+// prepends for quoted-reply messages. The approval detection logic needs the raw
+// user response ("1", "2", "approve CODE") without the quoted context.
+func stripReplyContext(text string) string {
+	if !strings.HasPrefix(text, "[Replying to:") {
+		return text
+	}
+	idx := strings.Index(text, "]")
+	if idx < 0 {
+		return text
+	}
+	rest := text[idx+1:]
+	return strings.TrimPrefix(rest, "\n")
+}
+
+func truncateCmdLocal(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
 }
