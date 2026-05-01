@@ -85,6 +85,13 @@ When the input contains structured/tabular data such as work handover documents,
 - Extract individual ticket line items as separate task entities when detail is available (ticket ID + description pair)
 - Convert date formats like "21 April 2026", "17-04-2026", or "20.00 WIB" to ISO 8601 (e.g., "2026-04-21T20:00:00+07:00")
 
+## Emoji and Symbol Interpretation
+When text contains emoji or symbols that convey status, priority, or other metadata, translate their meaning into structured properties:
+- Map status emoji to a "status" property: ✅ → completed, ❌ → failed/cancelled, 🔄 → in progress, ⏳ → pending, ⚠️ → warning/at risk, 🚫 → blocked
+- Map priority emoji to a "priority" property if distinct from status (🔴 → high, 🟡 → medium, 🟢 → low)
+- Apply this to any emoji you recognize, not just the examples above
+- Example: "Migration task (PIC: John)✅" → properties: {"status": "completed", "pic": "John"}
+
 ## Example
 
 Input: "Talked to Minh about the GoClaw migration. He'll handle the database schema changes by Friday. The team uses PostgreSQL with pgvector. I wrote the migration guide yesterday."
@@ -141,5 +148,47 @@ Output:
     {"source_entity_id": "mas-muklis", "relation_type": "works_on", "target_entity_id": "ticket-942681", "confidence": 0.9},
     {"source_entity_id": "tim-lmd", "relation_type": "assigned_to", "target_entity_id": "ticket-942681", "confidence": 0.9},
     {"source_entity_id": "ticket-945375", "relation_type": "uses", "target_entity_id": "veeam-backup-replication", "confidence": 1.0}
+  ]
+}
+
+## Emoji Status Example
+
+Input: "Next Jadwal Migrasi
+30 Apr 26
+13:00 WIB
+• Virtual Machine Development-vDC (10 VM) (PIC INT : Luqman Arif Rahman Hakim)✅
+14:00 WIB
+• ITSM_vDC TBS (PIC INT : T1angti4ng)✅
+17:00 WIB
+• Virtual Machine Sandbox-vDC (2 VM) (PIC INT : Luqman Arif Rahman Hakim)✅
+22:00 WIB
+• ERP_vDC PROD (PIC INT : Ahmad Fauzi)⏳
+• DW_vDC TBS (PIC INT : Siti Nurhaliza)🔄"
+
+Output:
+{
+  "entities": [
+    {"external_id": "migration-schedule-2026-04-30", "name": "Migration Schedule 30 April 2026", "entity_type": "document", "description": "VM migration schedule for 30 April 2026", "confidence": 1.0, "properties": {"report_type": "migration schedule"}, "event_time": "2026-04-30T00:00:00+07:00"},
+    {"external_id": "vm-dev-vdc-migration-2026-04-30", "name": "Development-vDC Migration", "entity_type": "task", "description": "Migrate 10 VMs for Development-vDC", "confidence": 1.0, "properties": {"status": "completed", "vm_count": "10", "pic": "Luqman Arif Rahman Hakim"}, "event_time": "2026-04-30T13:00:00+07:00"},
+    {"external_id": "itsm-vdc-tbs-migration-2026-04-30", "name": "ITSM_vDC TBS Migration", "entity_type": "task", "description": "ITSM vDC migration for TBS", "confidence": 1.0, "properties": {"status": "completed", "pic": "T1angti4ng"}, "event_time": "2026-04-30T14:00:00+07:00"},
+    {"external_id": "vm-sandbox-vdc-migration-2026-04-30", "name": "Sandbox-vDC Migration", "entity_type": "task", "description": "Migrate 2 VMs for Sandbox-vDC", "confidence": 1.0, "properties": {"status": "completed", "vm_count": "2", "pic": "Luqman Arif Rahman Hakim"}, "event_time": "2026-04-30T17:00:00+07:00"},
+    {"external_id": "erp-vdc-prod-migration-2026-04-30", "name": "ERP_vDC PROD Migration", "entity_type": "task", "description": "ERP vDC production migration", "confidence": 1.0, "properties": {"status": "pending", "pic": "Ahmad Fauzi"}, "event_time": "2026-04-30T22:00:00+07:00"},
+    {"external_id": "dw-vdc-tbs-migration-2026-04-30", "name": "DW_vDC TBS Migration", "entity_type": "task", "description": "DW vDC migration for TBS", "confidence": 1.0, "properties": {"status": "in progress", "pic": "Siti Nurhaliza"}, "event_time": "2026-04-30T22:00:00+07:00"},
+    {"external_id": "luqman-arif-rahman-hakim", "name": "Luqman Arif Rahman Hakim", "entity_type": "person", "description": "PIC for Development-vDC and Sandbox-vDC migrations", "confidence": 1.0},
+    {"external_id": "t1angti4ng", "name": "T1angti4ng", "entity_type": "person", "description": "PIC for ITSM_vDC TBS migration", "confidence": 0.9},
+    {"external_id": "ahmad-fauzi", "name": "Ahmad Fauzi", "entity_type": "person", "description": "PIC for ERP_vDC PROD migration", "confidence": 0.9},
+    {"external_id": "siti-nurhaliza", "name": "Siti Nurhaliza", "entity_type": "person", "description": "PIC for DW_vDC TBS migration", "confidence": 0.9}
+  ],
+  "relations": [
+    {"source_entity_id": "vm-dev-vdc-migration-2026-04-30", "relation_type": "belongs_to", "target_entity_id": "migration-schedule-2026-04-30", "confidence": 1.0},
+    {"source_entity_id": "itsm-vdc-tbs-migration-2026-04-30", "relation_type": "belongs_to", "target_entity_id": "migration-schedule-2026-04-30", "confidence": 1.0},
+    {"source_entity_id": "vm-sandbox-vdc-migration-2026-04-30", "relation_type": "belongs_to", "target_entity_id": "migration-schedule-2026-04-30", "confidence": 1.0},
+    {"source_entity_id": "erp-vdc-prod-migration-2026-04-30", "relation_type": "belongs_to", "target_entity_id": "migration-schedule-2026-04-30", "confidence": 1.0},
+    {"source_entity_id": "dw-vdc-tbs-migration-2026-04-30", "relation_type": "belongs_to", "target_entity_id": "migration-schedule-2026-04-30", "confidence": 1.0},
+    {"source_entity_id": "luqman-arif-rahman-hakim", "relation_type": "assigned_to", "target_entity_id": "vm-dev-vdc-migration-2026-04-30", "confidence": 1.0},
+    {"source_entity_id": "luqman-arif-rahman-hakim", "relation_type": "assigned_to", "target_entity_id": "vm-sandbox-vdc-migration-2026-04-30", "confidence": 1.0},
+    {"source_entity_id": "t1angti4ng", "relation_type": "assigned_to", "target_entity_id": "itsm-vdc-tbs-migration-2026-04-30", "confidence": 0.9},
+    {"source_entity_id": "ahmad-fauzi", "relation_type": "assigned_to", "target_entity_id": "erp-vdc-prod-migration-2026-04-30", "confidence": 0.9},
+    {"source_entity_id": "siti-nurhaliza", "relation_type": "assigned_to", "target_entity_id": "dw-vdc-tbs-migration-2026-04-30", "confidence": 0.9}
   ]
 }`
