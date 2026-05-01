@@ -138,6 +138,24 @@ func TestBuildRequestBody_TemperatureDependsOnModelNotAPIBase(t *testing.T) {
 	}
 }
 
+func TestStripTemperatureFromError(t *testing.T) {
+	body := map[string]any{
+		"model":       "gpt-5.5",
+		"temperature": 0.7,
+	}
+	err := &HTTPError{
+		Status: 400,
+		Body:   `openai: {"error":{"message":"Unsupported value: 'temperature' does not support 0.7 with this model. Only the default (1) value is supported.","param":"temperature","code":"unsupported_value"}}`,
+	}
+
+	if !stripTemperatureFromError(err, body) {
+		t.Fatal("expected temperature rejection to be handled")
+	}
+	if _, ok := body["temperature"]; ok {
+		t.Fatal("temperature should be removed before retry")
+	}
+}
+
 func TestBuildRequestBody_ReasoningEffortOpenAIOnly(t *testing.T) {
 	thinkOpts := map[string]any{OptThinkingLevel: "medium"}
 

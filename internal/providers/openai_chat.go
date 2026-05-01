@@ -25,6 +25,9 @@ func (p *OpenAIProvider) Chat(ctx context.Context, req ChatRequest) (*ChatRespon
 		if clamped := clampMaxTokensFromError(err, body); clamped {
 			slog.Info("max_tokens clamped, retrying", "model", model, "limit", clampedLimit(body))
 			resp, err = RetryDo(ctx, p.retryConfig, chatFn)
+		} else if stripped := stripTemperatureFromError(err, body); stripped {
+			slog.Info("temperature omitted after provider rejection, retrying", "model", model)
+			resp, err = RetryDo(ctx, p.retryConfig, chatFn)
 		}
 	}
 
@@ -76,6 +79,11 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 	if err != nil {
 		if clamped := clampMaxTokensFromError(err, body); clamped {
 			slog.Info("max_tokens clamped, retrying stream", "model", model, "limit", clampedLimit(body))
+			respBody, err = RetryDo(ctx, p.retryConfig, func() (io.ReadCloser, error) {
+				return p.doRequest(ctx, body)
+			})
+		} else if stripped := stripTemperatureFromError(err, body); stripped {
+			slog.Info("temperature omitted after provider rejection, retrying stream", "model", model)
 			respBody, err = RetryDo(ctx, p.retryConfig, func() (io.ReadCloser, error) {
 				return p.doRequest(ctx, body)
 			})

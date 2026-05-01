@@ -168,6 +168,25 @@ func clampMaxTokensFromError(err error, body map[string]any) bool {
 	return true
 }
 
+// stripTemperatureFromError checks if a provider rejects custom temperature.
+// If so, it removes temperature from the request body and returns true so the
+// caller can retry with the provider/model default.
+func stripTemperatureFromError(err error, body map[string]any) bool {
+	var httpErr *HTTPError
+	if !errors.As(err, &httpErr) || httpErr.Status != http.StatusBadRequest {
+		return false
+	}
+	if _, ok := body["temperature"]; !ok {
+		return false
+	}
+	bodyText := strings.ToLower(httpErr.Body)
+	if !strings.Contains(bodyText, "temperature") || !strings.Contains(bodyText, "unsupported") {
+		return false
+	}
+	delete(body, "temperature")
+	return true
+}
+
 // clampedLimit returns the clamped max_tokens or max_completion_tokens value for logging.
 func clampedLimit(body map[string]any) any {
 	if v, ok := body["max_completion_tokens"]; ok {
