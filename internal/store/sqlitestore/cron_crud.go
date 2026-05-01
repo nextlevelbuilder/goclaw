@@ -100,6 +100,7 @@ func (s *SQLiteCronStore) GetJob(ctx context.Context, jobID string) (*store.Cron
 func (s *SQLiteCronStore) ListJobs(ctx context.Context, includeDisabled bool, agentID, userID string) []store.CronJob {
 	q := `SELECT id, tenant_id, agent_id, user_id, name, enabled, schedule_kind, cron_expression, run_at, timezone,
 		 interval_ms, payload, delete_after_run, stateless, deliver, deliver_channel, deliver_to, wake_heartbeat,
+		 managed, provider, model,
 		 next_run_at, last_run_at, last_status, last_error,
 		 created_at, updated_at FROM cron_jobs WHERE 1=1`
 
@@ -254,6 +255,19 @@ func (s *SQLiteCronStore) UpdateJob(ctx context.Context, jobID string, patch sto
 	if patch.Name != "" {
 		updates["name"] = patch.Name
 	}
+	if patch.Managed != nil {
+		managedJSON, err := json.Marshal(patch.Managed)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal managed metadata for job %s: %w", jobID, err)
+		}
+		updates["managed"] = string(managedJSON)
+	}
+	if patch.Provider != nil {
+		updates["provider"] = *patch.Provider
+	}
+	if patch.Model != nil {
+		updates["model"] = *patch.Model
+	}
 	if patch.DeleteAfterRun != nil {
 		updates["delete_after_run"] = *patch.DeleteAfterRun
 	}
@@ -395,7 +409,6 @@ func (s *SQLiteCronStore) lockCronJobForMutation(ctx context.Context, tx *sql.Tx
 	return &state, nil
 }
 
-
 func execCronJobUpdateTx(ctx context.Context, tx *sql.Tx, id uuid.UUID, updates map[string]any) error {
 	if len(updates) == 0 {
 		return nil
@@ -433,4 +446,3 @@ func execCronJobUpdateTx(ctx context.Context, tx *sql.Tx, id uuid.UUID, updates 
 	}
 	return nil
 }
-

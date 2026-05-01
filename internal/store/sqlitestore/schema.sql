@@ -468,6 +468,9 @@ CREATE TABLE IF NOT EXISTS cron_jobs (
     deliver_channel  TEXT NOT NULL DEFAULT '',
     deliver_to       TEXT NOT NULL DEFAULT '',
     wake_heartbeat   INTEGER NOT NULL DEFAULT 0,
+    managed          TEXT NOT NULL DEFAULT '{}',
+    provider         TEXT NOT NULL DEFAULT '',
+    model            TEXT NOT NULL DEFAULT '',
     next_run_at      TEXT,
     last_run_at      TEXT,
     last_status      VARCHAR(20),
@@ -482,6 +485,8 @@ CREATE INDEX IF NOT EXISTS idx_cron_jobs_user_id ON cron_jobs(user_id);
 CREATE INDEX IF NOT EXISTS idx_cron_jobs_agent_user ON cron_jobs(agent_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_cron_jobs_team ON cron_jobs(team_id) WHERE team_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_cron_jobs_tenant ON cron_jobs(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_cron_jobs_managed_by ON cron_jobs(json_extract(managed, '$.by')) WHERE managed != '{}';
+CREATE INDEX IF NOT EXISTS idx_cron_jobs_managed_key ON cron_jobs(json_extract(managed, '$.key')) WHERE json_extract(managed, '$.key') IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_cron_jobs_agent_tenant_name ON cron_jobs(agent_id, tenant_id, name);
 
 -- ============================================================

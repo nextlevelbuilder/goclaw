@@ -16,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 26
+const SchemaVersion = 27
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -30,6 +30,8 @@ const SchemaVersion = 26
 //
 // Then bump SchemaVersion to 2.
 var migrations = map[int]string{
+	// Version 26 → 27: add declarative ownership and per-run provider/model overrides to cron jobs.
+	26: `SELECT 1;`,
 	// Version 1 → 2: add contact_type column to channel_contacts.
 	1: `ALTER TABLE channel_contacts ADD COLUMN contact_type VARCHAR(20) NOT NULL DEFAULT 'user';`,
 	// Version 2 → 3: promote cron payload fields to dedicated columns + add stateless flag.
@@ -630,7 +632,7 @@ CREATE TABLE IF NOT EXISTS tenant_hook_budget (
 
 // backfillV16 populates base_name / path_basename for rows that existed
 // before the v15 → v16 migration. Idempotent — re-running on already-filled
-// rows is a no-op thanks to the WHERE base_name = '' filter.
+// rows is a no-op thanks to the WHERE base_name = ” filter.
 func backfillV16(ctx context.Context, db *sql.DB) error {
 	type row struct{ id, path string }
 
@@ -769,7 +771,15 @@ func EnsureSchema(db *sql.DB) error {
 				}
 				return fmt.Errorf("begin migration tx v%d: %w", v, txErr)
 			}
-			if _, err := tx.Exec(patch); err != nil {
+			if v == 26 {
+				if err := migrateV27CronManaged(tx); err != nil {
+					tx.Rollback()
+					if needsFKOff {
+						_, _ = db.Exec("PRAGMA foreign_keys=ON")
+					}
+					return fmt.Errorf("apply migration v%d: %w", v, err)
+				}
+			} else if _, err := tx.Exec(patch); err != nil {
 				tx.Rollback()
 				if needsFKOff {
 					_, _ = db.Exec("PRAGMA foreign_keys=ON")
@@ -816,6 +826,50 @@ func EnsureSchema(db *sql.DB) error {
 	}
 
 	return seedMasterTenant(db)
+}
+
+func migrateV27CronManaged(tx *sql.Tx) error {
+	existing := make(map[string]bool)
+	rows, err := tx.Query("PRAGMA table_info(cron_jobs)")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notNull int
+		var defaultValue any
+		var pk int
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &defaultValue, &pk); err != nil {
+			return err
+		}
+		existing[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	stmts := []string{}
+	if !existing["managed"] {
+		stmts = append(stmts, `ALTER TABLE cron_jobs ADD COLUMN managed TEXT NOT NULL DEFAULT '{}';`)
+	}
+	if !existing["provider"] {
+		stmts = append(stmts, `ALTER TABLE cron_jobs ADD COLUMN provider TEXT NOT NULL DEFAULT '';`)
+	}
+	if !existing["model"] {
+		stmts = append(stmts, `ALTER TABLE cron_jobs ADD COLUMN model TEXT NOT NULL DEFAULT '';`)
+	}
+	stmts = append(stmts,
+		`CREATE INDEX IF NOT EXISTS idx_cron_jobs_managed_by ON cron_jobs(json_extract(managed, '$.by')) WHERE managed != '{}';`,
+		`CREATE INDEX IF NOT EXISTS idx_cron_jobs_managed_key ON cron_jobs(json_extract(managed, '$.key')) WHERE json_extract(managed, '$.key') IS NOT NULL;`,
+	)
+	for _, stmt := range stmts {
+		if _, err := tx.Exec(stmt); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // seedMasterTenant ensures the master tenant row exists (idempotent).

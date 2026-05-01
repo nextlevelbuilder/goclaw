@@ -41,6 +41,7 @@ func (s *SQLiteCronStore) refreshJobCache() {
 	rows, err := s.db.QueryContext(s.baseCtx,
 		`SELECT id, tenant_id, agent_id, user_id, name, enabled, schedule_kind, cron_expression, run_at, timezone,
 		 interval_ms, payload, delete_after_run, stateless, deliver, deliver_channel, deliver_to, wake_heartbeat,
+		 managed, provider, model,
 		 next_run_at, last_run_at, last_status, last_error,
 		 created_at, updated_at FROM cron_jobs WHERE enabled = 1`)
 	if err != nil {
@@ -365,6 +366,7 @@ func (s *SQLiteCronStore) loadClaimedJob(id uuid.UUID) (*store.CronJob, bool) {
 		s.baseCtx,
 		`SELECT id, tenant_id, agent_id, user_id, name, enabled, schedule_kind, cron_expression, run_at, timezone,
 		 interval_ms, payload, delete_after_run, stateless, deliver, deliver_channel, deliver_to, wake_heartbeat,
+		 managed, provider, model,
 		 next_run_at, last_run_at, last_status, last_error,
 		 created_at, updated_at
 		 FROM cron_jobs

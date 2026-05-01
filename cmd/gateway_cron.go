@@ -12,6 +12,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
 	"github.com/nextlevelbuilder/goclaw/internal/sessions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -24,7 +25,7 @@ import (
 // Safe because cron jobs only fire after Start(), well after this is set.
 var cronHeartbeatWakeFn func(agentID string)
 
-func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg *config.Config, channelMgr *channels.Manager, sessionMgr store.SessionStore, agentStore store.AgentStore) func(job *store.CronJob) (*store.CronJobResult, error) {
+func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg *config.Config, channelMgr *channels.Manager, sessionMgr store.SessionStore, agentStore store.AgentStore, providerRegistry *providers.Registry) func(job *store.CronJob) (*store.CronJobResult, error) {
 	return func(job *store.CronJob) (*store.CronJobResult, error) {
 		agentID := job.AgentID
 		if agentID == "" && agentStore != nil {
@@ -60,6 +61,21 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 
 		// Resolve channel type for system prompt context.
 		channelType := resolveChannelType(channelMgr, channel)
+
+		var providerOverride providers.Provider
+		if job.Provider != "" {
+			if providerRegistry == nil {
+				return nil, fmt.Errorf("configured provider override %q cannot be resolved: provider registry unavailable", job.Provider)
+			}
+			prov, err := providerRegistry.GetForTenant(job.TenantID, job.Provider)
+			if err != nil {
+				return nil, fmt.Errorf("configured provider override %q not found: %w", job.Provider, err)
+			}
+			providerOverride = prov
+			if job.Model == "" {
+				job.Model = prov.DefaultModel()
+			}
+		}
 
 		// Build cron context so the agent knows delivery target and requester.
 		var extraPrompt string
@@ -105,6 +121,8 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 			UserID:            job.UserID,
 			RunID:             fmt.Sprintf("cron:%s", job.ID),
 			Stream:            false,
+			ModelOverride:     job.Model,
+			ProviderOverride:  providerOverride,
 			ExtraSystemPrompt: extraPrompt,
 			TraceName:         fmt.Sprintf("Cron [%s] - %s", job.Name, agentID),
 			TraceTags:         []string{"cron"},

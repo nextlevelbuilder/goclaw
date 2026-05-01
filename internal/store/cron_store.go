@@ -24,6 +24,9 @@ type CronJob struct {
 	AgentID        string       `json:"agentId,omitempty" db:"agent_id"`
 	UserID         string       `json:"userId,omitempty" db:"user_id"`
 	Enabled        bool         `json:"enabled" db:"enabled"`
+	Managed        CronManaged  `json:"managed,omitempty" db:"-"`
+	Provider       string       `json:"provider,omitempty" db:"provider"`
+	Model          string       `json:"model,omitempty" db:"model"`
 	Schedule       CronSchedule `json:"schedule" db:"-"`
 	Payload        CronPayload  `json:"payload" db:"-"`
 	State          CronJobState `json:"state" db:"-"`
@@ -35,6 +38,20 @@ type CronJob struct {
 	DeliverChannel string       `json:"deliverChannel" db:"deliver_channel"`
 	DeliverTo      string       `json:"deliverTo" db:"deliver_to"`
 	WakeHeartbeat  bool         `json:"wakeHeartbeat" db:"wake_heartbeat"`
+}
+
+// CronManaged records the declarative source that owns a cron job.
+type CronManaged struct {
+	By           string `json:"by,omitempty"`
+	Source       string `json:"source,omitempty"`
+	Key          string `json:"key,omitempty"`
+	Version      string `json:"version,omitempty"`
+	DeclaredHash string `json:"declaredHash,omitempty"`
+}
+
+// Empty reports whether the managed metadata carries any ownership data.
+func (m CronManaged) Empty() bool {
+	return m.By == "" && m.Source == "" && m.Key == "" && m.Version == "" && m.DeclaredHash == ""
 }
 
 // CronSchedule defines when a job should run.
@@ -86,6 +103,9 @@ type CronJobPatch struct {
 	Name           string        `json:"name,omitempty" db:"-"`
 	AgentID        *string       `json:"agentId,omitempty" db:"-"`
 	Enabled        *bool         `json:"enabled,omitempty" db:"-"`
+	Managed        *CronManaged  `json:"managed,omitempty" db:"-"`
+	Provider       *string       `json:"provider,omitempty" db:"-"`
+	Model          *string       `json:"model,omitempty" db:"-"`
 	Schedule       *CronSchedule `json:"schedule,omitempty" db:"-"`
 	Message        string        `json:"message,omitempty" db:"-"`
 	DeleteAfterRun *bool         `json:"deleteAfterRun,omitempty" db:"-"`

@@ -152,7 +152,7 @@ func (h *AgentsHandler) importKG(ctx context.Context, ag *store.AgentData, arc *
 
 func (h *AgentsHandler) importCron(ctx context.Context, ag *store.AgentData, arc *importArchive, summary *ImportSummary, progressFn func(ProgressEvent)) {
 	tid := importTenantID(ctx)
-	const paramsPerRow = 10 // agent_id, name, schedule_kind, cron_expression, interval_ms, run_at, timezone, payload, delete_after_run, tenant_id (enabled is literal false)
+	const paramsPerRow = 13 // enabled is literal false
 	const chunkSize = 5000
 
 	for start := 0; start < len(arc.cronJobs); start += chunkSize {
@@ -164,17 +164,24 @@ func (h *AgentsHandler) importCron(ctx context.Context, ag *store.AgentData, arc
 		for i, j := range chunk {
 			base := i * paramsPerRow
 			placeholders = append(placeholders, fmt.Sprintf(
-				"($%d,$%d,false,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)",
+				"($%d,$%d,false,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)",
 				base+1, base+2, base+3, base+4, base+5, base+6, base+7, base+8, base+9, base+10,
+				base+11, base+12, base+13,
 			))
+			managed := j.Managed
+			if len(managed) == 0 {
+				managed = []byte("{}")
+			}
 			args = append(args, ag.ID, j.Name, j.ScheduleKind,
 				j.CronExpression, j.IntervalMS, nullStr(j.RunAt), j.Timezone,
 				j.Payload, j.DeleteAfterRun, tid,
+				managed, j.Provider, j.Model,
 			)
 		}
 
 		q := `INSERT INTO cron_jobs
-			(agent_id, name, enabled, schedule_kind, cron_expression, interval_ms, run_at, timezone, payload, delete_after_run, tenant_id)
+			(agent_id, name, enabled, schedule_kind, cron_expression, interval_ms, run_at, timezone, payload, delete_after_run, tenant_id,
+			 managed, provider, model)
 			VALUES ` + strings.Join(placeholders, ",") + `
 			ON CONFLICT (agent_id, tenant_id, name) DO UPDATE SET
 				schedule_kind = EXCLUDED.schedule_kind,
@@ -183,7 +190,10 @@ func (h *AgentsHandler) importCron(ctx context.Context, ag *store.AgentData, arc
 				run_at = EXCLUDED.run_at,
 				timezone = EXCLUDED.timezone,
 				payload = EXCLUDED.payload,
-				delete_after_run = EXCLUDED.delete_after_run`
+				delete_after_run = EXCLUDED.delete_after_run,
+				managed = EXCLUDED.managed,
+				provider = EXCLUDED.provider,
+				model = EXCLUDED.model`
 		if _, err := h.db.ExecContext(ctx, q, args...); err != nil {
 			slog.Warn("agents.import.cron_jobs.batch", "agent_id", ag.ID, "count", len(chunk), "error", err)
 		}

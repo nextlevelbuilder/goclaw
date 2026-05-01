@@ -16,6 +16,7 @@ import (
 func (s *PGCronStore) scanJob(ctx context.Context, id uuid.UUID) (*store.CronJob, error) {
 	q := `SELECT id, tenant_id, agent_id, user_id, name, enabled, schedule_kind, cron_expression, run_at, timezone,
 		 interval_ms, payload, delete_after_run, stateless, deliver, deliver_channel, deliver_to, wake_heartbeat,
+		 managed, provider, model,
 		 next_run_at, last_run_at, last_status, last_error,
 		 created_at, updated_at FROM cron_jobs WHERE id = $1`
 	args := []any{id}
@@ -48,14 +49,16 @@ func scanCronRow(row cronRowScanner) (*store.CronJob, error) {
 	var enabled, deleteAfterRun bool
 	var stateless, deliver, wakeHeartbeat bool
 	var deliverChannel, deliverTo string
+	var provider, model string
 	var cronExpr, tz, lastStatus, lastError *string
 	var runAt, nextRunAt, lastRunAt *time.Time
 	var intervalMS *int64
-	var payloadJSON []byte
+	var payloadJSON, managedJSON []byte
 	var createdAt, updatedAt time.Time
 
 	err := row.Scan(&id, &tenantID, &agentID, &userID, &name, &enabled, &scheduleKind, &cronExpr, &runAt, &tz,
 		&intervalMS, &payloadJSON, &deleteAfterRun, &stateless, &deliver, &deliverChannel, &deliverTo, &wakeHeartbeat,
+		&managedJSON, &provider, &model,
 		&nextRunAt, &lastRunAt, &lastStatus, &lastError,
 		&createdAt, &updatedAt)
 	if err != nil {
@@ -68,12 +71,21 @@ func scanCronRow(row cronRowScanner) (*store.CronJob, error) {
 			return nil, fmt.Errorf("failed to parse cron job payload: %w", err)
 		}
 	}
+	var managed store.CronManaged
+	if len(managedJSON) > 0 {
+		if err := json.Unmarshal(managedJSON, &managed); err != nil {
+			return nil, fmt.Errorf("failed to parse cron job managed metadata: %w", err)
+		}
+	}
 
 	job := &store.CronJob{
 		ID:       id.String(),
 		TenantID: tenantID,
 		Name:     name,
 		Enabled:  enabled,
+		Managed:  managed,
+		Provider: provider,
+		Model:    model,
 		Schedule: store.CronSchedule{
 			Kind: scheduleKind,
 		},

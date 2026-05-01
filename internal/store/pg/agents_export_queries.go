@@ -56,6 +56,9 @@ type CronJobExport struct {
 	Timezone       *string         `json:"timezone,omitempty" db:"timezone"`
 	Payload        json.RawMessage `json:"payload" db:"payload"`
 	DeleteAfterRun bool            `json:"delete_after_run" db:"delete_after_run"`
+	Managed        json.RawMessage `json:"managed,omitempty" db:"managed"`
+	Provider       string          `json:"provider,omitempty" db:"provider"`
+	Model          string          `json:"model,omitempty" db:"model"`
 }
 
 type ConfigPermissionExport struct {
@@ -144,16 +147,16 @@ type EvolutionSuggestionExport struct {
 }
 
 type ExportPreview struct {
-	ContextFiles       int `json:"context_files" db:"context_files"`
-	UserContextFiles   int `json:"user_context_files_users" db:"user_context_files_users"`
-	MemoryGlobal       int `json:"memory_global" db:"memory_global"`
-	MemoryPerUser      int `json:"memory_per_user" db:"memory_per_user"`
-	KGEntities         int `json:"kg_entities" db:"kg_entities"`
-	KGRelations        int `json:"kg_relations" db:"kg_relations"`
-	CronJobs           int `json:"cron_jobs" db:"cron_jobs"`
-	UserProfiles       int `json:"user_profiles" db:"user_profiles"`
-	UserOverrides      int `json:"user_overrides" db:"user_overrides"`
-	EpisodicSummaries  int `json:"episodic_summaries" db:"episodic_summaries"`
+	ContextFiles      int `json:"context_files" db:"context_files"`
+	UserContextFiles  int `json:"user_context_files_users" db:"user_context_files_users"`
+	MemoryGlobal      int `json:"memory_global" db:"memory_global"`
+	MemoryPerUser     int `json:"memory_per_user" db:"memory_per_user"`
+	KGEntities        int `json:"kg_entities" db:"kg_entities"`
+	KGRelations       int `json:"kg_relations" db:"kg_relations"`
+	CronJobs          int `json:"cron_jobs" db:"cron_jobs"`
+	UserProfiles      int `json:"user_profiles" db:"user_profiles"`
+	UserOverrides     int `json:"user_overrides" db:"user_overrides"`
+	EpisodicSummaries int `json:"episodic_summaries" db:"episodic_summaries"`
 	// Evolution section (Stage 1 + Stage 2 self-evolution)
 	EvolutionMetrics     int `json:"evolution_metrics" db:"evolution_metrics"`
 	EvolutionSuggestions int `json:"evolution_suggestions" db:"evolution_suggestions"`
@@ -446,7 +449,8 @@ func ExportCronJobs(ctx context.Context, db *sql.DB, agentID uuid.UUID) ([]CronJ
 	}
 	rows, err := db.QueryContext(ctx,
 		"SELECT name, schedule_kind, cron_expression, interval_ms,"+
-			" to_char(run_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"'), timezone, payload, delete_after_run"+
+			" to_char(run_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"'), timezone, payload, delete_after_run,"+
+			" managed, provider, model"+
 			" FROM cron_jobs WHERE agent_id = $1"+tc,
 		append([]any{agentID}, tcArgs...)...,
 	)
@@ -459,7 +463,8 @@ func ExportCronJobs(ctx context.Context, db *sql.DB, agentID uuid.UUID) ([]CronJ
 	for rows.Next() {
 		var j CronJobExport
 		if err := rows.Scan(&j.Name, &j.ScheduleKind, &j.CronExpression, &j.IntervalMS,
-			&j.RunAt, &j.Timezone, &j.Payload, &j.DeleteAfterRun); err != nil {
+			&j.RunAt, &j.Timezone, &j.Payload, &j.DeleteAfterRun,
+			&j.Managed, &j.Provider, &j.Model); err != nil {
 			slog.Warn("export.scan", "error", err)
 			continue
 		}
@@ -754,4 +759,3 @@ func ExportVaultLinks(ctx context.Context, db *sql.DB, agentID uuid.UUID) ([]Vau
 	}
 	return result, rows.Err()
 }
-

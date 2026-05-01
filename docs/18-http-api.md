@@ -1497,7 +1497,7 @@ Error messages are localized based on the `Accept-Language` header. HTTP status 
 The following operations are **only available via WebSocket RPC**, not HTTP:
 
 - **Sessions:** List, preview, patch, delete, reset (use WebSocket method `sessions.*`)
-- **Cron jobs:** List, create, update, delete, logs (use WebSocket method `cron.*`)
+- **Cron job event subscriptions:** Live run events still require WebSocket RPC (`cron.*`). Declarative cron management is also available over HTTP at `/v1/cron`.
 - **Send messages:** Send to channels (use WebSocket method `send.*`)
 - **Config management:** Get, apply, patch (use WebSocket method `config.*`)
 

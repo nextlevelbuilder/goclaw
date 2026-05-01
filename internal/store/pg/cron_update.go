@@ -42,6 +42,19 @@ func (s *PGCronStore) UpdateJob(ctx context.Context, jobID string, patch store.C
 	if patch.Name != "" {
 		updates["name"] = patch.Name
 	}
+	if patch.Managed != nil {
+		managedJSON, err := json.Marshal(patch.Managed)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal managed metadata for job %s: %w", jobID, err)
+		}
+		updates["managed"] = managedJSON
+	}
+	if patch.Provider != nil {
+		updates["provider"] = *patch.Provider
+	}
+	if patch.Model != nil {
+		updates["model"] = *patch.Model
+	}
 	if patch.DeleteAfterRun != nil {
 		updates["delete_after_run"] = *patch.DeleteAfterRun
 	}
@@ -181,7 +194,6 @@ func (s *PGCronStore) lockCronJobForMutation(ctx context.Context, tx *sql.Tx, id
 	return &state, nil
 }
 
-
 func execCronJobUpdateTx(ctx context.Context, tx *sql.Tx, id uuid.UUID, updates map[string]any) error {
 	if len(updates) == 0 {
 		return nil
@@ -219,4 +231,3 @@ func execCronJobUpdateTx(ctx context.Context, tx *sql.Tx, id uuid.UUID, updates 
 	}
 	return nil
 }
-

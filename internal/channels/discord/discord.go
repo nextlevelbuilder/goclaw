@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -35,18 +37,18 @@ const (
 // Channel connects to Discord via the Bot API using gateway events.
 type Channel struct {
 	*channels.BaseChannel
-	session           *discordgo.Session
-	config            config.DiscordConfig
-	botUserID         string                      // populated on start
-	applicationID     string                      // populated on start; required for slash-command registration
-	testGuildID       string                      // optional: dev-only guild for instant command propagation (empty = global)
-	placeholders      sync.Map                    // placeholderKey string → messageID string
-	typingCtrls       sync.Map                    // channelID string → *typing.Controller
-	interactionTokens sync.Map                    // discord interaction ID string → *interactionEcho (reply via interaction token)
-	agentStore        store.AgentStore            // for agent key lookup (nil = writer commands disabled)
-	configPermStore   store.ConfigPermissionStore // for group file writer management (nil = writer commands disabled)
-	audioMgr          *audio.Manager              // unified STT via audio.Manager (nil = no STT)
-	voiceSupervisor   *voice.Supervisor           // real-time voice-channel join + transcription (nil = disabled)
+	session            *discordgo.Session
+	config             config.DiscordConfig
+	botUserID          string                                    // populated on start
+	applicationID      string                                    // populated on start; required for slash-command registration
+	testGuildID        string                                    // optional: dev-only guild for instant command propagation (empty = global)
+	placeholders       sync.Map                                  // placeholderKey string → messageID string
+	typingCtrls        sync.Map                                  // channelID string → *typing.Controller
+	interactionTokens  sync.Map                                  // discord interaction ID string → *interactionEcho (reply via interaction token)
+	agentStore         store.AgentStore                          // for agent key lookup (nil = writer commands disabled)
+	configPermStore    store.ConfigPermissionStore               // for group file writer management (nil = writer commands disabled)
+	audioMgr           *audio.Manager                            // unified STT via audio.Manager (nil = no STT)
+	voiceSupervisor    *voice.Supervisor                         // real-time voice-channel join + transcription (nil = disabled)
 	voiceSummarizerCfg *channels.VoiceTranscriptSummarizerConfig // optional LLM summarizer for voice session close (nil = stats line only)
 	// pairingService, pairingDebounce, approvedGroups, groupHistory, historyLimit, requireMention
 	// are inherited from channels.BaseChannel.
@@ -201,7 +203,21 @@ func (c *Channel) startVoiceSupervisor(ctx context.Context) error {
 			"model", c.voiceSummarizerCfg.Model,
 		)
 	}
-	sup, err := voice.NewSupervisor(vcfg, c.session, c.audioMgr, voice.DefaultTmpDir(), c.botUserID, slog.Default())
+	// Voice transcribe path writes per-utterance Ogg files before STT.
+	// The default tmp dir (os.TempDir → /tmp) breaks under the post-#4474
+	// gosu-drop deployment (containers run as uid 1000, and /tmp ends
+	// up not world-writable in our base image). Use a subdirectory of
+	// /data instead — that's the goclaw-data PVC, owned by uid 1000
+	// from bootstrap, so the goclaw user can always write there.
+	// Falls back to the OS default if the PVC dir create fails (dev
+	// loops on disk without /data mounted).
+	voiceTmp := filepath.Join("/data", "voice-tmp")
+	if err := os.MkdirAll(voiceTmp, 0o755); err != nil {
+		slog.Warn("discord: voice tmp dir create failed; falling back to os tmp",
+			"err", err, "preferred", voiceTmp)
+		voiceTmp = voice.DefaultTmpDir()
+	}
+	sup, err := voice.NewSupervisor(vcfg, c.session, c.audioMgr, voiceTmp, c.botUserID, slog.Default())
 	if err != nil {
 		return err
 	}

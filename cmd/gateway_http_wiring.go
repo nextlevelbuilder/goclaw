@@ -30,6 +30,7 @@ type httpHandlers struct {
 	secureCLI        *httpapi.SecureCLIHandler
 	secureCLIGrant   *httpapi.SecureCLIGrantHandler
 	mcpUserCreds     *httpapi.MCPUserCredentialsHandler
+	cron             *httpapi.CronHandler
 }
 
 // wireHTTPHandlersOnServer registers all HTTP handler objects onto the gateway server.
@@ -87,6 +88,9 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 			h.pendingMessages.SetProviderModel(pc.Provider, pc.Model)
 		}
 		d.server.SetPendingMessagesHandler(h.pendingMessages)
+	}
+	if h.cron != nil {
+		d.server.SetCronHandler(h.cron)
 	}
 	if h.secureCLI != nil {
 		d.server.SetSecureCLIHandler(h.secureCLI)

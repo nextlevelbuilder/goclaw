@@ -34,12 +34,38 @@ jobs:
       # migrations once via golang-migrate. Uses port 5432 (CI-clean) vs 5433
       # for local dev (avoids clash with desktop Postgres installs).
       TEST_DATABASE_URL: postgres://postgres:test@localhost:5432/goclaw_test?sslmode=disable
+      DISCORDGO_REF: v0.29.1-dave.18
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
+      - name: Build libdave for Discord voice packages
+        run: |
+          set -eux
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build g++ make pkg-config curl zip unzip tar \
+            ca-certificates git autoconf automake libtool linux-libc-dev patchelf
+
+          git clone --depth=1 --branch "${DISCORDGO_REF}" https://github.com/cartridge-gg/discordgo.git /tmp/discordgo
+          git -C /tmp/discordgo submodule update --init --recursive
+
+          cd /tmp/discordgo/dave/libdave/cpp
+          ./vcpkg/bootstrap-vcpkg.sh -disableMetrics
+          make BUILD_TYPE=Release
+
+          libdave_build=/tmp/discordgo/dave/libdave/cpp/build
+          vcpkg_libdir="$(find "${libdave_build}/vcpkg_installed" -maxdepth 2 -name lib -type d | head -1)"
+          test -n "${vcpkg_libdir}"
+          vcpkg_libs="$(find "${vcpkg_libdir}" -maxdepth 1 -name '*.a' | sort | tr '\n' ' ')"
+          test -n "${vcpkg_libs}"
+
+          {
+            echo "CGO_CFLAGS=-I/tmp/discordgo/dave/libdave/cpp/includes"
+            echo "CGO_LDFLAGS=-L${vcpkg_libdir} ${libdave_build}/libdave.a -Wl,--start-group ${vcpkg_libs} -Wl,--end-group -lstdc++ -lm -ldl -lpthread"
+          } >> "$GITHUB_ENV"
       - run: go build ./...
       - run: go build -tags sqliteonly ./...
       - run: go vet ./...

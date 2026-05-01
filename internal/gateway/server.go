@@ -21,11 +21,11 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
-	"github.com/nextlevelbuilder/goclaw/internal/webui"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
+	"github.com/nextlevelbuilder/goclaw/internal/webui"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -50,21 +50,21 @@ type Server struct {
 	// Non-handler dependencies (don't implement RegisterRoutes)
 	policyEngine   *permissions.PolicyEngine
 	pairingService store.PairingStore
-	apiKeyStore    store.APIKeyStore  // for API key auth lookup
-	agentStore     store.AgentStore   // for context injection in tools_invoke
-	msgBus         *bus.MessageBus    // for MCP bridge media delivery
+	apiKeyStore    store.APIKeyStore // for API key auth lookup
+	agentStore     store.AgentStore  // for context injection in tools_invoke
+	msgBus         *bus.MessageBus   // for MCP bridge media delivery
 
 	upgrader    websocket.Upgrader
 	rateLimiter *RateLimiter
 	clients     map[string]*Client
 	mu          sync.RWMutex
 
-	startedAt      time.Time
-	version        string
-	db             interface{ PingContext(context.Context) error } // for health check DB ping
-	updateChecker  *UpdateChecker
+	startedAt     time.Time
+	version       string
+	db            interface{ PingContext(context.Context) error } // for health check DB ping
+	updateChecker *UpdateChecker
 
-	logTee   *LogTee                  // optional; auto-unsubscribes clients on disconnect
+	logTee   *LogTee                 // optional; auto-unsubscribes clients on disconnect
 	postTurn tools.PostTurnProcessor // optional; for team task dispatch in HTTP API paths
 
 	httpServer *http.Server
@@ -447,6 +447,11 @@ func (s *Server) SetWorkspaceUploadHandler(h *httpapi.WorkspaceUploadHandler) {
 
 // SetPendingMessagesHandler sets the pending messages handler.
 func (s *Server) SetPendingMessagesHandler(h *httpapi.PendingMessagesHandler) {
+	s.handlers = append(s.handlers, h)
+}
+
+// SetCronHandler sets the cron management handler.
+func (s *Server) SetCronHandler(h *httpapi.CronHandler) {
 	s.handlers = append(s.handlers, h)
 }
 

@@ -49,13 +49,20 @@ func BuildVoiceTranscriptSummarizer(cfg *VoiceTranscriptSummarizerConfig) func(c
 		if t == "" {
 			return "", errors.New("voice summarizer: empty transcript")
 		}
+		// Note on temperature: gpt-5 (and the o-series reasoning models)
+		// reject explicit temperature values other than 1, returning
+		// HTTP 400 "Unsupported value: 'temperature' does not support
+		// 0.4 with this model." Other providers/models accept
+		// temperature freely. Omit the parameter entirely so each
+		// provider gets its own default — the summarization prompt is
+		// constrained enough that a 1.0 sample is fine for our use.
 		resp, err := provider.Chat(ctx, providers.ChatRequest{
 			Messages: []providers.Message{
 				{Role: "system", Content: voiceSummaryPrompt},
 				{Role: "user", Content: t},
 			},
 			Model:   model,
-			Options: map[string]any{"max_tokens": maxTokens, "temperature": 0.4},
+			Options: map[string]any{"max_tokens": maxTokens},
 		})
 		if err != nil {
 			return "", fmt.Errorf("voice summarizer chat: %w", err)
