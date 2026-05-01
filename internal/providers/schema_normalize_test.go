@@ -508,12 +508,44 @@ func TestApplyStrictMode_NestedObject(t *testing.T) {
 	}
 }
 
+func TestApplyStrictMode_OptionalEmptyObject(t *testing.T) {
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"name": map[string]any{
+				"type": "string",
+			},
+			"params": map[string]any{
+				"type":        "object",
+				"description": "Optional skill-specific parameters",
+			},
+		},
+		"required": []string{"name"},
+	}
+	result := NormalizeSchema("openai", schema)
+
+	params := prop(result, "params")
+	if params == nil {
+		t.Fatal("expected params property")
+	}
+	if params["additionalProperties"] != false {
+		t.Fatalf("expected empty optional object to have additionalProperties:false, got %v", params["additionalProperties"])
+	}
+	paramTypes, ok := params["type"].([]any)
+	if !ok {
+		t.Fatalf("expected params type to be nullable array, got %T: %v", params["type"], params["type"])
+	}
+	if !containsAnyValue(paramTypes, "object") || !containsAnyValue(paramTypes, "null") {
+		t.Fatalf("expected params type to include object and null, got %v", paramTypes)
+	}
+}
+
 func TestApplyStrictMode_SkipsAnthropic(t *testing.T) {
 	schema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"url":    map[string]any{"type": "string"},
-			"debug":  map[string]any{"type": "boolean"},
+			"url":   map[string]any{"type": "string"},
+			"debug": map[string]any{"type": "boolean"},
 		},
 		"required": []any{"url"},
 	}
@@ -540,4 +572,13 @@ func prop(schema map[string]any, name string) map[string]any {
 	}
 	m, _ := props[name].(map[string]any)
 	return m
+}
+
+func containsAnyValue(values []any, want any) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

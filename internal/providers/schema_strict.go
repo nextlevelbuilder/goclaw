@@ -15,9 +15,12 @@ func applyStrictMode(schema map[string]any, depth int) map[string]any {
 	}
 
 	typ, _ := schema["type"].(string)
+	if typ != "object" {
+		return schema
+	}
 	props, hasProps := schema["properties"].(map[string]any)
-
-	if typ != "object" || !hasProps {
+	if !hasProps {
+		schema["additionalProperties"] = false
 		return schema
 	}
 
