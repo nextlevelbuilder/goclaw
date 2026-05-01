@@ -179,9 +179,10 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 	if v, ok := req.Options[OptTemperature]; ok {
 		// Certain model families don't support custom temperature (locked to default).
 		// This is a model-level constraint, not provider-specific — applies to both OpenAI and Azure.
-		// Note: gpt-5.X flagship models (gpt-5.1, gpt-5.4) DO support temperature;
-		// only the mini/nano reasoning variants reject it.
-		skipTemp := strings.HasPrefix(capabilityModel, "gpt-5-mini") || strings.HasPrefix(capabilityModel, "gpt-5-nano") || strings.HasPrefix(capabilityModel, "o1") || strings.HasPrefix(capabilityModel, "o3") || strings.HasPrefix(capabilityModel, "o4")
+		// Note: gpt-5.1/gpt-5.4 flagship models support temperature, but
+		// gpt-5.5 currently rejects custom temperature and only accepts the
+		// default value.
+		skipTemp := strings.HasPrefix(capabilityModel, "gpt-5.5") || strings.HasPrefix(capabilityModel, "gpt-5-mini") || strings.HasPrefix(capabilityModel, "gpt-5-nano") || strings.HasPrefix(capabilityModel, "o1") || strings.HasPrefix(capabilityModel, "o3") || strings.HasPrefix(capabilityModel, "o4")
 		if !skipTemp {
 			body["temperature"] = v
 		}
