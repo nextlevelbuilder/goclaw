@@ -16,14 +16,14 @@ import (
 // Config configures the Edge TTS provider.
 type Config struct {
 	Voice     string // default "en-US-MichelleNeural"
-	Rate      string // speech rate, e.g. "+0%"
+	Rate      string // speech rate, e.g. "+0%"; overridden by opts.Params["rate"]
 	TimeoutMs int
 }
 
 // Provider implements audio.TTSProvider via the edge-tts CLI.
 type Provider struct {
 	voice     string
-	rate      string
+	rate      string // legacy config-level rate string; opts.Params["rate"] takes precedence
 	timeoutMs int
 }
 
@@ -49,6 +49,13 @@ func (p *Provider) Name() string { return "edge" }
 // Synthesize shells out to edge-tts. Output is always MP3
 // (edge-tts default format: audio-24khz-48kbitrate-mono-mp3).
 // opts.Voice overrides the construction-time voice when non-empty.
+// opts.Params keys (integer slider values):
+//   - "rate"   int (-50..+100) → "--rate +N%"
+//   - "pitch"  int (-50..+50)  → "--pitch +NHz"
+//   - "volume" int (-50..+100) → "--volume +N%"
+//
+// Zero value for rate/pitch/volume means no flag is added (preserves legacy behaviour).
+// MUST NOT mutate opts.Params.
 func (p *Provider) Synthesize(ctx context.Context, text string, opts audio.TTSOptions) (*audio.SynthResult, error) {
 	tmpDir := os.TempDir()
 	outPath := filepath.Join(tmpDir, fmt.Sprintf("tts-%d.mp3", time.Now().UnixNano()))
@@ -59,13 +66,25 @@ func (p *Provider) Synthesize(ctx context.Context, text string, opts audio.TTSOp
 		voice = opts.Voice
 	}
 
+	// Resolve rate/pitch/volume from opts.Params (int slider).
+	// When Params is nil or key absent, fall back to legacy p.rate string if set.
+	rateStr := resolveEdgeParam(opts.Params, "rate", sliderToRateString, p.rate)
+	pitchStr := resolveEdgeParam(opts.Params, "pitch", sliderToPitchString, "")
+	volumeStr := resolveEdgeParam(opts.Params, "volume", sliderToVolumeString, "")
+
 	args := []string{
 		"--voice", voice,
 		"--text", text,
 		"--write-media", outPath,
 	}
-	if p.rate != "" {
-		args = append(args, "--rate", p.rate)
+	if rateStr != "" && rateStr != "+0%" {
+		args = append(args, "--rate", rateStr)
+	}
+	if pitchStr != "" && pitchStr != "+0Hz" {
+		args = append(args, "--pitch", pitchStr)
+	}
+	if volumeStr != "" && volumeStr != "+0%" {
+		args = append(args, "--volume", volumeStr)
 	}
 
 	timeout := time.Duration(p.timeoutMs) * time.Millisecond
@@ -87,4 +106,33 @@ func (p *Provider) Synthesize(ctx context.Context, text string, opts audio.TTSOp
 		Extension: "mp3",
 		MimeType:  "audio/mpeg",
 	}, nil
+}
+
+// resolveEdgeParam reads an integer slider value from params and converts it
+// to the edge-tts string format using conv. Falls back to legacyStr when the
+// key is absent from params or params is nil. Returns "" when both sources
+// are absent.
+func resolveEdgeParam(params map[string]any, key string, conv func(int) string, legacyStr string) string {
+	if params != nil {
+		if v, ok := audio.GetNested(params, key); ok {
+			n := toInt(v)
+			return conv(n)
+		}
+	}
+	return legacyStr
+}
+
+// toInt converts a numeric any value to int. Returns 0 for unknown types.
+func toInt(v any) int {
+	switch n := v.(type) {
+	case int:
+		return n
+	case int64:
+		return int(n)
+	case float64:
+		return int(n)
+	case float32:
+		return int(n)
+	}
+	return 0
 }

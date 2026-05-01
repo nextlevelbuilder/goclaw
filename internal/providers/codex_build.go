@@ -111,12 +111,26 @@ func (p *CodexProvider) buildRequestBody(req ChatRequest, stream bool) map[strin
 	if len(req.Tools) > 0 {
 		var tools []map[string]any
 		for _, t := range req.Tools {
-			tools = append(tools, map[string]any{
-				"type":        "function",
-				"name":        t.Function.Name,
-				"description": t.Function.Description,
-				"parameters":  NormalizeSchema("codex", t.Function.Parameters),
-			})
+			if t.Type == "image_generation" {
+				// Pass native image_generation tool object as-is — Responses API first-class tool.
+				// Defaults chosen for Phase 1b; per-agent overrides are Phase 4.
+				tools = append(tools, map[string]any{
+					"type":           "image_generation",
+					"action":         "generate",
+					"model":          "gpt-image-2",
+					"output_format":  "png",
+					"partial_images": 1,
+				})
+			} else {
+				// Function tool path (default). Works with both value-type and pointer Function
+				// fields — we only access t.Function when type is not "image_generation".
+				tools = append(tools, map[string]any{
+					"type":        "function",
+					"name":        t.Function.Name,
+					"description": t.Function.Description,
+					"parameters":  NormalizeSchema("codex", t.Function.Parameters),
+				})
+			}
 		}
 		body["tools"] = tools
 	}

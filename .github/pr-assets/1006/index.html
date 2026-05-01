@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>PR 1006 · Codex pool refactor + pool-aware create_image</title>
+<style>
+  :root {
+    --bg:#0d0d0d; --fg:#e8e4df; --card:#1a1714; --border:#2d2923;
+    --muted:#8a837d; --accent:#ef4444; --good:#22c55e; --code:#151210;
+  }
+  html.light {
+    --bg:#f8f6f3; --fg:#1a1714; --card:#ffffff; --border:#e5e0da;
+    --muted:#6b6560; --accent:#dc2626; --good:#15803d; --code:#f3f0eb;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif; background: var(--bg); color: var(--fg); padding: 32px; }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  h1 { margin: 0 0 8px 0; font-size: 22px; }
+  .sub { color: var(--muted); margin-bottom: 28px; font-size: 14px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 32px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .card h3 { margin: 0 0 8px 0; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .card p { margin: 0; font-size: 14px; line-height: 1.5; }
+  .section { margin-bottom: 32px; }
+  .section h2 { font-size: 16px; margin: 0 0 4px 0; }
+  .section .note { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+  .shot { background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .shot-header { padding: 10px 14px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+  .label { font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--good); }
+  .state { color: var(--muted); }
+  .shot img { width: 100%; display: block; }
+  pre.terminal { background: var(--code); color: var(--fg); padding: 14px; font-size: 12px; line-height: 1.5; overflow-x: auto; margin: 0; font-family: "SF Mono", Menlo, monospace; }
+  .hl-good { background: rgba(34,197,94,0.14); border-left: 3px solid var(--good); padding-left: 8px; display: block; }
+  .toggle { position: fixed; top: 20px; right: 20px; background: var(--card); border: 1px solid var(--border); color: var(--fg); padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 12px; }
+  @media (max-width: 900px) { .grid3 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<button class="toggle" onclick="document.documentElement.classList.toggle('light')">○ Light</button>
+<div class="wrap">
+  <h1>PR 1006 · Codex pool refactor + pool-aware create_image</h1>
+  <div class="sub">Closes #1001 and #1008. Captures: staging gateway on <code>claw</code>, master tenant, light theme, <code>openai-codex</code> provider configured as a 2-member <code>round_robin</code> pool with <code>openai-codex-2</code> as a member.</div>
+
+  <div class="grid3">
+    <div class="card"><h3>What changed</h3><p>Chain entries pointing at a Codex OAuth pool now route through the pool's own strategy with internal failover. The outer chain only advances after the pool is fully exhausted.</p></div>
+    <div class="card"><h3>Why it matters</h3><p>Before: users could accidentally select a pool member in the chain and bypass pool semantics. Now: the dropdown hides pool members and tags owners with an inline <code>Pool</code> chip — mirrors the Create Agent dropdown.</p></div>
+    <div class="card"><h3>Review cue</h3><p>The inline <code>Pool</code> chip next to <code>openai-codex</code> — and the absence of <code>openai-codex-2</code> from the list — proves the UX unification. Backend failover is proven by 5 integration scenarios in <code>create_image_pool_chain_test.go</code>.</p></div>
+  </div>
+
+  <div class="section">
+    <h2>1. Pool-filtered Provider dropdown</h2>
+    <div class="note">Red callout marks the <code>openai-codex</code> option tagged with an inline <code>Pool</code> chip. <code>openai-codex-2</code> (a pool member) is no longer listed — pool routing is reached only by picking the owner, matching the existing Create Agent dropdown pattern.</div>
+    <div class="shot">
+      <div class="shot-header">
+        <span class="label">Implemented</span>
+        <span class="state">Create Image — Provider Chain dialog, Provider dropdown open</span>
+      </div>
+      <img src="pool-dropdown-filtered.png" alt="Pool-filtered dropdown with inline Pool chip on owner"/>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>2. Backend validation</h2>
+    <div class="note">Full test matrix executed on the PR branch at the current HEAD.</div>
+    <pre class="terminal"><span class="hl-good">go build ./...                           — ok (PG)</span>
+<span class="hl-good">go build -tags sqliteonly ./...          — ok (Desktop)</span>
+<span class="hl-good">go vet ./...                             — no issues</span>
+<span class="hl-good">go test ./internal/tools/... ./internal/providers/...   — 1599 passed</span>
+<span class="hl-good">Integration: 5 pool-chain scenarios × 5 runs under -race — 25/25 deterministic</span>
+<span class="hl-good">pnpm --dir ui/web tsc --noEmit           — no errors</span></pre>
+  </div>
+</div>
+</body>
+</html>

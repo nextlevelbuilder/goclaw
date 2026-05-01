@@ -169,7 +169,8 @@
       "skills": "Skills",
       "instances": "Instances",
       "permissions": "Permissions",
-      "evolution": "Evolution"
+      "evolution": "Evolution",
+      "hooks": "Hooks"
     },
     "summonFailed": "Summon Failed",
     "evolving": "Evolving",
@@ -723,7 +724,10 @@
     "retrying": "Retrying...",
     "done": "done",
     "fileLabelSOUL": "Soul & Personality",
-    "fileLabelIDENTITY": "Identity Card"
+    "fileLabelIDENTITY": "Identity Card",
+    "takingTooLong": "Taking too long?",
+    "cancel": "Cancel",
+    "cancelling": "Cancelling..."
   },
   "configGroups": {
     "core": "Core",
@@ -970,6 +974,25 @@
     "noLogs": "No heartbeat logs yet.",
     "logsPagination": "{{from}}–{{to}} of {{total}}"
   },
+  "hooks": {
+    "card": {
+      "title": "Hooks",
+      "loading": "Loading hooks...",
+      "empty": "No hooks configured",
+      "emptyDesc": "Hooks intercept agent lifecycle events like tool calls.",
+      "viewAll": "View all {{count}} hooks",
+      "addHook": "Add hook",
+      "nHooks": "{{count}} hooks"
+    },
+    "tab": {
+      "refresh": "Refresh",
+      "create": "Create Hook",
+      "emptyTitle": "No hooks configured",
+      "emptyDesc": "Hooks intercept agent lifecycle events like tool calls, session start/stop, and more.",
+      "createFirst": "Create your first hook",
+      "deleteConfirm": "Delete hook for \"{{event}}\"? This cannot be undone."
+    }
+  },
   "permissions": {
     "title": "Permissions",
     "description": "Control who can modify agent config and files. Owner always has full access.",
@@ -979,6 +1002,7 @@
     "noRules": "No permission rules. Owner has implicit full access.",
     "userIdPlaceholder": "Search contacts or type ID...",
     "scopePlaceholder": "Select or type scope...",
+    "unknownWriterLabel": "User {{id}}",
     "types": {
       "file_writer": "File Writer",
       "file_writer_desc": "Controls who can edit files and manage cron in group chats. First user auto-added.",

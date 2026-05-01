@@ -232,7 +232,7 @@ func BuildPreviewPrompt(ctx context.Context, ag *store.AgentData, mode PromptMod
 			if tool, ok := deps.ToolLister.Get(canonical); ok {
 				toolDefs = append(toolDefs, providers.ToolDefinition{
 					Type: "function",
-					Function: providers.ToolFunctionSchema{
+					Function: &providers.ToolFunctionSchema{
 						Name:        alias,
 						Description: tool.Description(),
 						Parameters:  tool.Parameters(),

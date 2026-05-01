@@ -1,8 +1,7 @@
 import { useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useWs, useHttp } from "@/hooks/use-ws";
+import { useHttp } from "@/hooks/use-ws";
 import { useAuthStore } from "@/stores/use-auth-store";
-import { Methods } from "@/api/protocol";
 import { queryKeys } from "@/lib/query-keys";
 import { toast } from "@/stores/use-toast-store";
 import i18next from "i18next";
@@ -19,6 +18,12 @@ export interface TtsProviderConfig {
   enabled?: boolean;
   rate?: string;
   group_id?: string;
+  /**
+   * Generic params blob (Phase C dual-write).
+   * Mirrors the tts.{provider}.params JSON stored in system_configs.
+   * Backend reads this with precedence over legacy flat keys.
+   */
+  params?: Record<string, unknown>;
 }
 
 export interface TtsConfig {
@@ -31,6 +36,7 @@ export interface TtsConfig {
   elevenlabs: TtsProviderConfig;
   edge: TtsProviderConfig;
   minimax: TtsProviderConfig;
+  gemini: TtsProviderConfig;
 }
 
 const DEFAULT_TTS: TtsConfig = {
@@ -43,6 +49,7 @@ const DEFAULT_TTS: TtsConfig = {
   elevenlabs: {},
   edge: {},
   minimax: {},
+  gemini: {},
 };
 
 export interface SynthesizeParams {
@@ -69,7 +76,6 @@ export interface TestConnectionResult {
 }
 
 export function useTtsConfig() {
-  const ws = useWs();
   const http = useHttp();
   const connected = useAuthStore((s) => s.connected);
   const queryClient = useQueryClient();
@@ -79,9 +85,15 @@ export function useTtsConfig() {
   const { data: tts = DEFAULT_TTS, isPending: loading } = useQuery({
     queryKey: queryKeys.tts.all,
     queryFn: async () => {
-      const res = await ws.call<{ config: Record<string, unknown> }>(Methods.CONFIG_GET);
-      const ttsConfig = (res.config?.tts as TtsConfig) ?? DEFAULT_TTS;
-      return { ...DEFAULT_TTS, ...ttsConfig };
+      // Use per-tenant TTS config endpoint instead of global config.get
+      const res = await fetch("/v1/tts/config", {
+        headers: http.getAuthHeaders(),
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to load TTS config (${res.status})`);
+      }
+      const data = await res.json();
+      return { ...DEFAULT_TTS, ...data } as TtsConfig;
     },
     staleTime: 60_000,
     enabled: connected,
@@ -97,7 +109,16 @@ export function useTtsConfig() {
       setSaving(true);
       setError(null);
       try {
-        await ws.call(Methods.CONFIG_PATCH, { raw: JSON.stringify({ tts: updates }) });
+        // Use per-tenant TTS config endpoint instead of config.patch (master-scope)
+        const res = await fetch("/v1/tts/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...http.getAuthHeaders() },
+          body: JSON.stringify(updates),
+        });
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          throw new Error(text || `Failed to save TTS config (${res.status})`);
+        }
         await invalidate();
         toast.success(i18next.t("config:toast.saved"));
       } catch (err) {
@@ -109,7 +130,7 @@ export function useTtsConfig() {
         setSaving(false);
       }
     },
-    [ws, invalidate],
+    [http, invalidate],
   );
 
   // POST→Blob not in HttpClient; use fetch + getAuthHeaders() for tenant/user header parity.

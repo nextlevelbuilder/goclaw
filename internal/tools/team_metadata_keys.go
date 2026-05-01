@@ -44,6 +44,11 @@ const (
 	MetaUserName         = "user_name"
 	MetaTopicSystemPrompt = "topic_system_prompt"
 	MetaTopicSkills      = "topic_skills"
+	// MetaChannelSelfIdentity carries a channel-provided self-identity hint
+	// (e.g. "You are @viet_super_bot (ViệtBot) on this Telegram channel.")
+	// appended to the agent's system prompt so the LLM does not confuse its own
+	// platform handle for a different bot when users @mention it.
+	MetaChannelSelfIdentity = "channel_self_identity"
 )
 
 // Task metadata keys stored in store.TeamTaskData.Metadata.

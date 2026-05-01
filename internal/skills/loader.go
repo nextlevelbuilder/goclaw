@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -522,6 +523,77 @@ func extractFrontmatter(content string) string {
 
 func stripFrontmatter(content string) string {
 	return frontmatterRe.ReplaceAllString(normalizeLineEndings(content), "")
+}
+
+// parseSimpleYAMLLists parses YAML list fields into separate []string values keyed
+// by top-level key. Scalars and block scalars are ignored. Complements
+// parseSimpleYAML (which joins list items with spaces). Used by dep_manifest.go.
+//
+// Supported grammar (subset):
+//   - Flat list:           key:\n  - item1\n  - item2
+//   - Quoted items:        key:\n  - "value"
+//   - CRLF line endings are normalized
+//
+// Not supported — misuse is logged at debug level and the key is skipped:
+//   - Nested maps (key:\n  subkey:\n    - item) — values would lose prefix semantics
+//   - Flow-style lists (key: [a, b]) — silently returns empty
+//   - Dash without space (-item) — silently returns empty
+//
+// Example:
+//
+//	deps:
+//	  - pip:psycopg2-binary
+//	  - system:ffmpeg
+//
+// Returns: {"deps": ["pip:psycopg2-binary", "system:ffmpeg"]}
+func parseSimpleYAMLLists(content string) map[string][]string {
+	result := make(map[string][]string)
+	lines := strings.Split(normalizeLineEndings(content), "\n")
+	var currentKey string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		// Indented line — could be a list item for currentKey.
+		if len(line) > 0 && (line[0] == ' ' || line[0] == '\t') {
+			if currentKey == "" {
+				continue
+			}
+			if strings.HasPrefix(trimmed, "- ") {
+				val := strings.TrimSpace(trimmed[2:])
+				val = strings.Trim(val, "\"'")
+				if val != "" {
+					result[currentKey] = append(result[currentKey], val)
+				}
+				continue
+			}
+			// Indented non-list line under a tracked key — e.g. nested map:
+			//   deps:\n  pip:\n    - requests
+			// Silent flatten would drop the "pip:" prefix and miscategorize. Skip + clear key.
+			if strings.Contains(trimmed, ":") {
+				slog.Debug("skills: parseSimpleYAMLLists skipped nested map",
+					"key", currentKey, "nested", trimmed)
+				delete(result, currentKey)
+				currentKey = ""
+			}
+			continue
+		}
+		// Top-level key — reset list tracking.
+		idx := strings.IndexByte(trimmed, ':')
+		if idx < 0 {
+			currentKey = ""
+			continue
+		}
+		key := strings.TrimSpace(trimmed[:idx])
+		val := strings.TrimSpace(trimmed[idx+1:])
+		if val == "" {
+			currentKey = key
+		} else {
+			currentKey = ""
+		}
+	}
+	return result
 }
 
 // parseSimpleYAML parses a subset of YAML: simple key: value pairs,

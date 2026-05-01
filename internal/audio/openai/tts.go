@@ -59,6 +59,9 @@ func NewProvider(cfg Config) *Provider {
 func (p *Provider) Name() string { return "openai" }
 
 // Synthesize calls POST {apiBase}/audio/speech.
+// opts.Params keys: "speed" (float), "response_format" (string), "instructions" (string).
+// When opts.Params is nil or a key is absent, schema defaults are used.
+// MUST NOT mutate opts.Params — reads only.
 func (p *Provider) Synthesize(ctx context.Context, text string, opts audio.TTSOptions) (*audio.SynthResult, error) {
 	voice := opts.Voice
 	if voice == "" {
@@ -68,17 +71,23 @@ func (p *Provider) Synthesize(ctx context.Context, text string, opts audio.TTSOp
 	if model == "" {
 		model = p.model
 	}
-	format := opts.Format
-	if format == "" {
-		format = "mp3"
-	}
+
+	// Resolve params: caller-supplied wins over schema default.
+	format := resolveString(opts.Params, "response_format", "mp3")
+	speed := resolveFloat(opts.Params, "speed", 1.0)
+	instructions := resolveString(opts.Params, "instructions", "")
 
 	body := map[string]any{
 		"model":           model,
 		"input":           text,
 		"voice":           voice,
 		"response_format": format,
+		"speed":           speed,
 	}
+	if instructions != "" {
+		body["instructions"] = instructions
+	}
+
 	bodyJSON, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("marshal openai tts request: %w", err)
@@ -121,4 +130,41 @@ func (p *Provider) Synthesize(ctx context.Context, text string, opts audio.TTSOp
 		Extension: ext,
 		MimeType:  mime,
 	}, nil
+}
+
+// resolveString reads a string param from params map, falling back to def.
+func resolveString(params map[string]any, key, def string) string {
+	if params == nil {
+		return def
+	}
+	v, ok := audio.GetNested(params, key)
+	if !ok {
+		return def
+	}
+	if s, ok := v.(string); ok && s != "" {
+		return s
+	}
+	return def
+}
+
+// resolveFloat reads a float param from params map, falling back to def.
+func resolveFloat(params map[string]any, key string, def float64) float64 {
+	if params == nil {
+		return def
+	}
+	v, ok := audio.GetNested(params, key)
+	if !ok {
+		return def
+	}
+	switch n := v.(type) {
+	case float64:
+		return n
+	case float32:
+		return float64(n)
+	case int:
+		return float64(n)
+	case int64:
+		return float64(n)
+	}
+	return def
 }

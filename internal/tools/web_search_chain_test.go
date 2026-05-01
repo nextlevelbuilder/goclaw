@@ -2,24 +2,20 @@ package tools
 
 import (
 	"context"
+	"database/sql"
 	"testing"
+
+	"github.com/google/uuid"
+
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // fakeSearchProvider implements SearchProvider for chain-resolution tests.
-// Only Name() is exercised — Search is never called.
 type fakeSearchProvider struct{ name string }
 
 func (f *fakeSearchProvider) Name() string { return f.name }
 func (f *fakeSearchProvider) Search(_ context.Context, _ searchParams) ([]searchResult, error) {
 	return nil, nil
-}
-
-// defaultChain builds a deterministic default provider list used across tests.
-func defaultChain() []SearchProvider {
-	return []SearchProvider{
-		&fakeSearchProvider{name: "brave"},
-		&fakeSearchProvider{name: "duckduckgo"},
-	}
 }
 
 // chainNames extracts provider names in order for terse assertions.
@@ -31,137 +27,214 @@ func chainNames(chain []SearchProvider) []string {
 	return out
 }
 
-// ---- No override → defaults unchanged ----
+// fakeSecretsStore implements store.ConfigSecretsStore for unit tests.
+type fakeSecretsStore struct {
+	data map[uuid.UUID]map[string]string // tenantID → key → value
+}
 
-func TestResolveWebSearchChain_NoOverride_ReturnsDefaults(t *testing.T) {
-	got := ResolveWebSearchChain(context.Background(), defaultChain())
-	if len(got) != 2 || got[0].Name() != "brave" || got[1].Name() != "duckduckgo" {
-		t.Errorf("no override: got %v, want [brave duckduckgo]", chainNames(got))
+func newFakeSecretsStore() *fakeSecretsStore {
+	return &fakeSecretsStore{data: make(map[uuid.UUID]map[string]string)}
+}
+
+func (f *fakeSecretsStore) Get(ctx context.Context, key string) (string, error) {
+	tid := store.TenantIDFromContext(ctx)
+	if tid == uuid.Nil {
+		tid = store.MasterTenantID
+	}
+	m, ok := f.data[tid]
+	if !ok {
+		return "", sql.ErrNoRows
+	}
+	v, ok := m[key]
+	if !ok {
+		return "", sql.ErrNoRows
+	}
+	return v, nil
+}
+
+func (f *fakeSecretsStore) Set(ctx context.Context, key, value string) error {
+	tid := store.TenantIDFromContext(ctx)
+	if tid == uuid.Nil {
+		tid = store.MasterTenantID
+	}
+	if _, ok := f.data[tid]; !ok {
+		f.data[tid] = make(map[string]string)
+	}
+	f.data[tid][key] = value
+	return nil
+}
+
+func (f *fakeSecretsStore) Delete(ctx context.Context, key string) error {
+	tid := store.TenantIDFromContext(ctx)
+	if tid == uuid.Nil {
+		tid = store.MasterTenantID
+	}
+	m, ok := f.data[tid]
+	if ok {
+		delete(m, key)
+	}
+	return nil
+}
+
+func (f *fakeSecretsStore) GetAll(ctx context.Context) (map[string]string, error) {
+	tid := store.TenantIDFromContext(ctx)
+	if tid == uuid.Nil {
+		tid = store.MasterTenantID
+	}
+	m, ok := f.data[tid]
+	if !ok {
+		return make(map[string]string), nil
+	}
+	return m, nil
+}
+
+// --- JSON unmarshal tests ---
+
+func TestWebSearchChainOverride_UnmarshalJSON_ProviderOrder(t *testing.T) {
+	data := []byte(`{"provider_order":["brave","exa"],"brave":{"enabled":false}}`)
+	var o WebSearchChainOverride
+	if err := o.UnmarshalJSON(data); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+	if len(o.ProviderOrder) != 2 || o.ProviderOrder[0] != "brave" {
+		t.Errorf("ProviderOrder: got %v", o.ProviderOrder)
+	}
+	po, ok := o.Providers["brave"]
+	if !ok || po.Enabled == nil || *po.Enabled != false {
+		t.Errorf("brave override: got %+v", po)
 	}
 }
 
-// Empty defaults → nil result.
-func TestResolveWebSearchChain_EmptyDefaults_ReturnsNil(t *testing.T) {
-	got := ResolveWebSearchChain(context.Background(), nil)
-	if got != nil {
-		t.Errorf("empty defaults: got %v, want nil", got)
+func TestWebSearchChainOverride_UnmarshalJSON_Empty(t *testing.T) {
+	var o WebSearchChainOverride
+	if err := o.UnmarshalJSON([]byte(`{}`)); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+	if len(o.ProviderOrder) != 0 || len(o.Providers) != 0 {
+		t.Errorf("expected empty override: %+v", o)
 	}
 }
 
-// ---- provider_order reorders ----
+// --- Chain resolution tests (scenarios 1-6 from phase file) ---
 
-func TestResolveWebSearchChain_ProviderOrderReorders(t *testing.T) {
-	override := []byte(`{"provider_order":["duckduckgo","brave"]}`)
-	tenant := BuiltinToolSettings{"web_search": override}
-	ctx := WithTenantToolSettings(context.Background(), tenant)
+func TestBuildChainFromStorage(t *testing.T) {
+	tests := []struct {
+		name      string
+		tenantID  uuid.UUID
+		override  string // JSON string for builtin_tool_tenant_configs.settings web_search field
+		secrets   map[string]string
+		wantNames []string
+		wantLen   int
+	}{
+		{
+			name:      "scenario 1: no secrets, no override → DDG only",
+			tenantID:  uuid.New(),
+			override:  "",
+			secrets:   map[string]string{},
+			wantNames: []string{"duckduckgo"},
+			wantLen:   1,
+		},
+		{
+			name:     "scenario 2: override brave+exa, brave key present → [brave, exa, duckduckgo]",
+			tenantID: uuid.New(),
+			override: `{"provider_order":["brave","exa"]}`,
+			secrets: map[string]string{
+				"tools.web.brave.api_key": "test-key-brave-123",
+				"tools.web.exa.api_key":   "test-key-exa-456",
+			},
+			wantNames: []string{"brave", "exa", "duckduckgo"},
+			wantLen:   3,
+		},
+		{
+			name:     "scenario 3: override brave only, no brave key → [duckduckgo] (DDG always present)",
+			tenantID: uuid.New(),
+			override: `{"provider_order":["brave"]}`,
+			secrets:  map[string]string{},
+			wantNames: []string{"duckduckgo"},
+			wantLen:   1,
+		},
+		{
+			name:     "scenario 4: override with unknown provider name → skipped, DDG present",
+			tenantID: uuid.New(),
+			override: `{"provider_order":["unknown_provider","brave"]}`,
+			secrets: map[string]string{
+				"tools.web.brave.api_key": "test-key-brave-789",
+			},
+			wantNames: []string{"brave", "duckduckgo"},
+			wantLen:   2,
+		},
+		{
+			name:     "scenario 5: DDG explicitly disabled → still present (force-enabled)",
+			tenantID: uuid.New(),
+			override: `{"duckduckgo":{"enabled":false}}`,
+			secrets:  map[string]string{},
+			wantNames: []string{"duckduckgo"},
+			wantLen:   1,
+		},
+		{
+			name:     "scenario 6: Brave explicitly disabled, key present → skipped, DDG present",
+			tenantID: uuid.New(),
+			override: `{"brave":{"enabled":false}}`,
+			secrets: map[string]string{
+				"tools.web.brave.api_key": "test-key-brave-disabled",
+			},
+			wantNames: []string{"duckduckgo"},
+			wantLen:   1,
+		},
+	}
 
-	got := chainNames(ResolveWebSearchChain(ctx, defaultChain()))
-	want := []string{"duckduckgo", "brave"}
-	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
-		t.Errorf("reorder: got %v, want %v", got, want)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			ctx = store.WithTenantID(ctx, tt.tenantID)
+
+			// Set up fake secrets
+			fake := newFakeSecretsStore()
+			for k, v := range tt.secrets {
+				fake.Set(ctx, k, v)
+			}
+
+			// Set up override in context (tenant-layer settings)
+			if tt.override != "" {
+				settingsMap := BuiltinToolSettings{
+					"web_search": []byte(tt.override),
+				}
+				ctx = WithTenantToolSettings(ctx, settingsMap)
+			}
+
+			// Resolve chain
+			chain := BuildChainFromStorage(ctx, fake)
+
+			if len(chain) != tt.wantLen {
+				t.Errorf("chain length: got %d, want %d", len(chain), tt.wantLen)
+			}
+
+			names := chainNames(chain)
+			if len(names) != len(tt.wantNames) {
+				t.Errorf("provider names: got %v, want %v", names, tt.wantNames)
+				return
+			}
+
+			for i, want := range tt.wantNames {
+				if names[i] != want {
+					t.Errorf("provider %d: got %s, want %s", i, names[i], want)
+				}
+			}
+		})
 	}
 }
 
-// provider_order including only one provider → chain has only that provider.
-func TestResolveWebSearchChain_ProviderOrderFiltersOut(t *testing.T) {
-	override := []byte(`{"provider_order":["duckduckgo"]}`)
-	tenant := BuiltinToolSettings{"web_search": override}
-	ctx := WithTenantToolSettings(context.Background(), tenant)
+// --- Cache tests (see tenant_chain_cache_test.go for comprehensive cache tests) ---
 
-	got := chainNames(ResolveWebSearchChain(ctx, defaultChain()))
-	if len(got) != 1 || got[0] != "duckduckgo" {
-		t.Errorf("filter: got %v, want [duckduckgo]", got)
-	}
-}
+func TestTenantChainCache_SetGet(t *testing.T) {
+	c := newTenantChainCache()
 
-// Unknown providers in provider_order are skipped (no injection path).
-func TestResolveWebSearchChain_ProviderOrderIgnoresUnknown(t *testing.T) {
-	override := []byte(`{"provider_order":["malicious_new_provider","brave"]}`)
-	tenant := BuiltinToolSettings{"web_search": override}
-	ctx := WithTenantToolSettings(context.Background(), tenant)
+	tid := uuid.New()
+	providers := []SearchProvider{&fakeSearchProvider{"ddg"}}
+	c.Set(tid, providers)
 
-	got := chainNames(ResolveWebSearchChain(ctx, defaultChain()))
-	if len(got) != 1 || got[0] != "brave" {
-		t.Errorf("unknown skip: got %v, want [brave]", got)
-	}
-}
-
-// ---- per-provider enabled flag ----
-
-func TestResolveWebSearchChain_DisablesProviderViaEnabledFalse(t *testing.T) {
-	override := []byte(`{"brave":{"enabled":false}}`)
-	tenant := BuiltinToolSettings{"web_search": override}
-	ctx := WithTenantToolSettings(context.Background(), tenant)
-
-	got := chainNames(ResolveWebSearchChain(ctx, defaultChain()))
-	if len(got) != 1 || got[0] != "duckduckgo" {
-		t.Errorf("disable brave: got %v, want [duckduckgo]", got)
-	}
-}
-
-// enabled=true is a no-op (default is always "enabled" by virtue of being in defaults).
-func TestResolveWebSearchChain_EnabledTrueIsNoOp(t *testing.T) {
-	override := []byte(`{"brave":{"enabled":true},"duckduckgo":{"enabled":true}}`)
-	tenant := BuiltinToolSettings{"web_search": override}
-	ctx := WithTenantToolSettings(context.Background(), tenant)
-
-	got := chainNames(ResolveWebSearchChain(ctx, defaultChain()))
-	if len(got) != 2 {
-		t.Errorf("enabled=true no-op: got %v, want 2 providers", got)
-	}
-}
-
-// ---- malformed JSON → falls back to defaults ----
-
-func TestResolveWebSearchChain_MalformedJSON_FallsBackToDefaults(t *testing.T) {
-	override := []byte(`{not valid json`)
-	tenant := BuiltinToolSettings{"web_search": override}
-	ctx := WithTenantToolSettings(context.Background(), tenant)
-
-	got := chainNames(ResolveWebSearchChain(ctx, defaultChain()))
-	if len(got) != 2 {
-		t.Errorf("malformed: got %v, want defaults", got)
-	}
-}
-
-// ---- combined: provider_order + disabled provider in the order ----
-
-func TestResolveWebSearchChain_OrderAndDisableCombined(t *testing.T) {
-	override := []byte(`{"provider_order":["brave","duckduckgo"],"brave":{"enabled":false}}`)
-	tenant := BuiltinToolSettings{"web_search": override}
-	ctx := WithTenantToolSettings(context.Background(), tenant)
-
-	got := chainNames(ResolveWebSearchChain(ctx, defaultChain()))
-	// brave is in the order but disabled → skipped; duckduckgo survives.
-	if len(got) != 1 || got[0] != "duckduckgo" {
-		t.Errorf("order+disable: got %v, want [duckduckgo]", got)
-	}
-}
-
-// ---- global layer (WithBuiltinToolSettings) also drives the override ----
-// Ensures the merged view from BuiltinToolSettingsFromCtx surfaces global-layer
-// web_search settings just like tenant-layer.
-func TestResolveWebSearchChain_GlobalLayerDrivesOverride(t *testing.T) {
-	override := []byte(`{"provider_order":["duckduckgo"]}`)
-	global := BuiltinToolSettings{"web_search": override}
-	ctx := WithBuiltinToolSettings(context.Background(), global)
-
-	got := chainNames(ResolveWebSearchChain(ctx, defaultChain()))
-	if len(got) != 1 || got[0] != "duckduckgo" {
-		t.Errorf("global layer: got %v, want [duckduckgo]", got)
-	}
-}
-
-// Tenant layer beats global for the same tool (regression for Phase 3 precedence).
-func TestResolveWebSearchChain_TenantBeatsGlobal(t *testing.T) {
-	global := BuiltinToolSettings{"web_search": []byte(`{"provider_order":["brave"]}`)}
-	tenant := BuiltinToolSettings{"web_search": []byte(`{"provider_order":["duckduckgo"]}`)}
-
-	ctx := WithBuiltinToolSettings(context.Background(), global)
-	ctx = WithTenantToolSettings(ctx, tenant)
-
-	got := chainNames(ResolveWebSearchChain(ctx, defaultChain()))
-	if len(got) != 1 || got[0] != "duckduckgo" {
-		t.Errorf("tenant beats global: got %v, want [duckduckgo]", got)
+	got, ok := c.Get(tid)
+	if !ok || len(got) != 1 || got[0].Name() != "ddg" {
+		t.Errorf("cache Get: ok=%v got=%v", ok, chainNames(got))
 	}
 }

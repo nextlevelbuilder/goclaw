@@ -17,7 +17,7 @@ import (
 // buildMessages constructs the full message list for an LLM request.
 // Returns the messages and whether BOOTSTRAP.md was present in context files
 // (used by the caller for auto-cleanup without an extra DB roundtrip).
-func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, summary, userMessage, extraSystemPrompt, sessionKey, channel, channelType, chatTitle, peerKind, userID string, historyLimit int, skillFilter []string, lightContext bool) ([]providers.Message, bool) {
+func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, summary, userMessage, extraSystemPrompt, sessionKey, channel, channelType, chatTitle, chatID, peerKind, userID string, historyLimit int, skillFilter []string, lightContext bool) ([]providers.Message, bool) {
 	var messages []providers.Message
 
 	// Build system prompt — 3-layer mode resolution: runtime > auto-detect > config
@@ -204,6 +204,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		Workspace:              promptWorkspace,
 		Channel:                channel,
 		ChannelType:            channelType,
+		ChatID:                 chatID,
 		ChatTitle:              chatTitle,
 		PeerKind:               peerKind,
 		OwnerIDs:               l.ownerIDs,

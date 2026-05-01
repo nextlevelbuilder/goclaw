@@ -200,6 +200,11 @@ type Loop struct {
 	// Self-evolve: predefined agents can update SOUL.md through chat
 	selfEvolve bool
 
+	// allowImageGeneration: gate for native image_generation tool injection.
+	// Tri-level: provider supports it AND this flag is true AND request hasn't opted out.
+	// Defaults to true; set false via other_config.allow_image_generation = false.
+	allowImageGeneration bool
+
 	// TTS auto mode from config: "off", "always", "inbound", "tagged"
 	ttsAutoMode string
 
@@ -277,6 +282,7 @@ type AgentEvent struct {
 	ParentAgentID string `json:"parentAgentId,omitempty"`
 
 	// Routing context (helps WS clients filter by user/channel/session)
+	SenderID   string `json:"senderId,omitempty"` // original acting user; differs from UserID in group chats
 	UserID     string `json:"userId,omitempty"`
 	Channel    string `json:"channel,omitempty"`
 	ChatID     string `json:"chatId,omitempty"`
@@ -391,6 +397,10 @@ type LoopConfig struct {
 	// Self-evolve: predefined agents can update SOUL.md (style/tone) through chat
 	SelfEvolve bool
 
+	// AllowImageGeneration: whether the native image_generation tool may be attached.
+	// Defaults to true; set false to disable image generation for this agent.
+	AllowImageGeneration bool
+
 	// TTS auto mode from config: "off", "always", "inbound", "tagged"
 	// When "tagged", inject [[tts]] directive guidance into system prompt.
 	TTSAutoMode string
@@ -449,6 +459,15 @@ func (l *Loop) effectiveMaxTokens() int {
 		return l.maxTokens
 	}
 	return defaultMaxTokens
+}
+
+// resolveReserveTokens returns the reserve token buffer from compaction config.
+// Issue 958: Wire ReserveTokensFloor to prevent context overflow before compaction.
+func (l *Loop) resolveReserveTokens() int {
+	if l.compactionCfg != nil && l.compactionCfg.ReserveTokensFloor > 0 {
+		return l.compactionCfg.ReserveTokensFloor
+	}
+	return 0
 }
 
 func NewLoop(cfg LoopConfig) *Loop {
@@ -536,6 +555,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		promptMode:             cfg.PromptMode,
 		pinnedSkills:           cfg.PinnedSkills,
 		selfEvolve:             cfg.SelfEvolve,
+		allowImageGeneration:   cfg.AllowImageGeneration,
 		ttsAutoMode:            cfg.TTSAutoMode,
 		skillEvolve:            cfg.SkillEvolve,
 		skillNudgeInterval:     cfg.SkillNudgeInterval,
@@ -642,6 +662,9 @@ type MediaResult struct {
 	ContentType string `json:"content_type,omitempty"` // MIME type
 	Size        int64  `json:"size,omitempty"`         // file size in bytes
 	AsVoice     bool   `json:"as_voice,omitempty"`     // send as voice message (Telegram OGG)
+	// Prompt is the generation prompt for AI-generated media (e.g. create_image).
+	// Empty for user-uploaded or non-generated files.
+	Prompt string `json:"prompt,omitempty"`
 }
 
 // runState encapsulates all mutable state for a single agent run.

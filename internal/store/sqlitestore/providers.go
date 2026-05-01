@@ -168,12 +168,46 @@ func (s *SQLiteProviderStore) DeleteProvider(ctx context.Context, id uuid.UUID) 
 	if err != nil {
 		return err
 	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	// Safe no-op after Commit.
+	defer tx.Rollback()
+
+	// Defensive: disable heartbeats so the next scheduler tick after delete
+	// cannot fire stale config. FK ON DELETE SET NULL clears provider_id auto.
+	// Tenant-scope the UPDATE through agents to prevent cross-tenant side effects.
+	// IsCrossTenant (master scope) bypasses scoping for legitimate cross-tenant admin.
+	var updateQuery string
+	var updateArgs []any
+	if store.IsCrossTenant(ctx) {
+		updateQuery = "UPDATE agent_heartbeats SET enabled = 0 WHERE provider_id = ?"
+		updateArgs = []any{id}
+	} else {
+		tid := store.TenantIDFromContext(ctx)
+		updateQuery = `UPDATE agent_heartbeats SET enabled = 0
+		               WHERE provider_id = ?
+		                 AND agent_id IN (SELECT id FROM agents WHERE tenant_id = ?)`
+		updateArgs = []any{id, tid}
+	}
+	res, err := tx.ExecContext(ctx, updateQuery, updateArgs...)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		slog.Warn("heartbeat.provider_cleared",
+			"provider_id", id, "heartbeats_disabled", n)
+	}
+
 	args := append([]any{id}, tArgs...)
-	_, err = s.db.ExecContext(ctx,
+	if _, err := tx.ExecContext(ctx,
 		"DELETE FROM llm_providers WHERE id = ?"+tClause,
 		args...,
-	)
-	return err
+	); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *SQLiteProviderStore) decryptKey(apiKey, providerName string) string {

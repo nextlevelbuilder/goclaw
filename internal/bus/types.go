@@ -35,11 +35,14 @@ type InboundMessage struct {
 
 // OutboundMessage represents a message to be sent to a channel.
 type OutboundMessage struct {
-	Channel  string            `json:"channel"`
-	ChatID   string            `json:"chat_id"`
-	Content  string            `json:"content"`
-	Media    []MediaAttachment `json:"media,omitempty"`    // optional media attachments
-	Metadata map[string]string `json:"metadata,omitempty"` // channel-specific metadata
+	Channel         string            `json:"channel"`
+	ChatID          string            `json:"chat_id"`
+	Content         string            `json:"content"`
+	Media           []MediaAttachment `json:"media,omitempty"`              // optional media attachments
+	Metadata        map[string]string `json:"metadata,omitempty"`           // channel-specific metadata
+	TenantID        uuid.UUID         `json:"tenant_id,omitempty"`          // tenant scope for per-tenant TTS
+	AgentID         uuid.UUID         `json:"agent_id,omitempty"`           // agent scope for per-agent TTS voice override
+	AgentOtherConfig []byte           `json:"agent_other_config,omitempty"` // agent's other_config for TTS voice/model
 }
 
 // MediaAttachment represents a media file to be sent with a message.

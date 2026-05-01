@@ -19,5 +19,8 @@ tmp/
 ui/desktop/
 ui/simple-saas/
 !ui/web/
+ui/web/node_modules/
+ui/web/dist/
 plans/
 skills-store/
+**/node_modules/

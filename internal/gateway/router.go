@@ -67,12 +67,25 @@ func (r *MethodRouter) Handle(ctx context.Context, client *Client, req *protocol
 	if req.Method != protocol.MethodConnect && req.Method != protocol.MethodHealth && req.Method != protocol.MethodBrowserPairingStatus {
 		if pe := r.server.policyEngine; pe != nil {
 			if !pe.CanAccess(client.role, req.Method) {
-				slog.Warn("permission denied", "method", req.Method, "role", client.role, "client", client.id)
+				required := permissions.MethodRole(req.Method)
+				slog.Warn("security.permission_denied",
+					"method", req.Method,
+					"role", client.role,
+					"required", string(required),
+					"client", client.id,
+				)
 				locale := i18n.Normalize(client.locale)
+				var msg string
+				if required == permissions.RoleNone {
+					// Unclassified method — fail-closed (issue #866 fix).
+					msg = i18n.T(locale, i18n.MsgPermissionDenied, req.Method+" is not permitted for this session")
+				} else {
+					msg = i18n.T(locale, i18n.MsgPermissionDenied, req.Method+" requires "+string(required)+" role")
+				}
 				client.SendResponse(protocol.NewErrorResponse(
 					req.ID,
 					protocol.ErrUnauthorized,
-					i18n.T(locale, i18n.MsgPermissionDenied, req.Method+" requires "+string(permissions.MethodRole(req.Method))+" role"),
+					msg,
 				))
 				return
 			}
@@ -247,7 +260,7 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 		if paired {
 			client.role = permissions.RoleOperator
 			client.authenticated = true
-			client.userID = params.UserID
+		client.userID = params.UserID
 			client.pairedSenderID = params.SenderID
 			client.pairedChannel = "browser"
 			tid, errCode := r.resolveTenantHint(ctx, params.TenantHint, params.UserID)
@@ -286,17 +299,22 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 		}
 	}
 
-	// Path 4: Fallback → viewer (wrong token or pairing not available)
-	client.role = permissions.RoleViewer
-	client.authenticated = true
-	client.userID = params.UserID
-	tid, errCode := r.resolveTenantHint(ctx, params.TenantHint, params.UserID)
-	if errCode != "" {
-		client.SendResponse(protocol.NewErrorResponse(req.ID, errCode, "tenant access revoked"))
-		return
-	}
-	client.tenantID = tid
-	r.sendConnectResponse(ctx, client, req.ID)
+	// Path 4: Fail-closed — no valid token, no valid pairing → reject.
+	// Previously fell back to viewer+authenticated=true, which allowed any
+	// unauthenticated client to exercise the default-permit policy (CVE #866).
+	slog.Warn("security.ws_connect_rejected",
+		"reason", "no_valid_credentials",
+		"client", client.id,
+		"has_token", params.Token != "",
+		"has_sender_id", params.SenderID != "",
+	)
+	client.authenticated = false
+	locale := i18n.Normalize(client.locale)
+	client.SendResponse(protocol.NewErrorResponse(
+		req.ID,
+		protocol.ErrUnauthorized,
+		i18n.T(locale, i18n.MsgPermissionDenied, "valid token or active pairing required"),
+	))
 }
 
 func (r *MethodRouter) sendConnectResponse(ctx context.Context, client *Client, reqID string) {

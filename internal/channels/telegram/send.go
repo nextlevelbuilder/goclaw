@@ -92,11 +92,26 @@ func isPostConnectNetworkErr(err error) bool {
 		strings.Contains(s, "EOF")) && !strings.Contains(s, "lookup")
 }
 
+// mediaSendMethods lists sendX calls that upload a file body and therefore
+// need the longer sendMediaOverallTimeout budget. Keyed by the `name` argument
+// passed to retrySend so no call site has to change when we bump the budget.
+var mediaSendMethods = map[string]struct{}{
+	"sendPhoto":    {},
+	"sendVideo":    {},
+	"sendAudio":    {},
+	"sendVoice":    {},
+	"sendDocument": {},
+}
+
 // retrySend wraps a Telegram send call with retry logic for transient network errors.
 // Parse errors are NOT retried (handled by caller's HTML fallback).
 // resetFn is called before each retry (e.g. to seek file handles back to start). Can be nil.
 func (c *Channel) retrySend(ctx context.Context, name string, resetFn func(), fn func(context.Context) error) error {
-	ctx, cancel := context.WithTimeout(ctx, sendOverallTimeout)
+	overall := sendOverallTimeout
+	if _, isMedia := mediaSendMethods[name]; isMedia {
+		overall = sendMediaOverallTimeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, overall)
 	defer cancel()
 
 	var err error
@@ -261,6 +276,39 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 			}
 		}
 		return err
+	}
+
+	// TTS auto-apply: convert [[tts]] tagged responses to voice
+	if c.audioMgr != nil && msg.Content != "" {
+		isVoiceInbound := msg.Metadata["is_voice_inbound"] == "true"
+		ttsResult, ttsErr := c.audioMgr.AutoApplyToText(ctx, msg.Content, "telegram", isVoiceInbound, "")
+		if ttsErr != nil {
+			slog.Debug("telegram: tts auto-apply error", "error", ttsErr)
+		}
+		if ttsResult != nil && ttsResult.AudioPath != "" {
+			// Send voice message instead of text
+			if err := c.sendVoice(ctx, tu.ID(chatID), ttsResult.AudioPath, "", replyToMsgID, threadID); err != nil {
+				slog.Warn("telegram: tts auto-apply voice send failed, falling back to text", "error", err)
+			} else {
+				// Voice sent successfully
+				strippedText := strings.TrimSpace(ttsResult.Text)
+				if strippedText == "" {
+					// Voice-only: delete placeholder (no text to show)
+					if pID, ok := c.placeholders.LoadAndDelete(localKey); ok {
+						if msgID, ok := pID.(int); ok && msgID > 0 {
+							_ = c.deleteMessage(ctx, chatID, msgID)
+						}
+					}
+					return nil
+				}
+				// Has remaining text: let normal flow handle placeholder edit
+				msg.Content = strippedText
+			}
+		}
+		// Update content with directives stripped (even if TTS not applied)
+		if ttsResult != nil {
+			msg.Content = ttsResult.Text
+		}
 	}
 
 	// Text-only message

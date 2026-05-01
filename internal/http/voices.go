@@ -9,30 +9,31 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/audio"
 	"github.com/nextlevelbuilder/goclaw/internal/audio/elevenlabs"
+	"github.com/nextlevelbuilder/goclaw/internal/audio/minimax"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // VoicesHandler serves GET /v1/voices and POST /v1/voices/refresh.
-// It holds a *VoiceCache to serve cached responses and optionally a
-// *elevenlabs.TTSProvider to fetch live voices on cache miss.
+// provider is typed as audio.VoiceListProvider so any provider can be injected.
 type VoicesHandler struct {
 	cache       *audio.VoiceCache
-	provider    *elevenlabs.TTSProvider // nil when no ElevenLabs key is configured
+	provider    audio.VoiceListProvider // nil when resolved at request time from stores
 	secretStore store.ConfigSecretsStore
 	tenantStore store.TenantStore
 }
 
-// NewVoicesHandler creates a handler that resolves the ElevenLabs provider at
-// request time from config_secrets. Use NewVoicesHandlerWithProvider for tests.
+// NewVoicesHandler creates a handler that resolves the provider at request time
+// from config_secrets. Use NewVoicesHandlerWithProvider for tests.
 func NewVoicesHandler(cache *audio.VoiceCache, secretStore store.ConfigSecretsStore, tenantStore store.TenantStore) *VoicesHandler {
 	return &VoicesHandler{cache: cache, secretStore: secretStore, tenantStore: tenantStore}
 }
 
 // NewVoicesHandlerWithProvider creates a handler with a pre-built provider.
-// Primarily used in tests to inject a mock/httptest provider.
-func NewVoicesHandlerWithProvider(cache *audio.VoiceCache, p *elevenlabs.TTSProvider) *VoicesHandler {
+// Accepts audio.VoiceListProvider so any provider (ElevenLabs, MiniMax, mock) can be injected.
+// Primarily used in tests.
+func NewVoicesHandlerWithProvider(cache *audio.VoiceCache, p audio.VoiceListProvider) *VoicesHandler {
 	return &VoicesHandler{cache: cache, provider: p}
 }
 
@@ -55,7 +56,7 @@ func (h *VoicesHandler) handleList(w http.ResponseWriter, r *http.Request) {
 
 	p, err := h.resolveProvider(r, tenantID)
 	if err != nil {
-		slog.Warn("voices: no ElevenLabs provider", "tenant_id", tenantID, "error", err)
+		slog.Warn("voices: no provider configured", "tenant_id", tenantID, "error", err)
 		writeJSON(w, http.StatusNotFound, map[string]string{
 			"error": i18n.T(locale, i18n.MsgVoicesListFailed, err.Error()),
 		})
@@ -66,7 +67,7 @@ func (h *VoicesHandler) handleList(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Warn("voices: list failed", "tenant_id", tenantID, "error", err)
 		writeJSON(w, http.StatusBadGateway, map[string]string{
-			"error": i18n.T(locale, i18n.MsgVoicesListFailed, err.Error()),
+			"error": i18n.T(locale, i18n.MsgTtsMiniMaxVoicesFailed, err.Error()),
 		})
 		return
 	}
@@ -86,7 +87,7 @@ func (h *VoicesHandler) handleRefresh(w http.ResponseWriter, r *http.Request) {
 
 	p, err := h.resolveProvider(r, tenantID)
 	if err != nil {
-		slog.Warn("voices: no ElevenLabs provider on refresh", "tenant_id", tenantID, "error", err)
+		slog.Warn("voices: no provider on refresh", "tenant_id", tenantID, "error", err)
 		writeJSON(w, http.StatusNotFound, map[string]string{
 			"error": i18n.T(locale, i18n.MsgVoicesListFailed, err.Error()),
 		})
@@ -106,18 +107,38 @@ func (h *VoicesHandler) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"voices": voices})
 }
 
-// resolveProvider returns the ElevenLabs provider to use for this request.
-// Priority: injected provider (test/pre-built) > secret store lookup.
-func (h *VoicesHandler) resolveProvider(r *http.Request, tenantID uuid.UUID) (*elevenlabs.TTSProvider, error) {
+// resolveProvider returns the VoiceListProvider for this request.
+// Priority: injected provider (test/pre-built) > query-param ?provider > secret store lookup (elevenlabs default).
+func (h *VoicesHandler) resolveProvider(r *http.Request, tenantID uuid.UUID) (audio.VoiceListProvider, error) {
 	if h.provider != nil {
 		return h.provider, nil
 	}
 	if h.secretStore == nil {
-		return nil, fmt.Errorf("no ElevenLabs API key configured")
+		return nil, fmt.Errorf("no voice provider configured")
 	}
-	apiKey, err := h.secretStore.Get(r.Context(), "tts.elevenlabs.api_key")
-	if err != nil || apiKey == "" {
-		return nil, fmt.Errorf("ElevenLabs API key not found for tenant %s", tenantID)
+
+	providerName := r.URL.Query().Get("provider")
+	if providerName == "" {
+		providerName = "elevenlabs" // backward-compatible default
 	}
-	return elevenlabs.NewTTSProvider(elevenlabs.Config{APIKey: apiKey}), nil
+
+	switch providerName {
+	case "minimax":
+		apiKey, err := h.secretStore.Get(r.Context(), "tts.minimax.api_key")
+		if err != nil || apiKey == "" {
+			return nil, fmt.Errorf("MiniMax API key not found for tenant %s", tenantID)
+		}
+		apiBase, _ := h.secretStore.Get(r.Context(), "tts.minimax.api_base")
+		return minimax.NewVoiceLister(apiKey, apiBase, 15000, tenantID), nil
+
+	case "elevenlabs":
+		apiKey, err := h.secretStore.Get(r.Context(), "tts.elevenlabs.api_key")
+		if err != nil || apiKey == "" {
+			return nil, fmt.Errorf("ElevenLabs API key not found for tenant %s", tenantID)
+		}
+		return elevenlabs.NewTTSProvider(elevenlabs.Config{APIKey: apiKey}), nil
+
+	default:
+		return nil, fmt.Errorf("unsupported voice provider: %s", providerName)
+	}
 }

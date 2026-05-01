@@ -73,6 +73,8 @@ func init() {
 		MsgAlreadySummoning:      "agent đang được triệu hồi",
 		MsgSummoningUnavailable:  "triệu hồi không khả dụng",
 		MsgNoDescription:         "agent không có mô tả để triệu hồi lại",
+		MsgSummonCancelled:       "đã huỷ triệu hồi",
+		MsgCannotCancel:          "agent không trong trạng thái đang triệu hồi",
 		MsgInvalidPath:           "đường dẫn không hợp lệ",
 
 		// Tenant backup / restore
@@ -92,12 +94,12 @@ func init() {
 		MsgNotImplemented: "%s chưa được triển khai",
 
 		// Agent links
-		MsgLinksNotConfigured:   "liên kết agent chưa được cấu hình",
-		MsgInvalidDirection:     "hướng phải là outbound, inbound hoặc bidirectional",
-		MsgSourceTargetSame:     "nguồn và đích phải là các agent khác nhau",
-		MsgCannotDelegateOpen:   "không thể ủy quyền cho agent mở — chỉ agent định sẵn mới có thể là đích ủy quyền",
-		MsgNoUpdatesProvided:    "không có cập nhật nào được cung cấp",
-		MsgInvalidLinkStatus:    "trạng thái phải là active hoặc disabled",
+		MsgLinksNotConfigured: "liên kết agent chưa được cấu hình",
+		MsgInvalidDirection:   "hướng phải là outbound, inbound hoặc bidirectional",
+		MsgSourceTargetSame:   "nguồn và đích phải là các agent khác nhau",
+		MsgCannotDelegateOpen: "không thể ủy quyền cho agent mở — chỉ agent định sẵn mới có thể là đích ủy quyền",
+		MsgNoUpdatesProvided:  "không có cập nhật nào được cung cấp",
+		MsgInvalidLinkStatus:  "trạng thái phải là active hoặc disabled",
 
 		// Teams
 		MsgTeamsNotConfigured:   "nhóm chưa được cấu hình",
@@ -198,8 +200,15 @@ func init() {
 		MsgTenantScopeRequired: "cần xác định tenant để thực hiện thao tác này",
 
 		// TTS / Giọng đọc
-		MsgTtsUnknownModel:  "model tts không hỗ trợ: %s",
-		MsgVoicesListFailed: "không tải được danh sách giọng đọc: %s",
+		MsgTtsUnknownModel:       "model tts không hỗ trợ: %s",
+		MsgVoicesListFailed:      "không tải được danh sách giọng đọc: %s",
+		MsgTtsGeminiInvalidVoice: "giọng đọc Gemini không hợp lệ: %s",
+		MsgTtsGeminiSpeakerLimit: "Gemini TTS hỗ trợ tối đa 2 người nói",
+		MsgTtsGeminiInvalidModel:  "mô hình Gemini TTS không hợp lệ: %s",
+		MsgTtsGeminiTextOnly:      "Gemini từ chối tạo âm thanh. Vui lòng thử văn bản đơn giản hơn, không dịch hay bình luận.",
+		MsgTtsParamOutOfRange:     "tham số TTS %q có giá trị %v nằm ngoài phạm vi [%v, %v]",
+		MsgTtsParamUnknownKey:     "tham số TTS %q không được nhà cung cấp này hỗ trợ",
+		MsgTtsMiniMaxVoicesFailed: "không tải được danh sách giọng đọc MiniMax: %s",
 
 		// STT
 		MsgSTTAllProvidersFailed:     "Tất cả nhà cung cấp STT đều thất bại",
@@ -215,5 +224,8 @@ func init() {
 		MsgHookBudgetExceeded:          "tenant đã vượt ngân sách token cho hook",
 		MsgHookPerTurnCapReached:       "đã đạt giới hạn số lần gọi hook trong một lượt",
 		MsgHookBuiltinReadOnly:         "hook dựng sẵn chỉ cho phép bật/tắt, không thể chỉnh sửa",
+
+		// Message tool cross-target forward notice
+		MessageCrossTargetForwarded: "📤 Đã forward sang %s theo yêu cầu: %q",
 	})
 }

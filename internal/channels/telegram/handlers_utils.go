@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/mymmrac/telego"
@@ -18,6 +19,39 @@ func typingKeyFromIDs(localKey string, inboundMsgID int) string {
 		return localKey
 	}
 	return fmt.Sprintf("%s#%d", localKey, inboundMsgID)
+}
+
+// buildSelfIdentityPrompt returns a short system-prompt snippet telling the LLM
+// which Telegram handle represents itself, so it does not confuse its own
+// @mention for a different bot — especially useful in multi-bot groups where
+// other bots' mentions remain in the content after stripBotMention.
+// Returns empty string when the bot username has not been resolved yet.
+func buildSelfIdentityPrompt(botUsername, displayName string) string {
+	if botUsername == "" {
+		return ""
+	}
+	if displayName != "" {
+		return fmt.Sprintf("You are @%s (%s) on this Telegram channel.", botUsername, displayName)
+	}
+	return fmt.Sprintf("You are @%s on this Telegram channel.", botUsername)
+}
+
+// stripBotMention removes @botUsername tokens from text (case-insensitive).
+// Applied after the mention gate passes so the LLM does not see its own Telegram handle
+// and mistake itself for another bot (e.g. persona "Tiểu Hổ" receiving "@viet_super_bot vẽ...").
+//
+// Boundary rules match valid Telegram mentions:
+//   - Leading: start-of-string OR a non-word char (whitespace/punct). Prevents false strips
+//     inside words like "contact@viet_super_bot.com".
+//   - Trailing: \b (word-boundary). Prevents matching "@bot" inside "@bot_2".
+//
+// The leading non-word char is preserved via capture group $1.
+func stripBotMention(text, botUsername string) string {
+	if botUsername == "" || text == "" {
+		return text
+	}
+	pattern := `(?i)(^|[^\w])@` + regexp.QuoteMeta(botUsername) + `\b`
+	return strings.TrimSpace(regexp.MustCompile(pattern).ReplaceAllString(text, "$1"))
 }
 
 // detectMention checks if a Telegram message mentions the bot.

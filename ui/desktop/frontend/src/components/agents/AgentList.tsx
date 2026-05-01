@@ -11,7 +11,7 @@ import type { AgentData, AgentInput } from '../../types/agent'
 
 export function AgentList() {
   const { t } = useTranslation(['agents', 'common'])
-  const { agents, loading, atLimit, createAgent, updateAgent, deleteAgent, resummonAgent, fetchAgents } = useAgentCrud()
+  const { agents, loading, atLimit, createAgent, updateAgent, deleteAgent, resummonAgent, cancelSummonAgent, fetchAgents } = useAgentCrud()
   const setStoreAgents = useAgentStore((s) => s.setAgents)
 
   const [formOpen, setFormOpen] = useState(false)
@@ -140,6 +140,7 @@ export function AgentList() {
           agentId={summoningAgent.id}
           agentName={summoningAgent.name}
           onContinue={handleSummoningComplete}
+          onCancel={cancelSummonAgent}
         />
       )}
     </>

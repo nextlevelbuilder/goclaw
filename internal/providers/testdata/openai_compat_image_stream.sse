@@ -1,0 +1,9 @@
+data: {"choices":[{"delta":{"role":"assistant","content":"Here "},"finish_reason":null}]}
+
+data: {"choices":[{"delta":{"content":"is your image."},"finish_reason":null}]}
+
+data: {"choices":[{"delta":{"images":[{"type":"image_url","image_url":{"url":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"}}]},"finish_reason":null}]}
+
+data: {"choices":[{"delta":{},"finish_reason":"stop"}]}
+
+data: [DONE]

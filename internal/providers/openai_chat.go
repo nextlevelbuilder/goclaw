@@ -139,6 +139,22 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 			}
 		}
 
+		// Accumulate images from delta.images[].
+		// Each chunk may carry one or more image parts; we collect all into result.Images.
+		// Malformed data URLs are skipped with a warning — they don't abort the stream.
+		for _, img := range delta.Images {
+			mimeType, b64Data, err := parseDataURL(img.ImageURL.URL)
+			if err != nil {
+				slog.Warn("openai_stream: skipping malformed image data URL",
+					"type", img.Type, "url_len", len(img.ImageURL.URL), "error", err)
+				continue
+			}
+			result.Images = append(result.Images, ImageContent{
+				MimeType: mimeType,
+				Data:     b64Data,
+			})
+		}
+
 		// Accumulate streamed tool calls
 		for _, tc := range delta.ToolCalls {
 			acc, ok := accumulators[tc.Index]

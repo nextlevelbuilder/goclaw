@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"strconv"
 	"strings"
 	"time"
 
@@ -164,7 +166,10 @@ func (s *PGSessionStore) ListPagedRich(ctx context.Context, opts store.SessionLi
 		s.label, s.channel, s.user_id, COALESCE(s.metadata, '{}') AS metadata,
 		s.model, s.provider, s.input_tokens, s.output_tokens,
 		COALESCE(a.display_name, '') AS agent_name,
-		octet_length(s.messages::text) / 4 + 12000 AS estimated_tokens,
+		COALESCE(
+		  NULLIF(s.metadata->>'last_prompt_tokens', '')::int,
+		  octet_length(s.messages::text) / 4 + 12000
+		) AS estimated_tokens,
 		COALESCE(a.context_window, 200000) AS context_window,
 		s.compaction_count`
 
@@ -198,7 +203,19 @@ func (s *PGSessionStore) Save(ctx context.Context, key string) error {
 	msgs := make([]providers.Message, len(data.Messages))
 	copy(msgs, data.Messages)
 	snapshot.Messages = msgs
+	// Deep-copy Metadata under RLock so subsequent mutation does not race with
+	// concurrent readers holding data.Metadata via GetSessionMetadata.
+	metaCopy := make(map[string]string, len(data.Metadata)+2)
+	maps.Copy(metaCopy, data.Metadata)
+	snapshot.Metadata = metaCopy
 	s.mu.RUnlock()
+
+	// Persist adaptive-throttle numbers into metadata JSONB so list queries can
+	// read accurate token counts without a dedicated column.
+	if snapshot.LastPromptTokens > 0 {
+		snapshot.Metadata["last_prompt_tokens"] = strconv.Itoa(snapshot.LastPromptTokens)
+		snapshot.Metadata["last_message_count"] = strconv.Itoa(snapshot.LastMessageCount)
+	}
 
 	msgsJSON, _ := json.Marshal(snapshot.Messages)
 	metaJSON := []byte("{}")
@@ -352,6 +369,18 @@ func (s *PGSessionStore) loadFromDB(ctx context.Context, key string) *store.Sess
 		json.Unmarshal(*metaJSON, &meta)
 	}
 
+	// Restore adaptive-throttle fields from metadata so GetLastPromptTokens()
+	// returns the persisted value after a server restart (clean cache).
+	var lastPromptTokens, lastMessageCount int
+	if meta != nil {
+		if v := meta["last_prompt_tokens"]; v != "" {
+			lastPromptTokens, _ = strconv.Atoi(v)
+		}
+		if v := meta["last_message_count"]; v != "" {
+			lastMessageCount, _ = strconv.Atoi(v)
+		}
+	}
+
 	return &store.SessionData{
 		Key:                        sessionKey,
 		Messages:                   msgs,
@@ -373,6 +402,8 @@ func (s *PGSessionStore) loadFromDB(ctx context.Context, key string) *store.Sess
 		SpawnedBy:                  derefStr(spawnedBy),
 		SpawnDepth:                 spawnDepth,
 		Metadata:                   meta,
+		LastPromptTokens:           lastPromptTokens,
+		LastMessageCount:           lastMessageCount,
 	}
 }
 

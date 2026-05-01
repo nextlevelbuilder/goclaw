@@ -181,6 +181,7 @@ func syncBridgeToState(bridgeRS *runState, state *pipeline.RunState, action tool
 				ContentType: mr.ContentType,
 				Size:        mr.Size,
 				AsVoice:     mr.AsVoice,
+				Prompt:      mr.Prompt,
 			})
 		}
 	}
@@ -222,6 +223,7 @@ func makeToolEmitRun(l *Loop, req *RunRequest) func(AgentEvent) {
 	return func(event AgentEvent) {
 		event.RunKind = req.RunKind
 		event.SessionKey = req.SessionKey
+		event.SenderID = req.SenderID
 		event.UserID = req.UserID
 		event.Channel = req.Channel
 		l.emit(event)

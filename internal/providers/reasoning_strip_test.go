@@ -17,6 +17,7 @@ func TestResolveReasoningDecisionStripsForLeakyModels(t *testing.T) {
 		{"kimi k2 default off", "kimi-k2", true, "off"},
 		{"kimi thinking preview", "moonshot/kimi-k2-thinking", true, "off"},
 		{"deepseek reasoner", "deepseek-reasoner", true, "off"},
+		{"gemma 4 family", "google/gemma-4-27b-it", true, "off"},
 		{"deepseek chat not flagged", "deepseek-chat", false, "off"},
 		{"gpt-5.4 not flagged", "gpt-5.4", false, "off"},
 		{"empty model", "", false, "off"},
@@ -52,7 +53,7 @@ func TestResolveReasoningDecisionNoStripWhenEffortActive(t *testing.T) {
 
 // TestModelLeaksReasoning spot-checks the model allowlist directly.
 func TestModelLeaksReasoning(t *testing.T) {
-	leaky := []string{"kimi-k2", "KIMI-K2-Thinking", "deepseek-reasoner"}
+	leaky := []string{"kimi-k2", "KIMI-K2-Thinking", "deepseek-reasoner", "google/gemma-4-27b-it", "gemma4:8b-it-q4_K_M"}
 	for _, m := range leaky {
 		if !modelLeaksReasoning(m) {
 			t.Errorf("modelLeaksReasoning(%q) = false, want true", m)

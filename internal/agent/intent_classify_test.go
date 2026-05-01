@@ -227,3 +227,59 @@ func TestFormatStatusReply_WithStatus(t *testing.T) {
 		t.Error("expected non-empty reply with status")
 	}
 }
+
+// ─── IsExactCancelKeyword ─────────────────────────────────────────────────
+
+func TestIsExactCancelKeyword_ExactMatches(t *testing.T) {
+	cases := []string{"stop", "cancel", "abort", "thôi", "dừng", "hủy", "取消", "停", "nevermind", "never mind"}
+	for _, kw := range cases {
+		t.Run(kw, func(t *testing.T) {
+			if !IsExactCancelKeyword(kw) {
+				t.Errorf("%q should be recognized as cancel keyword", kw)
+			}
+		})
+	}
+}
+
+func TestIsExactCancelKeyword_CaseInsensitive(t *testing.T) {
+	cases := []string{"STOP", "Stop", "CANCEL", "Cancel", "ABORT", "Abort"}
+	for _, kw := range cases {
+		t.Run(kw, func(t *testing.T) {
+			if !IsExactCancelKeyword(kw) {
+				t.Errorf("%q should be recognized (case-insensitive)", kw)
+			}
+		})
+	}
+}
+
+func TestIsExactCancelKeyword_WithWhitespace(t *testing.T) {
+	cases := []string{"  stop  ", "\tstop\n", " cancel "}
+	for _, kw := range cases {
+		t.Run(kw, func(t *testing.T) {
+			if !IsExactCancelKeyword(kw) {
+				t.Errorf("%q should be recognized after trimming", kw)
+			}
+		})
+	}
+}
+
+func TestIsExactCancelKeyword_NonMatches(t *testing.T) {
+	cases := []string{
+		"stop now",           // not exact
+		"please stop",        // not exact
+		"nonstop",            // embedded
+		"stop it",            // not exact
+		"cancel the order",   // not exact
+		"don't stop",         // not exact
+		"",                   // empty
+		"hello",              // unrelated
+		"làm đơn giản thôi",  // contains "thôi" but not exact
+	}
+	for _, msg := range cases {
+		t.Run(msg, func(t *testing.T) {
+			if IsExactCancelKeyword(msg) {
+				t.Errorf("%q should NOT be recognized as cancel keyword", msg)
+			}
+		})
+	}
+}

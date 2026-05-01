@@ -32,7 +32,7 @@ func initGitHubInstaller() {
 		}
 	}
 	if v := os.Getenv("GOCLAW_PACKAGES_GITHUB_ALLOWED_ORGS"); v != "" {
-		for _, o := range strings.Split(v, ",") {
+		for o := range strings.SplitSeq(v, ",") {
 			if o = strings.TrimSpace(o); o != "" {
 				cfg.AllowedOrgs = append(cfg.AllowedOrgs, o)
 			}

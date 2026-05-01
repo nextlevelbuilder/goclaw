@@ -13,6 +13,11 @@ interface UserPickerComboboxProps {
   /** Filter by source: "contact" | "tenant_user" | undefined (both).
    *  Use "tenant_user" for merge dialogs and tenant user pickers. */
   source?: "contact" | "tenant_user";
+  /** Committed value shape. "user_id" (default) returns the human-facing user_id
+   *  string; "uuid" returns the tenant_user primary key UUID and is only useful
+   *  when the consumer forwards the value to a backend expecting a tenant_user
+   *  foreign key (e.g. contact merge's `tenant_user_id`). Requires `source="tenant_user"`. */
+  valueMode?: "user_id" | "uuid";
   /** Allow typing custom values not in the list. Default true. */
   allowCustom?: boolean;
   /** Render dropdown into a portal container (useful inside dialogs). */
@@ -38,10 +43,11 @@ export function UserPickerCombobox({
   className,
   peerKind,
   source,
+  valueMode,
   allowCustom = true,
   portalContainer,
 }: UserPickerComboboxProps) {
-  const { options } = useUserPicker(value, peerKind, source);
+  const { options } = useUserPicker(value, peerKind, source, valueMode);
 
   return (
     <Combobox

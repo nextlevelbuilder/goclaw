@@ -90,3 +90,4 @@ compose.d/*
 /.mise
 *.test
 goclaw-patched-linux-amd64
+ui/web/nginx.staging.conf

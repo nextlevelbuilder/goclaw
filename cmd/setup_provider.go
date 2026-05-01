@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
@@ -95,7 +94,7 @@ func addProvider() {
 	providerID, _ := resp["id"].(string)
 	fmt.Printf("  Provider %q created.\n", name)
 
-	// Auto-verify
+	// Auto-verify (ping mode — empty body)
 	if providerID != "" {
 		fmt.Print("  Verifying... ")
 		verifyResp, err := gatewayHTTPPost("/v1/providers/"+url.PathEscape(providerID)+"/verify", nil)
@@ -103,15 +102,13 @@ func addProvider() {
 			fmt.Printf("FAILED (%v)\n", err)
 			return
 		}
-		if ok, _ := verifyResp["success"].(bool); ok {
+		if valid, _ := verifyResp["valid"].(bool); valid {
 			fmt.Println("OK")
-			raw, _ := json.Marshal(verifyResp["models"])
-			var models []httpProviderModel
-			if json.Unmarshal(raw, &models) == nil {
-				fmt.Printf("  %d models available.\n", len(models))
-			}
 		} else {
 			msg, _ := verifyResp["error"].(string)
+			if msg == "" {
+				msg = "verification failed"
+			}
 			fmt.Printf("FAILED (%s)\n", msg)
 			fmt.Println("  You can update the API key later with 'goclaw providers update'.")
 		}

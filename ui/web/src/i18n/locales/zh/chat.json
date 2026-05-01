@@ -29,5 +29,6 @@
   "selectAgent": {
     "title": "选择Agent",
     "description": "选择Agent开始对话"
-  }
+  },
+  "imageGenDownloadName": "generated-{{timestamp}}.png"
 }

@@ -42,9 +42,10 @@ func GenerateCredentialContext(creds []store.SecureCLIBinary) string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString("### When a command is blocked:\n")
-	b.WriteString("Tell the user: \"This operation requires admin approval and cannot be performed automatically.\"\n")
-	b.WriteString("Do NOT attempt workarounds to bypass blocked commands.\n")
+	b.WriteString("### When a credentialed CLI command is blocked:\n")
+	b.WriteString("This section applies ONLY to commands that return a `[CREDENTIALED EXEC]` error.\n")
+	b.WriteString("Tell the user: \"This credentialed CLI operation is blocked by policy and may require admin approval.\"\n")
+	b.WriteString("Do NOT attempt workarounds to bypass blocked credentialed CLI commands.\n")
 	return b.String()
 }
 

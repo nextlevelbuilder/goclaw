@@ -124,7 +124,7 @@ Supported frontmatter fields:
 
 ## 5. Hash-Based Change Detection (UpsertSystemSkill)
 
-`UpsertSystemSkill` (`internal/store/pg/skills.go:410`) prevents unnecessary DB version bumps:
+`UpsertSystemSkill` (`internal/store/pg/`) prevents unnecessary DB version bumps:
 
 ```
 SELECT id, file_hash, file_path FROM skills WHERE slug = $1

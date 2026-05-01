@@ -119,6 +119,7 @@ func gatewayHTTPDoRaw(method, path string, body any) ([]byte, int, error) {
 		return nil, 0, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-GoClaw-User-Id", "system")
 	if token := resolveGatewayToken(); token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}

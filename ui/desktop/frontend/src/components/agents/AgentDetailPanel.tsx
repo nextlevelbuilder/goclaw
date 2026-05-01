@@ -18,9 +18,12 @@ import { AgentMcpSection } from './AgentMcpSection'
 import { AgentFilesTab } from './AgentFilesTab'
 import { VoicePicker } from './voice-picker'
 import { TtsEmptyState } from './tts-empty-state'
+import { TtsOverrideFineTune } from './tts-override-fine-tune'
+import type { ParamValue } from '../dynamic-param-form'
 import { ConfirmDialog } from '../common/ConfirmDialog'
 import { useAgentDetailState } from '../../hooks/use-agent-detail-state'
 import { useDesktopTtsConfig } from '../../hooks/use-tts-config'
+import { useTtsCapabilities } from '../../hooks/use-tts-capabilities'
 import type { AgentData } from '../../types/agent'
 import type { TtsProviderId } from '@/data/tts-providers'
 
@@ -43,24 +46,42 @@ export function AgentDetailPanel({ agent, onSave, onResummon, onClose }: AgentDe
   const ttsVoiceIdRef = useRef(ttsVoiceId)
   ttsVoiceIdRef.current = ttsVoiceId
 
-  // Wrap onSave to merge tts_voice_id into other_config at save time
+  // Per-agent TTS fine-tune params (generic keys: speed, emotion, style).
+  const [ttsParams, setTtsParams] = useState<Record<string, ParamValue>>(
+    (agent.other_config?.tts_params as Record<string, ParamValue>) ?? {},
+  )
+  const ttsParamsRef = useRef(ttsParams)
+  ttsParamsRef.current = ttsParams
+
+  // Wrap onSave to merge tts_voice_id + tts_params into other_config at save time.
   const onSaveWithVoice = useCallback(async (id: string, updates: Partial<AgentData>) => {
     const merged = { ...updates }
     const existing = (merged.other_config ?? {}) as Record<string, unknown>
     const voiceId = ttsVoiceIdRef.current
+    const params = ttsParamsRef.current
+    let cfg = { ...existing }
     if (voiceId) {
-      merged.other_config = { ...existing, tts_voice_id: voiceId }
+      cfg = { ...cfg, tts_voice_id: voiceId }
     } else {
-      const { tts_voice_id: _removed, ...rest } = existing
-      void _removed
-      merged.other_config = Object.keys(rest).length > 0 ? rest : null
+      const { tts_voice_id: _v, ...rest } = cfg
+      void _v
+      cfg = rest
     }
+    if (params && Object.keys(params).length > 0) {
+      cfg = { ...cfg, tts_params: params }
+    } else {
+      const { tts_params: _p, ...rest } = cfg
+      void _p
+      cfg = rest
+    }
+    merged.other_config = Object.keys(cfg).length > 0 ? cfg : null
     await onSave(id, merged)
   }, [onSave])
 
   const s = useAgentDetailState(agent, onSaveWithVoice, onClose)
   const isPredefined = agent.agent_type === 'predefined'
   const { globalProvider } = useDesktopTtsConfig()
+  const { data: allCaps } = useTtsCapabilities()
 
   const handleConfirmResummon = async () => {
     setConfirmResummon(false)
@@ -188,17 +209,28 @@ export function AgentDetailPanel({ agent, onSave, onResummon, onClose }: AgentDe
             <hr className="border-border" />
             <AgentMcpSection agentId={agent.id} />
             <hr className="border-border" />
-            {/* TTS Voice section — gated on global TTS provider being configured */}
+            {/* TTS Voice + Fine-tune section — gated on global TTS provider being configured */}
             <div className="space-y-2">
               <p className="text-xs font-semibold text-text-primary uppercase tracking-wide">
                 {t('tts:voice_label')}
               </p>
               {globalProvider ? (
-                <VoicePicker
-                  value={ttsVoiceId}
-                  onChange={setTtsVoiceId}
-                  provider={globalProvider as TtsProviderId}
-                />
+                <>
+                  <VoicePicker
+                    value={ttsVoiceId}
+                    onChange={setTtsVoiceId}
+                    provider={globalProvider as TtsProviderId}
+                  />
+                  {/* Fine-tune: per-agent overridable TTS params (Finding #9).
+                      agent_overridable_as in capabilities is the single source of truth
+                      for which params are shown and how generic↔native keys are mapped. */}
+                  <TtsOverrideFineTune
+                    globalProvider={globalProvider}
+                    allCaps={allCaps}
+                    ttsParams={ttsParams}
+                    onChange={setTtsParams}
+                  />
+                </>
               ) : (
                 <TtsEmptyState />
               )}

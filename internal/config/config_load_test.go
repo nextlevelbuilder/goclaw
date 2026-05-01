@@ -24,9 +24,7 @@ func TestDefault_SensibleDefaults(t *testing.T) {
 	if cfg.Agents.Defaults.MaxToolIterations != DefaultMaxIterations {
 		t.Fatalf("default max iterations: got %d", cfg.Agents.Defaults.MaxToolIterations)
 	}
-	if cfg.Tools.Web.DuckDuckGo.MaxResults != 5 {
-		t.Fatalf("default ddg max results: got %d", cfg.Tools.Web.DuckDuckGo.MaxResults)
-	}
+
 }
 
 // --- Load with missing file → uses defaults ---

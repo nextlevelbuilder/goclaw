@@ -73,6 +73,8 @@ func init() {
 		MsgAlreadySummoning:      "Agent正在被召唤中",
 		MsgSummoningUnavailable:  "召唤功能不可用",
 		MsgNoDescription:         "Agent没有可供重新召唤的描述",
+		MsgSummonCancelled:       "已取消召唤",
+		MsgCannotCancel:          "Agent 未处于召唤状态",
 		MsgInvalidPath:           "路径无效",
 
 		// Tenant backup / restore
@@ -92,12 +94,12 @@ func init() {
 		MsgNotImplemented: "%s 尚未实现",
 
 		// Agent links
-		MsgLinksNotConfigured:   "Agent链接未配置",
-		MsgInvalidDirection:     "方向必须是 outbound、inbound 或 bidirectional",
-		MsgSourceTargetSame:     "源和目标必须是不同的Agent",
-		MsgCannotDelegateOpen:   "无法委派给开放型Agent — 只有预定义Agent才能作为委派目标",
-		MsgNoUpdatesProvided:    "未提供更新内容",
-		MsgInvalidLinkStatus:    "状态必须是 active 或 disabled",
+		MsgLinksNotConfigured: "Agent链接未配置",
+		MsgInvalidDirection:   "方向必须是 outbound、inbound 或 bidirectional",
+		MsgSourceTargetSame:   "源和目标必须是不同的Agent",
+		MsgCannotDelegateOpen: "无法委派给开放型Agent — 只有预定义Agent才能作为委派目标",
+		MsgNoUpdatesProvided:  "未提供更新内容",
+		MsgInvalidLinkStatus:  "状态必须是 active 或 disabled",
 
 		// Teams
 		MsgTeamsNotConfigured:   "团队未配置",
@@ -198,8 +200,15 @@ func init() {
 		MsgTenantScopeRequired: "此操作需要指定租户范围",
 
 		// TTS / 声音
-		MsgTtsUnknownModel:  "未知的 tts 模型：%s",
-		MsgVoicesListFailed: "获取声音列表失败：%s",
+		MsgTtsUnknownModel:       "未知的 tts 模型：%s",
+		MsgVoicesListFailed:      "获取声音列表失败：%s",
+		MsgTtsGeminiInvalidVoice: "无效的 Gemini 声音：%s",
+		MsgTtsGeminiSpeakerLimit: "Gemini TTS 最多支持 2 位发言人",
+		MsgTtsGeminiInvalidModel:  "无效的 Gemini TTS 模型：%s",
+		MsgTtsGeminiTextOnly:      "Gemini 拒绝生成音频。请尝试更简单的文本，不要翻译或添加评论。",
+		MsgTtsParamOutOfRange:     "TTS 参数 %q 的值 %v 超出范围 [%v, %v]",
+		MsgTtsParamUnknownKey:     "TTS 参数 %q 不受此提供商支持",
+		MsgTtsMiniMaxVoicesFailed: "获取 MiniMax 声音列表失败：%s",
 
 		// STT
 		MsgSTTAllProvidersFailed:     "所有 STT 提供商均失败",
@@ -215,5 +224,8 @@ func init() {
 		MsgHookBudgetExceeded:          "租户钩子令牌预算已耗尽",
 		MsgHookPerTurnCapReached:       "单轮钩子调用次数已达上限",
 		MsgHookBuiltinReadOnly:         "内置钩子只读,仅允许切换启用状态",
+
+		// Message tool cross-target forward notice
+		MessageCrossTargetForwarded: "📤 已按请求转发至 %s:%q",
 	})
 }

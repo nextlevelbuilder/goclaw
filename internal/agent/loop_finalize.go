@@ -13,6 +13,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
 // isUserFilePopulated checks if USER.md has been filled with actual user data
@@ -42,6 +43,14 @@ func (l *Loop) finalizeRun(
 	hadBootstrap bool,
 	toolTiming ToolTimingMap,
 ) *RunResult {
+	// Extract MEDIA:<path> tokens the LLM echoed in its final response
+	// BEFORE sanitize strips them. Covers cases where a tool returned its
+	// artifact via the ForLLM MEDIA: prefix but the agent relayed it as plain
+	// text (e.g. PDF from exec/weasyprint, TTS mp3 paths the LLM quotes back).
+	if extracted := extractMediaFromContent(rs.finalContent, tools.ToolWorkspaceFromCtx(ctx)); len(extracted) > 0 {
+		rs.mediaResults = append(rs.mediaResults, extracted...)
+	}
+
 	// 5. Full sanitization pipeline (matching TS extractAssistantText + sanitizeUserFacingText)
 	rs.finalContent = SanitizeAssistantContent(rs.finalContent)
 

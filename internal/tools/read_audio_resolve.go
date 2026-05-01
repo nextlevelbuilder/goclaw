@@ -78,13 +78,28 @@ func (t *ReadAudioTool) callProvider(ctx context.Context, cp credentialProvider,
 	data, _ := params["data"].([]byte)
 	mime := GetParamString(params, "mime", "audio/mpeg")
 
-	// Provider-specific paths require API credentials; skip when cp is nil
-	// (e.g. OAuth-based providers that don't expose static keys).
+	// Provider-specific paths require API credentials. Fail-fast (no silent
+	// fallback to chat/completions) for any path we know won't work without
+	// keys: gemini File API, openai input_audio, and any transcription-named
+	// model under any ptype (e.g. openai_compat → DashScope qwen-audio).
 	ptype := GetParamString(params, "_provider_type", providerTypeFromName(providerName))
-	if cp == nil && (ptype == "gemini" || ptype == "openai") {
-		slog.Info("read_audio: no API credentials, falling back to Chat API", "provider", providerName)
+	if cp == nil && (ptype == "gemini" || ptype == "openai" || isTranscriptionModel(model)) {
+		return nil, nil, fmt.Errorf("read_audio: provider %q requires API credentials for model %q", providerName, model)
 	}
 	if cp != nil {
+		// Transcription models always go to /v1/audio/transcriptions regardless
+		// of ptype — orthogonal to chat-vs-input_audio routing. Covers both
+		// native openai (whisper-1, gpt-4o-transcribe) and openai_compat
+		// providers exposing a /v1/audio/transcriptions endpoint.
+		if isTranscriptionModel(model) {
+			slog.Info("read_audio: using openai transcription API", "provider", providerName, "model", model, "size", len(data), "mime", mime)
+			resp, err := openaiTranscriptionCall(ctx, cp.APIKey(), cp.APIBase(), model, data, mime)
+			if err != nil {
+				return nil, nil, fmt.Errorf("openai transcription call: %w", err)
+			}
+			return []byte(resp.Content), resp.Usage, nil
+		}
+
 		// Gemini: use File API (inlineData doesn't work for audio).
 		if ptype == "gemini" {
 			slog.Info("read_audio: using gemini file API", "provider", providerName, "model", model, "size", len(data), "mime", mime)
@@ -95,7 +110,7 @@ func (t *ReadAudioTool) callProvider(ctx context.Context, cp credentialProvider,
 			return []byte(resp.Content), resp.Usage, nil
 		}
 
-		// OpenAI: use input_audio content part (supports wav, mp3).
+		// Native OpenAI chat-audio (gpt-4o-audio-preview etc.): input_audio content part.
 		if ptype == "openai" {
 			slog.Info("read_audio: using openai input_audio API", "provider", providerName, "model", model, "size", len(data), "mime", mime)
 			resp, err := openaiAudioCall(ctx, cp.APIKey(), cp.APIBase(), model, prompt, data, mime)

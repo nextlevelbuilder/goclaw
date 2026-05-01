@@ -8,7 +8,7 @@ Extended thinking allows LLM providers to "think out loud" before producing a fi
 
 ## 1. Configuration
 
-The reusable default now lives on the provider in `settings.reasoning_defaults`. Agents consume that default by inheriting it, or store a custom override in `other_config.reasoning`. `thinking_level` remains the backward-compatible coarse shim for older builds.
+The reusable default now lives on the provider in `settings.reasoning_defaults`. Agents consume that default by inheriting it, or store a custom override in top-level `reasoning_config`. `thinking_level` remains the backward-compatible coarse shim for older builds.
 
 | Level | Behavior |
 |-------|----------|
@@ -35,10 +35,8 @@ The reusable default now lives on the provider in `settings.reasoning_defaults`.
 
 ```json
 {
-  "other_config": {
-    "reasoning": {
-      "override_mode": "inherit"
-    }
+  "reasoning_config": {
+    "override_mode": "inherit"
   }
 }
 ```
@@ -47,13 +45,11 @@ The reusable default now lives on the provider in `settings.reasoning_defaults`.
 
 ```json
 {
-  "other_config": {
-    "thinking_level": "high",
-    "reasoning": {
-      "override_mode": "custom",
-      "effort": "xhigh",
-      "fallback": "downgrade"
-    }
+  "thinking_level": "high",
+  "reasoning_config": {
+    "override_mode": "custom",
+    "effort": "xhigh",
+    "fallback": "downgrade"
   }
 }
 ```
@@ -61,11 +57,11 @@ The reusable default now lives on the provider in `settings.reasoning_defaults`.
 Rules:
 - Unset provider defaults and unset agent reasoning both resolve to `off`.
 - `settings.reasoning_defaults` is provider-owned and reusable across agents.
-- `reasoning.override_mode` accepts `inherit|custom`.
+- `reasoning_config.override_mode` accepts `inherit|custom`.
 - `thinking_level` still accepts `off|low|medium|high`.
-- `reasoning.effort` accepts `off|auto|none|minimal|low|medium|high|xhigh`.
-- `reasoning.fallback` accepts `downgrade|off|provider_default`.
-- Existing `reasoning` payloads without `override_mode` are treated as custom overrides for backward compatibility.
+- `reasoning_config.effort` accepts `off|auto|none|minimal|low|medium|high|xhigh`.
+- `reasoning_config.fallback` accepts `downgrade|off|provider_default`.
+- Existing legacy `other_config.reasoning` payloads without `override_mode` are treated as custom overrides for backward compatibility.
 - Read path resolves provider defaults first, then applies agent inherit/custom semantics, then falls back to legacy `thinking_level`.
 - Write path keeps a derived coarse `thinking_level` only for custom agent overrides so rollback to older GoClaw builds stays safe.
 
@@ -280,18 +276,13 @@ This makes silent downgrades or provider-default decisions visible in traces ins
 
 ## File Reference
 
-| File | Purpose |
-|------|---------|
-| `internal/providers/types.go` | ThinkingCapable interface, StreamChunk.Thinking field, Opt* thinking constants |
-| `internal/providers/anthropic.go` | Anthropic: budget mapping (4K/10K/32K), beta header injection, temperature stripping |
-| `internal/providers/anthropic_stream.go` | Anthropic streaming: thinking_delta handling, raw block accumulation |
-| `internal/providers/anthropic_request.go` | Anthropic request: thinking block preservation for tool loops |
-| `internal/providers/openai.go` | OpenAI-compat: reasoning_effort mapping, reasoning_content streaming |
-| `internal/providers/reasoning_capability.go` | Static GPT-5/Codex capability registry |
-| `internal/providers/reasoning_resolution.go` | Requested-to-effective reasoning decision engine |
-| `internal/providers/reasoning_observation.go` | Trace metadata merge helpers for reasoning decisions |
-| `internal/providers/dashscope.go` | DashScope: model-specific thinking guard, budget mapping, tools+streaming fallback |
-| `internal/providers/codex.go` | Codex: reasoning event streaming, OutputTokensDetails.ReasoningTokens tracking |
+| Module | Path | Purpose |
+|---|---|---|
+| Provider types & reasoning | `internal/providers/types.go`, `internal/providers/reasoning_capability.go`, `internal/providers/reasoning_resolution.go`, `internal/providers/reasoning_observation.go` | ThinkingCapable interface, GPT-5/Codex capability registry, reasoning decision engine, trace metadata |
+| Anthropic thinking | `internal/providers/anthropic.go`, `internal/providers/anthropic_stream.go`, `internal/providers/anthropic_request.go` | Budget mapping, beta header, thinking_delta streaming, block preservation for tool loops |
+| OpenAI-compat, DashScope & Codex | `internal/providers/openai.go`, `internal/providers/dashscope.go`, `internal/providers/codex.go` | Reasoning effort mapping, DashScope tools+streaming fallback, Codex reasoning event streaming |
+
+Use `grep` or your editor's symbol search for specific files.
 
 ---
 

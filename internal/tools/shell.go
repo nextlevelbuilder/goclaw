@@ -6,8 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
+	"os"
 	"os/exec"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 
@@ -41,6 +44,48 @@ type ExecTool struct {
 	approvalMgr      *ExecApprovalManager // nil = no approval needed
 	agentID          string               // for approval request context
 	secureCLIStore   store.SecureCLIStore // nil = no credentialed exec
+	// globalDenyGroups holds global shell deny-group toggles from config.tools.
+	// Per-agent overrides from context (store.WithShellDenyGroups) win per-key.
+	// Updated at startup and via TopicConfigChanged pub/sub for runtime reload.
+	globalDenyGroups map[string]bool
+}
+
+// SetGlobalShellDenyGroups replaces the global shell deny-group toggles. The
+// caller's map is defensively copied so later mutations cannot leak into the
+// tool's internal state. Passing nil or an empty map clears the global config
+// (per-agent context overrides, if any, still apply on their own).
+func (t *ExecTool) SetGlobalShellDenyGroups(groups map[string]bool) {
+	if len(groups) == 0 {
+		t.globalDenyGroups = nil
+		return
+	}
+	cp := make(map[string]bool, len(groups))
+	maps.Copy(cp, groups)
+	t.globalDenyGroups = cp
+}
+
+// effectiveDenyGroups merges the per-agent context override with the global
+// config. Precedence: per-agent context (per-key) > global. When one side is
+// empty, the other is returned directly (no allocation).
+func (t *ExecTool) effectiveDenyGroups(ctx context.Context) map[string]bool {
+	agent := store.ShellDenyGroupsFromContext(ctx)
+	if len(t.globalDenyGroups) == 0 {
+		return agent
+	}
+	if len(agent) == 0 {
+		return t.globalDenyGroups
+	}
+	merged := make(map[string]bool, len(t.globalDenyGroups)+len(agent))
+	maps.Copy(merged, t.globalDenyGroups)
+	// agent wins per-key
+	maps.Copy(merged, agent)
+	return merged
+}
+
+// EffectiveDenyGroupsForTest exposes effectiveDenyGroups for cross-package tests
+// (e.g. cmd pub/sub regression). Not for production callers.
+func (t *ExecTool) EffectiveDenyGroupsForTest(ctx context.Context) map[string]bool {
+	return t.effectiveDenyGroups(ctx)
 }
 
 // NewExecTool creates an exec tool that runs commands directly on the host.
@@ -109,6 +154,13 @@ func (t *ExecTool) SetSecureCLIStore(s store.SecureCLIStore) {
 	t.secureCLIStore = s
 }
 
+// HasSecureCLIStore reports whether a credential store is wired.
+// Intended for wiring-check tests that verify subagent ExecTools also enforce
+// the secure-CLI gate (Red Team F3).
+func (t *ExecTool) HasSecureCLIStore() bool {
+	return t.secureCLIStore != nil
+}
+
 func (t *ExecTool) Name() string        { return "exec" }
 func (t *ExecTool) Description() string { return "Execute a shell command and return its output" }
 func (t *ExecTool) Parameters() map[string]any {
@@ -143,8 +195,9 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 	// Unicode-based pattern bypass while preserving functional command content.
 	normalizedCommand := normalizeCommand(command)
 
-	// Resolve deny patterns: per-agent overrides from context, fallback to all defaults.
-	denyOverrides := store.ShellDenyGroupsFromContext(ctx)
+	// Resolve deny patterns: merge per-agent context overrides with global
+	// config (per-key agent precedence), fallback to all registry defaults.
+	denyOverrides := t.effectiveDenyGroups(ctx)
 	groupPatterns := ResolveDenyPatterns(denyOverrides)
 
 	// Also resolve package_install patterns separately for approval routing.
@@ -244,6 +297,45 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 		return t.executeCredentialed(ctx, cred, binary, cmdArgs, cwd, sandboxKey, command)
 	}
 
+	// Secure CLI gate: registered-but-not-granted binaries MUST NOT fall through
+	// to host exec with parent env. Works on the already-normalized command
+	// (Red Team F6) and unwraps shell wrappers up to depth 3 (Red Team F1).
+	// Fails CLOSED on DB error (Red Team F7).
+	if t.secureCLIStore != nil {
+		candidates, tooDeep := collectGateCandidates(normalizedCommand)
+		if tooDeep {
+			slog.Warn("security.credentialed_binary_wrapper_too_deep",
+				"command", truncateCmd(normalizedCommand, 80),
+				"agent_id", store.AgentIDFromContext(ctx))
+			return ErrorResult("Command nesting too deep (>3 shell wrappers). This looks adversarial; if legitimate, flatten the command.")
+		}
+		for _, c := range candidates {
+			if c.binary == "" {
+				continue
+			}
+			gctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+			registered, rerr := t.secureCLIStore.IsRegisteredBinary(gctx, c.binary)
+			cancel()
+			if rerr != nil {
+				slog.Warn("security.credentialed_binary_gate_error",
+					"binary", c.binary, "error", rerr,
+					"agent_id", store.AgentIDFromContext(ctx))
+				return ErrorResult("Secure CLI gate temporarily unavailable. Retry in a moment.")
+			}
+			if registered {
+				slog.Warn("security.credentialed_binary_denied",
+					"binary", c.binary,
+					"wrapper", c.wrapper,
+					"agent_id", store.AgentIDFromContext(ctx),
+					"tenant_id", store.TenantIDFromContext(ctx),
+					"command_prefix", truncateCmd(normalizedCommand, 80))
+				return ErrorResult(fmt.Sprintf(
+					"Binary %q requires a secure CLI grant. Ask admin to grant access to this agent.",
+					c.binary))
+			}
+		}
+	}
+
 	// Exec approval check (matching TS exec-approval.ts pipeline)
 	if t.approvalMgr != nil {
 		switch t.approvalMgr.CheckCommand(command) {
@@ -275,7 +367,12 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 			if wsBase == "" {
 				wsBase = t.workspace
 			}
-			allowed := allowedWithTeamWorkspace(ctx, nil)
+			// Shell is an arbitrary executor — a cross-chat cwd would let the
+			// command mutate files in another chat's workspace. Enforce the
+			// stricter write-allowed prefixes (team root excluded) to block
+			// cross-chat cwd even for "read-only" commands like cat, since we
+			// cannot prove the shell command will not write.
+			allowed := allowedWriteWithTeamWorkspace(ctx, nil)
 			resolved, err := resolvePathWithAllowed(wd, wsBase, true, allowed)
 			if err != nil {
 				return ErrorResult(err.Error())
@@ -315,8 +412,25 @@ func (t *ExecTool) executeOnHost(ctx context.Context, command, cwd string) *Resu
 
 	// Use plain exec.Command (not CommandContext) so we control the kill sequence.
 	// CommandContext would SIGKILL only the direct child, leaving forked grandchildren alive.
-	cmd := exec.Command("sh", "-c", command)
+	// Route through the platform shell: cmd.exe on Windows, sh on POSIX.
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.Command("cmd", "/C", command)
+	} else {
+		cmd = exec.Command("sh", "-c", command)
+	}
 	cmd.Dir = cwd
+
+	// Scrub credential env vars so fall-through exec cannot exfiltrate
+	// host secrets (Red Team F4). Uses static deny list + dynamic keys
+	// discovered from any registered secure-cli binary for this tenant.
+	var dynKeys []string
+	if t.secureCLIStore != nil {
+		dynKeys = t.credentialEnvKeys(ctx)
+	} else {
+		dynKeys = staticCredentialEnvKeys
+	}
+	cmd.Env = scrubCredentialEnv(os.Environ(), dynKeys)
 
 	// Place the child in its own process group so killProcessGroup(-pgid, sig)
 	// reaches the shell and all of its forked children.

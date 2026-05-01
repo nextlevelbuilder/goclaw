@@ -180,9 +180,9 @@ func TestGetPosts_ErrorResponse(t *testing.T) {
 func TestConfigParsing_CommentReplyOptions(t *testing.T) {
 	raw := `{
 		"page_id": "123",
-		"features": {"comment_reply": true, "first_inbox": true},
+		"features": {"comment_reply": true, "private_reply": true},
 		"comment_reply_options": {"filter": "keyword", "keywords": ["price", "buy"]},
-		"first_inbox_message": "Thanks!",
+		"private_reply_message": "Thanks!",
 		"post_context_cache_ttl": "30m"
 	}`
 
@@ -191,8 +191,8 @@ func TestConfigParsing_CommentReplyOptions(t *testing.T) {
 		t.Fatalf("unmarshal: %v", err)
 	}
 
-	if !cfg.Features.FirstInbox {
-		t.Error("Features.FirstInbox should be true")
+	if !cfg.Features.PrivateReply {
+		t.Error("Features.PrivateReply should be true")
 	}
 	if cfg.CommentReplyOptions.Filter != "keyword" {
 		t.Errorf("Filter = %q, want %q", cfg.CommentReplyOptions.Filter, "keyword")
@@ -202,11 +202,67 @@ func TestConfigParsing_CommentReplyOptions(t *testing.T) {
 		cfg.CommentReplyOptions.Keywords[1] != "buy" {
 		t.Errorf("Keywords = %v, want [price buy]", cfg.CommentReplyOptions.Keywords)
 	}
-	if cfg.FirstInboxMessage != "Thanks!" {
-		t.Errorf("FirstInboxMessage = %q, want %q", cfg.FirstInboxMessage, "Thanks!")
+	if cfg.PrivateReplyMessage != "Thanks!" {
+		t.Errorf("PrivateReplyMessage = %q, want %q", cfg.PrivateReplyMessage, "Thanks!")
 	}
 	if cfg.PostContextCacheTTL != "30m" {
 		t.Errorf("PostContextCacheTTL = %q, want %q", cfg.PostContextCacheTTL, "30m")
+	}
+}
+
+func TestPancakeConfig_AutoReactOptionsRoundtrip(t *testing.T) {
+	src := `{
+	  "page_id": "123",
+	  "platform": "facebook",
+	  "features": {"auto_react": true},
+	  "auto_react_options": {
+	    "allow_post_ids": ["post-1", "post-2"],
+	    "deny_post_ids": ["post-3"],
+	    "allow_user_ids": ["user-a"],
+	    "deny_user_ids": ["user-b", "user-c"]
+	  }
+	}`
+	var cfg pancakeInstanceConfig
+	if err := json.Unmarshal([]byte(src), &cfg); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if cfg.AutoReactOptions == nil {
+		t.Fatal("AutoReactOptions should be non-nil when JSON has auto_react_options")
+	}
+	if len(cfg.AutoReactOptions.AllowPostIDs) != 2 {
+		t.Errorf("AllowPostIDs len = %d, want 2", len(cfg.AutoReactOptions.AllowPostIDs))
+	}
+	if cfg.AutoReactOptions.DenyPostIDs[0] != "post-3" {
+		t.Errorf("DenyPostIDs[0] = %q, want post-3", cfg.AutoReactOptions.DenyPostIDs[0])
+	}
+	if len(cfg.AutoReactOptions.DenyUserIDs) != 2 {
+		t.Errorf("DenyUserIDs len = %d, want 2", len(cfg.AutoReactOptions.DenyUserIDs))
+	}
+	if cfg.AutoReactOptions.AllowUserIDs[0] != "user-a" {
+		t.Errorf("AllowUserIDs[0] = %q, want user-a", cfg.AutoReactOptions.AllowUserIDs[0])
+	}
+}
+
+func TestPancakeConfig_AutoReactOptionsOmitempty(t *testing.T) {
+	var cfg pancakeInstanceConfig
+	cfg.PageID = "123"
+	b, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(b), "auto_react_options") {
+		t.Errorf("empty AutoReactOptions should be omitted, got: %s", b)
+	}
+}
+
+func TestPancakeConfig_AutoReactOptionsDefaultsEmpty(t *testing.T) {
+	src := `{"page_id": "123"}`
+	var cfg pancakeInstanceConfig
+	if err := json.Unmarshal([]byte(src), &cfg); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if cfg.AutoReactOptions != nil {
+		t.Errorf("AutoReactOptions should be nil when absent, got %+v", cfg.AutoReactOptions)
 	}
 }
 
@@ -218,14 +274,14 @@ func TestConfigParsing_Defaults(t *testing.T) {
 		t.Fatalf("unmarshal: %v", err)
 	}
 
-	if cfg.Features.FirstInbox {
-		t.Error("Features.FirstInbox should default to false")
+	if cfg.Features.PrivateReply {
+		t.Error("Features.PrivateReply should default to false")
 	}
 	if cfg.CommentReplyOptions.Filter != "" {
 		t.Errorf("CommentReplyOptions.Filter should default to empty, got %q", cfg.CommentReplyOptions.Filter)
 	}
-	if cfg.FirstInboxMessage != "" {
-		t.Errorf("FirstInboxMessage should default to empty, got %q", cfg.FirstInboxMessage)
+	if cfg.PrivateReplyMessage != "" {
+		t.Errorf("PrivateReplyMessage should default to empty, got %q", cfg.PrivateReplyMessage)
 	}
 }
 
@@ -314,5 +370,49 @@ func TestReactComment_RejectsInvalidIDs(t *testing.T) {
 		if err := client.ReactComment(context.Background(), c.conv, c.msg); err == nil {
 			t.Errorf("expected error for conv=%q msg=%q, got nil", c.conv, c.msg)
 		}
+	}
+}
+
+// --- Accept Header Tests (Shopee support) ---
+
+// TestNewPageRequest_SetsAcceptJSONHeader verifies the Pancake GET negotiation fix:
+// without Accept: application/json, Pancake returns SPA HTML for Shopee endpoints.
+func TestNewPageRequest_SetsAcceptJSONHeader(t *testing.T) {
+	client := NewAPIClient("user-token", "page-token", "spo_25409726")
+	req, err := client.newPageRequest(context.Background(), http.MethodGet,
+		"https://pages.fm/api/public_api/v2/pages/spo_25409726/conversations", nil)
+	if err != nil {
+		t.Fatalf("newPageRequest: %v", err)
+	}
+	if got := req.Header.Get("Accept"); got != "application/json" {
+		t.Fatalf("Accept header = %q, want %q", got, "application/json")
+	}
+	if got := req.Header.Get("Authorization"); got != "Bearer page-token" {
+		t.Fatalf("Authorization header = %q, want %q", got, "Bearer page-token")
+	}
+}
+
+// TestGetPage_SetsAcceptJSONHeader — C2 guard. GetPage bypasses newPageRequest
+// (it builds its own http.NewRequestWithContext for the user-API /pages endpoint).
+// Without this header, startup auto-detect receives SPA HTML for Shopee pages.
+func TestGetPage_SetsAcceptJSONHeader(t *testing.T) {
+	transport := &captureTransport{
+		resp: &http.Response{
+			StatusCode: 200,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"data":[]}`)),
+		},
+	}
+	client := NewAPIClient("user-token", "page-token", "spo_25409726")
+	client.httpClient = &http.Client{Transport: transport}
+
+	if _, err := client.GetPage(context.Background()); err != nil {
+		t.Fatalf("GetPage: %v", err)
+	}
+	if transport.req == nil {
+		t.Fatal("expected request to be captured")
+	}
+	if got := transport.req.Header.Get("Accept"); got != "application/json" {
+		t.Fatalf("Accept header on GetPage = %q, want %q", got, "application/json")
 	}
 }

@@ -31,8 +31,11 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 	}
 
 	ctx := context.Background()
-	if ta, ok := ch.(interface{ TenantID() uuid.UUID }); ok {
-		ctx = store.WithTenantID(ctx, ta.TenantID())
+	// Use RunContext's TenantID directly (set at RegisterRun time from channel instance)
+	// rather than querying the channel interface - more direct and future-proof for
+	// channels that might serve multiple tenants.
+	if rc.TenantID != uuid.Nil {
+		ctx = store.WithTenantID(ctx, rc.TenantID)
 	}
 
 	// Forward to StreamingChannel (only when streaming is enabled for this run).
@@ -111,6 +114,7 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 					ChatID:   rc.ChatID,
 					Content:  statusText,
 					Metadata: outMeta,
+					TenantID: rc.TenantID,
 				})
 			}
 		case protocol.ChatEventChunk:
@@ -230,8 +234,27 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 				}
 				sc.FinalizeStream(ctx, rc.ChatID, currentStream)
 			}
-		case protocol.AgentEventRunFailed, protocol.AgentEventRunCancelled:
-			// Clean up streaming state on failure or cancellation
+		case protocol.AgentEventRunFailed:
+			// Clean up streaming state on failure
+			rc.mu.Lock()
+			currentStream := rc.stream
+			rc.stream = nil
+			rc.mu.Unlock()
+			if currentStream != nil {
+				_ = currentStream.Stop(ctx)
+			}
+			// Issue 958: Send user-friendly error message instead of silent "..."
+			errStr := extractPayloadString(payload, "error")
+			if friendlyMsg := FormatAgentError(errStr); friendlyMsg != "" {
+				m.bus.PublishOutbound(bus.OutboundMessage{
+					Channel:  rc.ChannelName,
+					ChatID:   rc.ChatID,
+					Content:  friendlyMsg,
+					TenantID: rc.TenantID,
+				})
+			}
+		case protocol.AgentEventRunCancelled:
+			// Clean up streaming state on cancellation
 			rc.mu.Lock()
 			currentStream := rc.stream
 			rc.stream = nil
@@ -283,6 +306,7 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 			ChatID:   rc.ChatID,
 			Content:  content,
 			Metadata: outMeta,
+			TenantID: rc.TenantID,
 		})
 		return
 	}
@@ -293,9 +317,10 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 		maxAttempts := extractPayloadString(payload, "maxAttempts")
 		retryMsg := fmt.Sprintf("Provider busy, retrying... (%s/%s)", attempt, maxAttempts)
 		m.bus.PublishOutbound(bus.OutboundMessage{
-			Channel: rc.ChannelName,
-			ChatID:  rc.ChatID,
-			Content: retryMsg,
+			Channel:  rc.ChannelName,
+			ChatID:   rc.ChatID,
+			Content:  retryMsg,
+			TenantID: rc.TenantID,
 			Metadata: map[string]string{
 				"placeholder_update": "true",
 			},

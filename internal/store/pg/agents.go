@@ -609,6 +609,18 @@ func joinStrings(s []string, sep string) string {
 	return result.String()
 }
 
+// ResetStuckSummoning flips rows with status='summoning' to 'summon_failed'.
+// Called at startup to recover from crashes where summon goroutines died mid-flight.
+func (s *PGAgentStore) ResetStuckSummoning(ctx context.Context) (int64, error) {
+	const q = `UPDATE agents SET status = $1 WHERE status = $2`
+	res, err := s.db.ExecContext(ctx, q, store.AgentStatusSummonFailed, store.AgentStatusSummoning)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
 func replaceIDX(s, replacement string) string {
 	var result strings.Builder
 	for i := 0; i < len(s); i++ {

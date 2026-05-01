@@ -43,11 +43,14 @@ jobs:
       - run: go build ./...
       - run: go build -tags sqliteonly ./...
       - run: go vet ./...
-      # -timeout=90s caps each test binary so a deadlocked test fails fast
-      # instead of blocking CI for the 10-minute default. Race-heavy wave C
-      # suites run in <20s, so 90s leaves ample breathing room.
+      # -timeout=5m caps each test binary so a deadlocked test fails fast
+      # instead of blocking CI for the 10-minute default. Bumped from 90s
+      # because real 1s retry backoffs in HTTPHandler and goja memory-bomb
+      # sandbox tests push the internal/hooks/handlers binary past 90s
+      # under -race -coverpkg=./...  Followup: make handler backoff
+      # configurable so tests can use ms-scale delays.
       - name: Unit tests
-        run: go test -race -timeout=90s -coverpkg=./... -coverprofile=coverage.out ./...
+        run: go test -race -timeout=5m -coverpkg=./... -coverprofile=coverage.out ./...
       # Invariant tests (P0) - tenant isolation, permission enforcement
       # These run against real DB and MUST pass for merge.
       - name: Invariant tests (P0)

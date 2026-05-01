@@ -100,6 +100,22 @@ func (p *OpenAIProvider) parseResponse(resp *openAIResponse) *ChatResponse {
 		if len(result.ToolCalls) > 0 && result.FinishReason != "length" {
 			result.FinishReason = "tool_calls"
 		}
+
+		// Decode images[] from the response message into ChatResponse.Images.
+		// Each entry carries a data URL (data:<mime>;base64,<b64>).
+		// Malformed entries are skipped with a warning to avoid crashing on partial responses.
+		for _, img := range msg.Images {
+			mimeType, b64Data, err := parseDataURL(img.ImageURL.URL)
+			if err != nil {
+				slog.Warn("openai: skipping malformed image data URL",
+					"type", img.Type, "url_len", len(img.ImageURL.URL), "error", err)
+				continue
+			}
+			result.Images = append(result.Images, ImageContent{
+				MimeType: mimeType,
+				Data:     b64Data,
+			})
+		}
 	}
 
 	if resp.Usage != nil {

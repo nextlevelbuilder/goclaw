@@ -27,7 +27,7 @@ const (
 func NewDefaultTransport() *http.Transport {
 	return &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
-		ResponseHeaderTimeout: 60 * time.Second, // wait for first byte of response
+		ResponseHeaderTimeout: 180 * time.Second, // wait for first byte of response (3min for slow providers)
 		IdleConnTimeout:       90 * time.Second, // close idle keep-alive connections
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,

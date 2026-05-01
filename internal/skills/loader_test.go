@@ -567,6 +567,95 @@ func TestLoader_ManagedSkills_WorkspaceTakesPriority(t *testing.T) {
 
 // --- Dirs ---
 
+func TestParseSimpleYAMLLists(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		key     string
+		want    []string
+	}{
+		{
+			name: "deps list",
+			content: `name: test
+deps:
+  - pip:psycopg2-binary
+  - system:ffmpeg
+`,
+			key:  "deps",
+			want: []string{"pip:psycopg2-binary", "system:ffmpeg"},
+		},
+		{
+			name: "quoted items",
+			content: `deps:
+  - "pip:requests"
+  - 'npm:typescript'
+`,
+			key:  "deps",
+			want: []string{"pip:requests", "npm:typescript"},
+		},
+		{
+			name: "empty key",
+			content: `name: test
+description: plain
+`,
+			key:  "deps",
+			want: nil,
+		},
+		{
+			name: "crlf",
+			content: "deps:\r\n  - pip:a\r\n  - pip:b\r\n",
+			key:    "deps",
+			want:   []string{"pip:a", "pip:b"},
+		},
+		{
+			name: "scalar skipped",
+			content: `deps: inline
+other:
+  - x
+`,
+			key:  "deps",
+			want: nil,
+		},
+		{
+			name: "multiple keys",
+			content: `deps:
+  - pip:a
+exclude_deps:
+  - pip:b
+`,
+			key:  "exclude_deps",
+			want: []string{"pip:b"},
+		},
+		{
+			// H2 regression: nested-map under tracked key must drop the key to
+			// avoid silent prefix-loss ("pip:" stripped → miscategorized as system).
+			name: "nested_map_dropped",
+			content: `deps:
+  pip:
+    - requests
+  system:
+    - ffmpeg
+`,
+			key:  "deps",
+			want: nil,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := parseSimpleYAMLLists(tc.content)
+			gv := got[tc.key]
+			if len(gv) != len(tc.want) {
+				t.Fatalf("len = %d, want %d; got=%v", len(gv), len(tc.want), gv)
+			}
+			for i, v := range gv {
+				if v != tc.want[i] {
+					t.Errorf("[%d] = %q, want %q", i, v, tc.want[i])
+				}
+			}
+		})
+	}
+}
+
 func TestLoader_Dirs(t *testing.T) {
 	ws := t.TempDir()
 	global := t.TempDir()

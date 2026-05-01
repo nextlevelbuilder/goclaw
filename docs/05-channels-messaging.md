@@ -319,7 +319,7 @@ All channel factories accept `audioMgr *audio.Manager`:
 - Feishu: `FactoryWithStoresAndAudio(..., audioMgr)`
 - WhatsApp: `FactoryWithDBAudio(..., audioMgr, builtinToolStore)`
 
-WhatsApp additionally accepts `builtinToolStore store.BuiltinToolStore` to fetch the per-message `whatsapp_enabled` opt-in flag. Wiring in `cmd/gateway_channels_setup.go:77` + `cmd/gateway.go:433`.
+WhatsApp additionally accepts `builtinToolStore store.BuiltinToolStore` to fetch the per-message `whatsapp_enabled` opt-in flag. Wiring is in `cmd/gateway_channels_setup.go` and `cmd/gateway.go`.
 
 ### Bot Commands
 
@@ -676,45 +676,14 @@ flowchart TD
 
 ## File Reference
 
-| File | Purpose |
-|------|---------|
-| `internal/channels/channel.go` | Channel interface, BaseChannel, extended interfaces, HandleMessage, Type() method |
-| `internal/channels/manager.go` | Manager: registration, StartAll, StopAll, channel lifecycle, webhook collection |
-| `internal/channels/dispatch.go` | Outbound message dispatcher, send error formatting |
-| `internal/channels/instance_loader.go` | DB-based channel instance loading |
-| `internal/channels/telegram/channel.go` | Telegram core: long polling, mention gating, typing indicators |
-| `internal/channels/telegram/handlers.go` | Message handling, media processing, forum topic detection |
-| `internal/channels/telegram/topic_config.go` | Per-topic config layering and resolution |
-| `internal/channels/telegram/commands.go` | Bot commands: /stop, /reset, /tasks, /addwriter, etc. |
-| `internal/channels/telegram/factory.go` | Channel factory with audio.Manager wiring |
-| `internal/channels/telegram/stream.go` | Streaming placeholder management |
-| `internal/channels/telegram/reactions.go` | Status reactions on messages |
-| `internal/channels/telegram/format.go` | Markdown → Telegram HTML pipeline, table rendering |
-| `internal/channels/feishu/feishu.go` | Feishu core: WS/Webhook modes, config, reactions |
-| `internal/channels/feishu/larkclient_messaging.go` | Streaming card create/update/close, message sending |
-| `internal/channels/feishu/media.go` | Media upload/download, type detection |
-| `internal/channels/feishu/bot_parse.go` | Mention resolution, message event parsing |
-| `internal/channels/feishu/bot.go` | Bot message handlers |
-| `internal/channels/feishu/bot_policy.go` | Policy evaluation |
-| `internal/channels/discord/discord.go` | Discord: gateway setup, session management, lifecycle |
-| `internal/channels/discord/handler.go` | Message handling, typing indicators, placeholder management |
-| `internal/channels/slack/channel.go` | Slack: Socket Mode, mention gating, thread caching, streaming |
-| `internal/channels/slack/handlers.go` | Message and event handling, pairing, group policy |
-| `internal/channels/slack/format.go` | Markdown → Slack mrkdwn pipeline |
-| `internal/channels/slack/reactions.go` | Status emoji reactions on messages |
-| `internal/channels/slack/stream.go` | Streaming message updates via placeholder editing |
-| `internal/channels/whatsapp/whatsapp.go` | WhatsApp: direct protocol client, QR auth, database persistence |
-| `internal/channels/whatsapp/factory.go` | Channel factory with audio.Manager and builtin-tool store wiring |
-| `internal/channels/whatsapp/stt.go` | Voice transcription with opt-in setting and E2E fallback |
-| `internal/channels/whatsapp/qr_methods.go` | QR code generation and authentication flow |
-| `internal/channels/whatsapp/format.go` | Message formatting (HTML-to-WhatsApp) |
-| `internal/channels/zalo/zalo.go` | Zalo OA: Bot API, long polling |
-| `internal/channels/zalo/personal/channel.go` | Zalo Personal: reverse-engineered protocol |
-| `internal/audio/manager.go` | Audio manager: providers registry, lifecycle |
-| `internal/audio/manager_stt.go` | STT chain resolution, Transcribe() entry point |
-| `internal/audio/legacy_stt_bridge.go` | Backward-compat bridge for legacy STTProxyURL configs |
-| `internal/store/pg/pairing.go` | Pairing: code generation, approval, persistence (database-backed) |
-| `cmd/gateway_consumer.go` | Message routing: prefixes, cancel interception |
+| Module | Path | Purpose |
+|---|---|---|
+| Channel core | `internal/channels/` | `Channel` interface, `BaseChannel`, `Manager` (StartAll/StopAll), outbound dispatcher, DB instance loader |
+| Platform adapters | `internal/channels/{telegram,feishu,discord,slack,whatsapp,zalo}/` | Per-platform: message handling, formatting, streaming, reactions, media, pairing |
+| Audio / STT | `internal/audio/` | Audio manager, STT chain resolution, legacy STT bridge |
+| Pairing & routing | `internal/store/pg/pairing.go`, `cmd/gateway_consumer.go` | Pairing code persistence, inbound message routing and cancel interception |
+
+Use `grep` or your editor's symbol search for specific files.
 
 ---
 

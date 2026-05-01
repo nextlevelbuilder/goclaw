@@ -6,12 +6,58 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/mymmrac/telego"
 	tu "github.com/mymmrac/telego/telegoutil"
 
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
+
+// writersSelfHealTTL gates repeated enrichment attempts for the same
+// (chatID,userID). Users who left the group will fail indefinitely; without
+// the TTL every /writers call would hammer the Telegram API.
+const writersSelfHealTTL = 5 * time.Minute
+
+// writersSelfHealMaxPerCall caps the number of async enrichment goroutines
+// spawned per /writers invocation so a group with many legacy rows can't
+// burst-spam the bot API.
+const writersSelfHealMaxPerCall = 5
+
+// writerHealCacheMax caps the writerHealLastTry map so a long-lived bot
+// accumulating entries across thousands of groups/users cannot grow the
+// map unboundedly. When the cap is hit we prune any entry whose last
+// attempt is older than 2×TTL — those would be eligible for retry anyway.
+const writerHealCacheMax = 1000
+
+// shouldTrySelfHeal returns true if no healing has been attempted for this
+// (chatID,userID) within the TTL window. On return=true the timestamp is
+// updated immediately so concurrent callers don't duplicate work.
+func (c *Channel) shouldTrySelfHeal(key string) bool {
+	c.writerHealMu.Lock()
+	defer c.writerHealMu.Unlock()
+	if c.writerHealLastTry == nil {
+		c.writerHealLastTry = make(map[string]time.Time)
+	}
+	if last, ok := c.writerHealLastTry[key]; ok && time.Since(last) < writersSelfHealTTL {
+		return false
+	}
+	// Opportunistic prune once the map gets large: drop entries whose last
+	// attempt is older than 2× TTL. O(n) worst case but amortized cheap —
+	// only runs when the cap is hit.
+	if len(c.writerHealLastTry) >= writerHealCacheMax {
+		cutoff := time.Now().Add(-2 * writersSelfHealTTL)
+		for k, t := range c.writerHealLastTry {
+			if t.Before(cutoff) {
+				delete(c.writerHealLastTry, k)
+			}
+		}
+	}
+	c.writerHealLastTry[key] = time.Now()
+	return true
+}
 
 // handleWriterCommand handles /addwriter and /removewriter commands.
 // The target user is identified by replying to one of their messages.
@@ -156,23 +202,70 @@ func (c *Channel) handleListWriters(ctx context.Context, chatID int64, chatIDStr
 		return
 	}
 
-	type fwMeta struct {
-		DisplayName string `json:"displayName"`
-		Username    string `json:"username"`
-	}
-
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("File writers for this group (%d):\n", len(writers)))
+	// needsHeal collects rows whose metadata is empty so we can async-enrich
+	// them after sending the response. Legacy rows (pre auto-enrichment) or
+	// rows that failed enrichment at grant time get healed on list.
+	var needsHeal []store.ConfigPermission
 	for i, w := range writers {
-		var meta fwMeta
-		_ = json.Unmarshal(w.Metadata, &meta)
-		label := w.UserID
-		if meta.Username != "" {
-			label = "@" + meta.Username
-		} else if meta.DisplayName != "" {
-			label = meta.DisplayName
+		label := channels.WriterLabel(w.Metadata, w.UserID)
+		// A label of the shape "User <id>" means neither username nor
+		// displayName was present — flag the row for background enrichment.
+		if strings.HasPrefix(label, "User ") {
+			needsHeal = append(needsHeal, w)
 		}
 		sb.WriteString(fmt.Sprintf("%d. %s (ID: %s)\n", i+1, label, w.UserID))
 	}
 	send(sb.String())
+
+	if len(needsHeal) > 0 {
+		c.asyncHealWriterMetadata(agentID, chatIDStr, groupID, needsHeal)
+	}
+}
+
+// asyncHealWriterMetadata fires a single background goroutine that walks
+// up to writersSelfHealMaxPerCall rows and tries to enrich their metadata
+// via Telegram's getChatMember, persisting results through the same Grant
+// upsert path as /addwriter. Fire-and-forget; uses context.Background so
+// it outlives the request that triggered it.
+func (c *Channel) asyncHealWriterMetadata(agentID uuid.UUID, chatIDStr, groupID string, rows []store.ConfigPermission) {
+	// Track the goroutine in handlerWg so Channel.Stop() waits for it before
+	// tearing down the bot/store and avoids use-after-close panics.
+	c.handlerWg.Add(1)
+	go func(rows []store.ConfigPermission) {
+		defer c.handlerWg.Done()
+		for i, w := range rows {
+			if i >= writersSelfHealMaxPerCall {
+				return
+			}
+			key := chatIDStr + "|" + w.UserID
+			if !c.shouldTrySelfHeal(key) {
+				continue
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			info, err := c.ResolveMember(ctx, chatIDStr, w.UserID)
+			cancel()
+			if err != nil {
+				slog.Info("writers.self_heal.resolve_failed", "user_id", w.UserID, "error", err)
+				continue
+			}
+			meta, err := channels.BuildWriterMetadata(info)
+			if err != nil {
+				continue
+			}
+			if err := c.configPermStore.Grant(context.Background(), &store.ConfigPermission{
+				AgentID:    agentID,
+				Scope:      groupID,
+				ConfigType: store.ConfigTypeFileWriter,
+				UserID:     w.UserID,
+				Permission: "allow",
+				Metadata:   meta,
+			}); err != nil {
+				slog.Warn("writers.self_heal.grant_failed", "user_id", w.UserID, "error", err)
+				continue
+			}
+			slog.Info("writers.self_heal.ok", "user_id", w.UserID)
+		}
+	}(rows)
 }

@@ -103,7 +103,7 @@ func TestHandleCommentEvent_FeatureDisabledLogsDiagnostic(t *testing.T) {
 	ch.handleCommentEvent(commentEvent("page-1", "conv-2", "user-2", "msg-2", "hello again"))
 
 	out := buf.String()
-	if count := strings.Count(out, "comment_reply and auto_react are both disabled"); count != 1 {
+	if count := strings.Count(out, "comment_reply and auto_react are disabled"); count != 1 {
 		t.Fatalf("expected exactly one diagnostic log for disabled features, got %d logs:\n%s", count, out)
 	}
 	if !strings.Contains(out, "page-1") {
@@ -567,5 +567,41 @@ func TestHandleCommentEvent_AutoReact_EmptyMessageID(t *testing.T) {
 	case <-reacted:
 		t.Error("ReactComment must NOT fire when message ID is empty")
 	default:
+	}
+}
+
+func TestFilterAutoReact_Matrix(t *testing.T) {
+	tests := []struct {
+		name             string
+		opts             *AutoReactOptions
+		postID, senderID string
+		want             bool
+	}{
+		{"nil opts → allow", nil, "p1", "u1", true},
+		{"empty opts → allow", &AutoReactOptions{}, "p1", "u1", true},
+		{"deny user match", &AutoReactOptions{DenyUserIDs: []string{"u1"}}, "p1", "u1", false},
+		{"deny post match", &AutoReactOptions{DenyPostIDs: []string{"p1"}}, "p1", "u1", false},
+		{"allow user miss (list non-empty)", &AutoReactOptions{AllowUserIDs: []string{"u2"}}, "p1", "u1", false},
+		{"allow user hit", &AutoReactOptions{AllowUserIDs: []string{"u1"}}, "p1", "u1", true},
+		{"allow post miss", &AutoReactOptions{AllowPostIDs: []string{"p2"}}, "p1", "u1", false},
+		{"allow post hit", &AutoReactOptions{AllowPostIDs: []string{"p1"}}, "p1", "u1", true},
+		{"deny beats allow (overlap)", &AutoReactOptions{
+			AllowUserIDs: []string{"u1"},
+			DenyUserIDs:  []string{"u1"},
+		}, "p1", "u1", false},
+		{"deny user with whitespace trims", &AutoReactOptions{DenyUserIDs: []string{" u1 "}}, "p1", "u1", false},
+		{"allow post with whitespace trims to match", &AutoReactOptions{AllowPostIDs: []string{" p1 "}}, "p1", "u1", true},
+		{"empty senderID with deny empty-string → no match", &AutoReactOptions{DenyUserIDs: []string{""}}, "p1", "", true},
+		{"empty sender + allow list → blocked", &AutoReactOptions{AllowUserIDs: []string{"u1"}}, "p1", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &pancakeInstanceConfig{AutoReactOptions: tt.opts}
+			got := filterAutoReact(cfg, tt.postID, tt.senderID)
+			if got != tt.want {
+				t.Errorf("filterAutoReact() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

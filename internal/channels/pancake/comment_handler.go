@@ -13,13 +13,13 @@ import (
 // handleCommentEvent processes a Pancake COMMENT webhook event.
 // Mirrors the inbox handler pattern with additional comment-specific guards.
 func (ch *Channel) handleCommentEvent(data MessagingData) {
-	// Feature gate — exit only if BOTH reply and auto-react are disabled.
+	// Feature gate — exit if nothing to do.
 	if !ch.config.Features.CommentReply && !ch.config.Features.AutoReact {
 		ch.commentReplyDisabledOnce.Do(func() {
-			slog.Info("pancake: comment ignored because comment_reply and auto_react are both disabled",
+			slog.Info("pancake: comment ignored because comment_reply and auto_react are disabled",
 				"page_id", ch.pageID,
 				"channel_name", ch.Name(),
-				"hint", "enable config.features.comment_reply or config.features.auto_react")
+				"hint", "enable config.features.comment_reply or auto_react")
 		})
 		return
 	}
@@ -61,12 +61,22 @@ func (ch *Channel) handleCommentEvent(data MessagingData) {
 	// Auto-react BEFORE keyword filter — fires on all valid non-duplicate comments.
 	// Independent of comment_reply: reacts even if reply is disabled.
 	if ch.config.Features.AutoReact && ch.platform == "facebook" && data.Message.ID != "" {
-		select {
-		case ch.reactSem <- struct{}{}:
-			go ch.reactCommentAsync(data.ConversationID, data.Message.ID)
-		default:
-			slog.Debug("pancake: react semaphore full, dropping reaction",
-				"page_id", ch.pageID, "comment_id", data.Message.ID)
+		if filterAutoReact(&ch.config, data.PostID, data.Message.SenderID) {
+			select {
+			case ch.reactSem <- struct{}{}:
+				go ch.reactCommentAsync(data.ConversationID, data.Message.ID)
+			default:
+				slog.Debug("pancake: react semaphore full, dropping reaction",
+					"page_id", ch.pageID, "comment_id", data.Message.ID)
+			}
+		} else {
+			// Rollout-phase Info log for misconfiguration diagnosis.
+			// TODO: downgrade to slog.Debug after ~2 weeks post-release.
+			slog.Info("pancake: auto-react filtered by allow/deny list",
+				"page_id", ch.pageID,
+				"comment_id", data.Message.ID,
+				"post_id", data.PostID,
+				"sender_id", data.Message.SenderID)
 		}
 	}
 
@@ -75,7 +85,6 @@ func (ch *Channel) handleCommentEvent(data MessagingData) {
 		return
 	}
 
-	// Comment filter.
 	if !ch.filterComment(data.Message.Content) {
 		slog.Debug("pancake: comment filtered out",
 			"page_id", ch.pageID, "msg_id", data.Message.ID)
@@ -180,6 +189,44 @@ func (ch *Channel) reactCommentAsync(conversationID, messageID string) {
 	}
 	slog.Debug("pancake: auto-reacted to comment",
 		"comment_id", messageID, "page_id", ch.pageID)
+}
+
+// filterAutoReact returns true when allow/deny lists permit reacting.
+// Only called after the fast-path gate (Features.AutoReact, platform, msgID) passes.
+// Nil AutoReactOptions = no scope filter = allow.
+// Deny lists evaluated before allow lists.
+func filterAutoReact(cfg *pancakeInstanceConfig, postID, senderID string) bool {
+	opts := cfg.AutoReactOptions
+	if opts == nil {
+		return true
+	}
+	if containsString(opts.DenyUserIDs, senderID) {
+		return false
+	}
+	if containsString(opts.DenyPostIDs, postID) {
+		return false
+	}
+	if len(opts.AllowUserIDs) > 0 && !containsString(opts.AllowUserIDs, senderID) {
+		return false
+	}
+	if len(opts.AllowPostIDs) > 0 && !containsString(opts.AllowPostIDs, postID) {
+		return false
+	}
+	return true
+}
+
+// containsString checks if target is present in ss after whitespace trim.
+// Returns false on empty target to prevent false-positive match on blank sender.
+func containsString(ss []string, target string) bool {
+	if target == "" {
+		return false
+	}
+	for _, s := range ss {
+		if strings.TrimSpace(s) == target {
+			return true
+		}
+	}
+	return false
 }
 
 // filterComment checks if the comment matches the configured filter.

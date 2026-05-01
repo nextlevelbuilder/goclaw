@@ -84,6 +84,10 @@ func (d *gatewayDeps) runLifecycle(
 		deps.webFetchTool.UpdatePolicy(updatedCfg.Tools.WebFetch.Policy, updatedCfg.Tools.WebFetch.AllowedDomains, updatedCfg.Tools.WebFetch.BlockedDomains)
 	})
 
+	// Reload global shell deny-group toggles on config changes via pub/sub
+	// so /config edits apply without a process restart.
+	subscribeShellDenyGroupsReload(d.msgBus, d.toolsReg)
+
 	// Reload TTS providers on config changes via pub/sub.
 	d.msgBus.Subscribe("tts-config-reload", func(evt bus.Event) {
 		if evt.Name != bus.TopicConfigChanged {
@@ -94,7 +98,9 @@ func (d *gatewayDeps) runLifecycle(
 			return
 		}
 		if d.pgStores.ConfigSecrets != nil {
-			if secrets, err := d.pgStores.ConfigSecrets.GetAll(context.Background()); err == nil && len(secrets) > 0 {
+			// Use master tenant context to load global TTS secrets
+			masterCtx := store.WithTenantID(context.Background(), store.MasterTenantID)
+			if secrets, err := d.pgStores.ConfigSecrets.GetAll(masterCtx); err == nil && len(secrets) > 0 {
 				updatedCfg.ApplyDBSecrets(secrets)
 			}
 		}

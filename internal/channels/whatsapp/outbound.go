@@ -16,7 +16,7 @@ import (
 )
 
 // Send delivers an outbound message to WhatsApp via whatsmeow.
-func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) error {
+func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 	if c.client == nil || !c.client.IsConnected() {
 		return fmt.Errorf("whatsapp not connected")
 	}
@@ -24,6 +24,44 @@ func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) error {
 	chatJID, err := types.ParseJID(msg.ChatID)
 	if err != nil {
 		return fmt.Errorf("invalid whatsapp JID %q: %w", msg.ChatID, err)
+	}
+
+	// TTS auto-apply: convert [[tts]] tagged responses to voice
+	if c.audioMgr != nil && msg.Content != "" {
+		isVoiceInbound := msg.Metadata["is_voice_inbound"] == "true"
+		ttsResult, ttsErr := c.audioMgr.AutoApplyToText(ctx, msg.Content, "whatsapp", isVoiceInbound, "")
+		if ttsErr != nil {
+			slog.Debug("whatsapp: tts auto-apply error", "error", ttsErr)
+		}
+		if ttsResult != nil && ttsResult.AudioPath != "" {
+			// Send audio as voice message
+			audioData, readErr := os.ReadFile(ttsResult.AudioPath)
+			if readErr == nil {
+				waMsg, buildErr := c.buildMediaMessage(audioData, ttsResult.AudioMime, "")
+				if buildErr == nil {
+					// Mark as voice message (PTT) for WhatsApp
+					if waMsg.AudioMessage != nil {
+						waMsg.AudioMessage.PTT = new(true)
+					}
+					if _, sendErr := c.client.SendMessage(c.ctx, chatJID, waMsg); sendErr != nil {
+						slog.Warn("whatsapp: tts auto-apply voice send failed, falling back to text", "error", sendErr)
+					} else {
+						// Voice sent successfully, stop typing and return
+						if cancel, ok := c.typingCancel.LoadAndDelete(msg.ChatID); ok {
+							if fn, ok := cancel.(context.CancelFunc); ok {
+								fn()
+							}
+						}
+						go c.sendPresence(chatJID, types.ChatPresencePaused)
+						return nil
+					}
+				}
+			}
+		}
+		// Update content with directives stripped (even if TTS not applied)
+		if ttsResult != nil {
+			msg.Content = ttsResult.Text
+		}
 	}
 
 	// Send media attachments first.

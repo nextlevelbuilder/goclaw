@@ -399,43 +399,14 @@ Both are periodic execution systems routed through the scheduler's cron lane, bu
 
 ## File Reference
 
-### Backend Core
-| File | Description |
-|------|-------------|
-| `internal/heartbeat/ticker.go` | Ticker loop, execution flow, suppression, active hours, stagger |
-| `internal/store/heartbeat_store.go` | Store interface, types (AgentHeartbeat, HeartbeatRunLog, HeartbeatEvent, DeliveryTarget), StaggerOffset |
-| `internal/store/pg/heartbeat.go` | PostgreSQL implementation (Get, Upsert, ListDue, UpdateState, InsertLog, ListLogs, ListDeliveryTargets) |
-| `internal/tools/heartbeat.go` | Agent-facing tool (8 actions, permission checks, auto-fill delivery) |
-| `internal/gateway/methods/heartbeat.go` | RPC handlers (8 methods, validation, cache invalidation, audit) |
+| Module | Path | Purpose |
+|---|---|---|
+| Heartbeat engine | `internal/heartbeat/`, `internal/store/heartbeat_store.go`, `internal/store/pg/heartbeat.go` | Ticker loop, store interface, PostgreSQL implementation (ListDue, UpdateState, logs) |
+| Gateway wiring | `cmd/gateway_heartbeat.go`, `cmd/gateway_cron.go`, `internal/gateway/methods/heartbeat.go` | Scheduler lane routing, cron wake integration, RPC handlers, cache invalidation |
+| Agent tool | `internal/tools/heartbeat.go` | 8-action agent-facing tool with permission checks and auto-fill delivery |
+| Frontend | `ui/web/src/pages/agents/` | `use-agent-heartbeat.ts` hook, config dialog, logs dialog, status card |
 
-### Scheduler Integration
-| File | Description |
-|------|-------------|
-| `cmd/gateway_heartbeat.go` | `makeHeartbeatRunFn` — routes heartbeat runs through scheduler cron lane |
-| `cmd/gateway.go` | Ticker initialization, event callback wiring, shutdown |
-| `cmd/gateway_methods.go` | RPC method registration |
-| `cmd/gateway_cron.go` | Cron wake integration (`WakeHeartbeat` flag) |
-
-### Database
-| File | Description |
-|------|-------------|
-| `migrations/000022_agent_heartbeats.up.sql` | Schema: `agent_heartbeats`, `heartbeat_run_logs`, `agent_config_permissions` |
-| `migrations/000022_agent_heartbeats.down.sql` | Rollback |
-
-### Protocol
-| File | Description |
-|------|-------------|
-| `pkg/protocol/methods.go` | RPC method constants (`MethodHeartbeatGet`, etc.) |
-| `pkg/protocol/events.go` | `EventHeartbeat = "heartbeat"` |
-
-### Frontend
-| File | Description |
-|------|-------------|
-| `ui/web/src/pages/agents/hooks/use-agent-heartbeat.ts` | React hook (config, polling, CRUD, logs, targets) |
-| `ui/web/src/pages/agents/agent-detail/heartbeat-config-dialog.tsx` | Settings dialog |
-| `ui/web/src/pages/agents/agent-detail/heartbeat-logs-dialog.tsx` | Run history viewer |
-| `ui/web/src/pages/agents/agent-detail/overview-sections/heartbeat-card.tsx` | Status display card |
-| `ui/web/src/api/protocol.ts` | RPC + event constants |
+Use `grep` or your editor's symbol search for specific files.
 
 ---
 

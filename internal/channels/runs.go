@@ -1,15 +1,18 @@
 package channels
 
+import "github.com/google/uuid"
+
 // --- Run tracking for streaming/reaction event forwarding ---
 
 // RegisterRun associates a run ID with a channel context so agent events
 // (chunks, tool calls, completion) can be forwarded to the originating channel.
-func (m *Manager) RegisterRun(runID, channelName, chatID, messageID string, metadata map[string]string, streaming, blockReply, toolStatus bool) {
+func (m *Manager) RegisterRun(runID, channelName, chatID, messageID string, metadata map[string]string, tenantID uuid.UUID, streaming, blockReply, toolStatus bool) {
 	m.runs.Store(runID, &RunContext{
 		ChannelName:       channelName,
 		ChatID:            chatID,
 		MessageID:         messageID,
 		Metadata:          metadata,
+		TenantID:          tenantID,
 		Streaming:         streaming,
 		BlockReplyEnabled: blockReply,
 		ToolStatusEnabled: toolStatus,

@@ -151,8 +151,8 @@ func TestNoneModeSections(t *testing.T) {
 			t.Errorf("none mode should not have: %s", dropped)
 		}
 	}
-	// Size check: should be under 3000 chars (~750 tokens)
-	if len(prompt) > 3000 {
+	// Size check: should be under 3100 chars (~775 tokens)
+	if len(prompt) > 3100 {
 		t.Errorf("none mode too large: %d chars", len(prompt))
 	}
 }

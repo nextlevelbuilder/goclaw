@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -73,6 +74,9 @@ func InstallSingleDep(ctx context.Context, dep string) (bool, string) {
 		if err != nil {
 			msg := fmt.Sprintf("%s: %v", strings.TrimSpace(string(out)), err)
 			slog.Error("skills: dep install failed", "dep", dep, "error", msg)
+			if hint := pipBuildFailHint(pkg, string(out)); hint != "" {
+				slog.Warn("skills: dep install hint", "dep", dep, "hint", hint)
+			}
 			return false, msg
 		}
 	case strings.HasPrefix(dep, "npm:"):
@@ -141,6 +145,9 @@ func InstallDeps(ctx context.Context, manifest *SkillManifest, missing []string)
 			cmd := exec.CommandContext(ctx, "pip3", "install", "--no-cache-dir", "--break-system-packages", pkg)
 			if out, err := cmd.CombinedOutput(); err != nil {
 				result.Errors = append(result.Errors, fmt.Sprintf("pip %s: %s (%v)", pkg, strings.TrimSpace(string(out)), err))
+				if hint := pipBuildFailHint(pkg, string(out)); hint != "" {
+					slog.Warn("skills: dep install hint", "pkg", pkg, "hint", hint)
+				}
 			} else {
 				successful = append(successful, pkg)
 			}
@@ -279,6 +286,8 @@ func apkViaHelper(ctx context.Context, action, pkg string) (bool, string) {
 
 // cleanCaches removes pip and npm caches to save disk space.
 func cleanCaches(ctx context.Context) {
-	exec.CommandContext(ctx, "pip3", "cache", "purge").Run()          //nolint:errcheck
-	exec.CommandContext(ctx, "sh", "-c", "rm -rf /tmp/npm-*").Run()  //nolint:errcheck
+	exec.CommandContext(ctx, "pip3", "cache", "purge").Run() //nolint:errcheck
+	if runtime.GOOS != "windows" {
+		exec.CommandContext(ctx, "sh", "-c", "rm -rf /tmp/npm-*").Run() //nolint:errcheck
+	}
 }

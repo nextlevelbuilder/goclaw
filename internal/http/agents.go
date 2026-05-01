@@ -35,16 +35,16 @@ type AgentsHandler struct {
 	kgStore          store.KnowledgeGraphStore // for import (nil = disabled)
 	episodicStore    store.EpisodicStore       // for import (nil in SQLite/lite builds)
 	vaultStore       store.VaultStore          // for vault import (nil = disabled)
-	toolsReg         ToolPreviewLister          // for system prompt preview tool resolution (nil = fallback)
-	skillsLoader     SkillPreviewBuilder        // for system prompt preview pinned skills (nil = skip)
-	skillAccessStore store.SkillAccessStore     // for system prompt preview skill filtering (nil = skip)
+	toolsReg         ToolPreviewLister         // for system prompt preview tool resolution (nil = fallback)
+	skillsLoader     SkillPreviewBuilder       // for system prompt preview pinned skills (nil = skip)
+	skillAccessStore store.SkillAccessStore    // for system prompt preview skill filtering (nil = skip)
 	teamStore        store.TeamStore           // for system prompt preview team context (nil = skip)
 	agentLinkStore   store.AgentLinkStore      // for system prompt preview delegation targets (nil = skip)
-	defaultWorkspace string                   // default workspace path template (e.g. "~/.goclaw/workspace")
-	dataDir          string                   // resolved data directory (e.g. "~/.goclaw/data") — for team workspace export
-	msgBus           *bus.MessageBus          // for cache invalidation events (nil = no events)
-	summoner         *AgentSummoner           // LLM-based agent setup (nil = disabled)
-	isOwner          func(string) bool        // checks if user ID is a system owner (nil = no owners configured)
+	defaultWorkspace string                    // default workspace path template (e.g. "~/.goclaw/workspace")
+	dataDir          string                    // resolved data directory (e.g. "~/.goclaw/data") — for team workspace export
+	msgBus           *bus.MessageBus           // for cache invalidation events (nil = no events)
+	summoner         *AgentSummoner            // LLM-based agent setup (nil = disabled)
+	isOwner          func(string) bool         // checks if user ID is a system owner (nil = no owners configured)
 }
 
 // NewAgentsHandler creates a handler for agent management endpoints.
@@ -134,6 +134,11 @@ func (h *AgentsHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/agents", h.authMiddleware(h.handleList))
 	mux.HandleFunc("POST /v1/agents", h.adminMiddleware(h.handleCreate))
 	mux.HandleFunc("GET /v1/agents/{id}", h.authMiddleware(h.handleGet))
+	// Finding #15: PUT /v1/agents/{id} is gated by adminMiddleware (RoleAdmin required).
+	// Admin-only access significantly reduces abuse risk — rapid writes by a malicious admin
+	// are an insider threat with broader capabilities than tts_params mutation.
+	// No additional per-user rate limiter is added at this time (YAGNI). Re-evaluate
+	// if non-admin write paths are ever added or the endpoint is exposed via OAuth scopes.
 	mux.HandleFunc("PUT /v1/agents/{id}", h.adminMiddleware(h.handleUpdate))
 	mux.HandleFunc("DELETE /v1/agents/{id}", h.adminMiddleware(h.handleDelete))
 	// Bulk operations (admin+)
@@ -145,6 +150,7 @@ func (h *AgentsHandler) RegisterRoutes(mux *http.ServeMux) {
 	// Agent operations (admin+)
 	mux.HandleFunc("POST /v1/agents/{id}/regenerate", h.adminMiddleware(h.handleRegenerate))
 	mux.HandleFunc("POST /v1/agents/{id}/resummon", h.adminMiddleware(h.handleResummon))
+	mux.HandleFunc("POST /v1/agents/{id}/cancel-summon", h.adminMiddleware(h.handleCancelSummon))
 	// Export (agent owner or system owner)
 	mux.HandleFunc("GET /v1/agents/{id}/system-prompt-preview", h.adminMiddleware(h.handleSystemPromptPreview))
 	mux.HandleFunc("GET /v1/agents/{id}/export/preview", h.authMiddleware(h.handleExportPreview))
@@ -199,7 +205,11 @@ func (h *AgentsHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"agents": agents})
+	publicAgents := make([]store.AgentData, 0, len(agents))
+	for i := range agents {
+		publicAgents = append(publicAgents, canonicalizeAgentForResponse(&agents[i]))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"agents": publicAgents})
 }
 
 func (h *AgentsHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
@@ -300,7 +310,8 @@ func (h *AgentsHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	emitAudit(h.msgBus, r, "agent.created", "agent", req.ID.String())
-	writeJSON(w, http.StatusCreated, req)
+	publicAgent := canonicalizeAgentForResponse(&req)
+	writeJSON(w, http.StatusCreated, publicAgent)
 }
 
 func (h *AgentsHandler) handleGet(w http.ResponseWriter, r *http.Request) {
@@ -322,7 +333,8 @@ func (h *AgentsHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		writeJSON(w, http.StatusOK, ag)
+		publicAgent := canonicalizeAgentForResponse(ag)
+		writeJSON(w, http.StatusOK, publicAgent)
 		return
 	}
 
@@ -339,10 +351,15 @@ func (h *AgentsHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusOK, ag)
+	publicAgent := canonicalizeAgentForResponse(ag)
+	writeJSON(w, http.StatusOK, publicAgent)
 }
 
 func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
+	// Finding #6: cap request body to 64 KB — prevents heap pressure from
+	// malicious large payloads stored in JSONB fields like tts_params.
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+
 	userID := store.UserIDFromContext(r.Context())
 	locale := store.LocaleFromContext(r.Context())
 	id, err := uuid.Parse(r.PathValue("id"))
@@ -357,6 +374,14 @@ func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	// it belongs to the caller's tenant.
 	ag, err := h.agents.GetByID(r.Context(), id)
 	if err != nil {
+		writeError(w, http.StatusNotFound, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "agent", id.String()))
+		return
+	}
+
+	// Finding #12: explicit tenant-scope guard as defense-in-depth.
+	// GetByID already scopes by tenant_id from context, but if a future refactor
+	// swaps to an unscoped variant this guard prevents cross-tenant mutation.
+	if ag.TenantID != store.TenantIDFromContext(r.Context()) {
 		writeError(w, http.StatusNotFound, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "agent", id.String()))
 		return
 	}
@@ -384,12 +409,23 @@ func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate v3 flag values in other_config (must be boolean).
+	// Also validate tts_params allow-list (Finding #5).
 	if oc, ok := allowed["other_config"]; ok && oc != nil {
 		switch v := oc.(type) {
 		case map[string]any:
 			if err := store.ValidateV3Flags(v); err != nil {
 				writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, err.Error())
 				return
+			}
+			// Finding #5: enforce tts_params key allow-list so arbitrary keys
+			// (e.g. __proto__, voice_settings.stability) cannot persist in JSONB.
+			if tp, ok := v["tts_params"]; ok && tp != nil {
+				if tpMap, ok := tp.(map[string]any); ok {
+					if err := validateAgentTTSParams(tpMap); err != nil {
+						writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, err.Error())
+						return
+					}
+				}
 			}
 		}
 	}

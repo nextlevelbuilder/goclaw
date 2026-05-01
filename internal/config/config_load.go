@@ -46,9 +46,6 @@ func Default() *Config {
 			RateLimitRPM:    20,
 		},
 		Tools: ToolsConfig{
-			Web: WebToolsConfig{
-				DuckDuckGo: DuckDuckGoConfig{Enabled: true, MaxResults: 5},
-			},
 			Browser: BrowserToolConfig{
 				Enabled:  true,
 				Headless: true,

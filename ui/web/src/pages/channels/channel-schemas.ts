@@ -99,6 +99,12 @@ const pancakePlatformOptions = [
   { value: "tokopedia",   label: "Tokopedia" },
 ];
 
+const tiktokTypeOptions = [
+  { value: "livestream", label: "Livestream AIO" },
+  { value: "messaging",  label: "Business Messaging" },
+  { value: "shop",       label: "TikTok Shop" },
+];
+
 // --- Config schemas ---
 
 export const configSchema: Record<string, FieldDef[]> = {
@@ -198,9 +204,33 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "page_id", label: "Page ID", type: "text", required: true, help: "Pancake internal page ID (numeric, from Pancake dashboard)" },
     { key: "webhook_page_id", label: "Webhook Page ID", type: "text", help: "Only needed when the native platform page ID in webhooks differs from the Pancake page ID above (rare). Leave empty if both are the same.", advanced: true },
     { key: "platform", label: "Platform", type: "select", required: true, defaultValue: "", options: pancakePlatformOptions, help: "Select the platform this Pancake page serves." },
+    { key: "tiktok_type", label: "TikTok Type", type: "select", options: tiktokTypeOptions, showWhen: { key: "platform", value: "tiktok" }, help: "Select the TikTok account type for this page" },
     { key: "features.inbox_reply", label: "Inbox Auto-Reply", type: "boolean", defaultValue: true },
     { key: "features.comment_reply", label: "Comment Reply", type: "boolean", defaultValue: false,
       showWhen: { key: "platform", value: ["facebook", "instagram", "threads", "tiktok", "youtube"] } },
+    { key: "features.private_reply", label: "Private Reply (Comment → DM)", type: "boolean", defaultValue: false,
+      help: "Send a one-time DM to commenters after the public reply. Facebook/Instagram only. Meta allows DM within 7 days of the comment.",
+      showWhen: { key: "platform", value: ["facebook", "instagram"] } },
+    { key: "private_reply_message", label: "DM Message", type: "textarea",
+      help: "Supports {{commenter_name}} and {{post_title}}. Empty = default English text.",
+      placeholder: "Hi {{commenter_name}}! Thanks for commenting on \"{{post_title}}\". How can I help?",
+      showWhen: { key: "features.private_reply", value: "true" } },
+    { key: "features.auto_react", label: "Auto-React (Like) Comments", type: "boolean",
+      defaultValue: false,
+      showWhen: { key: "platform", value: "facebook" },
+      help: "Automatically like Facebook comments. Set webhook_secret for security." },
+    { key: "auto_react_options.allow_post_ids", label: "Auto-React: Allow Post IDs", type: "tags",
+      showWhen: { key: "features.auto_react", value: "true" },
+      help: "Only react on these post IDs. Empty = all posts. Deny list overrides." },
+    { key: "auto_react_options.deny_post_ids", label: "Auto-React: Deny Post IDs", type: "tags",
+      showWhen: { key: "features.auto_react", value: "true" },
+      help: "Never react on these post IDs." },
+    { key: "auto_react_options.allow_user_ids", label: "Auto-React: Allow User IDs", type: "tags",
+      showWhen: { key: "features.auto_react", value: "true" },
+      help: "Only react to comments from these user IDs. Empty = all users. Deny list overrides." },
+    { key: "auto_react_options.deny_user_ids", label: "Auto-React: Deny User IDs", type: "tags",
+      showWhen: { key: "features.auto_react", value: "true" },
+      help: "Never react to comments from these user IDs." },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "Sender IDs to whitelist. Empty = accept all." },
     { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit" },
   ],

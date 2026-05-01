@@ -117,12 +117,7 @@ func setupToolRegistry(
 		toolsReg.Register(browser.NewBrowserTool(browserMgr))
 	}
 
-	// Web tools (web_search + web_fetch)
-	webSearchTool := tools.NewWebSearchTool(tools.WebSearchConfigFromConfig(cfg))
-	if webSearchTool != nil {
-		toolsReg.Register(webSearchTool)
-		slog.Info("web_search tool enabled")
-	}
+	// Web tools (web_fetch; web_search is registered in wireExtraTools after stores are ready)
 	webFetchTool = tools.NewWebFetchTool(tools.WebFetchConfig{
 		Policy:         cfg.Tools.WebFetch.Policy,
 		AllowedDomains: cfg.Tools.WebFetch.AllowedDomains,
@@ -216,6 +211,9 @@ func setupToolRegistry(
 	// Exception: .goclaw/skills-store/ is allowed (skills may contain executable scripts).
 	if execTool, ok := toolsReg.Get("exec"); ok {
 		if et, ok := execTool.(*tools.ExecTool); ok {
+			// Apply global shell deny-group toggles before any request can arrive.
+			// Per-agent overrides via store.WithShellDenyGroups still win per-key.
+			et.SetGlobalShellDenyGroups(cfg.Tools.ShellDenyGroups)
 			et.DenyPaths(dataDir, ".goclaw/")
 			// Allow skills execution: master-tenant skills-store + all tenant-scoped skills-store dirs.
 			et.AllowPathExemptions(
@@ -275,6 +273,11 @@ func setupToolRegistry(
 	}
 	if ed, ok := toolsReg.Get("edit"); ok {
 		if t, ok := ed.(*tools.EditTool); ok {
+			t.DenyPaths(internalDenyPaths...)
+		}
+	}
+	if sf, ok := toolsReg.Get("send_file"); ok {
+		if t, ok := sf.(*tools.SendFileTool); ok {
 			t.DenyPaths(internalDenyPaths...)
 		}
 	}

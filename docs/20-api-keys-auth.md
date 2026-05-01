@@ -30,7 +30,7 @@ Or in WebSocket `connect`:
 
 ### Security
 
-The gateway token is compared using **constant-time comparison** (`crypto/subtle.ConstantTimeCompare`) in both HTTP (`auth.go:tokenMatch`) and WebSocket (`router.go:handleConnect`) to prevent timing attacks. The comparison reveals no information about where the provided token first differs from the expected token.
+The gateway token is compared using **constant-time comparison** (`crypto/subtle.ConstantTimeCompare`) in both HTTP and WebSocket auth paths to prevent timing attacks. The comparison reveals no information about where the provided token first differs from the expected token.
 
 ---
 
@@ -78,7 +78,7 @@ Each API key is assigned one or more scopes that determine what operations it ca
 
 ### Role Derivation
 
-The highest-privilege scope determines the effective role via `RoleFromScopes()` in `permissions/policy.go`:
+The highest-privilege scope determines the effective role:
 
 ```
 if admin scope present           → RoleAdmin
@@ -399,19 +399,11 @@ curl -X POST -H "Authorization: Bearer gateway-admin-token" \
 
 ## 11. File Reference
 
-| File | Purpose |
-|------|---------|
-| `internal/crypto/apikey.go` | Key generation + SHA-256 hashing |
-| `internal/store/api_key_store.go` | Store interface + `APIKeyData` struct |
-| `internal/store/secure_cli_store.go` | SecureCLI store interface + `SecureCLIBinary` struct |
-| `internal/store/pg/api_keys.go` | PostgreSQL API key implementation |
-| `internal/store/pg/secure_cli.go` | PostgreSQL SecureCLI implementation |
-| `internal/http/api_keys.go` | HTTP API handler for API keys |
-| `internal/http/secure_cli.go` | HTTP API handler for SecureCLI |
-| `internal/http/auth.go` | HTTP auth middleware (resolveAPIKey, tokenMatch) |
-| `internal/http/api_key_cache.go` | In-memory API key cache with TTL + pubsub invalidation |
-| `internal/gateway/router.go` | WebSocket connect auth (API key path) |
-| `internal/gateway/methods/api_keys.go` | WebSocket RPC methods for API keys |
-| `internal/permissions/policy.go` | RBAC policy engine + role derivation + scope validation |
-| `migrations/000020_secure_cli_and_api_keys.up.sql` | Database migration (api_keys + secure_cli_binaries) |
-| `ui/web/src/pages/api-keys/` | Web UI components |
+| Module | Path | Purpose |
+|---|---|---|
+| Crypto & key generation | `internal/crypto/apikey.go` | Key generation, SHA-256 hashing |
+| Store & persistence | `internal/store/api_key_store.go`, `internal/store/secure_cli_store.go`, `internal/store/pg/api_keys.go`, `internal/store/pg/secure_cli.go` | API key + SecureCLI interfaces and PostgreSQL implementations |
+| HTTP & gateway auth | `internal/http/auth.go`, `internal/http/api_key_cache.go`, `internal/http/api_keys.go`, `internal/http/secure_cli.go`, `internal/gateway/router.go`, `internal/gateway/methods/api_keys.go` | Auth middleware, cache, HTTP handlers, WS connect auth |
+| Permissions & UI | `internal/permissions/policy.go`, `ui/web/src/pages/api-keys/` | RBAC role derivation, scope validation, web management page |
+
+Use `grep` or your editor's symbol search for specific files.

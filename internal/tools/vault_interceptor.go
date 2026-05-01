@@ -36,6 +36,21 @@ func inferScopeFromContext(ctx context.Context) (scope string, teamID *string, a
 	return "personal", nil, true
 }
 
+// inferChatIDFromContext returns the chat_id to stamp on a vault doc.
+// Non-nil only when team uses isolated workspace scope AND WorkspaceChatID is set.
+// Shared/personal scope → nil (team-wide, matches any chat in search).
+func inferChatIDFromContext(ctx context.Context) *string {
+	rc := store.RunContextFromCtx(ctx)
+	if rc == nil || rc.TeamID == "" || !rc.TeamIsolated {
+		return nil
+	}
+	chatID := WorkspaceChatIDFromCtx(ctx)
+	if chatID == "" {
+		return nil
+	}
+	return &chatID
+}
+
 // AfterWrite registers or updates a vault document after a file write.
 // Non-blocking: errors logged but not propagated.
 func (v *VaultInterceptor) AfterWrite(ctx context.Context, resolvedPath, content string) {
@@ -73,6 +88,7 @@ func (v *VaultInterceptor) AfterWrite(ctx context.Context, resolvedPath, content
 		TenantID:    tenantID,
 		AgentID:     agentIDPtr,
 		TeamID:      teamID,
+		ChatID:      inferChatIDFromContext(ctx),
 		Scope:       scope,
 		Path:        relPath,
 		Title:       title,
@@ -164,6 +180,7 @@ func (v *VaultInterceptor) AfterWriteMedia(ctx context.Context, resolvedPath, su
 		TenantID:    tenantID,
 		AgentID:     agentIDPtr,
 		TeamID:      teamID,
+		ChatID:      inferChatIDFromContext(ctx),
 		Scope:       scope,
 		Path:        relPath,
 		Title:       title,

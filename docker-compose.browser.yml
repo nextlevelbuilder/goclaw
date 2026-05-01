@@ -8,11 +8,20 @@
 
 services:
   chrome:
-    image: zenika/alpine-chrome:124
+    # chromedp/headless-shell auto-tracks Google Chrome for Testing and serves
+    # raw CDP on :9222 — same wire format Rod expects, no client code change.
+    # Replaces zenika/alpine-chrome:124, which stopped publishing new tags and
+    # doesn't support `--load-extension` in its default headless mode (#722).
+    image: chromedp/headless-shell:latest
+    # The image's entrypoint already sets --remote-debugging-address=0.0.0.0
+    # and --remote-debugging-port=9223, and fronts it with socat on :9222.
+    # Re-specifying those flags here duplicates them and causes Chrome to
+    # fail with "bind() failed: Address already in use". Pass only the
+    # goclaw-specific tweaks (headless mode, origin allowlist, GPU off).
     command:
       - --no-sandbox
-      - --remote-debugging-address=0.0.0.0
-      - --remote-debugging-port=9222
+      # New headless (Chrome 112+) is required for --load-extension to work.
+      - --headless=new
       - --remote-allow-origins=*
       - --disable-gpu
       - --disable-dev-shm-usage
@@ -20,7 +29,9 @@ services:
       - "${CHROME_CDP_PORT:-9222}:9222"
     shm_size: 2gb
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9222/json/version >/dev/null 2>&1"]
+      # chromedp/headless-shell is minimal — no wget/curl/nc. Use bash's
+      # /dev/tcp builtin to probe the CDP port directly (bash is in the image).
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9222"]
       interval: 5s
       timeout: 3s
       retries: 5

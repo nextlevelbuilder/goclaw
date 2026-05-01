@@ -16,7 +16,7 @@ func (s *PGVaultStore) ListUnenrichedDocs(ctx context.Context, tenantID string, 
 		return nil, fmt.Errorf("vault list unenriched: tenant: %w", err)
 	}
 
-	q := `SELECT id, tenant_id, agent_id, team_id, scope, custom_scope, path, path_basename, title, doc_type,
+	q := `SELECT id, tenant_id, agent_id, team_id, chat_id, scope, custom_scope, path, path_basename, title, doc_type,
 			content_hash, summary, metadata, created_at, updated_at
 		FROM vault_documents
 		WHERE tenant_id = $1 AND (summary IS NULL OR summary = '')
@@ -102,7 +102,7 @@ func (s *PGVaultStore) FindSimilarDocs(ctx context.Context, tenantID, agentID, d
 		return nil, nil // no embedding = no neighbors
 	}
 
-	q := `SELECT id, tenant_id, agent_id, team_id, scope, custom_scope, path, path_basename, title, doc_type,
+	q := `SELECT id, tenant_id, agent_id, team_id, chat_id, scope, custom_scope, path, path_basename, title, doc_type,
 			content_hash, summary, metadata, created_at, updated_at,
 			1 - (embedding <=> $1::vector) AS score
 		FROM vault_documents

@@ -113,5 +113,12 @@ export function useAgents() {
     [http],
   );
 
-  return { agents, loading, error, refresh: invalidate, createAgent, updateAgent, deleteAgent, resummonAgent };
+  const cancelSummonAgent = useCallback(
+    async (id: string) => {
+      await http.post(`/v1/agents/${id}/cancel-summon`);
+    },
+    [http],
+  );
+
+  return { agents, loading, error, refresh: invalidate, createAgent, updateAgent, deleteAgent, resummonAgent, cancelSummonAgent };
 }

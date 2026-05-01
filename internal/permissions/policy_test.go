@@ -1,6 +1,12 @@
 package permissions
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
@@ -119,6 +125,7 @@ func TestCanAccess_WriteMethods(t *testing.T) {
 	writeMethods := []string{
 		protocol.MethodChatSend,
 		protocol.MethodSessionsDelete,
+		protocol.MethodSessionsCompact,
 		protocol.MethodCronCreate,
 	}
 	for _, method := range writeMethods {
@@ -147,11 +154,71 @@ func TestCanAccess_ReadMethods_AnyRole(t *testing.T) {
 	}
 }
 
-func TestCanAccess_UnknownMethod_DefaultsToViewer(t *testing.T) {
+// TestCanAccess_UnknownMethod_DeniedForAll locks in the fail-closed behavior
+// introduced by issue #866: any method not present in the public / admin /
+// write / read allowlists MUST be denied for every role including owner.
+// This is the inverse of the previous default-permit behavior.
+func TestCanAccess_UnknownMethod_DeniedForAll(t *testing.T) {
 	pe := NewPolicyEngine(nil)
-	// Unknown method defaults to viewer role requirement
-	if !pe.CanAccess(RoleViewer, "totally.unknown.method") {
-		t.Fatal("viewer should access unknown method (defaults to viewer)")
+	unknown := "totally.unknown.method"
+	for _, role := range []Role{RoleViewer, RoleOperator, RoleAdmin, RoleOwner} {
+		if pe.CanAccess(role, unknown) {
+			t.Fatalf("%s must NOT access unclassified method %q (fail-closed)", role, unknown)
+		}
+	}
+	if MethodRole(unknown) != RoleNone {
+		t.Fatalf("MethodRole(%q) = %q, want RoleNone", unknown, MethodRole(unknown))
+	}
+}
+
+// TestCanAccess_CVE866_HeartbeatAndLogs asserts that the three RPCs exploited
+// in the issue-#866 chain now require admin. Viewer/operator must be denied.
+func TestCanAccess_CVE866_HeartbeatAndLogs(t *testing.T) {
+	pe := NewPolicyEngine(nil)
+	adminOnly := []string{
+		protocol.MethodHeartbeatSet,
+		protocol.MethodHeartbeatChecklistSet,
+		protocol.MethodLogsTail,
+		protocol.MethodHeartbeatToggle,
+		protocol.MethodHeartbeatTest,
+	}
+	for _, method := range adminOnly {
+		t.Run(method, func(t *testing.T) {
+			if pe.CanAccess(RoleViewer, method) {
+				t.Fatalf("viewer must NOT access %s (CVE #866)", method)
+			}
+			if pe.CanAccess(RoleOperator, method) {
+				t.Fatalf("operator must NOT access %s (CVE #866)", method)
+			}
+			if !pe.CanAccess(RoleAdmin, method) {
+				t.Fatalf("admin should access %s", method)
+			}
+			if !pe.CanAccess(RoleOwner, method) {
+				t.Fatalf("owner should access %s", method)
+			}
+		})
+	}
+}
+
+// TestCanAccess_PublicMethods ensures pre-auth RPCs remain reachable by every
+// role (including the zero-value RoleNone placeholder that pre-connect clients
+// hold) — otherwise legitimate clients cannot even complete the handshake.
+func TestCanAccess_PublicMethods(t *testing.T) {
+	pe := NewPolicyEngine(nil)
+	public := []string{
+		protocol.MethodConnect,
+		protocol.MethodHealth,
+		protocol.MethodStatus,
+		protocol.MethodBrowserPairingStatus,
+	}
+	for _, method := range public {
+		t.Run(method, func(t *testing.T) {
+			for _, role := range []Role{RoleViewer, RoleOperator, RoleAdmin, RoleOwner} {
+				if !pe.CanAccess(role, method) {
+					t.Fatalf("%s must access public method %s", role, method)
+				}
+			}
+		})
 	}
 }
 
@@ -238,6 +305,82 @@ func TestValidScope(t *testing.T) {
 	}
 	if ValidScope("") {
 		t.Fatal("expected empty scope to be rejected")
+	}
+}
+
+// --- MethodApprovalsList: locks in fix for writePrefixes shadowing bug.
+// Before the fix, the "exec.approval." prefix in isWriteMethod's writePrefixes
+// short-circuited the public→admin→write→read ordering in MethodRole,
+// wrongly classifying exec.approval.list as RoleOperator. exec.approval.list
+// is an explicit entry in isReadMethod and must resolve to RoleViewer.
+
+func TestMethodRole_ApprovalsList_IsViewer(t *testing.T) {
+	if got := MethodRole(protocol.MethodApprovalsList); got != RoleViewer {
+		t.Fatalf("exec.approval.list must be RoleViewer (listed in isReadMethod); got %q", got)
+	}
+	if got := MethodRole(protocol.MethodApprovalsApprove); got != RoleOperator {
+		t.Fatalf("exec.approval.approve must be RoleOperator; got %q", got)
+	}
+	if got := MethodRole(protocol.MethodApprovalsDeny); got != RoleOperator {
+		t.Fatalf("exec.approval.deny must be RoleOperator; got %q", got)
+	}
+}
+
+// --- Drift coverage: parses pkg/protocol/methods.go at test time, enumerates
+// every const Method* = "...", and asserts none resolve to RoleNone. New RPCs
+// added without a matching allowlist entry will be caught here before shipping
+// as fail-closed rejections in production.
+
+func TestMethodRole_DriftCoverage_AllProtocolMethodsClassified(t *testing.T) {
+	_, thisFile, _, _ := runtime.Caller(0)
+	methodsGoPath := filepath.Join(filepath.Dir(thisFile), "..", "..", "pkg", "protocol", "methods.go")
+
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, methodsGoPath, nil, 0)
+	if err != nil {
+		t.Fatalf("parse %s: %v", methodsGoPath, err)
+	}
+
+	var methods []string
+	for _, decl := range f.Decls {
+		gd, ok := decl.(*ast.GenDecl)
+		if !ok || gd.Tok != token.CONST {
+			continue
+		}
+		for _, spec := range gd.Specs {
+			vs, ok := spec.(*ast.ValueSpec)
+			if !ok {
+				continue
+			}
+			for i, name := range vs.Names {
+				if !strings.HasPrefix(name.Name, "Method") {
+					continue
+				}
+				if i >= len(vs.Values) {
+					continue
+				}
+				lit, ok := vs.Values[i].(*ast.BasicLit)
+				if !ok || lit.Kind != token.STRING {
+					continue
+				}
+				methods = append(methods, strings.Trim(lit.Value, `"`))
+			}
+		}
+	}
+
+	if len(methods) < 100 {
+		t.Fatalf("expected 100+ Method* constants, parser collected %d — methods.go layout may have changed", len(methods))
+	}
+
+	var unclassified []string
+	for _, m := range methods {
+		if MethodRole(m) == RoleNone {
+			unclassified = append(unclassified, m)
+		}
+	}
+	if len(unclassified) > 0 {
+		t.Fatalf("RBAC drift — %d protocol method(s) resolve to RoleNone:\n  %s\n\nAdd each to isPublicMethod, isAdminMethod, isWriteMethod, or isReadMethod in policy.go.",
+			len(unclassified), strings.Join(unclassified, "\n  "))
 	}
 }
 

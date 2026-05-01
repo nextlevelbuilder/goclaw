@@ -515,6 +515,9 @@ func (s *Server) SetVoicesHandler(h *httpapi.VoicesHandler) { s.handlers = appen
 // SetTTSHandler sets the TTS synthesize handler.
 func (s *Server) SetTTSHandler(h *httpapi.TTSHandler) { s.handlers = append(s.handlers, h) }
 
+// SetTTSConfigHandler sets the per-tenant TTS config handler.
+func (s *Server) SetTTSConfigHandler(h *httpapi.TTSConfigHandler) { s.handlers = append(s.handlers, h) }
+
 // SetVaultHandler sets the Knowledge Vault document handler.
 func (s *Server) SetVaultHandler(h *httpapi.VaultHandler) { s.handlers = append(s.handlers, h) }
 
