@@ -49,8 +49,7 @@ func scanCronRow(row cronRowScanner) (*store.CronJob, error) {
 	var enabled, deleteAfterRun bool
 	var stateless, deliver, wakeHeartbeat bool
 	var deliverChannel, deliverTo string
-	var provider, model string
-	var cronExpr, tz, lastStatus, lastError *string
+	var provider, model, cronExpr, tz, lastStatus, lastError *string
 	var runAt, nextRunAt, lastRunAt *time.Time
 	var intervalMS *int64
 	var payloadJSON, managedJSON []byte
@@ -84,8 +83,6 @@ func scanCronRow(row cronRowScanner) (*store.CronJob, error) {
 		Name:     name,
 		Enabled:  enabled,
 		Managed:  managed,
-		Provider: provider,
-		Model:    model,
 		Schedule: store.CronSchedule{
 			Kind: scheduleKind,
 		},
@@ -105,6 +102,12 @@ func scanCronRow(row cronRowScanner) (*store.CronJob, error) {
 	}
 	if userID != nil {
 		job.UserID = *userID
+	}
+	if provider != nil {
+		job.Provider = *provider
+	}
+	if model != nil {
+		job.Model = *model
 	}
 	if cronExpr != nil {
 		job.Schedule.Expr = *cronExpr

@@ -1,9 +1,11 @@
 package http
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -42,12 +44,15 @@ type wakeRequest struct {
 	SessionKey string         `json:"session_key,omitempty"`
 	UserID     string         `json:"user_id,omitempty"`
 	Metadata   map[string]any `json:"metadata,omitempty"`
+	Async      bool           `json:"async,omitempty"`
 }
 
 type wakeResponse struct {
-	Content string   `json:"content"`
-	RunID   string   `json:"run_id"`
-	Usage   *wakeUsage `json:"usage,omitempty"`
+	Content    string     `json:"content,omitempty"`
+	RunID      string     `json:"run_id"`
+	SessionKey string     `json:"session_key,omitempty"`
+	Status     string     `json:"status,omitempty"`
+	Usage      *wakeUsage `json:"usage,omitempty"`
 }
 
 type wakeUsage struct {
@@ -123,26 +128,44 @@ func (h *WakeHandler) handleWake(w http.ResponseWriter, r *http.Request) {
 	runID := uuid.NewString()
 	slog.Info("wake request", "agent", agentID, "user", userID, "session", sessionKey)
 
-	ctx, drainTeamDispatch := tools.InjectTeamDispatch(ctx, h.postTurn)
-	defer drainTeamDispatch()
+	run := func(runCtx context.Context) (*agent.RunResult, error) {
+		runCtx, drainTeamDispatch := tools.InjectTeamDispatch(runCtx, h.postTurn)
+		defer drainTeamDispatch()
 
-	result, err := loop.Run(ctx, agent.RunRequest{
-		SessionKey: sessionKey,
-		Message:    req.Message,
-		Channel:    "wake",
-		ChatID:     "api",
-		RunID:      runID,
-		UserID:     userID,
-		Stream:     false,
-	})
+		return loop.Run(runCtx, agent.RunRequest{
+			SessionKey: sessionKey,
+			Message:    req.Message,
+			Channel:    "wake",
+			ChatID:     "api",
+			RunID:      runID,
+			UserID:     userID,
+			Stream:     false,
+		})
+	}
+
+	if req.Async {
+		runCtx := detachedWakeContext(ctx)
+		go func() {
+			ctx, cancel := context.WithTimeout(runCtx, 30*time.Minute)
+			defer cancel()
+			if _, err := run(ctx); err != nil {
+				slog.Error("async wake failed", "agent", agentID, "session", sessionKey, "run_id", runID, "error", err)
+			}
+		}()
+		writeJSON(w, http.StatusAccepted, wakeResponse{RunID: runID, SessionKey: sessionKey, Status: "accepted"})
+		return
+	}
+
+	result, err := run(ctx)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("agent run failed: %v", err)})
 		return
 	}
 
 	resp := wakeResponse{
-		Content: result.Content,
-		RunID:   runID,
+		Content:    result.Content,
+		RunID:      runID,
+		SessionKey: sessionKey,
 	}
 	if result.Usage != nil {
 		resp.Usage = &wakeUsage{
@@ -153,4 +176,20 @@ func (h *WakeHandler) handleWake(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func detachedWakeContext(ctx context.Context) context.Context {
+	out := context.Background()
+	out = store.WithLocale(out, store.LocaleFromContext(ctx))
+	out = store.WithRole(out, store.RoleFromContext(ctx))
+	if userID := store.UserIDFromContext(ctx); userID != "" {
+		out = store.WithUserID(out, userID)
+	}
+	if tenantID := store.TenantIDFromContext(ctx); tenantID != uuid.Nil {
+		out = store.WithTenantID(out, tenantID)
+	}
+	if tenantSlug := store.TenantSlugFromContext(ctx); tenantSlug != "" {
+		out = store.WithTenantSlug(out, tenantSlug)
+	}
+	return out
 }

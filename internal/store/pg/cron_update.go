@@ -123,7 +123,10 @@ func (s *PGCronStore) UpdateJob(ctx context.Context, jobID string, patch store.C
 	}
 
 	s.InvalidateCache()
-	job, _ := s.scanJob(ctx, id)
+	job, err := s.scanJob(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("updated cron job %s could not be reloaded: %w", id, err)
+	}
 	return job, nil
 }
 

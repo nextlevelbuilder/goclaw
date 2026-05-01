@@ -79,7 +79,10 @@ func (s *PGCronStore) AddJob(ctx context.Context, name string, schedule store.Cr
 
 	s.cacheLoaded = false // invalidate cache
 
-	job, _ := s.GetJob(ctx, id.String())
+	job, ok := s.GetJob(ctx, id.String())
+	if !ok || job == nil {
+		return nil, fmt.Errorf("created cron job %s could not be reloaded", id)
+	}
 	return job, nil
 }
 
