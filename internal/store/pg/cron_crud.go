@@ -2,6 +2,7 @@ package pg
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -65,32 +66,57 @@ func (s *PGCronStore) AddJob(ctx context.Context, name string, schedule store.Cr
 	}
 
 	nextRun := computeNextRun(&schedule, now, s.defaultTZ)
+	tenantID := tenantIDForInsert(ctx)
 
-	err := s.db.QueryRowContext(ctx,
-		`INSERT INTO cron_jobs (id, tenant_id, agent_id, user_id, name, enabled, schedule_kind, cron_expression, run_at, timezone,
-		 interval_ms, payload, delete_after_run, deliver, deliver_channel, deliver_to, wake_heartbeat, next_run_at, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, true, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
-		 ON CONFLICT (agent_id, tenant_id, name) DO UPDATE SET
-			user_id = EXCLUDED.user_id,
-			schedule_kind = EXCLUDED.schedule_kind,
-			cron_expression = EXCLUDED.cron_expression,
-			run_at = EXCLUDED.run_at,
-			timezone = EXCLUDED.timezone,
-			interval_ms = EXCLUDED.interval_ms,
-			payload = EXCLUDED.payload,
-			delete_after_run = EXCLUDED.delete_after_run,
-			deliver = EXCLUDED.deliver,
-			deliver_channel = EXCLUDED.deliver_channel,
-			deliver_to = EXCLUDED.deliver_to,
-			wake_heartbeat = EXCLUDED.wake_heartbeat,
-			next_run_at = CASE WHEN cron_jobs.enabled THEN EXCLUDED.next_run_at ELSE NULL END,
-			updated_at = EXCLUDED.updated_at
-		 RETURNING id`,
-		id, tenantIDForInsert(ctx), agentUUID, userIDPtr, name, scheduleKind, cronExpr, runAt, tz,
-		intervalMS, payloadJSON, deleteAfterRun, deliver, channel, to, false, nextRun, now, now,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	err = tx.QueryRowContext(ctx,
+		`SELECT id FROM cron_jobs
+		 WHERE agent_id IS NOT DISTINCT FROM $1 AND tenant_id = $2 AND name = $3
+		 FOR UPDATE`,
+		agentUUID, tenantID, name,
 	).Scan(&id)
+	if err == nil {
+		err = tx.QueryRowContext(ctx,
+			`UPDATE cron_jobs SET
+				user_id = $2,
+				schedule_kind = $3,
+				cron_expression = $4,
+				run_at = $5,
+				timezone = $6,
+				interval_ms = $7,
+				payload = $8,
+				delete_after_run = $9,
+				deliver = $10,
+				deliver_channel = $11,
+				deliver_to = $12,
+				wake_heartbeat = $13,
+				next_run_at = CASE WHEN enabled THEN $14 ELSE NULL END,
+				updated_at = $15
+			 WHERE id = $1
+			 RETURNING id`,
+			id, userIDPtr, scheduleKind, cronExpr, runAt, tz, intervalMS, payloadJSON,
+			deleteAfterRun, deliver, channel, to, false, nextRun, now,
+		).Scan(&id)
+	} else if err == sql.ErrNoRows {
+		err = tx.QueryRowContext(ctx,
+			`INSERT INTO cron_jobs (id, tenant_id, agent_id, user_id, name, enabled, schedule_kind, cron_expression, run_at, timezone,
+			 interval_ms, payload, delete_after_run, deliver, deliver_channel, deliver_to, wake_heartbeat, next_run_at, created_at, updated_at)
+			 VALUES ($1, $2, $3, $4, $5, true, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+			 RETURNING id`,
+			id, tenantID, agentUUID, userIDPtr, name, scheduleKind, cronExpr, runAt, tz,
+			intervalMS, payloadJSON, deleteAfterRun, deliver, channel, to, false, nextRun, now, now,
+		).Scan(&id)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("create cron job: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
 	}
 
 	s.cacheLoaded = false // invalidate cache
