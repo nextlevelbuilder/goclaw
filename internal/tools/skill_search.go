@@ -67,7 +67,7 @@ func (t *SkillSearchTool) ensureIndex(ctx context.Context) {
 func (t *SkillSearchTool) Name() string { return "skill_search" }
 
 func (t *SkillSearchTool) Description() string {
-	return "Search for available skills by keyword. Returns matching skills with name, description, and SKILL.md location for reading with read_file."
+	return "Search for available skills by keyword. Returns matching skills with name, description, and SKILL.md location."
 }
 
 func (t *SkillSearchTool) Parameters() map[string]any {
@@ -134,8 +134,8 @@ func (t *SkillSearchTool) Execute(ctx context.Context, args map[string]any) *Res
 
 	// Include explicit next-step instruction in the result so the model follows through.
 	instruction := fmt.Sprintf(
-		"\n\nACTION REQUIRED: Call use_skill with name \"%s\", then read_file with path \"%s\" to read the skill instructions, then follow them.",
-		results[0].Name, results[0].Location,
+		"\n\nACTION REQUIRED: Call use_skill with name \"%s\" to load the skill instructions, then follow them. Do not call read_file on the skill path unless use_skill reports that no loader is configured.",
+		results[0].Name,
 	)
 
 	return NewResult(string(data) + instruction)

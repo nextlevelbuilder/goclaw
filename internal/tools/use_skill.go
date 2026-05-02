@@ -6,18 +6,29 @@ import (
 	"log/slog"
 )
 
-// UseSkillTool is a marker tool for observability.
-// It generates tool.call / tool.result events in spans and realtime
-// so skill activation is visible in tracing. The actual skill content
-// is still loaded via read_file — this tool is a deliberate no-op.
-type UseSkillTool struct{}
+type skillLoader interface {
+	LoadSkill(context.Context, string) (string, bool)
+}
 
-func NewUseSkillTool() *UseSkillTool { return &UseSkillTool{} }
+// UseSkillTool activates a skill and returns its instructions directly.
+// Returning the body matters for sandboxed wake sessions: read_file may be
+// restricted to a per-session workspace while skills live in shared roots.
+type UseSkillTool struct {
+	loader skillLoader
+}
+
+func NewUseSkillTool(loader ...skillLoader) *UseSkillTool {
+	t := &UseSkillTool{}
+	if len(loader) > 0 {
+		t.loader = loader[0]
+	}
+	return t
+}
 
 func (t *UseSkillTool) Name() string { return "use_skill" }
 
 func (t *UseSkillTool) Description() string {
-	return "Activate a skill. Call this before read_file to signal skill usage for tracing and observability."
+	return "Activate a skill and return its instructions."
 }
 
 func (t *UseSkillTool) Parameters() map[string]any {
@@ -37,7 +48,7 @@ func (t *UseSkillTool) Parameters() map[string]any {
 	}
 }
 
-func (t *UseSkillTool) Execute(_ context.Context, args map[string]any) *Result {
+func (t *UseSkillTool) Execute(ctx context.Context, args map[string]any) *Result {
 	name, _ := args["name"].(string)
 	if name == "" {
 		return ErrorResult("name parameter is required")
@@ -45,5 +56,12 @@ func (t *UseSkillTool) Execute(_ context.Context, args map[string]any) *Result {
 
 	slog.Info("skill.activated", "skill", name)
 
-	return NewResult(fmt.Sprintf("Skill %q activated. Proceed to read the skill's SKILL.md with read_file.", name))
+	if t.loader == nil {
+		return NewResult(fmt.Sprintf("Skill %q activated. Proceed to read the skill's SKILL.md with read_file.", name))
+	}
+	content, ok := t.loader.LoadSkill(ctx, name)
+	if !ok {
+		return ErrorResult(fmt.Sprintf("skill %q not found", name))
+	}
+	return NewResult(fmt.Sprintf("Skill %q activated. Follow these instructions:\n\n%s", name, content))
 }
