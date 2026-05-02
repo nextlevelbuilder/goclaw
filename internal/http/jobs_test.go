@@ -100,7 +100,7 @@ func (f *fakeSender) SendToChannel(_ context.Context, ch, chatID, content string
 }
 
 // runningRow seeds a fakeStore with a row in 'running' status, the
-// shape spawn_forge_job would have written. Returns the id for use in
+// shape spawn_job would have written. Returns the id for use in
 // the URL path.
 func runningRow(s *fakeStore, channel, threadID string) uuid.UUID {
 	id := uuid.New()

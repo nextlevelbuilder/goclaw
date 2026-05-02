@@ -18,7 +18,7 @@ import (
 )
 
 // JobsHandler serves the two HTTP endpoints that close the loop on a
-// forge Job spawned via the spawn_forge_job tool:
+// forge Job spawned via the spawn_job tool:
 //
 //	POST /v1/agents/jobs/{id}/progress
 //	POST /v1/agents/jobs/{id}/complete
@@ -54,7 +54,7 @@ type ChannelSender interface {
 }
 
 // NewJobsHandler builds a JobsHandler. taskStore is required (rows
-// are written by spawn_forge_job and read here for the security guard
+// are written by spawn_job and read here for the security guard
 // + status updates). sender is required (we need to post to Discord).
 // hmacSecret is required.
 func NewJobsHandler(taskStore store.SubagentTaskStore, sender ChannelSender, hmacSecret []byte) *JobsHandler {
@@ -80,7 +80,7 @@ func (h *JobsHandler) RegisterRoutes(mux *http.ServeMux) {
 // progressRequest is the body for /progress.
 type progressRequest struct {
 	Content  string `json:"content"`   // text to post into the thread
-	Channel  string `json:"channel"`   // channel instance name (echoed from spawn_forge_job)
+	Channel  string `json:"channel"`   // channel instance name (echoed from spawn_job)
 	ThreadID string `json:"thread_id"` // Discord thread id
 }
 

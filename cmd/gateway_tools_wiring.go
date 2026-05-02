@@ -64,8 +64,8 @@ func wireExtraTools(
 	// Tool's Execute errors cleanly when secret is unset, so dev /
 	// non-cluster builds where the agent service isn't reachable
 	// just see a runtime error from Gillen, no crash at boot.
-	toolsReg.Register(tools.NewSpawnForgeJobTool(pgStores.SubagentTasks, "", nil))
-	slog.Info("spawn_forge_job tool registered")
+	toolsReg.Register(tools.NewSpawnJobTool(pgStores.SubagentTasks, "", nil))
+	slog.Info("spawn_job tool registered")
 
 	slog.Info("session + message + send_file tools registered")
 
