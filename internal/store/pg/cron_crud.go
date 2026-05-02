@@ -66,13 +66,29 @@ func (s *PGCronStore) AddJob(ctx context.Context, name string, schedule store.Cr
 
 	nextRun := computeNextRun(&schedule, now, s.defaultTZ)
 
-	_, err := s.db.ExecContext(ctx,
+	err := s.db.QueryRowContext(ctx,
 		`INSERT INTO cron_jobs (id, tenant_id, agent_id, user_id, name, enabled, schedule_kind, cron_expression, run_at, timezone,
 		 interval_ms, payload, delete_after_run, deliver, deliver_channel, deliver_to, wake_heartbeat, next_run_at, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, true, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
+		 VALUES ($1, $2, $3, $4, $5, true, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+		 ON CONFLICT (agent_id, tenant_id, name) DO UPDATE SET
+			user_id = EXCLUDED.user_id,
+			schedule_kind = EXCLUDED.schedule_kind,
+			cron_expression = EXCLUDED.cron_expression,
+			run_at = EXCLUDED.run_at,
+			timezone = EXCLUDED.timezone,
+			interval_ms = EXCLUDED.interval_ms,
+			payload = EXCLUDED.payload,
+			delete_after_run = EXCLUDED.delete_after_run,
+			deliver = EXCLUDED.deliver,
+			deliver_channel = EXCLUDED.deliver_channel,
+			deliver_to = EXCLUDED.deliver_to,
+			wake_heartbeat = EXCLUDED.wake_heartbeat,
+			next_run_at = CASE WHEN cron_jobs.enabled THEN EXCLUDED.next_run_at ELSE NULL END,
+			updated_at = EXCLUDED.updated_at
+		 RETURNING id`,
 		id, tenantIDForInsert(ctx), agentUUID, userIDPtr, name, scheduleKind, cronExpr, runAt, tz,
 		intervalMS, payloadJSON, deleteAfterRun, deliver, channel, to, false, nextRun, now, now,
-	)
+	).Scan(&id)
 	if err != nil {
 		return nil, fmt.Errorf("create cron job: %w", err)
 	}
