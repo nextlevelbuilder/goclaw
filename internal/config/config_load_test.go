@@ -130,6 +130,26 @@ func TestLoad_EnvVarAPIKeys(t *testing.T) {
 	}
 }
 
+func TestLoad_OpenRouterRoutingEnvVars(t *testing.T) {
+	t.Setenv("GOCLAW_OPENROUTER_PROVIDER_ORDER", " atlas-cloud , deepinfra/turbo ")
+	t.Setenv("GOCLAW_OPENROUTER_ALLOW_FALLBACKS", "false")
+
+	cfg, err := Load("/nonexistent/path")
+	if err != nil {
+		t.Fatalf("load error: %v", err)
+	}
+	gotOrder := cfg.Providers.OpenRouter.ProviderOrder
+	if len(gotOrder) != 2 || gotOrder[0] != "atlas-cloud" || gotOrder[1] != "deepinfra/turbo" {
+		t.Fatalf("openrouter provider order: got %v", gotOrder)
+	}
+	if cfg.Providers.OpenRouter.AllowFallbacks == nil {
+		t.Fatal("openrouter allow_fallbacks should be set")
+	}
+	if *cfg.Providers.OpenRouter.AllowFallbacks {
+		t.Fatal("openrouter allow_fallbacks: got true, want false")
+	}
+}
+
 // --- Allowed origins from JSON5 ---
 
 func TestLoad_AllowedOrigins_JSON5(t *testing.T) {

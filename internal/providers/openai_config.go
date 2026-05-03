@@ -8,19 +8,21 @@ import (
 // OpenAIProvider implements Provider for OpenAI-compatible APIs
 // (OpenAI, Groq, OpenRouter, DeepSeek, VLLM, etc.)
 type OpenAIProvider struct {
-	name         string
-	apiKey       string
-	apiBase      string
-	chatPath     string // defaults to "/chat/completions"
-	authPrefix   string // auth header prefix, defaults to "Bearer " if empty
-	defaultModel string
-	providerType string // DB provider_type (e.g. "gemini_native", "openai", "minimax_native")
-	siteURL      string // optional site URL for provider identification (e.g. OpenRouter HTTP-Referer)
-	siteTitle    string // optional site title for provider identification (e.g. OpenRouter X-Title)
-	client       *http.Client
-	retryConfig  RetryConfig
-	middlewares  RequestMiddleware // composed middleware chain (nil = no-op)
-	registry     ModelRegistry    // model resolution registry (nil = skip)
+	name                     string
+	apiKey                   string
+	apiBase                  string
+	chatPath                 string // defaults to "/chat/completions"
+	authPrefix               string // auth header prefix, defaults to "Bearer " if empty
+	defaultModel             string
+	providerType             string // DB provider_type (e.g. "gemini_native", "openai", "minimax_native")
+	siteURL                  string // optional site URL for provider identification (e.g. OpenRouter HTTP-Referer)
+	siteTitle                string // optional site title for provider identification (e.g. OpenRouter X-Title)
+	client                   *http.Client
+	retryConfig              RetryConfig
+	middlewares              RequestMiddleware // composed middleware chain (nil = no-op)
+	registry                 ModelRegistry     // model resolution registry (nil = skip)
+	openRouterProviderOrder  []string
+	openRouterAllowFallbacks *bool
 }
 
 func NewOpenAIProvider(name, apiKey, apiBase, defaultModel string) *OpenAIProvider {
@@ -77,6 +79,14 @@ func (p *OpenAIProvider) WithMiddlewares(mws ...RequestMiddleware) *OpenAIProvid
 // WithProviderType sets the DB provider_type for correct API endpoint routing in media tools.
 func (p *OpenAIProvider) WithProviderType(pt string) *OpenAIProvider {
 	p.providerType = pt
+	return p
+}
+
+// WithOpenRouterRouting configures OpenRouter's provider routing object.
+// It is ignored by non-OpenRouter providers.
+func (p *OpenAIProvider) WithOpenRouterRouting(order []string, allowFallbacks *bool) *OpenAIProvider {
+	p.openRouterProviderOrder = append([]string(nil), order...)
+	p.openRouterAllowFallbacks = allowFallbacks
 	return p
 }
 

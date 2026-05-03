@@ -187,3 +187,33 @@ func TestBuildRequestBody_NativeToolInBody(t *testing.T) {
 		t.Error("native tool must not have 'function' field in request body")
 	}
 }
+
+func TestBuildRequestBody_OpenRouterProviderRouting(t *testing.T) {
+	allowFallbacks := false
+	p := NewOpenAIProvider("openrouter", "sk-test", "https://openrouter.ai/api/v1", "deepseek/deepseek-v4-flash").
+		WithOpenRouterRouting([]string{"atlas-cloud"}, &allowFallbacks)
+	req := ChatRequest{
+		Model:    "deepseek/deepseek-v4-flash",
+		Messages: []Message{{Role: "user", Content: "hello"}},
+	}
+
+	body := p.buildRequestBody("deepseek/deepseek-v4-flash", req, false)
+	raw, ok := body["provider"]
+	if !ok {
+		t.Fatal("body missing OpenRouter provider routing")
+	}
+	route, ok := raw.(map[string]any)
+	if !ok {
+		t.Fatalf("provider route is not map[string]any: %T", raw)
+	}
+	order, ok := route["order"].([]string)
+	if !ok {
+		t.Fatalf("provider.order is not []string: %T", route["order"])
+	}
+	if len(order) != 1 || order[0] != "atlas-cloud" {
+		t.Fatalf("provider.order = %v, want [atlas-cloud]", order)
+	}
+	if got := route["allow_fallbacks"]; got != false {
+		t.Fatalf("provider.allow_fallbacks = %v, want false", got)
+	}
+}

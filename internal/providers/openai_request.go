@@ -145,6 +145,16 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 		"messages": msgs,
 		"stream":   stream,
 	}
+	if p.name == "openrouter" && (len(p.openRouterProviderOrder) > 0 || p.openRouterAllowFallbacks != nil) {
+		route := map[string]any{}
+		if len(p.openRouterProviderOrder) > 0 {
+			route["order"] = append([]string(nil), p.openRouterProviderOrder...)
+		}
+		if p.openRouterAllowFallbacks != nil {
+			route["allow_fallbacks"] = *p.openRouterAllowFallbacks
+		}
+		body["provider"] = route
+	}
 
 	if len(req.Tools) > 0 {
 		body["tools"] = buildToolsPayload(p.schemaProviderName(), req.Tools)
