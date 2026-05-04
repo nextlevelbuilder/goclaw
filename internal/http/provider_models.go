@@ -15,8 +15,8 @@ import (
 
 // ModelInfo is a normalized model entry returned by the list-models endpoint.
 type ModelInfo struct {
-	ID        string                        `json:"id"`
-	Name      string                        `json:"name,omitempty"`
+	ID        string                         `json:"id"`
+	Name      string                         `json:"name,omitempty"`
 	Reasoning *providers.ReasoningCapability `json:"reasoning,omitempty"`
 }
 
@@ -61,9 +61,24 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 		return
 	}
 
+	if p.ProviderType == store.ProviderCodexCLI {
+		respond(codexCLIModels())
+		return
+	}
+
+	if p.ProviderType == store.ProviderGeminiCLI {
+		respond(geminiCLIModels())
+		return
+	}
+
 	// ACP agents don't need an API key — return hardcoded models
 	if p.ProviderType == store.ProviderACP {
 		respond(acpModels())
+		return
+	}
+	// ComfyUI does not expose a standard model catalog endpoint via this API.
+	if p.ProviderType == store.ProviderComfyUI {
+		respond([]ModelInfo{})
 		return
 	}
 

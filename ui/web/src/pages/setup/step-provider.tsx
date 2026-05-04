@@ -45,8 +45,11 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
 
   const isOAuth = providerType === "chatgpt_oauth";
   const isCLI = providerType === "claude_cli";
+  const isCodexCLI = providerType === "codex_cli";
+  const isGeminiCLI = providerType === "gemini_cli";
   // Local Ollama uses no API key — the server accepts any non-empty Bearer value internally
   const isOllama = providerType === "ollama";
+  const needsAPIKey = !isCLI && !isCodexCLI && !isGeminiCLI && !isOllama && !isOAuth;
 
   const handleTypeChange = (value: string) => {
     setProviderType(value);
@@ -97,7 +100,7 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
 
   const handleSubmit = async () => {
     if (isOAuth) return;
-    if (!isEditing && !isCLI && !isOllama && !apiKey.trim()) { setError(t("provider.errors.apiKeyRequired")); return; }
+    if (!isEditing && needsAPIKey && !apiKey.trim()) { setError(t("provider.errors.apiKeyRequired")); return; }
     setLoading(true);
     setError("");
     try {
@@ -116,7 +119,7 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
           name: name.trim(),
           provider_type: providerType,
           api_base: apiBase.trim() || undefined,
-          api_key: isCLI || isOllama || isOAuth ? undefined : apiKey.trim(),
+          api_key: needsAPIKey ? apiKey.trim() : undefined,
           enabled: true,
         }) as ProviderData;
         onComplete(provider);
@@ -139,6 +142,10 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
                 ? t("provider.descriptionOauth")
                 : isCLI
                 ? t("provider.descriptionCli")
+                : isCodexCLI
+                ? t("provider.descriptionCodexCli", "Run Codex CLI locally inside the GoClaw container. No API key needed.")
+                : isGeminiCLI
+                ? t("provider.descriptionGeminiCli", "Run Gemini CLI locally inside the GoClaw container. No API key needed.")
                 : t("provider.description")}
             </p>
           </div>
@@ -194,7 +201,11 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
               />
             </>
           ) : isCLI ? (
-            <CLISection open={true} />
+            <CLISection open={true} kind="claude" />
+          ) : isCodexCLI ? (
+            <CLISection open={true} kind="codex" />
+          ) : isGeminiCLI ? (
+            <CLISection open={true} kind="gemini" />
           ) : (
             <>
               <div className="space-y-2">
@@ -228,7 +239,7 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
 
           {!isOAuth && (
             <div className="flex justify-end">
-              <Button onClick={handleSubmit} disabled={loading || (!isEditing && !isCLI && !isOllama && !apiKey.trim())}>
+              <Button onClick={handleSubmit} disabled={loading || (!isEditing && needsAPIKey && !apiKey.trim())}>
                 {loading
                   ? isEditing ? t("provider.updating", "Updating...") : t("provider.creating")
                   : isEditing ? t("provider.update", "Update") : t("provider.create")}

@@ -25,10 +25,11 @@ type credentialProvider interface {
 }
 
 // imageGenProviderPriority is the default order for image generation providers.
-var imageGenProviderPriority = []string{"openrouter", "gemini", "openai", "minimax", "dashscope", "byteplus"}
+var imageGenProviderPriority = []string{"comfyui", "openrouter", "gemini", "openai", "minimax", "dashscope", "byteplus"}
 
 // imageGenModelDefaults maps provider names to default image generation models.
 var imageGenModelDefaults = map[string]string{
+	"comfyui":    "sd_xl_turbo_1.0_fp16",
 	"openrouter": "google/gemini-2.5-flash-image",
 	"openai":     "gpt-image-1.5",
 	"gemini":     "gemini-2.5-flash-image",
@@ -197,6 +198,8 @@ func (t *CreateImageTool) callProvider(ctx context.Context, cp credentialProvide
 		"provider", providerName, "model", model, "aspect_ratio", aspectRatio)
 
 	switch GetParamString(params, "_provider_type", providerTypeFromName(providerName)) {
+	case "comfyui":
+		return callComfyUIImageGen(ctx, cp.APIBase(), model, prompt, params)
 	case "gemini":
 		return t.callGeminiNativeImageGen(ctx, cp.APIKey(), cp.APIBase(), model, prompt, params)
 	case "openrouter":

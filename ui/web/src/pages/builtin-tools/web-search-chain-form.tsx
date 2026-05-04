@@ -25,13 +25,14 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 
-type ProviderKey = "exa" | "tavily" | "brave" | "duckduckgo";
+type ProviderKey = "exa" | "tavily" | "brave" | "searxng" | "omniroute" | "duckduckgo";
 
 interface ProviderEntry {
   id: string;
   name: ProviderKey;
   enabled: boolean;
   max_results?: number;
+  base_url?: string;
   /** Staged API key value — extracted and saved to config_secrets on PUT, never stored in settings */
   apiKey?: string;
 }
@@ -44,14 +45,16 @@ interface Props {
   onCancel: () => void;
 }
 
-const SORTABLE_PROVIDERS: ProviderKey[] = ["exa", "tavily", "brave"];
+const SORTABLE_PROVIDERS: ProviderKey[] = ["exa", "tavily", "brave", "searxng", "omniroute"];
 const LOCKED_PROVIDER: ProviderKey = "duckduckgo";
-const DEFAULT_ORDER: ProviderKey[] = ["exa", "tavily", "brave"];
+const DEFAULT_ORDER: ProviderKey[] = ["exa", "tavily", "brave", "searxng", "omniroute"];
 
 const RAIL_COLOR: Record<ProviderKey, string> = {
   exa: "bg-blue-600",
   tavily: "bg-cyan-500",
   brave: "bg-orange-500",
+  searxng: "bg-emerald-600",
+  omniroute: "bg-indigo-600",
   duckduckgo: "bg-slate-500",
 };
 
@@ -60,15 +63,18 @@ function parseInitialEntries(settings: Record<string, unknown>): ProviderEntry[]
     ? (settings.provider_order as string[]).filter((p): p is ProviderKey =>
         SORTABLE_PROVIDERS.includes(p as ProviderKey),
       )
-    : DEFAULT_ORDER;
+    : [];
+  const normalizedOrder =
+    rawOrder.length > 0 ? [...rawOrder, ...DEFAULT_ORDER.filter((p) => !rawOrder.includes(p))] : DEFAULT_ORDER;
 
-  return rawOrder.map((name) => {
+  return normalizedOrder.map((name) => {
     const cfg = (settings[name] ?? {}) as Record<string, unknown>;
     return {
       id: uniqueId(),
       name,
       enabled: Boolean(cfg.enabled ?? true),
       max_results: cfg.max_results != null ? Number(cfg.max_results) : undefined,
+      base_url: typeof cfg.base_url === "string" ? cfg.base_url : undefined,
     };
   });
 }
@@ -98,6 +104,7 @@ function SortableProviderCard({ entry, index, secretsSet, onUpdate }: SortableCa
   const showInput = showKeyInput || !keyIsSet;
 
   const displayName = t(`builtin.searchChain.providers.${entry.name}`, { defaultValue: entry.name });
+  const supportsBaseURL = entry.name === "searxng" || entry.name === "omniroute";
 
   return (
     <div
@@ -140,6 +147,22 @@ function SortableProviderCard({ entry, index, secretsSet, onUpdate }: SortableCa
           />
         </div>
 
+        {/* Base URL row */}
+        {supportsBaseURL && (
+          <div className="flex items-center gap-1.5 mt-2 pl-10">
+            <Label className="text-xs text-muted-foreground whitespace-nowrap">
+              {t("builtin.searchChain.baseUrl")}
+            </Label>
+            <Input
+              type="text"
+              placeholder={entry.name === "searxng" ? "http://127.0.0.1:8080/search" : "https://api.example.com/v1/search"}
+              value={entry.base_url ?? ""}
+              onChange={(e) => onUpdate(entry.id, { base_url: e.target.value })}
+              className="h-7 flex-1 text-base md:text-sm font-mono"
+            />
+          </div>
+        )}
+
         {/* API key row */}
         <div className="flex items-center gap-1.5 mt-2 pl-10">
           <Label className="text-xs text-muted-foreground whitespace-nowrap">
@@ -179,7 +202,7 @@ function SortableProviderCard({ entry, index, secretsSet, onUpdate }: SortableCa
   );
 }
 
-function LockedDuckDuckGoCard({ settings }: { settings: Record<string, unknown> }) {
+function LockedDuckDuckGoCard({ settings, index }: { settings: Record<string, unknown>; index: number }) {
   const { t } = useTranslation("tools");
   const cfg = (settings[LOCKED_PROVIDER] ?? {}) as Record<string, unknown>;
   const enabled = Boolean(cfg.enabled ?? true);
@@ -190,7 +213,7 @@ function LockedDuckDuckGoCard({ settings }: { settings: Record<string, unknown> 
       <div className="flex-1 px-3 py-3">
         <div className="flex items-center gap-2">
           <Lock className="size-4 text-muted-foreground shrink-0" />
-          <span className="text-xs text-muted-foreground font-mono shrink-0">#4</span>
+          <span className="text-xs text-muted-foreground font-mono shrink-0">#{index}</span>
           <Switch size="sm" checked disabled />
           <span className="text-sm font-medium flex-1">
             {t("builtin.searchChain.providers.duckduckgo")}
@@ -237,6 +260,9 @@ export function WebSearchChainForm({ initialSettings, secretsSet, onSave, onCanc
       for (const entry of entries) {
         const cfg: Record<string, unknown> = { enabled: entry.enabled };
         if (entry.max_results != null) cfg.max_results = entry.max_results;
+        if (entry.base_url && entry.base_url.trim() !== "") {
+          cfg.base_url = entry.base_url.trim();
+        }
         // Include api_key only when user typed a new value — backend extracts and strips it
         if (entry.apiKey && entry.apiKey.trim() !== "") {
           cfg.api_key = entry.apiKey.trim();
@@ -273,7 +299,7 @@ export function WebSearchChainForm({ initialSettings, secretsSet, onSave, onCanc
             ))}
           </SortableContext>
         </DndContext>
-        <LockedDuckDuckGoCard settings={initialSettings} />
+        <LockedDuckDuckGoCard settings={initialSettings} index={entries.length + 1} />
       </div>
 
       <DialogFooter>

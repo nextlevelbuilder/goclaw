@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -84,6 +85,50 @@ func (h *ProvidersHandler) handleVerifyProvider(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	// Codex CLI: verify binary exists on the server.
+	if p.ProviderType == store.ProviderCodexCLI {
+		binary := p.APIBase
+		if binary == "" {
+			binary = "codex"
+		}
+		if binary != "codex" && !filepath.IsAbs(binary) {
+			writeJSON(w, http.StatusOK, map[string]any{"valid": false, "error": "invalid binary path"})
+			return
+		}
+		if binary == "codex" && localFileExists("/usr/local/lib/node_modules/@openai/codex/bin/codex.js") {
+			if _, err := exec.LookPath("node"); err != nil {
+				writeJSON(w, http.StatusOK, map[string]any{"valid": false, "error": "node not found"})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"valid": true})
+			return
+		}
+		if _, err := exec.LookPath(binary); err != nil {
+			writeJSON(w, http.StatusOK, map[string]any{"valid": false, "error": "binary not found: " + binary})
+		} else {
+			writeJSON(w, http.StatusOK, map[string]any{"valid": true})
+		}
+		return
+	}
+
+	// Gemini CLI: verify binary exists on the server.
+	if p.ProviderType == store.ProviderGeminiCLI {
+		binary := p.APIBase
+		if binary == "" {
+			binary = "gemini"
+		}
+		if binary != "gemini" && !filepath.IsAbs(binary) {
+			writeJSON(w, http.StatusOK, map[string]any{"valid": false, "error": "invalid binary path"})
+			return
+		}
+		if _, err := exec.LookPath(binary); err != nil {
+			writeJSON(w, http.StatusOK, map[string]any{"valid": false, "error": "binary not found: " + binary})
+		} else {
+			writeJSON(w, http.StatusOK, map[string]any{"valid": true})
+		}
+		return
+	}
+
 	// Claude CLI: validate model alias locally (no LLM call needed)
 	if p.ProviderType == "claude_cli" {
 		if pingMode {
@@ -144,6 +189,11 @@ func (h *ProvidersHandler) handleVerifyProvider(w http.ResponseWriter, r *http.R
 	writeJSON(w, http.StatusOK, map[string]any{"valid": true})
 }
 
+func localFileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
 // handleClaudeCLIAuthStatus checks whether the Claude CLI is authenticated on the server.
 //
 //	GET /v1/providers/claude-cli/auth-status
@@ -171,6 +221,104 @@ func (h *ProvidersHandler) handleClaudeCLIAuthStatus(w http.ResponseWriter, r *h
 		writeJSON(w, http.StatusOK, map[string]any{
 			"logged_in": false,
 			"error":     err.Error(),
+			"in_docker": inDocker,
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"logged_in":         status.LoggedIn,
+		"email":             status.Email,
+		"subscription_type": status.SubscriptionType,
+		"in_docker":         inDocker,
+	})
+}
+
+// handleCodexCLIAuthStatus checks whether the Codex CLI is authenticated on the server.
+//
+//	GET /v1/providers/codex-cli/auth-status
+//	Response: {"logged_in": true, "email": "...", "subscription_type": "codex"}
+//	     or: {"logged_in": false, "error": "..."}
+func (h *ProvidersHandler) handleCodexCLIAuthStatus(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	cliPath := "codex"
+	if existing, err := h.store.ListProviders(r.Context()); err == nil {
+		for _, p := range existing {
+			if p.ProviderType == store.ProviderCodexCLI && p.APIBase != "" {
+				cliPath = p.APIBase
+				break
+			}
+			if p.ProviderType == store.ProviderACP && p.Name == "codex-cli" && p.APIBase != "" {
+				cliPath = p.APIBase
+				break
+			}
+		}
+	}
+
+	inDocker := config.InDocker()
+
+	status, err := providers.CheckCodexAuthStatus(ctx, cliPath)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"logged_in": false,
+			"error":     err.Error(),
+			"in_docker": inDocker,
+		})
+		return
+	}
+	if !status.LoggedIn {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"logged_in": false,
+			"error":     "Codex auth not found. Check /app/data/.codex/auth.json inside the container.",
+			"in_docker": inDocker,
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"logged_in":         status.LoggedIn,
+		"email":             status.Email,
+		"subscription_type": status.SubscriptionType,
+		"in_docker":         inDocker,
+	})
+}
+
+// handleGeminiCLIAuthStatus checks whether the Gemini CLI is authenticated on the server.
+//
+//	GET /v1/providers/gemini-cli/auth-status
+//	Response: {"logged_in": true, "email": "...", "subscription_type": "oauth-personal"}
+//	     or: {"logged_in": false, "error": "..."}
+func (h *ProvidersHandler) handleGeminiCLIAuthStatus(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	cliPath := "gemini"
+	if existing, err := h.store.ListProviders(r.Context()); err == nil {
+		for _, p := range existing {
+			if p.ProviderType == store.ProviderGeminiCLI && p.APIBase != "" {
+				cliPath = p.APIBase
+				break
+			}
+		}
+	}
+
+	inDocker := config.InDocker()
+
+	status, err := providers.CheckGeminiAuthStatus(ctx, cliPath)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"logged_in": false,
+			"error":     err.Error(),
+			"in_docker": inDocker,
+		})
+		return
+	}
+	if !status.LoggedIn {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"logged_in": false,
+			"error":     "Gemini auth not found. Check /app/data/.gemini/settings.json inside the container.",
 			"in_docker": inDocker,
 		})
 		return

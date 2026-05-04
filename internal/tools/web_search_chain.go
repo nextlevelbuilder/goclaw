@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -93,8 +94,9 @@ func (c *tenantChainCache) InvalidateAll() {
 // non-nil fields override the default. Unknown fields in the JSON blob are
 // ignored to stay forward-compatible with future tuning knobs.
 type WebSearchProviderOverride struct {
-	Enabled    *bool `json:"enabled,omitempty"`
-	MaxResults int   `json:"max_results,omitempty"`
+	Enabled    *bool  `json:"enabled,omitempty"`
+	MaxResults int    `json:"max_results,omitempty"`
+	BaseURL    string `json:"base_url,omitempty"`
 }
 
 // WebSearchChainOverride is the full tenant settings shape for web_search.
@@ -184,7 +186,7 @@ func BuildChainFromStorage(ctx context.Context, secrets store.ConfigSecretsStore
 			if po, ok := override.Providers[name]; ok && po.MaxResults > 0 {
 				maxResults = po.MaxResults
 			}
-			chain = append(chain, buildProviderByName(name, "", maxResults))
+			chain = append(chain, buildProviderByName(name, "", maxResults, webSearchProviderOptions{}))
 			continue
 		}
 
@@ -192,18 +194,30 @@ func BuildChainFromStorage(ctx context.Context, secrets store.ConfigSecretsStore
 			continue
 		}
 
-		key, err := secrets.Get(ctx, "tools.web."+name+".api_key")
-		if err != nil || key == "" {
-			// No key → provider not configured for this tenant; skip silently.
-			continue
-		}
-
 		maxResults := defaultSearchCount
+		var cfg WebSearchProviderOverride
 		if po, ok := override.Providers[name]; ok && po.MaxResults > 0 {
 			maxResults = po.MaxResults
 		}
+		if po, ok := override.Providers[name]; ok {
+			cfg = po
+		}
 
-		p := buildProviderByName(name, key, maxResults)
+		key, _ := secrets.Get(ctx, "tools.web."+name+".api_key")
+		switch name {
+		case searchProviderExa, searchProviderTavily, searchProviderBrave, searchProviderOmniRoute:
+			if key == "" {
+				// No key → provider not configured for this tenant; skip silently.
+				continue
+			}
+		case searchProviderSearxng:
+			// Allow local/private SearXNG without auth when base_url is explicitly configured.
+			if key == "" && strings.TrimSpace(cfg.BaseURL) == "" {
+				continue
+			}
+		}
+
+		p := buildProviderByName(name, key, maxResults, webSearchProviderOptions{BaseURL: cfg.BaseURL})
 		if p == nil {
 			slog.Warn("web_search: unknown provider name in chain", "name", name)
 			continue

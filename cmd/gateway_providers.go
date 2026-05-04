@@ -309,7 +309,19 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 		}
 		// ACP provider — no API key needed (agents manage their own auth).
 		if p.ProviderType == store.ProviderACP {
+			if isLegacyCodexCLIProvider(p) {
+				registerCodexCLIFromDB(registry, p)
+				continue
+			}
 			registerACPFromDB(registry, p)
+			continue
+		}
+		if p.ProviderType == store.ProviderCodexCLI {
+			registerCodexCLIFromDB(registry, p)
+			continue
+		}
+		if p.ProviderType == store.ProviderGeminiCLI {
+			registerGeminiCLIFromDB(registry, p)
 			continue
 		}
 		// Local Ollama requires no API key — handle before the key guard (same pattern as ClaudeCLI).
@@ -320,6 +332,18 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 				host = "http://localhost:11434/v1"
 			}
 			registry.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, "ollama", config.DockerLocalhost(host), "llama3.3"))
+			slog.Info("registered provider from DB", "name", p.Name)
+			continue
+		}
+		// Local ComfyUI requires no API key.
+		if p.ProviderType == store.ProviderComfyUI {
+			base := p.APIBase
+			if base == "" {
+				base = "http://127.0.0.1:8188"
+			}
+			prov := providers.NewOpenAIProvider(p.Name, "", config.DockerLocalhost(base), "")
+			prov.WithProviderType(p.ProviderType)
+			registry.RegisterForTenant(p.TenantID, prov)
 			slog.Info("registered provider from DB", "name", p.Name)
 			continue
 		}
@@ -482,6 +506,50 @@ func registerACPFromDB(registry *providers.Registry, p store.LLMProviderData) {
 		providers.WithACPModel(p.Name),
 	))
 	slog.Info("registered provider from DB", "name", p.Name, "type", "acp")
+}
+
+func isLegacyCodexCLIProvider(p store.LLMProviderData) bool {
+	return p.ProviderType == store.ProviderACP && p.Name == "codex-cli" && (p.APIBase == "" || p.APIBase == "codex")
+}
+
+// registerCodexCLIFromDB registers Codex CLI as a local subprocess provider.
+func registerCodexCLIFromDB(registry *providers.Registry, p store.LLMProviderData) {
+	cliPath := p.APIBase
+	if cliPath == "" {
+		cliPath = "codex"
+	}
+	if cliPath != "codex" && !filepath.IsAbs(cliPath) {
+		slog.Warn("security.codex_cli: invalid path from DB", "path", cliPath)
+		cliPath = "codex"
+	}
+	if cliPath != "codex" {
+		if _, err := exec.LookPath(cliPath); err != nil {
+			slog.Warn("codex-cli: binary not found, skipping", "path", cliPath, "error", err)
+			return
+		}
+	}
+	registry.RegisterForTenant(p.TenantID, providers.NewCodexCLIProvider(cliPath, providers.WithCodexCLIName(p.Name)))
+	slog.Info("registered provider from DB", "name", p.Name, "type", "codex_cli")
+}
+
+// registerGeminiCLIFromDB registers Gemini CLI as a local subprocess provider.
+func registerGeminiCLIFromDB(registry *providers.Registry, p store.LLMProviderData) {
+	cliPath := p.APIBase
+	if cliPath == "" {
+		cliPath = "gemini"
+	}
+	if cliPath != "gemini" && !filepath.IsAbs(cliPath) {
+		slog.Warn("security.gemini_cli: invalid path from DB", "path", cliPath)
+		cliPath = "gemini"
+	}
+	if cliPath != "gemini" {
+		if _, err := exec.LookPath(cliPath); err != nil {
+			slog.Warn("gemini-cli: binary not found, skipping", "path", cliPath, "error", err)
+			return
+		}
+	}
+	registry.RegisterForTenant(p.TenantID, providers.NewGeminiCLIProvider(cliPath, providers.WithGeminiCLIName(p.Name)))
+	slog.Info("registered provider from DB", "name", p.Name, "type", "gemini_cli")
 }
 
 // defaultACPWorkDir returns the default workspace directory for ACP agents.

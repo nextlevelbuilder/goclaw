@@ -17,19 +17,23 @@ import (
 
 // Matching TS src/agents/tools/web-search.ts constants.
 const (
-	defaultSearchCount   = 5
-	maxSearchCount       = 10
-	searchTimeoutSeconds = 30
-	braveSearchEndpoint  = "https://api.search.brave.com/res/v1/web/search"
-	exaSearchEndpoint    = "https://api.exa.ai/search"
-	tavilySearchEndpoint = "https://api.tavily.com/search"
-	webSearchUserAgent   = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+	defaultSearchCount      = 5
+	maxSearchCount          = 10
+	searchTimeoutSeconds    = 30
+	braveSearchEndpoint     = "https://api.search.brave.com/res/v1/web/search"
+	exaSearchEndpoint       = "https://api.exa.ai/search"
+	tavilySearchEndpoint    = "https://api.tavily.com/search"
+	searxngSearchEndpoint   = "http://127.0.0.1:8080/search"
+	omniRouteSearchEndpoint = "https://omni.get-gmail.com/v1/search"
+	webSearchUserAgent      = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
 const (
 	searchProviderExa        = "exa"
 	searchProviderTavily     = "tavily"
 	searchProviderBrave      = "brave"
+	searchProviderSearxng    = "searxng"
+	searchProviderOmniRoute  = "omniroute"
 	searchProviderDuckDuckGo = "duckduckgo"
 )
 
@@ -37,6 +41,8 @@ var defaultSearchProviderOrder = []string{
 	searchProviderExa,
 	searchProviderTavily,
 	searchProviderBrave,
+	searchProviderSearxng,
+	searchProviderOmniRoute,
 	searchProviderDuckDuckGo,
 }
 

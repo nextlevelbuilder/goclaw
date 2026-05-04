@@ -147,6 +147,7 @@
       "title": "Web Search Provider Chain",
       "description": "Drag to reorder search providers. First enabled provider with a valid API key is tried first.",
       "maxResults": "Max results",
+      "baseUrl": "Base URL",
       "locked": "Always-on fallback",
       "cancel": "Cancel",
       "save": "Save",
@@ -155,6 +156,8 @@
         "exa": "Exa",
         "tavily": "Tavily",
         "brave": "Brave Search",
+        "searxng": "SearXNG",
+        "omniroute": "OmniRoute Search",
         "duckduckgo": "DuckDuckGo"
       },
       "apiKey": "API Key",
@@ -235,7 +238,16 @@
       "saving": "Saving...",
       "imageModelLabel": "Image model",
       "imageModelDefaultOption": "Default · gpt-image-2 (recommended)",
-      "imageModelLegacyOption": "Legacy · gpt-image-1.5"
+      "imageModelLegacyOption": "Legacy · gpt-image-1.5",
+      "workflowFormat": "Format JSON",
+      "workflowValidate": "Validate",
+      "workflowUpload": "Upload .json",
+      "workflowInvalidJson": "Invalid JSON",
+      "workflowInvalidWrapper": "Invalid wrapper: expected {\"prompt\": { ... }}",
+      "workflowMustBeObject": "Workflow JSON must be an object",
+      "workflowMissingPromptToken": "Missing required {{prompt}} placeholder",
+      "workflowValid": "Workflow JSON is valid",
+      "workflowFormatted": "JSON formatted"
     },
     "toast": {
       "toggled": "Tool updated",

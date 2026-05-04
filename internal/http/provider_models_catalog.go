@@ -81,6 +81,31 @@ func acpModels() []ModelInfo {
 	}
 }
 
+func codexCLIModels() []ModelInfo {
+	return withReasoningCapabilities([]ModelInfo{
+		{ID: "gpt-5.5", Name: "GPT-5.5"},
+		{ID: "gpt-5.4", Name: "GPT-5.4"},
+		{ID: "gpt-5.4-mini", Name: "GPT-5.4 Mini"},
+		{ID: "gpt-5.3-codex", Name: "GPT-5.3 Codex"},
+		{ID: "gpt-5.3-codex-spark", Name: "GPT-5.3 Codex Spark"},
+		{ID: "gpt-5.2-codex", Name: "GPT-5.2 Codex"},
+		{ID: "gpt-5.2", Name: "GPT-5.2"},
+	})
+}
+
+func geminiCLIModels() []ModelInfo {
+	return []ModelInfo{
+		{ID: "auto", Name: "Auto"},
+		{ID: "pro", Name: "Pro"},
+		{ID: "flash", Name: "Flash"},
+		{ID: "flash-lite", Name: "Flash Lite"},
+		{ID: "gemini-2.5-pro", Name: "Gemini 2.5 Pro"},
+		{ID: "gemini-2.5-flash", Name: "Gemini 2.5 Flash"},
+		{ID: "gemini-2.5-flash-lite", Name: "Gemini 2.5 Flash Lite"},
+		{ID: "gemini-3-pro-preview", Name: "Gemini 3 Pro Preview"},
+	}
+}
+
 // chatGPTOAuthModels returns models available via ChatGPT OAuth integration.
 func chatGPTOAuthModels() []ModelInfo {
 	return withReasoningCapabilities([]ModelInfo{

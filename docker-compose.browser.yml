@@ -13,6 +13,7 @@ services:
     # Replaces zenika/alpine-chrome:124, which stopped publishing new tags and
     # doesn't support `--load-extension` in its default headless mode (#722).
     image: chromedp/headless-shell:latest
+    hostname: chrome
     # The image's entrypoint already sets --remote-debugging-address=0.0.0.0
     # and --remote-debugging-port=9223, and fronts it with socat on :9222.
     # Re-specifying those flags here duplicates them and causes Chrome to
@@ -23,11 +24,16 @@ services:
       # New headless (Chrome 112+) is required for --load-extension to work.
       - --headless=new
       - --remote-allow-origins=*
-      - --disable-gpu
-      - --disable-dev-shm-usage
+      - --remote-debugging-address=0.0.0.0
+      #- --disable-gpu
+      #- --disable-dev-shm-usage
     ports:
       - "${CHROME_CDP_PORT:-9222}:9222"
     shm_size: 2gb
+    environment:
+      - HTTPS_PROXY=http://10.0.101.1:14920
+      - HTTP_PROXY=http://10.0.101.1:14920
+      - NO_PROXY=localhost,127.0.0.1,::1,172.0.0.0/8,192.168.0.0/16
     healthcheck:
       # chromedp/headless-shell is minimal — no wget/curl/nc. Use bash's
       # /dev/tcp builtin to probe the CDP port directly (bash is in the image).
@@ -43,8 +49,6 @@ services:
     restart: unless-stopped
 
   goclaw:
-    environment:
-      - GOCLAW_BROWSER_REMOTE_URL=ws://chrome:9222
     depends_on:
       chrome:
         condition: service_healthy

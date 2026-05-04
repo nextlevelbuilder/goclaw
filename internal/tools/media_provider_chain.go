@@ -326,6 +326,7 @@ var dbTypeToMediaType = map[string]string{
 	"anthropic_native": "anthropic",
 	"byteplus":         "byteplus",
 	"byteplus_coding":  "byteplus",
+	"comfyui":          "comfyui",
 }
 
 // ResolveProviderType returns the media routing type for a provider.
@@ -423,6 +424,8 @@ func providerTypeFromName(name string) string {
 		return "byteplus"
 	case name == "yescale":
 		return "openai"
+	case name == "comfyui" || strings.HasPrefix(name, "comfyui-"):
+		return "comfyui"
 	default:
 		return "openai_compat"
 	}

@@ -21,10 +21,12 @@
 #
 # With OTel tracing:  add -f docker-compose.otel.yml
 # With Claude CLI:    add -f docker-compose.claude-cli.yml
+# With Codex CLI:     add -f docker-compose.codex-cli.yml
+# With Gemini CLI:    add -f docker-compose.gemini-cli.yml
 
 services:
   goclaw:
-    image: ghcr.io/nextlevelbuilder/goclaw:latest
+    image: ghcr.io/nextlevelbuilder/goclaw:latest-full
     build:
       context: ${GOCLAW_DIR:-.}
       dockerfile: Dockerfile
@@ -32,7 +34,9 @@ services:
         ENABLE_OTEL: "${ENABLE_OTEL:-false}"
         ENABLE_EMBEDUI: "${ENABLE_EMBEDUI:-true}"  # set to false when using WITH_WEB_NGINX
         ENABLE_PYTHON: "${ENABLE_PYTHON:-true}"
-        ENABLE_FULL_SKILLS: "${ENABLE_FULL_SKILLS:-false}"
+        ENABLE_NODE: "${ENABLE_NODE:-true}"
+        ENABLE_NPM: "${ENABLE_NPM:-true}"
+        ENABLE_FULL_SKILLS: "${ENABLE_FULL_SKILLS:-true}"
         VERSION: "${GOCLAW_VERSION:-dev}"
     # Uncomment to test update UI: GOCLAW_VERSION=v1.0.0
     ports:
@@ -52,17 +56,9 @@ services:
     volumes:
       - goclaw-data:/app/data
       - goclaw-workspace:/app/workspace
+      - goclaw-ssh:/app/.ssh/
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    security_opt:
-      - no-new-privileges:true
-    init: true
-    cap_drop:
-      - ALL
-    cap_add:
-      - SETUID
-      - SETGID
-      - CHOWN
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=256m
     deploy:
@@ -78,8 +74,27 @@ services:
 
 volumes:
   goclaw-data:
-  goclaw-workspace:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: 'bind'
+      # Set the absolute path to the directory on your machine
+      device: '/opt/goclawAI/data'
 
+  goclaw-workspace:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: 'bind'
+      # Set the absolute path to the directory on your machine
+      device: '/opt/goclawAI/workspace'
+  goclaw-ssh:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: 'bind'
+      # Set the absolute path to the directory on your machine
+      device: '/root/.ssh/'
 networks:
   goclaw-net:
     name: goclaw-net

@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -141,6 +142,8 @@ func (h *ProvidersHandler) RegisterRoutes(mux *http.ServeMux) {
 
 	// Claude CLI auth status (global — not per-provider)
 	mux.HandleFunc("GET /v1/providers/claude-cli/auth-status", h.auth(h.handleClaudeCLIAuthStatus))
+	mux.HandleFunc("GET /v1/providers/codex-cli/auth-status", h.auth(h.handleCodexCLIAuthStatus))
+	mux.HandleFunc("GET /v1/providers/gemini-cli/auth-status", h.auth(h.handleGeminiCLIAuthStatus))
 }
 
 func (h *ProvidersHandler) auth(next http.HandlerFunc) http.HandlerFunc {
@@ -163,6 +166,17 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 	// ACP agents don't need an API key — skip in-memory registration
 	// (ACP providers are registered via gateway_providers.go on startup or restart)
 	if p.ProviderType == store.ProviderACP {
+		if p.Name == "codex-cli" && (p.APIBase == "" || p.APIBase == "codex") {
+			h.registerCodexCLIInMemory(p)
+		}
+		return
+	}
+	if p.ProviderType == store.ProviderCodexCLI {
+		h.registerCodexCLIInMemory(p)
+		return
+	}
+	if p.ProviderType == store.ProviderGeminiCLI {
+		h.registerGeminiCLIInMemory(p)
 		return
 	}
 	// Claude CLI doesn't need an API key — register immediately
@@ -202,6 +216,18 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 			host = "http://localhost:11434/v1"
 		}
 		h.providerReg.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, "ollama", config.DockerLocalhost(host), "llama3.3"))
+		return
+	}
+	// ComfyUI is local/self-hosted and does not require an API key.
+	// Register as OpenAIProvider carrier so media-chain can resolve credentials shape.
+	if p.ProviderType == store.ProviderComfyUI {
+		base := p.APIBase
+		if base == "" {
+			base = "http://127.0.0.1:8188"
+		}
+		prov := providers.NewOpenAIProvider(p.Name, "", config.DockerLocalhost(base), "")
+		prov.WithProviderType(p.ProviderType)
+		h.providerReg.RegisterForTenant(p.TenantID, prov)
 		return
 	}
 	if p.APIKey == "" {
@@ -248,6 +274,42 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 	}
 }
 
+func (h *ProvidersHandler) registerCodexCLIInMemory(p *store.LLMProviderData) {
+	cliPath := p.APIBase
+	if cliPath == "" {
+		cliPath = "codex"
+	}
+	if cliPath != "codex" && !filepath.IsAbs(cliPath) {
+		slog.Warn("security.codex_cli: invalid path, using default", "path", cliPath, "provider", p.Name)
+		cliPath = "codex"
+	}
+	if cliPath != "codex" {
+		if _, err := exec.LookPath(cliPath); err != nil {
+			slog.Warn("codex-cli: binary not found, skipping in-memory registration", "path", cliPath, "provider", p.Name, "error", err)
+			return
+		}
+	}
+	h.providerReg.RegisterForTenant(p.TenantID, providers.NewCodexCLIProvider(cliPath, providers.WithCodexCLIName(p.Name)))
+}
+
+func (h *ProvidersHandler) registerGeminiCLIInMemory(p *store.LLMProviderData) {
+	cliPath := p.APIBase
+	if cliPath == "" {
+		cliPath = "gemini"
+	}
+	if cliPath != "gemini" && !filepath.IsAbs(cliPath) {
+		slog.Warn("security.gemini_cli: invalid path, using default", "path", cliPath, "provider", p.Name)
+		cliPath = "gemini"
+	}
+	if cliPath != "gemini" {
+		if _, err := exec.LookPath(cliPath); err != nil {
+			slog.Warn("gemini-cli: binary not found, skipping in-memory registration", "path", cliPath, "provider", p.Name, "error", err)
+			return
+		}
+	}
+	h.providerReg.RegisterForTenant(p.TenantID, providers.NewGeminiCLIProvider(cliPath, providers.WithGeminiCLIName(p.Name)))
+}
+
 // normalizeOllamaAPIBase ensures Ollama and OllamaCloud api_base values include the
 // /v1 suffix required for OpenAI-compatible endpoints. Normalizing at write time means
 // resolveAPIBase() always returns a ready-to-use base URL.
@@ -268,12 +330,18 @@ func normalizeOllamaAPIBase(p *store.LLMProviderData) {
 // (e.g. Ollama, Claude CLI). SSRF checks are skipped for these.
 var localProviderTypes = map[string]bool{
 	store.ProviderOllama:    true,
+	store.ProviderComfyUI:   true,
 	store.ProviderClaudeCLI: true,
+	store.ProviderCodexCLI:  true,
+	store.ProviderGeminiCLI: true,
 	store.ProviderACP:       true,
 }
 
 // validateProviderURL rejects provider base URLs pointing to internal/private networks.
 // Defense-in-depth: prevents SSRF when providers are later used for API calls.
+//
+// Set GOCLAW_ALLOW_PRIVATE_PROVIDER_URLS=1 to allow RFC1918/internal-DNS provider
+// endpoints on trusted LANs. Loopback, wildcard, and metadata targets stay blocked.
 func validateProviderURL(rawURL string, providerType string) error {
 	if rawURL == "" || localProviderTypes[providerType] {
 		return nil
@@ -289,6 +357,7 @@ func validateProviderURL(rawURL string, providerType string) error {
 		return fmt.Errorf("provider URL must use http or https scheme, got %q", u.Scheme)
 	}
 	host := u.Hostname()
+	allowPrivate := strings.EqualFold(os.Getenv("GOCLAW_ALLOW_PRIVATE_PROVIDER_URLS"), "1") || strings.EqualFold(os.Getenv("GOCLAW_ALLOW_PRIVATE_PROVIDER_URLS"), "true")
 	// Block obvious internal targets
 	blocked := []string{"localhost", "127.0.0.1", "::1", "0.0.0.0", "169.254.169.254", "metadata.google.internal"}
 	for _, b := range blocked {
@@ -296,18 +365,21 @@ func validateProviderURL(rawURL string, providerType string) error {
 			return fmt.Errorf("provider URL cannot point to %s", b)
 		}
 	}
-	// Block private IP ranges (normalize IPv6-mapped IPv4 to catch ::ffff:127.0.0.1)
+	// Block private IP ranges by default (normalize IPv6-mapped IPv4 to catch ::ffff:127.0.0.1)
 	ip := net.ParseIP(host)
 	if ip != nil {
 		if v4 := ip.To4(); v4 != nil {
 			ip = v4
 		}
-		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+		if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+			return fmt.Errorf("provider URL cannot point to private network: %s", host)
+		}
+		if ip.IsPrivate() && !allowPrivate {
 			return fmt.Errorf("provider URL cannot point to private network: %s", host)
 		}
 	}
-	// Block common internal hostnames
-	if strings.HasSuffix(host, ".internal") || strings.HasSuffix(host, ".local") {
+	// Block common internal hostnames by default.
+	if (strings.HasSuffix(host, ".internal") || strings.HasSuffix(host, ".local")) && !allowPrivate {
 		return fmt.Errorf("provider URL cannot point to internal hostname: %s", host)
 	}
 	return nil

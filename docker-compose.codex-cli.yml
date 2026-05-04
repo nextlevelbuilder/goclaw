@@ -1,0 +1,14 @@
+# Optional overlay: install Codex CLI and sync credentials/config from host into container.
+# Mounts host ~/.codex as read-only; entrypoint copies it to the data volume.
+# Adds ENABLE_CODEX_CLI build arg to install nodejs + @openai/codex.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.codex-cli.yml up -d --build
+
+services:
+  goclaw:
+    build:
+      args:
+        ENABLE_CODEX_CLI: "true"
+    volumes:
+      - ${HOME}/.codex:/app/.codex-host:ro

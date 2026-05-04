@@ -51,6 +51,24 @@ export const MEDIA_PARAMS_SCHEMA: Record<string, Record<string, ParamField[]>> =
       },
       { key: "prompt_extend", label: "Prompt Extend", type: "toggle", default: true },
     ],
+    comfyui: [
+      {
+        key: "workflow_api_json",
+        label: "Workflow API JSON",
+        type: "text",
+        default: "",
+        description: "ComfyUI API-format workflow JSON. Use {{prompt}} where tool prompt should be injected.",
+      },
+      {
+        key: "poll_interval_ms",
+        label: "Poll Interval (ms)",
+        type: "number",
+        default: 1000,
+        min: 200,
+        max: 10000,
+        step: 100,
+      },
+    ],
   },
   create_video: {
     minimax_native: [

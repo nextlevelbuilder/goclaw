@@ -19,14 +19,14 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      - GOCLAW_SANDBOX_MODE=all
+      - GOCLAW_SANDBOX_MODE=off
       - GOCLAW_SANDBOX_IMAGE=goclaw-sandbox:bookworm-slim
       - GOCLAW_SANDBOX_WORKSPACE_ACCESS=rw
       - GOCLAW_SANDBOX_SCOPE=session
       - GOCLAW_SANDBOX_MEMORY_MB=512
       - GOCLAW_SANDBOX_CPUS=1.0
       - GOCLAW_SANDBOX_TIMEOUT_SEC=300
-      - GOCLAW_SANDBOX_NETWORK=false
+      - GOCLAW_SANDBOX_NETWORK=true
     # Docker socket requires overriding base cap_drop to allow container orchestration.
     # Keep security_opt (no-new-privileges) from base — do NOT clear it.
     # Only add the minimum cap needed: NET_BIND_SERVICE for port binding.

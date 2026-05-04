@@ -100,6 +100,50 @@ if [ -d /app/.claude-host ] && ! command -v claude >/dev/null 2>&1; then
   echo "WARNING: Claude credentials mounted but claude CLI not installed. Rebuild with: --build"
 fi
 
+# Copy Codex CLI credentials/config from read-only host mount to the data volume.
+# /app/.codex is a symlink → /app/data/.codex (writable volume, see Dockerfile).
+if [ -d /app/.codex-host ]; then
+  if mkdir -p /app/data/.codex && cp -R /app/.codex-host/. /app/data/.codex/; then
+    chown -R goclaw:goclaw /app/data/.codex 2>/dev/null || true
+    find /app/data/.codex -type d -exec chmod 700 {} + 2>/dev/null || true
+    find /app/data/.codex -type f -exec chmod 600 {} + 2>/dev/null || true
+    echo "Codex CLI config synced from host."
+  else
+    echo "WARNING: Codex config copy failed (non-fatal)"
+  fi
+elif [ -d /app/data/.codex ]; then
+  chown -R goclaw:goclaw /app/data/.codex 2>/dev/null || true
+  find /app/data/.codex -type d -exec chmod 700 {} + 2>/dev/null || true
+  find /app/data/.codex -type f -exec chmod 600 {} + 2>/dev/null || true
+fi
+
+# Warn if Codex config is mounted but CLI binary is missing (forgot --build).
+if [ -d /app/.codex-host ] && ! command -v codex >/dev/null 2>&1; then
+  echo "WARNING: Codex config mounted but codex CLI not installed. Rebuild with: --build"
+fi
+
+# Copy Gemini CLI config from read-only host mount to the data volume.
+# /app/.gemini is a symlink -> /app/data/.gemini (writable volume, see Dockerfile).
+if [ -d /app/.gemini-host ]; then
+  if mkdir -p /app/data/.gemini && cp -R /app/.gemini-host/. /app/data/.gemini/; then
+    chown -R goclaw:goclaw /app/data/.gemini 2>/dev/null || true
+    find /app/data/.gemini -type d -exec chmod 700 {} + 2>/dev/null || true
+    find /app/data/.gemini -type f -exec chmod 600 {} + 2>/dev/null || true
+    echo "Gemini CLI config synced from host."
+  else
+    echo "WARNING: Gemini config copy failed (non-fatal)"
+  fi
+elif [ -d /app/data/.gemini ]; then
+  chown -R goclaw:goclaw /app/data/.gemini 2>/dev/null || true
+  find /app/data/.gemini -type d -exec chmod 700 {} + 2>/dev/null || true
+  find /app/data/.gemini -type f -exec chmod 600 {} + 2>/dev/null || true
+fi
+
+# Warn if Gemini config is mounted but CLI binary is missing (forgot --build).
+if [ -d /app/.gemini-host ] && ! command -v gemini >/dev/null 2>&1; then
+  echo "WARNING: Gemini config mounted but gemini CLI not installed. Rebuild with: --build"
+fi
+
 # Run command with privilege drop (su-exec in Docker, direct otherwise).
 run_as_goclaw() {
   if command -v su-exec >/dev/null 2>&1 && [ "$(id -u)" = "0" ]; then
