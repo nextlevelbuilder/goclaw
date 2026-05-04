@@ -45,7 +45,7 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 	}
 
 	// Pre-compute mention flag for groups so policy gating can suppress
-	// pairing replies when the bot was not addressed (issue #1091).
+	// pairing replies when the bot was not addressed.
 	mentioned := false
 	if !isDM {
 		for _, u := range m.Mentions {
