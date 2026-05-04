@@ -200,12 +200,19 @@ func (t *transcriber) processUtterance(ctx context.Context, u utterance) {
 	// manager_stt.go resolveSTTChain logic and plan codex-13).
 	sttCtx := audio.WithChannel(ctx, channels.TypeDiscord)
 
+	// Suppress Scribe's parenthetical audio-event tags. Discord voice
+	// is full of (clicks tongue) / (background music) / (inaudible) /
+	// language-specific hallucinations like (배경 음악) which add zero
+	// value to the transcript channel — humans there want spoken
+	// words only, not ambient-noise descriptions.
+	tagAudioEvents := false
 	result, err := t.audioMgr.Transcribe(sttCtx, audio.STTInput{
 		FilePath: path,
 		MimeType: "audio/ogg",
 		Filename: filepath.Base(path),
 	}, audio.STTOptions{
-		Diarize: false, // we're already speaker-separated via SSRC
+		Diarize:        false, // we're already speaker-separated via SSRC
+		TagAudioEvents: &tagAudioEvents,
 	})
 	if err != nil {
 		t.handleSTTError(err, u)

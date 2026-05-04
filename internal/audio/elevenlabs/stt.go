@@ -83,6 +83,20 @@ func (p *STTProvider) Transcribe(ctx context.Context, in audio.STTInput, opts au
 		}
 	}
 
+	// tag_audio_events: when false, Scribe omits parenthetical non-speech
+	// transcripts like "(clicks tongue)", "(background music)", "(inaudible)".
+	// We only forward the field when the caller explicitly opts in or out,
+	// so callers that don't care continue to get ElevenLabs' default (true).
+	if opts.TagAudioEvents != nil {
+		val := "false"
+		if *opts.TagAudioEvents {
+			val = "true"
+		}
+		if err := mw.WriteField("tag_audio_events", val); err != nil {
+			return nil, fmt.Errorf("elevenlabs stt: write tag_audio_events field: %w", err)
+		}
+	}
+
 	// Attach file.
 	filename := in.Filename
 	if filename == "" {

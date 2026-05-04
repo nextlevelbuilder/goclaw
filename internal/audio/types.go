@@ -117,10 +117,15 @@ type STTInput struct {
 
 // STTOptions tunes transcription.
 type STTOptions struct {
-	Language  string // BCP-47/ISO-639-1 hint, empty = auto-detect
-	ModelID   string // provider-specific model ID (default "scribe_v1")
-	Diarize   bool   // enable speaker diarization
-	TimeoutMs int    // per-call timeout override; 0 = provider default
+	Language        string // BCP-47/ISO-639-1 hint, empty = auto-detect
+	ModelID         string // provider-specific model ID (default "scribe_v1")
+	Diarize         bool   // enable speaker diarization
+	TimeoutMs       int    // per-call timeout override; 0 = provider default
+	TagAudioEvents  *bool  // when set, controls ElevenLabs Scribe audio-event
+	// tagging. nil = provider default (true). false suppresses parenthetical
+	// non-speech transcripts like "(clicks tongue)", "(background music)",
+	// "(inaudible)" — useful for Discord voice transcription where ambient
+	// noise should not pollute the transcript channel.
 }
 
 // TranscriptResult is the output of transcription.
