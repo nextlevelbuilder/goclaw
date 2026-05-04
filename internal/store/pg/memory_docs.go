@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -196,6 +197,13 @@ func (s *PGMemoryStore) ListDocuments(ctx context.Context, agentID, userID strin
 }
 
 // IndexDocument chunks a document and stores chunks with embeddings.
+//
+// For .md files this also (a) extracts Obsidian frontmatter and persists
+// it to memory_documents.metadata and (b) extracts wikilinks from the
+// body and rewrites the doc's rows in memory_links so backlinks stay
+// in sync with the latest content. Both are best-effort: failures log
+// at Warn but don't abort indexing — the chunks + embeddings, which
+// power memory_search, are the load-bearing artefact.
 func (s *PGMemoryStore) IndexDocument(ctx context.Context, agentID, userID, path string) error {
 	aid, err := parseUUID(agentID)
 	if err != nil {
@@ -206,6 +214,23 @@ func (s *PGMemoryStore) IndexDocument(ctx context.Context, agentID, userID, path
 	content, err := s.GetDocument(ctx, agentID, userID, path)
 	if err != nil {
 		return err
+	}
+
+	// Obsidian-style frontmatter + wikilinks live only in .md files.
+	// Other content types (no extension, plain text, etc.) skip this
+	// step and chunk the raw content as before.
+	indexBody := content
+	if strings.HasSuffix(path, ".md") {
+		meta, body := memory.ParseFrontmatter(content)
+		indexBody = body
+		if meta.HasContent() {
+			if mErr := s.upsertMemoryMetadata(ctx, aid, userID, path, meta); mErr != nil {
+				slog.Warn("memory: metadata upsert failed", "path", path, "err", mErr)
+			}
+		}
+		if lErr := s.rewriteMemoryLinks(ctx, aid, userID, path, body); lErr != nil {
+			slog.Warn("memory: links rewrite failed", "path", path, "err", lErr)
+		}
 	}
 
 	// Get document ID
@@ -254,8 +279,16 @@ func (s *PGMemoryStore) IndexDocument(ctx context.Context, agentID, userID, path
 		}
 	}
 
-	// Chunk text
-	chunks := memory.ChunkText(content, chunkLen, chunkOverlap)
+	// Chunk: markdown-aware (heading-boundary) for .md files; the
+	// existing paragraph-based chunker for everything else. Reuses
+	// indexBody (frontmatter stripped for .md) so the YAML block
+	// doesn't pollute embeddings.
+	var chunks []memory.TextChunk
+	if strings.HasSuffix(path, ".md") {
+		chunks = memory.ChunkMarkdown(indexBody, chunkLen, chunkOverlap)
+	} else {
+		chunks = memory.ChunkText(content, chunkLen, chunkOverlap)
+	}
 	if len(chunks) == 0 {
 		return nil
 	}

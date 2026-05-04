@@ -538,6 +538,10 @@ func runGateway() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Disk → DB memory sweeper (Obsidian vault sync). No-op when
+	// channels.memory_seeder block is unset.
+	setupMemoryDiskSeeder(ctx, cfg, pgStores)
+
 	server.StartUpdateChecker(ctx)
 
 	sigCh := make(chan os.Signal, 1)

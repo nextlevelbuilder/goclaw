@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -139,10 +140,30 @@ func (s *SQLiteMemoryStore) ListDocuments(ctx context.Context, agentID, userID s
 }
 
 // IndexDocument chunks a document and stores chunks (without embeddings in SQLite).
+//
+// For .md files, also extracts Obsidian frontmatter into
+// memory_documents.metadata and rewrites the doc's wikilink rows in
+// memory_links so backlink queries stay current. SQLite is dev/test
+// only; production uses the PG implementation.
 func (s *SQLiteMemoryStore) IndexDocument(ctx context.Context, agentID, userID, path string) error {
 	content, err := s.GetDocument(ctx, agentID, userID, path)
 	if err != nil {
 		return err
+	}
+
+	// Frontmatter + wikilinks (mirrors PG path; only for .md files).
+	indexBody := content
+	if strings.HasSuffix(path, ".md") {
+		meta, body := memory.ParseFrontmatter(content)
+		indexBody = body
+		if meta.HasContent() {
+			if mErr := s.upsertMemoryMetadata(ctx, agentID, userID, path, meta); mErr != nil {
+				slog.Warn("memory: metadata upsert failed", "path", path, "err", mErr)
+			}
+		}
+		if lErr := s.rewriteMemoryLinks(ctx, agentID, userID, path, body); lErr != nil {
+			slog.Warn("memory: links rewrite failed", "path", path, "err", lErr)
+		}
 	}
 
 	// Get document ID
@@ -184,7 +205,12 @@ func (s *SQLiteMemoryStore) IndexDocument(ctx context.Context, agentID, userID, 
 		}
 	}
 
-	chunks := memory.ChunkText(content, chunkLen, chunkOverlap)
+	var chunks []memory.TextChunk
+	if strings.HasSuffix(path, ".md") {
+		chunks = memory.ChunkMarkdown(indexBody, chunkLen, chunkOverlap)
+	} else {
+		chunks = memory.ChunkText(content, chunkLen, chunkOverlap)
+	}
 	if len(chunks) == 0 {
 		return nil
 	}

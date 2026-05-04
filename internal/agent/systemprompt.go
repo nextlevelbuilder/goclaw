@@ -181,6 +181,7 @@ var coreToolSummaries = map[string]string{
 	"exec":                   "Run shell commands",
 	"memory_search":          "Search indexed memory files (MEMORY.md + memory/*.md)",
 	"memory_get":             "Read specific sections of memory files",
+	"memory_backlinks":       "List every memory document that links into the given path via Obsidian wikilinks ([[Note]] / [[Folder/Note]]) — use after memory_search to discover related notes",
 	"spawn":                  "Spawn a self-clone subagent to handle a task in the background",
 	"web_search":             "Search the web",
 	"web_fetch":              "Fetch and extract content from a URL",

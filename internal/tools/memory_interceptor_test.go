@@ -72,8 +72,11 @@ func (m *mockMemoryStore) Search(_ context.Context, _ string, _, _ string, _ sto
 }
 func (m *mockMemoryStore) IndexDocument(_ context.Context, _, _, _ string) error { return nil }
 func (m *mockMemoryStore) IndexAll(_ context.Context, _, _ string) error         { return nil }
-func (m *mockMemoryStore) SetEmbeddingProvider(_ store.EmbeddingProvider)        {}
-func (m *mockMemoryStore) Close() error                                          { return nil }
+func (m *mockMemoryStore) GetBacklinks(_ context.Context, _, _, _ string) ([]store.BacklinkInfo, error) {
+	return nil, nil
+}
+func (m *mockMemoryStore) SetEmbeddingProvider(_ store.EmbeddingProvider) {}
+func (m *mockMemoryStore) Close() error                                   { return nil }
 
 // --- Test helpers ---
 

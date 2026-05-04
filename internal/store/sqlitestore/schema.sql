@@ -311,10 +311,38 @@ CREATE TABLE IF NOT EXISTS memory_documents (
     updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
+-- Obsidian frontmatter metadata (mirrors PG migration 000059). SQLite
+-- has no JSONB; store as TEXT containing JSON, queryable via json_each.
+ALTER TABLE memory_documents ADD COLUMN metadata TEXT NOT NULL DEFAULT '{}';
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_memdoc_unique ON memory_documents(agent_id, COALESCE(user_id, ''), path);
 CREATE INDEX IF NOT EXISTS idx_memdoc_agent_user ON memory_documents(agent_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_memdoc_team ON memory_documents(team_id) WHERE team_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_memory_documents_tenant ON memory_documents(tenant_id);
+
+-- Obsidian wikilinks (mirrors PG migration 000060). Sqlite is dev/test
+-- only — production uses Postgres — but keep schema parity so tests
+-- exercise the same code paths.
+CREATE TABLE IF NOT EXISTS memory_links (
+    id          TEXT NOT NULL PRIMARY KEY,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id),
+    agent_id    TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    user_id     VARCHAR(255) NOT NULL DEFAULT '',
+    from_path   TEXT NOT NULL,
+    to_path     TEXT,
+    to_basename TEXT NOT NULL,
+    link_type   TEXT NOT NULL,
+    section     TEXT,
+    block_id    TEXT,
+    display     TEXT,
+    created_at  TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_links_dedup
+    ON memory_links(agent_id, user_id, from_path, to_basename, link_type, COALESCE(block_id, ''));
+CREATE INDEX IF NOT EXISTS idx_memory_links_to ON memory_links(agent_id, to_path) WHERE to_path IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_memory_links_from ON memory_links(agent_id, from_path);
+CREATE INDEX IF NOT EXISTS idx_memory_links_basename ON memory_links(agent_id, to_basename);
 
 -- ============================================================
 -- Table: memory_chunks

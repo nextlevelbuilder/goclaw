@@ -211,8 +211,11 @@ func (m *mockMemoryStore) GetDocumentDetail(context.Context, string, string, str
 func (m *mockMemoryStore) ListChunks(context.Context, string, string, string) ([]store.ChunkInfo, error) { return nil, nil }
 func (m *mockMemoryStore) Search(context.Context, string, string, string, store.MemorySearchOptions) ([]store.MemorySearchResult, error) { return nil, nil }
 func (m *mockMemoryStore) IndexAll(context.Context, string, string) error { return nil }
+func (m *mockMemoryStore) GetBacklinks(context.Context, string, string, string) ([]store.BacklinkInfo, error) {
+	return nil, nil
+}
 func (m *mockMemoryStore) SetEmbeddingProvider(store.EmbeddingProvider) {}
-func (m *mockMemoryStore) Close() error { return nil }
+func (m *mockMemoryStore) Close() error                                  { return nil }
 
 // mockSessionStore implements store.SessionCoreStore for testing.
 type mockSessionStore struct {

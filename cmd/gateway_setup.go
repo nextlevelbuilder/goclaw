@@ -88,6 +88,7 @@ func setupToolRegistry(
 	toolsReg.Register(tools.NewMemorySearchTool())
 	toolsReg.Register(tools.NewMemoryGetTool())
 	toolsReg.Register(tools.NewMemoryExpandTool())
+	toolsReg.Register(tools.NewMemoryBacklinksTool())
 	toolsReg.Register(tools.NewKnowledgeGraphSearchTool())
 	slog.Info("memory + knowledge graph tools registered (PG-backed)")
 

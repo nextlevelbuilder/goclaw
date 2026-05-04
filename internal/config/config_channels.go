@@ -24,6 +24,26 @@ type VoiceSummarizerConfig struct {
 	ThinkingLevel string `json:"thinking_level,omitempty"` // reasoning_effort for reasoning models: "minimal" / "low" / "medium" / "high". Empty = "low".
 }
 
+// MemorySeederConfig configures the disk → Postgres memory sweeper that
+// keeps memory_documents + memory_chunks + memory_links in sync with
+// markdown files on disk (e.g. an Obsidian vault cloned into the
+// agent's workspace). Without this block configured the sweeper does
+// not run, and memory continues to populate lazily via agent file
+// writes only.
+type MemorySeederConfig struct {
+	// AgentKeys are the agent identifiers whose workspace memory dir
+	// should be swept. Each key resolves via AgentStore.GetByKey to an
+	// agent UUID + workspace path. Empty list = sweeper disabled.
+	AgentKeys []string `json:"agent_keys,omitempty"`
+	// IntervalMs controls how often the sweep re-runs after the initial
+	// startup pass. 0 = 5 minute default. Set to a negative value to
+	// run only the startup pass and never re-sweep.
+	IntervalMs int `json:"interval_ms,omitempty"`
+	// MaxFileBytes guards against accidentally indexing a giant file.
+	// 0 = 5 MiB default.
+	MaxFileBytes int64 `json:"max_file_bytes,omitempty"`
+}
+
 // ChannelsConfig contains per-channel configuration.
 type ChannelsConfig struct {
 	Telegram          TelegramConfig           `json:"telegram"`
@@ -35,6 +55,7 @@ type ChannelsConfig struct {
 	Feishu            FeishuConfig             `json:"feishu"`
 	PendingCompaction *PendingCompactionConfig `json:"pending_compaction,omitempty"` // global pending message compaction settings
 	VoiceSummarizer   *VoiceSummarizerConfig   `json:"voice_summarizer,omitempty"`   // override provider/model for voice transcript summarization
+	MemorySeeder      *MemorySeederConfig      `json:"memory_seeder,omitempty"`      // disk → Postgres memory sync sweeper (Obsidian vaults)
 }
 
 type TelegramConfig struct {

@@ -350,7 +350,7 @@ func wireExtras(
 		}
 	}
 
-	// Wire memory store on memory tools (search + get)
+	// Wire memory store on memory tools (search + get + backlinks)
 	if stores.Memory != nil {
 		if searchTool, ok := toolsReg.Get("memory_search"); ok {
 			if ms, ok := searchTool.(tools.MemoryStoreAware); ok {
@@ -359,6 +359,11 @@ func wireExtras(
 		}
 		if getTool, ok := toolsReg.Get("memory_get"); ok {
 			if ms, ok := getTool.(tools.MemoryStoreAware); ok {
+				ms.SetMemoryStore(stores.Memory)
+			}
+		}
+		if backlinksTool, ok := toolsReg.Get("memory_backlinks"); ok {
+			if ms, ok := backlinksTool.(tools.MemoryStoreAware); ok {
 				ms.SetMemoryStore(stores.Memory)
 			}
 		}

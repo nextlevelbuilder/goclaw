@@ -60,6 +60,17 @@ type ChunkInfo struct {
 	HasEmbedding bool   `json:"has_embedding" db:"has_embedding"`
 }
 
+// BacklinkInfo describes one wikilink pointing into a target document.
+// Returned by MemoryStore.GetBacklinks for the memory_backlinks tool.
+type BacklinkInfo struct {
+	FromPath  string `json:"from_path" db:"from_path"`
+	LinkType  string `json:"link_type" db:"link_type"` // wiki | embed | block
+	Section   string `json:"section,omitempty" db:"section"`
+	BlockID   string `json:"block_id,omitempty" db:"block_id"`
+	Display   string `json:"display,omitempty" db:"display"`
+	UserID    string `json:"user_id,omitempty" db:"user_id"`
+}
+
 // MemoryStore manages memory documents and search.
 type MemoryStore interface {
 	// Document CRUD
@@ -80,6 +91,13 @@ type MemoryStore interface {
 	// Indexing
 	IndexDocument(ctx context.Context, agentID, userID, path string) error
 	IndexAll(ctx context.Context, agentID, userID string) error
+
+	// Obsidian-style backlinks (populated as part of IndexDocument).
+	// GetBacklinks returns every link whose resolved target equals
+	// `targetPath` OR whose unresolved basename matches the target's
+	// basename (so callers can see incoming references even when the
+	// target wasn't yet in the vault when the source was indexed).
+	GetBacklinks(ctx context.Context, agentID, userID, targetPath string) ([]BacklinkInfo, error)
 
 	SetEmbeddingProvider(provider EmbeddingProvider)
 	Close() error

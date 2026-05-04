@@ -13,7 +13,7 @@ import (
 // builtinToolGroups is const-like seed data for per-Registry tool groups.
 // Do NOT modify at runtime — each Registry gets a deep copy in NewRegistry().
 var builtinToolGroups = map[string][]string{
-	"memory":     {"memory_search", "memory_get"},
+	"memory":     {"memory_search", "memory_get", "memory_backlinks"},
 	"web":        {"web_search", "web_fetch"},
 	"fs":         {"read_file", "write_file", "list_files", "edit"},
 	"runtime":    {"exec"},
@@ -27,7 +27,7 @@ var builtinToolGroups = map[string][]string{
 	"goclaw": {
 		"read_file", "write_file", "list_files", "edit", "exec",
 		"web_search", "web_fetch", "browser",
-		"memory_search", "memory_get", "memory_expand",
+		"memory_search", "memory_get", "memory_expand", "memory_backlinks",
 		"knowledge_graph_search", "vault_search", "vault_read",
 		"sessions_list", "sessions_history", "sessions_send", "spawn", "session_status",
 		"delegate",
@@ -70,7 +70,7 @@ func LegacyToolAliases() map[string]string {
 var subagentDenyList = []string{
 	"exec", // subagents should not shell out — main agent can still exec
 	"gateway", "agents_list", "whatsapp_login", "session_status",
-	"cron", "memory_search", "memory_get", "sessions_send",
+	"cron", "memory_search", "memory_get", "memory_backlinks", "sessions_send",
 }
 
 // Leaf subagent deny — additional restrictions at max spawn depth.
