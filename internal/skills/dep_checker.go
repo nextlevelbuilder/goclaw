@@ -2,14 +2,16 @@ package skills
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"strings"
 	"time"
 )
 
-const depCheckTimeout = 5 * time.Second
+const depCheckTimeout = 30 * time.Second
 
 // CheckSkillDeps verifies all dependencies in a manifest are available.
 // Returns (ok, missing) where missing lists unavailable dependencies.
@@ -87,7 +89,16 @@ func checkPythonPackages(importNames []string, scriptsDir string) []string {
 
 	out, err := cmd.Output()
 	if err != nil {
-		// Python itself failed — all packages are missing
+		if errors.Is(err, context.DeadlineExceeded) {
+			slog.Warn("skills: python dep check timed out — assuming present to avoid install loop",
+				"imports", importNames, "timeout", depCheckTimeout)
+			return nil
+		}
+		var stderr string
+		if ee, ok := err.(*exec.ExitError); ok {
+			stderr = strings.TrimSpace(string(ee.Stderr))
+		}
+		slog.Warn("skills: python dep check failed", "error", err, "stderr", stderr)
 		var missing []string
 		for _, name := range importNames {
 			missing = append(missing, "pip:"+importToPipName(name))

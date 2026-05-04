@@ -213,7 +213,7 @@ func TestACPProcess_NewSession_Success(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	sid, err := proc.NewSession(ctx)
+	sid, err := proc.NewSession(ctx, "")
 	if err != nil {
 		t.Fatalf("NewSession error: %v", err)
 	}
@@ -233,7 +233,7 @@ func TestACPProcess_NewSession_Error(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	_, err := proc.NewSession(ctx)
+	_, err := proc.NewSession(ctx, "")
 	if err == nil {
 		t.Fatal("expected error from NewSession")
 	}

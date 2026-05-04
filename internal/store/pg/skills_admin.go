@@ -35,11 +35,15 @@ func (s *PGSkillStore) UpsertSystemSkill(ctx context.Context, p store.SkillCreat
 			)
 			return existingID, false, existingFilePath, nil
 		}
-		// Hash genuinely changed — full update with new version
+		// Hash genuinely changed — full update with new version.
+		// is_system is deliberately NOT touched: it is a policy flag (write-
+		// protected + cross-tenant) set by an operator, not a property derived
+		// from "this skill came from the seeder source". Re-seeding after a
+		// SKILL.md edit must preserve whatever is_system value the operator chose.
 		fmJSON := marshalFrontmatter(p.Frontmatter)
 		_, err = s.db.ExecContext(ctx,
 			`UPDATE skills SET name = $1, description = $2, version = $3, frontmatter = $4,
-			 file_path = $5, file_size = $6, file_hash = $7, is_system = true,
+			 file_path = $5, file_size = $6, file_hash = $7,
 			 visibility = 'public', status = $8, updated_at = NOW()
 			 WHERE id = $9`,
 			p.Name, p.Description, p.Version, fmJSON,
@@ -52,13 +56,16 @@ func (s *PGSkillStore) UpsertSystemSkill(ctx context.Context, p store.SkillCreat
 		return existingID, true, p.FilePath, nil
 	}
 
-	// New skill — insert
+	// New skill — insert. is_system defaults to false: the seeder path should
+	// not unilaterally grant write-protected + cross-tenant status. Operators
+	// promote a skill to is_system=true explicitly (UI or direct SQL) when
+	// they want it shared across tenants and locked from edit.
 	id := store.GenNewID()
 	fmJSON := marshalFrontmatter(p.Frontmatter)
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO skills (id, name, slug, description, owner_id, visibility, version, status,
 		 is_system, frontmatter, file_path, file_size, file_hash, tenant_id, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, 'system', 'public', $5, $6, true, $7, $8, $9, $10, $11, NOW(), NOW())`,
+		 VALUES ($1, $2, $3, $4, 'system', 'public', $5, $6, false, $7, $8, $9, $10, $11, NOW(), NOW())`,
 		id, p.Name, p.Slug, p.Description, p.Version, p.Status,
 		fmJSON, p.FilePath, p.FileSize, p.FileHash, store.MasterTenantID,
 	)
