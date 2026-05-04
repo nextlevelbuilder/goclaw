@@ -22,7 +22,7 @@ import { useContactMerge } from "./hooks/use-contact-merge";
 import { MergeContactsDialog } from "./merge-contacts-dialog";
 import { ContactsTable } from "./contacts-table";
 
-const CHANNEL_TYPES = ["telegram", "discord", "slack", "whatsapp", "zalo_oa", "zalo_personal", "feishu"];
+const CHANNEL_TYPES = ["telegram", "discord", "slack", "whatsapp", "zalo_bot", "zalo_oa", "zalo_personal", "feishu"];
 const PERM_CHANNELS = ["telegram", "discord", "zalo", "slack", "feishu"] as const;
 
 export function ContactsPage() {

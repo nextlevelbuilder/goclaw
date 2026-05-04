@@ -92,3 +92,14 @@ describe("pancake configSchema", () => {
     expect(f!.showWhen).toEqual({ key: "features.auto_react", value: "true" });
   });
 });
+
+describe("zalo configSchema webhook_path field", () => {
+  it.each(["zalo_oa", "zalo_bot"])("%s exposes webhook_path gated on transport=webhook", (channel) => {
+    const fields = configSchema[channel]!;
+    const f = fields.find((x) => x.key === "webhook_path");
+    expect(f, `${channel} should have webhook_path field`).toBeDefined();
+    expect(f!.type).toBe("text");
+    expect(f!.required).toBe(true);
+    expect(f!.showWhen).toEqual({ key: "transport", value: "webhook" });
+  });
+});

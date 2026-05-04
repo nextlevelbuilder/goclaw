@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/cache"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
+	zalocommon "github.com/nextlevelbuilder/goclaw/internal/channels/zalo/common"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/heartbeat"
@@ -207,10 +209,26 @@ func (d *gatewayDeps) runLifecycle(
 
 	// Mount channel webhook handlers on the main mux (e.g. Feishu /feishu/events).
 	// This allows webhook-based channels to share the main server port.
+	zaloPrefixMounted := false
 	for _, route := range d.channelMgr.WebhookHandlers() {
 		mux.Handle(route.Path, route.Handler)
 		slog.Info("webhook route mounted on gateway", "path", route.Path)
+		if route.Path == zalocommon.WebhookPathPrefix {
+			zaloPrefixMounted = true
+		}
 	}
+	// Always mount the Zalo webhook prefix so wizard-created channels added
+	// after boot are reachable without restart. The shared router 404s
+	// unknown slugs, so an unmounted-yet-registered channel never silently
+	// drops. Bare /channels/zalo/webhook always returns 404 to avoid the
+	// http.ServeMux 301 redirect leaking the prefix path.
+	if !zaloPrefixMounted {
+		mux.Handle(zalocommon.WebhookPathPrefix, zalocommon.SharedRouter())
+		slog.Info("webhook route mounted on gateway", "path", zalocommon.WebhookPathPrefix, "source", "shared_router_default")
+	}
+	mux.HandleFunc(zalocommon.WebhookPathBare, func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	})
 
 	tsCleanup := initTailscale(ctx, d.cfg, mux)
 	if tsCleanup != nil {

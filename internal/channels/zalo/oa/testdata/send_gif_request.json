@@ -1,0 +1,12 @@
+{
+  "message": {
+    "attachment": {
+      "payload": {
+        "elements": [{"attachment_id": "ATT-gif-xyz", "media_type": "gif"}],
+        "template_type": "media"
+      },
+      "type": "template"
+    }
+  },
+  "recipient": {"user_id": "user-fixture"}
+}

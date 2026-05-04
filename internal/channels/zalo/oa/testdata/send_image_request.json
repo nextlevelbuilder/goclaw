@@ -1,0 +1,12 @@
+{
+  "message": {
+    "attachment": {
+      "payload": {
+        "elements": [{"attachment_id": "ATT-image-xyz", "media_type": "image"}],
+        "template_type": "media"
+      },
+      "type": "template"
+    }
+  },
+  "recipient": {"user_id": "user-fixture"}
+}

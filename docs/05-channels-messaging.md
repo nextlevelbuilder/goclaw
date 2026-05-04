@@ -13,6 +13,7 @@ flowchart LR
         DC["Discord"]
         SL["Slack"]
         FS["Feishu/Lark"]
+        ZB["Zalo Bot"]
         ZL["Zalo OA"]
         ZLP["Zalo Personal"]
         WA["WhatsApp"]
@@ -90,7 +91,8 @@ Every channel must implement the base interface:
 | `StreamingChannel` | Real-time streaming updates | Telegram, Slack |
 | `WebhookChannel` | Webhook HTTP handler mounting | Facebook, Feishu/Lark, Pancake |
 | `ReactionChannel` | Status reactions on messages | Telegram, Slack, Feishu |
-| `BlockReplyChannel` | Override gateway block_reply setting | Discord, Feishu/Lark, Pancake, Slack, Zalo OA, Zalo Personal |
+| `BlockReplyChannel` | Override gateway block_reply setting | Discord, Feishu/Lark, Pancake, Slack, Zalo Bot, Zalo OA, Zalo Personal |
+| `DMQuoteChannel` | Opt into stamping `reply_to_message_id` on DM outbound metadata (group inbounds always stamp it) — channel `Send` translates to platform-specific quote payload (Telegram `ReplyParameters`, Zalo OA `message.quote_message_id`, Pancake `comment_id`) | Zalo OA |
 
 `BaseChannel` provides a shared implementation that all channels embed: allowlist matching, `HandleMessage()`, `CheckPolicy()`, and user ID extraction.
 
@@ -156,7 +158,7 @@ flowchart TD
 
 | Feature | Telegram | Feishu/Lark | Discord | Slack | WhatsApp | Zalo OA | Zalo Personal |
 |---------|----------|-------------|---------|-------|----------|---------|---------------|
-| Connection | Long polling | WS (default) / Webhook | Gateway events | Socket Mode | Direct protocol (in-process) | Long polling | Internal protocol |
+| Connection | Long polling | WS (default) / Webhook | Gateway events | Socket Mode | Direct protocol (in-process) | Long polling (default) or Webhook (operator opt-in) | Internal protocol |
 | DM support | Yes | Yes | Yes | Yes | Yes | Yes (DM only) | Yes |
 | Group support | Yes (mention gating) | Yes | Yes | Yes (mention gating + thread cache) | Yes | No | Yes |
 | Forum/Topics | Yes (per-topic config) | Yes (topic session mode) | -- | -- | -- | -- | -- |
@@ -555,18 +557,187 @@ The WhatsApp channel connects directly to the WhatsApp network via the multi-dev
 
 ---
 
-## 10. Zalo OA
+## 10. Zalo Bot + Zalo OA (two variants)
 
-The Zalo OA (Official Account) channel connects to the Zalo OA Bot API.
+> **Operator-facing setup guides live on the public docs site:**
+> - [Zalo OA setup (OAuth + webhook)](https://docs.goclaw.sh/channel-zalo-oa)
+> - [Zalo Bot setup (static token)](https://docs.goclaw.sh/channel-zalo-bot)
+>
+> This file documents the *channel-system architecture* — see those guides for end-to-end onboarding.
 
-### Key Behaviors
+Zalo ships two distinct channel types under the same "Official Account"
+umbrella. GoClaw exposes both; pick based on deployment scale and auth model.
+
+| Variant | Channel type | Auth | When to use |
+|---|---|---|---|
+| **Zalo Bot** | `zalo_bot` | Pre-provisioned static OA access token pasted into the gateway | Dev, small-scale, single-OA setups |
+| **Zalo OA** | `zalo_oa` | OAuth v4 consent flow (user completes consent in Zalo, gateway stores refresh token + auto-refreshes access tokens) | Production, multi-OA, long-running deployments |
+
+Both variants consume the same `/v3.0/oa/message/cs` send endpoint and the
+same message-shape rules (template/media for images+gifs, plain `type=file`
+for files). They differ only in how access tokens are obtained + refreshed.
+
+### Transport modes (both variants)
+
+Both `zalo_bot` and `zalo_oa` support two inbound transports — operator
+picks per instance via `config.transport`:
+
+| Mode | Default | When to choose |
+|---|---|---|
+| `polling` | ✓ default | Gateway has no externally-reachable URL; operator wants single transport with no inbound HTTP exposure |
+| `webhook` | opt-in | Gateway has a public URL operator can register with Zalo dev console; operator prefers push delivery and is willing to manage signing-secret rotation |
+
+**Webhook is single-transport-active.** When `transport: "webhook"` the
+poll loop does NOT run — there is no concurrent fallback. Use the
+`catch_up_on_restart` opt-in (OA only) to backfill messages missed during
+gateway downtime. If the operator sets `transport: "webhook"` and Zalo
+delivery is failing, no polling will retrieve missed messages unless
+`catch_up_on_restart` is also enabled.
+
+### Webhook setup (operator walkthrough)
+
+1. Toggle the instance to `transport: "webhook"`. For OA, also set
+   `webhook_secret_key` (in the credentials blob) to the signing secret
+   from the Zalo developer console — distinct from the OAuth `secret_key`
+   credential, see Common pitfalls below. For Bot, set `webhook_secret`
+   (used as `X-Bot-Api-Secret-Token`).
+2. Reload the channel instance (toggle `enabled` off/on, or restart
+   gateway). The channel registers itself with the shared router under
+   `/channels/zalo/webhook/<slug>` and starts accepting POSTs. The slug
+   is derived from the instance name (e.g. `my-oa`) or the explicit
+   `webhook_path` config field.
+3. Call the WS RPC `channels.instances.zalo.webhook_url` with
+   `instance_id`. Response: `{path, instance_id, hint}`. Path is, e.g.,
+   `/channels/zalo/webhook/my-oa` — there is **no** PublicBaseURL field
+   in gateway config, so the RPC returns the path fragment only.
+4. Prepend your gateway's externally-reachable host to the path
+   (e.g., `https://gw.example.com/channels/zalo/webhook/my-oa`) and
+   register that full URL in the Zalo dev console.
+5. Send a test event from the Zalo console; the gateway logs
+   `zalo_oa.webhook.event_received` (or the bot equivalent). If you see
+   `security.zalo_webhook_signature_mismatch`, the secret on the gateway
+   does not match what's configured in Zalo.
+
+### OA polling-window resilience
+
+When `transport: "polling"` the OA channel exposes two operator-tunable
+knobs to reduce silent message loss on bursty OAs:
+
+| Setting | Default | Range | Notes |
+|---|---|---|---|
+| `poll_count` | 10 | [1, 10] | Page size per `listrecentchat` call (Zalo hard-caps at 10; values above return error -210, so anything bigger is silently clamped) |
+| `poll_burndown_max_pages` | 10 | [1, 20] | Max consecutive pages per cycle; set to 1 to disable burn-down |
+| `poll_interval_seconds` | 15 | [5, 120] | Cycle interval |
+
+At default settings the per-cycle ceiling is 10 × 10 = 100 messages.
+Burn-down stops on the first partial page or when
+`poll_burndown_max_pages` is reached (the cap emits
+`zalo_oa.poll.burndown_capped`). These fields are ignored when
+`transport: "webhook"`.
+
+### OA catch-up on restart
+
+`catch_up_on_restart: true` (off by default) fires a single bounded
+`listrecentchat` sweep at Start when the cursor is stale, in a goroutine
+so Start returns within 1s. Useful if you run webhook-only and need
+backfill across gateway restarts. The sweep cancels promptly on Stop via
+the channel's catch-up WaitGroup.
+
+### Zalo Bot — static-token variant
 
 - **DM only**: No group support. Only direct messages are processed
 - **Text limit**: 2,000-character maximum per message
-- **Long polling**: Default 30-second timeout, 5-second backoff on errors
+- **Polling**: long-polling against getUpdates (default 30-second timeout, 5-second backoff)
+- **Webhook**: header-token auth (`X-Bot-Api-Secret-Token`), constant-time compare; empty secret is rejected at Start
 - **Media**: Image support with 5 MB default limit
 - **Default DM policy**: `"pairing"` (requires pairing code)
 - **Pairing debounce**: 60-second debounce on pairing instructions
+- **Self-echo filter**: webhook handler drops messages where `from.id == botID` (A8) — Zalo redelivers our own outbound through the same URL otherwise
+
+### Zalo OA — OAuth v4 variant
+
+- **Auth flow**: User provides consent via Zalo OAuth endpoint; `code` query
+  param pasted back into the gateway; gateway exchanges for access + refresh
+  tokens and stores encrypted at rest
+- **Token refresh**: Lazy single-flight; safety ticker preempts near-expiry
+- **Polling**: `/v2.0/oa/listrecentchat` with operator-tunable
+  `poll_count` + `poll_burndown_max_pages` (see "OA polling-window
+  resilience" above)
+- **Webhook**: `X-ZEvent-Signature: hex(SHA256(appID + body + timestamp + secret))`.
+  Signature behavior driven by `webhook_signature_mode`: `strict` (reject
+  mismatch), `log_only` (warn-and-allow — useful for first-deploy spec
+  verification), `disabled` (default — accept unsigned). The default keeps
+  onboarding frictionless before the OA Secret Key is pasted into Credentials;
+  **operators handling production traffic must flip to `strict`** once the
+  secret is configured, otherwise inbound webhooks are not authenticated.
+  Replay window via `webhook_replay_window_seconds` (default 300, clamp
+  [60, 3600])
+- **Self-echo filter**: webhook handler drops events where `sender.id == oa_id` (A8)
+- **Per-endpoint caps**: image 1MB (hard Zalo cap, compress-before-upload
+  attempts downshift), file 5MB (PDF/DOC/DOCX only), gif 5MB
+- **Error-code registry**: centralized in
+  `internal/channels/zalo/oa/errors.go` (access-token-invalid family:
+  216/-216/401/-401; invalid_grant -118; params-invalid -201; file-size
+  exceeded -210; invalid redirect URI -14003)
+- **Trace mode**: set `GOCLAW_ZALO_OA_TRACE=1` to dump raw Zalo response
+  bodies at Debug level. PII-sensitive — do NOT enable in production
+  without scrubbing review
+
+### Common pitfalls
+
+- **Two secrets on OA**: `creds.secret_key` (OAuth refresh credential)
+  is **distinct** from `creds.webhook_secret_key` (signing key from the
+  dev console webhook panel). Both live in the encrypted credentials
+  blob. Mixing them silently breaks signature verification.
+- **Webhook URL exposes the slug**: this is acceptable — the slug alone
+  gives no access without the matching signature secret. Treat the
+  webhook URL as semi-secret; rotation requires unregister + re-register
+  on the Zalo console.
+- **Operability signals**: watch for `zalo_webhook.handler_error`
+  (handler raised after 200 ack — Zalo's 2s window forces async dispatch),
+  `zalo_webhook.empty_message_id_streak` (extractor returning "" for ≥10
+  events suggests Zalo schema drift), `zalo_oa.poll.burndown_capped`
+  (raise `poll_count` or shorten `poll_interval_seconds`).
+
+### Operator config reference
+
+Polling (default) — Zalo OA:
+
+```json5
+{
+  "transport": "polling",
+  "poll_interval_seconds": 15,
+  "poll_count": 50,
+  "poll_burndown_max_pages": 5
+}
+```
+
+Webhook — Zalo OA (the signing secret lives in credentials, not config):
+
+```json5
+// credentials
+{
+  "app_id": "<from-zalo-dev-console>",
+  "secret_key": "<oauth-app-secret>",
+  "webhook_secret_key": "<from-zalo-dev-console-webhook-panel>"
+}
+// config
+{
+  "transport": "webhook",
+  "webhook_signature_mode": "strict",
+  "webhook_replay_window_seconds": 300,
+  "catch_up_on_restart": true
+}
+```
+
+Webhook — Zalo Bot (secret is in credentials, not config):
+
+```json5
+// credentials
+{ "token": "<bot-token>", "webhook_secret": "<from-zalo-dev-console>" }
+// config
+{ "transport": "webhook", "dm_policy": "open" }
+```
 
 ---
 
@@ -576,14 +747,14 @@ The Zalo Personal channel provides access to personal Zalo accounts using a reve
 
 ### Key Differences from Zalo OA
 
-| Aspect | Zalo OA | Zalo Personal |
-|--------|---------|---------------|
-| Protocol | Official Bot API | Reverse-engineered (zcago, MIT) |
+| Aspect | Zalo OA / Bot | Zalo Personal |
+|--------|---------------|---------------|
+| Protocol | Official OA API (OAuth v4 or static token) | Reverse-engineered (zcago, MIT) |
 | DM support | Yes | Yes |
 | Group support | No | Yes |
 | Default DM policy | `pairing` | `allowlist` (restrictive) |
 | Default group policy | N/A | `allowlist` (restrictive) |
-| Authentication | API credentials | Pre-loaded credentials or QR scan |
+| Authentication | API credentials or OAuth consent | Pre-loaded credentials or QR scan |
 | Risk | None | Account may be locked/banned |
 
 ### Security Warning

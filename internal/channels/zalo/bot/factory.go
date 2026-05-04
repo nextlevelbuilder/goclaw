@@ -1,4 +1,4 @@
-package zalo
+package bot
 
 import (
 	"encoding/json"
@@ -10,22 +10,22 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-// zaloCreds maps the credentials JSON from the channel_instances table.
 type zaloCreds struct {
 	Token         string `json:"token"`
 	WebhookSecret string `json:"webhook_secret,omitempty"`
 }
 
-// zaloInstanceConfig maps the non-secret config JSONB from the channel_instances table.
 type zaloInstanceConfig struct {
-	DMPolicy   string   `json:"dm_policy,omitempty"`
-	WebhookURL string   `json:"webhook_url,omitempty"`
-	MediaMaxMB int      `json:"media_max_mb,omitempty"`
-	AllowFrom  []string `json:"allow_from,omitempty"`
-	BlockReply *bool    `json:"block_reply,omitempty"`
+	DMPolicy    string   `json:"dm_policy,omitempty"`
+	Transport   string   `json:"transport,omitempty"`
+	WebhookPath string   `json:"webhook_path,omitempty"`
+	MediaMaxMB  int      `json:"media_max_mb,omitempty"`
+	AllowFrom   []string `json:"allow_from,omitempty"`
+	BlockReply  *bool    `json:"block_reply,omitempty"`
 }
 
-// Factory creates a Zalo OA channel from DB instance data.
+// Factory creates a Zalo Bot channel from channel_instances data.
+// Webhook-mode channels register with common.SharedRouter() at Start().
 func Factory(name string, creds json.RawMessage, cfg json.RawMessage,
 	msgBus *bus.MessageBus, pairingSvc store.PairingStore) (channels.Channel, error) {
 
@@ -51,7 +51,8 @@ func Factory(name string, creds json.RawMessage, cfg json.RawMessage,
 		Token:         c.Token,
 		AllowFrom:     ic.AllowFrom,
 		DMPolicy:      ic.DMPolicy,
-		WebhookURL:    ic.WebhookURL,
+		Transport:     ic.Transport,
+		WebhookPath:   ic.WebhookPath,
 		WebhookSecret: c.WebhookSecret,
 		MediaMaxMB:    ic.MediaMaxMB,
 		BlockReply:    ic.BlockReply,
@@ -61,7 +62,6 @@ func Factory(name string, creds json.RawMessage, cfg json.RawMessage,
 	if err != nil {
 		return nil, err
 	}
-
 	ch.SetName(name)
 	return ch, nil
 }

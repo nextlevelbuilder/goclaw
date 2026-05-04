@@ -1,4 +1,4 @@
-package zalo
+package common
 
 import "testing"
 
@@ -13,7 +13,10 @@ func TestStripMarkdown(t *testing.T) {
 
 		// Bold & italic
 		{"bold stars", "this is **bold** text", "this is bold text"},
-		{"bold underscores", "this is __bold__ text", "this is bold text"},
+		{"bold underscores multiword", "say __hello world__ now", "say hello world now"},
+		{"bold underscores with punct", "this is __very, bold__ text", "this is very, bold text"},
+		{"python dunder preserved", "use __init__ method", "use __init__ method"},
+		{"python dunder name", "the __name__ var", "the __name__ var"},
 		{"bold+italic stars", "***important***", "important"},
 		{"strikethrough", "this is ~~deleted~~ text", "this is deleted text"},
 

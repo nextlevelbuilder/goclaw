@@ -15,6 +15,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/crypto"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/store/base"
 )
 
 // PGChannelInstanceStore implements store.ChannelInstanceStore backed by Postgres.
@@ -170,53 +171,11 @@ func (s *PGChannelInstanceStore) scanInstances(rows *sql.Rows) ([]store.ChannelI
 }
 
 func (s *PGChannelInstanceStore) Update(ctx context.Context, id uuid.UUID, updates map[string]any) error {
-	// Merge and encrypt credentials if present
+	// Credentials path: load+merge+write under SELECT FOR UPDATE so a
+	// concurrent operator Update vs background tokenSource.Persist can't
+	// clobber each other on the encrypted blob.
 	if credsVal, ok := updates["credentials"]; ok && credsVal != nil {
-		var newCreds map[string]any
-		switch v := credsVal.(type) {
-		case map[string]any:
-			newCreds = v
-		default:
-			var raw []byte
-			switch vv := v.(type) {
-			case []byte:
-				raw = vv
-			case string:
-				raw = []byte(vv)
-			default:
-				if b, err := json.Marshal(v); err == nil {
-					raw = b
-				}
-			}
-			if len(raw) > 0 {
-				if err := json.Unmarshal(raw, &newCreds); err != nil {
-					newCreds = nil
-				}
-			}
-		}
-
-		// Merge with existing credentials so partial updates don't wipe other fields
-		if len(newCreds) > 0 {
-			existing, err := s.loadExistingCreds(ctx, id)
-			if err != nil {
-				return fmt.Errorf("load existing credentials for merge: %w", err)
-			}
-			maps.Copy(existing, newCreds)
-			newCreds = existing
-		}
-
-		var credsBytes []byte
-		if len(newCreds) > 0 {
-			credsBytes, _ = json.Marshal(newCreds)
-		}
-		if len(credsBytes) > 0 && s.encKey != "" {
-			encrypted, err := crypto.Encrypt(string(credsBytes), s.encKey)
-			if err != nil {
-				return fmt.Errorf("encrypt credentials: %w", err)
-			}
-			credsBytes = []byte(encrypted)
-		}
-		updates["credentials"] = credsBytes
+		return s.updateCredentialsTx(ctx, id, updates, credsVal)
 	}
 	updates["updated_at"] = time.Now()
 	if store.IsCrossTenant(ctx) {
@@ -229,10 +188,171 @@ func (s *PGChannelInstanceStore) Update(ctx context.Context, id uuid.UUID, updat
 	return execMapUpdateWhereTenant(ctx, s.db, "channel_instances", updates, id, tid)
 }
 
-// loadExistingCreds reads and decrypts the current credentials for merging.
-func (s *PGChannelInstanceStore) loadExistingCreds(ctx context.Context, id uuid.UUID) (map[string]any, error) {
+// updateCredentialsTx merges the credentials patch under a row-level lock
+// to serialize concurrent writers (operator UI vs token refresh persist).
+func (s *PGChannelInstanceStore) updateCredentialsTx(ctx context.Context, id uuid.UUID, updates map[string]any, credsVal any) error {
+	var newCreds map[string]any
+	switch v := credsVal.(type) {
+	case map[string]any:
+		newCreds = v
+	default:
+		var raw []byte
+		switch vv := v.(type) {
+		case []byte:
+			raw = vv
+		case string:
+			raw = []byte(vv)
+		default:
+			if b, err := json.Marshal(v); err == nil {
+				raw = b
+			}
+		}
+		if len(raw) > 0 {
+			if err := json.Unmarshal(raw, &newCreds); err != nil {
+				newCreds = nil
+			}
+		}
+	}
+
+	tid := store.TenantIDFromContext(ctx)
+	crossTenant := store.IsCrossTenant(ctx)
+	if !crossTenant && tid == uuid.Nil {
+		return fmt.Errorf("tenant_id required for update")
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
 	var raw []byte
-	err := s.db.QueryRowContext(ctx, "SELECT credentials FROM channel_instances WHERE id = $1", id).Scan(&raw)
+	if crossTenant {
+		err = tx.QueryRowContext(ctx,
+			"SELECT credentials FROM channel_instances WHERE id = $1 FOR UPDATE", id,
+		).Scan(&raw)
+	} else {
+		err = tx.QueryRowContext(ctx,
+			"SELECT credentials FROM channel_instances WHERE id = $1 AND tenant_id = $2 FOR UPDATE", id, tid,
+		).Scan(&raw)
+	}
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("lock credentials: %w", err)
+	}
+
+	existing := map[string]any{}
+	if len(raw) > 0 {
+		decoded := raw
+		if s.encKey != "" {
+			if dec, decErr := crypto.Decrypt(string(raw), s.encKey); decErr == nil {
+				decoded = []byte(dec)
+			} else if !json.Valid(raw) {
+				return fmt.Errorf("decrypt existing credentials: %w", decErr)
+			}
+		}
+		if err := json.Unmarshal(decoded, &existing); err != nil {
+			return fmt.Errorf("unmarshal existing credentials: %w", err)
+		}
+	}
+	if len(newCreds) > 0 {
+		maps.Copy(existing, newCreds)
+		newCreds = existing
+	}
+
+	var credsBytes []byte
+	if len(newCreds) > 0 {
+		credsBytes, _ = json.Marshal(newCreds)
+	}
+	if len(credsBytes) > 0 && s.encKey != "" {
+		encrypted, err := crypto.Encrypt(string(credsBytes), s.encKey)
+		if err != nil {
+			return fmt.Errorf("encrypt credentials: %w", err)
+		}
+		credsBytes = []byte(encrypted)
+	}
+	updates["credentials"] = credsBytes
+	updates["updated_at"] = time.Now()
+
+	var query string
+	var args []any
+	if crossTenant {
+		query, args, err = base.BuildMapUpdate(pgDialect, "channel_instances", id, updates)
+	} else {
+		query, args, err = base.BuildMapUpdateWhereTenant(pgDialect, "channel_instances", updates, id, tid)
+	}
+	if err != nil {
+		return err
+	}
+	if query == "" {
+		return tx.Commit()
+	}
+	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// MergeConfig atomically merges `partial` into the config JSONB column at
+// SQL level using `||` (top-level shallow merge — keys in `partial`
+// overwrite, keys only in existing are preserved). Avoids the
+// read-modify-write race that the application-layer Update path has
+// when two writers touch the same blob concurrently.
+func (s *PGChannelInstanceStore) MergeConfig(ctx context.Context, id uuid.UUID, partial map[string]any) error {
+	clean := stripNilValues(partial)
+	if len(clean) == 0 {
+		return nil
+	}
+	patch, err := json.Marshal(clean)
+	if err != nil {
+		return fmt.Errorf("marshal config patch: %w", err)
+	}
+	if store.IsCrossTenant(ctx) {
+		_, err = s.db.ExecContext(ctx,
+			`UPDATE channel_instances
+			   SET config = COALESCE(config, '{}'::jsonb) || $1::jsonb,
+			       updated_at = $2
+			 WHERE id = $3`,
+			patch, time.Now(), id)
+		return err
+	}
+	tid := store.TenantIDFromContext(ctx)
+	if tid == uuid.Nil {
+		return fmt.Errorf("tenant_id required for merge")
+	}
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE channel_instances
+		   SET config = COALESCE(config, '{}'::jsonb) || $1::jsonb,
+		       updated_at = $2
+		 WHERE id = $3 AND tenant_id = $4`,
+		patch, time.Now(), id, tid)
+	return err
+}
+
+// stripNilValues — see ChannelInstanceStore.MergeConfig contract.
+func stripNilValues(in map[string]any) map[string]any {
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		if v == nil {
+			continue
+		}
+		out[k] = v
+	}
+	return out
+}
+
+// loadExistingCreds reads and decrypts the current credentials for merging.
+// Surfaces decrypt/unmarshal errors instead of returning an empty map —
+// otherwise a transient read failure during a partial update would wipe
+// every other credential field on the merge.
+func (s *PGChannelInstanceStore) loadExistingCreds(ctx context.Context, id uuid.UUID) (map[string]any, error) {
+	tid := store.TenantIDFromContext(ctx)
+	if tid == uuid.Nil {
+		return nil, fmt.Errorf("tenant_id required to load credentials")
+	}
+	var raw []byte
+	err := s.db.QueryRowContext(ctx,
+		"SELECT credentials FROM channel_instances WHERE id = $1 AND tenant_id = $2", id, tid,
+	).Scan(&raw)
 	if errors.Is(err, sql.ErrNoRows) || len(raw) == 0 {
 		return make(map[string]any), nil
 	}
@@ -240,13 +360,16 @@ func (s *PGChannelInstanceStore) loadExistingCreds(ctx context.Context, id uuid.
 		return nil, err
 	}
 	if s.encKey != "" {
-		if dec, err := crypto.Decrypt(string(raw), s.encKey); err == nil {
+		dec, decErr := crypto.Decrypt(string(raw), s.encKey)
+		if decErr == nil {
 			raw = []byte(dec)
+		} else if !json.Valid(raw) {
+			return nil, fmt.Errorf("decrypt existing credentials: %w", decErr)
 		}
 	}
 	var m map[string]any
 	if err := json.Unmarshal(raw, &m); err != nil {
-		return make(map[string]any), nil
+		return nil, fmt.Errorf("unmarshal existing credentials: %w", err)
 	}
 	return m, nil
 }

@@ -120,6 +120,19 @@
       "groups": "群组",
       "managers": "管理员"
     },
+    "zaloWebhook": {
+      "title": "Webhook 设置",
+      "pathLabel": "路径",
+      "urlLabel": "Webhook URL（粘贴到 Zalo 控制台）",
+      "hostLabel": "网关主机",
+      "hostHint": "如果 Zalo 无法访问此 UI 的源地址，请覆盖网关主机。按浏览器本地存储。",
+      "hostInvalid": "主机不是有效的 URL",
+      "hostInvalidScheme": "主机必须以 http:// 或 https:// 开头",
+      "oaIdLabel": "OA ID",
+      "oaIdPlaceholder": "连接后自动发现",
+      "loading": "加载中...",
+      "copy": "复制 URL"
+    },
     "general": {
       "identity": "身份信息",
       "name": "名称",
@@ -141,7 +154,15 @@
       "failedSave": "保存失败",
       "saved": "已保存",
       "updateCredentials": "更新凭据",
-      "saving": "保存中..."
+      "saving": "保存中...",
+      "bootstrapBanner": {
+        "title": "引导模式：在 Zalo 完成设置",
+        "step1": "复制下方的 Webhook URL。",
+        "step2": "在 developers.zalo.me 的 Webhook 标签页粘贴 URL → 点击 Thay đổi（更改）→ Cập nhật（更新）。Zalo 验证并保存。",
+        "step3": "Khóa bí mật OA（OA 密钥）字段出现。点击眼睛图标显示并复制该值。",
+        "step4": "将密钥粘贴到下方的 Webhook Secret Key 字段 → 更新凭据。",
+        "note": "处于引导模式时，Channel 会以 200 应答 Zalo 的验证 ping，但会丢弃事件。粘贴密钥后将启用签名校验和消息处理。"
+      }
     },
     "config": {
       "noSchema": "此Channel类型没有配置模式。",
@@ -225,15 +246,28 @@
     "draft_transport": { "label": "草稿预览", "help": "在私聊中使用隐形草稿预览回答流 — 每次编辑无通知（需启用私聊流式传输）" },
     "reasoning_stream": { "label": "显示推理", "help": "将AI思考过程显示为单独的消息（需启用流式传输）" },
     "reaction_level": { "label": "表情回应级别" },
+    "quote_user_message": {
+      "label": "引用用户消息",
+      "help": "回复时引用用户的最近一条入站消息（Zalo 的 reply-to）。关闭后仅发送普通回复，不带引用。"
+    },
     "media_max_mb": { "label": "最大媒体大小 (MB)" },
     "link_preview": { "label": "链接预览" },
     "allow_from": { "label": "允许的用户" },
     "block_reply": { "label": "分块回复", "help": "在工具迭代期间发送中间文本" },
+    "transport": { "label": "连接模式", "help": "Webhook 基于事件，更轻量。Polling 定时拉取消息 — 在没有公网 URL 时作为回退方案。" },
+    "webhook_secret_key": { "label": "Webhook 密钥", "help": "来自 Zalo 开发者控制台（OA → Webhook）的签名密钥。当连接模式为 Webhook 时必填（除非签名模式为 Disabled）。用于校验 X-ZEvent-Signature。" },
+    "webhook_signature_mode": { "label": "签名模式", "help": "Disabled 跳过校验 — 最容易上线。配置好 Webhook 密钥（在凭据中）后再切换到 Strict；Log-only 是迁移过渡阶段。" },
+    "webhook_replay_window_seconds": { "label": "重放窗口（秒）", "help": "接受 webhook 事件的最大时长。默认 300，范围 60–3600。" },
+    "catch_up_on_restart": { "label": "重启后追赶", "help": "Start 时执行一次有界的 listrecentchat 扫描，补回离线期间漏掉的事件。" },
+    "poll_interval_seconds": { "label": "轮询间隔（秒）", "help": "拉取新消息的频率。最小 5，最大 120。" },
+    "poll_count": { "label": "轮询页大小", "help": "每次 listrecentchat 调用的消息数。Zalo 上限为 10 — 超过会返回错误 -210。" },
+    "poll_burndown_max_pages": { "label": "Burn-down 最大页数", "help": "每个周期连续 listrecentchat 的最大页数（页大小 × 最大页数 = 排空消息总数）。默认 10，最大 20。设为 1 可禁用 burn-down。" },
+    "redirect_uri": { "label": "Redirect URI", "help": "在 https://developers.zalo.me/app/<app_id>/oa/settings 将此 URL 设为 Official Account Callback URL。不一致会返回 error_code=-14003。完整设置见文档。" },
+    "webhook_secret": { "label": "Webhook 密钥", "help": "由 bot.zapps.me 在你设置 webhook URL 时生成。复制并粘贴到此处。未设置前，此通道运行在 bootstrap 模式（以 HTTP 200 回应 Zalo 的验证 ping，但丢弃事件）。" },
     "domain": { "label": "域名" },
     "connection_mode": { "label": "连接模式", "help": "WebSocket 无需公网 IP — 仅需出站连接" },
     "webhook_port": { "label": "Webhook 端口", "help": "0 = 共享主网关端口（推荐）" },
-    "webhook_path": { "label": "Webhook 路径", "help": "主服务器上 Lark 事件的路径" },
-    "webhook_url": { "label": "Webhook URL" },
+    "webhook_path": { "label": "Webhook 路径", "help": "URL 路由路径。Zalo：小写字母、数字、连字符（2–63 字符），用作 /channels/zalo/webhook/<slug>。Lark：主服务器上的完整路径（例如 /feishu/events）。" },
     "topic_session_mode": { "label": "话题会话模式", "help": "使用线程 root_id 进行会话隔离" },
     "render_mode": { "label": "渲染模式" },
     "text_chunk_limit": { "label": "文本分段限制", "help": "每条消息最大字符数" },
@@ -289,6 +323,10 @@
     "connection_mode": {
       "webhook": "Webhook",
       "websocket": "WebSocket（推荐）"
+    },
+    "transport": {
+      "webhook": "Webhook（推荐）",
+      "polling": "Polling"
     },
     "topic_session_mode": {
       "disabled": "禁用",
@@ -357,6 +395,10 @@
     "whatsapp": {
       "createLabel": "创建并扫码",
       "formBanner": "创建后，请用 WhatsApp 扫描二维码完成认证。"
+    },
+    "zaloOa": {
+      "createLabel": "创建并连接",
+      "formBanner": "创建后,您将在 Zalo 中授权访问并粘贴返回的代码以完成授权。"
     }
   },
   "fallback": {
@@ -373,6 +415,11 @@
     "title": "所需API权限",
     "description": "您的 Lark/飞书 应用需要在开发者控制台启用这些权限。添加权限后请发布新版本。",
     "publishReminder": "添加权限后，将通讯录范围设置为「全部成员」，并发布新版本使更改生效。"
+  },
+  "zaloOaEvents": {
+    "title": "在 Zalo 控制台启用以下事件",
+    "description": "在 developers.zalo.me 保存 Webhook URL 之后，请将下列每个事件的开关打开。任何未开启的事件都不会到达 agent。",
+    "location": "Webhook 标签页 → \"Danh sách sự kiện webhook\" → 将每个事件的 Tắt / Bật 开关切换为 ON。"
   },
   "toast": {
     "created": "Channel已创建",
@@ -421,5 +468,24 @@
     "relinkDevice": "重新连接",
     "connectedSuccess": "✅ WhatsApp 连接成功！",
     "tabQrCode": "二维码"
+  },
+  "zaloOa": {
+    "dialogTitle": "连接 Zalo OA — {{name}}",
+    "dialogDescription": "授权官方账号,然后粘贴浏览器中的重定向 URL。",
+    "step1Heading": "步骤 1 — 授权",
+    "authorizeHelp": "打开下方链接，登录 Zalo 并为 Official Account 授权。授权后浏览器将跳转到回调 URL — 请从地址栏复制完整 URL，并粘贴到下方步骤 2 中。",
+    "step2Heading": "步骤 2 — 粘贴回调 URL",
+    "consentLoading": "正在生成授权 URL…",
+    "consentFailed": "无法获取授权 URL",
+    "pasteHelp": "授权后,从浏览器地址栏复制完整 URL 并粘贴到此处。",
+    "pastePlaceholder": "完整回调 URL",
+    "exchangeFailed": "代码交换失败",
+    "errCodeMissing": "粘贴的 URL 没有 \"code\" 参数 — 请在授权后从浏览器地址栏复制完整的回调 URL。",
+    "connectedClosing": "已连接 — 正在关闭…",
+    "copyUrl": "复制 URL",
+    "openInTab": "在新标签页中打开",
+    "cancel": "取消",
+    "connect": "连接",
+    "connecting": "连接中…"
   }
 }

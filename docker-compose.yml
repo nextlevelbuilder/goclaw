@@ -47,8 +47,10 @@ services:
       - GOCLAW_GATEWAY_TOKEN=${GOCLAW_GATEWAY_TOKEN:-}
       - GOCLAW_ENCRYPTION_KEY=${GOCLAW_ENCRYPTION_KEY:-}
       - GOCLAW_SKILLS_DIR=/app/data/skills
+      - GOCLAW_AUTO_UPGRADE=${GOCLAW_AUTO_UPGRADE:-true}
       # Debug
       - GOCLAW_TRACE_VERBOSE=${GOCLAW_TRACE_VERBOSE:-0}
+      - GOCLAW_LOG_LEVEL=${GOCLAW_LOG_LEVEL:-info}
     volumes:
       - goclaw-data:/app/data
       - goclaw-workspace:/app/workspace

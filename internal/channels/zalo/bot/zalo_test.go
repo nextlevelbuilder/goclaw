@@ -1,4 +1,4 @@
-package zalo
+package bot
 
 import (
 	"bytes"
@@ -336,9 +336,9 @@ func TestSend_PlainTextGoesThroughSendMessage(t *testing.T) {
 	}
 }
 
-// TestSend_PhotoExtractionRoutesToSendPhoto verifies [photo:URL] is
-// extracted and sent via sendPhoto instead of sendMessage.
-func TestSend_PhotoExtractionRoutesToSendPhoto(t *testing.T) {
+// TestSend_MediaHTTPURLRoutesToSendPhoto verifies a Media[] entry with an
+// http(s) URL routes to the sendPhoto endpoint with merged caption.
+func TestSend_MediaHTTPURLRoutesToSendPhoto(t *testing.T) {
 	var lastPath string
 	var lastBody map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -353,7 +353,11 @@ func TestSend_PhotoExtractionRoutesToSendPhoto(t *testing.T) {
 	ch := newTestChannel(t, srv.URL)
 	err := ch.Send(context.Background(), bus.OutboundMessage{
 		ChatID:  "user-8",
-		Content: "look at this [photo:https://cdn.example/test.jpg] nice pic",
+		Content: "nice pic",
+		Media: []bus.MediaAttachment{{
+			URL:     "https://cdn.example/test.jpg",
+			Caption: "look at this",
+		}},
 	})
 	if err != nil {
 		t.Fatalf("Send: %v", err)
@@ -363,6 +367,59 @@ func TestSend_PhotoExtractionRoutesToSendPhoto(t *testing.T) {
 	}
 	if lastBody["photo"] != "https://cdn.example/test.jpg" {
 		t.Errorf("photo = %v", lastBody["photo"])
+	}
+	if got := lastBody["caption"]; got != "look at this\n\nnice pic" {
+		t.Errorf("caption = %q, want merged caption+content", got)
+	}
+}
+
+// TestSend_MediaLocalPathRejected verifies the bot rejects local-path media
+// with an actionable error directing operators to the zalo_oa channel.
+func TestSend_MediaLocalPathRejected(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called = true
+		_, _ = w.Write([]byte(`{"ok":true,"result":{}}`))
+	}))
+	defer srv.Close()
+
+	ch := newTestChannel(t, srv.URL)
+	err := ch.Send(context.Background(), bus.OutboundMessage{
+		ChatID:  "user-9",
+		Content: "with caption",
+		Media:   []bus.MediaAttachment{{URL: "/tmp/local.jpg"}},
+	})
+	if err == nil {
+		t.Fatalf("Send: want error for local-path media, got nil")
+	}
+	if !strings.Contains(err.Error(), "local file media not supported") {
+		t.Errorf("err = %v, want local-path rejection", err)
+	}
+	if called {
+		t.Error("API was called despite local-path rejection")
+	}
+}
+
+// TestSend_NoMediaRoutesToText verifies the absence of Media[] routes to the
+// text-chunking path (sendMessage), preserving back-compat for plain text.
+func TestSend_NoMediaRoutesToText(t *testing.T) {
+	var lastPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		lastPath = r.URL.Path
+		_, _ = w.Write([]byte(`{"ok":true,"result":{}}`))
+	}))
+	defer srv.Close()
+
+	ch := newTestChannel(t, srv.URL)
+	err := ch.Send(context.Background(), bus.OutboundMessage{
+		ChatID:  "user-10",
+		Content: "plain message",
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	if !strings.HasSuffix(lastPath, "/sendMessage") {
+		t.Errorf("path = %q, want sendMessage", lastPath)
 	}
 }
 
@@ -466,6 +523,7 @@ func TestDownloadMedia_SuccessWritesTempFile(t *testing.T) {
 
 	mb := bus.New()
 	ch, _ := New(config.ZaloConfig{Token: "t"}, mb, nil)
+	ch.mediaClient = ch.client // httptest binds to 127.0.0.1; SSRF-safe client blocks loopback.
 	path, err := ch.downloadMedia(srv.URL + "/photo")
 	if err != nil {
 		t.Fatalf("downloadMedia: %v", err)
@@ -492,6 +550,7 @@ func TestDownloadMedia_HTTPErrorReturnsError(t *testing.T) {
 	defer srv.Close()
 
 	ch, _ := New(config.ZaloConfig{Token: "t"}, bus.New(), nil)
+	ch.mediaClient = ch.client
 	if _, err := ch.downloadMedia(srv.URL); err == nil {
 		t.Fatal("expected error on 404, got nil")
 	}
@@ -507,8 +566,27 @@ func TestDownloadMedia_EmptyResponseReturnsError(t *testing.T) {
 	defer srv.Close()
 
 	ch, _ := New(config.ZaloConfig{Token: "t"}, bus.New(), nil)
+	ch.mediaClient = ch.client
 	if _, err := ch.downloadMedia(srv.URL); err == nil {
 		t.Fatal("expected empty-response error, got nil")
+	}
+}
+
+// TestDownloadMedia_OversizeReturnsError verifies the cap is enforced rather
+// than silently truncating (regression: bare LimitReader chops oversize media).
+func TestDownloadMedia_OversizeReturnsError(t *testing.T) {
+	// Stream cap+1 bytes so io.Copy reads past the cap and triggers the guard.
+	const oversize = 10*1024*1024 + 1
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/jpeg")
+		_, _ = w.Write(bytes.Repeat([]byte("x"), oversize))
+	}))
+	defer srv.Close()
+
+	ch, _ := New(config.ZaloConfig{Token: "t"}, bus.New(), nil)
+	ch.mediaClient = ch.client
+	if _, err := ch.downloadMedia(srv.URL); err == nil {
+		t.Fatal("expected oversize error, got nil")
 	}
 }
 
@@ -522,6 +600,7 @@ func TestDownloadMedia_FallbackJPEGExtension(t *testing.T) {
 	defer srv.Close()
 
 	ch, _ := New(config.ZaloConfig{Token: "t"}, bus.New(), nil)
+	ch.mediaClient = ch.client
 	path, err := ch.downloadMedia(srv.URL)
 	if err != nil {
 		t.Fatalf("downloadMedia: %v", err)
@@ -550,5 +629,127 @@ func TestZaloAPIResponse_Roundtrip(t *testing.T) {
 	}
 	if !got.OK {
 		t.Error("OK field lost in round-trip")
+	}
+}
+
+func TestSendChatAction_PostsBodyWithParams(t *testing.T) {
+	var gotPath string
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		raw, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(raw, &gotBody)
+		_, _ = w.Write([]byte(`{"ok":true,"result":{}}`))
+	}))
+	defer srv.Close()
+
+	ch := newTestChannel(t, srv.URL)
+	if err := ch.sendChatAction("chat-1", "typing"); err != nil {
+		t.Fatalf("sendChatAction: %v", err)
+	}
+	if gotPath != "/bott/sendChatAction" {
+		t.Errorf("path = %q, want /bott/sendChatAction", gotPath)
+	}
+	if gotBody["chat_id"] != "chat-1" {
+		t.Errorf("chat_id = %v, want chat-1", gotBody["chat_id"])
+	}
+	if gotBody["action"] != "typing" {
+		t.Errorf("action = %v, want typing", gotBody["action"])
+	}
+}
+
+func TestStartTyping_FiresAndStoresController(t *testing.T) {
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		_, _ = w.Write([]byte(`{"ok":true,"result":{}}`))
+	}))
+	defer srv.Close()
+
+	ch := newTestChannel(t, srv.URL)
+	ch.startTyping("chat-1")
+
+	// Allow the initial fire to land.
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) && atomic.LoadInt32(&calls) == 0 {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := atomic.LoadInt32(&calls); got < 1 {
+		t.Errorf("sendChatAction calls = %d, want ≥1", got)
+	}
+	if _, ok := ch.typingCtrls.Load("chat-1"); !ok {
+		t.Error("typingCtrls missing entry for chat-1")
+	}
+	_ = ch.Stop(context.Background())
+}
+
+func TestStartTyping_NoOpWhenNotRunning(t *testing.T) {
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		_, _ = w.Write([]byte(`{"ok":true,"result":{}}`))
+	}))
+	defer srv.Close()
+
+	swapAPIBase(t, srv.URL)
+	ch, err := New(config.ZaloConfig{Token: "t", DMPolicy: "open"}, bus.New(), nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ch.startTyping("chat-1")
+
+	time.Sleep(50 * time.Millisecond)
+	if got := atomic.LoadInt32(&calls); got != 0 {
+		t.Errorf("sendChatAction calls = %d, want 0 (channel not running)", got)
+	}
+	if _, ok := ch.typingCtrls.Load("chat-1"); ok {
+		t.Error("typingCtrls should be empty when channel not running")
+	}
+}
+
+func TestSend_StopsTypingController(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"ok":true,"result":{}}`))
+	}))
+	defer srv.Close()
+
+	ch := newTestChannel(t, srv.URL)
+	ch.startTyping("chat-1")
+	if _, ok := ch.typingCtrls.Load("chat-1"); !ok {
+		t.Fatal("precondition: typing controller not stored")
+	}
+
+	if err := ch.Send(context.Background(), bus.OutboundMessage{
+		ChatID:  "chat-1",
+		Content: "hi",
+	}); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	if _, ok := ch.typingCtrls.Load("chat-1"); ok {
+		t.Error("typingCtrls entry should be cleared after Send")
+	}
+}
+
+func TestStop_DrainsTypingControllers(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"ok":true,"result":{}}`))
+	}))
+	defer srv.Close()
+
+	ch := newTestChannel(t, srv.URL)
+	ch.startTyping("chat-1")
+	ch.startTyping("chat-2")
+
+	if err := ch.Stop(context.Background()); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+
+	count := 0
+	ch.typingCtrls.Range(func(_, _ any) bool {
+		count++
+		return true
+	})
+	if count != 0 {
+		t.Errorf("typingCtrls residual entries = %d, want 0", count)
 	}
 }

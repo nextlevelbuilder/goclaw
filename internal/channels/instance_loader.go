@@ -270,6 +270,12 @@ func (l *InstanceLoader) loadInstance(ctx context.Context, inst store.ChannelIns
 	if base, ok := ch.(interface{ SetTenantID(uuid.UUID) }); ok {
 		base.SetTenantID(inst.TenantID)
 	}
+	// Propagate the channel_instances.id row UUID. Used by channels (e.g.
+	// zalo_oa) that need to write back to their own row at runtime —
+	// e.g. token refresh persisting rotated credentials.
+	if base, ok := ch.(interface{ SetInstanceID(uuid.UUID) }); ok {
+		base.SetInstanceID(inst.ID)
+	}
 	// Propagate tenant_id to pending history for compaction/sweep DB operations.
 	// Factory creates PendingHistory before SetTenantID is called, so tenantID is uuid.Nil at construction.
 	if ph, ok := ch.(interface{ SetPendingHistoryTenantID(uuid.UUID) }); ok {

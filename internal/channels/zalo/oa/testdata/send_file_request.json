@@ -1,0 +1,9 @@
+{
+  "message": {
+    "attachment": {
+      "payload": {"attachment_id": "ATT-file-xyz"},
+      "type": "file"
+    }
+  },
+  "recipient": {"user_id": "user-fixture"}
+}

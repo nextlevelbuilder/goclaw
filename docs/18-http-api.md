@@ -947,7 +947,7 @@ Accepts partial updates. Flag keys are validated against recognized v3 flags.
 | `POST` | `/v1/channels/instances/{id}/writers` | Add writer to group |
 | `DELETE` | `/v1/channels/instances/{id}/writers/{userId}` | Remove writer |
 
-**Supported channels:** `telegram`, `discord`, `slack`, `whatsapp`, `zalo_oa`, `zalo_personal`, `feishu`
+**Supported channels:** `telegram`, `discord`, `slack`, `whatsapp`, `zalo_oa`, `zalo_bot`, `zalo_personal`, `feishu`
 
 Credentials are masked in HTTP responses.
 

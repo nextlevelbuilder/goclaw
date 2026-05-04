@@ -1,53 +1,32 @@
-package zalo
+// Package common holds shared building blocks used by all Zalo channel
+// flavors (zalo_bot, zalo_oa, zalo_personal).
+package common
 
 import (
 	"regexp"
 	"strings"
 )
 
-// StripMarkdown removes markdown formatting artifacts from text, producing
-// clean plain text suitable for Zalo which does not support any markup.
+// StripMarkdown returns plain text with markdown artifacts removed —
+// Zalo does not support any markup rendering.
 func StripMarkdown(text string) string {
 	if text == "" {
 		return text
 	}
 
-	// 1. Strip fenced code blocks — keep content, remove ``` delimiters
 	text = reFencedCode.ReplaceAllString(text, "$1")
-
-	// 2. Strip inline code backticks
 	text = reInlineCode.ReplaceAllString(text, "$1")
-
-	// 3. Strip images ![alt](url) — remove entirely
 	text = reImage.ReplaceAllString(text, "")
-
-	// 4. Strip links [text](url) → text (url)
 	text = reLink.ReplaceAllString(text, "$1 ($2)")
-
-	// 5. Strip bold+italic (***text*** or ___text___)
 	text = reBoldItalicStar.ReplaceAllString(text, "$1")
 	text = reBoldItalicUnder.ReplaceAllString(text, "$1")
-
-	// 6. Strip bold (**text** or __text__)
 	text = reBoldStar.ReplaceAllString(text, "$1")
-	text = reBoldUnder.ReplaceAllString(text, "$1")
-
-	// 7. Strip strikethrough ~~text~~
+	text = reBoldUnder.ReplaceAllStringFunc(text, stripBoldUnder)
 	text = reStrikethrough.ReplaceAllString(text, "$1")
-
-	// 8. Strip headers (lines starting with #)
 	text = reHeader.ReplaceAllString(text, "$1")
-
-	// 9. Strip horizontal rules
 	text = reHorizontalRule.ReplaceAllString(text, "")
-
-	// 10. Strip blockquotes
 	text = reBlockquote.ReplaceAllString(text, "$1")
-
-	// 11. Replace bullet markers with •
 	text = reBullet.ReplaceAllString(text, "${1}• ")
-
-	// Clean up excessive blank lines (3+ → 2)
 	text = reExcessiveNewlines.ReplaceAllString(text, "\n\n")
 
 	return strings.TrimSpace(text)
@@ -69,4 +48,16 @@ var (
 	reBullet          = regexp.MustCompile(`(?m)^(\s*)[-*+]\s+`)
 
 	reExcessiveNewlines = regexp.MustCompile(`\n{3,}`)
+
+	reIdentifier = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 )
+
+// stripBoldUnder strips __bold__ but preserves identifier-shaped content like
+// __init__ / __name__ where the underscores are part of the token, not markup.
+func stripBoldUnder(match string) string {
+	inner := match[2 : len(match)-2]
+	if reIdentifier.MatchString(inner) {
+		return match
+	}
+	return inner
+}

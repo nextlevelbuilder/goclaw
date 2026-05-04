@@ -21,3 +21,20 @@ func NewTestClient(role permissions.Role, tenantID uuid.UUID, userID string) *Cl
 		tenantID:      tenantID,
 	}
 }
+
+// NewCapturingTestClient is like NewTestClient but also returns a buffered
+// send channel so response/event frames can be inspected by the test. The
+// channel is sized to absorb a small burst without blocking the handler.
+//
+// Not for production use.
+func NewCapturingTestClient(role permissions.Role, tenantID uuid.UUID, userID string) (*Client, <-chan []byte) {
+	send := make(chan []byte, 16)
+	return &Client{
+		id:            uuid.NewString(),
+		authenticated: true,
+		role:          role,
+		userID:        userID,
+		tenantID:      tenantID,
+		send:          send,
+	}, send
+}

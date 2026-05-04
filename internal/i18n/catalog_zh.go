@@ -224,6 +224,35 @@ func init() {
 		MsgHookPerTurnCapReached:       "单轮钩子调用次数已达上限",
 		MsgHookBuiltinReadOnly:         "内置钩子只读,仅允许切换启用状态",
 
+		// Zalo OA OAuth 渠道
+		MsgZaloOACodeExchangeFailed: "Zalo OAuth 授权码交换失败:%s",
+		MsgZaloOAInvalidChannelType: "实例不是 zalo_oa 类型",
+		MsgZaloOAConnected:           "已连接 Zalo 公众号:%s",
+		MsgZaloOAInvalidState:        "OAuth state 令牌无效或已过期",
+		MsgZaloOARedirectURIRequired: "credentials.redirect_uri 必填,且必须与 Zalo 开发者控制台注册的回调完全一致",
+		MsgZaloOAMissingAppID:        "credentials.app_id 必填 — 请先在通道中设置 app_id 再请求授权 URL",
+		MsgZaloOAStateGenFailed:      "无法生成授权 state 令牌,请重试",
+		MsgZaloOAOAIDMismatch:        "回调 URL 属于另一个 OA — 请粘贴当前实例授权页面的 URL",
+
+		// Zalo Webhook URL RPC
+		MsgZaloWebhookWrongChannelType: "channels.instances.zalo.webhook_url 仅适用于 zalo_bot 或 zalo_oa 类型的实例",
+		MsgZaloWebhookPathHint:         "在路径前加上网关的公网 URL(例如 https://gw.example.com),然后将完整 URL 注册到 Zalo 开发者控制台。",
+
+		// Zalo OA 运行时错误目录。参数:(代码 int, 原始消息 string)
+		MsgZaloOAErrAuth:              "Zalo 在刷新令牌后仍拒绝 access token(代码 %d:%s);需重新授权该公众号",
+		MsgZaloOAErrRefreshExpired:    "Zalo refresh token 已过期(代码 %d:%s);运营人员必须在 OA 控制台重新授权",
+		MsgZaloOAErrPayload:           "Zalo 拒绝该请求载荷(代码 %d:%s);请检查消息结构与必填字段",
+		MsgZaloOAErrSize:              "Zalo 上传文件超出大小上限(代码 %d:%s);图片 1MB / 文件 5MB / GIF 5MB",
+		MsgZaloOAErrPermission:        "Zalo 此操作需要额外权限(代码 %d:%s);请为 OA 应用授予所缺少的范围",
+		MsgZaloOAErrInteractionWindow: "接收方处于 Zalo 消息窗口之外(代码 %d:%s);请等待用户先发起会话或使用付费模板",
+		MsgZaloOAErrUserNotVisible:    "目标用户对该 OA 不可见(代码 %d:%s)",
+		MsgZaloOAErrAppDisabled:       "Zalo 应用已被禁用或封禁(代码 %d:%s);请联系 Zalo 支持",
+		MsgZaloOAErrRate:              "Zalo 配额已耗尽(代码 %d:%s);请等待配额窗口重置",
+		MsgZaloOAErrServer:            "Zalo 返回临时服务器错误(代码 %d:%s);请稍后重试",
+		MsgZaloOAErrRedirectURI:       "Zalo 拒绝 OAuth redirect_uri(代码 %d:%s);请在 Zalo 控制台更新 redirect URI 以匹配渠道配置",
+		MsgZaloOAReauthDueSoon:        "Refresh Token 将在 %d 天后到期,请重新授权 OA 以避免中断",
+		MsgZaloOAUnsupportedAttachment: "(文件 %q(%s)无法通过 Zalo OA 投递 — 仅接受 PDF/DOC/DOCX。内容已在上文说明。)",
+
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 已按请求转发至 %s:%q",
 	})

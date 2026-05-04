@@ -214,6 +214,7 @@ export function ChannelDetailPage({
             <TabsContent value="credentials" className="mt-4">
               <ChannelCredentialsTab
                 instance={instance}
+                status={status}
                 onUpdate={updateInstance}
               />
             </TabsContent>

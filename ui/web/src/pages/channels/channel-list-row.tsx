@@ -1,7 +1,8 @@
-import { QrCode, Radio, Trash2 } from "lucide-react";
+import { KeyRound, QrCode, Radio, Trash2, type LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type {
   ChannelInstanceData,
@@ -15,6 +16,12 @@ import {
   getChannelStatusMeta,
 } from "./channels-status-view";
 import { channelsWithAuth } from "./channel-wizard-registry";
+
+const REAUTH_ICONS: Record<string, LucideIcon> = {
+  zalo_personal: QrCode,
+  zalo_oa: KeyRound,
+  whatsapp: QrCode,
+};
 
 interface ChannelListRowProps {
   instance: ChannelInstanceData;
@@ -55,6 +62,7 @@ export function ChannelListRow({
     t("list.openChannelDetail", {
       defaultValue: "Open channel detail for the latest diagnosis",
     });
+  const ReauthIcon = REAUTH_ICONS[instance.channel_type] ?? QrCode;
 
   return (
     <div
@@ -124,17 +132,27 @@ export function ChannelListRow({
 
         <div className="flex shrink-0 items-start gap-1">
           {onAuth && supportsReauth && (
-            <Button
-              variant="ghost"
-              size="xs"
-              className="text-muted-foreground hover:text-primary"
-              onClick={(e) => {
-                e.stopPropagation();
-                onAuth();
-              }}
-            >
-              <QrCode className="h-3.5 w-3.5" />
-            </Button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    aria-label={t("actions.reauthenticate")}
+                    className="text-muted-foreground hover:text-primary"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onAuth();
+                    }}
+                  >
+                    <ReauthIcon className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  {t("actions.reauthenticate")}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
           {onDelete && !instance.is_default && (
             <Button

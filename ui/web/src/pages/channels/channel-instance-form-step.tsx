@@ -20,6 +20,7 @@ import { slugify } from "@/lib/slug";
 import { credentialsSchema, configSchema, wizardConfig, type FieldDef } from "./channel-schemas";
 import { ChannelFields } from "./channel-fields";
 import { ChannelScopesInfo } from "./channel-scopes-info";
+import { ZaloOAEventsNotice } from "./zalo/zalo-oa-events-notice";
 import { wizardEditConfigs } from "./channel-wizard-registry";
 import { TelegramGroupOverrides, type GroupConfigWithTopics } from "./telegram-group-overrides";
 import { CHANNEL_TYPES } from "@/constants/channels";
@@ -141,6 +142,7 @@ export function ChannelInstanceFormStep({
         )}
 
         <ChannelScopesInfo channelType={channelType} />
+        <ZaloOAEventsNotice channelType={channelType} />
 
         {instance && wizard?.steps.includes("auth") && (
           <div className="rounded-md border border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950 p-3">

@@ -112,6 +112,15 @@ const (
 	MethodChannelInstancesCreate = "channels.instances.create"
 	MethodChannelInstancesUpdate = "channels.instances.update"
 	MethodChannelInstancesDelete = "channels.instances.delete"
+
+	// Zalo OA OAuth (paste-code consent flow). zalo_oa-only.
+	MethodChannelInstancesZaloOAConsentURL   = "channels.instances.zalo_oa.consent_url"
+	MethodChannelInstancesZaloOAExchangeCode = "channels.instances.zalo_oa.exchange_code"
+
+	// Zalo webhook URL discovery — path-only; operator prepends host.
+	// Channel-family endpoint (no bot/oa suffix): handler dispatches on
+	// the resolved channel_type and serves both zalo_bot and zalo_oa.
+	MethodChannelInstancesZaloWebhookURL = "channels.instances.zalo.webhook_url"
 )
 
 // Agent links (inter-agent delegation)

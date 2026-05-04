@@ -17,7 +17,7 @@ import (
 	slackchannel "github.com/nextlevelbuilder/goclaw/internal/channels/slack"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/telegram"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/whatsapp"
-	"github.com/nextlevelbuilder/goclaw/internal/channels/zalo"
+	zalobot "github.com/nextlevelbuilder/goclaw/internal/channels/zalo/bot"
 	zalopersonal "github.com/nextlevelbuilder/goclaw/internal/channels/zalo/personal"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/zalo/personal/zalomethods"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
@@ -86,12 +86,12 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 
 	if cfg.Channels.Zalo.Enabled {
 		if cfg.Channels.Zalo.Token == "" {
-			recordMissingConfig(channels.TypeZaloOA, "Set channels.zalo.token in config.")
-		} else if z, err := zalo.New(cfg.Channels.Zalo, msgBus, pgStores.Pairing); err != nil {
-			channelMgr.RecordFailure(channels.TypeZaloOA, "", err)
+			recordMissingConfig(channels.TypeZaloBot, "Set channels.zalo.token in config.")
+		} else if z, err := zalobot.New(cfg.Channels.Zalo, msgBus, pgStores.Pairing); err != nil {
+			channelMgr.RecordFailure(channels.TypeZaloBot, "", err)
 			slog.Error("failed to initialize zalo channel", "error", err)
 		} else {
-			channelMgr.RegisterChannel(channels.TypeZaloOA, z)
+			channelMgr.RegisterChannel(channels.TypeZaloBot, z)
 			slog.Info("zalo channel enabled (config)")
 		}
 	}
@@ -152,6 +152,8 @@ func wireChannelRPCMethods(server *gateway.Server, pgStores *store.Stores, chann
 	// Register channel instances WS RPC methods
 	if pgStores.ChannelInstances != nil {
 		methods.NewChannelInstancesMethods(pgStores.ChannelInstances, pgStores.Agents, msgBus, msgBus).Register(server.Router())
+		methods.NewZaloOAMethods(pgStores.ChannelInstances, msgBus).Register(server.Router())
+		methods.NewZaloWebhookMethods(pgStores.ChannelInstances).Register(server.Router())
 		zalomethods.NewQRMethods(pgStores.ChannelInstances, msgBus).Register(server.Router())
 		zalomethods.NewContactsMethods(pgStores.ChannelInstances).Register(server.Router())
 		whatsapp.NewQRMethods(pgStores.ChannelInstances, channelMgr).Register(server.Router())

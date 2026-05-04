@@ -78,6 +78,7 @@ const (
 	TypeSlack        = "slack"
 	TypeTelegram     = "telegram"
 	TypeWhatsApp     = "whatsapp"
+	TypeZaloBot      = "zalo_bot"
 	TypeZaloOA       = "zalo_oa"
 	TypeZaloPersonal = "zalo_personal"
 )
@@ -143,6 +144,16 @@ type StreamingChannel interface {
 // the gateway-level block_reply setting. Returns nil to inherit the gateway default.
 type BlockReplyChannel interface {
 	BlockReplyEnabled() *bool
+}
+
+// DMQuoteChannel is optionally implemented by channels that want the gateway
+// consumer to stamp reply_to_message_id on DM outbound metadata (the
+// standard group-only behavior is bypassed). The channel's Send path is
+// responsible for translating the metadata into the platform-specific quote
+// payload. Manager.QuoteInboundOnDM releases its RLock before invoking, so
+// implementations need not be lock-free, but should still be cheap.
+type DMQuoteChannel interface {
+	QuoteInboundOnDM() bool
 }
 
 // WebhookChannel extends Channel with an HTTP handler that can be mounted
@@ -467,6 +478,17 @@ func (c *BaseChannel) MarkDegraded(summary, detail string, kind ChannelFailureKi
 		summary = "Running with warnings"
 	}
 	c.setHealth(NewChannelHealth(ChannelHealthStateDegraded, summary, detail, kind, retryable))
+}
+
+// MarkBootstrap records a degraded state that's part of normal setup
+// (not a fault). The bootstrap_state field is locale-independent.
+func (c *BaseChannel) MarkBootstrap(state ChannelBootstrapState, summary, detail string, kind ChannelFailureKind, retryable bool) {
+	if summary == "" {
+		summary = "Setup incomplete"
+	}
+	h := NewChannelHealth(ChannelHealthStateDegraded, summary, detail, kind, retryable)
+	h.BootstrapState = state
+	c.setHealth(h)
 }
 
 // MarkFailed records a startup or runtime failure.

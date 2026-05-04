@@ -314,6 +314,25 @@ func TestValidScope(t *testing.T) {
 // wrongly classifying exec.approval.list as RoleOperator. exec.approval.list
 // is an explicit entry in isReadMethod and must resolve to RoleViewer.
 
+func TestMethodRole_ZaloOA_IsAdmin(t *testing.T) {
+	// Both consent_url + exchange_code mutate channel_instance credentials
+	// (or generate state for an upcoming mutation), so they sit alongside
+	// channels.instances.create/update/delete in the admin-only block.
+	if got := MethodRole(protocol.MethodChannelInstancesZaloOAConsentURL); got != RoleAdmin {
+		t.Fatalf("zalo_oa.consent_url must be RoleAdmin; got %q", got)
+	}
+	if got := MethodRole(protocol.MethodChannelInstancesZaloOAExchangeCode); got != RoleAdmin {
+		t.Fatalf("zalo_oa.exchange_code must be RoleAdmin; got %q", got)
+	}
+	// webhook_url returns the operator-bound URL for both zalo_bot and
+	// zalo_oa. The URL embeds the instance ID, so it is config-shape data
+	// that must sit alongside channel mutation operations on the admin
+	// allowlist (not viewer / operator).
+	if got := MethodRole(protocol.MethodChannelInstancesZaloWebhookURL); got != RoleAdmin {
+		t.Fatalf("zalo.webhook_url must be RoleAdmin; got %q", got)
+	}
+}
+
 func TestMethodRole_ApprovalsList_IsViewer(t *testing.T) {
 	if got := MethodRole(protocol.MethodApprovalsList); got != RoleViewer {
 		t.Fatalf("exec.approval.list must be RoleViewer (listed in isReadMethod); got %q", got)

@@ -13,6 +13,7 @@ import {
 import { StickySaveBar } from "@/components/shared/sticky-save-bar";
 import { ChannelFields } from "../channel-fields";
 import { configSchema } from "../channel-schemas";
+import { ZaloWebhookURLSection } from "../zalo/zalo-webhook-url-section";
 import type { ChannelInstanceData } from "@/types/channel";
 import type { AgentData } from "@/types/agent";
 import { channelTypeLabels } from "../channels-status-view";
@@ -127,6 +128,14 @@ export function ChannelGeneralTab({ instance, agents, onUpdate }: ChannelGeneral
           <Label htmlFor="cd-enabled">{t("detail.general.enabled")}</Label>
         </div>
       </section>
+
+      {/* Webhook URL — visible only for zalo_bot/zalo_oa instances */}
+      {(instance.channel_type === "zalo_bot" || instance.channel_type === "zalo_oa") && (
+        <ZaloWebhookURLSection
+          instanceId={instance.id}
+          channelType={instance.channel_type}
+        />
+      )}
 
       {/* Policies section — only shown if this channel type has essential config fields */}
       {essentialFields.length > 0 && (

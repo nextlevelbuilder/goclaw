@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -228,20 +229,86 @@ func (s *SQLiteChannelInstanceStore) Update(ctx context.Context, id uuid.UUID, u
 	return execMapUpdateWhereTenant(ctx, s.db, "channel_instances", updates, id, tid)
 }
 
+// MergeConfig atomically applies a top-level shallow merge of `partial`
+// into the config column using SQLite's json_patch (RFC 7396 semantics).
+// Avoids the read-modify-write race that plagues a Get → mutate → Update
+// pattern when concurrent writers touch different keys in the same blob.
+//
+// Caveat: json_patch removes keys whose value is null in the patch. The
+// only consumer (poll cursor) writes int64 values, so this is fine.
+func (s *SQLiteChannelInstanceStore) MergeConfig(ctx context.Context, id uuid.UUID, partial map[string]any) error {
+	clean := stripNilValues(partial)
+	if len(clean) == 0 {
+		return nil
+	}
+	patch, err := json.Marshal(clean)
+	if err != nil {
+		return fmt.Errorf("marshal config patch: %w", err)
+	}
+	if store.IsCrossTenant(ctx) {
+		_, err = s.db.ExecContext(ctx,
+			`UPDATE channel_instances
+			   SET config = json_patch(COALESCE(config, '{}'), ?),
+			       updated_at = ?
+			 WHERE id = ?`,
+			string(patch), time.Now(), id)
+		return err
+	}
+	tid := store.TenantIDFromContext(ctx)
+	if tid == uuid.Nil {
+		return fmt.Errorf("tenant_id required for merge")
+	}
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE channel_instances
+		   SET config = json_patch(COALESCE(config, '{}'), ?),
+		       updated_at = ?
+		 WHERE id = ? AND tenant_id = ?`,
+		string(patch), time.Now(), id, tid)
+	return err
+}
+
+// stripNilValues — see ChannelInstanceStore.MergeConfig contract.
+func stripNilValues(in map[string]any) map[string]any {
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		if v == nil {
+			continue
+		}
+		out[k] = v
+	}
+	return out
+}
+
+// loadExistingCreds reads and decrypts the current credentials for merging.
+// Surfaces decrypt/unmarshal errors instead of returning an empty map —
+// otherwise a transient read failure during a partial update would wipe
+// every other credential field on the merge.
 func (s *SQLiteChannelInstanceStore) loadExistingCreds(ctx context.Context, id uuid.UUID) (map[string]any, error) {
+	tid := store.TenantIDFromContext(ctx)
+	if tid == uuid.Nil {
+		return nil, fmt.Errorf("tenant_id required to load credentials")
+	}
 	var raw []byte
-	err := s.db.QueryRowContext(ctx, "SELECT credentials FROM channel_instances WHERE id = ?", id).Scan(&raw)
-	if err != nil || len(raw) == 0 {
+	err := s.db.QueryRowContext(ctx,
+		"SELECT credentials FROM channel_instances WHERE id = ? AND tenant_id = ?", id, tid,
+	).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) || len(raw) == 0 {
 		return make(map[string]any), nil
 	}
+	if err != nil {
+		return nil, err
+	}
 	if s.encKey != "" {
-		if dec, err := crypto.Decrypt(string(raw), s.encKey); err == nil {
+		dec, decErr := crypto.Decrypt(string(raw), s.encKey)
+		if decErr == nil {
 			raw = []byte(dec)
+		} else if !json.Valid(raw) {
+			return nil, fmt.Errorf("decrypt existing credentials: %w", decErr)
 		}
 	}
 	var m map[string]any
 	if err := json.Unmarshal(raw, &m); err != nil {
-		return make(map[string]any), nil
+		return nil, fmt.Errorf("unmarshal existing credentials: %w", err)
 	}
 	return m, nil
 }

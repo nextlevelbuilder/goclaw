@@ -228,4 +228,35 @@ const (
 	MsgHookBudgetExceeded          = "hook.budget_exceeded"           // "tenant hook token budget exceeded"
 	MsgHookPerTurnCapReached       = "hook.per_turn_cap_reached"      // "hook invocation per-turn cap reached"
 	MsgHookBuiltinReadOnly         = "hook.builtin_readonly"          // "builtin hooks are read-only except for the enabled toggle"
+
+	// --- Zalo OA OAuth channel ---
+	MsgZaloOACodeExchangeFailed = "error.zalo_oa_code_exchange_failed" // "zalo oauth code exchange failed: %s"
+	MsgZaloOAInvalidChannelType = "error.zalo_oa_invalid_channel_type" // "instance is not a zalo_oa channel"
+	MsgZaloOAConnected           = "info.zalo_oa_connected"              // "zalo official account connected: %s"
+	MsgZaloOAInvalidState        = "error.zalo_oa_invalid_state"         // "oauth state token is invalid or expired"
+	MsgZaloOARedirectURIRequired = "error.zalo_oa_redirect_uri_required" // "credentials.redirect_uri is required and must match the dev-console callback"
+	MsgZaloOAMissingAppID        = "error.zalo_oa_missing_app_id"        // "credentials.app_id is required (set it on the channel before requesting consent URL)"
+	MsgZaloOAStateGenFailed      = "error.zalo_oa_state_gen_failed"      // "failed to generate state token"
+	MsgZaloOAOAIDMismatch        = "error.zalo_oa_oaid_mismatch"         // "callback OA differs from instance OA — paste the URL from THIS instance's consent page"
+
+	// --- Zalo webhook URL RPC ---
+	MsgZaloWebhookWrongChannelType = "error.zalo_webhook_wrong_channel_type" // "channels.instances.zalo.webhook_url only applies to zalo_bot or zalo_oa"
+	MsgZaloWebhookPathHint         = "info.zalo_webhook_path_hint"           // "Prepend your gateway's externally-reachable URL ..."
+
+	// --- Zalo OA runtime error catalog (used for MarkFailed reason). Args: code, raw message ---
+	MsgZaloOAErrAuth              = "error.zalo_oa_err_auth"               // access_token rejected after refresh
+	MsgZaloOAErrRefreshExpired    = "error.zalo_oa_err_refresh_expired"    // refresh token dead, re-consent required
+	MsgZaloOAErrPayload           = "error.zalo_oa_err_payload"            // request shape rejected
+	MsgZaloOAErrSize              = "error.zalo_oa_err_size"               // attachment over endpoint cap
+	MsgZaloOAErrPermission        = "error.zalo_oa_err_permission"         // missing OA scope
+	MsgZaloOAErrInteractionWindow = "error.zalo_oa_err_interaction_window" // user outside messaging window
+	MsgZaloOAErrUserNotVisible    = "error.zalo_oa_err_user_not_visible"   // recipient not opted in / hidden
+	MsgZaloOAErrAppDisabled       = "error.zalo_oa_err_app_disabled"       // Zalo app banned/disabled
+	MsgZaloOAErrRate              = "error.zalo_oa_err_rate"               // quota exhausted
+	MsgZaloOAErrServer            = "error.zalo_oa_err_server"             // upstream temporary failure
+	MsgZaloOAErrRedirectURI       = "error.zalo_oa_err_redirect_uri"       // OAuth redirect_uri mismatch
+	MsgZaloOAReauthDueSoon        = "info.zalo_oa_reauth_due_soon"         // refresh token nearing expiry; re-consent ahead of downtime. Args: days
+
+	// User-facing fallback when an unsupported attachment is dropped. Args: filename, mime
+	MsgZaloOAUnsupportedAttachment = "info.zalo_oa_unsupported_attachment"
 )

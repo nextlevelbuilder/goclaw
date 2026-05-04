@@ -40,6 +40,15 @@ const (
 	ChannelRemediationCodeCheckNetwork    ChannelRemediationCode = "check_network"
 )
 
+// ChannelBootstrapState classifies a degraded state that is part of normal
+// first-time setup rather than a fault. Locale-independent so UIs can gate
+// bootstrap banners without substring-matching localized summaries.
+type ChannelBootstrapState string
+
+const (
+	ChannelBootstrapAwaitingSecret ChannelBootstrapState = "awaiting_secret"
+)
+
 // ChannelRemediationTarget tells the UI which existing surface can help resolve the issue.
 type ChannelRemediationTarget string
 
@@ -75,6 +84,7 @@ type ChannelHealth struct {
 	LastFailedAt        time.Time           `json:"last_failed_at"`
 	LastHealthyAt       time.Time           `json:"last_healthy_at"`
 	Remediation         *ChannelRemediation `json:"remediation,omitempty"`
+	BootstrapState      ChannelBootstrapState `json:"bootstrap_state,omitempty"`
 }
 
 // ChannelErrorInfo contains shared error classification output for operators.

@@ -18,6 +18,7 @@ type ChannelsConfig struct {
 	Slack             SlackConfig              `json:"slack"`
 	WhatsApp          WhatsAppConfig           `json:"whatsapp"`
 	Zalo              ZaloConfig               `json:"zalo"`
+	ZaloOA            ZaloOAConfig             `json:"zalo_oa"`
 	ZaloPersonal      ZaloPersonalConfig       `json:"zalo_personal"`
 	Feishu            FeishuConfig             `json:"feishu"`
 	PendingCompaction *PendingCompactionConfig `json:"pending_compaction,omitempty"` // global pending message compaction settings
@@ -147,10 +148,44 @@ type ZaloConfig struct {
 	Token         string              `json:"token"`
 	AllowFrom     FlexibleStringSlice `json:"allow_from"`
 	DMPolicy      string              `json:"dm_policy,omitempty"` // "pairing" (default), "allowlist", "open", "disabled"
-	WebhookURL    string              `json:"webhook_url,omitempty"`
+	Transport     string              `json:"transport,omitempty"`    // "polling" (default) | "webhook"
+	WebhookPath   string              `json:"webhook_path,omitempty"` // per-instance routing slug appended to /channels/zalo/webhook/
 	WebhookSecret string              `json:"webhook_secret,omitempty"`
 	MediaMaxMB    int                 `json:"media_max_mb,omitempty"` // default 5
 	BlockReply    *bool               `json:"block_reply,omitempty"`  // override gateway block_reply (nil = inherit)
+}
+
+// ZaloOAConfig configures the phone-number-tied Official Account channel
+// that uses Zalo OAuth v4 (oauth.zaloapp.com).
+//
+// AppID, SecretKey, and OAID are NOT here — those credentials live in
+// ChannelInstance.credentials (encrypted JSON blob) and are loaded via
+// LoadCreds. This struct only carries operator-tunable runtime knobs.
+type ZaloOAConfig struct {
+	Enabled              bool                `json:"enabled"`
+	PollIntervalSeconds  int                 `json:"poll_interval_seconds,omitempty"`  // default 15
+	RefreshMarginSeconds int                 `json:"refresh_margin_seconds,omitempty"` // default 300
+	SafetyTickerMinutes  int                 `json:"safety_ticker_minutes,omitempty"`  // default 30
+	AllowFrom            FlexibleStringSlice `json:"allow_from,omitempty"`
+	DMPolicy             string              `json:"dm_policy,omitempty"`
+	BlockReply           *bool               `json:"block_reply,omitempty"`
+	ReactionLevel        string              `json:"reaction_level,omitempty"`     // "off" (default), "minimal", "full" — status emoji reactions
+	// Terminal reaction (done/error) is deferred by a random delay in
+	// [min, max] ms so the heart/sad doesn't slap right as the reply lands.
+	// Both 0 → defaults (800/2000). max < min → max coerced to min (no jitter).
+	ReactionTerminalDelayMinMs int                 `json:"reaction_terminal_delay_min_ms,omitempty"`
+	ReactionTerminalDelayMaxMs int                 `json:"reaction_terminal_delay_max_ms,omitempty"`
+	QuoteUserMessage     *bool               `json:"quote_user_message,omitempty"` // default false: quote the user's last inbound message in CS replies
+
+	Transport                  string `json:"transport,omitempty"`                     // "polling" (default) | "webhook"
+	WebhookPath                string `json:"webhook_path,omitempty"`                  // per-instance routing slug appended to /channels/zalo/webhook/
+	WebhookSignatureMode       string `json:"webhook_signature_mode,omitempty"`        // "disabled" (default) | "log_only" | "strict"
+	WebhookReplayWindowSeconds int    `json:"webhook_replay_window_seconds,omitempty"` // default 300, clamp [60, 3600]
+	CatchUpOnRestart           bool   `json:"catch_up_on_restart,omitempty"`           // single bounded listrecentchat sweep on Start (off by default)
+
+	// Polling knobs. Ignored when Transport="webhook".
+	PollCount            int `json:"poll_count,omitempty"`              // page size; default 10, clamp [1, 10] (Zalo hard cap, error -210 above)
+	PollBurndownMaxPages int `json:"poll_burndown_max_pages,omitempty"` // max pages per cycle; default 10, clamp [1, 20]; 1 disables burn-down
 }
 
 type ZaloPersonalConfig struct {

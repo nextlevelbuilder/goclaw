@@ -22,10 +22,10 @@ interface ChannelAdvancedDialogProps {
 
 const ESSENTIAL_CONFIG_KEYS = new Set(["dm_policy", "group_policy", "require_mention", "mention_mode"]);
 
-const NETWORK_KEYS = new Set(["api_server", "proxy", "domain", "connection_mode", "webhook_port", "webhook_path", "webhook_url"]);
+const NETWORK_KEYS = new Set(["api_server", "proxy", "domain", "connection_mode", "webhook_port", "webhook_path"]);
 const LIMITS_KEYS = new Set(["history_limit", "media_max_mb", "text_chunk_limit"]);
 const STREAMING_KEYS = new Set(["dm_stream", "group_stream", "draft_transport", "reasoning_stream", "native_stream", "debounce_delay", "thread_ttl"]);
-const BEHAVIOR_KEYS = new Set(["reaction_level", "link_preview", "block_reply", "render_mode", "topic_session_mode"]);
+const BEHAVIOR_KEYS = new Set(["reaction_level", "link_preview", "block_reply", "render_mode", "topic_session_mode", "quote_user_message"]);
 const ACCESS_KEYS = new Set(["allow_from", "group_allow_from"]);
 
 function getAdvancedFields(channelType: string) {
@@ -42,10 +42,15 @@ function getAdvancedFields(channelType: string) {
 
 function deriveInitialValues(instance: ChannelInstanceData): Record<string, unknown> {
   const config = (instance.config ?? {}) as Record<string, unknown>;
-  // Only keep advanced keys (exclude essential + groups)
   return Object.fromEntries(
     Object.entries(config).filter(([k]) => !ESSENTIAL_CONFIG_KEYS.has(k) && k !== "groups"),
   );
+}
+
+// Drop keys not present in the current schema (e.g. fields removed in a
+// recent release). Without this, MergeConfig keeps re-posting the orphan.
+function knownKeys(channelType: string): Set<string> {
+  return new Set((configSchema[channelType] ?? []).map((f) => f.key));
 }
 
 export function ChannelAdvancedDialog({
@@ -75,11 +80,15 @@ export function ChannelAdvancedDialog({
     setSaving(true);
     try {
       const existingConfig = (instance.config ?? {}) as Record<string, unknown>;
+      const valid = knownKeys(instance.channel_type);
+      // Preserve essential keys + groups; drop unknown (legacy) keys.
+      const preserved = Object.fromEntries(
+        Object.entries(existingConfig).filter(([k]) => valid.has(k) || ESSENTIAL_CONFIG_KEYS.has(k) || k === "groups"),
+      );
       const cleanAdvanced = Object.fromEntries(
         Object.entries(values).filter(([, v]) => v !== undefined && v !== "" && v !== null),
       );
-      // Merge: preserve essential keys and groups from existing, overwrite advanced keys
-      const merged = { ...existingConfig, ...cleanAdvanced };
+      const merged = { ...preserved, ...cleanAdvanced };
       await onUpdate({ config: merged });
       onOpenChange(false);
     } catch { // toast shown by hook

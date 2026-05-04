@@ -30,7 +30,7 @@ func IsDefaultChannelInstance(name string) bool {
 	}
 	// Legacy config-based defaults that were seeded with bare channel-type names.
 	switch name {
-	case "telegram", "discord", "feishu", "zalo_oa", "whatsapp":
+	case "telegram", "discord", "feishu", "zalo_oa", "zalo_bot", "whatsapp":
 		return true
 	}
 	return false
@@ -49,6 +49,16 @@ type ChannelInstanceStore interface {
 	Get(ctx context.Context, id uuid.UUID) (*ChannelInstanceData, error)
 	GetByName(ctx context.Context, name string) (*ChannelInstanceData, error)
 	Update(ctx context.Context, id uuid.UUID, updates map[string]any) error
+	// MergeConfig applies a top-level JSONB merge of `partial` into the
+	// instance's config column atomically at the SQL layer. Existing keys
+	// not present in `partial` are preserved. Used by background workers
+	// (e.g. polling cursors) to avoid clobbering operator-set fields when
+	// they only own a single config sub-key.
+	//
+	// Nil values in `partial` are stripped before merge so PG (`||`,
+	// preserves nulls) and SQLite (`json_patch`, deletes null keys) agree —
+	// callers wanting to delete a key must do it explicitly via Update.
+	MergeConfig(ctx context.Context, id uuid.UUID, partial map[string]any) error
 	Delete(ctx context.Context, id uuid.UUID) error
 	ListEnabled(ctx context.Context) ([]ChannelInstanceData, error)
 	ListAll(ctx context.Context) ([]ChannelInstanceData, error)

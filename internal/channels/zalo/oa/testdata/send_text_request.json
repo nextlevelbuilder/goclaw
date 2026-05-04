@@ -1,0 +1,4 @@
+{
+  "message": {"text": "hello fixture"},
+  "recipient": {"user_id": "user-fixture"}
+}

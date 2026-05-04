@@ -1,4 +1,4 @@
-package zalo
+package bot
 
 import (
 	"encoding/json"
@@ -13,7 +13,7 @@ import (
 // Channel when credentials and config JSON are well-formed.
 func TestFactory_ValidCredsProducesChannel(t *testing.T) {
 	creds := []byte(`{"token":"fake-zalo-token","webhook_secret":"hook-sec"}`)
-	cfg := []byte(`{"dm_policy":"open","media_max_mb":7,"allow_from":["+84900000000"],"webhook_url":"https://example.test/hook","block_reply":true}`)
+	cfg := []byte(`{"dm_policy":"open","media_max_mb":7,"allow_from":["+84900000000"],"block_reply":true}`)
 
 	mb := bus.New()
 	ch, err := Factory("my-zalo", creds, cfg, mb, nil)
@@ -170,7 +170,6 @@ func TestFactoryConfigWithoutOptionals(t *testing.T) {
 func TestZaloInstanceConfigRoundTrip(t *testing.T) {
 	src := zaloInstanceConfig{
 		DMPolicy:   "pairing",
-		WebhookURL: "https://example.test",
 		MediaMaxMB: 3,
 		AllowFrom:  []string{"user1", "user2"},
 	}

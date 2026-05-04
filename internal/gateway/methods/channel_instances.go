@@ -240,6 +240,13 @@ func (m *ChannelInstancesMethods) handleDelete(ctx context.Context, client *gate
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"status": "deleted"}))
 }
 
+// nonSecretCredentialKeys lists per-channel credential keys that are safe to
+// expose unmasked (e.g. identifiers, callback URLs) so the UI can pre-populate
+// editable fields. Keys NOT listed here are masked as "***".
+var nonSecretCredentialKeys = map[string]map[string]bool{
+	"zalo_oa": {"app_id": true, "redirect_uri": true, "oa_id": true},
+}
+
 // maskInstance returns a map representation with credentials masked.
 func maskInstance(inst store.ChannelInstanceData) map[string]any {
 	result := map[string]any{
@@ -257,13 +264,19 @@ func maskInstance(inst store.ChannelInstanceData) map[string]any {
 		"updated_at":      inst.UpdatedAt,
 	}
 
-	// Mask credentials: show keys with "***" values
+	// Mask credentials: secrets become "***"; non-secret keys (per channel
+	// type) keep their actual value so the UI can render and edit them.
 	if len(inst.Credentials) > 0 {
 		var raw map[string]any
 		if json.Unmarshal(inst.Credentials, &raw) == nil {
+			allowList := nonSecretCredentialKeys[inst.ChannelType]
 			masked := make(map[string]any, len(raw))
-			for k := range raw {
-				masked[k] = "***"
+			for k, v := range raw {
+				if allowList[k] {
+					masked[k] = v
+				} else {
+					masked[k] = "***"
+				}
 			}
 			result["credentials"] = masked
 		} else {
@@ -279,7 +292,7 @@ func maskInstance(inst store.ChannelInstanceData) map[string]any {
 // isValidChannelType checks if the channel type is supported.
 func isValidChannelType(ct string) bool {
 	switch ct {
-	case "telegram", "discord", "slack", "whatsapp", "zalo_oa", "zalo_personal", "feishu":
+	case "telegram", "discord", "slack", "whatsapp", "zalo_oa", "zalo_bot", "zalo_personal", "feishu", "facebook", "pancake":
 		return true
 	}
 	return false

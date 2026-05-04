@@ -120,6 +120,19 @@
       "groups": "Nhóm",
       "managers": "Quản lý"
     },
+    "zaloWebhook": {
+      "title": "Cấu hình Webhook",
+      "pathLabel": "Đường dẫn",
+      "urlLabel": "URL Webhook (dán vào Zalo console)",
+      "hostLabel": "Host gateway",
+      "hostHint": "Ghi đè host gateway nếu Zalo không thể truy cập origin của UI này. Lưu cục bộ trên trình duyệt.",
+      "hostInvalid": "Host không phải là URL hợp lệ",
+      "hostInvalidScheme": "Host phải bắt đầu bằng http:// hoặc https://",
+      "oaIdLabel": "OA ID",
+      "oaIdPlaceholder": "Tự động phát hiện sau khi Kết nối",
+      "loading": "Đang tải...",
+      "copy": "Sao chép URL"
+    },
     "general": {
       "identity": "Thông tin",
       "name": "Tên",
@@ -141,7 +154,15 @@
       "failedSave": "Lưu thất bại",
       "saved": "Đã lưu",
       "updateCredentials": "Cập nhật thông tin xác thực",
-      "saving": "Đang lưu..."
+      "saving": "Đang lưu...",
+      "bootstrapBanner": {
+        "title": "Chế độ khởi tạo: hoàn tất thiết lập trên Zalo",
+        "step1": "Sao chép Webhook URL bên dưới.",
+        "step2": "Trên tab Webhook tại developers.zalo.me, dán URL → bấm Thay đổi → Cập nhật. Zalo sẽ kiểm tra và lưu URL.",
+        "step3": "Trường Khóa bí mật OA xuất hiện. Bấm biểu tượng con mắt để hiện và sao chép giá trị.",
+        "step4": "Dán khóa vào trường Webhook Secret Key bên dưới → Cập nhật thông tin xác thực.",
+        "note": "Trong chế độ khởi tạo, channel xác nhận ping kiểm tra của Zalo nhưng KHÔNG xử lý sự kiện. Sau khi dán khóa, chữ ký sẽ được kiểm tra và tin nhắn được xử lý bình thường."
+      }
     },
     "config": {
       "noSchema": "Không có lược đồ cấu hình cho loại channel này.",
@@ -225,15 +246,28 @@
     "draft_transport": { "label": "Xem trước nháp", "help": "Dùng bản nháp ẩn cho stream trả lời trong DM — không thông báo mỗi lần chỉnh sửa (cần bật Stream DM)" },
     "reasoning_stream": { "label": "Hiện suy luận", "help": "Hiển thị quá trình suy nghĩ của AI thành tin nhắn riêng trước câu trả lời (cần bật streaming)" },
     "reaction_level": { "label": "Mức độ reaction" },
+    "quote_user_message": {
+      "label": "Trích dẫn tin của người dùng",
+      "help": "Trả lời kèm trích dẫn tin nhắn gần nhất của người dùng (reply-to của Zalo). Tắt để gửi trả lời thường, không kèm trích dẫn."
+    },
     "media_max_mb": { "label": "Kích thước media tối đa (MB)" },
     "link_preview": { "label": "Xem trước liên kết" },
     "allow_from": { "label": "Người dùng được phép" },
     "block_reply": { "label": "Phản hồi khối", "help": "Gửi văn bản trung gian trong quá trình lặp công cụ" },
+    "transport": { "label": "Chế độ kết nối", "help": "Webhook hoạt động theo sự kiện và nhẹ hơn. Polling lấy tin theo chu kỳ — phương án dự phòng khi không có URL công khai." },
+    "webhook_secret_key": { "label": "Khóa bí mật Webhook", "help": "Khóa ký từ Zalo dev console (OA → Webhook). Bắt buộc khi Chế độ kết nối = Webhook (trừ khi Chế độ chữ ký = Disabled). Dùng để xác thực X-ZEvent-Signature." },
+    "webhook_signature_mode": { "label": "Chế độ chữ ký", "help": "Disabled bỏ qua xác thực — dễ khởi tạo nhất. Chuyển sang Strict sau khi đã đặt Webhook Secret Key (trong Credentials); Log-only là bước trung gian khi di chuyển." },
+    "webhook_replay_window_seconds": { "label": "Cửa sổ replay (giây)", "help": "Thời gian tối đa chấp nhận sự kiện webhook. Mặc định 300, khoảng 60–3600." },
+    "catch_up_on_restart": { "label": "Bắt kịp khi khởi động lại", "help": "Chạy một lần listrecentchat có giới hạn lúc Start để bù sự kiện bị bỏ lỡ khi offline." },
+    "poll_interval_seconds": { "label": "Chu kỳ poll (giây)", "help": "Tần suất kiểm tra tin mới. Tối thiểu 5, tối đa 120." },
+    "poll_count": { "label": "Số tin/lượt poll", "help": "Số tin nhắn mỗi lần gọi listrecentchat. Zalo giới hạn ở 10 — vượt quá trả về lỗi -210." },
+    "poll_burndown_max_pages": { "label": "Số trang burn-down tối đa", "help": "Số trang listrecentchat liên tiếp tối đa mỗi chu kỳ (page size × max pages = số tin được drain). Mặc định 10, tối đa 20. Đặt 1 để tắt burn-down." },
+    "redirect_uri": { "label": "Redirect URI", "help": "Đặt URL này làm Official Account Callback URL tại https://developers.zalo.me/app/<app_id>/oa/settings. Sai khớp sẽ trả error_code=-14003. Xem docs để biết hướng dẫn đầy đủ." },
+    "webhook_secret": { "label": "Webhook Secret", "help": "Do bot.zapps.me sinh ra khi bạn cấu hình webhook URL ở đó. Sao chép và dán vào đây. Khi chưa đặt, kênh chạy ở chế độ bootstrap (trả lời ping xác minh của Zalo bằng HTTP 200 nhưng bỏ qua các sự kiện)." },
     "domain": { "label": "Tên miền" },
     "connection_mode": { "label": "Chế độ kết nối", "help": "WebSocket không cần IP công khai — chỉ kết nối ra ngoài" },
     "webhook_port": { "label": "Cổng webhook", "help": "0 = chia sẻ cổng gateway chính (khuyến nghị)" },
-    "webhook_path": { "label": "Đường dẫn webhook", "help": "Đường dẫn trên máy chủ chính cho sự kiện Lark" },
-    "webhook_url": { "label": "URL Webhook" },
+    "webhook_path": { "label": "Đường dẫn webhook", "help": "Đường dẫn định tuyến URL. Zalo: chữ thường, số và dấu gạch ngang (2–63 ký tự), dùng làm /channels/zalo/webhook/<slug>. Lark: đường dẫn trên máy chủ chính (ví dụ /feishu/events)." },
     "topic_session_mode": { "label": "Chế độ phiên chủ đề", "help": "Dùng root_id của luồng để cách ly phiên" },
     "render_mode": { "label": "Chế độ hiển thị" },
     "text_chunk_limit": { "label": "Giới hạn ký tự", "help": "Số ký tự tối đa mỗi tin nhắn" },
@@ -289,6 +323,10 @@
     "connection_mode": {
       "webhook": "Webhook",
       "websocket": "WebSocket (khuyên dùng)"
+    },
+    "transport": {
+      "webhook": "Webhook (khuyên dùng)",
+      "polling": "Polling"
     },
     "topic_session_mode": {
       "disabled": "Tắt",
@@ -357,6 +395,10 @@
     "whatsapp": {
       "createLabel": "Tạo & Quét QR",
       "formBanner": "Sau khi tạo, quét mã QR bằng WhatsApp để xác thực."
+    },
+    "zaloOa": {
+      "createLabel": "Tạo & Kết nối",
+      "formBanner": "Sau khi tạo, bạn sẽ cấp quyền trên Zalo và dán mã trả về để hoàn tất xác thực."
     }
   },
   "fallback": {
@@ -373,6 +415,11 @@
     "title": "Quyền API cần thiết",
     "description": "Ứng dụng Lark/Feishu cần bật các scope này trong Developer Console. Publish phiên bản mới sau khi thêm quyền.",
     "publishReminder": "Sau khi thêm scope, đặt Contact Range thành \"All members\" và publish phiên bản mới để thay đổi có hiệu lực."
+  },
+  "zaloOaEvents": {
+    "title": "Bật các sự kiện này trên Zalo console",
+    "description": "Sau khi lưu Webhook URL tại developers.zalo.me, hãy bật từng sự kiện dưới đây trong danh sách sự kiện. Sự kiện nào để Tắt sẽ không bao giờ tới agent.",
+    "location": "Tab Webhook → \"Danh sách sự kiện webhook\" → gạt Tắt / Bật sang ON cho từng sự kiện ở trên."
   },
   "toast": {
     "created": "Đã tạo channel",
@@ -421,5 +468,24 @@
     "relinkDevice": "Liên kết lại",
     "connectedSuccess": "✅ Kết nối WhatsApp thành công!",
     "tabQrCode": "Mã QR"
+  },
+  "zaloOa": {
+    "dialogTitle": "Kết nối Zalo OA — {{name}}",
+    "dialogDescription": "Cấp quyền cho Official Account, sau đó dán URL chuyển hướng từ trình duyệt.",
+    "step1Heading": "Bước 1 — Cấp quyền",
+    "authorizeHelp": "Mở liên kết bên dưới, đăng nhập Zalo và cấp quyền cho Official Account. Sau khi cấp quyền, trình duyệt sẽ chuyển sang URL callback — sao chép toàn bộ URL từ thanh địa chỉ và dán vào Bước 2 bên dưới.",
+    "step2Heading": "Bước 2 — Dán URL callback",
+    "consentLoading": "Đang tạo URL cấp quyền…",
+    "consentFailed": "Không thể lấy URL cấp quyền",
+    "pasteHelp": "Sau khi đồng ý, sao chép toàn bộ URL từ thanh địa chỉ trình duyệt và dán vào đây.",
+    "pastePlaceholder": "URL callback đầy đủ",
+    "exchangeFailed": "Đổi mã thất bại",
+    "errCodeMissing": "URL đã dán không có tham số \"code\" — hãy sao chép toàn bộ URL callback từ thanh địa chỉ trình duyệt sau khi cấp quyền.",
+    "connectedClosing": "Đã kết nối — đang đóng…",
+    "copyUrl": "Sao chép URL",
+    "openInTab": "Mở trong tab mới",
+    "cancel": "Hủy",
+    "connect": "Kết nối",
+    "connecting": "Đang kết nối…"
   }
 }

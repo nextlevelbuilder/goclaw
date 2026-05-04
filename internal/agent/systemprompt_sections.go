@@ -445,17 +445,52 @@ func buildRuntimeSection(cfg SystemPromptConfig) []string {
 	return lines
 }
 
-// buildChannelFormattingHint returns platform-specific formatting guidance.
-// Zalo does not render any markup, so we instruct the model to use plain text.
+// buildChannelFormattingHint returns platform-specific guidance: markdown
+// rendering, per-message length caps, and outbound attachment limits.
 func buildChannelFormattingHint(channelType string) []string {
 	switch channelType {
-	case "zalo", "zalo_personal":
+	case "zalo_personal":
 		return []string{
 			"## Output Formatting",
 			"",
 			"This channel (Zalo) does NOT support any text formatting — no Markdown, no HTML, no bold/italic/code.",
-			"Always respond in clean plain text. Do not use **, __, `, ```, #, > or any markup syntax.",
-			"For lists use simple dashes or bullets (•). For code, just paste the code as-is without fencing.",
+			"Always respond in clean plain text. Do NOT use **, __, ` (backticks), ```, #, --- (horizontal rule), >, ![]() or any other markup syntax — they appear as literal characters to the user.",
+			"For lists use simple dashes or bullets (•). For code, paste it as-is without fencing. Use blank lines to separate sections, not `---`.",
+			"",
+		}
+	case "zalo_oa":
+		return []string{
+			"## Output Formatting (Zalo Official Account)",
+			"",
+			"Plain text only — Zalo does NOT render Markdown or HTML. The user sees the literal characters of any markup you emit.",
+			"Do NOT use **, __, ` (backticks), ```, #, --- (horizontal rule), >, ![]() or tables. No emphasis syntax of any kind.",
+			"For lists use simple dashes or bullets (•). Separate sections with blank lines, never `---`. For code, paste it raw, no fences.",
+			"",
+			"### Outbound attachment limits (Zalo OA API — non-negotiable, enforced server-side)",
+			"- Documents: PDF, DOC, DOCX only, ≤ 5 MB. NEVER generate xlsx / xls / csv / pptx / txt / zip / json / md — Zalo will silently drop them and the user gets a 'cannot be delivered' fallback instead of your file.",
+			"- Images: JPG or PNG, ≤ 1 MB (auto-compressed to JPEG when larger).",
+			"- GIF: ≤ 5 MB via the dedicated GIF endpoint.",
+			"- Per-message text cap: 2000 characters. Longer replies are auto-split into multiple messages, but try to be concise.",
+			"",
+			"### File-generation rule",
+			"Before calling write_file(deliver=true) or send_file, the artifact MUST be PDF, DOC, or DOCX. If you cannot produce one of those (e.g. a charting library is missing), DO NOT fall back to xlsx — instead summarize the data inline as plain text. Do not claim to have sent a file in any other format; the send will fail silently.",
+			"",
+		}
+	case "zalo_bot":
+		return []string{
+			"## Output Formatting (Zalo Bot)",
+			"",
+			"Plain text only — Zalo does NOT render Markdown or HTML. The user sees the literal characters of any markup you emit.",
+			"Do NOT use **, __, ` (backticks), ```, #, --- (horizontal rule), >, ![]() or tables. No emphasis syntax of any kind.",
+			"For lists use simple dashes or bullets (•). Separate sections with blank lines, never `---`. For code, paste it raw, no fences.",
+			"",
+			"### Outbound attachment limits (Zalo Bot API — non-negotiable)",
+			"- Zalo Bot CANNOT send file attachments of any kind. No PDF, no DOC, no DOCX, no xlsx — file delivery is not supported on this channel. Do not call send_file or write_file(deliver=true) with a local path; the send will hard-fail.",
+			"- Images: only via a publicly reachable HTTP(S) URL (sent inline as a photo). Local image files are not accepted; host the image elsewhere first or skip it.",
+			"- Per-message text cap: 2000 characters. Longer replies are auto-split into multiple messages, but try to be concise.",
+			"",
+			"### File-generation rule",
+			"Never produce a file artifact for delivery on this channel. If the user asks for a report, table, or document, summarize it inline as plain text instead.",
 			"",
 		}
 	default:

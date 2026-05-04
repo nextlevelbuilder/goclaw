@@ -224,6 +224,35 @@ func init() {
 		MsgHookPerTurnCapReached:       "hook invocation per-turn cap reached",
 		MsgHookBuiltinReadOnly:         "builtin hooks are read-only except for the enabled toggle",
 
+		// Zalo OA OAuth channel
+		MsgZaloOACodeExchangeFailed: "zalo oauth code exchange failed: %s",
+		MsgZaloOAInvalidChannelType: "instance is not a zalo_oa channel",
+		MsgZaloOAConnected:           "zalo official account connected: %s",
+		MsgZaloOAInvalidState:        "oauth state token is invalid or expired",
+		MsgZaloOARedirectURIRequired: "credentials.redirect_uri is required and must exactly match the callback registered in your Zalo developer console",
+		MsgZaloOAMissingAppID:        "credentials.app_id is required — set it on the channel before requesting the consent URL",
+		MsgZaloOAStateGenFailed:      "failed to generate consent state token; please retry",
+		MsgZaloOAOAIDMismatch:        "callback URL belongs to a different OA — paste the URL from THIS instance's consent page",
+
+		// Zalo webhook URL RPC
+		MsgZaloWebhookWrongChannelType: "channels.instances.zalo.webhook_url only applies to zalo_bot or zalo_oa instances",
+		MsgZaloWebhookPathHint:         "Prepend your gateway's externally-reachable URL (e.g. https://gw.example.com) to the path, then register the full URL in the Zalo developer console.",
+
+		// Zalo OA runtime error catalog. Args: (code int, raw_message string)
+		MsgZaloOAErrAuth:              "Zalo rejected the access token after a refresh retry (code %d: %s); re-authorize the OA",
+		MsgZaloOAErrRefreshExpired:    "Zalo refresh token has expired (code %d: %s); operator must re-consent in the OA console",
+		MsgZaloOAErrPayload:           "Zalo rejected the request payload (code %d: %s); verify message shape and required fields",
+		MsgZaloOAErrSize:              "Zalo upload exceeds the size cap (code %d: %s); image 1MB / file 5MB / gif 5MB",
+		MsgZaloOAErrPermission:        "Zalo requires additional permission for this call (code %d: %s); grant the missing scope to the OA app",
+		MsgZaloOAErrInteractionWindow: "Recipient is outside Zalo's messaging window (code %d: %s); wait for the user to message first or use a paid template",
+		MsgZaloOAErrUserNotVisible:    "Target user is not visible to this OA (code %d: %s)",
+		MsgZaloOAErrAppDisabled:       "Zalo app is disabled or banned (code %d: %s); contact Zalo support",
+		MsgZaloOAErrRate:              "Zalo quota exhausted (code %d: %s); wait for the quota window to reset",
+		MsgZaloOAErrServer:            "Zalo returned a temporary server error (code %d: %s); retry later",
+		MsgZaloOAErrRedirectURI:       "Zalo rejected the OAuth redirect_uri (code %d: %s); update the redirect URI in the Zalo console to match the channel config",
+		MsgZaloOAReauthDueSoon:        "Refresh token expires in %d day(s); re-authorize the OA to avoid downtime",
+		MsgZaloOAUnsupportedAttachment: "(File %q (%s) cannot be delivered via Zalo OA — only PDF/DOC/DOCX are accepted. Content described above.)",
+
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 Forwarded to %s as requested: %q",
 	})

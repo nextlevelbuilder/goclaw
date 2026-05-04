@@ -9,6 +9,12 @@
 #   # or: make up WITH_WEB_NGINX=1
 #
 # Dashboard via nginx: http://localhost:3000
+#
+# NOTE: nginx.conf uses a static `upstream goclaw_backend` block, which
+# resolves the backend hostname only once at config load. K8s with a stable
+# Service ClusterIP is fine. In docker-compose, if the backend container is
+# recreated and gets a new IP, restart the UI container to refresh the
+# resolution: `docker compose restart goclaw-ui`.
 
 services:
   goclaw-ui:

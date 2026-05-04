@@ -215,12 +215,7 @@ func processNormalMessage(
 
 	// Build outbound metadata for reply-to + thread routing BEFORE RegisterRun
 	// so block.reply handler can use it for routing intermediate messages.
-	outMeta := channels.CopyFinalRoutingMeta(msg.Metadata)
-	if isGroup {
-		if mid := msg.Metadata["message_id"]; mid != "" {
-			outMeta["reply_to_message_id"] = mid
-		}
-	}
+	outMeta := buildOutboundReplyMeta(msg.Metadata, msg.Channel, isGroup, deps.ChannelMgr)
 
 	// Register run with channel manager for streaming/reaction event forwarding.
 	// Use localKey (composite key with topic suffix) so streaming/reaction events
@@ -528,4 +523,22 @@ func processNormalMessage(
 			go autoSetFollowup(ctx, deps.TeamStore, deps.AgentStore, agentKey, channel, chatID, replyContent)
 		}
 	}(agentID, msg.Channel, msg.ChatID, sessionKey, runID, peerKind, msg.Content, outMeta, blockReply, ptd, msg.TenantID, agentLoop.UUID(), agentLoop.OtherConfig())
+}
+
+// buildOutboundReplyMeta clones routing metadata and stamps reply_to_message_id
+// on group inbounds (always) and DM inbounds for channels that opt into the
+// DMQuoteChannel capability.
+func buildOutboundReplyMeta(in map[string]string, channelName string, isGroup bool, mgr *channels.Manager) map[string]string {
+	out := channels.CopyFinalRoutingMeta(in)
+	mid := in["message_id"]
+	if mid == "" {
+		return out
+	}
+	switch {
+	case isGroup:
+		out["reply_to_message_id"] = mid
+	case mgr != nil && mgr.QuoteInboundOnDM(channelName):
+		out["reply_to_message_id"] = mid
+	}
+	return out
 }

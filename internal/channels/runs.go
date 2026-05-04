@@ -56,3 +56,16 @@ func (m *Manager) ResolveBlockReply(channelName string, globalDefault *bool) boo
 	}
 	return globalDefault != nil && *globalDefault
 }
+
+// QuoteInboundOnDM reports whether the named channel opts into DM reply-to
+// stamping. Channels that don't implement DMQuoteChannel default to false.
+func (m *Manager) QuoteInboundOnDM(channelName string) bool {
+	m.mu.RLock()
+	ch, exists := m.channels[channelName]
+	m.mu.RUnlock()
+	if !exists {
+		return false
+	}
+	q, ok := ch.(DMQuoteChannel)
+	return ok && q.QuoteInboundOnDM()
+}

@@ -14,6 +14,7 @@ flowchart TD
         TG[Telegram]
         DC[Discord]
         FS[Feishu / Lark]
+        ZB[Zalo Bot]
         ZL[Zalo OA]
         ZLP[Zalo Personal]
         WA[WhatsApp]
@@ -77,7 +78,7 @@ flowchart TD
 
     WS --> WSS
     HTTP --> HTTPS
-    TG & DC & FS & ZL & ZLP & WA & SL --> CM
+    TG & DC & FS & ZB & ZL & ZLP & WA & SL --> CM
 
     WSS --> MR
     HTTPS --> MR
@@ -113,7 +114,7 @@ flowchart TD
 | `internal/bootstrap/` | System prompt files (AGENTS.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, BOOTSTRAP.md) + seeding + truncation |
 | `internal/config/` | Config loading (JSON5) + env var overlay |
 | `internal/skills/` | SKILL.md loader (5-tier hierarchy) + BM25 search + hot-reload via fsnotify |
-| `internal/channels/` | Channel manager + adapters: Telegram (forum topics, STT, bot commands), Feishu/Lark (streaming cards, media), Zalo OA, Zalo Personal, Discord, WhatsApp, Slack |
+| `internal/channels/` | Channel manager + adapters: Telegram (forum topics, STT, bot commands), Feishu/Lark (streaming cards, media), Zalo Bot (static-token), Zalo OA (OAuth), Zalo Personal, Discord, WhatsApp, Slack |
 | `internal/mcp/` | MCP server bridge (stdio, SSE, streamable-HTTP transports) |
 | `internal/scheduler/` | Lane-based concurrency control (main, subagent, cron, team lanes) with per-session serialization. Per-edition rate limits (`MaxSubagentConcurrent`, `MaxSubagentDepth`) with tenant-scoped concurrency |
 | `internal/memory/` | Memory system (pgvector hybrid search) |

@@ -8,6 +8,10 @@ export interface ChannelInstanceData {
   enabled: boolean;
   is_default: boolean;
   has_credentials: boolean;
+  /** Credentials map with secrets masked as "***". Non-secret fields
+   *  (per channel-type allowlist server-side) carry actual values for
+   *  form pre-population. */
+  credentials?: Record<string, unknown>;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -39,6 +43,9 @@ export interface ChannelRuntimeStatus {
     hint?: string;
     target?: "credentials" | "advanced" | "reauth" | "details";
   };
+  /** Locale-independent flag for degraded states that are part of normal
+   *  setup (not faults). UIs gate setup banners on this. */
+  bootstrap_state?: "awaiting_secret";
 }
 
 export interface ChannelInstanceInput {

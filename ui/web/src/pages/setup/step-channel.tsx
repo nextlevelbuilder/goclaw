@@ -79,6 +79,7 @@ export function StepChannel({ agent, onComplete, onSkip, onBack }: StepChannelPr
           dm_policy: "pairing",
           group_policy: "pairing",
           ...(channelType === "telegram" && { reaction_level: "full" }),
+          ...(channelType === "zalo_oa" && { reaction_level: "minimal" }),
         },
         enabled: true,
       });

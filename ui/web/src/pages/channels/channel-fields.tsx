@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/select";
 import { ToolNameSelect } from "@/components/shared/tool-name-select";
 import { SkillNameSelect } from "@/components/shared/skill-name-select";
-import type { FieldDef } from "./channel-schemas";
+import { isFieldVisible, type FieldDef } from "./channel-schemas";
 
 const INHERIT = "__inherit__";
 
@@ -32,15 +32,7 @@ export function ChannelFields({ fields, values, onChange, idPrefix, isEdit, cont
   return (
     <div className="grid gap-3">
       {fields.map((field) => {
-        // Conditional visibility: skip field if showWhen condition is not met
-        if (field.showWhen) {
-          const depValue = allValues[field.showWhen.key] ?? fields.find((f) => f.key === field.showWhen!.key)?.defaultValue;
-          const depStr = depValue !== undefined && depValue !== null ? String(depValue) : "";
-          const match = Array.isArray(field.showWhen.value)
-            ? field.showWhen.value.includes(depStr)
-            : depStr === field.showWhen.value;
-          if (!match) return null;
-        }
+        if (!isFieldVisible(field, fields, allValues)) return null;
         // Check disabledWhen condition
         let disabled = false;
         let disabledHint: string | undefined;
@@ -96,21 +88,7 @@ function FieldRenderer({
   switch (field.type) {
     case "text":
     case "password":
-      return (
-        <div className="grid gap-1.5">
-          <Label htmlFor={id}>
-            {label}{labelSuffix}{editHint}
-          </Label>
-          <Input
-            id={id}
-            type={field.type}
-            value={(value as string) ?? ""}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder={field.placeholder}
-          />
-          {help && <p className="text-xs text-muted-foreground">{help}</p>}
-        </div>
-      );
+      return <PasswordOrTextField field={field} value={value} onChange={onChange} id={id} label={label} labelSuffix={labelSuffix} editHint={editHint} help={help} />;
 
     case "number":
       return (
@@ -294,4 +272,41 @@ function FieldRenderer({
     default:
       return null;
   }
+}
+
+function PasswordOrTextField({
+  field,
+  value,
+  onChange,
+  id,
+  label,
+  labelSuffix,
+  editHint,
+  help,
+}: {
+  field: FieldDef;
+  value: unknown;
+  onChange: (v: unknown) => void;
+  id: string;
+  label: string;
+  labelSuffix: string;
+  editHint: string;
+  help: string;
+}) {
+  return (
+    <div className="grid gap-1.5">
+      <Label htmlFor={id}>
+        {label}{labelSuffix}{editHint}
+      </Label>
+      <Input
+        id={id}
+        type={field.type === "password" ? "password" : "text"}
+        autoComplete={field.type === "password" ? "new-password" : "off"}
+        value={(value as string) ?? ""}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={field.placeholder}
+      />
+      {help && <p className="text-xs text-muted-foreground">{help}</p>}
+    </div>
+  );
 }
