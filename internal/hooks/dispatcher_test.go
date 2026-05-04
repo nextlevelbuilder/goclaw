@@ -86,11 +86,16 @@ func (f *fakeStore) snapshotUpdates() []fakeUpdate {
 }
 
 // fakeHandler returns a scripted decision + optional sleep (for timeout tests).
+//
+// reason mirrors the script-handler contract: when set, it is written into the
+// per-execution ScriptResult (carried via ctx) so the dispatcher can forward
+// it on the FireResult. Used by the block-reason propagation test.
 type fakeHandler struct {
 	decision hooks.Decision
 	sleep    time.Duration
 	err      error
 	calls    int32
+	reason   string
 }
 
 func (h *fakeHandler) Execute(ctx context.Context, _ hooks.HookConfig, _ hooks.Event) (hooks.Decision, error) {
@@ -101,6 +106,11 @@ func (h *fakeHandler) Execute(ctx context.Context, _ hooks.HookConfig, _ hooks.E
 		case <-ctx.Done():
 			// Respect ctx; the dispatcher maps this to DecisionTimeout.
 			return hooks.DecisionTimeout, ctx.Err()
+		}
+	}
+	if h.reason != "" {
+		if r := hooks.ScriptResultFrom(ctx); r != nil {
+			r.Reason = h.reason
 		}
 	}
 	return h.decision, h.err
@@ -626,4 +636,63 @@ func installAllowlist(t *testing.T, m map[string][]string) func() {
 func allowlistID(name string) uuid.UUID {
 	// Stable deterministic UUID per label so cfg.ID matches the lookup.
 	return uuid.NewSHA1(uuid.NameSpaceDNS, []byte("test.allowlist/"+name))
+}
+
+// ── Block-reason propagation ────────────────────────────────────────────────
+
+// TestDispatcher_BlockReason_PropagatesToFireResult verifies that when a
+// script-handler hook blocks with a non-empty `reason`, the dispatcher copies
+// the reason onto FireResult.Reason so callers (pipeline tool stage / context
+// stage) can surface a self-documenting block message.
+func TestDispatcher_BlockReason_PropagatesToFireResult(t *testing.T) {
+	cfg := newBaseHook(hooks.HandlerScript, hooks.EventPreToolUse)
+	fs := &fakeStore{hooks: []hooks.HookConfig{cfg}}
+	blocker := &fakeHandler{decision: hooks.DecisionBlock, reason: "use rtk prefix"}
+
+	d := hooks.NewStdDispatcher(hooks.StdDispatcherOpts{
+		Store:    fs,
+		Audit:    hooks.NewAuditWriter(fs, ""),
+		Handlers: map[hooks.HandlerType]hooks.Handler{hooks.HandlerScript: blocker},
+	})
+	r, err := d.Fire(context.Background(), hooks.Event{
+		EventID:   "e-reason",
+		HookEvent: hooks.EventPreToolUse,
+	})
+	if err != nil {
+		t.Fatalf("Fire: %v", err)
+	}
+	if r.Decision != hooks.DecisionBlock {
+		t.Fatalf("decision=%q, want block", r.Decision)
+	}
+	if r.Reason != "use rtk prefix" {
+		t.Errorf("reason=%q, want %q", r.Reason, "use rtk prefix")
+	}
+}
+
+// TestDispatcher_Block_NoReason_LeavesReasonEmpty verifies the no-reason path
+// stays backward-compatible: blocking handlers that do not populate
+// ScriptResult.Reason yield FireResult.Reason == "".
+func TestDispatcher_Block_NoReason_LeavesReasonEmpty(t *testing.T) {
+	cfg := newBaseHook(hooks.HandlerHTTP, hooks.EventPreToolUse)
+	fs := &fakeStore{hooks: []hooks.HookConfig{cfg}}
+	blocker := &fakeHandler{decision: hooks.DecisionBlock}
+
+	d := hooks.NewStdDispatcher(hooks.StdDispatcherOpts{
+		Store:    fs,
+		Audit:    hooks.NewAuditWriter(fs, ""),
+		Handlers: map[hooks.HandlerType]hooks.Handler{hooks.HandlerHTTP: blocker},
+	})
+	r, err := d.Fire(context.Background(), hooks.Event{
+		EventID:   "e-noreason",
+		HookEvent: hooks.EventPreToolUse,
+	})
+	if err != nil {
+		t.Fatalf("Fire: %v", err)
+	}
+	if r.Decision != hooks.DecisionBlock {
+		t.Fatalf("decision=%q, want block", r.Decision)
+	}
+	if r.Reason != "" {
+		t.Errorf("reason=%q, want empty for handler that did not set one", r.Reason)
+	}
 }

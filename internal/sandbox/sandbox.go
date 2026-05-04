@@ -67,8 +67,9 @@ type Config struct {
 	// Security hardening (matching TS buildSandboxCreateArgs)
 	ReadOnlyRoot    bool     `json:"read_only_root"`
 	CapDrop         []string `json:"cap_drop,omitempty"`
-	Tmpfs           []string `json:"tmpfs,omitempty"`         // e.g. "/tmp", "/tmp:size=64m"
-	TmpfsSizeMB     int      `json:"tmpfs_size_mb,omitempty"` // default size for tmpfs mounts without explicit :size= (0 = Docker default)
+	Tmpfs           []string `json:"tmpfs,omitempty"`            // e.g. "/tmp", "/tmp:size=64m"
+	TmpfsSizeMB     int      `json:"tmpfs_size_mb,omitempty"`    // default size for tmpfs mounts without explicit :size= (0 = Docker default)
+	AllowTmpExec    bool     `json:"allow_tmp_exec,omitempty"`   // drop `noexec` from tmpfs mounts (still keeps nosuid+nodev). Required by some bundled-binary CLIs (e.g. staticx-wrapped gam) that extract+exec from /tmp at runtime.
 	PidsLimit       int      `json:"pids_limit,omitempty"`
 	User            string   `json:"user,omitempty"`             // container user (e.g. "1000:1000", "nobody")
 	MaxOutputBytes  int      `json:"max_output_bytes,omitempty"` // limit exec stdout+stderr capture (default 1MB, 0 = unlimited)

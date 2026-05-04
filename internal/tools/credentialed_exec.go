@@ -665,3 +665,250 @@ func credentialedExecFailError(binary string, args []string, exitCode int, outpu
 		IsError: true,
 	}
 }
+
+// detectCredentialedBinaryInChain scans a command that contains shell operators
+// for any token that matches a registered credentialed binary. Returns the
+// binary name if found, empty string otherwise. This catches cases where the
+// LLM wraps a credentialed CLI in a shell chain (e.g. "which gh && gh pr list")
+// — the first binary ("which") is not credentialed so lookupCredentialedBinary
+// misses it, but "gh" deeper in the chain IS credentialed and would run without
+// token injection if allowed to fall through to regular exec.
+//
+// Uses extractUnquotedSegments (quote-aware) so that operators inside quoted
+// arguments (e.g. --jq '.[0] | .name') are not mistaken for command chains.
+func (t *ExecTool) detectCredentialedBinaryInChain(ctx context.Context, command string) string {
+	if t.secureCLIStore == nil {
+		return ""
+	}
+	// Only check commands that have shell operators outside of quotes.
+	// detectUnquotedShellOperators already uses extractUnquotedSegments
+	// internally, so quoted pipes/semicolons are ignored.
+	if ops := detectUnquotedShellOperators(command); len(ops) == 0 {
+		return ""
+	}
+	// Extract only the unquoted portions of the command. This collapses
+	// quoted strings so that operators inside quotes disappear entirely,
+	// preventing false splits on e.g. '.[0] | .name'.
+	unquoted := extractUnquotedSegments(command)
+	// Split the unquoted text on shell operator characters. This is safe
+	// because extractUnquotedSegments already stripped all quoted content.
+	segments := shellOperatorPattern.Split(unquoted, -1)
+	for _, seg := range segments {
+		seg = strings.TrimSpace(seg)
+		if seg == "" {
+			continue
+		}
+		// Use go-shellwords to parse the segment's first token, handling
+		// edge cases like leading whitespace or escaped characters.
+		parser := shellwords.NewParser()
+		parser.ParseBacktick = false
+		parser.ParseEnv = false
+		words, err := parser.Parse(seg)
+		if err != nil || len(words) == 0 {
+			// Fallback to simple field split if shellwords fails
+			fields := strings.Fields(seg)
+			if len(fields) == 0 {
+				continue
+			}
+			words = fields[:1]
+		}
+		binary := normalizeBinaryName(words[0])
+		gctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		registered, rerr := t.secureCLIStore.IsRegisteredBinary(gctx, binary)
+		cancel()
+		if rerr == nil && registered {
+			return binary
+		}
+	}
+	return ""
+}
+
+// handleCredentialedChain handles commands where a credentialed binary appears
+// inside a shell operator chain (e.g. "which gh && gh pr list"). Two modes:
+//
+//   - allow_chain_exec=false (default): returns an error telling the LLM to
+//     call the CLI directly without shell operators.
+//   - allow_chain_exec=true: injects all matching credential env vars into
+//     the full command and executes via shell. Less secure (tokens visible
+//     to all commands in the chain) but works with LLMs that habitually
+//     use shell operators.
+//
+// Returns nil if no credentialed binary is detected in the chain.
+func (t *ExecTool) handleCredentialedChain(ctx context.Context, normalizedCmd, rawCmd string, args map[string]any) *Result {
+	if t.secureCLIStore == nil {
+		return nil
+	}
+	if ops := detectUnquotedShellOperators(normalizedCmd); len(ops) == 0 {
+		return nil
+	}
+
+	// Scan all segments for credentialed binaries
+	unquoted := extractUnquotedSegments(normalizedCmd)
+	segments := shellOperatorPattern.Split(unquoted, -1)
+
+	type chainMatch struct {
+		binary string
+		cred   *store.SecureCLIBinary
+	}
+	var matches []chainMatch
+	anyAllowChain := false
+
+	agentID := store.AgentIDFromContext(ctx)
+	var agentIDPtr *uuid.UUID
+	if agentID != uuid.Nil {
+		agentIDPtr = &agentID
+	}
+	userID := store.CredentialUserIDFromContext(ctx)
+
+	for _, seg := range segments {
+		seg = strings.TrimSpace(seg)
+		if seg == "" {
+			continue
+		}
+		parser := shellwords.NewParser()
+		parser.ParseBacktick = false
+		parser.ParseEnv = false
+		words, err := parser.Parse(seg)
+		if err != nil || len(words) == 0 {
+			fields := strings.Fields(seg)
+			if len(fields) == 0 {
+				continue
+			}
+			words = fields[:1]
+		}
+		binary := normalizeBinaryName(words[0])
+		gctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		cred, lookupErr := t.secureCLIStore.LookupByBinary(gctx, binary, agentIDPtr, userID)
+		cancel()
+		if lookupErr != nil || cred == nil {
+			continue
+		}
+		matches = append(matches, chainMatch{binary: binary, cred: cred})
+		if cred.AllowChainExec {
+			anyAllowChain = true
+		}
+	}
+
+	if len(matches) == 0 {
+		return nil
+	}
+
+	// Default mode: return error telling LLM to call directly
+	if !anyAllowChain {
+		first := matches[0].binary
+		return &Result{
+			ForLLM: fmt.Sprintf("[CREDENTIALED CLI] Command contains credentialed binary %q but uses shell operators.\n"+
+				"Shell operators (;  &&  ||  |) prevent credential injection.\n"+
+				"Call the CLI directly as the ONLY command: exec(\"%s ...\")\n"+
+				"Do NOT combine with other commands, pipes, or redirects.", first, first),
+			ForUser: fmt.Sprintf("Command contains %q with shell operators — call it directly.", first),
+			IsError: true,
+		}
+	}
+
+	// Chain injection mode: merge all matched credential env vars and execute
+	// the full command via shell with credentials injected.
+	slog.Info("security.credentialed_chain_exec",
+		"binaries", len(matches),
+		"command_prefix", truncateCmd(normalizedCmd, 80),
+		"agent_id", agentID)
+
+	envMap := make(map[string]string)
+	for _, m := range matches {
+		if len(m.cred.EncryptedEnv) > 0 {
+			var credEnv map[string]string
+			if err := json.Unmarshal(m.cred.EncryptedEnv, &credEnv); err == nil {
+				for k, v := range credEnv {
+					envMap[k] = v
+				}
+			}
+		}
+		// Merge per-user env overrides
+		if len(m.cred.UserEnv) > 0 {
+			var userEnvMap map[string]string
+			if err := json.Unmarshal(m.cred.UserEnv, &userEnvMap); err == nil {
+				for k, v := range userEnvMap {
+					envMap[k] = v
+				}
+			}
+		}
+		// Register for output scrubbing
+		for _, v := range envMap {
+			AddCredentialScrubValues(v)
+		}
+	}
+
+	// Use the longest timeout from matched credentials
+	timeout := 30 * time.Second
+	for _, m := range matches {
+		if d := time.Duration(m.cred.TimeoutSeconds) * time.Second; d > timeout {
+			timeout = d
+		}
+	}
+
+	// Resolve working directory
+	cwd := ToolWorkspaceFromCtx(ctx)
+	if cwd == "" {
+		cwd = t.workspace
+	}
+	if wd, _ := args["working_dir"].(string); wd != "" {
+		cwd = wd
+	}
+
+	// Execute via sandbox or host — using shell mode (sh -c) since the command
+	// contains intentional shell operators.
+	sandboxKey := ToolSandboxKeyFromCtx(ctx)
+	if t.sandboxMgr != nil && sandboxKey != "" {
+		sb, err := t.sandboxMgr.Get(ctx, sandboxKey, t.workspace, SandboxConfigFromCtx(ctx))
+		if err != nil {
+			return ErrorResult("credentialed chain exec requires sandbox but sandbox is unavailable: " + err.Error())
+		}
+		result, err := sb.Exec(ctx, []string{"sh", "-c", rawCmd}, cwd, sandbox.WithEnv(envMap))
+		if err != nil {
+			return ErrorResult(fmt.Sprintf("credentialed chain exec: %v", err))
+		}
+		output := result.Stdout
+		if result.Stderr != "" {
+			if output != "" {
+				output += "\n"
+			}
+			output += "STDERR:\n" + result.Stderr
+		}
+		if result.ExitCode != 0 {
+			return credentialedExecFailError("sh -c <chain>", []string{truncateCmd(rawCmd, 80)}, result.ExitCode, ScrubCredentials(output))
+		}
+		if output == "" {
+			output = "(command completed with no output)"
+		}
+		return SilentResult(capExecOutput(ScrubCredentials(output), execMaxOutputChars))
+	}
+
+	// Host execution with shell
+	ctx2, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	cmd := exec.Command("sh", "-c", rawCmd)
+	cmd.Dir = cwd
+	setProcessGroup(cmd)
+	cmd.Env = buildCredentialedEnv(envMap)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		return ErrorResult(fmt.Sprintf("credentialed chain exec: failed to start: %v", err))
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case err := <-done:
+		return formatCredentialedResult("sh -c <chain>", []string{truncateCmd(rawCmd, 80)}, stdout.String(), stderr.String(), err, ctx2, timeout)
+	case <-ctx2.Done():
+		_ = killProcessGroup(cmd, syscallSIGTERM)
+		select {
+		case <-done:
+		case <-time.After(3 * time.Second):
+			_ = killProcessGroup(cmd, syscallSIGKILL)
+			<-done
+		}
+		return ErrorResult(fmt.Sprintf("[CREDENTIALED CHAIN EXEC] Command timed out after %s.", timeout))
+	}
+}

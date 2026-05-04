@@ -97,6 +97,7 @@ func TestSanitizeKey(t *testing.T) {
 		{"simple", "simple"},
 		{"has/slash", "has-slash"},
 		{"has space", "has-space"},
+		{"agent:chloe:whatsapp:551152861098:5@s.whatsapp.net", "agent-chloe-whatsapp-551152861098-5-s-whatsapp-net"},
 		{strings.Repeat("x", 100), strings.Repeat("x", 50)},
 	}
 	for _, tc := range tests {

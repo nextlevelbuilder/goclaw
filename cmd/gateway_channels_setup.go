@@ -74,7 +74,11 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 		if strings.Contains(fmt.Sprintf("%T", pgStores.DB.Driver()), "sqlite") {
 			waDialect = "sqlite3"
 		}
-		wa, err := whatsapp.New(cfg.Channels.WhatsApp, msgBus, pgStores.Pairing, pgStores.DB, pgStores.PendingMessages, waDialect, audioMgr, pgStores.BuiltinTools)
+		// Config-only WhatsApp (single instance, no DB-backed channel_instances row);
+		// no instance store, no configJID — falls back to GetFirstDevice via NewDevice
+		// adoption when the legacy single-device store already exists.
+		wa, err := whatsapp.New(cfg.Channels.WhatsApp, msgBus, pgStores.Pairing, pgStores.DB,
+			pgStores.PendingMessages, waDialect, audioMgr, pgStores.BuiltinTools, nil, "")
 		if err != nil {
 			channelMgr.RecordFailure(channels.TypeWhatsApp, "", err)
 			slog.Error("failed to initialize whatsapp channel", "error", err)

@@ -21,6 +21,7 @@ type SecureCLIBinary struct {
 	TimeoutSeconds int             `json:"timeout_seconds" db:"timeout_seconds"`
 	Tips           string          `json:"tips" db:"tips"`            // hint injected into TOOLS.md context
 	IsGlobal       bool            `json:"is_global" db:"is_global"`
+	AllowChainExec bool            `json:"allow_chain_exec" db:"allow_chain_exec"`
 	Enabled        bool            `json:"enabled" db:"enabled"`
 	CreatedBy      string          `json:"created_by" db:"created_by"`
 	UserEnv        []byte          `json:"-" db:"-"` // per-user encrypted env (populated by LookupByBinary LEFT JOIN)

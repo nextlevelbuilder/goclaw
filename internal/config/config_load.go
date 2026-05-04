@@ -269,6 +269,10 @@ func (c *Config) applyEnvOverrides() {
 		ensureSandbox()
 		c.Agents.Defaults.Sandbox.NetworkEnabled = v == "true" || v == "1"
 	}
+	if v := os.Getenv("GOCLAW_SANDBOX_TMP_EXEC"); v != "" {
+		ensureSandbox()
+		c.Agents.Defaults.Sandbox.AllowTmpExec = v == "true" || v == "1"
+	}
 
 	// Browser (for Docker-compose browser sidecar overlay)
 	envStr("GOCLAW_BROWSER_REMOTE_URL", &c.Tools.Browser.RemoteURL)

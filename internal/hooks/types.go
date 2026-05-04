@@ -147,10 +147,17 @@ func (d Decision) IsBlock() bool {
 // For non-builtin scripts returning updatedInput the dispatcher strips the
 // mutation + logs a WARN; Updated* stay nil (defense-in-depth against a
 // tenant-authored script escalating its capability tier).
+//
+// Reason is populated only on DecisionBlock paths and only when a script-
+// handler hook returned a non-empty `reason` field. Callers (e.g. the
+// pipeline tool stage) surface it to the agent as the synthetic tool message
+// so the hook can self-document why the operation was blocked. Empty when no
+// script reason is available — callers fall back to a generic message.
 type FireResult struct {
 	Decision         Decision
 	UpdatedToolInput map[string]any
 	UpdatedRawInput  *string
+	Reason           string
 }
 
 // ─── Config & execution structs ──────────────────────────────────────────────

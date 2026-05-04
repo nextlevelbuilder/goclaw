@@ -270,6 +270,12 @@ func (l *InstanceLoader) loadInstance(ctx context.Context, inst store.ChannelIns
 	if base, ok := ch.(interface{ SetTenantID(uuid.UUID) }); ok {
 		base.SetTenantID(inst.TenantID)
 	}
+	// Propagate instance_id so channels that maintain per-instance external state
+	// (e.g. WhatsApp's whatsmeow_device row scoped to this channel) can persist it
+	// back to channel_instances.config.
+	if base, ok := ch.(interface{ SetInstanceID(uuid.UUID) }); ok {
+		base.SetInstanceID(inst.ID)
+	}
 	// Propagate tenant_id to pending history for compaction/sweep DB operations.
 	// Factory creates PendingHistory before SetTenantID is called, so tenantID is uuid.Nil at construction.
 	if ph, ok := ch.(interface{ SetPendingHistoryTenantID(uuid.UUID) }); ok {

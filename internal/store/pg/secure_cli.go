@@ -27,12 +27,12 @@ func NewPGSecureCLIStore(db *sql.DB, encryptionKey string) *PGSecureCLIStore {
 }
 
 const secureCLISelectCols = `id, binary_name, binary_path, description, encrypted_env,
- deny_args, deny_verbose, timeout_seconds, tips, is_global, enabled, created_by, created_at, updated_at`
+ deny_args, deny_verbose, timeout_seconds, tips, is_global, allow_chain_exec, enabled, created_by, created_at, updated_at`
 
 // secureCLISelectColsAliased is prefixed with table alias "b."
 // Required for LookupByBinary which uses LEFT JOIN (ambiguous column names without prefix).
 const secureCLISelectColsAliased = `b.id, b.binary_name, b.binary_path, b.description, b.encrypted_env,
- b.deny_args, b.deny_verbose, b.timeout_seconds, b.tips, b.is_global, b.enabled, b.created_by, b.created_at, b.updated_at`
+ b.deny_args, b.deny_verbose, b.timeout_seconds, b.tips, b.is_global, b.allow_chain_exec, b.enabled, b.created_by, b.created_at, b.updated_at`
 
 func (s *PGSecureCLIStore) Create(ctx context.Context, b *store.SecureCLIBinary) error {
 	if err := store.ValidateUserID(b.CreatedBy); err != nil {
@@ -69,13 +69,13 @@ func (s *PGSecureCLIStore) Create(ctx context.Context, b *store.SecureCLIBinary)
 
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO secure_cli_binaries (id, binary_name, binary_path, description, encrypted_env,
-		 deny_args, deny_verbose, timeout_seconds, tips, is_global, enabled, created_by, created_at, updated_at, tenant_id)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+		 deny_args, deny_verbose, timeout_seconds, tips, is_global, allow_chain_exec, enabled, created_by, created_at, updated_at, tenant_id)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
 		b.ID, b.BinaryName, nilStr(derefStr(b.BinaryPath)), b.Description,
 		envBytes,
 		jsonOrEmptyArray(b.DenyArgs), jsonOrEmptyArray(b.DenyVerbose),
 		b.TimeoutSeconds, b.Tips,
-		b.IsGlobal, b.Enabled,
+		b.IsGlobal, b.AllowChainExec, b.Enabled,
 		b.CreatedBy, now, now, tenantID,
 	)
 	return err
@@ -105,7 +105,7 @@ func (s *PGSecureCLIStore) scanRow(row *sql.Row) (*store.SecureCLIBinary, error)
 	err := row.Scan(
 		&b.ID, &b.BinaryName, &binaryPath, &b.Description, &env,
 		&denyArgs, &denyVerbose,
-		&b.TimeoutSeconds, &b.Tips, &b.IsGlobal,
+		&b.TimeoutSeconds, &b.Tips, &b.IsGlobal, &b.AllowChainExec,
 		&b.Enabled, &b.CreatedBy, &b.CreatedAt, &b.UpdatedAt,
 	)
 	if err != nil {
@@ -147,7 +147,7 @@ func (s *PGSecureCLIStore) scanRows(rows *sql.Rows) ([]store.SecureCLIBinary, er
 		if err := rows.Scan(
 			&b.ID, &b.BinaryName, &binaryPath, &b.Description, &env,
 			&denyArgs, &denyVerbose,
-			&b.TimeoutSeconds, &b.Tips, &b.IsGlobal,
+			&b.TimeoutSeconds, &b.Tips, &b.IsGlobal, &b.AllowChainExec,
 			&b.Enabled, &b.CreatedBy, &b.CreatedAt, &b.UpdatedAt,
 		); err != nil {
 			continue
@@ -177,7 +177,7 @@ func (s *PGSecureCLIStore) scanRows(rows *sql.Rows) ([]store.SecureCLIBinary, er
 var secureCLIAllowedFields = map[string]bool{
 	"binary_name": true, "binary_path": true, "description": true,
 	"encrypted_env": true, "deny_args": true, "deny_verbose": true,
-	"timeout_seconds": true, "tips": true, "is_global": true, "enabled": true,
+	"timeout_seconds": true, "tips": true, "is_global": true, "allow_chain_exec": true, "enabled": true,
 	"updated_at": true,
 }
 
@@ -344,7 +344,7 @@ func (s *PGSecureCLIStore) scanRowWithGrantAndUserEnv(row *sql.Row) (*store.Secu
 	err := row.Scan(
 		&b.ID, &b.BinaryName, &binaryPath, &b.Description, &env,
 		&denyArgs, &denyVerbose,
-		&b.TimeoutSeconds, &b.Tips, &b.IsGlobal,
+		&b.TimeoutSeconds, &b.Tips, &b.IsGlobal, &b.AllowChainExec,
 		&b.Enabled, &b.CreatedBy, &b.CreatedAt, &b.UpdatedAt,
 		// Grant columns
 		&grantDenyArgs, &grantDenyVerbose, &grantTimeout, &grantTips, &grantEnabled, &grantID,
@@ -498,7 +498,7 @@ func (s *PGSecureCLIStore) ListForAgent(ctx context.Context, agentID uuid.UUID) 
 		if err := rows.Scan(
 			&b.ID, &b.BinaryName, &binaryPath, &b.Description, &env,
 			&denyArgs, &denyVerbose,
-			&b.TimeoutSeconds, &b.Tips, &b.IsGlobal,
+			&b.TimeoutSeconds, &b.Tips, &b.IsGlobal, &b.AllowChainExec,
 			&b.Enabled, &b.CreatedBy, &b.CreatedAt, &b.UpdatedAt,
 			&grantDenyArgs, &grantDenyVerbose, &grantTimeout, &grantTips, &grantID,
 		); err != nil {

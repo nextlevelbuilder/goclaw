@@ -23,7 +23,7 @@ func (c *Channel) StartQRFlow(ctx context.Context) (<-chan whatsmeow.QRChannelIt
 			if c.ctx == nil {
 				c.ctx, c.cancel = context.WithCancel(context.Background())
 			}
-			deviceStore, err := c.container.GetFirstDevice(ctx)
+			deviceStore, err := c.resolveDevice(ctx)
 			if err != nil {
 				c.mu.Unlock()
 				return nil, fmt.Errorf("whatsapp get device: %w", err)
@@ -90,11 +90,12 @@ func (c *Channel) Reauth() error {
 	}
 	c.ctx, c.cancel = context.WithCancel(parent)
 
-	// Re-create client with fresh device store.
-	deviceStore, err := c.container.GetFirstDevice(context.Background())
-	if err != nil {
-		return fmt.Errorf("whatsapp: get fresh device: %w", err)
-	}
+	// Re-create client with a fresh device. Reauth always forces a new pairing,
+	// so we bypass resolveDevice (which would try to adopt an existing device).
+	// configJID is also cleared so the next persistJID on PairSuccess writes the
+	// new JID into channel_instances.config without short-circuiting on equality.
+	c.configJID = ""
+	deviceStore := c.container.NewDevice()
 	c.client = whatsmeow.NewClient(deviceStore, nil)
 	c.client.AddEventHandler(c.handleEvent)
 

@@ -248,6 +248,7 @@ type SandboxConfig struct {
 	// Enhanced security
 	User           string `json:"user,omitempty"`             // container user (e.g. "1000:1000", "nobody")
 	TmpfsSizeMB    int    `json:"tmpfs_size_mb,omitempty"`    // default tmpfs size in MB (0 = Docker default)
+	AllowTmpExec   bool   `json:"allow_tmp_exec,omitempty"`   // drop `noexec` from tmpfs mounts (still keeps nosuid+nodev). Required by some bundled-binary CLIs that extract+exec from /tmp at runtime.
 	MaxOutputBytes int    `json:"max_output_bytes,omitempty"` // limit exec output capture (default 1MB)
 
 	// Pruning (matching TS SandboxPruneSettings)
@@ -319,6 +320,7 @@ func (sc *SandboxConfig) ToSandboxConfig() sandbox.Config {
 	if sc.TmpfsSizeMB > 0 {
 		cfg.TmpfsSizeMB = sc.TmpfsSizeMB
 	}
+	cfg.AllowTmpExec = sc.AllowTmpExec
 	if sc.MaxOutputBytes > 0 {
 		cfg.MaxOutputBytes = sc.MaxOutputBytes
 	}

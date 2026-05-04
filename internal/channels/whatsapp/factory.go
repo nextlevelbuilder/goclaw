@@ -20,18 +20,25 @@ type whatsappInstanceConfig struct {
 	HistoryLimit   int      `json:"history_limit,omitempty"`
 	AllowFrom      []string `json:"allow_from,omitempty"`
 	BlockReply     *bool    `json:"block_reply,omitempty"`
+	// JID is the whatsmeow device JID this instance was paired with on a prior boot.
+	// Set automatically on PairSuccess and on adoption of an existing single-device
+	// store. Empty for fresh instances; the channel will NewDevice + go through QR.
+	JID string `json:"jid,omitempty"`
 }
 
 // FactoryWithDB returns a ChannelFactory with DB access for whatsmeow auth state.
 // dialect must be "pgx" (PostgreSQL) or "sqlite3" (SQLite/desktop).
 func FactoryWithDB(db *sql.DB, pendingStore store.PendingMessageStore, dialect string) channels.ChannelFactory {
-	return FactoryWithDBAudio(db, pendingStore, dialect, nil, nil)
+	return FactoryWithDBAudio(db, pendingStore, dialect, nil, nil, nil)
 }
 
 // FactoryWithDBAudio returns a ChannelFactory with DB access, STT support, and builtin-tools store
-// for reading stt.whatsapp_enabled opt-in setting per message.
+// for reading stt.whatsapp_enabled opt-in setting per message. instanceStore is optional but
+// required for multi-instance device scoping (passed from cmd/gateway.go); nil falls back to
+// legacy single-instance GetFirstDevice behavior.
 func FactoryWithDBAudio(db *sql.DB, pendingStore store.PendingMessageStore, dialect string,
-	audioMgr *audio.Manager, builtinToolStore store.BuiltinToolStore) channels.ChannelFactory {
+	audioMgr *audio.Manager, builtinToolStore store.BuiltinToolStore,
+	instanceStore store.ChannelInstanceStore) channels.ChannelFactory {
 	return func(name string, creds json.RawMessage, cfg json.RawMessage,
 		msgBus *bus.MessageBus, pairingSvc store.PairingStore) (channels.Channel, error) {
 
@@ -72,7 +79,8 @@ func FactoryWithDBAudio(db *sql.DB, pendingStore store.PendingMessageStore, dial
 			waCfg.GroupPolicy = "pairing"
 		}
 
-		ch, err := New(waCfg, msgBus, pairingSvc, db, pendingStore, dialect, audioMgr, builtinToolStore)
+		ch, err := New(waCfg, msgBus, pairingSvc, db, pendingStore, dialect, audioMgr, builtinToolStore,
+			instanceStore, ic.JID)
 		if err != nil {
 			return nil, err
 		}
