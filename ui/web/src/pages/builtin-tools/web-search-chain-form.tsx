@@ -63,9 +63,11 @@ function parseInitialEntries(settings: Record<string, unknown>): ProviderEntry[]
     ? (settings.provider_order as string[]).filter((p): p is ProviderKey =>
         SORTABLE_PROVIDERS.includes(p as ProviderKey),
       )
-    : DEFAULT_ORDER;
+    : [];
+  const normalizedOrder =
+    rawOrder.length > 0 ? [...rawOrder, ...DEFAULT_ORDER.filter((p) => !rawOrder.includes(p))] : DEFAULT_ORDER;
 
-  return rawOrder.map((name) => {
+  return normalizedOrder.map((name) => {
     const cfg = (settings[name] ?? {}) as Record<string, unknown>;
     return {
       id: uniqueId(),
@@ -153,7 +155,7 @@ function SortableProviderCard({ entry, index, secretsSet, onUpdate }: SortableCa
             </Label>
             <Input
               type="text"
-              placeholder={entry.name === "searxng" ? "http://127.0.0.1:8080/search" : "https://omni.get-gmail.com/v1/search"}
+              placeholder={entry.name === "searxng" ? "http://127.0.0.1:8080/search" : "https://api.example.com/v1/search"}
               value={entry.base_url ?? ""}
               onChange={(e) => onUpdate(entry.id, { base_url: e.target.value })}
               className="h-7 flex-1 text-base md:text-sm font-mono"
