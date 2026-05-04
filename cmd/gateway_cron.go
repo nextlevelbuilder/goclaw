@@ -88,8 +88,11 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 		// Reset session before each cron run to prevent tool errors from previous
 		// runs from polluting the context and blocking future executions (#294).
 		// Save() persists the empty session to DB so stale data won't reload after restart.
-		// Stateless jobs skip this — they intentionally carry no session history.
-		if !job.Stateless {
+		// Always reset cron sessions to prevent message accumulation across runs.
+		// Stateless jobs especially need this — the agent loop persists messages
+		// to the session regardless of the stateless flag, so without a reset
+		// the session grows indefinitely.
+		{
 			sessionMgr.Reset(cronCtx, sessionKey)
 			sessionMgr.Save(cronCtx, sessionKey)
 		}

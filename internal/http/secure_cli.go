@@ -161,6 +161,7 @@ type secureCLICreateRequest struct {
 	TimeoutSeconds int             `json:"timeout_seconds,omitempty"`
 	Tips           string          `json:"tips,omitempty"`
 	IsGlobal       *bool           `json:"is_global,omitempty"`
+	AllowChainExec *bool  `json:"allow_chain_exec,omitempty"`
 	Enabled        bool            `json:"enabled"`
 }
 
@@ -225,6 +226,7 @@ func (h *SecureCLIHandler) handleCreate(w http.ResponseWriter, r *http.Request) 
 		TimeoutSeconds: req.TimeoutSeconds,
 		Tips:           req.Tips,
 		IsGlobal:       req.IsGlobal == nil || *req.IsGlobal, // default true
+		AllowChainExec: req.AllowChainExec != nil && *req.AllowChainExec,
 		Enabled:        req.Enabled,
 		CreatedBy:      store.UserIDFromContext(r.Context()),
 	}
@@ -282,7 +284,7 @@ func (h *SecureCLIHandler) handleUpdate(w http.ResponseWriter, r *http.Request) 
 	allowed := map[string]bool{
 		"binary_name": true, "binary_path": true, "description": true,
 		"env": true, "deny_args": true, "deny_verbose": true,
-		"timeout_seconds": true, "tips": true, "is_global": true, "enabled": true,
+		"timeout_seconds": true, "tips": true, "is_global": true, "allow_chain_exec": true, "enabled": true,
 	}
 	for k := range updates {
 		if !allowed[k] {

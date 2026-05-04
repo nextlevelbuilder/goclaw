@@ -31,7 +31,7 @@ func NewSQLiteSecureCLIStore(db *sql.DB, encKey string) *SQLiteSecureCLIStore {
 }
 
 const secureCLISelectCols = `id, binary_name, binary_path, description, encrypted_env,
- deny_args, deny_verbose, timeout_seconds, tips, is_global, enabled, created_by, created_at, updated_at`
+ deny_args, deny_verbose, timeout_seconds, tips, is_global, allow_chain_exec, enabled, created_by, created_at, updated_at`
 
 const secureCLISelectColsAliased = `b.id, b.binary_name, b.binary_path, b.description, b.encrypted_env,
  b.deny_args, b.deny_verbose, b.timeout_seconds, b.tips, b.is_global, b.enabled, b.created_by, b.created_at, b.updated_at`
@@ -71,13 +71,13 @@ func (s *SQLiteSecureCLIStore) Create(ctx context.Context, b *store.SecureCLIBin
 
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO secure_cli_binaries (id, binary_name, binary_path, description, encrypted_env,
-		 deny_args, deny_verbose, timeout_seconds, tips, is_global, enabled, created_by, created_at, updated_at, tenant_id)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		 deny_args, deny_verbose, timeout_seconds, tips, is_global, allow_chain_exec, enabled, created_by, created_at, updated_at, tenant_id)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		b.ID, b.BinaryName, nilStr(derefStr(b.BinaryPath)), b.Description,
 		envBytes,
 		jsonOrEmptyArray(b.DenyArgs), jsonOrEmptyArray(b.DenyVerbose),
 		b.TimeoutSeconds, b.Tips,
-		b.IsGlobal, b.Enabled,
+		b.IsGlobal, b.AllowChainExec, b.Enabled,
 		b.CreatedBy, nowStr, nowStr, tenantID,
 	)
 	return err
@@ -108,7 +108,7 @@ func (s *SQLiteSecureCLIStore) scanRow(row *sql.Row) (*store.SecureCLIBinary, er
 	err := row.Scan(
 		&b.ID, &b.BinaryName, &binaryPath, &b.Description, &env,
 		&denyArgs, &denyVerbose,
-		&b.TimeoutSeconds, &b.Tips, &b.IsGlobal,
+		&b.TimeoutSeconds, &b.Tips, &b.IsGlobal, &b.AllowChainExec,
 		&b.Enabled, &b.CreatedBy, &createdAt, &updatedAt,
 	)
 	if err != nil {
@@ -153,7 +153,7 @@ func (s *SQLiteSecureCLIStore) scanRows(rows *sql.Rows) ([]store.SecureCLIBinary
 		if err := rows.Scan(
 			&b.ID, &b.BinaryName, &binaryPath, &b.Description, &env,
 			&denyArgs, &denyVerbose,
-			&b.TimeoutSeconds, &b.Tips, &b.IsGlobal,
+			&b.TimeoutSeconds, &b.Tips, &b.IsGlobal, &b.AllowChainExec,
 			&b.Enabled, &b.CreatedBy, &createdAt, &updatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan secure_cli_binaries row: %w", err)
@@ -185,7 +185,7 @@ func (s *SQLiteSecureCLIStore) scanRows(rows *sql.Rows) ([]store.SecureCLIBinary
 var secureCLIAllowedFields = map[string]bool{
 	"binary_name": true, "binary_path": true, "description": true,
 	"encrypted_env": true, "deny_args": true, "deny_verbose": true,
-	"timeout_seconds": true, "tips": true, "is_global": true, "enabled": true,
+	"timeout_seconds": true, "tips": true, "is_global": true, "allow_chain_exec": true, "enabled": true,
 	"updated_at": true,
 }
 
@@ -345,7 +345,7 @@ func (s *SQLiteSecureCLIStore) scanRowWithGrantAndUserEnv(row *sql.Row) (*store.
 	err := row.Scan(
 		&b.ID, &b.BinaryName, &binaryPath, &b.Description, &env,
 		&denyArgs, &denyVerbose,
-		&b.TimeoutSeconds, &b.Tips, &b.IsGlobal,
+		&b.TimeoutSeconds, &b.Tips, &b.IsGlobal, &b.AllowChainExec,
 		&b.Enabled, &b.CreatedBy, &createdAt, &updatedAt,
 		&grantDenyArgs, &grantDenyVerbose, &grantTimeout, &grantTips, &grantEnabled, &grantID,
 		&userEnv,
@@ -500,7 +500,7 @@ func (s *SQLiteSecureCLIStore) ListForAgent(ctx context.Context, agentID uuid.UU
 		if err := rows.Scan(
 			&b.ID, &b.BinaryName, &binaryPath, &b.Description, &env,
 			&denyArgs, &denyVerbose,
-			&b.TimeoutSeconds, &b.Tips, &b.IsGlobal,
+			&b.TimeoutSeconds, &b.Tips, &b.IsGlobal, &b.AllowChainExec,
 			&b.Enabled, &b.CreatedBy, &createdAt, &updatedAt,
 			&grantDenyArgs, &grantDenyVerbose, &grantTimeout, &grantTips, &grantID,
 		); err != nil {

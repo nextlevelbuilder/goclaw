@@ -8,6 +8,7 @@ export interface SecureCLIBinary {
   timeout_seconds: number;
   tips: string;
   is_global: boolean;
+  allow_chain_exec: boolean;
   enabled: boolean;
   created_by: string;
   created_at: string;
@@ -43,6 +44,7 @@ export interface CLICredentialInput {
   timeout_seconds?: number;
   tips?: string;
   is_global?: boolean;
+  allow_chain_exec?: boolean;
   enabled?: boolean;
   env?: Record<string, string>;
 }

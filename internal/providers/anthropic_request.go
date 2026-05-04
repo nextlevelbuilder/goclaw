@@ -32,6 +32,58 @@ func splitSystemPromptForCache(content string) []map[string]any {
 	return blocks
 }
 
+// applyCacheControlToLastMessage tags the last message with an ephemeral
+// cache_control breakpoint so Anthropic prompt caching rolls forward across
+// turns. On turn N+1, content up to this breakpoint becomes a cache hit
+// (10% of input cost) and only the new tail writes to cache.
+//
+// Without this, the entire conversation history is sent uncached every turn,
+// which dominates cost on long agent sessions (observed: 36% effective cache
+// hit on a 187-message Slack thread, vs. ~80% expected for Claude agents).
+//
+// Anthropic allows up to 4 cache breakpoints per request. The system prompt
+// and last tool definition use 2; this leaves 2 free, and we use one here.
+// String content is converted to a single text block to attach the marker.
+func applyCacheControlToLastMessage(messages []map[string]any) {
+	if len(messages) == 0 {
+		return
+	}
+	last := messages[len(messages)-1]
+	ephemeral := map[string]any{"type": "ephemeral"}
+
+	switch c := last["content"].(type) {
+	case string:
+		// Plain string content (typical for text-only user messages).
+		// Convert to a single-element block array so we can attach
+		// cache_control. Anthropic accepts both shapes.
+		last["content"] = []map[string]any{
+			{"type": "text", "text": c, "cache_control": ephemeral},
+		}
+	case []map[string]any:
+		// Block array (multi-modal user, assistant text+tool_use, tool_result).
+		if len(c) > 0 {
+			c[len(c)-1]["cache_control"] = ephemeral
+		}
+	case []json.RawMessage:
+		// Assistant raw blocks preserve thinking signatures for tool-use
+		// passback. Re-marshal the last block with cache_control attached;
+		// silently skip on decode failure to avoid corrupting the request.
+		if len(c) == 0 {
+			return
+		}
+		var block map[string]any
+		if err := json.Unmarshal(c[len(c)-1], &block); err != nil {
+			return
+		}
+		block["cache_control"] = ephemeral
+		marshaled, err := json.Marshal(block)
+		if err != nil {
+			return
+		}
+		c[len(c)-1] = marshaled
+	}
+}
+
 // buildRawBlock reconstructs a complete content block from streaming data.
 // This is needed to preserve thinking blocks (with signatures) for tool use passback.
 func (p *AnthropicProvider) buildRawBlock(blockType string, result *ChatResponse, toolCallJSON map[int]string, _ int) json.RawMessage {
@@ -174,6 +226,10 @@ func (p *AnthropicProvider) buildRequestBody(model string, req ChatRequest, stre
 			})
 		}
 	}
+
+	// Roll prompt cache forward across turns. Without this, conversation
+	// history is uncached on every turn — the dominant cost on long sessions.
+	applyCacheControlToLastMessage(messages)
 
 	body := map[string]any{
 		"model":      model,
