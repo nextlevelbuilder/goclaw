@@ -415,23 +415,42 @@ type QuotaConfig struct {
 
 // GatewayConfig controls the gateway server.
 type GatewayConfig struct {
-	Host                    string       `json:"host"`
-	Port                    int          `json:"port"`
-	Token                   string       `json:"token,omitempty"`                      // bearer token for WS/HTTP auth
-	OwnerIDs                []string     `json:"owner_ids,omitempty"`                  // sender IDs considered "owner"
-	AllowedOrigins          []string     `json:"allowed_origins,omitempty"`            // WebSocket CORS whitelist (empty = allow all)
-	MaxMessageChars         int          `json:"max_message_chars,omitempty"`          // max user message characters (default 32000)
-	RateLimitRPM            int          `json:"rate_limit_rpm,omitempty"`             // rate limit: requests per minute per user (default 20, 0 = disabled)
-	InjectionAction         string       `json:"injection_action,omitempty"`           // prompt injection action: "log", "warn" (default), "block", "off"
-	InboundDebounceMs       int          `json:"inbound_debounce_ms,omitempty"`        // merge rapid messages from same sender (default 1000ms, -1 = disabled)
-	Quota                   *QuotaConfig `json:"quota,omitempty"`                      // per-user/group request quotas
-	BlockReply              *bool        `json:"block_reply,omitempty"`                // deliver intermediate text during tool iterations (default false)
-	ToolStatus              *bool        `json:"tool_status,omitempty"`                // show tool name in streaming preview during tool execution (default true)
-	TaskRecoveryIntervalSec int          `json:"task_recovery_interval_sec,omitempty"` // team task recovery ticker interval in seconds (default 300 = 5min)
-	BackgroundProvider      string       `json:"background_provider,omitempty"`        // LLM provider for background workers (vault enrichment, consolidation)
-	BackgroundModel         string       `json:"background_model,omitempty"`           // LLM model for background workers
-	JobsCallbackSecret      string       `json:"jobs_callback_secret,omitempty"`       // HMAC secret for /v1/agents/jobs/{id}/{progress,complete} callbacks (shared with the agent service's webhook secret)
-	AgentServiceURL         string       `json:"agent_service_url,omitempty"`          // in-pod URL for the sibling agent service (default http://127.0.0.1:18789); spawn_job tool POSTs /jobs here
+	Host                    string           `json:"host"`
+	Port                    int              `json:"port"`
+	Token                   string           `json:"token,omitempty"`                      // bearer token for WS/HTTP auth
+	OwnerIDs                []string         `json:"owner_ids,omitempty"`                  // sender IDs considered "owner"
+	AllowedOrigins          []string         `json:"allowed_origins,omitempty"`            // WebSocket CORS whitelist (empty = allow all)
+	MaxMessageChars         int              `json:"max_message_chars,omitempty"`          // max user message characters (default 32000)
+	RateLimitRPM            int              `json:"rate_limit_rpm,omitempty"`             // rate limit: requests per minute per user (default 20, 0 = disabled)
+	InjectionAction         string           `json:"injection_action,omitempty"`           // prompt injection action: "log", "warn" (default), "block", "off"
+	InboundDebounceMs       int              `json:"inbound_debounce_ms,omitempty"`        // merge rapid messages from same sender (default 1000ms, -1 = disabled)
+	Quota                   *QuotaConfig     `json:"quota,omitempty"`                      // per-user/group request quotas
+	BlockReply              *bool            `json:"block_reply,omitempty"`                // deliver intermediate text during tool iterations (default false)
+	ToolStatus              *bool            `json:"tool_status,omitempty"`                // show tool name in streaming preview during tool execution (default true)
+	TaskRecoveryIntervalSec int              `json:"task_recovery_interval_sec,omitempty"` // team task recovery ticker interval in seconds (default 300 = 5min)
+	BackgroundProvider      string           `json:"background_provider,omitempty"`        // LLM provider for background workers (vault enrichment, consolidation)
+	BackgroundModel         string           `json:"background_model,omitempty"`           // LLM model for background workers
+	JobsCallbackSecret      string           `json:"jobs_callback_secret,omitempty"`       // HMAC secret for /v1/agents/jobs/{id}/{progress,complete} callbacks (shared with the agent service's webhook secret)
+	AgentServiceURL         string           `json:"agent_service_url,omitempty"`          // in-pod URL for the sibling agent service (default http://127.0.0.1:18789); spawn_job tool POSTs /jobs here
+	WorkIntake              WorkIntakeConfig `json:"work_intake,omitempty"`                // optional deterministic Discord work-request router
+}
+
+// WorkIntakeConfig routes actionable Discord work requests into long-running
+// job-backed planning before the chat model answers inline.
+type WorkIntakeConfig struct {
+	Enabled bool              `json:"enabled,omitempty"`
+	Routes  []WorkIntakeRoute `json:"routes,omitempty"`
+}
+
+type WorkIntakeRoute struct {
+	AgentID       string   `json:"agent_id,omitempty"`
+	Channel       string   `json:"channel,omitempty"`
+	ChatIDs       []string `json:"chat_ids,omitempty"`
+	Repos         []string `json:"repos,omitempty"`
+	BaseRef       string   `json:"base_ref,omitempty"`
+	Command       string   `json:"command,omitempty"`
+	WorkspaceRoot string   `json:"workspace_root,omitempty"`
+	Timeout       string   `json:"timeout,omitempty"`
 }
 
 // ToolsConfig controls tool availability, policy, and web search.
