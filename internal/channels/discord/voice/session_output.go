@@ -285,7 +285,13 @@ func (o *sessionOutput) Close(ctx context.Context, duration time.Duration) {
 			o.log.Warn("voice: transcript summarizer failed; falling back to stats line",
 				"err", err, "lines", len(transcriptCopy))
 		case strings.TrimSpace(summary) == "":
-			o.log.Debug("voice: transcript summarizer returned empty; falling back to stats line",
+			// Info, not Debug: an empty summary is invisible-by-default
+			// in prod (the user just sees the stats line and assumes the
+			// LLM didn't run). Surfacing it at Info makes the failure
+			// mode obvious in logs without needing a debugger or local
+			// repro. Common cause: reasoning models consuming the entire
+			// max_completion_tokens budget on reasoning tokens.
+			o.log.Info("voice: transcript summarizer returned empty; falling back to stats line",
 				"lines", len(transcriptCopy))
 		default:
 			finalText = strings.TrimSpace(summary) + "\n\n" + finalText

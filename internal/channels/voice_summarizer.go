@@ -37,9 +37,15 @@ func BuildVoiceTranscriptSummarizer(cfg *VoiceTranscriptSummarizerConfig) func(c
 	if cfg == nil || cfg.Provider == nil || cfg.Model == "" {
 		return nil
 	}
+	// Reasoning models (gpt-5, o1/o3/o4) burn max_completion_tokens on
+	// internal reasoning BEFORE producing any output text. Our previous
+	// 512-token default was being fully consumed by reasoning, leaving
+	// zero tokens for the actual summary; the call returned empty content
+	// and Close() silently fell back to the stats-only line. 4096 gives
+	// gpt-5 enough headroom for both reasoning and a ~1500-char summary.
 	maxTokens := cfg.MaxOutputTokens
 	if maxTokens <= 0 {
-		maxTokens = 512
+		maxTokens = 4096
 	}
 	provider := cfg.Provider
 	model := cfg.Model
@@ -49,20 +55,31 @@ func BuildVoiceTranscriptSummarizer(cfg *VoiceTranscriptSummarizerConfig) func(c
 		if t == "" {
 			return "", errors.New("voice summarizer: empty transcript")
 		}
-		// Note on temperature: gpt-5 (and the o-series reasoning models)
-		// reject explicit temperature values other than 1, returning
-		// HTTP 400 "Unsupported value: 'temperature' does not support
-		// 0.4 with this model." Other providers/models accept
-		// temperature freely. Omit the parameter entirely so each
-		// provider gets its own default — the summarization prompt is
-		// constrained enough that a 1.0 sample is fine for our use.
+		// Notes on options:
+		//
+		// - Temperature: gpt-5 (and the o-series reasoning models)
+		//   reject explicit temperature values other than 1, returning
+		//   HTTP 400 "Unsupported value: 'temperature' does not support
+		//   0.4 with this model." Omit entirely so each provider gets
+		//   its own default — the summarization prompt is constrained
+		//   enough that a 1.0 sample is fine.
+		//
+		// - thinking_level=low: voice-transcript summarization is a
+		//   straightforward task — heavy reasoning produces no measurable
+		//   quality lift but eats deep into max_completion_tokens. "low"
+		//   keeps reasoning short on gpt-5 / o-series, leaving ample
+		//   budget for the actual summary text. Non-reasoning models
+		//   (most non-OpenAI providers) silently ignore this option.
 		resp, err := provider.Chat(ctx, providers.ChatRequest{
 			Messages: []providers.Message{
 				{Role: "system", Content: voiceSummaryPrompt},
 				{Role: "user", Content: t},
 			},
-			Model:   model,
-			Options: map[string]any{"max_tokens": maxTokens},
+			Model: model,
+			Options: map[string]any{
+				"max_tokens":     maxTokens,
+				"thinking_level": "low",
+			},
 		})
 		if err != nil {
 			return "", fmt.Errorf("voice summarizer chat: %w", err)
