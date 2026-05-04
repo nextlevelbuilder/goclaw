@@ -191,6 +191,10 @@ func processNormalMessage(
 		}(msg.Channel, msg.ChatID)
 	}
 
+	if maybeHandleWorkIntake(ctx, msg, deps, agentID, peerKind, sessionKey) {
+		return
+	}
+
 	slog.Info("inbound: scheduling message (main lane)",
 		"channel", msg.Channel,
 		"chat_id", msg.ChatID,

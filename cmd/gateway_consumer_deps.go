@@ -23,6 +23,7 @@ type ConsumerDeps struct {
 	TeamStore        store.TeamStore
 	AgentStore       store.AgentStore
 	SessStore        store.SessionStore
+	SubagentTasks    store.SubagentTaskStore
 	PostTurn         tools.PostTurnProcessor
 	QuotaChecker     *channels.QuotaChecker
 	ContactCollector *store.ContactCollector
