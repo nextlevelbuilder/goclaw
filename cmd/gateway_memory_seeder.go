@@ -42,8 +42,13 @@ func setupMemoryDiskSeeder(ctx context.Context, cfg *config.Config, pgStores *st
 	// Negative => one-shot only (run startup pass, never re-sweep).
 	oneShot := seederCfg.IntervalMs < 0
 
+	// Cross-tenant lookup: the seeder operates on the agent's workspace
+	// filesystem, which isn't tenant-scoped. Without this flag,
+	// PGAgentStore.GetByKey requires a tenant_id in ctx and returns
+	// "agent not found" because the gateway-startup ctx has none.
+	lookupCtx := store.WithCrossTenant(ctx)
 	for _, key := range seederCfg.AgentKeys {
-		agent, err := pgStores.Agents.GetByKey(ctx, key)
+		agent, err := pgStores.Agents.GetByKey(lookupCtx, key)
 		if err != nil {
 			slog.Warn("memory disk seeder: agent lookup failed",
 				"agent_key", key, "err", err)
