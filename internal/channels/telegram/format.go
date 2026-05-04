@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/mattn/go-runewidth"
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 )
 
 // --- Markdown to Telegram HTML conversion ---
@@ -39,7 +40,7 @@ func htmlTagToMarkdown(text string) string {
 	return text
 }
 
-func markdownToTelegramHTML(text string) string {
+func markdownToTelegramHTML(text, tableMode string) string {
 	if text == "" {
 		return ""
 	}
@@ -52,7 +53,7 @@ func markdownToTelegramHTML(text string) string {
 	// Extract markdown tables FIRST — uses dedicated \x00TB placeholders.
 	// Tables render as <pre> (monospace block) WITHOUT <code> wrapper,
 	// so Telegram shows them as preformatted text, not as "code" with copy button.
-	tables := extractMarkdownTables(text)
+	tables := extractMarkdownTables(text, tableMode)
 	text = tables.text
 
 	// Extract and protect code blocks
@@ -223,10 +224,11 @@ type tableMatch struct {
 	rendered []string // rendered ASCII tables (one per placeholder)
 }
 
-// extractMarkdownTables finds markdown tables, renders them as ASCII-aligned text,
+// extractMarkdownTables finds markdown tables, renders them according to tableMode,
 // and replaces them with \x00TBn\x00 placeholders. Tables are restored later as
 // <pre> (not <pre><code>) so Telegram shows them as preformatted text.
-func extractMarkdownTables(text string) tableMatch {
+func extractMarkdownTables(text, tableMode string) tableMatch {
+	mode := channels.ParseTableMode(tableMode)
 	lines := strings.Split(text, "\n")
 	var result []string
 	var rendered []string
@@ -244,11 +246,16 @@ func extractMarkdownTables(text string) tableMatch {
 				i++
 			}
 
-			// Parse and render the table as ASCII-aligned text
 			tableLines := lines[tableStart:i]
-			rendered = append(rendered, renderTableAsCode(tableLines))
-			result = append(result, fmt.Sprintf("\x00TB%d\x00", idx))
-			idx++
+			if mode == channels.TableModeOff {
+				// Pass raw markdown through unchanged.
+				result = append(result, tableLines...)
+			} else {
+				parsed := channels.ParseMarkdownTableRows(tableLines)
+				rendered = append(rendered, channels.RenderTable(mode, parsed))
+				result = append(result, fmt.Sprintf("\x00TB%d\x00", idx))
+				idx++
+			}
 		} else {
 			result = append(result, lines[i])
 			i++
@@ -258,119 +265,6 @@ func extractMarkdownTables(text string) tableMatch {
 	return tableMatch{text: strings.Join(result, "\n"), rendered: rendered}
 }
 
-// renderTableAsCode converts parsed markdown table lines into ASCII-aligned text.
-// Matching TS renderTableAsCode(): calculates column widths, pads cells.
-func renderTableAsCode(lines []string) string {
-	if len(lines) < 2 {
-		return strings.Join(lines, "\n")
-	}
-
-	// Parse all rows into cells (skip separator line at index 1)
-	var rows [][]string
-	for i, line := range lines {
-		if i == 1 {
-			continue // skip separator
-		}
-		rows = append(rows, parseTableRow(line))
-	}
-
-	if len(rows) == 0 {
-		return ""
-	}
-
-	// Determine number of columns and max width per column
-	numCols := 0
-	for _, row := range rows {
-		if len(row) > numCols {
-			numCols = len(row)
-		}
-	}
-
-	colWidths := make([]int, numCols)
-	for _, row := range rows {
-		for j := 0; j < numCols && j < len(row); j++ {
-			w := displayWidth(row[j])
-			if w > colWidths[j] {
-				colWidths[j] = w
-			}
-		}
-	}
-
-	// Render header
-	var out []string
-	out = append(out, renderRow(rows[0], colWidths))
-
-	// Render separator
-	var sepParts []string
-	for _, w := range colWidths {
-		sepParts = append(sepParts, strings.Repeat("-", w+2))
-	}
-	out = append(out, "|"+strings.Join(sepParts, "|")+"|")
-
-	// Render data rows
-	for _, row := range rows[1:] {
-		out = append(out, renderRow(row, colWidths))
-	}
-
-	return strings.Join(out, "\n")
-}
-
-// parseTableRow splits a markdown table row into trimmed cell strings.
-// Inline markdown (bold, italic, strikethrough, code) is stripped since
-// tables render inside <pre><code> where HTML tags have no effect.
-func parseTableRow(line string) []string {
-	line = strings.TrimSpace(line)
-	// Remove leading/trailing pipes
-	if strings.HasPrefix(line, "|") {
-		line = line[1:]
-	}
-	if strings.HasSuffix(line, "|") {
-		line = line[:len(line)-1]
-	}
-
-	parts := strings.Split(line, "|")
-	cells := make([]string, len(parts))
-	for i, p := range parts {
-		cells[i] = stripInlineMarkdown(strings.TrimSpace(p))
-	}
-	return cells
-}
-
-// stripInlineMarkdown removes common inline markdown markers from text.
-// Used for table cells that render inside code blocks where formatting has no effect.
-var (
-	reStripBoldAsterisks    = regexp.MustCompile(`\*\*(.+?)\*\*`)
-	reStripBoldUnderscores  = regexp.MustCompile(`__(.+?)__`)
-	reStripItalicAsterisk   = regexp.MustCompile(`\*([^*]+)\*`)
-	reStripItalicUnderscore = regexp.MustCompile(`_([^_]+)_`)
-	reStripStrikethrough    = regexp.MustCompile(`~~(.+?)~~`)
-	reStripInlineCode       = regexp.MustCompile("`([^`]+)`")
-)
-
-func stripInlineMarkdown(s string) string {
-	s = reStripBoldAsterisks.ReplaceAllString(s, "$1")
-	s = reStripBoldUnderscores.ReplaceAllString(s, "$1")
-	s = reStripStrikethrough.ReplaceAllString(s, "$1")
-	s = reStripInlineCode.ReplaceAllString(s, "$1")
-	s = reStripItalicAsterisk.ReplaceAllString(s, "$1")
-	s = reStripItalicUnderscore.ReplaceAllString(s, "$1")
-	return s
-}
-
-// renderRow renders a single table row with padded cells.
-func renderRow(cells []string, colWidths []int) string {
-	var parts []string
-	for j, w := range colWidths {
-		cell := ""
-		if j < len(cells) {
-			cell = cells[j]
-		}
-		// Pad with spaces to align columns
-		padding := max(w-displayWidth(cell), 0)
-		parts = append(parts, " "+cell+strings.Repeat(" ", padding)+" ")
-	}
-	return "|" + strings.Join(parts, "|") + "|"
-}
 
 // displayWidth returns the display width of a string, accounting for
 // East Asian wide characters (CJK), emoji, and other double-width glyphs.

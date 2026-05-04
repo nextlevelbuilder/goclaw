@@ -301,7 +301,7 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 	}
 
 	// Text-only message
-	htmlContent := markdownToTelegramHTML(msg.Content)
+	htmlContent := markdownToTelegramHTML(msg.Content, c.config.TableMode)
 	chunks := chunkHTML(htmlContent, telegramMaxMessageLen)
 
 	// If a stream message exists (stored by FinalizeStream), edit the first chunk
@@ -379,7 +379,7 @@ func (c *Channel) sendMediaMessage(ctx context.Context, chatID int64, msg bus.Ou
 		// can split tags (e.g. cut inside <code>...</code>) causing parse errors.
 		var followUpText string
 		if caption != "" {
-			caption = markdownToTelegramHTML(caption)
+			caption = markdownToTelegramHTML(caption, c.config.TableMode)
 			if len(caption) > telegramCaptionMaxLen {
 				followUpText = caption
 				caption = ""

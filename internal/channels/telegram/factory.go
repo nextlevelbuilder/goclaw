@@ -38,6 +38,7 @@ type telegramInstanceConfig struct {
 	BlockReply      *bool    `json:"block_reply,omitempty"`
 	ForceIPv4       bool     `json:"force_ipv4,omitempty"`
 	AllowFrom       []string `json:"allow_from,omitempty"`
+	TableMode       string   `json:"table_mode,omitempty"` // "auto" (default), "ascii", "cards", "list", "off"
 }
 
 // Factory creates a Telegram channel from DB instance data (no extra stores).
@@ -115,6 +116,7 @@ func buildChannel(name string, creds json.RawMessage, cfg json.RawMessage,
 		LinkPreview:    ic.LinkPreview,
 		BlockReply:     ic.BlockReply,
 		ForceIPv4:      ic.ForceIPv4,
+		TableMode:      ic.TableMode,
 	}
 
 	// DB instances default to "pairing" for groups (secure by default).
