@@ -349,16 +349,20 @@ func (l *InstanceLoader) loadInstance(ctx context.Context, inst store.ChannelIns
 					}
 				}
 				maxTokens := 0
+				thinkingLevel := ""
 				if l.voiceSummCfg != nil {
 					maxTokens = l.voiceSummCfg.MaxTokens
+					thinkingLevel = l.voiceSummCfg.ThinkingLevel
 				}
 				vs.SetVoiceTranscriptSummarizer(&VoiceTranscriptSummarizerConfig{
 					Provider:        summP,
 					Model:           summModel,
 					MaxOutputTokens: maxTokens,
+					ThinkingLevel:   thinkingLevel,
 				})
 				slog.Debug("voice transcript summarizer configured",
-					"channel", inst.Name, "provider", summP.Name(), "model", summModel, "source", summSource)
+					"channel", inst.Name, "provider", summP.Name(), "model", summModel,
+					"source", summSource, "thinking_level", thinkingLevel)
 			}
 		} else {
 			attemptedProvider := ""

@@ -37,15 +37,25 @@ func BuildVoiceTranscriptSummarizer(cfg *VoiceTranscriptSummarizerConfig) func(c
 	if cfg == nil || cfg.Provider == nil || cfg.Model == "" {
 		return nil
 	}
-	// Reasoning models (gpt-5, o1/o3/o4) burn max_completion_tokens on
-	// internal reasoning BEFORE producing any output text. Our previous
-	// 512-token default was being fully consumed by reasoning, leaving
-	// zero tokens for the actual summary; the call returned empty content
-	// and Close() silently fell back to the stats-only line. 4096 gives
-	// gpt-5 enough headroom for both reasoning and a ~1500-char summary.
+	// Reasoning models (gpt-5, o1/o3/o4, deepseek-v4-pro) burn
+	// max_completion_tokens on internal reasoning BEFORE producing any
+	// output text. Our previous 512-token default was being fully
+	// consumed by reasoning, leaving zero tokens for the actual summary.
+	// 4096 gives most reasoning models enough headroom for reasoning +
+	// a ~1500-char summary; callers that want deeper reasoning (high
+	// thinking level) should bump this further (e.g. 8192).
 	maxTokens := cfg.MaxOutputTokens
 	if maxTokens <= 0 {
 		maxTokens = 4096
+	}
+	// Default thinking_level=low: bounded summarization rarely benefits
+	// from heavy reasoning, and "low" keeps reasoning tokens cheap.
+	// Callers (e.g. via the channels.voice_summarizer config block)
+	// can override to "minimal" / "medium" / "high" when their model
+	// or use case warrants. Non-reasoning models silently ignore.
+	thinkingLevel := cfg.ThinkingLevel
+	if thinkingLevel == "" {
+		thinkingLevel = "low"
 	}
 	provider := cfg.Provider
 	model := cfg.Model
@@ -63,13 +73,6 @@ func BuildVoiceTranscriptSummarizer(cfg *VoiceTranscriptSummarizerConfig) func(c
 		//   0.4 with this model." Omit entirely so each provider gets
 		//   its own default — the summarization prompt is constrained
 		//   enough that a 1.0 sample is fine.
-		//
-		// - thinking_level=low: voice-transcript summarization is a
-		//   straightforward task — heavy reasoning produces no measurable
-		//   quality lift but eats deep into max_completion_tokens. "low"
-		//   keeps reasoning short on gpt-5 / o-series, leaving ample
-		//   budget for the actual summary text. Non-reasoning models
-		//   (most non-OpenAI providers) silently ignore this option.
 		resp, err := provider.Chat(ctx, providers.ChatRequest{
 			Messages: []providers.Message{
 				{Role: "system", Content: voiceSummaryPrompt},
@@ -78,7 +81,7 @@ func BuildVoiceTranscriptSummarizer(cfg *VoiceTranscriptSummarizerConfig) func(c
 			Model: model,
 			Options: map[string]any{
 				"max_tokens":     maxTokens,
-				"thinking_level": "low",
+				"thinking_level": thinkingLevel,
 			},
 		})
 		if err != nil {

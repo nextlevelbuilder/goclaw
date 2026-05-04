@@ -801,11 +801,19 @@ type VoiceTranscriptSummarizerConfig struct {
 	Provider providers.Provider
 	Model    string
 
-	// MaxOutputTokens caps the LLM's response length. Default 512 if
-	// zero — that's roughly 4 paragraphs which is the sweet spot for a
-	// Discord summary message that still fits in the 2000-char limit
-	// after the legacy stats line gets appended.
+	// MaxOutputTokens caps the LLM's response length. Default 4096 if
+	// zero — generous on purpose for reasoning models that consume
+	// max_completion_tokens on internal reasoning before producing
+	// output text (gpt-5, o-series, deepseek-v4-pro).
 	MaxOutputTokens int
+
+	// ThinkingLevel controls the reasoning_effort sent to OpenAI-style
+	// reasoning models (gpt-5, o-series, deepseek-v4-pro on openrouter
+	// when run through the openai provider transport). One of "minimal",
+	// "low", "medium", "high". Empty string means use the summarizer's
+	// default ("low" — bounded summarization rarely benefits from heavy
+	// reasoning). Non-reasoning models silently ignore this option.
+	ThinkingLevel string
 }
 
 // Truncate shortens a string to maxLen, appending "..." if truncated.

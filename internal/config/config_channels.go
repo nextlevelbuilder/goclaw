@@ -18,9 +18,10 @@ type PendingCompactionConfig struct {
 // (e.g. gpt-5) but the summary task is cheap and bounded enough that a
 // lighter model is fine. Empty = inherit from agent (current behavior).
 type VoiceSummarizerConfig struct {
-	Provider  string `json:"provider,omitempty"`   // LLM provider name registered with the gateway (e.g. "deepseek")
-	Model     string `json:"model,omitempty"`      // model for voice summarization (e.g. "deepseek-chat")
-	MaxTokens int    `json:"max_tokens,omitempty"` // max output tokens; 0 = use BuildVoiceTranscriptSummarizer's default
+	Provider      string `json:"provider,omitempty"`       // LLM provider name registered with the gateway (e.g. "openrouter")
+	Model         string `json:"model,omitempty"`          // model for voice summarization (e.g. "deepseek/deepseek-v4-pro")
+	MaxTokens     int    `json:"max_tokens,omitempty"`     // max output tokens; 0 = BuildVoiceTranscriptSummarizer default (4096)
+	ThinkingLevel string `json:"thinking_level,omitempty"` // reasoning_effort for reasoning models: "minimal" / "low" / "medium" / "high". Empty = "low".
 }
 
 // ChannelsConfig contains per-channel configuration.
