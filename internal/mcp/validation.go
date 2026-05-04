@@ -20,6 +20,17 @@ var allowedCommands = map[string]bool{
 	"deno": true, "bun": true,
 }
 
+// extraAllowedCommands holds user-configured commands added via config.json "tools.allowed_commands".
+var extraAllowedCommands map[string]bool
+
+// SetExtraAllowedCommands populates the extra command allowlist from config.
+func SetExtraAllowedCommands(cmds []string) {
+	extraAllowedCommands = make(map[string]bool, len(cmds))
+	for _, cmd := range cmds {
+		extraAllowedCommands[cmd] = true
+	}
+}
+
 // Shell metacharacters that indicate injection attempt.
 var shellMetaChars = regexp.MustCompile(`[;|&$` + "`" + `(){}[\]<>]`)
 
@@ -79,14 +90,14 @@ func ValidateCommand(cmd string) error {
 
 	// Allow absolute paths to known commands
 	if strings.HasPrefix(cmd, "/") {
-		if !allowedCommands[basename] {
+		if !allowedCommands[basename] && !extraAllowedCommands[basename] {
 			return fmt.Errorf("command %q not in allowlist", basename)
 		}
 		return nil
 	}
 
 	// Bare command must be in allowlist
-	if !allowedCommands[cmd] {
+	if !allowedCommands[cmd] && !extraAllowedCommands[cmd] {
 		return fmt.Errorf("command %q not in allowlist (allowed: node, npx, python, python3, ruby, go, java, uvx, uv, pipx, deno, bun)", cmd)
 	}
 	return nil

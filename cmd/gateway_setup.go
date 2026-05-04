@@ -161,6 +161,12 @@ func setupToolRegistry(
 		slog.Info("credential scrubbing disabled")
 	}
 
+	// MCP extra allowed commands (extends the hardcoded allowlist for stdio transport)
+	if len(cfg.Tools.AllowedCommands) > 0 {
+		mcpbridge.SetExtraAllowedCommands(cfg.Tools.AllowedCommands)
+		slog.Info("MCP extra commands allowed", "commands", cfg.Tools.AllowedCommands)
+	}
+
 	// MCP servers (config-based: shared across all agents)
 	if len(cfg.Tools.McpServers) > 0 {
 		mcpMgr = mcpbridge.NewManager(toolsReg, mcpbridge.WithConfigs(cfg.Tools.McpServers))

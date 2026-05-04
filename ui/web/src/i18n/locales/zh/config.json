@@ -209,6 +209,10 @@
   "tools.execAskModeTip": "在执行命令之前何时提示用户审批。",
   "tools.execAllowlistLabel": "允许的命令（每行一个模式）",
   "tools.scrubCredentials": "擦除凭证",
+  "tools.mcpCommands": "MCP 允许的命令",
+  "tools.mcpCommandsLabel": "额外命令",
+  "tools.mcpCommandsTip": "允许作为 MCP 服务器命令（stdio 传输）的自定义二进制文件名称。默认运行时（node、python 等）始终允许。",
+  "tools.mcpCommandsPlaceholder": "输入命令名称后按 Enter",
 
   "tts.title": "文字转语音",
   "tts.configured": "已配置",

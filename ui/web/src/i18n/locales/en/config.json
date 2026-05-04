@@ -209,6 +209,10 @@
   "tools.execAskModeTip": "When to prompt the user for approval before executing a command.",
   "tools.execAllowlistLabel": "Allowed Commands (one pattern per line)",
   "tools.scrubCredentials": "Scrub Credentials",
+  "tools.mcpCommands": "MCP Allowed Commands",
+  "tools.mcpCommandsLabel": "Extra Commands",
+  "tools.mcpCommandsTip": "Custom binary names allowed as MCP server commands (stdio transport). Default runtimes (node, python, etc.) are always allowed.",
+  "tools.mcpCommandsPlaceholder": "Type command name and press Enter",
 
   "tts.title": "Text-to-Speech",
   "tts.configured": "Configured",

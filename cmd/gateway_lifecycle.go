@@ -13,6 +13,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/heartbeat"
+	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -113,6 +114,19 @@ func (d *gatewayDeps) runLifecycle(
 			d.ttsHandler.UpdateManager(newMgr)
 		}
 		slog.Info("tts config reloaded", "provider", newMgr.PrimaryProvider(), "auto", string(newMgr.AutoMode()))
+	})
+
+	// Reload MCP extra allowed commands on config changes via pub/sub.
+	d.msgBus.Subscribe("mcp-commands-reload", func(evt bus.Event) {
+		if evt.Name != bus.TopicConfigChanged {
+			return
+		}
+		updatedCfg, ok := evt.Payload.(*config.Config)
+		if !ok {
+			return
+		}
+		mcpbridge.SetExtraAllowedCommands(updatedCfg.Tools.AllowedCommands)
+		slog.Info("MCP extra commands reloaded", "commands", updatedCfg.Tools.AllowedCommands)
 	})
 
 	// Note: vault enrichment provider is resolved per-tenant at runtime,

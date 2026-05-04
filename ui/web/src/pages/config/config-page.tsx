@@ -16,6 +16,7 @@ import { AiDefaultsSection } from "./sections/ai-defaults-section";
 import { QuotaSection } from "./sections/quota-section";
 import { ToolsProfileSection } from "./sections/tools-profile-section";
 import { ToolsExecSection } from "./sections/tools-exec-section";
+import { McpCommandsSection } from "./sections/mcp-commands-section";
 import { ShellSecuritySection } from "./sections/shell-security-section";
 import { TtsSection } from "./sections/tts-section";
 import { CronSection } from "./sections/cron-section";
@@ -144,6 +145,11 @@ export function ConfigPage() {
             saving={saving}
           />
           <ShellSecuritySection
+            data={config.tools as any}
+            onSave={(v) => patch({ tools: v })}
+            saving={saving}
+          />
+          <McpCommandsSection
             data={config.tools as any}
             onSave={(v) => patch({ tools: v })}
             saving={saving}
