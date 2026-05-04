@@ -814,6 +814,49 @@ type VoiceTranscriptSummarizerConfig struct {
 	// default ("low" — bounded summarization rarely benefits from heavy
 	// reasoning). Non-reasoning models silently ignore this option.
 	ThinkingLevel string
+
+	// SkillBody, when non-empty, replaces the default summarizer
+	// system prompt. Loaded from the named skill at startup by the
+	// instance loader. Path-agnostic: the skill content reads memory
+	// via memory_search semantically rather than via hardcoded paths.
+	SkillBody string
+
+	// MemoryStore + MemoryAgentID enable agent-memory context lookup
+	// at summarization time. Both must be non-zero for the lookup to
+	// run (without them, the summarizer falls back to the legacy
+	// transcript-only call). MemoryAgentID is the UUID string of the
+	// agent whose vault the summarizer should query.
+	MemoryStore   MemoryQueryer
+	MemoryAgentID string
+
+	// SessionOutputDir is the workspace-relative directory where new
+	// session summaries get written (e.g. "voice-sessions"). Empty =
+	// disabled (no summary file gets written). Workspace path comes
+	// from MemoryWorkspace.
+	SessionOutputDir string
+	MemoryWorkspace  string
+}
+
+// MemoryQueryer is a small read+write surface the voice summarizer
+// uses for memory access. Defined locally (rather than depending on
+// store.MemoryStore) to keep the channels package free of store
+// imports — instance_loader bridges the two.
+type MemoryQueryer interface {
+	Search(ctx context.Context, query string, agentID, userID string, opts MemorySearchOpts) ([]MemorySnippet, error)
+	PutDocument(ctx context.Context, agentID, userID, path, content string) error
+}
+
+// MemorySearchOpts mirrors store.MemorySearchOptions for our caller.
+type MemorySearchOpts struct {
+	MaxResults int
+	MinScore   float64
+}
+
+// MemorySnippet mirrors store.MemorySearchResult for our caller.
+type MemorySnippet struct {
+	Path    string
+	Snippet string
+	Score   float64
 }
 
 // Truncate shortens a string to maxLen, appending "..." if truncated.

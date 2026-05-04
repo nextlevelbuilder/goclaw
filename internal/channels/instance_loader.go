@@ -40,6 +40,8 @@ type InstanceLoader struct {
 	providerReg       *providers.Registry
 	pendingCompactCfg *config.PendingCompactionConfig
 	voiceSummCfg      *config.VoiceSummarizerConfig
+	memStore          store.MemoryStore // optional — wires voice summarizer's memory context
+	skillBodyLoader   func(name string) (string, error) // optional — loads skill SKILL.md body by name
 	factories         map[string]ChannelFactory
 	manager           *Manager
 	msgBus            *bus.MessageBus
@@ -84,6 +86,22 @@ func (l *InstanceLoader) SetPendingCompactionConfig(cfg *config.PendingCompactio
 // instead of the agent's provider/model. Must be called before LoadAll/Reload.
 func (l *InstanceLoader) SetVoiceSummarizerConfig(cfg *config.VoiceSummarizerConfig) {
 	l.voiceSummCfg = cfg
+}
+
+// SetMemoryStore wires the agent memory store so the voice summarizer
+// can pull contextual snippets (contributor pages, project pages,
+// recent voice-session entries) into its system prompt.
+// Must be called before LoadAll/Reload.
+func (l *InstanceLoader) SetMemoryStore(ms store.MemoryStore) {
+	l.memStore = ms
+}
+
+// SetSkillBodyLoader wires a function that returns a skill's SKILL.md
+// body by skill name. Used by the voice summarizer to swap in skill
+// instructions as the system prompt. Must be called before
+// LoadAll/Reload.
+func (l *InstanceLoader) SetSkillBodyLoader(fn func(name string) (string, error)) {
+	l.skillBodyLoader = fn
 }
 
 // RegisterFactory registers a factory for a channel type (e.g., "telegram", "discord").
@@ -350,19 +368,54 @@ func (l *InstanceLoader) loadInstance(ctx context.Context, inst store.ChannelIns
 				}
 				maxTokens := 0
 				thinkingLevel := ""
+				sessionOutputDir := ""
+				skillName := ""
 				if l.voiceSummCfg != nil {
 					maxTokens = l.voiceSummCfg.MaxTokens
 					thinkingLevel = l.voiceSummCfg.ThinkingLevel
+					sessionOutputDir = l.voiceSummCfg.SessionOutputDir
+					skillName = l.voiceSummCfg.SkillName
 				}
+
+				// Resolve agent workspace + memory adapter (best-effort —
+				// missing pieces just disable that capability).
+				var memAdapter MemoryQueryer
+				memAgentID := ""
+				memWorkspace := ""
+				if ag != nil && ag.ID != uuid.Nil {
+					memAgentID = ag.ID.String()
+					memWorkspace = ag.Workspace
+				}
+				if l.memStore != nil && memAgentID != "" {
+					memAdapter = newMemoryStoreAdapter(l.memStore)
+				}
+
+				skillBody := ""
+				if skillName != "" && l.skillBodyLoader != nil {
+					if body, err := l.skillBodyLoader(skillName); err == nil {
+						skillBody = body
+					} else {
+						slog.Warn("voice_summarizer skill not found",
+							"channel", inst.Name, "skill", skillName, "err", err)
+					}
+				}
+
 				vs.SetVoiceTranscriptSummarizer(&VoiceTranscriptSummarizerConfig{
-					Provider:        summP,
-					Model:           summModel,
-					MaxOutputTokens: maxTokens,
-					ThinkingLevel:   thinkingLevel,
+					Provider:         summP,
+					Model:            summModel,
+					MaxOutputTokens:  maxTokens,
+					ThinkingLevel:    thinkingLevel,
+					SkillBody:        skillBody,
+					MemoryStore:      memAdapter,
+					MemoryAgentID:    memAgentID,
+					SessionOutputDir: sessionOutputDir,
+					MemoryWorkspace:  memWorkspace,
 				})
 				slog.Debug("voice transcript summarizer configured",
 					"channel", inst.Name, "provider", summP.Name(), "model", summModel,
-					"source", summSource, "thinking_level", thinkingLevel)
+					"source", summSource, "thinking_level", thinkingLevel,
+					"skill", skillName, "memory_wired", memAdapter != nil,
+					"session_output_dir", sessionOutputDir)
 			}
 		} else {
 			attemptedProvider := ""

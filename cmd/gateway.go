@@ -507,6 +507,18 @@ func runGateway() {
 		instanceLoader.SetProviderRegistry(providerRegistry)
 		instanceLoader.SetPendingCompactionConfig(cfg.Channels.PendingCompaction)
 		instanceLoader.SetVoiceSummarizerConfig(cfg.Channels.VoiceSummarizer)
+		if pgStores.Memory != nil {
+			instanceLoader.SetMemoryStore(pgStores.Memory)
+		}
+		if skillsLoader != nil {
+			instanceLoader.SetSkillBodyLoader(func(name string) (string, error) {
+				body, ok := skillsLoader.LoadSkill(context.Background(), name)
+				if !ok {
+					return "", fmt.Errorf("skill %q not found", name)
+				}
+				return body, nil
+			})
+		}
 		instanceLoader.RegisterFactory(channels.TypeTelegram, telegram.FactoryWithStoresAndAudio(pgStores.Agents, pgStores.ConfigPermissions, pgStores.Teams, pgStores.SubagentTasks, pgStores.PendingMessages, audioMgr))
 		instanceLoader.RegisterFactory(channels.TypeDiscord, discord.FactoryWithStoresAndAudio(pgStores.Agents, pgStores.ConfigPermissions, pgStores.PendingMessages, audioMgr))
 		instanceLoader.RegisterFactory(channels.TypeFeishu, feishu.FactoryWithPendingStoreAndAudio(pgStores.PendingMessages, audioMgr))

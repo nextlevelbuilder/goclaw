@@ -22,6 +22,20 @@ type VoiceSummarizerConfig struct {
 	Model         string `json:"model,omitempty"`          // model for voice summarization (e.g. "deepseek/deepseek-v4-pro")
 	MaxTokens     int    `json:"max_tokens,omitempty"`     // max output tokens; 0 = BuildVoiceTranscriptSummarizer default (4096)
 	ThinkingLevel string `json:"thinking_level,omitempty"` // reasoning_effort for reasoning models: "minimal" / "low" / "medium" / "high". Empty = "low".
+
+	// SessionOutputDir is the relative path (under the agent's
+	// memory dir) where new voice-session summary files get written
+	// after a successful summarization. Empty = "voice-sessions/".
+	// The disk seeder (see channels.memory_seeder) picks them up and
+	// indexes them within the next sweep so subsequent sessions can
+	// reference them as temporal context.
+	SessionOutputDir string `json:"session_output_dir,omitempty"`
+	// SkillName is the goclaw skill to load instructions from at
+	// summarization time. The skill's body is injected as a system
+	// prompt, replacing the default voiceSummaryPrompt. Empty =
+	// keep the default. Use this to swap in a project-specific
+	// summarization style without modifying goclaw code.
+	SkillName string `json:"skill_name,omitempty"`
 }
 
 // MemorySeederConfig configures the disk → Postgres memory sweeper that
