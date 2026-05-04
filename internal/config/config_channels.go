@@ -11,6 +11,18 @@ type PendingCompactionConfig struct {
 	Model      string `json:"model,omitempty"`       // model for summarization; empty = use agent's model
 }
 
+// VoiceSummarizerConfig overrides the provider+model used by the voice
+// transcript summarizer (Discord voice session close). Without this
+// override, the summarizer reuses the agent's provider+model, which can
+// be undesirable when the agent runs on an expensive reasoning model
+// (e.g. gpt-5) but the summary task is cheap and bounded enough that a
+// lighter model is fine. Empty = inherit from agent (current behavior).
+type VoiceSummarizerConfig struct {
+	Provider  string `json:"provider,omitempty"`   // LLM provider name registered with the gateway (e.g. "deepseek")
+	Model     string `json:"model,omitempty"`      // model for voice summarization (e.g. "deepseek-chat")
+	MaxTokens int    `json:"max_tokens,omitempty"` // max output tokens; 0 = use BuildVoiceTranscriptSummarizer's default
+}
+
 // ChannelsConfig contains per-channel configuration.
 type ChannelsConfig struct {
 	Telegram          TelegramConfig           `json:"telegram"`
@@ -21,6 +33,7 @@ type ChannelsConfig struct {
 	ZaloPersonal      ZaloPersonalConfig       `json:"zalo_personal"`
 	Feishu            FeishuConfig             `json:"feishu"`
 	PendingCompaction *PendingCompactionConfig `json:"pending_compaction,omitempty"` // global pending message compaction settings
+	VoiceSummarizer   *VoiceSummarizerConfig   `json:"voice_summarizer,omitempty"`   // override provider/model for voice transcript summarization
 }
 
 type TelegramConfig struct {

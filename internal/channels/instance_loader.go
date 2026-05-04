@@ -39,6 +39,7 @@ type InstanceLoader struct {
 	agentStore        store.AgentStore
 	providerReg       *providers.Registry
 	pendingCompactCfg *config.PendingCompactionConfig
+	voiceSummCfg      *config.VoiceSummarizerConfig
 	factories         map[string]ChannelFactory
 	manager           *Manager
 	msgBus            *bus.MessageBus
@@ -76,6 +77,13 @@ func (l *InstanceLoader) SetProviderRegistry(reg *providers.Registry) {
 // Must be called before LoadAll/Reload.
 func (l *InstanceLoader) SetPendingCompactionConfig(cfg *config.PendingCompactionConfig) {
 	l.pendingCompactCfg = cfg
+}
+
+// SetVoiceSummarizerConfig sets the global voice transcript summarizer override.
+// When set with a non-empty Provider+Model, the voice summarizer uses this
+// instead of the agent's provider/model. Must be called before LoadAll/Reload.
+func (l *InstanceLoader) SetVoiceSummarizerConfig(cfg *config.VoiceSummarizerConfig) {
+	l.voiceSummCfg = cfg
 }
 
 // RegisterFactory registers a factory for a channel type (e.g., "telegram", "discord").
@@ -318,17 +326,39 @@ func (l *InstanceLoader) loadInstance(ctx context.Context, inst store.ChannelIns
 			slog.Debug("pending compaction configured", "channel", inst.Name, "provider", p.Name(), "model", model,
 				"threshold", cc.Threshold, "keep_recent", cc.KeepRecent, "max_tokens", cc.MaxTokens)
 
-			// Reuse the same provider/model for voice transcript
-			// summarization if the channel exposes the hook. The
-			// summarizer is invoked at voice-session close from the
-			// supervisor's teardown goroutine; nil-safe at every layer.
+			// Wire the voice transcript summarizer if the channel exposes
+			// the hook. Prefer the explicit voice_summarizer override
+			// from config when present (e.g. so the agent runs on gpt-5
+			// for chat but voice-session summaries run on a cheaper
+			// model like deepseek-chat). Fall back to the agent's
+			// provider+model if no override.
 			if vs, ok := ch.(VoiceTranscriptSummarizable); ok {
+				summP, summModel := p, model
+				summSource := "agent"
+				if l.voiceSummCfg != nil && l.voiceSummCfg.Provider != "" {
+					if vp, err := l.providerReg.Get(tctx, l.voiceSummCfg.Provider); err == nil {
+						summP = vp
+						summModel = l.voiceSummCfg.Model
+						if summModel == "" {
+							summModel = vp.DefaultModel()
+						}
+						summSource = "override"
+					} else {
+						slog.Warn("voice_summarizer override provider not found; using agent's provider",
+							"channel", inst.Name, "override_provider", l.voiceSummCfg.Provider, "err", err)
+					}
+				}
+				maxTokens := 0
+				if l.voiceSummCfg != nil {
+					maxTokens = l.voiceSummCfg.MaxTokens
+				}
 				vs.SetVoiceTranscriptSummarizer(&VoiceTranscriptSummarizerConfig{
-					Provider: p,
-					Model:    model,
+					Provider:        summP,
+					Model:           summModel,
+					MaxOutputTokens: maxTokens,
 				})
 				slog.Debug("voice transcript summarizer configured",
-					"channel", inst.Name, "provider", p.Name(), "model", model)
+					"channel", inst.Name, "provider", summP.Name(), "model", summModel, "source", summSource)
 			}
 		} else {
 			attemptedProvider := ""
