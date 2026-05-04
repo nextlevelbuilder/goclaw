@@ -27,7 +27,7 @@ func TestGeminiProtocolMapping(t *testing.T) {
 		t.Fatalf("Spawn failed: %v", err)
 	}
 
-	sid, err := proc.NewSession(ctx)
+	sid, err := proc.NewSession(ctx, "")
 	if err != nil {
 		t.Fatalf("NewSession failed: %v", err)
 	}

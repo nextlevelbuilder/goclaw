@@ -112,6 +112,26 @@ func builtinToolSeedData() []store.BuiltinToolDef {
 		{Name: "team_tasks", DisplayName: "Team Tasks", Description: "View, create, update, and complete tasks on the team task board", Category: "teams", Enabled: true,
 			Requires: []string{"managed_mode", "teams"},
 		},
+
+		// general — utility tools available to every agent (incl. ACP via MCP bridge)
+		{Name: "datetime", DisplayName: "Date / Time", Description: "Get current date and time with optional IANA timezone (returns UTC + local).", Category: "general", Enabled: true},
+
+		// subagents (continued)
+		{Name: "delegate", DisplayName: "Delegate Task", Description: "Delegate a task to another linked agent (inter-agent orchestration).", Category: "subagents", Enabled: true},
+
+		// skills (continued)
+		{Name: "mcp_tool_search", DisplayName: "MCP Tool Search", Description: "BM25 search over deferred MCP tool catalog to discover relevant tools by query.", Category: "skills", Enabled: true},
+
+		// messaging (continued)
+		{Name: "list_group_members", DisplayName: "List Group Members", Description: "List members in a group chat (Telegram group, etc.).", Category: "messaging", Enabled: true},
+
+		// memory — Knowledge Vault
+		{Name: "vault_read", DisplayName: "Vault Read", Description: "Read a document from the Knowledge Vault by path or [[wikilink]].", Category: "memory", Enabled: true,
+			Requires: []string{"vault"},
+		},
+		{Name: "vault_search", DisplayName: "Vault Search", Description: "Hybrid search (lexical + embeddings) over the Knowledge Vault.", Category: "memory", Enabled: true,
+			Requires: []string{"vault"},
+		},
 	}
 
 	// Lite edition: remove skill management tools — not available on desktop.

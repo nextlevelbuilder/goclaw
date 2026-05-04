@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+
+	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 )
 
 type contextKey string
@@ -328,12 +330,16 @@ func WithLocale(ctx context.Context, locale string) context.Context {
 	return context.WithValue(ctx, LocaleKey, locale)
 }
 
-// LocaleFromContext extracts the locale from context. Returns "en" if not set.
+// LocaleFromContext extracts the locale from context. When no locale is set,
+// falls back to i18n.Default() which cascades through GOCLAW_DEFAULT_LOCALE,
+// the POSIX system locale (LC_ALL/LC_MESSAGES/LANG), and finally "en". This
+// keeps cron / heartbeat / other system-triggered code paths from defaulting
+// to English when the operator has configured a non-English environment.
 func LocaleFromContext(ctx context.Context) string {
 	if v, ok := ctx.Value(LocaleKey).(string); ok && v != "" {
 		return v
 	}
-	return "en"
+	return i18n.Default()
 }
 
 // WithTenantID returns a new context with the given tenant UUID.

@@ -161,14 +161,24 @@ func setupToolRegistry(
 		slog.Info("credential scrubbing disabled")
 	}
 
-	// MCP servers (config-based: shared across all agents)
+	// MCP servers (config-based: shared across all agents).
+	// We always create a Manager so mcp_tool_search has a backing instance —
+	// even with zero configured servers it returns "no tools found" gracefully.
 	if len(cfg.Tools.McpServers) > 0 {
 		mcpMgr = mcpbridge.NewManager(toolsReg, mcpbridge.WithConfigs(cfg.Tools.McpServers))
 		if err := mcpMgr.Start(context.Background()); err != nil {
 			slog.Warn("mcp.startup_errors", "error", err)
 		}
 		slog.Info("MCP servers initialized", "configured", len(cfg.Tools.McpServers), "tools", len(mcpMgr.ToolNames()))
+	} else {
+		mcpMgr = mcpbridge.NewManager(toolsReg)
+		slog.Info("MCP manager initialized empty (no servers configured)")
 	}
+
+	// mcp_tool_search: BM25 search over deferred MCP tools so the LLM can discover
+	// external integrations (GitHub/Slack/Postgres MCP, etc.) on demand.
+	toolsReg.Register(mcpbridge.NewMCPToolSearchTool(mcpMgr))
+	slog.Info("mcp_tool_search tool registered")
 
 	// Exec approval system — always active (deny patterns + safe bins + configurable ask mode)
 	{

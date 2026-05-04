@@ -57,34 +57,54 @@ func NewToolBridge(workspace string, opts ...ToolBridgeOption) *ToolBridge {
 // Handle dispatches agent→client requests by method name.
 // Implements the RequestHandler signature for Conn.
 func (tb *ToolBridge) Handle(ctx context.Context, method string, params json.RawMessage) (any, error) {
+	// Method names: ACP spec uses snake_case (fs/read_text_file,
+	// session/request_permission, etc). The original camelCase aliases
+	// (fs/readTextFile, permission/request) are retained for Claude CLI
+	// backward compatibility.
+	session := goclawSessionFromCtx(ctx)
 	switch method {
-	case "fs/readTextFile":
+	case "fs/read_text_file", "fs/readTextFile":
 		if tb.permMode == "deny-all" {
+			slog.Warn("security.tool_denied", "session", session, "tool", method, "reason", "deny-all")
 			return nil, fmt.Errorf("read denied by permission mode: %s", tb.permMode)
 		}
 		var req ReadTextFileRequest
 		if err := json.Unmarshal(params, &req); err != nil {
 			return nil, fmt.Errorf("invalid params: %w", err)
 		}
-		return tb.readFile(req)
-	case "fs/writeTextFile":
+		result, err := tb.readFile(req)
+		if err == nil {
+			slog.Info("security.tool_granted", "session", session, "tool", method, "path", req.Path)
+		}
+		return result, err
+	case "fs/write_text_file", "fs/writeTextFile":
 		if tb.permMode == "deny-all" || tb.permMode == "approve-reads" {
+			slog.Warn("security.tool_denied", "session", session, "tool", method, "reason", tb.permMode)
 			return nil, fmt.Errorf("write denied by permission mode: %s", tb.permMode)
 		}
 		var req WriteTextFileRequest
 		if err := json.Unmarshal(params, &req); err != nil {
 			return nil, fmt.Errorf("invalid params: %w", err)
 		}
-		return tb.writeFile(req)
+		result, err := tb.writeFile(req)
+		if err == nil {
+			slog.Info("security.tool_granted", "session", session, "tool", method, "path", req.Path)
+		}
+		return result, err
 	case "terminal/create":
 		if tb.permMode == "deny-all" || tb.permMode == "approve-reads" {
+			slog.Warn("security.tool_denied", "session", session, "tool", method, "reason", tb.permMode)
 			return nil, fmt.Errorf("terminal denied by permission mode: %s", tb.permMode)
 		}
 		var req CreateTerminalRequest
 		if err := json.Unmarshal(params, &req); err != nil {
 			return nil, fmt.Errorf("invalid params: %w", err)
 		}
-		return tb.createTerminal(req)
+		result, err := tb.createTerminal(req)
+		if err == nil {
+			slog.Info("security.tool_granted", "session", session, "tool", method, "command", req.Command)
+		}
+		return result, err
 	case "terminal/output":
 		var req TerminalOutputRequest
 		if err := json.Unmarshal(params, &req); err != nil {
@@ -97,7 +117,7 @@ func (tb *ToolBridge) Handle(ctx context.Context, method string, params json.Raw
 			return nil, fmt.Errorf("invalid params: %w", err)
 		}
 		return tb.releaseTerminal(req)
-	case "terminal/waitForExit":
+	case "terminal/wait_for_exit", "terminal/waitForExit":
 		var req WaitForTerminalExitRequest
 		if err := json.Unmarshal(params, &req); err != nil {
 			return nil, fmt.Errorf("invalid params: %w", err)
@@ -105,6 +125,7 @@ func (tb *ToolBridge) Handle(ctx context.Context, method string, params json.Raw
 		return tb.waitForExit(ctx, req)
 	case "terminal/kill":
 		if tb.permMode == "deny-all" {
+			slog.Warn("security.tool_denied", "session", session, "tool", method, "reason", "deny-all")
 			return nil, fmt.Errorf("terminal kill denied by permission mode: %s", tb.permMode)
 		}
 		var req KillTerminalRequest
@@ -117,7 +138,13 @@ func (tb *ToolBridge) Handle(ctx context.Context, method string, params json.Raw
 		if err := json.Unmarshal(params, &req); err != nil {
 			return nil, fmt.Errorf("invalid params: %w", err)
 		}
-		return tb.handlePermission(req)
+		return tb.handlePermission(ctx, req)
+	case "session/request_permission":
+		var req SessionRequestPermissionRequest
+		if err := json.Unmarshal(params, &req); err != nil {
+			return nil, fmt.Errorf("invalid params: %w", err)
+		}
+		return tb.handleSessionPermission(ctx, req)
 	default:
 		return nil, fmt.Errorf("unknown method: %s", method)
 	}
@@ -152,21 +179,75 @@ func (tb *ToolBridge) writeFile(req WriteTextFileRequest) (*WriteTextFileRespons
 }
 
 // handlePermission responds to permission requests based on configured mode.
-func (tb *ToolBridge) handlePermission(req RequestPermissionRequest) (*RequestPermissionResponse, error) {
+func (tb *ToolBridge) handlePermission(ctx context.Context, req RequestPermissionRequest) (*RequestPermissionResponse, error) {
+	session := goclawSessionFromCtx(ctx)
 	switch tb.permMode {
 	case "deny-all":
+		slog.Warn("security.tool_denied", "session", session, "tool", req.ToolName, "reason", "deny-all")
 		return &RequestPermissionResponse{Outcome: "denied"}, nil
 	case "approve-reads":
-		// Approve read-only tools, deny write/exec tools
 		lower := strings.ToLower(req.ToolName)
 		if strings.Contains(lower, "read") || strings.Contains(lower, "glob") ||
 			strings.Contains(lower, "grep") || strings.Contains(lower, "search") ||
 			strings.Contains(lower, "list") || strings.Contains(lower, "view") {
+			slog.Info("security.tool_granted", "session", session, "tool", req.ToolName, "mode", "approve-reads")
 			return &RequestPermissionResponse{Outcome: "approved"}, nil
 		}
+		slog.Warn("security.tool_denied", "session", session, "tool", req.ToolName, "reason", "approve-reads:write-blocked")
 		return &RequestPermissionResponse{Outcome: "denied"}, nil
 	default: // "approve-all" or unknown → approve
+		slog.Info("security.tool_granted", "session", session, "tool", req.ToolName, "mode", "approve-all")
 		return &RequestPermissionResponse{Outcome: "approved"}, nil
+	}
+}
+
+// handleSessionPermission handles the ACP-spec session/request_permission RPC.
+// Selection is by Kind (allow_once / allow_always / reject_once / reject_always)
+// rather than by OptionID strings, since the spec leaves OptionID as an
+// agent-defined identifier with no guaranteed values.
+func (tb *ToolBridge) handleSessionPermission(ctx context.Context, req SessionRequestPermissionRequest) (*SessionRequestPermissionResponse, error) {
+	session := goclawSessionFromCtx(ctx)
+
+	pickByKind := func(kinds ...string) string {
+		for _, want := range kinds {
+			for _, opt := range req.Options {
+				if opt.Kind == want {
+					return opt.OptionID
+				}
+			}
+		}
+		return ""
+	}
+	cancelled := &SessionRequestPermissionResponse{Outcome: SessionPermOutcome{Outcome: "cancelled"}}
+
+	switch tb.permMode {
+	case "deny-all":
+		slog.Warn("security.tool_denied", "session", session, "tool", req.ToolCall.Title, "reason", "deny-all")
+		return cancelled, nil
+	case "approve-reads":
+		lower := strings.ToLower(req.ToolCall.Title)
+		if strings.Contains(lower, "read") || strings.Contains(lower, "glob") ||
+			strings.Contains(lower, "grep") || strings.Contains(lower, "search") ||
+			strings.Contains(lower, "list") || strings.Contains(lower, "view") {
+			id := pickByKind("allow_once", "allow_always")
+			if id == "" {
+				return cancelled, nil
+			}
+			slog.Info("security.tool_granted", "session", session, "tool", req.ToolCall.Title, "mode", "approve-reads", "optionId", id)
+			return &SessionRequestPermissionResponse{Outcome: SessionPermOutcome{Outcome: "selected", OptionID: id}}, nil
+		}
+		slog.Warn("security.tool_denied", "session", session, "tool", req.ToolCall.Title, "reason", "approve-reads:write-blocked")
+		return cancelled, nil
+	default: // "approve-all"
+		// Prefer allow_once over allow_always so we don't blanket-trust
+		// across the session. Fall back to allow_always if only that is offered.
+		id := pickByKind("allow_once", "allow_always")
+		if id == "" {
+			slog.Warn("security.tool_denied", "session", session, "tool", req.ToolCall.Title, "reason", "no allow option offered")
+			return cancelled, nil
+		}
+		slog.Info("security.tool_granted", "session", session, "tool", req.ToolCall.Title, "mode", "approve-all", "optionId", id)
+		return &SessionRequestPermissionResponse{Outcome: SessionPermOutcome{Outcome: "selected", OptionID: id}}, nil
 	}
 }
 

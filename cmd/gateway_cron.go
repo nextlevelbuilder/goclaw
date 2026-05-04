@@ -61,29 +61,18 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 		// Resolve channel type for system prompt context.
 		channelType := resolveChannelType(channelMgr, channel)
 
-		// Build cron context so the agent knows delivery target and requester.
-		var extraPrompt string
-		if job.Deliver && job.DeliverChannel != "" && job.DeliverTo != "" {
-			extraPrompt = fmt.Sprintf(
-				"[Cron Job]\nThis is scheduled job \"%s\" (ID: %s).\n"+
-					"Requester: user %s on channel \"%s\" (chat %s).\n"+
-					"Your response will be automatically delivered to that chat — just produce the content directly.",
-				job.Name, job.ID, job.UserID, job.DeliverChannel, job.DeliverTo,
-			)
-		} else {
-			extraPrompt = fmt.Sprintf(
-				"[Cron Job]\nThis is scheduled job \"%s\" (ID: %s), created by user %s.\n"+
-					"Delivery is not configured — respond normally.",
-				job.Name, job.ID, job.UserID,
-			)
-		}
-
 		// Build context with tenant scope and timeout so agent loop events are
 		// scoped correctly and a hung agent can't block the cron scheduler forever.
 		jobTimeout := cfg.Cron.JobTimeoutDuration()
 		cronCtx, cancelCron := context.WithTimeout(context.Background(), jobTimeout)
 		defer cancelCron()
 		cronCtx = store.WithTenantID(cronCtx, job.TenantID)
+
+		// Localised cron meta block. Locale is resolved from ctx — for cron the
+		// ctx has no caller-supplied locale so store.LocaleFromContext cascades
+		// through GOCLAW_DEFAULT_LOCALE → POSIX system locale → "en". The agent
+		// loop sees this prompt prefixed to its request and will mirror language.
+		extraPrompt := buildCronExtraPrompt(cronCtx, job)
 
 		// Reset session before each cron run to prevent tool errors from previous
 		// runs from polluting the context and blocking future executions (#294).
@@ -165,4 +154,76 @@ func resolveCronPeerKind(job *store.CronJob) string {
 		return "group"
 	}
 	return ""
+}
+
+// buildCronExtraPrompt formats the per-job meta block prepended to the agent's
+// system prompt. The block tells the LLM this run originated from a cron job
+// and where (if anywhere) the response will be delivered.
+//
+// Locale is resolved from ctx via store.LocaleFromContext, which cascades
+// through GOCLAW_DEFAULT_LOCALE → POSIX system locale → "en". For cron the ctx
+// carries no caller-supplied locale, so the cascade picks the operator's
+// configured language. The block is emitted in that language so the LLM is
+// not nudged into English by a contradictory English meta-prompt while the
+// agent's own persona expects Korean / Vietnamese / etc output.
+func buildCronExtraPrompt(ctx context.Context, job *store.CronJob) string {
+	deliveryConfigured := job.Deliver && job.DeliverChannel != "" && job.DeliverTo != ""
+	switch store.LocaleFromContext(ctx) {
+	case "ko":
+		if deliveryConfigured {
+			return fmt.Sprintf(
+				"[크론 작업]\n예약된 작업 \"%s\" (ID: %s) 실행입니다.\n"+
+					"요청자: 사용자 %s, 채널 \"%s\" (chat %s).\n"+
+					"응답은 해당 채팅으로 자동 전달되니 본문만 그대로 작성하세요.",
+				job.Name, job.ID, job.UserID, job.DeliverChannel, job.DeliverTo,
+			)
+		}
+		return fmt.Sprintf(
+			"[크론 작업]\n예약된 작업 \"%s\" (ID: %s), 생성자 %s.\n"+
+				"전달 대상이 설정되어 있지 않으니 평소처럼 응답하세요.",
+			job.Name, job.ID, job.UserID,
+		)
+	case "vi":
+		if deliveryConfigured {
+			return fmt.Sprintf(
+				"[Cron Job]\nTác vụ định kỳ \"%s\" (ID: %s) đang chạy.\n"+
+					"Người yêu cầu: %s, kênh \"%s\" (chat %s).\n"+
+					"Phản hồi sẽ tự động gửi tới cuộc trò chuyện đó — chỉ cần viết nội dung trực tiếp.",
+				job.Name, job.ID, job.UserID, job.DeliverChannel, job.DeliverTo,
+			)
+		}
+		return fmt.Sprintf(
+			"[Cron Job]\nTác vụ định kỳ \"%s\" (ID: %s), do người dùng %s tạo.\n"+
+				"Chưa cấu hình kênh giao — phản hồi như bình thường.",
+			job.Name, job.ID, job.UserID,
+		)
+	case "zh":
+		if deliveryConfigured {
+			return fmt.Sprintf(
+				"[Cron Job]\n计划任务 \"%s\" (ID: %s) 正在执行。\n"+
+					"请求者:用户 %s,频道 \"%s\" (chat %s).\n"+
+					"响应会自动发送到该聊天 —— 直接生成内容即可。",
+				job.Name, job.ID, job.UserID, job.DeliverChannel, job.DeliverTo,
+			)
+		}
+		return fmt.Sprintf(
+			"[Cron Job]\n计划任务 \"%s\" (ID: %s),由用户 %s 创建。\n"+
+				"未配置投递目标 —— 正常响应即可。",
+			job.Name, job.ID, job.UserID,
+		)
+	}
+	// Default English.
+	if deliveryConfigured {
+		return fmt.Sprintf(
+			"[Cron Job]\nThis is scheduled job \"%s\" (ID: %s).\n"+
+				"Requester: user %s on channel \"%s\" (chat %s).\n"+
+				"Your response will be automatically delivered to that chat — just produce the content directly.",
+			job.Name, job.ID, job.UserID, job.DeliverChannel, job.DeliverTo,
+		)
+	}
+	return fmt.Sprintf(
+		"[Cron Job]\nThis is scheduled job \"%s\" (ID: %s), created by user %s.\n"+
+			"Delivery is not configured — respond normally.",
+		job.Name, job.ID, job.UserID,
+	)
 }
