@@ -68,9 +68,17 @@ func setupMemoryDiskSeeder(ctx context.Context, cfg *config.Config, pgStores *st
 			MaxFileBytes: seederCfg.MaxFileBytes,
 		}
 
+		// Tenant-scoped sweep ctx: ListDocuments / PutDocument /
+		// IndexDocument all require a tenant_id in ctx (otherwise they
+		// fail with "tenant_id required"). Use the agent's own
+		// tenant_id so all writes land under the right tenant. Note we
+		// don't reuse lookupCtx (cross-tenant) here — the document
+		// scope IS tenant-bound; only the agent enumeration was not.
+		sweepCtx := store.WithTenantID(ctx, agent.TenantID)
+
 		// Run initial pass on a goroutine so a slow first sweep doesn't
 		// stall gateway startup. Each agent gets its own goroutine.
-		go runSeederLoop(ctx, seeder, key, interval, oneShot)
+		go runSeederLoop(sweepCtx, seeder, key, interval, oneShot)
 		slog.Info("memory disk seeder started",
 			"agent_key", key,
 			"workspace", agent.Workspace,
