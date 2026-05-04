@@ -61,9 +61,16 @@ func (s *ToolStage) Execute(ctx context.Context, state *RunState) error {
 			HookEvent: hooks.EventPreToolUse,
 		}); r.Decision == hooks.DecisionBlock {
 			// Inject synthetic blocked tool message and skip actual execution.
+			// Surface the script reason when present so the hook can self-
+			// document why the call was blocked (e.g. retry hints). Fall back
+			// to the generic line for non-script handlers and silent scripts.
+			content := "Hook blocked: pre_tool_use"
+			if r.Reason != "" {
+				content = "Hook blocked: pre_tool_use — " + r.Reason
+			}
 			state.Messages.AppendPending(providers.Message{
 				Role:       "tool",
-				Content:    "Hook blocked: pre_tool_use",
+				Content:    content,
 				ToolCallID: tc.ID,
 			})
 			state.Tool.TotalToolCalls++

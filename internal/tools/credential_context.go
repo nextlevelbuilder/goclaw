@@ -32,7 +32,11 @@ func GenerateCredentialContext(creds []store.SecureCLIBinary) string {
 	b.WriteString("### Available CLIs:\n\n")
 
 	for _, c := range creds {
-		b.WriteString(fmt.Sprintf("**%s** — %s\n", c.BinaryName, c.Description))
+		if c.AllowChainExec {
+			b.WriteString(fmt.Sprintf("**%s** — %s (chain exec: credentials injected even in shell chains)\n", c.BinaryName, c.Description))
+		} else {
+			b.WriteString(fmt.Sprintf("**%s** — %s\n", c.BinaryName, c.Description))
+		}
 		if blocked := summarizeDenyPatterns(c.DenyArgs); blocked != "" {
 			b.WriteString(fmt.Sprintf("  Blocked: %s\n", blocked))
 		}

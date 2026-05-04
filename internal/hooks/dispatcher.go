@@ -241,7 +241,10 @@ func (d *stdDispatcher) runSync(ctx context.Context, ev Event, chain []HookConfi
 		switch dec {
 		case DecisionBlock:
 			d.cb.record(ctx, cfg.ID, d.now(), d.store)
-			return FireResult{Decision: DecisionBlock}, nil
+			// Forward the script reason so callers can surface a self-
+			// documenting message to the agent. Reason stays empty for
+			// non-script handlers and for scripts that did not set one.
+			return FireResult{Decision: DecisionBlock, Reason: scriptRes.Reason}, nil
 		case DecisionTimeout:
 			d.cb.record(ctx, cfg.ID, d.now(), d.store)
 			if cfg.OnTimeout == DecisionBlock {

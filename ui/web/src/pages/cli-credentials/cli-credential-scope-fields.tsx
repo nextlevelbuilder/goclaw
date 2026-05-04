@@ -31,6 +31,21 @@ export function CliCredentialScopeFields({ form }: CliCredentialScopeFieldsProps
         />
       </div>
 
+      {/* Allow chain exec */}
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <Label htmlFor="cc-chain-exec">{t("form.allowChainExec")}</Label>
+          <p className="text-xs text-muted-foreground">{t("form.allowChainExecHint")}</p>
+        </div>
+        <Controller
+          control={control}
+          name="allowChainExec"
+          render={({ field }) => (
+            <Switch id="cc-chain-exec" checked={field.value} onCheckedChange={field.onChange} />
+          )}
+        />
+      </div>
+
       <div className="flex items-center gap-2">
         <Controller
           control={control}

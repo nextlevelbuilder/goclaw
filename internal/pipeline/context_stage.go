@@ -59,6 +59,9 @@ func (s *ContextStage) Execute(ctx context.Context, state *RunState) error {
 		RawInput:  state.Input.Message,
 		HookEvent: hooks.EventUserPromptSubmit,
 	}); r.Decision == hooks.DecisionBlock {
+		if r.Reason != "" {
+			return fmt.Errorf("hook blocked user_prompt_submit: %s", r.Reason)
+		}
 		return fmt.Errorf("hook blocked user_prompt_submit")
 	} else if r.UpdatedRawInput != nil {
 		state.Input.Message = *r.UpdatedRawInput

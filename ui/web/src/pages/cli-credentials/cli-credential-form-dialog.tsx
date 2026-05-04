@@ -62,6 +62,7 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
       timeout: 30,
       tips: "",
       isGlobal: true,
+      allowChainExec: false,
       enabled: true,
     },
   });
@@ -79,6 +80,7 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
       timeout: credential?.timeout_seconds ?? 30,
       tips: credential?.tips ?? "",
       isGlobal: credential?.is_global ?? true,
+        allowChainExec: credential?.allow_chain_exec ?? false,
       enabled: credential?.enabled ?? true,
     });
     setEnvValues({});
@@ -183,6 +185,7 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
         timeout_seconds: values.timeout,
         tips: values.tips?.trim() ?? "",
         is_global: values.isGlobal,
+        allow_chain_exec: values.allowChainExec,
         enabled: values.enabled,
       };
       if (selectedPreset !== NONE_PRESET) payload.preset = selectedPreset;
