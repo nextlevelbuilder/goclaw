@@ -5,10 +5,14 @@ import (
 	"strings"
 )
 
+type webSearchProviderOptions struct {
+	BaseURL string
+}
+
 // buildProviderByName returns the SearchProvider for a known name.
 // Returns nil for unknown names. DDG ignores apiKey (not required).
 // maxResults <= 0 falls back to defaultSearchCount.
-func buildProviderByName(name, apiKey string, maxResults int) SearchProvider {
+func buildProviderByName(name, apiKey string, maxResults int, opts webSearchProviderOptions) SearchProvider {
 	if maxResults <= 0 {
 		maxResults = defaultSearchCount
 	}
@@ -19,6 +23,10 @@ func buildProviderByName(name, apiKey string, maxResults int) SearchProvider {
 		return newTavilySearchProvider(apiKey, maxResults)
 	case searchProviderBrave:
 		return newBraveSearchProvider(apiKey, maxResults)
+	case searchProviderSearxng:
+		return newSearxngSearchProvider(apiKey, maxResults, opts.BaseURL)
+	case searchProviderOmniRoute:
+		return newOmniRouteSearchProvider(apiKey, maxResults, opts.BaseURL)
 	case searchProviderDuckDuckGo:
 		return newDuckDuckGoSearchProvider(maxResults)
 	default:

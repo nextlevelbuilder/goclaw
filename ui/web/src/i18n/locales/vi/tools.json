@@ -147,6 +147,7 @@
       "title": "Chuỗi nhà cung cấp tìm kiếm web",
       "description": "Kéo để sắp xếp lại nhà cung cấp tìm kiếm. Nhà cung cấp đầu tiên được bật với API key hợp lệ sẽ được thử trước.",
       "maxResults": "Số kết quả tối đa",
+      "baseUrl": "Base URL",
       "locked": "Dự phòng luôn bật",
       "cancel": "Hủy",
       "save": "Lưu",
@@ -155,6 +156,8 @@
         "exa": "Exa",
         "tavily": "Tavily",
         "brave": "Brave Search",
+        "searxng": "SearXNG",
+        "omniroute": "OmniRoute Search",
         "duckduckgo": "DuckDuckGo"
       },
       "apiKey": "API Key",
