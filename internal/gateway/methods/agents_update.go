@@ -74,6 +74,11 @@ func (m *AgentsMethods) handleUpdate(ctx context.Context, client *gateway.Client
 			return
 		}
 
+		if msg := m.authorizePredefinedAgentEdit(ctx, ag, client.UserID(), protocol.MethodAgentsUpdate, ""); msg != "" {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, msg))
+			return
+		}
+
 		updates := map[string]any{}
 		if params.Name != "" {
 			updates["display_name"] = params.Name

@@ -414,7 +414,7 @@ func TestOAuthHandlerProviderLogoutRoute(t *testing.T) {
 	}
 }
 
-func TestProvidersHandlerRequiresAdmin(t *testing.T) {
+func TestProvidersHandlerWritesRequireAdmin(t *testing.T) {
 	token := "operator-key"
 	setupTestCache(t, map[string]*store.APIKeyData{
 		crypto.HashAPIKey(token): {
@@ -428,7 +428,7 @@ func TestProvidersHandlerRequiresAdmin(t *testing.T) {
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 
-	req := httptest.NewRequest("GET", "/v1/providers", nil)
+	req := httptest.NewRequest("POST", "/v1/providers", strings.NewReader(`{"name":"x"}`))
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)

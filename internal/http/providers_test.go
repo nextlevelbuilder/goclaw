@@ -344,3 +344,67 @@ func TestProvidersHandlerUpdateRejectsIncompatibleEmbeddingDimensions(t *testing
 		t.Fatalf("embedding dimensions = %+v, want 1536 preserved", es)
 	}
 }
+
+func TestProvidersHandlerRoleMatrix(t *testing.T) {
+	const (
+		viewerToken   = "viewer-key"
+		operatorToken = "operator-key"
+		adminToken    = "admin-key"
+	)
+	setupTestCache(t, map[string]*store.APIKeyData{
+		crypto.HashAPIKey(viewerToken):   {ID: uuid.New(), Scopes: []string{"operator.read"}},
+		crypto.HashAPIKey(operatorToken): {ID: uuid.New(), Scopes: []string{"operator.write"}},
+		crypto.HashAPIKey(adminToken):    {ID: uuid.New(), Scopes: []string{"operator.admin"}},
+	})
+
+	providerStore := newMockProviderStore()
+	provider := &store.LLMProviderData{
+		BaseModel:    store.BaseModel{ID: uuid.New()},
+		Name:         "openai",
+		ProviderType: store.ProviderOpenAICompat,
+		APIBase:      "https://api.openai.com/v1",
+		APIKey:       "sk-test",
+		Enabled:      true,
+	}
+	if err := providerStore.CreateProvider(context.Background(), provider); err != nil {
+		t.Fatalf("seed provider: %v", err)
+	}
+
+	handler := NewProvidersHandler(providerStore, newMockSecretsStore(), nil, "")
+	mux := http.NewServeMux()
+	handler.RegisterRoutes(mux)
+
+	cases := []struct {
+		name       string
+		method     string
+		path       string
+		body       string
+		token      string
+		wantStatus int
+	}{
+		{"viewer-get-list", http.MethodGet, "/v1/providers", "", viewerToken, http.StatusOK},
+		{"operator-get-list", http.MethodGet, "/v1/providers", "", operatorToken, http.StatusOK},
+		{"viewer-get-one", http.MethodGet, "/v1/providers/" + provider.ID.String(), "", viewerToken, http.StatusOK},
+		{"operator-post-forbidden", http.MethodPost, "/v1/providers", `{"name":"x","provider_type":"openai_compat","api_base":"https://x/v1","api_key":"k","enabled":true}`, operatorToken, http.StatusForbidden},
+		{"viewer-put-forbidden", http.MethodPut, "/v1/providers/" + provider.ID.String(), `{"enabled":false}`, viewerToken, http.StatusForbidden},
+		{"viewer-delete-forbidden", http.MethodDelete, "/v1/providers/" + provider.ID.String(), "", viewerToken, http.StatusForbidden},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var body *bytes.Buffer
+			if tc.body != "" {
+				body = bytes.NewBufferString(tc.body)
+			} else {
+				body = bytes.NewBuffer(nil)
+			}
+			req := httptest.NewRequest(tc.method, tc.path, body)
+			req.Header.Set("Authorization", "Bearer "+tc.token)
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
+			if w.Code != tc.wantStatus {
+				t.Fatalf("status = %d, want %d, body=%s", w.Code, tc.wantStatus, w.Body.String())
+			}
+		})
+	}
+}

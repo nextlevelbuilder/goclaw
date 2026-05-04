@@ -25,6 +25,7 @@ const (
 	MsgAgentNotFound       = "error.agent_not_found"       // "agent not found: %s"
 	MsgCannotDeleteDefault = "error.cannot_delete_default" // "cannot delete the default agent"
 	MsgUserCtxRequired     = "error.user_ctx_required"     // "user context required"
+	MsgOwnerIDImmutable    = "error.owner_id_immutable"    // "owner_id cannot be changed via this endpoint"
 
 	// --- Chat ---
 	MsgRateLimitExceeded = "error.rate_limit"       // "rate limit exceeded — please wait"

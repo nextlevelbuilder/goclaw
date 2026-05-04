@@ -37,8 +37,7 @@ func validateAgentTTSParams(ttsParams map[string]any) error {
 }
 
 // --- Field allowlists for update endpoints ---
-// Each map lists the columns that HTTP clients may update.
-// Immutable fields (id, owner_id, created_at, deleted_at) are excluded.
+// owner_id is rejected up front by handleUpdate, not silently dropped here.
 
 var agentAllowedFields = map[string]bool{
 	"agent_key": true, "agent_type": true, "display_name": true,

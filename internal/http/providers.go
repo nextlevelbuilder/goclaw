@@ -119,32 +119,30 @@ func (h *ProvidersHandler) emitProviderCacheInvalidate(name string) {
 
 // RegisterRoutes registers all provider management routes on the given mux.
 func (h *ProvidersHandler) RegisterRoutes(mux *http.ServeMux) {
-	// Provider CRUD
-	mux.HandleFunc("GET /v1/providers", h.auth(h.handleListProviders))
-	mux.HandleFunc("POST /v1/providers", h.auth(h.handleCreateProvider))
-	mux.HandleFunc("GET /v1/providers/{id}", h.auth(h.handleGetProvider))
-	mux.HandleFunc("PUT /v1/providers/{id}", h.auth(h.handleUpdateProvider))
-	mux.HandleFunc("DELETE /v1/providers/{id}", h.auth(h.handleDeleteProvider))
+	mux.HandleFunc("GET /v1/providers", h.authRead(h.handleListProviders))
+	mux.HandleFunc("POST /v1/providers", h.authAdmin(h.handleCreateProvider))
+	mux.HandleFunc("GET /v1/providers/{id}", h.authRead(h.handleGetProvider))
+	mux.HandleFunc("PUT /v1/providers/{id}", h.authAdmin(h.handleUpdateProvider))
+	mux.HandleFunc("DELETE /v1/providers/{id}", h.authAdmin(h.handleDeleteProvider))
 
-	// Model listing (proxied to upstream provider API)
-	mux.HandleFunc("GET /v1/providers/{id}/models", h.auth(h.handleListProviderModels))
+	mux.HandleFunc("GET /v1/providers/{id}/models", h.authRead(h.handleListProviderModels))
 
-	// Provider + model verification (pre-flight check)
-	mux.HandleFunc("POST /v1/providers/{id}/verify", h.auth(h.handleVerifyProvider))
-	mux.HandleFunc("POST /v1/providers/{id}/verify-embedding", h.auth(h.handleVerifyEmbedding))
+	mux.HandleFunc("POST /v1/providers/{id}/verify", h.authAdmin(h.handleVerifyProvider))
+	mux.HandleFunc("POST /v1/providers/{id}/verify-embedding", h.authAdmin(h.handleVerifyEmbedding))
 
-	// Provider-scoped Codex pool activity monitor
-	mux.HandleFunc("GET /v1/providers/{id}/codex-pool-activity", h.auth(h.handleProviderCodexPoolActivity))
+	mux.HandleFunc("GET /v1/providers/{id}/codex-pool-activity", h.authRead(h.handleProviderCodexPoolActivity))
 
-	// Embedding system status
-	mux.HandleFunc("GET /v1/embedding/status", h.auth(h.handleEmbeddingStatus))
+	mux.HandleFunc("GET /v1/embedding/status", h.authRead(h.handleEmbeddingStatus))
 
-	// Claude CLI auth status (global — not per-provider)
-	mux.HandleFunc("GET /v1/providers/claude-cli/auth-status", h.auth(h.handleClaudeCLIAuthStatus))
+	mux.HandleFunc("GET /v1/providers/claude-cli/auth-status", h.authRead(h.handleClaudeCLIAuthStatus))
 }
 
-func (h *ProvidersHandler) auth(next http.HandlerFunc) http.HandlerFunc {
+func (h *ProvidersHandler) authAdmin(next http.HandlerFunc) http.HandlerFunc {
 	return requireAuth(permissions.RoleAdmin, next)
+}
+
+func (h *ProvidersHandler) authRead(next http.HandlerFunc) http.HandlerFunc {
+	return requireAuth("", next)
 }
 
 // maskAPIKey replaces non-empty API keys with "***".

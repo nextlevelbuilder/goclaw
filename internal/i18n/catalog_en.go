@@ -24,6 +24,7 @@ func init() {
 		MsgAgentNotFound:       "agent not found: %s",
 		MsgCannotDeleteDefault: "cannot delete the default agent",
 		MsgUserCtxRequired:     "user context required",
+		MsgOwnerIDImmutable:    "owner_id cannot be changed via this endpoint",
 
 		// Chat
 		MsgRateLimitExceeded: "rate limit exceeded — please wait",

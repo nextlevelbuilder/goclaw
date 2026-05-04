@@ -24,6 +24,7 @@ func init() {
 		MsgAgentNotFound:       "未找到Agent：%s",
 		MsgCannotDeleteDefault: "无法删除默认Agent",
 		MsgUserCtxRequired:     "需要用户上下文",
+		MsgOwnerIDImmutable:    "无法通过此端点更改 owner_id",
 
 		// Chat
 		MsgRateLimitExceeded: "请求频率超限 — 请稍候",

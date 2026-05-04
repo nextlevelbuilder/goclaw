@@ -181,6 +181,11 @@ func (m *AgentsMethods) handleFilesSet(ctx context.Context, client *gateway.Clie
 			return
 		}
 
+		if msg := m.authorizePredefinedAgentEdit(ctx, ag, client.UserID(), protocol.MethodAgentsFileSet, params.Name); msg != "" {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, msg))
+			return
+		}
+
 		if err := m.agentStore.SetAgentContextFile(ctx, ag.ID, params.Name, params.Content); err != nil {
 			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToSave, "file", err.Error())))
 			return

@@ -39,6 +39,7 @@ export function AgentFilesTab({
 }: AgentFilesTabProps) {
   const { t } = useTranslation("agents");
   const userId = useAuthStore((s) => s.userId);
+  const isMasterScope = useAuthStore((s) => s.isMasterScope);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(false);
@@ -51,7 +52,8 @@ export function AgentFilesTab({
   const isOpen = agent.agent_type === "open";
   const isPredefined = agent.agent_type === "predefined";
   const isOwner = agent.owner_id === userId;
-  const canEdit = !isPredefined || isOwner;
+  const canEditPredefined = isOwner || isMasterScope;
+  const canEdit = !isPredefined || canEditPredefined;
 
   const displayFiles = files.filter(
     (f) =>
@@ -108,7 +110,7 @@ export function AgentFilesTab({
     return <OpenAgentEmptyState files={displayFiles} />;
   }
 
-  const aiActions = isPredefined && isOwner && (
+  const aiActions = isPredefined && canEditPredefined && (
     <>
       {onResummon && (
         <Button
@@ -137,7 +139,7 @@ export function AgentFilesTab({
 
   return (
     <div className="space-y-3">
-      {isPredefined && !isOwner && (
+      {isPredefined && !canEditPredefined && (
         <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
           <Lock className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
           <div className="text-sm">

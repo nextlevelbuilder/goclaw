@@ -24,6 +24,7 @@ func init() {
 		MsgAgentNotFound:       "không tìm thấy agent: %s",
 		MsgCannotDeleteDefault: "không thể xóa agent mặc định",
 		MsgUserCtxRequired:     "yêu cầu ngữ cảnh người dùng",
+		MsgOwnerIDImmutable:    "không thể thay đổi owner_id qua endpoint này",
 
 		// Chat
 		MsgRateLimitExceeded: "vượt quá giới hạn tốc độ — vui lòng đợi",

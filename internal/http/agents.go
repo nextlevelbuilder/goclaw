@@ -391,6 +391,13 @@ func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// owner_id is silently dropped by the allowlist filter below; reject up front
+	// so callers don't see a misleading 200 when ownership transfer is attempted.
+	if _, present := updates["owner_id"]; present {
+		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgOwnerIDImmutable))
+		return
+	}
+
 	// Allowlist: only permit known agent columns to be updated.
 	// Defense-in-depth against column injection via arbitrary JSON keys.
 	allowed := filterAllowedKeys(updates, agentAllowedFields)
