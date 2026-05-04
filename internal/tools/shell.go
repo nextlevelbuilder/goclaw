@@ -297,6 +297,13 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 		return t.executeCredentialed(ctx, cred, binary, cmdArgs, cwd, sandboxKey, command)
 	}
 
+	// Chain detection: credentialed binary found deeper in a shell operator chain.
+	// If allow_chain_exec is enabled for any matched binary, inject credentials
+	// into the full command. Otherwise return an actionable error.
+	if chainResult := t.handleCredentialedChain(ctx, normalizedCommand, command, args); chainResult != nil {
+		return chainResult
+	}
+
 	// Secure CLI gate: registered-but-not-granted binaries MUST NOT fall through
 	// to host exec with parent env. Works on the already-normalized command
 	// (Red Team F6) and unwraps shell wrappers up to depth 3 (Red Team F1).

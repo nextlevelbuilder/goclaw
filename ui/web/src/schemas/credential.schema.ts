@@ -9,6 +9,7 @@ export const cliCredentialSchema = z.object({
   timeout: z.number().min(1),
   tips: z.string().optional(),
   isGlobal: z.boolean(),
+  allowChainExec: z.boolean(),
   enabled: z.boolean(),
 });
 

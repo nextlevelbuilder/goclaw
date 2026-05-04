@@ -98,6 +98,9 @@ func newDockerSandbox(ctx context.Context, name string, cfg Config, workspace st
 		hostPath := resolveHostWorkspacePath(ctx, workspace)
 		args = append(args, "-v", fmt.Sprintf("%s:%s:%s", hostPath, containerWorkdir, mountOpt))
 	}
+
+	// Mount data volume read-only so sandbox can access skills, config, etc.
+	args = append(args, "-v", "app_goclaw-data:/app/data:ro")
 	args = append(args, "-w", containerWorkdir)
 
 	// Environment variables
