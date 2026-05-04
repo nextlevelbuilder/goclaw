@@ -63,7 +63,16 @@
       "connectionFailed": "Connection failed"
     },
     "requireUserCredentials": "Require User Credentials",
-    "requireUserCredentialsHint": "Each user must configure their own credentials. Server is disabled for users without personal credentials."
+    "requireUserCredentialsHint": "Each user must configure their own credentials. Server is disabled for users without personal credentials.",
+    "toolHints": "AI Agent Hints (Optional)",
+    "toolHintsHint": "Admin-authored notes appended to each tool's description so the LLM knows server-specific quirks.",
+    "toolHintsGlobal": "Global hint",
+    "toolHintsGlobalPlaceholder": "e.g. All tools expect JS expressions. Do not emit trailing semicolons.",
+    "toolHintsGlobalHint": "Applied to every tool of this server.",
+    "toolHintsPerTool": "Per-tool hints",
+    "toolHintsToolNamePlaceholder": "Tool name (e.g. search)",
+    "toolHintsToolValuePlaceholder": "Hint text shown to the LLM",
+    "toolHintsAdd": "Add hint"
   },
   "grants": {
     "title": "Agent Grants - {{name}}",

@@ -132,6 +132,57 @@ func TestBridgeToolNaming(t *testing.T) {
 	}
 }
 
+func TestBridgeToolWithHints(t *testing.T) {
+	mcpTool := mcpgo.Tool{
+		Name:        "search",
+		Description: "Run a search",
+		InputSchema: mcpgo.ToolInputSchema{Type: "object"},
+	}
+
+	// No hints → original description unchanged
+	bt := NewBridgeTool("srv", mcpTool, nil, "", 30, nil, uuid.Nil, nil)
+	if bt.Description() != "Run a search" {
+		t.Errorf("expected unchanged description, got %q", bt.Description())
+	}
+
+	// Global hint only
+	bt2 := NewBridgeTool("srv", mcpTool, nil, "", 30, nil, uuid.Nil, nil).
+		WithHints("No trailing semicolons.", "")
+	got := bt2.Description()
+	if got != "Run a search\n\n[Server hint] No trailing semicolons." {
+		t.Errorf("global-only mismatch:\n%q", got)
+	}
+
+	// Per-tool hint only
+	bt3 := NewBridgeTool("srv", mcpTool, nil, "", 30, nil, uuid.Nil, nil).
+		WithHints("", "Use arrow func.")
+	if bt3.Description() != "Run a search\n\n[Tool hint] Use arrow func." {
+		t.Errorf("tool-only mismatch: %q", bt3.Description())
+	}
+
+	// Both hints — order: global then tool
+	bt4 := NewBridgeTool("srv", mcpTool, nil, "", 30, nil, uuid.Nil, nil).
+		WithHints("G.", "T.")
+	if bt4.Description() != "Run a search\n\n[Server hint] G.\n\n[Tool hint] T." {
+		t.Errorf("combined mismatch: %q", bt4.Description())
+	}
+
+	// Whitespace-only hints → treated as empty (no suffix)
+	bt5 := NewBridgeTool("srv", mcpTool, nil, "", 30, nil, uuid.Nil, nil).
+		WithHints("  \n ", "\t")
+	if bt5.Description() != "Run a search" {
+		t.Errorf("whitespace-only hints should render no suffix, got %q", bt5.Description())
+	}
+
+	// WithHints can be chained and reset by re-calling
+	bt6 := NewBridgeTool("srv", mcpTool, nil, "", 30, nil, uuid.Nil, nil).
+		WithHints("first", "hint")
+	bt6.WithHints("", "")
+	if bt6.Description() != "Run a search" {
+		t.Errorf("calling WithHints with empty should clear suffix, got %q", bt6.Description())
+	}
+}
+
 func TestIsPlaceholderValue(t *testing.T) {
 	// Should be detected as placeholder.
 	placeholders := []string{
