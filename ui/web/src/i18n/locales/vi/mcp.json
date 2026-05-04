@@ -63,7 +63,16 @@
       "connectionFailed": "Kết nối thất bại"
     },
     "requireUserCredentials": "Yêu cầu Credentials riêng",
-    "requireUserCredentialsHint": "Mỗi user phải cấu hình credentials riêng. Server bị vô hiệu cho user chưa có credentials."
+    "requireUserCredentialsHint": "Mỗi user phải cấu hình credentials riêng. Server bị vô hiệu cho user chưa có credentials.",
+    "toolHints": "Gợi ý cho AI Agent (Tùy chọn)",
+    "toolHintsHint": "Ghi chú do admin viết, gắn vào description của từng tool để LLM biết đặc thù của server này.",
+    "toolHintsGlobal": "Gợi ý chung",
+    "toolHintsGlobalPlaceholder": "Ví dụ: Các tool ở đây chỉ nhận biểu thức JS. Không được có dấu ';' ở cuối.",
+    "toolHintsGlobalHint": "Áp dụng cho mọi tool của server này.",
+    "toolHintsPerTool": "Gợi ý theo tool cụ thể",
+    "toolHintsToolNamePlaceholder": "Tên tool (vd: search)",
+    "toolHintsToolValuePlaceholder": "Nội dung gợi ý sẽ gửi cho LLM",
+    "toolHintsAdd": "Thêm gợi ý"
   },
   "grants": {
     "title": "Quyền agent - {{name}}",

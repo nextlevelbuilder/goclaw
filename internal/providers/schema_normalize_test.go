@@ -508,6 +508,53 @@ func TestApplyStrictMode_NestedObject(t *testing.T) {
 	}
 }
 
+// TestApplyStrictMode_BareObjectProperty reproduces the use_skill tool
+// failure: an optional property declared as `{"type":"object","description":...}`
+// with NO nested `properties`. Pre-fix, applyStrictMode early-returned on
+// this node (no "properties") so additionalProperties was never set, then
+// makeNullable turned the type into ["object","null"], and OpenAI rejected
+// with "invalid_function_parameters: 'additionalProperties' is required to
+// be supplied and to be false" at path ('properties', 'params', 'type', '0').
+func TestApplyStrictMode_BareObjectProperty(t *testing.T) {
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"name": map[string]any{"type": "string"},
+			"params": map[string]any{
+				"type":        "object",
+				"description": "Optional skill-specific parameters",
+			},
+		},
+		"required": []any{"name"},
+	}
+	result := NormalizeSchema("openai", schema)
+
+	params := prop(result, "params")
+	if params == nil {
+		t.Fatal("expected params property to survive normalization")
+	}
+	if params["additionalProperties"] != false {
+		t.Errorf("bare object property must get additionalProperties:false; got %v", params["additionalProperties"])
+	}
+	// And makeNullable should have turned type into ["object","null"].
+	typ, ok := params["type"].([]any)
+	if !ok {
+		t.Fatalf("expected params.type to be a []any union, got %T: %v", params["type"], params["type"])
+	}
+	hasObject, hasNull := false, false
+	for _, v := range typ {
+		switch v {
+		case "object":
+			hasObject = true
+		case "null":
+			hasNull = true
+		}
+	}
+	if !hasObject || !hasNull {
+		t.Errorf("expected params.type to contain both 'object' and 'null'; got %v", typ)
+	}
+}
+
 func TestApplyStrictMode_SkipsAnthropic(t *testing.T) {
 	schema := map[string]any{
 		"type": "object",

@@ -70,6 +70,7 @@ func NewSQLiteStores(cfg store.StoreConfig) (*store.Stores, error) {
 		EvolutionSuggestions: NewSQLiteEvolutionSuggestionStore(db),
 		KnowledgeGraph:       NewSQLiteKnowledgeGraphStore(db),
 		Vault:                NewSQLiteVaultStore(db),
+		BitrixPortals:        NewSQLiteBitrixPortalStore(db, cfg.EncryptionKey),
 		Hooks:                NewSQLiteHookStore(db),
 	}, nil
 }
