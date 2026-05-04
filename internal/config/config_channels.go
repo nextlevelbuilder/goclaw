@@ -108,7 +108,22 @@ type DiscordConfig struct {
 	STTAPIKey         string              `json:"stt_api_key,omitempty"`
 	STTTenantID       string              `json:"stt_tenant_id,omitempty"`
 	STTTimeoutSeconds int                 `json:"stt_timeout_seconds,omitempty"`
-	VoiceAgentID      string              `json:"voice_agent_id,omitempty"`
+	VoiceAgentID      string              `json:"voice_agent_id,omitempty"` // routes UPLOADED voice-message attachments to a specific agent. NOT the voice-channel-join feature below.
+
+	// Real-time voice-channel join + transcription. A bot with these set
+	// listens for VoiceStateUpdate events in the given guild, joins the
+	// voice channel when humans are present, and posts per-speaker Ogg/Opus
+	// transcripts (via audio.Manager.Transcribe) to the text transcript
+	// channel. Distinct from VoiceAgentID above (which concerns uploaded
+	// audio attachments, not real-time voice channels).
+	VoiceChannelEnabled             *bool  `json:"voice_channel_enabled,omitempty"`
+	VoiceChannelGuildID             string `json:"voice_channel_guild_id,omitempty"`              // guild containing VoiceChannelID
+	VoiceChannelID                  string `json:"voice_channel_id,omitempty"`                    // voice channel to monitor + join
+	VoiceChannelTranscriptChannelID string `json:"voice_channel_transcript_channel_id,omitempty"` // text channel where transcripts post (REQUIRED when enabled)
+	VoiceChannelIdleLeaveSeconds    int    `json:"voice_channel_idle_leave_seconds,omitempty"`    // leave after this many seconds of no humans (default 60)
+	VoiceChannelMinUtteranceMs      int    `json:"voice_channel_min_utterance_ms,omitempty"`      // drop utterances shorter than this (default 400)
+	VoiceChannelMaxUtteranceMs      int    `json:"voice_channel_max_utterance_ms,omitempty"`      // force-flush ceiling (default 10000)
+	VoiceChannelDailyCapSeconds     int    `json:"voice_channel_daily_cap_seconds,omitempty"`     // per-day audio-seconds STT budget (default 7200)
 }
 
 type SlackConfig struct {
