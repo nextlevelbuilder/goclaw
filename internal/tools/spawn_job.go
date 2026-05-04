@@ -107,6 +107,18 @@ func (t *SpawnJobTool) Parameters() map[string]any {
 					},
 				},
 			},
+			"model": map[string]any{
+				"type":        "string",
+				"description": "Optional model override for the spawned worker (e.g. \"deepseek/deepseek-v4-pro\"). Empty = inherit from the worker's bound agent.",
+			},
+			"provider": map[string]any{
+				"type":        "string",
+				"description": "Optional provider override (e.g. \"openrouter\"). Empty = inherit from the worker's bound agent. Pair with model when routing to a non-default provider.",
+			},
+			"activate_skill": map[string]any{
+				"type":        "string",
+				"description": "Optional skill name (not slug) to pre-load into the worker's first turn so its instructions land before the user message. Empty = no pre-activation.",
+			},
 		},
 		"required": []string{"kind", "command", "worktree_path", "sinks"},
 	}
@@ -141,6 +153,22 @@ type SpawnJobRequest struct {
 	Sinks         []JobSink         `json:"sinks"`
 	TenantID      string            `json:"tenant_id,omitempty"`
 	ParentSession string            `json:"parent_session_key,omitempty"`
+
+	// Optional model/provider override for the spawned worker. When set,
+	// the worker's agent loop uses these instead of the registered
+	// agent's default. Useful for routing heavy summarization /
+	// reasoning work to a different model than the agent's chat path.
+	// Empty = inherit from the worker's bound agent.
+	Model    string `json:"model,omitempty"`
+	Provider string `json:"provider,omitempty"`
+
+	// ActivateSkill pre-loads a named skill into the worker's first
+	// turn (equivalent to the agent calling use_skill on its first
+	// step). Useful when the spawned job has a fixed purpose — e.g.
+	// "voice-session-summarization" — and you want the skill's
+	// instructions to land before the user message instead of after a
+	// skill_search round-trip. Empty = no pre-activation.
+	ActivateSkill string `json:"activate_skill,omitempty"`
 }
 
 type JobResources struct {
@@ -253,6 +281,9 @@ func parseSpawnJobArgs(args map[string]any) (SpawnJobRequest, error) {
 		WorkspaceRoot: strings.TrimSpace(argString(args, "workspace_root")),
 		WorktreePath:  strings.TrimSpace(argString(args, "worktree_path")),
 		Timeout:       strings.TrimSpace(argString(args, "timeout")),
+		Model:         strings.TrimSpace(argString(args, "model")),
+		Provider:      strings.TrimSpace(argString(args, "provider")),
+		ActivateSkill: strings.TrimSpace(argString(args, "activate_skill")),
 	}
 	if req.Kind == "" {
 		return req, fmt.Errorf("kind is required")
