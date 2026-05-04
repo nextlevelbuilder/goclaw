@@ -76,6 +76,11 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 		respond(acpModels())
 		return
 	}
+	// ComfyUI does not expose a standard model catalog endpoint via this API.
+	if p.ProviderType == store.ProviderComfyUI {
+		respond([]ModelInfo{})
+		return
+	}
 
 	// Ollama: use native /api/tags for richer metadata (parameter size, quantization, family).
 	// ProviderOllama has no API key; ProviderOllamaCloud requires one but both use the same endpoint.

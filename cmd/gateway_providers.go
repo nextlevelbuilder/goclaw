@@ -335,6 +335,18 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 			slog.Info("registered provider from DB", "name", p.Name)
 			continue
 		}
+		// Local ComfyUI requires no API key.
+		if p.ProviderType == store.ProviderComfyUI {
+			base := p.APIBase
+			if base == "" {
+				base = "http://127.0.0.1:8188"
+			}
+			prov := providers.NewOpenAIProvider(p.Name, "", config.DockerLocalhost(base), "")
+			prov.WithProviderType(p.ProviderType)
+			registry.RegisterForTenant(p.TenantID, prov)
+			slog.Info("registered provider from DB", "name", p.Name)
+			continue
+		}
 
 		if p.APIKey == "" {
 			continue

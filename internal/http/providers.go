@@ -218,6 +218,18 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 		h.providerReg.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, "ollama", config.DockerLocalhost(host), "llama3.3"))
 		return
 	}
+	// ComfyUI is local/self-hosted and does not require an API key.
+	// Register as OpenAIProvider carrier so media-chain can resolve credentials shape.
+	if p.ProviderType == store.ProviderComfyUI {
+		base := p.APIBase
+		if base == "" {
+			base = "http://127.0.0.1:8188"
+		}
+		prov := providers.NewOpenAIProvider(p.Name, "", config.DockerLocalhost(base), "")
+		prov.WithProviderType(p.ProviderType)
+		h.providerReg.RegisterForTenant(p.TenantID, prov)
+		return
+	}
 	if p.APIKey == "" {
 		return
 	}
@@ -318,6 +330,7 @@ func normalizeOllamaAPIBase(p *store.LLMProviderData) {
 // (e.g. Ollama, Claude CLI). SSRF checks are skipped for these.
 var localProviderTypes = map[string]bool{
 	store.ProviderOllama:    true,
+	store.ProviderComfyUI:   true,
 	store.ProviderClaudeCLI: true,
 	store.ProviderCodexCLI:  true,
 	store.ProviderGeminiCLI: true,
