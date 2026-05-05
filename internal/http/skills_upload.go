@@ -203,6 +203,11 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 		if skills.IsSystemArtifact(entryName) {
 			continue
 		}
+		// Normalize Windows backslash separators in ZIP entries.
+		// ZIPs created on Windows may use `\` instead of `/` in paths,
+		// causing files like "scripts\search.py" to be extracted as a
+		// single flat file instead of scripts/search.py on Linux.
+		entryName = strings.ReplaceAll(entryName, "\\", "/")
 		// Security: prevent path traversal
 		name := filepath.Clean(entryName)
 		if strings.Contains(name, "..") {
