@@ -679,6 +679,42 @@ Implementation is evidence-backed against the native ChatGPT Responses API event
 
 ---
 
+### Instagram channel integration
+
+**Features**
+
+- **Instagram Direct Messaging support** (`internal/channels/instagram/`): Complete Instagram channel implementation with webhook handling, Graph API integration, and message routing.
+- **Webhook-based messaging**: Real-time Instagram DM delivery via Facebook Graph API webhooks with deduplication.
+- **Instagram Business Account integration**: Supports Facebook Page connected to Instagram Business Account with long-lived access tokens.
+- **Media support**: Handles Instagram images, videos, and audio attachments with URL reference processing.
+- **Session management**: Per-user isolated sessions with configurable timeout options.
+- **Pairing integration**: Full integration with GoClaw's pairing system for secure access control.
+- **UI configuration**: Added to channel configuration UI with schema validation (`ui/web/src/pages/channels/channel-schemas.ts`).
+- **Gateway integration**: Seamless integration with existing gateway channel management (`cmd/gateway.go`).
+
+**Components**
+
+- `internal/channels/instagram/instagram.go` — Main channel implementation
+- `internal/channels/instagram/types.go` — Type definitions and payload structures
+- `internal/channels/instagram/graph_client.go` — Facebook Graph API client
+- `internal/channels/instagram/webhook_handler.go` — Webhook request handling
+- `internal/channels/instagram/message_handler.go` — Inbound message processing
+- `internal/channels/instagram/formatter.go` — Outbound message formatting
+- `internal/channels/instagram/router.go` — Global webhook routing
+
+**Security**
+
+- Token validation and verification at startup
+- Webhook authentication and verification
+- Deduplication mechanism preventing 24-hour replay attacks
+- Integration with existing allowlist and pairing policies
+
+**Docs**
+
+- `docs/05-channels-messaging.md` — Updated with Instagram channel documentation
+
+---
+
 ## 2026-04-19
 
 ### TTS: Gemini provider + ProviderCapabilities schema engine

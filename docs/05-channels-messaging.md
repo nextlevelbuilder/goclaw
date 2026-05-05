@@ -16,6 +16,7 @@ flowchart LR
         ZL["Zalo OA"]
         ZLP["Zalo Personal"]
         WA["WhatsApp"]
+        IG["Instagram"]
     end
 
     subgraph "Channel Layer"
@@ -53,6 +54,7 @@ flowchart LR
     SEND --> ZL
     SEND --> ZLP
     SEND --> WA
+    SEND --> IG
 ```
 
 Internal channels (`cli`, `system`, `subagent`, `browser`) are silently skipped by the outbound dispatcher and never forwarded to external platforms. The `browser` channel uses WebSocket directly on the gateway connection.
@@ -168,22 +170,22 @@ flowchart TD
 
 ## 4. Channel Comparison
 
-| Feature | Telegram | Feishu/Lark | Discord | Slack | WhatsApp | Zalo OA | Zalo Personal |
-|---------|----------|-------------|---------|-------|----------|---------|---------------|
-| Connection | Long polling | WS (default) / Webhook | Gateway events | Socket Mode | Direct protocol (in-process) | Long polling | Internal protocol |
-| DM support | Yes | Yes | Yes | Yes | Yes | Yes (DM only) | Yes |
-| Group support | Yes (mention gating) | Yes | Yes | Yes (mention gating + thread cache) | Yes | No | Yes |
-| Forum/Topics | Yes (per-topic config) | Yes (topic session mode) | -- | -- | -- | -- | -- |
-| Message limit | 4,096 chars | Configurable (default 4,000) | 2,000 chars | 4,000 chars | WhatsApp native limit | 2,000 chars | 2,000 chars |
-| Streaming | Typing indicator | Streaming message cards | Edit "Thinking..." | Edit "Thinking..." (throttled 1s) | No | No | No |
-| Media | Photos, voice, files | Images, files (30 MB) | Files, embeds | Files (download w/ SSRF protection) | Images, audio, video, documents | Images (5 MB) | -- |
-| Speech-to-text | Yes (STT proxy) | -- | -- | -- | -- | -- | -- |
-| Voice routing | Yes (VoiceAgentID) | -- | -- | -- | -- | -- | -- |
-| Rich formatting | Markdown → HTML | Card messages | Markdown | Markdown → mrkdwn | Plain text | Plain text | Plain text |
-| Bot commands | 10+ commands | -- | -- | -- | -- | -- | -- |
-| Tool allow list | Per-topic | -- | -- | -- | -- | -- | -- |
-| Pairing support | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| Status reactions | Yes | Yes | -- | Yes | -- | -- | -- |
+| Feature | Telegram | Feishu/Lark | Discord | Slack | WhatsApp | Zalo OA | Zalo Personal | Instagram |
+|---------|----------|-------------|---------|-------|----------|---------|---------------|-----------|
+| Connection | Long polling | WS (default) / Webhook | Gateway events | Socket Mode | Direct protocol (in-process) | Long polling | Internal protocol | Webhook |
+| DM support | Yes | Yes | Yes | Yes | Yes | Yes (DM only) | Yes | Yes |
+| Group support | Yes (mention gating) | Yes | Yes | Yes (mention gating + thread cache) | Yes | No | Yes | No |
+| Forum/Topics | Yes (per-topic config) | Yes (topic session mode) | -- | -- | -- | -- | -- | -- |
+| Message limit | 4,096 chars | Configurable (default 4,000) | 2,000 chars | 4,000 chars | WhatsApp native limit | 2,000 chars | 2,000 chars | 2,000 chars |
+| Streaming | Typing indicator | Streaming message cards | Edit "Thinking..." | Edit "Thinking..." (throttled 1s) | No | No | No | Typing indicator |
+| Media | Photos, voice, files | Images, files (30 MB) | Files, embeds | Files (download w/ SSRF protection) | Images, audio, video, documents | Images (5 MB) | -- | Images, video, audio |
+| Speech-to-text | Yes (STT proxy) | -- | -- | -- | -- | -- | -- | -- |
+| Voice routing | Yes (VoiceAgentID) | -- | -- | -- | -- | -- | -- | -- |
+| Rich formatting | Markdown → HTML | Card messages | Markdown | Markdown → mrkdwn | Plain text | Plain text | Plain text | Text only |
+| Bot commands | 10+ commands | -- | -- | -- | -- | -- | -- | -- |
+| Tool allow list | Per-topic | -- | -- | -- | -- | -- | -- | -- |
+| Pairing support | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| Status reactions | Yes | Yes | -- | Yes | -- | -- | -- | -- |
 
 ---
 
@@ -685,6 +687,75 @@ flowchart TD
 | TTL | 60 minutes |
 | Max pending per account | 3 |
 | Reply debounce | 60 seconds per sender |
+
+---
+
+## 16. Instagram
+
+The Instagram channel connects to Instagram Business Accounts via Facebook's Graph API and webhooks.
+
+### Key Behaviors
+
+- **Webhook-based**: Uses webhooks for real-time message delivery from Instagram DMs
+- **Instagram Business Account**: Requires a Facebook Page connected to an Instagram Business Account
+- **Access token**: Long-lived Instagram User Access Token with `instagram_business_basic` and `instagram_business_manage_messages` scopes
+- **App Secret**: Meta App Secret is **required** — used to verify the `X-Hub-Signature-256` HMAC on every inbound webhook POST. Missing/invalid signatures cause the event to be dropped
+- **Verification**: Verify token is compared in constant time on the GET handshake only
+- **Graph API base**: Instagram Messaging (DM send) routes through `https://graph.facebook.com` — `graph.instagram.com` is for the Basic Display / Login products and does not accept `/me/messages`
+- **Message format**: Text-only with support for images, videos, and audio attachments
+- **Typing indicator**: Optional typing indicator support via Graph API
+- **Auto-reply**: Optional auto-reply feature for immediate responses
+- **Deduplication**: Prevents processing duplicate webhook deliveries within 24-hour window
+- **DM only**: Supports direct messages only; no group chat support
+- **Session management**: Supports per-user isolated sessions with configurable timeout
+- **Pairing support**: Integrates with GoClaw's pairing system for secure access control
+
+### Configuration
+
+| Field | Description |
+|-------|-------------|
+| `user_access_token` | Long-lived Instagram User Access Token with `instagram_business_basic` + `instagram_business_manage_messages` scopes |
+| `app_secret` | Meta App Secret (required) — used to verify webhook HMAC signatures |
+| `verify_token` | Webhook verification token for the GET subscription handshake |
+| `instagram_user_id` | Instagram Business Account ID (IG_ID) |
+| `features.auto_reply` | Enable/disable automatic reply feature |
+| `features.typing_indicator` | Enable/disable typing indicator during processing |
+| `session_options.session_timeout` | Session timeout duration (e.g., "24h", "7d") |
+| `allow_from` | Optional allowlist of user IDs/usernames |
+
+### Webhook Setup
+
+Instagram delivers messages via webhooks to the endpoint `/channels/instagram/webhook`. The webhook includes:
+
+- Message ID, text content, and timestamp
+- Media attachments (images, videos, audio)
+- Reply-to information for threaded conversations
+- Sender and recipient identifiers
+
+### Message Flow
+
+1. User sends DM to Instagram Business Account
+2. Instagram delivers webhook to GoClaw gateway
+3. Message is deduplicated and validated
+4. Inbound message is published to message bus
+5. Agent processes message and generates response
+6. Response is formatted and sent back via Graph API
+7. Typing indicator shown during processing (if enabled)
+
+### Media Handling
+
+Instagram supports various media types:
+- **Images**: JPG, PNG formats delivered as URL references
+- **Videos**: MP4 format delivered as URL references  
+- **Audio**: M4A, MP3 formats delivered as URL references
+- Media URLs are temporary and require immediate download
+
+### Security
+
+- **Token validation**: Access token is validated at startup
+- **Webhook verification**: Verify token ensures legitimate webhook sources
+- **Rate limiting**: Built-in protection against webhook spam
+- **Deduplication**: 24-hour window prevents duplicate processing
 
 ---
 

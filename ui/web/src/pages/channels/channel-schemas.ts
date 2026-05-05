@@ -76,6 +76,11 @@ export const credentialsSchema: Record<string, FieldDef[]> = {
     { key: "app_secret", label: "App Secret", type: "password", required: true, help: "From Facebook Developer Console → Your App → Settings → Basic" },
     { key: "verify_token", label: "Webhook Verify Token", type: "password", required: true, help: "A secret string you choose, used to verify the webhook URL" },
   ],
+  instagram: [
+    { key: "user_access_token", label: "Instagram User Access Token", type: "password", required: true, help: "Instagram User Access Token from Facebook App with instagram_business_basic and instagram_business_manage_messages permissions" },
+    { key: "app_secret", label: "App Secret", type: "password", required: true, help: "Meta App Secret (Facebook Developer Console → Your App → Settings → Basic). Used to verify webhook signatures (X-Hub-Signature-256)." },
+    { key: "verify_token", label: "Webhook Verify Token", type: "password", required: true, help: "A secret string you choose, used to verify the webhook URL" },
+  ],
   pancake: [
     { key: "api_key", label: "API Key", type: "password", required: true, help: "Pancake user-level API key from pages.fm account settings" },
     { key: "page_access_token", label: "Page Access Token", type: "password", required: true, help: "Page-level token from Pancake dashboard → Page Settings" },
@@ -202,6 +207,14 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "post_context_cache_ttl", label: "Post Cache TTL", type: "text", placeholder: "e.g. 15m" },
     { key: "first_inbox_message", label: "First Inbox DM Text", type: "textarea", help: "Custom DM sent to first-time commenters. Defaults to Vietnamese if empty." },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "Facebook user IDs" },
+    { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit" },
+  ],
+  instagram: [
+    { key: "instagram_user_id", label: "Instagram User ID", type: "text", required: true, help: "Instagram Business Account ID (IG_ID)" },
+    { key: "features.auto_reply", label: "Auto-Reply", type: "boolean", defaultValue: false },
+    { key: "features.typing", label: "Typing Indicator", type: "boolean", defaultValue: true },
+    { key: "session_options.session_timeout", label: "Session Timeout", type: "text", placeholder: "e.g. 30m" },
+    { key: "allow_from", label: "Allowed Users", type: "tags", help: "Instagram sender IDs" },
     { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit" },
   ],
   pancake: [
