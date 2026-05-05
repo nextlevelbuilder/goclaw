@@ -92,47 +92,69 @@ func (s *DiskSeeder) Sweep(ctx context.Context) (SweepResult, error) {
 	}
 
 	var result SweepResult
-	walkErr := filepath.WalkDir(memDir, func(path string, d fs.DirEntry, err error) error {
+	// Symlink handling: filepath.WalkDir does NOT follow symlinks. The
+	// memory tree typically contains symlinks pointing at git-cloned
+	// vault mirrors (e.g. <workspace>/memory/memory → ../mirrors/memory
+	// for cartridge-gg/memory). Without explicit symlink resolution
+	// the walk reaches each symlink, sees a non-directory entry, skips
+	// it, and the entire vault content stays invisible — "started" log
+	// fires but no .md ever gets indexed.
+	//
+	// Strategy: hand-recurse with os.ReadDir + os.Stat (which follows
+	// symlinks). The "logical" path passed down through recursion uses
+	// the symlink prefix (so memory/wiki/page1.md is what lands in the
+	// DB, not the dereferenced mirrors/cartridge-gg-memory/wiki/page1.md
+	// — agents reason about the vault layout, not the mirror's storage
+	// location). visited[] guards against symlink cycles.
+	visited := map[string]bool{}
+	var walk func(logicalPath string) error
+	walk = func(logicalPath string) error {
+		// Stat (follows symlinks). If logicalPath is a symlink-to-dir
+		// this returns the target's info, IsDir == true → we recurse.
+		fi, err := os.Stat(logicalPath)
 		if err != nil {
-			// Permission / symlink errors on individual entries should
-			// log + skip, not abort the entire sweep.
-			s.logWarn("walk error", "path", path, "err", err)
+			s.logWarn("walk stat failed", "path", logicalPath, "err", err)
 			return nil
 		}
-		if d.IsDir() {
+		// Cycle guard: resolve to canonical and skip if already visited.
+		canon, lerr := filepath.EvalSymlinks(logicalPath)
+		if lerr == nil {
+			if visited[canon] {
+				return nil
+			}
+			visited[canon] = true
+		}
+		if fi.IsDir() {
+			entries, derr := os.ReadDir(logicalPath)
+			if derr != nil {
+				s.logWarn("readdir failed", "path", logicalPath, "err", derr)
+				return nil
+			}
+			for _, e := range entries {
+				if werr := walk(filepath.Join(logicalPath, e.Name())); werr != nil {
+					return werr
+				}
+			}
 			return nil
 		}
-		if !strings.HasSuffix(path, ".md") {
-			return nil
-		}
-		// Symlinks: WalkDir doesn't follow by default, but our memory
-		// dir often IS a symlink (e.g. memory/memory → ../mirrors/memory).
-		// The walk descends into the directory the symlink points to
-		// when the path passed to WalkDir is itself a symlink, which is
-		// what we want (we Stat'd memDir above and it was a directory).
-
-		fi, statErr := d.Info()
-		if statErr != nil {
-			s.logWarn("stat failed", "path", path, "err", statErr)
-			result.Failed++
+		// Non-directory: only .md files matter.
+		if !strings.HasSuffix(logicalPath, ".md") {
 			return nil
 		}
 		if fi.Size() > maxBytes {
-			s.logWarn("skip oversized file", "path", path, "size", fi.Size(), "max", maxBytes)
+			s.logWarn("skip oversized file", "path", logicalPath, "size", fi.Size(), "max", maxBytes)
 			result.Skipped++
 			return nil
 		}
 
-		body, readErr := os.ReadFile(path)
+		body, readErr := os.ReadFile(logicalPath)
 		if readErr != nil {
-			s.logWarn("read failed", "path", path, "err", readErr)
+			s.logWarn("read failed", "path", logicalPath, "err", readErr)
 			result.Failed++
 			return nil
 		}
 
-		relPath, _ := filepath.Rel(s.Workspace, path)
-		// Normalize separators on the off-chance Windows ever runs
-		// this; PG store canonicalizes on "/".
+		relPath, _ := filepath.Rel(s.Workspace, logicalPath)
 		relPath = filepath.ToSlash(relPath)
 
 		newHash := ContentHash(string(body))
@@ -146,10 +168,6 @@ func (s *DiskSeeder) Sweep(ctx context.Context) (SweepResult, error) {
 			result.Failed++
 			return nil
 		}
-		// IndexDocument runs frontmatter + wikilinks + chunking +
-		// embedding. Failures here mean we have the doc in
-		// memory_documents but not searchable yet — log and continue,
-		// the next sweep will retry.
 		if err := s.Store.IndexDocument(ctx, s.AgentID, s.UserID, relPath); err != nil {
 			s.logWarn("index failed", "path", relPath, "err", err)
 			result.Failed++
@@ -157,9 +175,9 @@ func (s *DiskSeeder) Sweep(ctx context.Context) (SweepResult, error) {
 		}
 		result.Indexed++
 		return nil
-	})
+	}
 
-	if walkErr != nil {
+	if walkErr := walk(memDir); walkErr != nil {
 		return result, fmt.Errorf("walk %s: %w", memDir, walkErr)
 	}
 	return result, nil

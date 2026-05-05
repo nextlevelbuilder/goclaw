@@ -149,6 +149,59 @@ func TestDiskSeeder_SkipsUnchangedFiles(t *testing.T) {
 	}
 }
 
+func TestDiskSeeder_FollowsSymlinkedDirs(t *testing.T) {
+	// Mirrors the prod layout: <workspace>/memory/ contains a symlink
+	// pointing at a sibling dir holding the real .md files (e.g.
+	// memory/memory → ../mirrors/memory). The seeder must descend
+	// through the symlink and index files it points at.
+	ws := t.TempDir()
+	memDir := filepath.Join(ws, "memory")
+	mirror := filepath.Join(ws, "mirrors", "wiki")
+	mustWrite(t, filepath.Join(mirror, "page1.md"), "# Page 1")
+	mustWrite(t, filepath.Join(mirror, "sub/page2.md"), "# Page 2")
+
+	if err := os.MkdirAll(memDir, 0o755); err != nil {
+		t.Fatalf("mkdir memDir: %v", err)
+	}
+	if err := os.Symlink("../mirrors/wiki", filepath.Join(memDir, "wiki")); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+
+	st := newFakeStore()
+	seeder := &DiskSeeder{Store: st, Workspace: ws, AgentID: "agent-id"}
+	res, err := seeder.Sweep(context.Background())
+	if err != nil {
+		t.Fatalf("sweep err: %v", err)
+	}
+	if res.Indexed != 2 {
+		t.Errorf("expected 2 indexed via symlink, got %d (skipped=%d failed=%d)", res.Indexed, res.Skipped, res.Failed)
+	}
+	// Recorded paths should preserve the symlink-relative layout, not
+	// the dereferenced mirror path — the agent reasons about
+	// memory/wiki/page1.md, not mirrors/wiki/page1.md.
+	for _, p := range st.indexed {
+		if !filepath.IsLocal(p) {
+			continue
+		}
+		if !contains(p, "memory/wiki/") {
+			t.Errorf("indexed path should be under memory/wiki/ (vault layout), got %q", p)
+		}
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || (len(s) > len(substr) && (containsAt(s, substr))))
+}
+
+func containsAt(s, substr string) bool {
+	for i := 0; i+len(substr) <= len(s); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
 func TestDiskSeeder_NoMemoryDir_NotAnError(t *testing.T) {
 	ws := t.TempDir() // no memory/ subdir
 	st := newFakeStore()
