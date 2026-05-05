@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"path"
-	"regexp"
 	"slices"
 	"strings"
 	"unicode"
@@ -35,9 +34,9 @@ func maybeHandleWorkIntake(ctx context.Context, msg bus.InboundMessage, deps *Co
 	}
 	ask := stripWorkIntakeScaffolding(msg.Content)
 
-	repo, repoOK := inferWorkIntakeRepo(route.Repos, ask)
+	repos, repoOK := selectWorkIntakeRepos(route.Repos)
 	if !repoOK {
-		publishWorkIntakeError(deps, msg, "Which repo should I plan against? Mention one of: "+strings.Join(route.Repos, ", "))
+		publishWorkIntakeError(deps, msg, "I can't start planning because this channel has no configured repos.")
 		return true
 	}
 
@@ -54,7 +53,7 @@ func maybeHandleWorkIntake(ctx context.Context, msg bus.InboundMessage, deps *Co
 		return true
 	}
 
-	threadName := buildWorkIntakeThreadName(repo, ask)
+	threadName := buildWorkIntakeThreadName(repos, ask)
 	thread, err := deps.ChannelMgr.CreateDiscordThread(ctx, msg.Channel, channels.DiscordThreadParams{
 		ChannelID:          firstNonEmpty(msg.Metadata["channel_id"], msg.ChatID),
 		MessageID:          msg.Metadata["message_id"],
@@ -67,7 +66,7 @@ func maybeHandleWorkIntake(ctx context.Context, msg bus.InboundMessage, deps *Co
 		return true
 	}
 
-	worktree := buildWorkIntakeWorktreePath(route, repo, ask)
+	worktree := buildWorkIntakeWorktreePath(route, repos, ask)
 	workspaceRoot := firstNonEmpty(route.WorkspaceRoot, defaultWorkIntakeRoot)
 	command := firstNonEmpty(route.Command, defaultWorkIntakeCommand)
 	timeout := firstNonEmpty(route.Timeout, defaultWorkIntakeTimeout)
@@ -80,10 +79,16 @@ func maybeHandleWorkIntake(ctx context.Context, msg bus.InboundMessage, deps *Co
 	toolCtx = tools.WithToolAgentKey(toolCtx, agentID)
 	toolCtx = tools.WithToolSessionKey(toolCtx, sessions.BuildScopedSessionKey(agentID, msg.Channel, sessions.PeerGroup, thread.ThreadID))
 
+	jobArgs := []any{"--ask", ask}
+	for _, repo := range repos {
+		jobArgs = append(jobArgs, "--candidate-repo", repo)
+	}
+	jobArgs = append(jobArgs, "--base-ref", baseRef, "--worktree", worktree, "--channel", msg.Channel, "--thread-id", thread.ThreadID)
+
 	args := map[string]any{
 		"kind":           "autoplan",
 		"command":        command,
-		"args":           []any{"--ask", ask, "--repo", repo, "--base-ref", baseRef, "--worktree", worktree, "--channel", msg.Channel, "--thread-id", thread.ThreadID},
+		"args":           jobArgs,
 		"cwd":            workspaceRoot,
 		"workspace_root": workspaceRoot,
 		"worktree_path":  worktree,
@@ -101,7 +106,7 @@ func maybeHandleWorkIntake(ctx context.Context, msg bus.InboundMessage, deps *Co
 		"channel", msg.Channel,
 		"parent_chat_id", msg.ChatID,
 		"thread_id", thread.ThreadID,
-		"repo", repo,
+		"repos", strings.Join(repos, ","),
 		"worktree", worktree,
 	)
 	publishWorkIntakeThreadMessage(deps, msg, thread.ThreadID, "Started the planning Job. Progress and any planning questions will appear here.")
@@ -154,29 +159,30 @@ func looksLikeWorkIntake(content string) bool {
 	})
 }
 
-func inferWorkIntakeRepo(repos []string, content string) (string, bool) {
+func selectWorkIntakeRepos(repos []string) ([]string, bool) {
 	if len(repos) == 0 {
-		return "", false
+		return nil, false
 	}
-	if len(repos) == 1 {
-		return repos[0], true
-	}
-	text := strings.ToLower(content)
-	var matches []string
+	out := make([]string, 0, len(repos))
+	seen := make(map[string]struct{}, len(repos))
 	for _, repo := range repos {
-		name := strings.ToLower(path.Base(repo))
-		full := strings.ToLower(repo)
-		if containsTokenish(text, name) || strings.Contains(text, full) {
-			matches = append(matches, repo)
+		repo = strings.TrimSpace(repo)
+		if repo == "" {
+			continue
 		}
+		if _, ok := seen[repo]; ok {
+			continue
+		}
+		seen[repo] = struct{}{}
+		out = append(out, repo)
 	}
-	if len(matches) == 1 {
-		return matches[0], true
+	if len(out) == 0 {
+		return nil, false
 	}
-	return "", false
+	return out, true
 }
 
-func buildWorkIntakeThreadName(repo, content string) string {
+func buildWorkIntakeThreadName(repos []string, content string) string {
 	summary := stripWorkIntakeScaffolding(content)
 	summary = strings.TrimPrefix(summary, "@Gillen")
 	summary = strings.TrimSpace(summary)
@@ -188,7 +194,7 @@ func buildWorkIntakeThreadName(repo, content string) string {
 	if len(words) > 8 {
 		words = words[:8]
 	}
-	name := path.Base(repo) + " / " + strings.Join(words, " ")
+	name := workIntakeRepoLabel(repos) + " / " + strings.Join(words, " ")
 	name = sanitizeDiscordThreadName(name)
 	if len([]rune(name)) > 100 {
 		name = string([]rune(name)[:100])
@@ -200,9 +206,9 @@ func buildWorkIntakeThreadName(repo, content string) string {
 	return name
 }
 
-func buildWorkIntakeWorktreePath(route config.WorkIntakeRoute, repo, content string) string {
+func buildWorkIntakeWorktreePath(route config.WorkIntakeRoute, repos []string, content string) string {
 	root := firstNonEmpty(route.WorkspaceRoot, defaultWorkIntakeRoot)
-	slug := slugify(path.Base(repo) + "-" + stripWorkIntakeScaffolding(content))
+	slug := slugify(workIntakeRepoLabel(repos) + "-" + stripWorkIntakeScaffolding(content))
 	if len(slug) > 48 {
 		slug = slug[:48]
 		slug = strings.Trim(slug, "-")
@@ -211,6 +217,30 @@ func buildWorkIntakeWorktreePath(route config.WorkIntakeRoute, repo, content str
 		slug = "discord-plan"
 	}
 	return root + "/worktrees/" + slug + "-" + uuid.NewString()[:8]
+}
+
+func workIntakeRepoLabel(repos []string) string {
+	if len(repos) == 0 {
+		return "planning"
+	}
+	if len(repos) == 1 {
+		return path.Base(repos[0])
+	}
+	parts := make([]string, 0, len(repos))
+	for _, repo := range repos {
+		base := path.Base(repo)
+		if base != "" && base != "." {
+			parts = append(parts, base)
+		}
+	}
+	if len(parts) == 0 {
+		return "multi-repo"
+	}
+	label := strings.Join(parts, "+")
+	if len([]rune(label)) > 40 {
+		label = "multi-repo"
+	}
+	return label
 }
 
 func publishWorkIntakeError(deps *ConsumerDeps, msg bus.InboundMessage, content string) {
@@ -260,14 +290,6 @@ func stripWorkIntakeScaffolding(content string) string {
 		out = append(out, line)
 	}
 	return strings.Join(out, " ")
-}
-
-func containsTokenish(haystack, needle string) bool {
-	if needle == "" {
-		return false
-	}
-	re := regexp.MustCompile(`(^|[^a-z0-9_-])` + regexp.QuoteMeta(needle) + `([^a-z0-9_-]|$)`)
-	return re.MatchString(haystack)
 }
 
 func sanitizeDiscordThreadName(s string) string {
