@@ -80,17 +80,21 @@ func TestLooksLikeWorkIntake(t *testing.T) {
 	}
 }
 
-func TestInferWorkIntakeRepo(t *testing.T) {
+func TestSelectWorkIntakeRepos(t *testing.T) {
 	repos := []string{"cartridge-gg/controller", "cartridge-gg/controller-rs"}
-	repo, ok := inferWorkIntakeRepo(repos, "Create a plan to upgrade controller-rs.")
-	if !ok || repo != "cartridge-gg/controller-rs" {
-		t.Fatalf("repo = %q, %v", repo, ok)
+	got, ok := selectWorkIntakeRepos(repos)
+	if !ok {
+		t.Fatal("expected repos")
 	}
-	if repo, ok := inferWorkIntakeRepo(repos, "Fix controller auth."); !ok || repo != "cartridge-gg/controller" {
-		t.Fatalf("repo = %q, %v", repo, ok)
+	if strings.Join(got, ",") != "cartridge-gg/controller,cartridge-gg/controller-rs" {
+		t.Fatalf("repos = %q", got)
 	}
-	if _, ok := inferWorkIntakeRepo(repos, "Fix auth."); ok {
-		t.Fatal("ambiguous request should not pick a repo")
+	got, ok = selectWorkIntakeRepos([]string{"cartridge-gg/controller", "cartridge-gg/controller", ""})
+	if !ok || strings.Join(got, ",") != "cartridge-gg/controller" {
+		t.Fatalf("deduped repos = %q, %v", got, ok)
+	}
+	if _, ok := selectWorkIntakeRepos(nil); ok {
+		t.Fatal("empty route should not select repos")
 	}
 }
 
@@ -107,8 +111,8 @@ func TestStripWorkIntakeScaffoldingUsesCurrentMention(t *testing.T) {
 }
 
 func TestBuildWorkIntakeNames(t *testing.T) {
-	name := buildWorkIntakeThreadName("cartridge-gg/controller-rs", "Create a plan to upgrade controller-rs for Starknet privacy features with a very long tail that should truncate cleanly")
-	if !strings.HasPrefix(name, "controller-rs / Create a plan to upgrade controller-rs") {
+	name := buildWorkIntakeThreadName([]string{"cartridge-gg/controller", "cartridge-gg/controller-rs"}, "Create a plan to upgrade controller-rs for Starknet privacy features with a very long tail that should truncate cleanly")
+	if !strings.HasPrefix(name, "controller+controller-rs / Create a plan to upgrade") {
 		t.Fatalf("thread name = %q", name)
 	}
 	if len([]rune(name)) > 100 {
@@ -116,8 +120,8 @@ func TestBuildWorkIntakeNames(t *testing.T) {
 	}
 
 	route := config.WorkIntakeRoute{WorkspaceRoot: "/data/workspace-eng"}
-	worktree := buildWorkIntakeWorktreePath(route, "cartridge-gg/controller-rs", "Create a plan to upgrade controller-rs for Starknet privacy features")
-	if !strings.HasPrefix(worktree, "/data/workspace-eng/worktrees/controller-rs-create-a-plan-to-upgrade-controlle-") {
+	worktree := buildWorkIntakeWorktreePath(route, []string{"cartridge-gg/controller", "cartridge-gg/controller-rs"}, "Create a plan to upgrade controller-rs for Starknet privacy features")
+	if !strings.HasPrefix(worktree, "/data/workspace-eng/worktrees/controller-controller-rs-create-a-plan-to-upgrad-") {
 		t.Fatalf("worktree = %q", worktree)
 	}
 }
