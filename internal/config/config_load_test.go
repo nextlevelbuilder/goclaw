@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // --- Default ---
@@ -261,5 +262,57 @@ func TestLoad_OwnerIDsEmpty(t *testing.T) {
 		if id == "" {
 			t.Fatal("empty owner ID should not be included")
 		}
+	}
+}
+
+// --- Cron job timeout env override ---
+
+func TestLoad_CronJobTimeout_EnvVar(t *testing.T) {
+	t.Setenv("GOCLAW_CRON_JOB_TIMEOUT", "1h")
+
+	cfg, err := Load("/nonexistent/path")
+	if err != nil {
+		t.Fatalf("load error: %v", err)
+	}
+	if got := cfg.Cron.JobTimeoutDuration(); got != time.Hour {
+		t.Fatalf("cron timeout: got %v, want 1h", got)
+	}
+}
+
+func TestLoad_CronJobTimeout_Invalid_FallsBackToDefault(t *testing.T) {
+	t.Setenv("GOCLAW_CRON_JOB_TIMEOUT", "not-a-duration")
+
+	cfg, err := Load("/nonexistent/path")
+	if err != nil {
+		t.Fatalf("load error: %v", err)
+	}
+	if got := cfg.Cron.JobTimeoutDuration(); got != DefaultJobTimeout {
+		t.Fatalf("invalid duration should fall back to default %v, got %v", DefaultJobTimeout, got)
+	}
+}
+
+func TestLoad_CronJobTimeout_Unset_UsesDefault(t *testing.T) {
+	cfg, err := Load("/nonexistent/path")
+	if err != nil {
+		t.Fatalf("load error: %v", err)
+	}
+	if got := cfg.Cron.JobTimeoutDuration(); got != DefaultJobTimeout {
+		t.Fatalf("unset env should use default %v, got %v", DefaultJobTimeout, got)
+	}
+}
+
+func TestLoad_CronJobTimeout_EnvOverridesFile(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.json5")
+	os.WriteFile(cfgPath, []byte(`{"cron":{"job_timeout":"5m"}}`), 0644)
+
+	t.Setenv("GOCLAW_CRON_JOB_TIMEOUT", "30m")
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load error: %v", err)
+	}
+	if got := cfg.Cron.JobTimeoutDuration(); got != 30*time.Minute {
+		t.Fatalf("env should override file: got %v, want 30m", got)
 	}
 }
