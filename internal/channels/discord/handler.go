@@ -63,16 +63,18 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 		return
 	}
 
+	referencedMessage := c.resolveReferencedMessage(ctx, m)
+
 	// Build content
 	content := m.Content
 
 	// Build reply context if replying to another message.
-	if m.ReferencedMessage != nil {
+	if referencedMessage != nil {
 		author := "unknown"
-		if m.ReferencedMessage.Author != nil {
-			author = m.ReferencedMessage.Author.Username
+		if referencedMessage.Author != nil {
+			author = referencedMessage.Author.Username
 		}
-		body := channels.Truncate(m.ReferencedMessage.Content, 500)
+		body := channels.Truncate(referencedMessage.Content, 500)
 		replyCtx := fmt.Sprintf("[Replying to %s]\n%s\n[/Replying]", author, body)
 		if content != "" {
 			content = replyCtx + "\n\n" + content
@@ -89,8 +91,8 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 	mediaList := resolveMedia(m.Attachments, maxBytes)
 
 	// Download media from replied-to message and merge (reply first, current second).
-	if m.ReferencedMessage != nil && len(m.ReferencedMessage.Attachments) > 0 {
-		replyMedia := resolveMedia(m.ReferencedMessage.Attachments, maxBytes)
+	if referencedMessage != nil && len(referencedMessage.Attachments) > 0 {
+		replyMedia := resolveMedia(referencedMessage.Attachments, maxBytes)
 		for i := range replyMedia {
 			replyMedia[i].FromReply = true
 		}
@@ -176,9 +178,9 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 			}
 		}
 		// Reply to bot's message counts as implicit mention.
-		if !mentioned && m.ReferencedMessage != nil &&
-			m.ReferencedMessage.Author != nil &&
-			m.ReferencedMessage.Author.ID == c.botUserID {
+		if !mentioned && referencedMessage != nil &&
+			referencedMessage.Author != nil &&
+			referencedMessage.Author.ID == c.botUserID {
 			mentioned = true
 		}
 		if !mentioned {
@@ -346,6 +348,36 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 	if peerKind == "group" {
 		c.GroupHistory().Clear(channelID)
 	}
+}
+
+func (c *Channel) resolveReferencedMessage(ctx context.Context, m *discordgo.MessageCreate) *discordgo.Message {
+	if m == nil || m.Message == nil {
+		return nil
+	}
+	if m.ReferencedMessage != nil {
+		return m.ReferencedMessage
+	}
+	ref := m.MessageReference
+	if ref == nil || ref.MessageID == "" {
+		return nil
+	}
+	channelID := ref.ChannelID
+	if channelID == "" {
+		channelID = m.ChannelID
+	}
+	if channelID == "" || c.session == nil {
+		return nil
+	}
+	msg, err := c.session.ChannelMessage(channelID, ref.MessageID, discordgo.WithContext(ctx))
+	if err != nil {
+		slog.Warn("discord: failed to fetch referenced message",
+			"channel_id", channelID,
+			"message_id", ref.MessageID,
+			"error", err,
+		)
+		return nil
+	}
+	return msg
 }
 
 // checkGroupPolicy evaluates the group policy for a sender, with pairing support.

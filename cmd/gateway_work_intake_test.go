@@ -179,6 +179,31 @@ func TestClassifyWorkIntakeIncludesScrubbedRecentContext(t *testing.T) {
 	}
 }
 
+func TestClassifyWorkIntakeTreatsReplyContextAsCurrentMessage(t *testing.T) {
+	content := "[From: Tarrence]\n" +
+		"[Replying to broody]\n" +
+		"can u unzip nums-metrics.zip, read readme.md, query Dune and PostHog, and run the script once\n" +
+		"[/Replying]\n\n" +
+		"@Gillen can you take a look at this"
+	p := &workIntakeStubProvider{response: `{"work_intake":true,"reason":"explicit reply target asks for operational work"}`}
+	got, _ := classifyWorkIntake(context.Background(), p, "gpt-5", content, nil)
+	if !got {
+		t.Fatal("expected model decision to route work intake")
+	}
+	prompt := p.req.Messages[1].Content
+	for _, want := range []string{"current_message", "[Replying to broody]", "nums-metrics.zip"} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("classifier prompt missing %q:\n%s", want, prompt)
+		}
+	}
+	system := p.req.Messages[0].Content
+	for _, want := range []string{"explicit Discord reply target", "vague", "recent_context"} {
+		if !strings.Contains(system, want) {
+			t.Fatalf("classifier system prompt missing %q:\n%s", want, system)
+		}
+	}
+}
+
 func TestClassifyWorkIntakeProviderErrorFallsBackInline(t *testing.T) {
 	p := &workIntakeStubProvider{err: errors.New("provider down")}
 	got, reason := classifyWorkIntake(context.Background(), p, "gpt-5", "@Gillen fix it", nil)

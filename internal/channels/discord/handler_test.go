@@ -332,3 +332,54 @@ func TestResolveMediaEmpty(t *testing.T) {
 		t.Errorf("resolveMedia([]) should return empty, got %d", len(results))
 	}
 }
+
+func TestResolveReferencedMessageFetchesWhenGatewayDidNotHydrateReply(t *testing.T) {
+	var fetched bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(io.Discard, r.Body)
+		if r.Method != http.MethodGet {
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+		if r.URL.Path != "/channels/ref-channel/messages/ref-message" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		fetched = true
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(200)
+		w.Write([]byte(`{
+			"id":"ref-message",
+			"channel_id":"ref-channel",
+			"content":"unzip nums-metrics.zip and run the metrics scripts",
+			"author":{"id":"broody","username":"broody"},
+			"attachments":[{"id":"att-1","filename":"nums-metrics.zip","url":"https://cdn.example/nums-metrics.zip","size":42}]
+		}`))
+	}))
+	defer server.Close()
+
+	ch := newTestChannel(t, server)
+	msg := &discordgo.MessageCreate{Message: &discordgo.Message{
+		ID:        "current-message",
+		ChannelID: "current-channel",
+		MessageReference: &discordgo.MessageReference{
+			ChannelID: "ref-channel",
+			MessageID: "ref-message",
+		},
+	}}
+
+	got := ch.resolveReferencedMessage(context.Background(), msg)
+	if got == nil {
+		t.Fatal("expected referenced message")
+	}
+	if !fetched {
+		t.Fatal("expected REST fetch for unhydrated referenced message")
+	}
+	if got.Content != "unzip nums-metrics.zip and run the metrics scripts" {
+		t.Fatalf("content = %q", got.Content)
+	}
+	if got.Author == nil || got.Author.Username != "broody" {
+		t.Fatalf("author = %+v", got.Author)
+	}
+	if len(got.Attachments) != 1 || got.Attachments[0].Filename != "nums-metrics.zip" {
+		t.Fatalf("attachments = %+v", got.Attachments)
+	}
+}
