@@ -341,6 +341,7 @@ func (t *SpawnJobTool) createTaskRow(ctx context.Context, id uuid.UUID, tenantID
 		OriginChatID:   strPtr(sink.ThreadID),
 		OriginPeerKind: strPtr("group"),
 		Metadata: map[string]any{
+			"runner":         "spawn_job",
 			"kind":           req.Kind,
 			"command":        req.Command,
 			"args":           req.Args,

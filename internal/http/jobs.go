@@ -89,7 +89,7 @@ type progressRequest struct {
 // telemetry can split the two.
 type completeRequest struct {
 	ExitCode int    `json:"exit_code"`
-	Result   string `json:"result"`           // human-readable summary or final content
+	Result   string `json:"result"` // human-readable summary or final content
 	Channel  string `json:"channel"`
 	ThreadID string `json:"thread_id"`
 	Source   string `json:"source,omitempty"` // "stream-task" | "informer"
@@ -180,7 +180,11 @@ func (h *JobsHandler) handleComplete(w http.ResponseWriter, r *http.Request) {
 	// Idempotency: if the row is already terminal, no-op. Handles the
 	// race between stream-task's direct callback and the informer's
 	// synthetic callback for the same Job.
-	if row.Status == "done" || row.Status == "failed" || row.Status == "interrupted" {
+	//
+	// Exception: older goclaw builds could mark spawn_job rows as
+	// "interrupted" during a goclaw restart even though the Kubernetes Job was
+	// still running. Let the real Job completion repair those rows.
+	if row.Status == "done" || row.Status == "failed" || (row.Status == "interrupted" && !isExternalSpawnJobTask(row)) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "already_terminal", "previous": row.Status})
 		return
 	}
@@ -309,6 +313,31 @@ func strDeref(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+func isExternalSpawnJobTask(row *store.SubagentTaskData) bool {
+	if row == nil || len(row.Metadata) == 0 {
+		return false
+	}
+	if metadataString(row.Metadata, "runner") == "spawn_job" {
+		return true
+	}
+	if metadataString(row.Metadata, "k8s_job_name") != "" {
+		return true
+	}
+	return metadataString(row.Metadata, "command") != "" &&
+		metadataString(row.Metadata, "worktree_path") != "" &&
+		row.Metadata["sinks"] != nil
+}
+
+func metadataString(metadata map[string]any, key string) string {
+	if metadata == nil {
+		return ""
+	}
+	if v, ok := metadata[key].(string); ok {
+		return v
+	}
+	return ""
 }
 
 func ptrIfNonEmpty(s string) *string {

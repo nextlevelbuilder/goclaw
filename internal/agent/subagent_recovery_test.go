@@ -195,6 +195,55 @@ func TestRecoverInterruptedSubagents_HappyPath(t *testing.T) {
 	}
 }
 
+func TestRecoverInterruptedSubagents_SkipsSpawnJobRows(t *testing.T) {
+	spawnJob := taskFixture("discord-eng", "1217211714185986128")
+	spawnJob.Metadata = map[string]any{
+		"runner":        "spawn_job",
+		"kind":          "autoplan",
+		"command":       "/app/agent/bin/run-discord-plan",
+		"worktree_path": "/data/workspace-eng/worktrees/task",
+		"sinks":         []any{map[string]any{"type": "discord"}},
+		"k8s_job_name":  "agent-job-autoplan-abc",
+		"agent_service": "kubernetes",
+	}
+	inProcess := taskFixture("discord-eng", "222")
+	taskStore := &fakeTaskStore{running: []store.SubagentTaskData{spawnJob, inProcess}}
+	sender := &fakeChannelSender{}
+
+	RecoverInterruptedSubagents(context.Background(), taskStore, sender, 50)
+
+	if len(taskStore.updates) != 1 {
+		t.Fatalf("expected only in-process row to be marked interrupted, got %+v", taskStore.updates)
+	}
+	if taskStore.updates[0].ID != inProcess.ID {
+		t.Fatalf("updated wrong row: got %s want %s", taskStore.updates[0].ID, inProcess.ID)
+	}
+	if len(sender.posts) != 1 || sender.posts[0].ChatID != "222" {
+		t.Fatalf("expected one recovery post for in-process row, got %+v", sender.posts)
+	}
+}
+
+func TestRecoverInterruptedSubagents_SkipsLegacySpawnJobRows(t *testing.T) {
+	spawnJob := taskFixture("discord-eng", "1217211714185986128")
+	spawnJob.Metadata = map[string]any{
+		"kind":          "autoplan",
+		"command":       "/app/agent/bin/run-discord-plan",
+		"worktree_path": "/data/workspace-eng/worktrees/task",
+		"sinks":         []any{map[string]any{"type": "discord"}},
+	}
+	taskStore := &fakeTaskStore{running: []store.SubagentTaskData{spawnJob}}
+	sender := &fakeChannelSender{}
+
+	RecoverInterruptedSubagents(context.Background(), taskStore, sender, 50)
+
+	if len(taskStore.updates) != 0 {
+		t.Fatalf("legacy spawn_job row should not be marked interrupted, got %+v", taskStore.updates)
+	}
+	if len(sender.posts) != 0 {
+		t.Fatalf("legacy spawn_job row should not get recovery notice, got %+v", sender.posts)
+	}
+}
+
 func TestRecoverInterruptedSubagents_NoOriginSilent(t *testing.T) {
 	// A row with nil OriginChannel/OriginChatID must still be marked
 	// interrupted but produces NO post. Common case: subagents spawned

@@ -362,11 +362,71 @@ func TestJobsHandler_CompleteIdempotent(t *testing.T) {
 	}
 }
 
+func TestJobsHandler_CompleteRepairsInterruptedSpawnJob(t *testing.T) {
+	s := newFakeStore()
+	sender := &fakeSender{}
+	id := runningRow(s, "discord-eng", "1217")
+	row, _ := s.Get(context.Background(), id)
+	row.Status = "interrupted"
+	row.Metadata = map[string]any{
+		"runner":        "spawn_job",
+		"kind":          "autoplan",
+		"command":       "/app/agent/bin/run-discord-plan",
+		"worktree_path": "/data/workspace-eng/worktrees/task",
+		"sinks":         []any{map[string]any{"type": "discord"}},
+	}
+	h := NewJobsHandler(s, sender, []byte("k"))
+
+	body, _ := json.Marshal(completeRequest{
+		ExitCode: 0,
+		Result:   "Recovered plan completion",
+		Channel:  "discord-eng",
+		ThreadID: "1217",
+		Source:   "stream-job",
+	})
+	rec := serve(h, signedRequest(t, "/v1/agents/jobs/"+id.String()+"/complete", body, []byte("k")))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if len(s.statuses) != 1 || s.statuses[0].status != "done" {
+		t.Fatalf("expected interrupted spawn_job to transition to done, got %+v", s.statuses)
+	}
+	if len(sender.calls) != 1 || !strings.Contains(sender.calls[0].content, "Recovered plan completion") {
+		t.Fatalf("expected completion post, got %+v", sender.calls)
+	}
+}
+
+func TestJobsHandler_CompleteKeepsInterruptedInProcessSubagentTerminal(t *testing.T) {
+	s := newFakeStore()
+	sender := &fakeSender{}
+	id := runningRow(s, "discord-eng", "1217")
+	row, _ := s.Get(context.Background(), id)
+	row.Status = "interrupted"
+	h := NewJobsHandler(s, sender, []byte("k"))
+
+	body, _ := json.Marshal(completeRequest{
+		ExitCode: 0,
+		Result:   "late in-process completion",
+		Channel:  "discord-eng",
+		ThreadID: "1217",
+	})
+	rec := serve(h, signedRequest(t, "/v1/agents/jobs/"+id.String()+"/complete", body, []byte("k")))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if len(s.statuses) != 0 {
+		t.Fatalf("interrupted in-process subagent should stay terminal, got %+v", s.statuses)
+	}
+	if len(sender.calls) != 0 {
+		t.Fatalf("interrupted in-process subagent should not post completion, got %+v", sender.calls)
+	}
+}
+
 func TestJobsHandler_VerifyHMACEdgeCases(t *testing.T) {
 	cases := []struct {
-		name    string
-		header  string
-		want    bool
+		name   string
+		header string
+		want   bool
 	}{
 		{"empty", "", false},
 		{"no_prefix", "abc", false},

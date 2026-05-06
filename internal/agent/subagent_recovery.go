@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -81,6 +82,13 @@ func RecoverInterruptedSubagents(
 	)
 	for i := range tasks {
 		t := &tasks[i]
+		if isExternalSpawnJobTask(t) {
+			slog.Info("subagent_recovery.skip_external_job",
+				"id", t.ID,
+				"kind", metadataString(t.Metadata, "kind"),
+				"k8s_job_name", metadataString(t.Metadata, "k8s_job_name"))
+			continue
+		}
 
 		// Step 1: mark interrupted. We use UpdateStatus so the store's
 		// existing tenant guards apply (the store has the tenant from
@@ -145,4 +153,36 @@ func derefStr(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+func isExternalSpawnJobTask(t *store.SubagentTaskData) bool {
+	if t == nil || len(t.Metadata) == 0 {
+		return false
+	}
+	if metadataString(t.Metadata, "runner") == "spawn_job" {
+		return true
+	}
+	if metadataString(t.Metadata, "k8s_job_name") != "" {
+		return true
+	}
+	// Backward compatibility for rows created before runner was stamped.
+	// spawn_job rows include the Kubernetes command contract in metadata;
+	// in-process subagent rows do not.
+	return metadataString(t.Metadata, "command") != "" &&
+		metadataString(t.Metadata, "worktree_path") != "" &&
+		t.Metadata["sinks"] != nil
+}
+
+func metadataString(metadata map[string]any, key string) string {
+	if metadata == nil {
+		return ""
+	}
+	switch v := metadata[key].(type) {
+	case string:
+		return v
+	case fmt.Stringer:
+		return v.String()
+	default:
+		return ""
+	}
 }
