@@ -57,12 +57,23 @@ type Channel struct {
 
 	// Outbound state.
 	// placeholders maps chatID (string, as in bus.OutboundMessage.ChatID)
-	// to the most recent message_id sent there. Used by streaming (Day 4)
+	// to the most recent message_id sent there. Used by streaming (Day 4.5)
 	// to know which message to edit instead of sending a new one.
 	placeholders sync.Map
 
 	// sentCount tracks total successful chunk sends; useful for tests/metrics.
 	sentCount int64
+
+	// runCtxMu guards pollRunCtx — written by Start, read by webhook
+	// handler (and potentially other callers triggered from outside the
+	// polling goroutine).
+	runCtxMu   sync.RWMutex
+	pollRunCtx context.Context
+
+	// reactionRefreshers tracks active typing-action goroutines per chatID.
+	// Map key: chatID (string). Map value: *reactionRefresher.
+	// Cleared on Stop.
+	reactionRefreshers sync.Map
 }
 
 // New constructs a Max channel from validated creds and config.
@@ -140,6 +151,12 @@ func (c *Channel) Start(ctx context.Context) error {
 		pollCtx, cancel := context.WithCancel(context.Background())
 		c.pollCancel = cancel
 
+		// Stash for the webhook handler so async dispatch uses the same
+		// long-lived context as polling.
+		c.runCtxMu.Lock()
+		c.pollRunCtx = pollCtx
+		c.runCtxMu.Unlock()
+
 		c.SetRunning(true)
 		c.MarkHealthy(connectedSummary(me.Username, me.UserID))
 
@@ -180,6 +197,10 @@ func (c *Channel) Stop(ctx context.Context) error {
 				"channel", c.Name(), "timeout", pollStopTimeout)
 		}
 
+		// Stop all reaction refreshers — must happen BEFORE handlerWg.Wait
+		// because refreshers do not run as handlers but still hold goroutines.
+		c.stopAllReactionRefreshers()
+
 		// Wait for in-flight handlers (bounded).
 		handlerDone := make(chan struct{})
 		go func() {
@@ -202,6 +223,14 @@ func (c *Channel) Stop(ctx context.Context) error {
 // Implementation lives in outbound.go.
 func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 	return c.send(ctx, msg)
+}
+
+// BlockReplyEnabled returns the per-instance block_reply setting if configured,
+// or nil to inherit the gateway-level default.
+//
+// Implements channels.BlockReplyChannel.
+func (c *Channel) BlockReplyEnabled() *bool {
+	return c.cfg.BlockReply
 }
 
 // connectedSummary builds a human-readable status string for the health endpoint.

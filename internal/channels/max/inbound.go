@@ -350,32 +350,7 @@ func buildMetadata(msg Message, edited bool) map[string]string {
 	return md
 }
 
-// downloadInboundMedia fetches attachment files to local paths suitable for
-// passing to BaseChannel.HandleMessage. Returns paths in attachment order;
-// failed downloads are skipped (logged) so partial media still flows.
-//
-// Day 2: stub — returns empty paths for now (logs intent).
-// Day 4 will implement actual HTTP GET → temp file persistence.
-func (c *Channel) downloadInboundMedia(ctx context.Context, atts []Attachment) []string {
-	if len(atts) == 0 {
-		return nil
-	}
-
-	var paths []string
-	for _, a := range atts {
-		switch a.Type {
-		case AttachmentTypeImage, AttachmentTypeVideo, AttachmentTypeAudio,
-			AttachmentTypeFile, AttachmentTypeSticker:
-			// Day 4: download a.Payload.URL to a temp file, sanitize filename, append path.
-			slog.Debug("max: media download not yet implemented",
-				"channel", c.Name(), "type", a.Type, "url", a.Payload.URL)
-		case AttachmentTypeContact, AttachmentTypeShare,
-			AttachmentTypeLocation, AttachmentTypeInlineKeyboard:
-			// Non-file attachments — skip silently.
-		}
-	}
-	return paths
-}
+// downloadInboundMedia is implemented in media_download.go.
 
 // =====================================================================
 // Helpers
