@@ -113,6 +113,54 @@ Stamp returned URL into the doc's `image` field.
 6. PATCH /api/<collection>/:id.
 7. WebFetch verify.
 
+## Workflow — attach image to existing article (after user approval)
+
+This is step 2 of the multi-mod chain: **content mod posts draft first, illustrator generates image, user approves, then content mod PATCHes the image URL**.
+
+Trigger: orchestrator (Gia Hân) sends task with `{ articleId, imageUrl, slug }` after user approved the illustration preview.
+
+1. **Receive task** with article id + approved image URL (typically Telegram or other temporary URL).
+2. **Upload to R2** (gives permanent URL):
+   ```bash
+   curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+     -d '{"url":"<approved telegram url>","intent":"article","slug":"<slug>"}' \
+     https://battudao.com/api/upload-from-url
+   # → { url: "https://pub-xxx.r2.dev/immortality-vn/articles/<slug>-<ts>.jpg" }
+   ```
+3. **PATCH article**:
+   ```bash
+   curl -X PATCH -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+     -d '{"image":"<r2 url from step 2>"}' \
+     https://battudao.com/api/articles/<articleId>
+   ```
+4. **Verify**: WebFetch the public page → confirm hero image renders.
+5. **Report** to orchestrator: `image attached to <id>, R2 url: <url>`. Article still `status: draft` — admin promotes manually.
+
+**Do NOT** patch image into khaitri docs unless explicitly asked — khaitri is text-only by convention.
+
+## Multi-mod orchestration (info for orchestrator agent)
+
+Two-step publish flow when user wants illustrated article:
+
+```
+[user content] → orchestrator
+    │
+    ├─ 1. dispatch immortality-mod (this skill) → POST /api/articles { ..., status: "draft" }
+    │     returns: { id, sourceRef, slug, adminUrl }
+    │
+    ├─ 2. dispatch illustrator-mod with { title, summary, slug } → returns: { telegramImageUrl }
+    │
+    ├─ 3. orchestrator forwards image preview to user → "duyệt không?"
+    │
+    ├─ 4. on user "ok" → dispatch immortality-mod (this skill, image-patch workflow)
+    │     with { articleId: id, imageUrl: telegramImageUrl, slug }
+    │     → uploads R2, PATCHes article.image
+    │
+    └─ 5. orchestrator notifies user: "Bài đã có hình, vào admin duyệt published: <adminUrl>"
+```
+
+This skill does NOT call sibling agents — orchestrator handles dispatching. This skill only owns the API write path.
+
 ## TUYỆT ĐỐI KHÔNG
 
 1. **CẤM hỏi user "Article hay Khai Trí?"** — auto-classify. Vi phạm = bug.
