@@ -86,16 +86,21 @@ type Image struct {
 }
 
 // Recipient identifies who receives a message — a user (DM) or a chat (group).
-// Exactly one of UserID / ChatID is meaningful.
+//
+// IMPORTANT: In real Max API responses, BOTH UserID and ChatID are populated
+// for direct messages (UserID = bot user_id, ChatID = dialog thread ID).
+// The authoritative discriminator is ChatType.
 type Recipient struct {
-	UserID  int64  `json:"user_id,omitempty"`
-	ChatID  int64  `json:"chat_id,omitempty"`
+	UserID   int64  `json:"user_id,omitempty"`
+	ChatID   int64  `json:"chat_id,omitempty"`
 	ChatType string `json:"chat_type,omitempty"` // "dialog" | "chat"
 }
 
-// IsDialog returns true if recipient is a user (DM).
+// IsDialog returns true if this recipient identifies a 1:1 conversation.
+// Uses ChatType as the authoritative signal because UserID is also populated
+// for DMs (it's the bot's user_id, not a discriminator).
 func (r *Recipient) IsDialog() bool {
-	return r.UserID != 0 && r.ChatID == 0
+	return r.ChatType == ChatTypeDialog
 }
 
 // MessageBody holds the content of a Message.
@@ -195,12 +200,16 @@ type LinkedMessage struct {
 }
 
 // Message is a chat message — both inbound (from updates) and outbound (send response).
+//
+// Note on field naming: the Max API returns the inner content under JSON key
+// "message" (not "body" as suggested by some docs sections). We keep the Go
+// field name `Body` for readability but bind to "message" via json tag.
 type Message struct {
 	Sender    *User          `json:"sender,omitempty"`
 	Recipient *Recipient     `json:"recipient,omitempty"`
 	Timestamp int64          `json:"timestamp"`
 	Link      *LinkedMessage `json:"link,omitempty"`
-	Body      *MessageBody   `json:"body,omitempty"`
+	Body      *MessageBody   `json:"message,omitempty"`
 	URL       string         `json:"url,omitempty"`
 }
 

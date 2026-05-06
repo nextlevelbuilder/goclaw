@@ -185,13 +185,15 @@ func (c *Channel) handleMessage(ctx context.Context, msg Message, edited bool) {
 
 	senderID := strconv.FormatInt(msg.Sender.UserID, 10)
 
-	// Resolve chatID and peerKind from recipient.
-	// DM: recipient.user_id is set, recipient.chat_id is 0
-	// Group: recipient.chat_id is set
+	// Resolve chatID and peerKind from recipient.chat_type (authoritative).
+	// In real Max API, both user_id and chat_id are populated for DMs:
+	//   user_id = bot's id, chat_id = dialog thread ID, chat_type = "dialog"
+	// For groups: chat_type = "chat", chat_id = group ID.
 	var chatID, peerKind string
 	if msg.Recipient.IsDialog() {
-		// DM: chat_id == sender's user_id from bot's perspective.
-		chatID = senderID
+		// Use recipient.chat_id (the DM thread ID) — stable per-conversation
+		// identifier that goclaw can use to construct session keys.
+		chatID = strconv.FormatInt(msg.Recipient.ChatID, 10)
 		peerKind = "direct"
 	} else {
 		chatID = strconv.FormatInt(msg.Recipient.ChatID, 10)
