@@ -167,5 +167,8 @@ func DefaultMenuCommands() []telego.BotCommand {
 		{Command: "writers", Description: "List file writers for this group"},
 		{Command: "addwriter", Description: "Add a file writer (reply to their message)"},
 		{Command: "removewriter", Description: "Remove a file writer (reply to their message)"},
+		{Command: "croners", Description: "List cron managers for this group"},
+		{Command: "addcron", Description: "Add a cron manager (reply to their message)"},
+		{Command: "removecron", Description: "Remove a cron manager (reply to their message)"},
 	}
 }

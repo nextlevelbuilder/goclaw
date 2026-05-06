@@ -93,6 +93,9 @@ func (c *Channel) handleBotCommand(ctx context.Context, message *telego.Message,
 			"/writers — List file writers for this group\n" +
 			"/addwriter — Add a file writer (reply to their message)\n" +
 			"/removewriter — Remove a file writer (reply to their message)\n" +
+			"/croners — List cron managers for this group\n" +
+			"/addcron — Add a cron manager (reply to their message)\n" +
+			"/removecron — Remove a cron manager (reply to their message)\n" +
 			"\nJust send a message to chat with the AI."
 		msg := tu.Message(chatIDObj, helpText)
 		setThread(msg)
@@ -226,6 +229,18 @@ func (c *Channel) handleBotCommand(ctx context.Context, message *telego.Message,
 
 	case "/writers":
 		c.handleListWriters(ctx, chatID, chatIDStr, isGroup, setThread)
+		return true
+
+	case "/addcron":
+		c.handleCronPermCommand(ctx, message, chatID, chatIDStr, senderID, isGroup, setThread, "add")
+		return true
+
+	case "/removecron":
+		c.handleCronPermCommand(ctx, message, chatID, chatIDStr, senderID, isGroup, setThread, "remove")
+		return true
+
+	case "/croners":
+		c.handleListCronPerm(ctx, chatID, chatIDStr, isGroup, setThread)
 		return true
 
 	case "/reactions":
