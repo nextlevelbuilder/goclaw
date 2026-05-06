@@ -238,7 +238,23 @@ func (c *Channel) handleMessage(ctx context.Context, msg Message, edited bool) {
 		content = stripBotMention(content, c.creds.Username, c.creds.BotID)
 	}
 
-	// Hand off to BaseChannel — this enforces allowlist + publishes to bus.
+	// Enforce DM / group policy before dispatch. CheckDMPolicy /
+	// CheckGroupPolicy in BaseChannel evaluate allowlist + pairing state;
+	// PolicyNeedsPairing causes a pairing-code reply to be sent (handled
+	// inside checkDMPolicy/checkGroupPolicy) and the message is dropped.
+	chatIDInt, _ := strconv.ParseInt(chatID, 10, 64)
+	if peerKind == "direct" {
+		if !c.checkDMPolicy(ctx, senderID, chatIDInt) {
+			return
+		}
+	} else {
+		if !c.checkGroupPolicy(ctx, senderID, chatIDInt) {
+			return
+		}
+	}
+
+	// Hand off to BaseChannel — publishes to bus (allowlist already
+	// applied above by CheckDMPolicy / CheckGroupPolicy).
 	c.HandleMessage(senderID, chatID, content, mediaPaths, metadata, peerKind)
 }
 

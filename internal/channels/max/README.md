@@ -95,7 +95,7 @@ Max API does not provide a shared-secret signature scheme for webhook authentici
 
 - **Hard-to-guess URL.** Embed a UUID or random hex token in the path: `https://your.gateway/max/webhook/<uuid>`. Rotate on suspected leak (logs, error reports, screenshots).
 - **TLS.** Webhook URL MUST be HTTPS. The channel enforces this at config-validation time; deployment must provision a real certificate.
-- **Production policy.** Configure `dm_policy: "allowlist"` and populate `allow_from` with known user IDs. Even if an attacker forges a webhook update with a spoofed `sender.user_id`, the channel rejects unauthorized senders before invoking the agent.
+- **Production policy.** Configure `dm_policy: "allowlist"` and populate `allow_from` with known user IDs, or use `dm_policy: "pairing"` to require an approval handshake. Both are enforced in `policy.go` before the agent loop is invoked. Note that `sender.user_id` from polling is server-attested by Max; webhook flows additionally verify HMAC-SHA256 in `auth.go` (see *Webhook security* below).
 
 **Recommended:**
 
