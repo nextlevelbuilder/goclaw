@@ -158,11 +158,45 @@ func TestClassifyWorkIntakeIncludesMediaAndOptions(t *testing.T) {
 	}
 }
 
+func TestClassifyWorkIntakeIncludesScrubbedRecentContext(t *testing.T) {
+	content := "[Chat messages since your last reply]\n" +
+		"Broody [4:22 PM]: @Gillen unzip nums-metrics.zip, read readme.md, query Dune and PostHog with DUNE_API_KEY=abcdef1234567890\n" +
+		"[From: Tarrence]\n" +
+		"@Gillen can you take a look at this"
+	p := &workIntakeStubProvider{response: `{"work_intake":true,"reason":"current message refers to prior operational request"}`}
+	got, _ := classifyWorkIntake(context.Background(), p, "gpt-5", content, nil)
+	if !got {
+		t.Fatal("expected model decision to route work intake")
+	}
+	prompt := p.req.Messages[1].Content
+	for _, want := range []string{"recent_context", "nums-metrics.zip", "[REDACTED]"} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("classifier prompt missing %q:\n%s", want, prompt)
+		}
+	}
+	if strings.Contains(prompt, "abcdef1234567890") {
+		t.Fatalf("classifier prompt leaked credential:\n%s", prompt)
+	}
+}
+
 func TestClassifyWorkIntakeProviderErrorFallsBackInline(t *testing.T) {
 	p := &workIntakeStubProvider{err: errors.New("provider down")}
 	got, reason := classifyWorkIntake(context.Background(), p, "gpt-5", "@Gillen fix it", nil)
 	if got || reason != "classifier failed" {
 		t.Fatalf("classifyWorkIntake() = %v, %q", got, reason)
+	}
+}
+
+func TestAppendWorkIntakeRecentContext(t *testing.T) {
+	content := "[Chat messages since your last reply]\n" +
+		"Broody [4:22 PM]: @Gillen unzip nums-metrics.zip and run the metrics scripts\n" +
+		"[From: Tarrence]\n" +
+		"@Gillen can you take a look at this"
+	got := appendWorkIntakeRecentContext("@Gillen can you take a look at this", content)
+	for _, want := range []string{"@Gillen can you take a look at this", "Recent Discord context", "nums-metrics.zip"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("ask missing %q:\n%s", want, got)
+		}
 	}
 }
 

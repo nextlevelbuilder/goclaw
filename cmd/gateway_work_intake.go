@@ -61,6 +61,7 @@ func maybeHandleWorkIntake(ctx context.Context, msg bus.InboundMessage, deps *Co
 		return false
 	}
 	ask := stripWorkIntakeScaffolding(msg.Content)
+	ask = appendWorkIntakeRecentContext(ask, msg.Content)
 	askWithMedia := appendWorkIntakeMediaContext(ask, msg.Media)
 
 	repos, repoOK := selectWorkIntakeRepos(route.Repos)
@@ -172,9 +173,11 @@ func classifyWorkIntake(ctx context.Context, provider providers.Provider, model,
 	}
 	payload := struct {
 		CurrentMessage string            `json:"current_message"`
+		RecentContext  string            `json:"recent_context,omitempty"`
 		Attachments    []workIntakeMedia `json:"attachments,omitempty"`
 	}{
 		CurrentMessage: current,
+		RecentContext:  tools.ScrubCredentials(workIntakeRecentContext(content)),
 	}
 	payload.Attachments = workIntakeMediaPayload(media)
 	payloadJSON, err := json.MarshalIndent(payload, "", "  ")
@@ -216,6 +219,45 @@ func classifyWorkIntake(ctx context.Context, provider providers.Provider, model,
 		return true, "unstructured classifier response"
 	}
 	return false, "unstructured classifier response"
+}
+
+func appendWorkIntakeRecentContext(ask, content string) string {
+	recent := strings.TrimSpace(workIntakeRecentContext(content))
+	if recent == "" {
+		return ask
+	}
+	return ask + "\n\nRecent Discord context this request may refer to:\n" + recent
+}
+
+func workIntakeRecentContext(content string) string {
+	lines := strings.Split(content, "\n")
+	currentStart := -1
+	for i := len(lines) - 1; i >= 0; i-- {
+		if strings.HasPrefix(strings.TrimSpace(lines[i]), "[From:") {
+			currentStart = i
+			break
+		}
+	}
+	if currentStart <= 0 {
+		return ""
+	}
+	recent := make([]string, 0, currentStart)
+	for _, line := range lines[:currentStart] {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "[Chat messages since") {
+			continue
+		}
+		recent = append(recent, line)
+	}
+	out := strings.Join(recent, "\n")
+	const maxRecentContext = 4000
+	if len(out) > maxRecentContext {
+		out = out[len(out)-maxRecentContext:]
+		if idx := strings.IndexByte(out, '\n'); idx >= 0 && idx+1 < len(out) {
+			out = out[idx+1:]
+		}
+	}
+	return out
 }
 
 type workIntakeMedia struct {
