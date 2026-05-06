@@ -18,6 +18,7 @@ var allowedCommands = map[string]bool{
 	"java": true, "dotnet": true, "php": true,
 	"uvx": true, "uv": true, "pipx": true,
 	"deno": true, "bun": true,
+	"mcp-server-darwin-arm64": true,
 }
 
 // Shell metacharacters that indicate injection attempt.
