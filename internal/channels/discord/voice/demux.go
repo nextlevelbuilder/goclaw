@@ -42,8 +42,9 @@ type demux struct {
 	ssrcBufs map[uint32]*ssrcBuffer
 
 	// Diagnostic counters (exposed for tests + metrics).
-	droppedFramesCapacity atomic.Uint64 // per-SSRC buffer hit SSRCBufferMaxBytes
-	droppedFramesQueue    atomic.Uint64 // utterance queue was full
+	droppedFramesCapacity   atomic.Uint64 // per-SSRC buffer hit SSRCBufferMaxBytes
+	droppedFramesQueue      atomic.Uint64 // utterance queue was full
+	droppedFramesCiphertext atomic.Uint64 // utterance looked like encrypted bytes, not Opus
 }
 
 // ssrcBuffer accumulates Opus frames for a single speaker's current
@@ -291,6 +292,14 @@ func (d *demux) flushSSRC(ssrc uint32, reason string) {
 		d.log.Debug("voice: drop short utterance",
 			"ssrc", ssrc, "duration_ms", u.durationMs,
 			"min_ms", d.cfg.MinUtteranceMs, "reason", reason)
+		return
+	}
+
+	if likely, distinctTOC := likelyCiphertextOpus(u.opusFrames); likely {
+		d.droppedFramesCiphertext.Add(uint64(len(u.opusFrames)))
+		d.log.Warn("voice: drop utterance suspected to be encrypted audio",
+			"ssrc", ssrc, "duration_ms", u.durationMs, "frames", len(u.opusFrames),
+			"distinct_toc", distinctTOC, "reason", reason)
 		return
 	}
 

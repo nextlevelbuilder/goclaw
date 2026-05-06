@@ -142,6 +142,58 @@ func Test_flushSSRC_drops_sub_threshold_utterances(t *testing.T) {
 	}
 }
 
+func Test_likelyCiphertextOpus_flags_uniform_TOC_distribution(t *testing.T) {
+	frames := make([][]byte, 50)
+	for i := range frames {
+		frames[i] = []byte{byte(i + 1), 0xaa, 0xbb}
+	}
+
+	got, distinct := likelyCiphertextOpus(frames)
+
+	if !got {
+		t.Fatalf("likelyCiphertextOpus = false, distinct=%d", distinct)
+	}
+}
+
+func Test_likelyCiphertextOpus_allows_short_or_stable_TOC(t *testing.T) {
+	short := make([][]byte, ciphertextTOCMinFrames-1)
+	for i := range short {
+		short[i] = []byte{byte(i + 1)}
+	}
+	if got, distinct := likelyCiphertextOpus(short); got {
+		t.Fatalf("short utterance flagged as ciphertext, distinct=%d", distinct)
+	}
+
+	stable := make([][]byte, 80)
+	for i := range stable {
+		stable[i] = []byte{0x78, byte(i)}
+	}
+	if got, distinct := likelyCiphertextOpus(stable); got {
+		t.Fatalf("stable TOC utterance flagged as ciphertext, distinct=%d", distinct)
+	}
+}
+
+func Test_flushSSRC_drops_ciphertext_like_utterances(t *testing.T) {
+	d, out := testDemux(t, Config{
+		SSRCBufferMaxBytes: 4096,
+		MinUtteranceMs:     1,
+	})
+	d.onSpeakingUpdate(1, "u", true)
+	for i := 0; i < 50; i++ {
+		d.onPacket(&discordgo.Packet{SSRC: 1, Timestamp: uint32(100 + i*960), Opus: []byte{byte(i + 1), 0xaa}})
+	}
+	d.onSpeakingUpdate(1, "u", false)
+
+	select {
+	case u := <-out:
+		t.Fatalf("expected ciphertext-like utterance drop, got %+v", u)
+	case <-time.After(30 * time.Millisecond):
+	}
+	if got := d.droppedFramesCiphertext.Load(); got != 50 {
+		t.Fatalf("ciphertext drop counter = %d, want 50", got)
+	}
+}
+
 func Test_flushSSRC_nonblocking_when_queue_full(t *testing.T) {
 	d := &demux{
 		cfg:      ApplyDefaults(Config{SSRCBufferMaxBytes: 1024, MinUtteranceMs: 1}),

@@ -73,10 +73,11 @@ type supState struct {
 	// vc is non-nil while connected. Protected by mu.
 	vc *discordgo.VoiceConnection
 
-	// demux + transcriber run while connected. Detached and stopped on
-	// leaveLocked.
-	demux       *demux
-	transcriber *transcriber
+	// demux + transcriber + daveWatchdog run while connected. Detached and
+	// stopped on leaveLocked.
+	demux        *demux
+	transcriber  *transcriber
+	daveWatchdog *daveWatchdog
 
 	// sessionOutput owns the per-session summary message + thread. Paired
 	// with demux/transcriber lifetime; leaveLocked calls Close on it before
@@ -538,6 +539,14 @@ func (s *Supervisor) onJoinSuccess(vc *discordgo.VoiceConnection) {
 	tr.start(context.Background())
 	s.state.transcriber = tr
 
+	wd := newDAVEWatchdog(vc, func() bool {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return !s.stopped.Load() && s.state.vc == vc && len(s.state.humans) > 0
+	}, s.log)
+	wd.start(context.Background())
+	s.state.daveWatchdog = wd
+
 	dm := newDemux(s.cfg, vc, tr.inbox(), s.log)
 	dm.start(context.Background())
 	s.state.demux = dm
@@ -549,11 +558,13 @@ func (s *Supervisor) leaveLocked(reason string) {
 	vc := s.state.vc
 	dm := s.state.demux
 	tr := s.state.transcriber
+	wd := s.state.daveWatchdog
 	output := s.state.output
 	startedAt := s.state.sessionStartedAt
 	s.state.vc = nil
 	s.state.demux = nil
 	s.state.transcriber = nil
+	s.state.daveWatchdog = nil
 	s.state.output = nil
 	s.state.sessionStartedAt = time.Time{}
 	if s.state.idleLeaveTimer != nil {
@@ -561,7 +572,7 @@ func (s *Supervisor) leaveLocked(reason string) {
 		s.state.idleLeaveTimer = nil
 	}
 
-	if vc == nil && dm == nil && tr == nil && output == nil {
+	if vc == nil && dm == nil && tr == nil && wd == nil && output == nil {
 		return
 	}
 
@@ -573,17 +584,21 @@ func (s *Supervisor) leaveLocked(reason string) {
 	// don't block on our own goroutines (which may want the lock back).
 	//
 	// Ordering rationale:
-	//   1. demux.stop() — stops producing utterances; flushes in-flight.
-	//   2. transcriber.stop() — drains queued utterances; stops posting.
-	//   3. output.Close() — edits the summary with final stats. Runs AFTER
+	//   1. daveWatchdog.stop() — stops recovery actions during teardown.
+	//   2. demux.stop() — stops producing utterances; flushes in-flight.
+	//   3. transcriber.stop() — drains queued utterances; stops posting.
+	//   4. output.Close() — edits the summary with final stats. Runs AFTER
 	//      transcriber stops so its utterance count is stable.
-	//   4. vc.Disconnect() — tears down the voice socket; fires our own
+	//   5. vc.Disconnect() — tears down the voice socket; fires our own
 	//      VoiceStateUpdate which the bot-self handler sees as a kick but
 	//      we've already cleared state so that path no-ops.
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
 		defer safego.Recover(nil, "component", "voice.supervisor.leave")
+		if wd != nil {
+			wd.stop()
+		}
 		if dm != nil {
 			dm.stop()
 		}

@@ -191,7 +191,7 @@ func processNormalMessage(
 		}(msg.Channel, msg.ChatID)
 	}
 
-	if maybeHandleWorkIntake(ctx, msg, deps, agentID, peerKind, sessionKey) {
+	if maybeHandleWorkIntake(ctx, msg, deps, agentID, peerKind, sessionKey, agentLoop) {
 		return
 	}
 
