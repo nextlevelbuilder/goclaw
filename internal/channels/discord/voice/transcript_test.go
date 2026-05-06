@@ -18,30 +18,32 @@ import (
 type fakeSession struct {
 	mu sync.Mutex
 
-	guildMemberFn        func(guildID, userID string) (*discordgo.Member, error)
-	channelSendFn        func(channelID, content string) (*discordgo.Message, error)
-	channelEditFn        func(channelID, messageID, content string) (*discordgo.Message, error)
-	channelMessageDelFn  func(channelID, messageID string) error
-	channelFn            func(channelID string) (*discordgo.Channel, error)
-	channelDeleteFn      func(channelID string) (*discordgo.Channel, error)
-	messageThreadStart   func(channelID, messageID, name string, archive int) (*discordgo.Channel, error)
+	guildMemberFn       func(guildID, userID string) (*discordgo.Member, error)
+	channelSendFn       func(channelID, content string) (*discordgo.Message, error)
+	channelEditFn       func(channelID, messageID, content string) (*discordgo.Message, error)
+	channelMessageDelFn func(channelID, messageID string) error
+	channelFn           func(channelID string) (*discordgo.Channel, error)
+	channelMessagesFn   func(channelID string, limit int, beforeID, afterID, aroundID string) ([]*discordgo.Message, error)
+	channelDeleteFn     func(channelID string) (*discordgo.Channel, error)
+	messageThreadStart  func(channelID, messageID, name string, archive int) (*discordgo.Channel, error)
 
-	guildMemberCalls         int
-	channelSendCalls         int
-	channelEditCalls         int
+	guildMemberCalls          int
+	channelSendCalls          int
+	channelEditCalls          int
 	channelMessageDeleteCalls int
-	channelCalls             int
-	channelDeleteCalls       int
-	threadStartCalls         int
-	lastSentChannelID        string
-	lastSentContent          string
-	lastEditChannelID        string
-	lastEditMessageID        string
-	lastEditContent          string
-	lastDeletedMessageID     string
-	lastDeletedChannelID     string
-	lastThreadName           string
-	sendsByChannel           map[string][]string
+	channelCalls              int
+	channelMessagesCalls      int
+	channelDeleteCalls        int
+	threadStartCalls          int
+	lastSentChannelID         string
+	lastSentContent           string
+	lastEditChannelID         string
+	lastEditMessageID         string
+	lastEditContent           string
+	lastDeletedMessageID      string
+	lastDeletedChannelID      string
+	lastThreadName            string
+	sendsByChannel            map[string][]string
 }
 
 func (f *fakeSession) recordSend(channelID, content string) {
@@ -99,6 +101,17 @@ func (f *fakeSession) Channel(channelID string, _ ...discordgo.RequestOption) (*
 		return &discordgo.Channel{ID: channelID, Name: "test-channel"}, nil
 	}
 	return fn(channelID)
+}
+
+func (f *fakeSession) ChannelMessages(channelID string, limit int, beforeID, afterID, aroundID string, _ ...discordgo.RequestOption) ([]*discordgo.Message, error) {
+	f.mu.Lock()
+	f.channelMessagesCalls++
+	fn := f.channelMessagesFn
+	f.mu.Unlock()
+	if fn == nil {
+		return nil, nil
+	}
+	return fn(channelID, limit, beforeID, afterID, aroundID)
 }
 
 func (f *fakeSession) ChannelMessageDelete(channelID, messageID string, _ ...discordgo.RequestOption) error {
@@ -315,6 +328,7 @@ func Test_memberDisplayName_precedence(t *testing.T) {
 	}{
 		{"nil member", nil, ""},
 		{"nick wins", &discordgo.Member{Nick: "Nicky"}, "Nicky"},
+		{"nick team suffix stripped", &discordgo.Member{Nick: "clicksave | cartridge", User: &discordgo.User{GlobalName: "Click Save", Username: "clicksave"}}, "clicksave"},
 		{"global over username", &discordgo.Member{User: &discordgo.User{GlobalName: "G", Username: "u"}}, "G"},
 		{"username when no global", &discordgo.Member{User: &discordgo.User{Username: "u"}}, "u"},
 		{"id as last resort", &discordgo.Member{User: &discordgo.User{ID: "id"}}, "id"},

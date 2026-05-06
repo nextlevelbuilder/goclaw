@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +24,13 @@ const (
 	// the parent transcript channel after this, so late-session utterances
 	// still reach the operator, just louder.
 	threadMessageCap = 1000
+
+	// On process restart we do not have in-memory sessionOutput state. Before
+	// creating a fresh summary/thread, look back through recent transcript
+	// channel messages for an un-ended voice summary for the same voice channel.
+	sessionRecoveryMessageScanLimit = 25
+	sessionRecoveryThreadLineLimit  = 100
+	summaryMessageMaxLen            = 1900
 
 	// Cap on REST calls we make for summary edits. Discord's per-channel
 	// message-edit rate limit is ~5/5s; discordgo's retry logic handles
@@ -67,6 +73,7 @@ type sessionOutput struct {
 	droppedOnCap    int               // posts that spilled to the parent channel after hitting threadMessageCap
 	lastEditAt      time.Time         // last summary-edit request start; used for rate-throttle
 	closed          bool
+	recovered       bool // true when this output reattached to a pre-restart summary/thread
 
 	// transcriptLines accumulates "<DisplayName>: <text>" entries in
 	// post order so Close can hand the full session to the summarizer.
@@ -109,6 +116,10 @@ func newSessionOutput(ctx context.Context, session discordSession, transcriptChI
 		log.Debug("voice: channel-name lookup failed; using ID", "err", err, "voice_channel_id", voiceChID)
 	}
 
+	if out.recoverActive(ctx) {
+		return out
+	}
+
 	// Post the initial summary message.
 	msg, err := session.ChannelMessageSend(transcriptChID, out.initialSummaryText(), discordgo.WithContext(ctx))
 	if err != nil || msg == nil {
@@ -132,6 +143,80 @@ func newSessionOutput(ctx context.Context, session discordSession, transcriptChI
 		"voice_channel_name", out.voiceChannelName,
 	)
 	return out
+}
+
+// recoverActive reattaches to the most recent un-ended voice summary for this
+// channel. This covers pod restarts while humans are still in voice: the new
+// process rejoins but continues the existing transcript thread instead of
+// creating a duplicate summary message.
+func (o *sessionOutput) recoverActive(ctx context.Context) bool {
+	msgs, err := o.session.ChannelMessages(o.transcriptChannelID, sessionRecoveryMessageScanLimit, "", "", "", discordgo.WithContext(ctx))
+	if err != nil {
+		o.log.Debug("voice: active session recovery scan failed", "err", err, "transcript_channel_id", o.transcriptChannelID)
+		return false
+	}
+	for _, msg := range msgs {
+		if msg == nil || !o.isRecoverableSummary(msg.Content) {
+			continue
+		}
+		threadID := msg.ID
+		if msg.Thread != nil && msg.Thread.ID != "" {
+			threadID = msg.Thread.ID
+		}
+		o.summaryMsgID = msg.ID
+		o.threadChannelID = threadID
+		o.startedAt = msg.Timestamp
+		if o.startedAt.IsZero() {
+			o.startedAt = time.Now()
+		}
+		o.recovered = true
+		o.loadRecoveredTranscript(ctx)
+		o.log.Info("voice: recovered active session output",
+			"summary_msg_id", o.summaryMsgID,
+			"thread_channel_id", o.threadChannelID,
+			"recovered_lines", len(o.transcriptLines),
+		)
+		return true
+	}
+	return false
+}
+
+func (o *sessionOutput) isRecoverableSummary(content string) bool {
+	label := o.channelLabel()
+	if strings.Contains(content, fmt.Sprintf("✅ Voice session ended in %s", label)) {
+		return false
+	}
+	return strings.Contains(content, fmt.Sprintf("🎤 Voice session started in %s", label)) ||
+		strings.Contains(content, fmt.Sprintf("🎤 Voice session in %s", label))
+}
+
+func (o *sessionOutput) loadRecoveredTranscript(ctx context.Context) {
+	if o.threadChannelID == "" {
+		return
+	}
+	msgs, err := o.session.ChannelMessages(o.threadChannelID, sessionRecoveryThreadLineLimit, "", "", "", discordgo.WithContext(ctx))
+	if err != nil {
+		o.log.Debug("voice: recovered thread transcript scan failed", "err", err, "thread_channel_id", o.threadChannelID)
+		return
+	}
+	for i := len(msgs) - 1; i >= 0; i-- {
+		msg := msgs[i]
+		if msg == nil {
+			continue
+		}
+		line := strings.TrimSpace(msg.Content)
+		if !looksLikeTranscriptLine(line) {
+			continue
+		}
+		if len(o.transcriptLines) >= transcriptCaptureMax {
+			break
+		}
+		o.transcriptLines = append(o.transcriptLines, line)
+		o.utteranceCount++
+		if name := speakerNameFromLine(line); name != "" {
+			o.noteSpeakerLocked("recovered:"+name, name)
+		}
+	}
 }
 
 // PostLine posts a transcript line to the thread (or the parent transcript
@@ -202,7 +287,13 @@ func (o *sessionOutput) NoteSpeaker(ctx context.Context, userID, displayName str
 	}
 	isNew := false
 	if _, ok := o.speakers[userID]; !ok {
-		o.speakerOrder = append(o.speakerOrder, userID)
+		if idx, ok := o.recoveredSpeakerIndexLocked(displayName); ok {
+			oldID := o.speakerOrder[idx]
+			delete(o.speakers, oldID)
+			o.speakerOrder[idx] = userID
+		} else {
+			o.speakerOrder = append(o.speakerOrder, userID)
+		}
 		isNew = true
 	}
 	o.speakers[userID] = displayName
@@ -269,8 +360,10 @@ func (o *sessionOutput) Close(ctx context.Context, duration time.Duration) {
 		return
 	}
 
-	// Empty session → delete the summary + thread artefacts.
-	if utterances == 0 {
+	// Empty brand-new session → delete the summary + thread artefacts. A
+	// recovered session may legitimately have no hydrated lines (thread lookup
+	// can fail), so preserve it rather than deleting pre-restart artefacts.
+	if utterances == 0 && !o.recovered {
 		o.cleanupEmpty(ctx, msgID, threadID)
 		return
 	}
@@ -294,7 +387,7 @@ func (o *sessionOutput) Close(ctx context.Context, duration time.Duration) {
 			o.log.Info("voice: transcript summarizer returned empty; falling back to stats line",
 				"lines", len(transcriptCopy))
 		default:
-			finalText = strings.TrimSpace(summary) + "\n\n" + finalText
+			finalText = combineSummaryAndStats(strings.TrimSpace(summary), finalText)
 		}
 	}
 
@@ -356,8 +449,6 @@ func (o *sessionOutput) runningSummaryTextLocked() string {
 			names = append(names, channels.SanitizeDisplayName(n))
 		}
 	}
-	// Keep first-seen order; only sort ties (empty-name fallbacks) for stability.
-	sort.SliceStable(names, func(i, j int) bool { return false }) // no-op, retains order
 	label := o.channelLabel()
 	switch len(names) {
 	case 0:
@@ -367,6 +458,44 @@ func (o *sessionOutput) runningSummaryTextLocked() string {
 	default:
 		return fmt.Sprintf("🎤 Voice session in %s — %d speakers: %s", label, len(names), strings.Join(names, ", "))
 	}
+}
+
+func (o *sessionOutput) recoveredSpeakerIndexLocked(displayName string) (int, bool) {
+	for i, uid := range o.speakerOrder {
+		if !strings.HasPrefix(uid, "recovered:") {
+			continue
+		}
+		if o.speakers[uid] == displayName {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+func (o *sessionOutput) noteSpeakerLocked(userID, displayName string) {
+	if userID == "" || displayName == "" {
+		return
+	}
+	if _, ok := o.speakers[userID]; !ok {
+		o.speakerOrder = append(o.speakerOrder, userID)
+	}
+	o.speakers[userID] = displayName
+}
+
+func looksLikeTranscriptLine(line string) bool {
+	idx := strings.Index(line, ":")
+	if idx <= 0 || idx > 80 {
+		return false
+	}
+	return strings.TrimSpace(line[idx+1:]) != ""
+}
+
+func speakerNameFromLine(line string) string {
+	idx := strings.Index(line, ":")
+	if idx <= 0 || idx > 80 {
+		return ""
+	}
+	return strings.TrimSpace(line[:idx])
 }
 
 // finalSummaryTextLocked renders the "session ended" line with stats.
@@ -394,4 +523,32 @@ func pluralize(n int, singular, plural string) string {
 		return fmt.Sprintf("%d %s", n, singular)
 	}
 	return fmt.Sprintf("%d %s", n, plural)
+}
+
+func combineSummaryAndStats(summary, stats string) string {
+	summary = strings.TrimSpace(summary)
+	stats = strings.TrimSpace(stats)
+	if summary == "" {
+		return truncateContent(stats, summaryMessageMaxLen)
+	}
+	sep := "\n\n"
+	available := summaryMessageMaxLen - len(sep) - len(stats)
+	if available <= 0 {
+		return truncateContent(stats, summaryMessageMaxLen)
+	}
+	return truncateContent(summary, available) + sep + stats
+}
+
+func truncateContent(s string, maxLen int) string {
+	if maxLen <= 0 || len(s) <= maxLen {
+		return s
+	}
+	runes := []rune(s)
+	if len(runes) <= maxLen {
+		return s
+	}
+	if maxLen <= 3 {
+		return string(runes[:maxLen])
+	}
+	return string(runes[:maxLen-3]) + "..."
 }
