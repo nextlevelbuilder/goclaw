@@ -239,6 +239,16 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 		if tid := store.TenantIDFromContext(ctx); tid != uuid.Nil {
 			chatReq.Options[providers.OptTenantID] = tid.String()
 		}
+		// Pass real acting sender + RBAC role through to MCP bridge headers so
+		// group-scoped permission checks (CheckCronPermission, CheckFileWriterPermission)
+		// see the original user when bridge tools (cron, write_file, ...) are
+		// called by external CLI providers (claude-cli, opencode-go) (#915).
+		if req.SenderID != "" {
+			chatReq.Options[providers.OptSenderID] = req.SenderID
+		}
+		if req.Role != "" {
+			chatReq.Options[providers.OptRole] = req.Role
+		}
 
 		// Reasoning decision: resolve effort level for thinking models (o3, DeepSeek-R1, Kimi).
 		reasoningDecision := providers.ResolveReasoningDecision(
