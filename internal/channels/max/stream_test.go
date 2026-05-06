@@ -485,7 +485,7 @@ type bogusStream struct{}
 
 func (bogusStream) Update(context.Context, string) {}
 func (bogusStream) Stop(context.Context) error     { return nil }
-func (bogusStream) MessageID() int                  { return 0 }
+func (bogusStream) MessageID() int                 { return 0 }
 
 // Compile-time check.
 var _ channels.ChannelStream = (*bogusStream)(nil)
@@ -693,9 +693,9 @@ func TestStreamingFullLifecycle(t *testing.T) {
 //  2. per-session run limits cap concurrent runs at 1 in DM
 //
 // This test exists to:
-//  - Verify CreateStream is independent (each run gets its own placeholder)
-//  - Document the placeholder collision so future code changes preserve
-//    or fix the behavior intentionally, not accidentally
+//   - Verify CreateStream is independent (each run gets its own placeholder)
+//   - Document the placeholder collision so future code changes preserve
+//     or fix the behavior intentionally, not accidentally
 //
 // If you change c.placeholders to be per-run (via RunContext), update this
 // test to assert correct routing.

@@ -31,10 +31,10 @@ type mockMaxBackend struct {
 }
 
 type capturedSend struct {
-	Method  string
-	Path    string
-	Query   map[string]string
-	Body    SendMessageRequest
+	Method string
+	Path   string
+	Query  map[string]string
+	Body   SendMessageRequest
 }
 
 func newMockBackend(t *testing.T) *mockMaxBackend {

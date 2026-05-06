@@ -52,13 +52,13 @@ type maxStream struct {
 	client *Client
 	chatID int64
 
-	mu         sync.Mutex
-	messageID  string    // mid.* returned by initial SendMessage; empty until set
-	pending    string    // text accumulated since last edit; cleared on flush
-	lastSent   string    // last text actually sent — used for dedup
-	lastEdit   time.Time // last successful edit timestamp
-	stopped    bool      // true after Stop has been called
-	createErr  error     // non-nil if placeholder creation failed; subsequent ops no-op
+	mu        sync.Mutex
+	messageID string    // mid.* returned by initial SendMessage; empty until set
+	pending   string    // text accumulated since last edit; cleared on flush
+	lastSent  string    // last text actually sent — used for dedup
+	lastEdit  time.Time // last successful edit timestamp
+	stopped   bool      // true after Stop has been called
+	createErr error     // non-nil if placeholder creation failed; subsequent ops no-op
 }
 
 // Update is called by the agent loop with the latest accumulated text.

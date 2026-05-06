@@ -105,8 +105,8 @@ func (r *Recipient) IsDialog() bool {
 
 // MessageBody holds the content of a Message.
 type MessageBody struct {
-	MID         string       `json:"mid"`         // message ID
-	Seq         int64        `json:"seq"`         // sequence in chat
+	MID         string       `json:"mid"` // message ID
+	Seq         int64        `json:"seq"` // sequence in chat
 	Text        string       `json:"text,omitempty"`
 	Attachments []Attachment `json:"attachments,omitempty"`
 	Markup      []Markup     `json:"markup,omitempty"` // text formatting markup
@@ -114,32 +114,32 @@ type MessageBody struct {
 
 // Markup describes text formatting per inline ranges.
 type Markup struct {
-	Type   string `json:"type"`             // "strong" | "emphasized" | etc.
-	From   int    `json:"from"`             // start char offset
+	Type   string `json:"type"` // "strong" | "emphasized" | etc.
+	From   int    `json:"from"` // start char offset
 	Length int    `json:"length"`
-	URL    string `json:"url,omitempty"`    // for "link" type
+	URL    string `json:"url,omitempty"`     // for "link" type
 	UserID int64  `json:"user_id,omitempty"` // for "user_mention"
 }
 
 // Attachment types per Max API.
 // Each kind has different Payload shape — use Type to dispatch.
 const (
-	AttachmentTypeImage         = "image"
-	AttachmentTypeVideo         = "video"
-	AttachmentTypeAudio         = "audio"
-	AttachmentTypeFile          = "file"
-	AttachmentTypeSticker       = "sticker"
-	AttachmentTypeContact       = "contact"
-	AttachmentTypeShare         = "share"
-	AttachmentTypeLocation      = "location"
+	AttachmentTypeImage          = "image"
+	AttachmentTypeVideo          = "video"
+	AttachmentTypeAudio          = "audio"
+	AttachmentTypeFile           = "file"
+	AttachmentTypeSticker        = "sticker"
+	AttachmentTypeContact        = "contact"
+	AttachmentTypeShare          = "share"
+	AttachmentTypeLocation       = "location"
 	AttachmentTypeInlineKeyboard = "inline_keyboard"
 )
 
 // Attachment is a polymorphic media/UI attachment on a Message.
 // Inspect Type, then Payload.* fields appropriate for that type.
 type Attachment struct {
-	Type    string             `json:"type"`
-	Payload AttachmentPayload  `json:"payload,omitempty"`
+	Type    string            `json:"type"`
+	Payload AttachmentPayload `json:"payload,omitempty"`
 }
 
 // AttachmentPayload is a union of fields across all attachment types.
@@ -167,9 +167,9 @@ type AttachmentPayload struct {
 	Code string `json:"code,omitempty"`
 
 	// Contact-specific (request_contact button responses)
-	VcfInfo string         `json:"vcf_info,omitempty"`
-	MaxInfo *User          `json:"max_info,omitempty"`
-	Hash    string         `json:"hash,omitempty"` // HMAC-SHA256(access_token, vcf_info)
+	VcfInfo string `json:"vcf_info,omitempty"`
+	MaxInfo *User  `json:"max_info,omitempty"`
+	Hash    string `json:"hash,omitempty"` // HMAC-SHA256(access_token, vcf_info)
 
 	// Share-specific (share button)
 	ShareURL string `json:"share_url,omitempty"`
@@ -184,7 +184,7 @@ type AttachmentPayload struct {
 
 // InlineButton is a single button in an inline keyboard.
 type InlineButton struct {
-	Type    string `json:"type"`              // "callback" | "link" | "request_contact" | etc.
+	Type    string `json:"type"` // "callback" | "link" | "request_contact" | etc.
 	Text    string `json:"text"`
 	Payload string `json:"payload,omitempty"` // for callback / clipboard
 	URL     string `json:"url,omitempty"`     // for link
@@ -193,7 +193,7 @@ type InlineButton struct {
 
 // LinkedMessage represents a forwarded or replied-to message.
 type LinkedMessage struct {
-	Type    string       `json:"type"`              // "reply" | "forward"
+	Type    string       `json:"type"` // "reply" | "forward"
 	Sender  *User        `json:"sender,omitempty"`
 	Message *MessageBody `json:"message,omitempty"`
 	ChatID  int64        `json:"chat_id,omitempty"`
@@ -215,14 +215,14 @@ type Message struct {
 
 // UpdateType enum per docs.
 const (
-	UpdateTypeMessageCreated  = "message_created"
-	UpdateTypeMessageEdited   = "message_edited"
-	UpdateTypeMessageRemoved  = "message_removed"
-	UpdateTypeMessageCallback = "message_callback"
-	UpdateTypeBotAdded        = "bot_added"
-	UpdateTypeBotRemoved      = "bot_removed"
-	UpdateTypeUserAdded       = "user_added"
-	UpdateTypeUserRemoved     = "user_removed"
+	UpdateTypeMessageCreated   = "message_created"
+	UpdateTypeMessageEdited    = "message_edited"
+	UpdateTypeMessageRemoved   = "message_removed"
+	UpdateTypeMessageCallback  = "message_callback"
+	UpdateTypeBotAdded         = "bot_added"
+	UpdateTypeBotRemoved       = "bot_removed"
+	UpdateTypeUserAdded        = "user_added"
+	UpdateTypeUserRemoved      = "user_removed"
 	UpdateTypeChatTitleChanged = "chat_title_changed"
 )
 
@@ -245,17 +245,17 @@ type Update struct {
 	UserID    int64  `json:"user_id,omitempty"`
 
 	// For bot_added / bot_removed / user_added / user_removed
-	Chat   *Chat `json:"chat,omitempty"`
-	User   *User `json:"user,omitempty"`
-	IsChannel bool `json:"is_channel,omitempty"`
+	Chat      *Chat `json:"chat,omitempty"`
+	User      *User `json:"user,omitempty"`
+	IsChannel bool  `json:"is_channel,omitempty"`
 }
 
 // Callback is a button-click event.
 type Callback struct {
-	Timestamp int64  `json:"timestamp"`
+	Timestamp  int64  `json:"timestamp"`
 	CallbackID string `json:"callback_id"`
-	Payload   string `json:"payload"`
-	User      *User  `json:"user,omitempty"`
+	Payload    string `json:"payload"`
+	User       *User  `json:"user,omitempty"`
 }
 
 // UpdatesResponse is the GET /updates body.
@@ -266,16 +266,16 @@ type UpdatesResponse struct {
 
 // SendMessageRequest is the POST /messages JSON body.
 type SendMessageRequest struct {
-	Text              string         `json:"text,omitempty"`
-	Attachments       []Attachment   `json:"attachments,omitempty"`
-	Link              *NewMessageLink `json:"link,omitempty"`
-	Notify            *bool          `json:"notify,omitempty"`
-	Format            string         `json:"format,omitempty"` // "markdown" | "html" | ""
+	Text        string          `json:"text,omitempty"`
+	Attachments []Attachment    `json:"attachments,omitempty"`
+	Link        *NewMessageLink `json:"link,omitempty"`
+	Notify      *bool           `json:"notify,omitempty"`
+	Format      string          `json:"format,omitempty"` // "markdown" | "html" | ""
 }
 
 // NewMessageLink references a message to reply to or forward.
 type NewMessageLink struct {
-	Type      string `json:"type"`            // "reply" | "forward"
+	Type      string `json:"type"` // "reply" | "forward"
 	MessageID string `json:"message_id,omitempty"`
 }
 
@@ -294,18 +294,18 @@ type SendMessageResponse struct {
 
 // EditMessageRequest is the PUT /messages JSON body.
 type EditMessageRequest struct {
-	Text        string       `json:"text,omitempty"`
-	Attachments []Attachment `json:"attachments,omitempty"`
+	Text        string          `json:"text,omitempty"`
+	Attachments []Attachment    `json:"attachments,omitempty"`
 	Link        *NewMessageLink `json:"link,omitempty"`
-	Notify      *bool        `json:"notify,omitempty"`
-	Format      string       `json:"format,omitempty"`
+	Notify      *bool           `json:"notify,omitempty"`
+	Format      string          `json:"format,omitempty"`
 }
 
 // SubscriptionRequest is the POST /subscriptions JSON body.
 type SubscriptionRequest struct {
-	URL          string   `json:"url"`
-	UpdateTypes  []string `json:"update_types,omitempty"`
-	Version      string   `json:"version,omitempty"`
+	URL         string   `json:"url"`
+	UpdateTypes []string `json:"update_types,omitempty"`
+	Version     string   `json:"version,omitempty"`
 }
 
 // APIError is the standard error body returned by Max API.

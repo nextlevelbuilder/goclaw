@@ -45,8 +45,8 @@ func TestChunkText_ExactlyMax(t *testing.T) {
 
 func TestChunkText_OverMax_ParagraphSplit(t *testing.T) {
 	// Two paragraphs separated by \n\n. Each fits within max alone.
-	p1 := strings.Repeat("a ", 1500)  // 3000 bytes
-	p2 := strings.Repeat("b ", 1500)  // 3000 bytes
+	p1 := strings.Repeat("a ", 1500) // 3000 bytes
+	p2 := strings.Repeat("b ", 1500) // 3000 bytes
 	text := p1 + "\n\n" + p2
 
 	got := chunkText(text)
