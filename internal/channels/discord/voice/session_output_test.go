@@ -106,6 +106,75 @@ func Test_newSessionOutput_thread_failure_falls_back_to_parent(t *testing.T) {
 	}
 }
 
+func Test_newSessionOutput_recovers_active_summary_and_thread(t *testing.T) {
+	now := time.Now().Add(-5 * time.Minute)
+	fs := &fakeSession{
+		channelMessagesFn: func(channelID string, limit int, _, _, _ string) ([]*discordgo.Message, error) {
+			switch channelID {
+			case "transcript-ch":
+				return []*discordgo.Message{
+					{
+						ID:        "summary-old",
+						Content:   "🎤 Voice session in #test-channel — 1 speaker: Alice",
+						Timestamp: now,
+						Thread:    &discordgo.Channel{ID: "thread-old"},
+					},
+				}, nil
+			case "thread-old":
+				return []*discordgo.Message{
+					{Content: "Bob: newest line"},
+					{Content: "Alice: older line"},
+				}, nil
+			default:
+				return nil, nil
+			}
+		},
+	}
+	out := newSessionOutput(context.Background(), fs, "transcript-ch", "voice-ch", discardLogger(), nil)
+	if fs.channelSendCalls != 0 {
+		t.Fatalf("recovery should not create a new summary message, sent %d", fs.channelSendCalls)
+	}
+	if fs.threadStartCalls != 0 {
+		t.Fatalf("recovery should not create a new thread, created %d", fs.threadStartCalls)
+	}
+	if out.summaryMsgID != "summary-old" || out.threadChannelID != "thread-old" {
+		t.Fatalf("did not recover existing summary/thread: summary=%q thread=%q", out.summaryMsgID, out.threadChannelID)
+	}
+	if out.utteranceCount != 2 {
+		t.Fatalf("expected recovered utterance count 2, got %d", out.utteranceCount)
+	}
+	out.PostLine(context.Background(), "Alice", "new line after restart")
+	if got := fs.sendsByChannel["thread-old"]; len(got) != 1 {
+		t.Fatalf("expected new post to recovered thread, got %d", len(got))
+	}
+	out.Close(context.Background(), time.Minute)
+	if !strings.Contains(fs.lastEditContent, "3 utterances") {
+		t.Fatalf("final summary should include recovered + new utterance count: %q", fs.lastEditContent)
+	}
+}
+
+func Test_newSessionOutput_ignores_ended_summary_when_recovering(t *testing.T) {
+	fs := &fakeSession{
+		channelMessagesFn: func(channelID string, _ int, _, _, _ string) ([]*discordgo.Message, error) {
+			if channelID != "transcript-ch" {
+				return nil, nil
+			}
+			return []*discordgo.Message{{
+				ID:      "summary-ended",
+				Content: "Discussed shipping.\n\n✅ Voice session ended in #test-channel — 5m · 2 speakers · 8 utterances",
+				Thread:  &discordgo.Channel{ID: "thread-ended"},
+			}}, nil
+		},
+	}
+	out := newSessionOutput(context.Background(), fs, "transcript-ch", "voice-ch", discardLogger(), nil)
+	if out.summaryMsgID == "summary-ended" {
+		t.Fatal("must not recover an already-ended voice summary")
+	}
+	if fs.channelSendCalls != 1 || fs.threadStartCalls != 1 {
+		t.Fatalf("expected fresh summary/thread after ignoring ended summary, sends=%d threads=%d", fs.channelSendCalls, fs.threadStartCalls)
+	}
+}
+
 // NoteSpeaker updates the running summary; repeated calls for the same
 // speaker don't re-edit (no change to the list).
 func Test_NoteSpeaker_updates_summary_and_dedupes(t *testing.T) {
@@ -259,6 +328,22 @@ func Test_Close_summarizer_error_falls_back_to_stats(t *testing.T) {
 	}
 	if !strings.Contains(fs.lastEditContent, "1 utterance") {
 		t.Errorf("fallback should include stats line: %q", fs.lastEditContent)
+	}
+}
+
+func Test_Close_truncates_overlong_summarizer_output(t *testing.T) {
+	fs := &fakeSession{}
+	summarizer := func(_ context.Context, _ string) (string, error) {
+		return strings.Repeat("x", summaryMessageMaxLen+500), nil
+	}
+	out := newSessionOutput(context.Background(), fs, "transcript-ch", "voice-ch", discardLogger(), summarizer)
+	out.PostLine(context.Background(), "Alice", "hi")
+	out.Close(context.Background(), time.Minute)
+	if len(fs.lastEditContent) > summaryMessageMaxLen {
+		t.Fatalf("summary edit content length = %d, want <= %d", len(fs.lastEditContent), summaryMessageMaxLen)
+	}
+	if !strings.Contains(fs.lastEditContent, "✅ Voice session ended") {
+		t.Fatalf("truncated summary should preserve stats line: %q", fs.lastEditContent)
 	}
 }
 

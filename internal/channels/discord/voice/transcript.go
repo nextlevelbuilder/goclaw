@@ -90,6 +90,7 @@ type discordSession interface {
 	ChannelMessageEdit(channelID, messageID, content string, options ...discordgo.RequestOption) (*discordgo.Message, error)
 	ChannelMessageDelete(channelID, messageID string, options ...discordgo.RequestOption) error
 	Channel(channelID string, options ...discordgo.RequestOption) (*discordgo.Channel, error)
+	ChannelMessages(channelID string, limit int, beforeID, afterID, aroundID string, options ...discordgo.RequestOption) ([]*discordgo.Message, error)
 	ChannelDelete(channelID string, options ...discordgo.RequestOption) (*discordgo.Channel, error)
 	MessageThreadStart(channelID, messageID string, name string, archiveDuration int, options ...discordgo.RequestOption) (*discordgo.Channel, error)
 }
@@ -365,23 +366,35 @@ func (t *transcriber) noteSpeaker(ctx context.Context, userID, displayName strin
 
 // memberDisplayName pulls the best available display string off a Member:
 // guild nickname → global display name → username → userID fallback.
+// Voice transcripts are read aloud in-channel, so normalize common guild
+// role/team suffixes from nicknames before displaying them.
 func memberDisplayName(m *discordgo.Member) string {
 	if m == nil {
 		return ""
 	}
 	if m.Nick != "" {
-		return m.Nick
+		return normalizeVoiceDisplayName(m.Nick)
 	}
 	if m.User != nil {
 		if m.User.GlobalName != "" {
-			return m.User.GlobalName
+			return normalizeVoiceDisplayName(m.User.GlobalName)
 		}
 		if m.User.Username != "" {
-			return m.User.Username
+			return normalizeVoiceDisplayName(m.User.Username)
 		}
-		return m.User.ID
+		return normalizeVoiceDisplayName(m.User.ID)
 	}
 	return ""
+}
+
+func normalizeVoiceDisplayName(name string) string {
+	name = strings.TrimSpace(name)
+	if before, _, ok := strings.Cut(name, "|"); ok {
+		if trimmed := strings.TrimSpace(before); trimmed != "" {
+			return trimmed
+		}
+	}
+	return name
 }
 
 // sweepLoop removes orphan ogg tmpfiles. Defensive: the happy-path uses
