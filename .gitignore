@@ -92,3 +92,5 @@ compose.d/*
 goclaw-patched-linux-amd64
 ui/web/nginx.staging.conf
 cmd/max-smoke/
+/max-smoke
+/cmd/max-smoke/max-smoke
