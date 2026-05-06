@@ -280,8 +280,16 @@ type NewMessageLink struct {
 }
 
 // SendMessageResponse is the POST /messages response.
+//
+// Per live API observation, the response includes top-level convenience
+// fields (chat_id, recipient_id, message_id) in addition to the nested
+// Message object. We capture them all — message_id is needed for
+// subsequent EditMessage / DeleteMessage calls.
 type SendMessageResponse struct {
-	Message Message `json:"message"`
+	Message     Message `json:"message"`
+	ChatID      int64   `json:"chat_id,omitempty"`
+	RecipientID int64   `json:"recipient_id,omitempty"`
+	MessageID   string  `json:"message_id,omitempty"`
 }
 
 // EditMessageRequest is the PUT /messages JSON body.

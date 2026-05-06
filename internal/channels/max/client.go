@@ -140,7 +140,8 @@ type SendMessageParams struct {
 }
 
 // SendMessage calls POST /messages with appropriate user_id/chat_id query params.
-func (c *Client) SendMessage(ctx context.Context, p SendMessageParams) (*Message, error) {
+// Returns the full response including top-level message_id (needed for edits).
+func (c *Client) SendMessage(ctx context.Context, p SendMessageParams) (*SendMessageResponse, error) {
 	if (p.UserID == 0 && p.ChatID == 0) || (p.UserID != 0 && p.ChatID != 0) {
 		return nil, errors.New("max client: exactly one of UserID/ChatID must be set")
 	}
@@ -160,7 +161,7 @@ func (c *Client) SendMessage(ctx context.Context, p SendMessageParams) (*Message
 	if err := c.do(ctx, http.MethodPost, "/messages", q, p.Body, &resp); err != nil {
 		return nil, fmt.Errorf("send message: %w", err)
 	}
-	return &resp.Message, nil
+	return &resp, nil
 }
 
 // EditMessageParams identifies a message to edit by message_id.
@@ -170,7 +171,7 @@ type EditMessageParams struct {
 }
 
 // EditMessage calls PUT /messages — used by streaming preview to update text in-place.
-func (c *Client) EditMessage(ctx context.Context, p EditMessageParams) (*Message, error) {
+func (c *Client) EditMessage(ctx context.Context, p EditMessageParams) (*SendMessageResponse, error) {
 	if p.MessageID == "" {
 		return nil, errors.New("max client: MessageID is required for EditMessage")
 	}
@@ -182,7 +183,7 @@ func (c *Client) EditMessage(ctx context.Context, p EditMessageParams) (*Message
 	if err := c.do(ctx, http.MethodPut, "/messages", q, p.Body, &resp); err != nil {
 		return nil, fmt.Errorf("edit message: %w", err)
 	}
-	return &resp.Message, nil
+	return &resp, nil
 }
 
 // DeleteMessage calls DELETE /messages.

@@ -312,20 +312,31 @@ func TestClient_SendMessage_DM(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"message":{"timestamp":111,"message":{"mid":"mid.x","seq":1,"text":"hello"}}}`)
+		_, _ = io.WriteString(w, `{
+			"message":{"timestamp":111,"message":{"mid":"mid.x","seq":1,"text":"hello"}},
+			"chat_id":888,
+			"recipient_id":888,
+			"message_id":"mid.x"
+		}`)
 	}))
 	defer srv.Close()
 
 	client := newTestClient(t, srv)
-	msg, err := client.SendMessage(context.Background(), SendMessageParams{
+	resp, err := client.SendMessage(context.Background(), SendMessageParams{
 		UserID: 12345,
 		Body:   SendMessageRequest{Text: "hello"},
 	})
 	if err != nil {
 		t.Fatalf("SendMessage: %v", err)
 	}
-	if msg.Body.Text != "hello" {
-		t.Errorf("response text = %q", msg.Body.Text)
+	if resp.Message.Body.Text != "hello" {
+		t.Errorf("response text = %q", resp.Message.Body.Text)
+	}
+	if resp.MessageID != "mid.x" {
+		t.Errorf("MessageID = %q, want mid.x", resp.MessageID)
+	}
+	if resp.ChatID != 888 {
+		t.Errorf("ChatID = %d, want 888", resp.ChatID)
 	}
 }
 
@@ -339,17 +350,20 @@ func TestClient_SendMessage_Group(t *testing.T) {
 			t.Errorf("user_id should not be set for group")
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"message":{"timestamp":1,"message":{"mid":"x","seq":1}}}`)
+		_, _ = io.WriteString(w, `{"message":{"timestamp":1,"message":{"mid":"x","seq":1}},"message_id":"x"}`)
 	}))
 	defer srv.Close()
 
 	client := newTestClient(t, srv)
-	_, err := client.SendMessage(context.Background(), SendMessageParams{
+	resp, err := client.SendMessage(context.Background(), SendMessageParams{
 		ChatID: 999,
 		Body:   SendMessageRequest{Text: "hi"},
 	})
 	if err != nil {
 		t.Fatalf("SendMessage: %v", err)
+	}
+	if resp.MessageID != "x" {
+		t.Errorf("MessageID = %q", resp.MessageID)
 	}
 }
 
@@ -385,20 +399,20 @@ func TestClient_EditMessage(t *testing.T) {
 			t.Errorf("message_id = %q", r.URL.Query().Get("message_id"))
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"message":{"timestamp":1,"message":{"mid":"mid.123","seq":1,"text":"updated"}}}`)
+		_, _ = io.WriteString(w, `{"message":{"timestamp":1,"message":{"mid":"mid.123","seq":1,"text":"updated"}},"message_id":"mid.123"}`)
 	}))
 	defer srv.Close()
 
 	client := newTestClient(t, srv)
-	msg, err := client.EditMessage(context.Background(), EditMessageParams{
+	resp, err := client.EditMessage(context.Background(), EditMessageParams{
 		MessageID: "mid.123",
 		Body:      EditMessageRequest{Text: "updated"},
 	})
 	if err != nil {
 		t.Fatalf("EditMessage: %v", err)
 	}
-	if msg.Body.Text != "updated" {
-		t.Errorf("text = %q", msg.Body.Text)
+	if resp.Message.Body.Text != "updated" {
+		t.Errorf("text = %q", resp.Message.Body.Text)
 	}
 }
 

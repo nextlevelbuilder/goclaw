@@ -54,6 +54,15 @@ type Channel struct {
 	// Polling cursor — sequence marker returned by Max GET /updates.
 	markerMu sync.Mutex
 	marker   *int64
+
+	// Outbound state.
+	// placeholders maps chatID (string, as in bus.OutboundMessage.ChatID)
+	// to the most recent message_id sent there. Used by streaming (Day 4)
+	// to know which message to edit instead of sending a new one.
+	placeholders sync.Map
+
+	// sentCount tracks total successful chunk sends; useful for tests/metrics.
+	sentCount int64
 }
 
 // New constructs a Max channel from validated creds and config.
@@ -189,9 +198,10 @@ func (c *Channel) Stop(ctx context.Context) error {
 }
 
 // Send delivers an outbound message produced by the agent loop.
-// Day 3 will implement this with chunking, formatting, and media.
+// Chunks long text by 4000-char limit, formats as markdown, and posts to Max.
+// Implementation lives in outbound.go.
 func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
-	return errors.New("max: Send not yet implemented (Day 3 work)")
+	return c.send(ctx, msg)
 }
 
 // connectedSummary builds a human-readable status string for the health endpoint.
