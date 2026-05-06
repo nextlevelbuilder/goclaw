@@ -166,6 +166,17 @@ func (s *maxStream) flushLocked(ctx context.Context) {
 		return
 	}
 
+	// Panic safety: if EditMessage panics (e.g. transport bug, custom
+	// slog handler crash), don't bring down the run. Log + swallow so
+	// the next Update can retry. Stream is best-effort UX; final Send
+	// will deliver the actual response with proper formatting.
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Warn("max: panic in stream flush (recovered)",
+				"chat_id", s.chatID, "message_id", s.messageID, "panic", r)
+		}
+	}()
+
 	_, err := s.client.EditMessage(ctx, EditMessageParams{
 		MessageID: s.messageID,
 		Body: EditMessageRequest{
@@ -280,15 +291,40 @@ func (c *Channel) CreateStream(ctx context.Context, chatID string, firstStream b
 //
 // If the stream had no messageID (placeholder creation failed), this is a
 // no-op — Send() will fall back to sending a fresh message with the answer.
+//
+// If the stream HAD a messageID but never produced any content (lastSent
+// empty — agent crashed or errored before the first Update), we delete
+// the placeholder rather than handing off. Reasoning: if Send is later
+// called (e.g. with an error message), it will fresh-send and the user
+// gets one clean message instead of "💭 Печатаю..." then an error reply.
+// If Send is NOT called (worst case: agent crash without recovery), the
+// orphan "💭 Печатаю..." would otherwise live in the chat indefinitely.
 func (c *Channel) FinalizeStream(ctx context.Context, chatID string, stream channels.ChannelStream) {
 	ms, ok := stream.(*maxStream)
 	if !ok {
 		return
 	}
-	mid := ms.messageIDStr()
+
+	ms.mu.Lock()
+	mid := ms.messageID
+	everSent := ms.lastSent != ""
+	ms.mu.Unlock()
+
 	if mid == "" {
 		return
 	}
+
+	if !everSent {
+		// Orphan placeholder — best-effort delete.
+		slog.Info("max: stream had no content, deleting placeholder",
+			"channel", c.Name(), "chat_id", chatID, "message_id", mid)
+		if err := c.client.DeleteMessage(ctx, mid); err != nil {
+			slog.Debug("max: orphan placeholder delete failed (non-fatal)",
+				"channel", c.Name(), "message_id", mid, "error", err)
+		}
+		return
+	}
+
 	c.placeholders.Store(chatID, mid)
 
 	slog.Info("max: stream finalized, handing off to Send()",

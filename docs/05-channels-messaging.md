@@ -526,6 +526,16 @@ LLM markdown → htmlTagsToMarkdown() → extractSlackTokens() → escapeHTMLEnt
 
 Key conversions: `**bold**` → `*bold*`, `~~strike~~` → `~strike~`, `[text](url)` → `<url|text>`, `# Header` → `*Header*`, tables → code blocks.
 
+### Webhook security
+
+Max API does not provide a shared-secret signature scheme for webhook authenticity. The webhook URL is the only auth — operators MUST treat it as a secret credential. Configure:
+
+- **Hard-to-guess URL.** Embed a UUID or random hex token in the path; rotate on suspected leak.
+- **TLS.** Webhook URL MUST be HTTPS (channel enforces this at config-validation time).
+- **`dm_policy: "allowlist"` in production.** Even if an attacker forges a webhook update with a spoofed sender, the channel rejects unauthorized senders before invoking the agent.
+
+Recommended: restrict ingress to Max API origin IPs (if published), apply rate limiting at the gateway, monitor for unexpected `update_type` values as a probe-detection signal.
+
 ### Environment Variables
 
 ```

@@ -83,5 +83,22 @@ When extending `client.go`:
 - **No outbound voice messages.** Inbound audio attachments are downloaded; outbound voice generation is not implemented.
 - **No callback button responses.** `AnswerCallback` exists in the client; agent-loop integration is not wired.
 - **No `request_contact` button setup.** `VerifyContactHash` validates incoming hashes; the outbound side (sending a request_contact button) is not implemented.
+- **Concurrent runs in the same chat may interleave placeholder handoffs.** When two agent runs are simultaneously active for one chat ID, both call `CreateStream` and post their own placeholder. The placeholder→Send handoff via `c.placeholders` is keyed only on chat ID, so the second `FinalizeStream` overwrites the first — the first run's `Send` then accidentally edits the second run's placeholder, while the second run's `Send` falls through to a fresh message. In production this is practically unreachable: goclaw's debounce coalesces rapid messages from one user, and per-session run limits cap concurrent runs at 1 in DM. Once Max enables group bots and concurrent group runs, the placeholder map will need to be keyed per-`RunContext` to fix this. Test `TestStreaming_ConcurrentRuns_DoNotInterfere` documents the current behaviour so future regressions are caught.
 
 These are scoped extensions, all backward-compatible with the current interface.
+
+## Webhook security
+
+Max API does not provide a shared-secret signature scheme for webhook authenticity. The webhook URL is the only auth — operators MUST treat it as a secret credential.
+
+**Required:**
+
+- **Hard-to-guess URL.** Embed a UUID or random hex token in the path: `https://your.gateway/max/webhook/<uuid>`. Rotate on suspected leak (logs, error reports, screenshots).
+- **TLS.** Webhook URL MUST be HTTPS. The channel enforces this at config-validation time; deployment must provision a real certificate.
+- **Production policy.** Configure `dm_policy: "allowlist"` and populate `allow_from` with known user IDs. Even if an attacker forges a webhook update with a spoofed `sender.user_id`, the channel rejects unauthorized senders before invoking the agent.
+
+**Recommended:**
+
+- **Ingress allowlist.** If Max API publishes static origin IPs, restrict ingress to those CIDRs at the load balancer / Cloud.ru ingress.
+- **Rate limiting.** Cap requests per source IP at the gateway level. Webhook deliveries from Max are infrequent; a low ceiling (e.g. 10 rps) limits damage from URL leaks.
+- **Monitor for unexpected `update_type`.** Log unrecognized update types at WARN; spikes suggest probing.

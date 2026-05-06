@@ -108,7 +108,7 @@ func (c *Channel) startReactionRefresher(chatIDStr string, chatIDInt int64, acti
 	// Stop any prior refresher for this chat.
 	c.stopReactionRefresher(chatIDStr)
 
-	ctx, cancel := context.WithCancel(c.runContext())
+	ctx, cancel := context.WithCancel(c.pollContext())
 	rr := &reactionRefresher{
 		cancel: cancel,
 		done:   make(chan struct{}),

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -144,14 +143,9 @@ func (c *Channel) fetchToTempFile(ctx context.Context, rawURL, ext, mediaType st
 	dlCtx, cancel := context.WithTimeout(ctx, downloadTimeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(dlCtx, http.MethodGet, rawURL, nil)
+	resp, err := c.client.DownloadFile(dlCtx, rawURL)
 	if err != nil {
-		return "", fmt.Errorf("build request: %w", err)
-	}
-
-	resp, err := c.client.httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("http: %w", err)
+		return "", err
 	}
 	defer resp.Body.Close()
 

@@ -238,6 +238,36 @@ func (c *Client) UnsubscribeWebhook(ctx context.Context, hookURL string) error {
 }
 
 // =====================================================================
+// Raw HTTP — used for asset downloads where the URL is provided by Max
+// API responses (e.g. attachment URLs, upload service URLs).
+// =====================================================================
+
+// DownloadFile fetches a URL through the same HTTP transport used for API
+// calls. The URL is treated as opaque: no auth header is added (Max
+// attachment URLs are pre-signed; upload service URLs use their own
+// query-string tokens).
+//
+// Caller is responsible for:
+//   - closing resp.Body
+//   - validating Content-Length / status code
+//   - applying any size cap appropriate to the call site
+//
+// This method exists so package-private code in other files (media_download)
+// doesn't reach into c.httpClient directly. If we add transport middleware
+// (e.g. otelhttp) in NewClient, downloads automatically pick it up.
+func (c *Client) DownloadFile(ctx context.Context, rawURL string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build download request: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("download: %w", err)
+	}
+	return resp, nil
+}
+
+// =====================================================================
 // Internal: do — single source of truth for HTTP I/O.
 // =====================================================================
 

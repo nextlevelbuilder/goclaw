@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -97,15 +98,42 @@ func (c *Channel) uploadOneMedia(ctx context.Context, m bus.MediaAttachment) (At
 	}
 
 	// Step 1: request upload URL.
-	uploadURL, err := c.client.RequestUploadURL(ctx, maxType)
-	if err != nil {
-		return Attachment{}, fmt.Errorf("request upload url: %w", err)
+	// Single transient retry: if the URL request fails with a transient
+	// error (network blip, 5xx), retry once. Permanent errors (4xx, file
+	// validation) are not retried — they would just fail the same way.
+	var uploadURL string
+	for attempt := 0; attempt < 2; attempt++ {
+		uploadURL, err = c.client.RequestUploadURL(ctx, maxType)
+		if err == nil {
+			break
+		}
+		if !isTransientUploadError(err) || attempt == 1 {
+			return Attachment{}, fmt.Errorf("request upload url: %w", err)
+		}
+		slog.Debug("max: transient error requesting upload URL, retrying once",
+			"channel", c.Name(), "type", maxType, "error", err)
 	}
 
 	// Step 2: push file bytes.
-	uploadResp, err := c.client.UploadFile(ctx, uploadURL, file, filepath.Base(m.URL), m.ContentType)
-	if err != nil {
-		return Attachment{}, fmt.Errorf("upload file: %w", err)
+	// Single transient retry: same rationale as Step 1. We have to seek
+	// the file back to start before retrying — the failed first attempt
+	// may have consumed bytes from the reader.
+	var uploadResp uploadResponse
+	for attempt := 0; attempt < 2; attempt++ {
+		if attempt > 0 {
+			if _, seekErr := file.Seek(0, 0); seekErr != nil {
+				return Attachment{}, fmt.Errorf("seek for retry: %w", seekErr)
+			}
+		}
+		uploadResp, err = c.client.UploadFile(ctx, uploadURL, file, filepath.Base(m.URL), m.ContentType)
+		if err == nil {
+			break
+		}
+		if !isTransientUploadError(err) || attempt == 1 {
+			return Attachment{}, fmt.Errorf("upload file: %w", err)
+		}
+		slog.Debug("max: transient error uploading file, retrying once",
+			"channel", c.Name(), "type", maxType, "error", err)
 	}
 
 	// Step 3: build Attachment from server response. The exact response
@@ -122,6 +150,54 @@ func (c *Channel) uploadOneMedia(ctx context.Context, m bus.MediaAttachment) (At
 		return Attachment{}, fmt.Errorf("interpret upload response: %w", err)
 	}
 	return att, nil
+}
+
+// isTransientUploadError reports whether err looks like a transient
+// failure (network blip, server timeout, 5xx) that's worth retrying once.
+//
+// We keep the policy conservative: only retry errors that have a strong
+// signal of being temporary. 4xx responses, local file errors, and JSON
+// decode errors are NOT retried — they reproduce on retry and just waste
+// time/quota.
+//
+// On a transient retry, we accept the small risk of double-orphan: the
+// first attempt may have actually succeeded server-side but the response
+// was lost in transit. Max storage TTLs unattached uploads anyway, so
+// the orphan disappears within ~24-48h.
+func isTransientUploadError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Context-related: deadline exceeded counts as transient (server may
+	// have been slow once); cancellation does NOT (caller intent).
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	if errors.Is(err, context.Canceled) {
+		return false
+	}
+	// Network errors from the stdlib — connection reset, DNS failure,
+	// EOF mid-response, etc. These match net.OpError and friends.
+	var netErr *net.OpError
+	if errors.As(err, &netErr) {
+		return true
+	}
+	// HTTP 5xx classification: the Max client surfaces server errors
+	// in error strings (no typed wrapper today). Check for the marker
+	// substring "5" followed by 2 digits used in client.go's do().
+	// This is fragile but better than no detection; can be replaced
+	// with a typed error wrapper in a follow-up.
+	msg := err.Error()
+	if strings.Contains(msg, "status 5") {
+		return true
+	}
+	// Generic transport-level errors that don't have a stable type.
+	if strings.Contains(msg, "EOF") ||
+		strings.Contains(msg, "connection reset") ||
+		strings.Contains(msg, "broken pipe") {
+		return true
+	}
+	return false
 }
 
 // classifyUploadType maps a file's MIME type / filename to the Max upload

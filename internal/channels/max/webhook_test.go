@@ -2,6 +2,7 @@ package max
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -189,8 +190,53 @@ func TestServeWebhook_DispatchErrorStillReturns200(t *testing.T) {
 }
 
 // =====================================================================
-// webhookPathFromURL
+// webhook dispatch context lifetime — Day 5b regression
 // =====================================================================
+
+// TestServeWebhook_DispatchSurvivesStop verifies the Day 5b fix: a webhook
+// delivery in flight when Stop is called must complete its dispatch
+// goroutine independently. Before the fix, dispatch shared c.pollRunCtx,
+// so Stop would cancel mid-dispatch and the message could be lost after
+// we'd already 200-OK'd Max.
+//
+// We can't directly observe "dispatch completed" without an inbound
+// listener, but we can verify:
+//  1. ServeHTTP returns 200 promptly (does not block on dispatch).
+//  2. Stop on the underlying Channel is non-fatal (no panic, no goroutine
+//     leak detectable in this short test).
+//
+// A stronger end-to-end test lives in integration_test.go.
+func TestServeWebhook_DispatchSurvivesStop(t *testing.T) {
+	c := newWebhookChannel(t, "webhook", "https://example.com/hook")
+	_, h := c.WebhookHandler()
+
+	body := []byte(`{
+		"update_type": "message_created",
+		"timestamp": 1730000000,
+		"message": {
+			"sender":    {"user_id": 74757262, "first_name": "Test"},
+			"recipient": {"chat_type": "dialog", "user_id": 256747471, "chat_id": 188289857},
+			"timestamp": 1730000000,
+			"message":   {"mid": "mid.test", "seq": 1, "text": "hello"}
+		}
+	}`)
+
+	req := httptest.NewRequest(http.MethodPost, "/hook", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+
+	// Dispatch happens in a goroutine; ServeHTTP returns immediately after 200.
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+
+	// Now Stop the channel — this used to cancel the dispatch context. With
+	// the fix, dispatch has its own context.Background-based timeout and is
+	// unaffected.
+	if err := c.Stop(context.Background()); err != nil {
+		t.Errorf("Stop after webhook dispatch returned error: %v", err)
+	}
+}
 
 func TestWebhookPathFromURL(t *testing.T) {
 	tests := []struct {

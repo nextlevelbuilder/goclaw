@@ -64,9 +64,10 @@ type Channel struct {
 	// sentCount tracks total successful chunk sends; useful for tests/metrics.
 	sentCount int64
 
-	// runCtxMu guards pollRunCtx — written by Start, read by webhook
-	// handler (and potentially other callers triggered from outside the
-	// polling goroutine).
+	// runCtxMu guards pollRunCtx — written by Start, read by reaction
+	// refresher goroutines via pollContext(). NOT used by webhook
+	// dispatch (webhook uses a fresh context.Background per delivery to
+	// avoid a cancellation race with Stop; see webhook.go).
 	runCtxMu   sync.RWMutex
 	pollRunCtx context.Context
 

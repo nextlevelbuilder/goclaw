@@ -67,6 +67,26 @@ func (c *Channel) send(ctx context.Context, msg bus.OutboundMessage) error {
 	// the now-finalized message.
 	placeholderID := c.consumePlaceholder(msg.ChatID)
 
+	// Panic safety: if anything between here and the end of send panics,
+	// restore the consumed placeholder so subsequent Send attempts can
+	// still find and edit it. A re-panic preserves the original failure
+	// for the caller / runtime to handle. We deliberately do NOT swallow
+	// the panic — that would mask bugs.
+	defer func() {
+		if r := recover(); r != nil {
+			if placeholderID != "" {
+				c.placeholders.Store(msg.ChatID, placeholderID)
+				slog.Warn("max: panic in send — placeholder restored",
+					"channel", c.Name(), "chat_id", msg.ChatID,
+					"placeholder", placeholderID, "panic", r)
+			} else {
+				slog.Warn("max: panic in send",
+					"channel", c.Name(), "chat_id", msg.ChatID, "panic", r)
+			}
+			panic(r) // re-raise
+		}
+	}()
+
 	// If only media: send a single message with the attachments and no text.
 	if len(chunks) == 0 {
 		if placeholderID != "" {

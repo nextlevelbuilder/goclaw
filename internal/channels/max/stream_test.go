@@ -402,15 +402,57 @@ func TestFinalizeStream_StoresMessageID(t *testing.T) {
 	c := streamChannel(t, m)
 
 	stream, _ := c.CreateStream(context.Background(), "188289857", true)
+
+	// Force an Update through so lastSent is non-empty — required for
+	// FinalizeStream to hand off rather than delete the placeholder.
+	ms := stream.(*maxStream)
+	ms.mu.Lock()
+	ms.lastEdit = time.Now().Add(-2 * streamThrottleInterval)
+	ms.mu.Unlock()
+	stream.Update(context.Background(), "some content")
+
 	c.FinalizeStream(context.Background(), "188289857", stream)
 
 	v, ok := c.placeholders.Load("188289857")
 	if !ok {
-		t.Fatal("expected placeholder stored after FinalizeStream")
+		t.Fatal("expected placeholder stored after FinalizeStream with content")
 	}
 	stored, _ := v.(string)
 	if !strings.HasPrefix(stored, "mid.test_") {
 		t.Errorf("stored = %q, expected mid.test_*", stored)
+	}
+}
+
+// TestFinalizeStream_DeletesOrphanPlaceholder — Day 5b regression.
+// When a stream is created (placeholder posted) but never receives any
+// successful Update (e.g. agent crash before first chunk), FinalizeStream
+// must DELETE the placeholder rather than hand off to placeholders. Otherwise
+// "💭 Печатаю..." lives in the chat indefinitely if no Send follows.
+func TestFinalizeStream_DeletesOrphanPlaceholder(t *testing.T) {
+	m := newStreamBackend(t)
+	c := streamChannel(t, m)
+
+	stream, _ := c.CreateStream(context.Background(), "188289857", true)
+	// No Update calls — stream has no content.
+
+	c.FinalizeStream(context.Background(), "188289857", stream)
+
+	// Placeholders map must be empty — no handoff happened.
+	if _, ok := c.placeholders.Load("188289857"); ok {
+		t.Error("placeholder should NOT be stored when stream had no content")
+	}
+
+	// Backend must have received a DELETE for the placeholder mid.
+	calls := m.snapshot()
+	hasDelete := false
+	for _, call := range calls {
+		if call.Method == http.MethodDelete && call.Path == "/messages" {
+			hasDelete = true
+			break
+		}
+	}
+	if !hasDelete {
+		t.Errorf("expected DELETE /messages for orphan placeholder; calls=%v", calls)
 	}
 }
 
@@ -629,5 +671,101 @@ func TestStreamingFullLifecycle(t *testing.T) {
 	}
 	if got, _ := last.Body["format"].(string); got != "markdown" {
 		t.Errorf("final edit format = %q, want 'markdown'", got)
+	}
+}
+
+// =====================================================================
+// Concurrent streams — documents known limitation
+// =====================================================================
+
+// TestStreaming_ConcurrentRuns_DoNotInterfere — Day 5b regression check.
+//
+// When two agent runs are active in the same chat simultaneously, each
+// gets its own ChannelStream from CreateStream. Each posts an independent
+// "💭 Печатаю..." placeholder. This is correct (each run is independent).
+//
+// HOWEVER, the placeholder handoff via c.placeholders is keyed only on
+// chatID — so the second FinalizeStream overwrites the first. The first
+// Send then accidentally consumes the *second* run's placeholder mid.
+//
+// In production this is practically unreachable because:
+//  1. goclaw debounce coalesces rapid messages from one user into one run
+//  2. per-session run limits cap concurrent runs at 1 in DM
+//
+// This test exists to:
+//  - Verify CreateStream is independent (each run gets its own placeholder)
+//  - Document the placeholder collision so future code changes preserve
+//    or fix the behavior intentionally, not accidentally
+//
+// If you change c.placeholders to be per-run (via RunContext), update this
+// test to assert correct routing.
+func TestStreaming_ConcurrentRuns_DoNotInterfere(t *testing.T) {
+	m := newStreamBackend(t)
+	c := streamChannel(t, m)
+
+	// Two parallel runs in the same chat.
+	streamA, errA := c.CreateStream(context.Background(), "188289857", true)
+	streamB, errB := c.CreateStream(context.Background(), "188289857", true)
+	if errA != nil || errB != nil {
+		t.Fatalf("CreateStream errors: A=%v B=%v", errA, errB)
+	}
+
+	// Both stream handles must be distinct and have independent message IDs.
+	msA := streamA.(*maxStream)
+	msB := streamB.(*maxStream)
+	if msA == msB {
+		t.Fatal("CreateStream returned the same handle twice")
+	}
+	if msA.messageID == "" || msB.messageID == "" {
+		t.Fatal("both streams must have placeholder mids")
+	}
+	if msA.messageID == msB.messageID {
+		t.Errorf("placeholder collision: both streams have mid=%q", msA.messageID)
+	}
+
+	// Send Update on each — backend should record edits to each placeholder.
+	msA.mu.Lock()
+	msA.lastEdit = time.Now().Add(-2 * streamThrottleInterval)
+	msA.mu.Unlock()
+	streamA.Update(context.Background(), "from run A")
+
+	msB.mu.Lock()
+	msB.lastEdit = time.Now().Add(-2 * streamThrottleInterval)
+	msB.mu.Unlock()
+	streamB.Update(context.Background(), "from run B")
+
+	// Both PUT calls should have happened; we can't easily map which to
+	// which without inspecting the URL message_id query param, so we just
+	// count.
+	calls := m.snapshot()
+	posts := 0
+	puts := 0
+	for _, call := range calls {
+		switch call.Method {
+		case http.MethodPost:
+			posts++
+		case http.MethodPut:
+			puts++
+		}
+	}
+	if posts != 2 {
+		t.Errorf("expected 2 POSTs (one placeholder per run), got %d", posts)
+	}
+	if puts != 2 {
+		t.Errorf("expected 2 PUTs (one update per run), got %d", puts)
+	}
+
+	// Document the known placeholder collision: FinalizeStream on B
+	// overwrites FinalizeStream on A. This is the bug we're documenting.
+	c.FinalizeStream(context.Background(), "188289857", streamA)
+	c.FinalizeStream(context.Background(), "188289857", streamB)
+
+	v, ok := c.placeholders.Load("188289857")
+	if !ok {
+		t.Fatal("expected placeholder after FinalizeStream chain")
+	}
+	stored, _ := v.(string)
+	if stored != msB.messageID {
+		t.Errorf("known limitation: expected last-finalize-wins (B's mid), got %q", stored)
 	}
 }

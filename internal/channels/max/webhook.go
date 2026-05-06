@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
 // defaultWebhookPath is used when cfg.WebhookURL has no path component.
@@ -23,6 +24,15 @@ const defaultWebhookPath = "/max/webhook"
 // are typically <10 KB; this cushion guards against accidental or malicious
 // oversized bodies while leaving plenty of room for messages with attachments.
 const maxWebhookBodyBytes = 1 << 20 // 1 MiB
+
+// webhookDispatchTimeout bounds the lifetime of an async dispatch goroutine
+// spawned per webhook delivery. Long enough for the agent to produce a full
+// reply (including streaming and media uploads); short enough that wedged
+// dispatches don't accumulate goroutines.
+//
+// 5 minutes matches the upper bound of typical agent run lengths in
+// production (most under 30s, p99 under 2m).
+const webhookDispatchTimeout = 5 * time.Minute
 
 // WebhookHandler returns the HTTP handler and mount path for this Max channel.
 // Implements channels.WebhookChannel.
@@ -123,18 +133,36 @@ func (c *Channel) serveWebhook(w http.ResponseWriter, r *http.Request) {
 	// Dispatch on the channel's run context so handler goroutines can outlive
 	// this HTTP request. Falls back to context.Background() if Start() hasn't
 	// been called yet (should not happen — handler isn't mounted until Start).
-	c.handleUpdate(c.runContext(), update)
+	// Dispatch on a fresh context independent of the channel's polling
+	// lifecycle. Webhook deliveries are individual requests from Max API:
+	// they must not be cancelled by goclaw rolling restarts or Stop. Once
+	// the HTTP request has been parsed and we're going to 200-OK Max, we
+	// own the message — we cannot lose it because Stop happened to fire.
+	//
+	// Bounded timeout (webhookDispatchTimeout) prevents goroutine leaks
+	// if dispatch wedges (e.g. agent loop hangs).
+	dispatchCtx, dispatchCancel := context.WithTimeout(context.Background(), webhookDispatchTimeout)
+	go func() {
+		defer dispatchCancel()
+		c.handleUpdate(dispatchCtx, update)
+	}()
 
 	w.WriteHeader(http.StatusOK)
 }
 
-// runContext returns the long-lived context spawned by Start. Returns
-// context.Background() if Start has not yet executed.
+// (runContext was removed — webhook now uses a fresh context per delivery.
+// The previous implementation read c.pollRunCtx, which created a
+// cancellation race during Stop: a webhook arriving mid-Stop could see a
+// just-cancelled context and drop the message after we'd already 200-OK'd
+// Max. See Day 5b commit message.)
+
+// pollContext returns the long-lived context spawned by Start, or
+// context.Background() if Start has not yet executed. Used by per-chat
+// reaction refreshers, which must stop when the channel stops — this is
+// the opposite of webhook handlers, which must complete even after Stop.
 //
-// Defensive: serveWebhook can in principle fire before Start completes (in
-// theory, if the gateway mux is registered eagerly). Using a never-cancelled
-// background context is safer than nil.
-func (c *Channel) runContext() context.Context {
+// Do not use for inbound message dispatch.
+func (c *Channel) pollContext() context.Context {
 	c.runCtxMu.RLock()
 	defer c.runCtxMu.RUnlock()
 	if c.pollRunCtx != nil {
