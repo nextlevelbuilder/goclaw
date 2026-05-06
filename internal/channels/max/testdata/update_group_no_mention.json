@@ -1,0 +1,29 @@
+{
+  "marker": 35900100,
+  "updates": [
+    {
+      "update_type": "message_created",
+      "timestamp": 1777970100000,
+      "user_locale": "ru",
+      "message": {
+        "sender": {
+          "user_id": 74757262,
+          "first_name": "Тарас",
+          "last_name": "",
+          "is_bot": false,
+          "name": "Тарас"
+        },
+        "recipient": {
+          "chat_id": 999888777,
+          "chat_type": "chat"
+        },
+        "timestamp": 1777970100000,
+        "message": {
+          "mid": "mid.group002",
+          "seq": 100000002,
+          "text": "это сообщение никого не упоминает"
+        }
+      }
+    }
+  ]
+}
