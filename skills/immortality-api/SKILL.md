@@ -60,19 +60,18 @@ If `auth/invalid-credential`: password rotated. Tell user to update vault — DO
 | `replace <id> < data.json` | PUT /khaitri/:id | Full khaitri update |
 | `delete <id>` | DELETE /khaitri/:id | Hard delete khaitri |
 
-**For articles:** use direct `curl` with the same idToken (or extend khaitri.mjs to articles.mjs in a future task). Endpoints mirror khaitri:
+**For articles:** use `articles.mjs` (mirror of khaitri.mjs):
 
-```bash
-TOKEN=$(node -e '...sign in, print idToken')
-# List
-curl -H "Authorization: Bearer $TOKEN" https://battudao.com/api/articles
-# Create
-curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d @article.json https://battudao.com/api/articles
-# Update
-curl -X PATCH -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d @patch.json https://battudao.com/api/articles/<id>
-```
+| Command | API call |
+|---|---|
+| `node articles.mjs spec` | GET /agent-spec |
+| `node articles.mjs list` | GET /articles |
+| `node articles.mjs get <id>` | GET /articles/:id |
+| `node articles.mjs create < data.json` | POST /articles (409 on dup sourceRef) |
+| `node articles.mjs update <id> < patch.json` | PATCH /articles/:id |
+| `node articles.mjs replace <id> < data.json` | PUT /articles/:id |
+| `node articles.mjs delete <id>` | DELETE /articles/:id |
+| `node articles.mjs upload-image < {url,intent,slug}` | POST /upload-from-url |
 
 ## Image upload (article hero or khaitri illustration)
 
