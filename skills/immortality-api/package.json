@@ -1,0 +1,16 @@
+{
+  "name": "immortality-api",
+  "version": "1.0.0",
+  "description": "Goclaw skill: agent-first REST API client for Khai Trí CRUD on immortality.vn",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "khaitri": "node scripts/khaitri.mjs"
+  },
+  "dependencies": {
+    "firebase": "^11.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
