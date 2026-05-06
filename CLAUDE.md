@@ -23,7 +23,8 @@ internal/
 ├── bootstrap/                System prompt files (SOUL.md, IDENTITY.md) + seeding + per-user seed
 ├── bus/                      Event bus system
 ├── cache/                    Caching layer
-├── channels/                 Channel manager: Telegram, Feishu/Lark, Zalo, Discord, WhatsApp
+├── channels/                 Channel manager: Telegram, Feishu/Lark, Zalo, Discord, WhatsApp, Max
+│   ├── max/                  Max Messenger (Russian platform) — long-poll + webhook
 │   └── whatsapp/             Native WhatsApp via whatsmeow (v3)
 ├── config/                   Config loading (JSON5) + env var overlay
 ├── consolidation/            Memory consolidation workers (episodic, semantic, dreaming) (v3)
