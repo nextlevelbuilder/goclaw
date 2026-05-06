@@ -90,7 +90,7 @@ func (c *Channel) send(ctx context.Context, msg bus.OutboundMessage) error {
 	// If only media: send a single message with the attachments and no text.
 	if len(chunks) == 0 {
 		if placeholderID != "" {
-			// Edit the placeholder to remove "💭 Печатаю..." then attach media
+			// Edit the placeholder to remove "💭 Thinking..." then attach media
 			// in a follow-up. Max EditMessage doesn't support attachments,
 			// so we delete the placeholder and send fresh — accepting the
 			// brief flicker as the lesser evil vs. orphaned placeholder.

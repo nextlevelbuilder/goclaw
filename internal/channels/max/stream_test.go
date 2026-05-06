@@ -427,7 +427,7 @@ func TestFinalizeStream_StoresMessageID(t *testing.T) {
 // When a stream is created (placeholder posted) but never receives any
 // successful Update (e.g. agent crash before first chunk), FinalizeStream
 // must DELETE the placeholder rather than hand off to placeholders. Otherwise
-// "💭 Печатаю..." lives in the chat indefinitely if no Send follows.
+// "💭 Thinking..." lives in the chat indefinitely if no Send follows.
 func TestFinalizeStream_DeletesOrphanPlaceholder(t *testing.T) {
 	m := newStreamBackend(t)
 	c := streamChannel(t, m)
@@ -682,7 +682,7 @@ func TestStreamingFullLifecycle(t *testing.T) {
 //
 // When two agent runs are active in the same chat simultaneously, each
 // gets its own ChannelStream from CreateStream. Each posts an independent
-// "💭 Печатаю..." placeholder. This is correct (each run is independent).
+// "💭 Thinking..." placeholder. This is correct (each run is independent).
 //
 // HOWEVER, the placeholder handoff via c.placeholders is keyed only on
 // chatID — so the second FinalizeStream overwrites the first. The first

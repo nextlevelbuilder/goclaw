@@ -24,7 +24,7 @@ const streamThrottleInterval = 800 * time.Millisecond
 // streamPlaceholderText is the initial text sent when a stream is created.
 // Shown to the user immediately so they know the bot has received their
 // message and is generating a response.
-const streamPlaceholderText = "💭 Печатаю..."
+const streamPlaceholderText = "💭 Thinking..."
 
 // streamMaxBytes caps the size of any single stream edit. Matches Max's
 // per-message text limit. We never split a streaming message — long content
@@ -231,7 +231,7 @@ func (c *Channel) StreamEnabled(isGroup bool) bool {
 // CreateStream creates a per-run streaming handle for the given chatID.
 // Implements channels.StreamingChannel.
 //
-// Sends a placeholder message ("💭 Печатаю...") immediately and stores its
+// Sends a placeholder message ("💭 Thinking...") immediately and stores its
 // message_id on the returned stream. Subsequent Update calls edit this
 // message in place.
 //
@@ -296,9 +296,9 @@ func (c *Channel) CreateStream(ctx context.Context, chatID string, firstStream b
 // empty — agent crashed or errored before the first Update), we delete
 // the placeholder rather than handing off. Reasoning: if Send is later
 // called (e.g. with an error message), it will fresh-send and the user
-// gets one clean message instead of "💭 Печатаю..." then an error reply.
+// gets one clean message instead of "💭 Thinking..." then an error reply.
 // If Send is NOT called (worst case: agent crash without recovery), the
-// orphan "💭 Печатаю..." would otherwise live in the chat indefinitely.
+// orphan "💭 Thinking..." would otherwise live in the chat indefinitely.
 func (c *Channel) FinalizeStream(ctx context.Context, chatID string, stream channels.ChannelStream) {
 	ms, ok := stream.(*maxStream)
 	if !ok {
