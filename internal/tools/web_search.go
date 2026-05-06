@@ -163,6 +163,10 @@ func (t *WebSearchTool) Parameters() map[string]any {
 				"type":        "string",
 				"description": "Filter results by discovery time. Supports 'pd' (past day), 'pw' (past week), 'pm' (past month), 'py' (past year), and date range 'YYYY-MM-DDtoYYYY-MM-DD'.",
 			},
+			"provider": map[string]any{
+				"type":        "string",
+				"description": "Optional: force a specific provider (e.g., 'tavily', 'exa', 'brave', 'duckduckgo'). When omitted, the tenant's configured provider chain is used (first-success-wins). Use this to force cross-engine corroboration — call once with each provider and compare results.",
+			},
 		},
 		"required": []string{"query"},
 	}
@@ -183,6 +187,7 @@ func (t *WebSearchTool) Execute(ctx context.Context, args map[string]any) *Resul
 	searchLang, _ := args["search_lang"].(string)
 	uiLang, _ := args["ui_lang"].(string)
 	freshness, _ := args["freshness"].(string)
+	requestedProvider, _ := args["provider"].(string)
 
 	params := searchParams{
 		Query:      query,
@@ -193,18 +198,40 @@ func (t *WebSearchTool) Execute(ctx context.Context, args map[string]any) *Resul
 		Freshness:  freshness,
 	}
 
-	// Check cache (scoped per channel to prevent cross-channel cache poisoning)
+	// Check cache (scoped per channel + provider to prevent cross-engine cache mixing)
 	channel := ToolChannelFromCtx(ctx)
-	cacheKey := fmt.Sprintf("%s:%s", channel, buildSearchCacheKey(params))
+	cacheKey := fmt.Sprintf("%s:%s:%s", channel, requestedProvider, buildSearchCacheKey(params))
 	if cached, ok := t.cache.get(cacheKey); ok {
-		slog.Debug("web_search cache hit", "query", query)
+		slog.Debug("web_search cache hit", "query", query, "provider", requestedProvider)
 		return NewResult(cached)
 	}
 
 	// Resolve per-request provider chain from tenant config_secrets + settings overlay.
 	chain := t.resolveChain(ctx)
 
-	// Try providers in order (first success wins)
+	// If caller explicitly named a provider, narrow the chain to just that one.
+	// This unlocks cross-engine corroboration (caller invokes once per engine
+	// and compares results) — without a provider param, the first-success-wins
+	// chain hides everything after the first hit.
+	if requestedProvider != "" {
+		filtered := make([]SearchProvider, 0, 1)
+		for _, p := range chain {
+			if strings.EqualFold(p.Name(), requestedProvider) {
+				filtered = append(filtered, p)
+				break
+			}
+		}
+		if len(filtered) == 0 {
+			available := make([]string, 0, len(chain))
+			for _, p := range chain {
+				available = append(available, p.Name())
+			}
+			return ErrorResult(fmt.Sprintf("provider %q not configured for this tenant; available: %v", requestedProvider, available))
+		}
+		chain = filtered
+	}
+
+	// Try providers in order (first success wins, unless narrowed above)
 	var lastErr error
 	for _, provider := range chain {
 		results, err := provider.Search(ctx, params)
