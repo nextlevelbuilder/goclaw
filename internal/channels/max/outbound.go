@@ -57,8 +57,25 @@ func (c *Channel) send(ctx context.Context, msg bus.OutboundMessage) error {
 		return nil
 	}
 
+	// Streaming handoff: if FinalizeStream stored a placeholder messageID
+	// for this chat, edit it with the first chunk instead of sending a
+	// fresh message. This replaces the streaming preview with the final
+	// markdown-formatted answer, avoiding a duplicate.
+	//
+	// We consume the placeholder (LoadAndDelete) so subsequent Send calls
+	// in the same chat (e.g. error notifications) don't accidentally edit
+	// the now-finalized message.
+	placeholderID := c.consumePlaceholder(msg.ChatID)
+
 	// If only media: send a single message with the attachments and no text.
 	if len(chunks) == 0 {
+		if placeholderID != "" {
+			// Edit the placeholder to remove "💭 Печатаю..." then attach media
+			// in a follow-up. Max EditMessage doesn't support attachments,
+			// so we delete the placeholder and send fresh — accepting the
+			// brief flicker as the lesser evil vs. orphaned placeholder.
+			c.bestEffortDeletePlaceholder(ctx, placeholderID)
+		}
 		return c.sendOneChunk(ctx, msg.ChatID, chatID, "", attachments)
 	}
 
@@ -70,19 +87,52 @@ func (c *Channel) send(ctx context.Context, msg bus.OutboundMessage) error {
 			attsForThisChunk = attachments
 		}
 
-		mid, err := c.sendOneChunkAndReturnID(ctx, msg.ChatID, chatID, chunk, attsForThisChunk, i+1, len(chunks))
-		if err != nil {
-			return err
+		// First chunk: prefer editing the streaming placeholder if one exists.
+		// Subsequent chunks always go via SendMessage.
+		var mid string
+		if i == 0 && placeholderID != "" && len(attsForThisChunk) == 0 {
+			// Edit path — placeholder exists and no media (Max EditMessage
+			// doesn't support attachments; falls back to send if media present).
+			mid, err = c.editPlaceholder(ctx, msg.ChatID, placeholderID, chunk)
+			if err != nil {
+				// Edit failed — fall back to a fresh send. Delete the stale
+				// placeholder best-effort to keep the chat tidy.
+				slog.Warn("max: edit placeholder failed, sending fresh message",
+					"channel", c.Name(), "chat_id", msg.ChatID,
+					"placeholder", placeholderID, "error", err)
+				c.bestEffortDeletePlaceholder(ctx, placeholderID)
+				mid, err = c.sendOneChunkAndReturnID(ctx, msg.ChatID, chatID, chunk, attsForThisChunk, i+1, len(chunks))
+				if err != nil {
+					return err
+				}
+			}
+		} else {
+			if i == 0 && placeholderID != "" && len(attsForThisChunk) > 0 {
+				// Media-with-text on first chunk: can't edit (Max API limitation).
+				// Delete placeholder, send fresh.
+				c.bestEffortDeletePlaceholder(ctx, placeholderID)
+			}
+			mid, err = c.sendOneChunkAndReturnID(ctx, msg.ChatID, chatID, chunk, attsForThisChunk, i+1, len(chunks))
+			if err != nil {
+				return err
+			}
 		}
 		lastMessageID = mid
 	}
 
-	// Persist message_id for streaming edits (Day 4.5 will use this).
-	// Key on chat_id — newest message_id wins. This matches Telegram's
-	// `placeholders sync.Map` pattern and works because streaming only
-	// edits the most recent placeholder.
-	if lastMessageID != "" {
+	// Persist message_id of the LAST chunk so a future streaming run can
+	// know which message it edited. We only store when at least one chunk
+	// was sent via fresh POST (i.e. lastMessageID came from SendMessage,
+	// not from an edit of a consumed placeholder). After editing a
+	// finalized placeholder, the mid points to the user-visible answer —
+	// re-storing would cause the next Send call to overwrite that answer
+	// instead of sending a new message.
+	if lastMessageID != "" && placeholderID == "" {
 		c.placeholders.Store(msg.ChatID, lastMessageID)
+		atomic.AddInt64(&c.sentCount, 1)
+	} else if lastMessageID != "" {
+		// Even when we edited a placeholder, still bump the counter for
+		// metrics consistency. Don't store the mid — see comment above.
 		atomic.AddInt64(&c.sentCount, 1)
 	}
 
@@ -182,8 +232,7 @@ func parseChatID(s string) (int64, error) {
 }
 
 // lastMessageIDFor returns the last message_id sent into the given chat,
-// or empty string if no message has been sent there yet. Used by streaming
-// (Day 4) to find the placeholder to edit.
+// or empty string if no message has been sent there yet.
 func (c *Channel) lastMessageIDFor(chatID string) string {
 	v, ok := c.placeholders.Load(chatID)
 	if !ok {
@@ -191,4 +240,74 @@ func (c *Channel) lastMessageIDFor(chatID string) string {
 	}
 	id, _ := v.(string)
 	return id
+}
+
+// consumePlaceholder atomically loads and removes the placeholder messageID
+// for the given chat. Used by Send() to detect that a streaming preview is
+// in flight and should be edited rather than replaced by a new message.
+//
+// Returns "" if no placeholder is registered.
+//
+// We delete on read so that subsequent Send calls within the same chat
+// (e.g. error notifications, follow-up messages) don't accidentally edit a
+// message that has already been finalized.
+func (c *Channel) consumePlaceholder(chatID string) string {
+	v, ok := c.placeholders.LoadAndDelete(chatID)
+	if !ok {
+		return ""
+	}
+	id, _ := v.(string)
+	return id
+}
+
+// editPlaceholder edits the placeholder message with the final formatted
+// chunk text. Uses Max's PUT /messages with `format: "markdown"` so the
+// final response renders with proper formatting (bold, italic, code).
+//
+// Returns the message_id from the edit response (typically equal to the
+// input mid; we trust the API).
+func (c *Channel) editPlaceholder(
+	ctx context.Context,
+	chatIDStr string,
+	placeholderID string,
+	text string,
+) (string, error) {
+	resp, err := c.client.EditMessage(ctx, EditMessageParams{
+		MessageID: placeholderID,
+		Body: EditMessageRequest{
+			Text:   text,
+			Format: defaultFormat,
+		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("edit placeholder %s: %w", placeholderID, err)
+	}
+	slog.Debug("max: placeholder edited with final response",
+		"channel", c.Name(),
+		"chat_id", chatIDStr,
+		"message_id", placeholderID,
+		"text_bytes", len(text),
+	)
+	// The API returns the same mid in resp.MessageID; fall back to the
+	// input if for any reason the response shape is empty.
+	if resp.MessageID != "" {
+		return resp.MessageID, nil
+	}
+	return placeholderID, nil
+}
+
+// bestEffortDeletePlaceholder issues a DELETE for a placeholder we can't
+// edit (e.g. when the Send carries media that EditMessage can't combine).
+// Failure is logged but never propagates — leaving an orphaned placeholder
+// is annoying but not catastrophic.
+//
+// Used as a recovery path; not on the happy edit path.
+func (c *Channel) bestEffortDeletePlaceholder(ctx context.Context, placeholderID string) {
+	if placeholderID == "" {
+		return
+	}
+	if err := c.client.DeleteMessage(ctx, placeholderID); err != nil {
+		slog.Debug("max: placeholder delete failed (non-fatal)",
+			"channel", c.Name(), "message_id", placeholderID, "error", err)
+	}
 }

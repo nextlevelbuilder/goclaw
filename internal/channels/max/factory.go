@@ -47,6 +47,16 @@ type instanceConfig struct {
 	// BlockReply overrides the gateway-level block_reply setting.
 	// nil = inherit gateway default. Override only when you have a reason.
 	BlockReply *bool `json:"block_reply,omitempty"`
+
+	// DMStream toggles streaming preview for direct messages.
+	// Default: true (streaming ON for DMs — modern UX expectation).
+	// Set to false to disable: agent loop falls back to non-streaming Send.
+	DMStream *bool `json:"dm_stream,omitempty"`
+
+	// GroupStream toggles streaming preview for group messages.
+	// Default: false (Max platform doesn't yet support bots in groups; even
+	// once it does, in-place editing in groups is more visually noisy).
+	GroupStream *bool `json:"group_stream,omitempty"`
 }
 
 // instanceCreds is the secret credentials JSON, encrypted at rest in
@@ -74,9 +84,6 @@ func Factory(name string, creds json.RawMessage, cfg json.RawMessage,
 
 // FactoryWithPendingStoreAndAudio returns a ChannelFactory with the standard
 // production stores and STT support. Wired up in cmd/gateway.go.
-//
-// Note: db parameter is reserved for future use (e.g. message_id persistence
-// for streaming edit recovery across restarts).
 func FactoryWithPendingStoreAndAudio(
 	pendingStore store.PendingMessageStore,
 	audioMgr *audio.Manager,
