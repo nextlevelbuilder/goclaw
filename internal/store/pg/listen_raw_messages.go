@@ -49,7 +49,7 @@ func (s *PGListenRawMessageStore) AppendBatch(ctx context.Context, msgs []store.
 
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO listen_raw_messages (id, channel_name, chat_id, chat_name, graph_id, sender, sender_id, body, msg_timestamp, agent_id, created_at, tenant_id, media_refs)
-				 VALUES `+strings.Join(placeholders, ","),
+					 VALUES `+strings.Join(placeholders, ","),
 		args...,
 	)
 	return err
@@ -58,37 +58,47 @@ func (s *PGListenRawMessageStore) AppendBatch(ctx context.Context, msgs []store.
 // rawMsgRow is an sqlx scan struct for listen_raw_messages SELECT queries.
 // Handles jsonb→json.RawMessage conversion for media_refs.
 type rawMsgRow struct {
-	ID           uuid.UUID       `db:"id"`
-	ChannelName  string          `db:"channel_name"`
-	ChatID       string          `db:"chat_id"`
-	ChatName     string          `db:"chat_name"`
-	GraphID      string          `db:"graph_id"`
-	Sender       string          `db:"sender"`
-	SenderID     string          `db:"sender_id"`
-	Body         string          `db:"body"`
-	MsgTimestamp time.Time       `db:"msg_timestamp"`
-	AgentID      string          `db:"agent_id"`
-	CreatedAt    time.Time       `db:"created_at"`
-	ProcessedAt  *time.Time      `db:"processed_at"`
-	MediaRefs    json.RawMessage `db:"media_refs"`
-	AgentName    string          `db:"agent_name"`
+	ID                 uuid.UUID       `db:"id"`
+	ChannelName        string          `db:"channel_name"`
+	ChatID             string          `db:"chat_id"`
+	ChatName           string          `db:"chat_name"`
+	GraphID            string          `db:"graph_id"`
+	Sender             string          `db:"sender"`
+	SenderID           string          `db:"sender_id"`
+	Body               string          `db:"body"`
+	MsgTimestamp       time.Time       `db:"msg_timestamp"`
+	AgentID            string          `db:"agent_id"`
+	CreatedAt          time.Time       `db:"created_at"`
+	ProcessedAt        *time.Time      `db:"processed_at"`
+	MediaRefs          json.RawMessage `db:"media_refs"`
+	AgentName          string          `db:"agent_name"`
+	ExtractionStatus   string          `db:"extraction_status"`
+	ExtractionError    *string         `db:"extraction_error"`
+	ExtractionAttempts int             `db:"extraction_attempts"`
+	LastAttemptedAt    *time.Time      `db:"last_attempted_at"`
 }
 
 func (r rawMsgRow) toMessage() store.ListenRawMessage {
 	m := store.ListenRawMessage{
-		ID:           r.ID,
-		ChannelName:  r.ChannelName,
-		ChatID:       r.ChatID,
-		ChatName:     r.ChatName,
-		GraphID:      r.GraphID,
-		Sender:       r.Sender,
-		SenderID:     r.SenderID,
-		Body:         r.Body,
-		MsgTimestamp: r.MsgTimestamp,
-		AgentID:      r.AgentID,
-		CreatedAt:    r.CreatedAt,
-		ProcessedAt:  r.ProcessedAt,
-		AgentName:    r.AgentName,
+		ID:                 r.ID,
+		ChannelName:        r.ChannelName,
+		ChatID:             r.ChatID,
+		ChatName:           r.ChatName,
+		GraphID:            r.GraphID,
+		Sender:             r.Sender,
+		SenderID:           r.SenderID,
+		Body:               r.Body,
+		MsgTimestamp:       r.MsgTimestamp,
+		AgentID:            r.AgentID,
+		CreatedAt:          r.CreatedAt,
+		ProcessedAt:        r.ProcessedAt,
+		AgentName:          r.AgentName,
+		ExtractionStatus:   r.ExtractionStatus,
+		ExtractionAttempts: r.ExtractionAttempts,
+		LastAttemptedAt:    r.LastAttemptedAt,
+	}
+	if r.ExtractionError != nil {
+		m.ExtractionError = *r.ExtractionError
 	}
 	if len(r.MediaRefs) > 0 && string(r.MediaRefs) != "null" {
 		_ = json.Unmarshal(r.MediaRefs, &m.MediaRefs)
@@ -97,18 +107,22 @@ func (r rawMsgRow) toMessage() store.ListenRawMessage {
 }
 
 func (s *PGListenRawMessageStore) ListPending(ctx context.Context, agentID, graphID string, maxRows int) ([]store.ListenRawMessage, error) {
-	tClause, tArgs, _, err := scopeClause(ctx, 4)
+	// Params: $1=agentID, $2=graphID, $3=pending, $4=failed, $5=maxAttempts, $6=maxRows, $7=tenant_id
+	tClause, tArgs, _, err := scopeClause(ctx, 7)
 	if err != nil {
 		return nil, err
 	}
 	var rows []rawMsgRow
 	err = pkgSqlxDB.SelectContext(ctx, &rows,
-		`SELECT id, channel_name, chat_id, chat_name, graph_id, sender, sender_id, body, msg_timestamp, agent_id, created_at, processed_at, media_refs
-				 FROM listen_raw_messages
-				 WHERE agent_id = $1 AND graph_id = $2 AND processed_at IS NULL`+tClause+`
-				 ORDER BY msg_timestamp DESC
-				 LIMIT $3`,
-		append([]any{agentID, graphID, maxRows}, tArgs...)...,
+		`SELECT id, channel_name, chat_id, chat_name, graph_id, sender, sender_id, body, msg_timestamp, agent_id, created_at, processed_at, media_refs,
+		        extraction_status, extraction_error, extraction_attempts, last_attempted_at
+		 FROM listen_raw_messages
+		 WHERE agent_id = $1 AND graph_id = $2
+		   AND (extraction_status = $3 OR (extraction_status = $4 AND extraction_attempts < $5))`+tClause+`
+		 ORDER BY msg_timestamp DESC
+		 LIMIT $6`,
+		append([]any{agentID, graphID,
+			store.ExtractionStatusPending, store.ExtractionStatusFailed, store.MaxExtractionAttempts, maxRows}, tArgs...)...,
 	)
 	if err != nil {
 		return nil, err
@@ -124,29 +138,57 @@ func (s *PGListenRawMessageStore) MarkProcessed(ctx context.Context, ids []uuid.
 	if len(ids) == 0 {
 		return nil
 	}
+	now := time.Now()
 	placeholders := make([]string, len(ids))
-	args := make([]any, len(ids)+1)
-	args[0] = time.Now()
+	args := make([]any, len(ids)+2)
+	args[0] = now
+	args[1] = store.ExtractionStatusExtracted
 	for i, id := range ids {
-		placeholders[i] = fmt.Sprintf("$%d", i+2)
-		args[i+1] = id
+		placeholders[i] = fmt.Sprintf("$%d", i+3)
+		args[i+2] = id
 	}
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE listen_raw_messages SET processed_at = $1 WHERE id IN (`+strings.Join(placeholders, ",")+`)`,
+		`UPDATE listen_raw_messages SET processed_at = $1, extraction_status = $2, extraction_error = NULL WHERE id IN (`+strings.Join(placeholders, ",")+`)`,
+		args...,
+	)
+	return err
+}
+
+func (s *PGListenRawMessageStore) MarkFailed(ctx context.Context, ids []uuid.UUID, extractErr string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	now := time.Now()
+	placeholders := make([]string, len(ids))
+	args := make([]any, 0, len(ids)+3)
+	args = append(args, store.ExtractionStatusFailed, extractErr, now)
+	for i, id := range ids {
+		placeholders[i] = fmt.Sprintf("$%d", i+4)
+		args = append(args, id)
+	}
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE listen_raw_messages
+		 SET extraction_status = $1, extraction_error = $2,
+		     extraction_attempts = extraction_attempts + 1,
+		     last_attempted_at = $3, processed_at = $3
+		 WHERE id IN (`+strings.Join(placeholders, ",")+`)`,
 		args...,
 	)
 	return err
 }
 
 func (s *PGListenRawMessageStore) ListPendingGroups(ctx context.Context) ([]store.ListenRawMessageGroup, error) {
-	tClause, tArgs, _, err := scopeClause(ctx, 1)
+	// Params: $1=pending, $2=failed, $3=maxAttempts, $4=tenant_id
+	tClause, tArgs, _, err := scopeClause(ctx, 4)
 	if err != nil {
 		return nil, err
 	}
 	var result []store.ListenRawMessageGroup
 	err = pkgSqlxDB.SelectContext(ctx, &result,
-		`SELECT DISTINCT agent_id, graph_id FROM listen_raw_messages WHERE processed_at IS NULL`+tClause,
-		tArgs...,
+		`SELECT DISTINCT agent_id, graph_id
+		 FROM listen_raw_messages
+		 WHERE (extraction_status = $1 OR (extraction_status = $2 AND extraction_attempts < $3))`+tClause,
+		append([]any{store.ExtractionStatusPending, store.ExtractionStatusFailed, store.MaxExtractionAttempts}, tArgs...)...,
 	)
 	return result, err
 }
@@ -174,7 +216,7 @@ func (s *PGListenRawMessageStore) ResetProcessed(ctx context.Context, agentID, g
 	}
 
 	where := strings.Join(conditions, " AND ")
-	q := `UPDATE listen_raw_messages SET processed_at = NULL WHERE ` + where + tClause
+	q := `UPDATE listen_raw_messages SET processed_at = NULL, extraction_status = 'pending', extraction_error = NULL WHERE ` + where + tClause
 	args = append(args, tArgs...)
 
 	res, err := s.db.ExecContext(ctx, q, args...)
@@ -200,7 +242,7 @@ func (s *PGListenRawMessageStore) ResetProcessedByIDs(ctx context.Context, ids [
 		return 0, err
 	}
 	args = append(args, tArgs...)
-	q := `UPDATE listen_raw_messages SET processed_at = NULL WHERE id IN (` + strings.Join(placeholders, ",") + `) AND processed_at IS NOT NULL` + tClause
+	q := `UPDATE listen_raw_messages SET processed_at = NULL, extraction_status = 'pending', extraction_error = NULL WHERE id IN (` + strings.Join(placeholders, ",") + `) AND processed_at IS NOT NULL` + tClause
 	res, err := s.db.ExecContext(ctx, q, args...)
 	if err != nil {
 		return 0, err
@@ -215,11 +257,12 @@ func (s *PGListenRawMessageStore) ListPendingEmbeddings(ctx context.Context, age
 	}
 	var rows []rawMsgRow
 	err = pkgSqlxDB.SelectContext(ctx, &rows,
-		`SELECT id, channel_name, chat_id, chat_name, graph_id, sender, sender_id, body, msg_timestamp, agent_id, created_at, processed_at, media_refs
-				 FROM listen_raw_messages
-				 WHERE agent_id = $1 AND graph_id = $2 AND embedded_at IS NULL`+tClause+`
-				 ORDER BY msg_timestamp ASC
-				 LIMIT $3`,
+		`SELECT id, channel_name, chat_id, chat_name, graph_id, sender, sender_id, body, msg_timestamp, agent_id, created_at, processed_at, media_refs,
+		        extraction_status, extraction_error, extraction_attempts, last_attempted_at
+		 FROM listen_raw_messages
+		 WHERE agent_id = $1 AND graph_id = $2 AND embedded_at IS NULL`+tClause+`
+		 ORDER BY msg_timestamp ASC
+		 LIMIT $3`,
 		append([]any{agentID, graphID, maxRows}, tArgs...)...,
 	)
 	if err != nil {
@@ -230,6 +273,19 @@ func (s *PGListenRawMessageStore) ListPendingEmbeddings(ctx context.Context, age
 		result[i] = r.toMessage()
 	}
 	return result, nil
+}
+
+func (s *PGListenRawMessageStore) ListPendingEmbeddingGroups(ctx context.Context) ([]store.ListenRawMessageGroup, error) {
+	tClause, tArgs, _, err := scopeClause(ctx, 1)
+	if err != nil {
+		return nil, err
+	}
+	var result []store.ListenRawMessageGroup
+	err = pkgSqlxDB.SelectContext(ctx, &result,
+		`SELECT DISTINCT agent_id, graph_id FROM listen_raw_messages WHERE embedded_at IS NULL`+tClause,
+		tArgs...,
+	)
+	return result, err
 }
 
 func (s *PGListenRawMessageStore) MarkEmbedded(ctx context.Context, ids []uuid.UUID) error {
@@ -334,12 +390,13 @@ func (s *PGListenRawMessageStore) List(ctx context.Context, opts store.ListenRaw
 	var rows []rawMsgRow
 	err = pkgSqlxDB.SelectContext(ctx, &rows,
 		`SELECT m.id, m.channel_name, m.chat_id, m.chat_name, m.graph_id, m.sender, m.sender_id, m.body, m.msg_timestamp, m.agent_id, m.created_at, m.processed_at, m.media_refs,
-				        COALESCE(a.display_name, a.agent_key, '') AS agent_name
-				 FROM listen_raw_messages m
-				 LEFT JOIN agents a ON a.id = m.agent_id
-				 WHERE 1=1`+tmClause+whereMClause+`
-				 ORDER BY m.created_at DESC
-				 LIMIT $`+fmt.Sprintf("%d", paramIdx)+` OFFSET $`+fmt.Sprintf("%d", paramIdx+1),
+		        m.extraction_status, m.extraction_error, m.extraction_attempts, m.last_attempted_at,
+		        COALESCE(a.display_name, a.agent_key, '') AS agent_name
+		 FROM listen_raw_messages m
+		 LEFT JOIN agents a ON a.id = m.agent_id
+		 WHERE 1=1`+tmClause+whereMClause+`
+		 ORDER BY m.created_at DESC
+		 LIMIT $`+fmt.Sprintf("%d", paramIdx)+` OFFSET $`+fmt.Sprintf("%d", paramIdx+1),
 		pageArgs...,
 	)
 	if err != nil {

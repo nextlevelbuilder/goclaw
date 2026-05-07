@@ -67,7 +67,7 @@ func RegisterEmbeddingWorker(deps EmbeddingWorkerDeps) func() {
 func processAllEmbeddingBatches(deps EmbeddingWorkerDeps) {
 	ctx := store.WithTenantID(context.Background(), deps.TenantID)
 
-	groups, err := deps.RawMsgStore.ListPendingGroups(ctx)
+	groups, err := deps.RawMsgStore.ListPendingEmbeddingGroups(ctx)
 	if err != nil {
 		slog.Warn("whatsapp embedding worker: failed to list pending groups", "error", err)
 		return

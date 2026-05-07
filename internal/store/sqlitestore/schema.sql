@@ -1605,21 +1605,25 @@ CREATE INDEX IF NOT EXISTS idx_vault_links_source
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS listen_raw_messages (
-    id            TEXT NOT NULL PRIMARY KEY,
-    channel_name  VARCHAR(100) NOT NULL,
-    chat_id       VARCHAR(255) NOT NULL,
-    chat_name     VARCHAR(255) NOT NULL DEFAULT '',
-    graph_id      VARCHAR(255) NOT NULL,
-    sender        VARCHAR(255) NOT NULL DEFAULT '',
-    sender_id     VARCHAR(255) NOT NULL DEFAULT '',
-    body          TEXT NOT NULL DEFAULT '',
-    msg_timestamp TEXT NOT NULL,
-    agent_id      TEXT NOT NULL,
-    tenant_id     TEXT NOT NULL REFERENCES tenants(id),
-    created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    processed_at  TEXT,
-    embedded_at   TEXT,
-    media_refs    TEXT NOT NULL DEFAULT '[]'
+    id                  TEXT NOT NULL PRIMARY KEY,
+    channel_name        VARCHAR(100) NOT NULL,
+    chat_id             VARCHAR(255) NOT NULL,
+    chat_name           VARCHAR(255) NOT NULL DEFAULT '',
+    graph_id            VARCHAR(255) NOT NULL,
+    sender              VARCHAR(255) NOT NULL DEFAULT '',
+    sender_id           VARCHAR(255) NOT NULL DEFAULT '',
+    body                TEXT NOT NULL DEFAULT '',
+    msg_timestamp       TEXT NOT NULL,
+    agent_id            TEXT NOT NULL,
+    tenant_id           TEXT NOT NULL REFERENCES tenants(id),
+    created_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    processed_at        TEXT,
+    embedded_at         TEXT,
+    media_refs          TEXT NOT NULL DEFAULT '[]',
+    extraction_status   VARCHAR(20) NOT NULL DEFAULT 'pending',
+    extraction_error    TEXT,
+    extraction_attempts INTEGER NOT NULL DEFAULT 0,
+    last_attempted_at   TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_listen_raw_agent_chat ON listen_raw_messages(agent_id, chat_id, created_at);

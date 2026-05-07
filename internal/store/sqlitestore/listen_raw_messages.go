@@ -48,31 +48,13 @@ func (s *SQLiteListenRawMessageStore) AppendBatch(ctx context.Context, msgs []st
 
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO listen_raw_messages (id, channel_name, chat_id, chat_name, graph_id, sender, sender_id, body, msg_timestamp, agent_id, created_at, tenant_id, media_refs)
-				 VALUES `+strings.Join(placeholders, ","),
+					 VALUES `+strings.Join(placeholders, ","),
 		args...,
 	)
 	return err
 }
 
-func (s *SQLiteListenRawMessageStore) ListPending(ctx context.Context, agentID, graphID string, maxRows int) ([]store.ListenRawMessage, error) {
-	tClause, tArgs, err := scopeClause(ctx)
-	if err != nil {
-		return nil, err
-	}
-	args := append([]any{agentID, graphID, maxRows}, tArgs...)
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, channel_name, chat_id, chat_name, graph_id, sender, sender_id, body, msg_timestamp, agent_id, created_at, processed_at, media_refs
-				 FROM listen_raw_messages
-				 WHERE agent_id = ? AND graph_id = ? AND processed_at IS NULL`+tClause+`
-				 ORDER BY msg_timestamp DESC
-				 LIMIT ?`,
-		args...,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
+func scanRawMessages(rows *sql.Rows) ([]store.ListenRawMessage, error) {
 	var result []store.ListenRawMessage
 	for rows.Next() {
 		var m store.ListenRawMessage
@@ -80,9 +62,14 @@ func (s *SQLiteListenRawMessageStore) ListPending(ctx context.Context, agentID, 
 		var createdAt sql.NullString
 		var msgTimestamp sql.NullString
 		var mediaRefsJSON string
+		var extractionStatus sql.NullString
+		var extractionError sql.NullString
+		var extractionAttempts sql.NullInt64
+		var lastAttemptedAt sql.NullString
 		if err := rows.Scan(&m.ID, &m.ChannelName, &m.ChatID, &m.ChatName,
 			&m.GraphID, &m.Sender, &m.SenderID, &m.Body,
-			&msgTimestamp, &m.AgentID, &createdAt, &processedAt, &mediaRefsJSON); err != nil {
+			&msgTimestamp, &m.AgentID, &createdAt, &processedAt, &mediaRefsJSON,
+			&extractionStatus, &extractionError, &extractionAttempts, &lastAttemptedAt); err != nil {
 			return nil, err
 		}
 		if msgTimestamp.Valid {
@@ -100,9 +87,47 @@ func (s *SQLiteListenRawMessageStore) ListPending(ctx context.Context, agentID, 
 		if mediaRefsJSON != "" && mediaRefsJSON != "[]" {
 			_ = json.Unmarshal([]byte(mediaRefsJSON), &m.MediaRefs)
 		}
+		if extractionStatus.Valid {
+			m.ExtractionStatus = extractionStatus.String
+		}
+		if extractionError.Valid {
+			m.ExtractionError = extractionError.String
+		}
+		if extractionAttempts.Valid {
+			m.ExtractionAttempts = int(extractionAttempts.Int64)
+		}
+		if lastAttemptedAt.Valid && lastAttemptedAt.String != "" {
+			t, _ := time.Parse(time.RFC3339Nano, lastAttemptedAt.String)
+			m.LastAttemptedAt = &t
+		}
 		result = append(result, m)
 	}
 	return result, rows.Err()
+}
+
+func (s *SQLiteListenRawMessageStore) ListPending(ctx context.Context, agentID, graphID string, maxRows int) ([]store.ListenRawMessage, error) {
+	tClause, tArgs, err := scopeClause(ctx)
+	if err != nil {
+		return nil, err
+	}
+	args := append([]any{agentID, graphID,
+		store.ExtractionStatusPending, store.ExtractionStatusFailed, store.MaxExtractionAttempts,
+		maxRows}, tArgs...)
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, channel_name, chat_id, chat_name, graph_id, sender, sender_id, body, msg_timestamp, agent_id, created_at, processed_at, media_refs,
+		        extraction_status, extraction_error, extraction_attempts, last_attempted_at
+		 FROM listen_raw_messages
+		 WHERE agent_id = ? AND graph_id = ?
+		   AND (extraction_status = ? OR (extraction_status = ? AND extraction_attempts < ?))`+tClause+`
+		 ORDER BY msg_timestamp DESC
+		 LIMIT ?`,
+		args...,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanRawMessages(rows)
 }
 
 func (s *SQLiteListenRawMessageStore) MarkProcessed(ctx context.Context, ids []uuid.UUID) error {
@@ -111,17 +136,93 @@ func (s *SQLiteListenRawMessageStore) MarkProcessed(ctx context.Context, ids []u
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	placeholders := make([]string, len(ids))
-	args := make([]any, 0, len(ids)+1)
-	args = append(args, now)
+	args := make([]any, 0, len(ids)+2)
+	args = append(args, now, store.ExtractionStatusExtracted)
 	for i, id := range ids {
 		placeholders[i] = "?"
 		args = append(args, id)
 	}
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE listen_raw_messages SET processed_at = ? WHERE id IN (`+strings.Join(placeholders, ",")+`)`,
+		`UPDATE listen_raw_messages SET processed_at = ?, extraction_status = ?, extraction_error = NULL WHERE id IN (`+strings.Join(placeholders, ",")+`)`,
 		args...,
 	)
 	return err
+}
+
+func (s *SQLiteListenRawMessageStore) MarkFailed(ctx context.Context, ids []uuid.UUID, extractErr string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	placeholders := make([]string, len(ids))
+	args := make([]any, 0, len(ids)+3)
+	args = append(args, store.ExtractionStatusFailed, extractErr, now)
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE listen_raw_messages
+		 SET extraction_status = ?, extraction_error = ?,
+		     extraction_attempts = extraction_attempts + 1,
+		     last_attempted_at = ?, processed_at = ?
+		 WHERE id IN (`+strings.Join(placeholders, ",")+`)`,
+		args...,
+	)
+	return err
+}
+
+func (s *SQLiteListenRawMessageStore) ListPendingGroups(ctx context.Context) ([]store.ListenRawMessageGroup, error) {
+	tClause, tArgs, err := scopeClause(ctx)
+	if err != nil {
+		return nil, err
+	}
+	args := append([]any{store.ExtractionStatusPending, store.ExtractionStatusFailed, store.MaxExtractionAttempts}, tArgs...)
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT DISTINCT agent_id, graph_id
+		 FROM listen_raw_messages
+		 WHERE (extraction_status = ? OR (extraction_status = ? AND extraction_attempts < ?))`+tClause,
+		args...,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []store.ListenRawMessageGroup
+	for rows.Next() {
+		var g store.ListenRawMessageGroup
+		if err := rows.Scan(&g.AgentID, &g.GraphID); err != nil {
+			return nil, err
+		}
+		result = append(result, g)
+	}
+	return result, rows.Err()
+}
+
+func (s *SQLiteListenRawMessageStore) ListPendingEmbeddingGroups(ctx context.Context) ([]store.ListenRawMessageGroup, error) {
+	tClause, tArgs, err := scopeClause(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT DISTINCT agent_id, graph_id FROM listen_raw_messages WHERE embedded_at IS NULL`+tClause,
+		tArgs...,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []store.ListenRawMessageGroup
+	for rows.Next() {
+		var g store.ListenRawMessageGroup
+		if err := rows.Scan(&g.AgentID, &g.GraphID); err != nil {
+			return nil, err
+		}
+		result = append(result, g)
+	}
+	return result, rows.Err()
 }
 
 func (s *SQLiteListenRawMessageStore) ListPendingEmbeddings(ctx context.Context, agentID, graphID string, maxRows int) ([]store.ListenRawMessage, error) {
@@ -130,7 +231,8 @@ func (s *SQLiteListenRawMessageStore) ListPendingEmbeddings(ctx context.Context,
 		return nil, err
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, channel_name, chat_id, chat_name, graph_id, sender, sender_id, body, msg_timestamp, agent_id, created_at, processed_at, media_refs
+		`SELECT id, channel_name, chat_id, chat_name, graph_id, sender, sender_id, body, msg_timestamp, agent_id, created_at, processed_at, media_refs,
+		        extraction_status, extraction_error, extraction_attempts, last_attempted_at
 		 FROM listen_raw_messages
 		 WHERE agent_id = ? AND graph_id = ? AND embedded_at IS NULL`+tClause+`
 		 ORDER BY msg_timestamp ASC
@@ -141,37 +243,7 @@ func (s *SQLiteListenRawMessageStore) ListPendingEmbeddings(ctx context.Context,
 		return nil, err
 	}
 	defer rows.Close()
-
-	var result []store.ListenRawMessage
-	for rows.Next() {
-		var m store.ListenRawMessage
-		var processedAt sql.NullString
-		var createdAt sql.NullString
-		var msgTimestamp sql.NullString
-		var mediaRefsJSON string
-		if err := rows.Scan(&m.ID, &m.ChannelName, &m.ChatID, &m.ChatName,
-			&m.GraphID, &m.Sender, &m.SenderID, &m.Body,
-			&msgTimestamp, &m.AgentID, &createdAt, &processedAt, &mediaRefsJSON); err != nil {
-			return nil, err
-		}
-		if msgTimestamp.Valid {
-			t, _ := time.Parse(time.RFC3339Nano, msgTimestamp.String)
-			m.MsgTimestamp = t
-		}
-		if createdAt.Valid {
-			t, _ := time.Parse(time.RFC3339Nano, createdAt.String)
-			m.CreatedAt = t
-		}
-		if processedAt.Valid && processedAt.String != "" {
-			t, _ := time.Parse(time.RFC3339Nano, processedAt.String)
-			m.ProcessedAt = &t
-		}
-		if mediaRefsJSON != "" && mediaRefsJSON != "[]" {
-			_ = json.Unmarshal([]byte(mediaRefsJSON), &m.MediaRefs)
-		}
-		result = append(result, m)
-	}
-	return result, rows.Err()
+	return scanRawMessages(rows)
 }
 
 func (s *SQLiteListenRawMessageStore) MarkEmbedded(ctx context.Context, ids []uuid.UUID) error {
@@ -191,31 +263,6 @@ func (s *SQLiteListenRawMessageStore) MarkEmbedded(ctx context.Context, ids []uu
 		args...,
 	)
 	return err
-}
-
-func (s *SQLiteListenRawMessageStore) ListPendingGroups(ctx context.Context) ([]store.ListenRawMessageGroup, error) {
-	tClause, tArgs, err := scopeClause(ctx)
-	if err != nil {
-		return nil, err
-	}
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT DISTINCT agent_id, graph_id FROM listen_raw_messages WHERE processed_at IS NULL`+tClause,
-		tArgs...,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var result []store.ListenRawMessageGroup
-	for rows.Next() {
-		var g store.ListenRawMessageGroup
-		if err := rows.Scan(&g.AgentID, &g.GraphID); err != nil {
-			return nil, err
-		}
-		result = append(result, g)
-	}
-	return result, rows.Err()
 }
 
 func (s *SQLiteListenRawMessageStore) ResetProcessed(ctx context.Context, agentID, graphID string) (int64, error) {
@@ -238,7 +285,8 @@ func (s *SQLiteListenRawMessageStore) ResetProcessed(ctx context.Context, agentI
 	}
 
 	where := strings.Join(conditions, " AND ")
-	q := `UPDATE listen_raw_messages SET processed_at = NULL WHERE ` + where + tClause
+	args = append(args, store.ExtractionStatusPending)
+	q := `UPDATE listen_raw_messages SET processed_at = NULL, extraction_status = ?, extraction_error = NULL WHERE ` + where + tClause
 	args = append(args, tArgs...)
 
 	res, err := s.db.ExecContext(ctx, q, args...)
@@ -262,8 +310,9 @@ func (s *SQLiteListenRawMessageStore) ResetProcessedByIDs(ctx context.Context, i
 	if err != nil {
 		return 0, err
 	}
+	args = append(args, store.ExtractionStatusPending)
 	args = append(args, tArgs...)
-	q := `UPDATE listen_raw_messages SET processed_at = NULL WHERE id IN (` + strings.Join(placeholders, ",") + `) AND processed_at IS NOT NULL` + tClause
+	q := `UPDATE listen_raw_messages SET processed_at = NULL, extraction_status = ?, extraction_error = NULL WHERE id IN (` + strings.Join(placeholders, ",") + `) AND processed_at IS NOT NULL` + tClause
 	res, err := s.db.ExecContext(ctx, q, args...)
 	if err != nil {
 		return 0, err
@@ -334,10 +383,11 @@ func (s *SQLiteListenRawMessageStore) List(ctx context.Context, opts store.Liste
 	pageArgs = append(pageArgs, limit, offset)
 
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, channel_name, chat_id, chat_name, graph_id, sender, sender_id, body, msg_timestamp, agent_id, created_at, processed_at, media_refs
-				 FROM listen_raw_messages WHERE 1=1`+tClause+whereClause+`
-				 ORDER BY created_at DESC
-				 LIMIT ? OFFSET ?`,
+		`SELECT id, channel_name, chat_id, chat_name, graph_id, sender, sender_id, body, msg_timestamp, agent_id, created_at, processed_at, media_refs,
+		        extraction_status, extraction_error, extraction_attempts, last_attempted_at
+		 FROM listen_raw_messages WHERE 1=1`+tClause+whereClause+`
+		 ORDER BY created_at DESC
+		 LIMIT ? OFFSET ?`,
 		pageArgs...,
 	)
 	if err != nil {
@@ -345,34 +395,6 @@ func (s *SQLiteListenRawMessageStore) List(ctx context.Context, opts store.Liste
 	}
 	defer rows.Close()
 
-	var result []store.ListenRawMessage
-	for rows.Next() {
-		var m store.ListenRawMessage
-		var processedAt sql.NullString
-		var createdAt sql.NullString
-		var msgTimestamp sql.NullString
-		var mediaRefsJSON string
-		if err := rows.Scan(&m.ID, &m.ChannelName, &m.ChatID, &m.ChatName,
-			&m.GraphID, &m.Sender, &m.SenderID, &m.Body,
-			&msgTimestamp, &m.AgentID, &createdAt, &processedAt, &mediaRefsJSON); err != nil {
-			return nil, 0, err
-		}
-		if msgTimestamp.Valid {
-			t, _ := time.Parse(time.RFC3339Nano, msgTimestamp.String)
-			m.MsgTimestamp = t
-		}
-		if createdAt.Valid {
-			t, _ := time.Parse(time.RFC3339Nano, createdAt.String)
-			m.CreatedAt = t
-		}
-		if processedAt.Valid && processedAt.String != "" {
-			t, _ := time.Parse(time.RFC3339Nano, processedAt.String)
-			m.ProcessedAt = &t
-		}
-		if mediaRefsJSON != "" && mediaRefsJSON != "[]" {
-			_ = json.Unmarshal([]byte(mediaRefsJSON), &m.MediaRefs)
-		}
-		result = append(result, m)
-	}
-	return result, total, rows.Err()
+	result, scanErr := scanRawMessages(rows)
+	return result, total, scanErr
 }

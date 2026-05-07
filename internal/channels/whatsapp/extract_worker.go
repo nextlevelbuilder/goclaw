@@ -186,6 +186,7 @@ func processGroupBatch(ctx context.Context, deps ExtractionWorkerDeps, agentID, 
 		if err != nil {
 			slog.Warn("whatsapp extraction worker: extraction failed",
 				"agent_id", agentID, "graph_id", graphID, "error", err)
+			markMsgsFailed(ctx, deps, msgs, err)
 			return
 		}
 		ingestAndFinalize(ctx, deps, result, agentID, graphID, msgs)
@@ -199,10 +200,26 @@ func processGroupBatch(ctx context.Context, deps ExtractionWorkerDeps, agentID, 
 	if err != nil {
 		slog.Warn("whatsapp extraction worker: extraction failed",
 			"agent_id", agentID, "graph_id", graphID, "error", err)
+		markMsgsFailed(ctx, deps, msgs, err)
 		return
 	}
 
 	ingestAndFinalize(ctx, deps, result, agentID, graphID, msgs)
+}
+
+// markMsgsFailed marks messages as failed with the given error for retry tracking.
+func markMsgsFailed(ctx context.Context, deps ExtractionWorkerDeps, msgs []store.ListenRawMessage, extractErr error) {
+	ids := make([]uuid.UUID, len(msgs))
+	for i, m := range msgs {
+		ids[i] = m.ID
+	}
+	errMsg := extractErr.Error()
+	if len(errMsg) > 500 {
+		errMsg = errMsg[:500]
+	}
+	if markErr := deps.RawMsgStore.MarkFailed(ctx, ids, errMsg); markErr != nil {
+		slog.Warn("whatsapp extraction worker: failed to mark messages as failed", "error", markErr)
+	}
 }
 
 // ingestAndFinalize handles entity scoping, KG ingestion, dedup, and marking messages as processed.
@@ -256,29 +273,30 @@ func ingestAndFinalize(ctx context.Context, deps ExtractionWorkerDeps, result *k
 		if err != nil {
 			slog.Warn("whatsapp extraction worker: KG ingest failed",
 				"agent_id", agentID, "graph_id", graphID, "error", err)
-			// Still mark as processed to avoid retrying a failed ingest indefinitely.
-		} else {
-			slog.Info("whatsapp extraction worker: KG extraction complete",
-				"agent_id", agentID, "graph_id", graphID,
-				"entities", len(result.Entities),
-				"relations", len(result.Relations),
-				"ingested_ids", len(entityIDs))
+			// Mark as failed for retry (up to MaxExtractionAttempts).
+			markMsgsFailed(ctx, deps, msgs, err)
+			return
+		}
+		slog.Info("whatsapp extraction worker: KG extraction complete",
+			"agent_id", agentID, "graph_id", graphID,
+			"entities", len(result.Entities),
+			"relations", len(result.Relations),
+			"ingested_ids", len(entityIDs))
 
-			// Run inline dedup on newly upserted entities (best-effort).
-			if len(entityIDs) > 0 {
-				if merged, flagged, dedupErr := deps.KGStore.DedupAfterExtraction(ctx, agentID, graphID, entityIDs); dedupErr != nil {
-					slog.Debug("whatsapp extraction worker: dedup failed",
-						"agent_id", agentID, "graph_id", graphID, "error", dedupErr)
-				} else if merged > 0 || flagged > 0 {
-					slog.Info("whatsapp extraction worker: dedup results",
-						"agent_id", agentID, "graph_id", graphID,
-						"merged", merged, "flagged", flagged)
-				}
+		// Run inline dedup on newly upserted entities (best-effort).
+		if len(entityIDs) > 0 {
+			if merged, flagged, dedupErr := deps.KGStore.DedupAfterExtraction(ctx, agentID, graphID, entityIDs); dedupErr != nil {
+				slog.Debug("whatsapp extraction worker: dedup failed",
+					"agent_id", agentID, "graph_id", graphID, "error", dedupErr)
+			} else if merged > 0 || flagged > 0 {
+				slog.Info("whatsapp extraction worker: dedup results",
+					"agent_id", agentID, "graph_id", graphID,
+					"merged", merged, "flagged", flagged)
 			}
 		}
 	}
 
-	// Mark messages as processed.
+	// Mark messages as processed (success).
 	ids := make([]uuid.UUID, len(msgs))
 	for i, m := range msgs {
 		ids[i] = m.ID
