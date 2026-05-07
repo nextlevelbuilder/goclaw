@@ -87,7 +87,8 @@ type LLMProviderData struct {
 
 // RequiredMemoryEmbeddingDimensions is the fixed vector size used by the pgvector memory schema.
 // All memory embeddings must match this dimensionality until the schema supports variable sizes.
-const RequiredMemoryEmbeddingDimensions = 1536
+// Set to 768 to match embeddinggemma-300m output dimensions.
+const RequiredMemoryEmbeddingDimensions = 768
 
 // EmbeddingSettings holds embedding-specific configuration stored in provider settings JSONB.
 type EmbeddingSettings struct {

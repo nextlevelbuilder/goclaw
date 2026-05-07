@@ -192,7 +192,9 @@ func (p *OpenAIEmbeddingProvider) Embed(ctx context.Context, texts []string) ([]
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.apiKey)
+	if p.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+p.apiKey)
+	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -205,28 +207,40 @@ func (p *OpenAIEmbeddingProvider) Embed(ctx context.Context, texts []string) ([]
 		return nil, fmt.Errorf("embedding API error %d: %s", resp.StatusCode, string(body))
 	}
 
-	var result struct {
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	// Try OpenAI format: {"data": [{"embedding": [...]}]}
+	var oaiResult struct {
 		Data []struct {
 			Embedding []float32 `json:"embedding"`
 		} `json:"data"`
 	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
+	if err := json.Unmarshal(body, &oaiResult); err == nil && len(oaiResult.Data) > 0 {
+		embeddings := make([][]float32, len(oaiResult.Data))
+		for i, d := range oaiResult.Data {
+			embeddings[i] = d.Embedding
+		}
+		return embeddings, nil
 	}
 
-	embeddings := make([][]float32, len(result.Data))
-	for i, d := range result.Data {
-		embeddings[i] = d.Embedding
+	// Try raw array format: {"embeddings": [[...]]}
+	var rawResult struct {
+		Embeddings [][]float32 `json:"embeddings"`
+	}
+	if err := json.Unmarshal(body, &rawResult); err == nil && len(rawResult.Embeddings) > 0 {
+		return rawResult.Embeddings, nil
 	}
 
-	return embeddings, nil
+	return nil, fmt.Errorf("unsupported embedding response format: %s", string(body[:min(len(body), 200)]))
 }
 
 // CosineSimilarity computes the cosine similarity between two vectors.
 // Returns a value between -1 and 1 (1 = identical).
 func CosineSimilarity(a, b []float32) float64 {
-	if len(a) != len(b) || len(a) == 0 {
+	if len(a) == 0 || len(b) == 0 || len(a) != len(b) {
 		return 0
 	}
 
