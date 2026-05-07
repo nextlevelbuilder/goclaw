@@ -63,6 +63,13 @@ func dashScopeModels() []ModelInfo {
 	}
 }
 
+// qiniuModels returns a fallback list for Qiniu when /models cannot be fetched.
+func qiniuModels() []ModelInfo {
+	return []ModelInfo{
+		{ID: "deepseek-v3", Name: "DeepSeek V3"},
+	}
+}
+
 // claudeCLIModels returns the model aliases accepted by the Claude CLI.
 func claudeCLIModels() []ModelInfo {
 	return []ModelInfo{

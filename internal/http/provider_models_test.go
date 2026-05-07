@@ -179,6 +179,44 @@ func TestProvidersHandlerListProviderModelsOpenAICompatAnnotatesKnownModels(t *t
 	}
 }
 
+func TestProvidersHandlerListProviderModelsQiniuFallbackModel(t *testing.T) {
+	token := setupProvidersAdminToken(t)
+	providerStore := newMockProviderStore()
+	provider := &store.LLMProviderData{
+		BaseModel:    store.BaseModel{ID: uuid.New()},
+		Name:         "qiniu",
+		ProviderType: store.ProviderQiniu,
+		Enabled:      true,
+	}
+	if err := providerStore.CreateProvider(t.Context(), provider); err != nil {
+		t.Fatalf("CreateProvider() error = %v", err)
+	}
+
+	handler := NewProvidersHandler(providerStore, newMockSecretsStore(), nil, "")
+	mux := http.NewServeMux()
+	handler.RegisterRoutes(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/providers/"+provider.ID.String()+"/models", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var result ProviderModelsResponse
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+	if len(result.Models) != 1 {
+		t.Fatalf("models len = %d, want 1", len(result.Models))
+	}
+	if result.Models[0].ID != store.QiniuDefaultModel {
+		t.Fatalf("models[0].id = %q, want %q", result.Models[0].ID, store.QiniuDefaultModel)
+	}
+}
+
 // TestProvidersHandlerListProviderModelsOllamaRichMetadata verifies that the
 // handler fetches /api/tags from Ollama and maps rich details (family,
 // parameter_size, quantization_level) into the display name.

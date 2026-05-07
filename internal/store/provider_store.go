@@ -31,6 +31,7 @@ const (
 	ProviderOllamaCloud     = "ollama_cloud" // Ollama Cloud (Bearer token required)
 	ProviderACP             = "acp"          // ACP (Agent Client Protocol) agent subprocess
 	ProviderNovita          = "novita"          // Novita AI (OpenAI-compatible endpoint)
+	ProviderQiniu           = "qiniu"           // Qiniu AI Gateway (OpenAI-compatible endpoint)
 	ProviderBytePlus        = "byteplus"        // BytePlus ModelArk (Seed 2.0 models)
 	ProviderBytePlusCoding  = "byteplus_coding" // BytePlus ModelArk Coding Plan
 
@@ -42,6 +43,10 @@ const (
 	BytePlusDefaultAPIBase       = "https://ark.ap-southeast.bytepluses.com/api/v3"
 	BytePlusCodingDefaultAPIBase = "https://ark.ap-southeast.bytepluses.com/api/coding/v3"
 	BytePlusDefaultModel         = "seed-2-0-lite-260228"
+
+	// Qiniu AI Gateway defaults.
+	QiniuDefaultAPIBase = "https://api.qnaigc.com/v1"
+	QiniuDefaultModel   = "deepseek-v3"
 )
 
 // ValidProviderTypes lists all accepted provider_type values.
@@ -68,6 +73,7 @@ var ValidProviderTypes = map[string]bool{
 	ProviderOllamaCloud:     true,
 	ProviderACP:             true,
 	ProviderNovita:          true,
+	ProviderQiniu:           true,
 	ProviderBytePlus:        true,
 	ProviderBytePlusCoding:  true,
 }

@@ -239,6 +239,12 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 			base = store.NovitaDefaultAPIBase
 		}
 		h.providerReg.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, p.APIKey, base, store.NovitaDefaultModel))
+	case store.ProviderQiniu:
+		base := apiBase
+		if base == "" {
+			base = store.QiniuDefaultAPIBase
+		}
+		h.providerReg.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, p.APIKey, base, store.QiniuDefaultModel))
 	default:
 		prov := providers.NewOpenAIProvider(p.Name, p.APIKey, apiBase, "")
 		if p.ProviderType == store.ProviderMiniMax {

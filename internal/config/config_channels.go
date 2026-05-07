@@ -211,6 +211,7 @@ type ProvidersConfig struct {
 	Bailian    ProviderConfig  `json:"bailian"`
 	Zai         ProviderConfig  `json:"zai"`
 	ZaiCoding   ProviderConfig  `json:"zai_coding"`
+	Qiniu       ProviderConfig  `json:"qiniu"`       // Qiniu AI Gateway (OpenAI-compatible endpoint)
 	Ollama      OllamaConfig    `json:"ollama"`       // local Ollama instance (no API key needed)
 	OllamaCloud ProviderConfig  `json:"ollama_cloud"` // Ollama Cloud (API key required)
 	ClaudeCLI   ClaudeCLIConfig `json:"claude_cli"`
@@ -284,6 +285,8 @@ func (p *ProvidersConfig) APIBaseForType(providerType string) string {
 		return p.Zai.APIBase
 	case "zai_coding":
 		return p.ZaiCoding.APIBase
+	case "qiniu":
+		return p.Qiniu.APIBase
 	case "ollama_cloud":
 		return p.OllamaCloud.APIBase
 	case "novita":
@@ -315,6 +318,7 @@ func (c *Config) HasAnyProvider() bool {
 		p.Bailian.APIKey != "" ||
 		p.Zai.APIKey != "" ||
 		p.ZaiCoding.APIKey != "" ||
+		p.Qiniu.APIKey != "" ||
 		p.Ollama.Host != "" ||
 		p.OllamaCloud.APIKey != "" ||
 		p.ClaudeCLI.CLIPath != "" ||

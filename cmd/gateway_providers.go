@@ -122,6 +122,15 @@ func registerProviders(registry *providers.Registry, cfg *config.Config, modelRe
 		slog.Info("registered provider", "name", "zai-coding")
 	}
 
+	if cfg.Providers.Qiniu.APIKey != "" {
+		base := cfg.Providers.Qiniu.APIBase
+		if base == "" {
+			base = store.QiniuDefaultAPIBase
+		}
+		registry.Register(providers.NewOpenAIProvider("qiniu", cfg.Providers.Qiniu.APIKey, base, store.QiniuDefaultModel))
+		slog.Info("registered provider", "name", "qiniu")
+	}
+
 	// Local / self-hosted Ollama — gated on Host, no API key required.
 	// Ollama's OpenAI-compat endpoint accepts any non-empty Bearer value.
 	if cfg.Providers.Ollama.Host != "" {
@@ -367,6 +376,12 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 				base = "https://api.z.ai/api/coding/paas/v4"
 			}
 			registry.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, p.APIKey, base, "glm-5"))
+		case store.ProviderQiniu:
+			base := p.APIBase
+			if base == "" {
+				base = store.QiniuDefaultAPIBase
+			}
+			registry.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, p.APIKey, base, store.QiniuDefaultModel))
 		case store.ProviderOllamaCloud:
 			base := p.APIBase
 			if base == "" {

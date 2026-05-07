@@ -67,6 +67,11 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 		return
 	}
 
+	if p.ProviderType == store.ProviderQiniu && p.APIKey == "" {
+		respond(withReasoningCapabilities(qiniuModels()))
+		return
+	}
+
 	// Ollama: use native /api/tags for richer metadata (parameter size, quantization, family).
 	// ProviderOllama has no API key; ProviderOllamaCloud requires one but both use the same endpoint.
 	if p.ProviderType == store.ProviderOllama || p.ProviderType == store.ProviderOllamaCloud {
@@ -118,6 +123,10 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 
 	if err != nil {
 		slog.Warn("providers.models", "provider", p.Name, "error", err)
+		if p.ProviderType == store.ProviderQiniu {
+			respond(withReasoningCapabilities(qiniuModels()))
+			return
+		}
 		// Return empty list instead of error — provider may not support /models
 		respond([]ModelInfo{})
 		return
