@@ -31,7 +31,9 @@
   },
   "status": {
     "pending": "待处理",
-    "processed": "已处理"
+    "processed": "已处理",
+    "extracted": "已提取",
+    "failed": "失败"
   },
   "showing": "显示 {{count}} / {{total}} 条消息",
   "stats": {

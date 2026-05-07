@@ -31,7 +31,9 @@
   },
   "status": {
     "pending": "Pending",
-    "processed": "Processed"
+    "processed": "Processed",
+    "extracted": "Extracted",
+    "failed": "Failed"
   },
   "showing": "Showing {{count}} of {{total}} messages",
   "stats": {

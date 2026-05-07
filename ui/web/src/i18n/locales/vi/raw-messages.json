@@ -31,7 +31,9 @@
   },
   "status": {
     "pending": "Chờ xử lý",
-    "processed": "Đã xử lý"
+    "processed": "Đã xử lý",
+    "extracted": "Đã trích xuất",
+    "failed": "Lỗi"
   },
   "showing": "Hiển thị {{count}} / {{total}} tin nhắn",
   "stats": {

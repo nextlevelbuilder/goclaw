@@ -14,6 +14,7 @@ export interface RawMessage {
   agent_id: string;
   agent_name: string;
   processed_at: string | null;
+  extraction_status: string;
   created_at: string;
 }
 

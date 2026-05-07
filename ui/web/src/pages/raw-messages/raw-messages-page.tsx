@@ -473,8 +473,10 @@ export function RawMessagesPage() {
                         {formatDate(msg.msg_timestamp || msg.created_at)}
                       </td>
                       <td className="px-4 py-3">
-                        {msg.processed_at ? (
-                          <Badge variant="success" className="text-xs">{t("status.processed")}</Badge>
+                        {msg.extraction_status === "extracted" ? (
+                          <Badge variant="success" className="text-xs">{t("status.extracted")}</Badge>
+                        ) : msg.extraction_status === "failed" ? (
+                          <Badge variant="destructive" className="text-xs">{t("status.failed")}</Badge>
                         ) : (
                           <Badge variant="secondary" className="text-xs">{t("status.pending")}</Badge>
                         )}
