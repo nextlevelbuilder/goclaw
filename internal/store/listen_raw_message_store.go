@@ -120,4 +120,14 @@ type ListenRawMessageStore interface {
 
 	// EmbeddingStats returns (pending, embedded) counts for embedding status.
 	EmbeddingStats(ctx context.Context) (pending int, embedded int, err error)
+
+	// ListAbandonedGroups returns distinct (agent_id, graph_id) pairs that have
+	// messages with extraction_status = 'failed' AND extraction_attempts >= MaxExtractionAttempts.
+	// These are "abandoned" messages that the normal worker skips.
+	ListAbandonedGroups(ctx context.Context) ([]ListenRawMessageGroup, error)
+
+	// ListAbandonedIDs returns message IDs for abandoned messages in a given group,
+	// limited to maxRows. These are messages where extraction_status = 'failed'
+	// AND extraction_attempts >= MaxExtractionAttempts.
+	ListAbandonedIDs(ctx context.Context, agentID, graphID string, maxRows int) ([]uuid.UUID, error)
 }

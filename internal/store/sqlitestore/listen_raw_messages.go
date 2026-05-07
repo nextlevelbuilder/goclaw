@@ -406,3 +406,60 @@ func (s *SQLiteListenRawMessageStore) ExtractionStats(ctx context.Context) (map[
 func (s *SQLiteListenRawMessageStore) EmbeddingStats(ctx context.Context) (int, int, error) {
 	return 0, 0, nil
 }
+
+func (s *SQLiteListenRawMessageStore) ListAbandonedGroups(ctx context.Context) ([]store.ListenRawMessageGroup, error) {
+	tClause, tArgs, err := scopeClause(ctx)
+	if err != nil {
+		return nil, err
+	}
+	args := append([]any{store.ExtractionStatusFailed, store.MaxExtractionAttempts}, tArgs...)
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT DISTINCT agent_id, graph_id
+		 FROM listen_raw_messages
+		 WHERE extraction_status = ? AND extraction_attempts >= ?`+tClause,
+		args...,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []store.ListenRawMessageGroup
+	for rows.Next() {
+		var g store.ListenRawMessageGroup
+		if err := rows.Scan(&g.AgentID, &g.GraphID); err != nil {
+			return nil, err
+		}
+		result = append(result, g)
+	}
+	return result, rows.Err()
+}
+
+func (s *SQLiteListenRawMessageStore) ListAbandonedIDs(ctx context.Context, agentID, graphID string, maxRows int) ([]uuid.UUID, error) {
+	tClause, tArgs, err := scopeClause(ctx)
+	if err != nil {
+		return nil, err
+	}
+	args := append([]any{agentID, graphID, store.ExtractionStatusFailed, store.MaxExtractionAttempts, maxRows}, tArgs...)
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id FROM listen_raw_messages
+		 WHERE agent_id = ? AND graph_id = ?
+		   AND extraction_status = ? AND extraction_attempts >= ?`+tClause+`
+		 LIMIT ?`,
+		args...,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}

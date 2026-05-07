@@ -342,6 +342,37 @@ func (s *PGListenRawMessageStore) EmbeddingStats(ctx context.Context) (int, int,
 	return pending, embedded, nil
 }
 
+func (s *PGListenRawMessageStore) ListAbandonedGroups(ctx context.Context) ([]store.ListenRawMessageGroup, error) {
+	tClause, tArgs, _, err := scopeClause(ctx, 3)
+	if err != nil {
+		return nil, err
+	}
+	var result []store.ListenRawMessageGroup
+	err = pkgSqlxDB.SelectContext(ctx, &result,
+		`SELECT DISTINCT agent_id, graph_id
+		 FROM listen_raw_messages
+		 WHERE extraction_status = $1 AND extraction_attempts >= $2`+tClause,
+		append([]any{store.ExtractionStatusFailed, store.MaxExtractionAttempts}, tArgs...)...,
+	)
+	return result, err
+}
+
+func (s *PGListenRawMessageStore) ListAbandonedIDs(ctx context.Context, agentID, graphID string, maxRows int) ([]uuid.UUID, error) {
+	tClause, tArgs, _, err := scopeClause(ctx, 5)
+	if err != nil {
+		return nil, err
+	}
+	var ids []uuid.UUID
+	err = pkgSqlxDB.SelectContext(ctx, &ids,
+		`SELECT id FROM listen_raw_messages
+		 WHERE agent_id = $1 AND graph_id = $2
+		   AND extraction_status = $3 AND extraction_attempts >= $4`+tClause+`
+		 LIMIT $5`,
+		append([]any{agentID, graphID, store.ExtractionStatusFailed, store.MaxExtractionAttempts, maxRows}, tArgs...)...,
+	)
+	return ids, err
+}
+
 func (s *PGListenRawMessageStore) List(ctx context.Context, opts store.ListenRawMessageListOpts) ([]store.ListenRawMessage, int, error) {
 	tClause, tArgs, _, err := scopeClause(ctx, 1)
 	if err != nil {

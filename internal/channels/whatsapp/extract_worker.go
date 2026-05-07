@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/sync/semaphore"
 
 	"github.com/nextlevelbuilder/goclaw/internal/knowledgegraph"
 	"github.com/nextlevelbuilder/goclaw/internal/providerresolve"
@@ -17,9 +20,67 @@ import (
 )
 
 const (
-	defaultExtractPollSec = 30
-	extractBatchSize      = 20
+	defaultExtractPollSec    = 30
+	extractMinPollSec        = 5
+	extractBatchSize         = 50
+	extractMaxConcurrent     = 3
+	extractBacklogThreshold  = 100
 )
+
+type extractConfig struct {
+	batchSize        int
+	maxConcurrent    int
+	defaultPollSec   int
+	minPollSec       int
+	backlogThreshold int
+}
+
+func defaultExtractConfig() extractConfig {
+	return extractConfig{
+		batchSize:        extractBatchSize,
+		maxConcurrent:    extractMaxConcurrent,
+		defaultPollSec:   defaultExtractPollSec,
+		minPollSec:       extractMinPollSec,
+		backlogThreshold: extractBacklogThreshold,
+	}
+}
+
+func loadExtractConfig(ctx context.Context, sysCfg store.SystemConfigStore) extractConfig {
+	cfg := defaultExtractConfig()
+	if sysCfg == nil {
+		return cfg
+	}
+	configs, err := sysCfg.List(ctx)
+	if err != nil {
+		return cfg
+	}
+	if v := configs["listen.extract.batch_size"]; v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.batchSize = n
+		}
+	}
+	if v := configs["listen.extract.max_concurrent"]; v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.maxConcurrent = n
+		}
+	}
+	if v := configs["listen.extract.poll_sec"]; v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.defaultPollSec = n
+		}
+	}
+	if v := configs["listen.extract.min_poll_sec"]; v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.minPollSec = n
+		}
+	}
+	if v := configs["listen.extract.backlog_threshold"]; v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.backlogThreshold = n
+		}
+	}
+	return cfg
+}
 
 // ExtractionWorkerDeps bundles dependencies for the listen-only KG extraction worker.
 type ExtractionWorkerDeps struct {
@@ -29,7 +90,7 @@ type ExtractionWorkerDeps struct {
 	BuiltinTools  store.BuiltinToolStore
 	Registry      *providers.Registry
 	TenantID      uuid.UUID
-	PollSec       int // poll interval in seconds (default 30)
+	PollSec       int
 	MediaAnalyzer *MediaAnalyzer
 }
 
@@ -42,20 +103,31 @@ func RegisterExtractionWorker(deps ExtractionWorkerDeps) func() {
 		return func() {}
 	}
 
-	pollSec := deps.PollSec
-	if pollSec <= 0 {
-		pollSec = defaultExtractPollSec
+	basePollSec := deps.PollSec
+	if basePollSec <= 0 {
+		basePollSec = defaultExtractPollSec
 	}
-	pollInterval := time.Duration(pollSec) * time.Second
 
 	stopCh := make(chan struct{})
 	go func() {
-		ticker := time.NewTicker(pollInterval)
-		defer ticker.Stop()
 		for {
+			ctx := store.WithTenantID(context.Background(), deps.TenantID)
+			cfg := loadExtractConfig(ctx, deps.SystemConfigs)
+			if basePollSec > 0 {
+				cfg.defaultPollSec = basePollSec
+			}
+
+			processAllPendingBatches(deps, cfg)
+			retryAbandonedMessages(ctx, deps, cfg)
+
+			pending := pendingExtractionCount(ctx, deps)
+			nextInterval := time.Duration(cfg.defaultPollSec) * time.Second
+			if pending > cfg.backlogThreshold {
+				nextInterval = time.Duration(cfg.minPollSec) * time.Second
+			}
+
 			select {
-			case <-ticker.C:
-				processAllPendingBatches(deps)
+			case <-time.After(nextInterval):
 			case <-stopCh:
 				return
 			}
@@ -63,14 +135,23 @@ func RegisterExtractionWorker(deps ExtractionWorkerDeps) func() {
 	}()
 
 	slog.Info("whatsapp extraction worker: started",
-		"poll_interval", pollInterval, "batch_size", extractBatchSize,
+		"poll_interval", fmt.Sprintf("%ds/%ds", basePollSec, extractMinPollSec),
+		"batch_size", extractBatchSize, "max_concurrent", extractMaxConcurrent,
 		"media_analyzer", deps.MediaAnalyzer != nil)
 	return func() { close(stopCh) }
 }
 
+func pendingExtractionCount(ctx context.Context, deps ExtractionWorkerDeps) int {
+	stats, err := deps.RawMsgStore.ExtractionStats(ctx)
+	if err != nil {
+		return 0
+	}
+	return stats[store.ExtractionStatusPending] + stats[store.ExtractionStatusFailed]
+}
+
 // processAllPendingBatches finds all (agentID, graphID) groups with pending
-// messages and processes one batch per group.
-func processAllPendingBatches(deps ExtractionWorkerDeps) {
+// messages and processes one batch per group concurrently.
+func processAllPendingBatches(deps ExtractionWorkerDeps, cfg extractConfig) {
 	ctx := store.WithTenantID(context.Background(), deps.TenantID)
 
 	groups, err := deps.RawMsgStore.ListPendingGroups(ctx)
@@ -84,14 +165,26 @@ func processAllPendingBatches(deps ExtractionWorkerDeps) {
 
 	slog.Debug("whatsapp extraction worker: processing groups", "count", len(groups))
 
+	sem := semaphore.NewWeighted(int64(cfg.maxConcurrent))
+	var wg sync.WaitGroup
+
 	for _, g := range groups {
-		processGroupBatch(ctx, deps, g.AgentID, g.GraphID)
+		if err := sem.Acquire(ctx, 1); err != nil {
+			break
+		}
+		wg.Add(1)
+		go func(agentID, graphID string) {
+			defer wg.Done()
+			defer sem.Release(1)
+			processGroupBatch(ctx, deps, agentID, graphID, cfg.batchSize)
+		}(g.AgentID, g.GraphID)
 	}
+	wg.Wait()
 }
 
 // processGroupBatch processes one batch of pending messages for a given (agentID, graphID).
-func processGroupBatch(ctx context.Context, deps ExtractionWorkerDeps, agentID, graphID string) {
-	msgs, err := deps.RawMsgStore.ListPending(ctx, agentID, graphID, extractBatchSize)
+func processGroupBatch(ctx context.Context, deps ExtractionWorkerDeps, agentID, graphID string, batchSize int) {
+	msgs, err := deps.RawMsgStore.ListPending(ctx, agentID, graphID, batchSize)
 	if err != nil {
 		slog.Warn("whatsapp extraction worker: failed to list pending messages",
 			"agent_id", agentID, "graph_id", graphID, "error", err)
@@ -101,9 +194,6 @@ func processGroupBatch(ctx context.Context, deps ExtractionWorkerDeps, agentID, 
 		return
 	}
 
-	// Resolve KG extraction provider: prefer the KG-specific provider/model from
-	// builtin_tools settings (same as the main KG extraction pipeline), fall back
-	// to the background provider chain.
 	var p providers.Provider
 	var model string
 	var minConfidence float64 = 0.75
@@ -132,11 +222,8 @@ func processGroupBatch(ctx context.Context, deps ExtractionWorkerDeps, agentID, 
 		"provider", p.Name(), "model", model,
 		"provider_source", providerSource, "min_confidence", minConfidence)
 
-	// Build full raw text (used for fallback path).
 	fullText := buildConversationTextFromRaw(msgs)
 	if fullText == "" {
-		// Media-only messages with no body text — nothing to extract.
-		// Mark as processed to avoid reprocessing every poll cycle.
 		ids := rawMsgIDs(msgs)
 		if err := deps.RawMsgStore.MarkProcessed(ctx, ids); err != nil {
 			slog.Warn("whatsapp extraction worker: failed to mark empty-body batch",
@@ -145,8 +232,6 @@ func processGroupBatch(ctx context.Context, deps ExtractionWorkerDeps, agentID, 
 		return
 	}
 
-	// Group messages by date, build text per date, analyze media per date,
-	// then summarize each date separately for coherent narratives.
 	dateGroups := groupMessagesByDate(msgs)
 	var combinedSummary strings.Builder
 	summarizeOK := true
@@ -158,7 +243,6 @@ func processGroupBatch(ctx context.Context, deps ExtractionWorkerDeps, agentID, 
 			continue
 		}
 
-		// Analyze media for this date's messages.
 		dayText = appendMediaAnalysis(ctx, deps, dayMsgs, dayText, agentID, graphID)
 
 		summary, err := summarizeConversation(ctx, p, model, dayText)
@@ -186,7 +270,6 @@ func processGroupBatch(ctx context.Context, deps ExtractionWorkerDeps, agentID, 
 	}
 
 	if !summarizeOK {
-		// Fallback: extract directly from full raw text using the WhatsApp-optimized prompt.
 		fullText = appendMediaAnalysis(ctx, deps, msgs, fullText, agentID, graphID)
 		extractor := knowledgegraph.NewExtractorWithPrompt(p, model, minConfidence, listenExtractSystemPrompt)
 		result, err := extractor.Extract(ctx, fullText)
@@ -200,7 +283,6 @@ func processGroupBatch(ctx context.Context, deps ExtractionWorkerDeps, agentID, 
 		return
 	}
 
-	// Extract KG from the combined per-date summaries using the default extraction prompt.
 	extractionText := combinedSummary.String()
 	extractor := knowledgegraph.NewExtractor(p, model, minConfidence)
 	result, err := extractor.Extract(ctx, extractionText)
@@ -212,6 +294,27 @@ func processGroupBatch(ctx context.Context, deps ExtractionWorkerDeps, agentID, 
 	}
 
 	ingestAndFinalize(ctx, deps, result, agentID, graphID, msgs)
+}
+
+// retryAbandonedMessages finds messages stuck in 'failed' state with max attempts
+// and resets them back to 'pending' for reprocessing.
+func retryAbandonedMessages(ctx context.Context, deps ExtractionWorkerDeps, cfg extractConfig) {
+	groups, err := deps.RawMsgStore.ListAbandonedGroups(ctx)
+	if err != nil || len(groups) == 0 {
+		return
+	}
+	for _, g := range groups {
+		ids, err := deps.RawMsgStore.ListAbandonedIDs(ctx, g.AgentID, g.GraphID, cfg.batchSize)
+		if err != nil || len(ids) == 0 {
+			continue
+		}
+		slog.Info("whatsapp extraction worker: retrying abandoned messages",
+			"agent_id", g.AgentID, "graph_id", g.GraphID, "count", len(ids))
+		if _, err := deps.RawMsgStore.ResetProcessedByIDs(ctx, ids); err != nil {
+			slog.Warn("whatsapp extraction worker: failed to reset abandoned messages",
+				"agent_id", g.AgentID, "graph_id", g.GraphID, "error", err)
+		}
+	}
 }
 
 // rawMsgIDs extracts UUIDs from a slice of raw messages.
@@ -256,7 +359,6 @@ func ingestAndFinalize(ctx context.Context, deps ExtractionWorkerDeps, result *k
 		}
 	}
 
-	// Scope entities/relations to (agentID, graphID).
 	now := time.Now().UTC()
 	for i := range result.Entities {
 		result.Entities[i].AgentID = agentID
@@ -269,7 +371,6 @@ func ingestAndFinalize(ctx context.Context, deps ExtractionWorkerDeps, result *k
 		result.Relations[i].ValidFrom = &now
 	}
 
-	// Fallback: for event entities without extracted event_time, derive from message batch.
 	for i := range result.Entities {
 		if result.Entities[i].EntityType == "event" && result.Entities[i].EventTime == nil && len(msgs) > 0 {
 			earliest := msgs[0].MsgTimestamp
@@ -282,14 +383,12 @@ func ingestAndFinalize(ctx context.Context, deps ExtractionWorkerDeps, result *k
 		}
 	}
 
-	// Ingest into KG store.
 	if len(result.Entities) > 0 || len(result.Relations) > 0 {
 		entityIDs, err := deps.KGStore.IngestExtraction(ctx, agentID, graphID,
 			result.Entities, result.Relations)
 		if err != nil {
 			slog.Warn("whatsapp extraction worker: KG ingest failed",
 				"agent_id", agentID, "graph_id", graphID, "error", err)
-			// Mark as failed for retry (up to MaxExtractionAttempts).
 			markMsgsFailed(ctx, deps, msgs, err)
 			return
 		}
@@ -299,7 +398,6 @@ func ingestAndFinalize(ctx context.Context, deps ExtractionWorkerDeps, result *k
 			"relations", len(result.Relations),
 			"ingested_ids", len(entityIDs))
 
-		// Run inline dedup on newly upserted entities (best-effort).
 		if len(entityIDs) > 0 {
 			if merged, flagged, dedupErr := deps.KGStore.DedupAfterExtraction(ctx, agentID, graphID, entityIDs); dedupErr != nil {
 				slog.Debug("whatsapp extraction worker: dedup failed",
@@ -312,7 +410,6 @@ func ingestAndFinalize(ctx context.Context, deps ExtractionWorkerDeps, result *k
 		}
 	}
 
-	// Mark messages as processed (success).
 	ids := make([]uuid.UUID, len(msgs))
 	for i, m := range msgs {
 		ids[i] = m.ID
@@ -398,7 +495,6 @@ func buildConversationTextFromRaw(msgs []store.ListenRawMessage) string {
 		return ""
 	}
 
-	// Group messages by chatID for multi-group context.
 	grouped := make(map[string][]store.ListenRawMessage)
 	var order []string
 	for _, m := range msgs {
@@ -435,7 +531,6 @@ type kgExtractionSettings struct {
 }
 
 // resolveKGProvider reads KG extraction provider/model from builtin_tools settings.
-// Returns the provider, model, min confidence, and source description.
 func resolveKGProvider(ctx context.Context, deps ExtractionWorkerDeps) (providers.Provider, string, float64, string) {
 	raw, err := deps.BuiltinTools.GetSettings(ctx, "knowledge_graph_search")
 	if err != nil || raw == nil {
