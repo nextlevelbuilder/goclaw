@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
@@ -179,9 +180,10 @@ func containsToolCallMarkup(s string) bool {
 // buildMemoryContext queries the agent's memory for snippets relevant
 // to the transcript. Returns an empty string when no useful context
 // surfaces. Strategy: take the transcript's first 4 KiB (most calls
-// open with the topic), search semantically, take top 5 results, then
-// also search for each unique speaker prefix to surface contributor
-// pages.
+// open with the topic), search semantically, then also search likely
+// project/product/entity names and each unique speaker prefix. The LLM
+// still gets no live tools; memory lookup happens here so summaries can
+// use org context without leaking tool-call markup to Discord.
 func buildMemoryContext(ctx context.Context, cfg *VoiceTranscriptSummarizerConfig, transcript string) string {
 	const transcriptHead = 4096
 	query := transcript
@@ -200,6 +202,17 @@ func buildMemoryContext(ctx context.Context, cfg *VoiceTranscriptSummarizerConfi
 	var byPath = map[string]MemorySnippet{}
 	for _, s := range topical {
 		byPath[s.Path] = s
+	}
+	for _, q := range contextLookupQueries(transcript) {
+		got, err := cfg.MemoryStore.Search(ctx, q, cfg.MemoryAgentID, "", MemorySearchOpts{MaxResults: 2})
+		if err != nil {
+			continue
+		}
+		for _, s := range got {
+			if _, dup := byPath[s.Path]; !dup {
+				byPath[s.Path] = s
+			}
+		}
 	}
 	for _, name := range speakers {
 		got, err := cfg.MemoryStore.Search(ctx, name, cfg.MemoryAgentID, "", MemorySearchOpts{MaxResults: 2})
@@ -239,6 +252,185 @@ func buildMemoryContext(ctx context.Context, cfg *VoiceTranscriptSummarizerConfi
 		b.WriteString(section)
 	}
 	return b.String()
+}
+
+func contextLookupQueries(transcript string) []string {
+	const maxScanBytes = 8192
+	const maxQueries = 10
+	if len(transcript) > maxScanBytes {
+		transcript = transcript[:maxScanBytes]
+	}
+
+	var out []string
+	seen := map[string]bool{}
+	add := func(q string) {
+		if len(out) >= maxQueries {
+			return
+		}
+		q = strings.TrimSpace(q)
+		q = strings.Trim(q, `"'`+"`.,;:!?()[]{}<>")
+		if q == "" || len(q) > 80 {
+			return
+		}
+		key := strings.ToLower(q)
+		if seen[key] || isContextStopWord(key) {
+			return
+		}
+		seen[key] = true
+		out = append(out, q+" product project organization context")
+	}
+
+	for _, line := range strings.Split(transcript, "\n") {
+		text := stripSpeakerPrefix(line)
+		words := contextWords(text)
+		for i, w := range words {
+			if isProjectLikeToken(w) {
+				add(w)
+			}
+			if isContextCue(w) && i+1 < len(words) {
+				add(nextContextPhrase(words[i+1:]))
+			}
+		}
+		for _, phrase := range capitalizedContextPhrases(words) {
+			add(phrase)
+		}
+		if len(out) >= maxQueries {
+			break
+		}
+	}
+	return out
+}
+
+func stripSpeakerPrefix(line string) string {
+	idx := strings.Index(line, ":")
+	if idx <= 0 || idx > 80 {
+		return line
+	}
+	return line[idx+1:]
+}
+
+func contextWords(s string) []string {
+	raw := strings.Fields(s)
+	out := make([]string, 0, len(raw))
+	for _, w := range raw {
+		w = strings.Trim(w, `"'`+"`.,;:!?()[]{}<>")
+		if w == "" || !hasLetter(w) {
+			continue
+		}
+		out = append(out, w)
+	}
+	return out
+}
+
+func isProjectLikeToken(w string) bool {
+	if len(w) < 3 || isContextStopWord(strings.ToLower(w)) {
+		return false
+	}
+	if strings.ContainsAny(w, "-_./") {
+		return true
+	}
+	return startsUpper(w) || hasInnerUpper(w) || isAcronym(w)
+}
+
+func isContextCue(w string) bool {
+	switch strings.ToLower(w) {
+	case "app", "api", "chain", "client", "contract", "feature", "package", "platform", "product", "project", "protocol", "repo", "repository", "sdk", "service", "system":
+		return true
+	default:
+		return false
+	}
+}
+
+func nextContextPhrase(words []string) string {
+	parts := make([]string, 0, 3)
+	for _, w := range words {
+		lower := strings.ToLower(w)
+		if isContextStopWord(lower) || isContextCue(w) {
+			if len(parts) == 0 {
+				continue
+			}
+			break
+		}
+		parts = append(parts, w)
+		if len(parts) == 3 {
+			break
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+func capitalizedContextPhrases(words []string) []string {
+	var out []string
+	for i := 0; i < len(words); i++ {
+		if !startsUpper(words[i]) || isContextStopWord(strings.ToLower(words[i])) {
+			continue
+		}
+		parts := []string{words[i]}
+		for j := i + 1; j < len(words) && len(parts) < 4; j++ {
+			if !startsUpper(words[j]) || isContextStopWord(strings.ToLower(words[j])) {
+				break
+			}
+			parts = append(parts, words[j])
+		}
+		out = append(out, strings.Join(parts, " "))
+		i += len(parts) - 1
+	}
+	return out
+}
+
+func hasLetter(s string) bool {
+	for _, r := range s {
+		if unicode.IsLetter(r) {
+			return true
+		}
+	}
+	return false
+}
+
+func startsUpper(s string) bool {
+	for _, r := range s {
+		if unicode.IsLetter(r) {
+			return unicode.IsUpper(r)
+		}
+	}
+	return false
+}
+
+func hasInnerUpper(s string) bool {
+	seenLetter := false
+	for _, r := range s {
+		if !unicode.IsLetter(r) {
+			continue
+		}
+		if seenLetter && unicode.IsUpper(r) {
+			return true
+		}
+		seenLetter = true
+	}
+	return false
+}
+
+func isAcronym(s string) bool {
+	letters := 0
+	for _, r := range s {
+		if !unicode.IsLetter(r) {
+			continue
+		}
+		letters++
+		if !unicode.IsUpper(r) {
+			return false
+		}
+	}
+	return letters >= 2 && letters <= 8
+}
+
+func isContextStopWord(s string) bool {
+	switch s {
+	case "a", "about", "an", "and", "are", "as", "at", "be", "but", "by", "for", "from", "i", "if", "in", "is", "it", "like", "need", "needed", "needs", "of", "on", "or", "our", "so", "that", "the", "their", "then", "this", "to", "we", "with", "you":
+		return true
+	default:
+		return false
+	}
 }
 
 // uniqueSpeakers extracts the unique "<DisplayName>:" prefixes from

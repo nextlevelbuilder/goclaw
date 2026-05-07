@@ -38,6 +38,7 @@ type stubMemoryQueryer struct {
 	mu          sync.Mutex
 	searchCalls []string
 	searchOut   []MemorySnippet
+	searchFn    func(q string) ([]MemorySnippet, error)
 	putPaths    []string
 	putErr      error
 }
@@ -45,7 +46,11 @@ type stubMemoryQueryer struct {
 func (m *stubMemoryQueryer) Search(_ context.Context, q, _, _ string, _ MemorySearchOpts) ([]MemorySnippet, error) {
 	m.mu.Lock()
 	m.searchCalls = append(m.searchCalls, q)
+	fn := m.searchFn
 	m.mu.Unlock()
+	if fn != nil {
+		return fn(q)
+	}
 	return m.searchOut, nil
 }
 func (m *stubMemoryQueryer) PutDocument(_ context.Context, _, _, path, _ string) error {
@@ -126,6 +131,60 @@ func TestBuildVoiceTranscriptSummarizer_MemoryContextInjected(t *testing.T) {
 	}
 }
 
+func TestBuildVoiceTranscriptSummarizer_OrgContextLookupsInjected(t *testing.T) {
+	p := &stubProvider{resp: &providers.ChatResponse{Content: "ok"}}
+	mem := &stubMemoryQueryer{
+		searchFn: func(q string) ([]MemorySnippet, error) {
+			switch {
+			case strings.Contains(q, "controller-rs"):
+				return []MemorySnippet{{Path: "memory/projects/controller-rs.md", Snippet: "controller-rs signs sessions for controller integrations.", Score: 0.95}}, nil
+			case strings.Contains(q, "Starknet"):
+				return []MemorySnippet{{Path: "memory/projects/starknet.md", Snippet: "Starknet is the target L2 ecosystem for these flows.", Score: 0.94}}, nil
+			default:
+				return nil, nil
+			}
+		},
+	}
+	fn := BuildVoiceTranscriptSummarizer(&VoiceTranscriptSummarizerConfig{
+		Provider:      p,
+		Model:         "stub-model",
+		MemoryStore:   mem,
+		MemoryAgentID: "agent-uuid",
+	})
+	_, _ = fn(context.Background(), "alice: the repo controller-rs needs Starknet API context for the paymaster summary")
+	got := p.lastReq.Messages[0].Content
+	if !strings.Contains(got, "controller-rs signs sessions") {
+		t.Fatalf("expected controller-rs context injected; prompt: %q", got)
+	}
+	if !strings.Contains(got, "Starknet is the target L2") {
+		t.Fatalf("expected Starknet context injected; prompt: %q", got)
+	}
+	mem.mu.Lock()
+	defer mem.mu.Unlock()
+	if !containsSearchCall(mem.searchCalls, "controller-rs product project organization context") {
+		t.Fatalf("expected controller-rs context lookup, got calls: %v", mem.searchCalls)
+	}
+	if !containsSearchCall(mem.searchCalls, "Starknet product project organization context") {
+		t.Fatalf("expected Starknet context lookup, got calls: %v", mem.searchCalls)
+	}
+}
+
+func Test_contextLookupQueries_extractsProjectLikeTerms(t *testing.T) {
+	got := contextLookupQueries("alice: the repo katana needs controller-rs integration with Starknet API and GoClaw")
+	if !containsString(got, "katana product project organization context") {
+		t.Fatalf("expected cue-based lowercase project lookup, got %v", got)
+	}
+	if !containsString(got, "controller-rs product project organization context") {
+		t.Fatalf("expected hyphenated project lookup, got %v", got)
+	}
+	if !containsString(got, "Starknet product project organization context") {
+		t.Fatalf("expected capitalized project lookup, got %v", got)
+	}
+	if !containsString(got, "GoClaw product project organization context") {
+		t.Fatalf("expected camel-case project lookup, got %v", got)
+	}
+}
+
 func TestBuildVoiceTranscriptSummarizer_PersistsToMemoryAndDisk(t *testing.T) {
 	tmp := t.TempDir()
 	p := &stubProvider{resp: &providers.ChatResponse{Content: "the summary text"}}
@@ -160,6 +219,24 @@ func TestBuildVoiceTranscriptSummarizer_PersistsToMemoryAndDisk(t *testing.T) {
 			t.Errorf("disk file missing frontmatter: %q", string(body))
 		}
 	}
+}
+
+func containsSearchCall(calls []string, want string) bool {
+	for _, call := range calls {
+		if call == want {
+			return true
+		}
+	}
+	return false
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestBuildVoiceTranscriptSummarizer_EmptyTranscriptError(t *testing.T) {

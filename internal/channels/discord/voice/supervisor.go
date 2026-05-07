@@ -63,6 +63,11 @@ type Supervisor struct {
 
 	// Injectable clock for tests.
 	nowFn func() time.Time
+
+	// State-machine tests call event handlers directly with a bare
+	// discordgo.Session. Disable the slow Discord join path there while still
+	// exercising join scheduling state.
+	disableJoinWorkerForTests bool
 }
 
 type supState struct {
@@ -382,6 +387,9 @@ func (s *Supervisor) reconcileLocked() {
 	switch {
 	case humans > 0 && !connected && !s.state.joinScheduled && !s.inCooldownLocked():
 		s.state.joinScheduled = true
+		if s.disableJoinWorkerForTests {
+			return
+		}
 		s.wg.Add(1)
 		go func() {
 			defer s.wg.Done()

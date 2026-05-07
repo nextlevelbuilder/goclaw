@@ -45,6 +45,7 @@ func newTestSupervisor(t *testing.T, cfg Config) *Supervisor {
 	// Pre-seed the resolved guild so event handlers match. Production wiring
 	// does this in Supervisor.Start via session.Channel(...).
 	sup.resolvedGuildID = testGuildID
+	sup.disableJoinWorkerForTests = true
 	return sup
 }
 
