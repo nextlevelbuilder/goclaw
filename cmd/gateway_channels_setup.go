@@ -16,6 +16,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels/feishu"
 	slackchannel "github.com/nextlevelbuilder/goclaw/internal/channels/slack"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/telegram"
+	"github.com/nextlevelbuilder/goclaw/internal/channels/wechat"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/whatsapp"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/zalo"
 	zalopersonal "github.com/nextlevelbuilder/goclaw/internal/channels/zalo/personal"
@@ -142,6 +143,18 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 			}
 		}
 	}
+
+	if cfg.Channels.WeChat.Enabled {
+		if cfg.Channels.WeChat.Token == "" {
+			recordMissingConfig(channels.TypeWeChat, "Set channels.wechat.token in config.")
+		} else if wc, err := wechat.New(cfg.Channels.WeChat, msgBus, pgStores.Pairing); err != nil {
+			channelMgr.RecordFailure(channels.TypeWeChat, "", err)
+			slog.Error("failed to initialize wechat channel", "error", err)
+		} else {
+			channelMgr.RegisterChannel(channels.TypeWeChat, wc)
+			slog.Info("wechat channel enabled (config)")
+		}
+	}
 }
 
 // wireChannelRPCMethods registers WS RPC methods for channels, instances, agent links, and teams.
@@ -155,6 +168,7 @@ func wireChannelRPCMethods(server *gateway.Server, pgStores *store.Stores, chann
 		zalomethods.NewQRMethods(pgStores.ChannelInstances, msgBus).Register(server.Router())
 		zalomethods.NewContactsMethods(pgStores.ChannelInstances).Register(server.Router())
 		whatsapp.NewQRMethods(pgStores.ChannelInstances, channelMgr).Register(server.Router())
+		wechat.NewQRMethods(pgStores.ChannelInstances, msgBus).Register(server.Router())
 	}
 
 	// Register agent links WS RPC methods
@@ -270,4 +284,3 @@ func wireChannelEventSubscribers(
 		})
 	}
 }
-

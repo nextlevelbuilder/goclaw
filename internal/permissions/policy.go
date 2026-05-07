@@ -320,6 +320,7 @@ func isWriteMethod(method string) bool {
 		// Channel pairing starts (QR scan flows).
 		protocol.MethodZaloPersonalQRStart,
 		protocol.MethodWhatsAppQRStart,
+		protocol.MethodWeChatQRStart,
 	}
 	return slices.Contains(writeExact, method)
 }

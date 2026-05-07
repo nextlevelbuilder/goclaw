@@ -20,6 +20,7 @@ type ChannelsConfig struct {
 	Zalo              ZaloConfig               `json:"zalo"`
 	ZaloPersonal      ZaloPersonalConfig       `json:"zalo_personal"`
 	Feishu            FeishuConfig             `json:"feishu"`
+	WeChat            WechatConfig             `json:"wechat"`
 	PendingCompaction *PendingCompactionConfig `json:"pending_compaction,omitempty"` // global pending message compaction settings
 }
 
@@ -192,6 +193,15 @@ type FeishuConfig struct {
 	STTTenantID       string              `json:"stt_tenant_id,omitempty"`
 	STTTimeoutSeconds int                 `json:"stt_timeout_seconds,omitempty"`
 	VoiceAgentID      string              `json:"voice_agent_id,omitempty"`
+}
+
+type WechatConfig struct {
+	Enabled    bool                `json:"enabled"`
+	Token      string              `json:"token"`
+	AllowFrom  FlexibleStringSlice `json:"allow_from"`
+	DMPolicy   string              `json:"dm_policy,omitempty"`
+	BaseURL    string              `json:"base_url,omitempty"`
+	CDNBaseURL string              `json:"cdn_base_url,omitempty"`
 }
 
 // ProvidersConfig maps provider name to its config.

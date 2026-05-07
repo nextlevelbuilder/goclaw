@@ -357,6 +357,10 @@
     "whatsapp": {
       "createLabel": "Tạo & Quét QR",
       "formBanner": "Sau khi tạo, quét mã QR bằng WhatsApp để xác thực."
+    },
+    "wechat": {
+      "createLabel": "Tạo & Quét QR",
+      "formBanner": "Sau khi tạo, quét mã QR bằng WeChat để xác thực."
     }
   },
   "fallback": {
@@ -421,5 +425,17 @@
     "relinkDevice": "Liên kết lại",
     "connectedSuccess": "✅ Kết nối WhatsApp thành công!",
     "tabQrCode": "Mã QR"
+  },
+  "wechat": {
+    "loginSuccessLoading": "✅ Đăng nhập WeChat thành công! Đang tải channel...",
+    "generatingQr": "Đang tạo mã QR...",
+    "scanHint": "Quét bằng WeChat để đăng nhập",
+    "reauthTitle": "Kết nối lại WeChat: {{name}}",
+    "waitingForQr": "Đang chờ mã QR...",
+    "connectedSuccess": "✅ Kết nối WeChat thành công!",
+    "initializing": "Đang khởi tạo...",
+    "skip": "Bỏ qua",
+    "retry": "Thử lại",
+    "close": "Đóng"
   }
 }

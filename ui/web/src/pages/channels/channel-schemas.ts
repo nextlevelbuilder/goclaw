@@ -81,6 +81,7 @@ export const credentialsSchema: Record<string, FieldDef[]> = {
     { key: "page_access_token", label: "Page Access Token", type: "password", required: true, help: "Page-level token from Pancake dashboard → Page Settings" },
     { key: "webhook_secret", label: "Webhook Secret (Optional)", type: "password", help: "HMAC-SHA256 secret for webhook signature verification. Leave empty to skip verification." },
   ],
+  wechat: [],
 };
 
 // --- Pancake platform options ---
@@ -234,6 +235,10 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "Sender IDs to whitelist. Empty = accept all." },
     { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit" },
   ],
+  wechat: [
+    { key: "dm_policy", label: "DM Policy", type: "select", options: dmPolicyOptions, defaultValue: "pairing" },
+    { key: "allow_from", label: "Allowed Users", type: "tags", help: "User IDs or @usernames" },
+  ],
 };
 
 // --- Group override schema (Telegram per-group/topic overrides) ---
@@ -307,5 +312,10 @@ export const wizardConfig: Partial<Record<string, WizardConfig>> = {
     steps: ["auth"],
     createLabel: "wizard.whatsapp.createLabel",
     formBanner: "wizard.whatsapp.formBanner",
+  },
+  wechat: {
+    steps: ["auth"],
+    createLabel: "wizard.wechat.createLabel",
+    formBanner: "wizard.wechat.formBanner",
   },
 };

@@ -194,6 +194,9 @@ const (
 
 	// WhatsApp
 	MethodWhatsAppQRStart = "whatsapp.qr.start"
+
+	// WeChat
+	MethodWeChatQRStart = "wechat.qr.start"
 )
 
 // Agent hooks (Phase 3)
