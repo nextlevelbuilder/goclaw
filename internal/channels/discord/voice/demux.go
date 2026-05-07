@@ -295,18 +295,18 @@ func (d *demux) flushSSRC(ssrc uint32, reason string) {
 		return
 	}
 
-	if likely, smallFrames, avgBytes := likelyLowInformationOpus(u.opusFrames); likely {
-		d.log.Warn("voice: drop low-information utterance before STT",
-			"ssrc", ssrc, "duration_ms", u.durationMs, "frames", len(u.opusFrames),
-			"small_frames", smallFrames, "avg_frame_bytes", avgBytes, "reason", reason)
-		return
-	}
-
 	if likely, distinctTOC := likelyCiphertextOpus(u.opusFrames); likely {
 		d.droppedFramesCiphertext.Add(uint64(len(u.opusFrames)))
 		d.log.Warn("voice: drop utterance suspected to be encrypted audio",
 			"ssrc", ssrc, "duration_ms", u.durationMs, "frames", len(u.opusFrames),
 			"distinct_toc", distinctTOC, "reason", reason)
+		return
+	}
+
+	if likely, smallFrames, avgBytes := likelyLowInformationOpus(u.opusFrames); likely {
+		d.log.Warn("voice: drop low-information utterance before STT",
+			"ssrc", ssrc, "duration_ms", u.durationMs, "frames", len(u.opusFrames),
+			"small_frames", smallFrames, "avg_frame_bytes", avgBytes, "reason", reason)
 		return
 	}
 

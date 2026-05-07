@@ -520,9 +520,7 @@ func (s *Supervisor) onJoinSuccess(vc *discordgo.VoiceConnection) {
 			closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			output.Close(closeCtx, 0)
 			cancel()
-			if err := vc.Disconnect(); err != nil {
-				s.log.Debug("voice: post-stop Disconnect error (ignored)", "err", err)
-			}
+			s.disconnectVoice(vc, "post-stop")
 		}()
 		return
 	}
@@ -628,9 +626,21 @@ func (s *Supervisor) leaveLocked(reason string) {
 			cancel()
 		}
 		if vc != nil {
-			if err := vc.Disconnect(); err != nil {
-				s.log.Debug("voice: Disconnect error", "err", err)
-			}
+			s.disconnectVoice(vc, "leave")
 		}
 	}()
+}
+
+func (s *Supervisor) disconnectVoice(vc *discordgo.VoiceConnection, phase string) {
+	if vc == nil {
+		return
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			s.log.Warn("voice: Disconnect panic recovered", "phase", phase, "panic", r)
+		}
+	}()
+	if err := vc.Disconnect(); err != nil {
+		s.log.Debug("voice: Disconnect error", "phase", phase, "err", err)
+	}
 }
