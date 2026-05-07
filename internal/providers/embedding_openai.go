@@ -40,8 +40,15 @@ func NewOpenAIEmbeddingProvider(apiKey, apiBase, model string) *OpenAIEmbeddingP
 		apiKey:       apiKey,
 		apiBase:      strings.TrimRight(apiBase, "/"),
 		model:        model,
-		client:       &http.Client{Timeout: 60 * time.Second},
-		retry:        DefaultRetryConfig(),
+		client: &http.Client{
+			Timeout: 60 * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 30,
+				IdleConnTimeout:     90 * time.Second,
+			},
+		},
+		retry: DefaultRetryConfig(),
 	}
 }
 
