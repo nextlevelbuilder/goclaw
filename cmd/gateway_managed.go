@@ -384,6 +384,15 @@ func wireExtras(
 		slog.Info("v3 episodic memory wired to tools")
 	}
 
+	// Wire raw message chunk store on search tool
+	if stores.RawMessageChunks != nil {
+		if rmst, ok := toolsReg.Get("raw_message_search"); ok {
+			if t, ok := rmst.(*tools.RawMessageSearchTool); ok {
+				t.SetChunkStore(stores.RawMessageChunks)
+			}
+		}
+	}
+
 	// Wire knowledge graph store on KG tool + hint in memory_search results
 	if stores.KnowledgeGraph != nil {
 		if kgTool, ok := toolsReg.Get("knowledge_graph_search"); ok {

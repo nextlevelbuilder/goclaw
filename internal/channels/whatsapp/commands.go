@@ -266,11 +266,11 @@ func stripReplyContext(text string) string {
 	if !strings.HasPrefix(text, "[Replying to:") {
 		return text
 	}
-	idx := strings.Index(text, "]")
-	if idx < 0 {
+	_, after, ok := strings.Cut(text, "]")
+	if !ok {
 		return text
 	}
-	rest := text[idx+1:]
+	rest := after
 	return strings.TrimPrefix(rest, "\n")
 }
 

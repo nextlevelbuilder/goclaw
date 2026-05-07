@@ -146,10 +146,7 @@ func asciiRow(cells []string, colWidths []int) string {
 		if j < len(cells) {
 			cell = cells[j]
 		}
-		pad := w - len([]rune(cell))
-		if pad < 0 {
-			pad = 0
-		}
+		pad := max(w-len([]rune(cell)), 0)
 		parts[j] = " " + cell + strings.Repeat(" ", pad) + " "
 	}
 	return "|" + strings.Join(parts, "|") + "|"
@@ -194,10 +191,7 @@ func renderCards(t *TableRow) string {
 			if col < len(row) {
 				value = row[col]
 			}
-			pad := maxLabel - len(header)
-			if pad < 0 {
-				pad = 0
-			}
+			pad := max(maxLabel-len(header), 0)
 			out = append(out, "  "+header+strings.Repeat(" ", pad)+" : "+value)
 		}
 
@@ -212,7 +206,7 @@ func renderCards(t *TableRow) string {
 //
 // Example output:
 //
-//	• Kananaskis Nordic Spa | High | Before Aug 2026 | Planned
+//   - Kananaskis Nordic Spa | High | Before Aug 2026 | Planned
 func renderList(t *TableRow) string {
 	var out []string
 	for _, row := range t.Rows {

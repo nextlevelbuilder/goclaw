@@ -90,6 +90,7 @@ func setupToolRegistry(
 	toolsReg.Register(tools.NewMemoryGetTool())
 	toolsReg.Register(tools.NewMemoryExpandTool())
 	toolsReg.Register(tools.NewKnowledgeGraphSearchTool())
+	toolsReg.Register(tools.NewRawMessageSearchTool())
 	slog.Info("memory + knowledge graph tools registered (PG-backed)")
 
 	// Browser automation tool
@@ -447,6 +448,12 @@ func setupMemoryEmbeddings(
 			if pgStores.Episodic != nil {
 				pgStores.Episodic.SetEmbeddingProvider(embProvider)
 				slog.Info("episodic embeddings enabled", "provider", embProvider.Name())
+			}
+
+			// Wire embedding provider into raw message chunk store.
+			if pgStores.RawMessageChunks != nil {
+				pgStores.RawMessageChunks.SetEmbeddingProvider(embProvider)
+				slog.Info("raw message chunk embeddings enabled", "provider", embProvider.Name())
 			}
 		} else {
 			slog.Warn("memory embeddings disabled (no API key), chunks stored without vectors")

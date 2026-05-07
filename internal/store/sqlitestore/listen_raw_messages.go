@@ -124,6 +124,75 @@ func (s *SQLiteListenRawMessageStore) MarkProcessed(ctx context.Context, ids []u
 	return err
 }
 
+func (s *SQLiteListenRawMessageStore) ListPendingEmbeddings(ctx context.Context, agentID, graphID string, maxRows int) ([]store.ListenRawMessage, error) {
+	tClause, tArgs, err := scopeClause(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, channel_name, chat_id, chat_name, graph_id, sender, sender_id, body, msg_timestamp, agent_id, created_at, processed_at, media_refs
+		 FROM listen_raw_messages
+		 WHERE agent_id = ? AND graph_id = ? AND embedded_at IS NULL`+tClause+`
+		 ORDER BY msg_timestamp ASC
+		 LIMIT ?`,
+		append([]any{agentID, graphID, maxRows}, tArgs...)...,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []store.ListenRawMessage
+	for rows.Next() {
+		var m store.ListenRawMessage
+		var processedAt sql.NullString
+		var createdAt sql.NullString
+		var msgTimestamp sql.NullString
+		var mediaRefsJSON string
+		if err := rows.Scan(&m.ID, &m.ChannelName, &m.ChatID, &m.ChatName,
+			&m.GraphID, &m.Sender, &m.SenderID, &m.Body,
+			&msgTimestamp, &m.AgentID, &createdAt, &processedAt, &mediaRefsJSON); err != nil {
+			return nil, err
+		}
+		if msgTimestamp.Valid {
+			t, _ := time.Parse(time.RFC3339Nano, msgTimestamp.String)
+			m.MsgTimestamp = t
+		}
+		if createdAt.Valid {
+			t, _ := time.Parse(time.RFC3339Nano, createdAt.String)
+			m.CreatedAt = t
+		}
+		if processedAt.Valid && processedAt.String != "" {
+			t, _ := time.Parse(time.RFC3339Nano, processedAt.String)
+			m.ProcessedAt = &t
+		}
+		if mediaRefsJSON != "" && mediaRefsJSON != "[]" {
+			_ = json.Unmarshal([]byte(mediaRefsJSON), &m.MediaRefs)
+		}
+		result = append(result, m)
+	}
+	return result, rows.Err()
+}
+
+func (s *SQLiteListenRawMessageStore) MarkEmbedded(ctx context.Context, ids []uuid.UUID) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	placeholders := make([]string, len(ids))
+	args := make([]any, 0, len(ids)+1)
+	args = append(args, now)
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE listen_raw_messages SET embedded_at = ? WHERE id IN (`+strings.Join(placeholders, ",")+`)`,
+		args...,
+	)
+	return err
+}
+
 func (s *SQLiteListenRawMessageStore) ListPendingGroups(ctx context.Context) ([]store.ListenRawMessageGroup, error) {
 	tClause, tArgs, err := scopeClause(ctx)
 	if err != nil {

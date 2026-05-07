@@ -76,7 +76,7 @@ func TestTimeSectionFormat(t *testing.T) {
 	// Should contain HH:MM format (e.g. "15:04") but NOT HH:MM:SS
 	if strings.Contains(dateLine, ":") && strings.Count(dateLine, ":") > 2 {
 		// Check for seconds pattern (HH:MM:SS) — should not be present
-		for _, part := range strings.Fields(dateLine) {
+		for part := range strings.FieldsSeq(dateLine) {
 			if strings.Count(part, ":") == 2 && len(part) == 8 {
 				t.Errorf("time section should not include seconds: %s", dateLine)
 			}

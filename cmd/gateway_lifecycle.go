@@ -262,6 +262,18 @@ func (d *gatewayDeps) runLifecycle(
 		defer cleanupExtraction()
 	}
 
+	// WhatsApp raw message embedding worker.
+	// Runs alongside KG extraction — processes messages into vector store.
+	if d.pgStores.ListenRawMessages != nil && d.pgStores.RawMessageChunks != nil {
+		cleanupEmbedding := whatsapp.RegisterEmbeddingWorker(whatsapp.EmbeddingWorkerDeps{
+			RawMsgStore:   d.pgStores.ListenRawMessages,
+			ChunkStore:    d.pgStores.RawMessageChunks,
+			SystemConfigs: d.pgStores.SystemConfigs,
+			TenantID:      store.MasterTenantID,
+		})
+		defer cleanupEmbedding()
+	}
+
 	if err := d.server.Start(ctx); err != nil {
 		slog.Error("gateway error", "error", err)
 		os.Exit(1)

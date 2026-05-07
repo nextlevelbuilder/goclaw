@@ -36,17 +36,17 @@ func init() {
 // Auth state is stored in PostgreSQL (standard) or SQLite (desktop).
 type Channel struct {
 	*channels.BaseChannel
-	client    *whatsmeow.Client
-	container *sqlstore.Container
-	config    config.WhatsAppConfig
-	mu        sync.Mutex
-	ctx       context.Context
-	cancel    context.CancelFunc
-	parentCtx        context.Context       // stored from Start() for Reauth() context chain
-	audioMgr         *audio.Manager        // unified STT via audio.Manager (nil = no STT)
-	builtinToolStore store.BuiltinToolStore // reads stt settings (whatsapp_enabled) per voice message; nil = opt-out
-	configPermStore    store.ConfigPermissionStore // group file writer ACL (nil = no writer management)
-	execApprovalMgr    *tools.ExecApprovalManager  // channel-based exec approval (nil = not wired)
+	client           *whatsmeow.Client
+	container        *sqlstore.Container
+	config           config.WhatsAppConfig
+	mu               sync.Mutex
+	ctx              context.Context
+	cancel           context.CancelFunc
+	parentCtx        context.Context             // stored from Start() for Reauth() context chain
+	audioMgr         *audio.Manager              // unified STT via audio.Manager (nil = no STT)
+	builtinToolStore store.BuiltinToolStore      // reads stt settings (whatsapp_enabled) per voice message; nil = opt-out
+	configPermStore  store.ConfigPermissionStore // group file writer ACL (nil = no writer management)
+	execApprovalMgr  *tools.ExecApprovalManager  // channel-based exec approval (nil = not wired)
 
 	// QR state
 	lastQRMu        sync.RWMutex
@@ -370,10 +370,7 @@ func (c *Channel) startReconnectWatchdog() {
 		const maxBackoff = 60 * time.Second
 
 		for attempt := range maxAttempts {
-			backoff := time.Duration(attempt+1) * 5 * time.Second
-			if backoff > maxBackoff {
-				backoff = maxBackoff
-			}
+			backoff := min(time.Duration(attempt+1)*5*time.Second, maxBackoff)
 
 			select {
 			case <-ctx.Done():

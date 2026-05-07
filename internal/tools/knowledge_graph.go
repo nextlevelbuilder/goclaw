@@ -401,12 +401,13 @@ func matchesQuery(e store.Entity, query string) bool {
 	if len(words) == 0 {
 		return true
 	}
-	text := strings.ToLower(e.Name + " " + e.Description)
+	var text strings.Builder
+	text.WriteString(strings.ToLower(e.Name + " " + e.Description))
 	for k, v := range e.Properties {
-		text += " " + k + " " + v
+		text.WriteString(" " + k + " " + v)
 	}
 	for _, w := range words {
-		if !strings.Contains(text, w) {
+		if !strings.Contains(text.String(), w) {
 			return false
 		}
 	}

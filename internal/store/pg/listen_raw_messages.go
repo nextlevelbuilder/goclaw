@@ -208,6 +208,48 @@ func (s *PGListenRawMessageStore) ResetProcessedByIDs(ctx context.Context, ids [
 	return res.RowsAffected()
 }
 
+func (s *PGListenRawMessageStore) ListPendingEmbeddings(ctx context.Context, agentID, graphID string, maxRows int) ([]store.ListenRawMessage, error) {
+	tClause, tArgs, _, err := scopeClause(ctx, 4)
+	if err != nil {
+		return nil, err
+	}
+	var rows []rawMsgRow
+	err = pkgSqlxDB.SelectContext(ctx, &rows,
+		`SELECT id, channel_name, chat_id, chat_name, graph_id, sender, sender_id, body, msg_timestamp, agent_id, created_at, processed_at, media_refs
+				 FROM listen_raw_messages
+				 WHERE agent_id = $1 AND graph_id = $2 AND embedded_at IS NULL`+tClause+`
+				 ORDER BY msg_timestamp ASC
+				 LIMIT $3`,
+		append([]any{agentID, graphID, maxRows}, tArgs...)...,
+	)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]store.ListenRawMessage, len(rows))
+	for i, r := range rows {
+		result[i] = r.toMessage()
+	}
+	return result, nil
+}
+
+func (s *PGListenRawMessageStore) MarkEmbedded(ctx context.Context, ids []uuid.UUID) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids)+1)
+	args[0] = time.Now()
+	for i, id := range ids {
+		placeholders[i] = fmt.Sprintf("$%d", i+2)
+		args[i+1] = id
+	}
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE listen_raw_messages SET embedded_at = $1 WHERE id IN (`+strings.Join(placeholders, ",")+`)`,
+		args...,
+	)
+	return err
+}
+
 func (s *PGListenRawMessageStore) List(ctx context.Context, opts store.ListenRawMessageListOpts) ([]store.ListenRawMessage, int, error) {
 	tClause, tArgs, _, err := scopeClause(ctx, 1)
 	if err != nil {

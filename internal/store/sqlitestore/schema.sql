@@ -1618,6 +1618,7 @@ CREATE TABLE IF NOT EXISTS listen_raw_messages (
     tenant_id     TEXT NOT NULL REFERENCES tenants(id),
     created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     processed_at  TEXT,
+    embedded_at   TEXT,
     media_refs    TEXT NOT NULL DEFAULT '[]'
 );
 

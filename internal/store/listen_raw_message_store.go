@@ -81,4 +81,12 @@ type ListenRawMessageStore interface {
 	// ResetProcessedByIDs sets processed_at = NULL for messages with the given IDs.
 	// Returns the number of rows affected.
 	ResetProcessedByIDs(ctx context.Context, ids []uuid.UUID) (int64, error)
+
+	// ListPendingEmbeddings returns messages where embedded_at IS NULL for a given
+	// (agentID, graphID), ordered by msg_timestamp ASC (oldest first for sequential
+	// chunking), limited to maxRows.
+	ListPendingEmbeddings(ctx context.Context, agentID, graphID string, maxRows int) ([]ListenRawMessage, error)
+
+	// MarkEmbedded sets embedded_at = NOW() for the given message IDs.
+	MarkEmbedded(ctx context.Context, ids []uuid.UUID) error
 }
