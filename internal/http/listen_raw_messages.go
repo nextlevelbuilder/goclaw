@@ -23,6 +23,7 @@ func NewListenRawMessagesHandler(s store.ListenRawMessageStore) *ListenRawMessag
 // RegisterRoutes registers raw message routes on the given mux.
 func (h *ListenRawMessagesHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/listen-raw-messages", h.authMiddleware(h.handleList))
+	mux.HandleFunc("GET /v1/listen-raw-messages/stats", h.authMiddleware(h.handleStats))
 	mux.HandleFunc("POST /v1/listen-raw-messages/reset-processed", h.authMiddleware(h.handleResetProcessed))
 	mux.HandleFunc("POST /v1/listen-raw-messages/reset", h.authMiddleware(h.handleResetByIDs))
 }
@@ -52,6 +53,9 @@ func (h *ListenRawMessagesHandler) handleList(w http.ResponseWriter, r *http.Req
 	if v := r.URL.Query().Get("processed"); v != "" {
 		b := v == "true" || v == "1"
 		opts.Processed = &b
+	}
+	if v := r.URL.Query().Get("extraction_status"); v != "" {
+		opts.ExtractionStatus = v
 	}
 	if v := r.URL.Query().Get("limit"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 200 {
@@ -138,5 +142,30 @@ func (h *ListenRawMessagesHandler) handleResetByIDs(w http.ResponseWriter, r *ht
 	slog.Info("http.reset_by_ids: ok", "requested", len(ids), "affected", affected)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"reset_count": affected,
+	})
+}
+
+func (h *ListenRawMessagesHandler) handleStats(w http.ResponseWriter, r *http.Request) {
+	extractionStats, err := h.store.ExtractionStats(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if extractionStats == nil {
+		extractionStats = map[string]int{}
+	}
+
+	pendingEmb, embeddedEmb, err := h.store.EmbeddingStats(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"extraction": extractionStats,
+		"embedding": map[string]int{
+			"pending":  pendingEmb,
+			"embedded": embeddedEmb,
+		},
 	})
 }

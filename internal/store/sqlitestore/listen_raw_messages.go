@@ -398,3 +398,11 @@ func (s *SQLiteListenRawMessageStore) List(ctx context.Context, opts store.Liste
 	result, scanErr := scanRawMessages(rows)
 	return result, total, scanErr
 }
+
+func (s *SQLiteListenRawMessageStore) ExtractionStats(ctx context.Context) (map[string]int, error) {
+	return nil, nil
+}
+
+func (s *SQLiteListenRawMessageStore) EmbeddingStats(ctx context.Context) (int, int, error) {
+	return 0, 0, nil
+}

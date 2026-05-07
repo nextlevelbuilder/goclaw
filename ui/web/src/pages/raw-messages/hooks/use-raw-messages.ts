@@ -28,15 +28,21 @@ interface ResetResponse {
   reset_count: number;
 }
 
+export interface RawMessageStats {
+  extraction: Record<string, number>;
+  embedding: { pending: number; embedded: number };
+}
+
 export function useRawMessages() {
   const http = useHttp();
   const [messages, setMessages] = useState<RawMessage[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [stats, setStats] = useState<RawMessageStats | null>(null);
 
   const loadMessages = useCallback(
     async (params?: {
-      processed?: boolean;
+      extraction_status?: string;
       limit?: number;
       offset?: number;
       channelName?: string;
@@ -47,8 +53,8 @@ export function useRawMessages() {
       setLoading(true);
       try {
         const query: Record<string, string> = {};
-        if (params?.processed !== undefined) {
-          query.processed = String(params.processed);
+        if (params?.extraction_status) {
+          query.extraction_status = params.extraction_status;
         }
         if (params?.limit) {
           query.limit = String(params.limit);
@@ -80,6 +86,15 @@ export function useRawMessages() {
     [http],
   );
 
+  const loadStats = useCallback(async () => {
+    try {
+      const res = await http.get<RawMessageStats>("/v1/listen-raw-messages/stats");
+      if (res) setStats(res);
+    } catch {
+      // ignore
+    }
+  }, [http]);
+
   const resetToPending = useCallback(
     async (ids: string[]): Promise<number> => {
       const res = await http.post<ResetResponse>("/v1/listen-raw-messages/reset", { ids });
@@ -88,5 +103,5 @@ export function useRawMessages() {
     [http],
   );
 
-  return { messages, total, loading, loadMessages, resetToPending };
+  return { messages, total, loading, stats, loadMessages, loadStats, resetToPending };
 }

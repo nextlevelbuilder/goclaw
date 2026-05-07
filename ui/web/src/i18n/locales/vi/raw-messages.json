@@ -18,6 +18,8 @@
     "all": "Tất cả",
     "pending": "Chờ xử lý",
     "processed": "Đã xử lý",
+    "extracted": "Đã trích xuất",
+    "failed": "Lỗi",
     "agent": "Agent",
     "allAgents": "Tất cả agent",
     "channel": "Kênh",
@@ -32,6 +34,12 @@
     "processed": "Đã xử lý"
   },
   "showing": "Hiển thị {{count}} / {{total}} tin nhắn",
+  "stats": {
+    "extractionPending": "Chờ trích xuất",
+    "extractionExtracted": "Đã trích xuất",
+    "extractionFailed": "Trích xuất lỗi",
+    "embeddingEmbedded": "Đã nhúng"
+  },
   "pagination": {
     "page": "Trang {{current}} / {{total}}"
   },

@@ -306,6 +306,42 @@ func (s *PGListenRawMessageStore) MarkEmbedded(ctx context.Context, ids []uuid.U
 	return err
 }
 
+func (s *PGListenRawMessageStore) ExtractionStats(ctx context.Context) (map[string]int, error) {
+	tc, tArgs, _, err := scopeClause(ctx, 1)
+	if err != nil {
+		return nil, err
+	}
+	q := `SELECT extraction_status, COUNT(*) FROM listen_raw_messages WHERE 1=1` + tc + ` GROUP BY extraction_status`
+	rows, err := s.db.QueryContext(ctx, q, tArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make(map[string]int)
+	for rows.Next() {
+		var status string
+		var count int
+		if err := rows.Scan(&status, &count); err != nil {
+			continue
+		}
+		result[status] = count
+	}
+	return result, nil
+}
+
+func (s *PGListenRawMessageStore) EmbeddingStats(ctx context.Context) (int, int, error) {
+	tc, tArgs, _, err := scopeClause(ctx, 1)
+	if err != nil {
+		return 0, 0, err
+	}
+	q := `SELECT COUNT(*) FILTER (WHERE embedded_at IS NULL), COUNT(*) FILTER (WHERE embedded_at IS NOT NULL) FROM listen_raw_messages WHERE 1=1` + tc
+	var pending, embedded int
+	if err := s.db.QueryRowContext(ctx, q, tArgs...).Scan(&pending, &embedded); err != nil {
+		return 0, 0, err
+	}
+	return pending, embedded, nil
+}
+
 func (s *PGListenRawMessageStore) List(ctx context.Context, opts store.ListenRawMessageListOpts) ([]store.ListenRawMessage, int, error) {
 	tClause, tArgs, _, err := scopeClause(ctx, 1)
 	if err != nil {
@@ -347,7 +383,12 @@ func (s *PGListenRawMessageStore) List(ctx context.Context, opts store.ListenRaw
 		args = append(args, opts.GraphID)
 		paramIdx++
 	}
-	if opts.Processed != nil {
+	if opts.ExtractionStatus != "" {
+		where = append(where, fmt.Sprintf("extraction_status = $%d", paramIdx))
+		whereM = append(whereM, fmt.Sprintf("m.extraction_status = $%d", paramIdx))
+		args = append(args, opts.ExtractionStatus)
+		paramIdx++
+	} else if opts.Processed != nil {
 		if *opts.Processed {
 			where = append(where, "processed_at IS NOT NULL")
 			whereM = append(whereM, "m.processed_at IS NOT NULL")

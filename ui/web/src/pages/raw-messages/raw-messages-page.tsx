@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { FileText, RefreshCw, X, Filter, RotateCcw } from "lucide-react";
+import { FileText, RefreshCw, X, Filter, RotateCcw, CheckCircle, Clock, AlertTriangle, Layers } from "lucide-react";
 import { toast } from "@/stores/use-toast-store";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,7 +28,7 @@ export function RawMessagesPage() {
   const { t } = useTranslation("raw-messages");
   const { t: tc } = useTranslation("common");
   const { agents } = useAgents();
-  const { messages, total, loading, loadMessages, resetToPending } = useRawMessages();
+  const { messages, total, loading, stats, loadMessages, loadStats, resetToPending } = useRawMessages();
 
   const spinning = useMinLoading(loading);
   const showSkeleton = useDeferredLoading(loading && messages.length === 0);
@@ -37,7 +37,7 @@ export function RawMessagesPage() {
   const [selectedMsg, setSelectedMsg] = useState<RawMessage | null>(null);
 
   // Server-side filters
-  const [filterProcessed, setFilterProcessed] = useState<"all" | "pending" | "processed">("all");
+  const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "extracted" | "failed">("all");
   const [filterAgentId, setFilterAgentId] = useState<string>("__all__");
   const [filterChannel, setFilterChannel] = useState("");
   const [filterGraphId, setFilterGraphId] = useState("");
@@ -67,25 +67,27 @@ export function RawMessagesPage() {
   }, []);
 
   // Reset offset when server-side filters change
-  useEffect(() => { setOffset(0); setSelectedIds(new Set()); }, [filterProcessed, filterAgentId]);
+  useEffect(() => { setOffset(0); setSelectedIds(new Set()); }, [filterStatus, filterAgentId]);
+
+  // Load stats on mount
+  useEffect(() => { loadStats(); }, [loadStats]);
 
   // Fetch data
   useEffect(() => {
     const params: {
-      processed?: boolean;
+      extraction_status?: string;
       limit: number;
       offset: number;
       channelName?: string;
       agentId?: string;
       graphId?: string;
     } = { limit: PAGE_SIZE, offset };
-    if (filterProcessed === "pending") params.processed = false;
-    if (filterProcessed === "processed") params.processed = true;
+    if (filterStatus !== "all") params.extraction_status = filterStatus;
     if (filterChannel) params.channelName = filterChannel;
     if (filterAgentId !== "__all__") params.agentId = filterAgentId;
     if (filterGraphId) params.graphId = filterGraphId;
     loadMessages(params);
-  }, [offset, filterProcessed, filterAgentId, filterChannel, filterGraphId, loadMessages]);
+  }, [offset, filterStatus, filterAgentId, filterChannel, filterGraphId, loadMessages]);
 
   // Client-side filtered messages
   const filtered = useMemo(() => {
@@ -112,12 +114,12 @@ export function RawMessagesPage() {
   // Active filter count
   const activeFilterCount = useMemo(() => {
     let count = 0;
-    if (filterProcessed !== "all") count++;
+    if (filterStatus !== "all") count++;
     if (filterAgentId !== "__all__") count++;
     if (filterChannel) count++;
     if (filterGraphId) count++;
     return count;
-  }, [filterProcessed, filterAgentId, filterChannel, filterGraphId]);
+  }, [filterStatus, filterAgentId, filterChannel, filterGraphId]);
 
   // Selection helpers
   const toggleSelect = useCallback((id: string) => {
@@ -148,7 +150,7 @@ export function RawMessagesPage() {
   }, [filtered]);
 
   const handleClearFilters = () => {
-    setFilterProcessed("all");
+    setFilterStatus("all");
     setFilterAgentId("__all__");
     setFilterChannel("");
     setFilterGraphId("");
@@ -159,16 +161,16 @@ export function RawMessagesPage() {
   };
 
   const handleRefresh = () => {
+    loadStats();
     const params: {
-      processed?: boolean;
+      extraction_status?: string;
       limit: number;
       offset: number;
       channelName?: string;
       agentId?: string;
       graphId?: string;
     } = { limit: PAGE_SIZE, offset };
-    if (filterProcessed === "pending") params.processed = false;
-    if (filterProcessed === "processed") params.processed = true;
+    if (filterStatus !== "all") params.extraction_status = filterStatus;
     if (filterChannel) params.channelName = filterChannel;
     if (filterAgentId !== "__all__") params.agentId = filterAgentId;
     if (filterGraphId) params.graphId = filterGraphId;
@@ -232,19 +234,54 @@ export function RawMessagesPage() {
         }
       />
 
+      {/* Stats bar */}
+      {stats && (
+        <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2">
+            <Clock className="h-4 w-4 text-yellow-500" />
+            <div>
+              <div className="text-xs text-muted-foreground">{t("stats.extractionPending")}</div>
+              <div className="text-sm font-semibold">{stats.extraction.pending ?? 0}</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2">
+            <CheckCircle className="h-4 w-4 text-green-500" />
+            <div>
+              <div className="text-xs text-muted-foreground">{t("stats.extractionExtracted")}</div>
+              <div className="text-sm font-semibold">{stats.extraction.extracted ?? 0}</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2">
+            <AlertTriangle className="h-4 w-4 text-red-500" />
+            <div>
+              <div className="text-xs text-muted-foreground">{t("stats.extractionFailed")}</div>
+              <div className="text-sm font-semibold">{stats.extraction.failed ?? 0}</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2">
+            <Layers className="h-4 w-4 text-blue-500" />
+            <div>
+              <div className="text-xs text-muted-foreground">{t("stats.embeddingEmbedded")}</div>
+              <div className="text-sm font-semibold">{stats.embedding.embedded ?? 0}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showFilters && (
         <div className="mt-3 rounded-lg border bg-card p-3 space-y-3">
           {/* Server-side filters row */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
             {/* Status */}
             <select
-              value={filterProcessed}
-              onChange={(e) => setFilterProcessed(e.target.value as "all" | "pending" | "processed")}
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value as "all" | "pending" | "extracted" | "failed")}
               className="h-8 rounded-md border bg-background px-2 text-sm text-base md:text-sm"
             >
               <option value="all">{t("filters.all")}</option>
               <option value="pending">{t("filters.pending")}</option>
-              <option value="processed">{t("filters.processed")}</option>
+              <option value="extracted">{t("filters.extracted")}</option>
+              <option value="failed">{t("filters.failed")}</option>
             </select>
 
             {/* Agent dropdown */}
@@ -309,10 +346,10 @@ export function RawMessagesPage() {
           {/* Active filter chips */}
           {activeFilterCount > 0 && (
             <div className="flex flex-wrap items-center gap-2">
-              {filterProcessed !== "all" && (
+              {filterStatus !== "all" && (
                 <Badge variant="secondary" className="gap-1 text-xs">
-                  {t("filters.status")}: {t(`filters.${filterProcessed}`)}
-                  <button onClick={() => setFilterProcessed("all")} className="ml-0.5 hover:text-foreground">
+                  {t("filters.status")}: {t(`filters.${filterStatus}`)}
+                  <button onClick={() => setFilterStatus("all")} className="ml-0.5 hover:text-foreground">
                     <X className="h-3 w-3" />
                   </button>
                 </Badge>

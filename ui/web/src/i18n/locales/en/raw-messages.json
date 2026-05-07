@@ -18,6 +18,8 @@
     "all": "All",
     "pending": "Pending",
     "processed": "Processed",
+    "extracted": "Extracted",
+    "failed": "Failed",
     "agent": "Agent",
     "allAgents": "All agents",
     "channel": "Channel",
@@ -32,6 +34,12 @@
     "processed": "Processed"
   },
   "showing": "Showing {{count}} of {{total}} messages",
+  "stats": {
+    "extractionPending": "Extraction Pending",
+    "extractionExtracted": "Extracted",
+    "extractionFailed": "Extraction Failed",
+    "embeddingEmbedded": "Embedded"
+  },
   "pagination": {
     "page": "Page {{current}} of {{total}}"
   },

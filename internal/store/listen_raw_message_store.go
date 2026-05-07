@@ -56,13 +56,14 @@ type ListenRawMessageGroup struct {
 
 // ListenRawMessageListOpts controls filtering and pagination for listing raw messages.
 type ListenRawMessageListOpts struct {
-	Limit       int
-	Offset      int
-	ChannelName string
-	ChatID      string
-	AgentID     string
-	GraphID     string
-	Processed   *bool // nil=all, true=processed only, false=pending only
+	Limit            int
+	Offset           int
+	ChannelName      string
+	ChatID           string
+	AgentID          string
+	GraphID          string
+	Processed        *bool  // nil=all, true=processed only, false=pending only (legacy)
+	ExtractionStatus string // ""=all, "pending", "extracted", "failed"
 }
 
 // ListenRawMessageStore persists raw messages captured by WhatsApp listen-only mode.
@@ -113,4 +114,10 @@ type ListenRawMessageStore interface {
 
 	// MarkEmbedded sets embedded_at = NOW() for the given message IDs.
 	MarkEmbedded(ctx context.Context, ids []uuid.UUID) error
+
+	// ExtractionStats returns counts of messages grouped by extraction_status.
+	ExtractionStats(ctx context.Context) (map[string]int, error)
+
+	// EmbeddingStats returns (pending, embedded) counts for embedding status.
+	EmbeddingStats(ctx context.Context) (pending int, embedded int, err error)
 }

@@ -18,6 +18,8 @@
     "all": "全部",
     "pending": "待处理",
     "processed": "已处理",
+    "extracted": "已提取",
+    "failed": "失败",
     "agent": "Agent",
     "allAgents": "所有 Agent",
     "channel": "频道",
@@ -32,6 +34,12 @@
     "processed": "已处理"
   },
   "showing": "显示 {{count}} / {{total}} 条消息",
+  "stats": {
+    "extractionPending": "提取待处理",
+    "extractionExtracted": "已提取",
+    "extractionFailed": "提取失败",
+    "embeddingEmbedded": "已嵌入"
+  },
   "pagination": {
     "page": "第 {{current}} 页 / 共 {{total}} 页"
   },
