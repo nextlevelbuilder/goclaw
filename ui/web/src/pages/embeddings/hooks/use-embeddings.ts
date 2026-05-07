@@ -30,6 +30,11 @@ interface DeleteResponse {
   deleted_count: number;
 }
 
+interface ReEmbedResponse {
+  processed: number;
+  failed: number;
+}
+
 export function useEmbeddings() {
   const http = useHttp();
   const [chunks, setChunks] = useState<EmbeddingChunk[]>([]);
@@ -91,5 +96,17 @@ export function useEmbeddings() {
     [http],
   );
 
-  return { chunks, total, loading, loadChunks, deleteChunks, deleteByChat };
+  const reEmbed = useCallback(
+    async (params?: { agentId?: string; chatId?: string; graphId?: string }): Promise<ReEmbedResponse> => {
+      const body: Record<string, string> = {};
+      if (params?.agentId) body.agent_id = params.agentId;
+      if (params?.chatId) body.chat_id = params.chatId;
+      if (params?.graphId) body.graph_id = params.graphId;
+      const res = await http.post<ReEmbedResponse>("/v1/embeddings/re-embed", body);
+      return res ?? { processed: 0, failed: 0 };
+    },
+    [http],
+  );
+
+  return { chunks, total, loading, loadChunks, deleteChunks, deleteByChat, reEmbed };
 }

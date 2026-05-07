@@ -76,6 +76,9 @@ type RawMessageChunkStore interface {
 	// DeleteByChatID removes all chunks for a given agent+chat scope.
 	DeleteByChatID(ctx context.Context, agentID, chatID string) (int64, error)
 
+	// ReEmbedChunks generates embeddings for chunks that lack them, scoped by opts filters.
+	ReEmbedChunks(ctx context.Context, opts RawMessageChunkListOpts) (processed int, failed int, err error)
+
 	// SetEmbeddingProvider configures the embedding provider.
 	SetEmbeddingProvider(provider EmbeddingProvider)
 }

@@ -38,7 +38,13 @@
   "actions": {
     "deleteSelected": "删除选中",
     "deleteSuccess": "已删除 {{count}} 个分块",
-    "deleteFailed": "删除分块失败"
+    "deleteFailed": "删除分块失败",
+    "reEmbed": "重新嵌入",
+    "reEmbedding": "正在嵌入…",
+    "reEmbedSuccess": "已嵌入 {{count}} 个分块",
+    "reEmbedPartial": "已嵌入 {{processed}} 个分块",
+    "reEmbedPartialDetail": "{{failed}} 个失败",
+    "reEmbedFailed": "嵌入生成失败"
   },
   "detail": {
     "title": "分块详情",

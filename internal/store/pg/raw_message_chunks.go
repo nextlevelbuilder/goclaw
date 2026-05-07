@@ -379,6 +379,108 @@ func (r chunkRow) toChunk() store.RawMessageChunk {
 	}
 }
 
+// ReEmbedChunks generates embeddings for chunks that lack them, scoped by opts filters.
+func (s *PGRawMessageChunkStore) ReEmbedChunks(ctx context.Context, opts store.RawMessageChunkListOpts) (int, int, error) {
+	if s.provider == nil {
+		return 0, 0, fmt.Errorf("no embedding provider configured")
+	}
+
+	tClause, tArgs, _, err := scopeClause(ctx, 1)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	paramIdx := len(tArgs) + 1
+	var where []string
+	var args []any
+
+	if opts.AgentID != "" {
+		where = append(where, fmt.Sprintf("agent_id = $%d", paramIdx))
+		args = append(args, opts.AgentID)
+		paramIdx++
+	}
+	if opts.ChatID != "" {
+		where = append(where, fmt.Sprintf("chat_id = $%d", paramIdx))
+		args = append(args, opts.ChatID)
+		paramIdx++
+	}
+	if opts.GraphID != "" {
+		where = append(where, fmt.Sprintf("graph_id = $%d", paramIdx))
+		args = append(args, opts.GraphID)
+		paramIdx++
+	}
+	where = append(where, "embedding IS NULL")
+
+	whereClause := " AND " + strings.Join(where, " AND ")
+
+	const batchSize = 50
+	processed, failed := 0, 0
+
+	for {
+		queryArgs := append(tArgs, args...)
+		queryArgs = append(queryArgs, batchSize)
+		limitIdx := paramIdx
+
+		rows, err := s.db.QueryContext(ctx,
+			`SELECT id, text FROM raw_message_chunks WHERE 1=1`+tClause+whereClause+
+				` ORDER BY id ASC LIMIT $`+fmt.Sprintf("%d", limitIdx),
+			queryArgs...)
+		if err != nil {
+			return processed, failed, fmt.Errorf("query chunks without embeddings: %w", err)
+		}
+
+		type row struct {
+			ID   string `db:"id"`
+			Text string `db:"text"`
+		}
+		var batch []row
+		for rows.Next() {
+			var r row
+			if err := rows.Scan(&r.ID, &r.Text); err != nil {
+				rows.Close()
+				return processed, failed, fmt.Errorf("scan chunk: %w", err)
+			}
+			batch = append(batch, r)
+		}
+		rows.Close()
+
+		if len(batch) == 0 {
+			break
+		}
+
+		texts := make([]string, len(batch))
+		for i, r := range batch {
+			texts[i] = r.Text
+		}
+
+		embeddings, err := s.provider.Embed(ctx, texts)
+		if err != nil {
+			return processed, failed, fmt.Errorf("generate embeddings: %w", err)
+		}
+
+		for i, r := range batch {
+			if i >= len(embeddings) {
+				break
+			}
+			vecStr := vectorToString(embeddings[i])
+			if _, err := s.db.ExecContext(ctx,
+				"UPDATE raw_message_chunks SET embedding = $1::vector WHERE id = $2",
+				vecStr, r.ID,
+			); err != nil {
+				failed++
+				continue
+			}
+			processed++
+		}
+
+		if len(batch) < batchSize {
+			break
+		}
+	}
+
+	return processed, failed, nil
+}
+
 // List returns paginated chunks with optional filters.
 func (s *PGRawMessageChunkStore) List(ctx context.Context, opts store.RawMessageChunkListOpts) ([]store.RawMessageChunk, int, error) {
 	tClause, tArgs, _, err := scopeClause(ctx, 1)

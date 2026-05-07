@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Layers, RefreshCw, X, Filter, Trash2 } from "lucide-react";
+import { Layers, RefreshCw, X, Filter, Trash2, Wand2 } from "lucide-react";
 import { toast } from "@/stores/use-toast-store";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,7 +28,7 @@ export function EmbeddingsPage() {
   const { t } = useTranslation("embeddings");
   const { t: tc } = useTranslation("common");
   const { agents } = useAgents();
-  const { chunks, total, loading, loadChunks, deleteChunks } = useEmbeddings();
+  const { chunks, total, loading, loadChunks, deleteChunks, reEmbed } = useEmbeddings();
 
   const spinning = useMinLoading(loading);
   const showSkeleton = useDeferredLoading(loading && chunks.length === 0);
@@ -50,6 +50,7 @@ export function EmbeddingsPage() {
 
   // Row selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [reEmbedding, setReEmbedding] = useState(false);
 
   // Debounced text inputs
   const chatTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -199,6 +200,30 @@ export function EmbeddingsPage() {
     }
   };
 
+  const handleReEmbed = async () => {
+    setReEmbedding(true);
+    try {
+      const result = await reEmbed({
+        agentId: filterAgentId !== "__all__" ? filterAgentId : undefined,
+        chatId: filterChatId || undefined,
+        graphId: filterGraphId || undefined,
+      });
+      handleRefresh();
+      if (result.processed === 0) {
+        toast.info(t("actions.reEmbedSuccess", { count: 0 }));
+      } else if (result.failed > 0) {
+        toast.warning(t("actions.reEmbedPartial", { processed: result.processed }), t("actions.reEmbedPartialDetail", { failed: result.failed }));
+      } else {
+        toast.success(t("actions.reEmbedSuccess", { count: result.processed }));
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(t("actions.reEmbedFailed"), msg);
+    } finally {
+      setReEmbedding(false);
+    }
+  };
+
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
   const allSelected = filtered.length > 0 && selectedIds.size === filtered.length;
@@ -223,6 +248,16 @@ export function EmbeddingsPage() {
                   {activeFilterCount}
                 </Badge>
               )}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1 min-h-[44px] sm:min-h-0"
+              onClick={handleReEmbed}
+              disabled={reEmbedding || spinning}
+            >
+              <Wand2 className={"h-3.5 w-3.5" + (reEmbedding ? " animate-pulse" : "")} />
+              {reEmbedding ? t("actions.reEmbedding") : t("actions.reEmbed")}
             </Button>
             <Button variant="outline" size="sm" onClick={handleRefresh} disabled={spinning} className="gap-1">
               <RefreshCw className={"h-3.5 w-3.5" + (spinning ? " animate-spin" : "")} /> {tc("refresh")}

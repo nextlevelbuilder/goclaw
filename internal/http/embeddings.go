@@ -25,6 +25,7 @@ func (h *EmbeddingsHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/embeddings", h.authMiddleware(h.handleList))
 	mux.HandleFunc("POST /v1/embeddings/delete", h.authMiddleware(h.handleDelete))
 	mux.HandleFunc("POST /v1/embeddings/delete-by-chat", h.authMiddleware(h.handleDeleteByChat))
+	mux.HandleFunc("POST /v1/embeddings/re-embed", h.authMiddleware(h.handleReEmbed))
 }
 
 func (h *EmbeddingsHandler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
@@ -143,5 +144,42 @@ func (h *EmbeddingsHandler) handleDeleteByChat(w http.ResponseWriter, r *http.Re
 	slog.Info("http.embeddings.delete-by-chat: ok", "agent_id", body.AgentID, "chat_id", body.ChatID, "deleted", deleted)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"deleted_count": deleted,
+	})
+}
+
+func (h *EmbeddingsHandler) handleReEmbed(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		AgentID string `json:"agent_id,omitempty"`
+		ChatID  string `json:"chat_id,omitempty"`
+		GraphID string `json:"graph_id,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		slog.Warn("http.embeddings.re-embed: invalid body", "error", err)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+
+	opts := store.RawMessageChunkListOpts{}
+	if body.AgentID != "" {
+		opts.AgentID = body.AgentID
+	}
+	if body.ChatID != "" {
+		opts.ChatID = body.ChatID
+	}
+	if body.GraphID != "" {
+		opts.GraphID = body.GraphID
+	}
+
+	processed, failed, err := h.store.ReEmbedChunks(r.Context(), opts)
+	if err != nil {
+		slog.Error("http.embeddings.re-embed: store error", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	slog.Info("http.embeddings.re-embed: ok", "processed", processed, "failed", failed)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"processed": processed,
+		"failed":    failed,
 	})
 }

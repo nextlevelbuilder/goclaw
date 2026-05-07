@@ -38,7 +38,13 @@
   "actions": {
     "deleteSelected": "Delete Selected",
     "deleteSuccess": "{{count}} chunk(s) deleted",
-    "deleteFailed": "Failed to delete chunks"
+    "deleteFailed": "Failed to delete chunks",
+    "reEmbed": "Re-Embed",
+    "reEmbedding": "Embedding…",
+    "reEmbedSuccess": "{{count}} chunk(s) embedded",
+    "reEmbedPartial": "{{processed}} chunk(s) embedded",
+    "reEmbedPartialDetail": "{{failed}} failed",
+    "reEmbedFailed": "Failed to generate embeddings"
   },
   "detail": {
     "title": "Chunk Detail",

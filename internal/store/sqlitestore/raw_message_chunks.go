@@ -40,3 +40,7 @@ func (s *SQLiteRawMessageChunkStore) DeleteByChatID(_ context.Context, _ string,
 }
 
 func (s *SQLiteRawMessageChunkStore) SetEmbeddingProvider(_ store.EmbeddingProvider) {}
+
+func (s *SQLiteRawMessageChunkStore) ReEmbedChunks(_ context.Context, _ store.RawMessageChunkListOpts) (int, int, error) {
+	return 0, 0, nil
+}

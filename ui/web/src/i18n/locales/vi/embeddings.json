@@ -38,7 +38,13 @@
   "actions": {
     "deleteSelected": "Xóa đã chọn",
     "deleteSuccess": "Đã xóa {{count}} chunk(s)",
-    "deleteFailed": "Xóa chunks thất bại"
+    "deleteFailed": "Xóa chunks thất bại",
+    "reEmbed": "Tạo nhúng lại",
+    "reEmbedding": "Đang tạo nhúng…",
+    "reEmbedSuccess": "Đã tạo nhúng {{count}} chunk(s)",
+    "reEmbedPartial": "Đã tạo nhúng {{processed}} chunk(s)",
+    "reEmbedPartialDetail": "{{failed}} thất bại",
+    "reEmbedFailed": "Tạo nhúng thất bại"
   },
   "detail": {
     "title": "Chi tiết Chunk",
