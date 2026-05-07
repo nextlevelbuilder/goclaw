@@ -16,6 +16,7 @@
     "sessions": "Session",
     "pendingMessages": "Tin nhắn chờ",
     "rawMessages": "Tin nhắn thô",
+    "embeddings": "Embeddings",
     "channels": "Channel",
     "contacts": "Liên hệ",
     "skills": "Skill",

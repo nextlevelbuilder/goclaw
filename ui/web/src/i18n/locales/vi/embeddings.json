@@ -1,0 +1,61 @@
+{
+  "title": "Embeddings",
+  "description": "Nội dung đã chunk và nhúng từ tin nhắn thô.",
+  "emptyTitle": "Không có embeddings",
+  "emptyDescription": "Embeddings từ tin nhắn thô sẽ xuất hiện ở đây sau khi được xử lý.",
+  "columns": {
+    "chatName": "Chat",
+    "sender": "Người gửi",
+    "text": "Nội dung",
+    "chunkIndex": "Chunk",
+    "embedding": "Vector",
+    "msgTime": "Thời gian",
+    "createdAt": "Tạo lúc"
+  },
+  "filters": {
+    "title": "Bộ lọc",
+    "all": "Tất cả",
+    "hasEmbedding": "Có Vector",
+    "noEmbedding": "Không Vector",
+    "embedding": "Embedding",
+    "agent": "Agent",
+    "allAgents": "Tất cả agent",
+    "chatId": "Chat ID",
+    "graphId": "Graph ID",
+    "sender": "Người gửi",
+    "dateRange": "Khoảng thời gian",
+    "searchText": "Tìm nội dung…",
+    "clearAll": "Xóa bộ lọc"
+  },
+  "status": {
+    "embedded": "Đã nhúng",
+    "noVector": "Chưa có vector"
+  },
+  "showing": "Hiển thị {{count}} / {{total}} chunks",
+  "pagination": {
+    "page": "Trang {{current}} / {{total}}"
+  },
+  "actions": {
+    "deleteSelected": "Xóa đã chọn",
+    "deleteSuccess": "Đã xóa {{count}} chunk(s)",
+    "deleteFailed": "Xóa chunks thất bại"
+  },
+  "detail": {
+    "title": "Chi tiết Chunk",
+    "agent": "Agent",
+    "graphId": "Graph ID",
+    "chat": "Chat",
+    "sender": "Người gửi",
+    "chunkIndex": "Chunk Index",
+    "embeddingStatus": "Embedding",
+    "contentHash": "Content Hash",
+    "msgTimeRange": "Khoảng thời gian",
+    "sourceMsgIds": "Tin nhắn nguồn",
+    "createdAt": "Tạo lúc",
+    "chunkText": "Nội dung Chunk",
+    "copy": "Sao chép",
+    "copied": "Đã sao chép",
+    "na": "—",
+    "deleteChunk": "Xóa"
+  }
+}

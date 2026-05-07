@@ -16,6 +16,7 @@
     "sessions": "Sessions",
     "pendingMessages": "Pending Messages",
     "rawMessages": "Raw Messages",
+    "embeddings": "Embeddings",
     "channels": "Channels",
     "contacts": "Contacts",
     "skills": "Skills",

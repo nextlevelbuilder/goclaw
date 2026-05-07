@@ -28,6 +28,7 @@ type httpHandlers struct {
 	builtinTools     *httpapi.BuiltinToolsHandler
 	pendingMessages  *httpapi.PendingMessagesHandler
 	listenRawMsgs    *httpapi.ListenRawMessagesHandler
+	embeddings       *httpapi.EmbeddingsHandler
 	teamEvents       *httpapi.TeamEventsHandler
 	secureCLI        *httpapi.SecureCLIHandler
 	secureCLIGrant   *httpapi.SecureCLIGrantHandler
@@ -96,6 +97,9 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 	}
 	if h.listenRawMsgs != nil {
 		d.server.SetListenRawMessagesHandler(h.listenRawMsgs)
+	}
+	if h.embeddings != nil {
+		d.server.SetEmbeddingsHandler(h.embeddings)
 	}
 	if h.secureCLI != nil {
 		d.server.SetSecureCLIHandler(h.secureCLI)

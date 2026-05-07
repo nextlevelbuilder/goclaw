@@ -84,6 +84,9 @@ const PendingMessagesPage = lazyWithRetry(() =>
 const RawMessagesPage = lazyWithRetry(() =>
   import("@/pages/raw-messages/raw-messages-page").then((m) => ({ default: m.RawMessagesPage })),
 );
+const EmbeddingsPage = lazyWithRetry(() =>
+  import("@/pages/embeddings/embeddings-page").then((m) => ({ default: m.EmbeddingsPage })),
+);
 const MemoryPage = lazyWithRetry(() =>
   import("@/pages/memory/memory-page").then((m) => ({ default: m.MemoryPage })),
 );
@@ -208,6 +211,7 @@ export function AppRoutes() {
           <Route path={ROUTES.APPROVALS} element={<ApprovalsPage />} />
           <Route path={ROUTES.PENDING_MESSAGES} element={<PendingMessagesPage />} />
           <Route path={ROUTES.RAW_MESSAGES} element={<RawMessagesPage />} />
+          <Route path={ROUTES.EMBEDDINGS} element={<EmbeddingsPage />} />
           <Route path={ROUTES.MEMORY} element={<MemoryPage />} />
           <Route path={ROUTES.VAULT} element={<VaultPage />} />
           <Route path={ROUTES.KNOWLEDGE_GRAPH} element={<KnowledgeGraphPage />} />

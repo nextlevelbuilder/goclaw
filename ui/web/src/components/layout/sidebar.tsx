@@ -31,6 +31,7 @@ import {
   DatabaseBackup,
   FileText,
   Webhook,
+  Layers,
 
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -119,6 +120,7 @@ export function Sidebar({ collapsed, onNavItemClick }: SidebarProps) {
           <SidebarItem to={ROUTES.MEMORY} icon={Brain} label={t("nav.memory")} collapsed={collapsed} />
           <SidebarItem to={ROUTES.VAULT} icon={FileArchive} label={t("nav.vault")} collapsed={collapsed} />
           <SidebarItem to={ROUTES.KNOWLEDGE_GRAPH} icon={Network} label={t("nav.knowledgeGraph")} collapsed={collapsed} />
+          <SidebarItem to={ROUTES.EMBEDDINGS} icon={Layers} label={t("nav.embeddings")} collapsed={collapsed} />
           <SidebarItem to={ROUTES.STORAGE} icon={HardDrive} label={t("nav.storage")} collapsed={collapsed} />
         </SidebarGroup>
 

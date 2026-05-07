@@ -29,6 +29,7 @@
     "overview": "概览",
     "pendingMessages": "待处理消息",
     "rawMessages": "原始消息",
+    "embeddings": "向量嵌入",
     "providers": "Provider",
     "realtimeEvents": "实时事件",
     "sessions": "Session",

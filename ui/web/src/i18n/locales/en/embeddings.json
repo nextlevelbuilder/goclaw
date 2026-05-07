@@ -1,0 +1,61 @@
+{
+  "title": "Embeddings",
+  "description": "Chunked and embedded content from raw messages.",
+  "emptyTitle": "No embeddings",
+  "emptyDescription": "Chunked embeddings from raw messages will appear here once processed.",
+  "columns": {
+    "chatName": "Chat",
+    "sender": "Sender",
+    "text": "Text",
+    "chunkIndex": "Chunk",
+    "embedding": "Vector",
+    "msgTime": "Time Range",
+    "createdAt": "Created"
+  },
+  "filters": {
+    "title": "Filters",
+    "all": "All",
+    "hasEmbedding": "Has Vector",
+    "noEmbedding": "No Vector",
+    "embedding": "Embedding",
+    "agent": "Agent",
+    "allAgents": "All agents",
+    "chatId": "Chat ID",
+    "graphId": "Graph ID",
+    "sender": "Sender",
+    "dateRange": "Date range",
+    "searchText": "Search text…",
+    "clearAll": "Clear all"
+  },
+  "status": {
+    "embedded": "Embedded",
+    "noVector": "No Vector"
+  },
+  "showing": "Showing {{count}} of {{total}} chunks",
+  "pagination": {
+    "page": "Page {{current}} of {{total}}"
+  },
+  "actions": {
+    "deleteSelected": "Delete Selected",
+    "deleteSuccess": "{{count}} chunk(s) deleted",
+    "deleteFailed": "Failed to delete chunks"
+  },
+  "detail": {
+    "title": "Chunk Detail",
+    "agent": "Agent",
+    "graphId": "Graph ID",
+    "chat": "Chat",
+    "sender": "Sender",
+    "chunkIndex": "Chunk Index",
+    "embeddingStatus": "Embedding",
+    "contentHash": "Content Hash",
+    "msgTimeRange": "Time Range",
+    "sourceMsgIds": "Source Messages",
+    "createdAt": "Created At",
+    "chunkText": "Chunk Text",
+    "copy": "Copy",
+    "copied": "Copied",
+    "na": "—",
+    "deleteChunk": "Delete"
+  }
+}

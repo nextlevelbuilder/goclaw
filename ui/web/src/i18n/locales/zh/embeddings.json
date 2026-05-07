@@ -1,0 +1,61 @@
+{
+  "title": "向量嵌入",
+  "description": "从原始消息分块和嵌入的内容。",
+  "emptyTitle": "无嵌入数据",
+  "emptyDescription": "处理后的原始消息嵌入数据将显示在此处。",
+  "columns": {
+    "chatName": "聊天",
+    "sender": "发送者",
+    "text": "文本",
+    "chunkIndex": "分块",
+    "embedding": "向量",
+    "msgTime": "时间范围",
+    "createdAt": "创建时间"
+  },
+  "filters": {
+    "title": "筛选",
+    "all": "全部",
+    "hasEmbedding": "有向量",
+    "noEmbedding": "无向量",
+    "embedding": "嵌入",
+    "agent": "Agent",
+    "allAgents": "所有 Agent",
+    "chatId": "Chat ID",
+    "graphId": "Graph ID",
+    "sender": "发送者",
+    "dateRange": "日期范围",
+    "searchText": "搜索文本…",
+    "clearAll": "清除筛选"
+  },
+  "status": {
+    "embedded": "已嵌入",
+    "noVector": "无向量"
+  },
+  "showing": "显示 {{count}} / {{total}} 个分块",
+  "pagination": {
+    "page": "第 {{current}} 页 / 共 {{total}} 页"
+  },
+  "actions": {
+    "deleteSelected": "删除选中",
+    "deleteSuccess": "已删除 {{count}} 个分块",
+    "deleteFailed": "删除分块失败"
+  },
+  "detail": {
+    "title": "分块详情",
+    "agent": "Agent",
+    "graphId": "Graph ID",
+    "chat": "聊天",
+    "sender": "发送者",
+    "chunkIndex": "分块索引",
+    "embeddingStatus": "嵌入状态",
+    "contentHash": "内容哈希",
+    "msgTimeRange": "时间范围",
+    "sourceMsgIds": "来源消息",
+    "createdAt": "创建时间",
+    "chunkText": "分块文本",
+    "copy": "复制",
+    "copied": "已复制",
+    "na": "—",
+    "deleteChunk": "删除"
+  }
+}

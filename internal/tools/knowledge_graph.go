@@ -48,7 +48,7 @@ func (t *KnowledgeGraphSearchTool) Parameters() map[string]any {
 			},
 			"entity_id": map[string]any{
 				"type":        "string",
-				"description": "Entity ID to traverse from (for relationship discovery)",
+				"description": "Entity UUID to traverse relationships from. Get the UUID from a previous search result's (id: ...) field. Entity names are also accepted and will be auto-resolved.",
 			},
 			"max_depth": map[string]any{
 				"type":        "number",
@@ -146,6 +146,14 @@ func (t *KnowledgeGraphSearchTool) Execute(ctx context.Context, args map[string]
 }
 
 func (t *KnowledgeGraphSearchTool) executeTraversal(ctx context.Context, agentID, userID, entityID string, maxDepth int, query string) *Result {
+	// Resolve entity_id: if not a valid UUID, search by name to find the actual UUID.
+	if _, err := uuid.Parse(entityID); err != nil {
+		resolved := t.resolveEntityIDByName(ctx, agentID, userID, entityID)
+		if resolved != "" {
+			entityID = resolved
+		}
+	}
+
 	// Tier 1: outgoing deep traversal
 	results, err := t.kgStore.Traverse(ctx, agentID, userID, entityID, maxDepth)
 	if err != nil {
@@ -362,6 +370,27 @@ func (t *KnowledgeGraphSearchTool) executeSearch(ctx context.Context, agentID, u
 		}
 	}
 	return NewResult(sb.String())
+}
+
+// resolveEntityIDByName searches for an entity by name and returns its UUID.
+// Returns empty string if no unique match found.
+func (t *KnowledgeGraphSearchTool) resolveEntityIDByName(ctx context.Context, agentID, userID, name string) string {
+	entities, err := t.kgStore.SearchEntities(ctx, agentID, userID, name, 5)
+	if err != nil || len(entities) == 0 {
+		return ""
+	}
+	// Prefer exact name match
+	lower := strings.ToLower(name)
+	for _, e := range entities {
+		if strings.ToLower(e.Name) == lower {
+			return e.ID
+		}
+	}
+	// Fall back to first result if only one found
+	if len(entities) == 1 {
+		return entities[0].ID
+	}
+	return ""
 }
 
 // resolveEntityName returns a human-readable name for an entity ID, using cache or DB lookup.

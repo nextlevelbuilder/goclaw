@@ -347,3 +347,165 @@ func (s *PGRawMessageChunkStore) DeleteByGraphID(ctx context.Context, agentID, g
 	)
 	return err
 }
+
+// chunkRow is a scan target for List queries.
+type chunkRow struct {
+	ID          string    `db:"id"`
+	AgentID     string    `db:"agent_id"`
+	GraphID     string    `db:"graph_id"`
+	ChatID      string    `db:"chat_id"`
+	ChatName    string    `db:"chat_name"`
+	Sender      string    `db:"sender"`
+	SenderID    string    `db:"sender_id"`
+	MsgTimeFrom time.Time `db:"msg_time_from"`
+	MsgTimeTo   time.Time `db:"msg_time_to"`
+	ChunkIndex  int       `db:"chunk_index"`
+	Text        string    `db:"text"`
+	ContentHash string    `db:"content_hash"`
+	SourceMsgIDs []string  `db:"source_msg_ids"`
+	CreatedAt   time.Time `db:"created_at"`
+	HasEmbedding bool     `db:"has_embedding"`
+}
+
+func (r chunkRow) toChunk() store.RawMessageChunk {
+	return store.RawMessageChunk{
+		ID: r.ID, AgentID: r.AgentID, GraphID: r.GraphID,
+		ChatID: r.ChatID, ChatName: r.ChatName,
+		Sender: r.Sender, SenderID: r.SenderID,
+		MsgTimeFrom: r.MsgTimeFrom, MsgTimeTo: r.MsgTimeTo,
+		ChunkIndex: r.ChunkIndex, Text: r.Text,
+		ContentHash: r.ContentHash, SourceMsgIDs: r.SourceMsgIDs,
+		CreatedAt: r.CreatedAt, HasEmbedding: r.HasEmbedding,
+	}
+}
+
+// List returns paginated chunks with optional filters.
+func (s *PGRawMessageChunkStore) List(ctx context.Context, opts store.RawMessageChunkListOpts) ([]store.RawMessageChunk, int, error) {
+	tClause, tArgs, _, err := scopeClause(ctx, 1)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	paramIdx := len(tArgs) + 1
+	var where []string
+	var args []any
+
+	if opts.AgentID != "" {
+		where = append(where, fmt.Sprintf("agent_id = $%d", paramIdx))
+		args = append(args, opts.AgentID)
+		paramIdx++
+	}
+	if opts.ChatID != "" {
+		where = append(where, fmt.Sprintf("chat_id = $%d", paramIdx))
+		args = append(args, opts.ChatID)
+		paramIdx++
+	}
+	if opts.GraphID != "" {
+		where = append(where, fmt.Sprintf("graph_id = $%d", paramIdx))
+		args = append(args, opts.GraphID)
+		paramIdx++
+	}
+	if opts.Sender != "" {
+		where = append(where, fmt.Sprintf("sender = $%d", paramIdx))
+		args = append(args, opts.Sender)
+		paramIdx++
+	}
+	if opts.HasEmbedding != nil {
+		if *opts.HasEmbedding {
+			where = append(where, "embedding IS NOT NULL")
+		} else {
+			where = append(where, "embedding IS NULL")
+		}
+	}
+	if opts.FromTime != nil {
+		where = append(where, fmt.Sprintf("msg_time_from >= $%d", paramIdx))
+		args = append(args, *opts.FromTime)
+		paramIdx++
+	}
+	if opts.ToTime != nil {
+		where = append(where, fmt.Sprintf("msg_time_to <= $%d", paramIdx))
+		args = append(args, *opts.ToTime)
+		paramIdx++
+	}
+
+	whereClause := ""
+	if len(where) > 0 {
+		whereClause = " AND " + strings.Join(where, " AND ")
+	}
+
+	// COUNT query
+	var total int
+	countArgs := append(tArgs, args...)
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM raw_message_chunks WHERE 1=1`+tClause+whereClause,
+		countArgs...,
+	).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	// Data query
+	limit := 50
+	if opts.Limit > 0 && opts.Limit <= 200 {
+		limit = opts.Limit
+	}
+	offset := max(opts.Offset, 0)
+
+	pageArgs := append(tArgs, args...)
+	pageArgs = append(pageArgs, limit, offset)
+
+	var rows []chunkRow
+	if err := pkgSqlxDB.SelectContext(ctx, &rows,
+		`SELECT id, agent_id, graph_id, chat_id, chat_name, sender, sender_id,
+		        msg_time_from, msg_time_to, chunk_index, text, content_hash,
+		        source_msg_ids, created_at,
+		        embedding IS NOT NULL AS has_embedding
+		 FROM raw_message_chunks
+		 WHERE 1=1`+tClause+whereClause+`
+		 ORDER BY created_at DESC
+		 LIMIT $`+fmt.Sprintf("%d", paramIdx)+` OFFSET $`+fmt.Sprintf("%d", paramIdx+1),
+		pageArgs...,
+	); err != nil {
+		return nil, 0, err
+	}
+
+	result := make([]store.RawMessageChunk, len(rows))
+	for i, r := range rows {
+		result[i] = r.toChunk()
+	}
+	return result, total, nil
+}
+
+// DeleteByIDs removes chunks by their IDs.
+func (s *PGRawMessageChunkStore) DeleteByIDs(ctx context.Context, ids []string) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	tc, tcArgs, _, err := scopeClause(ctx, 2)
+	if err != nil {
+		return 0, err
+	}
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM raw_message_chunks WHERE id = ANY($1)`+tc,
+		append([]any{pq.Array(ids)}, tcArgs...)...,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+// DeleteByChatID removes all chunks for a given agent+chat scope.
+func (s *PGRawMessageChunkStore) DeleteByChatID(ctx context.Context, agentID, chatID string) (int64, error) {
+	tc, tcArgs, _, err := scopeClause(ctx, 3)
+	if err != nil {
+		return 0, err
+	}
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM raw_message_chunks WHERE agent_id = $1 AND chat_id = $2`+tc,
+		append([]any{agentID, chatID}, tcArgs...)...,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}

@@ -21,6 +21,7 @@ type RawMessageChunk struct {
 	ContentHash  string    `json:"content_hash" db:"content_hash"`
 	SourceMsgIDs []string  `json:"source_msg_ids" db:"source_msg_ids"`
 	CreatedAt    time.Time `json:"created_at" db:"created_at"`
+	HasEmbedding bool      `json:"has_embedding" db:"-"`
 }
 
 // RawMessageChunkSearchResult is a single result from hybrid search.
@@ -42,6 +43,19 @@ type RawMessageChunkSearchOptions struct {
 	RRFK       int        // RRF constant (default 60)
 }
 
+// RawMessageChunkListOpts configures a paginated list query.
+type RawMessageChunkListOpts struct {
+	Limit        int
+	Offset       int
+	AgentID      string
+	ChatID       string
+	GraphID      string
+	Sender       string
+	HasEmbedding *bool // nil=all, true=has embedding, false=no embedding
+	FromTime     *time.Time
+	ToTime       *time.Time
+}
+
 // RawMessageChunkStore manages chunked embeddings from raw messages.
 type RawMessageChunkStore interface {
 	// StoreChunks persists chunks with their embeddings.
@@ -50,8 +64,17 @@ type RawMessageChunkStore interface {
 	// Search performs hybrid FTS + vector search with Reciprocal Rank Fusion.
 	Search(ctx context.Context, query, agentID string, opts RawMessageChunkSearchOptions) ([]RawMessageChunkSearchResult, error)
 
+	// List returns paginated chunks with optional filters.
+	List(ctx context.Context, opts RawMessageChunkListOpts) ([]RawMessageChunk, int, error)
+
 	// DeleteByGraphID removes all chunks for a given agent+graph scope.
 	DeleteByGraphID(ctx context.Context, agentID, graphID string) error
+
+	// DeleteByIDs removes chunks by their IDs.
+	DeleteByIDs(ctx context.Context, ids []string) (int64, error)
+
+	// DeleteByChatID removes all chunks for a given agent+chat scope.
+	DeleteByChatID(ctx context.Context, agentID, chatID string) (int64, error)
 
 	// SetEmbeddingProvider configures the embedding provider.
 	SetEmbeddingProvider(provider EmbeddingProvider)

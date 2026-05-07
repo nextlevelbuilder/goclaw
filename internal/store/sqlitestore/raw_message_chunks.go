@@ -27,4 +27,16 @@ func (s *SQLiteRawMessageChunkStore) DeleteByGraphID(_ context.Context, _ string
 	return nil
 }
 
+func (s *SQLiteRawMessageChunkStore) List(_ context.Context, _ store.RawMessageChunkListOpts) ([]store.RawMessageChunk, int, error) {
+	return nil, 0, nil
+}
+
+func (s *SQLiteRawMessageChunkStore) DeleteByIDs(_ context.Context, _ []string) (int64, error) {
+	return 0, nil
+}
+
+func (s *SQLiteRawMessageChunkStore) DeleteByChatID(_ context.Context, _ string, _ string) (int64, error) {
+	return 0, nil
+}
+
 func (s *SQLiteRawMessageChunkStore) SetEmbeddingProvider(_ store.EmbeddingProvider) {}

@@ -449,6 +449,11 @@ func (s *Server) SetListenRawMessagesHandler(h *httpapi.ListenRawMessagesHandler
 	s.handlers = append(s.handlers, h)
 }
 
+// SetEmbeddingsHandler sets the embeddings (raw message chunks) handler.
+func (s *Server) SetEmbeddingsHandler(h *httpapi.EmbeddingsHandler) {
+	s.handlers = append(s.handlers, h)
+}
+
 // SetBuiltinToolsHandler sets the builtin tool management handler.
 func (s *Server) SetBuiltinToolsHandler(h *httpapi.BuiltinToolsHandler) {
 	s.handlers = append(s.handlers, h)
