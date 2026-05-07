@@ -350,21 +350,21 @@ func (s *PGRawMessageChunkStore) DeleteByGraphID(ctx context.Context, agentID, g
 
 // chunkRow is a scan target for List queries.
 type chunkRow struct {
-	ID          string    `db:"id"`
-	AgentID     string    `db:"agent_id"`
-	GraphID     string    `db:"graph_id"`
-	ChatID      string    `db:"chat_id"`
-	ChatName    string    `db:"chat_name"`
-	Sender      string    `db:"sender"`
-	SenderID    string    `db:"sender_id"`
-	MsgTimeFrom time.Time `db:"msg_time_from"`
-	MsgTimeTo   time.Time `db:"msg_time_to"`
-	ChunkIndex  int       `db:"chunk_index"`
-	Text        string    `db:"text"`
-	ContentHash string    `db:"content_hash"`
-	SourceMsgIDs []string  `db:"source_msg_ids"`
-	CreatedAt   time.Time `db:"created_at"`
-	HasEmbedding bool     `db:"has_embedding"`
+	ID           string         `db:"id"`
+	AgentID      string         `db:"agent_id"`
+	GraphID      string         `db:"graph_id"`
+	ChatID       string         `db:"chat_id"`
+	ChatName     string         `db:"chat_name"`
+	Sender       string         `db:"sender"`
+	SenderID     string         `db:"sender_id"`
+	MsgTimeFrom  time.Time      `db:"msg_time_from"`
+	MsgTimeTo    time.Time      `db:"msg_time_to"`
+	ChunkIndex   int            `db:"chunk_index"`
+	Text         string         `db:"text"`
+	ContentHash  string         `db:"content_hash"`
+	SourceMsgIDs pq.StringArray `db:"source_msg_ids"`
+	CreatedAt    time.Time      `db:"created_at"`
+	HasEmbedding bool           `db:"has_embedding"`
 }
 
 func (r chunkRow) toChunk() store.RawMessageChunk {
@@ -374,7 +374,7 @@ func (r chunkRow) toChunk() store.RawMessageChunk {
 		Sender: r.Sender, SenderID: r.SenderID,
 		MsgTimeFrom: r.MsgTimeFrom, MsgTimeTo: r.MsgTimeTo,
 		ChunkIndex: r.ChunkIndex, Text: r.Text,
-		ContentHash: r.ContentHash, SourceMsgIDs: r.SourceMsgIDs,
+		ContentHash: r.ContentHash, SourceMsgIDs: []string(r.SourceMsgIDs),
 		CreatedAt: r.CreatedAt, HasEmbedding: r.HasEmbedding,
 	}
 }

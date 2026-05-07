@@ -150,7 +150,7 @@ func buildEmbeddingProvider(
 	}
 
 	// Fallback: build directly from DB record
-	if dbp.APIKey != "" {
+	if dbp.APIKey != "" || apiBase != "" {
 		ep := memory.NewOpenAIEmbeddingProvider(dbp.Name, dbp.APIKey, apiBase, model)
 		ep.WithDimensions(dims)
 		return ep
