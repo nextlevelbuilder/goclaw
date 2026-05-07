@@ -173,6 +173,32 @@ func Test_likelyCiphertextOpus_allows_short_or_stable_TOC(t *testing.T) {
 	}
 }
 
+func Test_likelyLowInformationOpus_flags_sustained_silence(t *testing.T) {
+	frames := make([][]byte, 60)
+	for i := range frames {
+		frames[i] = opusSilenceFrame
+	}
+
+	got, smallFrames, avgBytes := likelyLowInformationOpus(frames)
+
+	if !got {
+		t.Fatalf("likelyLowInformationOpus = false, small=%d avg=%d", smallFrames, avgBytes)
+	}
+}
+
+func Test_likelyLowInformationOpus_allows_normal_sized_frames(t *testing.T) {
+	frames := make([][]byte, 60)
+	for i := range frames {
+		frames[i] = []byte{0x78, 0x55, 0x22, 0x11, 0x09, 0x44, 0x51, 0x62, 0x33, 0x7a, 0x12, 0x24}
+	}
+
+	got, smallFrames, avgBytes := likelyLowInformationOpus(frames)
+
+	if got {
+		t.Fatalf("normal-sized frames flagged as low-information, small=%d avg=%d", smallFrames, avgBytes)
+	}
+}
+
 func Test_flushSSRC_drops_ciphertext_like_utterances(t *testing.T) {
 	d, out := testDemux(t, Config{
 		SSRCBufferMaxBytes: 4096,

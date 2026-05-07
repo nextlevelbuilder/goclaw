@@ -225,6 +225,18 @@ func (t *transcriber) processUtterance(ctx context.Context, u utterance) {
 		t.log.Debug("voice: empty transcript", "ssrc", u.ssrc, "duration_ms", u.durationMs)
 		return
 	}
+	if decision := assessTranscriptQuality(result.Text, u, result.Duration); decision.Drop {
+		t.log.Warn("voice: drop transcript suspected to be STT hallucination",
+			"reason", decision.Reason,
+			"ssrc", u.ssrc,
+			"duration_ms", u.durationMs,
+			"provider_duration_s", result.Duration,
+			"chars", decision.Chars,
+			"words", decision.Words,
+			"chars_per_sec", decision.CharsPerSec,
+			"words_per_sec", decision.WordsPerSec)
+		return
+	}
 
 	t.postTranscript(ctx, u, result.Text)
 }
