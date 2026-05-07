@@ -152,11 +152,6 @@ func (s *PGRawMessageChunkStore) Search(ctx context.Context, query, agentID stri
 }
 
 func (s *PGRawMessageChunkStore) ftsSearch(ctx context.Context, query string, agentID uuid.UUID, opts store.RawMessageChunkSearchOptions, limit int) ([]scoredRawChunk, error) {
-	tc, tcArgs, _, err := scopeClause(ctx, 5)
-	if err != nil {
-		return nil, err
-	}
-
 	args := []any{query, agentID, query}
 	paramIdx := 4
 
@@ -180,6 +175,11 @@ func (s *PGRawMessageChunkStore) ftsSearch(ctx context.Context, query string, ag
 		extraWhere += fmt.Sprintf(" AND msg_time_to <= $%d", paramIdx)
 		args = append(args, *opts.ToTime)
 		paramIdx++
+	}
+
+	tc, tcArgs, _, err := scopeClause(ctx, paramIdx)
+	if err != nil {
+		return nil, err
 	}
 
 	limitN := paramIdx + len(tcArgs)
@@ -215,11 +215,6 @@ func (s *PGRawMessageChunkStore) ftsSearch(ctx context.Context, query string, ag
 func (s *PGRawMessageChunkStore) vectorSearch(ctx context.Context, embedding []float32, agentID uuid.UUID, opts store.RawMessageChunkSearchOptions, limit int) ([]scoredRawChunk, error) {
 	vecStr := vectorToString(embedding)
 
-	tc, tcArgs, _, err := scopeClause(ctx, 4)
-	if err != nil {
-		return nil, err
-	}
-
 	args := []any{vecStr, agentID}
 	paramIdx := 3
 
@@ -243,6 +238,11 @@ func (s *PGRawMessageChunkStore) vectorSearch(ctx context.Context, embedding []f
 		extraWhere += fmt.Sprintf(" AND msg_time_to <= $%d", paramIdx)
 		args = append(args, *opts.ToTime)
 		paramIdx++
+	}
+
+	tc, tcArgs, _, err := scopeClause(ctx, paramIdx)
+	if err != nil {
+		return nil, err
 	}
 
 	orderN := paramIdx + len(tcArgs)
