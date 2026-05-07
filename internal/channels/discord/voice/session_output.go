@@ -30,6 +30,7 @@ const (
 	// channel messages for an un-ended voice summary for the same voice channel.
 	sessionRecoveryMessageScanLimit = 25
 	sessionRecoveryThreadLineLimit  = 100
+	sessionRecoveryMaxTranscriptAge = 2 * time.Minute
 	summaryMessageMaxLen            = 1900
 
 	// Cap on REST calls we make for summary edits. Discord's per-channel
@@ -163,14 +164,30 @@ func (o *sessionOutput) recoverActive(ctx context.Context) bool {
 		if msg.Thread != nil && msg.Thread.ID != "" {
 			threadID = msg.Thread.ID
 		}
+		recovered := o.loadRecoveredTranscript(ctx, threadID)
+		if recovered.lastTranscriptAt.IsZero() || time.Since(recovered.lastTranscriptAt) > sessionRecoveryMaxTranscriptAge {
+			o.log.Info("voice: active session recovery skipped; last transcript is stale",
+				"summary_msg_id", msg.ID,
+				"thread_channel_id", threadID,
+				"last_transcript_at", recovered.lastTranscriptAt,
+				"max_age", sessionRecoveryMaxTranscriptAge,
+			)
+			continue
+		}
 		o.summaryMsgID = msg.ID
 		o.threadChannelID = threadID
 		o.startedAt = msg.Timestamp
 		if o.startedAt.IsZero() {
 			o.startedAt = time.Now()
 		}
+		o.transcriptLines = recovered.lines
+		o.utteranceCount = len(recovered.lines)
+		for _, line := range recovered.lines {
+			if name := speakerNameFromLine(line); name != "" {
+				o.noteSpeakerLocked("recovered:"+name, name)
+			}
+		}
 		o.recovered = true
-		o.loadRecoveredTranscript(ctx)
 		o.log.Info("voice: recovered active session output",
 			"summary_msg_id", o.summaryMsgID,
 			"thread_channel_id", o.threadChannelID,
@@ -190,15 +207,21 @@ func (o *sessionOutput) isRecoverableSummary(content string) bool {
 		strings.Contains(content, fmt.Sprintf("🎤 Voice session in %s", label))
 }
 
-func (o *sessionOutput) loadRecoveredTranscript(ctx context.Context) {
-	if o.threadChannelID == "" {
-		return
+type recoveredTranscript struct {
+	lines            []string
+	lastTranscriptAt time.Time
+}
+
+func (o *sessionOutput) loadRecoveredTranscript(ctx context.Context, threadChannelID string) recoveredTranscript {
+	if threadChannelID == "" {
+		return recoveredTranscript{}
 	}
-	msgs, err := o.session.ChannelMessages(o.threadChannelID, sessionRecoveryThreadLineLimit, "", "", "", discordgo.WithContext(ctx))
+	msgs, err := o.session.ChannelMessages(threadChannelID, sessionRecoveryThreadLineLimit, "", "", "", discordgo.WithContext(ctx))
 	if err != nil {
-		o.log.Debug("voice: recovered thread transcript scan failed", "err", err, "thread_channel_id", o.threadChannelID)
-		return
+		o.log.Debug("voice: recovered thread transcript scan failed", "err", err, "thread_channel_id", threadChannelID)
+		return recoveredTranscript{}
 	}
+	recovered := recoveredTranscript{lines: make([]string, 0, len(msgs))}
 	for i := len(msgs) - 1; i >= 0; i-- {
 		msg := msgs[i]
 		if msg == nil {
@@ -208,15 +231,15 @@ func (o *sessionOutput) loadRecoveredTranscript(ctx context.Context) {
 		if !looksLikeTranscriptLine(line) {
 			continue
 		}
-		if len(o.transcriptLines) >= transcriptCaptureMax {
+		if msg.Timestamp.After(recovered.lastTranscriptAt) {
+			recovered.lastTranscriptAt = msg.Timestamp
+		}
+		if len(recovered.lines) >= transcriptCaptureMax {
 			break
 		}
-		o.transcriptLines = append(o.transcriptLines, line)
-		o.utteranceCount++
-		if name := speakerNameFromLine(line); name != "" {
-			o.noteSpeakerLocked("recovered:"+name, name)
-		}
+		recovered.lines = append(recovered.lines, line)
 	}
+	return recovered
 }
 
 // PostLine posts a transcript line to the thread (or the parent transcript

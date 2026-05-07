@@ -107,7 +107,7 @@ func Test_newSessionOutput_thread_failure_falls_back_to_parent(t *testing.T) {
 }
 
 func Test_newSessionOutput_recovers_active_summary_and_thread(t *testing.T) {
-	now := time.Now().Add(-5 * time.Minute)
+	now := time.Now()
 	fs := &fakeSession{
 		channelMessagesFn: func(channelID string, limit int, _, _, _ string) ([]*discordgo.Message, error) {
 			switch channelID {
@@ -116,14 +116,14 @@ func Test_newSessionOutput_recovers_active_summary_and_thread(t *testing.T) {
 					{
 						ID:        "summary-old",
 						Content:   "🎤 Voice session in #test-channel — 1 speaker: Alice",
-						Timestamp: now,
+						Timestamp: now.Add(-5 * time.Minute),
 						Thread:    &discordgo.Channel{ID: "thread-old"},
 					},
 				}, nil
 			case "thread-old":
 				return []*discordgo.Message{
-					{Content: "Bob: newest line"},
-					{Content: "Alice: older line"},
+					{Content: "Bob: newest line", Timestamp: now.Add(-30 * time.Second)},
+					{Content: "Alice: older line", Timestamp: now.Add(-90 * time.Second)},
 				}, nil
 			default:
 				return nil, nil
@@ -150,6 +150,41 @@ func Test_newSessionOutput_recovers_active_summary_and_thread(t *testing.T) {
 	out.Close(context.Background(), time.Minute)
 	if !strings.Contains(fs.lastEditContent, "3 utterances") {
 		t.Fatalf("final summary should include recovered + new utterance count: %q", fs.lastEditContent)
+	}
+}
+
+func Test_newSessionOutput_ignores_stale_active_summary_when_recovering(t *testing.T) {
+	stale := time.Now().Add(-12 * time.Hour)
+	fs := &fakeSession{
+		channelMessagesFn: func(channelID string, _ int, _, _, _ string) ([]*discordgo.Message, error) {
+			switch channelID {
+			case "transcript-ch":
+				return []*discordgo.Message{
+					{
+						ID:        "summary-old",
+						Content:   "🎤 Voice session in #test-channel — 1 speaker: Alice",
+						Timestamp: stale,
+						Thread:    &discordgo.Channel{ID: "thread-old"},
+					},
+				}, nil
+			case "thread-old":
+				return []*discordgo.Message{
+					{Content: "Alice: stale line", Timestamp: stale},
+				}, nil
+			default:
+				return nil, nil
+			}
+		},
+	}
+	out := newSessionOutput(context.Background(), fs, "transcript-ch", "voice-ch", discardLogger(), nil)
+	if out.summaryMsgID == "summary-old" || out.threadChannelID == "thread-old" {
+		t.Fatalf("must not recover stale summary/thread: summary=%q thread=%q", out.summaryMsgID, out.threadChannelID)
+	}
+	if fs.channelSendCalls != 1 || fs.threadStartCalls != 1 {
+		t.Fatalf("expected fresh summary/thread after stale recovery candidate, sends=%d threads=%d", fs.channelSendCalls, fs.threadStartCalls)
+	}
+	if out.utteranceCount != 0 || len(out.transcriptLines) != 0 {
+		t.Fatalf("stale transcript lines must not carry into fresh session: count=%d lines=%d", out.utteranceCount, len(out.transcriptLines))
 	}
 }
 
