@@ -408,6 +408,11 @@ func (s *Server) SetTracesHandler(h *httpapi.TracesHandler) { s.handlers = appen
 // SetWakeHandler sets the external wake/trigger handler.
 func (s *Server) SetWakeHandler(h *httpapi.WakeHandler) { s.handlers = append(s.handlers, h) }
 
+// SetSyntheticInboundHandler sets the trusted internal synthetic inbound handler.
+func (s *Server) SetSyntheticInboundHandler(h *httpapi.SyntheticInboundHandler) {
+	s.handlers = append(s.handlers, h)
+}
+
 // SetJobsHandler sets the forge-Job progress + completion callback
 // handler (POST /v1/agents/jobs/{id}/{progress,complete}). Posted to
 // by stream-task running inside Job pods and the agent service's

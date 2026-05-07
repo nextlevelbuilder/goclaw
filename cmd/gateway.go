@@ -350,6 +350,7 @@ func runGateway() {
 	if postTurn != nil {
 		wakeH.SetPostTurnProcessor(postTurn)
 	}
+	syntheticInboundH := httpapi.NewSyntheticInboundHandler(msgBus)
 
 	// Wire all server.Set*Handler() calls via extracted helper.
 	deps.wireHTTPHandlersOnServer(
@@ -369,6 +370,7 @@ func runGateway() {
 			cron:             cronH,
 		},
 		wakeH,
+		syntheticInboundH,
 		mcpPool,
 		postTurn,
 		mediaStore,

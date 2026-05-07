@@ -38,6 +38,7 @@ type httpHandlers struct {
 func (d *gatewayDeps) wireHTTPHandlersOnServer(
 	h httpHandlers,
 	wakeH *httpapi.WakeHandler,
+	syntheticInboundH *httpapi.SyntheticInboundHandler,
 	mcpPool *mcpbridge.Pool,
 	postTurn tools.PostTurnProcessor,
 	mediaStore *media.Store,
@@ -56,6 +57,7 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 	}
 	// External wake/trigger API — wakeH was created by caller before invoking this method.
 	d.server.SetWakeHandler(wakeH)
+	d.server.SetSyntheticInboundHandler(syntheticInboundH)
 	if h.mcp != nil {
 		if mcpPool != nil {
 			h.mcp.SetPoolEvictor(mcpPool)
