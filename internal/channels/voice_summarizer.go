@@ -32,6 +32,12 @@ Guidelines:
 
 Stay under 1500 characters total.`
 
+// voiceSummaryNoToolGuard is appended even when a custom skill body replaces
+// the default prompt. Voice summaries call the provider directly, outside the
+// agent tool loop, so any tool-call markup in the model output would be posted
+// verbatim to Discord.
+const voiceSummaryNoToolGuard = `You do not have tools in this task. Do not call memory_search or any other tool. Do not emit XML, DSML, JSON tool calls, or tool-call markup. Return only the human-readable summary text.`
+
 // memoryContextHeader prefaces injected memory snippets in the system
 // prompt so the model knows it's looking at supplemental context, not
 // the transcript itself.
@@ -81,6 +87,7 @@ func BuildVoiceTranscriptSummarizer(cfg *VoiceTranscriptSummarizerConfig) func(c
 		}
 
 		augmented := systemPrompt
+		augmented = augmented + "\n\n" + voiceSummaryNoToolGuard
 		if cfg.MemoryStore != nil && cfg.MemoryAgentID != "" {
 			if ctxBlob := buildMemoryContext(ctx, cfg, t); ctxBlob != "" {
 				augmented = augmented + memoryContextHeader + "\n" + ctxBlob
@@ -106,10 +113,22 @@ func BuildVoiceTranscriptSummarizer(cfg *VoiceTranscriptSummarizerConfig) func(c
 		if err != nil {
 			return "", fmt.Errorf("voice summarizer chat: %w", err)
 		}
+		if resp == nil {
+			return "", errors.New("voice summarizer chat: nil response")
+		}
+		if responseHasToolCalls(resp) {
+			slog.Warn("voice summarizer: provider returned tool calls; falling back to stats line",
+				"finish_reason", resp.FinishReason, "tool_calls", len(resp.ToolCalls))
+			return "", nil
+		}
 
 		summary := strings.TrimSpace(resp.Content)
 		if summary == "" {
 			return "", nil // caller logs + falls back to stats line
+		}
+		if containsToolCallMarkup(summary) {
+			slog.Warn("voice summarizer: provider returned tool-call markup; falling back to stats line")
+			return "", nil
 		}
 
 		// Best-effort: write the new session summary to memory so the
@@ -125,6 +144,36 @@ func BuildVoiceTranscriptSummarizer(cfg *VoiceTranscriptSummarizerConfig) func(c
 
 		return summary, nil
 	}
+}
+
+func responseHasToolCalls(resp *providers.ChatResponse) bool {
+	if resp == nil {
+		return false
+	}
+	return resp.FinishReason == "tool_calls" || len(resp.ToolCalls) > 0
+}
+
+func containsToolCallMarkup(s string) bool {
+	if s == "" {
+		return false
+	}
+	lower := strings.ToLower(s)
+	markers := []string{
+		"<｜dsml｜tool_calls",
+		"<｜dsml｜invoke",
+		"</｜dsml｜tool_calls",
+		"<tool_calls",
+		"</tool_calls",
+		"<tool_call",
+		"</tool_call",
+		"\"tool_calls\"",
+	}
+	for _, marker := range markers {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 // buildMemoryContext queries the agent's memory for snippets relevant

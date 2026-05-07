@@ -15,10 +15,10 @@ import (
 // stubProvider records the last ChatRequest so tests can assert what
 // system prompt + options got sent.
 type stubProvider struct {
-	mu       sync.Mutex
-	lastReq  providers.ChatRequest
-	resp     *providers.ChatResponse
-	respErr  error
+	mu      sync.Mutex
+	lastReq providers.ChatRequest
+	resp    *providers.ChatResponse
+	respErr error
 }
 
 func (p *stubProvider) Name() string         { return "stub" }
@@ -93,6 +93,9 @@ func TestBuildVoiceTranscriptSummarizer_SkillBodyOverridesPrompt(t *testing.T) {
 	got := p.lastReq.Messages[0].Content
 	if !strings.HasPrefix(got, "Custom skill instructions") {
 		t.Errorf("skill body not used as prompt; got: %q", got)
+	}
+	if !strings.Contains(got, "Do not call memory_search") {
+		t.Errorf("non-negotiable no-tool guard missing from prompt: %q", got)
 	}
 }
 
@@ -180,5 +183,42 @@ func TestBuildVoiceTranscriptSummarizer_ProviderErrorPropagates(t *testing.T) {
 	_, err := fn(context.Background(), "alice: hi")
 	if err == nil || !strings.Contains(err.Error(), "boom") {
 		t.Errorf("expected wrapped err, got %v", err)
+	}
+}
+
+func TestBuildVoiceTranscriptSummarizer_ToolCallResponseFallsBackToStats(t *testing.T) {
+	p := &stubProvider{resp: &providers.ChatResponse{
+		FinishReason: "tool_calls",
+		ToolCalls:    []providers.ToolCall{{Name: "memory_search"}},
+	}}
+	fn := BuildVoiceTranscriptSummarizer(&VoiceTranscriptSummarizerConfig{
+		Provider: p,
+		Model:    "stub-model",
+	})
+	got, err := fn(context.Background(), "alice: hi")
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if got != "" {
+		t.Fatalf("tool-call response should be discarded so caller falls back to stats, got %q", got)
+	}
+}
+
+func TestBuildVoiceTranscriptSummarizer_DSMLToolMarkupFallsBackToStats(t *testing.T) {
+	p := &stubProvider{resp: &providers.ChatResponse{Content: `<｜DSML｜tool_calls>
+<｜DSML｜invoke name="memory_search">
+<｜DSML｜parameter name="query" string="true">gabe cartridge contributor</｜DSML｜parameter>
+</｜DSML｜invoke>
+</｜DSML｜tool_calls>`}}
+	fn := BuildVoiceTranscriptSummarizer(&VoiceTranscriptSummarizerConfig{
+		Provider: p,
+		Model:    "stub-model",
+	})
+	got, err := fn(context.Background(), "alice: hi")
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if got != "" {
+		t.Fatalf("DSML tool markup should be discarded so caller falls back to stats, got %q", got)
 	}
 }
