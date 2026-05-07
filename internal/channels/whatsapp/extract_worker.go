@@ -135,6 +135,13 @@ func processGroupBatch(ctx context.Context, deps ExtractionWorkerDeps, agentID, 
 	// Build full raw text (used for fallback path).
 	fullText := buildConversationTextFromRaw(msgs)
 	if fullText == "" {
+		// Media-only messages with no body text — nothing to extract.
+		// Mark as processed to avoid reprocessing every poll cycle.
+		ids := rawMsgIDs(msgs)
+		if err := deps.RawMsgStore.MarkProcessed(ctx, ids); err != nil {
+			slog.Warn("whatsapp extraction worker: failed to mark empty-body batch",
+				"agent_id", agentID, "graph_id", graphID, "error", err)
+		}
 		return
 	}
 
@@ -205,6 +212,15 @@ func processGroupBatch(ctx context.Context, deps ExtractionWorkerDeps, agentID, 
 	}
 
 	ingestAndFinalize(ctx, deps, result, agentID, graphID, msgs)
+}
+
+// rawMsgIDs extracts UUIDs from a slice of raw messages.
+func rawMsgIDs(msgs []store.ListenRawMessage) []uuid.UUID {
+	ids := make([]uuid.UUID, len(msgs))
+	for i, m := range msgs {
+		ids[i] = m.ID
+	}
+	return ids
 }
 
 // markMsgsFailed marks messages as failed with the given error for retry tracking.

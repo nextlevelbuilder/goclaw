@@ -56,6 +56,11 @@ func NewExtractorWithPrompt(provider providers.Provider, model string, minConfid
 
 const maxChunkChars = 12000
 
+const (
+	maxOutputTokens = 16384
+	maxRetries      = 3
+)
+
 // Extract calls the LLM to extract entities and relations from text.
 // For long texts, it splits into chunks, extracts from each, and merges results.
 func (e *Extractor) Extract(ctx context.Context, text string) (*ExtractionResult, error) {
@@ -132,7 +137,7 @@ func (e *Extractor) extractChunk(ctx context.Context, text string) (*ExtractionR
 		},
 		Model: e.model,
 		Options: map[string]any{
-			"max_tokens":  8192,
+			"max_tokens":  maxOutputTokens,
 			"temperature": 0.2,
 		},
 	}
@@ -158,20 +163,46 @@ func (e *Extractor) extractChunk(ctx context.Context, text string) (*ExtractionR
 		slog.Info("kg extraction: LLM response", "finish_reason", resp.FinishReason, "content_len", len(resp.Content), "response", respPreview)
 	}
 
-	// If response was truncated, retry with shorter input
+	// Handle truncated response: partial recovery then progressive retry
 	if resp.FinishReason == "length" {
-		slog.Warn("kg extraction: response truncated, retrying with shorter input")
-		const retryMaxChars = 8000
-		if len(text) > retryMaxChars {
-			text = text[:retryMaxChars] + "\n\n[...truncated]"
+		// Strategy 1: Attempt partial JSON recovery from truncated response
+		if partial, recoverErr := e.recoverPartial(resp.Content); recoverErr == nil && partial != nil && len(partial.Entities) > 0 {
+			slog.Warn("kg extraction: response truncated, recovered partial results",
+				"entities", len(partial.Entities), "relations", len(partial.Relations))
+			return e.filterAndNormalize(partial), nil
 		}
-		req.Messages[1].Content = text
-		resp, err = e.provider.Chat(ctx, req)
-		if err != nil {
-			return nil, fmt.Errorf("kg extraction LLM retry: %w", err)
+
+		// Strategy 2: Progressive retry with halved input
+		currentText := text
+		for attempt := 1; attempt <= maxRetries; attempt++ {
+			halfLen := len(currentText) / 2
+			if halfLen < 1000 {
+				break
+			}
+			currentText = currentText[:halfLen] + "\n\n[...truncated for retry]"
+			req.Messages[1].Content = currentText
+
+			slog.Warn("kg extraction: retrying with shorter input",
+				"attempt", attempt, "input_len", len(currentText))
+
+			resp, err = e.provider.Chat(ctx, req)
+			if err != nil {
+				return nil, fmt.Errorf("kg extraction LLM retry %d: %w", attempt, err)
+			}
+			if resp.FinishReason != "length" {
+				break
+			}
+			// Try partial recovery on retry response too
+			if partial, recoverErr := e.recoverPartial(resp.Content); recoverErr == nil && partial != nil && len(partial.Entities) > 0 {
+				slog.Warn("kg extraction: recovered partial results on retry",
+					"attempt", attempt, "entities", len(partial.Entities),
+					"relations", len(partial.Relations))
+				return e.filterAndNormalize(partial), nil
+			}
 		}
+
 		if resp.FinishReason == "length" {
-			return nil, fmt.Errorf("kg extraction: response still truncated after retry")
+			return nil, fmt.Errorf("kg extraction: response still truncated after %d retries", maxRetries)
 		}
 	}
 
@@ -203,14 +234,17 @@ func (e *Extractor) extractChunk(ctx context.Context, text string) (*ExtractionR
 		return nil, fmt.Errorf("parse extraction result: %w", err)
 	}
 
-	// Filter by confidence threshold and normalize
+	return e.filterAndNormalize(&result), nil
+}
+
+// filterAndNormalize filters entities/relations by confidence and normalizes fields.
+func (e *Extractor) filterAndNormalize(result *ExtractionResult) *ExtractionResult {
 	filtered := &ExtractionResult{}
 	for _, ent := range result.Entities {
 		if ent.Confidence >= e.minConfidence {
 			ent.ExternalID = strings.ToLower(strings.TrimSpace(ent.ExternalID))
 			ent.Name = strings.TrimSpace(ent.Name)
 			ent.EntityType = strings.ToLower(strings.TrimSpace(ent.EntityType))
-			// Parse RawEventTime (any type from LLM JSON) into EventTime.
 			if ent.EventTime == nil && ent.RawEventTime != nil {
 				if s, ok := ent.RawEventTime.(string); ok {
 					ent.EventTime = store.ParseFlexibleTime(s)
@@ -228,7 +262,145 @@ func (e *Extractor) extractChunk(ctx context.Context, text string) (*ExtractionR
 			filtered.Relations = append(filtered.Relations, rel)
 		}
 	}
-	return filtered, nil
+	return filtered
+}
+
+// recoverPartial attempts to parse a truncated LLM response by repairing the JSON.
+func (e *Extractor) recoverPartial(content string) (*ExtractionResult, error) {
+	content = strings.TrimSpace(content)
+	content = stripCodeBlock(content)
+	content = sanitizeJSON(content)
+
+	repaired := repairTruncatedJSON(content)
+	if repaired == "" {
+		return nil, fmt.Errorf("could not repair truncated JSON")
+	}
+
+	var result ExtractionResult
+	if err := json.Unmarshal([]byte(repaired), &result); err != nil {
+		return nil, fmt.Errorf("partial JSON parse failed: %w", err)
+	}
+	return &result, nil
+}
+
+// repairTruncatedJSON attempts to close truncated JSON structures so that
+// complete entities/relations before the cutoff can be parsed.
+func repairTruncatedJSON(s string) string {
+	if json.Valid([]byte(s)) {
+		return s
+	}
+	if len(s) == 0 || s[0] != '{' {
+		return ""
+	}
+
+	entIdx := strings.Index(s, `"entities"`)
+	if entIdx < 0 {
+		return ""
+	}
+	entArrStart := strings.Index(s[entIdx:], "[")
+	if entArrStart < 0 {
+		return ""
+	}
+	entArrStart += entIdx
+
+	// Phase 1: Walk entities array only (stop at closing ])
+	entContent, entEnd := findCompleteArrayElements(s, entArrStart)
+	if len(entContent) == 0 {
+		return `{"entities":[],"relations":[]}`
+	}
+
+	// Phase 2: Look for relations after entities section
+	relContent := ""
+	relSearchFrom := entEnd
+	relIdx := strings.Index(s[relSearchFrom:], `"relations"`)
+	if relIdx >= 0 {
+		relAbsIdx := relSearchFrom + relIdx
+		relArrStart := strings.Index(s[relAbsIdx:], "[")
+		if relArrStart >= 0 {
+			relArrStart += relAbsIdx
+			relContent, _ = findCompleteArrayElements(s, relArrStart)
+		}
+	}
+
+	var rebuilt strings.Builder
+	rebuilt.WriteString(`{"entities":[`)
+	rebuilt.WriteString(entContent)
+	rebuilt.WriteString(`],"relations":[`)
+	if relContent != "" {
+		rebuilt.WriteString(relContent)
+	}
+	rebuilt.WriteString(`]}`)
+
+	result := rebuilt.String()
+	if json.Valid([]byte(result)) {
+		return result
+	}
+	return ""
+}
+
+// findCompleteArrayElements walks a JSON array starting at arrOpenIdx (the '[' character)
+// and returns the content of all complete elements plus the index after the closing ']'.
+func findCompleteArrayElements(s string, arrOpenIdx int) (string, int) {
+	if arrOpenIdx >= len(s) || s[arrOpenIdx] != '[' {
+		return "", arrOpenIdx
+	}
+
+	depth := 0
+	lastCompleteEnd := -1
+	i := arrOpenIdx + 1
+	inString := false
+	escaped := false
+
+	for i < len(s) {
+		ch := s[i]
+
+		if escaped {
+			escaped = false
+			i++
+			continue
+		}
+		if ch == '\\' && inString {
+			escaped = true
+			i++
+			continue
+		}
+		if ch == '"' {
+			inString = !inString
+			i++
+			continue
+		}
+		if inString {
+			i++
+			continue
+		}
+
+		switch ch {
+		case '{', '[':
+			depth++
+		case '}', ']':
+			depth--
+			if depth < 0 {
+				// Array's closing ] found — stop
+				i++
+				if lastCompleteEnd < 0 {
+					return "", i
+				}
+				content := strings.TrimSpace(s[arrOpenIdx+1 : lastCompleteEnd+1])
+				return content, i
+			}
+			if depth == 0 {
+				lastCompleteEnd = i
+			}
+		}
+		i++
+	}
+
+	if lastCompleteEnd < 0 {
+		return "", arrOpenIdx
+	}
+
+	content := strings.TrimSpace(s[arrOpenIdx+1 : lastCompleteEnd+1])
+	return content, lastCompleteEnd + 1
 }
 
 // sanitizeJSON fixes common LLM JSON issues while preserving string values.
@@ -374,4 +546,3 @@ func stripCodeBlock(s string) string {
 	}
 	return strings.TrimSpace(s)
 }
-

@@ -392,3 +392,168 @@ func (m *countingMockProvider) ChatStream(_ context.Context, _ providers.ChatReq
 
 func (m *countingMockProvider) DefaultModel() string { return "counting-mock" }
 func (m *countingMockProvider) Name() string         { return "counting-mock" }
+
+// --- repairTruncatedJSON (tested in extractor_test.go) ---
+// --- recoverPartial ---
+
+func TestRecoverPartial_MidEntityTruncation(t *testing.T) {
+	truncated := `{"entities": [{"external_id": "alice", "name": "Alice", "entity_type": "person", "confidence": 0.9}, {"external_id": "bob", "na`
+	e := NewExtractor(&mockProvider{}, "m", 0.5)
+
+	result, err := e.recoverPartial(truncated)
+	if err != nil {
+		t.Fatalf("recoverPartial returned error: %v", err)
+	}
+	if len(result.Entities) != 1 {
+		t.Fatalf("expected 1 entity (alice), got %d", len(result.Entities))
+	}
+	if result.Entities[0].ExternalID != "alice" {
+		t.Errorf("expected alice, got %q", result.Entities[0].ExternalID)
+	}
+}
+
+func TestRecoverPartial_AfterEntitiesBeforeRelations(t *testing.T) {
+	truncated := `{"entities": [{"external_id": "alice", "name": "Alice", "confidence": 0.9}], "relations": [{"source_entity_id": "ali`
+	e := NewExtractor(&mockProvider{}, "m", 0.5)
+
+	result, err := e.recoverPartial(truncated)
+	if err != nil {
+		t.Fatalf("recoverPartial returned error: %v", err)
+	}
+	if len(result.Entities) != 1 {
+		t.Fatalf("expected 1 entity, got %d", len(result.Entities))
+	}
+	if len(result.Relations) != 0 {
+		t.Errorf("expected 0 relations, got %d", len(result.Relations))
+	}
+}
+
+func TestRecoverPartial_CompleteJSON(t *testing.T) {
+	complete := `{"entities": [{"external_id": "alice", "name": "Alice", "confidence": 0.9}], "relations": []}`
+	e := NewExtractor(&mockProvider{}, "m", 0.5)
+
+	result, err := e.recoverPartial(complete)
+	if err != nil {
+		t.Fatalf("recoverPartial returned error: %v", err)
+	}
+	if len(result.Entities) != 1 {
+		t.Fatalf("expected 1 entity, got %d", len(result.Entities))
+	}
+}
+
+// --- Extract with truncation recovery ---
+
+func TestExtract_TruncatedResponse_PartialRecovery(t *testing.T) {
+	// LLM returns truncated response with one complete entity
+	truncated := `{"entities": [{"external_id": "alice", "name": "Alice", "entity_type": "person", "confidence": 0.9}, {"external_id": "bob", "name": "Bo`
+	mock := &mockProvider{
+		response: providers.ChatResponse{
+			Content:      truncated,
+			FinishReason: "length",
+		},
+	}
+	e := NewExtractor(mock, "m", 0.8)
+
+	result, err := e.Extract(context.Background(), "Alice and Bob work together.")
+	if err != nil {
+		t.Fatalf("Extract returned error: %v", err)
+	}
+	if len(result.Entities) != 1 {
+		t.Fatalf("expected 1 entity (recovered alice), got %d", len(result.Entities))
+	}
+	if result.Entities[0].ExternalID != "alice" {
+		t.Errorf("expected alice, got %q", result.Entities[0].ExternalID)
+	}
+}
+
+func TestExtract_TruncatedResponse_ProgressiveRetrySucceeds(t *testing.T) {
+	callCount := 0
+	// First call: truncated, not recoverable
+	// Second call (retry 1): success
+	truncated := `{"entities": [{"ext`
+	success := `{"entities":[{"external_id":"alice","name":"Alice","entity_type":"person","confidence":0.9}],"relations":[]}`
+
+	mock := &callSequenceProvider{
+		responses: []providers.ChatResponse{
+			{Content: truncated, FinishReason: "length"},
+			{Content: success, FinishReason: "stop"},
+		},
+		onCall: func() { callCount++ },
+	}
+	e := NewExtractor(mock, "m", 0.8)
+
+	// Use long enough text to avoid being < 1000 chars after halving
+	longText := strings.Repeat("Alice works at Acme Corp on the big project. ", 200)
+
+	result, err := e.Extract(context.Background(), longText)
+	if err != nil {
+		t.Fatalf("Extract returned error: %v", err)
+	}
+	if len(result.Entities) != 1 {
+		t.Fatalf("expected 1 entity, got %d", len(result.Entities))
+	}
+	if callCount < 2 {
+		t.Errorf("expected at least 2 LLM calls (initial + retry), got %d", callCount)
+	}
+}
+
+func TestExtract_TruncatedResponse_AllRetriesFail(t *testing.T) {
+	truncated := `{"entities": [{"ext`
+	mock := &alwaysTruncatedProvider{
+		content: truncated,
+	}
+	e := NewExtractor(mock, "m", 0.8)
+
+	longText := strings.Repeat("Alice works at Acme Corp. ", 200)
+
+	_, err := e.Extract(context.Background(), longText)
+	if err == nil {
+		t.Fatal("expected error when all retries fail, got nil")
+	}
+	if !strings.Contains(err.Error(), "still truncated") {
+		t.Errorf("expected truncation error, got: %v", err)
+	}
+}
+
+// callSequenceProvider returns responses in sequence.
+type callSequenceProvider struct {
+	responses []providers.ChatResponse
+	index     int
+	onCall    func()
+}
+
+func (m *callSequenceProvider) Chat(_ context.Context, _ providers.ChatRequest) (*providers.ChatResponse, error) {
+	if m.onCall != nil {
+		m.onCall()
+	}
+	if m.index >= len(m.responses) {
+		r := m.responses[len(m.responses)-1]
+		return &r, nil
+	}
+	r := m.responses[m.index]
+	m.index++
+	return &r, nil
+}
+
+func (m *callSequenceProvider) ChatStream(_ context.Context, _ providers.ChatRequest, _ func(providers.StreamChunk)) (*providers.ChatResponse, error) {
+	return m.Chat(context.Background(), providers.ChatRequest{})
+}
+
+func (m *callSequenceProvider) DefaultModel() string { return "seq-mock" }
+func (m *callSequenceProvider) Name() string         { return "seq-mock" }
+
+// alwaysTruncatedProvider always returns truncated response.
+type alwaysTruncatedProvider struct {
+	content string
+}
+
+func (m *alwaysTruncatedProvider) Chat(_ context.Context, _ providers.ChatRequest) (*providers.ChatResponse, error) {
+	return &providers.ChatResponse{Content: m.content, FinishReason: "length"}, nil
+}
+
+func (m *alwaysTruncatedProvider) ChatStream(_ context.Context, _ providers.ChatRequest, _ func(providers.StreamChunk)) (*providers.ChatResponse, error) {
+	return m.Chat(context.Background(), providers.ChatRequest{})
+}
+
+func (m *alwaysTruncatedProvider) DefaultModel() string { return "trunc-mock" }
+func (m *alwaysTruncatedProvider) Name() string         { return "trunc-mock" }
