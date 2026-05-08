@@ -37,13 +37,22 @@ func enqueueAnnounce(key string, entry announceEntry) bool {
 
 // announceRouting holds the shared routing info captured by the first goroutine.
 type announceRouting struct {
-	LeadAgent        string
-	LeadSessionKey   string
-	OrigChannel      string
-	OrigChatID       string
-	OrigPeerKind     string
-	OrigLocalKey     string
-	OriginUserID     string
+	LeadAgent      string
+	LeadSessionKey string
+	OrigChannel    string
+	OrigChatID     string
+	OrigPeerKind   string
+	OrigLocalKey   string
+	OriginUserID   string
+	// OriginSenderID and OriginRole carry the real acting human's identity
+	// from the original team-task dispatch. Without them, the Lead's session
+	// resumes from this re-ingress with an empty SenderID, which then fails
+	// CheckFileWriterPermission / CheckCronPermission in group contexts
+	// ("system context cannot write files in group chats"). The subagent
+	// announce queue (subagentAnnounceRouting) already carries these fields
+	// — this keeps the team-task announce queue at parity. (#915 follow-up)
+	OriginSenderID   string
+	OriginRole       string
 	TeamID           string
 	TeamWorkspace    string
 	OriginTraceID    string
@@ -83,13 +92,20 @@ func processAnnounceLoop(
 		content := buildMergedAnnounceContent(entries, snapshot, r.TeamWorkspace)
 
 		req := agent.RunRequest{
-			SessionKey:       r.LeadSessionKey,
-			Message:          content,
-			Channel:          r.OrigChannel,
-			ChatID:           r.OrigChatID,
-			PeerKind:         r.OrigPeerKind,
-			LocalKey:         r.OrigLocalKey,
-			UserID:           r.OriginUserID,
+			SessionKey: r.LeadSessionKey,
+			Message:    content,
+			Channel:    r.OrigChannel,
+			ChatID:     r.OrigChatID,
+			PeerKind:   r.OrigPeerKind,
+			LocalKey:   r.OrigLocalKey,
+			UserID:     r.OriginUserID,
+			// SenderID + Role propagate the original human acting through this
+			// team-task announce. loop_context.injectContext gates WithSenderID
+			// on req.SenderID being non-empty, so missing them silently strips
+			// the Lead's identity on resume — and group-scoped permission
+			// checks then deny write_file etc. (#915 follow-up)
+			SenderID:         r.OriginSenderID,
+			Role:             r.OriginRole,
 			RunID:            fmt.Sprintf("teammate-announce-%s-%d", r.LeadAgent, len(entries)),
 			RunKind:          "announce",
 			HideInput:        true,
