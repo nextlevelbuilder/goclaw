@@ -10,10 +10,11 @@ import (
 // to avoid circular import; agent_test verifies they match).
 const CacheBoundaryMarker = "<!-- GOCLAW_CACHE_BOUNDARY -->"
 
-// splitSystemPromptForCache splits a system prompt at the cache boundary marker.
+// SplitSystemPromptForCache splits a system prompt at CacheBoundaryMarker.
 // Returns 2 blocks if boundary found: stable (with cache_control) + dynamic (without).
 // Returns 1 block with cache_control if no boundary (backwards compat).
-func splitSystemPromptForCache(content string) []map[string]any {
+// Used by both Anthropic and DashScope cache middleware (identical wire format).
+func SplitSystemPromptForCache(content string) []map[string]any {
 	ephemeral := map[string]any{"type": "ephemeral"}
 	before, after, ok := strings.Cut(content, CacheBoundaryMarker)
 	if !ok {
@@ -95,7 +96,7 @@ func (p *AnthropicProvider) buildRequestBody(model string, req ChatRequest, stre
 	for _, msg := range req.Messages {
 		switch msg.Role {
 		case "system":
-			systemBlocks = append(systemBlocks, splitSystemPromptForCache(msg.Content)...)
+			systemBlocks = append(systemBlocks, SplitSystemPromptForCache(msg.Content)...)
 
 		case "user":
 			if len(msg.Images) > 0 || len(msg.Videos) > 0 {

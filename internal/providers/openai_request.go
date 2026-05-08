@@ -159,6 +159,15 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 		msgs = append(msgs, msg)
 	}
 
+	// Apply DashScope cache_control wrapping (verified live 2026-05-08).
+	// Uses 3-source detection from p.isDashScope() (URL + providerType + name)
+	// to handle reverse-proxied endpoints. No-op for non-DashScope endpoints
+	// or when env disabled. For native OpenAI, role mapping above renames
+	// "system"→"developer" so wrap is a no-op (role guard).
+	if p.isDashScope() && !dashScopeCacheDisabled() && len(msgs) > 0 {
+		msgs[0] = wrapSystemForDashScopeCache(msgs[0])
+	}
+
 	// Safety net: strip trailing assistant message to prevent HTTP 400 from
 	// proxy providers (LiteLLM, OpenRouter) that don't support assistant prefill.
 	// This should rarely trigger — the agent loop ensures user message is last.
@@ -182,6 +191,19 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 			body["tool_choice"] = tc
 		} else {
 			body["tool_choice"] = "auto"
+		}
+	}
+
+	// DashScope tool prefix cache: cache_control on last tool definition
+	// caches the entire tools array (descriptions + schemas, ~5-10K tokens).
+	// Combined with system block cache: 2/4 markers used, 99.5% hit rate verified.
+	if p.isDashScope() && !dashScopeCacheDisabled() {
+		if t, ok := body["tools"].([]map[string]any); ok && len(t) > 0 {
+			markersFromSystem := 0
+			if len(msgs) > 0 {
+				markersFromSystem = countCacheControlMarkers(msgs[0])
+			}
+			body["tools"] = applyDashScopeToolPrefixCache(t, markersFromSystem)
 		}
 	}
 
