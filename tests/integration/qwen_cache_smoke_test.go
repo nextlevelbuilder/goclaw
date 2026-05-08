@@ -66,7 +66,7 @@ func TestQwenCacheSmoke(t *testing.T) {
 
 			// ~6K-token stable prefix, salted per run + per model so cache is fresh.
 			stableSys := fmt.Sprintf("You are an expert assistant for run=%s model=%s. ", salt, model) +
-				repeat("Provide thorough technically accurate answers about software engineering. Discuss architecture trade-offs performance security observability and maintenance. Cite design patterns and explain why they apply. ", 200) +
+				strings.Repeat("Provide thorough technically accurate answers about software engineering. Discuss architecture trade-offs performance security observability and maintenance. Cite design patterns and explain why they apply. ", 200) +
 				providers.CacheBoundaryMarker +
 				"\nDynamic suffix: " + time.Now().Format(time.RFC3339Nano)
 
@@ -147,11 +147,3 @@ func TestQwenCacheSmoke(t *testing.T) {
 	}
 }
 
-func repeat(s string, n int) string {
-	var b strings.Builder
-	b.Grow(len(s) * n)
-	for i := 0; i < n; i++ {
-		b.WriteString(s)
-	}
-	return b.String()
-}
