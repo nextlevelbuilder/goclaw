@@ -94,6 +94,15 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 			sessionMgr.Save(cronCtx, sessionKey)
 		}
 
+		// Replay the human creator's sender + role each time the job fires.
+		// Stamped at create time by cron tool handleAdd; without it,
+		// group-scope cron actions (write_file, cron mutations from inside
+		// the scheduled turn) fail group-context permission checks because
+		// UserID is the group scope, not a real human. Empty values
+		// (DM crons, system-installed crons) preserve prior behaviour.
+		creatorSenderID := job.Payload.CreatorSenderID
+		creatorRole := job.Payload.CreatorRole
+
 		// Schedule through cron lane — scheduler handles agent resolution and concurrency
 		outCh := sched.Schedule(cronCtx, scheduler.LaneCron, agent.RunRequest{
 			SessionKey:        sessionKey,
@@ -103,6 +112,8 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 			ChatID:            job.DeliverTo,
 			PeerKind:          peerKind,
 			UserID:            job.UserID,
+			SenderID:          creatorSenderID,
+			Role:              creatorRole,
 			RunID:             fmt.Sprintf("cron:%s", job.ID),
 			Stream:            false,
 			ExtraSystemPrompt: extraPrompt,

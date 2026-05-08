@@ -17,7 +17,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-func (s *SQLiteCronStore) AddJob(ctx context.Context, name string, schedule store.CronSchedule, message string, deliver bool, channel, to, agentID, userID string) (*store.CronJob, error) {
+func (s *SQLiteCronStore) AddJob(ctx context.Context, name string, schedule store.CronSchedule, message string, deliver bool, channel, to, agentID, userID, creatorSenderID, creatorRole string) (*store.CronJob, error) {
 	if schedule.TZ == "" && schedule.Kind == "cron" && s.defaultTZ != "" {
 		schedule.TZ = s.defaultTZ
 	}
@@ -28,7 +28,10 @@ func (s *SQLiteCronStore) AddJob(ctx context.Context, name string, schedule stor
 	}
 
 	payload := store.CronPayload{
-		Kind: "agent_turn", Message: message,
+		Kind:            "agent_turn",
+		Message:         message,
+		CreatorSenderID: creatorSenderID,
+		CreatorRole:     creatorRole,
 	}
 	payloadJSON, _ := json.Marshal(payload)
 

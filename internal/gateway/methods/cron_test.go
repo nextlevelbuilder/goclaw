@@ -31,16 +31,22 @@ func (s *stubCronStore) addJob(id, name, userID string) {
 }
 
 func (s *stubCronStore) AddJob(_ context.Context, name string, schedule store.CronSchedule, message string,
-	deliver bool, channel, to, agentID, userID string) (*store.CronJob, error) {
+	deliver bool, channel, to, agentID, userID, creatorSenderID, creatorRole string) (*store.CronJob, error) {
 	if s.addErr != nil {
 		return nil, s.addErr
 	}
 	job := &store.CronJob{
-		ID:      "new-job-id",
-		Name:    name,
-		UserID:  userID,
-		Enabled: true,
+		ID:       "new-job-id",
+		Name:     name,
+		UserID:   userID,
+		Enabled:  true,
 		Schedule: schedule,
+		Payload: store.CronPayload{
+			Kind:            "agent_turn",
+			Message:         message,
+			CreatorSenderID: creatorSenderID,
+			CreatorRole:     creatorRole,
+		},
 	}
 	s.addedJob = job
 	s.jobs[job.ID] = job

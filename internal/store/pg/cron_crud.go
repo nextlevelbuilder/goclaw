@@ -12,7 +12,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-func (s *PGCronStore) AddJob(ctx context.Context, name string, schedule store.CronSchedule, message string, deliver bool, channel, to, agentID, userID string) (*store.CronJob, error) {
+func (s *PGCronStore) AddJob(ctx context.Context, name string, schedule store.CronSchedule, message string, deliver bool, channel, to, agentID, userID, creatorSenderID, creatorRole string) (*store.CronJob, error) {
 	// Apply default timezone for cron expressions when not set per-job.
 	if schedule.TZ == "" && schedule.Kind == "cron" && s.defaultTZ != "" {
 		schedule.TZ = s.defaultTZ
@@ -24,7 +24,10 @@ func (s *PGCronStore) AddJob(ctx context.Context, name string, schedule store.Cr
 	}
 
 	payload := store.CronPayload{
-		Kind: "agent_turn", Message: message,
+		Kind:            "agent_turn",
+		Message:         message,
+		CreatorSenderID: creatorSenderID,
+		CreatorRole:     creatorRole,
 	}
 	payloadJSON, _ := json.Marshal(payload)
 

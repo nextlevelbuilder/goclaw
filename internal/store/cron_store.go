@@ -51,6 +51,19 @@ type CronPayload struct {
 	Kind    string `json:"kind" db:"-"`
 	Message string `json:"message" db:"-"`
 	Command string `json:"command,omitempty" db:"-"`
+
+	// CreatorSenderID + CreatorRole carry the identity of the human who
+	// scheduled this job. Stamped at create time, replayed as RunRequest
+	// SenderID/Role when the job fires. Without these, group-scope crons
+	// fail CheckFileWriterPermission / CheckCronPermission inside the
+	// scheduled agent's turn ("system context cannot ... in group chats")
+	// because UserID alone is the GROUP scope, not a real human.
+	//
+	// Empty is valid (DM crons, system-installed crons): the firing
+	// preserves existing behaviour and group-scope permission checks
+	// still deny if the agent attempts a gated mutation.
+	CreatorSenderID string `json:"creatorSenderId,omitempty" db:"-"`
+	CreatorRole     string `json:"creatorRole,omitempty" db:"-"`
 }
 
 // CronJobState tracks runtime state for a job.
@@ -108,7 +121,14 @@ type CronEvent struct {
 
 // CronStore manages scheduled jobs.
 type CronStore interface {
-	AddJob(ctx context.Context, name string, schedule CronSchedule, message string, deliver bool, channel, to, agentID, userID string) (*CronJob, error)
+	// AddJob creates a new scheduled job. creatorSenderID + creatorRole are
+	// optional and may be empty — they're stamped onto the job's Payload so
+	// that when the job fires, the agent run can attribute actions back to
+	// the human who scheduled the cron (passed as RunRequest.SenderID/Role).
+	// Without this attribution, group-scope crons fail group-scoped permission
+	// checks at fire time because UserID alone is the group scope, not a
+	// human. Empty values preserve pre-existing behaviour.
+	AddJob(ctx context.Context, name string, schedule CronSchedule, message string, deliver bool, channel, to, agentID, userID, creatorSenderID, creatorRole string) (*CronJob, error)
 	GetJob(ctx context.Context, jobID string) (*CronJob, bool)
 	ListJobs(ctx context.Context, includeDisabled bool, agentID, userID string) []CronJob
 	RemoveJob(ctx context.Context, jobID string) error

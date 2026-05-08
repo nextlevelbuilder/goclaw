@@ -89,7 +89,14 @@ func (m *CronMethods) handleCreate(ctx context.Context, client *gateway.Client, 
 		return
 	}
 
-	job, err := m.service.AddJob(ctx, params.Name, params.Schedule, params.Message, params.Deliver, params.DeliverChannel, params.DeliverTo, params.AgentID, client.UserID())
+	// Capture the creator's sender + role so the job's later runs can
+	// attribute group-scope actions back to a real human (file_writer +
+	// cron permission gates). For WS clients, we only have a UserID — there
+	// is no separate "Telegram numeric sender" upstream of this RPC, so
+	// these are typically empty here. WS-installed crons that need to
+	// fire in group chats should be created via a Telegram-rooted flow
+	// instead, where the cron tool's handleAdd captures sender from ctx.
+	job, err := m.service.AddJob(ctx, params.Name, params.Schedule, params.Message, params.Deliver, params.DeliverChannel, params.DeliverTo, params.AgentID, client.UserID(), "", "")
 	if err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, err.Error()))
 		return
