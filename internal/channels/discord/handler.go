@@ -226,9 +226,15 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 
 	// Send typing indicator with keepalive + TTL safety net.
 	// Discord typing expires after 10s, so keepalive every 9s.
-	// TTL auto-stops after 60s to prevent stuck indicators.
+	// TTL auto-stops to prevent stuck indicators when a run ends without a Send()
+	// (e.g. silent run.failed / run.cancelled).
+	suppressPlaceholder := c.config.SuppressPlaceholder != nil && *c.config.SuppressPlaceholder
+	typingTTL := defaultTypingTTL
+	if suppressPlaceholder {
+		typingTTL = suppressedPlaceholderTypingTTL
+	}
 	typingCtrl := typing.New(typing.Options{
-		MaxDuration:       60 * time.Second,
+		MaxDuration:       typingTTL,
 		KeepaliveInterval: 9 * time.Second,
 		StartFn: func() error {
 			return c.session.ChannelTyping(channelID)
@@ -241,12 +247,16 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 	c.typingCtrls.Store(channelID, typingCtrl)
 	typingCtrl.Start()
 
-	// Send placeholder "Thinking..." message.
+	// Send placeholder "Thinking..." message unless suppressed via config.
+	// When suppressed, the typing indicator alone signals progress until the
+	// final response is sent (as a new message, not an edit).
 	// Key by inbound message ID (not channel ID) to avoid race conditions
 	// when multiple messages arrive in the same channel concurrently.
-	placeholder, err := c.session.ChannelMessageSend(channelID, "Thinking...")
-	if err == nil {
-		c.placeholders.Store(m.ID, placeholder.ID)
+	if !suppressPlaceholder {
+		placeholder, err := c.session.ChannelMessageSend(channelID, "Thinking...")
+		if err == nil {
+			c.placeholders.Store(m.ID, placeholder.ID)
+		}
 	}
 
 	// Strip bot @mention from content — it's just the trigger, not meaningful.

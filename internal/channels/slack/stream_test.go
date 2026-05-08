@@ -62,6 +62,38 @@ func TestExtractChannelID(t *testing.T) {
 	}
 }
 
+func TestStreamEnabledSuppressPlaceholder(t *testing.T) {
+	ptrBool := func(b bool) *bool { return &b }
+
+	tests := []struct {
+		name                string
+		dmStream            *bool
+		groupStream         *bool
+		suppressPlaceholder *bool
+		isGroup             bool
+		want                bool
+	}{
+		{"dm stream on", ptrBool(true), nil, nil, false, true},
+		{"group stream on", nil, ptrBool(true), nil, true, true},
+		{"dm stream on, suppress on → off", ptrBool(true), nil, ptrBool(true), false, false},
+		{"group stream on, suppress on → off", nil, ptrBool(true), ptrBool(true), true, false},
+		{"suppress off → dm stream still on", ptrBool(true), nil, ptrBool(false), false, true},
+		{"both off", nil, nil, nil, false, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Channel{}
+			c.config.DMStream = tt.dmStream
+			c.config.GroupStream = tt.groupStream
+			c.config.SuppressPlaceholder = tt.suppressPlaceholder
+			if got := c.StreamEnabled(tt.isGroup); got != tt.want {
+				t.Errorf("StreamEnabled(isGroup=%v) = %v, want %v", tt.isGroup, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestExtractThreadTS(t *testing.T) {
 	tests := []struct {
 		name     string

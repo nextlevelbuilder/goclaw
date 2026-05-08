@@ -127,7 +127,23 @@ func New(cfg config.SlackConfig, msgBus *bus.MessageBus, pairingSvc store.Pairin
 	ch.SetPairingService(pairingSvc)
 	ch.SetGroupHistory(channels.MakeHistory(channels.TypeSlack, pendingStore, base.TenantID()))
 	ch.SetHistoryLimit(historyLimit)
+
+	if ch.placeholderSuppressed() {
+		dmStream := cfg.DMStream != nil && *cfg.DMStream
+		groupStream := cfg.GroupStream != nil && *cfg.GroupStream
+		if dmStream || groupStream {
+			slog.Warn("slack: suppress_placeholder is enabled; streaming edits require a placeholder and will be skipped",
+				"dm_stream", dmStream, "group_stream", groupStream)
+		}
+	}
+
 	return ch, nil
+}
+
+// placeholderSuppressed reports whether the channel is configured to skip the
+// "Thinking..." placeholder message and rely on reactions / no indicator only.
+func (c *Channel) placeholderSuppressed() bool {
+	return c.config.SuppressPlaceholder != nil && *c.config.SuppressPlaceholder
 }
 
 // Start opens the Socket Mode connection and begins receiving events.

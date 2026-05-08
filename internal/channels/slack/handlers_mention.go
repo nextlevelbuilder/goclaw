@@ -67,16 +67,19 @@ func (c *Channel) handleAppMention(ev *slackevents.AppMentionEvent) {
 		replyThreadTS = ev.TimeStamp
 	}
 
-	placeholderOpts := []slackapi.MsgOption{
-		slackapi.MsgOptionText("Thinking...", false),
-	}
-	if replyThreadTS != "" {
-		placeholderOpts = append(placeholderOpts, slackapi.MsgOptionTS(replyThreadTS))
-	}
+	// Send "Thinking..." placeholder unless suppressed via config.
+	if !c.placeholderSuppressed() {
+		placeholderOpts := []slackapi.MsgOption{
+			slackapi.MsgOptionText("Thinking...", false),
+		}
+		if replyThreadTS != "" {
+			placeholderOpts = append(placeholderOpts, slackapi.MsgOptionTS(replyThreadTS))
+		}
 
-	_, placeholderTS, err := c.api.PostMessage(channelID, placeholderOpts...)
-	if err == nil {
-		c.placeholders.Store(localKey, placeholderTS)
+		_, placeholderTS, err := c.api.PostMessage(channelID, placeholderOpts...)
+		if err == nil {
+			c.placeholders.Store(localKey, placeholderTS)
+		}
 	}
 
 	annotated := fmt.Sprintf("[From: %s]\n%s", displayName, content)

@@ -37,6 +37,15 @@ All notable changes to GoClaw are documented here. For full documentation, see [
 
 ### Improvements
 
+- **`suppress_placeholder` toggle for Discord and Slack.** New optional boolean
+  on each channel's config. When set, skips the "Thinking..." placeholder
+  message and its later edit-with-response. For Discord, the typing indicator
+  now covers the full agent turn (TTL raised to 30 min as a safety net) and
+  the final response posts as a new message. For Slack, streaming is
+  force-disabled (streaming edits the placeholder); the `thinking_face`
+  reaction from `reaction_level: minimal|full` acts as the in-progress signal.
+  Tradeoff: LLM retry notifications and tool-status updates (which ride on
+  placeholder edits) are silently dropped — that's the point of the toggle.
 - **Context pruning cleanup.** Removed redundant Pass 0 (per-result 30% guard),
   deduplicated double prune call per iteration, added SanitizeHistory to
   PruneStage for broken tool_use/tool_result pair cleanup.

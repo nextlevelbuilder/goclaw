@@ -487,7 +487,7 @@ The Discord channel uses the `discordgo` library to connect via the Discord Gate
 
 - **Gateway intents**: Requests `GuildMessages`, `DirectMessages`, and `MessageContent` intents
 - **Message limit**: 2,000-character limit with automatic splitting at newlines
-- **Placeholder editing**: Sends "Thinking..." → edits with actual response
+- **Placeholder editing**: Sends "Thinking..." → edits with actual response. Set `suppress_placeholder: true` to skip the placeholder; the typing indicator then runs for the full agent turn (TTL raised to 30 min as a safety net) and the final response is posted as a new message. Tradeoffs: LLM retry notifications and non-streaming tool-status updates are delivered by editing the placeholder, so both are silently dropped when suppressed — the typing indicator is the only in-progress signal.
 - **Mention gating**: `requireMention` default true; bot mention stripped from content
 - **Bot identity**: Fetches `@me` on startup to detect and ignore own messages
 - **Typing indicator**: 9-second keepalive while agent processes
@@ -505,7 +505,7 @@ The Slack channel uses the `slack-go/slack` library to connect via Socket Mode (
 - **Three token types**: `xoxb-` (Bot Token, required), `xapp-` (App-Level Token, required), `xoxp-` (User Token, optional for custom identity)
 - **Token prefix validation**: Tokens validated at startup (`xoxb-`, `xapp-`, `xoxp-` prefixes)
 - **Message limit**: 4,000-character limit with automatic splitting at newline boundaries
-- **Placeholder editing**: Sends "Thinking..." → edits with actual response (same as Discord)
+- **Placeholder editing**: Sends "Thinking..." → edits with actual response (same as Discord). Set `suppress_placeholder: true` to skip the placeholder entirely; the final response is posted as a new message and the thinking-face reaction (when `reaction_level` is set to `minimal` or `full` — off by default) acts as the in-progress indicator. Force-disables streaming since Slack streaming edits the placeholder, and silently drops LLM retry notifications and tool-status updates for the same reason.
 - **Mention gating**: `requireMention` default true; `<@botUserID>` stripped from content
 - **Thread participation cache**: After bot replies in a thread, subsequent messages in that thread auto-trigger response without @mention (24h TTL)
 - **Message dedup**: `channel+ts` key prevents duplicate processing on Socket Mode reconnect
