@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -292,7 +293,27 @@ func (t *CronTool) handleAdd(ctx context.Context, args map[string]any, agentID, 
 		agentID = explicit
 	}
 
-	job, err := t.cronStore.AddJob(ctx, name, schedule, message, deliver, channel, to, agentID, userID)
+	// Capture the human creator's sender + role at the moment of scheduling.
+	// These ride along on the job's payload and are replayed as the
+	// RunRequest's SenderID/Role each time the job fires (gateway_cron.go).
+	// Without them, group-scope cron mutations and write_file inside the
+	// scheduled agent's turn fail group-context permission checks because
+	// UserID alone is the group scope, not a real human.
+	//
+	// Synthetic senders (subagent:, teammate:, ticker:, ...) are deliberately
+	// dropped — we never want to attribute a future cron run to a system
+	// component. Empty creator → preserves prior behaviour.
+	creatorSenderID := store.SenderIDFromContext(ctx)
+	if isSyntheticSender := func(s string) bool {
+		return strings.HasPrefix(s, "system:") || strings.HasPrefix(s, "notification:") ||
+			strings.HasPrefix(s, "teammate:") || strings.HasPrefix(s, "ticker:") ||
+			strings.HasPrefix(s, "subagent:") || s == "session_send_tool"
+	}; isSyntheticSender(creatorSenderID) {
+		creatorSenderID = ""
+	}
+	creatorRole := store.RoleFromContext(ctx)
+
+	job, err := t.cronStore.AddJob(ctx, name, schedule, message, deliver, channel, to, agentID, userID, creatorSenderID, creatorRole)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("failed to create cron job: %v", err))
 	}
