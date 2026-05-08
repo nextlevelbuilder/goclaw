@@ -1,8 +1,14 @@
 package providers
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 )
 
 // OpenAIProvider implements Provider for OpenAI-compatible APIs
@@ -21,6 +27,10 @@ type OpenAIProvider struct {
 	retryConfig  RetryConfig
 	middlewares  RequestMiddleware // composed middleware chain (nil = no-op)
 	registry     ModelRegistry    // model resolution registry (nil = skip)
+
+	modelsMu    sync.Mutex
+	modelsCache []string
+	modelsCacheAt time.Time
 }
 
 func NewOpenAIProvider(name, apiKey, apiBase, defaultModel string) *OpenAIProvider {
@@ -140,4 +150,69 @@ func (p *OpenAIProvider) resolveModel(model string) string {
 		_ = p.registry.Resolve("openai", model)
 	}
 	return model
+}
+
+// ListModels fetches available model IDs from the upstream OpenAI-compatible
+// /models endpoint. Results are cached for 5 minutes to avoid repeated calls
+// from background workers. Returns an empty slice (not an error) if the
+// upstream doesn't support /models or the API key is missing.
+func (p *OpenAIProvider) ListModels(ctx context.Context) ([]string, error) {
+	p.modelsMu.Lock()
+	if len(p.modelsCache) > 0 && time.Since(p.modelsCacheAt) < 5*time.Minute {
+		out := append([]string(nil), p.modelsCache...)
+		p.modelsMu.Unlock()
+		return out, nil
+	}
+	p.modelsMu.Unlock()
+
+	if p.apiKey == "" {
+		return nil, nil
+	}
+
+	rctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(rctx, "GET", p.apiBase+"/models", nil)
+	if err != nil {
+		return nil, err
+	}
+	prefix := p.authPrefix
+	if prefix == "" {
+		prefix = "Bearer "
+	}
+	req.Header.Set("Authorization", prefix+p.apiKey)
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, fmt.Errorf("provider /models returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode /models: %w", err)
+	}
+
+	ids := make([]string, 0, len(result.Data))
+	for _, m := range result.Data {
+		if m.ID != "" {
+			ids = append(ids, m.ID)
+		}
+	}
+
+	p.modelsMu.Lock()
+	p.modelsCache = ids
+	p.modelsCacheAt = time.Now()
+	p.modelsMu.Unlock()
+
+	return ids, nil
 }
