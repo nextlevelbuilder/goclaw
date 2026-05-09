@@ -323,6 +323,7 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 		migrateBuiltinToolSettings(context.Background(), d.pgStores.BuiltinTools)
 		backfillWebFetchSettings(context.Background(), d.pgStores.BuiltinTools)
 		applyBuiltinToolDisables(context.Background(), d.pgStores.BuiltinTools, d.toolsReg)
+		disableIndividualSearchTools(d.toolsReg)
 	}
 }
 

@@ -395,6 +395,9 @@ func runGateway() {
 		mediaStore,
 	)
 
+		// Re-disable individual search tools (applyBuiltinToolDisables may have re-enabled them).
+	disableIndividualSearchTools(toolsReg)
+
 	// System backup API — admin + owner only, SSE progress streaming.
 	server.SetBackupHandler(httpapi.NewBackupHandler(cfg, cfg.Database.PostgresDSN, Version, permPE.IsOwner))
 

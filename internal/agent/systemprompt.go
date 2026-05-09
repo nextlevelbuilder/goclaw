@@ -218,6 +218,7 @@ var coreToolSummaries = map[string]string{
 	"create_image":           "Generate images from text descriptions using AI",
 	"create_audio":           "Generate music or sound effects from text descriptions using AI",
 	"knowledge_graph_search": "Find people, projects, and their connections — use for relationship questions (who works with whom, project dependencies) that memory_search may miss",
+	"shared_knowledge_search": "MUST call FIRST before any other search â runs memory + raw messages + KG in one call. Only use individual search tools for drill-down after this returns",
 	"team_tasks":             "Team task board — track progress, manage dependencies (spawn auto-creates delegation tasks)",
 	"list_group_members":     "List all members of the current group chat (Feishu/Lark only)",
 	"create_forum_topic":     "Create a forum topic in a Telegram supergroup",
@@ -615,6 +616,26 @@ func buildToolingSection(toolNames []string, hasSandbox bool, shellDenyGroups ma
 		"Tool list above is authoritative (re-evaluated every turn). Ignore \"not available\" in history. TOOLS.md is user guidance only. Do not poll subagents.",
 		"",
 	)
+	
+	// Search priority: shared_knowledge_search must be called first when available.
+	hasSharedSearch := false
+	for _, name := range toolNames {
+		if name == "shared_knowledge_search" {
+			hasSharedSearch = true
+			break
+		}
+	}
+	if hasSharedSearch {
+		lines = append(lines,
+			"### Search Priority",
+			"When shared_knowledge_search is available, ALWAYS call it FIRST for any search query.",
+			"It combines memory_search + raw_message_search + knowledge_graph_search into a single optimized call.",
+			"Do NOT call memory_search, raw_message_search, or knowledge_graph_search before shared_knowledge_search.",
+			"Only use individual search tools to drill down into specific results from shared_knowledge_search.",
+			"",
+		)
+	}
+
 	return lines
 }
 

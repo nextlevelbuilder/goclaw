@@ -97,6 +97,9 @@ func buildMemoryRecallSlimSection(hasMemoryExpand bool, sharedKGIDs []string) []
 		lines = append(lines,
 			fmt.Sprintf("Your knowledge graph scopes (%d): %s. Use the `scope` parameter in knowledge_graph_search to filter by a specific scope.",
 				len(sharedKGIDs), strings.Join(sharedKGIDs, ", ")))
+		lines = append(lines,
+			"ALWAYS use shared_knowledge_search FIRST for any search — it runs memory + raw messages + KG in one call. "+
+				"Do NOT call memory_search, raw_message_search, or knowledge_graph_search individually unless drilling down into a specific result from shared_knowledge_search.")
 	}
 	lines = append(lines, "")
 	return lines
@@ -305,6 +308,9 @@ func buildMemoryRecallSection(hasMemoryGet, hasMemoryExpand, hasKG bool, sharedK
 			lines = append(lines,
 				fmt.Sprintf("Your knowledge graph scopes (%d): %s. Use the `scope` parameter in knowledge_graph_search to filter by a specific scope.",
 					len(sharedKGIDs), strings.Join(sharedKGIDs, ", ")))
+			lines = append(lines,
+				"ALWAYS use shared_knowledge_search FIRST for any search — it runs memory + raw messages + KG in one call. "+
+					"Do NOT call memory_search, raw_message_search, or knowledge_graph_search individually unless drilling down into a specific result from shared_knowledge_search.")
 		}
 	}
 

@@ -409,6 +409,21 @@ func wireExtras(
 		slog.Info("knowledge graph tool wired (Postgres)")
 	}
 
+	// Wire shared_knowledge_search composed tool
+	if skst, ok := toolsReg.Get("shared_knowledge_search"); ok {
+		if t, ok := skst.(*tools.SharedKnowledgeSearchTool); ok {
+			if stores.RawMessageChunks != nil {
+				t.SetChunkStore(stores.RawMessageChunks)
+			}
+			if stores.KnowledgeGraph != nil {
+				t.SetKGStore(stores.KnowledgeGraph)
+			}
+			if stores.Memory != nil {
+				t.SetMemoryStore(stores.Memory)
+			}
+		}
+	}
+
 	// Wire vault tools and interceptors (conditional on vault store availability)
 	vaultIntc = wireVault(stores, toolsReg, workspace, domainBus)
 
@@ -594,6 +609,8 @@ func wireExtras(
 				return
 			}
 			applyBuiltinToolDisables(context.Background(), stores.BuiltinTools, toolsReg)
+			// Re-disable individual search tools if shared_knowledge_search is wired.
+			disableIndividualSearchTools(toolsReg)
 			agentRouter.InvalidateAll()
 		})
 	}

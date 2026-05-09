@@ -253,3 +253,18 @@ func applyBuiltinToolDisables(ctx context.Context, bts store.BuiltinToolStore, t
 		slog.Info("builtin tools updated", "disabled", disabledCount, "enabled", enabledCount)
 	}
 }
+
+// disableIndividualSearchTools disables knowledge_graph_search, memory_search,
+// and raw_message_search when shared_knowledge_search is wired. Must be called
+// AFTER applyBuiltinToolDisables which re-enables DB-enabled tools.
+func disableIndividualSearchTools(toolsReg *tools.Registry) {
+	if skst, ok := toolsReg.Get("shared_knowledge_search"); ok {
+		if t, ok := skst.(*tools.SharedKnowledgeSearchTool); ok {
+			if t.IsWired() {
+				toolsReg.Disable("knowledge_graph_search")
+				toolsReg.Disable("memory_search")
+				toolsReg.Disable("raw_message_search")
+			}
+		}
+	}
+}
