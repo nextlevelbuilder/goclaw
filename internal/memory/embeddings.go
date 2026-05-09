@@ -9,6 +9,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"sort"
 	"strings"
 )
 
@@ -122,6 +123,79 @@ func ChunkText(text string, maxChunkLen, overlap int) []TextChunk {
 	}
 
 	return chunks
+}
+
+// ChunkEvalStats holds statistics from analyzing raw message content.
+type ChunkEvalStats struct {
+	AvgBodyLen int // average body length in chars
+	MaxBodyLen int // max body length
+	P95BodyLen int // 95th percentile body length
+	TotalMsgs  int // count of messages analyzed
+}
+
+// EvaluateRawMessages analyzes message body texts and returns length statistics.
+// Used by EvaluateChunkParams to compute optimal chunk parameters.
+func EvaluateRawMessages(texts []string) ChunkEvalStats {
+	if len(texts) == 0 {
+		return ChunkEvalStats{}
+	}
+
+	lengths := make([]int, len(texts))
+	total := 0
+	maxLen := 0
+	for i, t := range texts {
+		l := len(t)
+		lengths[i] = l
+		total += l
+		if l > maxLen {
+			maxLen = l
+		}
+	}
+	sort.Ints(lengths)
+
+	p95Idx := len(lengths) * 95 / 100
+	if p95Idx >= len(lengths) {
+		p95Idx = len(lengths) - 1
+	}
+
+	return ChunkEvalStats{
+		AvgBodyLen: total / len(lengths),
+		MaxBodyLen: maxLen,
+		P95BodyLen: lengths[p95Idx],
+		TotalMsgs:  len(lengths),
+	}
+}
+
+// knownEmbeddingModels maps model name prefixes to max input tokens.
+var knownEmbeddingModels = map[string]struct{ MaxTokens int }{
+	"embeddinggemma":         {MaxTokens: 8192},
+	"text-embedding-3-small": {MaxTokens: 8191},
+	"text-embedding-3-large": {MaxTokens: 8191},
+	"text-embedding-ada-002": {MaxTokens: 8191},
+}
+
+const (
+	defaultEmbeddingMaxTokens = 8192
+	embeddingSafetyMargin     = 0.85
+	charsPerTokenLatin        = 4 // fixed for Indonesian/English (Latin script)
+	overlapRatio              = 0.20
+)
+
+// EvaluateChunkParams computes recommended maxChunkLen and chunkOverlap (in characters)
+// based on the embedding model's token limits and message content statistics.
+// Model is matched by prefix against knownEmbeddingModels; unknown models default to 8192 tokens.
+func EvaluateChunkParams(model string, stats ChunkEvalStats) (maxChunkLen, chunkOverlap int) {
+	maxTokens := defaultEmbeddingMaxTokens
+	for prefix, info := range knownEmbeddingModels {
+		if strings.HasPrefix(model, prefix) {
+			maxTokens = info.MaxTokens
+			break
+		}
+	}
+
+	maxChunkLen = int(float64(maxTokens) * embeddingSafetyMargin * charsPerTokenLatin)
+	chunkOverlap = maxChunkLen / 5
+	return maxChunkLen, chunkOverlap
 }
 
 // EmbeddingProvider generates vector embeddings for text.

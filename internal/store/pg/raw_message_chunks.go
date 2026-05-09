@@ -152,18 +152,23 @@ func (s *PGRawMessageChunkStore) Search(ctx context.Context, query, agentID stri
 }
 
 func (s *PGRawMessageChunkStore) ftsSearch(ctx context.Context, query string, agentID uuid.UUID, opts store.RawMessageChunkSearchOptions, limit int) ([]scoredRawChunk, error) {
-	args := []any{query, agentID, query}
+	// When GraphID is set (shared knowledge search), scope by graph_id instead of agent_id.
+	// Multiple agents can contribute chunks to the same graph.
+	var primaryCol string
+	var primaryVal any
+	if opts.GraphID != "" {
+		primaryCol, primaryVal = "graph_id", opts.GraphID
+	} else {
+		primaryCol, primaryVal = "agent_id", agentID
+	}
+
+	args := []any{query, primaryVal, query}
 	paramIdx := 4
 
 	var extraWhere string
 	if opts.ChatID != "" {
 		extraWhere += fmt.Sprintf(" AND chat_id = $%d", paramIdx)
 		args = append(args, opts.ChatID)
-		paramIdx++
-	}
-	if opts.GraphID != "" {
-		extraWhere += fmt.Sprintf(" AND graph_id = $%d", paramIdx)
-		args = append(args, opts.GraphID)
 		paramIdx++
 	}
 	if opts.FromTime != nil {
@@ -187,8 +192,8 @@ func (s *PGRawMessageChunkStore) ftsSearch(ctx context.Context, query string, ag
 			msg_time_from, msg_time_to, chunk_index, text, source_msg_ids,
 			ts_rank(tsv, plainto_tsquery('simple', $1)) AS score
 		FROM raw_message_chunks
-		WHERE agent_id = $2 AND tsv @@ plainto_tsquery('simple', $3)%s%s
-		ORDER BY score DESC LIMIT $%d`, extraWhere, tc, limitN)
+		WHERE %s = $2 AND tsv @@ plainto_tsquery('simple', $3)%s%s
+		ORDER BY score DESC LIMIT $%d`, primaryCol, extraWhere, tc, limitN)
 
 	args = append(args, tcArgs...)
 	args = append(args, limit)
@@ -215,18 +220,21 @@ func (s *PGRawMessageChunkStore) ftsSearch(ctx context.Context, query string, ag
 func (s *PGRawMessageChunkStore) vectorSearch(ctx context.Context, embedding []float32, agentID uuid.UUID, opts store.RawMessageChunkSearchOptions, limit int) ([]scoredRawChunk, error) {
 	vecStr := vectorToString(embedding)
 
-	args := []any{vecStr, agentID}
+	var primaryCol string
+	var primaryVal any
+	if opts.GraphID != "" {
+		primaryCol, primaryVal = "graph_id", opts.GraphID
+	} else {
+		primaryCol, primaryVal = "agent_id", agentID
+	}
+
+	args := []any{vecStr, primaryVal}
 	paramIdx := 3
 
 	var extraWhere string
 	if opts.ChatID != "" {
 		extraWhere += fmt.Sprintf(" AND chat_id = $%d", paramIdx)
 		args = append(args, opts.ChatID)
-		paramIdx++
-	}
-	if opts.GraphID != "" {
-		extraWhere += fmt.Sprintf(" AND graph_id = $%d", paramIdx)
-		args = append(args, opts.GraphID)
 		paramIdx++
 	}
 	if opts.FromTime != nil {
@@ -251,8 +259,8 @@ func (s *PGRawMessageChunkStore) vectorSearch(ctx context.Context, embedding []f
 			msg_time_from, msg_time_to, chunk_index, text, source_msg_ids,
 			1 - (embedding <=> $1::vector) AS score
 		FROM raw_message_chunks
-		WHERE agent_id = $2 AND embedding IS NOT NULL%s%s
-		ORDER BY embedding <=> $%d::vector LIMIT $%d`, extraWhere, tc, orderN, limitN)
+		WHERE %s = $2 AND embedding IS NOT NULL%s%s
+		ORDER BY embedding <=> $%d::vector LIMIT $%d`, primaryCol, extraWhere, tc, orderN, limitN)
 
 	args = append(args, tcArgs...)
 	args = append(args, vecStr, limit)

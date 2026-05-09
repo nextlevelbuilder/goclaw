@@ -165,10 +165,22 @@ func (t *SharedKnowledgeSearchTool) Execute(ctx context.Context, args map[string
 	rmCount := 0
 	var senders map[string]bool
 	if t.chunkStore != nil && scope != "" && rmBudget > 0 {
-		rmResults, err := t.chunkStore.Search(ctx, query, agentStr, store.RawMessageChunkSearchOptions{
+		// Extract date range from query to narrow search window
+		searchQuery := query
+		var searchOpts = store.RawMessageChunkSearchOptions{
 			GraphID:    scope,
 			MaxResults: rmBudget,
-		})
+		}
+		if dateRange := ExtractDateRange(query); dateRange != nil {
+			searchOpts.FromTime = &dateRange.From
+			searchOpts.ToTime = &dateRange.To
+			searchQuery = StripDateTokens(query)
+			if searchQuery == "" {
+				searchQuery = query
+			}
+		}
+
+		rmResults, err := t.chunkStore.Search(ctx, searchQuery, agentStr, searchOpts)
 		if err != nil {
 			slog.Warn("shared_knowledge.raw_message_search_failed", "error", err)
 		}
@@ -184,9 +196,6 @@ func (t *SharedKnowledgeSearchTool) Execute(ctx context.Context, args map[string
 				fmt.Fprintf(&b, "%d. [%s] %s in \"%s\"\n",
 					i+1, c.MsgTimeFrom.Format("2006-01-02 15:04"), c.Sender, c.ChatName)
 				text := c.Text
-				if len(text) > 500 {
-					text = text[:497] + "..."
-				}
 				fmt.Fprintf(&b, "   \"%s\"\n\n", text)
 
 				// Collect unique sender names for entity extraction

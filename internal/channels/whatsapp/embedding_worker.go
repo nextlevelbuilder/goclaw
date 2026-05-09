@@ -20,8 +20,6 @@ const (
 	defaultEmbeddingPollSec   = 30
 	embeddingMinPollSec       = 5
 	embeddingBatchSize        = 100
-	embeddingChunkSize        = 1000
-	embeddingChunkOverlap     = 200
 	embeddingEmbBatch         = 50
 	embeddingMaxConcurrent    = 3
 	embeddingBacklogThreshold = 100
@@ -33,6 +31,8 @@ type embeddingConfig struct {
 	defaultPollSec   int
 	minPollSec       int
 	backlogThreshold int
+	maxChunkLen      int // 0 = evaluate from messages + model
+	chunkOverlap     int // 0 = evaluate from messages + model
 }
 
 func defaultEmbeddingConfig() embeddingConfig {
@@ -77,6 +77,16 @@ func loadEmbeddingConfig(ctx context.Context, sysCfg store.SystemConfigStore) em
 	if v := configs["listen.embedding.backlog_threshold"]; v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			cfg.backlogThreshold = n
+		}
+	}
+	if v := configs["listen.embedding.chunk_size"]; v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.maxChunkLen = n
+		}
+	}
+	if v := configs["listen.embedding.chunk_overlap"]; v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.chunkOverlap = n
 		}
 	}
 	return cfg
@@ -132,7 +142,8 @@ func RegisterEmbeddingWorker(deps EmbeddingWorkerDeps) func() {
 
 	slog.Info("whatsapp embedding worker: started",
 		"poll_interval", fmt.Sprintf("%ds/%ds", basePollSec, embeddingMinPollSec),
-		"batch_size", embeddingBatchSize, "max_concurrent", embeddingMaxConcurrent)
+		"batch_size", embeddingBatchSize, "max_concurrent", embeddingMaxConcurrent,
+		"chunk_eval", "auto")
 	return func() { close(stopCh) }
 }
 
@@ -161,14 +172,14 @@ func processAllEmbeddingBatches(deps EmbeddingWorkerDeps, cfg embeddingConfig) {
 		go func(agentID, graphID string) {
 			defer wg.Done()
 			defer sem.Release(1)
-			processEmbeddingGroupBatch(ctx, deps, agentID, graphID, cfg.batchSize)
+			processEmbeddingGroupBatch(ctx, deps, agentID, graphID, cfg)
 		}(g.AgentID, g.GraphID)
 	}
 	wg.Wait()
 }
 
-func processEmbeddingGroupBatch(ctx context.Context, deps EmbeddingWorkerDeps, agentID, graphID string, batchSize int) {
-	msgs, err := deps.RawMsgStore.ListPendingEmbeddings(ctx, agentID, graphID, batchSize)
+func processEmbeddingGroupBatch(ctx context.Context, deps EmbeddingWorkerDeps, agentID, graphID string, cfg embeddingConfig) {
+	msgs, err := deps.RawMsgStore.ListPendingEmbeddings(ctx, agentID, graphID, cfg.batchSize)
 	if err != nil {
 		slog.Warn("whatsapp embedding worker: failed to list pending embeddings",
 			"agent_id", agentID, "graph_id", graphID, "error", err)
@@ -185,6 +196,28 @@ func processEmbeddingGroupBatch(ctx context.Context, deps EmbeddingWorkerDeps, a
 		return
 	}
 
+	// Resolve chunk params: system_configs override > evaluator from actual messages
+	maxChunkLen := cfg.maxChunkLen
+	chunkOverlap := cfg.chunkOverlap
+	if maxChunkLen == 0 || chunkOverlap == 0 {
+		bodies := make([]string, len(msgs))
+		for i, m := range msgs {
+			bodies[i] = m.Body
+		}
+		stats := memory.EvaluateRawMessages(bodies)
+		evalLen, evalOverlap := memory.EvaluateChunkParams(provider.Model(), stats)
+		if maxChunkLen == 0 {
+			maxChunkLen = evalLen
+		}
+		if chunkOverlap == 0 {
+			chunkOverlap = evalOverlap
+		}
+		slog.Debug("whatsapp embedding worker: evaluated chunk params",
+			"model", provider.Model(), "max_chunk_len", maxChunkLen,
+			"chunk_overlap", chunkOverlap, "msg_count", stats.TotalMsgs,
+			"avg_body_len", stats.AvgBodyLen, "p95_body_len", stats.P95BodyLen)
+	}
+
 	chatGroups := groupRawMsgsByChat(msgs)
 
 	var allChunks []store.RawMessageChunk
@@ -198,7 +231,7 @@ func processEmbeddingGroupBatch(ctx context.Context, deps EmbeddingWorkerDeps, a
 			continue
 		}
 
-		chunks := memory.ChunkText(chatText, embeddingChunkSize, embeddingChunkOverlap)
+		chunks := memory.ChunkText(chatText, maxChunkLen, chunkOverlap)
 		for ci, chunk := range chunks {
 			if strings.TrimSpace(chunk.Text) == "" {
 				continue

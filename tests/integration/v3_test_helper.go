@@ -127,6 +127,8 @@ func seedTenantAgent(t *testing.T, db *sql.DB) (tenantID, agentID uuid.UUID) {
 		db.Exec("DELETE FROM kg_dedup_candidates WHERE tenant_id = $1", tenantID)
 		db.Exec("DELETE FROM kg_relations WHERE tenant_id = $1", tenantID)
 		db.Exec("DELETE FROM kg_entities WHERE tenant_id = $1", tenantID)
+		db.Exec("DELETE FROM raw_message_chunks WHERE tenant_id = $1", tenantID)
+		db.Exec("DELETE FROM listen_raw_messages WHERE tenant_id = $1", tenantID)
 		db.Exec("DELETE FROM memory_chunks WHERE tenant_id = $1", tenantID)
 		db.Exec("DELETE FROM memory_documents WHERE tenant_id = $1", tenantID)
 
