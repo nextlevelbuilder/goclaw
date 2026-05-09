@@ -11,10 +11,9 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-// SharedKnowledgeSearchTool orchestrates a 4-step search flow when shared
-// knowledge graph is enabled. It resolves graph scope, searches memory,
-// searches raw messages scoped to the graph, and extracts entities from
-// raw message results into the knowledge graph.
+// SharedKnowledgeSearchTool orchestrates a two-phase search flow.
+// Phase 1 (initial): searches raw message embeddings across all configured graph scopes.
+// Phase 2 (drill-down via entity_id): traverses memory + knowledge graph.
 type SharedKnowledgeSearchTool struct {
 	chunkStore store.RawMessageChunkStore
 	kgStore    store.KnowledgeGraphStore
@@ -37,7 +36,6 @@ func (t *SharedKnowledgeSearchTool) SetMemoryStore(s store.MemoryStore) {
 	t.memStore = s
 }
 
-// IsWired returns true if at least one store dependency is injected.
 func (t *SharedKnowledgeSearchTool) IsWired() bool {
 	return t.chunkStore != nil || t.kgStore != nil || t.memStore != nil
 }
@@ -45,8 +43,8 @@ func (t *SharedKnowledgeSearchTool) IsWired() bool {
 func (t *SharedKnowledgeSearchTool) Name() string { return "shared_knowledge_search" }
 
 func (t *SharedKnowledgeSearchTool) Description() string {
-	return "Search shared knowledge: memory context + raw messages + knowledge graph entities in one call, scoped to your configured graph. " +
-		"Use entity_id to drill down into a specific entity's relationships (traversal)."
+	return "Search raw message embeddings across all configured graph scopes. " +
+		"Use entity_id to drill down into memory context + knowledge graph relationships for a specific entity."
 }
 
 func (t *SharedKnowledgeSearchTool) Parameters() map[string]any {
@@ -59,7 +57,7 @@ func (t *SharedKnowledgeSearchTool) Parameters() map[string]any {
 			},
 			"scope": map[string]any{
 				"type":        "string",
-				"description": "Explicit graph scope ID override. If omitted, uses the agent's configured shared knowledge scopes.",
+				"description": "Explicit graph scope ID override. If omitted, searches all configured shared knowledge scopes.",
 			},
 			"entity_id": map[string]any{
 				"type":        "string",
@@ -71,7 +69,7 @@ func (t *SharedKnowledgeSearchTool) Parameters() map[string]any {
 			},
 			"max_results": map[string]any{
 				"type":        "integer",
-				"description": "Maximum results per section (default 10).",
+				"description": "Maximum results per scope (default 10).",
 			},
 		},
 		"required": []string{"query"},
@@ -96,80 +94,40 @@ func (t *SharedKnowledgeSearchTool) Execute(ctx context.Context, args map[string
 		maxResults = min(mr, 50)
 	}
 
-	// Step 1: Resolve graph scope
-	scope, _ := args["scope"].(string)
-	if scope == "" {
-		sharedIDs := store.SharedKGIDsFromCtx(ctx)
-		if len(sharedIDs) > 0 {
-			scope = sharedIDs[0]
-		}
+	// Resolve graph scopes — search ALL configured graphs, not just the first.
+	explicitScope, _ := args["scope"].(string)
+	var scopes []string
+	if explicitScope != "" {
+		scopes = []string{explicitScope}
+	} else {
+		scopes = store.SharedKGIDsFromCtx(ctx)
 	}
 
-	if scope == "" && t.chunkStore == nil && t.memStore == nil && t.kgStore == nil {
+	if len(scopes) == 0 && t.chunkStore == nil && t.memStore == nil && t.kgStore == nil {
 		return NewResult("Shared knowledge search is not configured for this agent (no scopes and no stores available).")
 	}
 
-	// Drill-down mode: entity traversal
+	// Drill-down mode: entity traversal via memory + KG
 	entityID, _ := args["entity_id"].(string)
-	if entityID != "" && t.kgStore != nil {
-		return t.executeTraversal(ctx, agentStr, userID, entityID, query)
-	}
-
-	// Phase-aware budget split
-	var memBudget, rmBudget, kgBudget int
 	if entityID != "" {
-		// Drill-down: 50% memory, 10% raw, 40% KG
-		memBudget = max(1, maxResults*50/100)
-		rmBudget = max(1, maxResults*10/100)
-		kgBudget = max(1, maxResults*40/100)
-	} else {
-		// Initial: 20% memory, 80% raw, KG from senders only
-		memBudget = max(1, maxResults*20/100)
-		rmBudget = max(1, maxResults*80/100)
-		kgBudget = 0
+		if t.kgStore != nil {
+			return t.executeTraversal(ctx, agentStr, userID, entityID, query)
+		}
+		if t.memStore != nil {
+			return t.searchMemory(ctx, query, agentStr, maxResults)
+		}
+		return ErrorResult("no memory or KG store available for drill-down")
 	}
 
 	var b strings.Builder
 
-	// Step 2: Memory search
-	memCount := 0
-	if t.memStore != nil && memBudget > 0 {
-		memUserID := store.MemoryUserID(ctx)
-		memResults, err := t.memStore.Search(ctx, query, agentStr, memUserID, store.MemorySearchOptions{
-			MaxResults:   memBudget,
-			VectorWeight: 0.7,
-			TextWeight:   0.3,
-		})
-		if err != nil {
-			slog.Warn("shared_knowledge.memory_search_failed", "error", err)
-		}
-		if len(memResults) > 0 {
-			memCount = len(memResults)
-			fmt.Fprintf(&b, "## Memory Context (%d results)\n\n", memCount)
-			for i, r := range memResults {
-				if i >= maxResults {
-					break
-				}
-				snippet := r.Snippet
-				if len(snippet) > 300 {
-					snippet = snippet[:297] + "..."
-				}
-				fmt.Fprintf(&b, "- [%s] %s (score: %.3f)\n", r.Scope, r.Path, r.Score)
-				fmt.Fprintf(&b, "  %s\n", snippet)
-			}
-			b.WriteString("\n")
-		}
-	}
-
-	// Step 3: Raw message search scoped to graph_id
+	// Phase 1: Raw message search across all configured graph scopes
 	rmCount := 0
 	var senders map[string]bool
-	if t.chunkStore != nil && scope != "" && rmBudget > 0 {
-		// Extract date range from query to narrow search window
+	if t.chunkStore != nil && len(scopes) > 0 {
 		searchQuery := query
-		var searchOpts = store.RawMessageChunkSearchOptions{
-			GraphID:    scope,
-			MaxResults: rmBudget,
+		searchOpts := store.RawMessageChunkSearchOptions{
+			MaxResults: maxResults,
 		}
 		if dateRange := ExtractDateRange(query); dateRange != nil {
 			searchOpts.FromTime = &dateRange.From
@@ -180,25 +138,34 @@ func (t *SharedKnowledgeSearchTool) Execute(ctx context.Context, args map[string
 			}
 		}
 
-		rmResults, err := t.chunkStore.Search(ctx, searchQuery, agentStr, searchOpts)
-		if err != nil {
-			slog.Warn("shared_knowledge.raw_message_search_failed", "error", err)
-		}
-		if len(rmResults) > 0 {
-			senders = make(map[string]bool)
-			rmCount = len(rmResults)
-			fmt.Fprintf(&b, "## Raw Messages from scope %q (%d results)\n\n", scope, rmCount)
+		for _, scope := range scopes {
+			opts := searchOpts
+			opts.GraphID = scope
+
+			rmResults, err := t.chunkStore.Search(ctx, searchQuery, agentStr, opts)
+			if err != nil {
+				slog.Warn("shared_knowledge.raw_message_search_failed", "scope", scope, "error", err)
+				continue
+			}
+			if len(rmResults) == 0 {
+				continue
+			}
+
+			if senders == nil {
+				senders = make(map[string]bool)
+			}
+			rmCount += len(rmResults)
+			fmt.Fprintf(&b, "## Raw Messages from %q (%d results)\n\n", scope, len(rmResults))
 			for i, r := range rmResults {
 				if i >= maxResults {
 					break
 				}
 				c := r.Chunk
-				fmt.Fprintf(&b, "%d. [%s] %s in \"%s\"\n",
-					i+1, c.MsgTimeFrom.Format("2006-01-02 15:04"), c.Sender, c.ChatName)
-				text := c.Text
-				fmt.Fprintf(&b, "   \"%s\"\n\n", text)
+				fmt.Fprintf(&b, "%d. [%s → %s] %s in \"%s\"\n",
+					i+1, c.MsgTimeFrom.Format("2006-01-02 15:04"), c.MsgTimeTo.Format("2006-01-02 15:04"),
+					c.Sender, c.ChatName)
+				fmt.Fprintf(&b, "   \"%s\"\n\n", c.Text)
 
-				// Collect unique sender names for entity extraction
 				if c.Sender != "" {
 					senders[c.Sender] = true
 				}
@@ -206,15 +173,13 @@ func (t *SharedKnowledgeSearchTool) Execute(ctx context.Context, args map[string
 		}
 	}
 
-	// Step 4: Entity extraction from raw message senders
-	entityCount := 0
+	// Sender entity hints for drill-down
 	if t.kgStore != nil && len(senders) > 0 {
 		var entityLines []string
 		seen := make(map[string]bool)
 		for sender := range senders {
 			entities, err := t.kgStore.SearchEntities(ctx, agentStr, userID, sender, 3)
 			if err != nil {
-				slog.Debug("shared_knowledge.entity_search_failed", "sender", sender, "error", err)
 				continue
 			}
 			for _, e := range entities {
@@ -234,8 +199,7 @@ func (t *SharedKnowledgeSearchTool) Execute(ctx context.Context, args map[string
 			}
 		}
 		if len(entityLines) > 0 {
-			entityCount = len(entityLines)
-			fmt.Fprintf(&b, "## Related Entities (%d)\n\n", entityCount)
+			fmt.Fprintf(&b, "## Related Entities (%d)\n\n", len(entityLines))
 			for _, line := range entityLines {
 				fmt.Fprintf(&b, "%s\n", line)
 			}
@@ -243,42 +207,48 @@ func (t *SharedKnowledgeSearchTool) Execute(ctx context.Context, args map[string
 		}
 	}
 
-	// Also run KG search for the query itself (when no raw messages but KG available)
-	if t.kgStore != nil && kgBudget > 0 && rmCount == 0 && entityCount == 0 {
-		entities, err := t.kgStore.SearchEntities(ctx, agentStr, userID, query, kgBudget)
-		if err != nil {
-			slog.Debug("shared_knowledge.kg_search_failed", "error", err)
-		}
-		if len(entities) > 0 {
-			fmt.Fprintf(&b, "## Knowledge Graph Entities (%d)\n\n", len(entities))
-			for _, e := range entities {
-				fmt.Fprintf(&b, "- %s [%s] (id: %s)", e.Name, e.EntityType, e.ID)
-				if e.Description != "" {
-					desc := e.Description
-					if len(desc) > 150 {
-						desc = desc[:147] + "..."
-					}
-					fmt.Fprintf(&b, "\n  %s", desc)
-				}
-				fmt.Fprintln(&b)
-			}
-			b.WriteString("\n")
-		}
-	}
-
 	if b.Len() == 0 {
-		return NewResult(fmt.Sprintf("No results found for %q in shared knowledge (scope: %s).", query, scope))
+		return NewResult(fmt.Sprintf("No results found for %q across %d graph scope(s).", query, len(scopes)))
 	}
 
-	// Summary header
 	var header strings.Builder
-	fmt.Fprintf(&header, "Shared knowledge search for %q", query)
-	if scope != "" {
-		fmt.Fprintf(&header, " (scope: %s)", scope)
+	fmt.Fprintf(&header, "Raw message search for %q across %d scope(s)", query, len(scopes))
+	if len(scopes) <= 3 {
+		header.WriteString(" [" + strings.Join(scopes, ", ") + "]")
 	}
 	fmt.Fprintf(&header, ":\n\n")
 
 	return NewResult(header.String() + b.String())
+}
+
+// searchMemory searches memory store only (used for drill-down).
+func (t *SharedKnowledgeSearchTool) searchMemory(ctx context.Context, query, agentID string, maxResults int) *Result {
+	memUserID := store.MemoryUserID(ctx)
+	memResults, err := t.memStore.Search(ctx, query, agentID, memUserID, store.MemorySearchOptions{
+		MaxResults:   maxResults,
+		VectorWeight: 0.7,
+		TextWeight:   0.3,
+	})
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("memory search failed: %v", err))
+	}
+	if len(memResults) == 0 {
+		return NewResult("No memory results found.")
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "## Memory Context (%d results)\n\n", len(memResults))
+	for i, r := range memResults {
+		if i >= maxResults {
+			break
+		}
+		snippet := r.Snippet
+		if len(snippet) > 300 {
+			snippet = snippet[:297] + "..."
+		}
+		fmt.Fprintf(&b, "- [%s] %s (score: %.3f)\n", r.Scope, r.Path, r.Score)
+		fmt.Fprintf(&b, "  %s\n", snippet)
+	}
+	return NewResult(b.String())
 }
 
 // executeTraversal drills down into a specific entity's relationships.
@@ -301,7 +271,6 @@ func (t *SharedKnowledgeSearchTool) executeTraversal(ctx context.Context, agentI
 	}
 
 	maxDepth := 2
-	// depth parsed from args not available here; default 2
 
 	// Tier 1: deep traversal
 	results, err := t.kgStore.Traverse(ctx, agentID, userID, entityID, maxDepth)

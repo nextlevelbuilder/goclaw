@@ -188,11 +188,14 @@ func (s *PGRawMessageChunkStore) ftsSearch(ctx context.Context, query string, ag
 	}
 
 	limitN := paramIdx + len(tcArgs)
+	// Use OR logic for FTS: any token match contributes to score.
+	// plainto_tsquery produces AND-connected tokens; we convert to OR
+	// to avoid excluding chunks missing a single token.
 	q := fmt.Sprintf(`SELECT id, agent_id, graph_id, chat_id, chat_name, sender, sender_id,
 			msg_time_from, msg_time_to, chunk_index, text, source_msg_ids,
-			ts_rank(tsv, plainto_tsquery('simple', $1)) AS score
+			ts_rank(tsv, (SELECT replace(plainto_tsquery('simple', $1)::text, '&', '|')::tsquery)) AS score
 		FROM raw_message_chunks
-		WHERE %s = $2 AND tsv @@ plainto_tsquery('simple', $3)%s%s
+		WHERE %s = $2 AND tsv @@ (SELECT replace(plainto_tsquery('simple', $3)::text, '&', '|')::tsquery)%s%s
 		ORDER BY score DESC LIMIT $%d`, primaryCol, extraWhere, tc, limitN)
 
 	args = append(args, tcArgs...)

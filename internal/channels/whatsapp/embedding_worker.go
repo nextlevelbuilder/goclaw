@@ -226,40 +226,45 @@ func processEmbeddingGroupBatch(ctx context.Context, deps EmbeddingWorkerDeps, a
 
 	for _, chatID := range chatGroups.order {
 		chatMsgs := chatGroups.groups[chatID]
-		chatText := buildEmbeddingTextFromRaw(chatMsgs)
-		if strings.TrimSpace(chatText) == "" {
-			continue
-		}
+		dayGroups := groupRawMsgsByDay(chatMsgs)
 
-		chunks := memory.ChunkText(chatText, maxChunkLen, chunkOverlap)
-		for ci, chunk := range chunks {
-			if strings.TrimSpace(chunk.Text) == "" {
+		for _, dayKey := range dayGroups.order {
+			dayMsgs := dayGroups.groups[dayKey]
+			dayText := buildEmbeddingTextFromRaw(dayMsgs)
+			if strings.TrimSpace(dayText) == "" {
 				continue
 			}
 
-			timeFrom, timeTo := chunkTimeRange(chatMsgs)
-			senders := uniqueSenders(chatMsgs)
-			msgIDs := chunkSourceIDs(chatMsgs)
+			chunks := memory.ChunkText(dayText, maxChunkLen, chunkOverlap)
+			for ci, chunk := range chunks {
+				if strings.TrimSpace(chunk.Text) == "" {
+					continue
+				}
 
-			allChunks = append(allChunks, store.RawMessageChunk{
-				AgentID:      agentID,
-				GraphID:      graphID,
-				ChatID:       chatMsgs[0].ChatID,
-				ChatName:     chatMsgs[0].ChatName,
-				Sender:       senders,
-				SenderID:     chatMsgs[0].SenderID,
-				MsgTimeFrom:  timeFrom,
-				MsgTimeTo:    timeTo,
-				ChunkIndex:   ci,
-				Text:         chunk.Text,
-				ContentHash:  memory.ContentHash(chunk.Text),
-				SourceMsgIDs: msgIDs,
-			})
-			allTexts = append(allTexts, chunk.Text)
-		}
+				timeFrom, timeTo := chunkTimeRange(dayMsgs)
+				senders := uniqueSenders(dayMsgs)
+				msgIDs := chunkSourceIDs(dayMsgs)
 
-		for _, m := range chatMsgs {
-			processedIDs = append(processedIDs, m.ID)
+				allChunks = append(allChunks, store.RawMessageChunk{
+					AgentID:      agentID,
+					GraphID:      graphID,
+					ChatID:       chatMsgs[0].ChatID,
+					ChatName:     chatMsgs[0].ChatName,
+					Sender:       senders,
+					SenderID:     dayMsgs[0].SenderID,
+					MsgTimeFrom:  timeFrom,
+					MsgTimeTo:    timeTo,
+					ChunkIndex:   ci,
+					Text:         chunk.Text,
+					ContentHash:  memory.ContentHash(chunk.Text),
+					SourceMsgIDs: msgIDs,
+				})
+				allTexts = append(allTexts, chunk.Text)
+			}
+
+			for _, m := range dayMsgs {
+				processedIDs = append(processedIDs, m.ID)
+			}
 		}
 	}
 
@@ -329,6 +334,23 @@ func groupRawMsgsByChat(msgs []store.ListenRawMessage) chatGroupOrder {
 		cg.groups[m.ChatID] = append(cg.groups[m.ChatID], m)
 	}
 	return cg
+}
+
+type dayGroupOrder struct {
+	order  []string
+	groups map[string][]store.ListenRawMessage
+}
+
+func groupRawMsgsByDay(msgs []store.ListenRawMessage) dayGroupOrder {
+	dg := dayGroupOrder{groups: make(map[string][]store.ListenRawMessage)}
+	for _, m := range msgs {
+		dayKey := m.MsgTimestamp.Format("2006-01-02")
+		if _, ok := dg.groups[dayKey]; !ok {
+			dg.order = append(dg.order, dayKey)
+		}
+		dg.groups[dayKey] = append(dg.groups[dayKey], m)
+	}
+	return dg
 }
 
 func buildEmbeddingTextFromRaw(msgs []store.ListenRawMessage) string {
