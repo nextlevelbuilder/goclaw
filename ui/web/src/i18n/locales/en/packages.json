@@ -62,5 +62,17 @@
     "version": "Version",
     "actions": "Actions",
     "empty": "No packages installed"
+  },
+  "tabs": {
+    "system": "System",
+    "python": "Python",
+    "node": "Node",
+    "github": "GitHub",
+    "cliCredentials": "CLI Credentials"
+  },
+  "runtimesHeader": {
+    "title": "Runtimes",
+    "available": "Available",
+    "missing": "Missing"
   }
 }

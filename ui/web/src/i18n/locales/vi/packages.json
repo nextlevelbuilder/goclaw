@@ -62,5 +62,17 @@
     "version": "Phiên bản",
     "actions": "Thao tác",
     "empty": "Chưa có gói nào được cài"
+  },
+  "tabs": {
+    "system": "Hệ thống",
+    "python": "Python",
+    "node": "Node",
+    "github": "GitHub",
+    "cliCredentials": "Thông tin CLI"
+  },
+  "runtimesHeader": {
+    "title": "Runtimes",
+    "available": "Sẵn sàng",
+    "missing": "Chưa cài"
   }
 }

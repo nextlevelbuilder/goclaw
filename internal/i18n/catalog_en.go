@@ -224,6 +224,12 @@ func init() {
 		MsgHookPerTurnCapReached:       "hook invocation per-turn cap reached",
 		MsgHookBuiltinReadOnly:         "builtin hooks are read-only except for the enabled toggle",
 
+		// Grant env validation
+		MsgGrantEnvDeniedKeys:   "env keys not allowed: %s",
+		MsgGrantEnvValueInvalid: "invalid env value: %s",
+		MsgGrantEnvTooManyKeys:  "too many env keys: max 50",
+		MsgGrantEnvRevealLimit:  "rate limit exceeded for env reveal — try again later",
+
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 Forwarded to %s as requested: %q",
 	})

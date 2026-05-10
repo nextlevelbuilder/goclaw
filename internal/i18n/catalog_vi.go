@@ -224,6 +224,12 @@ func init() {
 		MsgHookPerTurnCapReached:       "đã đạt giới hạn số lần gọi hook trong một lượt",
 		MsgHookBuiltinReadOnly:         "hook dựng sẵn chỉ cho phép bật/tắt, không thể chỉnh sửa",
 
+		// Grant env validation
+		MsgGrantEnvDeniedKeys:   "các khóa env không được phép: %s",
+		MsgGrantEnvValueInvalid: "giá trị env không hợp lệ: %s",
+		MsgGrantEnvTooManyKeys:  "quá nhiều khóa env: tối đa 50",
+		MsgGrantEnvRevealLimit:  "đã vượt giới hạn yêu cầu xem env — vui lòng thử lại sau",
+
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 Đã forward sang %s theo yêu cầu: %q",
 	})

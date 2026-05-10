@@ -62,5 +62,17 @@
     "version": "版本",
     "actions": "操作",
     "empty": "暂无已安装的软件包"
+  },
+  "tabs": {
+    "system": "系统",
+    "python": "Python",
+    "node": "Node",
+    "github": "GitHub",
+    "cliCredentials": "CLI 凭证"
+  },
+  "runtimesHeader": {
+    "title": "运行时",
+    "available": "可用",
+    "missing": "缺失"
   }
 }

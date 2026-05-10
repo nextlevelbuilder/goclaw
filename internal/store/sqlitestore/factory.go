@@ -64,7 +64,7 @@ func NewSQLiteStores(cfg store.StoreConfig) (*store.Stores, error) {
 		SubagentTasks:   NewSQLiteSubagentTaskStore(db),
 		AgentLinks:      NewSQLiteAgentLinkStore(db),
 		SecureCLI:            secureCLI,
-		SecureCLIGrants:      NewSQLiteSecureCLIAgentGrantStore(db),
+		SecureCLIGrants:      NewSQLiteSecureCLIAgentGrantStore(db, cfg.EncryptionKey),
 		Episodic:             NewSQLiteEpisodicStore(db),
 		EvolutionMetrics:     NewSQLiteEvolutionMetricsStore(db),
 		EvolutionSuggestions: NewSQLiteEvolutionSuggestionStore(db),

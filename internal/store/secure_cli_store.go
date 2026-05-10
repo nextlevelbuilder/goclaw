@@ -8,6 +8,17 @@ import (
 	"github.com/google/uuid"
 )
 
+// AgentGrantSummary is the lightweight per-grant item returned in the List response.
+// It exposes env_set (bool: has override) but NEVER the encrypted bytes.
+type AgentGrantSummary struct {
+	GrantID  uuid.UUID `json:"grant_id"`
+	AgentID  uuid.UUID `json:"agent_id"`
+	AgentKey string    `json:"agent_key"`
+	Name     string    `json:"name"`
+	Enabled  bool      `json:"enabled"`
+	EnvSet   bool      `json:"env_set"` // true when encrypted_env IS NOT NULL — projection only, never the blob
+}
+
 // SecureCLIBinary represents a CLI binary with auto-injected credentials.
 // Credentials are encrypted at rest and injected into child processes via Direct Exec Mode.
 type SecureCLIBinary struct {
@@ -26,6 +37,8 @@ type SecureCLIBinary struct {
 	UserEnv        []byte          `json:"-" db:"-"` // per-user encrypted env (populated by LookupByBinary LEFT JOIN)
 	// EnvKeys is set by HTTP handlers only (names from decrypted env, no values); not a DB column.
 	EnvKeys []string `json:"env_keys,omitempty" db:"-"`
+	// AgentGrantsSummary is populated by List only — lightweight per-grant summary (no env bytes).
+	AgentGrantsSummary []AgentGrantSummary `json:"agent_grants_summary" db:"-"`
 }
 
 // MergeGrantOverrides applies agent grant overrides onto a binary config.
@@ -45,6 +58,10 @@ func (b *SecureCLIBinary) MergeGrantOverrides(g *SecureCLIAgentGrant) {
 	}
 	if g.Tips != nil {
 		b.Tips = *g.Tips
+	}
+	// Grant env fully replaces binary default env when non-empty.
+	if len(g.EncryptedEnv) > 0 {
+		b.EncryptedEnv = g.EncryptedEnv
 	}
 }
 
@@ -70,6 +87,13 @@ type SecureCLIAgentGrant struct {
 	TimeoutSeconds *int             `json:"timeout_seconds,omitempty" db:"timeout_seconds"`
 	Tips           *string          `json:"tips,omitempty" db:"tips"`
 	Enabled        bool             `json:"enabled" db:"enabled"`
+	// EncryptedEnv holds per-grant AES-256-GCM encrypted env vars. NULL means no override.
+	// Never serialized to API — HTTP layer exposes env_keys + env_set only.
+	EncryptedEnv   []byte           `json:"-" db:"encrypted_env"`
+	// EnvKeys is populated by HTTP handlers only (sorted key names, no values). Not a DB column.
+	EnvKeys        []string         `json:"env_keys,omitempty" db:"-"`
+	// EnvSet indicates whether this grant has an env override. Not a DB column.
+	EnvSet         bool             `json:"env_set" db:"-"`
 	CreatedAt      time.Time        `json:"created_at" db:"created_at"`
 	UpdatedAt      time.Time        `json:"updated_at" db:"updated_at"`
 }
@@ -119,4 +143,9 @@ type SecureCLIAgentGrantStore interface {
 	Delete(ctx context.Context, id uuid.UUID) error
 	ListByBinary(ctx context.Context, binaryID uuid.UUID) ([]SecureCLIAgentGrant, error)
 	ListByAgent(ctx context.Context, agentID uuid.UUID) ([]SecureCLIAgentGrant, error)
+
+	// UpdateGrantEnv sets the encrypted env override for a grant.
+	// encryptedEnv must be the plaintext JSON bytes — the store layer encrypts with AES-256-GCM.
+	// Pass nil to clear the env override. Fails closed if encryption key is missing.
+	UpdateGrantEnv(ctx context.Context, grantID uuid.UUID, plaintextEnv []byte) error
 }
