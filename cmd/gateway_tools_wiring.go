@@ -125,6 +125,16 @@ func wireExtraTools(
 			pa.AllowPaths(userAllowPaths...)
 		}
 	}
+	// exec working_dir validation shares the same allow-list as file tools so
+	// the agent can cd into a skill dir to run its scripts. Note: subagent
+	// ExecTool is constructed separately in buildSubagentToolsRegistry and
+	// does NOT inherit this — that's an intentional scope limit for now.
+	if execTool, ok := toolsReg.Get("exec"); ok {
+		if pa, ok := execTool.(tools.PathAllowable); ok {
+			pa.AllowPaths(skillsAllowPaths...)
+			pa.AllowPaths(userAllowPaths...)
+		}
+	}
 
 	// Memory tools are PG-backed; always available.
 	hasMemory = true

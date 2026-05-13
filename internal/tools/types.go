@@ -72,7 +72,9 @@ type ApprovalAware interface {
 	SetApprovalManager(*ExecApprovalManager, string)
 }
 
-// PathAllowable tools can allow extra path prefixes for read access.
+// PathAllowable tools can allow extra path prefixes beyond the workspace.
+// Each implementor interprets the prefixes against its own operation
+// (read/write/edit/list target, or exec working_dir).
 type PathAllowable interface {
 	AllowPaths(...string)
 }

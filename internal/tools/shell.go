@@ -39,6 +39,7 @@ type ExecTool struct {
 	pathDenyPatterns []*regexp.Regexp // always-on path-based denials (DenyPaths)
 	pathDenyRoots    []string         // raw deny roots for nested workspace exemptions
 	denyExemptions   []string         // substrings that exempt a command from deny
+	allowedPrefixes  []string         // extra path prefixes allowed as working_dir (AllowPaths)
 	restrict         bool
 	sandboxMgr       sandbox.Manager      // nil = no sandbox, execute on host
 	approvalMgr      *ExecApprovalManager // nil = no approval needed
@@ -125,6 +126,15 @@ func (t *ExecTool) DenyPaths(paths ...string) {
 // are exempt because the argument ".goclaw/skills-store/tool.py" starts with the prefix.
 func (t *ExecTool) AllowPathExemptions(prefixes ...string) {
 	t.denyExemptions = append(t.denyExemptions, prefixes...)
+}
+
+// AllowPaths adds path prefixes that exec is allowed to use as working_dir,
+// even when restrict_to_workspace is true (e.g. skills directories).
+// Implements the PathAllowable interface for uniform wiring with file tools.
+// Distinct from AllowPathExemptions, which exempts command arguments from
+// deny pattern matching.
+func (t *ExecTool) AllowPaths(prefixes ...string) {
+	t.allowedPrefixes = append(t.allowedPrefixes, prefixes...)
 }
 
 // normalizeCommand applies NFKC Unicode normalization and strips zero-width
@@ -372,7 +382,9 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 			// stricter write-allowed prefixes (team root excluded) to block
 			// cross-chat cwd even for "read-only" commands like cat, since we
 			// cannot prove the shell command will not write.
-			allowed := allowedWriteWithTeamWorkspace(ctx, nil)
+			// Base prefixes come from AllowPaths (skills-store, user-configured
+			// allow_paths) so the agent can cd into skill dirs to run scripts.
+			allowed := allowedWriteWithTeamWorkspace(ctx, t.allowedPrefixes)
 			resolved, err := resolvePathWithAllowed(wd, wsBase, true, allowed)
 			if err != nil {
 				return ErrorResult(err.Error())

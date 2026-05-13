@@ -394,7 +394,10 @@ func resolvePathWithAllowed(path, workspace string, restrict bool, allowedPrefix
 			return real, nil
 		}
 	}
-	slog.Warn("read_file: access denied", "path", cleaned, "workspace", workspace, "allowedPrefixes", allowedPrefixes)
+	// Caller-neutral message: this function is shared by read_file, list_files,
+	// read_image, send_file, and exec (working_dir validation). The tool name
+	// is surfaced via the surrounding tool_call_update event.
+	slog.Warn("path access denied", "path", cleaned, "workspace", workspace, "allowedPrefixes", allowedPrefixes)
 	return "", err
 }
 
