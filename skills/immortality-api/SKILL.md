@@ -99,8 +99,17 @@ Stamp returned URL into the doc's `image` field.
 7. **Upload image** if any (POST /api/upload-from-url).
 8. **Create** (POST /api/<collection>). On 409 sourceRef_exists → PATCH instead.
 9. **Self-verify**: WebFetch public page. Confirm title renders, body shows, no raw markdown garbage.
-10. **Report** to user:
-    > Đã đăng dạng **<Article|Khai Trí>**: "<title>". ID: <id>. Status: draft. Anh duyệt trong admin: https://battudao.com/admin
+10. **Report** to user — use `publicUrl` from API response (do NOT guess URL):
+    > Đã đăng dạng **<Article|Khai Trí>**: "<title>".
+    > ID: <id>. Status: draft.
+    > Public preview: <publicUrl from response>
+    > Admin duyệt: https://battudao.com/admin
+
+**URL convention** (do NOT guess):
+- Article detail: `/article/<viSlug>` — viSlug is auto-generated from vi.title by the API. The response includes `publicUrl` field. Use that.
+- Article list: `/articles` (plural)
+- Khai Trí detail: `/khaitri/<order2digit>-<viSlug>` — pattern same as articles
+- NEVER use sourceRef in the URL — it's an internal idempotency key, not a slug.
 
 ## Workflow — edit existing entry
 
@@ -118,15 +127,50 @@ This is step 2 of the multi-mod chain: **content mod posts draft first, illustra
 
 Trigger: orchestrator (Gia Hân) sends task with `{ articleId, imageUrl, slug }` after user approved the illustration preview.
 
-1. **Receive task** with article id + approved image URL (typically Telegram or other temporary URL).
-2. **Upload to R2** (gives permanent URL):
+**Image source — 2 paths (pick by what orchestrator passes):**
+
+| Input shape | Endpoint to use | When |
+|---|---|---|
+| `imageUrl` is a public http(s) URL (Telegram CDN, picsum, etc.) | `POST /api/upload-from-url` — server fetches the URL → R2 | Illustrator returned a Telegram URL or external URL |
+| `imagePath` is a local workspace file (e.g. `/app/workspace/<agent>/generated/<date>/<slug>.png` from `create_image` tool) | `POST /api/upload-file` — raw bytes in body | Illustrator's `create_image` saved locally and no Telegram URL is available |
+
+Mod must NOT try to:
+- ❌ Convert local file to `data:` URL and POST to `/api/upload-from-url` — SSRF guard blocks `data:` schemes (returns 400 `public_url_required`). And data-URL base64 inflates payload → 413.
+- ❌ Wait for files to be copied between agent workspaces — use `/api/upload-file` instead.
+
+Mod MUST:
+- ✅ If `imageUrl` (public): pass to `/api/upload-from-url` body `{ url, intent, slug }`.
+- ✅ If `imagePath` (local): read file bytes → `POST /api/upload-file` with `Content-Type: image/<type>`, `X-Intent: article|khaitri`, `X-Slug: <slug>`, body = raw bytes.
+- ✅ Either path returns the permanent R2 URL → use that to PATCH `article.image`.
+
+**Workflow:**
+
+1. **Receive task** with article id + either `imageUrl` (public URL) or `imagePath` (local file).
+2. **Upload to R2** — pick path A or B:
+
+   **A. Public URL** (`/api/upload-from-url`):
    ```bash
-   curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-     -d '{"url":"<approved telegram url>","intent":"article","slug":"<slug>"}' \
-     https://battudao.com/api/upload-from-url
-   # → { url: "https://pub-xxx.r2.dev/immortality-vn/articles/<slug>-<ts>.jpg" }
+   echo '{"url":"<public url>","intent":"article","slug":"<slug>"}' \
+     | node /app/data/skills-store/immortality-api/1/scripts/articles.mjs upload-image
+   # → { ok: true, url: "https://pub-xxx.r2.dev/immortality-vn/articles/<slug>-<ts>.jpg" }
    ```
-3. **PATCH article**:
+
+   **B. Local file** (`/api/upload-file` — raw bytes):
+   ```bash
+   curl -X POST -H "Authorization: Bearer $TOKEN" \
+     -H "Content-Type: image/png" \
+     -H "X-Intent: article" -H "X-Slug: <slug>" \
+     --data-binary @/app/workspace/<agent>/generated/<date>/<file>.png \
+     https://battudao.com/api/upload-file
+   # → { ok: true, url: "https://pub-xxx.r2.dev/immortality-vn/articles/<slug>-<ts>.png" }
+   ```
+   Adjust `Content-Type` per actual file mime: `image/jpeg` / `image/webp` / `image/gif`.
+3. **PATCH article** with R2 URL:
+   ```bash
+   echo '{"image":"<r2 url from step 2>"}' \
+     | node /app/data/skills-store/immortality-api/1/scripts/articles.mjs update <articleId>
+   ```
+   Or via curl:
    ```bash
    curl -X PATCH -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
      -d '{"image":"<r2 url from step 2>"}' \
@@ -159,6 +203,30 @@ Two-step publish flow when user wants illustrated article:
 ```
 
 This skill does NOT call sibling agents — orchestrator handles dispatching. This skill only owns the API write path.
+
+## Final announce — LUÔN include link
+
+Khi báo cáo cuối cho orchestrator (Gia Hân) hoặc user, **bắt buộc** include trong content message (KHÔNG chỉ trong `team_tasks.result`):
+
+```
+✅ Đăng xong (draft) — <title>
+ID: <id>
+Public preview: <publicUrl từ API response>
+Admin duyệt: https://battudao.com/admin
+```
+
+Lý do: announce content là cái orchestrator forward cho user. Nếu chỉ ghi link vào `result` column, orchestrator không biết để forward → user không thấy link → phải hỏi lại "sao ko gửi link".
+
+## Task lifecycle — báo cáo đúng status
+
+Khi chạy trong task context (được dispatch bởi Gia Hân / orchestrator):
+
+- **API trả 2xx + self-verify pass** → mark task `completed`, report success.
+- **API trả non-2xx KHÔNG phải 409** (e.g. 500, 502, 422 sau khi đã fix payload, network timeout) → mark task `failed` với reason cụ thể. **KHÔNG mark `completed`** vì goal "đăng được lên API" chưa đạt.
+- **API trả 409 sourceRef_exists** → switch sang PATCH (idempotent retry), không phải failure.
+- **Validate `/api/<collection>/validate` trả `errors[]`** → fix payload + retry. Nếu retry max-out → mark task `failed`.
+
+Quy tắc: status task phải khớp với outcome thật sự của goal, không phải "agent run đã kết thúc". Mark `completed` khi action fail = lừa orchestrator → user mất khả năng retry vì rule chỉ retry status `failed/stale/cancelled/in_review`.
 
 ## TUYỆT ĐỐI KHÔNG
 
