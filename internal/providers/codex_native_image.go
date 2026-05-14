@@ -56,18 +56,44 @@ func (p *CodexProvider) GenerateImage(ctx context.Context, req NativeImageReques
 // The Responses API rejects non-streaming requests with HTTP 400 "Stream must be set to true",
 // so stream is always true. Final assembly happens in parseNativeImageSSE which scans the
 // event stream for response.output_item.done (image item) or response.completed output walk.
+//
+// When req.InputImages is non-empty, the user turn is built as a multipart array
+// (input_image parts followed by the input_text prompt) so the model receives the
+// references as visual context for image-to-image editing.
 func (p *CodexProvider) buildNativeImageRequestBody(model string, req NativeImageRequest) map[string]any {
+	content := make([]map[string]any, 0, len(req.InputImages)+1)
+	for _, img := range req.InputImages {
+		if len(img.Data) == 0 {
+			continue
+		}
+		mime := img.MimeType
+		if mime == "" {
+			mime = "image/png"
+		}
+		content = append(content, map[string]any{
+			"type":      "input_image",
+			"image_url": fmt.Sprintf("data:%s;base64,%s", mime, base64.StdEncoding.EncodeToString(img.Data)),
+		})
+	}
+	content = append(content, map[string]any{
+		"type": "input_text",
+		"text": req.Prompt,
+	})
+
+	instructions := "Generate an image matching the user's description using the image_generation tool. Return only the image; do not describe it in text."
+	if len(req.InputImages) > 0 {
+		instructions = "The user has provided reference image(s) and a description. Use the image_generation tool to produce a single new image guided by both. Return only the image; do not describe it in text."
+	}
+
 	return map[string]any{
 		"model":        model,
 		"stream":       true,
 		"store":        false,
-		"instructions": "Generate an image matching the user's description using the image_generation tool. Return only the image; do not describe it in text.",
+		"instructions": instructions,
 		"input": []any{
 			map[string]any{
-				"role": "user",
-				"content": []map[string]any{
-					{"type": "input_text", "text": req.Prompt},
-				},
+				"role":    "user",
+				"content": content,
 			},
 		},
 		"tools": []map[string]any{

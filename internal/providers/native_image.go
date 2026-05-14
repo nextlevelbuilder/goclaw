@@ -39,6 +39,14 @@ func ValidateImageModel(model string) (string, error) {
 	return model, nil
 }
 
+// NativeImageInput is a reference image fed into image generation (image-to-image
+// editing — face swap, style transfer, composition). Decoded raw bytes; the
+// provider re-encodes as base64 data URL when assembling the request body.
+type NativeImageInput struct {
+	MimeType string // e.g. "image/png", "image/jpeg"
+	Data     []byte // raw decoded image bytes
+}
+
 // NativeImageRequest describes a single image generation request.
 type NativeImageRequest struct {
 	// Model is the parent LLM model for the Responses API call (e.g. "gpt-5.4").
@@ -61,6 +69,12 @@ type NativeImageRequest struct {
 
 	// OutputFormat is the desired image format: "png" (default), "jpg", "webp".
 	OutputFormat string
+
+	// InputImages, if non-empty, are reference images included in the user
+	// turn so the model can use them as visual context (image-to-image edit,
+	// face swap, restyle). gpt-image-2 supports up to 4. Other image models
+	// or providers without this capability ignore the field.
+	InputImages []NativeImageInput
 }
 
 // NativeImageResult holds the result of a native image generation call.

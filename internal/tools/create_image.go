@@ -52,7 +52,7 @@ func NewCreateImageTool(registry *providers.Registry) *CreateImageTool {
 func (t *CreateImageTool) Name() string { return "create_image" }
 
 func (t *CreateImageTool) Description() string {
-	return "Generate an image from a text description using an image generation model. Returns a MEDIA: path to the generated image file."
+	return "Generate an image from a text description using an image generation model. Optionally pass reference images via input_images to do image-to-image edits (face swap, restyle, composition). Returns a MEDIA: path to the generated image file."
 }
 
 func (t *CreateImageTool) Parameters() map[string]any {
@@ -61,7 +61,7 @@ func (t *CreateImageTool) Parameters() map[string]any {
 		"properties": map[string]any{
 			"prompt": map[string]any{
 				"type":        "string",
-				"description": "Text description of the image to generate.",
+				"description": "Text description of the image to generate (or, when input_images is set, an instruction describing the edit).",
 			},
 			"aspect_ratio": map[string]any{
 				"type":        "string",
@@ -70,6 +70,11 @@ func (t *CreateImageTool) Parameters() map[string]any {
 			"filename_hint": map[string]any{
 				"type":        "string",
 				"description": "Short descriptive filename (no extension). Example: 'sunset-beach', 'company-logo'.",
+			},
+			"input_images": map[string]any{
+				"type":        "array",
+				"items":       map[string]any{"type": "string"},
+				"description": "Optional. Absolute paths to reference images (e.g. files in your workspace under .uploads/ or generated/) used as visual context for the model. Enables face swap, restyle, composition. Up to 4 images. Only honored when the resolved provider supports image input (gpt-image-2 via openai-codex).",
 			},
 		},
 		"required": []string{"prompt"},
@@ -87,6 +92,13 @@ func (t *CreateImageTool) Execute(ctx context.Context, args map[string]any) *Res
 	}
 	filenameHint, _ := args["filename_hint"].(string)
 
+	// Optional reference images for image-to-image editing. Read bytes here
+	// (single point of failure) and pass decoded structs through the chain.
+	inputImages, err := loadInputImages(ctx, args["input_images"])
+	if err != nil {
+		return ErrorResult(err.Error())
+	}
+
 	chain := ResolveMediaProviderChain(ctx, "create_image", "", "",
 		imageGenProviderPriority, imageGenModelDefaults, t.registry)
 
@@ -97,6 +109,9 @@ func (t *CreateImageTool) Execute(ctx context.Context, args map[string]any) *Res
 		}
 		chain[i].Params["prompt"] = prompt
 		chain[i].Params["aspect_ratio"] = aspectRatio
+		if len(inputImages) > 0 {
+			chain[i].Params["input_images"] = inputImages
+		}
 	}
 
 	chainResult, err := ExecuteWithChain(ctx, chain, t.registry, t.callProvider)
@@ -145,6 +160,53 @@ func (t *CreateImageTool) Execute(ctx context.Context, args map[string]any) *Res
 	return result
 }
 
+// loadInputImages decodes the optional input_images argument into raw image
+// bytes paired with detected MIME type. The argument may be a []any of file
+// paths (LLM-provided strings). Each file must live inside the workspace
+// (enforced by EnsureWorkspacePath) and decode as png/jpeg/webp/gif. Returns
+// nil with no error when the argument is absent or empty.
+func loadInputImages(ctx context.Context, raw any) ([]providers.NativeImageInput, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	arr, ok := raw.([]any)
+	if !ok {
+		return nil, fmt.Errorf("input_images must be an array of file paths")
+	}
+	if len(arr) == 0 {
+		return nil, nil
+	}
+	const maxInputs = 4
+	if len(arr) > maxInputs {
+		return nil, fmt.Errorf("input_images supports at most %d images, got %d", maxInputs, len(arr))
+	}
+	workspace := ToolWorkspaceFromCtx(ctx)
+	out := make([]providers.NativeImageInput, 0, len(arr))
+	for i, item := range arr {
+		path, _ := item.(string)
+		if path == "" {
+			return nil, fmt.Errorf("input_images[%d] is not a string path", i)
+		}
+		resolved, err := resolvePath(path, workspace, effectiveRestrict(ctx, false))
+		if err != nil {
+			return nil, fmt.Errorf("input_images[%d] (%s): %w", i, path, err)
+		}
+		data, err := os.ReadFile(resolved)
+		if err != nil {
+			return nil, fmt.Errorf("input_images[%d] (%s): read failed: %w", i, path, err)
+		}
+		mime := http.DetectContentType(data)
+		switch mime {
+		case "image/png", "image/jpeg", "image/webp", "image/gif":
+			// ok
+		default:
+			return nil, fmt.Errorf("input_images[%d] (%s): unsupported MIME %q (need png/jpeg/webp/gif)", i, path, mime)
+		}
+		out = append(out, providers.NativeImageInput{MimeType: mime, Data: data})
+	}
+	return out, nil
+}
+
 // embedPromptIntoPNG wraps agent.EmbedPNGPrompt for the tools package.
 // Logs a warning on error but always returns usable bytes.
 func embedPromptIntoPNG(data []byte, prompt string) []byte {
@@ -173,12 +235,14 @@ func (t *CreateImageTool) callProvider(ctx context.Context, cp credentialProvide
 			prompt := GetParamString(params, "prompt", "")
 			aspectRatio := GetParamString(params, "aspect_ratio", "1:1")
 			imageModel := GetParamString(params, "image_model", "")
+			inputImages, _ := params["input_images"].([]providers.NativeImageInput)
 			result, err := np.GenerateImage(ctx, providers.NativeImageRequest{
 				Model:        model,
 				ImageModel:   imageModel,
 				Prompt:       prompt,
 				AspectRatio:  aspectRatio,
 				OutputFormat: "png",
+				InputImages:  inputImages,
 			})
 			if err != nil {
 				return nil, nil, fmt.Errorf("native image generation: %w", err)
