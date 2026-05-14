@@ -3,9 +3,12 @@ package max
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
@@ -15,13 +18,37 @@ import (
 // to handleUpdate. Exits when ctx is cancelled.
 //
 // Errors are classified:
-//   - context.Canceled / context.DeadlineExceeded → exit cleanly
+//   - polling context cancelled → exit cleanly with log
+//   - HTTP-level timeout (http.Client.Timeout) → TRANSIENT, retry with backoff
 //   - APIError (auth/4xx) → log + sleep + continue (could be transient config issue)
 //   - Network errors → log + exponential backoff + continue
 //
 // Marker is advanced only on successful response, ensuring at-least-once delivery.
+//
+// Critical correctness note: pollLoop must NOT exit on HTTP-level deadline
+// errors. http.Client.Timeout creates an internal child context that returns
+// context.DeadlineExceeded on timeout — using errors.Is(err, context.DeadlineExceeded)
+// here would conflate transient network/server slowness with operator-initiated
+// shutdown, causing silent polling death (bot stops responding while pod
+// stays up). See isCtxDone below for why we use ctx.Err() only.
 func (c *Channel) pollLoop(ctx context.Context) {
 	defer close(c.pollDone)
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("max: polling goroutine panicked (recovered)",
+				"channel", c.Name(),
+				"panic", r,
+				"stack", string(debug.Stack()))
+			// Mark channel degraded so the health endpoint reflects the
+			// problem and operators see something is wrong.
+			c.MarkDegraded(
+				"Polling goroutine panicked",
+				fmt.Sprintf("%v", r),
+				channels.ChannelFailureKindUnknown,
+				false, // not auto-recoverable from inside pollLoop
+			)
+		}
+	}()
 
 	slog.Info("max: polling started", "channel", c.Name(), "timeout_s", c.cfg.PollingTimeout)
 
@@ -38,13 +65,15 @@ func (c *Channel) pollLoop(ctx context.Context) {
 		default:
 		}
 
+		// FIX: do NOT subscribe to UpdateTypeMessageEdited. Edit events should
+		// not trigger new agent runs (the original message_created already did).
+		// See follow-up analysis for details.
 		resp, err := c.client.GetUpdates(ctx, GetUpdatesParams{
 			Limit:   100,
 			Timeout: c.cfg.PollingTimeout,
 			Marker:  c.getMarker(),
 			Types: []string{
 				UpdateTypeMessageCreated,
-				UpdateTypeMessageEdited,
 				UpdateTypeMessageCallback,
 				UpdateTypeBotAdded,
 				UpdateTypeBotRemoved,
@@ -52,7 +81,12 @@ func (c *Channel) pollLoop(ctx context.Context) {
 		})
 
 		if err != nil {
-			if isCtxDone(ctx, err) {
+			// FIX: Check ONLY the polling context (ctx.Err()), NOT the error
+			// chain. HTTP-level timeouts wrap context.DeadlineExceeded but
+			// they're transient and must be retried, not treated as shutdown.
+			if isCtxDone(ctx) {
+				slog.Info("max: polling stopped (context cancelled during request)",
+					"channel", c.Name())
 				return
 			}
 			c.handlePollError(err, &backoff, maxBackoff)
@@ -61,6 +95,10 @@ func (c *Channel) pollLoop(ctx context.Context) {
 
 		// Reset backoff on success.
 		backoff = baseBackoff
+
+		// Heartbeat: update timestamp of last successful poll. Used by
+		// health endpoint and external watchdogs to detect stuck polling.
+		atomic.StoreInt64(&c.lastPollAt, time.Now().Unix())
 
 		// Dispatch each update; advance marker only after dispatch.
 		for _, u := range resp.Updates {
@@ -73,13 +111,28 @@ func (c *Channel) pollLoop(ctx context.Context) {
 }
 
 // handlePollError logs and waits with bounded backoff before next poll attempt.
+//
+// This is called for transient errors (including HTTP-level timeouts) where
+// the polling context is still alive. We log, mark the channel degraded
+// briefly, then sleep with exponential backoff.
 func (c *Channel) handlePollError(err error, backoff *time.Duration, maxBackoff time.Duration) {
 	var apiErr *APIError
-	if errors.As(err, &apiErr) {
+	switch {
+	case errors.As(err, &apiErr):
 		slog.Warn("max: API error during poll",
-			"channel", c.Name(), "code", apiErr.Code, "message", apiErr.Message)
-	} else {
-		slog.Warn("max: poll request failed", "channel", c.Name(), "error", err)
+			"channel", c.Name(), "code", apiErr.Code, "message", apiErr.Message,
+			"backoff_s", backoff.Seconds())
+	case errors.Is(err, context.DeadlineExceeded):
+		// HTTP-level timeout. NOT a polling-context cancellation (we already
+		// checked that above). Log clearly so operators can distinguish from
+		// a normal shutdown.
+		slog.Warn("max: poll request timed out (transient, retrying)",
+			"channel", c.Name(), "error", err,
+			"backoff_s", backoff.Seconds())
+	default:
+		slog.Warn("max: poll request failed",
+			"channel", c.Name(), "error", err,
+			"backoff_s", backoff.Seconds())
 	}
 
 	// Mark degraded so health endpoint reflects the issue.
@@ -101,6 +154,16 @@ func (c *Channel) handlePollError(err error, backoff *time.Duration, maxBackoff 
 // Spawns a goroutine bounded by handlerSem for message handling; callbacks
 // and other types run inline because they are short-lived.
 func (c *Channel) handleUpdate(ctx context.Context, u Update) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("max: handleUpdate panicked (recovered)",
+				"channel", c.Name(),
+				"update_type", u.UpdateType,
+				"panic", r,
+				"stack", string(debug.Stack()))
+		}
+	}()
+
 	switch u.UpdateType {
 	case UpdateTypeMessageCreated:
 		if u.Message == nil {
@@ -109,12 +172,16 @@ func (c *Channel) handleUpdate(ctx context.Context, u Update) {
 		c.spawnMessageHandler(ctx, *u.Message, false)
 
 	case UpdateTypeMessageEdited:
-		// We treat edits like new messages with metadata.edited=true.
-		// Agent loop can decide to ignore or to incorporate.
-		if u.Message == nil {
-			return
+		// FIX: do not re-dispatch edits to the agent loop. The original
+		// message_created already triggered a run; an edit doesn't carry
+		// new intent the agent should respond to a second time.
+		if u.Message != nil && u.Message.Body != nil {
+			slog.Debug("max: ignoring message_edited",
+				"channel", c.Name(),
+				"chat_id", chatIDFromUpdate(u),
+				"message_id", u.Message.Body.MID)
 		}
-		c.spawnMessageHandler(ctx, *u.Message, true)
+		return
 
 	case UpdateTypeMessageCallback:
 		if u.Callback == nil {
@@ -158,6 +225,14 @@ func (c *Channel) spawnMessageHandler(ctx context.Context, msg Message, edited b
 		go func() {
 			defer c.handlerWg.Done()
 			defer func() { <-c.handlerSem }()
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("max: message handler panicked (recovered)",
+						"channel", c.Name(),
+						"panic", r,
+						"stack", string(debug.Stack()))
+				}
+			}()
 			c.handleMessage(ctx, msg, edited)
 		}()
 	case <-ctx.Done():
@@ -179,7 +254,13 @@ func (c *Channel) handleMessage(ctx context.Context, msg Message, edited bool) {
 	}
 
 	// Self-loop guard: ignore messages sent BY us.
+	// Defense-in-depth: also check IsBot for cases where BotID was reset.
 	if c.creds.BotID != 0 && msg.Sender.UserID == c.creds.BotID {
+		return
+	}
+	if msg.Sender.IsBot {
+		slog.Debug("max: ignoring message from bot sender",
+			"channel", c.Name(), "sender_id", msg.Sender.UserID)
 		return
 	}
 
@@ -259,17 +340,13 @@ func (c *Channel) handleMessage(ctx context.Context, msg Message, edited bool) {
 }
 
 // handleCallback responds to inline keyboard button clicks.
-// Day 2: minimal — we acknowledge with empty answer to dismiss client toast,
-// then forward the payload as a regular text message to the agent.
-// Day 4 will add richer callback handling.
 func (c *Channel) handleCallback(ctx context.Context, cb Callback) {
 	if cb.User == nil {
 		return
 	}
 
 	senderID := strconv.FormatInt(cb.User.UserID, 10)
-	// Callbacks don't carry chat_id directly — for Day 2 we treat them as DMs
-	// from the user. Day 4 will extend Update to carry chat context.
+	// Callbacks don't carry chat_id directly — treat as DMs.
 	chatID := senderID
 
 	slog.Debug("max: callback received",
@@ -298,7 +375,6 @@ func (c *Channel) handleCallback(ctx context.Context, cb Callback) {
 //  2. Plain "@<bot_username>" substring (case-insensitive)
 //
 // Reply-to-bot is NOT counted as mention here — Day 2 keeps it strict.
-// (Telegram's mentionGate adds this; we'll port if/when tests show need.)
 func (c *Channel) detectMention(msg Message) bool {
 	if msg.Body == nil {
 		return false
@@ -372,12 +448,22 @@ func buildMetadata(msg Message, edited bool) map[string]string {
 // Helpers
 // =====================================================================
 
-// isCtxDone returns true if err is a context cancellation derivative.
-func isCtxDone(ctx context.Context, err error) bool {
-	if ctx.Err() != nil {
-		return true
-	}
-	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+// isCtxDone returns true if and only if the polling context itself has
+// been cancelled by the caller (operator Stop, gateway shutdown, etc.).
+//
+// CRITICAL: do NOT inspect the error chain via errors.Is here. HTTP-level
+// timeouts from http.Client.Timeout wrap context.DeadlineExceeded internally,
+// but those are TRANSIENT errors that should be retried, not treated as
+// polling cancellation. The previous version used:
+//
+//     errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+//
+// which caused silent polling death whenever an HTTP request hit its
+// 120-second client timeout (e.g. during Tailscale instability or
+// upstream proxy slowness). pollLoop returned without restarting, leaving
+// the bot permanently unresponsive until pod restart.
+func isCtxDone(ctx context.Context) bool {
+	return ctx.Err() != nil
 }
 
 // getMarker returns the current polling cursor (nil-safe).

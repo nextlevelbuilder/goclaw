@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/audio"
@@ -30,6 +31,18 @@ const handlerStopTimeout = 15 * time.Second
 // probeTimeout bounds the GET /me call at Start() — used to validate token
 // and capture bot identity. Must complete before polling can begin.
 const probeTimeout = 30 * time.Second
+
+// pollSupervisorMaxRestarts bounds restart attempts within pollSupervisorWindow.
+// If exceeded, the channel is marked failed and the supervisor exits.
+const pollSupervisorMaxRestarts = 5
+
+// pollSupervisorWindow is the sliding window for rate-limiting restart attempts.
+const pollSupervisorWindow = 5 * time.Minute
+
+// pollSupervisorRestartDelay is the wait before relaunching pollLoop after
+// an unexpected exit, preventing tight loops when something is fundamentally
+// broken (e.g., bad credentials, persistent network failure).
+const pollSupervisorRestartDelay = 5 * time.Second
 
 // Channel implements channels.Channel for Max Messenger.
 // Embeds BaseChannel for shared policy/allowlist/pairing/health logic.
@@ -75,6 +88,12 @@ type Channel struct {
 	// Map key: chatID (string). Map value: *reactionRefresher.
 	// Cleared on Stop.
 	reactionRefreshers sync.Map
+
+	// lastPollAt is the unix timestamp (seconds) of the most recent successful
+	// poll. Updated atomically on every successful GetUpdates response.
+	// Used by health endpoint and external watchdogs to detect stuck polling.
+	// Zero until the first successful poll completes.
+	lastPollAt int64
 }
 
 // New constructs a Max channel from validated creds and config.
@@ -168,7 +187,11 @@ func (c *Channel) Start(ctx context.Context) error {
 			"first_name", me.FirstName,
 		)
 
-		go c.pollLoop(pollCtx)
+		// Run pollLoop under a supervisor that restarts it on unexpected exit.
+		// This protects against transient bugs (e.g., HTTP timeout
+		// misclassification), panics, and any other goroutine death we
+		// haven't anticipated.
+		go c.runPollSupervisor(pollCtx)
 
 		// Day 4: subscribe webhook here if cfg.Mode == "webhook".
 		// For now polling is the only supported mode.
@@ -240,4 +263,113 @@ func connectedSummary(username string, userID int64) string {
 		return fmt.Sprintf("Connected as @%s (id=%d)", username, userID)
 	}
 	return fmt.Sprintf("Connected (bot_id=%d)", userID)
+}
+
+// runPollSupervisor monitors pollLoop and restarts it on unexpected exit.
+// This provides resilience against transient bugs and panics that would
+// otherwise leave the channel silently dead (process alive, no polling).
+//
+// Behaviour:
+//   - pollLoop exits cleanly when ctx is cancelled → supervisor returns.
+//   - pollLoop exits unexpectedly (panic, network error misclassification,
+//     etc.) → supervisor logs WARN, waits restartDelay, relaunches pollLoop.
+//   - More than pollSupervisorMaxRestarts unexpected exits within
+//     pollSupervisorWindow → supervisor gives up, marks channel FAILED.
+//
+// The rate-limit protects against tight restart loops when something is
+// fundamentally broken (e.g. bad credentials, persistent connectivity loss).
+// In that case operators see a clear FAILED state in the health endpoint
+// instead of a busy goroutine churning forever.
+func (c *Channel) runPollSupervisor(ctx context.Context) {
+	var restartTimes []time.Time
+
+	for {
+		if ctx.Err() != nil {
+			slog.Info("max: poll supervisor exiting (context cancelled)",
+				"channel", c.Name())
+			return
+		}
+
+		// On restart (not the first iteration), recreate pollDone so any
+		// observer waiting on it sees a fresh "in flight" channel. Stop()
+		// reads the field then waits on whatever pollDone points to, so
+		// races are bounded to a small window during Stop+restart overlap;
+		// the worst case is a redundant timeout in Stop, which is benign.
+		if len(restartTimes) > 0 {
+			c.pollDone = make(chan struct{})
+		}
+
+		// Run pollLoop. It will return on:
+		//   - ctx cancelled (normal Stop) — caller sees ctx.Err() != nil
+		//   - panic (recovered inside pollLoop's defer)
+		//   - any unexpected exit (e.g., bug)
+		c.pollLoop(ctx)
+
+		// Distinguish normal vs unexpected exit.
+		if ctx.Err() != nil {
+			slog.Info("max: pollLoop exited cleanly (context done)",
+				"channel", c.Name())
+			return
+		}
+
+		// Unexpected exit: rate-limit restart attempts.
+		now := time.Now()
+		cutoff := now.Add(-pollSupervisorWindow)
+		kept := restartTimes[:0]
+		for _, t := range restartTimes {
+			if t.After(cutoff) {
+				kept = append(kept, t)
+			}
+		}
+		restartTimes = kept
+
+		if len(restartTimes) >= pollSupervisorMaxRestarts {
+			slog.Error("max: polling restart limit exceeded, marking channel failed",
+				"channel", c.Name(),
+				"restarts", len(restartTimes),
+				"window", pollSupervisorWindow)
+			c.MarkFailed(
+				"Polling repeatedly failed",
+				fmt.Sprintf("pollLoop restarted %d times within %v",
+					len(restartTimes), pollSupervisorWindow),
+				channels.ChannelFailureKindUnknown,
+				false,
+			)
+			c.SetRunning(false)
+			return
+		}
+
+		restartTimes = append(restartTimes, now)
+		slog.Warn("max: pollLoop exited unexpectedly, restarting",
+			"channel", c.Name(),
+			"restart_count", len(restartTimes),
+			"max_restarts", pollSupervisorMaxRestarts,
+			"window", pollSupervisorWindow,
+			"delay_s", pollSupervisorRestartDelay.Seconds())
+
+		// Wait before restart; abort wait if ctx cancelled mid-sleep.
+		select {
+		case <-time.After(pollSupervisorRestartDelay):
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// LastPollAt returns the unix timestamp (seconds) of the most recent
+// successful poll. Returns 0 if polling has not yet completed one cycle.
+// Thread-safe; reads via atomic load.
+func (c *Channel) LastPollAt() int64 {
+	return atomic.LoadInt64(&c.lastPollAt)
+}
+
+// PollAge returns the duration since the last successful poll.
+// Returns -1 if polling has not yet completed one cycle.
+// Used by health endpoint and watchdogs to detect stuck polling.
+func (c *Channel) PollAge() time.Duration {
+	ts := atomic.LoadInt64(&c.lastPollAt)
+	if ts == 0 {
+		return -1
+	}
+	return time.Since(time.Unix(ts, 0))
 }
