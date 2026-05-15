@@ -25,7 +25,7 @@ var DenyGroupRegistry = map[string]*DenyGroup{
 			regexp.MustCompile(`\brm\s+.*--force`),
 			regexp.MustCompile(`\bdel\s+/[fq]\b`),
 			regexp.MustCompile(`\brmdir\s+/s\b`),
-			regexp.MustCompile(`\b(mkfs|diskpart)\b|\bformat\s`),
+			regexp.MustCompile(`\b(mkfs|diskpart)\b|(?i)\bformat\s+[a-z]:`),
 			regexp.MustCompile(`\bdd\s+if=`),
 			regexp.MustCompile(`>\s*/dev/sd[a-z]\b`),
 			regexp.MustCompile(`\b(shutdown|reboot|poweroff|halt)\b`),
