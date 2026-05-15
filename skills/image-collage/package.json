@@ -1,0 +1,16 @@
+{
+  "name": "image-collage",
+  "version": "1.0.0",
+  "description": "Goclaw skill: deterministic multi-image collage at target aspect ratio",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "render": "node scripts/render-collage.mjs"
+  },
+  "dependencies": {
+    "sharp": "^0.33.5"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
