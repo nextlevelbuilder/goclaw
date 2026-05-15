@@ -7,11 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/net/http2"
 )
 
 // Default base URL for the Max Bot API. Overridable for tests.
@@ -20,6 +23,73 @@ const defaultBaseURL = "https://platform-api.max.ru"
 // Default API version recommended by Max docs (sent as query param ?v=...).
 // Optional in current API but documented as forward-compatible practice.
 const defaultAPIVersion = "0.0.0"
+
+// =====================================================================
+// HTTP transport configuration
+//
+// The Max API uses long-polling on GET /updates (typically with a
+// timeout=30s server-hold). The default net/http transport has two
+// well-known weaknesses for this workload that we observed in production:
+//
+//   1. TCP-level keepalives use the OS default (Linux: tcp_keepalive_time
+//      = 7200s). For long-polls that hold a TCP connection idle for 30s
+//      while waiting for events, this is irrelevant — but it also means
+//      NAT devices / stateful firewalls in front of the egress can drop
+//      the flow state silently, leaving Go thinking the connection is
+//      alive while the path is dead.
+//
+//   2. HTTP/2 is enabled by default but PING-based health checks are
+//      NOT configured. Once a half-broken connection enters the
+//      multiplex pool, every subsequent long-poll sent over it hangs
+//      for the full Client.Timeout (we observed 120s+).
+//
+// The transport below fixes both — see newDefaultHTTPClient.
+const (
+	defaultDialTimeout         = 10 * time.Second
+	defaultDialKeepAlive       = 15 * time.Second
+	defaultTLSHandshakeTimeout = 10 * time.Second
+	defaultResponseHeader      = 45 * time.Second
+	defaultIdleConnTimeout     = 90 * time.Second
+	defaultClientTimeout       = 45 * time.Second
+	defaultH2ReadIdleTimeout   = 15 * time.Second
+	defaultH2PingTimeout       = 10 * time.Second
+	defaultMaxIdleConnsPerHost = 4
+)
+
+// newDefaultHTTPClient builds the production HTTP client used when the
+// caller does not pass WithHTTPClient. It enables HTTP/2 PING-based
+// health checks (detect half-broken connections within ~25s instead of
+// waiting for Client.Timeout) and overrides the kernel's TCP keepalive
+// defaults so NAT/firewall flow state stays warm during long-polls.
+func newDefaultHTTPClient() *http.Client {
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   defaultDialTimeout,
+			KeepAlive: defaultDialKeepAlive,
+		}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   defaultMaxIdleConnsPerHost,
+		IdleConnTimeout:       defaultIdleConnTimeout,
+		TLSHandshakeTimeout:   defaultTLSHandshakeTimeout,
+		ExpectContinueTimeout: 1 * time.Second,
+		ResponseHeaderTimeout: defaultResponseHeader,
+	}
+
+	// Configure HTTP/2 PING-based health checks. ConfigureTransports
+	// upgrades the transport in-place. If this fails we still want a
+	// working client (HTTP/1.1 fallback is acceptable degraded mode).
+	if h2t, err := http2.ConfigureTransports(transport); err == nil {
+		h2t.ReadIdleTimeout = defaultH2ReadIdleTimeout
+		h2t.PingTimeout = defaultH2PingTimeout
+	}
+
+	return &http.Client{
+		Transport: transport,
+		Timeout:   defaultClientTimeout,
+	}
+}
 
 // Client is a thin HTTP client for the Max Messenger Bot API.
 //
@@ -67,14 +137,30 @@ func NewClient(token string, opts ...ClientOption) *Client {
 		token:      token,
 		baseURL:    defaultBaseURL,
 		apiVersion: defaultAPIVersion,
-		// Long-poll timeout up to 90s per Max docs; allow headroom.
-		httpClient: &http.Client{Timeout: 120 * time.Second},
+		httpClient: newDefaultHTTPClient(),
 		maxRetries: 3,
 	}
 	for _, o := range opts {
 		o(c)
 	}
 	return c
+}
+
+// CloseIdleConnections releases any pooled connections that are not
+// currently in use. Called by pollLoop after a transient network error
+// to ensure the next retry establishes a fresh TCP/TLS session,
+// avoiding the "half-broken connection returned from pool" failure mode.
+//
+// Safe to call concurrently with in-flight requests: only IDLE
+// connections are closed; active long-polls continue undisturbed.
+func (c *Client) CloseIdleConnections() {
+	if c.httpClient == nil {
+		return
+	}
+	type idleCloser interface{ CloseIdleConnections() }
+	if ic, ok := c.httpClient.Transport.(idleCloser); ok {
+		ic.CloseIdleConnections()
+	}
 }
 
 // GetMe calls GET /me and returns the bot's profile info.

@@ -117,6 +117,11 @@ func (c *Channel) pollLoop(ctx context.Context) {
 // briefly, then sleep with exponential backoff.
 func (c *Channel) handlePollError(err error, backoff *time.Duration, maxBackoff time.Duration) {
 	var apiErr *APIError
+	// Network-class errors (timeouts, broken pipe, conn reset) can be the
+	// product of a half-broken TCP/HTTP2 connection lingering in the
+	// transport pool. Track whether to evict that pool before the next
+	// retry so we don't loop on the same dead connection.
+	evictIdleConns := false
 	switch {
 	case errors.As(err, &apiErr):
 		slog.Warn("max: API error during poll",
@@ -129,10 +134,25 @@ func (c *Channel) handlePollError(err error, backoff *time.Duration, maxBackoff 
 		slog.Warn("max: poll request timed out (transient, retrying)",
 			"channel", c.Name(), "error", err,
 			"backoff_s", backoff.Seconds())
+		evictIdleConns = true
 	default:
 		slog.Warn("max: poll request failed",
 			"channel", c.Name(), "error", err,
 			"backoff_s", backoff.Seconds())
+		// Pessimistically evict the pool for unknown errors too. The only
+		// errors we definitely don't want to evict on are APIError (4xx/5xx
+		// from a healthy connection), and those are handled above.
+		evictIdleConns = true
+	}
+
+	// Drop any idle pooled connections so the next retry establishes a
+	// fresh TCP/TLS session. Safe to call concurrently with in-flight
+	// requests: only IDLE connections are closed; the current (failing)
+	// request has already returned at this point.
+	if evictIdleConns {
+		c.client.CloseIdleConnections()
+		slog.Debug("max: evicted idle pool connections after transient error",
+			"channel", c.Name())
 	}
 
 	// Mark degraded so health endpoint reflects the issue.
