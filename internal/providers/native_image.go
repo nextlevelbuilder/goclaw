@@ -91,7 +91,9 @@ type NativeImageResult struct {
 
 // SizeFromAspect converts a common aspect ratio string to a pixel dimension
 // string expected by image generation APIs (e.g. "1792x1024").
-// Falls back to "1024x1024" for unrecognised ratios.
+// All returned widths/heights are multiples of 16 — gpt-image-2 rejects sizes
+// that are not (e.g. "1365x1024" → "Invalid size"). Falls back to "1024x1024"
+// for unrecognised ratios.
 func SizeFromAspect(aspectRatio string) string {
 	switch aspectRatio {
 	case "16:9":
@@ -99,9 +101,9 @@ func SizeFromAspect(aspectRatio string) string {
 	case "9:16":
 		return "1024x1792"
 	case "3:4":
-		return "1024x1365"
+		return "1024x1360"
 	case "4:3":
-		return "1365x1024"
+		return "1360x1024"
 	default:
 		return "1024x1024"
 	}
