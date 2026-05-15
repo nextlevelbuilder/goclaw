@@ -132,11 +132,12 @@ func (l *Loop) enrichInputMedia(ctx context.Context, req *RunRequest, messages [
 	// knows images were received and stored (consistent with audio/video enrichment).
 	l.enrichImageIDs(messages, mediaRefs)
 
-	// 2e-ii. In file-ref mode, enrich ALL user messages' image tags with file paths.
-	// This enables read_image(path=...) for both current and historical images.
-	if deferToReadImageTool {
-		l.enrichImagePaths(messages)
-	}
+	// 2e-ii. Enrich ALL user messages' image tags with persisted file paths
+	// from MediaRefs. Channels emit tags with ephemeral /tmp paths (or no
+	// path at all) — this step overwrites them with the workspace-persisted
+	// path so the LLM can pass them directly to create_image(input_images=…)
+	// or read_image(path=…) without re-listing the .uploads/ directory.
+	l.enrichImagePaths(messages)
 
 	// 2f. Collect all media file paths for team workspace auto-collect.
 	// When the leader calls team_tasks(create), these paths are copied to the

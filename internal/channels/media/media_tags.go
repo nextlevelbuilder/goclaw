@@ -21,28 +21,60 @@ func BuildMediaTags(mediaList []MediaInfo) string {
 		var tag string
 		switch m.Type {
 		case TypeImage:
+			// Include path so the LLM can pass it directly to tools like
+			// create_image(input_images=[...]) without guessing which uploaded
+			// file belongs to which message turn. Skip /tmp paths because those
+			// are ephemeral channel temp files that get cleaned up before the
+			// agent loop persists them to .uploads/ — enrichImagePaths fills in
+			// the persisted path later from MediaRefs.
+			attrs := []string{}
+			if m.FilePath != "" && !strings.HasPrefix(m.FilePath, "/tmp/") {
+				attrs = append(attrs, fmt.Sprintf("path=%q", m.FilePath))
+			}
 			if m.SourceURL != "" {
-				tag = fmt.Sprintf("<media:image url=%q>", m.SourceURL)
+				attrs = append(attrs, fmt.Sprintf("url=%q", m.SourceURL))
+			}
+			if len(attrs) > 0 {
+				tag = fmt.Sprintf("<media:image %s>", strings.Join(attrs, " "))
 			} else {
 				tag = "<media:image>"
 			}
 		case TypeVideo, TypeAnimation:
-			tag = "<media:video>"
-		case TypeAudio:
-			if m.Transcript != "" {
-				tag = fmt.Sprintf("<media:audio>\n<transcript>%s</transcript>", html.EscapeString(m.Transcript))
+			if m.FilePath != "" && !strings.HasPrefix(m.FilePath, "/tmp/") {
+				tag = fmt.Sprintf("<media:video path=%q>", m.FilePath)
 			} else {
-				tag = "<media:audio>"
+				tag = "<media:video>"
+			}
+		case TypeAudio:
+			pathAttr := ""
+			if m.FilePath != "" && !strings.HasPrefix(m.FilePath, "/tmp/") {
+				pathAttr = fmt.Sprintf(" path=%q", m.FilePath)
+			}
+			if m.Transcript != "" {
+				tag = fmt.Sprintf("<media:audio%s>\n<transcript>%s</transcript>", pathAttr, html.EscapeString(m.Transcript))
+			} else {
+				tag = fmt.Sprintf("<media:audio%s>", pathAttr)
 			}
 		case TypeVoice:
+			pathAttr := ""
+			if m.FilePath != "" && !strings.HasPrefix(m.FilePath, "/tmp/") {
+				pathAttr = fmt.Sprintf(" path=%q", m.FilePath)
+			}
 			if m.Transcript != "" {
-				tag = fmt.Sprintf("<media:voice>\n<transcript>%s</transcript>", html.EscapeString(m.Transcript))
+				tag = fmt.Sprintf("<media:voice%s>\n<transcript>%s</transcript>", pathAttr, html.EscapeString(m.Transcript))
 			} else {
-				tag = "<media:voice>"
+				tag = fmt.Sprintf("<media:voice%s>", pathAttr)
 			}
 		case TypeDocument:
+			attrs := []string{}
 			if m.FileName != "" {
-				tag = fmt.Sprintf("<media:document name=%q>", m.FileName)
+				attrs = append(attrs, fmt.Sprintf("name=%q", m.FileName))
+			}
+			if m.FilePath != "" && !strings.HasPrefix(m.FilePath, "/tmp/") {
+				attrs = append(attrs, fmt.Sprintf("path=%q", m.FilePath))
+			}
+			if len(attrs) > 0 {
+				tag = fmt.Sprintf("<media:document %s>", strings.Join(attrs, " "))
 			} else {
 				tag = "<media:document>"
 			}

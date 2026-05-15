@@ -101,7 +101,10 @@ func (m *Manager) AddMessage(_ context.Context, key string, msg providers.Messag
 	s.Updated = time.Now()
 }
 
-// GetHistory returns a copy of the message history.
+// GetHistory returns a copy of the message history. Deep-copies MediaRefs so
+// callers that sign / mutate Path (e.g. chat.go SignMediaPath for delivery)
+// don't leak signed URLs back into the in-memory cache, which would then be
+// persisted to DB and break later filesystem reads of those media files.
 func (m *Manager) GetHistory(_ context.Context, key string) []providers.Message {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -113,6 +116,14 @@ func (m *Manager) GetHistory(_ context.Context, key string) []providers.Message 
 
 	msgs := make([]providers.Message, len(s.Messages))
 	copy(msgs, s.Messages)
+	for i := range msgs {
+		if len(msgs[i].MediaRefs) == 0 {
+			continue
+		}
+		refsCopy := make([]providers.MediaRef, len(msgs[i].MediaRefs))
+		copy(refsCopy, msgs[i].MediaRefs)
+		msgs[i].MediaRefs = refsCopy
+	}
 	return msgs
 }
 

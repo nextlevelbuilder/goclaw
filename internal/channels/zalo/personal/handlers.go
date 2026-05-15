@@ -71,6 +71,7 @@ func (c *Channel) handleDM(msg protocol.UserMessage) {
 		"message_id":   msg.Data.MsgID,
 		"platform":     channels.TypeZaloPersonal,
 		"display_name": channels.SanitizeDisplayName(senderName),
+		"locale":       "vi", // Zalo Personal is a VN-only product; force Vietnamese for system/status replies.
 	}
 	c.HandleMessage(senderID, threadID, content, media, metadata, "direct")
 }
@@ -232,7 +233,11 @@ func downloadFile(ctx context.Context, fileURL string) (string, error) {
 		return "", fmt.Errorf("ssrf check: %w", err)
 	}
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	// Zalo CDN (photo-stal-*.zdn.vn, fg*.dlfl.vn) is often slow from non-VN
+	// regions and large images can take >30s to even start serving. Bump to
+	// 90s to avoid spurious "context deadline exceeded" that leave the agent
+	// blind to the image the user just sent.
+	client := &http.Client{Timeout: 90 * time.Second}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fileURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("download: %w", err)

@@ -163,9 +163,21 @@ func loadImages(files []bus.MediaFile) []providers.ImageContent {
 			continue
 		}
 
-		data, err := os.ReadFile(f.Path)
+		// Defensive: some legacy session rows have signed-URL paths
+		// (`/v1/files/<fs-path>?ft=<token>`) instead of filesystem paths
+		// because chat.go:SignMediaPath mutated the in-memory MediaRef.
+		// Strip the URL framing so os.ReadFile sees a real fs path.
+		path := f.Path
+		if strings.HasPrefix(path, "/v1/files/") {
+			path = strings.TrimPrefix(path, "/v1/files")
+		}
+		if i := strings.IndexByte(path, '?'); i >= 0 {
+			path = path[:i]
+		}
+
+		data, err := os.ReadFile(path)
 		if err != nil {
-			slog.Warn("vision: failed to read image file", "path", f.Path, "error", err)
+			slog.Warn("vision: failed to read image file", "path", path, "error", err)
 			continue
 		}
 		if len(data) > maxImageBytes {

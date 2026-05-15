@@ -293,7 +293,11 @@ func processNormalMessage(
 		if loop, ok := agentLoop.(*agent.Loop); ok && loop.Provider() != nil {
 			locale := msg.Metadata["locale"]
 			if locale == "" {
-				locale = "en"
+				// Fall back to "vi" — this deployment is VN-first. The metadata
+				// locale is only populated by web/desktop clients; chat channels
+				// (Zalo, Telegram) don't set it, so an "en" default leaks English
+				// system status/ack messages to Vietnamese users.
+				locale = "vi"
 			}
 			intent := agent.ClassifyIntent(ctx, loop.Provider(), loop.Model(), msg.Content)
 			switch intent {

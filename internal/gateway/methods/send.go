@@ -28,9 +28,10 @@ func (m *SendMethods) Register(router *gateway.MethodRouter) {
 func (m *SendMethods) handleSend(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	locale := store.LocaleFromContext(ctx)
 	var params struct {
-		Channel string `json:"channel"`
-		To      string `json:"to"`
-		Message string `json:"message"`
+		Channel string   `json:"channel"`
+		To      string   `json:"to"`
+		Message string   `json:"message"`
+		Media   []string `json:"media,omitempty"` // optional absolute file paths to attach (image/video/audio/document)
 	}
 	if req.Params != nil {
 		json.Unmarshal(req.Params, &params)
@@ -44,20 +45,32 @@ func (m *SendMethods) handleSend(ctx context.Context, client *gateway.Client, re
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "to")))
 		return
 	}
-	if params.Message == "" {
+	// Message can be empty when only media is being sent.
+	if params.Message == "" && len(params.Media) == 0 {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgMsgRequired)))
 		return
+	}
+
+	var mediaFiles []bus.MediaAttachment
+	for _, p := range params.Media {
+		if p == "" {
+			continue
+		}
+		// Caller passes absolute container paths; the dispatcher routes via channel.Send.
+		mediaFiles = append(mediaFiles, bus.MediaAttachment{URL: p})
 	}
 
 	m.msgBus.PublishOutbound(bus.OutboundMessage{
 		Channel: params.Channel,
 		ChatID:  params.To,
 		Content: params.Message,
+		Media:   mediaFiles,
 	})
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"ok":      true,
 		"channel": params.Channel,
 		"to":      params.To,
+		"media":   len(mediaFiles),
 	}))
 }
