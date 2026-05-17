@@ -23,6 +23,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
+	"github.com/nextlevelbuilder/goclaw/internal/tools/tuyettruong"
 	"github.com/nextlevelbuilder/goclaw/internal/tracing"
 	"github.com/nextlevelbuilder/goclaw/internal/tts"
 	"github.com/nextlevelbuilder/goclaw/pkg/browser"
@@ -148,6 +149,10 @@ func setupToolRegistry(
 	if ttsMgr.HasProviders() {
 		slog.Info("tts enabled", "provider", ttsMgr.PrimaryProvider(), "auto", string(ttsMgr.AutoMode()))
 	}
+
+	// Tuyettruong store admin tools (no-op if TUYETTRUONG_API_BASE unset).
+	// Import: "github.com/nextlevelbuilder/goclaw/internal/tools/tuyettruong"
+	tuyettruong.RegisterAll(toolsReg)
 
 	// Tool rate limiting (per session, sliding window)
 	if cfg.Tools.RateLimitPerHour > 0 {
