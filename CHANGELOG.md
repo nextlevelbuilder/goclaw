@@ -69,6 +69,12 @@ All notable changes to GoClaw are documented here. For full documentation, see [
   `display_name` across the inbound → outbound hop so the private-reply
   template variables survive the agent pipeline round-trip.
 
+### Fixed
+
+- **Agent provider switching.** Saving an agent after changing provider/model now
+  handles cleared ChatGPT OAuth routing config without writing SQL NULL into
+  NOT NULL JSON config columns.
+
 ## Project Status
 
 ### Implemented & Tested in Production
