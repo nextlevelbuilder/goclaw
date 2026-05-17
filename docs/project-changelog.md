@@ -6,6 +6,18 @@ Significant changes, features, and fixes in reverse chronological order.
 
 ## 2026-05-17
 
+### Agents: provider switch save fix
+
+**Fixes**
+
+- Fixed agent detail save after switching provider/model when the UI clears stale ChatGPT OAuth routing; typed JSON nulls now coerce to `{}` for NOT NULL agent JSON config columns in PostgreSQL and SQLite.
+
+**Tests**
+
+- Added regression coverage for typed `json.RawMessage(nil)` / JSON `null` agent config updates.
+
+---
+
 ### Deployment: VPS hybrid GoClaw setup
 
 **Operations**

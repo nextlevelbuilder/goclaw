@@ -3,6 +3,7 @@ package pg
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -208,7 +209,7 @@ func (s *PGAgentStore) Update(ctx context.Context, id uuid.UUID, updates map[str
 	}
 	// NOT NULL JSONB columns: null → empty object.
 	for _, col := range []string{"other_config", "tools_config", "chatgpt_oauth_routing", "model_fallback", "reasoning_config", "workspace_sharing", "shell_deny_groups", "kg_dedup_config"} {
-		if v, ok := updates[col]; ok && v == nil {
+		if v, ok := updates[col]; ok && isEmptyOrNullJSONUpdate(v) {
 			updates[col] = []byte("{}")
 		}
 	}
@@ -259,6 +260,22 @@ func (s *PGAgentStore) Update(ctx context.Context, id uuid.UUID, updates map[str
 		}()
 	}
 	return nil
+}
+
+func isEmptyOrNullJSONUpdate(v any) bool {
+	if v == nil {
+		return true
+	}
+	switch data := v.(type) {
+	case json.RawMessage:
+		return len(data) == 0 || strings.TrimSpace(string(data)) == "null"
+	case []byte:
+		return len(data) == 0 || strings.TrimSpace(string(data)) == "null"
+	case string:
+		return strings.TrimSpace(data) == "" || strings.TrimSpace(data) == "null"
+	default:
+		return false
+	}
 }
 
 func (s *PGAgentStore) Delete(ctx context.Context, id uuid.UUID) error {
