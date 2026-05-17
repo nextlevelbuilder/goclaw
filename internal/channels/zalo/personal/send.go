@@ -38,22 +38,36 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 		}
 	}
 
-	// Send media attachments.
+	// Send media attachments. Errors are collected and returned so the
+	// dispatcher's media-failure notify path fires — otherwise the bot
+	// thinks delivery succeeded (tool already returned) and lies to the
+	// user with "Đây anh" while nothing was sent.
+	var mediaErrs []error
 	for _, media := range msg.Media {
 		if protocol.IsImageFile(media.URL) {
 			if err := c.sendImage(ctx, sess, msg.ChatID, threadType, media.URL, media.Caption); err != nil {
 				slog.Warn("zalo_personal: failed to send image", "path", media.URL, "error", err)
+				mediaErrs = append(mediaErrs, fmt.Errorf("image %s: %w", media.URL, err))
 			}
 		} else {
 			if err := c.sendFile(ctx, sess, msg.ChatID, threadType, media.URL); err != nil {
 				slog.Warn("zalo_personal: failed to send file", "path", media.URL, "error", err)
+				mediaErrs = append(mediaErrs, fmt.Errorf("file %s: %w", media.URL, err))
 			}
 		}
 	}
 
 	// Send text content (if any remains after media).
 	if msg.Content != "" {
-		return c.sendChunkedText(ctx, sess, msg.ChatID, threadType, msg.Content)
+		if err := c.sendChunkedText(ctx, sess, msg.ChatID, threadType, msg.Content); err != nil {
+			return err
+		}
+	}
+
+	if len(mediaErrs) > 0 {
+		// Return first media error; dispatcher will fire a user-visible
+		// notification because msg.Media is non-empty.
+		return mediaErrs[0]
 	}
 	return nil
 }

@@ -174,6 +174,21 @@ func formatChannelSendError(err error) string {
 	raw := err.Error()
 	lower := strings.ToLower(raw)
 
+	// Zalo Personal — Vietnamese friendly messages (bot's primary deployment locale).
+	if strings.Contains(lower, "zalo_personal") {
+		switch {
+		case strings.Contains(lower, "chunk upload") || strings.Contains(lower, "vượt quá 512k"):
+			return "⚠️ Em gửi ảnh hông được, file lớn quá Zalo chặn. Anh báo dev fix giùm."
+		case strings.Contains(lower, "file too large"):
+			return "⚠️ Em gửi hông được, file vượt quá giới hạn của Zalo (25 MB)."
+		case strings.Contains(lower, "timeout"):
+			return "⚠️ Em gửi ảnh bị timeout. Anh thử lại sau giùm em."
+		case strings.Contains(lower, "without photoid") || strings.Contains(lower, "without fileid"):
+			return "⚠️ Em gửi ảnh hông xong, Zalo từ chối. Anh báo dev fix giùm."
+		}
+		return "⚠️ Em hông gửi được file qua Zalo, anh thử lại sau giùm."
+	}
+
 	// Telegram "Bad Request: <description>" — extract description
 	if m := telegramAPIDescRe.FindStringSubmatch(raw); len(m) == 2 {
 		return fmt.Sprintf("⚠️ Send failed: %s", m[1])
