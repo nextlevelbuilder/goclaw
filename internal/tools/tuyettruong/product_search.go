@@ -13,13 +13,27 @@ import (
 type ProductSearchTool struct {
 	client *Client
 	role   BotRole
+	name   string // override default name (used by sales variant)
 }
 
 func NewProductSearchTool(c *Client, role BotRole) *ProductSearchTool {
 	return &ProductSearchTool{client: c, role: role}
 }
 
-func (t *ProductSearchTool) Name() string { return "tt_product_search" }
+// WithName overrides the registered tool name. Used to register the same
+// underlying search under "tt_product_search" (admin) and "sales_product_search"
+// (sales) so each agent's tools_config can scope cleanly.
+func (t *ProductSearchTool) WithName(name string) *ProductSearchTool {
+	t.name = name
+	return t
+}
+
+func (t *ProductSearchTool) Name() string {
+	if t.name != "" {
+		return t.name
+	}
+	return "tt_product_search"
+}
 func (t *ProductSearchTool) Description() string {
 	return "Search products in the tuyettruong catalog by keyword. Returns up to 20 matches with slug/name/brand. Use this before tt_product_get when you only have a fuzzy name."
 }

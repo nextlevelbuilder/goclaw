@@ -15,9 +15,18 @@ Goclaw tools that call the tuyettruong Next.js store admin API.
 | `product_delete.go` | `tt_product_delete` — destructive, requires `confirm_token=XOA-<slug>` |
 | `order_list.go` | `tt_order_list` — filterable by status |
 | `order_update_status.go` | `tt_order_update_status` — confirm payment, cancel, etc. |
+| `quote_state.go` | Per-session draft store (in-memory, 24h TTL) |
+| `quote_renderer.go` | Text quote formatter + chunker for Zalo's 2000-char limit |
+| `quote_tools.go` | `quote_add_item`, `_remove_item`, `_view`, `_set_customer`, `_finalize`, `_clear` |
+| `order_place.go` | `order_place` — submits draft as real order, idempotent |
+| `order_customer_claimed_paid.go` | `order_customer_claimed_paid` — customer says "đã CK" |
+| `order_lookup.go` | `order_lookup` — customer support questions |
+| `notify_admin.go` | `notify_admin` — v1 logs only; future push via goclaw bus |
 | `register.go` | `RegisterAll(reg)` wires all of the above into a goclaw tool registry |
 | `seeds/admin_agent_system_prompt.md` | Vietnamese system prompt for the admin-agent |
-| `seeds/seed_admin_agent.sql` | Manual SQL to insert agent + Telegram channel rows |
+| `seeds/seed_admin_agent.sql` | Manual SQL to insert admin agent + Telegram channel |
+| `seeds/sales_agent_system_prompt.md` | Vietnamese system prompt for the sales-agent |
+| `seeds/seed_sales_agent.sql` | Manual SQL to insert sales agent + Zalo Personal channel |
 
 ## Env vars
 
@@ -25,7 +34,7 @@ Goclaw tools that call the tuyettruong Next.js store admin API.
 |---|---|
 | `TUYETTRUONG_API_BASE` | Base URL (e.g. `https://tuyettruong.com`). Required — without it, RegisterAll skips. |
 | `TUYETTRUONG_ADMIN_BOT_API_KEY` | Matches `BOT_ADMIN_API_KEY` in tuyettruong env. Sent as `x-api-key`. |
-| `TUYETTRUONG_SALES_BOT_API_KEY` | For sales agent tools (P3). Not used by admin tools. |
+| `TUYETTRUONG_SALES_BOT_API_KEY` | Matches `BOT_SALES_API_KEY` in tuyettruong env. Used by sales tools (quote_*, order_*, notify_admin). |
 
 ## Boot wiring
 
