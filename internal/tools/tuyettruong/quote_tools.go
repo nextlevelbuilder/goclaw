@@ -2,6 +2,7 @@ package tuyettruong
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -47,31 +48,29 @@ func (t *QuoteAddItemTool) Execute(ctx context.Context, args map[string]any) *to
 	}
 
 	// Fetch live product detail from public endpoint (no cost field).
+	// Price is decoded as `any` because the tuyettruong API has shifted between
+	// returning numeric(14,0) as a string (raw postgres-js output) and as a
+	// JS Number (after the data source explicitly casts). coerceMoney handles
+	// both transparently — don't assume the shape.
+	type variantRow struct {
+		Sku        string            `json:"sku"`
+		Attributes map[string]string `json:"attributes"`
+		Price      any               `json:"price"`
+		Stock      int               `json:"stock"`
+		Active     bool              `json:"active"`
+		Images     []string          `json:"images"`
+	}
 	var product struct {
-		Slug     string `json:"slug"`
-		Name     string `json:"name"`
-		Images   []string `json:"images"`
-		Variants []struct {
-			Sku        string            `json:"sku"`
-			Attributes map[string]string `json:"attributes"`
-			Price      string            `json:"price"`
-			Stock      int               `json:"stock"`
-			Active     bool              `json:"active"`
-			Images     []string          `json:"images"`
-		} `json:"variants"`
+		Slug     string       `json:"slug"`
+		Name     string       `json:"name"`
+		Images   []string     `json:"images"`
+		Variants []variantRow `json:"variants"`
 	}
 	if err := t.client.Do(ctx, RoleSales, "GET", "/api/v1/store/products/"+slug, nil, &product); err != nil {
 		return errorResult(err)
 	}
 
-	var matched *struct {
-		Sku        string            `json:"sku"`
-		Attributes map[string]string `json:"attributes"`
-		Price      string            `json:"price"`
-		Stock      int               `json:"stock"`
-		Active     bool              `json:"active"`
-		Images     []string          `json:"images"`
-	}
+	var matched *variantRow
 	for i := range product.Variants {
 		if product.Variants[i].Sku == sku {
 			matched = &product.Variants[i]
@@ -85,9 +84,9 @@ func (t *QuoteAddItemTool) Execute(ctx context.Context, args map[string]any) *to
 		return errorResult(fmt.Errorf("variant %s is inactive", sku))
 	}
 
-	price, err := parsePrice(matched.Price)
+	price, err := coerceMoney(matched.Price)
 	if err != nil {
-		return errorResult(err)
+		return errorResult(fmt.Errorf("variant %s price: %w", sku, err))
 	}
 
 	sessionKey := tools.ToolSessionKeyFromCtx(ctx)
@@ -259,13 +258,14 @@ func (t *QuoteFinalizeTool) Execute(ctx context.Context, args map[string]any) *t
 		return errorResult(fmt.Errorf("draft is empty — add items first via quote_add_item"))
 	}
 
-	// Re-fetch each product and compare snapshot vs current price.
+	// Re-fetch each product and compare snapshot vs current price. Price is
+	// decoded as `any` for the same robustness reasons as quote_add_item.
 	drift := false
 	for i, item := range d.Items {
 		var p struct {
 			Variants []struct {
 				Sku    string `json:"sku"`
-				Price  string `json:"price"`
+				Price  any    `json:"price"`
 				Stock  int    `json:"stock"`
 				Active bool   `json:"active"`
 			} `json:"variants"`
@@ -279,7 +279,11 @@ func (t *QuoteFinalizeTool) Execute(ctx context.Context, args map[string]any) *t
 				if !v.Active {
 					return errorResult(fmt.Errorf("variant %s đã ngưng bán — vui lòng bỏ khỏi quote", item.VariantSku))
 				}
-				newPrice, _ = parsePrice(v.Price)
+				np, err := coerceMoney(v.Price)
+				if err != nil {
+					return errorResult(fmt.Errorf("variant %s price: %w", v.Sku, err))
+				}
+				newPrice = np
 				break
 			}
 		}
@@ -341,16 +345,40 @@ func (t *QuoteClearTool) Execute(ctx context.Context, _ map[string]any) *tools.R
 	return jsonResult(map[string]any{"ok": true})
 }
 
-func parsePrice(raw string) (float64, error) {
-	// API returns numeric(14,0) as string. Strip whitespace, parse float.
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return 0, fmt.Errorf("empty price")
+// coerceMoney accepts whatever shape the tuyettruong API returns for money
+// fields. Real-world observed: number (3300000) from postgres-js path that
+// casts via Number(), and string ("3300000") from raw postgres-js. Also
+// handles json.Number defensively in case the decoder is ever switched.
+func coerceMoney(v any) (float64, error) {
+	if v == nil {
+		return 0, fmt.Errorf("price is null")
 	}
-	var f float64
-	_, err := fmt.Sscanf(raw, "%f", &f)
-	if err != nil {
-		return 0, fmt.Errorf("parse price %q: %w", raw, err)
+	switch x := v.(type) {
+	case float64:
+		return x, nil
+	case float32:
+		return float64(x), nil
+	case int:
+		return float64(x), nil
+	case int64:
+		return float64(x), nil
+	case json.Number:
+		f, err := x.Float64()
+		if err != nil {
+			return 0, fmt.Errorf("parse json.Number %q: %w", x.String(), err)
+		}
+		return f, nil
+	case string:
+		s := strings.TrimSpace(x)
+		if s == "" {
+			return 0, fmt.Errorf("empty price string")
+		}
+		var f float64
+		if _, err := fmt.Sscanf(s, "%f", &f); err != nil {
+			return 0, fmt.Errorf("parse price %q: %w", s, err)
+		}
+		return f, nil
+	default:
+		return 0, fmt.Errorf("unexpected price type %T (%v)", v, v)
 	}
-	return f, nil
 }
