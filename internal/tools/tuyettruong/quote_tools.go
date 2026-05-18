@@ -47,11 +47,9 @@ func (t *QuoteAddItemTool) Execute(ctx context.Context, args map[string]any) *to
 		qty = int(v)
 	}
 
-	// Fetch live product detail from public endpoint (no cost field).
-	// Price is decoded as `any` because the tuyettruong API has shifted between
-	// returning numeric(14,0) as a string (raw postgres-js output) and as a
-	// JS Number (after the data source explicitly casts). coerceMoney handles
-	// both transparently — don't assume the shape.
+	// Fetch product + variants direct from Supabase PostgREST (hot read path,
+	// skip Vercel cold-start). Price is decoded as `any` and coerced via
+	// coerceMoney to handle both numeric-as-number and numeric-as-string forms.
 	type variantRow struct {
 		Sku        string            `json:"sku"`
 		Attributes map[string]string `json:"attributes"`
@@ -60,15 +58,21 @@ func (t *QuoteAddItemTool) Execute(ctx context.Context, args map[string]any) *to
 		Active     bool              `json:"active"`
 		Images     []string          `json:"images"`
 	}
-	var product struct {
+	type productRow struct {
 		Slug     string       `json:"slug"`
 		Name     string       `json:"name"`
 		Images   []string     `json:"images"`
 		Variants []variantRow `json:"variants"`
 	}
-	if err := t.client.Do(ctx, RoleSales, "GET", "/api/v1/store/products/"+slug, nil, &product); err != nil {
+	var rows []productRow
+	supaPath := "products?slug=eq." + slug + "&select=slug,name,images,variants(sku,attributes,price,stock,active,images)&limit=1"
+	if err := t.client.SupabaseSelect(ctx, supaPath, &rows); err != nil {
 		return errorResult(err)
 	}
+	if len(rows) == 0 {
+		return errorResult(fmt.Errorf("product %s not found", slug))
+	}
+	product := rows[0]
 
 	var matched *variantRow
 	for i := range product.Variants {
@@ -258,11 +262,10 @@ func (t *QuoteFinalizeTool) Execute(ctx context.Context, args map[string]any) *t
 		return errorResult(fmt.Errorf("draft is empty — add items first via quote_add_item"))
 	}
 
-	// Re-fetch each product and compare snapshot vs current price. Price is
-	// decoded as `any` for the same robustness reasons as quote_add_item.
+	// Re-fetch each product (Supabase direct) and compare snapshot vs current.
 	drift := false
 	for i, item := range d.Items {
-		var p struct {
+		var rows []struct {
 			Variants []struct {
 				Sku    string `json:"sku"`
 				Price  any    `json:"price"`
@@ -270,11 +273,15 @@ func (t *QuoteFinalizeTool) Execute(ctx context.Context, args map[string]any) *t
 				Active bool   `json:"active"`
 			} `json:"variants"`
 		}
-		if err := t.client.Do(ctx, RoleSales, "GET", "/api/v1/store/products/"+item.ProductSlug, nil, &p); err != nil {
+		path := "products?slug=eq." + item.ProductSlug + "&select=variants(sku,price,stock,active)&limit=1"
+		if err := t.client.SupabaseSelect(ctx, path, &rows); err != nil {
 			return errorResult(fmt.Errorf("re-fetch %s: %w", item.ProductSlug, err))
 		}
+		if len(rows) == 0 {
+			return errorResult(fmt.Errorf("product %s không còn tồn tại", item.ProductSlug))
+		}
 		var newPrice float64 = -1
-		for _, v := range p.Variants {
+		for _, v := range rows[0].Variants {
 			if v.Sku == item.VariantSku {
 				if !v.Active {
 					return errorResult(fmt.Errorf("variant %s đã ngưng bán — vui lòng bỏ khỏi quote", item.VariantSku))

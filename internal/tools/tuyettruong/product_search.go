@@ -60,10 +60,51 @@ func (t *ProductSearchTool) Execute(ctx context.Context, args map[string]any) *t
 			limit = 50
 		}
 	}
+
+	// Sales reads bypass Next.js and go straight to Supabase PostgREST —
+	// this is the hot path during quote-building, so we skip the Vercel
+	// cold-start penalty. Admin still routes through Next.js to inherit
+	// the same search behavior the dashboard uses (FTS, ranking, etc.)
+	// and to leave room for admin-only filters later.
+	if t.role == RoleSales {
+		// Match name OR search_keywords[] — postgres-side ilike + array overlap.
+		// "or=(...)" is PostgREST's compound-filter syntax. wildcards must be %.
+		needle := "*" + escapeForLike(q) + "*"
+		path := fmt.Sprintf(
+			"products?or=(name.ilike.%s,brand.ilike.%s)&active=eq.true&select=slug,name,brand&limit=%d",
+			url.QueryEscape(needle), url.QueryEscape(needle), limit,
+		)
+		var rows []map[string]any
+		if err := t.client.SupabaseSelect(ctx, path, &rows); err != nil {
+			return errorResult(err)
+		}
+		return jsonResult(map[string]any{
+			"items": rows,
+			"total": len(rows),
+		})
+	}
+
+	// Admin path — through Next.js as before.
 	path := fmt.Sprintf("/api/v1/store/products-search?q=%s&limit=%d", url.QueryEscape(q), limit)
 	var out map[string]any
 	if err := t.client.Do(ctx, t.role, "GET", path, nil, &out); err != nil {
 		return errorResult(err)
 	}
 	return jsonResult(out)
+}
+
+// escapeForLike percent-encodes characters that would otherwise be eaten by
+// PostgREST's filter parser. Underscores and percent-signs are LIKE-wildcards
+// and need to stay raw values from the user.
+func escapeForLike(s string) string {
+	// Replace existing wildcards with their literal forms.
+	out := make([]byte, 0, len(s))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c == '%' || c == '_' || c == '\\' {
+			out = append(out, '\\')
+		}
+		out = append(out, c)
+	}
+	return string(out)
 }

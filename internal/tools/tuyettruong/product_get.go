@@ -9,6 +9,9 @@ import (
 
 // ProductGetTool wraps GET /api/v1/admin/products/{slug}. Full product +
 // variants (price, stock, attributes). Admin-only because it exposes cost.
+// Routes through Next.js (Vercel) because admin sees cost field — must use
+// authenticated path. Sales doesn't use this tool; sales gets variant detail
+// straight from Supabase via the quote_add_item flow.
 type ProductGetTool struct {
 	client *Client
 }

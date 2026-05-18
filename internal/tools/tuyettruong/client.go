@@ -256,6 +256,50 @@ func (c *Client) Do(
 	return nil
 }
 
+// SupabaseSelect runs a PostgREST query against the tuyettruong Supabase
+// project using the anon key. Use for high-frequency read paths (catalog
+// search, product detail in sales flow) where going through Next.js would
+// pay a Vercel cold-start cost on every turn. Writes and admin reads should
+// keep using `Do` so they pass through the validated Next.js business layer.
+//
+// `path` is the PostgREST path including query string, e.g.
+//   "products?slug=eq.dior-sauvage&select=id,name,variants(sku,price,stock)"
+//
+// The anon key is rate-limited and RLS-gated — assumes the `products` and
+// `variants` tables have SELECT policies for anon. If RLS rejects, falls
+// through to a clear error string, not silent empty result.
+func (c *Client) SupabaseSelect(ctx context.Context, path string, out any) error {
+	if c == nil {
+		return fmt.Errorf("tuyettruong client not configured")
+	}
+	url := c.supabaseURL + "/rest/v1/" + strings.TrimLeft(path, "/")
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return fmt.Errorf("build supabase request: %w", err)
+	}
+	req.Header.Set("apikey", c.anonKey)
+	req.Header.Set("Authorization", "Bearer "+c.anonKey)
+	req.Header.Set("Accept", "application/json")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("supabase http: %w", err)
+	}
+	defer resp.Body.Close()
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read supabase response: %w", err)
+	}
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("supabase %s → %d: %s", path, resp.StatusCode, truncate(string(respBody), 400))
+	}
+	if out != nil && len(respBody) > 0 {
+		if err := json.Unmarshal(respBody, out); err != nil {
+			return fmt.Errorf("decode supabase response: %w", err)
+		}
+	}
+	return nil
+}
+
 func bytesReaderFromAny(body any) io.Reader {
 	if body == nil {
 		return nil
