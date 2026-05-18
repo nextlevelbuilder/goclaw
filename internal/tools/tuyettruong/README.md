@@ -13,6 +13,8 @@ Goclaw tools that call the tuyettruong Next.js store admin API.
 | `product_update.go` | `tt_product_update` — patch product metadata |
 | `variant_update.go` | `tt_variant_update` — patch variant (price, stock, …) |
 | `product_delete.go` | `tt_product_delete` — destructive, requires `confirm_token=XOA-<slug>` |
+| `product_lookup_existing.go` | `tt_product_lookup_existing` — dedup pre-flight by AUST L / parentSku / name fuzzy |
+| `product_draft_from_extracted.go` | `tt_product_draft_from_extracted` — create DRAFT (active=false) from vision-extracted fields |
 | `order_list.go` | `tt_order_list` — filterable by status |
 | `order_update_status.go` | `tt_order_update_status` — confirm payment, cancel, etc. |
 | `quote_state.go` | Per-session draft store (in-memory, 24h TTL) |
@@ -71,7 +73,9 @@ If you already have a working test agent in goclaw (e.g. `gia-han`), you don't n
 3. In goclaw admin UI, edit `gia-han` and add to `tools_config.allow`:
    ```
    tt_product_search, tt_product_get, tt_product_create, tt_product_update,
-   tt_variant_update, tt_product_delete, tt_order_list, tt_order_update_status,
+   tt_variant_update, tt_product_delete,
+   tt_product_lookup_existing, tt_product_draft_from_extracted,
+   tt_order_list, tt_order_update_status,
    sales_product_search,
    quote_add_item, quote_remove_item, quote_view, quote_set_customer,
    quote_finalize, quote_clear,

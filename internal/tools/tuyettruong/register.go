@@ -42,6 +42,8 @@ func RegisterAll(reg *tools.Registry) {
 	reg.RegisterWithMetadata(NewProductUpdateTool(client), mutating())
 	reg.RegisterWithMetadata(NewVariantUpdateTool(client), mutating())
 	reg.RegisterWithMetadata(NewProductDeleteTool(client), mutating())
+	reg.RegisterWithMetadata(NewProductLookupExistingTool(client), readOnly())
+	reg.RegisterWithMetadata(NewProductDraftFromExtractedTool(client), mutating())
 	reg.RegisterWithMetadata(NewOrderListTool(client), readOnly())
 	reg.RegisterWithMetadata(NewOrderUpdateStatusTool(client), mutating())
 
@@ -68,6 +70,7 @@ func RegisterAll(reg *tools.Registry) {
 			"tt_product_search", "tt_product_get",
 			"tt_product_create", "tt_product_update",
 			"tt_variant_update", "tt_product_delete",
+			"tt_product_lookup_existing", "tt_product_draft_from_extracted",
 			"tt_order_list", "tt_order_update_status",
 		},
 		"sales_tools", []string{
