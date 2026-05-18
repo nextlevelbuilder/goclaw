@@ -6,6 +6,22 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
+// readOnly / mutating build a ToolMetadata with the right capability set.
+// Goclaw uses a slice of ToolCapability constants (not bool fields).
+func readOnly() tools.ToolMetadata {
+	return tools.ToolMetadata{
+		Capabilities: []tools.ToolCapability{tools.CapReadOnly},
+		Group:        "tuyettruong",
+	}
+}
+
+func mutating() tools.ToolMetadata {
+	return tools.ToolMetadata{
+		Capabilities: []tools.ToolCapability{tools.CapMutating},
+		Group:        "tuyettruong",
+	}
+}
+
 // RegisterAll wires every tuyettruong tool into the given registry. Safe to
 // call at boot in cmd/gateway_setup.go right after the built-in tools are
 // registered. Skips registration entirely if the client isn't configured —
@@ -19,31 +35,31 @@ func RegisterAll(reg *tools.Registry) {
 
 	// Admin tools — only usable from the admin-agent (its tool allow list
 	// includes the tt_* names; sales-agent's tools_config excludes them).
-	reg.RegisterWithMetadata(NewProductSearchTool(client, RoleAdmin), tools.ToolMetadata{ReadOnly: true})
-	reg.RegisterWithMetadata(NewProductGetTool(client), tools.ToolMetadata{ReadOnly: true})
-	reg.RegisterWithMetadata(NewProductCreateTool(client), tools.ToolMetadata{Mutating: true})
-	reg.RegisterWithMetadata(NewProductUpdateTool(client), tools.ToolMetadata{Mutating: true})
-	reg.RegisterWithMetadata(NewVariantUpdateTool(client), tools.ToolMetadata{Mutating: true})
-	reg.RegisterWithMetadata(NewProductDeleteTool(client), tools.ToolMetadata{Mutating: true})
-	reg.RegisterWithMetadata(NewOrderListTool(client), tools.ToolMetadata{ReadOnly: true})
-	reg.RegisterWithMetadata(NewOrderUpdateStatusTool(client), tools.ToolMetadata{Mutating: true})
+	reg.RegisterWithMetadata(NewProductSearchTool(client, RoleAdmin), readOnly())
+	reg.RegisterWithMetadata(NewProductGetTool(client), readOnly())
+	reg.RegisterWithMetadata(NewProductCreateTool(client), mutating())
+	reg.RegisterWithMetadata(NewProductUpdateTool(client), mutating())
+	reg.RegisterWithMetadata(NewVariantUpdateTool(client), mutating())
+	reg.RegisterWithMetadata(NewProductDeleteTool(client), mutating())
+	reg.RegisterWithMetadata(NewOrderListTool(client), readOnly())
+	reg.RegisterWithMetadata(NewOrderUpdateStatusTool(client), mutating())
 
 	// Sales tools — usable from sales-agent. Quote tools mutate in-process
-	// draft state; order_place writes to the store; the rest are read or notify.
-	reg.RegisterWithMetadata(NewQuoteAddItemTool(client), tools.ToolMetadata{Mutating: true})
-	reg.RegisterWithMetadata(NewQuoteRemoveItemTool(), tools.ToolMetadata{Mutating: true})
-	reg.RegisterWithMetadata(NewQuoteViewTool(), tools.ToolMetadata{ReadOnly: true})
-	reg.RegisterWithMetadata(NewQuoteSetCustomerTool(), tools.ToolMetadata{Mutating: true})
-	reg.RegisterWithMetadata(NewQuoteFinalizeTool(client), tools.ToolMetadata{ReadOnly: true})
-	reg.RegisterWithMetadata(NewQuoteClearTool(), tools.ToolMetadata{Mutating: true})
-	reg.RegisterWithMetadata(NewOrderPlaceTool(client), tools.ToolMetadata{Mutating: true})
-	reg.RegisterWithMetadata(NewOrderCustomerClaimedPaidTool(client), tools.ToolMetadata{Mutating: true})
-	reg.RegisterWithMetadata(NewOrderLookupTool(client), tools.ToolMetadata{ReadOnly: true})
-	reg.RegisterWithMetadata(NewNotifyAdminTool(), tools.ToolMetadata{Mutating: false})
+	// draft state; order_place writes to the store; the rest read or notify.
+	reg.RegisterWithMetadata(NewQuoteAddItemTool(client), mutating())
+	reg.RegisterWithMetadata(NewQuoteRemoveItemTool(), mutating())
+	reg.RegisterWithMetadata(NewQuoteViewTool(), readOnly())
+	reg.RegisterWithMetadata(NewQuoteSetCustomerTool(), mutating())
+	reg.RegisterWithMetadata(NewQuoteFinalizeTool(client), readOnly())
+	reg.RegisterWithMetadata(NewQuoteClearTool(), mutating())
+	reg.RegisterWithMetadata(NewOrderPlaceTool(client), mutating())
+	reg.RegisterWithMetadata(NewOrderCustomerClaimedPaidTool(client), mutating())
+	reg.RegisterWithMetadata(NewOrderLookupTool(client), readOnly())
+	reg.RegisterWithMetadata(NewNotifyAdminTool(), readOnly())
 
 	// Sales bot also needs product_search read-only — register a sales-role
 	// variant under a distinct alias so the agent allow lists can differ.
-	reg.RegisterWithMetadata(NewProductSearchTool(client, RoleSales).WithName("sales_product_search"), tools.ToolMetadata{ReadOnly: true})
+	reg.RegisterWithMetadata(NewProductSearchTool(client, RoleSales).WithName("sales_product_search"), readOnly())
 
 	slog.Info("tuyettruong tools registered",
 		"base", client.baseURL,
