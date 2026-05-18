@@ -28,13 +28,30 @@ Goclaw tools that call the tuyettruong Next.js store admin API.
 | `seeds/sales_agent_system_prompt.md` | Vietnamese system prompt for the sales-agent |
 | `seeds/seed_sales_agent.sql` | Manual SQL to insert sales agent + Zalo Personal channel |
 
-## Env vars
+## Auth model
+
+The agent has its own **Supabase user account** (role=admin) and authenticates the same way a logged-in human admin would. Client logs in once at process start, caches the JWT, refreshes 5 minutes before expiry. Every API call sends `Authorization: Bearer <jwt>`. No bot-specific API keys; no machine tokens.
+
+### Create the agent's user account (once)
+
+In tuyettruong repo:
+```bash
+npm run auth:create-supabase-admin -- --email=gia-han@tuyettruong.bot --password=<strong-pwd> --role=admin
+```
+
+(Email can be anything not used by a real customer — `*.bot` subdomain is a clear convention.)
+
+### Env vars
 
 | Name | Purpose |
 |---|---|
-| `TUYETTRUONG_API_BASE` | Base URL (e.g. `https://tuyettruong.com`). Required — without it, RegisterAll skips. |
-| `TUYETTRUONG_ADMIN_BOT_API_KEY` | Matches `BOT_ADMIN_API_KEY` in tuyettruong env. Sent as `x-api-key`. |
-| `TUYETTRUONG_SALES_BOT_API_KEY` | Matches `BOT_SALES_API_KEY` in tuyettruong env. Used by sales tools (quote_*, order_*, notify_admin). |
+| `TUYETTRUONG_API_BASE` | e.g. `https://tuyettruong.com` |
+| `TUYETTRUONG_SUPABASE_URL` | Same as `NEXT_PUBLIC_SUPABASE_URL` in tuyettruong |
+| `TUYETTRUONG_SUPABASE_ANON_KEY` | Same as `NEXT_PUBLIC_SUPABASE_ANON_KEY` |
+| `TUYETTRUONG_AGENT_EMAIL` | The agent's account email |
+| `TUYETTRUONG_AGENT_PASSWORD` | The agent's account password |
+
+Missing any of the above → `RegisterAll` logs the list and skips tool registration cleanly. Goclaw still boots.
 
 ## Boot wiring
 

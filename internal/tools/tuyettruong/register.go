@@ -29,7 +29,8 @@ func mutating() tools.ToolMetadata {
 func RegisterAll(reg *tools.Registry) {
 	client := NewClient()
 	if client == nil {
-		slog.Info("tuyettruong tools skipped (TUYETTRUONG_API_BASE not set)")
+		slog.Info("tuyettruong tools skipped — missing env",
+			"required", MissingEnv())
 		return
 	}
 

@@ -1,6 +1,9 @@
 // Package tuyettruong wires goclaw tools to the tuyettruong Next.js HTTP API.
-// Each tool calls the shared Client; the Client knows how to attach the bot
-// API key + actor header derived from goclaw session context.
+// Auth model: the agent has its own Supabase user account (role=admin). The
+// shared Client logs in once at process start, caches the access_token, and
+// auto-refreshes a few minutes before expiry. Every API call sends the JWT
+// as `Authorization: Bearer ...` — same path a logged-in admin would take
+// from a browser. No bot-specific headers; no separate machine API key.
 package tuyettruong
 
 import (
@@ -12,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
@@ -19,13 +23,20 @@ import (
 
 const (
 	defaultTimeout = 15 * time.Second
-	envAPIBase     = "TUYETTRUONG_API_BASE"
-	envAdminKey    = "TUYETTRUONG_ADMIN_BOT_API_KEY"
-	envSalesKey    = "TUYETTRUONG_SALES_BOT_API_KEY"
+
+	envAPIBase       = "TUYETTRUONG_API_BASE"
+	envSupabaseURL   = "TUYETTRUONG_SUPABASE_URL"
+	envSupabaseAnon  = "TUYETTRUONG_SUPABASE_ANON_KEY"
+	envAgentEmail    = "TUYETTRUONG_AGENT_EMAIL"
+	envAgentPassword = "TUYETTRUONG_AGENT_PASSWORD"
+
+	// Refresh the token N seconds before it expires to avoid mid-call expiry.
+	refreshLeadSeconds = 300
 )
 
-// BotRole identifies which API key the tool should send. Each tool declares
-// its required role at construction time.
+// BotRole is retained for tool signatures but is currently a no-op — every
+// request uses the single agent JWT. Kept so we can wire per-role tokens in
+// the future without re-touching every tool file.
 type BotRole int
 
 const (
@@ -33,82 +44,158 @@ const (
 	RoleSales
 )
 
-// Client is a small typed wrapper around net/http for tuyettruong endpoints.
-// Shared across all tools — construct once at registration, never holds per-call state.
-type Client struct {
-	baseURL string
-	http    *http.Client
+type tokenBundle struct {
+	accessToken  string
+	refreshToken string
+	expiresAt    time.Time
 }
 
-// NewClient resolves base URL from env. Returns nil if not configured (tools
-// will short-circuit with a clear error). One client per goclaw process is fine.
+// Client is a small typed wrapper around net/http for tuyettruong endpoints.
+// Shared across all tools — construct once at registration. Holds the cached
+// JWT and refreshes it on demand.
+type Client struct {
+	baseURL     string
+	supabaseURL string
+	anonKey     string
+	email       string
+	password    string
+	http        *http.Client
+
+	mu    sync.Mutex
+	token *tokenBundle
+}
+
+// NewClient resolves config from env. Returns nil if any required var is
+// missing — RegisterAll will then skip tool registration and log a friendly
+// reason so goclaw still boots cleanly.
 func NewClient() *Client {
 	base := strings.TrimRight(os.Getenv(envAPIBase), "/")
-	if base == "" {
+	sbURL := strings.TrimRight(os.Getenv(envSupabaseURL), "/")
+	anon := os.Getenv(envSupabaseAnon)
+	email := os.Getenv(envAgentEmail)
+	pwd := os.Getenv(envAgentPassword)
+	if base == "" || sbURL == "" || anon == "" || email == "" || pwd == "" {
 		return nil
 	}
 	return &Client{
-		baseURL: base,
-		http:    &http.Client{Timeout: defaultTimeout},
+		baseURL:     base,
+		supabaseURL: sbURL,
+		anonKey:     anon,
+		email:       email,
+		password:    pwd,
+		http:        &http.Client{Timeout: defaultTimeout},
 	}
 }
 
-func apiKeyFor(role BotRole) string {
-	switch role {
-	case RoleSales:
-		return os.Getenv(envSalesKey)
-	default:
-		return os.Getenv(envAdminKey)
+// MissingEnv returns the names of any required env vars that are unset.
+// Used by RegisterAll for a helpful log message.
+func MissingEnv() []string {
+	want := []string{envAPIBase, envSupabaseURL, envSupabaseAnon, envAgentEmail, envAgentPassword}
+	missing := []string{}
+	for _, k := range want {
+		if os.Getenv(k) == "" {
+			missing = append(missing, k)
+		}
 	}
+	return missing
 }
 
-// actorFromCtx builds the X-Bot-Actor-Id header value from goclaw context.
-// Format: "<platform>:<platformUserId>". Returns "" if we can't determine —
-// the API will reject; this is preferred over silently impersonating someone.
-func actorFromCtx(ctx context.Context) string {
-	channel := tools.ToolChannelFromCtx(ctx)
-	chatID := tools.ToolChatIDFromCtx(ctx)
-	if channel == "" || chatID == "" {
-		return ""
+// ensureToken returns a valid access token, performing a login or refresh as
+// needed. Safe for concurrent callers (mutex-guarded).
+func (c *Client) ensureToken(ctx context.Context) (string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.token != nil && time.Now().Before(c.token.expiresAt) {
+		return c.token.accessToken, nil
 	}
-	// Telegram chatID for DMs is the user_id; for groups it's negative
-	// "-12345:topic:99" form. For now we expect admin/sales DM only.
-	if idx := strings.IndexByte(chatID, ':'); idx > 0 {
-		chatID = chatID[:idx]
+	if c.token != nil && c.token.refreshToken != "" {
+		if err := c.refresh(ctx); err == nil {
+			return c.token.accessToken, nil
+		}
+		// fall through to fresh password login
 	}
-	switch channel {
-	case "telegram":
-		return "tg:" + chatID
-	case "zalo_personal":
-		return "zalo_personal:" + chatID
-	case "zalo_oa":
-		return "zalo_oa:" + chatID
-	default:
-		return ""
+	if err := c.login(ctx); err != nil {
+		return "", err
 	}
+	return c.token.accessToken, nil
+}
+
+func (c *Client) login(ctx context.Context) error {
+	url := c.supabaseURL + "/auth/v1/token?grant_type=password"
+	body, _ := json.Marshal(map[string]string{
+		"email":    c.email,
+		"password": c.password,
+	})
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("build login: %w", err)
+	}
+	req.Header.Set("apikey", c.anonKey)
+	req.Header.Set("Content-Type", "application/json")
+	return c.consumeTokenResponse(req)
+}
+
+func (c *Client) refresh(ctx context.Context) error {
+	url := c.supabaseURL + "/auth/v1/token?grant_type=refresh_token"
+	body, _ := json.Marshal(map[string]string{"refresh_token": c.token.refreshToken})
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("build refresh: %w", err)
+	}
+	req.Header.Set("apikey", c.anonKey)
+	req.Header.Set("Content-Type", "application/json")
+	return c.consumeTokenResponse(req)
+}
+
+func (c *Client) consumeTokenResponse(req *http.Request) error {
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("supabase token: %w", err)
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("supabase token → %d: %s", resp.StatusCode, truncate(string(respBody), 300))
+	}
+	var parsed struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+		ExpiresIn    int    `json:"expires_in"`
+	}
+	if err := json.Unmarshal(respBody, &parsed); err != nil {
+		return fmt.Errorf("decode token: %w", err)
+	}
+	if parsed.AccessToken == "" {
+		return fmt.Errorf("supabase returned empty access_token")
+	}
+	if parsed.ExpiresIn <= 0 {
+		parsed.ExpiresIn = 3600
+	}
+	c.token = &tokenBundle{
+		accessToken:  parsed.AccessToken,
+		refreshToken: parsed.RefreshToken,
+		expiresAt:    time.Now().Add(time.Duration(parsed.ExpiresIn-refreshLeadSeconds) * time.Second),
+	}
+	return nil
 }
 
 // Do executes a JSON HTTP call against the tuyettruong API and decodes the
-// response into out (if non-nil). Returns a Result-shaped error on transport
-// or non-2xx responses so callers can return it directly.
+// response into out (if non-nil). Sends the agent JWT for any path that
+// needs auth; public store endpoints accept it too without complaint, so we
+// always attach it.
 func (c *Client) Do(
 	ctx context.Context,
-	role BotRole,
+	_ BotRole,
 	method, path string,
 	body any,
 	out any,
 ) error {
 	if c == nil {
-		return fmt.Errorf("tuyettruong client not configured (set %s)", envAPIBase)
+		return fmt.Errorf("tuyettruong client not configured")
 	}
-	key := apiKeyFor(role)
-	if key == "" {
-		switch role {
-		case RoleSales:
-			return fmt.Errorf("missing %s env", envSalesKey)
-		default:
-			return fmt.Errorf("missing %s env", envAdminKey)
-		}
+	token, err := c.ensureToken(ctx)
+	if err != nil {
+		return err
 	}
 
 	var bodyReader io.Reader
@@ -125,17 +212,34 @@ func (c *Client) Do(
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
 	}
-	req.Header.Set("x-api-key", key)
+	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
-	if actor := actorFromCtx(ctx); actor != "" {
-		req.Header.Set("X-Bot-Actor-Id", actor)
-	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return fmt.Errorf("http: %w", err)
 	}
 	defer resp.Body.Close()
+
+	// One retry on 401 — token may have rotated since the cached check.
+	if resp.StatusCode == 401 {
+		_ = resp.Body.Close()
+		c.mu.Lock()
+		c.token = nil
+		c.mu.Unlock()
+		token, err = c.ensureToken(ctx)
+		if err != nil {
+			return err
+		}
+		req2, _ := http.NewRequestWithContext(ctx, method, url, bytesReaderFromAny(body))
+		req2.Header.Set("Authorization", "Bearer "+token)
+		req2.Header.Set("Content-Type", "application/json")
+		resp, err = c.http.Do(req2)
+		if err != nil {
+			return fmt.Errorf("http (retry): %w", err)
+		}
+		defer resp.Body.Close()
+	}
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -150,6 +254,14 @@ func (c *Client) Do(
 		}
 	}
 	return nil
+}
+
+func bytesReaderFromAny(body any) io.Reader {
+	if body == nil {
+		return nil
+	}
+	b, _ := json.Marshal(body)
+	return bytes.NewReader(b)
 }
 
 func truncate(s string, n int) string {
