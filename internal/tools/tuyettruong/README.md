@@ -40,6 +40,32 @@ Goclaw tools that call the tuyettruong Next.js store admin API.
 
 Already wired in `cmd/gateway_setup.go` (search for `tuyettruong.RegisterAll`).
 
+## Quick start: test with existing agent (gia-han)
+
+If you already have a working test agent in goclaw (e.g. `gia-han`), you don't need to seed `tuyettruong-admin` or `tuyettruong-sales` yet. Single-agent setup:
+
+1. Set env (point both keys to the same value — admin perms cover sales too):
+   ```
+   TUYETTRUONG_API_BASE=https://tuyettruong.com
+   TUYETTRUONG_ADMIN_BOT_API_KEY=<same as BOT_ADMIN_API_KEY in tuyettruong>
+   TUYETTRUONG_SALES_BOT_API_KEY=<same as above>
+   ```
+2. Restart goclaw → log line `tuyettruong tools registered` confirms wiring
+3. In goclaw admin UI, edit `gia-han` and add to `tools_config.allow`:
+   ```
+   tt_product_search, tt_product_get, tt_product_create, tt_product_update,
+   tt_variant_update, tt_product_delete, tt_order_list, tt_order_update_status,
+   sales_product_search,
+   quote_add_item, quote_remove_item, quote_view, quote_set_customer,
+   quote_finalize, quote_clear,
+   order_place, order_customer_claimed_paid, order_lookup, notify_admin
+   ```
+4. Paste system prompt from `seeds/combined_test_agent_system_prompt.md`
+5. In tuyettruong `/admin/bot-identities`: add anh's TG user_id with role=admin
+6. DM gia-han: "tìm áo trắng" → should work as sales; "list đơn mới" → admin flow
+
+When ready to split into 2 dedicated agents later, use `seed_admin_agent.sql` + `seed_sales_agent.sql` and switch the system prompts accordingly.
+
 ## Setup checklist (admin agent on Telegram)
 
 1. `@BotFather` → `/newbot` → save the token
