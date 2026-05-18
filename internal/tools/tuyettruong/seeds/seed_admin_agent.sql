@@ -9,8 +9,10 @@
 --   <MODEL>                  — e.g. 'claude-sonnet-4-6'
 --   <SYSTEM_PROMPT_TEXT>     — paste the full text from admin_agent_system_prompt.md (escape single quotes)
 --
--- Tools whitelist for this agent: only tt_* (so the LLM can't accidentally
--- call non-tuyettruong tools like web_search, exec, etc.).
+-- Tools whitelist for this agent: tt_* plus web_fetch + web_search. The two
+-- web tools are needed by the photo-ingest flow — agent fetches the
+-- manufacturer page (or searches for it) to pull clean product image URLs
+-- before drafting. No `exec`, no shell — admin agent stays HTTP-only.
 
 INSERT INTO agents (
   id, tenant_id, agent_key, provider_id, model,
@@ -31,7 +33,9 @@ INSERT INTO agents (
       'tt_product_search', 'tt_product_get',
       'tt_product_create', 'tt_product_update',
       'tt_variant_update', 'tt_product_delete',
-      'tt_order_list', 'tt_order_update_status'
+      'tt_product_lookup_existing', 'tt_product_draft_from_extracted',
+      'tt_order_list', 'tt_order_update_status',
+      'web_fetch', 'web_search'
     )
   ),
   jsonb_build_object(

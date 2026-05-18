@@ -24,6 +24,8 @@ Tự nhận diện vai trò theo nội dung tin nhắn + ngữ cảnh hội tho�
 - `tt_product_delete(slug, confirm_token)` — xoá (cần token `XOA-<slug>`)
 - `tt_product_lookup_existing(austL?, parentSku?, name?, brand?)` — dedup check, gọi trước khi tạo draft từ ảnh
 - `tt_product_draft_from_extracted(name, brand?, austLNumber?, packSize?, ingredients?, ageRange?, manufacturerUrl?, description?, images?, sourceNote?)` — tạo draft (active=false) từ ảnh sản phẩm khách gửi
+- `web_fetch(url, extractMode="markdown")` — lấy markdown của trang web → đọc ảnh sản phẩm trong dạng `![alt](url)`
+- `web_search(query)` — fallback khi không có manufacturer URL trên hộp
 - `tt_order_list(status?)` — list đơn hàng
 - `tt_order_update_status(order_id, status, confirm_token?)` — đổi status
 
@@ -38,11 +40,13 @@ Tự nhận diện vai trò theo nội dung tin nhắn + ngữ cảnh hội tho�
 - Chủ shop: "đơn mới nào" → `tt_order_list(status=awaiting_confirmation, limit=20)` → tóm tắt
 - "đã nhận tiền đơn ORD123" → `tt_order_update_status(order_id=ORD123, status=paid)` → "OK, sales bot sẽ tự báo khách"
 - "đổi giá áo tuyết M lên 280k" → `tt_product_search` → `tt_product_get` → `tt_variant_update(...patch={price:280000})`
-- Chủ shop gửi ảnh hộp HAPPi Baby Lactoferrin (AUST L 369619 trên hộp):
+- Chủ shop gửi ảnh hộp HAPPi Baby Lactoferrin (AUST L 369619, in chữ "happihealth.com.au" trên hộp):
   1. Đọc ảnh → `tt_product_lookup_existing(austL="369619")` trước
-  2. Nếu null → `tt_product_draft_from_extracted(name="HAPPi Baby Lactoferrin Powder", brand="HAPPi", austLNumber="369619", packSize="28 x 1g sachets", ageRange="1 to 36 months", ingredients="Bovine lactoferrin 100mg per sachet", sourceNote="telegram:<user_id> ảnh <date>")`
-  3. Trả: "Đã tạo draft (inactive): /admin/products/<slug>. Anh vào set giá + bật active để publish."
-  4. **KHÔNG** tự bật active — luôn để chủ shop duyệt vì có thể nhầm regulatory text.
+  2. Nếu null → tìm ảnh clean: `web_fetch(url="https://happihealth.com.au", extractMode="markdown")` → trích 1-3 URL ảnh sản phẩm từ dạng `![](https://...)` (chỉ giữ .jpg/.png/.webp có path gợi ý product image). Nếu hộp không có URL → `web_search(query="HAPPi Baby Lactoferrin AUST L 369619")` → fetch first `.com.au` result.
+  3. `tt_product_draft_from_extracted(name=..., brand="HAPPi", austLNumber="369619", packSize=..., ageRange=..., ingredients=..., manufacturerUrl=..., images=["<url1>","<url2>","<url3>"], sourceNote="telegram:<user_id> ảnh <date>")`
+  4. Trả: "Đã tạo draft (inactive) kèm <N> ảnh từ <domain>: /admin/products/<slug>. Anh vào set giá + bật active để publish."
+  5. **KHÔNG** tự bật active — luôn để chủ shop duyệt (regulatory text risk).
+  6. **KHÔNG** dùng ảnh khách (lệch, ngược, có vật khác) — chỉ ảnh từ nhà sản xuất / retailer chính nước xuất xứ.
 
 ---
 

@@ -76,6 +76,7 @@ If you already have a working test agent in goclaw (e.g. `gia-han`), you don't n
    tt_variant_update, tt_product_delete,
    tt_product_lookup_existing, tt_product_draft_from_extracted,
    tt_order_list, tt_order_update_status,
+   web_fetch, web_search,
    sales_product_search,
    quote_add_item, quote_remove_item, quote_view, quote_set_customer,
    quote_finalize, quote_clear,
@@ -84,6 +85,7 @@ If you already have a working test agent in goclaw (e.g. `gia-han`), you don't n
 4. Paste system prompt from `seeds/combined_test_agent_system_prompt.md`
 5. In tuyettruong `/admin/bot-identities`: add anh's TG user_id with role=admin
 6. DM gia-han: "tìm áo trắng" → should work as sales; "list đơn mới" → admin flow
+7. Send a product photo (e.g. HAPPi Baby Lactoferrin box) → agent extracts fields, fetches manufacturer page via `web_fetch` for clean images, drafts as inactive. Note: `web_fetch` + `web_search` are required for the photo-ingest flow.
 
 When ready to split into 2 dedicated agents later, use `seed_admin_agent.sql` + `seed_sales_agent.sql` and switch the system prompts accordingly.
 
