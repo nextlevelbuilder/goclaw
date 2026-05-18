@@ -47,6 +47,10 @@ func RegisterAll(reg *tools.Registry) {
 	reg.RegisterWithMetadata(NewOrderListTool(client), readOnly())
 	reg.RegisterWithMetadata(NewOrderUpdateStatusTool(client), mutating())
 
+	// Identity resolution — used by either mode at conversation start to know
+	// whether the incoming chat sender is admin/staff/customer/unknown.
+	reg.RegisterWithMetadata(NewWhoAmITool(client), readOnly())
+
 	// Sales tools — usable from sales-agent. Quote tools mutate in-process
 	// draft state; order_place writes to the store; the rest read or notify.
 	reg.RegisterWithMetadata(NewQuoteAddItemTool(client), mutating())
@@ -73,6 +77,7 @@ func RegisterAll(reg *tools.Registry) {
 			"tt_product_lookup_existing", "tt_product_draft_from_extracted",
 			"tt_order_list", "tt_order_update_status",
 		},
+		"shared_tools", []string{"tt_whoami"},
 		"sales_tools", []string{
 			"sales_product_search",
 			"quote_add_item", "quote_remove_item", "quote_view",
