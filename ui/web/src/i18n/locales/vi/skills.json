@@ -153,8 +153,27 @@
     "selectAgent": "Chọn agent",
     "allowManage": "Cho phép agent này sửa hoặc xóa skill",
     "canManage": "Được sửa",
+    "grantAllAgents": "Grant tất cả agents",
+    "grantAllPartial": "{{count}} grant agent thất bại",
     "loadFailed": "Không thể tải grant",
     "saveFailed": "Không thể lưu grant",
     "revokeFailed": "Không thể thu hồi grant"
+  },
+  "bulk": {
+    "selected": "Đã chọn {{count}}",
+    "selectSkill": "Chọn {{name}}",
+    "selectPage": "Chọn skill đang hiển thị",
+    "enable": "Bật",
+    "disable": "Tắt",
+    "grantAllAgents": "Grant tất cả agents",
+    "delete": "Xóa",
+    "clear": "Bỏ chọn",
+    "enabled": "Đã bật {{count}} skill",
+    "disabled": "Đã tắt {{count}} skill",
+    "grantedAllAgents": "Đã grant tất cả agents cho {{count}} skill",
+    "deleted": "Đã xóa {{count}} skill",
+    "failed": "Bulk action thất bại",
+    "deleteTitle": "Xóa các skill đã chọn",
+    "deleteDescription": "Thao tác này sẽ xóa {{count}} custom skill đã chọn. Gõ DELETE để xác nhận."
   }
 }

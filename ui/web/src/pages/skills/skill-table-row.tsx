@@ -18,6 +18,8 @@ interface SkillTableRowProps {
   tab: "core" | "custom";
   hasTenantScope: boolean;
   toggling: string | null;
+  selected: boolean;
+  onToggleSelect: (skill: SkillInfo) => void;
   onView: (skill: SkillInfo) => void;
   onEdit: (skill: SkillInfo) => void;
   onManageGrants: (skill: SkillInfo) => void;
@@ -30,7 +32,7 @@ interface SkillTableRowProps {
 
 /** Single row in the skills table with inline status, visibility, and action controls. */
 export function SkillTableRow({
-  skill, tab, hasTenantScope, toggling,
+  skill, tab, hasTenantScope, toggling, selected, onToggleSelect,
   onView, onEdit, onManageGrants, onDelete, onToggle, onCycleVisibility,
   onSetTenantConfig, onDeleteTenantConfig,
 }: SkillTableRowProps) {
@@ -40,7 +42,18 @@ export function SkillTableRow({
   const hasMissing = (skill.missing_deps?.length ?? 0) > 0;
 
   return (
-    <tr className={cn("border-b last:border-0 hover:bg-muted/30", (isArchived || isDisabled) && "opacity-60")}>
+    <tr className={cn("border-b last:border-0 hover:bg-muted/30", selected && "bg-primary/5", (isArchived || isDisabled) && "opacity-60")}>
+      <td className="px-4 py-3">
+        {skill.id && (
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => onToggleSelect(skill)}
+            aria-label={t("bulk.selectSkill", { name: skill.name })}
+            className="h-4 w-4 cursor-pointer accent-primary"
+          />
+        )}
+      </td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-2 flex-wrap">
           <Zap className="h-4 w-4 text-muted-foreground shrink-0" />

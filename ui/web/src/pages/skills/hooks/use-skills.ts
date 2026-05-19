@@ -133,9 +133,54 @@ export function useSkills() {
     [http, invalidate],
   );
 
+  const grantSkillToAgents = useCallback(
+    async (id: string, agentIds: string[], version: number, canManage: boolean) => {
+      const failures: string[] = [];
+      for (const targetAgentId of Array.from(new Set(agentIds.filter(Boolean)))) {
+        try {
+          await http.post<{ ok: string }>(`/v1/skills/${id}/grants/agent`, {
+            agent_id: targetAgentId,
+            version,
+            can_manage: canManage,
+          });
+        } catch (err) {
+          failures.push(userFriendlyError(err));
+        }
+      }
+      await invalidate();
+      if (failures.length > 0) {
+        throw new Error(i18next.t("skills:grants.grantAllPartial", { count: failures.length }));
+      }
+    },
+    [http, invalidate],
+  );
+
   const revokeSkillFromAgent = useCallback(
     async (id: string, agentId: string) => {
       await http.delete<{ ok: string }>(`/v1/skills/${id}/grants/agent/${agentId}`);
+      await invalidate();
+    },
+    [http, invalidate],
+  );
+
+  const deleteSkills = useCallback(
+    async (ids: string[]) => {
+      for (const id of Array.from(new Set(ids.filter(Boolean)))) {
+        await http.delete<{ ok: string }>(`/v1/skills/${id}`);
+      }
+      await invalidate();
+    },
+    [http, invalidate],
+  );
+
+  const toggleSkills = useCallback(
+    async (ids: string[], enabled: boolean) => {
+      for (const id of Array.from(new Set(ids.filter(Boolean)))) {
+        await http.post<{ ok: boolean; enabled: boolean; status: string }>(
+          `/v1/skills/${id}/toggle`,
+          { enabled },
+        );
+      }
       await invalidate();
     },
     [http, invalidate],
@@ -256,7 +301,8 @@ export function useSkills() {
   return {
     skills, loading, refresh: invalidate, getSkill,
     uploadSkill, updateSkill, deleteSkill,
-    listAgentGrants, grantSkillToAgent, revokeSkillFromAgent,
+    listAgentGrants, grantSkillToAgent, grantSkillToAgents, revokeSkillFromAgent,
+    deleteSkills, toggleSkills,
     getSkillVersions, getSkillFiles, getSkillFileContent, rescanDeps, installDeps, installSingleDep, toggleSkill,
     setTenantConfig, deleteTenantConfig,
   };

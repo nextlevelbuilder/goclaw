@@ -26,6 +26,7 @@ interface SkillAgentGrantsDialogProps {
   onClose: () => void;
   onLoad: (skillId: string) => Promise<SkillAgentGrant[]>;
   onGrant: (skillId: string, agentId: string, version: number, canManage: boolean) => Promise<void>;
+  onGrantAll: (skillId: string, agentIds: string[], version: number, canManage: boolean) => Promise<void>;
   onRevoke: (skillId: string, agentId: string) => Promise<void>;
 }
 
@@ -34,6 +35,7 @@ export function SkillAgentGrantsDialog({
   onClose,
   onLoad,
   onGrant,
+  onGrantAll,
   onRevoke,
 }: SkillAgentGrantsDialogProps) {
   const { t } = useTranslation("skills");
@@ -86,6 +88,28 @@ export function SkillAgentGrantsDialog({
       });
       setAgentId("");
       setCanManage(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("grants.saveFailed"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGrantAll = async () => {
+    if (!skill.id || agents.length === 0) return;
+    setLoading(true);
+    setError("");
+    try {
+      await onGrantAll(skill.id, agents.map((agent) => agent.id), skill.version ?? 1, canManage);
+      setGrants(agents.map((agent) => ({
+        agent_id: agent.id,
+        agent_key: agent.agent_key,
+        display_name: agent.display_name,
+        pinned_version: skill.version ?? 1,
+        granted_by: "",
+        can_manage: canManage,
+      })));
+      setAgentId("");
     } catch (err) {
       setError(err instanceof Error ? err.message : t("grants.saveFailed"));
     } finally {
@@ -173,10 +197,15 @@ export function SkillAgentGrantsDialog({
               </span>
               <Switch checked={canManage} onCheckedChange={setCanManage} />
             </label>
-            <Button size="sm" onClick={handleGrant} disabled={loading || !agentId} className="gap-1">
-              <Plus className="h-3.5 w-3.5" />
-              {selectedGrant ? t("grants.save") : t("grants.grant")}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" onClick={handleGrant} disabled={loading || !agentId} className="gap-1">
+                <Plus className="h-3.5 w-3.5" />
+                {selectedGrant ? t("grants.save") : t("grants.grant")}
+              </Button>
+              <Button size="sm" variant="outline" onClick={handleGrantAll} disabled={loading || agents.length === 0}>
+                {t("grants.grantAllAgents")}
+              </Button>
+            </div>
           </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}

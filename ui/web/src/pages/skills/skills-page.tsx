@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from "react";
+import { useState, useEffect, lazy, Suspense, useMemo } from "react";
 import { useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { Zap, RefreshCw, Upload, ScanSearch, Download } from "lucide-react";
@@ -10,10 +10,12 @@ import { Pagination } from "@/components/shared/pagination";
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
 import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { cn } from "@/lib/utils";
+import { toast } from "@/stores/use-toast-store";
 import { useSkills, type SkillInfo } from "./hooks/use-skills";
 import { SkillDetailDialog } from "./skill-detail-dialog";
 import { SkillEditDialog } from "./skill-edit-dialog";
 import { SkillAgentGrantsDialog } from "./skill-agent-grants-dialog";
+import { SkillBulkActionsToolbar } from "./skill-bulk-actions-toolbar";
 
 const SkillUploadDialog = lazy(() =>
   import("./skill-upload-dialog").then((m) => ({ default: m.SkillUploadDialog }))
@@ -25,6 +27,7 @@ import { useMinLoading } from "@/hooks/use-min-loading";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import { usePagination } from "@/hooks/use-pagination";
 import { useTenants } from "@/hooks/use-tenants";
+import { useAgents } from "@/pages/agents/hooks/use-agents";
 
 const MASTER_TENANT_ID = "0193a5b0-7000-7000-8000-000000000001";
 
@@ -34,13 +37,15 @@ export function SkillsPage() {
   const { t } = useTranslation("skills");
   const {
     skills, loading, refresh, getSkill, uploadSkill, updateSkill, deleteSkill,
-    listAgentGrants, grantSkillToAgent, revokeSkillFromAgent,
+    listAgentGrants, grantSkillToAgent, grantSkillToAgents, revokeSkillFromAgent,
+    deleteSkills, toggleSkills,
     getSkillVersions, getSkillFiles, getSkillFileContent, rescanDeps, installDeps, installSingleDep, toggleSkill,
     setTenantConfig, deleteTenantConfig,
   } = useSkills();
   const [params, setParams] = useSearchParams();
   const { runtimes } = useRuntimes();
   const { currentTenantId } = useTenants();
+  const { agents } = useAgents();
   const hasTenantScope = !!currentTenantId && currentTenantId !== MASTER_TENANT_ID;
   const spinning = useMinLoading(loading);
   const showSkeleton = useDeferredLoading(loading && skills.length === 0);
@@ -52,23 +57,45 @@ export function SkillsPage() {
   const [editTarget, setEditTarget] = useState<SkillInfo | null>(null);
   const [grantsTarget, setGrantsTarget] = useState<SkillInfo | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SkillInfo | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [bulkLoading, setBulkLoading] = useState(false);
   const [rescanning, setRescanning] = useState(false);
   const [installingDeps, setInstallingDeps] = useState(false);
   const [toggling, setToggling] = useState<string | null>(null);
 
-  const coreSkills = skills.filter((s: SkillInfo) => s.is_system);
-  const customSkills = skills.filter((s: SkillInfo) => !s.is_system);
+  const coreSkills = useMemo(() => skills.filter((s: SkillInfo) => s.is_system), [skills]);
+  const customSkills = useMemo(() => skills.filter((s: SkillInfo) => !s.is_system), [skills]);
   const tabSkills = tab === "core" ? coreSkills : customSkills;
-  const allMissing = [...new Set(tabSkills.flatMap((s: SkillInfo) => s.missing_deps ?? []))];
-  const filtered = tabSkills.filter(
-    (s: SkillInfo) =>
-      s.name.toLowerCase().includes(search.toLowerCase()) ||
-      s.description.toLowerCase().includes(search.toLowerCase()),
+  const allMissing = useMemo(
+    () => [...new Set(tabSkills.flatMap((s: SkillInfo) => s.missing_deps ?? []))],
+    [tabSkills],
+  );
+  const filtered = useMemo(
+    () => tabSkills.filter(
+      (s: SkillInfo) =>
+        s.name.toLowerCase().includes(search.toLowerCase()) ||
+        s.description.toLowerCase().includes(search.toLowerCase()),
+    ),
+    [search, tabSkills],
   );
   const { pageItems, pagination, setPage, setPageSize, resetPage } = usePagination(filtered);
+  const selectedSkills = filtered.filter((skill) => skill.id && selectedIds.has(skill.id));
+  const selectedCustomSkills = selectedSkills.filter((skill) => !skill.is_system);
+  const pageSelectableIds = pageItems.map((skill) => skill.id).filter((id): id is string => !!id);
+  const allPageSelected = pageSelectableIds.length > 0 && pageSelectableIds.every((id) => selectedIds.has(id));
+  const somePageSelected = pageSelectableIds.some((id) => selectedIds.has(id)) && !allPageSelected;
 
   useEffect(() => { resetPage(); }, [search, tab, resetPage]);
+  useEffect(() => { setSelectedIds(new Set()); }, [search, tab]);
+  useEffect(() => {
+    setSelectedIds((current) => {
+      const valid = new Set(filtered.map((skill) => skill.id).filter(Boolean));
+      const next = new Set(Array.from(current).filter((id) => valid.has(id)));
+      return next.size === current.size ? current : next;
+    });
+  }, [filtered]);
 
   const setParamValues = (updates: Record<string, string | null>) => {
     const next = new URLSearchParams(params);
@@ -134,6 +161,76 @@ export function SkillsPage() {
     setDeleteLoading(true);
     try { await deleteSkill(deleteTarget.id); setDeleteTarget(null); refresh(); }
     finally { setDeleteLoading(false); }
+  };
+
+  const toggleSelectSkill = (skill: SkillInfo) => {
+    if (!skill.id) return;
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(skill.id!)) next.delete(skill.id!);
+      else next.add(skill.id!);
+      return next;
+    });
+  };
+
+  const toggleSelectPage = () => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (allPageSelected) {
+        for (const id of pageSelectableIds) next.delete(id);
+      } else {
+        for (const id of pageSelectableIds) next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const runBulkAction = async (action: () => Promise<void>, successKey: string, count: number) => {
+    setBulkLoading(true);
+    try {
+      await action();
+      setSelectedIds(new Set());
+      toast.success(t(successKey, { count }));
+    } catch (err) {
+      toast.error(t("bulk.failed"), err instanceof Error ? err.message : String(err));
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  const handleBulkToggle = (enabled: boolean) => {
+    const ids = selectedSkills.map((skill) => skill.id).filter((id): id is string => !!id);
+    runBulkAction(async () => {
+      if (hasTenantScope) {
+        for (const id of ids) await setTenantConfig(id, enabled);
+      } else {
+        await toggleSkills(ids, enabled);
+      }
+    }, enabled ? "bulk.enabled" : "bulk.disabled", ids.length);
+  };
+
+  const handleBulkGrantAllAgents = () => {
+    const agentIds = agents.map((agent) => agent.id).filter(Boolean);
+    runBulkAction(async () => {
+      for (const skill of selectedCustomSkills) {
+        if (skill.id) await grantSkillToAgents(skill.id, agentIds, skill.version ?? 1, true);
+      }
+    }, "bulk.grantedAllAgents", selectedCustomSkills.length);
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = selectedCustomSkills.map((skill) => skill.id).filter((id): id is string => !!id);
+    setDeleteLoading(true);
+    try {
+      await deleteSkills(ids);
+      setBulkDeleteOpen(false);
+      setSelectedIds(new Set());
+      toast.success(t("bulk.deleted", { count: ids.length }));
+    } catch (err) {
+      toast.error(t("bulk.failed"), err instanceof Error ? err.message : String(err));
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   const handleRescanDeps = async () => {
@@ -205,6 +302,18 @@ export function SkillsPage() {
         ))}
       </div>
 
+      <SkillBulkActionsToolbar
+        selectedCount={selectedSkills.length}
+        customSelectedCount={selectedCustomSkills.length}
+        agentCount={agents.length}
+        loading={bulkLoading || deleteLoading}
+        onEnable={() => handleBulkToggle(true)}
+        onDisable={() => handleBulkToggle(false)}
+        onGrantAllAgents={handleBulkGrantAllAgents}
+        onDelete={() => setBulkDeleteOpen(true)}
+        onClear={() => setSelectedIds(new Set())}
+      />
+
       <div className="mt-4">
         <MissingDepsPanel missing={allMissing} onInstallItem={installSingleDep} runtimes={tab === "core" ? runtimes : undefined} />
         <SearchInput value={search} onChange={setSearch} placeholder={t("searchPlaceholder")} className="max-w-sm" />
@@ -224,6 +333,16 @@ export function SkillsPage() {
             <table className="w-full min-w-[600px] text-sm">
               <thead>
                 <tr className="border-b bg-muted/50">
+                  <th className="w-10 px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={allPageSelected}
+                      ref={(el) => { if (el) el.indeterminate = somePageSelected; }}
+                      onChange={toggleSelectPage}
+                      aria-label={t("bulk.selectPage")}
+                      className="h-4 w-4 cursor-pointer accent-primary"
+                    />
+                  </th>
                   <th className="px-4 py-3 text-left font-medium">{t("columns.name")}</th>
                   <th className="px-4 py-3 text-left font-medium">{t("columns.description")}</th>
                   {tab === "custom" && <th className="px-4 py-3 text-left font-medium">{t("columns.agents")}</th>}
@@ -240,6 +359,8 @@ export function SkillsPage() {
                     tab={tab}
                     hasTenantScope={hasTenantScope}
                     toggling={toggling}
+                    selected={!!skill.id && selectedIds.has(skill.id)}
+                    onToggleSelect={toggleSelectSkill}
                     onView={handleViewSkill}
                     onEdit={setEditTarget}
                     onManageGrants={setGrantsTarget}
@@ -292,6 +413,7 @@ export function SkillsPage() {
           onClose={() => setGrantsTarget(null)}
           onLoad={listAgentGrants}
           onGrant={grantSkillToAgent}
+          onGrantAll={grantSkillToAgents}
           onRevoke={revokeSkillFromAgent}
         />
       )}
@@ -308,6 +430,16 @@ export function SkillsPage() {
         confirmValue={deleteTarget?.name || ""}
         confirmLabel={t("delete.confirmLabel")}
         onConfirm={handleDelete}
+        loading={deleteLoading}
+      />
+      <ConfirmDeleteDialog
+        open={bulkDeleteOpen}
+        onOpenChange={(open) => !open && setBulkDeleteOpen(false)}
+        title={t("bulk.deleteTitle")}
+        description={t("bulk.deleteDescription", { count: selectedCustomSkills.length })}
+        confirmValue="DELETE"
+        confirmLabel={t("delete.confirmLabel")}
+        onConfirm={handleBulkDelete}
         loading={deleteLoading}
       />
     </div>

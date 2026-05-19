@@ -155,20 +155,49 @@ export function SkillDetailDialog({
     loadFileContent(path);
   };
 
+  useEffect(() => {
+    if (hasFiles) loadVersions();
+  }, [hasFiles, loadVersions]);
+
+  const headerVersion = selectedVersion ?? versions?.current ?? skill.version;
+
   return (
     <Dialog open onOpenChange={() => onClose()}>
       <DialogContent className="max-h-[85vh] md:min-h-[60vh] overflow-hidden flex flex-col sm:max-w-2xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-7xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 flex-wrap">
-            {skill.name}
-            <Badge variant="outline">{skill.source || "file"}</Badge>
-            {skill.visibility && (
-              <Badge variant="secondary">{skill.visibility}</Badge>
-            )}
-            {skill.version ? (
-              <span className="text-xs font-normal text-muted-foreground">v{skill.version}</span>
+          <div className="flex flex-col gap-2 pr-8 sm:flex-row sm:items-start sm:justify-between">
+            <DialogTitle className="flex min-w-0 flex-wrap items-center gap-2">
+              {skill.name}
+              <Badge variant="outline">{skill.source || "file"}</Badge>
+              {skill.visibility && (
+                <Badge variant="secondary">{skill.visibility}</Badge>
+              )}
+            </DialogTitle>
+            {versions && versions.versions.length > 1 ? (
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="text-sm text-muted-foreground">{t("detail.version")}</span>
+                <Select
+                  value={String(headerVersion ?? versions.current)}
+                  onValueChange={handleVersionChange}
+                >
+                  <SelectTrigger className="h-8 w-40">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {versions.versions.map((v) => (
+                      <SelectItem key={v} value={String(v)}>
+                        v{v}{v === versions.current ? ` ${t("detail.current")}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : headerVersion ? (
+              <Badge variant="outline" className="w-fit shrink-0 font-normal">
+                v{headerVersion}
+              </Badge>
             ) : null}
-          </DialogTitle>
+          </div>
           {skill.description && (
             <p className="text-sm text-muted-foreground">{skill.description}</p>
           )}
@@ -208,27 +237,6 @@ export function SkillDetailDialog({
 
           {hasFiles && (
             <TabsContent value="files" className="flex-1 overflow-hidden flex flex-col mt-2 gap-2">
-              {versions && versions.versions.length > 1 && (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">{t("detail.version")}</span>
-                  <Select
-                    value={String(selectedVersion ?? versions.current)}
-                    onValueChange={handleVersionChange}
-                  >
-                    <SelectTrigger className="w-40 h-8">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {versions.versions.map((v) => (
-                        <SelectItem key={v} value={String(v)}>
-                          v{v}{v === versions.current ? ` ${t("detail.current")}` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
               <FileBrowser
                 tree={tree}
                 filesLoading={filesLoading}

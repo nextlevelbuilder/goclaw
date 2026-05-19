@@ -33,9 +33,28 @@
     "selectAgent": "Select agent",
     "allowManage": "Allow this agent to edit or delete the skill",
     "canManage": "Can edit",
+    "grantAllAgents": "Grant all agents",
+    "grantAllPartial": "{{count}} agent grant(s) failed",
     "loadFailed": "Failed to load grants",
     "saveFailed": "Failed to save grant",
     "revokeFailed": "Failed to revoke grant"
+  },
+  "bulk": {
+    "selected": "{{count}} selected",
+    "selectSkill": "Select {{name}}",
+    "selectPage": "Select visible skills",
+    "enable": "Enable",
+    "disable": "Disable",
+    "grantAllAgents": "Grant all agents",
+    "delete": "Delete",
+    "clear": "Clear",
+    "enabled": "Enabled {{count}} skill(s)",
+    "disabled": "Disabled {{count}} skill(s)",
+    "grantedAllAgents": "Granted all agents to {{count}} skill(s)",
+    "deleted": "Deleted {{count}} skill(s)",
+    "failed": "Bulk action failed",
+    "deleteTitle": "Delete selected skills",
+    "deleteDescription": "This will delete {{count}} selected custom skill(s). Type DELETE to confirm."
   },
   "visibility": {
     "clickToCycle": "Click to change visibility"

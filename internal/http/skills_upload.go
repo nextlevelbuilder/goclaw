@@ -204,6 +204,7 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	wroteSkillMD := false
 	for _, f := range zr.File {
 		if f.FileInfo().IsDir() {
 			continue
@@ -225,22 +226,38 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		// Security: prevent path traversal
-		name := filepath.Clean(entryName)
-		if strings.Contains(name, "..") {
+		cleanName := filepath.Clean(entryName)
+		if strings.Contains(cleanName, "..") {
 			continue
 		}
-		destPath := filepath.Join(destDir, name)
+		destPath := filepath.Join(destDir, cleanName)
 		if !strings.HasPrefix(destPath, destDir+string(filepath.Separator)) {
 			continue
 		}
 		if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
-			continue
+			os.RemoveAll(destDir)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, "failed to create skill file directory")})
+			return
 		}
 		data, err := readZipFile(f)
 		if err != nil {
-			continue
+			os.RemoveAll(destDir)
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidRequest, "failed to read ZIP entry")})
+			return
 		}
-		os.WriteFile(destPath, []byte(data), 0644)
+		if err := os.WriteFile(destPath, []byte(data), 0644); err != nil {
+			os.RemoveAll(destDir)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, "failed to write skill files")})
+			return
+		}
+		if cleanName == "SKILL.md" {
+			wroteSkillMD = true
+		}
+	}
+	if !wroteSkillMD {
+		os.RemoveAll(destDir)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidRequest, "ZIP must contain a writable SKILL.md")})
+		return
 	}
 
 	// Save metadata to DB

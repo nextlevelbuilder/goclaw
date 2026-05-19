@@ -153,8 +153,27 @@
     "selectAgent": "选择 Agent",
     "allowManage": "允许此 Agent 编辑或删除 Skill",
     "canManage": "可编辑",
+    "grantAllAgents": "授权所有 Agent",
+    "grantAllPartial": "{{count}} 个 Agent 授权失败",
     "loadFailed": "无法加载授权",
     "saveFailed": "无法保存授权",
     "revokeFailed": "无法撤销授权"
+  },
+  "bulk": {
+    "selected": "已选择 {{count}} 项",
+    "selectSkill": "选择 {{name}}",
+    "selectPage": "选择当前可见 Skill",
+    "enable": "启用",
+    "disable": "禁用",
+    "grantAllAgents": "授权所有 Agent",
+    "delete": "删除",
+    "clear": "清除选择",
+    "enabled": "已启用 {{count}} 个 Skill",
+    "disabled": "已禁用 {{count}} 个 Skill",
+    "grantedAllAgents": "已为 {{count}} 个 Skill 授权所有 Agent",
+    "deleted": "已删除 {{count}} 个 Skill",
+    "failed": "批量操作失败",
+    "deleteTitle": "删除所选 Skill",
+    "deleteDescription": "这将删除 {{count}} 个所选自定义 Skill。请输入 DELETE 确认。"
   }
 }
