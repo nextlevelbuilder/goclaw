@@ -1,11 +1,10 @@
 import { useState, useEffect, lazy, Suspense, useMemo } from "react";
-import { useSearchParams } from "react-router";
+import { useNavigate, useParams, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { Zap, RefreshCw, Upload, ScanSearch, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
-import { SearchInput } from "@/components/shared/search-input";
 import { Pagination } from "@/components/shared/pagination";
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
 import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
@@ -16,6 +15,8 @@ import { SkillDetailDialog } from "./skill-detail-dialog";
 import { SkillEditDialog } from "./skill-edit-dialog";
 import { SkillAgentGrantsDialog } from "./skill-agent-grants-dialog";
 import { SkillBulkActionsToolbar } from "./skill-bulk-actions-toolbar";
+import { SkillHealthSummary } from "./skill-health-summary";
+import { SkillsFilterBar } from "./skills-filter-bar";
 
 const SkillUploadDialog = lazy(() =>
   import("./skill-upload-dialog").then((m) => ({ default: m.SkillUploadDialog }))
@@ -28,6 +29,12 @@ import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import { usePagination } from "@/hooks/use-pagination";
 import { useTenants } from "@/hooks/use-tenants";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
+import { deriveSkillStats, filterSkills, sortSkills } from "./lib/skills-filtering";
+import {
+  parseSkillsPageState,
+  serializeSkillsPageState,
+  type SkillsPageState,
+} from "./lib/skills-page-state";
 
 const MASTER_TENANT_ID = "0193a5b0-7000-7000-8000-000000000001";
 
@@ -43,15 +50,17 @@ export function SkillsPage() {
     setTenantConfig, deleteTenantConfig,
   } = useSkills();
   const [params, setParams] = useSearchParams();
+  const routeParams = useParams<{ id?: string }>();
+  const navigate = useNavigate();
   const { runtimes } = useRuntimes();
   const { currentTenantId } = useTenants();
   const { agents } = useAgents();
   const hasTenantScope = !!currentTenantId && currentTenantId !== MASTER_TENANT_ID;
   const spinning = useMinLoading(loading);
   const showSkeleton = useDeferredLoading(loading && skills.length === 0);
-  const urlTab = params.get("tab") === "custom" ? "custom" : "core";
-  const tab: Tab = urlTab;
-  const [search, setSearch] = useState("");
+  const pageState = useMemo(() => parseSkillsPageState(params), [params]);
+  const tab: Tab = pageState.tab;
+  const skillRef = params.get("skill");
   const [selectedSkill, setSelectedSkill] = useState<(SkillInfo & { content: string }) | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<SkillInfo | null>(null);
@@ -68,27 +77,33 @@ export function SkillsPage() {
   const coreSkills = useMemo(() => skills.filter((s: SkillInfo) => s.is_system), [skills]);
   const customSkills = useMemo(() => skills.filter((s: SkillInfo) => !s.is_system), [skills]);
   const tabSkills = tab === "core" ? coreSkills : customSkills;
+  const healthStats = useMemo(() => deriveSkillStats(tabSkills), [tabSkills]);
   const allMissing = useMemo(
     () => [...new Set(tabSkills.flatMap((s: SkillInfo) => s.missing_deps ?? []))],
     [tabSkills],
   );
   const filtered = useMemo(
-    () => tabSkills.filter(
-      (s: SkillInfo) =>
-        s.name.toLowerCase().includes(search.toLowerCase()) ||
-        s.description.toLowerCase().includes(search.toLowerCase()),
-    ),
-    [search, tabSkills],
+    () => sortSkills(filterSkills(tabSkills, pageState), pageState.sort),
+    [pageState, tabSkills],
   );
   const { pageItems, pagination, setPage, setPageSize, resetPage } = usePagination(filtered);
   const selectedSkills = filtered.filter((skill) => skill.id && selectedIds.has(skill.id));
   const selectedCustomSkills = selectedSkills.filter((skill) => !skill.is_system);
+  const skippedSystemCount = selectedSkills.length - selectedCustomSkills.length;
   const pageSelectableIds = pageItems.map((skill) => skill.id).filter((id): id is string => !!id);
   const allPageSelected = pageSelectableIds.length > 0 && pageSelectableIds.every((id) => selectedIds.has(id));
   const somePageSelected = pageSelectableIds.some((id) => selectedIds.has(id)) && !allPageSelected;
 
-  useEffect(() => { resetPage(); }, [search, tab, resetPage]);
-  useEffect(() => { setSelectedIds(new Set()); }, [search, tab]);
+  useEffect(() => {
+    const routeSkillId = routeParams.id;
+    if (!routeSkillId) return;
+    const next = new URLSearchParams(params);
+    next.set("skill", routeSkillId);
+    navigate({ pathname: "/skills", search: toSearchString(next) }, { replace: true });
+  }, [navigate, params, routeParams.id]);
+
+  useEffect(() => { resetPage(); }, [pageState.q, pageState.filter, pageState.sort, pageState.agent, tab, resetPage]);
+  useEffect(() => { setSelectedIds(new Set()); }, [pageState.q, pageState.filter, pageState.sort, pageState.agent, tab]);
   useEffect(() => {
     setSelectedIds((current) => {
       const valid = new Set(filtered.map((skill) => skill.id).filter(Boolean));
@@ -96,6 +111,10 @@ export function SkillsPage() {
       return next.size === current.size ? current : next;
     });
   }, [filtered]);
+
+  const setPageState = (updates: Partial<SkillsPageState>) => {
+    setParams(serializeSkillsPageState(params, updates), { replace: true });
+  };
 
   const setParamValues = (updates: Record<string, string | null>) => {
     const next = new URLSearchParams(params);
@@ -108,7 +127,8 @@ export function SkillsPage() {
 
   const setTab = (nextTab: Tab) => {
     const next = new URLSearchParams(params);
-    next.set("tab", nextTab);
+    if (nextTab === "core") next.delete("tab");
+    else next.set("tab", nextTab);
     next.delete("skill");
     next.delete("detailTab");
     next.delete("version");
@@ -122,13 +142,14 @@ export function SkillsPage() {
     next.delete("detailTab");
     next.delete("version");
     next.delete("file");
-    setParams(next, { replace: true });
+    navigate({ pathname: "/skills", search: toSearchString(next) }, { replace: true });
     setSelectedSkill(null);
   };
 
   const handleViewSkill = async (skill: SkillInfo) => {
     const next = new URLSearchParams(params);
-    next.set("tab", skill.is_system ? "core" : "custom");
+    if (skill.is_system) next.delete("tab");
+    else next.set("tab", "custom");
     next.set("skill", skill.id || skill.slug || skill.name);
     next.set("detailTab", "content");
     next.delete("version");
@@ -137,7 +158,6 @@ export function SkillsPage() {
   };
 
   useEffect(() => {
-    const skillRef = params.get("skill");
     if (!skillRef) {
       setSelectedSkill(null);
       return;
@@ -147,7 +167,7 @@ export function SkillsPage() {
       if (!cancelled) setSelectedSkill(detail);
     });
     return () => { cancelled = true; };
-  }, [params, getSkill]);
+  }, [skillRef, getSkill]);
 
   const handleCycleVisibility = async (skill: SkillInfo) => {
     if (!skill.id) return;
@@ -305,6 +325,7 @@ export function SkillsPage() {
       <SkillBulkActionsToolbar
         selectedCount={selectedSkills.length}
         customSelectedCount={selectedCustomSkills.length}
+        skippedSystemCount={skippedSystemCount}
         agentCount={agents.length}
         loading={bulkLoading || deleteLoading}
         onEnable={() => handleBulkToggle(true)}
@@ -316,7 +337,14 @@ export function SkillsPage() {
 
       <div className="mt-4">
         <MissingDepsPanel missing={allMissing} onInstallItem={installSingleDep} runtimes={tab === "core" ? runtimes : undefined} />
-        <SearchInput value={search} onChange={setSearch} placeholder={t("searchPlaceholder")} className="max-w-sm" />
+        <div className="space-y-3">
+          <SkillHealthSummary
+            stats={healthStats}
+            activeFilter={pageState.filter}
+            onFilterChange={(filter) => setPageState({ filter })}
+          />
+          <SkillsFilterBar state={pageState} onChange={setPageState} />
+        </div>
       </div>
 
       <div className="mt-4">
@@ -325,8 +353,8 @@ export function SkillsPage() {
         ) : filtered.length === 0 ? (
           <EmptyState
             icon={Zap}
-            title={search ? t("noMatchTitle") : t("emptyTitle")}
-            description={search ? t("noMatchDescription") : t("emptyDescription")}
+            title={pageState.q || pageState.filter !== "all" ? t("noMatchTitle") : t("emptyTitle")}
+            description={pageState.q || pageState.filter !== "all" ? t("noMatchDescription") : t("emptyDescription")}
           />
         ) : (
           <div className="overflow-x-auto rounded-md border">
@@ -444,4 +472,9 @@ export function SkillsPage() {
       />
     </div>
   );
+}
+
+function toSearchString(params: URLSearchParams): string {
+  const serialized = params.toString();
+  return serialized ? `?${serialized}` : "";
 }

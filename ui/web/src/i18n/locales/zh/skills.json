@@ -18,6 +18,34 @@
     "owner": "所有者"
   },
   "noDescription": "暂无描述",
+  "status": {
+    "unmanaged": "未管理",
+    "missingDepsCount": "缺少 {{count}} 项"
+  },
+  "filters": {
+    "label": "筛选",
+    "all": "全部 Skill",
+    "attention": "需要处理",
+    "missing-deps": "缺少依赖",
+    "disabled": "已禁用",
+    "archived": "已归档",
+    "unmanaged": "未管理",
+    "clear": "清除筛选"
+  },
+  "sort": {
+    "label": "排序",
+    "name": "名称",
+    "deps": "缺少依赖",
+    "version": "版本"
+  },
+  "health": {
+    "total": "总数",
+    "attention": "需要处理",
+    "missingDeps": "缺少依赖",
+    "disabled": "已禁用",
+    "archived": "已归档",
+    "unmanaged": "未管理"
+  },
   "visibility": {
     "clickToCycle": "点击更改可见性"
   },
@@ -58,8 +86,14 @@
     "agentManagers": "授予 Agent 管理权限",
     "managerAgentsHelp": "所选当前 Agent 以后可以更新此 Skill。",
     "selectAllAgents": "选择所有 Agent",
+    "selectAllCurrentAgents": "选择所有当前 Agent",
     "clearAgents": "清除 Agent",
-    "noAgents": "暂无 Agent"
+    "noAgents": "暂无 Agent",
+    "selectedAgentsCount": "已选择 {{selected}} / {{total}} 个当前 Agent",
+    "summaryUploaded": "已上传 {{count}} 个",
+    "summaryWarnings": "{{count}} 个警告",
+    "summaryUnchanged": "{{count}} 个未更改",
+    "summaryFailed": "{{count}} 个失败"
   },
   "edit": {
     "title": "编辑Skill",
@@ -111,7 +145,7 @@
     "pythonLabel": "Python",
     "nodeLabel": "Node.js",
     "statusActive": "Active",
-    "statusArchived": "Missing deps",
+    "statusArchived": "已归档",
     "runtimeMissing": "Runtime Prerequisites Missing",
     "runtimeMissingDesc": "核心技能需要在 GoClaw 运行时容器内提供 Python 和/或 Node.js 运行时。宿主机上的运行时不会在这里被使用。如果你使用的是已发布的 latest 镜像，那么缺少这些运行时可能是正常现象。",
     "runtimeMissingAction": "打开 Packages 页面，在此容器中检查或安装运行时。",
@@ -127,7 +161,12 @@
     "files": "文件",
     "version": "版本：",
     "current": "（当前）",
-    "noContent": "无可用内容。"
+    "noContent": "无可用内容。",
+    "fileSearch": "搜索文件...",
+    "filesShown": "{{shown}} / {{total}} 个文件",
+    "copyLink": "复制链接",
+    "copySuccess": "已复制 Deeplink",
+    "copyFailed": "复制 Deeplink 失败"
   },
   "toast": {
     "updated": "技能已更新",
@@ -174,6 +213,10 @@
     "deleted": "已删除 {{count}} 个 Skill",
     "failed": "批量操作失败",
     "deleteTitle": "删除所选 Skill",
-    "deleteDescription": "这将删除 {{count}} 个所选自定义 Skill。请输入 DELETE 确认。"
+    "deleteDescription": "这将删除 {{count}} 个所选自定义 Skill。请输入 DELETE 确认。",
+    "customAvailable": "{{count}} 个自定义操作可用",
+    "skippedSystem": "已跳过 {{count}} 个系统 Skill",
+    "customOnlyReason": "此操作仅适用于自定义 Skill",
+    "noAgentsReason": "暂无当前 Agent"
   }
 }

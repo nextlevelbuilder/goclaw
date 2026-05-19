@@ -18,6 +18,34 @@
     "owner": "Chủ sở hữu"
   },
   "noDescription": "Không có mô tả",
+  "status": {
+    "unmanaged": "Chưa có agent quản lý",
+    "missingDepsCount": "Thiếu {{count}}"
+  },
+  "filters": {
+    "label": "Bộ lọc",
+    "all": "Tất cả skill",
+    "attention": "Cần xử lý",
+    "missing-deps": "Thiếu deps",
+    "disabled": "Đã tắt",
+    "archived": "Đã lưu trữ",
+    "unmanaged": "Chưa có quản lý",
+    "clear": "Xóa bộ lọc"
+  },
+  "sort": {
+    "label": "Sắp xếp",
+    "name": "Tên",
+    "deps": "Thiếu deps",
+    "version": "Phiên bản"
+  },
+  "health": {
+    "total": "Tổng",
+    "attention": "Cần xử lý",
+    "missingDeps": "Thiếu deps",
+    "disabled": "Đã tắt",
+    "archived": "Đã lưu trữ",
+    "unmanaged": "Chưa có quản lý"
+  },
   "visibility": {
     "clickToCycle": "Nhấp để thay đổi hiển thị"
   },
@@ -58,8 +86,14 @@
     "agentManagers": "Cấp quyền quản lý cho agents",
     "managerAgentsHelp": "Các agent hiện tại được chọn có thể cập nhật skill này sau.",
     "selectAllAgents": "Chọn tất cả agents",
+    "selectAllCurrentAgents": "Chọn tất cả agent hiện tại",
     "clearAgents": "Bỏ chọn agents",
-    "noAgents": "Chưa có agent"
+    "noAgents": "Chưa có agent",
+    "selectedAgentsCount": "Đã chọn {{selected}} / {{total}} agent hiện tại",
+    "summaryUploaded": "{{count}} đã tải lên",
+    "summaryWarnings": "{{count}} cảnh báo",
+    "summaryUnchanged": "{{count}} không đổi",
+    "summaryFailed": "{{count}} thất bại"
   },
   "edit": {
     "title": "Chỉnh sửa skill",
@@ -111,7 +145,7 @@
     "pythonLabel": "Python",
     "nodeLabel": "Node.js",
     "statusActive": "Active",
-    "statusArchived": "Missing deps",
+    "statusArchived": "Đã lưu trữ",
     "runtimeMissing": "Runtime Prerequisites Missing",
     "runtimeMissingDesc": "Các core skill cần runtime Python và/hoặc Node.js bên trong container runtime GoClaw. Runtime cài trên máy host sẽ không được dùng ở đây. Nếu bạn đang dùng image latest đã phát hành thì việc thiếu runtime có thể là bình thường.",
     "runtimeMissingAction": "Mở trang Packages để kiểm tra hoặc cài runtime trong container này.",
@@ -127,7 +161,12 @@
     "files": "Tệp",
     "version": "Phiên bản:",
     "current": "(hiện tại)",
-    "noContent": "Không có nội dung."
+    "noContent": "Không có nội dung.",
+    "fileSearch": "Tìm trong tệp...",
+    "filesShown": "{{shown}} / {{total}} tệp",
+    "copyLink": "Copy link",
+    "copySuccess": "Đã copy deeplink",
+    "copyFailed": "Không thể copy deeplink"
   },
   "toast": {
     "updated": "Đã cập nhật skill",
@@ -174,6 +213,10 @@
     "deleted": "Đã xóa {{count}} skill",
     "failed": "Bulk action thất bại",
     "deleteTitle": "Xóa các skill đã chọn",
-    "deleteDescription": "Thao tác này sẽ xóa {{count}} custom skill đã chọn. Gõ DELETE để xác nhận."
+    "deleteDescription": "Thao tác này sẽ xóa {{count}} custom skill đã chọn. Gõ DELETE để xác nhận.",
+    "customAvailable": "{{count}} thao tác custom khả dụng",
+    "skippedSystem": "Bỏ qua {{count}} skill hệ thống",
+    "customOnlyReason": "Thao tác này chỉ áp dụng cho custom skill",
+    "noAgentsReason": "Chưa có agent hiện tại"
   }
 }

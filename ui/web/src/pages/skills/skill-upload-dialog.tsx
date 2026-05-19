@@ -12,9 +12,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
 import { createSkillSubZip } from "./lib/create-skill-sub-zip";
 import { resolveUploadSkills } from "./lib/resolve-upload-skills";
+import { summarizeUploadEntries } from "./lib/skill-upload-summary";
 import { uniqueId } from "@/lib/utils";
 import type { SkillUploadOptions, SkillUploadResponse } from "./hooks/use-skills";
 import type { FileEntry, SkillStatus } from "./lib/skill-upload-types";
@@ -238,9 +240,8 @@ export function SkillUploadDialog({ open, onOpenChange, onUpload }: SkillUploadD
   // Derived counts (skill level, not file level)
   // ---------------------------------------------------------------------------
 
-  const allSkills = entries.flatMap((e) => e.skills);
-  const actionableCount = allSkills.filter((s) => s.status === "valid").length;
-  const successCount = allSkills.filter((s) => s.status === "success" || s.status === "warning").length;
+  const uploadSummary = summarizeUploadEntries(entries);
+  const actionableCount = uploadSummary.valid;
   const allCurrentAgentsSelected = agents.length > 0 && managerAgentIds.length === agents.length;
 
   const toggleManagerAgent = (id: string) => {
@@ -326,9 +327,12 @@ export function SkillUploadDialog({ open, onOpenChange, onUpload }: SkillUploadD
                 <div className="flex items-center justify-between gap-2">
                   <Label className="text-xs text-muted-foreground">{t("upload.managerAgentsHelp")}</Label>
                   <Button type="button" variant="ghost" size="sm" onClick={toggleAllAgents} disabled={agents.length === 0}>
-                    {allCurrentAgentsSelected ? t("upload.clearAgents") : t("upload.selectAllAgents")}
+                    {allCurrentAgentsSelected ? t("upload.clearAgents") : t("upload.selectAllCurrentAgents")}
                   </Button>
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  {t("upload.selectedAgentsCount", { selected: managerAgentIds.length, total: agents.length })}
+                </p>
                 <div className="max-h-32 overflow-y-auto rounded-md border">
                   {agents.length === 0 ? (
                     <p className="px-3 py-2 text-sm text-muted-foreground">{t("upload.noAgents")}</p>
@@ -352,13 +356,18 @@ export function SkillUploadDialog({ open, onOpenChange, onUpload }: SkillUploadD
         {/* Summary line */}
         {entries.length > 0 && !done && !uploading && (
           <p className="text-xs text-muted-foreground">
-            {t("upload.validCount", { valid: actionableCount, total: allSkills.length })}
+            {t("upload.validCount", { valid: actionableCount, total: uploadSummary.total })}
           </p>
         )}
         {done && (
-          <p className="text-sm font-medium text-muted-foreground">
-            {t("upload.successCount", { success: successCount, total: allSkills.filter((s) => s.status !== "unchanged" && s.status !== "invalid").length })}
-          </p>
+          <div className="flex flex-wrap gap-1.5 text-sm">
+            <Badge variant="success">{t("upload.summaryUploaded", { count: uploadSummary.uploaded })}</Badge>
+            <Badge variant="warning">{t("upload.summaryWarnings", { count: uploadSummary.warnings })}</Badge>
+            <Badge variant="outline">{t("upload.summaryUnchanged", { count: uploadSummary.unchanged })}</Badge>
+            <Badge variant={uploadSummary.failed + uploadSummary.invalid > 0 ? "destructive" : "outline"}>
+              {t("upload.summaryFailed", { count: uploadSummary.failed + uploadSummary.invalid })}
+            </Badge>
+          </div>
         )}
 
         <DialogFooter>
