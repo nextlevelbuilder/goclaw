@@ -24,10 +24,15 @@ var allowedCommands = map[string]bool{
 var shellMetaChars = regexp.MustCompile(`[;|&$` + "`" + `(){}[\]<>]`)
 
 // Dangerous arg flags that enable code execution.
-var dangerousArgPatterns = []string{
+// These are matched as standalone flags only (exact match or flag=value form).
+var dangerousFlagPatterns = []string{
 	"--eval", "-e", "-c",      // Code execution flags
 	"--require", "-r",         // Module injection
 	"--import",                // ES module injection
+}
+
+// Dangerous code patterns that should be caught anywhere in an argument.
+var dangerousCodePatterns = []string{
 	"exec(", "eval(",          // Inline code
 	"__import__",              // Python import injection
 	"child_process",           // Node.js process spawning
@@ -96,7 +101,12 @@ func ValidateCommand(cmd string) error {
 func ValidateArgs(args []string) error {
 	for i, arg := range args {
 		argLower := strings.ToLower(arg)
-		for _, pattern := range dangerousArgPatterns {
+		for _, pattern := range dangerousFlagPatterns {
+			if isStandaloneFlag(argLower, pattern) {
+				return fmt.Errorf("arg[%d] contains dangerous pattern %q", i, pattern)
+			}
+		}
+		for _, pattern := range dangerousCodePatterns {
 			if strings.Contains(argLower, pattern) {
 				return fmt.Errorf("arg[%d] contains dangerous pattern %q", i, pattern)
 			}
@@ -107,6 +117,26 @@ func ValidateArgs(args []string) error {
 		}
 	}
 	return nil
+}
+
+// isStandaloneFlag checks if arg matches a flag pattern as a standalone flag,
+// avoiding false positives from package names containing the flag as a substring.
+// Examples: "-c" matches, "-c=value" matches, "clickup-cli" does NOT match.
+func isStandaloneFlag(arg, flag string) bool {
+	if arg == flag {
+		return true
+	}
+	if after, ok := strings.CutPrefix(arg, flag); ok {
+		// Must be followed by a non-alphabetic character or end-of-string
+		if len(after) == 0 || !isAlpha(rune(after[0])) {
+			return true
+		}
+	}
+	return false
+}
+
+func isAlpha(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
 }
 
 // ValidateURL checks URL for SSRF vulnerabilities using the existing security package.
