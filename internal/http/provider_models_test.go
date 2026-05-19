@@ -95,24 +95,39 @@ func TestProvidersHandlerListProviderModelsChatGPTOAuthIncludesReasoningMetadata
 		t.Fatalf("reasoning_defaults.effort = %q, want high", result.ReasoningDefaults.Effort)
 	}
 
-	var found bool
+	var found54 bool
+	var found55 bool
 	for _, model := range result.Models {
-		if model.ID != "gpt-5.4" {
-			continue
-		}
-		found = true
-		if model.Reasoning == nil {
-			t.Fatal("gpt-5.4 reasoning = nil, want capability metadata")
-		}
-		if model.Reasoning.DefaultEffort != "none" {
-			t.Fatalf("gpt-5.4 default_effort = %q, want none", model.Reasoning.DefaultEffort)
-		}
-		if got := model.Reasoning.Levels; len(got) != 5 || got[4] != "xhigh" {
-			t.Fatalf("gpt-5.4 levels = %#v, want none..xhigh", got)
+		switch model.ID {
+		case "gpt-5.4":
+			found54 = true
+			if model.Reasoning == nil {
+				t.Fatal("gpt-5.4 reasoning = nil, want capability metadata")
+			}
+			if model.Reasoning.DefaultEffort != "none" {
+				t.Fatalf("gpt-5.4 default_effort = %q, want none", model.Reasoning.DefaultEffort)
+			}
+			if got := model.Reasoning.Levels; len(got) != 5 || got[4] != "xhigh" {
+				t.Fatalf("gpt-5.4 levels = %#v, want none..xhigh", got)
+			}
+		case "gpt-5.5":
+			found55 = true
+			if model.Reasoning == nil {
+				t.Fatal("gpt-5.5 reasoning = nil, want capability metadata")
+			}
+			if model.Reasoning.DefaultEffort != "none" {
+				t.Fatalf("gpt-5.5 default_effort = %q, want none", model.Reasoning.DefaultEffort)
+			}
+			if got := model.Reasoning.Levels; len(got) != 5 || got[4] != "xhigh" {
+				t.Fatalf("gpt-5.5 levels = %#v, want none..xhigh", got)
+			}
 		}
 	}
-	if !found {
+	if !found54 {
 		t.Fatal("gpt-5.4 not found in ChatGPT OAuth model list")
+	}
+	if !found55 {
+		t.Fatal("gpt-5.5 not found in ChatGPT OAuth model list")
 	}
 }
 
