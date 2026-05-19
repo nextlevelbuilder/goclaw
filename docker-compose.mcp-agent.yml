@@ -1,0 +1,75 @@
+# MCP sandbox agent service.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.mcp-agent.yml up -d --build
+#
+# Register this MCP server in GoClaw as:
+#   http://mcp-agent:8090/mcp   (from the GoClaw container)
+#   http://localhost:8090/mcp   (from the host)
+
+services:
+  mcp-agent:
+    image: ${GOCLAW_MCP_AGENT_IMAGE:-goclaw-mcp-agent:dev}
+    build:
+      context: ${GOCLAW_DIR:-.}
+      dockerfile: Dockerfile.mcp-agent
+      args:
+        VERSION: "${GOCLAW_MCP_AGENT_VERSION:-dev}"
+    ports:
+      - "${GOCLAW_MCP_AGENT_PORT:-8090}:8090"
+    environment:
+      - MCP_ADDR=:8090
+      - GOCLAW_ALLOW_PRIVATE_IP=${GOCLAW_ALLOW_PRIVATE_IP:-false}
+      - FORM_AGENT_CONTROL_PLANE_URL=${FORM_AGENT_CONTROL_PLANE_URL:-}
+      - FORM_AGENT_TEMPLATE_ID=${FORM_AGENT_TEMPLATE_ID:-}
+      - FORM_AGENT_TENANT_ID=${FORM_AGENT_TENANT_ID:-}
+      - FORM_AGENT_SANDBOX_LIFETIME_SEC=${FORM_AGENT_SANDBOX_LIFETIME_SEC:-}
+      - FORM_AGENT_SANDBOX_TIMEOUT_SEC=${FORM_AGENT_SANDBOX_TIMEOUT_SEC:-}
+      - FORM_AGENT_READY_TIMEOUT_SEC=${FORM_AGENT_READY_TIMEOUT_SEC:-}
+      - FORM_AGENT_LLM_BASE_URL=${FORM_AGENT_LLM_BASE_URL:-}
+      - FORM_AGENT_LLM_API_KEY=${FORM_AGENT_LLM_API_KEY:-}
+      - FORM_AGENT_LLM_MODEL=${FORM_AGENT_LLM_MODEL:-}
+      - FORM_AGENT_LLM_TEMPERATURE=${FORM_AGENT_LLM_TEMPERATURE:-}
+      - FORM_AGENT_BROWSER_HEADLESS=${FORM_AGENT_BROWSER_HEADLESS:-}
+      - FORM_AGENT_RAW_EVENT_LOG_DIR=${FORM_AGENT_RAW_EVENT_LOG_DIR:-}
+      - OPENCODE_AGENT_CONTROL_PLANE_URL=${OPENCODE_AGENT_CONTROL_PLANE_URL:-}
+      - OPENCODE_AGENT_GOCLAW_API_BASE_URL=${OPENCODE_AGENT_GOCLAW_API_BASE_URL:-}
+      - OPENCODE_AGENT_TEMPLATE_ID=${OPENCODE_AGENT_TEMPLATE_ID:-}
+      - OPENCODE_AGENT_TENANT_ID=${OPENCODE_AGENT_TENANT_ID:-}
+      - OPENCODE_AGENT_SANDBOX_LIFETIME_SEC=${OPENCODE_AGENT_SANDBOX_LIFETIME_SEC:-}
+      - OPENCODE_AGENT_READY_TIMEOUT_SEC=${OPENCODE_AGENT_READY_TIMEOUT_SEC:-}
+      - OPENCODE_AGENT_RUN_TIMEOUT_SEC=${OPENCODE_AGENT_RUN_TIMEOUT_SEC:-}
+      - OPENCODE_AGENT_LLM_BASE_URL=${OPENCODE_AGENT_LLM_BASE_URL:-}
+      - OPENCODE_AGENT_LLM_API_KEY=${OPENCODE_AGENT_LLM_API_KEY:-}
+      - OPENCODE_AGENT_LLM_MODEL=${OPENCODE_AGENT_LLM_MODEL:-}
+      - OPENCODE_AGENT_PROVIDER_ID=${OPENCODE_AGENT_PROVIDER_ID:-}
+      - OPENCODE_WORKSPACE_STEP_TIMEOUT_SEC=${OPENCODE_WORKSPACE_STEP_TIMEOUT_SEC:-}
+      - AGENTFIELD_BASE_URL=${AGENTFIELD_BASE_URL:-}
+      - AGENTFIELD_API_KEY=${AGENTFIELD_API_KEY:-}
+      - LLM_BASE_URL=${LLM_BASE_URL:-}
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_MODEL=${LLM_MODEL:-}
+      - AIDER_OPENAI_API_BASE=${AIDER_OPENAI_API_BASE:-}
+      - AIDER_OPENAI_API_KEY=${AIDER_OPENAI_API_KEY:-}
+      - AIDER_MODEL=${AIDER_MODEL:-}
+      - OPENAI_API_BASE=${OPENAI_API_BASE:-}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=128m
+    networks:
+      - default
+      - goclaw-net
+    restart: unless-stopped
+
+networks:
+  goclaw-net:
+    name: goclaw-net
+    driver: bridge

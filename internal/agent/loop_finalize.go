@@ -99,11 +99,19 @@ func (l *Loop) finalizeRun(
 		}
 	}
 
+	// Direct-return tool results are already the user-facing answer. Persisting the
+	// model's pre-tool thinking alongside that answer leaves a stale "thinking"
+	// block after the tool has completed.
+	finalThinking := rs.finalThinking
+	if rs.directReturn {
+		finalThinking = ""
+	}
+
 	// Build final assistant message with output media refs for history persistence.
 	assistantMsg := providers.Message{
 		Role:     "assistant",
 		Content:  rs.finalContent,
-		Thinking: rs.finalThinking,
+		Thinking: finalThinking,
 	}
 	for _, mr := range rs.mediaResults {
 		kind := "document"
@@ -224,7 +232,7 @@ func (l *Loop) finalizeRun(
 
 	return &RunResult{
 		Content:        rs.finalContent,
-		Thinking:       rs.finalThinking,
+		Thinking:       finalThinking,
 		RunID:          req.RunID,
 		Iterations:     rs.iteration,
 		Usage:          &rs.totalUsage,
@@ -233,5 +241,6 @@ func (l *Loop) finalizeRun(
 		BlockReplies:   rs.blockReplies,
 		LastBlockReply: rs.lastBlockReply,
 		LoopKilled:     rs.loopKilled,
+		DirectReturn:   rs.directReturn,
 	}
 }

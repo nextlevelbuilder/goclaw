@@ -32,6 +32,7 @@ const (
 	ctxAgentKey    toolContextKey = "tool_agent_key"
 	ctxSessionKey  toolContextKey = "tool_session_key" // origin session key for announce routing
 	ctxRunKind     toolContextKey = "tool_run_kind"    // "notification", "announce", "delegation"
+	ctxProgressCB  toolContextKey = "tool_progress_cb"
 )
 
 // Well-known channel names used for routing and access control.
@@ -46,6 +47,25 @@ const (
 type MediaPathLoader interface {
 	LoadPath(id string) (string, error)
 }
+
+// ProgressEvent is emitted by long-running tools that can report intermediate
+// progress (for example MCP notifications/progress).
+type ProgressEvent struct {
+	ServerName     string
+	ToolName       string
+	RegisteredName string
+	Token          string
+	Progress       float64
+	Total          float64
+	Message        string
+	Event          string
+	RunID          string
+	Timestamp      string
+	EventData      map[string]any
+}
+
+// ProgressCallback forwards a tool's intermediate progress to the agent runtime.
+type ProgressCallback func(ctx context.Context, event ProgressEvent)
 
 func WithToolChannel(ctx context.Context, channel string) context.Context {
 	return context.WithValue(ctx, ctxChannel, channel)
@@ -168,6 +188,17 @@ func WithRunKind(ctx context.Context, kind string) context.Context {
 // RunKindFromCtx returns the run kind from context, or empty string.
 func RunKindFromCtx(ctx context.Context) string {
 	v, _ := ctx.Value(ctxRunKind).(string)
+	return v
+}
+
+// WithToolProgressCallback injects a per-tool-call progress callback.
+func WithToolProgressCallback(ctx context.Context, cb ProgressCallback) context.Context {
+	return context.WithValue(ctx, ctxProgressCB, cb)
+}
+
+// ToolProgressCallbackFromCtx returns the per-tool-call progress callback, if any.
+func ToolProgressCallbackFromCtx(ctx context.Context) ProgressCallback {
+	v, _ := ctx.Value(ctxProgressCB).(ProgressCallback)
 	return v
 }
 

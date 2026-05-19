@@ -21,9 +21,9 @@ import (
 // safe reconnection without data races.
 type BridgeTool struct {
 	serverName     string
-	serverID       uuid.UUID    // MCP server ID (for grant recheck)
-	toolName       string       // original MCP tool name
-	registeredName string       // may include prefix: "{prefix}__{toolName}"
+	serverID       uuid.UUID // MCP server ID (for grant recheck)
+	toolName       string    // original MCP tool name
+	registeredName string    // may include prefix: "{prefix}__{toolName}"
 	description    string
 	inputSchema    map[string]any // JSON Schema for parameters
 	requiredSet    map[string]bool
@@ -31,6 +31,7 @@ type BridgeTool struct {
 	timeoutSec     int
 	connected      *atomic.Bool
 	grantChecker   GrantChecker // for runtime grant recheck (nil = skip check)
+	progressRouter *mcpProgressRouter
 }
 
 // NewBridgeTool creates a BridgeTool from an MCP Tool definition.
@@ -39,7 +40,7 @@ type BridgeTool struct {
 // clientPtr is a shared atomic pointer from serverState — reconnection swaps it
 // atomically, and all BridgeTools see the new client without explicit notification.
 // serverID and grantChecker are optional — pass uuid.Nil and nil for config-path mode.
-func NewBridgeTool(serverName string, mcpTool mcpgo.Tool, clientPtr *atomic.Pointer[mcpclient.Client], prefix string, timeoutSec int, connected *atomic.Bool, serverID uuid.UUID, grantChecker GrantChecker) *BridgeTool {
+func NewBridgeTool(serverName string, mcpTool mcpgo.Tool, clientPtr *atomic.Pointer[mcpclient.Client], prefix string, timeoutSec int, connected *atomic.Bool, serverID uuid.UUID, grantChecker GrantChecker, progressRouters ...*mcpProgressRouter) *BridgeTool {
 	name := mcpTool.Name
 	effectivePrefix := ensureMCPPrefix(prefix, serverName)
 	registered := effectivePrefix + "__" + name
@@ -54,6 +55,10 @@ func NewBridgeTool(serverName string, mcpTool mcpgo.Tool, clientPtr *atomic.Poin
 	for _, r := range mcpTool.InputSchema.Required {
 		reqSet[r] = true
 	}
+	var progressRouter *mcpProgressRouter
+	if len(progressRouters) > 0 {
+		progressRouter = progressRouters[0]
+	}
 
 	return &BridgeTool{
 		serverName:     serverName,
@@ -67,6 +72,7 @@ func NewBridgeTool(serverName string, mcpTool mcpgo.Tool, clientPtr *atomic.Poin
 		timeoutSec:     timeoutSec,
 		connected:      connected,
 		grantChecker:   grantChecker,
+		progressRouter: progressRouter,
 	}
 }
 
@@ -135,6 +141,26 @@ func (t *BridgeTool) Execute(ctx context.Context, args map[string]any) *tools.Re
 	req := mcpgo.CallToolRequest{}
 	req.Params.Name = t.toolName
 	req.Params.Arguments = cleanedArgs
+	progressToken := uuid.NewString()
+	req.Params.Meta = &mcpgo.Meta{ProgressToken: progressToken}
+	if cb := tools.ToolProgressCallbackFromCtx(ctx); cb != nil && t.progressRouter != nil {
+		unregister := t.progressRouter.register(progressToken, func(ev mcpProgressEvent) {
+			cb(ctx, tools.ProgressEvent{
+				ServerName:     t.serverName,
+				ToolName:       t.toolName,
+				RegisteredName: t.registeredName,
+				Token:          ev.Token,
+				Progress:       ev.Progress,
+				Total:          ev.Total,
+				Message:        ev.Message,
+				Event:          ev.Event,
+				RunID:          ev.RunID,
+				Timestamp:      ev.Timestamp,
+				EventData:      ev.EventData,
+			})
+		})
+		defer unregister()
+	}
 
 	result, err := client.CallTool(callCtx, req)
 	if err != nil {
@@ -150,10 +176,28 @@ func (t *BridgeTool) Execute(ctx context.Context, args map[string]any) *tools.Re
 		return tools.ErrorResult(text)
 	}
 
+	if t.shouldDirectReturn() {
+		return tools.DirectResult(text)
+	}
+
 	// Wrap MCP tool results as external/untrusted content to prevent prompt injection.
 	// MCP servers may be third-party and return adversarial content.
 	wrapped := wrapMCPContent(text, t.serverName, t.toolName)
 	return tools.NewResult(wrapped)
+}
+
+// shouldDirectReturn returns true if this tool's results should be passed
+// directly to the LLM without wrapping as external/untrusted content.
+//
+// Currently, all tools from the mcp-agent server (our own sub-agent control plane)
+// are trusted and directly returned. This prevents the task management agent from
+// re-wrapping results in additional LLM calls. Third-party MCP servers remain wrapped.
+func (t *BridgeTool) shouldDirectReturn() bool {
+	// Trust our own mcp-agent server — it hosts feishu/opencode/agentfield sub-agents
+	if t.serverName == "mcp-agent" {
+		return true
+	}
+	return false
 }
 
 // inputSchemaToMap converts mcp.ToolInputSchema to the map format expected by tools.Tool.Parameters().

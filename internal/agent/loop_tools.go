@@ -119,6 +119,12 @@ func (l *Loop) processToolResult(
 
 	action = toolResultContinue
 
+	if result.DirectReturn {
+		rs.finalContent = result.ForLLM
+		rs.directReturn = true
+		return toolMsg, nil, toolResultBreak
+	}
+
 	// Check for tool call loop after recording result.
 	if level, msg := rs.loopDetector.detect(registryName, argsHash); level != "" {
 		if level == "critical" {

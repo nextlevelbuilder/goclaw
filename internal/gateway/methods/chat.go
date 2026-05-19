@@ -3,6 +3,7 @@ package methods
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -11,10 +12,10 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/audio"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
-	"github.com/nextlevelbuilder/goclaw/internal/config"
-	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
+	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sessions"
@@ -107,6 +108,7 @@ type chatSendParams struct {
 	SessionKey string            `json:"sessionKey"`
 	Stream     bool              `json:"stream"`
 	Media      json.RawMessage   `json:"media,omitempty"` // []string (legacy) or []chatMediaItem
+	Metadata   map[string]string `json:"metadata,omitempty"`
 }
 
 // parseMedia handles both legacy string paths and new {path,filename} objects.
@@ -284,8 +286,9 @@ func (m *ChatMethods) handleSend(ctx context.Context, client *gateway.Client, re
 			WorkspaceChatID: userID, // mirror ChatID so vault chat_id isolation activates for WS direct flow
 			RunID:           runID,
 			UserID:          userID,
-			Stream:     params.Stream,
-			InjectCh:   injectCh,
+			Metadata:        params.Metadata,
+			Stream:          params.Stream,
+			InjectCh:        injectCh,
 			// Wire trace ID back to the active run so force-abort can mark the
 			// correct trace as cancelled if the goroutine does not exit within 3s.
 			OnTraceCreated: func(traceID uuid.UUID) {
@@ -331,6 +334,17 @@ func (m *ChatMethods) handleSend(ctx context.Context, client *gateway.Client, re
 
 		// TTS auto-apply: convert [[tts]] tagged responses to voice audio
 		content := result.Content
+		gatewayProgressKind := ""
+		if kind, ok := shouldSuppressGatewayProgressFinalContent(params.Metadata, content, result.DirectReturn); ok {
+			gatewayProgressKind = kind
+			content = ""
+			slog.Info("goclaw.gateway_progress.final_content_suppressed",
+				"agent_id", params.AgentID,
+				"session_key", sessionKey,
+				"run_id", result.RunID,
+				"kind", kind,
+			)
+		}
 		var ttsAudio *agent.MediaResult
 		if m.audioMgr != nil && content != "" {
 			// For WS, we don't have voice inbound info - use "tagged" mode only
@@ -353,6 +367,10 @@ func (m *ChatMethods) handleSend(ctx context.Context, client *gateway.Client, re
 			"content": content,
 			"usage":   result.Usage,
 		}
+		if gatewayProgressKind != "" {
+			resp["gatewayProgressDelivered"] = true
+			resp["gatewayProgressKind"] = gatewayProgressKind
+		}
 		if result.Thinking != "" {
 			resp["thinking"] = result.Thinking
 		}
@@ -366,6 +384,71 @@ func (m *ChatMethods) handleSend(ctx context.Context, client *gateway.Client, re
 		}
 		client.SendResponse(protocol.NewOKResponse(req.ID, resp))
 	}()
+}
+
+func shouldSuppressGatewayProgressFinalContent(metadata map[string]string, content string, directReturn bool) (string, bool) {
+	if !hasGatewayProgressContext(metadata) {
+		return "", false
+	}
+	if directReturn {
+		if kind, ok := gatewayReplyKindFromContent(content); ok && kind != "" {
+			return kind, true
+		}
+		return "direct_return", true
+	}
+	kind, ok := gatewayReplyKindFromContent(content)
+	if !ok {
+		return "", false
+	}
+	switch kind {
+	case "ask_user", "result", "error":
+		return kind, true
+	default:
+		return "", false
+	}
+}
+
+func hasGatewayProgressContext(metadata map[string]string) bool {
+	if len(metadata) == 0 {
+		return false
+	}
+	for _, key := range []string{"gateway_context_id", "out_track_id", "internal_session_id", "conversation_id"} {
+		if strings.TrimSpace(metadata[key]) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func gatewayReplyKindFromContent(content string) (string, bool) {
+	content = strings.TrimSpace(content)
+	if content == "" || !strings.HasPrefix(content, "{") {
+		return "", false
+	}
+	var root map[string]any
+	if err := json.Unmarshal([]byte(content), &root); err != nil {
+		return "", false
+	}
+	return gatewayReplyKindFromMap(root)
+}
+
+func gatewayReplyKindFromMap(root map[string]any) (string, bool) {
+	if root == nil {
+		return "", false
+	}
+	if version, _ := root["version"].(string); version == "goclaw.gateway.reply.v1" {
+		if kind, _ := root["kind"].(string); kind != "" {
+			return kind, true
+		}
+	}
+	for _, key := range []string{"payload", "data"} {
+		if child, ok := root[key].(map[string]any); ok {
+			if kind, ok := gatewayReplyKindFromMap(child); ok {
+				return kind, true
+			}
+		}
+	}
+	return "", false
 }
 
 type chatHistoryParams struct {

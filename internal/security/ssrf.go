@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"sync/atomic"
 	"time"
 )
@@ -18,6 +19,20 @@ import (
 // pinnedIPKey is a context key used to pass the pre-resolved IP from
 // Validate into the custom DialContext, preventing DNS rebinding attacks.
 type pinnedIPKey struct{}
+
+// allowPrivateIP is a runtime flag that allows private IP addresses when set to true.
+// This can be enabled via GOCLAW_ALLOW_PRIVATE_IP environment variable for internal network deployments.
+var allowPrivateIP atomic.Bool
+
+// init reads the GOCLAW_ALLOW_PRIVATE_IP environment variable to configure private IP access.
+// Set to "true" or "1" to allow connections to private IP ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16).
+// WARNING: Only enable this in trusted internal network environments.
+func init() {
+	if v := os.Getenv("GOCLAW_ALLOW_PRIVATE_IP"); v == "true" || v == "1" {
+		allowPrivateIP.Store(true)
+		slog.Warn("security.ssrf_private_ip_allowed", "warning", "SSRF protection for private IPs is DISABLED. Only use this in trusted internal networks!")
+	}
+}
 
 // allowLoopbackForTest is a test-only bypass. Production code MUST never set
 // this flag. Exposed via SetAllowLoopbackForTest exclusively for *_test.go.
@@ -68,9 +83,28 @@ func init() {
 }
 
 // isBlocked returns true if ip falls within any blocked CIDR.
+// When GOCLAW_ALLOW_PRIVATE_IP is enabled, private CIDRs (RFC 1918) are not blocked.
 func isBlocked(ip net.IP) bool {
 	for _, cidr := range blockedCIDRs {
 		if cidr.Contains(ip) {
+			// If private IPs are allowed, skip RFC 1918 private CIDRs
+			if allowPrivateIP.Load() && isPrivateCIDR(cidr) {
+				continue
+			}
+			return true
+		}
+	}
+	return false
+}
+
+// isPrivateCIDR returns true if the CIDR is a private RFC 1918/4193 range.
+// This excludes loopback, link-local, multicast, and unspecified ranges which are always blocked.
+func isPrivateCIDR(cidr *net.IPNet) bool {
+	// Check if this is one of the private CIDRs we want to allow
+	privateCIDRs := []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7"}
+	for _, p := range privateCIDRs {
+		_, ipNet, _ := net.ParseCIDR(p)
+		if ipNet != nil && cidr.String() == ipNet.String() {
 			return true
 		}
 	}

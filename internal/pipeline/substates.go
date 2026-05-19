@@ -8,7 +8,7 @@ import (
 
 // ContextState: owned by ContextStage, read by ThinkStage.
 type ContextState struct {
-	ContextFiles   []any  // bootstrap.ContextFile — typed in Phase 2, any avoids circular import
+	ContextFiles   []any // bootstrap.ContextFile — typed in Phase 2, any avoids circular import
 	SkillsSummary  string
 	TeamContext    string // team workspace context injected for team runs
 	MemorySection  string // L0 auto-injected memory context for system prompt
@@ -58,6 +58,7 @@ type ToolState struct {
 	MediaResults   []MediaResult // media files produced by tools
 	Deliverables   []string      // tool output content for team task results
 	LoopKilled     bool          // set when loop detector triggers critical
+	DirectReturn   bool          // set when a tool result should become final content directly
 }
 
 // ObserveState: owned by ObserveStage.
@@ -85,12 +86,12 @@ type CompactState struct {
 
 // EvolutionState: owned by skill evolution nudge logic.
 type EvolutionState struct {
-	Nudge70Sent      bool
-	Nudge90Sent      bool
-	PostscriptSent   bool
-	BootstrapWrite   bool // BOOTSTRAP.md write detected
-	TeamTaskCreates  int  // team_tasks tool calls
-	TeamTaskSpawns   int  // delegate tool calls (spawns)
+	Nudge70Sent     bool
+	Nudge90Sent     bool
+	PostscriptSent  bool
+	BootstrapWrite  bool // BOOTSTRAP.md write detected
+	TeamTaskCreates int  // team_tasks tool calls
+	TeamTaskSpawns  int  // delegate tool calls (spawns)
 }
 
 // RunResult is the final output of a pipeline run.
@@ -102,6 +103,7 @@ type RunResult struct {
 	Iterations     int
 	ToolCalls      int
 	LoopKilled     bool
+	DirectReturn   bool
 	Duration       time.Duration
 	AsyncToolCalls []string
 	MediaResults   []MediaResult

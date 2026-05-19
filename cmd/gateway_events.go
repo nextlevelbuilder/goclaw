@@ -20,6 +20,7 @@ import (
 func (d *gatewayDeps) wireEventSubscribers() {
 	d.wireTeamTaskAuditSubscriber()
 	d.wireTeamProgressNotifySubscriber()
+	d.wireAgentPlatformProgressForwarder()
 }
 
 // wireTeamTaskAuditSubscriber persists team task lifecycle events to the team_task_events table.

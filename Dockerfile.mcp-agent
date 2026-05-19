@@ -1,0 +1,36 @@
+# syntax=docker/dockerfile:1
+
+FROM golang:1.26-bookworm AS builder
+
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+ARG VERSION=dev
+RUN CGO_ENABLED=0 GOOS=linux \
+    go build -ldflags="-s -w -X main.version=${VERSION}" \
+    -o /out/mcp-sandbox-agent ./cmd/mcp-sandbox-agent
+
+FROM alpine:3.23
+
+RUN apk add --no-cache ca-certificates wget
+
+RUN adduser -D -u 1000 -h /app mcpagent
+WORKDIR /app
+
+COPY --from=builder /out/mcp-sandbox-agent /usr/local/bin/mcp-sandbox-agent
+
+USER mcpagent
+
+ENV MCP_ADDR=:8090
+
+EXPOSE 8090
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD wget -qO- http://localhost:8090/healthz || exit 1
+
+ENTRYPOINT ["mcp-sandbox-agent"]
+CMD ["--addr", ":8090"]

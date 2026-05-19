@@ -397,6 +397,7 @@ func processNormalMessage(
 		Role:              effectiveRole,
 		SenderName:        resolveSenderName(msg),
 		RunID:             runID,
+		Metadata:          msg.Metadata,
 		Stream:            enableStream,
 		HistoryLimit:      msg.HistoryLimit,
 		ToolAllow:         msg.ToolAllow,

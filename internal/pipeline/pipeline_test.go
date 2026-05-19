@@ -433,3 +433,19 @@ func TestRunState_BuildResult_AllFields(t *testing.T) {
 		t.Errorf("LastBlockReply = %q", r.LastBlockReply)
 	}
 }
+
+func TestRunState_BuildResult_DirectReturnSuppressesThinking(t *testing.T) {
+	t.Parallel()
+	state := buildMinimalRunState()
+	state.Observe.FinalContent = "tool result"
+	state.Observe.FinalThinking = "model thinking before tool"
+	state.Tool.DirectReturn = true
+
+	r := state.BuildResult()
+	if r.Thinking != "" {
+		t.Errorf("Thinking = %q, want empty for direct return", r.Thinking)
+	}
+	if !r.DirectReturn {
+		t.Error("DirectReturn = false, want true")
+	}
+}

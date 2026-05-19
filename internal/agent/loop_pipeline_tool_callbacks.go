@@ -18,8 +18,8 @@ import (
 // makeExecuteToolCall wraps tool execution: name resolution, execute, process result.
 // Uses bridgeRS to share loop detection state between the pipeline and agent's processToolResult.
 func (l *Loop) makeExecuteToolCall(req *RunRequest, bridgeRS *runState) func(ctx context.Context, state *pipeline.RunState, tc providers.ToolCall) ([]providers.Message, error) {
-	emitRun := makeToolEmitRun(l, req)
 	return func(ctx context.Context, state *pipeline.RunState, tc providers.ToolCall) ([]providers.Message, error) {
+		emitRun := makeToolEmitRun(l, req, ctx)
 		registryName := l.resolveToolCallName(tc.Name)
 		argsJSON, _ := json.Marshal(tc.Arguments)
 		slog.Info("tool call", "agent", l.id, "tool", tc.Name, "args_len", len(argsJSON))
@@ -43,6 +43,7 @@ func (l *Loop) makeExecuteToolCall(req *RunRequest, bridgeRS *runState) func(ctx
 				OtherConfig: append([]byte(nil), l.agentOtherConfig...), // defensive copy at dispatch
 			})
 		}
+		ctx = withToolProgressEvents(ctx, emitRun, l.id, state.RunID, tc)
 
 		result := l.tools.ExecuteWithContext(ctx, registryName, tc.Arguments,
 			req.Channel, req.ChatID, req.PeerKind, req.SessionKey, nil)
@@ -72,8 +73,8 @@ type toolRawResult struct {
 // makeExecuteToolRaw wraps tool I/O only (parallel-safe, no state mutation).
 // Returns tool message + toolRawResult (with timing + spanID) as opaque raw data for ProcessToolResult.
 func (l *Loop) makeExecuteToolRaw(req *RunRequest) func(ctx context.Context, tc providers.ToolCall) (providers.Message, any, error) {
-	emitRun := makeToolEmitRun(l, req)
 	return func(ctx context.Context, tc providers.ToolCall) (providers.Message, any, error) {
+		emitRun := makeToolEmitRun(l, req, ctx)
 		registryName := l.resolveToolCallName(tc.Name)
 		argsJSON, _ := json.Marshal(tc.Arguments)
 		slog.Info("tool call", "agent", l.id, "tool", tc.Name, "args_len", len(argsJSON))
@@ -100,6 +101,7 @@ func (l *Loop) makeExecuteToolRaw(req *RunRequest) func(ctx context.Context, tc 
 				OtherConfig: append([]byte(nil), l.agentOtherConfig...), // defensive copy at dispatch
 			})
 		}
+		ctx = withToolProgressEvents(ctx, emitRun, l.id, req.RunID, tc)
 
 		result := l.tools.ExecuteWithContext(ctx, registryName, tc.Arguments,
 			req.Channel, req.ChatID, req.PeerKind, req.SessionKey, nil)
@@ -121,8 +123,8 @@ func (l *Loop) makeExecuteToolRaw(req *RunRequest) func(ctx context.Context, tc 
 // makeProcessToolResult wraps post-execution bookkeeping (sequential, mutates bridgeRS).
 // rawData is *toolRawResult from ExecuteToolRaw — no re-execution.
 func (l *Loop) makeProcessToolResult(req *RunRequest, bridgeRS *runState) func(ctx context.Context, state *pipeline.RunState, tc providers.ToolCall, rawMsg providers.Message, rawData any) []providers.Message {
-	emitRun := makeToolEmitRun(l, req)
 	return func(ctx context.Context, state *pipeline.RunState, tc providers.ToolCall, rawMsg providers.Message, rawData any) []providers.Message {
+		emitRun := makeToolEmitRun(l, req, ctx)
 		registryName := l.resolveToolCallName(tc.Name)
 
 		// Extract result and timing from toolRawResult wrapper.
@@ -168,6 +170,7 @@ func syncBridgeToState(bridgeRS *runState, state *pipeline.RunState, action tool
 	state.Tool.LoopKilled = bridgeRS.loopKilled
 	state.Tool.AsyncToolCalls = bridgeRS.asyncToolCalls
 	state.Tool.Deliverables = bridgeRS.deliverables
+	state.Tool.DirectReturn = bridgeRS.directReturn
 	state.Evolution.BootstrapWrite = bridgeRS.bootstrapWriteDetected
 	state.Evolution.TeamTaskSpawns = bridgeRS.teamTaskSpawns
 	state.Evolution.TeamTaskCreates = bridgeRS.teamTaskCreates
@@ -185,7 +188,7 @@ func syncBridgeToState(bridgeRS *runState, state *pipeline.RunState, action tool
 			})
 		}
 	}
-	if state.Tool.LoopKilled && action == toolResultBreak {
+	if (state.Tool.LoopKilled || state.Tool.DirectReturn) && action == toolResultBreak {
 		state.Observe.FinalContent = bridgeRS.finalContent
 	}
 }
@@ -219,13 +222,40 @@ func (l *Loop) recordToolMetric(ctx context.Context, sessionKey, toolName string
 }
 
 // makeToolEmitRun creates a tool event emitter with request context.
-func makeToolEmitRun(l *Loop, req *RunRequest) func(AgentEvent) {
+func makeToolEmitRun(l *Loop, req *RunRequest, ctx context.Context) func(AgentEvent) {
 	return func(event AgentEvent) {
 		event.RunKind = req.RunKind
 		event.SessionKey = req.SessionKey
 		event.SenderID = req.SenderID
 		event.UserID = req.UserID
 		event.Channel = req.Channel
+		event.TenantID = store.TenantIDFromContext(ctx)
+		event.Metadata = req.Metadata
 		l.emit(event)
 	}
+}
+
+func withToolProgressEvents(ctx context.Context, emitRun func(AgentEvent), agentID, runID string, tc providers.ToolCall) context.Context {
+	return tools.WithToolProgressCallback(ctx, func(_ context.Context, progress tools.ProgressEvent) {
+		emitRun(AgentEvent{
+			Type:    protocol.AgentEventActivity,
+			AgentID: agentID,
+			RunID:   runID,
+			Payload: map[string]any{
+				"id":              tc.ID,
+				"phase":           "mcp_progress",
+				"tool":            tc.Name,
+				"server":          progress.ServerName,
+				"mcp_tool":        progress.ToolName,
+				"registered_tool": progress.RegisteredName,
+				"progress":        progress.Progress,
+				"total":           progress.Total,
+				"message":         progress.Message,
+				"event":           progress.Event,
+				"run_id":          progress.RunID,
+				"timestamp":       progress.Timestamp,
+				"event_data":      progress.EventData,
+			},
+		})
+	})
 }

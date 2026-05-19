@@ -81,11 +81,19 @@ func (s *FinalizeStage) Execute(ctx context.Context, state *RunState) error {
 		state.Observe.AssistantImages = nil // prevent double-processing on retries
 	}
 
+	// Direct-return tool results are already the user-facing answer. Persisting the
+	// model's pre-tool thinking alongside that answer leaves a stale "thinking"
+	// block after the tool has completed.
+	finalThinking := state.Observe.FinalThinking
+	if state.Tool.DirectReturn {
+		finalThinking = ""
+	}
+
 	// 3c. Build final assistant message with MediaRefs for session persistence.
 	assistantMsg := providers.Message{
 		Role:     "assistant",
 		Content:  state.Observe.FinalContent,
-		Thinking: state.Observe.FinalThinking,
+		Thinking: finalThinking,
 	}
 	for _, mr := range state.Tool.MediaResults {
 		kind := "document"

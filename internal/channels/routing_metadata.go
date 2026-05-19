@@ -5,17 +5,25 @@ package channels
 // replies, block replies, retries, and placeholder updates all land in the
 // correct thread / topic / subgroup routing bucket on each channel.
 var routingMetaKeys = []string{
-	"message_thread_id",      // telegram forum topics
-	"local_key",              // composite chat-id suffix
-	"group_id",               // legacy group identifier
-	"feishu_reply_target_id", // feishu/lark thread reply routing
-	"fb_mode",                // facebook messenger vs comment routing
-	"sender_id",              // facebook sender for first-inbox / pancake sender for private-reply
-	"page_id",                // facebook page routing
-	"reply_to_comment_id",    // facebook/pancake comment reply target
-	"pancake_mode",           // pancake inbox vs comment routing
-	"post_id",                // pancake: post id for template vars
-	"display_name",           // pancake: commenter display name for template vars
+	"message_thread_id",        // telegram forum topics
+	"local_key",                // composite chat-id suffix
+	"group_id",                 // legacy group identifier
+	"feishu_reply_target_id",   // feishu/lark thread reply routing
+	"fb_mode",                  // facebook messenger vs comment routing
+	"sender_id",                // facebook sender for first-inbox / pancake sender for private-reply
+	"page_id",                  // facebook page routing
+	"reply_to_comment_id",      // facebook/pancake comment reply target
+	"pancake_mode",             // pancake inbox vs comment routing
+	"post_id",                  // pancake: post id for template vars
+	"display_name",             // pancake: commenter display name for template vars
+	"gateway_context_id",       // external gateway progress callback context
+	"channel",                  // external platform name (e.g. dingtalk) from AgentPlatform
+	"internal_session_id",      // external gateway session id
+	"conversation_id",          // external platform conversation id
+	"message_id",               // external platform triggering message id
+	"out_track_id",             // DingTalk card outTrackId
+	"reply_mode",               // external gateway reply mode (text/card)
+	gatewayProgressModeMetaKey, // opt-in: forward MCP progress as structured gateway JSON
 }
 
 var finalReplyMetaKeys = append([]string{

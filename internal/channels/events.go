@@ -2,6 +2,7 @@ package channels
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -36,6 +37,10 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 	// channels that might serve multiple tenants.
 	if rc.TenantID != uuid.Nil {
 		ctx = store.WithTenantID(ctx, rc.TenantID)
+	}
+
+	if eventType == protocol.AgentEventActivity {
+		m.forwardGatewayProgressEvent(ctx, rc, ch, runID, payload)
 	}
 
 	// Forward to StreamingChannel (only when streaming is enabled for this run).
@@ -358,6 +363,233 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 	}
 }
 
+const (
+	gatewayReplyVersion           = "goclaw.gateway.reply.v1"
+	gatewayProgressEventType      = "goclaw.gateway.progress"
+	gatewayProgressMetaKey        = "goclaw_gateway_event"
+	gatewayProgressModeMetaKey    = "gateway_progress"
+	gatewayProgressModeJSON       = "json_outbound"
+	gatewayProgressModeJSONAlias  = "outbound"
+	gatewayProgressModeTrue       = "true"
+	gatewayProgressModeEnabled    = "enabled"
+	gatewayProgressPayloadMetaKey = "goclaw_gateway_payload"
+)
+
+func (m *Manager) forwardGatewayProgressEvent(ctx context.Context, rc *RunContext, ch Channel, runID string, payload any) {
+	event, ok := BuildGatewayProgressEvent(runID, payload, GatewayProgressRoute{
+		Channel:   rc.ChannelName,
+		ChatID:    rc.ChatID,
+		MessageID: rc.MessageID,
+		TenantID:  rc.TenantID.String(),
+		Metadata:  rc.Metadata,
+	})
+	if !ok {
+		return
+	}
+
+	if gatewayCh, ok := ch.(GatewayProgressChannel); ok {
+		if err := gatewayCh.OnGatewayProgress(ctx, event); err != nil {
+			slog.Debug("gateway progress event failed",
+				"channel", rc.ChannelName,
+				"run_id", runID,
+				"event", event.Event,
+				"kind", event.Kind,
+				"error", err,
+			)
+		}
+		return
+	}
+
+	// Temporary compatibility path for external gateway adapters that only
+	// receive OutboundMessage. This is opt-in so normal chat channels do not
+	// receive raw JSON progress messages.
+	if !gatewayProgressJSONOutboundEnabled(rc.Metadata) {
+		return
+	}
+
+	raw, err := json.Marshal(event)
+	if err != nil {
+		slog.Debug("gateway progress marshal failed", "channel", rc.ChannelName, "run_id", runID, "error", err)
+		return
+	}
+
+	outMeta := copyRoutingMeta(rc.Metadata)
+	if outMeta == nil {
+		outMeta = map[string]string{}
+	}
+	outMeta[gatewayProgressMetaKey] = gatewayProgressEventType
+	outMeta["goclaw_gateway_version"] = event.Version
+	outMeta["goclaw_gateway_kind"] = event.Kind
+	outMeta["goclaw_gateway_run_id"] = event.RunID
+	outMeta["goclaw_gateway_child_run_id"] = event.ChildRun
+	outMeta["goclaw_gateway_progress_event"] = event.Event
+	outMeta[gatewayProgressPayloadMetaKey] = string(raw)
+
+	m.bus.PublishOutbound(bus.OutboundMessage{
+		Channel:  rc.ChannelName,
+		ChatID:   rc.ChatID,
+		Content:  string(raw),
+		Metadata: outMeta,
+		TenantID: rc.TenantID,
+	})
+}
+
+func BuildGatewayProgressEvent(runID string, payload any, route GatewayProgressRoute) (GatewayProgressEvent, bool) {
+	payloadMap, ok := payload.(map[string]any)
+	if !ok {
+		return GatewayProgressEvent{}, false
+	}
+	phase, _ := payloadMap["phase"].(string)
+	if phase != "mcp_progress" {
+		return GatewayProgressEvent{}, false
+	}
+
+	eventData, ok := asStringAnyMap(payloadMap["event_data"])
+	if !ok {
+		return GatewayProgressEvent{}, false
+	}
+	replyPayload, ok := extractGatewayReplyPayload(eventData)
+	if !ok {
+		return GatewayProgressEvent{}, false
+	}
+
+	kind, _ := replyPayload["kind"].(string)
+	if !IsGatewayProgressKindForwardable(kind) {
+		return GatewayProgressEvent{}, false
+	}
+	tool, _ := payloadMap["tool"].(string)
+	mcpTool, _ := payloadMap["mcp_tool"].(string)
+	message, _ := payloadMap["message"].(string)
+	eventName, _ := payloadMap["event"].(string)
+	childRunID, _ := payloadMap["run_id"].(string)
+	timestamp, _ := payloadMap["timestamp"].(string)
+
+	gatewayContext := extractGatewayContext(route.Metadata)
+	channel := route.Channel
+	messageID := route.MessageID
+	if gatewayContext != nil {
+		if v := gatewayContext["channel"]; v != "" {
+			channel = v
+		}
+		if v := gatewayContext["message_id"]; v != "" {
+			messageID = v
+		}
+	}
+	return GatewayProgressEvent{
+		Kind:              kind,
+		GatewayContextID:  gatewayContext["gateway_context_id"],
+		Channel:           channel,
+		ConversationID:    gatewayContext["conversation_id"],
+		MessageID:         messageID,
+		InternalSessionID: gatewayContext["internal_session_id"],
+		OutTrackID:        gatewayContext["out_track_id"],
+		ReplyMode:         gatewayContext["reply_mode"],
+		Payload:           replyPayload,
+
+		EventType:      gatewayProgressEventType,
+		Version:        gatewayReplyVersion,
+		RunID:          runID,
+		AgentID:        route.AgentID,
+		SessionKey:     route.SessionKey,
+		ChatID:         route.ChatID,
+		UserID:         route.UserID,
+		SenderID:       route.SenderID,
+		TenantID:       route.TenantID,
+		GatewayContext: gatewayContext,
+		Metadata:       gatewayContext,
+		Tool:           tool,
+		MCPTool:        mcpTool,
+		Progress:       payloadMap["progress"],
+		Total:          payloadMap["total"],
+		Message:        message,
+		Event:          eventName,
+		ChildRun:       childRunID,
+		Timestamp:      timestamp,
+		EventData:      eventData,
+	}, true
+}
+
+func extractGatewayReplyPayload(eventData map[string]any) (map[string]any, bool) {
+	candidates := []any{
+		eventData["payload"],
+		eventData["data"],
+	}
+	if data, ok := asStringAnyMap(eventData["data"]); ok {
+		candidates = append(candidates, data["payload"])
+	}
+
+	for _, candidate := range candidates {
+		m, ok := asStringAnyMap(candidate)
+		if !ok {
+			continue
+		}
+		if version, _ := m["version"].(string); version == gatewayReplyVersion {
+			return m, true
+		}
+	}
+	return nil, false
+}
+
+func IsGatewayProgressKindForwardable(kind string) bool {
+	switch kind {
+	case "progress", "text", "ask_user", "result", "error":
+		return true
+	default:
+		return false
+	}
+}
+
+func IsGatewayProgressKindCritical(kind string) bool {
+	switch kind {
+	case "ask_user", "result", "error":
+		return true
+	default:
+		return false
+	}
+}
+
+func extractGatewayContext(metadata map[string]string) map[string]string {
+	keys := []string{
+		"gateway_context_id",
+		"channel",
+		"internal_session_id",
+		"conversation_id",
+		"message_id",
+		"out_track_id",
+		"reply_mode",
+	}
+	out := make(map[string]string)
+	for _, key := range keys {
+		if v := metadata[key]; v != "" {
+			out[key] = v
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func gatewayProgressJSONOutboundEnabled(metadata map[string]string) bool {
+	mode := strings.ToLower(strings.TrimSpace(metadata[gatewayProgressModeMetaKey]))
+	switch mode {
+	case gatewayProgressModeJSON, gatewayProgressModeJSONAlias, gatewayProgressModeTrue, gatewayProgressModeEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+func asStringAnyMap(v any) (map[string]any, bool) {
+	if m, ok := v.(map[string]any); ok {
+		return m, true
+	}
+	if m, ok := v.(map[string]interface{}); ok {
+		return map[string]any(m), true
+	}
+	return nil, false
+}
+
 // extractPayloadString extracts a string field from a payload (map[string]string or map[string]interface{}).
 func extractPayloadString(payload any, key string) string {
 	switch p := payload.(type) {
@@ -370,7 +602,6 @@ func extractPayloadString(payload any, key string) string {
 	}
 	return ""
 }
-
 
 // toolStatusMap maps builtin tool names to user-friendly status messages.
 var toolStatusMap = map[string]string{
@@ -400,8 +631,8 @@ var toolStatusMap = map[string]string{
 	// Browser
 	"browser": "🌐 Browsing...",
 	// Delegation & teams
-	"spawn":        "👥 Delegating task...",
-	"team_tasks":   "📋 Managing team tasks...",
+	"spawn":      "👥 Delegating task...",
+	"team_tasks": "📋 Managing team tasks...",
 	// Sessions
 	"sessions_list":    "📋 Listing sessions...",
 	"session_status":   "📋 Checking session...",

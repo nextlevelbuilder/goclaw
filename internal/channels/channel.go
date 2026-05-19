@@ -166,6 +166,70 @@ type ReactionChannel interface {
 	ClearReaction(ctx context.Context, chatID string, messageID string) error
 }
 
+// GatewayProgressEvent is the stable event shape forwarded from MCP progress
+// notifications to external gateway-style channel adapters.
+//
+// Payload is the protocol-level card/progress payload produced by downstream
+// agents, for example version "goclaw.gateway.reply.v1". EventData keeps the
+// original downstream event envelope for adapters that need lower-level details.
+type GatewayProgressEvent struct {
+	Kind              string         `json:"kind,omitempty"`
+	GatewayContextID  string         `json:"gateway_context_id,omitempty"`
+	Channel           string         `json:"channel,omitempty"`
+	ConversationID    string         `json:"conversation_id,omitempty"`
+	MessageID         string         `json:"message_id,omitempty"`
+	InternalSessionID string         `json:"internal_session_id,omitempty"`
+	OutTrackID        string         `json:"out_track_id,omitempty"`
+	ReplyMode         string         `json:"reply_mode,omitempty"`
+	Payload           map[string]any `json:"payload"`
+
+	EventType  string `json:"event_type,omitempty"`
+	Version    string `json:"version,omitempty"`
+	RunID      string `json:"run_id,omitempty"`
+	AgentID    string `json:"agent_id,omitempty"`
+	SessionKey string `json:"session_key,omitempty"`
+	ChatID     string `json:"chat_id,omitempty"`
+	UserID     string `json:"user_id,omitempty"`
+	SenderID   string `json:"sender_id,omitempty"`
+	TenantID   string `json:"tenant_id,omitempty"`
+
+	GatewayContext map[string]string `json:"gateway_context,omitempty"`
+	// Metadata mirrors GatewayContext for external gateway services that read
+	// the original chat.send metadata envelope directly.
+	Metadata  map[string]string `json:"metadata,omitempty"`
+	Tool      string            `json:"tool,omitempty"`
+	MCPTool   string            `json:"mcp_tool,omitempty"`
+	Progress  any               `json:"progress,omitempty"`
+	Total     any               `json:"total,omitempty"`
+	Message   string            `json:"message,omitempty"`
+	Event     string            `json:"event,omitempty"`
+	ChildRun  string            `json:"child_run_id,omitempty"`
+	Timestamp string            `json:"timestamp,omitempty"`
+	EventData map[string]any    `json:"event_data,omitempty"`
+}
+
+// GatewayProgressRoute carries the GoClaw-side routing context that should be
+// attached to a downstream progress payload before it leaves the process.
+type GatewayProgressRoute struct {
+	AgentID    string
+	SessionKey string
+	Channel    string
+	ChatID     string
+	MessageID  string
+	UserID     string
+	SenderID   string
+	TenantID   string
+	Metadata   map[string]string
+}
+
+// GatewayProgressChannel is implemented by channel adapters that can consume
+// structured gateway events, such as a DingTalk/Feishu gateway that updates a
+// card as a long-running MCP tool emits progress.
+type GatewayProgressChannel interface {
+	Channel
+	OnGatewayProgress(ctx context.Context, event GatewayProgressEvent) error
+}
+
 // BaseChannel provides shared functionality for all channel implementations.
 // Channel implementations should embed this struct.
 type BaseChannel struct {

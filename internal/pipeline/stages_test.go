@@ -46,7 +46,7 @@ func (m *mockTokenCounter) CountMessages(_ string, msgs []providers.Message) int
 	return len(msgs) * m.countPerMessage
 }
 func (m *mockTokenCounter) CountToolSchemas(_ string, _ []providers.ToolDefinition) int { return 0 }
-func (m *mockTokenCounter) ModelContextWindow(_ string) int                              { return 200_000 }
+func (m *mockTokenCounter) ModelContextWindow(_ string) int                             { return 200_000 }
 
 // --- ThinkStage tests ---
 
@@ -1963,6 +1963,32 @@ func TestFinalizeStage_FlushesRemainingPending(t *testing.T) {
 	}
 }
 
+func TestFinalizeStage_DirectReturnDoesNotPersistThinking(t *testing.T) {
+	t.Parallel()
+	var flushedMsgs []providers.Message
+	deps := &PipelineDeps{
+		FlushMessages: func(_ context.Context, _ string, msgs []providers.Message) error {
+			flushedMsgs = append(flushedMsgs, msgs...)
+			return nil
+		},
+	}
+	stage := NewFinalizeStage(deps)
+	state := defaultState()
+	state.Observe.FinalContent = "tool result"
+	state.Observe.FinalThinking = "model thinking before tool"
+	state.Tool.DirectReturn = true
+
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if len(flushedMsgs) != 1 {
+		t.Fatalf("flushed %d messages, want 1", len(flushedMsgs))
+	}
+	if flushedMsgs[0].Thinking != "" {
+		t.Errorf("persisted Thinking = %q, want empty for direct return", flushedMsgs[0].Thinking)
+	}
+}
+
 func TestFinalizeStage_CallsBootstrapCleanup_WhenHadBootstrap(t *testing.T) {
 	t.Parallel()
 	cleanupCalled := false
@@ -2114,8 +2140,8 @@ func TestParseTTL_ValidInputs(t *testing.T) {
 		{"5m", 5 * time.Minute},
 		{"30s", 30 * time.Second},
 		{"1h30m", 90 * time.Minute},
-		{"bogus", 5 * time.Minute},  // invalid → fallback
-		{"-1m", 5 * time.Minute},    // negative → fallback
+		{"bogus", 5 * time.Minute}, // invalid → fallback
+		{"-1m", 5 * time.Minute},   // negative → fallback
 	}
 	for _, tc := range cases {
 		got := parseTTL(tc.in)

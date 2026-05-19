@@ -29,6 +29,10 @@ func connectAndDiscover(ctx context.Context, name, transportType, command string
 			return nil, nil, fmt.Errorf("start transport: %w", err)
 		}
 	}
+	progress := newMCPProgressRouter()
+	client.OnNotification(func(notification mcpgo.JSONRPCNotification) {
+		progress.handle(name, notification)
+	})
 
 	initReq := mcpgo.InitializeRequest{}
 	initReq.Params.ProtocolVersion = mcpgo.LATEST_PROTOCOL_VERSION
@@ -84,6 +88,7 @@ func connectAndDiscover(ctx context.Context, name, transportType, command string
 		name:       name,
 		transport:  transportType,
 		client:     client,
+		progress:   progress,
 		timeoutSec: timeoutSec,
 		conn: connParams{
 			command: command,
@@ -142,7 +147,7 @@ func (m *Manager) connectServer(ctx context.Context, name, transportType, comman
 func (m *Manager) registerBridgeTools(ss *serverState, mcpTools []mcpgo.Tool, serverName, toolPrefix string, timeoutSec int, serverID uuid.UUID) []string {
 	var registeredNames []string
 	for _, mcpTool := range mcpTools {
-		bt := NewBridgeTool(serverName, mcpTool, &ss.clientPtr, toolPrefix, timeoutSec, &ss.connected, serverID, m.grantChecker)
+		bt := NewBridgeTool(serverName, mcpTool, &ss.clientPtr, toolPrefix, timeoutSec, &ss.connected, serverID, m.grantChecker, ss.progress)
 
 		if _, exists := m.registry.Get(bt.Name()); exists {
 			slog.Warn("mcp.tool.name_collision",
@@ -210,7 +215,7 @@ func (m *Manager) connectViaPool(ctx context.Context, tenantID uuid.UUID, name, 
 func (m *Manager) registerPoolBridgeTools(entry *poolEntry, serverName, toolPrefix string, timeoutSec int, serverID uuid.UUID) []string {
 	var registeredNames []string
 	for _, mcpTool := range entry.tools {
-		bt := NewBridgeTool(serverName, mcpTool, &entry.state.clientPtr, toolPrefix, timeoutSec, &entry.state.connected, serverID, m.grantChecker)
+		bt := NewBridgeTool(serverName, mcpTool, &entry.state.clientPtr, toolPrefix, timeoutSec, &entry.state.connected, serverID, m.grantChecker, entry.state.progress)
 
 		if _, exists := m.registry.Get(bt.Name()); exists {
 			slog.Warn("mcp.tool.name_collision",
@@ -395,6 +400,14 @@ func fullReconnect(ctx context.Context, ss *serverState) bool {
 			return false
 		}
 	}
+	progress := ss.progress
+	if progress == nil {
+		progress = newMCPProgressRouter()
+		ss.progress = progress
+	}
+	newClient.OnNotification(func(notification mcpgo.JSONRPCNotification) {
+		progress.handle(ss.name, notification)
+	})
 
 	initReq := mcpgo.InitializeRequest{}
 	initReq.Params.ProtocolVersion = mcpgo.LATEST_PROTOCOL_VERSION

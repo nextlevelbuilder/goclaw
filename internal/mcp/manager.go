@@ -62,18 +62,19 @@ type connParams struct {
 type serverState struct {
 	name       string
 	transport  string
-	client     *mcpclient.Client               // direct ref for health checks (single-goroutine access)
+	client     *mcpclient.Client                // direct ref for health checks (single-goroutine access)
 	clientPtr  atomic.Pointer[mcpclient.Client] // shared atomic ref for BridgeTools (multi-goroutine safe)
+	progress   *mcpProgressRouter
 	connected  atomic.Bool
 	toolNames  []string // registered tool names in the registry
 	timeoutSec int
 	cancel     context.CancelFunc
 	conn       connParams // connection params for reconnect
 
-	mu              sync.Mutex
-	reconnAttempts  int
-	healthFailures  int // consecutive ping failures (resets on success)
-	lastErr         string
+	mu             sync.Mutex
+	reconnAttempts int
+	healthFailures int // consecutive ping failures (resets on success)
+	lastErr        string
 }
 
 // Manager orchestrates MCP server connections and tool registration.
@@ -102,13 +103,13 @@ type Manager struct {
 
 	// Shared connection pool (nil = config-only mode)
 	pool          *Pool
-	poolServers   map[string]struct{}  // server names acquired from pool (for cleanup)
-	poolToolNames map[string][]string  // per-agent tool names for pool-backed servers
+	poolServers   map[string]struct{} // server names acquired from pool (for cleanup)
+	poolToolNames map[string][]string // per-agent tool names for pool-backed servers
 	poolKeys      map[string]string   // server name → pool compound key (tenantID/name) for Release
 
 	// Search mode: deferred tools not registered in registry
 	deferredTools  map[string]*BridgeTool // registeredName → BridgeTool
-	activatedTools map[string]struct{}     // tracks activated tool names for group:mcp
+	activatedTools map[string]struct{}    // tracks activated tool names for group:mcp
 	searchMode     bool
 
 	// User-credential servers: servers requiring per-user credentials, stored during
