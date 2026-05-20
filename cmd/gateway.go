@@ -528,8 +528,10 @@ func runGateway() {
 		// lazy per-user credential provisioning (via mcp_server_name +
 		// mcp_base_url in their instance config) can reach the partner's
 		// MCPServerStore. The MCP server authenticates each onboard call
-		// via the caller-supplied Bitrix access_token (Path B) — no shared
-		// admin secret is required. Channels with none of those set operate
+		// via the caller-supplied Bitrix access_token (the "Bitrix24
+		// OAuth → existing mcp_user_credentials bridge" — Bitrix-specific
+		// glue, not a generic MCP architecture pattern) — no shared admin
+		// secret is required. Channels with none of those set operate
 		// identically to before — the MCPStore arg is nil-safe inside the
 		// factory.
 		instanceLoader.RegisterFactory(channels.TypeBitrix24, bitrix24.FactoryWithPortalStoreAndMCP(pgStores.BitrixPortals, pgStores.MCP, bitrixEncKey))
