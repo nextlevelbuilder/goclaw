@@ -224,7 +224,52 @@ export function useChatMessages(sessionKey: string, agentId: string) {
         case "activity": {
           const phase = event.payload?.phase as RunActivity["phase"];
           if (phase) {
-            const newActivity: RunActivity = { phase, tool: event.payload?.tool as string | undefined, tools: event.payload?.tools as string[] | undefined, iteration: event.payload?.iteration as number | undefined };
+            if (phase === "mcp_progress") {
+              const toolCallId = event.payload?.id as string | undefined;
+              const toolName = event.payload?.tool as string | undefined;
+              const now = Date.now();
+              toolStreamRef.current = toolStreamRef.current.map((t) => {
+                const matches = toolCallId ? t.toolCallId === toolCallId : toolName && t.name === toolName && t.phase === "calling";
+                if (!matches) return t;
+                return {
+                  ...t,
+                  progress: typeof event.payload?.progress === "number" ? event.payload.progress : undefined,
+                  progressTotal: typeof event.payload?.total === "number" ? event.payload.total : undefined,
+                  progressMessage: event.payload?.message as string | undefined,
+                  progressEvent: event.payload?.event as string | undefined,
+                  progressRunId: event.payload?.run_id as string | undefined,
+                  progressTimestamp: event.payload?.timestamp as string | undefined,
+                  progressEventData: event.payload?.event_data as Record<string, unknown> | undefined,
+                  progressHistory: [
+                    ...(t.progressHistory ?? []),
+                    {
+                      event: event.payload?.event as string | undefined,
+                      runId: event.payload?.run_id as string | undefined,
+                      timestamp: event.payload?.timestamp as string | undefined,
+                      message: event.payload?.message as string | undefined,
+                      progress: typeof event.payload?.progress === "number" ? event.payload.progress : undefined,
+                      total: typeof event.payload?.total === "number" ? event.payload.total : undefined,
+                      eventData: event.payload?.event_data as Record<string, unknown> | undefined,
+                    },
+                  ].slice(-12),
+                  updatedAt: now,
+                };
+              });
+              setToolStream(toolStreamRef.current);
+            }
+            const newActivity: RunActivity = {
+              phase,
+              tool: event.payload?.tool as string | undefined,
+              tools: event.payload?.tools as string[] | undefined,
+              iteration: event.payload?.iteration as number | undefined,
+              progress: typeof event.payload?.progress === "number" ? event.payload.progress : undefined,
+              total: typeof event.payload?.total === "number" ? event.payload.total : undefined,
+              message: event.payload?.message as string | undefined,
+              event: event.payload?.event as string | undefined,
+              runId: event.payload?.run_id as string | undefined,
+              timestamp: event.payload?.timestamp as string | undefined,
+              eventData: event.payload?.event_data as Record<string, unknown> | undefined,
+            };
             activityRef.current = newActivity; setActivity(newActivity);
           }
           break;

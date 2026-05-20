@@ -4,12 +4,19 @@ import type { Message } from "./session";
 
 /** Activity phase tracking during agent run */
 export interface RunActivity {
-  phase: "thinking" | "tool_exec" | "streaming" | "compacting" | "retrying" | "leader_processing";
+  phase: "thinking" | "tool_exec" | "streaming" | "compacting" | "retrying" | "leader_processing" | "mcp_progress";
   tool?: string;
   tools?: string[];
   iteration?: number;
   retryAttempt?: number;
   retryMax?: number;
+  progress?: number;
+  total?: number;
+  message?: string;
+  event?: string;
+  runId?: string;
+  timestamp?: string;
+  eventData?: Record<string, unknown>;
 }
 
 /** Team task tracking from team.task.* events */
@@ -69,6 +76,13 @@ export interface AgentEventPayload {
     tool?: string;
     tools?: string[];
     iteration?: number;
+    progress?: number;
+    total?: number;
+    message?: string;
+    event?: string;
+    run_id?: string;
+    timestamp?: string;
+    event_data?: Record<string, unknown>;
     // run.retrying event fields
     attempt?: number;
     maxAttempts?: number;
@@ -86,6 +100,22 @@ export interface ToolStreamEntry {
   arguments?: Record<string, unknown>;
   result?: string;
   errorContent?: string;
+  progress?: number;
+  progressTotal?: number;
+  progressMessage?: string;
+  progressEvent?: string;
+  progressRunId?: string;
+  progressTimestamp?: string;
+  progressEventData?: Record<string, unknown>;
+  progressHistory?: {
+    event?: string;
+    runId?: string;
+    timestamp?: string;
+    message?: string;
+    progress?: number;
+    total?: number;
+    eventData?: Record<string, unknown>;
+  }[];
   startedAt: number;
   updatedAt: number;
 }

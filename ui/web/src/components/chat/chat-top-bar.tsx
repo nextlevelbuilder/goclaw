@@ -26,6 +26,7 @@ const phaseLabels: Record<RunActivity["phase"], string> = {
   compacting: "Compacting…",
   retrying: "Retrying…",
   leader_processing: "Processing team results…",
+  mcp_progress: "MCP progress…",
 };
 
 export function ChatTopBar({ agentId, isRunning, isBusy, activity, teamTasks, onToggleTaskPanel, taskPanelOpen, session }: ChatTopBarProps) {

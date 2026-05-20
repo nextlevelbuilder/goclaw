@@ -58,6 +58,11 @@ function getPhaseConfig(activity: RunActivity) {
       };
     case "leader_processing":
       return { icon: Users, animation: "animate-pulse", color: "text-emerald-500", label: "Processing team results..." };
+    case "mcp_progress": {
+      const ratio = activity.total ? ` (${activity.progress ?? 0}/${activity.total})` : "";
+      const label = activity.message || (activity.tool ? `Running ${activity.tool}` : "MCP progress");
+      return { icon: Wrench, animation: "animate-pulse", color: "text-blue-500", label: `${label}${ratio}` };
+    }
     default:
       return { icon: Brain, animation: "animate-pulse", color: "text-muted-foreground", label: "Working..." };
   }
