@@ -72,12 +72,13 @@ var (
 //  2. Instance config has both mcp_server_name and mcp_base_url set.
 //  3. The mcp_servers row exists (looked up by name).
 //
-// Path B authentication (see mcp_client.go doc): the MCP server
-// authenticates each /api/auto-onboard call via the caller-supplied Bitrix
-// access_token by calling Bitrix `profile` and matching the token-owner
-// ID against bitrix_user_id — no shared admin secret is required, so
-// multi-tenant isolation holds naturally (each portal's users authenticate
-// with their own per-portal OAuth tokens).
+// Bitrix24 OAuth → existing mcp_user_credentials bridge (Bitrix-specific
+// glue — see mcp_client.go doc): the MCP server authenticates each
+// /api/auto-onboard call via the caller-supplied Bitrix access_token by
+// calling Bitrix `profile` and matching the token-owner ID against
+// bitrix_user_id — no shared admin secret is required, so multi-tenant
+// isolation holds naturally (each portal's users authenticate with their
+// own per-portal OAuth tokens).
 //
 // Any single missing piece leaves the channel usable but with
 // provisioning off — that's the operator's "staged rollout" path: install

@@ -2,10 +2,10 @@
 
 > Kế hoạch tích hợp MCP `mcp-bx-syn` với GoClaw chatbot để enforce per-user ACL khi user chat với bot Bitrix24.
 >
-> **Status**: ✅ Both sides implemented. Path B (access_token as auth anchor) shipped end-to-end. Remaining work is operational (backfill, marketplace rollout, Phase E shared-credential support for Open Channel).
+> **Status**: ✅ Both sides implemented. "Bitrix24 OAuth → existing `mcp_user_credentials` bridge" (auto-onboard via access_token as auth anchor — Bitrix-specific glue, not a generic MCP architecture pattern) shipped end-to-end. Remaining work is operational (backfill, marketplace rollout, Phase E shared-credential support for Open Channel).
 >
 > **Owner**: dangt
-> **Last updated**: 2026-04-23 (rev5: Path B shipped — ADMIN_TOKEN removed, mapping table dropped, notify + rate limit + audit log added)
+> **Last updated**: 2026-04-23 (rev5: mcp_user_credentials bridge shipped — ADMIN_TOKEN removed, mapping table dropped, notify + rate limit + audit log added)
 
 ---
 
@@ -14,7 +14,7 @@
 **Mục tiêu**: Mỗi user trong Bitrix chat với bot GoClaw → MCP `mcp-bx-syn` gọi Bitrix REST với token của **chính user đó** (enforce ACL tự nhiên). Triển khai an toàn ở quy mô marketplace: mỗi portal cài app độc lập, không có shared secret giữa MCP và GoClaw.
 
 **Phạm vi (đã triển khai)**:
-- Endpoint `POST /api/auto-onboard` trên MCP (Path B — xác thực bằng Bitrix `access_token` thay vì `ADMIN_TOKEN`)
+- Endpoint `POST /api/auto-onboard` trên MCP (mcp_user_credentials bridge — xác thực bằng Bitrix `access_token` thay vì `ADMIN_TOKEN`)
 - Lazy provisioning hook trong custom Bitrix24 channel của GoClaw
 - Persist per-user OAuth tokens vào MCPUserCredentials để MCP proxy gọi REST API theo user
 - Rate limit + audit log trên endpoint
@@ -35,7 +35,7 @@
 
 ## 2. Quyết định đã chốt (Rev5)
 
-- ✅ **Path B**: MCP xác thực mỗi call `/api/auto-onboard` bằng cách gọi Bitrix `profile` với `access_token` do caller supply, so khớp `profile.ID` với `bitrix_user_id`. Không cần `ADMIN_TOKEN` shared giữa GoClaw và MCP.
+- ✅ **mcp_user_credentials bridge**: MCP xác thực mỗi call `/api/auto-onboard` bằng cách gọi Bitrix `profile` với `access_token` do caller supply, so khớp `profile.ID` với `bitrix_user_id`. Không cần `ADMIN_TOKEN` shared giữa GoClaw và MCP.
   - Đổi so với Rev4 (dùng `ADMIN_TOKEN` Bearer) vì không scale cho marketplace: mỗi portal chạy GoClaw riêng không thể share 1 secret với MCP worker.
 - ✅ **Reject 404 `tenant_not_installed`** nếu portal chưa cài MCP app.
 - ✅ **Idempotent theo `(tenant.domain, bitrix_user_id)`** — lần 2 refresh tokens, trả cùng USR_.
@@ -115,7 +115,7 @@ Agent gọi MCP tool → Manager.resolveServerCredentials() inject
 | MCP `profile` (không `user.get`) vì không yêu cầu `user` scope | ✅ | `src/auth/bitrix-user-verify.ts` |
 | `ensureFreshToken` re-verify hourly + dismiss khi fail | ✅ | `src/auth/token-manager.ts` |
 | GoClaw KHÔNG còn phụ thuộc ADMIN_TOKEN | ✅ | commit `07b48ef0` (goclaw-deploy/dev) |
-| GoClaw channel đã wire Path B từ commit phase C | ✅ | commit `ea09c1ba` (goclaw-deploy/dev) |
+| GoClaw channel đã wire mcp_user_credentials bridge từ commit phase C | ✅ | commit `ea09c1ba` (goclaw-deploy/dev) |
 
 ---
 
@@ -123,15 +123,15 @@ Agent gọi MCP tool → Manager.resolveServerCredentials() inject
 
 ### 4.1 MCP side — schema (không migration mới)
 
-Schema gốc đã đủ. Các bảng Path B dùng:
+Schema gốc đã đủ. Các bảng mcp_user_credentials bridge dùng:
 
 | Bảng | Cột liên quan | Dùng cho |
 |---|---|---|
 | `tenants` | `domain UNIQUE` | `findTenantByDomain` — 404 gate |
 | `users` | `tenant_id`, `bitrix_user_id TEXT`, `UNIQUE(tenant_id, bitrix_user_id)`, `access_token`, `refresh_token`, `token_expires_at`, `token_version` | Upsert theo (tenant, bitrix_user_id); lưu OAuth tokens để proxy Bitrix REST |
-| `users` (Phase 04 columns, reuse) | `user_status` (`active`/`dismissed`), `last_verified_at` (unix seconds) | Đã có từ Phase 04; Path B reuse cho `ensureFreshToken` re-verify + dismiss flow |
+| `users` (Phase 04 columns, reuse) | `user_status` (`active`/`dismissed`), `last_verified_at` (unix seconds) | Đã có từ Phase 04; mcp_user_credentials bridge reuse cho `ensureFreshToken` re-verify + dismiss flow |
 | `api_keys` | `user_id`, `key`, `label`, `active` | Mint USR_ label `"goclaw-bot"`; `deactivateUserApiKeys` set `active=0` khi dismiss |
-| `auto_onboard_audit` (mới — Path B) | `id`, `domain`, `bitrix_user_id`, `event`, `actor`, `metadata`, `created_at` | Audit trail cho `/api/auto-onboard` — mọi call (success + fail) ghi 1 row. Event taxonomy: `success`/`rate_limited`/`invalid_bitrix_user`/`bitrix_unreachable`/`tenant_not_installed`/`bad_request` |
+| `auto_onboard_audit` (mới — mcp_user_credentials bridge) | `id`, `domain`, `bitrix_user_id`, `event`, `actor`, `metadata`, `created_at` | Audit trail cho `/api/auto-onboard` — mọi call (success + fail) ghi 1 row. Event taxonomy: `success`/`rate_limited`/`invalid_bitrix_user`/`bitrix_unreachable`/`tenant_not_installed`/`bad_request` |
 
 ### 4.2 GoClaw side — schema (KHÔNG migration mới) ✅
 
@@ -148,7 +148,7 @@ Schema gốc đã đủ. Các bảng Path B dùng:
 
 ## 5. MCP side — `/api/auto-onboard` endpoint ✅ IMPLEMENTED
 
-### 5.1 HTTP contract (rev5 — Path B)
+### 5.1 HTTP contract (rev5 — mcp_user_credentials bridge)
 
 **Route**: `POST /api/auto-onboard`
 
@@ -223,7 +223,7 @@ Content-Type: application/json
 
 ### 5.3 Re-verify defence-in-depth (`src/auth/token-manager.ts`)
 
-Path B xác thực 1 lần lúc onboard; nhưng nếu user bị deactive trên Bitrix sau khi onboard, USR_ vẫn sống. Mitigation:
+mcp_user_credentials bridge xác thực 1 lần lúc onboard; nhưng nếu user bị deactive trên Bitrix sau khi onboard, USR_ vẫn sống. Mitigation:
 
 - `ensureFreshToken()` chạy trên **mỗi** MCP call (via `resolveApiAuth` → `OAuthAuthContext`).
 - Nếu `last_verified_at > 1h` → gọi `verifyBitrixActive` lại:
@@ -238,11 +238,11 @@ Kết quả: user bị xoá khỏi Bitrix → trong vòng 1h MCP key của họ 
 
 | File | Action | Status |
 |---|---|---|
-| `src/api/auto-onboard.ts` | Rewrite — Path B (verify + rate limit + audit) | ✅ |
+| `src/api/auto-onboard.ts` | Rewrite — mcp_user_credentials bridge (verify + rate limit + audit) | ✅ |
 | `src/auth/bitrix-user-verify.ts` | Create — `verifyBitrixActive` via `profile` | ✅ |
 | `src/auth/token-manager.ts` | Modify — hook re-verify vào `ensureFreshToken` | ✅ |
 | `src/db/queries.ts` | Modify — thêm `logAutoOnboardEvent`, `updateUserVerifyStatus`, `deactivateUserApiKeys` | ✅ |
-| `src/db/schema.sql` | Modify — thêm bảng `auto_onboard_audit` (Path B audit). `users.user_status` + `last_verified_at` đã có từ Phase 04 | ✅ |
+| `src/db/schema.sql` | Modify — thêm bảng `auto_onboard_audit` (mcp_user_credentials bridge audit). `users.user_status` + `last_verified_at` đã có từ Phase 04 | ✅ |
 | `src/api/api-router.ts` | Modify — route `POST /auto-onboard` (no auth gate) | ✅ |
 | `wrangler.toml` | Modify — `RATE_LIMIT_KV` binding + drop `ADMIN_TOKEN` dependency | ✅ |
 
@@ -405,7 +405,7 @@ Không đụng health state — channel vẫn Green vì routing vẫn work.
 |---|---|---|
 | `internal/channels/bitrix24/channel.go` | Modify — add `mcpStore/mcpClient/mcpServerID/mcpProvMu/mcpDebounce/notifyMu/notifyDebounce/nameCacheMu/nameCache` fields | `ea09c1ba` (phase C) |
 | `internal/channels/bitrix24/factory.go` | Modify — `FactoryWithPortalStoreAndMCP` variant + half-config validation; `bitrixCreds` empty struct | `ea09c1ba`, `07b48ef0` |
-| `internal/channels/bitrix24/mcp_client.go` | Create — thin HTTP client; Path B no-auth | `ea09c1ba`, `07b48ef0` |
+| `internal/channels/bitrix24/mcp_client.go` | Create — thin HTTP client; mcp_user_credentials bridge no-auth | `ea09c1ba`, `07b48ef0` |
 | `internal/channels/bitrix24/provisioner.go` | Create — `provisionIfMissing` + `notifyUserOfMCPIssueOnce` + sentinel errors | `ea09c1ba`, `07b48ef0` |
 | `internal/channels/bitrix24/contact_enrich.go` | Create — lazy `user.get` cache cho display_name | `ea09c1ba` |
 | `internal/channels/bitrix24/handle.go` | Modify — call `provisionIfMissing` trước `HandleMessage` | `ea09c1ba` |
@@ -452,7 +452,7 @@ Không đụng health state — channel vẫn Green vì routing vẫn work.
 | Secret | Dùng cho | Rev5 status |
 |---|---|---|
 | `BITRIX_CLIENT_ID` / `BITRIX_CLIENT_SECRET` | OAuth dance (install + refresh) | Giữ nguyên |
-| ~~`ADMIN_TOKEN`~~ | ~~Auth `/api/auto-onboard`~~ | **Bỏ** (Path B không cần) |
+| ~~`ADMIN_TOKEN`~~ | ~~Auth `/api/auto-onboard`~~ | **Bỏ** (mcp_user_credentials bridge không cần) |
 | `ENCRYPTION_KEY` | D1 field encryption | Giữ nguyên |
 | KV binding `RATE_LIMIT_KV` | Rate limit `/api/auto-onboard` | **Mới** |
 
@@ -470,7 +470,7 @@ Không cần env var riêng cho MCP integration. Tất cả config sống trong 
 
 ## 8. Test plan
 
-### 8.1 Unit test MCP side (Path B)
+### 8.1 Unit test MCP side (mcp_user_credentials bridge)
 
 1. Body invalid JSON → 400 `bad_request` + audit row `reason:"invalid_json"`
 2. Thiếu `domain` / `bitrix_user_id` / `access_token` / `refresh_token` → 400 + audit `missing:"<field>"`
@@ -531,10 +531,10 @@ Không cần env var riêng cho MCP integration. Tất cả config sống trong 
 
 ## 9. Rollout sequence
 
-### ✅ Phase A — MCP Path B shipped
+### ✅ Phase A — MCP mcp_user_credentials bridge shipped
 - [x] Schema: thêm bảng `auto_onboard_audit` (Phase 04 đã có sẵn `user_status` + `last_verified_at` — reuse, không migrate lại)
 - [x] `verifyBitrixActive` via `profile` (thay cơ chế `user.get?FILTER[ID]=…&ACTIVE=true` cũ)
-- [x] `/api/auto-onboard` rewrite Path B (bỏ Bearer ADMIN_TOKEN gate)
+- [x] `/api/auto-onboard` rewrite mcp_user_credentials bridge (bỏ Bearer ADMIN_TOKEN gate)
 - [x] Rate limit KV + audit log
 - [x] Hook `verifyBitrixActive` vào `ensureFreshToken` (re-verify hourly — cơ chế hourly đã có Phase 04, chỉ đổi backend verify)
 - [x] Deploy + smoke test (end-to-end user#62)
@@ -567,7 +567,7 @@ Không cần env var riêng cho MCP integration. Tất cả config sống trong 
 
 ## 10. Security considerations
 
-### 10.1 Path B auth anchor
+### 10.1 mcp_user_credentials bridge auth anchor
 
 - **Trust boundary**: MCP tin `access_token` là thật vì Bitrix `profile` xác nhận nó thuộc user nào. Attacker muốn mint USR_ cho user X phải có access_token hợp lệ của user X — mà access_token chỉ leak được nếu Bitrix portal đã bị compromise (trong trường hợp đó attacker đã có quyền cao hơn nhiều so với USR_).
 - Không còn "master key" → không có rotate periodic; cũng không có single point of credential leak.
@@ -616,7 +616,7 @@ Không cần env var riêng cho MCP integration. Tất cả config sống trong 
 
 ## 12. Changelog
 
-- **2026-04-23 (rev5)**: Path B shipped end-to-end. Bỏ ADMIN_TOKEN.
+- **2026-04-23 (rev5)**: mcp_user_credentials bridge shipped end-to-end. Bỏ ADMIN_TOKEN.
   - MCP side: `/api/auto-onboard` rewrite dùng `verifyBitrixActive(profile)` làm auth anchor thay vì Bearer ADMIN_TOKEN. Thêm rate limit KV (600/min IP + 120/min domain), audit log `auto_onboard_audit`. Hourly re-verify trong `ensureFreshToken` để revoke USR_ của user bị dismiss khỏi Bitrix.
   - GoClaw side: `mcpClient` bỏ `adminToken` field + Authorization header. `provisioner.go` bỏ `resolveMCPAdminToken` + 2 env consts (`GOCLAW_BITRIX_MCP_ADMIN_TOKEN`, `BITRIX_MCP_ADMIN_TOKEN`). `bitrixCreds` chuyển về empty struct. UI form drop `mcp_admin_token` field. (commit `07b48ef0`)
   - Bỏ bảng mapping `bitrix_mcp_user_mapping` khỏi plan — reuse partner's `mcp_user_credentials` store. Tiết kiệm ~300 LOC: interface + 2 store impls + migration + SchemaVersion bump.

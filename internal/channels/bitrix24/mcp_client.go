@@ -14,16 +14,23 @@ import (
 
 // mcpClient talks to an MCP server's /api/auto-onboard endpoint.
 //
+// This is Bitrix-specific glue ("Bitrix24 OAuth → existing
+// mcp_user_credentials bridge"), NOT a generic MCP architecture pattern —
+// other channels (Telegram, Discord, …) currently require admins to set
+// per-user MCP credentials manually via the HTTP admin API. Bitrix
+// automates the same flow because Bitrix events naturally carry user
+// OAuth tokens.
+//
 // When a Bitrix24 user sends their first message, the bitrix24 channel
 // doesn't yet know which per-user MCP API key that user should use. It POSTs
 // to the MCP server — which is the authoritative identity provider for this
 // integration — with the triggering user's OAuth tokens (access_token +
 // refresh_token + expires_in) harvested from the Bitrix event auth block.
 // The MCP server verifies the access_token against Bitrix `profile` to
-// confirm the caller actually owns bitrix_user_id (Path B — no shared admin
-// secret required), then upserts its own tenants + bitrix_users tables keyed
-// by (domain, bitrix_user_id) and returns the per-user api_key we persist
-// via mcp_user_credentials.
+// confirm the caller actually owns bitrix_user_id — no shared admin secret
+// required — then upserts its own tenants + bitrix_users tables keyed by
+// (domain, bitrix_user_id) and returns the per-user api_key we persist via
+// mcp_user_credentials.
 //
 // The client is deliberately thin:
 //   - No retries on 4xx (auth config wrong → operator must fix).
@@ -48,7 +55,7 @@ var ErrTenantNotInstalled = errors.New("mcp auto-onboard: tenant_not_installed")
 
 // newMCPClient builds a client pointed at baseURL. The MCP server
 // authenticates each auto-onboard call via the caller-supplied Bitrix
-// access_token (Path B) — no shared admin secret is required.
+// access_token — no shared admin secret is required.
 // baseURL MUST be the MCP server root (e.g. https://mcp.example.com) — we
 // append /api/auto-onboard internally so channel config stays minimal.
 func newMCPClient(baseURL string, timeout time.Duration) *mcpClient {

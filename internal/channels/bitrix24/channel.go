@@ -62,9 +62,10 @@ type Channel struct {
 	//
 	// mcpStore comes from the MCP-aware factory variant; mcpClient is
 	// built at Start() iff config has mcp_server_name + mcp_base_url and
-	// the named mcp_servers row exists. Path B: the MCP server
-	// authenticates each onboard call via the caller-supplied Bitrix
-	// access_token — no shared admin secret is required. mcpServerID is
+	// the named mcp_servers row exists. Bitrix24 OAuth → existing
+	// mcp_user_credentials bridge: the MCP server authenticates each
+	// onboard call via the caller-supplied Bitrix access_token — no
+	// shared admin secret is required. mcpServerID is
 	// resolved once at Start() via mcpStore.GetServerByName and then
 	// cached — avoids looking up the server on every inbound message.
 	mcpStore    store.MCPServerStore

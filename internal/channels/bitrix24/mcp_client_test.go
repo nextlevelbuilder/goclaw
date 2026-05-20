@@ -51,10 +51,10 @@ func TestMCPClient_AutoOnboard_Success(t *testing.T) {
 	if gotPath != "/api/auto-onboard" {
 		t.Fatalf("wrong path: %q", gotPath)
 	}
-	// Path B: no Authorization header — MCP server authenticates via the
-	// caller-supplied Bitrix access_token in the body, not a bearer token.
+	// Auto-onboard contract: no Authorization header — MCP server authenticates
+	// via the caller-supplied Bitrix access_token in the body, not a bearer token.
 	if gotAuth != "" {
-		t.Fatalf("expected no Authorization header under Path B, got: %q", gotAuth)
+		t.Fatalf("expected no Authorization header for auto-onboard, got: %q", gotAuth)
 	}
 	if gotCT != "application/json" {
 		t.Fatalf("wrong content-type: %q", gotCT)

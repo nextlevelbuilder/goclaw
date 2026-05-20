@@ -96,9 +96,11 @@ type bitrixInstanceConfig struct {
 	//   2. Channel looks up MCPUserCredentials(serverID, senderID). Present
 	//      → skip. Absent → POST /api/auto-onboard on MCPBaseURL forwarding
 	//      U's OAuth tokens. MCP server authenticates the call via Bitrix
-	//      `profile` against the supplied access_token (Path B — no shared
-	//      admin secret required) and responds with a per-user api_key,
-	//      which channel stores via SetUserCredentials.
+	//      `profile` against the supplied access_token — no shared admin
+	//      secret required — and responds with a per-user api_key, which
+	//      channel stores via SetUserCredentials (the "Bitrix24 OAuth →
+	//      existing mcp_user_credentials bridge" — Bitrix-specific glue,
+	//      not a generic MCP architecture pattern).
 	//   3. Agent pipeline downstream reads those creds naturally.
 	//
 	// Best-effort: if any step fails, channel logs a warning and forwards
@@ -148,8 +150,10 @@ func FactoryWithPortalStore(portalStore store.BitrixPortalStore, encKey string) 
 // provisioning: on first message from each user, it POSTs to
 // {mcp_base_url}/api/auto-onboard to mint per-user MCP credentials,
 // which downstream agent pipeline reads naturally. The MCP server
-// authenticates each call via the caller-supplied Bitrix access_token
-// (Path B) — no shared admin secret is required.
+// authenticates each call via the caller-supplied Bitrix access_token —
+// no shared admin secret is required (Bitrix24 OAuth → existing
+// mcp_user_credentials bridge; Bitrix-specific glue, not a generic
+// MCP architecture pattern).
 //
 // Pass nil mcpStore to disable provisioning even if config has the fields.
 // Half-config (only one of mcp_server_name / mcp_base_url set) fails fast.

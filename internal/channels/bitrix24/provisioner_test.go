@@ -558,7 +558,7 @@ func TestProvisionIfMissing_MissingAuthBlock(t *testing.T) {
 // Each case should leave mcpClient nil + mcpServerID zero, so
 // provisionIfMissing returns ErrProvisionDisabled.
 //
-// Path B auth note: there is no longer an admin-token branch to test —
+// Auto-onboard auth note: there is no longer an admin-token branch to test —
 // the MCP server authenticates each /api/auto-onboard call via the
 // caller-supplied Bitrix access_token, not a shared bearer.
 func TestInitMCPProvisioner_DisabledModes(t *testing.T) {
