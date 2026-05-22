@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -23,6 +25,7 @@ type Manager struct {
 	pageTenants map[string]string           // targetID → tenantID (for filtering)
 	pageLastUsed map[string]time.Time       // targetID → last access time
 	headless      bool
+	leakless      bool          // use leakless wrapper to prevent zombie processes (default true)
 	remoteURL     string        // CDP endpoint for remote Chrome (sidecar); skips local launcher
 	actionTimeout time.Duration // per-action context timeout (default 30s)
 	idleTimeout   time.Duration // auto-close pages idle longer than this (default 10m, 0=disabled)
@@ -65,6 +68,12 @@ func WithMaxPages(n int) Option {
 	return func(m *Manager) { m.maxPages = n }
 }
 
+// WithLeakless sets whether to use the leakless wrapper to prevent zombie processes.
+// Default is true. Set to false on Windows if blocked by antivirus.
+func WithLeakless(enabled bool) Option {
+	return func(m *Manager) { m.leakless = enabled }
+}
+
 // New creates a Manager with options.
 func New(opts ...Option) *Manager {
 	m := &Manager{
@@ -77,6 +86,7 @@ func New(opts ...Option) *Manager {
 		actionTimeout: 30 * time.Second,
 		idleTimeout:   10 * time.Minute,
 		maxPages:      5,
+		leakless:      true, // default true, set false on Windows if blocked by antivirus
 		logger:        slog.Default(),
 	}
 	for _, o := range opts {
@@ -122,14 +132,19 @@ func (m *Manager) Start(ctx context.Context) error {
 		controlURL = u
 		m.logger.Info("connecting to remote Chrome", "cdp", controlURL, "remote", m.remoteURL)
 	} else {
-		// Local Chrome — launch via rod launcher with stability flags
+		// Local browser — launch via rod launcher with stability flags
 		launchCtx, launchCancel := context.WithTimeout(ctx, 30*time.Second)
 		defer launchCancel()
 
+		// Use isolated user data directory to avoid conflicts with user's browser
+		userDataDir := filepath.Join(os.TempDir(), "goclaw-browser-profile")
+
 		l := launcher.New().
 			Context(launchCtx).
-			Leakless(true).
+			Leakless(m.leakless).
 			Headless(m.headless).
+			UserDataDir(userDataDir).
+			Set("no-sandbox"). // Required on Windows to prevent browser crash
 			Set("disable-gpu").
 			Set("no-first-run").
 			Set("no-default-browser-check").
@@ -141,30 +156,61 @@ func (m *Manager) Start(ctx context.Context) error {
 			Set("disable-background-timer-throttling").
 			Set("disable-backgrounding-occluded-windows")
 
+		// On Windows, prefer Edge over Chrome (more stable with CDP)
+		browserName := "Chrome"
+		if edgePath := findEdgePath(); edgePath != "" {
+			l = l.Bin(edgePath)
+			browserName = "Edge"
+		}
+
 		u, err := l.Launch()
 		if err != nil {
-			return fmt.Errorf("launch Chrome: %w", err)
+			return fmt.Errorf("launch %s: %w", browserName, err)
 		}
 		controlURL = u
 		m.launcher = l
-		m.logger.Info("Chrome launched", "cdp", controlURL, "headless", m.headless, "pid", l.PID())
+		m.logger.Info("browser launched", "browser", browserName, "cdp", controlURL, "headless", m.headless, "pid", l.PID())
 	}
 
-	connectCtx, connectCancel := context.WithTimeout(ctx, 15*time.Second)
-	defer connectCancel()
+	// Connect with timeout, but keep browser alive with Background context after connect.
+	// We use a channel to implement connect timeout without binding context to browser.
+	b := rod.New().ControlURL(controlURL)
 
-	b := rod.New().Context(connectCtx).ControlURL(controlURL)
-	if err := b.Connect(); err != nil {
-		// If local launch succeeded but connect failed, kill the orphan process
+	connectDone := make(chan error, 1)
+	go func() {
+		connectDone <- b.Connect()
+	}()
+
+	select {
+	case err := <-connectDone:
+		if err != nil {
+			if m.launcher != nil {
+				m.launcher.Kill()
+				m.launcher.Cleanup()
+				m.launcher = nil
+			}
+			return fmt.Errorf("connect to browser: %w", err)
+		}
+	case <-time.After(15 * time.Second):
 		if m.launcher != nil {
 			m.launcher.Kill()
 			m.launcher.Cleanup()
 			m.launcher = nil
 		}
-		return fmt.Errorf("connect to Chrome: %w", err)
+		return fmt.Errorf("connect to browser: timeout after 15s")
+	case <-ctx.Done():
+		if m.launcher != nil {
+			m.launcher.Kill()
+			m.launcher.Cleanup()
+			m.launcher = nil
+		}
+		return fmt.Errorf("connect to browser: %w", ctx.Err())
 	}
 
+	// NOTE: Do NOT use b.Timeout() here - it causes context conflicts with per-operation timeouts.
+	// Each operation (OpenTab, Navigate, etc.) applies its own context timeout from the tool call.
 	m.browser = b
+	m.logger.Info("browser connected")
 
 	// Start idle-page reaper if configured
 	if m.idleTimeout > 0 && m.stopReaper == nil {
@@ -293,4 +339,18 @@ func (m *Manager) Status() *StatusInfo {
 		}
 	}
 	return info
+}
+
+// findEdgePath returns the path to Microsoft Edge executable on Windows, or empty string if not found.
+func findEdgePath() string {
+	paths := []string{
+		`C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`,
+		`C:\Program Files\Microsoft\Edge\Application\msedge.exe`,
+	}
+	for _, p := range paths {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return ""
 }

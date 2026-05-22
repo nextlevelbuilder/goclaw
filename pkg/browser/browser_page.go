@@ -102,12 +102,18 @@ func (m *Manager) Navigate(ctx context.Context, targetID, url string) error {
 		}
 		return fmt.Errorf("navigate: %w", err)
 	}
-	if err := page.WaitStable(300 * time.Millisecond); err != nil {
+
+	// Wait for page load (DOM ready) - more reliable than WaitStable for heavy sites
+	if err := page.WaitLoad(); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		return fmt.Errorf("wait stable after navigate: %w", err)
+		// Log but continue - page may still be usable
+		m.logger.Warn("WaitLoad incomplete after navigate", "url", url, "error", err)
 	}
+
+	// Optional WaitStable - non-fatal for sites with continuous network activity
+	_ = page.WaitStable(500 * time.Millisecond)
 	return nil
 }
 

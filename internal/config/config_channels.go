@@ -431,6 +431,7 @@ type WebFetchPolicyConfig struct {
 type BrowserToolConfig struct {
 	Enabled         bool   `json:"enabled"`                    // enable the browser tool (default false)
 	Headless        bool   `json:"headless,omitempty"`         // run Chrome in headless mode (ignored when RemoteURL is set)
+	Leakless        *bool  `json:"leakless,omitempty"`         // use leakless wrapper to prevent zombie processes (default true, set false on Windows if blocked by antivirus)
 	RemoteURL       string `json:"remote_url,omitempty"`       // CDP endpoint for remote Chrome sidecar, e.g. "ws://chrome:9222"
 	ActionTimeoutMs int    `json:"action_timeout_ms,omitempty"` // per-action timeout in ms (default 30000)
 	IdleTimeoutMs   int    `json:"idle_timeout_ms,omitempty"`   // idle page auto-close in ms (default 600000, 0=disabled)

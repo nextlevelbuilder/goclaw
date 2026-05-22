@@ -85,21 +85,47 @@ func (m *Manager) OpenTab(ctx context.Context, url string) (*TabInfo, error) {
 		return nil, err
 	}
 
-	page, err := b.Page(proto.TargetCreateTarget{URL: url})
-	if err != nil {
-		return nil, fmt.Errorf("open tab: %w", err)
+	// Log context deadline for debugging
+	if deadline, ok := ctx.Deadline(); ok {
+		m.logger.Info("OpenTab starting", "url", url, "timeout_remaining", time.Until(deadline).String())
+	} else {
+		m.logger.Info("OpenTab starting", "url", url, "timeout", "no deadline")
 	}
 
-	// Watchdog: close page on ctx cancel to unblock WaitStable CDP call.
-	stopWatchdog := watchPageClose(ctx, page)
-	if err := page.WaitStable(300 * time.Millisecond); err != nil {
-		stopWatchdog()
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-		return nil, fmt.Errorf("wait stable: %w", err)
+	// Create blank page first (faster, avoids URL loading timeout during creation)
+	startTime := time.Now()
+	page, err := b.Page(proto.TargetCreateTarget{URL: "about:blank"})
+	elapsed := time.Since(startTime)
+	if err != nil {
+		m.logger.Error("Page creation failed", "elapsed", elapsed.String(), "error", err, "ctx_err", ctx.Err())
+		return nil, fmt.Errorf("open tab: %w", err)
 	}
-	stopWatchdog()
+	m.logger.Info("Page created successfully", "elapsed", elapsed.String())
+
+	// Watchdog: close page on ctx cancel to unblock blocking CDP calls.
+	stopWatchdog := watchPageClose(ctx, page)
+	defer stopWatchdog()
+
+	// Navigate to target URL
+	if url != "" && url != "about:blank" {
+		if err := page.Navigate(url); err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return nil, fmt.Errorf("navigate to %s: %w", url, err)
+		}
+
+		// Wait for initial page load (DOM ready)
+		if err := page.WaitLoad(); err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			m.logger.Warn("WaitLoad incomplete", "url", url, "error", err)
+		}
+
+		// Optional WaitStable - non-fatal
+		_ = page.WaitStable(500 * time.Millisecond)
+	}
 	info, _ := page.Info()
 	tid := string(page.TargetID)
 	m.pages[tid] = page

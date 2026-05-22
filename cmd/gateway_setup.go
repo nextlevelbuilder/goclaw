@@ -99,7 +99,10 @@ func setupToolRegistry(
 			slog.Info("browser tool enabled", "remote", cfg.Tools.Browser.RemoteURL)
 		} else {
 			opts = append(opts, browser.WithHeadless(cfg.Tools.Browser.Headless))
-			slog.Info("browser tool enabled", "headless", cfg.Tools.Browser.Headless)
+			// Leakless defaults to true; set false on Windows if blocked by antivirus
+			leakless := cfg.Tools.Browser.Leakless == nil || *cfg.Tools.Browser.Leakless
+			opts = append(opts, browser.WithLeakless(leakless))
+			slog.Info("browser tool enabled", "headless", cfg.Tools.Browser.Headless, "leakless", leakless)
 		}
 		if cfg.Tools.Browser.ActionTimeoutMs > 0 {
 			opts = append(opts, browser.WithActionTimeout(time.Duration(cfg.Tools.Browser.ActionTimeoutMs)*time.Millisecond))
