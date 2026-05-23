@@ -55,7 +55,7 @@ export function AboutDialog({ open, onOpenChange }: AboutDialogProps) {
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2.5">
-            <img src="/goclaw-icon.svg" alt="GoClaw" className="h-7 w-7" />
+            <img src="/goclaw-icon.svg" alt="TS SRE" className="h-7 w-7" />
             {t("about.title")}
             {updateAvailable && latestVersion && (
               <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">
