@@ -14,11 +14,11 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
-	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
@@ -27,6 +27,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/tts"
 	"github.com/nextlevelbuilder/goclaw/pkg/browser"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
+	publicTool "github.com/nextlevelbuilder/goclaw/pkg/tool"
 )
 
 // setupToolRegistry creates the tool registry and registers all tools.
@@ -159,6 +160,26 @@ func setupToolRegistry(
 	if cfg.Tools.ScrubCredentials != nil && !*cfg.Tools.ScrubCredentials {
 		toolsReg.SetScrubbing(false)
 		slog.Info("credential scrubbing disabled")
+	}
+
+	// Register external tools from global factory registry
+	// This allows external packages to register custom tools via init()
+	if publicTool.GlobalToolFactoryRegistry.Count() > 0 {
+		registeredCount := 0
+		for _, name := range publicTool.GlobalToolFactoryRegistry.List() {
+			tool, ok := publicTool.GlobalToolFactoryRegistry.Create(name)
+			if !ok {
+				slog.Warn("Failed to create tool from factory", "tool", name)
+				continue
+			}
+
+			// Adapt public Tool to internal Tool
+			adapter := &internalToolAdapter{publicTool: tool}
+			toolsReg.Register(adapter)
+			registeredCount++
+			slog.Info("Registered external tool from factory", "tool", name)
+		}
+		slog.Info("External tools registered from factory", "count", registeredCount)
 	}
 
 	// MCP servers (config-based: shared across all agents)
@@ -604,3 +625,29 @@ func setupSkillsSystem(
 	return skillsLoader, skillSearchTool, globalSkillsDir, bundledSkillsDir, builtinSkillsDir
 }
 
+// internalToolAdapter adapts publicTool.Tool to internal/tools.Tool
+type internalToolAdapter struct {
+	publicTool publicTool.Tool
+}
+
+func (a *internalToolAdapter) Name() string {
+	return a.publicTool.Name()
+}
+
+func (a *internalToolAdapter) Description() string {
+	return a.publicTool.Description()
+}
+
+func (a *internalToolAdapter) Parameters() map[string]any {
+	return a.publicTool.Parameters()
+}
+
+func (a *internalToolAdapter) Execute(ctx context.Context, args map[string]any) *tools.Result {
+	publicResult := a.publicTool.Execute(ctx, args)
+	return &tools.Result{
+		ForLLM:  publicResult.ForLLM,
+		ForUser: publicResult.ForUser,
+		IsError: !publicResult.Success,
+		Err:     nil,
+	}
+}
