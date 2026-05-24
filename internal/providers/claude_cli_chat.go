@@ -14,6 +14,16 @@ import (
 	"time"
 )
 
+// isSignalKilledErr returns true when the error indicates the subprocess was
+// killed by a signal (SIGKILL). This typically happens when the Claude CLI
+// subscription/OAuth session is throttled or overloaded. It is safe to retry.
+func isSignalKilledErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "signal: killed")
+}
+
 // Chat runs the CLI synchronously and returns the final response.
 func (p *ClaudeCLIProvider) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
 	systemPrompt, userMsg, images := extractFromMessages(req.Messages)
@@ -78,8 +88,38 @@ func (p *ClaudeCLIProvider) Chat(ctx context.Context, req ChatRequest) (*ChatRes
 	return parseJSONResponse(output)
 }
 
+// maxCLIKilledRetries is how many times to retry after signal: killed.
+const maxCLIKilledRetries = 2
+
 // ChatStream runs the CLI with stream-json output, calling onChunk for each text delta.
+// If the subprocess is killed by a signal (OAuth throttle) and no content was delivered yet,
+// it retries up to maxCLIKilledRetries times with a short backoff.
 func (p *ClaudeCLIProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk func(StreamChunk)) (*ChatResponse, error) {
+	var lastErr error
+	for attempt := 0; attempt <= maxCLIKilledRetries; attempt++ {
+		if attempt > 0 {
+			backoff := time.Duration(attempt) * 3 * time.Second
+			slog.Warn("claude-cli: signal killed, retrying", "attempt", attempt, "backoff", backoff)
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(backoff):
+			}
+		}
+		resp, err := p.chatStreamOnce(ctx, req, onChunk)
+		if err == nil {
+			return resp, nil
+		}
+		lastErr = err
+		if !isSignalKilledErr(err) {
+			return nil, err
+		}
+	}
+	return nil, lastErr
+}
+
+// chatStreamOnce is the single-attempt implementation of ChatStream.
+func (p *ClaudeCLIProvider) chatStreamOnce(ctx context.Context, req ChatRequest, onChunk func(StreamChunk)) (*ChatResponse, error) {
 	systemPrompt, userMsg, images := extractFromMessages(req.Messages)
 	sessionKey := extractStringOpt(req.Options, OptSessionKey)
 	model := req.Model

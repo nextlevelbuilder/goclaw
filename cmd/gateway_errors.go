@@ -21,6 +21,11 @@ func formatAgentError(err error) string {
 		return "⚠️ Request timed out. Please try again."
 	}
 
+	// 1b. Claude CLI subprocess killed by OS (OAuth session throttle/overload).
+	if strings.Contains(lower, "signal: killed") {
+		return "⚠️ The AI backend was temporarily interrupted. Please try again."
+	}
+
 	// 2. Context overflow
 	if isContextOverflowError(lower) {
 		return "⚠️ Context overflow — message too large for this model. Try /new to start a fresh session."
