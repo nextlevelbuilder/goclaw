@@ -4,6 +4,7 @@ package sqlitestore
 
 import (
 	"database/sql"
+	"encoding/json"
 	"path/filepath"
 	"testing"
 
@@ -25,7 +26,8 @@ func TestSQLiteAgentStore_Update_CoerceNullForNotNullColumns(t *testing.T) {
 		"tools_config":          nil,
 		"reasoning_config":      nil,
 		"workspace_sharing":     nil,
-		"chatgpt_oauth_routing": nil,
+		"chatgpt_oauth_routing": json.RawMessage(nil),
+		"model_fallback":        json.RawMessage(`null`),
 		"shell_deny_groups":     nil,
 		"kg_dedup_config":       nil,
 		"self_evolve":           nil,
@@ -44,19 +46,19 @@ func TestSQLiteAgentStore_Update_CoerceNullForNotNullColumns(t *testing.T) {
 
 	// Verify JSON columns became '{}', BOOL → 0, INT → 0, TEXT → ''.
 	var (
-		otherCfg, toolsCfg, reasoningCfg, wsSharing, oauthRouting, shellDeny, kgDedup string
-		selfEvolve, skillEvolve, isDefault                                            bool
-		skillNudge, maxTokens                                                         int
-		emoji, agentDesc, thinkingLvl                                                 string
+		otherCfg, toolsCfg, reasoningCfg, wsSharing, oauthRouting, modelFallback, shellDeny, kgDedup string
+		selfEvolve, skillEvolve, isDefault                                                           bool
+		skillNudge, maxTokens                                                                        int
+		emoji, agentDesc, thinkingLvl                                                                string
 	)
 	err := db.QueryRowContext(ctx,
 		`SELECT other_config, tools_config, reasoning_config, workspace_sharing,
-			chatgpt_oauth_routing, shell_deny_groups, kg_dedup_config,
+			chatgpt_oauth_routing, model_fallback, shell_deny_groups, kg_dedup_config,
 			self_evolve, skill_evolve, is_default,
 			skill_nudge_interval, max_tokens,
 			emoji, agent_description, thinking_level
 		 FROM agents WHERE id = ?`, agentID).Scan(
-		&otherCfg, &toolsCfg, &reasoningCfg, &wsSharing, &oauthRouting, &shellDeny, &kgDedup,
+		&otherCfg, &toolsCfg, &reasoningCfg, &wsSharing, &oauthRouting, &modelFallback, &shellDeny, &kgDedup,
 		&selfEvolve, &skillEvolve, &isDefault,
 		&skillNudge, &maxTokens,
 		&emoji, &agentDesc, &thinkingLvl,
@@ -68,7 +70,7 @@ func TestSQLiteAgentStore_Update_CoerceNullForNotNullColumns(t *testing.T) {
 	jsonCols := map[string]string{
 		"other_config": otherCfg, "tools_config": toolsCfg,
 		"reasoning_config": reasoningCfg, "workspace_sharing": wsSharing,
-		"chatgpt_oauth_routing": oauthRouting, "shell_deny_groups": shellDeny,
+		"chatgpt_oauth_routing": oauthRouting, "model_fallback": modelFallback, "shell_deny_groups": shellDeny,
 		"kg_dedup_config": kgDedup,
 	}
 	for name, got := range jsonCols {

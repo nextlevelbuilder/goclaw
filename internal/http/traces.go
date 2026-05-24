@@ -30,6 +30,7 @@ func NewTracesHandler(tracing store.TracingStore) *TracesHandler {
 // RegisterRoutes registers trace routes on the given mux.
 func (h *TracesHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/traces", h.authMiddleware(h.handleList))
+	mux.HandleFunc("GET /v1/traces/follow", h.authMiddleware(h.handleFollow))
 	mux.HandleFunc("GET /v1/traces/{traceID}/export", h.authMiddleware(h.handleExport))
 	mux.HandleFunc("GET /v1/traces/{traceID}", h.authMiddleware(h.handleGet))
 	mux.HandleFunc("GET /v1/costs/summary", h.authMiddleware(h.handleCostSummary))
@@ -94,6 +95,96 @@ func (h *TracesHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		"total":  total,
 		"limit":  opts.Limit,
 		"offset": opts.Offset,
+	})
+}
+
+func (h *TracesHandler) handleFollow(w http.ResponseWriter, r *http.Request) {
+	locale := store.LocaleFromContext(r.Context())
+	query := r.URL.Query()
+	opts := store.TraceListOpts{
+		Limit: 50,
+	}
+
+	if v := query.Get("agent_id"); v != "" {
+		id, err := uuid.Parse(v)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidID, "agent")})
+			return
+		}
+		opts.AgentID = &id
+	}
+	if v := query.Get("session_key"); v != "" {
+		opts.SessionKey = v
+	}
+	if opts.SessionKey == "" && opts.AgentID == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgRequired, "session_key or agent_id")})
+		return
+	}
+	if v := query.Get("status"); v != "" {
+		opts.Status = v
+	}
+	if v := query.Get("channel"); v != "" {
+		opts.Channel = v
+	}
+	if v := query.Get("since"); v != "" {
+		since, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidRequest, "since must be RFC3339")})
+			return
+		}
+		opts.ChangedAfter = &since
+	}
+	if v := query.Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			if n > 200 {
+				n = 200
+			}
+			opts.Limit = n
+		}
+	}
+	includeSpans := false
+	if v := query.Get("include_spans"); v != "" {
+		parsed, err := strconv.ParseBool(v)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidRequest, "include_spans must be boolean")})
+			return
+		}
+		includeSpans = parsed
+	}
+
+	auth := resolveAuth(r)
+	if !permissions.HasMinRole(auth.Role, permissions.RoleAdmin) {
+		opts.UserID = store.UserIDFromContext(r.Context())
+	} else if v := query.Get("user_id"); v != "" {
+		opts.UserID = v
+	}
+
+	serverTime := time.Now().UTC()
+	traces, err := h.tracing.ListTraces(r.Context(), opts)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	spansByTraceID := map[string][]store.SpanData{}
+	if includeSpans {
+		for _, trace := range traces {
+			spans, err := h.tracing.GetTraceSpans(r.Context(), trace.ID)
+			if err != nil {
+				slog.Error("traces.follow_get_spans_failed", "trace_id", trace.ID, "error", err)
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return
+			}
+			spansByTraceID[trace.ID.String()] = spans
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"traces":            traces,
+		"spans_by_trace_id": spansByTraceID,
+		"server_time":       serverTime,
+		"next_since":        serverTime,
+		"limit":             opts.Limit,
 	})
 }
 

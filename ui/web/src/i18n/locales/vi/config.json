@@ -42,7 +42,7 @@
   "gateway.rateLimitRpm": "Giới hạn tốc độ (RPM)",
   "gateway.rateLimitRpmTip": "Số yêu cầu tối đa mỗi phút mỗi người dùng. Đặt 0 để tắt giới hạn.",
   "gateway.inboundDebounceMs": "Debounce đầu vào (ms)",
-  "gateway.inboundDebounceMsTip": "Độ trễ tính bằng mili giây trước khi xử lý tin nhắn mới, để gộp các tin nhắn nhanh liên tiếp. Đặt -1 để tắt.",
+  "gateway.inboundDebounceMsTip": "Độ trễ tính bằng mili giây trước khi xử lý các tin nhắn nhanh liên tiếp từ channel hoặc Web Chat. Đặt 0 để dùng mặc định 1000ms, hoặc -1 để tắt.",
   "gateway.injectionAction": "Hành động phát hiện injection",
 
   "agents.title": "Mặc định agent",

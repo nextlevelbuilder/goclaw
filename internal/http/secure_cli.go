@@ -15,6 +15,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
+	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
@@ -151,17 +152,17 @@ func (h *SecureCLIHandler) handleList(w http.ResponseWriter, r *http.Request) {
 
 // secureCLICreateRequest supports both preset-based and custom creation.
 type secureCLICreateRequest struct {
-	Preset         string          `json:"preset,omitempty"`          // auto-fill from preset
-	BinaryName     string          `json:"binary_name"`
-	BinaryPath     *string         `json:"binary_path,omitempty"`
-	Description    string          `json:"description"`
-	Env            map[string]string `json:"env"`                     // plaintext env vars (encrypted by store)
-	DenyArgs       json.RawMessage `json:"deny_args,omitempty"`
-	DenyVerbose    json.RawMessage `json:"deny_verbose,omitempty"`
-	TimeoutSeconds int             `json:"timeout_seconds,omitempty"`
-	Tips           string          `json:"tips,omitempty"`
-	IsGlobal       *bool           `json:"is_global,omitempty"`
-	Enabled        bool            `json:"enabled"`
+	Preset         string            `json:"preset,omitempty"` // auto-fill from preset
+	BinaryName     string            `json:"binary_name"`
+	BinaryPath     *string           `json:"binary_path,omitempty"`
+	Description    string            `json:"description"`
+	Env            map[string]string `json:"env"` // plaintext env vars (encrypted by store)
+	DenyArgs       json.RawMessage   `json:"deny_args,omitempty"`
+	DenyVerbose    json.RawMessage   `json:"deny_verbose,omitempty"`
+	TimeoutSeconds int               `json:"timeout_seconds,omitempty"`
+	Tips           string            `json:"tips,omitempty"`
+	IsGlobal       *bool             `json:"is_global,omitempty"`
+	Enabled        bool              `json:"enabled"`
 }
 
 func (h *SecureCLIHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
@@ -371,6 +372,10 @@ func (h *SecureCLIHandler) handleCheckBinary(w http.ResponseWriter, r *http.Requ
 	}
 	absPath, err := exec.LookPath(req.BinaryName)
 	if err != nil {
+		if runtimePath, ok := skills.FindRuntimeExecutable(req.BinaryName); ok {
+			writeJSON(w, http.StatusOK, map[string]any{"found": true, "path": runtimePath})
+			return
+		}
 		writeJSON(w, http.StatusOK, map[string]any{"found": false, "error": fmt.Sprintf("binary %q not found in PATH", req.BinaryName)})
 		return
 	}

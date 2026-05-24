@@ -230,22 +230,105 @@ func (s *PGSecureCLIStore) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 func (s *PGSecureCLIStore) List(ctx context.Context) ([]store.SecureCLIBinary, error) {
-	query := `SELECT ` + secureCLISelectCols + ` FROM secure_cli_binaries`
+	// caller_tenant_id is always the requesting tenant — critical for C3 tenant isolation.
+	// Master-scope binaries have b.tenant_id = MasterTenantID but grants belong to
+	// specific tenants; we must filter grants by caller's tenant, not b.tenant_id.
+	callerTenantID := store.TenantIDFromContext(ctx)
+
+	// agentGrantsSubquery aggregates per-binary grants for the caller tenant only.
+	// encrypted_env IS NOT NULL projects as a bool (env_set) — ciphertext bytes are NEVER selected.
+	// COALESCE(..., '[]') ensures empty grants return [] not null.
+	agentGrantsLateral := `LEFT JOIN LATERAL (
+		SELECT COALESCE(json_agg(json_build_object(
+			'grant_id', g.id,
+			'agent_id', g.agent_id,
+			'agent_key', a.agent_key,
+			'name',      a.display_name,
+			'enabled',   g.enabled,
+			'env_set',   (g.encrypted_env IS NOT NULL)
+		) ORDER BY g.created_at), '[]') AS grants
+		FROM secure_cli_agent_grants g
+		JOIN agents a ON a.id = g.agent_id AND a.tenant_id = g.tenant_id
+		WHERE g.binary_id = b.id AND g.tenant_id = $1
+		-- Hard cap: list view renders summary chips only. Admins with >20 grants per
+		-- binary still see the first 20; use the detail dialog for the full set.
+		LIMIT 20
+	) sg ON true`
+
+	var query string
 	var qArgs []any
-	if !store.IsCrossTenant(ctx) {
-		tenantID := store.TenantIDFromContext(ctx)
-		if tenantID == uuid.Nil {
+
+	if store.IsCrossTenant(ctx) {
+		// Cross-tenant: list all binaries but still scope grants to caller tenant.
+		// Use MasterTenantID as caller_tenant param when no tenant context.
+		effectiveTenant := callerTenantID
+		if effectiveTenant == uuid.Nil {
+			effectiveTenant = store.MasterTenantID
+		}
+		qArgs = append(qArgs, effectiveTenant)
+		query = `SELECT ` + secureCLISelectColsAliased + `, sg.grants FROM secure_cli_binaries b ` +
+			agentGrantsLateral + ` ORDER BY b.binary_name`
+	} else {
+		if callerTenantID == uuid.Nil {
 			return nil, nil
 		}
-		query += ` WHERE tenant_id = $1`
-		qArgs = append(qArgs, tenantID)
+		qArgs = append(qArgs, callerTenantID, callerTenantID)
+		query = `SELECT ` + secureCLISelectColsAliased + `, sg.grants FROM secure_cli_binaries b ` +
+			agentGrantsLateral + ` WHERE b.tenant_id = $2 ORDER BY b.binary_name`
 	}
-	query += ` ORDER BY binary_name`
+
 	rows, err := s.db.QueryContext(ctx, query, qArgs...)
 	if err != nil {
 		return nil, err
 	}
-	return s.scanRows(rows)
+	return s.scanRowsWithGrants(rows)
+}
+
+// scanRowsWithGrants scans the extended List query (includes sg.grants JSON column).
+func (s *PGSecureCLIStore) scanRowsWithGrants(rows *sql.Rows) ([]store.SecureCLIBinary, error) {
+	defer rows.Close()
+	var result []store.SecureCLIBinary
+	for rows.Next() {
+		var b store.SecureCLIBinary
+		var binaryPath *string
+		var denyArgs, denyVerbose *[]byte
+		var env []byte
+		var grantsJSON []byte
+
+		if err := rows.Scan(
+			&b.ID, &b.BinaryName, &binaryPath, &b.Description, &env,
+			&denyArgs, &denyVerbose,
+			&b.TimeoutSeconds, &b.Tips, &b.IsGlobal,
+			&b.Enabled, &b.CreatedBy, &b.CreatedAt, &b.UpdatedAt,
+			&grantsJSON,
+		); err != nil {
+			continue
+		}
+
+		b.BinaryPath = binaryPath
+		if denyArgs != nil {
+			b.DenyArgs = *denyArgs
+		}
+		if denyVerbose != nil {
+			b.DenyVerbose = *denyVerbose
+		}
+		if len(env) > 0 && s.encKey != "" {
+			if decrypted, err := crypto.Decrypt(string(env), s.encKey); err == nil {
+				b.EncryptedEnv = []byte(decrypted)
+			}
+		} else {
+			b.EncryptedEnv = env
+		}
+
+		// Unmarshal grants JSON → slice; default to empty slice (never nil).
+		b.AgentGrantsSummary = []store.AgentGrantSummary{}
+		if len(grantsJSON) > 0 {
+			_ = json.Unmarshal(grantsJSON, &b.AgentGrantsSummary)
+		}
+
+		result = append(result, b)
+	}
+	return result, nil
 }
 
 // LookupByBinary finds the credential config for a binary name.
@@ -260,7 +343,7 @@ func (s *PGSecureCLIStore) LookupByBinary(ctx context.Context, binaryName string
 
 	// Build SELECT columns with optional LEFT JOINs for grant overrides and user env
 	selectCols := secureCLISelectColsAliased
-	grantCols := ", g.deny_args AS grant_deny_args, g.deny_verbose AS grant_deny_verbose, g.timeout_seconds AS grant_timeout, g.tips AS grant_tips, g.enabled AS grant_enabled, g.id AS grant_id"
+	grantCols := ", g.deny_args AS grant_deny_args, g.deny_verbose AS grant_deny_verbose, g.timeout_seconds AS grant_timeout, g.tips AS grant_tips, g.enabled AS grant_enabled, g.id AS grant_id, g.encrypted_env AS grant_enc_env"
 	selectCols += grantCols
 
 	var joinClause string
@@ -339,6 +422,7 @@ func (s *PGSecureCLIStore) scanRowWithGrantAndUserEnv(row *sql.Row) (*store.Secu
 	var grantTips *string
 	var grantEnabled *bool
 	var grantID *uuid.UUID
+	var grantEncEnv []byte
 	var userEnv []byte
 
 	err := row.Scan(
@@ -347,7 +431,7 @@ func (s *PGSecureCLIStore) scanRowWithGrantAndUserEnv(row *sql.Row) (*store.Secu
 		&b.TimeoutSeconds, &b.Tips, &b.IsGlobal,
 		&b.Enabled, &b.CreatedBy, &b.CreatedAt, &b.UpdatedAt,
 		// Grant columns
-		&grantDenyArgs, &grantDenyVerbose, &grantTimeout, &grantTips, &grantEnabled, &grantID,
+		&grantDenyArgs, &grantDenyVerbose, &grantTimeout, &grantTips, &grantEnabled, &grantID, &grantEncEnv,
 		// User env
 		&userEnv,
 	)
@@ -388,6 +472,12 @@ func (s *PGSecureCLIStore) scanRowWithGrantAndUserEnv(row *sql.Row) (*store.Secu
 		}
 		grant.TimeoutSeconds = grantTimeout
 		grant.Tips = grantTips
+		// Decrypt grant env override (fail-closed: skip if decrypt fails).
+		if len(grantEncEnv) > 0 && s.encKey != "" {
+			if decrypted, err := crypto.Decrypt(string(grantEncEnv), s.encKey); err == nil {
+				grant.EncryptedEnv = []byte(decrypted)
+			}
+		}
 		b.MergeGrantOverrides(grant)
 	}
 
@@ -460,7 +550,8 @@ func (s *PGSecureCLIStore) ListForAgent(ctx context.Context, agentID uuid.UUID) 
 
 	selectCols := secureCLISelectColsAliased +
 		`, g.deny_args AS grant_deny_args, g.deny_verbose AS grant_deny_verbose,
-		   g.timeout_seconds AS grant_timeout, g.tips AS grant_tips, g.id AS grant_id`
+		   g.timeout_seconds AS grant_timeout, g.tips AS grant_tips, g.id AS grant_id,
+		   g.encrypted_env AS grant_enc_env`
 
 	query := `SELECT ` + selectCols + ` FROM secure_cli_binaries b
 		LEFT JOIN secure_cli_agent_grants g ON g.binary_id = b.id AND g.agent_id = $1
@@ -494,13 +585,14 @@ func (s *PGSecureCLIStore) ListForAgent(ctx context.Context, agentID uuid.UUID) 
 		var grantTimeout *int
 		var grantTips *string
 		var grantID *uuid.UUID
+		var grantEncEnv []byte
 
 		if err := rows.Scan(
 			&b.ID, &b.BinaryName, &binaryPath, &b.Description, &env,
 			&denyArgs, &denyVerbose,
 			&b.TimeoutSeconds, &b.Tips, &b.IsGlobal,
 			&b.Enabled, &b.CreatedBy, &b.CreatedAt, &b.UpdatedAt,
-			&grantDenyArgs, &grantDenyVerbose, &grantTimeout, &grantTips, &grantID,
+			&grantDenyArgs, &grantDenyVerbose, &grantTimeout, &grantTips, &grantID, &grantEncEnv,
 		); err != nil {
 			continue
 		}
@@ -533,6 +625,11 @@ func (s *PGSecureCLIStore) ListForAgent(ctx context.Context, agentID uuid.UUID) 
 			}
 			grant.TimeoutSeconds = grantTimeout
 			grant.Tips = grantTips
+			if len(grantEncEnv) > 0 && s.encKey != "" {
+				if decrypted, err := crypto.Decrypt(string(grantEncEnv), s.encKey); err == nil {
+					grant.EncryptedEnv = []byte(decrypted)
+				}
+			}
 			b.MergeGrantOverrides(grant)
 		}
 

@@ -7,7 +7,11 @@ export interface ToolPolicyConfig {
   allow?: string[];
   deny?: string[];
   alsoAllow?: string[];
-  byProvider?: Record<string, { profile?: string; allow?: string[]; deny?: string[]; alsoAllow?: string[] }>;
+  byProvider?: Record<string, ToolPolicyConfig>;
+  wait?: {
+    min_ms?: number;
+    max_ms?: number;
+  };
   toolCallPrefix?: string; // prefix to strip from model's tool call names
 }
 
@@ -117,6 +121,19 @@ export interface ChatGPTOAuthRoutingConfig {
   extra_provider_names?: string[];
 }
 
+export interface ModelFallbackCandidate {
+  provider?: string;
+  model?: string;
+}
+
+export interface ModelFallbackConfig {
+  enabled?: boolean;
+  strategy?: "priority_order";
+  candidates?: ModelFallbackCandidate[];
+  max_attempts?: number;
+  cooldown_enabled?: boolean;
+}
+
 export interface KgDedupConfig {
   enabled?: boolean;
   similarity_threshold?: number;
@@ -156,6 +173,7 @@ export interface AgentData {
   reasoning_config?: AgentReasoningConfig | null;
   workspace_sharing?: WorkspaceSharingConfig | null;
   chatgpt_oauth_routing?: ChatGPTOAuthRoutingConfig | null;
+  model_fallback?: ModelFallbackConfig | null;
   shell_deny_groups?: ShellDenyGroups | null;
   kg_dedup_config?: KgDedupConfig | null;
 

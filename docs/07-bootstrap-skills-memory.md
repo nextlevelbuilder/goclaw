@@ -320,9 +320,9 @@ flowchart TD
 
 ---
 
-## 12. Skills Grants & Visibility
+## 12. Skills Grants & Access Mode
 
-Skill access is controlled through a 3-tier visibility model with explicit agent and user grants.
+Skill access is controlled through a 3-tier `visibility` field with explicit agent and user grants. The web UI labels this as **Access mode** because `public` means tenant-wide access, not internet publishing.
 
 ```mermaid
 flowchart TD
@@ -335,13 +335,13 @@ flowchart TD
     GRANT -->|No grant| DENIED["Not accessible"]
 ```
 
-### Visibility Levels
+### Access Modes
 
-| Visibility | Access Rule |
-|------------|------------|
-| `public` | All agents and users can discover and use the skill |
-| `private` | Only the owner (`skills.owner_id = userID`) can access |
-| `internal` | Requires an explicit agent grant or user grant |
+| DB value | UI label | Access Rule |
+|----------|----------|------------|
+| `private` | Owner only | Only the owner (`skills.owner_id = userID`) can access |
+| `internal` | Granted agents | Requires an explicit agent grant or user grant |
+| `public` | All tenant agents | All agents and users in scope can discover and use the skill |
 
 ### Grant Tables
 

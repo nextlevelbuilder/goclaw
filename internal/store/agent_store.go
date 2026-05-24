@@ -81,6 +81,7 @@ type AgentData struct {
 	ReasoningConfig     json.RawMessage `json:"reasoning_config,omitempty" db:"reasoning_config"`
 	WorkspaceSharing    json.RawMessage `json:"workspace_sharing,omitempty" db:"workspace_sharing"`
 	ChatGPTOAuthRouting json.RawMessage `json:"chatgpt_oauth_routing,omitempty" db:"chatgpt_oauth_routing"`
+	ModelFallback       json.RawMessage `json:"model_fallback,omitempty" db:"model_fallback"`
 	ShellDenyGroups     json.RawMessage `json:"shell_deny_groups,omitempty" db:"shell_deny_groups"`
 	KGDedupConfig       json.RawMessage `json:"kg_dedup_config,omitempty" db:"kg_dedup_config"`
 }
@@ -483,6 +484,74 @@ func (a *AgentData) ParseChatGPTOAuthRouting() *ChatGPTOAuthRoutingConfig {
 		return nil
 	}
 	return routing
+}
+
+const (
+	ModelFallbackStrategyPriority = "priority_order"
+)
+
+type ModelFallbackCandidate struct {
+	Provider string `json:"provider,omitempty" db:"-"`
+	Model    string `json:"model,omitempty" db:"-"`
+}
+
+type ModelFallbackConfig struct {
+	Enabled         bool                     `json:"enabled,omitempty" db:"-"`
+	Strategy        string                   `json:"strategy,omitempty" db:"-"`
+	Candidates      []ModelFallbackCandidate `json:"candidates,omitempty" db:"-"`
+	MaxAttempts     int                      `json:"max_attempts,omitempty" db:"-"`
+	CooldownEnabled *bool                    `json:"cooldown_enabled,omitempty" db:"-"`
+}
+
+func (a *AgentData) ParseModelFallback() *ModelFallbackConfig {
+	if len(a.ModelFallback) <= 2 {
+		return nil
+	}
+	var raw ModelFallbackConfig
+	if json.Unmarshal(a.ModelFallback, &raw) != nil || !raw.Enabled {
+		return nil
+	}
+	cfg := NormalizeModelFallbackConfig(&raw)
+	if cfg == nil || len(cfg.Candidates) == 0 {
+		return nil
+	}
+	return cfg
+}
+
+func NormalizeModelFallbackConfig(cfg *ModelFallbackConfig) *ModelFallbackConfig {
+	if cfg == nil {
+		return nil
+	}
+	out := &ModelFallbackConfig{
+		Enabled:         cfg.Enabled,
+		Strategy:        cfg.Strategy,
+		MaxAttempts:     cfg.MaxAttempts,
+		CooldownEnabled: cfg.CooldownEnabled,
+	}
+	if out.Strategy == "" {
+		out.Strategy = ModelFallbackStrategyPriority
+	}
+	if out.Strategy != ModelFallbackStrategyPriority {
+		out.Strategy = ModelFallbackStrategyPriority
+	}
+	seen := make(map[string]bool, len(cfg.Candidates))
+	for _, c := range cfg.Candidates {
+		c.Provider = strings.TrimSpace(c.Provider)
+		c.Model = strings.TrimSpace(c.Model)
+		if c.Provider == "" || c.Model == "" {
+			continue
+		}
+		key := c.Provider + "\x00" + c.Model
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out.Candidates = append(out.Candidates, c)
+	}
+	if out.MaxAttempts < 0 {
+		out.MaxAttempts = 0
+	}
+	return out
 }
 
 func normalizeChatGPTOAuthRoutingConfig(cfg *ChatGPTOAuthRoutingConfig) *ChatGPTOAuthRoutingConfig {

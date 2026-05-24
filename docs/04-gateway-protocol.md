@@ -112,7 +112,7 @@ flowchart LR
 |------|--------------------|
 | viewer | `agents.list`, `config.get`, `sessions.list`, `sessions.preview`, `health`, `status`, `providers.models`, `skills.list`, `skills.get`, `channels.list`, `channels.status`, `cron.list`, `cron.status`, `cron.runs`, `usage.get`, `usage.summary` |
 | operator | All viewer methods plus: `chat.send`, `chat.abort`, `chat.history`, `chat.inject`, `sessions.delete`, `sessions.reset`, `sessions.patch`, `cron.create`, `cron.update`, `cron.delete`, `cron.toggle`, `cron.run`, `skills.update`, `send`, `exec.approval.list`, `exec.approval.approve`, `exec.approval.deny`, `device.pair.request`, `device.pair.list` |
-| admin | All operator methods plus: `config.apply`, `config.patch`, `agents.create`, `agents.update`, `agents.delete`, `agents.files.*`, `teams.*`, `channels.toggle`, `device.pair.approve`, `device.pair.revoke` |
+| admin | All operator methods plus: `config.apply`, `config.patch`, `config.permissions.*`, `agents.create`, `agents.update`, `agents.delete`, `agents.files.*`, `teams.*`, `channels.toggle`, `device.pair.approve`, `device.pair.revoke` |
 
 ---
 
@@ -194,6 +194,10 @@ flowchart TD
 | `config.apply` | Replace entire configuration |
 | `config.patch` | Partial configuration update |
 | `config.schema` | Get configuration JSON schema |
+| `config.permissions.list` | List agent config permission rules |
+| `config.permissions.check` | Preview effective permission for an agent, scope, config type, and user |
+| `config.permissions.grant` | Add or update an agent config permission rule |
+| `config.permissions.revoke` | Remove an agent config permission rule |
 
 ### Skills
 

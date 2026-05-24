@@ -1,5 +1,7 @@
 package http
 
+import "github.com/nextlevelbuilder/goclaw/internal/providers"
+
 // bailianModels returns a hardcoded list of models available on the
 // Bailian Coding platform (coding-intl.dashscope.aliyuncs.com).
 // The platform does not expose a /v1/models endpoint.
@@ -84,6 +86,7 @@ func acpModels() []ModelInfo {
 // chatGPTOAuthModels returns models available via ChatGPT OAuth integration.
 func chatGPTOAuthModels() []ModelInfo {
 	return withReasoningCapabilities([]ModelInfo{
+		{ID: providers.DefaultCodexModel, Name: "GPT-5.5"},
 		{ID: "gpt-5.4", Name: "GPT-5.4"},
 		{ID: "gpt-5.4-mini", Name: "GPT-5.4 Mini"},
 		{ID: "gpt-5.3-codex", Name: "GPT-5.3 Codex"},

@@ -84,31 +84,53 @@ func (s *SQLiteSkillStore) BuildSummary(ctx context.Context, allowList []string)
 }
 
 func (s *SQLiteSkillStore) GetSkill(ctx context.Context, name string) (*store.SkillInfo, bool) {
-	var id uuid.UUID
-	var skillName, slug, visibility string
-	var desc *string
-	var tagsJSON []byte
-	var version int
-	var isSystem bool
-	var filePath *string
-	q := "SELECT id, name, slug, description, visibility, tags, version, is_system, file_path FROM skills WHERE slug = ? AND status = 'active'"
-	args := []any{name}
+	baseSelect := `SELECT id, name, slug, description, visibility, owner_id, tags, version, is_system, status, enabled, deps, frontmatter, file_path
+		FROM skills WHERE `
+	scope := ""
+	args := []any{}
 	if !store.IsCrossTenant(ctx) {
 		tid := store.TenantIDFromContext(ctx)
 		if tid == uuid.Nil {
 			tid = store.MasterTenantID
 		}
-		q += " AND (is_system = 1 OR tenant_id = ?)"
 		args = append(args, tid)
+		scope = " AND (is_system = 1 OR tenant_id = ?)"
 	}
-	if err := s.db.QueryRowContext(ctx, q, args...).Scan(&id, &skillName, &slug, &desc, &visibility, &tagsJSON, &version, &isSystem, &filePath); err != nil {
-		return nil, false
+
+	scan := func(q string, qArgs ...any) (*store.SkillInfo, bool) {
+		var id uuid.UUID
+		var skillName, slug, visibility, ownerID, status string
+		var desc *string
+		var tagsJSON []byte
+		var version int
+		var isSystem, enabled bool
+		var depsRaw, fmRaw []byte
+		var filePath *string
+		if err := s.db.QueryRowContext(ctx, q, qArgs...).Scan(&id, &skillName, &slug, &desc, &visibility, &ownerID, &tagsJSON, &version, &isSystem, &status, &enabled, &depsRaw, &fmRaw, &filePath); err != nil {
+			return nil, false
+		}
+		info := buildSkillInfo(id.String(), skillName, slug, desc, version, s.baseDir, filePath)
+		info.Visibility = visibility
+		info.OwnerID = ownerID
+		scanJSONStringArray(tagsJSON, &info.Tags)
+		info.IsSystem = isSystem
+		info.Status = status
+		info.Enabled = enabled
+		info.Author = parseFrontmatterAuthor(fmRaw)
+		info.CreatorAgent = parseFrontmatterCreatorAgent(fmRaw)
+		info.MissingDeps = parseDepsColumn(depsRaw)
+		enriched := []store.SkillInfo{info}
+		s.attachSkillAgentMetadata(ctx, enriched)
+		return &enriched[0], true
 	}
-	info := buildSkillInfo(id.String(), skillName, slug, desc, version, s.baseDir, filePath)
-	info.Visibility = visibility
-	scanJSONStringArray(tagsJSON, &info.Tags)
-	info.IsSystem = isSystem
-	return &info, true
+
+	if id, err := uuid.Parse(name); err == nil {
+		return scan(baseSelect+"id = ? AND status IN ('active', 'archived')"+scope, append([]any{id}, args...)...)
+	}
+	if info, ok := scan(baseSelect+"slug = ? AND status = 'active'"+scope, append([]any{name}, args...)...); ok {
+		return info, true
+	}
+	return scan(baseSelect+"name = ? AND status = 'active'"+scope+" ORDER BY id LIMIT 1", append([]any{name}, args...)...)
 }
 
 func (s *SQLiteSkillStore) FilterSkills(ctx context.Context, allowList []string) []store.SkillInfo {
@@ -116,7 +138,7 @@ func (s *SQLiteSkillStore) FilterSkills(ctx context.Context, allowList []string)
 	var filtered []store.SkillInfo
 	if allowList == nil {
 		for _, sk := range all {
-			if sk.Enabled {
+			if sk.Enabled && store.IsSkillVisibleTo(ctx, sk.OwnerID, sk.Visibility, sk.IsSystem) {
 				filtered = append(filtered, sk)
 			}
 		}
@@ -139,13 +161,13 @@ func (s *SQLiteSkillStore) FilterSkills(ctx context.Context, allowList []string)
 
 // GetSkillByID returns a SkillInfo for any skill by UUID regardless of status.
 func (s *SQLiteSkillStore) GetSkillByID(ctx context.Context, id uuid.UUID) (store.SkillInfo, bool) {
-	var name, slug, visibility, status string
+	var name, slug, visibility, ownerID, status string
 	var desc *string
 	var tagsJSON, depsRaw []byte
 	var version int
 	var isSystem, enabled bool
 	var filePath *string
-	q := `SELECT name, slug, description, visibility, tags, version, is_system, status, enabled, deps, file_path
+	q := `SELECT name, slug, description, visibility, owner_id, tags, version, is_system, status, enabled, deps, file_path
 		 FROM skills WHERE id = ?`
 	args := []any{id}
 	if !store.IsCrossTenant(ctx) {
@@ -156,12 +178,13 @@ func (s *SQLiteSkillStore) GetSkillByID(ctx context.Context, id uuid.UUID) (stor
 		q += " AND (is_system = 1 OR tenant_id = ?)"
 		args = append(args, tid)
 	}
-	if err := s.db.QueryRowContext(ctx, q, args...).Scan(&name, &slug, &desc, &visibility, &tagsJSON,
+	if err := s.db.QueryRowContext(ctx, q, args...).Scan(&name, &slug, &desc, &visibility, &ownerID, &tagsJSON,
 		&version, &isSystem, &status, &enabled, &depsRaw, &filePath); err != nil {
 		return store.SkillInfo{}, false
 	}
 	info := buildSkillInfo(id.String(), name, slug, desc, version, s.baseDir, filePath)
 	info.Visibility = visibility
+	info.OwnerID = ownerID
 	scanJSONStringArray(tagsJSON, &info.Tags)
 	info.IsSystem = isSystem
 	info.Status = status
@@ -288,4 +311,3 @@ func (s *SQLiteSkillStore) IsSystemSkill(slug string) bool {
 	err := s.db.QueryRow("SELECT is_system FROM skills WHERE slug = ?", slug).Scan(&isSystem)
 	return err == nil && isSystem
 }
-

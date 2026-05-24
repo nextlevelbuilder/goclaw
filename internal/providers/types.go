@@ -10,6 +10,7 @@ import (
 const (
 	OptMaxTokens       = "max_tokens"
 	OptTemperature     = "temperature"
+	OptToolChoice      = "tool_choice"
 	OptThinkingLevel   = "thinking_level"
 	OptReasoningEffort = "reasoning_effort"
 	OptEnableThinking  = "enable_thinking"

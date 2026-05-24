@@ -747,7 +747,11 @@
       "selectToolsDeny": "选择要拒绝的工具...",
       "selectToolsAlsoAllow": "选择附加工具...",
       "toolCallPrefix": "工具调用前缀",
-      "toolCallPrefixHint": "从模型的工具调用名称中去除此前缀后再查找注册表。"
+      "toolCallPrefixHint": "从模型的工具调用名称中去除此前缀后再查找注册表。",
+      "waitLimits": "Wait 工具边界",
+      "waitMinPlaceholder": "最小毫秒",
+      "waitMaxPlaceholder": "最大毫秒",
+      "waitLimitsHint": "可选的 Agent 专属边界。服务端仍会将等待限制在 100-300000 毫秒内。"
     },
     "workspaceSharing": {
       "title": "工作区共享",
@@ -772,6 +776,19 @@
       "shareSessions": "共享会话",
       "shareSessionsTip": "允许 agent 访问所有群组的会话记录。关闭时，每个用户的会话保持隔离。",
       "shareSessionsNote": "切换不会迁移数据——切换到共享模式后，现有的用户独立会话将无法访问。"
+    },
+    "modelFallback": {
+      "title": "模型回退",
+      "description": "主模型不可用时，按优先顺序尝试备用 provider/model。",
+      "enabled": "已启用",
+      "primary": "主模型",
+      "providerPlaceholder": "选择 provider",
+      "modelPlaceholder": "选择或输入模型",
+      "add": "添加回退",
+      "remove": "删除回退",
+      "reorder": "调整回退顺序",
+      "empty": "尚未配置回退模型。",
+      "cooldown": "临时跳过近期失败的路由"
     },
     "compaction": {
       "title": "压缩",
@@ -982,6 +999,11 @@
     "title": "权限管理",
     "description": "控制谁可以修改代理配置和文件。所有者始终拥有完全访问权限。",
     "addRule": "添加规则",
+    "allMembers": "All members",
+    "allMembersTitle": "Grant this rule to every member in the selected scope by using userId=\"*\".",
+    "checkAccess": "Check access",
+    "allowed": "Allowed",
+    "denied": "Denied",
     "fileWriters": "文件编辑者",
     "configPerms": "配置权限",
     "noRules": "暂无权限规则。所有者默认拥有完全访问权限。",

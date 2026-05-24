@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -129,6 +130,7 @@ func (l *Loop) makeBuildMessages() func(ctx context.Context, input *pipeline.Run
 		msgs, _ := l.buildMessages(ctx, history, summary,
 			input.Message, input.ExtraSystemPrompt,
 			input.SessionKey, input.Channel, input.ChannelType,
+			input.BitrixPortalDomain,
 			input.ChatTitle, input.ChatID, input.PeerKind, input.UserID,
 			input.HistoryLimit, input.SkillFilter, input.LightContext)
 		return msgs, nil
@@ -197,8 +199,25 @@ func (l *Loop) makeBuildFilteredTools(req *RunRequest) func(state *pipeline.RunS
 		// Load per-user MCP tools (Notion, etc.) into registry before filtering.
 		// Servers with require_user_credentials are deferred at startup and
 		// connected per-request here with the actual user's credentials.
-		l.getUserMCPTools(state.Ctx, state.Input.UserID)
-
+		//
+		// Use resolveActorUserID — the gateway consumer rewrites UserID in
+		// two scenarios (group chats AND DM with merged contact), both of
+		// which break per-user MCP credential lookup. ChannelType discriminates
+		// Bitrix24 (always prefer SenderID) from other channels (group-only
+		// rewrite recovery). See resolveActorUserID docstring for full rationale.
+		actorUserID := resolveActorUserID(
+			state.Input.UserID,
+			state.Input.SenderID,
+			state.Input.PeerKind,
+			state.Input.ChannelType,
+		)
+		userTools := l.getUserMCPTools(state.Ctx, actorUserID)
+		slog.Debug("mcp.user_tools_context",
+			"peer_kind", state.Input.PeerKind,
+			"input_user_id", state.Input.UserID,
+			"sender_id", state.Input.SenderID,
+			"actor_user_id", actorUserID,
+			"user_tools_count", len(userTools))
 		maxIter := l.maxIterations
 		if req.MaxIterations > 0 && req.MaxIterations < maxIter {
 			maxIter = req.MaxIterations
@@ -214,6 +233,16 @@ func (l *Loop) makeBuildFilteredTools(req *RunRequest) func(state *pipeline.RunS
 				state.Messages.AppendPending(msg)
 			}
 		}
+		mcpDefs := 0
+		for _, td := range toolDefs {
+			if strings.HasPrefix(strings.TrimSpace(td.Function.Name), "mcp_") {
+				mcpDefs++
+			}
+		}
+		slog.Debug("mcp.filtered_tools",
+			"tool_defs_count", len(toolDefs),
+			"mcp_defs_count", mcpDefs,
+			"iteration", state.Iteration)
 		return toolDefs, nil
 	}
 }
@@ -289,6 +318,61 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 		} else {
 			resp, err = provider.Chat(ctx, chatReq)
 		}
+		slog.Info("debug.llm.first_response",
+			"has_error", err != nil,
+			"tool_calls_count", func() int {
+				if resp == nil {
+					return -1
+				}
+				return len(resp.ToolCalls)
+			}(),
+			"tools_provided", len(chatReq.Tools))
+
+		// One guarded retry when MCP task tools are available but the model
+		// returns text-only instead of tool calls.
+		retryEligible := err == nil && resp != nil && len(resp.ToolCalls) == 0 && shouldRetryTaskMCP(chatReq)
+		slog.Info("debug.llm.retry_guard", "retry_eligible", retryEligible)
+		if retryEligible {
+			retryReq := chatReq
+			if retryReq.Options == nil {
+				retryReq.Options = make(map[string]any)
+			}
+			retryReq.Options[providers.OptToolChoice] = "required"
+			retryReq.Messages = append(append([]providers.Message{}, chatReq.Messages...), providers.Message{
+				Role:    "system",
+				Content: "MCP task tools are available in this turn. Do not ask for CRM identifier/email first. Call the relevant MCP task tool immediately, then answer with the tool result.",
+			})
+			if req.Stream {
+				resp, err = provider.ChatStream(ctx, retryReq, func(chunk providers.StreamChunk) {
+					if chunk.Thinking != "" {
+						emitRun(AgentEvent{
+							Type:    protocol.ChatEventThinking,
+							AgentID: l.id,
+							RunID:   req.RunID,
+							Payload: map[string]string{"content": chunk.Thinking},
+						})
+					}
+					if chunk.Content != "" {
+						emitRun(AgentEvent{
+							Type:    protocol.ChatEventChunk,
+							AgentID: l.id,
+							RunID:   req.RunID,
+							Payload: map[string]string{"content": chunk.Content},
+						})
+					}
+				})
+			} else {
+				resp, err = provider.Chat(ctx, retryReq)
+			}
+			slog.Info("debug.llm.retry_response",
+				"has_error", err != nil,
+				"tool_calls_count", func() int {
+					if resp == nil {
+						return -1
+					}
+					return len(resp.ToolCalls)
+				}())
+		}
 
 		// Non-streaming: emit content events matching v2 behavior (channels need these).
 		if !req.Stream && err == nil && resp != nil {
@@ -309,10 +393,34 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 				})
 			}
 		}
-
 		l.emitLLMSpanEnd(ctx, spanID, start, resp, err, opts...)
 		return resp, err
 	}
+}
+
+func shouldRetryTaskMCP(chatReq providers.ChatRequest) bool {
+	hasTaskMCPTool := false
+	for _, td := range chatReq.Tools {
+		name := strings.TrimSpace(td.Function.Name)
+		if strings.HasPrefix(name, "mcp_bx24__") && (strings.Contains(name, "search") || strings.Contains(name, "execute")) {
+			hasTaskMCPTool = true
+			break
+		}
+	}
+	if !hasTaskMCPTool {
+		return false
+	}
+	lastUser := ""
+	for i := len(chatReq.Messages) - 1; i >= 0; i-- {
+		if chatReq.Messages[i].Role == "user" {
+			lastUser = strings.ToLower(strings.TrimSpace(chatReq.Messages[i].Content))
+			break
+		}
+	}
+	if lastUser == "" {
+		return false
+	}
+	return strings.Contains(lastUser, "task") || strings.Contains(lastUser, "việc") || strings.Contains(lastUser, "công việc")
 }
 
 func (l *Loop) makePruneMessages() func(msgs []providers.Message, budget int) ([]providers.Message, pipeline.PruneStats) {

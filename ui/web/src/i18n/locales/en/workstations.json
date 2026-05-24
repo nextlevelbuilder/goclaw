@@ -1,0 +1,82 @@
+{
+  "title": "Workstations",
+  "description": "Manage remote workstation connections (SSH, Docker) for agents to execute commands.",
+  "addWorkstation": "Add Workstation",
+  "emptyTitle": "No workstations configured",
+  "emptyDescription": "Add a workstation to allow agents to run commands on remote machines.",
+  "backend": {
+    "ssh": "SSH",
+    "docker": "Docker"
+  },
+  "status": {
+    "active": "Active",
+    "inactive": "Inactive"
+  },
+  "columns": {
+    "name": "Name",
+    "key": "Key",
+    "backend": "Backend",
+    "status": "Status",
+    "created": "Created",
+    "actions": "Actions"
+  },
+  "actions": {
+    "edit": "Edit",
+    "delete": "Delete",
+    "test": "Test Connection",
+    "activate": "Activate",
+    "deactivate": "Deactivate"
+  },
+  "createDialog": {
+    "title": "Add Workstation",
+    "description": "Configure a new remote workstation connection.",
+    "nameLabel": "Display Name",
+    "namePlaceholder": "My Dev Server",
+    "keyLabel": "Workstation Key",
+    "keyPlaceholder": "dev-server",
+    "keyHint": "Lowercase letters, digits, hyphens. Used by agents to reference this workstation.",
+    "backendLabel": "Backend Type",
+    "sshOption": "SSH",
+    "dockerOption": "Docker",
+    "hostLabel": "Host",
+    "hostPlaceholder": "192.168.1.100",
+    "portLabel": "Port",
+    "userLabel": "SSH User",
+    "userPlaceholder": "ubuntu",
+    "identityFileLabel": "Identity File (optional)",
+    "identityFilePlaceholder": "~/.ssh/id_rsa",
+    "containerLabel": "Container Name / ID",
+    "containerPlaceholder": "my-container",
+    "dockerHostLabel": "Docker Host (optional)",
+    "dockerHostPlaceholder": "unix:///var/run/docker.sock",
+    "cancel": "Cancel",
+    "create": "Create"
+  },
+  "deleteDialog": {
+    "title": "Delete Workstation",
+    "description": "Are you sure you want to delete \"{{name}}\"? This cannot be undone.",
+    "confirmLabel": "Delete"
+  },
+  "testResult": {
+    "success": "Connection successful",
+    "notImplemented": "Connection test is not yet available"
+  },
+  "activity": {
+    "title": "Recent Activity",
+    "emptyTitle": "No activity yet",
+    "emptyDescription": "Exec events will appear here once agents run commands.",
+    "columns": {
+      "action": "Action",
+      "cmdPreview": "Command",
+      "exitCode": "Exit Code",
+      "duration": "Duration",
+      "agent": "Agent",
+      "timestamp": "Time"
+    },
+    "actions": {
+      "exec": "Exec",
+      "deny": "Denied"
+    },
+    "loadMore": "Load more"
+  }
+}

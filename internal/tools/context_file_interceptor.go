@@ -23,7 +23,7 @@ var protectedFileSet = map[string]bool{
 	bootstrap.AgentsFile:         true,
 	bootstrap.UserFile:           true,
 	bootstrap.UserPredefinedFile: true,
-	bootstrap.CapabilitiesFile:  true,
+	bootstrap.CapabilitiesFile:   true,
 }
 
 // contextFileSet is the set of filenames routed to the DB store.
@@ -34,9 +34,9 @@ var contextFileSet = map[string]bool{
 	bootstrap.IdentityFile:       true,
 	bootstrap.UserFile:           true,
 	bootstrap.UserPredefinedFile: true,
-	bootstrap.BootstrapFile:      true,       // first-run file (deleted after completion)
-	bootstrap.HeartbeatFile:      true,       // agent-level heartbeat checklist
-	bootstrap.CapabilitiesFile:  true,       // domain expertise (evolvable when self_evolve=true)
+	bootstrap.BootstrapFile:      true, // first-run file (deleted after completion)
+	bootstrap.HeartbeatFile:      true, // agent-level heartbeat checklist
+	bootstrap.CapabilitiesFile:   true, // domain expertise (evolvable when self_evolve=true)
 }
 
 // isContextFile checks if a path refers to a workspace-root context file.
@@ -75,12 +75,12 @@ const defaultContextCacheTTL = 5 * time.Minute
 // Keeps SOUL.md, IDENTITY.md etc. in Postgres.
 // Routes based on agent type: "open" → all per-user, "predefined" → only USER.md per-user.
 type ContextFileInterceptor struct {
-	agentStore       store.AgentStore
-	workspace        string // workspace root for matching absolute paths
-	agentCache       cache.Cache[[]store.AgentContextFileData] // agent-level files, keyed by agentID.String()
-	userCache        cache.Cache[[]store.AgentContextFileData] // user-level files, keyed by "agentID:userID"
-	ttl              time.Duration
-	permStore store.ConfigPermissionStore // nil = no group write restriction
+	agentStore store.AgentStore
+	workspace  string                                    // workspace root for matching absolute paths
+	agentCache cache.Cache[[]store.AgentContextFileData] // agent-level files, keyed by agentID.String()
+	userCache  cache.Cache[[]store.AgentContextFileData] // user-level files, keyed by "agentID:userID"
+	ttl        time.Duration
+	permStore  store.ConfigPermissionStore // nil = no group write restriction
 }
 
 // NewContextFileInterceptor creates an interceptor backed by the given agent store.
@@ -121,7 +121,7 @@ func (b *ContextFileInterceptor) ReadFile(ctx context.Context, path string) (str
 		return "", false, nil // no agent context
 	}
 
-	userID := store.UserIDFromContext(ctx)
+	userID := store.ContextUserID(ctx)
 	agentType := store.AgentTypeFromContext(ctx)
 
 	// Open agent: ALL files per-user → fallback to agent-level
@@ -204,31 +204,22 @@ func (b *ContextFileInterceptor) WriteFile(ctx context.Context, path, content st
 		return false, nil // no agent context
 	}
 
-	userID := store.UserIDFromContext(ctx)
+	scopeUserID := store.UserIDFromContext(ctx)
+	userID := store.ContextUserID(ctx)
 	agentType := store.AgentTypeFromContext(ctx)
 
 	// Permission check: protected files in group context require allowlist membership.
 	// Exception: during bootstrap onboarding (BOOTSTRAP.md still exists for this user),
 	// USER.md writes are allowed so the bot can complete the first-run ritual.
-	if (strings.HasPrefix(userID, "group:") || strings.HasPrefix(userID, "guild:")) && protectedFileSet[fileName] {
+	if (strings.HasPrefix(scopeUserID, "group:") || strings.HasPrefix(scopeUserID, "guild:")) && protectedFileSet[fileName] {
 		skipCheck := false
-		if fileName == bootstrap.UserFile && b.hasBootstrapFile(ctx, agentID, userID) {
+		if fileName == bootstrap.UserFile && b.hasBootstrapFile(ctx, agentID, scopeUserID) {
 			skipCheck = true // onboarding in progress — allow USER.md write
 		}
 		if !skipCheck {
-			senderID := store.SenderIDFromContext(ctx)
-			if senderID != "" && b.permStore != nil {
-				numericID := strings.SplitN(senderID, "|", 2)[0]
-				allowed, err := b.permStore.CheckPermission(ctx, agentID, userID, store.ConfigTypeFileWriter, numericID)
-				if err != nil {
-					slog.Warn("security.group_file_writer_check_failed",
-						"error", err, "sender", numericID, "file", fileName, "group", userID)
-					// fail open: allow write if check fails
-				} else if !allowed {
-					return true, fmt.Errorf("permission denied: you are not authorized to modify %s in this group. Ask a group file writer to add you with /addwriter", fileName)
-				}
+			if err := store.CheckContextFilePermission(ctx, b.permStore); err != nil {
+				return true, fmt.Errorf("permission denied: you are not authorized to modify %s in this group. %w", fileName, err)
 			}
-			// senderID empty or no permStore = system context (cron, subagent) → fail open
 		}
 	}
 
@@ -297,6 +288,9 @@ func (b *ContextFileInterceptor) WriteFile(ctx context.Context, path, content st
 // Used by the agent loop to dynamically resolve context files for system prompt.
 // Uses the same agentCache/userCache as ReadFile — invalidated on WriteFile and pubsub events.
 func (b *ContextFileInterceptor) LoadContextFiles(ctx context.Context, agentID uuid.UUID, userID, agentType string) []bootstrap.ContextFile {
+	if store.IsSharedContext(ctx) {
+		userID = ""
+	}
 	// Open agent: all files from user_context_files
 	if agentType == store.AgentTypeOpen && userID != "" {
 		files := b.cachedUserFiles(ctx, agentID, userID)

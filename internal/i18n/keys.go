@@ -114,6 +114,43 @@ const (
 	// --- Skills ---
 	MsgSkillsUpdateNotSupported = "error.skills_update_not_supported" // "skills.update not supported for file-based skills"
 	MsgCannotResolveSkillID     = "error.cannot_resolve_skill_id"     // "cannot resolve skill ID for file-based skill"
+	MsgInvalidVisibility        = "error.invalid_visibility"          // "invalid visibility %q: must be one of private, public"
+
+	// --- Package updates (Phase 4+5) ---
+	MsgPackageNotInstalled  = "packages.update.not_installed"    // "Package {name} is not installed"
+	MsgPackageUpdateLocked  = "packages.update.locked"           // "Package {name} is being updated by another request"
+	MsgReleaseNotFound      = "packages.update.release_not_found" // "Release {tag} not found for {repo}"
+	MsgAssetNotFound        = "packages.update.asset_not_found"  // "No compatible asset for {os}/{arch}"
+	MsgChecksumMismatch     = "packages.update.checksum_mismatch" // "Checksum mismatch for {name}"
+	MsgUpdateSwapFailed     = "packages.update.swap_failed"      // "Failed to install {name}; previous version restored"
+	MsgUpdateManifestDesync = "packages.update.manifest_desync"  // "Binary updated but manifest save failed — manual recovery required for {name}"
+	MsgUpdateCacheStale     = "packages.update.cache_stale"      // "Updates cache stale; run refresh before applying an update"
+
+	// Package update source labels
+	MsgPackagesUpdatesSourceGithub = "packages.updates.source.github" // "GitHub"
+	MsgPackagesUpdatesSourcePip    = "packages.updates.source.pip"    // "pip"
+	MsgPackagesUpdatesSourceNpm    = "packages.updates.source.npm"    // "npm"
+
+	// Package update availability messages
+	MsgPackagesUpdatesUnavailablePip = "packages.updates.unavailable.pip" // "pip not installed on this system"
+	MsgPackagesUpdatesUnavailableNpm = "packages.updates.unavailable.npm" // "npm not installed on this system"
+
+	// Package update failure reasons
+	MsgPackagesUpdatesReasonDependencyConflict = "packages.updates.reason.dependencyConflict" // "Dependency conflict"
+	MsgPackagesUpdatesReasonPermission         = "packages.updates.reason.permission"         // "Permission denied"
+	MsgPackagesUpdatesReasonNetwork            = "packages.updates.reason.network"            // "Network error"
+	MsgPackagesUpdatesReasonNotFound           = "packages.updates.reason.notFound"           // "Package not found"
+	MsgPackagesUpdatesReasonTargetMissing      = "packages.updates.reason.targetMissing"      // "Version not available"
+	MsgPackagesUpdatesReasonExternallyManaged  = "packages.updates.reason.externallyManaged"  // "Environment externally managed"
+
+	// Package update apk-specific labels (Phase 2b)
+	MsgPackagesUpdatesSourceApk      = "packages.updates.source.apk"      // "apk"
+	MsgPackagesUpdatesUnavailableApk = "packages.updates.unavailable.apk" // "apk not available on this system"
+
+	// Package update apk-specific reasons (Phase 2b)
+	MsgPackagesUpdatesReasonLocked            = "packages.updates.reason.locked"            // "Package database is locked"
+	MsgPackagesUpdatesReasonDiskFull          = "packages.updates.reason.diskFull"          // "Disk full"
+	MsgPackagesUpdatesReasonHelperUnavailable = "packages.updates.reason.helperUnavailable" // "Privileged helper unavailable"
 
 	// --- Logs ---
 	MsgInvalidLogAction = "error.invalid_log_action" // "action must be 'start' or 'stop'"
@@ -220,6 +257,52 @@ const (
 	MsgTenantMismatch      = "error.tenant_mismatch"       // "tenant user does not belong to this tenant"
 	MsgTenantScopeRequired = "error.tenant_scope_required" // "tenant scope is required for this operation"
 
+	// --- Webhooks ---
+	MsgWebhookAuthFailed             = "webhook.auth_failed"              // "webhook authentication failed"
+	MsgWebhookHMACInvalid            = "webhook.hmac_invalid"             // "HMAC signature is invalid"
+	MsgWebhookHMACTimestampSkew      = "webhook.hmac_timestamp_skew"      // "request timestamp outside acceptable window"
+	MsgWebhookBearerRequiredHMAC     = "webhook.bearer_required_hmac"     // "this webhook requires HMAC authentication"
+	MsgWebhookRevoked                = "webhook.revoked"                  // "webhook has been revoked"
+	MsgWebhookKindMismatch           = "webhook.kind_mismatch"            // "request kind does not match webhook configuration"
+	MsgWebhookRateLimited            = "webhook.rate_limited"             // "webhook rate limit exceeded"
+	MsgWebhookBodyTooLarge           = "webhook.body_too_large"           // "request body exceeds size limit"
+	MsgWebhookIdempotencyConflict    = "webhook.idempotency_conflict"     // "idempotency key conflict: request body mismatch"
+	MsgWebhookTenantMismatch         = "webhook.tenant_mismatch"          // "webhook tenant mismatch"
+	MsgWebhookAgentNotFound          = "webhook.agent_not_found"          // "webhook agent not found"
+	MsgWebhookChannelNotFound        = "webhook.channel_not_found"        // "webhook channel not found"
+	MsgWebhookMediaSSRFBlocked       = "webhook.media_ssrf_blocked"       // "media URL blocked by SSRF policy"
+	MsgWebhookMediaTooLarge          = "webhook.media_too_large"          // "media file exceeds size limit"
+	MsgWebhookMediaMIMEDenied        = "webhook.media_mime_denied"        // "media MIME type is not allowed"
+	MsgWebhookCallbackURLInvalid     = "webhook.callback_url_invalid"     // "callback URL is invalid or blocked"
+	MsgWebhookLLMTimeout             = "webhook.llm_timeout"              // "LLM processing timed out"
+	MsgWebhookLaneSaturated          = "webhook.lane_saturated"           // "webhook processing lane is at capacity"
+	MsgWebhookLocalhostOnlyViolation  = "webhook.localhost_only_violation"  // "this webhook is restricted to localhost callers"
+	MsgWebhookMediaChannelUnsupported = "webhook.media_channel_unsupported" // "channel does not support media attachments"
+	MsgWebhookIPDenied                = "webhook.ip_denied"                 // "request origin is not in the IP allowlist"
+	MsgWebhookEncryptionUnavailable   = "webhook.encryption_unavailable"    // "webhook encryption key not configured; set GOCLAW_ENCRYPTION_KEY to enable webhooks"
+
+	// --- Workstation permissions ---
+	MsgWorkstationCmdDenied      = "error.workstation_cmd_denied"      // "command denied by workstation policy: %s"
+	MsgWorkstationEnvDenied      = "error.workstation_env_denied"      // "env var denied by policy: %s"
+	MsgWorkstationInputInvalid   = "error.workstation_input_invalid"   // "command contains invalid characters: %s"
+	MsgWorkstationRateLimit      = "error.workstation_rate_limit"      // "workstation rate limit exceeded"
+	MsgWorkstationPermNotFound   = "error.workstation_perm_not_found"  // "permission entry not found: %s"
+
+	// --- Workstation activity (Phase 7) ---
+	MsgWorkstationActivityTitle  = "ui.workstations.activity.title"       // "Recent Activity"
+	MsgWorkstationActionExec     = "ui.workstations.activity.action_exec" // "Exec"
+	MsgWorkstationActionDeny     = "ui.workstations.activity.action_deny" // "Denied"
+
+	// --- Workstation ---
+	MsgWorkstationNotFound   = "error.workstation_not_found"    // "workstation not found: %s"
+	MsgWorkstationKeyExists  = "error.workstation_key_exists"   // "workstation key already in use: %s"
+	MsgInvalidBackend        = "error.invalid_backend"          // "invalid backend type: %s (must be ssh|docker)"
+	MsgWorkstationInactive   = "error.workstation_inactive"     // "workstation is inactive: %s"
+	MsgInvalidMetadataShape  = "error.invalid_metadata_shape"   // "invalid metadata for %s backend: %s"
+	MsgWorkstationRequired   = "error.workstation_required"     // "no workstation bound to agent; pass workstation_id"
+	MsgWorkstationAccessDenied = "error.workstation_access_denied" // "agent %s not authorized for workstation %s"
+	MsgBackendNotReady       = "error.backend_not_ready"        // "workstation backend not ready: %s"
+
 	// --- Hooks ---
 	MsgHookInvalidMatcher          = "hook.invalid_matcher"           // "invalid matcher regex: %s"
 	MsgHookCommandDisabledStandard = "hook.command_disabled_standard" // "command-type hooks are only available on Lite edition"
@@ -228,4 +311,10 @@ const (
 	MsgHookBudgetExceeded          = "hook.budget_exceeded"           // "tenant hook token budget exceeded"
 	MsgHookPerTurnCapReached       = "hook.per_turn_cap_reached"      // "hook invocation per-turn cap reached"
 	MsgHookBuiltinReadOnly         = "hook.builtin_readonly"          // "builtin hooks are read-only except for the enabled toggle"
+
+	// --- Grant env validation ---
+	MsgGrantEnvDeniedKeys   = "error.grant_env_denied_keys"   // "env keys not allowed: %s"
+	MsgGrantEnvValueInvalid = "error.grant_env_value_invalid" // "invalid env value: %s"
+	MsgGrantEnvTooManyKeys  = "error.grant_env_too_many_keys" // "too many env keys: max 50"
+	MsgGrantEnvRevealLimit  = "error.grant_env_reveal_limit"  // "rate limit exceeded for env reveal"
 )

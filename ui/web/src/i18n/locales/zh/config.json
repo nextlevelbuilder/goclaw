@@ -42,7 +42,7 @@
   "gateway.rateLimitRpm": "速率限制（RPM）",
   "gateway.rateLimitRpmTip": "每用户每分钟最大请求数。设为 0 禁用速率限制。",
   "gateway.inboundDebounceMs": "入站防抖（毫秒）",
-  "gateway.inboundDebounceMsTip": "处理新消息前的延迟毫秒数，用于合并快速连续消息。设为 -1 禁用。",
+  "gateway.inboundDebounceMsTip": "处理来自频道或 Web Chat 的快速连续消息前的延迟毫秒数。设为 0 使用默认 1000ms，设为 -1 禁用。",
   "gateway.injectionAction": "注入检测动作",
 
   "agents.title": "Agent 默认值",

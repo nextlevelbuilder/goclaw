@@ -44,9 +44,10 @@ func TestMessageHandlerSkipsRecentOutboundEchoWithHTMLFormatting(t *testing.T) {
 func TestWebhookRouterSkipsNonInboxConversationEvents(t *testing.T) {
 	msgBus := bus.New()
 	target := &Channel{
-		BaseChannel: channels.NewBaseChannel(channels.TypePancake, msgBus, nil),
-		pageID:      "page-123",
-		platform:    "facebook",
+		BaseChannel:   channels.NewBaseChannel(channels.TypePancake, msgBus, nil),
+		pageID:        "page-123",
+		platform:      "facebook",
+		webhookSecret: "test-secret",
 	}
 	router := &webhookRouter{
 		instances: map[string]*Channel{
@@ -74,6 +75,7 @@ func TestWebhookRouterSkipsNonInboxConversationEvents(t *testing.T) {
 	}`
 
 	req := httptest.NewRequest(http.MethodPost, "/channels/pancake/webhook", strings.NewReader(body))
+	signTestPancakeRequest(req, body, target.webhookSecret)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -92,9 +94,10 @@ func TestWebhookRouterSkipsNonInboxConversationEvents(t *testing.T) {
 func TestWebhookRouterPrefersMessageSenderOverConversationSender(t *testing.T) {
 	msgBus := bus.New()
 	target := &Channel{
-		BaseChannel: channels.NewBaseChannel(channels.TypePancake, msgBus, nil),
-		pageID:      "page-123",
-		platform:    "facebook",
+		BaseChannel:   channels.NewBaseChannel(channels.TypePancake, msgBus, nil),
+		pageID:        "page-123",
+		platform:      "facebook",
+		webhookSecret: "test-secret",
 	}
 	router := &webhookRouter{
 		instances: map[string]*Channel{
@@ -127,6 +130,7 @@ func TestWebhookRouterPrefersMessageSenderOverConversationSender(t *testing.T) {
 	}`
 
 	req := httptest.NewRequest(http.MethodPost, "/channels/pancake/webhook", strings.NewReader(body))
+	signTestPancakeRequest(req, body, target.webhookSecret)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 

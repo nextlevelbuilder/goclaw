@@ -91,6 +91,7 @@ export const queryKeys = {
   packages: {
     all: ["packages"] as const,
     runtimes: ["packages", "runtimes"] as const,
+    updates: ["packages", "updates"] as const,
   },
   tenantUsers: {
     all: ["tenantUsers"] as const,

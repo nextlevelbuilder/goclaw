@@ -41,6 +41,53 @@
       "installedAt": "安装时间"
     }
   },
+  "updates": {
+    "available": "有 {{count}} 个可用更新",
+    "none": "所有软件包已是最新",
+    "refresh": "刷新",
+    "refreshing": "刷新中...",
+    "lastCheckedAgo": "上次检查于 {{ago}}",
+    "neverChecked": "尚未检查",
+    "update": "更新",
+    "updateAll": "全部更新",
+    "updating": "正在更新 {{name}}...",
+    "updateSucceeded": "{{name}} 已更新至 {{version}}",
+    "updateFailed": "{{name}} 更新失败:{{reason}}",
+    "updateAllResult": "{{succeeded}} 成功,{{failed}} 失败",
+    "confirmAllTitle": "更新 {{count}} 个软件包?",
+    "confirmAllBody": "过程可能需要几分钟。更新按顺序应用。",
+    "selected": "已选 {{count}} 个",
+    "manifestDesyncWarn": "二进制文件已更新但清单保存失败。{{name}} 需要手动恢复。",
+    "cacheStale": "更新缓存已过期。请先刷新。",
+    "adminOnly": "需要管理员权限",
+    "empty": "没有可用更新",
+    "source": {
+      "github": "GitHub",
+      "pip": "pip",
+      "npm": "npm",
+      "apk": "apk"
+    },
+    "filter": {
+      "all": "所有来源",
+      "label": "筛选"
+    },
+    "unavailable": {
+      "pip": "未安装 pip",
+      "npm": "未安装 npm",
+      "apk": "此系统不可用 apk"
+    },
+    "button": {
+      "tooltip": {
+        "github": "从 GitHub 发布更新",
+        "pip": "通过 pip 更新",
+        "npm": "通过 npm 更新",
+        "apk": "通过 apk 更新（系统包）"
+      }
+    },
+    "summary": {
+      "perSource": "{{source}}: {{count}}"
+    }
+  },
   "actions": {
     "install": "安装",
     "uninstall": "卸载",
@@ -62,5 +109,17 @@
     "version": "版本",
     "actions": "操作",
     "empty": "暂无已安装的软件包"
+  },
+  "tabs": {
+    "system": "系统",
+    "python": "Python",
+    "node": "Node",
+    "github": "GitHub",
+    "cliCredentials": "CLI 凭证"
+  },
+  "runtimesHeader": {
+    "title": "运行时",
+    "available": "可用",
+    "missing": "缺失"
   }
 }

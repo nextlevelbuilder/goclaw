@@ -762,7 +762,11 @@
       "selectToolsDeny": "Select tools to deny...",
       "selectToolsAlsoAllow": "Select additional tools...",
       "toolCallPrefix": "Tool Call Prefix",
-      "toolCallPrefixHint": "Strips this prefix from model's tool call names before registry lookup."
+      "toolCallPrefixHint": "Strips this prefix from model's tool call names before registry lookup.",
+      "waitLimits": "Wait Tool Bounds",
+      "waitMinPlaceholder": "Min ms",
+      "waitMaxPlaceholder": "Max ms",
+      "waitLimitsHint": "Optional per-agent bounds. Server safety limits still clamp waits to 100-300000ms."
     },
     "workspaceSharing": {
       "title": "Workspace Sharing",
@@ -787,6 +791,19 @@
       "shareSessions": "Share Sessions",
       "shareSessionsTip": "Allow agent to access conversation sessions across all groups. When off, each user's sessions remain isolated.",
       "shareSessionsNote": "Toggling this does not migrate data — existing per-user sessions become inaccessible in shared mode."
+    },
+    "modelFallback": {
+      "title": "Model Fallback",
+      "description": "Try backup provider/model pairs in priority order when the primary model is unavailable.",
+      "enabled": "Enabled",
+      "primary": "Primary",
+      "providerPlaceholder": "Select provider",
+      "modelPlaceholder": "Select or type model",
+      "add": "Add fallback",
+      "remove": "Remove fallback",
+      "reorder": "Reorder fallback",
+      "empty": "No fallback models configured.",
+      "cooldown": "Skip recently failing routes temporarily"
     },
     "compaction": {
       "title": "Compaction",
@@ -997,6 +1014,11 @@
     "title": "Permissions",
     "description": "Control who can modify agent config and files. Owner always has full access.",
     "addRule": "Add Rule",
+    "allMembers": "All members",
+    "allMembersTitle": "Grant this rule to every member in the selected scope by using userId=\"*\".",
+    "checkAccess": "Check access",
+    "allowed": "Allowed",
+    "denied": "Denied",
     "fileWriters": "File Writers",
     "configPerms": "Config Permissions",
     "noRules": "No permission rules. Owner has implicit full access.",

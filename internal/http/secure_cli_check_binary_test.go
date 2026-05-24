@@ -1,0 +1,98 @@
+package http
+
+import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestSecureCLICheckBinaryFindsRuntimeNpmBinary(t *testing.T) {
+	runtimeDir := t.TempDir()
+	t.Setenv("RUNTIME_DIR", runtimeDir)
+	t.Setenv("NPM_CONFIG_PREFIX", "")
+	t.Setenv("PATH", "/usr/bin")
+
+	binDir := filepath.Join(runtimeDir, "npm-global", "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	wantPath := filepath.Join(binDir, "openrouter")
+	if err := os.WriteFile(wantPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/cli-credentials/check-binary", strings.NewReader(`{"binary_name":"openrouter"}`))
+	rec := httptest.NewRecorder()
+
+	NewSecureCLIHandler(nil, nil).handleCheckBinary(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var got struct {
+		Found bool   `json:"found"`
+		Path  string `json:"path"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if !got.Found {
+		t.Fatalf("found = false, error = %q", got.Error)
+	}
+	if got.Path != wantPath {
+		t.Fatalf("path = %q, want %q", got.Path, wantPath)
+	}
+}
+
+func TestSecureCLICheckBinaryFindsNpmPackageCliAlias(t *testing.T) {
+	runtimeDir := t.TempDir()
+	t.Setenv("RUNTIME_DIR", runtimeDir)
+	t.Setenv("NPM_CONFIG_PREFIX", "")
+	t.Setenv("PATH", "/usr/bin")
+
+	pkgDir := filepath.Join(runtimeDir, "npm-global", "lib", "node_modules", "openrouter-cli")
+	if err := os.MkdirAll(pkgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := []byte(`{"name":"openrouter-cli","bin":{"orc":"dist/index.js"}}`)
+	if err := os.WriteFile(filepath.Join(pkgDir, "package.json"), manifest, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	binDir := filepath.Join(runtimeDir, "npm-global", "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	wantPath := filepath.Join(binDir, "orc")
+	if err := os.WriteFile(wantPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/cli-credentials/check-binary", strings.NewReader(`{"binary_name":"openrouter"}`))
+	rec := httptest.NewRecorder()
+
+	NewSecureCLIHandler(nil, nil).handleCheckBinary(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var got struct {
+		Found bool   `json:"found"`
+		Path  string `json:"path"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if !got.Found {
+		t.Fatalf("found = false, error = %q", got.Error)
+	}
+	if got.Path != wantPath {
+		t.Fatalf("path = %q, want %q", got.Path, wantPath)
+	}
+}

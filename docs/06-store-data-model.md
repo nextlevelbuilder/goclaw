@@ -68,6 +68,23 @@ The `Stores` struct is the top-level container holding all PostgreSQL-backed sto
 
 ---
 
+## Agent Model Fallback Storage
+
+Agent rows include `model_fallback`, stored as JSONB in PostgreSQL and TEXT JSON in SQLite. The config is per-agent and normalized before runtime use:
+
+- `enabled`: whether fallback is active.
+- `strategy`: currently `priority_order`.
+- `candidates`: ordered backup provider/model pairs. The primary agent provider/model is not stored in this list.
+- `max_attempts`: optional cap across primary plus fallback candidates.
+- `cooldown_enabled`: temporarily skips recently failing routes when enabled.
+
+Migration versions:
+
+- PostgreSQL: `000065_agent_model_fallback`.
+- SQLite: schema v33 to v34.
+
+---
+
 ## 3. Session Caching
 
 The session store uses an in-memory write-behind cache to minimize database I/O during the agent tool loop. All reads and writes happen in memory; data is flushed to the persistent backend only when `Save()` is called at the end of a run.

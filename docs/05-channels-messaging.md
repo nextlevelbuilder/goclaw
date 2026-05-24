@@ -67,6 +67,10 @@ The consumer routes system messages based on sender ID prefixes:
 | `delegate:` | Parent agent's original session (legacy session key format) | team |
 | `teammate:` | Target agent session | team |
 
+### Inbound Debounce
+
+Normal channel messages pass through the shared inbound debouncer before agent execution. `gateway.inbound_debounce_ms` merges rapid text messages from the same `channel:chatID:senderID`; `0` uses the 1000ms default and `-1` disables debounce. Media messages bypass the wait window after flushing pending text, and command/control messages such as stop/reset and system escalations bypass debounce.
+
 ---
 
 ## 2. Channel Interfaces
@@ -509,7 +513,7 @@ The Slack channel uses the `slack-go/slack` library to connect via Socket Mode (
 - **Mention gating**: `requireMention` default true; `<@botUserID>` stripped from content
 - **Thread participation cache**: After bot replies in a thread, subsequent messages in that thread auto-trigger response without @mention (24h TTL)
 - **Message dedup**: `channel+ts` key prevents duplicate processing on Socket Mode reconnect
-- **Message debounce**: Per-thread batching of rapid messages (300ms default, configurable)
+- **Message debounce**: Per-thread batching of rapid messages (300ms default, configurable; `debounce_delay: 0` disables)
 - **Dead socket classification**: Non-retryable auth errors (invalid_auth, token_revoked) fail fast instead of infinite reconnect
 - **Streaming**: Edit-in-place via `chat.update` with 1000ms throttle (Slack Tier 3 rate limit)
 - **Reactions**: Status emoji on user messages (thinking_face, hammer_and_wrench, white_check_mark, x, hourglass_flowing_sand)

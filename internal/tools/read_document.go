@@ -94,6 +94,10 @@ func (t *ReadDocumentTool) Parameters() map[string]any {
 				"type":        "string",
 				"description": "Optional: specific media_id from <media:document> tag. If omitted, uses most recent document.",
 			},
+			"path": map[string]any{
+				"type":        "string",
+				"description": "Optional file path from a <media:document path=\"...\"> tag. Use this when the tag provides a path or the file is an archive that should be inspected with exec.",
+			},
 		},
 		"required": []string{"prompt"},
 	}
@@ -105,14 +109,22 @@ func (t *ReadDocumentTool) Execute(ctx context.Context, args map[string]any) *Re
 		prompt = "Analyze this document and describe its contents."
 	}
 	mediaID, _ := args["media_id"].(string)
+	docPathArg, _ := args["path"].(string)
 
 	// Resolve document file path from MediaRefs in context.
-	docPath, docMime, err := t.resolveDocumentFile(ctx, mediaID)
+	docPath, docMime, err := t.resolveDocumentFile(ctx, mediaID, docPathArg)
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
 
 	slog.Info("read_document: resolved file", "path", docPath, "mime", docMime, "media_id", mediaID)
+
+	if isArchiveDocumentPath(docPath) {
+		return NewResult(fmt.Sprintf(
+			"Archive file available at %s. read_document does not analyze archive containers directly. Use exec to inspect or extract it, for example: unzip -l %q or unzip -q %q -d <output-dir>, then use list_files/read_file on extracted files.",
+			docPath, docPath, docPath,
+		))
+	}
 
 	// Read document file.
 	data, err := os.ReadFile(docPath)

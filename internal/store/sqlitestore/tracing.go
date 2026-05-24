@@ -108,6 +108,10 @@ func buildTraceWhere(ctx context.Context, opts store.TraceListOpts) (string, []a
 		conditions = append(conditions, "channel = ?")
 		args = append(args, opts.Channel)
 	}
+	if opts.ChangedAfter != nil {
+		conditions = append(conditions, "(created_at > ? OR end_time > ? OR status = ?)")
+		args = append(args, *opts.ChangedAfter, *opts.ChangedAfter, store.TraceStatusRunning)
+	}
 
 	if len(conditions) == 0 {
 		return "", nil

@@ -96,7 +96,7 @@ func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir 
 		secureCLIH = httpapi.NewSecureCLIHandler(stores.SecureCLI, msgBus)
 	}
 	if stores != nil && stores.SecureCLIGrants != nil {
-		secureCLIGrantH = httpapi.NewSecureCLIGrantHandler(stores.SecureCLIGrants, msgBus)
+		secureCLIGrantH = httpapi.NewSecureCLIGrantHandler(stores.SecureCLIGrants, stores.Tenants, msgBus)
 	}
 
 	return agentsH, skillsH, tracesH, mcpH, channelInstancesH, providersH, builtinToolsH, pendingMessagesH, teamEventsH, secureCLIH, secureCLIGrantH, mcpUserCredsH

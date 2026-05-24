@@ -145,13 +145,18 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 }
 
 // wireChannelRPCMethods registers WS RPC methods for channels, instances, agent links, and teams.
-func wireChannelRPCMethods(server *gateway.Server, pgStores *store.Stores, channelMgr *channels.Manager, agentRouter *agent.Router, msgBus *bus.MessageBus, dataDir string) {
+// Returns the channel-instances methods handler so the caller can register
+// per-channel-type orphan cleaners (e.g. Bitrix24 imbot.unregister) after
+// per-channel dependencies (portal store, encryption key) are in scope.
+func wireChannelRPCMethods(server *gateway.Server, pgStores *store.Stores, channelMgr *channels.Manager, agentRouter *agent.Router, msgBus *bus.MessageBus, dataDir string) *methods.ChannelInstancesMethods {
 	// Register channels RPC methods (after channelMgr is initialized with all channels)
 	methods.NewChannelsMethods(channelMgr).Register(server.Router())
 
 	// Register channel instances WS RPC methods
+	var chInstancesM *methods.ChannelInstancesMethods
 	if pgStores.ChannelInstances != nil {
-		methods.NewChannelInstancesMethods(pgStores.ChannelInstances, pgStores.Agents, msgBus, msgBus).Register(server.Router())
+		chInstancesM = methods.NewChannelInstancesMethods(pgStores.ChannelInstances, pgStores.Agents, msgBus, msgBus, channelMgr)
+		chInstancesM.Register(server.Router())
 		zalomethods.NewQRMethods(pgStores.ChannelInstances, msgBus).Register(server.Router())
 		zalomethods.NewContactsMethods(pgStores.ChannelInstances).Register(server.Router())
 		whatsapp.NewQRMethods(pgStores.ChannelInstances, channelMgr).Register(server.Router())
@@ -166,6 +171,8 @@ func wireChannelRPCMethods(server *gateway.Server, pgStores *store.Stores, chann
 	if pgStores.Teams != nil {
 		methods.NewTeamsMethods(pgStores.Teams, pgStores.Agents, pgStores.AgentLinks, agentRouter, msgBus, msgBus, dataDir).Register(server.Router())
 	}
+
+	return chInstancesM
 }
 
 // wireChannelEventSubscribers sets up event subscribers for channel instance cache invalidation,

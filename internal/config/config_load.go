@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -12,6 +14,54 @@ import (
 
 	"github.com/titanous/json5"
 )
+
+const GatewayAllowInsecureNoAuthEnv = "GOCLAW_ALLOW_INSECURE_NO_AUTH"
+
+// GatewayNoAuthFallbackAllowed reports whether empty-token gateway auth may
+// run in local/dev compatibility mode.
+func GatewayNoAuthFallbackAllowed(g GatewayConfig) bool {
+	if strings.TrimSpace(g.Token) != "" {
+		return false
+	}
+	if insecureNoAuthOptIn() {
+		return true
+	}
+	return isLoopbackGatewayHost(g.Host)
+}
+
+// ValidateGatewayAuth fails configurations that would expose the gateway
+// without any bearer token.
+func ValidateGatewayAuth(g GatewayConfig) error {
+	if strings.TrimSpace(g.Token) != "" || GatewayNoAuthFallbackAllowed(g) {
+		return nil
+	}
+	return fmt.Errorf("gateway token is required when GOCLAW_HOST=%q; set GOCLAW_GATEWAY_TOKEN or explicit %s=1 for local development only", g.Host, GatewayAllowInsecureNoAuthEnv)
+}
+
+func insecureNoAuthOptIn() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(GatewayAllowInsecureNoAuthEnv))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
+func isLoopbackGatewayHost(host string) bool {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return false
+	}
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.Trim(host, "[]")
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	addr, err := netip.ParseAddr(host)
+	return err == nil && addr.IsLoopback()
+}
 
 // Default returns a Config with sensible defaults.
 func Default() *Config {
@@ -109,6 +159,14 @@ func (c *Config) applyEnvOverrides() {
 	envStr("GOCLAW_OLLAMA_HOST", &c.Providers.Ollama.Host)
 	envStr("GOCLAW_OLLAMA_CLOUD_API_KEY", &c.Providers.OllamaCloud.APIKey)
 	envStr("GOCLAW_OLLAMA_CLOUD_API_BASE", &c.Providers.OllamaCloud.APIBase)
+	// Google Cloud Vertex AI (OAuth2 service account + ADC).
+	// APIKey may hold inline SA JSON; CredentialsFile is a path to SA JSON.
+	// If both empty, ADC (GOOGLE_APPLICATION_CREDENTIALS / gcloud / GCE metadata) is used.
+	envStr("GOCLAW_VERTEX_API_KEY", &c.Providers.Vertex.APIKey)
+	envStr("GOCLAW_VERTEX_CREDENTIALS_FILE", &c.Providers.Vertex.CredentialsFile)
+	envStr("GOCLAW_VERTEX_PROJECT_ID", &c.Providers.Vertex.ProjectID)
+	envStr("GOCLAW_VERTEX_REGION", &c.Providers.Vertex.Region)
+	envStr("GOCLAW_VERTEX_MODEL", &c.Providers.Vertex.Model)
 	envStr("GOCLAW_GATEWAY_TOKEN", &c.Gateway.Token)
 	envStr("GOCLAW_TELEGRAM_TOKEN", &c.Channels.Telegram.Token)
 	envStr("GOCLAW_DISCORD_TOKEN", &c.Channels.Discord.Token)
@@ -276,7 +334,6 @@ func (c *Config) applyEnvOverrides() {
 		c.Tools.Browser.Enabled = true
 	}
 }
-
 
 // Save writes the config to a JSON file.
 func Save(path string, cfg *Config) error {

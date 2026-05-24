@@ -183,7 +183,8 @@ func (m *Manager) Start(ctx context.Context) error {
 			errs = append(errs, fmt.Sprintf("%s: %v", name, err))
 			continue
 		}
-		if err := m.connectServer(ctx, name, cfg.Transport, cfg.Command, cfg.Args, cfg.Env, cfg.URL, headers, cfg.ToolPrefix, cfg.TimeoutSec, uuid.Nil); err != nil {
+		// Config-path servers have no DB-backed Settings, so no tool hints.
+		if err := m.connectServer(ctx, name, cfg.Transport, cfg.Command, cfg.Args, cfg.Env, cfg.URL, headers, cfg.ToolPrefix, cfg.TimeoutSec, uuid.Nil, ToolHints{}); err != nil {
 			slog.Warn("mcp.server.connect_failed", "server", name, "error", err)
 			errs = append(errs, fmt.Sprintf("%s: %v", name, err))
 		}
@@ -288,19 +289,20 @@ func (m *Manager) resolveServerCredentials(ctx context.Context, info store.MCPAc
 // and applies tool allow/deny filtering from server grants.
 func (m *Manager) connectAndFilter(ctx context.Context, rs *resolvedServer) error {
 	srv := rs.info.Server
+	hints := ParseToolHints(srv.Settings)
 
 	if m.pool != nil && !rs.hasUserCreds {
 		// Pool mode: acquire shared connection, create per-agent BridgeTools
 		tid := store.TenantIDFromContext(ctx)
 		if err := m.connectViaPool(ctx, tid, srv.Name, srv.Transport, srv.Command,
-			rs.args, rs.env, srv.URL, rs.headers, srv.ToolPrefix, srv.TimeoutSec, srv.ID); err != nil {
+			rs.args, rs.env, srv.URL, rs.headers, srv.ToolPrefix, srv.TimeoutSec, srv.ID, hints); err != nil {
 			return err
 		}
 	} else {
 		// Per-agent mode: create per-agent connection
 		if err := m.connectServer(ctx, srv.Name, srv.Transport, srv.Command,
 			rs.args, rs.env, srv.URL, rs.headers,
-			srv.ToolPrefix, srv.TimeoutSec, srv.ID); err != nil {
+			srv.ToolPrefix, srv.TimeoutSec, srv.ID, hints); err != nil {
 			return err
 		}
 	}
@@ -594,4 +596,44 @@ func requireUserCreds(settings json.RawMessage) bool {
 	}
 	_ = json.Unmarshal(settings, &s)
 	return s.RequireUserCredentials
+}
+
+// ToolHints carries admin-authored description hints for MCP tools.
+// Stored under MCPServerData.Settings.tool_hints as JSONB:
+//
+//	{
+//	  "tool_hints": {
+//	    "global": "...",
+//	    "tools": { "<tool_name>": "..." }
+//	  }
+//	}
+//
+// The hints are appended to a tool's description so the LLM sees server-specific
+// quirks (e.g. "no trailing semicolons in code args") without modifying the MCP
+// server itself. Empty Global/Tools render no suffix.
+type ToolHints struct {
+	Global string            `json:"global,omitempty"`
+	Tools  map[string]string `json:"tools,omitempty"`
+}
+
+// ParseToolHints extracts tool description hints from an MCP server's Settings JSONB.
+// Returns a zero-value ToolHints (no hints) if settings are empty or malformed.
+// Safe to call with nil — never panics.
+func ParseToolHints(settings json.RawMessage) ToolHints {
+	if len(settings) == 0 {
+		return ToolHints{}
+	}
+	var s struct {
+		ToolHints ToolHints `json:"tool_hints"`
+	}
+	_ = json.Unmarshal(settings, &s)
+	return s.ToolHints
+}
+
+// HintFor returns the per-tool hint for toolName, or empty string if none.
+func (h ToolHints) HintFor(toolName string) string {
+	if h.Tools == nil {
+		return ""
+	}
+	return h.Tools[toolName]
 }

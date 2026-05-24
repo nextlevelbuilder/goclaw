@@ -2,8 +2,11 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -15,22 +18,38 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
+// argMapKeys returns sorted top-level keys of a tool argument map for log
+// correlation. Keys only — values may contain PII (per-tool semantics).
+// Returns empty string for nil/empty maps to keep log line tidy.
+func argMapKeys(m map[string]any) string {
+	if len(m) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, ",")
+}
+
 // BridgeTool adapts an MCP tool into the tools.Tool interface.
 // It delegates Execute calls to the MCP server via the client.
 // The client pointer is loaded atomically from clientPtr to support
 // safe reconnection without data races.
 type BridgeTool struct {
-	serverName     string
-	serverID       uuid.UUID    // MCP server ID (for grant recheck)
-	toolName       string       // original MCP tool name
-	registeredName string       // may include prefix: "{prefix}__{toolName}"
-	description    string
-	inputSchema    map[string]any // JSON Schema for parameters
-	requiredSet    map[string]bool
-	clientPtr      *atomic.Pointer[mcpclient.Client] // shared with serverState for atomic swap on reconnect
-	timeoutSec     int
-	connected      *atomic.Bool
-	grantChecker   GrantChecker // for runtime grant recheck (nil = skip check)
+	serverName        string
+	serverID          uuid.UUID    // MCP server ID (for grant recheck)
+	toolName          string       // original MCP tool name
+	registeredName    string       // may include prefix: "{prefix}__{toolName}"
+	description       string
+	descriptionSuffix string         // admin-authored hints appended to description (see WithHints)
+	inputSchema       map[string]any // JSON Schema for parameters
+	requiredSet       map[string]bool
+	clientPtr         *atomic.Pointer[mcpclient.Client] // shared with serverState for atomic swap on reconnect
+	timeoutSec        int
+	connected         *atomic.Bool
+	grantChecker      GrantChecker // for runtime grant recheck (nil = skip check)
 }
 
 // NewBridgeTool creates a BridgeTool from an MCP Tool definition.
@@ -92,9 +111,41 @@ func ensureMCPPrefix(prefix, serverName string) string {
 	return prefix
 }
 
-func (t *BridgeTool) Name() string               { return t.registeredName }
-func (t *BridgeTool) Description() string        { return t.description }
+func (t *BridgeTool) Name() string { return t.registeredName }
+func (t *BridgeTool) Description() string {
+	if t.descriptionSuffix == "" {
+		return t.description
+	}
+	return t.description + t.descriptionSuffix
+}
 func (t *BridgeTool) Parameters() map[string]any { return t.inputSchema }
+
+// WithHints attaches admin-authored description hints to this tool. Hints are
+// appended to Description() so the LLM sees server-specific quirks (e.g. "no
+// trailing semicolons in code args") without modifying the upstream MCP server.
+// Empty global and toolHint render no suffix. Returns t for chaining.
+//
+// Wire hints from MCPServerData.Settings via ParseToolHints:
+//
+//	hints := ParseToolHints(srv.Settings)
+//	bt := NewBridgeTool(...).WithHints(hints.Global, hints.HintFor(mcpTool.Name))
+func (t *BridgeTool) WithHints(global, toolHint string) *BridgeTool {
+	g := strings.TrimSpace(global)
+	h := strings.TrimSpace(toolHint)
+	if g == "" && h == "" {
+		t.descriptionSuffix = ""
+		return t
+	}
+	var parts []string
+	if g != "" {
+		parts = append(parts, "[Server hint] "+g)
+	}
+	if h != "" {
+		parts = append(parts, "[Tool hint] "+h)
+	}
+	t.descriptionSuffix = "\n\n" + strings.Join(parts, "\n\n")
+	return t
+}
 
 // ServerName returns the name of the MCP server this tool belongs to.
 func (t *BridgeTool) ServerName() string { return t.serverName }
@@ -104,6 +155,20 @@ func (t *BridgeTool) OriginalName() string { return t.toolName }
 
 // IsConnected returns whether the underlying MCP server connection is healthy.
 func (t *BridgeTool) IsConnected() bool { return t.connected.Load() }
+
+// isUnauthorizedErr detects HTTP 401 responses bubbled up through the mcp-go
+// streamable-http transport. The transport surfaces HTTP errors as wrapped
+// Go errors with the status code in the message; check both common phrasings.
+func isUnauthorizedErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "unauthorized (401)") ||
+		strings.Contains(msg, "401 unauthorized") ||
+		strings.Contains(msg, "status code 401") ||
+		strings.Contains(msg, "http 401")
+}
 
 func (t *BridgeTool) Execute(ctx context.Context, args map[string]any) *tools.Result {
 	// Recheck grant before execution — defense against revoked grants
@@ -136,18 +201,57 @@ func (t *BridgeTool) Execute(ctx context.Context, args map[string]any) *tools.Re
 	req.Params.Name = t.toolName
 	req.Params.Arguments = cleanedArgs
 
+	// C5 (Phase 4): structured outbound log so operators can correlate tool
+	// calls with mcp-bx-syn audit logs / Bitrix REST traces. user_id comes
+	// from ctx (resolved by agent loop via resolveActorUserID). Args size
+	// only — never log args content (may contain PII per tool).
+	callStart := time.Now()
+	slog.Debug("mcp.tool.call.outbound",
+		"server", t.serverName,
+		"tool", t.registeredName,
+		"user_id", store.UserIDFromContext(ctx),
+		"agent_id", store.AgentIDFromContext(ctx),
+		"args_keys", argMapKeys(cleanedArgs),
+	)
+
 	result, err := client.CallTool(callCtx, req)
+	latencyMs := time.Since(callStart).Milliseconds()
 	if err != nil {
 		if errors.Is(callCtx.Err(), context.DeadlineExceeded) {
 			return tools.ErrorResult(fmt.Sprintf("MCP tool %q timeout after %ds", t.registeredName, t.timeoutSec))
 		}
+		// C4 fix: detect 401 Unauthorized from MCP transport. Flip connected=false
+		// so the next user event triggers getUserMCPTools to clear the cache and
+		// re-acquire — which (in loop_mcp_user.go) detects the same 401 against
+		// the fresh pool and purges DeleteUserCredentials → next-next event auto
+		// re-onboards via provisioner. Without this flip, BridgeTool would keep
+		// hitting the revoked api_key on every retry until pool idle-evicts (15m).
+		if isUnauthorizedErr(err) {
+			t.connected.Store(false)
+			slog.Warn("mcp.tool.call.auth_expired",
+				"server", t.serverName, "tool", t.registeredName,
+				"user_id", store.UserIDFromContext(ctx),
+				"latency_ms", latencyMs)
+			return tools.ErrorResult(fmt.Sprintf("MCP tool %q: credential expired, please retry", t.registeredName))
+		}
+		slog.Warn("mcp.tool.call.error",
+			"server", t.serverName, "tool", t.registeredName,
+			"user_id", store.UserIDFromContext(ctx),
+			"latency_ms", latencyMs, "error", err.Error())
 		return tools.ErrorResult(fmt.Sprintf("MCP tool %q error: %v", t.registeredName, err))
 	}
+	slog.Debug("mcp.tool.call.done",
+		"server", t.serverName, "tool", t.registeredName,
+		"user_id", store.UserIDFromContext(ctx),
+		"latency_ms", latencyMs, "is_error", result.IsError)
 
 	text := extractTextContent(result)
 
 	if result.IsError {
 		return tools.ErrorResult(text)
+	}
+	if msg, ok := detectLogicalErrorPayload(text); ok {
+		return tools.ErrorResult(msg)
 	}
 
 	// Wrap MCP tool results as external/untrusted content to prevent prompt injection.
@@ -246,6 +350,25 @@ func isPlaceholderValue(s string) bool {
 		return true
 	}
 	return false
+}
+
+// detectLogicalErrorPayload upgrades successful transport responses that contain
+// tool-level JSON errors (common pattern: {"error":"..."}).
+func detectLogicalErrorPayload(text string) (string, bool) {
+	raw := strings.TrimSpace(text)
+	if raw == "" || (!strings.HasPrefix(raw, "{") && !strings.HasPrefix(raw, "[")) {
+		return "", false
+	}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(raw), &m); err != nil {
+		return "", false
+	}
+	if v, ok := m["error"]; ok {
+		if s := strings.TrimSpace(fmt.Sprint(v)); s != "" && s != "<nil>" {
+			return s, true
+		}
+	}
+	return "", false
 }
 
 // isAllCapsPlaceholder detects LLM-generated all-caps placeholder strings

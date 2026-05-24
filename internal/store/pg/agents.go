@@ -3,6 +3,7 @@ package pg
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -93,7 +94,7 @@ const agentSelectCols = `id, agent_key, display_name, frontmatter, owner_id, pro
 		 emoji, agent_description, thinking_level, max_tokens,
 		 self_evolve, skill_evolve, skill_nudge_interval,
 		 reasoning_config, workspace_sharing, chatgpt_oauth_routing,
-		 shell_deny_groups, kg_dedup_config,
+		 model_fallback, shell_deny_groups, kg_dedup_config,
 		 agent_type, is_default, status, budget_monthly_cents, created_at, updated_at, tenant_id`
 
 func (s *PGAgentStore) Create(ctx context.Context, agent *store.AgentData) error {
@@ -115,10 +116,10 @@ func (s *PGAgentStore) Create(ctx context.Context, agent *store.AgentData) error
 		 emoji, agent_description, thinking_level, max_tokens,
 		 self_evolve, skill_evolve, skill_nudge_interval,
 		 reasoning_config, workspace_sharing, chatgpt_oauth_routing,
-		 shell_deny_groups, kg_dedup_config,
+		 model_fallback, shell_deny_groups, kg_dedup_config,
 		 agent_type, is_default, status, budget_monthly_cents, created_at, updated_at, tenant_id)
 		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,
-		         $19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37)`,
+		         $19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38)`,
 		agent.ID, agent.AgentKey, agent.DisplayName, sql.NullString{String: agent.Frontmatter, Valid: agent.Frontmatter != ""}, agent.OwnerID, agent.Provider, agent.Model,
 		agent.ContextWindow, agent.MaxToolIterations, agent.Workspace, agent.RestrictToWorkspace,
 		jsonOrEmpty(agent.ToolsConfig), jsonOrNull(agent.SandboxConfig), jsonOrNull(agent.SubagentsConfig), jsonOrNull(agent.MemoryConfig),
@@ -126,7 +127,7 @@ func (s *PGAgentStore) Create(ctx context.Context, agent *store.AgentData) error
 		agent.Emoji, agent.AgentDescription, agent.ThinkingLevel, agent.MaxTokens,
 		agent.SelfEvolve, agent.SkillEvolve, agent.SkillNudgeInterval,
 		jsonOrEmpty(agent.ReasoningConfig), jsonOrEmpty(agent.WorkspaceSharing), jsonOrEmpty(agent.ChatGPTOAuthRouting),
-		jsonOrEmpty(agent.ShellDenyGroups), jsonOrEmpty(agent.KGDedupConfig),
+		jsonOrEmpty(agent.ModelFallback), jsonOrEmpty(agent.ShellDenyGroups), jsonOrEmpty(agent.KGDedupConfig),
 		agent.AgentType, agent.IsDefault, agent.Status, agent.BudgetMonthlyCents, now, now, tenantID,
 	)
 	if err != nil {
@@ -207,8 +208,8 @@ func (s *PGAgentStore) Update(ctx context.Context, id uuid.UUID, updates map[str
 		}
 	}
 	// NOT NULL JSONB columns: null → empty object.
-	for _, col := range []string{"other_config", "tools_config", "chatgpt_oauth_routing", "reasoning_config", "workspace_sharing", "shell_deny_groups", "kg_dedup_config"} {
-		if v, ok := updates[col]; ok && v == nil {
+	for _, col := range []string{"other_config", "tools_config", "chatgpt_oauth_routing", "model_fallback", "reasoning_config", "workspace_sharing", "shell_deny_groups", "kg_dedup_config"} {
+		if v, ok := updates[col]; ok && isEmptyOrNullJSONUpdate(v) {
 			updates[col] = []byte("{}")
 		}
 	}
@@ -259,6 +260,22 @@ func (s *PGAgentStore) Update(ctx context.Context, id uuid.UUID, updates map[str
 		}()
 	}
 	return nil
+}
+
+func isEmptyOrNullJSONUpdate(v any) bool {
+	if v == nil {
+		return true
+	}
+	switch data := v.(type) {
+	case json.RawMessage:
+		return len(data) == 0 || strings.TrimSpace(string(data)) == "null"
+	case []byte:
+		return len(data) == 0 || strings.TrimSpace(string(data)) == "null"
+	case string:
+		return strings.TrimSpace(data) == "" || strings.TrimSpace(data) == "null"
+	default:
+		return false
+	}
 }
 
 func (s *PGAgentStore) Delete(ctx context.Context, id uuid.UUID) error {
@@ -496,13 +513,13 @@ func scanAgentRow(row agentRowScanner) (*store.AgentData, error) {
 	var frontmatter sql.NullString
 	// pgx: scan nullable JSONB into *[]byte (NOT *json.RawMessage — pgx can't scan NULL into defined types)
 	var toolsCfg, sandboxCfg, subagentsCfg, memoryCfg, compactionCfg, pruningCfg, otherCfg *[]byte
-	var reasoningCfg, wsCfg, oauthCfg, shellCfg, kgCfg *[]byte
+	var reasoningCfg, wsCfg, oauthCfg, fallbackCfg, shellCfg, kgCfg *[]byte
 	err := row.Scan(&d.ID, &d.AgentKey, &d.DisplayName, &frontmatter, &d.OwnerID, &d.Provider, &d.Model,
 		&d.ContextWindow, &d.MaxToolIterations, &d.Workspace, &d.RestrictToWorkspace,
 		&toolsCfg, &sandboxCfg, &subagentsCfg, &memoryCfg, &compactionCfg, &pruningCfg, &otherCfg,
 		&d.Emoji, &d.AgentDescription, &d.ThinkingLevel, &d.MaxTokens,
 		&d.SelfEvolve, &d.SkillEvolve, &d.SkillNudgeInterval,
-		&reasoningCfg, &wsCfg, &oauthCfg, &shellCfg, &kgCfg,
+		&reasoningCfg, &wsCfg, &oauthCfg, &fallbackCfg, &shellCfg, &kgCfg,
 		&d.AgentType, &d.IsDefault, &d.Status, &d.BudgetMonthlyCents, &d.CreatedAt, &d.UpdatedAt, &d.TenantID)
 	if err != nil {
 		return nil, err
@@ -540,6 +557,9 @@ func scanAgentRow(row agentRowScanner) (*store.AgentData, error) {
 	}
 	if oauthCfg != nil {
 		d.ChatGPTOAuthRouting = *oauthCfg
+	}
+	if fallbackCfg != nil {
+		d.ModelFallback = *fallbackCfg
 	}
 	if shellCfg != nil {
 		d.ShellDenyGroups = *shellCfg
@@ -633,4 +653,3 @@ func replaceIDX(s, replacement string) string {
 	}
 	return result.String()
 }
-

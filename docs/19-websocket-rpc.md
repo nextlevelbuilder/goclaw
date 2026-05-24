@@ -106,6 +106,8 @@ Send a message to an agent and trigger execution.
 
 When `stream: true`, intermediate events are emitted: `chunk`, `tool.call`, `tool.result`, `run.started`, `run.completed`.
 
+Rapid text-only `chat.send` requests for the same user and session are debounced by `gateway.inbound_debounce_ms`: `0` uses the 1000ms default and `-1` disables debounce. The merged message keeps request params from the latest send and joins text with newlines. Cancel keywords bypass debounce and abort the active run immediately. Media sends bypass the wait window and drain any pending text into the same dispatch.
+
 ### `chat.history`
 
 Retrieve chat history for a session.

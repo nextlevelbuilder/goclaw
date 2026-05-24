@@ -3,8 +3,10 @@ package skills
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -409,6 +411,37 @@ func TestListInstalledPackages_HasThreeCategories(t *testing.T) {
 	// Just verify the struct itself is not nil
 	if result == nil {
 		t.Error("ListInstalledPackages returned nil")
+	}
+}
+
+func TestListDebianUserPackagesShowsRequestedAliasName(t *testing.T) {
+	t.Setenv("RUNTIME_DIR", t.TempDir())
+	overrideAlpineRuntime(false)
+	t.Cleanup(func() { overrideAlpineRuntime(false) })
+
+	if err := addSystemPackageRecord("github-cli", "gh", "apt"); err != nil {
+		t.Fatalf("addSystemPackageRecord: %v", err)
+	}
+
+	orig := packageListCommandCombinedOutput
+	packageListCommandCombinedOutput = func(_ context.Context, name string, args ...string) ([]byte, error) {
+		if name != "dpkg-query" {
+			return nil, errors.New("unexpected command")
+		}
+		wantArgs := []string{"-W", "-f=${Version}", "gh"}
+		if !reflect.DeepEqual(args, wantArgs) {
+			t.Fatalf("args = %#v, want %#v", args, wantArgs)
+		}
+		return []byte("2.72.0-1\n"), nil
+	}
+	t.Cleanup(func() { packageListCommandCombinedOutput = orig })
+
+	got := listDebianUserPackages(context.Background())
+	if len(got) != 1 {
+		t.Fatalf("got %d packages, want 1: %#v", len(got), got)
+	}
+	if got[0].Name != "github-cli" || got[0].Version != "2.72.0-1" {
+		t.Fatalf("package = %#v, want github-cli 2.72.0-1", got[0])
 	}
 }
 

@@ -216,7 +216,7 @@ func TestParseAndValidatePackage_BodySizeLimit(t *testing.T) {
 
 // TestNewPackagesHandler creates a handler.
 func TestNewPackagesHandler(t *testing.T) {
-	h := NewPackagesHandler()
+	h := NewPackagesHandler(nil, nil)
 	if h == nil {
 		t.Fatal("NewPackagesHandler() returned nil")
 	}
@@ -224,7 +224,7 @@ func TestNewPackagesHandler(t *testing.T) {
 
 // TestPackagesHandler_RegisterRoutes ensures routes are registered without panic.
 func TestPackagesHandler_RegisterRoutes(t *testing.T) {
-	h := NewPackagesHandler()
+	h := NewPackagesHandler(nil, nil)
 	mux := http.NewServeMux()
 
 	// Should not panic

@@ -588,6 +588,7 @@ type RunRequest struct {
 	ForwardMedia      []bus.MediaFile    // media files to forward to output (from delegation results)
 	Channel           string             // source channel instance name (e.g. "my-telegram-bot")
 	ChannelType       string             // platform type (e.g. "zalo_personal", "telegram") — for system prompt context
+	BitrixPortalDomain string            // bitrix24-only: portal domain (e.g. "tamgiac.bitrix24.com") for entity URL construction
 	ChatTitle         string             // group chat display name (e.g. Telegram group title)
 	ChatID            string             // source chat ID
 	PeerKind          string             // "direct" or "group" (for session key building and tool context)

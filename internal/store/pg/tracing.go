@@ -121,6 +121,11 @@ func buildTraceWhere(ctx context.Context, opts store.TraceListOpts) (string, []a
 		args = append(args, opts.Channel)
 		argIdx++
 	}
+	if opts.ChangedAfter != nil {
+		conditions = append(conditions, fmt.Sprintf("(created_at > $%d OR end_time > $%d OR status = $%d)", argIdx, argIdx, argIdx+1))
+		args = append(args, *opts.ChangedAfter, store.TraceStatusRunning)
+		argIdx += 2
+	}
 
 	where := ""
 	if len(conditions) > 0 {

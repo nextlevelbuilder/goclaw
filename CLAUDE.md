@@ -44,7 +44,7 @@ internal/
 ├── orchestration/            Orchestration primitives: BatchQueue[T] generic, ChildResult, media conversion (v3)
 ├── permissions/              RBAC (admin/operator/viewer)
 ├── pipeline/                 8-stage agent pipeline (context→history→prompt→think→act→observe→memory→summarize)
-├── providers/                LLM providers: Anthropic (native HTTP+SSE), OpenAI-compat (HTTP+SSE), DashScope (Alibaba Qwen), Claude CLI (stdio+MCP bridge), ACP (Anthropic Console Proxy), Codex (OpenAI)
+├── providers/                LLM providers: Anthropic (native HTTP+SSE), OpenAI-compat (HTTP+SSE), DashScope (Alibaba Qwen), Claude CLI (stdio+MCP bridge), ACP (Anthropic Console Proxy), Codex (OpenAI), Vertex AI (GCP OAuth2 + OpenAI-compat)
 ├── providerresolve/          Provider adapter + model registry with forward-compat resolver
 ├── sandbox/                  Docker-based code execution sandbox
 ├── scheduler/                Lane-based concurrency (main/subagent/cron)
@@ -76,7 +76,7 @@ ui/desktop/                   Wails v2 desktop app (React frontend + embedded ga
 - **Agent types:** `open` (per-user context, 7 files) vs `predefined` (shared context + USER.md per-user)
 - **Agent identity:** Dual-identity pattern (agent_key vs UUID) applies to agents, teams, tenants. Rule: UUID for DB/FK/events, agent_key for logs/paths/UI. See `docs/agent-identity-conventions.md`
 - **Context files:** `agent_context_files` (agent-level) + `user_context_files` (per-user), routed via `ContextFileInterceptor`
-- **Providers:** Anthropic (native HTTP+SSE), OpenAI-compat (HTTP+SSE), DashScope (Alibaba Qwen), Claude CLI (stdio+MCP bridge), ACP (Anthropic Console Proxy), Codex (OpenAI). All use `RetryDo()` for retries. Loads from `llm_providers` table with encrypted API keys. ProviderAdapter enables pluggable implementations with ModelRegistry forward-compat resolver. Shared SSEScanner in `providers/sse_reader.go` for streaming providers
+- **Providers:** Anthropic (native HTTP+SSE), OpenAI-compat (HTTP+SSE), DashScope (Alibaba Qwen), Claude CLI (stdio+MCP bridge), ACP (Anthropic Console Proxy), Codex (OpenAI), Vertex AI (GCP OAuth2 service account or ADC + OpenAI-compat endpoint, `internal/providers/vertex.go`). All use `RetryDo()` for retries. Loads from `llm_providers` table with encrypted API keys. ProviderAdapter enables pluggable implementations with ModelRegistry forward-compat resolver. Shared SSEScanner in `providers/sse_reader.go` for streaming providers
 - **Pipeline:** 8-stage loop (context→history→prompt→think→act→observe→memory→summarize) with pluggable callbacks, always-on execution path
 - **DomainEventBus:** Typed events with worker pool, dedup, retry. Used by consolidation pipeline and memory workers
 - **3-tier memory:** Working (conversation) → Episodic (session summaries) → Semantic (KG). Progressive loading L0/L1/L2 with auto-inject for L0
@@ -123,6 +123,7 @@ make desktop-dmg VERSION=0.1.0               # Create .dmg installer (macOS only
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
 | `ci.yaml` | push main, PR→main/dev | Go build+test+vet, Web build |
+| `dev-beta-release.yaml` | push dev | Go build+test+vet, Web build, semantic beta prerelease, beta Docker, zuey VPS deploy |
 | `release.yaml` | tag `v[0-9]+.[0-9]+.[0-9]+` | Binaries + Docker (4 variants + web) + Discord |
 | `release-beta.yaml` | tag `v*-beta*` / `v*-rc*` | Beta binaries + Docker + GitHub prerelease |
 | `release-desktop.yaml` | tag `lite-v*` | Desktop app (macOS+Windows), auto prerelease for `-beta`/`-rc` tags |
@@ -136,7 +137,8 @@ git tag v3.0.0 && git push origin v3.0.0
 
 **Beta release** (from dev):
 ```bash
-git tag v2.67.0-beta.1 && git push origin v2.67.0-beta.1   # standard beta
+git push origin dev                                         # auto beta via CI
+git tag v2.67.0-beta.1 && git push origin v2.67.0-beta.1   # manual/backfill beta
 git tag lite-v1.2.0-beta.1 && git push origin lite-v1.2.0-beta.1  # lite beta
 ```
 
@@ -163,9 +165,10 @@ OTel and Tailscale variants are not pre-built — build from source with the app
 ### Tag Pattern Safety
 
 - `release.yaml`: tag-triggered (`v[0-9]+.[0-9]+.[0-9]+`) — clean semver only, no beta/rc
+- `dev-beta-release.yaml`: branch-triggered on `dev`; creates `vX.Y.Z-beta.N` tags after CI passes, then deploys that tag to zuey via the protected gateway upgrade endpoint
 - `release-beta.yaml`: tag-triggered (`v*-beta*`, `v*-rc*`) — never matches clean semver
 - `release-desktop.yaml`: tag-triggered (`lite-v*`) — `lite-` prefix prevents overlap
-- No workflow triggers overlap — each tag pattern is distinct. Merging to `main` only triggers CI, not release
+- Stable and desktop tag patterns remain distinct. `dev` branch pushes create beta releases only after CI passes
 
 ## Desktop Edition (Lite)
 

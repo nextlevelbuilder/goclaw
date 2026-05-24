@@ -2,6 +2,8 @@ package tools
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -203,5 +205,92 @@ func TestMatchesBinaryDenyJoinedArgs(t *testing.T) {
 				t.Errorf("matchesBinaryDeny(%v) = %q, wantHit=%v", tt.args, got, tt.wantHit)
 			}
 		})
+	}
+}
+
+func TestResolveAndMatchBinaryUsesConfiguredExecutablePath(t *testing.T) {
+	t.Setenv("PATH", "/usr/bin")
+	binDir := t.TempDir()
+	binaryPath := filepath.Join(binDir, "openrouter")
+	if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := resolveAndMatchBinary("openrouter", &binaryPath)
+	if err != nil {
+		t.Fatalf("resolveAndMatchBinary returned error: %v", err)
+	}
+	if got != binaryPath {
+		t.Fatalf("path = %q, want %q", got, binaryPath)
+	}
+}
+
+func TestResolveAndMatchBinaryAllowsConfiguredAliasPath(t *testing.T) {
+	runtimeDir := t.TempDir()
+	t.Setenv("RUNTIME_DIR", runtimeDir)
+	t.Setenv("NPM_CONFIG_PREFIX", "")
+	t.Setenv("PATH", "/usr/bin")
+
+	pkgDir := filepath.Join(runtimeDir, "npm-global", "lib", "node_modules", "openrouter-cli")
+	if err := os.MkdirAll(pkgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := []byte(`{"name":"openrouter-cli","bin":{"orc":"dist/index.js"}}`)
+	if err := os.WriteFile(filepath.Join(pkgDir, "package.json"), manifest, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	binDir := filepath.Join(runtimeDir, "npm-global", "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	binaryPath := filepath.Join(binDir, "orc")
+	if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := resolveAndMatchBinary("openrouter", &binaryPath)
+	if err != nil {
+		t.Fatalf("resolveAndMatchBinary returned error: %v", err)
+	}
+	if got != binaryPath {
+		t.Fatalf("path = %q, want %q", got, binaryPath)
+	}
+}
+
+func TestResolveAndMatchBinaryRejectsArbitraryConfiguredPath(t *testing.T) {
+	t.Setenv("PATH", "/usr/bin")
+	binDir := t.TempDir()
+	binaryPath := filepath.Join(binDir, "sh")
+	if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := resolveAndMatchBinary("openrouter", &binaryPath); err == nil {
+		t.Fatalf("resolveAndMatchBinary accepted arbitrary mismatched path")
+	}
+}
+
+func TestResolveAndMatchBinaryFallsBackToRuntimeExecutableDirs(t *testing.T) {
+	runtimeDir := t.TempDir()
+	t.Setenv("RUNTIME_DIR", runtimeDir)
+	t.Setenv("NPM_CONFIG_PREFIX", "")
+	t.Setenv("PATH", "/usr/bin")
+
+	binDir := filepath.Join(runtimeDir, "npm-global", "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	binaryPath := filepath.Join(binDir, "openrouter")
+	if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := resolveAndMatchBinary("openrouter", nil)
+	if err != nil {
+		t.Fatalf("resolveAndMatchBinary returned error: %v", err)
+	}
+	if got != binaryPath {
+		t.Fatalf("path = %q, want %q", got, binaryPath)
 	}
 }

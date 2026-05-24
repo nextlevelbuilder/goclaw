@@ -4,6 +4,268 @@ Significant changes, features, and fixes in reverse chronological order.
 
 ---
 
+## 2026-05-22
+
+### Messaging debounce hardening
+
+**Features**
+
+- Added Web Chat debounce for rapid text-only `chat.send` calls using `gateway.inbound_debounce_ms`.
+- Clarified shared inbound debounce behavior in docs and Web UI config help text.
+
+**Fixes**
+
+- Fixed Slack `debounce_delay: 0` so it disables per-thread batching instead of falling back to the default.
+
+**Tests**
+
+- Added regression coverage for channel inbound debounce, Web Chat debounce, media/cancel bypass handling, and Slack debounce config defaults.
+
+### CLI P6 backend API unblock
+
+**Features**
+
+- Added HTTP session branch and history follow endpoints for automation clients.
+- Added read-only channel writer permission testing.
+- Added split activity-log and runtime-log aggregate endpoints.
+
+**Tests**
+
+- Added focused HTTP, store, and runtime log coverage for branch/follow, writer test, activity aggregate, and LogTee ring aggregation.
+
+### CI/CD: zuey beta deploy
+
+**Features**
+
+- Added automatic zuey VPS deployment to the `Dev CI and Beta Release` workflow after beta prerelease assets are published.
+- The deploy job triggers the protected gateway upgrade endpoint with the generated `vX.Y.Z-beta.N` tag, waits for upgrade status, and verifies public `/health`.
+- Beta prereleases now upload `CHECKSUMS.sha256` alongside binary assets.
+
+**Fixes**
+
+- Updated the host release-upgrade script to support beta asset filenames with a leading `v`.
+- Added checksum fallback to GitHub release asset SHA256 digests when beta releases do not publish `CHECKSUMS.sha256`.
+- Detached gateway-triggered upgrades into a transient `systemd-run` unit so stopping `goclaw` during deploy no longer kills the upgrade job.
+- Allowed stale upgrade `running` status records to be superseded after timeout and made the zuey deploy wait loop tolerate transient 502s during restart.
+
+**Tests**
+
+- Added regression coverage for stale gateway upgrade status recovery.
+
+---
+
+## 2026-05-20
+
+### HTTP API contract hardening
+
+**Fixes**
+
+- Fixed memory API `{agentID}` handling so agent keys are resolved before storage access and invalid IDs return structured client errors instead of leaking UUID parse failures as HTTP 500.
+- Allowed system/admin API-key automation to list agents and sessions without an extra `X-GoClaw-User-Id` header while preserving user filtering for non-admin callers.
+- Added structured `/v1/*` not-found responses and a read-only `GET /v1/sessions` compatibility endpoint for automation clients.
+
+**Tests**
+
+- Added regression coverage for memory agent-key resolution, invalid memory IDs, session list auth behavior, and structured API 404s.
+
+---
+
+## 2026-05-18
+
+### Packages: GitHub installer runtime path
+
+**Fixes**
+
+- Fixed GitHub Releases package installs on bare-metal gateways by defaulting the GitHub binary directory to `{runtimeDir}/bin` instead of Docker-only `/app/data/.runtime/bin`.
+- The fix covers installs such as `github:nextlevelbuilder/goclaw-cli@v0.4.1` on the VPS, where `/app` is not writable or present.
+
+**Tests**
+
+- Added default-path regression coverage and made Unix-socket apk helper tests skip cleanly on Windows environments that cannot bind Unix sockets.
+
+---
+
+### Tools: built-in wait delay
+
+**Features**
+
+- Added a built-in `wait` tool with bounded millisecond delays, cancellation support, per-agent min/max settings, and runtime policy visibility.
+- Preserved same-response ordering by making `wait` a sequential tool-call barrier.
+- Added Web agent settings controls so per-agent wait limits are not dropped on save.
+
+**Tests**
+
+- Added focused wait validation, cancellation, policy, builtin seed, config parsing, and tool-stage ordering coverage.
+
+---
+
+### Providers: ChatGPT OAuth GPT-5.5 default
+
+**Changed**
+
+- Updated ChatGPT Subscription (OAuth) default model, provider model catalog, reasoning metadata, and docs examples to prefer `gpt-5.5`.
+
+**Tests**
+
+- Updated focused provider/model catalog, reasoning, registry, and token-window coverage for `gpt-5.5`.
+
+---
+
+### Deployment: Codex CLI service-user auth
+
+**Fixes**
+
+- Fixed agent-controlled Codex CLI auth on the VPS by ensuring the `goclaw` systemd service user has the ChatGPT login auth file under `/var/lib/goclaw/.codex/auth.json`.
+- Documented the required service-user check: `sudo -u goclaw -H codex login status`.
+
+---
+
+### Packages: npm workspace protocol fallback
+
+**Fixes**
+
+- Fixed Node package installs for registry packages published with `workspace:` dependency ranges, such as `@agenttasks/cli`.
+- GoClaw now retries npm `EUNSUPPORTEDPROTOCOL workspace:` failures by packing the registry tarball, rewriting workspace dependency ranges to published package versions, and installing the sanitized package folder.
+
+**Tests**
+
+- Added focused coverage for workspace protocol detection and package.json dependency rewrite behavior.
+
+---
+
+## 2026-05-17
+
+### Skills: agent manage grants
+
+**Fixes**
+
+- Added explicit per-agent skill manage grants so agents can edit/delete skills they were authorized to maintain even when `owner_id` no longer matches their current actor identity.
+- Auto-granted manage permission to the creating/publishing agent for new managed skills.
+
+**UI**
+
+- Show custom skill owner IDs in the Skills table.
+- Added Skills page controls to grant agent skill access and edit/delete permission.
+
+**Tests**
+
+- Added PG/SQLite grant coverage and verified Go builds plus Web UI build.
+
+---
+
+### Agents: provider switch save fix
+
+**Fixes**
+
+- Fixed agent detail save after switching provider/model when the UI clears stale ChatGPT OAuth routing; typed JSON nulls now coerce to `{}` for NOT NULL agent JSON config columns in PostgreSQL and SQLite.
+
+**Tests**
+
+- Added regression coverage for typed `json.RawMessage(nil)` / JSON `null` agent config updates.
+
+---
+
+### Deployment: VPS hybrid GoClaw setup
+
+**Operations**
+
+- Deployed GoClaw to a VPS using bare-metal `systemd` gateway plus Dockerized PostgreSQL 18 pgvector.
+- Restored the latest private PostgreSQL backup, then upgraded schema from `57` to `65`.
+- Installed Node.js 22 and Codex CLI on the host; interactive `codex --login` remains manual.
+- Configured Cloudflare-proxied deployment domain and issued SSL through Certbot/Nginx.
+- Added `goclaw-backup-r2.timer` to dump PostgreSQL every 6 hours, upload to private Cloudflare R2 storage, and retain the latest 20 backups.
+- Added deployment runbook in `docs/deployment-guide.md`.
+
+**Features**
+
+- Added a protected gateway upgrade HTTP API that triggers the fixed host-local upgrade script asynchronously.
+- Added `scripts/goclaw-upgrade-release.sh` and installed the VPS copy at `/usr/local/bin/goclaw-upgrade-release`; dry-run verifies the latest stable server release asset and checksum before deploy.
+
+---
+
+### CI/CD: dev branch beta automation
+
+**Features**
+
+- Added a `Dev CI and Beta Release` GitHub Actions workflow for `dev` pushes that runs Go and Web UI checks before publishing a beta prerelease.
+- Added semantic-release-style beta version calculation from Conventional Commits, creating `vX.Y.Z-beta.N` tags and prereleases automatically after tests pass.
+- Beta automation uploads Linux binaries and publishes `beta` Docker image tags for the same release version, with Docker Hub publishing enabled when credentials are configured.
+
+**Fixes**
+
+- Made beta prerelease publishing independent of a local checkout by passing the repository explicitly to GitHub CLI release commands.
+
+---
+
+### Agent Permissions: channel and workspace matrix
+
+**Features**
+
+- Added `config.permissions.check` so the UI can preview the effective allow/deny decision for an agent, scope, config type, and user.
+- Added Permissions UI support for `userId="*"` to grant all members in a selected group scope.
+- Documented the cross-channel agent permission matrix, including Zalo group context writes and workspace/context file boundaries.
+
+**Security**
+
+- Protected group context file writes now require a real sender with `context_files` or legacy `file_writer` permission.
+- Group file/context/cron permission-store errors now fail closed instead of silently allowing mutation.
+- Backend config permission RPCs validate config types and permission values before storing rules.
+
+**Tests**
+
+- Added focused store and context interceptor coverage for permission preview and protected group context writes.
+
+---
+
+### CLI Credentials: per-agent env vars under Packages
+
+**Features**
+
+- Kept `CLI Credentials` as the Packages tab at `/packages?tab=cli-credentials` and preserved the legacy `/cli-credentials` redirect.
+- Removed the duplicate standalone `CLI Credentials` item from the left sidebar.
+- Added focused coverage for grant env payload semantics and routing contracts.
+
+**Fixes**
+
+- Made agent-grant environment variable controls easier to find by labeling the row action and adding a visible Environment Variables header inside the grant form.
+
+**Security**
+
+- Nested agent-grant get/update/delete/reveal routes now verify the grant belongs to the binary ID in the URL.
+- Grant creation now validates both the CLI binary and target agent exist in the authenticated tenant before inserting.
+- Grant updates now validate env payloads before scalar writes, preventing partial state changes on 400 responses.
+- Runtime env precedence is covered: per-user env overrides per-agent grant env for duplicate keys.
+- Credentialed exec now fails closed if per-user env JSON is invalid.
+- SQLite add-column migrations for replayed schema snapshots now skip already-present columns.
+
+**Tests**
+
+- Focused backend, store compile, UI unit, and web build validation pass.
+- Live PostgreSQL validation skipped because `TEST_DATABASE_URL` is not set.
+
+---
+
+## 2026-05-16
+
+### Agents: per-agent model fallback
+
+**Features**
+
+- Added per-agent `model_fallback` config with ordered provider/model candidates.
+- Agent advanced config UI now supports enabling fallback, adding backup provider/model pairs, and drag-and-drop ordering.
+- Runtime wraps the resolved agent provider with fallback only for normal agent execution. Explicit provider/model overrides bypass the fallback chain.
+
+**Migrations**
+
+- **PG:** `000065_agent_model_fallback` adds `agents.model_fallback JSONB NOT NULL DEFAULT '{}'`.
+- **SQLite:** schema v33 to v34 adds `agents.model_fallback TEXT NOT NULL DEFAULT '{}'`.
+
+**Tests**
+
+- Focused provider, provider resolver, store tests pass. Main app builds in default and `sqliteonly` modes. Web production build passes.
+
+---
+
 ## v3.11.3 — 2026-04-26
 
 ### Fixes
@@ -153,6 +415,41 @@ Implementation is evidence-backed against the native ChatGPT Responses API event
 **Docs**
 
 - Updated `docs/02-providers.md` and `docs/18-http-api.md` to describe the two-strategy model and the compatibility migration.
+
+---
+
+## 2026-04-21
+
+### Webhook fixes (post-review security & idempotency hardening)
+
+**Fixes**
+
+- **K1: Auth context isolation** — Webhook auth middleware now resolves secret/HMAC signature before tenant injection (eliminating 401 due to tenant scope applied too early). Unscoped store methods `GetByHashUnscoped` + `GetByIDUnscoped` added to WebhookStore interface.
+- **K7: IP allowlist enforcement** — Inbound webhook calls now check `ip_allowlist` field (CIDR + exact IP) after bearer/HMAC auth. Empty list = allow all (back-compat). Rejected requests return HTTP 403 with log `security.webhook.ip_denied`.
+- **K8: HMAC replay protection** — Per-process nonce cache (key = `sha256(tenant_id + "|" + signature_hex)`) with 320s TTL rejects duplicate signatures within the skew window. Single-node caveat documented. Log: `security.webhook.hmac_replay`.
+- **K2: `request_payload` canonical shape** — All webhook audit rows now store `{"body_hash":"<hex64>","meta":{...}}` JSON instead of raw bytes. Idempotency checker compares body hashes to detect replays with different payloads (409 Conflict).
+- **K3: Body hash extraction** — `extractBodyHash()` now parses canonical audit payload structure (previously had parsing bugs leading to missed hash validation).
+- **K9: Invariant test column fix** — Webhook tenant isolation test now references correct schema columns (`encrypted_secret`, `lease_token`).
+- **K4: Worker slot drain** — Fixed channel leak in webhook worker that prevented slot release on successful claims. Concurrency now scales properly under load.
+- **K5: Lease-token CAS on UpdateStatus** — Stale webhook receivers can no longer overwrite delivery status. Status updates use optimistic concurrency on `lease_token` (UUID), ensuring only the owning worker can mark the call done. Prevents duplicate delivery from slow receivers.
+- **K6: HMAC signing key encryption** — Raw secret (from which `hmac_signing_key = hex(SHA-256(secret))` is derived) is now encrypted at rest via AES-256-GCM using `GOCLAW_ENCRYPTION_KEY`. Database compromise no longer = HMAC key compromise. Clients receive plaintext secret once (create/rotate response) and must store securely.
+- **K10: Shared rate limiter instance** — Fixed duplicate `webhookLimiter` instantiation causing doubled RPM enforcement. Single limiter now shared across all webhook endpoints.
+
+**Migrations**
+
+- PostgreSQL: Migration `000057` adds `lease_token` column to `webhook_calls`. Migration `000058` adds `encrypted_secret` column to `webhooks`.
+- SQLite: Schema v28 includes both new columns.
+
+**Docs**
+
+- `docs/webhooks.md`: Section 3 clarified bearer/HMAC auth contract + IP allowlist behavior. New Section 14 explains encryption at rest, key contract, DB compromise boundary.
+- `docs/00-architecture-overview.md`: Section 12 (Webhook Subsystem) updated to mention lease-token CAS semantics and secret encryption.
+
+**Environment**
+
+- `GOCLAW_ENCRYPTION_KEY` is now **required** for webhook HMAC auth. Same key also encrypts LLM provider credentials.
+
+---
 
 ## 2026-04-19
 

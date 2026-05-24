@@ -1,9 +1,20 @@
 # Test artifacts
 tests/integration/testdata/
+backup/
 
-# Binary
-openclaw-go
-pkg-helper
+# Binary (anchored to repo root so we don't accidentally ignore
+# the cmd/pkg-helper/ source directory, which breaks Docker builds
+# on uploaders that pattern-match .gitignore against the whole tree
+# — notably `railway up`).
+/openclaw-go
+/pkg-helper
+/goclaw.exe
+/goclaw-local.exe
+
+# Ad-hoc debug probes live here — never commit (they import internal/
+# packages from outside cmd/ and only exist for one-shot diagnostics).
+/tmp-reset-bot/
+/tmp-probe*/
 
 # IDE
 .idea/
@@ -91,3 +102,8 @@ compose.d/*
 *.test
 goclaw-patched-linux-amd64
 ui/web/nginx.staging.conf
+
+# Local scratchpad / one-shot artifacts (never commit)
+**/debug-*.log
+/*.sql
+scripts/docker-patch-*.sql

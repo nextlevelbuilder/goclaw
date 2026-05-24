@@ -22,7 +22,8 @@
     "discord": "Discord — Display names and usernames available automatically.",
     "zalo": "Zalo — Display names available automatically.",
     "slack": "Slack — Display names resolved via Slack API (bot must be in workspace).",
-    "feishu": "Feishu/Lark — Requires contact:user.base:readonly permission. Without this, names will be empty."
+    "feishu": "Feishu/Lark — Requires contact:user.base:readonly permission. Without this, names will be empty.",
+    "bitrix24": "Bitrix24 — Requires `user` scope + one `user.get` call per new sender. Names may be empty briefly on first message."
   },
   "selectedCount": "{{count}} selected",
   "merge": {

@@ -76,7 +76,11 @@ func TestResolvePath_TraversalBlocked(t *testing.T) {
 
 func TestResolvePath_AbsoluteEscapeBlocked(t *testing.T) {
 	ws := setupWorkspace(t)
-	_, err := resolvePath("/etc/passwd", ws, true)
+	outside := filepath.Join(t.TempDir(), "passwd")
+	if err := os.WriteFile(outside, []byte("secret"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := resolvePath(outside, ws, true)
 	if err == nil {
 		t.Fatal("expected error for absolute path outside workspace, got nil")
 	}
@@ -186,12 +190,13 @@ func TestResolvePath_NonExistentFileInWorkspace(t *testing.T) {
 func TestResolvePath_UnrestrictedAllowsEscape(t *testing.T) {
 	ws := setupWorkspace(t)
 	// restrict=false should allow any path
-	resolved, err := resolvePath("/etc/hosts", ws, false)
+	outside := filepath.Join(t.TempDir(), "hosts")
+	resolved, err := resolvePath(outside, ws, false)
 	if err != nil {
 		t.Fatalf("expected success with restrict=false, got: %v", err)
 	}
-	if resolved != "/etc/hosts" {
-		t.Fatalf("expected /etc/hosts, got: %s", resolved)
+	if resolved != filepath.Clean(outside) {
+		t.Fatalf("expected %s, got: %s", filepath.Clean(outside), resolved)
 	}
 }
 
@@ -322,15 +327,19 @@ func TestResolvePathWithAllowed_TeamWorkspaceAccess(t *testing.T) {
 }
 
 func TestIsPathInside(t *testing.T) {
+	parent := filepath.Join(t.TempDir(), "a", "b")
+	child := filepath.Join(parent, "c")
+	sibling := parent + "c"
+	other := filepath.Join(t.TempDir(), "a", "b")
 	tests := []struct {
 		child, parent string
 		want          bool
 	}{
-		{"/a/b/c", "/a/b", true},
-		{"/a/b", "/a/b", true},
-		{"/a/bc", "/a/b", false}, // not a child, just prefix match
-		{"/a", "/a/b", false},
-		{"/x/y", "/a/b", false},
+		{child, parent, true},
+		{parent, parent, true},
+		{sibling, parent, false}, // not a child, just prefix match
+		{filepath.Dir(parent), parent, false},
+		{other, parent, false},
 	}
 	for _, tt := range tests {
 		got := isPathInside(tt.child, tt.parent)
@@ -348,11 +357,11 @@ func TestIsPathInside_WindowsCaseInsensitive(t *testing.T) {
 		child, parent string
 		want          bool
 	}{
-		{`C:\Workspace\file.txt`, `c:\workspace`, true},       // case mismatch
-		{`c:\workspace\file.txt`, `C:\Workspace`, true},       // reverse case
-		{`C:\WORKSPACE\SUB\FILE`, `c:\workspace`, true},       // all caps child
-		{`D:\other`, `C:\workspace`, false},                   // different drive
-		{`C:\workspaceX\file.txt`, `C:\workspace`, false},     // prefix but not child
+		{`C:\Workspace\file.txt`, `c:\workspace`, true},   // case mismatch
+		{`c:\workspace\file.txt`, `C:\Workspace`, true},   // reverse case
+		{`C:\WORKSPACE\SUB\FILE`, `c:\workspace`, true},   // all caps child
+		{`D:\other`, `C:\workspace`, false},               // different drive
+		{`C:\workspaceX\file.txt`, `C:\workspace`, false}, // prefix but not child
 	}
 	for _, tt := range tests {
 		got := isPathInside(tt.child, tt.parent)

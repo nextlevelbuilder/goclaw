@@ -9,6 +9,7 @@ import (
 	"maps"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -114,8 +115,18 @@ func (t *ExecTool) SetSandboxKey(key string) {}
 // These are NOT configurable via deny groups — they always apply regardless of group config.
 func (t *ExecTool) DenyPaths(paths ...string) {
 	for _, p := range paths {
-		escaped := regexp.QuoteMeta(p)
-		t.pathDenyPatterns = append(t.pathDenyPatterns, regexp.MustCompile(escaped))
+		seen := make(map[string]struct{}, 3)
+		for _, variant := range []string{p, filepath.ToSlash(p), filepath.FromSlash(p)} {
+			if variant == "" {
+				continue
+			}
+			if _, ok := seen[variant]; ok {
+				continue
+			}
+			seen[variant] = struct{}{}
+			escaped := regexp.QuoteMeta(variant)
+			t.pathDenyPatterns = append(t.pathDenyPatterns, regexp.MustCompile(escaped))
+		}
 		t.pathDenyRoots = append(t.pathDenyRoots, p)
 	}
 }
@@ -194,6 +205,27 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 	// Normalize command before all deny checks: NFKC + zero-width strip prevents
 	// Unicode-based pattern bypass while preserving functional command content.
 	normalizedCommand := normalizeCommand(command)
+
+	// Credentialed exec is argv-based, not shell-based. Route it before shell
+	// deny scanning so ordinary argument text cannot be mistaken for executable
+	// shell syntax.
+	if cred, binary, cmdArgs := t.lookupCredentialedBinary(ctx, command); cred != nil {
+		cwd := ToolWorkspaceFromCtx(ctx)
+		if cwd == "" {
+			cwd = t.workspace
+		}
+		if wd, _ := args["working_dir"].(string); wd != "" {
+			if effectiveRestrict(ctx, t.restrict) {
+				if resolved, err := resolvePath(wd, t.workspace, true); err == nil {
+					cwd = resolved
+				}
+			} else {
+				cwd = wd
+			}
+		}
+		sandboxKey := ToolSandboxKeyFromCtx(ctx)
+		return t.executeCredentialed(ctx, cred, binary, cmdArgs, cwd, sandboxKey, command)
+	}
 
 	// Resolve deny patterns: merge per-agent context overrides with global
 	// config (per-key agent precedence), fallback to all registry defaults.
@@ -275,26 +307,6 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 	// Memory path hint: shell commands can't access DB-backed memory files.
 	if hint := MaybeMemoryExecHint(normalizedCommand); hint != "" {
 		return SilentResult(hint)
-	}
-
-	// Credentialed exec: if command matches a configured binary, use Direct Exec Mode.
-	// This bypasses approval (admin trust) and shell (security).
-	if cred, binary, cmdArgs := t.lookupCredentialedBinary(ctx, command); cred != nil {
-		cwd := ToolWorkspaceFromCtx(ctx)
-		if cwd == "" {
-			cwd = t.workspace
-		}
-		if wd, _ := args["working_dir"].(string); wd != "" {
-			if effectiveRestrict(ctx, t.restrict) {
-				if resolved, err := resolvePath(wd, t.workspace, true); err == nil {
-					cwd = resolved
-				}
-			} else {
-				cwd = wd
-			}
-		}
-		sandboxKey := ToolSandboxKeyFromCtx(ctx)
-		return t.executeCredentialed(ctx, cred, binary, cmdArgs, cwd, sandboxKey, command)
 	}
 
 	// Secure CLI gate: registered-but-not-granted binaries MUST NOT fall through
@@ -403,6 +415,15 @@ func matchesAny(command string, patterns []*regexp.Regexp) bool {
 	return false
 }
 
+func posixShellPath() (string, error) {
+	for _, candidate := range []string{"/bin/sh", "/usr/bin/sh"} {
+		if st, err := os.Stat(candidate); err == nil && !st.IsDir() && st.Mode()&0o111 != 0 {
+			return candidate, nil
+		}
+	}
+	return "", errors.New("no executable POSIX shell found at /bin/sh or /usr/bin/sh")
+}
+
 // executeOnHost runs a command directly on the host (original behavior).
 // ctx cancellation (e.g. agent abort) triggers SIGTERM → 3s grace → SIGKILL on the
 // entire process group so forked children are also cleaned up (no orphans).
@@ -417,7 +438,11 @@ func (t *ExecTool) executeOnHost(ctx context.Context, command, cwd string) *Resu
 	if runtime.GOOS == "windows" {
 		cmd = exec.Command("cmd", "/C", command)
 	} else {
-		cmd = exec.Command("sh", "-c", command)
+		shellPath, err := posixShellPath()
+		if err != nil {
+			return ErrorResult(err.Error())
+		}
+		cmd = exec.Command(shellPath, "-c", command)
 	}
 	cmd.Dir = cwd
 

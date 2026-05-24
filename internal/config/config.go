@@ -56,7 +56,39 @@ type Config struct {
 	Tailscale TailscaleConfig `json:"tailscale"`
 	Bindings  []AgentBinding  `json:"bindings,omitempty"`
 	Hooks     HooksConfig     `json:"hooks"`
+	Packages  PackagesConfig  `json:"packages"` // runtime package mgmt (GitHub updater)
 	mu        sync.RWMutex
+}
+
+// PackagesConfig tunes the runtime package update flow (Phase 1: GitHub
+// binaries). GitHubToken is RESERVED for Phase 2 (authenticated rate-limit
+// bump); currently unwired.
+//
+// UpdatesCheckTTL controls how stale the updates cache can get before a
+// GET /v1/packages/updates triggers a background refresh. Encoded as
+// human-readable string (e.g. "1h", "30m") parsed via time.ParseDuration;
+// empty string → default 1h.
+//
+// ScratchDir is the tmp workspace used by the update executor for download
+// + extract + staging before atomic swap. Defaults to "{BinDir}/../tmp" when
+// empty; operators MAY set explicitly to avoid symlink-resolution issues
+// (red-team H6).
+type PackagesConfig struct {
+	GitHubToken     string `json:"github_token,omitempty"`      // Phase 2 stub
+	UpdatesCheckTTL string `json:"updates_check_ttl,omitempty"` // e.g. "1h"
+	ScratchDir      string `json:"scratch_dir,omitempty"`       // abs path
+}
+
+// UpdatesCheckTTLDuration parses UpdatesCheckTTL returning 1h on empty/invalid.
+func (p PackagesConfig) UpdatesCheckTTLDuration() time.Duration {
+	if p.UpdatesCheckTTL == "" {
+		return time.Hour
+	}
+	d, err := time.ParseDuration(p.UpdatesCheckTTL)
+	if err != nil || d <= 0 {
+		return time.Hour
+	}
+	return d
 }
 
 // HooksConfig tunes the script-hook runtime caps. All zero-valued fields fall

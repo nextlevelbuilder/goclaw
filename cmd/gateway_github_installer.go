@@ -18,7 +18,7 @@ import (
 //	GOCLAW_PACKAGES_GITHUB_TOKEN          optional PAT (boosts rate limit, enables private repos)
 //	GOCLAW_PACKAGES_MAX_ASSET_SIZE_MB     default 200
 //	GOCLAW_PACKAGES_GITHUB_ALLOWED_ORGS   comma-separated allowlist (empty = all allowed)
-//	GOCLAW_PACKAGES_GITHUB_BIN_DIR        default /app/data/.runtime/bin
+//	GOCLAW_PACKAGES_GITHUB_BIN_DIR        default {runtimeDir}/bin
 //	GOCLAW_PACKAGES_GITHUB_MANIFEST       default {BIN_DIR}/../github-packages.json
 func initGitHubInstaller() {
 	cfg := &skills.GitHubPackagesConfig{

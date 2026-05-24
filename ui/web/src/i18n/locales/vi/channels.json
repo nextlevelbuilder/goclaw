@@ -421,5 +421,55 @@
     "relinkDevice": "Liên kết lại",
     "connectedSuccess": "✅ Kết nối WhatsApp thành công!",
     "tabQrCode": "Mã QR"
+  },
+  "bitrix24": {
+    "portalSelect": {
+      "placeholder": "Chọn portal...",
+      "empty": "Chưa có portal Bitrix24 nào.",
+      "createFirst": "Kết nối portal Bitrix24 đầu tiên",
+      "createNew": "Tạo portal mới",
+      "pendingBadge": "Chưa authorize — click để resume",
+      "loadError": "Không tải được danh sách portal. Refresh để thử lại."
+    },
+    "errors": {
+      "portalRequired": "Vui lòng chọn portal.",
+      "portalNotInstalled": "Portal này chưa hoàn tất authorize. Authorize trước khi tạo channel."
+    },
+    "create": {
+      "title": "Kết nối Portal Bitrix24",
+      "submit": "Tạo & Authorize →",
+      "fields": {
+        "name": "Tên portal",
+        "nameHint": "Slug nội bộ. Tự điền từ domain, có thể sửa.",
+        "domain": "Domain",
+        "clientId": "Client ID",
+        "clientSecret": "Client Secret"
+      },
+      "errors": {
+        "invalidName": "Chữ thường, số, gạch nối, gạch dưới (2-64 ký tự).",
+        "invalidDomain": "Phải là domain Bitrix24 hợp lệ (vd: mycorp.bitrix24.com).",
+        "duplicateName": "Tên portal đã tồn tại.",
+        "forbidden": "Cần quyền tenant admin để tạo portal.",
+        "gatewayURLUnknown": "Mở UI goclaw qua public URL (không phải localhost) trước, rồi retry."
+      },
+      "help": {
+        "title": "Lấy Client ID và Secret ở đâu?",
+        "step1": "Đăng nhập portal Bitrix24 với quyền Administrator.",
+        "step2": "Vào Developer resources → Other → Local application → Add.",
+        "step3": "Set Handler URL là:",
+        "step4": "Tick các scope cần thiết:",
+        "step5": "Save → copy Application ID và Key vào form trên.",
+        "localDevWarning": "Đang ở localhost — Bitrix24 không reach được. Dùng Cloudflare Tunnel hoặc domain public trước."
+      },
+      "authorize": {
+        "title": "Authorize \"{{name}}\"",
+        "openButton": "Mở trang authorize",
+        "waiting": "Đang chờ authorize...",
+        "installed": "Portal đã install thành công!",
+        "timedOut": "Chưa authorize xong. Có thể resume từ dropdown sau.",
+        "closeResumeLater": "Đóng (resume sau)",
+        "urlUnknown": "Không có install URL. Mở UI qua public URL rồi retry từ dropdown."
+      }
+    }
   }
 }

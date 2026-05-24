@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -28,7 +29,7 @@ type Channel struct {
 	config            config.TelegramConfig
 	httpClient        *http.Client
 	transport         *http.Transport
-	ipv4Once          sync.Once // guards enableIPv4Only to prevent data race
+	ipv4Once          sync.Once                   // guards enableIPv4Only to prevent data race
 	agentStore        store.AgentStore            // for agent key lookup (nil if not configured)
 	configPermStore   store.ConfigPermissionStore // for group file writer management (nil if not configured)
 	teamStore         store.TeamStore             // for /tasks, /task_detail commands (nil if not configured)
@@ -38,16 +39,16 @@ type Channel struct {
 	typingCtrls       sync.Map                    // localKey string → *typing.Controller
 	reactions         sync.Map                    // localKey string → *StatusReactionController
 	threadIDs         sync.Map                    // localKey string → messageThreadID int (for forum topic routing)
-	mentionMode       string             // "strict" (default) or "yield"
-	botDisplayName    string             // bot's first_name from GetMe (e.g. "ViệtBot"); captured once at Start
-	pollCancel        context.CancelFunc // cancels the long polling context
-	pollDone          chan struct{}      // closed when polling goroutine exits
-	handlerWg         sync.WaitGroup     // tracks in-flight handler goroutines for graceful shutdown
-	handlerSem        chan struct{}      // bounded semaphore for concurrent handler goroutines
-	pendingDraftID    sync.Map           // localKey string → int (draftID)
-	audioMgr          *audio.Manager    // unified STT via audio.Manager (nil = no STT)
-	writerHealMu      sync.Mutex         // guards writerHealLastTry for /writers self-heal
-	writerHealLastTry map[string]time.Time // key "chatID|userID" → last attempt timestamp
+	mentionMode       string                      // "strict" (default) or "yield"
+	botDisplayName    string                      // bot's first_name from GetMe (e.g. "ViệtBot"); captured once at Start
+	pollCancel        context.CancelFunc          // cancels the long polling context
+	pollDone          chan struct{}               // closed when polling goroutine exits
+	handlerWg         sync.WaitGroup              // tracks in-flight handler goroutines for graceful shutdown
+	handlerSem        chan struct{}               // bounded semaphore for concurrent handler goroutines
+	pendingDraftID    sync.Map                    // localKey string → int (draftID)
+	audioMgr          *audio.Manager              // unified STT via audio.Manager (nil = no STT)
+	writerHealMu      sync.Mutex                  // guards writerHealLastTry for /writers self-heal
+	writerHealLastTry map[string]time.Time        // key "chatID|userID" → last attempt timestamp
 	// pairingService, approvedGroups, pairingDebounce, groupHistory, historyLimit, requireMention
 	// are inherited from channels.BaseChannel.
 }
@@ -185,7 +186,17 @@ func (c *Channel) Start(ctx context.Context) error {
 	me, err := c.bot.GetMe(probeCtx)
 	probeCancel()
 	if err != nil {
-		return fmt.Errorf("validate telegram bot: %w", err)
+		if shouldRetryTelegramStartupWithIPv4(err) {
+			c.enableIPv4Only()
+			slog.Warn("telegram: startup probe retrying with IPv4 fallback", "error", sanitizeTelegramError(err, c.config.Token))
+
+			probeCtx, probeCancel = context.WithTimeout(ctx, probeOverallTimeout)
+			me, err = c.bot.GetMe(probeCtx)
+			probeCancel()
+		}
+	}
+	if err != nil {
+		return fmt.Errorf("validate telegram bot: %w", sanitizeTelegramError(err, c.config.Token))
 	}
 	username := ""
 	if me != nil {
@@ -403,6 +414,51 @@ func connectedSummary(username string) string {
 		return "Connected"
 	}
 	return fmt.Sprintf("Connected as @%s", username)
+}
+
+type redactedTelegramError struct {
+	err   error
+	token string
+}
+
+func (e redactedTelegramError) Error() string {
+	msg := e.err.Error()
+	if e.token != "" {
+		msg = strings.ReplaceAll(msg, e.token, "<telegram-token>")
+	}
+	return msg
+}
+
+func (e redactedTelegramError) Unwrap() error { return e.err }
+
+func sanitizeTelegramError(err error, token string) error {
+	if err == nil {
+		return nil
+	}
+	return redactedTelegramError{err: err, token: token}
+}
+
+func shouldRetryTelegramStartupWithIPv4(err error) bool {
+	if err == nil {
+		return false
+	}
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "lookup") || strings.Contains(msg, "no such host") {
+		return false
+	}
+	if isRetryableNetworkErr(err) {
+		return true
+	}
+	if strings.Contains(msg, "network is unreachable") ||
+		strings.Contains(msg, "no route to host") ||
+		strings.Contains(msg, "deadline exceeded") {
+		return true
+	}
+	return false
 }
 
 // applyIPv4Dialer forces a transport to use IPv4 only by overriding DialContext.

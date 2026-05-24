@@ -570,6 +570,17 @@ func TestReadOnlyStreak_ExecNeutral(t *testing.T) {
 	}
 }
 
+func TestReadOnlyStreak_WaitNeutral(t *testing.T) {
+	var s toolLoopState
+	for range 5 {
+		s.recordMutation("read_file", nil)
+	}
+	s.recordMutation("wait", map[string]any{"timeMs": 1000})
+	if s.readOnlyStreak != 5 {
+		t.Fatalf("expected streak 5 after wait, got %d", s.readOnlyStreak)
+	}
+}
+
 func TestReadOnlyStreak_MCPNeutral(t *testing.T) {
 	var s toolLoopState
 	// 5 reads → streak = 5

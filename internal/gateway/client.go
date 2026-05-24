@@ -42,6 +42,13 @@ type Client struct {
 	tenantID   uuid.UUID // resolved tenant; always concrete after connect
 	tenantName string    // resolved tenant display name (set during connect)
 	tenantSlug string    // resolved tenant URL slug (set during connect)
+
+	// upgradeURL is the public-facing URL derived from the HTTP upgrade
+	// request that started this WS connection. Captured pre-auth but only
+	// trusted (i.e. propagated into server-wide state) AFTER the client
+	// authenticates — see MethodRouter.handleConnect. Empty when upgrade
+	// request lacked Host headers.
+	upgradeURL string
 }
 
 func NewClient(conn *websocket.Conn, server *Server, remoteIP string) *Client {
@@ -54,6 +61,15 @@ func NewClient(conn *websocket.Conn, server *Server, remoteIP string) *Client {
 		remoteAddr:  remoteIP,
 	}
 }
+
+// setUpgradeURL records the public URL derived from the HTTP upgrade request.
+// Called once during handleWebSocket before Run(); never trust this value
+// before client.authenticated == true.
+func (c *Client) setUpgradeURL(url string) { c.upgradeURL = url }
+
+// UpgradeURL returns the public URL the client used to reach the gateway.
+// Only meaningful after authentication.
+func (c *Client) UpgradeURL() string { return c.upgradeURL }
 
 // Run starts the read and write pumps for this client.
 func (c *Client) Run(ctx context.Context) {

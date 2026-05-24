@@ -23,7 +23,7 @@ func NewPGStores(cfg store.StoreConfig) (*store.Stores, error) {
 		skillsDir = config.ResolvedDataDirFromEnv() + "/skills-store"
 	}
 
-	return &store.Stores{
+	pgStores := &store.Stores{
 		DB:        db,
 		Sessions:  NewPGSessionStore(db),
 		Memory:    NewPGMemoryStore(db, memCfg),
@@ -45,7 +45,7 @@ func NewPGStores(cfg store.StoreConfig) (*store.Stores, error) {
 		Activity:         NewPGActivityStore(db),
 		Snapshots:        NewPGSnapshotStore(db),
 		SecureCLI:           NewPGSecureCLIStore(db, cfg.EncryptionKey),
-		SecureCLIGrants:     NewPGSecureCLIAgentGrantStore(db),
+		SecureCLIGrants:     NewPGSecureCLIAgentGrantStore(db, cfg.EncryptionKey),
 		APIKeys:             NewPGAPIKeyStore(db),
 		Heartbeats:        NewPGHeartbeatStore(db),
 		ConfigPermissions:     NewPGConfigPermissionStore(db),
@@ -58,6 +58,17 @@ func NewPGStores(cfg store.StoreConfig) (*store.Stores, error) {
 		Episodic:              NewPGEpisodicStore(db),
 		EvolutionMetrics:      NewPGEvolutionMetricsStore(db),
 		EvolutionSuggestions:  NewPGEvolutionSuggestionStore(db),
+		BitrixPortals:         NewPGBitrixPortalStore(db, cfg.EncryptionKey),
 		Hooks:                 NewPGHookStore(db),
-	}, nil
+		Webhooks:               NewPGWebhookStore(db),
+		WebhookCalls:           NewPGWebhookCallStore(db),
+		Workstations:           NewPGWorkstationStore(db, cfg.EncryptionKey),
+		WorkstationLinks:       NewPGAgentWorkstationLinkStore(db),
+		WorkstationPermissions: NewPGWorkstationPermissionStore(db),
+		WorkstationActivity:    NewPGWorkstationActivityStore(db),
+	}
+	// Wire permStore into WorkstationStore so Create seeds allowlist atomically (H5 fix).
+	// Must happen after both stores are constructed.
+	pgStores.Workstations.(*PGWorkstationStore).SetPermStore(pgStores.WorkstationPermissions)
+	return pgStores, nil
 }

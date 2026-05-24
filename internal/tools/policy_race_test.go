@@ -160,6 +160,14 @@ func TestToolGroups_BuiltinGroups_Seeded(t *testing.T) {
 	if !containsTool(web, "web_search") || !containsTool(web, "web_fetch") {
 		t.Errorf("web group should contain web_search and web_fetch, got: %v", web)
 	}
+
+	runtime, ok := reg.GetToolGroup("runtime")
+	if !ok {
+		t.Fatal("expected 'runtime' builtin group to exist")
+	}
+	if !containsTool(runtime, "wait") {
+		t.Errorf("runtime group should contain wait, got: %v", runtime)
+	}
 }
 
 func containsTool(tools []string, name string) bool {

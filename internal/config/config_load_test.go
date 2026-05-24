@@ -116,6 +116,39 @@ func TestLoad_EnvVarOverrides_InvalidPort(t *testing.T) {
 	}
 }
 
+func TestValidateGatewayAuthRejectsExternalNoToken(t *testing.T) {
+	cfg := Default()
+	cfg.Gateway.Host = "0.0.0.0"
+	cfg.Gateway.Token = ""
+	t.Setenv(GatewayAllowInsecureNoAuthEnv, "")
+
+	if err := ValidateGatewayAuth(cfg.Gateway); err == nil {
+		t.Fatal("expected external bind with empty gateway token to fail")
+	}
+}
+
+func TestValidateGatewayAuthAllowsLoopbackNoToken(t *testing.T) {
+	cfg := Default()
+	cfg.Gateway.Host = "127.0.0.1"
+	cfg.Gateway.Token = ""
+	t.Setenv(GatewayAllowInsecureNoAuthEnv, "")
+
+	if err := ValidateGatewayAuth(cfg.Gateway); err != nil {
+		t.Fatalf("loopback no-token mode should be allowed: %v", err)
+	}
+}
+
+func TestValidateGatewayAuthAllowsExplicitInsecureOptIn(t *testing.T) {
+	cfg := Default()
+	cfg.Gateway.Host = "0.0.0.0"
+	cfg.Gateway.Token = ""
+	t.Setenv(GatewayAllowInsecureNoAuthEnv, "1")
+
+	if err := ValidateGatewayAuth(cfg.Gateway); err != nil {
+		t.Fatalf("explicit insecure opt-in should allow no-token mode: %v", err)
+	}
+}
+
 // --- Env var for API keys ---
 
 func TestLoad_EnvVarAPIKeys(t *testing.T) {

@@ -3,6 +3,7 @@ import type {
   ChatGPTOAuthRoutingConfig,
   CompactionConfig,
   ContextPruningConfig,
+  ModelFallbackConfig,
   ReasoningOverrideMode,
   SandboxConfig,
   WorkspaceSharingConfig,
@@ -29,6 +30,7 @@ export interface AdvancedDialogState {
   reasoningFallback: string;
   reasoningExpert: boolean;
   chatgptRouting: ChatGPTOAuthRoutingConfig;
+  modelFallback: ModelFallbackConfig;
   wsSharing: WorkspaceSharingConfig;
   comp: CompactionConfig;
   pruneEnabled: boolean;
@@ -90,6 +92,7 @@ export function deriveState(
         !SIMPLE_REASONING_LEVELS.has(reasoningEffort) ||
         reasoningFallback !== "downgrade"),
     chatgptRouting: draftRouting,
+    modelFallback: agent.model_fallback ?? { enabled: false, strategy: "priority_order", candidates: [] },
     // Read workspace_sharing from top-level, fallback to other_config for transition
     wsSharing: (
       agent.workspace_sharing ??
@@ -116,6 +119,7 @@ export interface BuildAdvancedUpdatePayloadParams {
   reasoningFallback: string;
   thinkingLevel: string;
   chatgptRouting: ChatGPTOAuthRoutingConfig;
+  modelFallback: ModelFallbackConfig;
   wsSharing: WorkspaceSharingConfig;
   comp: CompactionConfig;
   pruneEnabled: boolean;
@@ -131,7 +135,7 @@ export function buildAdvancedUpdatePayload(
     agent, currentProvider, providersLoading, providerModelsLoading,
     expertReasoningAvailable, reasoningMode, reasoningEffort, reasoningExpert,
     reasoningFallback, thinkingLevel, chatgptRouting, wsSharing,
-    comp, pruneEnabled, prune, sbEnabled, sb,
+    modelFallback, comp, pruneEnabled, prune, sbEnabled, sb,
   } = params;
 
   const routingPayload = buildAgentOtherConfigWithChatGPTOAuthRouting(
@@ -149,6 +153,7 @@ export function buildAdvancedUpdatePayload(
       ? { mode: "cache-ttl", ...prune }
       : { mode: "off" },
     sandbox_config: sbEnabled ? sb : null,
+    model_fallback: normalizeModelFallbackForPayload(modelFallback),
     ...routingPayload,
   };
 
@@ -185,4 +190,20 @@ export function buildAdvancedUpdatePayload(
   }
 
   return updates;
+}
+
+function normalizeModelFallbackForPayload(config: ModelFallbackConfig): ModelFallbackConfig {
+  const candidates = (config.candidates ?? [])
+    .map((candidate) => ({
+      provider: candidate.provider?.trim() ?? "",
+      model: candidate.model?.trim() ?? "",
+    }))
+    .filter((candidate) => candidate.provider && candidate.model);
+  return {
+    enabled: Boolean(config.enabled && candidates.length > 0),
+    strategy: "priority_order",
+    candidates,
+    ...(config.max_attempts && config.max_attempts > 0 ? { max_attempts: config.max_attempts } : {}),
+    cooldown_enabled: config.cooldown_enabled ?? true,
+  };
 }

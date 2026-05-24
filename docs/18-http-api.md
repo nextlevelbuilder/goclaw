@@ -148,7 +148,7 @@ can override or inherit routing behavior while keeping the main `provider` field
 ```json
 {
   "provider": "openai-codex",
-  "model": "gpt-5.4",
+  "model": "gpt-5.5",
   "chatgpt_oauth_routing": {
     "override_mode": "custom",
     "strategy": "round_robin"
@@ -214,7 +214,7 @@ Agents can now store capability-aware GPT-5/Codex reasoning intent under top-lev
 ```json
 {
   "provider": "openai-codex",
-  "model": "gpt-5.4",
+  "model": "gpt-5.5",
   "reasoning_config": {
     "override_mode": "inherit"
   }
@@ -344,6 +344,7 @@ LLM provider management. API keys are encrypted with AES-256-GCM in the database
 | `GET` | `/v1/providers/{id}` | Get provider |
 | `PUT` | `/v1/providers/{id}` | Update provider |
 | `DELETE` | `/v1/providers/{id}` | Delete provider |
+| `POST` | `/v1/providers/{id}/reconnect` | Reload provider runtime from stored config |
 
 ### Provider Verification & Models
 
@@ -358,17 +359,36 @@ LLM provider management. API keys are encrypted with AES-256-GCM in the database
 
 **Supported types:** `anthropic_native`, `openai_compat`, `chatgpt_oauth`, `gemini_native`, `dashscope`, `bailian`, `minimax`, `claude_cli`, `acp`
 
+Reconnect response:
+
+```json
+{
+  "status": "reconnected",
+  "provider": {
+    "id": "0193a5b0-7000-7000-8000-000000000123",
+    "name": "openrouter-main",
+    "provider_type": "openai_compat",
+    "api_key": "***",
+    "enabled": true
+  },
+  "registry_updated": true,
+  "cache_invalidated": true
+}
+```
+
+`status` is `reconnected`, `disabled`, or `not_registered`. Reconnect never changes stored provider config. It does not run an upstream verify call; call `/v1/providers/{id}/verify` after reconnect when that check is needed.
+
 Example response:
 
 ```json
 {
   "models": [
     {
-      "id": "gpt-5.4",
-      "name": "GPT-5.4",
+      "id": "gpt-5.5",
+      "name": "GPT-5.5",
       "reasoning": {
         "levels": ["none", "low", "medium", "high", "xhigh"],
-        "default_effort": "none"
+        "default_effort": "medium"
       }
     },
     {
@@ -537,9 +557,46 @@ Per-agent vector memory using pgvector.
 
 Optional query parameter `?user_id=` for per-user scoping.
 
+`{agentID}` accepts either the agent UUID or `agent_key`; invalid IDs return a structured `INVALID_REQUEST`/`NOT_FOUND` response instead of surfacing storage parse errors.
+
 ---
 
-## 11. Episodic Memory
+## 11. Sessions
+
+Read-only session listing is available over HTTP for automation clients.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/sessions` | List sessions with `agentId`/`agent_id`, `channel`, `limit`, and `offset` filters |
+| `POST` | `/v1/chat/sessions/{key}/branch` | Branch an existing chat session at `up_to_index` |
+| `GET` | `/v1/chat/sessions/{key}/history/follow` | Poll session history after an index cursor |
+
+Admins and system-level admin API keys can list all sessions within the resolved tenant. Non-admin callers must have an effective `X-GoClaw-User-Id` context and are filtered to their own sessions.
+
+Session branch request:
+
+```json
+{
+  "new_session_key": "optional agent:{sameAgentKey}:...",
+  "up_to_index": 12,
+  "label": "optional label",
+  "metadata": {}
+}
+```
+
+If `new_session_key` is omitted, the server generates `agent:{agentKey}:branch:direct:{uuid}`. `up_to_index` copies `messages[0:up_to_index]`; invalid ranges are rejected and existing target keys are not overwritten.
+
+History follow uses `cursor` as the count of already consumed messages:
+
+```
+GET /v1/chat/sessions/{key}/history/follow?cursor=12&limit=50
+```
+
+If `cursor > total`, the response sets `reset: true` and `next_cursor` to the current total.
+
+---
+
+## 12. Episodic Memory
 
 Episodic memory captures conversation summaries per user session for long-term context continuity.
 
@@ -944,8 +1001,20 @@ Accepts partial updates. Flag keys are validated against recognized v3 flags.
 |--------|------|-------------|
 | `GET` | `/v1/channels/instances/{id}/writers/groups` | List group file writers |
 | `GET` | `/v1/channels/instances/{id}/writers` | List writers for group |
+| `POST` | `/v1/channels/instances/{id}/writers/test` | Test whether a user is a writer for a group |
 | `POST` | `/v1/channels/instances/{id}/writers` | Add writer to group |
 | `DELETE` | `/v1/channels/instances/{id}/writers/{userId}` | Remove writer |
+
+Writer test request:
+
+```json
+{
+  "group_id": "group:telegram:-100123",
+  "user_id": "386246614"
+}
+```
+
+Response includes `allowed`, `reason`, `instance_id`, `agent_id`, `group_id`, `user_id`, and `writer_count`. Stable reasons: `writer`, `not_writer`, `no_writers_configured`, `invalid_group`.
 
 **Supported channels:** `telegram`, `discord`, `slack`, `whatsapp`, `zalo_oa`, `zalo_personal`, `feishu`
 
@@ -978,7 +1047,7 @@ Team activity and audit trail.
 
 ## 20. Secure CLI Credentials
 
-CLI authentication credentials for secure command execution. Requires **admin role** (full gateway token or empty gateway token in dev/single-user mode).
+CLI authentication credentials for secure command execution. Requires **admin role** (gateway token or empty-token local/dev fallback).
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -1014,7 +1083,7 @@ CLI authentication credentials for secure command execution. Requires **admin ro
 
 ## 21. Runtime & Packages Management
 
-Manage system (apk), Python (pip), and Node (npm) package installation in the GoClaw runtime container. These endpoints do not inspect host-level runtimes. Requires authentication. When `GOCLAW_GATEWAY_TOKEN` is empty (dev/single-user mode), all users get admin role and can manage packages.
+Manage system (apk), Python (pip), and Node (npm) package installation in the GoClaw runtime container. These endpoints do not inspect host-level runtimes. Requires authentication. Empty-token admin access is limited to loopback local development or explicit `GOCLAW_ALLOW_INSECURE_NO_AUTH=1`; external binds require `GOCLAW_GATEWAY_TOKEN`.
 
 ### List Installed Packages
 
@@ -1134,10 +1203,25 @@ LLM call tracing and cost analysis.
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/v1/traces` | List traces (paginated, filterable) |
+| `GET` | `/v1/traces/follow` | Poll trace changes for one session or agent |
 | `GET` | `/v1/traces/{traceID}` | Get trace with spans |
 | `GET` | `/v1/traces/{traceID}/export` | Export trace tree (gzipped JSON) |
 
 **Filters:** `agent_id`, `user_id`, `session_key`, `status`, `channel`
+
+`GET /v1/traces/follow` requires `session_key` or `agent_id`. Query params: `session_key`, `agent_id`, `status`, `channel`, `since` (RFC 3339), `limit` (default 50, max 200), `include_spans` (default false). Non-admin callers only see their own traces. When `since` is provided, the server returns traces matching existing filters and `(created_at > since OR end_time > since OR status = "running")`.
+
+Follow response:
+
+```json
+{
+  "traces": [],
+  "spans_by_trace_id": {},
+  "server_time": "2026-05-20T11:23:00Z",
+  "next_since": "2026-05-20T11:23:00Z",
+  "limit": 50
+}
+```
 
 ### Costs
 
@@ -1166,6 +1250,16 @@ LLM call tracing and cost analysis.
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/v1/activity` | List activity audit logs (filterable) |
+| `GET` | `/v1/activity/aggregate` | Aggregate activity logs by action, actor type, entity type, or admin-only actor ID |
+| `GET` | `/v1/logs/runtime/aggregate` | Aggregate recent in-memory runtime logs by level or source |
+
+Activity aggregate query parameters:
+- `group_by`: `action`, `actor_type`, `entity_type`, or `actor_id` (admin only)
+- `from`, `to`: optional RFC3339 range, `from` inclusive and `to` exclusive
+- `actor_type`, `actor_id`, `action`, `entity_type`, `entity_id`: optional filters; non-admin callers are always scoped to their resolved user ID and must have user context
+- `limit`: bucket cap, default 50, max 200
+
+Runtime log aggregate is admin-only and ring-buffer based. It returns `retention=ring_buffer`, `capacity`, and `sample_size`; it is not durable log storage.
 
 ---
 
@@ -1178,7 +1272,7 @@ Workspace file management.
 | `GET` | `/v1/storage/files` | List files with depth limiting |
 | `GET` | `/v1/storage/files/{path...}` | Read file (JSON or raw) |
 | `POST` | `/v1/storage/files` | Upload file (admin) |
-| `DELETE` | `/v1/storage/files/{path...}` | Delete file/directory |
+| `DELETE` | `/v1/storage/files/{path...}` | Delete file/directory (admin) |
 | `PUT` | `/v1/storage/move` | Move/rename file (admin) |
 | `GET` | `/v1/storage/size` | Stream storage size (Server-Sent Events, cached 60 min) |
 
@@ -1496,7 +1590,7 @@ Error messages are localized based on the `Accept-Language` header. HTTP status 
 
 The following operations are **only available via WebSocket RPC**, not HTTP:
 
-- **Sessions:** List, preview, patch, delete, reset (use WebSocket method `sessions.*`)
+- **Sessions:** Preview, patch, delete, reset (use WebSocket method `sessions.*`; HTTP supports read-only list)
 - **Cron jobs:** List, create, update, delete, logs (use WebSocket method `cron.*`)
 - **Send messages:** Send to channels (use WebSocket method `send.*`)
 - **Config management:** Get, apply, patch (use WebSocket method `config.*`)

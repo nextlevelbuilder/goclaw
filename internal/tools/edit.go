@@ -16,8 +16,8 @@ import (
 type EditTool struct {
 	workspace       string
 	restrict        bool
-	allowedPrefixes []string                    // extra allowed path prefixes (cross-drive on Windows)
-	deniedPrefixes  []string                    // path prefixes to deny access to (e.g. .goclaw)
+	allowedPrefixes []string // extra allowed path prefixes (cross-drive on Windows)
+	deniedPrefixes  []string // path prefixes to deny access to (e.g. .goclaw)
 	sandboxMgr      sandbox.Manager
 	contextFileIntc *ContextFileInterceptor
 	memIntc         *MemoryInterceptor
@@ -218,7 +218,7 @@ func (t *EditTool) executeInSandbox(ctx context.Context, path, oldStr, newStr st
 	}
 	containerPath := ResolveSandboxPath(path, containerCwd)
 
-	bridge := sandbox.NewFsBridge(sb.ID(), sandbox.DefaultContainerWorkdir)
+	bridge := sandbox.NewFsBridge(sb.ID(), containerCwd)
 	content, err := bridge.ReadFile(ctx, containerPath)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("failed to read file: %v", err) + MaybeFsBridgeHint(err))

@@ -15,6 +15,9 @@ type CodexRoutingDefaults struct {
 	ExtraProviderNames []string
 }
 
+// DefaultCodexModel is the default model for ChatGPT Subscription (OAuth).
+const DefaultCodexModel = "gpt-5.5"
+
 // CodexProvider implements Provider for the OpenAI Responses API,
 // used with ChatGPT subscription via OAuth (Codex flow).
 // Wire format: POST /codex/responses on chatgpt.com backend.
@@ -37,7 +40,7 @@ func NewCodexProvider(name string, tokenSource TokenSource, apiBase, defaultMode
 	apiBase = strings.TrimRight(apiBase, "/")
 
 	if defaultModel == "" {
-		defaultModel = "gpt-5.4"
+		defaultModel = DefaultCodexModel
 	}
 
 	return &CodexProvider{
@@ -78,7 +81,7 @@ func (p *CodexProvider) Capabilities() ProviderCapabilities {
 		Vision:           true,
 		CacheControl:     false,
 		ImageGeneration:  true, // Codex (OpenAI Responses API) supports native image_generation tool
-		MaxContextWindow: 1_000_000,
+		MaxContextWindow: 1_050_000,
 		TokenizerID:      "o200k_base",
 	}
 }

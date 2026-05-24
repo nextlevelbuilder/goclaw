@@ -42,7 +42,7 @@
   "gateway.rateLimitRpm": "Rate Limit (RPM)",
   "gateway.rateLimitRpmTip": "Maximum requests per minute per user. Set to 0 to disable rate limiting.",
   "gateway.inboundDebounceMs": "Inbound Debounce (ms)",
-  "gateway.inboundDebounceMsTip": "Delay in milliseconds before processing a new message, to coalesce rapid follow-ups. Set to -1 to disable.",
+  "gateway.inboundDebounceMsTip": "Delay in milliseconds before processing rapid channel or Web Chat follow-ups. Set 0 for the 1000ms default, or -1 to disable.",
   "gateway.injectionAction": "Injection Detection Action",
 
   "agents.title": "Agent Defaults",

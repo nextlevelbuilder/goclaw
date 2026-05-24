@@ -16,6 +16,15 @@ export interface ConfigPermission {
   updatedAt: string;
 }
 
+export interface ConfigPermissionDecision {
+  allowed: boolean;
+  agentId: string;
+  scope: string;
+  configType: string;
+  userId: string;
+  reason: string;
+}
+
 export function useConfigPermissions(agentId: string | undefined) {
   const ws = useWs();
   const [permissions, setPermissions] = useState<ConfigPermission[]>([]);
@@ -53,6 +62,18 @@ export function useConfigPermissions(agentId: string | undefined) {
     [ws, agentId, load],
   );
 
+  const check = useCallback(
+    async (scope: string, configType: string, userId: string) => {
+      if (!agentId || !scope || !configType || !userId) return undefined;
+      const res = await ws.call<{ decision: ConfigPermissionDecision }>(
+        Methods.CONFIG_PERMISSIONS_CHECK,
+        { agentId, scope, configType, userId },
+      );
+      return res.decision;
+    },
+    [ws, agentId],
+  );
+
   const revoke = useCallback(
     async (scope: string, configType: string, userId: string) => {
       if (!agentId) return;
@@ -69,5 +90,5 @@ export function useConfigPermissions(agentId: string | undefined) {
     [ws, agentId, load],
   );
 
-  return { permissions, loading, load, grant, revoke };
+  return { permissions, loading, load, grant, revoke, check };
 }

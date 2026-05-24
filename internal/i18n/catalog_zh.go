@@ -113,6 +113,7 @@ func init() {
 		// Skills
 		MsgSkillsUpdateNotSupported: "基于文件的Skill不支持 skills.update",
 		MsgCannotResolveSkillID:     "无法解析基于文件的Skill ID",
+		MsgInvalidVisibility:        "无效的 visibility %q：必须为 private 或 public",
 
 		// Logs
 		MsgInvalidLogAction: "action 必须是 'start' 或 'stop'",
@@ -215,7 +216,41 @@ func init() {
 		MsgSTTWhatsappPrivacyWarning: "为 WhatsApp 启用 STT 将破坏发送至此 Agent 的语音消息的端对端加密。",
 		MsgVoiceMessageFallback:      "[语音消息]",
 
+		// Webhooks
+		MsgWebhookAuthFailed:              "Webhook 身份验证失败",
+		MsgWebhookHMACInvalid:             "HMAC 签名无效",
+		MsgWebhookHMACTimestampSkew:       "请求时间戳超出可接受窗口",
+		MsgWebhookBearerRequiredHMAC:      "此 Webhook 需要 HMAC 身份验证",
+		MsgWebhookRevoked:                 "Webhook 已被撤销",
+		MsgWebhookKindMismatch:            "请求类型与 Webhook 配置不匹配",
+		MsgWebhookRateLimited:             "超出 Webhook 速率限制",
+		MsgWebhookBodyTooLarge:            "请求正文超出大小限制",
+		MsgWebhookIdempotencyConflict:     "幂等键冲突：请求正文不匹配",
+		MsgWebhookTenantMismatch:          "Webhook 租户不匹配",
+		MsgWebhookAgentNotFound:           "未找到 Webhook 代理",
+		MsgWebhookChannelNotFound:         "未找到 Webhook 频道",
+		MsgWebhookMediaSSRFBlocked:        "媒体 URL 被 SSRF 策略拦截",
+		MsgWebhookMediaTooLarge:           "媒体文件超出大小限制",
+		MsgWebhookMediaMIMEDenied:         "媒体 MIME 类型不被允许",
+		MsgWebhookCallbackURLInvalid:      "回调 URL 无效或被拦截",
+		MsgWebhookLLMTimeout:              "LLM 处理超时",
+		MsgWebhookLaneSaturated:           "Webhook 处理通道已满",
+		MsgWebhookLocalhostOnlyViolation:  "此 Webhook 仅限本地调用",
+		MsgWebhookMediaChannelUnsupported: "频道不支持媒体附件",
+		MsgWebhookIPDenied:                "请求来源不在 IP 白名单中",
+		MsgWebhookEncryptionUnavailable:   "Webhook 加密密钥未配置；请设置 GOCLAW_ENCRYPTION_KEY 以启用 Webhook",
+
 		// Hooks
+		// Workstation
+		MsgWorkstationNotFound:     "未找到工作站：%s",
+		MsgWorkstationKeyExists:    "工作站键已被使用：%s",
+		MsgInvalidBackend:          "无效的后端类型：%s（必须是 ssh|docker）",
+		MsgWorkstationInactive:     "工作站未激活：%s",
+		MsgInvalidMetadataShape:    "%s 后端的元数据无效：%s",
+		MsgWorkstationRequired:     "Agent 未绑定工作站，请提供 workstation_id",
+		MsgWorkstationAccessDenied: "Agent %s 无权访问工作站 %s",
+		MsgBackendNotReady:         "工作站后端未就绪：%s",
+
 		MsgHookInvalidMatcher:          "无效的匹配器正则表达式: %s",
 		MsgHookCommandDisabledStandard: "命令类型钩子仅在 Lite 版本可用",
 		MsgHookPromptRequiresMatcher:   "prompt 钩子必须指定 matcher 或 if_expr(成本失控保护)",
@@ -224,7 +259,56 @@ func init() {
 		MsgHookPerTurnCapReached:       "单轮钩子调用次数已达上限",
 		MsgHookBuiltinReadOnly:         "内置钩子只读,仅允许切换启用状态",
 
+		// Workstation permissions (Phase 6)
+		MsgWorkstationCmdDenied:    "命令被工作站策略拒绝: %s",
+		MsgWorkstationEnvDenied:    "环境变量被策略拒绝: %s",
+		MsgWorkstationInputInvalid: "命令包含无效字符: %s",
+		MsgWorkstationRateLimit:    "已超过工作站速率限制",
+		MsgWorkstationPermNotFound: "未找到权限条目: %s",
+		// Workstation activity (Phase 7)
+		MsgWorkstationActivityTitle: "近期活动",
+		MsgWorkstationActionExec:    "执行",
+		MsgWorkstationActionDeny:    "拒绝",
+
+		// Package updates (Phase 4+5)
+		MsgPackageNotInstalled:  "软件包 %s 未安装",
+		MsgPackageUpdateLocked:  "软件包 %s 正在被其他请求更新",
+		MsgReleaseNotFound:      "%s 未找到版本 %s",
+		MsgAssetNotFound:        "没有适用于 %s/%s 的文件",
+		MsgChecksumMismatch:     "%s 校验和不匹配",
+		MsgUpdateSwapFailed:     "安装 %s 失败；已恢复旧版本",
+		MsgUpdateManifestDesync: "二进制文件已更新但清单保存失败 — %s 需要手动恢复",
+		MsgUpdateCacheStale:     "更新缓存已过期；请先刷新再应用更新",
+
+		// Grant env validation
+		MsgGrantEnvDeniedKeys:   "不允许的环境变量键：%s",
+		MsgGrantEnvValueInvalid: "无效的环境变量值：%s",
+		MsgGrantEnvTooManyKeys:  "环境变量键过多：最多 50 个",
+		MsgGrantEnvRevealLimit:  "env 查看请求超出速率限制，请稍后再试",
+
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 已按请求转发至 %s:%q",
+
+		// Package update source labels
+		MsgPackagesUpdatesSourceGithub: "GitHub",
+		MsgPackagesUpdatesSourcePip:    "pip",
+		MsgPackagesUpdatesSourceNpm:    "npm",
+		MsgPackagesUpdatesSourceApk:    "apk",
+
+		// Package update availability messages
+		MsgPackagesUpdatesUnavailablePip: "系统中未安装 pip",
+		MsgPackagesUpdatesUnavailableNpm: "系统中未安装 npm",
+		MsgPackagesUpdatesUnavailableApk: "此系统不可用 apk",
+
+		// Package update failure reasons
+		MsgPackagesUpdatesReasonDependencyConflict: "依赖冲突",
+		MsgPackagesUpdatesReasonPermission:         "权限被拒绝",
+		MsgPackagesUpdatesReasonNetwork:            "网络错误",
+		MsgPackagesUpdatesReasonNotFound:           "未找到软件包",
+		MsgPackagesUpdatesReasonTargetMissing:      "版本不可用",
+		MsgPackagesUpdatesReasonExternallyManaged:  "环境由外部管理",
+		MsgPackagesUpdatesReasonLocked:             "软件包数据库已锁定",
+		MsgPackagesUpdatesReasonDiskFull:           "磁盘已满",
+		MsgPackagesUpdatesReasonHelperUnavailable:  "特权助手不可用",
 	})
 }

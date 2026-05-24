@@ -150,7 +150,7 @@ func (ch *Channel) Start(ctx context.Context) error {
 	if ch.webhookSecret == "" {
 		slog.Warn("security.pancake_webhook_no_secret",
 			"page_id", ch.pageID,
-			"note", "webhook_secret not configured; incoming webhook requests will not be authenticated")
+			"note", "webhook_secret not configured; incoming webhook requests will be ignored until configured")
 	}
 
 	// Without HMAC, any actor reaching the webhook endpoint can trigger Pancake API calls.
@@ -370,4 +370,3 @@ func (ch *Channel) maxMessageLength() int {
 		return 2000
 	}
 }
-

@@ -18,6 +18,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tasks"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
+	"github.com/nextlevelbuilder/goclaw/internal/webhooks"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -141,6 +142,38 @@ func (d *gatewayDeps) runLifecycle(
 
 	go consumeInboundMessages(ctx, d.msgBus, d.agentRouter, d.cfg, deps.sched, d.channelMgr, deps.consumerTeamStore, deps.quotaChecker, d.pgStores.Sessions, d.pgStores.Agents, contactCollector, deps.postTurn, deps.subagentMgr)
 
+	// Webhook callback worker — delivers async webhook_calls rows to receiver callback_url.
+	// Runs in both editions: Standard (PG, concurrency=4) and Lite (SQLite, concurrency=1).
+	// sqliteonly: single callback worker — SQLite lacks SKIP LOCKED; BEGIN IMMEDIATE serializes.
+	var webhookWorkerCancel context.CancelFunc
+	if d.pgStores != nil &&
+		d.pgStores.WebhookCalls != nil &&
+		d.pgStores.Webhooks != nil &&
+		d.pgStores.Tenants != nil &&
+		d.agentRouter != nil {
+		workerConcurrency := 4
+		if edition.Current().IsLimited() {
+			// sqliteonly: single callback worker — SQLite lacks SKIP LOCKED; BEGIN IMMEDIATE serializes.
+			workerConcurrency = 1
+		}
+		ww := webhooks.NewWebhookWorker(
+			d.pgStores.WebhookCalls,
+			d.pgStores.Webhooks,
+			d.pgStores.Tenants,
+			d.agentRouter,
+			nil, // limiter: created internally with default per-tenant cap (4)
+			webhooks.WorkerConfig{
+				WorkerConcurrency:    workerConcurrency,
+				PerTenantConcurrency: 4,
+			},
+		)
+		// K6: decrypt raw secret for outbound HMAC signing using the same key as inbound verify.
+		ww.SetEncKey(os.Getenv("GOCLAW_ENCRYPTION_KEY"))
+		var workerCtx context.Context
+		workerCtx, webhookWorkerCancel = context.WithCancel(ctx)
+		go ww.Run(workerCtx)
+	}
+
 	// Task recovery ticker: re-dispatches stale/pending team tasks on startup and periodically.
 	var taskTicker *tasks.TaskTicker
 	if d.pgStores.Teams != nil {
@@ -161,6 +194,11 @@ func (d *gatewayDeps) runLifecycle(
 		deps.heartbeatTicker.Stop()
 		if taskTicker != nil {
 			taskTicker.Stop()
+		}
+
+		// Stop webhook callback worker — signals Run() to drain in-flight and exit.
+		if webhookWorkerCancel != nil {
+			webhookWorkerCancel()
 		}
 
 		// Drain audit log queue before closing DB
