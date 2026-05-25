@@ -35,6 +35,9 @@
     { "name": "Storage", "description": "Workspace file management" },
     { "name": "Media", "description": "Media upload and serving" },
     { "name": "System", "description": "Health check and system info" }
+  ,
+    { "name": "Vault", "description": "Knowledge Vault: documents, links, search, tree, upload, enrichment" },
+    { "name": "Vault Graph", "description": "Lightweight graph view of vault documents + links for visualization" }
   ],
   "security": [{ "bearerAuth": [] }],
   "paths": {
@@ -852,6 +855,1643 @@
         "responses": { "200": { "description": "Group cleared" } }
       }
     }
+  ,
+    "/v1/vault/documents": {
+      "get": {
+        "tags": [
+          "Vault"
+        ],
+        "summary": "List vault documents (tenant-wide)",
+        "description": "List vault documents across all agents in the tenant. Non-owners see only personal + their teams' docs.",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          },
+          {
+            "name": "agent_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Optional filter by agent."
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "personal",
+                "team",
+                "shared"
+              ]
+            },
+            "description": "Filter by scope. Owner sees all by default; non-owners are restricted to personal + their teams."
+          },
+          {
+            "name": "doc_type",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Comma-separated list of doc_types."
+          },
+          {
+            "name": "team_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "minimum": 1,
+              "maximum": 500
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Document list with total count.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "documents": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/VaultDocument"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Vault"
+        ],
+        "summary": "Create vault document (no agent)",
+        "description": "Create a vault document not bound to a specific agent. When no `team_id` is given the document is shared scope.",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VaultDocumentInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Document created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VaultDocument"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/vault/documents/{docID}": {
+      "get": {
+        "tags": [
+          "Vault"
+        ],
+        "summary": "Get vault document",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          },
+          {
+            "name": "docID",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Document found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VaultDocument"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Vault"
+        ],
+        "summary": "Update vault document",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          },
+          {
+            "name": "docID",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VaultDocumentUpdateInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Document updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VaultDocument"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "403": {
+            "description": "Forbidden — only owner may change team assignment."
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Vault"
+        ],
+        "summary": "Delete vault document",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          },
+          {
+            "name": "docID",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Document deleted."
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/vault/documents/{docID}/links": {
+      "get": {
+        "tags": [
+          "Vault"
+        ],
+        "summary": "Get document outlinks + backlinks",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          },
+          {
+            "name": "docID",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Outlinks (with resolved target titles) + backlinks.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "outlinks": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/VaultLink"
+                      }
+                    },
+                    "backlinks": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/VaultBacklink"
+                      }
+                    },
+                    "doc_names": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "description": "Map of target doc_id → display name."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/vault/links": {
+      "post": {
+        "tags": [
+          "Vault"
+        ],
+        "summary": "Create vault link",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "from_doc_id",
+                  "to_doc_id"
+                ],
+                "properties": {
+                  "from_doc_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "to_doc_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "link_type": {
+                    "type": "string",
+                    "default": "reference",
+                    "description": "wikilink, reference, task_attachment, ..."
+                  },
+                  "context": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Link created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VaultLink"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "403": {
+            "description": "Forbidden — source document not owned by this agent, or cross-team link."
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/vault/links/{linkID}": {
+      "delete": {
+        "tags": [
+          "Vault"
+        ],
+        "summary": "Delete vault link",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          },
+          {
+            "name": "linkID",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Link deleted."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/vault/links/batch": {
+      "post": {
+        "tags": [
+          "Vault"
+        ],
+        "summary": "Batch get outlinks",
+        "description": "Return all outlinks for up to 500 doc_ids in one query.",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "doc_ids"
+                ],
+                "properties": {
+                  "doc_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "maxItems": 500
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Outlinks.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VaultLink"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/vault/upload": {
+      "post": {
+        "tags": [
+          "Vault"
+        ],
+        "summary": "Upload files to vault",
+        "description": "Accept multipart file uploads (up to 50 files, 50 MB each). Files are written to the tenant workspace under `agents/{agent_key}/`, `teams/{team_id}/`, or shared root, depending on form fields. Allowed extensions: md/txt/json/yaml/yml/csv/toml/xml/html/htm/go/py/js/ts/tsx/jsx/rs/java/rb/sh/sql/swift/kt/c/cpp/h.",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "files"
+                ],
+                "properties": {
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    }
+                  },
+                  "agent_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "team_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Upload result (some files may have errored individually).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "documents": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "document": {
+                            "$ref": "#/components/schemas/VaultDocument"
+                          },
+                          "error": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "count": {
+                      "type": "integer",
+                      "description": "Number of files successfully uploaded."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/vault/rescan": {
+      "post": {
+        "tags": [
+          "Vault"
+        ],
+        "summary": "Rescan tenant workspace",
+        "description": "Walk the tenant workspace and register missing/changed files. Per-tenant concurrency guard (returns 409 if another rescan is in progress).",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Rescan complete.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "new": {
+                      "type": "integer"
+                    },
+                    "updated": {
+                      "type": "integer"
+                    },
+                    "reenqueued": {
+                      "type": "integer"
+                    },
+                    "skipped": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/vault/tree": {
+      "get": {
+        "tags": [
+          "Vault"
+        ],
+        "summary": "List vault tree entries",
+        "description": "Return immediate children (files + virtual folders) under a path prefix for lazy-loading the vault sidebar.",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path prefix to expand. Empty = root. Must not contain `..` or start with `/`."
+          },
+          {
+            "name": "agent_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "personal",
+                "team",
+                "shared"
+              ]
+            }
+          },
+          {
+            "name": "doc_type",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Comma-separated list of doc_types."
+          },
+          {
+            "name": "team_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tree entries.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "entries": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/VaultTreeEntry"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/vault/search": {
+      "post": {
+        "tags": [
+          "Vault"
+        ],
+        "summary": "Search vault (tenant-wide)",
+        "description": "Hybrid full-text + vector search across the tenant. Pass `agent_id` in the body to restrict to one agent.",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "query"
+                ],
+                "properties": {
+                  "query": {
+                    "type": "string"
+                  },
+                  "agent_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "Only used by the tenant-wide endpoint. Ignored when the path already carries `{agentID}`."
+                  },
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "personal",
+                      "team",
+                      "shared"
+                    ]
+                  },
+                  "doc_types": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "max_results": {
+                    "type": "integer",
+                    "default": 10
+                  },
+                  "team_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "chat_id": {
+                    "type": "string",
+                    "description": "Optional. When set with team_id, restrict to same-chat + team-wide docs (isolated semantics)."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ranked hybrid (FTS + vector) search results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VaultSearchResult"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/vault/enrichment/status": {
+      "get": {
+        "tags": [
+          "Vault"
+        ],
+        "summary": "Get enrichment pipeline status",
+        "description": "Returns current per-tenant enrichment progress (summary generation + embeddings). May return an empty object if no enrichment is running or the worker is disabled.",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Progress snapshot.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/vault/enrichment/stop": {
+      "post": {
+        "tags": [
+          "Vault"
+        ],
+        "summary": "Stop running enrichment for this tenant",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stop signal sent (or no enrichment was running).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "stopped": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Enrichment worker not available in this build."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/agents/{agentID}/vault/documents": {
+      "get": {
+        "tags": [
+          "Vault"
+        ],
+        "summary": "List vault documents for agent",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          },
+          {
+            "name": "agentID",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "personal",
+                "team",
+                "shared"
+              ]
+            },
+            "description": "Filter by scope. Owner sees all by default; non-owners are restricted to personal + their teams."
+          },
+          {
+            "name": "doc_type",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Comma-separated list of doc_types."
+          },
+          {
+            "name": "team_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "minimum": 1,
+              "maximum": 500
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Document list with total count.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "documents": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/VaultDocument"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Vault"
+        ],
+        "summary": "Create vault document for agent",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          },
+          {
+            "name": "agentID",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VaultDocumentInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Document created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VaultDocument"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/agents/{agentID}/vault/documents/{docID}": {
+      "get": {
+        "tags": [
+          "Vault"
+        ],
+        "summary": "Get vault document (agent-scoped)",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          },
+          {
+            "name": "agentID",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "docID",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Document found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VaultDocument"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Vault"
+        ],
+        "summary": "Update vault document (agent-scoped)",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          },
+          {
+            "name": "agentID",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "docID",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VaultDocumentUpdateInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Document updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VaultDocument"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "403": {
+            "description": "Forbidden — only owner may change team assignment."
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Vault"
+        ],
+        "summary": "Delete vault document (agent-scoped)",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          },
+          {
+            "name": "agentID",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "docID",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Document deleted."
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/agents/{agentID}/vault/documents/{docID}/links": {
+      "get": {
+        "tags": [
+          "Vault"
+        ],
+        "summary": "Get document links (agent-scoped)",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          },
+          {
+            "name": "agentID",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "docID",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Outlinks (with resolved target titles) + backlinks.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "outlinks": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/VaultLink"
+                      }
+                    },
+                    "backlinks": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/VaultBacklink"
+                      }
+                    },
+                    "doc_names": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "description": "Map of target doc_id → display name."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/agents/{agentID}/vault/search": {
+      "post": {
+        "tags": [
+          "Vault"
+        ],
+        "summary": "Search vault scoped to one agent",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          },
+          {
+            "name": "agentID",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "query"
+                ],
+                "properties": {
+                  "query": {
+                    "type": "string"
+                  },
+                  "agent_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "Only used by the tenant-wide endpoint. Ignored when the path already carries `{agentID}`."
+                  },
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "personal",
+                      "team",
+                      "shared"
+                    ]
+                  },
+                  "doc_types": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "max_results": {
+                    "type": "integer",
+                    "default": 10
+                  },
+                  "team_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "chat_id": {
+                    "type": "string",
+                    "description": "Optional. When set with team_id, restrict to same-chat + team-wide docs (isolated semantics)."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ranked hybrid (FTS + vector) search results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VaultSearchResult"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/agents/{agentID}/vault/links": {
+      "post": {
+        "tags": [
+          "Vault"
+        ],
+        "summary": "Create vault link (agent-scoped)",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          },
+          {
+            "name": "agentID",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "from_doc_id",
+                  "to_doc_id"
+                ],
+                "properties": {
+                  "from_doc_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "to_doc_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "link_type": {
+                    "type": "string",
+                    "default": "reference",
+                    "description": "wikilink, reference, task_attachment, ..."
+                  },
+                  "context": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Link created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VaultLink"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "403": {
+            "description": "Forbidden — source document not owned by this agent, or cross-team link."
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/agents/{agentID}/vault/links/{linkID}": {
+      "delete": {
+        "tags": [
+          "Vault"
+        ],
+        "summary": "Delete vault link (agent-scoped)",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          },
+          {
+            "name": "agentID",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "linkID",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Link deleted."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/vault/graph": {
+      "get": {
+        "tags": [
+          "Vault Graph"
+        ],
+        "summary": "Vault graph snapshot",
+        "description": "Lightweight nodes + edges for graph visualization (Cytoscape, etc.). Field names are short to keep wire size small.",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          },
+          {
+            "name": "agent_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "team_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 2000,
+              "minimum": 1,
+              "maximum": 10000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Nodes + edges.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "nodes": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/VaultGraphNode"
+                      }
+                    },
+                    "edges": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/VaultGraphEdge"
+                      }
+                    },
+                    "total_nodes": {
+                      "type": "integer"
+                    },
+                    "total_edges": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    }
   },
   "components": {
     "securitySchemes": {
@@ -970,7 +2610,328 @@
           "error": { "type": "string" }
         }
       }
+    ,
+    "VaultDocument": {
+      "type": "object",
+      "description": "Document registered in the Knowledge Vault. Content lives on disk in the tenant workspace; the registry holds metadata + summary + embedding + links.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "tenant_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "agent_id": {
+          "type": "string",
+          "format": "uuid",
+          "nullable": true,
+          "description": "Owning agent. Null for team or shared documents."
+        },
+        "team_id": {
+          "type": "string",
+          "format": "uuid",
+          "nullable": true
+        },
+        "chat_id": {
+          "type": "string",
+          "nullable": true,
+          "description": "Set only in isolated teams to scope a document to one chat."
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "personal",
+            "team",
+            "shared"
+          ]
+        },
+        "custom_scope": {
+          "type": "string",
+          "nullable": true
+        },
+        "path": {
+          "type": "string",
+          "description": "Workspace-relative path."
+        },
+        "path_basename": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "doc_type": {
+          "type": "string",
+          "enum": [
+            "context",
+            "memory",
+            "note",
+            "skill",
+            "episodic",
+            "media"
+          ]
+        },
+        "content_hash": {
+          "type": "string",
+          "description": "SHA-256 hex digest of the file."
+        },
+        "summary": {
+          "type": "string"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true,
+          "nullable": true
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
     },
+    "VaultDocumentInput": {
+      "type": "object",
+      "required": [
+        "path",
+        "title"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "example": "specs/PRD-checkout.md",
+          "description": "Workspace-relative path. Must not contain `..` or start with `/`."
+        },
+        "title": {
+          "type": "string"
+        },
+        "doc_type": {
+          "type": "string",
+          "default": "note",
+          "enum": [
+            "context",
+            "memory",
+            "note",
+            "skill",
+            "episodic",
+            "media"
+          ]
+        },
+        "scope": {
+          "type": "string",
+          "default": "personal",
+          "enum": [
+            "personal",
+            "team",
+            "shared"
+          ]
+        },
+        "team_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "When set, the request must be made by a member of the team. Implies scope=team."
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "VaultDocumentUpdateInput": {
+      "type": "object",
+      "description": "Partial update. Omitted fields are left unchanged. `team_id`: nil = no change, `\"\"` = clear (back to personal), uuid = move to team (owner only).",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "doc_type": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "personal",
+            "team",
+            "shared"
+          ]
+        },
+        "team_id": {
+          "type": "string",
+          "nullable": true
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "VaultLink": {
+      "type": "object",
+      "description": "Directed link between two vault documents (wikilink, reference, attachment, ...).",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "from_doc_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "to_doc_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "link_type": {
+          "type": "string",
+          "example": "wikilink"
+        },
+        "context": {
+          "type": "string",
+          "description": "Surrounding text snippet or source reference."
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true,
+          "nullable": true
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "VaultBacklink": {
+      "type": "object",
+      "description": "Enriched backlink: source doc metadata joined with the link row.",
+      "properties": {
+        "from_doc_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "context": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "team_id": {
+          "type": "string",
+          "format": "uuid",
+          "nullable": true
+        }
+      }
+    },
+    "VaultSearchResult": {
+      "type": "object",
+      "properties": {
+        "document": {
+          "$ref": "#/components/schemas/VaultDocument"
+        },
+        "score": {
+          "type": "number",
+          "format": "double"
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "vault",
+            "episodic",
+            "kg"
+          ]
+        }
+      }
+    },
+    "VaultTreeEntry": {
+      "type": "object",
+      "description": "A file or virtual folder under a tree path.",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "isDir": {
+          "type": "boolean"
+        },
+        "hasChildren": {
+          "type": "boolean"
+        },
+        "docId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "docType": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "nullable": true
+        }
+      }
+    },
+    "VaultGraphNode": {
+      "type": "object",
+      "description": "Lightweight vault doc for graph visualization. Field names are intentionally short to keep wire size small.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "t": {
+          "type": "string",
+          "description": "title"
+        },
+        "p": {
+          "type": "string",
+          "description": "path"
+        },
+        "dt": {
+          "type": "string",
+          "description": "doc_type"
+        },
+        "deg": {
+          "type": "integer",
+          "description": "in+out degree"
+        }
+      }
+    },
+    "VaultGraphEdge": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "from": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "to": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "type": {
+          "type": "string",
+          "description": "link_type"
+        }
+      }
+    }
+  },
     "responses": {
       "Unauthorized": {
         "description": "Authentication required or invalid token",
