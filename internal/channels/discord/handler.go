@@ -44,12 +44,29 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 		peerKind = "direct"
 	}
 
+	// Pre-compute mention flag for groups so policy gating can suppress
+	// pairing replies when the bot was not addressed.
+	mentioned := false
+	if !isDM {
+		for _, u := range m.Mentions {
+			if u.ID == c.botUserID {
+				mentioned = true
+				break
+			}
+		}
+		if !mentioned && m.ReferencedMessage != nil &&
+			m.ReferencedMessage.Author != nil &&
+			m.ReferencedMessage.Author.ID == c.botUserID {
+			mentioned = true
+		}
+	}
+
 	if isDM {
 		if !c.checkDMPolicy(ctx, senderID, channelID) {
 			return
 		}
 	} else {
-		if !c.checkGroupPolicy(ctx, senderID, channelID) {
+		if !c.checkGroupPolicy(ctx, senderID, channelID, mentioned) {
 			slog.Debug("discord group message rejected by policy",
 				"user_id", senderID,
 				"username", senderName,
@@ -167,20 +184,8 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 
 	// Mention gating: in groups, only respond when bot is @mentioned (default true).
 	// When not mentioned, record message to pending history for later context.
+	// `mentioned` was pre-computed above for policy gating.
 	if peerKind == "group" && c.RequireMention() {
-		mentioned := false
-		for _, u := range m.Mentions {
-			if u.ID == c.botUserID {
-				mentioned = true
-				break
-			}
-		}
-		// Reply to bot's message counts as implicit mention.
-		if !mentioned && m.ReferencedMessage != nil &&
-			m.ReferencedMessage.Author != nil &&
-			m.ReferencedMessage.Author.ID == c.botUserID {
-			mentioned = true
-		}
 		if !mentioned {
 			// Collect media file paths for group history context.
 			var mediaPaths []string
@@ -318,12 +323,17 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 }
 
 // checkGroupPolicy evaluates the group policy for a sender, with pairing support.
-func (c *Channel) checkGroupPolicy(ctx context.Context, senderID, channelID string) bool {
+// When RequireMention is enabled, pairing replies only fire if the bot was
+// explicitly addressed — otherwise the bot stays silent in the channel.
+func (c *Channel) checkGroupPolicy(ctx context.Context, senderID, channelID string, mentioned bool) bool {
 	result := c.CheckGroupPolicy(ctx, senderID, channelID, c.config.GroupPolicy)
 	switch result {
 	case channels.PolicyAllow:
 		return true
 	case channels.PolicyNeedsPairing:
+		if c.RequireMention() && !mentioned {
+			return false
+		}
 		groupSenderID := fmt.Sprintf("group:%s", channelID)
 		c.sendPairingReply(ctx, groupSenderID, channelID)
 		return false
