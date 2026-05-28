@@ -6,6 +6,17 @@ All notable changes to GoClaw are documented here. For full documentation, see [
 
 ### Added
 
+- **Built-in skill `workspace-organizing`** — closes #71. Discipline skill that
+  teaches agents to keep personal, team, and delegate workspaces tidy.
+  Enforces a purpose-based folder convention with two modes: flat
+  (`notes/`, `data/`, `outputs/`, `scripts/`, `archive/`) for ad-hoc work
+  and project (`projects/<slug>/{docs,assets,source,reports,research}/`)
+  for named multi-file work. Per-agent namespacing under
+  `shared/<agent_key>/` prevents collisions in team workspaces. Integrates
+  pre-write discovery via `vault_search`, `memory_search`, and
+  `knowledge_graph_search` to surface related files before writing and
+  avoid duplicates; documents Vault scope mirroring and id-routing rules.
+
 - **Skill agent manage grants** — Adds per-agent skill edit/delete grants with
   backend checks, HTTP/WS support, SQLite and PostgreSQL schema updates, and web
   dashboard controls for granting and revoking manage access.
