@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
 )
 
 // downloadDefaults bound media downloads to prevent abuse and tame slow
@@ -48,11 +50,27 @@ var errMediaTooLarge = errors.New("max: media file too large")
 // other goclaw channels. Ownership transfers to BaseChannel.HandleMessage,
 // which is responsible for cleanup downstream.
 func (c *Channel) downloadInboundMedia(ctx context.Context, atts []Attachment) []string {
+	return mediaPathsFromInfos(c.downloadInboundMediaInfo(ctx, atts))
+}
+
+// downloadInboundMediaInfo fetches files for image/video/audio/file/sticker
+// attachments. Returns MediaInfo (local path + kind + original filename + MIME)
+// in the same order as the input attachments, skipping non-media types and
+// failed downloads.
+//
+// Failures are logged and continue — partial success is preferable to
+// silently dropping the entire message. The agent still receives the text
+// content and any successfully-downloaded files.
+//
+// Files are written to os.TempDir() with prefix "goclaw_max_*" matching
+// other goclaw channels. Ownership transfers to BaseChannel.HandleMessage,
+// which is responsible for cleanup downstream.
+func (c *Channel) downloadInboundMediaInfo(ctx context.Context, atts []Attachment) []media.MediaInfo {
 	if len(atts) == 0 {
 		return nil
 	}
 
-	var paths []string
+	var infos []media.MediaInfo
 	for i, a := range atts {
 		switch a.Type {
 		case AttachmentTypeImage, AttachmentTypeVideo, AttachmentTypeAudio,
@@ -74,7 +92,12 @@ func (c *Channel) downloadInboundMedia(ctx context.Context, atts []Attachment) [
 				}
 				continue
 			}
-			paths = append(paths, path)
+			infos = append(infos, media.MediaInfo{
+				Type:        maxAttachmentToMediaType(a.Type),
+				FilePath:    path,
+				FileName:    a.Payload.Filename,
+				ContentType: media.DetectMIMEType(a.Payload.Filename),
+			})
 
 		case AttachmentTypeContact, AttachmentTypeShare,
 			AttachmentTypeLocation, AttachmentTypeInlineKeyboard:
@@ -86,7 +109,81 @@ func (c *Channel) downloadInboundMedia(ctx context.Context, atts []Attachment) [
 				"channel", c.Name(), "type", a.Type)
 		}
 	}
+	return infos
+}
+
+// maxAttachmentToMediaType maps a Max attachment type to the shared media kind
+// used by media.BuildMediaTags and the agent media pipeline.
+func maxAttachmentToMediaType(t string) string {
+	switch t {
+	case AttachmentTypeImage, AttachmentTypeSticker:
+		return media.TypeImage
+	case AttachmentTypeVideo:
+		return media.TypeVideo
+	case AttachmentTypeAudio:
+		return media.TypeAudio
+	case AttachmentTypeFile:
+		return media.TypeDocument
+	default:
+		return media.TypeDocument
+	}
+}
+
+// mediaPathsFromInfos extracts local file paths from a MediaInfo slice,
+// preserving order. Returns nil for empty input so callers that branch on a
+// nil slice keep their previous behaviour.
+func mediaPathsFromInfos(infos []media.MediaInfo) []string {
+	if len(infos) == 0 {
+		return nil
+	}
+	paths := make([]string, 0, len(infos))
+	for _, mi := range infos {
+		if mi.FilePath != "" {
+			paths = append(paths, mi.FilePath)
+		}
+	}
 	return paths
+}
+
+// enrichContentWithMedia prepends shared <media:*> tags to the message content
+// and inlines text-document content, so the agent is aware of attachments even
+// when no caption was supplied. Without this, a file sent with no accompanying
+// text reaches the agent as an empty message and is ignored.
+//
+// Mirrors the Telegram channel, which builds the same tags via the shared
+// media package. For text documents (.txt/.csv/.json/...) the content is
+// inlined inside a <file> block; binary files (PDF/DOCX/...) get a hint
+// pointing the agent at the read_document tool. The shared enrichDocumentPaths
+// step later attaches the on-disk path to the <media:document> tag.
+func enrichContentWithMedia(content string, infos []media.MediaInfo) string {
+	if len(infos) == 0 {
+		return content
+	}
+
+	tags := media.BuildMediaTags(infos)
+	if tags != "" {
+		if content != "" {
+			content = tags + "\n\n" + content
+		} else {
+			content = tags
+		}
+	}
+
+	for _, mi := range infos {
+		if mi.Type != media.TypeDocument {
+			continue
+		}
+		doc, err := media.ExtractDocumentContent(mi.FilePath, mi.FileName)
+		if err != nil {
+			slog.Warn("max: document extraction failed",
+				"file", mi.FileName, "error", err)
+			continue
+		}
+		if doc != "" {
+			content += "\n\n" + doc
+		}
+	}
+	return content
 }
 
 // downloadOneAttachment fetches a single attachment URL to a temp file.

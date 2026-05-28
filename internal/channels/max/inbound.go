@@ -332,12 +332,20 @@ func (c *Channel) handleMessage(ctx context.Context, msg Message, edited bool) {
 
 	// Download inbound media to local files. Empty for messages without
 	// media, errors are logged + skipped (we still deliver the text).
-	mediaPaths := c.downloadInboundMedia(ctx, msg.Body.Attachments)
+	mediaInfos := c.downloadInboundMediaInfo(ctx, msg.Body.Attachments)
+	mediaPaths := mediaPathsFromInfos(mediaInfos)
 
 	// Strip bot mention from content for cleaner agent input.
 	if peerKind == "group" && c.creds.BotID != 0 {
 		content = stripBotMention(content, c.creds.Username, c.creds.BotID)
 	}
+
+	// Make the agent aware of attachments even when the message has no
+	// caption. Without this, a file sent with no accompanying text reaches
+	// the agent as an empty message and is ignored. Mirrors the Telegram
+	// channel via the shared media package: builds <media:*> tags and inlines
+	// text-document content (binary files get a read_document hint).
+	content = enrichContentWithMedia(content, mediaInfos)
 
 	// Enforce DM / group policy before dispatch. CheckDMPolicy /
 	// CheckGroupPolicy in BaseChannel evaluate allowlist + pairing state;
