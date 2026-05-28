@@ -556,7 +556,7 @@ func (h *ChannelInstancesHandler) handleResolveContacts(w http.ResponseWriter, r
 // isValidChannelType checks if the channel type is supported.
 func isValidChannelType(ct string) bool {
 	switch ct {
-	case "telegram", "discord", "slack", "whatsapp", "zalo_oa", "zalo_personal", "feishu", "facebook", "pancake":
+	case "telegram", "discord", "slack", "whatsapp", "zalo_oa", "zalo_personal", "feishu", "facebook", "pancake", "line":
 		return true
 	}
 	return false

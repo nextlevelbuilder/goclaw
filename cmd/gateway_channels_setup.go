@@ -15,6 +15,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels/discord"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/feishu"
 	slackchannel "github.com/nextlevelbuilder/goclaw/internal/channels/slack"
+	linechannel "github.com/nextlevelbuilder/goclaw/internal/channels/line"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/telegram"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/whatsapp"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/zalo"
@@ -140,6 +141,16 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 				channelMgr.RegisterChannel(channels.TypeFeishu, f)
 				slog.Info("feishu/lark channel enabled (config)")
 			}
+		}
+	}
+
+	if cfg.Channels.Line.Enabled && cfg.Channels.Line.ChannelAccessToken != "" && instanceLoader == nil {
+		l, err := linechannel.New(cfg.Channels.Line, msgBus, pgStores.Pairing)
+		if err != nil {
+			slog.Error("failed to initialize line channel", "error", err)
+		} else {
+			channelMgr.RegisterChannel(channels.TypeLine, l)
+			slog.Info("line channel enabled (config)")
 		}
 	}
 }

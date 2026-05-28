@@ -22,6 +22,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels/feishu"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/pancake"
 	slackchannel "github.com/nextlevelbuilder/goclaw/internal/channels/slack"
+	linechannel "github.com/nextlevelbuilder/goclaw/internal/channels/line"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/telegram"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/whatsapp"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/zalo"
@@ -493,6 +494,7 @@ func runGateway() {
 		instanceLoader.RegisterFactory(channels.TypeSlack, slackchannel.FactoryWithPendingStore(pgStores.PendingMessages))
 		instanceLoader.RegisterFactory(channels.TypeFacebook, facebook.Factory)
 		instanceLoader.RegisterFactory(channels.TypePancake, pancake.Factory)
+		instanceLoader.RegisterFactory(channels.TypeLine, linechannel.Factory)
 		if err := instanceLoader.LoadAll(context.Background()); err != nil {
 			slog.Error("failed to load channel instances from DB", "error", err)
 		}

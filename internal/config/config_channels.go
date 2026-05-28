@@ -20,6 +20,7 @@ type ChannelsConfig struct {
 	Zalo              ZaloConfig               `json:"zalo"`
 	ZaloPersonal      ZaloPersonalConfig       `json:"zalo_personal"`
 	Feishu            FeishuConfig             `json:"feishu"`
+	Line              LineConfig               `json:"line"`
 	PendingCompaction *PendingCompactionConfig `json:"pending_compaction,omitempty"` // global pending message compaction settings
 }
 
@@ -537,4 +538,14 @@ func MergeChannelGroupQuotas(cfg *Config) {
 			cfg.Gateway.Quota.Groups[key] = *groupCfg.Quota
 		}
 	}
+}
+
+// LineConfig defines configuration for the LINE Messaging API channel.
+type LineConfig struct {
+	Enabled            bool                `json:"enabled"`
+	ChannelAccessToken string              `json:"channel_access_token"`
+	ChannelSecret      string              `json:"channel_secret"`
+	AllowFrom          FlexibleStringSlice `json:"allow_from"`
+	DMPolicy           string              `json:"dm_policy,omitempty"`
+	GroupPolicy        string              `json:"group_policy,omitempty"`
 }
