@@ -16,6 +16,12 @@ Single binary. Production-tested. Agents that orchestrate for you.
 </p>
 
 <p align="center">
+  <a href="https://render.com/deploy?repo=https://github.com/ojusave/goclaw&branch=dev">
+    <img src="https://render.com/images/deploy-to-render-button.svg" alt="Deploy to Render" />
+  </a>
+</p>
+
+<p align="center">
   <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go_1.26-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go" /></a>
   <a href="https://www.postgresql.org/"><img src="https://img.shields.io/badge/PostgreSQL_18-316192?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL" /></a>
   <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker" /></a>
@@ -141,6 +147,21 @@ git tag lite-v0.1.0 && git push origin lite-v0.1.0
 <p align="center">
   <img src="_statics/Mode Prompt System.jpg" alt="4-Mode Prompt System" width="800" />
 </p>
+
+## Deploy on Render
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/ojusave/goclaw&branch=dev)
+
+This fork includes a [`render.yaml`](render.yaml) Blueprint: GoClaw web service, Render Postgres 18 (pgvector), and a persistent disk for config and agent workspaces.
+
+1. Click **Deploy to Render** and connect this GitHub repo.
+2. After the deploy finishes, open the web service URL.
+3. Copy `GOCLAW_GATEWAY_TOKEN` from the service's environment variables in the [Render Dashboard](https://dashboard.render.com/) and sign in to the dashboard.
+4. Set at least one LLM provider key (`GOCLAW_OPENROUTER_API_KEY`, `GOCLAW_ANTHROPIC_API_KEY`, or `GOCLAW_OPENAI_API_KEY`) in the Dashboard or in Render env vars.
+
+New to Render? [Sign up](https://dashboard.render.com/register?utm_source=github&utm_medium=referral&utm_campaign=ojus_demos&utm_content=hero_cta).
+
+**Not supported on Render:** Docker sandbox, Tailscale overlay, and docker-compose browser sidecars. See comments in `render.yaml` for details.
 
 ## Quick Start
 

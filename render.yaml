@@ -1,0 +1,73 @@
+# yaml-language-server: $schema=https://render.com/schema/render.yaml.json
+#
+# GoClaw on Render — Blueprint for https://github.com/ojusave/goclaw
+# Upstream: https://github.com/nextlevelbuilder/goclaw
+#
+# Pattern: image-wrapper (official ghcr.io image with embedded web UI + Python).
+# Render Blueprints do not pass Docker build-args; building Dockerfile from this
+# repo without args skips the embedded dashboard (ENABLE_EMBEDUI defaults false).
+#
+# Not supported on Render: Docker sandbox (WITH_SANDBOX), Tailscale overlay,
+# docker-compose sidecars. Browser automation requires a separate private service.
+#
+# After deploy: open the web dashboard, sign in with GOCLAW_GATEWAY_TOKEN, add
+# an LLM provider API key in Settings, then create agents.
+
+previews:
+  generation: off
+
+projects:
+  - name: goclaw
+    environments:
+      - name: production
+        services:
+          - type: web
+            name: goclaw
+            runtime: image
+            plan: standard
+            region: oregon
+            image:
+              url: ghcr.io/nextlevelbuilder/goclaw:latest
+            healthCheckPath: /health
+            # GoClaw reads GOCLAW_PORT, not Render's PORT — map at container start.
+            dockerCommand: sh -c 'export GOCLAW_PORT="${PORT:-10000}" && exec /app/docker-entrypoint.sh serve'
+            initialDeployHook: psql "$GOCLAW_POSTGRES_DSN" -c 'CREATE EXTENSION IF NOT EXISTS vector; CREATE EXTENSION IF NOT EXISTS pgcrypto;'
+            disk:
+              name: goclaw-data
+              mountPath: /app/data
+              sizeGB: 10
+            envVars:
+              - key: GOCLAW_HOST
+                value: "0.0.0.0"
+              - key: GOCLAW_CONFIG
+                value: /app/data/config.json
+              - key: GOCLAW_DATA_DIR
+                value: /app/data
+              - key: GOCLAW_WORKSPACE
+                value: /app/data/workspace
+              - key: GOCLAW_SKILLS_DIR
+                value: /app/data/skills
+              - key: GOCLAW_GATEWAY_TOKEN
+                generateValue: true
+              - key: GOCLAW_ENCRYPTION_KEY
+                generateValue: true
+              - key: GOCLAW_POSTGRES_DSN
+                fromDatabase:
+                  name: goclaw-db
+                  property: connectionString
+              # Optional: set one provider key to auto-onboard on first boot.
+              # Add more keys from docs.goclaw.sh after deploy if needed.
+              - key: GOCLAW_OPENROUTER_API_KEY
+                sync: false
+              - key: GOCLAW_ANTHROPIC_API_KEY
+                sync: false
+              - key: GOCLAW_OPENAI_API_KEY
+                sync: false
+
+        databases:
+          - name: goclaw-db
+            plan: basic-256mb
+            region: oregon
+            databaseName: goclaw
+            postgresMajorVersion: "18"
+            ipAllowList: []
