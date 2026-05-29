@@ -5,7 +5,7 @@
     "title": "Runtimes",
     "scopeTitle": "Trạng thái runtime theo container",
     "scopeDesc": "Các kiểm tra này chạy bên trong container runtime GoClaw hiện tại. Runtime cài trên máy host, thay đổi shell profile và binary do nvm quản lý sẽ không được dùng ở đây.",
-    "minimalImageHint": "Image latest được phát hành là bản tối giản, nên việc thiếu Python hoặc Node ở đó có thể là bình thường. Hãy dùng biến thể image python, node hoặc full, build lại với ENABLE_PYTHON=true / ENABLE_NODE=true / ENABLE_FULL_SKILLS=true, hoặc cài runtime trực tiếp trong container này.",
+    "minimalImageHint": "Image latest được phát hành có Python nhưng chưa có Node. Dùng image full để có Node/npm và extras, dùng base cho image nhỏ nhất, build lại với ENABLE_NODE=true / ENABLE_FULL_SKILLS=true, hoặc cài runtime trực tiếp trong container này.",
     "available": "Sẵn sàng",
     "missing": "Chưa cài",
     "missingInContainer": "Thiếu trong container"
@@ -41,6 +41,53 @@
       "installedAt": "Ngày cài"
     }
   },
+  "updates": {
+    "available": "{{count}} cập nhật khả dụng",
+    "none": "Tất cả gói đã mới nhất",
+    "refresh": "Làm mới",
+    "refreshing": "Đang làm mới...",
+    "lastCheckedAgo": "Kiểm tra lần cuối {{ago}}",
+    "neverChecked": "Chưa kiểm tra",
+    "update": "Cập nhật",
+    "updateAll": "Cập nhật tất cả",
+    "updating": "Đang cập nhật {{name}}...",
+    "updateSucceeded": "{{name}} đã cập nhật lên {{version}}",
+    "updateFailed": "Cập nhật {{name}} thất bại: {{reason}}",
+    "updateAllResult": "{{succeeded}} thành công, {{failed}} thất bại",
+    "confirmAllTitle": "Cập nhật {{count}} gói?",
+    "confirmAllBody": "Quá trình có thể mất vài phút. Các gói được cập nhật tuần tự.",
+    "selected": "{{count}} đã chọn",
+    "manifestDesyncWarn": "Binary đã cập nhật nhưng lưu manifest thất bại. Cần khôi phục thủ công cho {{name}}.",
+    "cacheStale": "Cache cập nhật đã cũ. Hãy làm mới trước.",
+    "adminOnly": "Cần quyền quản trị viên",
+    "empty": "Không có bản cập nhật",
+    "source": {
+      "github": "GitHub",
+      "pip": "pip",
+      "npm": "npm",
+      "apk": "apk"
+    },
+    "filter": {
+      "all": "Tất cả nguồn",
+      "label": "Lọc"
+    },
+    "unavailable": {
+      "pip": "Chưa cài pip",
+      "npm": "Chưa cài npm",
+      "apk": "apk không khả dụng trên hệ thống"
+    },
+    "button": {
+      "tooltip": {
+        "github": "Cập nhật từ bản phát hành GitHub",
+        "pip": "Cập nhật qua pip",
+        "npm": "Cập nhật qua npm",
+        "apk": "Cập nhật qua apk (gói hệ thống)"
+      }
+    },
+    "summary": {
+      "perSource": "{{source}}: {{count}}"
+    }
+  },
   "actions": {
     "install": "Cài đặt",
     "uninstall": "Gỡ bỏ",
@@ -62,5 +109,17 @@
     "version": "Phiên bản",
     "actions": "Thao tác",
     "empty": "Chưa có gói nào được cài"
+  },
+  "tabs": {
+    "system": "Hệ thống",
+    "python": "Python",
+    "node": "Node",
+    "github": "GitHub",
+    "cliCredentials": "Thông tin CLI"
+  },
+  "runtimesHeader": {
+    "title": "Runtimes",
+    "available": "Sẵn sàng",
+    "missing": "Chưa cài"
   }
 }

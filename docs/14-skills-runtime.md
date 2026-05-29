@@ -1,6 +1,6 @@
 # 14 - Skills Runtime Environment
 
-How skills access Python, Node.js, and system tools inside the Docker container. Covers image variants, pre-installed packages, runtime installation, and security constraints.
+How skills access Python, Node.js, and system tools inside Docker containers and bare-metal gateway deployments. Covers image variants, pre-installed packages, runtime installation, and security constraints.
 
 ---
 
@@ -29,6 +29,11 @@ How skills access Python, Node.js, and system tools inside the Docker container.
 └─────────────────────────────────────────────────────────┘
 ```
 
+Explicit skill activation is handled before runtime execution. When a user starts
+their prompt with `/<skill-slug>` or `/use <skill name>`, the gateway resolves
+the skill, injects its `SKILL.md` into the current turn, and then normal runtime
+rules apply to any scripts or package dependencies that skill uses.
+
 ---
 
 ## 2. Pre-installed Packages (Option A)
@@ -39,10 +44,11 @@ Pre-installed runtimes depend on the Docker image variant you deploy. The Packag
 
 | Variant | Published tag | Build args | Pre-installed runtimes |
 |---------|---------------|------------|------------------------|
-| Minimal | `latest` | `ENABLE_PYTHON=false`, `ENABLE_NODE=false`, `ENABLE_FULL_SKILLS=false` | No Python or Node.js runtimes |
-| Python | `python` | `ENABLE_PYTHON=true` | `python3`, `py3-pip`, `edge-tts` |
-| Node | `node` | `ENABLE_NODE=true` | `nodejs`, `npm` |
-| Full | `full` | `ENABLE_FULL_SKILLS=true` | `python3`, `py3-pip`, `nodejs`, `npm`, `pandoc`, `github-cli`, bundled skill deps |
+| Latest | `latest` | `ENABLE_PYTHON=true`, `ENABLE_NODE=false`, `ENABLE_FULL_SKILLS=false` | `python3`, `py3-pip`, shared Python deps |
+| Base | `base` | `ENABLE_PYTHON=false`, `ENABLE_NODE=false`, `ENABLE_FULL_SKILLS=false` | No Python or Node.js runtimes |
+| Full | `full` | `ENABLE_FULL_SKILLS=true` | `python3`, `py3-pip`, `nodejs`, `npm`, `pandoc`, `github-cli`, bundled skill deps, Workspace CLI |
+| Custom Python | not published | `ENABLE_PYTHON=true` | `python3`, `py3-pip`, shared Python deps |
+| Custom Node | not published | `ENABLE_NODE=true` | `nodejs`, `npm` |
 
 ### Full Variant Extras
 
@@ -62,6 +68,7 @@ Pre-installed runtimes depend on the Docker image variant you deploy. The Packag
 |---------|---------|
 | `docx` | docx skill (document creation) |
 | `pptxgenjs` | pptx skill (presentation creation) |
+| `@googleworkspace/cli` (`gws`) | Google Workspace CLI for Drive, Gmail, Calendar, and Workspace APIs |
 
 ---
 
@@ -90,13 +97,33 @@ PATH=/app/data/.runtime/npm-global/bin:/app/data/.runtime/pip/bin:$PATH
 2. **Node.js**: `npm install -g <package>` installs to `/app/data/.runtime/npm-global/`. `NODE_PATH` includes both system globals (`/usr/local/lib/node_modules`) and runtime globals.
 3. **Persistence**: Packages installed at runtime persist across tool calls within the same container lifecycle (volume-backed).
 
+### Bare-Metal Ubuntu/Debian
+
+When the gateway runs directly on Ubuntu/Debian instead of inside the Alpine Docker image:
+
+1. `pip:<name>` still runs `pip3 install --break-system-packages <name>`.
+2. `npm:<name>` runs `npm install -g <name>` with a GoClaw-owned prefix at `{runtimeDir}/npm-global` instead of `/usr/lib/node_modules`.
+3. Bare system package names use `sudo -n apt-get install -y --no-install-recommends <name>`.
+4. Compatibility aliases: `pip3` installs `python3-pip`; `github-cli` installs `gh`.
+5. Installed apt packages are recorded in `{runtimeDir}/system-packages.json` so the System Packages table can show the user-facing name (`github-cli`) while checking the real apt package (`gh`).
+6. `/tmp/pkg.sock` is Docker/Alpine-only and is not required on bare-metal Ubuntu/Debian.
+
+Default `{runtimeDir}` resolution:
+
+1. `RUNTIME_DIR`, when set.
+2. `GOCLAW_DATA_DIR/.runtime`, when `GOCLAW_DATA_DIR` is set.
+3. `/var/lib/goclaw/data/.runtime` on bare-metal Linux.
+4. `/app/data/.runtime` in Docker-style runtime.
+
 ### Agent Guidance
 
 The system prompt and UI should treat runtime availability as variant-dependent:
 
 ```
-Minimal `latest`: Python/Node may be missing in the container.
-`python`, `node`, and `full` variants pre-install different runtimes.
+Published `latest`: Python is present; Node may be missing in the container.
+Published `full`: Python, Node, and full skill extras are present.
+Published `base`: Python and Node are absent.
+Custom builds can set ENABLE_PYTHON=true or ENABLE_NODE=true.
 To install additional packages: pip3 install <pkg> or npm install -g <pkg>
 ```
 
@@ -117,7 +144,7 @@ To install additional packages: pip3 install <pkg> or npm install -g <pkg>
 
 - Run Python/Node scripts via exec tool
 - Install packages via `pip3 install` / `npm install -g`
-- Access files in `/app/workspace/` including `.media/` subdirectory
+- Access files in `/app/workspace/`, including `.uploads/` for current user uploads and `.media/` for legacy media refs
 - Read skill files from `.goclaw/skills-store/`
 
 ### What Agents CANNOT Do
@@ -134,16 +161,18 @@ To install additional packages: pip3 install <pkg> or npm install -g <pkg>
 Uploaded files (from web chat, Telegram, Discord, etc.) are persisted to:
 
 ```
-/app/workspace/.media/{sessionHash}/{uuid}.{ext}
+/app/workspace/.uploads/{safe-original-name}-{8hex}.{ext}
 ```
+
+Uploads without a usable original filename fall back to `{uuid}.{ext}`. Legacy media refs may still resolve from `.media/{sessionHash}/{uuid}.{ext}`.
 
 The `enrichDocumentPaths()` function injects the full path into `<media:document>` tags:
 
 ```
-<media:document name="report.pdf" path="/app/workspace/.media/abc123/uuid.pdf">
+<media:document name="report.pdf" path="/app/workspace/.uploads/report-a1b2c3d4.pdf">
 ```
 
-Agents can read these files directly via exec — no copy to `/tmp` needed.
+Agents can read these files directly via exec — no copy to `/tmp` needed. For archive uploads such as `.zip`, inspect or extract with commands like `unzip -l "<path>"` or `unzip -q "<path>" -d <output-dir>`.
 
 ---
 
@@ -182,7 +211,7 @@ When a user uploads a skill with the same name via the UI, the managed version t
 To add a new package to the Docker image:
 
 1. **Python**: Add to the `pip3 install` line in `Dockerfile` (usually `full`, sometimes `python`)
-2. **Node.js**: Add to the `npm install -g` line in `Dockerfile` (usually `full`, sometimes `node`)
+2. **Node.js**: Add to the `npm install -g` line in `Dockerfile` (usually `full`, sometimes a custom `ENABLE_NODE=true` build)
 3. **System tool**: Add to the `apk add` line in `Dockerfile`
 4. **Docs/UI guidance**: Update runtime variant docs and any UI copy that describes pre-installed tools
 5. **Rebuild**: `docker compose ... up -d --build`
@@ -199,9 +228,26 @@ github:owner/repo[@tag]
 ```
 
 Admin-only, SHA256-verified, ELF-validated, with a release-picker UI. Binaries
-land in `/app/data/.runtime/bin/` (on `$PATH`). See
+land in `{runtimeDir}/bin/` (on `$PATH`). See
 [`docs/packages-github.md`](./packages-github.md) for syntax, configuration,
 security posture, and troubleshooting (especially musl/glibc compatibility).
+
+### Update Flow (Phase 1: GitHub only)
+
+GitHub binaries support proactive update checking via:
+
+- UI summary bar on the Runtime & Packages page (badge + Refresh + Update All)
+- `/v1/packages/updates*` endpoints (master-scope for writes)
+- Atomic two-phase `.bak` swap with automatic rollback
+- ETag-aware polling (304 = zero rate-limit cost)
+- Pre-release handling via regex + `release.prerelease` + semver ordering
+
+See [`docs/packages-github.md`](./packages-github.md) § "Updating Installed
+Packages" for the full contract, troubleshooting, and runbook.
+
+Pip/npm/apk update flows are **deferred to Phase 2** — the `UpdateChecker` /
+`UpdateExecutor` interfaces in `internal/skills/update_registry.go` are
+designed for interface-based extension without Phase 1 refactor.
 
 ---
 
@@ -241,7 +287,7 @@ exclude_deps:    # filter false positives from auto-scan; ignored when deps: is 
 | Prefix | Effect | Example |
 |--------|--------|---------|
 | `pip:` | Python pip install | `pip:psycopg2-binary`, `pip:requests>=2.31` |
-| `npm:` | Global npm install | `npm:typescript` |
+| `npm:` | Global npm install under GoClaw runtime prefix | `npm:typescript`, `npm:@aiagentwiki/cli` |
 | `github:` | GitHub Releases installer (admin) | `github:cli/cli@v2.40.0` |
 | `system:` | apk package via pkg-helper | `system:ffmpeg` |
 | (bare) | Treated as system binary | `pandoc` |

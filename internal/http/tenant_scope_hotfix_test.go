@@ -116,7 +116,7 @@ func TestBuiltinToolsUpdate_RejectsNonMasterAdmin(t *testing.T) {
 // ---- CRITICAL-2: packages handleInstall / handleUninstall regression ----
 
 func TestPackagesInstall_RejectsNonMasterAdmin(t *testing.T) {
-	h := NewPackagesHandler()
+	h := NewPackagesHandler(nil, nil)
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/packages/install", h.handleInstall)
 
@@ -137,7 +137,7 @@ func TestPackagesInstall_RejectsNonMasterAdmin(t *testing.T) {
 }
 
 func TestPackagesUninstall_RejectsNonMasterAdmin(t *testing.T) {
-	h := NewPackagesHandler()
+	h := NewPackagesHandler(nil, nil)
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/packages/uninstall", h.handleUninstall)
 

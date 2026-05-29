@@ -263,10 +263,10 @@ func TestCloneFromTemplatePatchBooleanFields(t *testing.T) {
 	registry := &InMemoryRegistry{}
 
 	template := ModelSpec{
-		ID:       "base",
-		Provider: "openai",
+		ID:        "base",
+		Provider:  "openai",
 		Reasoning: false,
-		Vision:   false,
+		Vision:    false,
 	}
 	registry.Register(template)
 
@@ -371,7 +371,7 @@ func TestOpenAIForwardCompatResolveExactMatch(t *testing.T) {
 	resolver := &OpenAIForwardCompat{}
 	registry.RegisterResolver("openai", resolver)
 
-	// Try to resolve gpt-5.5 which should use gpt-5.4 as template with patch
+	// gpt-5.5 is a seeded model, so direct resolution should win.
 	resolved := registry.Resolve("openai", "gpt-5.5")
 
 	if resolved == nil {
@@ -380,12 +380,11 @@ func TestOpenAIForwardCompatResolveExactMatch(t *testing.T) {
 	if resolved.ID != "gpt-5.5" {
 		t.Errorf("expected ID=gpt-5.5, got %s", resolved.ID)
 	}
-	// Should have patched values from the map
-	if resolved.ContextWindow != 1_000_000 {
-		t.Errorf("expected ContextWindow=1000000 from patch, got %d", resolved.ContextWindow)
+	if resolved.ContextWindow != 1_050_000 {
+		t.Errorf("expected ContextWindow=1050000, got %d", resolved.ContextWindow)
 	}
-	if resolved.MaxTokens != 200_000 {
-		t.Errorf("expected MaxTokens=200000 from patch, got %d", resolved.MaxTokens)
+	if resolved.MaxTokens != 128_000 {
+		t.Errorf("expected MaxTokens=128000, got %d", resolved.MaxTokens)
 	}
 }
 
@@ -403,9 +402,12 @@ func TestOpenAIForwardCompatResolvePrefixMatch(t *testing.T) {
 	if resolved.ID != "gpt-5.5-turbo" {
 		t.Errorf("expected ID=gpt-5.5-turbo, got %s", resolved.ID)
 	}
-	// Should use gpt-5.4 as template with gpt-5.5 patch
-	if resolved.MaxTokens != 200_000 {
-		t.Errorf("expected MaxTokens=200000 from patch, got %d", resolved.MaxTokens)
+	// Should use gpt-5.5 as the latest known template.
+	if resolved.ContextWindow != 1_050_000 {
+		t.Errorf("expected ContextWindow=1050000 from template, got %d", resolved.ContextWindow)
+	}
+	if resolved.MaxTokens != 128_000 {
+		t.Errorf("expected MaxTokens=128000 from template, got %d", resolved.MaxTokens)
 	}
 }
 
@@ -462,8 +464,8 @@ func TestCloneFromTemplatePatchZeroValuesIgnored(t *testing.T) {
 
 	// Patch with zero values should be ignored
 	patch := &ModelSpec{
-		ContextWindow: 0, // Should be ignored
-		MaxTokens:     0, // Should be ignored
+		ContextWindow: 0,  // Should be ignored
+		MaxTokens:     0,  // Should be ignored
 		TokenizerID:   "", // Should be ignored
 		Cost: ModelCost{
 			InputPer1M: 0, // Should be ignored

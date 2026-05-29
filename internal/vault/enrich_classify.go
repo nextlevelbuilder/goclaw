@@ -7,6 +7,7 @@ import (
 	"maps"
 	"slices"
 
+	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -39,6 +40,14 @@ type candidatePair struct {
 func (w *EnrichWorker) classifyLinks(ctx context.Context, provider providers.Provider, model, tenantID, agentID string, results []enriched) {
 	if provider == nil {
 		return
+	}
+	if tid, err := uuid.Parse(tenantID); err == nil {
+		ctx = store.WithTenantID(ctx, tid)
+	}
+	if agentID != "" {
+		if aid, err := uuid.Parse(agentID); err == nil {
+			ctx = store.WithAgentID(ctx, aid)
+		}
 	}
 
 	capped := results

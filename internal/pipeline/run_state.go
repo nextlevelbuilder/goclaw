@@ -78,6 +78,7 @@ type RunInput struct {
 	ForwardMedia      []bus.MediaFile
 	Channel           string
 	ChannelType       string
+	BitrixPortalDomain string // bitrix24-only: portal domain for entity URL construction
 	ChatTitle         string
 	ChatID            string
 	PeerKind          string

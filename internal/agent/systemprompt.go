@@ -99,10 +99,16 @@ type SystemPromptConfig struct {
 	Workspace     string
 	Channel       string                  // runtime channel instance name (e.g. "my-telegram-bot")
 	ChannelType   string                  // platform type (e.g. "zalo_personal", "telegram")
+	// BitrixPortalDomain — bitrix24 channel only. The portal domain (e.g.
+	// "tamgiac.bitrix24.com") looked up from the channel runtime/DB. Used by
+	// buildBitrix24EntityLinkSection to teach the LLM the correct domain for
+	// entity links (tasks, deals, contacts). Empty for non-bitrix24 channels.
+	BitrixPortalDomain string
 	ChatID        string                  // current reply target chat id (drives <current_reply_target>)
 	ChatTitle     string                  // group chat display name (shown in identity line)
 	PeerKind      string                  // "direct" or "group"
 	OwnerIDs      []string                // owner sender IDs
+	SenderID      string                  // current message sender's external ID (numeric for Bitrix24 / Telegram, used to substitute into entity URLs)
 	Mode          PromptMode              // full or minimal
 	ToolNames     []string                // registered tool names
 	SkillsSummary string                  // XML from skills.Loader.BuildSummary()
@@ -406,6 +412,20 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 		if cfg.HasMCPToolSearch {
 			lines = append(lines, buildMCPToolsSearchSection()...)
 		}
+		// C6 (Phase 4): CRM data freshness reminder. When the agent has MCP
+		// tools available for CRM operations (e.g. Bitrix24), the LLM may
+		// recall data from conversation history instead of re-fetching —
+		// causing it to surface fields the user no longer has permission to
+		// see (admin changed CRM access between turns). Explicit policy here
+		// nudges the LLM to re-fetch for record lookups.
+		if isFull && cfg.ChannelType == "bitrix24" {
+			lines = append(lines, buildCRMFreshnessSection()...)
+			// Entity link domain hint: LLM otherwise hallucinates
+			// "bitrix24.example.com" when asked to send a record URL.
+			if cfg.BitrixPortalDomain != "" {
+				lines = append(lines, buildBitrix24EntityLinkSection(cfg.BitrixPortalDomain, cfg.SenderID)...)
+			}
+		}
 	}
 
 	// 6. ## Workspace (sandbox-aware: show container workdir when sandboxed)
@@ -592,7 +612,7 @@ func buildToolingSection(toolNames []string, hasSandbox bool, shellDenyGroups ma
 		lines = append(lines,
 			"",
 			"### Media Files",
-			`When users send media (<media:image path="...">, <media:video id="...">, <media:audio id="...">, <media:document path="...">), use the corresponding read_* tool with the path/media_id.`,
+			`When users send media (<media:image path="...">, <media:video id="...">, <media:audio id="...">, <media:document path="...">), use the corresponding read_* tool with the path/media_id. For archives (.zip, .tar.gz, etc.), use exec with the document path to inspect/extract the archive.`,
 			"You have full vision/audio/video capabilities. NEVER say you cannot see images or files.",
 		)
 	}

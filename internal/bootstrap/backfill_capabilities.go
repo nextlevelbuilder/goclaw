@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"log/slog"
-	"path/filepath"
 )
 
 // BackfillCapabilities seeds CAPABILITIES.md template for all agents that don't have it.
@@ -15,7 +14,7 @@ func BackfillCapabilities(ctx context.Context, db *sql.DB) (int64, error) {
 		return 0, nil
 	}
 
-	tpl, err := templateFS.ReadFile(filepath.Join("templates", CapabilitiesFile))
+	tpl, err := templateFS.ReadFile(templatePath(CapabilitiesFile))
 	if err != nil {
 		return 0, err
 	}

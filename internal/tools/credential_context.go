@@ -31,6 +31,7 @@ func GenerateCredentialContext(creds []store.SecureCLIBinary) string {
 	b.WriteString("- Parse JSON output directly — do NOT pipe to jq\n\n")
 	b.WriteString("### Available CLIs:\n\n")
 
+	hasGit := false
 	for _, c := range creds {
 		b.WriteString(fmt.Sprintf("**%s** — %s\n", c.BinaryName, c.Description))
 		if blocked := summarizeDenyPatterns(c.DenyArgs); blocked != "" {
@@ -40,6 +41,22 @@ func GenerateCredentialContext(creds []store.SecureCLIBinary) string {
 			b.WriteString(fmt.Sprintf("  Tip: %s\n", c.Tips))
 		}
 		b.WriteString("\n")
+		if c.AdapterName != nil && *c.AdapterName == "git" {
+			hasGit = true
+		}
+	}
+
+	if hasGit {
+		// Git adapter has fixed, predictable semantics worth surfacing to the
+		// LLM up front. Keeps the agent from attempting workarounds (writing
+		// to ~/.gitconfig, exporting GIT_USERNAME, etc.) when a subcommand is
+		// outside the auto-auth set.
+		b.WriteString("### git (adapter-managed):\n")
+		b.WriteString("- Auto-authenticated subcommands: `clone`, `fetch`, `pull`, `push`, `submodule`.\n")
+		b.WriteString("- Other subcommands (status, log, diff, commit, branch, …) run WITHOUT credentials — safe for read-only repo work.\n")
+		b.WriteString("- `git config --global` is denied by policy.\n")
+		b.WriteString("- Auth is host-scoped: a credential for `github.com` will NOT authenticate to `gitlab.com`.\n")
+		b.WriteString("- Do NOT attempt to print, copy, or modify the credential — it is injected per-process only.\n\n")
 	}
 
 	b.WriteString("### When a credentialed CLI command is blocked:\n")

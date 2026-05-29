@@ -79,6 +79,7 @@ func extractAgentID(r *http.Request, model string) string {
 // --- Package-level API key cache for shared auth ---
 
 var pkgGatewayToken string
+var pkgNoAuthFallbackAllowed = true
 var pkgAPIKeyCache *apiKeyCache
 var pkgPairingStore store.PairingStore
 var pkgTenantCache *tenantCache
@@ -88,6 +89,12 @@ var pkgOwnerIDs []string
 // Must be called once during server startup before handling requests.
 func InitGatewayToken(token string) {
 	pkgGatewayToken = token
+}
+
+// InitGatewayNoAuthFallbackAllowed controls the legacy empty-token local/dev
+// fallback after startup config validation.
+func InitGatewayNoAuthFallbackAllowed(allowed bool) {
+	pkgNoAuthFallbackAllowed = allowed
 }
 
 // InitAPIKeyCache initializes the shared API key cache with TTL and pubsub invalidation.
@@ -233,8 +240,8 @@ func resolveAuthWithBearer(r *http.Request, bearer string) authResult {
 			slog.Warn("security.http_pairing_auth_failed", "sender_id", senderID, "ip", r.RemoteAddr)
 		}
 	}
-	// No auth configured → admin (no token = dev/single-user mode, full access)
-	if pkgGatewayToken == "" {
+	// No auth configured → admin only when startup allowed local/dev fallback.
+	if pkgGatewayToken == "" && pkgNoAuthFallbackAllowed {
 		return authResult{Role: permissions.RoleAdmin, Authenticated: true, TenantID: store.MasterTenantID}
 	}
 	return authResult{}

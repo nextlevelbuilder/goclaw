@@ -131,6 +131,13 @@ func clientCanReceiveEvent(c *Client, event bus.Event) bool {
 		return true
 	}
 
+	// Package update events → only Owner clients (TenantID=Nil filter above).
+	// red-team B1/C5: explicit branch provides defense-in-depth even though the
+	// Admin/Owner path at line 46 already covers uuid.Nil events for owners.
+	if strings.HasPrefix(event.Name, "package.update.") {
+		return true
+	}
+
 	// Default: deny unknown events to non-admin (fail-closed).
 	return false
 }

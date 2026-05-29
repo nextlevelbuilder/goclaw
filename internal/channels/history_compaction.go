@@ -11,6 +11,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 )
 
 // CompactionConfig configures LLM-based history compaction.
@@ -20,6 +21,7 @@ type CompactionConfig struct {
 	MaxTokens  int                // max output tokens for summarization (default 4096)
 	Provider   providers.Provider // LLM provider for summarization
 	Model      string             // model to use for summarization
+	UsageCaps  *usagecaps.Service
 }
 
 // MaybeCompact checks if compaction is needed for a history key and triggers it in background.
@@ -55,7 +57,7 @@ func (ph *PendingHistory) MaybeCompact(historyKey string, currentCount int, cfg 
 // CompactGroup performs LLM-based compaction on a pending message group.
 // Reused by both auto-compact (channel) and HTTP compact endpoint.
 // Returns the number of entries remaining after compaction.
-func CompactGroup(ctx context.Context, s store.PendingMessageStore, channelName, historyKey string, provider providers.Provider, model string, keepRecent, maxTokens int) (int, error) {
+func CompactGroup(ctx context.Context, s store.PendingMessageStore, channelName, historyKey string, provider providers.Provider, model string, keepRecent, maxTokens int, usageCaps *usagecaps.Service) (int, error) {
 	if keepRecent <= 0 {
 		keepRecent = 40
 	}
@@ -94,13 +96,18 @@ func CompactGroup(ctx context.Context, s store.PendingMessageStore, channelName,
 		fmt.Fprintf(&sb, "%s%s: %s\n", prefix, ts, e.Body)
 	}
 
-	resp, err := provider.Chat(ctx, providers.ChatRequest{
+	req := providers.ChatRequest{
 		Messages: []providers.Message{{
 			Role:    "user",
 			Content: "Summarize these group chat messages concisely, preserving key topics, decisions, names, and important context:\n\n" + sb.String(),
 		}},
 		Model:   model,
 		Options: map[string]any{"max_tokens": maxTokens, "temperature": 0.3},
+	}
+	resp, err := usageCaps.Chat(ctx, provider, req, usagecaps.ChatOptions{
+		ModelID:         model,
+		Purpose:         "pending-history-compaction",
+		MaxOutputTokens: maxTokens,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("llm summarize: %w", err)
@@ -185,7 +192,7 @@ func (ph *PendingHistory) runCompaction(historyKey string, cfg *CompactionConfig
 		return
 	}
 
-	_, err = CompactGroup(ctx, ph.store, ph.channelName, historyKey, cfg.Provider, cfg.Model, cfg.KeepRecent, cfg.MaxTokens)
+	_, err = CompactGroup(ctx, ph.store, ph.channelName, historyKey, cfg.Provider, cfg.Model, cfg.KeepRecent, cfg.MaxTokens, cfg.UsageCaps)
 	if err != nil {
 		slog.Warn("compaction.failed", "channel", ph.channelName, "key", historyKey, "error", err)
 		return

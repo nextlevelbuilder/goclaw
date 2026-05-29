@@ -14,6 +14,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -23,6 +24,7 @@ import (
 func (s *AgentSummoner) RegenerateAgent(agentID uuid.UUID, tenantID uuid.UUID, providerName, model, editPrompt string) {
 	ctx, cancel := context.WithTimeout(store.WithTenantID(context.Background(), tenantID), 300*time.Second)
 	defer cancel()
+	ctx = store.WithAgentID(ctx, agentID)
 
 	s.ensureBackfillFiles(ctx, agentID)
 
@@ -121,7 +123,7 @@ func (s *AgentSummoner) generateFiles(ctx context.Context, providerName, model, 
 
 	slog.Info("summoning: calling LLM", "provider", providerName, "model", model, "prompt_len", len(prompt))
 
-	resp, err := provider.Chat(ctx, providers.ChatRequest{
+	req := providers.ChatRequest{
 		Messages: []providers.Message{
 			{Role: "system", Content: "You are a file generator. Output ONLY the requested XML-tagged files. No extra commentary."},
 			{Role: "user", Content: prompt},
@@ -133,6 +135,12 @@ func (s *AgentSummoner) generateFiles(ctx context.Context, providerName, model, 
 			providers.OptSessionKey:   summonSessionKey,
 			providers.OptDisableTools: true,
 		},
+	}
+	resp, err := s.usageCaps.Chat(ctx, provider, req, usagecaps.ChatOptions{
+		ProviderName:    providerName,
+		ModelID:         model,
+		Purpose:         "agent-summoner",
+		MaxOutputTokens: 8192,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", providerName, err)

@@ -82,6 +82,7 @@ func TestModelContextWindow(t *testing.T) {
 	}{
 		{"claude-sonnet-4-5-20250929", 200_000},
 		{"gpt-4o-mini", 128_000},
+		{"gpt-5.5", 1_050_000},
 		{"gpt-5.4", 1_000_000},
 		{"unknown-model", 200_000}, // conservative default
 	}

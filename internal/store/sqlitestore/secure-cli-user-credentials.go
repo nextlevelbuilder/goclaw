@@ -15,6 +15,11 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
+// userCredSelectCols projects every column callers read off SecureCLIUserCredential.
+// Keep in lockstep with the struct in internal/store/secure_cli_store.go.
+const userCredSelectCols = `id, binary_id, user_id, encrypted_env, COALESCE(metadata, '{}'),
+ credential_type, host_scope, created_at, updated_at`
+
 // GetUserCredentials returns per-user credential overrides for a CLI binary.
 // Returns (nil, nil) if no per-user credentials exist.
 func (s *SQLiteSecureCLIStore) GetUserCredentials(ctx context.Context, binaryID uuid.UUID, userID string) (*store.SecureCLIUserCredential, error) {
@@ -25,14 +30,16 @@ func (s *SQLiteSecureCLIStore) GetUserCredentials(ctx context.Context, binaryID 
 
 	var uc store.SecureCLIUserCredential
 	var env []byte
+	var metaBytes []byte
 	var createdAt, updatedAt string
 
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, binary_id, user_id, encrypted_env, COALESCE(metadata, '{}'), created_at, updated_at
+		`SELECT `+userCredSelectCols+`
 		 FROM secure_cli_user_credentials
 		 WHERE binary_id = ? AND user_id = ? AND tenant_id = ?`,
 		binaryID, userID, tid,
-	).Scan(&uc.ID, &uc.BinaryID, &uc.UserID, &env, &uc.Metadata, &createdAt, &updatedAt)
+	).Scan(&uc.ID, &uc.BinaryID, &uc.UserID, &env, &metaBytes,
+		&uc.CredentialType, &uc.HostScope, &createdAt, &updatedAt)
 
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -43,6 +50,9 @@ func (s *SQLiteSecureCLIStore) GetUserCredentials(ctx context.Context, binaryID 
 
 	uc.CreatedAt = createdAt
 	uc.UpdatedAt = updatedAt
+	if len(metaBytes) > 0 {
+		uc.Metadata = metaBytes
+	}
 
 	// Decrypt env
 	if len(env) > 0 && s.encKey != "" {
@@ -56,9 +66,15 @@ func (s *SQLiteSecureCLIStore) GetUserCredentials(ctx context.Context, binaryID 
 	return &uc, nil
 }
 
-// SetUserCredentials creates or updates per-user encrypted env overrides (upsert).
-// Encrypts the env bytes before storing.
+// SetUserCredentials writes a legacy env-vars credential (credential_type / host_scope NULL).
+// Preserves all pre-existing callers.
 func (s *SQLiteSecureCLIStore) SetUserCredentials(ctx context.Context, binaryID uuid.UUID, userID string, encryptedEnv []byte) error {
+	return s.SetUserCredentialsTyped(ctx, binaryID, userID, encryptedEnv, nil, nil)
+}
+
+// SetUserCredentialsTyped is the typed-credential entry point.
+// credentialType / hostScope are NULL for legacy env-only credentials.
+func (s *SQLiteSecureCLIStore) SetUserCredentialsTyped(ctx context.Context, binaryID uuid.UUID, userID string, encryptedEnv []byte, credentialType, hostScope *string) error {
 	tid := store.TenantIDFromContext(ctx)
 	if tid == uuid.Nil {
 		tid = store.MasterTenantID
@@ -79,12 +95,16 @@ func (s *SQLiteSecureCLIStore) SetUserCredentials(ctx context.Context, binaryID 
 	id := store.GenNewID()
 
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO secure_cli_user_credentials (id, binary_id, user_id, encrypted_env, metadata, tenant_id, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, '{}', ?, ?, ?)
+		`INSERT INTO secure_cli_user_credentials
+		   (id, binary_id, user_id, encrypted_env, metadata, tenant_id,
+		    credential_type, host_scope, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, '{}', ?, ?, ?, ?, ?)
 		 ON CONFLICT (binary_id, user_id, tenant_id) DO UPDATE SET
-		   encrypted_env = excluded.encrypted_env,
-		   updated_at = excluded.updated_at`,
-		id, binaryID, userID, envBytes, tid, now, now,
+		   encrypted_env   = excluded.encrypted_env,
+		   credential_type = excluded.credential_type,
+		   host_scope      = excluded.host_scope,
+		   updated_at      = excluded.updated_at`,
+		id, binaryID, userID, envBytes, tid, credentialType, hostScope, now, now,
 	)
 	return err
 }
@@ -110,7 +130,7 @@ func (s *SQLiteSecureCLIStore) ListUserCredentials(ctx context.Context, binaryID
 	}
 
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, binary_id, user_id, encrypted_env, COALESCE(metadata, '{}'), created_at, updated_at
+		`SELECT `+userCredSelectCols+`
 		 FROM secure_cli_user_credentials
 		 WHERE binary_id = ? AND tenant_id = ?
 		 ORDER BY created_at`, binaryID, tid)
@@ -123,14 +143,19 @@ func (s *SQLiteSecureCLIStore) ListUserCredentials(ctx context.Context, binaryID
 	for rows.Next() {
 		var uc store.SecureCLIUserCredential
 		var env []byte
+		var metaBytes []byte
 		var createdAt, updatedAt string
 
-		if err := rows.Scan(&uc.ID, &uc.BinaryID, &uc.UserID, &env, &uc.Metadata, &createdAt, &updatedAt); err != nil {
+		if err := rows.Scan(&uc.ID, &uc.BinaryID, &uc.UserID, &env, &metaBytes,
+			&uc.CredentialType, &uc.HostScope, &createdAt, &updatedAt); err != nil {
 			return nil, err
 		}
 
 		uc.CreatedAt = createdAt
 		uc.UpdatedAt = updatedAt
+		if len(metaBytes) > 0 {
+			uc.Metadata = metaBytes
+		}
 
 		if len(env) > 0 && s.encKey != "" {
 			if decrypted, err := crypto.Decrypt(string(env), s.encKey); err == nil {

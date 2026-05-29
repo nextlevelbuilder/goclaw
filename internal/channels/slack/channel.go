@@ -101,8 +101,11 @@ func New(cfg config.SlackConfig, msgBus *bus.MessageBus, pairingSvc store.Pairin
 		historyLimit = channels.DefaultGroupHistoryLimit
 	}
 
-	debounceDelay := time.Duration(cfg.DebounceDelay) * time.Millisecond
-	if cfg.DebounceDelay == 0 {
+	debounceDelay := 300 * time.Millisecond
+	if cfg.DebounceDelay != nil {
+		debounceDelay = time.Duration(*cfg.DebounceDelay) * time.Millisecond
+	}
+	if debounceDelay < 0 {
 		debounceDelay = 300 * time.Millisecond
 	}
 

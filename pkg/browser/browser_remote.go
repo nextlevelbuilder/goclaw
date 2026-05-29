@@ -95,6 +95,16 @@ func (m *Manager) getPage(targetID string) (*rod.Page, error) {
 // If tenantID is set and the page belongs to a different tenant, access is denied.
 // Must be called with m.mu held.
 func (m *Manager) getPageForTenant(targetID, tenantID string) (*rod.Page, error) {
+	if tenantID != "" && tenantID != MasterTenantID && targetID == "" {
+		for tid, page := range m.pages {
+			if m.pageTenants[tid] == tenantID {
+				m.touchPageLocked(tid)
+				return page, nil
+			}
+		}
+		return nil, fmt.Errorf("no tabs open")
+	}
+
 	page, err := m.getPage(targetID)
 	if err != nil {
 		return nil, err
@@ -113,7 +123,7 @@ func (m *Manager) getPageForTenant(targetID, tenantID string) (*rod.Page, error)
 	if targetID == "" {
 		resolvedTID = string(page.TargetID)
 	}
-	if owner, ok := m.pageTenants[resolvedTID]; ok && owner != tenantID {
+	if owner, ok := m.pageTenants[resolvedTID]; !ok || owner != tenantID {
 		return nil, fmt.Errorf("tab not found: %s", targetID)
 	}
 	m.touchPageLocked(resolvedTID)

@@ -41,7 +41,7 @@ func ValidateImageModel(model string) (string, error) {
 
 // NativeImageRequest describes a single image generation request.
 type NativeImageRequest struct {
-	// Model is the parent LLM model for the Responses API call (e.g. "gpt-5.4").
+	// Model is the parent LLM model for the Responses API call (e.g. "gpt-5.5").
 	// NOT the image model — see ImageModel below.
 	// If empty, the provider uses its own default LLM model.
 	Model string

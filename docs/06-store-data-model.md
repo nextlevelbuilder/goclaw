@@ -45,6 +45,7 @@ The `Stores` struct is the top-level container holding all PostgreSQL-backed sto
 | ContactStore | `PGContactStore` | Channel contacts (auto-collected), cross-channel deduplication, merge |
 | ActivityStore | `PGActivityStore` | Audit logs, action tracking, compliance |
 | SnapshotStore | `PGSnapshotStore` | Hourly usage snapshots, cost aggregation, time series queries |
+| UsageCapStore | `PGUsageCapStore` | OpenRouter pricing catalog, pricing overrides, cap policies, reservations, counters, events |
 | SecureCLIStore | `PGSecureCLIStore` | CLI binary configs with encrypted credential injection |
 | APIKeyStore | `PGAPIKeyStore` | Gateway API keys, scopes, expiration, revocation |
 | HookStore | `PGHookStore` | Lifecycle hook definitions (event, handler type, matcher, config), execution audit log |
@@ -65,6 +66,50 @@ The `Stores` struct is the top-level container holding all PostgreSQL-backed sto
 | SubagentTasksStore | `SQLiteSubagentTasks` | ✓ Parity (json_set for metadata merge) |
 | SecureCLIStore | `SQLiteSecureCLIStore` | ✓ Parity + AES-256-GCM encryption mandatory (GOCLAW_KEY env var required) |
 | HookStore | `SQLiteHookStore` | ✓ Parity (agent_hooks + hook_executions tables, same schema as PG) |
+
+---
+
+## Agent Model Fallback Storage
+
+Agent rows include `model_fallback`, stored as JSONB in PostgreSQL and TEXT JSON in SQLite. The config is per-agent and normalized before runtime use:
+
+- `enabled`: whether fallback is active.
+- `strategy`: currently `priority_order`.
+- `candidates`: ordered backup provider/model pairs. The primary agent provider/model is not stored in this list.
+- `max_attempts`: optional cap across primary plus fallback candidates.
+- `cooldown_enabled`: temporarily skips recently failing routes when enabled.
+
+Migration versions:
+
+- PostgreSQL: `000065_agent_model_fallback`.
+- SQLite: schema v33 to v34.
+
+---
+
+## Usage Cap Storage
+
+Usage cap enforcement is Standard/PostgreSQL-only in round one. The `UsageCapStore` is wired on the PostgreSQL store factory and left nil in SQLite/Lite builds.
+
+Tables:
+- `usage_pricing_catalog`: OpenRouter model catalog prices, raw upstream model payload, sync time.
+- `usage_pricing_overrides`: tenant/provider/model override prices for custom billing assumptions.
+- `usage_cap_policies`: cap definitions scoped by tenant, agent, provider, provider type, model, `window_key`, and `source`.
+- `usage_cap_counters`: current window used and reserved token/cost counters.
+- `usage_cap_reservations`: preflight reservations keyed by LLM call attempt.
+- `usage_cap_events`: allow/block/reconcile/skip audit events.
+
+Reservation updates are atomic: counters are updated only when `used + reserved + estimate` remains below configured token and cost ceilings.
+Reservation keys are idempotent per policy, so a retry using the same key does not double-increment reserved counters.
+Policy `agent_id` references must belong to the same tenant as the policy. Policy and pricing override `provider_id` references may belong to the same tenant or the master tenant for default provider fallback, but not another non-master tenant.
+Catalog and override price fields are nullable decimal strings with non-negative validation in the store layer and database checks.
+Pricing resolution checks exact override/catalog model IDs first, then provider-derived OpenRouter aliases for native unprefixed model IDs.
+
+Agent `budget_monthly_cents` values are bridged into `usage_cap_policies` with `source = 'agent_budget_monthly_cents'`, an agent scope, `window_key = 'month'`, and `max_cost_micros = budget_monthly_cents * 10000`. Updating or clearing the agent budget keeps that generated policy in sync; manual cap policies continue to use `source = 'manual'`.
+
+Migration versions:
+
+- PostgreSQL: `000070_usage_caps_pricing`, `000071_usage_cap_policies`, `000072_agent_budget_usage_cap_bridge`.
+- SQLite: no schema change; feature is not active in Lite.
 
 ---
 

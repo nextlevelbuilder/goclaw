@@ -3,6 +3,7 @@ package backup
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -59,6 +60,9 @@ func TestParseDSN_SpecialCharsInPassword(t *testing.T) {
 }
 
 func TestWritePgpass_FilePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not expose POSIX 0600 permissions reliably")
+	}
 	creds := &PGCredentials{
 		Host: "localhost", Port: "5432",
 		User: "testuser", Password: "testpass",

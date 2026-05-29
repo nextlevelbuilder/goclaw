@@ -343,7 +343,7 @@ func TestPathExemptions(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			normalizedCmd := strings.ReplaceAll(normalizeCommand(tc.cmd), "/app/data", dataDir)
+			normalizedCmd := strings.ReplaceAll(normalizeCommand(tc.cmd), "/app/data", filepath.ToSlash(dataDir))
 			denied := false
 			for _, pattern := range allPatterns {
 				if !pattern.MatchString(normalizedCmd) {
@@ -433,10 +433,10 @@ func TestExecute_AllowsCurrentWorkspaceNestedUnderDeniedRoot(t *testing.T) {
 	tool := NewExecTool("/workspace", false)
 	tool.DenyPaths(dataDir)
 
-	target := filepath.Join(workspace, ".uploads", "report.png")
+	target := filepath.ToSlash(filepath.Join(workspace, ".uploads", "report.png"))
 	ctx := WithToolWorkspace(context.Background(), workspace)
 	result := tool.Execute(ctx, map[string]any{
-		"command": "printf '%s' " + target,
+		"command": "echo " + target,
 	})
 
 	if strings.Contains(result.ForLLM, "command denied by safety policy") {
@@ -456,11 +456,11 @@ func TestExecute_AllowsCurrentTeamWorkspaceNestedUnderDeniedRoot(t *testing.T) {
 	tool := NewExecTool("/workspace", false)
 	tool.DenyPaths(dataDir)
 
-	target := filepath.Join(teamWorkspace, "report.png")
+	target := filepath.ToSlash(filepath.Join(teamWorkspace, "report.png"))
 	ctx := WithToolWorkspace(context.Background(), t.TempDir())
 	ctx = WithToolTeamWorkspace(ctx, teamWorkspace)
 	result := tool.Execute(ctx, map[string]any{
-		"command": "printf '%s' " + target,
+		"command": "echo " + target,
 	})
 
 	if strings.Contains(result.ForLLM, "command denied by safety policy") {
@@ -519,18 +519,19 @@ func TestExecute_AllowsQuotedAndPrefixedUploadArguments(t *testing.T) {
 	if err := os.WriteFile(target, []byte("ok"), 0644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
+	commandTarget := filepath.ToSlash(target)
 
 	tool := NewExecTool("/workspace", false)
 	tool.DenyPaths(dataDir)
 
 	ctx := WithToolWorkspace(context.Background(), workspace)
 	result := tool.Execute(ctx, map[string]any{
-		"command": "printf '%s' file=@\"" + target + "\"",
+		"command": "echo file=@\"" + commandTarget + "\"",
 	})
 	if strings.Contains(result.ForLLM, "command denied by safety policy") {
 		t.Fatalf("expected quoted/prefixed upload argument to bypass deny, got: %s", result.ForLLM)
 	}
-	if !strings.Contains(result.ForLLM, "file=@"+target) {
+	if !strings.Contains(result.ForLLM, "file=@") || !strings.Contains(result.ForLLM, commandTarget) {
 		t.Fatalf("expected output to contain prefixed path, got: %s", result.ForLLM)
 	}
 }
@@ -556,7 +557,7 @@ func TestExecute_DoesNotExemptSymlinkEscapeInsideTeamWorkspace(t *testing.T) {
 
 	linkPath := filepath.Join(teamWorkspace, "leak.txt")
 	if err := os.Symlink(protected, linkPath); err != nil {
-		t.Fatalf("Symlink() error = %v", err)
+		t.Skipf("Symlink() unavailable: %v", err)
 	}
 
 	tool := NewExecTool("/workspace", false)
@@ -584,13 +585,14 @@ func TestExecute_AllowsLegacyWorkspaceUploadsLayout(t *testing.T) {
 	if err := os.WriteFile(target, []byte("ok"), 0644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
+	commandTarget := filepath.ToSlash(target)
 
 	tool := NewExecTool("/workspace", false)
 	tool.DenyPaths(dataDir, ".goclaw/")
 
 	ctx := WithToolWorkspace(context.Background(), workspace)
 	result := tool.Execute(ctx, map[string]any{
-		"command": "cp \"" + target + "\" /tmp/partner.png",
+		"command": "cp \"" + commandTarget + "\" /tmp/partner.png",
 	})
 
 	if strings.Contains(result.ForLLM, "command denied by safety policy") {

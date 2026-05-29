@@ -89,6 +89,10 @@ type PipelineDeps struct {
 	ExecuteToolRaw func(ctx context.Context, tc providers.ToolCall) (providers.Message, any, error)
 	// ProcessToolResult processes a raw tool result with state mutation (sequential only).
 	ProcessToolResult func(ctx context.Context, state *RunState, tc providers.ToolCall, rawMsg providers.Message, rawData any) []providers.Message
+	// SequentialToolCall returns true for tools that must preserve same-response order.
+	// When any tool call in a batch matches, ToolStage uses ExecuteToolCall for the
+	// whole batch instead of parallel raw execution.
+	SequentialToolCall func(tc providers.ToolCall) bool
 	// CheckReadOnly checks read-only streak. Returns warning message (if any) and whether to break.
 	CheckReadOnly func(state *RunState) (*providers.Message, bool)
 

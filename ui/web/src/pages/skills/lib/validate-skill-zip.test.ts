@@ -78,6 +78,20 @@ describe("validateSkillZip (backward compat)", () => {
   });
 });
 
+describe("validateSkillZip upload size limit", () => {
+  it("uses caller-provided limit when validating file size", async () => {
+    const file = new File([new Uint8Array(2 * 1024 * 1024)], "large.zip", { type: "application/zip" });
+    const result = await validateMultiSkillZip(file, { maxUploadSizeMB: 1 });
+    expect(result.error).toBe("upload.tooLarge");
+  });
+
+  it("defaults to 20MB for backward compatibility", async () => {
+    const file = new File([new Uint8Array(2 * 1024 * 1024)], "not-a-real.zip", { type: "application/zip" });
+    const result = await validateSkillZip(file);
+    expect(result.error).toBe("upload.invalidZip");
+  });
+});
+
 describe("validateMultiSkillZip", () => {
   it("detects multiple skills in ZIP", async () => {
     const file = await createTestZip({

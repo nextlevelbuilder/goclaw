@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -138,6 +139,94 @@ func TestFilesHandleServe_FileOutsideAllDirs_WithToken_Returns404(t *testing.T) 
 	// File token exists but path is outside workspace/dataDir → 404 (security denial via NotFound)
 	if w.Code == http.StatusOK {
 		t.Errorf("file outside workspace should not be served with signed token, got 200")
+	}
+}
+
+func TestFilesHandleServe_SignedSymlinkEscape_Returns404(t *testing.T) {
+	h, workspace := makeTestFilesHandler(t)
+	outsideDir := t.TempDir()
+	target := filepath.Join(outsideDir, "secret.txt")
+	if err := os.WriteFile(target, []byte("secret"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	linkPath := filepath.Join(workspace, "link.txt")
+	if err := os.Symlink(target, linkPath); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	urlPath := "/v1/files/" + strings.TrimPrefix(filepath.Clean(linkPath), "/")
+	ft := SignFileToken(urlPath, FileSigningKey(), FileTokenTTL)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/files/{path...}", h.handleServe)
+
+	req := httptest.NewRequest(http.MethodGet, urlPath+"?ft="+ft, nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code == http.StatusOK {
+		t.Fatal("signed symlink escaping workspace should not be served")
+	}
+}
+
+func TestFilesHandleServe_OpenThenSwapToSymlinkEscape_Returns404(t *testing.T) {
+	h, workspace := makeTestFilesHandler(t)
+	outsideDir := t.TempDir()
+	secretPath := filepath.Join(outsideDir, "secret.txt")
+	if err := os.WriteFile(secretPath, []byte("secret"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	filePath := filepath.Join(workspace, "race.txt")
+	if err := os.WriteFile(filePath, []byte("allowed"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	filesAfterOpenHookForTest = func(opened string) {
+		if opened != filePath {
+			return
+		}
+		_ = os.Remove(filePath)
+		_ = os.Symlink(secretPath, filePath)
+	}
+	defer func() { filesAfterOpenHookForTest = nil }()
+
+	urlPath := "/v1/files/" + strings.TrimPrefix(filepath.Clean(filePath), "/")
+	ft := SignFileToken(urlPath, FileSigningKey(), FileTokenTTL)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/files/{path...}", h.handleServe)
+
+	req := httptest.NewRequest(http.MethodGet, urlPath+"?ft="+ft, nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code == http.StatusOK {
+		t.Fatal("file swapped to escaping symlink after open should not be served")
+	}
+	if strings.Contains(w.Body.String(), "secret") {
+		t.Fatal("response leaked swapped outside file content")
+	}
+}
+
+func TestFilesHandleSign_SymlinkEscape_ReturnsForbidden(t *testing.T) {
+	setupTestToken(t, "")
+	setupTestNoAuthFallback(t, true)
+	h, workspace := makeTestFilesHandler(t)
+	outsideDir := t.TempDir()
+	target := filepath.Join(outsideDir, "secret.txt")
+	if err := os.WriteFile(target, []byte("secret"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	linkPath := filepath.Join(workspace, "link.txt")
+	if err := os.Symlink(target, linkPath); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/files/sign", strings.NewReader(`{"path":`+strconv.Quote(linkPath)+`}`))
+	w := httptest.NewRecorder()
+	h.handleSign(w, req)
+
+	if w.Code == http.StatusOK {
+		t.Fatal("sign endpoint should reject symlinks escaping allowed roots")
 	}
 }
 

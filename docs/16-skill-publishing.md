@@ -183,7 +183,7 @@ Unlike the HTTP upload handler, the tool does **not** archive the skill on missi
 | `..` in relative path | Skip (prevent traversal) |
 | Symlinks | Skip (prevent escape) |
 | System artifacts | Skip (`.DS_Store`, `__MACOSX`, `Thumbs.db`, etc.) |
-| Total dir size > 20 MB | Reject with error |
+| Total upload size exceeds configured limit | Reject with error. Default is 20 MB; configurable via `skills.max_upload_size_mb`, `GOCLAW_SKILLS_MAX_UPLOAD_SIZE_MB`, tenant `skills.max_upload_size_mb`, or SKILL.md frontmatter `max_upload_size_mb`; clamped to 1-500 MB. |
 
 ---
 

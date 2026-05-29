@@ -48,7 +48,20 @@ func (s *SQLiteMemoryStore) likeSearch(ctx context.Context, query, agentID, user
 	var q string
 	var args []any
 
-	if userID != "" {
+	if store.IsSharedMemory(ctx) {
+		tc, tcArgs, err := scopeClause(ctx)
+		if err != nil {
+			return nil, err
+		}
+		q = `SELECT path, start_line, end_line, text, user_id
+			 FROM memory_chunks
+			 WHERE agent_id = ?
+			 AND text LIKE ? ESCAPE '\'` + tc + `
+			 ORDER BY updated_at DESC
+			 LIMIT ?`
+		args = append([]any{agentID, pattern}, tcArgs...)
+		args = append(args, limit)
+	} else if userID != "" {
 		tc, tcArgs, err := scopeClause(ctx)
 		if err != nil {
 			return nil, err

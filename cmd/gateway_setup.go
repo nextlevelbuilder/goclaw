@@ -14,11 +14,11 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
-	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
@@ -214,6 +214,7 @@ func setupToolRegistry(
 			// Apply global shell deny-group toggles before any request can arrive.
 			// Per-agent overrides via store.WithShellDenyGroups still win per-key.
 			et.SetGlobalShellDenyGroups(cfg.Tools.ShellDenyGroups)
+			et.SetCommandKeywordAllowlist(cfg.Tools.CommandKeywordAllowlist)
 			et.DenyPaths(dataDir, ".goclaw/")
 			// Allow skills execution: master-tenant skills-store + all tenant-scoped skills-store dirs.
 			et.AllowPathExemptions(
@@ -603,4 +604,3 @@ func setupSkillsSystem(
 
 	return skillsLoader, skillSearchTool, globalSkillsDir, bundledSkillsDir, builtinSkillsDir
 }
-

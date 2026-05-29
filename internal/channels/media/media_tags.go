@@ -102,6 +102,9 @@ func ExtractDocumentContent(filePath, fileName string) (string, error) {
 	if !isText {
 		// Binary files (PDF, DOCX, etc.) are persisted via MediaRef and analyzed
 		// by the read_document tool. Return a hint instead of "not supported" placeholder.
+		if isArchiveFileName(fileName) {
+			return fmt.Sprintf("[Archive: %s — use exec with the path from the <media:document> tag to inspect or extract this archive]", fileName), nil
+		}
 		return fmt.Sprintf("[File: %s — use read_document tool to analyze this file]", fileName), nil
 	}
 
@@ -121,4 +124,17 @@ func ExtractDocumentContent(filePath, fileName string) (string, error) {
 	escaped := html.EscapeString(content)
 
 	return fmt.Sprintf("<file name=%q mime=%q>\n%s\n</file>", fileName, mime, escaped), nil
+}
+
+func isArchiveFileName(fileName string) bool {
+	lower := strings.ToLower(fileName)
+	return strings.HasSuffix(lower, ".zip") ||
+		strings.HasSuffix(lower, ".tar") ||
+		strings.HasSuffix(lower, ".tar.gz") ||
+		strings.HasSuffix(lower, ".tgz") ||
+		strings.HasSuffix(lower, ".tar.bz2") ||
+		strings.HasSuffix(lower, ".tbz2") ||
+		strings.HasSuffix(lower, ".tar.xz") ||
+		strings.HasSuffix(lower, ".txz") ||
+		strings.HasSuffix(lower, ".gz")
 }

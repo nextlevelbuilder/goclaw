@@ -24,7 +24,9 @@ func (s *PGCronStore) AddJob(ctx context.Context, name string, schedule store.Cr
 	}
 
 	payload := store.CronPayload{
-		Kind: "agent_turn", Message: message,
+		Kind:             "agent_turn",
+		Message:          message,
+		CredentialUserID: store.ExplicitCredentialUserIDFromContext(ctx),
 	}
 	payloadJSON, _ := json.Marshal(payload)
 

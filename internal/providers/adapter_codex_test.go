@@ -35,11 +35,22 @@ func TestCodexAdapter_Defaults(t *testing.T) {
 	if !caps.Thinking || !caps.Vision {
 		t.Errorf("expected Thinking+Vision, got %+v", caps)
 	}
-	if caps.MaxContextWindow != 1_000_000 {
-		t.Errorf("MaxContextWindow = %d, want 1_000_000", caps.MaxContextWindow)
+	if caps.MaxContextWindow != 1_050_000 {
+		t.Errorf("MaxContextWindow = %d, want 1_050_000", caps.MaxContextWindow)
 	}
 	if caps.TokenizerID != "o200k_base" {
 		t.Errorf("TokenizerID = %q, want o200k_base", caps.TokenizerID)
+	}
+	body, _, err := a.ToRequest(ChatRequest{Messages: []Message{{Role: "user", Content: "hi"}}})
+	if err != nil {
+		t.Fatalf("ToRequest error: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if payload["model"] != DefaultCodexModel {
+		t.Errorf("default model = %v, want %s", payload["model"], DefaultCodexModel)
 	}
 }
 

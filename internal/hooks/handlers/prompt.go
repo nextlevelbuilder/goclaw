@@ -17,6 +17,8 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/hooks"
 	"github.com/nextlevelbuilder/goclaw/internal/hooks/budget"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
+	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 )
 
 // ── Public surface ──────────────────────────────────────────────────────────
@@ -45,6 +47,9 @@ type PromptHandler struct {
 	// Budget tracks monthly token spend per tenant. Optional — when nil,
 	// budget checks are skipped (Lite edition behavior).
 	Budget *budget.Store
+
+	// UsageCaps enforces provider/model/tenant cost caps before the hook LLM call.
+	UsageCaps *usagecaps.Service
 
 	// DefaultModel is used when a hook config does not specify one.
 	// Recommended: "haiku" for cheap evaluation.
@@ -155,7 +160,17 @@ func (h *PromptHandler) Execute(ctx context.Context, cfg hooks.HookConfig, ev ho
 	req := h.buildChatRequest(cfg, ev, resolvedModel)
 
 	// 6. Call provider.
-	resp, err := provider.Chat(ctx, req)
+	callCtx := ctx
+	if ev.TenantID != uuid.Nil {
+		callCtx = store.WithTenantID(callCtx, ev.TenantID)
+	}
+	resp, err := h.UsageCaps.Chat(callCtx, provider, req, usagecaps.ChatOptions{
+		TenantID:        ev.TenantID,
+		ProviderName:    provider.Name(),
+		ModelID:         resolvedModel,
+		Purpose:         "hook-prompt",
+		MaxOutputTokens: promptMaxTokens(req),
+	})
 	if err != nil {
 		// Fail-closed on transport/provider error for blocking events.
 		if ev.HookEvent.IsBlocking() {
@@ -298,6 +313,23 @@ func (h *PromptHandler) buildChatRequest(cfg hooks.HookConfig, ev hooks.Event, m
 			providers.OptTemperature: 0.0,
 		},
 	}
+}
+
+func promptMaxTokens(req providers.ChatRequest) int {
+	if req.Options == nil {
+		return 512
+	}
+	if v, ok := req.Options[providers.OptMaxTokens]; ok {
+		switch n := v.(type) {
+		case int:
+			return n
+		case int64:
+			return int(n)
+		case float64:
+			return int(n)
+		}
+	}
+	return 512
 }
 
 // sanitizeToolInput canonicalizes a tool_input map into stable JSON with

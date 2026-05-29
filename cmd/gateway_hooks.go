@@ -7,12 +7,13 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/hooks"
-	hookhandlers "github.com/nextlevelbuilder/goclaw/internal/hooks/handlers"
 	"github.com/nextlevelbuilder/goclaw/internal/hooks/budget"
+	hookhandlers "github.com/nextlevelbuilder/goclaw/internal/hooks/handlers"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/security"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
+	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 )
 
 // sharedHookHandlers is populated by wireExtras so the gateway.go router
@@ -27,7 +28,7 @@ var sharedHookHandlers map[hooks.HandlerType]hooks.Handler
 // Budget wiring (C1 fix): the PromptHandler receives a budget.Store bound
 // to pg.NewPGHookBudget so token spend is atomically deducted per tenant.
 // When the DB handle is unavailable, budget falls back to nil (Lite desktop).
-func buildHookHandlers(stores *store.Stores, providerReg *providers.Registry, hooksCfg config.HooksConfig) map[hooks.HandlerType]hooks.Handler {
+func buildHookHandlers(stores *store.Stores, providerReg *providers.Registry, hooksCfg config.HooksConfig, usageCapSvc *usagecaps.Service) map[hooks.HandlerType]hooks.Handler {
 	encryptKey := os.Getenv("GOCLAW_ENCRYPTION_KEY")
 
 	var budgetStore *budget.Store
@@ -38,6 +39,7 @@ func buildHookHandlers(stores *store.Stores, providerReg *providers.Registry, ho
 	promptHandler := &hookhandlers.PromptHandler{
 		Resolver:     hookhandlers.NewRegistryResolver(providerReg, stores.SystemConfigs),
 		Budget:       budgetStore,
+		UsageCaps:    usageCapSvc,
 		DefaultModel: "haiku",
 	}
 

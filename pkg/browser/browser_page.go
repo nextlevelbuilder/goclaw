@@ -83,7 +83,13 @@ func (m *Manager) Screenshot(ctx context.Context, targetID string, fullPage bool
 // Navigate navigates a page to a URL.
 // A ctx-cancel watchdog closes the page if ctx is done during the blocking WaitStable call.
 func (m *Manager) Navigate(ctx context.Context, targetID, url string) error {
-	tenantID := tenantIDFromCtx(ctx)
+	scope := scopeFromCtx(ctx)
+	cookies, err := m.cookiesForURL(ctx, scope, url)
+	if err != nil {
+		return fmt.Errorf("load browser cookies: %w", err)
+	}
+
+	tenantID := scope.Key()
 	m.mu.Lock()
 	page, err := m.getPageForTenant(targetID, tenantID)
 	m.mu.Unlock()
@@ -96,6 +102,14 @@ func (m *Manager) Navigate(ctx context.Context, targetID, url string) error {
 	stop := watchPageClose(ctx, page)
 	defer stop()
 
+	if len(cookies) > 0 {
+		if err := page.SetCookies(cookies); err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return fmt.Errorf("set browser cookies: %w", err)
+		}
+	}
 	if err := page.Navigate(url); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()

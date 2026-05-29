@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -21,6 +22,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -38,6 +40,7 @@ type ProvidersHandler struct {
 	tracingStore    store.TracingStore      // optional: for provider-scoped pool activity
 	agents          store.AgentCRUDStore    // optional: for provider pool activity agent lookup
 	modelReg        providers.ModelRegistry // optional: forward-compat model resolver for Anthropic
+	usageCaps       *usagecaps.Service
 }
 
 // NewProvidersHandler creates a handler for provider management endpoints.
@@ -84,6 +87,10 @@ func (h *ProvidersHandler) SetModelRegistry(r providers.ModelRegistry) {
 	h.modelReg = r
 }
 
+func (h *ProvidersHandler) SetUsageCapService(s *usagecaps.Service) {
+	h.usageCaps = s
+}
+
 // resolveAPIBase returns the provider's api_base, falling back to config/env if empty.
 // For Ollama/OllamaCloud providers, applies a safety-net normalization: if the stored
 // value is missing the /v1 suffix (pre-existing record before write-time normalization),
@@ -107,14 +114,27 @@ func (h *ProvidersHandler) resolveAPIBase(p *store.LLMProviderData) string {
 
 // emitProviderCacheInvalidate broadcasts a provider cache invalidation event.
 // Subscribers (e.g. ACP re-registration in gateway_managed.go) react to reload from DB.
-func (h *ProvidersHandler) emitProviderCacheInvalidate(name string) {
+func (h *ProvidersHandler) emitProviderCacheInvalidate(ctx context.Context, tenantID uuid.UUID, name string) bool {
 	if h.msgBus == nil {
-		return
+		return false
 	}
+	tenantID = providerCacheTenantID(ctx, tenantID)
 	h.msgBus.Broadcast(bus.Event{
-		Name:    protocol.EventCacheInvalidate,
-		Payload: bus.CacheInvalidatePayload{Kind: bus.CacheKindProvider, Key: name},
+		Name:     protocol.EventCacheInvalidate,
+		TenantID: tenantID,
+		Payload:  bus.CacheInvalidatePayload{Kind: bus.CacheKindProvider, Key: name, TenantID: tenantID},
 	})
+	return true
+}
+
+func providerCacheTenantID(ctx context.Context, tenantID uuid.UUID) uuid.UUID {
+	if tenantID != uuid.Nil {
+		return tenantID
+	}
+	if tid := store.TenantIDFromContext(ctx); tid != uuid.Nil {
+		return tid
+	}
+	return store.MasterTenantID
 }
 
 // RegisterRoutes registers all provider management routes on the given mux.
@@ -130,6 +150,7 @@ func (h *ProvidersHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/providers/{id}/models", h.auth(h.handleListProviderModels))
 
 	// Provider + model verification (pre-flight check)
+	mux.HandleFunc("POST /v1/providers/{id}/reconnect", h.auth(h.handleReconnectProvider))
 	mux.HandleFunc("POST /v1/providers/{id}/verify", h.auth(h.handleVerifyProvider))
 	mux.HandleFunc("POST /v1/providers/{id}/verify-embedding", h.auth(h.handleVerifyEmbedding))
 
@@ -154,16 +175,29 @@ func maskAPIKey(p *store.LLMProviderData) {
 	}
 }
 
+type providerRuntimeRegistrationStatus string
+
+const (
+	providerRuntimeRegistered        providerRuntimeRegistrationStatus = "registered"
+	providerRuntimeDisabled          providerRuntimeRegistrationStatus = "disabled"
+	providerRuntimeSkipped           providerRuntimeRegistrationStatus = "skipped"
+	providerRuntimeMissingCredential providerRuntimeRegistrationStatus = "missing_credential"
+	providerRuntimeInvalidConfig     providerRuntimeRegistrationStatus = "invalid_config"
+)
+
 // registerInMemory adds (or replaces) a provider in the in-memory registry
 // so it's immediately usable for verify/chat without a gateway restart.
-func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
+func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) providerRuntimeRegistrationStatus {
 	if h.providerReg == nil || !p.Enabled {
-		return
+		if p.Enabled {
+			return providerRuntimeSkipped
+		}
+		return providerRuntimeDisabled
 	}
 	// ACP agents don't need an API key — skip in-memory registration
 	// (ACP providers are registered via gateway_providers.go on startup or restart)
 	if p.ProviderType == store.ProviderACP {
-		return
+		return providerRuntimeSkipped
 	}
 	// Claude CLI doesn't need an API key — register immediately
 	if p.ProviderType == store.ProviderClaudeCLI {
@@ -179,7 +213,7 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 		}
 		if _, err := exec.LookPath(cliPath); err != nil {
 			slog.Warn("claude-cli: binary not found, skipping in-memory registration", "path", cliPath, "provider", p.Name, "error", err)
-			return
+			return providerRuntimeInvalidConfig
 		}
 		cliOpts := []providers.ClaudeCLIOption{
 			providers.WithClaudeCLIName(p.Name),
@@ -191,7 +225,7 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 			cliOpts = append(cliOpts, providers.WithClaudeCLIMCPConfigData(mcpData))
 		}
 		h.providerReg.RegisterForTenant(p.TenantID, providers.NewClaudeCLIProvider(cliPath, cliOpts...))
-		return
+		return providerRuntimeRegistered
 	}
 	// Ollama doesn't need an API key — handle before the key guard (same as startup).
 	// In Docker, swap localhost → host.docker.internal so the container can reach the host.
@@ -202,10 +236,33 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 			host = "http://localhost:11434/v1"
 		}
 		h.providerReg.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, "ollama", config.DockerLocalhost(host), "llama3.3"))
-		return
+		return providerRuntimeRegistered
+	}
+	// Vertex supports ADC (empty api_key) — handle before the generic key guard.
+	if p.ProviderType == store.ProviderVertex {
+		vsettings := store.ParseVertexProviderSettings(p.Settings)
+		if vsettings == nil {
+			slog.Warn("vertex: missing project_id/region in settings, cannot register", "name", p.Name)
+			return providerRuntimeInvalidConfig
+		}
+		vcfg := providers.VertexConfig{
+			Name:            p.Name,
+			CredentialsJSON: p.APIKey,
+			ProjectID:       vsettings.ProjectID,
+			Region:          vsettings.Region,
+			DefaultModel:    vsettings.Model,
+			APIBaseOverride: p.APIBase,
+		}
+		prov, err := providers.NewVertexProviderWithTimeout(vcfg)
+		if err != nil {
+			slog.Warn("vertex: register in-memory failed", "name", p.Name, "error", err)
+			return providerRuntimeInvalidConfig
+		}
+		h.providerReg.RegisterForTenant(p.TenantID, prov)
+		return providerRuntimeRegistered
 	}
 	if p.APIKey == "" {
-		return
+		return providerRuntimeMissingCredential
 	}
 	apiBase := h.resolveAPIBase(p)
 	switch p.ProviderType {
@@ -246,6 +303,7 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 		}
 		h.providerReg.RegisterForTenant(p.TenantID, prov)
 	}
+	return providerRuntimeRegistered
 }
 
 // normalizeOllamaAPIBase ensures Ollama and OllamaCloud api_base values include the
@@ -399,7 +457,7 @@ func (h *ProvidersHandler) handleCreateProvider(w http.ResponseWriter, r *http.R
 
 	// Register in-memory so verify/chat work without restart
 	h.registerInMemory(&p)
-	h.emitProviderCacheInvalidate(p.Name)
+	h.emitProviderCacheInvalidate(r.Context(), p.TenantID, p.Name)
 
 	emitAudit(h.msgBus, r, "provider.created", "provider", p.ID.String())
 	maskAPIKey(&p)
@@ -424,6 +482,62 @@ func (h *ProvidersHandler) handleGetProvider(w http.ResponseWriter, r *http.Requ
 	maskAPIKey(p)
 	publicProvider := canonicalizeProviderForResponse(p)
 	writeJSON(w, http.StatusOK, publicProvider)
+}
+
+func (h *ProvidersHandler) handleReconnectProvider(w http.ResponseWriter, r *http.Request) {
+	locale := extractLocale(r)
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidID, "provider")})
+		return
+	}
+
+	var req struct {
+		Verify bool `json:"verify"`
+	}
+	if r.Body != nil && r.Body != http.NoBody && r.ContentLength != 0 {
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
+			return
+		}
+		if req.Verify {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidRequest, "verify is not supported by reconnect; call provider verify separately")})
+			return
+		}
+	}
+
+	p, err := h.store.GetProvider(r.Context(), id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "provider", id.String())})
+		return
+	}
+
+	if h.providerReg != nil {
+		h.providerReg.UnregisterForTenant(p.TenantID, p.Name)
+	}
+
+	status := "disabled"
+	registryUpdated := false
+	if p.Enabled {
+		switch h.registerInMemory(p) {
+		case providerRuntimeRegistered:
+			status = "reconnected"
+			registryUpdated = true
+		default:
+			status = "not_registered"
+		}
+	}
+	cacheInvalidated := h.emitProviderCacheInvalidate(r.Context(), p.TenantID, p.Name)
+	emitAudit(h.msgBus, r, "provider.reconnected", "provider", p.ID.String())
+
+	maskAPIKey(p)
+	publicProvider := canonicalizeProviderForResponse(p)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":            status,
+		"provider":          publicProvider,
+		"registry_updated":  registryUpdated,
+		"cache_invalidated": cacheInvalidated,
+	})
 }
 
 func (h *ProvidersHandler) handleUpdateProvider(w http.ResponseWriter, r *http.Request) {
@@ -563,9 +677,9 @@ func (h *ProvidersHandler) handleUpdateProvider(w http.ResponseWriter, r *http.R
 
 	// Notify subscribers (e.g. ACP re-registration) about the change
 	if updated, err := h.store.GetProvider(r.Context(), id); err == nil {
-		h.emitProviderCacheInvalidate(updated.Name)
+		h.emitProviderCacheInvalidate(r.Context(), updated.TenantID, updated.Name)
 		if oldName != "" && oldName != updated.Name {
-			h.emitProviderCacheInvalidate(oldName)
+			h.emitProviderCacheInvalidate(r.Context(), updated.TenantID, oldName)
 		}
 	}
 
@@ -599,7 +713,7 @@ func (h *ProvidersHandler) handleDeleteProvider(w http.ResponseWriter, r *http.R
 		h.providerReg.UnregisterForTenant(providerTenantID, providerName)
 	}
 	if providerName != "" {
-		h.emitProviderCacheInvalidate(providerName)
+		h.emitProviderCacheInvalidate(r.Context(), providerTenantID, providerName)
 	}
 
 	emitAudit(h.msgBus, r, "provider.deleted", "provider", id.String())

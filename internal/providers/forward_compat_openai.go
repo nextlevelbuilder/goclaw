@@ -11,11 +11,10 @@ var openAIForwardCompatMap = map[string]struct {
 	Patch    *ModelSpec
 }{
 	"gpt-5.5": {
-		Template: "gpt-5.4",
-		Patch:    &ModelSpec{ContextWindow: 1_000_000, MaxTokens: 200_000},
+		Template: "gpt-5.5",
 	},
 	"gpt-5.6": {
-		Template: "gpt-5.4",
+		Template: "gpt-5.5",
 		Patch:    &ModelSpec{ContextWindow: 2_000_000, MaxTokens: 200_000},
 	},
 	"o5-mini": {
@@ -24,7 +23,7 @@ var openAIForwardCompatMap = map[string]struct {
 	},
 }
 
-// ResolveForwardCompat handles models like "gpt-5.5" by cloning from "gpt-5.4".
+// ResolveForwardCompat handles future model aliases by cloning from the latest known template.
 func (r *OpenAIForwardCompat) ResolveForwardCompat(modelID string, registry ModelRegistry) *ModelSpec {
 	// Direct map lookup (exact match)
 	if entry, ok := openAIForwardCompatMap[modelID]; ok {

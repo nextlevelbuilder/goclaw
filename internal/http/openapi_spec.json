@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "GoClaw Gateway API",
-    "description": "PostgreSQL multi-tenant AI agent gateway with WebSocket RPC + HTTP API.\n\n## Authentication\n\nAll endpoints require a Bearer token in the `Authorization` header:\n\n```\nAuthorization: Bearer <gateway-token-or-api-key>\n```\n\nYou can use either the **gateway token** (grants admin access) or an **API key** created via the API Keys endpoints (grants scoped access).\n\nIf no token is configured on the server, authentication is disabled (backward compatibility).\n\n## Common Headers\n\n| Header | Description |\n|--------|-------------|\n| `X-GoClaw-User-Id` | External user ID for multi-tenant context |\n| `X-GoClaw-Agent-Id` | Target agent ID (alternative to model prefix) |\n| `X-GoClaw-Tenant-Id` | Tenant scope — UUID or slug (gateway token / cross-tenant API keys) |\n| `Accept-Language` | Locale for error messages (`en`, `vi`, `zh`) |\n\n## WebSocket Protocol\n\nConnect via `POST /ws` (upgrade). Protocol v3 uses frame types: `req`, `res`, `event`.\nFirst request must be `connect` with `{\"token\": \"...\", \"user_id\": \"...\", \"locale\": \"en\"}`.",
+    "description": "PostgreSQL multi-tenant AI agent gateway with WebSocket RPC + HTTP API.\n\n## Authentication\n\nAll endpoints require a Bearer token in the `Authorization` header:\n\n```\nAuthorization: Bearer <gateway-token-or-api-key>\n```\n\nYou can use either the **gateway token** (grants admin access) or an **API key** created via the API Keys endpoints (grants scoped access).\n\nIf no gateway token is configured, empty-token admin access is limited to loopback local development or explicit `GOCLAW_ALLOW_INSECURE_NO_AUTH=1`; externally reachable deployments require `GOCLAW_GATEWAY_TOKEN`.\n\n## Common Headers\n\n| Header | Description |\n|--------|-------------|\n| `X-GoClaw-User-Id` | External user ID for multi-tenant context |\n| `X-GoClaw-Agent-Id` | Target agent ID (alternative to model prefix) |\n| `X-GoClaw-Tenant-Id` | Tenant scope — UUID or slug (gateway token / cross-tenant API keys) |\n| `Accept-Language` | Locale for error messages (`en`, `vi`, `zh`) |\n\n## WebSocket Protocol\n\nConnect via `POST /ws` (upgrade). Protocol v3 uses frame types: `req`, `res`, `event`.\nFirst request must be `connect` with `{\"token\": \"...\", \"user_id\": \"...\", \"locale\": \"en\"}`.",
     "version": "0.2.0",
     "contact": {
       "name": "GoClaw",
@@ -26,6 +26,7 @@
     { "name": "MCP Servers", "description": "MCP server configuration and grants" },
     { "name": "Custom Tools", "description": "Custom tool definitions" },
     { "name": "Built-in Tools", "description": "Built-in tool configuration" },
+    { "name": "Browser", "description": "Browser automation cookie sync" },
     { "name": "Memory", "description": "Agent memory (pgvector) management" },
     { "name": "Knowledge Graph", "description": "Entity knowledge graph" },
     { "name": "Channels", "description": "Channel instance management" },
@@ -60,6 +61,90 @@
               }
             }
           }
+        }
+      }
+    },
+    "/v1/browser/cookies/sync": {
+      "post": {
+        "tags": ["Browser"],
+        "summary": "Sync selected browser cookies",
+        "description": "Stores explicitly selected cookies for the authenticated user and one agent. Cookie values are encrypted at rest and are never returned by list APIs.",
+        "parameters": [
+          { "name": "X-GoClaw-User-Id", "in": "header", "required": true, "schema": { "type": "string" }, "description": "Authenticated external user ID for cookie scope" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["agent_id", "cookies"],
+                "properties": {
+                  "agent_id": { "type": "string" },
+                  "source": { "type": "string", "example": "chrome-selected-cookie-sync" },
+                  "cookies": {
+                    "type": "array",
+                    "maxItems": 200,
+                    "items": {
+                      "type": "object",
+                      "required": ["name", "value"],
+                      "properties": {
+                        "domain": { "type": "string", "example": ".example.com" },
+                        "url": { "type": "string", "example": "https://example.com/app" },
+                        "name": { "type": "string" },
+                        "path": { "type": "string", "example": "/" },
+                        "value": { "type": "string" },
+                        "secure": { "type": "boolean" },
+                        "httpOnly": { "type": "boolean" },
+                        "sameSite": { "type": "string" },
+                        "expiresAt": { "type": "string", "format": "date-time" },
+                        "expirationDate": { "type": "number", "description": "Unix seconds as returned by chrome.cookies" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Cookies synced", "content": { "application/json": { "schema": { "type": "object", "properties": { "synced": { "type": "integer" } } } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "503": { "description": "Cookie encryption is not configured" }
+        }
+      }
+    },
+    "/v1/browser/cookies": {
+      "get": {
+        "tags": ["Browser"],
+        "summary": "List synced browser cookie metadata",
+        "description": "Lists metadata for cookies scoped to the authenticated user and requested agent. Cookie values are redacted.",
+        "parameters": [
+          { "name": "agent_id", "in": "query", "required": true, "schema": { "type": "string" } },
+          { "name": "domain", "in": "query", "schema": { "type": "string" } },
+          { "name": "name", "in": "query", "schema": { "type": "string" } },
+          { "name": "path", "in": "query", "schema": { "type": "string" } },
+          { "name": "X-GoClaw-User-Id", "in": "header", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Cookie metadata", "content": { "application/json": { "schema": { "type": "object", "properties": { "items": { "type": "array", "items": { "type": "object", "properties": { "domain": { "type": "string" }, "name": { "type": "string" }, "path": { "type": "string" }, "secure": { "type": "boolean" }, "httpOnly": { "type": "boolean" }, "sameSite": { "type": "string" }, "expiresAt": { "type": "string", "format": "date-time" }, "source": { "type": "string" }, "updatedAt": { "type": "string", "format": "date-time" } } } } } } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "503": { "description": "Cookie encryption is not configured" }
+        }
+      },
+      "delete": {
+        "tags": ["Browser"],
+        "summary": "Delete synced browser cookies",
+        "parameters": [
+          { "name": "agent_id", "in": "query", "required": true, "schema": { "type": "string" } },
+          { "name": "domain", "in": "query", "schema": { "type": "string" } },
+          { "name": "name", "in": "query", "schema": { "type": "string" } },
+          { "name": "path", "in": "query", "schema": { "type": "string" } },
+          { "name": "X-GoClaw-User-Id", "in": "header", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Cookies deleted", "content": { "application/json": { "schema": { "type": "object", "properties": { "deleted": { "type": "integer" } } } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" }
         }
       }
     },
@@ -103,6 +188,54 @@
           "200": { "description": "Chat completion response (or SSE stream if stream=true)" },
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "429": { "description": "Rate limit exceeded" }
+        }
+      }
+    },
+    "/v1/chat/sessions/{key}/branch": {
+      "post": {
+        "tags": ["Sessions"],
+        "summary": "Branch a chat session",
+        "parameters": [{ "name": "key", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["up_to_index"],
+                "properties": {
+                  "new_session_key": { "type": "string" },
+                  "up_to_index": { "type": "integer", "minimum": 0 },
+                  "label": { "type": "string" },
+                  "metadata": { "type": "object", "additionalProperties": { "type": "string" } }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Session branched" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "403": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/v1/chat/sessions/{key}/history/follow": {
+      "get": {
+        "tags": ["Sessions"],
+        "summary": "Poll chat session history by index cursor",
+        "parameters": [
+          { "name": "key", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "cursor", "in": "query", "schema": { "type": "integer", "minimum": 0, "default": 0 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50, "maximum": 200 } }
+        ],
+        "responses": {
+          "200": { "description": "History page" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "403": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
         }
       }
     },
@@ -482,6 +615,52 @@
         "responses": { "200": { "description": "Provider deleted" } }
       }
     },
+    "/v1/providers/{id}/reconnect": {
+      "post": {
+        "tags": ["Providers"],
+        "summary": "Reconnect provider runtime",
+        "description": "Reload an existing provider from stored config into the runtime registry. Does not mutate stored config and does not call upstream verification.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "verify": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Only false is supported. Call /v1/providers/{id}/verify separately for upstream verification."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Provider reconnect result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "enum": ["reconnected", "disabled", "not_registered"] },
+                    "provider": { "$ref": "#/components/schemas/ProviderInput" },
+                    "registry_updated": { "type": "boolean" },
+                    "cache_invalidated": { "type": "boolean" }
+                  },
+                  "required": ["status", "provider", "registry_updated", "cache_invalidated"]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
     "/v1/providers/{id}/models": {
       "get": {
         "tags": ["Providers"],
@@ -745,6 +924,33 @@
         "responses": { "200": { "description": "Instance deleted" } }
       }
     },
+    "/v1/channels/instances/{id}/writers/test": {
+      "post": {
+        "tags": ["Channels"],
+        "summary": "Test channel group writer permission",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["group_id", "user_id"],
+                "properties": {
+                  "group_id": { "type": "string", "example": "group:telegram:-100123" },
+                  "user_id": { "type": "string", "example": "386246614" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Writer permission decision" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
     "/v1/contacts": {
       "get": {
         "tags": ["Channels"],
@@ -762,6 +968,43 @@
           { "name": "agent_id", "in": "query", "schema": { "type": "string" } }
         ],
         "responses": { "200": { "description": "Trace list" } }
+      }
+    },
+    "/v1/traces/follow": {
+      "get": {
+        "tags": ["Traces"],
+        "summary": "Poll trace changes",
+        "description": "Stateless polling endpoint for traces in one session or one agent. Requires session_key or agent_id.",
+        "parameters": [
+          { "name": "session_key", "in": "query", "schema": { "type": "string" } },
+          { "name": "agent_id", "in": "query", "schema": { "type": "string", "format": "uuid" } },
+          { "name": "status", "in": "query", "schema": { "type": "string" } },
+          { "name": "channel", "in": "query", "schema": { "type": "string" } },
+          { "name": "since", "in": "query", "schema": { "type": "string", "format": "date-time" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50, "maximum": 200 } },
+          { "name": "include_spans", "in": "query", "schema": { "type": "boolean", "default": false } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Trace follow page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "traces": { "type": "array", "items": { "type": "object" } },
+                    "spans_by_trace_id": { "type": "object", "additionalProperties": { "type": "array", "items": { "type": "object" } } },
+                    "server_time": { "type": "string", "format": "date-time" },
+                    "next_since": { "type": "string", "format": "date-time" },
+                    "limit": { "type": "integer" }
+                  },
+                  "required": ["traces", "spans_by_trace_id", "server_time", "next_since", "limit"]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" }
+        }
       }
     },
     "/v1/traces/{traceID}": {
@@ -805,6 +1048,46 @@
           { "name": "offset", "in": "query", "schema": { "type": "integer", "default": 0 } }
         ],
         "responses": { "200": { "description": "Activity log entries" } }
+      }
+    },
+    "/v1/activity/aggregate": {
+      "get": {
+        "tags": ["Activity"],
+        "summary": "Aggregate audit activity logs",
+        "parameters": [
+          { "name": "group_by", "in": "query", "required": true, "schema": { "type": "string", "enum": ["action", "actor_type", "entity_type", "actor_id"] } },
+          { "name": "from", "in": "query", "schema": { "type": "string", "format": "date-time" } },
+          { "name": "to", "in": "query", "schema": { "type": "string", "format": "date-time" } },
+          { "name": "actor_type", "in": "query", "schema": { "type": "string" } },
+          { "name": "actor_id", "in": "query", "schema": { "type": "string" } },
+          { "name": "action", "in": "query", "schema": { "type": "string" } },
+          { "name": "entity_type", "in": "query", "schema": { "type": "string" } },
+          { "name": "entity_id", "in": "query", "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50, "maximum": 200 } }
+        ],
+        "responses": {
+          "200": { "description": "Activity aggregate buckets" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "403": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/v1/logs/runtime/aggregate": {
+      "get": {
+        "tags": ["Activity"],
+        "summary": "Aggregate recent runtime logs from the in-memory ring buffer",
+        "parameters": [
+          { "name": "group_by", "in": "query", "schema": { "type": "string", "enum": ["level", "source"], "default": "level" } },
+          { "name": "level", "in": "query", "schema": { "type": "string", "enum": ["debug", "info", "warn", "error"] } },
+          { "name": "source", "in": "query", "schema": { "type": "string" } },
+          { "name": "from", "in": "query", "schema": { "type": "string", "format": "date-time" } }
+        ],
+        "responses": {
+          "200": { "description": "Runtime log aggregate buckets" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "403": { "$ref": "#/components/responses/Unauthorized" },
+          "503": { "description": "Runtime log tee unavailable" }
+        }
       }
     },
     "/v1/delegations": {

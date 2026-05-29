@@ -99,13 +99,14 @@ type SpanData struct {
 
 // TraceListOpts configures trace listing.
 type TraceListOpts struct {
-	AgentID    *uuid.UUID
-	UserID     string
-	SessionKey string
-	Status     string
-	Channel    string
-	Limit      int
-	Offset     int
+	AgentID      *uuid.UUID
+	UserID       string
+	SessionKey   string
+	Status       string
+	Channel      string
+	ChangedAfter *time.Time
+	Limit        int
+	Offset       int
 }
 
 // CostSummaryOpts configures cost aggregation queries.

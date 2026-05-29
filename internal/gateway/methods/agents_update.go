@@ -60,6 +60,10 @@ func (m *AgentsMethods) handleUpdate(ctx context.Context, client *gateway.Client
 	if req.Params != nil {
 		json.Unmarshal(req.Params, &params)
 	}
+	var rawParams map[string]json.RawMessage
+	if req.Params != nil {
+		_ = json.Unmarshal(req.Params, &rawParams)
+	}
 
 	if params.AgentID == "" {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "agentId")))
@@ -104,7 +108,9 @@ func (m *AgentsMethods) handleUpdate(ctx context.Context, client *gateway.Client
 		if params.IsDefault != nil {
 			updates["is_default"] = *params.IsDefault
 		}
-		if params.BudgetCents != nil {
+		if rawBudget, ok := rawParams["budget_monthly_cents"]; ok && strings.TrimSpace(string(rawBudget)) == "null" {
+			updates["budget_monthly_cents"] = nil
+		} else if params.BudgetCents != nil {
 			updates["budget_monthly_cents"] = *params.BudgetCents
 		}
 		// Per-agent JSONB config overrides

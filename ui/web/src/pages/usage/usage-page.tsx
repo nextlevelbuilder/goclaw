@@ -21,6 +21,7 @@ import { DistributionRow } from "./components/distribution-row";
 import { DurationChart } from "./components/duration-chart";
 import { KnowledgeChart } from "./components/knowledge-chart";
 import { TopModelsTable } from "./components/top-models-table";
+import { UsageCapsPanel } from "./components/usage-caps-panel";
 
 const EMPTY_SUMMARY = { requests: 0, input_tokens: 0, output_tokens: 0, cost: 0, errors: 0, unique_users: 0, llm_calls: 0, tool_calls: 0, avg_duration_ms: 0 };
 
@@ -106,6 +107,10 @@ function AnalyticsDashboard() {
 
       <ErrorBoundary>
         <SummaryCards current={current} previous={previous} loading={loading} />
+      </ErrorBoundary>
+
+      <ErrorBoundary>
+        <UsageCapsPanel />
       </ErrorBoundary>
 
       <ErrorBoundary>

@@ -23,15 +23,15 @@ var virtualSystemFiles = map[string]string{
 
 // ReadFileTool reads file contents, optionally through a sandbox container.
 type ReadFileTool struct {
-	workspace        string
-	restrict         bool
-	allowedPrefixes  []string                // extra allowed path prefixes (e.g. skills dirs)
-	deniedPrefixes   []string                // path prefixes to deny access to (e.g. .goclaw)
-	sandboxMgr       sandbox.Manager         // nil = direct host access
-	contextFileIntc  *ContextFileInterceptor // nil = no virtual FS routing
-	memIntc          *MemoryInterceptor      // nil = no memory routing
-	permStore        store.ConfigPermissionStore // nil = no group read restriction
-	vaultIntc        *VaultInterceptor           // nil = no vault lazy sync
+	workspace       string
+	restrict        bool
+	allowedPrefixes []string                    // extra allowed path prefixes (e.g. skills dirs)
+	deniedPrefixes  []string                    // path prefixes to deny access to (e.g. .goclaw)
+	sandboxMgr      sandbox.Manager             // nil = direct host access
+	contextFileIntc *ContextFileInterceptor     // nil = no virtual FS routing
+	memIntc         *MemoryInterceptor          // nil = no memory routing
+	permStore       store.ConfigPermissionStore // nil = no group read restriction
+	vaultIntc       *VaultInterceptor           // nil = no vault lazy sync
 }
 
 // SetContextFileInterceptor enables virtual FS routing for context files.
@@ -196,14 +196,13 @@ func (t *ReadFileTool) Execute(ctx context.Context, args map[string]any) *Result
 }
 
 func (t *ReadFileTool) executeInSandbox(ctx context.Context, path, sandboxKey string, args map[string]any) *Result {
-	bridge, err := t.getFsBridge(ctx, sandboxKey)
-	if err != nil {
-		return ErrorResult(fmt.Sprintf("sandbox error: %v", err))
-	}
-
 	containerCwd, cwdErr := SandboxCwd(ctx, t.workspace, sandbox.DefaultContainerWorkdir)
 	if cwdErr != nil {
 		return ErrorResult(fmt.Sprintf("sandbox path mapping: %v", cwdErr))
+	}
+	bridge, err := t.getFsBridge(ctx, sandboxKey, containerCwd)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("sandbox error: %v", err))
 	}
 	containerPath := ResolveSandboxPath(path, containerCwd)
 
@@ -215,12 +214,12 @@ func (t *ReadFileTool) executeInSandbox(ctx context.Context, path, sandboxKey st
 	return t.paginateOutput(data, args)
 }
 
-func (t *ReadFileTool) getFsBridge(ctx context.Context, sandboxKey string) (*sandbox.FsBridge, error) {
+func (t *ReadFileTool) getFsBridge(ctx context.Context, sandboxKey, containerCwd string) (*sandbox.FsBridge, error) {
 	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, t.workspace, SandboxConfigFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
-	return sandbox.NewFsBridge(sb.ID(), sandbox.DefaultContainerWorkdir), nil
+	return sandbox.NewFsBridge(sb.ID(), containerCwd), nil
 }
 
 // readFileMaxChars is the output cap for read_file. Large files require offset/limit pagination.
@@ -582,4 +581,3 @@ func resolveThroughExistingAncestors(target string) (string, error) {
 	}
 	return filepath.Clean(target), nil
 }
-

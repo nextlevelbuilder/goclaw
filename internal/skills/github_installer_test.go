@@ -2,17 +2,18 @@ package skills
 
 import (
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
 func TestParseGitHubSpec(t *testing.T) {
 	cases := []struct {
-		in     string
-		ok     bool
-		owner  string
-		repo   string
-		tag    string
+		in    string
+		ok    bool
+		owner string
+		repo  string
+		tag   string
 	}{
 		{"github:cli/cli@v2.45.0", true, "cli", "cli", "v2.45.0"},
 		{"github:cli/cli", true, "cli", "cli", ""},
@@ -123,10 +124,19 @@ func TestAllowedOrg(t *testing.T) {
 }
 
 func TestConfigDefaults(t *testing.T) {
+	runtimeDir := t.TempDir()
+	t.Setenv("RUNTIME_DIR", runtimeDir)
+
 	c := &GitHubPackagesConfig{}
 	c.Defaults()
 	if c.BinDir == "" || c.ManifestPath == "" || c.MaxAssetSizeMB != 200 {
 		t.Errorf("unexpected defaults: %+v", c)
+	}
+	if want := filepath.Join(runtimeDir, "bin"); c.BinDir != want {
+		t.Errorf("BinDir = %q, want %q", c.BinDir, want)
+	}
+	if want := filepath.Join(runtimeDir, "github-packages.json"); c.ManifestPath != want {
+		t.Errorf("ManifestPath = %q, want %q", c.ManifestPath, want)
 	}
 	if c.MaxAssetBytes() != 200*1024*1024 {
 		t.Errorf("MaxAssetBytes wrong: %d", c.MaxAssetBytes())

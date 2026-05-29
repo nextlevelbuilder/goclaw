@@ -27,6 +27,10 @@ func (l *Loop) runViaPipeline(ctx context.Context, req RunRequest) (*RunResult, 
 	provider := l.provider
 	if req.ProviderOverride != nil {
 		provider = req.ProviderOverride
+	} else if req.ModelOverride != "" {
+		if fallback, ok := provider.(interface{ PrimaryProvider() providers.Provider }); ok {
+			provider = fallback.PrimaryProvider()
+		}
 	}
 
 	p := pipeline.NewDefaultPipeline(deps)
@@ -137,7 +141,10 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 		ExecuteToolCall:   cb.executeToolCall,
 		ExecuteToolRaw:    cb.executeToolRaw,
 		ProcessToolResult: cb.processToolResult,
-		CheckReadOnly:     cb.checkReadOnly,
+		SequentialToolCall: func(tc providers.ToolCall) bool {
+			return l.resolveToolCallName(tc.Name) == "wait"
+		},
+		CheckReadOnly: cb.checkReadOnly,
 
 		// Observe: drain InjectCh
 		DrainInjectCh: func() []providers.Message {
@@ -204,9 +211,10 @@ func convertRunInput(req *RunRequest) *pipeline.RunInput {
 		Message:           req.Message,
 		Media:             req.Media,
 		ForwardMedia:      req.ForwardMedia,
-		Channel:           req.Channel,
-		ChannelType:       req.ChannelType,
-		ChatTitle:         req.ChatTitle,
+		Channel:            req.Channel,
+		ChannelType:        req.ChannelType,
+		BitrixPortalDomain: req.BitrixPortalDomain,
+		ChatTitle:          req.ChatTitle,
 		ChatID:            req.ChatID,
 		PeerKind:          req.PeerKind,
 		RunID:             req.RunID,

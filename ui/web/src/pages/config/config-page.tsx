@@ -15,6 +15,7 @@ import { BehaviorSection } from "./sections/behavior-section";
 import { AiDefaultsSection } from "./sections/ai-defaults-section";
 import { QuotaSection } from "./sections/quota-section";
 import { ToolsProfileSection } from "./sections/tools-profile-section";
+import { ToolsBrowserSection } from "./sections/tools-browser-section";
 import { ToolsExecSection } from "./sections/tools-exec-section";
 import { ShellSecuritySection } from "./sections/shell-security-section";
 import { TtsSection } from "./sections/tts-section";
@@ -134,6 +135,11 @@ export function ConfigPage() {
 
         <TabsContent value="tools" className="space-y-4">
           <ToolsProfileSection
+            data={config.tools as any}
+            onSave={(v) => patch({ tools: v })}
+            saving={saving}
+          />
+          <ToolsBrowserSection
             data={config.tools as any}
             onSave={(v) => patch({ tools: v })}
             saving={saving}

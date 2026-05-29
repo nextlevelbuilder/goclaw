@@ -55,15 +55,14 @@ func (s *PGSkillStore) SearchByEmbedding(ctx context.Context, embedding []float3
 		}
 		// Use DB file_path when available; fall back to baseDir construction.
 		if row.FilePath != nil && *row.FilePath != "" {
-			r.Path = *row.FilePath + "/SKILL.md"
+			r.Path = store.SkillMarkdownPath(*row.FilePath)
 		} else {
-			r.Path = fmt.Sprintf("%s/%s/%d/SKILL.md", s.baseDir, row.Slug, row.Version)
+			r.Path = store.SkillMarkdownPath(fmt.Sprintf("%s/%s/%d", s.baseDir, row.Slug, row.Version))
 		}
 		results = append(results, r)
 	}
 	return results, nil
 }
-
 
 func buildSkillEmbeddingTenantCond(scope string) string {
 	if scope == "" {

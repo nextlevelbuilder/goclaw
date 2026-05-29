@@ -13,6 +13,11 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
+// userCredSelectCols projects every column callers read off SecureCLIUserCredential.
+// Keep in lockstep with the struct in internal/store/secure_cli_store.go.
+const userCredSelectCols = `id, binary_id, user_id, encrypted_env, metadata,
+ credential_type, host_scope, created_at, updated_at`
+
 func (s *PGSecureCLIStore) GetUserCredentials(ctx context.Context, binaryID uuid.UUID, userID string) (*store.SecureCLIUserCredential, error) {
 	tid := store.TenantIDFromContext(ctx)
 	if tid == uuid.Nil {
@@ -21,11 +26,12 @@ func (s *PGSecureCLIStore) GetUserCredentials(ctx context.Context, binaryID uuid
 	var uc store.SecureCLIUserCredential
 	var env []byte
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, binary_id, user_id, encrypted_env, metadata, created_at, updated_at
+		`SELECT `+userCredSelectCols+`
 		 FROM secure_cli_user_credentials
 		 WHERE binary_id = $1 AND user_id = $2 AND tenant_id = $3`,
 		binaryID, userID, tid,
-	).Scan(&uc.ID, &uc.BinaryID, &uc.UserID, &env, &uc.Metadata, &uc.CreatedAt, &uc.UpdatedAt)
+	).Scan(&uc.ID, &uc.BinaryID, &uc.UserID, &env, &uc.Metadata,
+		&uc.CredentialType, &uc.HostScope, &uc.CreatedAt, &uc.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -43,7 +49,15 @@ func (s *PGSecureCLIStore) GetUserCredentials(ctx context.Context, binaryID uuid
 	return &uc, nil
 }
 
+// SetUserCredentials writes a legacy env-vars credential (credential_type / host_scope NULL).
+// Preserves all pre-existing callers.
 func (s *PGSecureCLIStore) SetUserCredentials(ctx context.Context, binaryID uuid.UUID, userID string, encryptedEnv []byte) error {
+	return s.SetUserCredentialsTyped(ctx, binaryID, userID, encryptedEnv, nil, nil)
+}
+
+// SetUserCredentialsTyped is the typed-credential entry point.
+// credentialType / hostScope are NULL for legacy env-only credentials.
+func (s *PGSecureCLIStore) SetUserCredentialsTyped(ctx context.Context, binaryID uuid.UUID, userID string, encryptedEnv []byte, credentialType, hostScope *string) error {
 	tid := store.TenantIDFromContext(ctx)
 	if tid == uuid.Nil {
 		tid = store.MasterTenantID
@@ -62,12 +76,16 @@ func (s *PGSecureCLIStore) SetUserCredentials(ctx context.Context, binaryID uuid
 
 	now := time.Now()
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO secure_cli_user_credentials (binary_id, user_id, encrypted_env, metadata, tenant_id, created_at, updated_at)
-		 VALUES ($1, $2, $3, '{}', $4, $5, $5)
+		`INSERT INTO secure_cli_user_credentials
+		   (binary_id, user_id, encrypted_env, metadata, tenant_id,
+		    credential_type, host_scope, created_at, updated_at)
+		 VALUES ($1, $2, $3, '{}', $4, $5, $6, $7, $7)
 		 ON CONFLICT (binary_id, user_id, tenant_id) DO UPDATE SET
-		   encrypted_env = EXCLUDED.encrypted_env,
-		   updated_at = EXCLUDED.updated_at`,
-		binaryID, userID, envBytes, tid, now,
+		   encrypted_env   = EXCLUDED.encrypted_env,
+		   credential_type = EXCLUDED.credential_type,
+		   host_scope      = EXCLUDED.host_scope,
+		   updated_at      = EXCLUDED.updated_at`,
+		binaryID, userID, envBytes, tid, credentialType, hostScope, now,
 	)
 	return err
 }
@@ -90,7 +108,7 @@ func (s *PGSecureCLIStore) ListUserCredentials(ctx context.Context, binaryID uui
 		tid = store.MasterTenantID
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, binary_id, user_id, encrypted_env, metadata, created_at, updated_at
+		`SELECT `+userCredSelectCols+`
 		 FROM secure_cli_user_credentials
 		 WHERE binary_id = $1 AND tenant_id = $2
 		 ORDER BY created_at`, binaryID, tid)
@@ -103,7 +121,8 @@ func (s *PGSecureCLIStore) ListUserCredentials(ctx context.Context, binaryID uui
 	for rows.Next() {
 		var uc store.SecureCLIUserCredential
 		var env []byte
-		if err := rows.Scan(&uc.ID, &uc.BinaryID, &uc.UserID, &env, &uc.Metadata, &uc.CreatedAt, &uc.UpdatedAt); err != nil {
+		if err := rows.Scan(&uc.ID, &uc.BinaryID, &uc.UserID, &env, &uc.Metadata,
+			&uc.CredentialType, &uc.HostScope, &uc.CreatedAt, &uc.UpdatedAt); err != nil {
 			return nil, err
 		}
 		if len(env) > 0 && s.encKey != "" {

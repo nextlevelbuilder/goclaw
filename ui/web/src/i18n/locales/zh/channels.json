@@ -421,5 +421,55 @@
     "relinkDevice": "重新连接",
     "connectedSuccess": "✅ WhatsApp 连接成功！",
     "tabQrCode": "二维码"
+  },
+  "bitrix24": {
+    "portalSelect": {
+      "placeholder": "选择门户...",
+      "empty": "尚未连接 Bitrix24 门户。",
+      "createFirst": "连接第一个 Bitrix24 门户",
+      "createNew": "创建新门户",
+      "pendingBadge": "等待授权 — 点击继续",
+      "loadError": "门户加载失败，请刷新重试。"
+    },
+    "errors": {
+      "portalRequired": "请选择一个门户。",
+      "portalNotInstalled": "此门户尚未完成授权。请先授权再创建通道。"
+    },
+    "create": {
+      "title": "连接 Bitrix24 门户",
+      "submit": "创建并授权 →",
+      "fields": {
+        "name": "门户名称",
+        "nameHint": "内部标识。从域名自动填充，可编辑。",
+        "domain": "域名",
+        "clientId": "Client ID",
+        "clientSecret": "Client Secret"
+      },
+      "errors": {
+        "invalidName": "请使用小写字母、数字、连字符、下划线（2-64 字符）。",
+        "invalidDomain": "必须是有效的 Bitrix24 域名（例如：mycorp.bitrix24.com）。",
+        "duplicateName": "门户名称已存在。",
+        "forbidden": "您需要租户管理员权限才能创建门户。",
+        "gatewayURLUnknown": "请先通过公网 URL（非 localhost）打开 goclaw UI 然后重试。"
+      },
+      "help": {
+        "title": "如何获取 Client ID 和 Secret？",
+        "step1": "以管理员身份打开 Bitrix24 门户。",
+        "step2": "进入开发者资源 → 其他 → 本地应用 → 添加。",
+        "step3": "将 Handler URL 设置为：",
+        "step4": "勾选所需的权限：",
+        "step5": "保存 → 将 Application ID 和 Key 复制到上面的表单。",
+        "localDevWarning": "您正在 localhost — Bitrix24 无法访问此 URL。请先使用 Cloudflare Tunnel 或公网域名。"
+      },
+      "authorize": {
+        "title": "授权 \"{{name}}\"",
+        "openButton": "打开授权页面",
+        "waiting": "等待授权中...",
+        "installed": "门户安装成功！",
+        "timedOut": "尚未完成授权。可从下拉框继续。",
+        "closeResumeLater": "关闭（稍后继续）",
+        "urlUnknown": "无法获取安装 URL。请通过公网 URL 打开 goclaw UI 后从下拉框重试。"
+      }
+    }
   }
 }

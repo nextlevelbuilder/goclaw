@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SKILL_ACCESS_MODE_ORDER } from "./lib/skill-access-mode";
 import type { SkillInfo } from "@/types/skill";
 
 interface SkillEditDialogProps {
@@ -32,7 +33,7 @@ export function SkillEditDialog({ skill, onClose, onSave }: SkillEditDialogProps
   const { t } = useTranslation("skills");
   const [name, setName] = useState(skill.name);
   const [description, setDescription] = useState(skill.description);
-  const [visibility, setVisibility] = useState(skill.visibility ?? "private");
+  const [accessMode, setAccessMode] = useState(skill.visibility ?? "private");
   const [tags, setTags] = useState<string[]>(skill.tags ?? []);
   const [tagInput, setTagInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -40,7 +41,7 @@ export function SkillEditDialog({ skill, onClose, onSave }: SkillEditDialogProps
   useEffect(() => {
     setName(skill.name);
     setDescription(skill.description);
-    setVisibility(skill.visibility ?? "private");
+    setAccessMode(skill.visibility ?? "private");
     setTags(skill.tags ?? []);
   }, [skill]);
 
@@ -60,7 +61,7 @@ export function SkillEditDialog({ skill, onClose, onSave }: SkillEditDialogProps
     if (!skill.id) return;
     setLoading(true);
     try {
-      await onSave(skill.id, { name, description, visibility, tags });
+      await onSave(skill.id, { name, description, visibility: accessMode, tags });
       onClose();
     } catch {
       // toast shown by hook — keep dialog open
@@ -97,15 +98,15 @@ export function SkillEditDialog({ skill, onClose, onSave }: SkillEditDialogProps
           </div>
 
           <div className="space-y-1.5">
-            <Label>{t("edit.visibility")}</Label>
-            <Select value={visibility} onValueChange={setVisibility}>
+            <Label>{t("edit.accessMode")}</Label>
+            <Select value={accessMode} onValueChange={setAccessMode}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="private">{t("edit.privateOption")}</SelectItem>
-                <SelectItem value="internal">{t("edit.internalOption")}</SelectItem>
-                <SelectItem value="public">{t("edit.publicOption")}</SelectItem>
+                {SKILL_ACCESS_MODE_ORDER.map((mode) => (
+                  <SelectItem key={mode} value={mode}>{t(`accessMode.${mode}`)}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

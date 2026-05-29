@@ -140,14 +140,13 @@ func (t *ListFilesTool) Execute(ctx context.Context, args map[string]any) *Resul
 }
 
 func (t *ListFilesTool) executeInSandbox(ctx context.Context, path, sandboxKey string) *Result {
-	bridge, err := t.getFsBridge(ctx, sandboxKey)
-	if err != nil {
-		return ErrorResult(fmt.Sprintf("sandbox error: %v", err))
-	}
-
 	containerCwd, cwdErr := SandboxCwd(ctx, t.workspace, sandbox.DefaultContainerWorkdir)
 	if cwdErr != nil {
 		return ErrorResult(fmt.Sprintf("sandbox path mapping: %v", cwdErr))
+	}
+	bridge, err := t.getFsBridge(ctx, sandboxKey, containerCwd)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("sandbox error: %v", err))
 	}
 	containerPath := ResolveSandboxPath(path, containerCwd)
 
@@ -159,10 +158,10 @@ func (t *ListFilesTool) executeInSandbox(ctx context.Context, path, sandboxKey s
 	return SilentResult(output)
 }
 
-func (t *ListFilesTool) getFsBridge(ctx context.Context, sandboxKey string) (*sandbox.FsBridge, error) {
+func (t *ListFilesTool) getFsBridge(ctx context.Context, sandboxKey, containerCwd string) (*sandbox.FsBridge, error) {
 	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, t.workspace, SandboxConfigFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
-	return sandbox.NewFsBridge(sb.ID(), sandbox.DefaultContainerWorkdir), nil
+	return sandbox.NewFsBridge(sb.ID(), containerCwd), nil
 }

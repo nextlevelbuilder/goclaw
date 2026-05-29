@@ -13,6 +13,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -266,6 +267,10 @@ func (h *BuiltinToolsHandler) handleUpdate(w http.ResponseWriter, r *http.Reques
 	if v, ok := updates["settings"]; ok {
 		// Extract secrets before saving settings
 		if settingsRaw, err := json.Marshal(v); err == nil {
+			if err := tools.ValidateExecSettingsJSON(name, settingsRaw, false); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+				return
+			}
 			cleaned := h.extractAndSaveSecrets(r.Context(), name, settingsRaw)
 			var cleanedMap any
 			if err2 := json.Unmarshal(cleaned, &cleanedMap); err2 == nil {
@@ -389,6 +394,12 @@ func (h *BuiltinToolsHandler) handleSetTenantConfig(w http.ResponseWriter, r *ht
 	if body.Settings != nil && !isValidSettingsJSON(body.Settings) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "settings must be a JSON object or null"})
 		return
+	}
+	if body.Settings != nil {
+		if err := tools.ValidateExecSettingsJSON(name, body.Settings, true); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
 	}
 
 	// Write enabled if provided (preserves settings column via column-list upsert).

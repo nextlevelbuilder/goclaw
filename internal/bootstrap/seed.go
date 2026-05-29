@@ -4,6 +4,7 @@ import (
 	"embed"
 	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
 )
 
@@ -25,7 +26,7 @@ var templateFiles = []string{
 
 // ReadTemplate returns the content of an embedded template file.
 func ReadTemplate(name string) (string, error) {
-	content, err := templateFS.ReadFile(filepath.Join("templates", name))
+	content, err := templateFS.ReadFile(templatePath(name))
 	if err != nil {
 		return "", err
 	}
@@ -88,7 +89,7 @@ func seedTemplate(workspaceDir, name string) (bool, error) {
 	defer f.Close()
 
 	// Read embedded template
-	content, err := templateFS.ReadFile(filepath.Join("templates", name))
+	content, err := templateFS.ReadFile(templatePath(name))
 	if err != nil {
 		os.Remove(dstPath) // clean up empty file
 		return false, err
@@ -99,4 +100,8 @@ func seedTemplate(workspaceDir, name string) (bool, error) {
 	}
 
 	return true, nil
+}
+
+func templatePath(name string) string {
+	return path.Join("templates", name)
 }

@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "GoClaw Selected Cookie Sync",
+  "version": "0.1.0",
+  "description": "Explicitly sync selected cookies from the active tab to a scoped GoClaw browser session.",
+  "permissions": ["activeTab", "cookies", "storage", "tabs"],
+  "optional_host_permissions": ["<all_urls>"],
+  "action": {
+    "default_title": "Sync cookies to GoClaw",
+    "default_popup": "popup.html"
+  }
+}

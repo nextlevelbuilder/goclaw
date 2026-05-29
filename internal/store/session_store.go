@@ -2,11 +2,26 @@ package store
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
+
+var (
+	ErrSessionNotFound      = errors.New("session not found")
+	ErrSessionAlreadyExists = errors.New("session already exists")
+	ErrInvalidSessionBranch = errors.New("invalid session branch")
+)
+
+// SessionBranchOpts configures a durable session branch operation.
+type SessionBranchOpts struct {
+	NewKey    string
+	UpToIndex int
+	Label     string
+	Metadata  map[string]string
+}
 
 // SessionData holds conversation state for one session.
 type SessionData struct {
@@ -20,21 +35,21 @@ type SessionData struct {
 	UserID    string     `json:"userID,omitempty" db:"user_id"`     // External user ID (e.g. Telegram user ID)
 	TeamID    *uuid.UUID `json:"teamID,omitempty" db:"team_id"`     // Team UUID (set for team sessions)
 
-	Model                      string `json:"model,omitempty" db:"model"`
-	Provider                   string `json:"provider,omitempty" db:"provider"`
-	Channel                    string `json:"channel,omitempty" db:"channel"`
-	InputTokens                int64  `json:"inputTokens,omitempty" db:"input_tokens"`
-	OutputTokens               int64  `json:"outputTokens,omitempty" db:"output_tokens"`
-	CompactionCount            int    `json:"compactionCount,omitempty" db:"compaction_count"`
-	MemoryFlushCompactionCount int    `json:"memoryFlushCompactionCount,omitempty" db:"memory_flush_compaction_count"`
-	MemoryFlushAt              int64  `json:"memoryFlushAt,omitempty" db:"-"`
-	Label                      string `json:"label,omitempty" db:"label"`
+	Model                      string            `json:"model,omitempty" db:"model"`
+	Provider                   string            `json:"provider,omitempty" db:"provider"`
+	Channel                    string            `json:"channel,omitempty" db:"channel"`
+	InputTokens                int64             `json:"inputTokens,omitempty" db:"input_tokens"`
+	OutputTokens               int64             `json:"outputTokens,omitempty" db:"output_tokens"`
+	CompactionCount            int               `json:"compactionCount,omitempty" db:"compaction_count"`
+	MemoryFlushCompactionCount int               `json:"memoryFlushCompactionCount,omitempty" db:"memory_flush_compaction_count"`
+	MemoryFlushAt              int64             `json:"memoryFlushAt,omitempty" db:"-"`
+	Label                      string            `json:"label,omitempty" db:"label"`
 	SpawnedBy                  string            `json:"spawnedBy,omitempty" db:"spawned_by"`
 	SpawnDepth                 int               `json:"spawnDepth,omitempty" db:"spawn_depth"`
 	Metadata                   map[string]string `json:"metadata,omitempty" db:"metadata"`
 
 	// Adaptive throttle: cached per-session so scheduler reads without DB lookup.
-	ContextWindow    int `json:"contextWindow,omitempty" db:"context_window"`       // agent's context window (set on first run)
+	ContextWindow    int `json:"contextWindow,omitempty" db:"context_window"`        // agent's context window (set on first run)
 	LastPromptTokens int `json:"lastPromptTokens,omitempty" db:"last_prompt_tokens"` // actual prompt tokens from last LLM response
 	LastMessageCount int `json:"lastMessageCount,omitempty" db:"last_message_count"` // message count at time of last LLM call
 }
@@ -75,8 +90,8 @@ type SessionInfoRich struct {
 	InputTokens     int64  `json:"inputTokens,omitempty" db:"input_tokens"`
 	OutputTokens    int64  `json:"outputTokens,omitempty" db:"output_tokens"`
 	AgentName       string `json:"agentName,omitempty" db:"agent_name"`
-	EstimatedTokens int    `json:"estimatedTokens,omitempty" db:"-"` // estimated current context tokens (messages bytes/4 + 12k system prompt)
-	ContextWindow   int    `json:"contextWindow,omitempty" db:"context_window"` // agent's context window size
+	EstimatedTokens int    `json:"estimatedTokens,omitempty" db:"-"`                // estimated current context tokens (messages bytes/4 + 12k system prompt)
+	ContextWindow   int    `json:"contextWindow,omitempty" db:"context_window"`     // agent's context window size
 	CompactionCount int    `json:"compactionCount,omitempty" db:"compaction_count"` // number of compactions performed
 }
 
@@ -103,6 +118,12 @@ type SessionCoreStore interface {
 	Reset(ctx context.Context, key string)
 	Delete(ctx context.Context, key string) error
 	Save(ctx context.Context, key string) error
+}
+
+// SessionBranchStore is implemented by durable stores that can clone a session
+// into a new branch key without overwriting an existing target.
+type SessionBranchStore interface {
+	BranchSession(ctx context.Context, sourceKey string, opts SessionBranchOpts) (*SessionData, int, error)
 }
 
 // SessionMetadataStore manages session metadata, token tracking, and calibration.

@@ -14,12 +14,15 @@ import (
 // ---- stub CronStore ----
 
 type stubCronStore struct {
-	jobs       map[string]*store.CronJob
-	addErr     error
-	removeErr  error
-	updateErr  error
-	enableErr  error
-	addedJob   *store.CronJob
+	jobs      map[string]*store.CronJob
+	addErr    error
+	removeErr error
+	updateErr error
+	enableErr error
+	addedJob  *store.CronJob
+	updateCnt int
+	enableCnt int
+	runCnt    int
 }
 
 func newStubCronStore() *stubCronStore {
@@ -36,10 +39,10 @@ func (s *stubCronStore) AddJob(_ context.Context, name string, schedule store.Cr
 		return nil, s.addErr
 	}
 	job := &store.CronJob{
-		ID:      "new-job-id",
-		Name:    name,
-		UserID:  userID,
-		Enabled: true,
+		ID:       "new-job-id",
+		Name:     name,
+		UserID:   userID,
+		Enabled:  true,
 		Schedule: schedule,
 	}
 	s.addedJob = job
@@ -71,6 +74,7 @@ func (s *stubCronStore) RemoveJob(_ context.Context, jobID string) error {
 }
 
 func (s *stubCronStore) UpdateJob(_ context.Context, jobID string, patch store.CronJobPatch) (*store.CronJob, error) {
+	s.updateCnt++
 	if s.updateErr != nil {
 		return nil, s.updateErr
 	}
@@ -82,6 +86,7 @@ func (s *stubCronStore) UpdateJob(_ context.Context, jobID string, patch store.C
 }
 
 func (s *stubCronStore) EnableJob(_ context.Context, jobID string, enabled bool) error {
+	s.enableCnt++
 	if s.enableErr != nil {
 		return s.enableErr
 	}
@@ -98,15 +103,16 @@ func (s *stubCronStore) GetRunLog(_ context.Context, _ string, _, _ int) ([]stor
 func (s *stubCronStore) Status() map[string]any { return map[string]any{"running": true} }
 
 // Lifecycle stubs (not called in unit tests)
-func (s *stubCronStore) Start() error                                            { return nil }
-func (s *stubCronStore) Stop()                                                   {}
+func (s *stubCronStore) Start() error                                                  { return nil }
+func (s *stubCronStore) Stop()                                                         {}
 func (s *stubCronStore) SetOnJob(_ func(*store.CronJob) (*store.CronJobResult, error)) {}
-func (s *stubCronStore) SetOnEvent(_ func(store.CronEvent))                      {}
+func (s *stubCronStore) SetOnEvent(_ func(store.CronEvent))                            {}
 func (s *stubCronStore) RunJob(_ context.Context, _ string, _ bool) (bool, string, error) {
+	s.runCnt++
 	return true, "", nil
 }
-func (s *stubCronStore) SetDefaultTimezone(_ string)                             {}
-func (s *stubCronStore) GetDueJobs(_ time.Time) []store.CronJob                 { return nil }
+func (s *stubCronStore) SetDefaultTimezone(_ string)            {}
+func (s *stubCronStore) GetDueJobs(_ time.Time) []store.CronJob { return nil }
 
 // ---- helpers ----
 
@@ -160,7 +166,7 @@ func TestCronCreate_MissingName_ReturnsInvalidRequest(t *testing.T) {
 	m := buildCronMethods(t, svc)
 	client := nullClient()
 	req := cronReqFrame(t, protocol.MethodCronCreate, map[string]any{
-		"message": "hello",
+		"message":  "hello",
 		"schedule": map[string]any{"kind": "every", "everyMs": 60000},
 	})
 	m.handleCreate(context.Background(), client, req)
@@ -199,8 +205,8 @@ func TestCronCreate_ValidParams_CreatesJob(t *testing.T) {
 	m := buildCronMethods(t, svc)
 	client := nullClient()
 	req := cronReqFrame(t, protocol.MethodCronCreate, map[string]any{
-		"name":    "my-daily-job",
-		"message": "do the thing",
+		"name":     "my-daily-job",
+		"message":  "do the thing",
 		"schedule": map[string]any{"kind": "every", "everyMs": 3600000},
 	})
 	m.handleCreate(context.Background(), client, req)
@@ -258,4 +264,91 @@ func TestCronToggle_MissingJobID_ReturnsInvalidRequest(t *testing.T) {
 	req := cronReqFrame(t, protocol.MethodCronToggle, map[string]any{"enabled": true})
 	m.handleToggle(context.Background(), client, req)
 	// No panic = jobId-required error path hit
+}
+
+func TestCronToggle_BlocksCredentialBoundEnableByDifferentUser(t *testing.T) {
+	svc := newStubCronStore()
+	svc.jobs["job-1"] = &store.CronJob{
+		ID:     "job-1",
+		UserID: "",
+		Payload: store.CronPayload{
+			CredentialUserID: "tenant-user-a",
+		},
+	}
+	m := buildCronMethods(t, svc)
+	client := nullClient()
+	ctx := store.WithCredentialUserID(context.Background(), "tenant-user-b")
+
+	req := cronReqFrame(t, protocol.MethodCronToggle, map[string]any{"jobId": "job-1", "enabled": true})
+	m.handleToggle(ctx, client, req)
+
+	if svc.enableCnt != 0 {
+		t.Fatalf("EnableJob called %d times, want 0", svc.enableCnt)
+	}
+}
+
+func TestCronToggle_AllowsCredentialBoundDisableByDifferentUser(t *testing.T) {
+	svc := newStubCronStore()
+	svc.jobs["job-1"] = &store.CronJob{
+		ID:     "job-1",
+		UserID: "",
+		Payload: store.CronPayload{
+			CredentialUserID: "tenant-user-a",
+		},
+	}
+	m := buildCronMethods(t, svc)
+	client := nullClient()
+	ctx := store.WithCredentialUserID(context.Background(), "tenant-user-b")
+
+	req := cronReqFrame(t, protocol.MethodCronToggle, map[string]any{"jobId": "job-1", "enabled": false})
+	m.handleToggle(ctx, client, req)
+
+	if svc.enableCnt != 1 {
+		t.Fatalf("EnableJob called %d times, want 1", svc.enableCnt)
+	}
+}
+
+func TestCronUpdate_BlocksCredentialBoundJobByDifferentUser(t *testing.T) {
+	svc := newStubCronStore()
+	svc.jobs["job-1"] = &store.CronJob{
+		ID:     "job-1",
+		UserID: "",
+		Payload: store.CronPayload{
+			CredentialUserID: "tenant-user-a",
+		},
+	}
+	m := buildCronMethods(t, svc)
+	client := nullClient()
+	ctx := store.WithCredentialUserID(context.Background(), "tenant-user-b")
+
+	req := cronReqFrame(t, protocol.MethodCronUpdate, map[string]any{
+		"jobId": "job-1",
+		"patch": map[string]any{"message": "run gh issue list"},
+	})
+	m.handleUpdate(ctx, client, req)
+
+	if svc.updateCnt != 0 {
+		t.Fatalf("UpdateJob called %d times, want 0", svc.updateCnt)
+	}
+}
+
+func TestCronRun_BlocksCredentialBoundJobByDifferentUser(t *testing.T) {
+	svc := newStubCronStore()
+	svc.jobs["job-1"] = &store.CronJob{
+		ID:     "job-1",
+		UserID: "",
+		Payload: store.CronPayload{
+			CredentialUserID: "tenant-user-a",
+		},
+	}
+	m := buildCronMethods(t, svc)
+	client := nullClient()
+	ctx := store.WithCredentialUserID(context.Background(), "tenant-user-b")
+
+	req := cronReqFrame(t, protocol.MethodCronRun, map[string]any{"jobId": "job-1", "mode": "force"})
+	m.handleRun(ctx, client, req)
+
+	if svc.runCnt != 0 {
+		t.Fatalf("RunJob called %d times, want 0", svc.runCnt)
+	}
 }

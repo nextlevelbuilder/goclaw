@@ -21,4 +21,5 @@ func init() {
 	RegisterDataHook(55, webSearchMigrateHookName, func(ctx context.Context, db *sql.DB) error {
 		return migrateWebSearchInlineKeys(ctx, db)
 	})
+	RegisterDataHook(72, workspaceNormalizeHookName, normalizeAgentWorkspaces)
 }
