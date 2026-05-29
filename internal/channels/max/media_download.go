@@ -92,11 +92,17 @@ func (c *Channel) downloadInboundMediaInfo(ctx context.Context, atts []Attachmen
 				}
 				continue
 			}
+			// Detect MIME from the downloaded path, not a.Payload.Filename.
+			// Max inline image/audio/video/sticker attachments often have an
+			// empty Filename, but guessExtension always supplies a type-based
+			// extension for the temp file. Detecting from the path keeps inline
+			// images out of the document bucket and into the vision pipeline.
+			mime := media.DetectMIMEType(path)
 			infos = append(infos, media.MediaInfo{
-				Type:        maxAttachmentToMediaType(a),
+				Type:        maxAttachmentToMediaType(a, mime),
 				FilePath:    path,
 				FileName:    a.Payload.Filename,
-				ContentType: media.DetectMIMEType(a.Payload.Filename),
+				ContentType: mime,
 			})
 
 		case AttachmentTypeContact, AttachmentTypeShare,
@@ -115,11 +121,11 @@ func (c *Channel) downloadInboundMediaInfo(ctx context.Context, atts []Attachmen
 // maxAttachmentToMediaType maps a Max attachment to the shared media kind
 // used by media.BuildMediaTags and the agent media pipeline.
 //
-// For the explicit "file" type the real kind is derived from the filename's
-// MIME so images-sent-as-files reach the vision pipeline, audio reaches STT,
-// and only true documents go to read_document. Otherwise routing would
-// depend on HOW the user attached the file rather than WHAT it is.
-func maxAttachmentToMediaType(a Attachment) string {
+// "file" attachments are classified by MIME so images-sent-as-files reach the
+// vision pipeline, audio reaches STT, and only true documents go to
+// read_document. The caller supplies a pre-computed mime so we don't repeat
+// detection logic.
+func maxAttachmentToMediaType(a Attachment, mime string) string {
 	switch a.Type {
 	case AttachmentTypeImage, AttachmentTypeSticker:
 		return media.TypeImage
@@ -128,9 +134,9 @@ func maxAttachmentToMediaType(a Attachment) string {
 	case AttachmentTypeAudio:
 		return media.TypeAudio
 	case AttachmentTypeFile:
-		return media.MediaKindFromMime(media.DetectMIMEType(a.Payload.Filename))
+		return media.MediaKindFromMime(mime)
 	default:
-		return media.MediaKindFromMime(media.DetectMIMEType(a.Payload.Filename))
+		return media.MediaKindFromMime(mime)
 	}
 }
 
