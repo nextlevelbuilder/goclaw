@@ -152,16 +152,19 @@ git tag lite-v0.1.0 && git push origin lite-v0.1.0
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/ojusave/goclaw&branch=dev)
 
-This fork includes a [`render.yaml`](render.yaml) Blueprint: GoClaw web service, Render Postgres 18 (pgvector), and a persistent disk for config and agent workspaces.
+This fork includes a production-hardened [`render.yaml`](render.yaml): GoClaw web service (Standard), Render Postgres 18 (pgvector), and a 10 GB persistent disk.
 
-1. Click **Deploy to Render** and connect this GitHub repo.
-2. After the deploy finishes, open the web service URL.
-3. Copy `GOCLAW_GATEWAY_TOKEN` from the service's environment variables in the [Render Dashboard](https://dashboard.render.com/) and sign in to the dashboard.
-4. Set at least one LLM provider key (`GOCLAW_OPENROUTER_API_KEY`, `GOCLAW_ANTHROPIC_API_KEY`, or `GOCLAW_OPENAI_API_KEY`) in the Dashboard or in Render env vars.
+**At Blueprint Apply you do not enter any LLM API keys.** Leave provider fields empty. Add one provider key after deploy.
+
+1. Click **Deploy to Render** and connect this repo (`dev` branch).
+2. Click **Apply** with no provider keys filled in.
+3. When the deploy is `live`, open the web service URL.
+4. Copy **`GOCLAW_GATEWAY_TOKEN`** from Environment in the [Render Dashboard](https://dashboard.render.com/) and sign in to the GoClaw dashboard.
+5. Add **one** LLM provider in GoClaw Settings (or set e.g. `GOCLAW_ANTHROPIC_API_KEY` in Render env vars and redeploy).
 
 New to Render? [Sign up](https://dashboard.render.com/register?utm_source=github&utm_medium=referral&utm_campaign=ojus_demos&utm_content=hero_cta).
 
-**Not supported on Render:** Docker sandbox, Tailscale overlay, and docker-compose browser sidecars. See comments in `render.yaml` for details.
+**Plan floor:** Standard (2 GB). Starter will OOM. **Not supported:** Docker sandbox, Tailscale, browser sidecar without extra services. See [`render.yaml`](render.yaml) comments and [template README](https://github.com/ojusave/goclaw/blob/dev/render.yaml) for troubleshooting (including the `exit 127` dockerCommand pitfall).
 
 ## Quick Start
 
