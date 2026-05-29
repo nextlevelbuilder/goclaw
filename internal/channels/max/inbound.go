@@ -328,6 +328,33 @@ func (c *Channel) handleMessage(ctx context.Context, msg Message, edited bool) {
 		return
 	}
 
+	// Sprint 10: coalesce multi-event inbounds. If aggregator accepts,
+	// dispatchMessage is called after the silence window with merged msg.
+	if c.aggregator != nil && c.aggregator.Push(ctx, msg, edited) {
+		return
+	}
+
+	c.dispatchMessage(ctx, msg, edited)
+}
+
+// dispatchMessage performs the actual download/publish work for an inbound
+// message. Called either directly from handleMessage, or via the aggregator
+// flushFn after the silence window for coalesced events.
+func (c *Channel) dispatchMessage(ctx context.Context, msg Message, edited bool) {
+	if msg.Sender == nil || msg.Recipient == nil || msg.Body == nil {
+		return
+	}
+	senderID := strconv.FormatInt(msg.Sender.UserID, 10)
+	var chatID, peerKind string
+	if msg.Recipient.IsDialog() {
+		chatID = strconv.FormatInt(msg.Recipient.ChatID, 10)
+		peerKind = "direct"
+	} else {
+		chatID = strconv.FormatInt(msg.Recipient.ChatID, 10)
+		peerKind = "group"
+	}
+	content := strings.TrimSpace(msg.Body.Text)
+
 	// Build metadata from message link (reply/forward) and locale.
 	metadata := buildMetadata(msg, edited)
 

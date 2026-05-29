@@ -55,6 +55,10 @@ type Channel struct {
 	pendingStore store.PendingMessageStore
 	audioMgr     *audio.Manager
 
+	// aggregator coalesces rapid multi-event inbounds from the same
+	// (chat, sender) into one dispatch. See inbound_aggregator.go.
+	aggregator *inboundAggregator
+
 	// Lifecycle.
 	startOnce  sync.Once
 	stopOnce   sync.Once
@@ -137,7 +141,13 @@ func New(
 		pollDone:     make(chan struct{}),
 		handlerSem:   make(chan struct{}, handlerPoolSize),
 	}
-
+	// Sprint 10: coalesce multi-event inbounds at channel layer.
+	c.aggregator = newInboundAggregator(
+		aggregatorWindow,
+		aggregatorMaxPerBuf,
+		aggregatorMaxBuffers,
+		c.dispatchMessage,
+	)
 	return c, nil
 }
 
@@ -220,7 +230,10 @@ func (c *Channel) Stop(ctx context.Context) error {
 			slog.Warn("max: polling did not exit within timeout",
 				"channel", c.Name(), "timeout", pollStopTimeout)
 		}
-
+		// Sprint 10: drain pending multi-attachment buffers.
+		if c.aggregator != nil {
+			c.aggregator.Stop()
+		}
 		// Stop all reaction refreshers — must happen BEFORE handlerWg.Wait
 		// because refreshers do not run as handlers but still hold goroutines.
 		c.stopAllReactionRefreshers()

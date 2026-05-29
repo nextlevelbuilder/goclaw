@@ -37,6 +37,10 @@ func newTestChannel(t *testing.T, botID int64, botUsername string, requireMentio
 		t.Fatalf("New channel: %v", err)
 	}
 	c.SetRequireMention(requireMention)
+	// Sprint 10: handleMessage tests use synchronous drain() — disable
+	// the aggregator so each Push falls through to dispatchMessage
+	// directly. The aggregator has its own unit tests separately.
+	c.aggregator = nil
 
 	// Drain function: consume all currently-buffered inbound messages.
 	drain := func() []bus.InboundMessage {
