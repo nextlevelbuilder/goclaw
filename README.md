@@ -16,15 +16,10 @@ Single binary. Production-tested. Agents that orchestrate for you.
 </p>
 
 <p align="center">
-  <a href="https://render.com/deploy?repo=https://github.com/ojusave/goclaw&branch=dev">
-    <img src="https://render.com/images/deploy-to-render-button.svg" alt="Deploy to Render" />
-  </a>
-</p>
-
-<p align="center">
   <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go_1.26-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go" /></a>
   <a href="https://www.postgresql.org/"><img src="https://img.shields.io/badge/PostgreSQL_18-316192?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL" /></a>
   <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker" /></a>
+  <a href="https://render.com/deploy?repo=https://github.com/ojusave/goclaw&branch=dev"><img src="https://img.shields.io/badge/Render-deploy-46E3B7?style=flat-square" alt="Deploy on Render" /></a>
   <a href="https://developer.mozilla.org/en-US/docs/Web/API/WebSocket"><img src="https://img.shields.io/badge/WebSocket-010101?style=flat-square&logo=socket.io&logoColor=white" alt="WebSocket" /></a>
   <a href="https://opentelemetry.io/"><img src="https://img.shields.io/badge/OpenTelemetry-000000?style=flat-square&logo=opentelemetry&logoColor=white" alt="OpenTelemetry" /></a>
   <a href="https://www.anthropic.com/"><img src="https://img.shields.io/badge/Anthropic-191919?style=flat-square&logo=anthropic&logoColor=white" alt="Anthropic" /></a>
@@ -150,21 +145,7 @@ git tag lite-v0.1.0 && git push origin lite-v0.1.0
 
 ## Deploy on Render
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/ojusave/goclaw&branch=dev)
-
-This fork includes a production-hardened [`render.yaml`](render.yaml): GoClaw web service (Standard), Render Postgres 18 (pgvector), and a 10 GB persistent disk.
-
-**At Blueprint Apply you do not enter any LLM API keys.** Leave provider fields empty. Add one provider key after deploy.
-
-1. Click **Deploy to Render** and connect this repo (`dev` branch).
-2. Click **Apply** with no provider keys filled in.
-3. When the deploy is `live`, open the web service URL.
-4. Copy **`GOCLAW_GATEWAY_TOKEN`** from Environment in the [Render Dashboard](https://dashboard.render.com/) and sign in to the GoClaw dashboard.
-5. Add **one** LLM provider in GoClaw Settings (or set e.g. `GOCLAW_ANTHROPIC_API_KEY` in Render env vars and redeploy).
-
-New to Render? [Sign up](https://dashboard.render.com/register?utm_source=github&utm_medium=referral&utm_campaign=ojus_demos&utm_content=hero_cta).
-
-**Plan floor:** Standard (2 GB). Starter will OOM. **Not supported:** Docker sandbox, Tailscale, browser sidecar without extra services. See [`render.yaml`](render.yaml) comments and [template README](https://github.com/ojusave/goclaw/blob/dev/render.yaml) for troubleshooting (including the `exit 127` dockerCommand pitfall).
+[`render.yaml`](render.yaml) deploys GoClaw on Render (Postgres 18 + pgvector, Standard plan, persistent disk). Use the **Render** badge above or open the Blueprint from the repo root. No LLM keys required at Apply: add a provider in the dashboard after deploy. Copy `GOCLAW_GATEWAY_TOKEN` from the Render Dashboard to sign in.
 
 ## Quick Start
 
