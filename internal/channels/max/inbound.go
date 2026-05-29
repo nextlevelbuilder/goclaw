@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 )
 
@@ -333,7 +334,6 @@ func (c *Channel) handleMessage(ctx context.Context, msg Message, edited bool) {
 	// Download inbound media to local files. Empty for messages without
 	// media, errors are logged + skipped (we still deliver the text).
 	mediaInfos := c.downloadInboundMediaInfo(ctx, msg.Body.Attachments)
-	mediaPaths := mediaPathsFromInfos(mediaInfos)
 
 	// Strip bot mention from content for cleaner agent input.
 	if peerKind == "group" && c.creds.BotID != 0 {
@@ -362,9 +362,39 @@ func (c *Channel) handleMessage(ctx context.Context, msg Message, edited bool) {
 		}
 	}
 
-	// Hand off to BaseChannel — publishes to bus (allowlist already
-	// applied above by CheckDMPolicy / CheckGroupPolicy).
-	c.HandleMessage(senderID, chatID, content, mediaPaths, metadata, peerKind)
+	// Publish directly to the bus with per-file MimeType so persistMedia can
+	// classify each file into the correct kind (image/audio/document) and
+	// route it to the matching pipeline. The legacy HandleMessage([]string)
+	// path drops MIME, which makes everything land as kind=document — so
+	// images sent as files never reach the vision pipeline. Allowlist and
+	// pairing are already enforced above by CheckDMPolicy / CheckGroupPolicy.
+	// Mirrors the Telegram channel, which publishes directly for the same
+	// reason.
+	mediaFiles := make([]bus.MediaFile, 0, len(mediaInfos))
+	for _, mi := range mediaInfos {
+		mediaFiles = append(mediaFiles, bus.MediaFile{
+			Path:     mi.FilePath,
+			MimeType: mi.ContentType,
+			Filename: mi.FileName,
+		})
+	}
+	userID := senderID
+	if idx := strings.IndexByte(senderID, '|'); idx > 0 {
+		userID = senderID[:idx]
+	}
+	c.Bus().PublishInbound(bus.InboundMessage{
+		Channel:      c.Name(),
+		SenderID:     senderID,
+		ChatID:       chatID,
+		Content:      content,
+		Media:        mediaFiles,
+		PeerKind:     peerKind,
+		UserID:       userID,
+		AgentID:      c.AgentID(),
+		HistoryLimit: c.HistoryLimit(),
+		TenantID:     c.TenantID(),
+		Metadata:     metadata,
+	})
 }
 
 // handleCallback responds to inline keyboard button clicks.

@@ -93,7 +93,7 @@ func (c *Channel) downloadInboundMediaInfo(ctx context.Context, atts []Attachmen
 				continue
 			}
 			infos = append(infos, media.MediaInfo{
-				Type:        maxAttachmentToMediaType(a.Type),
+				Type:        maxAttachmentToMediaType(a),
 				FilePath:    path,
 				FileName:    a.Payload.Filename,
 				ContentType: media.DetectMIMEType(a.Payload.Filename),
@@ -112,10 +112,15 @@ func (c *Channel) downloadInboundMediaInfo(ctx context.Context, atts []Attachmen
 	return infos
 }
 
-// maxAttachmentToMediaType maps a Max attachment type to the shared media kind
+// maxAttachmentToMediaType maps a Max attachment to the shared media kind
 // used by media.BuildMediaTags and the agent media pipeline.
-func maxAttachmentToMediaType(t string) string {
-	switch t {
+//
+// For the explicit "file" type the real kind is derived from the filename's
+// MIME so images-sent-as-files reach the vision pipeline, audio reaches STT,
+// and only true documents go to read_document. Otherwise routing would
+// depend on HOW the user attached the file rather than WHAT it is.
+func maxAttachmentToMediaType(a Attachment) string {
+	switch a.Type {
 	case AttachmentTypeImage, AttachmentTypeSticker:
 		return media.TypeImage
 	case AttachmentTypeVideo:
@@ -123,9 +128,9 @@ func maxAttachmentToMediaType(t string) string {
 	case AttachmentTypeAudio:
 		return media.TypeAudio
 	case AttachmentTypeFile:
-		return media.TypeDocument
+		return media.MediaKindFromMime(media.DetectMIMEType(a.Payload.Filename))
 	default:
-		return media.TypeDocument
+		return media.MediaKindFromMime(media.DetectMIMEType(a.Payload.Filename))
 	}
 }
 
