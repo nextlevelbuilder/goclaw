@@ -19,7 +19,7 @@ Single binary. Production-tested. Agents that orchestrate for you.
   <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go_1.26-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go" /></a>
   <a href="https://www.postgresql.org/"><img src="https://img.shields.io/badge/PostgreSQL_18-316192?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL" /></a>
   <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker" /></a>
-  <a href="https://render.com/deploy?repo=https://github.com/ojusave/goclaw&branch=dev"><img src="https://img.shields.io/badge/Render-deploy-46E3B7?style=flat-square" alt="Deploy on Render" /></a>
+  <a href="https://render.com/deploy?repo=https://github.com/ojusave/goclaw&branch=dev"><img src="https://render.com/images/deploy-to-render-button.svg" alt="Deploy to Render" height="20" /></a>
   <a href="https://developer.mozilla.org/en-US/docs/Web/API/WebSocket"><img src="https://img.shields.io/badge/WebSocket-010101?style=flat-square&logo=socket.io&logoColor=white" alt="WebSocket" /></a>
   <a href="https://opentelemetry.io/"><img src="https://img.shields.io/badge/OpenTelemetry-000000?style=flat-square&logo=opentelemetry&logoColor=white" alt="OpenTelemetry" /></a>
   <a href="https://www.anthropic.com/"><img src="https://img.shields.io/badge/Anthropic-191919?style=flat-square&logo=anthropic&logoColor=white" alt="Anthropic" /></a>
@@ -145,7 +145,7 @@ git tag lite-v0.1.0 && git push origin lite-v0.1.0
 
 ## Deploy on Render
 
-[`render.yaml`](render.yaml) deploys GoClaw on Render (Postgres 18 + pgvector, Standard plan, persistent disk). Use the **Render** badge above or open the Blueprint from the repo root. No LLM keys required at Apply: add a provider in the dashboard after deploy. Copy `GOCLAW_GATEWAY_TOKEN` from the Render Dashboard to sign in.
+[`render.yaml`](render.yaml) deploys GoClaw on Render (Postgres 18 + pgvector, Standard plan, persistent disk). Use the official **Deploy to Render** button in the badge row (after Docker) or apply the Blueprint from the repo root. No LLM keys required at Apply: add a provider in the dashboard after deploy. Copy `GOCLAW_GATEWAY_TOKEN` from the Render Dashboard to sign in.
 
 ## Quick Start
 
