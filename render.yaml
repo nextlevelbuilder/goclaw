@@ -29,9 +29,6 @@ projects:
             image:
               url: ghcr.io/nextlevelbuilder/goclaw:latest
             healthCheckPath: /health
-            # GoClaw reads GOCLAW_PORT, not Render's PORT — map at container start.
-            dockerCommand: sh -c 'export GOCLAW_PORT="${PORT:-10000}" && exec /app/docker-entrypoint.sh serve'
-            initialDeployHook: psql "$GOCLAW_POSTGRES_DSN" -c 'CREATE EXTENSION IF NOT EXISTS vector; CREATE EXTENSION IF NOT EXISTS pgcrypto;'
             disk:
               name: goclaw-data
               mountPath: /app/data
@@ -39,6 +36,9 @@ projects:
             envVars:
               - key: GOCLAW_HOST
                 value: "0.0.0.0"
+              # Render web services listen on port 10000 by default.
+              - key: GOCLAW_PORT
+                value: "10000"
               - key: GOCLAW_CONFIG
                 value: /app/data/config.json
               - key: GOCLAW_DATA_DIR
