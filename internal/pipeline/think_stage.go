@@ -68,9 +68,14 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 			// Attempt emergency compaction
 			if s.deps.CompactMessages != nil {
 				originalLen := len(state.Messages.History())
+				savedPending := state.Messages.Pending()
 				compacted, compactErr := s.deps.CompactMessages(ctx, state.Messages.History(), state.Model)
 				if compactErr == nil {
 					state.Messages.ReplaceHistory(compacted)
+					// Restore pending cleared by ReplaceHistory.
+					for _, msg := range savedPending {
+						state.Messages.AppendPending(msg)
+					}
 					slog.Info("emergency_compaction_triggered",
 						"run_id", state.RunID,
 						"original_msgs", originalLen,

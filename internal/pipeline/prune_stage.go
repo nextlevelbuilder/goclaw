@@ -180,11 +180,21 @@ func (s *PruneStage) Execute(ctx context.Context, state *RunState) error {
 		return nil // no compaction available
 	}
 
+	// Save pending before compaction — ReplaceHistory clears pending,
+	// but pending may contain the current iteration's assistant(tool_calls)
+	// message which must be preserved to maintain tool_calls → tool pairing.
+	savedPending := state.Messages.Pending()
+
 	compacted, err := s.deps.CompactMessages(ctx, state.Messages.History(), state.Model)
 	if err != nil {
 		return fmt.Errorf("compact messages: %w", err)
 	}
 	state.Messages.ReplaceHistory(compacted)
+
+	// Restore pending messages that were cleared by ReplaceHistory.
+	for _, msg := range savedPending {
+		state.Messages.AppendPending(msg)
+	}
 	state.Prune.MidLoopCompacted = true
 	state.Compact.CompactionCount++
 	state.Compact.MemoryFlushedThisCycle = false // reset for next cycle
