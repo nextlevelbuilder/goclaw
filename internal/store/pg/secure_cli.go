@@ -355,6 +355,11 @@ func (s *PGSecureCLIStore) LookupByBinary(ctx context.Context, binaryName string
 	} else {
 		selectCols += ", NULL AS user_env, NULL AS user_cred_type, NULL AS user_host_scope"
 	}
+	if agentID != nil {
+		selectCols += ", ac.encrypted_env AS agent_env, ac.credential_type AS agent_cred_type, ac.host_scope AS agent_host_scope"
+	} else {
+		selectCols += ", NULL AS agent_env, NULL AS agent_cred_type, NULL AS agent_host_scope"
+	}
 
 	var args []any
 	argIdx := 1
@@ -369,6 +374,16 @@ func (s *PGSecureCLIStore) LookupByBinary(ctx context.Context, binaryName string
 		argIdx++
 	} else {
 		query += ` LEFT JOIN secure_cli_agent_grants g ON FALSE` // never match
+	}
+	if agentID != nil {
+		query += fmt.Sprintf(` LEFT JOIN secure_cli_agent_credentials ac ON ac.binary_id = b.id AND ac.agent_id = $%d`, argIdx)
+		args = append(args, *agentID)
+		argIdx++
+		if !isCross {
+			query += fmt.Sprintf(` AND ac.tenant_id = $%d`, argIdx)
+			args = append(args, tid)
+			argIdx++
+		}
 	}
 
 	// LEFT JOIN user credentials
@@ -432,6 +447,8 @@ func (s *PGSecureCLIStore) scanRowWithGrantAndUserEnv(row *sql.Row) (*store.Secu
 	var grantEncEnv []byte
 	var userEnv []byte
 	var userCredType, userHostScope *string
+	var agentEnv []byte
+	var agentCredType, agentHostScope *string
 
 	err := row.Scan(
 		&b.ID, &b.BinaryName, &binaryPath, &b.Description, &env,
@@ -442,6 +459,8 @@ func (s *PGSecureCLIStore) scanRowWithGrantAndUserEnv(row *sql.Row) (*store.Secu
 		&grantDenyArgs, &grantDenyVerbose, &grantTimeout, &grantTips, &grantEnabled, &grantID, &grantEncEnv,
 		// User credential columns
 		&userEnv, &userCredType, &userHostScope,
+		// Agent credential columns
+		&agentEnv, &agentCredType, &agentHostScope,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -481,23 +500,45 @@ func (s *PGSecureCLIStore) scanRowWithGrantAndUserEnv(row *sql.Row) (*store.Secu
 		grant.TimeoutSeconds = grantTimeout
 		grant.Tips = grantTips
 		// Decrypt grant env override (fail-closed: skip if decrypt fails).
-		if len(grantEncEnv) > 0 && s.encKey != "" {
-			if decrypted, err := crypto.Decrypt(string(grantEncEnv), s.encKey); err == nil {
-				grant.EncryptedEnv = []byte(decrypted)
+		if len(grantEncEnv) > 0 {
+			if s.encKey != "" {
+				if decrypted, err := crypto.Decrypt(string(grantEncEnv), s.encKey); err == nil {
+					grant.EncryptedEnv = []byte(decrypted)
+				}
+			} else {
+				grant.EncryptedEnv = grantEncEnv
 			}
 		}
 		b.MergeGrantOverrides(grant)
 	}
 
 	// Decrypt per-user env
-	if len(userEnv) > 0 && s.encKey != "" {
-		if decrypted, err := crypto.Decrypt(string(userEnv), s.encKey); err == nil {
-			b.UserEnv = []byte(decrypted)
+	if len(userEnv) > 0 {
+		if s.encKey != "" {
+			if decrypted, err := crypto.Decrypt(string(userEnv), s.encKey); err == nil {
+				b.UserEnv = []byte(decrypted)
+			}
+		} else {
+			b.UserEnv = userEnv
 		}
 	}
 	// Project per-user credential metadata so adapters can branch on it.
 	b.UserCredentialType = userCredType
 	b.UserHostScope = userHostScope
+	if len(b.UserEnv) > 0 || userCredType != nil || userHostScope != nil {
+		b.SetEffectiveCredential(b.UserEnv, userCredType, userHostScope, "user", "")
+	}
+	if len(agentEnv) > 0 || agentCredType != nil || agentHostScope != nil {
+		decrypted := agentEnv
+		if len(agentEnv) > 0 && s.encKey != "" {
+			if d, err := crypto.Decrypt(string(agentEnv), s.encKey); err == nil {
+				decrypted = []byte(d)
+			}
+		}
+		if b.CredentialSource == "" {
+			b.SetEffectiveCredential(decrypted, agentCredType, agentHostScope, "agent", "")
+		}
+	}
 
 	return &b, nil
 }
@@ -507,7 +548,7 @@ func (s *PGSecureCLIStore) applyContextSecureCLI(ctx context.Context, b *store.S
 	if len(scopes) == 0 || b == nil {
 		return b, nil
 	}
-	hasUserCredential := len(b.UserEnv) > 0 || b.UserCredentialType != nil || b.UserHostScope != nil
+	hasUserCredential := b.CredentialSource == "user" || len(b.UserEnv) > 0 || b.UserCredentialType != nil || b.UserHostScope != nil
 	disabledByContext := false
 	for _, scope := range scopes {
 		grants, err := s.ListContextGrantsForScope(ctx, scope)
@@ -546,9 +587,7 @@ func (s *PGSecureCLIStore) applyContextSecureCLI(ctx context.Context, b *store.S
 			continue
 		}
 		if !hasUserCredential {
-			b.UserEnv = creds.EncryptedEnv
-			b.UserCredentialType = creds.CredentialType
-			b.UserHostScope = creds.HostScope
+			b.SetEffectiveCredential(creds.EncryptedEnv, creds.CredentialType, creds.HostScope, "context", scope.ScopeType+":"+scope.ScopeKey)
 		} else {
 			b.EncryptedEnv = creds.EncryptedEnv
 		}

@@ -335,6 +335,10 @@ CREATE TABLE secure_cli_binaries (
 | `DELETE` | `/v1/cli-credentials/{id}` | Delete a SecureCLI config |
 | `POST` | `/v1/cli-credentials/{id}/test` | Dry-run test (requires admin) |
 | `GET` | `/v1/cli-credentials/presets` | List preset templates for common CLIs |
+| `GET` | `/v1/cli-credentials/{id}/agent-credentials` | List agent-scoped credentials |
+| `GET` | `/v1/cli-credentials/{id}/agent-credentials/{agentId}` | Get agent-scoped credential metadata |
+| `PUT` | `/v1/cli-credentials/{id}/agent-credentials/{agentId}` | Create or replace agent-scoped credential |
+| `DELETE` | `/v1/cli-credentials/{id}/agent-credentials/{agentId}` | Delete agent-scoped credential |
 
 ### Google Workspace CLI preset
 

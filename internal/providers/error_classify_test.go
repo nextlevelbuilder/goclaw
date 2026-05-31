@@ -285,6 +285,14 @@ func TestClassifyFormatInvalidRequest(t *testing.T) {
 	}
 }
 
+func TestClassifyContentPolicyDataInspectionFailed(t *testing.T) {
+	classifier := NewDefaultClassifier()
+	result := classifier.Classify(nil, 400, `{"error":{"code":"data_inspection_failed","message":"Input text data may contain inappropriate content."}}`)
+	if result.Reason != FailoverContentPolicy {
+		t.Errorf("expected FailoverContentPolicy, got %s", result.Reason)
+	}
+}
+
 func TestClassifyHTTP401WithExpired(t *testing.T) {
 	classifier := NewDefaultClassifier()
 	result := classifier.Classify(nil, 401, "Token has expired")

@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { normalizeCliPreset, normalizeCliPresets } from "../hooks/use-cli-credentials";
 
 describe("cli credential preset normalization", () => {
@@ -29,5 +31,16 @@ describe("cli credential preset normalization", () => {
   it("returns an empty preset map for missing API payloads", () => {
     expect(normalizeCliPresets(null)).toEqual({});
     expect(normalizeCliPresets(undefined)).toEqual({});
+  });
+
+  it("keeps agent credential API calls on the agent-credentials endpoint family", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "src/pages/cli-credentials/hooks/use-cli-agent-credentials.ts"),
+      "utf8",
+    );
+
+    expect(source).toContain("/v1/cli-credentials/${binaryId}/agent-credentials");
+    expect(source).toContain("/v1/cli-credentials/${binaryId}/agent-credentials/${agentId}");
+    expect(source).toContain("useCliAgentCredentials");
   });
 });

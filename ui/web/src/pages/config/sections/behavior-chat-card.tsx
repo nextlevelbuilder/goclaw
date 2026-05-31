@@ -6,13 +6,18 @@ import { useWs } from "@/hooks/use-ws";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+
+const quickAckModeValues = ["llm_generated", "fixed_template", "off"] as const;
+type QuickAckMode = (typeof quickAckModeValues)[number];
 
 export interface ChatBehaviorValues {
   enabled?: boolean;
   quick_ack?: {
     enabled?: boolean;
+    mode?: QuickAckMode;
     min_delay_ms?: number;
     templates?: string[];
   };
@@ -25,7 +30,7 @@ export interface ChatBehaviorValues {
 }
 
 interface PreviewResponse {
-  ack?: { shouldSend?: boolean; content?: string };
+  ack?: { shouldSend?: boolean; content?: string; fallbackContent?: string; source?: string };
   split?: { parts?: string[] };
 }
 
@@ -102,6 +107,23 @@ export function BehaviorChatCard({ value, onChange }: Props) {
               />
             </div>
             <div className="grid gap-1.5">
+              <Label htmlFor="chat-behavior-ack-mode">{t("behavior.quickAckMode")}</Label>
+              <Select
+                value={value.quick_ack?.mode ?? "llm_generated"}
+                onValueChange={(mode) => patchAck({ mode: mode as QuickAckMode })}
+                disabled={!value.enabled}
+              >
+                <SelectTrigger id="chat-behavior-ack-mode" className="text-base md:text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {quickAckModeValues.map((mode) => (
+                    <SelectItem key={mode} value={mode}>{t(`behavior.quickAckMode.${mode}`)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-1.5">
               <Label htmlFor="chat-behavior-ack-delay">{t("behavior.quickAckDelay")}</Label>
               <Input
                 id="chat-behavior-ack-delay"
@@ -150,13 +172,22 @@ export function BehaviorChatCard({ value, onChange }: Props) {
             {t("behavior.preview")}
           </div>
           <div className="space-y-2 text-muted-foreground">
-            <p>{preview?.ack?.shouldSend ? `${t("behavior.previewAck")}: ${preview.ack.content}` : t("behavior.previewNoAck")}</p>
+            <p>{formatAckPreview(preview, t)}</p>
             <p>{t("behavior.previewParts", { count: preview?.split?.parts?.length ?? 1 })}</p>
           </div>
         </div>
       </CardContent>
     </Card>
   );
+}
+
+function formatAckPreview(preview: PreviewResponse | null, t: (key: string, options?: any) => string) {
+  const ack = preview?.ack;
+  if (!ack?.shouldSend) return t("behavior.previewNoAck");
+  if (ack.source === "generated") {
+    return t("behavior.previewGeneratedAck", { fallback: ack.fallbackContent ?? "" });
+  }
+  return `${t("behavior.previewAck")}: ${ack.content ?? ""}`;
 }
 
 function NumberField({ label, value, disabled, onChange }: { label: string; value: number; disabled: boolean; onChange: (v: number) => void }) {

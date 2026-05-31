@@ -480,7 +480,10 @@ func processNormalMessage(
 		}
 
 		// Clean up run tracking (in case HandleAgentEvent didn't fire for terminal events)
+		interimDelivered := 0
+		lastInterimReply := ""
 		if deps.ChannelMgr != nil {
+			interimDelivered, lastInterimReply = deps.ChannelMgr.InterimDeliverySnapshot(rID)
 			deps.ChannelMgr.UnregisterRun(rID)
 		}
 
@@ -539,10 +542,11 @@ func processNormalMessage(
 			return
 		}
 
-		// Dedup: if block replies were delivered and the final content matches the last
+		// Dedup: if interim replies were delivered and the final content matches the last
 		// block reply, suppress the final message to avoid duplicate delivery.
-		// Only applies when blockReply is enabled (otherwise nothing was delivered).
-		if blockReplyEnabled && outcome.Result.BlockReplies > 0 && outcome.Result.Content == outcome.Result.LastBlockReply && len(outcome.Result.Media) == 0 {
+		// This uses channel delivery state, not emitted pipeline events, because streaming
+		// runs and quick-ack-disabled initial block replies can intentionally suppress them.
+		if interimDelivered > 0 && outcome.Result.Content == lastInterimReply && len(outcome.Result.Media) == 0 {
 			slog.Debug("inbound: dedup final message (matches last block reply)",
 				"channel", channel, "run_id", rID)
 			deps.MsgBus.PublishOutbound(bus.OutboundMessage{

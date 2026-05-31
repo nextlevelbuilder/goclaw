@@ -1711,6 +1711,36 @@ CREATE INDEX IF NOT EXISTS idx_scuc_tenant ON secure_cli_user_credentials(tenant
 CREATE INDEX IF NOT EXISTS idx_scuc_binary ON secure_cli_user_credentials(binary_id);
 
 -- ============================================================
+-- Table: secure_cli_agent_credentials (per-agent encrypted env)
+-- ============================================================
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_secure_cli_binaries_id_tenant
+    ON secure_cli_binaries(id, tenant_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agents_id_tenant
+    ON agents(id, tenant_id);
+
+CREATE TABLE IF NOT EXISTS secure_cli_agent_credentials (
+    id              TEXT NOT NULL PRIMARY KEY,
+    binary_id       TEXT NOT NULL,
+    agent_id        TEXT NOT NULL,
+    encrypted_env   BLOB NOT NULL,
+    metadata        TEXT NOT NULL DEFAULT '{}',
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id),
+    credential_type TEXT,
+    host_scope      TEXT,
+    created_by      VARCHAR(255) NOT NULL DEFAULT '',
+    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    UNIQUE(binary_id, agent_id, tenant_id),
+    FOREIGN KEY (binary_id, tenant_id) REFERENCES secure_cli_binaries(id, tenant_id) ON DELETE CASCADE,
+    FOREIGN KEY (agent_id, tenant_id) REFERENCES agents(id, tenant_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_scac_tenant ON secure_cli_agent_credentials(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_scac_binary ON secure_cli_agent_credentials(binary_id);
+CREATE INDEX IF NOT EXISTS idx_scac_agent ON secure_cli_agent_credentials(agent_id);
+
+-- ============================================================
 -- Table: vault_documents (V3 Knowledge Vault registry)
 -- ============================================================
 

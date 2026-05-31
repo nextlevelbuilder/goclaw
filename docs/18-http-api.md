@@ -1173,7 +1173,44 @@ CLI authentication credentials for secure command execution. Requires **admin ro
 | `DELETE` | `/v1/cli-credentials/{id}` | Delete credential |
 | `POST` | `/v1/cli-credentials/{id}/test` | Test credential connection (dry-run) |
 
+### Agent Credentials
+
+Agent credentials store PAT/SSH/env material for one CLI credential and one
+agent. They are the default git setup path; agent access controls who can cause
+the credential to be used. Responses return metadata only and never include raw
+typed token/key blobs.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/cli-credentials/{id}/agent-credentials` | List agent credentials for CLI cred |
+| `GET` | `/v1/cli-credentials/{id}/agent-credentials/{agentId}` | Get agent credential metadata |
+| `PUT` | `/v1/cli-credentials/{id}/agent-credentials/{agentId}` | Set agent credential |
+| `DELETE` | `/v1/cli-credentials/{id}/agent-credentials/{agentId}` | Delete agent credential |
+
+Typed git request body:
+
+```json
+{
+  "credential_type": "pat",
+  "host_scope": "github.com",
+  "blob": { "token": "ghp_..." }
+}
+```
+
+Env request body:
+
+```json
+{
+  "env": {
+    "GH_TOKEN": { "kind": "sensitive", "value": "..." }
+  }
+}
+```
+
 ### Per-User Credentials
+
+Advanced personal overrides. These remain for backward compatibility and have
+higher runtime precedence than channel/context and agent credentials.
 
 | Method | Path | Description |
 |--------|------|-------------|

@@ -252,6 +252,10 @@ const (
 	MsgSkillNudge70Pct      = "skill.nudge_70_pct"
 	MsgSkillNudge90Pct      = "skill.nudge_90_pct"
 
+	// Tool progress announcements (user-facing)
+	MsgToolAnnouncementSingle = "progress.tool_announcement.single" // "I'll use %s to handle the next step."
+	MsgToolAnnouncementMulti  = "progress.tool_announcement.multi"  // "I'll use %s to handle the next step."
+
 	// --- Tenants ---
 	MsgInvalidRole = "error.invalid_role" // "invalid role: allowed values are owner, admin, operator, member, viewer"
 

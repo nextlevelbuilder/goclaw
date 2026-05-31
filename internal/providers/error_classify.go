@@ -18,6 +18,7 @@ const (
 	FailoverBilling       FailoverReason = "billing"
 	FailoverTimeout       FailoverReason = "timeout"
 	FailoverModelNotFound FailoverReason = "model_not_found"
+	FailoverContentPolicy FailoverReason = "content_policy"
 	FailoverUnknown       FailoverReason = "unknown"
 )
 
@@ -108,6 +109,9 @@ func (c *DefaultClassifier) Classify(err error, statusCode int, body string) Fai
 	}
 	if containsAny(lower, "tool_call", "function_call", "invalid_request") && statusCode == 400 {
 		return classifyReason(FailoverFormat)
+	}
+	if containsAny(lower, "data_inspection_failed", "inappropriate content", "content_policy_violation") && statusCode != 0 {
+		return classifyReason(FailoverContentPolicy)
 	}
 
 	// Provider-specific patterns

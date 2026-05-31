@@ -73,6 +73,44 @@ func TestMergeCredentialedEnvFlattensSensitiveValueEntries(t *testing.T) {
 	}
 }
 
+func TestMergeCredentialedEnvUsesAgentEnvCredential(t *testing.T) {
+	typ := "env"
+	binary := &store.SecureCLIBinary{
+		EncryptedEnv: []byte(`{"SHARED_KEY":"binary","BINARY_ONLY":"base"}`),
+	}
+	binary.SetEffectiveCredential([]byte(`{"SHARED_KEY":"agent","AGENT_ONLY":"scoped"}`), &typ, nil, "agent", "")
+
+	env, err := mergeCredentialedEnv(binary)
+	if err != nil {
+		t.Fatalf("mergeCredentialedEnv() error = %v", err)
+	}
+	if env["SHARED_KEY"] != "agent" {
+		t.Fatalf("SHARED_KEY = %q, want agent override", env["SHARED_KEY"])
+	}
+	if env["AGENT_ONLY"] != "scoped" {
+		t.Fatalf("AGENT_ONLY = %q", env["AGENT_ONLY"])
+	}
+}
+
+func TestMergeCredentialedEnvDoesNotFlattenTypedCredentialBlob(t *testing.T) {
+	typ := "pat"
+	binary := &store.SecureCLIBinary{
+		EncryptedEnv: []byte(`{"PUBLIC_BASE_URL":"https://goclaw.sh"}`),
+	}
+	binary.SetEffectiveCredential([]byte(`{"token":"ghp_not_real_token"}`), &typ, nil, "agent", "")
+
+	env, err := mergeCredentialedEnv(binary)
+	if err != nil {
+		t.Fatalf("mergeCredentialedEnv() error = %v", err)
+	}
+	if _, ok := env["token"]; ok {
+		t.Fatalf("typed credential blob was flattened into child env: %#v", env)
+	}
+	if env["PUBLIC_BASE_URL"] != "https://goclaw.sh" {
+		t.Fatalf("PUBLIC_BASE_URL = %q", env["PUBLIC_BASE_URL"])
+	}
+}
+
 func TestExec_RapidAPIMissingRequiredEnvFailsBeforeBinaryResolution(t *testing.T) {
 	stub := newStubSecureCLIStore()
 	stub.byName["rapidapi"] = &store.SecureCLIBinary{

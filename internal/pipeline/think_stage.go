@@ -6,7 +6,10 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
 const maxTruncRetries = 3
@@ -23,7 +26,7 @@ func NewThinkStage(deps *PipelineDeps) *ThinkStage {
 	return &ThinkStage{deps: deps, result: Continue}
 }
 
-func (s *ThinkStage) Name() string       { return "think" }
+func (s *ThinkStage) Name() string        { return "think" }
 func (s *ThinkStage) Result() StageResult { return s.result }
 
 // Execute builds tools, calls LLM, handles truncation, sets flow control.
@@ -64,26 +67,12 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 			if state.Think.OverflowRetries > 0 {
 				return fmt.Errorf("context overflow after compaction: %w", err)
 			}
-			state.Think.OverflowRetries++
-			// Attempt emergency compaction
-			if s.deps.CompactMessages != nil {
-				originalLen := len(state.Messages.History())
-				compacted, compactErr := s.deps.CompactMessages(ctx, state.Messages.History(), state.Model)
-				if compactErr == nil {
-					state.Messages.ReplaceHistory(compacted)
-					slog.Info("emergency_compaction_triggered",
-						"run_id", state.RunID,
-						"original_msgs", originalLen,
-						"compacted_msgs", len(compacted),
-					)
-					return nil // Retry this iteration (Continue result)
-				}
-				slog.Warn("emergency_compaction_failed", "error", compactErr)
+			if s.tryEmergencyCompaction(ctx, state, "context_overflow_error") {
+				return nil // Retry this iteration (Continue result)
 			}
 		}
 		return fmt.Errorf("llm call: %w", err)
 	}
-	state.Think.LastResponse = resp
 
 	// 5. Accumulate usage (including ThinkingTokens for reasoning models)
 	if resp.Usage != nil {
@@ -92,6 +81,18 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 		state.Think.TotalUsage.TotalTokens += resp.Usage.TotalTokens
 		state.Think.TotalUsage.ThinkingTokens += resp.Usage.ThinkingTokens
 	}
+
+	if isEmptyLengthResponse(resp) {
+		if state.Think.OverflowRetries > 0 {
+			return fmt.Errorf("llm response truncated before content after compaction")
+		}
+		if s.tryEmergencyCompaction(ctx, state, "empty_length_response") {
+			return nil // Retry next iteration with compacted history.
+		}
+		return fmt.Errorf("llm response truncated before content")
+	}
+
+	state.Think.LastResponse = resp
 
 	// 6. Handle truncation: retry when tool call args are truncated or malformed.
 	// Gemini returns finish_reason="tool_calls" (not "length") even when the thinking
@@ -145,13 +146,127 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 	}
 	state.Messages.AppendPending(assistantMsg)
 
-	// Emit block.reply for intermediate assistant content during tool iterations.
-	// Non-streaming channels (Zalo, Discord, WhatsApp) need this for delivery.
-	if resp.Content != "" && s.deps.EmitBlockReply != nil {
-		s.deps.EmitBlockReply(resp.Content)
-	}
+	s.emitToolIterationBlockReply(ctx, resp)
 
 	return nil
+}
+
+func (s *ThinkStage) tryEmergencyCompaction(ctx context.Context, state *RunState, reason string) bool {
+	state.Think.OverflowRetries++
+	if s.deps.CompactMessages == nil {
+		return false
+	}
+
+	originalLen := len(state.Messages.History())
+	compacted, compactErr := s.deps.CompactMessages(ctx, state.Messages.History(), state.Model)
+	if compactErr != nil {
+		slog.Warn("emergency_compaction_failed", "reason", reason, "error", compactErr)
+		return false
+	}
+	state.Messages.ReplaceHistory(compacted)
+	slog.Info("emergency_compaction_triggered",
+		"run_id", state.RunID,
+		"reason", reason,
+		"original_msgs", originalLen,
+		"compacted_msgs", len(compacted),
+	)
+	return true
+}
+
+func isEmptyLengthResponse(resp *providers.ChatResponse) bool {
+	return resp != nil &&
+		resp.FinishReason == "length" &&
+		strings.TrimSpace(resp.Content) == "" &&
+		len(resp.ToolCalls) == 0 &&
+		len(resp.Images) == 0
+}
+
+func (s *ThinkStage) emitToolIterationBlockReply(ctx context.Context, resp *providers.ChatResponse) {
+	content := resp.Content
+	source := protocol.BlockReplySourceLLMProgress
+	announcement := defaultToolAnnouncement(ctx, resp.ToolCalls)
+	if strings.TrimSpace(content) == "" {
+		content = announcement
+		source = protocol.BlockReplySourceToolAnnouncement
+	} else if announcement != "" {
+		if !contentMentionsAnnouncedTools(content, resp.ToolCalls) {
+			content = strings.TrimRight(content, "\r\n\t ") + "\n\n" + announcement
+		}
+		source = protocol.BlockReplySourceToolAnnouncement
+	}
+	if strings.TrimSpace(content) == "" {
+		return
+	}
+	if s.deps.EmitBlockReplyWithSource != nil {
+		s.deps.EmitBlockReplyWithSource(content, source)
+		return
+	}
+	if s.deps.EmitBlockReply != nil {
+		s.deps.EmitBlockReply(content)
+	}
+}
+
+func defaultToolAnnouncement(ctx context.Context, calls []providers.ToolCall) string {
+	names := announcedToolNames(calls)
+	if len(names) == 0 {
+		return ""
+	}
+	list := strings.Join(names, ", ")
+	locale := store.LocaleFromContext(ctx)
+	if len(names) == 1 {
+		return i18n.T(locale, i18n.MsgToolAnnouncementSingle, list)
+	}
+	return i18n.T(locale, i18n.MsgToolAnnouncementMulti, list)
+}
+
+func announcedToolNames(calls []providers.ToolCall) []string {
+	names := sanitizedAnnouncementToolNames(calls)
+	for i, name := range names {
+		names[i] = "`" + name + "`"
+	}
+	return names
+}
+
+func contentMentionsAnnouncedTools(content string, calls []providers.ToolCall) bool {
+	names := sanitizedAnnouncementToolNames(calls)
+	if len(names) == 0 {
+		return false
+	}
+	lowerContent := strings.ToLower(content)
+	for _, name := range names {
+		if !strings.Contains(lowerContent, strings.ToLower(name)) {
+			return false
+		}
+	}
+	return true
+}
+
+func sanitizedAnnouncementToolNames(calls []providers.ToolCall) []string {
+	names := make([]string, 0, len(calls))
+	seen := make(map[string]struct{}, len(calls))
+	for _, call := range calls {
+		name := sanitizeToolAnnouncementName(call.Name)
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
+	}
+	return names
+}
+
+func sanitizeToolAnnouncementName(name string) string {
+	name = strings.TrimSpace(name)
+	name = strings.NewReplacer("`", "", "\n", " ", "\r", " ", "\t", " ").Replace(name)
+	name = strings.Join(strings.Fields(name), " ")
+	runes := []rune(name)
+	if len(runes) > 64 {
+		name = string(runes[:64])
+	}
+	return name
 }
 
 // maybeInjectNudge injects iteration budget warnings at 70% and 90%.

@@ -3,9 +3,21 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useHttp } from "@/hooks/use-ws";
 import { toast } from "@/stores/use-toast-store";
 import i18n from "@/i18n";
-import type { SecureCLIBinary, CLICredentialInput, CLIPreset, CLIAgentGrant, CLIAgentGrantInput } from "@/types/cli-credential";
+import type {
+  SecureCLIBinary,
+  CLICredentialInput,
+  CLIPreset,
+  CLIAgentGrant,
+  CLIAgentGrantInput,
+} from "@/types/cli-credential";
 
-export type { SecureCLIBinary, CLICredentialInput, CLIPreset, CLIAgentGrant, CLIAgentGrantInput };
+export type {
+  SecureCLIBinary,
+  CLICredentialInput,
+  CLIPreset,
+  CLIAgentGrant,
+  CLIAgentGrantInput,
+};
 
 const QUERY_KEY = ["cliCredentials"] as const;
 const PRESETS_KEY = ["cliCredentials", "presets"] as const;

@@ -26,9 +26,17 @@ const blockReplyOptions = [
   { value: "false", label: "Disabled" },
 ];
 
+const quickAckModeOptions = [
+  { value: "inherit", label: "Inherit from gateway" },
+  { value: "llm_generated", label: "LLM-generated with fallback" },
+  { value: "fixed_template", label: "Fixed template" },
+  { value: "off", label: "Off" },
+];
+
 const chatBehaviorOverrideFields: FieldDef[] = [
   { key: "chat_behavior.enabled", label: "Human-like Delivery", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Override gateway quick acknowledgement and final reply splitting." },
   { key: "chat_behavior.quick_ack.enabled", label: "Quick Acknowledgement", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Override quick acknowledgement for this channel." },
+  { key: "chat_behavior.quick_ack.mode", label: "Quick Ack Mode", type: "select", options: quickAckModeOptions, defaultValue: "inherit", help: "Generated uses the main LLM block reply; templates are fallback only." },
   { key: "chat_behavior.final_split.enabled", label: "Final Reply Splitting", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Override final multi-message splitting for this channel." },
 ];
 

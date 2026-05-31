@@ -490,14 +490,12 @@ func (t *ExecTool) executeCredentialed(ctx context.Context, cred *store.SecureCL
 			if len(inj.ArgvPrefix) > 0 {
 				args = append(append([]string{}, inj.ArgvPrefix...), args...)
 			}
-			for k, v := range inj.Env {
-				envMap[k] = v
-			}
+			maps.Copy(envMap, inj.Env)
 			if len(inj.ScrubValues) > 0 {
 				AddScrubValuesCtx(ctx, inj.ScrubValues...)
 			}
 			emitSystemEnvInjectionAudit(adapter.Name(), binary,
-				store.CredentialUserIDFromContext(ctx), inj, cred.UserHostScope)
+				store.CredentialUserIDFromContext(ctx), cred.CredentialSource, inj, effectiveHostScope(cred))
 		}
 	}
 
@@ -508,12 +506,22 @@ func (t *ExecTool) executeCredentialed(ctx context.Context, cred *store.SecureCL
 	return t.executeCredentialedHost(ctx, absPath, args, cwd, envMap, timeout)
 }
 
-// userCredFromBinary synthesizes a *SecureCLIUserCredential from the fields
-// LookupByBinary's LEFT JOIN populated on the binary row. Returns nil when
-// no user credential exists (UserEnv empty + no typed metadata).
+// userCredFromBinary synthesizes adapter credential input from LookupByBinary's
+// effective credential fields. The adapter contract still uses
+// SecureCLIUserCredential, but the material can come from user, context, or
+// agent scoped rows.
 func userCredFromBinary(ctx context.Context, bin *store.SecureCLIBinary) *store.SecureCLIUserCredential {
 	if bin == nil {
 		return nil
+	}
+	if len(bin.CredentialEnv) > 0 || bin.CredentialType != nil || bin.CredentialHostScope != nil {
+		return &store.SecureCLIUserCredential{
+			BinaryID:       bin.ID,
+			UserID:         credentialSubjectForAdapter(ctx, bin),
+			EncryptedEnv:   bin.CredentialEnv,
+			CredentialType: bin.CredentialType,
+			HostScope:      bin.CredentialHostScope,
+		}
 	}
 	if len(bin.UserEnv) == 0 && bin.UserCredentialType == nil && bin.UserHostScope == nil {
 		return nil
@@ -525,6 +533,23 @@ func userCredFromBinary(ctx context.Context, bin *store.SecureCLIBinary) *store.
 		CredentialType: bin.UserCredentialType,
 		HostScope:      bin.UserHostScope,
 	}
+}
+
+func credentialSubjectForAdapter(ctx context.Context, bin *store.SecureCLIBinary) string {
+	if bin != nil && bin.CredentialSubjectID != "" {
+		return bin.CredentialSubjectID
+	}
+	return store.CredentialUserIDFromContext(ctx)
+}
+
+func effectiveHostScope(bin *store.SecureCLIBinary) *string {
+	if bin == nil {
+		return nil
+	}
+	if bin.CredentialHostScope != nil {
+		return bin.CredentialHostScope
+	}
+	return bin.UserHostScope
 }
 
 func mergeCredentialedEnv(cred *store.SecureCLIBinary) (map[string]string, error) {
@@ -539,7 +564,18 @@ func mergeCredentialedEnv(cred *store.SecureCLIBinary) (map[string]string, error
 		}
 		maps.Copy(envMap, baseEnv)
 	}
+	if len(cred.CredentialEnv) > 0 && isEnvCredentialType(cred.CredentialType) {
+		scopedEnv, err := store.FlattenSecureCLIEnv(cred.CredentialEnv)
+		if err != nil {
+			return nil, err
+		}
+		maps.Copy(envMap, scopedEnv)
+		return envMap, nil
+	}
 	if len(cred.UserEnv) > 0 {
+		if !isEnvCredentialType(cred.UserCredentialType) {
+			return envMap, nil
+		}
 		userEnvMap, err := store.FlattenSecureCLIEnv(cred.UserEnv)
 		if err != nil {
 			return nil, err
@@ -547,6 +583,10 @@ func mergeCredentialedEnv(cred *store.SecureCLIBinary) (map[string]string, error
 		maps.Copy(envMap, userEnvMap)
 	}
 	return envMap, nil
+}
+
+func isEnvCredentialType(typ *string) bool {
+	return typ == nil || *typ == "" || *typ == "env"
 }
 
 func missingRequiredCredentialEnv(binary string, envMap map[string]string) []string {

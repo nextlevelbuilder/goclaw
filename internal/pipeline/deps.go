@@ -61,10 +61,11 @@ type PipelineDeps struct {
 	InjectReminders  func(ctx context.Context, input *RunInput, msgs []providers.Message) []providers.Message
 
 	// Think callbacks (ThinkStage)
-	BuildFilteredTools func(state *RunState) ([]providers.ToolDefinition, error)
-	CallLLM            func(ctx context.Context, state *RunState, req providers.ChatRequest) (*providers.ChatResponse, error)
-	UniqueToolCallIDs  func(calls []providers.ToolCall, runID string, iteration int) []providers.ToolCall
-	EmitBlockReply     func(content string) // emit block.reply for intermediate assistant content
+	BuildFilteredTools       func(state *RunState) ([]providers.ToolDefinition, error)
+	CallLLM                  func(ctx context.Context, state *RunState, req providers.ChatRequest) (*providers.ChatResponse, error)
+	UniqueToolCallIDs        func(calls []providers.ToolCall, runID string, iteration int) []providers.ToolCall
+	EmitBlockReply           func(content string)         // emit block.reply for intermediate assistant content
+	EmitBlockReplyWithSource func(content, source string) // emit block.reply with payload source metadata
 
 	// Prune callbacks (PruneStage)
 	PruneMessages   func(msgs []providers.Message, budget int) ([]providers.Message, PruneStats)

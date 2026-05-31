@@ -39,6 +39,20 @@ func (m *Manager) UnregisterRun(runID string) {
 	}
 }
 
+func (m *Manager) InterimDeliverySnapshot(runID string) (int, string) {
+	val, ok := m.runs.Load(runID)
+	if ok {
+		rc, ok := val.(*RunContext)
+		if !ok {
+			return 0, ""
+		}
+		rc.mu.Lock()
+		defer rc.mu.Unlock()
+		return rc.interimDelivered, rc.lastInterimReply
+	}
+	return 0, ""
+}
+
 // IsStreamingChannel checks if a named channel implements StreamingChannel
 // AND has streaming currently enabled for the given chat type.
 // isGroup: true for group chats, false for DMs.

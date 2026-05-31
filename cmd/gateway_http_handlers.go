@@ -112,7 +112,7 @@ func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir 
 	}
 
 	if stores != nil && stores.SecureCLI != nil {
-		secureCLIH = httpapi.NewSecureCLIHandler(stores.SecureCLI, msgBus)
+		secureCLIH = httpapi.NewSecureCLIHandler(stores.SecureCLI, msgBus, stores.Tenants)
 	}
 	if stores != nil && stores.SecureCLIGrants != nil {
 		secureCLIGrantH = httpapi.NewSecureCLIGrantHandler(stores.SecureCLIGrants, stores.Tenants, msgBus)

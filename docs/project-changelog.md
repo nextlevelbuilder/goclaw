@@ -4,6 +4,125 @@ Significant changes, features, and fixes in reverse chronological order.
 
 ---
 
+## 2026-05-31
+
+### CI/CD: fast zuey beta deploy (issue #88)
+
+**Changes**
+
+- Split the dev beta release workflow so zuey deploy starts after the linux amd64 prerelease asset is published, instead of waiting for Docker multi-arch builds and beta alias promotion.
+- Added stale beta tag guards for zuey deploy and Docker beta alias promotion so older runs cannot roll back a newer beta.
+- Kept linux arm64 binaries, refreshed checksums, multi-arch Docker images, and beta aliases as required post-deploy completion jobs.
+
+**Tests**
+
+- Added a workflow-structure test covering the fast deploy graph, artifact completion graph, and stale-tag guards.
+
+---
+
+### Provider fallback content-policy recovery
+
+**Fixes**
+
+- Classifies provider content-policy rejections such as DashScope `data_inspection_failed` so model fallback can continue to the next configured candidate instead of stopping on `unknown`.
+- Prevents Telegram runs from aborting silently when one fallback provider rejects a long/private history but another configured fallback remains available.
+
+**Tests**
+
+- Added provider classifier and model fallback coverage for continuing past a content-policy fallback failure.
+
+---
+
+### Empty Codex OAuth truncation recovery
+
+**Fixes**
+
+- Detects successful LLM calls that still return `finish_reason=length` with no text/tool/image output, the observed failure mode when long Codex OAuth runs spend the remaining budget on reasoning.
+- Runs emergency history compaction and retries instead of finalizing empty assistant content into repeated `"..."` replies.
+- Preserves configured/model context windows so future provider context upgrades do not require code changes.
+
+**Tests**
+
+- Added ThinkStage coverage for empty length responses, retry compaction, usage accounting, and repeated failure handling.
+
+---
+
+### Agent Access git credential follow-up (issue #117)
+
+**Fixes**
+
+- Replaced separate Agent Grants and Agent Credentials row actions with one
+  Agent Access dialog containing Credential and Access policy tabs, preventing
+  overlapping agent-access modals.
+- Git PAT credentials now inject GitHub-compatible Basic auth extraheaders
+  instead of Bearer headers.
+- SSH private keys are now checked with OpenSSH at save time when `ssh-keygen`
+  is available, catching keys that would later fail with `error in libcrypto`.
+
+**Security**
+
+- Git PAT redaction now includes the raw token, the base64 Basic auth payload,
+  and the full injected header value.
+
+---
+
+### Tool-call announcements
+
+**Fixes**
+
+- Intermediate Replies now guarantees a pre-tool announcement when the model
+  requests tools without assistant text, or with text that does not name the
+  tools. The fallback uses sanitized tool names only and is tagged as
+  `tool_announcement`.
+- Quick acknowledgement off still suppresses generic first acknowledgements,
+  but no longer suppresses explicit tool announcements.
+
+**Tests**
+
+- Added pipeline coverage for empty-content tool calls and channel coverage for
+  `tool_announcement` delivery when Quick acknowledgement is off.
+
+---
+
+### Channel intermediate reply gating
+
+**Fixes**
+
+- Quick acknowledgement off now suppresses the first pre-tool `block.reply`
+  even when explicit `gateway.block_reply` is enabled, so the initial
+  acknowledgement does not leak through the Intermediate Replies path.
+- Final reply dedup now uses channel-delivered interim state instead of raw
+  pipeline `block.reply` emit counts, avoiding false suppression when an
+  interim event was skipped.
+
+**Tests**
+
+- Added channel event coverage for quick acknowledgement disabled and
+  `quick_ack.mode = "off"` with explicit intermediate replies enabled.
+
+---
+
+### Agent-scoped git credentials (issue #117)
+
+**New**
+
+- Added agent-scoped Secure CLI credentials with PostgreSQL migration `000077`
+  and SQLite schema version `46`.
+- Added HTTP APIs under
+  `/v1/cli-credentials/{id}/agent-credentials/{agentId}` for listing,
+  reading metadata, saving, and deleting agent credentials.
+- Web CLI Credentials now exposes Agent Credentials as the primary git PAT/SSH
+  setup path, with User Credentials renamed to advanced personal overrides.
+
+**Security**
+
+- Runtime credential precedence is now user override, context credential, agent
+  credential, then binary env defaults.
+- Git adapter audit logs include `credential_source` without logging raw
+  secrets or plaintext host scopes.
+
+---
+
 ## 2026-05-29
 
 ### Passive channel memory extraction (issue #64)

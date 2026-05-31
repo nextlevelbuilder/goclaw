@@ -130,6 +130,7 @@ function normalizeChatBehavior(value: any): ChatBehaviorValues {
     enabled: value?.enabled ?? false,
     quick_ack: {
       enabled: value?.quick_ack?.enabled ?? true,
+      mode: value?.quick_ack?.mode ?? "llm_generated",
       min_delay_ms: value?.quick_ack?.min_delay_ms ?? 1000,
       templates: value?.quick_ack?.templates ?? ["Got it. Working on it..."],
     },

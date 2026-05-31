@@ -480,7 +480,14 @@ Pre-computed usage snapshots (hourly aggregations) for analytics dashboards. Tra
 
 ### SecureCLIStore
 
-CLI binary credential configuration with encrypted environment variable injection. Credentials are auto-injected into child processes without exposing them to command output.
+CLI binary credential configuration with encrypted environment variable
+injection. Credentials are auto-injected into child processes without exposing
+them to command output.
+
+Credential rows can live at binary, agent, channel/context, or user scope.
+Runtime resolution prefers user overrides, then context credentials, then agent
+credentials, then binary defaults. The `secure_cli_agent_credentials` table
+stores one encrypted PAT/SSH/env payload per `(binary_id, agent_id, tenant_id)`.
 
 | Method | Purpose |
 |--------|---------|
@@ -492,6 +499,9 @@ CLI binary credential configuration with encrypted environment variable injectio
 | `ListByAgent(agentID)` | Return configs for a specific agent |
 | `LookupByBinary(binaryName, agentID)` | Find best-matching config (agent-specific > global) |
 | `ListEnabled()` | Return enabled configs for TOOLS.md generation |
+| `ListAgentCredentials(binaryID)` | Return masked agent credential metadata |
+| `SetAgentCredentialsTyped(binaryID, agentID, env, type, hostScope)` | Store agent-scoped PAT/SSH/env payload |
+| `DeleteAgentCredentials(binaryID, agentID)` | Remove an agent-scoped credential |
 
 ### APIKeyStore
 

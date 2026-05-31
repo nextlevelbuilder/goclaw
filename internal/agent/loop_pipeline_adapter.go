@@ -51,6 +51,22 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 	}
 
 	cb := l.pipelineCallbacks(req, bridgeRS)
+	emitBlockReply := func(content, source string) {
+		sanitized := SanitizeAssistantContent(content)
+		if sanitized == "" || IsSilentReply(sanitized) {
+			return
+		}
+		payload := map[string]string{"content": sanitized}
+		if source != "" {
+			payload["source"] = source
+		}
+		cb.emitRun(AgentEvent{
+			Type:    protocol.AgentEventBlockReply,
+			AgentID: l.id,
+			RunID:   req.RunID,
+			Payload: payload,
+		})
+	}
 
 	return pipeline.PipelineDeps{
 		TokenCounter: tokencount.NewTiktokenCounter(),
@@ -105,16 +121,9 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 		CallLLM:            cb.callLLM,
 		UniqueToolCallIDs:  uniquifyToolCallIDs,
 		EmitBlockReply: func(content string) {
-			sanitized := SanitizeAssistantContent(content)
-			if sanitized != "" && !IsSilentReply(sanitized) {
-				cb.emitRun(AgentEvent{
-					Type:    protocol.AgentEventBlockReply,
-					AgentID: l.id,
-					RunID:   req.RunID,
-					Payload: map[string]string{"content": sanitized},
-				})
-			}
+			emitBlockReply(content, "")
 		},
+		EmitBlockReplyWithSource: emitBlockReply,
 
 		// Prune callbacks
 		PruneMessages:   cb.pruneMessages,

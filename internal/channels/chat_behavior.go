@@ -12,6 +12,14 @@ const (
 	defaultFinalSplitMax   = 3
 	defaultFinalSplitDelay = 500
 	defaultAckTemplate     = "Got it. Working on it..."
+
+	QuickAckModeLLMGenerated  = "llm_generated"
+	QuickAckModeFixedTemplate = "fixed_template"
+	QuickAckModeOff           = "off"
+
+	QuickAckSourceGenerated = "generated"
+	QuickAckSourceTemplate  = "template"
+	QuickAckSourceOff       = "off"
 )
 
 type ResolvedChatBehavior struct {
@@ -22,6 +30,7 @@ type ResolvedChatBehavior struct {
 
 type ResolvedQuickAckConfig struct {
 	Enabled    bool
+	Mode       string
 	MinDelayMs int
 	Templates  []string
 }
@@ -46,8 +55,11 @@ type ChatBehaviorPreview struct {
 }
 
 type AckPreview struct {
-	ShouldSend bool   `json:"shouldSend"`
-	Content    string `json:"content,omitempty"`
+	ShouldSend      bool   `json:"shouldSend"`
+	Content         string `json:"content,omitempty"`
+	FallbackContent string `json:"fallbackContent,omitempty"`
+	Mode            string `json:"mode,omitempty"`
+	Source          string `json:"source,omitempty"`
 }
 
 type SplitPreview struct {
@@ -57,6 +69,7 @@ type SplitPreview struct {
 func ResolveChatBehavior(global, override *config.ChatBehaviorConfig) ResolvedChatBehavior {
 	resolved := ResolvedChatBehavior{
 		QuickAck: ResolvedQuickAckConfig{
+			Mode:       QuickAckModeLLMGenerated,
 			MinDelayMs: defaultQuickAckDelayMs,
 			Templates:  []string{defaultAckTemplate},
 		},
@@ -88,6 +101,9 @@ func applyChatBehavior(dst *ResolvedChatBehavior, src *config.ChatBehaviorConfig
 	if src.QuickAck != nil {
 		if src.QuickAck.Enabled != nil {
 			dst.QuickAck.Enabled = *src.QuickAck.Enabled
+		}
+		if src.QuickAck.Mode != nil {
+			dst.QuickAck.Mode = normalizeQuickAckMode(*src.QuickAck.Mode)
 		}
 		if src.QuickAck.MinDelayMs != nil {
 			dst.QuickAck.MinDelayMs = max(0, *src.QuickAck.MinDelayMs)
@@ -127,18 +143,91 @@ func cleanTemplates(values []string) []string {
 
 func PreviewChatBehavior(global, override *config.ChatBehaviorConfig, opts ChatBehaviorPreviewOptions) ChatBehaviorPreview {
 	resolved := ResolveChatBehavior(global, override)
+	return PreviewResolvedChatBehavior(resolved, opts)
+}
+
+func PreviewResolvedChatBehavior(resolved ResolvedChatBehavior, opts ChatBehaviorPreviewOptions) ChatBehaviorPreview {
 	preview := ChatBehaviorPreview{
 		Resolved: resolved,
 		Split:    SplitPreview{Parts: SplitFinalMessages(opts.Content, resolved.FinalSplit)},
 	}
-	if ShouldSendQuickAck(resolved, opts.IsStreaming) {
-		preview.Ack = AckPreview{ShouldSend: true, Content: resolved.QuickAck.Templates[0]}
-	}
+	preview.Ack = buildAckPreview(resolved, opts.IsStreaming, opts.HasToolCalls)
 	return preview
 }
 
 func ShouldSendQuickAck(behavior ResolvedChatBehavior, streaming bool) bool {
-	return behavior.Enabled && behavior.QuickAck.Enabled && !streaming
+	if !behavior.Enabled || !behavior.QuickAck.Enabled || streaming {
+		return false
+	}
+	switch effectiveQuickAckMode(behavior.QuickAck.Mode) {
+	case QuickAckModeLLMGenerated, QuickAckModeFixedTemplate:
+		return true
+	default:
+		return false
+	}
+}
+
+func ShouldDeliverGeneratedProgress(behavior ResolvedChatBehavior, streaming bool) bool {
+	return behavior.Enabled &&
+		behavior.QuickAck.Enabled &&
+		!streaming &&
+		effectiveQuickAckMode(behavior.QuickAck.Mode) == QuickAckModeLLMGenerated
+}
+
+func ShouldSuppressInitialBlockReply(behavior ResolvedChatBehavior, streaming bool) bool {
+	if streaming || !behavior.Enabled {
+		return false
+	}
+	return !behavior.QuickAck.Enabled || effectiveQuickAckMode(behavior.QuickAck.Mode) == QuickAckModeOff
+}
+
+func normalizeQuickAckMode(mode string) string {
+	switch strings.TrimSpace(mode) {
+	case QuickAckModeFixedTemplate:
+		return QuickAckModeFixedTemplate
+	case QuickAckModeOff:
+		return QuickAckModeOff
+	default:
+		return QuickAckModeLLMGenerated
+	}
+}
+
+func effectiveQuickAckMode(mode string) string {
+	if strings.TrimSpace(mode) == "" {
+		return QuickAckModeLLMGenerated
+	}
+	return normalizeQuickAckMode(mode)
+}
+
+func buildAckPreview(behavior ResolvedChatBehavior, streaming, hasToolCalls bool) AckPreview {
+	mode := effectiveQuickAckMode(behavior.QuickAck.Mode)
+	preview := AckPreview{Mode: mode}
+	if !behavior.Enabled || !behavior.QuickAck.Enabled || streaming {
+		preview.Source = QuickAckSourceOff
+		return preview
+	}
+	if mode == QuickAckModeOff {
+		preview.Source = QuickAckSourceOff
+		return preview
+	}
+	if len(behavior.QuickAck.Templates) == 0 {
+		return preview
+	}
+	if mode == QuickAckModeFixedTemplate {
+		preview.ShouldSend = true
+		preview.Source = QuickAckSourceTemplate
+		preview.Content = behavior.QuickAck.Templates[0]
+		return preview
+	}
+	preview.ShouldSend = true
+	if hasToolCalls {
+		preview.Source = QuickAckSourceGenerated
+		preview.FallbackContent = behavior.QuickAck.Templates[0]
+		return preview
+	}
+	preview.Source = QuickAckSourceTemplate
+	preview.Content = behavior.QuickAck.Templates[0]
+	return preview
 }
 
 func SplitFinalMessages(content string, cfg ResolvedFinalSplitConfig) []string {

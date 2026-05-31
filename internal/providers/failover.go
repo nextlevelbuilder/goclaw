@@ -55,7 +55,7 @@ func isProfileRotatable(reason FailoverReason) bool {
 // isModelFallbackRequired returns true for permanent errors requiring a different model.
 func isModelFallbackRequired(reason FailoverReason) bool {
 	switch reason {
-	case FailoverAuthPermanent, FailoverBilling, FailoverFormat, FailoverModelNotFound:
+	case FailoverAuthPermanent, FailoverBilling, FailoverFormat, FailoverModelNotFound, FailoverContentPolicy:
 		return true
 	}
 	return false

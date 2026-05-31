@@ -348,7 +348,7 @@
     "allow_from": { "label": "Allowed Users" },
     "block_reply": {
       "label": "Block Reply",
-      "help": "Deliver intermediate text during tool iterations"
+      "help": "Deliver tool announcements and intermediate text around tool iterations"
     },
     "domain": { "label": "Domain" },
     "connection_mode": {

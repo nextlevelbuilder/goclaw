@@ -271,27 +271,39 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 	}
 
 	// Handle block.reply: deliver intermediate assistant text to non-streaming channels.
-	// Gated by BlockReplyEnabled (resolved from gateway + per-channel config at RegisterRun time).
+	// Gated by explicit block_reply or generated-progress chat behavior.
 	// Streaming channels already deliver via chunks, so skip to avoid double-delivery.
 	if eventType == protocol.AgentEventBlockReply {
-		if !rc.BlockReplyEnabled {
-			return
-		}
 		content := extractPayloadString(payload, "content")
 		if content == "" {
 			return
 		}
+		source := extractPayloadString(payload, "source")
 		rc.mu.Lock()
 		streaming := rc.Streaming
+		rc.blockReplySeen++
+		isInitialBlockReply := rc.blockReplySeen == 1
+		blockReplyEnabled := rc.BlockReplyEnabled
+		chatBehavior := rc.ChatBehavior
 		rc.mu.Unlock()
 
 		if streaming {
 			return // streaming already delivered via chunks
 		}
+		generatedProgress := ShouldDeliverGeneratedProgress(chatBehavior, streaming)
+		if !blockReplyEnabled && !generatedProgress {
+			return
+		}
+		isToolAnnouncement := source == protocol.BlockReplySourceToolAnnouncement
+		if isInitialBlockReply && !isToolAnnouncement && blockReplyEnabled && !generatedProgress && ShouldSuppressInitialBlockReply(chatBehavior, streaming) {
+			return
+		}
 
 		m.cancelQuickAck(rc)
 		rc.mu.Lock()
 		rc.blockReplySent = true
+		rc.interimDelivered++
+		rc.lastInterimReply = content
 		rc.mu.Unlock()
 
 		// Build outbound metadata: copy routing fields but strip reply_to_message_id

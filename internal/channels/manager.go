@@ -43,6 +43,9 @@ type RunContext struct {
 	ackSent           bool
 	ackCancelled      bool
 	blockReplySent    bool
+	blockReplySeen    int
+	interimDelivered  int
+	lastInterimReply  string
 	streamBuffer      string        // accumulated streaming text (chunks are deltas)
 	inToolPhase       bool          // true after tool.call, reset on next chunk (new LLM iteration)
 	stream            ChannelStream // per-run stream handle (replaces per-chat sync.Map in channel impls)

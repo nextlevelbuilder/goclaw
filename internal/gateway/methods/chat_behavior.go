@@ -72,14 +72,10 @@ func (m *ChatBehaviorMethods) handlePreview(_ context.Context, client *gateway.C
 	} else {
 		resolved = channels.ResolveChatBehavior(m.cfg.Gateway.ChatBehavior, nil)
 	}
-	preview := channels.ChatBehaviorPreview{
-		Resolved: resolved,
-		Split: channels.SplitPreview{
-			Parts: channels.SplitFinalMessages(params.Content, resolved.FinalSplit),
-		},
-	}
-	if channels.ShouldSendQuickAck(resolved, params.IsStreaming) {
-		preview.Ack = channels.AckPreview{ShouldSend: true, Content: resolved.QuickAck.Templates[0]}
-	}
+	preview := channels.PreviewResolvedChatBehavior(resolved, channels.ChatBehaviorPreviewOptions{
+		Content:      params.Content,
+		IsStreaming:  params.IsStreaming,
+		HasToolCalls: params.HasToolCalls,
+	})
 	client.SendResponse(protocol.NewOKResponse(req.ID, preview))
 }

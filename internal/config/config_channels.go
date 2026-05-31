@@ -11,6 +11,7 @@ type ChatBehaviorConfig struct {
 // QuickAckConfig controls one short acknowledgement before longer non-streaming runs.
 type QuickAckConfig struct {
 	Enabled    *bool    `json:"enabled,omitempty"`
+	Mode       *string  `json:"mode,omitempty"`
 	MinDelayMs *int     `json:"min_delay_ms,omitempty"`
 	Templates  []string `json:"templates,omitempty"`
 }

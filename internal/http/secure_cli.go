@@ -26,13 +26,22 @@ var safeBinaryNameRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`)
 
 // SecureCLIHandler handles secure CLI binary credential CRUD endpoints.
 type SecureCLIHandler struct {
-	store  store.SecureCLIStore
-	msgBus *bus.MessageBus
+	store      store.SecureCLIStore
+	agentCreds store.SecureCLIAgentCredentialStore
+	tenants    store.TenantStore
+	msgBus     *bus.MessageBus
 }
 
 // NewSecureCLIHandler creates a handler for secure CLI credential management.
-func NewSecureCLIHandler(s store.SecureCLIStore, msgBus *bus.MessageBus) *SecureCLIHandler {
-	return &SecureCLIHandler{store: s, msgBus: msgBus}
+func NewSecureCLIHandler(s store.SecureCLIStore, msgBus *bus.MessageBus, tenants ...store.TenantStore) *SecureCLIHandler {
+	h := &SecureCLIHandler{store: s, msgBus: msgBus}
+	if len(tenants) > 0 {
+		h.tenants = tenants[0]
+	}
+	if agentCreds, ok := s.(store.SecureCLIAgentCredentialStore); ok {
+		h.agentCreds = agentCreds
+	}
+	return h
 }
 
 // RegisterRoutes registers all secure CLI routes on the given mux.
@@ -51,6 +60,13 @@ func (h *SecureCLIHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/cli-credentials/{id}/user-credentials/{userId}", h.auth(h.handleGetUserCredentials))
 	mux.HandleFunc("PUT /v1/cli-credentials/{id}/user-credentials/{userId}", h.auth(h.handleSetUserCredentials))
 	mux.HandleFunc("DELETE /v1/cli-credentials/{id}/user-credentials/{userId}", h.auth(h.handleDeleteUserCredentials))
+
+	// Per-agent credential management. Credentials do not grant binary access;
+	// non-global binaries still require agent-grants.
+	mux.HandleFunc("GET /v1/cli-credentials/{id}/agent-credentials", h.auth(h.handleListAgentCredentials))
+	mux.HandleFunc("GET /v1/cli-credentials/{id}/agent-credentials/{agentId}", h.auth(h.handleGetAgentCredentials))
+	mux.HandleFunc("PUT /v1/cli-credentials/{id}/agent-credentials/{agentId}", h.auth(h.handleSetAgentCredentials))
+	mux.HandleFunc("DELETE /v1/cli-credentials/{id}/agent-credentials/{agentId}", h.auth(h.handleDeleteAgentCredentials))
 }
 
 func (h *SecureCLIHandler) auth(next http.HandlerFunc) http.HandlerFunc {

@@ -75,11 +75,17 @@ Normal channel messages pass through the shared inbound debouncer before agent e
 
 `gateway.chat_behavior` controls optional channel-only delivery polish:
 
-- `quick_ack` sends one short acknowledgement after a configurable delay, only for non-streaming channel runs.
+- `quick_ack.mode = "llm_generated"` uses the existing main-turn `block.reply` event as the natural progress response for non-streaming channel runs. It does not make a separate LLM call.
+- `quick_ack.templates` are fallback messages. In generated mode, the first template is sent only if no generated `block.reply` arrives before `quick_ack.min_delay_ms`.
+- `quick_ack.mode = "fixed_template"` preserves the older fixed-template acknowledgement behavior.
+- `quick_ack.mode = "off"` disables chat-behavior quick acknowledgement. When explicit `gateway.block_reply` is on, the first generic pre-tool `block.reply` is treated as the immediate acknowledgement and suppressed; deterministic tool announcements still deliver before tool execution because they are part of Intermediate Replies.
+- If a model requests tools without assistant text, or with text that does not name the tools, the pipeline emits a safe `tool_announcement` fallback using only sanitized tool names. Tool arguments are never included in this message.
 - `final_split` splits long final text replies into a bounded number of paragraph messages.
 - Per-channel `chat_behavior` overrides inherit the gateway config unless a field is explicitly set.
 
 Splitting is intentionally conservative. Replies containing fenced code, tables, lists, quotes, JSON/XML-ish blocks, or URL-only paragraphs remain a single message. Media replies and streaming deliveries are not split.
+
+Progress messages are not added to session history by this behavior. Existing run timeline handling for `block.reply` remains unchanged.
 
 **Multi-attachment coalescing (#63).** Messages carrying attachments do NOT bypass the debouncer — that pre-fix shortcut was the source of N-replies for one user action. Instead, when media is present the effective window is `max(configured, mediaFloor)` so multi-file uploads land in the same buffer and flush together. Three surfaces apply the same invariant:
 
