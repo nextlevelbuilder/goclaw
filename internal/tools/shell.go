@@ -644,7 +644,11 @@ func buildHostResult(err error, stdout, stderr *limitedBuffer, ctx context.Conte
 
 // executeInSandbox routes a command through a Docker sandbox container.
 func (t *ExecTool) executeInSandbox(ctx context.Context, command, cwd, sandboxKey string) *Result {
-	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, t.workspace, SandboxConfigFromCtx(ctx))
+	tenantWs := ToolWorkspaceFromCtx(ctx)
+	if tenantWs == "" {
+		tenantWs = t.workspace
+	}
+	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, tenantWs, SandboxConfigFromCtx(ctx))
 	if err != nil {
 		if errors.Is(err, sandbox.ErrSandboxDisabled) {
 			return t.executeOnHost(ctx, command, cwd)

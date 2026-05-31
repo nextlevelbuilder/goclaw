@@ -200,3 +200,24 @@ func containsString(values []string, target string) bool {
 	}
 	return false
 }
+
+func TestSameWorkspace(t *testing.T) {
+	tests := []struct {
+		name string
+		a    string
+		b    string
+		want bool
+	}{
+		{name: "same clean path", a: "/app/workspace/tenant-a", b: "/app/workspace/tenant-a", want: true},
+		{name: "equivalent clean path", a: "/app/workspace/tenant-a/.", b: "/app/workspace/tenant-a", want: true},
+		{name: "different tenant", a: "/app/workspace/tenant-a", b: "/app/workspace/tenant-b", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := sameWorkspace(tt.a, tt.b); got != tt.want {
+				t.Fatalf("sameWorkspace(%q, %q) = %v, want %v", tt.a, tt.b, got, tt.want)
+			}
+		})
+	}
+}

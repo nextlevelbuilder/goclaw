@@ -207,7 +207,11 @@ func (t *EditTool) Execute(ctx context.Context, args map[string]any) *Result {
 }
 
 func (t *EditTool) executeInSandbox(ctx context.Context, path, oldStr, newStr string, replaceAll bool, sandboxKey string) *Result {
-	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, t.workspace, SandboxConfigFromCtx(ctx))
+	tenantWs := ToolWorkspaceFromCtx(ctx)
+	if tenantWs == "" {
+		tenantWs = t.workspace
+	}
+	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, tenantWs, SandboxConfigFromCtx(ctx))
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("sandbox error: %v", err))
 	}

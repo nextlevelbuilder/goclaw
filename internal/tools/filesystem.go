@@ -215,7 +215,11 @@ func (t *ReadFileTool) executeInSandbox(ctx context.Context, path, sandboxKey st
 }
 
 func (t *ReadFileTool) getFsBridge(ctx context.Context, sandboxKey, containerCwd string) (*sandbox.FsBridge, error) {
-	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, t.workspace, SandboxConfigFromCtx(ctx))
+	tenantWs := ToolWorkspaceFromCtx(ctx)
+	if tenantWs == "" {
+		tenantWs = t.workspace
+	}
+	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, tenantWs, SandboxConfigFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}

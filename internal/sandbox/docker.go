@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"maps"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -257,17 +258,28 @@ func (m *DockerManager) Get(ctx context.Context, key string, workspace string, c
 
 	m.mu.RLock()
 	if sb, ok := m.sandboxes[key]; ok {
+		if sameWorkspace(sb.workspace, workspace) {
+			m.mu.RUnlock()
+			return sb, nil
+		}
 		m.mu.RUnlock()
-		return sb, nil
+	} else {
+		m.mu.RUnlock()
 	}
-	m.mu.RUnlock()
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Double-check
+	// Double-check. If an existing sandbox was created for a different
+	// workspace, destroy it and recreate under the requested tenant workspace.
 	if sb, ok := m.sandboxes[key]; ok {
-		return sb, nil
+		if sameWorkspace(sb.workspace, workspace) {
+			return sb, nil
+		}
+		delete(m.sandboxes, key)
+		if err := sb.Destroy(ctx); err != nil {
+			slog.Warn("sandbox workspace changed; failed to destroy stale container", "key", key, "error", err)
+		}
 	}
 
 	prefix := cfg.ContainerPrefix
@@ -467,4 +479,8 @@ func (lb *limitedBuffer) Write(p []byte) (int, error) {
 
 func (lb *limitedBuffer) String() string {
 	return lb.buf.String()
+}
+
+func sameWorkspace(a, b string) bool {
+	return filepath.Clean(a) == filepath.Clean(b)
 }

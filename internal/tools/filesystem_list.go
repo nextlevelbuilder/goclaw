@@ -159,7 +159,11 @@ func (t *ListFilesTool) executeInSandbox(ctx context.Context, path, sandboxKey s
 }
 
 func (t *ListFilesTool) getFsBridge(ctx context.Context, sandboxKey, containerCwd string) (*sandbox.FsBridge, error) {
-	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, t.workspace, SandboxConfigFromCtx(ctx))
+	tenantWs := ToolWorkspaceFromCtx(ctx)
+	if tenantWs == "" {
+		tenantWs = t.workspace
+	}
+	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, tenantWs, SandboxConfigFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}
