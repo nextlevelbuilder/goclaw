@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	shellwords "github.com/mattn/go-shellwords"
@@ -51,18 +52,35 @@ func (t *ExecTool) dynamicPathExemptions(ctx context.Context) []string {
 // On the claw server, /app/workspace is symlinked to /app/.goclaw at runtime,
 // so both forms may appear in LLM-generated commands for the same physical path.
 func pathAliasVariants(path string) []string {
-	variants := []string{path}
+	variants := make([]string, 0, 3)
+	seen := make(map[string]struct{}, 3)
+	appendVariant := func(v string) {
+		if v == "" {
+			return
+		}
+		if _, ok := seen[v]; ok {
+			return
+		}
+		seen[v] = struct{}{}
+		variants = append(variants, v)
+	}
+	appendVariant(path)
+	pathSlash := filepath.ToSlash(path)
 	for _, mapping := range [][2]string{
 		{"/app/workspace", "/app/.goclaw"},
 		{"/app/.goclaw", "/app/workspace"},
 	} {
 		from, to := mapping[0], mapping[1]
-		if path == from {
-			variants = append(variants, to)
-			continue
+		var mapped string
+		if pathSlash == from {
+			mapped = to
+		} else if strings.HasPrefix(pathSlash, from+"/") {
+			mapped = to + strings.TrimPrefix(pathSlash, from)
 		}
-		if strings.HasPrefix(path, from+string(filepath.Separator)) {
-			variants = append(variants, to+strings.TrimPrefix(path, from))
+		if mapped != "" {
+			appendVariant(mapped)
+			appendVariant(filepath.FromSlash(mapped))
+			continue
 		}
 	}
 	return variants
@@ -72,22 +90,24 @@ func pathAliasVariants(path string) []string {
 // deny roots. Supports both absolute roots (prefix match) and relative roots
 // (e.g. ".goclaw/" — checked as a path component marker anywhere in path).
 func (t *ExecTool) isNestedUnderDeniedRoot(path string) bool {
+	pathClean := filepath.ToSlash(filepath.Clean(path))
+	pathWithBoundary := "/" + strings.Trim(pathClean, "/") + "/"
 	for _, root := range t.pathDenyRoots {
-		cleanRoot := filepath.Clean(root)
-		if cleanRoot == "." || cleanRoot == string(filepath.Separator) {
+		cleanRoot := filepath.ToSlash(filepath.Clean(root))
+		if cleanRoot == "." || cleanRoot == "/" {
 			continue
 		}
-		if !filepath.IsAbs(cleanRoot) {
-			marker := string(filepath.Separator) + cleanRoot + string(filepath.Separator)
-			if strings.Contains(path, marker) {
+		if !filepath.IsAbs(root) && !strings.HasPrefix(cleanRoot, "/") {
+			marker := "/" + strings.Trim(cleanRoot, "/") + "/"
+			if strings.Contains(pathWithBoundary, marker) {
 				return true
 			}
 			continue
 		}
-		if path == cleanRoot {
+		if equalPathString(pathClean, cleanRoot) {
 			continue
 		}
-		if strings.HasPrefix(path, cleanRoot+string(filepath.Separator)) {
+		if hasPathPrefix(pathClean, cleanRoot) {
 			return true
 		}
 	}
@@ -96,25 +116,46 @@ func (t *ExecTool) isNestedUnderDeniedRoot(path string) bool {
 
 // matchesPathExemption checks if a resolved path falls under any exemption prefix.
 func matchesPathExemption(path string, exemptions []string) bool {
-	sep := string(filepath.Separator)
+	path = normalizePathForMatch(path)
 	for _, ex := range exemptions {
 		if ex == "" {
 			continue
 		}
-		if path == ex {
+		ex = normalizePathForMatch(ex)
+		if equalPathString(path, ex) {
 			return true
 		}
-		if strings.HasSuffix(ex, sep) {
-			if strings.HasPrefix(path, ex) {
-				return true
-			}
-			continue
-		}
-		if strings.HasPrefix(path, ex+sep) {
+		if hasPathPrefix(path, ex) {
 			return true
 		}
 	}
 	return false
+}
+
+func normalizePathForMatch(path string) string {
+	clean := filepath.ToSlash(filepath.Clean(path))
+	if clean != "/" {
+		clean = strings.TrimRight(clean, "/")
+	}
+	return clean
+}
+
+func equalPathString(a, b string) bool {
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
+}
+
+func hasPathPrefix(path, prefix string) bool {
+	if equalPathString(path, prefix) {
+		return true
+	}
+	if runtime.GOOS == "windows" {
+		path = strings.ToLower(path)
+		prefix = strings.ToLower(prefix)
+	}
+	return strings.HasPrefix(path, prefix+"/")
 }
 
 // parseExecCommandWords splits a shell command into words using go-shellwords,
@@ -235,7 +276,8 @@ func looksLikePathCandidate(s string) bool {
 		strings.HasPrefix(s, "teams/") ||
 		strings.HasPrefix(s, "tenants/") ||
 		strings.HasPrefix(s, "~/") ||
-		strings.Contains(s, string(filepath.Separator))
+		strings.Contains(s, "/") ||
+		strings.Contains(s, `\`)
 }
 
 // canonicalizeExecPath resolves a path to its canonical absolute form,

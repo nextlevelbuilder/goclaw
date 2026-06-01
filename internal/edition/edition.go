@@ -18,17 +18,21 @@ type Edition struct {
 	RBACEnabled           bool           `json:"rbac_enabled"`
 	TeamFullMode          bool           `json:"team_full_mode"`          // false = lite task actions only
 	VectorSearch          bool           `json:"vector_search"`           // false = FTS5 only
+	SupportsPipNpm        bool           `json:"supports_pip_npm"`        // false for Lite desktop
+	SupportsApk           bool           `json:"supports_apk"`            // false for Lite desktop (no apk on macOS/Windows)
 }
 
 // --- Presets ---
 
 // Standard is the default edition: all features enabled, no limits.
 var Standard = Edition{
-	Name:         "standard",
-	KGEnabled:    true,
-	RBACEnabled:  true,
-	TeamFullMode: true,
-	VectorSearch: true,
+	Name:           "standard",
+	KGEnabled:      true,
+	RBACEnabled:    true,
+	TeamFullMode:   true,
+	VectorSearch:   true,
+	SupportsPipNpm: true,
+	SupportsApk:    true,
 }
 
 // Lite is the desktop/self-hosted edition with sensible limits.
@@ -44,6 +48,8 @@ var Lite = Edition{
 	RBACEnabled:           false,
 	TeamFullMode:          false,
 	VectorSearch:          false,
+	SupportsPipNpm:        false,
+	SupportsApk:           false,
 }
 
 // --- Global state ---
@@ -80,4 +86,10 @@ func (e Edition) ChannelLimit(channelType string) int {
 		return 0
 	}
 	return e.MaxChannels[channelType]
+}
+
+// AllowsChannels reports whether this edition permits channel-based webhook routes
+// (kind="message"). Standard edition allows channels; Lite does not.
+func (e Edition) AllowsChannels() bool {
+	return e.Name == "standard"
 }

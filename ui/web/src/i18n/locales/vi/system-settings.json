@@ -64,6 +64,20 @@
     "modelPlaceholder": "(mặc định)",
     "info": "Dùng cho vault enrichment (tóm tắt tài liệu), consolidation (tóm tắt phiên) và dreaming. Để trống sẽ fallback về agent default provider."
   },
+  "skills": {
+    "title": "Skills",
+    "description": "Cài đặt gói skill và slash command theo tenant.",
+    "maxUploadSize": "Dung lượng tải lên tối đa",
+    "maxUploadSizeHint": "Giới hạn ZIP theo từng tệp, tính bằng MB. Khoảng cho phép: 1-500.",
+    "slashEnabled": "Bật slash command",
+    "slashEnabledHint": "Nhận diện /skill-name và /use skill-name ở đầu prompt.",
+    "slashSuggest": "Gợi ý skill gần đúng",
+    "slashSuggestHint": "Hiển thị các skill gần giống khi không tìm thấy skill được gọi.",
+    "slashPartial": "Cho phép khớp một phần",
+    "slashPartialHint": "Cho phép prefix duy nhất như /frontend kích hoạt skill tương ứng.",
+    "slashPrefix": "Prefix command",
+    "slashPrefixHint": "Một ký tự dùng trước skill command."
+  },
   "compaction": {
     "title": "Nén tin nhắn chờ",
     "description": "Tóm tắt lịch sử tin nhắn chờ dài để nằm trong giới hạn context.",

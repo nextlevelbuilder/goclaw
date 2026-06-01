@@ -61,6 +61,26 @@ func (c *Config) ApplySystemConfigs(configs map[string]string) {
 	str("tools.profile", &c.Tools.Profile)
 	integer("tools.rate_limit_per_hour", &c.Tools.RateLimitPerHour)
 	boolean("tools.scrub_credentials", &c.Tools.ScrubCredentials)
+	boolValue := func(key string, dst *bool) {
+		if v, ok := configs[key]; ok && v != "" {
+			*dst = v == "true" || v == "1"
+		}
+	}
+	boolValue("tools.browser.enabled", &c.Tools.Browser.Enabled)
+	boolValue("tools.browser.headless", &c.Tools.Browser.Headless)
+	str("tools.browser.remote_url", &c.Tools.Browser.RemoteURL)
+	integer("tools.browser.action_timeout_ms", &c.Tools.Browser.ActionTimeoutMs)
+	integer("tools.browser.idle_timeout_ms", &c.Tools.Browser.IdleTimeoutMs)
+	integer("tools.browser.max_pages", &c.Tools.Browser.MaxPages)
+	boolValue("tools.browser.cookie_sync_enabled", &c.Tools.Browser.CookieSyncEnabled)
+
+	// Skills
+	integer(SkillMaxUploadSizeSystemConfigKey, &c.Skills.MaxUploadSizeMB)
+	c.Skills.MaxUploadSizeMB = ClampSkillMaxUploadSizeMB(c.Skills.MaxUploadSizeMB)
+	boolean(SkillSlashCommandsEnabledSystemConfigKey, &c.Skills.SlashCommands.Enabled)
+	boolean(SkillSlashSuggestNotFoundSystemConfigKey, &c.Skills.SlashCommands.SuggestNotFound)
+	boolValue(SkillSlashPartialMatchingSystemConfigKey, &c.Skills.SlashCommands.PartialMatching)
+	str(SkillSlashCommandPrefixSystemConfigKey, &c.Skills.SlashCommands.Prefix)
 
 	// TTS
 	str("tts.provider", &c.Tts.Provider)

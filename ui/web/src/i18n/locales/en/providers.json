@@ -258,6 +258,38 @@
     "verifyFailed": "Embedding verification failed",
     "dimensionsMismatch": "{{count}} dimensions — does not match required 1536"
   },
+  "pricing": {
+    "title": "Model Pricing",
+    "description": "Sync OpenRouter prices and override this provider's model costs for usage caps.",
+    "skippedDescription": "Usage caps skip subscription and local providers, but prices can still be prepared for later API-based routing.",
+    "sync": "Sync OpenRouter",
+    "model": "Model",
+    "saveOverride": "Save Override",
+    "catalogMatches": "OpenRouter catalog matches",
+    "source": "Source",
+    "configuredFields": "Configured fields",
+    "override": "Override",
+    "emptyOverrides": "No pricing overrides for this provider.",
+    "deleteOverride": "Delete override",
+    "fields": {
+      "input": "Input",
+      "output": "Output",
+      "cache_read": "Cache read",
+      "cache_write": "Cache write",
+      "reasoning": "Reasoning",
+      "request": "Request",
+      "image": "Image",
+      "web_search": "Web search"
+    },
+    "toast": {
+      "synced": "Synced {{count}} OpenRouter models",
+      "syncFailed": "Could not sync OpenRouter pricing",
+      "saved": "Pricing override saved",
+      "saveFailed": "Could not save pricing override",
+      "deleted": "Pricing override deleted",
+      "deleteFailed": "Could not delete pricing override"
+    }
+  },
   "reasoning": {
     "off": "Off",
     "offDesc": "No default extended thinking",

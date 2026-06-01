@@ -6,12 +6,23 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/crypto"
 	"github.com/nextlevelbuilder/goclaw/internal/hooks"
 	"github.com/nextlevelbuilder/goclaw/internal/hooks/handlers"
 	"github.com/nextlevelbuilder/goclaw/internal/security"
 )
+
+// testCtx returns a context with a 10s deadline for HTTP handler tests.
+// This prevents tests from consuming the entire package timeout budget
+// when the CI runner is slow.
+func testCtx(t *testing.T) context.Context {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	t.Cleanup(cancel)
+	return ctx
+}
 
 // makeHTTPCfg builds a minimal HookConfig with given URL.
 func makeHTTPCfg(url string) hooks.HookConfig {
@@ -34,7 +45,7 @@ func TestHTTP_200Allow(t *testing.T) {
 	defer srv.Close()
 
 	h := &handlers.HTTPHandler{Client: srv.Client()}
-	dec, err := h.Execute(context.Background(), makeHTTPCfg(srv.URL), hooks.Event{HookEvent: hooks.EventPreToolUse})
+	dec, err := h.Execute(testCtx(t), makeHTTPCfg(srv.URL), hooks.Event{HookEvent: hooks.EventPreToolUse})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -55,7 +66,7 @@ func TestHTTP_200BlockDecision(t *testing.T) {
 	defer srv.Close()
 
 	h := &handlers.HTTPHandler{Client: srv.Client()}
-	dec, err := h.Execute(context.Background(), makeHTTPCfg(srv.URL), hooks.Event{HookEvent: hooks.EventPreToolUse})
+	dec, err := h.Execute(testCtx(t), makeHTTPCfg(srv.URL), hooks.Event{HookEvent: hooks.EventPreToolUse})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -76,7 +87,7 @@ func TestHTTP_200ContinueFalse(t *testing.T) {
 	defer srv.Close()
 
 	h := &handlers.HTTPHandler{Client: srv.Client()}
-	dec, err := h.Execute(context.Background(), makeHTTPCfg(srv.URL), hooks.Event{HookEvent: hooks.EventPreToolUse})
+	dec, err := h.Execute(testCtx(t), makeHTTPCfg(srv.URL), hooks.Event{HookEvent: hooks.EventPreToolUse})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -102,7 +113,7 @@ func TestHTTP_5xxRetriesOnce(t *testing.T) {
 	defer srv.Close()
 
 	h := &handlers.HTTPHandler{Client: srv.Client()}
-	dec, err := h.Execute(context.Background(), makeHTTPCfg(srv.URL), hooks.Event{HookEvent: hooks.EventPreToolUse})
+	dec, err := h.Execute(testCtx(t), makeHTTPCfg(srv.URL), hooks.Event{HookEvent: hooks.EventPreToolUse})
 	if err != nil {
 		t.Fatalf("unexpected error after retry: %v", err)
 	}
@@ -128,7 +139,7 @@ func TestHTTP_4xxReturnsError(t *testing.T) {
 	defer srv.Close()
 
 	h := &handlers.HTTPHandler{Client: srv.Client()}
-	dec, err := h.Execute(context.Background(), makeHTTPCfg(srv.URL), hooks.Event{HookEvent: hooks.EventPreToolUse})
+	dec, err := h.Execute(testCtx(t), makeHTTPCfg(srv.URL), hooks.Event{HookEvent: hooks.EventPreToolUse})
 	if err == nil {
 		t.Fatal("expected error on persistent 400")
 	}
@@ -149,7 +160,7 @@ func TestHTTP_MissingURL(t *testing.T) {
 		Config:      map[string]any{}, // no "url"
 		Enabled:     true,
 	}
-	dec, err := h.Execute(context.Background(), cfg, hooks.Event{HookEvent: hooks.EventPreToolUse})
+	dec, err := h.Execute(testCtx(t), cfg, hooks.Event{HookEvent: hooks.EventPreToolUse})
 	if err == nil {
 		t.Fatal("expected error for missing URL")
 	}
@@ -169,7 +180,7 @@ func TestHTTP_NonJSON2xx_TreatedAsAllow(t *testing.T) {
 	defer srv.Close()
 
 	h := &handlers.HTTPHandler{Client: srv.Client()}
-	dec, err := h.Execute(context.Background(), makeHTTPCfg(srv.URL), hooks.Event{HookEvent: hooks.EventPreToolUse})
+	dec, err := h.Execute(testCtx(t), makeHTTPCfg(srv.URL), hooks.Event{HookEvent: hooks.EventPreToolUse})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -216,7 +227,7 @@ func TestHTTP_EncryptedAuthHeader_Decrypted(t *testing.T) {
 		},
 		Enabled: true,
 	}
-	dec, err := h.Execute(context.Background(), cfg, hooks.Event{HookEvent: hooks.EventPreToolUse})
+	dec, err := h.Execute(testCtx(t), cfg, hooks.Event{HookEvent: hooks.EventPreToolUse})
 	if err != nil {
 		t.Fatalf("unexpected error: %v (got Authorization: %q)", err, gotAuth)
 	}
@@ -244,7 +255,7 @@ func TestHTTP_ResponseBodyCappedAt1MiB(t *testing.T) {
 
 	h := &handlers.HTTPHandler{Client: srv.Client()}
 	// 2 MiB body is non-JSON → treated as allow, no panic.
-	dec, err := h.Execute(context.Background(), makeHTTPCfg(srv.URL), hooks.Event{HookEvent: hooks.EventPreToolUse})
+	dec, err := h.Execute(testCtx(t), makeHTTPCfg(srv.URL), hooks.Event{HookEvent: hooks.EventPreToolUse})
 	if err != nil {
 		t.Fatalf("unexpected error on oversized body: %v", err)
 	}

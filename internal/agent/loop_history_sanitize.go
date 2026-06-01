@@ -284,11 +284,12 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 
 		inTokens := l.estimateSummaryInputTokens(toSummarize)
 		slog.Info("compact_budget", "agent", l.id, "in_tokens", inTokens, "out_tokens", dynamicSummaryMax(inTokens))
-		resp, err := l.provider.Chat(sctx, providers.ChatRequest{
+		chatReq := providers.ChatRequest{
 			Messages: []providers.Message{{Role: "user", Content: prompt.String()}},
 			Model:    l.model,
 			Options:  map[string]any{"max_tokens": dynamicSummaryMax(inTokens), "temperature": 0.3},
-		})
+		}
+		resp, err := l.callInternalLLMWithUsage(sctx, chatReq, "session-summarization")
 		if err != nil {
 			slog.Warn("summarization failed", "session", sessionKey, "error", err)
 			return

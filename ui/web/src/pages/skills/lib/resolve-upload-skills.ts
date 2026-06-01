@@ -1,9 +1,9 @@
-import { validateMultiSkillZip, type MultiSkillZipValidation } from "./validate-skill-zip";
+import { validateMultiSkillZip, type MultiSkillZipValidation, type SkillZipValidationOptions } from "./validate-skill-zip";
 import type { SkillEntry, SkillStatus } from "./skill-upload-types";
 
 type SkillEntrySeed = Omit<SkillEntry, "id">;
 
-type ValidateSkillArchive = (file: File) => Promise<MultiSkillZipValidation>;
+type ValidateSkillArchive = (file: File, options?: SkillZipValidationOptions) => Promise<MultiSkillZipValidation>;
 
 // Browser-side ZIP parsing is best-effort only. Some valid ZIP variants are
 // accepted by the backend but rejected by JSZip, so fall back to a direct
@@ -11,9 +11,10 @@ type ValidateSkillArchive = (file: File) => Promise<MultiSkillZipValidation>;
 export async function resolveUploadSkills(
   file: File,
   validateArchive: ValidateSkillArchive = validateMultiSkillZip,
+  options: SkillZipValidationOptions = {},
 ): Promise<SkillEntrySeed[]> {
   try {
-    const validation = await validateArchive(file);
+    const validation = await validateArchive(file, options);
     if (validation.error === "upload.invalidZip") {
       return [fallbackUploadSkill()];
     }

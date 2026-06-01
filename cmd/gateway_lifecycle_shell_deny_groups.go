@@ -30,6 +30,10 @@ func subscribeShellDenyGroupsReload(msgBus *bus.MessageBus, toolsReg *tools.Regi
 			return
 		}
 		et.SetGlobalShellDenyGroups(updatedCfg.Tools.ShellDenyGroups)
-		slog.Info("shell deny groups reloaded via pub/sub", "groups", len(updatedCfg.Tools.ShellDenyGroups))
+		et.SetCommandKeywordAllowlist(updatedCfg.Tools.CommandKeywordAllowlist)
+		slog.Info("shell deny groups reloaded via pub/sub",
+			"groups", len(updatedCfg.Tools.ShellDenyGroups),
+			"command_keyword_allowlist_rules", len(updatedCfg.Tools.CommandKeywordAllowlist),
+		)
 	})
 }

@@ -186,7 +186,7 @@ func (l *Loop) runMemoryFlush(ctx context.Context, sessionKey string, settings *
 	// Run LLM iteration loop (max 5 iterations for flush)
 	maxFlushIter := 5
 	for range maxFlushIter {
-		resp, err := l.provider.Chat(flushCtx, providers.ChatRequest{
+		chatReq := providers.ChatRequest{
 			Messages: messages,
 			Tools:    toolDefs,
 			Model:    l.model,
@@ -194,7 +194,8 @@ func (l *Loop) runMemoryFlush(ctx context.Context, sessionKey string, settings *
 				"max_tokens":  4096,
 				"temperature": 0.3,
 			},
-		})
+		}
+		resp, err := l.callInternalLLMWithUsage(flushCtx, chatReq, "memory-flush")
 		if err != nil {
 			slog.Warn("memory flush: LLM call failed", "error", err)
 			l.extractiveMemoryFallback(flushCtx, sessionKey, history, "LLM error")

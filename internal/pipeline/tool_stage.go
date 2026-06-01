@@ -2,7 +2,9 @@ package pipeline
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strconv"
 	"sync"
 
 	"github.com/google/uuid"
@@ -10,6 +12,8 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
+
+const maxSequentialWaitBatchMs = 300000
 
 // ToolStage runs per iteration after PruneStage. Executes tool calls from
 // ThinkState.LastResponse, checks exit conditions (loop kill, read-only streak, budget).
@@ -42,12 +46,24 @@ func (s *ToolStage) Execute(ctx context.Context, state *RunState) error {
 
 	// Parallel path: separate I/O (parallel) from state mutation (sequential).
 	// Requires both ExecuteToolRaw and ProcessToolResult callbacks.
-	if len(toolCalls) > 1 && s.deps.ExecuteToolRaw != nil && s.deps.ProcessToolResult != nil {
+	if len(toolCalls) > 1 && s.deps.ExecuteToolRaw != nil && s.deps.ProcessToolResult != nil && !s.requiresSequential(toolCalls) {
 		return s.executeParallel(ctx, state, toolCalls)
 	}
 
 	// Sequential fallback: ExecuteToolCall handles both I/O and state mutation.
+	cumulativeWaitMs := 0
 	for _, tc := range toolCalls {
+		if s.shouldStopBeforeTool(ctx, state) {
+			return nil
+		}
+		if s.deps.SequentialToolCall != nil && s.deps.SequentialToolCall(tc) {
+			cumulativeWaitMs += toolCallTimeMs(tc)
+			if cumulativeWaitMs > maxSequentialWaitBatchMs {
+				s.result = AbortRun
+				return nil
+			}
+		}
+
 		// Hook: sync PreToolUse — block if hook denies. Builtin-source hooks may
 		// rewrite tc.Arguments via UpdatedToolInput (e.g. path-sanitizer); apply
 		// before ExecuteToolCall so the rewrite is authoritative.
@@ -99,10 +115,59 @@ func (s *ToolStage) Execute(ctx context.Context, state *RunState) error {
 			s.result = BreakLoop
 			return nil
 		}
+		if ctx.Err() != nil {
+			s.result = AbortRun
+			return nil
+		}
 	}
 
 	s.checkExitConditions(state)
 	return nil
+}
+
+func (s *ToolStage) requiresSequential(toolCalls []providers.ToolCall) bool {
+	if s.deps.SequentialToolCall == nil {
+		return false
+	}
+	for _, tc := range toolCalls {
+		if s.deps.SequentialToolCall(tc) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *ToolStage) shouldStopBeforeTool(ctx context.Context, state *RunState) bool {
+	if ctx.Err() != nil {
+		s.result = AbortRun
+		return true
+	}
+	if s.deps.Config.MaxToolCalls > 0 && state.Tool.TotalToolCalls >= s.deps.Config.MaxToolCalls {
+		s.result = BreakLoop
+		return true
+	}
+	return false
+}
+
+func toolCallTimeMs(tc providers.ToolCall) int {
+	v, ok := tc.Arguments["timeMs"]
+	if !ok {
+		return 0
+	}
+	switch n := v.(type) {
+	case int:
+		return n
+	case int64:
+		return int(n)
+	case float64:
+		return int(n)
+	case json.Number:
+		i, err := strconv.Atoi(n.String())
+		if err == nil {
+			return i
+		}
+	}
+	return 0
 }
 
 // executeParallel runs tool I/O concurrently, then processes results sequentially.

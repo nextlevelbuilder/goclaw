@@ -4,6 +4,7 @@ package sqlitestore
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -194,6 +195,24 @@ func (s *SQLiteMCPServerStore) ListAccessible(ctx context.Context, agentID uuid.
 	if err != nil {
 		return nil, err
 	}
+	// Symmetric with PG ListAccessible: synthetic owner identities ("" at
+	// registration, "system" for WS direct chat) skip the per-user-grant join
+	// so a stale disabled user_grants row never silently hides a server that
+	// agent_grants enables. See internal/store/pg/mcp_servers_access.go.
+	if userID == "" || userID == "system" {
+		rows, err := s.db.QueryContext(ctx,
+			`SELECT ms.id, ms.name, ms.display_name, ms.transport, ms.command, ms.args, ms.url, ms.headers, ms.env,
+			 ms.api_key, ms.tool_prefix, ms.timeout_sec, ms.settings, ms.enabled, ms.created_by, ms.created_at, ms.updated_at,
+			 mag.tool_allow, mag.tool_deny
+			 FROM mcp_servers ms
+			 INNER JOIN mcp_agent_grants mag ON ms.id = mag.server_id AND mag.agent_id = ? AND mag.enabled = 1
+			 WHERE ms.enabled = 1`+tClause,
+			append([]any{agentID}, tArgs...)...)
+		if err != nil {
+			return nil, err
+		}
+		return s.scanAccessibleRows(rows)
+	}
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT ms.id, ms.name, ms.display_name, ms.transport, ms.command, ms.args, ms.url, ms.headers, ms.env,
 		 ms.api_key, ms.tool_prefix, ms.timeout_sec, ms.settings, ms.enabled, ms.created_by, ms.created_at, ms.updated_at,
@@ -207,6 +226,13 @@ func (s *SQLiteMCPServerStore) ListAccessible(ctx context.Context, agentID uuid.
 	if err != nil {
 		return nil, err
 	}
+	return s.scanAccessibleRows(rows)
+}
+
+// scanAccessibleRows decodes the shared SELECT projection used by both the
+// system-user (no per-user-grant filter) and external-user paths of
+// ListAccessible.
+func (s *SQLiteMCPServerStore) scanAccessibleRows(rows *sql.Rows) ([]store.MCPAccessInfo, error) {
 	defer rows.Close()
 
 	result := make([]store.MCPAccessInfo, 0)

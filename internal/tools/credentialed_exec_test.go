@@ -2,7 +2,11 @@ package tools
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
+
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 )
 
 func TestDetectShellOperators(t *testing.T) {
@@ -204,4 +208,283 @@ func TestMatchesBinaryDenyJoinedArgs(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestApplyCommandKeywordAllowlistScopesContentArgs(t *testing.T) {
+	ghPatterns, _ := json.Marshal([]string{`auth\s+`, `repo\s+delete`, `secret\s+`, `token\s+`})
+	rules := []config.CommandKeywordAllowlistRule{
+		{
+			ID:           "github-content",
+			Command:      "gh",
+			Subcommands:  []string{"issue create", "pr create"},
+			Args:         []string{"--body", "--title"},
+			ArgPositions: []int{0},
+			Keywords:     []string{"secret", "token"},
+			Reason:       "GitHub issue and PR prose may discuss security terms.",
+		},
+	}
+
+	tests := []struct {
+		name      string
+		args      []string
+		wantHit   bool
+		wantAudit int
+	}{
+		{
+			name:      "issue body content allowed",
+			args:      []string{"issue", "create", "--body", "secret rotation details"},
+			wantHit:   false,
+			wantAudit: 1,
+		},
+		{
+			name:      "pr title content allowed",
+			args:      []string{"pr", "create", "--title=token handling notes"},
+			wantHit:   false,
+			wantAudit: 1,
+		},
+		{
+			name:      "positional content allowed",
+			args:      []string{"issue", "create", "token handling notes"},
+			wantHit:   false,
+			wantAudit: 1,
+		},
+		{
+			name:    "command path stays blocked",
+			args:    []string{"secret", "set", "TOKEN"},
+			wantHit: true,
+		},
+		{
+			name:    "non-allowlisted arg stays blocked",
+			args:    []string{"issue", "create", "--label", "secret incident"},
+			wantHit: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sanitized, audits := applyCommandKeywordAllowlist("gh", tt.args, rules)
+			got := matchesBinaryDeny(sanitized, ghPatterns)
+			if (got != "") != tt.wantHit {
+				t.Fatalf("matchesBinaryDeny(%v) after allowlist = %q, wantHit=%v", sanitized, got, tt.wantHit)
+			}
+			if len(audits) != tt.wantAudit {
+				t.Fatalf("audit count = %d, want %d", len(audits), tt.wantAudit)
+			}
+		})
+	}
+}
+
+func TestApplyCommandKeywordAllowlistIgnoresDisabledRules(t *testing.T) {
+	ghPatterns, _ := json.Marshal([]string{`secret\s+`})
+	enabled := false
+	rules := []config.CommandKeywordAllowlistRule{
+		{
+			ID:          "disabled-github-content",
+			Command:     "gh",
+			Subcommands: []string{"issue create"},
+			Args:        []string{"--body"},
+			Keywords:    []string{"secret"},
+			Enabled:     &enabled,
+		},
+	}
+
+	sanitized, audits := applyCommandKeywordAllowlist("gh", []string{"issue", "create", "--body", "secret notes"}, rules)
+	if got := matchesBinaryDeny(sanitized, ghPatterns); got == "" {
+		t.Fatalf("disabled rule bypassed deny_args; sanitized args = %v", sanitized)
+	}
+	if len(audits) != 0 {
+		t.Fatalf("disabled rule emitted audit records: %v", audits)
+	}
+}
+
+func TestApplyCommandKeywordAllowlistRequiresSubcommandForPositions(t *testing.T) {
+	ghPatterns, _ := json.Marshal([]string{`secret\s+`})
+	rules := []config.CommandKeywordAllowlistRule{
+		{
+			ID:           "unsafe-position",
+			Command:      "gh",
+			ArgPositions: []int{0},
+			Keywords:     []string{"secret"},
+		},
+	}
+
+	sanitized, audits := applyCommandKeywordAllowlist("gh", []string{"secret", "set", "TOKEN"}, rules)
+	if got := matchesBinaryDeny(sanitized, ghPatterns); got == "" {
+		t.Fatalf("position rule without subcommand bypassed command-path deny; sanitized args = %v", sanitized)
+	}
+	if len(audits) != 0 {
+		t.Fatalf("position rule without subcommand emitted audit records: %v", audits)
+	}
+}
+
+func TestResolveAndMatchBinaryUsesConfiguredExecutablePath(t *testing.T) {
+	t.Setenv("PATH", "/usr/bin")
+	binDir := t.TempDir()
+	binaryPath := filepath.Join(binDir, "openrouter")
+	if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := resolveAndMatchBinary("openrouter", &binaryPath)
+	if err != nil {
+		t.Fatalf("resolveAndMatchBinary returned error: %v", err)
+	}
+	if got != binaryPath {
+		t.Fatalf("path = %q, want %q", got, binaryPath)
+	}
+}
+
+func TestResolveAndMatchBinaryAllowsConfiguredAliasPath(t *testing.T) {
+	runtimeDir := t.TempDir()
+	t.Setenv("RUNTIME_DIR", runtimeDir)
+	t.Setenv("NPM_CONFIG_PREFIX", "")
+	t.Setenv("PATH", "/usr/bin")
+
+	pkgDir := filepath.Join(runtimeDir, "npm-global", "lib", "node_modules", "openrouter-cli")
+	if err := os.MkdirAll(pkgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := []byte(`{"name":"openrouter-cli","bin":{"orc":"dist/index.js"}}`)
+	if err := os.WriteFile(filepath.Join(pkgDir, "package.json"), manifest, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	binDir := filepath.Join(runtimeDir, "npm-global", "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	binaryPath := filepath.Join(binDir, "orc")
+	if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := resolveAndMatchBinary("openrouter", &binaryPath)
+	if err != nil {
+		t.Fatalf("resolveAndMatchBinary returned error: %v", err)
+	}
+	if got != binaryPath {
+		t.Fatalf("path = %q, want %q", got, binaryPath)
+	}
+}
+
+func TestResolveAndMatchBinaryRejectsArbitraryConfiguredPath(t *testing.T) {
+	t.Setenv("PATH", "/usr/bin")
+	binDir := t.TempDir()
+	binaryPath := filepath.Join(binDir, "sh")
+	if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := resolveAndMatchBinary("openrouter", &binaryPath); err == nil {
+		t.Fatalf("resolveAndMatchBinary accepted arbitrary mismatched path")
+	}
+}
+
+func TestResolveAndMatchBinaryFallsBackToRuntimeExecutableDirs(t *testing.T) {
+	runtimeDir := t.TempDir()
+	t.Setenv("RUNTIME_DIR", runtimeDir)
+	t.Setenv("NPM_CONFIG_PREFIX", "")
+	t.Setenv("PATH", "/usr/bin")
+
+	binDir := filepath.Join(runtimeDir, "npm-global", "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	binaryPath := filepath.Join(binDir, "openrouter")
+	if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := resolveAndMatchBinary("openrouter", nil)
+	if err != nil {
+		t.Fatalf("resolveAndMatchBinary returned error: %v", err)
+	}
+	if got != binaryPath {
+		t.Fatalf("path = %q, want %q", got, binaryPath)
+	}
+}
+
+func TestResolveAndMatchBinaryFindsGoogleWorkspaceRuntimeBinary(t *testing.T) {
+	runtimeDir := t.TempDir()
+	t.Setenv("RUNTIME_DIR", runtimeDir)
+	t.Setenv("NPM_CONFIG_PREFIX", "")
+	t.Setenv("PATH", "/usr/bin")
+
+	binDir := filepath.Join(runtimeDir, "npm-global", "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	binaryPath := filepath.Join(binDir, "gws")
+	if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := resolveAndMatchBinary("gws", nil)
+	if err != nil {
+		t.Fatalf("resolveAndMatchBinary returned error: %v", err)
+	}
+	if got != binaryPath {
+		t.Fatalf("path = %q, want %q", got, binaryPath)
+	}
+}
+
+// TestValidateExecCwd guards against the misleading "fork/exec PATH: no such
+// file or directory" that Linux Go surfaces when cmd.Dir is the actual
+// culprit (chdir failure inside the cloned child). Pre-flighting cmd.Dir
+// surfaces the real cause so operators don't chase missing-binary ghosts.
+func TestValidateExecCwd(t *testing.T) {
+	t.Run("empty cwd is allowed", func(t *testing.T) {
+		if err := validateExecCwd(""); err != nil {
+			t.Fatalf("empty cwd: want nil, got %v", err)
+		}
+	})
+
+	t.Run("existing directory is allowed", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := validateExecCwd(dir); err != nil {
+			t.Fatalf("existing dir: want nil, got %v", err)
+		}
+	})
+
+	t.Run("missing directory names the cwd, not the binary", func(t *testing.T) {
+		missing := filepath.Join(t.TempDir(), "does-not-exist")
+		err := validateExecCwd(missing)
+		if err == nil {
+			t.Fatal("missing cwd: want error, got nil")
+		}
+		// The error must mention "working directory" — that's the whole point.
+		// Without this guard, exec would surface "fork/exec /usr/bin/gh: no such file or directory"
+		// even when the binary is fine.
+		if got := err.Error(); !contains(got, "working directory") || !contains(got, missing) {
+			t.Fatalf("missing cwd: error = %q, want it to mention %q and 'working directory'", got, missing)
+		}
+	})
+
+	t.Run("file instead of directory is rejected", func(t *testing.T) {
+		f, err := os.CreateTemp(t.TempDir(), "notadir")
+		if err != nil {
+			t.Fatal(err)
+		}
+		f.Close()
+		err = validateExecCwd(f.Name())
+		if err == nil {
+			t.Fatal("file as cwd: want error, got nil")
+		}
+		if got := err.Error(); !contains(got, "not a directory") {
+			t.Fatalf("file as cwd: error = %q, want 'not a directory'", got)
+		}
+	})
+}
+
+func contains(s, sub string) bool {
+	return len(sub) == 0 || (len(s) >= len(sub) && (s == sub || stringIndex(s, sub) >= 0))
+}
+
+func stringIndex(s, sub string) int {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return i
+		}
+	}
+	return -1
 }

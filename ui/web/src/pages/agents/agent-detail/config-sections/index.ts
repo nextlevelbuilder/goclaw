@@ -8,3 +8,5 @@ export { MemorySection } from "./memory-section";
 export { ThinkingSection } from "./thinking-section";
 export { WorkspaceSharingSection } from "./workspace-sharing-section";
 export { ChatGPTOAuthRoutingSection } from "./chatgpt-oauth-routing-section";
+export { ModelFallbackSection } from "./model-fallback-section";
+export { InboundDebounceSection } from "./inbound-debounce-section";

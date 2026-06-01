@@ -13,11 +13,13 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { UserPickerCombobox } from "@/components/shared/user-picker-combobox";
-import { KeyValueEditor } from "@/components/shared/key-value-editor";
 import { toast } from "@/stores/use-toast-store";
 import { useHttp } from "@/hooks/use-ws";
 import i18next from "i18next";
+import { CliCredentialEnvVarsSection, type ManualEnvEntry } from "./cli-credential-env-vars-section";
+import { CliCredentialGitFields, type GitCredentialType } from "./cli-credential-git-fields";
 import type { SecureCLIBinary } from "./hooks/use-cli-credentials";
+import type { CLIEnvEntryResponse, CLIEnvPayload } from "@/types/cli-credential";
 
 interface UserCredEntry {
   id: string;
@@ -26,6 +28,9 @@ interface UserCredEntry {
   has_env: boolean;
   /** Env variable names (no values) for display */
   env_keys?: string[];
+  /** Phase 5: typed-credential adapter routing. */
+  credential_type?: string | null;
+  host_scope?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -36,10 +41,25 @@ interface CLIUserCredentialsDialogProps {
   binary: SecureCLIBinary;
 }
 
-const SENSITIVE_ENV_RE = /^.*(key|secret|token|password|credential).*$/i;
-const isSensitiveEnv = (key: string) => SENSITIVE_ENV_RE.test(key.trim());
-
 type ViewState = "list" | "form";
+
+function entriesFromEnv(env: Record<string, CLIEnvEntryResponse> | null | undefined): ManualEnvEntry[] {
+  if (!env || Object.keys(env).length === 0) return [];
+  return Object.entries(env).map(([key, entry]) => ({
+    key,
+    value: entry.value ?? "",
+    kind: entry.kind ?? "sensitive",
+  }));
+}
+
+function envPayloadFromEntries(entries: ManualEnvEntry[]): CLIEnvPayload {
+  const env: CLIEnvPayload = {};
+  for (const entry of entries) {
+    const key = entry.key.trim();
+    if (key) env[key] = { kind: entry.kind, value: entry.value };
+  }
+  return env;
+}
 
 export function CLIUserCredentialsDialog({ open, onOpenChange, binary }: CLIUserCredentialsDialogProps) {
   const { t } = useTranslation("cli-credentials");
@@ -54,9 +74,19 @@ export function CLIUserCredentialsDialog({ open, onOpenChange, binary }: CLIUser
   const [userId, setUserId] = useState("");
   // Separate search text from selected value (onChange fires on every keystroke)
   const [userSearchText, setUserSearchText] = useState("");
-  const [env, setEnv] = useState<Record<string, string>>({});
+  const [envEntries, setEnvEntries] = useState<ManualEnvEntry[]>([]);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeletingId] = useState<string | null>(null);
+
+  // Phase 5 — git typed credential form state. Always declared, only
+  // exercised when binary.adapter_name === "git".
+  const isGit = binary.adapter_name === "git";
+  const [gitType, setGitType] = useState<GitCredentialType>("pat");
+  const [gitHostScope, setGitHostScope] = useState("");
+  const [gitToken, setGitToken] = useState("");
+  const [gitPrivateKey, setGitPrivateKey] = useState("");
+  const [gitErrorKey, setGitErrorKey] = useState<string | undefined>(undefined);
+  const [gitHasExistingSecret, setGitHasExistingSecret] = useState(false);
 
   // User picker for the form
 
@@ -80,15 +110,27 @@ export function CLIUserCredentialsDialog({ open, onOpenChange, binary }: CLIUser
     setEditEntry(null);
     setUserId("");
     setUserSearchText("");
-    setEnv({});
+    setEnvEntries([]);
+    setGitType(isGit ? "pat" : "env");
+    setGitHostScope("");
+    setGitToken("");
+    setGitPrivateKey("");
+    setGitErrorKey(undefined);
+    setGitHasExistingSecret(false);
     loadList();
-  }, [open, loadList]);
+  }, [open, loadList, isGit]);
 
   const openAdd = () => {
     setEditEntry(null);
     setUserId("");
     setUserSearchText("");
-    setEnv({});
+    setEnvEntries([]);
+    setGitType(isGit ? "pat" : "env");
+    setGitHostScope("");
+    setGitToken("");
+    setGitPrivateKey("");
+    setGitErrorKey(undefined);
+    setGitHasExistingSecret(false);
     setView("form");
   };
 
@@ -96,22 +138,114 @@ export function CLIUserCredentialsDialog({ open, onOpenChange, binary }: CLIUser
     setEditEntry(entry);
     setUserId(entry.user_id);
     setUserSearchText(entry.user_id);
-    setEnv({});
+    setEnvEntries([]);
+    setGitErrorKey(undefined);
     setView("form");
-    // Load existing env for edit
+    // Load existing data for edit. The GET response includes credential_type +
+    // host_scope but NEVER the secret blob — so we show "secret set" masked
+    // placeholder and require re-entry to change the secret.
     try {
-      const res = await http.get<{ user_id: string; env: Record<string, string> | null }>(
-        `/v1/cli-credentials/${binary.id}/user-credentials/${entry.user_id}`,
-      );
-      setEnv(res.env ?? {});
+      const res = await http.get<{
+        user_id: string;
+        env: Record<string, CLIEnvEntryResponse> | null;
+        credential_type?: string | null;
+        host_scope?: string | null;
+        has_secret?: boolean;
+      }>(`/v1/cli-credentials/${binary.id}/user-credentials/${entry.user_id}`);
+      setEnvEntries(entriesFromEnv(res.env));
+      if (isGit) {
+        const t = (res.credential_type ?? "env") as GitCredentialType;
+        setGitType(t === "pat" || t === "ssh_key" ? t : "env");
+        setGitHostScope(res.host_scope ?? "");
+        setGitHasExistingSecret(!!res.has_secret);
+        setGitToken("");
+        setGitPrivateKey("");
+      }
     } catch {
-      // leave env empty — user can re-enter
+      // leave fields empty — user can re-enter
     }
+  };
+
+  /** Build the PUT payload for the git typed-credential path.
+   * Returns null when the caller should fall through to the legacy env flow
+   * (gitType==="env" or non-git binary). Returns a string error message when
+   * client-side validation fails BEFORE the network round-trip — we still want
+   * inline UI on host_scope required to be instant. */
+  const buildGitTypedPayload = (): { credential_type: string; host_scope: string; blob: Record<string, string> } | null | string => {
+    if (!isGit || gitType === "env") return null;
+    const scope = gitHostScope.trim();
+    if (!scope) {
+      setGitErrorKey("git.cred_host_scope_required");
+      return "host_scope_required";
+    }
+    if (gitType === "pat") {
+      const tok = gitToken;
+      // On edit, allow empty token → caller should not submit (keeps existing secret).
+      // We block here because typed PUT replaces the blob entirely.
+      if (!tok) {
+        if (gitHasExistingSecret) return "no_change";
+        setGitErrorKey("git.cred_blob_missing_token");
+        return "token_required";
+      }
+      return { credential_type: "pat", host_scope: scope, blob: { token: tok } };
+    }
+    if (gitType === "ssh_key") {
+      const key = gitPrivateKey;
+      if (!key.trim()) {
+        if (gitHasExistingSecret) return "no_change";
+        setGitErrorKey("git.cred_blob_missing_key");
+        return "key_required";
+      }
+      return { credential_type: "ssh_key", host_scope: scope, blob: { key } };
+    }
+    return null;
   };
 
   const handleSave = async () => {
     const uid = userId.trim();
     if (!uid) return;
+
+    setGitErrorKey(undefined);
+
+    // Git typed branch — supersedes the legacy env path for pat/ssh_key.
+    if (isGit && gitType !== "env") {
+      const payload = buildGitTypedPayload();
+      if (typeof payload === "string") {
+        // Client-side validation failure already set gitErrorKey above; bail
+        // without toast so the inline field error is the single source of truth.
+        if (payload === "no_change") {
+          toast.success(i18next.t("cli-credentials:userCredentials.saved"));
+          setView("list");
+        }
+        return;
+      }
+      if (payload === null) return;
+      setSaving(true);
+      try {
+        await http.put(`/v1/cli-credentials/${binary.id}/user-credentials/${uid}`, payload);
+        toast.success(i18next.t("cli-credentials:userCredentials.saved"));
+        await loadList();
+        setView("list");
+      } catch (err) {
+        // Backend writes typed errors with `code = error_key` so the shared
+        // HttpClient surfaces them on err.code. Drive inline UI off that.
+        const code = (err as { code?: string })?.code;
+        if (code && code.startsWith("git.cred_")) {
+          setGitErrorKey(code);
+        } else {
+          toast.error(
+            i18next.t("cli-credentials:userCredentials.saveFailed"),
+            err instanceof Error ? err.message : "",
+          );
+        }
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
+    // Legacy env-vars path (passthrough binaries + git's "env" fallback).
+    const env = envPayloadFromEntries(envEntries);
     // New entry needs at least one variable; edits may clear all keys (empty object).
     if (!editEntry && Object.keys(env).length === 0) {
       toast.error(i18next.t("cli-credentials:userCredentials.envRequired"));
@@ -182,12 +316,25 @@ export function CLIUserCredentialsDialog({ open, onOpenChange, binary }: CLIUser
                     <div className="flex flex-col gap-1 min-w-0">
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="font-mono text-sm truncate">{entry.user_id}</span>
-                        {entry.has_env && (
+                        {entry.credential_type && entry.credential_type !== "env" ? (
+                          <Badge variant="default" className="shrink-0 text-xs uppercase">
+                            {entry.credential_type === "pat"
+                              ? t("userCredentials.credentialTypePAT")
+                              : entry.credential_type === "ssh_key"
+                                ? t("userCredentials.credentialTypeSSH")
+                                : entry.credential_type}
+                          </Badge>
+                        ) : entry.has_env ? (
                           <Badge variant="secondary" className="shrink-0 text-xs">
                             env
                           </Badge>
-                        )}
+                        ) : null}
                       </div>
+                      {entry.host_scope && (
+                        <p className="text-xs text-muted-foreground font-mono truncate" title={entry.host_scope}>
+                          {entry.host_scope}
+                        </p>
+                      )}
                       {entry.env_keys && entry.env_keys.length > 0 && (
                         <p className="text-xs text-muted-foreground font-mono truncate" title={entry.env_keys.join(", ")}>
                           {entry.env_keys.join(", ")}
@@ -249,17 +396,34 @@ export function CLIUserCredentialsDialog({ open, onOpenChange, binary }: CLIUser
                 <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded-md px-2.5 py-1.5 border border-amber-200 dark:border-amber-800">{t("userCredentials.mergeHint")}</p>
               </div>
 
-              <div className="flex flex-col gap-1.5">
-                <Label>{t("userCredentials.env")}</Label>
-                <KeyValueEditor
-                  value={env}
-                  onChange={setEnv}
-                  keyPlaceholder="ENV_KEY"
-                  valuePlaceholder="value"
-                  addLabel={t("userCredentials.addEnv")}
-                  maskValue={isSensitiveEnv}
+              {isGit ? (
+                <CliCredentialGitFields
+                  type={gitType}
+                  onTypeChange={setGitType}
+                  hostScope={gitHostScope}
+                  onHostScopeChange={setGitHostScope}
+                  token={gitToken}
+                  onTokenChange={setGitToken}
+                  privateKey={gitPrivateKey}
+                  onPrivateKeyChange={setGitPrivateKey}
+                  errorKey={gitErrorKey}
+                  hasExistingSecret={gitHasExistingSecret}
                 />
-              </div>
+              ) : null}
+
+              {(!isGit || gitType === "env") && (
+                <div className="flex flex-col gap-1.5">
+                  <Label>{t("userCredentials.env")}</Label>
+                  <CliCredentialEnvVarsSection
+                    isManualMode
+                    activePreset={null}
+                    envValues={{}}
+                    setEnvValues={() => undefined}
+                    manualEnvEntries={envEntries}
+                    setManualEnvEntries={setEnvEntries}
+                  />
+                </div>
+              )}
             </div>
 
             <DialogFooter>

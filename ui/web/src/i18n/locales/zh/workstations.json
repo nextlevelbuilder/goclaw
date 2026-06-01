@@ -1,0 +1,82 @@
+{
+  "title": "工作站",
+  "description": "管理远程工作站连接（SSH、Docker），供 Agent 执行命令。",
+  "addWorkstation": "添加工作站",
+  "emptyTitle": "暂无工作站",
+  "emptyDescription": "添加工作站以允许 Agent 在远程机器上运行命令。",
+  "backend": {
+    "ssh": "SSH",
+    "docker": "Docker"
+  },
+  "status": {
+    "active": "活跃",
+    "inactive": "已停用"
+  },
+  "columns": {
+    "name": "名称",
+    "key": "键名",
+    "backend": "类型",
+    "status": "状态",
+    "created": "创建时间",
+    "actions": "操作"
+  },
+  "actions": {
+    "edit": "编辑",
+    "delete": "删除",
+    "test": "测试连接",
+    "activate": "启用",
+    "deactivate": "停用"
+  },
+  "createDialog": {
+    "title": "添加工作站",
+    "description": "配置新的远程工作站连接。",
+    "nameLabel": "显示名称",
+    "namePlaceholder": "开发服务器",
+    "keyLabel": "工作站键名",
+    "keyPlaceholder": "dev-server",
+    "keyHint": "小写字母、数字、连字符。Agent 使用此键名引用该工作站。",
+    "backendLabel": "后端类型",
+    "sshOption": "SSH",
+    "dockerOption": "Docker",
+    "hostLabel": "主机",
+    "hostPlaceholder": "192.168.1.100",
+    "portLabel": "端口",
+    "userLabel": "SSH 用户",
+    "userPlaceholder": "ubuntu",
+    "identityFileLabel": "密钥文件（可选）",
+    "identityFilePlaceholder": "~/.ssh/id_rsa",
+    "containerLabel": "容器名称 / ID",
+    "containerPlaceholder": "my-container",
+    "dockerHostLabel": "Docker Host（可选）",
+    "dockerHostPlaceholder": "unix:///var/run/docker.sock",
+    "cancel": "取消",
+    "create": "创建"
+  },
+  "deleteDialog": {
+    "title": "删除工作站",
+    "description": "确定要删除「{{name}}」吗？此操作无法撤销。",
+    "confirmLabel": "删除"
+  },
+  "testResult": {
+    "success": "连接成功",
+    "notImplemented": "连接测试功能暂未开放"
+  },
+  "activity": {
+    "title": "近期活动",
+    "emptyTitle": "暂无活动",
+    "emptyDescription": "Agent 执行命令后将在此显示。",
+    "columns": {
+      "action": "操作",
+      "cmdPreview": "命令",
+      "exitCode": "退出码",
+      "duration": "耗时",
+      "agent": "Agent",
+      "timestamp": "时间"
+    },
+    "actions": {
+      "exec": "执行",
+      "deny": "拒绝"
+    },
+    "loadMore": "加载更多"
+  }
+}

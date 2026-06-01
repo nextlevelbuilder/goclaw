@@ -11,9 +11,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/bgalert"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
-	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/providerresolve"
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 )
 
 const (
@@ -31,6 +32,7 @@ type dreamingWorker struct {
 	systemConfigs store.SystemConfigStore // per-tenant provider config
 	registry      *providers.Registry     // provider resolution
 	alertDeps     bgalert.AlertDeps
+	usageCaps     *usagecaps.Service
 
 	// threshold/debounce are the global defaults. Per-agent overrides come
 	// from resolveConfig which reads the agent's MemoryConfig.Dreaming JSONB.
@@ -93,6 +95,11 @@ func (w *dreamingWorker) Handle(ctx context.Context, event eventbus.DomainEvent)
 	if event.TenantID != "" {
 		if tid, err := uuid.Parse(event.TenantID); err == nil {
 			ctx = store.WithTenantID(ctx, tid)
+		}
+	}
+	if event.AgentID != "" {
+		if aid, err := uuid.Parse(event.AgentID); err == nil {
+			ctx = store.WithAgentID(ctx, aid)
 		}
 	}
 
@@ -205,7 +212,7 @@ func (w *dreamingWorker) synthesize(ctx context.Context, provider providers.Prov
 	}
 	body := strings.Join(summaries, "\n---\n")
 
-	resp, err := provider.Chat(ctx, providers.ChatRequest{
+	req := providers.ChatRequest{
 		Messages: []providers.Message{
 			{Role: "system", Content: dreamingSystemPrompt},
 			{Role: "user", Content: "Session summaries:\n---\n" + body + "\n---"},
@@ -214,6 +221,11 @@ func (w *dreamingWorker) synthesize(ctx context.Context, provider providers.Prov
 		Options: map[string]any{
 			providers.OptMaxTokens: dreamingMaxTokens,
 		},
+	}
+	resp, err := w.usageCaps.Chat(ctx, provider, req, usagecaps.ChatOptions{
+		ModelID:         model,
+		Purpose:         "dreaming-synthesis",
+		MaxOutputTokens: dreamingMaxTokens,
 	})
 	if err != nil {
 		return "", fmt.Errorf("dreaming chat: %w", err)

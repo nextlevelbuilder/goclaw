@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 
 	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/hooks"
@@ -52,13 +53,13 @@ func (h *CommandHandler) Execute(ctx context.Context, cfg hooks.HookConfig, ev h
 		return hooks.DecisionError, fmt.Errorf("hook: command handler: marshal event: %w", err)
 	}
 
-	sh, err := findShell()
+	sh, args, err := shellCommand(cmd)
 	if err != nil {
 		return hooks.DecisionError, fmt.Errorf("hook: command handler: %w", err)
 	}
 
 	//nolint:gosec // Command comes from admin-configured hooks stored in DB, not user input.
-	c := exec.CommandContext(ctx, sh, "-c", cmd)
+	c := exec.CommandContext(ctx, sh, args...)
 	c.Stdin = bytes.NewReader(eventJSON)
 	c.Env = buildAllowedEnv(allowedVars)
 
@@ -95,12 +96,20 @@ func (h *CommandHandler) Execute(ctx context.Context, cfg hooks.HookConfig, ev h
 	return hooks.DecisionAllow, nil
 }
 
-// findShell returns the path to sh, falling back to /bin/sh.
-func findShell() (string, error) {
-	if p, err := exec.LookPath("sh"); err == nil {
-		return p, nil
+// shellCommand returns the platform shell invocation for an admin-configured command.
+func shellCommand(cmd string) (string, []string, error) {
+	if runtime.GOOS == "windows" {
+		for _, shell := range []string{"pwsh", "powershell"} {
+			if p, err := exec.LookPath(shell); err == nil {
+				return p, []string{"-NoProfile", "-NonInteractive", "-Command", cmd}, nil
+			}
+		}
+		return "", nil, fmt.Errorf("PowerShell shell not found")
 	}
-	return "/bin/sh", nil
+	if p, err := exec.LookPath("sh"); err == nil {
+		return p, []string{"-c", cmd}, nil
+	}
+	return "/bin/sh", []string{"-c", cmd}, nil
 }
 
 // buildAllowedEnv constructs an env slice containing only the listed keys from

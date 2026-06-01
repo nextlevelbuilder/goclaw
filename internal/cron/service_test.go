@@ -339,14 +339,44 @@ func TestService_RunLog_PopulatedByAutoExecution(t *testing.T) {
 		return "ok", nil
 	})
 
-	interval := int64(50)
+	if err := cs.Start(); err != nil {
+		t.Fatalf("Start error: %v", err)
+	}
+	defer cs.Stop()
+
+	interval := int64(time.Hour / time.Millisecond)
 	job, _ := cs.AddJob("logger", Schedule{Kind: "every", EveryMS: &interval}, "tick", false, "", "", "")
 
-	cs.Start()
-	time.Sleep(120 * time.Millisecond)
-	cs.Stop()
+	cs.mu.Lock()
+	foundJob := false
+	for i := range cs.store.Jobs {
+		if cs.store.Jobs[i].ID == job.ID {
+			due := nowMS()
+			cs.store.Jobs[i].State.NextRunAtMS = &due
+			foundJob = true
+			break
+		}
+	}
+	if !foundJob {
+		cs.mu.Unlock()
+		t.Fatalf("job %s not found in store", job.ID)
+	}
+	if err := cs.saveUnsafe(); err != nil {
+		cs.mu.Unlock()
+		t.Fatalf("save due job: %v", err)
+	}
+	cs.mu.Unlock()
 
-	log := cs.GetRunLog(job.ID, 50)
+	var log []RunLogEntry
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		log = cs.GetRunLog(job.ID, 50)
+		if len(log) > 0 {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
 	if len(log) == 0 {
 		t.Fatal("expected at least 1 run log entry from automatic execution")
 	}
@@ -420,11 +450,11 @@ func TestAnchorBasedNextRun_PreservesOffset(t *testing.T) {
 	// Formula: next = anchor + (elapsed/interval + 1) * interval
 
 	tests := []struct {
-		name        string
-		anchor      int64 // scheduledAtMS
-		interval    int64 // everyMS
-		now         int64
-		wantNext    int64
+		name     string
+		anchor   int64 // scheduledAtMS
+		interval int64 // everyMS
+		now      int64
+		wantNext int64
 	}{
 		{
 			name:     "normal_one_period",
@@ -461,7 +491,7 @@ func TestAnchorBasedNextRun_PreservesOffset(t *testing.T) {
 		{
 			name:     "small_interval_large_gap",
 			anchor:   0,
-			interval: 1000, // 1 second
+			interval: 1000,     // 1 second
 			now:      86400000, // 24 hours later — O(1) handles this without 86400 iterations
 			// elapsed=86400000, periods=86400000/1000=86400, next=0+(86400+1)*1000=86401000
 			wantNext: 86401000,
@@ -488,8 +518,8 @@ func TestAnchorBasedNextRun_PreservesOffset(t *testing.T) {
 	interval := int64(5000)
 	now := int64(6500)
 
-	nextA := anchorA + (((now - anchorA) / interval) + 1) * interval
-	nextB := anchorB + (((now - anchorB) / interval) + 1) * interval
+	nextA := anchorA + (((now-anchorA)/interval)+1)*interval
+	nextB := anchorB + (((now-anchorB)/interval)+1)*interval
 	offset := nextA - nextB
 	if offset != 4000 { // 11000 - 7000 = 4000 (original offset 1000 preserved mod interval)
 		t.Fatalf("expected 4000ms offset between jobs, got %d", offset)

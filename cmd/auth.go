@@ -45,7 +45,7 @@ func authStatusCmd() *cobra.Command {
 					name = provider
 				}
 				fmt.Printf("ChatGPT OAuth account: active (alias: %s)\n", name)
-				fmt.Printf("Use model prefix '%s/' in agent config (e.g. %s/gpt-5.4).\n", name, name)
+				fmt.Printf("Use model prefix '%s/' in agent config (e.g. %s/gpt-5.5).\n", name, name)
 			} else {
 				fmt.Printf("No ChatGPT OAuth tokens found for alias '%s'.\n", provider)
 				fmt.Println("Use the web UI to authenticate this ChatGPT OAuth account.")

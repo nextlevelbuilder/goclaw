@@ -19,7 +19,52 @@
     "total": "Total",
     "channel": "Channel",
     "cost": "Cost",
-    "status": "Status"
+    "status": "Status",
+    "actions": "Actions"
+  },
+  "caps": {
+    "title": "Usage Caps",
+    "description": "Limit AI budget by tokens and cost across tenant, agent, provider, and model scopes.",
+    "window": "Window",
+    "windows": {
+      "hour": "Hourly",
+      "day": "Daily",
+      "week": "Weekly",
+      "month": "Monthly"
+    },
+    "agent": "Agent",
+    "provider": "Provider",
+    "model": "Model",
+    "allAgents": "All Agents",
+    "allProviders": "All Providers",
+    "maxTokens": "Max tokens",
+    "maxCost": "Max cost USD",
+    "create": "Create cap",
+    "edit": "Edit cap",
+    "save": "Save cap",
+    "cancel": "Cancel edit",
+    "scope": "Scope",
+    "tokens": "Tokens",
+    "cost": "Cost",
+    "empty": "No cap policies yet.",
+    "tenantScope": "Tenant cap",
+    "tenantScoped": "Tenant scoped",
+    "agentScoped": "Agent scoped",
+    "agentBudgetSource": "Agent budget",
+    "agentBudgetManaged": "Clear this from the agent monthly budget field.",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "delete": "Delete cap",
+    "recentBlocks": "Recent blocks",
+    "blocked": "Blocked",
+    "toast": {
+      "created": "Usage cap created",
+      "updated": "Usage cap updated",
+      "createFailed": "Could not create usage cap",
+      "updateFailed": "Could not update usage cap",
+      "deleted": "Usage cap deleted",
+      "deleteFailed": "Could not delete usage cap"
+    }
   },
   "analytics": {
     "title": "Usage Analytics",

@@ -218,9 +218,14 @@ func buildTenantCfgHandler(tcfg *stubTenantCfgStore, tid uuid.UUID) (*BuiltinToo
 // mustDoPut wires a mux pattern so r.PathValue("name") resolves correctly.
 func mustDo(t *testing.T, inject http.HandlerFunc, method, body string) *httptest.ResponseRecorder {
 	t.Helper()
+	return mustDoTool(t, inject, method, "web_search", body)
+}
+
+func mustDoTool(t *testing.T, inject http.HandlerFunc, method, toolName, body string) *httptest.ResponseRecorder {
+	t.Helper()
 	mux := http.NewServeMux()
 	mux.HandleFunc(method+" /v1/tools/builtin/{name}/tenant-config", inject)
-	req := httptest.NewRequest(method, "/v1/tools/builtin/web_search/tenant-config", strings.NewReader(body))
+	req := httptest.NewRequest(method, "/v1/tools/builtin/"+toolName+"/tenant-config", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -302,6 +307,67 @@ func TestPutTenantConfig_InvalidSettingsJSON_Returns400(t *testing.T) {
 	rec := mustDo(t, inject, http.MethodPut, `{"settings":[1,2,3]}`)
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("array settings status = %d, want 400", rec.Code)
+	}
+}
+
+func TestPutTenantConfig_InvalidExecTimeoutSettings_Returns400(t *testing.T) {
+	tcfg := newStubTenantCfgStore()
+	_, inject := buildTenantCfgHandler(tcfg, uuid.New())
+
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"non_number", `{"settings":{"timeout_seconds":"60"}}`},
+		{"zero", `{"settings":{"timeout_seconds":0}}`},
+		{"negative", `{"settings":{"timeout_seconds":-1}}`},
+		{"above_max", `{"settings":{"timeout_seconds":3601}}`},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := mustDoTool(t, inject, http.MethodPut, "exec", tc.body)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400; body=%s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestBuiltinToolsUpdate_InvalidExecTimeoutSettings_Returns400(t *testing.T) {
+	recStore := &recordingBuiltinToolStore{}
+	h := &BuiltinToolsHandler{store: recStore}
+	mux := http.NewServeMux()
+	mux.HandleFunc("PUT /v1/tools/builtin/{name}", h.handleUpdate)
+
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"non_object", `{"settings":[1,2]}`},
+		{"non_number", `{"settings":{"timeout_seconds":"60"}}`},
+		{"zero", `{"settings":{"timeout_seconds":0}}`},
+		{"negative", `{"settings":{"timeout_seconds":-1}}`},
+		{"above_max", `{"settings":{"timeout_seconds":3601}}`},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPut, "/v1/tools/builtin/exec", strings.NewReader(tc.body))
+			req.Header.Set("Content-Type", "application/json")
+			ctx := store.WithTenantID(req.Context(), store.MasterTenantID)
+			ctx = store.WithRole(ctx, "admin")
+			req = req.WithContext(ctx)
+
+			rr := httptest.NewRecorder()
+			mux.ServeHTTP(rr, req)
+			if rr.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400; body=%s", rr.Code, rr.Body.String())
+			}
+		})
+	}
+	if recStore.updateName != "" {
+		t.Fatalf("invalid settings reached store update for %q", recStore.updateName)
 	}
 }
 

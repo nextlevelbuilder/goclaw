@@ -14,6 +14,7 @@ import (
 
 	"github.com/mymmrac/telego"
 
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
@@ -22,6 +23,9 @@ import (
 const (
 	// defaultMediaMaxBytes is the default max download size for the official Bot API (20 MB).
 	defaultMediaMaxBytes int64 = 20 * 1024 * 1024
+
+	// officialAPIOutboundMaxBytes is Telegram's upload limit for Bot API media sends.
+	officialAPIOutboundMaxBytes int64 = 50 * 1024 * 1024
 
 	// localAPIDefaultMaxBytes is the default max download size when a local Bot API server
 	// is configured. The local server supports up to 2 GB; we default to 200 MB and let
@@ -356,6 +360,24 @@ func buildMediaTags(mediaList []MediaInfo) string {
 	return media.BuildMediaTags(mediaList)
 }
 
+func prependMediaInfoFiles(current []bus.MediaFile, history []MediaInfo) []bus.MediaFile {
+	if len(history) == 0 {
+		return current
+	}
+	ordered := make([]bus.MediaFile, 0, len(history)+len(current))
+	for _, m := range history {
+		if m.FilePath == "" {
+			continue
+		}
+		ordered = append(ordered, bus.MediaFile{
+			Path:     m.FilePath,
+			MimeType: m.ContentType,
+			Filename: m.FileName,
+		})
+	}
+	return append(ordered, current...)
+}
+
 // extractDocumentContent delegates to the shared media package.
 func extractDocumentContent(filePath, fileName string) (string, error) {
 	return media.ExtractDocumentContent(filePath, fileName)
@@ -409,22 +431,51 @@ func extractMediaRefs(msg *telego.Message) []channels.MediaRef {
 		refs = append(refs, channels.MediaRef{Type: "image", FileID: photo.FileID, FileSize: int64(photo.FileSize)})
 	}
 	if msg.Video != nil {
-		refs = append(refs, channels.MediaRef{Type: "video", FileID: msg.Video.FileID, FileSize: int64(msg.Video.FileSize)})
+		refs = append(refs, channels.MediaRef{
+			Type:        "video",
+			FileID:      msg.Video.FileID,
+			FileSize:    int64(msg.Video.FileSize),
+			FileName:    msg.Video.FileName,
+			ContentType: msg.Video.MimeType,
+		})
 	}
 	if msg.VideoNote != nil {
 		refs = append(refs, channels.MediaRef{Type: "video", FileID: msg.VideoNote.FileID, FileSize: int64(msg.VideoNote.FileSize)})
 	}
 	if msg.Animation != nil {
-		refs = append(refs, channels.MediaRef{Type: "animation", FileID: msg.Animation.FileID, FileSize: int64(msg.Animation.FileSize)})
+		refs = append(refs, channels.MediaRef{
+			Type:        "animation",
+			FileID:      msg.Animation.FileID,
+			FileSize:    int64(msg.Animation.FileSize),
+			FileName:    msg.Animation.FileName,
+			ContentType: msg.Animation.MimeType,
+		})
 	}
 	if msg.Audio != nil {
-		refs = append(refs, channels.MediaRef{Type: "audio", FileID: msg.Audio.FileID, FileSize: int64(msg.Audio.FileSize)})
+		refs = append(refs, channels.MediaRef{
+			Type:        "audio",
+			FileID:      msg.Audio.FileID,
+			FileSize:    int64(msg.Audio.FileSize),
+			FileName:    msg.Audio.FileName,
+			ContentType: msg.Audio.MimeType,
+		})
 	}
 	if msg.Voice != nil {
-		refs = append(refs, channels.MediaRef{Type: "voice", FileID: msg.Voice.FileID, FileSize: int64(msg.Voice.FileSize)})
+		refs = append(refs, channels.MediaRef{
+			Type:        "voice",
+			FileID:      msg.Voice.FileID,
+			FileSize:    int64(msg.Voice.FileSize),
+			ContentType: msg.Voice.MimeType,
+		})
 	}
 	if msg.Document != nil {
-		refs = append(refs, channels.MediaRef{Type: "document", FileID: msg.Document.FileID, FileSize: int64(msg.Document.FileSize)})
+		refs = append(refs, channels.MediaRef{
+			Type:        "document",
+			FileID:      msg.Document.FileID,
+			FileSize:    int64(msg.Document.FileSize),
+			FileName:    msg.Document.FileName,
+			ContentType: msg.Document.MimeType,
+		})
 	}
 	return refs
 }
@@ -489,9 +540,12 @@ func (c *Channel) resolveMediaRefs(ctx context.Context, refs []channels.MediaRef
 			continue
 		}
 		results = append(results, MediaInfo{
-			Type:     ref.Type,
-			FilePath: filePath,
-			FileID:   ref.FileID,
+			Type:        ref.Type,
+			FilePath:    filePath,
+			FileID:      ref.FileID,
+			ContentType: ref.ContentType,
+			FileName:    ref.FileName,
+			FileSize:    ref.FileSize,
 		})
 	}
 	return results, errs

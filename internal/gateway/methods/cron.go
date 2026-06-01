@@ -52,6 +52,7 @@ func (m *CronMethods) handleList(ctx context.Context, client *gateway.Client, re
 		userID = client.UserID()
 	}
 	jobs := m.service.ListJobs(ctx, params.IncludeDisabled, "", userID)
+	jobs = store.RedactCronJobsCredentialContext(jobs)
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"jobs":   jobs,
@@ -112,7 +113,7 @@ func (m *CronMethods) handleCreate(ctx context.Context, client *gateway.Client, 
 	}
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
-		"job": job,
+		"job": store.RedactCronJobCredentialContext(*job),
 	}))
 	emitAudit(m.eventBus, client, "cron.created", "cron", job.ID)
 }
@@ -131,14 +132,17 @@ func (m *CronMethods) handleDelete(ctx context.Context, client *gateway.Client, 
 		return
 	}
 
+	job, ok := m.service.GetJob(ctx, params.JobID)
+	if !ok {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgJobNotFound)))
+		return
+	}
 	if !canSeeAll(client.Role(), m.cfg.Gateway.OwnerIDs, client.UserID()) {
-		job, ok := m.service.GetJob(ctx, params.JobID)
-		if !ok || job.UserID != client.UserID() {
+		if job.UserID != client.UserID() {
 			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgPermissionDenied, "cron job")))
 			return
 		}
 	}
-
 	if err := m.service.RemoveJob(ctx, params.JobID); err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, err.Error()))
 		return
@@ -165,10 +169,20 @@ func (m *CronMethods) handleToggle(ctx context.Context, client *gateway.Client, 
 		return
 	}
 
+	job, ok := m.service.GetJob(ctx, params.JobID)
+	if !ok {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgJobNotFound)))
+		return
+	}
 	if !canSeeAll(client.Role(), m.cfg.Gateway.OwnerIDs, client.UserID()) {
-		job, ok := m.service.GetJob(ctx, params.JobID)
-		if !ok || job.UserID != client.UserID() {
+		if job.UserID != client.UserID() {
 			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgPermissionDenied, "cron job")))
+			return
+		}
+	}
+	if params.Enabled {
+		if err := store.CheckCronCredentialOwner(ctx, job); err != nil {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgPermissionDenied, "cron job credential context")))
 			return
 		}
 	}
@@ -213,12 +227,20 @@ func (m *CronMethods) handleUpdate(ctx context.Context, client *gateway.Client, 
 		return
 	}
 
+	existing, ok := m.service.GetJob(ctx, jobID)
+	if !ok {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgJobNotFound)))
+		return
+	}
 	if !canSeeAll(client.Role(), m.cfg.Gateway.OwnerIDs, client.UserID()) {
-		existing, ok := m.service.GetJob(ctx, jobID)
-		if !ok || existing.UserID != client.UserID() {
+		if existing.UserID != client.UserID() {
 			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgPermissionDenied, "cron job")))
 			return
 		}
+	}
+	if err := store.CheckCronCredentialOwner(ctx, existing); err != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgPermissionDenied, "cron job credential context")))
+		return
 	}
 
 	job, err := m.service.UpdateJob(ctx, jobID, params.Patch)
@@ -232,7 +254,7 @@ func (m *CronMethods) handleUpdate(ctx context.Context, client *gateway.Client, 
 	}
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
-		"job": job,
+		"job": store.RedactCronJobCredentialContext(*job),
 	}))
 	emitAudit(m.eventBus, client, "cron.updated", "cron", jobID)
 }
@@ -271,6 +293,10 @@ func (m *CronMethods) handleRun(ctx context.Context, client *gateway.Client, req
 			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgPermissionDenied, "cron job")))
 			return
 		}
+	}
+	if err := store.CheckCronCredentialOwner(ctx, job); err != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgPermissionDenied, "cron job credential context")))
+		return
 	}
 
 	// Respond immediately — job execution happens in background

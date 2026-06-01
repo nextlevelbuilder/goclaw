@@ -11,6 +11,10 @@ import (
 	"time"
 )
 
+var packageListCommandCombinedOutput = func(ctx context.Context, name string, args ...string) ([]byte, error) {
+	return exec.CommandContext(ctx, name, args...).CombinedOutput()
+}
+
 // PackageInfo describes a single installed package.
 type PackageInfo struct {
 	Name    string `json:"name"`
@@ -40,14 +44,14 @@ type InstalledPackages struct {
 
 const listTimeout = 15 * time.Second
 
-// ListInstalledPackages queries apk, pip3, and npm for installed packages.
-// Only returns user-installed packages (filters out base Alpine packages for system).
+// ListInstalledPackages queries system, pip3, and npm for installed packages.
+// System packages are limited to packages installed through GoClaw.
 func ListInstalledPackages(ctx context.Context) *InstalledPackages {
 	ctx, cancel := context.WithTimeout(ctx, listTimeout)
 	defer cancel()
 
 	result := &InstalledPackages{}
-	result.System = listApkUserPackages(ctx)
+	result.System = listSystemUserPackages(ctx)
 	result.Pip = listPipPackages(ctx)
 	result.Npm = listNpmPackages(ctx)
 	if gh := DefaultGitHubInstaller(); gh != nil {
@@ -67,14 +71,17 @@ func ListInstalledPackages(ctx context.Context) *InstalledPackages {
 	return result
 }
 
+func listSystemUserPackages(ctx context.Context) []PackageInfo {
+	if IsAlpineRuntime() {
+		return listApkUserPackages(ctx)
+	}
+	return listDebianUserPackages(ctx)
+}
+
 // listApkUserPackages returns packages from the apk-packages persist file
 // (user-installed on-demand packages only, not base Alpine).
 func listApkUserPackages(ctx context.Context) []PackageInfo {
-	runtimeDir := os.Getenv("RUNTIME_DIR")
-	if runtimeDir == "" {
-		runtimeDir = "/app/data/.runtime"
-	}
-	listFile := filepath.Join(runtimeDir, "apk-packages")
+	listFile := filepath.Join(packageRuntimeDir(), "apk-packages")
 
 	f, err := os.Open(listFile)
 	if err != nil {
@@ -111,7 +118,7 @@ func listApkUserPackages(ctx context.Context) []PackageInfo {
 // Uses "apk list --installed" which works without root and gives versioned output.
 func getApkVersion(ctx context.Context, name string) string {
 	// Output format: "github-cli-2.72.0-r6 aarch64 {github-cli} (MIT) [installed]"
-	out, err := exec.CommandContext(ctx, "apk", "list", "--installed", name).Output()
+	out, err := packageListCommandCombinedOutput(ctx, "apk", "list", "--installed", name)
 	if err != nil {
 		return ""
 	}
@@ -134,7 +141,7 @@ func getApkVersion(ctx context.Context, name string) string {
 
 // listPipPackages returns pip3-installed packages via JSON output.
 func listPipPackages(ctx context.Context) []PackageInfo {
-	out, err := exec.CommandContext(ctx, "pip3", "list", "--format", "json").CombinedOutput()
+	out, err := packageListCommandCombinedOutput(ctx, "pip3", "list", "--format", "json")
 	if err != nil {
 		return nil
 	}
@@ -156,7 +163,10 @@ func listPipPackages(ctx context.Context) []PackageInfo {
 
 // listNpmPackages returns globally installed npm packages.
 func listNpmPackages(ctx context.Context) []PackageInfo {
-	out, err := exec.CommandContext(ctx, "npm", "list", "-g", "--json", "--depth=0").CombinedOutput()
+	ensureNpmGlobalEnv()
+	cmd := exec.CommandContext(ctx, npmBinary, "list", "-g", "--json", "--depth=0")
+	cmd.Env = npmCommandEnv()
+	out, err := cmd.CombinedOutput()
 	if err != nil && len(out) == 0 {
 		return nil
 	}
@@ -175,4 +185,36 @@ func listNpmPackages(ctx context.Context) []PackageInfo {
 		pkgs = append(pkgs, PackageInfo{Name: name, Version: info.Version})
 	}
 	return pkgs
+}
+
+func listDebianUserPackages(ctx context.Context) []PackageInfo {
+	records, err := readSystemPackageRecords()
+	if err != nil || len(records) == 0 {
+		return nil
+	}
+
+	pkgs := make([]PackageInfo, 0, len(records))
+	for _, record := range records {
+		if record.Manager != "apt" || record.Package == "" {
+			continue
+		}
+		version := getDebianPackageVersion(ctx, record.Package)
+		if version == "" {
+			continue
+		}
+		name := record.Name
+		if name == "" {
+			name = record.Package
+		}
+		pkgs = append(pkgs, PackageInfo{Name: name, Version: version})
+	}
+	return pkgs
+}
+
+func getDebianPackageVersion(ctx context.Context, name string) string {
+	out, err := packageListCommandCombinedOutput(ctx, "dpkg-query", "-W", "-f=${Version}", name)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }

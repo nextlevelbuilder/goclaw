@@ -22,7 +22,8 @@
     "discord": "Discord — Tên hiển thị và username có sẵn tự động.",
     "zalo": "Zalo — Tên hiển thị có sẵn tự động.",
     "slack": "Slack — Tên được lấy qua Slack API (bot phải trong workspace).",
-    "feishu": "Feishu/Lark — Cần quyền contact:user.base:readonly. Nếu không có, tên sẽ trống."
+    "feishu": "Feishu/Lark — Cần quyền contact:user.base:readonly. Nếu không có, tên sẽ trống.",
+    "bitrix24": "Bitrix24 — Cần scope `user` + 1 lần gọi `user.get` cho mỗi người gửi mới. Tên có thể trống ở tin nhắn đầu."
   },
   "selectedCount": "Đã chọn {{count}}",
   "merge": {

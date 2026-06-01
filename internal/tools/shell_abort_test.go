@@ -5,7 +5,9 @@ package tools
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -23,22 +25,26 @@ func TestShellAbort_ProcessGroupKilled(t *testing.T) {
 		t.Skip("process-group kill not supported on Windows")
 	}
 
-	// Marker to identify our specific sleep processes.
-	marker := fmt.Sprintf("goclaw_abort_test_%d", time.Now().UnixNano())
-	command := fmt.Sprintf("sleep 60 & echo 'marker=%s' & sleep 60 & wait", marker)
+	tmpDir := t.TempDir()
+	pidFile := filepath.Join(tmpDir, "sleep-pids")
+	quotedPIDFile := shellSingleQuote(pidFile)
+	command := fmt.Sprintf(
+		"sleep 60 & echo $! >> %s; sleep 60 & echo $! >> %s; wait",
+		quotedPIDFile,
+		quotedPIDFile,
+	)
 
-	tool := NewExecTool(t.TempDir(), false)
+	tool := NewExecTool(tmpDir, false)
 	tool.timeout = 10 * time.Second // generous outer timeout
 
 	ctx, cancel := context.WithCancel(context.Background())
 
 	done := make(chan *Result, 1)
 	go func() {
-		done <- tool.executeOnHost(ctx, command, t.TempDir())
+		done <- tool.executeOnHost(ctx, command, tmpDir)
 	}()
 
-	// Give the shell time to fork the sleep processes.
-	time.Sleep(100 * time.Millisecond)
+	sleepPIDs := waitForRecordedPIDs(t, pidFile, 2, time.Second)
 
 	// Cancel ctx — should trigger SIGTERM → 3s grace → SIGKILL.
 	cancel()
@@ -60,34 +66,55 @@ func TestShellAbort_ProcessGroupKilled(t *testing.T) {
 	// Give the OS a moment to reap the killed processes.
 	time.Sleep(200 * time.Millisecond)
 
-	// Verify no orphan sleep processes remain. We check with `ps` filtering by
-	// "sleep 60" (the exact argument). pgrep is not reliably available on macOS CI.
-	orphans := findOrphanSleeps(t)
+	// Verify no child sleep process from this test remains.
+	orphans := findLivePIDs(t, sleepPIDs)
 	if len(orphans) > 0 {
-		t.Errorf("found %d orphan 'sleep 60' process(es) after abort: %v", len(orphans), orphans)
+		t.Errorf("found %d live sleep process(es) after abort: %v", len(orphans), orphans)
 	}
 }
 
-// findOrphanSleeps returns PIDs of any remaining `sleep 60` processes.
-// Uses `ps aux` output parsed in Go — avoids pgrep availability issues on macOS.
-func findOrphanSleeps(t *testing.T) []string {
+func waitForRecordedPIDs(t *testing.T, pidFile string, want int, timeout time.Duration) []string {
 	t.Helper()
 
-	out, err := exec.Command("ps", "aux").Output()
-	if err != nil {
-		t.Logf("ps aux failed (non-fatal): %v", err)
-		return nil
+	deadline := time.Now().Add(timeout)
+	for {
+		pids := readRecordedPIDs(t, pidFile)
+		if len(pids) >= want {
+			return pids[:want]
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("sleep child PIDs not recorded within %s; got %v", timeout, pids)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
+}
+
+func readRecordedPIDs(t *testing.T, pidFile string) []string {
+	t.Helper()
+
+	data, err := os.ReadFile(pidFile)
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatalf("read pid file: %v", err)
+	}
+	return strings.Fields(string(data))
+}
+
+func findLivePIDs(t *testing.T, pids []string) []string {
+	t.Helper()
 
 	var found []string
-	for line := range strings.SplitSeq(string(out), "\n") {
-		// Match lines containing "sleep 60" but not the grep/ps command itself.
-		if strings.Contains(line, "sleep 60") && !strings.Contains(line, "ps aux") {
-			fields := strings.Fields(line)
-			if len(fields) >= 2 {
-				found = append(found, fields[1]) // PID is column 2 in ps aux
-			}
+	for _, pid := range pids {
+		out, err := exec.Command("ps", "-p", pid, "-o", "pid=").Output()
+		if err != nil {
+			continue
+		}
+		if strings.TrimSpace(string(out)) != "" {
+			found = append(found, pid)
 		}
 	}
 	return found
+}
+
+func shellSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
 }

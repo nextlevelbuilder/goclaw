@@ -6,7 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
-	"path/filepath"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -77,19 +77,24 @@ func SignMediaPath(rawPath, secret string) string {
 		return ""
 	}
 	// Strip stale ?ft= tokens
-	path := staleTokenRe.ReplaceAllString(rawPath, "")
-	path = strings.TrimRight(path, "?&")
+	cleanPath := filepathToURLPath(rawPath)
+	cleanPath = staleTokenRe.ReplaceAllString(cleanPath, "")
+	cleanPath = strings.TrimRight(cleanPath, "?&")
 	// Strip all /v1/files/ and /v1/media/ prefixes (may be stacked from legacy bugs)
-	for strings.Contains(path, "/v1/files/") {
-		path = strings.Replace(path, "/v1/files/", "/", 1)
+	for strings.Contains(cleanPath, "/v1/files/") {
+		cleanPath = strings.Replace(cleanPath, "/v1/files/", "/", 1)
 	}
-	for strings.Contains(path, "/v1/media/") {
-		path = strings.Replace(path, "/v1/media/", "/", 1)
+	for strings.Contains(cleanPath, "/v1/media/") {
+		cleanPath = strings.Replace(cleanPath, "/v1/media/", "/", 1)
 	}
-	path = filepath.Clean(path)
-	urlPath := "/v1/files/" + strings.TrimPrefix(path, "/")
+	cleanPath = path.Clean(cleanPath)
+	urlPath := "/v1/files/" + strings.TrimPrefix(cleanPath, "/")
 	ft := SignFileToken(urlPath, secret, FileTokenTTL)
 	return urlPath + "?ft=" + ft
+}
+
+func filepathToURLPath(rawPath string) string {
+	return strings.ReplaceAll(rawPath, `\`, "/")
 }
 
 // fileURLRe matches /v1/files/... and /v1/media/... URLs in markdown and plain text.

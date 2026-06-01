@@ -7,17 +7,23 @@ import (
 	kg "github.com/nextlevelbuilder/goclaw/internal/knowledgegraph"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 )
 
 // KnowledgeGraphHandler handles KG entity/relation management endpoints.
 type KnowledgeGraphHandler struct {
 	store       store.KnowledgeGraphStore
 	providerReg *providers.Registry
+	usageCaps   *usagecaps.Service
 }
 
 // NewKnowledgeGraphHandler creates a handler for KG management endpoints.
 func NewKnowledgeGraphHandler(s store.KnowledgeGraphStore, providerReg *providers.Registry) *KnowledgeGraphHandler {
 	return &KnowledgeGraphHandler{store: s, providerReg: providerReg}
+}
+
+func (h *KnowledgeGraphHandler) SetUsageCapService(s *usagecaps.Service) {
+	h.usageCaps = s
 }
 
 // NewExtractor creates an Extractor from the given provider name and model.
@@ -29,7 +35,9 @@ func (h *KnowledgeGraphHandler) NewExtractor(ctx context.Context, providerName, 
 	if err != nil {
 		return nil
 	}
-	return kg.NewExtractor(p, model, minConfidence)
+	extractor := kg.NewExtractor(p, model, minConfidence)
+	extractor.SetUsageCapService(h.usageCaps)
+	return extractor
 }
 
 // RegisterRoutes registers all KG routes on the given mux.

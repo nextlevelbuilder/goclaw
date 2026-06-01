@@ -59,8 +59,8 @@ export function BehaviorRateCard({ value, onChange }: Props) {
               type="number"
               value={value.inbound_debounce_ms ?? ""}
               onChange={(e) => update({ inbound_debounce_ms: Number(e.target.value) })}
-              placeholder="1000 (-1 = disabled)"
-              min={-1}
+              placeholder="0 (no debounce)"
+              min={0}
             />
           </div>
         </div>

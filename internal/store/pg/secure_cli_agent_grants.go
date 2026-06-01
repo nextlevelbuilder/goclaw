@@ -5,23 +5,62 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/crypto"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // PGSecureCLIAgentGrantStore implements store.SecureCLIAgentGrantStore backed by Postgres.
 type PGSecureCLIAgentGrantStore struct {
-	db *sql.DB
+	db     *sql.DB
+	encKey string // AES-256-GCM key for encrypted_env column
 }
 
-func NewPGSecureCLIAgentGrantStore(db *sql.DB) *PGSecureCLIAgentGrantStore {
-	return &PGSecureCLIAgentGrantStore{db: db}
+func NewPGSecureCLIAgentGrantStore(db *sql.DB, encKey string) *PGSecureCLIAgentGrantStore {
+	return &PGSecureCLIAgentGrantStore{db: db, encKey: encKey}
 }
 
-const grantSelectCols = `id, binary_id, agent_id, deny_args, deny_verbose, timeout_seconds, tips, enabled, created_at, updated_at`
+const grantSelectCols = `id, binary_id, agent_id, deny_args, deny_verbose, timeout_seconds, tips, enabled, encrypted_env, created_at, updated_at`
+
+func (s *PGSecureCLIAgentGrantStore) BinaryExists(ctx context.Context, binaryID uuid.UUID) (bool, error) {
+	query := `SELECT EXISTS(SELECT 1 FROM secure_cli_binaries WHERE id = $1`
+	args := []any{binaryID}
+	if !store.IsCrossTenant(ctx) {
+		tid := store.TenantIDFromContext(ctx)
+		if tid == uuid.Nil {
+			return false, nil
+		}
+		query += ` AND tenant_id = $2`
+		args = append(args, tid)
+	}
+	query += `)`
+
+	var exists bool
+	err := s.db.QueryRowContext(ctx, query, args...).Scan(&exists)
+	return exists, err
+}
+
+func (s *PGSecureCLIAgentGrantStore) AgentExists(ctx context.Context, agentID uuid.UUID) (bool, error) {
+	query := `SELECT EXISTS(SELECT 1 FROM agents WHERE id = $1 AND deleted_at IS NULL`
+	args := []any{agentID}
+	if !store.IsCrossTenant(ctx) {
+		tid := store.TenantIDFromContext(ctx)
+		if tid == uuid.Nil {
+			return false, nil
+		}
+		query += ` AND tenant_id = $2`
+		args = append(args, tid)
+	}
+	query += `)`
+
+	var exists bool
+	err := s.db.QueryRowContext(ctx, query, args...).Scan(&exists)
+	return exists, err
+}
 
 func (s *PGSecureCLIAgentGrantStore) Create(ctx context.Context, g *store.SecureCLIAgentGrant) error {
 	if g.ID == uuid.Nil {
@@ -38,12 +77,12 @@ func (s *PGSecureCLIAgentGrantStore) Create(ctx context.Context, g *store.Secure
 
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO secure_cli_agent_grants
-		 (id, binary_id, agent_id, deny_args, deny_verbose, timeout_seconds, tips, enabled, tenant_id, created_at, updated_at)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+		 (id, binary_id, agent_id, deny_args, deny_verbose, timeout_seconds, tips, enabled, encrypted_env, tenant_id, created_at, updated_at)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
 		g.ID, g.BinaryID, g.AgentID,
 		nullableJSON(g.DenyArgs), nullableJSON(g.DenyVerbose),
 		g.TimeoutSeconds, g.Tips,
-		g.Enabled, tenantID, now, now,
+		g.Enabled, nilIfEmpty(g.EncryptedEnv), tenantID, now, now,
 	)
 	return err
 }
@@ -142,16 +181,20 @@ func (s *PGSecureCLIAgentGrantStore) scanRow(row *sql.Row) (*store.SecureCLIAgen
 	var denyArgs, denyVerbose *[]byte
 	var timeout *int
 	var tips *string
+	var encEnv []byte
 
 	err := row.Scan(
 		&g.ID, &g.BinaryID, &g.AgentID,
 		&denyArgs, &denyVerbose, &timeout, &tips,
-		&g.Enabled, &g.CreatedAt, &g.UpdatedAt,
+		&g.Enabled, &encEnv, &g.CreatedAt, &g.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
 	}
 	s.applyNullable(&g, denyArgs, denyVerbose, timeout, tips)
+	if err := s.decryptEnv(&g, encEnv); err != nil {
+		return nil, err
+	}
 	return &g, nil
 }
 
@@ -164,14 +207,30 @@ func (s *PGSecureCLIAgentGrantStore) scanRows(rows *sql.Rows) ([]store.SecureCLI
 		var timeout *int
 		var tips *string
 
+		var encEnv []byte
 		if err := rows.Scan(
 			&g.ID, &g.BinaryID, &g.AgentID,
 			&denyArgs, &denyVerbose, &timeout, &tips,
-			&g.Enabled, &g.CreatedAt, &g.UpdatedAt,
+			&g.Enabled, &encEnv, &g.CreatedAt, &g.UpdatedAt,
 		); err != nil {
 			continue
 		}
 		s.applyNullable(&g, denyArgs, denyVerbose, timeout, tips)
+		// Finding #4: Log decrypt failures instead of silently masking them.
+		// A corrupted row appears with EncryptedEnv==nil (env_set: false), which
+		// could hide a key-rotation incident or DB tamper. Surface it via Error log
+		// so ops can detect it. The row is still included in the result so list
+		// doesn't break, but the decrypt failure is visible.
+		if err := s.decryptEnv(&g, encEnv); err != nil {
+			slog.Error("security.grant.decrypt_failed",
+				"grant_id", g.ID,
+				"binary_id", g.BinaryID,
+				"err", err,
+			)
+			// EncryptedEnv stays nil — populateGrantEnvFields will set env_set=false,
+			// which is misleading but acceptable in list view. Callers should inspect
+			// logs when admin sees env_set=false on a grant they know has env set.
+		}
 		result = append(result, g)
 	}
 	return result, nil
@@ -191,10 +250,68 @@ func (s *PGSecureCLIAgentGrantStore) applyNullable(g *store.SecureCLIAgentGrant,
 	g.Tips = tips
 }
 
+// decryptEnv decrypts stored encrypted_env bytes into g.EncryptedEnv.
+// Returns error if encKey is set but decryption fails (fail-closed).
+func (s *PGSecureCLIAgentGrantStore) decryptEnv(g *store.SecureCLIAgentGrant, raw []byte) error {
+	if len(raw) == 0 {
+		return nil
+	}
+	if s.encKey == "" {
+		return fmt.Errorf("encryption key missing: cannot decrypt grant env")
+	}
+	decrypted, err := crypto.Decrypt(string(raw), s.encKey)
+	if err != nil {
+		return fmt.Errorf("decrypt grant env: %w", err)
+	}
+	g.EncryptedEnv = []byte(decrypted)
+	return nil
+}
+
+// UpdateGrantEnv encrypts plaintextEnv and persists it on the grant row.
+// Pass nil to clear the env override. Fails closed if encKey is missing and plaintextEnv is non-empty.
+func (s *PGSecureCLIAgentGrantStore) UpdateGrantEnv(ctx context.Context, grantID uuid.UUID, plaintextEnv []byte) error {
+	var envBytes []byte
+	if len(plaintextEnv) > 0 {
+		if s.encKey == "" {
+			return fmt.Errorf("encryption key missing: cannot persist grant env")
+		}
+		enc, err := crypto.Encrypt(string(plaintextEnv), s.encKey)
+		if err != nil {
+			return fmt.Errorf("encrypt grant env: %w", err)
+		}
+		envBytes = []byte(enc)
+	}
+	now := time.Now()
+	if store.IsCrossTenant(ctx) {
+		_, err := s.db.ExecContext(ctx,
+			`UPDATE secure_cli_agent_grants SET encrypted_env = $1, updated_at = $2 WHERE id = $3`,
+			nilIfEmpty(envBytes), now, grantID,
+		)
+		return err
+	}
+	tid := store.TenantIDFromContext(ctx)
+	if tid == uuid.Nil {
+		return fmt.Errorf("tenant_id required")
+	}
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE secure_cli_agent_grants SET encrypted_env = $1, updated_at = $2 WHERE id = $3 AND tenant_id = $4`,
+		nilIfEmpty(envBytes), now, grantID, tid,
+	)
+	return err
+}
+
 // nullableJSON returns nil if the pointer is nil, otherwise the raw bytes for the DB driver.
 func nullableJSON(v *json.RawMessage) any {
 	if v == nil {
 		return nil
 	}
 	return []byte(*v)
+}
+
+// nilIfEmpty returns nil if the slice is empty, otherwise the slice (for nullable BYTEA columns).
+func nilIfEmpty(b []byte) any {
+	if len(b) == 0 {
+		return nil
+	}
+	return b
 }

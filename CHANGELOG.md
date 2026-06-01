@@ -4,6 +4,88 @@ All notable changes to GoClaw are documented here. For full documentation, see [
 
 ## Unreleased
 
+### Added
+
+- **Built-in skill `workspace-organizing`** — closes #71. Discipline skill that
+  teaches agents to keep personal, team, and delegate workspaces tidy.
+  Enforces a purpose-based folder convention with two modes: flat
+  (`notes/`, `data/`, `outputs/`, `scripts/`, `archive/`) for ad-hoc work
+  and project (`projects/<slug>/{docs,assets,source,reports,research}/`)
+  for named multi-file work. Per-agent namespacing under
+  `shared/<agent_key>/` prevents collisions in team workspaces. Integrates
+  pre-write discovery via `vault_search`, `memory_search`, and
+  `knowledge_graph_search` to surface related files before writing and
+  avoid duplicates; documents Vault scope mirroring and id-routing rules.
+
+- **Skill agent manage grants** — Adds per-agent skill edit/delete grants with
+  backend checks, HTTP/WS support, SQLite and PostgreSQL schema updates, and web
+  dashboard controls for granting and revoking manage access.
+
+- **Packages Update Flow (Phase 2a: pip + npm)** — closes #900 (Phase 2a). Extends
+  Phase 1 update infrastructure to pip and npm package sources. `/v1/packages/updates`
+  now returns mixed-source results with an `availability: {github, pip, npm}` map.
+  Multi-source UI with per-source filter pills; unavailable sources (binary not on PATH
+  or Lite edition) hidden automatically. apk deferred to Phase 2b.
+  See `docs/packages-pip-npm.md` for command matrix, runbook, and min versions.
+
+- **Packages Update Flow (Phase 1: GitHub binaries)** — closes #900. Proactive
+  "N updates available" badge + per-row `[Update]` + `[Update All]` on the
+  Runtime & Packages page. Backend endpoints under `/v1/packages/updates*`
+  (master-scope). ETag-aware polling (304 responses don't burn rate limit),
+  stale-while-revalidate cache, atomic two-phase `.bak` swap with rollback.
+  Pre-release detection via regex + GitHub API flag; semver ordering via
+  `golang.org/x/mod/semver`; non-semver tags use string-inequality fallback
+  with downgrade protection. WebSocket events `package.update.*` for owner
+  clients. See `docs/packages-github.md` § "Updating Installed Packages".
+
+### Changed
+
+- **ChatGPT Subscription (OAuth)** — default model and backend-owned model catalog
+  now prefer `gpt-5.5`, with reasoning metadata and context-window defaults updated
+  for provider-first model selection.
+
+### Fixed
+
+- **Multi-attachment messages no longer trigger N agent replies (#63).**
+  Three coalescing surfaces hardened so a single user action produces ONE
+  agent run regardless of how the platform delivers attachments:
+  1. **Bus debouncer** — removed the media-bypass shortcut that fired
+     immediately for any message with attachments; media now goes through
+     the same per-(channel, chatID, senderID, agentID) silence window as
+     text. Media-floor (`max(configured, mediaFloor)`) guarantees a
+     minimum window when attachments are present so multi-file uploads
+     coalesce. Dedup seed prevents the same `MessageID` from being
+     buffered twice on bursty arrivals.
+  2. **Web Chat debouncer** (`internal/gateway/methods/chat_debounce.go`) —
+     parallel structure for `/v1/chat/completions` streaming: per-session
+     buffer + media floor + Take/Discard semantics for flush/cancel
+     control. Merges queued payloads at flush time (latest params win;
+     text concatenated newline-separated).
+  3. **Telegram album aggregator** (`internal/channels/telegram/album_aggregator.go`) —
+     channel-layer coalescing for albums. Telegram delivers a media-group
+     (multiple photos/videos shared as one user action) as N separate
+     `Message` updates sharing a `MediaGroupID`. The aggregator buffers
+     by `(chatID, MediaGroupID)` after all access gates pass, pins the
+     sender on first arrival as a security tripwire, and dispatches ONE
+     `processResolvedMessage` call with all members on a 500ms silence
+     window. `Stop()` synchronously drains pending buffers before
+     `pollCancel` so in-flight albums always publish.
+
+  Cross-surface invariants (see CONTRIBUTING.md → "Multi-attachment
+  coalescing"): no media bypass, media floor on every surface,
+  drop-and-log dual caps, no `time.Timer.Reset` (use `AfterFunc` +
+  `Stop`), sender pin on first arrival, post-stop pushes rejected
+  with warn log.
+
+- **Upstream critical security remediation** — hardens gateway no-token fallback,
+  Feishu/Lark and Pancake webhooks, sandbox path/write handling, tenant-admin
+  checks for mutable HTTP surfaces, and Lite hook schema migration verification.
+
+- **SecureCLI runtime npm binaries** — binary discovery and credentialed exec now
+  resolve tools installed under the GoClaw runtime directories, including
+  `{runtimeDir}/npm-global/bin`, and support single-binary npm package aliases
+  such as `openrouter-cli` exposing `orc`.
+
 ### Breaking Changes
 
 - **Context pruning now opt-in.** Previously tool-result trimming ran by default
@@ -50,6 +132,18 @@ All notable changes to GoClaw are documented here. For full documentation, see [
   `display_name` across the inbound → outbound hop so the private-reply
   template variables survive the agent pipeline round-trip.
 
+### Fixed
+
+- **Skill grant tenant isolation.** Agent skill grants now validate both the
+  skill and agent tenant scope before insert, revoke, grant listing, or
+  can-manage checks. Visibility auto-promote/auto-demote updates are scoped to
+  the calling tenant or system skills so one tenant cannot mutate another
+  tenant's skill.
+
+- **Agent provider switching.** Saving an agent after changing provider/model now
+  handles cleared ChatGPT OAuth routing config without writing SQL NULL into
+  NOT NULL JSON config columns.
+
 ## Project Status
 
 ### Implemented & Tested in Production
@@ -82,6 +176,7 @@ All notable changes to GoClaw are documented here. For full documentation, see [
 - **Hooks system** — Event-driven hooks with command evaluators (shell exit code) and agent evaluators (delegate to reviewer). Blocking gates with auto-retry and recursion-safe evaluation.
 - **Media tools** — `create_image` (DashScope, MiniMax), `create_audio` (OpenAI, ElevenLabs, MiniMax, Suno), `create_video` (MiniMax, Veo), `read_document` (Gemini File API), `read_image`, `read_audio`, `read_video`. Persistent media storage with lazy-loaded MediaRef.
 - **Additional provider modes** — Claude CLI (Anthropic via stdio + MCP bridge), Codex (OpenAI gpt-5.3-codex via OAuth).
+- **Google Cloud Vertex AI provider** — Enterprise GCP integration via Vertex OpenAI-compatible endpoint. OAuth2 service account auth (inline JSON or file path) with automatic token refresh, plus Application Default Credentials (ADC) for GKE/Cloud Run/Compute Engine. Regional endpoints for data residency (e.g. `asia-southeast1`, `us-central1`). Addresses [#576](https://github.com/nextlevelbuilder/goclaw/issues/576).
 - **Knowledge graph** — LLM-powered entity extraction, graph traversal, force-directed visualization, and `knowledge_graph_search` agent tool.
 - **Memory management** — Admin dashboard for memory documents (CRUD, semantic search, chunk/embedding details, bulk re-indexing).
 - **Persistent pending messages** — Channel messages persisted to PostgreSQL with auto-compaction (LLM summarization) and monitoring dashboard.

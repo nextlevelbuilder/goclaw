@@ -22,17 +22,35 @@ import (
 type TTSConfigHandler struct {
 	systemConfigs store.SystemConfigStore
 	configSecrets store.ConfigSecretsStore
+	tenants       store.TenantStore
 }
 
 // NewTTSConfigHandler creates a handler for per-tenant TTS config.
-func NewTTSConfigHandler(sc store.SystemConfigStore, cs store.ConfigSecretsStore) *TTSConfigHandler {
-	return &TTSConfigHandler{systemConfigs: sc, configSecrets: cs}
+func NewTTSConfigHandler(sc store.SystemConfigStore, cs store.ConfigSecretsStore, tenants ...store.TenantStore) *TTSConfigHandler {
+	h := &TTSConfigHandler{systemConfigs: sc, configSecrets: cs}
+	if len(tenants) > 0 {
+		h.tenants = tenants[0]
+	}
+	return h
 }
 
 // RegisterRoutes wires TTS config endpoints onto mux with RoleAdmin auth.
 func (h *TTSConfigHandler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /v1/tts/config", requireAuth(permissions.RoleAdmin, h.handleGet))
-	mux.HandleFunc("POST /v1/tts/config", requireAuth(permissions.RoleAdmin, h.handleSave))
+	mux.HandleFunc("GET /v1/tts/config", requireAuth(permissions.RoleAdmin, h.requireTenantAdmin(h.handleGet)))
+	mux.HandleFunc("POST /v1/tts/config", requireAuth(permissions.RoleAdmin, h.requireTenantAdmin(h.handleSave)))
+}
+
+func (h *TTSConfigHandler) requireTenantAdmin(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if pkgGatewayToken == "" && store.TenantIDFromContext(r.Context()) == store.MasterTenantID {
+			next(w, r)
+			return
+		}
+		if !requireTenantAdmin(w, r, h.tenants) {
+			return
+		}
+		next(w, r)
+	}
 }
 
 // ttsConfigResponse is the response for GET /v1/tts/config.
@@ -60,8 +78,8 @@ type ttsProviderConfigResponse struct {
 	GroupID  string         `json:"group_id,omitempty"`
 	Enabled  *bool          `json:"enabled,omitempty"`
 	Rate     string         `json:"rate,omitempty"`
-	Speakers string         `json:"speakers,omitempty"`  // JSON-encoded []SpeakerVoice (Gemini multi-speaker)
-	Params   map[string]any `json:"params,omitempty"`    // provider-specific params blob
+	Speakers string         `json:"speakers,omitempty"` // JSON-encoded []SpeakerVoice (Gemini multi-speaker)
+	Params   map[string]any `json:"params,omitempty"`   // provider-specific params blob
 }
 
 // handleGet returns TTS config for the current tenant.

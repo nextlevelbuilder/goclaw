@@ -57,6 +57,16 @@
       "saving": "保存中...",
       "title": "知识图谱设置"
     },
+    "execSettings": {
+      "title": "Exec 设置",
+      "description": "配置内置 exec 工具的主机命令超时。",
+      "timeoutSeconds": "超时（秒）",
+      "timeoutHint": "允许范围：{{min}}-{{max}} 秒。",
+      "sandboxHint": "Docker sandbox 运行使用 Agent sandbox 超时设置。",
+      "cancel": "取消",
+      "save": "保存",
+      "saving": "保存中..."
+    },
     "searchChain": {
       "title": "网页搜索 Provider 链",
       "description": "拖动以重新排序搜索 Provider。第一个已启用且具有有效 API Key 的 Provider 将被优先尝试。",

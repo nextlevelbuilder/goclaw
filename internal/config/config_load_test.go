@@ -24,6 +24,21 @@ func TestDefault_SensibleDefaults(t *testing.T) {
 	if cfg.Agents.Defaults.MaxToolIterations != DefaultMaxIterations {
 		t.Fatalf("default max iterations: got %d", cfg.Agents.Defaults.MaxToolIterations)
 	}
+	if cfg.Skills.EffectiveMaxUploadSizeMB() != DefaultSkillMaxUploadSizeMB {
+		t.Fatalf("default skill upload max: got %d, want %d", cfg.Skills.EffectiveMaxUploadSizeMB(), DefaultSkillMaxUploadSizeMB)
+	}
+	if !cfg.Skills.SlashCommands.EffectiveEnabled() {
+		t.Fatal("slash commands should default enabled")
+	}
+	if !cfg.Skills.SlashCommands.EffectiveSuggestNotFound() {
+		t.Fatal("slash command suggestions should default enabled")
+	}
+	if cfg.Skills.SlashCommands.EffectivePartialMatching() {
+		t.Fatal("slash command partial matching should default disabled")
+	}
+	if cfg.Skills.SlashCommands.EffectivePrefix() != "/" {
+		t.Fatalf("slash command prefix = %q, want /", cfg.Skills.SlashCommands.EffectivePrefix())
+	}
 
 }
 
@@ -103,6 +118,124 @@ func TestLoad_EnvVarOverrides(t *testing.T) {
 	}
 }
 
+func TestLoad_SkillsMaxUploadSizeFromFileAndEnv(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.json5")
+	os.WriteFile(cfgPath, []byte(`{"skills":{"max_upload_size_mb":64}}`), 0644)
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load error: %v", err)
+	}
+	if cfg.Skills.EffectiveMaxUploadSizeMB() != 64 {
+		t.Fatalf("file skill upload max: got %d, want 64", cfg.Skills.EffectiveMaxUploadSizeMB())
+	}
+
+	t.Setenv("GOCLAW_SKILLS_MAX_UPLOAD_SIZE_MB", "128")
+	cfg, err = Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load with env error: %v", err)
+	}
+	if cfg.Skills.EffectiveMaxUploadSizeMB() != 128 {
+		t.Fatalf("env skill upload max: got %d, want 128", cfg.Skills.EffectiveMaxUploadSizeMB())
+	}
+}
+
+func TestLoad_SkillSlashCommandsFromFileEnvAndSystemConfig(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.json5")
+	os.WriteFile(cfgPath, []byte(`{
+		"skills": {
+			"slash_commands": {
+				"enabled": false,
+				"suggest_not_found": false,
+				"partial_matching": true,
+				"prefix": "!"
+			}
+		}
+	}`), 0644)
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load error: %v", err)
+	}
+	if cfg.Skills.SlashCommands.EffectiveEnabled() {
+		t.Fatal("file enabled override should be false")
+	}
+	if cfg.Skills.SlashCommands.EffectiveSuggestNotFound() {
+		t.Fatal("file suggestion override should be false")
+	}
+	if !cfg.Skills.SlashCommands.EffectivePartialMatching() {
+		t.Fatal("file partial matching override should be true")
+	}
+	if cfg.Skills.SlashCommands.EffectivePrefix() != "!" {
+		t.Fatalf("file prefix = %q, want !", cfg.Skills.SlashCommands.EffectivePrefix())
+	}
+
+	t.Setenv("GOCLAW_SKILLS_SLASH_COMMANDS_ENABLED", "true")
+	t.Setenv("GOCLAW_SKILLS_SLASH_COMMANDS_SUGGEST_NOT_FOUND", "true")
+	t.Setenv("GOCLAW_SKILLS_SLASH_COMMANDS_PARTIAL_MATCHING", "false")
+	t.Setenv("GOCLAW_SKILLS_SLASH_COMMANDS_PREFIX", "#")
+	cfg, err = Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load with env error: %v", err)
+	}
+	if !cfg.Skills.SlashCommands.EffectiveEnabled() {
+		t.Fatal("env enabled override should be true")
+	}
+	if !cfg.Skills.SlashCommands.EffectiveSuggestNotFound() {
+		t.Fatal("env suggestion override should be true")
+	}
+	if cfg.Skills.SlashCommands.EffectivePartialMatching() {
+		t.Fatal("env partial matching override should be false")
+	}
+	if cfg.Skills.SlashCommands.EffectivePrefix() != "#" {
+		t.Fatalf("env prefix = %q, want #", cfg.Skills.SlashCommands.EffectivePrefix())
+	}
+
+	cfg.ApplySystemConfigs(map[string]string{
+		"skills.slash_commands.enabled":           "false",
+		"skills.slash_commands.suggest_not_found": "false",
+		"skills.slash_commands.partial_matching":  "true",
+		"skills.slash_commands.prefix":            "%",
+	})
+	if cfg.Skills.SlashCommands.EffectiveEnabled() {
+		t.Fatal("system enabled override should be false")
+	}
+	if cfg.Skills.SlashCommands.EffectiveSuggestNotFound() {
+		t.Fatal("system suggestion override should be false")
+	}
+	if !cfg.Skills.SlashCommands.EffectivePartialMatching() {
+		t.Fatal("system partial matching override should be true")
+	}
+	if cfg.Skills.SlashCommands.EffectivePrefix() != "%" {
+		t.Fatalf("system prefix = %q, want %%", cfg.Skills.SlashCommands.EffectivePrefix())
+	}
+}
+
+func TestSkillsMaxUploadSizeClampAndSystemConfigOverlay(t *testing.T) {
+	cfg := Default()
+	cfg.Skills.MaxUploadSizeMB = 0
+	if got := cfg.Skills.EffectiveMaxUploadSizeMB(); got != DefaultSkillMaxUploadSizeMB {
+		t.Fatalf("zero upload max: got %d, want %d", got, DefaultSkillMaxUploadSizeMB)
+	}
+
+	cfg.Skills.MaxUploadSizeMB = -10
+	if got := cfg.Skills.EffectiveMaxUploadSizeMB(); got != MinSkillMaxUploadSizeMB {
+		t.Fatalf("negative upload max: got %d, want %d", got, MinSkillMaxUploadSizeMB)
+	}
+
+	cfg.Skills.MaxUploadSizeMB = 999
+	if got := cfg.Skills.EffectiveMaxUploadSizeMB(); got != MaxSkillMaxUploadSizeMB {
+		t.Fatalf("high upload max: got %d, want %d", got, MaxSkillMaxUploadSizeMB)
+	}
+
+	cfg.ApplySystemConfigs(map[string]string{"skills.max_upload_size_mb": "77"})
+	if got := cfg.Skills.EffectiveMaxUploadSizeMB(); got != 77 {
+		t.Fatalf("system config upload max: got %d, want 77", got)
+	}
+}
+
 func TestLoad_EnvVarOverrides_InvalidPort(t *testing.T) {
 	t.Setenv("GOCLAW_PORT", "not-a-number")
 
@@ -113,6 +246,39 @@ func TestLoad_EnvVarOverrides_InvalidPort(t *testing.T) {
 	// Invalid port should keep default
 	if cfg.Gateway.Port != 18790 {
 		t.Fatalf("invalid port env should keep default: got %d", cfg.Gateway.Port)
+	}
+}
+
+func TestValidateGatewayAuthRejectsExternalNoToken(t *testing.T) {
+	cfg := Default()
+	cfg.Gateway.Host = "0.0.0.0"
+	cfg.Gateway.Token = ""
+	t.Setenv(GatewayAllowInsecureNoAuthEnv, "")
+
+	if err := ValidateGatewayAuth(cfg.Gateway); err == nil {
+		t.Fatal("expected external bind with empty gateway token to fail")
+	}
+}
+
+func TestValidateGatewayAuthAllowsLoopbackNoToken(t *testing.T) {
+	cfg := Default()
+	cfg.Gateway.Host = "127.0.0.1"
+	cfg.Gateway.Token = ""
+	t.Setenv(GatewayAllowInsecureNoAuthEnv, "")
+
+	if err := ValidateGatewayAuth(cfg.Gateway); err != nil {
+		t.Fatalf("loopback no-token mode should be allowed: %v", err)
+	}
+}
+
+func TestValidateGatewayAuthAllowsExplicitInsecureOptIn(t *testing.T) {
+	cfg := Default()
+	cfg.Gateway.Host = "0.0.0.0"
+	cfg.Gateway.Token = ""
+	t.Setenv(GatewayAllowInsecureNoAuthEnv, "1")
+
+	if err := ValidateGatewayAuth(cfg.Gateway); err != nil {
+		t.Fatalf("explicit insecure opt-in should allow no-token mode: %v", err)
 	}
 }
 

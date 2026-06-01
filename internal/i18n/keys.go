@@ -78,6 +78,12 @@ const (
 	MsgCannotCancel          = "error.cannot_cancel_summon"    // "agent is not being summoned"
 	MsgInvalidPath           = "error.invalid_path"            // "invalid path"
 
+	// --- Browser cookies ---
+	MsgBrowserCookieTooMany            = "error.browser_cookie_too_many"            // "too many browser cookies in one sync request"
+	MsgInvalidCookieURL                = "error.invalid_cookie_url"                 // "invalid cookie URL"
+	MsgBrowserCookieValueTooLarge      = "error.browser_cookie_value_too_large"     // "cookie value too large"
+	MsgBrowserCookieEncryptionRequired = "error.browser_cookie_encryption_required" // "browser cookie encryption is not configured"
+
 	// --- Tenant backup / restore ---
 	MsgRestoreNewModeRejectsTenantID = "error.restore_new_mode_rejects_tenant_id" // "mode=new uses tenant_slug; tenant_id is not accepted"
 
@@ -87,6 +93,21 @@ const (
 
 	// --- Provider ---
 	MsgProviderReqFailed = "error.provider_request_failed" // "%s: request failed: %s"
+
+	// --- Usage caps / pricing ---
+	MsgUsageCapsListPoliciesFailed          = "usage_caps.list_policies_failed"
+	MsgUsageCapPolicyValidationFailed       = "usage_caps.policy_validation_failed"
+	MsgUsageCapPolicyManaged                = "usage_caps.policy_managed"
+	MsgUsageCapsDeletePolicyFailed          = "usage_caps.delete_policy_failed"
+	MsgUsageCapsUtilizationFailed           = "usage_caps.utilization_failed"
+	MsgUsageCapsEventsFailed                = "usage_caps.events_failed"
+	MsgUsagePricingSyncOpenRouterFailed     = "usage_pricing.sync_openrouter_failed"
+	MsgUsagePricingStoreCatalogFailed       = "usage_pricing.store_catalog_failed"
+	MsgUsagePricingListFailed               = "usage_pricing.list_failed"
+	MsgUsagePricingProviderModelRequired    = "usage_pricing.provider_model_required"
+	MsgUsagePricingOverrideValidationFailed = "usage_pricing.override_validation_failed"
+	MsgUsagePricingListOverridesFailed      = "usage_pricing.list_overrides_failed"
+	MsgUsagePricingDeleteOverrideFailed     = "usage_pricing.delete_override_failed"
 
 	// --- Unknown method ---
 	MsgUnknownMethod = "error.unknown_method" // "unknown method: %s"
@@ -114,6 +135,43 @@ const (
 	// --- Skills ---
 	MsgSkillsUpdateNotSupported = "error.skills_update_not_supported" // "skills.update not supported for file-based skills"
 	MsgCannotResolveSkillID     = "error.cannot_resolve_skill_id"     // "cannot resolve skill ID for file-based skill"
+	MsgInvalidVisibility        = "error.invalid_visibility"          // "invalid visibility %q: must be one of private, public"
+
+	// --- Package updates (Phase 4+5) ---
+	MsgPackageNotInstalled  = "packages.update.not_installed"     // "Package {name} is not installed"
+	MsgPackageUpdateLocked  = "packages.update.locked"            // "Package {name} is being updated by another request"
+	MsgReleaseNotFound      = "packages.update.release_not_found" // "Release {tag} not found for {repo}"
+	MsgAssetNotFound        = "packages.update.asset_not_found"   // "No compatible asset for {os}/{arch}"
+	MsgChecksumMismatch     = "packages.update.checksum_mismatch" // "Checksum mismatch for {name}"
+	MsgUpdateSwapFailed     = "packages.update.swap_failed"       // "Failed to install {name}; previous version restored"
+	MsgUpdateManifestDesync = "packages.update.manifest_desync"   // "Binary updated but manifest save failed — manual recovery required for {name}"
+	MsgUpdateCacheStale     = "packages.update.cache_stale"       // "Updates cache stale; run refresh before applying an update"
+
+	// Package update source labels
+	MsgPackagesUpdatesSourceGithub = "packages.updates.source.github" // "GitHub"
+	MsgPackagesUpdatesSourcePip    = "packages.updates.source.pip"    // "pip"
+	MsgPackagesUpdatesSourceNpm    = "packages.updates.source.npm"    // "npm"
+
+	// Package update availability messages
+	MsgPackagesUpdatesUnavailablePip = "packages.updates.unavailable.pip" // "pip not installed on this system"
+	MsgPackagesUpdatesUnavailableNpm = "packages.updates.unavailable.npm" // "npm not installed on this system"
+
+	// Package update failure reasons
+	MsgPackagesUpdatesReasonDependencyConflict = "packages.updates.reason.dependencyConflict" // "Dependency conflict"
+	MsgPackagesUpdatesReasonPermission         = "packages.updates.reason.permission"         // "Permission denied"
+	MsgPackagesUpdatesReasonNetwork            = "packages.updates.reason.network"            // "Network error"
+	MsgPackagesUpdatesReasonNotFound           = "packages.updates.reason.notFound"           // "Package not found"
+	MsgPackagesUpdatesReasonTargetMissing      = "packages.updates.reason.targetMissing"      // "Version not available"
+	MsgPackagesUpdatesReasonExternallyManaged  = "packages.updates.reason.externallyManaged"  // "Environment externally managed"
+
+	// Package update apk-specific labels (Phase 2b)
+	MsgPackagesUpdatesSourceApk      = "packages.updates.source.apk"      // "apk"
+	MsgPackagesUpdatesUnavailableApk = "packages.updates.unavailable.apk" // "apk not available on this system"
+
+	// Package update apk-specific reasons (Phase 2b)
+	MsgPackagesUpdatesReasonLocked            = "packages.updates.reason.locked"            // "Package database is locked"
+	MsgPackagesUpdatesReasonDiskFull          = "packages.updates.reason.diskFull"          // "Disk full"
+	MsgPackagesUpdatesReasonHelperUnavailable = "packages.updates.reason.helperUnavailable" // "Privileged helper unavailable"
 
 	// --- Logs ---
 	MsgInvalidLogAction = "error.invalid_log_action" // "action must be 'start' or 'stop'"
@@ -197,15 +255,15 @@ const (
 	MsgInvalidRole = "error.invalid_role" // "invalid role: allowed values are owner, admin, operator, member, viewer"
 
 	// --- TTS / Voices ---
-	MsgTtsUnknownModel          = "error.tts_unknown_model"           // "unknown tts model: %s"
-	MsgVoicesListFailed         = "error.voices_list_failed"          // "failed to list voices: %s"
-	MsgTtsGeminiInvalidVoice    = "error.tts_gemini_invalid_voice"    // "invalid Gemini voice: %s"
-	MsgTtsGeminiSpeakerLimit    = "error.tts_gemini_speaker_limit"    // "Gemini TTS supports at most 2 speakers"
-	MsgTtsGeminiInvalidModel    = "error.tts_gemini_invalid_model"    // "invalid Gemini TTS model: %s"
-	MsgTtsGeminiTextOnly        = "error.tts_gemini_text_only"        // "Gemini refused to generate audio; try simpler text without translation or commentary"
-	MsgTtsParamOutOfRange       = "error.tts_param_out_of_range"      // "TTS param %q value %v is out of range [%v, %v]"
-	MsgTtsParamUnknownKey       = "error.tts_param_unknown_key"       // "TTS param %q is not supported by this provider"
-	MsgTtsMiniMaxVoicesFailed   = "error.tts_minimax_voices_failed"   // "failed to fetch MiniMax voices: %s"
+	MsgTtsUnknownModel        = "error.tts_unknown_model"         // "unknown tts model: %s"
+	MsgVoicesListFailed       = "error.voices_list_failed"        // "failed to list voices: %s"
+	MsgTtsGeminiInvalidVoice  = "error.tts_gemini_invalid_voice"  // "invalid Gemini voice: %s"
+	MsgTtsGeminiSpeakerLimit  = "error.tts_gemini_speaker_limit"  // "Gemini TTS supports at most 2 speakers"
+	MsgTtsGeminiInvalidModel  = "error.tts_gemini_invalid_model"  // "invalid Gemini TTS model: %s"
+	MsgTtsGeminiTextOnly      = "error.tts_gemini_text_only"      // "Gemini refused to generate audio; try simpler text without translation or commentary"
+	MsgTtsParamOutOfRange     = "error.tts_param_out_of_range"    // "TTS param %q value %v is out of range [%v, %v]"
+	MsgTtsParamUnknownKey     = "error.tts_param_unknown_key"     // "TTS param %q is not supported by this provider"
+	MsgTtsMiniMaxVoicesFailed = "error.tts_minimax_voices_failed" // "failed to fetch MiniMax voices: %s"
 
 	// --- STT ---
 	MsgSTTAllProvidersFailed     = "error.stt_all_providers_failed"    // "All STT providers failed"
@@ -220,6 +278,52 @@ const (
 	MsgTenantMismatch      = "error.tenant_mismatch"       // "tenant user does not belong to this tenant"
 	MsgTenantScopeRequired = "error.tenant_scope_required" // "tenant scope is required for this operation"
 
+	// --- Webhooks ---
+	MsgWebhookAuthFailed              = "webhook.auth_failed"               // "webhook authentication failed"
+	MsgWebhookHMACInvalid             = "webhook.hmac_invalid"              // "HMAC signature is invalid"
+	MsgWebhookHMACTimestampSkew       = "webhook.hmac_timestamp_skew"       // "request timestamp outside acceptable window"
+	MsgWebhookBearerRequiredHMAC      = "webhook.bearer_required_hmac"      // "this webhook requires HMAC authentication"
+	MsgWebhookRevoked                 = "webhook.revoked"                   // "webhook has been revoked"
+	MsgWebhookKindMismatch            = "webhook.kind_mismatch"             // "request kind does not match webhook configuration"
+	MsgWebhookRateLimited             = "webhook.rate_limited"              // "webhook rate limit exceeded"
+	MsgWebhookBodyTooLarge            = "webhook.body_too_large"            // "request body exceeds size limit"
+	MsgWebhookIdempotencyConflict     = "webhook.idempotency_conflict"      // "idempotency key conflict: request body mismatch"
+	MsgWebhookTenantMismatch          = "webhook.tenant_mismatch"           // "webhook tenant mismatch"
+	MsgWebhookAgentNotFound           = "webhook.agent_not_found"           // "webhook agent not found"
+	MsgWebhookChannelNotFound         = "webhook.channel_not_found"         // "webhook channel not found"
+	MsgWebhookMediaSSRFBlocked        = "webhook.media_ssrf_blocked"        // "media URL blocked by SSRF policy"
+	MsgWebhookMediaTooLarge           = "webhook.media_too_large"           // "media file exceeds size limit"
+	MsgWebhookMediaMIMEDenied         = "webhook.media_mime_denied"         // "media MIME type is not allowed"
+	MsgWebhookCallbackURLInvalid      = "webhook.callback_url_invalid"      // "callback URL is invalid or blocked"
+	MsgWebhookLLMTimeout              = "webhook.llm_timeout"               // "LLM processing timed out"
+	MsgWebhookLaneSaturated           = "webhook.lane_saturated"            // "webhook processing lane is at capacity"
+	MsgWebhookLocalhostOnlyViolation  = "webhook.localhost_only_violation"  // "this webhook is restricted to localhost callers"
+	MsgWebhookMediaChannelUnsupported = "webhook.media_channel_unsupported" // "channel does not support media attachments"
+	MsgWebhookIPDenied                = "webhook.ip_denied"                 // "request origin is not in the IP allowlist"
+	MsgWebhookEncryptionUnavailable   = "webhook.encryption_unavailable"    // "webhook encryption key not configured; set GOCLAW_ENCRYPTION_KEY to enable webhooks"
+
+	// --- Workstation permissions ---
+	MsgWorkstationCmdDenied    = "error.workstation_cmd_denied"     // "command denied by workstation policy: %s"
+	MsgWorkstationEnvDenied    = "error.workstation_env_denied"     // "env var denied by policy: %s"
+	MsgWorkstationInputInvalid = "error.workstation_input_invalid"  // "command contains invalid characters: %s"
+	MsgWorkstationRateLimit    = "error.workstation_rate_limit"     // "workstation rate limit exceeded"
+	MsgWorkstationPermNotFound = "error.workstation_perm_not_found" // "permission entry not found: %s"
+
+	// --- Workstation activity (Phase 7) ---
+	MsgWorkstationActivityTitle = "ui.workstations.activity.title"       // "Recent Activity"
+	MsgWorkstationActionExec    = "ui.workstations.activity.action_exec" // "Exec"
+	MsgWorkstationActionDeny    = "ui.workstations.activity.action_deny" // "Denied"
+
+	// --- Workstation ---
+	MsgWorkstationNotFound     = "error.workstation_not_found"     // "workstation not found: %s"
+	MsgWorkstationKeyExists    = "error.workstation_key_exists"    // "workstation key already in use: %s"
+	MsgInvalidBackend          = "error.invalid_backend"           // "invalid backend type: %s (must be ssh|docker)"
+	MsgWorkstationInactive     = "error.workstation_inactive"      // "workstation is inactive: %s"
+	MsgInvalidMetadataShape    = "error.invalid_metadata_shape"    // "invalid metadata for %s backend: %s"
+	MsgWorkstationRequired     = "error.workstation_required"      // "no workstation bound to agent; pass workstation_id"
+	MsgWorkstationAccessDenied = "error.workstation_access_denied" // "agent %s not authorized for workstation %s"
+	MsgBackendNotReady         = "error.backend_not_ready"         // "workstation backend not ready: %s"
+
 	// --- Hooks ---
 	MsgHookInvalidMatcher          = "hook.invalid_matcher"           // "invalid matcher regex: %s"
 	MsgHookCommandDisabledStandard = "hook.command_disabled_standard" // "command-type hooks are only available on Lite edition"
@@ -228,4 +332,24 @@ const (
 	MsgHookBudgetExceeded          = "hook.budget_exceeded"           // "tenant hook token budget exceeded"
 	MsgHookPerTurnCapReached       = "hook.per_turn_cap_reached"      // "hook invocation per-turn cap reached"
 	MsgHookBuiltinReadOnly         = "hook.builtin_readonly"          // "builtin hooks are read-only except for the enabled toggle"
+
+	// --- Grant env validation ---
+	MsgGrantEnvDeniedKeys   = "error.grant_env_denied_keys"   // "env keys not allowed: %s"
+	MsgGrantEnvValueInvalid = "error.grant_env_value_invalid" // "invalid env value: %s"
+	MsgGrantEnvTooManyKeys  = "error.grant_env_too_many_keys" // "too many env keys: max 50"
+	MsgGrantEnvRevealLimit  = "error.grant_env_reveal_limit"  // "rate limit exceeded for env reveal"
+
+	// --- Git credential adapter (Phase 3+) ---
+	MsgGitCredHostMismatch        = "error.git_cred_host_mismatch"         // "stored credential is for %s but command targets %s"
+	MsgGitCredNoMatch             = "error.git_cred_no_match"              // "no git credential configured for host %s"
+	MsgGitCredUnsupportedType     = "error.git_cred_unsupported_type"      // "git credential type %q is not supported"
+	MsgGitCredTokenInvalid        = "error.git_cred_token_invalid"         // "stored git token is invalid or empty"
+	MsgGitCredTokenControlChar    = "error.git_cred_token_control_char"    // "stored git token contains forbidden control characters"
+	MsgGitCredHostUserinfoRejected = "error.git_cred_host_userinfo_rejected" // "git URL with embedded userinfo is rejected as ambiguous"
+	MsgGitCredSSHPassphraseUnsupported = "error.git_cred_ssh_passphrase_unsupported" // "passphrase-protected SSH keys not supported in v1"
+	MsgGitCredSSHKeyInvalid            = "error.git_cred_ssh_key_invalid"             // "SSH private key invalid: %s"
+	MsgGitCredHostScopeRequired        = "error.git_cred_host_scope_required"         // "host_scope required for credential_type %s"
+	MsgGitCredHostScopeInvalid         = "error.git_cred_host_scope_invalid"          // "host_scope %q is not a valid hostname"
+	MsgGitCredBlobMissingField         = "error.git_cred_blob_missing_field"          // "blob missing required field %q"
+	MsgGitCredUnsupportedCredType      = "error.git_cred_unsupported_cred_type"       // "credential_type %q is not supported"
 )

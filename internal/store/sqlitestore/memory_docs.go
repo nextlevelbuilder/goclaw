@@ -20,7 +20,15 @@ func (s *SQLiteMemoryStore) GetDocument(ctx context.Context, agentID, userID, pa
 	var content string
 	var err error
 
-	if userID == "" {
+	if store.IsSharedMemory(ctx) {
+		tc, tcArgs, tcErr := scopeClause(ctx)
+		if tcErr != nil {
+			return "", tcErr
+		}
+		err = s.db.QueryRowContext(ctx,
+			"SELECT content FROM memory_documents WHERE agent_id = ? AND path = ?"+tc+" ORDER BY updated_at DESC LIMIT 1",
+			append([]any{aid, path}, tcArgs...)...).Scan(&content)
+	} else if userID == "" {
 		tc, tcArgs, tcErr := scopeClause(ctx)
 		if tcErr != nil {
 			return "", tcErr
@@ -69,7 +77,15 @@ func (s *SQLiteMemoryStore) DeleteDocument(ctx context.Context, agentID, userID,
 	var res sql.Result
 	var err error
 
-	if userID == "" {
+	if store.IsSharedMemory(ctx) {
+		tc, tcArgs, tcErr := scopeClause(ctx)
+		if tcErr != nil {
+			return tcErr
+		}
+		res, err = s.db.ExecContext(ctx,
+			"DELETE FROM memory_documents WHERE agent_id = ? AND path = ?"+tc,
+			append([]any{agentID, path}, tcArgs...)...)
+	} else if userID == "" {
 		tc, tcArgs, tcErr := scopeClause(ctx)
 		if tcErr != nil {
 			return tcErr
@@ -100,7 +116,15 @@ func (s *SQLiteMemoryStore) ListDocuments(ctx context.Context, agentID, userID s
 	var rows *sql.Rows
 	var err error
 
-	if userID == "" {
+	if store.IsSharedMemory(ctx) {
+		tc, tcArgs, tcErr := scopeClause(ctx)
+		if tcErr != nil {
+			return nil, tcErr
+		}
+		rows, err = s.db.QueryContext(ctx,
+			"SELECT path, hash, user_id, updated_at FROM memory_documents WHERE agent_id = ?"+tc,
+			append([]any{agentID}, tcArgs...)...)
+	} else if userID == "" {
 		tc, tcArgs, tcErr := scopeClause(ctx)
 		if tcErr != nil {
 			return nil, tcErr
@@ -147,7 +171,15 @@ func (s *SQLiteMemoryStore) IndexDocument(ctx context.Context, agentID, userID, 
 
 	// Get document ID
 	var docID string
-	if userID == "" {
+	if store.IsSharedMemory(ctx) {
+		tc, tcArgs, tcErr := scopeClause(ctx)
+		if tcErr != nil {
+			return tcErr
+		}
+		err = s.db.QueryRowContext(ctx,
+			"SELECT id FROM memory_documents WHERE agent_id = ? AND path = ?"+tc+" ORDER BY updated_at DESC LIMIT 1",
+			append([]any{agentID, path}, tcArgs...)...).Scan(&docID)
+	} else if userID == "" {
 		tc, tcArgs, tcErr := scopeClause(ctx)
 		if tcErr != nil {
 			return tcErr

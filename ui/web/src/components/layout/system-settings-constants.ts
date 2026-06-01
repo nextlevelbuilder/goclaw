@@ -44,6 +44,11 @@ export interface InitState {
   kgMinConfidence: string;
   bgProvider: string;
   bgModel: string;
+  skillUploadMaxSize: string;
+  skillSlashEnabled: boolean;
+  skillSlashSuggest: boolean;
+  skillSlashPartial: boolean;
+  skillSlashPrefix: string;
 }
 
 export const DEFAULTS: InitState = {
@@ -54,6 +59,11 @@ export const DEFAULTS: InitState = {
   compThreshold: "", compKeepRecent: "", compMaxTokens: "",
   kgProvider: "", kgModel: "", kgMinConfidence: "0.75",
   bgProvider: "", bgModel: "",
+  skillUploadMaxSize: "20",
+  skillSlashEnabled: true,
+  skillSlashSuggest: true,
+  skillSlashPartial: false,
+  skillSlashPrefix: "/",
 };
 
 export function parseBool(v: string | undefined, fallback: boolean): boolean {

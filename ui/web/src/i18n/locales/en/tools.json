@@ -143,6 +143,16 @@
       "save": "Save",
       "saving": "Saving..."
     },
+    "execSettings": {
+      "title": "Exec Settings",
+      "description": "Configure the host command timeout for the built-in exec tool.",
+      "timeoutSeconds": "Timeout (seconds)",
+      "timeoutHint": "Allowed range: {{min}}-{{max}} seconds.",
+      "sandboxHint": "Docker sandbox runs use the agent sandbox timeout setting.",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving..."
+    },
     "searchChain": {
       "title": "Web Search Provider Chain",
       "description": "Drag to reorder search providers. First enabled provider with a valid API key is tried first.",

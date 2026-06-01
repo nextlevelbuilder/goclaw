@@ -84,6 +84,9 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 		cronCtx, cancelCron := context.WithTimeout(context.Background(), jobTimeout)
 		defer cancelCron()
 		cronCtx = store.WithTenantID(cronCtx, job.TenantID)
+		if job.Payload.CredentialUserID != "" {
+			cronCtx = store.WithCredentialUserID(cronCtx, job.Payload.CredentialUserID)
+		}
 
 		// Reset session before each cron run to prevent tool errors from previous
 		// runs from polluting the context and blocking future executions (#294).

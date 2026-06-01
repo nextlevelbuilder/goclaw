@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
@@ -41,14 +43,14 @@ func (s *stubSkillStore) LoadSkill(_ context.Context, name string) (string, bool
 	return c, ok
 }
 
-func (s *stubSkillStore) LoadForContext(_ context.Context, _ []string) string  { return "" }
-func (s *stubSkillStore) BuildSummary(_ context.Context, _ []string) string    { return "" }
+func (s *stubSkillStore) LoadForContext(_ context.Context, _ []string) string { return "" }
+func (s *stubSkillStore) BuildSummary(_ context.Context, _ []string) string   { return "" }
 func (s *stubSkillStore) FilterSkills(_ context.Context, _ []string) []store.SkillInfo {
 	return nil
 }
-func (s *stubSkillStore) Version() int64  { return s.version }
-func (s *stubSkillStore) BumpVersion()    { s.version++ }
-func (s *stubSkillStore) Dirs() []string  { return nil }
+func (s *stubSkillStore) Version() int64 { return s.version }
+func (s *stubSkillStore) BumpVersion()   { s.version++ }
+func (s *stubSkillStore) Dirs() []string { return nil }
 
 // ---- helpers ----
 
@@ -160,4 +162,58 @@ func TestSkillsUpdate_EmptyUpdates_ReturnsInvalidRequest(t *testing.T) {
 	})
 	m.handleUpdate(context.Background(), client, req)
 	// No panic = invalid-request (empty updates) path hit
+}
+
+func TestSkillsUpdate_NormalizesEmptyVisibilityToPrivate(t *testing.T) {
+	skillID := "0193a5b0-7000-7000-8000-000000000321"
+	store := newUpdatingSkillStore([]store.SkillInfo{{Name: "sk", Slug: "sk", Path: skillID}})
+	m := NewSkillsMethods(store, nil)
+	client := nullClient()
+	req := skillReqFrame(t, protocol.MethodSkillsUpdate, map[string]any{
+		"id":      skillID,
+		"updates": map[string]any{"visibility": ""},
+	})
+
+	m.handleUpdate(context.Background(), client, req)
+
+	if got := store.lastUpdates["visibility"]; got != "private" {
+		t.Fatalf("visibility update = %#v, want private", got)
+	}
+}
+
+func TestSkillsUpdate_RejectsNonStringVisibilityBeforeUpdate(t *testing.T) {
+	skillID := "0193a5b0-7000-7000-8000-000000000322"
+	store := newUpdatingSkillStore([]store.SkillInfo{{Name: "sk", Slug: "sk", Path: skillID}})
+	m := NewSkillsMethods(store, nil)
+	client := nullClient()
+	req := skillReqFrame(t, protocol.MethodSkillsUpdate, map[string]any{
+		"id":      skillID,
+		"updates": map[string]any{"visibility": true},
+	})
+
+	m.handleUpdate(context.Background(), client, req)
+
+	if store.updateCalled {
+		t.Fatalf("non-string visibility reached UpdateSkill: %+v", store.lastUpdates)
+	}
+}
+
+type updatingSkillStore struct {
+	*stubSkillStore
+	lastUpdates  map[string]any
+	updateCalled bool
+}
+
+func newUpdatingSkillStore(skills []store.SkillInfo) *updatingSkillStore {
+	return &updatingSkillStore{stubSkillStore: newStubSkillStore(skills)}
+}
+
+func (s *updatingSkillStore) UpdateSkill(_ context.Context, _ uuid.UUID, updates map[string]any) error {
+	s.updateCalled = true
+	s.lastUpdates = updates
+	return nil
+}
+
+func (s *updatingSkillStore) GetSkillOwnerID(context.Context, uuid.UUID) (string, bool) {
+	return "", true
 }

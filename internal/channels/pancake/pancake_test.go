@@ -3,6 +3,9 @@ package pancake
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -537,12 +540,18 @@ func buildWebhookBody(pageID, convID, convType, senderID, msgID, content, postID
 		pageID, conv, msgID, content)
 }
 
+func signTestPancakeRequest(req *http.Request, body, secret string) {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(body))
+	req.Header.Set("X-Pancake-Signature", "sha256="+hex.EncodeToString(mac.Sum(nil)))
+}
+
 // newTestRouter creates an isolated webhookRouter with a registered channel.
 func newTestRouter(t *testing.T, cfg pancakeInstanceConfig) (*webhookRouter, *Channel, *bus.MessageBus) {
 	t.Helper()
 	msgBus := bus.New()
 	cfg.PageID = "page-test"
-	creds := pancakeCreds{APIKey: "k", PageAccessToken: "t"}
+	creds := pancakeCreds{APIKey: "k", PageAccessToken: "t", WebhookSecret: "test-secret"}
 	ch, err := New(cfg, creds, msgBus, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -557,10 +566,12 @@ func newTestRouter(t *testing.T, cfg pancakeInstanceConfig) (*webhookRouter, *Ch
 func TestWebhookRouterRoutesCommentEvent(t *testing.T) {
 	cfg := pancakeInstanceConfig{}
 	cfg.Features.CommentReply = true
-	router, _, msgBus := newTestRouter(t, cfg)
+	router, ch, msgBus := newTestRouter(t, cfg)
+	ch.webhookSecret = "test-secret"
 
 	body := buildWebhookBody("page-test", "conv-1", "COMMENT", "user-1", "msg-1", "hello", "")
 	req := httptest.NewRequest(http.MethodPost, webhookPath, strings.NewReader(body))
+	signTestPancakeRequest(req, body, ch.webhookSecret)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -590,7 +601,7 @@ func TestWebhookRouterRoutesWebhookPageID(t *testing.T) {
 
 	msgBus := bus.New()
 	cfg.PageID = "pancake-internal-id"
-	creds := pancakeCreds{APIKey: "k", PageAccessToken: "t"}
+	creds := pancakeCreds{APIKey: "k", PageAccessToken: "t", WebhookSecret: "test-secret"}
 	ch, err := New(cfg, creds, msgBus, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -611,6 +622,7 @@ func TestWebhookRouterRoutesWebhookPageID(t *testing.T) {
 	// Webhook arrives with Facebook native page ID — must route to the channel.
 	body := buildWebhookBody("fb-native-id", "conv-1", "COMMENT", "user-1", "msg-1", "hello", "")
 	req := httptest.NewRequest(http.MethodPost, webhookPath, strings.NewReader(body))
+	signTestPancakeRequest(req, body, ch.webhookSecret)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -632,10 +644,12 @@ func TestWebhookRouterRoutesWebhookPageID(t *testing.T) {
 func TestWebhookRouterRoutesInboxEvent(t *testing.T) {
 	cfg := pancakeInstanceConfig{}
 	cfg.Features.InboxReply = true
-	router, _, msgBus := newTestRouter(t, cfg)
+	router, ch, msgBus := newTestRouter(t, cfg)
+	ch.webhookSecret = "test-secret"
 
 	body := buildWebhookBody("page-test", "conv-1", "INBOX", "user-1", "msg-2", "inbox msg", "")
 	req := httptest.NewRequest(http.MethodPost, webhookPath, strings.NewReader(body))
+	signTestPancakeRequest(req, body, ch.webhookSecret)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -648,6 +662,77 @@ func TestWebhookRouterRoutesInboxEvent(t *testing.T) {
 	// inbox handler sets pancake_mode = "inbox"
 	if msg.Metadata["pancake_mode"] != "inbox" {
 		t.Errorf("pancake_mode = %q, want %q", msg.Metadata["pancake_mode"], "inbox")
+	}
+}
+
+func TestWebhookRouterMissingSecretDoesNotDispatch(t *testing.T) {
+	cfg := pancakeInstanceConfig{}
+	cfg.Features.InboxReply = true
+	router, ch, msgBus := newTestRouter(t, cfg)
+	ch.webhookSecret = ""
+
+	body := buildWebhookBody("page-test", "conv-1", "INBOX", "user-1", "msg-2", "inbox msg", "")
+	req := httptest.NewRequest(http.MethodPost, webhookPath, strings.NewReader(body))
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected provider-safe 200, got %d", w.Code)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if _, ok := msgBus.ConsumeInbound(ctx); ok {
+		t.Fatal("expected no dispatch when webhook secret is missing")
+	}
+}
+
+func TestWebhookRouterSignatureMismatchDoesNotDispatch(t *testing.T) {
+	cfg := pancakeInstanceConfig{}
+	cfg.Features.InboxReply = true
+	router, ch, msgBus := newTestRouter(t, cfg)
+
+	body := buildWebhookBody("page-test", "conv-1", "INBOX", "user-1", "msg-2", "inbox msg", "")
+	req := httptest.NewRequest(http.MethodPost, webhookPath, strings.NewReader(body))
+	signTestPancakeRequest(req, body, "wrong-secret")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected provider-safe 200, got %d", w.Code)
+	}
+	if ch.webhookSecret == "" {
+		t.Fatal("test setup error: expected configured webhook secret")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if _, ok := msgBus.ConsumeInbound(ctx); ok {
+		t.Fatal("expected no dispatch on signature mismatch")
+	}
+}
+
+func TestWebhookRouterDuplicateSignedBodyDoesNotDispatchTwice(t *testing.T) {
+	cfg := pancakeInstanceConfig{}
+	cfg.Features.InboxReply = true
+	router, ch, msgBus := newTestRouter(t, cfg)
+
+	body := buildWebhookBody("page-test", "conv-1", "INBOX", "user-1", "", "inbox msg", "")
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodPost, webhookPath, strings.NewReader(body))
+		signTestPancakeRequest(req, body, ch.webhookSecret)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("request %d status = %d, want 200", i+1, w.Code)
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if _, ok := msgBus.ConsumeInbound(ctx); !ok {
+		t.Fatal("expected first signed webhook to dispatch")
+	}
+	if _, ok := msgBus.ConsumeInbound(ctx); ok {
+		t.Fatal("expected duplicate signed webhook body to be skipped")
 	}
 }
 
@@ -675,10 +760,12 @@ func TestWebhookRouterSkipsUnknownType(t *testing.T) {
 func TestWebhookRouterCommentNormalizesPostID(t *testing.T) {
 	cfg := pancakeInstanceConfig{}
 	cfg.Features.CommentReply = true
-	router, _, msgBus := newTestRouter(t, cfg)
+	router, ch, msgBus := newTestRouter(t, cfg)
+	ch.webhookSecret = "test-secret"
 
 	body := buildWebhookBody("page-test", "conv-1", "COMMENT", "user-1", "msg-4", "hello", "post-123")
 	req := httptest.NewRequest(http.MethodPost, webhookPath, strings.NewReader(body))
+	signTestPancakeRequest(req, body, ch.webhookSecret)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -697,9 +784,9 @@ func TestWebhookRouterCommentNormalizesPostID(t *testing.T) {
 
 // multiCaptureTransport records multiple requests (for first-inbox tests).
 type multiCaptureTransport struct {
-	reqs  []*http.Request
+	reqs   []*http.Request
 	bodies [][]byte
-	mu    sync.Mutex
+	mu     sync.Mutex
 }
 
 func (t *multiCaptureTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -726,7 +813,7 @@ func newChannelWithMultiCapture(t *testing.T, cfg pancakeInstanceConfig) (*Chann
 	transport := &multiCaptureTransport{}
 	msgBus := bus.New()
 	cfg.PageID = "page-123"
-	creds := pancakeCreds{APIKey: "k", PageAccessToken: "t"}
+	creds := pancakeCreds{APIKey: "k", PageAccessToken: "t", WebhookSecret: "test-secret"}
 	ch, err := New(cfg, creds, msgBus, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -1054,7 +1141,7 @@ func TestCommentFlowEndToEnd(t *testing.T) {
 	transport := &multiCaptureTransport{}
 	msgBus := bus.New()
 	cfg.PageID = "page-e2e"
-	creds := pancakeCreds{APIKey: "k", PageAccessToken: "t"}
+	creds := pancakeCreds{APIKey: "k", PageAccessToken: "t", WebhookSecret: "test-secret"}
 	ch, err := New(cfg, creds, msgBus, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -1067,6 +1154,7 @@ func TestCommentFlowEndToEnd(t *testing.T) {
 	// Step 1: POST comment webhook.
 	body := buildWebhookBody("page-e2e", "conv-e2e", "COMMENT", "user-e2e", "msg-e2e", "great product!", "")
 	req := httptest.NewRequest(http.MethodPost, webhookPath, strings.NewReader(body))
+	signTestPancakeRequest(req, body, ch.webhookSecret)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -1088,8 +1176,8 @@ func TestCommentFlowEndToEnd(t *testing.T) {
 
 	// Step 4: Send outbound reply.
 	outMsg := bus.OutboundMessage{
-		ChatID:  inMsg.ChatID,
-		Content: "thank you!",
+		ChatID:   inMsg.ChatID,
+		Content:  "thank you!",
 		Metadata: inMsg.Metadata,
 	}
 	if err := ch.Send(context.Background(), outMsg); err != nil {
@@ -1122,6 +1210,7 @@ func TestCommentFlowEndToEnd(t *testing.T) {
 	// Step 6: Second comment from same sender — stateless: another DM fires.
 	body2 := buildWebhookBody("page-e2e", "conv-e2e", "COMMENT", "user-e2e", "msg-e2e-2", "another comment", "")
 	req2 := httptest.NewRequest(http.MethodPost, webhookPath, strings.NewReader(body2))
+	signTestPancakeRequest(req2, body2, ch.webhookSecret)
 	w2 := httptest.NewRecorder()
 	router.ServeHTTP(w2, req2)
 

@@ -3,6 +3,7 @@ package browser
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-rod/rod"
@@ -46,11 +47,15 @@ func (m *Manager) Type(ctx context.Context, targetID, ref, text string, opts Typ
 	if opts.Slowly {
 		// Type character by character with delay
 		for _, ch := range text {
-			el.MustInput(string(ch))
+			if err := rod.Try(func() { el.MustInput(string(ch)) }); err != nil {
+				return fmt.Errorf("type input: %w", err)
+			}
 			time.Sleep(50 * time.Millisecond)
 		}
 	} else {
-		el.MustInput(text)
+		if err := rod.Try(func() { el.MustInput(text) }); err != nil {
+			return fmt.Errorf("type input: %w", err)
+		}
 	}
 
 	if opts.Submit {
@@ -108,7 +113,7 @@ func (m *Manager) Wait(ctx context.Context, targetID string, opts WaitOpts) erro
 	// Wait for text to appear
 	if opts.Text != "" {
 		return rod.Try(func() {
-			page.Timeout(30 * time.Second).MustElementR("*", opts.Text)
+			page.Timeout(30*time.Second).MustElementR("*", opts.Text)
 		})
 	}
 
@@ -138,14 +143,31 @@ func (m *Manager) Wait(ctx context.Context, targetID string, opts WaitOpts) erro
 
 	// Wait for URL
 	if opts.URL != "" {
-		wait := page.WaitNavigation(proto.PageLifecycleEventNameLoad)
-		wait()
-		return nil
+		return waitForURL(ctx, page, opts.URL, 30*time.Second)
 	}
 
 	// Default: wait for page to stabilize
 	waitStable(page)
 	return nil
+}
+
+func waitForURL(ctx context.Context, page *rod.Page, want string, timeout time.Duration) error {
+	deadline := time.After(timeout)
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		info, _ := page.Info()
+		if info != nil && strings.Contains(info.URL, want) {
+			return nil
+		}
+		select {
+		case <-deadline:
+			return fmt.Errorf("timeout waiting for URL containing %q", want)
+		case <-ticker.C:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 }
 
 // Evaluate runs JavaScript on a page.

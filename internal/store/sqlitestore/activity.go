@@ -80,6 +80,48 @@ func (s *SQLiteActivityStore) Count(ctx context.Context, opts store.ActivityList
 	return count, err
 }
 
+func (s *SQLiteActivityStore) Aggregate(ctx context.Context, opts store.ActivityAggregateOpts) ([]store.ActivityAggregateBucket, int, error) {
+	column, ok := activityAggregateColumn(opts.GroupBy)
+	if !ok {
+		return nil, 0, fmt.Errorf("invalid group_by")
+	}
+	limit := opts.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	where, args := buildActivityWhere(ctx, opts.ActivityListOpts)
+	total, err := s.Count(ctx, opts.ActivityListOpts)
+	if err != nil {
+		return nil, 0, err
+	}
+	args = append(args, limit)
+	query := fmt.Sprintf(
+		`SELECT COALESCE(%s, ''), COUNT(*), MAX(created_at)
+		 FROM activity_logs %s
+		 GROUP BY %s
+		 ORDER BY COUNT(*) DESC, MAX(created_at) DESC
+		 LIMIT ?`,
+		column, where, column,
+	)
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var buckets []store.ActivityAggregateBucket
+	for rows.Next() {
+		var b store.ActivityAggregateBucket
+		var lastSeen sqliteTime
+		if err := rows.Scan(&b.Key, &b.Count, &lastSeen); err != nil {
+			return nil, 0, err
+		}
+		b.LastSeen = lastSeen.Time
+		buckets = append(buckets, b)
+	}
+	return buckets, total, rows.Err()
+}
+
 func buildActivityWhere(ctx context.Context, opts store.ActivityListOpts) (string, []any) {
 	var conditions []string
 	var args []any
@@ -112,9 +154,32 @@ func buildActivityWhere(ctx context.Context, opts store.ActivityListOpts) (strin
 		conditions = append(conditions, "entity_id = ?")
 		args = append(args, opts.EntityID)
 	}
+	if opts.From != nil {
+		conditions = append(conditions, "created_at >= ?")
+		args = append(args, *opts.From)
+	}
+	if opts.To != nil {
+		conditions = append(conditions, "created_at < ?")
+		args = append(args, *opts.To)
+	}
 
 	if len(conditions) == 0 {
 		return "", nil
 	}
 	return "WHERE " + strings.Join(conditions, " AND "), args
+}
+
+func activityAggregateColumn(groupBy string) (string, bool) {
+	switch groupBy {
+	case "action":
+		return "action", true
+	case "actor_type":
+		return "actor_type", true
+	case "entity_type":
+		return "entity_type", true
+	case "actor_id":
+		return "actor_id", true
+	default:
+		return "", false
+	}
 }

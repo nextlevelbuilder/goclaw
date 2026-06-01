@@ -450,7 +450,7 @@ System skills (`is_system=true`) cannot be modified through any path.
 | Symlink detection | `filepath.WalkDir` + `d.Type()&os.ModeSymlink` check |
 | Path traversal | `strings.Contains(rel, "..")` rejection |
 | Content size limit | 100KB max for SKILL.md content |
-| Companion size limit | 20MB max total for companion files (scripts, assets) |
+| Companion size limit | Configurable per ZIP upload; default 20MB, clamped to 1-500MB |
 | Soft-delete | Files moved to `.trash/`, never hard-deleted |
 
 ---

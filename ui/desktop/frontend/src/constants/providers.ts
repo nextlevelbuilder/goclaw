@@ -9,6 +9,7 @@ export const PROVIDER_TYPES: ProviderTypeInfo[] = [
   { value: 'anthropic_native', label: 'Anthropic (Native)', apiBase: '', needsKey: true },
   { value: 'openai_compat', label: 'OpenAI Compatible', apiBase: '', needsKey: true },
   { value: 'gemini_native', label: 'Google Gemini', apiBase: 'https://generativelanguage.googleapis.com/v1beta/openai', needsKey: true },
+  { value: 'vertex', label: 'Google Vertex AI', apiBase: '', needsKey: false },
   { value: 'openrouter', label: 'OpenRouter', apiBase: 'https://openrouter.ai/api/v1', needsKey: true },
   { value: 'groq', label: 'Groq', apiBase: 'https://api.groq.com/openai/v1', needsKey: true },
   { value: 'deepseek', label: 'DeepSeek', apiBase: 'https://api.deepseek.com/v1', needsKey: true },

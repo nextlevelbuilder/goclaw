@@ -220,6 +220,14 @@ func processNormalMessage(
 		if mid := msg.Metadata["message_id"]; mid != "" {
 			outMeta["reply_to_message_id"] = mid
 		}
+		// Address the asker so multi-user group chats render a clear "this
+		// reply is for X" signal. Today this is Bitrix24-specific (channel
+		// renders [USER=<id>][/USER] BBCode); other channels ignore the key.
+		// Skip synthetic senders (ticker, notification, system) — those have
+		// no real user to @mention.
+		if msg.SenderID != "" && !bus.IsInternalSender(msg.SenderID) {
+			outMeta["bitrix_address_user_id"] = msg.SenderID
+		}
 	}
 
 	// Register run with channel manager for streaming/reaction event forwarding.
@@ -265,6 +273,42 @@ func processNormalMessage(
 		extraPrompt += identity
 	}
 
+	// Append Bitrix24 entity binding hint so MCP-equipped agents can resolve
+	// "this deal/task/lead" deterministically. The channel layer (bitrix24/handle.go)
+	// forwards data[PARAMS][CHAT_ENTITY_TYPE] + CHAT_ENTITY_ID into Metadata
+	// whenever the chat is bound to a Bitrix24 module entity. Plain user-created
+	// chats omit both keys → no hint added (avoids polluting unrelated chats).
+	//
+	// We deliberately keep this simple "system prompt injection" approach for now.
+	// The LLM still has to call MCP tools to fetch fresh data — we only tell it
+	// WHICH entity is in scope, not WHAT the data is. See
+	// plans/bitrix24-mcp-refactor/reports/event-payloads.md for the metadata
+	// contract and the phase plan for the optional pre-fetch upgrade.
+	if et, eid := msg.Metadata["bitrix_chat_entity_type"], msg.Metadata["bitrix_chat_entity_id"]; et != "" && eid != "" {
+		// Defense-in-depth against prompt injection from webhook-sourced metadata.
+		// Bitrix server-side normally constrains these to short alphanumeric ids
+		// (e.g. "DEAL|2064", "TASKS"), but treating them as untrusted prevents a
+		// malicious or compromised portal from steering the system prompt via
+		// crafted CHAT_ENTITY_ID values.
+		if isSafeBitrixEntityToken(et, 64) && isSafeBitrixEntityToken(eid, 128) {
+			if extraPrompt != "" {
+				extraPrompt += "\n\n"
+			}
+			extraPrompt += fmt.Sprintf(
+				"## Channel context — Bitrix24 entity binding\n"+
+					"This chat is bound to a Bitrix24 entity (type=%s, id=%s).\n"+
+					"When the user refers to \"this deal\", \"this task\", \"this lead\", or similar deictic phrases, treat them as referring to id %s.\n"+
+					"CRM ids use pipe format (e.g. \"DEAL|2064\" — split on '|' and use the numeric part with the matching MCP tool such as crm.deal.get / crm.lead.get / crm.contact.get / crm.company.get).\n"+
+					"Tasks ids are plain numbers — pass directly to tasks.task.get.\n"+
+					"Do not ask the user which deal/task this is; you already know.",
+				et, eid, eid,
+			)
+		} else {
+			slog.Warn("security.bitrix24.entity_metadata_rejected",
+				"channel", msg.Channel, "et_len", len(et), "eid_len", len(eid))
+		}
+	}
+
 	// Per-topic skill filter override (from group/topic config hierarchy).
 	var skillFilter []string
 	if ts := msg.Metadata[tools.MetaTopicSkills]; ts != "" {
@@ -289,7 +333,11 @@ func processNormalMessage(
 			if locale == "" {
 				locale = "en"
 			}
-			intent := agent.ClassifyIntent(ctx, loop.Provider(), loop.Model(), msg.Content)
+			classifyCtx := ctx
+			if uid := loop.UUID(); uid != uuid.Nil {
+				classifyCtx = store.WithAgentID(classifyCtx, uid)
+			}
+			intent := agent.ClassifyIntentWithUsageCaps(classifyCtx, deps.UsageCaps, loop.Provider(), loop.Model(), msg.Content)
 			switch intent {
 			case agent.IntentStatusQuery:
 				status := deps.Agents.GetActivity(sessionKey)
@@ -385,9 +433,13 @@ func processNormalMessage(
 		Message:           msg.Content,
 		Media:             reqMedia,
 		ForwardMedia:      fwdMedia,
-		Channel:           msg.Channel,
-		ChannelType:       resolveChannelType(deps.ChannelMgr, msg.Channel),
-		ChatTitle:         msg.Metadata[tools.MetaChatTitle],
+		Channel:            msg.Channel,
+		ChannelType:        resolveChannelType(deps.ChannelMgr, msg.Channel),
+		// Forward Bitrix24 portal domain from channel metadata so the
+		// system prompt can teach the LLM the correct entity URL host.
+		// Empty for non-bitrix24 channels — section is skipped downstream.
+		BitrixPortalDomain: msg.Metadata["bitrix_portal"],
+		ChatTitle:          msg.Metadata[tools.MetaChatTitle],
 		ChatID:            msg.ChatID,
 		WorkspaceChatID:   msg.ChatID,
 		PeerKind:          peerKind,
@@ -528,4 +580,23 @@ func processNormalMessage(
 			go autoSetFollowup(ctx, deps.TeamStore, deps.AgentStore, agentKey, channel, chatID, replyContent)
 		}
 	}(agentID, msg.Channel, msg.ChatID, sessionKey, runID, peerKind, msg.Content, outMeta, blockReply, ptd, msg.TenantID, agentLoop.UUID(), agentLoop.OtherConfig())
+}
+
+// isSafeBitrixEntityToken validates a webhook-sourced Bitrix entity token before
+// it is interpolated into the agent system prompt. Rejects empty, oversized, or
+// control-character payloads to prevent prompt-injection from a crafted portal
+// event. Allowed character set is intentionally permissive (Bitrix entity ids
+// include letters, digits, '|', '_', '-') — the goal is to block newlines and
+// formatting characters that could break out of the prompt template, not to
+// enforce a strict id grammar.
+func isSafeBitrixEntityToken(s string, maxLen int) bool {
+	if s == "" || len(s) > maxLen {
+		return false
+	}
+	for _, r := range s {
+		if r < 0x20 || r == 0x7f {
+			return false
+		}
+	}
+	return true
 }

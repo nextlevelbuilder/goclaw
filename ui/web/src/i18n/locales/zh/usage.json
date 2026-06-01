@@ -19,7 +19,52 @@
     "total": "合计",
     "channel": "渠道",
     "cost": "费用",
-    "status": "状态"
+    "status": "状态",
+    "actions": "操作"
+  },
+  "caps": {
+    "title": "用量上限",
+    "description": "按租户、Agent、Provider 和模型范围限制 AI 预算的令牌与费用。",
+    "window": "窗口",
+    "windows": {
+      "hour": "每小时",
+      "day": "每天",
+      "week": "每周",
+      "month": "每月"
+    },
+    "agent": "Agent",
+    "provider": "Provider",
+    "model": "模型",
+    "allAgents": "全部Agent",
+    "allProviders": "全部Provider",
+    "maxTokens": "最大令牌",
+    "maxCost": "最大费用 USD",
+    "create": "创建上限",
+    "edit": "编辑上限",
+    "save": "保存上限",
+    "cancel": "取消编辑",
+    "scope": "范围",
+    "tokens": "令牌",
+    "cost": "费用",
+    "empty": "暂无上限策略。",
+    "tenantScope": "租户上限",
+    "tenantScoped": "租户范围",
+    "agentScoped": "Agent范围",
+    "agentBudgetSource": "Agent预算",
+    "agentBudgetManaged": "请在 Agent 月度预算字段中清除此上限。",
+    "enabled": "已启用",
+    "disabled": "已禁用",
+    "delete": "删除上限",
+    "recentBlocks": "近期拦截",
+    "blocked": "已拦截",
+    "toast": {
+      "created": "用量上限已创建",
+      "updated": "用量上限已更新",
+      "createFailed": "无法创建用量上限",
+      "updateFailed": "无法更新用量上限",
+      "deleted": "用量上限已删除",
+      "deleteFailed": "无法删除用量上限"
+    }
   },
   "analytics": {
     "title": "用量分析",

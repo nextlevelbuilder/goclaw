@@ -36,6 +36,13 @@ func setupTestToken(t *testing.T, token string) {
 	t.Cleanup(func() { pkgGatewayToken = old })
 }
 
+func setupTestNoAuthFallback(t *testing.T, allowed bool) {
+	t.Helper()
+	old := pkgNoAuthFallbackAllowed
+	pkgNoAuthFallbackAllowed = allowed
+	t.Cleanup(func() { pkgNoAuthFallbackAllowed = old })
+}
+
 func setupTestTenantStore(t *testing.T, ts store.TenantStore) {
 	t.Helper()
 	old := pkgTenantCache
@@ -221,6 +228,7 @@ func TestResolveAuth_WrongToken(t *testing.T) {
 
 func TestResolveAuth_NoAuthConfigured(t *testing.T) {
 	setupTestCache(t, nil)
+	setupTestNoAuthFallback(t, true)
 
 	r := httptest.NewRequest("GET", "/v1/agents", nil)
 
@@ -230,6 +238,19 @@ func TestResolveAuth_NoAuthConfigured(t *testing.T) {
 	}
 	if auth.Role != permissions.RoleAdmin {
 		t.Errorf("role = %v, want admin (no token = dev/single-user mode)", auth.Role)
+	}
+}
+
+func TestResolveAuth_NoAuthConfiguredDisallowed(t *testing.T) {
+	setupTestCache(t, nil)
+	setupTestToken(t, "")
+	setupTestNoAuthFallback(t, false)
+
+	r := httptest.NewRequest("GET", "/v1/agents", nil)
+
+	auth := resolveAuth(r)
+	if auth.Authenticated {
+		t.Fatal("expected unauthenticated when no-token fallback is disabled")
 	}
 }
 

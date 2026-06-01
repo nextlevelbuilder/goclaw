@@ -185,17 +185,19 @@ func (h *AgentsHandler) adminMiddleware(next http.HandlerFunc) http.HandlerFunc 
 
 func (h *AgentsHandler) handleList(w http.ResponseWriter, r *http.Request) {
 	userID := store.UserIDFromContext(r.Context())
-	if userID == "" {
-		locale := store.LocaleFromContext(r.Context())
-		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgUserIDHeader))
-		return
-	}
 
 	var agents []store.AgentData
 	var err error
-	if h.isOwnerUser(userID) {
+	switch {
+	case userID == "" && permissions.HasMinRole(permissions.Role(store.RoleFromContext(r.Context())), permissions.RoleAdmin):
+		agents, err = h.agents.List(r.Context(), "")
+	case userID == "":
+		locale := store.LocaleFromContext(r.Context())
+		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgUserIDHeader))
+		return
+	case h.isOwnerUser(userID):
 		agents, err = h.agents.List(r.Context(), "") // owners see all agents
-	} else {
+	default:
 		agents, err = h.agents.ListAccessible(r.Context(), userID)
 	}
 	if err != nil {
@@ -284,6 +286,10 @@ func (h *AgentsHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 		req.ParseChatGPTOAuthRouting(),
 	); err != nil {
 		slog.Error("agents.create.validate_routing", "error", err)
+		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidRequest, err.Error()))
+		return
+	}
+	if err := validateAgentModelFallback(req.ModelFallback); err != nil {
 		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidRequest, err.Error()))
 		return
 	}
@@ -451,6 +457,20 @@ func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		validationAgent.ChatGPTOAuthRouting = rawRouting
+		allowed["chatgpt_oauth_routing"] = rawRouting
+	}
+	if fallback, ok := allowed["model_fallback"]; ok {
+		rawFallback, err := marshalJSONRaw(fallback)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidJSON))
+			return
+		}
+		if err := validateAgentModelFallback(rawFallback); err != nil {
+			writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidRequest, err.Error()))
+			return
+		}
+		validationAgent.ModelFallback = rawFallback
+		allowed["model_fallback"] = rawFallback
 	}
 
 	if err := validateChatGPTOAuthAgentRouting(
@@ -495,6 +515,26 @@ func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 
 	emitAudit(h.msgBus, r, "agent.updated", "agent", id.String())
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
+}
+
+func validateAgentModelFallback(raw json.RawMessage) error {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	var cfg store.ModelFallbackConfig
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return fmt.Errorf("invalid model_fallback")
+	}
+	normalized := store.NormalizeModelFallbackConfig(&cfg)
+	if normalized == nil {
+		return nil
+	}
+	for _, candidate := range normalized.Candidates {
+		if candidate.Provider == "" || candidate.Model == "" {
+			return fmt.Errorf("fallback candidates require provider and model")
+		}
+	}
+	return nil
 }
 
 // syncIdentityName updates the Name: field in the agent's IDENTITY.md (agent-level and

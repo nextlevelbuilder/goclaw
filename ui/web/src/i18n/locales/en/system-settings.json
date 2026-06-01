@@ -64,6 +64,20 @@
     "modelPlaceholder": "(default)",
     "info": "Used for vault enrichment (document summarization), consolidation (session summaries), and dreaming. Leave empty to fall back to the agent default provider."
   },
+  "skills": {
+    "title": "Skills",
+    "description": "Tenant skill package and slash command settings.",
+    "maxUploadSize": "Max upload size",
+    "maxUploadSizeHint": "Per-file ZIP limit in MB. Allowed range: 1-500.",
+    "slashEnabled": "Enable slash commands",
+    "slashEnabledHint": "Detect /skill-name and /use skill-name at the start of user prompts.",
+    "slashSuggest": "Suggest similar skills",
+    "slashSuggestHint": "Show close matches when a requested skill is not found.",
+    "slashPartial": "Allow partial matching",
+    "slashPartialHint": "Let unique prefixes like /frontend activate matching skills.",
+    "slashPrefix": "Command prefix",
+    "slashPrefixHint": "Single character used before skill commands."
+  },
   "compaction": {
     "title": "Pending Message Compaction",
     "description": "Summarize long pending message history to stay within context limits.",

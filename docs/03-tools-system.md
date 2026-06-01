@@ -246,6 +246,32 @@ User-facing parameter schemas for the most commonly configured tools.
 ```
 Available presets: `gh`, `gcloud`, `aws`, `kubectl`, `terraform`.
 
+### Credentialed CLI keyword allowlist
+
+`config.tools.commandKeywordAllowlist` lets operators allow specific product or security vocabulary inside selected credentialed CLI content arguments without disabling `deny_args`.
+
+Example:
+
+```json
+{
+  "tools": {
+    "commandKeywordAllowlist": [
+      {
+        "id": "github-content",
+        "command": "gh",
+        "subcommands": ["issue create", "issue edit", "pr create", "pr comment"],
+        "args": ["--body", "--title"],
+        "argPositions": [],
+        "keywords": ["secret", "secrets", "token", "credential"],
+        "reason": "Allow security vocabulary in GitHub issue and PR prose"
+      }
+    ]
+  }
+}
+```
+
+The rule above allows `gh issue create --body "secret rotation notes"` but still blocks command paths like `gh secret set TOKEN`. `argPositions` are 0-based after the matched subcommand. The scanner evaluates command arguments only; it does not read the contents of files passed through arguments such as `--body-file`.
+
 ---
 
 ## 6. Interception Layer
@@ -346,6 +372,13 @@ Custom tools are shell-based tools defined at runtime via the HTTP API — no re
 | `env` | no | Encrypted environment variables injected at runtime |
 | `enabled` | no | Toggle without deleting (default true) |
 
+Credentialed CLI env entries support two API/UI kinds:
+
+- `sensitive` (default): encrypted at rest, masked in normal API responses, replace-only in UI, and flattened only at credential injection time.
+- `value`: encrypted at rest but visible to authorized admins in API/UI for non-secret settings such as public URLs, domains, limits, regions, and feature flags.
+
+Legacy env JSON like `{"TOKEN":"..."}` is still accepted and treated as `sensitive`.
+
 **Execution:** Template placeholders are rendered with shell-escaped argument values, then run via `sh -c`. The same deny-pattern check as the `exec` tool applies — no reverse shells, no `curl | sh`, etc.
 
 **Scope:**
@@ -363,6 +396,35 @@ Tool output is automatically scrubbed before being returned to the LLM or the us
 **Dynamic scrubbing** — values can be registered at runtime (e.g. server IPs, deployment-specific tokens). Thread-safe; checked alongside static patterns on every tool result.
 
 The exact patterns are intentionally not published here (defense-in-depth). The scrubber is always enabled in the registry by default.
+
+### 8a. Credential adapter framework
+
+For tool binaries that need per-user typed credentials (PAT, SSH key,
+kubeconfig, `.pgpass`, etc.), the `CredentialAdapter` interface in
+`internal/tools/credential_adapter.go` transforms a stored credential into
+the argv/env/ephemeral-file shape the binary expects.
+
+- **`Name() string`** — the value stored in `secure_cli_binaries.adapter_name`.
+- **`ShouldInject(argv []string) bool`** — gate that skips local-only
+  subcommands (e.g. `git status` does not trigger injection).
+- **`Prepare(...) (*Injection, error)`** — returns the four-field
+  `Injection{ArgvPrefix, Env, Cleanup, ScrubValues}` consumed by
+  `credentialed_exec.go`.
+
+Adapters are registered in their own `init()` via `RegisterAdapter`. Lookup
+falls back to the `passthrough` no-op adapter on unknown/empty names, so
+unrelated presets (`gh`, `aws`, `gcloud`, `kubectl`, `terraform`, `gws`)
+keep their legacy env-injection path bit-for-bit.
+
+Per-injection audit: every adapter run emits one
+`slog.Warn("security.system_env_injection", …)` line with the field schema
+documented in [09-security.md § 14](./09-security.md#14-cli-credential-adapters).
+
+To author a new adapter (kubectl, docker, npm, aws, …), follow the worked
+mappings + interface-validation gate in
+[credential-adapter-playbook.md](./credential-adapter-playbook.md). User-facing
+config for the shipped `git` adapter is documented in
+[git-credential-adapter.md](./git-credential-adapter.md).
 
 ---
 
@@ -382,6 +444,8 @@ Merged settings map:
 
 Merge is per-tool-name: tenant entry for `web_search` wins wholesale over global default — no deep field merge. Tools that do not read the settings map are unaffected.
 
+`exec` reads `settings.timeout_seconds` for host command execution. The REST API validates `exec` settings as a JSON object with optional integer `timeout_seconds` in the `1..3600` range. Missing or invalid runtime values fall back to 60 seconds, while values above the maximum are clamped to 3600 seconds for defense in depth. Docker sandbox tool calls still use `sandbox_config.timeout_sec`; this setting only controls the host `exec` built-in.
+
 **Secret vs non-secret split:**
 - Non-secret config (provider priorities, limits, domain policies) → `builtin_tool_tenant_configs.settings`
 - Secrets (API keys, tokens) → `config_secrets` table (AES-256-GCM encrypted, tenant-scoped)
@@ -390,11 +454,11 @@ Never put credentials in the settings JSON blob — backend does not validate th
 
 **Cache invalidation:** settings changes propagate via pub/sub (tenant-scoped). Next agent turn re-resolves automatically.
 
-**Tenant admin workflow:** Settings → Builtin Tools → gear icon → JSON editor → Save. Changes take effect on the next agent turn. "Reset to default" reverts to platform defaults.
+**Tenant admin workflow:** Settings → Builtin Tools → gear icon → typed form when available, otherwise JSON editor → Save. Changes take effect on the next agent turn. "Reset to default" reverts to platform defaults.
 
 **Master-scope guard:** Writes to global `builtin_tools` table require master tenant scope. Tenant admins use the `/tenant-config` endpoint. Same guard applies on the WS config methods.
 
-Current adopters: `web_search`, `web_fetch`, `tts`, `create_image`, `read_image`, `create_audio`, `read_audio`, `knowledge_graph_search`.
+Current adopters: `exec`, `web_search`, `web_fetch`, `tts`, `create_image`, `read_image`, `create_audio`, `read_audio`, `knowledge_graph_search`.
 
 ### Shell Deny-Groups (Runtime Config)
 
@@ -406,7 +470,7 @@ Current adopters: `web_search`, `web_fetch`, `tts`, `create_image`, `read_image`
 - Per-key: agent value takes precedence over global value
 - Multi-tenant invariant: each tenant's config is isolated
 
-**Live reload:** Changes to `config.tools.shellDenyGroups` propagate via `bus.TopicConfigChanged` pub/sub. Next agent turn automatically applies new toggles.
+**Live reload:** Changes to `config.tools.shellDenyGroups` and `config.tools.commandKeywordAllowlist` propagate via `bus.TopicConfigChanged` pub/sub. Next agent turn automatically applies new toggles.
 
 **Deny-group classes** (from `internal/tools/shell_deny_groups.go` — all denied by default):
 

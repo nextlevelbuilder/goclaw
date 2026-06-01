@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -134,7 +135,7 @@ func TestShouldShareSessions_DisabledByDefault(t *testing.T) {
 
 func TestShouldShareSessions_IndependentOfMemory(t *testing.T) {
 	l := &Loop{workspaceSharing: &store.WorkspaceSharingConfig{
-		ShareMemory:    true,
+		ShareMemory:   true,
 		ShareSessions: false,
 	}}
 	if l.shouldShareSessions() {
@@ -181,9 +182,10 @@ func TestProviderName_WithProvider(t *testing.T) {
 // ─── expandWorkspace ──────────────────────────────────────────────────────
 
 func TestExpandWorkspace_AbsolutePathUnchanged(t *testing.T) {
-	got := expandWorkspace("/absolute/path")
-	if got != "/absolute/path" {
-		t.Errorf("expandWorkspace = %q, want /absolute/path", got)
+	abs := filepath.Join(t.TempDir(), "absolute", "path")
+	got := expandWorkspace(abs)
+	if got != filepath.Clean(abs) {
+		t.Errorf("expandWorkspace = %q, want %q", got, filepath.Clean(abs))
 	}
 }
 
@@ -192,14 +194,14 @@ func TestExpandWorkspace_HomeExpanded(t *testing.T) {
 	if strings.HasPrefix(got, "~") {
 		t.Errorf("tilde not expanded: %q", got)
 	}
-	if !strings.HasPrefix(got, "/") {
+	if !filepath.IsAbs(got) {
 		t.Errorf("expected absolute path after ~ expansion, got %q", got)
 	}
 }
 
 func TestExpandWorkspace_RelativePathBecomesAbsolute(t *testing.T) {
 	got := expandWorkspace("relative/path")
-	if !strings.HasPrefix(got, "/") {
+	if !filepath.IsAbs(got) {
 		t.Errorf("relative path should become absolute, got %q", got)
 	}
 }

@@ -2,6 +2,7 @@ package handlers_test
 
 import (
 	"context"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -60,7 +61,11 @@ func TestCommand_ExitOne_ReturnsError(t *testing.T) {
 func TestCommand_JSONContinueFalse_ReturnsBlock(t *testing.T) {
 	h := &handlers.CommandHandler{Edition: edition.Lite}
 	// printf produces {"continue":false} on stdout then exits 0.
-	cfg := makeCmdCfg(`printf '{"continue":false}'`, hooks.ScopeAgent)
+	command := `printf '{"continue":false}'`
+	if runtime.GOOS == "windows" {
+		command = `Write-Output '{"continue":false}'`
+	}
+	cfg := makeCmdCfg(command, hooks.ScopeAgent)
 	dec, err := h.Execute(context.Background(), cfg, hooks.Event{HookEvent: hooks.EventPreToolUse})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -137,7 +142,11 @@ func TestCommand_CtxCancel_IsKilled(t *testing.T) {
 	// "exec sleep 30" replaces the shell process with sleep directly (no
 	// grandchild), so exec.CommandContext's kill reaches the process that
 	// holds the pipe — Output() returns promptly after ctx deadline fires.
-	cfg := makeCmdCfg("exec sleep 30", hooks.ScopeAgent)
+	command := "exec sleep 30"
+	if runtime.GOOS == "windows" {
+		command = "Start-Sleep -Seconds 30"
+	}
+	cfg := makeCmdCfg(command, hooks.ScopeAgent)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()

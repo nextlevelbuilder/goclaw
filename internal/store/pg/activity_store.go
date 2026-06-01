@@ -75,6 +75,46 @@ func (s *PGActivityStore) Count(ctx context.Context, opts store.ActivityListOpts
 	return count, err
 }
 
+func (s *PGActivityStore) Aggregate(ctx context.Context, opts store.ActivityAggregateOpts) ([]store.ActivityAggregateBucket, int, error) {
+	column, ok := activityAggregateColumn(opts.GroupBy)
+	if !ok {
+		return nil, 0, fmt.Errorf("invalid group_by")
+	}
+	limit := opts.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	where, args := buildActivityWhere(ctx, opts.ActivityListOpts)
+	total, err := s.Count(ctx, opts.ActivityListOpts)
+	if err != nil {
+		return nil, 0, err
+	}
+	args = append(args, limit)
+	query := fmt.Sprintf(
+		`SELECT COALESCE(%s, ''), COUNT(*), MAX(created_at)
+		 FROM activity_logs %s
+		 GROUP BY %s
+		 ORDER BY COUNT(*) DESC, MAX(created_at) DESC
+		 LIMIT $%d`,
+		column, where, column, len(args),
+	)
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var buckets []store.ActivityAggregateBucket
+	for rows.Next() {
+		var b store.ActivityAggregateBucket
+		if err := rows.Scan(&b.Key, &b.Count, &b.LastSeen); err != nil {
+			return nil, 0, err
+		}
+		buckets = append(buckets, b)
+	}
+	return buckets, total, rows.Err()
+}
+
 func buildActivityWhere(ctx context.Context, opts store.ActivityListOpts) (string, []any) {
 	var conditions []string
 	var args []any
@@ -114,9 +154,34 @@ func buildActivityWhere(ctx context.Context, opts store.ActivityListOpts) (strin
 		args = append(args, opts.EntityID)
 		idx++
 	}
+	if opts.From != nil {
+		conditions = append(conditions, fmt.Sprintf("created_at >= $%d", idx))
+		args = append(args, *opts.From)
+		idx++
+	}
+	if opts.To != nil {
+		conditions = append(conditions, fmt.Sprintf("created_at < $%d", idx))
+		args = append(args, *opts.To)
+		idx++
+	}
 
 	if len(conditions) == 0 {
 		return "", nil
 	}
 	return "WHERE " + strings.Join(conditions, " AND "), args
+}
+
+func activityAggregateColumn(groupBy string) (string, bool) {
+	switch groupBy {
+	case "action":
+		return "action", true
+	case "actor_type":
+		return "actor_type", true
+	case "entity_type":
+		return "entity_type", true
+	case "actor_id":
+		return "actor_id", true
+	default:
+		return "", false
+	}
 }

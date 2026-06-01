@@ -21,6 +21,7 @@ type OpenAIProvider struct {
 	retryConfig  RetryConfig
 	middlewares  RequestMiddleware // composed middleware chain (nil = no-op)
 	registry     ModelRegistry    // model resolution registry (nil = skip)
+	noAuthHeader bool             // when true, doRequest() skips setting Authorization (e.g. Vertex OAuth transport injects its own)
 }
 
 func NewOpenAIProvider(name, apiKey, apiBase, defaultModel string) *OpenAIProvider {
@@ -77,6 +78,21 @@ func (p *OpenAIProvider) WithMiddlewares(mws ...RequestMiddleware) *OpenAIProvid
 // WithProviderType sets the DB provider_type for correct API endpoint routing in media tools.
 func (p *OpenAIProvider) WithProviderType(pt string) *OpenAIProvider {
 	p.providerType = pt
+	return p
+}
+
+// WithHTTPClient overrides the default HTTP client. Used by Vertex to inject an oauth2.Transport.
+func (p *OpenAIProvider) WithHTTPClient(c *http.Client) *OpenAIProvider {
+	if c != nil {
+		p.client = c
+	}
+	return p
+}
+
+// WithoutAuthHeader disables the Authorization header in doRequest(). Used by Vertex where
+// the oauth2.Transport injects Authorization itself.
+func (p *OpenAIProvider) WithoutAuthHeader() *OpenAIProvider {
+	p.noAuthHeader = true
 	return p
 }
 

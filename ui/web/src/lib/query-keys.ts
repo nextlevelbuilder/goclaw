@@ -5,6 +5,8 @@ export const queryKeys = {
   providers: {
     all: ["providers"] as const,
     models: (providerId: string) => ["providers", providerId, "models"] as const,
+    pricing: (providerId: string) => ["providers", providerId, "pricing"] as const,
+    pricingCatalog: (model: string) => ["providers", "pricing-catalog", model] as const,
     chatgptOAuthStatuses: (providerKeys: string[]) => ["providers", "chatgpt-oauth-statuses", ...providerKeys] as const,
     chatgptOAuthQuotas: (providerNames: string[]) => ["providers", "chatgpt-oauth-quotas", ...providerNames] as const,
     codexPoolActivity: (providerId: string, limit: number) => ["providers", providerId, "codex-pool-activity", limit] as const,
@@ -69,6 +71,11 @@ export const queryKeys = {
   usage: {
     all: ["usage"] as const,
     records: (params: Record<string, unknown>) => ["usage", "records", params] as const,
+    caps: {
+      policies: ["usage", "caps", "policies"] as const,
+      utilization: ["usage", "caps", "utilization"] as const,
+      events: ["usage", "caps", "events"] as const,
+    },
   },
   teams: {
     all: ["teams"] as const,
@@ -91,6 +98,7 @@ export const queryKeys = {
   packages: {
     all: ["packages"] as const,
     runtimes: ["packages", "runtimes"] as const,
+    updates: ["packages", "updates"] as const,
   },
   tenantUsers: {
     all: ["tenantUsers"] as const,

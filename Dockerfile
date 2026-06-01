@@ -92,7 +92,7 @@ RUN set -eux; \
         apk add --no-cache python3 py3-pip nodejs npm pandoc github-cli poppler-utils bash; \
         pip3 install --no-cache-dir --break-system-packages \
             -r /tmp/requirements-base.txt -r /tmp/requirements-skills.txt; \
-        npm install -g --cache /tmp/npm-cache docx@^9.6.1 pptxgenjs@^4.0.1; \
+        npm install -g --cache /tmp/npm-cache docx@^9.6.1 pptxgenjs@^4.0.1 @googleworkspace/cli@0.22.5; \
         rm -rf /tmp/npm-cache /root/.cache /var/cache/apk/*; \
     else \
         if [ "$ENABLE_PYTHON" = "true" ]; then \

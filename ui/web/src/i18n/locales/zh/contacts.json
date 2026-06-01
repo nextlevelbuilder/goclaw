@@ -22,7 +22,8 @@
     "discord": "Discord — 显示名称和用户名自动获取。",
     "zalo": "Zalo — 显示名称自动获取。",
     "slack": "Slack — 通过 Slack API 解析显示名称（Bot 需在工作区内）。",
-    "feishu": "飞书/Lark — 需要 contact:user.base:readonly 权限。未授权时名称将为空。"
+    "feishu": "飞书/Lark — 需要 contact:user.base:readonly 权限。未授权时名称将为空。",
+    "bitrix24": "Bitrix24 — 需要 `user` 权限范围，每个新发送者会触发一次 `user.get` 调用。首条消息的名称可能短暂为空。"
   },
   "selectedCount": "已选择 {{count}} 个",
   "merge": {
