@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
@@ -30,6 +32,41 @@ func (l *Loop) resolveToolCallName(name string) string {
 		return tools.StripToolPrefix(l.agentToolPolicy.ToolCallPrefix, name)
 	}
 	return name
+}
+
+// normalizeToolCall rewrites malformed MCP pseudo-calls that some models emit
+// as `exec` with `{action:"mcp_xxx", code|command:"..."}`.
+// We recover the intended MCP tool name from `action` and map payload to MCP
+// schema (`code`) before registry lookup.
+func (l *Loop) normalizeToolCall(tc providers.ToolCall) providers.ToolCall {
+	if tc.Name != "exec" || len(tc.Arguments) == 0 {
+		return tc
+	}
+	action, _ := tc.Arguments["action"].(string)
+	if !strings.HasPrefix(action, "mcp_") {
+		return tc
+	}
+
+	normalized := tc
+	normalized.Name = action
+	args := map[string]any{}
+	if code, ok := tc.Arguments["code"]; ok {
+		args["code"] = code
+	} else if command, ok := tc.Arguments["command"]; ok {
+		// Legacy prompt snippets sometimes place JS code in `command`.
+		args["code"] = command
+	}
+	if len(args) == 0 {
+		for k, v := range tc.Arguments {
+			if k != "action" {
+				args[k] = v
+			}
+		}
+	}
+	normalized.Arguments = args
+	slog.Warn("tool call normalized from exec to mcp tool",
+		"agent", l.id, "from", tc.Name, "to", normalized.Name)
+	return normalized
 }
 
 func hasParseErrors(calls []providers.ToolCall) bool {

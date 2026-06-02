@@ -598,6 +598,15 @@ func (e *poolEntry) Connected() *atomic.Bool { return &e.state.connected }
 // MCPTools returns the discovered MCP tool definitions for this pool entry.
 func (e *poolEntry) MCPTools() []mcpgo.Tool { return e.tools }
 
+// RequestForceReconnect triggers an out-of-band Initialize when a BridgeTool
+// detects the server-side session was reset (see isSessionUninitializedErr).
+// Returns a closure to keep BridgeTool decoupled from *serverState.
+// Concurrent invocations dedupe via the underlying CAS guard.
+func (e *poolEntry) RequestForceReconnect() func(reason string) {
+	ss := e.state
+	return func(reason string) { ss.requestForceReconnect(reason) }
+}
+
 // poolHealthLoop is a standalone health loop for pool-managed connections.
 // After consecutive ping failures, it attempts a full reconnect by creating
 // a fresh client, mirroring the Manager.tryReconnect slow path.
@@ -610,6 +619,14 @@ func poolHealthLoop(ctx context.Context, ss *serverState) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			// Skip ping while a force-reconnect is in flight (see
+			// requestForceReconnect). Pinging here races the recovery
+			// goroutine and would clobber connected=true on servers that
+			// answer `ping` even in the post-reset "initializing" state.
+			if ss.reconnPending.Load() {
+				slog.Debug("mcp.pool.health_skip", "server", ss.name, "reason", "reconnect_pending")
+				continue
+			}
 			if err := ss.client.Ping(ctx); err != nil {
 				if isMethodNotFound(err) {
 					ss.connected.Store(true)

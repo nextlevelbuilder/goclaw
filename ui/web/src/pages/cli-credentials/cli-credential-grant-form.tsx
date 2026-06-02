@@ -8,6 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { CliCredentialGrantEnvSection } from "./cli-credential-grant-env-section";
+import type { GrantEnvState } from "./cli-credential-grant-env-section";
 import type { AgentData } from "@/types/agent";
 import type { SecureCLIBinary } from "./hooks/use-cli-credentials";
 
@@ -26,6 +28,17 @@ interface Props {
   setTips: (v: string) => void;
   enabled: boolean;
   setEnabled: (v: boolean) => void;
+  /** Per-grant env override state */
+  envState: GrantEnvState;
+  setEnvState: (next: GrantEnvState) => void;
+  /** Grant ID when editing (null when creating) */
+  editingGrantId: string | null;
+  /** Whether the existing grant already has encrypted env */
+  initialEnvSet: boolean;
+  /** Key names of existing grant env (for masked display) */
+  initialEnvKeys: string[];
+  /** Keys rejected by last PUT (shown as errors) */
+  rejectedKeys?: string[];
   isEditing: boolean;
   saving: boolean;
   onSubmit: () => void;
@@ -37,7 +50,10 @@ export function CliCredentialGrantForm({
   binary, agents, agentId, setAgentId,
   denyArgs, setDenyArgs, denyVerbose, setDenyVerbose,
   timeout, setTimeout, tips, setTips,
-  enabled, setEnabled, isEditing, saving,
+  enabled, setEnabled,
+  envState, setEnvState,
+  editingGrantId, initialEnvSet, initialEnvKeys, rejectedKeys,
+  isEditing, saving,
   onSubmit, onCancel,
 }: Props) {
   const { t } = useTranslation("cli-credentials");
@@ -118,6 +134,17 @@ export function CliCredentialGrantForm({
           <Switch id="grant-enabled" checked={enabled} onCheckedChange={setEnabled} />
           <Label htmlFor="grant-enabled">{tc("enabled")}</Label>
         </div>
+
+        {/* Per-grant env override — Phase 7 */}
+        <CliCredentialGrantEnvSection
+          binaryId={binary.id}
+          grantId={editingGrantId}
+          initialEnvSet={initialEnvSet}
+          initialEnvKeys={initialEnvKeys}
+          state={envState}
+          onChange={setEnvState}
+          rejectedKeys={rejectedKeys}
+        />
       </div>
 
       <Button size="sm" onClick={onSubmit} disabled={saving || !agentId} className="gap-1">

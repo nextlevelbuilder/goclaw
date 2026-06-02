@@ -77,6 +77,12 @@ func init() {
 		MsgCannotCancel:          "agent không trong trạng thái đang triệu hồi",
 		MsgInvalidPath:           "đường dẫn không hợp lệ",
 
+		// Browser cookies
+		MsgBrowserCookieTooMany:            "quá nhiều cookie trình duyệt trong một yêu cầu đồng bộ",
+		MsgInvalidCookieURL:                "URL cookie không hợp lệ",
+		MsgBrowserCookieValueTooLarge:      "giá trị cookie quá lớn",
+		MsgBrowserCookieEncryptionRequired: "chưa cấu hình mã hoá cookie trình duyệt",
+
 		// Tenant backup / restore
 		MsgRestoreNewModeRejectsTenantID: "mode=new tạo tenant mới; dùng tenant_slug (không phải tenant_id) làm slug cho tenant mới",
 
@@ -86,6 +92,21 @@ func init() {
 
 		// Provider
 		MsgProviderReqFailed: "%s: yêu cầu thất bại: %s",
+
+		// Usage caps / pricing
+		MsgUsageCapsListPoliciesFailed:          "không thể liệt kê chính sách usage cap",
+		MsgUsageCapPolicyValidationFailed:       "xác thực chính sách usage cap thất bại",
+		MsgUsageCapPolicyManaged:                "không thể chỉnh sửa chính sách usage cap do hệ thống quản lý",
+		MsgUsageCapsDeletePolicyFailed:          "không thể xóa chính sách usage cap",
+		MsgUsageCapsUtilizationFailed:           "không thể tải mức sử dụng usage cap",
+		MsgUsageCapsEventsFailed:                "không thể tải sự kiện usage cap",
+		MsgUsagePricingSyncOpenRouterFailed:     "không thể đồng bộ giá OpenRouter: %s",
+		MsgUsagePricingStoreCatalogFailed:       "không thể lưu catalog giá",
+		MsgUsagePricingListFailed:               "không thể liệt kê giá model",
+		MsgUsagePricingProviderModelRequired:    "provider_id và model_id là bắt buộc",
+		MsgUsagePricingOverrideValidationFailed: "xác thực override giá thất bại",
+		MsgUsagePricingListOverridesFailed:      "không thể liệt kê override giá",
+		MsgUsagePricingDeleteOverrideFailed:     "không thể xóa override giá",
 
 		// Unknown method
 		MsgUnknownMethod: "phương thức không xác định: %s",
@@ -113,6 +134,7 @@ func init() {
 		// Skills
 		MsgSkillsUpdateNotSupported: "skills.update không được hỗ trợ với skill dựa trên tệp",
 		MsgCannotResolveSkillID:     "không thể xác định ID skill dựa trên tệp",
+		MsgInvalidVisibility:        "visibility không hợp lệ %q: phải là private hoặc public",
 
 		// Logs
 		MsgInvalidLogAction: "action phải là 'start' hoặc 'stop'",
@@ -199,10 +221,10 @@ func init() {
 		MsgTenantScopeRequired: "cần xác định tenant để thực hiện thao tác này",
 
 		// TTS / Giọng đọc
-		MsgTtsUnknownModel:       "model tts không hỗ trợ: %s",
-		MsgVoicesListFailed:      "không tải được danh sách giọng đọc: %s",
-		MsgTtsGeminiInvalidVoice: "giọng đọc Gemini không hợp lệ: %s",
-		MsgTtsGeminiSpeakerLimit: "Gemini TTS hỗ trợ tối đa 2 người nói",
+		MsgTtsUnknownModel:        "model tts không hỗ trợ: %s",
+		MsgVoicesListFailed:       "không tải được danh sách giọng đọc: %s",
+		MsgTtsGeminiInvalidVoice:  "giọng đọc Gemini không hợp lệ: %s",
+		MsgTtsGeminiSpeakerLimit:  "Gemini TTS hỗ trợ tối đa 2 người nói",
 		MsgTtsGeminiInvalidModel:  "mô hình Gemini TTS không hợp lệ: %s",
 		MsgTtsGeminiTextOnly:      "Gemini từ chối tạo âm thanh. Vui lòng thử văn bản đơn giản hơn, không dịch hay bình luận.",
 		MsgTtsParamOutOfRange:     "tham số TTS %q có giá trị %v nằm ngoài phạm vi [%v, %v]",
@@ -215,7 +237,41 @@ func init() {
 		MsgSTTWhatsappPrivacyWarning: "Bật STT cho WhatsApp sẽ phá vỡ mã hóa đầu cuối cho tin nhắn thoại gửi đến agent này.",
 		MsgVoiceMessageFallback:      "[Tin nhắn thoại]",
 
+		// Webhooks
+		MsgWebhookAuthFailed:              "xác thực webhook thất bại",
+		MsgWebhookHMACInvalid:             "chữ ký HMAC không hợp lệ",
+		MsgWebhookHMACTimestampSkew:       "thời gian yêu cầu nằm ngoài cửa sổ chấp nhận",
+		MsgWebhookBearerRequiredHMAC:      "webhook này yêu cầu xác thực HMAC",
+		MsgWebhookRevoked:                 "webhook đã bị thu hồi",
+		MsgWebhookKindMismatch:            "loại yêu cầu không khớp cấu hình webhook",
+		MsgWebhookRateLimited:             "vượt quá giới hạn tốc độ webhook",
+		MsgWebhookBodyTooLarge:            "nội dung yêu cầu vượt quá giới hạn kích thước",
+		MsgWebhookIdempotencyConflict:     "xung đột idempotency key: nội dung yêu cầu không khớp",
+		MsgWebhookTenantMismatch:          "tenant của webhook không khớp",
+		MsgWebhookAgentNotFound:           "không tìm thấy agent webhook",
+		MsgWebhookChannelNotFound:         "không tìm thấy kênh webhook",
+		MsgWebhookMediaSSRFBlocked:        "URL media bị chặn bởi chính sách SSRF",
+		MsgWebhookMediaTooLarge:           "tệp media vượt quá giới hạn kích thước",
+		MsgWebhookMediaMIMEDenied:         "loại MIME của media không được phép",
+		MsgWebhookCallbackURLInvalid:      "URL callback không hợp lệ hoặc bị chặn",
+		MsgWebhookLLMTimeout:              "LLM xử lý hết thời gian chờ",
+		MsgWebhookLaneSaturated:           "làn xử lý webhook đã đầy",
+		MsgWebhookLocalhostOnlyViolation:  "webhook này chỉ cho phép gọi từ localhost",
+		MsgWebhookMediaChannelUnsupported: "kênh không hỗ trợ tệp đính kèm media",
+		MsgWebhookIPDenied:                "địa chỉ IP không nằm trong danh sách cho phép",
+		MsgWebhookEncryptionUnavailable:   "khóa mã hóa webhook chưa được cấu hình; hãy đặt GOCLAW_ENCRYPTION_KEY để kích hoạt webhook",
+
 		// Hooks
+		// Workstation
+		MsgWorkstationNotFound:     "không tìm thấy máy trạm: %s",
+		MsgWorkstationKeyExists:    "khóa máy trạm đã được sử dụng: %s",
+		MsgInvalidBackend:          "loại backend không hợp lệ: %s (phải là ssh|docker)",
+		MsgWorkstationInactive:     "máy trạm không hoạt động: %s",
+		MsgInvalidMetadataShape:    "metadata không hợp lệ cho backend %s: %s",
+		MsgWorkstationRequired:     "agent chưa được gắn máy trạm; hãy truyền workstation_id",
+		MsgWorkstationAccessDenied: "agent %s không được phép truy cập máy trạm %s",
+		MsgBackendNotReady:         "backend máy trạm chưa sẵn sàng: %s",
+
 		MsgHookInvalidMatcher:          "biểu thức regex matcher không hợp lệ: %s",
 		MsgHookCommandDisabledStandard: "hook loại command chỉ khả dụng trên phiên bản Lite",
 		MsgHookPromptRequiresMatcher:   "hook prompt bắt buộc có matcher hoặc if_expr (chống chi phí vượt kiểm soát)",
@@ -224,7 +280,70 @@ func init() {
 		MsgHookPerTurnCapReached:       "đã đạt giới hạn số lần gọi hook trong một lượt",
 		MsgHookBuiltinReadOnly:         "hook dựng sẵn chỉ cho phép bật/tắt, không thể chỉnh sửa",
 
+		// Workstation permissions (Phase 6)
+		MsgWorkstationCmdDenied:    "lệnh bị từ chối bởi chính sách workstation: %s",
+		MsgWorkstationEnvDenied:    "biến môi trường bị từ chối bởi chính sách: %s",
+		MsgWorkstationInputInvalid: "lệnh chứa ký tự không hợp lệ: %s",
+		MsgWorkstationRateLimit:    "đã vượt quá giới hạn tốc độ workstation",
+		MsgWorkstationPermNotFound: "không tìm thấy mục quyền: %s",
+		// Workstation activity (Phase 7)
+		MsgWorkstationActivityTitle: "Hoạt động gần đây",
+		MsgWorkstationActionExec:    "Thực thi",
+		MsgWorkstationActionDeny:    "Từ chối",
+
+		// Package updates (Phase 4+5)
+		MsgPackageNotInstalled:  "Gói %s chưa được cài đặt",
+		MsgPackageUpdateLocked:  "Gói %s đang được cập nhật bởi một yêu cầu khác",
+		MsgReleaseNotFound:      "Không tìm thấy phiên bản %s cho %s",
+		MsgAssetNotFound:        "Không có tệp tương thích cho %s/%s",
+		MsgChecksumMismatch:     "Checksum không khớp cho %s",
+		MsgUpdateSwapFailed:     "Không cài được %s; đã khôi phục phiên bản cũ",
+		MsgUpdateManifestDesync: "Binary đã cập nhật nhưng lưu manifest thất bại — cần khôi phục thủ công cho %s",
+		MsgUpdateCacheStale:     "Cache cập nhật đã cũ; hãy refresh trước khi áp dụng",
+
+		// Grant env validation
+		MsgGrantEnvDeniedKeys:   "các khóa env không được phép: %s",
+		MsgGrantEnvValueInvalid: "giá trị env không hợp lệ: %s",
+		MsgGrantEnvTooManyKeys:  "quá nhiều khóa env: tối đa 50",
+		MsgGrantEnvRevealLimit:  "đã vượt giới hạn yêu cầu xem env — vui lòng thử lại sau",
+
+		// Git credential adapter
+		MsgGitCredHostMismatch:         "thông tin xác thực git đã lưu dành cho %s nhưng lệnh đang nhắm tới %s",
+		MsgGitCredNoMatch:              "không có thông tin xác thực git cho host %s",
+		MsgGitCredUnsupportedType:      "loại thông tin xác thực git %q không được hỗ trợ",
+		MsgGitCredTokenInvalid:         "token git đã lưu không hợp lệ hoặc rỗng",
+		MsgGitCredTokenControlChar:     "token git đã lưu chứa ký tự điều khiển bị cấm",
+		MsgGitCredHostUserinfoRejected:     "URL git chứa userinfo nhúng bị từ chối vì gây nhập nhằng",
+		MsgGitCredSSHPassphraseUnsupported: "khóa SSH có passphrase chưa được hỗ trợ; chạy `ssh-keygen -p` để gỡ passphrase trước khi lưu",
+		MsgGitCredSSHKeyInvalid:            "khóa riêng SSH không hợp lệ: %s",
+		MsgGitCredHostScopeRequired:        "host_scope là bắt buộc cho credential_type %s",
+		MsgGitCredHostScopeInvalid:         "host_scope %q không phải là tên máy chủ hợp lệ",
+		MsgGitCredBlobMissingField:         "blob credential thiếu trường bắt buộc %q",
+		MsgGitCredUnsupportedCredType:      "credential_type %q không được hỗ trợ",
+
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 Đã forward sang %s theo yêu cầu: %q",
+
+		// Package update source labels
+		MsgPackagesUpdatesSourceGithub: "GitHub",
+		MsgPackagesUpdatesSourcePip:    "pip",
+		MsgPackagesUpdatesSourceNpm:    "npm",
+		MsgPackagesUpdatesSourceApk:    "apk",
+
+		// Package update availability messages
+		MsgPackagesUpdatesUnavailablePip: "pip chưa cài trên hệ thống",
+		MsgPackagesUpdatesUnavailableNpm: "npm chưa cài trên hệ thống",
+		MsgPackagesUpdatesUnavailableApk: "apk không khả dụng trên hệ thống này",
+
+		// Package update failure reasons
+		MsgPackagesUpdatesReasonDependencyConflict: "Xung đột phụ thuộc",
+		MsgPackagesUpdatesReasonPermission:         "Bị từ chối quyền",
+		MsgPackagesUpdatesReasonNetwork:            "Lỗi mạng",
+		MsgPackagesUpdatesReasonNotFound:           "Không tìm thấy gói",
+		MsgPackagesUpdatesReasonTargetMissing:      "Phiên bản không tồn tại",
+		MsgPackagesUpdatesReasonExternallyManaged:  "Môi trường được quản lý bên ngoài",
+		MsgPackagesUpdatesReasonLocked:             "Cơ sở dữ liệu gói đang bị khóa",
+		MsgPackagesUpdatesReasonDiskFull:           "Đĩa đã đầy",
+		MsgPackagesUpdatesReasonHelperUnavailable:  "Dịch vụ đặc quyền không khả dụng",
 	})
 }

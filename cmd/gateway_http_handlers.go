@@ -2,14 +2,16 @@ package cmd
 
 import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
+	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 )
 
 // wireHTTP creates HTTP handlers (agents + skills + traces + MCP + channel instances + providers + builtin tools + pending messages).
-func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir string, msgBus *bus.MessageBus, toolsReg *tools.Registry, providerReg *providers.Registry, modelReg providers.ModelRegistry, isOwner func(string) bool, gatewayAddr string, mcpToolLister httpapi.MCPToolLister) (*httpapi.AgentsHandler, *httpapi.SkillsHandler, *httpapi.TracesHandler, *httpapi.MCPHandler, *httpapi.ChannelInstancesHandler, *httpapi.ProvidersHandler, *httpapi.BuiltinToolsHandler, *httpapi.PendingMessagesHandler, *httpapi.TeamEventsHandler, *httpapi.SecureCLIHandler, *httpapi.SecureCLIGrantHandler, *httpapi.MCPUserCredentialsHandler) {
+func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir string, msgBus *bus.MessageBus, toolsReg *tools.Registry, providerReg *providers.Registry, modelReg providers.ModelRegistry, isOwner func(string) bool, gatewayAddr string, mcpToolLister httpapi.MCPToolLister, usageCapSvc *usagecaps.Service, skillUploadConfig config.SkillsConfig) (*httpapi.AgentsHandler, *httpapi.SkillsHandler, *httpapi.TracesHandler, *httpapi.MCPHandler, *httpapi.ChannelInstancesHandler, *httpapi.ProvidersHandler, *httpapi.BuiltinToolsHandler, *httpapi.PendingMessagesHandler, *httpapi.TeamEventsHandler, *httpapi.SecureCLIHandler, *httpapi.SecureCLIGrantHandler, *httpapi.MCPUserCredentialsHandler) {
 	var agentsH *httpapi.AgentsHandler
 	var skillsH *httpapi.SkillsHandler
 	var tracesH *httpapi.TracesHandler
@@ -24,7 +26,7 @@ func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir 
 	if stores != nil && stores.Agents != nil {
 		var summoner *httpapi.AgentSummoner
 		if providerReg != nil {
-			summoner = httpapi.NewAgentSummoner(stores.Agents, providerReg, msgBus)
+			summoner = httpapi.NewAgentSummoner(stores.Agents, providerReg, msgBus, usageCapSvc)
 		}
 		agentsH = httpapi.NewAgentsHandler(stores.Agents, stores.Providers, providerReg, stores.DB, stores.Tracing, defaultWorkspace, msgBus, summoner, isOwner)
 		agentsH.SetImportStores(stores.Memory, stores.KnowledgeGraph)
@@ -37,6 +39,10 @@ func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir 
 			if len(dirs) > 0 {
 				skillsH = httpapi.NewSkillsHandler(manageStore, dirs[0], dataDir, bundledSkillsDir, msgBus, stores.SkillTenantCfgs, stores.Tenants)
 				skillsH.SetDB(stores.DB)
+				skillsH.SetUploadLimitConfig(skillUploadConfig)
+				if stores.SystemConfigs != nil {
+					skillsH.SetSystemConfigStore(stores.SystemConfigs)
+				}
 			}
 		}
 	}
@@ -61,6 +67,7 @@ func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir 
 	if stores != nil && stores.Providers != nil {
 		providersH = httpapi.NewProvidersHandler(stores.Providers, stores.ConfigSecrets, providerReg, gatewayAddr)
 		providersH.SetMessageBus(msgBus)
+		providersH.SetUsageCapService(usageCapSvc)
 		if modelReg != nil {
 			providersH.SetModelRegistry(modelReg)
 		}
@@ -90,13 +97,14 @@ func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir 
 
 	if stores != nil && stores.PendingMessages != nil {
 		pendingMessagesH = httpapi.NewPendingMessagesHandler(stores.PendingMessages, stores.Agents, providerReg)
+		pendingMessagesH.SetUsageCapService(usageCapSvc)
 	}
 
 	if stores != nil && stores.SecureCLI != nil {
 		secureCLIH = httpapi.NewSecureCLIHandler(stores.SecureCLI, msgBus)
 	}
 	if stores != nil && stores.SecureCLIGrants != nil {
-		secureCLIGrantH = httpapi.NewSecureCLIGrantHandler(stores.SecureCLIGrants, msgBus)
+		secureCLIGrantH = httpapi.NewSecureCLIGrantHandler(stores.SecureCLIGrants, stores.Tenants, msgBus)
 	}
 
 	return agentsH, skillsH, tracesH, mcpH, channelInstancesH, providersH, builtinToolsH, pendingMessagesH, teamEventsH, secureCLIH, secureCLIGrantH, mcpUserCredsH

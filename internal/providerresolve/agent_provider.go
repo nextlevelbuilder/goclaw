@@ -48,3 +48,43 @@ func ResolveConfiguredProvider(registry *providers.Registry, agent *store.AgentD
 	}
 	return nil, baseErr
 }
+
+// ResolveAgentProvider resolves the agent runtime provider, including generic
+// per-agent model fallback when configured.
+func ResolveAgentProvider(registry *providers.Registry, agent *store.AgentData) (providers.Provider, error) {
+	baseProvider, err := ResolveConfiguredProvider(registry, agent)
+	if err != nil {
+		return nil, err
+	}
+	if registry == nil || agent == nil {
+		return baseProvider, nil
+	}
+	fallbackCfg := agent.ParseModelFallback()
+	if fallbackCfg == nil {
+		return baseProvider, nil
+	}
+	candidates := make([]providers.FallbackCandidate, 0, len(fallbackCfg.Candidates))
+	for _, candidate := range fallbackCfg.Candidates {
+		provider, err := registry.GetForTenant(agent.TenantID, candidate.Provider)
+		if err != nil || provider == nil {
+			continue
+		}
+		candidates = append(candidates, providers.FallbackCandidate{
+			ProviderName: candidate.Provider,
+			Model:        candidate.Model,
+			Provider:     provider,
+		})
+	}
+	if len(candidates) == 0 {
+		return baseProvider, nil
+	}
+	cooldownEnabled := true
+	if fallbackCfg.CooldownEnabled != nil {
+		cooldownEnabled = *fallbackCfg.CooldownEnabled
+	}
+	return providers.NewModelFallbackProvider(providers.FallbackCandidate{
+		ProviderName: agent.Provider,
+		Model:        agent.Model,
+		Provider:     baseProvider,
+	}, candidates, fallbackCfg.MaxAttempts, cooldownEnabled), nil
+}

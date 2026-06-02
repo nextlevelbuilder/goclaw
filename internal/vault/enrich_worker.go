@@ -16,20 +16,21 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bgalert"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
-	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/providerresolve"
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 	"golang.org/x/sync/semaphore"
 )
 
 const (
-	enrichMaxDedupEntries = 10000
-	enrichSimilarityLimit = 10
-	enrichSimilarityMin   = 0.7
-	enrichMaxConcurrent      = 3 // max concurrent batch summarize calls across chunks
-	enrichBatchSize          = 5 // docs per enrichment chunk (1 LLM call per chunk)
-	enrichBatchItemMaxRunes  = 3000 // per-file content limit in batch summarize
-	enrichMaxRetries         = 3    // shared retry count for LLM calls (summarize + classify)
+	enrichMaxDedupEntries   = 10000
+	enrichSimilarityLimit   = 10
+	enrichSimilarityMin     = 0.7
+	enrichMaxConcurrent     = 3    // max concurrent batch summarize calls across chunks
+	enrichBatchSize         = 5    // docs per enrichment chunk (1 LLM call per chunk)
+	enrichBatchItemMaxRunes = 3000 // per-file content limit in batch summarize
+	enrichMaxRetries        = 3    // shared retry count for LLM calls (summarize + classify)
 )
 
 // Shared retry config for all enrichment LLM calls.
@@ -41,12 +42,13 @@ var (
 // EnrichWorkerDeps bundles dependencies for the vault enrichment worker.
 type EnrichWorkerDeps struct {
 	VaultStore    store.VaultStore
-	SystemConfigs store.SystemConfigStore   // per-tenant provider config
-	Registry      *providers.Registry       // provider resolution
+	SystemConfigs store.SystemConfigStore // per-tenant provider config
+	Registry      *providers.Registry     // provider resolution
 	EventBus      eventbus.DomainEventBus
-	MsgBus        bus.EventPublisher        // for WS event broadcast
-	TeamStore     store.TaskCommentStore    // for Phase 2.5 task-based auto-linking (nil-safe)
-	AlertDeps     bgalert.AlertDeps         // for reporting non-retryable LLM errors
+	MsgBus        bus.EventPublisher     // for WS event broadcast
+	TeamStore     store.TaskCommentStore // for Phase 2.5 task-based auto-linking (nil-safe)
+	AlertDeps     bgalert.AlertDeps      // for reporting non-retryable LLM errors
+	UsageCaps     *usagecaps.Service
 }
 
 // RegisterEnrichWorker subscribes the enrichment worker to vault doc events.
@@ -60,6 +62,7 @@ func RegisterEnrichWorker(deps EnrichWorkerDeps) (func(), *EnrichProgress, *Enri
 		registry:      deps.Registry,
 		msgBus:        deps.MsgBus,
 		alertDeps:     deps.AlertDeps,
+		usageCaps:     deps.UsageCaps,
 		dedup:         make(map[string]string),
 		sem:           semaphore.NewWeighted(enrichMaxConcurrent),
 		progress:      progress,
@@ -74,11 +77,12 @@ func RegisterEnrichWorker(deps EnrichWorkerDeps) (func(), *EnrichProgress, *Enri
 // Exported so HTTP handlers can call Stop/EnqueueUnenriched.
 type EnrichWorker struct {
 	vault         store.VaultStore
-	teamStore     store.TaskCommentStore      // nil-tolerant — Phase 2.5 disabled when nil
-	systemConfigs store.SystemConfigStore     // per-tenant provider config
-	registry      *providers.Registry         // provider resolution
-	msgBus        bus.EventPublisher          // for error event broadcast
-	alertDeps     bgalert.AlertDeps           // for reporting non-retryable LLM errors
+	teamStore     store.TaskCommentStore  // nil-tolerant — Phase 2.5 disabled when nil
+	systemConfigs store.SystemConfigStore // per-tenant provider config
+	registry      *providers.Registry     // provider resolution
+	msgBus        bus.EventPublisher      // for error event broadcast
+	alertDeps     bgalert.AlertDeps       // for reporting non-retryable LLM errors
+	usageCaps     *usagecaps.Service
 	queue         enrichBatchQueue
 	progress      *EnrichProgress
 
@@ -296,6 +300,14 @@ func (w *EnrichWorker) processChunk(ctx context.Context, items []eventbus.VaultD
 
 	// Batch-fetch all existing docs in a single query.
 	tenantID := pending[0].TenantID
+	if tid, err := uuid.Parse(tenantID); err == nil {
+		ctx = store.WithTenantID(ctx, tid)
+	}
+	if pending[0].AgentID != "" {
+		if aid, err := uuid.Parse(pending[0].AgentID); err == nil {
+			ctx = store.WithAgentID(ctx, aid)
+		}
+	}
 
 	// Resolve provider once per chunk (all items share tenantID)
 	provider, model := w.resolveProviderForTenant(ctx, tenantID)
@@ -515,7 +527,11 @@ func (w *EnrichWorker) chatWithRetry(ctx context.Context, provider providers.Pro
 			}
 		}
 		cctx, cancel := context.WithTimeout(ctx, enrichRetryTimeouts[attempt])
-		resp, err := provider.Chat(cctx, req)
+		resp, err := w.usageCaps.Chat(cctx, provider, req, usagecaps.ChatOptions{
+			ModelID:         req.Model,
+			Purpose:         logPrefix,
+			MaxOutputTokens: 4096,
+		})
 		cancel()
 		if err != nil {
 			lastErr = err
@@ -562,7 +578,6 @@ func (w *EnrichWorker) syncWikilinks(ctx context.Context, p eventbus.VaultDocUps
 		slog.Warn("vault.enrich: sync_wikilinks", "path", p.Path, "err", err)
 	}
 }
-
 
 // recordDedup stores a processed hash and evicts ~25% entries if over capacity.
 func (w *EnrichWorker) recordDedup(docID, hash string) {

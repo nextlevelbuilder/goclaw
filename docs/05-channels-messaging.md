@@ -67,6 +67,20 @@ The consumer routes system messages based on sender ID prefixes:
 | `delegate:` | Parent agent's original session (legacy session key format) | team |
 | `teammate:` | Target agent session | team |
 
+### Inbound Debounce
+
+Normal channel messages pass through the shared inbound debouncer before agent execution. `gateway.inbound_debounce_ms` merges rapid text messages from the same `channel:chatID:senderID:agentID`; `0` means no debounce and positive values set the wait window. Agents can override the global value with `other_config.inbound_debounce_ms`; unset inherits the global config. Command/control messages such as `/stop`, `/reset`, and system escalations bypass the debouncer.
+
+**Multi-attachment coalescing (#63).** Messages carrying attachments do NOT bypass the debouncer — that pre-fix shortcut was the source of N-replies for one user action. Instead, when media is present the effective window is `max(configured, mediaFloor)` so multi-file uploads land in the same buffer and flush together. Three surfaces apply the same invariant:
+
+| Surface | Buffer key | Trigger |
+|---------|------------|---------|
+| `internal/bus/inbound_debounce.go` | `(channel, chatID, senderID, agentID)` | Any inbound passing through the shared bus |
+| `internal/gateway/methods/chat_debounce.go` | `(userKey, sessionKey)` | `/v1/chat/completions` streaming sessions |
+| `internal/channels/telegram/album_aggregator.go` | `(chatID, MediaGroupID)` | Telegram media-group updates (album = N updates sharing one `MediaGroupID`) |
+
+The Telegram album aggregator runs at the channel layer after all access gates (mention, pairing, allow-list) pass — it buffers per `MediaGroupID`, pins the sender on first arrival as a security tripwire (mismatched sender → `security.album_sender_mismatch` + drop), and dispatches ONE call to the downstream pipeline on a 500ms silence window. `Channel.Stop()` synchronously drains pending albums before `pollCancel` so in-flight bursts always reach the agent loop. See `CONTRIBUTING.md` → "Multi-attachment coalescing" for the eight cross-surface invariants any new surface must honor.
+
 ---
 
 ## 2. Channel Interfaces
@@ -509,7 +523,7 @@ The Slack channel uses the `slack-go/slack` library to connect via Socket Mode (
 - **Mention gating**: `requireMention` default true; `<@botUserID>` stripped from content
 - **Thread participation cache**: After bot replies in a thread, subsequent messages in that thread auto-trigger response without @mention (24h TTL)
 - **Message dedup**: `channel+ts` key prevents duplicate processing on Socket Mode reconnect
-- **Message debounce**: Per-thread batching of rapid messages (300ms default, configurable)
+- **Message debounce**: Per-thread batching of rapid messages (300ms default, configurable; `debounce_delay: 0` disables)
 - **Dead socket classification**: Non-retryable auth errors (invalid_auth, token_revoked) fail fast instead of infinite reconnect
 - **Streaming**: Edit-in-place via `chat.update` with 1000ms throttle (Slack Tier 3 rate limit)
 - **Reactions**: Status emoji on user messages (thinking_face, hammer_and_wrench, white_check_mark, x, hourglass_flowing_sand)

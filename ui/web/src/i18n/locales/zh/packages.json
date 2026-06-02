@@ -5,7 +5,7 @@
     "title": "运行时",
     "scopeTitle": "容器范围内的运行时状态",
     "scopeDesc": "这些检查在当前活动的 GoClaw 运行时容器内执行。宿主机已安装的运行时、shell profile 变更以及由 nvm 管理的二进制文件都不会在这里被使用。",
-    "minimalImageHint": "已发布的 latest 镜像是最小化变体，因此缺少 Python 或 Node 运行时在该镜像中可能是正常现象。请改用 python、node 或 full 镜像变体，或使用 ENABLE_PYTHON=true / ENABLE_NODE=true / ENABLE_FULL_SKILLS=true 重新构建，或者直接在此容器中手动安装运行时。",
+    "minimalImageHint": "已发布的 latest 镜像包含 Python，但不包含 Node。需要 Node/npm 和内置扩展时请使用 full 镜像，需要最小镜像时使用 base，或使用 ENABLE_NODE=true / ENABLE_FULL_SKILLS=true 重新构建，也可以直接在此容器中手动安装运行时。",
     "available": "可用",
     "missing": "缺失",
     "missingInContainer": "容器内缺失"
@@ -41,6 +41,53 @@
       "installedAt": "安装时间"
     }
   },
+  "updates": {
+    "available": "有 {{count}} 个可用更新",
+    "none": "所有软件包已是最新",
+    "refresh": "刷新",
+    "refreshing": "刷新中...",
+    "lastCheckedAgo": "上次检查于 {{ago}}",
+    "neverChecked": "尚未检查",
+    "update": "更新",
+    "updateAll": "全部更新",
+    "updating": "正在更新 {{name}}...",
+    "updateSucceeded": "{{name}} 已更新至 {{version}}",
+    "updateFailed": "{{name}} 更新失败:{{reason}}",
+    "updateAllResult": "{{succeeded}} 成功,{{failed}} 失败",
+    "confirmAllTitle": "更新 {{count}} 个软件包?",
+    "confirmAllBody": "过程可能需要几分钟。更新按顺序应用。",
+    "selected": "已选 {{count}} 个",
+    "manifestDesyncWarn": "二进制文件已更新但清单保存失败。{{name}} 需要手动恢复。",
+    "cacheStale": "更新缓存已过期。请先刷新。",
+    "adminOnly": "需要管理员权限",
+    "empty": "没有可用更新",
+    "source": {
+      "github": "GitHub",
+      "pip": "pip",
+      "npm": "npm",
+      "apk": "apk"
+    },
+    "filter": {
+      "all": "所有来源",
+      "label": "筛选"
+    },
+    "unavailable": {
+      "pip": "未安装 pip",
+      "npm": "未安装 npm",
+      "apk": "此系统不可用 apk"
+    },
+    "button": {
+      "tooltip": {
+        "github": "从 GitHub 发布更新",
+        "pip": "通过 pip 更新",
+        "npm": "通过 npm 更新",
+        "apk": "通过 apk 更新（系统包）"
+      }
+    },
+    "summary": {
+      "perSource": "{{source}}: {{count}}"
+    }
+  },
   "actions": {
     "install": "安装",
     "uninstall": "卸载",
@@ -62,5 +109,17 @@
     "version": "版本",
     "actions": "操作",
     "empty": "暂无已安装的软件包"
+  },
+  "tabs": {
+    "system": "系统",
+    "python": "Python",
+    "node": "Node",
+    "github": "GitHub",
+    "cliCredentials": "CLI 凭证"
+  },
+  "runtimesHeader": {
+    "title": "运行时",
+    "available": "可用",
+    "missing": "缺失"
   }
 }

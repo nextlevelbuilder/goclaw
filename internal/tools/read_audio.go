@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 )
 
 // --- Context helpers for media audio ---
@@ -45,10 +46,15 @@ var audioModelDefaults = map[string]string{
 type ReadAudioTool struct {
 	registry    *providers.Registry
 	mediaLoader MediaPathLoader
+	usageCaps   *usagecaps.Service
 }
 
 func NewReadAudioTool(registry *providers.Registry, mediaLoader MediaPathLoader) *ReadAudioTool {
 	return &ReadAudioTool{registry: registry, mediaLoader: mediaLoader}
+}
+
+func (t *ReadAudioTool) SetUsageCapService(svc *usagecaps.Service) {
+	t.usageCaps = svc
 }
 
 func (t *ReadAudioTool) Name() string { return "read_audio" }

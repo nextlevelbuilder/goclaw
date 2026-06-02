@@ -73,6 +73,34 @@ func TestEnrichImageIDs_SkipsAlreadyEnriched(t *testing.T) {
 	}
 }
 
+func TestCollectRefsByKindOrdersOldestToNewestThenCurrent(t *testing.T) {
+	messages := []providers.Message{
+		{
+			Role:      "user",
+			Content:   "old",
+			MediaRefs: []providers.MediaRef{{ID: "old-doc", Kind: "document"}},
+		},
+		{
+			Role:      "user",
+			Content:   "latest-history",
+			MediaRefs: []providers.MediaRef{{ID: "latest-history-doc", Kind: "document"}},
+		},
+	}
+	current := []providers.MediaRef{{ID: "current-doc", Kind: "document"}}
+
+	got := collectRefsByKind(messages, current, "document")
+	want := []string{"old-doc", "latest-history-doc", "current-doc"}
+
+	if len(got) != len(want) {
+		t.Fatalf("got %d refs, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i].ID != want[i] {
+			t.Fatalf("ref[%d] = %q, want %q", i, got[i].ID, want[i])
+		}
+	}
+}
+
 // testMediaStore creates a temporary media.Store for tests.
 func testMediaStore(t *testing.T) *media.Store {
 	t.Helper()

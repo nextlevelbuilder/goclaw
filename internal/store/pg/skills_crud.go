@@ -309,6 +309,33 @@ func parseFrontmatterAuthor(raw []byte) string {
 	return fm["author"]
 }
 
+func parseFrontmatterCreatorAgent(raw []byte) *store.SkillAgentRef {
+	if len(raw) == 0 {
+		return nil
+	}
+	var fm map[string]string
+	if err := json.Unmarshal(raw, &fm); err != nil {
+		return nil
+	}
+	ref := store.SkillAgentRef{
+		ID:       fm["created_by_agent_id"],
+		AgentKey: firstNonEmpty(fm["created_by_agent_key"], fm["creator_agent_key"]),
+	}
+	if ref.ID == "" && ref.AgentKey == "" {
+		return nil
+	}
+	return &ref
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
 func marshalFrontmatter(fm map[string]string) []byte {
 	if len(fm) == 0 {
 		return []byte("{}")

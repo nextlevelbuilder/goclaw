@@ -110,5 +110,8 @@ func (p *Pipeline) Run(ctx context.Context, state *RunState) (*RunResult, error)
 
 	result := state.BuildResult()
 	result.Duration = time.Since(start)
+	if result.Duration <= 0 {
+		result.Duration = time.Nanosecond
+	}
 	return result, nil
 }

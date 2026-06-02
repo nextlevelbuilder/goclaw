@@ -619,6 +619,17 @@ func TestBuildSkillInfo_FilePathOverridesBaseDir(t *testing.T) {
 	}
 }
 
+func TestBuildSkillInfo_FilePathMayPointToSkillMarkdown(t *testing.T) {
+	fp := "/custom/path/to/skill/SKILL.md"
+	info := buildSkillInfo("id", "n", "s", nil, 1, "/ignored", &fp)
+	if info.BaseDir != "/custom/path/to/skill" {
+		t.Errorf("BaseDir should normalize file path: %q", info.BaseDir)
+	}
+	if info.Path != "/custom/path/to/skill/SKILL.md" {
+		t.Errorf("Path = %q", info.Path)
+	}
+}
+
 func TestBuildSkillInfo_EmptyFilePathFallsBack(t *testing.T) {
 	empty := ""
 	info := buildSkillInfo("id", "n", "slug", nil, 2, "/base", &empty)

@@ -137,6 +137,13 @@
     scrollbar-width: thin;
     scrollbar-color: var(--border) transparent;
   }
+  html,
+  body,
+  #root {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
   body {
     @apply bg-background text-foreground;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;

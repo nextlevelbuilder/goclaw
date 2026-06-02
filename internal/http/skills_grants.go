@@ -1,8 +1,6 @@
 package http
 
 import (
-	"archive/zip"
-	"io"
 	"log/slog"
 	"net/http"
 
@@ -33,6 +31,25 @@ func (h *SkillsHandler) handleListAgentSkills(w http.ResponseWriter, r *http.Req
 	writeJSON(w, http.StatusOK, map[string]any{"skills": skills})
 }
 
+func (h *SkillsHandler) handleListAgentGrants(w http.ResponseWriter, r *http.Request) {
+	locale := store.LocaleFromContext(r.Context())
+	idStr := r.PathValue("id")
+	skillID, err := uuid.Parse(idStr)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidID, "skill")})
+		return
+	}
+
+	grants, err := h.skills.ListAgentGrantsForSkill(r.Context(), skillID)
+	if err != nil {
+		slog.Error("failed to list skill agent grants", "skill_id", skillID, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgFailedToList, "skill grants")})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"grants": grants})
+}
+
 func (h *SkillsHandler) handleGrantAgent(w http.ResponseWriter, r *http.Request) {
 	locale := store.LocaleFromContext(r.Context())
 	userID := store.UserIDFromContext(r.Context())
@@ -53,8 +70,9 @@ func (h *SkillsHandler) handleGrantAgent(w http.ResponseWriter, r *http.Request)
 	}
 
 	var req struct {
-		AgentID string `json:"agent_id"`
-		Version int    `json:"version"`
+		AgentID   string `json:"agent_id"`
+		Version   int    `json:"version"`
+		CanManage *bool  `json:"can_manage"`
 	}
 	if !bindJSON(w, r, locale, &req) {
 		return
@@ -70,8 +88,14 @@ func (h *SkillsHandler) handleGrantAgent(w http.ResponseWriter, r *http.Request)
 		req.Version = 1
 	}
 
-	if err := h.skills.GrantToAgent(r.Context(), skillID, agentID, req.Version, userID); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	var grantErr error
+	if req.CanManage == nil {
+		grantErr = h.skills.GrantToAgent(r.Context(), skillID, agentID, req.Version, userID)
+	} else {
+		grantErr = h.skills.GrantToAgent(r.Context(), skillID, agentID, req.Version, userID, *req.CanManage)
+	}
+	if grantErr != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": grantErr.Error()})
 		return
 	}
 
@@ -199,16 +223,3 @@ func (h *SkillsHandler) handleRevokeUser(w http.ResponseWriter, r *http.Request)
 }
 
 // --- Helpers ---
-
-func readZipFile(f *zip.File) (string, error) {
-	rc, err := f.Open()
-	if err != nil {
-		return "", err
-	}
-	defer rc.Close()
-	data, err := io.ReadAll(rc)
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
-}

@@ -82,7 +82,15 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool
         memory_config: mem,
         subagents_config: subEnabled ? sub : null,
         tools_config: toolsEnabled
-          ? { profile: tools.profile, allow: tools.allow, deny: tools.deny, alsoAllow: tools.alsoAllow, byProvider: tools.byProvider }
+          ? {
+            profile: tools.profile,
+            allow: tools.allow,
+            deny: tools.deny,
+            alsoAllow: tools.alsoAllow,
+            byProvider: tools.byProvider,
+            wait: tools.wait,
+            toolCallPrefix: tools.toolCallPrefix,
+          }
           : {},
         // Promoted fields sent at top level (NOT NULL columns — send "" not null)
         emoji: emoji.trim(),

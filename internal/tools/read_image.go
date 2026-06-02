@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 )
 
 // --- Context helpers for media images ---
@@ -46,11 +47,16 @@ var visionModelDefaults = map[string]string{
 
 // ReadImageTool uses a vision-capable provider to describe images attached to the current message.
 type ReadImageTool struct {
-	registry *providers.Registry
+	registry  *providers.Registry
+	usageCaps *usagecaps.Service
 }
 
 func NewReadImageTool(registry *providers.Registry) *ReadImageTool {
 	return &ReadImageTool{registry: registry}
+}
+
+func (t *ReadImageTool) SetUsageCapService(svc *usagecaps.Service) {
+	t.usageCaps = svc
 }
 
 func (t *ReadImageTool) Name() string { return "read_image" }
@@ -152,7 +158,7 @@ func (t *ReadImageTool) callProvider(ctx context.Context, cp credentialProvider,
 		opts["disable_tools"] = true
 	}
 
-	resp, err := p.Chat(ctx, providers.ChatRequest{
+	chatReq := providers.ChatRequest{
 		Messages: []providers.Message{
 			{
 				Role:    "user",
@@ -162,7 +168,15 @@ func (t *ReadImageTool) callProvider(ctx context.Context, cp credentialProvider,
 		},
 		Model:   model,
 		Options: opts,
-	})
+	}
+	reservation, reserveErr := reserveToolLLMUsage(ctx, t.usageCaps, t.Name(), providerName, model, chatReq)
+	if reserveErr != nil {
+		return nil, nil, reserveErr
+	}
+	resp, err := p.Chat(ctx, chatReq)
+	if reservation != nil {
+		reservation.Reconcile(ctx, resp, err)
+	}
 	if err != nil {
 		return nil, nil, fmt.Errorf("vision provider error: %w", err)
 	}

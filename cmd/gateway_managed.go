@@ -18,12 +18,12 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/hooks"
 	hookbuiltin "github.com/nextlevelbuilder/goclaw/internal/hooks/builtin"
-	"github.com/nextlevelbuilder/goclaw/internal/orchestration"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	kg "github.com/nextlevelbuilder/goclaw/internal/knowledgegraph"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
 	memorypkg "github.com/nextlevelbuilder/goclaw/internal/memory"
+	"github.com/nextlevelbuilder/goclaw/internal/orchestration"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
@@ -31,6 +31,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/internal/tracing"
+	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -58,6 +59,7 @@ func wireExtras(
 	sandboxMgr sandbox.Manager,
 	redisClient any, // nil when built without -tags redis or when Redis is unconfigured
 	domainBus eventbus.DomainEventBus,
+	usageCapSvc *usagecaps.Service,
 ) (*tools.ContextFileInterceptor, *mcpbridge.Pool, *media.Store, tools.PostTurnProcessor) {
 	// 1. Build cache instances (in-memory or Redis depending on build tags)
 	agentCtxCache, userCtxCache := makeCaches(redisClient)
@@ -82,9 +84,15 @@ func wireExtras(
 			}
 		}
 		// Register media analysis tools (need mediaStore for file access).
-		toolsReg.Register(tools.NewReadDocumentTool(providerReg, mediaStore))
-		toolsReg.Register(tools.NewReadAudioTool(providerReg, mediaStore))
-		toolsReg.Register(tools.NewReadVideoTool(providerReg, mediaStore))
+		readDocumentTool := tools.NewReadDocumentTool(providerReg, mediaStore)
+		readDocumentTool.SetUsageCapService(usageCapSvc)
+		toolsReg.Register(readDocumentTool)
+		readAudioTool := tools.NewReadAudioTool(providerReg, mediaStore)
+		readAudioTool.SetUsageCapService(usageCapSvc)
+		toolsReg.Register(readAudioTool)
+		readVideoTool := tools.NewReadVideoTool(providerReg, mediaStore)
+		readVideoTool.SetUsageCapService(usageCapSvc)
+		toolsReg.Register(readVideoTool)
 		toolsReg.Register(tools.NewCreateVideoTool(providerReg))
 		slog.Info("media tools registered", "tools", "read_document,read_audio,read_video,create_video")
 	}
@@ -177,7 +185,7 @@ func wireExtras(
 				"disabled_count", n, "edition", edition.Current().Name)
 		}
 
-		handlers := buildHookHandlers(stores, providerReg, appCfg.Hooks)
+		handlers := buildHookHandlers(stores, providerReg, appCfg.Hooks, usageCapSvc)
 		stdOpts := hooks.StdDispatcherOpts{
 			Store:    hs,
 			Audit:    hooks.NewAuditWriter(hs, ""),
@@ -201,6 +209,7 @@ func wireExtras(
 		ToolPolicy:             toolPE,
 		Skills:                 skillsLoader,
 		SkillAccessStore:       skillAccessStore,
+		SkillSlashCommands:     appCfg.Skills.SlashCommands,
 		HasMemory:              hasMemory,
 		TraceCollector:         traceCollector,
 		EnsureUserProfile:      ensureUserProfile,
@@ -228,6 +237,7 @@ func wireExtras(
 		MediaStore:             mediaStore,
 		ModelPricing:           appCfg.Telemetry.ModelPricing,
 		TracingStore:           stores.Tracing,
+		UsageCaps:              usageCapSvc,
 		MemoryStore:            stores.Memory,
 		ContactStore:           stores.Contacts,
 		TenantStore:            stores.Tenants,
@@ -295,7 +305,7 @@ func wireExtras(
 		writeMemIntc = tools.NewMemoryInterceptor(stores.Memory, workspace)
 		// Hook KG extraction on memory writes if KG store is available
 		if stores.KnowledgeGraph != nil && stores.BuiltinTools != nil {
-			writeMemIntc.SetKGExtractFunc(buildKGExtractFunc(stores.KnowledgeGraph, stores.BuiltinTools, providerReg))
+			writeMemIntc.SetKGExtractFunc(buildKGExtractFunc(stores.KnowledgeGraph, stores.BuiltinTools, providerReg, usageCapSvc))
 		}
 	}
 	if readTool, ok := toolsReg.Get("read_file"); ok {
@@ -678,7 +688,11 @@ func wireExtras(
 			return
 		}
 		// Unregister old instance (closes ProcessPool) then re-register
-		providerReg.Unregister(p.Name)
+		tenantID := event.TenantID
+		if tenantID == uuid.Nil {
+			tenantID = store.MasterTenantID
+		}
+		providerReg.UnregisterForTenant(tenantID, p.Name)
 		if p.Enabled {
 			registerACPFromDB(providerReg, *p)
 		}
@@ -699,7 +713,7 @@ type kgSettings struct {
 // buildKGExtractFunc returns a callback that extracts entities from memory content.
 // Settings are read from the builtin_tools table on each invocation (not cached),
 // so changes take effect immediately without restart.
-func buildKGExtractFunc(kgStore store.KnowledgeGraphStore, bts store.BuiltinToolStore, providerReg *providers.Registry) tools.KGExtractFunc {
+func buildKGExtractFunc(kgStore store.KnowledgeGraphStore, bts store.BuiltinToolStore, providerReg *providers.Registry, usageCapSvc *usagecaps.Service) tools.KGExtractFunc {
 	return func(ctx context.Context, agentID, userID, content string) {
 		slog.Info("kg extract: triggered", "agent", agentID, "user", userID, "content_len", len(content))
 		// Read settings from DB on each call so admin changes take effect immediately
@@ -723,6 +737,7 @@ func buildKGExtractFunc(kgStore store.KnowledgeGraphStore, bts store.BuiltinTool
 			return
 		}
 		extractor := kg.NewExtractor(p, settings.ExtractionModel, settings.MinConfidence)
+		extractor.SetUsageCapService(usageCapSvc)
 		result, err := extractor.Extract(ctx, content)
 		if err != nil {
 			slog.Warn("kg extract: extraction failed", "agent", agentID, "error", err)

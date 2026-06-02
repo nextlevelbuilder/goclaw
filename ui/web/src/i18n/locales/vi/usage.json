@@ -19,7 +19,52 @@
     "total": "Tổng",
     "channel": "Kênh",
     "cost": "Chi phí",
-    "status": "Trạng thái"
+    "status": "Trạng thái",
+    "actions": "Thao tác"
+  },
+  "caps": {
+    "title": "Usage Cap",
+    "description": "Giới hạn AI budget theo token và chi phí ở cấp tenant, agent, provider và model.",
+    "window": "Chu kỳ",
+    "windows": {
+      "hour": "Theo giờ",
+      "day": "Theo ngày",
+      "week": "Theo tuần",
+      "month": "Theo tháng"
+    },
+    "agent": "Agent",
+    "provider": "Provider",
+    "model": "Model",
+    "allAgents": "Tất cả Agent",
+    "allProviders": "Tất cả Provider",
+    "maxTokens": "Token tối đa",
+    "maxCost": "Chi phí tối đa USD",
+    "create": "Tạo cap",
+    "edit": "Sửa cap",
+    "save": "Lưu cap",
+    "cancel": "Hủy sửa",
+    "scope": "Phạm vi",
+    "tokens": "Token",
+    "cost": "Chi phí",
+    "empty": "Chưa có policy cap.",
+    "tenantScope": "Cap tenant",
+    "tenantScoped": "Phạm vi tenant",
+    "agentScoped": "Phạm vi agent",
+    "agentBudgetSource": "Ngân sách agent",
+    "agentBudgetManaged": "Xóa giới hạn này từ ô ngân sách hàng tháng của agent.",
+    "enabled": "Đã bật",
+    "disabled": "Đã tắt",
+    "delete": "Xóa cap",
+    "recentBlocks": "Lần chặn gần đây",
+    "blocked": "Đã chặn",
+    "toast": {
+      "created": "Đã tạo usage cap",
+      "updated": "Đã cập nhật usage cap",
+      "createFailed": "Không thể tạo usage cap",
+      "updateFailed": "Không thể cập nhật usage cap",
+      "deleted": "Đã xóa usage cap",
+      "deleteFailed": "Không thể xóa usage cap"
+    }
   },
   "analytics": {
     "title": "Phân tích sử dụng",

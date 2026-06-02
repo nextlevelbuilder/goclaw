@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"regexp"
 	"strings"
 	"sync"
@@ -110,6 +111,90 @@ func AddCredentialScrubValues(values ...string) {
 			existing[v] = true
 		}
 	}
+}
+
+// --- Per-request scrub bag (multi-tenant safe) ---
+//
+// The package-global credentialScrubValues above accumulates across all
+// goroutines for the life of the process. For the adapter pipeline (Phase 2+)
+// each exec gets its own scrub bag via context so tenant A's credentials never
+// reach tenant B's output, even when adapters run concurrently.
+
+type scrubBag struct {
+	mu     sync.RWMutex
+	values []string
+}
+
+type scrubBagKey struct{}
+
+type execCwdKey struct{}
+
+// WithExecCwd returns a context carrying the working directory the
+// credentialed exec will use. Adapters consult this so any pre-flight
+// sub-exec (e.g. `git config --get remote.origin.url`) runs inside the
+// caller's repo, not goclaw's daemon CWD.
+func WithExecCwd(ctx context.Context, cwd string) context.Context {
+	if cwd == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, execCwdKey{}, cwd)
+}
+
+// ExecCwdFromContext returns the cwd planted by WithExecCwd, or empty.
+func ExecCwdFromContext(ctx context.Context) string {
+	if s, ok := ctx.Value(execCwdKey{}).(string); ok {
+		return s
+	}
+	return ""
+}
+
+// WithScrubBag returns a context carrying a fresh per-request scrub list.
+// Call at the top of executeCredentialed; pass the returned ctx downstream.
+func WithScrubBag(ctx context.Context) context.Context {
+	return context.WithValue(ctx, scrubBagKey{}, &scrubBag{})
+}
+
+// AddScrubValuesCtx appends adapter-derived secrets to the per-request bag.
+// No-op when ctx has no bag (legacy callers). Skips values shorter than 6
+// chars to avoid false-positive matches like "x" or "1".
+func AddScrubValuesCtx(ctx context.Context, vs ...string) {
+	bag, ok := ctx.Value(scrubBagKey{}).(*scrubBag)
+	if !ok {
+		return
+	}
+	bag.mu.Lock()
+	defer bag.mu.Unlock()
+	for _, v := range vs {
+		if len(v) >= 6 {
+			bag.values = append(bag.values, v)
+		}
+	}
+}
+
+// ScrubCredentialsCtx runs the same regex pass as ScrubCredentials AND any
+// per-request bag values, but does NOT consult the package-global slice.
+// Use this in the adapter pipeline so one tenant's secrets cannot leak into
+// another tenant's output through the shared global.
+func ScrubCredentialsCtx(ctx context.Context, text string) string {
+	for _, pat := range credentialPatterns {
+		text = pat.ReplaceAllString(text, redactedPlaceholder)
+	}
+	if bag, ok := ctx.Value(scrubBagKey{}).(*scrubBag); ok {
+		bag.mu.RLock()
+		vals := append([]string(nil), bag.values...)
+		bag.mu.RUnlock()
+		for _, v := range vals {
+			text = strings.ReplaceAll(text, v, redactedPlaceholder)
+		}
+	}
+	// Dynamic server-IP values still apply — they're infra metadata, not creds.
+	dynamicScrubMu.RLock()
+	dyn := dynamicScrubValues
+	dynamicScrubMu.RUnlock()
+	for _, v := range dyn {
+		text = strings.ReplaceAll(text, v, serverIPPlaceholder)
+	}
+	return text
 }
 
 // ScrubCredentials replaces known credential patterns and dynamic values in text.

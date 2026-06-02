@@ -16,6 +16,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 )
 
 // HandleVerifyProviderForTest invokes the verify handler directly without auth
@@ -126,8 +127,9 @@ func (h *ProvidersHandler) handleVerifyProvider(w http.ResponseWriter, r *http.R
 
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
+	ctx = store.WithTenantID(ctx, p.TenantID)
 
-	_, err = provider.Chat(ctx, providers.ChatRequest{
+	reqChat := providers.ChatRequest{
 		Messages: []providers.Message{
 			{Role: "user", Content: "hi"},
 		},
@@ -136,6 +138,13 @@ func (h *ProvidersHandler) handleVerifyProvider(w http.ResponseWriter, r *http.R
 			// Use a small but safe value — reasoning models need headroom beyond 1 token.
 			"max_tokens": 50,
 		},
+	}
+	_, err = h.usageCaps.Chat(ctx, provider, reqChat, usagecaps.ChatOptions{
+		TenantID:        p.TenantID,
+		ProviderName:    p.Name,
+		ModelID:         req.Model,
+		Purpose:         "provider-verify",
+		MaxOutputTokens: 50,
 	})
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{"valid": false, "error": friendlyVerifyError(err)})

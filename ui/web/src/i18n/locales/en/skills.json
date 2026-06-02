@@ -11,13 +11,93 @@
     "description": "Description",
     "source": "Source",
     "author": "Author",
-    "visibility": "Visibility",
+    "agents": "Agents",
+    "owner": "Owner",
+    "visibility": "Access mode",
+    "accessMode": "Access mode",
     "status": "Status",
     "actions": "Actions"
   },
   "noDescription": "No description",
+  "status": {
+    "unmanaged": "Unmanaged",
+    "missingDepsCount": "{{count}} missing"
+  },
+  "filters": {
+    "label": "Filter",
+    "all": "All skills",
+    "attention": "Needs attention",
+    "missing-deps": "Missing deps",
+    "disabled": "Disabled",
+    "archived": "Archived",
+    "unmanaged": "Unmanaged",
+    "clear": "Clear filters"
+  },
+  "sort": {
+    "label": "Sort",
+    "name": "Name",
+    "deps": "Missing deps",
+    "version": "Version"
+  },
+  "health": {
+    "total": "Total",
+    "attention": "Needs attention",
+    "missingDeps": "Missing deps",
+    "disabled": "Disabled",
+    "archived": "Archived",
+    "unmanaged": "Unmanaged"
+  },
+  "owner": "Owner",
+  "unknownOwner": "Unknown",
+  "grants": {
+    "title": "Agent access for {{name}}",
+    "manage": "Manage agent access",
+    "current": "Current agent grants",
+    "none": "No agent grants yet.",
+    "add": "Add grant",
+    "update": "Update grant",
+    "grant": "Grant",
+    "save": "Save",
+    "revoke": "Revoke grant",
+    "selectAgent": "Select agent",
+    "allowManage": "Allow this agent to edit or delete the skill",
+    "canManage": "Can edit",
+    "grantAllAgents": "Grant all agents",
+    "grantAllPartial": "{{count}} agent grant(s) failed",
+    "loadFailed": "Failed to load grants",
+    "saveFailed": "Failed to save grant",
+    "revokeFailed": "Failed to revoke grant"
+  },
+  "bulk": {
+    "selected": "{{count}} selected",
+    "selectSkill": "Select {{name}}",
+    "selectPage": "Select visible skills",
+    "enable": "Enable",
+    "disable": "Disable",
+    "grantAllAgents": "Grant all agents",
+    "delete": "Delete",
+    "clear": "Clear",
+    "enabled": "Enabled {{count}} skill(s)",
+    "disabled": "Disabled {{count}} skill(s)",
+    "grantedAllAgents": "Granted all agents to {{count}} skill(s)",
+    "deleted": "Deleted {{count}} skill(s)",
+    "failed": "Bulk action failed",
+    "deleteTitle": "Delete selected skills",
+    "deleteDescription": "This will delete {{count}} selected custom skill(s). Type DELETE to confirm.",
+    "customAvailable": "{{count}} custom action(s) available",
+    "skippedSystem": "{{count}} system skill(s) skipped",
+    "customOnlyReason": "This action only applies to custom skills",
+    "noAgentsReason": "No current agents available"
+  },
   "visibility": {
-    "clickToCycle": "Click to change visibility"
+    "clickToCycle": "Click to change access mode"
+  },
+  "accessMode": {
+    "private": "Owner only",
+    "internal": "Granted agents",
+    "public": "All tenant agents",
+    "unknown": "Unknown ({{value}})",
+    "clickToCycle": "Click to change access mode"
   },
   "delete": {
     "title": "Delete Skill",
@@ -26,7 +106,7 @@
   },
   "upload": {
     "title": "Upload Skills",
-    "description": "Upload ZIP files containing SKILL.md with YAML frontmatter (name, description, slug).",
+    "description": "Upload ZIP files containing SKILL.md with YAML frontmatter (name, description, slug). Max {{max}} MB per file.",
     "button": "Upload",
     "uploading": "Uploading...",
     "dropOrClick": "Click or drag & drop .zip files",
@@ -34,7 +114,7 @@
     "onlyZip": "Only .zip files are accepted",
     "cancel": "Cancel",
     "done": "Done",
-    "tooLarge": "File exceeds 20MB limit",
+    "tooLarge": "File exceeds the configured upload limit",
     "invalidZip": "Invalid ZIP file",
     "noSkillMd": "ZIP must contain SKILL.md at root",
     "emptySkillMd": "SKILL.md is empty",
@@ -52,13 +132,25 @@
     "skillUnchanged": "Content unchanged — skipped",
     "slugConflict": "Slug conflicts with a system skill",
     "unchanged": "Unchanged",
-    "new": "New"
+    "new": "New",
+    "agentManagers": "Grant manager access to agents",
+    "managerAgentsHelp": "Selected current agents can update this skill later.",
+    "selectAllAgents": "Select all agents",
+    "selectAllCurrentAgents": "Select all current agents",
+    "clearAgents": "Clear agents",
+    "noAgents": "No agents available",
+    "selectedAgentsCount": "{{selected}} of {{total}} current agents selected",
+    "summaryUploaded": "{{count}} uploaded",
+    "summaryWarnings": "{{count}} warning(s)",
+    "summaryUnchanged": "{{count}} unchanged",
+    "summaryFailed": "{{count}} failed"
   },
   "edit": {
     "title": "Edit Skill",
     "name": "Name",
     "description": "Description",
-    "visibility": "Visibility",
+    "visibility": "Access mode",
+    "accessMode": "Access mode",
     "tags": "Tags",
     "addTag": "Add tag...",
     "add": "Add",
@@ -92,6 +184,7 @@
     "rescanSuccess": "Updated {{count}} skills",
     "missing": "Missing: {{deps}}",
     "install": "Install Dependencies",
+    "installAll": "Install all dependencies",
     "installing": "Installing...",
     "installSuccess": "Dependencies installed successfully",
     "installPartial": "Some dependencies failed to install",
@@ -103,11 +196,15 @@
     "pythonLabel": "Python",
     "nodeLabel": "Node.js",
     "statusActive": "Active",
-    "statusArchived": "Missing deps",
+    "statusArchived": "Archived",
     "runtimeMissing": "Runtime Prerequisites Missing",
     "runtimeMissingDesc": "Core skills require Python and/or Node.js runtimes inside the GoClaw runtime container. Host-installed runtimes are not used here. If you are using the published latest image, missing runtimes can be expected there.",
     "runtimeMissingAction": "Open Packages to verify or install runtimes in this container.",
     "runtimeRequired": "Install container runtimes first"
+  },
+  "agents": {
+    "creator": "Creator",
+    "managers": "Managers"
   },
   "detail": {
     "title": "Skill Detail",
@@ -115,7 +212,12 @@
     "files": "Files",
     "version": "Version:",
     "current": "(current)",
-    "noContent": "No content available."
+    "noContent": "No content available.",
+    "fileSearch": "Search files...",
+    "filesShown": "{{shown}} of {{total}} files",
+    "copyLink": "Copy link",
+    "copySuccess": "Deeplink copied",
+    "copyFailed": "Failed to copy deeplink"
   },
   "toast": {
     "updated": "Skill updated",

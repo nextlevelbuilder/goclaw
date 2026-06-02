@@ -7,9 +7,11 @@ import (
 	"maps"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -96,6 +98,58 @@ func newValidationTTSConfigMux(sc store.SystemConfigStore, cs store.ConfigSecret
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 	return mux
+}
+
+func newValidationTTSConfigMuxWithTenants(sc store.SystemConfigStore, cs store.ConfigSecretsStore, ts store.TenantStore) *http.ServeMux {
+	h := NewTTSConfigHandler(sc, cs, ts)
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+	return mux
+}
+
+func TestTTSConfigRequiresTenantAdminForReadAndWrite(t *testing.T) {
+	setupTestToken(t, "gateway-token")
+	setupTestNoAuthFallback(t, false)
+	ts := newMockTenantStore()
+	tenantID := uuid.New()
+	ts.addTenant(tenantID, "acme")
+	ts.setUserRole(tenantID, "viewer-user", store.TenantRoleViewer)
+	ts.setUserRole(tenantID, "admin-user", store.TenantRoleAdmin)
+	setupTestTenantStore(t, ts)
+
+	sc := &validationSystemConfigStore{data: map[string]string{}}
+	cs := &validationSecretsStore{data: map[string]string{}}
+	mux := newValidationTTSConfigMuxWithTenants(sc, cs, ts)
+
+	viewerGet := httptest.NewRequest("GET", "/v1/tts/config", nil)
+	viewerGet.Header.Set("Authorization", "Bearer gateway-token")
+	viewerGet.Header.Set("X-GoClaw-User-Id", "viewer-user")
+	viewerGet.Header.Set("X-GoClaw-Tenant-Id", "acme")
+	viewerGetRR := httptest.NewRecorder()
+	mux.ServeHTTP(viewerGetRR, viewerGet)
+	if viewerGetRR.Code != http.StatusForbidden {
+		t.Fatalf("viewer GET status = %d, want 403", viewerGetRR.Code)
+	}
+
+	viewerPost := httptest.NewRequest("POST", "/v1/tts/config", strings.NewReader(`{"provider":"edge"}`))
+	viewerPost.Header.Set("Authorization", "Bearer gateway-token")
+	viewerPost.Header.Set("X-GoClaw-User-Id", "viewer-user")
+	viewerPost.Header.Set("X-GoClaw-Tenant-Id", "acme")
+	viewerPostRR := httptest.NewRecorder()
+	mux.ServeHTTP(viewerPostRR, viewerPost)
+	if viewerPostRR.Code != http.StatusForbidden {
+		t.Fatalf("viewer POST status = %d, want 403", viewerPostRR.Code)
+	}
+
+	adminPost := httptest.NewRequest("POST", "/v1/tts/config", strings.NewReader(`{"provider":"edge"}`))
+	adminPost.Header.Set("Authorization", "Bearer gateway-token")
+	adminPost.Header.Set("X-GoClaw-User-Id", "admin-user")
+	adminPost.Header.Set("X-GoClaw-Tenant-Id", "acme")
+	adminPostRR := httptest.NewRecorder()
+	mux.ServeHTTP(adminPostRR, adminPost)
+	if adminPostRR.Code != http.StatusOK {
+		t.Fatalf("tenant admin POST status = %d, want 200: %s", adminPostRR.Code, adminPostRR.Body.String())
+	}
 }
 
 func TestTTSConfigSave_AcceptsLegacyAndUISchemaAliases(t *testing.T) {

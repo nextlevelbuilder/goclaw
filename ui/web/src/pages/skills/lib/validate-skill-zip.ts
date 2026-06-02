@@ -36,8 +36,14 @@ export interface MultiSkillZipValidation {
   error?: string;
 }
 
-// Constants matching server-side (internal/http/skills.go)
-const MAX_SKILL_SIZE = 20 * 1024 * 1024; // 20MB
+export interface SkillZipValidationOptions {
+  maxUploadSizeMB?: number;
+}
+
+// Constants matching server-side skill upload limits.
+export const DEFAULT_SKILL_UPLOAD_SIZE_MB = 20;
+export const MIN_SKILL_UPLOAD_SIZE_MB = 1;
+export const MAX_SKILL_UPLOAD_SIZE_MB = 500;
 const MAX_SKILLS_PER_ZIP = 50;
 const SLUG_REGEX = /^[a-z0-9][a-z0-9-]*[a-z0-9]$/;
 const FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---/;
@@ -50,8 +56,8 @@ const FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---/;
  * Validate a skill ZIP file client-side — backward-compatible single-skill path.
  * Delegates to validateMultiSkillZip and returns the first skill's result.
  */
-export async function validateSkillZip(file: File): Promise<SkillZipValidation> {
-  const multi = await validateMultiSkillZip(file);
+export async function validateSkillZip(file: File, options: SkillZipValidationOptions = {}): Promise<SkillZipValidation> {
+  const multi = await validateMultiSkillZip(file, options);
   if (multi.error) return { valid: false, error: multi.error };
   const first = multi.skills[0];
   if (!first) return { valid: false, error: "upload.noSkillMd" };
@@ -75,11 +81,11 @@ export async function validateSkillZip(file: File): Promise<SkillZipValidation> 
  * Returns one SkillValidationEntry per detected SKILL.md, each independently
  * validated with a SHA-256 contentHash.
  */
-export async function validateMultiSkillZip(file: File): Promise<MultiSkillZipValidation> {
+export async function validateMultiSkillZip(file: File, options: SkillZipValidationOptions = {}): Promise<MultiSkillZipValidation> {
   if (!file.name.toLowerCase().endsWith(".zip")) {
     return { skills: [], error: "upload.onlyZip" };
   }
-  if (file.size > MAX_SKILL_SIZE) {
+  if (file.size > uploadSizeLimitBytes(options.maxUploadSizeMB)) {
     return { skills: [], error: "upload.tooLarge" };
   }
 
@@ -104,6 +110,17 @@ export async function validateMultiSkillZip(file: File): Promise<MultiSkillZipVa
   );
 
   return { skills };
+}
+
+export function normalizeSkillUploadSizeMB(value?: number): number {
+  if (!Number.isFinite(value) || value === undefined || value === 0) return DEFAULT_SKILL_UPLOAD_SIZE_MB;
+  if (value < MIN_SKILL_UPLOAD_SIZE_MB) return MIN_SKILL_UPLOAD_SIZE_MB;
+  if (value > MAX_SKILL_UPLOAD_SIZE_MB) return MAX_SKILL_UPLOAD_SIZE_MB;
+  return Math.trunc(value);
+}
+
+function uploadSizeLimitBytes(value?: number): number {
+  return normalizeSkillUploadSizeMB(value) * 1024 * 1024;
 }
 
 // ---------------------------------------------------------------------------

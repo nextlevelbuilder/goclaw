@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GoClaw Cookie Sync</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>GoClaw</h1>
+        <button id="refresh" type="button" title="Refresh cookies">Refresh</button>
+      </header>
+
+      <section class="settings">
+        <label>
+          Gateway URL
+          <input id="gatewayUrl" type="url" placeholder="http://localhost:18790" />
+        </label>
+        <label>
+          Auth token
+          <input id="token" type="password" autocomplete="off" />
+        </label>
+        <label>
+          User ID
+          <input id="userId" type="text" autocomplete="off" placeholder="user@example.com" />
+        </label>
+        <label>
+          Agent ID
+          <input id="agentId" type="text" autocomplete="off" placeholder="default" />
+        </label>
+      </section>
+
+      <section class="toolbar">
+        <button id="grant" type="button">Grant Site Access</button>
+        <button id="selectAll" type="button">Select All</button>
+      </section>
+
+      <p id="status" role="status"></p>
+      <div id="cookies" class="cookies"></div>
+
+      <footer>
+        <button id="sync" type="button">Sync Selected</button>
+      </footer>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

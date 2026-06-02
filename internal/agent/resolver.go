@@ -15,9 +15,9 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/hooks"
-	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
+	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	"github.com/nextlevelbuilder/goclaw/internal/providerresolve"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
@@ -25,6 +25,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/internal/tracing"
+	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 )
 
 // ResolverDeps holds shared dependencies for the agent resolver.
@@ -84,7 +85,8 @@ type ResolverDeps struct {
 	MCPGrantChecker mcpbridge.GrantChecker
 
 	// Skill access store — for per-agent skill visibility filtering
-	SkillAccessStore store.SkillAccessStore
+	SkillAccessStore   store.SkillAccessStore
+	SkillSlashCommands config.SkillSlashCommandConfig
 
 	// Config permission store for group file writer checks
 	ConfigPermStore store.ConfigPermissionStore
@@ -97,6 +99,7 @@ type ResolverDeps struct {
 
 	// Tracing store for budget enforcement queries
 	TracingStore store.TracingStore
+	UsageCaps    *usagecaps.Service
 
 	// Memory store for extractive memory fallback
 	MemoryStore store.MemoryStore
@@ -158,7 +161,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 		}
 
 		// Resolve provider (tenant-aware: tries tenant-specific first, falls back to master)
-		provider, err := providerresolve.ResolveConfiguredProvider(deps.ProviderReg, ag)
+		provider, err := providerresolve.ResolveAgentProvider(deps.ProviderReg, ag)
 		if err != nil {
 			// Fallback to any available provider for this tenant
 			names := deps.ProviderReg.ListForTenant(ag.TenantID)
@@ -467,7 +470,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			AgentOtherConfig:       ag.OtherConfig,
 			AgentType:              ag.AgentType,
 			IsTeamLead:             isTeamLead,
-			AutoInjector:          deps.AutoInjector,
+			AutoInjector:           deps.AutoInjector,
 			Provider:               provider,
 			Model:                  ag.Model,
 			ModelRegistry:          deps.ModelRegistry,
@@ -489,6 +492,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			AgentToolPolicy:        agentToolPolicyForTeam(agentToolPolicyWithWorkspace(agentToolPolicyWithMCP(ag.ParseToolsConfig(), hasMCPTools), hasTeam), isTeamLead),
 			SkillsLoader:           deps.Skills,
 			SkillAllowList:         skillAllowList,
+			SkillSlashCommands:     deps.SkillSlashCommands,
 			HasMemory:              hasMemory,
 			ContextFiles:           contextFiles,
 			EnsureUserProfile:      deps.EnsureUserProfile,
@@ -509,6 +513,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			BuiltinToolSettings:    builtinSettings,
 			TenantToolSettings:     tenantToolSettings,
 			TenantAllowedPaths:     tenantAllowedPaths,
+			SystemConfigs:          deps.SystemConfigs,
 			DisabledTools:          disabledTools,
 			ReasoningConfig:        store.ResolveEffectiveReasoningConfig(providerReasoningDefaults, ag.ParseReasoningConfig()),
 			PromptMode:             PromptMode(ag.ParsePromptMode()),
@@ -528,6 +533,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			ModelPricing:           deps.ModelPricing,
 			BudgetMonthlyCents:     derefInt(ag.BudgetMonthlyCents),
 			TracingStore:           deps.TracingStore,
+			UsageCaps:              deps.UsageCaps,
 			MemoryStore:            deps.MemoryStore,
 			MCPStore:               deps.MCPStore,
 			MCPPool:                deps.MCPPool,

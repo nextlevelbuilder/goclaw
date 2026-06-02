@@ -108,12 +108,18 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 				PromptTokens:     chunk.Usage.PromptTokens,
 				CompletionTokens: chunk.Usage.CompletionTokens,
 				TotalTokens:      chunk.Usage.TotalTokens,
+				RequestCount:     1,
 			}
 			if chunk.Usage.PromptTokensDetails != nil {
 				result.Usage.CacheReadTokens = chunk.Usage.PromptTokensDetails.CachedTokens
+				result.Usage.CacheCreationTokens = chunk.Usage.PromptTokensDetails.CacheWriteTokens
+				result.Usage.PromptTokensIncludeCachedSegments = true
 			}
 			if chunk.Usage.CompletionTokensDetails != nil && chunk.Usage.CompletionTokensDetails.ReasoningTokens > 0 {
 				result.Usage.ThinkingTokens = chunk.Usage.CompletionTokensDetails.ReasoningTokens
+			}
+			if chunk.Usage.ServerToolUse != nil {
+				result.Usage.WebSearchCount = chunk.Usage.ServerToolUse.WebSearchRequests
 			}
 		}
 
@@ -181,7 +187,7 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 
 	// Check for scanner errors (timeout, connection reset, etc.)
 	if err := sse.Err(); err != nil {
-		return nil, fmt.Errorf("%s: stream read error: %w", p.name, err)
+		return result, fmt.Errorf("%s: stream read error: %w", p.name, err)
 	}
 
 	// Parse accumulated tool call arguments

@@ -185,6 +185,7 @@ func (t *CronTool) handleStatus() *Result {
 func (t *CronTool) handleList(ctx context.Context, args map[string]any, agentID, userID string) *Result {
 	includeDisabled, _ := args["includeDisabled"].(bool)
 	jobs := t.cronStore.ListJobs(ctx, includeDisabled, agentID, userID)
+	jobs = store.RedactCronJobsCredentialContext(jobs)
 
 	result := map[string]any{
 		"jobs":  jobs,
@@ -305,7 +306,7 @@ func (t *CronTool) handleAdd(ctx context.Context, args map[string]any, agentID, 
 		}
 	}
 
-	data, _ := json.MarshalIndent(map[string]any{"job": job}, "", "  ")
+	data, _ := json.MarshalIndent(map[string]any{"job": store.RedactCronJobCredentialContext(*job)}, "", "  ")
 	return NewResult(string(data))
 }
 
@@ -334,8 +335,12 @@ func (t *CronTool) handleUpdate(ctx context.Context, args map[string]any, agentI
 		return ErrorResult("jobId is required for update action")
 	}
 
-	if _, errResult := t.checkJobOwnership(ctx, jobID, agentID, userID); errResult != nil {
+	existing, errResult := t.checkJobOwnership(ctx, jobID, agentID, userID)
+	if errResult != nil {
 		return errResult
+	}
+	if err := store.CheckCronCredentialOwner(ctx, existing); err != nil {
+		return ErrorResult("permission denied: cron job uses a credential context owned by another user")
 	}
 
 	patchObj, ok := args["patch"].(map[string]any)
@@ -360,7 +365,7 @@ func (t *CronTool) handleUpdate(ctx context.Context, args map[string]any, agentI
 		return ErrorResult(fmt.Sprintf("failed to update cron job: %v", err))
 	}
 
-	data, _ := json.MarshalIndent(map[string]any{"job": job}, "", "  ")
+	data, _ := json.MarshalIndent(map[string]any{"job": store.RedactCronJobCredentialContext(*job)}, "", "  ")
 	return NewResult(string(data))
 }
 
@@ -370,7 +375,8 @@ func (t *CronTool) handleRemove(ctx context.Context, args map[string]any, agentI
 		return ErrorResult("jobId is required for remove action")
 	}
 
-	if _, errResult := t.checkJobOwnership(ctx, jobID, agentID, userID); errResult != nil {
+	_, errResult := t.checkJobOwnership(ctx, jobID, agentID, userID)
+	if errResult != nil {
 		return errResult
 	}
 
@@ -388,8 +394,12 @@ func (t *CronTool) handleRun(ctx context.Context, args map[string]any, agentID, 
 		return ErrorResult("jobId is required for run action")
 	}
 
-	if _, errResult := t.checkJobOwnership(ctx, jobID, agentID, userID); errResult != nil {
+	existing, errResult := t.checkJobOwnership(ctx, jobID, agentID, userID)
+	if errResult != nil {
 		return errResult
+	}
+	if err := store.CheckCronCredentialOwner(ctx, existing); err != nil {
+		return ErrorResult("permission denied: cron job uses a credential context owned by another user")
 	}
 
 	runMode, _ := args["runMode"].(string)

@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Upload } from "lucide-react";
 import {
@@ -10,18 +10,24 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import { useAgents } from "@/pages/agents/hooks/use-agents";
 import { createSkillSubZip } from "./lib/create-skill-sub-zip";
 import { resolveUploadSkills } from "./lib/resolve-upload-skills";
+import { summarizeUploadEntries } from "./lib/skill-upload-summary";
 import { uniqueId } from "@/lib/utils";
-import type { SkillUploadResponse } from "./hooks/use-skills";
+import type { SkillUploadOptions, SkillUploadResponse } from "./hooks/use-skills";
 import type { FileEntry, SkillStatus } from "./lib/skill-upload-types";
 import { FileEntryBlock } from "./skill-upload-entry";
+import { useSkillUploadLimit } from "./hooks/use-skill-upload-limit";
 import JSZip from "jszip";
 
 interface SkillUploadDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onUpload: (file: File) => Promise<SkillUploadResponse>;
+  onUpload: (file: File, options?: SkillUploadOptions) => Promise<SkillUploadResponse>;
 }
 
 export function SkillUploadDialog({ open, onOpenChange, onUpload }: SkillUploadDialogProps) {
@@ -30,7 +36,15 @@ export function SkillUploadDialog({ open, onOpenChange, onUpload }: SkillUploadD
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [done, setDone] = useState(false);
+  const [grantManagers, setGrantManagers] = useState(true);
+  const [managerAgentIds, setManagerAgentIds] = useState<string[]>([]);
+  const { agents, refresh: refreshAgents } = useAgents();
+  const maxUploadSizeMB = useSkillUploadLimit(open);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (open) refreshAgents();
+  }, [open, refreshAgents]);
 
   // ---------------------------------------------------------------------------
   // File handling
@@ -54,7 +68,7 @@ export function SkillUploadDialog({ open, onOpenChange, onUpload }: SkillUploadD
     // Validate all files concurrently
     const results = await Promise.all(
       pending.map(async (entry) => {
-        const resolved = await resolveUploadSkills(entry.file);
+        const resolved = await resolveUploadSkills(entry.file, undefined, { maxUploadSizeMB });
         return {
           id: entry.id,
           skills: resolved.map((skill) => ({
@@ -116,24 +130,44 @@ export function SkillUploadDialog({ open, onOpenChange, onUpload }: SkillUploadD
           uploadFile = fileEntry.file;
         }
 
-        const result = await onUpload(uploadFile);
+        const result = await onUpload(uploadFile, {
+          managerAgentIds: grantManagers ? managerAgentIds : [],
+        });
 
         if (result.status === "unchanged") {
+          const grantDetail = result.grant_errors?.length
+            ? result.grant_errors.join("; ")
+            : undefined;
           setEntries((prev) =>
             prev.map((e) =>
               e.id === fileEntry.id
-                ? { ...e, skills: e.skills.map((s) => s.id === skill.id ? { ...s, status: "unchanged" as SkillStatus } : s) }
+                ? {
+                    ...e,
+                    skills: e.skills.map((s) =>
+                      s.id === skill.id
+                        ? {
+                            ...s,
+                            status: grantDetail ? ("warning" as SkillStatus) : ("unchanged" as SkillStatus),
+                            error: grantDetail,
+                          }
+                        : s,
+                    ),
+                  }
                 : e,
             ),
           );
           continue;
         }
 
+        const grantDetail = result.grant_errors?.length
+          ? result.grant_errors.join("; ")
+          : undefined;
         const depDetail = result.deps_warning
           ? result.deps_errors?.length
             ? `${result.deps_warning}: ${result.deps_errors.join("; ")}`
             : result.deps_warning
           : undefined;
+        const warningDetail = [depDetail, grantDetail].filter(Boolean).join("; ") || undefined;
 
         setEntries((prev) =>
           prev.map((e) =>
@@ -144,8 +178,8 @@ export function SkillUploadDialog({ open, onOpenChange, onUpload }: SkillUploadD
                     s.id === skill.id
                       ? {
                           ...s,
-                          status: result.deps_warning ? ("warning" as SkillStatus) : ("success" as SkillStatus),
-                          error: depDetail,
+                          status: warningDetail ? ("warning" as SkillStatus) : ("success" as SkillStatus),
+                          error: warningDetail,
                         }
                       : s,
                   ),
@@ -188,6 +222,8 @@ export function SkillUploadDialog({ open, onOpenChange, onUpload }: SkillUploadD
     setEntries([]);
     setDragging(false);
     setDone(false);
+    setGrantManagers(true);
+    setManagerAgentIds([]);
     onOpenChange(v);
   };
 
@@ -206,9 +242,19 @@ export function SkillUploadDialog({ open, onOpenChange, onUpload }: SkillUploadD
   // Derived counts (skill level, not file level)
   // ---------------------------------------------------------------------------
 
-  const allSkills = entries.flatMap((e) => e.skills);
-  const actionableCount = allSkills.filter((s) => s.status === "valid").length;
-  const successCount = allSkills.filter((s) => s.status === "success" || s.status === "warning").length;
+  const uploadSummary = summarizeUploadEntries(entries);
+  const actionableCount = uploadSummary.valid;
+  const allCurrentAgentsSelected = agents.length > 0 && managerAgentIds.length === agents.length;
+
+  const toggleManagerAgent = (id: string) => {
+    setManagerAgentIds((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
+    );
+  };
+
+  const toggleAllAgents = () => {
+    setManagerAgentIds(allCurrentAgentsSelected ? [] : agents.map((agent) => agent.id));
+  };
 
   // ---------------------------------------------------------------------------
   // Render
@@ -219,7 +265,7 @@ export function SkillUploadDialog({ open, onOpenChange, onUpload }: SkillUploadD
       <DialogContent className="max-h-[80dvh] flex flex-col">
         <DialogHeader>
           <DialogTitle>{t("upload.title")}</DialogTitle>
-          <DialogDescription>{t("upload.description")}</DialogDescription>
+          <DialogDescription>{t("upload.description", { max: maxUploadSizeMB })}</DialogDescription>
         </DialogHeader>
 
         {/* Drop zone — hidden once upload starts or finishes */}
@@ -272,16 +318,58 @@ export function SkillUploadDialog({ open, onOpenChange, onUpload }: SkillUploadD
           </div>
         )}
 
+        {entries.length > 0 && !uploading && !done && (
+          <div className="space-y-3 rounded-md border p-3">
+            <label className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium">{t("upload.agentManagers")}</span>
+              <Switch checked={grantManagers} onCheckedChange={setGrantManagers} />
+            </label>
+            {grantManagers && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label className="text-xs text-muted-foreground">{t("upload.managerAgentsHelp")}</Label>
+                  <Button type="button" variant="ghost" size="sm" onClick={toggleAllAgents} disabled={agents.length === 0}>
+                    {allCurrentAgentsSelected ? t("upload.clearAgents") : t("upload.selectAllCurrentAgents")}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {t("upload.selectedAgentsCount", { selected: managerAgentIds.length, total: agents.length })}
+                </p>
+                <div className="max-h-32 overflow-y-auto rounded-md border">
+                  {agents.length === 0 ? (
+                    <p className="px-3 py-2 text-sm text-muted-foreground">{t("upload.noAgents")}</p>
+                  ) : agents.map((agent) => (
+                    <label key={agent.id} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted/40">
+                      <input
+                        type="checkbox"
+                        checked={managerAgentIds.includes(agent.id)}
+                        onChange={() => toggleManagerAgent(agent.id)}
+                        className="h-4 w-4"
+                      />
+                      <span className="min-w-0 truncate">{agent.display_name || agent.agent_key}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Summary line */}
         {entries.length > 0 && !done && !uploading && (
           <p className="text-xs text-muted-foreground">
-            {t("upload.validCount", { valid: actionableCount, total: allSkills.length })}
+            {t("upload.validCount", { valid: actionableCount, total: uploadSummary.total })}
           </p>
         )}
         {done && (
-          <p className="text-sm font-medium text-muted-foreground">
-            {t("upload.successCount", { success: successCount, total: allSkills.filter((s) => s.status !== "unchanged" && s.status !== "invalid").length })}
-          </p>
+          <div className="flex flex-wrap gap-1.5 text-sm">
+            <Badge variant="success">{t("upload.summaryUploaded", { count: uploadSummary.uploaded })}</Badge>
+            <Badge variant="warning">{t("upload.summaryWarnings", { count: uploadSummary.warnings })}</Badge>
+            <Badge variant="outline">{t("upload.summaryUnchanged", { count: uploadSummary.unchanged })}</Badge>
+            <Badge variant={uploadSummary.failed + uploadSummary.invalid > 0 ? "destructive" : "outline"}>
+              {t("upload.summaryFailed", { count: uploadSummary.failed + uploadSummary.invalid })}
+            </Badge>
+          </div>
         )}
 
         <DialogFooter>

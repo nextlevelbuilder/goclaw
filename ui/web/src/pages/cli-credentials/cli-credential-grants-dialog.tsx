@@ -8,6 +8,10 @@ import { useAgents } from "@/pages/agents/hooks/use-agents";
 import { useCliCredentialGrants } from "./hooks/use-cli-credentials";
 import { CliCredentialGrantCard } from "./cli-credential-grant-card";
 import { CliCredentialGrantForm } from "./cli-credential-grant-form";
+import {
+  EMPTY_ENV_STATE, buildEnvVarsPayload, envStateFromGrant,
+} from "./cli-credential-grants-dialog-helpers";
+import type { GrantEnvState } from "./cli-credential-grant-env-section";
 import type { SecureCLIBinary, CLIAgentGrant } from "./hooks/use-cli-credentials";
 
 interface Props {
@@ -32,6 +36,11 @@ export function CliCredentialGrantsDialog({ open, onOpenChange, binary }: Props)
   const [editingGrant, setEditingGrant] = useState<CLIAgentGrant | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [rejectedKeys, setRejectedKeys] = useState<string[]>([]);
+
+  // Env override — local state only; cleared on dialog close (no persistent cache)
+  const [envState, setEnvState] = useState<GrantEnvState>(EMPTY_ENV_STATE);
+  const [originalEnvSet, setOriginalEnvSet] = useState(false);
 
   const agentNameMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -39,19 +48,16 @@ export function CliCredentialGrantsDialog({ open, onOpenChange, binary }: Props)
     return map;
   }, [agents]);
 
-  useEffect(() => {
-    if (open) clearForm();
-  }, [open]);
+  // Finding #11: clear form on both open AND close.
+  // Original code only cleared on open (true→?), leaving plaintext env values
+  // in state when dialog closes. Now: open=true → clearForm (fresh start);
+  // open=false → clearForm (wipe any revealed plaintext before next session).
+  useEffect(() => { clearForm(); }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const clearForm = () => {
-    setAgentId("");
-    setDenyArgs("");
-    setDenyVerbose("");
-    setTimeout("");
-    setTips("");
-    setEnabled(true);
-    setEditingGrant(null);
-    setError("");
+    setAgentId(""); setDenyArgs(""); setDenyVerbose(""); setTimeout(""); setTips("");
+    setEnabled(true); setEditingGrant(null); setError(""); setRejectedKeys([]);
+    setEnvState(EMPTY_ENV_STATE); setOriginalEnvSet(false);
   };
 
   const selectGrant = (grant: CLIAgentGrant) => {
@@ -62,7 +68,9 @@ export function CliCredentialGrantsDialog({ open, onOpenChange, binary }: Props)
     setTips(grant.tips ?? "");
     setEnabled(grant.enabled);
     setEditingGrant(grant);
-    setError("");
+    setError(""); setRejectedKeys([]);
+    setOriginalEnvSet(grant.env_set === true);
+    setEnvState(envStateFromGrant(grant));
   };
 
   const splitComma = (v: string): string[] | null => {
@@ -72,9 +80,9 @@ export function CliCredentialGrantsDialog({ open, onOpenChange, binary }: Props)
 
   const handleSubmit = async () => {
     if (!agentId) { setError(t("grants.agentRequired")); return; }
-    setSaving(true);
-    setError("");
+    setSaving(true); setError(""); setRejectedKeys([]);
     try {
+      const envVarsPayload = buildEnvVarsPayload(envState, originalEnvSet);
       const input = {
         agent_id: agentId,
         deny_args: splitComma(denyArgs),
@@ -82,6 +90,7 @@ export function CliCredentialGrantsDialog({ open, onOpenChange, binary }: Props)
         timeout_seconds: timeout ? parseInt(timeout, 10) : null,
         tips: tips.trim() || null,
         enabled,
+        ...(envVarsPayload !== undefined ? { env_vars: envVarsPayload } : {}),
       };
       if (editingGrant) {
         await updateGrant(editingGrant.id, input);
@@ -90,7 +99,10 @@ export function CliCredentialGrantsDialog({ open, onOpenChange, binary }: Props)
       }
       clearForm();
     } catch (err) {
-      setError(err instanceof Error ? err.message : tc("error"));
+      const msg = err instanceof Error ? err.message : tc("error");
+      const details = (err as { details?: { rejected_keys?: string[] } }).details;
+      if (details?.rejected_keys) setRejectedKeys(details.rejected_keys);
+      setError(msg);
     } finally {
       setSaving(false);
     }
@@ -114,7 +126,6 @@ export function CliCredentialGrantsDialog({ open, onOpenChange, binary }: Props)
         <DialogHeader>
           <DialogTitle>{t("grants.title", { name: binary.binary_name })}</DialogTitle>
         </DialogHeader>
-
         <div className="space-y-4 -mx-4 px-4 sm:-mx-6 sm:px-6 overflow-y-auto min-h-0">
           {grants.length > 0 && (
             <div className="space-y-2">
@@ -134,28 +145,25 @@ export function CliCredentialGrantsDialog({ open, onOpenChange, binary }: Props)
               </div>
             </div>
           )}
-
           <CliCredentialGrantForm
             binary={binary}
             agents={agents}
-            agentId={agentId}
-            setAgentId={setAgentId}
-            denyArgs={denyArgs}
-            setDenyArgs={setDenyArgs}
-            denyVerbose={denyVerbose}
-            setDenyVerbose={setDenyVerbose}
-            timeout={timeout}
-            setTimeout={setTimeout}
-            tips={tips}
-            setTips={setTips}
-            enabled={enabled}
-            setEnabled={setEnabled}
+            agentId={agentId} setAgentId={setAgentId}
+            denyArgs={denyArgs} setDenyArgs={setDenyArgs}
+            denyVerbose={denyVerbose} setDenyVerbose={setDenyVerbose}
+            timeout={timeout} setTimeout={setTimeout}
+            tips={tips} setTips={setTips}
+            enabled={enabled} setEnabled={setEnabled}
+            envState={envState} setEnvState={setEnvState}
+            editingGrantId={editingGrant?.id ?? null}
+            initialEnvSet={editingGrant?.env_set === true}
+            initialEnvKeys={editingGrant?.env_keys ?? []}
+            rejectedKeys={rejectedKeys}
             isEditing={editingGrant !== null}
             saving={saving}
             onSubmit={handleSubmit}
             onCancel={clearForm}
           />
-
           {loading && <p className="text-xs text-muted-foreground">{tc("loading")}</p>}
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>

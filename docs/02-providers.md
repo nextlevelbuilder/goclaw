@@ -44,6 +44,39 @@ All HTTP-based providers (Anthropic, OpenAI-compatible, Codex) use 300-second ti
 
 ---
 
+## Agent Model Fallback
+
+Agents can define `model_fallback` as an ordered list of backup provider/model pairs. The agent's configured `provider` and `model` are always the primary route; fallback candidates are tried in UI order when the primary route returns a classifiable provider failure such as rate limit, overload, timeout, auth/billing failure, model-not-found, or unknown transport failure. Context overflow is not treated as fallback because it needs compaction, not a different model.
+
+Fallback is runtime-only and per agent. Explicit `ProviderOverride` or `ModelOverride` requests bypass the fallback wrapper so manual runs, heartbeats, or call sites that intentionally choose a model keep exact override behavior.
+
+Streaming fallback is conservative: backup models are tried only if the stream fails before any content, thinking, or image chunk is emitted.
+
+---
+
+## Usage Cap Pricing Enforcement
+
+Standard edition can enforce AI budget caps before billable provider dispatch. API-key providers use OpenRouter `/models` pricing as the catalog source, with optional tenant/provider/model overrides in the dashboard.
+
+Excluded provider classes:
+- `chatgpt_oauth`, `claude_cli`, and `bailian` are treated as subscription/non-API pricing in round one.
+- local/no-key subprocess providers such as `acp` and `ollama` are skipped unless a future feature explicitly enables pricing for them.
+
+Runtime flow:
+1. Resolve the stored provider by name and skip non-billable provider classes.
+2. Load matching policies for tenant, agent, provider, provider type, and model.
+3. Resolve custom pricing override first, then OpenRouter catalog pricing when a matching policy has a cost ceiling. Native provider model IDs are mapped to OpenRouter prefixes for common providers such as OpenAI, Anthropic, and Gemini.
+4. Reserve estimated tokens and cost atomically before each dispatch attempt.
+5. Reconcile reserved counters after the provider returns usage or after a failed call.
+
+Token-only policies do not require catalog pricing. Model fallback routes reserve against the actual candidate provider/model before each attempt. Cached input is separated from uncached input for OpenAI-compatible usage accounting. Partial stream failures keep the estimate, or actual provider usage when available, instead of clearing billed output to zero. Internal LLM calls for memory flush, compaction, media reading tools (`read_image`, `read_document`, `read_audio`, `read_video`), and subagents use the same preflight/reconcile path.
+
+The legacy agent-level `budget_monthly_cents` field is treated as a generated monthly agent USD cap. Existing values are backfilled during migration, and later agent budget edits update or remove the generated cap policy.
+
+Supported price units: input, output, cache read, cache write, reasoning, request, image, and web search.
+
+---
+
 ## 2. Supported Providers
 
 ### Six Core Provider Types
@@ -52,7 +85,7 @@ All HTTP-based providers (Anthropic, OpenAI-compatible, Codex) use 300-second ti
 |----------|------|----------|---------------|
 | **anthropic** | Native HTTP + SSE | API key required | `claude-sonnet-4-5-20250929` |
 | **claude_cli** | stdio subprocess + MCP | Binary path (default: `claude`) | `sonnet` |
-| **codex** | OAuth Responses API | OAuth token source | `gpt-5.3-codex` |
+| **codex** | OAuth Responses API | OAuth token source | `gpt-5.5` |
 | **acp** | JSON-RPC 2.0 subagents | Binary + workspace dir | `claude` |
 | **dashscope** | OpenAI-compat wrapper | API key + custom models | `qwen3-max` |
 | **openai** (+ 10+ variants) | OpenAI-compatible | API key + endpoint URL | Model-specific |
@@ -561,7 +594,7 @@ Claude CLI inherits thinking support from the underlying Claude model. Thinking 
 
 ## 12. Codex Provider
 
-The Codex provider integrates with OpenAI's ChatGPT Responses API (OAuth-based), enabling access to gpt-5.3-codex model through the chatgpt.com backend. Unlike standard OpenAI endpoints, Codex uses OAuth token refresh and a custom response format with "phase" markers.
+The Codex provider integrates with OpenAI's ChatGPT Responses API (OAuth-based), defaulting to `gpt-5.5` through the chatgpt.com backend. Unlike standard OpenAI endpoints, Codex uses OAuth token refresh and a custom response format with "phase" markers.
 
 ### Configuration
 
@@ -572,7 +605,7 @@ tokenSource := &MyTokenSource{} // implements TokenSource interface
 provider := NewCodexProvider("codex", tokenSource, "", "")
 // or specify custom API base and model:
 provider := NewCodexProvider("codex", tokenSource,
-  "https://chatgpt.com/backend-api", "gpt-5.3-codex")
+  "https://chatgpt.com/backend-api", "gpt-5.5")
 ```
 
 ### API Endpoint
@@ -591,7 +624,7 @@ Codex returns structured responses with phase markers:
 ```json
 {
   "id": "...",
-  "model": "gpt-5.3-codex",
+  "model": "gpt-5.5",
   "choices": [{
     "message": {
       "role": "assistant",

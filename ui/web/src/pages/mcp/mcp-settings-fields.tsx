@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { KeyValueEditor } from "@/components/shared/key-value-editor";
 import type { MCPFormData } from "@/schemas/mcp.schema";
 
@@ -24,6 +25,8 @@ export function McpSettingsFields({ form }: McpSettingsFieldsProps) {
   const name = watch("name");
   const enabled = watch("enabled");
   const requireUserCreds = watch("requireUserCreds");
+  const toolHintsGlobal = watch("toolHintsGlobal");
+  const toolHintsTools = watch("toolHintsTools") as Record<string, string>;
 
   return (
     <>
@@ -37,6 +40,43 @@ export function McpSettingsFields({ form }: McpSettingsFieldsProps) {
           addLabel={t("form.addVariable")}
           maskValue={isSensitiveEnv}
         />
+      </div>
+
+      {/* Admin-authored hints appended to MCP tool descriptions. Lets ops teach
+          the LLM about server-specific quirks (e.g. "no trailing ';' in code args")
+          without modifying the upstream MCP server. See Settings.tool_hints JSONB. */}
+      <div className="grid gap-3 rounded-md border border-dashed border-border p-3">
+        <div className="grid gap-1">
+          <Label className="text-sm font-medium">{t("form.toolHints")}</Label>
+          <p className="text-xs text-muted-foreground">{t("form.toolHintsHint")}</p>
+        </div>
+
+        <div className="grid gap-1.5">
+          <Label htmlFor="mcp-tool-hints-global" className="text-xs text-muted-foreground">
+            {t("form.toolHintsGlobal")}
+          </Label>
+          <Textarea
+            id="mcp-tool-hints-global"
+            value={toolHintsGlobal}
+            onChange={(e) => setValue("toolHintsGlobal", e.target.value)}
+            placeholder={t("form.toolHintsGlobalPlaceholder")}
+            rows={3}
+            className="text-base md:text-sm resize-y"
+          />
+          <p className="text-xs text-muted-foreground">{t("form.toolHintsGlobalHint")}</p>
+        </div>
+
+        <div className="grid gap-1.5">
+          <Label className="text-xs text-muted-foreground">{t("form.toolHintsPerTool")}</Label>
+          <KeyValueEditor
+            value={toolHintsTools}
+            onChange={(v) => setValue("toolHintsTools", v)}
+            keyPlaceholder={t("form.toolHintsToolNamePlaceholder")}
+            valuePlaceholder={t("form.toolHintsToolValuePlaceholder")}
+            addLabel={t("form.toolHintsAdd")}
+            valueAs="textarea"
+          />
+        </div>
       </div>
 
       <div className="grid gap-1.5">

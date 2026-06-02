@@ -202,6 +202,64 @@ func TestRequireUserCreds_InvalidJSON(t *testing.T) {
 	}
 }
 
+// --- ParseToolHints ---
+
+func TestParseToolHints_Nil(t *testing.T) {
+	h := ParseToolHints(nil)
+	if h.Global != "" || len(h.Tools) != 0 {
+		t.Errorf("nil settings should yield empty hints, got %+v", h)
+	}
+}
+
+func TestParseToolHints_Empty(t *testing.T) {
+	h := ParseToolHints(json.RawMessage(`{}`))
+	if h.Global != "" || len(h.Tools) != 0 {
+		t.Errorf("empty settings should yield empty hints, got %+v", h)
+	}
+}
+
+func TestParseToolHints_Full(t *testing.T) {
+	settings := json.RawMessage(`{
+		"require_user_credentials": true,
+		"tool_hints": {
+			"global": "No trailing semicolons.",
+			"tools": {
+				"search": "Use arrow func.",
+				"update": "entityId must be int."
+			}
+		}
+	}`)
+	h := ParseToolHints(settings)
+	if h.Global != "No trailing semicolons." {
+		t.Errorf("global mismatch: %q", h.Global)
+	}
+	if h.HintFor("search") != "Use arrow func." {
+		t.Errorf("search hint mismatch: %q", h.HintFor("search"))
+	}
+	if h.HintFor("update") != "entityId must be int." {
+		t.Errorf("update hint mismatch: %q", h.HintFor("update"))
+	}
+	if h.HintFor("nonexistent") != "" {
+		t.Errorf("unknown tool should return empty string")
+	}
+}
+
+func TestParseToolHints_InvalidJSON(t *testing.T) {
+	// Invalid JSON → zero-value hints (safe default)
+	h := ParseToolHints(json.RawMessage(`{invalid`))
+	if h.Global != "" || len(h.Tools) != 0 {
+		t.Errorf("invalid JSON should yield empty hints, got %+v", h)
+	}
+}
+
+func TestParseToolHints_NilHintsMap(t *testing.T) {
+	// HintFor must not panic when Tools map is nil
+	h := ToolHints{Global: "global only"}
+	if h.HintFor("anything") != "" {
+		t.Error("nil Tools map should return empty string, not panic")
+	}
+}
+
 // --- mcpBM25Index ---
 
 func TestMCPBM25Index_EmptyIndex(t *testing.T) {

@@ -12,7 +12,15 @@ export interface SkillInfo {
   enabled?: boolean;
   tenant_enabled?: boolean | null;
   author?: string;
+  creator_agent?: SkillAgentRef;
+  manager_agents?: SkillAgentRef[];
   missing_deps?: string[];
+}
+
+export interface SkillAgentRef {
+  id?: string;
+  agent_key?: string;
+  display_name?: string;
 }
 
 export interface SkillFile {
@@ -35,6 +43,16 @@ export interface SkillWithGrant {
   visibility: string;
   version: number;
   granted: boolean;
+  can_manage?: boolean;
   pinned_version?: number;
   is_system: boolean;
+}
+
+export interface SkillAgentGrant {
+  agent_id: string;
+  agent_key?: string;
+  display_name?: string;
+  pinned_version: number;
+  granted_by: string;
+  can_manage: boolean;
 }

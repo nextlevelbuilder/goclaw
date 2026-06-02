@@ -3,6 +3,11 @@ package telegram
 import (
 	"strings"
 	"testing"
+
+	"github.com/mymmrac/telego"
+
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 )
 
 // --- buildMediaTags tests ---
@@ -146,5 +151,54 @@ func TestBuildMediaTags_UnknownType(t *testing.T) {
 	got := buildMediaTags(items)
 	if got != "" {
 		t.Errorf("expected empty string for unknown type, got: %q", got)
+	}
+}
+
+func TestExtractMediaRefsPreservesDocumentMetadata(t *testing.T) {
+	msg := &telego.Message{
+		Document: &telego.Document{
+			FileID:   "telegram-file-id",
+			FileName: "codex.zip",
+			MimeType: "application/zip",
+			FileSize: 1234,
+		},
+	}
+
+	got := extractMediaRefs(msg)
+	want := []channels.MediaRef{{
+		Type:        "document",
+		FileID:      "telegram-file-id",
+		FileSize:    1234,
+		FileName:    "codex.zip",
+		ContentType: "application/zip",
+	}}
+
+	if len(got) != len(want) {
+		t.Fatalf("got %d refs, want %d", len(got), len(want))
+	}
+	if got[0] != want[0] {
+		t.Fatalf("ref = %+v, want %+v", got[0], want[0])
+	}
+}
+
+func TestPrependMediaInfoFilesKeepsHistoryBeforeCurrent(t *testing.T) {
+	current := []bus.MediaFile{{
+		Path:     "/workspace/.uploads/current.pdf",
+		MimeType: "application/pdf",
+		Filename: "current.pdf",
+	}}
+	history := []MediaInfo{{
+		Type:        "document",
+		FilePath:    "/workspace/.uploads/codex.zip",
+		ContentType: "application/zip",
+		FileName:    "codex.zip",
+	}}
+
+	got := prependMediaInfoFiles(current, history)
+	if len(got) != 2 {
+		t.Fatalf("got %d files, want 2", len(got))
+	}
+	if got[0].Path != history[0].FilePath || got[1].Path != current[0].Path {
+		t.Fatalf("order = [%q, %q], want history before current", got[0].Path, got[1].Path)
 	}
 }

@@ -293,6 +293,38 @@
     "verifyFailed": "Kiểm tra embedding thất bại",
     "dimensionsMismatch": "{{count}} chiều — không khớp yêu cầu 1536"
   },
+  "pricing": {
+    "title": "Giá Model",
+    "description": "Đồng bộ giá OpenRouter và ghi đè chi phí model của provider này cho usage cap.",
+    "skippedDescription": "Usage cap bỏ qua provider subscription và local, nhưng vẫn có thể chuẩn bị giá cho route API-based sau này.",
+    "sync": "Đồng bộ OpenRouter",
+    "model": "Model",
+    "saveOverride": "Lưu override",
+    "catalogMatches": "Kết quả trong catalog OpenRouter",
+    "source": "Nguồn",
+    "configuredFields": "Trường đã cấu hình",
+    "override": "Override",
+    "emptyOverrides": "Provider này chưa có pricing override.",
+    "deleteOverride": "Xóa override",
+    "fields": {
+      "input": "Input",
+      "output": "Output",
+      "cache_read": "Cache read",
+      "cache_write": "Cache write",
+      "reasoning": "Reasoning",
+      "request": "Request",
+      "image": "Image",
+      "web_search": "Web search"
+    },
+    "toast": {
+      "synced": "Đã đồng bộ {{count}} model OpenRouter",
+      "syncFailed": "Không thể đồng bộ giá OpenRouter",
+      "saved": "Đã lưu pricing override",
+      "saveFailed": "Không thể lưu pricing override",
+      "deleted": "Đã xóa pricing override",
+      "deleteFailed": "Không thể xóa pricing override"
+    }
+  },
   "reasoning": {
     "off": "Off",
     "offDesc": "No default extended thinking",

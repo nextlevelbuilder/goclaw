@@ -12,6 +12,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 )
 
 // Summoning event type constants.
@@ -48,14 +49,16 @@ type AgentSummoner struct {
 	agents      store.AgentStore
 	providerReg *providers.Registry
 	msgBus      *bus.MessageBus
+	usageCaps   *usagecaps.Service
 }
 
 // NewAgentSummoner creates a summoner backed by the given stores and provider registry.
-func NewAgentSummoner(agents store.AgentStore, providerReg *providers.Registry, msgBus *bus.MessageBus) *AgentSummoner {
+func NewAgentSummoner(agents store.AgentStore, providerReg *providers.Registry, msgBus *bus.MessageBus, usageCaps *usagecaps.Service) *AgentSummoner {
 	return &AgentSummoner{
 		agents:      agents,
 		providerReg: providerReg,
 		msgBus:      msgBus,
+		usageCaps:   usageCaps,
 	}
 }
 
@@ -73,6 +76,7 @@ const singleCallTimeout = 300 * time.Second
 func (s *AgentSummoner) SummonAgent(agentID uuid.UUID, tenantID uuid.UUID, providerName, model, description string) {
 	ctx, cancel := context.WithTimeout(store.WithTenantID(context.Background(), tenantID), 600*time.Second)
 	defer cancel()
+	ctx = store.WithAgentID(ctx, agentID)
 
 	s.ensureBackfillFiles(ctx, agentID)
 	s.emitEvent(agentID, tenantID, SummonEventStarted, "", "")

@@ -1,12 +1,14 @@
 package browser
 
 import (
+	"context"
 	"encoding/json"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // --- resolveToIPv4 ---
@@ -198,12 +200,25 @@ func TestManagerOptions(t *testing.T) {
 	m := New(
 		WithHeadless(true),
 		WithRemoteURL("ws://chrome:9222"),
+		WithActionTimeout(2*time.Second),
+		WithIdleTimeout(0),
+		WithMaxPages(7),
 	)
 	if !m.headless {
 		t.Error("WithHeadless(true) not applied")
 	}
 	if m.remoteURL != "ws://chrome:9222" {
 		t.Errorf("WithRemoteURL not applied: %q", m.remoteURL)
+	}
+	status := m.Status()
+	if status.ActionTimeoutMs != 2000 {
+		t.Errorf("ActionTimeoutMs = %d, want 2000", status.ActionTimeoutMs)
+	}
+	if status.IdleTimeoutMs != 0 {
+		t.Errorf("IdleTimeoutMs = %d, want 0", status.IdleTimeoutMs)
+	}
+	if status.MaxPages != 7 {
+		t.Errorf("MaxPages = %d, want 7", status.MaxPages)
 	}
 }
 
@@ -220,5 +235,46 @@ func TestManagerStatusWhenStopped(t *testing.T) {
 	status := m.Status()
 	if status.Running {
 		t.Error("Status.Running should be false when browser is nil")
+	}
+}
+
+func TestBrowserScopeKeyIncludesTenantUserAndAgent(t *testing.T) {
+	scope := BrowserScope{
+		TenantID: "tenant-a",
+		UserID:   "user-a",
+		AgentID:  "agent-a",
+	}
+	got := scope.Key()
+	for _, want := range []string{"tenant=tenant-a", "user=user-a", "agent=agent-a"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("scope key %q missing %q", got, want)
+		}
+	}
+}
+
+func TestBrowserScopeKeyFallsBackToTenantForLegacyContext(t *testing.T) {
+	ctx := WithTenantID(context.Background(), "tenant-a")
+	if got := tenantIDFromCtx(ctx); got != "tenant-a" {
+		t.Fatalf("tenantIDFromCtx legacy key = %q, want tenant-a", got)
+	}
+}
+
+func TestGetPageForTenantRejectsUnownedEmptyTarget(t *testing.T) {
+	m := New()
+	m.pages["master-tab"] = nil
+
+	_, err := m.getPageForTenant("", "tenant-a")
+	if err == nil {
+		t.Fatal("expected scoped caller with no owned tabs to be denied")
+	}
+}
+
+func TestGetPageForTenantRejectsUnownedExplicitTarget(t *testing.T) {
+	m := New()
+	m.pages["master-tab"] = nil
+
+	_, err := m.getPageForTenant("master-tab", "tenant-a")
+	if err == nil {
+		t.Fatal("expected scoped caller to be denied unowned tab")
 	}
 }

@@ -22,8 +22,10 @@ func builtinToolSeedData() []store.BuiltinToolDef {
 
 		// runtime
 		{Name: "exec", DisplayName: "Execute Command", Description: "Execute a shell command in the workspace and return stdout/stderr", Category: "runtime", Enabled: true,
+			Settings: json.RawMessage(`{"timeout_seconds":60}`),
 			Metadata: json.RawMessage(`{"config_hint":"Config → Tools → Exec Approval"}`),
 		},
+		{Name: "wait", DisplayName: "Wait", Description: "Pause the current agent tool sequence for a bounded number of milliseconds", Category: "runtime", Enabled: true},
 
 		// web
 		{Name: "web_search", DisplayName: "Web Search", Description: "Search the web for information using a search engine (Brave or DuckDuckGo)", Category: "web", Enabled: true,

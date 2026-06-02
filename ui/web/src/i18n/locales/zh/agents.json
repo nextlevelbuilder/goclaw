@@ -747,7 +747,11 @@
       "selectToolsDeny": "选择要拒绝的工具...",
       "selectToolsAlsoAllow": "选择附加工具...",
       "toolCallPrefix": "工具调用前缀",
-      "toolCallPrefixHint": "从模型的工具调用名称中去除此前缀后再查找注册表。"
+      "toolCallPrefixHint": "从模型的工具调用名称中去除此前缀后再查找注册表。",
+      "waitLimits": "Wait 工具边界",
+      "waitMinPlaceholder": "最小毫秒",
+      "waitMaxPlaceholder": "最大毫秒",
+      "waitLimitsHint": "可选的 Agent 专属边界。服务端仍会将等待限制在 100-300000 毫秒内。"
     },
     "workspaceSharing": {
       "title": "工作区共享",
@@ -773,6 +777,19 @@
       "shareSessionsTip": "允许 agent 访问所有群组的会话记录。关闭时，每个用户的会话保持隔离。",
       "shareSessionsNote": "切换不会迁移数据——切换到共享模式后，现有的用户独立会话将无法访问。"
     },
+    "modelFallback": {
+      "title": "模型回退",
+      "description": "主模型不可用时，按优先顺序尝试备用 provider/model。",
+      "enabled": "已启用",
+      "primary": "主模型",
+      "providerPlaceholder": "选择 provider",
+      "modelPlaceholder": "选择或输入模型",
+      "add": "添加回退",
+      "remove": "删除回退",
+      "reorder": "调整回退顺序",
+      "empty": "尚未配置回退模型。",
+      "cooldown": "临时跳过近期失败的路由"
+    },
     "compaction": {
       "title": "压缩",
       "description": "上下文窗口压缩和压缩前记忆设置",
@@ -782,6 +799,16 @@
       "keepLastMessagesTip": "压缩后保留的最近消息数。旧消息被摘要替换。",
       "memoryFlush": "压缩前记忆",
       "memoryFlushTip": "压缩前，Agent可以将重要上下文保存到记忆文件。同时触发知识图谱提取。"
+    },
+    "inboundDebounce": {
+      "title": "入站防抖",
+      "description": "为此 Agent 覆盖 Web Chat 和频道快速连续消息的合并设置。",
+      "mode": "模式",
+      "modeTip": "继承会使用全局 Behavior 设置。自定义会在此 Agent 上保存覆盖值。",
+      "inherit": "继承全局",
+      "custom": "自定义",
+      "debounceMs": "防抖（毫秒）",
+      "debounceMsTip": "设为 0 表示不防抖；正数会在该等待时间后合并连续消息。"
     },
     "contextPruning": {
       "title": "上下文裁剪",
@@ -982,6 +1009,11 @@
     "title": "权限管理",
     "description": "控制谁可以修改代理配置和文件。所有者始终拥有完全访问权限。",
     "addRule": "添加规则",
+    "allMembers": "All members",
+    "allMembersTitle": "Grant this rule to every member in the selected scope by using userId=\"*\".",
+    "checkAccess": "Check access",
+    "allowed": "Allowed",
+    "denied": "Denied",
     "fileWriters": "文件编辑者",
     "configPerms": "配置权限",
     "noRules": "暂无权限规则。所有者默认拥有完全访问权限。",

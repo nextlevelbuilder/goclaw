@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { ToolNameSelect } from "@/components/shared/tool-name-select";
 import { SkillNameSelect } from "@/components/shared/skill-name-select";
+import { BitrixPortalSelect } from "./bitrix24/bitrix-portal-select";
 import type { FieldDef } from "./channel-schemas";
 
 const INHERIT = "__inherit__";
@@ -25,9 +26,17 @@ interface ChannelFieldsProps {
   isEdit?: boolean; // for credentials: show "leave blank to keep" hint
   /** Extra values for showWhen checks (e.g. config values visible to credential fields) */
   contextValues?: Record<string, unknown>;
+  /** Channel type — drives special-case renderers (e.g. bitrix24.portal dropdown) */
+  channelType?: string;
+  /** Callback when the bitrix24 portal dropdown's "+ Create new" item is picked.
+   *  Parent owns the modal lifecycle. */
+  onPortalCreateRequest?: () => void;
+  /** Callback when user clicks a pending (not-yet-authorized) portal in the
+   *  dropdown. Parent opens the create modal directly at the authorize step. */
+  onPortalResumeAuthorize?: (portalName: string) => void;
 }
 
-export function ChannelFields({ fields, values, onChange, idPrefix, isEdit, contextValues }: ChannelFieldsProps) {
+export function ChannelFields({ fields, values, onChange, idPrefix, isEdit, contextValues, channelType, onPortalCreateRequest, onPortalResumeAuthorize }: ChannelFieldsProps) {
   const allValues = contextValues ? { ...contextValues, ...values } : values;
   return (
     <div className="grid gap-3">
@@ -61,6 +70,9 @@ export function ChannelFields({ fields, values, onChange, idPrefix, isEdit, cont
             isEdit={isEdit}
             disabled={disabled}
             disabledHint={disabledHint}
+            channelType={channelType}
+            onPortalCreateRequest={onPortalCreateRequest}
+            onPortalResumeAuthorize={onPortalResumeAuthorize}
           />
         );
       })}
@@ -76,6 +88,9 @@ function FieldRenderer({
   isEdit,
   disabled,
   disabledHint,
+  channelType,
+  onPortalCreateRequest,
+  onPortalResumeAuthorize,
 }: {
   field: FieldDef;
   value: unknown;
@@ -84,6 +99,9 @@ function FieldRenderer({
   isEdit?: boolean;
   disabled?: boolean;
   disabledHint?: string;
+  channelType?: string;
+  onPortalCreateRequest?: () => void;
+  onPortalResumeAuthorize?: (portalName: string) => void;
 }) {
   const { t } = useTranslation("channels");
   // i18n: try "fieldConfig.<key>.label" / "fieldConfig.<key>.help", fall back to hardcoded schema string
@@ -96,6 +114,26 @@ function FieldRenderer({
   switch (field.type) {
     case "text":
     case "password":
+      // Special case: Bitrix24 portal field renders as a dynamic dropdown
+      // populated from bitrix.portals.list, not a free-text input. Hard-coded
+      // for one use case — generalising FieldDef to support runtime-loaded
+      // options is deferred until a second channel needs it (YAGNI).
+      if (channelType === "bitrix24" && field.key === "portal" && field.type === "text") {
+        return (
+          <div className="grid gap-1.5">
+            <Label htmlFor={id}>
+              {label}{labelSuffix}
+            </Label>
+            <BitrixPortalSelect
+              value={(value as string) ?? ""}
+              onChange={onChange}
+              onCreateRequest={onPortalCreateRequest ?? (() => {})}
+              onResumeAuthorize={onPortalResumeAuthorize}
+            />
+            {help && <p className="text-xs text-muted-foreground">{help}</p>}
+          </div>
+        );
+      }
       return (
         <div className="grid gap-1.5">
           <Label htmlFor={id}>

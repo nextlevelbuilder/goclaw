@@ -139,8 +139,28 @@ func (t *BrowserTool) Execute(ctx context.Context, args map[string]any) *tools.R
 	}
 
 	// Propagate tenant ID from store context to browser context for page isolation.
+	scope := BrowserScope{}
 	if tid := store.TenantIDFromContext(ctx); tid.String() != "00000000-0000-0000-0000-000000000000" {
-		ctx = WithTenantID(ctx, tid.String())
+		scope.TenantID = tid.String()
+	}
+	scope.UserID = store.CredentialUserIDFromContext(ctx)
+	if agentID := store.AgentIDFromContext(ctx); agentID.String() != "00000000-0000-0000-0000-000000000000" {
+		scope.AgentID = agentID.String()
+	} else {
+		scope.AgentID = store.AgentKeyFromContext(ctx)
+	}
+	ctx = WithScope(ctx, scope)
+
+	// Apply per-action timeout before startup so remote Chrome failures are bounded too.
+	switch action {
+	case "open", "navigate", "snapshot", "screenshot", "act", "tabs":
+		timeout := t.manager.ActionTimeout()
+		if ms, ok := args["timeoutMs"].(float64); ok && ms > 0 {
+			timeout = time.Duration(ms) * time.Millisecond
+		}
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
 	}
 
 	// Auto-start browser for actions that need it
@@ -149,18 +169,6 @@ func (t *BrowserTool) Execute(ctx context.Context, args map[string]any) *tools.R
 		if err := t.manager.Start(ctx); err != nil {
 			return tools.ErrorResult(fmt.Sprintf("failed to start browser: %v", err))
 		}
-	}
-
-	// Apply per-action timeout for heavy operations
-	switch action {
-	case "open", "navigate", "snapshot", "screenshot", "act":
-		timeout := t.manager.ActionTimeout()
-		if ms, ok := args["timeoutMs"].(float64); ok && ms > 0 {
-			timeout = time.Duration(ms) * time.Millisecond
-		}
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, timeout)
-		defer cancel()
 	}
 
 	switch action {

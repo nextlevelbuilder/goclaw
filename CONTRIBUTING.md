@@ -72,6 +72,48 @@ Shared predicate: `store.IsMasterScope(ctx)` (`internal/store/context.go`).
 - `requireAuth(RoleAdmin)` as the **sole** gate on a global-state write
 - Admin revoke/delete handlers that skip pre-fetch ownership verification (store SQL alone is not enough when it matches `IS NULL` arms)
 
+### Multi-attachment coalescing (#63)
+
+Three independent surfaces coalesce burst inbounds so one user action produces
+one agent run. Any future surface that fans burst arrivals into the agent loop
+MUST honor these eight invariants. Drift on any of them re-introduces the
+N-replies bug.
+
+1. **No media bypass.** A message carrying attachments goes through the same
+   silence window as text. The pre-fix "publish immediately when media is
+   present" shortcut is the original #63 regression — do not reintroduce it.
+2. **Media floor.** When attachments are present, the effective window is
+   `max(configured, mediaFloor)`. Configured can be 0 (disabled) for text-only
+   flows; once media arrives the floor is the lower bound so multi-file
+   uploads have time to land.
+3. **Per-key buffer.** Buffer key is the smallest tuple that uniquely names
+   "this user action in this delivery channel" — `(channel, chatID, senderID,
+   agentID)` for the bus debouncer, `(userKey, sessionKey)` for web chat,
+   `(chatID, MediaGroupID)` for Telegram albums.
+4. **Sender pin on first arrival.** First arrival pins the senderID on the
+   buffer. Subsequent arrivals with a mismatched sender are dropped with a
+   `security.*_sender_mismatch` warn log. Defense-in-depth against spoofed
+   updates; the platform should never reuse a group/session id across senders.
+5. **Drop-and-log dual caps.** Per-buffer cap AND global active-buffer cap.
+   Overflow logs `*.overflow` with `scope=buffer|global`, drops the
+   straggler, and returns false to caller — caller falls through to
+   single-message dispatch so no message is silently lost.
+6. **AfterFunc + Stop, never Reset.** Use `time.AfterFunc(window, fn)` and
+   `timer.Stop()` on every arrival. `time.Timer.Reset()` has a documented
+   double-fire race when the timer is mid-fire — banned.
+7. **Representative is members[0].** The first arrival's resolved context
+   (sender label, content prefix, reply target, topic config) is the one
+   that flows downstream on flush. Later arrivals contribute their media
+   only.
+8. **Synchronous Stop drain.** Shutdown order is `aggregator.Stop()` →
+   `pollCancel()` → `handlerWg.Wait()`. Stop synchronously flushes all
+   pending buffers BEFORE any context is cancelled so in-flight bursts
+   reach the agent loop. Post-Stop pushes are rejected with a warn log.
+
+Surfaces today: `internal/bus/inbound_debounce.go`,
+`internal/gateway/methods/chat_debounce.go`,
+`internal/channels/telegram/album_aggregator.go`.
+
 ## Test Layers
 
 Tests are organized by priority and purpose:

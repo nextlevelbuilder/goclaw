@@ -21,6 +21,7 @@ import { ProviderOAuthAccountSection } from "./provider-oauth-account-section";
 import { ProviderReasoningSection } from "./provider-reasoning-section";
 import { ProviderEmbeddingSection } from "./provider-embedding-section";
 import { ProviderPoolActivitySection } from "./provider-pool-activity-section";
+import { ProviderPricingSection } from "./provider-pricing-section";
 import {
   buildProviderSettingsWithChatGPTOAuthRouting,
   buildProviderSettingsWithReasoningDefaults,
@@ -284,6 +285,8 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
           </div>
         </section>
       ) : null}
+
+      <ProviderPricingSection provider={provider} />
 
       {showEmbedding ? (
         <ProviderEmbeddingSection embEnabled={embEnabled} setEmbEnabled={setEmbEnabled} embModel={embModel} setEmbModel={setEmbModel} embApiBase={embApiBase} setEmbApiBase={setEmbApiBase} onVerify={() => verifyEmbedding(provider.id, embModel.trim() || undefined, undefined)} verifying={embVerifying} verifyResult={embResult} />

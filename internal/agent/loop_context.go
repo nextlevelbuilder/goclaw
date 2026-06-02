@@ -45,7 +45,7 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 	// Resolve merged tenant user identity for credential lookups.
 	// Keeps UserID unchanged (session/workspace scoping) but sets a separate
 	// CredentialUserID for SecureCLI, MCP, and other per-user features.
-	if l.userResolver != nil && req.UserID != "" {
+	if l.userResolver != nil && req.UserID != "" && store.ExplicitCredentialUserIDFromContext(ctx) == "" {
 		credUserID := l.resolveCredentialUserID(ctx, *req)
 		if credUserID != "" && credUserID != req.UserID {
 			ctx = store.WithCredentialUserID(ctx, credUserID)
@@ -108,6 +108,11 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 	if l.memoryCfg != nil {
 		ctx = tools.WithMemoryConfig(ctx, l.memoryCfg)
 	}
+	var waitToolCfg *config.WaitToolPolicy
+	if l.agentToolPolicy != nil && l.agentToolPolicy.Wait != nil {
+		waitToolCfg = l.agentToolPolicy.Wait
+		ctx = tools.WithWaitToolConfig(ctx, waitToolCfg)
+	}
 	if l.sandboxCfg != nil {
 		ctx = tools.WithSandboxConfig(ctx, l.sandboxCfg)
 	}
@@ -156,6 +161,9 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 		}
 		// Apply user isolation layer via pipeline.
 		shared := l.shouldShareWorkspace(req.UserID, req.PeerKind)
+		if shared {
+			ctx = store.WithSharedContext(ctx)
+		}
 		effectiveWorkspace := tools.ResolveWorkspace(ws,
 			tools.UserChatLayer(tools.SanitizePathSegment(req.UserID), shared),
 		)
@@ -169,7 +177,15 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 			ctx = store.WithSharedSessions(ctx)
 		}
 		if err := os.MkdirAll(effectiveWorkspace, 0755); err != nil {
-			slog.Warn("failed to create user workspace directory", "workspace", effectiveWorkspace, "user", req.UserID, "error", err)
+			// Stale stored workspace (e.g. Docker-era /app/workspace/ on bare-metal host)
+			// would propagate as cmd.Dir into exec tools, where Linux's clone+chdir+execve
+			// failure surfaces as a misleading "fork/exec PATH: no such file or directory"
+			// — same message users would see for a missing binary. Fall back to the system
+			// default workspace (already created at startup) so tools keep working while
+			// the warning surfaces the data drift for operators.
+			slog.Warn("failed to create user workspace directory; falling back to system default",
+				"workspace", effectiveWorkspace, "fallback", l.workspace, "user", req.UserID, "error", err)
+			effectiveWorkspace = l.workspace
 		}
 		ctx = tools.WithToolWorkspace(ctx, effectiveWorkspace)
 	} else if l.workspace != "" {
@@ -179,10 +195,15 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 	// Team workspace: dispatched task overrides default workspace.
 	if req.TeamWorkspace != "" {
 		if err := os.MkdirAll(req.TeamWorkspace, 0755); err != nil {
-			slog.Warn("failed to create team workspace directory", "workspace", req.TeamWorkspace, "error", err)
+			// See note above on loop_context user workspace fallback. A broken
+			// req.TeamWorkspace would otherwise become cmd.Dir and surface as
+			// "fork/exec PATH: no such file or directory" from any tool exec.
+			slog.Warn("failed to create team workspace directory; keeping previous workspace",
+				"workspace", req.TeamWorkspace, "error", err)
+		} else {
+			ctx = tools.WithToolTeamWorkspace(ctx, req.TeamWorkspace)
+			ctx = tools.WithToolWorkspace(ctx, req.TeamWorkspace)
 		}
-		ctx = tools.WithToolTeamWorkspace(ctx, req.TeamWorkspace)
-		ctx = tools.WithToolWorkspace(ctx, req.TeamWorkspace)
 	}
 	if req.TeamID != "" {
 		ctx = tools.WithToolTeamID(ctx, req.TeamID)
@@ -227,9 +248,14 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 				tools.UserChatLayer(wsChat, shared),
 			)
 			if err := os.MkdirAll(wsDir, 0750); err != nil {
-				slog.Warn("failed to create team workspace directory", "workspace", wsDir, "error", err)
+				// See note above on loop_context user workspace fallback. Skip the
+				// team workspace context-set so downstream tools don't inherit a
+				// path that would fail with a misleading "fork/exec PATH: ENOENT".
+				slog.Warn("failed to create team workspace directory; skipping team workspace ctx",
+					"workspace", wsDir, "error", err)
+			} else {
+				ctx = tools.WithToolTeamWorkspace(ctx, wsDir)
 			}
-			ctx = tools.WithToolTeamWorkspace(ctx, wsDir)
 			// Team root (no UserChatLayer): lets any team agent — leader or member —
 			// read files produced by peers under different chat/user scopes within
 			// the same team. Writes still default to wsDir above; team root only
@@ -346,7 +372,7 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 		providerName = l.provider.Name()
 	}
 	// Extract resolved credential user ID (set earlier via WithCredentialUserID, empty if not resolved).
-	credUserID, _ := ctx.Value(store.CredentialUserIDKey).(string)
+	credUserID := store.ExplicitCredentialUserIDFromContext(ctx)
 	rc := &store.RunContext{
 		AgentID:             l.agentUUID,
 		AgentKey:            l.id,
@@ -359,6 +385,7 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 		SharedMemory:        store.IsSharedMemory(ctx),
 		SharedKG:            store.IsSharedKG(ctx),
 		SharedSessions:      store.IsSharedSessions(ctx),
+		SharedContext:       store.IsSharedContext(ctx),
 		RestrictToWorkspace: l.restrictToWs != nil && *l.restrictToWs,
 		BuiltinToolSettings: l.builtinToolSettings,
 		ChannelType:         req.ChannelType,
@@ -367,6 +394,7 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 		ParentProvider:      providerName,
 		MemoryCfg:           l.memoryCfg,
 		SandboxCfg:          l.sandboxCfg,
+		WaitToolCfg:         waitToolCfg,
 		ShellDenyGroups:     l.shellDenyGroups,
 		Workspace:           tools.ToolWorkspaceFromCtx(ctx),
 		TeamWorkspace:       tools.ToolTeamWorkspaceFromCtx(ctx),

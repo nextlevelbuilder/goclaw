@@ -1,6 +1,8 @@
 package store
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -101,6 +103,80 @@ func TestNextRunForToggle_ExpiredAtReturnsError(t *testing.T) {
 	}
 	if !errors.Is(err, ErrCronJobNoFutureRun) {
 		t.Fatalf("got %v, want ErrCronJobNoFutureRun", err)
+	}
+}
+
+func TestCronPayloadCredentialUserIDJSONRoundTrip(t *testing.T) {
+	payload := CronPayload{
+		Kind:             "agent_turn",
+		Message:          "run credentialed report",
+		CredentialUserID: "tenant-user-123",
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	if !json.Valid(data) {
+		t.Fatalf("payload JSON is invalid: %s", data)
+	}
+
+	var got CronPayload
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if got.CredentialUserID != payload.CredentialUserID {
+		t.Fatalf("credential user ID = %q, want %q", got.CredentialUserID, payload.CredentialUserID)
+	}
+}
+
+func TestCronPayloadLegacyJSONKeepsEmptyCredentialUserID(t *testing.T) {
+	var got CronPayload
+	if err := json.Unmarshal([]byte(`{"kind":"agent_turn","message":"legacy"}`), &got); err != nil {
+		t.Fatalf("unmarshal legacy payload: %v", err)
+	}
+	if got.CredentialUserID != "" {
+		t.Fatalf("legacy payload credential user ID = %q, want empty", got.CredentialUserID)
+	}
+}
+
+func TestCheckCronCredentialOwnerBlocksMismatch(t *testing.T) {
+	ctx := WithCredentialUserID(context.Background(), "tenant-user-b")
+	job := &CronJob{Payload: CronPayload{CredentialUserID: "tenant-user-a"}}
+
+	if err := CheckCronCredentialOwner(ctx, job); !errors.Is(err, ErrCronCredentialOwnerMismatch) {
+		t.Fatalf("got %v, want ErrCronCredentialOwnerMismatch", err)
+	}
+}
+
+func TestCheckCronCredentialOwnerIgnoresUserIDFallback(t *testing.T) {
+	ctx := WithUserID(context.Background(), "tenant-user-a")
+	job := &CronJob{Payload: CronPayload{CredentialUserID: "tenant-user-a"}}
+
+	if err := CheckCronCredentialOwner(ctx, job); !errors.Is(err, ErrCronCredentialOwnerMismatch) {
+		t.Fatalf("got %v, want ErrCronCredentialOwnerMismatch", err)
+	}
+}
+
+func TestCheckCronCredentialOwnerAllowsMatchAndLegacy(t *testing.T) {
+	ctx := WithCredentialUserID(context.Background(), "tenant-user-a")
+	if err := CheckCronCredentialOwner(ctx, &CronJob{Payload: CronPayload{CredentialUserID: "tenant-user-a"}}); err != nil {
+		t.Fatalf("matching credential owner should pass: %v", err)
+	}
+	if err := CheckCronCredentialOwner(context.Background(), &CronJob{}); err != nil {
+		t.Fatalf("legacy job should pass: %v", err)
+	}
+}
+
+func TestRedactCronJobCredentialContext(t *testing.T) {
+	job := CronJob{Payload: CronPayload{CredentialUserID: "tenant-user-a", Message: "run"}}
+	redacted := RedactCronJobCredentialContext(job)
+
+	if redacted.Payload.CredentialUserID != "" {
+		t.Fatalf("redacted credential user ID = %q, want empty", redacted.Payload.CredentialUserID)
+	}
+	if job.Payload.CredentialUserID == "" {
+		t.Fatal("redaction mutated source job")
 	}
 }
 

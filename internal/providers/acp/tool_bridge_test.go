@@ -111,7 +111,11 @@ func TestResolvePath_Escape_PathTraversal(t *testing.T) {
 
 func TestResolvePath_AbsoluteOutsideWorkspace(t *testing.T) {
 	tb, _ := newTestBridge(t)
-	_, err := tb.resolvePath("/etc/passwd")
+	outside := filepath.Join(t.TempDir(), "passwd")
+	if err := os.WriteFile(outside, []byte("secret"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := tb.resolvePath(outside)
 	if err == nil {
 		t.Error("expected access denied for absolute path outside workspace")
 	}

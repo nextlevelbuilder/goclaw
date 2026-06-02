@@ -10,6 +10,7 @@ import (
 const (
 	OptMaxTokens       = "max_tokens"
 	OptTemperature     = "temperature"
+	OptToolChoice      = "tool_choice"
 	OptThinkingLevel   = "thinking_level"
 	OptReasoningEffort = "reasoning_effort"
 	OptEnableThinking  = "enable_thinking"
@@ -185,10 +186,14 @@ type ToolFunctionSchema struct {
 
 // Usage tracks token consumption.
 type Usage struct {
-	PromptTokens        int `json:"prompt_tokens"`
-	CompletionTokens    int `json:"completion_tokens"`
-	TotalTokens         int `json:"total_tokens"`
-	CacheCreationTokens int `json:"cache_creation_input_tokens,omitempty"`
-	CacheReadTokens     int `json:"cache_read_input_tokens,omitempty"`
-	ThinkingTokens      int `json:"thinking_tokens,omitempty"`
+	PromptTokens                      int  `json:"prompt_tokens"`
+	CompletionTokens                  int  `json:"completion_tokens"`
+	TotalTokens                       int  `json:"total_tokens"`
+	CacheCreationTokens               int  `json:"cache_creation_input_tokens,omitempty"`
+	CacheReadTokens                   int  `json:"cache_read_input_tokens,omitempty"`
+	PromptTokensIncludeCachedSegments bool `json:"prompt_tokens_include_cached_segments,omitempty"`
+	ThinkingTokens                    int  `json:"thinking_tokens,omitempty"`
+	RequestCount                      int  `json:"request_count,omitempty"`
+	ImageCount                        int  `json:"image_count,omitempty"`
+	WebSearchCount                    int  `json:"web_search_count,omitempty"`
 }

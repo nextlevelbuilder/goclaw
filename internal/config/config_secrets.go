@@ -37,6 +37,7 @@ func (c *Config) MaskedCopy() *Config {
 	maskNonEmpty(&cp.Providers.Zai.APIKey)
 	maskNonEmpty(&cp.Providers.ZaiCoding.APIKey)
 	maskNonEmpty(&cp.Providers.OllamaCloud.APIKey)
+	maskNonEmpty(&cp.Providers.Vertex.APIKey)
 
 	// Mask gateway token
 	maskNonEmpty(&cp.Gateway.Token)
@@ -84,6 +85,7 @@ func (c *Config) StripSecrets() {
 	c.Providers.Zai.APIKey = ""
 	c.Providers.ZaiCoding.APIKey = ""
 	c.Providers.OllamaCloud.APIKey = ""
+	c.Providers.Vertex.APIKey = ""
 
 	// Gateway token
 	c.Gateway.Token = ""
@@ -136,6 +138,7 @@ func (c *Config) StripMaskedSecrets() {
 	stripIfMasked(&c.Providers.Zai.APIKey)
 	stripIfMasked(&c.Providers.ZaiCoding.APIKey)
 	stripIfMasked(&c.Providers.OllamaCloud.APIKey)
+	stripIfMasked(&c.Providers.Vertex.APIKey)
 
 	// Gateway token
 	stripIfMasked(&c.Gateway.Token)

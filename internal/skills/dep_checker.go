@@ -19,6 +19,7 @@ func CheckSkillDeps(m *SkillManifest) (bool, []string) {
 	if m == nil || m.IsEmpty() {
 		return true, nil
 	}
+	ensureNpmGlobalEnv()
 
 	var missing []string
 
@@ -121,6 +122,7 @@ func checkNodePackages(packages []string, scriptsDir string) []string {
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "node", "-e", sb.String())
+	cmd.Env = npmCommandEnv()
 	if scriptsDir != "" {
 		cmd.Dir = scriptsDir
 	}

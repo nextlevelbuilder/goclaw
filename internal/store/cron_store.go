@@ -12,8 +12,9 @@ import (
 )
 
 var (
-	ErrCronJobNotFound    = errors.New("cron job not found")
-	ErrCronJobNoFutureRun = errors.New("cron job has no future run")
+	ErrCronJobNotFound             = errors.New("cron job not found")
+	ErrCronJobNoFutureRun          = errors.New("cron job has no future run")
+	ErrCronCredentialOwnerMismatch = errors.New("cron credential context belongs to a different user")
 )
 
 // CronJob represents a scheduled job.
@@ -48,9 +49,40 @@ type CronSchedule struct {
 
 // CronPayload describes what a job does when triggered.
 type CronPayload struct {
-	Kind    string `json:"kind" db:"-"`
-	Message string `json:"message" db:"-"`
-	Command string `json:"command,omitempty" db:"-"`
+	Kind             string `json:"kind" db:"-"`
+	Message          string `json:"message" db:"-"`
+	Command          string `json:"command,omitempty" db:"-"`
+	CredentialUserID string `json:"credentialUserId,omitempty" db:"-"`
+}
+
+// CheckCronCredentialOwner blocks user-triggered mutation/execution of a
+// credential-bound cron job unless the caller owns that credential context.
+func CheckCronCredentialOwner(ctx context.Context, job *CronJob) error {
+	if job == nil || job.Payload.CredentialUserID == "" {
+		return nil
+	}
+	if ExplicitCredentialUserIDFromContext(ctx) == job.Payload.CredentialUserID {
+		return nil
+	}
+	return ErrCronCredentialOwnerMismatch
+}
+
+// RedactCronJobCredentialContext returns a response-safe copy of a cron job.
+func RedactCronJobCredentialContext(job CronJob) CronJob {
+	job.Payload.CredentialUserID = ""
+	return job
+}
+
+// RedactCronJobsCredentialContext returns response-safe copies of cron jobs.
+func RedactCronJobsCredentialContext(jobs []CronJob) []CronJob {
+	if len(jobs) == 0 {
+		return jobs
+	}
+	redacted := make([]CronJob, len(jobs))
+	for i := range jobs {
+		redacted[i] = RedactCronJobCredentialContext(jobs[i])
+	}
+	return redacted
 }
 
 // CronJobState tracks runtime state for a job.

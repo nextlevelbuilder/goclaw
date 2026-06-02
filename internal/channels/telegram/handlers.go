@@ -389,12 +389,68 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 		}
 	}
 
+	// All gates passed — hand off to processResolvedMessage for media resolution
+	// and downstream dispatch. members=[message] for single-message path; the
+	// album branch below coalesces Telegram media-group members so downstream
+	// sees ONE synthesized message per album (fixes #63).
+	rctx := resolvedMessageContext{
+		content:         content,
+		userID:          userID,
+		senderID:        senderID,
+		senderLabel:     senderLabel,
+		chatID:          chatID,
+		chatIDStr:       chatIDStr,
+		localKey:        localKey,
+		isGroup:         isGroup,
+		isForum:         isForum,
+		messageThreadID: messageThreadID,
+		dmThreadID:      dmThreadID,
+		topicCfg:        topicCfg,
+	}
+
+	// Album coalescing: if this update carries a MediaGroupID, push to the
+	// aggregator and return — the silence-window flush dispatches ONE call
+	// with all members. Push returns false on empty MediaGroupID (this branch
+	// won't be entered), aggregator stopped (post-shutdown), sender-rebind
+	// security drop, per-buffer overflow, or global overflow. In those cases
+	// fall through to single-message dispatch so the message is never silently
+	// lost.
+	if message.MediaGroupID != "" && c.albumAgg != nil {
+		if c.albumAgg.Push(message, rctx) {
+			return
+		}
+	}
+	c.processResolvedMessage(ctx, rctx, []*telego.Message{message})
+}
+
+// processResolvedMessage handles the post-gate phase of an inbound: media
+// resolution → content enrichment → typing → metadata → PublishInbound. It is
+// the shared entry point for single-message dispatch (members = []{rep}) and
+// album-flush dispatch (members = N buffered album members; rep = members[0]).
+//
+// Album behavior: media is resolved for every member, concatenated in arrival
+// order; reply context / forward context / caption come from members[0] only
+// (Telegram puts these on the first album message).
+func (c *Channel) processResolvedMessage(ctx context.Context, rctx resolvedMessageContext, members []*telego.Message) {
+	if len(members) == 0 {
+		return
+	}
+	rep := members[0]
+	user := rep.From
+	content := rctx.content
+
 	// --- Media download (only when bot will process the message) ---
 	// Deferred until after mention + pairing gates to avoid downloading
 	// media for messages that only get recorded in pending history.
-	mediaList, mediaErrors := c.resolveMedia(ctx, message)
-	if message.ReplyToMessage != nil {
-		replyMedia, replyErrors := c.resolveMedia(ctx, message.ReplyToMessage)
+	var mediaList []MediaInfo
+	var mediaErrors []MediaError
+	for _, m := range members {
+		ml, me := c.resolveMedia(ctx, m)
+		mediaList = append(mediaList, ml...)
+		mediaErrors = append(mediaErrors, me...)
+	}
+	if rep.ReplyToMessage != nil {
+		replyMedia, replyErrors := c.resolveMedia(ctx, rep.ReplyToMessage)
 		if len(replyMedia) > 0 {
 			// Tag reply media so LLM knows which images came from the replied-to message.
 			for i := range replyMedia {
@@ -403,7 +459,7 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 			// Reply media first (context), current media second.
 			mediaList = append(replyMedia, mediaList...)
 			slog.Debug("telegram: resolved media from replied message",
-				"reply_msg_id", message.ReplyToMessage.MessageID,
+				"reply_msg_id", rep.ReplyToMessage.MessageID,
 				"media_count", len(replyMedia),
 			)
 		}
@@ -458,7 +514,7 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 
 		// Replace lightweight media tags with full tags (includes transcripts).
 		fullTags := buildMediaTags(mediaList)
-		lightTags := lightweightMediaTags(message)
+		lightTags := lightweightMediaTags(rep)
 		if lightTags != "" && fullTags != "" {
 			content = strings.Replace(content, lightTags, fullTags, 1)
 		} else if fullTags != "" {
@@ -479,7 +535,7 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 	if len(mediaErrors) > 0 {
 		for _, me := range mediaErrors {
 			errTag := fmt.Sprintf("[sent media (%s) — skipped: %s]", me.Type, me.Reason)
-			if lightTag := lightweightTagForType(me.Type, message); lightTag != "" {
+			if lightTag := lightweightTagForType(me.Type, rep); lightTag != "" {
 				content = strings.Replace(content, lightTag, errTag, 1)
 			} else {
 				content = errTag + "\n" + content
@@ -494,33 +550,27 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 			} else {
 				errText = "⚠️ Failed to download the attached file. Skipped."
 			}
-			_ = c.sendHTML(ctx, chatID, errText, 0, messageThreadID)
+			_ = c.sendHTML(ctx, rctx.chatID, errText, 0, rctx.messageThreadID)
 		}
 	}
 
 	slog.Debug("telegram message received",
-		"sender_id", senderID,
-		"chat_id", fmt.Sprintf("%d", chatID),
+		"sender_id", rctx.senderID,
+		"chat_id", rctx.chatIDStr,
 		"preview", channels.Truncate(content, 50),
 	)
 
 	// Build context from pending group history (if any).
 	// Annotate current message with sender name so LLM knows who is talking.
 	finalContent := content
-	if isGroup {
-		annotated := fmt.Sprintf("[From: %s]\n%s", senderLabel, content)
+	if rctx.isGroup {
+		annotated := fmt.Sprintf("[From: %s]\n%s", rctx.senderLabel, content)
 		if c.HistoryLimit() > 0 {
 			// Resolve deferred media from history entries (lazy download).
-			if histRefs := c.GroupHistory().CollectMediaRefs(localKey); len(histRefs) > 0 {
+			if histRefs := c.GroupHistory().CollectMediaRefs(rctx.localKey); len(histRefs) > 0 {
 				histMedia, histErrors := c.resolveMediaRefs(ctx, histRefs)
-				for _, m := range histMedia {
-					mediaFiles = append(mediaFiles, bus.MediaFile{
-						Path:     m.FilePath,
-						MimeType: m.ContentType,
-						Filename: m.FileName,
-					})
-				}
 				if len(histMedia) > 0 {
+					mediaFiles = prependMediaInfoFiles(mediaFiles, histMedia)
 					histTags := buildMediaTags(histMedia)
 					annotated = "[Media from recent group messages — only analyze if user asks about them]\n" + histTags + "\n[/Media]\n\n" + annotated
 				}
@@ -529,39 +579,39 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 						"type", e.Type, "reason", e.Reason)
 				}
 			}
-			finalContent = c.GroupHistory().BuildContext(localKey, annotated, c.HistoryLimit())
+			finalContent = c.GroupHistory().BuildContext(rctx.localKey, annotated, c.HistoryLimit())
 		} else {
 			finalContent = annotated
 		}
 	} else {
 		// DM: annotate with sender identity so the agent knows who is messaging.
-		finalContent = fmt.Sprintf("[From: %s]\n%s", senderLabel, content)
+		finalContent = fmt.Sprintf("[From: %s]\n%s", rctx.senderLabel, content)
 	}
 
 	// Send typing indicator with keepalive + TTL safety net.
 	// Telegram typing expires after 5s, so keepalive every 4s.
 	// TTL auto-stops after 60s to prevent stuck indicators.
-	chatIDObj := tu.ID(chatID)
+	chatIDObj := tu.ID(rctx.chatID)
 	typingCtrl := typing.New(typing.Options{
 		MaxDuration:       60 * time.Second,
 		KeepaliveInterval: 4 * time.Second,
 		StartFn: func() error {
 			action := tu.ChatAction(chatIDObj, telego.ChatActionTyping)
-			if messageThreadID > 0 {
-				action.MessageThreadID = messageThreadID
+			if rctx.messageThreadID > 0 {
+				action.MessageThreadID = rctx.messageThreadID
 			}
 			return c.bot.SendChatAction(ctx, action)
 		},
 	})
 	// Stop previous typing controller for this chat/topic (if any)
-	if prev, ok := c.typingCtrls.Load(localKey); ok {
+	if prev, ok := c.typingCtrls.Load(rctx.localKey); ok {
 		prev.(*typing.Controller).Stop()
 	}
-	c.typingCtrls.Store(localKey, typingCtrl)
+	c.typingCtrls.Store(rctx.localKey, typingCtrl)
 	typingCtrl.Start()
 
 	// Stop previous thinking animation for this chat/topic
-	if prevStop, ok := c.stopThinking.Load(localKey); ok {
+	if prevStop, ok := c.stopThinking.Load(rctx.localKey); ok {
 		if cf, ok := prevStop.(*thinkingCancel); ok {
 			cf.Cancel()
 		}
@@ -569,7 +619,7 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 
 	// Create thinking cancel for this chat/topic
 	_, thinkCancel := context.WithCancel(ctx)
-	c.stopThinking.Store(localKey, &thinkingCancel{fn: thinkCancel})
+	c.stopThinking.Store(rctx.localKey, &thinkingCancel{fn: thinkCancel})
 
 	// No "Thinking..." placeholder — the DraftStream creates its own message
 	// on the first streaming chunk (sendMessage on first flush).
@@ -577,23 +627,35 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 	// user sees typing indicator → first content appears directly.
 
 	metadata := map[string]string{
-		"message_id": fmt.Sprintf("%d", message.MessageID),
-		"user_id":    fmt.Sprintf("%d", user.ID),
+		"message_id":       fmt.Sprintf("%d", rep.MessageID),
+		"user_id":          fmt.Sprintf("%d", user.ID),
 		tools.MetaUsername: user.Username,
-		"first_name": user.FirstName,
-		"is_group":   fmt.Sprintf("%t", isGroup),
-		"local_key":  localKey,
+		"first_name":       user.FirstName,
+		"is_group":         fmt.Sprintf("%t", rctx.isGroup),
+		"local_key":        rctx.localKey,
 	}
-	if message.Chat.Title != "" {
-		metadata[tools.MetaChatTitle] = message.Chat.Title
+	// When this publish coalesces multiple platform messages (album members),
+	// seed every sibling MessageID into merged_message_ids so the consumer
+	// dedup (cmd/gateway_consumer_dedup.go) blocks Telegram retransmits of
+	// non-representative members from triggering a duplicate agent run.
+	// Reuses the same key as the bus debouncer's merge path — single sink.
+	if len(members) > 1 {
+		ids := make([]string, 0, len(members))
+		for _, m := range members {
+			ids = append(ids, fmt.Sprintf("%d", m.MessageID))
+		}
+		metadata["merged_message_ids"] = strings.Join(ids, ",")
 	}
-	if isForum {
+	if rep.Chat.Title != "" {
+		metadata[tools.MetaChatTitle] = rep.Chat.Title
+	}
+	if rctx.isForum {
 		metadata[tools.MetaIsForum] = "true"
-		metadata[tools.MetaMessageThreadID] = fmt.Sprintf("%d", messageThreadID)
+		metadata[tools.MetaMessageThreadID] = fmt.Sprintf("%d", rctx.messageThreadID)
 	}
-	if dmThreadID > 0 {
-		metadata[tools.MetaDMThreadID] = fmt.Sprintf("%d", dmThreadID)
-		metadata[tools.MetaMessageThreadID] = fmt.Sprintf("%d", dmThreadID)
+	if rctx.dmThreadID > 0 {
+		metadata[tools.MetaDMThreadID] = fmt.Sprintf("%d", rctx.dmThreadID)
+		metadata[tools.MetaMessageThreadID] = fmt.Sprintf("%d", rctx.dmThreadID)
 	}
 	// Self-identity hint so the LLM knows its own Telegram handle and does not
 	// confuse other bots' @mentions (preserved after stripBotMention) for its own.
@@ -601,15 +663,15 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 		metadata[tools.MetaChannelSelfIdentity] = identity
 	}
 
-	if topicCfg.systemPrompt != "" {
-		metadata[tools.MetaTopicSystemPrompt] = topicCfg.systemPrompt
+	if rctx.topicCfg.systemPrompt != "" {
+		metadata[tools.MetaTopicSystemPrompt] = rctx.topicCfg.systemPrompt
 	}
-	if topicCfg.skills != nil {
-		metadata[tools.MetaTopicSkills] = strings.Join(topicCfg.skills, ",")
+	if rctx.topicCfg.skills != nil {
+		metadata[tools.MetaTopicSkills] = strings.Join(rctx.topicCfg.skills, ",")
 	}
 
 	peerKind := "direct"
-	if isGroup {
+	if rctx.isGroup {
 		peerKind = "group"
 	}
 
@@ -632,35 +694,35 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 	// Collect contact for processed messages (DM + group-mentioned).
 	if cc := c.ContactCollector(); cc != nil {
 		contactName := strings.TrimSpace(user.FirstName + " " + user.LastName)
-		cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, userID, contactName, user.Username, peerKind, "user", "", "")
+		cc.EnsureContact(ctx, c.Type(), c.Name(), rctx.senderID, rctx.userID, contactName, user.Username, peerKind, "user", "", "")
 		// Also collect group chat itself as a contact (for group permission / merge).
-		if isGroup {
-			cc.EnsureContact(ctx, c.Type(), c.Name(), chatIDStr, "", message.Chat.Title, "", "group", "group", "", "")
+		if rctx.isGroup {
+			cc.EnsureContact(ctx, c.Type(), c.Name(), rctx.chatIDStr, "", rep.Chat.Title, "", "group", "group", "", "")
 			// Collect forum topic as a distinct delivery target (including General).
-			if isForum && messageThreadID > 0 {
-				threadStr := fmt.Sprintf("%d", messageThreadID)
-				cc.EnsureContact(ctx, c.Type(), c.Name(), chatIDStr, "", message.Chat.Title, "", "group", "topic", threadStr, "topic")
+			if rctx.isForum && rctx.messageThreadID > 0 {
+				threadStr := fmt.Sprintf("%d", rctx.messageThreadID)
+				cc.EnsureContact(ctx, c.Type(), c.Name(), rctx.chatIDStr, "", rep.Chat.Title, "", "group", "topic", threadStr, "topic")
 			}
 		}
 	}
 
 	c.Bus().PublishInbound(bus.InboundMessage{
 		Channel:      c.Name(),
-		SenderID:     senderID,
-		ChatID:       chatIDStr,
+		SenderID:     rctx.senderID,
+		ChatID:       rctx.chatIDStr,
 		Content:      finalContent,
 		Media:        mediaFiles,
 		PeerKind:     peerKind,
-		UserID:       userID,
+		UserID:       rctx.userID,
 		AgentID:      targetAgentID,
 		HistoryLimit: c.HistoryLimit(),
-		ToolAllow:    topicCfg.tools,
+		ToolAllow:    rctx.topicCfg.tools,
 		TenantID:     c.TenantID(),
 		Metadata:     metadata,
 	})
 
 	// Clear pending history after sending to agent.
-	if isGroup {
-		c.GroupHistory().Clear(localKey)
+	if rctx.isGroup {
+		c.GroupHistory().Clear(rctx.localKey)
 	}
 }

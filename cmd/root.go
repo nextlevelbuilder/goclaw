@@ -38,6 +38,7 @@ func init() {
 	rootCmd.AddCommand(configCmd())
 	rootCmd.AddCommand(providersCmd())
 	rootCmd.AddCommand(channelsCmd())
+	rootCmd.AddCommand(bitrixPortalCmd())
 	rootCmd.AddCommand(cronCmd())
 	rootCmd.AddCommand(skillsCmd())
 	rootCmd.AddCommand(sessionsCmd())

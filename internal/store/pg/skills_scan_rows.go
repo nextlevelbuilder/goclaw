@@ -14,10 +14,12 @@ import (
 // Used by ListSkills (includes frontmatter) and scanSkillInfoList (no frontmatter).
 type skillInfoRow struct {
 	ID         uuid.UUID      `db:"id"`
+	TenantID   uuid.UUID      `db:"tenant_id"`
 	Name       string         `db:"name"`
 	Slug       string         `db:"slug"`
 	Desc       *string        `db:"description"`
 	Visibility string         `db:"visibility"`
+	OwnerID    string         `db:"owner_id"`
 	Tags       pq.StringArray `db:"tags"`
 	Version    int            `db:"version"`
 	IsSystem   bool           `db:"is_system"`
@@ -36,7 +38,9 @@ type skillInfoRowWithFrontmatter struct {
 // toSkillInfo converts a skillInfoRow to store.SkillInfo, resolving computed fields from baseDir.
 func (r *skillInfoRow) toSkillInfo(baseDir string) store.SkillInfo {
 	info := buildSkillInfo(r.ID.String(), r.Name, r.Slug, r.Desc, r.Version, baseDir, r.FilePath)
+	info.TenantID = r.TenantID.String()
 	info.Visibility = r.Visibility
+	info.OwnerID = r.OwnerID
 	info.Tags = []string(r.Tags)
 	info.IsSystem = r.IsSystem
 	info.Status = r.Status
@@ -49,6 +53,7 @@ func (r *skillInfoRow) toSkillInfo(baseDir string) store.SkillInfo {
 func (r *skillInfoRowWithFrontmatter) toSkillInfo(baseDir string) store.SkillInfo {
 	info := r.skillInfoRow.toSkillInfo(baseDir)
 	info.Author = parseFrontmatterAuthor(r.FmRaw)
+	info.CreatorAgent = parseFrontmatterCreatorAgent(r.FmRaw)
 	return info
 }
 

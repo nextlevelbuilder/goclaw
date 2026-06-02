@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/cache"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
@@ -233,7 +234,7 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 	}
 
 	// Path 2: No token configured → operator (backward compat)
-	if configToken == "" {
+	if configToken == "" && config.GatewayNoAuthFallbackAllowed(r.server.cfg.Gateway) {
 		client.role = permissions.RoleOperator
 		client.authenticated = true
 		client.userID = params.UserID
@@ -260,7 +261,7 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 		if paired {
 			client.role = permissions.RoleOperator
 			client.authenticated = true
-		client.userID = params.UserID
+			client.userID = params.UserID
 			client.pairedSenderID = params.SenderID
 			client.pairedChannel = "browser"
 			tid, errCode := r.resolveTenantHint(ctx, params.TenantHint, params.UserID)
@@ -318,6 +319,25 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 }
 
 func (r *MethodRouter) sendConnectResponse(ctx context.Context, client *Client, reqID string) {
+	// Now that the client is authenticated, promote the upgrade-request URL
+	// into the gateway-wide PublicURLSnapshot. RPC methods that advertise URLs
+	// back to external systems (e.g. bitrix.portals.create) read from this
+	// snapshot. Gating on authentication is what blocks the
+	// `Host: evil.com /health` poisoning vector — unauthenticated probes
+	// never make it this far.
+	//
+	// SetIfPublic additionally skips loopback/private hosts so a developer
+	// connecting via an SSH tunnel (Host=localhost:NNNN) doesn't pollute the
+	// snapshot for other admins on the public URL.
+	if r.server.publicURLSnapshot != nil {
+		if url := client.UpgradeURL(); url != "" {
+			if !r.server.publicURLSnapshot.SetIfPublic(url) {
+				slog.Debug("public_url snapshot skipped: non-public upgrade host",
+					"url", url, "user_id", client.UserID())
+			}
+		}
+	}
+
 	// Build scoped ctx that store.IsMasterScope expects: role + tenant.
 	// Owner role short-circuits regardless of tenant; non-owner relies on
 	// tenant_id == MasterTenantID. See store.IsMasterScope at context.go:346.
