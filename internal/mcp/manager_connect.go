@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 	"time"
 
@@ -230,6 +231,13 @@ func (m *Manager) registerPoolBridgeTools(entry *poolEntry, serverName, toolPref
 
 // createClient creates the appropriate MCP client based on transport type.
 func createClient(transportType, command string, args []string, env map[string]string, url string, headers map[string]string) (*mcpclient.Client, error) {
+
+	authHTTPClient := &http.Client{
+		Transport: &ContextAwareRoundTripper{
+			Proxied: http.DefaultTransport,
+		},
+	}
+
 	switch transportType {
 	case "stdio":
 		envSlice := mapToEnvSlice(env)
@@ -237,6 +245,8 @@ func createClient(transportType, command string, args []string, env map[string]s
 
 	case "sse":
 		var opts []transport.ClientOption
+		opts = append(opts, transport.WithHTTPClient(authHTTPClient))
+
 		if len(headers) > 0 {
 			opts = append(opts, mcpclient.WithHeaders(headers))
 		}
@@ -244,6 +254,8 @@ func createClient(transportType, command string, args []string, env map[string]s
 
 	case "streamable-http":
 		var opts []transport.StreamableHTTPCOption
+		opts = append(opts, transport.WithHTTPBasicClient(authHTTPClient))
+
 		if len(headers) > 0 {
 			opts = append(opts, transport.WithHTTPHeaders(headers))
 		}

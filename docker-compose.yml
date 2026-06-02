@@ -47,6 +47,7 @@ services:
       - GOCLAW_GATEWAY_TOKEN=${GOCLAW_GATEWAY_TOKEN:-}
       - GOCLAW_ENCRYPTION_KEY=${GOCLAW_ENCRYPTION_KEY:-}
       - GOCLAW_SKILLS_DIR=/app/data/skills
+      - GOCLAW_POSTGRES_DSN=postgres://postgres:postgres@postgres:5432/goclaw?sslmode=disable
       # Debug
       - GOCLAW_TRACE_VERBOSE=${GOCLAW_TRACE_VERBOSE:-0}
     volumes:
@@ -75,7 +76,14 @@ services:
       - default
       - goclaw-net
     restart: unless-stopped
-
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: goclaw
+    ports:
+      - "5433:5432"
 volumes:
   goclaw-data:
   goclaw-workspace:
