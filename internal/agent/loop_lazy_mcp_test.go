@@ -24,13 +24,16 @@ func (m *mockExecTool) Execute(_ context.Context, _ map[string]any) *tools.Resul
 	return tools.NewResult("ok from " + m.name)
 }
 
-// simulateLazyActivationCheck mimics the allowedTools check from loop.go for one tool call:
+// simulateLazyActivationCheck mimics the runtime authorize gate from
+// makeAuthorizeToolCall (loop_pipeline_callbacks.go) for one tool call.
+// The real gate is a PipelineDeps.AuthorizeToolCall callback invoked by ToolStage;
+// this helper exercises the same logic in isolation so tests stay unit-level.
 //
-//	if allowedTools != nil && !allowedTools[tc.Name] {
-//	    if l.tools.TryActivateDeferred(tc.Name) { allowedTools[tc.Name] = true }
+//	if allowed != nil && !allowed[name] {
+//	    if reg.TryActivateDeferred(name) { allowed[name] = true }
 //	    else { result = ErrorResult(...) }
 //	}
-//	if result == nil { result = l.tools.ExecuteWithContext(...) }
+//	if result == nil { result = reg.ExecuteWithContext(...) }
 //
 // Returns (result, blocked).
 func simulateLazyActivationCheck(reg *tools.Registry, allowedTools map[string]bool, toolName string) (*tools.Result, bool) {

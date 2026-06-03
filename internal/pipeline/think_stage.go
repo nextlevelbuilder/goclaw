@@ -41,6 +41,13 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 		if err != nil {
 			return fmt.Errorf("build tools: %w", err)
 		}
+		allowed := make(map[string]bool, len(toolDefs))
+		for _, td := range toolDefs {
+			allowed[td.Function.Name] = true
+		}
+		state.Tool.AllowedTools = allowed
+	} else {
+		state.Tool.AllowedTools = nil
 	}
 
 	// 3. Construct ChatRequest
