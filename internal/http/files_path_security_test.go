@@ -88,6 +88,60 @@ func TestFilesHandleServe_ProcDir_Blocked(t *testing.T) {
 	}
 }
 
+// ---- handleServe: expanded deny-prefix list ----
+
+// TestFilesHandleServe_ExpandedDenyPrefixes verifies that paths under /home/,
+// /Users/, /var/lib/, /var/www/, /opt/, and /srv/ are all blocked. These are
+// defense-in-depth blocks for misconfigured roots — the token/RBAC checks are
+// the primary barriers.
+func TestFilesHandleServe_ExpandedDenyPrefixes_Blocked(t *testing.T) {
+	h, _ := makeTestFilesHandler(t)
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/files/{path...}", h.handleServe)
+
+	cases := []struct {
+		name string
+		url  string
+	}{
+		{"home user ssh key", "/v1/files/home/user/.ssh/id_rsa"},
+		{"home user aws creds", "/v1/files/home/user/.aws/credentials"},
+		{"Users admin dir (macOS)", "/v1/files/Users/admin/secrets.txt"},
+		{"var lib docker secret", "/v1/files/var/lib/docker/overlay2/secret"},
+		{"var www config", "/v1/files/var/www/config.php"},
+		{"opt secrets key", "/v1/files/opt/secrets/key.pem"},
+		{"srv www app config", "/v1/files/srv/www/app/config.yaml"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.url, nil)
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
+			if w.Code == http.StatusOK {
+				t.Errorf("path %s should be denied (deny-prefix), got 200", tc.url)
+			}
+		})
+	}
+}
+
+// ---- handleServe: fail-closed observability on empty workspace/dataDir ----
+
+// TestFilesHandleServe_NoBoundary_Denies verifies that when both workspace and
+// dataDir are empty the handler returns 404 (fail-closed) for any path.
+func TestFilesHandleServe_NoBoundary_Denies(t *testing.T) {
+	h := NewFilesHandler("", "")
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/files/{path...}", h.handleServe)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/files/tmp/test.txt", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code == http.StatusOK {
+		t.Errorf("empty workspace+dataDir should deny all requests, got 200")
+	}
+}
+
 // ---- handleServe: workspace boundary enforcement ----
 
 func TestFilesHandleServe_FileInsideWorkspace_WithToken_Serves(t *testing.T) {
