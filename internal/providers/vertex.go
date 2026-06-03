@@ -131,11 +131,15 @@ func NewVertexProvider(ctx context.Context, cfg VertexConfig) (*OpenAIProvider, 
 	// then transparently fetches a fresh one. No extra work for callers.
 	cached := oauth2.ReuseTokenSource(nil, tokenSource)
 
+	// Use NewDefaultTransport as the oauth2 base transport so Vertex requests
+	// inherit the same per-stage timeouts as other providers. SSRF defense is
+	// provided by validateVertexAPIBaseOverride, which enforces the googleapis.com
+	// host constraint at provider-creation time.
 	client := &http.Client{
 		Timeout: DefaultHTTPTimeout,
 		Transport: &oauth2.Transport{
 			Source: cached,
-			Base:   http.DefaultTransport,
+			Base:   NewDefaultTransport(),
 		},
 	}
 
