@@ -174,12 +174,12 @@ func TestCheckDMPolicy_PolicyPairing(t *testing.T) {
 			wantResult:       PolicyAllow,
 		},
 		{
-			name:             "Pairing service error allows message (fail-open)",
+			name:             "Pairing service error denies message (fail-closed)",
 			senderID:         "user999",
 			allowList:        []string{},
 			paired:           false,
 			failPairingCheck: true,
-			wantResult:       PolicyAllow,
+			wantResult:       PolicyDeny,
 		},
 	}
 
@@ -319,14 +319,14 @@ func TestCheckGroupPolicy_PolicyPairing(t *testing.T) {
 			wantResult:    PolicyNeedsPairing,
 		},
 		{
-			name:             "Pairing service error allows (fail-open)",
+			name:             "Pairing service error denies (fail-closed)",
 			senderID:         "user999",
 			chatID:           "chat_2",
 			allowList:        []string{},
 			groupApproved:    false,
 			paired:           false,
 			failPairingCheck: true,
-			wantResult:       PolicyAllow,
+			wantResult:       PolicyDeny,
 		},
 	}
 
@@ -553,13 +553,13 @@ func TestCheckDMPolicy_AllPolicies_TableDriven(t *testing.T) {
 			wantResult: PolicyNeedsPairing,
 		},
 		{
-			name:             "pairing policy fail-open on service error",
+			name:             "pairing policy fail-closed on service error",
 			policy:           "pairing",
 			senderID:         "user3",
 			allowList:        []string{},
 			paired:           false,
 			failPairingCheck: true,
-			wantResult:       PolicyAllow,
+			wantResult:       PolicyDeny,
 		},
 	}
 
