@@ -18,13 +18,17 @@
   },
   "detail": {
     "reset": "重置",
+    "compact": "压缩",
     "delete": "删除",
     "deleteTitle": "删除Session",
     "deleteDescription": "这将永久删除此Session中的所有消息。",
     "resetTitle": "重置Session",
     "resetDescription": "这将清除所有消息但保留Session。",
+    "compactTitle": "压缩Session",
+    "compactDescription": "将消息历史截断为最近 4 条消息，但保留摘要。与重置不同，摘要会保留，以便Agent保留上下文。",
     "confirmDelete": "删除",
     "confirmReset": "重置",
+    "confirmCompact": "压缩",
     "noMessages": "此Session中没有消息",
     "summary": "摘要",
     "showMore": "显示更多",
@@ -39,6 +43,8 @@
     "deleteFailed": "删除Session失败",
     "reset": "Session已重置",
     "resetFailed": "重置Session失败",
+    "compacted": "Session已压缩",
+    "compactFailed": "压缩Session失败",
     "updated": "Session已更新",
     "updateFailed": "更新Session失败"
   }

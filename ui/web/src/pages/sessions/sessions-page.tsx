@@ -27,7 +27,7 @@ export function SessionsPage() {
   const [pageSize, setPageSizeRaw] = useState(globalPageSize);
   const setPageSize = (size: number) => { setPageSizeRaw(size); setPage(1); setGlobalPageSize(size); };
 
-  const { sessions, total, loading, preview, deleteSession, resetSession, patchSession } = useSessions({
+  const { sessions, total, loading, preview, deleteSession, resetSession, compactSession, patchSession } = useSessions({
     limit: pageSize,
     offset: (page - 1) * pageSize,
   });
@@ -50,6 +50,7 @@ export function SessionsPage() {
           navigate("/sessions");
         }}
         onReset={resetSession}
+        onCompact={compactSession}
         onPatch={patchSession}
       />
     );

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, Trash2, RotateCcw, Eye, Pencil, Check, X } from "lucide-react";
+import { ArrowLeft, Trash2, RotateCcw, Shrink, Eye, Pencil, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { MessageBubble } from "@/components/chat/message-bubble";
@@ -40,6 +40,7 @@ interface SessionDetailPageProps {
   onPreview: (key: string) => Promise<SessionPreview | null>;
   onDelete: (key: string) => Promise<void>;
   onReset: (key: string) => Promise<void>;
+  onCompact?: (key: string, keepLast?: number) => Promise<void>;
   onPatch?: (key: string, updates: { label?: string }) => Promise<void>;
 }
 
@@ -49,6 +50,7 @@ export function SessionDetailPage({
   onPreview,
   onDelete,
   onReset,
+  onCompact,
   onPatch,
 }: SessionDetailPageProps) {
   const { t } = useTranslation("sessions");
@@ -57,6 +59,7 @@ export function SessionDetailPage({
   const [loading, setLoading] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [confirmCompact, setConfirmCompact] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
 
@@ -206,6 +209,11 @@ export function SessionDetailPage({
           </div>
         </div>
         <div className="flex gap-2">
+          {onCompact && (
+            <Button variant="outline" size="sm" onClick={() => setConfirmCompact(true)} className="gap-1">
+              <Shrink className="h-3.5 w-3.5" /> {t("detail.compact")}
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={() => setConfirmReset(true)} className="gap-1">
             <RotateCcw className="h-3.5 w-3.5" /> {t("detail.reset")}
           </Button>
@@ -268,6 +276,23 @@ export function SessionDetailPage({
           setMessages([]);
         }}
       />
+
+      {onCompact && (
+        <ConfirmDialog
+          open={confirmCompact}
+          onOpenChange={setConfirmCompact}
+          title={t("detail.compactTitle")}
+          description={t("detail.compactDescription")}
+          confirmLabel={t("detail.confirmCompact")}
+          onConfirm={async () => {
+            await onCompact(session.key);
+            setConfirmCompact(false);
+            // Reload preview to reflect truncated history.
+            const p = await onPreview(session.key);
+            if (p) setMessages(p.messages);
+          }}
+        />
+      )}
     </div>
   );
 }

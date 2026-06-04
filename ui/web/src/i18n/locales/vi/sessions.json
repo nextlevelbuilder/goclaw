@@ -18,13 +18,17 @@
   },
   "detail": {
     "reset": "Đặt lại",
+    "compact": "Nén",
     "delete": "Xóa",
     "deleteTitle": "Xóa session",
     "deleteDescription": "Thao tác này sẽ xóa vĩnh viễn tất cả tin nhắn trong session này.",
     "resetTitle": "Đặt lại phiên",
     "resetDescription": "Thao tác này sẽ xóa tất cả tin nhắn nhưng giữ lại phiên.",
+    "compactTitle": "Nén phiên",
+    "compactDescription": "Cắt ngắn lịch sử tin nhắn xuống 4 tin gần nhất, giữ lại tóm tắt. Khác với Đặt lại - không xóa tóm tắt, agent vẫn nhớ ngữ cảnh.",
     "confirmDelete": "Xóa",
     "confirmReset": "Đặt lại",
+    "confirmCompact": "Nén",
     "noMessages": "Không có tin nhắn trong session này",
     "summary": "Tóm tắt",
     "showMore": "Xem thêm",
@@ -39,6 +43,8 @@
     "deleteFailed": "Không thể xóa session",
     "reset": "Đã đặt lại session",
     "resetFailed": "Không thể đặt lại session",
+    "compacted": "Đã nén session",
+    "compactFailed": "Không thể nén session",
     "updated": "Đã cập nhật session",
     "updateFailed": "Không thể cập nhật session"
   }

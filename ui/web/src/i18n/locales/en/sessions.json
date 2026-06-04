@@ -18,13 +18,17 @@
   },
   "detail": {
     "reset": "Reset",
+    "compact": "Compact",
     "delete": "Delete",
     "deleteTitle": "Delete Session",
     "deleteDescription": "This will permanently delete all messages in this session.",
     "resetTitle": "Reset Session",
     "resetDescription": "This will clear all messages but keep the session.",
+    "compactTitle": "Compact Session",
+    "compactDescription": "Truncate message history to the last 4 messages while keeping the summary. Unlike Reset, the summary is preserved so the agent retains context.",
     "confirmDelete": "Delete",
     "confirmReset": "Reset",
+    "confirmCompact": "Compact",
     "noMessages": "No messages in this session",
     "summary": "Summary",
     "showMore": "Show more",
@@ -39,6 +43,8 @@
     "deleteFailed": "Failed to delete session",
     "reset": "Session reset",
     "resetFailed": "Failed to reset session",
+    "compacted": "Session compacted",
+    "compactFailed": "Failed to compact session",
     "updated": "Session updated",
     "updateFailed": "Failed to update session"
   }
