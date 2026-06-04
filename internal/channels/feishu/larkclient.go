@@ -104,6 +104,9 @@ type apiResponse struct {
 	Code int             `json:"code"`
 	Msg  string          `json:"msg"`
 	Data json.RawMessage `json:"data"`
+	// Bot is only present on the legacy /open-apis/bot/v3/info endpoint,
+	// which returns the bot object at the top level instead of inside "data".
+	Bot json.RawMessage `json:"bot"`
 }
 
 // doJSON performs an authenticated JSON API call with auto token refresh.

@@ -270,6 +270,9 @@ func (c *LarkClient) DeleteMessageReaction(ctx context.Context, messageID, react
 
 // GetBotInfo fetches the bot's identity from /open-apis/bot/v3/info.
 // Returns the bot's open_id which is needed for mention detection in groups.
+// This legacy endpoint returns the bot object at the TOP level of the
+// response ({"code":0,"msg":"ok","bot":{...}}), not inside "data" like
+// newer Lark APIs — read resp.Bot first, with a data.bot fallback.
 func (c *LarkClient) GetBotInfo(ctx context.Context) (string, error) {
 	resp, err := c.doJSON(ctx, "GET", "/open-apis/bot/v3/info", nil)
 	if err != nil {
@@ -278,15 +281,31 @@ func (c *LarkClient) GetBotInfo(ctx context.Context) (string, error) {
 	if resp.Code != 0 {
 		return "", fmt.Errorf("get bot info: code=%d msg=%s", resp.Code, resp.Msg)
 	}
-	var result struct {
-		Bot struct {
-			OpenID string `json:"open_id"`
-		} `json:"bot"`
+
+	var botInfo struct {
+		OpenID string `json:"open_id"`
 	}
-	if err := json.Unmarshal(resp.Data, &result); err != nil {
-		return "", fmt.Errorf("unmarshal response: %w", err)
+	if len(resp.Bot) > 0 {
+		if err := json.Unmarshal(resp.Bot, &botInfo); err != nil {
+			return "", fmt.Errorf("unmarshal bot info: %w", err)
+		}
+		return botInfo.OpenID, nil
 	}
-	return result.Bot.OpenID, nil
+
+	// Fallback: some deployments may wrap the bot object inside "data".
+	if len(resp.Data) > 0 {
+		var wrapped struct {
+			Bot struct {
+				OpenID string `json:"open_id"`
+			} `json:"bot"`
+		}
+		if err := json.Unmarshal(resp.Data, &wrapped); err != nil {
+			return "", fmt.Errorf("unmarshal bot info data: %w", err)
+		}
+		return wrapped.Bot.OpenID, nil
+	}
+
+	return "", fmt.Errorf("get bot info: response missing bot object")
 }
 
 // --- IM API: Chat Members ---
