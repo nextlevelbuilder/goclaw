@@ -22,8 +22,8 @@ FROM nginx:1.27-alpine
 # regardless of pnpm's build-time umask (see #761).
 COPY --chmod=0755 --from=builder /app/dist /usr/share/nginx/html
 
-# Copy nginx config
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Copy nginx config template (envsubst-processed at startup via NGINX_ENTRYPOINT_LOCAL_RESOLVERS)
+COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 
 EXPOSE 80
 

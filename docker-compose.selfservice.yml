@@ -18,6 +18,10 @@ services:
       dockerfile: Dockerfile
     ports:
       - "${GOCLAW_UI_PORT:-3000}:80"
+    environment:
+      # Use nginx's built-in local resolver mechanism (reads /etc/resolv.conf automatically)
+      # Works with Docker (127.0.0.11) and Podman (gateway IP) without overrides
+      - NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1
     networks:
       - default
       - goclaw-net

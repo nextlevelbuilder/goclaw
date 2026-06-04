@@ -10,10 +10,9 @@ server {
     gzip_types text/plain text/css application/json application/javascript text/xml application/xml text/javascript image/svg+xml;
     gzip_min_length 256;
 
-    # Docker internal DNS resolver — re-resolves upstream when backend
-    # container restarts with a new IP (prevents stale DNS cache).
-    # Note: valid=10s means up to 10s stale DNS on backend restart.
-    resolver 127.0.0.11 valid=10s ipv6=off;
+    # DNS resolver — uses NGINX_LOCAL_RESOLVERS (set by nginx entrypoint from /etc/resolv.conf)
+    # Works for both Docker (127.0.0.11) and Podman (gateway IP) without manual config
+    resolver ${NGINX_LOCAL_RESOLVERS} valid=10s ipv6=off;
     set $upstream_backend "http://goclaw:18790";
 
     # Cache static assets
