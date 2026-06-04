@@ -2,6 +2,7 @@ package http
 
 import (
 	"net"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -35,17 +36,18 @@ func saveAndRestoreGlobals(t *testing.T) {
 func TestValidateProviderURL(t *testing.T) {
 	saveAndRestoreGlobals(t)
 	allowPrivateProviderURLsFn = func() bool { return false }
+	absClaudePath := filepath.Join(t.TempDir(), "claude")
 
 	dnsResolverFn = stubResolver(map[string][]string{
-		"api.openai.com":          {"104.18.6.192"},
-		"legit-provider.com":      {"203.0.113.50"},
-		"10.10.27.30.nip.io":      {"10.10.27.30"},
-		"192.168.1.1.sslip.io":    {"192.168.1.1"},
-		"172.16.0.5.nip.io":       {"172.16.0.5"},
-		"169.254.169.254.nip.io":  {"169.254.169.254"},
-		"127.0.0.1.nip.io":        {"127.0.0.1"},
-		"rebind.attacker.com":      {"10.0.0.1"},
-		"dual-stack.example.com":  {"203.0.113.50", "10.0.0.1"},
+		"api.openai.com":         {"104.18.6.192"},
+		"legit-provider.com":     {"203.0.113.50"},
+		"10.10.27.30.nip.io":     {"10.10.27.30"},
+		"192.168.1.1.sslip.io":   {"192.168.1.1"},
+		"172.16.0.5.nip.io":      {"172.16.0.5"},
+		"169.254.169.254.nip.io": {"169.254.169.254"},
+		"127.0.0.1.nip.io":       {"127.0.0.1"},
+		"rebind.attacker.com":    {"10.0.0.1"},
+		"dual-stack.example.com": {"203.0.113.50", "10.0.0.1"},
 	})
 
 	tests := []struct {
@@ -67,15 +69,16 @@ func TestValidateProviderURL(t *testing.T) {
 		{"gopher scheme remote", "gopher://internal:25", "openai_compat", true},
 		{"file scheme ollama", "file:///etc/passwd", "ollama", true},       // H-1: scheme enforced even for local types
 		{"gopher scheme acp", "gopher://localhost:25", "acp", true},        // H-1: scheme enforced even for local types
-		{"file scheme claude_cli", "file:///bin/bash", "claude_cli", true}, // H-1: scheme enforced even for local types
+		{"file scheme claude_cli", "file:///bin/bash", "claude_cli", true}, // H-1: scheme enforced for URL-like Claude CLI values
 
 		// --- Local type: allowlist-only ---
 		{"ollama localhost", "http://localhost:11434/v1", "ollama", false},
 		{"ollama 127.0.0.1", "http://127.0.0.1:11434/v1", "ollama", false},
 		{"ollama ::1", "http://[::1]:11434/v1", "ollama", false},
 		{"ollama host.docker.internal", "http://host.docker.internal:11434/v1", "ollama", false},
-		{"claude_cli localhost", "http://localhost:8080", "claude_cli", false},
 		{"acp 127.0.0.1", "http://127.0.0.1:9090", "acp", false},
+		{"claude_cli command name", "claude", "claude_cli", false},
+		{"claude_cli absolute path", absClaudePath, "claude_cli", false},
 
 		// Local type with non-localhost hosts → blocked
 		{"ollama 169.254.169.254", "http://169.254.169.254/latest/meta-data/", "ollama", true},
@@ -85,7 +88,6 @@ func TestValidateProviderURL(t *testing.T) {
 		{"ollama link-local", "http://169.254.1.1:8080/v1", "ollama", true},
 		{"ollama .internal", "http://redis.internal:6379/v1", "ollama", true},
 		{"ollama gcp metadata", "http://metadata.google.internal/computeMetadata/v1/", "ollama", true},
-		{"claude_cli metadata", "http://169.254.169.254/", "claude_cli", true},
 		{"acp private", "http://10.0.0.1:8080/v1", "acp", true},
 
 		// --- Remote type literal blocked IPs ---
@@ -173,6 +175,26 @@ func TestValidateProviderURL_AllowPrivateFlag(t *testing.T) {
 	})
 }
 
+func TestValidateProviderURL_LocalTypesIgnoreAllowPrivateFlag(t *testing.T) {
+	saveAndRestoreGlobals(t)
+	allowPrivateProviderURLsFn = func() bool { return true }
+
+	cases := []struct {
+		url          string
+		providerType string
+	}{
+		{"http://ollama:11434/v1", "ollama"},
+		{"http://host.lan:11434/v1", "ollama"},
+		{"http://10.0.0.5:11434/v1", "ollama"},
+		{"http://acp-sidecar:9090", "acp"},
+	}
+	for _, c := range cases {
+		if err := validateProviderURL(c.url, c.providerType); err == nil {
+			t.Errorf("expected local provider URL %s / %s to remain blocked despite allow-private flag", c.url, c.providerType)
+		}
+	}
+}
+
 // --- H-1: scheme enforced for local provider types (from PR #972) ---
 
 func TestValidateProviderURL_LocalTypeSchemeEnforced(t *testing.T) {
@@ -184,7 +206,6 @@ func TestValidateProviderURL_LocalTypeSchemeEnforced(t *testing.T) {
 	}{
 		{"file:///etc/passwd", "ollama"},
 		{"gopher://localhost:25", "ollama"},
-		{"file:///etc/passwd", "claude_cli"},
 		{"file:///etc/passwd", "acp"},
 	}
 	for _, c := range cases {
@@ -251,14 +272,41 @@ func TestValidateProviderURL_LocalTypeAllowedHosts(t *testing.T) {
 		{"http://127.0.0.1:11434/v1", "ollama"},
 		{"http://[::1]:11434/v1", "ollama"},
 		{"http://host.docker.internal:11434/v1", "ollama"},
-		{"http://localhost:8080", "claude_cli"},
-		{"http://127.0.0.1:8080", "claude_cli"},
 		{"http://localhost:9090", "acp"},
 		{"http://127.0.0.1:9090", "acp"},
 	}
 	for _, a := range allowed {
 		if err := validateProviderURL(a.url, a.providerType); err != nil {
 			t.Errorf("expected %s / %s to be allowed, got: %v", a.url, a.providerType, err)
+		}
+	}
+}
+
+func TestValidateProviderURL_ClaudeCLIExecutablePath(t *testing.T) {
+	saveAndRestoreGlobals(t)
+	absClaudePath := filepath.Join(t.TempDir(), "claude")
+
+	allowed := []string{
+		"",
+		"claude",
+		absClaudePath,
+		filepath.Join(t.TempDir(), "Claude Code.app", "Contents", "MacOS", "claude"),
+	}
+	for _, raw := range allowed {
+		if err := validateProviderURL(raw, "claude_cli"); err != nil {
+			t.Errorf("expected Claude CLI executable %q to be allowed, got: %v", raw, err)
+		}
+	}
+
+	blocked := []string{
+		"file:///usr/local/bin/claude",
+		"https://api.anthropic.com/v1",
+		"relative/claude",
+		"claude --dangerously-skip-permissions",
+	}
+	for _, raw := range blocked {
+		if err := validateProviderURL(raw, "claude_cli"); err == nil {
+			t.Errorf("expected Claude CLI executable %q to be rejected", raw)
 		}
 	}
 }

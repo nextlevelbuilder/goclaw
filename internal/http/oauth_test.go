@@ -65,6 +65,12 @@ func (m *mockProviderStore) UpdateProvider(_ context.Context, id uuid.UUID, upda
 			if v, ok := updates["api_key"]; ok {
 				p.APIKey = v.(string)
 			}
+			if v, ok := updates["api_base"]; ok {
+				p.APIBase = v.(string)
+			}
+			if v, ok := updates["provider_type"]; ok {
+				p.ProviderType = v.(string)
+			}
 			if v, ok := updates["settings"]; ok {
 				p.Settings = v.(json.RawMessage)
 			}

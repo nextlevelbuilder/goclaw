@@ -324,13 +324,12 @@ func normalizeOllamaAPIBase(p *store.LLMProviderData) {
 	}
 }
 
-// localProviderTypes are provider types that legitimately run on localhost
-// (e.g. Ollama, Claude CLI). They are restricted to an explicit localhost allowlist
+// localURLProviderTypes are provider types that legitimately run on localhost.
+// They are restricted to an explicit localhost allowlist
 // rather than skipping SSRF validation entirely.
-var localProviderTypes = map[string]bool{
-	store.ProviderOllama:    true,
-	store.ProviderClaudeCLI: true,
-	store.ProviderACP:       true,
+var localURLProviderTypes = map[string]bool{
+	store.ProviderOllama: true,
+	store.ProviderACP:    true,
 }
 
 // allowedLocalHosts are the only hosts permitted for local provider types.
@@ -355,27 +354,31 @@ var allowPrivateProviderURLsFn = sync.OnceValue(func() bool {
 //
 // Logic:
 //  1. Empty URL → allowed (provider may not need a custom base).
-//  2. Scheme check (http/https only) → enforced unconditionally for ALL types,
-//     including local types. Blocks file://, gopher://, dict://, etc.
-//  3. Local types (ollama, claude_cli, acp) → host must be in allowedLocalHosts
+//  2. Claude CLI → api_base is an executable path/command, not a URL.
+//  3. Scheme check (http/https only) → enforced for URL-based types, including
+//     local URL types. Blocks file://, gopher://, dict://, etc.
+//  4. Local URL types (ollama, acp) → host must be in allowedLocalHosts
 //     (explicit allowlist prevents reaching 169.254.169.254 or internal services
 //     via the local-type bypass).
-//  4. Remote types → if GOCLAW_ALLOW_PRIVATE_PROVIDER_URLS is set, allow and log.
+//  5. Remote types → if GOCLAW_ALLOW_PRIVATE_PROVIDER_URLS is set, allow and log.
 //     Otherwise: resolve DNS hostname; reject if ANY resolved IP satisfies
 //     security.IsBlocked (covers loopback, link-local, private, multicast,
 //     unspecified — including 0.0.0.0 and :: that earlier hand-rolled checks missed).
 //
-// DNS resolution on step 4 closes the nip.io / sslip.io / attacker-domain bypass
+// DNS resolution on step 5 closes the nip.io / sslip.io / attacker-domain bypass
 // where a hostname passes a literal-string blocklist but resolves to a private IP.
 func validateProviderURL(rawURL string, providerType string) error {
 	if rawURL == "" {
 		return nil
 	}
+	if providerType == store.ProviderClaudeCLI {
+		return validateClaudeCLIExecutablePath(rawURL)
+	}
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return fmt.Errorf("invalid URL: %w", err)
 	}
-	// Scheme check is unconditional — applies to ALL provider types including local.
+	// Scheme check is unconditional for URL-based provider types, including local URL types.
 	switch u.Scheme {
 	case "http", "https":
 	default:
@@ -387,7 +390,7 @@ func validateProviderURL(rawURL string, providerType string) error {
 	// Local provider types: only allow an explicit localhost allowlist.
 	// This prevents using the local-type escape hatch to reach internal services
 	// or cloud metadata endpoints.
-	if localProviderTypes[providerType] {
+	if localURLProviderTypes[providerType] {
 		for _, a := range allowedLocalHosts {
 			if strings.EqualFold(host, a) {
 				return nil
@@ -438,6 +441,19 @@ func validateProviderURL(rawURL string, providerType string) error {
 		}
 	}
 	return nil
+}
+
+func validateClaudeCLIExecutablePath(path string) error {
+	if strings.Contains(path, "\x00") {
+		return fmt.Errorf("Claude CLI executable path cannot contain NUL byte")
+	}
+	if _, err := url.ParseRequestURI(path); err == nil && strings.Contains(path, "://") {
+		return fmt.Errorf("Claude CLI api_base must be an executable path or %q, got URL %q", "claude", path)
+	}
+	if path == "claude" || filepath.IsAbs(path) {
+		return nil
+	}
+	return fmt.Errorf("Claude CLI api_base must be %q or an absolute executable path, got %q", "claude", path)
 }
 
 // --- Provider CRUD ---
