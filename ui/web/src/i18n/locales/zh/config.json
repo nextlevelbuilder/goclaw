@@ -100,6 +100,8 @@
   "agents.compaction.reserveTokensFloorTip": "压缩前为新响应保留的最小 Token 缓冲区。",
   "agents.compaction.maxHistoryShare": "最大历史占比（0-1）",
   "agents.compaction.maxHistoryShareTip": "对话历史可占用的上下文窗口比例。",
+  "agents.compaction.timeoutSeconds": "压缩超时（秒）",
+  "agents.compaction.timeoutSecondsTip": "等待压缩摘要的最长时间。留空则使用默认 120 秒。",
 
   "agents.pruning.title": "上下文裁剪",
   "agents.pruning.desc": "裁剪旧工具结果以释放上下文空间",

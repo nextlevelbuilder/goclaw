@@ -37,6 +37,8 @@ Conversation to summarize:
 
 `
 
+const defaultCompactionTimeout = 120 * time.Second
+
 // compactMessagesInPlace summarizes the first ~70% of messages into a condensed
 // summary, keeping the last ~30% intact. Operates purely on the local messages
 // slice — no session state touched, no locks needed.
@@ -84,7 +86,7 @@ func (l *Loop) compactMessagesInPlace(ctx context.Context, messages []providers.
 		}
 	}
 
-	sctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	sctx, cancel := context.WithTimeout(ctx, l.compactionTimeout())
 	defer cancel()
 
 	inTokens := l.estimateSummaryInputTokens(toSummarize)
@@ -131,6 +133,13 @@ func (l *Loop) compactMessagesInPlace(ctx context.Context, messages []providers.
 		"kept", len(result))
 
 	return result
+}
+
+func (l *Loop) compactionTimeout() time.Duration {
+	if l.compactionCfg != nil && l.compactionCfg.TimeoutSeconds > 0 {
+		return time.Duration(l.compactionCfg.TimeoutSeconds) * time.Second
+	}
+	return defaultCompactionTimeout
 }
 
 // dynamicSummaryMax returns the output-token budget for a compaction or
