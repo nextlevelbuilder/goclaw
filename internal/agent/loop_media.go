@@ -45,30 +45,39 @@ func parseMediaResult(toolOutput string) *MediaResult {
 	}
 }
 
-// extractMediaFromContent scans text for MEDIA:<path> tokens the LLM may echo
-// in its final response (e.g. when a tool returned the MEDIA: prefix as plain
-// text instead of setting Result.Media). Relative paths are resolved against
-// workspace. Called before sanitize strips the tokens so the attachments are
-// still delivered.
+// confineToWorkspace validates that mediaPath resolves to a regular file located
+// inside workspace, then returns the cleaned path. It is the single source of
+// truth for the media path-containment boundary, shared by the two feeders of
+// MediaResult.Path: extractMediaFromContent (LLM-echoed tokens) and the
+// parseMediaResult sink in processToolResult (tool MEDIA: output). Constraining
+// at this boundary protects every outbound channel at once — a path that escapes
+// the workspace never reaches a channel's file-upload egress.
 //
-// Security: only paths that (a) exist on disk and (b) resolve inside the
-// workspace root are accepted. An LLM cannot inject attachments pointing at
-// /etc/passwd, a sibling tenant's workspace, or a hallucinated path — the
-// extractor silently drops them. When workspace is empty, only legacy absolute
-// paths from tool outputs (via parseMediaResult's upstream flow) are trusted;
-// LLM-echoed absolute paths without a workspace context are dropped.
-func extractMediaFromContent(content, workspace string) []MediaResult {
-	if !strings.Contains(content, "MEDIA:") || workspace == "" {
-		return nil
-	}
-	matches := mediaPathPattern.FindAllString(content, -1)
-	if len(matches) == 0 {
-		return nil
+// Containment applies, in order:
+//   - relative paths are resolved against the workspace root;
+//   - Lstat (not Stat) rejects a symlink at the leaf outright;
+//   - EvalSymlinks resolves ancestor symlinks before the Rel check, so a
+//     "<ws>/<symlink-dir>/secret" escape via a dir symlink pointing outside the
+//     workspace is caught (a purely lexical Rel check would miss it).
+//
+// Returns the cleaned (symlink-preserving) path and true when the file is safe
+// to ship, or "", false when it must be dropped. An empty workspace yields
+// false: without a boundary there is nothing to validate against, and an
+// unvalidatable path must never reach an external egress.
+//
+// NOTE: the returned path is `cleaned`, NOT the symlink-resolved path. resolved
+// is used ONLY for the containment check — downstream readers (channel senders,
+// history, dedup) must see the same path semantics the tool emitted, otherwise
+// workspaces backed by bind-mounts / dir symlinks suffer dedup misses (observed
+// in production).
+func confineToWorkspace(mediaPath, workspace string) (string, bool) {
+	if mediaPath == "" || workspace == "" {
+		return "", false
 	}
 	// Resolve workspace to its real path (follows symlinks). Required because
 	// macOS uses symlinks for /tmp → /private/tmp; if we only Clean the
-	// workspace but EvalSymlinks the extracted paths, the Rel check below
-	// would spuriously fail even for legitimate files.
+	// workspace but EvalSymlinks the candidate path, the Rel check below would
+	// spuriously fail even for legitimate files.
 	wsRoot := ""
 	if abs, err := filepath.Abs(workspace); err == nil {
 		if resolved, err := filepath.EvalSymlinks(abs); err == nil {
@@ -78,6 +87,43 @@ func extractMediaFromContent(content, workspace string) []MediaResult {
 		}
 	}
 	if wsRoot == "" {
+		return "", false
+	}
+	path := mediaPath
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(wsRoot, path)
+	}
+	cleaned := filepath.Clean(path)
+	info, err := os.Lstat(cleaned)
+	if err != nil || !info.Mode().IsRegular() {
+		return "", false
+	}
+	resolved, err := filepath.EvalSymlinks(cleaned)
+	if err != nil {
+		return "", false
+	}
+	rel, err := filepath.Rel(wsRoot, resolved)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return cleaned, true
+}
+
+// extractMediaFromContent scans text for MEDIA:<path> tokens the LLM may echo
+// in its final response (e.g. when a tool returned the MEDIA: prefix as plain
+// text instead of setting Result.Media). Relative paths are resolved against
+// workspace. Called before sanitize strips the tokens so the attachments are
+// still delivered.
+//
+// Security: only paths accepted by confineToWorkspace are emitted. An LLM cannot
+// inject attachments pointing at /etc/passwd, a sibling tenant's workspace, or a
+// hallucinated path — the extractor silently drops them.
+func extractMediaFromContent(content, workspace string) []MediaResult {
+	if !strings.Contains(content, "MEDIA:") || workspace == "" {
+		return nil
+	}
+	matches := mediaPathPattern.FindAllString(content, -1)
+	if len(matches) == 0 {
 		return nil
 	}
 	results := make([]MediaResult, 0, len(matches))
@@ -93,31 +139,8 @@ func extractMediaFromContent(content, workspace string) []MediaResult {
 		if path == "" {
 			continue
 		}
-		// Resolve relative paths against workspace.
-		if !filepath.IsAbs(path) {
-			path = filepath.Join(wsRoot, path)
-		}
-		cleaned := filepath.Clean(path)
-		// Existence + regular-file check. Lstat (not Stat) so a symlink at
-		// the leaf is rejected outright.
-		info, err := os.Lstat(cleaned)
-		if err != nil || !info.Mode().IsRegular() {
-			continue
-		}
-		// Resolve ancestor symlinks THEN check containment. A purely lexical
-		// Rel check would pass "<ws>/<symlink-dir>/secret" when symlink-dir
-		// points outside the workspace; EvalSymlinks closes that escape.
-		// NOTE: resolved is used ONLY for containment — the stored path stays
-		// `cleaned` so downstream readers (channel senders, history) use the
-		// same path semantics as the tool that wrote the file. Overwriting
-		// with the resolved path caused dedup misses in production when
-		// workspace contains bind-mounts / dir symlinks.
-		resolved, err := filepath.EvalSymlinks(cleaned)
-		if err != nil {
-			continue
-		}
-		rel, err := filepath.Rel(wsRoot, resolved)
-		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		cleaned, ok := confineToWorkspace(path, workspace)
+		if !ok {
 			continue
 		}
 		if _, dup := seen[cleaned]; dup {
