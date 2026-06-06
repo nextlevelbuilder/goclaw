@@ -30,7 +30,7 @@ services:
       dockerfile: Dockerfile
       args:
         ENABLE_OTEL: "${ENABLE_OTEL:-false}"
-        ENABLE_EMBEDUI: "${ENABLE_EMBEDUI:-true}"  # set to false when using WITH_WEB_NGINX
+        ENABLE_EMBEDUI: "${ENABLE_EMBEDUI:-true}" # set to false when using WITH_WEB_NGINX
         ENABLE_PYTHON: "${ENABLE_PYTHON:-true}"
         ENABLE_FULL_SKILLS: "${ENABLE_FULL_SKILLS:-false}"
         VERSION: "${GOCLAW_VERSION:-dev}"
@@ -86,7 +86,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: goclaw
     ports:
-      - "5433:5432"
+      - "5434:5432"
 volumes:
   goclaw-data:
   goclaw-workspace:
