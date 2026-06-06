@@ -98,7 +98,20 @@ func (l *Loop) processToolResult(
 			rs.mediaResults = append(rs.mediaResults, mr)
 		}
 	} else if mr := parseMediaResult(result.ForLLM); mr != nil {
-		rs.mediaResults = append(rs.mediaResults, *mr)
+		// Security (egress boundary): a tool's MEDIA:<path> output is taken
+		// verbatim, so confine it to the agent workspace before it can reach an
+		// outbound channel's file-upload sink (e.g. Bitrix imbot.v2.File.upload,
+		// Telegram sendDocument). A malicious or buggy tool emitting
+		// MEDIA:/etc/passwd is dropped here — fixing every channel at the source
+		// rather than per-channel. Mirrors extractMediaFromContent containment.
+		if cleaned, ok := confineToWorkspace(mr.Path, tools.ToolWorkspaceFromCtx(ctx)); ok {
+			mr.Path = cleaned
+			rs.mediaResults = append(rs.mediaResults, *mr)
+		} else {
+			slog.Warn("security.media_path_rejected",
+				"agent", l.id, "tool", tc.Name, "path", mr.Path,
+				"reason", "outside agent workspace")
+		}
 	}
 	// Auto-attach workspace media to task (covers create_image/audio/video).
 	if teamWs := tools.ToolTeamWorkspaceFromCtx(ctx); teamWs != "" {
