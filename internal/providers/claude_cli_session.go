@@ -68,11 +68,11 @@ func (p *ClaudeCLIProvider) buildArgs(model, workDir, mcpConfigPath string, cliS
 
 	if disableTools {
 		// Summoner: disable all tools entirely via disallowedTools
-		args = append(args, "--disallowedTools", "Bash,Edit,Read,Write,Glob,Grep,WebFetch,WebSearch,TodoRead,TodoWrite,NotebookRead,NotebookEdit")
+		args = append(args, "--disallowedTools", "Bash,Edit,Read,Write,Glob,Grep,WebFetch,WebSearch,TodoWrite,NotebookEdit")
 	} else if mcpConfigPath != "" {
 		// Chat with MCP bridge: disable CLI built-in tools, only allow MCP bridge tools.
 		// This ensures all tool execution goes through GoClaw's controlled MCP bridge.
-		args = append(args, "--disallowedTools", "Bash,Edit,Read,Write,Glob,Grep,WebFetch,WebSearch,TodoRead,TodoWrite,NotebookRead,NotebookEdit")
+		args = append(args, "--disallowedTools", "Bash,Edit,Read,Write,Glob,Grep,WebFetch,WebSearch,TodoWrite,NotebookEdit")
 	}
 
 	if p.hooksSettingsPath != "" {
