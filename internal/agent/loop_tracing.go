@@ -74,7 +74,7 @@ func (l *Loop) resolveSpan(opts []spanOption) (string, string) {
 }
 
 func (l *Loop) resolveSpanOverrides(opts []spanOption) spanOverrides {
-	o := spanOverrides{model: l.model, provider: l.provider.Name()}
+	o := spanOverrides{model: l.model, provider: l.ProviderName()}
 	for _, fn := range opts {
 		fn(&o)
 	}

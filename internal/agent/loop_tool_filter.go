@@ -24,7 +24,7 @@ func (l *Loop) buildFilteredTools(req *RunRequest, hadBootstrap bool, iteration,
 	var toolDefs []providers.ToolDefinition
 	var allowedTools map[string]bool
 	if l.toolPolicy != nil {
-		toolDefs = l.toolPolicy.FilterTools(l.tools, l.id, l.provider.Name(), l.agentToolPolicy, req.ToolAllow, false, false)
+		toolDefs = l.toolPolicy.FilterTools(l.tools, l.id, l.ProviderName(), l.agentToolPolicy, req.ToolAllow, false, false)
 		allowedTools = make(map[string]bool, len(toolDefs))
 		for _, td := range toolDefs {
 			allowedTools[td.Function.Name] = true

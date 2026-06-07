@@ -43,6 +43,9 @@ func (l *Loop) reserveInternalLLMUsageFor(ctx context.Context, chatReq providers
 }
 
 func (l *Loop) callInternalLLMWithUsage(ctx context.Context, chatReq providers.ChatRequest, purpose string) (*providers.ChatResponse, error) {
+	if l.provider == nil {
+		return nil, fmt.Errorf("callInternalLLMWithUsage: provider is nil (purpose=%s)", purpose)
+	}
 	if fallbackProvider, ok := l.provider.(*providers.ModelFallbackProvider); ok {
 		before := func(callCtx context.Context, entry providers.FallbackCandidate, actualReq providers.ChatRequest) (providers.FallbackAfterCall, error) {
 			candidatePurpose := fmt.Sprintf("%s:%s:%s", purpose, entry.ProviderName, actualReq.Model)

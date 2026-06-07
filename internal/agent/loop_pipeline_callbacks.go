@@ -540,7 +540,7 @@ func (l *Loop) makeFlushMessages(req *RunRequest) func(ctx context.Context, sess
 
 func (l *Loop) makeUpdateMetadata(req *RunRequest) func(ctx context.Context, sessionKey string, usage providers.Usage) error {
 	return func(ctx context.Context, sessionKey string, usage providers.Usage) error {
-		l.sessions.UpdateMetadata(ctx, sessionKey, l.model, l.provider.Name(), req.Channel)
+		l.sessions.UpdateMetadata(ctx, sessionKey, l.model, l.ProviderName(), req.Channel)
 		l.sessions.AccumulateTokens(ctx, sessionKey, int64(usage.PromptTokens), int64(usage.CompletionTokens))
 		// Persist session to DB (matching v2 finalizeRun behavior).
 		// FlushMessages already ran, so all pending messages are in the cache.

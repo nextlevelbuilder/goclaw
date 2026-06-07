@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -299,7 +300,7 @@ func (sq *SessionQueue) executeRun(ctx context.Context, runID string, runGenerat
 	// ensure cleanup still runs so the session queue doesn't orphan this run.
 	defer func() {
 		if r := recover(); r != nil {
-			slog.Error("scheduler: executeRun panicked", "run_id", runID, "panic", fmt.Sprint(r))
+			slog.Error("scheduler: executeRun panicked", "run_id", runID, "panic", fmt.Sprint(r), "stack", string(debug.Stack()))
 			pending.ResultCh <- RunOutcome{Err: fmt.Errorf("run panic: %v", r)}
 			close(pending.ResultCh)
 			sq.mu.Lock()
