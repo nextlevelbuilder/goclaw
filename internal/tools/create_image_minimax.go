@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -53,6 +54,31 @@ func callMinimaxImageGen(ctx context.Context, apiKey, apiBase, model, prompt str
 		"prompt":          prompt,
 		"aspect_ratio":    aspectRatio,
 		"response_format": "base64",
+	}
+
+	if rawImgs, ok := params["ref_images"]; ok {
+		if refImgs, ok := rawImgs.([]*referenceImage); ok && len(refImgs) > 0 {
+			if len(refImgs) > 1 {
+				slog.Warn("minimax image gen: provider only supports 1 reference image, using the first one", "count", len(refImgs))
+			}
+			refImg := refImgs[0]
+			var refURL string
+			if refImg.URL != "" {
+				refURL = refImg.URL
+			} else {
+				refMime := refImg.MimeType
+				if refMime == "" {
+					refMime = "image/png"
+				}
+				refURL = fmt.Sprintf("data:%s;base64,%s", refMime, refImg.Base64)
+			}
+			body["subject_reference"] = []map[string]any{
+				{
+					"type":       "character",
+					"image_file": refURL,
+				},
+			}
+		}
 	}
 
 	jsonBody, err := json.Marshal(body)

@@ -61,6 +61,18 @@ type NativeImageRequest struct {
 
 	// OutputFormat is the desired image format: "png" (default), "jpg", "webp".
 	OutputFormat string
+
+	// RefImages contains the list of reference images.
+	RefImages []RefImage
+}
+
+// RefImage represents a single reference image for image-to-image or styling tasks.
+type RefImage struct {
+	Data     []byte
+	Base64   string
+	MimeType string
+	URL      string
+	Strength float64
 }
 
 // NativeImageResult holds the result of a native image generation call.

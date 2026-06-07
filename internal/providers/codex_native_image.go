@@ -57,6 +57,39 @@ func (p *CodexProvider) GenerateImage(ctx context.Context, req NativeImageReques
 // so stream is always true. Final assembly happens in parseNativeImageSSE which scans the
 // event stream for response.output_item.done (image item) or response.completed output walk.
 func (p *CodexProvider) buildNativeImageRequestBody(model string, req NativeImageRequest) map[string]any {
+	tool := map[string]any{
+		"type":          "image_generation",
+		"action":        "generate",
+		"model":         req.ImageModel,
+		"output_format": req.OutputFormat,
+		"size":          SizeFromAspect(req.AspectRatio),
+	}
+	
+	contentParts := []map[string]any{}
+
+	for _, img := range req.RefImages {
+		if img.Base64 != "" {
+			refMime := img.MimeType
+			if refMime == "" {
+				refMime = "image/png"
+			}
+			contentParts = append(contentParts, map[string]any{
+				"type":      "input_image",
+				"image_url": fmt.Sprintf("data:%s;base64,%s", refMime, img.Base64),
+			})
+		} else if img.URL != "" {
+			contentParts = append(contentParts, map[string]any{
+				"type":      "input_image",
+				"image_url": img.URL,
+			})
+		}
+	}
+
+	contentParts = append(contentParts, map[string]any{
+		"type": "input_text",
+		"text": req.Prompt,
+	})
+
 	return map[string]any{
 		"model":        model,
 		"stream":       true,
@@ -64,21 +97,11 @@ func (p *CodexProvider) buildNativeImageRequestBody(model string, req NativeImag
 		"instructions": "Generate an image matching the user's description using the image_generation tool. Return only the image; do not describe it in text.",
 		"input": []any{
 			map[string]any{
-				"role": "user",
-				"content": []map[string]any{
-					{"type": "input_text", "text": req.Prompt},
-				},
+				"role":    "user",
+				"content": contentParts,
 			},
 		},
-		"tools": []map[string]any{
-			{
-				"type":          "image_generation",
-				"action":        "generate",
-				"model":         req.ImageModel,
-				"output_format": req.OutputFormat,
-				"size":          SizeFromAspect(req.AspectRatio),
-			},
-		},
+		"tools": []map[string]any{tool},
 		"tool_choice": map[string]any{
 			"type": "image_generation",
 		},

@@ -86,18 +86,42 @@ func callDashScopeImageGen(ctx context.Context, apiKey, apiBase, model, prompt s
 
 	endpoint := dashScopeImageEndpoint(apiBase)
 
+	inputBody := map[string]any{
+		"messages": []map[string]any{
+			{"role": "user", "content": prompt},
+		},
+	}
+	parametersBody := map[string]any{
+		"n":             1,
+		"size":          size,
+		"prompt_extend": promptExtend,
+	}
+
+	if rawImgs, ok := params["ref_images"]; ok {
+		if refImgs, ok := rawImgs.([]*referenceImage); ok && len(refImgs) > 0 {
+			if len(refImgs) > 1 {
+				slog.Warn("dashscope image gen: provider only supports 1 reference image, using the first one", "count", len(refImgs))
+			}
+			refImg := refImgs[0]
+			var refURL string
+			if refImg.URL != "" {
+				refURL = refImg.URL
+			} else {
+				refMime := refImg.MimeType
+				if refMime == "" {
+					refMime = "image/png"
+				}
+				refURL = fmt.Sprintf("data:%s;base64,%s", refMime, refImg.Base64)
+			}
+			inputBody["ref_img"] = refURL
+			parametersBody["ref_strength"] = refImg.Strength
+		}
+	}
+
 	body := map[string]any{
-		"model": model,
-		"input": map[string]any{
-			"messages": []map[string]any{
-				{"role": "user", "content": prompt},
-			},
-		},
-		"parameters": map[string]any{
-			"n":             1,
-			"size":          size,
-			"prompt_extend": promptExtend,
-		},
+		"model":      model,
+		"input":      inputBody,
+		"parameters": parametersBody,
 	}
 
 	jsonBody, err := json.Marshal(body)
