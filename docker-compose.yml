@@ -30,7 +30,7 @@ services:
       dockerfile: Dockerfile
       args:
         ENABLE_OTEL: "${ENABLE_OTEL:-false}"
-        ENABLE_EMBEDUI: "${ENABLE_EMBEDUI:-true}"  # set to false when using WITH_WEB_NGINX
+        ENABLE_EMBEDUI: "${ENABLE_EMBEDUI:-true}" # set to false when using WITH_WEB_NGINX
         ENABLE_PYTHON: "${ENABLE_PYTHON:-true}"
         ENABLE_FULL_SKILLS: "${ENABLE_FULL_SKILLS:-false}"
         VERSION: "${GOCLAW_VERSION:-dev}"
@@ -47,6 +47,7 @@ services:
       - GOCLAW_GATEWAY_TOKEN=${GOCLAW_GATEWAY_TOKEN:?run ./prepare-env.sh or set GOCLAW_GATEWAY_TOKEN}
       - GOCLAW_ENCRYPTION_KEY=${GOCLAW_ENCRYPTION_KEY:-}
       - GOCLAW_SKILLS_DIR=/app/data/skills
+      - GOCLAW_POSTGRES_DSN=postgres://postgres:postgres@postgres:5432/goclaw?sslmode=disable
       # Debug
       - GOCLAW_TRACE_VERBOSE=${GOCLAW_TRACE_VERBOSE:-0}
       - BITRIX24_LOG_RAW_EVENT=${BITRIX24_LOG_RAW_EVENT:-0}
@@ -78,7 +79,14 @@ services:
       - default
       - goclaw-net
     restart: unless-stopped
-
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: goclaw
+    ports:
+      - "5434:5432"
 volumes:
   goclaw-data:
   goclaw-workspace:
