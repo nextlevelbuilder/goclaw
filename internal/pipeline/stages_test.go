@@ -2443,3 +2443,51 @@ func TestPruneStage_CacheTtlGate_MarkTouchedOnlyOnMutation(t *testing.T) {
 		t.Error("MarkCacheTouched should NOT be called when prune returns no mutation")
 	}
 }
+
+func TestThinkStage_AllowedTools_MixedFunctionAndNativeTools_NoPanic(t *testing.T) {
+	t.Parallel()
+	deps := &PipelineDeps{
+		Config: PipelineConfig{MaxIterations: 10, MaxTokens: 1000},
+		BuildFilteredTools: func(state *RunState) ([]providers.ToolDefinition, error) {
+			return []providers.ToolDefinition{
+				{
+					Type: "function",
+					Function: &providers.ToolFunctionSchema{
+						Name: "read_file",
+					},
+				},
+				{
+					Type:     "image_generation",
+					Function: nil,
+				},
+			}, nil
+		},
+		CallLLM: func(_ context.Context, _ *RunState, _ providers.ChatRequest) (*providers.ChatResponse, error) {
+			return &providers.ChatResponse{
+				Content:      "ok",
+				FinishReason: "stop",
+			}, nil
+		},
+	}
+	stage := NewThinkStage(deps)
+	state := defaultState()
+
+	err := stage.Execute(context.Background(), state)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+
+	if state.Tool.AllowedTools == nil {
+		t.Fatal("AllowedTools should not be nil")
+	}
+	if !state.Tool.AllowedTools["read_file"] {
+		t.Error("expected read_file in AllowedTools")
+	}
+	if state.Tool.AllowedTools[""] {
+		t.Error("AllowedTools should not contain empty key for native tools")
+	}
+	if len(state.Tool.AllowedTools) != 1 {
+		t.Errorf("AllowedTools len = %d, want 1", len(state.Tool.AllowedTools))
+	}
+}
+
