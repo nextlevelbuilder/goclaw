@@ -30,6 +30,14 @@ func TestLookupReasoningCapability(t *testing.T) {
 	if capability.Supports("low") {
 		t.Fatal("expected gpt-5.1-codex-max to reject low")
 	}
+
+	capability = LookupReasoningCapability("gpt-5.5")
+	if capability == nil {
+		t.Fatal("LookupReasoningCapability(gpt-5.5) = nil, want capability")
+	}
+	if capability.DefaultEffort != "medium" {
+		t.Fatalf("gpt-5.5 default_effort = %q, want medium", capability.DefaultEffort)
+	}
 }
 
 func TestResolveReasoningDecisionDowngradesUnsupportedEffort(t *testing.T) {

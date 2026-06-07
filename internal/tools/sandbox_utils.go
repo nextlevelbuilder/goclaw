@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -30,16 +31,25 @@ func SandboxCwd(ctx context.Context, globalWorkspace, containerBase string) (str
 	if rel == "." {
 		return containerBase, nil
 	}
-	return filepath.Join(containerBase, rel), nil
+	return path.Join(filepath.ToSlash(containerBase), filepath.ToSlash(rel)), nil
 }
 
 // ResolveSandboxPath resolves a tool-provided path (relative or absolute)
-// against the sandbox container CWD. If the path is relative, it is joined
-// with containerCwd. Absolute paths are returned as-is (the sandbox
-// filesystem already restricts access to the mounted volume).
-func ResolveSandboxPath(path, containerCwd string) string {
-	if filepath.IsAbs(path) {
-		return path
+// against the sandbox container CWD. Escapes are rejected to containerCwd so a
+// tool scoped to /workspace/agent-a cannot address /workspace/agent-b.
+func ResolveSandboxPath(filePath, containerCwd string) string {
+	cwd := path.Clean(containerCwd)
+	if cwd == "." || cwd == "/" {
+		cwd = "/workspace"
 	}
-	return filepath.Join(containerCwd, path)
+	var resolved string
+	if strings.HasPrefix(filePath, "/") {
+		resolved = path.Clean(filePath)
+	} else {
+		resolved = path.Clean(path.Join(cwd, filePath))
+	}
+	if resolved == cwd || strings.HasPrefix(resolved, cwd+"/") {
+		return resolved
+	}
+	return cwd
 }

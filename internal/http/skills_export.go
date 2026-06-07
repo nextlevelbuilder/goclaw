@@ -146,7 +146,7 @@ func (h *SkillsHandler) writeSkillsExportArchive(ctx context.Context, w io.Write
 
 		// SKILL.md — read from filesystem
 		if sk.FilePath != "" {
-			fullPath := config.ExpandHome(sk.FilePath)
+			fullPath := config.ExpandHome(store.SkillMarkdownPath(sk.FilePath))
 			if data, err := os.ReadFile(fullPath); err == nil {
 				if err := addToTar(tw, prefix+"SKILL.md", data); err != nil {
 					slog.Warn("skills.export: write SKILL.md", "slug", sk.Slug, "error", err)

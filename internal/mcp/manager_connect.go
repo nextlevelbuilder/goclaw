@@ -56,6 +56,7 @@ func connectAndDiscover(ctx context.Context, name, transportType, command string
 			}
 		}
 		if _, err := client.Initialize(ctx, initReq); err == nil {
+			initErr = nil
 			break
 		} else {
 			initErr = err
@@ -101,14 +102,18 @@ func connectAndDiscover(ctx context.Context, name, transportType, command string
 
 // connectServer creates a client, initializes the connection, discovers tools, and registers them.
 // serverID is the MCP server UUID from DB (uuid.Nil for config-path servers).
-func (m *Manager) connectServer(ctx context.Context, name, transportType, command string, args []string, env map[string]string, url string, headers map[string]string, toolPrefix string, timeoutSec int, serverID uuid.UUID) error {
+// hints carries admin-authored description hints from MCPServerData.Settings.tool_hints;
+// pass a zero-value ToolHints{} for config-path servers or when no hints are configured.
+// toolAllow/toolDeny come from the agent's grant — non-allowed tools are filtered out
+// upfront so the LLM never sees tools it cannot call. Pass nil for config-path servers.
+func (m *Manager) connectServer(ctx context.Context, name, transportType, command string, args []string, env map[string]string, url string, headers map[string]string, toolPrefix string, timeoutSec int, serverID uuid.UUID, hints ToolHints, toolAllow, toolDeny []string) error {
 	ss, mcpTools, err := connectAndDiscover(ctx, name, transportType, command, args, env, url, headers, timeoutSec)
 	if err != nil {
 		return err
 	}
 
-	// Register tools
-	registeredNames := m.registerBridgeTools(ss, mcpTools, name, toolPrefix, timeoutSec, serverID)
+	// Register tools (filtered by grant's tool_allow/tool_deny upfront)
+	registeredNames := m.registerBridgeTools(ss, mcpTools, name, toolPrefix, timeoutSec, serverID, hints, toolAllow, toolDeny)
 	ss.toolNames = registeredNames
 
 	// Create health monitoring context
@@ -139,10 +144,23 @@ func (m *Manager) connectServer(ctx context.Context, name, transportType, comman
 // registerBridgeTools creates BridgeTools from MCP tool definitions and
 // registers them in the Manager's registry. Returns registered tool names.
 // serverID is the MCP server UUID (uuid.Nil for config-path servers).
-func (m *Manager) registerBridgeTools(ss *serverState, mcpTools []mcpgo.Tool, serverName, toolPrefix string, timeoutSec int, serverID uuid.UUID) []string {
+// hints.Global applies to all tools; hints.Tools[name] adds a per-tool hint.
+// toolAllow/toolDeny are evaluated via IsToolAllowed so filtered-out tools
+// never get a BridgeTool created — the LLM never sees them, eliminating the
+// "registered then runtime-denied" loop that produced repeated grant-revoked
+// errors. Pass nil/nil to register every discovered tool.
+func (m *Manager) registerBridgeTools(ss *serverState, mcpTools []mcpgo.Tool, serverName, toolPrefix string, timeoutSec int, serverID uuid.UUID, hints ToolHints, toolAllow, toolDeny []string) []string {
 	var registeredNames []string
+	var filteredOut []string
 	for _, mcpTool := range mcpTools {
-		bt := NewBridgeTool(serverName, mcpTool, &ss.clientPtr, toolPrefix, timeoutSec, &ss.connected, serverID, m.grantChecker)
+		if !IsToolAllowed(mcpTool.Name, toolAllow, toolDeny) {
+			filteredOut = append(filteredOut, mcpTool.Name)
+			continue
+		}
+
+		bt := NewBridgeTool(serverName, mcpTool, &ss.clientPtr, toolPrefix, timeoutSec, &ss.connected, serverID, m.grantChecker).
+			WithHints(hints.Global, hints.HintFor(mcpTool.Name)).
+			WithForceReconnect(func(reason string) { ss.requestForceReconnect(reason) })
 
 		if _, exists := m.registry.Get(bt.Name()); exists {
 			slog.Warn("mcp.tool.name_collision",
@@ -156,20 +174,34 @@ func (m *Manager) registerBridgeTools(ss *serverState, mcpTools []mcpgo.Tool, se
 		m.registry.Register(bt)
 		registeredNames = append(registeredNames, bt.Name())
 	}
+	if len(filteredOut) > 0 {
+		slog.Info("mcp.tools.filtered_at_register",
+			"server", serverName,
+			"server_id", serverID,
+			"path", "manager",
+			"filtered_count", len(filteredOut),
+			"filtered_tools", filteredOut,
+			"allow_size", len(toolAllow),
+			"deny_size", len(toolDeny),
+		)
+	}
 	return registeredNames
 }
 
 // connectViaPool acquires a shared connection from the pool and creates
 // per-agent BridgeTools pointing to the shared client/connected pointers.
-// serverID is the MCP server UUID from DB.
-func (m *Manager) connectViaPool(ctx context.Context, tenantID uuid.UUID, name, transportType, command string, args []string, env map[string]string, url string, headers map[string]string, toolPrefix string, timeoutSec int, serverID uuid.UUID) error {
+// serverID is the MCP server UUID from DB. hints carries admin-authored
+// description hints from MCPServerData.Settings.tool_hints.
+// toolAllow/toolDeny come from the agent's grant — non-allowed tools are filtered
+// out upfront so the LLM never sees tools it cannot call.
+func (m *Manager) connectViaPool(ctx context.Context, tenantID uuid.UUID, name, transportType, command string, args []string, env map[string]string, url string, headers map[string]string, toolPrefix string, timeoutSec int, serverID uuid.UUID, hints ToolHints, toolAllow, toolDeny []string) error {
 	entry, err := m.pool.Acquire(ctx, tenantID, name, transportType, command, args, env, url, headers, timeoutSec)
 	if err != nil {
 		return err
 	}
 
 	// Create per-agent BridgeTools from the pool's shared connection
-	registeredNames := m.registerPoolBridgeTools(entry, name, toolPrefix, timeoutSec, serverID)
+	registeredNames := m.registerPoolBridgeTools(entry, name, toolPrefix, timeoutSec, serverID, hints, toolAllow, toolDeny)
 
 	// Track server state and per-agent tool names.
 	// poolServers/poolToolNames keyed by plain name for Close() iteration.
@@ -207,10 +239,21 @@ func (m *Manager) connectViaPool(ctx context.Context, tenantID uuid.UUID, name, 
 // registerPoolBridgeTools creates BridgeTools from pool entry's discovered tools,
 // pointing to the shared client/connected pointers. Returns registered tool names.
 // serverID is the MCP server UUID from DB.
-func (m *Manager) registerPoolBridgeTools(entry *poolEntry, serverName, toolPrefix string, timeoutSec int, serverID uuid.UUID) []string {
+// hints.Global applies to all tools; hints.Tools[name] adds a per-tool hint.
+// toolAllow/toolDeny are evaluated via IsToolAllowed so filtered-out tools never
+// get a BridgeTool created (LLM never sees them).
+func (m *Manager) registerPoolBridgeTools(entry *poolEntry, serverName, toolPrefix string, timeoutSec int, serverID uuid.UUID, hints ToolHints, toolAllow, toolDeny []string) []string {
 	var registeredNames []string
+	var filteredOut []string
 	for _, mcpTool := range entry.tools {
-		bt := NewBridgeTool(serverName, mcpTool, &entry.state.clientPtr, toolPrefix, timeoutSec, &entry.state.connected, serverID, m.grantChecker)
+		if !IsToolAllowed(mcpTool.Name, toolAllow, toolDeny) {
+			filteredOut = append(filteredOut, mcpTool.Name)
+			continue
+		}
+
+		bt := NewBridgeTool(serverName, mcpTool, &entry.state.clientPtr, toolPrefix, timeoutSec, &entry.state.connected, serverID, m.grantChecker).
+			WithHints(hints.Global, hints.HintFor(mcpTool.Name)).
+			WithForceReconnect(entry.RequestForceReconnect())
 
 		if _, exists := m.registry.Get(bt.Name()); exists {
 			slog.Warn("mcp.tool.name_collision",
@@ -223,6 +266,17 @@ func (m *Manager) registerPoolBridgeTools(entry *poolEntry, serverName, toolPref
 
 		m.registry.Register(bt)
 		registeredNames = append(registeredNames, bt.Name())
+	}
+	if len(filteredOut) > 0 {
+		slog.Info("mcp.tools.filtered_at_register",
+			"server", serverName,
+			"server_id", serverID,
+			"path", "pool",
+			"filtered_count", len(filteredOut),
+			"filtered_tools", filteredOut,
+			"allow_size", len(toolAllow),
+			"deny_size", len(toolDeny),
+		)
 	}
 
 	return registeredNames
@@ -275,6 +329,14 @@ func (m *Manager) healthLoop(ctx context.Context, ss *serverState) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			// Skip ping while a force-reconnect is in flight. Some servers
+			// answer `ping` in the post-reset "initializing" state; pinging
+			// here would race the recovery goroutine and clobber
+			// connected=true before the fresh Initialize completes.
+			if ss.reconnPending.Load() {
+				slog.Debug("mcp.server.health_skip", "server", ss.name, "reason", "reconnect_pending")
+				continue
+			}
 			if err := ss.client.Ping(ctx); err != nil {
 				if isMethodNotFound(err) {
 					ss.connected.Store(true)

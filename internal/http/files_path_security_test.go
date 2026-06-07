@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -87,6 +88,60 @@ func TestFilesHandleServe_ProcDir_Blocked(t *testing.T) {
 	}
 }
 
+// ---- handleServe: expanded deny-prefix list ----
+
+// TestFilesHandleServe_ExpandedDenyPrefixes verifies that paths under /home/,
+// /Users/, /var/lib/, /var/www/, /opt/, and /srv/ are all blocked. These are
+// defense-in-depth blocks for misconfigured roots — the token/RBAC checks are
+// the primary barriers.
+func TestFilesHandleServe_ExpandedDenyPrefixes_Blocked(t *testing.T) {
+	h, _ := makeTestFilesHandler(t)
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/files/{path...}", h.handleServe)
+
+	cases := []struct {
+		name string
+		url  string
+	}{
+		{"home user ssh key", "/v1/files/home/user/.ssh/id_rsa"},
+		{"home user aws creds", "/v1/files/home/user/.aws/credentials"},
+		{"Users admin dir (macOS)", "/v1/files/Users/admin/secrets.txt"},
+		{"var lib docker secret", "/v1/files/var/lib/docker/overlay2/secret"},
+		{"var www config", "/v1/files/var/www/config.php"},
+		{"opt secrets key", "/v1/files/opt/secrets/key.pem"},
+		{"srv www app config", "/v1/files/srv/www/app/config.yaml"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.url, nil)
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
+			if w.Code == http.StatusOK {
+				t.Errorf("path %s should be denied (deny-prefix), got 200", tc.url)
+			}
+		})
+	}
+}
+
+// ---- handleServe: fail-closed observability on empty workspace/dataDir ----
+
+// TestFilesHandleServe_NoBoundary_Denies verifies that when both workspace and
+// dataDir are empty the handler returns 404 (fail-closed) for any path.
+func TestFilesHandleServe_NoBoundary_Denies(t *testing.T) {
+	h := NewFilesHandler("", "")
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/files/{path...}", h.handleServe)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/files/tmp/test.txt", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code == http.StatusOK {
+		t.Errorf("empty workspace+dataDir should deny all requests, got 200")
+	}
+}
+
 // ---- handleServe: workspace boundary enforcement ----
 
 func TestFilesHandleServe_FileInsideWorkspace_WithToken_Serves(t *testing.T) {
@@ -138,6 +193,94 @@ func TestFilesHandleServe_FileOutsideAllDirs_WithToken_Returns404(t *testing.T) 
 	// File token exists but path is outside workspace/dataDir → 404 (security denial via NotFound)
 	if w.Code == http.StatusOK {
 		t.Errorf("file outside workspace should not be served with signed token, got 200")
+	}
+}
+
+func TestFilesHandleServe_SignedSymlinkEscape_Returns404(t *testing.T) {
+	h, workspace := makeTestFilesHandler(t)
+	outsideDir := t.TempDir()
+	target := filepath.Join(outsideDir, "secret.txt")
+	if err := os.WriteFile(target, []byte("secret"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	linkPath := filepath.Join(workspace, "link.txt")
+	if err := os.Symlink(target, linkPath); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	urlPath := "/v1/files/" + strings.TrimPrefix(filepath.Clean(linkPath), "/")
+	ft := SignFileToken(urlPath, FileSigningKey(), FileTokenTTL)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/files/{path...}", h.handleServe)
+
+	req := httptest.NewRequest(http.MethodGet, urlPath+"?ft="+ft, nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code == http.StatusOK {
+		t.Fatal("signed symlink escaping workspace should not be served")
+	}
+}
+
+func TestFilesHandleServe_OpenThenSwapToSymlinkEscape_Returns404(t *testing.T) {
+	h, workspace := makeTestFilesHandler(t)
+	outsideDir := t.TempDir()
+	secretPath := filepath.Join(outsideDir, "secret.txt")
+	if err := os.WriteFile(secretPath, []byte("secret"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	filePath := filepath.Join(workspace, "race.txt")
+	if err := os.WriteFile(filePath, []byte("allowed"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	filesAfterOpenHookForTest = func(opened string) {
+		if opened != filePath {
+			return
+		}
+		_ = os.Remove(filePath)
+		_ = os.Symlink(secretPath, filePath)
+	}
+	defer func() { filesAfterOpenHookForTest = nil }()
+
+	urlPath := "/v1/files/" + strings.TrimPrefix(filepath.Clean(filePath), "/")
+	ft := SignFileToken(urlPath, FileSigningKey(), FileTokenTTL)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/files/{path...}", h.handleServe)
+
+	req := httptest.NewRequest(http.MethodGet, urlPath+"?ft="+ft, nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code == http.StatusOK {
+		t.Fatal("file swapped to escaping symlink after open should not be served")
+	}
+	if strings.Contains(w.Body.String(), "secret") {
+		t.Fatal("response leaked swapped outside file content")
+	}
+}
+
+func TestFilesHandleSign_SymlinkEscape_ReturnsForbidden(t *testing.T) {
+	setupTestToken(t, "")
+	setupTestNoAuthFallback(t, true)
+	h, workspace := makeTestFilesHandler(t)
+	outsideDir := t.TempDir()
+	target := filepath.Join(outsideDir, "secret.txt")
+	if err := os.WriteFile(target, []byte("secret"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	linkPath := filepath.Join(workspace, "link.txt")
+	if err := os.Symlink(target, linkPath); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/files/sign", strings.NewReader(`{"path":`+strconv.Quote(linkPath)+`}`))
+	w := httptest.NewRecorder()
+	h.handleSign(w, req)
+
+	if w.Code == http.StatusOK {
+		t.Fatal("sign endpoint should reject symlinks escaping allowed roots")
 	}
 }
 

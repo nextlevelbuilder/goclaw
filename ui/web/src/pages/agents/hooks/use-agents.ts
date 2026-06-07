@@ -21,7 +21,7 @@ export function useAgents() {
   const connected = useAuthStore((s) => s.connected);
   const queryClient = useQueryClient();
 
-  const { data: agents = [], isPending: loading, error: queryError } = useQuery({
+  const { data: agents = [], isPending: loading, error: queryError, refetch } = useQuery({
     queryKey: queryKeys.agents.all,
     queryFn: async () => {
       // Try HTTP first (returns full agent data, filtered by user access)
@@ -59,8 +59,11 @@ export function useAgents() {
   const error = queryError instanceof Error ? queryError.message : queryError ? "Failed to load agents" : null;
 
   const invalidate = useCallback(
-    () => queryClient.invalidateQueries({ queryKey: queryKeys.agents.all }),
-    [queryClient],
+    async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.agents.all });
+      await refetch();
+    },
+    [queryClient, refetch],
   );
 
   const createAgent = useCallback(

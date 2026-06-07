@@ -8,6 +8,11 @@ import (
 	"testing"
 )
 
+func TestMain(m *testing.M) {
+	os.Setenv("GOCLAW_DISABLE_PERSONAL_SKILLS", "1")
+	os.Exit(m.Run())
+}
+
 // makeSkillDir creates a skill directory with a SKILL.md file.
 func makeSkillDir(t *testing.T, parent, slug, content string) string {
 	t.Helper()
@@ -602,10 +607,10 @@ description: plain
 			want: nil,
 		},
 		{
-			name: "crlf",
+			name:    "crlf",
 			content: "deps:\r\n  - pip:a\r\n  - pip:b\r\n",
-			key:    "deps",
-			want:   []string{"pip:a", "pip:b"},
+			key:     "deps",
+			want:    []string{"pip:a", "pip:b"},
 		},
 		{
 			name: "scalar skipped",

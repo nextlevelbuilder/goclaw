@@ -39,12 +39,17 @@ interface ChannelInstanceFormStepProps {
   onCancel: () => void;
   onSubmit: () => void;
   submitLabel: string;
+  /** Bitrix24 only: trigger parent's create-portal modal from the Portal dropdown. */
+  onPortalCreateRequest?: () => void;
+  /** Bitrix24 only: open the create modal in resume mode for an existing pending portal. */
+  onPortalResumeAuthorize?: (portalName: string) => void;
 }
 
 export function ChannelInstanceFormStep({
   form, instance, agents, credsValues, configValues,
   onCredsChange, onConfigChange, setConfigValues,
   error, loading, onCancel, onSubmit, submitLabel,
+  onPortalCreateRequest, onPortalResumeAuthorize,
 }: ChannelInstanceFormStepProps) {
   const { t } = useTranslation("channels");
   const { register, control, formState: { errors } } = form;
@@ -165,7 +170,15 @@ export function ChannelInstanceFormStep({
         {formCfgFields.length > 0 && (
           <fieldset className="rounded-md border p-3 space-y-3">
             <legend className="px-1 text-sm font-medium">{t("form.configuration")}</legend>
-            <ChannelFields fields={normalCfgFields} values={configValues} onChange={onConfigChange} idPrefix="ci-cfg" />
+            <ChannelFields
+              fields={normalCfgFields}
+              values={configValues}
+              onChange={onConfigChange}
+              idPrefix="ci-cfg"
+              channelType={channelType}
+              onPortalCreateRequest={onPortalCreateRequest}
+              onPortalResumeAuthorize={onPortalResumeAuthorize}
+            />
             {instance && EditConfig && <EditConfig instance={instance} configValues={configValues} onConfigChange={onConfigChange} />}
             {advancedCfgFields.length > 0 && (
               <div className="pt-1">

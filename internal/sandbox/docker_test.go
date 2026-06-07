@@ -126,3 +126,49 @@ func TestResolveScopeKey(t *testing.T) {
 		}
 	}
 }
+
+func TestFsBridgeResolvePathRejectsWorkspaceEscapes(t *testing.T) {
+	bridge := NewFsBridge("container-test", "/workspace/agent-a")
+
+	tests := []struct {
+		name string
+		path string
+		want string
+	}{
+		{name: "inside relative", path: "notes/a.txt", want: "/workspace/agent-a/notes/a.txt"},
+		{name: "inside absolute", path: "/workspace/agent-a/notes/a.txt", want: "/workspace/agent-a/notes/a.txt"},
+		{name: "relative parent escape", path: "../agent-b/secret.txt", want: "/workspace/agent-a"},
+		{name: "absolute sibling escape", path: "/workspace/agent-b/secret.txt", want: "/workspace/agent-a"},
+		{name: "root escape", path: "/etc/passwd", want: "/workspace/agent-a"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := bridge.resolvePath(tt.path); got != tt.want {
+				t.Fatalf("resolvePath(%q) = %q, want %q", tt.path, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFsBridgePathWithinUsesPathBoundaries(t *testing.T) {
+	tests := []struct {
+		name   string
+		root   string
+		target string
+		want   bool
+	}{
+		{name: "root itself", root: "/workspace/agent-a", target: "/workspace/agent-a", want: true},
+		{name: "child path", root: "/workspace/agent-a", target: "/workspace/agent-a/file.txt", want: true},
+		{name: "sibling with shared prefix", root: "/workspace/agent-a", target: "/workspace/agent-a-b/file.txt", want: false},
+		{name: "parent path", root: "/workspace/agent-a", target: "/workspace", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := fsBridgePathWithin(tt.root, tt.target); got != tt.want {
+				t.Fatalf("fsBridgePathWithin(%q, %q) = %v, want %v", tt.root, tt.target, got, tt.want)
+			}
+		})
+	}
+}

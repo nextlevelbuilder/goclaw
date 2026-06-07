@@ -10,19 +10,21 @@ import (
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/bgalert"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
-	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/providerresolve"
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 )
 
 // episodicWorker handles session.completed events → creates episodic summaries.
 type episodicWorker struct {
 	store         store.EpisodicStore
-	sessions      store.SessionCoreStore      // for reading session messages during summarization
-	systemConfigs store.SystemConfigStore     // per-tenant provider config
-	registry      *providers.Registry         // provider resolution
+	sessions      store.SessionCoreStore  // for reading session messages during summarization
+	systemConfigs store.SystemConfigStore // per-tenant provider config
+	registry      *providers.Registry     // provider resolution
 	eventBus      eventbus.DomainEventBus
 	alertDeps     bgalert.AlertDeps
+	usageCaps     *usagecaps.Service
 }
 
 // resolveProvider delegates to shared background provider resolution.
@@ -53,6 +55,7 @@ func (w *episodicWorker) Handle(ctx context.Context, event eventbus.DomainEvent)
 	if err != nil {
 		return fmt.Errorf("episodic: invalid agent_id %q: %w", event.AgentID, err)
 	}
+	ctx = store.WithAgentID(ctx, agentUUID)
 
 	// Build source_id for idempotency
 	sourceID := fmt.Sprintf("%s:%d", payload.SessionKey, payload.CompactionCount)
@@ -168,13 +171,18 @@ func (w *episodicWorker) summarizeFromMessages(ctx context.Context, provider pro
 	sctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	resp, err := provider.Chat(sctx, providers.ChatRequest{
+	req := providers.ChatRequest{
 		Messages: []providers.Message{
 			{Role: "system", Content: summarizationPrompt},
 			{Role: "user", Content: sb.String()},
 		},
 		Model:   model,
 		Options: map[string]any{"max_tokens": 1024, "temperature": 0.3},
+	}
+	resp, err := w.usageCaps.Chat(sctx, provider, req, usagecaps.ChatOptions{
+		ModelID:         model,
+		Purpose:         "episodic-summary",
+		MaxOutputTokens: 1024,
 	})
 	if err != nil {
 		return "", err

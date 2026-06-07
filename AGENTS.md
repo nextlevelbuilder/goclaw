@@ -44,7 +44,7 @@ internal/
 ├── orchestration/            Orchestration primitives: BatchQueue[T] generic, ChildResult, media conversion (v3)
 ├── permissions/              RBAC (admin/operator/viewer)
 ├── pipeline/                 8-stage agent pipeline (context→history→prompt→think→act→observe→memory→summarize)
-├── providers/                LLM providers: Anthropic (native HTTP+SSE), OpenAI-compat (HTTP+SSE), DashScope (Alibaba Qwen), Codex CLI (stdio+MCP bridge), ACP (Anthropic Console Proxy), Codex (OpenAI)
+├── providers/                LLM providers: Anthropic (native HTTP+SSE), OpenAI-compat (HTTP+SSE), DashScope (Alibaba Qwen), Codex CLI (stdio+MCP bridge), ACP (Anthropic Console Proxy), Codex (OpenAI), Vertex AI (GCP OAuth2 + OpenAI-compat)
 ├── providerresolve/          Provider adapter + model registry with forward-compat resolver
 ├── sandbox/                  Docker-based code execution sandbox
 ├── scheduler/                Lane-based concurrency (main/subagent/cron)
@@ -76,7 +76,7 @@ ui/desktop/                   Wails v2 desktop app (React frontend + embedded ga
 - **Agent types:** `open` (per-user context, 7 files) vs `predefined` (shared context + USER.md per-user)
 - **Agent identity:** Dual-identity pattern (agent_key vs UUID) applies to agents, teams, tenants. Rule: UUID for DB/FK/events, agent_key for logs/paths/UI. See `docs/agent-identity-conventions.md`
 - **Context files:** `agent_context_files` (agent-level) + `user_context_files` (per-user), routed via `ContextFileInterceptor`
-- **Providers:** Anthropic (native HTTP+SSE), OpenAI-compat (HTTP+SSE), DashScope (Alibaba Qwen), Codex CLI (stdio+MCP bridge), ACP (Anthropic Console Proxy), Codex (OpenAI). All use `RetryDo()` for retries. Loads from `llm_providers` table with encrypted API keys. ProviderAdapter enables pluggable implementations with ModelRegistry forward-compat resolver. Shared SSEScanner in `providers/sse_reader.go` for streaming providers
+- **Providers:** Anthropic (native HTTP+SSE), OpenAI-compat (HTTP+SSE), DashScope (Alibaba Qwen), Codex CLI (stdio+MCP bridge), ACP (Anthropic Console Proxy), Codex (OpenAI), Vertex AI (GCP OAuth2 service account or ADC + OpenAI-compat endpoint, `internal/providers/vertex.go`). All use `RetryDo()` for retries. Loads from `llm_providers` table with encrypted API keys. ProviderAdapter enables pluggable implementations with ModelRegistry forward-compat resolver. Shared SSEScanner in `providers/sse_reader.go` for streaming providers
 - **Pipeline:** 8-stage loop (context→history→prompt→think→act→observe→memory→summarize) with pluggable callbacks, always-on execution path
 - **DomainEventBus:** Typed events with worker pool, dedup, retry. Used by consolidation pipeline and memory workers
 - **3-tier memory:** Working (conversation) → Episodic (session summaries) → Semantic (KG). Progressive loading L0/L1/L2 with auto-inject for L0

@@ -109,10 +109,22 @@ func TestResolveSandboxPath(t *testing.T) {
 			want:         "/workspace/agent-a/subdir/file.txt",
 		},
 		{
-			name:         "absolute path passed through",
+			name:         "absolute sibling workspace path is rejected to cwd",
 			path:         "/workspace/agent-a/file.txt",
 			containerCwd: "/workspace/agent-b",
+			want:         "/workspace/agent-b",
+		},
+		{
+			name:         "absolute path inside cwd stays absolute",
+			path:         "/workspace/agent-a/file.txt",
+			containerCwd: "/workspace/agent-a",
 			want:         "/workspace/agent-a/file.txt",
+		},
+		{
+			name:         "relative parent escape is rejected to cwd",
+			path:         "../agent-b/file.txt",
+			containerCwd: "/workspace/agent-a",
+			want:         "/workspace/agent-a",
 		},
 		{
 			name:         "dot path",

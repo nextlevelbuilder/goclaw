@@ -84,16 +84,23 @@ type WaitOpts struct {
 
 // ConsoleMessage is a captured browser console message.
 type ConsoleMessage struct {
-	Level   string `json:"level"` // "log", "warn", "error", "info"
-	Text    string `json:"text"`
-	URL     string `json:"url,omitempty"`
-	LineNo  int    `json:"lineNo,omitempty"`
-	ColNo   int    `json:"colNo,omitempty"`
+	Level  string `json:"level"` // "log", "warn", "error", "info"
+	Text   string `json:"text"`
+	URL    string `json:"url,omitempty"`
+	LineNo int    `json:"lineNo,omitempty"`
+	ColNo  int    `json:"colNo,omitempty"`
 }
 
 // StatusInfo describes the current browser state.
 type StatusInfo struct {
-	Running bool   `json:"running"`
-	Tabs    int    `json:"tabs"`
-	URL     string `json:"url,omitempty"` // current tab URL
+	Running         bool   `json:"running"`
+	Tabs            int    `json:"tabs"`
+	URL             string `json:"url,omitempty"` // current tab URL
+	Headless        bool   `json:"headless"`
+	RemoteURL       string `json:"remoteUrl,omitempty"`
+	ActionTimeoutMs int    `json:"actionTimeoutMs"`
+	IdleTimeoutMs   int    `json:"idleTimeoutMs"`
+	MaxPages        int    `json:"maxPages"`
+	IsolationMode   string `json:"isolationMode"`
+	CookieSync      bool   `json:"cookieSync"`
 }

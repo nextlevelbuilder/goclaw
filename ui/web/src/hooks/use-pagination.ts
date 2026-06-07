@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useUiStore } from "@/stores/use-ui-store";
 
 export interface PaginationState {
@@ -29,6 +29,12 @@ export function usePagination<T>(
 
   const [page, setPageRaw] = useState(1);
   const [pageSize, setPageSizeRaw] = useState(options.defaultPageSize ?? globalPageSize);
+
+  useEffect(() => {
+    if (options.defaultPageSize === undefined) {
+      setPageSizeRaw(globalPageSize);
+    }
+  }, [globalPageSize, options.defaultPageSize]);
 
   const total = items.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));

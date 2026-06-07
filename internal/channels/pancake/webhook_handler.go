@@ -34,6 +34,11 @@ func verifyHMAC(body []byte, secret, signature string) bool {
 	return hmac.Equal(got, expected)
 }
 
+func webhookReplayKey(body []byte) string {
+	sum := sha256.Sum256(body)
+	return "webhook:" + hex.EncodeToString(sum[:])
+}
+
 // --- Global webhook router for multi-page support ---
 
 // webhookRouter routes incoming Pancake webhook events to the correct channel instance by page_id.
@@ -176,16 +181,25 @@ func (r *webhookRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// HMAC signature verification — skip if webhook_secret not configured.
-	if target.webhookSecret != "" {
-		sig := req.Header.Get("X-Pancake-Signature")
-		if !verifyHMAC(body, target.webhookSecret, sig) {
-			slog.Warn("security.pancake_webhook_signature_mismatch",
-				"page_id", pageID,
-				"remote_addr", req.RemoteAddr)
-			w.WriteHeader(http.StatusOK)
-			return
-		}
+	if target.webhookSecret == "" {
+		slog.Warn("security.pancake_webhook_missing_secret",
+			"page_id", pageID,
+			"remote_addr", req.RemoteAddr)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	sig := req.Header.Get("X-Pancake-Signature")
+	if !verifyHMAC(body, target.webhookSecret, sig) {
+		slog.Warn("security.pancake_webhook_signature_mismatch",
+			"page_id", pageID,
+			"remote_addr", req.RemoteAddr)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if target.isDup(webhookReplayKey(body)) {
+		slog.Info("pancake: duplicate webhook skipped", "page_id", pageID)
+		w.WriteHeader(http.StatusOK)
+		return
 	}
 
 	// Build normalized MessagingData from actual Pancake payload.

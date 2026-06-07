@@ -49,8 +49,8 @@ const (
 
 // Phase 2 - NEEDED methods
 const (
-	MethodSkillsList  = "skills.list"
-	MethodSkillsGet   = "skills.get"
+	MethodSkillsList   = "skills.list"
+	MethodSkillsGet    = "skills.get"
 	MethodSkillsUpdate = "skills.update"
 
 	MethodCronList   = "cron.list"
@@ -101,6 +101,7 @@ const (
 // Config permissions
 const (
 	MethodConfigPermissionsList   = "config.permissions.list"
+	MethodConfigPermissionsCheck  = "config.permissions.check"
 	MethodConfigPermissionsGrant  = "config.permissions.grant"
 	MethodConfigPermissionsRevoke = "config.permissions.revoke"
 )
@@ -124,28 +125,28 @@ const (
 
 // Agent teams
 const (
-	MethodTeamsList     = "teams.list"
-	MethodTeamsCreate   = "teams.create"
-	MethodTeamsGet      = "teams.get"
-	MethodTeamsDelete   = "teams.delete"
-	MethodTeamsTaskList      = "teams.tasks.list"
-	MethodTeamsTaskGet       = "teams.tasks.get"
-	MethodTeamsTaskGetLight  = "teams.tasks.get-light"
-	MethodTeamsTaskApprove   = "teams.tasks.approve"
-	MethodTeamsTaskReject    = "teams.tasks.reject"
-	MethodTeamsTaskComment   = "teams.tasks.comment"
-	MethodTeamsTaskComments  = "teams.tasks.comments"
-	MethodTeamsTaskEvents    = "teams.tasks.events"
-	MethodTeamsTaskCreate    = "teams.tasks.create"
-	MethodTeamsTaskDelete     = "teams.tasks.delete"
-	MethodTeamsTaskDeleteBulk = "teams.tasks.delete-bulk"
-	MethodTeamsTaskAssign            = "teams.tasks.assign"
-	MethodTeamsTaskActiveBySession   = "teams.tasks.active-by-session"
-	MethodTeamsMembersAdd    = "teams.members.add"
-	MethodTeamsMembersRemove = "teams.members.remove"
-	MethodTeamsUpdate        = "teams.update"
-	MethodTeamsKnownUsers    = "teams.known_users"
-	MethodTeamsScopes        = "teams.scopes"
+	MethodTeamsList                = "teams.list"
+	MethodTeamsCreate              = "teams.create"
+	MethodTeamsGet                 = "teams.get"
+	MethodTeamsDelete              = "teams.delete"
+	MethodTeamsTaskList            = "teams.tasks.list"
+	MethodTeamsTaskGet             = "teams.tasks.get"
+	MethodTeamsTaskGetLight        = "teams.tasks.get-light"
+	MethodTeamsTaskApprove         = "teams.tasks.approve"
+	MethodTeamsTaskReject          = "teams.tasks.reject"
+	MethodTeamsTaskComment         = "teams.tasks.comment"
+	MethodTeamsTaskComments        = "teams.tasks.comments"
+	MethodTeamsTaskEvents          = "teams.tasks.events"
+	MethodTeamsTaskCreate          = "teams.tasks.create"
+	MethodTeamsTaskDelete          = "teams.tasks.delete"
+	MethodTeamsTaskDeleteBulk      = "teams.tasks.delete-bulk"
+	MethodTeamsTaskAssign          = "teams.tasks.assign"
+	MethodTeamsTaskActiveBySession = "teams.tasks.active-by-session"
+	MethodTeamsMembersAdd          = "teams.members.add"
+	MethodTeamsMembersRemove       = "teams.members.remove"
+	MethodTeamsUpdate              = "teams.update"
+	MethodTeamsKnownUsers          = "teams.known_users"
+	MethodTeamsScopes              = "teams.scopes"
 )
 
 // Team workspace
@@ -189,11 +190,32 @@ const (
 	MethodBrowserScreenshot = "browser.screenshot"
 
 	// Zalo Personal
-	MethodZaloPersonalQRStart   = "zalo.personal.qr.start"
-	MethodZaloPersonalContacts  = "zalo.personal.contacts"
+	MethodZaloPersonalQRStart  = "zalo.personal.qr.start"
+	MethodZaloPersonalContacts = "zalo.personal.contacts"
 
 	// WhatsApp
 	MethodWhatsAppQRStart = "whatsapp.qr.start"
+)
+
+// Workstations (Standard edition only — gated at router)
+const (
+	MethodWorkstationsList        = "workstations.list"
+	MethodWorkstationsGet         = "workstations.get"
+	MethodWorkstationsCreate      = "workstations.create"
+	MethodWorkstationsUpdate      = "workstations.update"
+	MethodWorkstationsDelete      = "workstations.delete"
+	MethodWorkstationsTest        = "workstations.testConnection"
+	MethodWorkstationsLinkAgent   = "workstations.linkAgent"
+	MethodWorkstationsUnlinkAgent = "workstations.unlinkAgent"
+
+	// Workstation permission allowlist CRUD (Phase 6)
+	MethodWorkstationsPermList   = "workstations.permissions.list"
+	MethodWorkstationsPermAdd    = "workstations.permissions.add"
+	MethodWorkstationsPermRemove = "workstations.permissions.remove"
+	MethodWorkstationsPermToggle = "workstations.permissions.toggle"
+
+	// Workstation activity audit log (Phase 7)
+	MethodWorkstationsListActivity = "workstations.activity.list"
 )
 
 // Agent hooks (Phase 3)
@@ -205,4 +227,13 @@ const (
 	MethodHooksToggle  = "hooks.toggle"
 	MethodHooksTest    = "hooks.test"
 	MethodHooksHistory = "hooks.history"
+)
+
+// Bitrix24 portal management (self-service onboarding for the bitrix24 channel).
+// See plans/260513-1648-bitrix24-portal-self-service-ux/phase-02-backend-rpc-portals.md.
+const (
+	MethodBitrixPortalsList           = "bitrix.portals.list"
+	MethodBitrixPortalsCreate         = "bitrix.portals.create"
+	MethodBitrixPortalsGetInstallURL  = "bitrix.portals.get_install_url"
+	MethodBitrixPortalsDelete         = "bitrix.portals.delete"
 )

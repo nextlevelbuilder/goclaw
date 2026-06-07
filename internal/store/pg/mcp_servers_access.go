@@ -2,6 +2,7 @@ package pg
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -148,7 +149,33 @@ func (s *PGMCPServerStore) RevokeFromUser(ctx context.Context, serverID uuid.UUI
 // --- Resolution ---
 
 func (s *PGMCPServerStore) ListAccessible(ctx context.Context, agentID uuid.UUID, userID string) ([]store.MCPAccessInfo, error) {
-	tClause, tArgs, _, err := scopeClauseAlias(ctx, 3, "ms")
+	tClause, tArgs, _, err := scopeClauseAlias(ctx, 2, "ms")
+	if err != nil {
+		return nil, err
+	}
+	// Synthetic owner identities ("" at startup registration, "system" for
+	// WS direct/owner chat) are not real external actors — they cannot have
+	// a per-user grant that anyone deliberately provisioned. Skipping the
+	// mcp_user_grants join for those keeps registration (userID="") and
+	// execute (userID="system") symmetric. Without this, a stale row in
+	// mcp_user_grants with user_id='system' AND enabled=false would silently
+	// hide tools at execute time that registration saw fine, producing
+	// "grant revoked (reason: server_not_accessible)" with no DB change.
+	if userID == "" || userID == "system" {
+		rows, err := s.db.QueryContext(ctx,
+			`SELECT ms.id, ms.name, ms.display_name, ms.transport, ms.command, ms.args, ms.url, ms.headers, ms.env,
+			 ms.api_key, ms.tool_prefix, ms.timeout_sec, ms.settings, ms.enabled, ms.created_by, ms.created_at, ms.updated_at,
+			 mag.tool_allow, mag.tool_deny
+			 FROM mcp_servers ms
+			 INNER JOIN mcp_agent_grants mag ON ms.id = mag.server_id AND mag.agent_id = $1 AND mag.enabled = true
+			 WHERE ms.enabled = true`+tClause,
+			append([]any{agentID}, tArgs...)...)
+		if err != nil {
+			return nil, err
+		}
+		return s.scanAccessibleRows(rows)
+	}
+	tClause, tArgs, _, err = scopeClauseAlias(ctx, 3, "ms")
 	if err != nil {
 		return nil, err
 	}
@@ -165,6 +192,13 @@ func (s *PGMCPServerStore) ListAccessible(ctx context.Context, agentID uuid.UUID
 	if err != nil {
 		return nil, err
 	}
+	return s.scanAccessibleRows(rows)
+}
+
+// scanAccessibleRows decodes the shared SELECT projection used by both the
+// system-user (no per-user-grant filter) and external-user paths of
+// ListAccessible. Kept private so callers go through ListAccessible.
+func (s *PGMCPServerStore) scanAccessibleRows(rows *sql.Rows) ([]store.MCPAccessInfo, error) {
 	defer rows.Close()
 
 	result := make([]store.MCPAccessInfo, 0)

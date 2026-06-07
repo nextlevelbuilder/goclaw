@@ -22,7 +22,7 @@ type ConfigMethods struct {
 	cfgPath      string
 	secretsStore store.ConfigSecretsStore
 	syncFn       func(ctx context.Context, cfg *config.Config) // nil-safe; syncs non-secret settings to system_configs
-	eventBus     bus.EventPublisher       // nil-safe; broadcasts config change events
+	eventBus     bus.EventPublisher                            // nil-safe; broadcasts config change events
 }
 
 func NewConfigMethods(cfg *config.Config, cfgPath string, secretsStore store.ConfigSecretsStore, eventBus bus.EventPublisher) *ConfigMethods {
@@ -268,6 +268,45 @@ func (m *ConfigMethods) handleSchema(_ context.Context, client *gateway.Client, 
 			"tools": map[string]any{
 				"type":        "object",
 				"description": "Tool configuration (browser, exec, web search)",
+			},
+			"skills": map[string]any{
+				"type":        "object",
+				"description": "Skill storage and upload settings",
+				"properties": map[string]any{
+					"max_upload_size_mb": map[string]any{
+						"type":        "integer",
+						"minimum":     config.MinSkillMaxUploadSizeMB,
+						"maximum":     config.MaxSkillMaxUploadSizeMB,
+						"default":     config.DefaultSkillMaxUploadSizeMB,
+						"description": "Maximum skill ZIP upload size in MB",
+					},
+					"slash_commands": map[string]any{
+						"type":        "object",
+						"description": "Explicit slash command skill activation settings",
+						"properties": map[string]any{
+							"enabled": map[string]any{
+								"type":        "boolean",
+								"default":     true,
+								"description": "Enable slash command detection in user prompts",
+							},
+							"suggest_not_found": map[string]any{
+								"type":        "boolean",
+								"default":     true,
+								"description": "Suggest similar skills when a requested skill is not found",
+							},
+							"partial_matching": map[string]any{
+								"type":        "boolean",
+								"default":     false,
+								"description": "Allow unique skill slug/name prefixes",
+							},
+							"prefix": map[string]any{
+								"type":        "string",
+								"default":     config.DefaultSkillSlashCommandPrefix,
+								"description": "Single-character slash command prefix",
+							},
+						},
+					},
+				},
 			},
 			"sessions": map[string]any{
 				"type":        "object",

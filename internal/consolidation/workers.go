@@ -13,6 +13,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 )
 
 // ConsolidationDeps bundles all dependencies for the consolidation pipeline.
@@ -26,6 +27,7 @@ type ConsolidationDeps struct {
 	Registry      *providers.Registry     // provider resolution
 	Extractor     EntityExtractor
 	AlertDeps     bgalert.AlertDeps // for reporting non-retryable LLM errors
+	UsageCaps     *usagecaps.Service
 	// AgentStore is optional: when present, the dreaming worker reads
 	// per-agent overrides from MemoryConfig.Dreaming. If nil, the worker
 	// uses its built-in defaults for every agent.
@@ -42,6 +44,7 @@ func Register(deps ConsolidationDeps) func() {
 		registry:      deps.Registry,
 		eventBus:      deps.EventBus,
 		alertDeps:     deps.AlertDeps,
+		usageCaps:     deps.UsageCaps,
 	}
 	semantic := &semanticWorker{
 		kgStore:   deps.KGStore,
@@ -59,6 +62,7 @@ func Register(deps ConsolidationDeps) func() {
 		systemConfigs: deps.SystemConfigs,
 		registry:      deps.Registry,
 		alertDeps:     deps.AlertDeps,
+		usageCaps:     deps.UsageCaps,
 		threshold:     dreamingDefaultThreshold,
 		debounce:      dreamingDefaultDebounce,
 		resolveConfig: newAgentStoreResolver(deps.AgentStore),

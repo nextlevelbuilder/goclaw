@@ -36,9 +36,11 @@ const (
 // Stored in RAM only (not persisted to DB) — used by channels that defer media
 // download until the bot is actually mentioned (e.g. Telegram).
 type MediaRef struct {
-	Type     string // "image", "video", "audio", "voice", "document", "animation"
-	FileID   string // platform-specific file ID for lazy download
-	FileSize int64  // file size in bytes (0 if unknown) — used to skip large files
+	Type        string // "image", "video", "audio", "voice", "document", "animation"
+	FileID      string // platform-specific file ID for lazy download
+	FileSize    int64  // file size in bytes (0 if unknown) — used to skip large files
+	FileName    string // original filename, if the platform exposes one
+	ContentType string // MIME type, if the platform exposes one
 }
 
 // HistoryEntry represents a single tracked group message.

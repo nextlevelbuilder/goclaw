@@ -150,7 +150,7 @@ func (p *AnthropicProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 	}
 
 	if err := sse.Err(); err != nil {
-		return nil, fmt.Errorf("anthropic stream read error: %w", err)
+		return result, fmt.Errorf("anthropic stream read error: %w", err)
 	}
 
 	// Parse accumulated tool call JSON arguments

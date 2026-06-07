@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -47,6 +48,7 @@ type Config struct {
 	Providers ProvidersConfig `json:"providers"`
 	Gateway   GatewayConfig   `json:"gateway"`
 	Tools     ToolsConfig     `json:"tools"`
+	Skills    SkillsConfig    `json:"skills"`
 	Sessions  SessionsConfig  `json:"sessions"`
 	Database  DatabaseConfig  `json:"database"`
 	Tts       TtsConfig       `json:"tts"`
@@ -56,7 +58,39 @@ type Config struct {
 	Tailscale TailscaleConfig `json:"tailscale"`
 	Bindings  []AgentBinding  `json:"bindings,omitempty"`
 	Hooks     HooksConfig     `json:"hooks"`
+	Packages  PackagesConfig  `json:"packages"` // runtime package mgmt (GitHub updater)
 	mu        sync.RWMutex
+}
+
+// PackagesConfig tunes the runtime package update flow (Phase 1: GitHub
+// binaries). GitHubToken is RESERVED for Phase 2 (authenticated rate-limit
+// bump); currently unwired.
+//
+// UpdatesCheckTTL controls how stale the updates cache can get before a
+// GET /v1/packages/updates triggers a background refresh. Encoded as
+// human-readable string (e.g. "1h", "30m") parsed via time.ParseDuration;
+// empty string → default 1h.
+//
+// ScratchDir is the tmp workspace used by the update executor for download
+// + extract + staging before atomic swap. Defaults to "{BinDir}/../tmp" when
+// empty; operators MAY set explicitly to avoid symlink-resolution issues
+// (red-team H6).
+type PackagesConfig struct {
+	GitHubToken     string `json:"github_token,omitempty"`      // Phase 2 stub
+	UpdatesCheckTTL string `json:"updates_check_ttl,omitempty"` // e.g. "1h"
+	ScratchDir      string `json:"scratch_dir,omitempty"`       // abs path
+}
+
+// UpdatesCheckTTLDuration parses UpdatesCheckTTL returning 1h on empty/invalid.
+func (p PackagesConfig) UpdatesCheckTTLDuration() time.Duration {
+	if p.UpdatesCheckTTL == "" {
+		return time.Hour
+	}
+	d, err := time.ParseDuration(p.UpdatesCheckTTL)
+	if err != nil || d <= 0 {
+		return time.Hour
+	}
+	return d
 }
 
 // HooksConfig tunes the script-hook runtime caps. All zero-valued fields fall
@@ -97,7 +131,82 @@ type DatabaseConfig struct {
 
 // SkillsConfig configures the skills storage system.
 type SkillsConfig struct {
-	StorageDir string `json:"storage_dir,omitempty"` // directory for skill content (default: dataDir/skills-store/)
+	StorageDir      string                  `json:"storage_dir,omitempty"`        // directory for skill content (default: dataDir/skills-store/)
+	MaxUploadSizeMB int                     `json:"max_upload_size_mb,omitempty"` // per-file ZIP upload limit
+	SlashCommands   SkillSlashCommandConfig `json:"slash_commands,omitempty"`
+}
+
+// SkillSlashCommandConfig controls explicit slash-command skill activation.
+type SkillSlashCommandConfig struct {
+	Enabled         *bool  `json:"enabled,omitempty"`
+	SuggestNotFound *bool  `json:"suggest_not_found,omitempty"`
+	PartialMatching bool   `json:"partial_matching,omitempty"`
+	Prefix          string `json:"prefix,omitempty"`
+}
+
+const (
+	DefaultSkillMaxUploadSizeMB = 20
+	MinSkillMaxUploadSizeMB     = 1
+	MaxSkillMaxUploadSizeMB     = 500
+
+	DefaultSkillSlashCommandPrefix = "/"
+
+	SkillMaxUploadSizeSystemConfigKey        = "skills.max_upload_size_mb"
+	SkillSlashCommandsEnabledSystemConfigKey = "skills.slash_commands.enabled"
+	SkillSlashSuggestNotFoundSystemConfigKey = "skills.slash_commands.suggest_not_found"
+	SkillSlashPartialMatchingSystemConfigKey = "skills.slash_commands.partial_matching"
+	SkillSlashCommandPrefixSystemConfigKey   = "skills.slash_commands.prefix"
+)
+
+func ClampSkillMaxUploadSizeMB(value int) int {
+	if value == 0 {
+		return DefaultSkillMaxUploadSizeMB
+	}
+	if value < MinSkillMaxUploadSizeMB {
+		return MinSkillMaxUploadSizeMB
+	}
+	if value > MaxSkillMaxUploadSizeMB {
+		return MaxSkillMaxUploadSizeMB
+	}
+	return value
+}
+
+func (c SkillsConfig) EffectiveMaxUploadSizeMB() int {
+	return ClampSkillMaxUploadSizeMB(c.MaxUploadSizeMB)
+}
+
+func (c SkillsConfig) EffectiveMaxUploadSizeBytes() int64 {
+	return int64(c.EffectiveMaxUploadSizeMB()) << 20
+}
+
+func (c SkillSlashCommandConfig) EffectiveEnabled() bool {
+	if c.Enabled == nil {
+		return true
+	}
+	return *c.Enabled
+}
+
+func (c SkillSlashCommandConfig) EffectiveSuggestNotFound() bool {
+	if c.SuggestNotFound == nil {
+		return true
+	}
+	return *c.SuggestNotFound
+}
+
+func (c SkillSlashCommandConfig) EffectivePartialMatching() bool {
+	return c.PartialMatching
+}
+
+func (c SkillSlashCommandConfig) EffectivePrefix() string {
+	prefix := strings.TrimSpace(c.Prefix)
+	if prefix == "" {
+		return DefaultSkillSlashCommandPrefix
+	}
+	runes := []rune(prefix)
+	if len(runes) != 1 || runes[0] == ' ' || runes[0] == '\t' || runes[0] == '\n' || runes[0] == '\r' {
+		return DefaultSkillSlashCommandPrefix
+	}
+	return prefix
 }
 
 // AgentBinding maps a channel/peer pattern to a specific agent.
@@ -447,6 +556,7 @@ func (c *Config) ReplaceFrom(src *Config) {
 	c.Providers = src.Providers
 	c.Gateway = src.Gateway
 	c.Tools = src.Tools
+	c.Skills = src.Skills
 	c.Sessions = src.Sessions
 	c.Database = src.Database
 	c.Tts = src.Tts

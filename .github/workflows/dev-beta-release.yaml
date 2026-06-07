@@ -1,0 +1,504 @@
+name: Dev CI and Beta Release
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dev-beta-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GHCR_IMAGE: ghcr.io/${{ github.repository }}
+  DOCKERHUB_IMAGE: digitop/goclaw
+  INITIAL_VERSION: 3.11.3
+  PRERELEASE_ID: beta
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    services:
+      pg:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: goclaw_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://postgres:test@localhost:5432/goclaw_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - run: go build ./...
+      - run: go build -tags sqliteonly ./...
+      - run: go vet ./...
+      - name: Unit tests
+        run: go test -race -timeout=5m -coverpkg=./... -coverprofile=coverage.out ./...
+      - name: Invariant tests (P0)
+        run: go test -race -timeout=90s -tags integration ./tests/invariants/...
+      - name: Contract tests (P1)
+        run: go test -race -timeout=90s -tags integration ./tests/contracts/... || echo "::warning::Contract tests skipped (no server configured)"
+        continue-on-error: true
+      - name: Integration tests
+        run: go test -race -timeout=180s -tags integration ./tests/integration/
+      - name: Coverage summary
+        run: go tool cover -func=coverage.out | tail -1
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ui/web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm build
+
+  beta_version:
+    needs: [go, web]
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      released: ${{ steps.version.outputs.released }}
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      notes_path: ${{ steps.version.outputs.notes_path }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fetch upstream release tags
+        run: git fetch --force --tags https://github.com/nextlevelbuilder/goclaw.git "refs/tags/v*:refs/tags/v*"
+      - name: Compute semantic beta version
+        id: version
+        run: node scripts/ci/semantic-beta-version.mjs
+      - name: Create or verify beta tag
+        if: steps.version.outputs.released == 'true'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+            git tag -a "$TAG" -m "Release $TAG"
+            git push origin "$TAG"
+          fi
+      - name: Upload release notes
+        if: steps.version.outputs.released == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: ${{ steps.version.outputs.notes_path }}
+
+  build_binaries:
+    needs: beta_version
+    if: needs.beta_version.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.beta_version.outputs.tag }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build web UI
+        run: |
+          corepack enable && corepack prepare pnpm@10.28.2 --activate
+          cd ui/web && pnpm install --frozen-lockfile && pnpm build && cd ../..
+          mkdir -p internal/webui/dist
+          cp -r ui/web/dist/* internal/webui/dist/
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          VERSION: ${{ needs.beta_version.outputs.tag }}
+        run: |
+          CGO_ENABLED=0 go build -tags embedui \
+            -ldflags="-s -w -X github.com/nextlevelbuilder/goclaw/cmd.Version=${VERSION}" \
+            -o goclaw .
+          tar -czf "goclaw-${VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" goclaw migrations/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: goclaw-*.tar.gz
+
+  publish_release:
+    needs: [beta_version, build_binaries, promote_beta_aliases]
+    if: needs.beta_version.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: binary-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Download release notes
+        uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+          path: release-notes
+
+      - name: Publish prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.beta_version.outputs.tag }}
+        run: |
+          (cd artifacts && sha256sum goclaw-*.tar.gz > CHECKSUMS.sha256)
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" \
+              --title "GoClaw $TAG" \
+              --notes-file release-notes/release-notes.md \
+              --prerelease
+          else
+            gh release create "$TAG" \
+              --title "GoClaw $TAG" \
+              --notes-file release-notes/release-notes.md \
+              --prerelease
+          fi
+          gh release upload "$TAG" artifacts/* --clobber
+
+  docker_images:
+    needs: beta_version
+    if: needs.beta_version.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: latest
+            suffix: ""
+            enable_otel: "false"
+            enable_embedui: "true"
+            enable_python: "true"
+            enable_full_skills: "false"
+          - variant: full
+            suffix: "-full"
+            enable_otel: "false"
+            enable_embedui: "true"
+            enable_python: "true"
+            enable_full_skills: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.beta_version.outputs.tag }}
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        if: env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ env.DOCKERHUB_TOKEN }}
+
+      - name: Resolve Docker tags
+        id: docker_tags
+        env:
+          TAG: ${{ needs.beta_version.outputs.tag }}
+          SUFFIX: ${{ matrix.suffix }}
+        run: |
+          {
+            echo "tags<<EOF"
+            echo "${GHCR_IMAGE}:${TAG}${SUFFIX}"
+            if [[ -n "$DOCKERHUB_USERNAME" && -n "$DOCKERHUB_TOKEN" ]]; then
+              echo "${DOCKERHUB_IMAGE}:${TAG}${SUFFIX}"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          if [[ -z "$DOCKERHUB_USERNAME" || -z "$DOCKERHUB_TOKEN" ]]; then
+            echo "::notice::Docker Hub secrets not configured; publishing GHCR only."
+          fi
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.docker_tags.outputs.tags }}
+          build-args: |
+            ENABLE_OTEL=${{ matrix.enable_otel }}
+            ENABLE_EMBEDUI=${{ matrix.enable_embedui }}
+            ENABLE_PYTHON=${{ matrix.enable_python }}
+            ENABLE_FULL_SKILLS=${{ matrix.enable_full_skills }}
+            VERSION=${{ needs.beta_version.outputs.tag }}
+          cache-from: type=gha,scope=dev-beta-${{ matrix.variant }}
+          cache-to: type=gha,mode=max,scope=dev-beta-${{ matrix.variant }}
+
+  promote_beta_aliases:
+    needs: [beta_version, docker_images]
+    if: needs.beta_version.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+    steps:
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        if: env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ env.DOCKERHUB_TOKEN }}
+
+      - name: Promote beta aliases
+        env:
+          TAG: ${{ needs.beta_version.outputs.tag }}
+        run: |
+          docker buildx imagetools create -t "${GHCR_IMAGE}:beta" "${GHCR_IMAGE}:${TAG}"
+          docker buildx imagetools create -t "${GHCR_IMAGE}:beta-full" "${GHCR_IMAGE}:${TAG}-full"
+          if [[ -n "$DOCKERHUB_USERNAME" && -n "$DOCKERHUB_TOKEN" ]]; then
+            docker buildx imagetools create -t "${DOCKERHUB_IMAGE}:beta" "${DOCKERHUB_IMAGE}:${TAG}"
+            docker buildx imagetools create -t "${DOCKERHUB_IMAGE}:beta-full" "${DOCKERHUB_IMAGE}:${TAG}-full"
+          else
+            echo "::notice::Docker Hub secrets not configured; promoted GHCR beta aliases only."
+          fi
+
+  deploy_zuey_beta:
+    needs: [beta_version, publish_release]
+    if: needs.beta_version.outputs.released == 'true' && github.repository == 'digitopvn/goclaw'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      GOCLAW_DEPLOY_URL: ${{ secrets.ZUEY_GOCLAW_URL }}
+      GOCLAW_GATEWAY_TOKEN: ${{ secrets.ZUEY_GOCLAW_GATEWAY_TOKEN }}
+      GOCLAW_UPGRADE_TOKEN: ${{ secrets.ZUEY_GOCLAW_UPGRADE_TOKEN }}
+      GOCLAW_DEPLOY_USER_ID: ${{ vars.ZUEY_GOCLAW_USER_ID || 'system' }}
+      TAG: ${{ needs.beta_version.outputs.tag }}
+      ZUEY_SSH_HOST: ${{ vars.ZUEY_SSH_HOST || '82.197.71.246' }}
+      ZUEY_SSH_PORT: ${{ vars.ZUEY_SSH_PORT || '2233' }}
+      ZUEY_SSH_USER: ${{ vars.ZUEY_SSH_USER || 'zuey' }}
+    steps:
+      - name: Validate deploy configuration
+        run: |
+          missing=0
+          for name in GOCLAW_DEPLOY_URL GOCLAW_GATEWAY_TOKEN GOCLAW_UPGRADE_TOKEN TAG; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::${name} is not configured"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Checkout repository (for VPS script sync)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.beta_version.outputs.tag }}
+
+      - name: Sync zuey ops scripts to VPS
+        env:
+          ZUEY_SSH_PRIVATE_KEY_B64: ${{ secrets.ZUEY_SSH_PRIVATE_KEY_B64 }}
+          ZUEY_SUDO_PASS: ${{ secrets.ZUEY_SUDO_PASS }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${ZUEY_SSH_PRIVATE_KEY_B64:-}" || -z "${ZUEY_SUDO_PASS:-}" ]]; then
+            echo "::warning::ZUEY_SSH_PRIVATE_KEY_B64 or ZUEY_SUDO_PASS not configured; skipping VPS script sync. Store the private key as base64 (\`base64 -w0 < /path/to/key\`) in the ZUEY_SSH_PRIVATE_KEY_B64 secret to keep /usr/local/bin/goclaw-deploy and /usr/local/bin/goclaw-upgrade-release in sync with the repo on every beta deploy."
+            exit 0
+          fi
+
+          # Verify the two scripts exist in the checked-out tag
+          for f in scripts/zuey/goclaw-deploy.sh scripts/zuey/goclaw-upgrade-release.sh; do
+            test -f "$f" || { echo "::error::$f missing in repo"; exit 1; }
+            bash -n "$f" || { echo "::error::$f has syntax error"; exit 1; }
+          done
+
+          # Stage SSH key: base64-decode, write with 0600, validate format.
+          # Why base64: GitHub Secrets storage round-trips can normalize/strip
+          # newlines in PEM blocks, producing `error in libcrypto` on load.
+          # Base64 is a single line, immune to whitespace mangling.
+          install -m 700 -d ~/.ssh
+          # Create the key file with a tight umask so it is born at 0600 —
+          # avoids the brief 0644 window between `>` redirect and `chmod`.
+          if ! ( umask 077 && printf %s "$ZUEY_SSH_PRIVATE_KEY_B64" | base64 -d > ~/.ssh/id_zuey ) 2>/dev/null; then
+            echo "::error::ZUEY_SSH_PRIVATE_KEY_B64 is not valid base64. Regenerate with: base64 -w0 < /path/to/private_key"
+            exit 1
+          fi
+          if ! ssh-keygen -y -f ~/.ssh/id_zuey >/dev/null 2>&1; then
+            echo "::error::Decoded SSH key is not a valid OpenSSH/PEM private key. Verify the source file is a real private key and re-encode."
+            rm -f ~/.ssh/id_zuey
+            exit 1
+          fi
+          ssh-keyscan -p "$ZUEY_SSH_PORT" -H "$ZUEY_SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+          SSH_BASE=(-i ~/.ssh/id_zuey -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15)
+
+          # Upload (-O selects legacy scp protocol; OpenSSH 9.x defaults to sftp
+          # which is fine here, but -O is portable across runner image versions)
+          scp -O -P "$ZUEY_SSH_PORT" "${SSH_BASE[@]}" \
+            scripts/zuey/goclaw-deploy.sh \
+            scripts/zuey/goclaw-upgrade-release.sh \
+            "${ZUEY_SSH_USER}@${ZUEY_SSH_HOST}:/tmp/"
+
+          # Install on host: backup-if-changed → install (root:root 0755) →
+          # syntax check. The sudo password is shell-quoted via printf %q and
+          # interpolated into the remote command line; the SSH channel is
+          # encrypted and GitHub Actions auto-masks the secret in logs.
+          # sudo -S reads from stdin and does not echo the password.
+          quoted_pass=$(printf %q "$ZUEY_SUDO_PASS")
+          ssh -p "$ZUEY_SSH_PORT" "${SSH_BASE[@]}" "${ZUEY_SSH_USER}@${ZUEY_SSH_HOST}" \
+            "SUDOPASS=$quoted_pass bash -s" <<'REMOTE'
+          set -euo pipefail
+          ts=$(date +%Y%m%d-%H%M%S)
+          for name in goclaw-deploy goclaw-upgrade-release; do
+            src="/tmp/${name}.sh"
+            dst="/usr/local/bin/${name}"
+            if [ ! -f "$src" ]; then echo "::error::missing $src"; exit 1; fi
+            if [ -f "$dst" ] && cmp -s "$src" "$dst"; then
+              echo "no change: $name"
+              rm -f "$src"
+              continue
+            fi
+            if [ -f "$dst" ]; then
+              echo "$SUDOPASS" | sudo -S cp -p "$dst" "${dst}.bak-${ts}"
+            fi
+            echo "$SUDOPASS" | sudo -S install -o root -g root -m 0755 "$src" "$dst"
+            echo "$SUDOPASS" | sudo -S bash -n "$dst"
+            rm -f "$src"
+            echo "installed: $name"
+          done
+          REMOTE
+
+          # Clean up the private key from the runner FS
+          shred -u ~/.ssh/id_zuey 2>/dev/null || rm -f ~/.ssh/id_zuey
+
+      - name: Trigger zuey gateway upgrade
+        run: |
+          base_url="${GOCLAW_DEPLOY_URL%/}"
+          body="$(mktemp)"
+          payload="$(printf '{"tag":"%s"}' "$TAG")"
+          status_code="$(curl -sS --retry 3 --retry-delay 2 \
+            -o "$body" \
+            -w "%{http_code}" \
+            -X POST "${base_url}/v1/system/gateway/upgrade" \
+            -H "Authorization: Bearer ${GOCLAW_GATEWAY_TOKEN}" \
+            -H "X-GoClaw-Upgrade-Token: ${GOCLAW_UPGRADE_TOKEN}" \
+            -H "X-GoClaw-User-Id: ${GOCLAW_DEPLOY_USER_ID}" \
+            -H "Content-Type: application/json" \
+            --data "$payload")"
+          if [[ "$status_code" != "202" ]]; then
+            echo "::error::gateway upgrade trigger failed with HTTP ${status_code}"
+            cat "$body"
+            exit 1
+          fi
+          cat "$body"
+
+      - name: Wait for zuey gateway upgrade
+        run: |
+          base_url="${GOCLAW_DEPLOY_URL%/}"
+          for attempt in {1..90}; do
+            status_err="$(mktemp)"
+            status_json="$(curl -fsS --retry 3 --retry-delay 2 \
+              -H "Authorization: Bearer ${GOCLAW_GATEWAY_TOKEN}" \
+              -H "X-GoClaw-Upgrade-Token: ${GOCLAW_UPGRADE_TOKEN}" \
+              -H "X-GoClaw-User-Id: ${GOCLAW_DEPLOY_USER_ID}" \
+              "${base_url}/v1/system/gateway/upgrade/status" 2>"$status_err" || true)"
+            if [[ -z "$status_json" ]]; then
+              echo "upgrade status unavailable; attempt ${attempt}/90"
+              cat "$status_err"
+              rm -f "$status_err"
+              sleep 10
+              continue
+            fi
+            rm -f "$status_err"
+            state="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("state", ""))' <<< "$status_json" 2>/dev/null || true)"
+            if [[ "$state" == "succeeded" ]]; then
+              echo "$status_json"
+              exit 0
+            fi
+            if [[ "$state" == "failed" ]]; then
+              echo "::error::gateway upgrade failed"
+              echo "$status_json"
+              exit 1
+            fi
+            echo "upgrade state=${state:-unknown}; attempt ${attempt}/90"
+            sleep 10
+          done
+          echo "::error::gateway upgrade timed out"
+          exit 1
+
+      - name: Verify public health
+        run: |
+          base_url="${GOCLAW_DEPLOY_URL%/}"
+          health_json="$(curl -fsS --retry 5 --retry-delay 3 "${base_url}/health")"
+          status="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("status", ""))' <<< "$health_json")"
+          if [[ "$status" != "ok" ]]; then
+            echo "::error::unexpected health response"
+            echo "$health_json"
+            exit 1
+          fi
+          echo "$health_json"

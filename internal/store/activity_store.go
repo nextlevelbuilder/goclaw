@@ -28,8 +28,23 @@ type ActivityListOpts struct {
 	Action     string
 	EntityType string
 	EntityID   string
+	From       *time.Time
+	To         *time.Time
 	Limit      int
 	Offset     int
+}
+
+// ActivityAggregateOpts configures audit log aggregation.
+type ActivityAggregateOpts struct {
+	ActivityListOpts
+	GroupBy string
+}
+
+// ActivityAggregateBucket is a grouped audit log count.
+type ActivityAggregateBucket struct {
+	Key      string    `json:"key"`
+	Count    int       `json:"count"`
+	LastSeen time.Time `json:"last_seen"`
 }
 
 // ActivityStore manages activity audit logs.
@@ -37,4 +52,5 @@ type ActivityStore interface {
 	Log(ctx context.Context, entry *ActivityLog) error
 	List(ctx context.Context, opts ActivityListOpts) ([]ActivityLog, error)
 	Count(ctx context.Context, opts ActivityListOpts) (int, error)
+	Aggregate(ctx context.Context, opts ActivityAggregateOpts) ([]ActivityAggregateBucket, int, error)
 }

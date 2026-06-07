@@ -17,6 +17,7 @@ import { CliCredentialEnvVarsSection } from "./cli-credential-env-vars-section";
 import { CliCredentialBinaryFields } from "./cli-credential-binary-fields";
 import { CliCredentialScopeFields } from "./cli-credential-scope-fields";
 import { cliCredentialSchema, type CliCredentialFormData } from "@/schemas/credential.schema";
+import type { CLIEnvEntryResponse, CLIEnvPayload } from "@/types/cli-credential";
 
 interface Props {
   open: boolean;
@@ -28,6 +29,20 @@ interface Props {
 
 const NONE_PRESET = "__none__";
 const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+function manualEntriesFromEnv(
+  env: Record<string, CLIEnvEntryResponse> | undefined,
+  fallbackKeys: string[],
+): ManualEnvEntry[] {
+  if (env && Object.keys(env).length > 0) {
+    return Object.entries(env).map(([key, entry]) => ({
+      key,
+      value: entry.value ?? "",
+      kind: entry.kind ?? "sensitive",
+    }));
+  }
+  return fallbackKeys.map((key) => ({ key, value: "", kind: "sensitive" }));
+}
 
 export function CliCredentialFormDialog({ open, onOpenChange, credential, presets, onSubmit }: Props) {
   const { t } = useTranslation("cli-credentials");
@@ -91,13 +106,13 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
       return;
     }
 
-    const applyEnvKeys = (keys: string[]) => {
+    const applyEnvState = (env: Record<string, CLIEnvEntryResponse> | undefined, keys: string[]) => {
       setInitialEnvKeys(keys);
-      setManualEnvEntries(keys.length > 0 ? keys.map((k) => ({ key: k, value: "" })) : []);
+      setManualEnvEntries(manualEntriesFromEnv(env, keys));
     };
 
     if (credential.env_keys !== undefined) {
-      applyEnvKeys(credential.env_keys ?? []);
+      applyEnvState(credential.env, credential.env_keys ?? []);
       return;
     }
 
@@ -106,9 +121,9 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
       try {
         const full = await http.get<SecureCLIBinary>(`/v1/cli-credentials/${credential.id}`);
         if (cancelled) return;
-        applyEnvKeys(full.env_keys ?? []);
+        applyEnvState(full.env, full.env_keys ?? []);
       } catch {
-        if (!cancelled) applyEnvKeys([]);
+        if (!cancelled) applyEnvState(undefined, []);
       }
     })();
     return () => { cancelled = true; };
@@ -156,16 +171,22 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
   const splitCommaList = (v: string): string[] =>
     v.split(",").map((s) => s.trim()).filter(Boolean);
 
-  const buildEnvPayload = (): Record<string, string> | null => {
-    if (!isManualMode) return envValues;
-    const env: Record<string, string> = {};
+  const buildEnvPayload = (): CLIEnvPayload | null => {
+    if (!isManualMode) {
+      const presetEnv: CLIEnvPayload = {};
+      for (const [key, value] of Object.entries(envValues)) {
+        presetEnv[key] = { kind: "sensitive", value };
+      }
+      return presetEnv;
+    }
+    const env: CLIEnvPayload = {};
     for (const entry of manualEnvEntries) {
       const k = entry.key.trim();
       if (k && !ENV_KEY_PATTERN.test(k)) {
         setError(t("form.invalidEnvKey", { key: k }));
         return null;
       }
-      if (k) env[k] = entry.value;
+      if (k) env[k] = { kind: entry.kind, value: entry.value };
     }
     return env;
   };

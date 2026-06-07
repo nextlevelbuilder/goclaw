@@ -143,6 +143,16 @@
       "save": "Lưu",
       "saving": "Đang lưu..."
     },
+    "execSettings": {
+      "title": "Cài đặt Exec",
+      "description": "Cấu hình thời gian chờ lệnh host cho công cụ exec tích hợp.",
+      "timeoutSeconds": "Thời gian chờ (giây)",
+      "timeoutHint": "Phạm vi cho phép: {{min}}-{{max}} giây.",
+      "sandboxHint": "Lần chạy Docker sandbox dùng cài đặt thời gian chờ sandbox của agent.",
+      "cancel": "Hủy",
+      "save": "Lưu",
+      "saving": "Đang lưu..."
+    },
     "searchChain": {
       "title": "Chuỗi nhà cung cấp tìm kiếm web",
       "description": "Kéo để sắp xếp lại nhà cung cấp tìm kiếm. Nhà cung cấp đầu tiên được bật với API key hợp lệ sẽ được thử trước.",

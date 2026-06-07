@@ -13,6 +13,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tracing"
+	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 )
 
 // runTask executes the subagent in a goroutine.
@@ -253,10 +254,7 @@ func (sm *SubagentManager) executeTask(ctx context.Context, task *SubagentTask) 
 				}
 				slog.Info("subagent LLM retry", "id", task.ID, "iteration", iteration, "attempt", attempt+1)
 			}
-		// ctx is the parent agent's run context — cancelling the parent (e.g. agent abort)
-		// cascades here and to all subsequent tool calls in this iteration.
-		// Do NOT replace ctx with context.Background() here; that would detach abort propagation.
-			resp, err = activeProvider.Chat(ctx, chatReq)
+			resp, err = sm.chatSubagentWithUsageCap(ctx, task, activeProvider, model, chatReq, iteration, attempt+1)
 			if err == nil {
 				break
 			}
@@ -343,4 +341,45 @@ func (sm *SubagentManager) executeTask(ctx context.Context, task *SubagentTask) 
 	go sm.persistStatus(ctx, task, iteration)
 
 	return iteration
+}
+
+func (sm *SubagentManager) chatSubagentWithUsageCap(ctx context.Context, task *SubagentTask, activeProvider providers.Provider, model string, chatReq providers.ChatRequest, iteration, attempt int) (*providers.ChatResponse, error) {
+	if fallbackProvider, ok := activeProvider.(*providers.ModelFallbackProvider); ok {
+		before := func(callCtx context.Context, entry providers.FallbackCandidate, actualReq providers.ChatRequest) (providers.FallbackAfterCall, error) {
+			reservation, err := sm.reserveSubagentUsage(callCtx, task, entry.ProviderName, actualReq.Model, actualReq, fmt.Sprintf("%d:%d:%s:%s", iteration, attempt, entry.ProviderName, actualReq.Model))
+			if err != nil {
+				return nil, err
+			}
+			return func(resp *providers.ChatResponse, callErr error, _ providers.FallbackCallInfo) {
+				if reservation != nil {
+					reservation.Reconcile(callCtx, resp, callErr)
+				}
+			}, nil
+		}
+		return fallbackProvider.ChatWithHook(ctx, chatReq, before)
+	}
+	reservation, err := sm.reserveSubagentUsage(ctx, task, activeProvider.Name(), model, chatReq, fmt.Sprintf("%d:%d", iteration, attempt))
+	if err != nil {
+		return nil, err
+	}
+	resp, err := activeProvider.Chat(ctx, chatReq)
+	if reservation != nil {
+		reservation.Reconcile(ctx, resp, err)
+	}
+	return resp, err
+}
+
+func (sm *SubagentManager) reserveSubagentUsage(ctx context.Context, task *SubagentTask, providerName, model string, chatReq providers.ChatRequest, suffix string) (*usagecaps.Reservation, error) {
+	if sm.usageCaps == nil {
+		return nil, nil
+	}
+	return sm.usageCaps.Preflight(ctx, usagecaps.Request{
+		TenantID:        task.OriginTenantID,
+		AgentID:         task.OriginAgentID,
+		ProviderName:    providerName,
+		ModelID:         model,
+		ReservationKey:  fmt.Sprintf("%s:%s", task.ID, suffix),
+		Messages:        chatReq.Messages,
+		MaxOutputTokens: 4096,
+	})
 }

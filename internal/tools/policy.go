@@ -16,7 +16,7 @@ var builtinToolGroups = map[string][]string{
 	"memory":     {"memory_search", "memory_get"},
 	"web":        {"web_search", "web_fetch"},
 	"fs":         {"read_file", "write_file", "list_files", "edit"},
-	"runtime":    {"exec"},
+	"runtime":    {"exec", "wait"},
 	"sessions":   {"sessions_list", "sessions_history", "sessions_send", "spawn", "session_status"},
 	"ui":         {"browser"},
 	"automation": {"cron"},
@@ -25,7 +25,7 @@ var builtinToolGroups = map[string][]string{
 	"vault":      {"vault_search", "vault_read"},
 	// Composite group: all goclaw native tools (excludes MCP/custom plugins).
 	"goclaw": {
-		"read_file", "write_file", "list_files", "edit", "exec",
+		"read_file", "write_file", "list_files", "edit", "exec", "wait",
 		"web_search", "web_fetch", "browser",
 		"memory_search", "memory_get", "memory_expand",
 		"knowledge_graph_search", "vault_search", "vault_read",
@@ -48,12 +48,12 @@ var builtinToolGroups = map[string][]string{
 var toolProfiles = map[string][]string{
 	"minimal":   {"session_status"},
 	"coding":    {"group:fs", "group:runtime", "group:sessions", "group:memory", "group:web", "group:vault", "read_image", "create_image", "skill_search"},
-	"messaging": {"group:messaging", "group:web", "group:vault", "sessions_list", "sessions_history", "sessions_send", "session_status", "read_image", "skill_search"},
+	"messaging": {"group:messaging", "wait", "group:web", "group:vault", "sessions_list", "sessions_history", "sessions_send", "session_status", "read_image", "skill_search"},
 	"full":      {}, // empty = no restrictions
 }
 
 // Legacy tool aliases — migrated to Registry.RegisterAlias() at startup.
-// Kept as seed data only; resolveAlias() is no longer used.
+// resolveAlias() is used by IsDenied to expand names before deny-spec matching.
 var legacyToolAliases = map[string]string{
 	"bash":           "exec",
 	"apply-patch":    "apply_patch",
@@ -434,19 +434,34 @@ func unionWithSpec(reg *Registry, current []string, allTools []string, spec []st
 
 // IsDenied checks if a tool name is explicitly denied by global or agent policy.
 // Used to prevent lazy-activated deferred tools from bypassing the deny list.
+// Checks under all candidate names: the raw name, the legacy alias (e.g. bash→exec),
+// and the registry alias when available.
 func (pe *PolicyEngine) IsDenied(name string, agentPolicy *config.ToolPolicySpec) bool {
+	candidates := map[string]struct{}{name: {}}
+	// Keep legacy alias compatibility (e.g. bash -> exec).
+	candidates[resolveAlias(name)] = struct{}{}
+	// Include registry alias mapping when available.
 	pe.mu.RLock()
 	reg := pe.registry
 	pe.mu.RUnlock()
+	if reg != nil {
+		if canonical, ok := reg.Aliases()[name]; ok && canonical != "" {
+			candidates[canonical] = struct{}{}
+		}
+	}
 
 	if pe.globalPolicy != nil {
-		if matchDenySpec(reg, name, pe.globalPolicy.Deny) {
-			return true
+		for candidate := range candidates {
+			if matchDenySpec(reg, candidate, pe.globalPolicy.Deny) {
+				return true
+			}
 		}
 	}
 	if agentPolicy != nil {
-		if matchDenySpec(reg, name, agentPolicy.Deny) {
-			return true
+		for candidate := range candidates {
+			if matchDenySpec(reg, candidate, agentPolicy.Deny) {
+				return true
+			}
 		}
 	}
 	return false

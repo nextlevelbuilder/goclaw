@@ -83,13 +83,8 @@ export function BehaviorSection({ config, onPatch, saving }: Props) {
     (v: T) => { setter(v); setDirty(true); };
 
   const handleSave = () => {
-    // Strip masked/secret values to avoid overwriting real secrets with "***"
-    const gwClean = Object.fromEntries(
-      Object.entries(gw).filter(([, v]) => typeof v !== "string" || v !== "***"),
-    );
     onPatch({
       gateway: {
-        ...gwClean,
         tool_status: ux.tool_status,
         block_reply: ux.block_reply,
         max_message_chars: rate.max_message_chars,
@@ -98,12 +93,11 @@ export function BehaviorSection({ config, onPatch, saving }: Props) {
         injection_action: security.injection_action,
       },
       agents: {
-        ...config.agents,
-        defaults: { ...ag, intent_classify: ux.intent_classify },
+        defaults: { intent_classify: ux.intent_classify },
       },
-      tools: { ...tl, scrub_credentials: security.scrub_credentials },
-      sessions: { ...ss, ...sessions },
-      channels: { ...ch, pending_compaction: pendingCompaction },
+      tools: { scrub_credentials: security.scrub_credentials },
+      sessions,
+      channels: { pending_compaction: pendingCompaction },
     });
   };
 

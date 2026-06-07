@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -48,8 +47,6 @@ func buildPrefilledUser(meta *ChannelMeta) string {
 _(First contact via %s channel. Profile info auto-filled from channel data.)_
 `, name, name, tz, meta.ChannelType)
 }
-
-
 
 // retryOnBusy retries fn up to 3 times on SQLITE_BUSY errors with 500ms delay.
 func retryOnBusy(fn func() error) error {
@@ -110,7 +107,7 @@ func SeedToStore(ctx context.Context, agentStore store.AgentStore, agentID uuid.
 			continue
 		}
 
-		content, err := templateFS.ReadFile(filepath.Join("templates", name))
+		content, err := templateFS.ReadFile(templatePath(name))
 		if err != nil {
 			slog.Warn("bootstrap: failed to read embedded template", "file", name, "error", err)
 			continue
@@ -125,7 +122,7 @@ func SeedToStore(ctx context.Context, agentStore store.AgentStore, agentID uuid.
 	// Seed USER_PREDEFINED.md for predefined agents (agent-level, not in templateFiles).
 	// Provides baseline user-handling rules shared across all users.
 	if !hasContent[UserPredefinedFile] {
-		content, err := templateFS.ReadFile(filepath.Join("templates", UserPredefinedFile))
+		content, err := templateFS.ReadFile(templatePath(UserPredefinedFile))
 		if err == nil {
 			if err := retryOnBusy(func() error { return agentStore.SetAgentContextFile(ctx, agentID, UserPredefinedFile, string(content)) }); err != nil {
 				return seeded, err
@@ -218,7 +215,7 @@ func SeedUserFiles(ctx context.Context, agentStore store.AgentStore, agentID uui
 				if name == BootstrapFile || name == UserFile {
 					continue // skip bootstrap (the whole point) and user (already filled)
 				}
-				content, err := templateFS.ReadFile(filepath.Join("templates", name))
+				content, err := templateFS.ReadFile(templatePath(name))
 				if err != nil {
 					continue
 				}
@@ -286,7 +283,7 @@ func SeedUserFiles(ctx context.Context, agentStore store.AgentStore, agentID uui
 			templateName = "BOOTSTRAP_PREDEFINED.md"
 		}
 
-		content, err := templateFS.ReadFile(filepath.Join("templates", templateName))
+		content, err := templateFS.ReadFile(templatePath(templateName))
 		if err != nil {
 			slog.Warn("bootstrap: failed to read embedded template for user seed", "file", name, "error", err)
 			continue
@@ -319,7 +316,7 @@ func EmbeddedUserFiles(agentType string) []ContextFile {
 		if agentType == store.AgentTypePredefined && name == BootstrapFile {
 			templateName = "BOOTSTRAP_PREDEFINED.md"
 		}
-		content, err := templateFS.ReadFile(filepath.Join("templates", templateName))
+		content, err := templateFS.ReadFile(templatePath(templateName))
 		if err != nil {
 			continue
 		}

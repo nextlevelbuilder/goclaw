@@ -39,22 +39,66 @@ func (l *Loop) buildCredentialCLIContext(ctx context.Context) string {
 	return tools.GenerateCredentialContext(creds)
 }
 
-// buildMCPToolDescs extracts real descriptions for MCP tools from the registry.
-// Returns nil if no MCP tools are present.
-func (l *Loop) buildMCPToolDescs(toolNames []string) map[string]string {
+// buildMCPToolDescs extracts real descriptions for MCP tools from the registry,
+// scoped to the calling actor's available per-user MCP tools. Returns nil if
+// no MCP tools are present for this actor.
+//
+// Per-user MCP tools (C2 fix, Phase 2) are NOT in the shared registry — they
+// live in mcpUserTools sync.Map keyed by actorUserID. A-G1 fix (260512):
+// previously this function fell back to scanning all users to find any matching
+// description, which let LLM see tools that executeToolForActor can't actually
+// invoke for the current actor (resulting in "tool not found" loops for cron /
+// synthetic events with no senderID, and for users whose creds were just purged).
+//
+// Now: only surface a description if the actor has the tool in their cache.
+// Shared registry MCP tools (non-per-user) still resolve via l.tools.Get.
+//
+// actorUserID="" means no per-user MCP tools — only shared registry results
+// included.
+func (l *Loop) buildMCPToolDescs(toolNames []string, actorUserID string) map[string]string {
+	// Build set of tool names the actor actually owns. Empty if actorUserID is
+	// blank or actor has no per-user MCP tools.
+	actorToolDescs := l.lookupActorMCPDescs(actorUserID)
+
 	descs := make(map[string]string)
 	for _, name := range toolNames {
 		if !strings.HasPrefix(name, "mcp_") || name == "mcp_tool_search" {
 			continue
 		}
+		// Shared registry first (non-per-user MCP tools).
 		if tool, ok := l.tools.Get(name); ok {
 			descs[name] = tool.Description()
+			continue
+		}
+		// Per-user MCP tool — only include if actor actually has it.
+		if desc, ok := actorToolDescs[name]; ok {
+			descs[name] = desc
 		}
 	}
 	if len(descs) == 0 {
 		return nil
 	}
 	return descs
+}
+
+// lookupActorMCPDescs returns the name→description map of per-user MCP tools
+// owned by the given actor. Empty map if actorUserID is blank or no creds.
+// Used by buildMCPToolDescs to scope LLM-visible MCP tools to what the actor
+// can actually call (executeToolForActor lookup uses same key).
+func (l *Loop) lookupActorMCPDescs(actorUserID string) map[string]string {
+	out := make(map[string]string)
+	if actorUserID == "" {
+		return out
+	}
+	cached, ok := l.mcpUserTools.Load(actorUserID)
+	if !ok {
+		return out
+	}
+	userTools, _ := cached.([]tools.Tool)
+	for _, t := range userTools {
+		out[t.Name()] = t.Description()
+	}
+	return out
 }
 
 // buildGroupWriterPrompt builds the system prompt section for group file writer restrictions.

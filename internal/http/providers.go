@@ -1,12 +1,14 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -20,7 +22,9 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/oauth"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/security"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -38,6 +42,7 @@ type ProvidersHandler struct {
 	tracingStore    store.TracingStore      // optional: for provider-scoped pool activity
 	agents          store.AgentCRUDStore    // optional: for provider pool activity agent lookup
 	modelReg        providers.ModelRegistry // optional: forward-compat model resolver for Anthropic
+	usageCaps       *usagecaps.Service
 }
 
 // NewProvidersHandler creates a handler for provider management endpoints.
@@ -84,6 +89,10 @@ func (h *ProvidersHandler) SetModelRegistry(r providers.ModelRegistry) {
 	h.modelReg = r
 }
 
+func (h *ProvidersHandler) SetUsageCapService(s *usagecaps.Service) {
+	h.usageCaps = s
+}
+
 // resolveAPIBase returns the provider's api_base, falling back to config/env if empty.
 // For Ollama/OllamaCloud providers, applies a safety-net normalization: if the stored
 // value is missing the /v1 suffix (pre-existing record before write-time normalization),
@@ -107,14 +116,27 @@ func (h *ProvidersHandler) resolveAPIBase(p *store.LLMProviderData) string {
 
 // emitProviderCacheInvalidate broadcasts a provider cache invalidation event.
 // Subscribers (e.g. ACP re-registration in gateway_managed.go) react to reload from DB.
-func (h *ProvidersHandler) emitProviderCacheInvalidate(name string) {
+func (h *ProvidersHandler) emitProviderCacheInvalidate(ctx context.Context, tenantID uuid.UUID, name string) bool {
 	if h.msgBus == nil {
-		return
+		return false
 	}
+	tenantID = providerCacheTenantID(ctx, tenantID)
 	h.msgBus.Broadcast(bus.Event{
-		Name:    protocol.EventCacheInvalidate,
-		Payload: bus.CacheInvalidatePayload{Kind: bus.CacheKindProvider, Key: name},
+		Name:     protocol.EventCacheInvalidate,
+		TenantID: tenantID,
+		Payload:  bus.CacheInvalidatePayload{Kind: bus.CacheKindProvider, Key: name, TenantID: tenantID},
 	})
+	return true
+}
+
+func providerCacheTenantID(ctx context.Context, tenantID uuid.UUID) uuid.UUID {
+	if tenantID != uuid.Nil {
+		return tenantID
+	}
+	if tid := store.TenantIDFromContext(ctx); tid != uuid.Nil {
+		return tid
+	}
+	return store.MasterTenantID
 }
 
 // RegisterRoutes registers all provider management routes on the given mux.
@@ -130,6 +152,7 @@ func (h *ProvidersHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/providers/{id}/models", h.auth(h.handleListProviderModels))
 
 	// Provider + model verification (pre-flight check)
+	mux.HandleFunc("POST /v1/providers/{id}/reconnect", h.auth(h.handleReconnectProvider))
 	mux.HandleFunc("POST /v1/providers/{id}/verify", h.auth(h.handleVerifyProvider))
 	mux.HandleFunc("POST /v1/providers/{id}/verify-embedding", h.auth(h.handleVerifyEmbedding))
 
@@ -154,16 +177,29 @@ func maskAPIKey(p *store.LLMProviderData) {
 	}
 }
 
+type providerRuntimeRegistrationStatus string
+
+const (
+	providerRuntimeRegistered        providerRuntimeRegistrationStatus = "registered"
+	providerRuntimeDisabled          providerRuntimeRegistrationStatus = "disabled"
+	providerRuntimeSkipped           providerRuntimeRegistrationStatus = "skipped"
+	providerRuntimeMissingCredential providerRuntimeRegistrationStatus = "missing_credential"
+	providerRuntimeInvalidConfig     providerRuntimeRegistrationStatus = "invalid_config"
+)
+
 // registerInMemory adds (or replaces) a provider in the in-memory registry
 // so it's immediately usable for verify/chat without a gateway restart.
-func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
+func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) providerRuntimeRegistrationStatus {
 	if h.providerReg == nil || !p.Enabled {
-		return
+		if p.Enabled {
+			return providerRuntimeSkipped
+		}
+		return providerRuntimeDisabled
 	}
 	// ACP agents don't need an API key — skip in-memory registration
 	// (ACP providers are registered via gateway_providers.go on startup or restart)
 	if p.ProviderType == store.ProviderACP {
-		return
+		return providerRuntimeSkipped
 	}
 	// Claude CLI doesn't need an API key — register immediately
 	if p.ProviderType == store.ProviderClaudeCLI {
@@ -179,7 +215,7 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 		}
 		if _, err := exec.LookPath(cliPath); err != nil {
 			slog.Warn("claude-cli: binary not found, skipping in-memory registration", "path", cliPath, "provider", p.Name, "error", err)
-			return
+			return providerRuntimeInvalidConfig
 		}
 		cliOpts := []providers.ClaudeCLIOption{
 			providers.WithClaudeCLIName(p.Name),
@@ -191,7 +227,7 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 			cliOpts = append(cliOpts, providers.WithClaudeCLIMCPConfigData(mcpData))
 		}
 		h.providerReg.RegisterForTenant(p.TenantID, providers.NewClaudeCLIProvider(cliPath, cliOpts...))
-		return
+		return providerRuntimeRegistered
 	}
 	// Ollama doesn't need an API key — handle before the key guard (same as startup).
 	// In Docker, swap localhost → host.docker.internal so the container can reach the host.
@@ -202,10 +238,33 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 			host = "http://localhost:11434/v1"
 		}
 		h.providerReg.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, "ollama", config.DockerLocalhost(host), "llama3.3"))
-		return
+		return providerRuntimeRegistered
+	}
+	// Vertex supports ADC (empty api_key) — handle before the generic key guard.
+	if p.ProviderType == store.ProviderVertex {
+		vsettings := store.ParseVertexProviderSettings(p.Settings)
+		if vsettings == nil {
+			slog.Warn("vertex: missing project_id/region in settings, cannot register", "name", p.Name)
+			return providerRuntimeInvalidConfig
+		}
+		vcfg := providers.VertexConfig{
+			Name:            p.Name,
+			CredentialsJSON: p.APIKey,
+			ProjectID:       vsettings.ProjectID,
+			Region:          vsettings.Region,
+			DefaultModel:    vsettings.Model,
+			APIBaseOverride: p.APIBase,
+		}
+		prov, err := providers.NewVertexProviderWithTimeout(vcfg)
+		if err != nil {
+			slog.Warn("vertex: register in-memory failed", "name", p.Name, "error", err)
+			return providerRuntimeInvalidConfig
+		}
+		h.providerReg.RegisterForTenant(p.TenantID, prov)
+		return providerRuntimeRegistered
 	}
 	if p.APIKey == "" {
-		return
+		return providerRuntimeMissingCredential
 	}
 	apiBase := h.resolveAPIBase(p)
 	switch p.ProviderType {
@@ -246,6 +305,7 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 		}
 		h.providerReg.RegisterForTenant(p.TenantID, prov)
 	}
+	return providerRuntimeRegistered
 }
 
 // normalizeOllamaAPIBase ensures Ollama and OllamaCloud api_base values include the
@@ -264,53 +324,136 @@ func normalizeOllamaAPIBase(p *store.LLMProviderData) {
 	}
 }
 
-// localProviderTypes are provider types that legitimately run on localhost
-// (e.g. Ollama, Claude CLI). SSRF checks are skipped for these.
-var localProviderTypes = map[string]bool{
-	store.ProviderOllama:    true,
-	store.ProviderClaudeCLI: true,
-	store.ProviderACP:       true,
+// localURLProviderTypes are provider types that legitimately run on localhost.
+// They are restricted to an explicit localhost allowlist
+// rather than skipping SSRF validation entirely.
+var localURLProviderTypes = map[string]bool{
+	store.ProviderOllama: true,
+	store.ProviderACP:    true,
 }
+
+// allowedLocalHosts are the only hosts permitted for local provider types.
+// Explicit allowlist (not blocklist) to prevent new internal addresses from
+// slipping through (e.g. 169.254.169.254 via ollama base URL).
+var allowedLocalHosts = []string{"localhost", "127.0.0.1", "::1", "host.docker.internal"}
+
+// dnsResolverFn resolves hostnames to IPs. Replaceable in tests.
+var dnsResolverFn = net.LookupHost
+
+// allowPrivateProviderURLsFn reports whether the operator has opted in to
+// permitting private / loopback / link-local / internal-hostname provider base
+// URLs via GOCLAW_ALLOW_PRIVATE_PROVIDER_URLS. Evaluated once at first call so
+// tests can override the variable before that happens.
+var allowPrivateProviderURLsFn = sync.OnceValue(func() bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("GOCLAW_ALLOW_PRIVATE_PROVIDER_URLS")))
+	return v == "1" || v == "true" || v == "yes"
+})
 
 // validateProviderURL rejects provider base URLs pointing to internal/private networks.
 // Defense-in-depth: prevents SSRF when providers are later used for API calls.
+//
+// Logic:
+//  1. Empty URL → allowed (provider may not need a custom base).
+//  2. Claude CLI → api_base is an executable path/command, not a URL.
+//  3. Scheme check (http/https only) → enforced for URL-based types, including
+//     local URL types. Blocks file://, gopher://, dict://, etc.
+//  4. Local URL types (ollama, acp) → host must be in allowedLocalHosts
+//     (explicit allowlist prevents reaching 169.254.169.254 or internal services
+//     via the local-type bypass).
+//  5. Remote types → if GOCLAW_ALLOW_PRIVATE_PROVIDER_URLS is set, allow and log.
+//     Otherwise: resolve DNS hostname; reject if ANY resolved IP satisfies
+//     security.IsBlocked (covers loopback, link-local, private, multicast,
+//     unspecified — including 0.0.0.0 and :: that earlier hand-rolled checks missed).
+//
+// DNS resolution on step 5 closes the nip.io / sslip.io / attacker-domain bypass
+// where a hostname passes a literal-string blocklist but resolves to a private IP.
 func validateProviderURL(rawURL string, providerType string) error {
-	if rawURL == "" || localProviderTypes[providerType] {
+	if rawURL == "" {
 		return nil
+	}
+	if providerType == store.ProviderClaudeCLI {
+		return validateClaudeCLIExecutablePath(rawURL)
 	}
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return fmt.Errorf("invalid URL: %w", err)
 	}
-	// Only allow http/https schemes — block file://, gopher://, dict://, etc.
+	// Scheme check is unconditional for URL-based provider types, including local URL types.
 	switch u.Scheme {
 	case "http", "https":
 	default:
 		return fmt.Errorf("provider URL must use http or https scheme, got %q", u.Scheme)
 	}
+
 	host := u.Hostname()
-	// Block obvious internal targets
-	blocked := []string{"localhost", "127.0.0.1", "::1", "0.0.0.0", "169.254.169.254", "metadata.google.internal"}
-	for _, b := range blocked {
-		if strings.EqualFold(host, b) {
-			return fmt.Errorf("provider URL cannot point to %s", b)
+
+	// Local provider types: only allow an explicit localhost allowlist.
+	// This prevents using the local-type escape hatch to reach internal services
+	// or cloud metadata endpoints.
+	if localURLProviderTypes[providerType] {
+		for _, a := range allowedLocalHosts {
+			if strings.EqualFold(host, a) {
+				return nil
+			}
 		}
+		slog.Warn("security.provider_url.local_type_denied", "host", host, "provider_type", providerType)
+		return fmt.Errorf("provider type %q only allows localhost URLs (localhost, 127.0.0.1, ::1, host.docker.internal), got host %q", providerType, host)
 	}
-	// Block private IP ranges (normalize IPv6-mapped IPv4 to catch ::ffff:127.0.0.1)
-	ip := net.ParseIP(host)
-	if ip != nil {
-		if v4 := ip.To4(); v4 != nil {
-			ip = v4
-		}
-		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
-			return fmt.Errorf("provider URL cannot point to private network: %s", host)
-		}
+
+	// Operator opt-in to allow private-network provider URLs (e.g. LAN-hosted vLLM).
+	// Scheme check above still applies even with this gate open.
+	if allowPrivateProviderURLsFn() {
+		slog.Warn("security.provider_url.private_allowed", "host", host, "provider_type", providerType)
+		return nil
 	}
-	// Block common internal hostnames
+
+	// Check literal IP first (avoids unnecessary DNS lookup).
+	if ip := net.ParseIP(host); ip != nil {
+		if security.IsBlocked(ip) {
+			slog.Warn("security.provider_url.blocked", "host", host, "provider_type", providerType)
+			return fmt.Errorf("provider URL cannot point to %s", host)
+		}
+		return nil
+	}
+
+	// Block .internal / .local suffix before DNS (fail-fast for well-known patterns).
 	if strings.HasSuffix(host, ".internal") || strings.HasSuffix(host, ".local") {
+		slog.Warn("security.provider_url.blocked", "host", host, "provider_type", providerType)
 		return fmt.Errorf("provider URL cannot point to internal hostname: %s", host)
 	}
+
+	// Resolve DNS and check every returned address.
+	// Prevents bypass via wildcard services (nip.io, sslip.io) or attacker-controlled
+	// domains that map to private IPs (DNS-rebinding at config time).
+	addrs, err := dnsResolverFn(host)
+	if err != nil {
+		slog.Warn("security.provider_url.dns_resolve_failed", "host", host, "provider_type", providerType, "error", err)
+		return fmt.Errorf("provider URL hostname %q could not be resolved: %w", host, err)
+	}
+	for _, addr := range addrs {
+		ip := net.ParseIP(addr)
+		if ip == nil {
+			continue
+		}
+		if security.IsBlocked(ip) {
+			slog.Warn("security.provider_url.blocked_resolved", "host", host, "resolved_ip", ip.String(), "provider_type", providerType)
+			return fmt.Errorf("provider URL %q resolves to private/reserved address %s", host, ip)
+		}
+	}
 	return nil
+}
+
+func validateClaudeCLIExecutablePath(path string) error {
+	if strings.Contains(path, "\x00") {
+		return fmt.Errorf("Claude CLI executable path cannot contain NUL byte")
+	}
+	if _, err := url.ParseRequestURI(path); err == nil && strings.Contains(path, "://") {
+		return fmt.Errorf("Claude CLI api_base must be an executable path or %q, got URL %q", "claude", path)
+	}
+	if path == "claude" || filepath.IsAbs(path) {
+		return nil
+	}
+	return fmt.Errorf("Claude CLI api_base must be %q or an absolute executable path, got %q", "claude", path)
 }
 
 // --- Provider CRUD ---
@@ -399,7 +542,7 @@ func (h *ProvidersHandler) handleCreateProvider(w http.ResponseWriter, r *http.R
 
 	// Register in-memory so verify/chat work without restart
 	h.registerInMemory(&p)
-	h.emitProviderCacheInvalidate(p.Name)
+	h.emitProviderCacheInvalidate(r.Context(), p.TenantID, p.Name)
 
 	emitAudit(h.msgBus, r, "provider.created", "provider", p.ID.String())
 	maskAPIKey(&p)
@@ -424,6 +567,62 @@ func (h *ProvidersHandler) handleGetProvider(w http.ResponseWriter, r *http.Requ
 	maskAPIKey(p)
 	publicProvider := canonicalizeProviderForResponse(p)
 	writeJSON(w, http.StatusOK, publicProvider)
+}
+
+func (h *ProvidersHandler) handleReconnectProvider(w http.ResponseWriter, r *http.Request) {
+	locale := extractLocale(r)
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidID, "provider")})
+		return
+	}
+
+	var req struct {
+		Verify bool `json:"verify"`
+	}
+	if r.Body != nil && r.Body != http.NoBody && r.ContentLength != 0 {
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
+			return
+		}
+		if req.Verify {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidRequest, "verify is not supported by reconnect; call provider verify separately")})
+			return
+		}
+	}
+
+	p, err := h.store.GetProvider(r.Context(), id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "provider", id.String())})
+		return
+	}
+
+	if h.providerReg != nil {
+		h.providerReg.UnregisterForTenant(p.TenantID, p.Name)
+	}
+
+	status := "disabled"
+	registryUpdated := false
+	if p.Enabled {
+		switch h.registerInMemory(p) {
+		case providerRuntimeRegistered:
+			status = "reconnected"
+			registryUpdated = true
+		default:
+			status = "not_registered"
+		}
+	}
+	cacheInvalidated := h.emitProviderCacheInvalidate(r.Context(), p.TenantID, p.Name)
+	emitAudit(h.msgBus, r, "provider.reconnected", "provider", p.ID.String())
+
+	maskAPIKey(p)
+	publicProvider := canonicalizeProviderForResponse(p)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":            status,
+		"provider":          publicProvider,
+		"registry_updated":  registryUpdated,
+		"cache_invalidated": cacheInvalidated,
+	})
 }
 
 func (h *ProvidersHandler) handleUpdateProvider(w http.ResponseWriter, r *http.Request) {
@@ -563,9 +762,9 @@ func (h *ProvidersHandler) handleUpdateProvider(w http.ResponseWriter, r *http.R
 
 	// Notify subscribers (e.g. ACP re-registration) about the change
 	if updated, err := h.store.GetProvider(r.Context(), id); err == nil {
-		h.emitProviderCacheInvalidate(updated.Name)
+		h.emitProviderCacheInvalidate(r.Context(), updated.TenantID, updated.Name)
 		if oldName != "" && oldName != updated.Name {
-			h.emitProviderCacheInvalidate(oldName)
+			h.emitProviderCacheInvalidate(r.Context(), updated.TenantID, oldName)
 		}
 	}
 
@@ -599,7 +798,7 @@ func (h *ProvidersHandler) handleDeleteProvider(w http.ResponseWriter, r *http.R
 		h.providerReg.UnregisterForTenant(providerTenantID, providerName)
 	}
 	if providerName != "" {
-		h.emitProviderCacheInvalidate(providerName)
+		h.emitProviderCacheInvalidate(r.Context(), providerTenantID, providerName)
 	}
 
 	emitAudit(h.msgBus, r, "provider.deleted", "provider", id.String())

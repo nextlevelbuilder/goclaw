@@ -23,6 +23,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/tokencount"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/internal/tracing"
+	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 )
 
 // bootstrapAutoCleanupTurns is the number of user messages after which
@@ -80,13 +81,13 @@ type Loop struct {
 	// agentUUID is the canonical DB primary key. Use for SQL WHERE/JOIN,
 	// DomainEvent.AgentID, OTel span attributes, and context propagation via
 	// store.WithAgentID. See docs/agent-identity-conventions.md.
-	agentUUID        uuid.UUID
-	tenantID         uuid.UUID // agent's owning tenant
+	agentUUID uuid.UUID
+	tenantID  uuid.UUID // agent's owning tenant
 	// agentOtherConfig is a defensive byte copy of agents.other_config JSONB.
 	// Copied once at Loop construction; used to build AgentAudioSnapshot at tool dispatch.
 	agentOtherConfig json.RawMessage
-	agentType        string    // "open" or "predefined"
-	defaultTimezone  string    // system default timezone for bootstrap pre-fill
+	agentType        string // "open" or "predefined"
+	defaultTimezone  string // system default timezone for bootstrap pre-fill
 	provider         providers.Provider
 	model            string
 	modelRegistry    providers.ModelRegistry // resolves per-model context window at run time (nil = use static contextWindow)
@@ -108,7 +109,7 @@ type Loop struct {
 	// Memory flush runs if callback != nil; auto-inject runs if AutoInjector != nil.
 	autoInjector memory.AutoInjector // v3 L0 memory auto-inject (nil = disabled)
 
-	eventPub        bus.EventPublisher // currently unused by Loop; kept for future use
+	eventPub        bus.EventPublisher      // currently unused by Loop; kept for future use
 	domainBus       eventbus.DomainEventBus // V3 domain event bus for consolidation pipeline
 	sessions        store.SessionStore
 	tools           tools.ToolExecutor
@@ -121,11 +122,12 @@ type Loop struct {
 	summarizeMu sync.Map // sessionKey → *sync.Mutex
 
 	// Bootstrap/persona context (loaded at startup, injected into system prompt)
-	ownerIDs       []string
-	skillsLoader   *skills.Loader
-	skillAllowList []string // nil = all, [] = none, ["x","y"] = filter
-	hasMemory      bool
-	contextFiles   []bootstrap.ContextFile
+	ownerIDs           []string
+	skillsLoader       *skills.Loader
+	skillAllowList     []string // nil = all, [] = none, ["x","y"] = filter
+	skillSlashCommands config.SkillSlashCommandConfig
+	hasMemory          bool
+	contextFiles       []bootstrap.ContextFile
 
 	// Per-user profile + file seeding + dynamic context loading
 	ensureUserProfile EnsureUserProfileFunc // create/resolve user profile + workspace
@@ -137,11 +139,11 @@ type Loop struct {
 	userSetups        sync.Map            // userID → *userSetup (workspace + seeding state, per Loop instance)
 
 	// Per-user MCP tools: servers requiring user credentials get connected per-request.
-	mcpStore        store.MCPServerStore    // for credential lookup
-	mcpPool         *mcpbridge.Pool         // user-keyed connection pool
-	mcpUserCredSrvs []store.MCPAccessInfo   // servers needing per-user creds
-	mcpUserTools    sync.Map                // userID → []tools.Tool (cached per-user tools)
-	mcpGrantChecker mcpbridge.GrantChecker  // runtime grant verification (nil = skip)
+	mcpStore        store.MCPServerStore   // for credential lookup
+	mcpPool         *mcpbridge.Pool        // user-keyed connection pool
+	mcpUserCredSrvs []store.MCPAccessInfo  // servers needing per-user creds
+	mcpUserTools    sync.Map               // userID → []tools.Tool (cached per-user tools)
+	mcpGrantChecker mcpbridge.GrantChecker // runtime grant verification (nil = skip)
 
 	// Compaction config (memory flush settings)
 	compactionCfg *config.CompactionConfig
@@ -184,6 +186,7 @@ type Loop struct {
 	// Tenant-specific allowed paths beyond workspace (from system_configs['allowed_paths']).
 	// Filesystem tools (read_file, write_file, edit, list_files) check these at execution time.
 	tenantAllowedPaths []string
+	systemConfigs      store.SystemConfigStore
 
 	// Per-tenant disabled tools (tool name → true means excluded from LLM)
 	disabledTools map[string]bool
@@ -239,13 +242,14 @@ type Loop struct {
 	// Budget enforcement: monthly spending limit in cents (0 = unlimited)
 	budgetMonthlyCents int
 	tracingStore       store.TracingStore
+	usageCaps          *usagecaps.Service
 
 	// Memory store for extractive memory fallback (writes directly when LLM flush fails)
 	memStore store.MemoryStore
 
 	// v3 orchestration mode (spawn/delegate/team) — controls tool visibility
-	orchMode          OrchestrationMode
-	delegateTargets   []DelegateTargetEntry // delegation targets for prompt injection
+	orchMode        OrchestrationMode
+	delegateTargets []DelegateTargetEntry // delegation targets for prompt injection
 
 	// v3 evolution metrics store (nil = disabled)
 	evolutionMetricsStore store.EvolutionMetricsStore
@@ -328,11 +332,12 @@ type LoopConfig struct {
 	OnEvent         func(AgentEvent)
 
 	// Bootstrap/persona context
-	OwnerIDs       []string
-	SkillsLoader   *skills.Loader
-	SkillAllowList []string // nil = all, [] = none, ["x","y"] = filter
-	HasMemory      bool
-	ContextFiles   []bootstrap.ContextFile
+	OwnerIDs           []string
+	SkillsLoader       *skills.Loader
+	SkillAllowList     []string // nil = all, [] = none, ["x","y"] = filter
+	SkillSlashCommands config.SkillSlashCommandConfig
+	HasMemory          bool
+	ContextFiles       []bootstrap.ContextFile
 
 	// Compaction config
 	CompactionCfg *config.CompactionConfig
@@ -350,11 +355,11 @@ type LoopConfig struct {
 
 	// Agent UUID + tenant for context propagation to tools
 	AgentUUID        uuid.UUID
-	TenantID         uuid.UUID        // agent's owning tenant — injected into execution context
-	AgentOtherConfig json.RawMessage  // raw other_config JSONB — copied defensively in NewLoop
-	AgentType        string           // "open" or "predefined"
-	DisplayName string    // human-readable agent display name (for runtime section)
-	IsTeamLead bool      // agent leads a team (from resolver detection)
+	TenantID         uuid.UUID       // agent's owning tenant — injected into execution context
+	AgentOtherConfig json.RawMessage // raw other_config JSONB — copied defensively in NewLoop
+	AgentType        string          // "open" or "predefined"
+	DisplayName      string          // human-readable agent display name (for runtime section)
+	IsTeamLead       bool            // agent leads a team (from resolver detection)
 
 	// Per-user profile + file seeding + dynamic context loading
 	EnsureUserProfile EnsureUserProfileFunc // preferred: separate profile + workspace
@@ -381,6 +386,7 @@ type LoopConfig struct {
 
 	// Tenant-specific allowed paths beyond workspace (from system_configs['allowed_paths']).
 	TenantAllowedPaths []string
+	SystemConfigs      store.SystemConfigStore
 
 	// Per-tenant disabled tools (tool name → true means excluded)
 	DisabledTools map[string]bool
@@ -430,19 +436,20 @@ type LoopConfig struct {
 	// Budget enforcement
 	BudgetMonthlyCents int
 	TracingStore       store.TracingStore
+	UsageCaps          *usagecaps.Service
 
 	// Memory store for extractive memory fallback (writes directly when LLM flush fails)
 	MemoryStore store.MemoryStore
 
 	// Per-user MCP tools (servers requiring per-user credentials)
-	MCPStore        store.MCPServerStore    // for credential lookup
-	MCPPool         *mcpbridge.Pool         // user-keyed connection pool
-	MCPUserCredSrvs []store.MCPAccessInfo   // servers needing per-user creds
-	MCPGrantChecker mcpbridge.GrantChecker  // runtime grant verification (nil = skip)
+	MCPStore        store.MCPServerStore   // for credential lookup
+	MCPPool         *mcpbridge.Pool        // user-keyed connection pool
+	MCPUserCredSrvs []store.MCPAccessInfo  // servers needing per-user creds
+	MCPGrantChecker mcpbridge.GrantChecker // runtime grant verification (nil = skip)
 
 	// V3 orchestration mode (resolved by resolver, controls tool visibility)
-	OrchMode          OrchestrationMode
-	DelegateTargets   []DelegateTargetEntry // delegation targets for prompt injection
+	OrchMode        OrchestrationMode
+	DelegateTargets []DelegateTargetEntry // delegation targets for prompt injection
 
 	// V3 evolution metrics store for recording tool/retrieval/feedback metrics
 	EvolutionMetricsStore store.EvolutionMetricsStore
@@ -527,6 +534,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		ownerIDs:               cfg.OwnerIDs,
 		skillsLoader:           cfg.SkillsLoader,
 		skillAllowList:         cfg.SkillAllowList,
+		skillSlashCommands:     cfg.SkillSlashCommands,
 		hasMemory:              cfg.HasMemory,
 		contextFiles:           cfg.ContextFiles,
 		defaultTimezone:        cfg.DefaultTimezone,
@@ -550,6 +558,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		builtinToolSettings:    cfg.BuiltinToolSettings,
 		tenantToolSettings:     cfg.TenantToolSettings,
 		tenantAllowedPaths:     cfg.TenantAllowedPaths,
+		systemConfigs:          cfg.SystemConfigs,
 		disabledTools:          cfg.DisabledTools,
 		reasoningConfig:        cfg.ReasoningConfig,
 		promptMode:             cfg.PromptMode,
@@ -568,6 +577,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		modelPricing:           cfg.ModelPricing,
 		budgetMonthlyCents:     cfg.BudgetMonthlyCents,
 		tracingStore:           cfg.TracingStore,
+		usageCaps:              cfg.UsageCaps,
 		memStore:               cfg.MemoryStore,
 		mcpStore:               cfg.MCPStore,
 		mcpPool:                cfg.MCPPool,
@@ -582,35 +592,36 @@ func NewLoop(cfg LoopConfig) *Loop {
 
 // RunRequest is the input for processing a message through the agent.
 type RunRequest struct {
-	SessionKey        string             // composite key: agent:{agentId}:{channel}:{peerKind}:{chatId}
-	Message           string             // user message
-	Media             []bus.MediaFile    // local media files with MIME types
-	ForwardMedia      []bus.MediaFile    // media files to forward to output (from delegation results)
-	Channel           string             // source channel instance name (e.g. "my-telegram-bot")
-	ChannelType       string             // platform type (e.g. "zalo_personal", "telegram") — for system prompt context
-	ChatTitle         string             // group chat display name (e.g. Telegram group title)
-	ChatID            string             // source chat ID
-	PeerKind          string             // "direct" or "group" (for session key building and tool context)
-	RunID             string             // unique run identifier
-	UserID            string             // external user ID (TEXT, free-form) for multi-tenant scoping
-	SenderID          string             // original individual sender ID (preserved in group chats for permission checks)
-	SenderName        string             // display name from channel metadata (for bootstrap auto-contact)
-	Role              string             // caller's RBAC role (admin/operator/viewer/owner); bypasses per-user grants for authenticated admins (#915)
-	Stream            bool               // whether to stream response chunks
-	ExtraSystemPrompt string             // optional: injected into system prompt (skills, subagent context, etc.)
-	SkillFilter       []string           // per-request skill override: nil=use agent default, []=no skills, ["x","y"]=whitelist
-	HistoryLimit      int                // max user turns to keep in context (0=unlimited, from channel config)
-	ToolAllow         []string           // per-group tool allow list (nil = no restriction, supports "group:xxx")
-	LocalKey          string             // composite key with topic/thread suffix for routing (e.g. "-100123:topic:42")
-	ParentTraceID     uuid.UUID          // if set, reuse parent trace instead of creating new (announce runs)
-	ParentRootSpanID  uuid.UUID          // if set, nest announce agent span under this parent span
-	LinkedTraceID     uuid.UUID          // if set, create new trace with parent_trace_id pointing to this (team task runs)
-	TraceName         string             // override trace name (default: "chat <agentID>")
-	TraceTags         []string           // additional tags for the trace (e.g. "cron")
-	MaxIterations     int                // per-request override (0 = use agent default, must be lower)
-	ModelOverride     string             // per-request model override (heartbeat uses cheaper model)
-	ProviderOverride  providers.Provider // per-request provider override (heartbeat uses different provider)
-	LightContext      bool               // skip loading context files (only inject ExtraSystemPrompt)
+	SessionKey         string             // composite key: agent:{agentId}:{channel}:{peerKind}:{chatId}
+	Message            string             // user message
+	Media              []bus.MediaFile    // local media files with MIME types
+	ForwardMedia       []bus.MediaFile    // media files to forward to output (from delegation results)
+	Channel            string             // source channel instance name (e.g. "my-telegram-bot")
+	ChannelType        string             // platform type (e.g. "zalo_personal", "telegram") — for system prompt context
+	BitrixPortalDomain string             // bitrix24-only: portal domain (e.g. "tamgiac.bitrix24.com") for entity URL construction
+	ChatTitle          string             // group chat display name (e.g. Telegram group title)
+	ChatID             string             // source chat ID
+	PeerKind           string             // "direct" or "group" (for session key building and tool context)
+	RunID              string             // unique run identifier
+	UserID             string             // external user ID (TEXT, free-form) for multi-tenant scoping
+	SenderID           string             // original individual sender ID (preserved in group chats for permission checks)
+	SenderName         string             // display name from channel metadata (for bootstrap auto-contact)
+	Role               string             // caller's RBAC role (admin/operator/viewer/owner); bypasses per-user grants for authenticated admins (#915)
+	Stream             bool               // whether to stream response chunks
+	ExtraSystemPrompt  string             // optional: injected into system prompt (skills, subagent context, etc.)
+	SkillFilter        []string           // per-request skill override: nil=use agent default, []=no skills, ["x","y"]=whitelist
+	HistoryLimit       int                // max user turns to keep in context (0=unlimited, from channel config)
+	ToolAllow          []string           // per-group tool allow list (nil = no restriction, supports "group:xxx")
+	LocalKey           string             // composite key with topic/thread suffix for routing (e.g. "-100123:topic:42")
+	ParentTraceID      uuid.UUID          // if set, reuse parent trace instead of creating new (announce runs)
+	ParentRootSpanID   uuid.UUID          // if set, nest announce agent span under this parent span
+	LinkedTraceID      uuid.UUID          // if set, create new trace with parent_trace_id pointing to this (team task runs)
+	TraceName          string             // override trace name (default: "chat <agentID>")
+	TraceTags          []string           // additional tags for the trace (e.g. "cron")
+	MaxIterations      int                // per-request override (0 = use agent default, must be lower)
+	ModelOverride      string             // per-request model override (heartbeat uses cheaper model)
+	ProviderOverride   providers.Provider // per-request provider override (heartbeat uses different provider)
+	LightContext       bool               // skip loading context files (only inject ExtraSystemPrompt)
 
 	// Run classification
 	RunKind       string // "delegation", "announce" — empty for user-initiated runs
@@ -645,7 +656,7 @@ type RunRequest struct {
 // RunResult is the output of a completed agent run.
 type RunResult struct {
 	Content        string           `json:"content"`
-	Thinking       string           `json:"thinking,omitempty"`       // reasoning content from thinking models (Claude, o3, DeepSeek-R1, Kimi)
+	Thinking       string           `json:"thinking,omitempty"` // reasoning content from thinking models (Claude, o3, DeepSeek-R1, Kimi)
 	RunID          string           `json:"runId"`
 	Iterations     int              `json:"iterations"`
 	Usage          *providers.Usage `json:"usage,omitempty"`

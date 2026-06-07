@@ -8,12 +8,12 @@ import {
 import { ConfigGroupHeader } from "@/components/shared/config-group-header";
 import type {
   AgentData, ChatGPTOAuthRoutingConfig, CompactionConfig, ContextPruningConfig,
-  ReasoningOverrideMode,
+  ModelFallbackConfig, ReasoningOverrideMode,
   SandboxConfig, WorkspaceSharingConfig,
 } from "@/types/agent";
 import {
   ChatGPTOAuthRoutingSection, ThinkingSection, WorkspaceSharingSection, CompactionSection,
-  ContextPruningSection, SandboxSection,
+  ContextPruningSection, InboundDebounceSection, ModelFallbackSection, SandboxSection,
 } from "./config-sections";
 import { WorkspaceSection } from "./general-sections";
 import { useProviders } from "@/pages/providers/hooks/use-providers";
@@ -55,7 +55,10 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
   const [reasoningFallback, setReasoningFallback] = useState<string>(init.reasoningFallback);
   const [reasoningExpert, setReasoningExpert] = useState(init.reasoningExpert);
   const [chatgptRouting, setChatgptRouting] = useState<ChatGPTOAuthRoutingConfig>(init.chatgptRouting);
+  const [modelFallback, setModelFallback] = useState<ModelFallbackConfig>(init.modelFallback);
   const [comp, setComp] = useState<CompactionConfig>(init.comp);
+  const [inboundDebounceMode, setInboundDebounceMode] = useState(init.inboundDebounceMode);
+  const [inboundDebounceMs, setInboundDebounceMs] = useState(init.inboundDebounceMs);
   const [pruneEnabled, setPruneEnabled] = useState(init.pruneEnabled);
   const [prune, setPrune] = useState<ContextPruningConfig>(init.prune);
   const [sbEnabled, setSbEnabled] = useState(init.sbEnabled);
@@ -72,8 +75,11 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
     setReasoningFallback(s.reasoningFallback);
     setReasoningExpert(s.reasoningExpert);
     setChatgptRouting(s.chatgptRouting);
+    setModelFallback(s.modelFallback);
     setWsSharing(s.wsSharing);
     setComp(s.comp);
+    setInboundDebounceMode(s.inboundDebounceMode);
+    setInboundDebounceMs(s.inboundDebounceMs);
     setPruneEnabled(s.pruneEnabled);
     setPrune(s.prune);
     setSbEnabled(s.sbEnabled);
@@ -124,8 +130,11 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
         reasoningFallback,
         thinkingLevel,
         chatgptRouting,
+        modelFallback,
         wsSharing,
         comp,
+        inboundDebounceMode,
+        inboundDebounceMs,
         pruneEnabled,
         prune,
         sbEnabled,
@@ -211,6 +220,14 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
             }
           />
 
+          <ModelFallbackSection
+            primaryProvider={agent.provider}
+            primaryModel={agent.model}
+            providers={providers}
+            value={modelFallback}
+            onChange={setModelFallback}
+          />
+
           {/* Performance */}
           <ConfigGroupHeader
             title={t("configGroups.performance")}
@@ -218,6 +235,12 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
           />
           <div className="space-y-4">
             <CompactionSection value={comp} onChange={setComp} />
+            <InboundDebounceSection
+              mode={inboundDebounceMode}
+              debounceMs={inboundDebounceMs}
+              onModeChange={setInboundDebounceMode}
+              onDebounceMsChange={setInboundDebounceMs}
+            />
             <ContextPruningSection
               enabled={pruneEnabled}
               value={prune}

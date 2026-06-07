@@ -48,6 +48,9 @@ func (s *stubSecureCLIStoreCmd) GetUserCredentials(ctx context.Context, binaryID
 func (s *stubSecureCLIStoreCmd) SetUserCredentials(ctx context.Context, binaryID uuid.UUID, userID string, encryptedEnv []byte) error {
 	return nil
 }
+func (s *stubSecureCLIStoreCmd) SetUserCredentialsTyped(ctx context.Context, binaryID uuid.UUID, userID string, encryptedEnv []byte, credentialType, hostScope *string) error {
+	return nil
+}
 func (s *stubSecureCLIStoreCmd) DeleteUserCredentials(ctx context.Context, binaryID uuid.UUID, userID string) error {
 	return nil
 }

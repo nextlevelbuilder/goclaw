@@ -48,6 +48,42 @@ func TestEnsureSchema_FreshDB(t *testing.T) {
 			t.Errorf("vault_documents missing column %q", want)
 		}
 	}
+
+	for _, table := range []string{"hooks", "hook_agents"} {
+		var count int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`, table).Scan(&count); err != nil {
+			t.Fatalf("lookup %s table: %v", table, err)
+		}
+		if count != 1 {
+			t.Errorf("fresh schema missing %q table", table)
+		}
+	}
+}
+
+func TestEnsureSchema_PreHooksUpgradeCreatesHookTables(t *testing.T) {
+	db := openTestDBAtVersion(t, 19)
+	for _, table := range []string{"tenant_hook_budget", "hook_executions", "hook_agents", "hooks"} {
+		if _, err := db.Exec(`DROP TABLE IF EXISTS ` + table); err != nil {
+			t.Fatalf("drop %s: %v", table, err)
+		}
+	}
+	if _, err := db.Exec(`UPDATE schema_version SET version = 19`); err != nil {
+		t.Fatalf("set pre-hooks schema version: %v", err)
+	}
+
+	if err := EnsureSchema(db); err != nil {
+		t.Fatalf("EnsureSchema (pre-hooks to current) failed: %v", err)
+	}
+
+	for _, table := range []string{"hooks", "hook_agents"} {
+		var count int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`, table).Scan(&count); err != nil {
+			t.Fatalf("lookup %s table: %v", table, err)
+		}
+		if count != 1 {
+			t.Errorf("upgrade schema missing %q table", table)
+		}
+	}
 }
 
 // TestEnsureSchema_MigrationV11Only verifies migrations from v11 onward

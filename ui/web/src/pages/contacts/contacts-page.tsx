@@ -25,8 +25,8 @@ import { ContactsTable } from "./contacts-table";
 import type { ChannelInstanceData } from "@/types/channel";
 import type { ChannelContact } from "@/types/contact";
 
-const CHANNEL_TYPES = ["telegram", "discord", "slack", "whatsapp", "zalo_oa", "zalo_personal", "feishu"];
-const PERM_CHANNELS = ["telegram", "discord", "zalo", "slack", "feishu"] as const;
+const CHANNEL_TYPES = ["telegram", "discord", "slack", "whatsapp", "zalo_oa", "zalo_personal", "feishu", "bitrix24"];
+const PERM_CHANNELS = ["telegram", "discord", "zalo", "slack", "feishu", "bitrix24"] as const;
 
 export function ContactsPage() {
   const { t } = useTranslation("contacts");

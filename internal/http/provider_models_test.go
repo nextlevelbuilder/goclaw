@@ -97,22 +97,22 @@ func TestProvidersHandlerListProviderModelsChatGPTOAuthIncludesReasoningMetadata
 
 	var found bool
 	for _, model := range result.Models {
-		if model.ID != "gpt-5.4" {
+		if model.ID != "gpt-5.5" {
 			continue
 		}
 		found = true
 		if model.Reasoning == nil {
-			t.Fatal("gpt-5.4 reasoning = nil, want capability metadata")
+			t.Fatal("gpt-5.5 reasoning = nil, want capability metadata")
 		}
-		if model.Reasoning.DefaultEffort != "none" {
-			t.Fatalf("gpt-5.4 default_effort = %q, want none", model.Reasoning.DefaultEffort)
+		if model.Reasoning.DefaultEffort != "medium" {
+			t.Fatalf("gpt-5.5 default_effort = %q, want medium", model.Reasoning.DefaultEffort)
 		}
 		if got := model.Reasoning.Levels; len(got) != 5 || got[4] != "xhigh" {
-			t.Fatalf("gpt-5.4 levels = %#v, want none..xhigh", got)
+			t.Fatalf("gpt-5.5 levels = %#v, want none..xhigh", got)
 		}
 	}
 	if !found {
-		t.Fatal("gpt-5.4 not found in ChatGPT OAuth model list")
+		t.Fatal("gpt-5.5 not found in ChatGPT OAuth model list")
 	}
 }
 

@@ -38,3 +38,43 @@ func TestGenerateCredentialContext_BlockedSectionScopedToMarker(t *testing.T) {
 		t.Errorf("output still contains unqualified wording %q.\nOutput:\n%s", dontWant, out)
 	}
 }
+
+// 14. Phase 5: when the git adapter is enabled on at least one preset, the
+// generated TOOLS.md supplement includes the git-adapter usage block so the
+// LLM knows which subcommands auto-authenticate and which run un-credentialed.
+func TestGenerateCredentialContext_IncludesGit(t *testing.T) {
+	git := "git"
+	creds := []store.SecureCLIBinary{{
+		BinaryName:  "git",
+		Description: "git VCS",
+		AdapterName: &git,
+	}}
+
+	out := GenerateCredentialContext(creds)
+
+	wantContains := []string{
+		"### git (adapter-managed):",
+		"Auto-authenticated subcommands",
+		"`clone`, `fetch`, `pull`, `push`, `submodule`",
+		"host-scoped",
+		"git config --global",
+	}
+	for _, s := range wantContains {
+		if !strings.Contains(out, s) {
+			t.Errorf("expected output to contain %q, but it did not.\nOutput:\n%s", s, out)
+		}
+	}
+}
+
+// When NO preset has adapter_name=="git", the git block must NOT appear —
+// keeps TOOLS.md context minimal when only passthrough binaries are wired.
+func TestGenerateCredentialContext_OmitsGitWhenAbsent(t *testing.T) {
+	creds := []store.SecureCLIBinary{{
+		BinaryName:  "gh",
+		Description: "GitHub CLI",
+	}}
+	out := GenerateCredentialContext(creds)
+	if strings.Contains(out, "### git (adapter-managed):") {
+		t.Errorf("git block leaked into non-git context.\nOutput:\n%s", out)
+	}
+}

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 
 interface KeyValuePair {
@@ -16,6 +17,8 @@ interface KeyValueEditorProps {
   addLabel?: string;
   /** Return true for keys whose values should be masked (type="password"). */
   maskValue?: (key: string) => boolean;
+  /** Render value field as a single-line input (default) or multi-line textarea. */
+  valueAs?: "input" | "textarea";
 }
 
 function toEntries(obj: Record<string, string>): KeyValuePair[] {
@@ -40,6 +43,7 @@ export function KeyValueEditor({
   valuePlaceholder = "Value",
   addLabel = "Add",
   maskValue,
+  valueAs = "input",
 }: KeyValueEditorProps) {
   const [entries, setEntries] = useState<KeyValuePair[]>(() => toEntries(value));
   const internalChange = useRef(false);
@@ -78,20 +82,30 @@ export function KeyValueEditor({
   return (
     <div className="space-y-2">
       {entries.map((entry, idx) => (
-        <div key={idx} className="flex items-center gap-2">
+        <div key={idx} className={valueAs === "textarea" ? "flex items-start gap-2" : "flex items-center gap-2"}>
           <Input
             value={entry.key}
             onChange={(e) => updateEntry(idx, { key: e.target.value })}
             placeholder={keyPlaceholder}
             className="flex-1 font-mono text-sm"
           />
-          <Input
-            type={maskValue?.(entry.key) ? "password" : "text"}
-            value={entry.value}
-            onChange={(e) => updateEntry(idx, { value: e.target.value })}
-            placeholder={valuePlaceholder}
-            className="flex-1 font-mono text-sm"
-          />
+          {valueAs === "textarea" ? (
+            <Textarea
+              value={entry.value}
+              onChange={(e) => updateEntry(idx, { value: e.target.value })}
+              placeholder={valuePlaceholder}
+              rows={2}
+              className="flex-[2] text-base md:text-sm min-h-[38px] resize-y"
+            />
+          ) : (
+            <Input
+              type={maskValue?.(entry.key) ? "password" : "text"}
+              value={entry.value}
+              onChange={(e) => updateEntry(idx, { value: e.target.value })}
+              placeholder={valuePlaceholder}
+              className="flex-1 font-mono text-sm"
+            />
+          )}
           <Button
             variant="ghost"
             size="icon"

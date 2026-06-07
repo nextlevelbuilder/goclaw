@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -13,8 +14,14 @@ func TestConnectAndDiscoverRetriesOnStdioInitFailure(t *testing.T) {
 	defer cancel()
 
 	start := time.Now()
+	command := "cat"
+	var args []string
+	if runtime.GOOS == "windows" {
+		command = "cmd"
+		args = []string{"/C", "type", "NUL"}
+	}
 	_, _, err := connectAndDiscover(ctx, "test-retry", "stdio",
-		"cat", nil, nil, "", nil, 2)
+		command, args, nil, "", nil, 2)
 	elapsed := time.Since(start)
 
 	if err == nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -65,7 +66,7 @@ func CheckRuntimes() *RuntimeStatus {
 
 	// Check github-bin runtime directory (where GitHub-installed binaries live).
 	ghInfo := RuntimeInfo{Name: "github-bin"}
-	binDir := "/app/data/.runtime/bin"
+	binDir := filepath.Join(packageRuntimeDir(), "bin")
 	if gh := DefaultGitHubInstaller(); gh != nil && gh.Config != nil && gh.Config.BinDir != "" {
 		binDir = gh.Config.BinDir
 	}

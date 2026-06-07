@@ -7,11 +7,29 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"os"
 	"os/exec"
-	"runtime"
+	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 )
+
+// sharedLocker is the package-level PackageLocker injected by gateway wiring.
+// It serializes concurrent pip/npm install+update operations on the same package.
+// If nil (default), pip/npm branches run lock-free — backward-compatible for
+// tests and callers that don't wire a locker.
+var sharedLocker atomic.Pointer[PackageLocker]
+
+// SetSharedPackageLocker installs the package-level locker used by
+// InstallSingleDep for pip and npm operations. Wiring MUST call this before
+// the first install/update; otherwise pip/npm paths run lock-free.
+// GitHub installs lock independently via GitHubInstaller.Locker.
+func SetSharedPackageLocker(l *PackageLocker) { sharedLocker.Store(l) }
+
+// sharedPackageLocker returns the current shared PackageLocker, or nil if none
+// was installed via SetSharedPackageLocker.
+func sharedPackageLocker() *PackageLocker { return sharedLocker.Load() }
 
 // InstallTimeout is the wall-clock cap applied to a single package install.
 // Exported so HTTP handlers that bypass InstallSingleDep (e.g. the github:
@@ -20,6 +38,12 @@ const InstallTimeout = 5 * time.Minute
 
 // pkgHelperSocket is the Unix socket path for the root-privileged pkg-helper.
 const pkgHelperSocket = "/tmp/pkg.sock"
+
+// apkHelperCallFunc is the package-level hook for apkHelperCall, allowing tests
+// to inject a stub without starting a real Unix socket server. Production code
+// always uses the default value (apkHelperCall). Tests replace it per-case and
+// restore via t.Cleanup.
+var apkHelperCallFunc = apkHelperCall
 
 // InstallResult holds per-category install outcomes.
 type InstallResult struct {
@@ -69,6 +93,13 @@ func InstallSingleDep(ctx context.Context, dep string) (bool, string) {
 		return true, ""
 	case strings.HasPrefix(dep, "pip:"):
 		pkg := strings.TrimPrefix(dep, "pip:")
+		if l := sharedPackageLocker(); l != nil {
+			release, lerr := l.Acquire(ctx, "pip", pkg)
+			if lerr != nil {
+				return false, fmt.Sprintf("lock acquire: %v", lerr)
+			}
+			defer release()
+		}
 		cmd := exec.CommandContext(ctx, "pip3", "install", "--no-cache-dir", "--break-system-packages", pkg)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
@@ -81,17 +112,21 @@ func InstallSingleDep(ctx context.Context, dep string) (bool, string) {
 		}
 	case strings.HasPrefix(dep, "npm:"):
 		pkg := strings.TrimPrefix(dep, "npm:")
-		cmd := exec.CommandContext(ctx, "npm", "install", "-g", pkg)
-		out, err := cmd.CombinedOutput()
+		if l := sharedPackageLocker(); l != nil {
+			release, lerr := l.Acquire(ctx, "npm", pkg)
+			if lerr != nil {
+				return false, fmt.Sprintf("lock acquire: %v", lerr)
+			}
+			defer release()
+		}
+		out, err := installNpmPackage(ctx, pkg)
 		if err != nil {
 			msg := fmt.Sprintf("%s: %v", strings.TrimSpace(string(out)), err)
 			slog.Error("skills: dep install failed", "dep", dep, "error", msg)
 			return false, msg
 		}
 	default:
-		// System package via pkg-helper (root-privileged Unix socket).
-		// pkg-helper handles persist to apk-packages file.
-		ok, errMsg := apkViaHelper(ctx, "install", dep)
+		ok, errMsg := installSystemPackage(ctx, dep)
 		if !ok {
 			return false, errMsg
 		}
@@ -127,9 +162,9 @@ func InstallDeps(ctx context.Context, manifest *SkillManifest, missing []string)
 		slog.Info("skills: installing system packages", "pkgs", sysPkgs)
 		var successful []string
 		for _, pkg := range sysPkgs {
-			ok, errMsg := apkViaHelper(ctx, "install", pkg)
+			ok, errMsg := installSystemPackage(ctx, pkg)
 			if !ok {
-				result.Errors = append(result.Errors, fmt.Sprintf("apk %s: %s", pkg, errMsg))
+				result.Errors = append(result.Errors, fmt.Sprintf("system %s: %s", pkg, errMsg))
 			} else {
 				successful = append(successful, pkg)
 			}
@@ -158,10 +193,15 @@ func InstallDeps(ctx context.Context, manifest *SkillManifest, missing []string)
 	// Npm packages: install one by one for partial-success resilience.
 	if len(npmPkgs) > 0 {
 		slog.Info("skills: installing npm packages", "pkgs", npmPkgs)
+		if err := os.MkdirAll(npmGlobalPrefix(), 0o750); err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("npm prefix setup: %v", err))
+			cleanCaches(ctx)
+			return result, nil
+		}
+		ensureNpmGlobalEnv()
 		var successful []string
 		for _, pkg := range npmPkgs {
-			cmd := exec.CommandContext(ctx, "npm", "install", "-g", pkg)
-			if out, err := cmd.CombinedOutput(); err != nil {
+			if out, err := installNpmPackage(ctx, pkg); err != nil {
 				result.Errors = append(result.Errors, fmt.Sprintf("npm %s: %s (%v)", pkg, strings.TrimSpace(string(out)), err))
 			} else {
 				successful = append(successful, pkg)
@@ -228,7 +268,9 @@ func UninstallPackage(ctx context.Context, dep string) (bool, string) {
 		}
 	case strings.HasPrefix(dep, "npm:"):
 		pkg := strings.TrimPrefix(dep, "npm:")
-		cmd := exec.CommandContext(ctx, "npm", "uninstall", "-g", pkg)
+		ensureNpmGlobalEnv()
+		cmd := exec.CommandContext(ctx, npmBinary, "uninstall", "-g", pkg)
+		cmd.Env = npmCommandEnv()
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			msg := fmt.Sprintf("%s: %v", strings.TrimSpace(string(out)), err)
@@ -236,8 +278,7 @@ func UninstallPackage(ctx context.Context, dep string) (bool, string) {
 			return false, msg
 		}
 	default:
-		// System package via pkg-helper. Helper handles persist file removal.
-		ok, errMsg := apkViaHelper(ctx, "uninstall", dep)
+		ok, errMsg := uninstallSystemPackage(ctx, dep)
 		if !ok {
 			return false, errMsg
 		}
@@ -247,47 +288,92 @@ func UninstallPackage(ctx context.Context, dep string) (bool, string) {
 	return true, ""
 }
 
-// apkViaHelper sends an install/uninstall request to the root-privileged pkg-helper
-// via Unix socket. The helper runs apk add/del as root and manages the persist file.
-func apkViaHelper(ctx context.Context, action, pkg string) (bool, string) {
+// apkHelperCall dials the pkg-helper v2 Unix socket and invokes action for pkg.
+// Package may be empty for read-only actions (update-index, list-outdated).
+//
+// Return values:
+//   - ok: resp.OK from helper
+//   - code: resp.Code (error classification); "helper_unavailable" on dial fail,
+//     "helper_error" on send/recv/parse failure, "system_error" if helper omits code
+//   - data: resp.Data (stdout payload for list-outdated / update-index)
+//   - errMsg: resp.Error (human-readable reason)
+//
+// Scanner buffer: 64KB initial / 1MB max (CONTRACT). list-outdated output on
+// full-skills images can approach this limit. Any NEW action returning >1MB MUST
+// raise this ceiling AND the matching helper-side write, or split into multiple
+// JSON lines. Violating silently yields helper_error "bufio.Scanner: token too long".
+func apkHelperCall(ctx context.Context, action, pkg string) (ok bool, code, data, errMsg string) {
 	conn, err := net.DialTimeout("unix", pkgHelperSocket, 5*time.Second)
 	if err != nil {
-		return false, fmt.Sprintf("pkg-helper unavailable: %v", err)
+		return false, "helper_unavailable", "", fmt.Sprintf("pkg-helper unavailable: %v", err)
 	}
 	defer conn.Close()
 
-	// Set deadline from context.
-	if deadline, ok := ctx.Deadline(); ok {
+	// Bind connection lifetime to caller's context deadline (primary per-op timeout).
+	// The helper also enforces a 10-min safety ceiling independently.
+	if deadline, hasDeadline := ctx.Deadline(); hasDeadline {
 		conn.SetDeadline(deadline) //nolint:errcheck
 	}
 
-	// Send request as JSON line.
+	// Send request as a newline-delimited JSON line.
 	req := map[string]string{"action": action, "package": pkg}
 	if err := json.NewEncoder(conn).Encode(req); err != nil {
-		return false, fmt.Sprintf("pkg-helper send failed: %v", err)
+		return false, "helper_error", "", fmt.Sprintf("pkg-helper send failed: %v", err)
 	}
 
-	// Read response.
+	// Read single-line JSON response.
+	// Buffer ceiling documented above as a client contract.
 	scanner := bufio.NewScanner(conn)
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 	if !scanner.Scan() {
-		return false, "pkg-helper: no response"
+		scanErr := scanner.Err()
+		if scanErr != nil {
+			return false, "helper_error", "", fmt.Sprintf("pkg-helper: read error: %v", scanErr)
+		}
+		return false, "helper_error", "", "pkg-helper: no response"
 	}
 
 	var resp struct {
 		OK    bool   `json:"ok"`
 		Error string `json:"error"`
+		Code  string `json:"code"`
+		Data  string `json:"data"`
 	}
 	if err := json.Unmarshal(scanner.Bytes(), &resp); err != nil {
-		return false, fmt.Sprintf("pkg-helper: invalid response: %v", err)
+		return false, "helper_error", "", fmt.Sprintf("pkg-helper: invalid response: %v", err)
 	}
 
-	return resp.OK, resp.Error
+	// Default missing code to system_error for v1-era helpers that omit the field.
+	if resp.Code == "" && !resp.OK {
+		resp.Code = "system_error"
+	}
+
+	return resp.OK, resp.Code, resp.Data, resp.Error
+}
+
+// apkViaHelper is the legacy 2-return-value wrapper used by InstallSingleDep,
+// InstallDeps, and UninstallPackage. Delegates to apkHelperCall; callers
+// receive (ok, errMsg) and do not need the code/data fields.
+func apkViaHelper(ctx context.Context, action, pkg string) (bool, string) {
+	ok, _, _, errMsg := apkHelperCall(ctx, action, pkg)
+	return ok, errMsg
 }
 
 // cleanCaches removes pip and npm caches to save disk space.
+// Uses pipBinary so test fixtures can redirect pip3 invocations.
 func cleanCaches(ctx context.Context) {
-	exec.CommandContext(ctx, "pip3", "cache", "purge").Run() //nolint:errcheck
-	if runtime.GOOS != "windows" {
-		exec.CommandContext(ctx, "sh", "-c", "rm -rf /tmp/npm-*").Run() //nolint:errcheck
+	exec.CommandContext(ctx, pipBinary, "cache", "purge").Run() //nolint:errcheck
+	// Remove npm temp dirs using native Go (avoid sh -c shell glob + symlink risk).
+	// Matches only direct entries in /tmp; skips symlinks to prevent attacker-pointed rm.
+	matches, _ := filepath.Glob("/tmp/npm-*")
+	for _, p := range matches {
+		info, lerr := os.Lstat(p)
+		if lerr != nil {
+			continue
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			continue // skip symlinks
+		}
+		_ = os.RemoveAll(p)
 	}
 }

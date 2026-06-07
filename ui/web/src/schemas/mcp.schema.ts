@@ -13,6 +13,10 @@ export const mcpFormSchema = z.object({
   timeout: z.number().min(1),
   enabled: z.boolean(),
   requireUserCreds: z.boolean(),
+  // Admin-authored description hints appended to MCP tool descriptions so the
+  // LLM sees server-specific quirks. Persisted under settings.tool_hints.
+  toolHintsGlobal: z.string(),
+  toolHintsTools: z.record(z.string(), z.string()),
 });
 
 export type MCPFormData = z.infer<typeof mcpFormSchema>;

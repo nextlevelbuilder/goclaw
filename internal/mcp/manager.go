@@ -74,6 +74,15 @@ type serverState struct {
 	reconnAttempts  int
 	healthFailures  int // consecutive ping failures (resets on success)
 	lastErr         string
+
+	// reconnPending is set when a BridgeTool detects the server reset its
+	// session lifecycle (FastMCP-style "tools/call invalid during session
+	// initialization" error) and force-reconnect is in flight. The health
+	// loop must skip its ping while pending, otherwise a server that still
+	// answers `ping` in "initializing" state would clobber connected=true
+	// before the fresh Initialize completes — leaving the pool to keep
+	// serving the dead session.
+	reconnPending atomic.Bool
 }
 
 // Manager orchestrates MCP server connections and tool registration.
@@ -183,7 +192,10 @@ func (m *Manager) Start(ctx context.Context) error {
 			errs = append(errs, fmt.Sprintf("%s: %v", name, err))
 			continue
 		}
-		if err := m.connectServer(ctx, name, cfg.Transport, cfg.Command, cfg.Args, cfg.Env, cfg.URL, headers, cfg.ToolPrefix, cfg.TimeoutSec, uuid.Nil); err != nil {
+		// Config-path servers have no DB-backed Settings, so no tool hints.
+		// Also no grant-based tool filtering (allow/deny are nil) — config
+		// trust model is that the operator gates which servers are enabled.
+		if err := m.connectServer(ctx, name, cfg.Transport, cfg.Command, cfg.Args, cfg.Env, cfg.URL, headers, cfg.ToolPrefix, cfg.TimeoutSec, uuid.Nil, ToolHints{}, nil, nil); err != nil {
 			slog.Warn("mcp.server.connect_failed", "server", name, "error", err)
 			errs = append(errs, fmt.Sprintf("%s: %v", name, err))
 		}
@@ -284,33 +296,26 @@ func (m *Manager) resolveServerCredentials(ctx context.Context, info store.MCPAc
 	}
 }
 
-// connectAndFilter establishes the MCP connection (pool or per-agent mode)
-// and applies tool allow/deny filtering from server grants.
+// connectAndFilter establishes the MCP connection (pool or per-agent mode).
+// Tool allow/deny filtering from server grants is applied upfront inside
+// registerBridgeTools / registerPoolBridgeTools so non-allowed tools never
+// reach the registry (and thus never reach the LLM).
 func (m *Manager) connectAndFilter(ctx context.Context, rs *resolvedServer) error {
 	srv := rs.info.Server
+	hints := ParseToolHints(srv.Settings)
 
 	if m.pool != nil && !rs.hasUserCreds {
 		// Pool mode: acquire shared connection, create per-agent BridgeTools
 		tid := store.TenantIDFromContext(ctx)
-		if err := m.connectViaPool(ctx, tid, srv.Name, srv.Transport, srv.Command,
-			rs.args, rs.env, srv.URL, rs.headers, srv.ToolPrefix, srv.TimeoutSec, srv.ID); err != nil {
-			return err
-		}
-	} else {
-		// Per-agent mode: create per-agent connection
-		if err := m.connectServer(ctx, srv.Name, srv.Transport, srv.Command,
-			rs.args, rs.env, srv.URL, rs.headers,
-			srv.ToolPrefix, srv.TimeoutSec, srv.ID); err != nil {
-			return err
-		}
+		return m.connectViaPool(ctx, tid, srv.Name, srv.Transport, srv.Command,
+			rs.args, rs.env, srv.URL, rs.headers, srv.ToolPrefix, srv.TimeoutSec, srv.ID, hints,
+			rs.info.ToolAllow, rs.info.ToolDeny)
 	}
-
-	// Apply tool filtering from grants
-	if len(rs.info.ToolAllow) > 0 || len(rs.info.ToolDeny) > 0 {
-		m.filterTools(srv.Name, rs.info.ToolAllow, rs.info.ToolDeny)
-	}
-
-	return nil
+	// Per-agent mode: create per-agent connection
+	return m.connectServer(ctx, srv.Name, srv.Transport, srv.Command,
+		rs.args, rs.env, srv.URL, rs.headers,
+		srv.ToolPrefix, srv.TimeoutSec, srv.ID, hints,
+		rs.info.ToolAllow, rs.info.ToolDeny)
 }
 
 // LoadForAgent connects MCP servers accessible by a specific agent+user.
@@ -594,4 +599,44 @@ func requireUserCreds(settings json.RawMessage) bool {
 	}
 	_ = json.Unmarshal(settings, &s)
 	return s.RequireUserCredentials
+}
+
+// ToolHints carries admin-authored description hints for MCP tools.
+// Stored under MCPServerData.Settings.tool_hints as JSONB:
+//
+//	{
+//	  "tool_hints": {
+//	    "global": "...",
+//	    "tools": { "<tool_name>": "..." }
+//	  }
+//	}
+//
+// The hints are appended to a tool's description so the LLM sees server-specific
+// quirks (e.g. "no trailing semicolons in code args") without modifying the MCP
+// server itself. Empty Global/Tools render no suffix.
+type ToolHints struct {
+	Global string            `json:"global,omitempty"`
+	Tools  map[string]string `json:"tools,omitempty"`
+}
+
+// ParseToolHints extracts tool description hints from an MCP server's Settings JSONB.
+// Returns a zero-value ToolHints (no hints) if settings are empty or malformed.
+// Safe to call with nil — never panics.
+func ParseToolHints(settings json.RawMessage) ToolHints {
+	if len(settings) == 0 {
+		return ToolHints{}
+	}
+	var s struct {
+		ToolHints ToolHints `json:"tool_hints"`
+	}
+	_ = json.Unmarshal(settings, &s)
+	return s.ToolHints
+}
+
+// HintFor returns the per-tool hint for toolName, or empty string if none.
+func (h ToolHints) HintFor(toolName string) string {
+	if h.Tools == nil {
+		return ""
+	}
+	return h.Tools[toolName]
 }

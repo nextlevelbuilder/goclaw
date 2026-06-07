@@ -38,6 +38,7 @@ func (m *ConfigPermissionsMethods) SetMemberResolver(r channels.MemberResolver) 
 
 func (m *ConfigPermissionsMethods) Register(router *gateway.MethodRouter) {
 	router.Register(protocol.MethodConfigPermissionsList, m.handleList)
+	router.Register(protocol.MethodConfigPermissionsCheck, m.handleCheck)
 	router.Register(protocol.MethodConfigPermissionsGrant, m.handleGrant)
 	router.Register(protocol.MethodConfigPermissionsRevoke, m.handleRevoke)
 }
@@ -53,6 +54,10 @@ func (m *ConfigPermissionsMethods) handleList(ctx context.Context, client *gatew
 	}
 	if params.AgentID == "" {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "agentId")))
+		return
+	}
+	if params.ConfigType != "" && !store.ValidConfigType(params.ConfigType) {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "invalid configType"))
 		return
 	}
 
@@ -71,6 +76,38 @@ func (m *ConfigPermissionsMethods) handleList(ctx context.Context, client *gatew
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"permissions": perms}))
 }
 
+func (m *ConfigPermissionsMethods) handleCheck(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+	locale := store.LocaleFromContext(ctx)
+	var params struct {
+		AgentID    string `json:"agentId"`
+		Scope      string `json:"scope"`
+		ConfigType string `json:"configType"`
+		UserID     string `json:"userId"`
+	}
+	if req.Params != nil {
+		json.Unmarshal(req.Params, &params)
+	}
+
+	if errMsg := validateConfigPermissionParams(locale, params.AgentID, params.Scope, params.ConfigType, params.UserID, "allow", false); errMsg != "" {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, errMsg))
+		return
+	}
+
+	agentUUID, err := resolveAgentUUIDCached(ctx, m.agentRouter, m.agentStore, params.AgentID)
+	if err != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "invalid agentId"))
+		return
+	}
+
+	decision, err := store.CheckConfigPermissionDecision(ctx, m.permStore, agentUUID, params.Scope, params.ConfigType, params.UserID)
+	if err != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, configPermInternalErr("check", err)))
+		return
+	}
+
+	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"decision": decision}))
+}
+
 func (m *ConfigPermissionsMethods) handleGrant(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	locale := store.LocaleFromContext(ctx)
 	var params struct {
@@ -86,21 +123,8 @@ func (m *ConfigPermissionsMethods) handleGrant(ctx context.Context, client *gate
 		json.Unmarshal(req.Params, &params)
 	}
 
-	switch {
-	case params.AgentID == "":
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "agentId")))
-		return
-	case params.Scope == "":
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "scope")))
-		return
-	case params.ConfigType == "":
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "configType")))
-		return
-	case params.UserID == "":
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "userId")))
-		return
-	case params.Permission == "":
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "permission")))
+	if errMsg := validateConfigPermissionParams(locale, params.AgentID, params.Scope, params.ConfigType, params.UserID, params.Permission, true); errMsg != "" {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, errMsg))
 		return
 	}
 
@@ -158,18 +182,8 @@ func (m *ConfigPermissionsMethods) handleRevoke(ctx context.Context, client *gat
 		json.Unmarshal(req.Params, &params)
 	}
 
-	switch {
-	case params.AgentID == "":
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "agentId")))
-		return
-	case params.Scope == "":
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "scope")))
-		return
-	case params.ConfigType == "":
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "configType")))
-		return
-	case params.UserID == "":
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "userId")))
+	if errMsg := validateConfigPermissionParams(locale, params.AgentID, params.Scope, params.ConfigType, params.UserID, "allow", false); errMsg != "" {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, errMsg))
 		return
 	}
 
@@ -190,4 +204,26 @@ func (m *ConfigPermissionsMethods) handleRevoke(ctx context.Context, client *gat
 func configPermInternalErr(action string, err error) string {
 	slog.Error("config.permissions RPC error", "action", action, "error", err)
 	return "internal error"
+}
+
+func validateConfigPermissionParams(locale, agentID, scope, configType, userID, permission string, validatePermission bool) string {
+	switch {
+	case agentID == "":
+		return i18n.T(locale, i18n.MsgRequired, "agentId")
+	case scope == "":
+		return i18n.T(locale, i18n.MsgRequired, "scope")
+	case configType == "":
+		return i18n.T(locale, i18n.MsgRequired, "configType")
+	case userID == "":
+		return i18n.T(locale, i18n.MsgRequired, "userId")
+	case !store.ValidConfigScope(scope):
+		return "invalid scope"
+	case !store.ValidConfigType(configType):
+		return "invalid configType"
+	case validatePermission && permission == "":
+		return i18n.T(locale, i18n.MsgRequired, "permission")
+	case validatePermission && !store.ValidConfigPermission(permission):
+		return "invalid permission"
+	}
+	return ""
 }

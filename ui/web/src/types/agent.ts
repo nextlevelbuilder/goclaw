@@ -7,7 +7,11 @@ export interface ToolPolicyConfig {
   allow?: string[];
   deny?: string[];
   alsoAllow?: string[];
-  byProvider?: Record<string, { profile?: string; allow?: string[]; deny?: string[]; alsoAllow?: string[] }>;
+  byProvider?: Record<string, ToolPolicyConfig>;
+  wait?: {
+    min_ms?: number;
+    max_ms?: number;
+  };
   toolCallPrefix?: string; // prefix to strip from model's tool call names
 }
 
@@ -104,6 +108,7 @@ export type EffectiveChatGPTOAuthRoutingStrategy =
 
 export type ChatGPTOAuthRoutingOverrideMode = "inherit" | "custom";
 export type ReasoningOverrideMode = "inherit" | "custom";
+export type InboundDebounceOverrideMode = "inherit" | "custom";
 
 export interface AgentReasoningConfig {
   override_mode?: ReasoningOverrideMode;
@@ -111,10 +116,28 @@ export interface AgentReasoningConfig {
   fallback?: "downgrade" | "provider_default" | "off";
 }
 
+export interface InboundDebounceConfig {
+  override_mode?: InboundDebounceOverrideMode;
+  inbound_debounce_ms?: number;
+}
+
 export interface ChatGPTOAuthRoutingConfig {
   override_mode?: ChatGPTOAuthRoutingOverrideMode;
   strategy?: ChatGPTOAuthRoutingStrategy;
   extra_provider_names?: string[];
+}
+
+export interface ModelFallbackCandidate {
+  provider?: string;
+  model?: string;
+}
+
+export interface ModelFallbackConfig {
+  enabled?: boolean;
+  strategy?: "priority_order";
+  candidates?: ModelFallbackCandidate[];
+  max_attempts?: number;
+  cooldown_enabled?: boolean;
 }
 
 export interface KgDedupConfig {
@@ -156,6 +179,7 @@ export interface AgentData {
   reasoning_config?: AgentReasoningConfig | null;
   workspace_sharing?: WorkspaceSharingConfig | null;
   chatgpt_oauth_routing?: ChatGPTOAuthRoutingConfig | null;
+  model_fallback?: ModelFallbackConfig | null;
   shell_deny_groups?: ShellDenyGroups | null;
   kg_dedup_config?: KgDedupConfig | null;
 

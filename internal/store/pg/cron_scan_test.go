@@ -78,30 +78,30 @@ func validCronRow(payloadJSON []byte) []any {
 	expr := "*/5 * * * *"
 	tz := "UTC"
 	return []any{
-		id,                  // id
-		tenantID,            // tenant_id
-		(*uuid.UUID)(nil),   // agent_id
-		(*string)(nil),      // user_id
-		"test-job",          // name
-		true,                // enabled
-		"cron",              // schedule_kind
-		&expr,               // cron_expression
-		(*time.Time)(nil),   // run_at
-		&tz,                 // timezone
-		(*int64)(nil),       // interval_ms
-		payloadJSON,         // payload
-		false,               // delete_after_run
-		false,               // stateless
-		false,               // deliver
-		"",                  // deliver_channel
-		"",                  // deliver_to
-		false,               // wake_heartbeat
-		(*time.Time)(nil),   // next_run_at
-		(*time.Time)(nil),   // last_run_at
-		(*string)(nil),      // last_status
-		(*string)(nil),      // last_error
-		now,                 // created_at
-		now,                 // updated_at
+		id,                // id
+		tenantID,          // tenant_id
+		(*uuid.UUID)(nil), // agent_id
+		(*string)(nil),    // user_id
+		"test-job",        // name
+		true,              // enabled
+		"cron",            // schedule_kind
+		&expr,             // cron_expression
+		(*time.Time)(nil), // run_at
+		&tz,               // timezone
+		(*int64)(nil),     // interval_ms
+		payloadJSON,       // payload
+		false,             // delete_after_run
+		false,             // stateless
+		false,             // deliver
+		"",                // deliver_channel
+		"",                // deliver_to
+		false,             // wake_heartbeat
+		(*time.Time)(nil), // next_run_at
+		(*time.Time)(nil), // last_run_at
+		(*string)(nil),    // last_status
+		(*string)(nil),    // last_error
+		now,               // created_at
+		now,               // updated_at
 	}
 }
 
@@ -123,17 +123,18 @@ func TestScanCronRow_MalformedPayloadJSON(t *testing.T) {
 // TestScanCronRow_ValidPayload verifies correct behavior with valid JSON.
 func TestScanCronRow_ValidPayload(t *testing.T) {
 	payload := store.CronPayload{
-		Kind:    "message",
-		Message: "hello world",
+		Kind:             "message",
+		Message:          "hello world",
+		CredentialUserID: "tenant-user-123",
 	}
 	payloadJSON, _ := json.Marshal(payload)
 
 	// Build row with deliver/deliver_channel/deliver_to set as dedicated columns.
 	rowVals := validCronRow(payloadJSON)
 	// Indices: stateless=13, deliver=14, deliver_channel=15, deliver_to=16, wake_heartbeat=17
-	rowVals[14] = true      // deliver
+	rowVals[14] = true       // deliver
 	rowVals[15] = "telegram" // deliver_channel
-	rowVals[16] = "user123" // deliver_to
+	rowVals[16] = "user123"  // deliver_to
 	row := &mockRowScanner{values: rowVals}
 
 	job, err := scanCronRow(row)
@@ -143,6 +144,9 @@ func TestScanCronRow_ValidPayload(t *testing.T) {
 
 	if job.Payload.Message != "hello world" {
 		t.Errorf("expected Message 'hello world', got %q", job.Payload.Message)
+	}
+	if job.Payload.CredentialUserID != "tenant-user-123" {
+		t.Errorf("expected CredentialUserID 'tenant-user-123', got %q", job.Payload.CredentialUserID)
 	}
 	if job.DeliverChannel != "telegram" {
 		t.Errorf("expected DeliverChannel 'telegram', got %q", job.DeliverChannel)

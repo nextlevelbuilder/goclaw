@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -101,6 +104,9 @@ func (s *stubSecureCLIStore) GetUserCredentials(ctx context.Context, binaryID uu
 func (s *stubSecureCLIStore) SetUserCredentials(ctx context.Context, binaryID uuid.UUID, userID string, encryptedEnv []byte) error {
 	return nil
 }
+func (s *stubSecureCLIStore) SetUserCredentialsTyped(ctx context.Context, binaryID uuid.UUID, userID string, encryptedEnv []byte, credentialType, hostScope *string) error {
+	return nil
+}
 func (s *stubSecureCLIStore) DeleteUserCredentials(ctx context.Context, binaryID uuid.UUID, userID string) error {
 	return nil
 }
@@ -181,6 +187,94 @@ func TestExec_GrantedBinary_UsesCredentialedPath(t *testing.T) {
 	if strings.Contains(result.ForLLM, "sh: 1:") || strings.Contains(result.ForLLM, "/bin/sh") {
 		t.Fatalf("expected credentialed-path error, got shell fall-through error: %s", result.ForLLM)
 	}
+}
+
+func TestExec_CredentialedArgsDoNotTriggerPackageInstallApproval(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script fixture is POSIX-only")
+	}
+	tool, ctx := newCredentialedZernioTestTool(t)
+	result := tool.Execute(ctx, map[string]any{
+		"command": `zernio posts:create --accounts abc --text "install with npm install -g agent-browser"`,
+	})
+
+	if result.IsError {
+		t.Fatalf("credentialed command should treat quoted package install text as argv data, got: %s", result.ForLLM)
+	}
+	if !strings.Contains(result.ForLLM, "posts:create") || !strings.Contains(result.ForLLM, "npm install -g agent-browser") {
+		t.Fatalf("expected script to receive original args, got: %s", result.ForLLM)
+	}
+}
+
+func TestExec_CredentialedRejectsUnquotedShellOperator(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script fixture is POSIX-only")
+	}
+	tool, ctx := newCredentialedZernioTestTool(t)
+	result := tool.Execute(ctx, map[string]any{
+		"command": `zernio posts:create --text ok ; echo leaked`,
+	})
+
+	if !result.IsError {
+		t.Fatalf("expected credentialed command with unquoted shell operator to fail")
+	}
+	if !strings.Contains(result.ForLLM, "Shell operators not supported") && !strings.Contains(result.ForLLM, "Detected: ;") {
+		t.Fatalf("expected shell-operator rejection, got: %s", result.ForLLM)
+	}
+}
+
+func TestExec_NonCredentialedPackageInstallStillDenied(t *testing.T) {
+	tool := NewExecTool(t.TempDir(), false)
+	result := tool.Execute(context.Background(), map[string]any{
+		"command": "npm install left-pad",
+	})
+
+	if !result.IsError {
+		t.Fatalf("expected package install command to be denied")
+	}
+	if !strings.Contains(result.ForLLM, "package_install") && !strings.Contains(result.ForLLM, "matches pattern") {
+		t.Fatalf("expected package-install policy denial, got: %s", result.ForLLM)
+	}
+}
+
+func TestPosixShellPathPrefersAbsoluteShell(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX-only")
+	}
+	got, err := posixShellPath()
+	if err != nil {
+		t.Fatalf("expected absolute POSIX shell on test runtime: %v", err)
+	}
+	if got != "/bin/sh" && got != "/usr/bin/sh" {
+		t.Fatalf("unexpected shell path: %q", got)
+	}
+	if _, err := os.Stat(got); err != nil {
+		t.Fatalf("shell path %q must exist: %v", got, err)
+	}
+}
+
+func newCredentialedZernioTestTool(t *testing.T) (*ExecTool, context.Context) {
+	t.Helper()
+	binDir := t.TempDir()
+	binPath := filepath.Join(binDir, "zernio")
+	if err := os.WriteFile(binPath, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	stub := newStubSecureCLIStore()
+	stub.byName["zernio"] = &store.SecureCLIBinary{
+		BinaryName:     "zernio",
+		BinaryPath:     &binPath,
+		EncryptedEnv:   []byte("{}"),
+		TimeoutSeconds: 10,
+		DenyArgs:       json.RawMessage("[]"),
+		DenyVerbose:    json.RawMessage("[]"),
+	}
+
+	tool := NewExecTool(t.TempDir(), false)
+	tool.SetSecureCLIStore(stub)
+	ctx := store.WithTenantID(store.WithAgentID(context.Background(), uuid.New()), uuid.New())
+	return tool, ctx
 }
 
 // --- Phase 3 gate-enforcement tests ---
@@ -323,7 +417,11 @@ func TestExec_RejectsWrapperDepthCap(t *testing.T) {
 func TestExec_AllowsShellWrapperWithUnregisteredInner(t *testing.T) {
 	tool, _, ctx := newGateTestTool(t)
 	// registered empty, inner is echo (not registered) → fall-through.
-	result := tool.Execute(ctx, map[string]any{"command": "sh -c 'echo hi'"})
+	command := "sh -c 'echo hi'"
+	if runtime.GOOS == "windows" {
+		command = "cmd /c echo hi"
+	}
+	result := tool.Execute(ctx, map[string]any{"command": command})
 	if result.IsError {
 		t.Fatalf("expected pass-through when inner unregistered, got error: %s", result.ForLLM)
 	}
@@ -394,7 +492,11 @@ func TestExec_FallThrough_ScrubsGHToken(t *testing.T) {
 	t.Setenv("GH_TOKEN", "supersecretvalue")
 	// Use single-quote printf so shell sees the literal; our gate lets "sh"
 	// fall through (sh is not registered, echo is not registered).
-	result := tool.Execute(ctx, map[string]any{"command": `sh -c 'echo "token=$GH_TOKEN"'`})
+	command := `sh -c 'echo "token=$GH_TOKEN"'`
+	if runtime.GOOS == "windows" {
+		command = `cmd /c echo token=%GH_TOKEN%`
+	}
+	result := tool.Execute(ctx, map[string]any{"command": command})
 	if result.IsError {
 		t.Fatalf("expected pass-through, got: %s", result.ForLLM)
 	}

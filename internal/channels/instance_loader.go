@@ -16,6 +16,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/providerresolve"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 )
 
 // reloadStartTimeout bounds how long Reload() will wait for a single channel's
@@ -39,6 +40,7 @@ type InstanceLoader struct {
 	agentStore        store.AgentStore
 	providerReg       *providers.Registry
 	pendingCompactCfg *config.PendingCompactionConfig
+	usageCaps         *usagecaps.Service
 	factories         map[string]ChannelFactory
 	manager           *Manager
 	msgBus            *bus.MessageBus
@@ -76,6 +78,10 @@ func (l *InstanceLoader) SetProviderRegistry(reg *providers.Registry) {
 // Must be called before LoadAll/Reload.
 func (l *InstanceLoader) SetPendingCompactionConfig(cfg *config.PendingCompactionConfig) {
 	l.pendingCompactCfg = cfg
+}
+
+func (l *InstanceLoader) SetUsageCapService(s *usagecaps.Service) {
+	l.usageCaps = s
 }
 
 // RegisterFactory registers a factory for a channel type (e.g., "telegram", "discord").
@@ -306,8 +312,9 @@ func (l *InstanceLoader) loadInstance(ctx context.Context, inst store.ChannelIns
 
 		if p != nil && model != "" {
 			cc := &CompactionConfig{
-				Provider: p,
-				Model:    model,
+				Provider:  p,
+				Model:     model,
+				UsageCaps: l.usageCaps,
 			}
 			if l.pendingCompactCfg != nil {
 				cc.Threshold = l.pendingCompactCfg.Threshold

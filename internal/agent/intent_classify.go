@@ -8,6 +8,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 )
 
 // IntentType represents the classified intent of a user message.
@@ -108,6 +109,10 @@ func containsWholeWord(s, kw string) bool {
 // Uses keyword fast-path first, then falls back to LLM classification.
 // Falls back to IntentNewTask on any error.
 func ClassifyIntent(ctx context.Context, provider providers.Provider, model, userMessage string) IntentType {
+	return ClassifyIntentWithUsageCaps(ctx, nil, provider, model, userMessage)
+}
+
+func ClassifyIntentWithUsageCaps(ctx context.Context, usageCaps *usagecaps.Service, provider providers.Provider, model, userMessage string) IntentType {
 	// Fast-path: keyword matching for obvious patterns (no LLM cost).
 	if intent, ok := quickClassify(userMessage); ok {
 		return intent
@@ -116,7 +121,7 @@ func ClassifyIntent(ctx context.Context, provider providers.Provider, model, use
 	ctx, cancel := context.WithTimeout(ctx, intentClassifyTimeout)
 	defer cancel()
 
-	resp, err := provider.Chat(ctx, providers.ChatRequest{
+	req := providers.ChatRequest{
 		Messages: []providers.Message{
 			{Role: "system", Content: intentSystemPrompt},
 			{Role: "user", Content: userMessage},
@@ -126,6 +131,11 @@ func ClassifyIntent(ctx context.Context, provider providers.Provider, model, use
 			providers.OptMaxTokens:   20,
 			providers.OptTemperature: 0.0,
 		},
+	}
+	resp, err := usageCaps.Chat(ctx, provider, req, usagecaps.ChatOptions{
+		ModelID:         model,
+		Purpose:         "intent-classify",
+		MaxOutputTokens: 20,
 	})
 	if err != nil {
 		return IntentNewTask

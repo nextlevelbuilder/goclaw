@@ -311,6 +311,38 @@
     "verifyFailed": "Embedding验证失败",
     "dimensionsMismatch": "{{count}}维 — 不符合要求的1536"
   },
+  "pricing": {
+    "title": "模型定价",
+    "description": "同步 OpenRouter 价格，并为此 Provider 的模型费用设置覆盖以供用量上限使用。",
+    "skippedDescription": "用量上限会跳过订阅和本地 Provider，但仍可为之后的 API 路由预先配置价格。",
+    "sync": "同步 OpenRouter",
+    "model": "模型",
+    "saveOverride": "保存覆盖",
+    "catalogMatches": "OpenRouter 目录匹配",
+    "source": "来源",
+    "configuredFields": "已配置字段",
+    "override": "覆盖",
+    "emptyOverrides": "此 Provider 暂无定价覆盖。",
+    "deleteOverride": "删除覆盖",
+    "fields": {
+      "input": "输入",
+      "output": "输出",
+      "cache_read": "缓存读取",
+      "cache_write": "缓存写入",
+      "reasoning": "推理",
+      "request": "请求",
+      "image": "图片",
+      "web_search": "网页搜索"
+    },
+    "toast": {
+      "synced": "已同步 {{count}} 个 OpenRouter 模型",
+      "syncFailed": "无法同步 OpenRouter 定价",
+      "saved": "定价覆盖已保存",
+      "saveFailed": "无法保存定价覆盖",
+      "deleted": "定价覆盖已删除",
+      "deleteFailed": "无法删除定价覆盖"
+    }
+  },
   "reasoning": {
     "off": "Off",
     "offDesc": "No default extended thinking",

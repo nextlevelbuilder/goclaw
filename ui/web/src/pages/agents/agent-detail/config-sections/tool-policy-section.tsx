@@ -21,6 +21,23 @@ interface ToolPolicySectionProps {
 export function ToolPolicySection({ enabled, value, onToggle, onChange }: ToolPolicySectionProps) {
   const { t } = useTranslation("agents");
   const s = "configSections.toolPolicy";
+
+  const updateWaitLimit = (field: "min_ms" | "max_ms", raw: string) => {
+    const nextWait = { ...(value.wait ?? {}) };
+    if (raw === "") {
+      delete nextWait[field];
+    } else {
+      const parsed = Number(raw);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        nextWait[field] = Math.trunc(parsed);
+      }
+    }
+    onChange({
+      ...value,
+      wait: Object.keys(nextWait).length > 0 ? nextWait : undefined,
+    });
+  };
+
   return (
     <ConfigSection
       title={t(`${s}.title`)}
@@ -49,9 +66,35 @@ export function ToolPolicySection({ enabled, value, onToggle, onChange }: ToolPo
           value={value.toolCallPrefix ?? ""}
           onChange={(e) => onChange({ ...value, toolCallPrefix: e.target.value.replace(/[^a-z0-9_{}/]/g, "") || undefined })}
           placeholder="e.g. proxy_"
-          className="font-mono text-sm"
+          className="font-mono text-base md:text-sm"
         />
         <p className="text-xs text-muted-foreground">{t(`${s}.toolCallPrefixHint`)}</p>
+      </div>
+      <div className="space-y-2">
+        <InfoLabel tip="Optional per-agent wait tool bounds in milliseconds. Values are clamped by server safety limits: 100ms to 300000ms.">{t(`${s}.waitLimits`)}</InfoLabel>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <Input
+            type="number"
+            min={100}
+            max={300000}
+            step={100}
+            value={value.wait?.min_ms ?? ""}
+            onChange={(e) => updateWaitLimit("min_ms", e.target.value)}
+            placeholder={t(`${s}.waitMinPlaceholder`)}
+            className="text-base md:text-sm"
+          />
+          <Input
+            type="number"
+            min={100}
+            max={300000}
+            step={100}
+            value={value.wait?.max_ms ?? ""}
+            onChange={(e) => updateWaitLimit("max_ms", e.target.value)}
+            placeholder={t(`${s}.waitMaxPlaceholder`)}
+            className="text-base md:text-sm"
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">{t(`${s}.waitLimitsHint`)}</p>
       </div>
       <div className="space-y-2">
         <InfoLabel tip="Explicit allowlist. Only these tools will be available (overrides profile). Leave empty to use profile defaults.">{t(`${s}.allow`)}</InfoLabel>

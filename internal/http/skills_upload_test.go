@@ -5,17 +5,20 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"maps"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
@@ -278,8 +281,8 @@ func TestHandleInstallDeps_ExistingEndpointStillReturnsInstallResult(t *testing.
 	prevAggregate := aggregateInstallDeps
 	prevInstall := installManagedDeps
 	aggregateInstallDeps = func(dirs map[string]string) (*skills.SkillManifest, []string) {
-		if got := dirs["system-skill"]; got != systemDir {
-			t.Fatalf("system dir = %q, want %q", got, systemDir)
+		if !mapContainsValue(dirs, systemDir) {
+			t.Fatalf("install dirs missing system dir: %v", dirs)
 		}
 		return &skills.SkillManifest{RequiresPython: []string{"requests"}}, []string{"pip:requests"}
 	}
@@ -308,6 +311,426 @@ func TestHandleInstallDeps_ExistingEndpointStillReturnsInstallResult(t *testing.
 	}
 }
 
+func TestHandleInstallDeps_IncludesCustomSkillDirsAndRefreshesStaleDeps(t *testing.T) {
+	handler, skillStore, ctx, root := newTestUploadHandler(t)
+	systemDir := filepath.Join(root, "skills-store", "system-skill", "1")
+	customDir := filepath.Join(root, "skills-store", "custom-skill", "1")
+	skillStore.seedSystemSkill("system-skill", systemDir)
+	customID := skillStore.seedCustomSkill("custom-skill", customDir, "archived", []string{"pip:requests"})
+
+	prevAggregate := aggregateInstallDeps
+	prevInstall := installManagedDeps
+	aggregateInstallDeps = func(dirs map[string]string) (*skills.SkillManifest, []string) {
+		if !mapContainsValue(dirs, systemDir) {
+			t.Fatalf("install dirs missing system dir: %v", dirs)
+		}
+		if !mapContainsValue(dirs, customDir) {
+			t.Fatalf("install dirs missing custom dir: %v", dirs)
+		}
+		return &skills.SkillManifest{RequiresPython: []string{"requests"}}, []string{"pip:requests"}
+	}
+	installManagedDeps = func(context.Context, *skills.SkillManifest, []string) (*skills.InstallResult, error) {
+		return &skills.InstallResult{Pip: []string{"requests"}}, nil
+	}
+	t.Cleanup(func() {
+		aggregateInstallDeps = prevAggregate
+		installManagedDeps = prevInstall
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/skills/install-deps", http.NoBody).WithContext(ctx)
+	w := httptest.NewRecorder()
+	handler.handleInstallDeps(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	info, ok := skillStore.GetSkillByID(ctx, customID)
+	if !ok {
+		t.Fatal("custom skill missing")
+	}
+	if info.Status != "active" {
+		t.Fatalf("custom status = %q, want active", info.Status)
+	}
+	if len(info.MissingDeps) != 0 {
+		t.Fatalf("custom missing_deps = %v, want none", info.MissingDeps)
+	}
+}
+
+func TestHandleInstallDeps_NoMissingPackagesStillRefreshesStaleDeps(t *testing.T) {
+	handler, skillStore, ctx, root := newTestUploadHandler(t)
+	customDir := filepath.Join(root, "skills-store", "custom-skill", "1")
+	customID := skillStore.seedCustomSkill("custom-skill", customDir, "archived", []string{"pip:requests"})
+
+	prevAggregate := aggregateInstallDeps
+	prevInstall := installManagedDeps
+	aggregateInstallDeps = func(dirs map[string]string) (*skills.SkillManifest, []string) {
+		if !mapContainsValue(dirs, customDir) {
+			t.Fatalf("install dirs missing custom dir: %v", dirs)
+		}
+		return nil, nil
+	}
+	installManagedDeps = func(context.Context, *skills.SkillManifest, []string) (*skills.InstallResult, error) {
+		t.Fatal("install should not run when aggregate reports no missing packages")
+		return nil, nil
+	}
+	t.Cleanup(func() {
+		aggregateInstallDeps = prevAggregate
+		installManagedDeps = prevInstall
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/skills/install-deps", http.NoBody).WithContext(ctx)
+	w := httptest.NewRecorder()
+	handler.handleInstallDeps(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	info, ok := skillStore.GetSkillByID(ctx, customID)
+	if !ok {
+		t.Fatal("custom skill missing")
+	}
+	if info.Status != "active" {
+		t.Fatalf("custom status = %q, want active", info.Status)
+	}
+	if len(info.MissingDeps) != 0 {
+		t.Fatalf("custom missing_deps = %v, want none", info.MissingDeps)
+	}
+}
+
+func TestHandleInstallDeps_RefreshesNonMasterTenantCustomSkills(t *testing.T) {
+	handler, skillStore, ctx, root := newTestUploadHandler(t)
+	tenantID := uuid.New()
+	customDir := filepath.Join(root, "tenants", tenantID.String(), "skills-store", "tenant-skill", "1")
+	customID := skillStore.seedCustomSkillForTenant(tenantID, "tenant-skill", customDir, "archived", []string{"pip:requests"})
+
+	prevAggregate := aggregateInstallDeps
+	prevInstall := installManagedDeps
+	aggregateInstallDeps = func(dirs map[string]string) (*skills.SkillManifest, []string) {
+		if !mapContainsValue(dirs, customDir) {
+			t.Fatalf("install dirs missing non-master custom dir: %v", dirs)
+		}
+		return nil, nil
+	}
+	installManagedDeps = func(context.Context, *skills.SkillManifest, []string) (*skills.InstallResult, error) {
+		t.Fatal("install should not run when aggregate reports no missing packages")
+		return nil, nil
+	}
+	t.Cleanup(func() {
+		aggregateInstallDeps = prevAggregate
+		installManagedDeps = prevInstall
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/skills/install-deps", http.NoBody).WithContext(ctx)
+	w := httptest.NewRecorder()
+	handler.handleInstallDeps(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	info, ok := skillStore.GetSkillByID(store.WithTenantID(context.Background(), tenantID), customID)
+	if !ok {
+		t.Fatal("custom skill missing")
+	}
+	if info.Status != "active" {
+		t.Fatalf("custom status = %q, want active", info.Status)
+	}
+	if len(info.MissingDeps) != 0 {
+		t.Fatalf("custom missing_deps = %v, want none", info.MissingDeps)
+	}
+}
+
+func TestHandleInstallDep_RescansCustomSkillsAfterSuccessfulInstall(t *testing.T) {
+	handler, skillStore, ctx, root := newTestUploadHandler(t)
+	customDir := filepath.Join(root, "skills-store", "custom-skill", "1")
+	customID := skillStore.seedCustomSkill("custom-skill", customDir, "archived", []string{"pip:requests"})
+
+	prevInstallSingle := installSingleDep
+	installSingleDep = func(context.Context, string) (bool, string) { return true, "" }
+	t.Cleanup(func() { installSingleDep = prevInstallSingle })
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/skills/install-dep", bytes.NewBufferString(`{"dep":"pip:requests"}`)).WithContext(ctx)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	handler.handleInstallDep(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	info, ok := skillStore.GetSkillByID(ctx, customID)
+	if !ok {
+		t.Fatal("custom skill missing")
+	}
+	if info.Status != "active" {
+		t.Fatalf("custom status = %q, want active", info.Status)
+	}
+	if len(info.MissingDeps) != 0 {
+		t.Fatalf("custom missing_deps = %v, want none", info.MissingDeps)
+	}
+}
+
+func TestHandleInstallDep_RescansCustomSkillsAfterFailedInstall(t *testing.T) {
+	handler, skillStore, ctx, root := newTestUploadHandler(t)
+	customDir := filepath.Join(root, "skills-store", "custom-skill", "1")
+	customID := skillStore.seedCustomSkill("custom-skill", customDir, "archived", []string{"pip:requests"})
+
+	prevInstallSingle := installSingleDep
+	installSingleDep = func(context.Context, string) (bool, string) { return false, "install failed" }
+	t.Cleanup(func() { installSingleDep = prevInstallSingle })
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/skills/install-dep", bytes.NewBufferString(`{"dep":"pip:requests"}`)).WithContext(ctx)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	handler.handleInstallDep(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	info, ok := skillStore.GetSkillByID(ctx, customID)
+	if !ok {
+		t.Fatal("custom skill missing")
+	}
+	if info.Status != "active" {
+		t.Fatalf("custom status = %q, want active", info.Status)
+	}
+	if len(info.MissingDeps) != 0 {
+		t.Fatalf("custom missing_deps = %v, want none", info.MissingDeps)
+	}
+}
+
+func TestParseUploadManagerAgentIDs_RejectsTooManyValues(t *testing.T) {
+	values := make([]string, maxUploadManagerAgentIDs+1)
+	for i := range values {
+		values[i] = uuid.NewString()
+	}
+	raw, err := json.Marshal(values)
+	if err != nil {
+		t.Fatalf("marshal manager ids: %v", err)
+	}
+
+	req := newUploadManagerIDsFormRequest(t, string(raw))
+	if _, err := parseUploadManagerAgentIDs(req); err == nil {
+		t.Fatal("expected too many manager_agent_ids to be rejected")
+	}
+}
+
+func TestParseUploadManagerAgentIDs_RejectsNilUUID(t *testing.T) {
+	raw, err := json.Marshal([]string{uuid.Nil.String()})
+	if err != nil {
+		t.Fatalf("marshal manager ids: %v", err)
+	}
+
+	req := newUploadManagerIDsFormRequest(t, string(raw))
+	if _, err := parseUploadManagerAgentIDs(req); err == nil {
+		t.Fatal("expected nil UUID to be rejected")
+	}
+}
+
+func TestParseUploadManagerAgentIDs_DeduplicatesValues(t *testing.T) {
+	id := uuid.New()
+	raw, err := json.Marshal([]string{id.String(), id.String()})
+	if err != nil {
+		t.Fatalf("marshal manager ids: %v", err)
+	}
+
+	req := newUploadManagerIDsFormRequest(t, string(raw))
+	got, err := parseUploadManagerAgentIDs(req)
+	if err != nil {
+		t.Fatalf("parse manager ids: %v", err)
+	}
+	if len(got) != 1 || got[0] != id {
+		t.Fatalf("manager ids = %v, want [%s]", got, id)
+	}
+}
+
+func TestHandleUpload_GrantsSelectedAgentsCanManageOnCreatedSkill(t *testing.T) {
+	handler, skillStore, ctx, _ := newTestUploadHandler(t)
+	stubUploadDepFns(t,
+		func(context.Context, *skills.SkillManifest, []string) (*skills.InstallResult, error) {
+			return nil, nil
+		},
+		func(*skills.SkillManifest) (bool, []string) { return true, nil },
+	)
+
+	agentA := uuid.New()
+	agentB := uuid.New()
+	req := newZipUploadRequestWithManagers(t, ctx, map[string]string{
+		"SKILL.md": skillMarkdown("Managed Skill", "managed-skill"),
+	}, []string{agentA.String(), agentB.String()})
+	w := httptest.NewRecorder()
+	handler.handleUpload(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	if len(skillStore.grantCalls) != 2 {
+		t.Fatalf("grant calls = %d, want 2", len(skillStore.grantCalls))
+	}
+	for i, call := range skillStore.grantCalls {
+		if call.SkillID == uuid.Nil {
+			t.Fatalf("grant call %d has nil skill id", i)
+		}
+		if call.Version != 1 {
+			t.Fatalf("grant call %d version = %d, want 1", i, call.Version)
+		}
+		if call.GrantedBy != "user-1" {
+			t.Fatalf("grant call %d granted by = %q, want user-1", i, call.GrantedBy)
+		}
+		if !call.CanManage {
+			t.Fatalf("grant call %d canManage = false, want true", i)
+		}
+	}
+	if skillStore.grantCalls[0].AgentID != agentA || skillStore.grantCalls[1].AgentID != agentB {
+		t.Fatalf("grant agent ids = %s, %s; want %s, %s",
+			skillStore.grantCalls[0].AgentID,
+			skillStore.grantCalls[1].AgentID,
+			agentA,
+			agentB,
+		)
+	}
+}
+
+func TestHandleUpload_GrantsSelectedAgentsOnUnchangedSkill(t *testing.T) {
+	handler, skillStore, ctx, _ := newTestUploadHandler(t)
+	stubUploadDepFns(t,
+		func(context.Context, *skills.SkillManifest, []string) (*skills.InstallResult, error) {
+			return nil, nil
+		},
+		func(*skills.SkillManifest) (bool, []string) { return true, nil },
+	)
+	files := map[string]string{
+		"SKILL.md": skillMarkdown("Unchanged Managed Skill", "unchanged-managed-skill"),
+	}
+
+	w1 := httptest.NewRecorder()
+	handler.handleUpload(w1, newZipUploadRequest(t, ctx, files))
+	if w1.Code != http.StatusCreated {
+		t.Fatalf("first upload status = %d, body = %s", w1.Code, w1.Body.String())
+	}
+
+	agentID := uuid.New()
+	w2 := httptest.NewRecorder()
+	handler.handleUpload(w2, newZipUploadRequestWithManagers(t, ctx, files, []string{agentID.String()}))
+	if w2.Code != http.StatusOK {
+		t.Fatalf("second upload status = %d, body = %s", w2.Code, w2.Body.String())
+	}
+
+	var resp struct {
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(w2.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Status != "unchanged" {
+		t.Fatalf("status = %q, want unchanged", resp.Status)
+	}
+	if len(skillStore.grantCalls) != 1 {
+		t.Fatalf("grant calls = %d, want 1", len(skillStore.grantCalls))
+	}
+	call := skillStore.grantCalls[0]
+	if call.AgentID != agentID {
+		t.Fatalf("grant agent id = %s, want %s", call.AgentID, agentID)
+	}
+	if call.Version != 1 {
+		t.Fatalf("grant version = %d, want 1", call.Version)
+	}
+	if !call.CanManage {
+		t.Fatal("grant canManage = false, want true")
+	}
+}
+
+func TestHandleUpload_ReturnsGrantErrors(t *testing.T) {
+	handler, skillStore, ctx, _ := newTestUploadHandler(t)
+	stubUploadDepFns(t,
+		func(context.Context, *skills.SkillManifest, []string) (*skills.InstallResult, error) {
+			return nil, nil
+		},
+		func(*skills.SkillManifest) (bool, []string) { return true, nil },
+	)
+
+	agentID := uuid.New()
+	skillStore.grantErrors[agentID] = errors.New("agent tenant mismatch")
+	req := newZipUploadRequestWithManagers(t, ctx, map[string]string{
+		"SKILL.md": skillMarkdown("Grant Error Skill", "grant-error-skill"),
+	}, []string{agentID.String()})
+	w := httptest.NewRecorder()
+	handler.handleUpload(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		GrantErrors []string `json:"grant_errors"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(resp.GrantErrors) != 1 {
+		t.Fatalf("grant_errors = %v, want one error", resp.GrantErrors)
+	}
+	if want := agentID.String() + ": agent tenant mismatch"; resp.GrantErrors[0] != want {
+		t.Fatalf("grant error = %q, want %q", resp.GrantErrors[0], want)
+	}
+}
+
+func TestResolveSkillUploadLimitMBPrecedenceAndClamp(t *testing.T) {
+	ctx := store.WithTenantID(context.Background(), store.MasterTenantID)
+	handler, _, _, _ := newTestUploadHandler(t)
+	handler.SetUploadLimitConfig(config.SkillsConfig{MaxUploadSizeMB: 30})
+
+	if got := handler.resolveSkillUploadLimitMB(ctx, nil); got != 30 {
+		t.Fatalf("global limit = %d, want 30", got)
+	}
+	if got := handler.resolveSkillUploadLimitMB(ctx, map[string]string{"max_upload_size_mb": "100"}); got != 100 {
+		t.Fatalf("frontmatter limit = %d, want 100", got)
+	}
+
+	handler.SetSystemConfigStore(&skillUploadSystemConfigStore{data: map[string]string{skillUploadMaxSizeConfigKey: "40"}})
+	if got := handler.resolveSkillUploadLimitMB(ctx, map[string]string{"max_upload_size_mb": "100"}); got != 40 {
+		t.Fatalf("tenant limit = %d, want 40", got)
+	}
+
+	handler.SetSystemConfigStore(&skillUploadSystemConfigStore{data: map[string]string{skillUploadMaxSizeConfigKey: "999"}})
+	if got := handler.resolveSkillUploadLimitMB(ctx, nil); got != config.MaxSkillMaxUploadSizeMB {
+		t.Fatalf("clamped tenant limit = %d, want %d", got, config.MaxSkillMaxUploadSizeMB)
+	}
+}
+
+func TestUploadRejectsZipAboveConfiguredLimit(t *testing.T) {
+	handler, _, ctx, _ := newTestUploadHandler(t)
+	handler.SetUploadLimitConfig(config.SkillsConfig{MaxUploadSizeMB: 1})
+
+	req := newZipUploadRequestWithBinary(t, ctx, map[string][]byte{
+		"SKILL.md":  []byte(skillMarkdown("Large Skill", "large-skill")),
+		"large.bin": bytes.Repeat([]byte("x"), (1<<20)+1),
+	})
+	w := httptest.NewRecorder()
+	handler.handleUpload(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "exceeds") || !strings.Contains(w.Body.String(), "1 MB") {
+		t.Fatalf("body = %s, want configured upload limit error", w.Body.String())
+	}
+}
+
+func TestUploadAllowsFrontmatterLimitAboveGlobalDefault(t *testing.T) {
+	handler, _, ctx, _ := newTestUploadHandler(t)
+	handler.SetUploadLimitConfig(config.SkillsConfig{MaxUploadSizeMB: 1})
+	skillMD := "---\nname: Video Skill\nslug: video-skill\nmax_upload_size_mb: 2\n---\nSkill body\n"
+
+	req := newZipUploadRequestWithBinary(t, ctx, map[string][]byte{
+		"SKILL.md":  []byte(skillMD),
+		"large.bin": bytes.Repeat([]byte("x"), (1<<20)+(128<<10)),
+	})
+	w := httptest.NewRecorder()
+	handler.handleUpload(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+}
+
 func newTestUploadHandler(t *testing.T) (*SkillsHandler, *skillManageStoreStub, context.Context, string) {
 	t.Helper()
 
@@ -326,6 +749,12 @@ func newTestUploadHandler(t *testing.T) (*SkillsHandler, *skillManageStoreStub, 
 }
 
 func newZipUploadRequest(t *testing.T, ctx context.Context, files map[string]string) *http.Request {
+	t.Helper()
+
+	return newZipUploadRequestWithManagers(t, ctx, files, nil)
+}
+
+func newZipUploadRequestWithManagers(t *testing.T, ctx context.Context, files map[string]string, managerAgentIDs []string) *http.Request {
 	t.Helper()
 
 	var zipBuf bytes.Buffer
@@ -352,6 +781,15 @@ func newZipUploadRequest(t *testing.T, ctx context.Context, files map[string]str
 	if _, err := part.Write(zipBuf.Bytes()); err != nil {
 		t.Fatalf("multipart write: %v", err)
 	}
+	if managerAgentIDs != nil {
+		raw, err := json.Marshal(managerAgentIDs)
+		if err != nil {
+			t.Fatalf("marshal manager_agent_ids: %v", err)
+		}
+		if err := mw.WriteField("manager_agent_ids", string(raw)); err != nil {
+			t.Fatalf("multipart manager_agent_ids: %v", err)
+		}
+	}
 	if err := mw.Close(); err != nil {
 		t.Fatalf("multipart close: %v", err)
 	}
@@ -361,26 +799,120 @@ func newZipUploadRequest(t *testing.T, ctx context.Context, files map[string]str
 	return req.WithContext(ctx)
 }
 
+func newZipUploadRequestWithBinary(t *testing.T, ctx context.Context, files map[string][]byte) *http.Request {
+	t.Helper()
+
+	var zipBuf bytes.Buffer
+	zw := zip.NewWriter(&zipBuf)
+	for name, content := range files {
+		header := &zip.FileHeader{Name: name, Method: zip.Store}
+		w, err := zw.CreateHeader(header)
+		if err != nil {
+			t.Fatalf("zip create %s: %v", name, err)
+		}
+		if _, err := w.Write(content); err != nil {
+			t.Fatalf("zip write %s: %v", name, err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("zip close: %v", err)
+	}
+
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	part, err := mw.CreateFormFile("file", "skill.zip")
+	if err != nil {
+		t.Fatalf("multipart file: %v", err)
+	}
+	if _, err := part.Write(zipBuf.Bytes()); err != nil {
+		t.Fatalf("multipart write: %v", err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatalf("multipart close: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/skills/upload", &body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	return req.WithContext(ctx)
+}
+
+func newUploadManagerIDsFormRequest(t *testing.T, raw string) *http.Request {
+	t.Helper()
+
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	if err := mw.WriteField("manager_agent_ids", raw); err != nil {
+		t.Fatalf("multipart manager_agent_ids: %v", err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatalf("multipart close: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/v1/skills/upload", &body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	return req
+}
+
 func skillMarkdown(name, slug string) string {
 	return "---\nname: " + name + "\nslug: " + slug + "\n---\nSkill body\n"
 }
 
 type skillManageStoreStub struct {
-	baseDir    string
-	version    int64
-	nextBySlug map[string]int
-	skills     map[uuid.UUID]store.SkillInfo
-	systemDirs map[string]string
-	hashBySlug map[string]string // slug -> SKILL.md content hash (most recent)
+	baseDir     string
+	version     int64
+	nextBySlug  map[string]int
+	skills      map[uuid.UUID]store.SkillInfo
+	systemDirs  map[string]string
+	hashBySlug  map[string]string // slug -> SKILL.md content hash (most recent)
+	grantCalls  []skillGrantCall
+	grantErrors map[uuid.UUID]error
+	lastUpdates map[uuid.UUID]map[string]any
+}
+
+type skillUploadSystemConfigStore struct {
+	data map[string]string
+}
+
+func (s *skillUploadSystemConfigStore) Get(_ context.Context, key string) (string, error) {
+	if v, ok := s.data[key]; ok {
+		return v, nil
+	}
+	return "", errors.New("not found")
+}
+
+func (s *skillUploadSystemConfigStore) Set(_ context.Context, key, value string) error {
+	if s.data == nil {
+		s.data = map[string]string{}
+	}
+	s.data[key] = value
+	return nil
+}
+
+func (s *skillUploadSystemConfigStore) Delete(_ context.Context, key string) error {
+	delete(s.data, key)
+	return nil
+}
+
+func (s *skillUploadSystemConfigStore) List(_ context.Context) (map[string]string, error) {
+	return s.data, nil
+}
+
+type skillGrantCall struct {
+	SkillID   uuid.UUID
+	AgentID   uuid.UUID
+	Version   int
+	GrantedBy string
+	CanManage bool
 }
 
 func newSkillManageStoreStub(baseDir string) *skillManageStoreStub {
 	return &skillManageStoreStub{
-		baseDir:    baseDir,
-		nextBySlug: map[string]int{},
-		skills:     map[uuid.UUID]store.SkillInfo{},
-		systemDirs: map[string]string{},
-		hashBySlug: map[string]string{},
+		baseDir:     baseDir,
+		nextBySlug:  map[string]int{},
+		skills:      map[uuid.UUID]store.SkillInfo{},
+		systemDirs:  map[string]string{},
+		hashBySlug:  map[string]string{},
+		grantErrors: map[uuid.UUID]error{},
+		lastUpdates: map[uuid.UUID]map[string]any{},
 	}
 }
 
@@ -388,6 +920,7 @@ func (s *skillManageStoreStub) seedSystemSkill(slug, dir string) {
 	id := uuid.New()
 	s.skills[id] = store.SkillInfo{
 		ID:       id.String(),
+		TenantID: store.MasterTenantID.String(),
 		Name:     "System Skill",
 		Slug:     slug,
 		Path:     filepath.Join(dir, "SKILL.md"),
@@ -398,6 +931,36 @@ func (s *skillManageStoreStub) seedSystemSkill(slug, dir string) {
 		IsSystem: true,
 	}
 	s.systemDirs[slug] = dir
+}
+
+func (s *skillManageStoreStub) seedCustomSkill(slug, dir, status string, missing []string) uuid.UUID {
+	return s.seedCustomSkillForTenant(store.MasterTenantID, slug, dir, status, missing)
+}
+
+func (s *skillManageStoreStub) seedCustomSkillForTenant(tenantID uuid.UUID, slug, dir, status string, missing []string) uuid.UUID {
+	id := uuid.New()
+	s.skills[id] = store.SkillInfo{
+		ID:          id.String(),
+		TenantID:    tenantID.String(),
+		Name:        "Custom Skill",
+		Slug:        slug,
+		Path:        filepath.Join(dir, "SKILL.md"),
+		BaseDir:     dir,
+		Version:     1,
+		Status:      status,
+		Enabled:     true,
+		MissingDeps: append([]string(nil), missing...),
+	}
+	return id
+}
+
+func mapContainsValue(values map[string]string, want string) bool {
+	for _, got := range values {
+		if got == want {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *skillManageStoreStub) ListSkills(context.Context) []store.SkillInfo {
@@ -423,8 +986,12 @@ func (s *skillManageStoreStub) Version() int64 { return s.version }
 func (s *skillManageStoreStub) BumpVersion()   { s.version++ }
 func (s *skillManageStoreStub) Dirs() []string { return []string{s.baseDir} }
 
-func (s *skillManageStoreStub) CreateSkillManaged(_ context.Context, p store.SkillCreateParams) (uuid.UUID, error) {
+func (s *skillManageStoreStub) CreateSkillManaged(ctx context.Context, p store.SkillCreateParams) (uuid.UUID, error) {
 	id := uuid.New()
+	tenantID := store.TenantIDFromContext(ctx)
+	if tenantID == uuid.Nil {
+		tenantID = store.MasterTenantID
+	}
 	status := p.Status
 	if status == "" {
 		status = "active"
@@ -438,6 +1005,7 @@ func (s *skillManageStoreStub) CreateSkillManaged(_ context.Context, p store.Ski
 	}
 	s.skills[id] = store.SkillInfo{
 		ID:          id.String(),
+		TenantID:    tenantID.String(),
 		Name:        p.Name,
 		Slug:        p.Slug,
 		Path:        filepath.Join(p.FilePath, "SKILL.md"),
@@ -464,14 +1032,21 @@ func (s *skillManageStoreStub) GetSkillHashBySlug(_ context.Context, slug string
 	return hash, version, true
 }
 
-func (s *skillManageStoreStub) UpdateSkill(_ context.Context, id uuid.UUID, updates map[string]any) error {
+func (s *skillManageStoreStub) UpdateSkill(ctx context.Context, id uuid.UUID, updates map[string]any) error {
 	skill, ok := s.skills[id]
 	if !ok {
+		return nil
+	}
+	if !s.canAccessSkill(ctx, skill) {
 		return nil
 	}
 	if status, ok := updates["status"].(string); ok {
 		skill.Status = status
 	}
+	if visibility, ok := updates["visibility"].(string); ok {
+		skill.Visibility = visibility
+	}
+	s.lastUpdates[id] = maps.Clone(updates)
 	s.skills[id] = skill
 	return nil
 }
@@ -498,9 +1073,16 @@ func (s *skillManageStoreStub) IsSystemSkill(slug string) bool {
 	_, ok := s.systemDirs[slug]
 	return ok
 }
-func (s *skillManageStoreStub) ListAllSkills(context.Context) []store.SkillInfo {
+func (s *skillManageStoreStub) ListAllSkills(ctx context.Context) []store.SkillInfo {
+	tid := store.TenantIDFromContext(ctx)
+	if tid == uuid.Nil {
+		tid = store.MasterTenantID
+	}
 	out := make([]store.SkillInfo, 0, len(s.skills))
 	for _, skill := range s.skills {
+		if !store.IsCrossTenant(ctx) && !skill.IsSystem && skill.TenantID != tid.String() {
+			continue
+		}
 		out = append(out, skill)
 	}
 	return out
@@ -519,16 +1101,43 @@ func (s *skillManageStoreStub) ListSystemSkillDirs(context.Context) map[string]s
 	maps.Copy(out, s.systemDirs)
 	return out
 }
-func (s *skillManageStoreStub) StoreMissingDeps(_ context.Context, id uuid.UUID, missing []string) error {
+func (s *skillManageStoreStub) StoreMissingDeps(ctx context.Context, id uuid.UUID, missing []string) error {
 	skill, ok := s.skills[id]
 	if !ok {
+		return nil
+	}
+	if !s.canAccessSkill(ctx, skill) {
 		return nil
 	}
 	skill.MissingDeps = append([]string(nil), missing...)
 	s.skills[id] = skill
 	return nil
 }
-func (s *skillManageStoreStub) GrantToAgent(context.Context, uuid.UUID, uuid.UUID, int, string) error {
+
+func (s *skillManageStoreStub) canAccessSkill(ctx context.Context, skill store.SkillInfo) bool {
+	if skill.IsSystem || store.IsCrossTenant(ctx) {
+		return true
+	}
+	tid := store.TenantIDFromContext(ctx)
+	if tid == uuid.Nil {
+		tid = store.MasterTenantID
+	}
+	return skill.TenantID == "" || skill.TenantID == tid.String()
+}
+func (s *skillManageStoreStub) GrantToAgent(_ context.Context, skillID uuid.UUID, agentID uuid.UUID, version int, grantedBy string, canManage ...bool) error {
+	if err := s.grantErrors[agentID]; err != nil {
+		return err
+	}
+	call := skillGrantCall{
+		SkillID:   skillID,
+		AgentID:   agentID,
+		Version:   version,
+		GrantedBy: grantedBy,
+	}
+	if len(canManage) > 0 {
+		call.CanManage = canManage[0]
+	}
+	s.grantCalls = append(s.grantCalls, call)
 	return nil
 }
 func (s *skillManageStoreStub) RevokeFromAgent(context.Context, uuid.UUID, uuid.UUID) error {
@@ -540,6 +1149,12 @@ func (s *skillManageStoreStub) GrantToUser(context.Context, uuid.UUID, string, s
 func (s *skillManageStoreStub) RevokeFromUser(context.Context, uuid.UUID, string) error { return nil }
 func (s *skillManageStoreStub) ListWithGrantStatus(context.Context, uuid.UUID) ([]store.SkillWithGrantStatus, error) {
 	return nil, nil
+}
+func (s *skillManageStoreStub) ListAgentGrantsForSkill(context.Context, uuid.UUID) ([]store.SkillAgentGrantInfo, error) {
+	return nil, nil
+}
+func (s *skillManageStoreStub) AgentCanManageSkill(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return false, nil
 }
 func (s *skillManageStoreStub) GetSkillFilePath(context.Context, uuid.UUID) (string, string, int, bool, bool) {
 	return "", "", 0, false, false

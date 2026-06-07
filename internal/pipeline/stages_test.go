@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -963,6 +964,197 @@ func TestToolStage_MultipleTools_ParallelPath_InvokesRawAndProcessForEach(t *tes
 	}
 	if state.Tool.TotalToolCalls != 3 {
 		t.Errorf("TotalToolCalls = %d, want 3", state.Tool.TotalToolCalls)
+	}
+}
+
+func TestToolStage_MultipleTools_SequentialBarrierSkipsParallelRawPath(t *testing.T) {
+	t.Parallel()
+	calls := []string{}
+	deps := &PipelineDeps{
+		ExecuteToolCall: func(_ context.Context, _ *RunState, tc providers.ToolCall) ([]providers.Message, error) {
+			calls = append(calls, tc.Name)
+			return []providers.Message{{Role: "tool", Content: "result:" + tc.Name, ToolCallID: tc.ID}}, nil
+		},
+		ExecuteToolRaw: func(_ context.Context, _ providers.ToolCall) (providers.Message, any, error) {
+			t.Fatal("ExecuteToolRaw must not be called when a sequential barrier is present")
+			return providers.Message{}, nil, nil
+		},
+		ProcessToolResult: func(_ context.Context, _ *RunState, _ providers.ToolCall, _ providers.Message, _ any) []providers.Message {
+			t.Fatal("ProcessToolResult must not be called when a sequential barrier is present")
+			return nil
+		},
+		SequentialToolCall: func(tc providers.ToolCall) bool {
+			return tc.Name == "wait"
+		},
+	}
+	stage := NewToolStage(deps)
+	state := defaultState()
+	state.Think.LastResponse = &providers.ChatResponse{
+		ToolCalls: []providers.ToolCall{
+			{ID: "1", Name: "message"},
+			{ID: "2", Name: "wait"},
+			{ID: "3", Name: "message"},
+		},
+	}
+
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	want := []string{"message", "wait", "message"}
+	if !reflect.DeepEqual(calls, want) {
+		t.Fatalf("ExecuteToolCall order = %v, want %v", calls, want)
+	}
+}
+
+func TestToolStage_MultipleTools_PrefixedSequentialBarrierSkipsParallelRawPath(t *testing.T) {
+	t.Parallel()
+	calls := []string{}
+	deps := &PipelineDeps{
+		ExecuteToolCall: func(_ context.Context, _ *RunState, tc providers.ToolCall) ([]providers.Message, error) {
+			calls = append(calls, tc.Name)
+			return []providers.Message{{Role: "tool", Content: "result:" + tc.Name, ToolCallID: tc.ID}}, nil
+		},
+		ExecuteToolRaw: func(_ context.Context, _ providers.ToolCall) (providers.Message, any, error) {
+			t.Fatal("ExecuteToolRaw must not be called when a prefixed sequential barrier is present")
+			return providers.Message{}, nil, nil
+		},
+		ProcessToolResult: func(_ context.Context, _ *RunState, _ providers.ToolCall, _ providers.Message, _ any) []providers.Message {
+			t.Fatal("ProcessToolResult must not be called when a prefixed sequential barrier is present")
+			return nil
+		},
+		SequentialToolCall: func(tc providers.ToolCall) bool {
+			return strings.TrimPrefix(tc.Name, "proxy_") == "wait"
+		},
+	}
+	stage := NewToolStage(deps)
+	state := defaultState()
+	state.Think.LastResponse = &providers.ChatResponse{
+		ToolCalls: []providers.ToolCall{
+			{ID: "1", Name: "proxy_message"},
+			{ID: "2", Name: "proxy_wait"},
+			{ID: "3", Name: "proxy_message"},
+		},
+	}
+
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	want := []string{"proxy_message", "proxy_wait", "proxy_message"}
+	if !reflect.DeepEqual(calls, want) {
+		t.Fatalf("ExecuteToolCall order = %v, want %v", calls, want)
+	}
+}
+
+func TestToolStage_SequentialBatchStopsAfterContextCancellation(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	calls := []string{}
+	deps := &PipelineDeps{
+		ExecuteToolCall: func(_ context.Context, _ *RunState, tc providers.ToolCall) ([]providers.Message, error) {
+			calls = append(calls, tc.Name)
+			if tc.Name == "wait" {
+				cancel()
+			}
+			return []providers.Message{{Role: "tool", Content: "result:" + tc.Name, ToolCallID: tc.ID}}, nil
+		},
+		ExecuteToolRaw: func(_ context.Context, _ providers.ToolCall) (providers.Message, any, error) {
+			t.Fatal("ExecuteToolRaw must not be called when a sequential barrier is present")
+			return providers.Message{}, nil, nil
+		},
+		ProcessToolResult: func(_ context.Context, _ *RunState, _ providers.ToolCall, _ providers.Message, _ any) []providers.Message {
+			t.Fatal("ProcessToolResult must not be called when a sequential barrier is present")
+			return nil
+		},
+		SequentialToolCall: func(tc providers.ToolCall) bool {
+			return tc.Name == "wait"
+		},
+	}
+	stage := NewToolStage(deps)
+	state := defaultState()
+	state.Think.LastResponse = &providers.ChatResponse{
+		ToolCalls: []providers.ToolCall{
+			{ID: "1", Name: "message"},
+			{ID: "2", Name: "wait", Arguments: map[string]any{"timeMs": 1000}},
+			{ID: "3", Name: "message"},
+		},
+	}
+
+	if err := stage.Execute(ctx, state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	want := []string{"message", "wait"}
+	if !reflect.DeepEqual(calls, want) {
+		t.Fatalf("ExecuteToolCall order = %v, want %v", calls, want)
+	}
+	if stage.Result() != AbortRun {
+		t.Fatalf("Result() = %v, want AbortRun", stage.Result())
+	}
+}
+
+func TestToolStage_SequentialBatchEnforcesToolBudgetBeforeEachCall(t *testing.T) {
+	t.Parallel()
+	calls := []string{}
+	deps := &PipelineDeps{
+		Config: PipelineConfig{MaxToolCalls: 2},
+		ExecuteToolCall: func(_ context.Context, _ *RunState, tc providers.ToolCall) ([]providers.Message, error) {
+			calls = append(calls, tc.Name)
+			return []providers.Message{{Role: "tool", Content: "result:" + tc.Name, ToolCallID: tc.ID}}, nil
+		},
+		SequentialToolCall: func(tc providers.ToolCall) bool {
+			return tc.Name == "wait"
+		},
+	}
+	stage := NewToolStage(deps)
+	state := defaultState()
+	state.Think.LastResponse = &providers.ChatResponse{
+		ToolCalls: []providers.ToolCall{
+			{ID: "1", Name: "message"},
+			{ID: "2", Name: "wait", Arguments: map[string]any{"timeMs": 1000}},
+			{ID: "3", Name: "message"},
+		},
+	}
+
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	want := []string{"message", "wait"}
+	if !reflect.DeepEqual(calls, want) {
+		t.Fatalf("ExecuteToolCall order = %v, want %v", calls, want)
+	}
+	if stage.Result() != BreakLoop {
+		t.Fatalf("Result() = %v, want BreakLoop", stage.Result())
+	}
+}
+
+func TestToolStage_SequentialWaitBatchEnforcesCumulativeWaitCap(t *testing.T) {
+	t.Parallel()
+	calls := []string{}
+	deps := &PipelineDeps{
+		ExecuteToolCall: func(_ context.Context, _ *RunState, tc providers.ToolCall) ([]providers.Message, error) {
+			calls = append(calls, tc.ID)
+			return []providers.Message{{Role: "tool", Content: "result:" + tc.Name, ToolCallID: tc.ID}}, nil
+		},
+		SequentialToolCall: func(tc providers.ToolCall) bool {
+			return tc.Name == "wait"
+		},
+	}
+	stage := NewToolStage(deps)
+	state := defaultState()
+	state.Think.LastResponse = &providers.ChatResponse{
+		ToolCalls: []providers.ToolCall{
+			{ID: "1", Name: "wait", Arguments: map[string]any{"timeMs": 300000}},
+			{ID: "2", Name: "wait", Arguments: map[string]any{"timeMs": 300000}},
+		},
+	}
+
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if !reflect.DeepEqual(calls, []string{"1"}) {
+		t.Fatalf("ExecuteToolCall calls = %v, want [1]", calls)
+	}
+	if stage.Result() != AbortRun {
+		t.Fatalf("Result() = %v, want AbortRun", stage.Result())
 	}
 }
 

@@ -747,7 +747,11 @@
       "selectToolsDeny": "Chọn công cụ để từ chối...",
       "selectToolsAlsoAllow": "Chọn công cụ bổ sung...",
       "toolCallPrefix": "Tiền tố Tool Call",
-      "toolCallPrefixHint": "Loại bỏ tiền tố này từ tên tool call của model trước khi tra cứu registry."
+      "toolCallPrefixHint": "Loại bỏ tiền tố này từ tên tool call của model trước khi tra cứu registry.",
+      "waitLimits": "Giới hạn công cụ wait",
+      "waitMinPlaceholder": "Min ms",
+      "waitMaxPlaceholder": "Max ms",
+      "waitLimitsHint": "Giới hạn riêng cho agent. Server vẫn kẹp wait trong khoảng 100-300000ms."
     },
     "workspaceSharing": {
       "title": "Chia sẻ Workspace",
@@ -773,6 +777,19 @@
       "shareSessionsTip": "Cho phép agent truy cập các phiên hội thoại trên tất cả các nhóm. Khi tắt, phiên của mỗi người dùng được cô lập riêng.",
       "shareSessionsNote": "Bật/tắt không di chuyển dữ liệu — phiên per-user trước đó sẽ không truy cập được trong chế độ shared."
     },
+    "modelFallback": {
+      "title": "Fallback model",
+      "description": "Thử các cặp provider/model dự phòng theo thứ tự ưu tiên khi model chính không khả dụng.",
+      "enabled": "Đã bật",
+      "primary": "Chính",
+      "providerPlaceholder": "Chọn provider",
+      "modelPlaceholder": "Chọn hoặc nhập model",
+      "add": "Thêm fallback",
+      "remove": "Xóa fallback",
+      "reorder": "Đổi thứ tự fallback",
+      "empty": "Chưa cấu hình model fallback.",
+      "cooldown": "Tạm bỏ qua route vừa lỗi"
+    },
     "compaction": {
       "title": "Nén ngữ cảnh",
       "description": "Cài đặt nén cửa sổ ngữ cảnh và ghi nhớ trước nén",
@@ -782,6 +799,16 @@
       "keepLastMessagesTip": "Số tin nhắn gần nhất giữ lại sau khi nén. Các tin nhắn cũ hơn được thay thế bằng bản tóm tắt.",
       "memoryFlush": "Ghi nhớ trước nén",
       "memoryFlushTip": "Trước khi nén, agent được một lượt để lưu ngữ cảnh quan trọng vào file bộ nhớ. Cũng kích hoạt trích xuất Knowledge Graph."
+    },
+    "inboundDebounce": {
+      "title": "Debounce đầu vào",
+      "description": "Override việc gộp tin nhắn nhanh liên tiếp từ Web Chat và channel cho agent này.",
+      "mode": "Chế độ",
+      "modeTip": "Inherit dùng cấu hình global trong Behavior. Custom lưu override trên agent này.",
+      "inherit": "Kế thừa global",
+      "custom": "Tùy chỉnh",
+      "debounceMs": "Debounce (ms)",
+      "debounceMsTip": "Đặt 0 để không debounce; giá trị dương sẽ gộp tin nhắn sau thời gian chờ đó."
     },
     "contextPruning": {
       "title": "Cắt bớt ngữ cảnh",
@@ -982,6 +1009,11 @@
     "title": "Quyền hạn",
     "description": "Quản lý ai được phép thay đổi cấu hình agent và file. Chủ sở hữu luôn có quyền đầy đủ.",
     "addRule": "Thêm quy tắc",
+    "allMembers": "Tat ca members",
+    "allMembersTitle": "Grant rule nay cho tat ca members trong scope dang chon bang userId=\"*\".",
+    "checkAccess": "Kiem tra quyen",
+    "allowed": "Duoc phep",
+    "denied": "Bi chan",
     "fileWriters": "Người viết file",
     "configPerms": "Quyền cấu hình",
     "noRules": "Chưa có quy tắc. Chủ sở hữu mặc định có đầy đủ quyền.",

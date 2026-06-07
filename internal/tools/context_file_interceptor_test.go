@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -21,6 +22,32 @@ type stubAgentStore struct {
 	agentCallsN   atomic.Int32 // counts GetAgentContextFiles calls
 	setAgentCallN atomic.Int32
 	setUserCallN  atomic.Int32
+}
+
+type stubConfigPermissionStore struct {
+	allow        bool
+	allowedTypes map[string]bool
+	err          error
+}
+
+func (s stubConfigPermissionStore) CheckPermission(_ context.Context, _ uuid.UUID, _ string, configType, _ string) (bool, error) {
+	if s.err != nil {
+		return false, s.err
+	}
+	if s.allowedTypes != nil {
+		return s.allowedTypes[configType], nil
+	}
+	return s.allow, nil
+}
+func (s stubConfigPermissionStore) Grant(context.Context, *store.ConfigPermission) error { return nil }
+func (s stubConfigPermissionStore) Revoke(context.Context, uuid.UUID, string, string, string) error {
+	return nil
+}
+func (s stubConfigPermissionStore) List(context.Context, uuid.UUID, string, string) ([]store.ConfigPermission, error) {
+	return nil, nil
+}
+func (s stubConfigPermissionStore) ListFileWriters(context.Context, uuid.UUID, string) ([]store.ConfigPermission, error) {
+	return nil, nil
 }
 
 func (s *stubAgentStore) GetAgentContextFiles(_ context.Context, _ uuid.UUID) ([]store.AgentContextFileData, error) {
@@ -66,7 +93,7 @@ func (s *stubAgentStore) GetByIDs(_ context.Context, _ []uuid.UUID) ([]store.Age
 	return nil, nil
 }
 func (s *stubAgentStore) GetDefault(_ context.Context) (*store.AgentData, error)        { return nil, nil }
-func (s *stubAgentStore) ResetStuckSummoning(_ context.Context) (int64, error)           { return 0, nil }
+func (s *stubAgentStore) ResetStuckSummoning(_ context.Context) (int64, error)          { return 0, nil }
 func (s *stubAgentStore) Update(_ context.Context, _ uuid.UUID, _ map[string]any) error { return nil }
 func (s *stubAgentStore) Delete(_ context.Context, _ uuid.UUID) error                   { return nil }
 func (s *stubAgentStore) List(_ context.Context, _ string) ([]store.AgentData, error) {
@@ -104,6 +131,7 @@ func (s *stubAgentStore) EnsureUserProfile(_ context.Context, _ uuid.UUID, _ str
 func (s *stubAgentStore) PropagateContextFile(_ context.Context, _ uuid.UUID, _ string) (int, error) {
 	return 0, nil
 }
+
 // ---- Tests ----
 
 // TestInterceptor_CacheHit verifies that a second read does NOT call GetAgentContextFiles again.
@@ -348,6 +376,149 @@ func TestInterceptor_BlocksCapabilitiesWithoutSelfEvolve(t *testing.T) {
 	}
 }
 
+func TestInterceptor_BlocksProtectedGroupContextWriteWithoutSender(t *testing.T) {
+	agentID := uuid.New()
+	tenantID := uuid.New()
+	as := &stubAgentStore{}
+	intc := NewContextFileInterceptor(as, "/workspace",
+		cache.NewInMemoryCache[[]store.AgentContextFileData](),
+		cache.NewInMemoryCache[[]store.AgentContextFileData](),
+	)
+	intc.SetConfigPermStore(stubConfigPermissionStore{allow: true})
+
+	ctx := store.WithAgentID(context.Background(), agentID)
+	ctx = store.WithTenantID(ctx, tenantID)
+	ctx = store.WithAgentType(ctx, store.AgentTypeOpen)
+	ctx = store.WithUserID(ctx, "group:zalo:123")
+
+	handled, err := intc.WriteFile(ctx, "SOUL.md", "new soul")
+	if !handled {
+		t.Fatal("expected SOUL.md to be handled")
+	}
+	if err == nil {
+		t.Fatal("expected protected group context write to require a real sender")
+	}
+	if !strings.Contains(err.Error(), "system context cannot write files") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n := as.setUserCallN.Load(); n != 0 {
+		t.Fatalf("denied write should not touch user context store, got %d writes", n)
+	}
+}
+
+func TestInterceptor_AllowsProtectedGroupContextWriteForGrantedSender(t *testing.T) {
+	agentID := uuid.New()
+	tenantID := uuid.New()
+	as := &stubAgentStore{}
+	intc := NewContextFileInterceptor(as, "/workspace",
+		cache.NewInMemoryCache[[]store.AgentContextFileData](),
+		cache.NewInMemoryCache[[]store.AgentContextFileData](),
+	)
+	intc.SetConfigPermStore(stubConfigPermissionStore{
+		allowedTypes: map[string]bool{store.ConfigTypeContextFiles: true},
+	})
+
+	ctx := store.WithAgentID(context.Background(), agentID)
+	ctx = store.WithTenantID(ctx, tenantID)
+	ctx = store.WithAgentType(ctx, store.AgentTypeOpen)
+	ctx = store.WithUserID(ctx, "group:zalo:123")
+	ctx = store.WithSenderID(ctx, "456")
+
+	handled, err := intc.WriteFile(ctx, "SOUL.md", "new soul")
+	if err != nil {
+		t.Fatalf("expected granted sender to write protected group context file, got: %v", err)
+	}
+	if !handled {
+		t.Fatal("expected SOUL.md to be handled")
+	}
+	if n := as.setUserCallN.Load(); n != 1 {
+		t.Fatalf("expected one user context write, got %d", n)
+	}
+}
+
+func TestInterceptor_AllowsProtectedGroupContextWriteForLegacyFileWriter(t *testing.T) {
+	agentID := uuid.New()
+	tenantID := uuid.New()
+	as := &stubAgentStore{}
+	intc := NewContextFileInterceptor(as, "/workspace",
+		cache.NewInMemoryCache[[]store.AgentContextFileData](),
+		cache.NewInMemoryCache[[]store.AgentContextFileData](),
+	)
+	intc.SetConfigPermStore(stubConfigPermissionStore{
+		allowedTypes: map[string]bool{store.ConfigTypeFileWriter: true},
+	})
+
+	ctx := store.WithAgentID(context.Background(), agentID)
+	ctx = store.WithTenantID(ctx, tenantID)
+	ctx = store.WithAgentType(ctx, store.AgentTypeOpen)
+	ctx = store.WithUserID(ctx, "group:zalo:123")
+	ctx = store.WithSenderID(ctx, "456")
+
+	handled, err := intc.WriteFile(ctx, "SOUL.md", "new soul")
+	if err != nil {
+		t.Fatalf("expected legacy file_writer to write protected group context file, got: %v", err)
+	}
+	if !handled {
+		t.Fatal("expected SOUL.md to be handled")
+	}
+}
+
+func TestInterceptor_BlocksProtectedGroupContextWriteWithoutTenant(t *testing.T) {
+	agentID := uuid.New()
+	as := &stubAgentStore{}
+	intc := NewContextFileInterceptor(as, "/workspace",
+		cache.NewInMemoryCache[[]store.AgentContextFileData](),
+		cache.NewInMemoryCache[[]store.AgentContextFileData](),
+	)
+	intc.SetConfigPermStore(stubConfigPermissionStore{
+		allowedTypes: map[string]bool{store.ConfigTypeContextFiles: true},
+	})
+
+	ctx := store.WithAgentID(context.Background(), agentID)
+	ctx = store.WithAgentType(ctx, store.AgentTypeOpen)
+	ctx = store.WithUserID(ctx, "group:zalo:123")
+	ctx = store.WithSenderID(ctx, "456")
+
+	handled, err := intc.WriteFile(ctx, "SOUL.md", "new soul")
+	if !handled {
+		t.Fatal("expected SOUL.md to be handled")
+	}
+	if err == nil {
+		t.Fatal("expected missing tenant context to fail closed")
+	}
+	if !strings.Contains(err.Error(), "tenant context is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestInterceptor_BlocksProtectedGroupContextWriteOnPermissionStoreError(t *testing.T) {
+	agentID := uuid.New()
+	tenantID := uuid.New()
+	as := &stubAgentStore{}
+	intc := NewContextFileInterceptor(as, "/workspace",
+		cache.NewInMemoryCache[[]store.AgentContextFileData](),
+		cache.NewInMemoryCache[[]store.AgentContextFileData](),
+	)
+	intc.SetConfigPermStore(stubConfigPermissionStore{err: errors.New("db down")})
+
+	ctx := store.WithAgentID(context.Background(), agentID)
+	ctx = store.WithTenantID(ctx, tenantID)
+	ctx = store.WithAgentType(ctx, store.AgentTypeOpen)
+	ctx = store.WithUserID(ctx, "group:zalo:123")
+	ctx = store.WithSenderID(ctx, "456")
+
+	handled, err := intc.WriteFile(ctx, "SOUL.md", "new soul")
+	if !handled {
+		t.Fatal("expected SOUL.md to be handled")
+	}
+	if err == nil {
+		t.Fatal("expected permission store errors to fail closed")
+	}
+	if !strings.Contains(err.Error(), "permission check failed") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 // TestInterceptor_AllowsCapabilitiesRead verifies that a predefined agent
 // with self_evolve=true can read CAPABILITIES.md (needed before updating).
 func TestInterceptor_AllowsCapabilitiesRead(t *testing.T) {
@@ -399,5 +570,65 @@ func TestInterceptor_BlocksCapabilitiesReadWithoutSelfEvolve(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "already loaded into your context") {
 		t.Errorf("expected context-loaded error, got: %v", err)
+	}
+}
+
+func TestInterceptor_SharedContextReadsAgentLevelForOpenAgent(t *testing.T) {
+	agentID := uuid.New()
+	as := &stubAgentStore{
+		agentFiles: []store.AgentContextFileData{
+			{AgentID: agentID, FileName: "USER.md", Content: "shared profile"},
+		},
+		userFiles: []store.UserContextFileData{
+			{AgentID: agentID, UserID: "user-1", FileName: "USER.md", Content: "private profile"},
+		},
+	}
+	intc := NewContextFileInterceptor(as, "/workspace",
+		cache.NewInMemoryCache[[]store.AgentContextFileData](),
+		cache.NewInMemoryCache[[]store.AgentContextFileData](),
+	)
+
+	ctx := store.WithAgentID(context.Background(), agentID)
+	ctx = store.WithAgentType(ctx, store.AgentTypeOpen)
+	ctx = store.WithUserID(ctx, "user-1")
+	ctx = store.WithSharedContext(ctx)
+
+	content, handled, err := intc.ReadFile(ctx, "USER.md")
+	if err != nil {
+		t.Fatalf("shared context read returned error: %v", err)
+	}
+	if !handled {
+		t.Fatal("expected USER.md to be handled")
+	}
+	if content != "shared profile" {
+		t.Fatalf("expected shared agent-level context, got %q", content)
+	}
+}
+
+func TestInterceptor_SharedContextWritesAgentLevelForOpenAgent(t *testing.T) {
+	agentID := uuid.New()
+	as := &stubAgentStore{}
+	intc := NewContextFileInterceptor(as, "/workspace",
+		cache.NewInMemoryCache[[]store.AgentContextFileData](),
+		cache.NewInMemoryCache[[]store.AgentContextFileData](),
+	)
+
+	ctx := store.WithAgentID(context.Background(), agentID)
+	ctx = store.WithAgentType(ctx, store.AgentTypeOpen)
+	ctx = store.WithUserID(ctx, "user-1")
+	ctx = store.WithSharedContext(ctx)
+
+	handled, err := intc.WriteFile(ctx, "USER.md", "shared profile")
+	if err != nil {
+		t.Fatalf("shared context write returned error: %v", err)
+	}
+	if !handled {
+		t.Fatal("expected USER.md to be handled")
+	}
+	if n := as.setAgentCallN.Load(); n != 1 {
+		t.Fatalf("expected SetAgentContextFile once, got %d", n)
+	}
+	if n := as.setUserCallN.Load(); n != 0 {
+		t.Fatalf("expected no SetUserContextFile calls, got %d", n)
 	}
 }

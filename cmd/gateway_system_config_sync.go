@@ -78,6 +78,9 @@ func seedConfigForContext(ctx context.Context, sc store.SystemConfigStore, cfg *
 			set(key, fmt.Sprintf("%d", val))
 		}
 	}
+	setIntAllowZero := func(key string, val int) {
+		set(key, fmt.Sprintf("%d", val))
+	}
 	setBool := func(key string, val *bool) {
 		if val != nil {
 			set(key, fmt.Sprintf("%t", *val))
@@ -102,7 +105,7 @@ func seedConfigForContext(ctx context.Context, sc store.SystemConfigStore, cfg *
 	setInt("gateway.rate_limit_rpm", cfg.Gateway.RateLimitRPM)
 	setInt("gateway.max_message_chars", cfg.Gateway.MaxMessageChars)
 	set("gateway.injection_action", cfg.Gateway.InjectionAction)
-	setInt("gateway.inbound_debounce_ms", cfg.Gateway.InboundDebounceMs)
+	setIntAllowZero("gateway.inbound_debounce_ms", cfg.Gateway.InboundDebounceMs)
 	setBool("gateway.block_reply", cfg.Gateway.BlockReply)
 	setBool("gateway.tool_status", cfg.Gateway.ToolStatus)
 	setInt("gateway.task_recovery_interval_sec", cfg.Gateway.TaskRecoveryIntervalSec)
@@ -115,6 +118,13 @@ func seedConfigForContext(ctx context.Context, sc store.SystemConfigStore, cfg *
 	set("tools.profile", cfg.Tools.Profile)
 	setInt("tools.rate_limit_per_hour", cfg.Tools.RateLimitPerHour)
 	setBool("tools.scrub_credentials", cfg.Tools.ScrubCredentials)
+	set("tools.browser.enabled", fmt.Sprintf("%t", cfg.Tools.Browser.Enabled))
+	set("tools.browser.headless", fmt.Sprintf("%t", cfg.Tools.Browser.Headless))
+	set("tools.browser.remote_url", cfg.Tools.Browser.RemoteURL)
+	setInt("tools.browser.action_timeout_ms", cfg.Tools.Browser.ActionTimeoutMs)
+	setIntAllowZero("tools.browser.idle_timeout_ms", cfg.Tools.Browser.IdleTimeoutMs)
+	setInt("tools.browser.max_pages", cfg.Tools.Browser.MaxPages)
+	set("tools.browser.cookie_sync_enabled", fmt.Sprintf("%t", cfg.Tools.Browser.CookieSyncEnabled))
 
 	// TTS
 	set("tts.provider", cfg.Tts.Provider)

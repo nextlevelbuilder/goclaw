@@ -27,10 +27,11 @@ func isTextMime(mime string) bool {
 }
 
 // collectRefsByKind gathers MediaRefs of a given kind from message history
-// (reverse order) and current-turn refs. Historical first, current last.
+// in chronological order, then appends current-turn refs. The last ref is the
+// newest document for read_document's omitted media_id fallback.
 func collectRefsByKind(messages []providers.Message, currentRefs []providers.MediaRef, kind string) []providers.MediaRef {
 	var refs []providers.MediaRef
-	for i := len(messages) - 1; i >= 0; i-- {
+	for i := range messages {
 		for _, ref := range messages[i].MediaRefs {
 			if ref.Kind == kind {
 				refs = append(refs, ref)

@@ -29,7 +29,7 @@ type slackInstanceConfig struct {
 	NativeStream   *bool    `json:"native_stream,omitempty"`
 	ReactionLevel  string   `json:"reaction_level,omitempty"`
 	BlockReply     *bool    `json:"block_reply,omitempty"`
-	DebounceDelay  int      `json:"debounce_delay,omitempty"`
+	DebounceDelay  *int     `json:"debounce_delay,omitempty"`
 	ThreadTTL      *int     `json:"thread_ttl,omitempty"`
 }
 

@@ -439,3 +439,24 @@ func TestParseAllowImageGeneration_UnrelatedKeys_DefaultsTrue(t *testing.T) {
 		t.Error("other_config without allow_image_generation key must default to true")
 	}
 }
+
+func TestParseToolsConfigWaitPolicy(t *testing.T) {
+	t.Parallel()
+	agent := AgentData{
+		ToolsConfig: json.RawMessage(`{"profile":"coding","wait":{"min_ms":500,"max_ms":60000},"toolCallPrefix":"proxy_"}`),
+	}
+
+	got := agent.ParseToolsConfig()
+	if got == nil {
+		t.Fatal("ParseToolsConfig() = nil")
+	}
+	if got.Wait == nil {
+		t.Fatal("Wait policy was not parsed")
+	}
+	if got.Wait.MinMs != 500 || got.Wait.MaxMs != 60000 {
+		t.Fatalf("Wait = %#v, want min=500 max=60000", got.Wait)
+	}
+	if got.ToolCallPrefix != "proxy_" {
+		t.Fatalf("ToolCallPrefix = %q", got.ToolCallPrefix)
+	}
+}

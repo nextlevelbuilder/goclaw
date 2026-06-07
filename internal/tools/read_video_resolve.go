@@ -70,7 +70,19 @@ func (t *ReadVideoTool) callProvider(ctx context.Context, cp credentialProvider,
 	ptype := GetParamString(params, "_provider_type", providerTypeFromName(providerName))
 	if cp != nil && ptype == "gemini" {
 		slog.Info("read_video: using gemini file API", "provider", providerName, "model", model, "size", len(data), "mime", mime)
+		chatReq := providers.ChatRequest{
+			Messages: []providers.Message{{Role: "user", Content: prompt}},
+			Model:    model,
+			Options:  map[string]any{"max_tokens": 16384},
+		}
+		reservation, reserveErr := reserveToolLLMUsage(ctx, t.usageCaps, t.Name(), providerName, model, chatReq)
+		if reserveErr != nil {
+			return nil, nil, reserveErr
+		}
 		resp, err := geminiFileAPICall(ctx, cp.APIKey(), model, prompt, data, mime, 180*time.Second)
+		if reservation != nil {
+			reservation.Reconcile(ctx, resp, err)
+		}
 		if err != nil {
 			return nil, nil, fmt.Errorf("gemini file API: %w", err)
 		}
@@ -84,7 +96,7 @@ func (t *ReadVideoTool) callProvider(ctx context.Context, cp credentialProvider,
 	}
 
 	slog.Info("read_video: using chat API fallback", "provider", providerName, "model", model, "size", len(data))
-	resp, err := p.Chat(ctx, providers.ChatRequest{
+	chatReq := providers.ChatRequest{
 		Messages: []providers.Message{
 			{
 				Role:    "user",
@@ -97,7 +109,15 @@ func (t *ReadVideoTool) callProvider(ctx context.Context, cp credentialProvider,
 			"max_tokens":  16384,
 			"temperature": 0.2,
 		},
-	})
+	}
+	reservation, reserveErr := reserveToolLLMUsage(ctx, t.usageCaps, t.Name(), providerName, model, chatReq)
+	if reserveErr != nil {
+		return nil, nil, reserveErr
+	}
+	resp, err := p.Chat(ctx, chatReq)
+	if reservation != nil {
+		reservation.Reconcile(ctx, resp, err)
+	}
 	if err != nil {
 		return nil, nil, fmt.Errorf("chat API: %w", err)
 	}

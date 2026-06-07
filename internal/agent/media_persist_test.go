@@ -72,6 +72,14 @@ func TestPersistMedia_NamingScheme(t *testing.T) {
 			wantSlug:   "",
 			wantExtPat: `\.pdf`,
 		},
+		{
+			name:       "zip_archive_preserves_archive_extension",
+			filename:   "codex.zip",
+			content:    "zip bytes",
+			mime:       "application/zip",
+			wantSlug:   "codex",
+			wantExtPat: `\.zip`,
+		},
 	}
 
 	var loop Loop

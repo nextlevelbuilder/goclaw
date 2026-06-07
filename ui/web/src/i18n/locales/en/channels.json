@@ -506,5 +506,55 @@
     "relinkDevice": "Re-link Device",
     "connectedSuccess": "✅ WhatsApp connected successfully!",
     "tabQrCode": "QR Code"
+  },
+  "bitrix24": {
+    "portalSelect": {
+      "placeholder": "Select a portal...",
+      "empty": "No Bitrix24 portals connected yet.",
+      "createFirst": "Connect your first Bitrix24 portal",
+      "createNew": "Create new portal",
+      "pendingBadge": "Pending install — click to resume",
+      "loadError": "Failed to load portals. Refresh to retry."
+    },
+    "errors": {
+      "portalRequired": "Please select a portal.",
+      "portalNotInstalled": "This portal has not completed authorization. Authorize it before creating a channel."
+    },
+    "create": {
+      "title": "Connect Bitrix24 Portal",
+      "submit": "Create & Authorize →",
+      "fields": {
+        "name": "Portal name",
+        "nameHint": "Internal slug. Auto-filled from domain; you can edit it.",
+        "domain": "Domain",
+        "clientId": "Client ID",
+        "clientSecret": "Client Secret"
+      },
+      "errors": {
+        "invalidName": "Use lowercase letters, digits, hyphens, underscores (2-64 chars).",
+        "invalidDomain": "Must be a valid Bitrix24 portal domain (e.g. mycorp.bitrix24.com).",
+        "duplicateName": "A portal with this name already exists.",
+        "forbidden": "You need tenant admin permission to create portals.",
+        "gatewayURLUnknown": "Open the goclaw UI via your public URL first (not localhost), then retry."
+      },
+      "help": {
+        "title": "How to get Client ID and Secret?",
+        "step1": "Open your Bitrix24 portal as Administrator.",
+        "step2": "Go to Developer resources → Other → Local application → Add.",
+        "step3": "Set the Handler URL to:",
+        "step4": "Tick the required scopes:",
+        "step5": "Save → copy the Application ID and Key into the form above.",
+        "localDevWarning": "You're on localhost — Bitrix24 cannot reach this URL. Use Cloudflare Tunnel or your public domain first."
+      },
+      "authorize": {
+        "title": "Authorize \"{{name}}\"",
+        "openButton": "Open authorization page",
+        "waiting": "Waiting for authorization...",
+        "installed": "Portal installed successfully!",
+        "timedOut": "Authorization not completed yet. You can resume from the dropdown.",
+        "closeResumeLater": "Close (resume later)",
+        "urlUnknown": "Install URL is unavailable. Open the goclaw UI via your public URL and retry from the dropdown."
+      }
+    }
   }
 }

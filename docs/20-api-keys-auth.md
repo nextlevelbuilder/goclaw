@@ -32,6 +32,15 @@ Or in WebSocket `connect`:
 
 The gateway token is compared using **constant-time comparison** (`crypto/subtle.ConstantTimeCompare`) in both HTTP and WebSocket auth paths to prevent timing attacks. The comparison reveals no information about where the provided token first differs from the expected token.
 
+Externally reachable deployments must configure a gateway token. If `gateway.token` / `GOCLAW_GATEWAY_TOKEN` is empty while the gateway binds to `0.0.0.0`, `::`, or a non-loopback address, startup fails before the health endpoint reports ready.
+
+Empty-token compatibility is only for local development:
+
+- bind `GOCLAW_HOST` to loopback (`127.0.0.1`, `localhost`, or `::1`), or
+- set `GOCLAW_ALLOW_INSECURE_NO_AUTH=1` explicitly.
+
+The explicit opt-in applies to both HTTP and WebSocket. Do not use it on shared hosts, Docker ports exposed outside the machine, or production deployments.
+
 ---
 
 ## 2. API Keys
@@ -100,7 +109,7 @@ GoClaw tries authentication methods in this priority order:
 1. **Gateway token** (exact match via constant-time comparison) → `RoleAdmin` or `RoleOwner` for configured owner IDs
 2. **API key** (SHA-256 hash lookup in `api_keys` table) → role from scopes
 3. **Browser pairing** (sender ID must be paired with "browser" device type) → `RoleOperator` (HTTP only; requires `X-GoClaw-Sender-Id` header)
-4. **No auth configured** (backward compatibility: if no gateway token is set) → full-access dev mode
+4. **No auth configured and local/dev mode explicitly allowed** → full-access dev mode
 5. **No valid auth found** → `401 Unauthorized`
 
 ### HTTP Request Flow
@@ -116,13 +125,15 @@ flowchart TD
     G -->|Yes| H[Derive role from scopes]
     G -->|No| I{Gateway token configured?}
     I -->|Yes| J[401 Unauthorized]
-    I -->|No| K[Full-access backward compat]
+    I -->|No| K{Local/dev fallback allowed?}
+    K -->|No| J
+    K -->|Yes| O[Full-access backward compat]
     C -->|Check paired device| L{Device paired?}
     L -->|Yes| M[RoleOperator]
     L -->|No| J
     E --> N[Authenticate request]
     H --> N
-    K --> N
+    O --> N
     M --> N
 ```
 
@@ -154,6 +165,8 @@ On successful API key authentication, `last_used_at` is updated asynchronously (
 - **Tenant scope**: `X-GoClaw-Tenant-Id: <tenant-uuid-or-slug>` — owner/system-key scope narrowing; non-owner gateway token and browser-pairing callers must already belong to the requested tenant
 - **Locale**: `Accept-Language` — user's preferred language (en, vi, zh; default: en)
 
+User context is still required for user-scoped read paths. Admin API keys without an `owner_id` can call tenant-scoped admin list endpoints such as `GET /v1/agents` and `GET /v1/sessions` without `X-GoClaw-User-Id`; non-admin keys without an effective user receive a structured `INVALID_REQUEST`. User-bound API keys always force the stored `owner_id` and ignore spoofed user headers.
+
 ### Tenant Scope Rules
 
 - **Gateway token + owner user ID**: may narrow to any tenant via `X-GoClaw-Tenant-Id`
@@ -164,7 +177,7 @@ On successful API key authentication, `last_used_at` is updated asynchronously (
 
 ### Backward Compatibility
 
-If no gateway token is configured (`gateway.token` is empty in `config.json`), unauthenticated requests run in backward-compatibility full-access mode. This enables self-hosted deployments without strict authentication. Once a gateway token is configured, all requests must authenticate or use browser pairing.
+If no gateway token is configured (`gateway.token` is empty in `config.json`), unauthenticated requests run in backward-compatibility full-access mode only for loopback local development or when `GOCLAW_ALLOW_INSECURE_NO_AUTH=1` is set. Once a gateway token is configured, all requests must authenticate or use browser pairing.
 
 ---
 
@@ -288,6 +301,8 @@ SecureCLI is a feature that allows GoClaw to automatically inject credentials in
 
 When an agent needs to run `gh auth`, `gcloud auth`, or other authenticated CLI commands, the admin can configure a SecureCLI binary with encrypted environment variables. The agent never sees the raw credentials — they are injected directly into the child process environment via Direct Exec Mode.
 
+Built-in presets include `gh`, `gcloud`, `gws`, `aws`, `kubectl`, and `terraform`. The `gws` preset targets Google Workspace CLI (`@googleworkspace/cli`) and supports `GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE`, `GOOGLE_WORKSPACE_CLI_TOKEN`, `GOOGLE_WORKSPACE_CLI_CLIENT_ID`, and `GOOGLE_WORKSPACE_CLI_CLIENT_SECRET`.
+
 ### Database Schema
 
 ```sql
@@ -320,6 +335,18 @@ CREATE TABLE secure_cli_binaries (
 | `DELETE` | `/v1/cli-credentials/{id}` | Delete a SecureCLI config |
 | `POST` | `/v1/cli-credentials/{id}/test` | Dry-run test (requires admin) |
 | `GET` | `/v1/cli-credentials/presets` | List preset templates for common CLIs |
+
+### Google Workspace CLI preset
+
+The `gws` preset is intended for server-side Google Workspace reads and reviewed admin workflows. It blocks interactive credential commands (`gws auth setup`, `gws auth login`, `gws auth export`, `gws auth logout`) because those flows can create, expose, or clear credentials outside GoClaw's encrypted store.
+
+Credential options:
+
+- `GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE`: path to exported `gws` credentials or an OAuth credentials JSON file.
+- `GOOGLE_WORKSPACE_CLI_TOKEN`: pre-obtained OAuth access token.
+- `GOOGLE_WORKSPACE_CLI_CLIENT_ID` / `GOOGLE_WORKSPACE_CLI_CLIENT_SECRET`: optional OAuth client values for deployments that manage auth outside the agent turn.
+
+Use `docs/google-workspace-cli.md` for command examples and smoke-test guidance.
 
 ### Features
 

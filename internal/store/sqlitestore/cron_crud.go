@@ -28,7 +28,9 @@ func (s *SQLiteCronStore) AddJob(ctx context.Context, name string, schedule stor
 	}
 
 	payload := store.CronPayload{
-		Kind: "agent_turn", Message: message,
+		Kind:             "agent_turn",
+		Message:          message,
+		CredentialUserID: store.ExplicitCredentialUserIDFromContext(ctx),
 	}
 	payloadJSON, _ := json.Marshal(payload)
 
@@ -395,7 +397,6 @@ func (s *SQLiteCronStore) lockCronJobForMutation(ctx context.Context, tx *sql.Tx
 	return &state, nil
 }
 
-
 func execCronJobUpdateTx(ctx context.Context, tx *sql.Tx, id uuid.UUID, updates map[string]any) error {
 	if len(updates) == 0 {
 		return nil
@@ -433,4 +434,3 @@ func execCronJobUpdateTx(ctx context.Context, tx *sql.Tx, id uuid.UUID, updates 
 	}
 	return nil
 }
-

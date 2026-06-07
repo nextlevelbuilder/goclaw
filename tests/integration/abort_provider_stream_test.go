@@ -16,8 +16,6 @@ import (
 // while a Chat call is in flight properly closes the HTTP connection.
 // Uses a stalling SSE server that only responds if data flows from it.
 func TestAnthropicChat_AbortContextCancel(t *testing.T) {
-	t.Parallel()
-
 	// Start a stalling SSE server
 	server := newStallingSSEServer(t)
 	defer server.Close()
@@ -68,8 +66,6 @@ func TestAnthropicChat_AbortContextCancel(t *testing.T) {
 
 // TestOpenAIChat_AbortContextCancel mirrors the Anthropic test for OpenAI-compatible providers.
 func TestOpenAIChat_AbortContextCancel(t *testing.T) {
-	t.Parallel()
-
 	server := newStallingSSEServer(t)
 	defer server.Close()
 

@@ -111,6 +111,7 @@ func (h *AgentsHandler) buildAgentFromArchive(cfg map[string]json.RawMessage, ag
 	ag.ReasoningConfig = rawOrNil(cfg["reasoning_config"])
 	ag.WorkspaceSharing = rawOrNil(cfg["workspace_sharing"])
 	ag.ChatGPTOAuthRouting = rawOrNil(cfg["chatgpt_oauth_routing"])
+	ag.ModelFallback = rawOrNil(cfg["model_fallback"])
 	ag.ShellDenyGroups = rawOrNil(cfg["shell_deny_groups"])
 	ag.KGDedupConfig = rawOrNil(cfg["kg_dedup_config"])
 

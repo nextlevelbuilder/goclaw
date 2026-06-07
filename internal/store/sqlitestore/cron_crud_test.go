@@ -65,6 +65,29 @@ func TestSQLiteCronStore_ReenableRestoresNextRun(t *testing.T) {
 	}
 }
 
+func TestSQLiteCronStore_AddJobPersistsCredentialUserID(t *testing.T) {
+	cronStore, ctx, _ := newTestSQLiteCronStore(t)
+	ctx = store.WithCredentialUserID(ctx, "tenant-user-123")
+	everyMS := int64(time.Minute / time.Millisecond)
+
+	job, err := cronStore.AddJob(ctx, "job-credential-context", store.CronSchedule{
+		Kind:    "every",
+		EveryMS: &everyMS,
+	}, "run credentialed report", false, "", "", "", "group:telegram:-100123")
+	if err != nil {
+		t.Fatalf("AddJob error: %v", err)
+	}
+	if job == nil {
+		job = mustOnlyJob(t, cronStore, ctx)
+	}
+	if job.UserID != "group:telegram:-100123" {
+		t.Fatalf("cron user ID = %q, want group-scoped owner", job.UserID)
+	}
+	if job.Payload.CredentialUserID != "tenant-user-123" {
+		t.Fatalf("credential user ID = %q, want tenant-user-123", job.Payload.CredentialUserID)
+	}
+}
+
 func TestSQLiteCronStore_EnableAlreadyEnabledPreservesNextRun(t *testing.T) {
 	cronStore, ctx, _ := newTestSQLiteCronStore(t)
 	everyMS := int64(time.Hour / time.Millisecond)

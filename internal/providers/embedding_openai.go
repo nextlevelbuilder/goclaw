@@ -40,8 +40,11 @@ func NewOpenAIEmbeddingProvider(apiKey, apiBase, model string) *OpenAIEmbeddingP
 		apiKey:       apiKey,
 		apiBase:      strings.TrimRight(apiBase, "/"),
 		model:        model,
-		client:       &http.Client{Timeout: 60 * time.Second},
-		retry:        DefaultRetryConfig(),
+		// Use a fixed 60s timeout client. Embedding requests are short but can be
+		// batched. The apiBase is validated at provider-creation time by
+		// validateProviderURL in internal/http/providers.go.
+		client: &http.Client{Timeout: 60 * time.Second},
+		retry:  DefaultRetryConfig(),
 	}
 }
 

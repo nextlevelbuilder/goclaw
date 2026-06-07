@@ -56,6 +56,11 @@ func (t *PublishSkillTool) Parameters() map[string]any {
 				"type":        "string",
 				"description": "Path to skill directory containing SKILL.md (absolute or relative to workspace)",
 			},
+			"visibility": map[string]any{
+				"type":        "string",
+				"enum":        []string{skills.VisibilityPrivate, skills.VisibilityPublic},
+				"description": "Who can discover this skill. 'private' (default) is visible only to the owner; 'public' is visible to anyone in the tenant.",
+			},
 		},
 		"required": []string{"path"},
 	}
@@ -66,6 +71,12 @@ func (t *PublishSkillTool) Execute(ctx context.Context, args map[string]any) *Re
 	if rawPath == "" {
 		return ErrorResult("path is required")
 	}
+
+	rawVisibility, _ := args["visibility"].(string)
+	if err := skills.ValidateVisibility(rawVisibility); err != nil {
+		return ErrorResult(err.Error())
+	}
+	visibility := skills.NormalizeVisibility(rawVisibility)
 
 	// Resolve path: absolute or relative to workspace
 	dir := rawPath
@@ -141,7 +152,7 @@ func (t *PublishSkillTool) Execute(ctx context.Context, args map[string]any) *Re
 		Slug:        slug,
 		Description: &desc,
 		OwnerID:     ownerID,
-		Visibility:  "private",
+		Visibility:  visibility,
 		Version:     version,
 		FilePath:    destDir,
 		FileSize:    fileSize,
@@ -159,7 +170,7 @@ func (t *PublishSkillTool) Execute(ctx context.Context, args map[string]any) *Re
 	// Auto-grant to calling agent (granted-by = owner, same as CreateSkillManaged)
 	agentID := store.AgentIDFromContext(ctx)
 	if agentID != uuid.Nil {
-		if err := t.skills.GrantToAgent(ctx, id, agentID, version, ownerID); err != nil {
+		if err := t.skills.GrantToAgent(ctx, id, agentID, version, ownerID, true); err != nil {
 			slog.Warn("publish_skill: auto-grant failed", "error", err)
 		}
 	}

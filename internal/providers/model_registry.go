@@ -154,6 +154,7 @@ func SeedDefaultModels(r *InMemoryRegistry) {
 
 	// OpenAI models
 	for _, s := range []ModelSpec{
+		{ID: "gpt-5.5", Provider: "openai", ContextWindow: 1_050_000, MaxTokens: 128_000, Reasoning: true, Vision: true, TokenizerID: "o200k_base"},
 		{ID: "gpt-5.4", Provider: "openai", ContextWindow: 1_000_000, MaxTokens: 100_000, Reasoning: true, Vision: true, TokenizerID: "o200k_base"},
 		{ID: "gpt-5.2", Provider: "openai", ContextWindow: 256_000, MaxTokens: 64_000, Reasoning: true, Vision: true, TokenizerID: "o200k_base"},
 		{ID: "gpt-4o", Provider: "openai", ContextWindow: 128_000, MaxTokens: 16_384, Reasoning: false, Vision: true, TokenizerID: "o200k_base"},

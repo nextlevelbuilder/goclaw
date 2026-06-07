@@ -63,7 +63,7 @@ func buildWebhookRequest(body string) *http.Request {
 
 func TestWebhookHandler_URLVerification(t *testing.T) {
 	called := false
-	h := NewWebhookHandler("", "", func(_ *MessageEvent) { called = true })
+	h := NewWebhookHandler("test-tok", "", func(_ *MessageEvent) { called = true })
 
 	body := `{"type":"url_verification","token":"test-tok","challenge":"abc123"}`
 	w := httptest.NewRecorder()
@@ -81,6 +81,24 @@ func TestWebhookHandler_URLVerification(t *testing.T) {
 	}
 	if called {
 		t.Error("onMessage must not be called for url_verification")
+	}
+}
+
+func TestWebhookHandler_URLVerificationRequiresMatchingToken(t *testing.T) {
+	h := NewWebhookHandler("expected-token", "", func(_ *MessageEvent) {
+		t.Fatal("onMessage must not be called for url_verification")
+	})
+
+	body := `{"type":"url_verification","token":"wrong-token","challenge":"abc123"}`
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, buildWebhookRequest(body))
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status: got %d, want 200", w.Code)
+	}
+	var resp map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&resp); err == nil && resp["challenge"] != "" {
+		t.Fatalf("must not return challenge for mismatched token, got %q", resp["challenge"])
 	}
 }
 
@@ -179,6 +197,72 @@ func TestWebhookHandler_TokenMatch_Dispatches(t *testing.T) {
 	}
 }
 
+func TestWebhookHandler_MissingVerificationTokenDoesNotDispatchMessage(t *testing.T) {
+	dispatched := make(chan *MessageEvent, 1)
+	h := NewWebhookHandler("", "", func(e *MessageEvent) { dispatched <- e })
+
+	env := map[string]any{
+		"schema": "2.0",
+		"header": map[string]any{
+			"event_id":   "evt_missing_token",
+			"event_type": "im.message.receive_v1",
+			"token":      "",
+			"app_id":     "cli_test",
+			"tenant_key": "test-tenant-1",
+		},
+		"event": map[string]any{
+			"sender":  map[string]any{},
+			"message": map[string]any{"message_id": "om_1", "chat_id": "oc_1"},
+		},
+	}
+	body, _ := json.Marshal(env)
+
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, buildWebhookRequest(string(body)))
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status: got %d, want 200", w.Code)
+	}
+	select {
+	case <-dispatched:
+		t.Fatal("onMessage must not be called when verification token is missing")
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func TestWebhookHandler_EncryptKeyRejectsPlaintextEvent(t *testing.T) {
+	dispatched := make(chan *MessageEvent, 1)
+	h := NewWebhookHandler("", "encrypt-key", func(e *MessageEvent) { dispatched <- e })
+
+	env := map[string]any{
+		"schema": "2.0",
+		"header": map[string]any{
+			"event_id":   "evt_plaintext",
+			"event_type": "im.message.receive_v1",
+			"token":      "",
+			"app_id":     "cli_test",
+			"tenant_key": "test-tenant-1",
+		},
+		"event": map[string]any{
+			"sender":  map[string]any{},
+			"message": map[string]any{"message_id": "om_1", "chat_id": "oc_1"},
+		},
+	}
+	body, _ := json.Marshal(env)
+
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, buildWebhookRequest(string(body)))
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status: got %d, want 200", w.Code)
+	}
+	select {
+	case <-dispatched:
+		t.Fatal("onMessage must not be called for plaintext event when encrypt key is configured")
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
 // --- Non-message event type ---
 
 func TestWebhookHandler_NonMessageEvent_Ignored(t *testing.T) {
@@ -214,6 +298,18 @@ func TestWebhookHandler_InvalidJSON(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("status: got %d, want 400", w.Code)
+	}
+}
+
+func TestWebhookHandler_RejectsOversizedBody(t *testing.T) {
+	h := NewWebhookHandler("", "", func(_ *MessageEvent) {
+		t.Fatal("onMessage must not be called for oversized body")
+	})
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, buildWebhookRequest(strings.Repeat("x", maxWebhookBodyBytes+1)))
+
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("status: got %d, want 413", w.Code)
 	}
 }
 
@@ -278,6 +374,13 @@ func TestDecryptEvent_InvalidBase64(t *testing.T) {
 	_, err := decryptEvent("not-valid-base64!!!", "key")
 	if err == nil {
 		t.Fatal("expected error for invalid base64")
+	}
+}
+
+func TestDecryptEvent_RejectsNonBlockMultipleCiphertext(t *testing.T) {
+	payload := base64.StdEncoding.EncodeToString([]byte("12345678901234567"))
+	if _, err := decryptEvent(payload, "key"); err == nil {
+		t.Fatal("expected error for non-block-multiple ciphertext")
 	}
 }
 

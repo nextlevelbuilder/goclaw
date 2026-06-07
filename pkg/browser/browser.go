@@ -13,22 +13,23 @@ import (
 
 // Manager handles the Chrome browser lifecycle and page management.
 type Manager struct {
-	mu          sync.Mutex
-	browser     *rod.Browser
-	launcher    *launcher.Launcher // retained for PID-based cleanup on crash
-	refs        *RefStore
-	pages       map[string]*rod.Page        // targetID → page
-	console     map[string][]ConsoleMessage // targetID → console messages
-	tenantCtxs  map[string]*rod.Browser     // tenantID → incognito browser context
-	pageTenants map[string]string           // targetID → tenantID (for filtering)
-	pageLastUsed map[string]time.Time       // targetID → last access time
-	headless      bool
-	remoteURL     string        // CDP endpoint for remote Chrome (sidecar); skips local launcher
-	actionTimeout time.Duration // per-action context timeout (default 30s)
-	idleTimeout   time.Duration // auto-close pages idle longer than this (default 10m, 0=disabled)
-	maxPages      int           // max open pages per tenant (default 5)
-	stopReaper    chan struct{} // signal to stop the reaper goroutine
-	logger        *slog.Logger
+	mu             sync.Mutex
+	browser        *rod.Browser
+	launcher       *launcher.Launcher // retained for PID-based cleanup on crash
+	refs           *RefStore
+	pages          map[string]*rod.Page        // targetID → page
+	console        map[string][]ConsoleMessage // targetID → console messages
+	tenantCtxs     map[string]*rod.Browser     // browser scope key → incognito browser context
+	pageTenants    map[string]string           // targetID → browser scope key (for filtering)
+	pageLastUsed   map[string]time.Time        // targetID → last access time
+	headless       bool
+	remoteURL      string        // CDP endpoint for remote Chrome (sidecar); skips local launcher
+	actionTimeout  time.Duration // per-action context timeout (default 30s)
+	idleTimeout    time.Duration // auto-close pages idle longer than this (default 10m, 0=disabled)
+	maxPages       int           // max open pages per tenant (default 5)
+	cookieProvider CookieProvider
+	stopReaper     chan struct{} // signal to stop the reaper goroutine
+	logger         *slog.Logger
 }
 
 // Option configures a Manager.
@@ -65,6 +66,11 @@ func WithMaxPages(n int) Option {
 	return func(m *Manager) { m.maxPages = n }
 }
 
+// WithCookieProvider sets the provider for selected cookie sync into new pages.
+func WithCookieProvider(p CookieProvider) Option {
+	return func(m *Manager) { m.cookieProvider = p }
+}
+
 // New creates a Manager with options.
 func New(opts ...Option) *Manager {
 	m := &Manager{
@@ -88,6 +94,13 @@ func New(opts ...Option) *Manager {
 // ActionTimeout returns the configured per-action timeout.
 func (m *Manager) ActionTimeout() time.Duration {
 	return m.actionTimeout
+}
+
+// SetCookieProvider updates the selected-cookie provider after store setup.
+func (m *Manager) SetCookieProvider(p CookieProvider) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.cookieProvider = p
 }
 
 // touchPageLocked updates the last-used timestamp for a page. Must be called with mu held.
@@ -248,28 +261,27 @@ func (m *Manager) cleanupDeadBrowserLocked() {
 // Pages opened without a tenant context or by the master tenant use the main browser directly.
 const MasterTenantID = "0193a5b0-7000-7000-8000-000000000001"
 
-// tenantBrowserLocked returns an isolated incognito browser context for the given tenant.
-// Master tenant and empty string use the main browser (no isolation needed).
+// tenantBrowserLocked returns an isolated incognito browser context for the given scope.
+// Legacy master/empty scopes with no user/agent use the main browser.
 // Must be called with mu held.
-func (m *Manager) tenantBrowserLocked(tenantID string) (*rod.Browser, error) {
+func (m *Manager) tenantBrowserLocked(scopeKey string) (*rod.Browser, error) {
 	if m.browser == nil {
 		return nil, fmt.Errorf("browser not running")
 	}
-	// Master tenant or no tenant: use main browser
-	if tenantID == "" || tenantID == MasterTenantID {
+	if scopeKey == "" || scopeKey == MasterTenantID {
 		return m.browser, nil
 	}
 	// Return existing incognito context
-	if ctx, ok := m.tenantCtxs[tenantID]; ok {
+	if ctx, ok := m.tenantCtxs[scopeKey]; ok {
 		return ctx, nil
 	}
-	// Create new incognito context for this tenant
+	// Create new incognito context for this scope.
 	incognito, err := m.browser.Incognito()
 	if err != nil {
-		return nil, fmt.Errorf("create incognito context for tenant %s: %w", tenantID, err)
+		return nil, fmt.Errorf("create incognito context for browser scope %s: %w", scopeKey, err)
 	}
-	m.tenantCtxs[tenantID] = incognito
-	m.logger.Info("created incognito browser context", "tenant", tenantID)
+	m.tenantCtxs[scopeKey] = incognito
+	m.logger.Info("created incognito browser context", "scope", scopeKey)
 	return incognito, nil
 }
 
@@ -278,15 +290,23 @@ func (m *Manager) Status() *StatusInfo {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	info := &StatusInfo{
+		Running:         m.browser != nil,
+		Headless:        m.headless,
+		RemoteURL:       m.remoteURL,
+		ActionTimeoutMs: int(m.actionTimeout / time.Millisecond),
+		IdleTimeoutMs:   int(m.idleTimeout / time.Millisecond),
+		MaxPages:        m.maxPages,
+		IsolationMode:   "tenant_user_agent",
+		CookieSync:      m.cookieProvider != nil,
+	}
+
 	if m.browser == nil {
-		return &StatusInfo{Running: false}
+		return info
 	}
 
 	pages, _ := m.browser.Pages()
-	info := &StatusInfo{
-		Running: true,
-		Tabs:    len(pages),
-	}
+	info.Tabs = len(pages)
 	if len(pages) > 0 {
 		if pageInfo, err := pages[0].Info(); err == nil {
 			info.URL = pageInfo.URL
