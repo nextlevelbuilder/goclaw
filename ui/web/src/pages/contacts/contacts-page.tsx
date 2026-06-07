@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, Contact, Info, Merge, RefreshCw, Search, Unlink } from "lucide-react";
 import { useUiStore } from "@/stores/use-ui-store";
@@ -19,8 +19,11 @@ import { useMinLoading } from "@/hooks/use-min-loading";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import { useContacts } from "./hooks/use-contacts";
 import { useContactMerge } from "./hooks/use-contact-merge";
+import { useChannelInstances } from "../channels/hooks/use-channel-instances";
 import { MergeContactsDialog } from "./merge-contacts-dialog";
 import { ContactsTable } from "./contacts-table";
+import type { ChannelInstanceData } from "@/types/channel";
+import type { ChannelContact } from "@/types/contact";
 
 const CHANNEL_TYPES = ["telegram", "discord", "slack", "whatsapp", "zalo_oa", "zalo_personal", "feishu"];
 const PERM_CHANNELS = ["telegram", "discord", "zalo", "slack", "feishu"] as const;
@@ -51,6 +54,8 @@ export function ContactsPage() {
     offset: (page - 1) * pageSize,
   });
   const { unmerge } = useContactMerge();
+  const { instances: channelInstances, updateInstance } = useChannelInstances({ limit: 200 });
+  const [allowingIds, setAllowingIds] = useState<Set<string>>(new Set());
 
   const spinning = useMinLoading(fetching);
   const showSkeleton = useDeferredLoading(loading && contacts.length === 0);
@@ -104,6 +109,59 @@ export function ContactsPage() {
       setSelectedIds(new Set());
     } catch (err) {
       toast.error(t("merge.dialogTitle"), err instanceof Error ? err.message : t("merge.unmergeError"));
+    }
+  };
+
+  const findContactInstance = useCallback(
+    (contact: ChannelContact) => {
+      const candidates = channelInstances.filter((inst) => inst.channel_type === contact.channel_type);
+      if (contact.channel_instance) {
+        const matched = candidates.find(
+          (inst) => inst.name === contact.channel_instance || inst.display_name === contact.channel_instance,
+        );
+        if (matched) return matched;
+      }
+      return candidates.length === 1 ? candidates[0] : undefined;
+    },
+    [channelInstances],
+  );
+
+  const isContactAllowed = useCallback(
+    (contact: ChannelContact) => {
+      const inst = findContactInstance(contact);
+      if (!inst) return false;
+      return getAllowFrom(inst).includes(contact.sender_id);
+    },
+    [findContactInstance],
+  );
+
+  const handleAllowContact = async (contact: ChannelContact) => {
+    const inst = findContactInstance(contact);
+    if (!inst) {
+      toast.error(t("actions.allowFailed"), t("actions.noChannelInstance"));
+      return;
+    }
+
+    const allowFrom = getAllowFrom(inst);
+    if (allowFrom.includes(contact.sender_id)) return;
+
+    setAllowingIds((prev) => new Set(prev).add(contact.id));
+    try {
+      await updateInstance(inst.id, {
+        config: {
+          ...(inst.config ?? {}),
+          allow_from: [...allowFrom, contact.sender_id],
+        },
+      });
+      toast.success(t("actions.allowed"), t("actions.allowSuccess", { name: contact.display_name || contact.sender_id }));
+    } catch {
+      // updateInstance already shows the backend error.
+    } finally {
+      setAllowingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(contact.id);
+        return next;
+      });
     }
   };
 
@@ -201,6 +259,9 @@ export function ContactsPage() {
             page={page}
             pageSize={pageSize}
             totalPages={totalPages}
+            allowingIds={allowingIds}
+            isContactAllowed={isContactAllowed}
+            onAllowContact={handleAllowContact}
             onToggleSelect={toggleSelect}
             onToggleSelectAll={toggleSelectAll}
             onPageChange={setPage}
@@ -221,6 +282,17 @@ export function ContactsPage() {
       />
     </div>
   );
+}
+
+function getAllowFrom(inst: ChannelInstanceData): string[] {
+  const raw = inst.config?.allow_from;
+  if (Array.isArray(raw)) {
+    return raw.map((item) => String(item).trim()).filter(Boolean);
+  }
+  if (typeof raw === "string") {
+    return raw.split(/[\n,]/).map((item) => item.trim()).filter(Boolean);
+  }
+  return [];
 }
 
 function PermissionsNote() {

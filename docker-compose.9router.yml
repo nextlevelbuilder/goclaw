@@ -1,0 +1,68 @@
+# 9Router sidecar overlay — smart AI router with auto-fallback.
+# Connects GoClaw to 40+ AI providers (Claude, Gemini, GPT, etc.) for free.
+# See: https://github.com/decolua/9router
+#
+# Prerequisites — clone 9router next to this repo:
+#   git clone https://github.com/decolua/9router ../9router
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.9router.yml up -d --build
+#   # or: make up WITH_NINE_ROUTER=1
+#
+# Then open the 9router dashboard at http://localhost:20128 to:
+#   1. Connect a FREE provider (Claude Code, Gemini CLI, iFlow...)
+#   2. Copy the API key from the dashboard
+#   3. Set GOCLAW_NINE_ROUTER_API_KEY=<key> in your .env
+#
+# Required env vars:
+#   GOCLAW_NINE_ROUTER_API_KEY  — API key from the 9router dashboard
+#
+# Optional env vars:
+#   NINE_ROUTER_DIR             — path to the cloned 9router repo (default: ../9router)
+#   NINE_ROUTER_PORT            — host port for 9router dashboard (default: 20128)
+
+services:
+  nine-router:
+    build:
+      context: ${NINE_ROUTER_DIR:-../9router}
+      dockerfile: Dockerfile
+    image: nine-router:local
+    ports:
+      - "${NINE_ROUTER_PORT:-20128}:20128"
+    environment:
+      - PORT=20128
+      - HOSTNAME=0.0.0.0
+      - DATA_DIR=/app/data
+      # Allow GoClaw (on the same Docker network) to reach back for OAuth callbacks
+      - BASE_URL=${NINE_ROUTER_BASE_URL:-http://nine-router:20128}
+      - NEXT_PUBLIC_BASE_URL=${NINE_ROUTER_PUBLIC_URL:-http://localhost:20128}
+    volumes:
+      - nine-router-data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:20128/api/health 2>/dev/null || wget -qO- http://127.0.0.1:20128 -S --spider 2>&1 | grep -q 'HTTP/' && echo ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+    networks:
+      - goclaw-net
+    restart: unless-stopped
+
+  goclaw:
+    environment:
+      # The API key is generated from the 9router dashboard (http://localhost:20128).
+      # Set this in your .env file after connecting a provider in 9router.
+      - GOCLAW_NINE_ROUTER_API_KEY=${GOCLAW_NINE_ROUTER_API_KEY:-}
+      # GoClaw reaches 9router over the internal Docker network
+      - GOCLAW_NINE_ROUTER_BASE_URL=http://nine-router:20128/v1
+    depends_on:
+      nine-router:
+        condition: service_healthy
+
+volumes:
+  nine-router-data:

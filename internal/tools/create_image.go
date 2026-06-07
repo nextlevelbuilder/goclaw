@@ -119,6 +119,16 @@ func (t *CreateImageTool) Execute(ctx context.Context, args map[string]any) *Res
 		return ErrorResult(fmt.Sprintf("image generation failed: %v", err))
 	}
 
+	// Silent-failure guard: when input_images are passed, gpt-image-2 sometimes
+	// returns one of the inputs unchanged instead of applying the requested edit.
+	// Surface that as a tool error so the agent retries or asks for clarification
+	// instead of replying "Đây anh." with the customer's own image.
+	if err := verifyOutputDiffersFromInputs(chainResult.Data, inputImages, imageVerifyDefaultThreshold); err != nil {
+		slog.Warn("create_image: output verification failed",
+			"provider", chainResult.Provider, "model", chainResult.Model, "error", err)
+		return ErrorResult(err.Error())
+	}
+
 	// Embed prompt into PNG tEXt metadata before writing to disk.
 	// If embedding fails (malformed bytes, non-PNG) the original data is used unchanged.
 	imageData := embedPromptIntoPNG(chainResult.Data, prompt)

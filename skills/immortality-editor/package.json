@@ -1,0 +1,16 @@
+{
+  "name": "immortality-editor",
+  "version": "1.0.0",
+  "description": "Goclaw skill: fetch existing Khai Trí Q&A entries from immortality.vn Firestore back into editable markdown — pairs with immortality-publisher for the upsert write path",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "fetch": "node scripts/fetch.mjs"
+  },
+  "dependencies": {
+    "firebase": "^11.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

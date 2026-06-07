@@ -14,7 +14,17 @@
     "channelType": "Channel",
     "peerKind": "Type",
     "lastSeen": "Last Seen",
+    "actions": "Actions",
     "merged": "Merged"
+  },
+  "actions": {
+    "copySenderId": "Copy sender ID",
+    "allow": "Allow",
+    "allowed": "Allowed",
+    "allowZalo": "Add this Zalo sender ID to the channel allowlist",
+    "allowSuccess": "{{name}} can now message this Zalo channel.",
+    "allowFailed": "Could not update allowlist",
+    "noChannelInstance": "No matching Zalo channel instance was found for this contact."
   },
   "permissionsNote": {
     "title": "Channel permissions for contact names",

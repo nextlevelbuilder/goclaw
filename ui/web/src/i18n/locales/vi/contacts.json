@@ -14,7 +14,17 @@
     "channelType": "Channel",
     "peerKind": "Loại",
     "lastSeen": "Lần cuối",
+    "actions": "Thao tác",
     "merged": "Đã gộp"
+  },
+  "actions": {
+    "copySenderId": "Copy ID gửi",
+    "allow": "Cho phép",
+    "allowed": "Đã cho phép",
+    "allowZalo": "Thêm ID Zalo này vào allowlist của channel",
+    "allowSuccess": "{{name}} đã được phép nhắn vào Zalo channel này.",
+    "allowFailed": "Không cập nhật được allowlist",
+    "noChannelInstance": "Không tìm thấy Zalo channel instance phù hợp với liên hệ này."
   },
   "permissionsNote": {
     "title": "Quyền truy cập tên liên hệ theo channel",

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 )
 
 // GenerateImage implements NativeImageProvider for CodexProvider.
@@ -154,7 +155,33 @@ func parseNativeImageResponse(data []byte) (*NativeImageResult, error) {
 		}
 	}
 
+	// No image returned. The model produced only message/reasoning items —
+	// most commonly a refusal or a "here is what I would do" text response.
+	// Surface the assistant text so the upstream tool error tells the agent
+	// exactly why no image came back, instead of a generic "no image" error.
+	if msg := extractCodexAssistantText(resp.Output); msg != "" {
+		return nil, fmt.Errorf("codex native image: model returned text instead of image: %s", msg)
+	}
 	return nil, fmt.Errorf("codex native image: no image_generation_call in response output")
+}
+
+// extractCodexAssistantText concatenates any output_text content from message
+// items. Used to surface refusal/explanation text when the model declines to
+// generate an image. Returns an empty string when no message text is present.
+func extractCodexAssistantText(items []codexItem) string {
+	var parts []string
+	for i := range items {
+		item := &items[i]
+		if item.Type != "message" {
+			continue
+		}
+		for _, c := range item.Content {
+			if c.Type == "output_text" && c.Text != "" {
+				parts = append(parts, c.Text)
+			}
+		}
+	}
+	return strings.TrimSpace(strings.Join(parts, " "))
 }
 
 // parseNativeImageSSE parses SSE-streamed lines when the server unexpectedly returns
@@ -164,6 +191,11 @@ func parseNativeImageSSE(data []byte) (*NativeImageResult, error) {
 	var b64 string
 	var outputFormat string
 	var usage *Usage
+	// Track assistant text so we can surface a refusal/explanation when the
+	// stream ends without an image. Text arrives either as incremental deltas
+	// (response.output_text.delta) or in the completed item walk below.
+	var textDeltas []string
+	var completedText string
 
 	for line := range bytes.SplitSeq(data, []byte("\n")) {
 		if !bytes.HasPrefix(line, []byte("data: ")) {
@@ -185,6 +217,10 @@ func parseNativeImageSSE(data []byte) (*NativeImageResult, error) {
 				b64 = event.Item.Result
 				outputFormat = event.Item.OutputFormat
 			}
+		case "response.output_text.delta":
+			if event.Delta != "" {
+				textDeltas = append(textDeltas, event.Delta)
+			}
 		case "response.completed":
 			if event.Response != nil {
 				for i := range event.Response.Output {
@@ -202,11 +238,21 @@ func parseNativeImageSSE(data []byte) (*NativeImageResult, error) {
 						TotalTokens:      u.TotalTokens,
 					}
 				}
+				completedText = extractCodexAssistantText(event.Response.Output)
 			}
 		}
 	}
 
 	if b64 == "" {
+		// Prefer the text gathered from the completed response walk; fall back
+		// to concatenated deltas if the server didn't emit a final aggregate.
+		msg := completedText
+		if msg == "" {
+			msg = strings.TrimSpace(strings.Join(textDeltas, ""))
+		}
+		if msg != "" {
+			return nil, fmt.Errorf("codex native image: model returned text instead of image: %s", msg)
+		}
 		return nil, fmt.Errorf("codex native image: no image in SSE stream")
 	}
 

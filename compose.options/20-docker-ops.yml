@@ -1,0 +1,69 @@
+# Docker-ops overlay — cho phép agent (Tesla) quản lý Docker host an toàn.
+#
+# Dùng `tecnativa/docker-socket-proxy` làm lớp trung gian giữa goclaw
+# container và /var/run/docker.sock trên host, cộng với docker CLI được cài
+# sẵn trong goclaw image (ENABLE_SANDBOX=true).
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f compose.options/20-docker-ops.yml up -d --build
+#
+# SECURITY NOTES:
+#   - Proxy này bật MỌI endpoint (full quyền), gần tương đương mount sock trực tiếp
+#     về mặt bảo mật. Giá trị chính là có thể SIẾT sau này chỉ bằng cách đổi env
+#     var, không cần rebuild image.
+#   - Chặn các thao tác nguy hiểm (mount / vào container, exec vào container
+#     sensitive...) được thực hiện ở tầng AGENT (runbook DOCKER_OPS.md của Tesla),
+#     không phải ở proxy.
+#   - Nếu muốn siết xuống mức "chỉ xem": set POST=0, EXEC=0, BUILD=0.
+
+services:
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    container_name: goclaw-docker-proxy
+    restart: unless-stopped
+    environment:
+      # Full quyền — khớp với "scope docker full" đã chốt với user.
+      CONTAINERS: 1
+      IMAGES: 1
+      NETWORKS: 1
+      VOLUMES: 1
+      SERVICES: 1
+      TASKS: 1
+      NODES: 1
+      SWARM: 1
+      SYSTEM: 1
+      PLUGINS: 1
+      INFO: 1
+      VERSION: 1
+      BUILD: 1
+      COMMIT: 1
+      CONFIGS: 1
+      DISTRIBUTION: 1
+      EVENTS: 1
+      EXEC: 1
+      GRPC: 1
+      SECRETS: 1
+      SESSION: 1
+      POST: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - goclaw-net
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+          cpus: '0.2'
+
+  goclaw:
+    build:
+      args:
+        # ENABLE_SANDBOX=true khiến Dockerfile cài `docker-cli` vào image.
+        # Không bật sandbox mode thực sự — chỉ mượn flag để có binary docker.
+        ENABLE_SANDBOX: "true"
+    environment:
+      # Docker CLI trong goclaw sẽ gọi qua proxy thay vì đụng trực tiếp sock.
+      - DOCKER_HOST=tcp://docker-proxy:2375
+    depends_on:
+      docker-proxy:
+        condition: service_started

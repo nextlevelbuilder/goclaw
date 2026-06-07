@@ -25,6 +25,17 @@ goclaw
 prompt.md
 *.bk.*
 
+# Publisher skills (npm deps)
+skills/*/node_modules/
+
+# Inbox — runtime drop zone for publishers (immortality-publisher, fly0-publisher, etc.)
+# Content is transient: dropped → processed → moved to _done/. Not source-controlled.
+inbox/
+
+# Chrome profiles — real browser profiles with cookies, login data, sessions.
+# Sensitive + large (100s of MB). Never source-controlled.
+chrome-profiles/
+
 # UI Web (React SPA)
 ui/web/node_modules/
 ui/web/dist/
