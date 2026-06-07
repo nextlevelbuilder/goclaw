@@ -173,6 +173,15 @@ func (l *Loop) ProviderName() string {
 	return l.provider.Name()
 }
 
+// toolDefinitionName returns the function tool name, or empty for native provider tools
+// (e.g. image_generation) whose Function field is nil per providers.ToolDefinition.
+func toolDefinitionName(td providers.ToolDefinition) string {
+	if td.Function != nil {
+		return td.Function.Name
+	}
+	return ""
+}
+
 // uniquifyToolCallIDs ensures all tool call IDs are globally unique across the
 // transcript by hashing the original ID with run-ID, iteration, and index.
 // Returns a new slice (does not mutate the input).

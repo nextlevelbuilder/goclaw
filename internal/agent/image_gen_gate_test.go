@@ -9,8 +9,10 @@ package agent
 // Additionally: final-iteration stripping takes priority — all tools removed.
 
 import (
+	"context"
 	"testing"
 
+	"github.com/nextlevelbuilder/goclaw/internal/pipeline"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
 
@@ -113,5 +115,26 @@ func TestImageGenGate_FinalIteration_AllToolsStripped(t *testing.T) {
 
 	if len(defs) != 0 {
 		t.Errorf("final iteration must strip all tools; got %d: %v", len(defs), defs)
+	}
+}
+
+// Regression: imageGenToolDef has Function=nil; makeBuildFilteredTools must not panic
+// when counting MCP tools after injection (loop_pipeline_callbacks.go).
+func TestMakeBuildFilteredTools_WithImageGen_NoPanic(t *testing.T) {
+	t.Parallel()
+	prov := &imageCapableProvider{imageGen: true}
+	l := buildImageGenLoop(true, prov)
+	cb := l.makeBuildFilteredTools(&RunRequest{ChannelType: "facebook"})
+	state := &pipeline.RunState{
+		Input:    &pipeline.RunInput{UserID: "u1", ChannelType: "facebook"},
+		Messages: pipeline.NewMessageBuffer(providers.Message{}),
+		Ctx:      context.Background(),
+	}
+	defs, err := cb(state)
+	if err != nil {
+		t.Fatalf("makeBuildFilteredTools: %v", err)
+	}
+	if !hasImageGenTool(defs) {
+		t.Fatal("expected image_generation tool in filtered defs")
 	}
 }
