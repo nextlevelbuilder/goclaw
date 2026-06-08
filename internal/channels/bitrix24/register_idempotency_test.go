@@ -88,11 +88,11 @@ func TestRegisterBot_Path1_CachedBotIDStillValid_NoRegisterCall(t *testing.T) {
 			w.WriteHeader(http.StatusInternalServerError)
 			_, _ = w.Write([]byte(`{"error":"should_not_be_called"}`))
 		},
-		"imbot.bot.list": func(w http.ResponseWriter, r *http.Request) {
+		"imbot.v2.Bot.list": func(w http.ResponseWriter, r *http.Request) {
 			atomic.AddInt32(&listHits, 1)
 			w.Header().Set("Content-Type", "application/json")
 			// Bot 42 still present on portal → verifyBot returns true.
-			_, _ = w.Write([]byte(`{"result":[{"BOT_ID":42,"CODE":"support_bot"}]}`))
+			_, _ = w.Write([]byte(`{"result":{"bots":[{"id":42,"code":"support_bot"}],"users":[],"hasNextPage":false}}`))
 		},
 	}
 	srv := httptest.NewServer(h)
@@ -133,10 +133,10 @@ func TestRegisterBot_Path1_CachedBotIDMissing_FallsThroughToRegister(t *testing.
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"result":777}`))
 		},
-		"imbot.bot.list": func(w http.ResponseWriter, r *http.Request) {
+		"imbot.v2.Bot.list": func(w http.ResponseWriter, r *http.Request) {
 			// Cached bot 42 is NOT in the portal's list → verifyBot returns false.
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"result":[{"BOT_ID":99,"CODE":"other_bot"}]}`))
+			_, _ = w.Write([]byte(`{"result":{"bots":[{"id":99,"code":"other_bot"}]}}`))
 		},
 	}
 	srv := httptest.NewServer(h)
@@ -179,10 +179,10 @@ func TestRegisterBot_Path2_FreshRegisterSucceeds(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"result":{"BOT_ID":555}}`))
 		},
-		"imbot.bot.list": func(w http.ResponseWriter, r *http.Request) {
+		"imbot.v2.Bot.list": func(w http.ResponseWriter, r *http.Request) {
 			atomic.AddInt32(&listHits, 1)
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"result":[]}`))
+			_, _ = w.Write([]byte(`{"result":{"bots":[]}}`))
 		},
 	}
 	srv := httptest.NewServer(h)
@@ -226,13 +226,13 @@ func TestRegisterBot_Path3_DuplicateCode_ResolvesViaList(t *testing.T) {
 				"error_description":"Bot code already exists on portal"
 			}`))
 		},
-		"imbot.bot.list": func(w http.ResponseWriter, r *http.Request) {
+		"imbot.v2.Bot.list": func(w http.ResponseWriter, r *http.Request) {
 			atomic.AddInt32(&listHits, 1)
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"result":[
-				{"BOT_ID":888,"CODE":"support_bot"},
-				{"BOT_ID":999,"CODE":"other"}
-			]}`))
+			_, _ = w.Write([]byte(`{"result":{"bots":[
+				{"id":888,"code":"support_bot"},
+				{"id":999,"code":"other"}
+			]}}`))
 		},
 	}
 	srv := httptest.NewServer(h)
@@ -266,11 +266,11 @@ func TestRegisterBot_Path3_DuplicateCode_NotInList_Errors(t *testing.T) {
 				"error_description":"duplicate bot code"
 			}`))
 		},
-		"imbot.bot.list": func(w http.ResponseWriter, r *http.Request) {
+		"imbot.v2.Bot.list": func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			// None of these match "support_bot" → fallback should fail with a
 			// clear "no bot with CODE" error rather than returning 0 success.
-			_, _ = w.Write([]byte(`{"result":[{"BOT_ID":1,"CODE":"nope"}]}`))
+			_, _ = w.Write([]byte(`{"result":{"bots":[{"id":1,"code":"nope"}]}}`))
 		},
 	}
 	srv := httptest.NewServer(h)
@@ -291,7 +291,11 @@ func TestRegisterBot_Path3_DuplicateCode_NotInList_Errors(t *testing.T) {
 	}
 }
 
-func TestRegisterBot_Path3_BothListEndpointsFail_JoinsErrors(t *testing.T) {
+// TestRegisterBot_Path3_ListFails_SurfacesError covers the duplicate-code
+// fallback when the bot-list lookup itself fails. After the v2 migration there
+// is a single list endpoint (imbot.v2.Bot.list) — its error must surface
+// directly (no more dual-endpoint errors.Join).
+func TestRegisterBot_Path3_ListFails_SurfacesError(t *testing.T) {
 	h := restHandler{
 		"imbot.register": func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
@@ -301,15 +305,10 @@ func TestRegisterBot_Path3_BothListEndpointsFail_JoinsErrors(t *testing.T) {
 				"error_description":"bot code already exists"
 			}`))
 		},
-		"imbot.bot.list": func(w http.ResponseWriter, r *http.Request) {
+		"imbot.v2.Bot.list": func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
-			_, _ = w.Write([]byte(`{"error":"LIST_OUTAGE","error_description":"primary endpoint down"}`))
-		},
-		"imbot.list": func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusInternalServerError)
-			_, _ = w.Write([]byte(`{"error":"ALT_OUTAGE","error_description":"alt endpoint also down"}`))
+			_, _ = w.Write([]byte(`{"error":"LIST_OUTAGE","error_description":"endpoint down"}`))
 		},
 	}
 	srv := httptest.NewServer(h)
@@ -323,16 +322,10 @@ func TestRegisterBot_Path3_BothListEndpointsFail_JoinsErrors(t *testing.T) {
 
 	_, err := ch.registerBot(context.Background())
 	if err == nil {
-		t.Fatal("expected error when both list endpoints fail")
+		t.Fatal("expected error when the bot-list lookup fails")
 	}
-	msg := err.Error()
-	// Both underlying error codes should be visible in the joined error so
-	// operators can see we tried the fallback and both sides failed.
-	if !strings.Contains(msg, "LIST_OUTAGE") {
-		t.Errorf("primary error not surfaced: %s", msg)
-	}
-	if !strings.Contains(msg, "ALT_OUTAGE") {
-		t.Errorf("alt error not surfaced (errors.Join missing): %s", msg)
+	if msg := err.Error(); !strings.Contains(msg, "LIST_OUTAGE") {
+		t.Errorf("list error not surfaced: %s", msg)
 	}
 }
 
@@ -417,7 +410,7 @@ func TestEventHandlerURL_FallsBackToLegacyConfig(t *testing.T) {
 func TestUnregisterBot_Success(t *testing.T) {
 	var calls int32
 	h := restHandler{
-		"imbot.unregister": func(w http.ResponseWriter, r *http.Request) {
+		"imbot.v2.Bot.unregister": func(w http.ResponseWriter, r *http.Request) {
 			atomic.AddInt32(&calls, 1)
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"result":true}`))
@@ -442,7 +435,7 @@ func TestUnregisterBot_Success(t *testing.T) {
 // "bot not found" (because admin already deleted via UI) is treated as success.
 func TestUnregisterBot_BotNotFound(t *testing.T) {
 	h := restHandler{
-		"imbot.unregister": func(w http.ResponseWriter, r *http.Request) {
+		"imbot.v2.Bot.unregister": func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
 			_, _ = w.Write([]byte(`{"error":"ERROR_BOT_NOT_FOUND","error_description":"Bot not found on this portal"}`))
 		},
@@ -463,7 +456,7 @@ func TestUnregisterBot_BotNotFound(t *testing.T) {
 // caller can log a warn and move on — must NOT be swallowed.
 func TestUnregisterBot_TransportError(t *testing.T) {
 	h := restHandler{
-		"imbot.unregister": func(w http.ResponseWriter, r *http.Request) {
+		"imbot.v2.Bot.unregister": func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			_, _ = w.Write([]byte(`{"error":"INTERNAL","error_description":"portal went away"}`))
 		},
@@ -485,7 +478,7 @@ func TestUnregisterBot_TransportError(t *testing.T) {
 func TestUnregisterBot_ZeroBotID(t *testing.T) {
 	var calls int32
 	h := restHandler{
-		"imbot.unregister": func(w http.ResponseWriter, r *http.Request) {
+		"imbot.v2.Bot.unregister": func(w http.ResponseWriter, r *http.Request) {
 			atomic.AddInt32(&calls, 1)
 			_, _ = w.Write([]byte(`{"result":true}`))
 		},
@@ -510,7 +503,7 @@ func TestUnregisterBot_ZeroBotID(t *testing.T) {
 func TestDestroy_FullFlow(t *testing.T) {
 	var unregCalls int32
 	h := restHandler{
-		"imbot.unregister": func(w http.ResponseWriter, r *http.Request) {
+		"imbot.v2.Bot.unregister": func(w http.ResponseWriter, r *http.Request) {
 			atomic.AddInt32(&unregCalls, 1)
 			_, _ = w.Write([]byte(`{"result":true}`))
 		},
@@ -550,7 +543,7 @@ func TestDestroy_FullFlow(t *testing.T) {
 func TestDestroy_BotIDZero(t *testing.T) {
 	var unregCalls int32
 	h := restHandler{
-		"imbot.unregister": func(w http.ResponseWriter, r *http.Request) {
+		"imbot.v2.Bot.unregister": func(w http.ResponseWriter, r *http.Request) {
 			atomic.AddInt32(&unregCalls, 1)
 		},
 	}
@@ -576,7 +569,7 @@ func TestDestroy_BotIDZero(t *testing.T) {
 // local channel is stopped — DB delete upstream must not be blocked.
 func TestDestroy_UnregisterFailureProceedsToCleanup(t *testing.T) {
 	h := restHandler{
-		"imbot.unregister": func(w http.ResponseWriter, r *http.Request) {
+		"imbot.v2.Bot.unregister": func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			_, _ = w.Write([]byte(`{"error":"INTERNAL","error_description":"portal 5xx"}`))
 		},

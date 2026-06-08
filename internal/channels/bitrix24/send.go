@@ -117,14 +117,17 @@ func (c *Channel) sendChunk(ctx context.Context, chatID, chunk string) error {
 		return errors.New("bitrix24: channel lost during send")
 	}
 
+	// imbot.v2.Chat.Message.send: nested `fields.message` shape (verified live).
+	// Non-system message → omit fields.system (defaults to false).
 	params := map[string]any{
-		"BOT_ID":    botID,
-		"DIALOG_ID": chatID,
-		"MESSAGE":   chunk,
-		"SYSTEM":    "N",
+		"botId":    botID,
+		"dialogId": chatID,
+		"fields": map[string]any{
+			"message": chunk,
+		},
 	}
 
-	_, err := client.Call(ctx, "imbot.message.add", params)
+	_, err := client.Call(ctx, "imbot.v2.Chat.Message.send", params)
 	if err == nil {
 		return nil
 	}
@@ -143,7 +146,7 @@ func (c *Channel) sendChunk(ctx context.Context, chatID, chunk string) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
-	_, err = client.Call(ctx, "imbot.message.add", params)
+	_, err = client.Call(ctx, "imbot.v2.Chat.Message.send", params)
 	return err
 }
 

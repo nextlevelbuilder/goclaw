@@ -68,11 +68,11 @@ func DestroyOrphanBot(
 		return nil // no bot was ever registered for this code
 	}
 
-	if _, callErr := portal.Client().Call(ctx, "imbot.unregister", map[string]any{
-		"BOT_ID": botID,
+	if _, callErr := portal.Client().Call(ctx, "imbot.v2.Bot.unregister", map[string]any{
+		"botId": botID,
 	}); callErr != nil {
 		if !isBotNotFoundError(callErr) {
-			slog.Warn("bitrix24 orphan destroy: imbot.unregister failed",
+			slog.Warn("bitrix24 orphan destroy: imbot.v2.Bot.unregister failed",
 				"tenant", tenantID, "portal", cfg.Portal,
 				"bot_code", cfg.BotCode, "bot_id", botID, "err", callErr)
 		} else {

@@ -4,6 +4,16 @@ All notable changes to GoClaw are documented here. For full documentation, see [
 
 ## Unreleased
 
+### Changed
+
+- **Bitrix24 channel migrated to imbot v2 messaging API** — outbound text now uses
+  `imbot.v2.Chat.Message.send` (replacing `imbot.message.add`); bot verification/lookup
+  uses `imbot.v2.Bot.list` (replacing `imbot.bot.list` + the legacy `imbot.list` fallback);
+  bot teardown uses `imbot.v2.Bot.unregister` (replacing `imbot.unregister`). Bot
+  registration intentionally stays on v1 `imbot.register` — v2 `imbot.v2.Bot.register`
+  changes the event-delivery model (per-event handler URLs → `eventMode`), which would
+  require rewriting the inbound event parser. No user-facing behavior change.
+
 ### Added
 
 - **Behavior UX sidecar delivery overrides** — Adds sidecar-generated Quick

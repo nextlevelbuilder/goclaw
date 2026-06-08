@@ -282,11 +282,10 @@ func (c *Channel) handleJoin(ctx context.Context, evt *Event) {
 		return
 	}
 	welcome := fmt.Sprintf("Xin chào! Tôi là %s. Hãy hỏi tôi bất cứ điều gì.", c.cfg.BotName)
-	if _, err := client.Call(ctx, "imbot.message.add", map[string]any{
-		"BOT_ID":    botID,
-		"DIALOG_ID": evt.Params.DialogID,
-		"MESSAGE":   welcome,
-		"SYSTEM":    "N",
+	if _, err := client.Call(ctx, "imbot.v2.Chat.Message.send", map[string]any{
+		"botId":    botID,
+		"dialogId": evt.Params.DialogID,
+		"fields":   map[string]any{"message": welcome},
 	}); err != nil {
 		slog.Warn("bitrix24: welcome message send failed",
 			"dialog_id", evt.Params.DialogID, "err", err)
