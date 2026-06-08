@@ -234,22 +234,22 @@ flowchart TD
 
 ## 4. Channel Comparison
 
-| Feature | Telegram | Feishu/Lark | Discord | Slack | WhatsApp | Zalo OA | Zalo Personal |
-|---------|----------|-------------|---------|-------|----------|---------|---------------|
-| Connection | Long polling | WS (default) / Webhook | Gateway events | Socket Mode | Direct protocol (in-process) | Long polling | Internal protocol |
-| DM support | Yes | Yes | Yes | Yes | Yes | Yes (DM only) | Yes |
-| Group support | Yes (mention gating) | Yes | Yes | Yes (mention gating + thread cache) | Yes | No | Yes |
-| Forum/Topics | Yes (per-topic config) | Yes (topic session mode) | -- | -- | -- | -- | -- |
-| Message limit | 4,096 chars | Configurable (default 4,000) | 2,000 chars | 4,000 chars | WhatsApp native limit | 2,000 chars | 2,000 chars |
-| Streaming | Typing indicator | Streaming message cards | Edit "Thinking..." | Edit "Thinking..." (throttled 1s) | No | No | No |
-| Media | Photos, voice, files | Images, files (30 MB) | Files, embeds | Files (download w/ SSRF protection) | Images, audio, video, documents | Images (5 MB) | -- |
-| Speech-to-text | Yes (STT proxy) | -- | -- | -- | -- | -- | -- |
-| Voice routing | Yes (VoiceAgentID) | -- | -- | -- | -- | -- | -- |
-| Rich formatting | Markdown → HTML | Card messages | Markdown | Markdown → mrkdwn | Plain text | Plain text | Plain text |
-| Bot commands | 10+ commands | -- | -- | -- | -- | -- | -- |
-| Tool allow list | Per-topic | -- | -- | -- | -- | -- | -- |
-| Pairing support | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| Status reactions | Yes | Yes | -- | Yes | -- | -- | -- |
+| Feature | Telegram | Feishu/Lark | Discord | Slack | WhatsApp | Zalo OA | Zalo Personal | Bitrix24 |
+|---------|----------|-------------|---------|-------|----------|---------|---------------|----------|
+| Connection | Long polling | WS (default) / Webhook | Gateway events | Socket Mode | Direct protocol (in-process) | Long polling | Internal protocol | Long polling (REST) |
+| DM support | Yes | Yes | Yes | Yes | Yes | Yes (DM only) | Yes | Yes |
+| Group support | Yes (mention gating) | Yes | Yes | Yes (mention gating + thread cache) | Yes | No | Yes | Yes |
+| Forum/Topics | Yes (per-topic config) | Yes (topic session mode) | -- | -- | -- | -- | -- | -- |
+| Message limit | 4,096 chars | Configurable (default 4,000) | 2,000 chars | 4,000 chars | WhatsApp native limit | 2,000 chars | 2,000 chars | 4,096 chars |
+| Streaming | Typing indicator | Streaming message cards | Edit "Thinking..." | Edit "Thinking..." (throttled 1s) | No | No | No | No |
+| Media | Photos, voice, files | Images, files (30 MB) | Files, embeds | Files (download w/ SSRF protection) | Images, audio, video, documents | Images (5 MB) | -- | Files (20 MB default) |
+| Speech-to-text | Yes (STT proxy) | -- | -- | -- | -- | -- | -- | -- |
+| Voice routing | Yes (VoiceAgentID) | -- | -- | -- | -- | -- | -- | -- |
+| Rich formatting | Markdown → HTML | Card messages | Markdown | Markdown → mrkdwn | Plain text | Plain text | Plain text | Plain text |
+| Bot commands | 10+ commands | -- | -- | -- | -- | -- | -- | -- |
+| Tool allow list | Per-topic | -- | -- | -- | -- | -- | -- | -- |
+| Pairing support | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| Status reactions | Yes | Yes | -- | Yes | -- | -- | -- | -- |
 
 ---
 
@@ -781,12 +781,53 @@ flowchart TD
 
 ---
 
+## 16. Bitrix24
+
+The Bitrix24 channel connects to a Bitrix24 portal via the `imbot.v2.*` REST API. Authentication uses an app token with `imbot` scope.
+
+### Key Behaviors
+
+- **Text limit**: 4,096 characters per message with automatic splitting at newlines
+- **Media support**: Both inbound and outbound file transfers with MIME preservation
+- **Default DM policy**: `"pairing"` (requires pairing code)
+- **Pairing debounce**: 60-second debounce on pairing instructions
+- **Media max size**: Configurable `media_max_mb` (default 20 MB) applies symmetrically to inbound downloads and outbound uploads
+
+### Inbound Media
+
+When a user sends a file to the bot:
+1. Resolve file metadata via `imbot.v2.File.download` → obtain one-time authenticated download URL
+2. Stream file to temp directory, preserving MIME type
+3. Forward to agent via `bus.MediaFile` with original filename
+4. Agent pipeline routes to appropriate reader (`read_image`, `read_document`, `read_audio`, `read_video`)
+
+**Configuration**: Size cap via `media_max_mb` (per `channel_instance` or config default). Oversized files are silently skipped (best-effort).
+
+### Outbound Media
+
+Agent-produced media files are uploaded to the chat via `imbot.v2.File.upload`:
+1. Read file from workspace
+2. Encode as base64
+3. POST to `imbot.v2.File.upload` with bot ID and chat ID
+4. Upload succeeds atomically: file is stored in portal Drive, attached to chat, and posted in a single REST call
+
+**Configuration**: Size cap via same `media_max_mb` knob (symmetric with inbound).
+
+### OAuth Scope
+
+The bot app must have the `imbot` scope granted. The `disk` scope is **not** required — all file operations are scoped to the message thread context.
+
+**Implementation**: `internal/channels/bitrix24/download.go` (inbound), `send_media.go` (outbound). New `BaseChannel.HandleMessageMedia()` method (in `internal/channels/channel.go`) centralizes media-aware message handling across all channels.
+
+---
+
 ## File Reference
 
 | Module | Path | Purpose |
 |---|---|---|
-| Channel core | `internal/channels/` | `Channel` interface, `BaseChannel`, `Manager` (StartAll/StopAll), outbound dispatcher, DB instance loader |
-| Platform adapters | `internal/channels/{telegram,feishu,discord,slack,whatsapp,zalo}/` | Per-platform: message handling, formatting, streaming, reactions, media, pairing |
+| Channel core | `internal/channels/` | `Channel` interface, `BaseChannel` (incl. `HandleMessageMedia()` method), `Manager` (StartAll/StopAll), outbound dispatcher, DB instance loader |
+| Platform adapters | `internal/channels/{telegram,feishu,discord,slack,whatsapp,zalo,bitrix24}/` | Per-platform: message handling, formatting, streaming, reactions, media, pairing |
+| Bitrix24 media | `internal/channels/bitrix24/download.go`, `send_media.go` | Inbound file download via `imbot.v2.File.download`, outbound upload via `imbot.v2.File.upload` |
 | Audio / STT | `internal/audio/` | Audio manager, STT chain resolution, legacy STT bridge |
 | Pairing & routing | `internal/store/pg/pairing.go`, `cmd/gateway_consumer.go` | Pairing code persistence, inbound message routing and cancel interception |
 
