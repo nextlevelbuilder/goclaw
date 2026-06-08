@@ -57,6 +57,7 @@ func (l *Loop) pipelineCallbacks(req *RunRequest, bridgeRS *runState) pipelineCa
 		executeToolCall:    l.makeExecuteToolCall(req, bridgeRS),
 		executeToolRaw:     l.makeExecuteToolRaw(req),
 		processToolResult:  l.makeProcessToolResult(req, bridgeRS),
+		authorizeToolCall:  l.makeAuthorizeToolCall(),
 		checkReadOnly:      l.makeCheckReadOnly(req, bridgeRS),
 		sanitizeContent:    SanitizeAssistantContent,
 		flushMessages:      l.makeFlushMessages(req),
@@ -85,6 +86,7 @@ type pipelineCallbackSet struct {
 	executeToolCall    func(ctx context.Context, state *pipeline.RunState, tc providers.ToolCall) ([]providers.Message, error)
 	executeToolRaw     func(ctx context.Context, tc providers.ToolCall) (providers.Message, any, error)
 	processToolResult  func(ctx context.Context, state *pipeline.RunState, tc providers.ToolCall, rawMsg providers.Message, rawData any) []providers.Message
+	authorizeToolCall  func(ctx context.Context, state *pipeline.RunState, tc providers.ToolCall) (bool, string)
 	checkReadOnly      func(state *pipeline.RunState) (*providers.Message, bool)
 	sanitizeContent    func(string) string
 	flushMessages      func(ctx context.Context, sessionKey string, msgs []providers.Message) error
@@ -246,6 +248,44 @@ func (l *Loop) makeBuildFilteredTools(req *RunRequest) func(state *pipeline.RunS
 			"mcp_defs_count", mcpDefs,
 			"iteration", state.Iteration)
 		return toolDefs, nil
+	}
+}
+
+// makeAuthorizeToolCall enforces a runtime fail-closed allowlist check before
+// every tool execution. AllowedTools is keyed by canonical registry names (built
+// by ThinkStage from FilterTools output). The model may emit prefixed names when
+// the agent has toolCallPrefix configured (e.g. "proxy_exec" → canonical "exec"),
+// so we resolve the name to its canonical form before the lookup to avoid a
+// guaranteed miss on every prefixed call.
+func (l *Loop) makeAuthorizeToolCall() func(ctx context.Context, state *pipeline.RunState, tc providers.ToolCall) (bool, string) {
+	return func(_ context.Context, state *pipeline.RunState, tc providers.ToolCall) (bool, string) {
+		allowed := state.Tool.AllowedTools
+		if allowed == nil {
+			// nil allowlist means no per-iteration restriction (e.g. BuildFilteredTools not wired).
+			return true, ""
+		}
+
+		// Resolve to canonical name before allowlist lookup. AllowedTools is keyed
+		// by canonical names; the model may emit prefixed names when toolCallPrefix
+		// is set (e.g. "proxy_exec" vs "exec"). Without this the lookup always misses.
+		name := l.resolveToolCallName(tc.Name)
+
+		if allowed[name] {
+			return true, ""
+		}
+
+		// Preserve lazy activation for deferred tools (typically per-user MCP).
+		if l.tools != nil && l.tools.TryActivateDeferred(name) {
+			// Re-check deny policy to prevent a lazy-activated tool from bypassing
+			// an explicit deny rule.
+			if l.toolPolicy != nil && l.toolPolicy.IsDenied(name, l.agentToolPolicy) {
+				return false, "tool not allowed by policy: " + name
+			}
+			allowed[name] = true
+			return true, ""
+		}
+
+		return false, "tool not allowed by policy: " + name
 	}
 }
 

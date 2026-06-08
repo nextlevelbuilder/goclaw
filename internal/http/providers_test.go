@@ -298,6 +298,79 @@ func TestProvidersHandlerCreateAllows1536EmbeddingDimensions(t *testing.T) {
 	}
 }
 
+func TestProvidersHandlerCreateAllowsClaudeCLIExecutablePath(t *testing.T) {
+	token := setupProvidersAdminToken(t)
+	providerStore := newMockProviderStore()
+	handler := NewProvidersHandler(providerStore, newMockSecretsStore(), nil, "")
+	mux := http.NewServeMux()
+	handler.RegisterRoutes(mux)
+
+	body := map[string]any{
+		"name":          "claude-local",
+		"provider_type": store.ProviderClaudeCLI,
+		"api_base":      writeFakeClaudeBinary(t),
+		"enabled":       true,
+	}
+	rawBody, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/providers", bytes.NewReader(rawBody))
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status code = %d, want %d, body=%s", w.Code, http.StatusCreated, w.Body.String())
+	}
+	if got := providerStore.providers["claude-local"].APIBase; got == "" || !filepath.IsAbs(got) {
+		t.Fatalf("stored Claude CLI api_base = %q, want absolute executable path", got)
+	}
+}
+
+func TestProvidersHandlerUpdateAllowsClaudeCLIExecutablePath(t *testing.T) {
+	token := setupProvidersAdminToken(t)
+	providerStore := newMockProviderStore()
+	provider := &store.LLMProviderData{
+		BaseModel:    store.BaseModel{ID: uuid.New()},
+		Name:         "claude-local",
+		ProviderType: store.ProviderClaudeCLI,
+		APIBase:      "claude",
+		Enabled:      true,
+	}
+	if err := providerStore.CreateProvider(context.Background(), provider); err != nil {
+		t.Fatalf("CreateProvider() error = %v", err)
+	}
+
+	handler := NewProvidersHandler(providerStore, newMockSecretsStore(), nil, "")
+	mux := http.NewServeMux()
+	handler.RegisterRoutes(mux)
+
+	nextPath := writeFakeClaudeBinary(t)
+	body := map[string]any{"api_base": nextPath}
+	rawBody, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPut, "/v1/providers/"+provider.ID.String(), bytes.NewReader(rawBody))
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	current, err := providerStore.GetProvider(context.Background(), provider.ID)
+	if err != nil {
+		t.Fatalf("GetProvider() error = %v", err)
+	}
+	if current.APIBase != nextPath {
+		t.Fatalf("api_base = %q, want %q", current.APIBase, nextPath)
+	}
+}
+
 func TestProvidersHandlerUpdateRejectsIncompatibleEmbeddingDimensions(t *testing.T) {
 	token := setupProvidersAdminToken(t)
 	providerStore := newMockProviderStore()

@@ -141,6 +141,7 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 		ExecuteToolCall:   cb.executeToolCall,
 		ExecuteToolRaw:    cb.executeToolRaw,
 		ProcessToolResult: cb.processToolResult,
+		AuthorizeToolCall: cb.authorizeToolCall,
 		SequentialToolCall: func(tc providers.ToolCall) bool {
 			return l.resolveToolCallName(tc.Name) == "wait"
 		},

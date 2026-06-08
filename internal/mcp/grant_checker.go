@@ -46,6 +46,8 @@ type storeGrantChecker struct {
 	cache sync.Map // map[cacheKey]*cacheEntry
 }
 
+const grantCheckerCacheSubscriberID = bus.TopicCacheMCP + ":grant_checker"
+
 // NewStoreGrantChecker creates a GrantChecker backed by the MCP store.
 // Subscribes to TopicCacheMCP for cache invalidation on grant changes.
 func NewStoreGrantChecker(mcpStore store.MCPServerStore, msgBus *bus.MessageBus) *storeGrantChecker {
@@ -56,7 +58,7 @@ func NewStoreGrantChecker(mcpStore store.MCPServerStore, msgBus *bus.MessageBus)
 	// Subscribe to cache invalidation events.
 	// When MCP grants are revoked/modified, the HTTP handler broadcasts to this topic.
 	if msgBus != nil {
-		msgBus.Subscribe(bus.TopicCacheMCP, func(event bus.Event) {
+		msgBus.Subscribe(grantCheckerCacheSubscriberID, func(event bus.Event) {
 			if event.Name == protocol.EventCacheInvalidate {
 				gc.cache.Clear()
 				slog.Debug("mcp.grant_checker.cache_cleared", "trigger", "bus_event")

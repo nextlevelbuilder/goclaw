@@ -5,12 +5,14 @@ import (
 	"testing"
 
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/pipeline"
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
 // mockExecTool is a simple tool that records whether it was executed.
 type mockExecTool struct {
-	name    string
+	name     string
 	executed bool
 }
 
@@ -24,13 +26,16 @@ func (m *mockExecTool) Execute(_ context.Context, _ map[string]any) *tools.Resul
 	return tools.NewResult("ok from " + m.name)
 }
 
-// simulateLazyActivationCheck mimics the allowedTools check from loop.go for one tool call:
+// simulateLazyActivationCheck mimics the runtime authorize gate from
+// makeAuthorizeToolCall (loop_pipeline_callbacks.go) for one tool call.
+// The real gate is a PipelineDeps.AuthorizeToolCall callback invoked by ToolStage;
+// this helper exercises the same logic in isolation so tests stay unit-level.
 //
-//	if allowedTools != nil && !allowedTools[tc.Name] {
-//	    if l.tools.TryActivateDeferred(tc.Name) { allowedTools[tc.Name] = true }
+//	if allowed != nil && !allowed[name] {
+//	    if reg.TryActivateDeferred(name) { allowed[name] = true }
 //	    else { result = ErrorResult(...) }
 //	}
-//	if result == nil { result = l.tools.ExecuteWithContext(...) }
+//	if result == nil { result = reg.ExecuteWithContext(...) }
 //
 // Returns (result, blocked).
 func simulateLazyActivationCheck(reg *tools.Registry, allowedTools map[string]bool, toolName string) (*tools.Result, bool) {
@@ -160,6 +165,24 @@ func TestLoop_LazyMCP_NilAllowedTools_AllowsAll(t *testing.T) {
 	}
 	if !tool.executed {
 		t.Error("tool should execute when allowedTools is nil")
+	}
+}
+
+func TestLoopAuthorizeToolCall_PrefixedNameCanonicalLookup(t *testing.T) {
+	loop := NewLoop(LoopConfig{
+		AgentToolPolicy: &config.ToolPolicySpec{ToolCallPrefix: "proxy_"},
+	})
+	gate := loop.makeAuthorizeToolCall()
+	state := &pipeline.RunState{}
+	state.Tool.AllowedTools = map[string]bool{"exec": true}
+
+	ok, reason := gate(context.Background(), state, providers.ToolCall{
+		ID:   "tc-proxy-exec",
+		Name: "proxy_exec",
+	})
+
+	if !ok {
+		t.Fatalf("prefixed tool call should resolve to canonical allowlist entry; reason: %q", reason)
 	}
 }
 

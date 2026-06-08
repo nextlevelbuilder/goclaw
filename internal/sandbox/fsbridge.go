@@ -80,8 +80,12 @@ func (b *FsBridge) WriteFile(ctx context.Context, path, content string, appendMo
 		}
 	}
 
-	ddArgs := fsBridgeWriteDDArgs(resolved, appendMode)
-	_, stderr, exitCode, err := b.dockerExec(ctx, []byte(content), ddArgs...)
+	// Write content via stdin without invoking a shell. Passing the resolved path
+	// as a discrete argv entry prevents shell metacharacters in filenames from
+	// being interpreted as commands inside the sandbox container.
+	// "--" terminates option parsing so paths starting with "-" are safe.
+	teeArgs := fsBridgeWriteTeeArgs(resolved, appendMode)
+	_, stderr, exitCode, err := b.dockerExec(ctx, []byte(content), teeArgs...)
 	if err != nil {
 		return fmt.Errorf("fsbridge write: %w", err)
 	}
@@ -92,11 +96,12 @@ func (b *FsBridge) WriteFile(ctx context.Context, path, content string, appendMo
 	return nil
 }
 
-func fsBridgeWriteDDArgs(resolved string, appendMode bool) []string {
-	args := []string{"dd", "bs=1048576", "status=none", "of=" + resolved}
+func fsBridgeWriteTeeArgs(resolved string, appendMode bool) []string {
+	args := []string{"tee"}
 	if appendMode {
-		args = append(args, "conv=notrunc", "oflag=append")
+		args = append(args, "-a")
 	}
+	args = append(args, "--", resolved)
 	return args
 }
 

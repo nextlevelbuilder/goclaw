@@ -64,6 +64,22 @@ func (s *ToolStage) Execute(ctx context.Context, state *RunState) error {
 			}
 		}
 
+		// Fail-closed authorization gate: reject calls not present in the
+		// per-iteration allowlist built by ThinkStage. Operates on the canonical
+		// (prefix-stripped) name so toolCallPrefix agents are handled correctly.
+		if s.deps.AuthorizeToolCall != nil {
+			if ok, reason := s.deps.AuthorizeToolCall(ctx, state, tc); !ok {
+				state.Messages.AppendPending(providers.Message{
+					Role:       "tool",
+					Content:    reason,
+					ToolCallID: tc.ID,
+					IsError:    true,
+				})
+				state.Tool.TotalToolCalls++
+				continue
+			}
+		}
+
 		// Hook: sync PreToolUse — block if hook denies. Builtin-source hooks may
 		// rewrite tc.Arguments via UpdatedToolInput (e.g. path-sanitizer); apply
 		// before ExecuteToolCall so the rewrite is authoritative.
@@ -179,10 +195,35 @@ func (s *ToolStage) executeParallel(ctx context.Context, state *RunState, toolCa
 		err     error
 	}
 
+	// Filter out unauthorized calls before dispatching parallel I/O.
+	// Keeps error messages deterministic (same order as toolCalls slice).
+	filteredCalls := make([]providers.ToolCall, 0, len(toolCalls))
+	for _, tc := range toolCalls {
+		if s.deps.AuthorizeToolCall != nil {
+			if ok, reason := s.deps.AuthorizeToolCall(ctx, state, tc); !ok {
+				state.Messages.AppendPending(providers.Message{
+					Role:       "tool",
+					Content:    reason,
+					ToolCallID: tc.ID,
+					IsError:    true,
+				})
+				state.Tool.TotalToolCalls++
+				continue
+			}
+		}
+		filteredCalls = append(filteredCalls, tc)
+	}
+	// When all calls were blocked, still run exit-condition checks (read-only
+	// streak, MaxToolCalls budget) for consistency with the sequential path.
+	if len(filteredCalls) == 0 {
+		s.checkExitConditions(state)
+		return nil
+	}
+
 	// Phase 1: parallel I/O (no state mutation)
-	results := make([]rawResult, len(toolCalls))
+	results := make([]rawResult, len(filteredCalls))
 	var wg sync.WaitGroup
-	for i, tc := range toolCalls {
+	for i, tc := range filteredCalls {
 		wg.Add(1)
 		go func(idx int, tc providers.ToolCall) {
 			defer wg.Done()

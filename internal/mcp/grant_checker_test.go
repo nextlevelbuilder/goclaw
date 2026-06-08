@@ -6,7 +6,9 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
 // mockMCPStore implements store.MCPServerStore for testing.
@@ -28,11 +30,13 @@ func (m *mockMCPStore) GetServer(ctx context.Context, id uuid.UUID) (*store.MCPS
 func (m *mockMCPStore) GetServerByName(ctx context.Context, name string) (*store.MCPServerData, error) {
 	return nil, nil
 }
-func (m *mockMCPStore) ListServers(ctx context.Context) ([]store.MCPServerData, error) { return nil, nil }
+func (m *mockMCPStore) ListServers(ctx context.Context) ([]store.MCPServerData, error) {
+	return nil, nil
+}
 func (m *mockMCPStore) UpdateServer(ctx context.Context, id uuid.UUID, updates map[string]any) error {
 	return nil
 }
-func (m *mockMCPStore) DeleteServer(ctx context.Context, id uuid.UUID) error        { return nil }
+func (m *mockMCPStore) DeleteServer(ctx context.Context, id uuid.UUID) error           { return nil }
 func (m *mockMCPStore) GrantToAgent(ctx context.Context, g *store.MCPAgentGrant) error { return nil }
 func (m *mockMCPStore) RevokeFromAgent(ctx context.Context, serverID, agentID uuid.UUID) error {
 	return nil
@@ -129,6 +133,60 @@ func TestStoreGrantChecker_InvalidateClearsCache(t *testing.T) {
 	gc.IsAllowed(ctx, agentID, userID, serverID, "tool")
 	if mockStore.callCount != 2 {
 		t.Errorf("expected 2 calls after invalidation, got %d", mockStore.callCount)
+	}
+}
+
+func TestStoreGrantChecker_BusInvalidationSurvivesOtherMCPSubscribers(t *testing.T) {
+	initialServerID := uuid.New()
+	newServerID := uuid.New()
+	agentID := uuid.New()
+	userID := "system"
+
+	mockStore := &mockMCPStore{
+		accessible: []store.MCPAccessInfo{
+			{Server: store.MCPServerData{BaseModel: store.BaseModel{ID: initialServerID}, Name: "initial-server"}},
+		},
+	}
+
+	msgBus := bus.New()
+	gc := NewStoreGrantChecker(mockStore, msgBus)
+	ctx := context.Background()
+
+	if allowed, reason := gc.IsAllowed(ctx, agentID, userID, initialServerID, "tool"); !allowed {
+		t.Fatalf("expected initial server allowed, reason=%q", reason)
+	}
+	if mockStore.callCount != 1 {
+		t.Fatalf("expected 1 DB call after warm cache, got %d", mockStore.callCount)
+	}
+
+	// The gateway also subscribes to MCP cache events. Subscriber IDs must be
+	// unique; otherwise this later subscription replaces the grant checker and
+	// its stale cache survives grant changes.
+	otherSubscriberCalled := false
+	msgBus.Subscribe(bus.TopicCacheMCP, func(event bus.Event) {
+		if event.Name == protocol.EventCacheInvalidate {
+			otherSubscriberCalled = true
+		}
+	})
+
+	mockStore.accessible = []store.MCPAccessInfo{
+		{Server: store.MCPServerData{BaseModel: store.BaseModel{ID: initialServerID}, Name: "initial-server"}},
+		{Server: store.MCPServerData{BaseModel: store.BaseModel{ID: newServerID}, Name: "new-server"}},
+	}
+
+	msgBus.Broadcast(bus.Event{
+		Name:    protocol.EventCacheInvalidate,
+		Payload: bus.CacheInvalidatePayload{Kind: bus.CacheKindMCP},
+	})
+	if !otherSubscriberCalled {
+		t.Fatal("expected other MCP subscriber to receive invalidation")
+	}
+
+	if allowed, reason := gc.IsAllowed(ctx, agentID, userID, newServerID, "tool"); !allowed {
+		t.Fatalf("expected grant checker cache to refresh after bus invalidation, reason=%q", reason)
+	}
+	if mockStore.callCount != 2 {
+		t.Fatalf("expected cache miss after bus invalidation, got callCount=%d", mockStore.callCount)
 	}
 }
 

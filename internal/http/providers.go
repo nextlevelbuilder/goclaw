@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -21,6 +22,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/oauth"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/security"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
@@ -322,53 +324,136 @@ func normalizeOllamaAPIBase(p *store.LLMProviderData) {
 	}
 }
 
-// localProviderTypes are provider types that legitimately run on localhost
-// (e.g. Ollama, Claude CLI). SSRF checks are skipped for these.
-var localProviderTypes = map[string]bool{
-	store.ProviderOllama:    true,
-	store.ProviderClaudeCLI: true,
-	store.ProviderACP:       true,
+// localURLProviderTypes are provider types that legitimately run on localhost.
+// They are restricted to an explicit localhost allowlist
+// rather than skipping SSRF validation entirely.
+var localURLProviderTypes = map[string]bool{
+	store.ProviderOllama: true,
+	store.ProviderACP:    true,
 }
+
+// allowedLocalHosts are the only hosts permitted for local provider types.
+// Explicit allowlist (not blocklist) to prevent new internal addresses from
+// slipping through (e.g. 169.254.169.254 via ollama base URL).
+var allowedLocalHosts = []string{"localhost", "127.0.0.1", "::1", "host.docker.internal"}
+
+// dnsResolverFn resolves hostnames to IPs. Replaceable in tests.
+var dnsResolverFn = net.LookupHost
+
+// allowPrivateProviderURLsFn reports whether the operator has opted in to
+// permitting private / loopback / link-local / internal-hostname provider base
+// URLs via GOCLAW_ALLOW_PRIVATE_PROVIDER_URLS. Evaluated once at first call so
+// tests can override the variable before that happens.
+var allowPrivateProviderURLsFn = sync.OnceValue(func() bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("GOCLAW_ALLOW_PRIVATE_PROVIDER_URLS")))
+	return v == "1" || v == "true" || v == "yes"
+})
 
 // validateProviderURL rejects provider base URLs pointing to internal/private networks.
 // Defense-in-depth: prevents SSRF when providers are later used for API calls.
+//
+// Logic:
+//  1. Empty URL → allowed (provider may not need a custom base).
+//  2. Claude CLI → api_base is an executable path/command, not a URL.
+//  3. Scheme check (http/https only) → enforced for URL-based types, including
+//     local URL types. Blocks file://, gopher://, dict://, etc.
+//  4. Local URL types (ollama, acp) → host must be in allowedLocalHosts
+//     (explicit allowlist prevents reaching 169.254.169.254 or internal services
+//     via the local-type bypass).
+//  5. Remote types → if GOCLAW_ALLOW_PRIVATE_PROVIDER_URLS is set, allow and log.
+//     Otherwise: resolve DNS hostname; reject if ANY resolved IP satisfies
+//     security.IsBlocked (covers loopback, link-local, private, multicast,
+//     unspecified — including 0.0.0.0 and :: that earlier hand-rolled checks missed).
+//
+// DNS resolution on step 5 closes the nip.io / sslip.io / attacker-domain bypass
+// where a hostname passes a literal-string blocklist but resolves to a private IP.
 func validateProviderURL(rawURL string, providerType string) error {
-	if rawURL == "" || localProviderTypes[providerType] {
+	if rawURL == "" {
 		return nil
+	}
+	if providerType == store.ProviderClaudeCLI {
+		return validateClaudeCLIExecutablePath(rawURL)
 	}
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return fmt.Errorf("invalid URL: %w", err)
 	}
-	// Only allow http/https schemes — block file://, gopher://, dict://, etc.
+	// Scheme check is unconditional for URL-based provider types, including local URL types.
 	switch u.Scheme {
 	case "http", "https":
 	default:
 		return fmt.Errorf("provider URL must use http or https scheme, got %q", u.Scheme)
 	}
+
 	host := u.Hostname()
-	// Block obvious internal targets
-	blocked := []string{"localhost", "127.0.0.1", "::1", "0.0.0.0", "169.254.169.254", "metadata.google.internal"}
-	for _, b := range blocked {
-		if strings.EqualFold(host, b) {
-			return fmt.Errorf("provider URL cannot point to %s", b)
+
+	// Local provider types: only allow an explicit localhost allowlist.
+	// This prevents using the local-type escape hatch to reach internal services
+	// or cloud metadata endpoints.
+	if localURLProviderTypes[providerType] {
+		for _, a := range allowedLocalHosts {
+			if strings.EqualFold(host, a) {
+				return nil
+			}
 		}
+		slog.Warn("security.provider_url.local_type_denied", "host", host, "provider_type", providerType)
+		return fmt.Errorf("provider type %q only allows localhost URLs (localhost, 127.0.0.1, ::1, host.docker.internal), got host %q", providerType, host)
 	}
-	// Block private IP ranges (normalize IPv6-mapped IPv4 to catch ::ffff:127.0.0.1)
-	ip := net.ParseIP(host)
-	if ip != nil {
-		if v4 := ip.To4(); v4 != nil {
-			ip = v4
-		}
-		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
-			return fmt.Errorf("provider URL cannot point to private network: %s", host)
-		}
+
+	// Operator opt-in to allow private-network provider URLs (e.g. LAN-hosted vLLM).
+	// Scheme check above still applies even with this gate open.
+	if allowPrivateProviderURLsFn() {
+		slog.Warn("security.provider_url.private_allowed", "host", host, "provider_type", providerType)
+		return nil
 	}
-	// Block common internal hostnames
+
+	// Check literal IP first (avoids unnecessary DNS lookup).
+	if ip := net.ParseIP(host); ip != nil {
+		if security.IsBlocked(ip) {
+			slog.Warn("security.provider_url.blocked", "host", host, "provider_type", providerType)
+			return fmt.Errorf("provider URL cannot point to %s", host)
+		}
+		return nil
+	}
+
+	// Block .internal / .local suffix before DNS (fail-fast for well-known patterns).
 	if strings.HasSuffix(host, ".internal") || strings.HasSuffix(host, ".local") {
+		slog.Warn("security.provider_url.blocked", "host", host, "provider_type", providerType)
 		return fmt.Errorf("provider URL cannot point to internal hostname: %s", host)
 	}
+
+	// Resolve DNS and check every returned address.
+	// Prevents bypass via wildcard services (nip.io, sslip.io) or attacker-controlled
+	// domains that map to private IPs (DNS-rebinding at config time).
+	addrs, err := dnsResolverFn(host)
+	if err != nil {
+		slog.Warn("security.provider_url.dns_resolve_failed", "host", host, "provider_type", providerType, "error", err)
+		return fmt.Errorf("provider URL hostname %q could not be resolved: %w", host, err)
+	}
+	for _, addr := range addrs {
+		ip := net.ParseIP(addr)
+		if ip == nil {
+			continue
+		}
+		if security.IsBlocked(ip) {
+			slog.Warn("security.provider_url.blocked_resolved", "host", host, "resolved_ip", ip.String(), "provider_type", providerType)
+			return fmt.Errorf("provider URL %q resolves to private/reserved address %s", host, ip)
+		}
+	}
 	return nil
+}
+
+func validateClaudeCLIExecutablePath(path string) error {
+	if strings.Contains(path, "\x00") {
+		return fmt.Errorf("Claude CLI executable path cannot contain NUL byte")
+	}
+	if _, err := url.ParseRequestURI(path); err == nil && strings.Contains(path, "://") {
+		return fmt.Errorf("Claude CLI api_base must be an executable path or %q, got URL %q", "claude", path)
+	}
+	if path == "claude" || filepath.IsAbs(path) {
+		return nil
+	}
+	return fmt.Errorf("Claude CLI api_base must be %q or an absolute executable path, got %q", "claude", path)
 }
 
 // --- Provider CRUD ---

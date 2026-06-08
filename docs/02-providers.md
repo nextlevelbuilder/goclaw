@@ -554,7 +554,7 @@ ClaudeCLIProvider can be configured in `config.json`:
 }
 ```
 
-Or via database `llm_providers` table with `provider_type = "claude_cli"`.
+Or via database `llm_providers` table with `provider_type = "claude_cli"`. For database providers, `api_base` is the CLI executable selector (`"claude"` or an absolute binary path), not an HTTP base URL, so provider URL SSRF opt-ins do not apply to Claude CLI.
 
 ### Session Management
 

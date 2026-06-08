@@ -41,6 +41,13 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 		if err != nil {
 			return fmt.Errorf("build tools: %w", err)
 		}
+		allowed := make(map[string]bool, len(toolDefs))
+		for _, td := range toolDefs {
+			allowed[td.Function.Name] = true
+		}
+		state.Tool.AllowedTools = allowed
+	} else {
+		state.Tool.AllowedTools = nil
 	}
 
 	// 3. Construct ChatRequest
@@ -68,9 +75,14 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 			// Attempt emergency compaction
 			if s.deps.CompactMessages != nil {
 				originalLen := len(state.Messages.History())
+				savedPending := state.Messages.Pending()
 				compacted, compactErr := s.deps.CompactMessages(ctx, state.Messages.History(), state.Model)
 				if compactErr == nil {
 					state.Messages.ReplaceHistory(compacted)
+					// Restore pending cleared by ReplaceHistory.
+					for _, msg := range savedPending {
+						state.Messages.AppendPending(msg)
+					}
 					slog.Info("emergency_compaction_triggered",
 						"run_id", state.RunID,
 						"original_msgs", originalLen,

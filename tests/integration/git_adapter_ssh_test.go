@@ -160,8 +160,7 @@ func TestGitAdapter_SSH_CleanupOnExecFailure(t *testing.T) {
 // TestGitAdapter_SSH_HostMismatch_NoTmpfile: rejected host mismatch must
 // NOT leave an orphaned tmpfile in os.TempDir().
 func TestGitAdapter_SSH_HostMismatch_NoTmpfile(t *testing.T) {
-	t.Parallel()
-
+	t.Setenv("TMPDIR", t.TempDir())
 	cred := sshCredFor(t, "github.com")
 	adapter := tools.AdapterFor("git")
 

@@ -77,6 +77,16 @@ func isBlocked(ip net.IP) bool {
 	return false
 }
 
+// IsBlocked reports whether ip falls within any blocked CIDR (loopback,
+// link-local including cloud-metadata 169.254.169.254, RFC 1918 private,
+// multicast, and unspecified 0.0.0.0/:: ranges).
+//
+// Use this in provider-URL validation and dial-time guards to avoid
+// duplicating the CIDR list across packages.
+func IsBlocked(ip net.IP) bool {
+	return isBlocked(ip)
+}
+
 // redactURL strips query string and userinfo for safe logging.
 func redactURL(rawURL string) string {
 	u, err := url.Parse(rawURL)
