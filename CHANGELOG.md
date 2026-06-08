@@ -6,6 +6,15 @@ All notable changes to GoClaw are documented here. For full documentation, see [
 
 ### Added
 
+- **Bitrix24 channel 2-way media (file) transfer** — Inbound media downloads via
+  `imbot.v2.File.download` (one-time authenticated URL) with MIME preservation for
+  images, PDFs, audio, and video. Outbound uploads via `imbot.v2.File.upload` (base64).
+  Shared `media_max_mb` config knob (default 20 MB) caps both directions. Requires
+  `imbot` OAuth scope (no `disk` scope needed). Inbound handled by new
+  `internal/channels/bitrix24/download.go`; outbound by `send_media.go`. New
+  `BaseChannel.HandleMessageMedia()` method centralizes media-aware message handling.
+  See `docs/05-channels-messaging.md` § 16 (Bitrix24) for configuration.
+
 - **Skill agent manage grants** — Adds per-agent skill edit/delete grants with
   backend checks, HTTP/WS support, SQLite and PostgreSQL schema updates, and web
   dashboard controls for granting and revoking manage access.

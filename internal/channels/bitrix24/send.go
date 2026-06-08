@@ -48,10 +48,15 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 		return errors.New("bitrix24: missing chat_id on outbound message")
 	}
 
-	// Phase 06 will upload real media here; Phase 03 logs + drops.
+	// Upload any media attachments first via imbot.v2.File.upload. The text body
+	// is delivered separately below, so a media failure never drops the text and
+	// we never double-post. A media-only message (empty Content) returns at the
+	// empty-text guard below after the upload completes.
 	if len(msg.Media) > 0 {
-		slog.Info("bitrix24: media attachments present — Phase 06 pending; sending text only",
-			"chat_id", msg.ChatID, "count", len(msg.Media))
+		if err := c.sendMedia(ctx, msg); err != nil {
+			slog.Warn("bitrix24: one or more media uploads failed; continuing with text",
+				"chat_id", msg.ChatID, "err", err)
+		}
 	}
 
 	text := strings.TrimSpace(msg.Content)

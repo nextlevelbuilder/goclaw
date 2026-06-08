@@ -255,16 +255,18 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 		}
 	}
 
-	// Phase 06 will populate media paths after downloading from disk.getExternalLink;
-	// Phase 03 passes an empty slice so text-only flow is correct end-to-end.
-	var media []string
+	// Download any attachments via imbot.v2.File.download and forward them to
+	// the agent with their MIME type preserved. Best-effort: failures are logged
+	// inside downloadEventFiles and never block the text from reaching the agent.
+	mediaFiles := c.downloadEventFiles(ctx, c.BotID(), evt.Params.Files)
 	slog.Info("bitrix24 message: publish to bus",
 		"sender_id", senderID,
 		"chat_id", chatID,
 		"peer_kind", peerKind,
 		"message_id", evt.Params.MessageID,
+		"media_count", len(mediaFiles),
 	)
-	c.HandleMessage(senderID, chatID, text, media, meta, peerKind)
+	c.HandleMessageMedia(senderID, chatID, text, mediaFiles, meta, peerKind)
 }
 
 // handleJoin sends a short welcome the first time the bot is added to a
