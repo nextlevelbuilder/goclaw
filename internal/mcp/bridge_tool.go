@@ -220,6 +220,16 @@ func (t *BridgeTool) Execute(ctx context.Context, args map[string]any) *tools.Re
 	callCtx, cancel := context.WithTimeout(ctx, time.Duration(t.timeoutSec)*time.Second)
 	defer cancel()
 
+	// Ensure agent ID and user ID are explicitly carried in callCtx
+	agentID := store.AgentIDFromContext(ctx)
+	userID := store.UserIDFromContext(ctx)
+	if agentID != uuid.Nil {
+		callCtx = store.WithAgentID(callCtx, agentID)
+	}
+	if userID != "" {
+		callCtx = store.WithUserID(callCtx, userID)
+	}
+
 	// Strip empty-value optional args. LLMs often send "" for optional fields
 	// instead of omitting them, causing MCP servers to reject invalid values
 	// (e.g. empty string for UUID fields).

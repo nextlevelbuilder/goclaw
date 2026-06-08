@@ -325,6 +325,14 @@ func (m *Manager) LoadForAgent(ctx context.Context, agentID uuid.UUID, userID st
 		return nil
 	}
 
+	if agentID != uuid.Nil {
+		ctx = store.WithAgentID(ctx, agentID)
+	}
+	if userID != "" {
+		ctx = store.WithUserID(ctx, userID)
+	}
+
+
 	accessible, err := m.store.ListAccessible(ctx, agentID, userID)
 	if err != nil {
 		return fmt.Errorf("list accessible MCP servers: %w", err)

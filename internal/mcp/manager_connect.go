@@ -12,6 +12,7 @@ import (
 	mcpclient "github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // connectAndDiscover creates a client, initializes the MCP handshake, and
@@ -292,6 +293,19 @@ func createClient(transportType, command string, args []string, env map[string]s
 		},
 	}
 
+	headerFunc := func(ctx context.Context) map[string]string {
+		h := make(map[string]string)
+		agentID := store.AgentIDFromContext(ctx)
+		userID := store.UserIDFromContext(ctx)
+		if agentID != uuid.Nil {
+			h["X-GoClaw-Agent-Id"] = agentID.String()
+		}
+		if userID != "" {
+			h["X-GoClaw-User-Id"] = userID
+		}
+		return h
+	}
+
 	switch transportType {
 	case "stdio":
 		envSlice := mapToEnvSlice(env)
@@ -300,6 +314,7 @@ func createClient(transportType, command string, args []string, env map[string]s
 	case "sse":
 		var opts []transport.ClientOption
 		opts = append(opts, transport.WithHTTPClient(authHTTPClient))
+		opts = append(opts, mcpclient.WithHeaderFunc(transport.HTTPHeaderFunc(headerFunc)))
 
 		if len(headers) > 0 {
 			opts = append(opts, mcpclient.WithHeaders(headers))
@@ -309,6 +324,7 @@ func createClient(transportType, command string, args []string, env map[string]s
 	case "streamable-http":
 		var opts []transport.StreamableHTTPCOption
 		opts = append(opts, transport.WithHTTPBasicClient(authHTTPClient))
+		opts = append(opts, transport.WithHTTPHeaderFunc(transport.HTTPHeaderFunc(headerFunc)))
 
 		if len(headers) > 0 {
 			opts = append(opts, transport.WithHTTPHeaders(headers))
