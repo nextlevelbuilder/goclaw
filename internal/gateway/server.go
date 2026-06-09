@@ -407,7 +407,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, `{"status":"ok","protocol":%d,"author":"jarvis"}`, protocol.ProtocolVersion)
+	fmt.Fprintf(w, `{"status":"ok","protocol":%d,"author":"jarvis-claw"}`, protocol.ProtocolVersion)
 }
 
 // handleIndex is the fallback "/" handler when no embedded web UI is present.
