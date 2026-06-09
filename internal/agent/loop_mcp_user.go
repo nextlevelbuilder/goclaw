@@ -2,12 +2,15 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"maps"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
@@ -121,13 +124,38 @@ func (l *Loop) getUserMCPTools(ctx context.Context, userID string) []tools.Tool 
 	for _, info := range l.mcpUserCredSrvs {
 		srv := info.Server
 
-		// Check if user has credentials for this server
-		uc, err := l.mcpStore.GetUserCredentials(ctx, srv.ID, userID)
-		if err != nil || uc == nil || (uc.APIKey == "" && len(uc.Headers) == 0 && len(uc.Env) == 0) {
+		// OAuth-active servers authenticate ONLY via the user's OAuth token. Static
+		// per-user credentials (api_key/headers/env) are deliberately NOT consulted for
+		// them — otherwise a user who set static creds but never authorized OAuth could
+		// call tools, bypassing OAuth entirely.
+		oauthActive := false
+		if len(srv.Settings) > 0 {
+			var settingsObj struct {
+				OAuth struct {
+					AuthType string `json:"auth_type"`
+				} `json:"oauth"`
+			}
+			_ = json.Unmarshal(srv.Settings, &settingsObj)
+			oauthActive = settingsObj.OAuth.AuthType == "oauth"
+		}
+
+		// Static per-user credentials — only for NON-OAuth servers.
+		var uc *store.MCPUserCredentials
+		hasStaticCreds := false
+		if !oauthActive {
+			if c, e := l.mcpStore.GetUserCredentials(ctx, srv.ID, userID); e == nil && c != nil &&
+				(c.APIKey != "" || len(c.Headers) > 0 || len(c.Env) > 0) {
+				uc = c
+				hasStaticCreds = true
+			}
+		}
+		hasOAuthCreds := oauthActive && l.mcpOAuthTokenProvider != nil
+
+		if !hasStaticCreds && !hasOAuthCreds {
 			continue
 		}
 
-		// Resolve connection params: server defaults merged with user overrides
+		// Resolve connection params: server defaults merged with user overrides.
 		args := mcpbridge.ParseJSONBytesToStringSlice(srv.Args)
 		env := mcpbridge.ParseJSONBytesToStringMap(srv.Env)
 		if env == nil {
@@ -138,23 +166,47 @@ func (l *Loop) getUserMCPTools(ctx context.Context, userID string) []tools.Tool 
 			headers = make(map[string]string)
 		}
 
-		// Inject server-level API key into headers if present
-		if srv.APIKey != "" && headers["Authorization"] == "" {
+		// Inject server-level API key into headers — ONLY for non-OAuth servers.
+		// For OAuth servers the Authorization MUST come from the user's OAuth token;
+		// falling back to the shared server-level api_key/headers would let a user who
+		// hasn't authorized still call tools with the common credential (isolation leak).
+		if !hasOAuthCreds && srv.APIKey != "" && headers["Authorization"] == "" {
 			headers["Authorization"] = "Bearer " + srv.APIKey
 		}
 
-		// Merge user credentials (user overrides server defaults)
-		if uc.APIKey != "" {
-			headers["Authorization"] = "Bearer " + uc.APIKey
+		// Merge user credentials (user overrides server defaults).
+		if hasStaticCreds {
+			if uc.APIKey != "" {
+				headers["Authorization"] = "Bearer " + uc.APIKey
+			}
+			maps.Copy(headers, uc.Headers)
+			maps.Copy(env, uc.Env)
 		}
-		maps.Copy(headers, uc.Headers)
-		maps.Copy(env, uc.Env)
+
+		// Inject OAuth Bearer token for OAuth-enabled servers. The token is the ONLY
+		// source of Authorization for these servers — if none is available (user not
+		// authorized yet / refresh failed), skip the server entirely so no tools are
+		// exposed, rather than connecting with the shared server-level credential.
+		if hasOAuthCreds {
+			token, err2 := l.mcpOAuthTokenProvider.GetValidToken(ctx, srv.ID, l.tenantID, userID)
+			if err2 != nil || token == "" {
+				if err2 != nil {
+					slog.Warn("mcp.oauth_token_unavailable", "server", srv.Name, "user", userID, "tenant", l.tenantID, "error", err2)
+				} else {
+					slog.Debug("mcp.oauth_token_empty", "server", srv.Name, "user", userID, "tenant", l.tenantID)
+				}
+				// Strip any inherited Authorization and skip — OAuth not authorized.
+				continue
+			}
+			headers["Authorization"] = "Bearer " + token
+			slog.Debug("mcp.oauth_token_injected", "server", srv.Name, "user", userID, "tenant", l.tenantID)
+		}
 
 		// Acquire user-keyed pool connection
 		entry, err := l.mcpPool.AcquireUser(ctx, l.tenantID, srv.Name, userID,
 			srv.Transport, srv.Command, args, env, srv.URL, headers, srv.TimeoutSec)
 		if err != nil {
-			if isUnauthorized401(err) {
+			if isUnauthorized401(err) && uc != nil {
 				expiresAt := strings.TrimSpace(uc.Env["BITRIX_EXPIRES_AT"])
 				expired := false
 				if expiresAt != "" {
@@ -173,6 +225,19 @@ func (l *Loop) getUserMCPTools(ctx context.Context, userID string) []tools.Tool 
 				)
 				_ = l.mcpStore.DeleteUserCredentials(ctx, srv.ID, userID)
 				slog.Warn("mcp.user_credentials_purged", "server", srv.Name, "user", userID, "reason", "unauthorized_401")
+			}
+			// OAuth servers (uc == nil, hasOAuthCreds) carry no static credentials
+			// to purge, but a 401 still means the injected Bearer token was rejected.
+			// Evict the in-memory OAuth token cache so the next turn reloads from the
+			// store (picking up a token refreshed out-of-band) instead of replaying the
+			// same rejected token from cache.
+			if isUnauthorized401(err) && hasOAuthCreds {
+				if inv, ok := l.mcpOAuthTokenProvider.(interface {
+					InvalidateCache(uuid.UUID, string)
+				}); ok {
+					inv.InvalidateCache(srv.ID, userID)
+					slog.Warn("mcp.oauth_token_cache_purged", "server", srv.Name, "user", userID, "tenant", l.tenantID, "reason", "unauthorized_401")
+				}
 			}
 			slog.Warn("mcp.user_pool_acquire_failed", "server", srv.Name, "user", userID, "error", err)
 			continue

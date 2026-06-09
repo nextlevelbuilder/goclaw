@@ -171,8 +171,10 @@ func init() {
 		MsgFailedToDeleteFile:    "không thể xóa",
 
 		// OAuth
-		MsgNoPendingOAuth:    "không có luồng OAuth đang chờ",
-		MsgFailedToSaveToken: "không thể lưu token",
+		MsgNoPendingOAuth:       "không có luồng OAuth đang chờ",
+		MsgFailedToSaveToken:    "không thể lưu token",
+		MsgOAuthCallbackSuccess: "Ủy quyền thành công. Bạn có thể đóng cửa sổ này.",
+		MsgOAuthCallbackFailed:  "Ủy quyền thất bại. Bạn có thể đóng cửa sổ này.",
 
 		// Intent Classify
 		MsgStatusWorking:       "🔄 Mình đang xử lý yêu cầu của bạn... Vui lòng chờ.",

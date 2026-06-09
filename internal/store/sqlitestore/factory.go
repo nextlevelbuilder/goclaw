@@ -61,6 +61,7 @@ func NewSQLiteStores(cfg store.StoreConfig) (*store.Stores, error) {
 		Teams:                  NewSQLiteTeamStore(db),
 		Skills:                 NewSQLiteSkillStore(db, cfg.SkillsStorageDir),
 		MCP:                    NewSQLiteMCPServerStore(db, cfg.EncryptionKey),
+		MCPOAuthTokens:         NewSQLiteMCPOAuthTokenStore(db, cfg.EncryptionKey),
 		Activity:               NewSQLiteActivityStore(db),
 		APIKeys:                NewSQLiteAPIKeyStore(db),
 		ConfigPermissions:      NewSQLiteConfigPermissionStore(db),

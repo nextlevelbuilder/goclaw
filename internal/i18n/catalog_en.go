@@ -171,8 +171,10 @@ func init() {
 		MsgFailedToDeleteFile:    "failed to delete",
 
 		// OAuth
-		MsgNoPendingOAuth:    "no pending OAuth flow",
-		MsgFailedToSaveToken: "failed to save token",
+		MsgNoPendingOAuth:       "no pending OAuth flow",
+		MsgFailedToSaveToken:    "failed to save token",
+		MsgOAuthCallbackSuccess: "Authorization successful. You may close this window.",
+		MsgOAuthCallbackFailed:  "Authorization failed. You may close this window.",
 
 		// Intent Classify
 		MsgStatusWorking:       "🔄 I'm working on your request... Please wait.",

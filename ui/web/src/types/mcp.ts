@@ -1,3 +1,32 @@
+export interface MCPOAuthSettings {
+  auth_type?: "oauth" | "";
+  use_dcr?: boolean;
+  grant_type?: "pkce" | "authorization_code" | "client_credentials";
+  auth_endpoint?: string;
+  token_endpoint?: string;
+  client_id?: string;
+  /** Write-only — never returned by the API (stored encrypted). */
+  client_secret?: string;
+  scope?: string;
+}
+
+export interface MCPServerSettings {
+  require_user_credentials?: boolean;
+  tool_hints?: {
+    global?: string;
+    tools?: Record<string, string>;
+  };
+  oauth?: MCPOAuthSettings;
+}
+
+export interface MCPOAuthStatus {
+  has_token: boolean;
+  client_id?: string;
+  issuer?: string;
+  expires_at?: string;
+  expired?: boolean;
+}
+
 export interface MCPServerData {
   id: string;
   name: string;
@@ -10,13 +39,7 @@ export interface MCPServerData {
   env: Record<string, string> | null;
   tool_prefix: string;
   timeout_sec: number;
-  settings?: {
-    require_user_credentials?: boolean;
-    tool_hints?: {
-      global?: string;
-      tools?: Record<string, string>;
-    };
-  };
+  settings?: MCPServerSettings;
   enabled: boolean;
   created_by: string;
   agent_count?: number;
@@ -35,13 +58,7 @@ export interface MCPServerInput {
   env?: Record<string, string>;
   tool_prefix?: string;
   timeout_sec?: number;
-  settings?: {
-    require_user_credentials?: boolean;
-    tool_hints?: {
-      global?: string;
-      tools?: Record<string, string>;
-    };
-  };
+  settings?: MCPServerSettings;
   enabled?: boolean;
 }
 

@@ -32,6 +32,7 @@ type httpHandlers struct {
 	secureCLI        *httpapi.SecureCLIHandler
 	secureCLIGrant   *httpapi.SecureCLIGrantHandler
 	mcpUserCreds     *httpapi.MCPUserCredentialsHandler
+	mcpOAuth         *httpapi.MCPOAuthHandler
 }
 
 // wireHTTPHandlersOnServer registers all HTTP handler objects onto the gateway server.
@@ -65,6 +66,12 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 	}
 	if h.mcpUserCreds != nil {
 		d.server.SetMCPUserCredentialsHandler(h.mcpUserCreds)
+	}
+	if h.mcpOAuth != nil {
+		if mcpPool != nil {
+			h.mcpOAuth.SetEvictor(mcpPool)
+		}
+		d.server.SetMCPOAuthHandler(h.mcpOAuth)
 	}
 	if h.channelInstances != nil {
 		d.server.SetChannelInstancesHandler(h.channelInstances)

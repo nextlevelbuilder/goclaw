@@ -124,6 +124,16 @@ type Manager struct {
 	// LoadForAgent("") for later per-request tool resolution. These servers are NOT
 	// connected at startup — connections are created per-user via pool.AcquireUser().
 	userCredServers []store.MCPAccessInfo
+
+	// oauthTokenProvider resolves a live Bearer token for OAuth-enabled MCP servers.
+	// nil = OAuth token injection disabled.
+	oauthTokenProvider OAuthTokenProvider
+}
+
+// OAuthTokenProvider retrieves a valid OAuth Bearer token for an MCP server.
+// userID="" means global token; non-empty means per-user token.
+type OAuthTokenProvider interface {
+	GetValidToken(ctx context.Context, serverID, tenantID uuid.UUID, userID string) (string, error)
 }
 
 // ManagerOption configures the Manager.
@@ -156,6 +166,13 @@ func WithPool(p *Pool) ManagerOption {
 func WithGrantChecker(gc GrantChecker) ManagerOption {
 	return func(m *Manager) {
 		m.grantChecker = gc
+	}
+}
+
+// WithOAuthTokenProvider sets the OAuth token provider for Bearer token injection.
+func WithOAuthTokenProvider(p OAuthTokenProvider) ManagerOption {
+	return func(m *Manager) {
+		m.oauthTokenProvider = p
 	}
 }
 
@@ -254,8 +271,12 @@ func (m *Manager) resolveServerCredentials(ctx context.Context, info store.MCPAc
 		return nil
 	}
 
-	// Inject APIKey into headers if present (bug fix: was never passed to connections)
-	if srv.APIKey != "" && headers["Authorization"] == "" {
+	oauthActive := isOAuthActive(srv.Settings)
+
+	// Inject APIKey into headers if present — ONLY for non-OAuth servers.
+	// For OAuth servers the Authorization MUST come from the OAuth token; using the
+	// server-level api_key as a fallback would expose tools before authorization.
+	if !oauthActive && srv.APIKey != "" && headers["Authorization"] == "" {
 		if headers == nil {
 			headers = make(map[string]string)
 		}
@@ -305,6 +326,31 @@ func (m *Manager) resolveServerCredentials(ctx context.Context, info store.MCPAc
 				env[k] = v
 			}
 		}
+	}
+
+	// OAuth-enabled servers: the OAuth token is the ONLY source of Authorization.
+	// Require a valid token — if none is available (not authorized yet / refresh
+	// failed / OAuth subsystem absent), skip the server so it is NOT loaded into the
+	// shared registry with the server-level credential as a fallback.
+	if oauthActive {
+		if m.oauthTokenProvider == nil {
+			slog.Debug("mcp.skip_oauth_no_provider", "server", srv.Name)
+			return nil
+		}
+		tenantID := store.TenantIDFromContext(ctx)
+		oauthUserID := ""
+		if requireUserCreds(srv.Settings) {
+			oauthUserID = userID
+		}
+		token, err2 := m.oauthTokenProvider.GetValidToken(ctx, srv.ID, tenantID, oauthUserID)
+		if err2 != nil || token == "" {
+			slog.Debug("mcp.skip_oauth_no_token", "server", srv.Name, "user", oauthUserID, "error", err2)
+			return nil
+		}
+		if headers == nil {
+			headers = make(map[string]string)
+		}
+		headers["Authorization"] = "Bearer " + token
 	}
 
 	// Per-user credentials change connection params → can't share pool connection.
@@ -628,6 +674,26 @@ func requireUserCreds(settings json.RawMessage) bool {
 	}
 	_ = json.Unmarshal(settings, &s)
 	return s.RequireUserCredentials
+}
+
+// isOAuthActive checks if the server's settings have OAuth auth_type enabled.
+func isOAuthActive(settings json.RawMessage) bool {
+	return IsOAuthActive(settings)
+}
+
+// IsOAuthActive reports whether the given raw server settings JSON has OAuth enabled.
+// Exported for use by HTTP handlers that need to gate OAuth token injection.
+func IsOAuthActive(settings json.RawMessage) bool {
+	if len(settings) == 0 {
+		return false
+	}
+	var s struct {
+		OAuth struct {
+			AuthType string `json:"auth_type"`
+		} `json:"oauth"`
+	}
+	_ = json.Unmarshal(settings, &s)
+	return s.OAuth.AuthType == "oauth"
 }
 
 // ToolHints carries admin-authored description hints for MCP tools.

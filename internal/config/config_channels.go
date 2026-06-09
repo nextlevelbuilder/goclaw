@@ -428,6 +428,7 @@ type GatewayConfig struct {
 	TaskRecoveryIntervalSec int                 `json:"task_recovery_interval_sec,omitempty"` // team task recovery ticker interval in seconds (default 300 = 5min)
 	BackgroundProvider      string              `json:"background_provider,omitempty"`        // LLM provider for background workers (vault enrichment, consolidation)
 	BackgroundModel         string              `json:"background_model,omitempty"`           // LLM model for background workers
+	PublicURL               string              `json:"public_url,omitempty"`                 // public base URL for OAuth callbacks (e.g. "https://goclaw.example.com")
 }
 
 // ToolsConfig controls tool availability, policy, and web search.

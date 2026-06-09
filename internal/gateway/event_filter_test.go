@@ -251,3 +251,70 @@ func TestExtractMapField_StructPayload_JSONFallback(t *testing.T) {
 		t.Errorf("extractMapField JSON fallback = %q, want %q", got, "from-struct")
 	}
 }
+
+// ---- MCP OAuth Complete events ----
+
+func TestClientCanReceiveEvent_MCPOAuthComplete_RoutedToInitiatingUser(t *testing.T) {
+	userA := makeClient(permissions.RoleOperator, "user-a", masterTenant)
+	userB := makeClient(permissions.RoleOperator, "user-b", masterTenant)
+
+	evt := makeEvent(protocol.EventMCPOAuthComplete, masterTenant, map[string]any{
+		"serverId":         "server-1",
+		"initiatingUserId": "user-a",
+		"status":           "success",
+	})
+
+	if !clientCanReceiveEvent(userA, evt) {
+		t.Error("initiating user should receive mcp.oauth_complete")
+	}
+	if clientCanReceiveEvent(userB, evt) {
+		t.Error("non-initiating user should NOT receive mcp.oauth_complete")
+	}
+}
+
+func TestClientCanReceiveEvent_MCPOAuthComplete_NotLeakAcrossTenant(t *testing.T) {
+	// Same user ID, different tenants.
+	userAMaster := makeClient(permissions.RoleOperator, "user-a", masterTenant)
+	userAOther := makeClient(permissions.RoleOperator, "user-a", otherTenant)
+
+	evt := makeEvent(protocol.EventMCPOAuthComplete, masterTenant, map[string]any{
+		"serverId":         "server-1",
+		"initiatingUserId": "user-a",
+		"status":           "success",
+	})
+
+	if !clientCanReceiveEvent(userAMaster, evt) {
+		t.Error("user-a in masterTenant should receive the event they initiated")
+	}
+	if clientCanReceiveEvent(userAOther, evt) {
+		t.Error("user-a in otherTenant must NOT receive masterTenant event (tenant isolation)")
+	}
+}
+
+func TestClientCanReceiveEvent_MCPOAuthComplete_AdminReceivesInTenant(t *testing.T) {
+	admin := makeClient(permissions.RoleAdmin, "admin", masterTenant)
+
+	evt := makeEvent(protocol.EventMCPOAuthComplete, masterTenant, map[string]any{
+		"serverId":         "server-1",
+		"initiatingUserId": "other-user",
+		"status":           "success",
+	})
+
+	if !clientCanReceiveEvent(admin, evt) {
+		t.Error("admin should receive mcp.oauth_complete events for any user in their tenant")
+	}
+}
+
+func TestClientCanReceiveEvent_MCPOAuthComplete_NoInitiatingUserIDBlocked(t *testing.T) {
+	c := makeClient(permissions.RoleOperator, "user-x", masterTenant)
+
+	// Event with no initiatingUserId — blocked for non-admin (fail-closed).
+	evt := makeEvent(protocol.EventMCPOAuthComplete, masterTenant, map[string]any{
+		"serverId": "server-1",
+		"status":   "success",
+	})
+
+	if clientCanReceiveEvent(c, evt) {
+		t.Error("mcp.oauth_complete without initiatingUserId should be blocked for non-admin (fail-closed)")
+	}
+}

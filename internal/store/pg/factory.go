@@ -35,6 +35,7 @@ func NewPGStores(cfg store.StoreConfig) (*store.Stores, error) {
 		Tracing:                NewPGTracingStore(db),
 		RunTimeline:            NewPGRunTimelineStore(db),
 		MCP:                    NewPGMCPServerStore(db, cfg.EncryptionKey),
+		MCPOAuthTokens:         NewPGMCPOAuthTokenStore(db, cfg.EncryptionKey),
 		ChannelInstances:       NewPGChannelInstanceStore(db, cfg.EncryptionKey),
 		ConfigSecrets:          NewPGConfigSecretsStore(db, cfg.EncryptionKey),
 		AgentLinks:             NewPGAgentLinkStore(db),

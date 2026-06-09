@@ -61,6 +61,7 @@ func wireExtras(
 	redisClient any, // nil when built without -tags redis or when Redis is unconfigured
 	domainBus eventbus.DomainEventBus,
 	usageCapSvc *usagecaps.Service,
+	mcpOAuthProvider mcpbridge.OAuthTokenProvider, // nil = OAuth injection disabled
 ) (*tools.ContextFileInterceptor, *mcpbridge.Pool, *media.Store, tools.PostTurnProcessor) {
 	// 1. Build cache instances (in-memory or Redis depending on build tags)
 	agentCtxCache, userCtxCache := makeCaches(redisClient)
@@ -243,6 +244,7 @@ func wireExtras(
 		MCPStore:               stores.MCP,
 		MCPPool:                mcpPool,
 		MCPGrantChecker:        mcpGrantChecker,
+		MCPOAuthTokenProvider:  mcpOAuthProvider,
 		ConfigPermStore:        stores.ConfigPermissions,
 		MediaStore:             mediaStore,
 		ModelPricing:           appCfg.Telemetry.ModelPricing,
@@ -535,7 +537,9 @@ func wireExtras(
 		agentRouter.InvalidateAll()
 	})
 
-	// MCP cache: invalidate all agent caches when MCP servers/grants change
+	// MCP cache: invalidate all agent caches + per-user pool connections when MCP servers/grants change.
+	// Per-user pool connections hold stale credentials/headers; evicting them forces a fresh
+	// AcquireUser on next request so new OAuth tokens and grant changes take effect immediately.
 	msgBus.Subscribe(bus.TopicCacheMCP, func(event bus.Event) {
 		if event.Name != protocol.EventCacheInvalidate {
 			return
@@ -545,6 +549,9 @@ func wireExtras(
 			return
 		}
 		agentRouter.InvalidateAll()
+		if mcpPool != nil {
+			mcpPool.EvictAllUsers()
+		}
 	})
 
 	// Cron cache: invalidate job cache on cron changes

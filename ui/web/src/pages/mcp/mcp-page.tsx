@@ -12,6 +12,7 @@ import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { useMCP, type MCPServerData, type MCPServerInput } from "./hooks/use-mcp";
 import { MCPFormDialog } from "./mcp-form-dialog";
 import { MCPToolsDialog } from "./mcp-tools-dialog";
+import { MCPOAuthDialog } from "./mcp-oauth-dialog";
 import { useMinLoading } from "@/hooks/use-min-loading";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import { usePagination } from "@/hooks/use-pagination";
@@ -32,7 +33,7 @@ const transportBadge: Record<string, string> = {
 export function MCPPage() {
   const { t } = useTranslation("mcp");
   const { t: tc } = useTranslation("common");
-  const { servers, loading, fetching, refresh, createServer, updateServer, deleteServer, grantAgent, revokeAgent, listAgentGrants, testConnection, reconnectServer, listServerTools, getUserCredentials, setUserCredentials, deleteUserCredentials } = useMCP();
+  const { servers, loading, fetching, refresh, createServer, updateServer, deleteServer, grantAgent, revokeAgent, listAgentGrants, testConnection, reconnectServer, listServerTools, getUserCredentials, setUserCredentials, deleteUserCredentials, startOAuth, getOAuthStatus, revokeOAuth } = useMCP();
   const spinning = useMinLoading(fetching);
   const showSkeleton = useDeferredLoading(loading && servers.length === 0);
   const [search, setSearch] = useState("");
@@ -44,6 +45,7 @@ export function MCPPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [credentialsServer, setCredentialsServer] = useState<MCPServerData | null>(null);
   const [reconnectingId, setReconnectingId] = useState<string | null>(null);
+  const [oauthServer, setOauthServer] = useState<MCPServerData | null>(null);
 
   const filtered = servers.filter(
     (s) =>
@@ -56,7 +58,7 @@ export function MCPPage() {
   useEffect(() => { resetPage(); }, [search, resetPage]);
 
   const handleCreate = async (data: MCPServerInput) => {
-    await createServer(data);
+    return createServer(data);
   };
 
   const handleEdit = async (data: MCPServerInput) => {
@@ -73,6 +75,10 @@ export function MCPPage() {
     } finally {
       setDeleteLoading(false);
     }
+  };
+
+  const handleAuthorize = (srv: MCPServerData) => {
+    setOauthServer(srv);
   };
 
   return (
@@ -238,7 +244,19 @@ export function MCPPage() {
         server={editServer}
         onSubmit={editServer ? handleEdit : handleCreate}
         onTest={testConnection}
+        onAuthorize={handleAuthorize}
       />
+
+      {oauthServer && (
+        <MCPOAuthDialog
+          open={!!oauthServer}
+          onOpenChange={(open) => !open && setOauthServer(null)}
+          server={oauthServer}
+          onStartOAuth={startOAuth}
+          onGetStatus={getOAuthStatus}
+          onRevoke={revokeOAuth}
+        />
+      )}
 
       {grantsServer && (
         <Suspense fallback={null}>
@@ -283,6 +301,9 @@ export function MCPPage() {
             onGetCredentials={getUserCredentials}
             onSetCredentials={setUserCredentials}
             onDeleteCredentials={deleteUserCredentials}
+            onStartOAuth={startOAuth}
+            onGetOAuthStatus={getOAuthStatus}
+            onRevokeOAuth={revokeOAuth}
           />
         </Suspense>
       )}

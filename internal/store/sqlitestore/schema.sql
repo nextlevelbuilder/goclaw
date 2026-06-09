@@ -2280,3 +2280,40 @@ CREATE TABLE IF NOT EXISTS skill_versions (
     UNIQUE(skill_id, version)
 );
 CREATE INDEX IF NOT EXISTS idx_skill_versions_tenant_skill ON skill_versions(tenant_id, skill_id, version DESC);
+
+-- ============================================================
+-- Table: mcp_oauth_tokens (migration 000084)
+-- OAuth tokens for MCP servers. user_id NULL = global/tenant-level.
+-- access_token, refresh_token, dcr_client_secret are AES-256-GCM encrypted.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS mcp_oauth_tokens (
+    id                TEXT NOT NULL PRIMARY KEY,
+    server_id         TEXT NOT NULL REFERENCES mcp_servers(id) ON DELETE CASCADE,
+    tenant_id         TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    user_id           TEXT,
+
+    access_token      TEXT NOT NULL,
+    refresh_token     TEXT,
+    token_type        TEXT NOT NULL DEFAULT 'Bearer',
+    scopes            TEXT,
+    expires_at        TEXT,
+    issued_at         TEXT,
+
+    dcr_client_id     TEXT NOT NULL DEFAULT '',
+    dcr_client_secret TEXT,
+    dcr_issuer        TEXT NOT NULL DEFAULT '',
+
+    token_endpoint    TEXT NOT NULL DEFAULT '',
+    resource_uri      TEXT,
+
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+-- SQLite also treats NULLs as distinct in UNIQUE constraints. Use partial unique
+-- indexes so the NULL case (global token) is correctly deduplicated.
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_oauth_tokens_global_uq
+    ON mcp_oauth_tokens (server_id, tenant_id) WHERE user_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_oauth_tokens_user_uq
+    ON mcp_oauth_tokens (server_id, tenant_id, user_id) WHERE user_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_mcp_oauth_tokens_server_tenant ON mcp_oauth_tokens (server_id, tenant_id);

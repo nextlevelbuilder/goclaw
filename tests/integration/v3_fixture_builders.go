@@ -3,6 +3,7 @@
 package integration
 
 import (
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -10,6 +11,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
+	pgstore "github.com/nextlevelbuilder/goclaw/internal/store/pg"
 )
 
 // seedTwoTenants creates 2 independent tenants with agents for isolation testing.
@@ -190,4 +193,43 @@ func seedContact(t *testing.T, db *sql.DB, tenantID uuid.UUID) uuid.UUID {
 	})
 
 	return contactID
+}
+
+// oauthStore returns a PGMCPOAuthTokenStore backed by the shared test DB.
+func oauthStore(t *testing.T) *pgstore.PGMCPOAuthTokenStore {
+	t.Helper()
+	return pgstore.NewPGMCPOAuthTokenStore(testDB(t), testEncryptionKey)
+}
+
+// seedMCPOAuthToken inserts an OAuth token for testing and registers cleanup.
+// userID="" inserts a global (tenant-level) token; non-empty inserts per-user.
+func seedMCPOAuthToken(t *testing.T, db *sql.DB, tenantID, serverID uuid.UUID, userID string) *store.MCPOAuthToken {
+	t.Helper()
+	tok := &store.MCPOAuthToken{
+		ID:            uuid.New(),
+		ServerID:      serverID,
+		TenantID:      tenantID,
+		UserID:        userID,
+		AccessToken:   "seed-access-token",
+		RefreshToken:  "seed-refresh-token",
+		TokenType:     "Bearer",
+		Scopes:        "read write",
+		DCRClientID:   "seed-client-id",
+		DCRIssuer:     "https://auth.example.com",
+		TokenEndpoint: "https://auth.example.com/token",
+	}
+	st := pgstore.NewPGMCPOAuthTokenStore(db, testEncryptionKey)
+	if err := st.UpsertOAuthToken(context.Background(), tok); err != nil {
+		t.Fatalf("seedMCPOAuthToken: %v", err)
+	}
+	t.Cleanup(func() {
+		if userID == "" {
+			db.Exec("DELETE FROM mcp_oauth_tokens WHERE server_id = $1 AND tenant_id = $2 AND user_id IS NULL",
+				serverID, tenantID)
+		} else {
+			db.Exec("DELETE FROM mcp_oauth_tokens WHERE server_id = $1 AND tenant_id = $2 AND user_id = $3",
+				serverID, tenantID, userID)
+		}
+	})
+	return tok
 }

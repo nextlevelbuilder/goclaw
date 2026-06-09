@@ -108,6 +108,15 @@ func clientCanReceiveEvent(c *Client, event bus.Event) bool {
 		return false // non-admin clients don't receive these
 	}
 
+	// MCP OAuth completion: deliver to the user who initiated the flow.
+	// Admins already receive this via the admin check above.
+	if event.Name == protocol.EventMCPOAuthComplete {
+		if uid := extractMapField(event.Payload, "initiatingUserId"); uid != "" {
+			return uid == c.userID
+		}
+		return false
+	}
+
 	// Exec approval events: scoped to the requesting user.
 	if strings.HasPrefix(event.Name, "exec.approval.") {
 		if uid := extractMapField(event.Payload, "userId"); uid != "" {

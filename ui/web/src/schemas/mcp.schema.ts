@@ -17,6 +17,15 @@ export const mcpFormSchema = z.object({
   // LLM sees server-specific quirks. Persisted under settings.tool_hints.
   toolHintsGlobal: z.string(),
   toolHintsTools: z.record(z.string(), z.string()),
+  // OAuth 2.1 client configuration (non-stdio transports only)
+  oauthEnabled: z.boolean(),
+  oauthUseDcr: z.boolean(),
+  oauthGrantType: z.enum(["pkce", "authorization_code", "client_credentials"]),
+  oauthAuthEndpoint: z.string(),
+  oauthTokenEndpoint: z.string(),
+  oauthClientId: z.string(),
+  oauthClientSecret: z.string(),
+  oauthScope: z.string(),
 });
 
 export type MCPFormData = z.infer<typeof mcpFormSchema>;

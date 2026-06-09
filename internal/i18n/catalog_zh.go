@@ -171,8 +171,10 @@ func init() {
 		MsgFailedToDeleteFile:    "删除失败",
 
 		// OAuth
-		MsgNoPendingOAuth:    "没有待处理的 OAuth 流程",
-		MsgFailedToSaveToken: "保存令牌失败",
+		MsgNoPendingOAuth:       "没有待处理的 OAuth 流程",
+		MsgFailedToSaveToken:    "保存令牌失败",
+		MsgOAuthCallbackSuccess: "授权成功。您可以关闭此窗口。",
+		MsgOAuthCallbackFailed:  "授权失败。您可以关闭此窗口。",
 
 		// Intent Classify
 		MsgStatusWorking:       "🔄 我正在处理您的请求...请稍候。",

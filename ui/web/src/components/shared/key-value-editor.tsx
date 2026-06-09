@@ -95,7 +95,7 @@ export function KeyValueEditor({
               onChange={(e) => updateEntry(idx, { value: e.target.value })}
               placeholder={valuePlaceholder}
               rows={2}
-              className="flex-[2] text-base md:text-sm min-h-[38px] resize-y"
+              className="flex-2 text-base md:text-sm min-h-[38px] resize-y"
             />
           ) : (
             <Input

@@ -7,19 +7,36 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
 // MCPUserCredentialsHandler handles per-user MCP credential endpoints.
 type MCPUserCredentialsHandler struct {
 	store       store.MCPServerStore
 	tenantStore store.TenantStore
+	msgBus      *bus.MessageBus
 }
 
 // NewMCPUserCredentialsHandler creates a handler for MCP user credential endpoints.
-func NewMCPUserCredentialsHandler(s store.MCPServerStore, ts store.TenantStore) *MCPUserCredentialsHandler {
-	return &MCPUserCredentialsHandler{store: s, tenantStore: ts}
+func NewMCPUserCredentialsHandler(s store.MCPServerStore, ts store.TenantStore, msgBus *bus.MessageBus) *MCPUserCredentialsHandler {
+	return &MCPUserCredentialsHandler{store: s, tenantStore: ts, msgBus: msgBus}
+}
+
+// emitMCPCacheInvalidate broadcasts an MCP cache-invalidate event so per-user pool
+// connections are evicted (mcp.pool.all_user_connections_evicted) and agent Loop
+// caches reload after credentials change — otherwise the pooled per-user connection
+// keeps the stale credential until idle TTL. Mirrors MCPHandler.emitCacheInvalidate.
+func (h *MCPUserCredentialsHandler) emitMCPCacheInvalidate() {
+	if h.msgBus == nil {
+		return
+	}
+	h.msgBus.Broadcast(bus.Event{
+		Name:    protocol.EventCacheInvalidate,
+		Payload: bus.CacheInvalidatePayload{Kind: bus.CacheKindMCP},
+	})
 }
 
 // RegisterRoutes registers MCP user credential routes.
@@ -104,6 +121,9 @@ func (h *MCPUserCredentialsHandler) handleSet(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	// Drop pooled per-user connections so the new credentials take effect immediately.
+	h.emitMCPCacheInvalidate()
+
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }
 
@@ -127,7 +147,7 @@ func (h *MCPUserCredentialsHandler) handleGet(w http.ResponseWriter, r *http.Req
 	}
 
 	creds, err := h.store.GetUserCredentials(r.Context(), serverID, userID)
-	if err != nil {
+	if err != nil || creds == nil {
 		writeJSON(w, http.StatusOK, map[string]any{"has_credentials": false})
 		return
 	}
@@ -163,6 +183,9 @@ func (h *MCPUserCredentialsHandler) handleDelete(w http.ResponseWriter, r *http.
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+
+	// Drop pooled per-user connections so the removed credentials stop being used.
+	h.emitMCPCacheInvalidate()
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }

@@ -84,6 +84,9 @@ type ResolverDeps struct {
 	// MCP grant checker — for runtime grant verification at BridgeTool.Execute
 	MCPGrantChecker mcpbridge.GrantChecker
 
+	// MCP OAuth token provider — injects Bearer tokens for OAuth-enabled MCP servers
+	MCPOAuthTokenProvider mcpbridge.OAuthTokenProvider
+
 	// Skill access store — for per-agent skill visibility filtering
 	SkillAccessStore    store.SkillAccessStore
 	SkillStore          store.SkillStore
@@ -319,6 +322,9 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			if deps.MCPGrantChecker != nil {
 				mcpOpts = append(mcpOpts, mcpbridge.WithGrantChecker(deps.MCPGrantChecker))
 			}
+			if deps.MCPOAuthTokenProvider != nil {
+				mcpOpts = append(mcpOpts, mcpbridge.WithOAuthTokenProvider(deps.MCPOAuthTokenProvider))
+			}
 			mcpMgr := mcpbridge.NewManager(toolsReg, mcpOpts...)
 			if err := mcpMgr.LoadForAgent(ctx, ag.ID, ""); err != nil {
 				slog.Warn("failed to load MCP servers for agent", "agent", agentKey, "error", err)
@@ -543,6 +549,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			MCPPool:                deps.MCPPool,
 			MCPUserCredSrvs:        mcpUserCredSrvs,
 			MCPGrantChecker:        deps.MCPGrantChecker,
+			MCPOAuthTokenProvider:  deps.MCPOAuthTokenProvider,
 			OrchMode:               orchMode,
 			DelegateTargets:        delegateTargets,
 			EvolutionMetricsStore:  evoMetricsStore,

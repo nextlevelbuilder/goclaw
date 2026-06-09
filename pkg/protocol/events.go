@@ -121,6 +121,10 @@ const (
 	// EventWorkstationExecDone is emitted when a remote exec command finishes.
 	// Payload: WorkstationExecDonePayload.
 	EventWorkstationExecDone = "workstation.exec.done"
+
+	// MCP OAuth flow completion — fired after callback token exchange succeeds or fails.
+	// Payload: MCPOAuthCompletePayload.
+	EventMCPOAuthComplete = "mcp.oauth_complete"
 )
 
 // Agent event subtypes (in payload.type)

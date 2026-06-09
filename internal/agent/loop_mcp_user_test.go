@@ -1,6 +1,137 @@
 package agent
 
-import "testing"
+import (
+	"context"
+	"encoding/json"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
+)
+
+// ---- mock helpers for getUserMCPTools OAuth tests ----
+
+// minimalMCPServerStore implements store.MCPServerStore with panics for all
+// methods except GetUserCredentials, which is the only method called in
+// getUserMCPTools.
+type minimalMCPServerStore struct {
+	userCreds         *store.MCPUserCredentials
+	userCredsErr      error
+	getUserCredsCalls int
+}
+
+func (m *minimalMCPServerStore) GetUserCredentials(_ context.Context, _ uuid.UUID, _ string) (*store.MCPUserCredentials, error) {
+	m.getUserCredsCalls++
+	return m.userCreds, m.userCredsErr
+}
+
+func (m *minimalMCPServerStore) CreateServer(_ context.Context, _ *store.MCPServerData) error {
+	panic("not implemented")
+}
+func (m *minimalMCPServerStore) GetServer(_ context.Context, _ uuid.UUID) (*store.MCPServerData, error) {
+	panic("not implemented")
+}
+func (m *minimalMCPServerStore) GetServerByName(_ context.Context, _ string) (*store.MCPServerData, error) {
+	panic("not implemented")
+}
+func (m *minimalMCPServerStore) ListServers(_ context.Context) ([]store.MCPServerData, error) {
+	panic("not implemented")
+}
+func (m *minimalMCPServerStore) UpdateServer(_ context.Context, _ uuid.UUID, _ map[string]any) error {
+	panic("not implemented")
+}
+func (m *minimalMCPServerStore) DeleteServer(_ context.Context, _ uuid.UUID) error {
+	panic("not implemented")
+}
+func (m *minimalMCPServerStore) GrantToAgent(_ context.Context, _ *store.MCPAgentGrant) error {
+	panic("not implemented")
+}
+func (m *minimalMCPServerStore) RevokeFromAgent(_ context.Context, _, _ uuid.UUID) error {
+	panic("not implemented")
+}
+func (m *minimalMCPServerStore) ListAgentGrants(_ context.Context, _ uuid.UUID) ([]store.MCPAgentGrant, error) {
+	panic("not implemented")
+}
+func (m *minimalMCPServerStore) ListServerGrants(_ context.Context, _ uuid.UUID) ([]store.MCPAgentGrant, error) {
+	panic("not implemented")
+}
+func (m *minimalMCPServerStore) GrantToUser(_ context.Context, _ *store.MCPUserGrant) error {
+	panic("not implemented")
+}
+func (m *minimalMCPServerStore) RevokeFromUser(_ context.Context, _ uuid.UUID, _ string) error {
+	panic("not implemented")
+}
+func (m *minimalMCPServerStore) CountAgentGrantsByServer(_ context.Context) (map[uuid.UUID]int, error) {
+	panic("not implemented")
+}
+func (m *minimalMCPServerStore) ListAccessible(_ context.Context, _ uuid.UUID, _ string) ([]store.MCPAccessInfo, error) {
+	panic("not implemented")
+}
+func (m *minimalMCPServerStore) CreateRequest(_ context.Context, _ *store.MCPAccessRequest) error {
+	panic("not implemented")
+}
+func (m *minimalMCPServerStore) ListPendingRequests(_ context.Context) ([]store.MCPAccessRequest, error) {
+	panic("not implemented")
+}
+func (m *minimalMCPServerStore) ReviewRequest(_ context.Context, _ uuid.UUID, _ bool, _, _ string) error {
+	panic("not implemented")
+}
+func (m *minimalMCPServerStore) SetUserCredentials(_ context.Context, _ uuid.UUID, _ string, _ store.MCPUserCredentials) error {
+	panic("not implemented")
+}
+func (m *minimalMCPServerStore) DeleteUserCredentials(_ context.Context, _ uuid.UUID, _ string) error {
+	panic("not implemented")
+}
+
+// recordingOAuthProvider records calls to GetValidToken for assertion.
+type recordingOAuthProvider struct {
+	mu          sync.Mutex
+	callCount   int
+	returnToken string
+	returnErr   error
+}
+
+func (r *recordingOAuthProvider) GetValidToken(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ string) (string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.callCount++
+	return r.returnToken, r.returnErr
+}
+
+// newTestPool creates a real *mcpbridge.Pool with short timeouts for unit tests.
+// The pool's AcquireUser will fail (no real MCP server), but token injection
+// happens before the pool call.
+func newTestPool(t *testing.T) *mcpbridge.Pool {
+	t.Helper()
+	pool := mcpbridge.NewPool(mcpbridge.PoolConfig{
+		MaxSize:            10,
+		UserAcquireTimeout: 10 * time.Millisecond,
+	})
+	t.Cleanup(func() { pool.Stop() })
+	return pool
+}
+
+// oauthSettings returns JSON settings with auth_type: oauth.
+func oauthSettings() json.RawMessage {
+	return json.RawMessage(`{"oauth":{"auth_type":"oauth"}}`)
+}
+
+// oauthServerData returns a minimal MCPServerData for an OAuth-configured HTTP
+// server. Transport=http + unreachable URL causes AcquireUser to fail quickly
+// (connection refused) without panicking — unlike stdio with empty command
+// which would spawn a goroutine reading from a nil pipe.
+func oauthServerData() store.MCPServerData {
+	return store.MCPServerData{
+		BaseModel: store.BaseModel{ID: uuid.New()},
+		Name:      "oauth-server-" + uuid.New().String()[:8],
+		Transport: "http",
+		URL:       "http://127.0.0.1:1", // port 1 = connection refused immediately
+		Settings:  oauthSettings(),
+	}
+}
 
 // TestResolveActorUserID locks the actor-vs-context user-id resolution semantics
 // that gate per-user MCP credential lookup (and other per-actor resources).
@@ -159,3 +290,185 @@ func TestResolveActorUserID(t *testing.T) {
 		})
 	}
 }
+
+// ---- getUserMCPTools OAuth token injection tests ----
+//
+// These tests verify that mcpOAuthTokenProvider.GetValidToken is called (or
+// not) based on whether the MCP server settings declare auth_type=oauth.
+// Pool.AcquireUser fails (no real MCP server), but GetValidToken is injected
+// BEFORE the pool call, so we can assert on call count without needing a
+// working MCP connection.
+
+// TestGetUserMCPToolsOAuthTokenProviderCalled verifies that when a server's
+// settings declare auth_type=oauth, GetValidToken is called for the user.
+func TestGetUserMCPToolsOAuthTokenProviderCalled(t *testing.T) {
+	pool := newTestPool(t)
+	provider := &recordingOAuthProvider{returnToken: "test-bearer-token"}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+
+	l := &Loop{
+		tenantID:              uuid.New(),
+		mcpPool:               pool,
+		mcpStore:              &minimalMCPServerStore{},
+		mcpUserCredSrvs:       []store.MCPAccessInfo{{Server: oauthServerData()}},
+		mcpOAuthTokenProvider: provider,
+	}
+
+	_ = l.getUserMCPTools(ctx, "user-1")
+
+	provider.mu.Lock()
+	callCount := provider.callCount
+	provider.mu.Unlock()
+
+	if callCount == 0 {
+		t.Error("expected GetValidToken to be called for OAuth-configured server, but it was not")
+	}
+}
+
+// TestGetUserMCPToolsOAuthTokenNotCalledForNonOAuth verifies that when a
+// server has no OAuth settings, the token provider is never invoked and the
+// server is skipped (neither static nor OAuth creds).
+func TestGetUserMCPToolsOAuthTokenNotCalledForNonOAuth(t *testing.T) {
+	pool := newTestPool(t)
+	provider := &recordingOAuthProvider{}
+
+	l := &Loop{
+		tenantID: uuid.New(),
+		mcpPool:  pool,
+		mcpStore: &minimalMCPServerStore{},
+		mcpUserCredSrvs: []store.MCPAccessInfo{
+			{Server: store.MCPServerData{
+				BaseModel: store.BaseModel{ID: uuid.New()},
+				Name:      "plain-server",
+				Transport: "http",
+				URL:       "http://127.0.0.1:1",
+				// No settings → auth_type defaults to "" (not "oauth")
+			}},
+		},
+		mcpOAuthTokenProvider: provider,
+	}
+
+	_ = l.getUserMCPTools(context.Background(), "user-1")
+
+	provider.mu.Lock()
+	callCount := provider.callCount
+	provider.mu.Unlock()
+
+	if callCount != 0 {
+		t.Errorf("GetValidToken must not be called for non-OAuth server, called %d times", callCount)
+	}
+}
+
+// TestGetUserMCPToolsOAuthNoTokenSkipsServer verifies that when GetValidToken
+// returns no valid token (expired / not authorized yet), the OAuth server is
+// SKIPPED entirely — it must NOT fall back to the shared server-level
+// headers/api_key as Authorization (which would let an unauthorized user call
+// tools with the common credential). GetValidToken is still consulted (proving
+// we entered the OAuth branch) but no tools are produced.
+func TestGetUserMCPToolsOAuthNoTokenSkipsServer(t *testing.T) {
+	pool := newTestPool(t)
+	expiredErr := errTokenExpiredForTest("oauth token expired")
+	provider := &recordingOAuthProvider{
+		returnToken: "",
+		returnErr:   expiredErr,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+
+	// Server carries a server-level API key — must NOT be used as a fallback.
+	srv := oauthServerData()
+	srv.APIKey = "shared-server-key"
+
+	l := &Loop{
+		tenantID:              uuid.New(),
+		mcpPool:               pool,
+		mcpStore:              &minimalMCPServerStore{},
+		mcpUserCredSrvs:       []store.MCPAccessInfo{{Server: srv}},
+		mcpOAuthTokenProvider: provider,
+	}
+
+	result := l.getUserMCPTools(ctx, "user-1")
+	if result != nil {
+		t.Errorf("expected nil tools when OAuth has no token (skip, no fallback), got %d tools", len(result))
+	}
+	provider.mu.Lock()
+	calls := provider.callCount
+	provider.mu.Unlock()
+	if calls == 0 {
+		t.Error("expected GetValidToken to be consulted before skipping the OAuth server")
+	}
+}
+
+// TestGetUserMCPToolsOAuthIgnoresStaticCreds verifies that for an OAuth server
+// the user's static per-user credentials are NOT consulted or used: even when the
+// user has set static creds, an OAuth server without a valid token is skipped
+// (the OAuth token is the sole credential). This closes the bypass where a user
+// with static headers could call OAuth tools without authorizing.
+func TestGetUserMCPToolsOAuthIgnoresStaticCreds(t *testing.T) {
+	pool := newTestPool(t)
+	provider := &recordingOAuthProvider{returnToken: ""} // not authorized yet
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+
+	// Store has valid static creds for the user — must be ignored for OAuth servers.
+	st := &minimalMCPServerStore{
+		userCreds: &store.MCPUserCredentials{
+			APIKey:  "user-static-key",
+			Headers: map[string]string{"Authorization": "Bearer user-static-key"},
+		},
+	}
+
+	l := &Loop{
+		tenantID:              uuid.New(),
+		mcpPool:               pool,
+		mcpStore:              st,
+		mcpUserCredSrvs:       []store.MCPAccessInfo{{Server: oauthServerData()}},
+		mcpOAuthTokenProvider: provider,
+	}
+
+	result := l.getUserMCPTools(ctx, "user-1")
+	if result != nil {
+		t.Errorf("expected nil tools: OAuth server without token must be skipped even with static creds, got %d tools", len(result))
+	}
+	if st.getUserCredsCalls != 0 {
+		t.Errorf("static GetUserCredentials must NOT be consulted for OAuth servers, called %d times", st.getUserCredsCalls)
+	}
+	provider.mu.Lock()
+	calls := provider.callCount
+	provider.mu.Unlock()
+	if calls == 0 {
+		t.Error("expected GetValidToken to be consulted for the OAuth server")
+	}
+}
+
+// TestGetUserMCPToolsNilPoolEarlyReturn verifies that a nil pool causes the
+// function to return immediately without calling the token provider.
+func TestGetUserMCPToolsNilPoolEarlyReturn(t *testing.T) {
+	provider := &recordingOAuthProvider{}
+
+	l := &Loop{
+		tenantID:              uuid.New(),
+		mcpPool:               nil, // triggers early return
+		mcpStore:              &minimalMCPServerStore{},
+		mcpUserCredSrvs:       []store.MCPAccessInfo{{Server: oauthServerData()}},
+		mcpOAuthTokenProvider: provider,
+	}
+
+	result := l.getUserMCPTools(context.Background(), "user-1")
+	if result != nil {
+		t.Errorf("expected nil when pool is nil, got %v", result)
+	}
+	if provider.callCount != 0 {
+		t.Error("GetValidToken must not be called when pool is nil (early return path)")
+	}
+}
+
+// errTokenExpiredForTest is a simple error type used to simulate ErrTokenExpired
+// without importing the oauth package (avoids potential import cycles in tests).
+type errTokenExpiredForTest string
+
+func (e errTokenExpiredForTest) Error() string { return string(e) }

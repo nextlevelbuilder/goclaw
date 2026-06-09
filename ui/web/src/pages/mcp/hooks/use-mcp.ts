@@ -4,9 +4,9 @@ import i18next from "i18next";
 import { useHttp } from "@/hooks/use-ws";
 import { queryKeys } from "@/lib/query-keys";
 import { toast } from "@/stores/use-toast-store";
-import type { MCPServerData, MCPServerInput, MCPAgentGrant, MCPToolInfo, MCPUserCredentialStatus, MCPUserCredentialInput } from "@/types/mcp";
+import type { MCPServerData, MCPServerInput, MCPAgentGrant, MCPToolInfo, MCPUserCredentialStatus, MCPUserCredentialInput, MCPOAuthStatus } from "@/types/mcp";
 
-export type { MCPServerData, MCPServerInput, MCPAgentGrant, MCPToolInfo, MCPUserCredentialStatus, MCPUserCredentialInput };
+export type { MCPServerData, MCPServerInput, MCPAgentGrant, MCPToolInfo, MCPUserCredentialStatus, MCPUserCredentialInput, MCPOAuthStatus };
 
 export function useMCP() {
   const http = useHttp();
@@ -109,7 +109,7 @@ export function useMCP() {
   );
 
   const testConnection = useCallback(
-    async (data: { transport: string; command?: string; args?: string[]; url?: string; headers?: Record<string, string>; env?: Record<string, string> }) => {
+    async (data: { server_id?: string; transport: string; command?: string; args?: string[]; url?: string; headers?: Record<string, string>; env?: Record<string, string> }) => {
       return http.post<{ success: boolean; tool_count?: number; error?: string }>("/v1/mcp/servers/test", data);
     },
     [http],
@@ -160,6 +160,32 @@ export function useMCP() {
     [http],
   );
 
+  const startOAuth = useCallback(
+    async (serverId: string, mcpUrl: string, userId?: string) => {
+      return http.post<{ auth_url: string; state: string; client_id: string; issuer: string; completed?: boolean }>(
+        "/v1/mcp/oauth/start",
+        { server_id: serverId, mcp_url: mcpUrl, user_id: userId ?? "" },
+      );
+    },
+    [http],
+  );
+
+  const getOAuthStatus = useCallback(
+    async (serverId: string, userId?: string) => {
+      const qs = userId ? `?user_id=${encodeURIComponent(userId)}` : "";
+      return http.get<MCPOAuthStatus>(`/v1/mcp/oauth/status/${serverId}${qs}`);
+    },
+    [http],
+  );
+
+  const revokeOAuth = useCallback(
+    async (serverId: string, userId?: string) => {
+      const qs = userId ? `?user_id=${encodeURIComponent(userId)}` : "";
+      await http.delete(`/v1/mcp/oauth/token/${serverId}${qs}`);
+    },
+    [http],
+  );
+
   return {
     servers,
     loading,
@@ -178,5 +204,8 @@ export function useMCP() {
     getUserCredentials,
     setUserCredentials,
     deleteUserCredentials,
+    startOAuth,
+    getOAuthStatus,
+    revokeOAuth,
   };
 }
