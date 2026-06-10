@@ -229,6 +229,202 @@ func TestSend_EmptyContentIsNoOp(t *testing.T) {
 	}
 }
 
+// TestResolveSendOptions verifies the Metadata → sendOptions decoding that
+// Send() uses to pick v1 whisper vs v2 public and to thread replyId into
+// the v2 fields object. Defaults must preserve pre-refactor behaviour
+// (public, no replyId) so any caller missing the keys still works.
+func TestResolveSendOptions(t *testing.T) {
+	cases := []struct {
+		name            string
+		meta            map[string]string
+		wantVisibility  string
+		wantReplyToMID  int
+	}{
+		{
+			name:           "empty metadata defaults to public",
+			meta:           nil,
+			wantVisibility: VisibilityPublic,
+			wantReplyToMID: 0,
+		},
+		{
+			name:           "whisper visibility",
+			meta:           map[string]string{MetaKeyVisibility: VisibilityWhisper},
+			wantVisibility: VisibilityWhisper,
+			wantReplyToMID: 0,
+		},
+		{
+			name:           "explicit public visibility",
+			meta:           map[string]string{MetaKeyVisibility: VisibilityPublic},
+			wantVisibility: VisibilityPublic,
+			wantReplyToMID: 0,
+		},
+		{
+			name:           "unknown visibility value falls back to public",
+			meta:           map[string]string{MetaKeyVisibility: "secret"},
+			wantVisibility: VisibilityPublic,
+			wantReplyToMID: 0,
+		},
+		{
+			name:           "valid numeric message_id parsed for replyToMID",
+			meta:           map[string]string{MetaKeyMessageID: "297178"},
+			wantVisibility: VisibilityPublic,
+			wantReplyToMID: 297178,
+		},
+		{
+			name:           "non-numeric message_id ignored",
+			meta:           map[string]string{MetaKeyMessageID: "abc"},
+			wantVisibility: VisibilityPublic,
+			wantReplyToMID: 0,
+		},
+		{
+			name:           "zero message_id ignored",
+			meta:           map[string]string{MetaKeyMessageID: "0"},
+			wantVisibility: VisibilityPublic,
+			wantReplyToMID: 0,
+		},
+		{
+			name: "whisper with replyToMID still captures both",
+			meta: map[string]string{
+				MetaKeyVisibility: VisibilityWhisper,
+				MetaKeyMessageID:  "12345",
+			},
+			wantVisibility: VisibilityWhisper,
+			wantReplyToMID: 12345,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := resolveSendOptions(tc.meta)
+			if opts.visibility != tc.wantVisibility {
+				t.Errorf("visibility = %q; want %q", opts.visibility, tc.wantVisibility)
+			}
+			if opts.replyToMID != tc.wantReplyToMID {
+				t.Errorf("replyToMID = %d; want %d", opts.replyToMID, tc.wantReplyToMID)
+			}
+		})
+	}
+}
+
+// TestSend_BranchesOnVisibility wires Send() through the HTTP-layer stub
+// (captureRT) so we can assert exactly which Bitrix REST method got
+// invoked and what params were on the wire. Public visibility → v2;
+// whisper visibility → v1 with SKIP_CONNECTOR=Y. The matrix also covers
+// replyId propagation on v2 and its absence on v1.
+func TestSend_BranchesOnVisibility(t *testing.T) {
+	cases := []struct {
+		name           string
+		metadata       map[string]string
+		wantPath       string
+		wantFormChecks map[string]string // exact form-key → expected value
+		notWantKeys    []string          // form keys that must be absent
+	}{
+		{
+			name: "whisper routes to v1 imbot.message.add with SKIP_CONNECTOR=Y",
+			metadata: map[string]string{
+				MetaKeyVisibility: VisibilityWhisper,
+				MetaKeyMessageID:  "297178", // v1 ignores replyId so must NOT appear
+			},
+			wantPath: "/rest/imbot.message.add.json",
+			wantFormChecks: map[string]string{
+				"BOT_ID":         "1",
+				"DIALOG_ID":      "chat4878",
+				"MESSAGE":        "hi from bot",
+				"SKIP_CONNECTOR": "Y",
+			},
+			notWantKeys: []string{
+				"fields[replyId]",
+				"replyId",
+				"botId",
+			},
+		},
+		{
+			name: "public with replyId routes to v2 + fields[replyId]",
+			metadata: map[string]string{
+				MetaKeyVisibility: VisibilityPublic,
+				MetaKeyMessageID:  "297196",
+			},
+			wantPath: "/rest/imbot.v2.Chat.Message.send.json",
+			wantFormChecks: map[string]string{
+				"botId":            "1",
+				"dialogId":         "chat4878",
+				"fields[message]":  "hi from bot",
+				"fields[replyId]":  "297196",
+			},
+			notWantKeys: []string{
+				"SKIP_CONNECTOR",
+				"BOT_ID",
+				"MESSAGE",
+			},
+		},
+		{
+			name:     "public without message_id routes to v2 without replyId",
+			metadata: map[string]string{MetaKeyVisibility: VisibilityPublic},
+			wantPath: "/rest/imbot.v2.Chat.Message.send.json",
+			wantFormChecks: map[string]string{
+				"botId":           "1",
+				"dialogId":        "chat4878",
+				"fields[message]": "hi from bot",
+			},
+			notWantKeys: []string{
+				"fields[replyId]",
+				"replyId",
+				"SKIP_CONNECTOR",
+			},
+		},
+		{
+			name:     "missing visibility defaults to v2 public (backward-compat)",
+			metadata: nil,
+			wantPath: "/rest/imbot.v2.Chat.Message.send.json",
+			wantFormChecks: map[string]string{
+				"botId":           "1",
+				"dialogId":        "chat4878",
+				"fields[message]": "hi from bot",
+			},
+			notWantKeys: []string{
+				"SKIP_CONNECTOR",
+				"fields[replyId]",
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rt := &captureRT{result: `{"result":{"id":1}}`}
+			client := newStubClient("test.bitrix24.com", rt)
+			ch, _ := newFakeChannelWithClient(t, client)
+			ch.SetRunning(true)
+
+			msg := bus.OutboundMessage{
+				ChatID:   "chat4878",
+				Content:  "hi from bot",
+				Metadata: tc.metadata,
+			}
+			if err := ch.Send(context.Background(), msg); err != nil {
+				t.Fatalf("Send error: %v", err)
+			}
+
+			if len(rt.paths) != 1 {
+				t.Fatalf("expected exactly 1 HTTP call, got %d (paths=%v)", len(rt.paths), rt.paths)
+			}
+			if rt.paths[0] != tc.wantPath {
+				t.Errorf("path = %q; want %q", rt.paths[0], tc.wantPath)
+			}
+
+			form := rt.reqs[0]
+			for k, want := range tc.wantFormChecks {
+				if got := form.Get(k); got != want {
+					t.Errorf("form[%q] = %q; want %q (full form: %v)", k, got, want, form)
+				}
+			}
+			for _, k := range tc.notWantKeys {
+				if v := form.Get(k); v != "" {
+					t.Errorf("form[%q] should be absent, got %q", k, v)
+				}
+			}
+		})
+	}
+}
+
 // TestBuildAddressMention covers the address-user resolver that prepends the
 // `[USER=<id>][/USER]` BBCode to outbound replies in group chats. The format
 // is intentionally empty-named so Bitrix renders the user's current display

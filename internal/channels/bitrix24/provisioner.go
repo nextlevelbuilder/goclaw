@@ -375,7 +375,10 @@ func (c *Channel) notifyUserOfMCPIssueOnce(ctx context.Context, userID, chatID s
 	//  2. The notice is plain text — no BBCode conversion, no chunking
 	//     (well under the 4000-rune limit), no media. Send's pipeline is
 	//     overkill.
-	if err := c.sendChunk(ctx, chatID, mcpUserNotifyMessage); err != nil {
+	// Provisioner notice is a one-off staff alert sent into the user's
+	// chat with the bot — always public (default v2 path), no replyId
+	// because there's no inbound message to link back to.
+	if err := c.sendChunk(ctx, chatID, mcpUserNotifyMessage, sendOptions{visibility: VisibilityPublic}); err != nil {
 		slog.Debug("bitrix24 mcp: failed to send user degradation notice",
 			"channel", c.Name(), "user", userID, "chat_id", chatID, "err", err)
 	}

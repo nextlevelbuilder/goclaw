@@ -105,17 +105,56 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 		return
 	}
 
-	isGroup := isGroupMessageType(evt.Params.MessageType)
+	// Open Channel (Bitrix24 Lines) carries MESSAGE_TYPE="L" and
+	// CHAT_ENTITY_TYPE="LINES". The session mixes real customers coming in
+	// through a connector (Zalo/FB/...) with internal staff who join to
+	// supervise. Customers can't @-mention the bot from outside; treating the
+	// session as a generic group chat would either spam customers (drop when
+	// require_mention is true, reply to everything when false) or silently
+	// merge into the "direct" path. Recognise it up-front so the gate below
+	// can apply the right policy.
+	isOpenChannel := strings.EqualFold(evt.Params.MessageType, "L") ||
+		strings.EqualFold(evt.Params.ChatEntityType, "LINES")
+	// Force group routing for Open Channel so the existing mention-strip /
+	// readable-mention pipeline below runs, and so the session key includes
+	// the chat id instead of dumping every participant into the "direct"
+	// bucket.
+	isGroup := isGroupMessageType(evt.Params.MessageType) || isOpenChannel
 	text := evt.Params.Message
 	slog.Info("bitrix24 message: handle entry",
 		"from_user_id", evt.Params.FromUserID,
 		"dialog_id", evt.Params.DialogID,
 		"message_type", evt.Params.MessageType,
 		"is_group", isGroup,
+		"is_open_channel", isOpenChannel,
+		"from_connector", evt.Params.FromIsConnector,
 		"require_mention", c.RequireMention(),
 		"message_id", evt.Params.MessageID,
 		"mentioned_list_n", len(evt.Params.MentionedList),
 	)
+	// Open Channel gate (must run BEFORE the generic group block):
+	//   - Connector traffic (real customer): drop. Humans handle the
+	//     customer; the bot stays out of the conversation by design.
+	//   - Internal staff without @-mentioning the bot: drop. Staff who join
+	//     the session only need the bot when they explicitly call it.
+	//   - Internal staff with @-mention: fall through to the group block so
+	//     the existing mention-strip pipeline runs.
+	if isOpenChannel {
+		if evt.Params.FromIsConnector {
+			slog.Info("bitrix24 message: dropped OL connector message (staff handles customer)",
+				"from_user_id", evt.Params.FromUserID,
+				"dialog_id", evt.Params.DialogID,
+				"message_id", evt.Params.MessageID)
+			return
+		}
+		if !c.isMentionedParams(&evt.Params) {
+			slog.Info("bitrix24 message: dropped OL internal staff without mention",
+				"from_user_id", evt.Params.FromUserID,
+				"dialog_id", evt.Params.DialogID,
+				"message_id", evt.Params.MessageID)
+			return
+		}
+	}
 	if isGroup {
 		// Authority-ordered fallback: structured MENTIONED_LIST → raw
 		// MESSAGE_ORIGINAL → stripped MESSAGE. In group chats Bitrix24 strips
@@ -182,12 +221,22 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 		}
 	}
 
+	// Visibility: whisper (internal-only) vs public (forwarded to external
+	// connector). Send() uses this to route through imbot.message.add with
+	// SKIP_CONNECTOR=Y (whisper) or imbot.v2.Chat.Message.send (public).
+	// Default to public so legacy events without the marker still publish
+	// to the connector — that matches pre-refactor behavior.
+	visibility := VisibilityPublic
+	if evt.Params.IsHiddenMessage {
+		visibility = VisibilityWhisper
+	}
 	meta := map[string]string{
 		"bitrix_dialog_id":  evt.Params.DialogID,
 		"bitrix_portal":     c.portalDomainSafe(),
 		"bitrix_bot_id":     strconv.Itoa(c.BotID()),
 		"bitrix_bot_code":   c.cfg.BotCode,
-		"bitrix_message_id": evt.Params.MessageID,
+		MetaKeyMessageID:    evt.Params.MessageID,
+		MetaKeyVisibility:   visibility,
 	}
 	if evt.Params.ReplyToMID != "" {
 		meta["bitrix_reply_to_mid"] = evt.Params.ReplyToMID

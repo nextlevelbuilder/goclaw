@@ -123,6 +123,171 @@ func TestParseEvent_FormURLEncoded_WithFiles(t *testing.T) {
 	}
 }
 
+// TestParseEvent_FormURLEncoded_WithFiles_IDKeyed covers the live Bitrix24
+// webhook shape where FILES is indexed by the file id (e.g. FILES[29968]),
+// not by a 0-based array index. Older fixtures use array-style keys; both
+// forms must populate evt.Params.Files.
+func TestParseEvent_FormURLEncoded_WithFiles_IDKeyed(t *testing.T) {
+	v := buildBitrixForm()
+	v.Set("data[PARAMS][FILES][29968][id]", "29968")
+	v.Set("data[PARAMS][FILES][29968][name]", "photo.jpg")
+	v.Set("data[PARAMS][FILES][29968][type]", "image")
+	v.Set("data[PARAMS][FILES][29968][urlDownload]", "https://portal.bitrix24.com/bitrix/services/main/ajax.php?action=disk.api.file.download&fileId=29968")
+	v.Set("data[PARAMS][FILES][29968][size]", "211220")
+
+	req := httptest.NewRequest(http.MethodPost, "/bitrix24/events", strings.NewReader(v.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	evt, err := ParseEvent(req)
+	if err != nil {
+		t.Fatalf("ParseEvent: %v", err)
+	}
+	if len(evt.Params.Files) != 1 {
+		t.Fatalf("expected 1 file, got %d", len(evt.Params.Files))
+	}
+	f := evt.Params.Files[0]
+	if f.ID != "29968" || f.Name != "photo.jpg" || f.Type != "image" || f.Size != 211220 {
+		t.Errorf("file mismatch: %+v", f)
+	}
+	if f.URL == "" {
+		t.Errorf("file.URL missing — urlDownload should populate it when urlMachine/url absent")
+	}
+}
+
+// TestParseEvent_FormURLEncoded_IsConnector covers parsing of data[USER][IS_CONNECTOR]
+// for both Y and N values (form-encoded path). Used by the Open Channel gate
+// in handle.go to distinguish customers (Y) from internal staff (N).
+func TestParseEvent_FormURLEncoded_IsConnector(t *testing.T) {
+	cases := []struct {
+		name     string
+		raw      string
+		expected bool
+	}{
+		{"Y", "Y", true},
+		{"y", "y", true},
+		{"N", "N", false},
+		{"empty", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			v := buildBitrixForm()
+			if tc.raw != "" {
+				v.Set("data[USER][IS_CONNECTOR]", tc.raw)
+			}
+			req := httptest.NewRequest(http.MethodPost, "/bitrix24/events", strings.NewReader(v.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			evt, err := ParseEvent(req)
+			if err != nil {
+				t.Fatalf("ParseEvent: %v", err)
+			}
+			if evt.Params.FromIsConnector != tc.expected {
+				t.Errorf("FromIsConnector = %v; want %v", evt.Params.FromIsConnector, tc.expected)
+			}
+		})
+	}
+}
+
+// TestParseEvent_JSON_IsConnector covers the JSON path: data.USER.IS_CONNECTOR
+// → EventParams.FromIsConnector.
+func TestParseEvent_JSON_IsConnector(t *testing.T) {
+	cases := []struct {
+		name     string
+		raw      string
+		expected bool
+	}{
+		{"Y", `"Y"`, true},
+		{"N", `"N"`, false},
+		{"missing", `null`, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			body := `{
+				"event": "ONIMBOTMESSAGEADD",
+				"auth": {"domain":"x","application_token":"t","access_token":"a","refresh_token":"r","member_id":"m"},
+				"data": {
+					"USER": {"IS_CONNECTOR": ` + tc.raw + `},
+					"PARAMS": {"MESSAGE_ID":"1","DIALOG_ID":"chat1","FROM_USER_ID":"42","MESSAGE":"hi","MESSAGE_TYPE":"L"}
+				}
+			}`
+			req := httptest.NewRequest(http.MethodPost, "/bitrix24/events", strings.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			evt, err := ParseEvent(req)
+			if err != nil {
+				t.Fatalf("ParseEvent: %v", err)
+			}
+			if evt.Params.FromIsConnector != tc.expected {
+				t.Errorf("FromIsConnector = %v; want %v", evt.Params.FromIsConnector, tc.expected)
+			}
+		})
+	}
+}
+
+// TestParseEvent_FormURLEncoded_IsHiddenMessage covers parsing of
+// data[PARAMS][PARAMS][COMPONENT_ID] → EventParams.IsHiddenMessage. The
+// nested PARAMS path is how Bitrix24 marks whisper / internal-only messages
+// in Open Channel sessions (do not forward to external connectors).
+func TestParseEvent_FormURLEncoded_IsHiddenMessage(t *testing.T) {
+	cases := []struct {
+		name     string
+		value    string // value for data[PARAMS][PARAMS][COMPONENT_ID]; empty = field absent
+		expected bool
+	}{
+		{"hidden_message", "HiddenMessage", true},
+		{"other_component", "ChatJoin", false},
+		{"absent", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			v := buildBitrixForm()
+			if tc.value != "" {
+				v.Set("data[PARAMS][PARAMS][COMPONENT_ID]", tc.value)
+			}
+			req := httptest.NewRequest(http.MethodPost, "/bitrix24/events", strings.NewReader(v.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			evt, err := ParseEvent(req)
+			if err != nil {
+				t.Fatalf("ParseEvent: %v", err)
+			}
+			if evt.Params.IsHiddenMessage != tc.expected {
+				t.Errorf("IsHiddenMessage = %v; want %v", evt.Params.IsHiddenMessage, tc.expected)
+			}
+		})
+	}
+}
+
+// TestParseEvent_JSON_IsHiddenMessage covers the JSON path: data.PARAMS.PARAMS.
+// COMPONENT_ID → EventParams.IsHiddenMessage.
+func TestParseEvent_JSON_IsHiddenMessage(t *testing.T) {
+	cases := []struct {
+		name     string
+		nested   string // JSON snippet for inner PARAMS; empty = field absent
+		expected bool
+	}{
+		{"hidden_message", `,"PARAMS":{"COMPONENT_ID":"HiddenMessage"}`, true},
+		{"other_component", `,"PARAMS":{"COMPONENT_ID":"ChatJoin"}`, false},
+		{"absent", ``, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			body := `{
+				"event": "ONIMBOTMESSAGEADD",
+				"auth": {"domain":"x","application_token":"t","access_token":"a","refresh_token":"r","member_id":"m"},
+				"data": {
+					"PARAMS": {"MESSAGE_ID":"1","DIALOG_ID":"chat1","FROM_USER_ID":"42","MESSAGE":"hi","MESSAGE_TYPE":"L"` + tc.nested + `}
+				}
+			}`
+			req := httptest.NewRequest(http.MethodPost, "/bitrix24/events", strings.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			evt, err := ParseEvent(req)
+			if err != nil {
+				t.Fatalf("ParseEvent: %v", err)
+			}
+			if evt.Params.IsHiddenMessage != tc.expected {
+				t.Errorf("IsHiddenMessage = %v; want %v", evt.Params.IsHiddenMessage, tc.expected)
+			}
+		})
+	}
+}
+
 func TestParseEvent_SystemFlag(t *testing.T) {
 	v := buildBitrixForm()
 	v.Set("data[PARAMS][SYSTEM]", "Y")
