@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -88,6 +89,22 @@ type EventParams struct {
 	// deal/task" deterministically without parsing CHAT_TITLE strings.
 	ChatEntityType string
 	ChatEntityID   string
+
+	// FromIsConnector mirrors data[USER][IS_CONNECTOR]. In Bitrix24 Open
+	// Channel sessions (MESSAGE_TYPE=L), real customers come in through a
+	// connector (Zalo, FB, etc.) and IS_CONNECTOR=Y. Internal staff who join
+	// the session report IS_CONNECTOR=N. The flag drives the Open Channel
+	// gating in handleMessage: bot drops connector traffic (humans handle
+	// customers) and only replies to staff who @-mention it.
+	FromIsConnector bool
+
+	// IsHiddenMessage mirrors data[PARAMS][PARAMS][COMPONENT_ID]=HiddenMessage,
+	// which Bitrix24 sets for whisper / internal-only messages in Open
+	// Channel sessions. Whisper messages MUST NOT be forwarded to external
+	// connectors (Zalo, FB, etc.) — Send() routes whisper replies through
+	// imbot.message.add with SKIP_CONNECTOR=Y instead of the v2 path.
+	// Absent or any value other than "HiddenMessage" → false (public).
+	IsHiddenMessage bool
 }
 
 // EventFile is one attachment element extracted from
@@ -194,6 +211,19 @@ func parseFormEvent(v url.Values) (*Event, error) {
 	if s := formGet(v, "data", "PARAMS", "SYSTEM"); s == "Y" {
 		p.SystemMessage = true
 	}
+	// data[PARAMS][PARAMS][COMPONENT_ID]=HiddenMessage marks a whisper /
+	// internal-only message in Open Channel. Note the nested PARAMS — the
+	// outer PARAMS contains MESSAGE_ID/CHAT_ID/etc., and Bitrix tucks UI
+	// component metadata into an inner PARAMS sub-object.
+	if s := formGet(v, "data", "PARAMS", "PARAMS", "COMPONENT_ID"); s == "HiddenMessage" {
+		p.IsHiddenMessage = true
+	}
+	// data[USER][IS_CONNECTOR] — Y for messages coming in through an Open
+	// Channel connector (Zalo, FB Messenger, etc.), N for internal Bitrix24
+	// users. Used by the Open Channel gate in handle.go.
+	if s := formGet(v, "data", "USER", "IS_CONNECTOR"); strings.EqualFold(s, "Y") {
+		p.FromIsConnector = true
+	}
 
 	// MENTIONED_LIST: data[PARAMS][MENTIONED_LIST][<user_id>]=<user_id>.
 	// Iterate all form keys to discover the structured map; key format is
@@ -232,25 +262,65 @@ func parseFormEvent(v url.Values) (*Event, error) {
 		}
 	}
 
-	// Files iterate indices until name+url both empty.
-	for i := 0; i < 32; i++ {
-		name := formGet(v, "data", "PARAMS", "FILES", strconv.Itoa(i), "name")
+	// FILES is keyed by the Bitrix24 file ID, not by a 0-based index — webhook
+	// payloads look like `data[PARAMS][FILES][29968][name]=...`. Discover every
+	// id present in the form, then look the fields up by that id. Older
+	// fixtures using "0","1",... still work — they just appear as ids "0","1".
+	const filesPrefix = "data[PARAMS][FILES]["
+	seen := make(map[string]struct{})
+	var fileIDs []string
+	for key := range v {
+		if !strings.HasPrefix(key, filesPrefix) {
+			continue
+		}
+		rest := key[len(filesPrefix):]
+		end := strings.IndexByte(rest, ']')
+		if end <= 0 {
+			continue
+		}
+		id := rest[:end]
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		fileIDs = append(fileIDs, id)
+	}
+	// Deterministic order: numeric ids ascending; non-numeric ids fall back to
+	// lexicographic. Map iteration order in Go is random, so without this the
+	// output Files slice ordering would flap between runs.
+	sort.Slice(fileIDs, func(i, j int) bool {
+		ai, aErr := strconv.Atoi(fileIDs[i])
+		bi, bErr := strconv.Atoi(fileIDs[j])
+		if aErr == nil && bErr == nil {
+			return ai < bi
+		}
+		return fileIDs[i] < fileIDs[j]
+	})
+	for _, id := range fileIDs {
+		name := formGet(v, "data", "PARAMS", "FILES", id, "name")
 		url := firstNonEmpty(
-			formGet(v, "data", "PARAMS", "FILES", strconv.Itoa(i), "urlMachine"),
-			formGet(v, "data", "PARAMS", "FILES", strconv.Itoa(i), "url"),
+			formGet(v, "data", "PARAMS", "FILES", id, "urlMachine"),
+			formGet(v, "data", "PARAMS", "FILES", id, "url"),
+			formGet(v, "data", "PARAMS", "FILES", id, "urlDownload"),
 		)
 		if name == "" && url == "" {
-			break
+			continue
 		}
-		size, _ := strconv.ParseInt(formGet(v, "data", "PARAMS", "FILES", strconv.Itoa(i), "size"), 10, 64)
+		size, _ := strconv.ParseInt(formGet(v, "data", "PARAMS", "FILES", id, "size"), 10, 64)
+		// Prefer the explicit FILES[<id>][id] field when present; fall back to
+		// the bracket key itself (which IS the file id in live payloads).
+		fileID := formGet(v, "data", "PARAMS", "FILES", id, "id")
+		if fileID == "" {
+			fileID = id
+		}
 		p.Files = append(p.Files, EventFile{
-			ID:         formGet(v, "data", "PARAMS", "FILES", strconv.Itoa(i), "id"),
+			ID:         fileID,
 			Name:       name,
-			Type:       formGet(v, "data", "PARAMS", "FILES", strconv.Itoa(i), "type"),
+			Type:       formGet(v, "data", "PARAMS", "FILES", id, "type"),
 			URL:        url,
-			URLPreview: formGet(v, "data", "PARAMS", "FILES", strconv.Itoa(i), "urlPreview"),
+			URLPreview: formGet(v, "data", "PARAMS", "FILES", id, "urlPreview"),
 			Size:       size,
-			Mime:       formGet(v, "data", "PARAMS", "FILES", strconv.Itoa(i), "mime"),
+			Mime:       formGet(v, "data", "PARAMS", "FILES", id, "mime"),
 		})
 	}
 
@@ -283,6 +353,9 @@ func parseJSONEvent(body io.ReadCloser) (*Event, error) {
 		} `json:"auth"`
 		Data struct {
 			Bot    map[string]map[string]any `json:"BOT"`
+			User   struct {
+				IsConnector string `json:"IS_CONNECTOR"`
+			} `json:"USER"`
 			Params struct {
 				MessageID       any              `json:"MESSAGE_ID"`
 				DialogID        any              `json:"DIALOG_ID"`
@@ -297,7 +370,14 @@ func parseJSONEvent(body io.ReadCloser) (*Event, error) {
 				ReplyToMID      any              `json:"REPLY_TO_MESSAGE_ID"`
 				ChatEntityType  string           `json:"CHAT_ENTITY_TYPE"`
 				ChatEntityID    string           `json:"CHAT_ENTITY_ID"`
-				Files           []map[string]any `json:"FILES"`
+				// Nested PARAMS holds UI component metadata. COMPONENT_ID=
+				// HiddenMessage marks a whisper / internal-only message.
+				NestedParams struct {
+					ComponentID string `json:"COMPONENT_ID"`
+				} `json:"PARAMS"`
+				// FILES may arrive as an array OR a map keyed by file id — keep
+				// raw and normalize after Decode.
+				Files json.RawMessage `json:"FILES"`
 			} `json:"PARAMS"`
 		} `json:"data"`
 	}
@@ -352,6 +432,8 @@ func parseJSONEvent(body io.ReadCloser) (*Event, error) {
 	p.ReplyToMID = asString(raw.Data.Params.ReplyToMID)
 	p.ChatEntityType = raw.Data.Params.ChatEntityType
 	p.ChatEntityID = raw.Data.Params.ChatEntityID
+	p.FromIsConnector = strings.EqualFold(raw.Data.User.IsConnector, "Y")
+	p.IsHiddenMessage = raw.Data.Params.NestedParams.ComponentID == "HiddenMessage"
 	if len(raw.Data.Params.MentionedList) > 0 {
 		p.MentionedList = make(map[string]string, len(raw.Data.Params.MentionedList))
 		for id, val := range raw.Data.Params.MentionedList {
@@ -359,17 +441,48 @@ func parseJSONEvent(body io.ReadCloser) (*Event, error) {
 		}
 	}
 
-	for _, f := range raw.Data.Params.Files {
+	// Normalize FILES to (key, file-fields) pairs. Bitrix24 ships either an
+	// array OR an object keyed by the file id; we handle both. The key is the
+	// fallback for the file id when the inner "id" field is absent.
+	type filePair struct {
+		key    string
+		fields map[string]any
+	}
+	var filePairs []filePair
+	if len(raw.Data.Params.Files) > 0 {
+		var asArr []map[string]any
+		if err := json.Unmarshal(raw.Data.Params.Files, &asArr); err == nil {
+			for i, f := range asArr {
+				filePairs = append(filePairs, filePair{key: strconv.Itoa(i), fields: f})
+			}
+		} else {
+			var asMap map[string]map[string]any
+			if err := json.Unmarshal(raw.Data.Params.Files, &asMap); err == nil {
+				for k, f := range asMap {
+					filePairs = append(filePairs, filePair{key: k, fields: f})
+				}
+			}
+		}
+	}
+	for _, fp := range filePairs {
+		f := fp.fields
 		url := asString(f["urlMachine"])
 		if url == "" {
 			url = asString(f["url"])
+		}
+		if url == "" {
+			url = asString(f["urlDownload"])
 		}
 		name := asString(f["name"])
 		if name == "" && url == "" {
 			continue
 		}
+		id := asString(f["id"])
+		if id == "" {
+			id = fp.key
+		}
 		p.Files = append(p.Files, EventFile{
-			ID:         asString(f["id"]),
+			ID:         id,
 			Name:       name,
 			Type:       asString(f["type"]),
 			URL:        url,

@@ -12,6 +12,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
+	"github.com/nextlevelbuilder/goclaw/internal/channels/bitrix24"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/telegram/voiceguard"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
@@ -228,6 +229,17 @@ func processNormalMessage(
 		if msg.SenderID != "" && !bus.IsInternalSender(msg.SenderID) {
 			outMeta["bitrix_address_user_id"] = msg.SenderID
 		}
+	}
+
+	// Forward Bitrix24-specific routing keys so Send() can:
+	//   1. Branch v2 public vs v1 whisper (bitrix_visibility)
+	//   2. Set fields.replyId on v2 public reply (bitrix_message_id)
+	// CopyFinalRoutingMeta is channel-agnostic and doesn't include these.
+	if v := msg.Metadata[bitrix24.MetaKeyVisibility]; v != "" {
+		outMeta[bitrix24.MetaKeyVisibility] = v
+	}
+	if v := msg.Metadata[bitrix24.MetaKeyMessageID]; v != "" {
+		outMeta[bitrix24.MetaKeyMessageID] = v
 	}
 
 	// Register run with channel manager for streaming/reaction event forwarding.
