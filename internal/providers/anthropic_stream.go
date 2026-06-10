@@ -40,6 +40,10 @@ func (p *AnthropicProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 	// Track thinking token count by accumulated chunk size
 	thinkingChars := 0
 	var thinkingSignature strings.Builder
+	// rawThinkingBlock accumulates thinking text ALWAYS (even when stripThinking=true).
+	// result.Thinking may be empty when stripping; rawThinkingBlock preserves the full
+	// content for RawAssistantContent tool-use passback (required by Anthropic API).
+	var rawThinkingBlock strings.Builder
 
 	sse := NewSSEScanner(cb)
 	for sse.Next() {
@@ -90,6 +94,7 @@ func (p *AnthropicProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 					// Always count raw thinking bytes for billing estimation
 					// below, even when stripping user-visible output.
 					thinkingChars += len(ev.Delta.Thinking)
+					rawThinkingBlock.WriteString(ev.Delta.Thinking)
 					if !stripThinking {
 						result.Thinking += ev.Delta.Thinking
 						if onChunk != nil {
@@ -110,12 +115,23 @@ func (p *AnthropicProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 			// Reconstruct the complete content block for RawAssistantContent
 			if len(rawContentBlocks) > 0 {
 				idx := len(rawContentBlocks) - 1
-				block := p.buildRawBlock(currentBlockType, result, toolCallJSON, idx)
+				// When stripThinking is active, result.Thinking is empty but we still
+				// need the full thinking content for Anthropic tool-use passback.
+				// Temporarily restore raw content so buildRawBlock produces a valid block.
+				var block json.RawMessage
+				if currentBlockType == "thinking" && stripThinking && rawThinkingBlock.Len() > 0 {
+					result.Thinking = rawThinkingBlock.String()
+					block = p.buildRawBlock(currentBlockType, result, toolCallJSON, idx)
+					result.Thinking = "" // restore stripped state
+				} else {
+					block = p.buildRawBlock(currentBlockType, result, toolCallJSON, idx)
+				}
 				if block != nil {
 					rawContentBlocks[idx] = block
 				}
 			}
 			currentBlockType = ""
+			rawThinkingBlock.Reset()
 
 		case "message_delta":
 			var ev anthropicMessageDeltaEvent
