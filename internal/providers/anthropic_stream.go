@@ -39,7 +39,12 @@ func (p *AnthropicProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 	var currentBlockType string
 	// Track thinking token count by accumulated chunk size
 	thinkingChars := 0
+	// thinkingSignature accumulates ALL signature_delta values across the stream.
+	// Stored in result.ThinkingSignature for external callers; never reset mid-stream.
 	var thinkingSignature strings.Builder
+	// perBlockSignature tracks the signature for the CURRENT thinking block only.
+	// Reset at content_block_stop so multi-block responses get correct per-block signatures.
+	var perBlockSignature strings.Builder
 	// rawThinkingBlock accumulates thinking text ALWAYS (even when stripThinking=true).
 	// result.Thinking may be empty when stripping; rawThinkingBlock preserves the full
 	// content for RawAssistantContent tool-use passback (required by Anthropic API).
@@ -108,6 +113,7 @@ func (p *AnthropicProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 					}
 				case "signature_delta":
 					thinkingSignature.WriteString(ev.Delta.Signature)
+					perBlockSignature.WriteString(ev.Delta.Signature)
 				}
 			}
 
@@ -115,14 +121,30 @@ func (p *AnthropicProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 			// Reconstruct the complete content block for RawAssistantContent
 			if len(rawContentBlocks) > 0 {
 				idx := len(rawContentBlocks) - 1
-				// When stripThinking is active, result.Thinking is empty but we still
-				// need the full thinking content for Anthropic tool-use passback.
-				// Temporarily restore raw content so buildRawBlock produces a valid block.
 				var block json.RawMessage
-				if currentBlockType == "thinking" && stripThinking && rawThinkingBlock.Len() > 0 {
-					result.Thinking = rawThinkingBlock.String()
-					block = p.buildRawBlock(currentBlockType, result, toolCallJSON, idx)
-					result.Thinking = "" // restore stripped state
+				if currentBlockType == "thinking" {
+					// Build the thinking block directly from per-block accumulators.
+					// Two issues fixed here:
+					// 1. result.ThinkingSignature is set only AFTER the stream ends, so
+					//    buildRawBlock would always omit the signature — causing Anthropic
+					//    to reject the passback with "Field required" on the next iteration.
+					// 2. When stripThinking=true, result.Thinking is empty and buildRawBlock
+					//    would produce {"type":"thinking","thinking":""} which Anthropic also
+					//    rejects. rawThinkingBlock always accumulates regardless of stripping.
+					thinkingText := rawThinkingBlock.String()
+					b := map[string]any{
+						"type":     "thinking",
+						"thinking": thinkingText,
+					}
+					if sig := perBlockSignature.String(); sig != "" {
+						b["signature"] = sig
+					}
+					if encoded, err := json.Marshal(b); err == nil {
+						block = encoded
+					}
+					// Reset per-block signature so the next thinking block starts clean.
+					// thinkingSignature (all-blocks accumulator) is intentionally NOT reset.
+					perBlockSignature.Reset()
 				} else {
 					block = p.buildRawBlock(currentBlockType, result, toolCallJSON, idx)
 				}
