@@ -114,6 +114,9 @@ const BackupRestorePage = lazyWithRetry(() =>
 const HooksPage = lazyWithRetry(() =>
   import("@/pages/hooks").then((m) => ({ default: m.HooksPage })),
 );
+const WebhooksPage = lazyWithRetry(() =>
+  import("@/pages/webhooks/webhooks-page").then((m) => ({ default: m.WebhooksPage })),
+);
 const WorkstationsPage = lazyWithRetry(() =>
   import("@/pages/workstations/workstations-page").then((m) => ({ default: m.WorkstationsPage })),
 );
@@ -185,6 +188,7 @@ export function AppRoutes() {
           <Route path={ROUTES.API_KEYS} element={<RequireAdmin><ApiKeysPage /></RequireAdmin>} />
           <Route path={ROUTES.CHANNELS} element={<RequireAdmin><ChannelsPage key="list" /></RequireAdmin>} />
           <Route path={ROUTES.CHANNEL_DETAIL} element={<RequireAdmin><ChannelsPage key="detail" /></RequireAdmin>} />
+          <Route path={ROUTES.WEBHOOKS} element={<RequireAdmin><WebhooksPage /></RequireAdmin>} />
           <Route path={ROUTES.NODES} element={<RequireAdmin><NodesPage /></RequireAdmin>} />
           <Route path={ROUTES.WORKSTATIONS} element={<RequireAdmin><WorkstationsPage /></RequireAdmin>} />
           <Route path={ROUTES.LOGS} element={<RequireAdmin><LogsPage /></RequireAdmin>} />

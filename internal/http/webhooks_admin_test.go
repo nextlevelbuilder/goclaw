@@ -222,7 +222,7 @@ func webhookTenantCtxWithRole(tenantID uuid.UUID, userID, role string) context.C
 const testAdminEncKey = "00000000000000000000000000000000"
 
 func newAdminHandler(ws *adminWebhookStore, ts *adminTenantStore) *WebhooksAdminHandler {
-	h := NewWebhooksAdminHandler(ws, ts, nil)
+	h := NewWebhooksAdminHandler(ws, nil, ts, nil)
 	h.SetEncKey(testAdminEncKey) // required since K6 guard rejects empty encKey
 	return h
 }

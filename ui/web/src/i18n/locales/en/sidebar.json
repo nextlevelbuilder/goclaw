@@ -16,6 +16,7 @@
     "sessions": "Sessions",
     "pendingMessages": "Pending Messages",
     "channels": "Channels",
+    "webhooks": "Webhooks",
     "contacts": "Contacts",
     "skills": "Skills",
     "cron": "Cron",

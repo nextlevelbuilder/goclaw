@@ -511,6 +511,137 @@ func (h *WebhookLLMHandler) handleAsync(
 	})
 }
 
+// RunTest performs a synchronous test invocation of an llm-kind webhook on behalf of an
+// admin (POST /v1/webhooks/{id}/test). The caller (WebhooksAdminHandler) has already
+// authorized the request and verified webhook ownership — no webhook secret is involved.
+// It resolves the bound agent, runs it within the standard sync timeout, writes an audit
+// row (mode=sync), and returns the response. Errors are returned (not written to HTTP).
+func (h *WebhookLLMHandler) RunTest(ctx context.Context, wh *store.WebhookData, input, model string) (*webhookLLMSyncResp, error) {
+	if wh == nil || wh.AgentID == nil {
+		return nil, errors.New("webhook has no bound agent")
+	}
+	agentID := wh.AgentID.String()
+
+	ag, agErr := h.agentRouter.Get(ctx, agentID)
+	if agErr != nil {
+		return nil, fmt.Errorf("agent not found: %w", agErr)
+	}
+	// P0 cross-tenant isolation: agent must belong to webhook's tenant.
+	if ag.UUID() != *wh.AgentID {
+		slog.Warn("security.webhook.tenant_mismatch", "webhook_id", wh.ID, "webhook_tenant", wh.TenantID, "agent_id", agentID)
+		return nil, errors.New("agent tenant mismatch")
+	}
+
+	callID := store.GenNewID()
+	deliveryID := store.GenNewID()
+	now := time.Now()
+	runID := uuid.NewString()
+	sessionKey := resolveWebhookSessionKey("", agentID, wh.ID, runID)
+
+	requestPayload, _ := buildAuditPayload(nil, map[string]any{"test": true, "input_len": len(input)})
+	callRecord := &store.WebhookCallData{
+		ID:             callID,
+		TenantID:       wh.TenantID,
+		WebhookID:      wh.ID,
+		AgentID:        wh.AgentID,
+		DeliveryID:     deliveryID,
+		Mode:           "sync",
+		Status:         "running",
+		RequestPayload: requestPayload,
+		CreatedAt:      now,
+		StartedAt:      &now,
+	}
+
+	rr := agent.RunRequest{
+		SessionKey:    sessionKey,
+		Message:       input,
+		Channel:       "webhook",
+		ChatID:        wh.ID.String(),
+		RunID:         runID,
+		Stream:        false,
+		ModelOverride: model,
+		TraceName:     "webhook.llm.test",
+		TraceTags:     []string{"webhook", "test"},
+	}
+
+	timeout := webhookLLMTimeout
+	if h.syncTimeout > 0 {
+		timeout = h.syncTimeout
+	}
+
+	type runOutcome struct {
+		result *agent.RunResult
+		err    error
+	}
+	outCh := make(chan runOutcome, 1)
+
+	laneCtx, laneCancel := context.WithTimeout(ctx, timeout)
+	defer laneCancel()
+
+	submitErr := h.lane.Submit(laneCtx, func() {
+		runCtx, runCancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
+		defer runCancel()
+		result, err := ag.Run(runCtx, rr)
+		outCh <- runOutcome{result: result, err: err}
+	})
+	if submitErr != nil {
+		completedAt := time.Now()
+		errMsg := submitErr.Error()
+		callRecord.Status = "failed"
+		callRecord.Attempts = 1
+		callRecord.CompletedAt = &completedAt
+		callRecord.LastError = &errMsg
+		persistWebhookCall(ctx, h.callStore, callRecord, false, "webhook.llm.test_audit_write_failed")
+		return nil, fmt.Errorf("webhook lane saturated: %w", submitErr)
+	}
+
+	var out runOutcome
+	select {
+	case out = <-outCh:
+	case <-laneCtx.Done():
+		out = runOutcome{err: context.DeadlineExceeded}
+	}
+
+	if out.err != nil {
+		completedAt := time.Now()
+		errMsg := out.err.Error()
+		callRecord.Status = "failed"
+		callRecord.Attempts = 1
+		callRecord.CompletedAt = &completedAt
+		callRecord.LastError = &errMsg
+		persistWebhookCall(ctx, h.callStore, callRecord, false, "webhook.llm.test_audit_write_failed")
+		return nil, out.err
+	}
+
+	resp := &webhookLLMSyncResp{
+		CallID:       callID.String(),
+		AgentID:      agentID,
+		Output:       out.result.Content,
+		FinishReason: "stop",
+	}
+	if out.result.Usage != nil {
+		resp.Usage = &webhookLLMUsage{
+			PromptTokens:     out.result.Usage.PromptTokens,
+			CompletionTokens: out.result.Usage.CompletionTokens,
+			TotalTokens:      out.result.Usage.TotalTokens,
+		}
+	}
+
+	respBytes, _ := json.Marshal(resp)
+	if len(respBytes) > webhookLLMResponseTruncate {
+		respBytes = respBytes[:webhookLLMResponseTruncate]
+	}
+	completedAt := time.Now()
+	callRecord.Status = "done"
+	callRecord.Attempts = 1
+	callRecord.Response = respBytes
+	callRecord.CompletedAt = &completedAt
+	persistWebhookCall(ctx, h.callStore, callRecord, false, "webhook.llm.test_audit_write_failed")
+
+	slog.Info("webhook.llm.test", "call_id", callID, "agent_id", agentID, "webhook_id", wh.ID, "output_len", len(out.result.Content))
+	return resp, nil
+}
+
 // buildInput parses the raw JSON input into a user message and optional extra system prompt.
 //
 // Two formats are accepted:

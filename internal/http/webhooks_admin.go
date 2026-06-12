@@ -1,12 +1,14 @@
 package http
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base32"
 	"encoding/hex"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -30,21 +32,38 @@ var webhookKinds = map[string]bool{
 	"message": true,
 }
 
+// webhookLLMTester runs a server-side test invocation of an llm-kind webhook using the
+// admin's already-authorized session (no webhook secret required). Implemented by *WebhookLLMHandler.
+type webhookLLMTester interface {
+	RunTest(ctx context.Context, wh *store.WebhookData, input, model string) (*webhookLLMSyncResp, error)
+}
+
+// webhookMsgTester runs a server-side test invocation of a message-kind webhook. Implemented by
+// *WebhookMessageHandler. nil on Lite edition (channels unavailable) — handleTest guards on nil.
+type webhookMsgTester interface {
+	RunTest(ctx context.Context, wh *store.WebhookData, req webhookMessageReq) (*webhookMessageResp, error)
+}
+
 // WebhooksAdminHandler implements CRUD for webhook registry entries.
 // All endpoints are tenant-admin-gated (requireTenantAdmin).
 // encKey is the AES-256-GCM encryption key (GOCLAW_ENCRYPTION_KEY); if empty, encrypted_secret
 // is stored as "" and HMAC auth requires rotation before it can be used.
 type WebhooksAdminHandler struct {
-	webhooks store.WebhookStore
-	tenants  store.TenantStore
-	msgBus   *bus.MessageBus
-	encKey   string // AES-256-GCM key for encrypting raw webhook secrets at rest
+	webhooks  store.WebhookStore
+	calls     store.WebhookCallStore
+	tenants   store.TenantStore
+	msgBus    *bus.MessageBus
+	encKey    string // AES-256-GCM key for encrypting raw webhook secrets at rest
+	llmTester webhookLLMTester
+	msgTester webhookMsgTester
 }
 
 // NewWebhooksAdminHandler creates a handler for webhook admin endpoints.
-func NewWebhooksAdminHandler(webhooks store.WebhookStore, tenants store.TenantStore, msgBus *bus.MessageBus) *WebhooksAdminHandler {
+// calls may be nil — the delivery-history endpoint returns 503 when unset.
+func NewWebhooksAdminHandler(webhooks store.WebhookStore, calls store.WebhookCallStore, tenants store.TenantStore, msgBus *bus.MessageBus) *WebhooksAdminHandler {
 	return &WebhooksAdminHandler{
 		webhooks: webhooks,
+		calls:    calls,
 		tenants:  tenants,
 		msgBus:   msgBus,
 	}
@@ -54,6 +73,18 @@ func NewWebhooksAdminHandler(webhooks store.WebhookStore, tenants store.TenantSt
 // Must be called before the first Create/Rotate request; safe to call at startup only.
 func (h *WebhooksAdminHandler) SetEncKey(encKey string) {
 	h.encKey = encKey
+}
+
+// SetTesters wires the runtime invocation handlers used by POST /v1/webhooks/{id}/test.
+// Concrete pointer params (not interfaces) so callers can pass typed-nil safely: a nil
+// *WebhookMessageHandler on Lite leaves msgTester as a true nil interface. Safe to call at startup only.
+func (h *WebhooksAdminHandler) SetTesters(llm *WebhookLLMHandler, msg *WebhookMessageHandler) {
+	if llm != nil {
+		h.llmTester = llm
+	}
+	if msg != nil {
+		h.msgTester = msg
+	}
 }
 
 // RegisterRoutes registers all webhook admin routes on mux.
@@ -67,6 +98,9 @@ func (h *WebhooksAdminHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PATCH /v1/webhooks/{id}", h.requireAdmin(h.handleUpdate))
 	mux.HandleFunc("POST /v1/webhooks/{id}/rotate", h.requireAdmin(h.handleRotate))
 	mux.HandleFunc("DELETE /v1/webhooks/{id}", h.requireAdmin(h.handleRevoke))
+	mux.HandleFunc("GET /v1/webhooks/{id}/calls", h.requireAdmin(h.handleListCalls))
+	mux.HandleFunc("GET /v1/webhooks/{id}/calls/{callId}", h.requireAdmin(h.handleGetCall))
+	mux.HandleFunc("POST /v1/webhooks/{id}/test", h.requireAdmin(h.handleTest))
 }
 
 func (h *WebhooksAdminHandler) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
@@ -530,6 +564,306 @@ func (h *WebhooksAdminHandler) handleRevoke(w http.ResponseWriter, r *http.Reque
 	h.emitCacheInvalidate(id.String())
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
+}
+
+// --- List Calls (delivery history) ---
+
+// webhookCallResp is the trimmed delivery-history record returned to the admin UI.
+// Raw request_payload is omitted (may be large / hold caller data); response is the
+// already-truncated (≤32 KB) audit body and is safe to surface for debugging.
+type webhookCallResp struct {
+	ID            uuid.UUID  `json:"id"`
+	DeliveryID    uuid.UUID  `json:"delivery_id"`
+	Mode          string     `json:"mode"`
+	Status        string     `json:"status"`
+	Attempts      int        `json:"attempts"`
+	NextAttemptAt *time.Time `json:"next_attempt_at,omitempty"`
+	StartedAt     *time.Time `json:"started_at,omitempty"`
+	CompletedAt   *time.Time `json:"completed_at,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	LastError     *string    `json:"last_error,omitempty"`
+	Response      string     `json:"response,omitempty"`
+}
+
+const (
+	webhookCallsDefaultLimit = 50
+	webhookCallsMaxLimit     = 200
+)
+
+func (h *WebhooksAdminHandler) handleListCalls(w http.ResponseWriter, r *http.Request) {
+	locale := extractLocale(r)
+
+	if !requireTenantAdmin(w, r, h.tenants) {
+		slog.Warn("security.webhook.admin_denied", "action", "list_calls", "path", r.URL.Path,
+			"user_id", store.UserIDFromContext(r.Context()))
+		return
+	}
+
+	if h.calls == nil {
+		writeError(w, http.StatusServiceUnavailable, protocol.ErrInternal, i18n.T(locale, i18n.MsgInternalError, "call store unavailable"))
+		return
+	}
+
+	id, ok := parseWebhookID(w, r, locale)
+	if !ok {
+		return
+	}
+
+	ctx := r.Context()
+
+	// Verify ownership before exposing call history (same pattern as handleGet).
+	wh, err := h.webhooks.GetByID(ctx, id)
+	if err != nil || wh == nil {
+		writeError(w, http.StatusNotFound, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "webhook", id.String()))
+		return
+	}
+	tenantID := store.TenantIDFromContext(ctx)
+	if !store.IsOwnerRole(ctx) && wh.TenantID != tenantID {
+		writeError(w, http.StatusNotFound, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "webhook", id.String()))
+		return
+	}
+
+	f := store.WebhookCallListFilter{WebhookID: &id, Limit: webhookCallsDefaultLimit}
+	if s := r.URL.Query().Get("status"); s != "" {
+		f.Status = s
+	}
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if n, perr := strconv.Atoi(l); perr == nil && n > 0 {
+			if n > webhookCallsMaxLimit {
+				n = webhookCallsMaxLimit
+			}
+			f.Limit = n
+		}
+	}
+	if o := r.URL.Query().Get("offset"); o != "" {
+		if n, perr := strconv.Atoi(o); perr == nil && n >= 0 {
+			f.Offset = n
+		}
+	}
+
+	rows, err := h.calls.List(ctx, f)
+	if err != nil {
+		slog.Error("webhook.admin.list_calls_failed", "error", err, "id", id)
+		writeError(w, http.StatusInternalServerError, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToList, "webhook calls"))
+		return
+	}
+
+	out := make([]webhookCallResp, 0, len(rows))
+	for i := range rows {
+		c := &rows[i]
+		out = append(out, webhookCallResp{
+			ID:            c.ID,
+			DeliveryID:    c.DeliveryID,
+			Mode:          c.Mode,
+			Status:        c.Status,
+			Attempts:      c.Attempts,
+			NextAttemptAt: c.NextAttemptAt,
+			StartedAt:     c.StartedAt,
+			CompletedAt:   c.CompletedAt,
+			CreatedAt:     c.CreatedAt,
+			LastError:     c.LastError,
+			Response:      string(c.Response),
+		})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// --- Get Call (single delivery detail) ---
+
+// webhookCallDetailResp is the full delivery record for GET /v1/webhooks/{id}/calls/{callId}.
+// Unlike the list DTO it includes request_payload (canonical audit body) and the full response,
+// plus callback_url / idempotency_key — for debugging a single invocation.
+type webhookCallDetailResp struct {
+	ID             uuid.UUID  `json:"id"`
+	WebhookID      uuid.UUID  `json:"webhook_id"`
+	AgentID        *uuid.UUID `json:"agent_id,omitempty"`
+	DeliveryID     uuid.UUID  `json:"delivery_id"`
+	IdempotencyKey *string    `json:"idempotency_key,omitempty"`
+	Mode           string     `json:"mode"`
+	Status         string     `json:"status"`
+	CallbackURL    *string    `json:"callback_url,omitempty"`
+	Attempts       int        `json:"attempts"`
+	NextAttemptAt  *time.Time `json:"next_attempt_at,omitempty"`
+	StartedAt      *time.Time `json:"started_at,omitempty"`
+	CompletedAt    *time.Time `json:"completed_at,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	LastError      *string    `json:"last_error,omitempty"`
+	RequestPayload string     `json:"request_payload,omitempty"`
+	Response       string     `json:"response,omitempty"`
+}
+
+func (h *WebhooksAdminHandler) handleGetCall(w http.ResponseWriter, r *http.Request) {
+	locale := extractLocale(r)
+
+	if !requireTenantAdmin(w, r, h.tenants) {
+		slog.Warn("security.webhook.admin_denied", "action", "get_call", "path", r.URL.Path,
+			"user_id", store.UserIDFromContext(r.Context()))
+		return
+	}
+
+	if h.calls == nil {
+		writeError(w, http.StatusServiceUnavailable, protocol.ErrInternal, i18n.T(locale, i18n.MsgInternalError, "call store unavailable"))
+		return
+	}
+
+	id, ok := parseWebhookID(w, r, locale)
+	if !ok {
+		return
+	}
+	callID, err := uuid.Parse(r.PathValue("callId"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidID, "call"))
+		return
+	}
+
+	ctx := r.Context()
+
+	// Verify webhook ownership first (same pattern as handleGet/handleListCalls).
+	wh, err := h.webhooks.GetByID(ctx, id)
+	if err != nil || wh == nil {
+		writeError(w, http.StatusNotFound, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "webhook", id.String()))
+		return
+	}
+	tenantID := store.TenantIDFromContext(ctx)
+	if !store.IsOwnerRole(ctx) && wh.TenantID != tenantID {
+		writeError(w, http.StatusNotFound, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "webhook", id.String()))
+		return
+	}
+
+	// GetByID is tenant-scoped; also verify the call belongs to THIS webhook.
+	c, err := h.calls.GetByID(ctx, callID)
+	if err != nil || c == nil || c.WebhookID != id {
+		writeError(w, http.StatusNotFound, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "webhook call", callID.String()))
+		return
+	}
+	if !store.IsOwnerRole(ctx) && c.TenantID != tenantID {
+		writeError(w, http.StatusNotFound, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "webhook call", callID.String()))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, webhookCallDetailResp{
+		ID:             c.ID,
+		WebhookID:      c.WebhookID,
+		AgentID:        c.AgentID,
+		DeliveryID:     c.DeliveryID,
+		IdempotencyKey: c.IdempotencyKey,
+		Mode:           c.Mode,
+		Status:         c.Status,
+		CallbackURL:    c.CallbackURL,
+		Attempts:       c.Attempts,
+		NextAttemptAt:  c.NextAttemptAt,
+		StartedAt:      c.StartedAt,
+		CompletedAt:    c.CompletedAt,
+		CreatedAt:      c.CreatedAt,
+		LastError:      c.LastError,
+		RequestPayload: string(c.RequestPayload),
+		Response:       string(c.Response),
+	})
+}
+
+// --- Test (server-side invocation) ---
+
+// testWebhookReq is the request body for POST /v1/webhooks/{id}/test.
+// For kind=llm: input (+ optional model). For kind=message: channel_name/chat_id/content/media_*.
+type testWebhookReq struct {
+	// llm fields
+	Input string `json:"input,omitempty"`
+	Model string `json:"model,omitempty"`
+	// message fields
+	ChannelName    string `json:"channel_name,omitempty"`
+	ChatID         string `json:"chat_id,omitempty"`
+	Content        string `json:"content,omitempty"`
+	MediaURL       string `json:"media_url,omitempty"`
+	MediaCaption   string `json:"media_caption,omitempty"`
+	FallbackToText bool   `json:"fallback_to_text,omitempty"`
+}
+
+func (h *WebhooksAdminHandler) handleTest(w http.ResponseWriter, r *http.Request) {
+	locale := extractLocale(r)
+
+	if !requireTenantAdmin(w, r, h.tenants) {
+		slog.Warn("security.webhook.admin_denied", "action", "test", "path", r.URL.Path,
+			"user_id", store.UserIDFromContext(r.Context()))
+		return
+	}
+
+	id, ok := parseWebhookID(w, r, locale)
+	if !ok {
+		return
+	}
+
+	ctx := r.Context()
+
+	// Verify ownership before invoking.
+	wh, err := h.webhooks.GetByID(ctx, id)
+	if err != nil || wh == nil {
+		writeError(w, http.StatusNotFound, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "webhook", id.String()))
+		return
+	}
+	tenantID := store.TenantIDFromContext(ctx)
+	if !store.IsOwnerRole(ctx) && wh.TenantID != tenantID {
+		writeError(w, http.StatusNotFound, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "webhook", id.String()))
+		return
+	}
+	if wh.Revoked {
+		writeError(w, http.StatusConflict, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgWebhookRevoked))
+		return
+	}
+
+	var req testWebhookReq
+	if !bindJSON(w, r, locale, &req) {
+		return
+	}
+
+	switch wh.Kind {
+	case "llm":
+		if h.llmTester == nil {
+			writeError(w, http.StatusServiceUnavailable, protocol.ErrInternal, i18n.T(locale, i18n.MsgInternalError, "llm tester unavailable"))
+			return
+		}
+		if wh.AgentID == nil {
+			writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgWebhookAgentNotFound))
+			return
+		}
+		if req.Input == "" {
+			writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "input"))
+			return
+		}
+		resp, runErr := h.llmTester.RunTest(ctx, wh, req.Input, req.Model)
+		if runErr != nil {
+			slog.Warn("webhook.admin.test_failed", "id", id, "kind", "llm", "error", runErr)
+			writeError(w, http.StatusBadGateway, protocol.ErrInternal, i18n.T(locale, i18n.MsgInternalError, runErr.Error()))
+			return
+		}
+		slog.Info("webhook.tested", "id", id, "tenant_id", tenantID, "kind", "llm", "actor", extractUserID(r))
+		writeJSON(w, http.StatusOK, resp)
+	case "message":
+		if h.msgTester == nil {
+			writeError(w, http.StatusForbidden, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgWebhookMessageTestRequiresStandard))
+			return
+		}
+		if req.ChatID == "" {
+			writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "chat_id"))
+			return
+		}
+		resp, runErr := h.msgTester.RunTest(ctx, wh, webhookMessageReq{
+			ChannelName:    req.ChannelName,
+			ChatID:         req.ChatID,
+			Content:        req.Content,
+			MediaURL:       req.MediaURL,
+			MediaCaption:   req.MediaCaption,
+			FallbackToText: req.FallbackToText,
+		})
+		if runErr != nil {
+			slog.Warn("webhook.admin.test_failed", "id", id, "kind", "message", "error", runErr)
+			writeError(w, http.StatusBadGateway, protocol.ErrInternal, i18n.T(locale, i18n.MsgInternalError, runErr.Error()))
+			return
+		}
+		slog.Info("webhook.tested", "id", id, "tenant_id", tenantID, "kind", "message", "actor", extractUserID(r))
+		writeJSON(w, http.StatusOK, resp)
+	default:
+		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidRequest, "unknown webhook kind"))
+	}
 }
 
 // --- Helpers ---

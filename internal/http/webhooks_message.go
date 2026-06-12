@@ -203,6 +203,129 @@ func (h *WebhookMessageHandler) handle(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, respBody)
 }
 
+// RunTest performs a test message send for a message-kind webhook on behalf of an admin
+// (POST /v1/webhooks/{id}/test). The caller has already authorized + verified ownership.
+// It resolves + tenant-validates the channel, sends the message (real side effect), writes
+// an audit row (mode=sync), and returns the response. Errors are returned (not written to HTTP).
+func (h *WebhookMessageHandler) RunTest(ctx context.Context, wh *store.WebhookData, req webhookMessageReq) (*webhookMessageResp, error) {
+	if wh == nil {
+		return nil, errors.New("webhook missing")
+	}
+
+	// Resolve channel: bound channel_id takes precedence over request channel_name.
+	var channelName string
+	if wh.ChannelID != nil {
+		inst, err := h.channelInstances.Get(ctx, *wh.ChannelID)
+		if err != nil || inst == nil {
+			return nil, errors.New("bound channel not found")
+		}
+		channelName = inst.Name
+	} else {
+		if req.ChannelName == "" {
+			return nil, errors.New("channel_name required")
+		}
+		channelName = req.ChannelName
+	}
+
+	// P0 cross-tenant isolation: channel must belong to webhook's tenant.
+	channelTenantID, exists := h.channelMgr.ChannelTenantID(channelName)
+	if !exists {
+		return nil, errors.New("channel not found")
+	}
+	if channelTenantID != uuid.Nil && channelTenantID != wh.TenantID {
+		slog.Warn("security.webhook.tenant_leak_attempt", "webhook_id", wh.ID, "webhook_tenant", wh.TenantID,
+			"channel_name", channelName, "channel_tenant", channelTenantID)
+		return nil, errors.New("channel tenant mismatch")
+	}
+
+	if req.ChatID == "" {
+		return nil, errors.New("chat_id required")
+	}
+	if req.Content == "" && req.MediaURL == "" {
+		return nil, errors.New("content or media_url required")
+	}
+	if len(req.Content) > webhookContentMaxBytes {
+		return nil, errors.New("content exceeds 16 KB limit")
+	}
+
+	callID := store.GenNewID()
+	deliveryID := store.GenNewID()
+	now := time.Now()
+	requestPayload, _ := buildAuditPayload(nil, map[string]any{
+		"test": true, "channel_name": channelName, "chat_id": req.ChatID, "has_media": req.MediaURL != "",
+	})
+	callRecord := &store.WebhookCallData{
+		ID:             callID,
+		TenantID:       wh.TenantID,
+		WebhookID:      wh.ID,
+		AgentID:        wh.AgentID,
+		DeliveryID:     deliveryID,
+		Mode:           "sync",
+		Status:         "running",
+		StartedAt:      &now,
+		RequestPayload: requestPayload,
+		CreatedAt:      now,
+	}
+
+	warning, sendErr := h.dispatchTest(ctx, wh, req, channelName)
+	if sendErr != nil {
+		h.failCall(ctx, callRecord, false, sendErr.Error())
+		return nil, sendErr
+	}
+
+	completedAt := time.Now()
+	callRecord.Status = "done"
+	callRecord.CompletedAt = &completedAt
+	callRecord.Attempts = 1
+	resp := &webhookMessageResp{
+		CallID:      callID.String(),
+		Status:      "sent",
+		ChannelName: channelName,
+		ChatID:      req.ChatID,
+		Warning:     warning,
+	}
+	respBytes, _ := json.Marshal(resp)
+	callRecord.Response = respBytes
+	persistWebhookCall(ctx, h.callStore, callRecord, false, "webhook.message.test_audit_write_failed")
+
+	slog.Info("webhook.message.test", "tenant_id", wh.TenantID, "webhook_id", wh.ID,
+		"channel", channelName, "chat_id", req.ChatID, "has_media", req.MediaURL != "")
+	return resp, nil
+}
+
+// dispatchTest sends a test message (text or media) and returns (warning, error).
+// Mirrors dispatch but returns errors instead of writing HTTP responses.
+func (h *WebhookMessageHandler) dispatchTest(ctx context.Context, wh *store.WebhookData, req webhookMessageReq, channelName string) (string, error) {
+	if req.MediaURL == "" {
+		if err := h.channelMgr.SendToChannel(ctx, channelName, req.ChatID, req.Content); err != nil {
+			return "", err
+		}
+		return "", nil
+	}
+
+	probe, probeErr := probeMediaURL(req.MediaURL)
+	if probeErr != nil {
+		return "", probeErr
+	}
+
+	channelType := h.channelMgr.ChannelTypeForName(channelName)
+	if channels.IsMediaCapable(channelType) {
+		media := []bus.MediaAttachment{{URL: req.MediaURL, ContentType: probe.ContentType, Caption: req.MediaCaption}}
+		if err := h.channelMgr.SendMediaToChannel(ctx, channelName, req.ChatID, req.Content, media); err != nil {
+			return "", err
+		}
+		return "", nil
+	}
+
+	if req.FallbackToText {
+		if err := h.channelMgr.SendToChannel(ctx, channelName, req.ChatID, req.Content); err != nil {
+			return "", err
+		}
+		return "media_not_supported_fallback_text", nil
+	}
+	return "", errors.New("channel does not support media and fallback_to_text is false")
+}
+
 // dispatch sends the message (media or text) to the channel.
 // Returns (warning string, error). On non-nil error the response was already written.
 func (h *WebhookMessageHandler) dispatch(

@@ -1,0 +1,149 @@
+{
+  "title": "Webhook",
+  "description": "Webhook HTTP đến để gọi agent (LLM) hoặc gửi tin nhắn qua channel.",
+  "addWebhook": "Tạo Webhook",
+  "searchPlaceholder": "Tìm webhook...",
+  "showRevoked": "Hiện đã thu hồi",
+  "emptyTitle": "Chưa có webhook",
+  "emptyDescription": "Tạo webhook đầu tiên để mở agent hoặc channel qua HTTP.",
+  "neverUsed": "Chưa dùng",
+  "kind": {
+    "llm": "LLM",
+    "message": "Tin nhắn"
+  },
+  "status": {
+    "active": "Hoạt động",
+    "revoked": "Đã thu hồi"
+  },
+  "columns": {
+    "name": "Tên",
+    "webhookId": "Webhook ID",
+    "kind": "Loại",
+    "target": "Đích",
+    "status": "Trạng thái",
+    "lastUsed": "Dùng gần nhất",
+    "actions": "Thao tác"
+  },
+  "actions": {
+    "test": "Kiểm thử",
+    "calls": "Lịch sử gọi",
+    "edit": "Sửa",
+    "rotate": "Xoay secret",
+    "revoke": "Thu hồi"
+  },
+  "form": {
+    "createTitle": "Tạo Webhook",
+    "editTitle": "Sửa Webhook",
+    "description": "Cấu hình cách webhook xác thực và việc nó kích hoạt.",
+    "name": "Tên",
+    "namePlaceholder": "vd: Xử lý lead CRM",
+    "kind": "Loại",
+    "messageStandardOnly": "Chỉ bản Standard",
+    "agent": "Agent",
+    "agentPlaceholder": "Chọn agent",
+    "agentHint": "Bắt buộc để gọi và kiểm thử webhook LLM.",
+    "none": "Không",
+    "channel": "Channel",
+    "channelPlaceholder": "Chọn channel",
+    "channelAny": "Bất kỳ (chỉ định khi gọi)",
+    "rateLimit": "Giới hạn (request / phút)",
+    "ipAllowlist": "Danh sách IP cho phép",
+    "ipAllowlistPlaceholder": "vd: 203.0.113.0/24, 198.51.100.7",
+    "ipAllowlistHint": "IP hoặc CIDR, cách nhau bằng dấu phẩy. Để trống cho phép tất cả.",
+    "requireHmac": "Bắt buộc HMAC",
+    "requireHmacHint": "Từ chối xác thực bearer token; chỉ chấp nhận request đã ký.",
+    "localhostOnly": "Chỉ localhost",
+    "localhostOnlyHint": "Chỉ chấp nhận request từ 127.0.0.1 / ::1.",
+    "localhostOnlyLite": "Bị bật cố định ở bản Lite.",
+    "cancel": "Hủy",
+    "create": "Tạo",
+    "save": "Lưu",
+    "saving": "Đang lưu..."
+  },
+  "secret": {
+    "title": "Secret của webhook",
+    "description": "Sao chép các giá trị này ngay — chỉ hiển thị một lần.",
+    "warning": "Secret này sẽ không hiển thị lại. Hãy lưu trữ an toàn.",
+    "webhookId": "Webhook ID (header X-Webhook-Id)",
+    "bearer": "Secret (Bearer token)",
+    "hmacKey": "Khóa ký HMAC",
+    "copy": "Sao chép",
+    "copied": "Đã chép",
+    "usageHint": "Gửi secret qua 'Authorization: Bearer <secret>', hoặc ký request bằng khóa HMAC.",
+    "done": "Xong"
+  },
+  "test": {
+    "title": "Kiểm thử webhook: {{name}}",
+    "description": "Gọi webhook phía máy chủ bằng phiên admin của bạn (không cần secret).",
+    "messageWarning": "Thao tác này gửi tin nhắn thật đến chat đích.",
+    "input": "Đầu vào",
+    "inputPlaceholder": "Nhập prompt gửi cho agent",
+    "chatId": "Chat ID",
+    "chatIdPlaceholder": "Định danh chat người nhận",
+    "content": "Nội dung",
+    "result": "Kết quả",
+    "sent": "Đã gửi tới {{channel}} (chat {{chatId}})",
+    "run": "Gửi thử",
+    "running": "Đang gửi...",
+    "close": "Đóng",
+    "failed": "Kiểm thử thất bại"
+  },
+  "calls": {
+    "title": "Lịch sử gọi: {{name}}",
+    "description": "Các lần gọi gần đây của webhook này.",
+    "statusAll": "Tất cả trạng thái",
+    "status": {
+      "queued": "Chờ",
+      "running": "Đang chạy",
+      "done": "Xong",
+      "failed": "Lỗi",
+      "dead": "Bỏ"
+    },
+    "cols": {
+      "status": "Trạng thái",
+      "mode": "Chế độ",
+      "attempts": "Số lần",
+      "created": "Tạo lúc",
+      "detail": "Chi tiết"
+    },
+    "emptyTitle": "Chưa có lần gọi nào",
+    "emptyDescription": "Các lần gọi webhook này sẽ hiển thị ở đây.",
+    "noMore": "Không còn lần gọi nào.",
+    "page": "Trang {{page}}",
+    "prev": "Trước",
+    "next": "Sau"
+  },
+  "callDetail": {
+    "title": "Chi tiết lần gọi",
+    "description": "Bản ghi đầy đủ của một lần gọi webhook.",
+    "loading": "Đang tải...",
+    "deliveryId": "Delivery ID",
+    "idempotencyKey": "Idempotency key",
+    "callbackUrl": "Callback URL",
+    "created": "Tạo lúc",
+    "started": "Bắt đầu",
+    "completed": "Hoàn tất",
+    "nextAttempt": "Lần thử kế",
+    "lastError": "Lỗi gần nhất",
+    "requestPayload": "Payload request",
+    "response": "Phản hồi"
+  },
+  "rotate": {
+    "title": "Xoay secret",
+    "description": "Xoay sẽ vô hiệu secret hiện tại của \"{{name}}\". Secret mới sẽ hiển thị một lần."
+  },
+  "revoke": {
+    "title": "Thu hồi webhook",
+    "description": "Thu hồi sẽ vô hiệu vĩnh viễn \"{{name}}\". Không thể hoàn tác."
+  },
+  "toast": {
+    "created": "Đã tạo webhook",
+    "updated": "Đã cập nhật webhook",
+    "secretRotated": "Đã xoay secret",
+    "revoked": "Đã thu hồi webhook",
+    "failedCreate": "Tạo webhook thất bại",
+    "failedUpdate": "Cập nhật webhook thất bại",
+    "failedRotate": "Xoay secret thất bại",
+    "failedRevoke": "Thu hồi webhook thất bại"
+  }
+}

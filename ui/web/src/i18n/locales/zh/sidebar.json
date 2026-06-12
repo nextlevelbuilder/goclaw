@@ -15,6 +15,7 @@
     "importExport": "Import & Export",
     "builtinTools": "内置工具",
     "channels": "Channel",
+    "webhooks": "Webhook",
     "contacts": "联系人",
     "chat": "对话",
     "config": "配置",

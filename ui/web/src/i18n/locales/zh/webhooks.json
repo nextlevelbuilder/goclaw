@@ -1,0 +1,149 @@
+{
+  "title": "Webhook",
+  "description": "用于触发智能体（LLM）或发送频道消息的入站 HTTP Webhook。",
+  "addWebhook": "创建 Webhook",
+  "searchPlaceholder": "搜索 Webhook...",
+  "showRevoked": "显示已吊销",
+  "emptyTitle": "暂无 Webhook",
+  "emptyDescription": "创建第一个 Webhook，通过 HTTP 暴露智能体或频道。",
+  "neverUsed": "从未使用",
+  "kind": {
+    "llm": "LLM",
+    "message": "消息"
+  },
+  "status": {
+    "active": "启用",
+    "revoked": "已吊销"
+  },
+  "columns": {
+    "name": "名称",
+    "webhookId": "Webhook ID",
+    "kind": "类型",
+    "target": "目标",
+    "status": "状态",
+    "lastUsed": "最近使用",
+    "actions": "操作"
+  },
+  "actions": {
+    "test": "测试",
+    "calls": "调用历史",
+    "edit": "编辑",
+    "rotate": "轮换密钥",
+    "revoke": "吊销"
+  },
+  "form": {
+    "createTitle": "创建 Webhook",
+    "editTitle": "编辑 Webhook",
+    "description": "配置此 Webhook 的鉴权方式及触发内容。",
+    "name": "名称",
+    "namePlaceholder": "例如：CRM 线索处理",
+    "kind": "类型",
+    "messageStandardOnly": "仅 Standard 版本",
+    "agent": "智能体",
+    "agentPlaceholder": "选择智能体",
+    "agentHint": "调用和测试 LLM Webhook 时必填。",
+    "none": "无",
+    "channel": "频道",
+    "channelPlaceholder": "选择频道",
+    "channelAny": "任意（按请求指定）",
+    "rateLimit": "速率限制（请求 / 分钟）",
+    "ipAllowlist": "IP 白名单",
+    "ipAllowlistPlaceholder": "例如：203.0.113.0/24, 198.51.100.7",
+    "ipAllowlistHint": "以逗号分隔的 IP 或 CIDR。留空则允许全部。",
+    "requireHmac": "强制 HMAC",
+    "requireHmacHint": "拒绝 Bearer 令牌鉴权，仅接受签名请求。",
+    "localhostOnly": "仅本地",
+    "localhostOnlyHint": "仅接受来自 127.0.0.1 / ::1 的请求。",
+    "localhostOnlyLite": "Lite 版本中强制开启。",
+    "cancel": "取消",
+    "create": "创建",
+    "save": "保存",
+    "saving": "保存中..."
+  },
+  "secret": {
+    "title": "Webhook 密钥",
+    "description": "请立即复制这些值——它们仅显示一次。",
+    "warning": "此密钥不会再次显示，请妥善保存。",
+    "webhookId": "Webhook ID（X-Webhook-Id 请求头）",
+    "bearer": "密钥（Bearer 令牌）",
+    "hmacKey": "HMAC 签名密钥",
+    "copy": "复制",
+    "copied": "已复制",
+    "usageHint": "通过 'Authorization: Bearer <secret>' 发送密钥，或使用 HMAC 密钥签名请求。",
+    "done": "完成"
+  },
+  "test": {
+    "title": "测试 Webhook：{{name}}",
+    "description": "使用您的管理员会话在服务端调用此 Webhook（无需密钥）。",
+    "messageWarning": "此操作会向目标聊天发送真实消息。",
+    "input": "输入",
+    "inputPlaceholder": "输入发送给智能体的提示词",
+    "chatId": "聊天 ID",
+    "chatIdPlaceholder": "接收方聊天标识",
+    "content": "内容",
+    "result": "结果",
+    "sent": "已发送至 {{channel}}（聊天 {{chatId}}）",
+    "run": "发送测试",
+    "running": "发送中...",
+    "close": "关闭",
+    "failed": "测试失败"
+  },
+  "calls": {
+    "title": "调用历史：{{name}}",
+    "description": "此 Webhook 的最近调用。",
+    "statusAll": "全部状态",
+    "status": {
+      "queued": "排队中",
+      "running": "运行中",
+      "done": "完成",
+      "failed": "失败",
+      "dead": "已废弃"
+    },
+    "cols": {
+      "status": "状态",
+      "mode": "模式",
+      "attempts": "尝试次数",
+      "created": "创建时间",
+      "detail": "详情"
+    },
+    "emptyTitle": "尚无调用",
+    "emptyDescription": "对此 Webhook 的调用将显示在此处。",
+    "noMore": "没有更多调用。",
+    "page": "第 {{page}} 页",
+    "prev": "上一页",
+    "next": "下一页"
+  },
+  "callDetail": {
+    "title": "调用详情",
+    "description": "单次 Webhook 调用的完整记录。",
+    "loading": "加载中...",
+    "deliveryId": "Delivery ID",
+    "idempotencyKey": "幂等键",
+    "callbackUrl": "回调 URL",
+    "created": "创建时间",
+    "started": "开始时间",
+    "completed": "完成时间",
+    "nextAttempt": "下次重试",
+    "lastError": "最近错误",
+    "requestPayload": "请求载荷",
+    "response": "响应"
+  },
+  "rotate": {
+    "title": "轮换密钥",
+    "description": "轮换将使 \"{{name}}\" 的当前密钥失效。新密钥仅显示一次。"
+  },
+  "revoke": {
+    "title": "吊销 Webhook",
+    "description": "吊销将永久禁用 \"{{name}}\"，且无法撤销。"
+  },
+  "toast": {
+    "created": "已创建 Webhook",
+    "updated": "已更新 Webhook",
+    "secretRotated": "已轮换密钥",
+    "revoked": "已吊销 Webhook",
+    "failedCreate": "创建 Webhook 失败",
+    "failedUpdate": "更新 Webhook 失败",
+    "failedRotate": "轮换密钥失败",
+    "failedRevoke": "吊销 Webhook 失败"
+  }
+}

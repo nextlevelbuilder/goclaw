@@ -176,9 +176,13 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 
 		// Webhook admin CRUD — available in all editions (Standard + Lite).
 		// Runtime routes (/v1/webhooks/message, /v1/webhooks/llm) are mounted by phases 05/06.
+		// adminH is captured so the test endpoint (POST /v1/webhooks/{id}/test) can be wired
+		// with the runtime invokers (llm/message handlers) once they are constructed below.
+		var adminH *httpapi.WebhooksAdminHandler
 		if d.pgStores != nil && d.pgStores.Webhooks != nil {
-			adminH := httpapi.NewWebhooksAdminHandler(
+			adminH = httpapi.NewWebhooksAdminHandler(
 				d.pgStores.Webhooks,
+				d.pgStores.WebhookCalls,
 				d.pgStores.Tenants,
 				d.msgBus,
 			)
@@ -188,13 +192,14 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 
 		// Webhook message endpoint — Standard edition only (channels required).
 		// Phase 05b: POST /v1/webhooks/message → sync channel send (text + optional media).
+		var msgH *httpapi.WebhookMessageHandler
 		if edition.Current().AllowsChannels() &&
 			d.pgStores != nil &&
 			d.pgStores.Webhooks != nil &&
 			d.pgStores.WebhookCalls != nil &&
 			d.pgStores.ChannelInstances != nil &&
 			d.channelMgr != nil {
-			msgH := httpapi.NewWebhookMessageHandler(
+			msgH = httpapi.NewWebhookMessageHandler(
 				d.channelMgr,
 				d.pgStores.ChannelInstances,
 				d.pgStores.WebhookCalls,
@@ -209,11 +214,12 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 		// Phase 06: POST /v1/webhooks/llm → sync agent run (≤30s) or async enqueue.
 		// LocalhostOnly enforcement is handled by WebhookAuthMiddleware at request time.
 		// lane=nil → handler self-creates internal default lane (4-slot).
+		var llmH *httpapi.WebhookLLMHandler
 		if d.pgStores != nil &&
 			d.pgStores.Webhooks != nil &&
 			d.pgStores.WebhookCalls != nil &&
 			d.agentRouter != nil {
-			llmH := httpapi.NewWebhookLLMHandler(
+			llmH = httpapi.NewWebhookLLMHandler(
 				d.agentRouter,
 				d.pgStores.WebhookCalls,
 				d.pgStores.Webhooks,
@@ -222,6 +228,12 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 			)
 			llmH.SetEncKey(webhookEncKey) // K6: decrypt secret at HMAC verify time
 			d.server.SetWebhookLLMHandler(llmH)
+		}
+
+		// Wire the admin test endpoint with runtime invokers. msgH is nil on Lite — the
+		// admin handler guards on nil and rejects message tests there.
+		if adminH != nil {
+			adminH.SetTesters(llmH, msgH)
 		}
 	}
 
