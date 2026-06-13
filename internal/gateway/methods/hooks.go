@@ -145,8 +145,8 @@ func (m *HookMethods) handleCreate(ctx context.Context, client *gateway.Client, 
 			i18n.T(locale, i18n.MsgMasterScopeRequired)))
 		return
 	}
-	// For tenant/agent scope, fill TenantID from ctx if not provided.
-	if cfg.Scope != hooks.ScopeGlobal && cfg.TenantID == uuid.Nil {
+	// For tenant/agent scope, fill TenantID from ctx if not provided or if sentinel.
+	if cfg.Scope != hooks.ScopeGlobal && (cfg.TenantID == uuid.Nil || cfg.TenantID == hooks.SentinelTenantID) {
 		cfg.TenantID = store.TenantIDFromContext(ctx)
 	}
 	if cfg.Scope == hooks.ScopeGlobal {
