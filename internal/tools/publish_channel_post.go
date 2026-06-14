@@ -34,17 +34,24 @@ func (s managerSender) SendChannelPost(ctx context.Context, chatID, imagePath, c
 	return s.mgr.PublishChannelPost(ctx, s.channelName, chatID, imagePath, captionHTML, pb)
 }
 
-// NewMeowPublishFunc returns a handle+date publish closure over the same
-// deterministic path the tool uses. Injected into the telegram channel for the
-// owner-gated /meow post command, so the command and the agent tool share one
-// code path. Returns a human-readable result line.
-func NewMeowPublishFunc(ms store.MeowStore, mgr channelPoster, channelInstance string, tenantID uuid.UUID, allowedRoots []string) func(ctx context.Context, handle, date string, force bool) (string, error) {
-	pub := &meow.Publisher{
+// NewMeowPublisher builds the deterministic, exactly-once Meow publisher over the
+// telegram channel manager. Shared by the /meow post command, the agent tool, and
+// the Sheets sync worker's publish_now path so they all use one publish code path.
+func NewMeowPublisher(ms store.MeowStore, mgr channelPoster, channelInstance string, allowedRoots []string) *meow.Publisher {
+	return &meow.Publisher{
 		Store:        ms,
 		Sender:       managerSender{mgr: mgr, channelName: channelInstance},
 		AllowedRoots: allowedRoots,
 		AllowedHosts: meow.DefaultButtonHostAllowlist(),
 	}
+}
+
+// NewMeowPublishFunc returns a handle+date publish closure over the same
+// deterministic path the tool uses. Injected into the telegram channel for the
+// owner-gated /meow post command, so the command and the agent tool share one
+// code path. Returns a human-readable result line.
+func NewMeowPublishFunc(ms store.MeowStore, mgr channelPoster, channelInstance string, tenantID uuid.UUID, allowedRoots []string) func(ctx context.Context, handle, date string, force bool) (string, error) {
+	pub := NewMeowPublisher(ms, mgr, channelInstance, allowedRoots)
 	return func(ctx context.Context, handle, dateStr string, force bool) (string, error) {
 		date, err := time.Parse("2006-01-02", dateStr)
 		if err != nil {
@@ -80,12 +87,7 @@ type PublishChannelPostTool struct {
 // the directories an image_path may resolve inside.
 func NewPublishChannelPostTool(ms store.MeowStore, mgr channelPoster, channelInstance string, tenantID uuid.UUID, allowedRoots []string) *PublishChannelPostTool {
 	return &PublishChannelPostTool{
-		pub: &meow.Publisher{
-			Store:        ms,
-			Sender:       managerSender{mgr: mgr, channelName: channelInstance},
-			AllowedRoots: allowedRoots,
-			AllowedHosts: meow.DefaultButtonHostAllowlist(),
-		},
+		pub:      NewMeowPublisher(ms, mgr, channelInstance, allowedRoots),
 		store:    ms,
 		tenantID: tenantID,
 	}

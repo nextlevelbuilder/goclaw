@@ -71,6 +71,7 @@ type Config struct {
 // approver when a row's approved_by cell is blank (default "sheets-sync").
 type MeowSheetsConfig struct {
 	Enabled            bool     `json:"enabled"`
+	Publish            bool     `json:"publish"` // master switch for live publish; off → sync-only
 	SpreadsheetID      string   `json:"spreadsheet_id,omitempty"`
 	Interval           string   `json:"interval,omitempty"`
 	ApprovedByFallback string   `json:"approved_by_fallback,omitempty"`

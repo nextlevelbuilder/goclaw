@@ -549,8 +549,9 @@ func runGateway() {
 	}
 
 	// Meow Google Sheets approval-bridge sync worker (disabled by default; reads
-	// approved rows + writes results back; never publishes to Telegram).
-	startMeowSheetsSync(ctx, cfg, pgStores.Meow)
+	// approved rows + writes results back; live publish only when meow_sheets.publish
+	// is on and a row's publish_now is ticked).
+	startMeowSheetsSync(ctx, cfg, pgStores.Meow, channelMgr)
 
 	// Create lane-based scheduler (matching TS CommandLane pattern).
 	// Must be created before cron setup so cron jobs route through the scheduler.

@@ -20,12 +20,13 @@ type SyncOutcome struct {
 
 // SyncReport aggregates the outcomes of applying a batch of actions.
 type SyncReport struct {
-	Ingested int
-	Approved int
-	Skipped  int
-	Held     int // ingest found a content problem at apply time (no draft row)
-	Errored  int // planner error or apply failure
-	Outcomes []SyncOutcome
+	Ingested  int
+	Approved  int
+	Published int // live-published via publish_now (Commit B)
+	Skipped   int
+	Held      int // ingest found a content problem at apply time (no draft row)
+	Errored   int // planner error or apply failure
+	Outcomes  []SyncOutcome
 }
 
 // ApplySync executes inbound SyncActions against the store using the existing

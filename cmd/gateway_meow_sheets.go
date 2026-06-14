@@ -6,10 +6,12 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/meow"
 	"github.com/nextlevelbuilder/goclaw/internal/meow/sheets"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
 // startMeowSheetsSync starts the Meow Google Sheets approval-bridge sync worker
@@ -17,7 +19,7 @@ import (
 // (Lite/non-PG), or no spreadsheet id is configured. Credentials come from env
 // only — never config.json. The worker reads approved rows and writes results
 // back; it never publishes to Telegram. It stops when ctx is cancelled.
-func startMeowSheetsSync(ctx context.Context, cfg *config.Config, meowStore store.MeowStore) {
+func startMeowSheetsSync(ctx context.Context, cfg *config.Config, meowStore store.MeowStore, channelMgr *channels.Manager) {
 	if !cfg.MeowSheets.Enabled {
 		slog.Info("meow sheets sync disabled")
 		return
@@ -42,16 +44,23 @@ func startMeowSheetsSync(ctx context.Context, cfg *config.Config, meowStore stor
 	}
 
 	dataDir := config.ResolvedDataDirFromEnv()
+	assetRoot := filepath.Join(dataDir, "meow-assets")
 	worker := &meow.SyncWorker{
 		Store:              meowStore,
 		Client:             client,
 		TenantID:           store.MasterTenantID,
 		InboxRoot:          filepath.Join(dataDir, "meow-inbox"),
-		AssetRoot:          filepath.Join(dataDir, "meow-assets"),
+		AssetRoot:          assetRoot,
 		ApprovedByFallback: cfg.MeowSheets.ApprovedBy(),
 		Tabs:               cfg.MeowSheets.Tabs,
 	}
+	// Live publish (publish_now) requires the master switch AND a wired channel
+	// manager. Off → sync-only (ingest + approve), no Telegram posting.
+	publish := cfg.MeowSheets.Publish && channelMgr != nil
+	if publish {
+		worker.Publisher = tools.NewMeowPublisher(meowStore, channelMgr, channels.TypeTelegram, []string{assetRoot})
+	}
 	interval := cfg.MeowSheets.SyncInterval()
-	slog.Info("meow sheets sync enabled", "spreadsheet", cfg.MeowSheets.SpreadsheetID, "interval", interval.String())
+	slog.Info("meow sheets sync enabled", "spreadsheet", cfg.MeowSheets.SpreadsheetID, "interval", interval.String(), "publish", publish)
 	go worker.Run(ctx, interval)
 }

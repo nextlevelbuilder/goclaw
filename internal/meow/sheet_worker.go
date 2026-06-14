@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,6 +27,10 @@ type SyncWorker struct {
 	AssetRoot          string
 	ApprovedByFallback string
 	Tabs               []string // brand_key tabs to poll; empty → every channel
+	// Publisher enables the publish_now path (Commit B). When nil, publish_now is
+	// ignored and the worker only ingests + approves (sync-only). Publishing is
+	// exactly-once via Publisher.PublishDue.
+	Publisher *Publisher
 }
 
 // Run polls every interval until ctx is cancelled, running once immediately so a
@@ -57,9 +62,9 @@ func (w *SyncWorker) tick(ctx context.Context) {
 		slog.Warn("meow.sheets.sync pass failed", "error", err)
 		return
 	}
-	if rep.Ingested+rep.Approved+rep.Held+rep.Errored > 0 {
+	if rep.Ingested+rep.Approved+rep.Published+rep.Held+rep.Errored > 0 {
 		slog.Info("meow.sheets.sync",
-			"ingested", rep.Ingested, "approved", rep.Approved,
+			"ingested", rep.Ingested, "approved", rep.Approved, "published", rep.Published,
 			"skipped", rep.Skipped, "held", rep.Held, "errored", rep.Errored)
 	}
 }
@@ -136,11 +141,51 @@ func (w *SyncWorker) syncTab(ctx context.Context, tab string, ch store.MpChannel
 
 	rep := ApplySync(ctx, w.Store, w.TenantID, toApply, w.InboxRoot, w.AssetRoot, w.ApprovedByFallback)
 	rep.Skipped += len(reconciled)
-	rep.Outcomes = append(rep.Outcomes, reconciled...)
 
+	// Collect the write-back result per row (publish overrides approve for the
+	// same row), then write each row once.
+	out := make(map[int]RowResult, len(rep.Outcomes)+len(reconciled))
 	for _, o := range rep.Outcomes {
-		if err := w.Client.WriteBack(ctx, o.Tab, o.RowIndex, o.Result); err != nil {
-			slog.Warn("meow.sheets.sync writeback failed", "tab", o.Tab, "row", o.RowIndex, "error", err)
+		out[o.RowIndex] = o.Result
+	}
+	for _, o := range reconciled {
+		out[o.RowIndex] = o.Result
+	}
+
+	// Publish pass (Commit B): publish_now is the explicit live-post trigger,
+	// independent of manager_approved. PublishDue is exactly-once and only acts on
+	// an already-approved post, so ticking publish_now alone (unapproved) is a
+	// no-op. Disabled entirely when no Publisher is wired (sync-only).
+	if w.Publisher != nil {
+		for _, r := range rows {
+			if !r.PublishNow {
+				continue
+			}
+			date, derr := time.Parse(syncDateLayout, r.Date)
+			if derr != nil {
+				continue // a bad date already surfaced as an error in the approve pass
+			}
+			res, perr := w.Publisher.PublishDue(ctx, w.TenantID, ch.ID, date, false)
+			switch {
+			case perr != nil:
+				out[r.RowIndex] = RowResult{Status: "error", Error: perr.Error()}
+				rep.Errored++
+			case res == nil:
+				// Nothing claimable (not approved yet, or already published) — leave as-is.
+			default:
+				out[r.RowIndex] = RowResult{
+					Status:      store.MpPostPublished,
+					TgMessageID: strconv.FormatInt(res.MessageID, 10),
+					TgLink:      res.Link,
+				}
+				rep.Published++
+			}
+		}
+	}
+
+	for rowIdx, rr := range out {
+		if err := w.Client.WriteBack(ctx, tab, rowIdx, rr); err != nil {
+			slog.Warn("meow.sheets.sync writeback failed", "tab", tab, "row", rowIdx, "error", err)
 		}
 	}
 	return rep
@@ -162,6 +207,7 @@ func syncedDates(posts []store.MpContentPost) map[string]string {
 func (r *SyncReport) merge(o SyncReport) {
 	r.Ingested += o.Ingested
 	r.Approved += o.Approved
+	r.Published += o.Published
 	r.Skipped += o.Skipped
 	r.Held += o.Held
 	r.Errored += o.Errored

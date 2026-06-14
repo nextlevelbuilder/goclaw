@@ -194,6 +194,14 @@ func (c *Config) applyEnvOverrides() {
 			c.MeowSheets.Enabled = false
 		}
 	}
+	if v := os.Getenv("GOCLAW_MEOW_SHEETS_PUBLISH"); v != "" {
+		switch strings.ToLower(strings.TrimSpace(v)) {
+		case "1", "true", "yes", "on":
+			c.MeowSheets.Publish = true
+		case "0", "false", "no", "off":
+			c.MeowSheets.Publish = false
+		}
+	}
 
 	// TTS secrets
 	envStr("GOCLAW_TTS_OPENAI_API_KEY", &c.Tts.OpenAI.APIKey)

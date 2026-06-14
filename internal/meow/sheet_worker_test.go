@@ -62,6 +62,42 @@ func (f *fakeWorkerStore) ApprovePost(_ context.Context, _, id uuid.UUID, by str
 	return store.ErrMeowPostNotFound
 }
 
+// Publish-path methods (used by Publisher.PublishDue in the publish_now test).
+func (f *fakeWorkerStore) GetChannel(_ context.Context, _, id uuid.UUID) (*store.MpChannel, error) {
+	if id == f.ch.ID {
+		c := f.ch
+		return &c, nil
+	}
+	return nil, store.ErrMeowChannelNotFound
+}
+func (f *fakeWorkerStore) ClaimPostForPublish(_ context.Context, _, channelID uuid.UUID, date time.Time, force bool) (*store.MpContentPost, error) {
+	day := date.Format("2006-01-02")
+	for _, p := range f.posts { // exactly-once: a day already in flight claims nothing
+		if p.ChannelID == channelID && p.ScheduledDate.Format("2006-01-02") == day &&
+			(p.Status == store.MpPostPublishing || p.Status == store.MpPostPublished) {
+			return nil, store.ErrMeowNoClaimablePost
+		}
+	}
+	for _, p := range f.posts {
+		if p.ChannelID == channelID && p.ScheduledDate.Format("2006-01-02") == day &&
+			(p.Status == store.MpPostApproved || (force && p.Status == store.MpPostDraft)) {
+			p.Status = store.MpPostPublishing
+			cp := *p
+			return &cp, nil
+		}
+	}
+	return nil, store.ErrMeowNoClaimablePost
+}
+func (f *fakeWorkerStore) UpdatePostStatus(_ context.Context, _, id uuid.UUID, status string, tgMessageID *int64, tgLink string) error {
+	for _, p := range f.posts {
+		if p.ID == id {
+			p.Status, p.TgMessageID, p.TgLink = status, tgMessageID, tgLink
+			return nil
+		}
+	}
+	return store.ErrMeowPostNotFound
+}
+
 // fakeRWClient serves seeded rows and records write-backs by row index.
 type fakeRWClient struct {
 	rows   map[string][]SheetRow
@@ -91,9 +127,10 @@ func workerFixture(t *testing.T) (*fakeWorkerStore, *fakeRWClient, *SyncWorker) 
 		t.Fatal(err)
 	}
 	bs, _ := json.Marshal([]Button{{Label: "Play now", URL: "https://t.me/holdemblitz_bot"}})
+	chatID := "-1001234567890"
 	st := &fakeWorkerStore{ch: store.MpChannel{
 		ID: uuid.New(), TenantID: uuid.New(), Handle: "@kingboardgamesofficial",
-		BrandKey: "king-board-games", ButtonSet: bs, Launched: true, Enabled: true,
+		BrandKey: "king-board-games", ButtonSet: bs, Launched: true, Enabled: true, ChatID: &chatID,
 	}}
 	client := &fakeRWClient{rows: map[string][]SheetRow{
 		"king-board-games": {{
@@ -165,6 +202,68 @@ func TestSyncWorker_BadRowWritesErrorNoCrash(t *testing.T) {
 	}
 	if got := client.writes[2]; got.Status != "error" || got.Error == "" {
 		t.Fatalf("bad row must write back an error: %+v", got)
+	}
+}
+
+func TestSyncWorker_PublishNow(t *testing.T) {
+	st, client, w := workerFixture(t)
+	sender := &fakeSender{msgID: 9999}
+	w.Publisher = &Publisher{
+		Store: st, Sender: sender,
+		AllowedRoots: []string{w.AssetRoot}, AllowedHosts: DefaultButtonHostAllowlist(),
+	}
+	// Approved + publish_now on the same row → approve into DB, then live publish.
+	r := client.rows["king-board-games"][0]
+	r.PublishNow = true
+	client.rows["king-board-games"] = []SheetRow{r}
+
+	rep, err := w.SyncOnce(context.Background())
+	if err != nil {
+		t.Fatalf("SyncOnce: %v", err)
+	}
+	if rep.Approved != 1 || rep.Published != 1 {
+		t.Fatalf("want 1 approve + 1 publish, got %+v", rep)
+	}
+	if sender.calls != 1 {
+		t.Fatalf("expected exactly one Telegram send, got %d", sender.calls)
+	}
+	if len(st.posts) != 1 || st.posts[0].Status != store.MpPostPublished {
+		t.Fatalf("post should be published: %+v", st.posts)
+	}
+	if got := client.writes[2]; got.Status != store.MpPostPublished || got.TgLink == "" || got.TgMessageID == "" {
+		t.Fatalf("row 2 should be written back published with tg fields, got %+v", got)
+	}
+
+	// Second pass: exactly-once — no second send, no new publish.
+	client.writes = nil
+	rep2, err := w.SyncOnce(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep2.Published != 0 || sender.calls != 1 {
+		t.Fatalf("publish must be exactly-once: rep2=%+v sends=%d", rep2, sender.calls)
+	}
+}
+
+func TestSyncWorker_PublishNowIgnoredWithoutPublisher(t *testing.T) {
+	st, client, w := workerFixture(t) // Publisher nil → sync-only
+	r := client.rows["king-board-games"][0]
+	r.PublishNow = true
+	client.rows["king-board-games"] = []SheetRow{r}
+
+	rep, err := w.SyncOnce(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Published != 0 {
+		t.Fatalf("no Publisher wired → publish_now must be ignored, got %+v", rep)
+	}
+	// Still ingests + approves (sync-only behavior preserved).
+	if rep.Approved != 1 || st.posts[0].Status != store.MpPostApproved {
+		t.Fatalf("sync-only should still approve: %+v", rep)
+	}
+	if client.writes[2].Status != store.MpPostApproved {
+		t.Fatalf("row should be written back approved, got %+v", client.writes[2])
 	}
 }
 
