@@ -184,10 +184,14 @@ func (c *Config) applyEnvOverrides() {
 	// wiring time, never stored in config.json).
 	envStr("GOCLAW_MEOW_SHEETS_SPREADSHEET_ID", &c.MeowSheets.SpreadsheetID)
 	envStr("GOCLAW_MEOW_SHEETS_INTERVAL", &c.MeowSheets.Interval)
+	// Two-way override so ops has a real kill switch: env can force-disable a
+	// config-file enabled:true, not only enable.
 	if v := os.Getenv("GOCLAW_MEOW_SHEETS_ENABLED"); v != "" {
 		switch strings.ToLower(strings.TrimSpace(v)) {
 		case "1", "true", "yes", "on":
 			c.MeowSheets.Enabled = true
+		case "0", "false", "no", "off":
+			c.MeowSheets.Enabled = false
 		}
 	}
 
