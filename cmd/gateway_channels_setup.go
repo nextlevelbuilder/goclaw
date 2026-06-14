@@ -53,6 +53,11 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 			slog.Error("failed to initialize telegram channel", "error", err)
 		} else {
 			channelMgr.RegisterChannel(channels.TypeTelegram, tg)
+			// Enable the owner-gated /meow command family (Standard/PG only;
+			// gate stays closed until an owner is configured + verified).
+			if pgStores.Meow != nil {
+				tg.SetMeowConfig(pgStores.SystemConfigs)
+			}
 			slog.Info("telegram channel enabled (config)")
 		}
 	}

@@ -33,6 +33,8 @@ type Channel struct {
 	configPermStore   store.ConfigPermissionStore // for group file writer management (nil if not configured)
 	teamStore         store.TeamStore             // for /tasks, /task_detail commands (nil if not configured)
 	subagentTaskStore store.SubagentTaskStore     // for /subagents, /subagent commands (nil if not configured)
+	meowCfg           store.SystemConfigStore     // owner-gate state for /meow (nil = /meow disabled)
+	meowPublish       meowPublishFn               // owner-gated publish entrypoint (nil = /meow post disabled)
 	placeholders      sync.Map                    // localKey string → messageID int
 	stopThinking      sync.Map                    // localKey string → *thinkingCancel
 	typingCtrls       sync.Map                    // localKey string → *typing.Controller
