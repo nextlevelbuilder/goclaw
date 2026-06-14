@@ -442,3 +442,43 @@ func TestHTMLTagToMarkdown(t *testing.T) {
 		})
 	}
 }
+
+func TestMarkdownToTelegramHTML_CustomEmoji(t *testing.T) {
+	t.Run("preserves safe tg emoji tag", func(t *testing.T) {
+		input := `Status <tg-emoji emoji-id="5368324170671202286">🤖</tg-emoji> thinking`
+		got := markdownToTelegramHTML(input)
+		want := `<tg-emoji emoji-id="5368324170671202286">🤖</tg-emoji>`
+		if !strings.Contains(got, want) {
+			t.Fatalf("custom emoji tag not preserved:\n got: %q\nwant substring: %q", got, want)
+		}
+	})
+
+	t.Run("normalizes tg emoji image syntax", func(t *testing.T) {
+		input := `Status <img src="tg://emoji?id=5368324170671202286" alt="🤖"/> thinking`
+		got := markdownToTelegramHTML(input)
+		want := `<tg-emoji emoji-id="5368324170671202286">🤖</tg-emoji>`
+		if !strings.Contains(got, want) {
+			t.Fatalf("custom emoji image syntax not normalized:\n got: %q\nwant substring: %q", got, want)
+		}
+	})
+
+	t.Run("normalizes markdown custom emoji syntax", func(t *testing.T) {
+		input := `Status ![🤖](tg://emoji?id=5368324170671202286) thinking`
+		got := markdownToTelegramHTML(input)
+		want := `<tg-emoji emoji-id="5368324170671202286">🤖</tg-emoji>`
+		if !strings.Contains(got, want) {
+			t.Fatalf("custom emoji markdown syntax not normalized:\n got: %q\nwant substring: %q", got, want)
+		}
+	})
+
+	t.Run("escapes unsafe custom emoji attributes", func(t *testing.T) {
+		input := `<tg-emoji emoji-id="5368324170671202286" onclick="alert(1)">🤖</tg-emoji>`
+		got := markdownToTelegramHTML(input)
+		if strings.Contains(got, `<tg-emoji`) {
+			t.Fatalf("unsafe custom emoji tag should not be preserved: %q", got)
+		}
+		if !strings.Contains(got, `&lt;tg-emoji`) {
+			t.Fatalf("unsafe custom emoji tag should be escaped: %q", got)
+		}
+	})
+}

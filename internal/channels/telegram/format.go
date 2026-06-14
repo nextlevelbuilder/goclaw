@@ -63,7 +63,6 @@ func markdownToTelegramHTML(text string) string {
 	inlineCodes := extractInlineCodes(text)
 	text = inlineCodes.text
 
-
 	// Extract and protect bare URLs from italic parsing.
 	// URLs with underscores (e.g. syngas_dailymail_2026_ai) get broken by
 	// the italic regex which matches _text_ patterns inside URLs.
@@ -74,6 +73,12 @@ func markdownToTelegramHTML(text string) string {
 		urlPlaceholders = append(urlPlaceholders, s)
 		return fmt.Sprintf("\x00URL%d\x00", idx)
 	})
+
+	// Extract and protect Telegram custom emoji tags. These are valid
+	// Telegram HTML entities, but arbitrary HTML must still be escaped.
+	customEmojis := extractCustomEmojiTags(text)
+	text = customEmojis.text
+
 	// Strip markdown headers
 	text = regexp.MustCompile(`(?m)^#{1,6}\s+(.+)$`).ReplaceAllString(text, "$1")
 
@@ -152,6 +157,12 @@ func markdownToTelegramHTML(text string) string {
 		text = strings.ReplaceAll(text, fmt.Sprintf("\x00TB%d\x00", i), fmt.Sprintf("<pre>%s</pre>", escaped))
 	}
 
+	// Restore vetted Telegram custom emoji entities after all generic
+	// escaping and markdown conversion has completed.
+	for i, emoji := range customEmojis.tags {
+		text = strings.ReplaceAll(text, fmt.Sprintf("\x00CE%d\x00", i), emoji)
+	}
+
 	return text
 }
 
@@ -177,6 +188,57 @@ func extractCodeBlocks(text string) codeBlockMatch {
 	})
 
 	return codeBlockMatch{text: text, codes: codes}
+}
+
+type customEmojiMatch struct {
+	text string
+	tags []string
+}
+
+var (
+	reTelegramCustomEmojiTag      = regexp.MustCompile(`<tg-emoji\s+emoji-id="([0-9]{1,32})">([^<>&]+)</tg-emoji>`)
+	reTelegramCustomEmojiImg      = regexp.MustCompile(`<img\s+src="tg://emoji\?id=([0-9]{1,32})"\s+alt="([^<>&"]+)"\s*/>`)
+	reTelegramCustomEmojiMarkdown = regexp.MustCompile(`!\[([^\]<>&]+)\]\(tg://emoji\?id=([0-9]{1,32})\)`)
+)
+
+func extractCustomEmojiTags(text string) customEmojiMatch {
+	var tags []string
+
+	replace := func(id, fallback string) string {
+		idx := len(tags)
+		tags = append(tags, fmt.Sprintf(
+			`<tg-emoji emoji-id="%s">%s</tg-emoji>`,
+			id,
+			fallback,
+		))
+		return fmt.Sprintf("\x00CE%d\x00", idx)
+	}
+
+	text = reTelegramCustomEmojiTag.ReplaceAllStringFunc(text, func(s string) string {
+		match := reTelegramCustomEmojiTag.FindStringSubmatch(s)
+		if len(match) != 3 {
+			return s
+		}
+		return replace(match[1], match[2])
+	})
+
+	text = reTelegramCustomEmojiImg.ReplaceAllStringFunc(text, func(s string) string {
+		match := reTelegramCustomEmojiImg.FindStringSubmatch(s)
+		if len(match) != 3 {
+			return s
+		}
+		return replace(match[1], match[2])
+	})
+
+	text = reTelegramCustomEmojiMarkdown.ReplaceAllStringFunc(text, func(s string) string {
+		match := reTelegramCustomEmojiMarkdown.FindStringSubmatch(s)
+		if len(match) != 3 {
+			return s
+		}
+		return replace(match[2], match[1])
+	})
+
+	return customEmojiMatch{text: text, tags: tags}
 }
 
 type inlineCodeMatch struct {
