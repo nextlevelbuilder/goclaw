@@ -8,8 +8,49 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
+
+// MeowAgentKey is the agent_key of the predefined Meow autopilot agent.
+const MeowAgentKey = "meow"
+
+// meowAgentTools is the Meow agent's tool allowlist. Every entry MUST be a real
+// registered tool — publish_channel_post is registered at gateway startup when
+// the Meow store is present.
+var meowAgentTools = []string{"publish_channel_post"}
+
+// SeedMeowAgent ensures the predefined Meow agent exists under the owner tenant
+// with a tool allowlist restricted to meowAgentTools. Idempotent: if the agent
+// already exists it is returned unchanged (created=false). provider/model seed
+// the scaffold (typically copied from the default agent); they can be empty for
+// a placeholder until configured. The caller seeds context files for a freshly
+// created agent (created=true).
+func SeedMeowAgent(ctx context.Context, agentStore store.AgentStore, tenantID uuid.UUID, provider, model string) (agent *store.AgentData, created bool, err error) {
+	ctx = store.WithTenantID(ctx, tenantID)
+	if existing, gerr := agentStore.GetByKey(ctx, MeowAgentKey); gerr == nil && existing != nil {
+		return existing, false, nil
+	}
+	toolsCfg, err := json.Marshal(config.ToolPolicySpec{Allow: meowAgentTools})
+	if err != nil {
+		return nil, false, fmt.Errorf("marshal meow tools_config: %w", err)
+	}
+	agent = &store.AgentData{
+		BaseModel:   store.BaseModel{ID: uuid.New()},
+		TenantID:    tenantID,
+		AgentKey:    MeowAgentKey,
+		DisplayName: "Meow",
+		OwnerID:     "system",
+		Provider:    provider,
+		Model:       model,
+		AgentType:   "predefined",
+		ToolsConfig: toolsCfg,
+	}
+	if err := agentStore.Create(ctx, agent); err != nil {
+		return nil, false, fmt.Errorf("create meow agent: %w", err)
+	}
+	return agent, true, nil
+}
 
 // meowChannelsSeed is the repo-bundled lightweight channel registry. The full
 // per-channel briefs/calendars/assets live in each source project's

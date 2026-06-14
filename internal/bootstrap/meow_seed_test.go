@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -61,5 +62,51 @@ func TestSeedMeowChannels(t *testing.T) {
 		if !byHandle[h].HasMascot {
 			t.Errorf("%s should have has_mascot=true", h)
 		}
+	}
+}
+
+// fakeAgentStore implements only GetByKey + Create.
+type fakeAgentStore struct {
+	store.AgentStore
+	existing *store.AgentData
+	created  []*store.AgentData
+}
+
+func (f *fakeAgentStore) GetByKey(_ context.Context, key string) (*store.AgentData, error) {
+	if f.existing != nil && f.existing.AgentKey == key {
+		return f.existing, nil
+	}
+	return nil, errors.New("not found")
+}
+
+func (f *fakeAgentStore) Create(_ context.Context, a *store.AgentData) error {
+	f.created = append(f.created, a)
+	f.existing = a
+	return nil
+}
+
+func TestSeedMeowAgent(t *testing.T) {
+	fs := &fakeAgentStore{}
+
+	agent, created, err := SeedMeowAgent(context.Background(), fs, store.MasterTenantID, "anthropic", "claude-x")
+	if err != nil || !created {
+		t.Fatalf("first seed: created=%v err=%v", created, err)
+	}
+	if agent.AgentKey != MeowAgentKey || agent.TenantID != store.MasterTenantID || agent.AgentType != "predefined" {
+		t.Fatalf("unexpected agent: key=%s tenant=%s type=%s", agent.AgentKey, agent.TenantID, agent.AgentType)
+	}
+	// Tool allowlist must reference ONLY real registered tools.
+	pol := agent.ParseToolsConfig()
+	if pol == nil || len(pol.Allow) != 1 || pol.Allow[0] != "publish_channel_post" {
+		t.Fatalf("tools allowlist wrong: %+v", pol)
+	}
+
+	// Idempotent: second call creates nothing.
+	_, created2, err := SeedMeowAgent(context.Background(), fs, store.MasterTenantID, "anthropic", "claude-x")
+	if err != nil || created2 {
+		t.Fatalf("second seed should be no-op: created=%v err=%v", created2, err)
+	}
+	if len(fs.created) != 1 {
+		t.Fatalf("expected exactly 1 Create, got %d", len(fs.created))
 	}
 }

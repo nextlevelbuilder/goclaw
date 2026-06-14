@@ -376,4 +376,23 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 			slog.Info("meow channels seeded", "count", n)
 		}
 	}
+
+	// Seed the predefined Meow agent (Standard/PG only) under the owner tenant,
+	// inheriting provider/model from the default agent when available. Fresh
+	// agents get their context files seeded.
+	if d.pgStores.Meow != nil && d.pgStores.Agents != nil {
+		octx := store.WithTenantID(context.Background(), store.MasterTenantID)
+		var prov, model string
+		if def, err := d.pgStores.Agents.GetByKey(octx, "default"); err == nil && def != nil {
+			prov, model = def.Provider, def.Model
+		}
+		if agent, created, err := bootstrap.SeedMeowAgent(context.Background(), d.pgStores.Agents, store.MasterTenantID, prov, model); err != nil {
+			slog.Error("failed to seed meow agent", "error", err)
+		} else if created {
+			if _, err := bootstrap.SeedToStore(context.Background(), d.pgStores.Agents, agent.ID, "predefined"); err != nil {
+				slog.Warn("meow agent context-file seed failed", "error", err)
+			}
+			slog.Info("meow agent seeded", "id", agent.ID)
+		}
+	}
 }
