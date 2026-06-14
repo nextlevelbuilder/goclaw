@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -804,4 +805,79 @@ func (c *Channel) deleteMessage(ctx context.Context, chatID int64, messageID int
 		ChatID:    tu.ID(chatID),
 		MessageID: messageID,
 	})
+}
+
+// PostButton is one inline URL button for a channel post (label + URL). Defined
+// here (not imported from the meow package) so the telegram layer stays
+// independent of the publish orchestration; the wiring layer adapts between them.
+type PostButton struct {
+	Label string
+	URL   string
+}
+
+// parseChannelChatID turns a stored chat id ("-1001234567" or "@handle") into a
+// telego ChatID.
+func parseChannelChatID(s string) (telego.ChatID, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return telego.ChatID{}, fmt.Errorf("empty chat id")
+	}
+	if strings.HasPrefix(s, "@") {
+		return tu.Username(s), nil
+	}
+	id, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return telego.ChatID{}, fmt.Errorf("parse chat id %q: %w", s, err)
+	}
+	return tu.ID(id), nil
+}
+
+// SendChannelPost publishes a photo with an HTML caption and inline URL buttons
+// to a channel, returning the Telegram message id. Unlike sendPhoto it sets
+// ReplyMarkup and returns the message id (needed for the post link + the
+// exactly-once write-back). The caption is expected to be already HTML-escaped;
+// an HTML parse error is surfaced (not silently stripped) so a malformed post
+// is caught rather than published without formatting.
+func (c *Channel) SendChannelPost(ctx context.Context, chatID, imagePath, captionHTML string, buttons []PostButton) (int64, error) {
+	tgChat, err := parseChannelChatID(chatID)
+	if err != nil {
+		return 0, err
+	}
+	file, err := os.Open(imagePath)
+	if err != nil {
+		return 0, fmt.Errorf("open photo %s: %w", imagePath, err)
+	}
+	defer file.Close()
+
+	params := &telego.SendPhotoParams{
+		ChatID:  tgChat,
+		Photo:   telego.InputFile{File: file},
+		Caption: captionHTML,
+	}
+	if captionHTML != "" {
+		params.ParseMode = telego.ModeHTML
+	}
+	if len(buttons) > 0 {
+		rows := make([][]telego.InlineKeyboardButton, 0, len(buttons))
+		for _, b := range buttons {
+			rows = append(rows, []telego.InlineKeyboardButton{{Text: b.Label, URL: b.URL}})
+		}
+		params.ReplyMarkup = &telego.InlineKeyboardMarkup{InlineKeyboard: rows}
+	}
+
+	var msg *telego.Message
+	err = c.retrySend(ctx, "sendChannelPost", func() { file.Seek(0, 0) }, func(ctx context.Context) error {
+		m, e := c.bot.SendPhoto(ctx, params)
+		if e == nil {
+			msg = m
+		}
+		return e
+	})
+	if err != nil {
+		return 0, err
+	}
+	if msg == nil {
+		return 0, fmt.Errorf("sendChannelPost: nil message returned")
+	}
+	return int64(msg.MessageID), nil
 }
