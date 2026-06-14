@@ -56,8 +56,10 @@ func (p *fakePoster) PublishChannelPost(_ context.Context, channelName, _, _, _ 
 func newToolFixture(t *testing.T) (*PublishChannelPostTool, *fakePoster, *fakeMeowStore) {
 	t.Helper()
 	root := t.TempDir()
-	img := filepath.Join(root, "p.png")
-	if err := os.WriteFile(img, []byte("x"), 0o600); err != nil {
+	img := filepath.Join(root, "p.webp")
+	// Minimal valid WebP container (RIFF....WEBP) — the publish path verifies the
+	// image signature before sending.
+	if err := os.WriteFile(img, []byte("RIFF\x00\x00\x00\x00WEBP"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	url := "https://t.me/Bot?startapp"
