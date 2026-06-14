@@ -60,6 +60,15 @@ type SheetRow struct {
 	Error           string
 }
 
+// IsBlank reports whether a row carries no planned-post content. A freshly
+// checkbox-formatted row reads back with manager_approved/publish_now defaulting
+// to "FALSE" but no date/text/image — such rows are noise the reader skips, so
+// the sync only sees rows a human actually filled in.
+func (r SheetRow) IsBlank() bool {
+	return r.Date == "" && r.KoText == "" && r.EnText == "" &&
+		r.ImageFile == "" && r.ImagePrompt == "" && r.Buttons == ""
+}
+
 // ParseSheetRow maps cells onto a SheetRow using headers (matched
 // case-insensitively, trimmed). A missing column is empty; extra cells are
 // ignored. Status is lowercased so comparisons against the post-status constants

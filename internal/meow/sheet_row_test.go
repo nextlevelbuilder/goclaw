@@ -79,6 +79,19 @@ func TestParseButtons(t *testing.T) {
 	}
 }
 
+func TestSheetRow_IsBlank(t *testing.T) {
+	// A row with only default checkbox values (no content) is blank.
+	if !(SheetRow{Status: "false"}).IsBlank() {
+		t.Error("checkbox-only row should be blank")
+	}
+	if (SheetRow{Date: "2026-06-16"}).IsBlank() {
+		t.Error("row with a date is not blank")
+	}
+	if (SheetRow{Buttons: "Play | https://t.me/x"}).IsBlank() {
+		t.Error("row with buttons is not blank")
+	}
+}
+
 func TestSheetRow_ToDraftBundle(t *testing.T) {
 	r := SheetRow{
 		Date:     "2026-06-16",

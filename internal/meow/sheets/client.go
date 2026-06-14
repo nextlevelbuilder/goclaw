@@ -106,7 +106,13 @@ func (c *Client) ReadTab(ctx context.Context, tab string) ([]meow.SheetRow, erro
 	headers := toStrings(resp.Values[0])
 	rows := make([]meow.SheetRow, 0, len(resp.Values)-1)
 	for i := 1; i < len(resp.Values); i++ {
-		rows = append(rows, meow.ParseSheetRow(tab, i+1, headers, toStrings(resp.Values[i])))
+		// RowIndex stays the true 1-based sheet row (header=1) even though blank
+		// rows are dropped, so write-back targets the right cell.
+		row := meow.ParseSheetRow(tab, i+1, headers, toStrings(resp.Values[i]))
+		if row.IsBlank() {
+			continue
+		}
+		rows = append(rows, row)
 	}
 	return rows, nil
 }
