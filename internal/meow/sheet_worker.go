@@ -27,9 +27,9 @@ type SyncWorker struct {
 	AssetRoot          string
 	ApprovedByFallback string
 	Tabs               []string // brand_key tabs to poll; empty → every channel
-	// Publisher enables the publish_now path (Commit B). When nil, publish_now is
-	// ignored and the worker only ingests + approves (sync-only). Publishing is
-	// exactly-once via Publisher.PublishDue.
+	// Publisher enables the publish_now path. When nil, publish_now is ignored and
+	// the worker only ingests + approves (sync-only). Publishing is exactly-once via
+	// Publisher.PublishDue.
 	Publisher *Publisher
 }
 
@@ -120,18 +120,20 @@ func (w *SyncWorker) syncTab(ctx context.Context, tab string, ch store.MpChannel
 		slog.Warn("meow.sheets.sync list posts failed", "tab", tab, "error", err)
 		return SyncReport{}
 	}
-	synced := syncedDates(existing)
+	synced := syncedPosts(existing)
 
-	// DB pre-check makes the sync idempotent regardless of sheet write-back
-	// success: a channel-day that already has a non-draft post is reconciled (its
-	// DB status written back to the sheet) instead of re-ingested.
+	// DB pre-check makes the sync idempotent AND self-healing regardless of sheet
+	// write-back success: a channel-day that already has a non-draft post is
+	// reconciled — its FULL DB result (status + tg_message_id + tg_link) is written
+	// back — instead of re-ingested. This restores publish results the sheet lost if
+	// an earlier write-back failed after a successful publish.
 	toApply := make([]SyncAction, 0, len(actions))
 	var reconciled []SyncOutcome
 	for _, a := range actions {
 		if a.Kind == SyncIngest {
-			if st, done := synced[a.Date]; done {
+			if post, done := synced[a.Date]; done {
 				reconciled = append(reconciled, SyncOutcome{
-					Tab: a.Tab, Date: a.Date, RowIndex: a.RowIndex, Result: RowResult{Status: st},
+					Tab: a.Tab, Date: a.Date, RowIndex: a.RowIndex, Result: reconcileResult(post),
 				})
 				continue
 			}
@@ -152,8 +154,8 @@ func (w *SyncWorker) syncTab(ctx context.Context, tab string, ch store.MpChannel
 		out[o.RowIndex] = o.Result
 	}
 
-	// Publish pass (Commit B): publish_now is the explicit live-post trigger,
-	// independent of manager_approved. PublishDue is exactly-once and only acts on
+	// Publish pass: publish_now is the explicit live-post trigger, independent of
+	// manager_approved. PublishDue is exactly-once and only acts on
 	// an already-approved post, so ticking publish_now alone (unapproved) is a
 	// no-op. Disabled entirely when no Publisher is wired (sync-only).
 	if w.Publisher != nil {
@@ -191,17 +193,28 @@ func (w *SyncWorker) syncTab(ctx context.Context, tab string, ch store.MpChannel
 	return rep
 }
 
-// syncedDates maps a channel's already-synced dates (any non-draft post) to that
-// post's status, keyed by YYYY-MM-DD to match a sheet row's date.
-func syncedDates(posts []store.MpContentPost) map[string]string {
-	out := make(map[string]string, len(posts))
+// syncedPosts maps a channel's already-synced dates (any non-draft post) to the
+// post, keyed by YYYY-MM-DD to match a sheet row's date.
+func syncedPosts(posts []store.MpContentPost) map[string]store.MpContentPost {
+	out := make(map[string]store.MpContentPost, len(posts))
 	for _, p := range posts {
 		if p.Status == store.MpPostDraft {
 			continue
 		}
-		out[p.ScheduledDate.Format(syncDateLayout)] = p.Status
+		out[p.ScheduledDate.Format(syncDateLayout)] = p
 	}
 	return out
+}
+
+// reconcileResult builds the full sheet write-back for an already-synced post so a
+// dropped earlier write-back is restored — including the publish identifiers when
+// the post is published. Empty fields are left unchanged by WriteBack.
+func reconcileResult(p store.MpContentPost) RowResult {
+	rr := RowResult{Status: p.Status, TgLink: p.TgLink}
+	if p.TgMessageID != nil {
+		rr.TgMessageID = strconv.FormatInt(*p.TgMessageID, 10)
+	}
+	return rr
 }
 
 func (r *SyncReport) merge(o SyncReport) {

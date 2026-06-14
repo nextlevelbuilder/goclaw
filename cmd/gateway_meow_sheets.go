@@ -18,7 +18,9 @@ import (
 // when enabled. It is a no-op (logged) when disabled, the Meow store is absent
 // (Lite/non-PG), or no spreadsheet id is configured. Credentials come from env
 // only — never config.json. The worker reads approved rows and writes results
-// back; it never publishes to Telegram. It stops when ctx is cancelled.
+// back; it is sync-only (no Telegram posting) unless meow_sheets.publish is on,
+// in which case a row's publish_now triggers a live, exactly-once publish. It
+// stops when ctx is cancelled.
 func startMeowSheetsSync(ctx context.Context, cfg *config.Config, meowStore store.MeowStore, channelMgr *channels.Manager) {
 	if !cfg.MeowSheets.Enabled {
 		slog.Info("meow sheets sync disabled")

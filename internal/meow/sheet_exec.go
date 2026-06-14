@@ -22,7 +22,7 @@ type SyncOutcome struct {
 type SyncReport struct {
 	Ingested  int
 	Approved  int
-	Published int // live-published via publish_now (Commit B)
+	Published int // live-published via the publish_now trigger
 	Skipped   int
 	Held      int // ingest found a content problem at apply time (no draft row)
 	Errored   int // planner error or apply failure

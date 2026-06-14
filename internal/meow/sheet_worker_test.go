@@ -99,15 +99,20 @@ func (f *fakeWorkerStore) UpdatePostStatus(_ context.Context, _, id uuid.UUID, s
 }
 
 // fakeRWClient serves seeded rows and records write-backs by row index.
+// dropWrites simulates a write-back that fails to land on the sheet.
 type fakeRWClient struct {
-	rows   map[string][]SheetRow
-	writes map[int]RowResult
+	rows       map[string][]SheetRow
+	writes     map[int]RowResult
+	dropWrites bool
 }
 
 func (c *fakeRWClient) ReadTab(_ context.Context, tab string) ([]SheetRow, error) {
 	return c.rows[tab], nil
 }
 func (c *fakeRWClient) WriteBack(_ context.Context, _ string, rowIndex int, r RowResult) error {
+	if c.dropWrites {
+		return nil // dropped: the sheet never reflects this write
+	}
 	if c.writes == nil {
 		c.writes = map[int]RowResult{}
 	}
@@ -264,6 +269,49 @@ func TestSyncWorker_PublishNowIgnoredWithoutPublisher(t *testing.T) {
 	}
 	if client.writes[2].Status != store.MpPostApproved {
 		t.Fatalf("row should be written back approved, got %+v", client.writes[2])
+	}
+}
+
+func TestSyncWorker_RecoversDroppedPublishWriteBack(t *testing.T) {
+	st, client, w := workerFixture(t)
+	sender := &fakeSender{msgID: 4242}
+	w.Publisher = &Publisher{
+		Store: st, Sender: sender,
+		AllowedRoots: []string{w.AssetRoot}, AllowedHosts: DefaultButtonHostAllowlist(),
+	}
+	r := client.rows["king-board-games"][0]
+	r.PublishNow = true
+	client.rows["king-board-games"] = []SheetRow{r}
+
+	// Pass 1: publish succeeds in DB, but the sheet write-back is dropped.
+	client.dropWrites = true
+	rep, err := w.SyncOnce(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Published != 1 || sender.calls != 1 {
+		t.Fatalf("pass 1 should publish once: rep=%+v sends=%d", rep, sender.calls)
+	}
+	if len(client.writes) != 0 {
+		t.Fatalf("pass 1 sheet should have nothing (dropped): %+v", client.writes)
+	}
+	if st.posts[0].Status != store.MpPostPublished || st.posts[0].TgMessageID == nil {
+		t.Fatalf("DB should be published with a tg id: %+v", st.posts[0])
+	}
+
+	// Pass 2: write-back works again; reconciliation restores the FULL result
+	// (status + tg_message_id + tg_link) even though publish doesn't re-fire.
+	client.dropWrites = false
+	rep2, err := w.SyncOnce(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sender.calls != 1 {
+		t.Fatalf("publish must not re-fire: sends=%d", sender.calls)
+	}
+	got := client.writes[2]
+	if got.Status != store.MpPostPublished || got.TgMessageID != "4242" || got.TgLink == "" {
+		t.Fatalf("pass 2 must restore status + tg fields, got %+v (rep2=%+v)", got, rep2)
 	}
 }
 
