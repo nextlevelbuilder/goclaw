@@ -38,6 +38,7 @@ func TestValidateDraftBundle_Invalid(t *testing.T) {
 		"no image":        {Handle: "@k", ScheduledDate: "2026-06-16", EnText: "x"},
 		"image is path":   {Handle: "@k", ScheduledDate: "2026-06-16", EnText: "x", Image: "../../etc/passwd"},
 		"image subdir":    {Handle: "@k", ScheduledDate: "2026-06-16", EnText: "x", Image: "sub/a.webp"},
+		"image not webp":  {Handle: "@k", ScheduledDate: "2026-06-16", EnText: "x", Image: "a.png"},
 		"button no label": {Handle: "@k", ScheduledDate: "2026-06-16", EnText: "x", Image: "a.webp", Buttons: []Button{{URL: "https://t.me/x"}}},
 		"button not https": {Handle: "@k", ScheduledDate: "2026-06-16", EnText: "x", Image: "a.webp", Buttons: []Button{{Label: "Go", URL: "tg://x"}}},
 	}

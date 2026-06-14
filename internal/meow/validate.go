@@ -6,6 +6,7 @@ package meow
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"net/url"
 	"os"
@@ -107,4 +108,23 @@ func ValidateImagePath(raw string, allowedRoots []string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("image path %q resolves outside allowed roots", raw)
+}
+
+// ValidateWebP confirms path is actually a WebP image by its container header
+// (RIFF....WEBP), not just its extension — so a mislabeled or corrupt file can
+// never enter the publish pipeline.
+func ValidateWebP(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("webp: open: %w", err)
+	}
+	defer f.Close()
+	var hdr [12]byte
+	if _, err := io.ReadFull(f, hdr[:]); err != nil {
+		return fmt.Errorf("webp: read header: %w", err)
+	}
+	if string(hdr[0:4]) != "RIFF" || string(hdr[8:12]) != "WEBP" {
+		return fmt.Errorf("webp: not a WebP file (bad RIFF/WEBP signature)")
+	}
+	return nil
 }

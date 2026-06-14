@@ -62,6 +62,10 @@ func IngestDraft(ctx context.Context, st store.MeowStore, tenantID uuid.UUID, b 
 	if _, err := ValidateImagePath(src, []string{bundleDir}); err != nil {
 		return IngestResult{Held: true, Reason: "image: " + err.Error()}, nil
 	}
+	// Confirm it is really a WebP (header), not just a .webp-named file.
+	if err := ValidateWebP(src); err != nil {
+		return IngestResult{Held: true, Reason: "image: " + err.Error()}, nil
+	}
 
 	date, _ := b.Date() // already validated
 	dest := filepath.Join(assetRoot, "drafts", ch.BrandKey, date.Format(draftDateLayout)+".webp")

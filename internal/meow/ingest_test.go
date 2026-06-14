@@ -120,3 +120,18 @@ func TestIngestDraft_UnknownChannelHolds(t *testing.T) {
 		t.Fatal("unknown channel must hold with no draft")
 	}
 }
+
+func TestIngestDraft_NonWebPHolds(t *testing.T) {
+	st, bundleDir, assetRoot := ingestFixture(t)
+	// Overwrite the fixture image with non-WebP content (still named .webp).
+	if err := os.WriteFile(filepath.Join(bundleDir, "2026-06-16.webp"), []byte("totally-not-webp"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	res, err := IngestDraft(context.Background(), st, st.ch.TenantID, goodBundle(), bundleDir, assetRoot)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !res.Held || len(st.upserts) != 0 {
+		t.Fatalf("non-webp image must hold with no draft (held=%v upserts=%d)", res.Held, len(st.upserts))
+	}
+}

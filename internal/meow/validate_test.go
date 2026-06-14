@@ -74,3 +74,23 @@ func TestValidateImagePath(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateWebP(t *testing.T) {
+	dir := t.TempDir()
+	good := filepath.Join(dir, "good.webp")
+	// RIFF + 4-byte size + WEBP + payload
+	os.WriteFile(good, []byte("RIFF\x00\x00\x00\x00WEBPxxxx"), 0o600)
+	if err := ValidateWebP(good); err != nil {
+		t.Fatalf("valid webp rejected: %v", err)
+	}
+	bad := filepath.Join(dir, "bad.webp") // .webp name, wrong content
+	os.WriteFile(bad, []byte("not-a-webp-file"), 0o600)
+	if err := ValidateWebP(bad); err == nil {
+		t.Fatal("non-webp content must be rejected")
+	}
+	tiny := filepath.Join(dir, "tiny.webp")
+	os.WriteFile(tiny, []byte("RIFF"), 0o600)
+	if err := ValidateWebP(tiny); err == nil {
+		t.Fatal("too-short file must be rejected")
+	}
+}

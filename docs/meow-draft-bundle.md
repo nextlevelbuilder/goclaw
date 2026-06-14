@@ -2,7 +2,7 @@
 
 The offline draft-prep workflow writes one **bundle** per channel-day into the
 source project: `<project>/marketing/meow/drafts/<date>.json` next to its
-`<date>.webp` image. Ingest (P4) reads the bundle server-side, validates it,
+`<date>.webp` image. Ingest reads the bundle server-side, validates it,
 transports the image into the meow-assets root, and upserts an
 `mp_content_posts` row as `draft`. Type: `meow.DraftBundle`.
 

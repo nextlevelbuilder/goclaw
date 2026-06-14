@@ -62,6 +62,9 @@ func (b *DraftBundle) Validate() error {
 	if strings.ContainsAny(img, `/\`) || strings.Contains(img, "..") {
 		return fmt.Errorf("image must be a bare filename, not a path (got %q)", b.Image)
 	}
+	if !strings.HasSuffix(strings.ToLower(img), ".webp") {
+		return fmt.Errorf("image must be a .webp file (got %q)", b.Image)
+	}
 	for i, btn := range b.Buttons {
 		if strings.TrimSpace(btn.Label) == "" {
 			return fmt.Errorf("button[%d] label is empty", i)
