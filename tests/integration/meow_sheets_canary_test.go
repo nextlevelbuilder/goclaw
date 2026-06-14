@@ -25,8 +25,8 @@ import (
 func TestMeowSheetsCanary(t *testing.T) {
 	credFile := os.Getenv("GOCLAW_MEOW_SHEETS_CREDENTIALS_FILE")
 	ssID := os.Getenv("GOCLAW_MEOW_SHEETS_SPREADSHEET_ID")
-	if credFile == "" || ssID == "" {
-		t.Skip("set GOCLAW_MEOW_SHEETS_CREDENTIALS_FILE + GOCLAW_MEOW_SHEETS_SPREADSHEET_ID to run the live canary")
+	if credFile == "" || ssID == "" || os.Getenv("GOCLAW_MEOW_SHEETS_CANARY") != "1" {
+		t.Skip("live canary: set GOCLAW_MEOW_SHEETS_CANARY=1 + GOCLAW_MEOW_SHEETS_CREDENTIALS_FILE + _SPREADSHEET_ID")
 	}
 
 	db := testutil.TestDB(t, "../../migrations")
@@ -41,8 +41,10 @@ func TestMeowSheetsCanary(t *testing.T) {
 	pg.InitSqlx(db) // sqlx-based store methods (GetChannelByHandle, ListPostsByChannel) need this
 	st := pg.NewPGMeowStore(db)
 	const (
-		tab        = "king-board-games"
-		handle     = "@kingboardgamesofficial"
+		// Dedicated transient tab + channel — never touches a real brand row. The
+		// tab is created via EnsureLayout and deleted on cleanup.
+		tab        = "_canary"
+		handle     = "@meow_canary"
 		canaryDate = "2030-01-02" // far-future so it never collides with real posts
 		btnURL     = "https://t.me/holdemblitz_bot"
 	)
@@ -82,7 +84,16 @@ func TestMeowSheetsCanary(t *testing.T) {
 		t.Fatalf("sheets client: %v", err)
 	}
 
-	// Write one approved row, and register cleanup of the sheet row + DB posts.
+	// Create the dedicated canary tab; delete it (and DB posts) on cleanup so the
+	// real console is left pristine — never writes into a brand tab.
+	if err := client.EnsureLayout(ctx, []string{tab}); err != nil {
+		t.Fatalf("ensure canary tab: %v", err)
+	}
+	t.Cleanup(func() {
+		client.DeleteTab(context.Background(), tab)
+		cleanPosts()
+	})
+
 	const rowIdx = 2
 	if err := client.WriteRow(ctx, tab, rowIdx, meow.SheetRow{
 		Date: canaryDate, Status: "ready", KoText: "canary dry-run",
@@ -91,10 +102,6 @@ func TestMeowSheetsCanary(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("write row: %v", err)
 	}
-	t.Cleanup(func() {
-		client.WriteRow(context.Background(), tab, rowIdx, meow.SheetRow{}) // blank the row
-		cleanPosts()
-	})
 
 	worker := &meow.SyncWorker{
 		Store: st, Client: client, TenantID: store.MasterTenantID,

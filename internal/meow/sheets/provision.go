@@ -151,6 +151,28 @@ func (c *Client) applyCheckboxes(ctx context.Context, tabs []string, tabID map[s
 	return nil
 }
 
+// DeleteTab removes a tab from the bound spreadsheet (a no-op if absent). Used to
+// clean up a transient canary tab so the real console is left pristine.
+func (c *Client) DeleteTab(ctx context.Context, tab string) error {
+	if c.spreadsheetID == "" {
+		return fmt.Errorf("no spreadsheet bound")
+	}
+	ids, err := c.tabIDs(ctx)
+	if err != nil {
+		return err
+	}
+	sid, ok := ids[tab]
+	if !ok {
+		return nil
+	}
+	if _, err := c.sheets.Spreadsheets.BatchUpdate(c.spreadsheetID, &sheets.BatchUpdateSpreadsheetRequest{
+		Requests: []*sheets.Request{{DeleteSheet: &sheets.DeleteSheetRequest{SheetId: sid}}},
+	}).Context(ctx).Do(); err != nil {
+		return fmt.Errorf("delete tab %q: %w", tab, err)
+	}
+	return nil
+}
+
 // share grants writer access to each email (no notification email).
 func (c *Client) share(ctx context.Context, fileID string, emails []string) error {
 	for _, email := range emails {
