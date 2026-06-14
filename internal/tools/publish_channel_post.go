@@ -34,6 +34,37 @@ func (s managerSender) SendChannelPost(ctx context.Context, chatID, imagePath, c
 	return s.mgr.PublishChannelPost(ctx, s.channelName, chatID, imagePath, captionHTML, pb)
 }
 
+// NewMeowPublishFunc returns a handle+date publish closure over the same
+// deterministic path the tool uses. Injected into the telegram channel for the
+// owner-gated /meow post command, so the command and the agent tool share one
+// code path. Returns a human-readable result line.
+func NewMeowPublishFunc(ms store.MeowStore, mgr channelPoster, channelInstance string, tenantID uuid.UUID, allowedRoots []string) func(ctx context.Context, handle, date string, force bool) (string, error) {
+	pub := &meow.Publisher{
+		Store:        ms,
+		Sender:       managerSender{mgr: mgr, channelName: channelInstance},
+		AllowedRoots: allowedRoots,
+		AllowedHosts: meow.DefaultButtonHostAllowlist(),
+	}
+	return func(ctx context.Context, handle, dateStr string, force bool) (string, error) {
+		date, err := time.Parse("2006-01-02", dateStr)
+		if err != nil {
+			return "", fmt.Errorf("bad date %q (want YYYY-MM-DD)", dateStr)
+		}
+		ch, err := ms.GetChannelByHandle(ctx, tenantID, handle)
+		if err != nil {
+			return "", fmt.Errorf("channel %q: %w", handle, err)
+		}
+		res, err := pub.PublishDue(ctx, tenantID, ch.ID, date, force)
+		if err != nil {
+			return "", err
+		}
+		if res == nil {
+			return fmt.Sprintf("No publishable post for %s on %s (nothing approved, or already published).", handle, dateStr), nil
+		}
+		return fmt.Sprintf("✅ Published %s → %s", handle, res.Link), nil
+	}
+}
+
 // PublishChannelPostTool runs the deterministic, exactly-once Meow publish path
 // for one channel-day on demand. Owner authorization is enforced at the command
 // layer (telegram), not here: this tool is only registered for the owner-tenant

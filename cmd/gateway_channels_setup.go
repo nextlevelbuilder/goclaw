@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"strings"
 
 	"github.com/google/uuid"
@@ -24,6 +25,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway/methods"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -57,6 +59,10 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 			// gate stays closed until an owner is configured + verified).
 			if pgStores.Meow != nil {
 				tg.SetMeowConfig(pgStores.SystemConfigs)
+				meowAssetRoot := filepath.Join(config.ResolvedDataDirFromEnv(), "meow-assets")
+				tg.SetMeowPublisher(tools.NewMeowPublishFunc(
+					pgStores.Meow, channelMgr, channels.TypeTelegram, store.MasterTenantID, []string{meowAssetRoot},
+				))
 			}
 			slog.Info("telegram channel enabled (config)")
 		}

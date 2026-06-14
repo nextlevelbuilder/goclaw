@@ -99,6 +99,16 @@ func (c *Channel) handleBotCommand(ctx context.Context, message *telego.Message,
 		c.bot.SendMessage(ctx, msg)
 		return true
 
+	case "/meow":
+		// Owner-gated Meow autopilot control (verify / post). Authorization is
+		// enforced inside handleMeowCommand (closed by default).
+		senderNumericID := strings.SplitN(senderID, "|", 2)[0]
+		reply := c.handleMeowCommand(ctx, senderNumericID, strings.Fields(text)[1:])
+		msg := tu.Message(chatIDObj, reply)
+		setThread(msg)
+		c.bot.SendMessage(ctx, msg)
+		return true
+
 	case "/reset":
 		// In group chats, only file writers can reset conversation history.
 		if isGroup && c.configPermStore != nil {
