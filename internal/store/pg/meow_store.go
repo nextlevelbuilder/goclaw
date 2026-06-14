@@ -178,6 +178,39 @@ func (s *PGMeowStore) UpdatePostStatus(ctx context.Context, tenantID, id uuid.UU
 	return nil
 }
 
+// ClaimPostForPublish atomically claims one eligible post for a channel-day and
+// flips it to 'publishing'. The inner SELECT skips the whole day if any post is
+// already publishing/published (exactly-once: re-runs claim nothing), locks the
+// chosen row (FOR UPDATE SKIP LOCKED) to serialize concurrent publishers, and
+// the partial unique index is the final backstop.
+func (s *PGMeowStore) ClaimPostForPublish(ctx context.Context, tenantID, channelID uuid.UUID, date time.Time, force bool) (*store.MpContentPost, error) {
+	var p store.MpContentPost
+	err := pkgSqlxDB.GetContext(ctx, &p,
+		`UPDATE mp_content_posts SET status = 'publishing', updated_at = NOW()
+		 WHERE id = (
+		   SELECT id FROM mp_content_posts
+		   WHERE tenant_id = $1 AND channel_id = $2 AND scheduled_date = $3::date
+		     AND (status = 'approved' OR ($4::bool AND status = 'draft'))
+		     AND NOT EXISTS (
+		       SELECT 1 FROM mp_content_posts
+		       WHERE tenant_id = $1 AND channel_id = $2 AND scheduled_date = $3::date
+		         AND status IN ('publishing','published')
+		     )
+		   ORDER BY created_at
+		   LIMIT 1
+		   FOR UPDATE SKIP LOCKED
+		 )
+		 RETURNING `+mpPostCols,
+		tenantID, channelID, date, force)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, store.ErrMeowNoClaimablePost
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
 // --- Metrics ---
 
 const mpMetricCols = `id, tenant_id, channel_id, date, subscriber_count, delta, stale, alerted_for_date, created_at`

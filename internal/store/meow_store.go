@@ -16,6 +16,10 @@ var (
 	// ErrMeowPostNotFound is returned when a post id does not resolve within
 	// the caller's tenant scope.
 	ErrMeowPostNotFound = errors.New("meow post not found")
+	// ErrMeowNoClaimablePost is returned by ClaimPostForPublish when there is
+	// no eligible post to publish for a channel-day (none approved, or one is
+	// already publishing/published — a no-op, not an error condition).
+	ErrMeowNoClaimablePost = errors.New("meow: no claimable post for channel-day")
 )
 
 // MpChannel is a managed Telegram channel in the Meow autopilot registry.
@@ -128,6 +132,12 @@ type MeowStore interface {
 	// partial unique index (channel_id, scheduled_date) WHERE status IN
 	// ('publishing','published') enforces exactly-once at the DB layer.
 	UpdatePostStatus(ctx context.Context, tenantID, id uuid.UUID, status string, tgMessageID *int64, tgLink string) error
+	// ClaimPostForPublish atomically transitions exactly one eligible post for
+	// (channel_id, scheduled_date) to 'publishing' and returns it. Eligible =
+	// status 'approved' (or 'approved'/'draft' when force). It claims nothing
+	// (ErrMeowNoClaimablePost) if a post for that channel-day is already
+	// publishing/published, so a re-run is a safe no-op (exactly-once).
+	ClaimPostForPublish(ctx context.Context, tenantID, channelID uuid.UUID, date time.Time, force bool) (*MpContentPost, error)
 
 	// Metrics (UNIQUE(channel_id, date) — Upsert is the dedup primitive)
 	UpsertMetric(ctx context.Context, m *MpChannelMetric) error

@@ -281,6 +281,64 @@ func TestMeowStore_MetricUpsertDedup(t *testing.T) {
 	}
 }
 
+func TestMeowStore_ClaimPostForPublish(t *testing.T) {
+	db := testDB(t)
+	tenantID, _ := seedTenantAgent(t, db)
+	ctx := tenantCtx(tenantID)
+	ms := pg.NewPGMeowStore(db)
+
+	ch := newTestChannel(tenantID, "@ClaimChan")
+	if err := ms.UpsertChannel(ctx, ch); err != nil {
+		t.Fatalf("UpsertChannel: %v", err)
+	}
+	day := time.Date(2026, 6, 21, 0, 0, 0, 0, time.UTC)
+	mk := func(status string) *store.MpContentPost {
+		p := &store.MpContentPost{TenantID: tenantID, ChannelID: ch.ID, ScheduledDate: day, Status: status}
+		if err := ms.CreatePost(ctx, p); err != nil {
+			t.Fatalf("CreatePost(%s): %v", status, err)
+		}
+		return p
+	}
+
+	// Two approved posts for the same channel-day.
+	mk(store.MpPostApproved)
+	mk(store.MpPostApproved)
+
+	// First claim flips exactly one to 'publishing'.
+	claimed, err := ms.ClaimPostForPublish(ctx, tenantID, ch.ID, day, false)
+	if err != nil {
+		t.Fatalf("first claim: %v", err)
+	}
+	if claimed.Status != store.MpPostPublishing {
+		t.Fatalf("claimed post not 'publishing': %s", claimed.Status)
+	}
+	// Second claim finds the day already in-flight → no-op sentinel.
+	if _, err := ms.ClaimPostForPublish(ctx, tenantID, ch.ID, day, false); err != store.ErrMeowNoClaimablePost {
+		t.Fatalf("second claim: expected ErrMeowNoClaimablePost, got %v", err)
+	}
+	// After publishing, still nothing claimable (exactly-once).
+	if err := ms.UpdatePostStatus(ctx, tenantID, claimed.ID, store.MpPostPublished, ptrInt64(1), "t.me/x/1"); err != nil {
+		t.Fatalf("mark published: %v", err)
+	}
+	if _, err := ms.ClaimPostForPublish(ctx, tenantID, ch.ID, day, false); err != store.ErrMeowNoClaimablePost {
+		t.Fatalf("post-publish claim: expected ErrMeowNoClaimablePost, got %v", err)
+	}
+
+	// Force claims a draft-only day; non-force does not.
+	day2 := time.Date(2026, 6, 22, 0, 0, 0, 0, time.UTC)
+	d := &store.MpContentPost{TenantID: tenantID, ChannelID: ch.ID, ScheduledDate: day2, Status: store.MpPostDraft}
+	if err := ms.CreatePost(ctx, d); err != nil {
+		t.Fatalf("CreatePost draft: %v", err)
+	}
+	if _, err := ms.ClaimPostForPublish(ctx, tenantID, ch.ID, day2, false); err != store.ErrMeowNoClaimablePost {
+		t.Fatalf("non-force claim of draft: expected ErrMeowNoClaimablePost, got %v", err)
+	}
+	forced, err := ms.ClaimPostForPublish(ctx, tenantID, ch.ID, day2, true)
+	if err != nil || forced == nil || forced.ID != d.ID {
+		t.Fatalf("force claim of draft: err=%v post=%v", err, forced)
+	}
+}
+
 func TestMeowStore_ReportIdempotency(t *testing.T) {
 	db := testDB(t)
 	tenantID, _ := seedTenantAgent(t, db)
