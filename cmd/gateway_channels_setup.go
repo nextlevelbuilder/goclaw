@@ -59,10 +59,13 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 			// gate stays closed until an owner is configured + verified).
 			if pgStores.Meow != nil {
 				tg.SetMeowConfig(pgStores.SystemConfigs)
-				meowAssetRoot := filepath.Join(config.ResolvedDataDirFromEnv(), "meow-assets")
+				meowDataDir := config.ResolvedDataDirFromEnv()
+				meowAssetRoot := filepath.Join(meowDataDir, "meow-assets")
+				meowInboxRoot := filepath.Join(meowDataDir, "meow-inbox")
 				tg.SetMeowPublisher(tools.NewMeowPublishFunc(
 					pgStores.Meow, channelMgr, channels.TypeTelegram, store.MasterTenantID, []string{meowAssetRoot},
 				))
+				tg.SetMeowOps(pgStores.Meow, store.MasterTenantID, meowAssetRoot, meowInboxRoot)
 			}
 			slog.Info("telegram channel enabled (config)")
 		}

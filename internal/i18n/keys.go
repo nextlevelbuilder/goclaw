@@ -317,4 +317,28 @@ const (
 	MsgGrantEnvValueInvalid = "error.grant_env_value_invalid" // "invalid env value: %s"
 	MsgGrantEnvTooManyKeys  = "error.grant_env_too_many_keys" // "too many env keys: max 50"
 	MsgGrantEnvRevealLimit  = "error.grant_env_reveal_limit"  // "rate limit exceeded for env reveal"
+
+	// --- Meow autopilot owner commands (Telegram) ---
+	MsgMeowNotAuthorized  = "meow.not_authorized"  // "Not authorized. Owner-gated — run /meow verify from the configured owner chat first."
+	MsgMeowOpsUnavailable = "meow.ops_unavailable" // "Meow content commands are not wired on this instance."
+	MsgMeowBadDate        = "meow.bad_date"        // "Bad date %q (want YYYY-MM-DD)."
+	MsgMeowChannelUnknown = "meow.channel_unknown" // "Unknown channel %s."
+	MsgMeowError          = "meow.error"           // "Error: %s"
+	MsgMeowQueueUsage     = "meow.queue_usage"     // "Usage: /meow queue <@handle>"
+	MsgMeowQueueEmpty     = "meow.queue_empty"     // "No draft or approved posts for %s."
+	MsgMeowQueueHeader    = "meow.queue_header"    // "Queue for %s:"
+	MsgMeowPreviewUsage   = "meow.preview_usage"   // "Usage: /meow preview <@handle> <YYYY-MM-DD>"
+	MsgMeowPostNone       = "meow.post_none"       // "No post for %s on %s."
+	MsgMeowApproveUsage   = "meow.approve_usage"   // "Usage: /meow approve <@handle> <YYYY-MM-DD>"
+	MsgMeowApproved       = "meow.approved"        // "Approved %s for %s."
+	MsgMeowNoDraftToAct   = "meow.no_draft_to_act" // "No draft for %s on %s."
+	MsgMeowSkipUsage      = "meow.skip_usage"      // "Usage: /meow skip <@handle> <YYYY-MM-DD>"
+	MsgMeowSkipped        = "meow.skipped"         // "Skipped %s for %s."
+	MsgMeowNoPostToSkip   = "meow.no_post_to_skip" // "No draft or approved post for %s on %s."
+	MsgMeowEditUsage      = "meow.edit_usage"      // "Usage: /meow edit <@handle> <YYYY-MM-DD> ko|en <text>"
+	MsgMeowEditBadField   = "meow.edit_bad_field"  // "Field must be 'ko' or 'en' (got %q)."
+	MsgMeowEdited         = "meow.edited"          // "Updated %s text for %s on %s." (field, handle, date)
+	MsgMeowIngestUsage    = "meow.ingest_usage"    // "Usage: /meow ingest <bundle.json under the inbox>"
+	MsgMeowIngestHeld     = "meow.ingest_held"     // "Held (not ingested): %s"
+	MsgMeowIngested       = "meow.ingested"        // "Ingested draft for %s on %s."
 )

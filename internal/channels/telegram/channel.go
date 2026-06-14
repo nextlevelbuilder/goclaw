@@ -35,6 +35,10 @@ type Channel struct {
 	subagentTaskStore store.SubagentTaskStore     // for /subagents, /subagent commands (nil if not configured)
 	meowCfg           store.SystemConfigStore     // owner-gate state for /meow (nil = /meow disabled)
 	meowPublish       meowPublishFn               // owner-gated publish entrypoint (nil = /meow post disabled)
+	meowStore         store.MeowStore             // content store for /meow queue|preview|edit|approve|skip|ingest (nil = disabled)
+	meowTenantID      uuid.UUID                   // tenant that owns the Meow channels
+	meowAssetRoot     string                      // publish allowed-root for ingested images
+	meowInboxRoot     string                      // server dir holding draft bundles awaiting ingest
 	placeholders      sync.Map                    // localKey string → messageID int
 	stopThinking      sync.Map                    // localKey string → *thinkingCancel
 	typingCtrls       sync.Map                    // localKey string → *typing.Controller
