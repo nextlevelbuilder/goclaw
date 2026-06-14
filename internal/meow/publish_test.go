@@ -54,13 +54,17 @@ func (s *fakeSender) SendChannelPost(_ context.Context, _, _, _ string, _ []Butt
 
 func strptr(s string) *string { return &s }
 
+// validWebP returns the minimal bytes ValidateWebP accepts: a RIFF container
+// tagged WEBP (12-byte header).
+func validWebP() []byte { return []byte("RIFF\x00\x00\x00\x00WEBP") }
+
 // buildPublisher wires a Publisher with a temp image dir + a launched channel
 // whose button set registers the given button URL.
 func buildPublisher(t *testing.T, sender *fakeSender, st *fakePubStore) (*Publisher, string) {
 	t.Helper()
 	root := t.TempDir()
-	img := filepath.Join(root, "post.png")
-	if err := os.WriteFile(img, []byte("img"), 0o600); err != nil {
+	img := filepath.Join(root, "post.webp")
+	if err := os.WriteFile(img, validWebP(), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return &Publisher{
@@ -176,6 +180,30 @@ func TestPublishDue_SendErrorLeavesPublishing(t *testing.T) {
 	// Row must stay 'publishing' (no published write) for reconciliation.
 	if st.updateCalls != 0 {
 		t.Fatalf("must not persist published after send failure (got %d update calls)", st.updateCalls)
+	}
+}
+
+func TestPublishDue_CorruptImageRejectedBeforeSend(t *testing.T) {
+	url := "https://t.me/TestBot"
+	sender := &fakeSender{}
+	st := &fakePubStore{ch: launchedChannel(url)}
+	// Build a publisher, then overwrite the claimed post's image with bytes that
+	// pass path containment but are NOT a WebP (no RIFF/WEBP signature).
+	pub, img := buildPublisher(t, sender, st)
+	if err := os.WriteFile(img, []byte("not-a-webp-file-at-all"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	st.claim = draftPost(img, url)
+
+	_, err := pub.PublishDue(context.Background(), uuid.New(), uuid.New(), time.Now(), false)
+	if err == nil {
+		t.Fatal("expected corrupt-image rejection")
+	}
+	if sender.calls != 0 {
+		t.Fatal("must validate image bytes before sending")
+	}
+	if st.updateCalls != 0 {
+		t.Fatal("must not mark published on a corrupt image")
 	}
 }
 

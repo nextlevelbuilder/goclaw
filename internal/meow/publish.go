@@ -86,6 +86,13 @@ func (p *Publisher) PublishDue(ctx context.Context, tenantID, channelID uuid.UUI
 	if err != nil {
 		return nil, fmt.Errorf("publish post %s: %w", post.ID, err)
 	}
+	// Final boundary check: confirm the file is still a real WebP by its header,
+	// not just by name. Ingest already vets this, but a row could have been
+	// crafted another way or the file swapped on disk — never send an unvetted
+	// or corrupt image to a live channel.
+	if err := ValidateWebP(imgPath); err != nil {
+		return nil, fmt.Errorf("publish post %s: %w", post.ID, err)
+	}
 	buttons, err := parseButtons(post.Buttons)
 	if err != nil {
 		return nil, fmt.Errorf("publish post %s: %w", post.ID, err)
