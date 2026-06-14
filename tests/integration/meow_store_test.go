@@ -281,6 +281,42 @@ func TestMeowStore_MetricUpsertDedup(t *testing.T) {
 	}
 }
 
+func TestMeowStore_UpsertDraftPostIdempotent(t *testing.T) {
+	db := testDB(t)
+	tenantID, _ := seedTenantAgent(t, db)
+	ctx := tenantCtx(tenantID)
+	ms := pg.NewPGMeowStore(db)
+
+	ch := newTestChannel(tenantID, "@DraftChan")
+	if err := ms.UpsertChannel(ctx, ch); err != nil {
+		t.Fatalf("UpsertChannel: %v", err)
+	}
+	day := time.Date(2026, 6, 23, 0, 0, 0, 0, time.UTC)
+
+	p1 := &store.MpContentPost{TenantID: tenantID, ChannelID: ch.ID, ScheduledDate: day, KoText: "v1", EnText: "e1"}
+	if err := ms.UpsertDraftPost(ctx, p1); err != nil {
+		t.Fatalf("first upsert: %v", err)
+	}
+	// Second ingest of the same channel-day updates the SAME row, not a dup.
+	p2 := &store.MpContentPost{TenantID: tenantID, ChannelID: ch.ID, ScheduledDate: day, KoText: "v2", EnText: "e2"}
+	if err := ms.UpsertDraftPost(ctx, p2); err != nil {
+		t.Fatalf("second upsert: %v", err)
+	}
+	if p1.ID != p2.ID {
+		t.Fatalf("idempotent upsert should reuse the row: %s vs %s", p1.ID, p2.ID)
+	}
+	posts, err := ms.ListPostsByChannel(ctx, tenantID, ch.ID)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(posts) != 1 {
+		t.Fatalf("expected exactly 1 draft row, got %d", len(posts))
+	}
+	if posts[0].KoText != "v2" || posts[0].Status != store.MpPostDraft {
+		t.Fatalf("draft not updated in place: %+v", posts[0])
+	}
+}
+
 func TestMeowStore_ClaimPostForPublish(t *testing.T) {
 	db := testDB(t)
 	tenantID, _ := seedTenantAgent(t, db)

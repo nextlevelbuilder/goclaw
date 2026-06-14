@@ -134,6 +134,34 @@ func (s *PGMeowStore) CreatePost(ctx context.Context, p *store.MpContentPost) er
 	return err
 }
 
+// UpsertDraftPost updates the existing draft for a channel-day in place, or
+// inserts a new draft if none exists (idempotent re-ingest). The tenant_id
+// filter keeps the update tenant-scoped; the insert path (CreatePost) validates
+// channel ownership. Only status='draft' rows are touched.
+func (s *PGMeowStore) UpsertDraftPost(ctx context.Context, p *store.MpContentPost) error {
+	if err := base.RequireTenantID(p.TenantID); err != nil {
+		return err
+	}
+	var id uuid.UUID
+	err := s.db.QueryRowContext(ctx,
+		`UPDATE mp_content_posts
+		   SET ko_text = $4, en_text = $5, image_path = $6, buttons = $7, updated_at = NOW()
+		 WHERE tenant_id = $1 AND channel_id = $2 AND scheduled_date = $3::date AND status = 'draft'
+		 RETURNING id`,
+		p.TenantID, p.ChannelID, p.ScheduledDate, p.KoText, p.EnText, p.ImagePath, base.JsonOrEmptyArray(p.Buttons),
+	).Scan(&id)
+	if err == nil {
+		p.ID = id
+		p.Status = store.MpPostDraft
+		return nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	p.Status = store.MpPostDraft
+	return s.CreatePost(ctx, p)
+}
+
 func (s *PGMeowStore) GetPost(ctx context.Context, tenantID, id uuid.UUID) (*store.MpContentPost, error) {
 	var p store.MpContentPost
 	err := pkgSqlxDB.GetContext(ctx, &p,

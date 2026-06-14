@@ -126,6 +126,10 @@ type MeowStore interface {
 
 	// Posts
 	CreatePost(ctx context.Context, p *MpContentPost) error
+	// UpsertDraftPost inserts a draft for (channel, scheduled_date) or updates
+	// the existing draft row for that channel-day in place (idempotent ingest).
+	// Only touches status='draft' rows; never disturbs approved/published posts.
+	UpsertDraftPost(ctx context.Context, p *MpContentPost) error
 	GetPost(ctx context.Context, tenantID, id uuid.UUID) (*MpContentPost, error)
 	ListPostsByChannel(ctx context.Context, tenantID, channelID uuid.UUID) ([]MpContentPost, error)
 	// UpdatePostStatus transitions a post and records publish results. The
