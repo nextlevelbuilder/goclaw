@@ -61,6 +61,7 @@ func NewPGStores(cfg store.StoreConfig) (*store.Stores, error) {
 		Hooks:                 NewPGHookStore(db),
 		Webhooks:               NewPGWebhookStore(db),
 		WebhookCalls:           NewPGWebhookCallStore(db),
+		Meow:                   NewPGMeowStore(db),
 		Workstations:           NewPGWorkstationStore(db, cfg.EncryptionKey),
 		WorkstationLinks:       NewPGAgentWorkstationLinkStore(db),
 		WorkstationPermissions: NewPGWorkstationPermissionStore(db),

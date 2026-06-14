@@ -46,6 +46,10 @@ type Stores struct {
 	Webhooks     WebhookStore
 	WebhookCalls WebhookCallStore
 
+	// Meow — Standard (PG) edition only; nil under the sqliteonly build
+	// (channels are gated off in Lite/desktop).
+	Meow MeowStore
+
 	// Workstations — Standard edition only (gated at router registration).
 	Workstations           WorkstationStore
 	WorkstationLinks       AgentWorkstationLinkStore

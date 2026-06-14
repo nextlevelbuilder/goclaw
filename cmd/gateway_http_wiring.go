@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/audio"
+	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway/methods"
@@ -364,5 +365,15 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 		migrateBuiltinToolSettings(context.Background(), d.pgStores.BuiltinTools)
 		backfillWebFetchSettings(context.Background(), d.pgStores.BuiltinTools)
 		applyBuiltinToolDisables(context.Background(), d.pgStores.BuiltinTools, d.toolsReg)
+	}
+
+	// Seed the Meow channel registry (Standard/PG edition only; nil under
+	// sqliteonly where channels are gated off) under the default owner tenant.
+	if d.pgStores.Meow != nil {
+		if n, err := bootstrap.SeedMeowChannels(context.Background(), d.pgStores.Meow, store.MasterTenantID); err != nil {
+			slog.Error("failed to seed meow channels", "error", err)
+		} else {
+			slog.Info("meow channels seeded", "count", n)
+		}
 	}
 }

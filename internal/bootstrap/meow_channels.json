@@ -1,0 +1,115 @@
+[
+  {
+    "handle": "@TonSlotOfficial",
+    "brand_key": "ton-slot",
+    "tz": "Asia/Seoul",
+    "has_mascot": false,
+    "launched": true,
+    "subs_baseline": 135000,
+    "buttons": [
+      {"label": "Youtube", "url": "https://www.youtube.com/@TONSLOT"},
+      {"label": "SLOT Airdrop", "url": "https://t.me/TonSlotOfficial/100"},
+      {"label": "Website", "url": "https://play.tonslot.site"},
+      {"label": "Play now", "url": "https://t.me/TonSlotGameBot?startapp=VGtF0UV3Z3HW"}
+    ]
+  },
+  {
+    "handle": "@onedollar_project",
+    "brand_key": "one-wallet",
+    "tz": "Asia/Seoul",
+    "has_mascot": true,
+    "launched": true,
+    "subs_baseline": 66700,
+    "buttons": [
+      {"label": "X", "url": "https://x.com/one_wallet_"},
+      {"label": "Facebook", "url": "https://facebook.com/onewallet.official"},
+      {"label": "Website", "url": "https://onewallet.store"},
+      {"label": "Youtube", "url": "https://www.youtube.com/@One_Wallet_Official"},
+      {"label": "Launch One Wallet", "url": "https://t.me/onedollar_wallet_bot/app"}
+    ]
+  },
+  {
+    "handle": "@OneJackpotOfficial",
+    "brand_key": "one-jackpot",
+    "tz": "Asia/Seoul",
+    "has_mascot": true,
+    "launched": true,
+    "subs_baseline": 63000,
+    "buttons": [
+      {"label": "Claim Your $1", "url": "https://jackpot.1dollar.day/post/event/new-player-bonus"},
+      {"label": "How To Deposit", "url": "https://www.youtube.com/shorts/_HvdRR446aU"},
+      {"label": "Youtube", "url": "https://www.youtube.com/@1DollarJackpotOfficial"},
+      {"label": "Website", "url": "https://jackpot.1dollar.day/"},
+      {"label": "X", "url": "https://x.com/1_DollarJackpot"},
+      {"label": "Play now", "url": "https://t.me/OneDollarJackpotBot/startapp"}
+    ]
+  },
+  {
+    "handle": "@monkeytimeofficial",
+    "brand_key": "monkey-time",
+    "tz": "Asia/Seoul",
+    "has_mascot": true,
+    "launched": true,
+    "subs_baseline": 53100,
+    "buttons": [
+      {"label": "Facebook", "url": "https://facebook.com/monkeytimeofficial"},
+      {"label": "X", "url": "https://x.com/Monkey_Time_App"},
+      {"label": "Youtube", "url": "https://www.youtube.com/@MonkeyTimeOfficial"},
+      {"label": "TikTok", "url": "https://www.tiktok.com/@monkeytime201"},
+      {"label": "How to Deposit", "url": "https://www.youtube.com/shorts/DJCXbu23ZWo"},
+      {"label": "How to Play", "url": "https://www.youtube.com/shorts/JGMs6hnZ9_U"},
+      {"label": "Support", "url": "https://t.me/monkeytimeofficial/39"},
+      {"label": "Play now", "url": "https://t.me/monkeytimeappbot?startapp"}
+    ]
+  },
+  {
+    "handle": "@tonpasswallet",
+    "brand_key": "ton-pass",
+    "tz": "Asia/Seoul",
+    "has_mascot": false,
+    "launched": true,
+    "subs_baseline": 51600,
+    "buttons": [
+      {"label": "Launch TonPass", "url": "https://t.me/tonpasswallet_bot/app"}
+    ]
+  },
+  {
+    "handle": "@TontvOfficialChannel",
+    "brand_key": "ton-tv",
+    "tz": "Asia/Seoul",
+    "has_mascot": false,
+    "launched": true,
+    "subs_baseline": 20900,
+    "buttons": [
+      {"label": "Watch now", "url": "https://t.me/tontv_official_bot/app"}
+    ]
+  },
+  {
+    "handle": "@kingboardgamesofficial",
+    "brand_key": "king-board-games",
+    "tz": "Asia/Seoul",
+    "has_mascot": false,
+    "launched": true,
+    "subs_baseline": 150,
+    "buttons": [
+      {"label": "Hold'em", "url": "https://t.me/holdemblitz_bot"},
+      {"label": "Slots", "url": "https://t.me/TonSlotGameBot"},
+      {"label": "Matgo", "url": "https://t.me/MonkeyPlayDevBot"},
+      {"label": "Mini-games", "url": "https://t.me/monkey_play_bot/app"},
+      {"label": "$1 Jackpot", "url": "https://t.me/OneDollarJackpotBot"},
+      {"label": "Kingston", "url": "https://t.me/kingston_official_bot/kingston"},
+      {"label": "Inquiry", "url": "https://t.me/T_o_n_y_D_H"}
+    ]
+  },
+  {
+    "handle": "@MonkeyMatgo",
+    "brand_key": "monkey-matgo",
+    "tz": "Asia/Seoul",
+    "has_mascot": true,
+    "launched": false,
+    "subs_baseline": 4,
+    "buttons": [
+      {"label": "Play now", "url": "https://t.me/MonkeyPlayDevBot?startapp"}
+    ]
+  }
+]
