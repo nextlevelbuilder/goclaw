@@ -27,6 +27,17 @@ const (
 	ColError           = "error"
 )
 
+// SheetHeaders is the canonical header row written when provisioning a tab, in
+// display order. Parsing maps by name (order-independent), so this is purely the
+// initial layout; a human may reorder columns afterward without breaking sync.
+func SheetHeaders() []string {
+	return []string{
+		ColDate, ColStatus, ColKoText, ColEnText, ColImagePrompt, ColImageFile,
+		ColButtons, ColManagerApproved, ColApprovedBy, ColApprovedAt,
+		ColPublishNow, ColTgMessageID, ColTgLink, ColError,
+	}
+}
+
 // SheetRow is one parsed row of a channel tab. Tab is the tab name (brand_key);
 // RowIndex is the 1-based sheet row used to target write-back.
 type SheetRow struct {
