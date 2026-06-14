@@ -14,8 +14,8 @@ feature branch.
   container: /app/data/secrets/meow-sheets-sa.json
   owner/mode: chown 1000:1000, chmod 600
   ```
-- The "Meow Publishing Queue" spreadsheet is shared (Editor) with
-  `meow-sheets@ton-corp.iam.gserviceaccount.com` (id `15OsWmsKDAua2lq3OyoYeNdUo3BjNVa1XT2u1ZSMGsws`).
+- The "Meow Publishing Queue" spreadsheet is shared (Editor) with the service-account
+  email `<service-account-email>` (real values live in private VPS/env notes, not here).
 - For any row to publish later, its image is already transported to the inbox
   (`/app/data/meow-inbox/<brand_key>/<date>.webp`, 1000:1000) — manual scp, unchanged.
 
