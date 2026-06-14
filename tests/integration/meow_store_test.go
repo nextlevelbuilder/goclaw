@@ -375,6 +375,76 @@ func TestMeowStore_ClaimPostForPublish(t *testing.T) {
 	}
 }
 
+func TestMeowStore_ApproveAndSkip(t *testing.T) {
+	db := testDB(t)
+	tenantID, _ := seedTenantAgent(t, db)
+	ctx := tenantCtx(tenantID)
+	ms := pg.NewPGMeowStore(db)
+
+	ch := newTestChannel(tenantID, "@ReviewChan")
+	if err := ms.UpsertChannel(ctx, ch); err != nil {
+		t.Fatalf("UpsertChannel: %v", err)
+	}
+	mkDraft := func(day time.Time) *store.MpContentPost {
+		p := &store.MpContentPost{TenantID: tenantID, ChannelID: ch.ID, ScheduledDate: day, Status: store.MpPostDraft}
+		if err := ms.CreatePost(ctx, p); err != nil {
+			t.Fatalf("CreatePost draft: %v", err)
+		}
+		return p
+	}
+
+	// Approve a draft → approved, with approver recorded.
+	d1 := mkDraft(time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC))
+	if err := ms.ApprovePost(ctx, tenantID, d1.ID, "owner-123"); err != nil {
+		t.Fatalf("ApprovePost: %v", err)
+	}
+	got, err := ms.GetPost(ctx, tenantID, d1.ID)
+	if err != nil {
+		t.Fatalf("GetPost: %v", err)
+	}
+	if got.Status != store.MpPostApproved || got.ApprovedBy != "owner-123" || got.ApprovedAt == nil {
+		t.Fatalf("approve did not record state: %+v", got)
+	}
+
+	// Re-approving an already-approved post is a no-op (guard) → NotFound.
+	if err := ms.ApprovePost(ctx, tenantID, d1.ID, "owner-123"); err != store.ErrMeowPostNotFound {
+		t.Fatalf("re-approve: expected ErrMeowPostNotFound, got %v", err)
+	}
+
+	// Skip is allowed from approved.
+	if err := ms.SkipPost(ctx, tenantID, d1.ID); err != nil {
+		t.Fatalf("SkipPost(approved): %v", err)
+	}
+	if got, _ := ms.GetPost(ctx, tenantID, d1.ID); got.Status != store.MpPostSkipped {
+		t.Fatalf("skip did not transition: %+v", got)
+	}
+
+	// Skip is allowed from draft.
+	d2 := mkDraft(time.Date(2026, 7, 2, 0, 0, 0, 0, time.UTC))
+	if err := ms.SkipPost(ctx, tenantID, d2.ID); err != nil {
+		t.Fatalf("SkipPost(draft): %v", err)
+	}
+
+	// Neither approve nor skip may touch a published post.
+	pub := &store.MpContentPost{TenantID: tenantID, ChannelID: ch.ID, ScheduledDate: time.Date(2026, 7, 3, 0, 0, 0, 0, time.UTC), Status: store.MpPostPublished}
+	if err := ms.CreatePost(ctx, pub); err != nil {
+		t.Fatalf("CreatePost published: %v", err)
+	}
+	if err := ms.ApprovePost(ctx, tenantID, pub.ID, "owner-123"); err != store.ErrMeowPostNotFound {
+		t.Fatalf("approve published: expected ErrMeowPostNotFound, got %v", err)
+	}
+	if err := ms.SkipPost(ctx, tenantID, pub.ID); err != store.ErrMeowPostNotFound {
+		t.Fatalf("skip published: expected ErrMeowPostNotFound, got %v", err)
+	}
+
+	// Cross-tenant approve/skip must not resolve the row.
+	other, _ := seedTenantAgent(t, db)
+	d3 := mkDraft(time.Date(2026, 7, 4, 0, 0, 0, 0, time.UTC))
+	if err := ms.ApprovePost(tenantCtx(other), other, d3.ID, "x"); err != store.ErrMeowPostNotFound {
+		t.Fatalf("cross-tenant approve: expected ErrMeowPostNotFound, got %v", err)
+	}
+}
+
 func TestMeowStore_ReportIdempotency(t *testing.T) {
 	db := testDB(t)
 	tenantID, _ := seedTenantAgent(t, db)

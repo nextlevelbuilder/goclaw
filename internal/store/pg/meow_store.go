@@ -239,6 +239,44 @@ func (s *PGMeowStore) ClaimPostForPublish(ctx context.Context, tenantID, channel
 	return &p, nil
 }
 
+// ApprovePost flips a draft post to 'approved' and records who approved it and
+// when. The status='draft' guard makes it a safe no-op on an already-approved,
+// in-flight, published, or skipped post (RowsAffected 0 → ErrMeowPostNotFound).
+func (s *PGMeowStore) ApprovePost(ctx context.Context, tenantID, id uuid.UUID, approvedBy string) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE mp_content_posts
+		   SET status = 'approved', approved_by = $3, approved_at = NOW(), updated_at = NOW()
+		 WHERE id = $1 AND tenant_id = $2 AND status = 'draft'`,
+		id, tenantID, approvedBy)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return store.ErrMeowPostNotFound
+	}
+	return nil
+}
+
+// SkipPost flips a draft or approved post to 'skipped'. The status guard ensures
+// an already-publishing/published post is never retracted (RowsAffected 0 →
+// ErrMeowPostNotFound).
+func (s *PGMeowStore) SkipPost(ctx context.Context, tenantID, id uuid.UUID) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE mp_content_posts
+		   SET status = 'skipped', updated_at = NOW()
+		 WHERE id = $1 AND tenant_id = $2 AND status IN ('draft','approved')`,
+		id, tenantID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return store.ErrMeowPostNotFound
+	}
+	return nil
+}
+
 // --- Metrics ---
 
 const mpMetricCols = `id, tenant_id, channel_id, date, subscriber_count, delta, stale, alerted_for_date, created_at`

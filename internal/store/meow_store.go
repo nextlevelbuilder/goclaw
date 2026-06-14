@@ -142,6 +142,14 @@ type MeowStore interface {
 	// (ErrMeowNoClaimablePost) if a post for that channel-day is already
 	// publishing/published, so a re-run is a safe no-op (exactly-once).
 	ClaimPostForPublish(ctx context.Context, tenantID, channelID uuid.UUID, date time.Time, force bool) (*MpContentPost, error)
+	// ApprovePost transitions a draft post to 'approved', recording the approver
+	// id and approval time. It acts only on a status='draft' row; a missing or
+	// non-draft post yields ErrMeowPostNotFound (nothing to approve).
+	ApprovePost(ctx context.Context, tenantID, id uuid.UUID, approvedBy string) error
+	// SkipPost transitions a draft or approved post to 'skipped'. It never
+	// touches a publishing/published row; a missing or terminal post yields
+	// ErrMeowPostNotFound (nothing to skip).
+	SkipPost(ctx context.Context, tenantID, id uuid.UUID) error
 
 	// Metrics (UNIQUE(channel_id, date) — Upsert is the dedup primitive)
 	UpsertMetric(ctx context.Context, m *MpChannelMetric) error
