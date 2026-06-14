@@ -455,6 +455,18 @@ func runGateway() {
 	channelMgr := channels.NewManager(msgBus)
 	deps.channelMgr = channelMgr
 
+	// Meow publish tool — Standard/PG edition only (channels are gated off in
+	// Lite, so Meow is nil there). Registered here because it needs the channel
+	// manager to drive the real Telegram send path. Owner authorization is
+	// enforced at the command layer, not by tool availability.
+	if pgStores.Meow != nil {
+		meowAssetRoot := filepath.Join(dataDir, "meow-assets")
+		toolsReg.Register(tools.NewPublishChannelPostTool(
+			pgStores.Meow, channelMgr, channels.TypeTelegram, store.MasterTenantID, []string{meowAssetRoot},
+		))
+		slog.Info("publish_channel_post tool registered", "asset_root", meowAssetRoot)
+	}
+
 	// Wire channel member resolver into permission grant paths (WS + HTTP) so
 	// file_writer grants coming from the Web UI auto-enrich their metadata.
 	cfgPermsMethods.SetMemberResolver(channelMgr)
