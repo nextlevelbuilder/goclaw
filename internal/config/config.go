@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -57,7 +58,44 @@ type Config struct {
 	Bindings  []AgentBinding  `json:"bindings,omitempty"`
 	Hooks     HooksConfig     `json:"hooks"`
 	Packages  PackagesConfig  `json:"packages"` // runtime package mgmt (GitHub updater)
+	MeowSheets MeowSheetsConfig `json:"meow_sheets"` // Meow Google Sheets approval bridge
 	mu        sync.RWMutex
+}
+
+// MeowSheetsConfig configures the Meow Google Sheets approval-bridge sync worker.
+// Disabled by default. Credentials are NEVER stored here (project rule: no secrets
+// in config.json) — they come from GOCLAW_MEOW_SHEETS_CREDENTIALS_FILE /
+// GOCLAW_MEOW_SHEETS_CREDENTIALS_JSON env at wiring time. Interval is a
+// time.ParseDuration string (default 5m). Tabs lists the brand_key tabs to poll;
+// empty means every launched channel. ApprovedByFallback is recorded as the
+// approver when a row's approved_by cell is blank (default "sheets-sync").
+type MeowSheetsConfig struct {
+	Enabled            bool     `json:"enabled"`
+	SpreadsheetID      string   `json:"spreadsheet_id,omitempty"`
+	Interval           string   `json:"interval,omitempty"`
+	ApprovedByFallback string   `json:"approved_by_fallback,omitempty"`
+	Tabs               []string `json:"tabs,omitempty"`
+}
+
+// SyncInterval parses Interval, defaulting to 5m on empty/invalid and flooring at
+// 1m to avoid hammering the Sheets API.
+func (m MeowSheetsConfig) SyncInterval() time.Duration {
+	d, err := time.ParseDuration(strings.TrimSpace(m.Interval))
+	if err != nil || d <= 0 {
+		d = 5 * time.Minute
+	}
+	if d < time.Minute {
+		d = time.Minute
+	}
+	return d
+}
+
+// ApprovedBy returns the configured approved_by fallback, defaulting to "sheets-sync".
+func (m MeowSheetsConfig) ApprovedBy() string {
+	if s := strings.TrimSpace(m.ApprovedByFallback); s != "" {
+		return s
+	}
+	return "sheets-sync"
 }
 
 // PackagesConfig tunes the runtime package update flow (Phase 1: GitHub

@@ -548,6 +548,10 @@ func runGateway() {
 		slog.Error("failed to start channels", "error", err)
 	}
 
+	// Meow Google Sheets approval-bridge sync worker (disabled by default; reads
+	// approved rows + writes results back; never publishes to Telegram).
+	startMeowSheetsSync(ctx, cfg, pgStores.Meow)
+
 	// Create lane-based scheduler (matching TS CommandLane pattern).
 	// Must be created before cron setup so cron jobs route through the scheduler.
 	sched := scheduler.NewScheduler(

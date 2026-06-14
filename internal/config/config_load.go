@@ -180,6 +180,17 @@ func (c *Config) applyEnvOverrides() {
 	envStr("GOCLAW_SLACK_APP_TOKEN", &c.Channels.Slack.AppToken)
 	envStr("GOCLAW_SLACK_USER_TOKEN", &c.Channels.Slack.UserToken)
 
+	// Meow Sheets bridge (non-secret settings; credentials come from env at
+	// wiring time, never stored in config.json).
+	envStr("GOCLAW_MEOW_SHEETS_SPREADSHEET_ID", &c.MeowSheets.SpreadsheetID)
+	envStr("GOCLAW_MEOW_SHEETS_INTERVAL", &c.MeowSheets.Interval)
+	if v := os.Getenv("GOCLAW_MEOW_SHEETS_ENABLED"); v != "" {
+		switch strings.ToLower(strings.TrimSpace(v)) {
+		case "1", "true", "yes", "on":
+			c.MeowSheets.Enabled = true
+		}
+	}
+
 	// TTS secrets
 	envStr("GOCLAW_TTS_OPENAI_API_KEY", &c.Tts.OpenAI.APIKey)
 	envStr("GOCLAW_TTS_ELEVENLABS_API_KEY", &c.Tts.ElevenLabs.APIKey)
