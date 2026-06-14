@@ -17,6 +17,7 @@ import (
 	tu "github.com/mymmrac/telego/telegoutil"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/typing"
 )
 
@@ -807,14 +808,6 @@ func (c *Channel) deleteMessage(ctx context.Context, chatID int64, messageID int
 	})
 }
 
-// PostButton is one inline URL button for a channel post (label + URL). Defined
-// here (not imported from the meow package) so the telegram layer stays
-// independent of the publish orchestration; the wiring layer adapts between them.
-type PostButton struct {
-	Label string
-	URL   string
-}
-
 // parseChannelChatID turns a stored chat id ("-1001234567" or "@handle") into a
 // telego ChatID.
 func parseChannelChatID(s string) (telego.ChatID, error) {
@@ -838,7 +831,7 @@ func parseChannelChatID(s string) (telego.ChatID, error) {
 // exactly-once write-back). The caption is expected to be already HTML-escaped;
 // an HTML parse error is surfaced (not silently stripped) so a malformed post
 // is caught rather than published without formatting.
-func (c *Channel) SendChannelPost(ctx context.Context, chatID, imagePath, captionHTML string, buttons []PostButton) (int64, error) {
+func (c *Channel) SendChannelPost(ctx context.Context, chatID, imagePath, captionHTML string, buttons []channels.PostButton) (int64, error) {
 	tgChat, err := parseChannelChatID(chatID)
 	if err != nil {
 		return 0, err
