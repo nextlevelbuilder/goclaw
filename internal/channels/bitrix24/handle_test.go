@@ -650,3 +650,133 @@ func TestHandleMessage_Blocked_DoesNotCollectContact(t *testing.T) {
 		t.Errorf("blocked messages must not record contacts, got %d upserts", n)
 	}
 }
+
+// --- Open Channel (MESSAGE_TYPE="L") gating ---------------------------------
+
+// TestHandleMessage_OpenChannel_ConnectorWithoutMentionDropped covers the
+// customer side of the Open Channel gate without an explicit mention: a
+// Zalo/FB customer (IS_CONNECTOR=Y) sending into the session WITHOUT
+// @-mentioning the bot must NOT trigger the agent. Humans handle plain
+// customer traffic; the bot only steps in when explicitly called.
+func TestHandleMessage_OpenChannel_ConnectorWithoutMentionDropped(t *testing.T) {
+	ch, mb := newHandleTestChannel(t, 1058, false)
+	defer resetWebhookRouterForTest()
+
+	ch.DispatchEvent(context.Background(), &Event{
+		Type: EventMessageAdd,
+		Params: EventParams{
+			FromUserID:      "960",
+			DialogID:        "chat4878",
+			MessageID:       "m-ol-customer",
+			MessageType:     "L",
+			ChatEntityType:  "LINES",
+			Message:         "Em hỏi giá sản phẩm A",
+			FromIsConnector: true,
+		},
+	})
+	if _, ok := drainOne(mb, 100*time.Millisecond); ok {
+		t.Error("Open Channel connector messages without mention must be dropped")
+	}
+}
+
+// TestHandleMessage_OpenChannel_ConnectorWithMentionForwarded covers the
+// "customer calls the bot" case: a Zalo/FB customer (IS_CONNECTOR=Y) whose
+// upstream populated MENTIONED_LIST with the bot id must trigger a reply,
+// the same as an internal staff member who @-mentions the bot. Connector
+// status alone is no longer a drop signal — mention is the only gate.
+func TestHandleMessage_OpenChannel_ConnectorWithMentionForwarded(t *testing.T) {
+	const botID = 1058
+	ch, mb := newHandleTestChannel(t, botID, false)
+	defer resetWebhookRouterForTest()
+
+	ch.DispatchEvent(context.Background(), &Event{
+		Type: EventMessageAdd,
+		Params: EventParams{
+			FromUserID:      "960",
+			DialogID:        "chat4878",
+			MessageID:       "m-ol-customer-mention",
+			MessageType:     "L",
+			ChatEntityType:  "LINES",
+			Message:         "alo bot ơi cho hỏi giá",
+			MessageOriginal: "[USER=1058]Tiểu Hà[/USER] alo bot ơi cho hỏi giá",
+			MentionedList:   map[string]string{"1058": "1058"},
+			FromIsConnector: true,
+		},
+	})
+	msg, ok := drainOne(mb, 500*time.Millisecond)
+	if !ok {
+		t.Fatal("Open Channel connector WITH @mention must forward to agent")
+	}
+	if msg.PeerKind != "group" {
+		t.Errorf("PeerKind = %q; want group (OL forced into group routing)", msg.PeerKind)
+	}
+	if !strings.Contains(msg.Content, "alo bot ơi cho hỏi giá") {
+		t.Errorf("content stripped wrong: %q", msg.Content)
+	}
+	if strings.Contains(msg.Content, "[USER=1058]") {
+		t.Errorf("bot mention BBCode not stripped: %q", msg.Content)
+	}
+}
+
+// TestHandleMessage_OpenChannel_InternalStaffWithoutMentionDropped covers the
+// silent-staff case: an internal Bitrix24 user joins the Open Channel session
+// to supervise but does NOT @-mention the bot — bot stays out.
+func TestHandleMessage_OpenChannel_InternalStaffWithoutMentionDropped(t *testing.T) {
+	ch, mb := newHandleTestChannel(t, 1058, false)
+	defer resetWebhookRouterForTest()
+
+	ch.DispatchEvent(context.Background(), &Event{
+		Type: EventMessageAdd,
+		Params: EventParams{
+			FromUserID:      "610",
+			DialogID:        "chat4878",
+			MessageID:       "m-ol-staff-quiet",
+			MessageType:     "L",
+			ChatEntityType:  "LINES",
+			Message:         "haha được rồi",
+			FromIsConnector: false,
+		},
+	})
+	if _, ok := drainOne(mb, 100*time.Millisecond); ok {
+		t.Error("Open Channel internal staff without @mention must be dropped")
+	}
+}
+
+// TestHandleMessage_OpenChannel_InternalStaffMentionForwarded covers the
+// "call the bot" case: internal staff @-mentions the bot — message goes to the
+// agent like a normal group mention.
+func TestHandleMessage_OpenChannel_InternalStaffMentionForwarded(t *testing.T) {
+	const botID = 1058
+	ch, mb := newHandleTestChannel(t, botID, false)
+	defer resetWebhookRouterForTest()
+
+	ch.DispatchEvent(context.Background(), &Event{
+		Type: EventMessageAdd,
+		Params: EventParams{
+			FromUserID:      "610",
+			DialogID:        "chat4878",
+			MessageID:       "m-ol-staff-mention",
+			MessageType:     "L",
+			ChatEntityType:  "LINES",
+			Message:         "tổng hợp khách này giúp",                                 // stripped form (Bitrix strips group mentions)
+			MessageOriginal: "[USER=1058]Tiểu Hà[/USER] tổng hợp khách này giúp",
+			MentionedList:   map[string]string{"1058": "1058"},
+			FromIsConnector: false,
+		},
+	})
+	msg, ok := drainOne(mb, 500*time.Millisecond)
+	if !ok {
+		t.Fatal("Open Channel internal staff WITH @mention must forward to agent")
+	}
+	if msg.PeerKind != "group" {
+		t.Errorf("PeerKind = %q; want group (OL forced into group routing)", msg.PeerKind)
+	}
+	if !strings.Contains(msg.Content, "tổng hợp khách này giúp") {
+		t.Errorf("content stripped wrong: %q", msg.Content)
+	}
+	// The bot's own [USER=1058]…[/USER] mention should be stripped from the
+	// forwarded content.
+	if strings.Contains(msg.Content, "[USER=1058]") {
+		t.Errorf("bot mention BBCode not stripped: %q", msg.Content)
+	}
+}

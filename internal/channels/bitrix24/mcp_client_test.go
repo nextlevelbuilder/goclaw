@@ -225,6 +225,12 @@ func TestIsGroupMessageType(t *testing.T) {
 		"X":       true,
 		"x":       true,
 		" X ":     true,
+		// "B" = Bitrix workgroup / Collab (SONET_GROUP) chat. Observed on
+		// real ONIMBOTMESSAGEADD payloads where CHAT_TYPE=B and
+		// CHAT_ENTITY_TYPE=SONET_GROUP; multi-user with @mention gating.
+		"B":   true,
+		"b":   true,
+		" B ": true,
 		"unknown": false,
 	}
 	for input, want := range cases {

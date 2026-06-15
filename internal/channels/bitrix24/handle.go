@@ -133,23 +133,17 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 		"mentioned_list_n", len(evt.Params.MentionedList),
 	)
 	// Open Channel gate (must run BEFORE the generic group block):
-	//   - Connector traffic (real customer): drop. Humans handle the
-	//     customer; the bot stays out of the conversation by design.
-	//   - Internal staff without @-mentioning the bot: drop. Staff who join
-	//     the session only need the bot when they explicitly call it.
-	//   - Internal staff with @-mention: fall through to the group block so
-	//     the existing mention-strip pipeline runs.
+	// Mention is the only criterion — both internal staff and external
+	// customers (IS_CONNECTOR=Y) can trigger the bot when they @-mention
+	// it. The connector side relies on upstream populating MENTIONED_LIST
+	// with the bot id when the customer addresses the bot from Zalo/FB;
+	// without an explicit mention, traffic is dropped so the bot doesn't
+	// spam the customer or interfere with operator handling.
 	if isOpenChannel {
-		if evt.Params.FromIsConnector {
-			slog.Info("bitrix24 message: dropped OL connector message (staff handles customer)",
-				"from_user_id", evt.Params.FromUserID,
-				"dialog_id", evt.Params.DialogID,
-				"message_id", evt.Params.MessageID)
-			return
-		}
 		if !c.isMentionedParams(&evt.Params) {
-			slog.Info("bitrix24 message: dropped OL internal staff without mention",
+			slog.Info("bitrix24 message: dropped OL message without mention",
 				"from_user_id", evt.Params.FromUserID,
+				"from_connector", evt.Params.FromIsConnector,
 				"dialog_id", evt.Params.DialogID,
 				"message_id", evt.Params.MessageID)
 			return
@@ -188,6 +182,21 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 		text = bxConvertUserMentionsToReadable(text)
 	}
 	text = strings.TrimSpace(text)
+
+	// Openline relays an external connector user with a sender tag at the start
+	// of the text (e.g. "[Name] #<connectorUserId>: <msg>"). Capture it so the
+	// reply can echo the same tag — the connector parses the leading tag to
+	// route the answer back to the right external person. Strip it from the body
+	// the agent sees so the LLM can't accidentally duplicate it. Only group
+	// (openline) messages carry this shape; plain chats return "" → no-op.
+	var senderPrefix string
+	if isGroup {
+		if p, rest := extractOpenlineSenderPrefix(text); p != "" {
+			senderPrefix = p
+			text = strings.TrimSpace(rest)
+		}
+	}
+
 	if text == "" && len(evt.Params.Files) == 0 {
 		return
 	}
@@ -237,6 +246,10 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 		"bitrix_bot_code":   c.cfg.BotCode,
 		MetaKeyMessageID:    evt.Params.MessageID,
 		MetaKeyVisibility:   visibility,
+	}
+	// Echo the openline sender tag back on the reply (see capture above).
+	if senderPrefix != "" {
+		meta[MetaKeySenderPrefix] = senderPrefix
 	}
 	if evt.Params.ReplyToMID != "" {
 		meta["bitrix_reply_to_mid"] = evt.Params.ReplyToMID
@@ -486,12 +499,18 @@ const pairingDebounce = 60 * time.Second
 //     direct-message handling, which bypasses the require-mention gate
 //     and routes traffic to a `direct:chatNN` session key instead of
 //     `group:chatNN`, mixing per-task context into per-user history.
+//   - "B"             — Bitrix24 workgroup / Collab (SONET_GROUP) chat,
+//     observed with CHAT_TYPE=B and CHAT_ENTITY_TYPE=SONET_GROUP. Same
+//     group semantics as "C" / "X" — multi-user by design, @mention
+//     gating applies. Without this branch the @mention prefix never
+//     renders on the bot's reply (it'd address the wrong member by
+//     name) and per-user history bleeds into one direct session.
 //
 // Anything else (including the empty string) is treated as a direct
 // message so stricter DM policies apply.
 func isGroupMessageType(mt string) bool {
 	switch strings.ToUpper(strings.TrimSpace(mt)) {
-	case "C", "CHAT", "O", "OPEN", "X":
+	case "B", "C", "CHAT", "O", "OPEN", "X":
 		return true
 	default:
 		return false
