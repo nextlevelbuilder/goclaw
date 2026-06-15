@@ -49,6 +49,14 @@ func TestResolveDisplayName(t *testing.T) {
 	}
 }
 
+func TestAnnotateGroupInboundMessageIncludesChannelID(t *testing.T) {
+	got := annotateGroupInboundMessage("Username", "user-1", "channel-1", "message content")
+	want := "[From: Username (<@user-1>) | channel_id: channel-1]\nmessage content"
+	if got != want {
+		t.Fatalf("annotateGroupInboundMessage() = %q, want %q", got, want)
+	}
+}
+
 // --- tryHandleCommand: routing only (no session calls) ---
 
 func TestTryHandleCommandRoutingNonCommand(t *testing.T) {

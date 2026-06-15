@@ -256,7 +256,7 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 	// Build final content with group context.
 	finalContent := content
 	if peerKind == "group" {
-		annotated := fmt.Sprintf("[From: %s (<@%s>)]\n%s", senderName, senderID, content)
+		annotated := annotateGroupInboundMessage(senderName, senderID, channelID, content)
 		if c.HistoryLimit() > 0 {
 			finalContent = c.GroupHistory().BuildContext(channelID, annotated, c.HistoryLimit())
 		} else {
@@ -320,6 +320,10 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 	if peerKind == "group" {
 		c.GroupHistory().Clear(channelID)
 	}
+}
+
+func annotateGroupInboundMessage(senderName, senderID, channelID, content string) string {
+	return fmt.Sprintf("[From: %s (<@%s>) | channel_id: %s]\n%s", senderName, senderID, channelID, content)
 }
 
 // checkGroupPolicy evaluates the group policy for a sender, with pairing support.
