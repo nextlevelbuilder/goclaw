@@ -245,6 +245,11 @@ func processNormalMessage(
 	if v := msg.Metadata[bitrix24.MetaKeyMessageID]; v != "" {
 		outMeta[bitrix24.MetaKeyMessageID] = v
 	}
+	// Openline sender tag captured on inbound → Send() prepends it to the reply
+	// so the connector routes the answer back to the right external user.
+	if v := msg.Metadata[bitrix24.MetaKeySenderPrefix]; v != "" {
+		outMeta[bitrix24.MetaKeySenderPrefix] = v
+	}
 
 	// Register run with channel manager for streaming/reaction event forwarding.
 	// Use localKey (composite key with topic suffix) so streaming/reaction events

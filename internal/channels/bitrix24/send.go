@@ -107,6 +107,16 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 		text = mention + " " + text
 	}
 
+	// Openline: prepend the sender tag captured from the inbound message
+	// ("[name] #id:") so the Bitrix Open Channel connector routes this reply
+	// back to the right external user. Goes at the very START (before any
+	// @mention) because the connector parses the leading tag. Prepended BEFORE
+	// chunkText so it only lands on the first chunk. Empty for non-openline
+	// replies → no-op.
+	if prefix := msg.Metadata[MetaKeySenderPrefix]; prefix != "" {
+		text = prefix + " " + text
+	}
+
 	// Resolve outbound routing once for the whole message — same for all
 	// chunks. Missing/unknown visibility defaults to public (= legacy v2
 	// path), so messages from code paths that don't propagate the key

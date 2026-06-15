@@ -22,6 +22,14 @@ const (
 	// constant just documents it. Do not rename without grepping for
 	// the literal "bitrix_message_id" across the repo.
 	MetaKeyMessageID = "bitrix_message_id"
+
+	// MetaKeySenderPrefix carries the openline sender tag ("[name] #id:")
+	// extracted from an inbound openline message by handle.go via
+	// extractOpenlineSenderPrefix. Forwarded by gateway_consumer_normal.go and
+	// read on outbound by Send(), which prepends it to the reply so the Bitrix
+	// Open Channel connector can route the answer back to the right external
+	// user. Empty / absent for plain Bitrix24 chats.
+	MetaKeySenderPrefix = "bitrix_sender_prefix"
 )
 
 // Values for MetaKeyVisibility. Stored as strings (not bool) so callers
