@@ -76,6 +76,8 @@
     "title": "Kiểm thử webhook: {{name}}",
     "description": "Gọi webhook phía máy chủ bằng phiên admin của bạn (không cần secret).",
     "messageWarning": "Thao tác này gửi tin nhắn thật đến chat đích.",
+    "channelName": "Tên channel",
+    "channelNamePlaceholder": "telegram-main",
     "input": "Đầu vào",
     "inputPlaceholder": "Nhập prompt gửi cho agent",
     "chatId": "Chat ID",

@@ -842,8 +842,20 @@ func (h *WebhooksAdminHandler) handleTest(w http.ResponseWriter, r *http.Request
 			writeError(w, http.StatusForbidden, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgWebhookMessageTestRequiresStandard))
 			return
 		}
+		if wh.ChannelID == nil && req.ChannelName == "" {
+			writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "channel_name"))
+			return
+		}
 		if req.ChatID == "" {
 			writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "chat_id"))
+			return
+		}
+		if req.Content == "" && req.MediaURL == "" {
+			writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "content"))
+			return
+		}
+		if len(req.Content) > webhookContentMaxBytes {
+			writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidRequest, "content exceeds 16 KB limit"))
 			return
 		}
 		resp, runErr := h.msgTester.RunTest(ctx, wh, webhookMessageReq{

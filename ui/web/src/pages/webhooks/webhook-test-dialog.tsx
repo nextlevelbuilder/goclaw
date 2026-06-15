@@ -35,6 +35,7 @@ function isLLMResult(r: WebhookTestResult): r is WebhookTestLLMResult {
 export function WebhookTestDialog({ webhook, onClose, onRun }: Props) {
   const { t } = useTranslation("webhooks");
   const [input, setInput] = useState("");
+  const [channelName, setChannelName] = useState("");
   const [chatId, setChatId] = useState("");
   const [content, setContent] = useState("");
   const [running, setRunning] = useState(false);
@@ -44,6 +45,7 @@ export function WebhookTestDialog({ webhook, onClose, onRun }: Props) {
   useEffect(() => {
     if (webhook) {
       setInput("");
+      setChannelName("");
       setChatId("");
       setContent("");
       setResult(null);
@@ -52,6 +54,7 @@ export function WebhookTestDialog({ webhook, onClose, onRun }: Props) {
   }, [webhook]);
 
   const isMessage = webhook?.kind === "message";
+  const hasBoundChannel = !!webhook?.channel_id;
 
   const handleRun = async () => {
     if (!webhook) return;
@@ -60,7 +63,11 @@ export function WebhookTestDialog({ webhook, onClose, onRun }: Props) {
     setError(null);
     try {
       const body: WebhookTestInput = isMessage
-        ? { chat_id: chatId.trim(), content: content.trim() }
+        ? {
+            channel_name: hasBoundChannel ? undefined : channelName.trim(),
+            chat_id: chatId.trim(),
+            content: content.trim(),
+          }
         : { input: input.trim() };
       const res = await onRun(webhook.id, body);
       setResult(res);
@@ -73,7 +80,9 @@ export function WebhookTestDialog({ webhook, onClose, onRun }: Props) {
     }
   };
 
-  const canRun = isMessage ? chatId.trim() !== "" : input.trim() !== "";
+  const canRun = isMessage
+    ? chatId.trim() !== "" && content.trim() !== "" && (hasBoundChannel || channelName.trim() !== "")
+    : input.trim() !== "";
 
   return (
     <Dialog open={!!webhook} onOpenChange={(open) => !open && onClose()}>
@@ -93,6 +102,18 @@ export function WebhookTestDialog({ webhook, onClose, onRun }: Props) {
         <div className="space-y-4">
           {isMessage ? (
             <>
+              {!hasBoundChannel && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="test-channel">{t("test.channelName")}</Label>
+                  <Input
+                    id="test-channel"
+                    value={channelName}
+                    onChange={(e) => setChannelName(e.target.value)}
+                    placeholder={t("test.channelNamePlaceholder")}
+                    className="text-base md:text-sm"
+                  />
+                </div>
+              )}
               <div className="space-y-1.5">
                 <Label htmlFor="test-chat">{t("test.chatId")}</Label>
                 <Input

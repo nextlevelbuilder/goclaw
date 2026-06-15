@@ -333,12 +333,44 @@ func TestWebhookAdmin_Test_Message_Success(t *testing.T) {
 	msg := &stubMsgTester{resp: &webhookMessageResp{CallID: "c1", Status: "sent", ChannelName: "tg", ChatID: "123"}}
 	h.msgTester = msg
 	ctx := webhookTenantAdminCtx(tid, "u")
-	w := doRequest(t, h, http.MethodPost, "/v1/webhooks/"+wh.ID.String()+"/test", map[string]any{"chat_id": "123", "content": "hi"}, ctx)
+	w := doRequest(t, h, http.MethodPost, "/v1/webhooks/"+wh.ID.String()+"/test", map[string]any{"channel_name": "tg", "chat_id": "123", "content": "hi"}, ctx)
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
 	}
 	if !msg.invoked {
 		t.Fatal("msg tester not invoked")
+	}
+}
+
+func TestWebhookAdmin_Test_Message_MissingChannelName(t *testing.T) {
+	tid := uuid.New()
+	wh := &store.WebhookData{ID: uuid.New(), TenantID: tid, Name: "wh", Kind: "message"}
+	h := newAdminHandlerWithCalls(newAdminWebhookStore(wh), &adminCallStore{}, &adminTenantStore{roles: map[string]string{tid.String() + ":u": "admin"}})
+	msg := &stubMsgTester{resp: &webhookMessageResp{CallID: "c1", Status: "sent", ChannelName: "tg", ChatID: "123"}}
+	h.msgTester = msg
+	ctx := webhookTenantAdminCtx(tid, "u")
+	w := doRequest(t, h, http.MethodPost, "/v1/webhooks/"+wh.ID.String()+"/test", map[string]any{"chat_id": "123", "content": "hi"}, ctx)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("missing channel_name must be 400, got %d", w.Code)
+	}
+	if msg.invoked {
+		t.Fatal("msg tester must not run when channel_name is missing")
+	}
+}
+
+func TestWebhookAdmin_Test_Message_MissingContent(t *testing.T) {
+	tid := uuid.New()
+	wh := &store.WebhookData{ID: uuid.New(), TenantID: tid, Name: "wh", Kind: "message"}
+	h := newAdminHandlerWithCalls(newAdminWebhookStore(wh), &adminCallStore{}, &adminTenantStore{roles: map[string]string{tid.String() + ":u": "admin"}})
+	msg := &stubMsgTester{resp: &webhookMessageResp{CallID: "c1", Status: "sent", ChannelName: "tg", ChatID: "123"}}
+	h.msgTester = msg
+	ctx := webhookTenantAdminCtx(tid, "u")
+	w := doRequest(t, h, http.MethodPost, "/v1/webhooks/"+wh.ID.String()+"/test", map[string]any{"channel_name": "tg", "chat_id": "123"}, ctx)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("missing content must be 400, got %d", w.Code)
+	}
+	if msg.invoked {
+		t.Fatal("msg tester must not run when content is missing")
 	}
 }
 

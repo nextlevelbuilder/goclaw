@@ -76,6 +76,8 @@
     "title": "测试 Webhook：{{name}}",
     "description": "使用您的管理员会话在服务端调用此 Webhook（无需密钥）。",
     "messageWarning": "此操作会向目标聊天发送真实消息。",
+    "channelName": "频道名称",
+    "channelNamePlaceholder": "telegram-main",
     "input": "输入",
     "inputPlaceholder": "输入发送给智能体的提示词",
     "chatId": "聊天 ID",

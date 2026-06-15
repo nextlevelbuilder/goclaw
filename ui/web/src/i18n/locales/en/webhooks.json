@@ -76,6 +76,8 @@
     "title": "Test webhook: {{name}}",
     "description": "Invoke this webhook server-side using your admin session (no secret needed).",
     "messageWarning": "This sends a real message to the target chat.",
+    "channelName": "Channel name",
+    "channelNamePlaceholder": "telegram-main",
     "input": "Input",
     "inputPlaceholder": "Enter a prompt to send to the agent",
     "chatId": "Chat ID",
