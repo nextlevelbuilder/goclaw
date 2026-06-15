@@ -28,14 +28,11 @@ func (p *OpenAIProvider) Chat(ctx context.Context, req ChatRequest) (*ChatRespon
 		}
 	}
 
-	// Drop user-visible reasoning for models flagged as leakers (e.g. Kimi,
-	// DeepSeek-Reasoner). Usage.ThinkingTokens is preserved so billing stays
-	// correct (Phase 1 depends on this).
-	if resp != nil {
-		if strip, _ := req.Options[OptStripThinking].(bool); strip {
-			resp.Thinking = ""
-		}
-	}
+	// Note: We used to drop user-visible reasoning here for leaky models.
+	// However, DeepSeek strictly requires `reasoning_content` to be passed back
+	// on tool call iterations. Clearing `resp.Thinking` here causes HTTP 400s
+	// on subsequent passbacks. The responsibility of hiding leaked reasoning
+	// from the UI is now handled in the Agent loop (e.g. final payload stripping).
 
 	return resp, err
 }
@@ -132,9 +129,9 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 		if reasoning == "" {
 			reasoning = delta.Reasoning
 		}
-		if reasoning != "" && !stripThinking {
+		if reasoning != "" {
 			result.Thinking += reasoning
-			if onChunk != nil {
+			if !stripThinking && onChunk != nil {
 				onChunk(StreamChunk{Thinking: reasoning})
 			}
 		}
