@@ -101,10 +101,10 @@ Every channel must implement the base interface:
 
 | Interface | Purpose | Implemented By |
 |-----------|---------|----------------|
-| `StreamingChannel` | Real-time streaming updates | Telegram, Slack |
-| `WebhookChannel` | Webhook HTTP handler mounting | Facebook, Feishu/Lark, Pancake |
-| `ReactionChannel` | Status reactions on messages | Telegram, Slack, Feishu |
-| `BlockReplyChannel` | Override gateway block_reply setting | Discord, Feishu/Lark, Pancake, Slack, Zalo OA, Zalo Personal |
+| `StreamingChannel` | Real-time streaming updates | Telegram, Slack, Max |
+| `WebhookChannel` | Webhook HTTP handler mounting | Facebook, Feishu/Lark, Pancake, Max |
+| `ReactionChannel` | Status reactions on messages | Telegram, Slack, Feishu, Max |
+| `BlockReplyChannel` | Override gateway block_reply setting | Discord, Feishu/Lark, Pancake, Slack, Zalo OA, Zalo Personal, Max |
 
 `BaseChannel` provides a shared implementation that all channels embed: allowlist matching, `HandleMessage()`, `CheckPolicy()`, and user ID extraction.
 
@@ -540,6 +540,16 @@ LLM markdown → htmlTagsToMarkdown() → extractSlackTokens() → escapeHTMLEnt
 
 Key conversions: `**bold**` → `*bold*`, `~~strike~~` → `~strike~`, `[text](url)` → `<url|text>`, `# Header` → `*Header*`, tables → code blocks.
 
+### Webhook security
+
+Max API does not provide a shared-secret signature scheme for webhook authenticity. The webhook URL is the only auth — operators MUST treat it as a secret credential. Configure:
+
+- **Hard-to-guess URL.** Embed a UUID or random hex token in the path; rotate on suspected leak.
+- **TLS.** Webhook URL MUST be HTTPS (channel enforces this at config-validation time).
+- **`dm_policy: "allowlist"` in production.** Even if an attacker forges a webhook update with a spoofed sender, the channel rejects unauthorized senders before invoking the agent.
+
+Recommended: restrict ingress to Max API origin IPs (if published), apply rate limiting at the gateway, monitor for unexpected `update_type` values as a probe-detection signal.
+
 ### Environment Variables
 
 ```
@@ -613,7 +623,97 @@ Zalo Personal uses an unofficial, reverse-engineered protocol. The account used 
 
 ---
 
-## 12. Channel-Isolated Workspaces
+## 12. Max Messenger
+
+The Max channel integrates with [Max](https://max.ru) — a Russian messaging platform whose Bot API mirrors many Telegram conventions. Implementation uses a custom HTTP client (no upstream SDK was suitable when this channel landed); production state validated end-to-end against the live `platform-api.max.ru` API.
+
+### Key Behaviors
+
+- **Two transports**: long polling (`mode: polling`, default) and webhook (`mode: webhook`). Polling spawns a goroutine that GETs `/updates` with a sequence marker; webhook is mounted on the main gateway mux at the path derived from `webhook_url`.
+- **Authentication**: `Authorization: <token>` header, *no* `Bearer` prefix. Bot tokens are issued via `@MasterBot` in the Max app or [business.max.ru/self](https://business.max.ru/self).
+- **Rate limit**: 30 RPS per bot (Max-side). All polling, sending, editing, and reactions share this budget.
+- **Message limit**: 4,000-character limit with automatic chunking at paragraph → line → sentence → word → codepoint boundary.
+- **Markdown forwarding**: Outbound messages send `format: "markdown"`; Max API parses common syntax (`**bold**`, `_italic_`, `` `code` ``) and converts to native markup. No client-side conversion needed.
+- **Streaming**: Eager placeholder ("💭 Печатаю..."), 800ms throttle, plain-text edits during stream, markdown-formatted final edit via `Send()`/`FinalizeStream` handoff. Answer-only mode (`ReasoningStreamEnabled = false`).
+- **Reactions**: Maps goclaw status (`thinking`, `tool_exec`, `compacting`, `stall`) to Max `typing_on` action. Per-chat refresher goroutine re-sends every 4s (Max typing indicator expires ~5s); terminal statuses (`done`, `error`) stop the refresher.
+- **Media (inbound)**: HTTP fetch with retry (3 attempts), 25 MiB cap, Content-Length pre-check. Files saved to `os.TempDir` with prefix `goclaw_max_<type>_*<ext>`. Failed downloads logged and skipped — text content still flows.
+- **Media (outbound)**: Two-step upload: `POST /uploads?type=...` → temporary URL → multipart POST → token; token attached to `POST /messages`. Failed uploads dropped from the attachment list; text chunks still ship.
+- **request_contact verification**: HMAC-SHA256(`bot_token`, `vcf_info`) validated via `hmac.Equal` constant-time comparison. Distinct error types for malformed hex vs. tampered payload.
+- **Group support**: Translator implemented with mention gating (`require_mention` default true), but Max platform does not yet permit adding bots to groups — group code is unvalidated live and will be exercised once the platform allows.
+- **Self-loop guard**: Messages where `sender.user_id == bot.user_id` are dropped (defends against accidental echo of webhooks).
+- **Lifecycle**: `Start` probes `/me`, spawns polling, marks healthy. `Stop` cancels poll context, drains reaction refreshers, waits up to 10s for in-flight handlers, then marks stopped.
+
+### API Findings (corrections to docs)
+
+Three discrepancies between Max's published docs and live API surface, all confirmed by PoC against the production endpoint:
+
+| Field | Doc says | Live API | Effect |
+|-------|----------|----------|--------|
+| Inner message body | `"body"` | `"message"` | JSON tag mismatch causes empty payloads on unmarshal |
+| Recipient discriminator | inferred from `user_id` | use `chat_type` ("dialog"/"chat") | Both `user_id` and `chat_id` populated for DMs — heuristic is wrong |
+| DM `chat_id` semantics | not specified | dialog thread ID (stable per conversation) | Use as canonical chat key; do not substitute sender ID |
+
+These are corrected in `types.go` and `inbound.go`.
+
+### Configuration
+
+```jsonc
+// channel_instances.config (JSONB)
+{
+  "mode": "polling",                // "polling" | "webhook"
+  "webhook_url": "https://...",     // required for webhook mode
+  "polling_timeout": 30,            // seconds, range 0-90
+  "dm_policy": "open",              // "open" | "allowlist" | "pairing" | "disabled"
+  "group_policy": "open",           // "open" | "allowlist" | "disabled"
+  "require_mention": true,          // group mention gate
+  "allow_from": ["12345"],          // user IDs for allowlist mode
+  "history_limit": 50,              // pending group messages buffer
+  "block_reply": null,              // override gateway-level block_reply
+  "dm_stream": true,                // streaming preview in DMs (default ON)
+  "group_stream": false             // streaming preview in groups (default OFF)
+}
+```
+
+```jsonc
+// channel_instances.credentials (encrypted JSONB)
+{
+  "bot_token": "<from @MasterBot>",
+  "bot_id": 256747471,              // optional, fetched on first start
+  "username": "id..._bot"           // optional, fetched on first start
+}
+```
+
+### Streaming Lifecycle
+
+```mermaid
+flowchart LR
+    A[CreateStream] -->|"POST /messages '💭 Печатаю...'"| P((placeholder mid))
+    P --> U[Update text]
+    U -->|throttle 800ms| E["PUT /messages (plain text)"]
+    E --> U
+    U --> S[Stop]
+    S -->|"final flush if pending"| F["PUT /messages (plain text)"]
+    F --> FS[FinalizeStream]
+    FS -->|"placeholders.Store(chatID, mid)"| SEND[Send]
+    SEND -->|"consumePlaceholder + edit"| FINAL["PUT /messages (markdown)"]
+```
+
+The placeholder is created eagerly so users see "💭 Печатаю..." within ~150ms of sending their message. Plain text during streaming avoids partial-token rendering glitches (e.g. unclosed `**bold`). The final `Send` carries the agent's complete formatted response and applies markdown.
+
+### Limits & Behaviour Notes
+
+- **Streaming text cap**: 4,000 chars (Max per-message limit). Longer streaming previews are truncated; the final `Send()` chunks correctly.
+- **Edit failures during streaming** are logged at `debug` and not propagated — the next `Update` retries with fresher text. Stream is best-effort UX.
+- **Concurrent runs in one chat**: each run gets its own stream/placeholder via per-`RunContext` storage. Two parallel "💭 Печатаю..." messages may appear briefly; this is correct.
+- **Webhook authentication**: Max does *not* send the bot token with webhook updates. URL secrecy is the only auth — operators must include a hard-to-guess path component (UUID recommended).
+
+### Environment Variables
+
+The Max channel is database-instance-only (no top-level config block). Operators provision via `channel_instances` rows. There are no `GOCLAW_MAX_*` environment variables.
+
+---
+
+## 13. Channel-Isolated Workspaces
 
 Each channel instance can target a specific agent, providing workspace isolation across channels.
 
@@ -632,7 +732,7 @@ Channel instances are loaded from the database with their assigned agent ID. The
 
 ---
 
-## 13. Local Key Propagation
+## 14. Local Key Propagation
 
 Thread/topic context is preserved through the entire message pipeline using a `local_key` in message metadata. This ensures subagent, delegation, and team message results land in the correct thread — not the root chat.
 
@@ -648,7 +748,7 @@ All channel state — placeholders, streams, reactions, typing controllers, thre
 
 ---
 
-## 14. Per-User Isolation
+## 15. Per-User Isolation
 
 Channels provide per-user isolation through compound sender IDs and context propagation:
 
@@ -659,7 +759,7 @@ Channels provide per-user isolation through compound sender IDs and context prop
 
 ---
 
-## 15. Pairing System
+## 16. Pairing System
 
 The pairing system provides a DM authentication flow for channels using the `pairing` DM policy.
 

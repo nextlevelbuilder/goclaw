@@ -68,7 +68,7 @@ Single binary. Production-tested. Agents that orchestrate for you.
 - **Self-Evolution** — Metrics → suggestions → auto-adapt with guardrails. Agents refine their own communication style
 - **Multi-Tenant PostgreSQL** — Per-user workspaces, per-user context files, encrypted API keys (AES-256-GCM), RBAC, isolated sessions
 - **20+ LLM Providers** — Anthropic (native HTTP+SSE with prompt caching), OpenAI, OpenRouter, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, DashScope, Claude CLI, Codex, ACP, and any OpenAI-compatible endpoint
-- **7 Messaging Channels** — Telegram, Discord, Slack, Zalo OA, Zalo Personal, Feishu/Lark, WhatsApp
+- **8 Messaging Channels** — Telegram, Discord, Slack, Zalo OA, Zalo Personal, Feishu/Lark, WhatsApp, Max
 - **Production Security** — 5-layer permission system, rate limiting, prompt injection detection, SSRF protection, AES-256-GCM encryption
 - **Single Binary** — ~25 MB static Go binary, no Node.js runtime, <1s startup, runs on a $5 VPS
 - **Observability** — Built-in LLM call tracing with spans and prompt cache metrics, optional OpenTelemetry OTLP export
@@ -103,7 +103,7 @@ irm https://raw.githubusercontent.com/nextlevelbuilder/goclaw/main/scripts/insta
 | Teams | Max 1 (5 members) | Unlimited |
 | Database | SQLite (local) | PostgreSQL |
 | Memory | FTS5 text search | pgvector semantic |
-| Channels | — | Telegram, Discord, Slack, Zalo, Feishu, WhatsApp |
+| Channels | — | Telegram, Discord, Slack, Zalo, Feishu, WhatsApp, Max |
 | Knowledge Graph | — | Full |
 | RBAC / Multi-tenant | — | Full |
 | Auto-update | GitHub Releases | Docker / binary |
@@ -326,7 +326,7 @@ Full documentation at **[docs.goclaw.sh](https://docs.goclaw.sh)** — or browse
 | [Core Concepts](https://docs.goclaw.sh/#how-goclaw-works) | Agent Loop, Sessions, Tools, Memory, Multi-Tenancy |
 | [Agents](https://docs.goclaw.sh/#creating-agents) | Creating Agents, Context Files, Personality, Sharing & Access |
 | [Providers](https://docs.goclaw.sh/#providers-overview) | Anthropic, OpenAI, OpenRouter, Gemini, DeepSeek, +15 more |
-| [Channels](https://docs.goclaw.sh/#channels-overview) | Telegram, Discord, Slack, Feishu, Zalo, WhatsApp, WebSocket |
+| [Channels](https://docs.goclaw.sh/#channels-overview) | Telegram, Discord, Slack, Feishu, Zalo, WhatsApp, Max, WebSocket |
 | [Agent Teams](https://docs.goclaw.sh/#teams-what-are-teams) | Teams, Task Board, Messaging, Delegation & Handoff |
 | [Advanced](https://docs.goclaw.sh/#custom-tools) | Custom Tools, MCP, Skills, Cron, Sandbox, Hooks, RBAC |
 | [Deployment](https://docs.goclaw.sh/#deploy-docker-compose) | Docker Compose, Database, Security, Observability, Tailscale |

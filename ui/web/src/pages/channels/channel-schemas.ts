@@ -76,6 +76,9 @@ export const credentialsSchema: Record<string, FieldDef[]> = {
     { key: "app_secret", label: "App Secret", type: "password", required: true, help: "From Facebook Developer Console → Your App → Settings → Basic" },
     { key: "verify_token", label: "Webhook Verify Token", type: "password", required: true, help: "A secret string you choose, used to verify the webhook URL" },
   ],
+  max: [
+    { key: "bot_token", label: "Bot Token", type: "password", required: true, placeholder: "Max bot token", help: "Issued by @MasterBot in the Max app" },
+  ],
   pancake: [
     { key: "api_key", label: "API Key", type: "password", required: true, help: "Pancake user-level API key from pages.fm account settings" },
     { key: "page_access_token", label: "Page Access Token", type: "password", required: true, help: "Page-level token from Pancake dashboard → Page Settings" },
@@ -203,6 +206,18 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "first_inbox_message", label: "First Inbox DM Text", type: "textarea", help: "Custom DM sent to first-time commenters. Defaults to Vietnamese if empty." },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "Facebook user IDs" },
     { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit" },
+  ],
+  max: [
+    { key: "mode", label: "Connection Mode", type: "select", options: [{ value: "polling", label: "Polling (recommended)" }, { value: "webhook", label: "Webhook" }], defaultValue: "polling", help: "Polling needs no public IP. Webhook requires HTTPS endpoint." },
+    { key: "polling_timeout", label: "Polling Timeout (seconds)", type: "number", defaultValue: 30, help: "Long-poll timeout for /updates", showWhen: { key: "mode", value: "polling" } },
+    { key: "dm_policy", label: "DM Policy", type: "select", options: dmPolicyOptions, defaultValue: "open" },
+    { key: "group_policy", label: "Group Policy", type: "select", options: groupPolicyOptions, defaultValue: "disabled", help: "Max does not yet support adding bots to groups via the platform API. Keep disabled." },
+    { key: "dm_stream", label: "DM Streaming", type: "boolean", defaultValue: true, help: "Stream response progressively in DMs (placeholder + edits)" },
+    { key: "group_stream", label: "Group Streaming", type: "boolean", defaultValue: false },
+    { key: "history_limit", label: "Group History Limit", type: "number", defaultValue: 50, help: "Max pending group messages for context (0 = disabled)" },
+    { key: "media_max_mb", label: "Max Media Size (MB)", type: "number", defaultValue: 20 },
+    { key: "allow_from", label: "Allowed Users", type: "tags", help: "Max user IDs allowed to interact (empty = no allowlist)" },
+    { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Deliver intermediate text during tool iterations" },
   ],
   pancake: [
     { key: "page_id", label: "Page ID", type: "text", required: true, help: "Pancake internal page ID (numeric, from Pancake dashboard)" },

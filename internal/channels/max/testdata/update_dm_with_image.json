@@ -1,0 +1,39 @@
+{
+  "marker": 35807800,
+  "updates": [
+    {
+      "update_type": "message_created",
+      "timestamp": 1777967518622,
+      "user_locale": "ru",
+      "message": {
+        "sender": {
+          "user_id": 74757262,
+          "first_name": "Тарас",
+          "last_name": "",
+          "is_bot": false,
+          "name": "Тарас"
+        },
+        "recipient": {
+          "user_id": 256747471,
+          "chat_id": 188289857,
+          "chat_type": "dialog"
+        },
+        "timestamp": 1777967518622,
+        "message": {
+          "mid": "mid.000000000b391341019df71f539e28ba",
+          "seq": 116520879300421818,
+          "text": "",
+          "attachments": [
+            {
+              "type": "image",
+              "payload": {
+                "url": "https://i.oneme.ru/upload/example/image1.jpg",
+                "photo_id": 12345678
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

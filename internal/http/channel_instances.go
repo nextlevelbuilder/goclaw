@@ -702,7 +702,7 @@ func (h *ChannelInstancesHandler) handleResolveContacts(w http.ResponseWriter, r
 // ui/web/src/constants/channels.ts.
 func isValidChannelType(ct string) bool {
 	switch ct {
-	case "telegram", "discord", "slack", "whatsapp", "zalo_oa", "zalo_personal", "feishu", "facebook", "pancake", "bitrix24":
+	case "telegram", "discord", "slack", "whatsapp", "zalo_oa", "zalo_personal", "feishu", "facebook", "pancake", "bitrix24", "max":
 		return true
 	}
 	return false

@@ -1,0 +1,37 @@
+{
+  "marker": 35900000,
+  "updates": [
+    {
+      "update_type": "message_created",
+      "timestamp": 1777970000000,
+      "user_locale": "ru",
+      "message": {
+        "sender": {
+          "user_id": 74757262,
+          "first_name": "Тарас",
+          "last_name": "",
+          "is_bot": false,
+          "name": "Тарас"
+        },
+        "recipient": {
+          "chat_id": 999888777,
+          "chat_type": "chat"
+        },
+        "timestamp": 1777970000000,
+        "message": {
+          "mid": "mid.group001",
+          "seq": 100000001,
+          "text": "@id772879874571_bot привет, как дела?",
+          "markup": [
+            {
+              "type": "user_mention",
+              "from": 0,
+              "length": 21,
+              "user_id": 256747471
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

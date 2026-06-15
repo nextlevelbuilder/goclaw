@@ -117,6 +117,25 @@ All notable changes to GoClaw are documented here. For full documentation, see [
     endpoint handle duplicates platform-side. No GoClaw state required.
   - No DB migration.
 
+- **Max Messenger channel.** Adds Max ([https://max.ru](https://max.ru)) — a
+  Russian messaging platform — as a first-class channel under
+  `internal/channels/max/`. Mirrors existing channel patterns (Telegram,
+  WhatsApp, etc.):
+  - **Two transports**: long polling (default) and webhook (HMAC-SHA256
+    signed). Polling is the recommended primary mode.
+  - **Streaming preview** with throttled in-place edits; final reply
+    re-emitted with markdown.
+  - **Reactions** mapping goclaw status to Max `typing_on` action with
+    per-chat refresh.
+  - **Media** inbound (HTTP fetch with retry) and outbound (two-step
+    upload).
+  - **Access control** via existing `dm_policy` / `group_policy` /
+    `allow_from` mechanisms; pairing replies sent through Max.
+  - Custom `net/http` client — no third-party Max SDK dependency.
+  - Tested locally end-to-end against the live `platform-api.max.ru`
+    API; webhook mode unit-tested but not yet live-validated.
+  - New channel type `max`. No DB migration.
+
 ### Improvements
 
 - **Context pruning cleanup.** Removed redundant Pass 0 (per-result 30% guard),

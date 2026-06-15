@@ -24,6 +24,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels/discord"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/facebook"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/feishu"
+	"github.com/nextlevelbuilder/goclaw/internal/channels/max"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/pancake"
 	slackchannel "github.com/nextlevelbuilder/goclaw/internal/channels/slack"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/telegram"
@@ -549,6 +550,7 @@ func runGateway() {
 		// identically to before — the MCPStore arg is nil-safe inside the
 		// factory.
 		instanceLoader.RegisterFactory(channels.TypeBitrix24, bitrix24.FactoryWithPortalStoreAndMCP(pgStores.BitrixPortals, pgStores.MCP, bitrixEncKey))
+		instanceLoader.RegisterFactory(channels.TypeMax, max.FactoryWithPendingStoreAndAudio(pgStores.PendingMessages, audioMgr))
 		if err := instanceLoader.LoadAll(context.Background()); err != nil {
 			slog.Error("failed to load channel instances from DB", "error", err)
 		}

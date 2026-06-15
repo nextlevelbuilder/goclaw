@@ -1,0 +1,31 @@
+{
+  "marker": 35807261,
+  "updates": [
+    {
+      "update_type": "message_created",
+      "timestamp": 1777966187384,
+      "user_locale": "ru",
+      "message": {
+        "sender": {
+          "user_id": 74757262,
+          "first_name": "Тарас",
+          "last_name": "",
+          "is_bot": false,
+          "last_activity_time": 1777966179000,
+          "name": "Тарас"
+        },
+        "recipient": {
+          "user_id": 256747471,
+          "chat_id": 188289857,
+          "chat_type": "dialog"
+        },
+        "timestamp": 1777966187384,
+        "message": {
+          "mid": "mid.000000000b391341019df70b03786130",
+          "seq": 116520792056422700,
+          "text": "тест 123"
+        }
+      }
+    }
+  ]
+}

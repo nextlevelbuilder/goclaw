@@ -1,0 +1,22 @@
+{
+  "marker": 35900200,
+  "updates": [
+    {
+      "update_type": "message_callback",
+      "timestamp": 1777970200000,
+      "user_locale": "ru",
+      "callback": {
+        "timestamp": 1777970200000,
+        "callback_id": "cb_abc123",
+        "payload": "menu:option1",
+        "user": {
+          "user_id": 74757262,
+          "first_name": "Тарас",
+          "last_name": "",
+          "is_bot": false,
+          "name": "Тарас"
+        }
+      }
+    }
+  ]
+}
