@@ -38,6 +38,11 @@ func NewDefaultTransport() *http.Transport {
 
 // NewDefaultHTTPClient returns an *http.Client backed by NewDefaultTransport.
 // No Client.Timeout is set — rely on ctx deadlines and Transport stage timeouts.
+//
+// SSRF protection for user-configured provider URLs is enforced at provider
+// create/update time by validateProviderURL (resolves the host and rejects
+// private/reserved IPs via security.IsBlocked). Dial-time DNS-rebinding
+// hardening is tracked as a follow-up.
 func NewDefaultHTTPClient() *http.Client {
 	return &http.Client{Transport: NewDefaultTransport()}
 }

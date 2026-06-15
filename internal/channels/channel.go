@@ -340,9 +340,9 @@ func (c *BaseChannel) CheckDMPolicy(ctx context.Context, senderID, dmPolicy stri
 		if c.pairingService != nil {
 			paired, err := c.pairingService.IsPaired(ctx, senderID, c.name)
 			if err != nil {
-				slog.Warn("security.pairing_check_failed, assuming paired (fail-open)",
+				slog.Warn("security.pairing_check_failed, denying access (fail-closed)",
 					"sender_id", senderID, "channel", c.name, "error", err)
-				return PolicyAllow
+				return PolicyDeny
 			}
 			if paired {
 				return PolicyAllow
@@ -379,9 +379,9 @@ func (c *BaseChannel) CheckGroupPolicy(ctx context.Context, senderID, chatID, gr
 		if c.pairingService != nil {
 			paired, err := c.pairingService.IsPaired(ctx, groupSenderID, c.name)
 			if err != nil {
-				slog.Warn("security.pairing_check_failed, assuming paired (fail-open)",
+				slog.Warn("security.pairing_check_failed, denying access (fail-closed)",
 					"group_sender", groupSenderID, "channel", c.name, "error", err)
-				return PolicyAllow
+				return PolicyDeny
 			}
 			if paired {
 				c.MarkGroupApproved(chatID)

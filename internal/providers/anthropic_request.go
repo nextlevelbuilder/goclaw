@@ -98,7 +98,7 @@ func (p *AnthropicProvider) buildRequestBody(model string, req ChatRequest, stre
 			systemBlocks = append(systemBlocks, splitSystemPromptForCache(msg.Content)...)
 
 		case "user":
-			if len(msg.Images) > 0 {
+			if len(msg.Images) > 0 || len(msg.Videos) > 0 {
 				var blocks []map[string]any
 				for _, img := range msg.Images {
 					blocks = append(blocks, map[string]any{
@@ -110,6 +110,7 @@ func (p *AnthropicProvider) buildRequestBody(model string, req ChatRequest, stre
 						},
 					})
 				}
+				// Videos are not supported by Anthropic, they are omitted here.
 				if msg.Content != "" {
 					blocks = append(blocks, map[string]any{
 						"type": "text",
@@ -213,7 +214,9 @@ func (p *AnthropicProvider) buildRequestBody(model string, req ChatRequest, stre
 		body["max_tokens"] = v
 	}
 	if v, ok := req.Options[OptTemperature]; ok {
-		body["temperature"] = v
+		if !anthropicSkipsTemperature(model) {
+			body["temperature"] = v
+		}
 	}
 
 	// Enable extended thinking if thinking_level is set
@@ -232,6 +235,30 @@ func (p *AnthropicProvider) buildRequestBody(model string, req ChatRequest, stre
 	}
 
 	return body
+}
+
+// anthropicSkipsTemperature reports whether the Messages API rejects sampling
+// parameters for this model. Claude Opus/Sonnet 4.6+ and Opus 4.7+ return HTTP
+// 400 when temperature (and top_p/top_k) are included; omit them entirely.
+func anthropicSkipsTemperature(model string) bool {
+	m := strings.ToLower(model)
+	for _, family := range []string{"claude-opus-4-", "claude-sonnet-4-"} {
+		after, ok := strings.CutPrefix(m, family)
+		if !ok {
+			continue
+		}
+		minor := 0
+		for _, c := range after {
+			if c < '0' || c > '9' {
+				break
+			}
+			minor = minor*10 + int(c-'0')
+		}
+		if minor >= 6 {
+			return true
+		}
+	}
+	return false
 }
 
 // anthropicThinkingBudget maps a thinking level to a token budget.

@@ -10,12 +10,71 @@ import { useBitrixPortalCreate } from "./use-bitrix-portals";
 // Validation mirrors the server-side regex in
 // internal/gateway/methods/bitrix_portals.go. Server is authoritative;
 // client validation is purely UX so the operator gets feedback before a
-// round-trip. Pattern intentionally accepts a wide TLD set (Bitrix24 has
-// regional clouds: .com, .eu, .ru, .de, .fr, .jp, .in, .kz, .ua, .by) plus
-// .bitrix.info for self-hosted.
+// round-trip. Pattern accepts Bitrix24 regional clouds (.com, .eu, .ru,
+// .de, .fr, .jp, .in, .kz, .ua, .by, .vn, .tr, .es, .com.br, .com.ar),
+// .bitrix.info self-hosted, plus any valid hostname/port for fully
+// self-hosted custom domains.
 const BITRIX_DOMAIN_RE =
-  /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.(bitrix24\.(com|eu|ru|de|fr|jp|in|kz|ua|by)|bitrix\.info)$/;
+  /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.(bitrix24\.(com|eu|ru|de|fr|jp|in|kz|ua|by|vn|tr|es|com\.br|com\.ar)|bitrix\.info)$/;
+const SELF_HOSTED_DOMAIN_RE =
+  /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:\d+)?$/;
 const PORTAL_NAME_RE = /^[a-z0-9][a-z0-9_-]{0,62}[a-z0-9]$/;
+
+// validateSelfHostedDomain mirrors the backend SSRF + port validation.
+// Rejects localhost, .local, .localhost TLDs, literal private/loopback IPs,
+// and invalid port ranges (0, >65535).
+function validateSelfHostedDomain(domain: string): string | null {
+  // Extract host and optional port.
+  let host = domain;
+  let portStr: string | undefined;
+  const colonIdx = domain.lastIndexOf(":");
+  if (colonIdx !== -1) {
+    host = domain.slice(0, colonIdx);
+    portStr = domain.slice(colonIdx + 1);
+  }
+
+  // Validate port range.
+  if (portStr !== undefined) {
+    const port = Number(portStr);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      return "port must be 1-65535";
+    }
+  }
+
+  // Reject localhost and .local/.localhost TLDs.
+  const lowerHost = host.toLowerCase();
+  if (
+    lowerHost === "localhost" ||
+    lowerHost.endsWith(".localhost") ||
+    lowerHost.endsWith(".local")
+  ) {
+    return "private/internal hostnames (localhost, .local, .localhost) are not allowed";
+  }
+
+  // Reject literal private/loopback IPs.
+  // Simple check for common patterns — backend does full CIDR validation.
+  if (
+    lowerHost === "127.0.0.1" ||
+    lowerHost.startsWith("127.") ||
+    lowerHost === "10.0.0.0" ||
+    lowerHost.startsWith("10.") ||
+    lowerHost.startsWith("192.168.") ||
+    lowerHost.startsWith("172.16.") ||
+    lowerHost.startsWith("172.17.") ||
+    lowerHost.startsWith("172.18.") ||
+    lowerHost.startsWith("172.19.") ||
+    lowerHost.startsWith("172.2") ||
+    lowerHost.startsWith("172.3") ||
+    lowerHost === "169.254.169.254" ||
+    lowerHost.startsWith("169.254.") ||
+    lowerHost === "::1" ||
+    lowerHost === "0.0.0.0"
+  ) {
+    return "IP is in a blocked range (loopback/private/metadata)";
+  }
+
+  return null;
+}
 
 interface BitrixPortalFormStepProps {
   /** Invoked with the server response after bitrix.portals.create succeeds. */
@@ -53,10 +112,21 @@ export function BitrixPortalFormStep({ onSuccess, onCancel }: BitrixPortalFormSt
         defaultValue: "Use lowercase letters, digits, hyphens, underscores (2-64 chars).",
       });
     }
-    if (!BITRIX_DOMAIN_RE.test(domain.toLowerCase())) {
+    const domainLower = domain.toLowerCase();
+    const isCloud = BITRIX_DOMAIN_RE.test(domainLower);
+    const isSelfHostedSyntax = SELF_HOSTED_DOMAIN_RE.test(domainLower);
+    if (!isCloud && !isSelfHostedSyntax) {
       e.domain = t("bitrix24.create.errors.invalidDomain", {
-        defaultValue: "Must be a valid Bitrix24 portal domain (e.g. mycorp.bitrix24.com).",
+        defaultValue: "Must be a valid hostname (e.g. *.bitrix24.com, *.bitrix.info, or your self-hosted domain).",
       });
+    } else if (!isCloud) {
+      // SSRF + port validation for self-hosted domains.
+      const ssrfErr = validateSelfHostedDomain(domainLower);
+      if (ssrfErr) {
+        e.domain = t("bitrix24.create.errors.invalidDomain", {
+          defaultValue: ssrfErr,
+        });
+      }
     }
     if (!clientId.trim()) e.client_id = t("common.required", { defaultValue: "Required" });
     if (!clientSecret.trim()) e.client_secret = t("common.required", { defaultValue: "Required" });
@@ -121,7 +191,7 @@ export function BitrixPortalFormStep({ onSuccess, onCancel }: BitrixPortalFormSt
           value={domain}
           onChange={(e) => setDomain(e.target.value)}
           onBlur={handleDomainBlur}
-          placeholder="tamgiac.bitrix24.com"
+          placeholder="mycorp.bitrix24.vn or bitrix.example.com"
           autoComplete="off"
           autoFocus
         />

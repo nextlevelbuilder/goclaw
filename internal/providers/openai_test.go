@@ -240,6 +240,60 @@ func TestBuildRequestBody_MultimodalTextBeforeImages(t *testing.T) {
 	}
 }
 
+func TestBuildRequestBody_MultimodalWithImageURL(t *testing.T) {
+	p := NewOpenAIProvider("test", "key", "https://api.openai.com/v1", "gpt-4")
+	req := ChatRequest{
+		Messages: []Message{
+			{
+				Role:    "user",
+				Content: "describe",
+				Images: []ImageContent{
+					{URL: "https://example.com/image.png"},
+				},
+			},
+		},
+	}
+	body := p.buildRequestBody("gpt-4o", req, false)
+	msgs := body["messages"].([]map[string]any)
+	parts, ok := msgs[0]["content"].([]map[string]any)
+	if !ok || len(parts) < 2 {
+		t.Fatalf("want multimodal parts, got %v", msgs[0]["content"])
+	}
+	imgPart := parts[1]["image_url"].(map[string]any)
+	if urlVal, _ := imgPart["url"].(string); urlVal != "https://example.com/image.png" {
+		t.Errorf("expected URL to be https://example.com/image.png, got %q", urlVal)
+	}
+}
+
+func TestBuildRequestBody_MultimodalWithVideoURL(t *testing.T) {
+	p := NewOpenAIProvider("test", "key", "https://api.openai.com/v1", "gpt-4")
+	req := ChatRequest{
+		Messages: []Message{
+			{
+				Role:    "user",
+				Content: "describe video",
+				Videos: []VideoContent{
+					{MimeType: "video/mp4", URL: "https://example.com/video.mp4"},
+				},
+			},
+		},
+	}
+	body := p.buildRequestBody("gpt-4o", req, false)
+	msgs := body["messages"].([]map[string]any)
+	parts, ok := msgs[0]["content"].([]map[string]any)
+	if !ok || len(parts) < 2 {
+		t.Fatalf("want multimodal parts, got %v", msgs[0]["content"])
+	}
+	videoPart, ok := parts[1]["video_url"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected video_url part, got %v", parts[1])
+	}
+	if urlVal, _ := videoPart["url"].(string); urlVal != "https://example.com/video.mp4" {
+		t.Errorf("expected URL to be https://example.com/video.mp4, got %q", urlVal)
+	}
+}
+
+
 func TestBuildRequestBody_TogetherDetectedByProviderType(t *testing.T) {
 	// Together behind reverse proxy — detected by providerType, not URL.
 	p := NewOpenAIProvider("my-proxy", "key", "https://proxy.internal/v1", "")

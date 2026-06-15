@@ -532,7 +532,7 @@
       },
       "errors": {
         "invalidName": "Use lowercase letters, digits, hyphens, underscores (2-64 chars).",
-        "invalidDomain": "Must be a valid Bitrix24 portal domain (e.g. mycorp.bitrix24.com).",
+        "invalidDomain": "Must be a valid hostname (e.g. mycorp.bitrix24.com, mycorp.bitrix24.vn, or your self-hosted domain).",
         "duplicateName": "A portal with this name already exists.",
         "forbidden": "You need tenant admin permission to create portals.",
         "gatewayURLUnknown": "Open the goclaw UI via your public URL first (not localhost), then retry."

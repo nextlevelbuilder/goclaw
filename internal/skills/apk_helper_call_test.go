@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync/atomic"
@@ -130,6 +132,108 @@ func TestApkHelperCall_DialFail(t *testing.T) {
 	if !strings.Contains(errMsg, "pkg-helper unavailable") {
 		t.Errorf("errMsg = %q, want to contain 'pkg-helper unavailable'", errMsg)
 	}
+}
+
+func TestApkHelperCallFallback_ParsesStdoutJSONWithStderrLogs(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell fixture requires Unix")
+	}
+
+	helper := writePkgHelperFixture(t, `
+echo 'time=2026-06-15 level=INFO msg="pkg-helper: installing"' >&2
+printf '%s\n' '{"ok":true,"data":"installed"}'
+`)
+
+	ok, code, data, errMsg := apkHelperCallFallback(context.Background(), helper, "install", "curl")
+
+	if !ok {
+		t.Fatalf("ok = false, want true (code=%q err=%q)", code, errMsg)
+	}
+	if code != "" {
+		t.Errorf("code = %q, want empty", code)
+	}
+	if data != "installed" {
+		t.Errorf("data = %q, want %q", data, "installed")
+	}
+	if errMsg != "" {
+		t.Errorf("errMsg = %q, want empty", errMsg)
+	}
+}
+
+func TestApkHelperCallFallback_ParsesErrorJSONDespiteExitStatus(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell fixture requires Unix")
+	}
+
+	helper := writePkgHelperFixture(t, `
+echo 'time=2026-06-15 level=ERROR msg="pkg-helper: install failed"' >&2
+printf '%s\n' '{"ok":false,"error":"package not found","code":"not_found"}'
+exit 1
+`)
+
+	ok, code, _, errMsg := apkHelperCallFallback(context.Background(), helper, "install", "missing")
+
+	if ok {
+		t.Fatal("ok = true, want false")
+	}
+	if code != "not_found" {
+		t.Errorf("code = %q, want %q", code, "not_found")
+	}
+	if errMsg != "package not found" {
+		t.Errorf("errMsg = %q, want %q", errMsg, "package not found")
+	}
+}
+
+func TestApkHelperCallFallback_InvalidStdoutIsHelperError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell fixture requires Unix")
+	}
+
+	helper := writePkgHelperFixture(t, `
+printf '%s\n' 'not-json'
+`)
+
+	ok, code, _, errMsg := apkHelperCallFallback(context.Background(), helper, "install", "curl")
+
+	if ok {
+		t.Fatal("ok = true, want false for invalid helper response")
+	}
+	if code != "helper_error" {
+		t.Errorf("code = %q, want %q", code, "helper_error")
+	}
+	if !strings.Contains(errMsg, "invalid response") || !strings.Contains(errMsg, "stdout: not-json") {
+		t.Errorf("errMsg = %q, want invalid response with stdout detail", errMsg)
+	}
+}
+
+func TestFirstExecutableFileFindsBundledFallbackCandidate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("executable-bit fixture requires Unix")
+	}
+
+	helper := writePkgHelperFixture(t, `exit 0`)
+	got, ok := firstExecutableFile([]string{
+		filepath.Join(t.TempDir(), "missing-helper"),
+		helper,
+	})
+
+	if !ok {
+		t.Fatal("firstExecutableFile did not find executable fallback candidate")
+	}
+	if got != helper {
+		t.Fatalf("firstExecutableFile = %q, want %q", got, helper)
+	}
+}
+
+func writePkgHelperFixture(t *testing.T, body string) string {
+	t.Helper()
+
+	path := filepath.Join(t.TempDir(), "pkg-helper")
+	script := "#!/bin/sh\n" + strings.TrimLeft(body, "\n")
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatalf("write helper fixture: %v", err)
+	}
+	return path
 }
 
 // TestApkHelperCall_ValidResponse verifies a well-formed canned response is

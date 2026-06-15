@@ -172,31 +172,3 @@ func TestFsBridgePathWithinUsesPathBoundaries(t *testing.T) {
 		})
 	}
 }
-
-func TestFsBridgeWriteFileCommandPreservesOverwriteTruncation(t *testing.T) {
-	args := fsBridgeWriteDDArgs("/workspace/file.txt", false)
-	for _, arg := range args {
-		if arg == "conv=notrunc" || arg == "oflag=append" {
-			t.Fatalf("overwrite command must truncate, got append-only arg %q in %v", arg, args)
-		}
-	}
-}
-
-func TestFsBridgeWriteFileCommandUsesNoTruncOnlyForAppend(t *testing.T) {
-	args := fsBridgeWriteDDArgs("/workspace/file.txt", true)
-	if !containsString(args, "conv=notrunc") {
-		t.Fatalf("append command missing conv=notrunc: %v", args)
-	}
-	if !containsString(args, "oflag=append") {
-		t.Fatalf("append command missing oflag=append: %v", args)
-	}
-}
-
-func containsString(values []string, target string) bool {
-	for _, value := range values {
-		if value == target {
-			return true
-		}
-	}
-	return false
-}

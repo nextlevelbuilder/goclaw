@@ -34,7 +34,7 @@ func (p *CodexProvider) buildRequestBody(req ChatRequest, stream bool) map[strin
 			}
 
 		case "user":
-			if len(m.Images) > 0 {
+			if len(m.Images) > 0 || len(m.Videos) > 0 {
 				var parts []map[string]any
 				for _, img := range m.Images {
 					parts = append(parts, map[string]any{
@@ -42,6 +42,7 @@ func (p *CodexProvider) buildRequestBody(req ChatRequest, stream bool) map[strin
 						"image_url": fmt.Sprintf("data:%s;base64,%s", img.MimeType, img.Data),
 					})
 				}
+				// Videos are not supported by Codex, they are omitted here.
 				if m.Content != "" {
 					parts = append(parts, map[string]any{
 						"type": "input_text",

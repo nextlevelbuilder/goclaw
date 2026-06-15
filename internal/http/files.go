@@ -95,11 +95,16 @@ func (h *FilesHandler) auth(next http.HandlerFunc) http.HandlerFunc {
 
 // deniedFilePrefixes blocks access to sensitive system directories.
 // Defense-in-depth: the auth token is the primary barrier, but restricting
-// known-sensitive paths limits damage if a token leaks.
+// known-sensitive absolute paths limits damage if a token leaks or a root is
+// misconfigured. All entries must be absolute paths because hasDeniedFilePrefix
+// uses pathWithinDir semantics — relative-rooted entries (e.g. "/.ssh") would
+// only block the literal filesystem subtree at that root, not user home dirs.
 var deniedFilePrefixes = []string{
 	"/etc/", "/proc/", "/sys/", "/dev/",
 	"/root/", "/boot/", "/run/",
-	"/var/run/", "/var/log/",
+	"/var/run/", "/var/log/", "/var/lib/", "/var/www/",
+	"/home/", "/Users/",
+	"/opt/", "/srv/",
 }
 
 func (h *FilesHandler) handleServe(w http.ResponseWriter, r *http.Request) {
@@ -127,6 +132,14 @@ func (h *FilesHandler) handleServe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	signed := r.URL.Query().Get("ft") != ""
+	// Fail-closed observability: if no boundary roots are configured at all,
+	// lexicallyAllowsFilePath already returns false, but log explicitly so
+	// operators can detect misconfigured deployments.
+	if h.workspace == "" && h.dataDir == "" {
+		slog.Warn("security.files_no_boundary", "path", absPath)
+		http.NotFound(w, r)
+		return
+	}
 	if !h.lexicallyAllowsFilePath(r, absPath, signed) {
 		slog.Warn("security.files_path_denied", "path", absPath, "workspace", h.workspace, "data_dir", h.dataDir)
 		http.NotFound(w, r)

@@ -447,7 +447,7 @@
       },
       "errors": {
         "invalidName": "请使用小写字母、数字、连字符、下划线（2-64 字符）。",
-        "invalidDomain": "必须是有效的 Bitrix24 域名（例如：mycorp.bitrix24.com）。",
+        "invalidDomain": "必须是有效的主机名（例如：mycorp.bitrix24.com、mycorp.bitrix24.vn 或你的自托管域名）。",
         "duplicateName": "门户名称已存在。",
         "forbidden": "您需要租户管理员权限才能创建门户。",
         "gatewayURLUnknown": "请先通过公网 URL（非 localhost）打开 goclaw UI 然后重试。"

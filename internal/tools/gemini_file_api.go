@@ -264,3 +264,153 @@ func parseGeminiResponse(respBody []byte) (*providers.ChatResponse, error) {
 		},
 	}, nil
 }
+
+// geminiFileUploadStream uploads a file stream to Gemini File API using resumable upload protocol.
+// Returns the file name (e.g. "files/abc123") and file URI for use in generateContent.
+func geminiFileUploadStream(ctx context.Context, apiKey, displayName string, reader io.Reader, contentLength int64, mime string) (fileName, fileURI string, err error) {
+	// Step 1: Initiate resumable upload.
+	initBody, _ := json.Marshal(map[string]any{
+		"file": map[string]string{"display_name": displayName},
+	})
+	initReq, err := http.NewRequestWithContext(ctx, "POST", geminiUploadBase+"?key="+apiKey, bytes.NewReader(initBody))
+	if err != nil {
+		return "", "", fmt.Errorf("create init request: %w", err)
+	}
+	initReq.Header.Set("Content-Type", "application/json")
+	initReq.Header.Set("X-Goog-Upload-Protocol", "resumable")
+	initReq.Header.Set("X-Goog-Upload-Command", "start")
+	initReq.Header.Set("X-Goog-Upload-Header-Content-Length", fmt.Sprintf("%d", contentLength))
+	initReq.Header.Set("X-Goog-Upload-Header-Content-Type", mime)
+
+	client := &http.Client{Timeout: 60 * time.Second}
+	initResp, err := client.Do(initReq)
+	if err != nil {
+		return "", "", fmt.Errorf("init upload: %w", err)
+	}
+	defer initResp.Body.Close()
+	io.ReadAll(initResp.Body) // drain
+
+	if initResp.StatusCode != 200 {
+		return "", "", fmt.Errorf("init upload HTTP %d", initResp.StatusCode)
+	}
+
+	uploadURL := initResp.Header.Get("X-Goog-Upload-URL")
+	if uploadURL == "" {
+		return "", "", fmt.Errorf("no upload URL in response headers")
+	}
+
+	// Step 2: Upload file stream.
+	uploadReq, err := http.NewRequestWithContext(ctx, "POST", uploadURL, reader)
+	if err != nil {
+		return "", "", fmt.Errorf("create upload request: %w", err)
+	}
+	uploadReq.ContentLength = contentLength
+	uploadReq.Header.Set("Content-Length", fmt.Sprintf("%d", contentLength))
+	uploadReq.Header.Set("X-Goog-Upload-Offset", "0")
+	uploadReq.Header.Set("X-Goog-Upload-Command", "upload, finalize")
+
+	// Do not set global Timeout on the HTTP client here because we are piping a potentially large stream.
+	uploadClient := &http.Client{}
+	uploadResp, err := uploadClient.Do(uploadReq)
+	if err != nil {
+		return "", "", fmt.Errorf("upload stream: %w", err)
+	}
+	defer uploadResp.Body.Close()
+
+	respBody, err := io.ReadAll(uploadResp.Body)
+	if err != nil {
+		return "", "", fmt.Errorf("read upload response: %w", err)
+	}
+	if uploadResp.StatusCode != 200 {
+		return "", "", fmt.Errorf("upload HTTP %d: %s", uploadResp.StatusCode, truncateStr(string(respBody), 500))
+	}
+
+	var uploadResult struct {
+		File struct {
+			Name  string `json:"name"`
+			URI   string `json:"uri"`
+			State string `json:"state"`
+		} `json:"file"`
+	}
+	if err := json.Unmarshal(respBody, &uploadResult); err != nil {
+		return "", "", fmt.Errorf("parse upload response: %w", err)
+	}
+
+	// Only return URI if file is already ACTIVE; otherwise caller must poll.
+	if uploadResult.File.State == "ACTIVE" {
+		return uploadResult.File.Name, uploadResult.File.URI, nil
+	}
+	return uploadResult.File.Name, "", nil
+}
+
+// geminiFileAPICallStream uploads a file stream via Gemini File API, polls until ready,
+// then calls generateContent with file_data reference.
+func geminiFileAPICallStream(ctx context.Context, apiKey, model, prompt string, reader io.Reader, contentLength int64, mime string, httpTimeout time.Duration) (*providers.ChatResponse, error) {
+	displayName := fmt.Sprintf("goclaw_%d", time.Now().UnixNano())
+
+	slog.Info("gemini file api: uploading stream", "size", contentLength, "mime", mime)
+	fileName, fileURI, err := geminiFileUploadStream(ctx, apiKey, displayName, reader, contentLength, mime)
+	if err != nil {
+		return nil, fmt.Errorf("upload: %w", err)
+	}
+	slog.Info("gemini file api: uploaded stream", "name", fileName)
+
+	// If file URI not returned directly, poll for it.
+	if fileURI == "" {
+		slog.Info("gemini file api: polling for active state", "name", fileName)
+		fileURI, err = geminiFilePoll(ctx, apiKey, fileName)
+		if err != nil {
+			return nil, fmt.Errorf("poll: %w", err)
+		}
+	}
+	slog.Info("gemini file api: file active", "uri", fileURI)
+
+	// Call generateContent with file_data reference.
+	body := map[string]any{
+		"contents": []map[string]any{
+			{
+				"parts": []map[string]any{
+					{"file_data": map[string]any{"mime_type": mime, "file_uri": fileURI}},
+					{"text": prompt},
+				},
+			},
+		},
+		"generationConfig": map[string]any{
+			"maxOutputTokens": 16384,
+			"temperature":     0.2,
+		},
+	}
+
+	bodyJSON, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", model, apiKey)
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(bodyJSON))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	if httpTimeout == 0 {
+		httpTimeout = 120 * time.Second
+	}
+	client := &http.Client{Timeout: httpTimeout}
+	httpResp, err := client.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("HTTP request: %w", err)
+	}
+	defer httpResp.Body.Close()
+
+	respBody, err := io.ReadAll(httpResp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+	if httpResp.StatusCode != 200 {
+		return nil, fmt.Errorf("HTTP %d: %s", httpResp.StatusCode, truncateStr(string(respBody), 500))
+	}
+
+	// Parse — same response format as geminiNativeDocumentCall.
+	return parseGeminiResponse(respBody)
+}

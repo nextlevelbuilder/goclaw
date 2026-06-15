@@ -45,6 +45,11 @@ func (p *OpenAIProvider) doRequest(ctx context.Context, body any) (io.ReadCloser
 	if p.siteTitle != "" {
 		httpReq.Header.Set("X-Title", p.siteTitle)
 	}
+	// Static per-provider headers (e.g. fixed User-Agent for kimi_coding).
+	// Applied after the standard headers so providers can override them if needed.
+	for k, v := range p.extraHeaders {
+		httpReq.Header.Set(k, v)
+	}
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
