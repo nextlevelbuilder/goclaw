@@ -206,6 +206,32 @@ func TestService_EnableJob_NotFound(t *testing.T) {
 	}
 }
 
+func TestService_GetJob_ReturnsSnapshot(t *testing.T) {
+	dir := t.TempDir()
+	storePath := filepath.Join(dir, "cron.json")
+	cs := NewService(storePath, nil)
+
+	interval := int64(60000)
+	job, err := cs.AddJob("snapshot-job", Schedule{Kind: "every", EveryMS: &interval}, "hello", false, "", "", "agent-1")
+	if err != nil {
+		t.Fatalf("AddJob error: %v", err)
+	}
+
+	found, ok := cs.GetJob(job.ID)
+	if !ok {
+		t.Fatal("job should exist")
+	}
+	found.State.LastStatus = "mutated"
+
+	again, ok := cs.GetJob(job.ID)
+	if !ok {
+		t.Fatal("job should still exist")
+	}
+	if again.State.LastStatus == "mutated" {
+		t.Fatal("GetJob should return a snapshot, not internal service state")
+	}
+}
+
 // --- At-schedule sets DeleteAfterRun ---
 
 func TestService_AddJob_AtSchedule_DeleteAfterRun(t *testing.T) {
@@ -235,18 +261,50 @@ func TestService_StartStop_JobExecution(t *testing.T) {
 
 	cs := NewService(storePath, handler)
 
-	interval := int64(50)
-	_, err := cs.AddJob("fast", Schedule{Kind: "every", EveryMS: &interval}, "tick", false, "", "", "")
+	if err := cs.Start(); err != nil {
+		t.Fatalf("Start error: %v", err)
+	}
+	defer cs.Stop()
+
+	interval := int64(time.Hour / time.Millisecond)
+	job, err := cs.AddJob("fast", Schedule{Kind: "every", EveryMS: &interval}, "tick", false, "", "", "")
 	if err != nil {
 		t.Fatalf("AddJob error: %v", err)
 	}
 
-	if err := cs.Start(); err != nil {
-		t.Fatalf("Start error: %v", err)
+	cs.mu.Lock()
+	foundJob := false
+	for i := range cs.store.Jobs {
+		if cs.store.Jobs[i].ID == job.ID {
+			due := nowMS()
+			cs.store.Jobs[i].State.NextRunAtMS = &due
+			foundJob = true
+			break
+		}
 	}
+	if !foundJob {
+		cs.mu.Unlock()
+		t.Fatalf("job %s not found in store", job.ID)
+	}
+	if err := cs.saveUnsafe(); err != nil {
+		cs.mu.Unlock()
+		t.Fatalf("save due job: %v", err)
+	}
+	cs.mu.Unlock()
 
-	// fast tick = 20ms; wait enough for several ticks + at least 1 due fire
-	time.Sleep(120 * time.Millisecond)
+	deadline := time.Now().Add(500 * time.Millisecond)
+	ran := false
+	for time.Now().Before(deadline) {
+		found, ok := cs.GetJob(job.ID)
+		if ok && found.State.LastRunAtMS != nil {
+			ran = true
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if !ran {
+		t.Fatal("expected persisted job execution before deadline")
+	}
 	cs.Stop()
 
 	count := execCount.Load()
