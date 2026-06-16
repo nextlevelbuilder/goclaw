@@ -226,12 +226,53 @@ func (c *Channel) verifyBot(ctx context.Context, botID int) (bool, error) {
 		return false, errors.New("bitrix24 verify: client not initialised")
 	}
 
-	resp, err := client.Call(ctx, "imbot.v2.Bot.list", nil)
+	found, err := c.forEachBotPage(ctx, client, func(resp *RawResult) bool {
+		return responseContainsBotID(resp, botID)
+	})
 	if err != nil {
 		return false, fmt.Errorf("bitrix24 verify: %w", err)
 	}
+	return found, nil
+}
 
-	return responseContainsBotID(resp, botID), nil
+// botListPageLimit matches the imbot.v2.Bot.list default page size (50). We page
+// explicitly via limit/offset and honor result.hasNextPage so portals with more
+// than one page of bots are fully scanned — scanning only page 1 makes
+// verify/lookup silently fail for any bot past the first 50.
+const botListPageLimit = 50
+
+// maxBotListPages backstops the pagination loop against a server that keeps
+// reporting hasNextPage=true (or a non-advancing offset). 40 pages = 2000 bots,
+// far beyond any real application.
+const maxBotListPages = 40
+
+// forEachBotPage pages through imbot.v2.Bot.list and calls scan on each page's
+// raw result. scan returns true to stop early (match found). Returns
+// (true, nil) on a match, (false, nil) when all pages are exhausted with no
+// match, (false, err) on a transport error. Legacy non-paginated envelopes
+// (no hasNextPage field) are treated as a single page and stop after one call.
+func (c *Channel) forEachBotPage(ctx context.Context, client *Client, scan func(*RawResult) bool) (bool, error) {
+	offset := 0
+	for page := 0; page < maxBotListPages; page++ {
+		resp, err := client.Call(ctx, "imbot.v2.Bot.list", map[string]any{
+			"limit":  botListPageLimit,
+			"offset": offset,
+		})
+		if err != nil {
+			return false, err
+		}
+		if scan(resp) {
+			return true, nil
+		}
+		var p struct {
+			HasNextPage bool `json:"hasNextPage"`
+		}
+		if err := json.Unmarshal(resp.Result, &p); err != nil || !p.HasNextPage {
+			return false, nil
+		}
+		offset += botListPageLimit
+	}
+	return false, nil
 }
 
 // findBotIDByCode scans the portal for a bot whose CODE equals the given
@@ -246,12 +287,17 @@ func (c *Channel) findBotIDByCode(ctx context.Context, code string) (int, error)
 		return 0, errors.New("bitrix24 find: client not initialised")
 	}
 
-	resp, err := client.Call(ctx, "imbot.v2.Bot.list", nil)
-	if err != nil {
+	var foundID int
+	if _, err := c.forEachBotPage(ctx, client, func(resp *RawResult) bool {
+		if id := findBotIDByCodeInResponse(resp, code); id > 0 {
+			foundID = id
+			return true
+		}
+		return false
+	}); err != nil {
 		return 0, fmt.Errorf("bitrix24 find-by-code: %w", err)
 	}
-
-	return findBotIDByCodeInResponse(resp, code), nil
+	return foundID, nil
 }
 
 // fetchAvatarBase64 downloads an image and returns it base64-encoded.

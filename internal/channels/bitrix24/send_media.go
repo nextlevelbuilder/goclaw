@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -16,6 +17,11 @@ import (
 // of Base64 content, but we keep a tighter ceiling so the POST body (Base64
 // inflates the payload by ~33%) stays reasonable. Normally cfg.MediaMaxMB wins.
 const maxOutboundMediaBytesFallback = 20 * 1024 * 1024
+
+// maxOutboundFiles caps how many attachments a single outbound message uploads,
+// mirroring maxInboundFiles. Stops an LLM that emits a large result.Media (or
+// many MEDIA: tokens) from triggering a serial REST upload storm + RAM spike.
+const maxOutboundFiles = 10
 
 // outboundMediaCap returns the per-file outbound size limit in bytes, honoring
 // the same cfg.MediaMaxMB knob used for inbound so the two directions stay
@@ -43,8 +49,15 @@ func (c *Channel) sendMedia(ctx context.Context, msg bus.OutboundMessage) error 
 		return fmt.Errorf("bitrix24: channel not initialised for media upload")
 	}
 
+	media := msg.Media
+	if len(media) > maxOutboundFiles {
+		slog.Warn("bitrix24: too many outbound attachments, capping",
+			"chat_id", msg.ChatID, "total", len(media), "cap", maxOutboundFiles)
+		media = media[:maxOutboundFiles]
+	}
+
 	var firstErr error
-	for _, m := range msg.Media {
+	for _, m := range media {
 		if err := c.uploadOneFile(ctx, client, botID, msg.ChatID, m); err != nil {
 			slog.Warn("bitrix24: media upload failed, skipping file",
 				"chat_id", msg.ChatID, "path", m.URL, "err", err)
@@ -63,16 +76,23 @@ func (c *Channel) uploadOneFile(ctx context.Context, client *Client, botID int, 
 	if m.URL == "" {
 		return fmt.Errorf("empty media path")
 	}
-	info, err := os.Stat(m.URL)
+	// Bounded read IS the size gate (no TOCTOU). A separate os.Stat size-check
+	// then os.ReadFile would let the file grow past the cap between the two — the
+	// agent's own .uploads/ workspace is writable by concurrent tool/agent runs.
+	// Reading cap+1 via LimitReader detects an over-cap file at read time and
+	// caps the bytes loaded into memory regardless.
+	maxBytes := c.outboundMediaCap()
+	fh, err := os.Open(m.URL)
 	if err != nil {
-		return fmt.Errorf("stat: %w", err)
+		return fmt.Errorf("open: %w", err)
 	}
-	if cap := c.outboundMediaCap(); info.Size() > cap {
-		return fmt.Errorf("file %d bytes exceeds cap %d", info.Size(), cap)
-	}
-	data, err := os.ReadFile(m.URL)
+	defer fh.Close()
+	data, err := io.ReadAll(io.LimitReader(fh, maxBytes+1))
 	if err != nil {
 		return fmt.Errorf("read: %w", err)
+	}
+	if int64(len(data)) > maxBytes {
+		return fmt.Errorf("file exceeds cap %d bytes", maxBytes)
 	}
 
 	// Base64 content must NOT carry a data:*/*;base64, prefix (Bitrix requirement).
@@ -90,6 +110,6 @@ func (c *Channel) uploadOneFile(ctx context.Context, client *Client, botID int, 
 		return fmt.Errorf("imbot.v2.File.upload: %w", err)
 	}
 	slog.Info("bitrix24: uploaded outbound file",
-		"chat_id", dialogID, "name", filepath.Base(m.URL), "bytes", info.Size())
+		"chat_id", dialogID, "name", filepath.Base(m.URL), "bytes", len(data))
 	return nil
 }

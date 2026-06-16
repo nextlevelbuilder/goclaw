@@ -24,6 +24,10 @@ const (
 	// inboundDownloadTimeout bounds a single file download. The REST client's
 	// 15s timeout is tuned for JSON calls; media needs a longer, dedicated one.
 	inboundDownloadTimeout = 5 * time.Minute
+	// maxInboundRedirects caps redirect hops on a download (each re-validated by
+	// CheckRedirect). Bitrix download links rarely redirect; a low cap limits a
+	// redirect-loop / SSRF-probe before the per-hop host check even runs.
+	maxInboundRedirects = 5
 )
 
 // fileDownloadResult mirrors the imbot.v2.File.download result envelope.
@@ -63,7 +67,31 @@ func (c *Channel) downloadEventFiles(ctx context.Context, botID int, files []Eve
 		files = files[:maxInboundFiles]
 	}
 
-	hc := &http.Client{Timeout: inboundDownloadTimeout}
+	// SSRF guard on redirects. fetchOneFile validates the *initial* downloadUrl
+	// host against the portal domain, but Go's default client then follows up to
+	// 10 redirects WITHOUT re-checking — a 3xx could send us to an internal
+	// service (cloud metadata 169.254.169.254, internal Redis, etc.). Re-validate
+	// every hop: only http(s), and never a private/loopback/link-local host.
+	// Public-host redirects (e.g. a Bitrix disk/CDN domain) are still allowed so
+	// legitimate downloads keep working. Mirrors the avatar-fetch guard in
+	// register.go.
+	hc := &http.Client{
+		Timeout: inboundDownloadTimeout,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= maxInboundRedirects {
+				return fmt.Errorf("too many redirects (%d)", len(via))
+			}
+			switch strings.ToLower(req.URL.Scheme) {
+			case "http", "https":
+			default:
+				return fmt.Errorf("redirect to unsupported scheme %q", req.URL.Scheme)
+			}
+			if isPrivateOrLoopback(req.URL.Hostname()) {
+				return fmt.Errorf("redirect to private/loopback host %q blocked", req.URL.Hostname())
+			}
+			return nil
+		},
+	}
 	var out []bus.MediaFile
 	for _, f := range files {
 		// Pre-flight size check — skip oversized files without a download attempt.

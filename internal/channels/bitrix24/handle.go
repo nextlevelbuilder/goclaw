@@ -188,13 +188,15 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 	// Capture it so the reply can echo the same tag — the connector parses the
 	// leading tag to route the answer back to the right external person. Strip it
 	// from the body the agent sees so the LLM can't accidentally duplicate it.
-	// The generic name-only "[Name] " layout is only honoured for Open Channel
-	// sessions (isOpenChannel) to avoid matching ordinary group chat text; the
-	// id-bearing layouts are unambiguous so they apply to any group. Plain chats
-	// return "" → no-op.
+	//
+	// Gated to Open Channel ONLY: the tag is meaningful solely for connector
+	// routing. Ordinary group chats (CRM deal/task chats) must never have their
+	// "[x] …"-shaped text mistaken for a sender tag — that would both echo a
+	// bogus prefix and widen the surface for a forged-tag misroute. Plain group
+	// chats / DMs → no-op.
 	var senderPrefix string
-	if isGroup {
-		if p, rest := extractOpenlineSenderPrefix(text, isOpenChannel); p != "" {
+	if isOpenChannel {
+		if p, rest := extractOpenlineSenderPrefix(text, true); p != "" {
 			senderPrefix = p
 			text = strings.TrimSpace(rest)
 		}
@@ -243,12 +245,12 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 		visibility = VisibilityWhisper
 	}
 	meta := map[string]string{
-		"bitrix_dialog_id":  evt.Params.DialogID,
-		"bitrix_portal":     c.portalDomainSafe(),
-		"bitrix_bot_id":     strconv.Itoa(c.BotID()),
-		"bitrix_bot_code":   c.cfg.BotCode,
-		MetaKeyMessageID:    evt.Params.MessageID,
-		MetaKeyVisibility:   visibility,
+		"bitrix_dialog_id": evt.Params.DialogID,
+		"bitrix_portal":    c.portalDomainSafe(),
+		"bitrix_bot_id":    strconv.Itoa(c.BotID()),
+		"bitrix_bot_code":  c.cfg.BotCode,
+		MetaKeyMessageID:   evt.Params.MessageID,
+		MetaKeyVisibility:  visibility,
 	}
 	// Echo the openline sender tag back on the reply (see capture above).
 	if senderPrefix != "" {
