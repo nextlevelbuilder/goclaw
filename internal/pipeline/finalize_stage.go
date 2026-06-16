@@ -40,12 +40,23 @@ func (s *FinalizeStage) Execute(ctx context.Context, state *RunState) error {
 
 	// 2. NO_REPLY detection: save to session for context but mark as silent.
 	// Must run BEFORE session flush so the agent message is persisted even if suppressed.
-	isSilent := s.deps.IsSilentReply != nil && s.deps.IsSilentReply(state.Observe.FinalContent)
+	isSilentByToken := s.deps.IsSilentReply != nil && s.deps.IsSilentReply(state.Observe.FinalContent)
 
-	// 2b. Fallback for empty content (matching v2: channels need non-empty content to deliver).
-	if state.Observe.FinalContent == "" && !isSilent {
-		state.Observe.FinalContent = "..."
+	// 2b. Empty final content: suppress delivery instead of sending placeholder "...".
+	// Distinguish from NO_REPLY (which is the model's deliberate silence) so debugging
+	// can spot when the model returned no usable content (provider parsing bug, context
+	// exhaustion, reasoning-only output, etc.). Treat both as silent for delivery purposes.
+	isEmptyOutput := state.Observe.FinalContent == "" && !isSilentByToken
+	if isEmptyOutput {
+		slog.Warn("agent produced empty final content; suppressing delivery",
+			"session", state.Input.SessionKey,
+			"iteration", state.Iteration,
+			"thinking_len", len(state.Observe.FinalThinking),
+			"tool_calls", state.Tool.TotalToolCalls,
+			"async_tool_calls", len(state.Tool.AsyncToolCalls),
+		)
 	}
+	isSilent := isSilentByToken || isEmptyOutput
 
 	// 2c. Append content suffix (e.g. image markdown for WS) with dedup.
 	if state.Input.ContentSuffix != "" && s.deps.DeduplicateMediaSuffix != nil {
@@ -148,10 +159,13 @@ func (s *FinalizeStage) Execute(ctx context.Context, state *RunState) error {
 		state.Observe.FinalContent = s.deps.StripMessageDirectives(state.Observe.FinalContent)
 	}
 
-	// 10. Suppress NO_REPLY (after session flush — content is persisted for context).
+	// 10. Suppress silent replies (after session flush — content is persisted for context).
+	// Covers both NO_REPLY token (deliberate) and empty output (likely upstream issue).
 	if isSilent {
-		slog.Info("v3 pipeline: NO_REPLY detected, suppressing delivery",
-			"session", state.Input.SessionKey)
+		if isSilentByToken {
+			slog.Info("v3 pipeline: NO_REPLY detected, suppressing delivery",
+				"session", state.Input.SessionKey)
+		}
 		state.Observe.FinalContent = ""
 	}
 

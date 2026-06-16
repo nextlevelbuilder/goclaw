@@ -54,8 +54,22 @@ func (l *Loop) finalizeRun(
 	// 5. Full sanitization pipeline (matching TS extractAssistantText + sanitizeUserFacingText)
 	rs.finalContent = SanitizeAssistantContent(rs.finalContent)
 
-	// 6. Handle NO_REPLY: save to session for context but mark as silent.
-	isSilent := IsSilentReply(rs.finalContent)
+	// 6. Silent-reply detection. Two cases collapse to the same delivery behavior
+	// (suppress) but stay distinct in logs so empty-output bugs don't hide behind
+	// the deliberate NO_REPLY signal.
+	isSilentByToken := IsSilentReply(rs.finalContent)
+	isEmptyOutput := rs.finalContent == "" && !isSilentByToken
+	if isEmptyOutput {
+		slog.Warn("agent produced empty final content; suppressing delivery",
+			"agent", l.id,
+			"session", req.SessionKey,
+			"iteration", rs.iteration,
+			"thinking_len", len(rs.finalThinking),
+			"tool_calls", rs.totalToolCalls,
+			"async_tool_calls", len(rs.asyncToolCalls),
+		)
+	}
+	isSilent := isSilentByToken || isEmptyOutput
 
 	// 5b. Skill evolution: postscript suggestion after complex tasks.
 	if l.skillEvolve && l.skillNudgeInterval > 0 &&
@@ -64,15 +78,6 @@ func (l *Loop) finalizeRun(
 		rs.skillPostscriptSent = true
 		locale := store.LocaleFromContext(ctx)
 		rs.finalContent += "\n\n---\n_" + i18n.T(locale, i18n.MsgSkillNudgePostscript) + "_"
-	}
-
-	// 7. Fallback for empty content
-	if rs.finalContent == "" {
-		if len(rs.asyncToolCalls) > 0 {
-			rs.finalContent = "..."
-		} else {
-			rs.finalContent = "..."
-		}
 	}
 
 	// Append content suffix (e.g. image markdown for WS) before saving to session.
@@ -197,8 +202,10 @@ func (l *Loop) finalizeRun(
 	// 8. Metadata Stripping: Clean internal [[...]] tags for user-facing content
 	rs.finalContent = StripMessageDirectives(rs.finalContent)
 	if isSilent {
-		slog.Info("agent loop: NO_REPLY detected, suppressing delivery",
-			"agent", l.id, "session", req.SessionKey)
+		if isSilentByToken {
+			slog.Info("agent loop: NO_REPLY detected, suppressing delivery",
+				"agent", l.id, "session", req.SessionKey)
+		}
 		rs.finalContent = ""
 	}
 

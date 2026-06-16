@@ -2440,6 +2440,76 @@ func TestFinalizeStage_SanitizesContent(t *testing.T) {
 	}
 }
 
+// TestFinalizeStage_EmptyContent_SuppressesInsteadOfEllipsis verifies that
+// empty FinalContent is treated as silent (suppressed delivery), NOT replaced
+// with literal "...". Regression guard for trace 019e01c2 where users saw
+// stray "..." messages in chat when the LLM produced no usable content.
+func TestFinalizeStage_EmptyContent_SuppressesInsteadOfEllipsis(t *testing.T) {
+	t.Parallel()
+	deps := &PipelineDeps{
+		// IsSilentReply must be wired so the stage knows to distinguish empty
+		// from NO_REPLY. Mirror production wiring (returns true for NO_REPLY token).
+		IsSilentReply: func(s string) bool {
+			return strings.HasPrefix(strings.TrimSpace(s), "NO_REPLY")
+		},
+		FlushMessages: func(_ context.Context, _ string, _ []providers.Message) error { return nil },
+	}
+	stage := NewFinalizeStage(deps)
+	state := defaultState()
+	state.Observe.FinalContent = ""
+
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if state.Observe.FinalContent != "" {
+		t.Errorf("FinalContent = %q, want empty (suppressed, not '...')", state.Observe.FinalContent)
+	}
+}
+
+// TestFinalizeStage_NoReplyToken_StillSuppresses verifies NO_REPLY semantics
+// remain unchanged after the empty-content fix.
+func TestFinalizeStage_NoReplyToken_StillSuppresses(t *testing.T) {
+	t.Parallel()
+	deps := &PipelineDeps{
+		SanitizeContent: func(s string) string { return s },
+		IsSilentReply: func(s string) bool {
+			return strings.HasPrefix(strings.TrimSpace(s), "NO_REPLY")
+		},
+		FlushMessages: func(_ context.Context, _ string, _ []providers.Message) error { return nil },
+	}
+	stage := NewFinalizeStage(deps)
+	state := defaultState()
+	state.Observe.FinalContent = "NO_REPLY: just observing"
+
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if state.Observe.FinalContent != "" {
+		t.Errorf("FinalContent = %q, want empty after NO_REPLY suppression", state.Observe.FinalContent)
+	}
+}
+
+// TestFinalizeStage_RealContent_PassesThrough verifies non-empty,
+// non-NO_REPLY content reaches downstream unchanged (modulo sanitize).
+func TestFinalizeStage_RealContent_PassesThrough(t *testing.T) {
+	t.Parallel()
+	deps := &PipelineDeps{
+		SanitizeContent: func(s string) string { return s },
+		IsSilentReply:   func(string) bool { return false },
+		FlushMessages:   func(_ context.Context, _ string, _ []providers.Message) error { return nil },
+	}
+	stage := NewFinalizeStage(deps)
+	state := defaultState()
+	state.Observe.FinalContent = "real reply"
+
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if state.Observe.FinalContent != "real reply" {
+		t.Errorf("FinalContent = %q, want 'real reply'", state.Observe.FinalContent)
+	}
+}
+
 func TestFinalizeStage_DeduplicatesMediaByPath(t *testing.T) {
 	t.Parallel()
 	deps := &PipelineDeps{}
