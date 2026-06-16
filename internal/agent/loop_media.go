@@ -109,6 +109,25 @@ func confineToWorkspace(mediaPath, workspace string) (string, bool) {
 	return cleaned, true
 }
 
+// confineToAnyRoot accepts mediaPath if it is contained by ANY of the allowed
+// roots (each checked with the hardened confineToWorkspace). Used for the
+// result.Media egress: a tool's media legitimately lives in the agent
+// workspace, the team workspace, OR a tenant-allowed path — the same scopes the
+// producing tools (create_*, send_file, delegate) validate against. A path
+// outside every root (e.g. /etc/passwd from a prompt-injected path) is rejected,
+// so the egress guard holds without dropping legitimate cross-workspace media.
+func confineToAnyRoot(mediaPath string, roots []string) (string, bool) {
+	for _, root := range roots {
+		if root == "" {
+			continue
+		}
+		if cleaned, ok := confineToWorkspace(mediaPath, root); ok {
+			return cleaned, true
+		}
+	}
+	return "", false
+}
+
 // extractMediaFromContent scans text for MEDIA:<path> tokens the LLM may echo
 // in its final response (e.g. when a tool returned the MEDIA: prefix as plain
 // text instead of setting Result.Media). Relative paths are resolved against

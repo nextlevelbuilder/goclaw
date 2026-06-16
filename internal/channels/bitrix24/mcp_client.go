@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -169,9 +170,9 @@ func (c *mcpClient) autoOnboard(ctx context.Context, req autoOnboardRequest) (*a
 		case resp.StatusCode >= 400 && resp.StatusCode < 500:
 			// Auth / config errors are non-retryable — surface the body so
 			// operators can see the domain / access_token mismatch.
-			return nil, fmt.Errorf("mcp auto-onboard: %d %s: %s", resp.StatusCode, http.StatusText(resp.StatusCode), truncateMCPBody(string(out), 500))
+			return nil, fmt.Errorf("mcp auto-onboard: %d %s: %s", resp.StatusCode, http.StatusText(resp.StatusCode), truncateMCPBody(redactMCPBody(string(out)), 500))
 		default:
-			lastErr = fmt.Errorf("mcp auto-onboard: %d %s: %s", resp.StatusCode, http.StatusText(resp.StatusCode), truncateMCPBody(string(out), 500))
+			lastErr = fmt.Errorf("mcp auto-onboard: %d %s: %s", resp.StatusCode, http.StatusText(resp.StatusCode), truncateMCPBody(redactMCPBody(string(out)), 500))
 			// fall through to retry
 		}
 	}
@@ -205,4 +206,17 @@ func truncateMCPBody(s string, n int) string {
 		return s
 	}
 	return s[:n] + "…"
+}
+
+// mcpTokenRedactRe scrubs OAuth secrets from an MCP response body. The POST we
+// send carries access_token / refresh_token (the Bitrix→MCP onboarding bridge);
+// a naive MCP server that echoes the request back in its 4xx/5xx error body
+// would otherwise leak those tokens into goclaw logs, breaking the package's
+// "log token lengths, never values" discipline.
+var mcpTokenRedactRe = regexp.MustCompile(`(?i)("(?:access_token|refresh_token|client_secret)"\s*:\s*")[^"]*(")`)
+
+// redactMCPBody replaces OAuth secret values in an MCP body with a placeholder
+// before the body is interpolated into an error string / log line.
+func redactMCPBody(s string) string {
+	return mcpTokenRedactRe.ReplaceAllString(s, `${1}[redacted]${2}`)
 }
