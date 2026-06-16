@@ -184,14 +184,17 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 	text = strings.TrimSpace(text)
 
 	// Openline relays an external connector user with a sender tag at the start
-	// of the text (e.g. "[Name] #<connectorUserId>: <msg>"). Capture it so the
-	// reply can echo the same tag — the connector parses the leading tag to
-	// route the answer back to the right external person. Strip it from the body
-	// the agent sees so the LLM can't accidentally duplicate it. Only group
-	// (openline) messages carry this shape; plain chats return "" → no-op.
+	// of the text ("[Name #id]:", "[Name] #id:", or the short "[Name] <msg>").
+	// Capture it so the reply can echo the same tag — the connector parses the
+	// leading tag to route the answer back to the right external person. Strip it
+	// from the body the agent sees so the LLM can't accidentally duplicate it.
+	// The generic name-only "[Name] " layout is only honoured for Open Channel
+	// sessions (isOpenChannel) to avoid matching ordinary group chat text; the
+	// id-bearing layouts are unambiguous so they apply to any group. Plain chats
+	// return "" → no-op.
 	var senderPrefix string
 	if isGroup {
-		if p, rest := extractOpenlineSenderPrefix(text); p != "" {
+		if p, rest := extractOpenlineSenderPrefix(text, isOpenChannel); p != "" {
 			senderPrefix = p
 			text = strings.TrimSpace(rest)
 		}
