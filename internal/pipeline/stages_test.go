@@ -2440,6 +2440,35 @@ func TestFinalizeStage_SanitizesContent(t *testing.T) {
 	}
 }
 
+func TestFinalizeStage_SuppressesSilentReplyAfterFlush(t *testing.T) {
+	t.Parallel()
+	finalContent := "This is directed at Bảo Ly Content, not me. I should stay silent.NO_REPLY"
+	var flushed []providers.Message
+	deps := &PipelineDeps{
+		IsSilentReply: func(content string) bool {
+			return content == finalContent
+		},
+		FlushMessages: func(_ context.Context, _ string, messages []providers.Message) error {
+			flushed = append(flushed, messages...)
+			return nil
+		},
+	}
+	stage := NewFinalizeStage(deps)
+	state := defaultState()
+	state.Observe.FinalContent = finalContent
+
+	err := stage.Execute(context.Background(), state)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if state.Observe.FinalContent != "" {
+		t.Fatalf("FinalContent = %q, want empty after silent reply suppression", state.Observe.FinalContent)
+	}
+	if len(flushed) == 0 || flushed[len(flushed)-1].Content != finalContent {
+		t.Fatalf("flushed final content = %#v, want original silent reply persisted before suppression", flushed)
+	}
+}
+
 func TestFinalizeStage_DeduplicatesMediaByPath(t *testing.T) {
 	t.Parallel()
 	deps := &PipelineDeps{}
