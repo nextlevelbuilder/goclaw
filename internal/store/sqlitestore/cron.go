@@ -131,11 +131,13 @@ func scanCronRow(row cronRowScanner) (*store.CronJob, error) {
 	var intervalMS *int64
 	var payloadJSON []byte
 	createdAt, updatedAt := scanTimePair()
+	var providerID *uuid.UUID
+	var model *string
 
 	err := row.Scan(&id, &tenantID, &agentID, &userID, &name, &enabled, &scheduleKind, &cronExpr, &runAt, &tz,
 		&intervalMS, &payloadJSON, &deleteAfterRun, &stateless, &deliver, &deliverChannel, &deliverTo, &wakeHeartbeat,
 		&nextRunAt, &lastRunAt, &lastStatus, &lastError,
-		createdAt, updatedAt)
+		createdAt, updatedAt, &providerID, &model)
 	if err != nil {
 		return nil, err
 	}
@@ -163,6 +165,9 @@ func scanCronRow(row cronRowScanner) (*store.CronJob, error) {
 		DeliverTo:      deliverTo,
 		WakeHeartbeat:  wakeHeartbeat,
 	}
+
+	job.ProviderID = providerID
+	job.Model = model
 
 	if agentID != nil {
 		job.AgentID = agentID.String()
@@ -210,7 +215,7 @@ func (s *SQLiteCronStore) scanJob(ctx context.Context, id uuid.UUID) (*store.Cro
 	q := `SELECT id, tenant_id, agent_id, user_id, name, enabled, schedule_kind, cron_expression, run_at, timezone,
 		 interval_ms, payload, delete_after_run, stateless, deliver, deliver_channel, deliver_to, wake_heartbeat,
 		 next_run_at, last_run_at, last_status, last_error,
-		 created_at, updated_at FROM cron_jobs WHERE id = ?`
+		 created_at, updated_at, provider_id, model FROM cron_jobs WHERE id = ?`
 	args := []any{id}
 
 	if !store.IsCrossTenant(ctx) {

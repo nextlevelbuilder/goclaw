@@ -103,7 +103,7 @@ func (s *SQLiteCronStore) ListJobs(ctx context.Context, includeDisabled bool, ag
 	q := `SELECT id, tenant_id, agent_id, user_id, name, enabled, schedule_kind, cron_expression, run_at, timezone,
 		 interval_ms, payload, delete_after_run, stateless, deliver, deliver_channel, deliver_to, wake_heartbeat,
 		 next_run_at, last_run_at, last_status, last_error,
-		 created_at, updated_at FROM cron_jobs WHERE 1=1`
+		 created_at, updated_at, provider_id, model FROM cron_jobs WHERE 1=1`
 
 	var args []any
 
@@ -302,6 +302,12 @@ func (s *SQLiteCronStore) UpdateJob(ctx context.Context, jobID string, patch sto
 	}
 	if patch.WakeHeartbeat != nil {
 		updates["wake_heartbeat"] = *patch.WakeHeartbeat
+	}
+	if patch.ProviderID != nil {
+		updates["provider_id"] = *patch.ProviderID
+	}
+	if patch.Model != nil {
+		updates["model"] = *patch.Model
 	}
 
 	if patch.Message != "" {

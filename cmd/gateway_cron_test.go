@@ -41,6 +41,8 @@ func TestCronJobHandlerInjectsPayloadCredentialUserID(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
+		nil,
 	)
 
 	result, err := handler(&store.CronJob{
@@ -132,6 +134,8 @@ func TestCronJobHandlerSuppressesNoReplyDelivery(t *testing.T) {
 				sched,
 				mb,
 				&config.Config{},
+				nil,
+				nil,
 				nil,
 				nil,
 				nil,

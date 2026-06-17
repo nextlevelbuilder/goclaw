@@ -16,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 49
+const SchemaVersion = 50
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -30,6 +30,9 @@ const SchemaVersion = 49
 //
 // Then bump SchemaVersion to 2.
 var migrations = map[int]string{
+	// Version 49 → 50: per-cron-job LLM provider/model override (mirrors agent_heartbeats).
+	49: `ALTER TABLE cron_jobs ADD COLUMN provider_id TEXT REFERENCES llm_providers(id) ON DELETE SET NULL;
+ALTER TABLE cron_jobs ADD COLUMN model VARCHAR(200);`,
 	// Version 1 → 2: add contact_type column to channel_contacts.
 	1: `ALTER TABLE channel_contacts ADD COLUMN contact_type VARCHAR(20) NOT NULL DEFAULT 'user';`,
 	// Version 2 → 3: promote cron payload fields to dedicated columns + add stateless flag.

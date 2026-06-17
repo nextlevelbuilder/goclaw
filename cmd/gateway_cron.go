@@ -12,6 +12,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
 	"github.com/nextlevelbuilder/goclaw/internal/sessions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -24,7 +25,7 @@ import (
 // Safe because cron jobs only fire after Start(), well after this is set.
 var cronHeartbeatWakeFn func(agentID string)
 
-func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg *config.Config, channelMgr *channels.Manager, sessionMgr store.SessionStore, agentStore store.AgentStore) func(job *store.CronJob) (*store.CronJobResult, error) {
+func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg *config.Config, channelMgr *channels.Manager, sessionMgr store.SessionStore, agentStore store.AgentStore, providerStore store.ProviderStore, providerReg *providers.Registry) func(job *store.CronJob) (*store.CronJobResult, error) {
 	return func(job *store.CronJob) (*store.CronJobResult, error) {
 		agentID := job.AgentID
 		if agentID == "" && agentStore != nil {
@@ -97,6 +98,24 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 			sessionMgr.Save(cronCtx, sessionKey)
 		}
 
+		// Resolve per-job provider/model override (mirrors heartbeat). Unset → agent default.
+		var providerOverride providers.Provider
+		if job.ProviderID != nil && providerStore != nil && providerReg != nil {
+			if provData, perr := providerStore.GetProvider(cronCtx, *job.ProviderID); perr == nil {
+				if prov, gerr := providerReg.GetForTenant(job.TenantID, provData.Name); gerr == nil {
+					providerOverride = prov
+				} else {
+					slog.Warn("cron.provider_not_in_registry", "job", job.ID, "provider_id", job.ProviderID, "error", gerr)
+				}
+			} else {
+				slog.Warn("cron.provider_not_found", "job", job.ID, "provider_id", job.ProviderID, "error", perr)
+			}
+		}
+		var modelOverride string
+		if job.Model != nil {
+			modelOverride = *job.Model
+		}
+
 		// Schedule through cron lane — scheduler handles agent resolution and concurrency
 		outCh := sched.Schedule(cronCtx, scheduler.LaneCron, agent.RunRequest{
 			SessionKey:        sessionKey,
@@ -108,6 +127,8 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 			UserID:            job.UserID,
 			RunID:             fmt.Sprintf("cron:%s", job.ID),
 			Stream:            false,
+			ModelOverride:     modelOverride,
+			ProviderOverride:  providerOverride,
 			ExtraSystemPrompt: extraPrompt,
 			TraceName:         fmt.Sprintf("Cron [%s] - %s", job.Name, agentID),
 			TraceTags:         []string{"cron"},
