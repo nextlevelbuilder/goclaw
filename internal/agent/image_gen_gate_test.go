@@ -55,7 +55,7 @@ func TestImageGenGate_AllTrue_ToolPresent(t *testing.T) {
 	prov := &imageCapableProvider{imageGen: true}
 	l := buildImageGenLoop(true, prov)
 
-	defs, _, _ := l.buildFilteredTools(&RunRequest{}, false, 1, 10, nil)
+	defs, _, _ := l.buildFilteredTools(&RunRequest{}, false, 1, 10, nil, nil)
 
 	if !hasImageGenTool(defs) {
 		t.Error("expected image_generation tool when all gate conditions are true")
@@ -68,7 +68,7 @@ func TestImageGenGate_ProviderNoCapability_ToolAbsent(t *testing.T) {
 	prov := &imageCapableProvider{imageGen: false}
 	l := buildImageGenLoop(true, prov)
 
-	defs, _, _ := l.buildFilteredTools(&RunRequest{}, false, 1, 10, nil)
+	defs, _, _ := l.buildFilteredTools(&RunRequest{}, false, 1, 10, nil, nil)
 
 	if hasImageGenTool(defs) {
 		t.Error("image_generation must NOT be in tools when provider does not advertise ImageGeneration")
@@ -82,7 +82,7 @@ func TestImageGenGate_ProviderNotCapabilitiesAware_ToolAbsent(t *testing.T) {
 	prov := &stubProvider{}
 	l := buildImageGenLoop(true, prov)
 
-	defs, _, _ := l.buildFilteredTools(&RunRequest{}, false, 1, 10, nil)
+	defs, _, _ := l.buildFilteredTools(&RunRequest{}, false, 1, 10, nil, nil)
 
 	if hasImageGenTool(defs) {
 		t.Error("image_generation must NOT be in tools when provider is not CapabilitiesAware")
@@ -95,7 +95,7 @@ func TestImageGenGate_AgentConfigDisabled_ToolAbsent(t *testing.T) {
 	prov := &imageCapableProvider{imageGen: true}
 	l := buildImageGenLoop(false, prov) // allowImageGeneration = false
 
-	defs, _, _ := l.buildFilteredTools(&RunRequest{}, false, 1, 10, nil)
+	defs, _, _ := l.buildFilteredTools(&RunRequest{}, false, 1, 10, nil, nil)
 
 	if hasImageGenTool(defs) {
 		t.Error("image_generation must NOT be in tools when agent config disables it")
@@ -109,7 +109,7 @@ func TestImageGenGate_FinalIteration_AllToolsStripped(t *testing.T) {
 	l := buildImageGenLoop(true, prov)
 
 	// iteration == maxIter → final stripping path; gate never reached
-	defs, _, _ := l.buildFilteredTools(&RunRequest{}, false, 5, 5, nil)
+	defs, _, _ := l.buildFilteredTools(&RunRequest{}, false, 5, 5, nil, nil)
 
 	if len(defs) != 0 {
 		t.Errorf("final iteration must strip all tools; got %d: %v", len(defs), defs)
