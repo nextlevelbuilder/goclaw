@@ -14,6 +14,7 @@ type Service struct {
 	running   bool
 	stopChan  chan struct{}
 	loopWG    sync.WaitGroup
+	jobWG     sync.WaitGroup
 	mu        sync.Mutex
 	runLog    []RunLogEntry // in-memory run history (last 200 entries)
 	retryCfg  RetryConfig   // retry config for failed jobs
@@ -114,6 +115,7 @@ func (cs *Service) Stop() {
 	cs.mu.Unlock()
 
 	cs.loopWG.Wait()
+	cs.jobWG.Wait()
 	slog.Info("cron service stopped")
 }
 
@@ -220,10 +222,10 @@ func (cs *Service) GetJob(jobID string) (*Job, bool) {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 
-	for i, job := range cs.store.Jobs {
+	for _, job := range cs.store.Jobs {
 		if job.ID == jobID {
-			jobCopy := cs.store.Jobs[i]
-			return &jobCopy, true
+			result := job
+			return &result, true
 		}
 	}
 	return nil, false

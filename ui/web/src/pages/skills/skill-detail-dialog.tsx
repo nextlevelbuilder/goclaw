@@ -23,9 +23,10 @@ import { toast } from "@/stores/use-toast-store";
 import type { SkillInfo, SkillFile, SkillVersions } from "@/types/skill";
 import { buildTree } from "./skill-file-helpers";
 import { FileBrowser } from "./skill-file-browser";
-import { parseSkillDetailVersionParam, shouldLoadSkillDetailFile } from "./lib/skill-detail-deeplink";
+import { normalizeSkillDetailTab, parseSkillDetailVersionParam, shouldLoadSkillDetailFile } from "./lib/skill-detail-deeplink";
 import { getSkillAccessModeKey } from "./lib/skill-access-mode";
 import type { SkillExportFormat } from "./lib/skill-export-download";
+import { SkillEvolutionPanel } from "./skill-evolution-panel";
 
 interface SkillDetailDialogProps {
   skill: SkillInfo & { content: string };
@@ -60,6 +61,8 @@ export function SkillDetailDialog({
 }: SkillDetailDialogProps) {
   const { t } = useTranslation("skills");
   const hasFiles = !!skill.id;
+  const hasEvolution = !!skill.id;
+  const activeDetailTab = normalizeSkillDetailTab(detailTab, hasFiles, hasEvolution);
   const accessModeKey = getSkillAccessModeKey(skill.visibility);
   const accessModeLabel = accessModeKey === "unknown"
     ? t("accessMode.unknown", { value: skill.visibility || t("unknownOwner") })
@@ -137,7 +140,7 @@ export function SkillDetailDialog({
   }, [selectedVersion, loadFiles]);
 
   useEffect(() => {
-    if (detailTab !== "files" || !hasFiles) return;
+    if (activeDetailTab !== "files" || !hasFiles) return;
     loadVersions();
     const versionParam = parseSkillDetailVersionParam(selectedVersionParam);
     if (versionParam !== null && versionParam !== selectedVersion) {
@@ -147,15 +150,15 @@ export function SkillDetailDialog({
     if (selectedVersion == null && skill.version) {
       setSelectedVersion(skill.version);
     }
-  }, [detailTab, hasFiles, loadVersions, selectedVersion, selectedVersionParam, skill.version]);
+  }, [activeDetailTab, hasFiles, loadVersions, selectedVersion, selectedVersionParam, skill.version]);
 
   useEffect(() => {
-    if (!shouldLoadSkillDetailFile(detailTab, selectedFilePath, files.length, activePath)) return;
+    if (!shouldLoadSkillDetailFile(activeDetailTab, selectedFilePath, files.length, activePath)) return;
     loadFileContent(selectedFilePath);
-  }, [activePath, detailTab, files.length, loadFileContent, selectedFilePath]);
+  }, [activePath, activeDetailTab, files.length, loadFileContent, selectedFilePath]);
 
   const handleTabChange = (tab: string) => {
-    onStateChange({ detailTab: tab });
+    onStateChange({ detailTab: tab, version: tab === "files" ? selectedVersionParam : null, file: tab === "files" ? activePath : null });
     if (tab === "files" && hasFiles) {
       loadVersions();
       if (files.length === 0 && !filesLoading) {
@@ -184,10 +187,10 @@ export function SkillDetailDialog({
     url.pathname = "/skills";
     const next = new URLSearchParams(url.search);
     next.set("skill", skill.id || skill.slug || skill.name);
-    next.set("detailTab", detailTab === "files" ? "files" : "content");
-    if (detailTab === "files" && selectedVersion != null) next.set("version", String(selectedVersion));
+    next.set("detailTab", activeDetailTab);
+    if (activeDetailTab === "files" && selectedVersion != null) next.set("version", String(selectedVersion));
     else next.delete("version");
-    if (detailTab === "files" && activePath) next.set("file", activePath);
+    if (activeDetailTab === "files" && activePath) next.set("file", activePath);
     else next.delete("file");
     url.search = next.toString();
 
@@ -290,10 +293,11 @@ export function SkillDetailDialog({
           )}
         </DialogHeader>
 
-        <Tabs value={detailTab === "files" && hasFiles ? "files" : "content"} className="flex-1 overflow-hidden flex flex-col" onValueChange={handleTabChange}>
+        <Tabs value={activeDetailTab} className="flex-1 overflow-hidden flex flex-col" onValueChange={handleTabChange}>
           <TabsList>
             <TabsTrigger value="content">{t("detail.content")}</TabsTrigger>
             {hasFiles && <TabsTrigger value="files">{t("detail.files")}</TabsTrigger>}
+            {hasEvolution && <TabsTrigger value="evolution">{t("evolution.tab")}</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="content" className="flex-1 overflow-y-auto mt-2 -mx-4 px-4 sm:-mx-6 sm:px-6">
@@ -329,6 +333,12 @@ export function SkillDetailDialog({
                 contentLoading={contentLoading}
                 fileContent={fileContent}
               />
+            </TabsContent>
+          )}
+
+          {hasEvolution && (
+            <TabsContent value="evolution" className="flex-1 overflow-y-auto mt-2 -mx-4 px-4 sm:-mx-6 sm:px-6">
+              <SkillEvolutionPanel skill={skill} active={activeDetailTab === "evolution"} />
             </TabsContent>
           )}
         </Tabs>

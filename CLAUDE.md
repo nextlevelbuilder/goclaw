@@ -91,6 +91,17 @@ ui/desktop/                   Wails v2 desktop app (React frontend + embedded ga
 - **Telegram formatting:** LLM output → `SanitizeAssistantContent()` → `markdownToTelegramHTML()` → `chunkHTML()` → `sendHTML()`. Tables rendered as ASCII in `<pre>` tags
 - **i18n:** Web UI uses `i18next` with namespace-split locale files in `ui/web/src/i18n/locales/{lang}/`. Backend uses `internal/i18n` message catalog with `i18n.T(locale, key, args...)`. Locale propagated via `store.WithLocale(ctx)` — WS `connect` param `locale`, HTTP `Accept-Language` header. Supported: en (default), vi, zh. New user-facing strings: add key to `internal/i18n/keys.go`, add translations to all 3 catalog files. New UI strings: add key to all 3 locale dirs. Bootstrap templates (SOUL.md, etc.) stay English-only (LLM consumption).
 
+## Cross-Surface Feature/Fix Parity
+
+Every feature implementation or bug fix must audit and update all affected product surfaces before it is marked complete:
+
+- **Gateway server:** handlers, WebSocket methods, stores, migrations, provider/runtime behavior, background jobs.
+- **API contract:** request/response structs, `pkg/protocol`, OpenAPI/docs, compatibility shims, tests built from real response shapes.
+- **Web UI:** `ui/web` screens, hooks, i18n, validation, loading/error states, and contract consumers.
+- **CLI/runtime package:** `cmd` commands, operator/runtime package commands, installers/manifests, response parsers, and runtime package docs.
+
+Do not ship a backend-only change when the web UI, CLI/runtime package, or API contract must also change. If a surface is not affected, state `Surface parity: <surface> N/A because ...` in the plan, PR, or final report. For cross-repo CLI work, verify the current CLI/runtime package repo and release channel before claiming parity.
+
 ## Running
 
 ```bash

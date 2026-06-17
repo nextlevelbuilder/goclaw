@@ -183,3 +183,114 @@ func TestExec_RapidAPIWithRequiredEnvReachesDirectExec(t *testing.T) {
 		t.Fatalf("credential value leaked into output: %s", result.ForLLM)
 	}
 }
+
+func TestExec_GoClawGatewayTokenRawOutputIsScrubbed(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script fixture is POSIX-only")
+	}
+
+	const token = "plain-gateway-token-SHOULD-NOT-LEAK-12345"
+	binDir := t.TempDir()
+	binPath := filepath.Join(binDir, "goclaw")
+	if err := os.WriteFile(binPath, []byte("#!/bin/sh\nprintf '%s\\n' \"$GOCLAW_GATEWAY_TOKEN\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	stub := newStubSecureCLIStore()
+	stub.byName["goclaw"] = &store.SecureCLIBinary{
+		BinaryName: "goclaw",
+		BinaryPath: &binPath,
+		EncryptedEnv: []byte(`{
+			"GOCLAW_GATEWAY_TOKEN":{"kind":"sensitive","value":"` + token + `"},
+			"GOCLAW_SERVER":{"kind":"sensitive","value":"http://127.0.0.1:18790"}
+		}`),
+		TimeoutSeconds: 10,
+		DenyArgs:       json.RawMessage("[]"),
+		DenyVerbose:    json.RawMessage("[]"),
+	}
+
+	tool := NewExecTool(t.TempDir(), false)
+	tool.SetSecureCLIStore(stub)
+
+	ctx := store.WithTenantID(store.WithAgentID(context.Background(), uuid.New()), uuid.New())
+	result := tool.Execute(ctx, map[string]any{"command": "goclaw agent list"})
+
+	if result.IsError {
+		t.Fatalf("expected goclaw direct exec to run, got: %s", result.ForLLM)
+	}
+	if strings.Contains(result.ForLLM, token) {
+		t.Fatalf("raw gateway token leaked into output: %s", result.ForLLM)
+	}
+	if !strings.Contains(result.ForLLM, "[REDACTED]") {
+		t.Fatalf("expected gateway token to be redacted, got: %s", result.ForLLM)
+	}
+}
+
+func TestExec_GHMissingRequiredEnvFailsBeforeRawAuth(t *testing.T) {
+	stub := newStubSecureCLIStore()
+	stub.byName["gh"] = &store.SecureCLIBinary{
+		BinaryName:     "gh",
+		EncryptedEnv:   []byte("{}"),
+		TimeoutSeconds: 10,
+		DenyArgs:       json.RawMessage("[]"),
+		DenyVerbose:    json.RawMessage("[]"),
+	}
+
+	tool := NewExecTool(t.TempDir(), false)
+	tool.SetSecureCLIStore(stub)
+
+	ctx := store.WithTenantID(store.WithAgentID(context.Background(), uuid.New()), uuid.New())
+	result := tool.Execute(ctx, map[string]any{"command": "gh issue list --repo digitopvn/goclaw --limit 1"})
+
+	if !result.IsError {
+		t.Fatalf("expected missing GH_TOKEN to fail")
+	}
+	if !strings.Contains(result.ForLLM, "missing required credential env") {
+		t.Fatalf("expected actionable missing-env error, got: %s", result.ForLLM)
+	}
+	if !strings.Contains(result.ForLLM, "GH_TOKEN") {
+		t.Fatalf("expected GH_TOKEN in error, got: %s", result.ForLLM)
+	}
+	if strings.Contains(result.ForLLM, "gh auth login") {
+		t.Fatalf("raw gh auth guidance leaked through: %s", result.ForLLM)
+	}
+}
+
+func TestExec_GitRemoteCommandWithoutTypedCredentialFailsBeforeRawAuth(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script fixture is POSIX-only")
+	}
+
+	binDir := t.TempDir()
+	binPath := filepath.Join(binDir, "git")
+	if err := os.WriteFile(binPath, []byte("#!/bin/sh\nprintf 'raw git reached\\n' >&2\nexit 128\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	adapterName := "git"
+	stub := newStubSecureCLIStore()
+	stub.byName["git"] = &store.SecureCLIBinary{
+		BinaryName:     "git",
+		BinaryPath:     &binPath,
+		EncryptedEnv:   []byte("{}"),
+		TimeoutSeconds: 10,
+		DenyArgs:       json.RawMessage("[]"),
+		DenyVerbose:    json.RawMessage("[]"),
+		AdapterName:    &adapterName,
+	}
+
+	tool := NewExecTool(t.TempDir(), false)
+	tool.SetSecureCLIStore(stub)
+
+	ctx := store.WithTenantID(store.WithAgentID(context.Background(), uuid.New()), uuid.New())
+	result := tool.Execute(ctx, map[string]any{"command": "git push -u origin feature"})
+
+	if !result.IsError {
+		t.Fatalf("expected missing typed git credential to fail")
+	}
+	if !strings.Contains(result.ForLLM, "Git credential resolution failed") {
+		t.Fatalf("expected git credential diagnostic, got: %s", result.ForLLM)
+	}
+	if strings.Contains(result.ForLLM, "raw git reached") {
+		t.Fatalf("raw git command executed before credential resolution failed: %s", result.ForLLM)
+	}
+}

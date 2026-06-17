@@ -98,7 +98,7 @@ func (p *AnthropicProvider) buildRequestBody(model string, req ChatRequest, stre
 			systemBlocks = append(systemBlocks, splitSystemPromptForCache(msg.Content)...)
 
 		case "user":
-			if len(msg.Images) > 0 {
+			if len(msg.Images) > 0 || len(msg.Videos) > 0 {
 				var blocks []map[string]any
 				for _, img := range msg.Images {
 					blocks = append(blocks, map[string]any{
@@ -110,6 +110,7 @@ func (p *AnthropicProvider) buildRequestBody(model string, req ChatRequest, stre
 						},
 					})
 				}
+				// Videos are not supported by Anthropic, they are omitted here.
 				if msg.Content != "" {
 					blocks = append(blocks, map[string]any{
 						"type": "text",

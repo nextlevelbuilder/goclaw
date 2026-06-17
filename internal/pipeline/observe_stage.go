@@ -1,6 +1,10 @@
 package pipeline
 
-import "context"
+import (
+	"context"
+
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
+)
 
 // ObserveStage runs per iteration after ToolStage. Drains InjectCh,
 // accumulates final content when no tool calls, tracks block replies.
@@ -18,51 +22,73 @@ func (s *ObserveStage) Name() string { return "observe" }
 
 // Execute drains injected messages, accumulates final content + block replies.
 func (s *ObserveStage) Execute(_ context.Context, state *RunState) error {
-	// 1. Drain InjectCh (non-blocking) — messages from tool side effects, subagent results
-	if s.deps.DrainInjectCh != nil {
-		for _, msg := range s.deps.DrainInjectCh() {
-			state.Messages.AppendPending(msg)
-		}
-	}
+	injected := s.drainInjectedMessages()
 
 	resp := state.Think.LastResponse
 	if resp == nil {
+		appendPendingMessages(state, injected)
 		return nil
 	}
 
-	// 2. Track block replies — only count tool-iteration responses where
-	// EmitBlockReply actually fires (think_stage emits block.reply only when
-	// tool calls are present). The final answer (no tool calls) must NOT be
-	// counted, otherwise the gateway dedup check falsely suppresses delivery.
+	// Track block replies only for tool-iteration responses. Final answers do
+	// not count, otherwise gateway dedup can suppress delivery.
 	if resp.Content != "" && len(resp.ToolCalls) > 0 {
 		state.Observe.BlockReplies++
 		state.Observe.LastBlockReply = resp.Content
 	}
 
-	// 3. Accumulate final content when no tool calls (final answer)
 	if len(resp.ToolCalls) == 0 {
+		s.observeFinalResponse(state, resp, injected)
+	} else {
+		appendPendingMessages(state, injected)
+	}
+
+	s.accumulateAssistantImages(state, resp)
+	return nil
+}
+
+func (s *ObserveStage) drainInjectedMessages() []providers.Message {
+	if s.deps.DrainInjectCh == nil {
+		return nil
+	}
+	return s.deps.DrainInjectCh()
+}
+
+func (s *ObserveStage) observeFinalResponse(state *RunState, resp *providers.ChatResponse, injected []providers.Message) {
+	if len(injected) == 0 {
 		state.Observe.FinalContent = resp.Content
 		state.Observe.FinalThinking = resp.Thinking
+		return
 	}
 
-	// 4. Accumulate assistant-generated final images across iterations.
-	// The LLM may emit image_generation_call in iter N alongside a function_call,
-	// then respond text-only in iter N+1 — LastResponse.Images would then be empty
-	// at finalize time and the iter-N image would be lost. Drain Images here so
-	// FinalizeStage sees every image regardless of which iteration produced it.
-	// Partial streaming frames are filtered out at source (codex.go only sets
-	// non-partial entries via imageState.recordFinal); a defensive filter here
-	// avoids coupling to that invariant.
-	if len(resp.Images) > 0 {
-		for _, img := range resp.Images {
-			if img.Partial {
-				continue
-			}
-			state.Observe.AssistantImages = append(state.Observe.AssistantImages, img)
+	state.Messages.AppendPending(providers.Message{
+		Role:      "assistant",
+		Content:   resp.Content,
+		Thinking:  resp.Thinking,
+		Transient: true,
+	})
+	appendPendingMessages(state, injected)
+	state.Observe.FinalContent = ""
+	state.Observe.FinalThinking = ""
+	state.Observe.ContinueAfterFinal = true
+}
+
+func (s *ObserveStage) accumulateAssistantImages(state *RunState, resp *providers.ChatResponse) {
+	if len(resp.Images) == 0 {
+		return
+	}
+	for _, img := range resp.Images {
+		if img.Partial {
+			continue
 		}
-		// Clear on response so a re-processing pass (e.g. retry) doesn't double-count.
-		resp.Images = nil
+		state.Observe.AssistantImages = append(state.Observe.AssistantImages, img)
 	}
+	// Clear on response so a re-processing pass (for example a retry) does not double-count.
+	resp.Images = nil
+}
 
-	return nil
+func appendPendingMessages(state *RunState, messages []providers.Message) {
+	for _, msg := range messages {
+		state.Messages.AppendPending(msg)
+	}
 }

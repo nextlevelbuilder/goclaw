@@ -45,6 +45,14 @@ describe("telegram configSchema", () => {
     expect(isDeliveryModelKey("chat_behavior.intermediate_replies.model")).toBe(true);
     expect(deliveryModelKey("chat_behavior.intermediate_replies.provider")).toBe("chat_behavior.intermediate_replies.model");
   });
+
+  it("documents every channel behavior field for tooltip rendering", () => {
+    const behaviorFields = telegramConfig.filter((field) => field.key.startsWith("chat_behavior."));
+    expect(behaviorFields.length).toBeGreaterThan(0);
+    for (const field of behaviorFields) {
+      expect(field.help?.trim(), `${field.key} should have tooltip help`).toBeTruthy();
+    }
+  });
 });
 
 describe("pancake configSchema", () => {

@@ -582,16 +582,17 @@ func (rc *RunContext) deliveryRequestLocked(purpose, toolName string) DeliveryMe
 		timeout = rc.ChatBehavior.IntermediateReplies.Timeout
 	}
 	return DeliveryMessageRequest{
-		Purpose:     purpose,
-		UserMessage: rc.Delivery.Inbound,
-		Locale:      rc.Delivery.Locale,
-		PeerKind:    rc.Delivery.PeerKind,
-		ChannelType: rc.Delivery.Channel,
-		AgentName:   rc.Delivery.AgentName,
-		ToolName:    toolName,
-		MaxTokens:   maxTokens,
-		MaxChars:    maxChars,
-		Timeout:     timeout,
+		Purpose:      purpose,
+		UserMessage:  rc.Delivery.Inbound,
+		Locale:       rc.Delivery.Locale,
+		PeerKind:     rc.Delivery.PeerKind,
+		ChannelType:  rc.Delivery.Channel,
+		AgentName:    rc.Delivery.AgentName,
+		ToolName:     toolName,
+		PersonaBrief: rc.Delivery.PersonaBrief,
+		MaxTokens:    maxTokens,
+		MaxChars:     maxChars,
+		Timeout:      timeout,
 	}
 }
 

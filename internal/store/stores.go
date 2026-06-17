@@ -26,6 +26,7 @@ type Stores struct {
 	Contacts              ContactStore
 	Activity              ActivityStore
 	Snapshots             SnapshotStore
+	UsageEvents           UsageEventStore
 	BrowserCookies        BrowserCookieStore
 	SecureCLI             SecureCLIStore
 	SecureCLIGrants       SecureCLIAgentGrantStore
@@ -35,6 +36,7 @@ type Stores struct {
 	Tenants               TenantStore
 	BuiltinToolTenantCfgs BuiltinToolTenantConfigStore
 	SkillTenantCfgs       SkillTenantConfigStore
+	SkillEvolution        SkillEvolutionStore
 	SystemConfigs         SystemConfigStore
 	SubagentTasks         SubagentTaskStore
 	Vault                 VaultStore

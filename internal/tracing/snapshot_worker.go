@@ -14,17 +14,19 @@ import (
 
 // SnapshotWorker periodically aggregates trace/span data into usage_snapshots.
 type SnapshotWorker struct {
-	db        *sql.DB
-	snapshots store.SnapshotStore
-	stopCh    chan struct{}
-	wg        sync.WaitGroup
+	db          *sql.DB
+	snapshots   store.SnapshotStore
+	usageEvents store.UsageEventStore
+	stopCh      chan struct{}
+	wg          sync.WaitGroup
 }
 
-func NewSnapshotWorker(db *sql.DB, snapshots store.SnapshotStore) *SnapshotWorker {
+func NewSnapshotWorker(db *sql.DB, snapshots store.SnapshotStore, usageEvents store.UsageEventStore) *SnapshotWorker {
 	return &SnapshotWorker{
-		db:        db,
-		snapshots: snapshots,
-		stopCh:    make(chan struct{}),
+		db:          db,
+		snapshots:   snapshots,
+		usageEvents: usageEvents,
+		stopCh:      make(chan struct{}),
 	}
 }
 
@@ -73,6 +75,11 @@ func (w *SnapshotWorker) loop() {
 // catchUp computes snapshots for all missed hours between latest bucket and current hour.
 func (w *SnapshotWorker) catchUp() {
 	ctx := context.Background()
+	w.catchUpSnapshots(ctx)
+	w.catchUpUsageEvents(ctx)
+}
+
+func (w *SnapshotWorker) catchUpSnapshots(ctx context.Context) {
 	now := time.Now().UTC()
 	targetHour := now.Truncate(time.Hour).Add(-time.Hour) // previous complete hour
 
@@ -97,6 +104,34 @@ func (w *SnapshotWorker) catchUp() {
 			return // stop catch-up on error, will retry next tick
 		}
 		slog.Info("snapshot computed", "hour", h.Format(time.RFC3339), "duration_ms", time.Since(start).Milliseconds())
+	}
+}
+
+func (w *SnapshotWorker) catchUpUsageEvents(ctx context.Context) {
+	if w.usageEvents == nil {
+		return
+	}
+	now := time.Now().UTC()
+	targetHour := now.Truncate(time.Hour).Add(-time.Hour)
+
+	latest, err := w.usageEvents.GetLatestEventRollupBucket(ctx)
+	if err != nil {
+		slog.Warn("usage_event_rollup: get latest bucket", "error", err)
+		return
+	}
+
+	startHour := targetHour
+	if latest != nil {
+		startHour = latest.Add(time.Hour)
+	}
+
+	for h := startHour; !h.After(targetHour); h = h.Add(time.Hour) {
+		start := time.Now()
+		if err := w.usageEvents.RefreshEventRollupHour(ctx, h); err != nil {
+			slog.Warn("usage_event_rollup: aggregate hour failed", "hour", h.Format(time.RFC3339), "error", err)
+			return
+		}
+		slog.Info("usage event rollup computed", "hour", h.Format(time.RFC3339), "duration_ms", time.Since(start).Milliseconds())
 	}
 }
 
@@ -127,6 +162,41 @@ func (w *SnapshotWorker) Backfill(ctx context.Context) (int, error) {
 	for h := startHour; h.Before(endHour); h = h.Add(time.Hour) {
 		if err := w.aggregateHour(ctx, h); err != nil {
 			slog.Warn("backfill: aggregate hour failed", "hour", h.Format(time.RFC3339), "error", err)
+			continue
+		}
+		count++
+	}
+	eventCount, err := w.backfillUsageEvents(ctx)
+	if err != nil {
+		return count, err
+	}
+	return count + eventCount, nil
+}
+
+func (w *SnapshotWorker) backfillUsageEvents(ctx context.Context) (int, error) {
+	if w.usageEvents == nil {
+		return 0, nil
+	}
+	latest, err := w.usageEvents.GetLatestEventRollupBucket(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("get latest event rollup bucket: %w", err)
+	}
+
+	var earliest sql.NullTime
+	if err := w.db.QueryRowContext(ctx, `SELECT MIN(event_time) FROM usage_events`).Scan(&earliest); err != nil || !earliest.Valid {
+		return 0, nil
+	}
+
+	startHour := earliest.Time.UTC().Truncate(time.Hour)
+	if latest != nil {
+		startHour = latest.Add(time.Hour)
+	}
+
+	endHour := time.Now().UTC().Truncate(time.Hour)
+	count := 0
+	for h := startHour; h.Before(endHour); h = h.Add(time.Hour) {
+		if err := w.usageEvents.RefreshEventRollupHour(ctx, h); err != nil {
+			slog.Warn("usage_event_rollup backfill: aggregate hour failed", "hour", h.Format(time.RFC3339), "error", err)
 			continue
 		}
 		count++
@@ -288,8 +358,8 @@ type agentMemoryCounts struct {
 
 // agentKGCounts holds point-in-time KG counts for one agent.
 type agentKGCounts struct {
-	AgentID  uuid.UUID
-	Entities int
+	AgentID   uuid.UUID
+	Entities  int
 	Relations int
 }
 

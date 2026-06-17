@@ -558,41 +558,7 @@ func parseManagedSkillFiles(raw any) ([]managedSkillFile, error) {
 }
 
 func validateManagedSkillFilePath(rawPath string) (string, error) {
-	if rawPath == "" {
-		return "", fmt.Errorf("invalid file path %q: empty path", rawPath)
-	}
-	if strings.ContainsRune(rawPath, 0x00) {
-		return "", fmt.Errorf("invalid file path %q: null byte", rawPath)
-	}
-	if len(rawPath) >= 2 && rawPath[1] == ':' {
-		return "", fmt.Errorf("invalid file path %q: windows drive paths are not allowed", rawPath)
-	}
-	normalized := strings.ReplaceAll(rawPath, "\\", "/")
-	if strings.HasPrefix(normalized, "/") {
-		return "", fmt.Errorf("invalid file path %q: absolute paths are not allowed", rawPath)
-	}
-	for part := range strings.SplitSeq(normalized, "/") {
-		switch part {
-		case "..":
-			return "", fmt.Errorf("invalid file path %q: parent traversal is not allowed", rawPath)
-		case ".git":
-			return "", fmt.Errorf("invalid file path %q: system artifact paths are not allowed", rawPath)
-		}
-		if strings.HasPrefix(part, ".") {
-			return "", fmt.Errorf("invalid file path %q: hidden files are not allowed", rawPath)
-		}
-	}
-	cleanPath := path.Clean(normalized)
-	if cleanPath == "." || cleanPath == "SKILL.md" || strings.EqualFold(cleanPath, "SKILL.md") {
-		return "", fmt.Errorf("invalid file path %q: SKILL.md must be provided via content or find/replace", rawPath)
-	}
-	if strings.HasPrefix(cleanPath, "../") || cleanPath == ".." || strings.HasPrefix(cleanPath, "/") {
-		return "", fmt.Errorf("invalid file path %q: path escapes skill root", rawPath)
-	}
-	if skills.IsSystemArtifact(cleanPath) {
-		return "", fmt.Errorf("invalid file path %q: system artifact paths are not allowed", rawPath)
-	}
-	return cleanPath, nil
+	return skills.ValidateSkillTargetPath(rawPath, false)
 }
 
 func collectExistingManagedSkillCompanionFiles(srcDir string) ([]managedSkillFile, error) {

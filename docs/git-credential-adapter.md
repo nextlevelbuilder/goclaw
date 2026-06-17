@@ -110,10 +110,10 @@ Stored `gitea.example.com:8443` matches:
 If you run a self-hosted server on the scheme's default port (443 HTTPS, 22
 SSH), omit the port. If you run on a non-default port, include it.
 
-When no stored credential matches the resolved remote host, the adapter falls
-through to the un-credentialed path: `git` runs with whatever credentials the
-calling shell already has (typically none, in which case the remote will reject
-the operation with a 401/403).
+When no typed PAT/SSH credential is selected, or the selected credential cannot
+match the resolved remote host, adapter-managed remote commands fail closed
+with a GoClaw diagnostic. `git` is not allowed to fall through to an
+interactive username/password prompt in agent runtime.
 
 ## Security model
 

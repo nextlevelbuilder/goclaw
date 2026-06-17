@@ -18,14 +18,14 @@ describe("skills page state", () => {
   });
 
   it("serializes non-default filters while preserving modal params", () => {
-    const params = new URLSearchParams("skill=abc&detailTab=files&file=SKILL.md");
+    const params = new URLSearchParams("skill=abc&detailTab=evolution&file=SKILL.md");
     const next = serializeSkillsPageState(params, { tab: "custom", q: "pdf", filter: "missing-deps", sort: "deps" });
     expect(next.get("tab")).toBe("custom");
     expect(next.get("q")).toBe("pdf");
     expect(next.get("filter")).toBe("missing-deps");
     expect(next.get("sort")).toBe("deps");
     expect(next.get("skill")).toBe("abc");
-    expect(next.get("detailTab")).toBe("files");
+    expect(next.get("detailTab")).toBe("evolution");
     expect(next.get("file")).toBe("SKILL.md");
   });
 

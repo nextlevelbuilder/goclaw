@@ -321,17 +321,37 @@ func (s *PGSkillStore) GrantToUser(ctx context.Context, skillID uuid.UUID, userI
 	if err := store.ValidateUserID(grantedBy); err != nil {
 		return err
 	}
+	tid := tenantIDForInsert(ctx)
+	if err := s.verifySkillInGrantScope(ctx, skillID, tid); err != nil {
+		return err
+	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO skill_user_grants (id, skill_id, user_id, granted_by, created_at, tenant_id)
 		 VALUES ($1, $2, $3, $4, $5, $6)
-		 ON CONFLICT (skill_id, user_id) DO NOTHING`,
-		store.GenNewID(), skillID, userID, grantedBy, time.Now(), tenantIDForInsert(ctx),
+		 ON CONFLICT (skill_id, user_id, tenant_id) DO NOTHING`,
+		store.GenNewID(), skillID, userID, grantedBy, time.Now(), tid,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE skills
+		 SET visibility = 'internal', updated_at = NOW()
+		 WHERE id = $1 AND visibility = 'private' AND (is_system = true OR tenant_id = $2)`,
+		skillID, tid)
+	if err != nil {
+		slog.Warn("skill_grants: failed to auto-promote visibility for user grant", "skill_id", skillID, "error", err)
+	}
+	s.BumpVersion()
+	return nil
 }
 
 // RevokeFromUser revokes a skill grant from a user.
 func (s *PGSkillStore) RevokeFromUser(ctx context.Context, skillID uuid.UUID, userID string) error {
+	tid := tenantIDForInsert(ctx)
+	if err := s.verifySkillInGrantScope(ctx, skillID, tid); err != nil {
+		return err
+	}
 	tClause, tArgs, _, err := scopeClause(ctx, 3)
 	if err != nil {
 		return err
@@ -339,7 +359,42 @@ func (s *PGSkillStore) RevokeFromUser(ctx context.Context, skillID uuid.UUID, us
 	_, err = s.db.ExecContext(ctx,
 		"DELETE FROM skill_user_grants WHERE skill_id = $1 AND user_id = $2"+tClause,
 		append([]any{skillID, userID}, tArgs...)...)
-	return err
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE skills SET visibility = 'private', updated_at = NOW()
+		 WHERE id = $1 AND visibility = 'internal' AND (is_system = true OR tenant_id = $2)
+		   AND NOT EXISTS (SELECT 1 FROM skill_agent_grants WHERE skill_id = $1)
+		   AND NOT EXISTS (SELECT 1 FROM skill_user_grants WHERE skill_id = $1)`,
+		skillID, tid)
+	if err != nil {
+		slog.Warn("skill_grants: failed to auto-demote visibility for user grant", "skill_id", skillID, "error", err)
+	}
+	s.BumpVersion()
+	return nil
+}
+
+// ListUserGrantsForSkill returns all user grants for one skill.
+func (s *PGSkillStore) ListUserGrantsForSkill(ctx context.Context, skillID uuid.UUID) ([]store.SkillUserGrantInfo, error) {
+	if err := s.verifySkillInGrantScope(ctx, skillID, tenantIDForInsert(ctx)); err != nil {
+		return nil, err
+	}
+	tClause, tArgs, _, err := scopeClauseAlias(ctx, 2, "sug")
+	if err != nil {
+		return nil, err
+	}
+	var result []store.SkillUserGrantInfo
+	err = pkgSqlxDB.SelectContext(ctx, &result,
+		`SELECT sug.user_id, sug.granted_by
+		   FROM skill_user_grants sug
+		  WHERE sug.skill_id = $1`+tClause+`
+		  ORDER BY sug.created_at DESC`,
+		append([]any{skillID}, tArgs...)...)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 // ListAccessible returns skills accessible to a given agent+user combination.
@@ -364,9 +419,13 @@ func (s *PGSkillStore) ListAccessible(ctx context.Context, agentID uuid.UUID, us
 		return nil, err
 	}
 	tenantCond := ""
+	agentGrantTenantCond := ""
+	userGrantTenantCond := ""
 	if tc != "" {
 		// tc is " AND tenant_id = $4"; we need it as an OR condition inside the WHERE
 		tenantCond = fmt.Sprintf(" AND (s.is_system = true OR s.tenant_id = $%d)", 4)
+		agentGrantTenantCond = fmt.Sprintf(" AND sag.tenant_id = $%d", 4)
+		userGrantTenantCond = fmt.Sprintf(" AND sug.tenant_id = $%d", 4)
 		_ = tc // tcArgs carries the value
 	}
 	// LEFT JOIN skill_tenant_configs to exclude per-tenant disabled skills.
@@ -379,8 +438,8 @@ func (s *PGSkillStore) ListAccessible(ctx context.Context, agentID uuid.UUID, us
 	}
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT DISTINCT s.name, s.slug, s.description, s.version, s.file_path FROM skills s
-		LEFT JOIN skill_agent_grants sag ON s.id = sag.skill_id AND sag.agent_id = $1
-		LEFT JOIN skill_user_grants sug ON s.id = sug.skill_id AND (sug.user_id = $2 OR sug.user_id = $3)`+stcJoin+`
+		LEFT JOIN skill_agent_grants sag ON s.id = sag.skill_id AND sag.agent_id = $1`+agentGrantTenantCond+`
+		LEFT JOIN skill_user_grants sug ON s.id = sug.skill_id AND (sug.user_id = $2 OR sug.user_id = $3)`+userGrantTenantCond+stcJoin+`
 		WHERE s.status = 'active'`+tenantCond+stcFilter+` AND (
 			s.is_system = true
 			OR s.visibility = 'public'

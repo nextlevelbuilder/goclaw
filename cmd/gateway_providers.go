@@ -397,6 +397,19 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 			prov := providers.NewOpenAIProvider(p.Name, p.APIKey, base, store.BytePlusDefaultModel)
 			prov.WithProviderType(p.ProviderType)
 			registry.RegisterForTenant(p.TenantID, prov)
+		case store.ProviderKimiCoding:
+			// Moonshot Kimi Coding requires a fixed User-Agent on every request.
+			// OpenAI-compatible wire shape otherwise.
+			base := p.APIBase
+			if base == "" {
+				base = store.KimiCodingDefaultAPIBase
+			}
+			prov := providers.NewOpenAIProvider(p.Name, p.APIKey, base, store.KimiCodingDefaultModel)
+			prov.WithProviderType(p.ProviderType)
+			prov.WithExtraHeaders(map[string]string{
+				"User-Agent": store.KimiCodingRequiredUserAgent,
+			})
+			registry.RegisterForTenant(p.TenantID, prov)
 		default:
 			prov := providers.NewOpenAIProvider(p.Name, p.APIKey, p.APIBase, "")
 			prov.WithProviderType(p.ProviderType)

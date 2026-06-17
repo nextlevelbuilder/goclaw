@@ -212,6 +212,15 @@ export interface AgentData {
   other_config?: Record<string, unknown> | null;
   budget_monthly_cents?: number | null;
   tenant_id?: string;
+  grant_gateway_operator_access?: boolean;
+  gateway_operator_bootstrap?: GatewayOperatorBootstrapResult | null;
+}
+
+export interface GatewayOperatorBootstrapResult {
+  status: "granted" | "warning" | "skipped" | string;
+  binary_id?: string;
+  grant_id?: string;
+  warning?: string;
 }
 
 export interface AgentShareData {

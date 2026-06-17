@@ -177,6 +177,31 @@
     "copySuccess": "Đã copy deeplink",
     "copyFailed": "Không thể copy deeplink"
   },
+  "evolution": {
+    "tab": "Tự tiến hóa",
+    "title": "Tự tiến hóa",
+    "enabled": "Bật",
+    "disabled": "Tắt",
+    "status": "Trạng thái: {{status}}",
+    "unavailable": "Không có dữ liệu tiến hóa cho skill này.",
+    "modes": {
+      "suggest_only": "Chỉ đề xuất",
+      "auto_analyze": "Tự phân tích"
+    },
+    "metrics": "Chỉ số",
+    "total": "Tổng",
+    "succeeded": "Thành công",
+    "failed": "Thất bại",
+    "successRate": "Tỉ lệ thành công",
+    "suggestions": "Đề xuất",
+    "noSuggestions": "Chưa có đề xuất.",
+    "noReason": "Chưa ghi lý do.",
+    "approve": "Duyệt",
+    "reject": "Từ chối",
+    "apply": "Áp dụng",
+    "activity": "Hoạt động",
+    "noActivity": "Chưa có hoạt động gần đây."
+  },
   "toast": {
     "updated": "Đã cập nhật skill",
     "updateFailed": "Không thể cập nhật skill",

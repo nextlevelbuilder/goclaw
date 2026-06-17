@@ -61,6 +61,10 @@ func (a *OpenAIAdapter) ToRequest(req ChatRequest) ([]byte, http.Header, error) 
 	if a.provider.siteTitle != "" {
 		h.Set("X-Title", a.provider.siteTitle)
 	}
+	// Mirror doRequest: provider-static headers (e.g. kimi_coding User-Agent).
+	for k, v := range a.provider.extraHeaders {
+		h.Set(k, v)
+	}
 
 	return data, h, nil
 }

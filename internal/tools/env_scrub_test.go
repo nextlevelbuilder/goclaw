@@ -19,6 +19,7 @@ func TestScrubCredentialEnv_StripsStatic(t *testing.T) {
 	in := []string{
 		"HOME=/root",
 		"GH_TOKEN=secret-abc",
+		"GOCLAW_GATEWAY_TOKEN=goclaw-secret",
 		"PATH=/usr/bin",
 		"AWS_SECRET_ACCESS_KEY=topsecret",
 		"RAPIDAPI_KEY=rapid-secret",
@@ -33,6 +34,9 @@ func TestScrubCredentialEnv_StripsStatic(t *testing.T) {
 	}
 	if envContains(out, "RAPIDAPI_KEY") {
 		t.Fatalf("RAPIDAPI_KEY must be scrubbed, got: %v", out)
+	}
+	if envContains(out, "GOCLAW_GATEWAY_TOKEN") {
+		t.Fatalf("GOCLAW_GATEWAY_TOKEN must be scrubbed, got: %v", out)
 	}
 	if !envContains(out, "HOME") || !envContains(out, "PATH") {
 		t.Fatalf("essential vars must be preserved, got: %v", out)

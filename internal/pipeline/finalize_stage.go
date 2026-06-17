@@ -112,7 +112,7 @@ func (s *FinalizeStage) Execute(ctx context.Context, state *RunState) error {
 	// 4. Flush remaining pending messages to session store
 	pending := state.Messages.FlushPending()
 	if len(pending) > 0 && s.deps.FlushMessages != nil {
-		if err := s.deps.FlushMessages(ctx, state.Input.SessionKey, pending); err != nil {
+		if err := s.deps.FlushMessages(ctx, state.Input.SessionKey, persistableMessages(pending)); err != nil {
 			slog.Warn("finalize flush failed", "err", err)
 		}
 	}

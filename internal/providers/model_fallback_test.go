@@ -206,6 +206,33 @@ func TestModelFallbackProviderContinuesAfterContentPolicyFallback(t *testing.T) 
 	}
 }
 
+func TestModelFallbackProviderFallsBackOnCodexSafetyRefusalString(t *testing.T) {
+	primary := &testFallbackProvider{
+		name:  "codex-digitop",
+		model: "gpt-5.5",
+		err:   errors.New("codex: response failed: Invalid prompt: we've limited access to this content for safety reasons"),
+	}
+	backup := &testFallbackProvider{name: "anthropic", model: "claude-sonnet-4-5"}
+	provider := NewModelFallbackProvider(FallbackCandidate{
+		ProviderName: "codex-digitop",
+		Provider:     primary,
+		Model:        "gpt-5.5",
+	}, []FallbackCandidate{
+		{ProviderName: "anthropic", Provider: backup, Model: "claude-sonnet-4-5"},
+	}, 2, false)
+
+	resp, err := provider.Chat(context.Background(), ChatRequest{})
+	if err != nil {
+		t.Fatalf("Chat() error = %v", err)
+	}
+	if resp.Content != "claude-sonnet-4-5" {
+		t.Fatalf("Chat() content = %q, want fallback model response", resp.Content)
+	}
+	if primary.calls != 1 || backup.calls != 1 {
+		t.Fatalf("calls primary=%d backup=%d, want 1/1", primary.calls, backup.calls)
+	}
+}
+
 func TestModelFallbackProviderMaxAttemptsCapsTotalAttempts(t *testing.T) {
 	primary := &testFallbackProvider{
 		name:  "primary",

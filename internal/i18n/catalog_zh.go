@@ -21,9 +21,17 @@ func init() {
 		MsgInvalidUpdates:   "更新内容无效",
 
 		// Agent
-		MsgAgentNotFound:       "未找到Agent：%s",
-		MsgCannotDeleteDefault: "无法删除默认Agent",
-		MsgUserCtxRequired:     "需要用户上下文",
+		MsgAgentNotFound:                       "未找到Agent：%s",
+		MsgCannotDeleteDefault:                 "无法删除默认Agent",
+		MsgUserCtxRequired:                     "需要用户上下文",
+		MsgGatewayOperatorSecureCLIUnavailable: "已跳过网关 operator 访问，因为 SecureCLI 存储不可用。",
+		MsgGatewayOperatorEligibilityFailed:    "Agent 已创建，但无法验证其是否为第一个 Agent 来授予网关 operator 访问。",
+		MsgGatewayOperatorNotFirstAgent:        "未授予网关 operator 访问，因为这不是第一个 Agent。",
+		MsgGatewayOperatorTokenMissing:         "已跳过网关 operator 访问，因为未配置网关 token。",
+		MsgGatewayOperatorBinaryMissing:        "已跳过网关 operator 访问，因为无法发现 goclaw binary。",
+		MsgGatewayOperatorExistingReview:       "已跳过网关 operator 访问，因为现有 goclaw CLI credential 需要手动检查。",
+		MsgGatewayOperatorRegisterFailed:       "已跳过网关 operator 访问，因为无法注册 goclaw CLI credential。",
+		MsgGatewayOperatorCredentialFailed:     "已跳过网关 operator 访问，因为无法存储 credential。",
 
 		// Chat
 		MsgRateLimitExceeded: "请求频率超限 — 请稍候",
@@ -133,9 +141,17 @@ func init() {
 		MsgCannotRemoveLastWriter:  "无法移除最后一个文件管理员",
 
 		// Skills
-		MsgSkillsUpdateNotSupported: "基于文件的Skill不支持 skills.update",
-		MsgCannotResolveSkillID:     "无法解析基于文件的Skill ID",
-		MsgInvalidVisibility:        "无效的 visibility %q：必须为 private 或 public",
+		MsgSkillsUpdateNotSupported:    "基于文件的Skill不支持 skills.update",
+		MsgCannotResolveSkillID:        "无法解析基于文件的Skill ID",
+		MsgInvalidVisibility:           "无效的 visibility %q：必须为 private 或 public",
+		MsgSkillEvolutionNotConfigured: "技能演进存储未配置",
+		MsgActivityStoreNotConfigured:  "活动存储未配置",
+		MsgInvalidEvolutionMode:        "无效的 evolution mode",
+		MsgSystemSkillMutationBlocked:  "禁止修改系统Skill",
+		MsgSuggestionMustBeApproved:    "应用前必须先批准建议",
+		MsgInvalidDraftPatch:           "无效的 draft_patch：%s",
+		MsgDraftPatchRequired:          "draft_patch 需要 content 或 find/replace",
+		MsgFindTextNotFound:            "在目标文件中未找到要替换的文本",
 
 		// Logs
 		MsgInvalidLogAction: "action 必须是 'start' 或 'stop'",

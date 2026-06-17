@@ -121,6 +121,87 @@ func buildTraceWhere(ctx context.Context, opts store.TraceListOpts) (string, []a
 		args = append(args, opts.Channel)
 		argIdx++
 	}
+	if opts.From != nil {
+		conditions = append(conditions, fmt.Sprintf("start_time >= $%d", argIdx))
+		args = append(args, *opts.From)
+		argIdx++
+	}
+	if opts.To != nil {
+		conditions = append(conditions, fmt.Sprintf("start_time < $%d", argIdx))
+		args = append(args, *opts.To)
+		argIdx++
+	}
+	if opts.MinInputTokens != nil {
+		conditions = append(conditions, fmt.Sprintf("total_input_tokens >= $%d", argIdx))
+		args = append(args, *opts.MinInputTokens)
+		argIdx++
+	}
+	if opts.MaxInputTokens != nil {
+		conditions = append(conditions, fmt.Sprintf("total_input_tokens <= $%d", argIdx))
+		args = append(args, *opts.MaxInputTokens)
+		argIdx++
+	}
+	if opts.MinOutputTokens != nil {
+		conditions = append(conditions, fmt.Sprintf("total_output_tokens >= $%d", argIdx))
+		args = append(args, *opts.MinOutputTokens)
+		argIdx++
+	}
+	if opts.MaxOutputTokens != nil {
+		conditions = append(conditions, fmt.Sprintf("total_output_tokens <= $%d", argIdx))
+		args = append(args, *opts.MaxOutputTokens)
+		argIdx++
+	}
+	if opts.MinToolCalls != nil {
+		conditions = append(conditions, fmt.Sprintf("tool_call_count >= $%d", argIdx))
+		args = append(args, *opts.MinToolCalls)
+		argIdx++
+	}
+	if opts.MaxToolCalls != nil {
+		conditions = append(conditions, fmt.Sprintf("tool_call_count <= $%d", argIdx))
+		args = append(args, *opts.MaxToolCalls)
+		argIdx++
+	}
+	if opts.HasToolCalls != nil {
+		if *opts.HasToolCalls {
+			conditions = append(conditions, "tool_call_count > 0")
+		} else {
+			conditions = append(conditions, "tool_call_count = 0")
+		}
+	}
+	if opts.Query != "" {
+		placeholder := fmt.Sprintf("$%d", argIdx)
+		conditions = append(conditions, fmt.Sprintf(`(
+			CAST(id AS text) ILIKE %[1]s ESCAPE '\' OR
+			COALESCE(name, '') ILIKE %[1]s ESCAPE '\' OR
+			COALESCE(input_preview, '') ILIKE %[1]s ESCAPE '\' OR
+			COALESCE(output_preview, '') ILIKE %[1]s ESCAPE '\' OR
+			COALESCE(session_key, '') ILIKE %[1]s ESCAPE '\' OR
+			COALESCE(channel, '') ILIKE %[1]s ESCAPE '\' OR
+			EXISTS (SELECT 1 FROM agents a WHERE a.id = traces.agent_id AND a.tenant_id = traces.tenant_id AND (COALESCE(a.display_name, '') ILIKE %[1]s ESCAPE '\' OR COALESCE(a.agent_key, '') ILIKE %[1]s ESCAPE '\')) OR
+			EXISTS (SELECT 1 FROM channel_instances ci WHERE ci.name = traces.channel AND ci.tenant_id = traces.tenant_id AND (COALESCE(ci.display_name, '') ILIKE %[1]s ESCAPE '\' OR COALESCE(ci.name, '') ILIKE %[1]s ESCAPE '\' OR COALESCE(ci.channel_type, '') ILIKE %[1]s ESCAPE '\')) OR
+			EXISTS (SELECT 1 FROM spans s WHERE s.trace_id = traces.id AND s.tenant_id = traces.tenant_id AND (COALESCE(s.tool_name, '') ILIKE %[1]s ESCAPE '\' OR COALESCE(s.input_preview, '') ILIKE %[1]s ESCAPE '\' OR COALESCE(s.output_preview, '') ILIKE %[1]s ESCAPE '\'))
+		)`, placeholder))
+		args = append(args, containsPattern(opts.Query))
+		argIdx++
+	}
+	if opts.AgentQuery != "" {
+		placeholder := fmt.Sprintf("$%d", argIdx)
+		conditions = append(conditions, fmt.Sprintf(`EXISTS (SELECT 1 FROM agents a WHERE a.id = traces.agent_id AND a.tenant_id = traces.tenant_id AND (COALESCE(a.display_name, '') ILIKE %[1]s ESCAPE '\' OR COALESCE(a.agent_key, '') ILIKE %[1]s ESCAPE '\'))`, placeholder))
+		args = append(args, containsPattern(opts.AgentQuery))
+		argIdx++
+	}
+	if opts.ChannelQuery != "" {
+		placeholder := fmt.Sprintf("$%d", argIdx)
+		conditions = append(conditions, fmt.Sprintf(`EXISTS (SELECT 1 FROM channel_instances ci WHERE ci.name = traces.channel AND ci.tenant_id = traces.tenant_id AND (COALESCE(ci.display_name, '') ILIKE %[1]s ESCAPE '\' OR COALESCE(ci.name, '') ILIKE %[1]s ESCAPE '\' OR COALESCE(ci.channel_type, '') ILIKE %[1]s ESCAPE '\'))`, placeholder))
+		args = append(args, containsPattern(opts.ChannelQuery))
+		argIdx++
+	}
+	if opts.ToolName != "" {
+		placeholder := fmt.Sprintf("$%d", argIdx)
+		conditions = append(conditions, fmt.Sprintf(`EXISTS (SELECT 1 FROM spans s WHERE s.trace_id = traces.id AND s.tenant_id = traces.tenant_id AND s.tool_name ILIKE %[1]s ESCAPE '\')`, placeholder))
+		args = append(args, containsPattern(opts.ToolName))
+		argIdx++
+	}
 	if opts.ChangedAfter != nil {
 		conditions = append(conditions, fmt.Sprintf("(created_at > $%d OR end_time > $%d OR status = $%d)", argIdx, argIdx, argIdx+1))
 		args = append(args, *opts.ChangedAfter, store.TraceStatusRunning)
@@ -132,6 +213,23 @@ func buildTraceWhere(ctx context.Context, opts store.TraceListOpts) (string, []a
 		where = " WHERE " + strings.Join(conditions, " AND ")
 	}
 	return where, args
+}
+
+func containsPattern(value string) string {
+	return "%" + escapeLike(value) + "%"
+}
+
+func escapeLike(value string) string {
+	var b strings.Builder
+	b.Grow(len(value))
+	for _, r := range value {
+		switch r {
+		case '\\', '%', '_':
+			b.WriteRune('\\')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 func (s *PGTracingStore) CountTraces(ctx context.Context, opts store.TraceListOpts) (int, error) {

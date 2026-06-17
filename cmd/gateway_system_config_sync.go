@@ -131,6 +131,7 @@ func seedConfigForContext(ctx context.Context, sc store.SystemConfigStore, cfg *
 	set("tts.auto", cfg.Tts.Auto)
 	set("tts.mode", cfg.Tts.Mode)
 	setInt("tts.max_length", cfg.Tts.MaxLength)
+	setInt("tts.timeout_ms", cfg.Tts.TimeoutMs)
 
 	// Cron
 	setInt("cron.max_retries", cfg.Cron.MaxRetries)

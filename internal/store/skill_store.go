@@ -114,6 +114,12 @@ type SkillAgentGrantInfo struct {
 	CanManage     bool      `json:"can_manage" db:"can_manage"`
 }
 
+// SkillUserGrantInfo is a user grant row for one skill.
+type SkillUserGrantInfo struct {
+	UserID    string `json:"user_id" db:"user_id"`
+	GrantedBy string `json:"granted_by" db:"granted_by"`
+}
+
 // SkillManageStore extends SkillStore with CRUD, ownership, and grant operations
 // needed by HTTP upload handlers and agent tools (skill_manage, publish_skill).
 // Implemented by both PGSkillStore and SQLiteSkillStore.
@@ -146,6 +152,7 @@ type SkillManageStore interface {
 	RevokeFromUser(ctx context.Context, skillID uuid.UUID, userID string) error
 	ListWithGrantStatus(ctx context.Context, agentID uuid.UUID) ([]SkillWithGrantStatus, error)
 	ListAgentGrantsForSkill(ctx context.Context, skillID uuid.UUID) ([]SkillAgentGrantInfo, error)
+	ListUserGrantsForSkill(ctx context.Context, skillID uuid.UUID) ([]SkillUserGrantInfo, error)
 	AgentCanManageSkill(ctx context.Context, skillID, agentID uuid.UUID) (bool, error)
 	// Files
 	GetSkillFilePath(ctx context.Context, id uuid.UUID) (filePath string, slug string, version int, isSystem bool, ok bool)

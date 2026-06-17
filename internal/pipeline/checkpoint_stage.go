@@ -3,6 +3,8 @@ package pipeline
 import (
 	"context"
 	"log/slog"
+
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
 
 // CheckpointStage runs per iteration. Flushes pending messages to session store
@@ -36,13 +38,32 @@ func (s *CheckpointStage) Execute(ctx context.Context, state *RunState) error {
 	if len(pending) == 0 {
 		return nil
 	}
+	persistable := persistableMessages(pending)
+	if len(persistable) == 0 {
+		return nil
+	}
 
-	if err := s.deps.FlushMessages(ctx, state.Input.SessionKey, pending); err != nil {
+	if err := s.deps.FlushMessages(ctx, state.Input.SessionKey, persistable); err != nil {
 		// Non-fatal: messages moved to history by FlushPending, will be flushed by FinalizeStage.
 		slog.Warn("checkpoint flush failed", "err", err, "iteration", state.Iteration)
 		return nil
 	}
 
-	state.Compact.CheckpointFlushedMsgs += len(pending)
+	state.Compact.CheckpointFlushedMsgs += len(persistable)
 	return nil
+}
+
+func persistableMessages(messages []providers.Message) []providers.Message {
+	for _, msg := range messages {
+		if msg.Transient {
+			filtered := make([]providers.Message, 0, len(messages))
+			for _, candidate := range messages {
+				if !candidate.Transient {
+					filtered = append(filtered, candidate)
+				}
+			}
+			return filtered
+		}
+	}
+	return messages
 }

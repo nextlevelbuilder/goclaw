@@ -173,9 +173,6 @@ func ListPresetNames() []string {
 
 func requiredCredentialEnvVars(binary string) []string {
 	name := normalizeBinaryName(binary)
-	if name != "rapidapi" {
-		return nil
-	}
 	preset := GetPreset(name)
 	if preset == nil {
 		return nil

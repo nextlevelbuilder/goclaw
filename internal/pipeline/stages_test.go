@@ -1929,7 +1929,6 @@ func TestObserveStage_DrainInjectCh_AddsToPending(t *testing.T) {
 	}
 	stage := NewObserveStage(deps)
 	state := defaultState()
-	state.Think.LastResponse = &providers.ChatResponse{FinishReason: "stop"}
 
 	err := stage.Execute(context.Background(), state)
 	if err != nil {
@@ -1941,6 +1940,44 @@ func TestObserveStage_DrainInjectCh_AddsToPending(t *testing.T) {
 	}
 	if pending[0].Content != "injected-1" || pending[1].Content != "injected-2" {
 		t.Errorf("pending = %v", pending)
+	}
+}
+
+func TestObserveStage_LateInjectionAfterFinalContinuesRun(t *testing.T) {
+	t.Parallel()
+	injected := []providers.Message{
+		{Role: "user", Content: "answer this follow-up too"},
+	}
+	deps := &PipelineDeps{
+		DrainInjectCh: func() []providers.Message { return injected },
+	}
+	stage := NewObserveStage(deps)
+	state := defaultState()
+	state.Think.LastResponse = &providers.ChatResponse{
+		Content:      "answer to original request",
+		Thinking:     "reasoning",
+		FinishReason: "stop",
+	}
+
+	err := stage.Execute(context.Background(), state)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if !state.Observe.ContinueAfterFinal {
+		t.Fatal("ContinueAfterFinal = false, want true")
+	}
+	if state.Observe.FinalContent != "" {
+		t.Fatalf("FinalContent = %q, want empty until follow-up is answered", state.Observe.FinalContent)
+	}
+	pending := state.Messages.Pending()
+	if len(pending) != 2 {
+		t.Fatalf("pending len = %d, want 2", len(pending))
+	}
+	if pending[0].Role != "assistant" || pending[0].Content != "answer to original request" || !pending[0].Transient {
+		t.Fatalf("pending[0] = %#v, want assistant original answer", pending[0])
+	}
+	if pending[1].Role != "user" || pending[1].Content != "answer this follow-up too" {
+		t.Fatalf("pending[1] = %#v, want user follow-up", pending[1])
 	}
 }
 
@@ -2278,6 +2315,37 @@ func TestCheckpointStage_FlushesAtInterval(t *testing.T) {
 	}
 	if state.Compact.CheckpointFlushedMsgs != 1 {
 		t.Errorf("CheckpointFlushedMsgs = %d, want 1", state.Compact.CheckpointFlushedMsgs)
+	}
+}
+
+func TestCheckpointStage_SkipsTransientMessagesWhenPersisting(t *testing.T) {
+	t.Parallel()
+	var flushedMsgs []providers.Message
+	deps := &PipelineDeps{
+		Config: PipelineConfig{CheckpointInterval: 5},
+		FlushMessages: func(_ context.Context, _ string, msgs []providers.Message) error {
+			flushedMsgs = msgs
+			return nil
+		},
+	}
+	stage := NewCheckpointStage(deps)
+	state := defaultState()
+	state.Iteration = 5
+	state.Messages.AppendPending(providers.Message{Role: "assistant", Content: "draft", Transient: true})
+	state.Messages.AppendPending(providers.Message{Role: "user", Content: "follow-up"})
+
+	err := stage.Execute(context.Background(), state)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if len(flushedMsgs) != 1 {
+		t.Fatalf("flushed %d messages, want 1", len(flushedMsgs))
+	}
+	if flushedMsgs[0].Content != "follow-up" {
+		t.Fatalf("flushed[0].Content = %q, want follow-up", flushedMsgs[0].Content)
+	}
+	if state.Compact.CheckpointFlushedMsgs != 1 {
+		t.Fatalf("CheckpointFlushedMsgs = %d, want 1", state.Compact.CheckpointFlushedMsgs)
 	}
 }
 
@@ -2794,6 +2862,36 @@ func TestFinalizeStage_FlushesRemainingPending(t *testing.T) {
 	}
 	if flushedMsgs[1].Role != "assistant" || flushedMsgs[1].Content != "hello" {
 		t.Errorf("flushed[1] = %q/%q, want assistant/hello", flushedMsgs[1].Role, flushedMsgs[1].Content)
+	}
+}
+
+func TestFinalizeStage_SkipsTransientMessagesWhenPersisting(t *testing.T) {
+	t.Parallel()
+	var flushedMsgs []providers.Message
+	deps := &PipelineDeps{
+		FlushMessages: func(_ context.Context, _ string, msgs []providers.Message) error {
+			flushedMsgs = append(flushedMsgs, msgs...)
+			return nil
+		},
+	}
+	stage := NewFinalizeStage(deps)
+	state := defaultState()
+	state.Observe.FinalContent = "final answer"
+	state.Messages.AppendPending(providers.Message{Role: "assistant", Content: "draft answer", Transient: true})
+	state.Messages.AppendPending(providers.Message{Role: "user", Content: "follow-up"})
+
+	err := stage.Execute(context.Background(), state)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if len(flushedMsgs) != 2 {
+		t.Fatalf("flushed %d messages, want follow-up + final answer", len(flushedMsgs))
+	}
+	if flushedMsgs[0].Content != "follow-up" {
+		t.Fatalf("flushed[0].Content = %q, want follow-up", flushedMsgs[0].Content)
+	}
+	if flushedMsgs[1].Content != "final answer" {
+		t.Fatalf("flushed[1].Content = %q, want final answer", flushedMsgs[1].Content)
 	}
 }
 

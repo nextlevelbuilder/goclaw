@@ -108,6 +108,76 @@ func buildTraceWhere(ctx context.Context, opts store.TraceListOpts) (string, []a
 		conditions = append(conditions, "channel = ?")
 		args = append(args, opts.Channel)
 	}
+	if opts.From != nil {
+		conditions = append(conditions, "start_time >= ?")
+		args = append(args, *opts.From)
+	}
+	if opts.To != nil {
+		conditions = append(conditions, "start_time < ?")
+		args = append(args, *opts.To)
+	}
+	if opts.MinInputTokens != nil {
+		conditions = append(conditions, "total_input_tokens >= ?")
+		args = append(args, *opts.MinInputTokens)
+	}
+	if opts.MaxInputTokens != nil {
+		conditions = append(conditions, "total_input_tokens <= ?")
+		args = append(args, *opts.MaxInputTokens)
+	}
+	if opts.MinOutputTokens != nil {
+		conditions = append(conditions, "total_output_tokens >= ?")
+		args = append(args, *opts.MinOutputTokens)
+	}
+	if opts.MaxOutputTokens != nil {
+		conditions = append(conditions, "total_output_tokens <= ?")
+		args = append(args, *opts.MaxOutputTokens)
+	}
+	if opts.MinToolCalls != nil {
+		conditions = append(conditions, "tool_call_count >= ?")
+		args = append(args, *opts.MinToolCalls)
+	}
+	if opts.MaxToolCalls != nil {
+		conditions = append(conditions, "tool_call_count <= ?")
+		args = append(args, *opts.MaxToolCalls)
+	}
+	if opts.HasToolCalls != nil {
+		if *opts.HasToolCalls {
+			conditions = append(conditions, "tool_call_count > 0")
+		} else {
+			conditions = append(conditions, "tool_call_count = 0")
+		}
+	}
+	if opts.Query != "" {
+		conditions = append(conditions, `(
+			CAST(id AS TEXT) LIKE ? ESCAPE '\' OR
+			COALESCE(name, '') LIKE ? ESCAPE '\' OR
+			COALESCE(input_preview, '') LIKE ? ESCAPE '\' OR
+			COALESCE(output_preview, '') LIKE ? ESCAPE '\' OR
+			COALESCE(session_key, '') LIKE ? ESCAPE '\' OR
+			COALESCE(channel, '') LIKE ? ESCAPE '\' OR
+			EXISTS (SELECT 1 FROM agents a WHERE a.id = traces.agent_id AND a.tenant_id = traces.tenant_id AND (COALESCE(a.display_name, '') LIKE ? ESCAPE '\' OR COALESCE(a.agent_key, '') LIKE ? ESCAPE '\')) OR
+			EXISTS (SELECT 1 FROM channel_instances ci WHERE ci.name = traces.channel AND ci.tenant_id = traces.tenant_id AND (COALESCE(ci.display_name, '') LIKE ? ESCAPE '\' OR COALESCE(ci.name, '') LIKE ? ESCAPE '\' OR COALESCE(ci.channel_type, '') LIKE ? ESCAPE '\')) OR
+			EXISTS (SELECT 1 FROM spans s WHERE s.trace_id = traces.id AND s.tenant_id = traces.tenant_id AND (COALESCE(s.tool_name, '') LIKE ? ESCAPE '\' OR COALESCE(s.input_preview, '') LIKE ? ESCAPE '\' OR COALESCE(s.output_preview, '') LIKE ? ESCAPE '\'))
+		)`)
+		pattern := containsPattern(opts.Query)
+		for range 14 {
+			args = append(args, pattern)
+		}
+	}
+	if opts.AgentQuery != "" {
+		conditions = append(conditions, `EXISTS (SELECT 1 FROM agents a WHERE a.id = traces.agent_id AND a.tenant_id = traces.tenant_id AND (COALESCE(a.display_name, '') LIKE ? ESCAPE '\' OR COALESCE(a.agent_key, '') LIKE ? ESCAPE '\'))`)
+		pattern := containsPattern(opts.AgentQuery)
+		args = append(args, pattern, pattern)
+	}
+	if opts.ChannelQuery != "" {
+		conditions = append(conditions, `EXISTS (SELECT 1 FROM channel_instances ci WHERE ci.name = traces.channel AND ci.tenant_id = traces.tenant_id AND (COALESCE(ci.display_name, '') LIKE ? ESCAPE '\' OR COALESCE(ci.name, '') LIKE ? ESCAPE '\' OR COALESCE(ci.channel_type, '') LIKE ? ESCAPE '\'))`)
+		pattern := containsPattern(opts.ChannelQuery)
+		args = append(args, pattern, pattern, pattern)
+	}
+	if opts.ToolName != "" {
+		conditions = append(conditions, `EXISTS (SELECT 1 FROM spans s WHERE s.trace_id = traces.id AND s.tenant_id = traces.tenant_id AND s.tool_name LIKE ? ESCAPE '\')`)
+		args = append(args, containsPattern(opts.ToolName))
+	}
 	if opts.ChangedAfter != nil {
 		conditions = append(conditions, "(created_at > ? OR end_time > ? OR status = ?)")
 		args = append(args, *opts.ChangedAfter, *opts.ChangedAfter, store.TraceStatusRunning)
@@ -117,6 +187,10 @@ func buildTraceWhere(ctx context.Context, opts store.TraceListOpts) (string, []a
 		return "", nil
 	}
 	return " WHERE " + strings.Join(conditions, " AND "), args
+}
+
+func containsPattern(value string) string {
+	return "%" + escapeLike(value) + "%"
 }
 
 func (s *SQLiteTracingStore) CountTraces(ctx context.Context, opts store.TraceListOpts) (int, error) {

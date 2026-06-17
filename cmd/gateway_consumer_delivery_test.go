@@ -45,7 +45,7 @@ func TestBuildDeliveryRuntimeUsesResolvedDeliveryProviderModels(t *testing.T) {
 		TenantID: tenantID,
 		Content:  "kiểm tra giúp tôi",
 		Metadata: map[string]string{"locale": "vi"},
-	}, "dm", "telegram", "agent")
+	}, "user-1", "dm", "telegram", "agent")
 
 	quick, ok := runtime.QuickAckGenerator.(channels.ProviderDeliveryMessageGenerator)
 	if !ok {
@@ -82,7 +82,7 @@ func TestBuildDeliveryRuntimeFallsBackToAgentProviderModelWhenUnset(t *testing.T
 			Enabled: true,
 			Mode:    channels.IntermediateModeSidecar,
 		},
-	}, bus.InboundMessage{TenantID: tenantID}, "dm", "telegram", "agent")
+	}, bus.InboundMessage{TenantID: tenantID}, "user-1", "dm", "telegram", "agent")
 
 	quick, ok := runtime.QuickAckGenerator.(channels.ProviderDeliveryMessageGenerator)
 	if !ok {
@@ -97,6 +97,40 @@ func TestBuildDeliveryRuntimeFallsBackToAgentProviderModelWhenUnset(t *testing.T
 	}
 	if progress.ProviderName != "agent-provider" || progress.Model != "agent-model" {
 		t.Fatalf("progress provider/model = %q/%q, want agent-provider/agent-model", progress.ProviderName, progress.Model)
+	}
+}
+
+func TestBuildDeliveryRuntimeIncludesAgentPersonaBrief(t *testing.T) {
+	agent := deliveryRuntimePersonaTestAgent{
+		deliveryRuntimeTestAgent: deliveryRuntimeTestAgent{
+			id:           "agent",
+			uuid:         uuid.New(),
+			model:        "agent-model",
+			providerName: "agent-provider",
+			provider:     deliveryRuntimeTestProvider{name: "agent-provider", model: "agent-default"},
+		},
+		personaByUserID: map[string]string{
+			"raw-user":      "wrong persona",
+			"resolved-user": "Style: concise, warm",
+		},
+	}
+	runtime := buildDeliveryRuntime(context.Background(), &ConsumerDeps{}, deliveryRuntimePersonaTestAgent{
+		deliveryRuntimeTestAgent: agent.deliveryRuntimeTestAgent,
+		personaByUserID:          agent.personaByUserID,
+	}, channels.ResolvedChatBehavior{
+		Enabled: true,
+		QuickAck: channels.ResolvedQuickAckConfig{
+			Enabled: true,
+			Mode:    channels.QuickAckModeSidecar,
+		},
+		IntermediateReplies: channels.ResolvedIntermediateRepliesConfig{
+			Enabled: true,
+			Mode:    channels.IntermediateModeSidecar,
+		},
+	}, bus.InboundMessage{UserID: "raw-user"}, "resolved-user", "dm", "telegram", "agent")
+
+	if runtime.PersonaBrief != "Style: concise, warm" {
+		t.Fatalf("runtime persona brief = %q, want agent persona", runtime.PersonaBrief)
 	}
 }
 
@@ -119,6 +153,15 @@ func (a deliveryRuntimeTestAgent) IsRunning() bool              { return true }
 func (a deliveryRuntimeTestAgent) Model() string                { return a.model }
 func (a deliveryRuntimeTestAgent) ProviderName() string         { return a.providerName }
 func (a deliveryRuntimeTestAgent) Provider() providers.Provider { return a.provider }
+
+type deliveryRuntimePersonaTestAgent struct {
+	deliveryRuntimeTestAgent
+	personaByUserID map[string]string
+}
+
+func (a deliveryRuntimePersonaTestAgent) DeliveryPersonaBrief(_ context.Context, userID string) string {
+	return a.personaByUserID[userID]
+}
 
 type deliveryRuntimeTestProvider struct {
 	name  string

@@ -32,6 +32,36 @@ func TestNoSOULEchoForAnthropic(t *testing.T) {
 	}
 }
 
+func TestBuildDeliveryPersonaBriefUsesCompactSOULStyleAndVibe(t *testing.T) {
+	files := []bootstrap.ContextFile{{
+		Path:    "SOUL.md",
+		Content: "# Fox\n## Style\nConcise and warm\n## Vibe\nPlayful but direct\n## Boundaries\nNever expose this section",
+	}}
+
+	got := BuildDeliveryPersonaBrief(files)
+	for _, want := range []string{"Style: Concise and warm", "Vibe: Playful but direct"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("delivery persona brief = %q, missing %q", got, want)
+		}
+	}
+	for _, blocked := range []string{"Boundaries", "Never expose", "SOUL.md", "context_file"} {
+		if strings.Contains(got, blocked) {
+			t.Fatalf("delivery persona brief leaked %q: %q", blocked, got)
+		}
+	}
+}
+
+func TestBuildDeliveryPersonaBriefEmptyWithoutSOULStyle(t *testing.T) {
+	files := []bootstrap.ContextFile{{
+		Path:    "SOUL.md",
+		Content: "# Fox\n## Boundaries\nNo style here",
+	}}
+
+	if got := BuildDeliveryPersonaBrief(files); got != "" {
+		t.Fatalf("delivery persona brief = %q, want empty fallback", got)
+	}
+}
+
 // TestProviderStablePrefixPosition verifies StablePrefix is before cache boundary.
 func TestProviderStablePrefixPosition(t *testing.T) {
 	cfg := SystemPromptConfig{

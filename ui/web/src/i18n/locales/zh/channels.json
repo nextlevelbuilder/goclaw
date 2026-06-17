@@ -324,6 +324,78 @@
     "skills": { "label": "Skill过滤", "help": "限制此群组可用的Skill" },
     "tools": { "label": "工具白名单", "help": "限制Agent在此群组中可使用的工具" },
     "system_prompt": { "label": "系统提示词" },
+    "chat_behavior": {
+      "enabled": {
+        "label": "自然投递行为",
+        "help": "Channel 级投递行为覆盖。Channel 设置优先于 Agent 和 Workspace 设置。"
+      },
+      "intermediate_replies": {
+        "enabled": {
+          "label": "中间回复",
+          "help": "在长任务或大量工具调用期间发送自然的进度气泡。此消息不会写入会话历史。"
+        },
+        "mode": {
+          "label": "中间回复模式",
+          "help": "选择由投递模型生成进度更新，或在此 Channel 中禁用。"
+        },
+        "provider": {
+          "label": "Intermediate Provider",
+          "help": "进度气泡使用的可选 Provider。留空则继承 Agent Provider；适合选择快速、低成本的 Provider。"
+        },
+        "model": {
+          "label": "Intermediate Model",
+          "help": "进度气泡使用的可选模型。留空则继承 Agent 模型；允许输入自定义模型名。"
+        },
+        "timeout_ms": {
+          "label": "Intermediate Timeout (ms)",
+          "help": "等待投递模型的最长时间，超时后跳过中间更新。"
+        },
+        "max_tokens": {
+          "label": "Intermediate Max Tokens",
+          "help": "每条进度气泡的 token 上限。保持较小可让更新更简短。"
+        },
+        "max_chars": {
+          "label": "Intermediate Max Chars",
+          "help": "生成后的字符上限，防止进度气泡变成完整回答。"
+        }
+      },
+      "quick_ack": {
+        "enabled": {
+          "label": "快速确认",
+          "help": "在长任务开始前发送一条自然的简短确认。此消息不会写入会话历史。"
+        },
+        "mode": {
+          "label": "快速确认模式",
+          "help": "生成模式使用配置的投递 Provider/模型。只有固定模板模式会发送模板文本。"
+        },
+        "provider": {
+          "label": "Quick Ack Provider",
+          "help": "快速确认使用的可选 Provider。留空则继承 Agent Provider；适合选择快速、低成本的 Provider。"
+        },
+        "model": {
+          "label": "Quick Ack Model",
+          "help": "快速确认使用的可选模型。留空则继承 Agent 模型；允许输入自定义模型名。"
+        },
+        "timeout_ms": {
+          "label": "Quick Ack Timeout (ms)",
+          "help": "等待确认模型的最长时间，超时后跳过生成的确认消息。"
+        },
+        "max_tokens": {
+          "label": "Quick Ack Max Tokens",
+          "help": "确认消息的 token 上限。保持较小可让它像确认收到，而不是完整回答。"
+        },
+        "max_chars": {
+          "label": "Quick Ack Max Chars",
+          "help": "生成后的字符上限，确保确认气泡保持简短。"
+        }
+      },
+      "final_split": {
+        "enabled": {
+          "label": "最终回复拆分",
+          "help": "将较长的最终回答拆分为多条 Channel 消息。此功能独立于推理和进度气泡。"
+        }
+      }
+    },
     "platform": { "label": "平台", "help": "选择此 Pancake 页面所服务的平台。" },
     "tiktok_type": { "label": "TikTok 类型", "help": "选择此页面的 TikTok 账户类型" },
     "features.private_reply": {
@@ -361,6 +433,46 @@
       "streaming_only": "仅流式传输时",
       "always_bubbles": "始终作为气泡",
       "off": "关闭"
+    },
+    "chat_behavior": {
+      "enabled": {
+        "inherit": "继承自 gateway",
+        "true": "启用",
+        "false": "禁用"
+      },
+      "intermediate_replies": {
+        "enabled": {
+          "inherit": "继承自 gateway",
+          "true": "启用",
+          "false": "禁用"
+        },
+        "mode": {
+          "inherit": "继承自 gateway",
+          "sidecar_generated": "Sidecar 生成",
+          "off": "关闭"
+        }
+      },
+      "quick_ack": {
+        "enabled": {
+          "inherit": "继承自 gateway",
+          "true": "启用",
+          "false": "禁用"
+        },
+        "mode": {
+          "inherit": "继承自 gateway",
+          "sidecar_generated": "Sidecar 生成",
+          "llm_generated": "LLM 生成",
+          "fixed_template": "固定模板",
+          "off": "关闭"
+        }
+      },
+      "final_split": {
+        "enabled": {
+          "inherit": "继承自 gateway",
+          "true": "启用",
+          "false": "禁用"
+        }
+      }
     },
     "domain": {
       "lark": "Lark（国际版）",
@@ -527,7 +639,7 @@
       },
       "errors": {
         "invalidName": "请使用小写字母、数字、连字符、下划线（2-64 字符）。",
-        "invalidDomain": "必须是有效的 Bitrix24 域名（例如：mycorp.bitrix24.com）。",
+        "invalidDomain": "必须是有效的主机名（例如：mycorp.bitrix24.com、mycorp.bitrix24.vn 或你的自托管域名）。",
         "duplicateName": "门户名称已存在。",
         "forbidden": "您需要租户管理员权限才能创建门户。",
         "gatewayURLUnknown": "请先通过公网 URL（非 localhost）打开 goclaw UI 然后重试。"

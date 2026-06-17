@@ -15,6 +15,7 @@ const (
 	FailoverFormat        FailoverReason = "format"
 	FailoverRateLimit     FailoverReason = "rate_limit"
 	FailoverOverloaded    FailoverReason = "overloaded"
+	FailoverServerError   FailoverReason = "server_error"
 	FailoverBilling       FailoverReason = "billing"
 	FailoverTimeout       FailoverReason = "timeout"
 	FailoverModelNotFound FailoverReason = "model_not_found"
@@ -101,6 +102,7 @@ func (c *DefaultClassifier) Classify(err error, statusCode int, body string) Fai
 		if containsAny(lower, "overload", "capacity", "too many") {
 			return classifyReason(FailoverOverloaded)
 		}
+		return classifyReason(FailoverServerError)
 	}
 
 	// Body pattern matching for specific error types
@@ -110,7 +112,7 @@ func (c *DefaultClassifier) Classify(err error, statusCode int, body string) Fai
 	if containsAny(lower, "tool_call", "function_call", "invalid_request") && statusCode == 400 {
 		return classifyReason(FailoverFormat)
 	}
-	if containsAny(lower, "data_inspection_failed", "inappropriate content", "content_policy_violation") && statusCode != 0 {
+	if isContentPolicyRefusal(lower, statusCode) {
 		return classifyReason(FailoverContentPolicy)
 	}
 
@@ -139,6 +141,10 @@ func ClassifyHTTPError(classifier ErrorClassifier, err error) FailoverClassifica
 	var httpErr *HTTPError
 	if errors.As(err, &httpErr) {
 		return classifier.Classify(err, httpErr.Status, httpErr.Body)
+	}
+	classification := classifier.Classify(err, 0, err.Error())
+	if classification.Kind == "context_overflow" || classification.Reason != FailoverUnknown {
+		return classification
 	}
 	// Non-HTTP error — check for network errors
 	if isNetworkError(err) {
@@ -183,6 +189,16 @@ func isNetworkError(err error) bool {
 	}
 	s := err.Error()
 	return containsAny(s, "connection reset", "broken pipe", "EOF", "timeout", "ECONNREFUSED")
+}
+
+func isContentPolicyRefusal(lower string, statusCode int) bool {
+	if statusCode != 0 && containsAny(lower, "data_inspection_failed", "inappropriate content", "content_policy_violation") {
+		return true
+	}
+	if containsAny(lower, "limited access to this content for safety reasons", "content for safety reasons") {
+		return true
+	}
+	return strings.Contains(lower, "invalid prompt") && strings.Contains(lower, "safety")
 }
 
 // containsAny returns true if s contains any of the substrings.

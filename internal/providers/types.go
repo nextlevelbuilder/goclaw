@@ -113,11 +113,20 @@ type StreamChunk struct {
 	Images   []ImageContent `json:"images,omitempty"` // image generation frames (Codex)
 }
 
-// ImageContent represents a base64-encoded image for vision-capable models.
+// ImageContent represents an image (either base64-encoded or a direct URL) for vision-capable models.
 type ImageContent struct {
 	MimeType string `json:"mime_type"`         // e.g. "image/jpeg"
 	Data     string `json:"data"`              // base64-encoded image bytes
+	URL      string `json:"url,omitempty"`     // URL of the image
 	Partial  bool   `json:"partial,omitempty"` // true for intermediate frames (Codex image_generation_call)
+}
+
+// VideoContent represents a video (either base64-encoded or a direct URL) for video-capable models.
+type VideoContent struct {
+	MimeType string `json:"mime_type"`         // e.g. "video/mp4"
+	Data     string `json:"data"`              // base64-encoded video bytes
+	URL      string `json:"url,omitempty"`     // URL of the video
+	Partial  bool   `json:"partial,omitempty"` // true for intermediate frames
 }
 
 // MediaRef is a lightweight reference to a persistently stored media file.
@@ -137,6 +146,7 @@ type Message struct {
 	Content    string         `json:"content"`
 	Thinking   string         `json:"thinking,omitempty"`   // reasoning_content for thinking models (Kimi, DeepSeek, etc.)
 	Images     []ImageContent `json:"-"`                    // vision: base64 images (runtime only, never persisted to DB)
+	Videos     []VideoContent `json:"-"`                    // vision: base64 videos (runtime only, never persisted to DB)
 	MediaRefs  []MediaRef     `json:"media_refs,omitempty"` // persistent media file references
 	ToolCalls  []ToolCall     `json:"tool_calls,omitempty"`
 	ToolCallID string         `json:"tool_call_id,omitempty"` // for role="tool" responses
@@ -156,6 +166,10 @@ type Message struct {
 	// Pointer type so that older messages (stored before this field existed) deserialize as nil,
 	// allowing the frontend to fall back to synthetic timestamps.
 	CreatedAt *time.Time `json:"created_at,omitempty"`
+
+	// Transient messages are runtime-only context for the next provider call.
+	// They must not be persisted to session history or serialized to providers.
+	Transient bool `json:"-"`
 }
 
 // ToolCall represents a tool invocation requested by the LLM.

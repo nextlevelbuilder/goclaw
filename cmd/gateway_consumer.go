@@ -238,6 +238,7 @@ func appendMediaToOutbound(msg *bus.OutboundMessage, media []agent.MediaResult) 
 		msg.Media = append(msg.Media, bus.MediaAttachment{
 			URL:         mr.Path,
 			ContentType: mr.ContentType,
+			Caption:     mr.Caption,
 		})
 		if mr.AsVoice {
 			if msg.Metadata == nil {

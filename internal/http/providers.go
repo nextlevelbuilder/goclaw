@@ -314,6 +314,18 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) providerRu
 			base = store.NovitaDefaultAPIBase
 		}
 		h.providerReg.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, p.APIKey, base, store.NovitaDefaultModel))
+	case store.ProviderKimiCoding:
+		// Moonshot Kimi Coding requires a fixed User-Agent on every request.
+		base := apiBase
+		if base == "" {
+			base = store.KimiCodingDefaultAPIBase
+		}
+		prov := providers.NewOpenAIProvider(p.Name, p.APIKey, base, store.KimiCodingDefaultModel)
+		prov.WithProviderType(p.ProviderType)
+		prov.WithExtraHeaders(map[string]string{
+			"User-Agent": store.KimiCodingRequiredUserAgent,
+		})
+		h.providerReg.RegisterForTenant(p.TenantID, prov)
 	default:
 		prov := providers.NewOpenAIProvider(p.Name, p.APIKey, apiBase, "")
 		if p.ProviderType == store.ProviderMiniMax {

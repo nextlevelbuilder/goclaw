@@ -45,11 +45,11 @@ func TestRapidAPIPresetBlocksVerboseSecretLeakFlags(t *testing.T) {
 	}
 }
 
-func TestRequiredCredentialEnvVarsScopedToRapidAPI(t *testing.T) {
+func TestRequiredCredentialEnvVarsFromPresets(t *testing.T) {
 	if got := requiredCredentialEnvVars("rapidapi"); !slices.Contains(got, "RAPIDAPI_KEY") {
 		t.Fatalf("requiredCredentialEnvVars(rapidapi) = %v, missing RAPIDAPI_KEY", got)
 	}
-	if got := requiredCredentialEnvVars("gh"); len(got) != 0 {
-		t.Fatalf("requiredCredentialEnvVars(gh) = %v, want no behavior change for existing presets", got)
+	if got := requiredCredentialEnvVars("gh"); !slices.Contains(got, "GH_TOKEN") {
+		t.Fatalf("requiredCredentialEnvVars(gh) = %v, missing GH_TOKEN", got)
 	}
 }

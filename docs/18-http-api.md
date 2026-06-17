@@ -329,6 +329,36 @@ Use `direct_selection_count` plus the `selected_provider` sequence to verify rea
 | `PUT` | `/v1/skills/{id}/tenant-config` | Set tenant-level skill config |
 | `DELETE` | `/v1/skills/{id}/tenant-config` | Delete tenant-level skill config |
 
+### Skill Self-Evolution
+
+Skill self-evolution is tenant-scoped and off by default per skill. Usage
+metrics are written only by trusted runtime paths such as `use_skill` tool
+execution and slash-command activation. There is no public usage-write endpoint.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/skills/{id}/evolution` | Read self-evolution settings for a skill |
+| `PATCH` | `/v1/skills/{id}/evolution` | Update enabled state or mode |
+| `GET` | `/v1/skills/{id}/metrics` | Read aggregate usage metrics and status counts |
+| `GET` | `/v1/skills/{id}/activity` | Read admin-only skill evolution activity |
+| `GET` | `/v1/skills/{id}/evolution/suggestions` | List skill-scoped improvement suggestions |
+| `POST` | `/v1/skills/{id}/evolution/suggestions` | Create a suggestion with evidence and draft patch |
+| `POST` | `/v1/skills/{id}/evolution/suggestions/{suggestionID}/approve` | Approve a suggestion |
+| `POST` | `/v1/skills/{id}/evolution/suggestions/{suggestionID}/reject` | Reject a suggestion |
+| `POST` | `/v1/skills/{id}/evolution/suggestions/{suggestionID}/apply` | Apply an approved suggestion to a new skill version |
+
+Supported modes:
+
+| Mode | Behavior |
+|------|----------|
+| `suggest_only` | Collect metrics and manage suggestions; no automatic patching |
+| `auto_analyze` | Reserved for analysis automation; patch application still requires explicit approval |
+
+Viewer/operator callers can read aggregate metrics. Raw activity details,
+actor IDs, failure evidence, draft patches, and suggestion apply actions remain
+admin-controlled. System skill mutation is blocked; custom skill suggestions
+write a new versioned directory and `skill_versions` record when applied.
+
 ### Skill Grants
 
 Skill upload size is enforced per ZIP file. The effective limit resolves in this order:
@@ -1358,7 +1388,26 @@ LLM call tracing and cost analysis.
 | `GET` | `/v1/traces/{traceID}/export` | Export trace tree (gzipped JSON) |
 | `GET` | `/v1/runs/{runID}/timeline` | Get persisted run archive timeline items |
 
-**Filters:** `agent_id`, `user_id`, `session_key`, `status`, `channel`
+`GET /v1/traces` query params:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `q` | string | Contains search across trace ID, trace name, input/output previews, session key, raw channel, joined agent/channel labels, and span tool/input/output previews |
+| `agent_id` | UUID | Exact agent UUID filter |
+| `user_id` | string | Exact user filter; non-admin callers are always forced to their own user scope |
+| `session_key` | string | Exact session key filter |
+| `status` | string | Exact trace status filter |
+| `channel` | string | Exact raw channel filter |
+| `agent` | string | Contains search over joined agent display name and key |
+| `channel_query` | string | Contains search over tenant-scoped channel instance name, display name, and type |
+| `from` / `to` | RFC 3339 timestamp | Start-time range; `from` is inclusive, `to` is exclusive |
+| `min_input_tokens` / `max_input_tokens` | int | Input token range |
+| `min_output_tokens` / `max_output_tokens` | int | Output token range |
+| `min_tool_calls` / `max_tool_calls` | int | Tool-call count range |
+| `tool_name` | string | Contains search over span tool names |
+| `has_tool_calls` | boolean | Convenience filter for traces with or without tool calls |
+| `limit` | int | Page size, default 50, max 200 |
+| `offset` | int | Pagination offset |
 
 `GET /v1/traces/follow` requires `session_key` or `agent_id`. Query params: `session_key`, `agent_id`, `status`, `channel`, `since` (RFC 3339), `limit` (default 50, max 200), `include_spans` (default false). Non-admin callers only see their own traces. When `since` is provided, the server returns traces matching existing filters and `(created_at > since OR end_time > since OR status = "running")`.
 
@@ -1373,6 +1422,26 @@ Follow response:
   "limit": 50
 }
 ```
+
+Main binary operator commands wrap the same endpoints:
+
+```bash
+goclaw traces list --query "provider fail" --status error
+goclaw traces get <trace-id> -o json
+goclaw traces export <trace-id> --file trace.json.gz
+goclaw traces follow --session <session-key>
+goclaw traces timeline <trace-id>
+```
+
+Remote gateways use the shared client overrides:
+
+```bash
+goclaw --server https://goclaw.example.com --token "$GOCLAW_GATEWAY_TOKEN" traces list -o json
+```
+
+The same `--server` / `--token` resolver is shared with WebSocket/RPC-backed
+admin commands. `GOCLAW_SERVER` or `GOCLAW_GATEWAY_URL` can provide the base URL
+when the flag is omitted.
 
 ### Run Timeline
 

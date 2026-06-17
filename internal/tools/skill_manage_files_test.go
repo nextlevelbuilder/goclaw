@@ -594,6 +594,9 @@ func (s *skillManageFilesStore) ListWithGrantStatus(context.Context, uuid.UUID) 
 func (s *skillManageFilesStore) ListAgentGrantsForSkill(context.Context, uuid.UUID) ([]store.SkillAgentGrantInfo, error) {
 	return nil, nil
 }
+func (s *skillManageFilesStore) ListUserGrantsForSkill(context.Context, uuid.UUID) ([]store.SkillUserGrantInfo, error) {
+	return nil, nil
+}
 func (s *skillManageFilesStore) AgentCanManageSkill(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
 	return false, nil
 }

@@ -3,9 +3,9 @@ import { useTranslation } from "react-i18next";
 import { Save, Settings, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { InfoLabel } from "@/components/shared/info-label";
 import { ProviderModelSelect } from "@/components/shared/provider-model-select";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -312,7 +312,9 @@ function DeliveryBehaviorSection({
     <div className="space-y-3 rounded-md border p-4">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h3 className="text-sm font-medium">{t("delivery.title")}</h3>
+          <InfoLabel tip={t("delivery.modeTip")} labelClassName="text-sm font-medium">
+            {t("delivery.title")}
+          </InfoLabel>
           <p className="text-xs text-muted-foreground">{t("delivery.description")}</p>
         </div>
         <Select value={mode} onValueChange={(next) => onModeChange(next as "inherit" | "custom")}>
@@ -328,39 +330,59 @@ function DeliveryBehaviorSection({
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3">
-            <Label>{t("delivery.quickAck")}</Label>
+            <InfoLabel tip={t("delivery.quickAckTip")}>{t("delivery.quickAck")}</InfoLabel>
             <Switch checked={value.quick_ack?.enabled ?? true} disabled={disabled} onCheckedChange={(enabled) => patchQuick({ enabled })} />
           </div>
           <DeliveryProviderFields
             disabled={disabled}
             provider={value.quick_ack?.provider ?? ""}
             model={value.quick_ack?.model ?? ""}
+            providerTip={t("delivery.quickAckProviderTip")}
+            modelTip={t("delivery.quickAckModelTip")}
             onProvider={(provider) => patchQuick({ provider, model: "" })}
             onModel={(model) => patchQuick({ model })}
           />
-          <NumberField label={t("delivery.quickAckDelay")} value={value.quick_ack?.min_delay_ms ?? 1000} disabled={disabled} onChange={(min_delay_ms) => patchQuick({ min_delay_ms })} />
-          <NumberField label={t("delivery.timeoutMs")} value={value.quick_ack?.timeout_ms ?? 2500} disabled={disabled} onChange={(timeout_ms) => patchQuick({ timeout_ms })} />
+          <NumberField label={t("delivery.quickAckDelay")} tip={t("delivery.quickAckDelayTip")} value={value.quick_ack?.min_delay_ms ?? 1000} disabled={disabled} onChange={(min_delay_ms) => patchQuick({ min_delay_ms })} />
+          <NumberField label={t("delivery.timeoutMs")} tip={t("delivery.quickAckTimeoutTip")} value={value.quick_ack?.timeout_ms ?? 2500} disabled={disabled} onChange={(timeout_ms) => patchQuick({ timeout_ms })} />
         </div>
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3">
-            <Label>{t("delivery.intermediate")}</Label>
+            <InfoLabel tip={t("delivery.intermediateTip")}>{t("delivery.intermediate")}</InfoLabel>
             <Switch checked={value.intermediate_replies?.enabled ?? false} disabled={disabled} onCheckedChange={(enabled) => patchIntermediate({ enabled })} />
           </div>
           <DeliveryProviderFields
             disabled={disabled}
             provider={value.intermediate_replies?.provider ?? ""}
             model={value.intermediate_replies?.model ?? ""}
+            providerTip={t("delivery.intermediateProviderTip")}
+            modelTip={t("delivery.intermediateModelTip")}
             onProvider={(provider) => patchIntermediate({ provider, model: "" })}
             onModel={(model) => patchIntermediate({ model })}
           />
-          <NumberField label={t("delivery.timeoutMs")} value={value.intermediate_replies?.timeout_ms ?? 2500} disabled={disabled} onChange={(timeout_ms) => patchIntermediate({ timeout_ms })} />
+          <NumberField label={t("delivery.timeoutMs")} tip={t("delivery.intermediateTimeoutTip")} value={value.intermediate_replies?.timeout_ms ?? 2500} disabled={disabled} onChange={(timeout_ms) => patchIntermediate({ timeout_ms })} />
         </div>
       </div>
     </div>
   );
 }
 
-function DeliveryProviderFields({ disabled, provider, model, onProvider, onModel }: { disabled: boolean; provider: string; model: string; onProvider: (value: string) => void; onModel: (value: string) => void }) {
+function DeliveryProviderFields({
+  disabled,
+  provider,
+  model,
+  providerTip,
+  modelTip,
+  onProvider,
+  onModel,
+}: {
+  disabled: boolean;
+  provider: string;
+  model: string;
+  providerTip: string;
+  modelTip: string;
+  onProvider: (value: string) => void;
+  onModel: (value: string) => void;
+}) {
   const { t } = useTranslation("agents");
   return (
     <ProviderModelSelect
@@ -372,16 +394,18 @@ function DeliveryProviderFields({ disabled, provider, model, onProvider, onModel
       allowEmpty
       providerLabel={t("delivery.provider")}
       modelLabel={t("delivery.model")}
+      providerTip={providerTip}
+      modelTip={modelTip}
       providerPlaceholder={t("delivery.providerPlaceholder")}
       modelPlaceholder={t("delivery.modelPlaceholder")}
     />
   );
 }
 
-function NumberField({ label, value, disabled, onChange }: { label: string; value: number; disabled: boolean; onChange: (value: number) => void }) {
+function NumberField({ label, tip, value, disabled, onChange }: { label: string; tip: string; value: number; disabled: boolean; onChange: (value: number) => void }) {
   return (
     <div className="grid gap-1.5">
-      <Label>{label}</Label>
+      <InfoLabel tip={tip}>{label}</InfoLabel>
       <Input className="text-base md:text-sm" type="number" min={0} value={value} disabled={disabled} onChange={(e) => onChange(Number(e.target.value))} />
     </div>
   );

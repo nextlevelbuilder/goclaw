@@ -21,9 +21,17 @@ func init() {
 		MsgInvalidUpdates:   "invalid updates",
 
 		// Agent
-		MsgAgentNotFound:       "agent not found: %s",
-		MsgCannotDeleteDefault: "cannot delete the default agent",
-		MsgUserCtxRequired:     "user context required",
+		MsgAgentNotFound:                       "agent not found: %s",
+		MsgCannotDeleteDefault:                 "cannot delete the default agent",
+		MsgUserCtxRequired:                     "user context required",
+		MsgGatewayOperatorSecureCLIUnavailable: "Gateway operator access was skipped because SecureCLI storage is unavailable.",
+		MsgGatewayOperatorEligibilityFailed:    "Agent was created, but gateway operator access could not verify first-agent eligibility.",
+		MsgGatewayOperatorNotFirstAgent:        "Gateway operator access was not granted because this is not the first agent.",
+		MsgGatewayOperatorTokenMissing:         "Gateway operator access was skipped because the gateway token is not configured.",
+		MsgGatewayOperatorBinaryMissing:        "Gateway operator access was skipped because the goclaw binary could not be discovered.",
+		MsgGatewayOperatorExistingReview:       "Gateway operator access was skipped because an existing goclaw CLI credential requires manual review.",
+		MsgGatewayOperatorRegisterFailed:       "Gateway operator access was skipped because the goclaw CLI credential could not be registered.",
+		MsgGatewayOperatorCredentialFailed:     "Gateway operator access was skipped because credentials could not be stored.",
 
 		// Chat
 		MsgRateLimitExceeded: "rate limit exceeded — please wait",
@@ -133,9 +141,17 @@ func init() {
 		MsgCannotRemoveLastWriter:  "cannot remove the last file writer",
 
 		// Skills
-		MsgSkillsUpdateNotSupported: "skills.update not supported for file-based skills",
-		MsgCannotResolveSkillID:     "cannot resolve skill ID for file-based skill",
-		MsgInvalidVisibility:        "invalid visibility %q: must be one of private, public",
+		MsgSkillsUpdateNotSupported:    "skills.update not supported for file-based skills",
+		MsgCannotResolveSkillID:        "cannot resolve skill ID for file-based skill",
+		MsgInvalidVisibility:           "invalid visibility %q: must be one of private, public",
+		MsgSkillEvolutionNotConfigured: "skill evolution store is not configured",
+		MsgActivityStoreNotConfigured:  "activity store is not configured",
+		MsgInvalidEvolutionMode:        "invalid evolution mode",
+		MsgSystemSkillMutationBlocked:  "system skill mutation is blocked",
+		MsgSuggestionMustBeApproved:    "suggestion must be approved before apply",
+		MsgInvalidDraftPatch:           "invalid draft_patch: %s",
+		MsgDraftPatchRequired:          "draft_patch requires content or find/replace",
+		MsgFindTextNotFound:            "find text not found in target file",
 
 		// Logs
 		MsgInvalidLogAction: "action must be 'start' or 'stop'",

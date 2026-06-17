@@ -21,9 +21,17 @@ func init() {
 		MsgInvalidUpdates:   "cập nhật không hợp lệ",
 
 		// Agent
-		MsgAgentNotFound:       "không tìm thấy agent: %s",
-		MsgCannotDeleteDefault: "không thể xóa agent mặc định",
-		MsgUserCtxRequired:     "yêu cầu ngữ cảnh người dùng",
+		MsgAgentNotFound:                       "không tìm thấy agent: %s",
+		MsgCannotDeleteDefault:                 "không thể xóa agent mặc định",
+		MsgUserCtxRequired:                     "yêu cầu ngữ cảnh người dùng",
+		MsgGatewayOperatorSecureCLIUnavailable: "Đã bỏ qua quyền gateway operator vì kho SecureCLI chưa khả dụng.",
+		MsgGatewayOperatorEligibilityFailed:    "Agent đã được tạo, nhưng không thể xác minh đây là agent đầu tiên để cấp quyền gateway operator.",
+		MsgGatewayOperatorNotFirstAgent:        "Không cấp quyền gateway operator vì đây không phải agent đầu tiên.",
+		MsgGatewayOperatorTokenMissing:         "Đã bỏ qua quyền gateway operator vì gateway token chưa được cấu hình.",
+		MsgGatewayOperatorBinaryMissing:        "Đã bỏ qua quyền gateway operator vì không tìm thấy binary goclaw.",
+		MsgGatewayOperatorExistingReview:       "Đã bỏ qua quyền gateway operator vì credential CLI goclaw hiện có cần kiểm tra thủ công.",
+		MsgGatewayOperatorRegisterFailed:       "Đã bỏ qua quyền gateway operator vì không thể đăng ký credential CLI goclaw.",
+		MsgGatewayOperatorCredentialFailed:     "Đã bỏ qua quyền gateway operator vì không thể lưu credential.",
 
 		// Chat
 		MsgRateLimitExceeded: "vượt quá giới hạn tốc độ — vui lòng đợi",
@@ -133,9 +141,17 @@ func init() {
 		MsgCannotRemoveLastWriter:  "không thể xóa người quản lý cuối cùng",
 
 		// Skills
-		MsgSkillsUpdateNotSupported: "skills.update không được hỗ trợ với skill dựa trên tệp",
-		MsgCannotResolveSkillID:     "không thể xác định ID skill dựa trên tệp",
-		MsgInvalidVisibility:        "visibility không hợp lệ %q: phải là private hoặc public",
+		MsgSkillsUpdateNotSupported:    "skills.update không được hỗ trợ với skill dựa trên tệp",
+		MsgCannotResolveSkillID:        "không thể xác định ID skill dựa trên tệp",
+		MsgInvalidVisibility:           "visibility không hợp lệ %q: phải là private hoặc public",
+		MsgSkillEvolutionNotConfigured: "kho lưu skill evolution chưa được cấu hình",
+		MsgActivityStoreNotConfigured:  "kho lưu activity chưa được cấu hình",
+		MsgInvalidEvolutionMode:        "evolution mode không hợp lệ",
+		MsgSystemSkillMutationBlocked:  "không được phép sửa skill hệ thống",
+		MsgSuggestionMustBeApproved:    "phải duyệt suggestion trước khi apply",
+		MsgInvalidDraftPatch:           "draft_patch không hợp lệ: %s",
+		MsgDraftPatchRequired:          "draft_patch cần content hoặc find/replace",
+		MsgFindTextNotFound:            "không tìm thấy đoạn cần thay trong tệp đích",
 
 		// Logs
 		MsgInvalidLogAction: "action phải là 'start' hoặc 'stop'",

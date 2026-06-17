@@ -222,6 +222,50 @@ func TestHandleAgentEvent_GeneratedQuickAckUsesSidecarGenerator(t *testing.T) {
 	}
 }
 
+func TestHandleAgentEvent_GeneratedQuickAckReceivesPersonaBrief(t *testing.T) {
+	behavior := ResolvedChatBehavior{
+		Enabled: true,
+		QuickAck: ResolvedQuickAckConfig{
+			Enabled:    true,
+			Mode:       QuickAckModeLLMGenerated,
+			MinDelayMs: 0,
+			MaxTokens:  20,
+			MaxChars:   80,
+		},
+	}
+
+	requests := make(chan DeliveryMessageRequest, 1)
+	mb := bus.New()
+	mgr := NewManager(mb)
+	mgr.RegisterChannel("test", &chatBehaviorTestChannel{name: "test"})
+	mgr.RegisterRunWithDelivery("run-1", "test", "chat-1", "msg-1", nil, uuid.Nil, false, false, true, behavior, DeliveryRuntime{
+		QuickAckGenerator: captureDeliveryGenerator{content: "Mình nhận rồi.", requests: requests},
+		Inbound:           "kiểm tra giúp tôi",
+		Locale:            "vi",
+		PersonaBrief:      "Style: concise, warm",
+	})
+
+	mgr.HandleAgentEvent(protocol.AgentEventRunStarted, "run-1", nil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if _, ok := mb.SubscribeOutbound(ctx); !ok {
+		t.Fatal("expected generated quick acknowledgement")
+	}
+
+	select {
+	case got := <-requests:
+		if got.PersonaBrief != "Style: concise, warm" {
+			t.Fatalf("quick ack persona brief = %q, want runtime persona", got.PersonaBrief)
+		}
+		if got.Purpose != DeliveryPurposeQuickAck {
+			t.Fatalf("quick ack purpose = %q", got.Purpose)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("generator did not receive quick ack request")
+	}
+}
+
 func TestHandleAgentEvent_GeneratedQuickAckDoesNotUseTemplateWhenGeneratorFails(t *testing.T) {
 	behavior := ResolvedChatBehavior{
 		Enabled: true,
@@ -283,6 +327,50 @@ func TestHandleAgentEvent_IntermediateProgressDoesNotUseFallbackWhenGeneratorFai
 	defer cancel()
 	if got, ok := mb.SubscribeOutbound(ctx); ok {
 		t.Fatalf("intermediate progress used fallback after generator failure: %+v", got)
+	}
+}
+
+func TestHandleAgentEvent_IntermediateProgressReceivesPersonaBrief(t *testing.T) {
+	behavior := ResolvedChatBehavior{
+		Enabled: true,
+		IntermediateReplies: ResolvedIntermediateRepliesConfig{
+			Enabled:   true,
+			Mode:      IntermediateModeSidecar,
+			MaxTokens: 20,
+			MaxChars:  120,
+		},
+		QuickAck: ResolvedQuickAckConfig{Enabled: false},
+	}
+
+	requests := make(chan DeliveryMessageRequest, 1)
+	mb := bus.New()
+	mgr := NewManager(mb)
+	mgr.RegisterChannel("test", &chatBehaviorTestChannel{name: "test"})
+	mgr.RegisterRunWithDelivery("run-1", "test", "chat-1", "msg-1", nil, uuid.Nil, false, false, true, behavior, DeliveryRuntime{
+		ProgressGenerator: captureDeliveryGenerator{content: "Đang soi tiếp.", requests: requests},
+		Inbound:           "kiểm tra giúp tôi",
+		Locale:            "vi",
+		PersonaBrief:      "Style: concise, warm",
+	})
+
+	mgr.HandleAgentEvent(protocol.AgentEventToolCall, "run-1", map[string]string{"name": "skill_search"})
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if _, ok := mb.SubscribeOutbound(ctx); !ok {
+		t.Fatal("expected generated progress outbound message")
+	}
+
+	select {
+	case got := <-requests:
+		if got.PersonaBrief != "Style: concise, warm" {
+			t.Fatalf("progress persona brief = %q, want runtime persona", got.PersonaBrief)
+		}
+		if got.Purpose != DeliveryPurposeProgress {
+			t.Fatalf("progress purpose = %q", got.Purpose)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("generator did not receive progress request")
 	}
 }
 
@@ -440,6 +528,46 @@ func TestHandleAgentEvent_ToolAnnouncementBypassesInitialQuickAckSuppression(t *
 	}
 }
 
+func TestHandleAgentEvent_FixedQuickAckIgnoresPersonaBrief(t *testing.T) {
+	behavior := ResolvedChatBehavior{
+		Enabled: true,
+		QuickAck: ResolvedQuickAckConfig{
+			Enabled:    true,
+			Mode:       QuickAckModeFixedTemplate,
+			MinDelayMs: 0,
+			MaxChars:   120,
+			Templates:  []string{"Checking the tool result now."},
+		},
+	}
+
+	requests := make(chan DeliveryMessageRequest, 1)
+	mb := bus.New()
+	mgr := NewManager(mb)
+	mgr.RegisterChannel("test", &chatBehaviorTestChannel{name: "test"})
+	mgr.RegisterRunWithDelivery("run-1", "test", "chat-1", "msg-1", nil, uuid.Nil, false, false, true, behavior, DeliveryRuntime{
+		QuickAckGenerator: captureDeliveryGenerator{content: "Generated.", requests: requests},
+		PersonaBrief:      "Style: concise, warm",
+	})
+
+	mgr.HandleAgentEvent(protocol.AgentEventRunStarted, "run-1", nil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	got, ok := mb.SubscribeOutbound(ctx)
+	if !ok {
+		t.Fatal("expected fixed quick acknowledgement")
+	}
+	if got.Content != "Checking the tool result now." {
+		t.Fatalf("fixed quick ack content = %q, want template", got.Content)
+	}
+
+	select {
+	case req := <-requests:
+		t.Fatalf("fixed quick ack unexpectedly called generator with request %+v", req)
+	default:
+	}
+}
+
 type fakeDeliveryGenerator struct {
 	content string
 	err     error
@@ -447,4 +575,16 @@ type fakeDeliveryGenerator struct {
 
 func (g fakeDeliveryGenerator) GenerateDeliveryMessage(context.Context, DeliveryMessageRequest) (string, error) {
 	return g.content, g.err
+}
+
+type captureDeliveryGenerator struct {
+	content  string
+	requests chan<- DeliveryMessageRequest
+}
+
+func (g captureDeliveryGenerator) GenerateDeliveryMessage(_ context.Context, req DeliveryMessageRequest) (string, error) {
+	if g.requests != nil {
+		g.requests <- req
+	}
+	return g.content, nil
 }

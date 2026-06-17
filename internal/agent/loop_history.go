@@ -117,7 +117,15 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		}
 	}
 
-	userMessage, extraSystemPrompt, skillFilter = l.applySkillSlashCommand(ctx, userMessage, extraSystemPrompt, skillFilter)
+	slashReq := &RunRequest{
+		SessionKey: sessionKey,
+		UserID:     userID,
+		SenderID:   store.SenderIDFromContext(ctx),
+		Channel:    channel,
+		ChatID:     chatID,
+		PeerKind:   peerKind,
+	}
+	userMessage, extraSystemPrompt, skillFilter = l.applySkillSlashCommand(ctx, slashReq, userMessage, extraSystemPrompt, skillFilter)
 
 	// Build tool list, filtering out skill_manage when skill_evolve is off.
 	// Also applies ChannelAware filtering so channel-specific tools don't

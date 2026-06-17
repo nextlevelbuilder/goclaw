@@ -361,6 +361,7 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 				})
 			}
 		}
+		fallbackTraceClassifier := providers.NewDefaultClassifier()
 		callProvider := func(attempt string, request providers.ChatRequest) (*providers.ChatResponse, error) {
 			if fallbackProvider, ok := provider.(*providers.ModelFallbackProvider); ok {
 				before := func(callCtx context.Context, entry providers.FallbackCandidate, actualReq providers.ChatRequest) (providers.FallbackAfterCall, error) {
@@ -371,6 +372,25 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 						return nil, reserveErr
 					}
 					return func(callResp *providers.ChatResponse, callErr error, info providers.FallbackCallInfo) {
+						fallbackMeta := providers.ModelFallbackAttemptMetadata{
+							ProviderName: entry.ProviderName,
+							Model:        actualReq.Model,
+							Status:       "success",
+							Streamed:     info.Streamed,
+						}
+						if callErr != nil {
+							classification := providers.ClassifyHTTPError(fallbackTraceClassifier, callErr)
+							reason := string(classification.Reason)
+							if classification.Kind == "context_overflow" {
+								reason = "context_overflow"
+							}
+							fallbackMeta.Status = "error"
+							fallbackMeta.Reason = reason
+							fallbackMeta.Error = callErr.Error()
+						} else {
+							opts = append(opts, withProvider(entry.ProviderName), withModel(actualReq.Model))
+						}
+						opts = append(opts, withModelFallbackAttempt(fallbackMeta))
 						if reservation != nil {
 							if info.Streamed {
 								reservation.ReconcileStream(callCtx, callResp, callErr, true)

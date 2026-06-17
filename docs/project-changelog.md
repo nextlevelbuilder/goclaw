@@ -4,6 +4,203 @@ Significant changes, features, and fixes in reverse chronological order.
 
 ---
 
+## 2026-06-13
+
+### Cron NO_REPLY delivery suppression (issue #141)
+
+**Fixes**
+
+- Suppressed configured cron channel delivery when final agent output contains a
+  standalone `NO_REPLY` sentinel anywhere in the text, while keeping normal chat
+  silent-reply behavior unchanged.
+- Added suppression logging with cron job/channel metadata for debugging.
+
+**Tests**
+
+- Added cron handler regression coverage for exact, prefix, suffix,
+  mid-sentence, decorative, and glued-token `NO_REPLY` outputs.
+
+---
+
+## 2026-06-12
+
+### Cron scheduler shutdown drain (post-merge CI follow-up)
+
+**Fixes**
+
+- Made cron service shutdown wait for scheduler-launched job executions to
+  finish so in-flight status persistence cannot outlive `Stop()`.
+
+**Tests**
+
+- Added regression coverage proving `Stop()` waits for a blocked in-flight job
+  before returning.
+
+### Bundled GoClaw gateway administration skill (issue #175)
+
+**Changes**
+
+- Added a bundled `goclaw` system skill for version-aware GoClaw CLI/runtime
+  discovery, read-only-first diagnostics, gateway administration workflows, and
+  troubleshooting playbooks.
+- Documented safety guidance for credentials, destructive actions,
+  permissions, tenant scope, and trace redaction.
+
+**Tests**
+
+- Added bundled-skill regression coverage to keep the default core skill set
+  discoverable in fresh runtimes.
+
+### Bailian Coding qwen3.7-plus catalog (issue #169)
+
+**Changes**
+
+- Added `qwen3.7-plus` / `Qwen 3.7 Plus` to the hardcoded Bailian
+  Coding provider model catalog.
+- Documented the model's advertised Text Generation, Deep Thinking, and Visual
+  Understanding capabilities while keeping Bailian on the existing
+  OpenAI-compatible provider wrapper.
+
+**Tests**
+
+- Added provider model endpoint coverage to verify Bailian exposes
+  `qwen3.7-plus` without adding unsupported OpenAI reasoning metadata.
+
+### Multi-attachment outbound delivery (issue #172)
+
+**Changes**
+
+- Extended `send_file` with `attachments[]` so agents can queue multiple
+  existing workspace files in one tool call while preserving order and captions.
+- Added caption propagation from tool result media through agent media results
+  into outbound channel attachments.
+- Added Telegram media-group delivery for compatible batches with 2-10 item
+  chunks, plus ordered fallback for singleton, voice, oversized-image, or mixed
+  incompatible cases.
+- Added explicit channel batch capability metadata for Telegram, Discord, and
+  ordered fallback channels.
+
+**Tests**
+
+- Added batch `send_file` regressions for happy path, duplicate rejection, and
+  all-or-nothing delivered-state handling.
+- Added Telegram media-group chunking tests for compatible grouping, max-size
+  chunking, and non-groupable fallback.
+
+### Operator trace CLI (issue #158)
+
+**Changes**
+
+- Added first-class `goclaw traces` operator commands to the main binary:
+  `list`, `get`, `export`, `follow`, and `timeline`.
+- Added remote client overrides with `--server` and `--token`; trace commands
+  support trace-scoped output selection via `--output` / `-o`.
+- Shared the URL/token resolver with WebSocket/RPC-backed admin commands so
+  `sessions`, `cron`, and `pairing` can use the same remote gateway overrides.
+- Kept trace commands as thin wrappers over existing HTTP endpoints so the
+  server/runtime and operator CLI share one binary without new API contracts.
+
+**Tests**
+
+- Added command/client regressions for gateway URL and token overrides, trace
+  query serialization, follow scope validation, and timeline run ID handling.
+
+### Skill self-evolution metrics and upgrades (issue #161, issue #142 foundation)
+
+**Features**
+
+- Added per-skill self-evolution settings, usage metrics, suggestions, immutable
+  applied-version records, and activity logs.
+- Added trusted runtime usage recording for `use_skill` and slash skill
+  activations without exposing a public usage-write endpoint.
+- Added skill evolution HTTP, CLI, and Web UI surfaces for settings, metrics,
+  suggestions, approval/apply actions, and admin-visible activity.
+- Added the shared foundation needed by self-improving skills: usage evidence,
+  reference-file patches, versioned apply, and approval/audit surfaces. The
+  consolidation learning extractor and auto user-scoped overlays remain out of
+  this v1 scope.
+
+**Safety**
+
+- Blocked direct system skill mutation in the suggestion apply path.
+- Reused a shared target-path validator for skill companion/reference patches.
+- Sanitized failure evidence, draft patches, actor IDs, and activity details
+  away from non-admin surfaces.
+
+**Tests**
+
+- Added focused skill path validator coverage and deep-link coverage for the new
+  Web UI evolution tab.
+
+### Skill lifecycle API and CLI (issue #159)
+
+**Changes**
+
+- Added per-skill dependency scan/check/install endpoints and CLI commands.
+- Added access read/update, agent/user grant aliases, and effective-access
+  inspection for operator workflows.
+- Dependency status now reports system, pip, npm, and GitHub release deps in
+  structured output.
+- Skill user grants are now tenant-scoped so shared system skills can be
+  granted to the same user ID in different tenants without conflicts.
+
+**Tests**
+
+- Added HTTP, CLI, PostgreSQL, and SQLite coverage for dependency lifecycle,
+  access mode changes, grants, effective access, grant-driven visibility, and
+  tenant-scoped user grants.
+
+### Mid-flight request preservation (issue #137)
+
+**Fixes**
+
+- Busy-session `chat.send` follow-ups that arrive after a no-tool final answer
+  now force one more pipeline iteration instead of finalizing the earlier answer.
+- The earlier final answer is preserved as assistant context and the follow-up is
+  appended after it, so the next model turn can answer both accepted requests.
+
+**Tests**
+
+- Added pipeline regressions for late injected follow-ups after a final answer.
+
+---
+
+## 2026-06-11
+
+### Trace search and advanced filters (issue #152)
+
+**Changes**
+
+- Extended `GET /v1/traces` with keyword search, partial Trace ID search, date
+  ranges, token ranges, tool-call filters, and agent/channel label search.
+- Added equivalent PostgreSQL and SQLite query-builder behavior with tenant
+  guards on joined channel/span search.
+- Added Web Traces search/filter controls with active filter chips.
+
+**Tests**
+
+- Added HTTP contract coverage for advanced trace filter parsing and user scope.
+- Added PostgreSQL and SQLite where-builder coverage for search, ranges, tool
+  filters, tenant predicates, and wildcard escaping.
+- Added Web filter serialization and trace i18n key coverage.
+
+### Secure CLI GitHub credential runtime diagnostics (issues #138, #151)
+
+**Fixes**
+
+- Git remote commands now fail closed before raw `git` auth prompts when no
+  typed host-scoped PAT/SSH credential is selected.
+- Required SecureCLI env validation now applies to preset env vars such as
+  `GH_TOKEN`, so credentialed `gh` commands report missing credential config
+  instead of raw `gh auth login` guidance.
+
+**Tests**
+
+- Added regressions for `git push` without typed credentials and `gh` without
+  `GH_TOKEN`.
+
+---
+
 ## 2026-06-09
 
 ### Behavior UX sidecar delivery overrides (issue #144)

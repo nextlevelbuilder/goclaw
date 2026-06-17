@@ -139,6 +139,12 @@ Enables thinking via `enable_thinking: true` plus a `thinking_budget` parameter.
 
 Other models (e.g., `qwen3-plus`, `qwen3-turbo`) silently skip thinking injection to avoid API errors.
 
+**Bailian Coding note**: Bailian is a separate OpenAI-compatible Coding
+endpoint. Its model catalog includes `qwen3.7-plus` with Deep Thinking and
+Visual Understanding listed for selection, but this DashScope `enable_thinking`
+/ `thinking_budget` injection path does not apply to Bailian unless the Coding
+endpoint's explicit request controls are verified separately.
+
 **Important limitation**: DashScope does not support streaming when tools are present. When an agent has tools enabled and thinking is active, the provider automatically falls back to non-streaming mode (single `Chat()` call) and synthesizes chunk callbacks to maintain the event flow.
 
 ### Codex (ChatGPT OAuth Responses API)

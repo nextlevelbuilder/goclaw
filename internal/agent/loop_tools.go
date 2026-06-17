@@ -91,7 +91,7 @@ func (l *Loop) processToolResult(
 			if ct == "" {
 				ct = mimeFromExt(filepath.Ext(mf.Path))
 			}
-			mr := MediaResult{Path: mf.Path, ContentType: ct}
+			mr := MediaResult{Path: mf.Path, ContentType: ct, Caption: mf.Caption}
 			if result.MediaPrompts != nil {
 				mr.Prompt = result.MediaPrompts[i]
 			}

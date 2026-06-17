@@ -249,7 +249,7 @@ func processNormalMessage(
 		chatBehavior = deps.ChannelMgr.ResolveChatBehaviorWithAgent(msg.Channel, workspaceBehavior, agentBehavior)
 	}
 	blockReply := deps.ChannelMgr != nil && chatBehavior.IntermediateReplies.Enabled
-	deliveryRuntime := buildDeliveryRuntime(ctx, deps, agentLoop, chatBehavior, msg, peerKind, resolveChannelType(deps.ChannelMgr, msg.Channel), agentID)
+	deliveryRuntime := buildDeliveryRuntime(ctx, deps, agentLoop, chatBehavior, msg, userID, peerKind, resolveChannelType(deps.ChannelMgr, msg.Channel), agentID)
 	toolStatus := deps.Cfg.Gateway.ToolStatus == nil || *deps.Cfg.Gateway.ToolStatus // default true
 	if deps.ChannelMgr != nil {
 		deps.ChannelMgr.RegisterRunWithDelivery(runID, msg.Channel, chatIDForRun, messageID, outMeta, msg.TenantID, channelStream, blockReply, toolStatus, chatBehavior, deliveryRuntime, reasoningDelivery)
@@ -611,17 +611,18 @@ func processNormalMessage(
 	}(agentID, msg.Channel, msg.ChatID, sessionKey, runID, peerKind, msg.Content, outMeta, blockReply, chatBehavior, channelStream, ptd, msg.TenantID, agentLoop.UUID(), agentLoop.OtherConfig())
 }
 
-func buildDeliveryRuntime(ctx context.Context, deps *ConsumerDeps, agentLoop agent.Agent, behavior channels.ResolvedChatBehavior, msg bus.InboundMessage, peerKind, channelType, agentKey string) channels.DeliveryRuntime {
+func buildDeliveryRuntime(ctx context.Context, deps *ConsumerDeps, agentLoop agent.Agent, behavior channels.ResolvedChatBehavior, msg bus.InboundMessage, userID, peerKind, channelType, agentKey string) channels.DeliveryRuntime {
 	locale := msg.Metadata["locale"]
 	if locale == "" {
 		locale = "auto"
 	}
 	runtime := channels.DeliveryRuntime{
-		Locale:    locale,
-		Inbound:   msg.Content,
-		PeerKind:  peerKind,
-		Channel:   channelType,
-		AgentName: agentKey,
+		Locale:       locale,
+		Inbound:      msg.Content,
+		PeerKind:     peerKind,
+		Channel:      channelType,
+		AgentName:    agentKey,
+		PersonaBrief: deliveryPersonaBrief(ctx, agentLoop, userID),
 	}
 	if behavior.Enabled && behavior.QuickAck.Enabled {
 		switch behavior.QuickAck.Mode {
@@ -636,6 +637,20 @@ func buildDeliveryRuntime(ctx context.Context, deps *ConsumerDeps, agentLoop age
 		}
 	}
 	return runtime
+}
+
+type deliveryPersonaProvider interface {
+	DeliveryPersonaBrief(context.Context, string) string
+}
+
+func deliveryPersonaBrief(ctx context.Context, agentLoop agent.Agent, userID string) string {
+	if agentLoop == nil {
+		return ""
+	}
+	if provider, ok := agentLoop.(deliveryPersonaProvider); ok {
+		return provider.DeliveryPersonaBrief(ctx, userID)
+	}
+	return ""
 }
 
 func buildDeliveryGenerator(ctx context.Context, deps *ConsumerDeps, agentLoop agent.Agent, tenantID uuid.UUID, providerName, model string) channels.DeliveryMessageGenerator {

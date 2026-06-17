@@ -324,6 +324,78 @@
     "skills": { "label": "Bộ lọc skill", "help": "Giới hạn skill khả dụng cho nhóm này" },
     "tools": { "label": "Danh sách công cụ được phép", "help": "Giới hạn công cụ agent có thể dùng trong nhóm này" },
     "system_prompt": { "label": "Prompt hệ thống" },
+    "chat_behavior": {
+      "enabled": {
+        "label": "Hành vi gửi tin tự nhiên",
+        "help": "Ghi đè hành vi gửi tin ở cấp Channel. Cấu hình Channel ưu tiên cao hơn Agent và Workspace."
+      },
+      "intermediate_replies": {
+        "enabled": {
+          "label": "Phản hồi trung gian",
+          "help": "Gửi bubble cập nhật tiến độ tự nhiên trong tác vụ dài hoặc dùng nhiều tool. Tin này không được thêm vào lịch sử phiên."
+        },
+        "mode": {
+          "label": "Chế độ phản hồi trung gian",
+          "help": "Chọn cập nhật tiến độ được generate bằng model gửi tin hay tắt ở channel này."
+        },
+        "provider": {
+          "label": "Intermediate Provider",
+          "help": "Provider tuỳ chọn cho bubble tiến độ. Để trống để kế thừa provider của agent; nên chọn provider nhanh và rẻ."
+        },
+        "model": {
+          "label": "Intermediate Model",
+          "help": "Model tuỳ chọn cho bubble tiến độ. Để trống để kế thừa model của agent; có thể nhập custom model name."
+        },
+        "timeout_ms": {
+          "label": "Intermediate Timeout (ms)",
+          "help": "Thời gian chờ tối đa cho model gửi tin trước khi bỏ qua cập nhật trung gian."
+        },
+        "max_tokens": {
+          "label": "Intermediate Max Tokens",
+          "help": "Giới hạn token cho mỗi bubble tiến độ. Nên để nhỏ để cập nhật ngắn gọn."
+        },
+        "max_chars": {
+          "label": "Intermediate Max Chars",
+          "help": "Giới hạn ký tự sau khi generate để bubble tiến độ không biến thành câu trả lời đầy đủ."
+        }
+      },
+      "quick_ack": {
+        "enabled": {
+          "label": "Xác nhận nhanh",
+          "help": "Gửi một câu xác nhận ngắn, tự nhiên trước khi tác vụ dài bắt đầu. Tin này không được thêm vào lịch sử phiên."
+        },
+        "mode": {
+          "label": "Chế độ xác nhận nhanh",
+          "help": "Các chế độ generate dùng provider/model gửi tin đã cấu hình. Chỉ chế độ fixed template mới gửi text cố định."
+        },
+        "provider": {
+          "label": "Quick Ack Provider",
+          "help": "Provider tuỳ chọn cho xác nhận nhanh. Để trống để kế thừa provider của agent; nên chọn provider nhanh và rẻ."
+        },
+        "model": {
+          "label": "Quick Ack Model",
+          "help": "Model tuỳ chọn cho xác nhận nhanh. Để trống để kế thừa model của agent; có thể nhập custom model name."
+        },
+        "timeout_ms": {
+          "label": "Quick Ack Timeout (ms)",
+          "help": "Thời gian chờ tối đa cho model xác nhận trước khi bỏ qua xác nhận được generate."
+        },
+        "max_tokens": {
+          "label": "Quick Ack Max Tokens",
+          "help": "Giới hạn token cho câu xác nhận. Nên để nhỏ để nó giống xác nhận đã nhận việc, không phải câu trả lời."
+        },
+        "max_chars": {
+          "label": "Quick Ack Max Chars",
+          "help": "Giới hạn ký tự sau khi generate để bubble xác nhận luôn ngắn gọn."
+        }
+      },
+      "final_split": {
+        "enabled": {
+          "label": "Tách câu trả lời cuối",
+          "help": "Tách câu trả lời dài thành nhiều tin nhắn channel. Tính năng này tách biệt với suy luận và bubble tiến độ."
+        }
+      }
+    },
     "platform": { "label": "Nền tảng", "help": "Chọn nền tảng mà trang Pancake này phục vụ." },
     "tiktok_type": { "label": "Loại tài khoản TikTok", "help": "Chọn loại tài khoản TikTok cho trang này" },
     "features.private_reply": {
@@ -361,6 +433,46 @@
       "streaming_only": "Chỉ khi streaming",
       "always_bubbles": "Luôn thành bubble",
       "off": "Tắt"
+    },
+    "chat_behavior": {
+      "enabled": {
+        "inherit": "Kế thừa từ gateway",
+        "true": "Bật",
+        "false": "Tắt"
+      },
+      "intermediate_replies": {
+        "enabled": {
+          "inherit": "Kế thừa từ gateway",
+          "true": "Bật",
+          "false": "Tắt"
+        },
+        "mode": {
+          "inherit": "Kế thừa từ gateway",
+          "sidecar_generated": "Sidecar generate",
+          "off": "Tắt"
+        }
+      },
+      "quick_ack": {
+        "enabled": {
+          "inherit": "Kế thừa từ gateway",
+          "true": "Bật",
+          "false": "Tắt"
+        },
+        "mode": {
+          "inherit": "Kế thừa từ gateway",
+          "sidecar_generated": "Sidecar generate",
+          "llm_generated": "LLM generate",
+          "fixed_template": "Template cố định",
+          "off": "Tắt"
+        }
+      },
+      "final_split": {
+        "enabled": {
+          "inherit": "Kế thừa từ gateway",
+          "true": "Bật",
+          "false": "Tắt"
+        }
+      }
     },
     "domain": {
       "lark": "Lark (Quốc tế)",
@@ -527,7 +639,7 @@
       },
       "errors": {
         "invalidName": "Chữ thường, số, gạch nối, gạch dưới (2-64 ký tự).",
-        "invalidDomain": "Phải là domain Bitrix24 hợp lệ (vd: mycorp.bitrix24.com).",
+        "invalidDomain": "Phải là hostname hợp lệ (vd: mycorp.bitrix24.com, mycorp.bitrix24.vn, hoặc domain self-hosted của bạn).",
         "duplicateName": "Tên portal đã tồn tại.",
         "forbidden": "Cần quyền tenant admin để tạo portal.",
         "gatewayURLUnknown": "Mở UI goclaw qua public URL (không phải localhost) trước, rồi retry."

@@ -426,7 +426,7 @@ func (t *ExecTool) executeCredentialed(ctx context.Context, cred *store.SecureCL
 
 	// Step 4: Register credential values for output scrubbing
 	for _, v := range envMap {
-		AddCredentialScrubValues(v)
+		AddScrubValuesCtx(ctx, v)
 	}
 
 	// Step 5: Resolve binary to absolute path and verify against config
@@ -465,6 +465,9 @@ func (t *ExecTool) executeCredentialed(ctx context.Context, cred *store.SecureCL
 
 	if adapter.ShouldInject(args) {
 		userCred := userCredFromBinary(ctx, cred)
+		if r := validateAdapterCredentialReady(adapter.Name(), binary, userCred); r != nil {
+			return r
+		}
 		// Plant the resolved exec cwd so adapters (e.g. git) can run any
 		// pre-flight sub-exec from the right repo, not goclaw's daemon CWD.
 		prepareCtx := WithExecCwd(ctx, cwd)
@@ -540,6 +543,26 @@ func credentialSubjectForAdapter(ctx context.Context, bin *store.SecureCLIBinary
 		return bin.CredentialSubjectID
 	}
 	return store.CredentialUserIDFromContext(ctx)
+}
+
+func validateAdapterCredentialReady(adapterName, binary string, cred *store.SecureCLIUserCredential) *Result {
+	if adapterName != "git" {
+		return nil
+	}
+	if cred == nil || cred.CredentialType == nil || strings.TrimSpace(*cred.CredentialType) == "" {
+		return credentialedGitCredentialResolutionError(binary, "no typed git credential selected")
+	}
+	switch strings.TrimSpace(*cred.CredentialType) {
+	case "pat", "ssh_key":
+		if cred.HostScope == nil || strings.TrimSpace(*cred.HostScope) == "" {
+			return credentialedGitCredentialResolutionError(binary, "typed git credential is missing host_scope")
+		}
+		return nil
+	case "env":
+		return credentialedGitCredentialResolutionError(binary, "legacy env credential cannot authenticate adapter-managed git remotes")
+	default:
+		return nil
+	}
 }
 
 func effectiveHostScope(bin *store.SecureCLIBinary) *string {
@@ -904,6 +927,17 @@ func credentialedMissingEnvError(binary string, keys []string) *Result {
 			"Configure the missing key as a SecureCLI user credential for the same user context, then grant this binary to the target agent.",
 			binary, strings.Join(keys, ", ")),
 		ForUser: fmt.Sprintf("CLI credential for %q is missing required env: %s.", binary, strings.Join(keys, ", ")),
+		IsError: true,
+	}
+}
+
+func credentialedGitCredentialResolutionError(binary, reason string) *Result {
+	return &Result{
+		ForLLM: fmt.Sprintf("[CREDENTIALED EXEC] Git credential resolution failed.\n"+
+			"Binary: %s\nReason: %s\n"+
+			"Configure a SecureCLI git credential with Credential Type = Personal Access Token or SSH Private Key and Host Scope matching the remote host, then grant this binary to the target agent.",
+			binary, reason),
+		ForUser: "Git credential resolution failed. Configure a host-scoped PAT or SSH key for this agent.",
 		IsError: true,
 	}
 }

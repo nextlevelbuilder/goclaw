@@ -105,6 +105,24 @@ Splitting is intentionally conservative. Replies containing fenced code, tables,
 
 Progress messages are not added to session history by this behavior. Existing run timeline handling for explicit `block.reply` remains unchanged.
 
+### Outbound Media Delivery
+
+Agent tools can queue media files through `Result.Media`; the consumer converts
+those entries into `OutboundMessage.Media` and preserves file order, MIME type,
+filename, and optional captions.
+
+- `send_file` accepts either the legacy single `path` + optional `caption`, or
+  `attachments: [{path, caption?}, ...]` for batch delivery of existing
+  workspace files.
+- Telegram groups compatible outbound media into `sendMediaGroup` album chunks
+  of 2-10 items. Photo/video items can share a chunk; documents group only with
+  documents; audio groups only with audio. Voice-mode audio, singleton chunks,
+  oversized images sent as documents, and incompatible runs use the existing
+  ordered single-send fallback.
+- Discord already sends multiple files plus optional text in one message.
+- Slack and other media-capable channels keep ordered fallback behavior unless
+  their adapter advertises a stronger batch capability.
+
 ### Reasoning Delivery
 
 Telegram channel config supports explicit reasoning delivery:
