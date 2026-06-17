@@ -85,9 +85,12 @@ func resolveActorUserID(userID, senderID, peerKind, channelType string) string {
 }
 
 // getUserMCPTools returns per-user MCP tools for servers requiring user credentials.
-// Tools are cached per-user in mcpUserTools sync.Map and registered in the shared
-// tool registry so ExecuteWithContext can resolve them. On first call for a user,
-// connections are established via pool.AcquireUser() and BridgeTools created.
+// Tools are cached per-user in mcpUserTools sync.Map and their NAMES added to the "mcp"
+// tool group; the tool objects are deliberately NOT registered in the shared registry
+// (cross-user identity leak — see inline note below). The returned slice is passed to
+// buildFilteredTools so the defs surface to the LLM; execution resolves per-actor via
+// executeToolForActor → mcpUserTools. On first call for a user, connections are
+// established via pool.AcquireUser() and BridgeTools created.
 func (l *Loop) getUserMCPTools(ctx context.Context, userID string) []tools.Tool {
 	if len(l.mcpUserCredSrvs) == 0 || l.mcpPool == nil || l.mcpStore == nil || userID == "" {
 		if userID == "" && len(l.mcpUserCredSrvs) > 0 {
