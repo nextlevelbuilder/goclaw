@@ -3,14 +3,12 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"os"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/spf13/cobra"
 
-	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -187,26 +185,20 @@ func pairingRevokeCmd() *cobra.Command {
 
 // gatewayRPC connects to the running gateway, authenticates, sends an RPC call, and returns the response.
 func gatewayRPC(method string, params json.RawMessage) (*protocol.ResponseFrame, error) {
-	cfg, err := config.Load(resolveConfigPath())
+	wsURL, err := resolveGatewayWebSocketURL()
 	if err != nil {
-		return nil, fmt.Errorf("load config: %w", err)
+		return nil, err
 	}
 
-	host := cfg.Gateway.Host
-	if host == "0.0.0.0" {
-		host = "127.0.0.1"
-	}
-
-	u := url.URL{Scheme: "ws", Host: fmt.Sprintf("%s:%d", host, cfg.Gateway.Port), Path: "/ws"}
-	conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("connect to gateway at %s: %w", u.String(), err)
+		return nil, fmt.Errorf("connect to gateway at %s: %w", wsURL, err)
 	}
 	defer conn.Close()
 
 	// Step 1: Send connect handshake
 	connectParams, _ := json.Marshal(map[string]any{
-		"token":    cfg.Gateway.Token,
+		"token":    resolveGatewayToken(),
 		"protocol": protocol.ProtocolVersion,
 	})
 	connectReq := protocol.RequestFrame{

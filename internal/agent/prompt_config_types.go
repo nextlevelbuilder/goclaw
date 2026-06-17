@@ -39,13 +39,14 @@ type PromptConfig struct {
 
 // IdentityData populates the identity template section.
 type IdentityData struct {
-	AgentName string
-	Emoji     string
-	Model     string
-	Channel   string
-	ChatID    string // current reply target chat id
-	ChatTitle string
-	PeerKind  string // "direct" or "group"
+	AgentName  string
+	Emoji      string
+	Model      string
+	Channel    string
+	ChatID     string // current reply target chat id
+	ChatTitle  string
+	PeerKind   string // "direct" or "group"
+	SenderName string
 }
 
 // ToolsSectionData populates the tools template section.

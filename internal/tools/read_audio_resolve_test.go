@@ -4,7 +4,30 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
+
+type readAudioUnsupportedProvider struct {
+	name      string
+	chatCalls int
+	images    int
+}
+
+func (p *readAudioUnsupportedProvider) Name() string         { return p.name }
+func (p *readAudioUnsupportedProvider) DefaultModel() string { return "claude-3-5-sonnet-latest" }
+
+func (p *readAudioUnsupportedProvider) Chat(_ context.Context, req providers.ChatRequest) (*providers.ChatResponse, error) {
+	p.chatCalls++
+	for _, msg := range req.Messages {
+		p.images += len(msg.Images)
+	}
+	return &providers.ChatResponse{Content: "unexpected"}, nil
+}
+
+func (p *readAudioUnsupportedProvider) ChatStream(_ context.Context, _ providers.ChatRequest, _ func(providers.StreamChunk)) (*providers.ChatResponse, error) {
+	return nil, nil
+}
 
 // TestReadAudioCallProvider_TranscriptionModelWithoutCreds_FailsFast asserts
 // that when no API credentials are present, a transcription-named model
@@ -69,5 +92,33 @@ func TestReadAudioCallProvider_GeminiWithoutCreds_FailsFast(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(err.Error()), "credential") {
 		t.Errorf("expected error to mention credentials, got: %v", err)
+	}
+}
+
+func TestReadAudioCallProvider_UnsupportedProviderDoesNotSendAudioAsImage(t *testing.T) {
+	reg := providers.NewRegistry(nil)
+	fake := &readAudioUnsupportedProvider{name: "anthropic"}
+	reg.Register(fake)
+	tool := &ReadAudioTool{registry: reg}
+
+	params := map[string]any{
+		"_provider_type": "anthropic",
+		"data":           []byte{0x4f, 0x67, 0x67, 0x53},
+		"mime":           "audio/ogg; codecs=opus",
+	}
+
+	_, _, err := tool.callProvider(context.Background(), nil, "anthropic", "claude-3-5-sonnet-latest", params)
+	if err == nil {
+		t.Fatalf("expected unsupported audio route error, got nil")
+	}
+	msg := strings.ToLower(err.Error())
+	if !strings.Contains(msg, "unsupported audio route") {
+		t.Fatalf("expected unsupported audio route error, got: %v", err)
+	}
+	if !strings.Contains(msg, "anthropic") || !strings.Contains(msg, "claude-3-5-sonnet-latest") {
+		t.Fatalf("expected provider and model in error, got: %v", err)
+	}
+	if fake.chatCalls != 0 || fake.images != 0 {
+		t.Fatalf("unsupported audio route called chat fallback: calls=%d images=%d", fake.chatCalls, fake.images)
 	}
 }

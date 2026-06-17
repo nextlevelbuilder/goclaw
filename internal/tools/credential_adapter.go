@@ -80,8 +80,8 @@ func AdapterFor(name string) CredentialAdapter {
 // env-injection-only path so every existing preset behaves identically.
 type passthroughAdapter struct{}
 
-func (passthroughAdapter) Name() string                { return "passthrough" }
-func (passthroughAdapter) ShouldInject([]string) bool  { return false }
+func (passthroughAdapter) Name() string               { return "passthrough" }
+func (passthroughAdapter) ShouldInject([]string) bool { return false }
 func (passthroughAdapter) Prepare(context.Context, *store.SecureCLIBinary, *store.SecureCLIUserCredential, []string) (*Injection, error) {
 	return &Injection{}, nil
 }
@@ -120,16 +120,18 @@ func sortedKeys(m map[string]string) []string {
 //   - adapter:           adapter name (e.g. "git", "passthrough")
 //   - binary:            binary name (e.g. "git", "gh")
 //   - user_id:           tenant user UUID (or empty for global-only contexts)
+//   - credential_source: source selected by runtime ("user", "context", "agent", or empty)
 //   - env_keys:          sorted env-var NAMES (never values)
 //   - argv_prefix_len:   number of argv elements prepended (NOT their content)
 //   - host_scope_hash:   SHA-256 first 8 hex chars of host_scope (or "none")
-func emitSystemEnvInjectionAudit(adapter, binary, userID string, inj *Injection, hostScope *string) {
+func emitSystemEnvInjectionAudit(adapter, binary, userID, credentialSource string, inj *Injection, hostScope *string) {
 	if inj == nil {
 		return
 	}
 	slog.Warn("security.system_env_injection",
 		"adapter", adapter,
 		"user_id", userID,
+		"credential_source", credentialSource,
 		"binary", binary,
 		"env_keys", sortedKeys(inj.Env),
 		"argv_prefix_len", len(inj.ArgvPrefix),

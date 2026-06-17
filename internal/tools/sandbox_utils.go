@@ -3,9 +3,12 @@ package tools
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // SandboxCwd maps the current effective workspace (from context) to its
@@ -30,6 +33,47 @@ func SandboxCwd(ctx context.Context, globalWorkspace, containerBase string) (str
 
 	if rel == "." {
 		return containerBase, nil
+	}
+	return path.Join(filepath.ToSlash(containerBase), filepath.ToSlash(rel)), nil
+}
+
+func effectiveSandboxWorkspace(ctx context.Context, globalWorkspace string) (string, error) {
+	if ws := ToolWorkspaceFromCtx(ctx); ws != "" {
+		return canonicalSandboxWorkspace(ws), nil
+	}
+	if globalWorkspace != "" && store.IsMasterScope(ctx) {
+		slog.Warn("security.sandbox_global_workspace_fallback",
+			"workspace", globalWorkspace,
+			"tenant_id", store.TenantIDFromContext(ctx),
+			"agent_id", store.AgentIDFromContext(ctx))
+		return canonicalSandboxWorkspace(globalWorkspace), nil
+	}
+	return "", fmt.Errorf("sandbox workspace unavailable for tenant-scoped execution")
+}
+
+func canonicalSandboxWorkspace(workspace string) string {
+	clean := filepath.Clean(workspace)
+	if real, err := filepath.EvalSymlinks(clean); err == nil {
+		return real
+	}
+	return clean
+}
+
+func sandboxCwdForHostPath(hostCwd, mountWorkspace, containerBase string) (string, error) {
+	if hostCwd == "" {
+		hostCwd = mountWorkspace
+	}
+	if containerBase == "" {
+		containerBase = "/workspace"
+	}
+	cleanMount := filepath.Clean(mountWorkspace)
+	cleanCwd := filepath.Clean(hostCwd)
+	rel, err := filepath.Rel(cleanMount, cleanCwd)
+	if err != nil || strings.HasPrefix(filepath.Clean(rel), "..") {
+		return "", fmt.Errorf("working directory %q is outside sandbox mount %q", hostCwd, mountWorkspace)
+	}
+	if rel == "." {
+		return filepath.ToSlash(containerBase), nil
 	}
 	return path.Join(filepath.ToSlash(containerBase), filepath.ToSlash(rel)), nil
 }

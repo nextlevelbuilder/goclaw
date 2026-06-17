@@ -26,15 +26,14 @@ var (
 //   - C3: re-verifies asset via meta SHA256 when present; refuses staged
 //     URL whose host is not in allowedDownloadHosts.
 //   - C4: saveManifest retries up to 3× before declaring desync.
-//   - H6: explicit ScratchDir (no "../tmp" symlink hazard).
+//   - scratch workspace resolves to writable runtime storage before staging.
 //   - L4: file written with 0755 during extraction, not chmod post-rename.
 type GitHubUpdateExecutor struct {
 	Installer  *GitHubInstaller
-	ScratchDir string // explicit; defaults to filepath.Join(BinDir, "..", "tmp") if empty
+	ScratchDir string // optional override; falls back to {runtimeDir}/tmp if unusable
 }
 
-// NewGitHubUpdateExecutor wires the executor. Call SetScratchDir to override
-// the default tmp path.
+// NewGitHubUpdateExecutor wires the executor.
 func NewGitHubUpdateExecutor(installer *GitHubInstaller) *GitHubUpdateExecutor {
 	return &GitHubUpdateExecutor{Installer: installer}
 }
@@ -42,12 +41,51 @@ func NewGitHubUpdateExecutor(installer *GitHubInstaller) *GitHubUpdateExecutor {
 // Source returns "github".
 func (e *GitHubUpdateExecutor) Source() string { return "github" }
 
-// scratchDir returns the resolved scratch directory.
-func (e *GitHubUpdateExecutor) scratchDir() string {
-	if e.ScratchDir != "" {
-		return e.ScratchDir
+// scratchDirCandidates returns scratch parents in preference order.
+func (e *GitHubUpdateExecutor) scratchDirCandidates() []string {
+	candidates := make([]string, 0, 3)
+	add := func(path string) {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			return
+		}
+		cleaned := filepath.Clean(path)
+		for _, existing := range candidates {
+			if existing == cleaned {
+				return
+			}
+		}
+		candidates = append(candidates, cleaned)
 	}
-	return filepath.Join(filepath.Dir(e.Installer.Config.BinDir), "tmp")
+
+	add(e.ScratchDir)
+	add(filepath.Join(packageRuntimeDir(), "tmp"))
+	if e.Installer != nil && e.Installer.Config != nil && e.Installer.Config.BinDir != "" {
+		add(filepath.Join(filepath.Dir(e.Installer.Config.BinDir), "tmp"))
+	}
+	return candidates
+}
+
+func (e *GitHubUpdateExecutor) createScratchDir(name, target string) (string, error) {
+	suffix := fmt.Sprintf("%s-%s-%d", name, sanitizeTag(target), time.Now().UnixNano())
+	var errs []error
+	for idx, base := range e.scratchDirCandidates() {
+		scratch := filepath.Join(base, suffix)
+		if err := os.MkdirAll(scratch, 0o755); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", scratch, err))
+			continue
+		}
+		if idx > 0 {
+			slog.Warn("github.update: scratch dir fallback selected",
+				"scratch", scratch,
+				"previous_error", errs[0])
+		}
+		return scratch, nil
+	}
+	if len(errs) == 0 {
+		return "", errors.New("create scratch dir: no scratch directory candidates")
+	}
+	return "", fmt.Errorf("create scratch dir: %w", errors.Join(errs...))
 }
 
 // Update applies the target version. The caller holds PackageLocker for
@@ -130,10 +168,9 @@ func (e *GitHubUpdateExecutor) Update(ctx context.Context, name, toVersion strin
 	}
 
 	// Prepare scratch dir — isolated per-update.
-	scratch := filepath.Join(e.scratchDir(),
-		fmt.Sprintf("%s-%s-%d", name, sanitizeTag(target), time.Now().UnixNano()))
-	if err := os.MkdirAll(scratch, 0o755); err != nil {
-		return fmt.Errorf("create scratch dir: %w", err)
+	scratch, err := e.createScratchDir(name, target)
+	if err != nil {
+		return err
 	}
 	defer os.RemoveAll(scratch)
 

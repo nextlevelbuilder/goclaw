@@ -119,6 +119,7 @@
       "config": "Config",
       "credentials": "Credentials",
       "groups": "Groups",
+      "contexts": "Contexts",
       "managers": "Managers"
     },
     "general": {
@@ -156,6 +157,86 @@
       "saved": "Saved",
       "saveGroups": "Save Groups",
       "saving": "Saving..."
+    },
+    "contexts": {
+      "description": "Review channel contexts, stored members, effective MCP tools, Secure CLI tools, and scoped credentials.",
+      "emptyTitle": "No contexts",
+      "emptyHint": "Contexts appear after this channel receives messages or group metadata.",
+      "loading": "Loading context details...",
+      "capabilities": "Capabilities",
+      "members": "Members",
+      "noCapabilities": "No capabilities available in this context.",
+      "noMembers": "No stored members for this context.",
+      "none": "None",
+      "allTools": "All tools",
+      "scopedCount": "{{count}} scoped override",
+      "scopedCount_plural": "{{count}} scoped overrides",
+      "live": "Live",
+      "grant": "Grant",
+      "revoke": "Revoke",
+      "manageCapability": "Manage capability",
+      "scopedCredential": "Scoped credential",
+      "apiKeyPlaceholder": "API key (MCP only)",
+      "envPlaceholder": "Environment JSON, for example {\"TOKEN\":\"...\"}",
+      "secretHint": "Values are encrypted and never returned after save.",
+      "saveCredential": "Save credential",
+      "deleteCredential": "Delete credential",
+      "grantSaved": "Context grant saved",
+      "grantDeleted": "Context grant deleted",
+      "credentialSaved": "Context credential saved",
+      "credentialDeleted": "Context credential deleted",
+      "invalidEnv": "Environment must be a JSON object with string values.",
+      "envRequired": "Secure CLI credentials require environment JSON.",
+      "credentialRequired": "Enter an API key or environment JSON.",
+      "actionFailed": "Action failed",
+      "columns": {
+        "name": "Name",
+        "type": "Type",
+        "source": "Source",
+        "credentials": "Credentials",
+        "tools": "Tools",
+        "actions": "Actions"
+      }
+    },
+    "passiveMemory": {
+      "title": "Passive memory extraction",
+      "description": "Extract long-lived facts from passive group traffic into reviewable memory.",
+      "pendingCount": "{{count}} pending",
+      "enable": "Enable passive extraction",
+      "reviewMode": "Require review before writing",
+      "interval": "Interval (minutes)",
+      "messageCap": "Message cap",
+      "retention": "Retention (hours)",
+      "minMessages": "Min messages",
+      "types": "Memory types",
+      "excludeUsers": "Excluded users",
+      "excludePatterns": "Excluded patterns",
+      "runNow": "Run now",
+      "save": "Save",
+      "saving": "Saving...",
+      "saved": "Memory settings saved",
+      "saveFailed": "Failed to save memory settings",
+      "runQueued": "Memory extraction started",
+      "runFailed": "Memory extraction failed",
+      "itemUpdated": "Memory item updated",
+      "itemFailed": "Memory item action failed",
+      "reviewQueue": "Review queue",
+      "loading": "Loading memory status...",
+      "noRuns": "No extraction runs yet.",
+      "noItems": "No memory candidates yet.",
+      "lastRun": "Last run",
+      "runStats": "{{messages}} messages, {{items}} items, {{redactions}} redactions",
+      "approve": "Approve",
+      "reject": "Reject",
+      "delete": "Delete",
+      "type": {
+        "people": "People",
+        "projects": "Projects",
+        "decisions": "Decisions",
+        "todos": "Todos",
+        "preferences": "Preferences",
+        "events": "Events"
+      }
     },
     "timeline": {
       "title": "Timeline",
@@ -257,18 +338,14 @@
       "label": "Draft Preview",
       "help": "Use stealth draft preview for answer stream in DMs — no notification per edit (requires DM Streaming)"
     },
-    "reasoning_stream": {
+    "reasoning_delivery": {
       "label": "Show Reasoning",
-      "help": "Display AI thinking as a separate message before the answer (requires streaming)"
+      "help": "Choose how model reasoning is shown in channel messages."
     },
     "reaction_level": { "label": "Reaction Level" },
     "media_max_mb": { "label": "Max Media Size (MB)" },
     "link_preview": { "label": "Link Preview" },
     "allow_from": { "label": "Allowed Users" },
-    "block_reply": {
-      "label": "Block Reply",
-      "help": "Deliver intermediate text during tool iterations"
-    },
     "domain": { "label": "Domain" },
     "connection_mode": {
       "label": "Connection Mode",
@@ -317,6 +394,78 @@
       "help": "Restrict which tools the agent can use in this group"
     },
     "system_prompt": { "label": "System Prompt" },
+    "chat_behavior": {
+      "enabled": {
+        "label": "Human-like Delivery",
+        "help": "Channel-level override for delivery behavior. Channel settings win over Agent and Workspace settings."
+      },
+      "intermediate_replies": {
+        "enabled": {
+          "label": "Intermediate Replies",
+          "help": "Send natural progress bubbles during long or tool-heavy runs. These messages are not added to session history."
+        },
+        "mode": {
+          "label": "Intermediate Reply Mode",
+          "help": "Choose whether progress updates are generated by the delivery model or disabled for this channel."
+        },
+        "provider": {
+          "label": "Intermediate Provider",
+          "help": "Optional provider for progress bubbles. Leave empty to inherit the agent provider; pick a fast, cheap provider here."
+        },
+        "model": {
+          "label": "Intermediate Model",
+          "help": "Optional model for progress bubbles. Leave empty to inherit the agent model; custom model names are allowed."
+        },
+        "timeout_ms": {
+          "label": "Intermediate Timeout (ms)",
+          "help": "Maximum time to wait for the delivery model before skipping an intermediate update."
+        },
+        "max_tokens": {
+          "label": "Intermediate Max Tokens",
+          "help": "Token cap for each generated progress bubble. Keep this small so updates stay short."
+        },
+        "max_chars": {
+          "label": "Intermediate Max Chars",
+          "help": "Character cap after generation so progress bubbles do not become full answers."
+        }
+      },
+      "quick_ack": {
+        "enabled": {
+          "label": "Quick Acknowledgement",
+          "help": "Send a short natural acknowledgement before long work starts. This message is not added to session history."
+        },
+        "mode": {
+          "label": "Quick Ack Mode",
+          "help": "Generated modes use the configured delivery provider/model. Fixed template mode is the only mode that sends template text."
+        },
+        "provider": {
+          "label": "Quick Ack Provider",
+          "help": "Optional provider for quick acknowledgements. Leave empty to inherit the agent provider; pick a fast, cheap provider here."
+        },
+        "model": {
+          "label": "Quick Ack Model",
+          "help": "Optional model for quick acknowledgements. Leave empty to inherit the agent model; custom model names are allowed."
+        },
+        "timeout_ms": {
+          "label": "Quick Ack Timeout (ms)",
+          "help": "Maximum time to wait for the acknowledgement model before skipping generated acknowledgement."
+        },
+        "max_tokens": {
+          "label": "Quick Ack Max Tokens",
+          "help": "Token cap for the acknowledgement. Keep this small so it reads like a receipt, not an answer."
+        },
+        "max_chars": {
+          "label": "Quick Ack Max Chars",
+          "help": "Character cap after generation so acknowledgement bubbles stay compact."
+        }
+      },
+      "final_split": {
+        "enabled": {
+          "label": "Final Reply Splitting",
+          "help": "Split long final answers into multiple channel messages. This is separate from reasoning and progress bubbles."
+        }
+      }
+    },
     "platform": { "label": "Platform", "help": "Select the platform this Pancake page serves." },
     "tiktok_type": { "label": "TikTok Type", "help": "Select the TikTok account type for this page" },
     "features.private_reply": {
@@ -329,11 +478,6 @@
     }
   },
   "fieldOptions": {
-    "block_reply": {
-      "inherit": "Inherit from gateway",
-      "true": "Enabled",
-      "false": "Disabled"
-    },
     "dm_policy": {
       "pairing": "Pairing (require code)",
       "open": "Open (accept all)",
@@ -354,6 +498,51 @@
       "off": "Off",
       "minimal": "Minimal",
       "full": "Full"
+    },
+    "reasoning_delivery": {
+      "streaming_only": "Streaming only",
+      "always_bubbles": "Always as bubbles",
+      "off": "Off"
+    },
+    "chat_behavior": {
+      "enabled": {
+        "inherit": "Inherit from gateway",
+        "true": "Enabled",
+        "false": "Disabled"
+      },
+      "intermediate_replies": {
+        "enabled": {
+          "inherit": "Inherit from gateway",
+          "true": "Enabled",
+          "false": "Disabled"
+        },
+        "mode": {
+          "inherit": "Inherit from gateway",
+          "sidecar_generated": "Sidecar-generated",
+          "off": "Off"
+        }
+      },
+      "quick_ack": {
+        "enabled": {
+          "inherit": "Inherit from gateway",
+          "true": "Enabled",
+          "false": "Disabled"
+        },
+        "mode": {
+          "inherit": "Inherit from gateway",
+          "sidecar_generated": "Sidecar-generated",
+          "llm_generated": "LLM-generated",
+          "fixed_template": "Fixed template",
+          "off": "Off"
+        }
+      },
+      "final_split": {
+        "enabled": {
+          "inherit": "Inherit from gateway",
+          "true": "Enabled",
+          "false": "Disabled"
+        }
+      }
     },
     "domain": {
       "lark": "Lark (Global)",
@@ -411,9 +600,9 @@
         "label": "Draft Preview",
         "help": "Use stealth draft preview for answer stream in DMs — no notification per edit (requires DM Streaming)"
       },
-      "reasoning_stream": {
+      "reasoning_delivery": {
         "label": "Show Reasoning",
-        "help": "Display AI thinking as a separate message before the answer (requires streaming)"
+        "help": "Choose how model reasoning is shown in channel messages."
       }
     },
     "fields": {

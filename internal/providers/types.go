@@ -166,6 +166,10 @@ type Message struct {
 	// Pointer type so that older messages (stored before this field existed) deserialize as nil,
 	// allowing the frontend to fall back to synthetic timestamps.
 	CreatedAt *time.Time `json:"created_at,omitempty"`
+
+	// Transient messages are runtime-only context for the next provider call.
+	// They must not be persisted to session history or serialized to providers.
+	Transient bool `json:"-"`
 }
 
 // ToolCall represents a tool invocation requested by the LLM.

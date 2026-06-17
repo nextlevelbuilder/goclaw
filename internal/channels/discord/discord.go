@@ -26,12 +26,12 @@ type Channel struct {
 	*channels.BaseChannel
 	session         *discordgo.Session
 	config          config.DiscordConfig
-	botUserID       string   // populated on start
-	placeholders    sync.Map // placeholderKey string → messageID string
-	typingCtrls     sync.Map // channelID string → *typing.Controller
+	botUserID       string                      // populated on start
+	placeholders    sync.Map                    // placeholderKey string → messageID string
+	typingCtrls     sync.Map                    // channelID string → *typing.Controller
 	agentStore      store.AgentStore            // for agent key lookup (nil = writer commands disabled)
 	configPermStore store.ConfigPermissionStore // for group file writer management (nil = writer commands disabled)
-	audioMgr        *audio.Manager             // unified STT via audio.Manager (nil = no STT)
+	audioMgr        *audio.Manager              // unified STT via audio.Manager (nil = no STT)
 	// pairingService, pairingDebounce, approvedGroups, groupHistory, historyLimit, requireMention
 	// are inherited from channels.BaseChannel.
 }
@@ -107,6 +107,9 @@ func (c *Channel) Start(_ context.Context) error {
 
 // BlockReplyEnabled returns the per-channel block_reply override (nil = inherit gateway default).
 func (c *Channel) BlockReplyEnabled() *bool { return c.config.BlockReply }
+
+// ChatBehaviorConfig returns the per-channel chat_behavior override.
+func (c *Channel) ChatBehaviorConfig() *config.ChatBehaviorConfig { return c.config.ChatBehavior }
 
 // SetPendingCompaction configures LLM-based auto-compaction for pending messages.
 func (c *Channel) SetPendingCompaction(cfg *channels.CompactionConfig) {

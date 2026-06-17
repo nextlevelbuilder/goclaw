@@ -11,6 +11,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -331,6 +332,9 @@ func (ch *Channel) sendPrivateReply(ctx context.Context, senderID, conversationI
 
 // BlockReplyEnabled returns the per-channel block_reply override (nil = inherit gateway default).
 func (ch *Channel) BlockReplyEnabled() *bool { return ch.config.BlockReply }
+
+// ChatBehaviorConfig returns the per-channel chat_behavior override.
+func (ch *Channel) ChatBehaviorConfig() *config.ChatBehaviorConfig { return ch.config.ChatBehavior }
 
 // WebhookHandler returns the shared webhook path and global router as handler.
 // Only the first pancake instance mounts the route; others return ("", nil).

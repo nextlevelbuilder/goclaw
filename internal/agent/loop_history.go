@@ -17,7 +17,7 @@ import (
 // buildMessages constructs the full message list for an LLM request.
 // Returns the messages and whether BOOTSTRAP.md was present in context files
 // (used by the caller for auto-cleanup without an extra DB roundtrip).
-func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, summary, userMessage, extraSystemPrompt, sessionKey, channel, channelType, bitrixPortalDomain, chatTitle, chatID, peerKind, userID string, historyLimit int, skillFilter []string, lightContext bool) ([]providers.Message, bool) {
+func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, summary, userMessage, extraSystemPrompt, sessionKey, channel, channelType, bitrixPortalDomain, chatTitle, chatID, peerKind, userID, senderName string, historyLimit int, skillFilter []string, lightContext bool) ([]providers.Message, bool) {
 	var messages []providers.Message
 
 	// Build system prompt — 3-layer mode resolution: runtime > auto-detect > config
@@ -117,7 +117,15 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		}
 	}
 
-	userMessage, extraSystemPrompt, skillFilter = l.applySkillSlashCommand(ctx, userMessage, extraSystemPrompt, skillFilter)
+	slashReq := &RunRequest{
+		SessionKey: sessionKey,
+		UserID:     userID,
+		SenderID:   store.SenderIDFromContext(ctx),
+		Channel:    channel,
+		ChatID:     chatID,
+		PeerKind:   peerKind,
+	}
+	userMessage, extraSystemPrompt, skillFilter = l.applySkillSlashCommand(ctx, slashReq, userMessage, extraSystemPrompt, skillFilter)
 
 	// Build tool list, filtering out skill_manage when skill_evolve is off.
 	// Also applies ChannelAware filtering so channel-specific tools don't
@@ -218,6 +226,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		PeerKind:               peerKind,
 		OwnerIDs:               l.ownerIDs,
 		SenderID:               store.SenderIDFromContext(ctx),
+		SenderName:             senderName,
 		Mode:                   mode,
 		ToolNames:              toolNames,
 		SkillsSummary:          l.resolveSkillsSummary(ctx, skillFilter),

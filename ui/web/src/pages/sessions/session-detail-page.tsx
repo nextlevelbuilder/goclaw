@@ -14,6 +14,8 @@ import type { SessionInfo, SessionPreview, Message } from "@/types/session";
 import type { ChatMessage, AgentEventPayload, ToolStreamEntry } from "@/types/chat";
 import { messageToTimestamp } from "@/lib/message-utils";
 import { SystemMessageBlock, SummaryBlock } from "./session-message-blocks";
+import { useRunTimeline } from "./hooks/use-run-timeline";
+import { RunTimelinePanel } from "./run-timeline-panel";
 
 /** Check if a message is an internal system message (subagent results, cron, etc.) */
 function isSystemMessage(msg: ChatMessage): boolean {
@@ -61,6 +63,11 @@ export function SessionDetailPage({
   const [titleDraft, setTitleDraft] = useState("");
 
   const parsed = parseSessionKey(session.key);
+  const {
+    data: runTimelineData,
+    isFetching: runTimelineFetching,
+    refetch: refetchRunTimeline,
+  } = useRunTimeline({ sessionKey: session.key, limit: 100 });
 
   const loadMessages = useCallback(() => {
     onPreview(session.key)
@@ -119,12 +126,14 @@ export function SessionDetailPage({
       if (!event) return;
       if (
         (event.type === "run.completed" || event.type === "run.failed" || event.type === "run.cancelled") &&
-        event.agentId === parsed.agentId
+        event.agentId === parsed.agentId &&
+        (!event.sessionKey || event.sessionKey === session.key)
       ) {
         debouncedRefresh();
+        void refetchRunTimeline();
       }
     },
-    [debouncedRefresh, parsed.agentId],
+    [debouncedRefresh, parsed.agentId, refetchRunTimeline, session.key],
   );
 
   useWsEvent(Events.AGENT, handleAgentEvent);
@@ -220,6 +229,8 @@ export function SessionDetailPage({
         <SummaryBlock text={summary} />
       )}
 
+      <RunTimelinePanel items={runTimelineData?.items ?? []} loading={runTimelineFetching} />
+
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-6 py-4">
         {loading && messages.length === 0 ? (
@@ -271,4 +282,3 @@ export function SessionDetailPage({
     </div>
   );
 }
-

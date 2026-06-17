@@ -38,6 +38,7 @@ func (b *BridgePromptBuilder) Build(cfg PromptConfig) (string, error) {
 		spc.ChatID = cfg.IdentityData.ChatID
 		spc.ChatTitle = cfg.IdentityData.ChatTitle
 		spc.PeerKind = cfg.IdentityData.PeerKind
+		spc.SenderName = cfg.IdentityData.SenderName
 	}
 
 	if cfg.Persona {

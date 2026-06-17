@@ -29,12 +29,13 @@ type ChannelContact struct {
 
 // ContactListOpts holds pagination and filter options for listing contacts.
 type ContactListOpts struct {
-	Search      string // ILIKE on display_name, username, sender_id
-	ChannelType string // filter by platform (telegram, discord, etc.)
-	PeerKind    string // "direct" or "group"
-	ContactType string // "user" or "group"
-	Limit       int
-	Offset      int
+	Search          string // ILIKE on display_name, username, sender_id
+	ChannelType     string // filter by platform (telegram, discord, etc.)
+	ChannelInstance string // filter by channel instance name
+	PeerKind        string // "direct" or "group"
+	ContactType     string // "user" or "group"
+	Limit           int
+	Offset          int
 }
 
 // ContactStore manages channel contacts (auto-collected user info).

@@ -351,6 +351,11 @@ Standard OpenAI-compatible provider targeting the Alibaba Coding API.
 
 - **Default model**: `qwen3.5-plus`
 - **Base URL**: `https://coding-intl.dashscope.aliyuncs.com/v1`
+- **Catalog source**: hardcoded because the Coding API does not expose a standard `/v1/models` endpoint
+
+| Model | Display name | Capabilities |
+|-------|--------------|--------------|
+| `qwen3.7-plus` | Qwen 3.7 Plus | Text Generation, Deep Thinking, Visual Understanding |
 
 ---
 

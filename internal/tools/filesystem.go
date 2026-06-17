@@ -196,11 +196,15 @@ func (t *ReadFileTool) Execute(ctx context.Context, args map[string]any) *Result
 }
 
 func (t *ReadFileTool) executeInSandbox(ctx context.Context, path, sandboxKey string, args map[string]any) *Result {
-	containerCwd, cwdErr := SandboxCwd(ctx, t.workspace, sandbox.DefaultContainerWorkdir)
+	mountWorkspace, err := effectiveSandboxWorkspace(ctx, t.workspace)
+	if err != nil {
+		return ErrorResult(err.Error())
+	}
+	containerCwd, cwdErr := sandboxCwdForHostPath(mountWorkspace, mountWorkspace, sandbox.DefaultContainerWorkdir)
 	if cwdErr != nil {
 		return ErrorResult(fmt.Sprintf("sandbox path mapping: %v", cwdErr))
 	}
-	bridge, err := t.getFsBridge(ctx, sandboxKey, containerCwd)
+	bridge, err := t.getFsBridge(ctx, sandboxKey, mountWorkspace, containerCwd)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("sandbox error: %v", err))
 	}
@@ -214,8 +218,8 @@ func (t *ReadFileTool) executeInSandbox(ctx context.Context, path, sandboxKey st
 	return t.paginateOutput(data, args)
 }
 
-func (t *ReadFileTool) getFsBridge(ctx context.Context, sandboxKey, containerCwd string) (*sandbox.FsBridge, error) {
-	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, t.workspace, SandboxConfigFromCtx(ctx))
+func (t *ReadFileTool) getFsBridge(ctx context.Context, sandboxKey, mountWorkspace, containerCwd string) (*sandbox.FsBridge, error) {
+	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, mountWorkspace, SandboxConfigFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}

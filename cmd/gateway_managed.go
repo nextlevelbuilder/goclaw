@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"strings"
+	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
@@ -86,6 +87,12 @@ func wireExtras(
 		// Register media analysis tools (need mediaStore for file access).
 		readDocumentTool := tools.NewReadDocumentTool(providerReg, mediaStore)
 		readDocumentTool.SetUsageCapService(usageCapSvc)
+		readDocumentTool.SetLocalParser(tools.NewLocalExtractParser(tools.LocalExtractConfig{
+			Enabled:    appCfg.Tools.DocumentParser.LocalFirstEnabled(),
+			MaxPages:   appCfg.Tools.DocumentParser.MaxPages,
+			Timeout:    time.Duration(appCfg.Tools.DocumentParser.TimeoutSec) * time.Second,
+			MinTextLen: appCfg.Tools.DocumentParser.MinTextLen,
+		}))
 		toolsReg.Register(readDocumentTool)
 		readAudioTool := tools.NewReadAudioTool(providerReg, mediaStore)
 		readAudioTool.SetUsageCapService(usageCapSvc)
@@ -197,6 +204,7 @@ func wireExtras(
 		sharedHookHandlers = handlers
 		slog.Info("agent hooks dispatcher wired", "handlers", "command,http,prompt")
 	}
+	timelineRecorder := agent.NewRunTimelineRecorder(stores.RunTimeline)
 
 	resolver := agent.NewManagedResolver(agent.ResolverDeps{
 		AgentStore:             stores.Agents,
@@ -208,7 +216,9 @@ func wireExtras(
 		Tools:                  toolsReg,
 		ToolPolicy:             toolPE,
 		Skills:                 skillsLoader,
+		SkillStore:             stores.Skills,
 		SkillAccessStore:       skillAccessStore,
+		SkillEvolutionStore:    stores.SkillEvolution,
 		SkillSlashCommands:     appCfg.Skills.SlashCommands,
 		HasMemory:              hasMemory,
 		TraceCollector:         traceCollector,
@@ -238,6 +248,7 @@ func wireExtras(
 		ModelPricing:           appCfg.Telemetry.ModelPricing,
 		TracingStore:           stores.Tracing,
 		UsageCaps:              usageCapSvc,
+		UsageEvents:            stores.UsageEvents,
 		MemoryStore:            stores.Memory,
 		ContactStore:           stores.Contacts,
 		TenantStore:            stores.Tenants,
@@ -292,6 +303,7 @@ func wireExtras(
 				Payload:  event,
 				TenantID: event.TenantID,
 			})
+			timelineRecorder.Record(event)
 		},
 	})
 	agentRouter.SetResolver(resolver)
@@ -694,7 +706,7 @@ func wireExtras(
 		}
 		providerReg.UnregisterForTenant(tenantID, p.Name)
 		if p.Enabled {
-			registerACPFromDB(providerReg, *p)
+			registerACPFromDB(providerReg, *p, configuredShellDenyGroups(appCfg))
 		}
 	})
 

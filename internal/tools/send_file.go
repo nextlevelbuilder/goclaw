@@ -55,17 +55,34 @@ func (t *SendFileTool) Parameters() map[string]any {
 				"type":        "string",
 				"description": "Optional text message accompanying the file",
 			},
+			"attachments": map[string]any{
+				"type":        "array",
+				"description": "Optional batch of files to send in order. When set, each item must include path and may include caption.",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"path": map[string]any{
+							"type":        "string",
+							"description": "Path to a file to send (relative to workspace, or absolute)",
+						},
+						"caption": map[string]any{
+							"type":        "string",
+							"description": "Optional caption for this attachment",
+						},
+					},
+					"required": []string{"path"},
+				},
+			},
 		},
-		"required": []string{"path"},
 	}
 }
 
 // Execute resolves and validates the path, checks for duplicate delivery, then
 // returns a Result with Media populated for downstream pipeline delivery.
 func (t *SendFileTool) Execute(ctx context.Context, args map[string]any) *Result {
-	path := argString(args, "path")
-	if path == "" {
-		return ErrorResult("path is required")
+	requests, err := parseSendFileRequests(args)
+	if err != nil {
+		return ErrorResult(err.Error())
 	}
 
 	// Per-request workspace (multi-tenant: each user has own workspace in context).
@@ -74,52 +91,57 @@ func (t *SendFileTool) Execute(ctx context.Context, args map[string]any) *Result
 		workspace = t.workspace
 	}
 
-	// Resolve path with allowed-prefixes support (mirrors write_file pattern).
 	allowed := allowedWithTeamWorkspace(ctx, t.allowedPrefixes)
-	resolved, err := resolvePathWithAllowed(path, workspace, effectiveRestrict(ctx, t.restrict), allowed)
-	if err != nil {
-		return ErrorResult("cannot access path: " + err.Error())
+	media := make([]bus.MediaFile, 0, len(requests))
+	seen := make(map[string]struct{}, len(requests))
+	for _, req := range requests {
+		resolved, err := resolvePathWithAllowed(req.Path, workspace, effectiveRestrict(ctx, t.restrict), allowed)
+		if err != nil {
+			return ErrorResult("cannot access path: " + err.Error())
+		}
+
+		// Deny-paths guard: reject access to internal files (memory.db, config.json, etc.).
+		if err := checkDeniedPath(resolved, workspace, t.deniedPrefixes); err != nil {
+			return ErrorResult(err.Error())
+		}
+
+		// Stat: file must exist and be a regular file (not a directory or device).
+		fi, err := os.Stat(resolved)
+		if err != nil {
+			return ErrorResult(fmt.Sprintf("file not found: %s", req.Path))
+		}
+		if !fi.Mode().IsRegular() {
+			return ErrorResult(fmt.Sprintf("path is not a regular file: %s", req.Path))
+		}
+
+		if _, duplicate := seen[resolved]; duplicate {
+			return ErrorResult(fmt.Sprintf("duplicate attachment path in batch: %s", filepath.Base(resolved)))
+		}
+		seen[resolved] = struct{}{}
+
+		// Duplicate-delivery guard: block if already delivered in this turn.
+		if dm := DeliveredMediaFromCtx(ctx); dm != nil && dm.IsDelivered(resolved) {
+			return ErrorResult(fmt.Sprintf(
+				"file already delivered in this turn: %s. Do not re-send the same file. "+
+					"If user explicitly asked to resend, the next turn will reset delivery state.",
+				filepath.Base(resolved)))
+		}
+
+		media = append(media, bus.MediaFile{
+			Path:     resolved,
+			Filename: filepath.Base(resolved),
+			MimeType: mimeFromPath(resolved),
+			Caption:  req.Caption,
+		})
 	}
 
-	// Deny-paths guard: reject access to internal files (memory.db, config.json, etc.).
-	if err := checkDeniedPath(resolved, workspace, t.deniedPrefixes); err != nil {
-		return ErrorResult(err.Error())
-	}
-
-	// Stat: file must exist and be a regular file (not a directory or device).
-	fi, err := os.Stat(resolved)
-	if err != nil {
-		return ErrorResult(fmt.Sprintf("file not found: %s", path))
-	}
-	if !fi.Mode().IsRegular() {
-		return ErrorResult(fmt.Sprintf("path is not a regular file: %s", path))
-	}
-
-	// Duplicate-delivery guard: block if already delivered in this turn.
-	if dm := DeliveredMediaFromCtx(ctx); dm != nil && dm.IsDelivered(resolved) {
-		return ErrorResult(fmt.Sprintf(
-			"file already delivered in this turn: %s. Do not re-send the same file. "+
-				"If user explicitly asked to resend, the next turn will reset delivery state.",
-			filepath.Base(resolved)))
-	}
-
-	// Build result — caption overrides default message if provided.
-	filename := filepath.Base(resolved)
-	msg := fmt.Sprintf("Sent file: %s", filename)
-	if caption := argString(args, "caption"); caption != "" {
-		msg = caption
-	}
-	result := SilentResult(msg)
-	result.Media = []bus.MediaFile{{
-		Path:     resolved,
-		Filename: filename,
-		MimeType: mimeFromPath(resolved),
-	}}
-
-	// Mark delivered so subsequent send_file or message(MEDIA:) calls detect the duplicate.
 	if dm := DeliveredMediaFromCtx(ctx); dm != nil {
-		dm.Mark(resolved)
+		for _, mf := range media {
+			dm.Mark(mf.Path)
+		}
 	}
 
+	result := SilentResult(sendFileResultMessage(media))
+	result.Media = media
 	return result
 }

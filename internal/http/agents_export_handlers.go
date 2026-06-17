@@ -119,9 +119,16 @@ func (h *AgentsHandler) handleExportDownload(w http.ResponseWriter, r *http.Requ
 	}
 	defer f.Close()
 
-	w.Header().Set("Content-Type", "application/gzip")
+	w.Header().Set("Content-Type", exportDownloadContentType(entry.fileName))
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, entry.fileName))
 	io.Copy(w, f) //nolint:errcheck
+}
+
+func exportDownloadContentType(fileName string) string {
+	if strings.HasSuffix(strings.ToLower(fileName), ".zip") {
+		return "application/zip"
+	}
+	return "application/gzip"
 }
 
 // handleExportSSE streams build progress as SSE events then sends a download token on completion.

@@ -91,6 +91,11 @@ func (p *Pipeline) Run(ctx context.Context, state *RunState) (*RunResult, error)
 			}
 		}
 		if state.ExitCode == BreakLoop {
+			if state.Observe.ContinueAfterFinal {
+				state.Observe.ContinueAfterFinal = false
+				state.ExitCode = Continue
+				continue
+			}
 			break
 		}
 		if ctx.Err() != nil {

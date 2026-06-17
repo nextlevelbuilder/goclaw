@@ -118,6 +118,7 @@
       "config": "配置",
       "credentials": "凭据",
       "groups": "群组",
+      "contexts": "上下文",
       "managers": "管理员"
     },
     "general": {
@@ -155,6 +156,86 @@
       "saved": "已保存",
       "saveGroups": "保存群组",
       "saving": "保存中..."
+    },
+    "contexts": {
+      "description": "查看 Channel 上下文、已存成员、MCP 工具、Secure CLI 工具和作用域凭据。",
+      "emptyTitle": "暂无上下文",
+      "emptyHint": "Channel 收到消息或群组元数据后会显示上下文。",
+      "loading": "正在加载上下文详情...",
+      "capabilities": "能力",
+      "members": "成员",
+      "noCapabilities": "此上下文没有可用能力。",
+      "noMembers": "此上下文没有已存成员。",
+      "none": "无",
+      "allTools": "全部工具",
+      "scopedCount": "{{count}} 个作用域覆盖",
+      "scopedCount_plural": "{{count}} 个作用域覆盖",
+      "live": "实时",
+      "grant": "授权",
+      "revoke": "撤销",
+      "manageCapability": "管理能力",
+      "scopedCredential": "作用域凭据",
+      "apiKeyPlaceholder": "API key（仅 MCP）",
+      "envPlaceholder": "环境变量 JSON，例如 {\"TOKEN\":\"...\"}",
+      "secretHint": "值会加密保存，保存后不会返回。",
+      "saveCredential": "保存凭据",
+      "deleteCredential": "删除凭据",
+      "grantSaved": "上下文授权已保存",
+      "grantDeleted": "上下文授权已删除",
+      "credentialSaved": "上下文凭据已保存",
+      "credentialDeleted": "上下文凭据已删除",
+      "invalidEnv": "环境变量必须是字符串值的 JSON 对象。",
+      "envRequired": "Secure CLI 凭据需要环境变量 JSON。",
+      "credentialRequired": "请输入 API key 或环境变量 JSON。",
+      "actionFailed": "操作失败",
+      "columns": {
+        "name": "名称",
+        "type": "类型",
+        "source": "来源",
+        "credentials": "凭据",
+        "tools": "工具",
+        "actions": "操作"
+      }
+    },
+    "passiveMemory": {
+      "title": "被动记忆提取",
+      "description": "从群组被动消息中提取长期事实，并进入可审核的记忆队列。",
+      "pendingCount": "{{count}} 待审核",
+      "enable": "启用被动提取",
+      "reviewMode": "写入前需要审核",
+      "interval": "间隔（分钟）",
+      "messageCap": "消息阈值",
+      "retention": "保留（小时）",
+      "minMessages": "最少消息数",
+      "types": "记忆类型",
+      "excludeUsers": "排除用户",
+      "excludePatterns": "排除规则",
+      "runNow": "立即运行",
+      "save": "保存",
+      "saving": "保存中...",
+      "saved": "记忆设置已保存",
+      "saveFailed": "保存记忆设置失败",
+      "runQueued": "记忆提取已启动",
+      "runFailed": "记忆提取失败",
+      "itemUpdated": "记忆项已更新",
+      "itemFailed": "记忆项操作失败",
+      "reviewQueue": "审核队列",
+      "loading": "正在加载记忆状态...",
+      "noRuns": "暂无提取运行。",
+      "noItems": "暂无记忆候选项。",
+      "lastRun": "最近运行",
+      "runStats": "{{messages}} 条消息，{{items}} 项，{{redactions}} 次脱敏",
+      "approve": "批准",
+      "reject": "拒绝",
+      "delete": "删除",
+      "type": {
+        "people": "人物",
+        "projects": "项目",
+        "decisions": "决策",
+        "todos": "待办",
+        "preferences": "偏好",
+        "events": "事件"
+      }
     },
     "timeline": {
       "title": "时间线",
@@ -223,12 +304,11 @@
     "dm_stream": { "label": "私聊流式传输", "help": "在私聊中逐步传输回复" },
     "group_stream": { "label": "群聊流式传输", "help": "在群聊中逐步传输回复" },
     "draft_transport": { "label": "草稿预览", "help": "在私聊中使用隐形草稿预览回答流 — 每次编辑无通知（需启用私聊流式传输）" },
-    "reasoning_stream": { "label": "显示推理", "help": "将AI思考过程显示为单独的消息（需启用流式传输）" },
+    "reasoning_delivery": { "label": "显示推理", "help": "选择如何在频道消息中显示模型推理。" },
     "reaction_level": { "label": "表情回应级别" },
     "media_max_mb": { "label": "最大媒体大小 (MB)" },
     "link_preview": { "label": "链接预览" },
     "allow_from": { "label": "允许的用户" },
-    "block_reply": { "label": "分块回复", "help": "在工具迭代期间发送中间文本" },
     "domain": { "label": "域名" },
     "connection_mode": { "label": "连接模式", "help": "WebSocket 无需公网 IP — 仅需出站连接" },
     "webhook_port": { "label": "Webhook 端口", "help": "0 = 共享主网关端口（推荐）" },
@@ -244,6 +324,78 @@
     "skills": { "label": "Skill过滤", "help": "限制此群组可用的Skill" },
     "tools": { "label": "工具白名单", "help": "限制Agent在此群组中可使用的工具" },
     "system_prompt": { "label": "系统提示词" },
+    "chat_behavior": {
+      "enabled": {
+        "label": "自然投递行为",
+        "help": "Channel 级投递行为覆盖。Channel 设置优先于 Agent 和 Workspace 设置。"
+      },
+      "intermediate_replies": {
+        "enabled": {
+          "label": "中间回复",
+          "help": "在长任务或大量工具调用期间发送自然的进度气泡。此消息不会写入会话历史。"
+        },
+        "mode": {
+          "label": "中间回复模式",
+          "help": "选择由投递模型生成进度更新，或在此 Channel 中禁用。"
+        },
+        "provider": {
+          "label": "Intermediate Provider",
+          "help": "进度气泡使用的可选 Provider。留空则继承 Agent Provider；适合选择快速、低成本的 Provider。"
+        },
+        "model": {
+          "label": "Intermediate Model",
+          "help": "进度气泡使用的可选模型。留空则继承 Agent 模型；允许输入自定义模型名。"
+        },
+        "timeout_ms": {
+          "label": "Intermediate Timeout (ms)",
+          "help": "等待投递模型的最长时间，超时后跳过中间更新。"
+        },
+        "max_tokens": {
+          "label": "Intermediate Max Tokens",
+          "help": "每条进度气泡的 token 上限。保持较小可让更新更简短。"
+        },
+        "max_chars": {
+          "label": "Intermediate Max Chars",
+          "help": "生成后的字符上限，防止进度气泡变成完整回答。"
+        }
+      },
+      "quick_ack": {
+        "enabled": {
+          "label": "快速确认",
+          "help": "在长任务开始前发送一条自然的简短确认。此消息不会写入会话历史。"
+        },
+        "mode": {
+          "label": "快速确认模式",
+          "help": "生成模式使用配置的投递 Provider/模型。只有固定模板模式会发送模板文本。"
+        },
+        "provider": {
+          "label": "Quick Ack Provider",
+          "help": "快速确认使用的可选 Provider。留空则继承 Agent Provider；适合选择快速、低成本的 Provider。"
+        },
+        "model": {
+          "label": "Quick Ack Model",
+          "help": "快速确认使用的可选模型。留空则继承 Agent 模型；允许输入自定义模型名。"
+        },
+        "timeout_ms": {
+          "label": "Quick Ack Timeout (ms)",
+          "help": "等待确认模型的最长时间，超时后跳过生成的确认消息。"
+        },
+        "max_tokens": {
+          "label": "Quick Ack Max Tokens",
+          "help": "确认消息的 token 上限。保持较小可让它像确认收到，而不是完整回答。"
+        },
+        "max_chars": {
+          "label": "Quick Ack Max Chars",
+          "help": "生成后的字符上限，确保确认气泡保持简短。"
+        }
+      },
+      "final_split": {
+        "enabled": {
+          "label": "最终回复拆分",
+          "help": "将较长的最终回答拆分为多条 Channel 消息。此功能独立于推理和进度气泡。"
+        }
+      }
+    },
     "platform": { "label": "平台", "help": "选择此 Pancake 页面所服务的平台。" },
     "tiktok_type": { "label": "TikTok 类型", "help": "选择此页面的 TikTok 账户类型" },
     "features.private_reply": {
@@ -256,11 +408,6 @@
     }
   },
   "fieldOptions": {
-    "block_reply": {
-      "inherit": "继承网关设置",
-      "true": "启用",
-      "false": "禁用"
-    },
     "dm_policy": {
       "pairing": "配对（需要验证码）",
       "open": "开放（接受所有）",
@@ -281,6 +428,51 @@
       "off": "关闭",
       "minimal": "最小",
       "full": "全部"
+    },
+    "reasoning_delivery": {
+      "streaming_only": "仅流式传输时",
+      "always_bubbles": "始终作为气泡",
+      "off": "关闭"
+    },
+    "chat_behavior": {
+      "enabled": {
+        "inherit": "继承自 gateway",
+        "true": "启用",
+        "false": "禁用"
+      },
+      "intermediate_replies": {
+        "enabled": {
+          "inherit": "继承自 gateway",
+          "true": "启用",
+          "false": "禁用"
+        },
+        "mode": {
+          "inherit": "继承自 gateway",
+          "sidecar_generated": "Sidecar 生成",
+          "off": "关闭"
+        }
+      },
+      "quick_ack": {
+        "enabled": {
+          "inherit": "继承自 gateway",
+          "true": "启用",
+          "false": "禁用"
+        },
+        "mode": {
+          "inherit": "继承自 gateway",
+          "sidecar_generated": "Sidecar 生成",
+          "llm_generated": "LLM 生成",
+          "fixed_template": "固定模板",
+          "off": "关闭"
+        }
+      },
+      "final_split": {
+        "enabled": {
+          "inherit": "继承自 gateway",
+          "true": "启用",
+          "false": "禁用"
+        }
+      }
     },
     "domain": {
       "lark": "Lark（国际版）",
@@ -329,7 +521,7 @@
       "dm_stream": { "label": "私聊流式传输", "help": "在私聊中逐步传输回复" },
       "group_stream": { "label": "群聊流式传输", "help": "在群聊中逐步传输回复" },
       "draft_transport": { "label": "草稿预览", "help": "在私聊中使用隐形草稿预览回答流 — 每次编辑无通知（需启用私聊流式传输）" },
-      "reasoning_stream": { "label": "显示推理", "help": "将AI思考过程显示为单独的消息（需启用流式传输）" }
+      "reasoning_delivery": { "label": "显示推理", "help": "选择如何在频道消息中显示模型推理。" }
     },
     "fields": {
       "groupPolicy": "群组策略",

@@ -58,10 +58,7 @@ func base64Encode(b []byte) string {
 	s := base64.StdEncoding.EncodeToString(b)
 	var out strings.Builder
 	for i := 0; i < len(s); i += 70 {
-		end := i + 70
-		if end > len(s) {
-			end = len(s)
-		}
+		end := min(i+70, len(s))
 		if i > 0 {
 			out.WriteByte('\n')
 		}
@@ -83,6 +80,28 @@ func TestValidateSSHKey_RejectsPassphrase(t *testing.T) {
 func TestValidateSSHKey_AcceptsUnencrypted(t *testing.T) {
 	if err := ValidateSSHKey(genEd25519PEM(t)); err != nil {
 		t.Fatalf("ed25519 should pass: %v", err)
+	}
+}
+
+func TestValidateSSHKeyForStorage_UsesOpenSSHCompatibilityCheck(t *testing.T) {
+	original := openSSHKeyCompatibilityCheck
+	t.Cleanup(func() { openSSHKeyCompatibilityCheck = original })
+
+	called := false
+	openSSHKeyCompatibilityCheck = func(context.Context, []byte) error {
+		called = true
+		return errors.New("ssh-keygen: error in libcrypto")
+	}
+
+	err := ValidateSSHKeyForStorage(context.Background(), genEd25519PEM(t))
+	if err == nil {
+		t.Fatal("expected OpenSSH compatibility error")
+	}
+	if !called {
+		t.Fatal("OpenSSH compatibility check was not called")
+	}
+	if !strings.Contains(err.Error(), "libcrypto") {
+		t.Fatalf("expected OpenSSH diagnostic, got %v", err)
 	}
 }
 

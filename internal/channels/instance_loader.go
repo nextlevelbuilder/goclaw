@@ -157,6 +157,37 @@ func (l *InstanceLoader) Reload(ctx context.Context) {
 	slog.Info("channel instances reloaded", "count", registered)
 }
 
+// LoadInstanceByID loads or refreshes one enabled channel instance without
+// stopping unrelated channels. Used by create-time cache invalidation and QR
+// auth flows that need the just-created channel to become available quickly.
+func (l *InstanceLoader) LoadInstanceByID(ctx context.Context, id uuid.UUID) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	inst, err := l.store.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	if _, ok := l.loaded[inst.Name]; ok {
+		if _, exists := l.manager.GetChannel(inst.Name); exists {
+			return nil
+		}
+		delete(l.loaded, inst.Name)
+	}
+
+	if !inst.Enabled {
+		return nil
+	}
+
+	if err := l.loadInstance(ctx, *inst, true); err != nil {
+		return err
+	}
+
+	slog.Info("channel instance loaded by id", "id", id, "name", inst.Name, "type", inst.ChannelType)
+	return nil
+}
+
 // Stop stops all managed channels.
 func (l *InstanceLoader) Stop(ctx context.Context) {
 	l.mu.Lock()

@@ -110,6 +110,61 @@ func TestSecureCLIPresetsIncludesGoogleWorkspace(t *testing.T) {
 	}
 }
 
+func TestSecureCLIPresetsReturnStableArraysForGit(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/v1/cli-credentials/presets", nil)
+	rec := httptest.NewRecorder()
+
+	NewSecureCLIHandler(nil, nil).handlePresets(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var got struct {
+		Presets map[string]struct {
+			EnvVars     []struct{} `json:"env_vars"`
+			DenyVerbose []string   `json:"deny_verbose"`
+			AdapterName string     `json:"adapter_name"`
+		} `json:"presets"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	git := got.Presets["git"]
+	if git.EnvVars == nil {
+		t.Fatalf("git env_vars = nil; response must use [] for frontend compatibility")
+	}
+	if git.DenyVerbose == nil {
+		t.Fatalf("git deny_verbose = nil; response must use [] for frontend compatibility")
+	}
+	if git.AdapterName != "git" {
+		t.Fatalf("git adapter_name = %q, want git", git.AdapterName)
+	}
+}
+
+func TestSecureCLICreateAllowsGitPresetWithoutLegacyEnv(t *testing.T) {
+	st := &fakeSecureCLIStore{}
+	req := httptest.NewRequest(http.MethodPost, "/v1/cli-credentials", strings.NewReader(`{"preset":"git"}`))
+	rec := httptest.NewRecorder()
+
+	NewSecureCLIHandler(st, nil).handleCreate(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	if st.created == nil {
+		t.Fatal("expected store.Create to be called")
+	}
+	if st.created.BinaryName != "git" {
+		t.Fatalf("binary_name = %q, want git", st.created.BinaryName)
+	}
+	if st.created.AdapterName == nil || *st.created.AdapterName != "git" {
+		t.Fatalf("adapter_name = %#v, want git", st.created.AdapterName)
+	}
+	if string(st.created.EncryptedEnv) != "{}" {
+		t.Fatalf("encrypted env = %q, want {}", st.created.EncryptedEnv)
+	}
+}
+
 func TestSecureCLICheckBinaryFindsNpmPackageCliAlias(t *testing.T) {
 	runtimeDir := t.TempDir()
 	t.Setenv("RUNTIME_DIR", runtimeDir)

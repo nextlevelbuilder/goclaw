@@ -1,5 +1,46 @@
 package config
 
+// ChatBehaviorConfig controls optional human-like channel delivery behavior.
+// Pointer fields allow per-channel overrides to inherit gateway defaults.
+type ChatBehaviorConfig struct {
+	Enabled             *bool                      `json:"enabled,omitempty"`
+	IntermediateReplies *IntermediateRepliesConfig `json:"intermediate_replies,omitempty"`
+	QuickAck            *QuickAckConfig            `json:"quick_ack,omitempty"`
+	FinalSplit          *FinalSplitConfig          `json:"final_split,omitempty"`
+}
+
+// QuickAckConfig controls one short acknowledgement before longer non-streaming runs.
+type QuickAckConfig struct {
+	Enabled    *bool    `json:"enabled,omitempty"`
+	Mode       *string  `json:"mode,omitempty"`
+	MinDelayMs *int     `json:"min_delay_ms,omitempty"`
+	Provider   string   `json:"provider,omitempty"`
+	Model      string   `json:"model,omitempty"`
+	TimeoutMs  *int     `json:"timeout_ms,omitempty"`
+	MaxTokens  *int     `json:"max_tokens,omitempty"`
+	MaxChars   *int     `json:"max_chars,omitempty"`
+	Templates  []string `json:"templates,omitempty"`
+}
+
+// IntermediateRepliesConfig controls delivery-only progress messages during tool phases.
+type IntermediateRepliesConfig struct {
+	Enabled   *bool   `json:"enabled,omitempty"`
+	Mode      *string `json:"mode,omitempty"`
+	Provider  string  `json:"provider,omitempty"`
+	Model     string  `json:"model,omitempty"`
+	TimeoutMs *int    `json:"timeout_ms,omitempty"`
+	MaxTokens *int    `json:"max_tokens,omitempty"`
+	MaxChars  *int    `json:"max_chars,omitempty"`
+}
+
+// FinalSplitConfig controls semantic splitting of final channel replies.
+type FinalSplitConfig struct {
+	Enabled     *bool `json:"enabled,omitempty"`
+	MinChars    *int  `json:"min_chars,omitempty"`
+	MaxMessages *int  `json:"max_messages,omitempty"`
+	DelayMs     *int  `json:"delay_ms,omitempty"`
+}
+
 // PendingCompactionConfig configures LLM-based compaction of pending group messages.
 // When a group accumulates more than Threshold pending messages, older messages are
 // summarized by an LLM and replaced with a compact summary, keeping KeepRecent raw messages.
@@ -24,25 +65,27 @@ type ChannelsConfig struct {
 }
 
 type TelegramConfig struct {
-	Enabled         bool                `json:"enabled"`
-	Token           string              `json:"token"`
-	Proxy           string              `json:"proxy,omitempty"`
-	APIServer       string              `json:"api_server,omitempty"` // custom Telegram Bot API server URL (e.g. "http://localhost:8081")
-	AllowFrom       FlexibleStringSlice `json:"allow_from"`
-	DMPolicy        string              `json:"dm_policy,omitempty"`        // "pairing" (default), "allowlist", "open", "disabled"
-	GroupPolicy     string              `json:"group_policy,omitempty"`     // "open" (default), "allowlist", "disabled"
-	RequireMention  *bool               `json:"require_mention,omitempty"`  // require @bot mention in groups (default true)
-	MentionMode     string              `json:"mention_mode,omitempty"`     // "strict" (default) = only respond when mentioned; "yield" = respond unless another bot is mentioned
-	HistoryLimit    int                 `json:"history_limit,omitempty"`    // max pending group messages for context (default 50, 0=disabled)
-	DMStream        *bool               `json:"dm_stream,omitempty"`        // enable streaming for DMs (default false) — edits placeholder progressively
-	GroupStream     *bool               `json:"group_stream,omitempty"`     // enable streaming for groups (default false) — sends new message, edits progressively
-	DraftTransport  *bool               `json:"draft_transport,omitempty"`  // use sendMessageDraft for DM streaming (default true) — stealth preview, no notifications per edit
-	ReasoningStream *bool               `json:"reasoning_stream,omitempty"` // show reasoning as separate message when provider emits thinking events (default true)
-	ReactionLevel   string              `json:"reaction_level,omitempty"`   // "off" (default), "minimal", "full" — status emoji reactions
-	MediaMaxBytes   int64               `json:"media_max_bytes,omitempty"`  // max media download size in bytes (default 20MB)
-	LinkPreview     *bool               `json:"link_preview,omitempty"`     // enable URL previews in messages (default true)
-	BlockReply      *bool               `json:"block_reply,omitempty"`      // override gateway block_reply (nil = inherit)
-	ForceIPv4       bool                `json:"force_ipv4,omitempty"`       // force IPv4 for all Telegram API requests (use when IPv6 routing is broken)
+	Enabled           bool                `json:"enabled"`
+	Token             string              `json:"token"`
+	Proxy             string              `json:"proxy,omitempty"`
+	APIServer         string              `json:"api_server,omitempty"` // custom Telegram Bot API server URL (e.g. "http://localhost:8081")
+	AllowFrom         FlexibleStringSlice `json:"allow_from"`
+	DMPolicy          string              `json:"dm_policy,omitempty"`          // "pairing" (default), "allowlist", "open", "disabled"
+	GroupPolicy       string              `json:"group_policy,omitempty"`       // "open" (default), "allowlist", "disabled"
+	RequireMention    *bool               `json:"require_mention,omitempty"`    // require @bot mention in groups (default true)
+	MentionMode       string              `json:"mention_mode,omitempty"`       // "strict" (default) = only respond when mentioned; "yield" = respond unless another bot is mentioned
+	HistoryLimit      int                 `json:"history_limit,omitempty"`      // max pending group messages for context (default 50, 0=disabled)
+	DMStream          *bool               `json:"dm_stream,omitempty"`          // enable streaming for DMs (default false) — edits placeholder progressively
+	GroupStream       *bool               `json:"group_stream,omitempty"`       // enable streaming for groups (default false) — sends new message, edits progressively
+	DraftTransport    *bool               `json:"draft_transport,omitempty"`    // use sendMessageDraft for DM streaming (default true) — stealth preview, no notifications per edit
+	ReasoningDelivery string              `json:"reasoning_delivery,omitempty"` // off, streaming_only, always_bubbles
+	ReasoningStream   *bool               `json:"reasoning_stream,omitempty"`   // show reasoning as separate message when provider emits thinking events (default true)
+	ReactionLevel     string              `json:"reaction_level,omitempty"`     // "off" (default), "minimal", "full" — status emoji reactions
+	MediaMaxBytes     int64               `json:"media_max_bytes,omitempty"`    // max media download size in bytes (default 20MB)
+	LinkPreview       *bool               `json:"link_preview,omitempty"`       // enable URL previews in messages (default true)
+	BlockReply        *bool               `json:"block_reply,omitempty"`        // override gateway block_reply (nil = inherit)
+	ChatBehavior      *ChatBehaviorConfig `json:"chat_behavior,omitempty"`      // override gateway chat behavior (nil = inherit)
+	ForceIPv4         bool                `json:"force_ipv4,omitempty"`         // force IPv4 for all Telegram API requests (use when IPv6 routing is broken)
 
 	// Optional STT (Speech-to-Text) pipeline for voice/audio inbound messages.
 	// When stt_proxy_url is set, audio/voice messages are transcribed before being forwarded to the agent.
@@ -103,6 +146,7 @@ type DiscordConfig struct {
 	RequireMention    *bool               `json:"require_mention,omitempty"` // require @bot mention in groups (default true)
 	HistoryLimit      int                 `json:"history_limit,omitempty"`   // max pending group messages for context (default 50, 0=disabled)
 	BlockReply        *bool               `json:"block_reply,omitempty"`     // override gateway block_reply (nil = inherit)
+	ChatBehavior      *ChatBehaviorConfig `json:"chat_behavior,omitempty"`   // override gateway chat behavior (nil = inherit)
 	MediaMaxBytes     int64               `json:"media_max_bytes,omitempty"` // max media download size (default 25MB)
 	STTProxyURL       string              `json:"stt_proxy_url,omitempty"`
 	STTAPIKey         string              `json:"stt_api_key,omitempty"`
@@ -126,6 +170,7 @@ type SlackConfig struct {
 	NativeStream   *bool               `json:"native_stream,omitempty"`   // use Slack ChatStreamer API if available (default false)
 	ReactionLevel  string              `json:"reaction_level,omitempty"`  // "off" (default), "minimal", "full"
 	BlockReply     *bool               `json:"block_reply,omitempty"`     // override gateway block_reply (nil = inherit)
+	ChatBehavior   *ChatBehaviorConfig `json:"chat_behavior,omitempty"`   // override gateway chat behavior (nil = inherit)
 	DebounceDelay  *int                `json:"debounce_delay,omitempty"`  // ms delay before dispatching rapid messages (default 300, 0=disabled)
 	ThreadTTL      *int                `json:"thread_ttl,omitempty"`      // hours before thread participation expires (default 24, 0=disabled — always require @mention)
 	MediaMaxBytes  int64               `json:"media_max_bytes,omitempty"` // max file download size in bytes (default 20MB)
@@ -140,6 +185,7 @@ type WhatsAppConfig struct {
 	RequireMention *bool               `json:"require_mention,omitempty"` // only respond in groups when bot is @mentioned (default false)
 	HistoryLimit   int                 `json:"history_limit,omitempty"`   // max pending group messages for context (default 200, 0=disabled)
 	BlockReply     *bool               `json:"block_reply,omitempty"`     // override gateway block_reply (nil = inherit)
+	ChatBehavior   *ChatBehaviorConfig `json:"chat_behavior,omitempty"`   // override gateway chat behavior (nil = inherit)
 }
 
 type ZaloConfig struct {
@@ -149,8 +195,9 @@ type ZaloConfig struct {
 	DMPolicy      string              `json:"dm_policy,omitempty"` // "pairing" (default), "allowlist", "open", "disabled"
 	WebhookURL    string              `json:"webhook_url,omitempty"`
 	WebhookSecret string              `json:"webhook_secret,omitempty"`
-	MediaMaxMB    int                 `json:"media_max_mb,omitempty"` // default 5
-	BlockReply    *bool               `json:"block_reply,omitempty"`  // override gateway block_reply (nil = inherit)
+	MediaMaxMB    int                 `json:"media_max_mb,omitempty"`  // default 5
+	BlockReply    *bool               `json:"block_reply,omitempty"`   // override gateway block_reply (nil = inherit)
+	ChatBehavior  *ChatBehaviorConfig `json:"chat_behavior,omitempty"` // override gateway chat behavior (nil = inherit)
 }
 
 type ZaloPersonalConfig struct {
@@ -162,6 +209,7 @@ type ZaloPersonalConfig struct {
 	HistoryLimit    int                 `json:"history_limit,omitempty"`    // max pending group messages for context (default 50, 0=disabled)
 	CredentialsPath string              `json:"credentials_path,omitempty"` // path to saved cookies JSON
 	BlockReply      *bool               `json:"block_reply,omitempty"`      // override gateway block_reply (nil = inherit)
+	ChatBehavior    *ChatBehaviorConfig `json:"chat_behavior,omitempty"`    // override gateway chat behavior (nil = inherit)
 }
 
 type FeishuConfig struct {
@@ -186,7 +234,8 @@ type FeishuConfig struct {
 	Streaming         *bool               `json:"streaming,omitempty"`          // default true
 	ReactionLevel     string              `json:"reaction_level,omitempty"`     // "off" (default), "minimal", "full" — typing emoji reactions
 	HistoryLimit      int                 `json:"history_limit,omitempty"`
-	BlockReply        *bool               `json:"block_reply,omitempty"` // override gateway block_reply (nil = inherit)
+	BlockReply        *bool               `json:"block_reply,omitempty"`   // override gateway block_reply (nil = inherit)
+	ChatBehavior      *ChatBehaviorConfig `json:"chat_behavior,omitempty"` // override gateway chat behavior (nil = inherit)
 	STTProxyURL       string              `json:"stt_proxy_url,omitempty"`
 	STTAPIKey         string              `json:"stt_api_key,omitempty"`
 	STTTenantID       string              `json:"stt_tenant_id,omitempty"`
@@ -362,21 +411,22 @@ type QuotaConfig struct {
 
 // GatewayConfig controls the gateway server.
 type GatewayConfig struct {
-	Host                    string       `json:"host"`
-	Port                    int          `json:"port"`
-	Token                   string       `json:"token,omitempty"`                      // bearer token for WS/HTTP auth
-	OwnerIDs                []string     `json:"owner_ids,omitempty"`                  // sender IDs considered "owner"
-	AllowedOrigins          []string     `json:"allowed_origins,omitempty"`            // WebSocket CORS whitelist (empty = allow all)
-	MaxMessageChars         int          `json:"max_message_chars,omitempty"`          // max user message characters (default 32000)
-	RateLimitRPM            int          `json:"rate_limit_rpm,omitempty"`             // rate limit: requests per minute per user (default 20, 0 = disabled)
-	InjectionAction         string       `json:"injection_action,omitempty"`           // prompt injection action: "log", "warn" (default), "block", "off"
-	InboundDebounceMs       int          `json:"inbound_debounce_ms,omitempty"`        // silence-window in ms that merges rapid channel/Web Chat messages from the same sender/session; 0 disables for text but media-bearing messages still honor a built-in media floor so multi-attachment bursts (#63) coalesce into a single agent run. Agents may override via per-agent agent_config.inbound_debounce_ms.
-	Quota                   *QuotaConfig `json:"quota,omitempty"`                      // per-user/group request quotas
-	BlockReply              *bool        `json:"block_reply,omitempty"`                // deliver intermediate text during tool iterations (default false)
-	ToolStatus              *bool        `json:"tool_status,omitempty"`                // show tool name in streaming preview during tool execution (default true)
-	TaskRecoveryIntervalSec int          `json:"task_recovery_interval_sec,omitempty"` // team task recovery ticker interval in seconds (default 300 = 5min)
-	BackgroundProvider      string       `json:"background_provider,omitempty"`        // LLM provider for background workers (vault enrichment, consolidation)
-	BackgroundModel         string       `json:"background_model,omitempty"`           // LLM model for background workers
+	Host                    string              `json:"host"`
+	Port                    int                 `json:"port"`
+	Token                   string              `json:"token,omitempty"`                      // bearer token for WS/HTTP auth
+	OwnerIDs                []string            `json:"owner_ids,omitempty"`                  // sender IDs considered "owner"
+	AllowedOrigins          []string            `json:"allowed_origins,omitempty"`            // WebSocket CORS whitelist (empty = allow all)
+	MaxMessageChars         int                 `json:"max_message_chars,omitempty"`          // max user message characters (default 32000)
+	RateLimitRPM            int                 `json:"rate_limit_rpm,omitempty"`             // rate limit: requests per minute per user (default 20, 0 = disabled)
+	InjectionAction         string              `json:"injection_action,omitempty"`           // prompt injection action: "log", "warn" (default), "block", "off"
+	InboundDebounceMs       int                 `json:"inbound_debounce_ms,omitempty"`        // silence-window in ms that merges rapid channel/Web Chat messages from the same sender/session; 0 disables for text but media-bearing messages still honor a built-in media floor so multi-attachment bursts (#63) coalesce into a single agent run. Agents may override via per-agent agent_config.inbound_debounce_ms.
+	Quota                   *QuotaConfig        `json:"quota,omitempty"`                      // per-user/group request quotas
+	BlockReply              *bool               `json:"block_reply,omitempty"`                // deliver intermediate text during tool iterations (default false)
+	ChatBehavior            *ChatBehaviorConfig `json:"chat_behavior,omitempty"`              // human-like channel delivery behavior (default disabled)
+	ToolStatus              *bool               `json:"tool_status,omitempty"`                // show tool name in streaming preview during tool execution (default true)
+	TaskRecoveryIntervalSec int                 `json:"task_recovery_interval_sec,omitempty"` // team task recovery ticker interval in seconds (default 300 = 5min)
+	BackgroundProvider      string              `json:"background_provider,omitempty"`        // LLM provider for background workers (vault enrichment, consolidation)
+	BackgroundModel         string              `json:"background_model,omitempty"`           // LLM model for background workers
 }
 
 // ToolsConfig controls tool availability, policy, and web search.
@@ -394,6 +444,30 @@ type ToolsConfig struct {
 	RateLimitPerHour        int                           `json:"rate_limit_per_hour,omitempty"` // max tool executions per hour per session (0 = disabled)
 	ScrubCredentials        *bool                         `json:"scrub_credentials,omitempty"`   // auto-redact API keys/tokens in tool output (default true)
 	McpServers              map[string]*MCPServerConfig   `json:"mcp_servers,omitempty"`         // external MCP server connections
+	DocumentParser          DocumentParserConfig          `json:"document_parser"`               // local-first document text extraction
+}
+
+// DocumentParserConfig controls local-first document text extraction in the
+// read_document tool. Local-first is OPT-IN (disabled by default): plain
+// pdftotext/pandoc output mis-orders tables/multi-column layouts and ignores
+// the analysis prompt, so the cloud vision path remains the default. When
+// enabled, PDF/DOCX are extracted via local binaries before any cloud LLM
+// call; missing binaries or empty output fall back to the provider chain.
+//
+// Changing these values requires a gateway restart — they are captured at tool
+// construction and not picked up by config hot-reload. (Binary availability,
+// however, is re-checked per call, so runtime installs are seen without a
+// restart.)
+type DocumentParserConfig struct {
+	LocalFirst *bool `json:"local_first,omitempty"`  // nil => false (default OFF)
+	MaxPages   int   `json:"max_pages,omitempty"`    // 0 => 200
+	TimeoutSec int   `json:"timeout_sec,omitempty"`  // 0 => 30s
+	MinTextLen int   `json:"min_text_len,omitempty"` // 0 => 16
+}
+
+// LocalFirstEnabled reports whether local-first extraction is turned on.
+func (c DocumentParserConfig) LocalFirstEnabled() bool {
+	return c.LocalFirst != nil && *c.LocalFirst
 }
 
 // CommandKeywordAllowlistRule scopes product/security vocabulary that may appear

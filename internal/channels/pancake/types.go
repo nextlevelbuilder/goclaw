@@ -3,7 +3,11 @@
 // A single Pancake API key gives access to all connected platforms — no per-platform OAuth needed.
 package pancake
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/nextlevelbuilder/goclaw/internal/config"
+)
 
 // pancakeCreds holds encrypted credentials stored in channel_instances.credentials.
 type pancakeCreds struct {
@@ -31,11 +35,12 @@ type pancakeInstanceConfig struct {
 		Filter             string   `json:"filter"`               // "all" | "keyword" (default: all)
 		Keywords           []string `json:"keywords"`             // required when filter = "keyword"
 	} `json:"comment_reply_options"`
-	PrivateReplyMessage string            `json:"private_reply_message,omitempty"` // custom DM text; defaults to built-in message. Supports {{commenter_name}} / {{post_title}} vars.
-	AutoReactOptions    *AutoReactOptions `json:"auto_react_options,omitempty"`
-	PostContextCacheTTL string            `json:"post_context_cache_ttl,omitempty"` // e.g. "30m"; defaults to 15m
-	AllowFrom           []string          `json:"allow_from,omitempty"`
-	BlockReply          *bool             `json:"block_reply,omitempty"` // override gateway block_reply (nil = inherit)
+	PrivateReplyMessage string                     `json:"private_reply_message,omitempty"` // custom DM text; defaults to built-in message. Supports {{commenter_name}} / {{post_title}} vars.
+	AutoReactOptions    *AutoReactOptions          `json:"auto_react_options,omitempty"`
+	PostContextCacheTTL string                     `json:"post_context_cache_ttl,omitempty"` // e.g. "30m"; defaults to 15m
+	AllowFrom           []string                   `json:"allow_from,omitempty"`
+	BlockReply          *bool                      `json:"block_reply,omitempty"`   // override gateway block_reply (nil = inherit)
+	ChatBehavior        *config.ChatBehaviorConfig `json:"chat_behavior,omitempty"` // override gateway chat behavior (nil = inherit)
 }
 
 // AutoReactOptions holds per-page scope filters for Facebook auto-react.

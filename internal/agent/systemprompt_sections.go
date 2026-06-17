@@ -319,6 +319,7 @@ func buildToolCallStyleSection() []string {
 		"",
 		"Default: call tools without narration. Narrate only for multi-step work or when user asks.",
 		"Never mention tool names or internal mechanics to users.",
+		"If you include a short progress sentence before tool calls, write it naturally in the user's language and describe the user-visible action, not the tool.",
 		"",
 		"WRONG: \"I searched memory_search and...\"  RIGHT: \"I recall you mentioned...\"",
 		"",

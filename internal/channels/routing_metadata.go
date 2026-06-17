@@ -38,6 +38,13 @@ func CopyFinalRoutingMeta(src map[string]string) map[string]string {
 	return copySelectedMeta(src, finalReplyMetaKeys)
 }
 
+// CopyFollowupRoutingMeta copies routing metadata for additional outbound
+// messages after the first final reply. It preserves thread/topic routing but
+// does not reuse placeholder or reply-to metadata reserved for the first reply.
+func CopyFollowupRoutingMeta(src map[string]string) map[string]string {
+	return copyRoutingMeta(src)
+}
+
 // copyRoutingMeta copies only the subset safe for intermediate block replies,
 // retries, and placeholder updates.
 func copyRoutingMeta(src map[string]string) map[string]string {

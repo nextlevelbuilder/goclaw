@@ -184,6 +184,16 @@ make logs              # Tail logs (goclaw service)
 make reset             # Wipe volumes and rebuild from scratch
 ```
 
+**Operator CLI:**
+
+The main `goclaw` binary can also inspect local or remote gateways:
+
+```bash
+goclaw traces list --status error
+goclaw traces get <trace-id> -o json
+goclaw --server https://goclaw.example.com --token "$GOCLAW_GATEWAY_TOKEN" traces follow --session <session-key>
+```
+
 **Optional services** — enable with `WITH_*` flags:
 
 | Flag | Service | What it does |

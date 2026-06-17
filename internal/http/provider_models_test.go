@@ -116,6 +116,54 @@ func TestProvidersHandlerListProviderModelsChatGPTOAuthIncludesReasoningMetadata
 	}
 }
 
+func TestProvidersHandlerListProviderModelsBailianIncludesQwen37Plus(t *testing.T) {
+	token := setupProvidersAdminToken(t)
+	providerStore := newMockProviderStore()
+	provider := &store.LLMProviderData{
+		BaseModel:    store.BaseModel{ID: uuid.New()},
+		Name:         "bailian-coding",
+		ProviderType: store.ProviderBailian,
+		APIKey:       "token",
+		Enabled:      true,
+	}
+	if err := providerStore.CreateProvider(t.Context(), provider); err != nil {
+		t.Fatalf("CreateProvider() error = %v", err)
+	}
+
+	handler := NewProvidersHandler(providerStore, newMockSecretsStore(), nil, "")
+	mux := http.NewServeMux()
+	handler.RegisterRoutes(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/providers/"+provider.ID.String()+"/models", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var result ProviderModelsResponse
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+
+	for _, model := range result.Models {
+		if model.ID != "qwen3.7-plus" {
+			continue
+		}
+		if model.Name != "Qwen 3.7 Plus" {
+			t.Fatalf("model name = %q, want Qwen 3.7 Plus", model.Name)
+		}
+		if model.Reasoning != nil {
+			t.Fatalf("model reasoning = %#v, want nil for Bailian OpenAI-compatible catalog entry", model.Reasoning)
+		}
+		return
+	}
+
+	t.Fatalf("qwen3.7-plus not found in Bailian model list: %#v", result.Models)
+}
+
 func TestProvidersHandlerListProviderModelsOpenAICompatAnnotatesKnownModels(t *testing.T) {
 	token := setupProvidersAdminToken(t)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

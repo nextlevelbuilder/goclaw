@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -24,6 +25,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/security"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
@@ -35,6 +37,7 @@ type ProvidersHandler struct {
 	providerReg     *providers.Registry
 	gatewayAddr     string                           // for injecting MCP bridge into Claude CLI providers
 	mcpLookup       providers.MCPServerLookup        // optional: resolves per-agent MCP servers
+	shellDenyGroups func() map[string]bool           // optional: current global shell deny-group overrides
 	apiBaseFallback func(providerType string) string // optional: config/env fallback for api_base
 	cliMu           sync.Mutex                       // serializes Claude CLI provider create to prevent duplicates
 	msgBus          *bus.MessageBus
@@ -67,6 +70,12 @@ func (h *ProvidersHandler) SetMCPServerLookup(lookup providers.MCPServerLookup) 
 	h.mcpLookup = lookup
 }
 
+// SetShellDenyGroupsSource sets the current global shell deny-group source for
+// runtime provider registration. Must be called before serving requests.
+func (h *ProvidersHandler) SetShellDenyGroupsSource(fn func() map[string]bool) {
+	h.shellDenyGroups = fn
+}
+
 // SetAPIBaseFallback sets a function that returns config/env api_base by provider type.
 // Used as fallback when DB providers have no api_base set.
 func (h *ProvidersHandler) SetAPIBaseFallback(fn func(providerType string) string) {
@@ -91,6 +100,13 @@ func (h *ProvidersHandler) SetModelRegistry(r providers.ModelRegistry) {
 
 func (h *ProvidersHandler) SetUsageCapService(s *usagecaps.Service) {
 	h.usageCaps = s
+}
+
+func (h *ProvidersHandler) currentShellDenyPatterns() []*regexp.Regexp {
+	if h.shellDenyGroups == nil {
+		return tools.DefaultDenyPatterns()
+	}
+	return tools.ResolveDenyPatterns(h.shellDenyGroups())
 }
 
 // resolveAPIBase returns the provider's api_base, falling back to config/env if empty.
@@ -219,7 +235,7 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) providerRu
 		}
 		cliOpts := []providers.ClaudeCLIOption{
 			providers.WithClaudeCLIName(p.Name),
-			providers.WithClaudeCLISecurityHooks("", true),
+			providers.WithClaudeCLISecurityHooks("", true, h.currentShellDenyPatterns()),
 		}
 		if h.gatewayAddr != "" {
 			mcpData := providers.BuildCLIMCPConfigData(nil, h.gatewayAddr, pkgGatewayToken)

@@ -364,6 +364,55 @@ func TestService_JobFailure_Updates_LastError(t *testing.T) {
 	}
 }
 
+func TestService_Stop_WaitsForInFlightJob(t *testing.T) {
+	setFastTick(t)
+	dir := t.TempDir()
+	storePath := filepath.Join(dir, "cron.json")
+
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	handler := func(job *Job) (string, error) {
+		close(entered)
+		<-release
+		return "done", nil
+	}
+
+	cs := NewService(storePath, handler)
+	interval := int64(10)
+	if _, err := cs.AddJob("blocking", Schedule{Kind: "every", EveryMS: &interval}, "block", false, "", "", ""); err != nil {
+		t.Fatalf("AddJob error: %v", err)
+	}
+	if err := cs.Start(); err != nil {
+		t.Fatalf("Start error: %v", err)
+	}
+
+	select {
+	case <-entered:
+	case <-time.After(time.Second):
+		cs.Stop()
+		t.Fatal("job handler did not start")
+	}
+
+	stopped := make(chan struct{})
+	go func() {
+		cs.Stop()
+		close(stopped)
+	}()
+
+	select {
+	case <-stopped:
+		t.Fatal("Stop returned while job handler was still running")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	close(release)
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+		t.Fatal("Stop did not return after in-flight job completed")
+	}
+}
+
 // --- Persistence: save and reload ---
 
 func TestService_Persistence_Roundtrip(t *testing.T) {

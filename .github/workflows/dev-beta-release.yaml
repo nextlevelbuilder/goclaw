@@ -8,10 +8,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: dev-beta-release-${{ github.ref }}
-  cancel-in-progress: false
-
 env:
   GHCR_IMAGE: ghcr.io/${{ github.repository }}
   DOCKERHUB_IMAGE: digitop/goclaw
@@ -80,6 +76,9 @@ jobs:
     needs: [go, web]
     if: github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
+    concurrency:
+      group: dev-beta-version-${{ github.ref }}
+      cancel-in-progress: false
     permissions:
       contents: write
     outputs:
@@ -91,6 +90,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Release workflow tests
+        run: node --test scripts/ci/semantic-beta-version.test.mjs scripts/ci/dev-beta-release-workflow.test.mjs
       - name: Fetch upstream release tags
         run: git fetch --force --tags https://github.com/nextlevelbuilder/goclaw.git "refs/tags/v*:refs/tags/v*"
       - name: Compute semantic beta version
@@ -105,6 +106,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if ! git rev-parse "$TAG" >/dev/null 2>&1; then
             git tag -a "$TAG" -m "Release $TAG"
+          fi
+          if ! git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
             git push origin "$TAG"
           fi
       - name: Upload release notes
@@ -114,7 +117,49 @@ jobs:
           name: release-notes
           path: ${{ steps.version.outputs.notes_path }}
 
-  build_binaries:
+  build_zuey_binary:
+    needs: beta_version
+    if: needs.beta_version.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.beta_version.outputs.tag }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build web UI
+        run: |
+          corepack enable && corepack prepare pnpm@10.28.2 --activate
+          cd ui/web && pnpm install --frozen-lockfile && pnpm build && cd ../..
+          mkdir -p internal/webui/dist
+          cp -r ui/web/dist/* internal/webui/dist/
+
+      - name: Build binary
+        env:
+          GOOS: linux
+          GOARCH: amd64
+          VERSION: ${{ needs.beta_version.outputs.tag }}
+        run: |
+          CGO_ENABLED=0 go build -tags embedui \
+            -ldflags="-s -w -X github.com/nextlevelbuilder/goclaw/cmd.Version=${VERSION}" \
+            -o goclaw .
+          tar -czf "goclaw-${VERSION}-linux-amd64.tar.gz" goclaw migrations/ skills/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-linux-amd64
+          path: goclaw-*.tar.gz
+
+  build_remaining_binaries:
     needs: beta_version
     if: needs.beta_version.outputs.released == 'true'
     runs-on: ubuntu-latest
@@ -122,8 +167,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - goos: linux
-            goarch: amd64
           - goos: linux
             goarch: arm64
     steps:
@@ -156,7 +199,7 @@ jobs:
           CGO_ENABLED=0 go build -tags embedui \
             -ldflags="-s -w -X github.com/nextlevelbuilder/goclaw/cmd.Version=${VERSION}" \
             -o goclaw .
-          tar -czf "goclaw-${VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" goclaw migrations/
+          tar -czf "goclaw-${VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" goclaw migrations/ skills/
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -165,18 +208,17 @@ jobs:
           path: goclaw-*.tar.gz
 
   publish_release:
-    needs: [beta_version, build_binaries, promote_beta_aliases]
+    needs: [beta_version, build_zuey_binary]
     if: needs.beta_version.outputs.released == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Download all artifacts
+      - name: Download zuey release artifact
         uses: actions/download-artifact@v4
         with:
-          pattern: binary-*
+          name: binary-linux-amd64
           path: artifacts
-          merge-multiple: true
 
       - name: Download release notes
         uses: actions/download-artifact@v4
@@ -202,6 +244,29 @@ jobs:
               --notes-file release-notes/release-notes.md \
               --prerelease
           fi
+          gh release upload "$TAG" artifacts/* --clobber
+
+  complete_release_artifacts:
+    needs: [beta_version, publish_release, build_zuey_binary, build_remaining_binaries, deploy_zuey_beta]
+    if: needs.beta_version.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all binary artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: binary-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Refresh prerelease assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.beta_version.outputs.tag }}
+        run: |
+          (cd artifacts && sha256sum goclaw-*.tar.gz > CHECKSUMS.sha256)
           gh release upload "$TAG" artifacts/* --clobber
 
   docker_images:
@@ -291,6 +356,9 @@ jobs:
     needs: [beta_version, docker_images]
     if: needs.beta_version.outputs.released == 'true'
     runs-on: ubuntu-latest
+    concurrency:
+      group: dev-beta-promote-aliases
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
@@ -298,9 +366,34 @@ jobs:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     steps:
+      - name: Check latest beta tag
+        id: beta_freshness
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.beta_version.outputs.tag }}
+        run: |
+          latest_beta="$(
+            gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/v" --paginate \
+              --jq '.[].ref | select(test("^refs/tags/v[0-9]+\\.[0-9]+\\.[0-9]+-beta\\.[0-9]+$")) | sub("^refs/tags/"; "")' \
+              | sort -V \
+              | tail -n 1
+          )"
+          if [[ -z "$latest_beta" ]]; then
+            echo "::error::No beta tags found; refusing to promote aliases"
+            exit 1
+          fi
+          if [[ "$latest_beta" != "$TAG" ]]; then
+            echo "::notice::Skipping stale beta alias promotion for ${TAG}; latest beta is ${latest_beta}"
+            echo "current=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "current=true" >> "$GITHUB_OUTPUT"
+
       - uses: docker/setup-buildx-action@v3
+        if: steps.beta_freshness.outputs.current == 'true'
 
       - name: Log in to GHCR
+        if: steps.beta_freshness.outputs.current == 'true'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -308,13 +401,14 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Log in to Docker Hub
-        if: env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != ''
+        if: steps.beta_freshness.outputs.current == 'true' && env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != ''
         uses: docker/login-action@v3
         with:
           username: ${{ env.DOCKERHUB_USERNAME }}
           password: ${{ env.DOCKERHUB_TOKEN }}
 
       - name: Promote beta aliases
+        if: steps.beta_freshness.outputs.current == 'true'
         env:
           TAG: ${{ needs.beta_version.outputs.tag }}
         run: |
@@ -329,9 +423,12 @@ jobs:
 
   deploy_zuey_beta:
     needs: [beta_version, publish_release]
-    if: needs.beta_version.outputs.released == 'true' && github.repository == 'digitopvn/goclaw'
+    if: needs.beta_version.outputs.released == 'true' && github.repository == 'digitopvn/goclaw' && github.repository != 'nextlevelbuilder/goclaw'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    concurrency:
+      group: dev-beta-zuey-deploy
+      cancel-in-progress: false
     permissions:
       contents: read
     env:
@@ -344,7 +441,30 @@ jobs:
       ZUEY_SSH_PORT: ${{ vars.ZUEY_SSH_PORT || '2233' }}
       ZUEY_SSH_USER: ${{ vars.ZUEY_SSH_USER || 'zuey' }}
     steps:
+      - name: Check latest beta tag
+        id: beta_freshness
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          latest_beta="$(
+            gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/v" --paginate \
+              --jq '.[].ref | select(test("^refs/tags/v[0-9]+\\.[0-9]+\\.[0-9]+-beta\\.[0-9]+$")) | sub("^refs/tags/"; "")' \
+              | sort -V \
+              | tail -n 1
+          )"
+          if [[ -z "$latest_beta" ]]; then
+            echo "::error::No beta tags found; refusing to deploy"
+            exit 1
+          fi
+          if [[ "$latest_beta" != "$TAG" ]]; then
+            echo "::notice::Skipping stale zuey deploy for ${TAG}; latest beta is ${latest_beta}"
+            echo "current=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "current=true" >> "$GITHUB_OUTPUT"
+
       - name: Validate deploy configuration
+        if: steps.beta_freshness.outputs.current == 'true'
         run: |
           missing=0
           for name in GOCLAW_DEPLOY_URL GOCLAW_GATEWAY_TOKEN GOCLAW_UPGRADE_TOKEN TAG; do
@@ -356,11 +476,13 @@ jobs:
           exit "$missing"
 
       - name: Checkout repository (for VPS script sync)
+        if: steps.beta_freshness.outputs.current == 'true'
         uses: actions/checkout@v4
         with:
           ref: ${{ needs.beta_version.outputs.tag }}
 
       - name: Sync zuey ops scripts to VPS
+        if: steps.beta_freshness.outputs.current == 'true'
         env:
           ZUEY_SSH_PRIVATE_KEY_B64: ${{ secrets.ZUEY_SSH_PRIVATE_KEY_B64 }}
           ZUEY_SUDO_PASS: ${{ secrets.ZUEY_SUDO_PASS }}
@@ -437,6 +559,7 @@ jobs:
           shred -u ~/.ssh/id_zuey 2>/dev/null || rm -f ~/.ssh/id_zuey
 
       - name: Trigger zuey gateway upgrade
+        if: steps.beta_freshness.outputs.current == 'true'
         run: |
           base_url="${GOCLAW_DEPLOY_URL%/}"
           body="$(mktemp)"
@@ -458,6 +581,7 @@ jobs:
           cat "$body"
 
       - name: Wait for zuey gateway upgrade
+        if: steps.beta_freshness.outputs.current == 'true'
         run: |
           base_url="${GOCLAW_DEPLOY_URL%/}"
           for attempt in {1..90}; do
@@ -492,6 +616,7 @@ jobs:
           exit 1
 
       - name: Verify public health
+        if: steps.beta_freshness.outputs.current == 'true'
         run: |
           base_url="${GOCLAW_DEPLOY_URL%/}"
           health_json="$(curl -fsS --retry 5 --retry-delay 3 "${base_url}/health")"

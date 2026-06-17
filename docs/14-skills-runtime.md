@@ -189,13 +189,15 @@ Skills shipped with the Docker image at `/app/bundled-skills/`. Lowest priority 
 | `docx` | Read, create, edit Word documents |
 | `pptx` | Read, create, edit presentations |
 | `skill-creator` | Create new skills |
+| `workspace-organizing` | Organize shared workspaces and generated files |
+| `goclaw` | Operate and debug GoClaw gateway CLI/runtime administration |
 
 ### How It Works
 
 1. Skills source files live in `skills/` directory in the repo
 2. Dockerfile copies them to `/app/bundled-skills/` in the image
 3. `gateway.go` passes this path as `builtinSkills` to `skills.NewLoader()`
-4. Loader priority: workspace > project-agents > personal-agents > global > **builtin** > managed
+4. Loader priority: workspace > project-agents > personal-agents > global > managed > **builtin**
 
 When a user uploads a skill with the same name via the UI, the managed version takes precedence.
 

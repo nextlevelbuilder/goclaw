@@ -37,6 +37,7 @@ func installSystemPackage(ctx context.Context, requested string) (bool, string) 
 	}
 	if err := addSystemPackageRecord(requested, pkg, "apt"); err != nil {
 		slog.Warn("skills: system package record add failed", "package", requested, "resolved", pkg, "error", err)
+		return false, fmt.Sprintf("package installed but package record update failed: %v", err)
 	}
 	return true, ""
 }
@@ -57,6 +58,7 @@ func uninstallSystemPackage(ctx context.Context, requested string) (bool, string
 	}
 	if err := removeSystemPackageRecord(requested, pkg, "apt"); err != nil {
 		slog.Warn("skills: system package record remove failed", "package", requested, "resolved", pkg, "error", err)
+		return false, fmt.Sprintf("package removed but package record update failed: %v", err)
 	}
 	return true, ""
 }

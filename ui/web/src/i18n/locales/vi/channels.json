@@ -118,6 +118,7 @@
       "config": "Cấu hình",
       "credentials": "Thông tin xác thực",
       "groups": "Nhóm",
+      "contexts": "Ngữ cảnh",
       "managers": "Quản lý"
     },
     "general": {
@@ -155,6 +156,86 @@
       "saved": "Đã lưu",
       "saveGroups": "Lưu nhóm",
       "saving": "Đang lưu..."
+    },
+    "contexts": {
+      "description": "Xem ngữ cảnh channel, thành viên đã lưu, MCP tools, Secure CLI tools và thông tin xác thực theo scope.",
+      "emptyTitle": "Không có ngữ cảnh",
+      "emptyHint": "Ngữ cảnh xuất hiện sau khi channel nhận tin nhắn hoặc metadata nhóm.",
+      "loading": "Đang tải chi tiết ngữ cảnh...",
+      "capabilities": "Quyền năng",
+      "members": "Thành viên",
+      "noCapabilities": "Không có quyền năng trong ngữ cảnh này.",
+      "noMembers": "Không có thành viên đã lưu trong ngữ cảnh này.",
+      "none": "Không có",
+      "allTools": "Tất cả tools",
+      "scopedCount": "{{count}} override theo scope",
+      "scopedCount_plural": "{{count}} override theo scope",
+      "live": "Live",
+      "grant": "Grant",
+      "revoke": "Revoke",
+      "manageCapability": "Quản lý quyền năng",
+      "scopedCredential": "Xác thực theo scope",
+      "apiKeyPlaceholder": "API key (chỉ MCP)",
+      "envPlaceholder": "JSON môi trường, ví dụ {\"TOKEN\":\"...\"}",
+      "secretHint": "Giá trị được mã hóa và không bao giờ trả về sau khi lưu.",
+      "saveCredential": "Lưu xác thực",
+      "deleteCredential": "Xóa xác thực",
+      "grantSaved": "Đã lưu grant theo ngữ cảnh",
+      "grantDeleted": "Đã xóa grant theo ngữ cảnh",
+      "credentialSaved": "Đã lưu xác thực theo ngữ cảnh",
+      "credentialDeleted": "Đã xóa xác thực theo ngữ cảnh",
+      "invalidEnv": "Môi trường phải là JSON object với giá trị dạng chuỗi.",
+      "envRequired": "Secure CLI credential cần JSON môi trường.",
+      "credentialRequired": "Nhập API key hoặc JSON môi trường.",
+      "actionFailed": "Thao tác thất bại",
+      "columns": {
+        "name": "Tên",
+        "type": "Loại",
+        "source": "Nguồn",
+        "credentials": "Xác thực",
+        "tools": "Tools",
+        "actions": "Thao tác"
+      }
+    },
+    "passiveMemory": {
+      "title": "Trích xuất bộ nhớ thụ động",
+      "description": "Trích xuất các sự kiện dài hạn từ traffic nhóm vào hàng chờ duyệt bộ nhớ.",
+      "pendingCount": "{{count}} chờ duyệt",
+      "enable": "Bật trích xuất thụ động",
+      "reviewMode": "Yêu cầu duyệt trước khi ghi",
+      "interval": "Chu kỳ (phút)",
+      "messageCap": "Ngưỡng tin nhắn",
+      "retention": "Giữ lại (giờ)",
+      "minMessages": "Tin nhắn tối thiểu",
+      "types": "Loại bộ nhớ",
+      "excludeUsers": "User loại trừ",
+      "excludePatterns": "Pattern loại trừ",
+      "runNow": "Chạy ngay",
+      "save": "Lưu",
+      "saving": "Đang lưu...",
+      "saved": "Đã lưu cấu hình bộ nhớ",
+      "saveFailed": "Lưu cấu hình bộ nhớ thất bại",
+      "runQueued": "Đã bắt đầu trích xuất bộ nhớ",
+      "runFailed": "Trích xuất bộ nhớ thất bại",
+      "itemUpdated": "Đã cập nhật mục bộ nhớ",
+      "itemFailed": "Thao tác mục bộ nhớ thất bại",
+      "reviewQueue": "Hàng chờ duyệt",
+      "loading": "Đang tải trạng thái bộ nhớ...",
+      "noRuns": "Chưa có lần trích xuất nào.",
+      "noItems": "Chưa có ứng viên bộ nhớ.",
+      "lastRun": "Lần chạy gần nhất",
+      "runStats": "{{messages}} tin nhắn, {{items}} mục, {{redactions}} redaction",
+      "approve": "Duyệt",
+      "reject": "Từ chối",
+      "delete": "Xóa",
+      "type": {
+        "people": "Con người",
+        "projects": "Dự án",
+        "decisions": "Quyết định",
+        "todos": "Việc cần làm",
+        "preferences": "Sở thích",
+        "events": "Sự kiện"
+      }
     },
     "timeline": {
       "title": "Dòng thời gian",
@@ -223,12 +304,11 @@
     "dm_stream": { "label": "Stream DM", "help": "Truyền phản hồi liên tục trong DM" },
     "group_stream": { "label": "Stream nhóm", "help": "Truyền phản hồi liên tục trong nhóm" },
     "draft_transport": { "label": "Xem trước nháp", "help": "Dùng bản nháp ẩn cho stream trả lời trong DM — không thông báo mỗi lần chỉnh sửa (cần bật Stream DM)" },
-    "reasoning_stream": { "label": "Hiện suy luận", "help": "Hiển thị quá trình suy nghĩ của AI thành tin nhắn riêng trước câu trả lời (cần bật streaming)" },
+    "reasoning_delivery": { "label": "Hiện suy luận", "help": "Chọn cách hiển thị suy luận của model trong tin nhắn channel." },
     "reaction_level": { "label": "Mức độ reaction" },
     "media_max_mb": { "label": "Kích thước media tối đa (MB)" },
     "link_preview": { "label": "Xem trước liên kết" },
     "allow_from": { "label": "Người dùng được phép" },
-    "block_reply": { "label": "Phản hồi khối", "help": "Gửi văn bản trung gian trong quá trình lặp công cụ" },
     "domain": { "label": "Tên miền" },
     "connection_mode": { "label": "Chế độ kết nối", "help": "WebSocket không cần IP công khai — chỉ kết nối ra ngoài" },
     "webhook_port": { "label": "Cổng webhook", "help": "0 = chia sẻ cổng gateway chính (khuyến nghị)" },
@@ -244,6 +324,78 @@
     "skills": { "label": "Bộ lọc skill", "help": "Giới hạn skill khả dụng cho nhóm này" },
     "tools": { "label": "Danh sách công cụ được phép", "help": "Giới hạn công cụ agent có thể dùng trong nhóm này" },
     "system_prompt": { "label": "Prompt hệ thống" },
+    "chat_behavior": {
+      "enabled": {
+        "label": "Hành vi gửi tin tự nhiên",
+        "help": "Ghi đè hành vi gửi tin ở cấp Channel. Cấu hình Channel ưu tiên cao hơn Agent và Workspace."
+      },
+      "intermediate_replies": {
+        "enabled": {
+          "label": "Phản hồi trung gian",
+          "help": "Gửi bubble cập nhật tiến độ tự nhiên trong tác vụ dài hoặc dùng nhiều tool. Tin này không được thêm vào lịch sử phiên."
+        },
+        "mode": {
+          "label": "Chế độ phản hồi trung gian",
+          "help": "Chọn cập nhật tiến độ được generate bằng model gửi tin hay tắt ở channel này."
+        },
+        "provider": {
+          "label": "Intermediate Provider",
+          "help": "Provider tuỳ chọn cho bubble tiến độ. Để trống để kế thừa provider của agent; nên chọn provider nhanh và rẻ."
+        },
+        "model": {
+          "label": "Intermediate Model",
+          "help": "Model tuỳ chọn cho bubble tiến độ. Để trống để kế thừa model của agent; có thể nhập custom model name."
+        },
+        "timeout_ms": {
+          "label": "Intermediate Timeout (ms)",
+          "help": "Thời gian chờ tối đa cho model gửi tin trước khi bỏ qua cập nhật trung gian."
+        },
+        "max_tokens": {
+          "label": "Intermediate Max Tokens",
+          "help": "Giới hạn token cho mỗi bubble tiến độ. Nên để nhỏ để cập nhật ngắn gọn."
+        },
+        "max_chars": {
+          "label": "Intermediate Max Chars",
+          "help": "Giới hạn ký tự sau khi generate để bubble tiến độ không biến thành câu trả lời đầy đủ."
+        }
+      },
+      "quick_ack": {
+        "enabled": {
+          "label": "Xác nhận nhanh",
+          "help": "Gửi một câu xác nhận ngắn, tự nhiên trước khi tác vụ dài bắt đầu. Tin này không được thêm vào lịch sử phiên."
+        },
+        "mode": {
+          "label": "Chế độ xác nhận nhanh",
+          "help": "Các chế độ generate dùng provider/model gửi tin đã cấu hình. Chỉ chế độ fixed template mới gửi text cố định."
+        },
+        "provider": {
+          "label": "Quick Ack Provider",
+          "help": "Provider tuỳ chọn cho xác nhận nhanh. Để trống để kế thừa provider của agent; nên chọn provider nhanh và rẻ."
+        },
+        "model": {
+          "label": "Quick Ack Model",
+          "help": "Model tuỳ chọn cho xác nhận nhanh. Để trống để kế thừa model của agent; có thể nhập custom model name."
+        },
+        "timeout_ms": {
+          "label": "Quick Ack Timeout (ms)",
+          "help": "Thời gian chờ tối đa cho model xác nhận trước khi bỏ qua xác nhận được generate."
+        },
+        "max_tokens": {
+          "label": "Quick Ack Max Tokens",
+          "help": "Giới hạn token cho câu xác nhận. Nên để nhỏ để nó giống xác nhận đã nhận việc, không phải câu trả lời."
+        },
+        "max_chars": {
+          "label": "Quick Ack Max Chars",
+          "help": "Giới hạn ký tự sau khi generate để bubble xác nhận luôn ngắn gọn."
+        }
+      },
+      "final_split": {
+        "enabled": {
+          "label": "Tách câu trả lời cuối",
+          "help": "Tách câu trả lời dài thành nhiều tin nhắn channel. Tính năng này tách biệt với suy luận và bubble tiến độ."
+        }
+      }
+    },
     "platform": { "label": "Nền tảng", "help": "Chọn nền tảng mà trang Pancake này phục vụ." },
     "tiktok_type": { "label": "Loại tài khoản TikTok", "help": "Chọn loại tài khoản TikTok cho trang này" },
     "features.private_reply": {
@@ -256,11 +408,6 @@
     }
   },
   "fieldOptions": {
-    "block_reply": {
-      "inherit": "Kế thừa từ gateway",
-      "true": "Bật",
-      "false": "Tắt"
-    },
     "dm_policy": {
       "pairing": "Ghép nối (yêu cầu mã)",
       "open": "Mở (chấp nhận tất cả)",
@@ -281,6 +428,51 @@
       "off": "Tắt",
       "minimal": "Tối thiểu",
       "full": "Đầy đủ"
+    },
+    "reasoning_delivery": {
+      "streaming_only": "Chỉ khi streaming",
+      "always_bubbles": "Luôn thành bubble",
+      "off": "Tắt"
+    },
+    "chat_behavior": {
+      "enabled": {
+        "inherit": "Kế thừa từ gateway",
+        "true": "Bật",
+        "false": "Tắt"
+      },
+      "intermediate_replies": {
+        "enabled": {
+          "inherit": "Kế thừa từ gateway",
+          "true": "Bật",
+          "false": "Tắt"
+        },
+        "mode": {
+          "inherit": "Kế thừa từ gateway",
+          "sidecar_generated": "Sidecar generate",
+          "off": "Tắt"
+        }
+      },
+      "quick_ack": {
+        "enabled": {
+          "inherit": "Kế thừa từ gateway",
+          "true": "Bật",
+          "false": "Tắt"
+        },
+        "mode": {
+          "inherit": "Kế thừa từ gateway",
+          "sidecar_generated": "Sidecar generate",
+          "llm_generated": "LLM generate",
+          "fixed_template": "Template cố định",
+          "off": "Tắt"
+        }
+      },
+      "final_split": {
+        "enabled": {
+          "inherit": "Kế thừa từ gateway",
+          "true": "Bật",
+          "false": "Tắt"
+        }
+      }
     },
     "domain": {
       "lark": "Lark (Quốc tế)",
@@ -329,7 +521,7 @@
       "dm_stream": { "label": "Stream DM", "help": "Truyền phản hồi liên tục trong DM" },
       "group_stream": { "label": "Stream Nhóm", "help": "Truyền phản hồi liên tục trong nhóm" },
       "draft_transport": { "label": "Xem trước nháp", "help": "Dùng bản nháp ẩn cho stream trả lời trong DM — không thông báo mỗi lần chỉnh sửa (cần bật Stream DM)" },
-      "reasoning_stream": { "label": "Hiện suy luận", "help": "Hiển thị quá trình suy nghĩ của AI thành tin nhắn riêng trước câu trả lời (cần bật streaming)" }
+      "reasoning_delivery": { "label": "Hiện suy luận", "help": "Chọn cách hiển thị suy luận của model trong tin nhắn channel." }
     },
     "fields": {
       "groupPolicy": "Chính sách nhóm",

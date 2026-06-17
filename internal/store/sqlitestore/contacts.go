@@ -71,6 +71,10 @@ func contactWhereSQLite(ctx context.Context, opts store.ContactListOpts) (string
 		conditions = append(conditions, "channel_type = ?")
 		args = append(args, opts.ChannelType)
 	}
+	if opts.ChannelInstance != "" {
+		conditions = append(conditions, "channel_instance = ?")
+		args = append(args, opts.ChannelInstance)
+	}
 	if opts.PeerKind != "" {
 		conditions = append(conditions, "peer_kind = ?")
 		args = append(args, opts.PeerKind)

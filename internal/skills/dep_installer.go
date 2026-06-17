@@ -55,6 +55,7 @@ type InstallResult struct {
 	System []string `json:"system,omitempty"`
 	Pip    []string `json:"pip,omitempty"`
 	Npm    []string `json:"npm,omitempty"`
+	GitHub []string `json:"github,omitempty"`
 	Errors []string `json:"errors,omitempty"`
 }
 

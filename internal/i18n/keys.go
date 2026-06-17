@@ -22,9 +22,17 @@ const (
 	MsgInvalidUpdates   = "error.invalid_updates"   // "invalid updates"
 
 	// --- Agent ---
-	MsgAgentNotFound       = "error.agent_not_found"       // "agent not found: %s"
-	MsgCannotDeleteDefault = "error.cannot_delete_default" // "cannot delete the default agent"
-	MsgUserCtxRequired     = "error.user_ctx_required"     // "user context required"
+	MsgAgentNotFound                       = "error.agent_not_found"       // "agent not found: %s"
+	MsgCannotDeleteDefault                 = "error.cannot_delete_default" // "cannot delete the default agent"
+	MsgUserCtxRequired                     = "error.user_ctx_required"     // "user context required"
+	MsgGatewayOperatorSecureCLIUnavailable = "gateway_operator.secure_cli_unavailable"
+	MsgGatewayOperatorEligibilityFailed    = "gateway_operator.eligibility_failed"
+	MsgGatewayOperatorNotFirstAgent        = "gateway_operator.not_first_agent"
+	MsgGatewayOperatorTokenMissing         = "gateway_operator.token_missing"
+	MsgGatewayOperatorBinaryMissing        = "gateway_operator.binary_missing"
+	MsgGatewayOperatorExistingReview       = "gateway_operator.existing_review"
+	MsgGatewayOperatorRegisterFailed       = "gateway_operator.register_failed"
+	MsgGatewayOperatorCredentialFailed     = "gateway_operator.credential_failed"
 
 	// --- Chat ---
 	MsgRateLimitExceeded = "error.rate_limit"       // "rate limit exceeded — please wait"
@@ -60,23 +68,24 @@ const (
 	MsgSenderIDRequired      = "error.sender_id_required"      // "sender_id is required"
 
 	// --- HTTP API ---
-	MsgInvalidAuth           = "error.invalid_auth"            // "invalid authentication"
-	MsgMsgsRequired          = "error.messages_required"       // "messages is required"
-	MsgUserIDHeader          = "error.user_id_header"          // "X-GoClaw-User-Id header is required"
-	MsgFileTooLarge          = "error.file_too_large"          // "file too large or invalid multipart form"
-	MsgMissingFileField      = "error.missing_file_field"      // "missing 'file' field"
-	MsgInvalidFilename       = "error.invalid_filename"        // "invalid filename"
-	MsgChannelKeyReq         = "error.channel_key_required"    // "channel and key are required"
-	MsgMethodNotAllowed      = "error.method_not_allowed"      // "method not allowed"
-	MsgStreamingNotSupported = "error.streaming_not_supported" // "streaming not supported"
-	MsgOwnerOnly             = "error.owner_only"              // "only owner can %s"
-	MsgNoAccess              = "error.no_access"               // "no access to this %s"
-	MsgAlreadySummoning      = "error.already_summoning"       // "agent is already being summoned"
-	MsgSummoningUnavailable  = "error.summoning_unavailable"   // "summoning not available"
-	MsgNoDescription         = "error.no_description"          // "agent has no description to resummon from"
-	MsgSummonCancelled       = "info.summon_cancelled"         // "summon cancelled by user"
-	MsgCannotCancel          = "error.cannot_cancel_summon"    // "agent is not being summoned"
-	MsgInvalidPath           = "error.invalid_path"            // "invalid path"
+	MsgInvalidAuth            = "error.invalid_auth"             // "invalid authentication"
+	MsgMsgsRequired           = "error.messages_required"        // "messages is required"
+	MsgUserIDHeader           = "error.user_id_header"           // "X-GoClaw-User-Id header is required"
+	MsgFileTooLarge           = "error.file_too_large"           // "file too large or invalid multipart form"
+	MsgMissingFileField       = "error.missing_file_field"       // "missing 'file' field"
+	MsgInvalidFilename        = "error.invalid_filename"         // "invalid filename"
+	MsgChannelKeyReq          = "error.channel_key_required"     // "channel and key are required"
+	MsgMethodNotAllowed       = "error.method_not_allowed"       // "method not allowed"
+	MsgStreamingNotSupported  = "error.streaming_not_supported"  // "streaming not supported"
+	MsgOwnerOnly              = "error.owner_only"               // "only owner can %s"
+	MsgNoAccess               = "error.no_access"                // "no access to this %s"
+	MsgAlreadySummoning       = "error.already_summoning"        // "agent is already being summoned"
+	MsgSummoningUnavailable   = "error.summoning_unavailable"    // "summoning not available"
+	MsgRunTimelineUnavailable = "error.run_timeline_unavailable" // "run timeline not available"
+	MsgNoDescription          = "error.no_description"           // "agent has no description to resummon from"
+	MsgSummonCancelled        = "info.summon_cancelled"          // "summon cancelled by user"
+	MsgCannotCancel           = "error.cannot_cancel_summon"     // "agent is not being summoned"
+	MsgInvalidPath            = "error.invalid_path"             // "invalid path"
 
 	// --- Browser cookies ---
 	MsgBrowserCookieTooMany            = "error.browser_cookie_too_many"            // "too many browser cookies in one sync request"
@@ -133,9 +142,17 @@ const (
 	MsgCannotRemoveLastWriter  = "error.cannot_remove_last_writer"  // "cannot remove the last file writer"
 
 	// --- Skills ---
-	MsgSkillsUpdateNotSupported = "error.skills_update_not_supported" // "skills.update not supported for file-based skills"
-	MsgCannotResolveSkillID     = "error.cannot_resolve_skill_id"     // "cannot resolve skill ID for file-based skill"
-	MsgInvalidVisibility        = "error.invalid_visibility"          // "invalid visibility %q: must be one of private, public"
+	MsgSkillsUpdateNotSupported    = "error.skills_update_not_supported"    // "skills.update not supported for file-based skills"
+	MsgCannotResolveSkillID        = "error.cannot_resolve_skill_id"        // "cannot resolve skill ID for file-based skill"
+	MsgInvalidVisibility           = "error.invalid_visibility"             // "invalid visibility %q: must be one of private, public"
+	MsgSkillEvolutionNotConfigured = "error.skill_evolution_not_configured" // "skill evolution store is not configured"
+	MsgActivityStoreNotConfigured  = "error.activity_store_not_configured"  // "activity store is not configured"
+	MsgInvalidEvolutionMode        = "error.invalid_evolution_mode"         // "invalid evolution mode"
+	MsgSystemSkillMutationBlocked  = "error.system_skill_mutation_blocked"  // "system skill mutation is blocked"
+	MsgSuggestionMustBeApproved    = "error.suggestion_must_be_approved"    // "suggestion must be approved before apply"
+	MsgInvalidDraftPatch           = "error.invalid_draft_patch"            // "invalid draft_patch: %s"
+	MsgDraftPatchRequired          = "error.draft_patch_required"           // "draft_patch requires content or find/replace"
+	MsgFindTextNotFound            = "error.find_text_not_found"            // "find text not found in target file"
 
 	// --- Package updates (Phase 4+5) ---
 	MsgPackageNotInstalled  = "packages.update.not_installed"     // "Package {name} is not installed"
@@ -251,6 +268,10 @@ const (
 	MsgSkillNudge70Pct      = "skill.nudge_70_pct"
 	MsgSkillNudge90Pct      = "skill.nudge_90_pct"
 
+	// Tool progress announcements (user-facing)
+	MsgToolAnnouncementSingle = "progress.tool_announcement.single" // "I'll use %s to handle the next step."
+	MsgToolAnnouncementMulti  = "progress.tool_announcement.multi"  // "I'll use %s to handle the next step."
+
 	// --- Tenants ---
 	MsgInvalidRole = "error.invalid_role" // "invalid role: allowed values are owner, admin, operator, member, viewer"
 
@@ -340,16 +361,16 @@ const (
 	MsgGrantEnvRevealLimit  = "error.grant_env_reveal_limit"  // "rate limit exceeded for env reveal"
 
 	// --- Git credential adapter (Phase 3+) ---
-	MsgGitCredHostMismatch        = "error.git_cred_host_mismatch"         // "stored credential is for %s but command targets %s"
-	MsgGitCredNoMatch             = "error.git_cred_no_match"              // "no git credential configured for host %s"
-	MsgGitCredUnsupportedType     = "error.git_cred_unsupported_type"      // "git credential type %q is not supported"
-	MsgGitCredTokenInvalid        = "error.git_cred_token_invalid"         // "stored git token is invalid or empty"
-	MsgGitCredTokenControlChar    = "error.git_cred_token_control_char"    // "stored git token contains forbidden control characters"
-	MsgGitCredHostUserinfoRejected = "error.git_cred_host_userinfo_rejected" // "git URL with embedded userinfo is rejected as ambiguous"
+	MsgGitCredHostMismatch             = "error.git_cred_host_mismatch"              // "stored credential is for %s but command targets %s"
+	MsgGitCredNoMatch                  = "error.git_cred_no_match"                   // "no git credential configured for host %s"
+	MsgGitCredUnsupportedType          = "error.git_cred_unsupported_type"           // "git credential type %q is not supported"
+	MsgGitCredTokenInvalid             = "error.git_cred_token_invalid"              // "stored git token is invalid or empty"
+	MsgGitCredTokenControlChar         = "error.git_cred_token_control_char"         // "stored git token contains forbidden control characters"
+	MsgGitCredHostUserinfoRejected     = "error.git_cred_host_userinfo_rejected"     // "git URL with embedded userinfo is rejected as ambiguous"
 	MsgGitCredSSHPassphraseUnsupported = "error.git_cred_ssh_passphrase_unsupported" // "passphrase-protected SSH keys not supported in v1"
-	MsgGitCredSSHKeyInvalid            = "error.git_cred_ssh_key_invalid"             // "SSH private key invalid: %s"
-	MsgGitCredHostScopeRequired        = "error.git_cred_host_scope_required"         // "host_scope required for credential_type %s"
-	MsgGitCredHostScopeInvalid         = "error.git_cred_host_scope_invalid"          // "host_scope %q is not a valid hostname"
-	MsgGitCredBlobMissingField         = "error.git_cred_blob_missing_field"          // "blob missing required field %q"
-	MsgGitCredUnsupportedCredType      = "error.git_cred_unsupported_cred_type"       // "credential_type %q is not supported"
+	MsgGitCredSSHKeyInvalid            = "error.git_cred_ssh_key_invalid"            // "SSH private key invalid: %s"
+	MsgGitCredHostScopeRequired        = "error.git_cred_host_scope_required"        // "host_scope required for credential_type %s"
+	MsgGitCredHostScopeInvalid         = "error.git_cred_host_scope_invalid"         // "host_scope %q is not a valid hostname"
+	MsgGitCredBlobMissingField         = "error.git_cred_blob_missing_field"         // "blob missing required field %q"
+	MsgGitCredUnsupportedCredType      = "error.git_cred_unsupported_cred_type"      // "credential_type %q is not supported"
 )

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -28,22 +29,34 @@ type ChannelStream interface {
 
 // RunContext tracks an active agent run for streaming/reaction event forwarding.
 type RunContext struct {
-	ChannelName       string
-	ChatID            string
-	MessageID         string            // platform message ID (string to support Feishu "om_xxx", Telegram "12345", etc.)
-	Metadata          map[string]string // outbound routing metadata (thread_id, local_key, group_id)
-	TenantID          uuid.UUID         // tenant scope for per-tenant TTS
-	Streaming         bool              // whether run uses streaming (to avoid double-delivery of block replies)
-	BlockReplyEnabled bool              // whether block.reply delivery is enabled for this run (resolved at RegisterRun time)
-	ToolStatusEnabled bool              // whether tool name shows in streaming preview during tool execution
-	mu                sync.Mutex
-	streamBuffer      string        // accumulated streaming text (chunks are deltas)
-	inToolPhase       bool          // true after tool.call, reset on next chunk (new LLM iteration)
-	stream            ChannelStream // per-run stream handle (replaces per-chat sync.Map in channel impls)
-	thinkingBuffer    string        // accumulated thinking/reasoning text
-	hasThinking       bool          // true if any thinking events received this iteration
-	thinkingDone      bool          // true after first chunk arrives (reasoning→answer transition complete)
-	tagParseSkipped   bool          // true after first chunk with no <think> tags (skip re-parsing)
+	ChannelName          string
+	ChatID               string
+	MessageID            string            // platform message ID (string to support Feishu "om_xxx", Telegram "12345", etc.)
+	Metadata             map[string]string // outbound routing metadata (thread_id, local_key, group_id)
+	TenantID             uuid.UUID         // tenant scope for per-tenant TTS
+	Streaming            bool              // whether run uses streaming (to avoid double-delivery of block replies)
+	BlockReplyEnabled    bool              // whether block.reply delivery is enabled for this run (resolved at RegisterRun time)
+	ToolStatusEnabled    bool              // whether tool name shows in streaming preview during tool execution
+	ChatBehavior         ResolvedChatBehavior
+	Delivery             DeliveryRuntime
+	ReasoningDelivery    ResolvedReasoningDelivery
+	mu                   sync.Mutex
+	ackTimer             *time.Timer
+	ackSent              bool
+	ackCancelled         bool
+	blockReplySent       bool
+	blockReplySeen       int
+	interimDelivered     int
+	lastInterimReply     string
+	streamBuffer         string        // accumulated streaming text (chunks are deltas)
+	inToolPhase          bool          // true after tool.call, reset on next chunk (new LLM iteration)
+	stream               ChannelStream // per-run stream handle (replaces per-chat sync.Map in channel impls)
+	thinkingBuffer       string        // accumulated thinking/reasoning text
+	hasThinking          bool          // true if any thinking events received this iteration
+	thinkingDone         bool          // true after first chunk arrives (reasoning→answer transition complete)
+	tagParseSkipped      bool          // true after first chunk with no <think> tags (skip re-parsing)
+	reasoningBubbles     *reasoningBubbleBuffer
+	reasoningBubbleTimer *time.Timer
 }
 
 // Manager manages all registered channels, handling their lifecycle

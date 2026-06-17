@@ -596,6 +596,13 @@ flowchart LR
 7. Stores in `episodic_summaries`
 8. Publishes `episodic.created` for downstream workers
 
+**Passive channel memory** (`internal/channelmemory`):
+1. Reads existing channel pending-message groups only when a channel admin enables `passive_memory.enabled`
+2. Redacts secrets, tokens, connection strings, payment-like numbers, emails, phones, and configured excluded users/patterns
+3. Writes extracted candidates to `channel_memory_extraction_items` for review by default
+4. On approval, creates an `episodic_summaries` row with `source_type='channel'`
+5. Publishes `episodic.created` so SemanticWorker/DedupWorker use the same KG path as session memory
+
 **SemanticWorker** (`internal/consolidation/semantic_worker.go`):
 1. Listens to `episodic.created` events
 2. Parses summary for entity mentions + relationships

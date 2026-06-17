@@ -133,6 +133,36 @@
       "avgDuration": "平均时长",
       "cost": "费用"
     },
+    "events": {
+      "title": "资源事件分析",
+      "description": "统计带 trace 的 tool、skill、MCP 和 runtime 活动。",
+      "tabs": {
+        "tool": "工具",
+        "skill": "技能",
+        "mcp_tool": "MCP",
+        "runtime_tool": "Runtime"
+      },
+      "metrics": {
+        "calls": "调用",
+        "errorRate": "错误率",
+        "tokens": "令牌",
+        "avgDuration": "平均时长",
+        "cost": "费用"
+      },
+      "activeBuckets": "{{count}} 个活跃时间桶",
+      "unknownSource": "未知",
+      "empty": "当前选择没有事件数据。",
+      "table": {
+        "resource": "资源",
+        "source": "来源",
+        "calls": "调用",
+        "errors": "错误",
+        "errorRate": "错误率",
+        "avgDuration": "平均时长",
+        "tokens": "令牌",
+        "cost": "费用"
+      }
+    },
     "tooltip": {
       "date": "日期",
       "total": "合计",

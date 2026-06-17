@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -115,19 +116,20 @@ func (gitAdapter) Prepare(ctx context.Context, _ *store.SecureCLIBinary, cred *s
 			return nil, err
 		}
 		// GIT_CONFIG_COUNT env approach (git 2.31+) — same effect as
-		// `-c http.https://host/.extraheader=Authorization: Bearer <tok>` but
+		// `-c http.https://host/.extraheader=Authorization: Basic ...` but
 		// the token stays out of argv. Single-entry header keeps host-scoping
 		// strict; the matching url prefix ensures git skips its credential
 		// helpers for this URL automatically.
 		configKey := fmt.Sprintf("http.https://%s/.extraheader", targetHost)
-		configVal := fmt.Sprintf("Authorization: Bearer %s", token)
+		basicPayload := base64.StdEncoding.EncodeToString([]byte("x-access-token:" + token))
+		configVal := "Authorization: Basic " + basicPayload
 		return &Injection{
 			Env: map[string]string{
 				"GIT_CONFIG_COUNT":   "1",
 				"GIT_CONFIG_KEY_0":   configKey,
 				"GIT_CONFIG_VALUE_0": configVal,
 			},
-			ScrubValues: []string{token},
+			ScrubValues: []string{token, basicPayload, configVal},
 		}, nil
 	case "ssh_key":
 		keyPEM, err := decodeSSHKeyBlob(cred.EncryptedEnv)

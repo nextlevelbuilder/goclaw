@@ -8,10 +8,18 @@ import {
 } from "@/components/ui/tooltip";
 
 /** Label with an (i) tooltip icon for field descriptions. */
-export function InfoLabel({ children, tip }: { children: React.ReactNode; tip: string }) {
+export function InfoLabel({
+  children,
+  tip,
+  labelClassName,
+}: {
+  children: React.ReactNode;
+  tip: string;
+  labelClassName?: string;
+}) {
   return (
     <div className="flex items-center gap-1.5">
-      <Label>{children}</Label>
+      <Label className={labelClassName}>{children}</Label>
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
