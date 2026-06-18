@@ -14,6 +14,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/discord"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/feishu"
+	"github.com/nextlevelbuilder/goclaw/internal/channels/mattermost"
 	slackchannel "github.com/nextlevelbuilder/goclaw/internal/channels/slack"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/telegram"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/whatsapp"
@@ -140,6 +141,16 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 				channelMgr.RegisterChannel(channels.TypeFeishu, f)
 				slog.Info("feishu/lark channel enabled (config)")
 			}
+		}
+	}
+
+	if cfg.Channels.Mattermost.Enabled && cfg.Channels.Mattermost.ServerURL != "" && cfg.Channels.Mattermost.BotToken != "" && instanceLoader == nil {
+		mm, err := mattermost.New(cfg.Channels.Mattermost, msgBus)
+		if err != nil {
+			slog.Error("failed to initialize mattermost channel", "error", err)
+		} else {
+			channelMgr.RegisterChannel(channels.TypeMattermost, mm)
+			slog.Info("mattermost channel enabled (config)")
 		}
 	}
 }
