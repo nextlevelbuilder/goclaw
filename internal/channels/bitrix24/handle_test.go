@@ -653,6 +653,27 @@ func TestHandleMessage_Blocked_DoesNotCollectContact(t *testing.T) {
 
 // --- Open Channel (MESSAGE_TYPE="L") gating ---------------------------------
 
+func TestIsOpenChannelParams(t *testing.T) {
+	tests := []struct {
+		name   string
+		params *EventParams
+		want   bool
+	}{
+		{name: "nil", params: nil, want: false},
+		{name: "message type L", params: &EventParams{MessageType: "L"}, want: true},
+		{name: "lines entity", params: &EventParams{ChatEntityType: "LINES"}, want: true},
+		{name: "case insensitive", params: &EventParams{ChatEntityType: "lines"}, want: true},
+		{name: "regular group", params: &EventParams{MessageType: "C"}, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isOpenChannelParams(tt.params); got != tt.want {
+				t.Errorf("isOpenChannelParams() = %v; want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestHandleMessage_OpenChannel_ConnectorWithoutMentionDropped covers the
 // customer side of the Open Channel gate without an explicit mention: a
 // Zalo/FB customer (IS_CONNECTOR=Y) sending into the session WITHOUT

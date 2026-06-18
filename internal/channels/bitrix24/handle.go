@@ -117,8 +117,7 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 	// require_mention is true, reply to everything when false) or silently
 	// merge into the "direct" path. Recognise it up-front so the gate below
 	// can apply the right policy.
-	isOpenChannel := strings.EqualFold(evt.Params.MessageType, "L") ||
-		strings.EqualFold(evt.Params.ChatEntityType, "LINES")
+	isOpenChannel := isOpenChannelParams(&evt.Params)
 	// Force group routing for Open Channel so the existing mention-strip /
 	// readable-mention pipeline below runs, and so the session key includes
 	// the chat id instead of dumping every participant into the "direct"
@@ -396,6 +395,14 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 // chat. Failure is non-fatal — the agent will still respond to the user's
 // first real message.
 func (c *Channel) handleJoin(ctx context.Context, evt *Event) {
+	// Open Channel sessions are customer-facing. Keep join events silent so
+	// adding the bot does not push an unsolicited greeting to the customer.
+	if isOpenChannelParams(&evt.Params) {
+		slog.Debug("bitrix24: welcome message skipped for open channel",
+			"dialog_id", evt.Params.DialogID)
+		return
+	}
+
 	client := c.Client()
 	botID := c.BotID()
 	if client == nil || botID <= 0 {
@@ -413,6 +420,11 @@ func (c *Channel) handleJoin(ctx context.Context, evt *Event) {
 		slog.Warn("bitrix24: welcome message send failed",
 			"dialog_id", evt.Params.DialogID, "err", err)
 	}
+}
+
+func isOpenChannelParams(p *EventParams) bool {
+	return p != nil && (strings.EqualFold(p.MessageType, "L") ||
+		strings.EqualFold(p.ChatEntityType, "LINES"))
 }
 
 // isMentionedParams checks all three sources Bitrix24 may use to convey a
