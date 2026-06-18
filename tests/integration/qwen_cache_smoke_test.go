@@ -36,9 +36,18 @@ func TestQwenCacheSmoke(t *testing.T) {
 		apiBase = "https://coding-intl.dashscope.aliyuncs.com/v1"
 	}
 
-	models := []string{"qwen3-coder-plus", "qwen3-max", "qwen-plus", "qwen-turbo"}
+	models := []string{"qwen3-coder-plus", "qwen3-max", "qwen-plus", "qwen-turbo", "qwen3.7-plus"}
 	if v := os.Getenv("DASHSCOPE_MODELS"); v != "" {
 		models = strings.Split(v, ",")
+	}
+
+	// cacheOptional models: Alibaba's context-cache doc does NOT yet list these
+	// for explicit cache. The wrap is a safe no-op when unsupported, so a "no
+	// cache" result is logged rather than failed — observe live behavior without
+	// a flaky CI assertion. Promote to a hard assertion once a run confirms hits.
+	cacheOptional := map[string]bool{
+		"qwen3.7-plus": true,
+		"qwen3.6-plus": true,
 	}
 
 	// Per-run salt so the cache prefix is unique to this test run; call 1 will
@@ -46,13 +55,13 @@ func TestQwenCacheSmoke(t *testing.T) {
 	salt := time.Now().Format("20060102T150405.000000000")
 
 	type result struct {
-		model    string
-		ok       bool
-		err      string
-		create   int
-		readHit  int
-		prompt2  int
-		hitRate  float64
+		model   string
+		ok      bool
+		err     string
+		create  int
+		readHit int
+		prompt2 int
+		hitRate float64
 	}
 	var results []result
 
@@ -123,6 +132,10 @@ func TestQwenCacheSmoke(t *testing.T) {
 			// (cached > 0 on call 2 with hit rate >= 80%) must hold. Both
 			// indicate cache_control plumbing works for this model.
 			if r.create == 0 && r.readHit == 0 {
+				if cacheOptional[model] {
+					t.Logf("model=%s: cache not observed (unconfirmed support) - no-op wrap, no cost", model)
+					return
+				}
 				t.Errorf("model=%s: cache appears UNSUPPORTED (no create, no hit)", model)
 				return
 			}
@@ -146,4 +159,3 @@ func TestQwenCacheSmoke(t *testing.T) {
 			r.model, ok, r.create, r.readHit, r.prompt2, r.hitRate*100)
 	}
 }
-
