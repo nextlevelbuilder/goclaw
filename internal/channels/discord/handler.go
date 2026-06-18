@@ -302,8 +302,19 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 		}
 	}
 
+	// PATCHED: Clear AgentID so the gateway consumer's resolveAgentRoute
+	// (cmd/gateway_consumer_normal.go:40-43) matches via cfg.Bindings.
+	// The consumer checks: if msg.AgentID == "" → resolveAgentRoute(cfg, msg.Channel, msg.ChatID, msg.PeerKind)
+	// Bindings in config.json match by channel name + peer.kind + peer.id.
+	// If no binding matches, resolveAgentRoute falls back to cfg.ResolveDefaultAgentID().
+	targetAgentID := ""
+	slog.Info("discord: binding routing enabled",
+		"channel_id", channelID,
+		"channel_name", c.Name(),
+		"peer_kind", peerKind,
+	)
+
 	// Voice agent routing
-	targetAgentID := c.AgentID()
 	if c.config.VoiceAgentID != "" {
 		for _, mi := range mediaList {
 			if mi.Type == media.TypeAudio || mi.Type == media.TypeVoice {
