@@ -307,7 +307,8 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) providerRu
 		if base == "" {
 			base = "https://coding-intl.dashscope.aliyuncs.com/v1"
 		}
-		h.providerReg.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, p.APIKey, base, "qwen3.5-plus"))
+		h.providerReg.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, p.APIKey, base, "qwen3.5-plus").
+			WithProviderType(p.ProviderType))
 	case store.ProviderNovita:
 		base := apiBase
 		if base == "" {

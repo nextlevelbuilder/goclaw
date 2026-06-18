@@ -201,6 +201,74 @@ func TestProvidersHandlerRegisterInMemoryAnthropicUsesModelRegistry(t *testing.T
 	}
 }
 
+func TestProvidersHandlerRegisterInMemoryDashScopeProxyKeepsCacheDetection(t *testing.T) {
+	providerReg := providers.NewRegistry(nil)
+	handler := NewProvidersHandler(newMockProviderStore(), newMockSecretsStore(), providerReg, "")
+
+	provider := &store.LLMProviderData{
+		BaseModel:    store.BaseModel{ID: uuid.New()},
+		TenantID:     uuid.New(),
+		Name:         "qwen-richard",
+		ProviderType: store.ProviderDashScope,
+		APIBase:      "https://proxy.internal/v1",
+		APIKey:       "sk-test",
+		Enabled:      true,
+	}
+
+	handler.registerInMemory(provider)
+
+	got, err := providerReg.GetForTenant(provider.TenantID, provider.Name)
+	if err != nil {
+		t.Fatalf("GetForTenant() error = %v", err)
+	}
+	assertRuntimeProviderWrapsDashScopeSystem(t, got, "qwen3.6-plus")
+}
+
+func TestProvidersHandlerRegisterInMemoryBailianProxyKeepsCacheDetection(t *testing.T) {
+	providerReg := providers.NewRegistry(nil)
+	handler := NewProvidersHandler(newMockProviderStore(), newMockSecretsStore(), providerReg, "")
+
+	provider := &store.LLMProviderData{
+		BaseModel:    store.BaseModel{ID: uuid.New()},
+		TenantID:     uuid.New(),
+		Name:         "qwen-richard",
+		ProviderType: store.ProviderBailian,
+		APIBase:      "https://proxy.internal/v1",
+		APIKey:       "sk-test",
+		Enabled:      true,
+	}
+
+	handler.registerInMemory(provider)
+
+	got, err := providerReg.GetForTenant(provider.TenantID, provider.Name)
+	if err != nil {
+		t.Fatalf("GetForTenant() error = %v", err)
+	}
+	assertRuntimeProviderWrapsDashScopeSystem(t, got, "qwen3.6-plus")
+}
+
+func assertRuntimeProviderWrapsDashScopeSystem(t *testing.T, runtimeProvider providers.Provider, model string) {
+	t.Helper()
+
+	bodyBuilder, ok := runtimeProvider.(interface {
+		BuildRequestBodyForTest(string, providers.ChatRequest, bool) map[string]any
+	})
+	if !ok {
+		t.Fatalf("runtime provider = %T, want BuildRequestBodyForTest", runtimeProvider)
+	}
+
+	body := bodyBuilder.BuildRequestBodyForTest(model, providers.ChatRequest{
+		Messages: []providers.Message{
+			{Role: "system", Content: "Stable prefix\n" + providers.CacheBoundaryMarker + "\nDynamic suffix"},
+			{Role: "user", Content: "Hi"},
+		},
+	}, false)
+	msgs := body["messages"].([]map[string]any)
+	if _, ok := msgs[0]["content"].([]map[string]any); !ok {
+		t.Fatalf("system content = %T, want DashScope cache blocks", msgs[0]["content"])
+	}
+}
+
 // writeFakeClaudeBinary creates an executable stub in a temp dir so exec.LookPath resolves it.
 // Returns the absolute path suitable for use as APIBase on a Claude CLI provider record.
 func writeFakeClaudeBinary(t *testing.T) string {

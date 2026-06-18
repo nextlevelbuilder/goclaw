@@ -41,18 +41,9 @@ func isDashScopeAPIBase(apiBase string) bool {
 }
 
 // dashScopePassthroughKeys is true when enable_thinking / thinking_budget may be added to the JSON body.
-// Uses URL, provider_type, and name so httptest DashScope URLs still work in tests.
+// Uses the same DashScope/Bailian route detection as prompt-cache wrapping.
 func (p *OpenAIProvider) dashScopePassthroughKeys() bool {
-	if isDashScopeAPIBase(p.apiBase) {
-		return true
-	}
-	if strings.Contains(strings.ToLower(strings.TrimSpace(p.providerType)), "dashscope") {
-		return true
-	}
-	if strings.Contains(strings.ToLower(p.name), "dashscope") {
-		return true
-	}
-	return false
+	return p.isDashScope()
 }
 
 // isDashScope returns true when this provider routes requests to DashScope/Bailian

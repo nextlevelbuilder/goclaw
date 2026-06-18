@@ -180,3 +180,28 @@ func TestBuildRequestBody_DashScopeWithEnvDisable_DoesNotWrap(t *testing.T) {
 		t.Errorf("env disable should keep string content, got %T", msgs[0]["content"])
 	}
 }
+
+func TestBuildRequestBody_BailianThinkingLevelMapsToDashScopeKeys(t *testing.T) {
+	p := NewOpenAIProvider("qwen-richard", "key", "https://proxy.internal/v1", "qwen3.6-plus").
+		WithProviderType("bailian")
+	req := ChatRequest{
+		Model: "qwen3.6-plus",
+		Messages: []Message{
+			{Role: "system", Content: "You are an assistant."},
+			{Role: "user", Content: "Hi"},
+		},
+		Options: map[string]any{OptThinkingLevel: "medium"},
+	}
+
+	body := p.buildRequestBody("qwen3.6-plus", req, false)
+
+	if body[OptEnableThinking] != true {
+		t.Fatalf("enable_thinking = %v, want true", body[OptEnableThinking])
+	}
+	if body[OptThinkingBudget] == nil {
+		t.Fatal("thinking_budget missing for Bailian Qwen thinking model")
+	}
+	if _, has := body[OptReasoningEffort]; has {
+		t.Fatal("Bailian must not receive OpenAI reasoning_effort")
+	}
+}

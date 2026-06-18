@@ -30,3 +30,28 @@ func TestOpenAIProvider_isDashScope(t *testing.T) {
 		})
 	}
 }
+
+func TestOpenAIProvider_dashScopePassthroughKeys(t *testing.T) {
+	cases := []struct {
+		name    string
+		apiBase string
+		ptype   string
+		pname   string
+		want    bool
+	}{
+		{"dashscope URL", "https://coding-intl.dashscope.aliyuncs.com/v1", "openai_compat", "qwen", true},
+		{"providerType=dashscope", "https://proxy.example.com/v1", "dashscope", "qwen", true},
+		{"providerType=bailian", "https://proxy.example.com/v1", "bailian", "qwen", true},
+		{"name contains dashscope", "https://proxy.example.com/v1", "openai_compat", "team-dashscope", true},
+		{"name contains bailian", "https://proxy.example.com/v1", "openai_compat", "team-bailian", true},
+		{"openrouter", "https://openrouter.ai/api/v1", "openai_compat", "openrouter", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := &OpenAIProvider{apiBase: tc.apiBase, providerType: tc.ptype, name: tc.pname}
+			if got := p.dashScopePassthroughKeys(); got != tc.want {
+				t.Errorf("dashScopePassthroughKeys() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

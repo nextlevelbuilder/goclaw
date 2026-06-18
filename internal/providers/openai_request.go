@@ -271,6 +271,10 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 
 	// DashScope-specific passthrough keys — never send to other OpenAI-compat hosts.
 	if p.dashScopePassthroughKeys() {
+		if level, ok := req.Options[OptThinkingLevel].(string); ok && level != "" && level != "off" && dashscopeThinkingModels[model] {
+			body[OptEnableThinking] = true
+			body[OptThinkingBudget] = dashscopeThinkingBudget(level)
+		}
 		if v, ok := req.Options[OptEnableThinking]; ok {
 			body[OptEnableThinking] = v
 		}

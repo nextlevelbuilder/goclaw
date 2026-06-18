@@ -46,7 +46,7 @@ func NewDashScopeProvider(name, apiKey, apiBase, defaultModel string) *DashScope
 		defaultModel = dashscopeDefaultModel
 	}
 	return &DashScopeProvider{
-		OpenAIProvider: NewOpenAIProvider(name, apiKey, apiBase, defaultModel),
+		OpenAIProvider: NewOpenAIProvider(name, apiKey, apiBase, defaultModel).WithProviderType("dashscope"),
 	}
 }
 
