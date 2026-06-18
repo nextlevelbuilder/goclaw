@@ -33,6 +33,7 @@ interface HookFormDialogProps {
 export function HookFormDialog({ open, onOpenChange, onSubmit, initial }: HookFormDialogProps) {
   const { t } = useTranslation("hooks");
   const isMasterScope = useAuthStore((s) => s.isMasterScope);
+  const currentTenantId = useAuthStore((s) => s.tenantId);
   // Global scope hidden for non-master callers; existing `global` hooks still render as-is in edit mode.
   const scopeOptions = isMasterScope
     ? (["global", "tenant", "agent"] as const)
@@ -43,9 +44,11 @@ export function HookFormDialog({ open, onOpenChange, onSubmit, initial }: HookFo
     formState: { errors, isSubmitting },
   } = useForm<HookFormData>({
     resolver: zodResolver(hookFormSchema),
+    mode: "onSubmit",
     defaultValues: {
       name: "",
       agent_ids: [],
+      tenant_id: "",
       event: "pre_tool_use",
       handler_type: "script",
       scope: "tenant",
@@ -80,6 +83,7 @@ export function HookFormDialog({ open, onOpenChange, onSubmit, initial }: HookFo
         reset({
           name: initial.name ?? "",
           agent_ids: initial.agent_ids ?? [],
+          tenant_id: initial.tenant_id ?? "",
           event: initial.event as HookFormData["event"],
           handler_type: handlerType,
           scope: initial.scope,
@@ -105,6 +109,10 @@ export function HookFormDialog({ open, onOpenChange, onSubmit, initial }: HookFo
   }, [open, initial, reset]);
 
   const onFormSubmit = async (data: HookFormData) => {
+    // Auto-fill tenant_id for agent-scoped hooks from current auth context
+    if (data.scope === "agent" && !data.tenant_id) {
+      data.tenant_id = currentTenantId;
+    }
     await onSubmit(data);
     onOpenChange(false);
   };
@@ -408,7 +416,7 @@ export function HookFormDialog({ open, onOpenChange, onSubmit, initial }: HookFo
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
             {t("form.cancel")}
           </Button>
-          <Button onClick={handleSubmit(onFormSubmit)} disabled={isSubmitting}>
+          <Button onClick={(e) => handleSubmit(onFormSubmit)(e as any)} disabled={isSubmitting}>
             {t(isBuiltin ? "form.saveToggle" : "form.save")}
           </Button>
         </DialogFooter>
