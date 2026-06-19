@@ -6,7 +6,7 @@ How bundled (system) skills are loaded, stored, injected into agents, and manage
 
 ## 1. Overview
 
-GoClaw ships with a set of **core skills** — SKILL.md-based modules bundled inside the binary's embedded filesystem. Unlike custom skills uploaded by users, core skills are:
+GoClaw ships with a set of **core skills** — SKILL.md-based modules bundled with the release under `/app/bundled-skills/` in Docker images, or `skills/` in local development and binary release archives. Unlike custom skills uploaded by users, core skills are:
 
 - Seeded automatically on every gateway startup
 - Tracked by content hash (no re-import if file unchanged)
@@ -23,6 +23,8 @@ Current bundled core skills:
 | `pptx` | Read, create, edit PowerPoint presentations via python-pptx |
 | `xlsx` | Read, create, edit Excel spreadsheets via openpyxl |
 | `skill-creator` | Meta-skill for creating new skills |
+| `workspace-organizing` | Workspace layout and file organization guidance |
+| `goclaw` | Gateway CLI/runtime administration and troubleshooting |
 
 Shared helper modules live in `skills/_shared/` and are copied alongside each skill but not registered as standalone skills.
 
@@ -31,25 +33,25 @@ Shared helper modules live in `skills/_shared/` and are copied alongside each sk
 ## 2. Startup Flow
 
 ```
-cmd/gateway.go  NewSkillLoader()
+cmd/gateway_setup.go  setupSkillsSystem()
        │
        ▼
-internal/skills/loader.go  NewLoader(baseDir, db)
+internal/skills/loader.go  NewLoader(workspace, globalSkillsDir, builtinSkillsDir)
        │  ── scans filesystem skill dirs
-       │  ── wires managed DB directory
-       │  ── calls BumpVersion() → invalidates list cache
+       │  ── wires managed skills-store directory
+       │  ── calls BumpVersion() -> invalidates list cache
        │
        ▼
-internal/skills/seeder.go  Seed(ctx, db, embedFS, baseDir)
+internal/skills/seeder.go  NewSeeder(bundledSkillsDir, managedDir, store).Seed(ctx)
        │
-       ├─ For each bundled skill in embed.FS (skills/*/SKILL.md):
+       ├─ For each bundled skill from os.ReadDir(bundledSkillsDir):
        │     1. Read SKILL.md → parse YAML frontmatter (name, slug, description, author, ...)
        │     2. Compute SHA-256 of content → FileHash
        │     3. Call GetNextVersion(slug) → next DB version number
        │     4. UpsertSystemSkill(ctx, params) ──► see §4
        │     5. Copy skill files to baseDir/<slug>/<version>/
        │
-       ├─ CheckDepsAsync(ctx, seededSlugs, baseDir, skillStore, broadcaster)
+       ├─ CheckDepsAsync(seededSkills, msgBus)
        │     └─ goroutine (non-blocking):
        │           for each slug:
        │             broadcast EventSkillDepsChecking {slug}
@@ -86,7 +88,11 @@ skills/
 │   └── ...
 ├── xlsx/
 │   └── ...
-└── skill-creator/
+├── skill-creator/
+│   └── SKILL.md
+├── workspace-organizing/
+│   └── SKILL.md
+└── goclaw/
     └── SKILL.md
 ```
 
@@ -293,6 +299,8 @@ Count ≤ 40 AND tokens ≤ 5000:
   <skill name="pptx" slug="pptx">Read, create, edit PowerPoint presentations</skill>
   <skill name="xlsx" slug="xlsx">Read, create, edit Excel spreadsheets</skill>
   <skill name="skill-creator" slug="skill-creator">Create new skills</skill>
+  <skill name="workspace-organizing" slug="workspace-organizing">Organize shared workspaces</skill>
+  <skill name="goclaw" slug="goclaw">Gateway CLI/runtime administration</skill>
 </available_skills>
 ```
 

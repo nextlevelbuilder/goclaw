@@ -49,6 +49,28 @@ func TestResolveDisplayName(t *testing.T) {
 	}
 }
 
+func TestResolveCachedChannelTitle(t *testing.T) {
+	session, err := discordgo.New("Bot test-token")
+	if err != nil {
+		t.Fatalf("discordgo.New() error = %v", err)
+	}
+	session.State = discordgo.NewState()
+	if err := session.State.GuildAdd(&discordgo.Guild{ID: "guild-1"}); err != nil {
+		t.Fatalf("GuildAdd() error = %v", err)
+	}
+	if err := session.State.ChannelAdd(&discordgo.Channel{ID: "chan-1", GuildID: "guild-1", Name: "support-room"}); err != nil {
+		t.Fatalf("ChannelAdd() error = %v", err)
+	}
+
+	ch := &Channel{session: session}
+	if got := ch.resolveCachedChannelTitle("chan-1"); got != "support-room" {
+		t.Fatalf("resolveCachedChannelTitle() = %q, want support-room", got)
+	}
+	if got := ch.resolveCachedChannelTitle("missing"); got != "" {
+		t.Fatalf("missing channel title = %q, want empty", got)
+	}
+}
+
 // --- tryHandleCommand: routing only (no session calls) ---
 
 func TestTryHandleCommandRoutingNonCommand(t *testing.T) {

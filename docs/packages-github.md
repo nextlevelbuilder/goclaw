@@ -72,6 +72,10 @@ token in `config.json`.
 | `GOCLAW_PACKAGES_GITHUB_BIN_DIR` | `{runtimeDir}/bin` | Where extracted binaries land |
 | `GOCLAW_PACKAGES_GITHUB_MANIFEST` | `{bin_dir}/../github-packages.json` | Manifest path |
 
+`packages.scratch_dir` in `config.json` is optional. If it is empty or cannot
+be created, updates use `{runtimeDir}/tmp` so bare-metal services do not depend
+on root-owned release directories such as `/opt/goclaw/tmp`.
+
 Token scopes:
 - public-only repos: no scopes required
 - private repos: `repo`
@@ -224,7 +228,8 @@ Check response header `X-RateLimit-Reset` (Unix epoch). Wait or set
 
 #### Scratch dir leftover after crash
 
-Path: `{BinDir}/../tmp/{name}-{tag}-{nanos}/`
+Path: `{runtimeDir}/tmp/{name}-{tag}-{nanos}/` unless
+`packages.scratch_dir` points to another writable directory.
 
 Safe to remove any `{name}-*-*` directory under tmp after ensuring no active
 update is in flight. Phase 2 will add startup GC.

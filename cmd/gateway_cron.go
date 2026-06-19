@@ -128,16 +128,26 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 
 		// If job wants delivery to a channel, send the agent response to the target chat.
 		if job.Deliver && job.DeliverChannel != "" && job.DeliverTo != "" {
-			outMsg := bus.OutboundMessage{
-				Channel: job.DeliverChannel,
-				ChatID:  job.DeliverTo,
-				Content: result.Content,
+			if cronOutputContainsNoReplySentinel(result.Content) {
+				slog.Info("cron: suppressed delivery because output contained NO_REPLY",
+					"job_id", job.ID,
+					"job_name", job.Name,
+					"channel", job.DeliverChannel,
+					"to", job.DeliverTo,
+					"content_len", len(result.Content),
+				)
+			} else {
+				outMsg := bus.OutboundMessage{
+					Channel: job.DeliverChannel,
+					ChatID:  job.DeliverTo,
+					Content: result.Content,
+				}
+				if peerKind == "group" {
+					outMsg.Metadata = map[string]string{"group_id": job.DeliverTo}
+				}
+				appendMediaToOutbound(&outMsg, result.Media)
+				msgBus.PublishOutbound(outMsg)
 			}
-			if peerKind == "group" {
-				outMsg.Metadata = map[string]string{"group_id": job.DeliverTo}
-			}
-			appendMediaToOutbound(&outMsg, result.Media)
-			msgBus.PublishOutbound(outMsg)
 		} else if job.Deliver {
 			slog.Warn("cron: delivery configured but channel/chatID missing — output discarded",
 				"job_id", job.ID, "job_name", job.Name, "channel", job.DeliverChannel, "to", job.DeliverTo)
@@ -159,6 +169,33 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 
 		return cronResult, nil
 	}
+}
+
+func cronOutputContainsNoReplySentinel(content string) bool {
+	text := strings.TrimSpace(content)
+	if text == "" {
+		return false
+	}
+
+	const token = "NO_REPLY"
+	for i := 0; i+len(token) <= len(text); i++ {
+		if !strings.EqualFold(text[i:i+len(token)], token) {
+			continue
+		}
+		beforeOK := i == 0 || !cronNoReplyAlphaNumByte(text[i-1])
+		after := i + len(token)
+		afterOK := after == len(text) || !cronNoReplyAlphaNumByte(text[after])
+		if beforeOK && afterOK {
+			return true
+		}
+	}
+	return false
+}
+
+func cronNoReplyAlphaNumByte(b byte) bool {
+	return (b >= 'a' && b <= 'z') ||
+		(b >= 'A' && b <= 'Z') ||
+		(b >= '0' && b <= '9')
 }
 
 // resolveCronPeerKind infers peer kind from the cron job's user ID.

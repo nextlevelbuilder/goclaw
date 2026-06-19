@@ -133,6 +133,36 @@
       "avgDuration": "TB thời lượng",
       "cost": "Chi phí"
     },
+    "events": {
+      "title": "Phân tích sự kiện tài nguyên",
+      "description": "Đếm hoạt động tool, skill, MCP và runtime từ các execution có trace.",
+      "tabs": {
+        "tool": "Tool",
+        "skill": "Skill",
+        "mcp_tool": "MCP",
+        "runtime_tool": "Runtime"
+      },
+      "metrics": {
+        "calls": "Lượt gọi",
+        "errorRate": "Tỷ lệ lỗi",
+        "tokens": "Token",
+        "avgDuration": "TB thời lượng",
+        "cost": "Chi phí"
+      },
+      "activeBuckets": "{{count}} bucket có dữ liệu",
+      "unknownSource": "Không rõ",
+      "empty": "Không có dữ liệu event cho lựa chọn này.",
+      "table": {
+        "resource": "Tài nguyên",
+        "source": "Nguồn",
+        "calls": "Lượt gọi",
+        "errors": "Lỗi",
+        "errorRate": "Tỷ lệ lỗi",
+        "avgDuration": "TB thời lượng",
+        "tokens": "Token",
+        "cost": "Chi phí"
+      }
+    },
     "tooltip": {
       "date": "Ngày",
       "total": "Tổng",

@@ -6,6 +6,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 type skillSlashCommandKind int
@@ -27,7 +28,7 @@ type skillSlashCommandResult struct {
 	Suggestions     []skills.Info
 }
 
-func (l *Loop) applySkillSlashCommand(ctx context.Context, message, extraPrompt string, skillFilter []string) (string, string, []string) {
+func (l *Loop) applySkillSlashCommand(ctx context.Context, req *RunRequest, message, extraPrompt string, skillFilter []string) (string, string, []string) {
 	result := resolveSkillSlashCommand(ctx, l.skillsLoader, l.resolveSkillSlashCommandConfig(ctx), message)
 	if result.Kind == skillSlashCommandNone {
 		return message, extraPrompt, skillFilter
@@ -41,6 +42,8 @@ func (l *Loop) applySkillSlashCommand(ctx context.Context, message, extraPrompt 
 			message = result.RemainingPrompt
 		}
 		skillFilter = []string{result.Skill.Slug}
+		l.recordSkillSlashUsageEvent(ctx, result.Skill.Slug)
+		l.recordSkillUsage(ctx, req, result.Skill.Slug, "", "slash", store.SkillUsageStatusStarted, "", 0)
 	case skillSlashCommandList:
 		message = "List the available skills shown in the system instructions."
 	case skillSlashCommandHelp:

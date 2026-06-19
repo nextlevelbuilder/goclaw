@@ -1,6 +1,7 @@
 package discord
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -73,11 +74,19 @@ func resolveMedia(attachments []*discordgo.MessageAttachment, maxBytes int64) []
 
 // downloadFromURL downloads a file from a URL with retry logic and saves to a temp file.
 func downloadFromURL(url string, maxBytes int64) (string, error) {
+	return downloadFromURLContext(context.Background(), url, maxBytes)
+}
+
+func downloadFromURLContext(ctx context.Context, url string, maxBytes int64) (string, error) {
 	var resp *http.Response
 	var err error
 
 	for attempt := 1; attempt <= downloadMaxRetries; attempt++ {
-		resp, err = http.Get(url) //nolint:gosec // Discord CDN URLs are trusted
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if reqErr != nil {
+			return "", reqErr
+		}
+		resp, err = http.DefaultClient.Do(req) //nolint:gosec // Discord CDN URLs are trusted
 		if err == nil {
 			break
 		}

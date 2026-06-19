@@ -6,6 +6,21 @@ import "errors"
 // Callers (e.g. webhook handler) should either degrade to text-only or return HTTP 501.
 var ErrMediaUnsupported = errors.New("channel does not support media attachments")
 
+// MediaBatchCapability describes how a channel can deliver multiple outbound
+// attachments from one OutboundMessage.
+type MediaBatchCapability struct {
+	Supported      bool
+	MaxAttachments int
+	Grouping       string
+}
+
+const (
+	MediaBatchGroupingNone          = "none"
+	MediaBatchGroupingSingleMessage = "single_message"
+	MediaBatchGroupingAlbumChunks   = "album_chunks"
+	MediaBatchGroupingOrdered       = "ordered"
+)
+
 // mediaCapableTypes lists channel platform types that consume msg.Media in their Send()
 // implementation. Verified against adapters:
 //   - telegram: internal/channels/telegram/send.go:251
@@ -30,8 +45,39 @@ var mediaCapableTypes = map[string]bool{
 	TypeFacebook:     true,
 }
 
+var mediaBatchCapabilities = map[string]MediaBatchCapability{
+	TypeTelegram: {
+		Supported:      true,
+		MaxAttachments: 10,
+		Grouping:       MediaBatchGroupingAlbumChunks,
+	},
+	TypeDiscord: {
+		Supported:      true,
+		MaxAttachments: 10,
+		Grouping:       MediaBatchGroupingSingleMessage,
+	},
+	TypeSlack: {
+		Supported:      true,
+		MaxAttachments: 0,
+		Grouping:       MediaBatchGroupingOrdered,
+	},
+}
+
 // IsMediaCapable reports whether the given channel platform type supports media attachments.
 // Use Manager.ChannelTypeForName to resolve the type from a channel instance name.
 func IsMediaCapable(channelType string) bool {
 	return mediaCapableTypes[channelType]
+}
+
+// MediaBatchCapabilityFor reports best-known multi-attachment delivery behavior.
+// Unknown media-capable channels preserve order by falling back to their Send()
+// implementation's existing per-file behavior.
+func MediaBatchCapabilityFor(channelType string) MediaBatchCapability {
+	if cap, ok := mediaBatchCapabilities[channelType]; ok {
+		return cap
+	}
+	if IsMediaCapable(channelType) {
+		return MediaBatchCapability{Supported: true, Grouping: MediaBatchGroupingOrdered}
+	}
+	return MediaBatchCapability{Grouping: MediaBatchGroupingNone}
 }

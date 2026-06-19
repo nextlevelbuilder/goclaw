@@ -7,6 +7,7 @@ import { BehaviorRateCard } from "./behavior-rate-card";
 import { BehaviorSessionsCard } from "./behavior-sessions-card";
 import { BehaviorSecurityCard } from "./behavior-security-card";
 import { BehaviorPendingCompactionCard, type PendingCompactionValues } from "./behavior-pending-compaction-card";
+import { BehaviorChatCard, type ChatBehaviorValues } from "./behavior-chat-card";
 
  
 
@@ -27,8 +28,6 @@ export function BehaviorSection({ config, onPatch, saving }: Props) {
 
   // UX toggles (from gateway + agents.defaults)
   const [ux, setUx] = useState({
-    tool_status: gw.tool_status !== false,
-    block_reply: gw.block_reply ?? false,
     intent_classify: ag.intent_classify !== false,
   });
 
@@ -55,14 +54,13 @@ export function BehaviorSection({ config, onPatch, saving }: Props) {
   const [pendingCompaction, setPendingCompaction] = useState<PendingCompactionValues>(
     ch.pending_compaction ?? {},
   );
+  const [chatBehavior, setChatBehavior] = useState<ChatBehaviorValues>(normalizeChatBehavior(gw.chat_behavior));
 
   const [dirty, setDirty] = useState(false);
 
   // Reset drafts when external config changes
   useEffect(() => {
     setUx({
-      tool_status: gw.tool_status !== false,
-      block_reply: gw.block_reply ?? false,
       intent_classify: ag.intent_classify !== false,
     });
     setRate({
@@ -76,6 +74,7 @@ export function BehaviorSection({ config, onPatch, saving }: Props) {
       scrub_credentials: tl.scrub_credentials,
     });
     setPendingCompaction(ch.pending_compaction ?? {});
+    setChatBehavior(normalizeChatBehavior(gw.chat_behavior));
     setDirty(false);
   }, [config]);  
 
@@ -85,12 +84,11 @@ export function BehaviorSection({ config, onPatch, saving }: Props) {
   const handleSave = () => {
     onPatch({
       gateway: {
-        tool_status: ux.tool_status,
-        block_reply: ux.block_reply,
         max_message_chars: rate.max_message_chars,
         rate_limit_rpm: rate.rate_limit_rpm,
         inbound_debounce_ms: rate.inbound_debounce_ms,
         injection_action: security.injection_action,
+        chat_behavior: chatBehavior,
       },
       agents: {
         defaults: { intent_classify: ux.intent_classify },
@@ -104,6 +102,7 @@ export function BehaviorSection({ config, onPatch, saving }: Props) {
   return (
     <div className="space-y-4">
       <BehaviorUxCard value={ux} onChange={markDirty(setUx)} />
+      <BehaviorChatCard value={chatBehavior} onChange={markDirty(setChatBehavior)} />
       <BehaviorRateCard value={rate} onChange={markDirty(setRate)} />
       <BehaviorSessionsCard value={sessions} onChange={markDirty(setSessions)} />
       <BehaviorSecurityCard value={security} onChange={markDirty(setSecurity)} />
@@ -118,4 +117,36 @@ export function BehaviorSection({ config, onPatch, saving }: Props) {
       )}
     </div>
   );
+}
+
+function normalizeChatBehavior(value: any): ChatBehaviorValues {
+  return {
+    enabled: value?.enabled ?? false,
+    quick_ack: {
+      enabled: value?.quick_ack?.enabled ?? true,
+      mode: value?.quick_ack?.mode ?? "sidecar_generated",
+      min_delay_ms: value?.quick_ack?.min_delay_ms ?? 1000,
+      provider: value?.quick_ack?.provider ?? "",
+      model: value?.quick_ack?.model ?? "",
+      timeout_ms: value?.quick_ack?.timeout_ms ?? 2500,
+      max_tokens: value?.quick_ack?.max_tokens ?? 40,
+      max_chars: value?.quick_ack?.max_chars ?? 120,
+      templates: value?.quick_ack?.templates ?? ["Got it. Working on it..."],
+    },
+    intermediate_replies: {
+      enabled: value?.intermediate_replies?.enabled ?? false,
+      mode: value?.intermediate_replies?.mode ?? "sidecar_generated",
+      provider: value?.intermediate_replies?.provider ?? "",
+      model: value?.intermediate_replies?.model ?? "",
+      timeout_ms: value?.intermediate_replies?.timeout_ms ?? 2500,
+      max_tokens: value?.intermediate_replies?.max_tokens ?? 60,
+      max_chars: value?.intermediate_replies?.max_chars ?? 180,
+    },
+    final_split: {
+      enabled: value?.final_split?.enabled ?? true,
+      min_chars: value?.final_split?.min_chars ?? 1200,
+      max_messages: value?.final_split?.max_messages ?? 3,
+      delay_ms: value?.final_split?.delay_ms ?? 500,
+    },
+  };
 }

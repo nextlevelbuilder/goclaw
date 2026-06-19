@@ -135,7 +135,7 @@ func (l *Loop) makeBuildMessages() func(ctx context.Context, input *pipeline.Run
 			input.Message, input.ExtraSystemPrompt,
 			input.SessionKey, input.Channel, input.ChannelType,
 			input.BitrixPortalDomain,
-			input.ChatTitle, input.ChatID, input.PeerKind, input.UserID,
+			input.ChatTitle, input.ChatID, input.PeerKind, input.UserID, input.SenderName,
 			input.HistoryLimit, input.SkillFilter, input.LightContext)
 		return msgs, nil
 	}
@@ -341,8 +341,10 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 			}
 		}
 
+		streamThinkingEmitted := false
 		emitChunk := func(chunk providers.StreamChunk) {
 			if chunk.Thinking != "" {
+				streamThinkingEmitted = true
 				emitRun(AgentEvent{
 					Type:    protocol.ChatEventThinking,
 					AgentID: l.id,
@@ -359,6 +361,7 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 				})
 			}
 		}
+		fallbackTraceClassifier := providers.NewDefaultClassifier()
 		callProvider := func(attempt string, request providers.ChatRequest) (*providers.ChatResponse, error) {
 			if fallbackProvider, ok := provider.(*providers.ModelFallbackProvider); ok {
 				before := func(callCtx context.Context, entry providers.FallbackCandidate, actualReq providers.ChatRequest) (providers.FallbackAfterCall, error) {
@@ -369,6 +372,25 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 						return nil, reserveErr
 					}
 					return func(callResp *providers.ChatResponse, callErr error, info providers.FallbackCallInfo) {
+						fallbackMeta := providers.ModelFallbackAttemptMetadata{
+							ProviderName: entry.ProviderName,
+							Model:        actualReq.Model,
+							Status:       "success",
+							Streamed:     info.Streamed,
+						}
+						if callErr != nil {
+							classification := providers.ClassifyHTTPError(fallbackTraceClassifier, callErr)
+							reason := string(classification.Reason)
+							if classification.Kind == "context_overflow" {
+								reason = "context_overflow"
+							}
+							fallbackMeta.Status = "error"
+							fallbackMeta.Reason = reason
+							fallbackMeta.Error = callErr.Error()
+						} else {
+							opts = append(opts, withProvider(entry.ProviderName), withModel(actualReq.Model))
+						}
+						opts = append(opts, withModelFallbackAttempt(fallbackMeta))
 						if reservation != nil {
 							if info.Streamed {
 								reservation.ReconcileStream(callCtx, callResp, callErr, true)
@@ -448,6 +470,15 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 					}
 					return len(resp.ToolCalls)
 				}())
+		}
+
+		if req.Stream && err == nil && resp != nil && resp.Thinking != "" && !streamThinkingEmitted {
+			emitRun(AgentEvent{
+				Type:    protocol.ChatEventThinking,
+				AgentID: l.id,
+				RunID:   req.RunID,
+				Payload: map[string]string{"content": resp.Thinking},
+			})
 		}
 
 		// Non-streaming: emit content events matching v2 behavior (channels need these).

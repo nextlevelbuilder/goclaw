@@ -52,9 +52,10 @@ func (l *Loop) IsRunning() bool { return l.activeRuns.Load() > 0 }
 type spanOption func(*spanOverrides)
 
 type spanOverrides struct {
-	model            string
-	provider         string
-	usageCapAttempts []usagecaps.TraceMetadata
+	model                 string
+	provider              string
+	usageCapAttempts      []usagecaps.TraceMetadata
+	modelFallbackAttempts []providers.ModelFallbackAttemptMetadata
 }
 
 func withModel(m string) spanOption    { return func(o *spanOverrides) { o.model = m } }
@@ -63,6 +64,14 @@ func withUsageCapMetadata(metadata usagecaps.TraceMetadata) spanOption {
 	return func(o *spanOverrides) {
 		if !metadata.Empty() {
 			o.usageCapAttempts = append(o.usageCapAttempts, metadata)
+		}
+	}
+}
+
+func withModelFallbackAttempt(metadata providers.ModelFallbackAttemptMetadata) spanOption {
+	return func(o *spanOverrides) {
+		if !metadata.Empty() {
+			o.modelFallbackAttempts = append(o.modelFallbackAttempts, metadata)
 		}
 	}
 }
@@ -165,6 +174,12 @@ func (l *Loop) emitLLMSpanEnd(ctx context.Context, spanID uuid.UUID, start time.
 	}
 	var spanMetadata json.RawMessage
 	spanOpts := l.resolveSpanOverrides(opts)
+	if spanOpts.provider != "" {
+		updates["provider"] = spanOpts.provider
+	}
+	if spanOpts.model != "" {
+		updates["model"] = spanOpts.model
+	}
 
 	if callErr != nil {
 		updates["status"] = store.SpanStatusError
@@ -219,6 +234,9 @@ func (l *Loop) emitLLMSpanEnd(ctx context.Context, spanID uuid.UUID, start time.
 	}
 	if len(spanOpts.usageCapAttempts) > 0 {
 		spanMetadata = usagecaps.MergeTraceMetadata(spanMetadata, spanOpts.usageCapAttempts)
+	}
+	if len(spanOpts.modelFallbackAttempts) > 0 {
+		spanMetadata = providers.MergeModelFallbackMetadata(spanMetadata, spanOpts.modelFallbackAttempts)
 	}
 	if len(spanMetadata) > 0 {
 		updates["metadata"] = spanMetadata

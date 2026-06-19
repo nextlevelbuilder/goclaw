@@ -186,6 +186,27 @@ func TestSecureCLIGrantCreateValidatesBinaryAndAgentScope(t *testing.T) {
 	}
 }
 
+func TestValidateAndSerializeEnvVarsRejectsGoClawGatewayToken(t *testing.T) {
+	rr := httptest.NewRecorder()
+
+	envJSON, ok := validateAndSerializeEnvVars(rr, "en", json.RawMessage(`{
+		"GOCLAW_GATEWAY_TOKEN": {"kind":"sensitive","value":"test-secret-token"}
+	}`))
+
+	if ok || envJSON != nil {
+		t.Fatalf("expected GOCLAW_GATEWAY_TOKEN to be rejected by public env validator")
+	}
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "GOCLAW_GATEWAY_TOKEN") {
+		t.Fatalf("expected rejected key in response, got %s", rr.Body.String())
+	}
+	if strings.Contains(rr.Body.String(), "test-secret-token") {
+		t.Fatalf("secret value leaked in validation error: %s", rr.Body.String())
+	}
+}
+
 func TestSecureCLIGrantUpdateRejectsInvalidEnvVarsBeforeScalarUpdate(t *testing.T) {
 	binaryID := uuid.New()
 	grantID := uuid.New()

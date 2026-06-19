@@ -51,6 +51,22 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 	}
 
 	cb := l.pipelineCallbacks(req, bridgeRS)
+	emitBlockReply := func(content, source string) {
+		sanitized := SanitizeAssistantContent(content)
+		if sanitized == "" || IsSilentReply(sanitized) {
+			return
+		}
+		payload := map[string]string{"content": sanitized}
+		if source != "" {
+			payload["source"] = source
+		}
+		cb.emitRun(AgentEvent{
+			Type:    protocol.AgentEventBlockReply,
+			AgentID: l.id,
+			RunID:   req.RunID,
+			Payload: payload,
+		})
+	}
 
 	return pipeline.PipelineDeps{
 		TokenCounter: tokencount.NewTiktokenCounter(),
@@ -105,16 +121,9 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 		CallLLM:            cb.callLLM,
 		UniqueToolCallIDs:  uniquifyToolCallIDs,
 		EmitBlockReply: func(content string) {
-			sanitized := SanitizeAssistantContent(content)
-			if sanitized != "" && !IsSilentReply(sanitized) {
-				cb.emitRun(AgentEvent{
-					Type:    protocol.AgentEventBlockReply,
-					AgentID: l.id,
-					RunID:   req.RunID,
-					Payload: map[string]string{"content": sanitized},
-				})
-			}
+			emitBlockReply(content, "")
 		},
+		EmitBlockReplyWithSource: emitBlockReply,
 
 		// Prune callbacks
 		PruneMessages:   cb.pruneMessages,
@@ -145,7 +154,8 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 		SequentialToolCall: func(tc providers.ToolCall) bool {
 			return l.resolveToolCallName(tc.Name) == "wait"
 		},
-		CheckReadOnly: cb.checkReadOnly,
+		ParallelEligibleToolCall: l.parallelEligibleToolCall,
+		CheckReadOnly:            cb.checkReadOnly,
 
 		// Observe: drain InjectCh
 		DrainInjectCh: func() []providers.Message {
@@ -208,38 +218,39 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 // convertRunInput converts agent.RunRequest to pipeline.RunInput.
 func convertRunInput(req *RunRequest) *pipeline.RunInput {
 	return &pipeline.RunInput{
-		SessionKey:        req.SessionKey,
-		Message:           req.Message,
-		Media:             req.Media,
-		ForwardMedia:      req.ForwardMedia,
+		SessionKey:         req.SessionKey,
+		Message:            req.Message,
+		Media:              req.Media,
+		ForwardMedia:       req.ForwardMedia,
 		Channel:            req.Channel,
 		ChannelType:        req.ChannelType,
 		BitrixPortalDomain: req.BitrixPortalDomain,
 		ChatTitle:          req.ChatTitle,
-		ChatID:            req.ChatID,
-		PeerKind:          req.PeerKind,
-		RunID:             req.RunID,
-		UserID:            req.UserID,
-		SenderID:          req.SenderID,
-		Stream:            req.Stream,
-		ExtraSystemPrompt: req.ExtraSystemPrompt,
-		SkillFilter:       req.SkillFilter,
-		HistoryLimit:      req.HistoryLimit,
-		ToolAllow:         req.ToolAllow,
-		LightContext:      req.LightContext,
-		RunKind:           req.RunKind,
-		DelegationID:      req.DelegationID,
-		TeamID:            req.TeamID,
-		TeamTaskID:        req.TeamTaskID,
-		ParentAgentID:     req.ParentAgentID,
-		MaxIterations:     req.MaxIterations,
-		ModelOverride:     req.ModelOverride,
-		HideInput:         req.HideInput,
-		ContentSuffix:     req.ContentSuffix,
-		LeaderAgentID:     req.LeaderAgentID,
-		WorkspaceChannel:  req.WorkspaceChannel,
-		WorkspaceChatID:   req.WorkspaceChatID,
-		TeamWorkspace:     req.TeamWorkspace,
+		ChatID:             req.ChatID,
+		PeerKind:           req.PeerKind,
+		RunID:              req.RunID,
+		UserID:             req.UserID,
+		SenderID:           req.SenderID,
+		SenderName:         req.SenderName,
+		Stream:             req.Stream,
+		ExtraSystemPrompt:  req.ExtraSystemPrompt,
+		SkillFilter:        req.SkillFilter,
+		HistoryLimit:       req.HistoryLimit,
+		ToolAllow:          req.ToolAllow,
+		LightContext:       req.LightContext,
+		RunKind:            req.RunKind,
+		DelegationID:       req.DelegationID,
+		TeamID:             req.TeamID,
+		TeamTaskID:         req.TeamTaskID,
+		ParentAgentID:      req.ParentAgentID,
+		MaxIterations:      req.MaxIterations,
+		ModelOverride:      req.ModelOverride,
+		HideInput:          req.HideInput,
+		ContentSuffix:      req.ContentSuffix,
+		LeaderAgentID:      req.LeaderAgentID,
+		WorkspaceChannel:   req.WorkspaceChannel,
+		WorkspaceChatID:    req.WorkspaceChatID,
+		TeamWorkspace:      req.TeamWorkspace,
 	}
 }
 

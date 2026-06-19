@@ -16,6 +16,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/typing"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
 // handleMessage processes incoming Discord messages.
@@ -253,11 +254,23 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 	content = strings.ReplaceAll(content, "<@"+c.botUserID+">", "")
 	content = strings.TrimSpace(content)
 
+	threadBackfill := threadBackfillResult{}
+	if peerKind == "group" && mentioned {
+		threadBackfill = c.backfillThreadHistory(ctx, m, maxBytes)
+		if len(threadBackfill.Media) > 0 {
+			mediaFiles = append(threadBackfill.Media, mediaFiles...)
+		}
+	}
+	hasThreadBackfill := threadBackfill.Context != "" || len(threadBackfill.Media) > 0
+
 	// Build final content with group context.
 	finalContent := content
 	if peerKind == "group" {
 		annotated := fmt.Sprintf("[From: %s (<@%s>)]\n%s", senderName, senderID, content)
-		if c.HistoryLimit() > 0 {
+		if threadBackfill.Context != "" {
+			annotated = threadBackfill.Context + "\n\n" + annotated
+		}
+		if c.HistoryLimit() > 0 && !hasThreadBackfill {
 			finalContent = c.GroupHistory().BuildContext(channelID, annotated, c.HistoryLimit())
 		} else {
 			finalContent = annotated
@@ -265,7 +278,8 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 		// Collect media from pending history entries (sent before this @mention).
 		// Original filename not retained by CollectMedia; use disk basename so
 		// persistMedia's sanitizer gets a meaningful stem instead of UUID fallback.
-		if histMediaPaths := c.GroupHistory().CollectMedia(channelID); len(histMediaPaths) > 0 {
+		if !hasThreadBackfill {
+			histMediaPaths := c.GroupHistory().CollectMedia(channelID)
 			for _, p := range histMediaPaths {
 				mediaFiles = append(mediaFiles, bus.MediaFile{Path: p, Filename: filepath.Base(p)})
 			}
@@ -281,6 +295,11 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 		"channel_id":      channelID,
 		"is_dm":           fmt.Sprintf("%t", isDM),
 		"placeholder_key": m.ID, // keyed by inbound message ID for placeholder lookup
+	}
+	if !isDM {
+		if title := c.resolveCachedChannelTitle(channelID); title != "" {
+			metadata[tools.MetaChatTitle] = title
+		}
 	}
 
 	// Voice agent routing
@@ -397,4 +416,15 @@ func resolveDisplayName(m *discordgo.MessageCreate) string {
 		return m.Author.GlobalName
 	}
 	return m.Author.Username
+}
+
+func (c *Channel) resolveCachedChannelTitle(channelID string) string {
+	if c == nil || c.session == nil || c.session.State == nil || channelID == "" {
+		return ""
+	}
+	ch, err := c.session.State.Channel(channelID)
+	if err != nil || ch == nil {
+		return ""
+	}
+	return channels.SanitizeDisplayName(ch.Name)
 }

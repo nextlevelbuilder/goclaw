@@ -1,14 +1,32 @@
 package telegram
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/mymmrac/telego"
 
+	"github.com/nextlevelbuilder/goclaw/internal/audio"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 )
+
+type telegramTestSTT struct {
+	name  string
+	input audio.STTInput
+}
+
+func (s *telegramTestSTT) Name() string { return s.name }
+
+func (s *telegramTestSTT) Transcribe(_ context.Context, in audio.STTInput, _ audio.STTOptions) (*audio.TranscriptResult, error) {
+	s.input = in
+	return &audio.TranscriptResult{Text: "xin chao", Provider: s.name}, nil
+}
 
 // --- buildMediaTags tests ---
 
@@ -151,6 +169,129 @@ func TestBuildMediaTags_UnknownType(t *testing.T) {
 	got := buildMediaTags(items)
 	if got != "" {
 		t.Errorf("expected empty string for unknown type, got: %q", got)
+	}
+}
+
+func TestTranscribeMediaAudioUsesChannelTypeAndPreservesMIME(t *testing.T) {
+	mgr := audio.NewManager(audio.ManagerConfig{})
+	tenantSTT := &telegramTestSTT{name: "tenant"}
+	telegramSTT := &telegramTestSTT{name: "proxy"}
+	mgr.RegisterSTT(tenantSTT)
+	mgr.SetSTTChain([]string{"tenant"})
+	mgr.RegisterChannelSTT(channels.TypeTelegram, telegramSTT)
+
+	ch := &Channel{
+		BaseChannel: channels.NewBaseChannel("telegram-main", nil, nil),
+		audioMgr:    mgr,
+	}
+	ch.SetType(channels.TypeTelegram)
+
+	got, err := ch.transcribeMediaAudio(context.Background(), MediaInfo{
+		Type:        "voice",
+		FilePath:    "/tmp/voice.ogg",
+		FileName:    "voice.ogg",
+		ContentType: "audio/ogg; codecs=opus",
+	})
+	if err != nil {
+		t.Fatalf("transcribeMediaAudio returned error: %v", err)
+	}
+	if got != "xin chao" {
+		t.Fatalf("transcript = %q, want channel override transcript", got)
+	}
+	if tenantSTT.input.FilePath != "" {
+		t.Fatalf("tenant STT received input; expected Telegram channel override to win")
+	}
+	if telegramSTT.input.MimeType != "audio/ogg; codecs=opus" {
+		t.Fatalf("mime = %q, want preserved Telegram voice MIME", telegramSTT.input.MimeType)
+	}
+	if telegramSTT.input.FilePath != "/tmp/voice.ogg" {
+		t.Fatalf("file path = %q, want /tmp/voice.ogg", telegramSTT.input.FilePath)
+	}
+}
+
+func TestTelegramAudioSTTMimeFallback(t *testing.T) {
+	tests := []struct {
+		name        string
+		contentType string
+		want        string
+	}{
+		{name: "preserves opus", contentType: "audio/ogg; codecs=opus", want: "audio/ogg; codecs=opus"},
+		{name: "empty defaults ogg", contentType: "", want: "audio/ogg"},
+		{name: "octet stream defaults ogg", contentType: "application/octet-stream", want: "audio/ogg"},
+		{name: "trims whitespace", contentType: " audio/mpeg ", want: "audio/mpeg"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := telegramAudioSTTMime(tt.contentType); got != tt.want {
+				t.Fatalf("telegramAudioSTTMime(%q) = %q, want %q", tt.contentType, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestResolveMediaTelegramVoiceDownloadsOggOpusFixture(t *testing.T) {
+	const token = "123456789:aaaabbbbaaaabbbbaaaabbbbaaaabbbbccc"
+	const fileID = "telegram-voice-file"
+	oggOpus := []byte("OggS\x00\x02telegram-voice-opus-fixture")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/bot" + token + "/getFile":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true,"result":{"file_id":"` + fileID + `","file_unique_id":"voice-unique","file_path":"voice/file.ogg"}}`))
+		case "/file/bot" + token + "/voice/file.ogg":
+			w.Header().Set("Content-Type", "audio/ogg")
+			_, _ = w.Write(oggOpus)
+		default:
+			t.Fatalf("unexpected Telegram API path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	ch, err := New(config.TelegramConfig{
+		Token:     token,
+		APIServer: server.URL,
+	}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("New channel: %v", err)
+	}
+
+	mediaList, mediaErrors := ch.resolveMedia(context.Background(), &telego.Message{
+		Voice: &telego.Voice{
+			FileID:   fileID,
+			MimeType: "audio/ogg; codecs=opus",
+			FileSize: int64(len(oggOpus)),
+		},
+	})
+	if len(mediaErrors) > 0 {
+		t.Fatalf("resolveMedia errors: %+v", mediaErrors)
+	}
+	if len(mediaList) != 1 {
+		t.Fatalf("got %d media items, want 1", len(mediaList))
+	}
+
+	voice := mediaList[0]
+	if voice.Type != "voice" {
+		t.Fatalf("media type = %q, want voice", voice.Type)
+	}
+	if voice.ContentType != "audio/ogg; codecs=opus" {
+		t.Fatalf("content type = %q, want Telegram voice MIME", voice.ContentType)
+	}
+	if voice.FilePath == "" {
+		t.Fatalf("expected downloaded file path")
+	}
+	t.Cleanup(func() { _ = os.Remove(voice.FilePath) })
+
+	data, err := os.ReadFile(voice.FilePath)
+	if err != nil {
+		t.Fatalf("read downloaded voice fixture: %v", err)
+	}
+	if !strings.HasPrefix(string(data), "OggS") {
+		t.Fatalf("downloaded fixture does not look like OGG data: %q", string(data))
+	}
+	if got := telegramAudioSTTMime(voice.ContentType); got != "audio/ogg; codecs=opus" {
+		t.Fatalf("STT mime = %q, want preserved Telegram voice MIME", got)
 	}
 }
 

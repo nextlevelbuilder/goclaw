@@ -32,7 +32,19 @@
     "showDetails": "xem chi tiết",
     "hide": "ẩn",
     "systemMessage": "Tin nhắn hệ thống",
-    "messages": "tin nhắn"
+    "messages": "tin nhắn",
+    "timeline": {
+      "title": "Timeline lượt chạy",
+      "loading": "đang tải",
+      "count": "{{count}} mục",
+      "runStatus": "lượt chạy",
+      "assistant": "assistant",
+      "toolCall": "gọi tool",
+      "toolResult": "kết quả tool",
+      "trace": "trace",
+      "activity": "hoạt động",
+      "failed": "lỗi"
+    }
   },
   "toast": {
     "deleted": "Đã xóa session",

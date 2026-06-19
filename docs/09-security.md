@@ -129,6 +129,16 @@ All four filesystem tools (`read_file`, `write_file`, `list_files`, `edit`) impl
 | Dynamic value scrubbing (SSRF) | Server IPs and other runtime-discovered values registered via `AddDynamicScrubValues()` and replaced with `[SERVER_IP]` |
 | Web content wrapping | Fetched content wrapped in `<<<EXTERNAL_UNTRUSTED_CONTENT>>>` tags with security warning |
 
+### Passive Channel Memory Redaction
+
+Passive channel memory extraction runs an additional pre-LLM redaction pass over
+pending group messages before any durable candidate is created. The pass removes
+common secret/key assignments, bearer/provider tokens, connection strings,
+payment-like digit sequences, phone numbers, email addresses, configured
+excluded sender IDs, and configured regex exclusion patterns. The new extraction
+tables store redaction counts/types and extracted summaries only, not raw message
+bodies.
+
 ### Layer 5: Isolation
 
 **Per-user workspace isolation** -- Two levels prevent cross-user file access:
@@ -221,7 +231,7 @@ AES-256-GCM encryption for secrets stored in PostgreSQL. Key provided via `GOCLA
 | LLM provider API keys | `llm_providers` | `api_key` |
 | MCP server API keys | `mcp_servers` | `api_key` |
 | Custom tool env vars | `custom_tools` | `env` |
-| Credentialed CLI env vars | `secure_cli_binaries`, `secure_cli_agent_grants`, `secure_cli_user_credentials` | `encrypted_env` |
+| Credentialed CLI env vars | `secure_cli_binaries`, `secure_cli_agent_grants`, `secure_cli_user_credentials`, `secure_cli_agent_credentials` | `encrypted_env` |
 
 **Format**: `"aes-gcm:" + base64(12-byte nonce + ciphertext + GCM tag)`
 
@@ -524,6 +534,11 @@ Implementer guide: [credential-adapter-playbook.md](./credential-adapter-playboo
 Both paths coexist. A typo in `adapter_name` falls back to passthrough, which
 restores the legacy denylist-only behavior — no silent bypass.
 
+Runtime credential precedence is explicit: user override, then channel/context
+credential, then agent credential, then binary-level env defaults. Agent
+credentials are the default git trust boundary; granting access to an agent
+also grants the ability to make that agent use its stored git credential.
+
 ### Audit log: `security.system_env_injection`
 
 Every adapter injection emits **exactly one** structured slog line. Field
@@ -537,6 +552,7 @@ the test and operator-facing log-search recipes.
 | `adapter` | string | e.g. `git`, `psql`, `passthrough` |
 | `binary` | string | binary name (`git`, `kubectl`, …) |
 | `user_id` | string | tenant user UUID (empty for global-only contexts) |
+| `credential_source` | string | `user`, `context`, `agent`, or empty when no scoped credential row was selected |
 | `env_keys` | []string | sorted env-var NAMES (never values) |
 | `argv_prefix_len` | int | number of argv elements prepended (NOT their content) |
 | `host_scope_hash` | string | SHA-256 first 8 hex chars of normalized host_scope, or `"none"` |

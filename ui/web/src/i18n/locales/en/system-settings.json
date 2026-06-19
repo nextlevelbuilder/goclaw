@@ -30,12 +30,6 @@
   "ux": {
     "title": "UX Behavior",
     "description": "Control how the gateway displays agent activity to users.",
-    "toolStatus": "Show tool name during execution",
-    "toolStatusHint": "Display the active tool name while the agent is running.",
-    "toolStatusInfo": "Tool names are shown in streaming preview while the agent runs.",
-    "blockReply": "Show intermediate text during tool calls",
-    "blockReplyHint": "Stream partial assistant text while tools are being invoked.",
-    "blockReplyInfo": "Intermediate text is streamed to users during tool execution.",
     "intentClassify": "Intent classification",
     "intentClassifyHint": "Classify user intent before routing to the agent.",
     "intentClassifyInfo": "Messages are classified to optimize agent routing and behavior."

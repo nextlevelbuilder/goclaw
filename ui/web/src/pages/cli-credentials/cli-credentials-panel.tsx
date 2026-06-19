@@ -14,9 +14,9 @@ import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { useMinLoading } from "@/hooks/use-min-loading";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import { useCliCredentials, useCliCredentialPresets } from "./hooks/use-cli-credentials";
-import { CliCredentialGrantsDialog } from "./cli-credential-grants-dialog";
 import { CliCredentialsTable } from "./cli-credentials-table";
 import type { SecureCLIBinary, CLICredentialInput } from "./hooks/use-cli-credentials";
+import type { AgentAccessTab } from "./cli-agent-access-dialog";
 
 const CliCredentialFormDialog = lazy(() =>
   import("./cli-credential-form-dialog").then((m) => ({ default: m.CliCredentialFormDialog }))
@@ -24,6 +24,14 @@ const CliCredentialFormDialog = lazy(() =>
 const CLIUserCredentialsDialog = lazy(() =>
   import("./cli-user-credentials-dialog").then((m) => ({ default: m.CLIUserCredentialsDialog }))
 );
+const CLIAgentAccessDialog = lazy(() =>
+  import("./cli-agent-access-dialog").then((m) => ({ default: m.CLIAgentAccessDialog }))
+);
+
+type AgentAccessTarget = {
+  binary: SecureCLIBinary;
+  initialTab: AgentAccessTab;
+};
 
 export function CliCredentialsPanel() {
   const { t } = useTranslation("cli-credentials");
@@ -34,7 +42,7 @@ export function CliCredentialsPanel() {
   const [deleteTarget, setDeleteTarget] = useState<SecureCLIBinary | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [userCredsTarget, setUserCredsTarget] = useState<SecureCLIBinary | null>(null);
-  const [grantsTarget, setGrantsTarget] = useState<SecureCLIBinary | null>(null);
+  const [agentAccessTarget, setAgentAccessTarget] = useState<AgentAccessTarget | null>(null);
 
   const { items, loading, refresh, createCredential, updateCredential, deleteCredential } =
     useCliCredentials();
@@ -61,6 +69,9 @@ export function CliCredentialsPanel() {
 
   const openCreate = () => { setEditItem(null); setFormOpen(true); };
   const openEdit = (item: SecureCLIBinary) => { setEditItem(item); setFormOpen(true); };
+  const openAgentAccess = (item: SecureCLIBinary, initialTab: AgentAccessTab = "credentials") => {
+    setAgentAccessTarget({ binary: item, initialTab });
+  };
 
   return (
     <div className="pb-10">
@@ -88,7 +99,7 @@ export function CliCredentialsPanel() {
             onEdit={openEdit}
             onDelete={setDeleteTarget}
             onUserCreds={setUserCredsTarget}
-            onGrants={setGrantsTarget}
+            onAgentAccess={openAgentAccess}
           />
           {/* Finding #12: surface LIMIT 20 truncation so admins know there are more entries. */}
           {items.length >= 20 && (
@@ -130,12 +141,15 @@ export function CliCredentialsPanel() {
         </Suspense>
       )}
 
-      {grantsTarget && (
-        <CliCredentialGrantsDialog
-          open={!!grantsTarget}
-          onOpenChange={(open) => !open && setGrantsTarget(null)}
-          binary={grantsTarget}
-        />
+      {agentAccessTarget && (
+        <Suspense fallback={null}>
+          <CLIAgentAccessDialog
+            open={!!agentAccessTarget}
+            onOpenChange={(open: boolean) => !open && setAgentAccessTarget(null)}
+            binary={agentAccessTarget.binary}
+            initialTab={agentAccessTarget.initialTab}
+          />
+        </Suspense>
       )}
     </div>
   );

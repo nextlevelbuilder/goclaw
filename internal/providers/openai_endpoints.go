@@ -41,15 +41,29 @@ func isDashScopeAPIBase(apiBase string) bool {
 }
 
 // dashScopePassthroughKeys is true when enable_thinking / thinking_budget may be added to the JSON body.
-// Uses URL, provider_type, and name so httptest DashScope URLs still work in tests.
+// Uses the same DashScope/Bailian route detection as prompt-cache wrapping.
 func (p *OpenAIProvider) dashScopePassthroughKeys() bool {
+	return p.isDashScope()
+}
+
+// isDashScope returns true when this provider routes requests to DashScope/Bailian
+// (supports cache_control:ephemeral wire format - verified live 2026-05-08).
+// Uses 3-source detection (URL + providerType + name) to handle reverse-proxied
+// DashScope endpoints. Includes "bailian" because live qwen-richard provider has
+// provider_type=bailian.
+//
+// Used by buildRequestBody to wrap system content with Anthropic-style
+// cache_control blocks for prompt caching (90% discount on cached prefix tokens).
+func (p *OpenAIProvider) isDashScope() bool {
 	if isDashScopeAPIBase(p.apiBase) {
 		return true
 	}
-	if strings.Contains(strings.ToLower(strings.TrimSpace(p.providerType)), "dashscope") {
+	pt := strings.ToLower(strings.TrimSpace(p.providerType))
+	if strings.Contains(pt, "dashscope") || strings.Contains(pt, "bailian") {
 		return true
 	}
-	if strings.Contains(strings.ToLower(p.name), "dashscope") {
+	name := strings.ToLower(p.name)
+	if strings.Contains(name, "dashscope") || strings.Contains(name, "bailian") {
 		return true
 	}
 	return false

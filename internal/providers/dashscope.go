@@ -12,15 +12,18 @@ const (
 )
 
 // dashscopeThinkingModels lists DashScope models that accept the
-// enable_thinking / thinking_budget parameters (Qwen3 open-weight and Qwen3.5 series).
+// enable_thinking / thinking_budget parameters (Qwen3 open-weight and Qwen3.5+ series).
 // Models NOT in this set (e.g. qwen3-plus, qwen3-turbo) will silently
 // skip thinking injection to avoid API "model not supported" errors.
 var dashscopeThinkingModels = map[string]bool{
+	// Qwen3.7 / 3.6 series — deep thinking + vision
+	"qwen3.7-plus": true,
+	"qwen3.6-plus": true,
 	// Qwen3.5 series — thinking + vision
-	"qwen3.5-plus":    true,
-	"qwen3.5-turbo":   true,
+	"qwen3.5-plus":  true,
+	"qwen3.5-turbo": true,
 	// Qwen3 hosted
-	"qwen3-max":       true,
+	"qwen3-max": true,
 	// Qwen3 open-weight (available as hosted inference)
 	"qwen3-235b-a22b": true,
 	"qwen3-32b":       true,
@@ -43,7 +46,7 @@ func NewDashScopeProvider(name, apiKey, apiBase, defaultModel string) *DashScope
 		defaultModel = dashscopeDefaultModel
 	}
 	return &DashScopeProvider{
-		OpenAIProvider: NewOpenAIProvider(name, apiKey, apiBase, defaultModel),
+		OpenAIProvider: NewOpenAIProvider(name, apiKey, apiBase, defaultModel).WithProviderType("dashscope"),
 	}
 }
 

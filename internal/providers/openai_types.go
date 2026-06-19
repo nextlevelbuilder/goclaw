@@ -56,8 +56,9 @@ type openAIUsage struct {
 }
 
 type openAIPromptDetails struct {
-	CachedTokens     int `json:"cached_tokens"`
-	CacheWriteTokens int `json:"cache_write_tokens,omitempty"`
+	CachedTokens             int `json:"cached_tokens"`
+	CacheWriteTokens         int `json:"cache_write_tokens,omitempty"`          // some OpenAI-compat providers
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"` // DashScope/Qwen
 }
 
 type openAICompletionDetails struct {

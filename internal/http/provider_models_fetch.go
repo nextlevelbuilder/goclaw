@@ -91,12 +91,15 @@ func fetchGeminiModels(ctx context.Context, apiKey string) ([]ModelInfo, error) 
 }
 
 // fetchOpenAIModels calls an OpenAI-compatible /models endpoint.
-func fetchOpenAIModels(ctx context.Context, apiBase, apiKey string) ([]ModelInfo, error) {
+func fetchOpenAIModels(ctx context.Context, apiBase, apiKey string, extraHeaders map[string]string) ([]ModelInfo, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", apiBase+"/models", nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+apiKey)
+	for k, v := range extraHeaders {
+		req.Header.Set(k, v)
+	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

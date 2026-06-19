@@ -112,7 +112,7 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 			}
 			if chunk.Usage.PromptTokensDetails != nil {
 				result.Usage.CacheReadTokens = chunk.Usage.PromptTokensDetails.CachedTokens
-				result.Usage.CacheCreationTokens = chunk.Usage.PromptTokensDetails.CacheWriteTokens
+				result.Usage.CacheCreationTokens = chunk.Usage.PromptTokensDetails.CacheWriteTokens + chunk.Usage.PromptTokensDetails.CacheCreationInputTokens
 				result.Usage.PromptTokensIncludeCachedSegments = true
 			}
 			if chunk.Usage.CompletionTokensDetails != nil && chunk.Usage.CompletionTokensDetails.ReasoningTokens > 0 {

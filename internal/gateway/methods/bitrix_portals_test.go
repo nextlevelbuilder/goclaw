@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -366,17 +367,62 @@ func TestBitrixPortals_Create_HappyPath_ReturnsInstallURL(t *testing.T) {
 func TestBitrixPortals_Create_InvalidDomain(t *testing.T) {
 	tid := uuid.New()
 	m := NewBitrixPortalsMethods(newStubBitrixPortalStore(), newStubChannelInstanceStore(), gatewayURLFn("https://gw.example.com"))
-	client, ch := gateway.NewCapturingTestClient(permissions.RoleAdmin, tid, "u", 4)
+
+	cases := []struct {
+		name   string
+		domain string
+	}{
+		{"leading hyphen", "-invalid.com"},
+		{"scheme included", "https://example.com"},
+		{"path included", "example.com/path"},
+		{"space in domain", "exam ple.com"},
+		{"invalid port zero", "example.com:0"},
+		{"invalid port overflow", "example.com:99999"},
+		{"localhost", "localhost"},
+		{"localhost subdomain", "bx.localhost"},
+		{"local TLD", "bx.local"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			client, ch := gateway.NewCapturingTestClient(permissions.RoleAdmin, tid, "u", 4)
+			m.handleCreate(store.WithTenantID(context.Background(), tid), client, buildBitrixReq(t, protocol.MethodBitrixPortalsCreate, map[string]string{
+				"name":          "p",
+				"domain":        tc.domain,
+				"client_id":     "x",
+				"client_secret": "y",
+			}))
+			resp := readResponse(t, ch)
+			if resp.Error == nil || resp.Error.Code != protocol.ErrInvalidRequest {
+				t.Errorf("expected INVALID_REQUEST for %q, got %+v", tc.domain, resp.Error)
+			}
+		})
+	}
+}
+
+func TestBitrixPortals_Create_SelfHostedDomain(t *testing.T) {
+	tid := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	pStore := newStubBitrixPortalStore()
+	m := NewBitrixPortalsMethods(pStore, newStubChannelInstanceStore(), gatewayURLFn("https://goclaw.tamgiac.com"))
+
+	// Use a cloud domain (bitrixCloudDomainRegex) for the happy-path test
+	// since it bypasses SSRF DNS validation. Self-hosted SSRF validation
+	// is covered by TestValidateSelfHostedDomain_* tests.
+	client, ch := gateway.NewCapturingTestClient(permissions.RoleAdmin, tid, "admin", 4)
 	m.handleCreate(store.WithTenantID(context.Background(), tid), client, buildBitrixReq(t, protocol.MethodBitrixPortalsCreate, map[string]string{
-		"name":          "p",
-		"domain":        "not-a-bitrix-domain.com",
-		"client_id":     "x",
-		"client_secret": "y",
+		"name":          "myportal",
+		"domain":        "myportal.bitrix24.com",
+		"client_id":     "local.abc",
+		"client_secret": "secret123",
 	}))
 
 	resp := readResponse(t, ch)
-	if resp.Error == nil || resp.Error.Code != protocol.ErrInvalidRequest {
-		t.Errorf("expected INVALID_REQUEST, got %+v", resp.Error)
+	if resp.Error != nil {
+		t.Fatalf("create with self-hosted domain failed: %+v", resp.Error)
+	}
+	result := resp.Payload.(map[string]any)
+	if result["domain"] != "myportal.bitrix24.com" {
+		t.Errorf("domain = %q, want myportal.bitrix24.com", result["domain"])
 	}
 }
 
@@ -540,22 +586,51 @@ func TestBitrixDomainRegex(t *testing.T) {
 		"my-corp.bitrix24.eu",
 		"a.bitrix24.com",
 		"company.bitrix.info",
+		"mycorp.bitrix24.vn",
+		"portal.bitrix24.tr",
+		"miempresa.bitrix24.es",
+		"empresa.bitrix24.com.br",
 	}
 	bad := []string{
 		"tamgiac.bitrix24",
-		"tamgiac.example.com",
 		"tamgiac.bitrix24.xx",
 		"-bad.bitrix24.com",
 		"UPPER.bitrix24.com", // we lowercase before match
 		"a.b.bitrix24.com",   // multi-level subdomain not allowed
 	}
 	for _, d := range good {
-		if !bitrixDomainRegex.MatchString(d) {
+		if !bitrixCloudDomainRegex.MatchString(d) {
 			t.Errorf("should accept %q", d)
 		}
 	}
 	for _, d := range bad {
-		if bitrixDomainRegex.MatchString(d) {
+		if bitrixCloudDomainRegex.MatchString(d) {
+			t.Errorf("should reject %q", d)
+		}
+	}
+}
+
+func TestSelfHostedDomainRegex(t *testing.T) {
+	good := []string{
+		"bx.example.com",
+		"portal.internal",
+		"bitrix.mycompany.co.uk",
+		"portal.example.com:8443",
+		"bx.corp",
+	}
+	bad := []string{
+		"-bad.example.com",
+		"UPPER.example.com", // we lowercase before match
+		"",
+		"not a domain",
+	}
+	for _, d := range good {
+		if !selfHostedDomainRegex.MatchString(d) {
+			t.Errorf("should accept %q", d)
+		}
+	}
+	for _, d := range bad {
+		if selfHostedDomainRegex.MatchString(d) {
 			t.Errorf("should reject %q", d)
 		}
 	}
@@ -575,6 +650,101 @@ func TestPortalNameRegex(t *testing.T) {
 		if portalNameRegex.MatchString(n) {
 			t.Errorf("should reject %q", n)
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// SSRF + port validation for self-hosted domains
+// ---------------------------------------------------------------------------
+
+func TestValidateSelfHostedDomain_SSRF(t *testing.T) {
+	// These should all be rejected as SSRF risks.
+	blocked := []string{
+		"127.0.0.1",
+		"127.0.0.1:8080",
+		"::1",
+		"10.0.0.1",
+		"10.0.0.1:443",
+		"192.168.1.1",
+		"172.16.0.1",
+		"169.254.169.254", // cloud metadata
+		"0.0.0.0",
+		"localhost",
+		"bx.localhost",
+		"bx.local",
+		"portal.internal.localhost",
+	}
+	for _, d := range blocked {
+		if err := validateSelfHostedDomain(d); err == nil {
+			t.Errorf("should reject %q (SSRF risk)", d)
+		}
+	}
+}
+
+func TestValidateSelfHostedDomain_PortRange(t *testing.T) {
+	badPorts := []string{
+		"example.com:0",
+		"example.com:99999",
+		"example.com:-1",
+		"example.com:abc",
+	}
+	for _, d := range badPorts {
+		if err := validateSelfHostedDomain(d); err == nil {
+			t.Errorf("should reject %q (invalid port)", d)
+		}
+	}
+}
+
+func TestValidateSelfHostedDomain_StubbedDNS(t *testing.T) {
+	// Save and restore the real resolver.
+	orig := lookupHost
+	defer func() { lookupHost = orig }()
+
+	tests := []struct {
+		name    string
+		host    string
+		addrs   []string
+		dnsErr  error
+		wantErr bool
+	}{
+		{"single public IP", "public.example.com", []string{"8.8.8.8"}, nil, false},
+		{"public IP with port", "public.example.com", []string{"93.184.216.34"}, nil, false},
+		{"single private IP", "internal.example.com", []string{"10.0.0.1"}, nil, true},
+		{"DNS resolution failure", "unresolvable.example.com", nil, fmt.Errorf("no such host"), true},
+		{"no addresses returned", "empty.example.com", []string{}, nil, true},
+		{"invalid IP string", "bad.example.com", []string{"not-an-ip"}, nil, true},
+		// Regression: multi-IP SSRF bypass — public IP first, private IP second.
+		// DNS ordering is not a security boundary; must reject if ANY IP is blocked.
+		{"multi-ip public-then-private", "evil.example.com", []string{"8.8.8.8", "10.0.0.1"}, nil, true},
+		{"multi-ip private-then-public", "evil2.example.com", []string{"192.168.1.1", "8.8.4.4"}, nil, true},
+		{"multi-ip all public", "safe.example.com", []string{"8.8.8.8", "8.8.4.4"}, nil, false},
+		{"multi-ip metadata IP", "meta.example.com", []string{"8.8.8.8", "169.254.169.254"}, nil, true},
+		{"multi-ip IPv6 loopback", "ipv6evil.example.com", []string{"2001:db8::1", "::1"}, nil, true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			lookupHost = func(host string) ([]string, error) {
+				if host == tc.host {
+					return tc.addrs, tc.dnsErr
+				}
+				return nil, fmt.Errorf("unexpected host: %s", host)
+			}
+
+			domain := tc.host
+			// Add port for the "public IP with port" case.
+			if tc.name == "public IP with port" {
+				domain = tc.host + ":443"
+			}
+
+			err := validateSelfHostedDomain(domain)
+			if tc.wantErr && err == nil {
+				t.Errorf("expected error for %q, got nil", tc.name)
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("expected no error for %q, got: %v", tc.name, err)
+			}
+		})
 	}
 }
 

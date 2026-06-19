@@ -346,6 +346,81 @@ func TestStoreSkill_GrantToAgent(t *testing.T) {
 	}
 }
 
+func TestStoreSkill_UserGrantListPromotesAndDemotesVisibility(t *testing.T) {
+	db := testDB(t)
+	tenantID, _ := seedTenantAgent(t, db)
+	ctx := tenantCtx(tenantID)
+	s := newSkillStore(t)
+
+	skillID := seedSkill(t, s, ctx, "user-grant-skill-"+tenantID.String()[:8], "User Grant Skill")
+	if err := s.GrantToUser(ctx, skillID, "granted-user", "test-owner"); err != nil {
+		t.Fatalf("GrantToUser: %v", err)
+	}
+	grants, err := s.ListUserGrantsForSkill(ctx, skillID)
+	if err != nil {
+		t.Fatalf("ListUserGrantsForSkill: %v", err)
+	}
+	if len(grants) != 1 || grants[0].UserID != "granted-user" || grants[0].GrantedBy != "test-owner" {
+		t.Fatalf("user grants = %+v", grants)
+	}
+	got, ok := s.GetSkillByID(ctx, skillID)
+	if !ok {
+		t.Fatal("GetSkillByID returned false")
+	}
+	if got.Visibility != "internal" {
+		t.Fatalf("visibility after user grant = %q, want internal", got.Visibility)
+	}
+	if err := s.RevokeFromUser(ctx, skillID, "granted-user"); err != nil {
+		t.Fatalf("RevokeFromUser: %v", err)
+	}
+	got, ok = s.GetSkillByID(ctx, skillID)
+	if !ok {
+		t.Fatal("GetSkillByID returned false after revoke")
+	}
+	if got.Visibility != "private" {
+		t.Fatalf("visibility after last user grant revoke = %q, want private", got.Visibility)
+	}
+}
+
+func TestStoreSkill_UserGrantsAreTenantScopedForSystemSkill(t *testing.T) {
+	db := testDB(t)
+	tenantA, _ := seedTenantAgent(t, db)
+	tenantB, _ := seedTenantAgent(t, db)
+	ctxA := tenantCtx(tenantA)
+	ctxB := tenantCtx(tenantB)
+	s := newSkillStore(t)
+	skillID := uuid.New()
+	slug := "system-user-grant-" + skillID.String()[:8]
+	if _, err := db.Exec(
+		`INSERT INTO skills (id, name, slug, owner_id, visibility, version, status, file_path, is_system, tenant_id)
+		 VALUES ($1, 'System User Grant Skill', $2, 'system', 'private', 1, 'active', $3, true, $4)`,
+		skillID, slug, "/tmp/skills/system-user-grant/1", store.MasterTenantID,
+	); err != nil {
+		t.Fatalf("insert system skill: %v", err)
+	}
+
+	if err := s.GrantToUser(ctxA, skillID, "same-user", "tenant-a-admin"); err != nil {
+		t.Fatalf("GrantToUser tenant A: %v", err)
+	}
+	if err := s.GrantToUser(ctxB, skillID, "same-user", "tenant-b-admin"); err != nil {
+		t.Fatalf("GrantToUser tenant B: %v", err)
+	}
+	grantsA, err := s.ListUserGrantsForSkill(ctxA, skillID)
+	if err != nil {
+		t.Fatalf("ListUserGrantsForSkill tenant A: %v", err)
+	}
+	grantsB, err := s.ListUserGrantsForSkill(ctxB, skillID)
+	if err != nil {
+		t.Fatalf("ListUserGrantsForSkill tenant B: %v", err)
+	}
+	if len(grantsA) != 1 || grantsA[0].GrantedBy != "tenant-a-admin" {
+		t.Fatalf("tenant A grants = %+v", grantsA)
+	}
+	if len(grantsB) != 1 || grantsB[0].GrantedBy != "tenant-b-admin" {
+		t.Fatalf("tenant B grants = %+v", grantsB)
+	}
+}
+
 func TestStoreSkill_GrantToAgentRejectsCrossTenantSkill(t *testing.T) {
 	db := testDB(t)
 	tenantA, agentA := seedTenantAgent(t, db)

@@ -3,13 +3,6 @@ import { useTranslation } from "react-i18next";
 import { Activity, GitFork, RefreshCw, Square, Bot, User, Users, Clock, Network, Globe, CheckCircle2, XCircle, Loader2, CircleDot, CircleDashed } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Pagination } from "@/components/shared/pagination";
@@ -30,6 +23,8 @@ import { useWsEvent } from "@/hooks/use-ws-event";
 import { Methods, Events } from "@/api/protocol";
 import { queryKeys } from "@/lib/query-keys";
 import { toast } from "@/stores/use-toast-store";
+import { TraceFilterBar } from "./trace-filter-bar";
+import type { TraceFilters } from "./trace-filter-params";
 
 /** Strip media placeholder tags like <media:image> from preview text */
 function cleanPreview(text: string): string {
@@ -64,8 +59,7 @@ export function TracesPage() {
   const tz = useUiStore((s) => s.timezone);
   const globalPageSize = useUiStore((s) => s.pageSize);
   const setGlobalPageSize = useUiStore((s) => s.setPageSize);
-  const [agentFilter, setAgentFilter] = useState<string>();
-  const [channelFilter, setChannelFilter] = useState<string>();
+  const [filters, setFilters] = useState<TraceFilters>({});
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSizeRaw] = useState(globalPageSize);
@@ -92,8 +86,7 @@ export function TracesPage() {
   const [abortingRunId, setAbortingRunId] = useState<string | null>(null);
 
   const { traces, total, loading, fetching, refresh, getTrace } = useTraces({
-    agentId: agentFilter,
-    channel: channelFilter,
+    ...filters,
     limit: pageSize,
     offset: (page - 1) * pageSize,
   });
@@ -160,39 +153,12 @@ export function TracesPage() {
         }
       />
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        {/* Agent filter */}
-        <Select
-          value={agentFilter ?? "__all__"}
-          onValueChange={(v) => { setAgentFilter(v === "__all__" ? undefined : v); setPage(1); }}
-        >
-          <SelectTrigger className="h-8 w-44 text-xs">
-            <SelectValue placeholder={t("allAgents")} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">{t("allAgents")}</SelectItem>
-            {agents.map((a) => (
-              <SelectItem key={a.id} value={a.id}>{a.display_name || a.agent_key || a.id}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {/* Channel filter */}
-        <Select
-          value={channelFilter ?? "__all__"}
-          onValueChange={(v) => { setChannelFilter(v === "__all__" ? undefined : v); setPage(1); }}
-        >
-          <SelectTrigger className="h-8 w-44 text-xs">
-            <SelectValue placeholder={t("allChannels")} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">{t("allChannels")}</SelectItem>
-            {channels.map((ch) => (
-              <SelectItem key={ch.id} value={ch.name}>{ch.display_name || ch.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      <TraceFilterBar
+        filters={filters}
+        agents={agents}
+        channels={channels}
+        onChange={(next) => { setFilters(next); setPage(1); }}
+      />
 
       <div className="mt-4">
         {showSkeleton ? (

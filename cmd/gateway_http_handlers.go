@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/channelmemory"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -11,7 +13,7 @@ import (
 )
 
 // wireHTTP creates HTTP handlers (agents + skills + traces + MCP + channel instances + providers + builtin tools + pending messages).
-func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir string, msgBus *bus.MessageBus, toolsReg *tools.Registry, providerReg *providers.Registry, modelReg providers.ModelRegistry, isOwner func(string) bool, gatewayAddr string, mcpToolLister httpapi.MCPToolLister, usageCapSvc *usagecaps.Service, skillUploadConfig config.SkillsConfig) (*httpapi.AgentsHandler, *httpapi.SkillsHandler, *httpapi.TracesHandler, *httpapi.MCPHandler, *httpapi.ChannelInstancesHandler, *httpapi.ProvidersHandler, *httpapi.BuiltinToolsHandler, *httpapi.PendingMessagesHandler, *httpapi.TeamEventsHandler, *httpapi.SecureCLIHandler, *httpapi.SecureCLIGrantHandler, *httpapi.MCPUserCredentialsHandler) {
+func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir string, msgBus *bus.MessageBus, domainBus eventbus.DomainEventBus, toolsReg *tools.Registry, providerReg *providers.Registry, modelReg providers.ModelRegistry, isOwner func(string) bool, gatewayAddr string, mcpToolLister httpapi.MCPToolLister, usageCapSvc *usagecaps.Service, appCfg *config.Config, skillUploadConfig config.SkillsConfig) (*httpapi.AgentsHandler, *httpapi.SkillsHandler, *httpapi.TracesHandler, *httpapi.MCPHandler, *httpapi.ChannelInstancesHandler, *httpapi.ProvidersHandler, *httpapi.BuiltinToolsHandler, *httpapi.PendingMessagesHandler, *httpapi.TeamEventsHandler, *httpapi.SecureCLIHandler, *httpapi.SecureCLIGrantHandler, *httpapi.MCPUserCredentialsHandler) {
 	var agentsH *httpapi.AgentsHandler
 	var skillsH *httpapi.SkillsHandler
 	var tracesH *httpapi.TracesHandler
@@ -31,6 +33,11 @@ func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir 
 		agentsH = httpapi.NewAgentsHandler(stores.Agents, stores.Providers, providerReg, stores.DB, stores.Tracing, defaultWorkspace, msgBus, summoner, isOwner)
 		agentsH.SetImportStores(stores.Memory, stores.KnowledgeGraph)
 		agentsH.SetDataDir(dataDir)
+		if stores.SecureCLI != nil && stores.SecureCLIGrants != nil {
+			if agentCreds, ok := stores.SecureCLI.(store.SecureCLIAgentCredentialStore); ok {
+				agentsH.SetGatewayOperatorBootstrap(stores.SecureCLI, stores.SecureCLIGrants, agentCreds, gatewayAddr)
+			}
+		}
 	}
 
 	if stores != nil && stores.Skills != nil {
@@ -39,6 +46,7 @@ func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir 
 			if len(dirs) > 0 {
 				skillsH = httpapi.NewSkillsHandler(manageStore, dirs[0], dataDir, bundledSkillsDir, msgBus, stores.SkillTenantCfgs, stores.Tenants)
 				skillsH.SetDB(stores.DB)
+				skillsH.SetEvolutionStore(stores.SkillEvolution, stores.Activity)
 				skillsH.SetUploadLimitConfig(skillUploadConfig)
 				if stores.SystemConfigs != nil {
 					skillsH.SetSystemConfigStore(stores.SystemConfigs)
@@ -48,7 +56,7 @@ func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir 
 	}
 
 	if stores != nil && stores.Tracing != nil {
-		tracesH = httpapi.NewTracesHandler(stores.Tracing)
+		tracesH = httpapi.NewTracesHandler(stores.Tracing, stores.RunTimeline)
 	}
 
 	if stores != nil && stores.MCP != nil {
@@ -62,12 +70,21 @@ func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir 
 
 	if stores != nil && stores.ChannelInstances != nil {
 		channelInstancesH = httpapi.NewChannelInstancesHandler(stores.ChannelInstances, stores.Agents, stores.ConfigPermissions, stores.Contacts, stores.Tenants, msgBus)
+		channelInstancesH.SetCapabilityStores(stores.MCP, stores.SecureCLI)
+		if memorySvc := makeChannelMemoryService(stores, domainBus, providerReg, usageCapSvc); memorySvc != nil {
+			channelInstancesH.SetMemoryExtractionService(memorySvc)
+		}
 	}
 
 	if stores != nil && stores.Providers != nil {
 		providersH = httpapi.NewProvidersHandler(stores.Providers, stores.ConfigSecrets, providerReg, gatewayAddr)
 		providersH.SetMessageBus(msgBus)
 		providersH.SetUsageCapService(usageCapSvc)
+		if appCfg != nil {
+			providersH.SetShellDenyGroupsSource(func() map[string]bool {
+				return appCfg.ShellDenyGroupsSnapshot()
+			})
+		}
 		if modelReg != nil {
 			providersH.SetModelRegistry(modelReg)
 		}
@@ -101,11 +118,28 @@ func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir 
 	}
 
 	if stores != nil && stores.SecureCLI != nil {
-		secureCLIH = httpapi.NewSecureCLIHandler(stores.SecureCLI, msgBus)
+		secureCLIH = httpapi.NewSecureCLIHandler(stores.SecureCLI, msgBus, stores.Tenants)
 	}
 	if stores != nil && stores.SecureCLIGrants != nil {
 		secureCLIGrantH = httpapi.NewSecureCLIGrantHandler(stores.SecureCLIGrants, stores.Tenants, msgBus)
 	}
 
 	return agentsH, skillsH, tracesH, mcpH, channelInstancesH, providersH, builtinToolsH, pendingMessagesH, teamEventsH, secureCLIH, secureCLIGrantH, mcpUserCredsH
+}
+
+func makeChannelMemoryService(stores *store.Stores, domainBus eventbus.DomainEventBus, providerReg *providers.Registry, usageCapSvc *usagecaps.Service) *channelmemory.Service {
+	if stores == nil || stores.ChannelInstances == nil || stores.PendingMessages == nil || stores.ChannelMemory == nil || stores.Episodic == nil {
+		return nil
+	}
+	return &channelmemory.Service{
+		Channels:      stores.ChannelInstances,
+		Pending:       stores.PendingMessages,
+		Extractions:   stores.ChannelMemory,
+		Episodic:      stores.Episodic,
+		EventBus:      domainBus,
+		SystemConfigs: stores.SystemConfigs,
+		Registry:      providerReg,
+		UsageCaps:     usageCapSvc,
+		Redactor:      channelmemory.NewRedactor(),
+	}
 }

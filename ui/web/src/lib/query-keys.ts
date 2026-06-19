@@ -23,6 +23,7 @@ export const queryKeys = {
   sessions: {
     all: ["sessions"] as const,
     list: (params: Record<string, unknown>) => ["sessions", params] as const,
+    timeline: (params: Record<string, unknown>) => ["sessions", "timeline", params] as const,
   },
   traces: {
     all: ["traces"] as const,
@@ -38,6 +39,14 @@ export const queryKeys = {
     all: ["channels"] as const,
     list: (params: Record<string, unknown>) => ["channels", params] as const,
     detail: (id: string) => ["channels", "detail", id] as const,
+    memoryExtraction: (id: string) => ["channels", "detail", id, "memory-extraction"] as const,
+    memoryExtractionItems: (id: string, params: Record<string, unknown>) =>
+      ["channels", "detail", id, "memory-extraction", "items", params] as const,
+    contexts: (id: string) => ["channels", "detail", id, "contexts"] as const,
+    contextMembers: (id: string, scopeType: string, scopeKey: string) =>
+      ["channels", "detail", id, "contexts", scopeType, scopeKey, "members"] as const,
+    contextCapabilities: (id: string, scopeType: string, scopeKey: string) =>
+      ["channels", "detail", id, "contexts", scopeType, scopeKey, "capabilities"] as const,
   },
   contacts: {
     all: ["contacts"] as const,
@@ -48,6 +57,10 @@ export const queryKeys = {
   skills: {
     all: ["skills"] as const,
     agentGrants: (agentId: string) => ["skills", "agent", agentId] as const,
+    evolution: (skillId: string) => ["skills", skillId, "evolution"] as const,
+    metrics: (skillId: string) => ["skills", skillId, "metrics"] as const,
+    suggestions: (skillId: string) => ["skills", skillId, "suggestions"] as const,
+    activity: (skillId: string) => ["skills", skillId, "activity"] as const,
     runtimes: ["skills", "runtimes"] as const,
   },
   cron: {

@@ -36,6 +36,7 @@ import {
   type SkillsPageState,
 } from "./lib/skills-page-state";
 import { getNextSkillAccessMode } from "./lib/skill-access-mode";
+import type { SkillExportFormat } from "./lib/skill-export-download";
 
 const MASTER_TENANT_ID = "0193a5b0-7000-7000-8000-000000000001";
 
@@ -46,7 +47,7 @@ export function SkillsPage() {
   const {
     skills, loading, refresh, getSkill, uploadSkill, updateSkill, deleteSkill,
     listAgentGrants, grantSkillToAgent, grantSkillToAgents, revokeSkillFromAgent,
-    deleteSkills, toggleSkills,
+    deleteSkills, toggleSkills, downloadSkills,
     getSkillVersions, getSkillFiles, getSkillFileContent, rescanDeps, installDeps, installSingleDep, toggleSkill,
     setTenantConfig, deleteTenantConfig,
   } = useSkills();
@@ -71,6 +72,8 @@ export function SkillsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [downloadLoading, setDownloadLoading] = useState(false);
+  const [exportFormat, setExportFormat] = useState<SkillExportFormat>("zip");
   const [rescanning, setRescanning] = useState(false);
   const [installingDeps, setInstallingDeps] = useState(false);
   const [toggling, setToggling] = useState<string | null>(null);
@@ -252,6 +255,18 @@ export function SkillsPage() {
     }
   };
 
+  const handleDownloadSkills = async (targetSkills: SkillInfo[]) => {
+    setDownloadLoading(true);
+    try {
+      await downloadSkills(targetSkills, exportFormat);
+      toast.success(t("export.downloadSuccess"));
+    } catch (err) {
+      toast.error(t("export.downloadFailed"), err instanceof Error ? err.message : String(err));
+    } finally {
+      setDownloadLoading(false);
+    }
+  };
+
   const handleRescanDeps = async () => {
     setRescanning(true);
     try { await rescanDeps(); } finally { setRescanning(false); }
@@ -327,6 +342,10 @@ export function SkillsPage() {
         skippedSystemCount={skippedSystemCount}
         agentCount={agents.length}
         loading={bulkLoading || deleteLoading}
+        downloadLoading={downloadLoading}
+        exportFormat={exportFormat}
+        onExportFormatChange={setExportFormat}
+        onDownload={() => handleDownloadSkills(selectedSkills)}
         onEnable={() => handleBulkToggle(true)}
         onDisable={() => handleBulkToggle(false)}
         onGrantAllAgents={handleBulkGrantAllAgents}
@@ -420,6 +439,10 @@ export function SkillsPage() {
           selectedFilePath={params.get("file")}
           onStateChange={setParamValues}
           onClose={closeDetail}
+          exportFormat={exportFormat}
+          downloadLoading={downloadLoading}
+          onExportFormatChange={setExportFormat}
+          onDownloadSkill={() => handleDownloadSkills([selectedSkill])}
           getSkillVersions={getSkillVersions}
           getSkillFiles={getSkillFiles}
           getSkillFileContent={getSkillFileContent}

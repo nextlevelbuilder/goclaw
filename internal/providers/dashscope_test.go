@@ -51,6 +51,8 @@ func TestDashScopeModelSupportsThinking(t *testing.T) {
 		model string
 		want  bool
 	}{
+		{"qwen3.7-plus", true},
+		{"qwen3.6-plus", true},
 		{"qwen3.5-plus", true},
 		{"qwen3.5-turbo", true},
 		{"qwen3-max", true},

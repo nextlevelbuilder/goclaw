@@ -139,6 +139,12 @@ Enables thinking via `enable_thinking: true` plus a `thinking_budget` parameter.
 
 Other models (e.g., `qwen3-plus`, `qwen3-turbo`) silently skip thinking injection to avoid API errors.
 
+**Bailian Coding note**: Bailian is a separate OpenAI-compatible Coding
+endpoint. Its model catalog includes `qwen3.7-plus` with Deep Thinking and
+Visual Understanding listed for selection, but this DashScope `enable_thinking`
+/ `thinking_budget` injection path does not apply to Bailian unless the Coding
+endpoint's explicit request controls are verified separately.
+
 **Important limitation**: DashScope does not support streaming when tools are present. When an agent has tools enabled and thinking is active, the provider automatically falls back to non-streaming mode (single `Chat()` call) and synthesizes chunk callbacks to maintain the event flow.
 
 ### Codex (ChatGPT OAuth Responses API)
@@ -175,6 +181,20 @@ flowchart TD
 | OpenAI-compat | `reasoning_content` in delta | `content` in delta |
 | DashScope | Same as OpenAI (when tools absent) | Same as OpenAI |
 | Codex | `reasoning` items with text summaries | `content` items |
+
+### Channel Delivery
+
+Provider streaming and channel streaming are separate decisions. A channel may request provider streaming only to receive reasoning events, while still delivering the final answer as a normal non-streamed message.
+
+Telegram exposes this through `reasoning_delivery`:
+
+| Mode | Channel output |
+|------|----------------|
+| `streaming_only` | Show reasoning only when `dm_stream` / `group_stream` is enabled. |
+| `always_bubbles` | Force provider streaming and flush reasoning into bounded channel bubbles. |
+| `off` | Do not show reasoning in channel messages. |
+
+`reasoning_stream=false` remains a legacy alias for `off` when no explicit mode is present. The bubble path is not persisted as assistant history; it is only a channel delivery surface.
 
 ### Token Estimation
 

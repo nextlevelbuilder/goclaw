@@ -52,6 +52,24 @@ export interface ContextPruningConfig {
   };
 }
 
+export interface DeliveryGeneratorConfig {
+  enabled?: boolean;
+  mode?: "sidecar_generated" | "llm_generated" | "fixed_template" | "off";
+  provider?: string;
+  model?: string;
+  timeout_ms?: number;
+  max_tokens?: number;
+  max_chars?: number;
+  min_delay_ms?: number;
+  templates?: string[];
+}
+
+export interface DeliveryBehaviorConfig {
+  enabled?: boolean;
+  intermediate_replies?: DeliveryGeneratorConfig;
+  quick_ack?: DeliveryGeneratorConfig;
+}
+
 export interface SandboxConfig {
   mode?: "off" | "non-main" | "all";
   image?: string;
@@ -194,6 +212,15 @@ export interface AgentData {
   other_config?: Record<string, unknown> | null;
   budget_monthly_cents?: number | null;
   tenant_id?: string;
+  grant_gateway_operator_access?: boolean;
+  gateway_operator_bootstrap?: GatewayOperatorBootstrapResult | null;
+}
+
+export interface GatewayOperatorBootstrapResult {
+  status: "granted" | "warning" | "skipped" | string;
+  binary_id?: string;
+  grant_id?: string;
+  warning?: string;
 }
 
 export interface AgentShareData {

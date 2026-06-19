@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -53,6 +54,9 @@ func (c *Channel) HandleMessage(senderID, chatID, content string, mediaPaths []s
 
 // BlockReplyEnabled returns the per-channel block_reply override.
 func (c *Channel) BlockReplyEnabled() *bool { return c.config.BlockReply }
+
+// ChatBehaviorConfig returns the per-channel chat_behavior override.
+func (c *Channel) ChatBehaviorConfig() *config.ChatBehaviorConfig { return c.config.ChatBehavior }
 
 // resolveDisplayName fetches and caches the Slack display name for a user ID.
 func (c *Channel) resolveDisplayName(userID string) string {

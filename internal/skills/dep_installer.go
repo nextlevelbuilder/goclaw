@@ -2,6 +2,7 @@ package skills
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -39,6 +40,10 @@ const InstallTimeout = 5 * time.Minute
 // pkgHelperSocket is the Unix socket path for the root-privileged pkg-helper.
 const pkgHelperSocket = "/tmp/pkg.sock"
 
+// pkgHelperBundledPath is where the Docker image copies the helper binary.
+// /app is not part of PATH, so direct-exec fallback must check it explicitly.
+const pkgHelperBundledPath = "/app/pkg-helper"
+
 // apkHelperCallFunc is the package-level hook for apkHelperCall, allowing tests
 // to inject a stub without starting a real Unix socket server. Production code
 // always uses the default value (apkHelperCall). Tests replace it per-case and
@@ -50,6 +55,7 @@ type InstallResult struct {
 	System []string `json:"system,omitempty"`
 	Pip    []string `json:"pip,omitempty"`
 	Npm    []string `json:"npm,omitempty"`
+	GitHub []string `json:"github,omitempty"`
 	Errors []string `json:"errors,omitempty"`
 }
 
@@ -305,6 +311,10 @@ func UninstallPackage(ctx context.Context, dep string) (bool, string) {
 func apkHelperCall(ctx context.Context, action, pkg string) (ok bool, code, data, errMsg string) {
 	conn, err := net.DialTimeout("unix", pkgHelperSocket, 5*time.Second)
 	if err != nil {
+		if path, found := findPkgHelperBinary(); found {
+			return apkHelperCallFallback(ctx, path, action, pkg)
+		}
+
 		return false, "helper_unavailable", "", fmt.Sprintf("pkg-helper unavailable: %v", err)
 	}
 	defer conn.Close()
@@ -333,22 +343,103 @@ func apkHelperCall(ctx context.Context, action, pkg string) (ok bool, code, data
 		return false, "helper_error", "", "pkg-helper: no response"
 	}
 
-	var resp struct {
-		OK    bool   `json:"ok"`
-		Error string `json:"error"`
-		Code  string `json:"code"`
-		Data  string `json:"data"`
-	}
-	if err := json.Unmarshal(scanner.Bytes(), &resp); err != nil {
+	resp, err := parsePkgHelperResponse(scanner.Bytes())
+	if err != nil {
 		return false, "helper_error", "", fmt.Sprintf("pkg-helper: invalid response: %v", err)
 	}
 
+	return resp.OK, resp.Code, resp.Data, resp.Error
+}
+
+type pkgHelperResponse struct {
+	OK    bool   `json:"ok"`
+	Error string `json:"error"`
+	Code  string `json:"code"`
+	Data  string `json:"data"`
+}
+
+func parsePkgHelperResponse(out []byte) (pkgHelperResponse, error) {
+	var resp pkgHelperResponse
+	if err := json.Unmarshal(out, &resp); err != nil {
+		return pkgHelperResponse{}, err
+	}
 	// Default missing code to system_error for v1-era helpers that omit the field.
 	if resp.Code == "" && !resp.OK {
 		resp.Code = "system_error"
 	}
+	return resp, nil
+}
 
-	return resp.OK, resp.Code, resp.Data, resp.Error
+func apkHelperCallFallback(ctx context.Context, helperPath, action, pkg string) (ok bool, code, data, errMsg string) {
+	cmd := exec.CommandContext(ctx, helperPath, action)
+	if pkg != "" {
+		cmd.Args = append(cmd.Args, pkg)
+	}
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, execErr := cmd.Output()
+
+	resp, parseErr := parsePkgHelperResponse(out)
+	if parseErr == nil {
+		if execErr != nil && resp.OK {
+			return false, "system_error", "", fmt.Sprintf("pkg-helper fallback exited after successful response: %v", execErr)
+		}
+		return resp.OK, resp.Code, resp.Data, resp.Error
+	}
+
+	detail := helperFallbackOutputDetail(out, stderr.String())
+	if execErr != nil {
+		return false, "system_error", "", fmt.Sprintf("pkg-helper fallback failed: %v%s", execErr, detail)
+	}
+	return false, "helper_error", "", fmt.Sprintf("pkg-helper fallback invalid response: %v%s", parseErr, detail)
+}
+
+func helperFallbackOutputDetail(stdout []byte, stderr string) string {
+	var parts []string
+	if trimmed := strings.TrimSpace(string(stdout)); trimmed != "" {
+		parts = append(parts, "stdout: "+trimmed)
+	}
+	if trimmed := strings.TrimSpace(stderr); trimmed != "" {
+		parts = append(parts, "stderr: "+trimmed)
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return ": " + strings.Join(parts, "; ")
+}
+
+func findPkgHelperBinary() (string, bool) {
+	if path, err := exec.LookPath("pkg-helper"); err == nil {
+		return path, true
+	}
+	return firstExecutableFile(pkgHelperFallbackPaths())
+}
+
+func pkgHelperFallbackPaths() []string {
+	paths := []string{pkgHelperBundledPath}
+	if exe, err := os.Executable(); err == nil {
+		paths = append([]string{filepath.Join(filepath.Dir(exe), "pkg-helper")}, paths...)
+	}
+	return paths
+}
+
+func firstExecutableFile(paths []string) (string, bool) {
+	seen := make(map[string]struct{}, len(paths))
+	for _, path := range paths {
+		if path == "" {
+			continue
+		}
+		if _, ok := seen[path]; ok {
+			continue
+		}
+		seen[path] = struct{}{}
+		info, err := os.Stat(path)
+		if err == nil && !info.IsDir() && info.Mode().Perm()&0111 != 0 {
+			return path, true
+		}
+	}
+	return "", false
 }
 
 // apkViaHelper is the legacy 2-return-value wrapper used by InstallSingleDep,

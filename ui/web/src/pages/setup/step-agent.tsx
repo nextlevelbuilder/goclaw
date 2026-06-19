@@ -13,6 +13,7 @@ import { SummoningModal } from "@/pages/agents/summoning-modal";
 import { useAgentPresets } from "@/pages/agents/agent-presets";
 import { useWsEvent } from "@/hooks/use-ws-event";
 import { slugify } from "@/lib/slug";
+import { toast } from "@/stores/use-toast-store";
 import type { ProviderData } from "@/types/provider";
 import type { AgentData } from "@/types/agent";
 
@@ -42,6 +43,11 @@ export function StepAgent({ provider, model, onComplete, onBack, existingAgent }
   const [selfEvolve, setSelfEvolve] = useState(
     Boolean(existingAgent?.self_evolve),
   );
+  const [gatewayOperatorAccess, setGatewayOperatorAccess] = useState(false);
+  const [gatewayOperatorNotice, setGatewayOperatorNotice] = useState<{
+    variant: "success" | "warning";
+    message: string;
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -121,6 +127,7 @@ export function StepAgent({ provider, model, onComplete, onBack, existingAgent }
 
     setLoading(true);
     setError("");
+    setGatewayOperatorNotice(null);
 
     try {
       if (isEditing) {
@@ -147,9 +154,19 @@ export function StepAgent({ provider, model, onComplete, onBack, existingAgent }
           agent_description: description.trim() || null,
           self_evolve: selfEvolve,
           emoji: selectedEmoji || null,
+          grant_gateway_operator_access: gatewayOperatorAccess || undefined,
         };
 
         const result = await createAgent(data) as AgentData;
+        const bootstrap = result.gateway_operator_bootstrap;
+        if (bootstrap?.status === "granted") {
+          const message = t("agent.gatewayOperatorGrantedDesc");
+          setGatewayOperatorNotice({ variant: "success", message });
+          toast.success(t("agent.gatewayOperatorGranted"), message);
+        } else if (bootstrap?.warning) {
+          setGatewayOperatorNotice({ variant: "warning", message: bootstrap.warning });
+          toast.warning(t("agent.gatewayOperatorWarning"), bootstrap.warning);
+        }
         setAgentResult(result);
         setSummoningOutcome("pending");
         setCreatedAgent({ id: result.id, name: displayName.trim() || agentKey });
@@ -242,8 +259,34 @@ export function StepAgent({ provider, model, onComplete, onBack, existingAgent }
                 </div>
                 <Switch id="setup-self-evolve" checked={selfEvolve} onCheckedChange={setSelfEvolve} />
               </div>
+              {!isEditing && (
+                <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-2.5">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="setup-gateway-operator" className="text-sm font-normal">
+                      {t("agent.gatewayOperatorAccess")}
+                    </Label>
+                    <p className="text-xs text-muted-foreground">{t("agent.gatewayOperatorAccessDesc")}</p>
+                  </div>
+                  <Switch
+                    id="setup-gateway-operator"
+                    checked={gatewayOperatorAccess}
+                    onCheckedChange={setGatewayOperatorAccess}
+                  />
+                </div>
+              )}
             </div>
 
+            {gatewayOperatorNotice && (
+              <p
+                className={`rounded-md border px-3 py-2 text-xs ${
+                  gatewayOperatorNotice.variant === "success"
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200"
+                    : "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
+                }`}
+              >
+                {gatewayOperatorNotice.message}
+              </p>
+            )}
             {error && <p className="text-sm text-destructive">{error}</p>}
 
             <div className={`flex ${onBack ? "justify-between" : "justify-end"} gap-2`}>

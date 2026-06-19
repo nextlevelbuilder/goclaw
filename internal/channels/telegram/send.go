@@ -96,11 +96,12 @@ func isPostConnectNetworkErr(err error) bool {
 // need the longer sendMediaOverallTimeout budget. Keyed by the `name` argument
 // passed to retrySend so no call site has to change when we bump the budget.
 var mediaSendMethods = map[string]struct{}{
-	"sendPhoto":    {},
-	"sendVideo":    {},
-	"sendAudio":    {},
-	"sendVoice":    {},
-	"sendDocument": {},
+	"sendPhoto":      {},
+	"sendVideo":      {},
+	"sendAudio":      {},
+	"sendVoice":      {},
+	"sendDocument":   {},
+	"sendMediaGroup": {},
 }
 
 // retrySend wraps a Telegram send call with retry logic for transient network errors.
@@ -218,10 +219,7 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 	// Placeholder update (e.g. LLM retry notification): edit the placeholder
 	// but keep it alive for the final response. Don't stop typing or cleanup.
 	if msg.Metadata["placeholder_update"] == "true" {
-		if pID, ok := c.placeholders.Load(localKey); ok {
-			_ = c.editMessage(ctx, chatID, pID.(int), msg.Content)
-		}
-		return nil
+		return c.updatePlaceholder(ctx, localKey, chatID, msg.Content, replyToMsgID, threadID)
 	}
 
 	// Stop thinking animation
@@ -364,81 +362,32 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 // Ref: TS src/telegram/send.ts → sendMessageTelegram with mediaUrl
 func (c *Channel) sendMediaMessage(ctx context.Context, chatID int64, msg bus.OutboundMessage, replyTo, threadID int) error {
 	chatIDObj := tu.ID(chatID)
+	items, err := c.prepareTelegramMediaItems(msg)
+	if err != nil {
+		return err
+	}
 
-	for _, media := range msg.Media {
-		// Determine caption (use message content for first media, or media caption)
-		caption := media.Caption
-		if caption == "" && msg.Content != "" {
-			caption = msg.Content
-			msg.Content = "" // only use for first media
-		}
-
-		// Convert caption from markdown to Telegram HTML (same as regular messages).
-		// If the HTML caption exceeds Telegram's 1024-byte limit, skip caption entirely
-		// and send the full text as a separate message. Truncating HTML at a byte boundary
-		// can split tags (e.g. cut inside <code>...</code>) causing parse errors.
-		var followUpText string
-		if caption != "" {
-			caption = markdownToTelegramHTML(caption)
-			if len(caption) > telegramCaptionMaxLen {
-				followUpText = caption
-				caption = ""
-			}
-		}
-
-		if err := c.validateOutboundMediaSize(media.URL); err != nil {
-			return err
-		}
-
-		// Send based on content type.
-		// Large images (>photoSizeThreshold) are sent as documents to avoid Telegram compression.
-		ct := strings.ToLower(media.ContentType)
-		switch {
-		case strings.HasPrefix(ct, "image/"):
-			sendAsDoc := false
-			if info, statErr := os.Stat(media.URL); statErr == nil && info.Size() > photoSizeThreshold {
-				sendAsDoc = true
-				slog.Info("large image, sending as document to preserve quality", "path", media.URL, "size", info.Size())
-			}
-			if sendAsDoc {
-				if err := c.sendDocument(ctx, chatIDObj, media.URL, caption, replyTo, threadID); err != nil {
-					return err
-				}
-			} else if err := c.sendPhoto(ctx, chatIDObj, media.URL, caption, replyTo, threadID); err != nil {
+	for _, chunk := range chunkTelegramMediaItems(items) {
+		if chunk.grouped {
+			if err := c.sendTelegramMediaGroup(ctx, chatIDObj, chunk.items, replyTo, threadID); err != nil {
 				return err
 			}
-		case strings.HasPrefix(ct, "video/"):
-			if err := c.sendVideo(ctx, chatIDObj, media.URL, caption, replyTo, threadID); err != nil {
-				return err
-			}
-		case strings.HasPrefix(ct, "audio/"):
-			// Voice message: use SendVoice for inline playback bubble.
-			if msg.Metadata["audio_as_voice"] == "true" && isVoiceCompatible(ct) {
-				if err := c.sendVoice(ctx, chatIDObj, media.URL, caption, replyTo, threadID); err != nil {
-					return err
-				}
-			} else {
-				if err := c.sendAudio(ctx, chatIDObj, media.URL, caption, replyTo, threadID); err != nil {
+			replyTo = 0
+			for _, item := range chunk.items {
+				if err := c.sendTelegramMediaFollowUp(ctx, chatID, item.followUpText, threadID); err != nil {
 					return err
 				}
 			}
-		default:
-			if err := c.sendDocument(ctx, chatIDObj, media.URL, caption, replyTo, threadID); err != nil {
-				return err
-			}
+			continue
 		}
-		// Only reply to the first media item
-		replyTo = 0
 
-		// Send follow-up text if caption was split.
-		// followUpText is already HTML (from markdownToTelegramHTML above), so
-		// just chunk and send — do NOT convert again (double-escaping breaks entities).
-		if followUpText != "" {
-			chunks := chunkHTML(followUpText, telegramMaxMessageLen)
-			for _, chunk := range chunks {
-				if err := c.sendHTML(ctx, chatID, chunk, 0, threadID); err != nil {
-					return err
-				}
+		for _, item := range chunk.items {
+			if err := c.sendSingleTelegramMediaItem(ctx, chatIDObj, item, replyTo, threadID); err != nil {
+				return err
+			}
+			replyTo = 0
+			if err := c.sendTelegramMediaFollowUp(ctx, chatID, item.followUpText, threadID); err != nil {
+				return err
 			}
 		}
 	}
@@ -472,6 +421,56 @@ func (c *Channel) outboundMediaMaxBytes() int64 {
 // replyTo and threadID are optional (0 = omit). General topic (1) is handled by resolveThreadIDForSend.
 func (c *Channel) sendHTML(ctx context.Context, chatID int64, htmlContent string, replyTo, threadID int) error {
 	return c.sendHTMLWithDepth(ctx, chatID, htmlContent, replyTo, threadID, 0)
+}
+
+func (c *Channel) updatePlaceholder(ctx context.Context, localKey string, chatID int64, content string, replyTo, threadID int) error {
+	if strings.TrimSpace(content) == "" {
+		return nil
+	}
+	htmlContent := html.EscapeString(content)
+	if pID, ok := c.placeholders.Load(localKey); ok {
+		_ = c.editMessage(ctx, chatID, pID.(int), htmlContent)
+		return nil
+	}
+
+	msg, err := c.sendPlaceholder(ctx, chatID, htmlContent, replyTo, threadID)
+	if err != nil {
+		if newChatID := extractMigrateChatID(err); newChatID != 0 {
+			slog.Info("telegram: group migrated to supergroup (placeholder update)",
+				"old_chat_id", chatID, "new_chat_id", newChatID)
+			c.migrateGroupChat(ctx, chatID, newChatID)
+			msg, err = c.sendPlaceholder(ctx, newChatID, htmlContent, replyTo, threadID)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	if msg != nil && msg.MessageID > 0 {
+		c.placeholders.Store(localKey, msg.MessageID)
+	}
+	return nil
+}
+
+func (c *Channel) sendPlaceholder(ctx context.Context, chatID int64, htmlContent string, replyTo, threadID int) (*telego.Message, error) {
+	tgMsg := tu.Message(tu.ID(chatID), htmlContent)
+	tgMsg.ParseMode = telego.ModeHTML
+	if sendThreadID := resolveThreadIDForSend(threadID); sendThreadID > 0 {
+		tgMsg.MessageThreadID = sendThreadID
+	}
+	if replyTo > 0 {
+		tgMsg.ReplyParameters = &telego.ReplyParameters{
+			MessageID:                replyTo,
+			AllowSendingWithoutReply: true,
+		}
+	}
+
+	var sent *telego.Message
+	err := c.retrySend(ctx, "sendMessage", nil, func(ctx context.Context) error {
+		var sendErr error
+		sent, sendErr = c.bot.SendMessage(ctx, tgMsg)
+		return sendErr
+	})
+	return sent, err
 }
 
 func (c *Channel) sendHTMLWithDepth(ctx context.Context, chatID int64, htmlContent string, replyTo, threadID, depth int) error {

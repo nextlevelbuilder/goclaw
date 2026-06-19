@@ -31,8 +31,6 @@ export interface InitState {
   embModel: string;
   embMaxChunkLen: string;
   embChunkOverlap: string;
-  toolStatus: boolean;
-  blockReply: boolean;
   intentClassify: boolean;
   compProvider: string;
   compModel: string;
@@ -54,7 +52,7 @@ export interface InitState {
 export const DEFAULTS: InitState = {
   embProvider: "", embModel: "",
   embMaxChunkLen: "", embChunkOverlap: "",
-  toolStatus: true, blockReply: false, intentClassify: true,
+  intentClassify: true,
   compProvider: "", compModel: "",
   compThreshold: "", compKeepRecent: "", compMaxTokens: "",
   kgProvider: "", kgModel: "", kgMinConfidence: "0.75",

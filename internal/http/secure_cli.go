@@ -26,13 +26,22 @@ var safeBinaryNameRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`)
 
 // SecureCLIHandler handles secure CLI binary credential CRUD endpoints.
 type SecureCLIHandler struct {
-	store  store.SecureCLIStore
-	msgBus *bus.MessageBus
+	store      store.SecureCLIStore
+	agentCreds store.SecureCLIAgentCredentialStore
+	tenants    store.TenantStore
+	msgBus     *bus.MessageBus
 }
 
 // NewSecureCLIHandler creates a handler for secure CLI credential management.
-func NewSecureCLIHandler(s store.SecureCLIStore, msgBus *bus.MessageBus) *SecureCLIHandler {
-	return &SecureCLIHandler{store: s, msgBus: msgBus}
+func NewSecureCLIHandler(s store.SecureCLIStore, msgBus *bus.MessageBus, tenants ...store.TenantStore) *SecureCLIHandler {
+	h := &SecureCLIHandler{store: s, msgBus: msgBus}
+	if len(tenants) > 0 {
+		h.tenants = tenants[0]
+	}
+	if agentCreds, ok := s.(store.SecureCLIAgentCredentialStore); ok {
+		h.agentCreds = agentCreds
+	}
+	return h
 }
 
 // RegisterRoutes registers all secure CLI routes on the given mux.
@@ -51,6 +60,13 @@ func (h *SecureCLIHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/cli-credentials/{id}/user-credentials/{userId}", h.auth(h.handleGetUserCredentials))
 	mux.HandleFunc("PUT /v1/cli-credentials/{id}/user-credentials/{userId}", h.auth(h.handleSetUserCredentials))
 	mux.HandleFunc("DELETE /v1/cli-credentials/{id}/user-credentials/{userId}", h.auth(h.handleDeleteUserCredentials))
+
+	// Per-agent credential management. Credentials do not grant binary access;
+	// non-global binaries still require agent-grants.
+	mux.HandleFunc("GET /v1/cli-credentials/{id}/agent-credentials", h.auth(h.handleListAgentCredentials))
+	mux.HandleFunc("GET /v1/cli-credentials/{id}/agent-credentials/{agentId}", h.auth(h.handleGetAgentCredentials))
+	mux.HandleFunc("PUT /v1/cli-credentials/{id}/agent-credentials/{agentId}", h.auth(h.handleSetAgentCredentials))
+	mux.HandleFunc("DELETE /v1/cli-credentials/{id}/agent-credentials/{agentId}", h.auth(h.handleDeleteAgentCredentials))
 }
 
 func (h *SecureCLIHandler) auth(next http.HandlerFunc) http.HandlerFunc {
@@ -116,9 +132,10 @@ func (h *SecureCLIHandler) handleCreate(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	var preset *tools.CLIPreset
 	// Apply preset defaults if specified
 	if req.Preset != "" {
-		preset := tools.GetPreset(req.Preset)
+		preset = tools.GetPreset(req.Preset)
 		if preset == nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown preset: " + req.Preset})
 			return
@@ -147,22 +164,31 @@ func (h *SecureCLIHandler) handleCreate(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgRequired, "binary_name")})
 		return
 	}
-	if len(req.Env) == 0 {
+	adapterManagedPreset := preset != nil && strings.TrimSpace(preset.AdapterName) != "" && len(preset.EnvVars) == 0
+	if len(req.Env) == 0 && !adapterManagedPreset {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgRequired, "env")})
 		return
 	}
 
-	envEntries, err := store.ParseSecureCLIEnv(req.Env)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgGrantEnvValueInvalid, err.Error())})
-		return
-	}
-	envJSON, err := store.SerializeSecureCLIEnv(envEntries)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgGrantEnvValueInvalid, err.Error())})
-		return
+	envJSON := []byte("{}")
+	if len(req.Env) > 0 {
+		envEntries, err := store.ParseSecureCLIEnv(req.Env)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgGrantEnvValueInvalid, err.Error())})
+			return
+		}
+		envJSON, err = store.SerializeSecureCLIEnv(envEntries)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgGrantEnvValueInvalid, err.Error())})
+			return
+		}
 	}
 
+	var adapterName *string
+	if preset != nil && strings.TrimSpace(preset.AdapterName) != "" {
+		name := strings.TrimSpace(preset.AdapterName)
+		adapterName = &name
+	}
 	b := &store.SecureCLIBinary{
 		BinaryName:     req.BinaryName,
 		BinaryPath:     req.BinaryPath,
@@ -175,6 +201,7 @@ func (h *SecureCLIHandler) handleCreate(w http.ResponseWriter, r *http.Request) 
 		IsGlobal:       req.IsGlobal == nil || *req.IsGlobal, // default true
 		Enabled:        req.Enabled,
 		CreatedBy:      store.UserIDFromContext(r.Context()),
+		AdapterName:    adapterName,
 	}
 	if b.TimeoutSeconds <= 0 {
 		b.TimeoutSeconds = 30
@@ -290,8 +317,48 @@ func (h *SecureCLIHandler) handleDelete(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
+type cliPresetResponse struct {
+	BinaryName  string            `json:"binary_name"`
+	Description string            `json:"description"`
+	EnvVars     []tools.EnvVarDef `json:"env_vars"`
+	DenyArgs    []string          `json:"deny_args"`
+	DenyVerbose []string          `json:"deny_verbose"`
+	Timeout     int               `json:"timeout"`
+	Tips        string            `json:"tips"`
+	AdapterName string            `json:"adapter_name,omitempty"`
+}
+
+func normalizedCLIPresets() map[string]cliPresetResponse {
+	out := make(map[string]cliPresetResponse, len(tools.CLIPresets))
+	for key, preset := range tools.CLIPresets {
+		envVars := preset.EnvVars
+		if envVars == nil {
+			envVars = []tools.EnvVarDef{}
+		}
+		denyArgs := preset.DenyArgs
+		if denyArgs == nil {
+			denyArgs = []string{}
+		}
+		denyVerbose := preset.DenyVerbose
+		if denyVerbose == nil {
+			denyVerbose = []string{}
+		}
+		out[key] = cliPresetResponse{
+			BinaryName:  preset.BinaryName,
+			Description: preset.Description,
+			EnvVars:     envVars,
+			DenyArgs:    denyArgs,
+			DenyVerbose: denyVerbose,
+			Timeout:     preset.Timeout,
+			Tips:        preset.Tips,
+			AdapterName: preset.AdapterName,
+		}
+	}
+	return out
+}
+
 func (h *SecureCLIHandler) handlePresets(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"presets": tools.CLIPresets})
+	writeJSON(w, http.StatusOK, map[string]any{"presets": normalizedCLIPresets()})
 }
 
 // handleCheckBinary resolves a binary name to its absolute path via exec.LookPath.

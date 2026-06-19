@@ -3,6 +3,7 @@ package providers
 import (
 	"log/slog"
 	"os"
+	"regexp"
 	"sync"
 )
 
@@ -42,17 +43,17 @@ const OptLocalKey = "local_key"
 // It acts as a thin proxy: CLI manages session history, tool execution, and context.
 // GoClaw only forwards the latest user message and streams back the response.
 type ClaudeCLIProvider struct {
-	name               string // provider name (default: "claude-cli")
-	cliPath            string // path to claude binary (default: "claude")
-	defaultModel       string // default: "sonnet"
-	baseWorkDir        string // base dir for agent workspaces
-	mcpConfigData      *MCPConfigData // per-session MCP config data
-	permMode           string // permission mode (default: "bypassPermissions")
-	hooksSettingsPath  string // generated settings.json with security hooks (empty = no hooks)
-	hooksCleanup       func() // cleanup function for hooks temp files
-	mu                 sync.Mutex // protects workdir creation
-	sessionMu          sync.Map   // key: string, value: *sync.Mutex — per-session lock
-	mcpConfigDirs      sync.Map   // key: string (dir path), value: struct{} — tracks per-session MCP config dirs for cleanup
+	name              string         // provider name (default: "claude-cli")
+	cliPath           string         // path to claude binary (default: "claude")
+	defaultModel      string         // default: "sonnet"
+	baseWorkDir       string         // base dir for agent workspaces
+	mcpConfigData     *MCPConfigData // per-session MCP config data
+	permMode          string         // permission mode (default: "bypassPermissions")
+	hooksSettingsPath string         // generated settings.json with security hooks (empty = no hooks)
+	hooksCleanup      func()         // cleanup function for hooks temp files
+	mu                sync.Mutex     // protects workdir creation
+	sessionMu         sync.Map       // key: string, value: *sync.Mutex — per-session lock
+	mcpConfigDirs     sync.Map       // key: string (dir path), value: struct{} — tracks per-session MCP config dirs for cleanup
 }
 
 // ClaudeCLIOption configures the provider.
@@ -105,9 +106,9 @@ func WithClaudeCLIPermMode(mode string) ClaudeCLIOption {
 // WithClaudeCLISecurityHooks enables GoClaw security hooks for CLI tool calls.
 // Generates a settings file with PreToolUse hooks that enforce shell deny patterns
 // and workspace path restrictions.
-func WithClaudeCLISecurityHooks(workspace string, restrictToWorkspace bool) ClaudeCLIOption {
+func WithClaudeCLISecurityHooks(workspace string, restrictToWorkspace bool, denyPatternSets ...[]*regexp.Regexp) ClaudeCLIOption {
 	return func(p *ClaudeCLIProvider) {
-		settingsPath, cleanup, err := BuildCLIHooksConfig(workspace, restrictToWorkspace)
+		settingsPath, cleanup, err := BuildCLIHooksConfig(workspace, restrictToWorkspace, denyPatternSets...)
 		if err != nil {
 			slog.Warn("claude-cli: failed to build security hooks", "error", err)
 			return
@@ -136,7 +137,7 @@ func NewClaudeCLIProvider(cliPath string, opts ...ClaudeCLIOption) *ClaudeCLIPro
 	return p
 }
 
-func (p *ClaudeCLIProvider) Name() string        { return p.name }
+func (p *ClaudeCLIProvider) Name() string         { return p.name }
 func (p *ClaudeCLIProvider) DefaultModel() string { return p.defaultModel }
 
 // Capabilities implements CapabilitiesAware for pipeline code-path selection.
