@@ -78,7 +78,13 @@ func (s *PGHookStore) Create(ctx context.Context, cfg hooks.HookConfig) (uuid.UU
 		name = &cfg.Name
 	}
 
-	_, err = s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	_, err = tx.ExecContext(ctx, `
 		INSERT INTO hooks
 		  (id, tenant_id, scope, event, handler_type,
 		   config, matcher, if_expr, timeout_ms, on_timeout,
@@ -99,11 +105,14 @@ func (s *PGHookStore) Create(ctx context.Context, cfg hooks.HookConfig) (uuid.UU
 		agentIDs = []uuid.UUID{*cfg.AgentID}
 	}
 	for _, aid := range agentIDs {
-		if _, err := s.db.ExecContext(ctx,
+		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO hook_agents (hook_id, agent_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
 			id, aid); err != nil {
 			return uuid.Nil, fmt.Errorf("insert hook agent link: %w", err)
 		}
+	}
+	if err := tx.Commit(); err != nil {
+		return uuid.Nil, fmt.Errorf("commit hook create: %w", err)
 	}
 	s.invalidateCache()
 	return id, nil
@@ -459,11 +468,11 @@ func (s *PGHookStore) WriteExecution(ctx context.Context, exec hooks.HookExecuti
 
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO hook_executions
-		  (id, hook_id, session_id, event, input_hash, decision,
+		  (id, hook_id, tenant_id, session_id, event, input_hash, decision,
 		   duration_ms, retry, dedup_key, error, error_detail, metadata, created_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
 		ON CONFLICT (dedup_key) WHERE dedup_key IS NOT NULL DO NOTHING`,
-		exec.ID, exec.HookID, sessionID, string(exec.Event),
+		exec.ID, exec.HookID, exec.TenantID, sessionID, string(exec.Event),
 		inputHash, string(exec.Decision),
 		exec.DurationMS, exec.Retry, dedupKey,
 		errStr, exec.ErrorDetail, metaJSON, now,
