@@ -184,20 +184,36 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 	text = strings.TrimSpace(text)
 
 	// Openline relays an external connector user with a sender tag at the start
-	// of the text ("[Name #id]:", "[Name] #id:", or the short "[Name] <msg>").
-	// Capture it so the reply can echo the same tag — the connector parses the
-	// leading tag to route the answer back to the right external person. Strip it
-	// from the body the agent sees so the LLM can't accidentally duplicate it.
+	// of the text. We parse it to (a) echo the connector msgId back so the reply
+	// routes to the right external message, and (b) — for the newer 3-token
+	// "[Name] #uid #msgId" layout — derive a stable per-participant identity from
+	// the external person's uid so each customer gets their own USER.md / memory
+	// instead of collapsing into the shared connector proxy.
 	//
-	// Gated to Open Channel ONLY: the tag is meaningful solely for connector
-	// routing. Ordinary group chats (CRM deal/task chats) must never have their
-	// "[x] …"-shaped text mistaken for a sender tag — that would both echo a
-	// bogus prefix and widen the surface for a forged-tag misroute. Plain group
-	// chats / DMs → no-op.
-	var senderPrefix string
+	// Identity is gated on FromIsConnector: only genuine connector relays
+	// (IS_CONNECTOR=Y) may mint a participant identity. An operator who types a
+	// look-alike "[Name] #a #b" tag (observed live) must never be mistaken for a
+	// customer, so for non-connector messages we only strip the tag from the body
+	// the agent sees and derive nothing. Plain group chats / DMs → no-op.
+	var senderTag OpenlineSenderTag
+	var participantSenderID string
 	if isOpenChannel {
-		if p, rest := extractOpenlineSenderPrefix(text, true); p != "" {
-			senderPrefix = p
+		if evt.Params.FromIsConnector {
+			senderTag = parseOpenlineSenderTag(text)
+			if senderTag.Format == TagFormatThreeToken && senderTag.UID != "" {
+				// Unique per (channel instance, OL chat, person) → one contact and
+				// one USER.md per external customer in the chat. c.Name() is
+				// config-controlled, the uid is digits-only from the regex, and the
+				// DialogID is a validated "chatNN" token — no freeform injection.
+				participantSenderID = fmt.Sprintf("openlines:%s:%s:%s",
+					c.Name(), evt.Params.DialogID, senderTag.UID)
+			}
+			if senderTag.Format != TagFormatNone {
+				text = strings.TrimSpace(senderTag.Rest)
+			}
+		} else if _, rest := extractOpenlineSenderPrefix(text, true); rest != text {
+			// Operator/staff message: strip a look-alike tag from the body for the
+			// LLM, but derive no identity and echo no prefix.
 			text = strings.TrimSpace(rest)
 		}
 	}
@@ -206,7 +222,13 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 		return
 	}
 
+	// senderID defaults to the connector proxy id (e.g. "960", shared by every
+	// customer in the chat). When a per-participant identity was derived above we
+	// use it instead so contact + memory scope to the individual person.
 	senderID := evt.Params.FromUserID
+	if participantSenderID != "" {
+		senderID = participantSenderID
+	}
 	chatID := evt.Params.DialogID
 	peerKind := "direct"
 	if isGroup {
@@ -249,12 +271,32 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 		"bitrix_portal":    c.portalDomainSafe(),
 		"bitrix_bot_id":    strconv.Itoa(c.BotID()),
 		"bitrix_bot_code":  c.cfg.BotCode,
-		MetaKeyMessageID:   evt.Params.MessageID,
-		MetaKeyVisibility:  visibility,
+		// Bitrix MESSAGE_ID drives the v2 fields.replyId reply-link. It is a
+		// Bitrix-internal id, distinct from the connector msgId embedded in the
+		// sender tag (echoed via MetaKeySenderPrefix instead), so it must stay the
+		// genuine webhook MESSAGE_ID — a 13-digit connector msgId is not a valid
+		// Bitrix replyId.
+		MetaKeyMessageID:  evt.Params.MessageID,
+		MetaKeyVisibility: visibility,
 	}
-	// Echo the openline sender tag back on the reply (see capture above).
-	if senderPrefix != "" {
-		meta[MetaKeySenderPrefix] = senderPrefix
+	// Echo the connector sender tag back on the reply so the Open Channel
+	// connector routes the answer to the right external message:
+	//   - 3-token   → "#msgId" only (name + uid dropped; connector needs just the id),
+	//   - legacy    → canonical "[name] #msgId" (unchanged from prior behavior),
+	//   - name-only → "[name]".
+	// senderTag is the zero value (TagFormatNone) for operator / non-connector
+	// messages, so this is a no-op there.
+	switch senderTag.Format {
+	case TagFormatThreeToken:
+		meta[MetaKeySenderPrefix] = "#" + senderTag.MsgID
+	case TagFormatLegacy:
+		meta[MetaKeySenderPrefix] = "[" + senderTag.Name + "] #" + senderTag.MsgID
+	case TagFormatNameOnly:
+		meta[MetaKeySenderPrefix] = "[" + senderTag.Name + "]"
+	}
+	// Per-participant identity signal for the consumer (per-person USER.md scope).
+	if participantSenderID != "" {
+		meta[MetaKeyParticipantUserID] = participantSenderID
 	}
 	if evt.Params.ReplyToMID != "" {
 		meta["bitrix_reply_to_mid"] = evt.Params.ReplyToMID
@@ -286,7 +328,17 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 	// missing we still create the contact row with empty fields, which
 	// matches the pre-enrichment behavior and causes no regression.
 	if cc := c.ContactCollector(); cc != nil {
-		contactName, contactUsername := c.resolveContactName(ctx, senderID)
+		var contactName, contactUsername string
+		if participantSenderID != "" && senderTag.Name != "" {
+			// Use the connector-parsed display name directly. resolveContactName
+			// would call user.get(senderID), but senderID is now the synthetic
+			// per-participant id and the numeric proxy (e.g. 960) resolves to the
+			// connector account — not the customer. The parsed name is the only
+			// real signal we have for the external person.
+			contactName = senderTag.Name
+		} else {
+			contactName, contactUsername = c.resolveContactName(ctx, senderID)
+		}
 		cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, contactName, contactUsername, peerKind, "user", "", "")
 		if isGroup && chatID != "" {
 			cc.EnsureContact(ctx, c.Type(), c.Name(), chatID, "", "", "", "group", "group", "", "")

@@ -425,6 +425,56 @@ func TestSend_BranchesOnVisibility(t *testing.T) {
 	}
 }
 
+// TestSend_OL_EchoPrefixPrepended verifies the openline sender-tag echo: whatever
+// handle.go placed in MetaKeySenderPrefix is prepended verbatim to the outbound
+// text so the Open Channel connector can route the reply back to the right
+// external message. send.go is format-agnostic — handle.go decides the shape
+// ("#msgId" for 3-token, "[name] #msgId" for legacy).
+func TestSend_OL_EchoPrefixPrepended(t *testing.T) {
+	cases := []struct {
+		name    string
+		prefix  string
+		wantMsg string
+	}{
+		{
+			name:    "3-token echo is msgId only",
+			prefix:  "#777888",
+			wantMsg: "#777888 hi from bot",
+		},
+		{
+			name:    "legacy echo keeps full [name] #msgId",
+			prefix:  "[Trung Hee] #7957717404177",
+			wantMsg: "[Trung Hee] #7957717404177 hi from bot",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rt := &captureRT{result: `{"result":{"id":1}}`}
+			client := newStubClient("test.bitrix24.com", rt)
+			ch, _ := newFakeChannelWithClient(t, client)
+			ch.SetRunning(true)
+
+			msg := bus.OutboundMessage{
+				ChatID:  "chat4878",
+				Content: "hi from bot",
+				Metadata: map[string]string{
+					MetaKeyVisibility:   VisibilityPublic,
+					MetaKeySenderPrefix: tc.prefix,
+				},
+			}
+			if err := ch.Send(context.Background(), msg); err != nil {
+				t.Fatalf("Send error: %v", err)
+			}
+			if len(rt.reqs) != 1 {
+				t.Fatalf("expected exactly 1 HTTP call, got %d", len(rt.reqs))
+			}
+			if got := rt.reqs[0].Get("fields[message]"); got != tc.wantMsg {
+				t.Errorf("fields[message] = %q; want %q", got, tc.wantMsg)
+			}
+		})
+	}
+}
+
 // TestBuildAddressMention covers the address-user resolver that prepends the
 // `[USER=<id>][/USER]` BBCode to outbound replies in group chats. The format
 // is intentionally empty-named so Bitrix renders the user's current display
@@ -488,6 +538,14 @@ func TestBuildAddressMention(t *testing.T) {
 			meta:  map[string]string{"bitrix_address_user_id": "940"},
 			botID: 0,
 			want:  "[USER=940][/USER]",
+		},
+		{
+			// Synthetic openline per-participant id is not a real Bitrix user —
+			// emitting [USER=openlines:...] would render as literal garbage.
+			name:  "synthetic_openline_id_suppressed",
+			meta:  map[string]string{"bitrix_address_user_id": "openlines:tamgiac:chat4878:111222"},
+			botID: 940,
+			want:  "",
 		},
 	}
 	for _, tc := range cases {
