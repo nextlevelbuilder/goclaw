@@ -70,6 +70,11 @@ func TestValidateArgs_DangerousPatterns_Rejected(t *testing.T) {
 		{"valid args", []string{"server.js", "--port", "3000"}, false},
 		{"valid path args", []string{"/path/to/script.js"}, false},
 		{"empty args", []string{}, false},
+		// Regression: package names containing dangerous flag substrings must not trip the check.
+		{"package name with -c substring", []string{"@nick.bester/clickup-cli", "mcp", "serve"}, false},
+		{"package name with -e substring", []string{"some-experimental-pkg"}, false},
+		{"package name with -r substring", []string{"some-runner-pkg"}, false},
+		{"flag with equals form", []string{"--eval=process.exit(1)"}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

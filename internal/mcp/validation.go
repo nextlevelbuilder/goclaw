@@ -23,15 +23,20 @@ var allowedCommands = map[string]bool{
 // Shell metacharacters that indicate injection attempt.
 var shellMetaChars = regexp.MustCompile(`[;|&$` + "`" + `(){}[\]<>]`)
 
-// Dangerous arg flags that enable code execution.
-var dangerousArgPatterns = []string{
-	"--eval", "-e", "-c",      // Code execution flags
-	"--require", "-r",         // Module injection
-	"--import",                // ES module injection
-	"exec(", "eval(",          // Inline code
-	"__import__",              // Python import injection
-	"child_process",           // Node.js process spawning
-	"subprocess",              // Python subprocess
+// Dangerous arg flags that must match the entire arg (or appear as --flag=value).
+// These are short/long flags that enable code execution and would produce false
+// positives if checked as substrings (e.g. "-c" matches "clickup-cli").
+var dangerousArgFlags = []string{
+	"-c", "-e", "-r", // Short code execution / module injection flags
+	"--eval", "--require", "--import", // Long flags
+}
+
+// Dangerous code-execution substrings that may appear anywhere inside an arg.
+var dangerousArgSubstrings = []string{
+	"exec(", "eval(", // Inline code
+	"__import__",    // Python import injection
+	"child_process", // Node.js process spawning
+	"subprocess",    // Python subprocess
 }
 
 // Fail-closed env var allowlist — only these are permitted for env: resolution.
@@ -96,7 +101,14 @@ func ValidateCommand(cmd string) error {
 func ValidateArgs(args []string) error {
 	for i, arg := range args {
 		argLower := strings.ToLower(arg)
-		for _, pattern := range dangerousArgPatterns {
+		// Flags: exact match, or "--flag=value" prefix. Avoids false positives
+		// like "clickup-cli" matching "-c".
+		for _, flag := range dangerousArgFlags {
+			if argLower == flag || strings.HasPrefix(argLower, flag+"=") {
+				return fmt.Errorf("arg[%d] is dangerous flag %q", i, flag)
+			}
+		}
+		for _, pattern := range dangerousArgSubstrings {
 			if strings.Contains(argLower, pattern) {
 				return fmt.Errorf("arg[%d] contains dangerous pattern %q", i, pattern)
 			}
