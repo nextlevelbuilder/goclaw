@@ -335,11 +335,18 @@ func (h *MCPOAuthHandler) handleCallback(w http.ResponseWriter, r *http.Request)
 	locale := extractLocale(r)
 
 	if oauthErr != "" {
-		h.writeCallbackHTML(w, locale, false, oauthErrDesc)
+		h.writeCallbackHTML(w, http.StatusOK, locale, false, oauthErrDesc)
+		return
+	}
+	if code != "" && state == "" {
+		// An auth code with no state is a malformed / CSRF-risk callback (state is
+		// the CSRF token), so reject with 400. A bare hit with neither code nor state
+		// (e.g. the user opening the URL directly) falls through to the 200 HTML page.
+		h.writeCallbackHTML(w, http.StatusBadRequest, locale, false, "missing state")
 		return
 	}
 	if code == "" || state == "" {
-		h.writeCallbackHTML(w, locale, false, "missing code or state")
+		h.writeCallbackHTML(w, http.StatusOK, locale, false, "missing code or state")
 		return
 	}
 
@@ -347,7 +354,7 @@ func (h *MCPOAuthHandler) handleCallback(w http.ResponseWriter, r *http.Request)
 	tokens, flow, err := h.flowMgr.ExchangeCode(ctx, state, code)
 	if err != nil {
 		slog.Warn("mcpoauth.exchange_failed", "error", err)
-		h.writeCallbackHTML(w, locale, false, err.Error())
+		h.writeCallbackHTML(w, http.StatusOK, locale, false, err.Error())
 		return
 	}
 
@@ -382,13 +389,13 @@ func (h *MCPOAuthHandler) handleCallback(w http.ResponseWriter, r *http.Request)
 	if err := h.activateToken(ctx, tok, serverName); err != nil {
 		slog.Error("mcpoauth.save_token", "error", err, "server_id", flow.ServerID)
 		h.publishOAuthComplete(flow, "error", "failed to save token")
-		h.writeCallbackHTML(w, locale, false, "failed to save token")
+		h.writeCallbackHTML(w, http.StatusOK, locale, false, "failed to save token")
 		return
 	}
 
 	// Notify the initiating WS client that OAuth completed successfully.
 	h.publishOAuthComplete(flow, "success", "")
-	h.writeCallbackHTML(w, locale, true, "")
+	h.writeCallbackHTML(w, http.StatusOK, locale, true, "")
 }
 
 // activateToken persists a freshly obtained OAuth token and makes it live:
@@ -427,7 +434,7 @@ func (h *MCPOAuthHandler) emitMCPCacheInvalidate() {
 	})
 }
 
-func (h *MCPOAuthHandler) writeCallbackHTML(w http.ResponseWriter, locale string, success bool, errMsg string) {
+func (h *MCPOAuthHandler) writeCallbackHTML(w http.ResponseWriter, statusCode int, locale string, success bool, errMsg string) {
 	status := "success"
 	if !success {
 		status = "error"
@@ -474,7 +481,7 @@ func (h *MCPOAuthHandler) writeCallbackHTML(w http.ResponseWriter, locale string
 </body></html>`, msgJSON, html.EscapeString(bodyMsg))
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(statusCode)
 	_, _ = fmt.Fprint(w, htmlPage)
 }
 
