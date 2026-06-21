@@ -52,6 +52,22 @@ func ollamaModelsRequest(t *testing.T, mux *http.ServeMux, providerID uuid.UUID,
 	return result, w.Code
 }
 
+func providerModelsRequest(t *testing.T, mux *http.ServeMux, providerID uuid.UUID, token string) ProviderModelsResponse {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/v1/providers/"+providerID.String()+"/models", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	var result ProviderModelsResponse
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+	return result
+}
+
 func TestProvidersHandlerListProviderModelsChatGPTOAuthIncludesReasoningMetadata(t *testing.T) {
 	token := setupProvidersAdminToken(t)
 	providerStore := newMockProviderStore()
@@ -162,6 +178,84 @@ func TestProvidersHandlerListProviderModelsBailianIncludesQwen37Plus(t *testing.
 	}
 
 	t.Fatalf("qwen3.7-plus not found in Bailian model list: %#v", result.Models)
+}
+
+func TestProvidersHandlerListProviderModelsMiniMaxIncludesM3AndLegacyModels(t *testing.T) {
+	token := setupProvidersAdminToken(t)
+	providerStore := newMockProviderStore()
+	provider := &store.LLMProviderData{
+		BaseModel:    store.BaseModel{ID: uuid.New()},
+		Name:         "minimax",
+		ProviderType: store.ProviderMiniMax,
+		APIKey:       "token",
+		Enabled:      true,
+	}
+	if err := providerStore.CreateProvider(t.Context(), provider); err != nil {
+		t.Fatalf("CreateProvider() error = %v", err)
+	}
+
+	handler := NewProvidersHandler(providerStore, newMockSecretsStore(), nil, "")
+	mux := http.NewServeMux()
+	handler.RegisterRoutes(mux)
+
+	result := providerModelsRequest(t, mux, provider.ID, token)
+	assertModelIDsInOrder(t, result.Models, []string{
+		"MiniMax-M3",
+		"MiniMax-M2.7",
+		"MiniMax-M2.5",
+		"MiniMax-M2.1",
+		"MiniMax-M2",
+	})
+}
+
+func TestProvidersHandlerListProviderModelsZaiUsesLocalCatalog(t *testing.T) {
+	token := setupProvidersAdminToken(t)
+
+	for _, providerType := range []string{store.ProviderZai, store.ProviderZaiCoding} {
+		t.Run(providerType, func(t *testing.T) {
+			providerStore := newMockProviderStore()
+			provider := &store.LLMProviderData{
+				BaseModel:    store.BaseModel{ID: uuid.New()},
+				Name:         providerType,
+				ProviderType: providerType,
+				APIKey:       "token",
+				Enabled:      true,
+			}
+			if err := providerStore.CreateProvider(t.Context(), provider); err != nil {
+				t.Fatalf("CreateProvider() error = %v", err)
+			}
+
+			handler := NewProvidersHandler(providerStore, newMockSecretsStore(), nil, "")
+			mux := http.NewServeMux()
+			handler.RegisterRoutes(mux)
+
+			result := providerModelsRequest(t, mux, provider.ID, token)
+			assertModelIDsInOrder(t, result.Models, []string{
+				"glm-5.2",
+				"glm-5.1",
+				"glm-5",
+				"glm-4.7",
+				"glm-4.5",
+			})
+		})
+	}
+}
+
+func assertModelIDsInOrder(t *testing.T, models []ModelInfo, want []string) {
+	t.Helper()
+	position := 0
+	for _, model := range models {
+		if position < len(want) && model.ID == want[position] {
+			position++
+		}
+	}
+	if position != len(want) {
+		got := make([]string, 0, len(models))
+		for _, model := range models {
+			got = append(got, model.ID)
+		}
+		t.Fatalf("model IDs = %#v, want sequence %#v", got, want)
+	}
 }
 
 func TestProvidersHandlerListProviderModelsOpenAICompatAnnotatesKnownModels(t *testing.T) {

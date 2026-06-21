@@ -14,15 +14,15 @@ type OpenAIProvider struct {
 	chatPath     string // defaults to "/chat/completions"
 	authPrefix   string // auth header prefix, defaults to "Bearer " if empty
 	defaultModel string
-	providerType string // DB provider_type (e.g. "gemini_native", "openai", "minimax_native")
-	siteURL      string // optional site URL for provider identification (e.g. OpenRouter HTTP-Referer)
-	siteTitle    string // optional site title for provider identification (e.g. OpenRouter X-Title)
+	providerType string            // DB provider_type (e.g. "gemini_native", "openai", "minimax_native")
+	siteURL      string            // optional site URL for provider identification (e.g. OpenRouter HTTP-Referer)
+	siteTitle    string            // optional site title for provider identification (e.g. OpenRouter X-Title)
 	extraHeaders map[string]string // static headers set on every outgoing request (e.g. fixed User-Agent for kimi_coding)
 	client       *http.Client
 	retryConfig  RetryConfig
 	middlewares  RequestMiddleware // composed middleware chain (nil = no-op)
-	registry     ModelRegistry    // model resolution registry (nil = skip)
-	noAuthHeader bool             // when true, doRequest() skips setting Authorization (e.g. Vertex OAuth transport injects its own)
+	registry     ModelRegistry     // model resolution registry (nil = skip)
+	noAuthHeader bool              // when true, doRequest() skips setting Authorization (e.g. Vertex OAuth transport injects its own)
 }
 
 func NewOpenAIProvider(name, apiKey, apiBase, defaultModel string) *OpenAIProvider {
@@ -43,7 +43,7 @@ func NewOpenAIProvider(name, apiKey, apiBase, defaultModel string) *OpenAIProvid
 	}
 }
 
-// WithChatPath returns a copy with a custom chat completions path (e.g. "/text/chatcompletion_v2" for MiniMax native API).
+// WithChatPath returns a copy with a custom chat completions path.
 func (p *OpenAIProvider) WithChatPath(path string) *OpenAIProvider {
 	p.chatPath = path
 	return p

@@ -97,16 +97,18 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 	var models []ModelInfo
 
 	switch p.ProviderType {
-	case "anthropic_native":
+	case store.ProviderAnthropicNative:
 		models, err = fetchAnthropicModels(ctx, p.APIKey, h.resolveAPIBase(p))
-	case "gemini_native":
+	case store.ProviderGeminiNative:
 		models, err = fetchGeminiModels(ctx, p.APIKey)
-	case "bailian":
+	case store.ProviderBailian:
 		models = bailianModels()
-	case "dashscope":
+	case store.ProviderDashScope:
 		models = dashScopeModels()
-	case "minimax_native":
+	case store.ProviderMiniMax:
 		models = minimaxModels()
+	case store.ProviderZai, store.ProviderZaiCoding:
+		models = zaiModels()
 	default:
 		// All other types use OpenAI-compatible /models endpoint
 		apiBase := openAIModelsAPIBase(p.ProviderType, h.resolveAPIBase(p))
