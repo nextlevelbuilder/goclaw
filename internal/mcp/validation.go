@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync/atomic"
 
 	"github.com/nextlevelbuilder/goclaw/internal/security"
 )
@@ -380,6 +381,34 @@ func isRemoteCodeReference(arg string) bool {
 	}
 }
 
+// mcpAllowedHostsStore holds the operator-configured allowlist of MCP server
+// hostnames that are exempt from the private-IP SSRF block during MCP config
+// validation (see SetAllowedHosts).
+var mcpAllowedHostsStore atomic.Pointer[map[string]bool]
+
+// SetAllowedHosts configures the MCP server hostname allowlist consulted by
+// ValidateURL / ValidateServerConfig. Hostnames are matched
+// case-insensitively against the pre-resolution URL host. Call once at gateway
+// startup; a nil/empty slice disables the allowlist (the default, no behavior
+// change). Only owner/admin gateway config should feed this.
+func SetAllowedHosts(hosts []string) {
+	m := make(map[string]bool, len(hosts))
+	for _, h := range hosts {
+		if h = strings.ToLower(strings.TrimSpace(h)); h != "" {
+			m[h] = true
+		}
+	}
+	mcpAllowedHostsStore.Store(&m)
+}
+
+// allowedHosts returns the current MCP hostname allowlist, or nil if unset.
+func allowedHosts() map[string]bool {
+	if p := mcpAllowedHostsStore.Load(); p != nil {
+		return *p
+	}
+	return nil
+}
+
 // ValidateURL checks URL for SSRF vulnerabilities using the existing security package.
 // This provides DNS rebinding protection via IP pinning.
 func ValidateURL(rawURL string) error {
@@ -387,8 +416,9 @@ func ValidateURL(rawURL string) error {
 		return nil
 	}
 
-	// Reuse existing SSRF validation with DNS rebinding protection
-	_, _, err := security.Validate(rawURL)
+	// Reuse existing SSRF validation; an operator may allowlist trusted internal
+	// MCP hosts (private network self-host) via SetAllowedHosts.
+	_, _, err := security.ValidateAllowingHosts(rawURL, allowedHosts())
 	if err != nil {
 		return fmt.Errorf("URL validation failed: %w", err)
 	}

@@ -416,6 +416,7 @@ type GatewayConfig struct {
 	Token                   string              `json:"token,omitempty"`                      // bearer token for WS/HTTP auth
 	OwnerIDs                []string            `json:"owner_ids,omitempty"`                  // sender IDs considered "owner"
 	AllowedOrigins          []string            `json:"allowed_origins,omitempty"`            // WebSocket CORS whitelist (empty = allow all)
+	MCPAllowedHosts         []string            `json:"mcp_allowed_hosts,omitempty"`          // trusted MCP server hostnames exempt from the private-IP SSRF block during config validation (empty = none)
 	MaxMessageChars         int                 `json:"max_message_chars,omitempty"`          // max user message characters (default 32000)
 	RateLimitRPM            int                 `json:"rate_limit_rpm,omitempty"`             // rate limit: requests per minute per user (default 20, 0 = disabled)
 	InjectionAction         string              `json:"injection_action,omitempty"`           // prompt injection action: "log", "warn" (default), "block", "off"

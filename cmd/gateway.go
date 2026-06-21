@@ -387,6 +387,7 @@ func runGateway() {
 		mcpToolLister = mcpMgr
 	}
 	httpapi.InitGatewayToken(cfg.Gateway.Token)
+	mcpbridge.SetAllowedHosts(cfg.Gateway.MCPAllowedHosts) // operator allowlist: trusted MCP hosts exempt from private-IP SSRF block
 	httpapi.InitGatewayNoAuthFallbackAllowed(config.GatewayNoAuthFallbackAllowed(cfg.Gateway))
 	exportTokenStore := httpapi.InitExportTokenStore()
 	defer exportTokenStore.Stop()
