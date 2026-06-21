@@ -329,6 +329,36 @@ Use `direct_selection_count` plus the `selected_provider` sequence to verify rea
 | `PUT` | `/v1/skills/{id}/tenant-config` | Set tenant-level skill config |
 | `DELETE` | `/v1/skills/{id}/tenant-config` | Delete tenant-level skill config |
 
+### Skill Self-Evolution
+
+Skill self-evolution is tenant-scoped and off by default per skill. Usage
+metrics are written only by trusted runtime paths such as `use_skill` tool
+execution and slash-command activation. There is no public usage-write endpoint.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/skills/{id}/evolution` | Read self-evolution settings for a skill |
+| `PATCH` | `/v1/skills/{id}/evolution` | Update enabled state or mode |
+| `GET` | `/v1/skills/{id}/metrics` | Read aggregate usage metrics and status counts |
+| `GET` | `/v1/skills/{id}/activity` | Read admin-only skill evolution activity |
+| `GET` | `/v1/skills/{id}/evolution/suggestions` | List skill-scoped improvement suggestions |
+| `POST` | `/v1/skills/{id}/evolution/suggestions` | Create a suggestion with evidence and draft patch |
+| `POST` | `/v1/skills/{id}/evolution/suggestions/{suggestionID}/approve` | Approve a suggestion |
+| `POST` | `/v1/skills/{id}/evolution/suggestions/{suggestionID}/reject` | Reject a suggestion |
+| `POST` | `/v1/skills/{id}/evolution/suggestions/{suggestionID}/apply` | Apply an approved suggestion to a new skill version |
+
+Supported modes:
+
+| Mode | Behavior |
+|------|----------|
+| `suggest_only` | Collect metrics and manage suggestions; no automatic patching |
+| `auto_analyze` | Reserved for analysis automation; patch application still requires explicit approval |
+
+Viewer/operator callers can read aggregate metrics. Raw activity details,
+actor IDs, failure evidence, draft patches, and suggestion apply actions remain
+admin-controlled. System skill mutation is blocked; custom skill suggestions
+write a new versioned directory and `skill_versions` record when applied.
+
 ### Skill Grants
 
 Skill upload size is enforced per ZIP file. The effective limit resolves in this order:
@@ -375,6 +405,22 @@ The default prefix is `/`; supported prompt forms are `/<slug> prompt`,
 | `GET` | `/v1/skills/export/preview` | Preview skills export bundle |
 | `GET` | `/v1/skills/export` | Export skills bundle |
 | `POST` | `/v1/skills/import` | Import skills bundle |
+
+`GET /v1/skills/export` supports direct download and the existing SSE token flow:
+
+| Query | Description |
+|-------|-------------|
+| `stream=true` | Start the existing SSE export flow and return a temporary `download_url` |
+| `format=tar.gz\|tgz\|zip` | Archive format; defaults to `tar.gz`. `tgz` is an alias for gzip tar output |
+| `id=<uuid>` | Select one skill ID. Can be repeated for multiple selected skills |
+| `ids=<uuid>,<uuid>` | Select multiple skill IDs as a comma-separated list |
+| `include_system=true` | Include system skills in a full export when no selected IDs are provided |
+
+Without `id` or `ids`, export remains backward-compatible and includes tenant
+custom skills by default. Explicitly selected IDs may include system/core skills
+without `include_system=true`; tenant-scoped custom skills are still filtered by
+the request tenant. ZIP support is export/download only; the import endpoint
+continues to accept the existing skills bundle format.
 
 ---
 
@@ -1095,6 +1141,28 @@ Response includes `allowed`, `reason`, `instance_id`, `agent_id`, `group_id`, `u
 
 Credentials are masked in HTTP responses.
 
+### Passive Memory Extraction
+
+Tenant admins can configure and operate passive memory extraction per channel
+instance. Read endpoints are viewer-accessible; settings and item transitions
+require tenant admin.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/channels/instances/{id}/memory-extraction` | Get config, latest run, pending count, and recent items |
+| `PUT` | `/v1/channels/instances/{id}/memory-extraction/settings` | Replace normalized `passive_memory` config in the channel instance config |
+| `POST` | `/v1/channels/instances/{id}/memory-extraction/run` | Trigger a manual extraction run |
+| `GET` | `/v1/channels/instances/{id}/memory-extraction/items` | List review queue items; optional `status` filter |
+| `POST` | `/v1/channels/instances/{id}/memory-extraction/items/{itemID}/approve` | Write candidate to episodic memory and publish KG event |
+| `POST` | `/v1/channels/instances/{id}/memory-extraction/items/{itemID}/reject` | Reject candidate |
+| `DELETE` | `/v1/channels/instances/{id}/memory-extraction/items/{itemID}` | Delete candidate and linked episodic summary when present |
+
+Config fields: `enabled`, `review_mode`, `interval_minutes`, `message_cap`,
+`retention_hours`, `allowed_types`, `exclude_users`, `exclude_patterns`,
+`min_messages`, `group_only`. Defaults are disabled, review mode on, group-only,
+360 minute interval, 100 message cap, 168 hour retention, and durable types:
+people, projects, decisions, todos, preferences, events.
+
 ---
 
 ## 18. Pending Messages
@@ -1135,7 +1203,44 @@ CLI authentication credentials for secure command execution. Requires **admin ro
 | `DELETE` | `/v1/cli-credentials/{id}` | Delete credential |
 | `POST` | `/v1/cli-credentials/{id}/test` | Test credential connection (dry-run) |
 
+### Agent Credentials
+
+Agent credentials store PAT/SSH/env material for one CLI credential and one
+agent. They are the default git setup path; agent access controls who can cause
+the credential to be used. Responses return metadata only and never include raw
+typed token/key blobs.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/cli-credentials/{id}/agent-credentials` | List agent credentials for CLI cred |
+| `GET` | `/v1/cli-credentials/{id}/agent-credentials/{agentId}` | Get agent credential metadata |
+| `PUT` | `/v1/cli-credentials/{id}/agent-credentials/{agentId}` | Set agent credential |
+| `DELETE` | `/v1/cli-credentials/{id}/agent-credentials/{agentId}` | Delete agent credential |
+
+Typed git request body:
+
+```json
+{
+  "credential_type": "pat",
+  "host_scope": "github.com",
+  "blob": { "token": "ghp_..." }
+}
+```
+
+Env request body:
+
+```json
+{
+  "env": {
+    "GH_TOKEN": { "kind": "sensitive", "value": "..." }
+  }
+}
+```
+
 ### Per-User Credentials
+
+Advanced personal overrides. These remain for backward compatibility and have
+higher runtime precedence than channel/context and agent credentials.
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -1281,8 +1386,28 @@ LLM call tracing and cost analysis.
 | `GET` | `/v1/traces/follow` | Poll trace changes for one session or agent |
 | `GET` | `/v1/traces/{traceID}` | Get trace with spans |
 | `GET` | `/v1/traces/{traceID}/export` | Export trace tree (gzipped JSON) |
+| `GET` | `/v1/runs/{runID}/timeline` | Get persisted run archive timeline items |
 
-**Filters:** `agent_id`, `user_id`, `session_key`, `status`, `channel`
+`GET /v1/traces` query params:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `q` | string | Contains search across trace ID, trace name, input/output previews, session key, raw channel, joined agent/channel labels, and span tool/input/output previews |
+| `agent_id` | UUID | Exact agent UUID filter |
+| `user_id` | string | Exact user filter; non-admin callers are always forced to their own user scope |
+| `session_key` | string | Exact session key filter |
+| `status` | string | Exact trace status filter |
+| `channel` | string | Exact raw channel filter |
+| `agent` | string | Contains search over joined agent display name and key |
+| `channel_query` | string | Contains search over tenant-scoped channel instance name, display name, and type |
+| `from` / `to` | RFC 3339 timestamp | Start-time range; `from` is inclusive, `to` is exclusive |
+| `min_input_tokens` / `max_input_tokens` | int | Input token range |
+| `min_output_tokens` / `max_output_tokens` | int | Output token range |
+| `min_tool_calls` / `max_tool_calls` | int | Tool-call count range |
+| `tool_name` | string | Contains search over span tool names |
+| `has_tool_calls` | boolean | Convenience filter for traces with or without tool calls |
+| `limit` | int | Page size, default 50, max 200 |
+| `offset` | int | Pagination offset |
 
 `GET /v1/traces/follow` requires `session_key` or `agent_id`. Query params: `session_key`, `agent_id`, `status`, `channel`, `since` (RFC 3339), `limit` (default 50, max 200), `include_spans` (default false). Non-admin callers only see their own traces. When `since` is provided, the server returns traces matching existing filters and `(created_at > since OR end_time > since OR status = "running")`.
 
@@ -1295,6 +1420,62 @@ Follow response:
   "server_time": "2026-05-20T11:23:00Z",
   "next_since": "2026-05-20T11:23:00Z",
   "limit": 50
+}
+```
+
+Main binary operator commands wrap the same endpoints:
+
+```bash
+goclaw traces list --query "provider fail" --status error
+goclaw traces get <trace-id> -o json
+goclaw traces export <trace-id> --file trace.json.gz
+goclaw traces follow --session <session-key>
+goclaw traces timeline <trace-id>
+```
+
+Remote gateways use the shared client overrides:
+
+```bash
+goclaw --server https://goclaw.example.com --token "$GOCLAW_GATEWAY_TOKEN" traces list -o json
+```
+
+The same `--server` / `--token` resolver is shared with WebSocket/RPC-backed
+admin commands. `GOCLAW_SERVER` or `GOCLAW_GATEWAY_URL` can provide the base URL
+when the flag is omitted.
+
+### Run Timeline
+
+`GET /v1/runs/{runID}/timeline` returns display-safe archive entries for one
+agent run. Optional query params: `session_key`, `limit` (default 200, max 500),
+and `offset`. Non-admin callers only receive entries owned by their effective
+`X-GoClaw-User-Id`.
+
+Timeline items are ordered by run sequence for `run_id` reads and include only
+safe previews for tool arguments/results. Raw thinking is not persisted.
+
+Example:
+
+```json
+{
+  "run_id": "run-123",
+  "session_key": "agent:demo:direct:user-1",
+  "items": [{
+    "id": "019e...",
+    "run_id": "run-123",
+    "session_key": "agent:demo:direct:user-1",
+    "seq": 2,
+    "item_type": "tool.call",
+    "status": "running",
+    "title": "web_fetch",
+    "preview": "{\"url\":\"https://example.com\"}",
+    "tool_name": "web_fetch",
+    "tool_call_id": "call_123",
+    "trace_id": "019e...",
+    "span_id": "019e...",
+    "created_at": "2026-05-29T10:00:00Z"
+  }],
+  "limit": 200,
+  "offset": 0
 }
 ```
 

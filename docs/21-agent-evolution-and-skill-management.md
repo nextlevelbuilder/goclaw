@@ -186,12 +186,13 @@ SHOULD NOT create skill when:
 - Simple tasks (< 5 tool calls)
 - User explicitly said "skip" or declined
 
-Creating: skill_manage(action="create", content="---\nname: ...\n...")
-Improving: skill_manage(action="patch", slug="...", find="...", replace="...")
+Creating: skill_manage(action="create", content="---\nname: ...\n...", files={"references/guide.md":"..."})
+Improving: skill_manage(action="patch", slug="...", find="...", replace="...", files={"references/guide.md":"..."})
 Removing: skill_manage(action="delete", slug="...")
 
 Constraints:
 - You can only manage skills you created (not system or other users' skills)
+- Use files for small text companion files. Use publish_skill or ZIP upload for full directories and binary assets.
 - Quality over quantity — one excellent skill beats five mediocre ones
 - Ask user before creating if unsure
 ```
@@ -262,7 +263,7 @@ Two paths for creating skills programmatically:
 
 | Path | Interface | Use Case |
 |------|-----------|----------|
-| `skill_manage` | Content string (SKILL.md body) | Agent creates during conversation (learning loop) |
+| `skill_manage` | Content string plus optional text companion files | Agent creates during conversation (learning loop) |
 | `publish_skill` | Directory path | Agent creates via filesystem (see [doc 16](./16-skill-publishing.md)) |
 
 Admin management via HTTP API + WebSocket RPC. Grants system controls per-agent and per-user access.
@@ -278,6 +279,8 @@ Admin management via HTTP API + WebSocket RPC. Grants system controls per-agent 
 | `content` | string | create | Full SKILL.md including YAML frontmatter |
 | `find` | string | patch | Exact text to find in current SKILL.md |
 | `replace` | string | patch | Replacement text |
+| `files` | object | no | Optional text companion files keyed by relative path, e.g. `references/guide.md` |
+| `visibility` | string | patch | Optional metadata-only visibility change when no content/files change |
 
 **Operations flow:**
 
@@ -285,24 +288,24 @@ Admin management via HTTP API + WebSocket RPC. Grants system controls per-agent 
 flowchart LR
     subgraph CREATE["action = create"]
         direction TB
-        C1["Content string"] --> C2["Size ≤ 100KB?"]
-        C2 --> C3["Security scan"]
+        C1["Content +<br/>optional files"] --> C2["Size and path<br/>validation"]
+        C2 --> C3["Security scan<br/>SKILL.md"]
         C3 --> C4["Parse frontmatter"]
         C4 --> C5["Slug validation"]
         C5 --> C6["System skill<br/>conflict check"]
-        C6 --> C7["Write SKILL.md<br/>to versioned dir"]
+        C6 --> C7["Write SKILL.md +<br/>companions"]
         C7 --> C8["DB insert<br/>(advisory lock)"]
         C8 --> C9["Auto-grant +<br/>dep scan"]
     end
 
     subgraph PATCH["action = patch"]
         direction TB
-        P1["slug + find/replace"] --> P2["Exists?<br/>System skill?"]
+        P1["slug + find/replace<br/>and/or files"] --> P2["Exists?<br/>System skill?"]
         P2 --> P3["Ownership check"]
-        P3 --> P4["Read current +<br/>apply patch"]
-        P4 --> P5["Security scan<br/>patched content"]
+        P3 --> P4["Read current +<br/>overlay files"]
+        P4 --> P5["Security scan +<br/>path validation"]
         P5 --> P6["New version<br/>(advisory lock)"]
-        P6 --> P7["Copy companions +<br/>DB update"]
+        P6 --> P7["Write companions +<br/>DB update"]
     end
 
     subgraph DELETE["action = delete"]
@@ -324,8 +327,8 @@ Directory-based alternative. See [16 - Skill Publishing System](./16-skill-publi
 
 | Dimension | `skill_manage` | `publish_skill` |
 |-----------|---------------|-----------------|
-| Input | Content string | Directory path |
-| Files | SKILL.md only (patch copies companions) | Entire directory (scripts, assets, etc.) |
+| Input | SKILL.md content plus optional files map | Directory path |
+| Files | SKILL.md plus direct text companion files; patch copies existing companions forward | Entire directory (scripts, assets, etc.) |
 | Dependency scan | Yes (warn only) | Yes (warn only) |
 | Auto-grant | Yes | Yes |
 | Skill creation guidance | Yes (skill_evolve prompt) | No (uses skill-creator core skill) |
@@ -342,16 +345,79 @@ All endpoints require authentication (`authMiddleware`). Mutation endpoints requ
 | `PUT` | `/v1/skills/{id}` | Update metadata (owner/admin) |
 | `DELETE` | `/v1/skills/{id}` | Delete/archive skill (owner/admin) |
 | `POST` | `/v1/skills/{id}/toggle` | Enable/disable skill (owner/admin) |
+| `GET` | `/v1/skills/{id}/dependencies` | Structured dependency status by source |
+| `POST` | `/v1/skills/{id}/dependencies/scan` | Re-scan skill dependencies |
+| `POST` | `/v1/skills/{id}/dependencies/check` | Check missing skill dependencies |
+| `POST` | `/v1/skills/{id}/dependencies/install` | Install missing deps for one skill (master tenant) |
+| `GET` | `/v1/skills/{id}/access` | Read visibility and grants |
+| `PATCH` | `/v1/skills/{id}/access` | Set visibility/access mode |
+| `GET` | `/v1/skills/{id}/access/effective` | Explain access for one skill/agent/user |
+| `GET` | `/v1/skills/access/effective` | Explain effective access across skills |
 | `POST` | `/v1/skills/{id}/grants/agent` | Grant skill to agent (owner/admin) |
-| `DELETE` | `/v1/skills/{id}/grants/agent` | Revoke agent grant (owner/admin) |
+| `DELETE` | `/v1/skills/{id}/grants/agent/{agentID}` | Revoke agent grant (owner/admin) |
 | `POST` | `/v1/skills/{id}/grants/user` | Grant skill to user (owner/admin) |
-| `DELETE` | `/v1/skills/{id}/grants/user` | Revoke user grant (owner/admin) |
+| `DELETE` | `/v1/skills/{id}/grants/user/{userID}` | Revoke user grant (owner/admin) |
 | `POST` | `/v1/skills/upload` | Upload custom skill ZIP |
 | `POST` | `/v1/skills/rescan-deps` | Re-scan all enabled skills |
 | `POST` | `/v1/skills/install-deps` | Install all missing deps |
 | `GET` | `/v1/skills/runtimes` | Check python3/node availability |
 
-### 3.5 WebSocket RPC
+### 3.5 Skill Self-Evolution
+
+Skill self-evolution tracks how each existing skill performs over time. It is
+separate from agent-level `skill_evolve`, which teaches agents when to create or
+patch reusable skills.
+
+**Runtime recording**
+
+- `use_skill` tool calls record tenant-scoped usage with status `succeeded` or
+  `failed`, duration, session key, run/trace ID, agent ID, and user scope.
+- Slash-command activation records a `started` event when `/<slug>` or
+  `/use <skill>` resolves to a skill.
+- Usage writes are internal only. v1 intentionally has no public
+  `POST /v1/skills/{id}/usage` endpoint, so clients cannot forge success rates.
+
+**Persistent tables**
+
+| Table | Purpose |
+|-------|---------|
+| `skill_evolution_settings` | Per-tenant, per-skill enabled flag and mode |
+| `skill_usage_metrics` | Runtime usage events and status counts |
+| `skill_improvement_suggestions` | Skill-scoped suggestions with evidence and draft patches |
+| `skill_versions` | Immutable applied-version records linked to changed files and suggestions |
+
+**HTTP and CLI controls**
+
+- HTTP: `GET/PATCH /v1/skills/{id}/evolution`,
+  `GET /v1/skills/{id}/metrics`,
+  `GET /v1/skills/{id}/activity`, and suggestion approve/reject/apply endpoints.
+- CLI: `goclaw skills evolve`, `goclaw skills metrics`,
+  `goclaw skills suggestions`, and `goclaw skills activity`.
+- Web UI: Skill detail has an `evolution` tab for settings, metrics,
+  suggestions, and admin-visible activity.
+
+**Guardrails**
+
+- Default mode is `suggest_only`; no automatic patching happens in v1.
+- Applying a suggestion to a custom skill copies the current skill directory to
+  the next version, validates the target path, runs the SKILL.md guard scanner
+  when needed, updates the active skill, records `skill_versions`, and writes an
+  activity log entry.
+- System/bundled skill mutation is refused by the apply path.
+- Viewer surfaces are sanitized. Failure evidence, draft patches, actor IDs,
+  and activity details require admin visibility.
+
+**Relationship to self-improving skills**
+
+This v1 is the control-plane foundation for self-improving skills: runtime usage
+events, evidence-backed suggestions, reference-file patches, version records,
+and approval/audit surfaces. It does not yet run a consolidation extractor that
+turns repeated corrections into learning notes or auto-applies user-scoped
+reference overlays. That higher-level learning loop belongs above this
+foundation and must keep scope separation, private-content filtering, evidence
+thresholds, and owner/admin approval policies explicit.
+
+### 3.6 WebSocket RPC
 
 | Method | Description |
 |--------|-------------|
@@ -359,7 +425,7 @@ All endpoints require authentication (`authMiddleware`). Mutation endpoints requ
 | `skills.get` | Get skill content by name |
 | `skills.update` | Update metadata (ownership-protected) |
 
-### 3.6 Grants & Visibility
+### 3.7 Grants & Visibility
 
 ```mermaid
 stateDiagram-v2
@@ -448,9 +514,9 @@ System skills (`is_system=true`) cannot be modified through any path.
 | Protection | Implementation |
 |------------|----------------|
 | Symlink detection | `filepath.WalkDir` + `d.Type()&os.ModeSymlink` check |
-| Path traversal | `strings.Contains(rel, "..")` rejection |
+| Path traversal | Direct `skill_manage(files=...)` payload rejects absolute paths, Windows drive paths, null bytes, `..`, `SKILL.md`, dotfiles/dotdirs, and system artifacts |
 | Content size limit | 100KB max for SKILL.md content |
-| Companion size limit | Configurable per ZIP upload; default 20MB, clamped to 1-500MB |
+| Companion size limit | Direct `skill_manage(files=...)` text files are capped at 2MB each. Existing companions copy forward with the 20MB total copy limit. ZIP upload remains configurable, default 20MB and clamped to 1-500MB |
 | Soft-delete | Files moved to `.trash/`, never hard-deleted |
 
 ---

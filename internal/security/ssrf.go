@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -67,6 +68,37 @@ func init() {
 	}
 }
 
+// exemptableCIDRs are the private/loopback ranges that an operator-allowlisted
+// MCP host may resolve into (see ValidateAllowingHosts). Cloud-metadata and
+// link-local (169.254.0.0/16, fe80::/10), multicast, and unspecified ranges are
+// deliberately NOT included: an allowlist entry must never open a path to the
+// cloud metadata endpoint.
+var exemptableCIDRs []*net.IPNet
+
+func init() {
+	for _, cidr := range []string{
+		"127.0.0.0/8", "::1/128", // loopback
+		"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7", // RFC 1918 + ULA
+	} {
+		_, ipNet, err := net.ParseCIDR(cidr)
+		if err != nil {
+			panic(fmt.Sprintf("security: bad exemptable CIDR %q: %v", cidr, err))
+		}
+		exemptableCIDRs = append(exemptableCIDRs, ipNet)
+	}
+}
+
+// isExemptable reports whether ip is in a private/loopback range that an
+// operator-allowlisted MCP host is permitted to resolve into.
+func isExemptable(ip net.IP) bool {
+	for _, cidr := range exemptableCIDRs {
+		if cidr.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
 // isBlocked returns true if ip falls within any blocked CIDR.
 func isBlocked(ip net.IP) bool {
 	for _, cidr := range blockedCIDRs {
@@ -107,11 +139,23 @@ func redactURL(rawURL string) string {
 // In test code, call SetAllowLoopbackForTest(true) before invoking this
 // function to permit httptest.NewServer addresses (127.0.0.1).
 func Validate(rawURL string) (*url.URL, net.IP, error) {
-	return validate(rawURL, allowLoopbackForTest.Load())
+	return validate(rawURL, allowLoopbackForTest.Load(), nil)
 }
 
-// validate is the internal implementation; allowLoopback is set only in tests.
-func validate(rawURL string, allowLoopback bool) (*url.URL, net.IP, error) {
+// ValidateAllowingHosts behaves like Validate but exempts an operator-configured
+// set of trusted hostnames from the private/loopback IP block, so self-hosted MCP
+// servers on a private network can be registered. Matching is case-insensitive on
+// the pre-resolution hostname; cloud-metadata/link-local, multicast and
+// unspecified ranges are still blocked even for allowlisted hosts. allowedHosts
+// may be nil (identical to Validate). Intended ONLY for owner/admin MCP server
+// config validation, never for agent-influenced fetch paths.
+func ValidateAllowingHosts(rawURL string, allowedHosts map[string]bool) (*url.URL, net.IP, error) {
+	return validate(rawURL, allowLoopbackForTest.Load(), allowedHosts)
+}
+
+// validate is the internal implementation. allowLoopback is set only in tests;
+// allowedHosts is the operator MCP allowlist (nil for all other callers).
+func validate(rawURL string, allowLoopback bool, allowedHosts map[string]bool) (*url.URL, net.IP, error) {
 	redacted := redactURL(rawURL)
 
 	u, err := url.Parse(rawURL)
@@ -131,9 +175,11 @@ func validate(rawURL string, allowLoopback bool) (*url.URL, net.IP, error) {
 		return nil, nil, errors.New("ssrf: empty host")
 	}
 
+	hostAllowlisted := len(allowedHosts) > 0 && allowedHosts[strings.ToLower(host)]
+
 	// If the host is already a literal IP, validate it directly.
 	if ip := net.ParseIP(host); ip != nil {
-		if !allowLoopback && isBlocked(ip) {
+		if !allowLoopback && isBlocked(ip) && !(hostAllowlisted && isExemptable(ip)) {
 			slog.Warn("security.hook.ssrf_block", "url", redacted, "reason", "blocked_ip", "ip", ip.String())
 			return nil, nil, fmt.Errorf("ssrf: IP %s is in a blocked range", ip)
 		}
@@ -156,7 +202,7 @@ func validate(rawURL string, allowLoopback bool) (*url.URL, net.IP, error) {
 		return nil, nil, fmt.Errorf("ssrf: resolved address %q is not a valid IP", addrs[0])
 	}
 
-	if !allowLoopback && isBlocked(ip) {
+	if !allowLoopback && isBlocked(ip) && !(hostAllowlisted && isExemptable(ip)) {
 		slog.Warn("security.hook.ssrf_block", "url", redacted, "reason", "blocked_resolved_ip", "host", host, "ip", ip.String())
 		return nil, nil, fmt.Errorf("ssrf: %q resolved to blocked IP %s", host, ip)
 	}

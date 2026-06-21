@@ -38,6 +38,19 @@ func TestFullModeAllSections(t *testing.T) {
 	}
 }
 
+func TestFullModeToolCallStyleGuidesNaturalProgress(t *testing.T) {
+	prompt := BuildSystemPrompt(fullTestConfig())
+	for _, want := range []string{
+		"short progress sentence before tool calls",
+		"write it naturally in the user's language",
+		"not the tool",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("tool call style missing progress guidance %q", want)
+		}
+	}
+}
+
 // --- Minimal mode tests ---
 
 func TestMinimalModeExclusions(t *testing.T) {

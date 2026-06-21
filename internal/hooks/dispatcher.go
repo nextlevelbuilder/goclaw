@@ -438,6 +438,7 @@ func (d *stdDispatcher) writeExec(ctx context.Context, cfg HookConfig, ev Event,
 	exec := HookExecution{
 		ID:         uuid.New(),
 		HookID:     &hookID,
+		TenantID:   &ev.TenantID,
 		SessionID:  ev.SessionID,
 		Event:      ev.HookEvent,
 		InputHash:  inputHash,

@@ -135,7 +135,7 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 
 	// Usage analytics API
 	if d.pgStores.Snapshots != nil {
-		d.server.SetUsageHandler(httpapi.NewUsageHandler(d.pgStores.Snapshots, d.pgStores.DB))
+		d.server.SetUsageHandler(httpapi.NewUsageHandler(d.pgStores.Snapshots, d.pgStores.UsageEvents, d.pgStores.DB))
 	}
 	if d.pgStores.UsageCaps != nil {
 		d.server.SetUsageCapsHandler(httpapi.NewUsageCapsHandler(d.pgStores.UsageCaps, d.pgStores.Tenants))

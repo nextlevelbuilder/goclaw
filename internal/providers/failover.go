@@ -46,7 +46,7 @@ func (e *FailoverSummaryError) Error() string {
 // isProfileRotatable returns true for transient errors where rotating API key/profile may help.
 func isProfileRotatable(reason FailoverReason) bool {
 	switch reason {
-	case FailoverRateLimit, FailoverOverloaded, FailoverTimeout, FailoverAuth:
+	case FailoverRateLimit, FailoverOverloaded, FailoverServerError, FailoverTimeout, FailoverAuth:
 		return true
 	}
 	return false
@@ -55,7 +55,7 @@ func isProfileRotatable(reason FailoverReason) bool {
 // isModelFallbackRequired returns true for permanent errors requiring a different model.
 func isModelFallbackRequired(reason FailoverReason) bool {
 	switch reason {
-	case FailoverAuthPermanent, FailoverBilling, FailoverFormat, FailoverModelNotFound:
+	case FailoverAuthPermanent, FailoverBilling, FailoverFormat, FailoverModelNotFound, FailoverContentPolicy:
 		return true
 	}
 	return false

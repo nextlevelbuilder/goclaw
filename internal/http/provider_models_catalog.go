@@ -1,12 +1,17 @@
 package http
 
-import "github.com/nextlevelbuilder/goclaw/internal/providers"
+import (
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
+)
 
 // bailianModels returns a hardcoded list of models available on the
 // Bailian Coding platform (coding-intl.dashscope.aliyuncs.com).
 // The platform does not expose a /v1/models endpoint.
 func bailianModels() []ModelInfo {
 	return []ModelInfo{
+		// qwen3.7-plus: Text Generation + Deep Thinking + Visual Understanding.
+		{ID: "qwen3.7-plus", Name: "Qwen 3.7 Plus"},
 		{ID: "qwen3.6-plus", Name: "Qwen 3.6 Plus"},
 		{ID: "qwen3.5-plus", Name: "Qwen 3.5 Plus"},
 		{ID: "kimi-k2.5", Name: "Kimi K2.5"},
@@ -24,10 +29,16 @@ func bailianModels() []ModelInfo {
 func minimaxModels() []ModelInfo {
 	return []ModelInfo{
 		// Chat / text
+		{ID: store.MiniMaxDefaultModel, Name: "MiniMax M3"},
 		{ID: "MiniMax-Text-01", Name: "MiniMax Text 01"},
 		{ID: "MiniMax-M1", Name: "MiniMax M1"},
 		{ID: "MiniMax-M2.7", Name: "MiniMax M2.7"},
+		{ID: "MiniMax-M2.7-highspeed", Name: "MiniMax M2.7 Highspeed"},
 		{ID: "MiniMax-M2.5", Name: "MiniMax M2.5"},
+		{ID: "MiniMax-M2.5-highspeed", Name: "MiniMax M2.5 Highspeed"},
+		{ID: "MiniMax-M2.1", Name: "MiniMax M2.1"},
+		{ID: "MiniMax-M2.1-highspeed", Name: "MiniMax M2.1 Highspeed"},
+		{ID: "MiniMax-M2", Name: "MiniMax M2"},
 		// Image generation
 		{ID: "image-01", Name: "Image 01"},
 		// Video generation
@@ -40,6 +51,28 @@ func minimaxModels() []ModelInfo {
 		// TTS
 		{ID: "speech-02-hd", Name: "Speech 02 HD"},
 		{ID: "speech-02-turbo", Name: "Speech 02 Turbo"},
+	}
+}
+
+// zaiModels returns a hardcoded list of Z.AI GLM models.
+// Z.AI supports OpenAI-compatible chat completions, but /models availability is
+// not required for GoClaw's model picker.
+func zaiModels() []ModelInfo {
+	return []ModelInfo{
+		{ID: store.ZaiDefaultModel, Name: "GLM 5.2"},
+		{ID: "glm-5.1", Name: "GLM 5.1"},
+		{ID: "glm-5-turbo", Name: "GLM 5 Turbo"},
+		{ID: "glm-5", Name: "GLM 5"},
+		{ID: "glm-4.7", Name: "GLM 4.7"},
+		{ID: "glm-4.7-flash", Name: "GLM 4.7 Flash"},
+		{ID: "glm-4.7-flashx", Name: "GLM 4.7 FlashX"},
+		{ID: "glm-4.6", Name: "GLM 4.6"},
+		{ID: "glm-4.5", Name: "GLM 4.5"},
+		{ID: "glm-4.5-air", Name: "GLM 4.5 Air"},
+		{ID: "glm-4.5-x", Name: "GLM 4.5 X"},
+		{ID: "glm-4.5-airx", Name: "GLM 4.5 AirX"},
+		{ID: "glm-4.5-flash", Name: "GLM 4.5 Flash"},
+		{ID: "glm-4-32b-0414-128k", Name: "GLM 4 32B 0414 128K"},
 	}
 }
 

@@ -36,10 +36,17 @@ type SkillsHandler struct {
 	msgBus         *bus.MessageBus
 	tenantCfgStore store.SkillTenantConfigStore
 	tenantStore    store.TenantStore
+	evolutionStore store.SkillEvolutionStore
+	activityStore  store.ActivityStore
 	db             *sql.DB  // for export/import direct queries
 	uploadLocks    sync.Map // per-slug mutex; bounded by validated slug set, entries are tiny (*sync.Mutex)
 	uploadLimitCfg config.SkillsConfig
 	systemConfigs  store.SystemConfigStore
+}
+
+func (h *SkillsHandler) SetEvolutionStore(evolution store.SkillEvolutionStore, activity store.ActivityStore) {
+	h.evolutionStore = evolution
+	h.activityStore = activity
 }
 
 // NewSkillsHandler creates a handler for skill management endpoints.
@@ -88,16 +95,39 @@ func (h *SkillsHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/skills/{id}/versions", h.authMiddleware(h.handleListVersions))
 	mux.HandleFunc("GET /v1/skills/{id}/files/{path...}", h.authMiddleware(h.handleReadFile))
 	mux.HandleFunc("GET /v1/skills/{id}/files", h.authMiddleware(h.handleListFiles))
+	mux.HandleFunc("GET /v1/skills/{id}/evolution", h.authMiddleware(h.handleGetEvolution))
+	mux.HandleFunc("GET /v1/skills/{id}/metrics", h.authMiddleware(h.handleGetSkillMetrics))
+	mux.HandleFunc("GET /v1/skills/{id}/activity", h.adminMiddleware(h.handleGetSkillActivity))
+	mux.HandleFunc("GET /v1/skills/{id}/evolution/suggestions", h.authMiddleware(h.handleListSkillSuggestions))
 	// Skill writes (admin+)
 	mux.HandleFunc("POST /v1/skills/upload", h.adminMiddleware(h.handleUpload))
 	mux.HandleFunc("PUT /v1/skills/{id}", h.adminMiddleware(h.handleUpdate))
 	mux.HandleFunc("DELETE /v1/skills/{id}", h.adminMiddleware(h.handleDelete))
+	mux.HandleFunc("PATCH /v1/skills/{id}/evolution", h.tenantAdminMiddleware(h.handlePatchEvolution))
+	mux.HandleFunc("POST /v1/skills/{id}/evolution/suggestions", h.tenantAdminMiddleware(h.handleCreateSkillSuggestion))
+	mux.HandleFunc("POST /v1/skills/{id}/evolution/suggestions/{suggestionID}/approve", h.tenantAdminMiddleware(h.handleApproveSkillSuggestion))
+	mux.HandleFunc("POST /v1/skills/{id}/evolution/suggestions/{suggestionID}/reject", h.tenantAdminMiddleware(h.handleRejectSkillSuggestion))
+	mux.HandleFunc("POST /v1/skills/{id}/evolution/suggestions/{suggestionID}/apply", h.tenantAdminMiddleware(h.handleApplySkillSuggestion))
+	mux.HandleFunc("GET /v1/skills/{id}/dependencies", h.adminMiddleware(h.handleSkillDependenciesStatus))
+	mux.HandleFunc("POST /v1/skills/{id}/dependencies/scan", h.adminMiddleware(h.handleSkillDependenciesStatus))
+	mux.HandleFunc("POST /v1/skills/{id}/dependencies/check", h.adminMiddleware(h.handleSkillDependenciesStatus))
+	mux.HandleFunc("POST /v1/skills/{id}/dependencies/install", h.adminMiddleware(h.handleSkillDependenciesInstall))
+	mux.HandleFunc("GET /v1/skills/{id}/access", h.adminMiddleware(h.handleGetSkillAccess))
+	mux.HandleFunc("PATCH /v1/skills/{id}/access", h.adminMiddleware(h.handlePatchSkillAccess))
+	mux.HandleFunc("GET /v1/skills/{id}/access/effective", h.adminMiddleware(h.handleGetSkillEffectiveAccess))
+	mux.HandleFunc("GET /v1/skills/access/effective", h.adminMiddleware(h.handleListEffectiveAccess))
 	// Skill grants (admin+)
 	mux.HandleFunc("GET /v1/skills/{id}/grants/agent", h.adminMiddleware(h.handleListAgentGrants))
 	mux.HandleFunc("POST /v1/skills/{id}/grants/agent", h.adminMiddleware(h.handleGrantAgent))
 	mux.HandleFunc("DELETE /v1/skills/{id}/grants/agent/{agentID}", h.adminMiddleware(h.handleRevokeAgent))
+	mux.HandleFunc("GET /v1/skills/{id}/grants/agents", h.adminMiddleware(h.handleListAgentGrants))
+	mux.HandleFunc("POST /v1/skills/{id}/grants/agents", h.adminMiddleware(h.handleGrantAgent))
+	mux.HandleFunc("DELETE /v1/skills/{id}/grants/agents/{agentID}", h.adminMiddleware(h.handleRevokeAgent))
+	mux.HandleFunc("GET /v1/skills/{id}/grants/users", h.adminMiddleware(h.handleListUserGrants))
 	mux.HandleFunc("POST /v1/skills/{id}/grants/user", h.adminMiddleware(h.handleGrantUser))
 	mux.HandleFunc("DELETE /v1/skills/{id}/grants/user/{userID}", h.adminMiddleware(h.handleRevokeUser))
+	mux.HandleFunc("POST /v1/skills/{id}/grants/users", h.adminMiddleware(h.handleGrantUser))
+	mux.HandleFunc("DELETE /v1/skills/{id}/grants/users/{userID}", h.adminMiddleware(h.handleRevokeUser))
 	// System-level operations: admin + master tenant only.
 	// These execute shell commands (pip/npm install) and affect the entire server.
 	mux.HandleFunc("POST /v1/skills/rescan-deps", h.adminMiddleware(h.handleRescanDeps))
@@ -124,23 +154,24 @@ func (h *SkillsHandler) adminMiddleware(next http.HandlerFunc) http.HandlerFunc 
 	return requireAuth(permissions.RoleAdmin, next)
 }
 
+func (h *SkillsHandler) tenantAdminMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return h.adminMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		if store.IsMasterScope(r.Context()) {
+			next(w, r)
+			return
+		}
+		if !requireTenantAdmin(w, r, h.tenantStore) {
+			return
+		}
+		next(w, r)
+	})
+}
+
 // requireMasterTenant rejects requests from non-master tenants.
 // System skill management (install packages, rescan deps) is a server-wide operation
 // that should only be accessible to the master tenant or cross-tenant admins.
 func (h *SkillsHandler) requireMasterTenant(w http.ResponseWriter, r *http.Request) bool {
-	ctx := r.Context()
-	if store.IsOwnerRole(ctx) {
-		return true
-	}
-	tid := store.TenantIDFromContext(ctx)
-	if tid == store.MasterTenantID {
-		return true
-	}
-	locale := store.LocaleFromContext(ctx)
-	writeJSON(w, http.StatusForbidden, map[string]string{
-		"error": i18n.T(locale, i18n.MsgPermissionDenied, "system skill management"),
-	})
-	return false
+	return requireMasterScope(w, r)
 }
 
 func (h *SkillsHandler) handleList(w http.ResponseWriter, r *http.Request) {
@@ -503,7 +534,7 @@ func stringSlicesEqual(a, b []string) bool {
 // bundled dir if the managed copy's scripts/ directory is missing or empty.
 // If a fallback scan succeeds, re-copies the bundled scripts to the managed dir.
 func (h *SkillsHandler) scanWithFallback(sk store.SkillInfo) *skills.SkillManifest {
-	manifest := skills.ScanSkillDeps(sk.BaseDir)
+	manifest := scanSkillDeps(sk.BaseDir)
 	if manifest != nil && !manifest.IsEmpty() {
 		return manifest
 	}
@@ -520,7 +551,7 @@ func (h *SkillsHandler) scanWithFallback(sk store.SkillInfo) *skills.SkillManife
 	}
 
 	bundledSkillDir := filepath.Join(h.bundledDir, sk.Slug)
-	bundledManifest := skills.ScanSkillDeps(bundledSkillDir)
+	bundledManifest := scanSkillDeps(bundledSkillDir)
 	if bundledManifest == nil || bundledManifest.IsEmpty() {
 		return manifest
 	}

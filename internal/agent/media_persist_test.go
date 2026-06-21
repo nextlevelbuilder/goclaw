@@ -116,3 +116,41 @@ func TestPersistMedia_NamingScheme(t *testing.T) {
 		})
 	}
 }
+
+func TestPersistMedia_BackfilledThreadAttachmentsCreateToolRefs(t *testing.T) {
+	workspace := t.TempDir()
+	imagePath := filepath.Join(t.TempDir(), "diagram.png")
+	if err := os.WriteFile(imagePath, []byte("not a real png"), 0644); err != nil {
+		t.Fatalf("write image: %v", err)
+	}
+	docPath := filepath.Join(t.TempDir(), "brief.pdf")
+	if err := os.WriteFile(docPath, []byte("%PDF-1.4\n%fake"), 0644); err != nil {
+		t.Fatalf("write doc: %v", err)
+	}
+
+	var loop Loop
+	refs := loop.persistMedia("discord-thread-session", []bus.MediaFile{
+		{Path: imagePath, MimeType: "image/png", Filename: "diagram.png"},
+		{Path: docPath, MimeType: "application/pdf", Filename: "brief.pdf"},
+	}, workspace)
+
+	if len(refs) != 2 {
+		t.Fatalf("refs = %d, want 2: %#v", len(refs), refs)
+	}
+	gotKinds := map[string]bool{}
+	for _, ref := range refs {
+		gotKinds[ref.Kind] = true
+		if ref.Path == "" {
+			t.Fatalf("ref missing persisted path: %#v", ref)
+		}
+		if _, err := os.Stat(ref.Path); err != nil {
+			t.Fatalf("persisted file missing for %s: %v", ref.Kind, err)
+		}
+	}
+	if !gotKinds["image"] {
+		t.Fatalf("missing image ref: %#v", refs)
+	}
+	if !gotKinds["document"] {
+		t.Fatalf("missing document ref: %#v", refs)
+	}
+}

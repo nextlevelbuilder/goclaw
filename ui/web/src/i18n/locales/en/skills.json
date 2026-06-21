@@ -89,6 +89,14 @@
     "customOnlyReason": "This action only applies to custom skills",
     "noAgentsReason": "No current agents available"
   },
+  "export": {
+    "format": "Archive format",
+    "download": "Download",
+    "downloadSelected": "Download selected",
+    "downloading": "Downloading...",
+    "downloadSuccess": "Download started",
+    "downloadFailed": "Download failed"
+  },
   "visibility": {
     "clickToCycle": "Click to change access mode"
   },
@@ -218,6 +226,31 @@
     "copyLink": "Copy link",
     "copySuccess": "Deeplink copied",
     "copyFailed": "Failed to copy deeplink"
+  },
+  "evolution": {
+    "tab": "Evolution",
+    "title": "Self-evolution",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "status": "Status: {{status}}",
+    "unavailable": "Evolution data is unavailable for this skill.",
+    "modes": {
+      "suggest_only": "Suggest only",
+      "auto_analyze": "Auto analyze"
+    },
+    "metrics": "Metrics",
+    "total": "Total",
+    "succeeded": "Succeeded",
+    "failed": "Failed",
+    "successRate": "Success rate",
+    "suggestions": "Suggestions",
+    "noSuggestions": "No suggestions.",
+    "noReason": "No reason recorded.",
+    "approve": "Approve",
+    "reject": "Reject",
+    "apply": "Apply",
+    "activity": "Activity",
+    "noActivity": "No recent activity."
   },
   "toast": {
     "updated": "Skill updated",

@@ -135,7 +135,7 @@ func (l *Loop) makeBuildMessages() func(ctx context.Context, input *pipeline.Run
 			input.Message, input.ExtraSystemPrompt,
 			input.SessionKey, input.Channel, input.ChannelType,
 			input.BitrixPortalDomain,
-			input.ChatTitle, input.ChatID, input.PeerKind, input.UserID,
+			input.ChatTitle, input.ChatID, input.PeerKind, input.UserID, input.SenderName,
 			input.HistoryLimit, input.SkillFilter, input.LightContext)
 		return msgs, nil
 	}
@@ -228,7 +228,7 @@ func (l *Loop) makeBuildFilteredTools(req *RunRequest) func(state *pipeline.RunS
 		}
 		allMsgs := state.Messages.All()
 		toolDefs, _, returnedMsgs := l.buildFilteredTools(req, state.Context.HadBootstrap,
-			state.Iteration, maxIter, allMsgs)
+			state.Iteration, maxIter, allMsgs, userTools)
 		// buildFilteredTools returns the full messages slice; only messages appended
 		// beyond the original length are injections (e.g. final-iteration hint).
 		// Appending the entire slice would duplicate system+history into pending.
@@ -239,7 +239,7 @@ func (l *Loop) makeBuildFilteredTools(req *RunRequest) func(state *pipeline.RunS
 		}
 		mcpDefs := 0
 		for _, td := range toolDefs {
-			if strings.HasPrefix(strings.TrimSpace(td.Function.Name), "mcp_") {
+			if td.Function != nil && strings.HasPrefix(strings.TrimSpace(td.Function.Name), "mcp_") {
 				mcpDefs++
 			}
 		}
@@ -341,8 +341,10 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 			}
 		}
 
+		streamThinkingEmitted := false
 		emitChunk := func(chunk providers.StreamChunk) {
 			if chunk.Thinking != "" {
+				streamThinkingEmitted = true
 				emitRun(AgentEvent{
 					Type:    protocol.ChatEventThinking,
 					AgentID: l.id,
@@ -359,6 +361,7 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 				})
 			}
 		}
+		fallbackTraceClassifier := providers.NewDefaultClassifier()
 		callProvider := func(attempt string, request providers.ChatRequest) (*providers.ChatResponse, error) {
 			if fallbackProvider, ok := provider.(*providers.ModelFallbackProvider); ok {
 				before := func(callCtx context.Context, entry providers.FallbackCandidate, actualReq providers.ChatRequest) (providers.FallbackAfterCall, error) {
@@ -369,6 +372,25 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 						return nil, reserveErr
 					}
 					return func(callResp *providers.ChatResponse, callErr error, info providers.FallbackCallInfo) {
+						fallbackMeta := providers.ModelFallbackAttemptMetadata{
+							ProviderName: entry.ProviderName,
+							Model:        actualReq.Model,
+							Status:       "success",
+							Streamed:     info.Streamed,
+						}
+						if callErr != nil {
+							classification := providers.ClassifyHTTPError(fallbackTraceClassifier, callErr)
+							reason := string(classification.Reason)
+							if classification.Kind == "context_overflow" {
+								reason = "context_overflow"
+							}
+							fallbackMeta.Status = "error"
+							fallbackMeta.Reason = reason
+							fallbackMeta.Error = callErr.Error()
+						} else {
+							opts = append(opts, withProvider(entry.ProviderName), withModel(actualReq.Model))
+						}
+						opts = append(opts, withModelFallbackAttempt(fallbackMeta))
 						if reservation != nil {
 							if info.Streamed {
 								reservation.ReconcileStream(callCtx, callResp, callErr, true)
@@ -450,6 +472,15 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 				}())
 		}
 
+		if req.Stream && err == nil && resp != nil && resp.Thinking != "" && !streamThinkingEmitted {
+			emitRun(AgentEvent{
+				Type:    protocol.ChatEventThinking,
+				AgentID: l.id,
+				RunID:   req.RunID,
+				Payload: map[string]string{"content": resp.Thinking},
+			})
+		}
+
 		// Non-streaming: emit content events matching v2 behavior (channels need these).
 		if !req.Stream && err == nil && resp != nil {
 			if resp.Thinking != "" {
@@ -477,6 +508,9 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 func shouldRetryTaskMCP(chatReq providers.ChatRequest) bool {
 	hasTaskMCPTool := false
 	for _, td := range chatReq.Tools {
+		if td.Function == nil {
+			continue
+		}
 		name := strings.TrimSpace(td.Function.Name)
 		if strings.HasPrefix(name, "mcp_bx24__") && (strings.Contains(name, "search") || strings.Contains(name, "execute")) {
 			hasTaskMCPTool = true

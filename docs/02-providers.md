@@ -101,13 +101,13 @@ Supported price units: input, output, cache read, cache write, reasoning, reques
 | gemini | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.0-flash` | Skips empty content fields |
 | mistral | `https://api.mistral.ai/v1` | `mistral-large-latest` | |
 | xai | `https://api.x.ai/v1` | `grok-3-mini` | |
-| minimax | `https://api.minimax.io/v1` | `MiniMax-M2.5` | Uses custom chat path |
+| minimax | `https://api.minimax.io/v1` | `MiniMax-M3` | Uses OpenAI-compatible chat completions; MiniMax also exposes an Anthropic-compatible API, but GoClaw keeps the current OpenAI-compatible path |
 | cohere | `https://api.cohere.ai/compatibility/v1` | `command-a` | |
 | perplexity | `https://api.perplexity.ai` | `sonar-pro` | |
 | ollama | `http://localhost:11434/v1` | `llama3.3` | Local/configurable |
 | bailian | `https://coding-intl.dashscope.aliyuncs.com/v1` | `qwen3.5-plus` | Alibaba Coding API |
-| zai | `https://api.z.ai/api/paas/v4` | `glm-5` | |
-| zai-coding | `https://api.z.ai/api/coding/paas/v4` | `glm-5` | |
+| zai | `https://api.z.ai/api/paas/v4` | `glm-5.2` | 1M context, 128K max output |
+| zai-coding | `https://api.z.ai/api/coding/paas/v4` | `glm-5.2` | 1M context, 128K max output |
 | byteplus | `https://ark.ap-southeast.bytepluses.com/api/v3` | `seed-2-0-lite-260228` | Seed 2.0 models |
 | byteplus_coding | `https://ark.ap-southeast.bytepluses.com/api/coding/v3` | `seed-2-0-lite-260228` | Seed 2.0 Coding Plan |
 
@@ -351,6 +351,11 @@ Standard OpenAI-compatible provider targeting the Alibaba Coding API.
 
 - **Default model**: `qwen3.5-plus`
 - **Base URL**: `https://coding-intl.dashscope.aliyuncs.com/v1`
+- **Catalog source**: hardcoded because the Coding API does not expose a standard `/v1/models` endpoint
+
+| Model | Display name | Capabilities |
+|-------|--------------|--------------|
+| `qwen3.7-plus` | Qwen 3.7 Plus | Text Generation, Deep Thinking, Visual Understanding |
 
 ---
 

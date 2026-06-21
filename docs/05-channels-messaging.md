@@ -71,6 +71,70 @@ The consumer routes system messages based on sender ID prefixes:
 
 Normal channel messages pass through the shared inbound debouncer before agent execution. `gateway.inbound_debounce_ms` merges rapid text messages from the same `channel:chatID:senderID:agentID`; `0` means no debounce and positive values set the wait window. Agents can override the global value with `other_config.inbound_debounce_ms`; unset inherits the global config. Command/control messages such as `/stop`, `/reset`, and system escalations bypass the debouncer.
 
+### Human-like Delivery
+
+`gateway.chat_behavior` controls optional channel-only delivery polish. Delivery
+text is not added to session history or the main provider messages.
+
+- `quick_ack` sends one short receipt for non-streaming channel runs.
+  `mode="sidecar_generated"` uses a bounded sidecar LLM call;
+  `mode="llm_generated"` is kept as a backward-compatible alias;
+  `mode="fixed_template"` sends the first template; `mode="off"` disables it.
+- `quick_ack.provider/model` can choose a cheaper sidecar provider/model. If
+  unset, the delivery generator falls back to the agent provider/model. Timeout,
+  max token, and max char limits bound the call; templates are fallback output on
+  errors, timeouts, or empty sidecar text.
+- `intermediate_replies` sends sidecar-generated progress during tool phases. It
+  is independent from `quick_ack`: either feature can be enabled or disabled
+  alone.
+- Sidecar progress uses bounded delivery metadata only: message preview, locale,
+  channel/peer, agent label, and tool phase. It does not receive session
+  history, tool arguments, tool output, tool schemas, memory, or system prompts.
+- Deterministic Tool Status Messages no longer emit channel text. Platform
+  reactions and explicit Show Reasoning delivery remain separate behavior.
+- `final_split` splits long final text replies into a bounded number of
+  paragraph messages.
+- Override order is Channel > Agent > Workspace. Agent overrides live in
+  `agents.other_config.delivery_behavior`; channel overrides continue under
+  `chat_behavior`.
+- Legacy `gateway.block_reply` and channel `block_reply` values are still read
+  as inherited `intermediate_replies.enabled` defaults when the newer
+  `chat_behavior.intermediate_replies.enabled` field is unset.
+
+Splitting is intentionally conservative. Replies containing fenced code, tables, lists, quotes, JSON/XML-ish blocks, or URL-only paragraphs remain a single message. Media replies and streaming deliveries are not split.
+
+Progress messages are not added to session history by this behavior. Existing run timeline handling for explicit `block.reply` remains unchanged.
+
+### Outbound Media Delivery
+
+Agent tools can queue media files through `Result.Media`; the consumer converts
+those entries into `OutboundMessage.Media` and preserves file order, MIME type,
+filename, and optional captions.
+
+- `send_file` accepts either the legacy single `path` + optional `caption`, or
+  `attachments: [{path, caption?}, ...]` for batch delivery of existing
+  workspace files.
+- Telegram groups compatible outbound media into `sendMediaGroup` album chunks
+  of 2-10 items. Photo/video items can share a chunk; documents group only with
+  documents; audio groups only with audio. Voice-mode audio, singleton chunks,
+  oversized images sent as documents, and incompatible runs use the existing
+  ordered single-send fallback.
+- Discord already sends multiple files plus optional text in one message.
+- Slack and other media-capable channels keep ordered fallback behavior unless
+  their adapter advertises a stronger batch capability.
+
+### Reasoning Delivery
+
+Telegram channel config supports explicit reasoning delivery:
+
+| `reasoning_delivery` | Behavior |
+|----------------------|----------|
+| `streaming_only` | Legacy behavior. Show model reasoning only in the live streaming lane. |
+| `always_bubbles` | Force provider streaming internally and send reasoning as bounded channel bubbles, even when `dm_stream` / `group_stream` are off. |
+| `off` | Suppress reasoning output in the channel. Traces and provider usage remain unaffected. |
+
+Backward compatibility: if `reasoning_delivery` is missing, legacy `reasoning_stream=false` resolves to `off`; otherwise it resolves to `streaming_only`. Explicit `reasoning_delivery` always wins over the legacy boolean. Reasoning bubbles are delivery-only messages and are not added to assistant history.
+
 **Multi-attachment coalescing (#63).** Messages carrying attachments do NOT bypass the debouncer — that pre-fix shortcut was the source of N-replies for one user action. Instead, when media is present the effective window is `max(configured, mediaFloor)` so multi-file uploads land in the same buffer and flush together. Three surfaces apply the same invariant:
 
 | Surface | Buffer key | Trigger |
@@ -105,6 +169,8 @@ Every channel must implement the base interface:
 | `WebhookChannel` | Webhook HTTP handler mounting | Facebook, Feishu/Lark, Pancake |
 | `ReactionChannel` | Status reactions on messages | Telegram, Slack, Feishu |
 | `BlockReplyChannel` | Override gateway block_reply setting | Discord, Feishu/Lark, Pancake, Slack, Zalo OA, Zalo Personal |
+| `ChatBehaviorChannel` | Override gateway chat_behavior setting | Bitrix24, Discord, Feishu/Lark, Pancake, Slack, Telegram, WhatsApp, Zalo OA, Zalo Personal |
+| `ReasoningDeliveryChannel` | Override channel-visible reasoning delivery | Telegram |
 
 `BaseChannel` provides a shared implementation that all channels embed: allowlist matching, `HandleMessage()`, `CheckPolicy()`, and user ID extraction.
 
@@ -199,6 +265,7 @@ The Telegram channel uses long polling via the `telego` library (Telegram Bot AP
 - **Cancel commands**: `/stop` and `/stopall` intercepted before the 800ms debouncer. See [08-scheduling-cron.md](./08-scheduling-cron.md) for details.
 - **Concurrent group support**: Group sessions support up to 3 concurrent agent runs.
 - **Bot reply as implicit mention**: Replying to a bot message in a group counts as mentioning the bot.
+- **Show Reasoning delivery**: `reasoning_delivery=always_bubbles` decouples provider streaming from Telegram live streaming so reasoning can appear as bounded normal messages while the final answer remains non-streaming.
 
 ### Formatting Pipeline
 
@@ -276,7 +343,7 @@ flowchart TD
     WHATSAPP_CHECK -->|Yes| DOWNLOAD
     
     DOWNLOAD --> STT_CHECK{"STT providers<br/>configured?"}
-    STT_CHECK -->|Yes| STT_CHAIN["Try providers in order:<br/>elevenlabs_scribe, proxy"]
+    STT_CHECK -->|Yes| STT_CHAIN["Try providers in order:<br/>elevenlabs, proxy"]
     STT_CHECK -->|No| LEGACY{"Legacy bridge<br/>providers?"}
     
     LEGACY -->|Yes| STT_CHAIN
@@ -298,11 +365,11 @@ flowchart TD
 
 #### Configuration & Decision Rules
 
-**Decision 2 (Conflict rule):** When `builtin_tools[stt].settings.providers[]` is present in the database, it OVERRIDES all legacy channel-specific STT configs. The legacy STT bridge (`STTProxyURL` → `proxy_stt` provider) only activates when the providers list is empty or missing.
+**Decision 2 (Conflict rule):** When `builtin_tools[stt].settings.providers[]` is present in the database, it OVERRIDES all legacy channel-specific STT configs. The legacy STT bridge (`STTProxyURL` → `proxy` provider) only activates when the providers list is empty or missing.
 
 | Setting | Behavior |
 |---------|----------|
-| `providers: ["elevenlabs_scribe", "proxy_stt"]` | Try ElevenLabs Scribe first; fall back to legacy proxy |
+| `providers: ["elevenlabs", "proxy"]` | Try ElevenLabs Scribe first; fall back to legacy proxy |
 | `providers: []` (empty) | Skip all STT; voice → `[Voice message]` fallback |
 | `providers` missing (nil) | Check for legacy bridge at startup; activate if `STTProxyURL` exists |
 
@@ -320,7 +387,7 @@ When enabled:
 
 | Channel | STT Support | Notes |
 |---------|:-:|---------|
-| **Telegram** | Yes | Uses unified chain; voice routing via `VoiceAgentID` config |
+| **Telegram** | Yes | Uses unified chain; preserves Telegram voice MIME; legacy proxy override is keyed by platform type `telegram`; voice routing via `VoiceAgentID` config |
 | **Discord** | Yes | Standard flow; no special routing |
 | **Feishu** | Yes | Standard flow; no special routing |
 | **WhatsApp** | Yes (opt-in) | Requires explicit admin approval; default OFF |
@@ -506,6 +573,7 @@ The Discord channel uses the `discordgo` library to connect via the Discord Gate
 - **Bot identity**: Fetches `@me` on startup to detect and ignore own messages
 - **Typing indicator**: 9-second keepalive while agent processes
 - **Group history**: Pending message buffer for context when mentioned
+- **Thread backfill**: When the bot is mentioned inside a Discord thread, the channel fetches up to 25 prior thread messages before the triggering message through Discord REST, prepends their text as context, and downloads up to 15 prior attachments for the same inbound media pipeline. This is thread-only, bounded to 5 MB per backfilled file with a 30-second timeout, and gracefully falls back to the current message when Discord lacks `READ_MESSAGE_HISTORY` or the REST request fails.
 
 ---
 
@@ -632,7 +700,32 @@ Channel instances are loaded from the database with their assigned agent ID. The
 
 ---
 
-## 13. Local Key Propagation
+## 13. Passive Memory Extraction
+
+Passive channel memory is an opt-in per-channel feature. When enabled in
+`channel_instances.config.passive_memory`, the gateway periodically reads the
+existing tenant-scoped `channel_pending_messages` group buffers, redacts sensitive
+content, asks the background LLM provider for durable fact candidates, and stores
+only candidates in the review queue.
+
+Default behavior is privacy-first:
+
+- Disabled by default.
+- Group-only in v1.
+- Review mode enabled by default.
+- Runs by manual trigger, message cap, or interval.
+- New extraction tables store metadata, summaries, topics/entities, confidence,
+  status, and redaction counts, but not raw message bodies.
+
+Approved items write an `episodic_summaries` row with `source_type='channel'`
+and a deterministic `source_id`; existing consolidation workers then handle KG
+promotion. Reject/delete prevents later writes. Delete also removes the linked
+episodic row when one exists; already-promoted KG nodes are not synchronously
+deleted in v1.
+
+---
+
+## 14. Local Key Propagation
 
 Thread/topic context is preserved through the entire message pipeline using a `local_key` in message metadata. This ensures subagent, delegation, and team message results land in the correct thread — not the root chat.
 
@@ -648,7 +741,7 @@ All channel state — placeholders, streams, reactions, typing controllers, thre
 
 ---
 
-## 14. Per-User Isolation
+## 15. Per-User Isolation
 
 Channels provide per-user isolation through compound sender IDs and context propagation:
 
@@ -659,7 +752,7 @@ Channels provide per-user isolation through compound sender IDs and context prop
 
 ---
 
-## 15. Pairing System
+## 16. Pairing System
 
 The pairing system provides a DM authentication flow for channels using the `pairing` DM policy.
 

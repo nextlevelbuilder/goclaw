@@ -180,6 +180,26 @@ func (b *fakeEventBus) Subscribe(eventbus.EventType, eventbus.DomainEventHandler
 func (b *fakeEventBus) Start(context.Context)     {}
 func (b *fakeEventBus) Drain(time.Duration) error { return nil }
 
+type fakeTeamAccessStore struct {
+	allowed bool
+}
+
+func (f *fakeTeamAccessStore) GrantTeamAccess(context.Context, uuid.UUID, string, string, string) error {
+	return nil
+}
+func (f *fakeTeamAccessStore) RevokeTeamAccess(context.Context, uuid.UUID, string) error {
+	return nil
+}
+func (f *fakeTeamAccessStore) ListTeamGrants(context.Context, uuid.UUID) ([]store.TeamUserGrant, error) {
+	return nil, nil
+}
+func (f *fakeTeamAccessStore) ListUserTeams(context.Context, string) ([]store.TeamData, error) {
+	return nil, nil
+}
+func (f *fakeTeamAccessStore) HasTeamAccess(context.Context, uuid.UUID, string) (bool, error) {
+	return f.allowed, nil
+}
+
 func newJSONRequest(t *testing.T, method, target string, body any) *http.Request {
 	t.Helper()
 	buf, err := json.Marshal(body)
@@ -378,6 +398,50 @@ func TestHandleUpdateDocument_NilContentSkipsWriteAndEvent(t *testing.T) {
 	}
 	if len(bus.published) != 0 {
 		t.Errorf("nil-content PUT must not publish events, got %d", len(bus.published))
+	}
+}
+
+func TestHandleUpdateDocument_TeamDocRequiresMembershipBeforeContentWrite(t *testing.T) {
+	teamID := uuid.NewString()
+	st := newFakeVaultStore()
+	st.docs["team-doc"] = &store.VaultDocument{
+		ID:       "team-doc",
+		TenantID: masterTenant.String(),
+		TeamID:   &teamID,
+		Path:     "teams/" + teamID + "/private.md",
+		Title:    "Private",
+		DocType:  "note",
+		Scope:    "team",
+	}
+	bus := &fakeEventBus{store: st}
+	ws := t.TempDir()
+	h := &VaultHandler{
+		store:      st,
+		teamAccess: &fakeTeamAccessStore{allowed: false},
+		eventBus:   bus,
+		workspace:  ws,
+	}
+
+	ctx := store.WithUserID(masterCtx(), "non-member")
+	req := newJSONRequest(t, http.MethodPut, "/v1/vault/documents/team-doc", map[string]any{
+		"content": "should not be written",
+	}).WithContext(ctx)
+	req.SetPathValue("docID", "team-doc")
+	rr := httptest.NewRecorder()
+
+	h.handleUpdateDocument(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403 (body: %s)", rr.Code, rr.Body.String())
+	}
+	if _, statErr := os.Stat(filepath.Join(ws, "teams", teamID, "private.md")); statErr == nil {
+		t.Fatal("non-member content update wrote file before team access check")
+	}
+	if st.upsertCall != 0 {
+		t.Fatalf("upsertCall = %d, want 0", st.upsertCall)
+	}
+	if len(bus.published) != 0 {
+		t.Fatalf("published %d events, want 0", len(bus.published))
 	}
 }
 

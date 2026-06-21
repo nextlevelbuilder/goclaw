@@ -17,6 +17,8 @@ import (
 
 // BridgeToolNames is the subset of GoClaw tools exposed via the MCP bridge.
 // Excluded: spawn (agent loop), create_forum_topic (channels).
+// delegate is included: it self-gates via CanDelegate/agent_links and resolves
+// its source agent from the X-Agent-ID header context, same as team_tasks.
 var BridgeToolNames = map[string]bool{
 	// Filesystem
 	"read_file":  true,
@@ -48,6 +50,8 @@ var BridgeToolNames = map[string]bool{
 	"sessions_send":    true,
 	// Team tools (context from X-Agent-ID/X-Channel/X-Chat-ID headers)
 	"team_tasks": true,
+	// Inter-agent delegation (self-gates via CanDelegate / agent_links)
+	"delegate": true,
 }
 
 // NewBridgeServer creates a StreamableHTTPServer that exposes GoClaw tools as MCP tools.

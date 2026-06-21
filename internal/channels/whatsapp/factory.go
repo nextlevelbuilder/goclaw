@@ -14,12 +14,13 @@ import (
 
 // whatsappInstanceConfig maps the non-secret config JSONB from the channel_instances table.
 type whatsappInstanceConfig struct {
-	DMPolicy       string   `json:"dm_policy,omitempty"`
-	GroupPolicy    string   `json:"group_policy,omitempty"`
-	RequireMention *bool    `json:"require_mention,omitempty"`
-	HistoryLimit   int      `json:"history_limit,omitempty"`
-	AllowFrom      []string `json:"allow_from,omitempty"`
-	BlockReply     *bool    `json:"block_reply,omitempty"`
+	DMPolicy       string                     `json:"dm_policy,omitempty"`
+	GroupPolicy    string                     `json:"group_policy,omitempty"`
+	RequireMention *bool                      `json:"require_mention,omitempty"`
+	HistoryLimit   int                        `json:"history_limit,omitempty"`
+	AllowFrom      []string                   `json:"allow_from,omitempty"`
+	BlockReply     *bool                      `json:"block_reply,omitempty"`
+	ChatBehavior   *config.ChatBehaviorConfig `json:"chat_behavior,omitempty"`
 }
 
 // FactoryWithDB returns a ChannelFactory with DB access for whatsmeow auth state.
@@ -44,14 +45,18 @@ func FactoryWithDBAudio(db *sql.DB, pendingStore store.PendingMessageStore, dial
 
 		// Detect old bridge_url config and give clear migration error.
 		if len(cfg) > 0 {
-			var legacy struct{ BridgeURL string `json:"bridge_url"` }
+			var legacy struct {
+				BridgeURL string `json:"bridge_url"`
+			}
 			if json.Unmarshal(cfg, &legacy) == nil && legacy.BridgeURL != "" {
 				return nil, fmt.Errorf("whatsapp: bridge_url is no longer supported — " +
 					"WhatsApp now runs natively via whatsmeow. Remove bridge_url from config")
 			}
 		}
 		if len(creds) > 0 {
-			var legacy struct{ BridgeURL string `json:"bridge_url"` }
+			var legacy struct {
+				BridgeURL string `json:"bridge_url"`
+			}
 			if json.Unmarshal(creds, &legacy) == nil && legacy.BridgeURL != "" {
 				return nil, fmt.Errorf("whatsapp: bridge_url is no longer supported — " +
 					"WhatsApp now runs natively via whatsmeow. Remove bridge_url from credentials")
@@ -66,6 +71,7 @@ func FactoryWithDBAudio(db *sql.DB, pendingStore store.PendingMessageStore, dial
 			RequireMention: ic.RequireMention,
 			HistoryLimit:   ic.HistoryLimit,
 			BlockReply:     ic.BlockReply,
+			ChatBehavior:   ic.ChatBehavior,
 		}
 		// DB instances default to "pairing" for groups (secure by default).
 		if waCfg.GroupPolicy == "" {

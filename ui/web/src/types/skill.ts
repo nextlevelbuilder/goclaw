@@ -56,3 +56,54 @@ export interface SkillAgentGrant {
   granted_by: string;
   can_manage: boolean;
 }
+
+export interface SkillEvolutionSettings {
+  tenant_id: string;
+  skill_id: string;
+  enabled: boolean;
+  mode: "suggest_only" | "auto_analyze";
+  last_analyzed_at?: string;
+}
+
+export interface SkillFailureReason {
+  reason: string;
+  count: number;
+  last_seen: string;
+}
+
+export interface SkillUsageStats {
+  skill_id: string;
+  total_calls: number;
+  started: number;
+  succeeded: number;
+  failed: number;
+  abandoned: number;
+  success_rate: number;
+  failure_rate: number;
+  last_used_at?: string;
+  top_failure_reasons?: SkillFailureReason[];
+}
+
+export interface SkillImprovementSuggestion {
+  id: string;
+  skill_id: string;
+  skill_slug: string;
+  suggestion_type: string;
+  status: "pending" | "approved" | "rejected" | "applied";
+  reason: string;
+  target_file?: string;
+  applied_version?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SkillActivityLog {
+  id: string;
+  actor_type: string;
+  actor_id: string;
+  action: string;
+  entity_type?: string;
+  entity_id?: string;
+  details?: unknown;
+  created_at: string;
+}

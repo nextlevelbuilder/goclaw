@@ -30,12 +30,6 @@
   "ux": {
     "title": "UX行为",
     "description": "控制网关如何向用户展示Agent活动。",
-    "toolStatus": "执行时显示工具名称",
-    "toolStatusHint": "Agent运行时显示当前工具名称。",
-    "toolStatusInfo": "Agent运行时在流式预览中显示工具名称。",
-    "blockReply": "工具调用时显示中间文本",
-    "blockReplyHint": "工具调用过程中流式传输部分助手文本。",
-    "blockReplyInfo": "工具执行期间向用户流式传输中间文本。",
     "intentClassify": "意图分类",
     "intentClassifyHint": "在路由到Agent之前分类用户意图。",
     "intentClassifyInfo": "消息被分类以优化Agent路由和行为。"

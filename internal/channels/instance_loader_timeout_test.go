@@ -3,9 +3,12 @@ package channels
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -83,6 +86,59 @@ func withShortReloadTimeout(t *testing.T, d time.Duration) {
 	orig := reloadStartTimeout
 	reloadStartTimeout = d
 	t.Cleanup(func() { reloadStartTimeout = orig })
+}
+
+type singleInstanceStore struct {
+	store.ChannelInstanceStore
+	inst store.ChannelInstanceData
+}
+
+func (s *singleInstanceStore) Get(context.Context, uuid.UUID) (*store.ChannelInstanceData, error) {
+	return &s.inst, nil
+}
+
+type scopedSingleInstanceStore struct {
+	singleInstanceStore
+}
+
+func (s *scopedSingleInstanceStore) Get(ctx context.Context, id uuid.UUID) (*store.ChannelInstanceData, error) {
+	if !store.IsCrossTenant(ctx) && store.TenantIDFromContext(ctx) == uuid.Nil {
+		return nil, errors.New("missing tenant scope")
+	}
+	return &s.inst, nil
+}
+
+func TestLoadInstanceByIDLoadsTargetWithoutReloadingExisting(t *testing.T) {
+	msgBus := bus.New()
+	mgr := NewManager(msgBus)
+	targetID := uuid.New()
+
+	loader := NewInstanceLoader(&scopedSingleInstanceStore{
+		singleInstanceStore: singleInstanceStore{inst: store.ChannelInstanceData{
+			BaseModel:   store.BaseModel{ID: targetID},
+			Name:        "telegram-new",
+			ChannelType: TypeTelegram,
+			Enabled:     true,
+		}},
+	}, nil, mgr, msgBus, nil)
+
+	existing := newTimeoutTestChannel("telegram-existing", TypeTelegram, false)
+	mgr.RegisterChannel("telegram-existing", existing)
+
+	loader.RegisterFactory(TypeTelegram, func(name string, _ json.RawMessage, _ json.RawMessage, _ *bus.MessageBus, _ store.PairingStore) (Channel, error) {
+		return newTimeoutTestChannel(name, TypeTelegram, false), nil
+	})
+
+	if err := loader.LoadInstanceByID(store.WithCrossTenant(context.Background()), targetID); err != nil {
+		t.Fatalf("LoadInstanceByID returned error: %v", err)
+	}
+
+	if _, ok := mgr.GetChannel("telegram-new"); !ok {
+		t.Fatal("expected target channel to be registered")
+	}
+	if _, ok := mgr.GetChannel("telegram-existing"); !ok {
+		t.Fatal("targeted load should not unregister unrelated channels")
+	}
 }
 
 // TestLoadInstance_HungStartDoesNotBlock verifies that a Start() that never

@@ -11,7 +11,6 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-
 // PGContactStore implements store.ContactStore backed by Postgres.
 type PGContactStore struct {
 	db           *sql.DB
@@ -62,6 +61,11 @@ func contactWhereClause(ctx context.Context, opts store.ContactListOpts) (string
 	if opts.ChannelType != "" {
 		conditions = append(conditions, fmt.Sprintf("channel_type = $%d", argIdx))
 		args = append(args, opts.ChannelType)
+		argIdx++
+	}
+	if opts.ChannelInstance != "" {
+		conditions = append(conditions, fmt.Sprintf("channel_instance = $%d", argIdx))
+		args = append(args, opts.ChannelInstance)
 		argIdx++
 	}
 	if opts.PeerKind != "" {

@@ -9,6 +9,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
@@ -204,6 +205,10 @@ func (m *SessionsMethods) handleDelete(ctx context.Context, client *gateway.Clie
 	emitAudit(m.eventBus, client, "session.deleted", "session", params.Key)
 }
 
+// cliSessionReset clears the Claude CLI-backed session for a key. It is a
+// package var so tests can stub it; defaults to the real provider helper.
+var cliSessionReset = providers.ResetCLISession
+
 func (m *SessionsMethods) handleReset(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	locale := store.LocaleFromContext(ctx)
 	var params sessionKeyParams
@@ -225,6 +230,10 @@ func (m *SessionsMethods) handleReset(ctx context.Context, client *gateway.Clien
 	}
 
 	m.sessions.Reset(ctx, params.Key)
+	// Also clear the Claude CLI session (.jsonl + CLAUDE.md) so the RPC reset
+	// matches the /reset chat command for claude-cli-backed agents (no-op when
+	// the CLI provider is unused).
+	cliSessionReset("", params.Key)
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"ok": true,

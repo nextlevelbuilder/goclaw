@@ -8,7 +8,7 @@ import (
 // the cache boundary marker is split into 2 blocks: stable (cached) + dynamic.
 func TestAnthropicSystemBlocksSplit(t *testing.T) {
 	prompt := "stable content\n" + CacheBoundaryMarker + "\ndynamic content"
-	blocks := splitSystemPromptForCache(prompt)
+	blocks := SplitSystemPromptForCache(prompt)
 	if len(blocks) != 2 {
 		t.Fatalf("expected 2 blocks, got %d", len(blocks))
 	}
@@ -30,7 +30,7 @@ func TestAnthropicSystemBlocksSplit(t *testing.T) {
 // marker → single block with cache_control.
 func TestAnthropicSingleBlockFallback(t *testing.T) {
 	prompt := "no boundary here"
-	blocks := splitSystemPromptForCache(prompt)
+	blocks := SplitSystemPromptForCache(prompt)
 	if len(blocks) != 1 {
 		t.Fatalf("expected 1 block, got %d", len(blocks))
 	}
@@ -46,7 +46,7 @@ func TestAnthropicSingleBlockFallback(t *testing.T) {
 // after the boundary produces only 1 block (no empty block appended).
 func TestAnthropicEmptyDynamic(t *testing.T) {
 	prompt := "stable only\n" + CacheBoundaryMarker + "\n"
-	blocks := splitSystemPromptForCache(prompt)
+	blocks := SplitSystemPromptForCache(prompt)
 	if len(blocks) != 1 {
 		t.Fatalf("expected 1 block for empty dynamic, got %d", len(blocks))
 	}
@@ -59,7 +59,7 @@ func TestAnthropicEmptyDynamic(t *testing.T) {
 // (empty stable section) still produces valid blocks without empty text.
 func TestAnthropicEmptyStable(t *testing.T) {
 	prompt := CacheBoundaryMarker + "\ndynamic only"
-	blocks := splitSystemPromptForCache(prompt)
+	blocks := SplitSystemPromptForCache(prompt)
 	// Stable is empty string after TrimSpace — should still produce a block
 	// (Anthropic API handles empty text blocks gracefully).
 	if len(blocks) < 1 {

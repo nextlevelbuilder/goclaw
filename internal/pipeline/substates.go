@@ -8,7 +8,7 @@ import (
 
 // ContextState: owned by ContextStage, read by ThinkStage.
 type ContextState struct {
-	ContextFiles   []any  // bootstrap.ContextFile — typed in Phase 2, any avoids circular import
+	ContextFiles   []any // bootstrap.ContextFile — typed in Phase 2, any avoids circular import
 	SkillsSummary  string
 	TeamContext    string // team workspace context injected for team runs
 	MemorySection  string // L0 auto-injected memory context for system prompt
@@ -70,6 +70,12 @@ type ObserveState struct {
 	BlockReplies   int
 	LastBlockReply string
 
+	// ContinueAfterFinal is set when a user follow-up arrives after the model
+	// has produced a final answer but before the run finalizes. The pipeline
+	// must give the model another turn so accepted messages are not silently
+	// stored without being answered.
+	ContinueAfterFinal bool
+
 	// AssistantImages accumulates final (non-partial) images from every iteration's
 	// ChatResponse.Images. FinalizeStage persists these to workspace/media/.
 	// Accumulation is required because LastResponse holds only the final iteration's
@@ -88,12 +94,12 @@ type CompactState struct {
 
 // EvolutionState: owned by skill evolution nudge logic.
 type EvolutionState struct {
-	Nudge70Sent      bool
-	Nudge90Sent      bool
-	PostscriptSent   bool
-	BootstrapWrite   bool // BOOTSTRAP.md write detected
-	TeamTaskCreates  int  // team_tasks tool calls
-	TeamTaskSpawns   int  // delegate tool calls (spawns)
+	Nudge70Sent     bool
+	Nudge90Sent     bool
+	PostscriptSent  bool
+	BootstrapWrite  bool // BOOTSTRAP.md write detected
+	TeamTaskCreates int  // team_tasks tool calls
+	TeamTaskSpawns  int  // delegate tool calls (spawns)
 }
 
 // RunResult is the final output of a pipeline run.

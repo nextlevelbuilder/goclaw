@@ -21,28 +21,29 @@ type feishuCreds struct {
 
 // feishuInstanceConfig maps the non-secret config JSONB from the channel_instances table.
 type feishuInstanceConfig struct {
-	Domain           string   `json:"domain,omitempty"`
-	ConnectionMode   string   `json:"connection_mode,omitempty"`
-	WebhookPort      int      `json:"webhook_port,omitempty"`
-	WebhookPath      string   `json:"webhook_path,omitempty"`
-	AllowFrom        []string `json:"allow_from,omitempty"`
-	DMPolicy         string   `json:"dm_policy,omitempty"`
-	GroupPolicy      string   `json:"group_policy,omitempty"`
-	GroupAllowFrom   []string `json:"group_allow_from,omitempty"`
-	RequireMention   *bool    `json:"require_mention,omitempty"`
-	TopicSessionMode string   `json:"topic_session_mode,omitempty"`
-	TextChunkLimit   int      `json:"text_chunk_limit,omitempty"`
-	MediaMaxMB       int      `json:"media_max_mb,omitempty"`
-	RenderMode       string   `json:"render_mode,omitempty"`
-	Streaming        *bool    `json:"streaming,omitempty"`
-	ReactionLevel    string   `json:"reaction_level,omitempty"`
-	HistoryLimit      int      `json:"history_limit,omitempty"`
-	BlockReply        *bool    `json:"block_reply,omitempty"`
-	STTProxyURL       string   `json:"stt_proxy_url,omitempty"`
-	STTAPIKey         string   `json:"stt_api_key,omitempty"`
-	STTTenantID       string   `json:"stt_tenant_id,omitempty"`
-	STTTimeoutSeconds int      `json:"stt_timeout_seconds,omitempty"`
-	VoiceAgentID      string   `json:"voice_agent_id,omitempty"`
+	Domain            string                     `json:"domain,omitempty"`
+	ConnectionMode    string                     `json:"connection_mode,omitempty"`
+	WebhookPort       int                        `json:"webhook_port,omitempty"`
+	WebhookPath       string                     `json:"webhook_path,omitempty"`
+	AllowFrom         []string                   `json:"allow_from,omitempty"`
+	DMPolicy          string                     `json:"dm_policy,omitempty"`
+	GroupPolicy       string                     `json:"group_policy,omitempty"`
+	GroupAllowFrom    []string                   `json:"group_allow_from,omitempty"`
+	RequireMention    *bool                      `json:"require_mention,omitempty"`
+	TopicSessionMode  string                     `json:"topic_session_mode,omitempty"`
+	TextChunkLimit    int                        `json:"text_chunk_limit,omitempty"`
+	MediaMaxMB        int                        `json:"media_max_mb,omitempty"`
+	RenderMode        string                     `json:"render_mode,omitempty"`
+	Streaming         *bool                      `json:"streaming,omitempty"`
+	ReactionLevel     string                     `json:"reaction_level,omitempty"`
+	HistoryLimit      int                        `json:"history_limit,omitempty"`
+	BlockReply        *bool                      `json:"block_reply,omitempty"`
+	ChatBehavior      *config.ChatBehaviorConfig `json:"chat_behavior,omitempty"`
+	STTProxyURL       string                     `json:"stt_proxy_url,omitempty"`
+	STTAPIKey         string                     `json:"stt_api_key,omitempty"`
+	STTTenantID       string                     `json:"stt_tenant_id,omitempty"`
+	STTTimeoutSeconds int                        `json:"stt_timeout_seconds,omitempty"`
+	VoiceAgentID      string                     `json:"voice_agent_id,omitempty"`
 }
 
 // Factory creates a Feishu/Lark channel from DB instance data.
@@ -89,6 +90,7 @@ func Factory(name string, creds json.RawMessage, cfg json.RawMessage,
 		ReactionLevel:     ic.ReactionLevel,
 		HistoryLimit:      ic.HistoryLimit,
 		BlockReply:        ic.BlockReply,
+		ChatBehavior:      ic.ChatBehavior,
 		STTProxyURL:       ic.STTProxyURL,
 		STTAPIKey:         ic.STTAPIKey,
 		STTTenantID:       ic.STTTenantID,
@@ -160,6 +162,7 @@ func FactoryWithPendingStoreAndAudio(pendingStore store.PendingMessageStore, aud
 			ReactionLevel:     ic.ReactionLevel,
 			HistoryLimit:      ic.HistoryLimit,
 			BlockReply:        ic.BlockReply,
+			ChatBehavior:      ic.ChatBehavior,
 			STTProxyURL:       ic.STTProxyURL,
 			STTAPIKey:         ic.STTAPIKey,
 			STTTenantID:       ic.STTTenantID,

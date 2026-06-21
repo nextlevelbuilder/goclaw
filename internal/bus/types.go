@@ -14,6 +14,7 @@ type MediaFile struct {
 	Path     string `json:"path"`
 	MimeType string `json:"mime_type,omitempty"` // e.g. "application/pdf", "image/jpeg"
 	Filename string `json:"filename,omitempty"`  // original user-provided filename, e.g. "Báo cáo Q4.pdf"; empty → UUID fallback in persistMedia
+	Caption  string `json:"caption,omitempty"`   // optional outbound caption attached to this file
 }
 
 // InboundMessage represents a message received from a channel (Telegram, Discord, etc.)
@@ -35,14 +36,14 @@ type InboundMessage struct {
 
 // OutboundMessage represents a message to be sent to a channel.
 type OutboundMessage struct {
-	Channel         string            `json:"channel"`
-	ChatID          string            `json:"chat_id"`
-	Content         string            `json:"content"`
-	Media           []MediaAttachment `json:"media,omitempty"`              // optional media attachments
-	Metadata        map[string]string `json:"metadata,omitempty"`           // channel-specific metadata
-	TenantID        uuid.UUID         `json:"tenant_id,omitempty"`          // tenant scope for per-tenant TTS
-	AgentID         uuid.UUID         `json:"agent_id,omitempty"`           // agent scope for per-agent TTS voice override
-	AgentOtherConfig []byte           `json:"agent_other_config,omitempty"` // agent's other_config for TTS voice/model
+	Channel          string            `json:"channel"`
+	ChatID           string            `json:"chat_id"`
+	Content          string            `json:"content"`
+	Media            []MediaAttachment `json:"media,omitempty"`              // optional media attachments
+	Metadata         map[string]string `json:"metadata,omitempty"`           // channel-specific metadata
+	TenantID         uuid.UUID         `json:"tenant_id,omitempty"`          // tenant scope for per-tenant TTS
+	AgentID          uuid.UUID         `json:"agent_id,omitempty"`           // agent scope for per-agent TTS voice override
+	AgentOtherConfig []byte            `json:"agent_other_config,omitempty"` // agent's other_config for TTS voice/model
 }
 
 // MediaAttachment represents a media file to be sent with a message.
@@ -54,7 +55,7 @@ type MediaAttachment struct {
 
 // Event represents a server-side event to broadcast to WebSocket clients.
 type Event struct {
-	Name     string    `json:"name"`              // event name (e.g. "agent", "chat", "health")
+	Name     string    `json:"name"` // event name (e.g. "agent", "chat", "health")
 	Payload  any       `json:"payload,omitempty"`
 	TenantID uuid.UUID `json:"-"` // tenant scope for event filtering (not serialized to clients)
 }

@@ -322,7 +322,7 @@ func wireTracingAndCron(
 	// Start snapshot worker for hourly usage aggregation
 	var snapshotWorker *tracing.SnapshotWorker
 	if stores.Snapshots != nil {
-		snapshotWorker = tracing.NewSnapshotWorker(stores.DB, stores.Snapshots)
+		snapshotWorker = tracing.NewSnapshotWorker(stores.DB, stores.Snapshots, stores.UsageEvents)
 		snapshotWorker.Start()
 
 		// Backfill historical data in background

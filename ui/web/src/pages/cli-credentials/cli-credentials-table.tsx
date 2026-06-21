@@ -4,7 +4,7 @@
  * Phase 8: each row has a chip sub-row from agent_grants_summary.
  */
 import { useTranslation } from "react-i18next";
-import { KeyRound, Pencil, Trash2, Users, Shield } from "lucide-react";
+import { KeyRound, Pencil, Trash2, Users, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CliCredentialAgentChips } from "./cli-credential-agent-chips";
@@ -15,10 +15,10 @@ interface Props {
   onEdit: (item: SecureCLIBinary) => void;
   onDelete: (item: SecureCLIBinary) => void;
   onUserCreds: (item: SecureCLIBinary) => void;
-  onGrants: (item: SecureCLIBinary) => void;
+  onAgentAccess: (item: SecureCLIBinary, initialTab?: "credentials" | "grants") => void;
 }
 
-export function CliCredentialsTable({ items, onEdit, onDelete, onUserCreds, onGrants }: Props) {
+export function CliCredentialsTable({ items, onEdit, onDelete, onUserCreds, onAgentAccess }: Props) {
   const { t } = useTranslation("cli-credentials");
   const { t: tc } = useTranslation("common");
 
@@ -70,12 +70,12 @@ export function CliCredentialsTable({ items, onEdit, onDelete, onUserCreds, onGr
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => onGrants(item)}
-                      title={t("grants.title", { name: item.binary_name })}
+                      onClick={() => onAgentAccess(item, item.adapter_name === "git" ? "credentials" : "grants")}
+                      title={t("agentAccess.title")}
                       className="gap-1"
                     >
-                      <Shield className="h-3.5 w-3.5" />
-                      {t("grants.addGrant")}
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                      {t("agentAccess.title")}
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => onUserCreds(item)} title={t("userCredentials.title")}>
                       <Users className="h-3.5 w-3.5" />
@@ -98,7 +98,7 @@ export function CliCredentialsTable({ items, onEdit, onDelete, onUserCreds, onGr
                 <td colSpan={6} className="p-0">
                   <CliCredentialAgentChips
                     agentGrantsSummary={item.agent_grants_summary}
-                    onOpenGrants={() => onGrants(item)}
+                    onOpenGrants={() => onAgentAccess(item, "grants")}
                   />
                 </td>
               </tr>

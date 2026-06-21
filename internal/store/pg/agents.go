@@ -97,6 +97,12 @@ const agentSelectCols = `id, agent_key, display_name, frontmatter, owner_id, pro
 		 model_fallback, shell_deny_groups, kg_dedup_config,
 		 agent_type, is_default, status, budget_monthly_cents, created_at, updated_at, tenant_id`
 
+// sqlExecer is satisfied by both *sql.DB and *sql.Tx, allowing helper
+// functions to be called within or outside a transaction.
+type sqlExecer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
 func (s *PGAgentStore) Create(ctx context.Context, agent *store.AgentData) error {
 	if agent.ID == uuid.Nil {
 		agent.ID = store.GenNewID()
@@ -108,7 +114,14 @@ func (s *PGAgentStore) Create(ctx context.Context, agent *store.AgentData) error
 	if tenantID == uuid.Nil {
 		tenantID = store.MasterTenantID
 	}
-	_, err := s.db.ExecContext(ctx,
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	_, err = tx.ExecContext(ctx,
 		`INSERT INTO agents (id, agent_key, display_name, frontmatter, owner_id, provider, model,
 		 context_window, max_tool_iterations, workspace, restrict_to_workspace,
 		 tools_config, sandbox_config, subagents_config, memory_config,
@@ -131,16 +144,18 @@ func (s *PGAgentStore) Create(ctx context.Context, agent *store.AgentData) error
 		agent.AgentType, agent.IsDefault, agent.Status, agent.BudgetMonthlyCents, now, now, tenantID,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("insert agent: %w", err)
 	}
 	if agent.BudgetMonthlyCents != nil {
-		if err := s.syncAgentBudgetUsageCap(ctx, tenantID, agent.ID, agent.BudgetMonthlyCents); err != nil {
-			_, _ = s.db.ExecContext(ctx, "DELETE FROM agents WHERE id = $1", agent.ID)
-			return err
+		if err := syncAgentBudgetUsageCap(ctx, tx, tenantID, agent.ID, agent.BudgetMonthlyCents); err != nil {
+			return fmt.Errorf("sync budget usage cap: %w", err)
 		}
 	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit agent create: %w", err)
+	}
 
-	// Generate embedding for new agent with frontmatter
+	// Generate embedding for new agent with frontmatter (best-effort, outside tx)
 	if agent.Frontmatter != "" && s.embProvider != nil {
 		go s.generateAgentEmbedding(context.Background(), agent.ID, agent.DisplayName, agent.Frontmatter)
 	}
@@ -271,7 +286,7 @@ func (s *PGAgentStore) Update(ctx context.Context, id uuid.UUID, updates map[str
 		}
 	}
 	if syncBudget {
-		if err := s.syncAgentBudgetUsageCap(ctx, budgetTenantID, id, budgetCents); err != nil {
+		if err := syncAgentBudgetUsageCap(ctx, s.db, budgetTenantID, id, budgetCents); err != nil {
 			return err
 		}
 	}
@@ -329,16 +344,19 @@ func budgetCentsFromUpdate(v any) (*int, error) {
 	return &cents, nil
 }
 
-func (s *PGAgentStore) syncAgentBudgetUsageCap(ctx context.Context, tenantID, agentID uuid.UUID, budgetCents *int) error {
+// syncAgentBudgetUsageCap upserts or deletes the agent's monthly budget cap
+// in usage_cap_policies. It accepts a sqlExecer so it can be called inside a
+// transaction (during Create) or directly against the pool (during Update).
+func syncAgentBudgetUsageCap(ctx context.Context, db sqlExecer, tenantID, agentID uuid.UUID, budgetCents *int) error {
 	if budgetCents == nil || *budgetCents <= 0 {
-		_, err := s.db.ExecContext(ctx,
+		_, err := db.ExecContext(ctx,
 			`DELETE FROM usage_cap_policies
 			 WHERE tenant_id=$1 AND agent_id=$2 AND source=$3`,
 			tenantID, agentID, store.UsageCapSourceAgentBudget)
 		return err
 	}
 	costMicros := int64(*budgetCents) * 10000
-	_, err := s.db.ExecContext(ctx, `
+	_, err := db.ExecContext(ctx, `
 INSERT INTO usage_cap_policies (
 	tenant_id, agent_id, window_key, max_cost_micros, enabled, priority, source
 ) VALUES ($1,$2,'month',$3,true,90,$4)

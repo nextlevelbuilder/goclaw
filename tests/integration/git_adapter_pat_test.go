@@ -6,7 +6,7 @@ package integration
 //
 // What we prove here that unit tests cannot:
 //   - A real `git clone` over HTTP succeeds when the adapter's Injection env
-//     is passed through, against a server that requires the bearer token.
+//     is passed through, against a server that requires Basic PAT auth.
 //   - The token never lands in `.git/config`, the remote URL, or any
 //     credential helper after clone — i.e. the GIT_CONFIG_COUNT shape leaves
 //     no on-disk trace.

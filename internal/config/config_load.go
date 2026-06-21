@@ -311,6 +311,19 @@ func (c *Config) applyEnvOverrides() {
 		c.Gateway.AllowedOrigins = origins
 	}
 
+	// Trusted MCP server hosts from env (comma-separated, whitespace-trimmed).
+	// These hosts are exempt from the private-IP SSRF block when registering MCP
+	// servers (e.g. self-hosted MCP on a private network).
+	if v := os.Getenv("GOCLAW_MCP_ALLOWED_HOSTS"); v != "" {
+		var hosts []string
+		for h := range strings.SplitSeq(v, ",") {
+			if trimmed := strings.TrimSpace(h); trimmed != "" {
+				hosts = append(hosts, trimmed)
+			}
+		}
+		c.Gateway.MCPAllowedHosts = hosts
+	}
+
 	// Tailscale (tsnet)
 	envStr("GOCLAW_TSNET_HOSTNAME", &c.Tailscale.Hostname)
 	envStr("GOCLAW_TSNET_AUTH_KEY", &c.Tailscale.AuthKey)

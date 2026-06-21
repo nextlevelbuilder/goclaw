@@ -58,15 +58,27 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 
 		// Echo reasoning_content only for APIs/models that accept it on assistant history.
 		// Together Qwen and many OpenAI-compat gateways reject unknown message fields → HTTP 400.
-		if m.Thinking != "" && m.Role == "assistant" && openAIWireAssistantReasoningContent(model) {
-			msg["reasoning_content"] = m.Thinking
+		//
+		// Kimi Coding is stricter: when its server-side thinking is on (always-on for
+		// kimi-k2-turbo-preview), assistant tool-call messages MUST carry
+		// reasoning_content even if empty — otherwise upstream returns 400 "thinking
+		// is enabled but reasoning_content is missing in assistant tool call message".
+		if m.Role == "assistant" && openAIWireAssistantReasoningContent(model) {
+			switch {
+			case m.Thinking != "":
+				msg["reasoning_content"] = m.Thinking
+			case p.providerType == "kimi_coding":
+				// Send empty string rather than omit the field — satisfies Kimi's
+				// "must be present" check without inventing reasoning content.
+				msg["reasoning_content"] = ""
+			}
 		}
 
 		// Include content; omit empty content for assistant messages with tool_calls
 		// (Gemini rejects empty content → "must include at least one parts field").
-		if m.Role == "user" && len(m.Images) > 0 {
+		if m.Role == "user" && (len(m.Images) > 0 || len(m.Videos) > 0) {
 			var parts []map[string]any
-			// Text before images — Together / Qwen vision examples use this order; OpenAI accepts both.
+			// Text before images/videos — Together / Qwen vision examples use this order; OpenAI accepts both.
 			if m.Content != "" {
 				parts = append(parts, map[string]any{
 					"type": "text",
@@ -74,10 +86,26 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 				})
 			}
 			for _, img := range m.Images {
+				urlVal := img.URL
+				if urlVal == "" {
+					urlVal = fmt.Sprintf("data:%s;base64,%s", img.MimeType, img.Data)
+				}
 				parts = append(parts, map[string]any{
 					"type": "image_url",
 					"image_url": map[string]any{
-						"url": fmt.Sprintf("data:%s;base64,%s", img.MimeType, img.Data),
+						"url": urlVal,
+					},
+				})
+			}
+			for _, vid := range m.Videos {
+				urlVal := vid.URL
+				if urlVal == "" {
+					urlVal = fmt.Sprintf("data:%s;base64,%s", vid.MimeType, vid.Data)
+				}
+				parts = append(parts, map[string]any{
+					"type": "video_url",
+					"video_url": map[string]any{
+						"url": urlVal,
 					},
 				})
 			}
@@ -131,6 +159,15 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 		msgs = append(msgs, msg)
 	}
 
+	// Apply DashScope cache_control wrapping (verified live 2026-05-08).
+	// Uses 3-source detection from p.isDashScope() (URL + providerType + name)
+	// to handle reverse-proxied endpoints. No-op for non-DashScope endpoints
+	// or when env disabled. For native OpenAI, role mapping above renames
+	// "system"→"developer" so wrap is a no-op (role guard).
+	if p.isDashScope() && !dashScopeCacheDisabled() && len(msgs) > 0 {
+		msgs[0] = wrapSystemForDashScopeCache(msgs[0])
+	}
+
 	// Safety net: strip trailing assistant message to prevent HTTP 400 from
 	// proxy providers (LiteLLM, OpenRouter) that don't support assistant prefill.
 	// This should rarely trigger — the agent loop ensures user message is last.
@@ -154,6 +191,19 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 			body["tool_choice"] = tc
 		} else {
 			body["tool_choice"] = "auto"
+		}
+	}
+
+	// DashScope tool prefix cache: cache_control on last tool definition
+	// caches the entire tools array (descriptions + schemas, ~5-10K tokens).
+	// Combined with system block cache: 2/4 markers used, 99.5% hit rate verified.
+	if p.isDashScope() && !dashScopeCacheDisabled() {
+		if t, ok := body["tools"].([]map[string]any); ok && len(t) > 0 {
+			markersFromSystem := 0
+			if len(msgs) > 0 {
+				markersFromSystem = countCacheControlMarkers(msgs[0])
+			}
+			body["tools"] = applyDashScopeToolPrefixCache(t, markersFromSystem)
 		}
 	}
 
@@ -188,6 +238,12 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 		// Note: gpt-5.X flagship models (gpt-5.1, gpt-5.4, gpt-5.5) DO support temperature;
 		// only the mini/nano reasoning variants reject it.
 		skipTemp := strings.HasPrefix(capabilityModel, "gpt-5-mini") || strings.HasPrefix(capabilityModel, "gpt-5-nano") || strings.HasPrefix(capabilityModel, "o1") || strings.HasPrefix(capabilityModel, "o3") || strings.HasPrefix(capabilityModel, "o4")
+		// Kimi Coding rejects any temperature override — `invalid temperature: only
+		// 1 is allowed for this model`. Skip sending so the upstream applies its
+		// own default (1). Matches the model-locked behavior of o1/o3/o4.
+		if p.providerType == "kimi_coding" {
+			skipTemp = true
+		}
 		if !skipTemp {
 			body["temperature"] = v
 		}
@@ -215,6 +271,10 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 
 	// DashScope-specific passthrough keys — never send to other OpenAI-compat hosts.
 	if p.dashScopePassthroughKeys() {
+		if level, ok := req.Options[OptThinkingLevel].(string); ok && level != "" && level != "off" && dashscopeThinkingModels[model] {
+			body[OptEnableThinking] = true
+			body[OptThinkingBudget] = dashscopeThinkingBudget(level)
+		}
 		if v, ok := req.Options[OptEnableThinking]; ok {
 			body[OptEnableThinking] = v
 		}

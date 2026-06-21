@@ -3,17 +3,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useHttp } from "@/hooks/use-ws";
 import { queryKeys } from "@/lib/query-keys";
 import type { TraceData, SpanData } from "@/types/trace";
+import { buildTraceRequestParams, type TraceFilters } from "../trace-filter-params";
 
 export type { TraceData, SpanData };
-
-export interface TraceFilters {
-  agentId?: string;
-  userId?: string;
-  status?: string;
-  channel?: string;
-  limit?: number;
-  offset?: number;
-}
+export type { TraceFilters };
 
 export function useTraces(filters: TraceFilters = {}) {
   const http = useHttp();
@@ -24,14 +17,7 @@ export function useTraces(filters: TraceFilters = {}) {
   const { data, isLoading: loading, isFetching } = useQuery({
     queryKey,
     queryFn: async () => {
-      const params: Record<string, string> = {};
-      if (filters.agentId) params.agent_id = filters.agentId;
-      if (filters.userId) params.user_id = filters.userId;
-      if (filters.status) params.status = filters.status;
-      if (filters.channel) params.channel = filters.channel;
-      if (filters.limit) params.limit = String(filters.limit);
-      if (filters.offset !== undefined) params.offset = String(filters.offset);
-
+      const params = buildTraceRequestParams(filters);
       const res = await http.get<{ traces: TraceData[]; total?: number }>("/v1/traces", params);
       return { traces: res.traces ?? [], total: res.total ?? 0 };
     },

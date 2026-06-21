@@ -72,7 +72,7 @@ func (t *ReadAudioTool) resolveAudioFile(ctx context.Context, mediaID string) (p
 // callProvider dispatches audio analysis to the appropriate provider API.
 // Gemini: uses File API (upload → poll → file_data in generateContent).
 // OpenAI: uses input_audio content part in chat completions.
-// Others: falls back to base64 in image_url (best effort).
+// Transcription models: use the OpenAI-compatible audio transcription endpoint.
 func (t *ReadAudioTool) callProvider(ctx context.Context, cp credentialProvider, providerName, model string, params map[string]any) ([]byte, *providers.Usage, error) {
 	prompt := GetParamString(params, "prompt", "Analyze this audio and describe its contents.")
 	data, _ := params["data"].([]byte)
@@ -157,39 +157,7 @@ func (t *ReadAudioTool) callProvider(ctx context.Context, cp credentialProvider,
 		}
 	}
 
-	// Other providers: try standard Chat API with base64 audio as image_url (best effort).
-	p, err := t.registry.Get(ctx, providerName)
-	if err != nil {
-		return nil, nil, fmt.Errorf("provider %q not available: %w", providerName, err)
-	}
-
-	slog.Info("read_audio: using chat API fallback", "provider", providerName, "model", model, "size", len(data))
-	chatReq := providers.ChatRequest{
-		Messages: []providers.Message{
-			{
-				Role:    "user",
-				Content: prompt,
-				Images:  []providers.ImageContent{{MimeType: mime, Data: base64.StdEncoding.EncodeToString(data)}},
-			},
-		},
-		Model: model,
-		Options: map[string]any{
-			"max_tokens":  16384,
-			"temperature": 0.2,
-		},
-	}
-	reservation, reserveErr := reserveToolLLMUsage(ctx, t.usageCaps, t.Name(), providerName, model, chatReq)
-	if reserveErr != nil {
-		return nil, nil, reserveErr
-	}
-	resp, err := p.Chat(ctx, chatReq)
-	if reservation != nil {
-		reservation.Reconcile(ctx, resp, err)
-	}
-	if err != nil {
-		return nil, nil, fmt.Errorf("chat API: %w", err)
-	}
-	return []byte(resp.Content), resp.Usage, nil
+	return nil, nil, fmt.Errorf("read_audio: unsupported audio route for provider %q (type %q) model %q; supported routes are Gemini File API, native OpenAI input_audio, or OpenAI-compatible transcription models", providerName, ptype, model)
 }
 
 // openaiAudioCall sends audio to OpenAI using the input_audio content part.

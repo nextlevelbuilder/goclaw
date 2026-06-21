@@ -42,7 +42,9 @@ func wireExtraTools(
 	toolsReg.Register(tools.NewWaitTool())
 
 	// Cron tool (agent-facing)
-	toolsReg.Register(tools.NewCronTool(pgStores.Cron))
+	cronTool := tools.NewCronTool(pgStores.Cron)
+	cronTool.SetProviderStore(pgStores.Providers)
+	toolsReg.Register(cronTool)
 	slog.Info("cron tool registered")
 
 	// Heartbeat tool (agent-facing)

@@ -73,7 +73,8 @@ Finalize (runs once, uses background context if cancelled)
 
 **ToolStage**
 - Execute single tool sequentially (no goroutine overhead)
-- Execute multiple tools in parallel via goroutines, sort results by index
+- Execute eligible read-only multi-tool batches in bounded parallel, then process results in original order
+- Keep mutating, async, MCP-bridged, `exec`/`bash`, `wait`, and unknown tools sequential
 - Emit `tool.call` before, `tool.result` after
 - Record tool span
 - Append tool messages to buffer
@@ -271,7 +272,9 @@ flowchart TD
 
 - Append the assistant message (with tool calls) to the message list.
 - **Single tool call**: execute sequentially (no goroutine overhead).
-- **Multiple tool calls**: launch parallel goroutines, collect all results, sort by original index, then process sequentially.
+- **Multiple eligible read-only tool calls**: run raw I/O through a bounded goroutine pool, collect results, then process sequentially in original assistant order.
+- **Unsafe or mixed batches**: run sequentially when any call is mutating, async, MCP-bridged, `exec`/`bash`, `wait`, unknown, or over the remaining tool-call budget.
+- Run synchronous `PreToolUse` hooks before any raw parallel I/O; blocked calls append synthetic tool messages and are not executed.
 - Emit `tool.call` before execution and `tool.result` after.
 - Record a tool span for each call. Track async tools (spawn, cron) separately.
 - Save tool messages to the session.

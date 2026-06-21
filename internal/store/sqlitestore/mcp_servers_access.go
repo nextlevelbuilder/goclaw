@@ -211,7 +211,11 @@ func (s *SQLiteMCPServerStore) ListAccessible(ctx context.Context, agentID uuid.
 		if err != nil {
 			return nil, err
 		}
-		return s.scanAccessibleRows(rows)
+		result, err := s.scanAccessibleRows(rows)
+		if err != nil {
+			return nil, err
+		}
+		return s.applyContextMCPAccess(ctx, result)
 	}
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT ms.id, ms.name, ms.display_name, ms.transport, ms.command, ms.args, ms.url, ms.headers, ms.env,
@@ -226,7 +230,68 @@ func (s *SQLiteMCPServerStore) ListAccessible(ctx context.Context, agentID uuid.
 	if err != nil {
 		return nil, err
 	}
-	return s.scanAccessibleRows(rows)
+	result, err := s.scanAccessibleRows(rows)
+	if err != nil {
+		return nil, err
+	}
+	return s.applyContextMCPAccess(ctx, result)
+}
+
+func (s *SQLiteMCPServerStore) applyContextMCPAccess(ctx context.Context, result []store.MCPAccessInfo) ([]store.MCPAccessInfo, error) {
+	scopes := store.ChannelContextScopeChainFromContext(ctx)
+	if len(scopes) == 0 {
+		return result, nil
+	}
+	for _, scope := range scopes {
+		grants, err := s.ListContextGrantsForScope(ctx, scope)
+		if err != nil {
+			return nil, err
+		}
+		if len(grants) == 0 {
+			continue
+		}
+		byServer := make(map[uuid.UUID]int, len(result))
+		for i := range result {
+			byServer[result[i].Server.ID] = i
+		}
+		for _, grant := range grants {
+			if idx, exists := byServer[grant.ServerID]; exists {
+				if !grant.Enabled {
+					result = append(result[:idx], result[idx+1:]...)
+					byServer = make(map[uuid.UUID]int, len(result))
+					for i := range result {
+						byServer[result[i].Server.ID] = i
+					}
+					continue
+				}
+				result[idx].ToolAllow = decodeGrantStringList(grant.ToolAllow)
+				result[idx].ToolDeny = decodeGrantStringList(grant.ToolDeny)
+				continue
+			}
+			if !grant.Enabled {
+				continue
+			}
+			server, err := s.GetServer(ctx, grant.ServerID)
+			if err != nil || server == nil || !server.Enabled {
+				continue
+			}
+			result = append(result, store.MCPAccessInfo{
+				Server:    *server,
+				ToolAllow: decodeGrantStringList(grant.ToolAllow),
+				ToolDeny:  decodeGrantStringList(grant.ToolDeny),
+			})
+		}
+	}
+	return result, nil
+}
+
+func decodeGrantStringList(raw json.RawMessage) []string {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	var list []string
+	_ = json.Unmarshal(raw, &list)
+	return list
 }
 
 // scanAccessibleRows decodes the shared SELECT projection used by both the

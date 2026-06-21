@@ -8,6 +8,7 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -55,7 +56,7 @@ func (e *errTypedCredential) Error() string { return e.msg }
 // the bytes that get encrypted-and-stored. Returns (envBytes, credentialType,
 // hostScope, error). On success, envBytes is the JSON-encoded blob (e.g.
 // `{"token":"..."}` or `{"key":"..."}`) ready for SetUserCredentialsTyped.
-func prepareTypedCredentialEnv(locale string, body typedCredentialBody) ([]byte, *string, *string, *errTypedCredential) {
+func prepareTypedCredentialEnv(ctx context.Context, locale string, body typedCredentialBody) ([]byte, *string, *string, *errTypedCredential) {
 	if body.CredentialType == nil || *body.CredentialType == "" || *body.CredentialType == "env" {
 		// Caller should route to legacy env path. Indicate that with all-nil
 		// returns + nil error; handler treats this as "fall through".
@@ -126,7 +127,7 @@ func prepareTypedCredentialEnv(locale string, body typedCredentialBody) ([]byte,
 				errorKey: "git.cred_blob_missing_key",
 			}
 		}
-		if err := tools.ValidateSSHKey([]byte(key)); err != nil {
+		if err := tools.ValidateSSHKeyForStorage(ctx, []byte(key)); err != nil {
 			if errors.Is(err, tools.ErrSSHKeyPassphraseUnsupported) {
 				return nil, nil, nil, &errTypedCredential{
 					status:   http.StatusBadRequest,

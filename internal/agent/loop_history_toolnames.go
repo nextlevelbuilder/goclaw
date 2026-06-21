@@ -31,9 +31,11 @@ func (l *Loop) filteredToolNames() []string {
 		return l.tools.List()
 	}
 	defs := l.toolPolicy.FilterTools(l.tools, l.id, l.provider.Name(), l.agentToolPolicy, nil, false, false)
-	names := make([]string, len(defs))
-	for i, d := range defs {
-		names[i] = d.Function.Name
+	names := make([]string, 0, len(defs))
+	for _, d := range defs {
+		if d.Function != nil {
+			names = append(names, d.Function.Name)
+		}
 	}
 	return names
 }

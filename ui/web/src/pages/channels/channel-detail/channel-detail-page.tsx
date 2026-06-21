@@ -10,7 +10,9 @@ import { ChannelGeneralTab } from "./channel-general-tab";
 import { ChannelCredentialsTab } from "./channel-credentials-tab";
 import { ChannelGroupsTab } from "./channel-groups-tab";
 import { ChannelManagersTab } from "./channel-managers-tab";
+import { ChannelContextsTab } from "./channel-contexts-tab";
 import { ChannelDiagnosticsCard } from "./channel-diagnostics-card";
+import { PassiveMemorySection } from "./passive-memory-section";
 import { DetailPageSkeleton } from "@/components/shared/loading-skeleton";
 import { useChannels } from "../hooks/use-channels";
 import { channelsWithAuth } from "../channel-wizard-registry";
@@ -19,6 +21,7 @@ import {
   getChannelRemediationMeta,
   getRenderableChannelStatus,
   getChannelStatusMeta,
+  shouldShowChannelDiagnosticsCard,
 } from "../channels-status-view";
 import { useChannelTimeline } from "./channel-detail-timeline-hook";
 import { ChannelDetailDialogs } from "./channel-detail-dialogs";
@@ -30,7 +33,7 @@ interface ChannelDetailPageProps {
 }
 
 const DEFAULT_CHANNEL_DETAIL_TAB = "general";
-const baseChannelDetailTabs = new Set(["general", "credentials", "managers"]);
+const baseChannelDetailTabs = new Set(["general", "credentials", "contexts", "managers"]);
 
 export function resolveChannelDetailTab(
   requestedTab: string | null,
@@ -60,6 +63,13 @@ export function ChannelDetailPage({
     listManagers,
     addManager,
     removeManager,
+    listContexts,
+    listContextMembers,
+    listContextCapabilities,
+    upsertContextGrant,
+    deleteContextGrant,
+    setContextCredentials,
+    deleteContextCredentials,
   } = useChannelDetail(instanceId);
   const { agents } = useAgents();
   const { channels } = useChannels();
@@ -130,12 +140,7 @@ export function ChannelDetailPage({
 
   const timelineItems = useChannelTimeline(status, t);
 
-  const showDiagnosticsCard =
-    status?.state === "failed" ||
-    status?.state === "degraded" ||
-    !!status?.remediation ||
-    !!status?.consecutive_failures ||
-    !!status?.first_failed_at;
+  const showDiagnosticsCard = shouldShowChannelDiagnosticsCard(status);
 
   const neutralHealthNote =
     !showDiagnosticsCard &&
@@ -185,6 +190,8 @@ export function ChannelDetailPage({
             </div>
           )}
 
+          <PassiveMemorySection instanceId={instance.id} />
+
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="w-full justify-start overflow-x-auto overflow-y-hidden">
               <TabsTrigger value="general">
@@ -198,6 +205,9 @@ export function ChannelDetailPage({
                   {t("detail.tabs.groups")}
                 </TabsTrigger>
               )}
+              <TabsTrigger value="contexts">
+                {t("detail.tabs.contexts")}
+              </TabsTrigger>
               <TabsTrigger value="managers">
                 {t("detail.tabs.managers")}
               </TabsTrigger>
@@ -227,6 +237,34 @@ export function ChannelDetailPage({
                 />
               </TabsContent>
             )}
+
+            <TabsContent value="contexts" className="mt-4">
+              <ChannelContextsTab
+                listContexts={listContexts}
+                listContextMembers={listContextMembers}
+                listContextCapabilities={listContextCapabilities}
+                onGrantCapability={(target) => upsertContextGrant({
+                  scopeType: target.context.scope_type,
+                  scopeKey: target.context.scope_key,
+                  capability: target.capability,
+                })}
+                onRevokeCapability={(target) => deleteContextGrant({
+                  scopeType: target.context.scope_type,
+                  scopeKey: target.context.scope_key,
+                  capability: target.capability,
+                })}
+                onSaveCredentials={(target, payload) => setContextCredentials({
+                  scopeType: target.context.scope_type,
+                  scopeKey: target.context.scope_key,
+                  capability: target.capability,
+                }, payload)}
+                onDeleteCredentials={(target) => deleteContextCredentials({
+                  scopeType: target.context.scope_type,
+                  scopeKey: target.context.scope_key,
+                  capability: target.capability,
+                })}
+              />
+            </TabsContent>
 
             <TabsContent value="managers" className="mt-4">
               <ChannelManagersTab

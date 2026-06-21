@@ -26,25 +26,30 @@ import (
 
 // AgentsHandler handles agent CRUD and sharing endpoints.
 type AgentsHandler struct {
-	agents           store.AgentStore
-	providers        store.ProviderStore
-	providerReg      *providers.Registry
-	db               *sql.DB
-	tracingStore     store.TracingStore
-	memoryStore      store.MemoryStore         // for import (nil = disabled)
-	kgStore          store.KnowledgeGraphStore // for import (nil = disabled)
-	episodicStore    store.EpisodicStore       // for import (nil in SQLite/lite builds)
-	vaultStore       store.VaultStore          // for vault import (nil = disabled)
-	toolsReg         ToolPreviewLister         // for system prompt preview tool resolution (nil = fallback)
-	skillsLoader     SkillPreviewBuilder       // for system prompt preview pinned skills (nil = skip)
-	skillAccessStore store.SkillAccessStore    // for system prompt preview skill filtering (nil = skip)
-	teamStore        store.TeamStore           // for system prompt preview team context (nil = skip)
-	agentLinkStore   store.AgentLinkStore      // for system prompt preview delegation targets (nil = skip)
-	defaultWorkspace string                    // default workspace path template (e.g. "~/.goclaw/workspace")
-	dataDir          string                    // resolved data directory (e.g. "~/.goclaw/data") — for team workspace export
-	msgBus           *bus.MessageBus           // for cache invalidation events (nil = no events)
-	summoner         *AgentSummoner            // LLM-based agent setup (nil = disabled)
-	isOwner          func(string) bool         // checks if user ID is a system owner (nil = no owners configured)
+	agents                    store.AgentStore
+	providers                 store.ProviderStore
+	providerReg               *providers.Registry
+	db                        *sql.DB
+	tracingStore              store.TracingStore
+	memoryStore               store.MemoryStore         // for import (nil = disabled)
+	kgStore                   store.KnowledgeGraphStore // for import (nil = disabled)
+	episodicStore             store.EpisodicStore       // for import (nil in SQLite/lite builds)
+	vaultStore                store.VaultStore          // for vault import (nil = disabled)
+	toolsReg                  ToolPreviewLister         // for system prompt preview tool resolution (nil = fallback)
+	skillsLoader              SkillPreviewBuilder       // for system prompt preview pinned skills (nil = skip)
+	skillAccessStore          store.SkillAccessStore    // for system prompt preview skill filtering (nil = skip)
+	teamStore                 store.TeamStore           // for system prompt preview team context (nil = skip)
+	agentLinkStore            store.AgentLinkStore      // for system prompt preview delegation targets (nil = skip)
+	secureCLI                 store.SecureCLIStore
+	secureCLIGrants           store.SecureCLIAgentGrantStore
+	secureCLIAgentCreds       store.SecureCLIAgentCredentialStore
+	defaultWorkspace          string // default workspace path template (e.g. "~/.goclaw/workspace")
+	dataDir                   string // resolved data directory (e.g. "~/.goclaw/data") — for team workspace export
+	gatewayAddr               string
+	msgBus                    *bus.MessageBus   // for cache invalidation events (nil = no events)
+	summoner                  *AgentSummoner    // LLM-based agent setup (nil = disabled)
+	isOwner                   func(string) bool // checks if user ID is a system owner (nil = no owners configured)
+	findGatewayOperatorBinary func() (string, error)
 }
 
 // NewAgentsHandler creates a handler for agent management endpoints.
@@ -222,10 +227,14 @@ func (h *AgentsHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req store.AgentData
-	if !bindJSON(w, r, locale, &req) {
+	var createReq struct {
+		store.AgentData
+		GrantGatewayOperatorAccess bool `json:"grant_gateway_operator_access,omitempty"`
+	}
+	if !bindJSON(w, r, locale, &createReq) {
 		return
 	}
+	req := createReq.AgentData
 
 	if !isValidSlug(req.AgentKey) {
 		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidSlug, "agent_key"))
@@ -317,6 +326,16 @@ func (h *AgentsHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 
 	emitAudit(h.msgBus, r, "agent.created", "agent", req.ID.String())
 	publicAgent := canonicalizeAgentForResponse(&req)
+	if createReq.GrantGatewayOperatorAccess {
+		writeJSON(w, http.StatusCreated, struct {
+			store.AgentData
+			GatewayOperatorBootstrap *gatewayOperatorBootstrapResult `json:"gateway_operator_bootstrap,omitempty"`
+		}{
+			AgentData:                publicAgent,
+			GatewayOperatorBootstrap: h.bootstrapGatewayOperatorForCreatedAgent(r.Context(), req.ID, locale),
+		})
+		return
+	}
 	writeJSON(w, http.StatusCreated, publicAgent)
 }
 

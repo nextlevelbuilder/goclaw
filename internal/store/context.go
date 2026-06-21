@@ -50,6 +50,8 @@ const (
 	CredentialUserIDKey contextKey = "goclaw_credential_user_id"
 	// SenderNameKey is the display name from channel metadata (for bootstrap auto-contact).
 	SenderNameKey contextKey = "goclaw_sender_name"
+	// ChannelContextScopeKey carries the channel/group/user scope for runtime grants and credentials.
+	ChannelContextScopeKey contextKey = "goclaw_channel_context_scope"
 	// AgentAudioKey carries the immutable agent audio snapshot for TTS tool dispatch.
 	AgentAudioKey contextKey = "goclaw_agent_audio"
 )

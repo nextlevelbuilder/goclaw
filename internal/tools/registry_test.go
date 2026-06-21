@@ -168,6 +168,42 @@ func TestRegistry_ExecuteWithContext_RateLimiting(t *testing.T) {
 	}
 }
 
+// SetRateLimiter must be re-callable so that startup code can swap the limiter
+// after DB-overlaid config is applied (cmd/gateway.go re-applies once
+// system_configs has overlaid the JSON5 default).
+func TestRegistry_SetRateLimiter_ReplacesPriorLimiter(t *testing.T) {
+	reg := NewRegistry()
+	reg.SetRateLimiter(NewToolRateLimiter(1)) // simulate JSON5 default
+	reg.Register(&mockTool{name: "tool"})
+
+	// Replace with higher limit (simulates DB overlay = 5)
+	reg.SetRateLimiter(NewToolRateLimiter(5))
+
+	for i := range 5 {
+		result := reg.ExecuteWithContext(context.Background(), "tool", nil,
+			"", "", "", "session-replace", nil)
+		if result.IsError {
+			t.Errorf("call %d should succeed under new 5/h limit: %s", i, result.ForLLM)
+		}
+	}
+	result := reg.ExecuteWithContext(context.Background(), "tool", nil,
+		"", "", "", "session-replace", nil)
+	if !result.IsError {
+		t.Error("6th call should hit the 5/h limit")
+	}
+
+	// Disable rate limiting via nil — verifies the gateway path that disables
+	// the limiter when cfg.Tools.RateLimitPerHour <= 0.
+	reg.SetRateLimiter(nil)
+	for i := range 10 {
+		result := reg.ExecuteWithContext(context.Background(), "tool", nil,
+			"", "", "", "session-replace", nil)
+		if result.IsError {
+			t.Errorf("call %d after nil limiter should be unbounded", i)
+		}
+	}
+}
+
 func TestRegistry_ExecuteWithContext_NoRateLimitWithoutSessionKey(t *testing.T) {
 	reg := NewRegistry()
 	reg.SetRateLimiter(NewToolRateLimiter(1))

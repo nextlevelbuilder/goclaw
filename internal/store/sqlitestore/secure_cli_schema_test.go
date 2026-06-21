@@ -5,6 +5,7 @@ package sqlitestore
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strings"
 	"testing"
 
@@ -75,11 +76,11 @@ func TestSQLite_CreateBinary_AdapterNameRoundTrip(t *testing.T) {
 
 	adapter := "git"
 	bin := &store.SecureCLIBinary{
-		BinaryName:  "git",
-		Description: "git with PAT adapter",
-		IsGlobal:    true,
-		Enabled:     true,
-		CreatedBy:   "u-tester",
+		BinaryName:   "git",
+		Description:  "git with PAT adapter",
+		IsGlobal:     true,
+		Enabled:      true,
+		CreatedBy:    "u-tester",
 		AdapterName:  &adapter,
 		EncryptedEnv: []byte(`{}`),
 	}
@@ -206,11 +207,11 @@ func TestSQLite_LookupByBinary_ProjectsNewColumns(t *testing.T) {
 
 	adapter := "git"
 	bin := &store.SecureCLIBinary{
-		BinaryName:  "git",
-		Description: "git adapter binary",
-		IsGlobal:    true,
-		Enabled:     true,
-		CreatedBy:   "u-tester",
+		BinaryName:   "git",
+		Description:  "git adapter binary",
+		IsGlobal:     true,
+		Enabled:      true,
+		CreatedBy:    "u-tester",
 		AdapterName:  &adapter,
 		EncryptedEnv: []byte(`{}`),
 	}
@@ -266,5 +267,171 @@ func TestSQLite_LookupByBinary_BackwardCompatibleNulls(t *testing.T) {
 	}
 	if got.UserHostScope != nil {
 		t.Fatalf("expected UserHostScope NULL, got %q", *got.UserHostScope)
+	}
+}
+
+func seedAgent(t *testing.T, db *sql.DB, tenantID uuid.UUID, key string) uuid.UUID {
+	t.Helper()
+	id := uuid.New()
+	_, err := db.Exec(
+		`INSERT INTO agents (id, tenant_id, agent_key, display_name, owner_id, provider, model, agent_type, status)
+		 VALUES (?, ?, ?, ?, 'owner', 'openai', 'gpt-5', 'predefined', 'active')`,
+		id, tenantID, key, key,
+	)
+	if err != nil {
+		t.Fatalf("seed agent %s: %v", key, err)
+	}
+	return id
+}
+
+func TestSQLite_SetAgentCredentialsTyped_RoundTrip(t *testing.T) {
+	s, db := newPhase1Store(t)
+	tid := seedTenant(t, db, "t-agent-typed")
+	ctx := store.WithTenantID(context.Background(), tid)
+	agentID := seedAgent(t, db, tid, "builder")
+
+	seedBinary(t, db, tid, "git", true, true)
+	var binID uuid.UUID
+	if err := db.QueryRow(`SELECT id FROM secure_cli_binaries WHERE binary_name = ? AND tenant_id = ?`, "git", tid).Scan(&binID); err != nil {
+		t.Fatalf("lookup seeded binary: %v", err)
+	}
+
+	credType := "pat"
+	hostScope := "github.com"
+	plaintext := []byte(`{"token":"ghp_agent"}`)
+	if err := s.SetAgentCredentialsTyped(ctx, binID, agentID, plaintext, &credType, &hostScope, "admin"); err != nil {
+		t.Fatalf("SetAgentCredentialsTyped: %v", err)
+	}
+
+	got, err := s.GetAgentCredentials(ctx, binID, agentID)
+	if err != nil {
+		t.Fatalf("GetAgentCredentials: %v", err)
+	}
+	if got == nil {
+		t.Fatalf("expected credential, got nil")
+	}
+	if got.CredentialType == nil || *got.CredentialType != "pat" {
+		t.Fatalf("expected credential_type=pat, got %v", got.CredentialType)
+	}
+	if got.HostScope == nil || *got.HostScope != "github.com" {
+		t.Fatalf("expected host_scope=github.com, got %v", got.HostScope)
+	}
+	if string(got.EncryptedEnv) != string(plaintext) {
+		t.Fatalf("decrypted env mismatch: got %q want %q", got.EncryptedEnv, plaintext)
+	}
+}
+
+func TestSQLite_LookupByBinary_UsesAgentCredentialWithoutUserID(t *testing.T) {
+	s, db := newPhase1Store(t)
+	tid := seedTenant(t, db, "t-agent-lookup")
+	ctx := store.WithTenantID(context.Background(), tid)
+	agentID := seedAgent(t, db, tid, "builder")
+
+	adapter := "git"
+	bin := &store.SecureCLIBinary{
+		BinaryName:   "git",
+		Description:  "git adapter binary",
+		IsGlobal:     true,
+		Enabled:      true,
+		CreatedBy:    "u-tester",
+		AdapterName:  &adapter,
+		EncryptedEnv: []byte(`{}`),
+	}
+	if err := s.Create(ctx, bin); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	credType := "pat"
+	hostScope := "github.com"
+	if err := s.SetAgentCredentialsTyped(ctx, bin.ID, agentID, []byte(`{"token":"agent"}`), &credType, &hostScope, "admin"); err != nil {
+		t.Fatalf("SetAgentCredentialsTyped: %v", err)
+	}
+
+	got, err := s.LookupByBinary(ctx, "git", &agentID, "")
+	if err != nil {
+		t.Fatalf("LookupByBinary: %v", err)
+	}
+	if got == nil {
+		t.Fatalf("expected binary, got nil")
+	}
+	if got.CredentialSource != "agent" {
+		t.Fatalf("expected agent source, got %q", got.CredentialSource)
+	}
+	if got.CredentialType == nil || *got.CredentialType != "pat" {
+		t.Fatalf("expected CredentialType=pat, got %v", got.CredentialType)
+	}
+	if string(got.CredentialEnv) != `{"token":"agent"}` {
+		t.Fatalf("expected agent credential env, got %q", got.CredentialEnv)
+	}
+}
+
+func TestSQLite_LookupByBinary_UserCredentialOverridesAgentCredential(t *testing.T) {
+	s, db := newPhase1Store(t)
+	tid := seedTenant(t, db, "t-user-over-agent")
+	ctx := store.WithTenantID(context.Background(), tid)
+	agentID := seedAgent(t, db, tid, "builder")
+
+	adapter := "git"
+	bin := &store.SecureCLIBinary{
+		BinaryName:   "git",
+		Description:  "git adapter binary",
+		IsGlobal:     true,
+		Enabled:      true,
+		CreatedBy:    "u-tester",
+		AdapterName:  &adapter,
+		EncryptedEnv: []byte(`{}`),
+	}
+	if err := s.Create(ctx, bin); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	credType := "pat"
+	hostScope := "github.com"
+	if err := s.SetAgentCredentialsTyped(ctx, bin.ID, agentID, []byte(`{"token":"agent"}`), &credType, &hostScope, "admin"); err != nil {
+		t.Fatalf("SetAgentCredentialsTyped: %v", err)
+	}
+	if err := s.SetUserCredentialsTyped(ctx, bin.ID, "u-1", []byte(`{"token":"user"}`), &credType, &hostScope); err != nil {
+		t.Fatalf("SetUserCredentialsTyped: %v", err)
+	}
+
+	got, err := s.LookupByBinary(ctx, "git", &agentID, "u-1")
+	if err != nil {
+		t.Fatalf("LookupByBinary: %v", err)
+	}
+	if got == nil {
+		t.Fatalf("expected binary, got nil")
+	}
+	if got.CredentialSource != "user" {
+		t.Fatalf("expected user source, got %q", got.CredentialSource)
+	}
+	if string(got.CredentialEnv) != `{"token":"user"}` {
+		t.Fatalf("expected user credential env, got %q", got.CredentialEnv)
+	}
+}
+
+func TestSQLite_SetAgentCredentialsRejectsCrossTenantAgent(t *testing.T) {
+	s, db := newPhase1Store(t)
+	tenantA := seedTenant(t, db, "t-agent-cred-a")
+	tenantB := seedTenant(t, db, "t-agent-cred-b")
+	ctxA := store.WithTenantID(context.Background(), tenantA)
+	agentB := seedAgent(t, db, tenantB, "other-tenant-agent")
+
+	bin := &store.SecureCLIBinary{
+		BinaryName:   "git",
+		Description:  "git adapter binary",
+		IsGlobal:     true,
+		Enabled:      true,
+		CreatedBy:    "u-tester",
+		EncryptedEnv: []byte(`{}`),
+	}
+	if err := s.Create(ctxA, bin); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	credType := "pat"
+	hostScope := "github.com"
+	err := s.SetAgentCredentialsTyped(ctxA, bin.ID, agentB, []byte(`{"token":"agent"}`), &credType, &hostScope, "admin")
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("expected sql.ErrNoRows for cross-tenant agent, got %v", err)
 	}
 }

@@ -47,6 +47,26 @@ func callBytePlusImageGen(ctx context.Context, apiKey, apiBase, model, prompt st
 		"response_format": "url",
 	}
 
+	if rawImgs, ok := params["ref_images"]; ok {
+		if refImgs, ok := rawImgs.([]*referenceImage); ok && len(refImgs) > 0 {
+			if len(refImgs) > 1 {
+				slog.Warn("byteplus image gen: provider only supports 1 reference image, using the first one", "count", len(refImgs))
+			}
+			refImg := refImgs[0]
+			var refURL string
+			if refImg.URL != "" {
+				refURL = refImg.URL
+			} else {
+				refMime := refImg.MimeType
+				if refMime == "" {
+					refMime = "image/png"
+				}
+				refURL = fmt.Sprintf("data:%s;base64,%s", refMime, refImg.Base64)
+			}
+			body["image"] = refURL
+		}
+	}
+
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		return nil, nil, fmt.Errorf("marshal request: %w", err)

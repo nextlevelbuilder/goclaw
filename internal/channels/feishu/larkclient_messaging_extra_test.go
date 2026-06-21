@@ -273,7 +273,9 @@ func TestDeleteMessageReaction_APIError(t *testing.T) {
 // --- GetBotInfo (returns open_id string) ---
 
 func TestGetBotInfo_Success(t *testing.T) {
-	srv := newSimpleMockServer(t, `{"code":0,"msg":"ok","data":{"bot":{"open_id":"ou_bot_123","app_name":"TestBot"}}}`)
+	// Real /open-apis/bot/v3/info responses put "bot" at the TOP level,
+	// not inside "data" (legacy API shape).
+	srv := newSimpleMockServer(t, `{"code":0,"msg":"ok","bot":{"open_id":"ou_bot_123","app_name":"TestBot"}}`)
 
 	c := NewLarkClient("app", "secret", srv.URL)
 	openID, err := c.GetBotInfo(context.Background())
@@ -282,6 +284,30 @@ func TestGetBotInfo_Success(t *testing.T) {
 	}
 	if openID != "ou_bot_123" {
 		t.Errorf("open_id: got %q, want ou_bot_123", openID)
+	}
+}
+
+func TestGetBotInfo_DataWrappedFallback(t *testing.T) {
+	// Defensive fallback for deployments that wrap the bot object in "data".
+	srv := newSimpleMockServer(t, `{"code":0,"msg":"ok","data":{"bot":{"open_id":"ou_bot_456","app_name":"TestBot"}}}`)
+
+	c := NewLarkClient("app", "secret", srv.URL)
+	openID, err := c.GetBotInfo(context.Background())
+	if err != nil {
+		t.Fatalf("GetBotInfo error: %v", err)
+	}
+	if openID != "ou_bot_456" {
+		t.Errorf("open_id: got %q, want ou_bot_456", openID)
+	}
+}
+
+func TestGetBotInfo_MissingBotObject(t *testing.T) {
+	srv := newSimpleMockServer(t, `{"code":0,"msg":"ok"}`)
+
+	c := NewLarkClient("app", "secret", srv.URL)
+	_, err := c.GetBotInfo(context.Background())
+	if err == nil {
+		t.Fatal("expected error when response has no bot object")
 	}
 }
 

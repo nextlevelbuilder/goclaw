@@ -12,6 +12,7 @@ export interface CLIEnvEntryResponse {
 }
 
 export type CLIEnvPayload = Record<string, string | CLIEnvEntryInput>;
+export type CLIGitCredentialType = "env" | "pat" | "ssh_key";
 
 export interface SecureCLIBinary {
   id: string;
@@ -58,6 +59,7 @@ export interface CLIPreset {
   deny_verbose: string[];
   timeout: number;
   tips: string;
+  adapter_name?: string;
 }
 
 export interface CLICredentialInput {
@@ -113,6 +115,29 @@ export interface CLIAgentGrantInput {
    * Keys must match ^[A-Z_][A-Z0-9_]*$ and must not be on the denylist.
    */
   env_vars?: CLIEnvPayload | null;
+}
+
+export interface CLIAgentCredential {
+  id: string;
+  binary_id: string;
+  agent_id: string;
+  agent_key?: string;
+  name?: string;
+  has_secret: boolean;
+  env_keys?: string[];
+  env?: Record<string, CLIEnvEntryResponse>;
+  credential_type?: CLIGitCredentialType | string | null;
+  host_scope?: string | null;
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CLIAgentCredentialInput {
+  env?: CLIEnvPayload;
+  credential_type?: Exclude<CLIGitCredentialType, "env">;
+  host_scope?: string;
+  blob?: Record<string, string>;
 }
 
 /** Summary of a single grant shown in the table row chips (Phase 4 API field). */

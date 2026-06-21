@@ -15,22 +15,53 @@ var imageGenToolDef = providers.ToolDefinition{Type: "image_generation"}
 
 // buildFilteredTools resolves the per-iteration tool definitions based on policy,
 // disabled tools, bootstrap mode, skill visibility, channel type, and iteration budget.
-// Per-user MCP tools must be registered in the Registry before calling this function
-// (via getUserMCPTools) so they are included in policy filtering and execution.
+// Per-user MCP tools (require_user_credentials servers) are passed in via userTools —
+// their objects deliberately live ONLY in l.mcpUserTools (cross-user isolation), NOT
+// in the shared registry. They are surfaced via a request-scoped overlay registry so
+// the PolicyEngine evaluates AND emits them under the SAME allow/deny rules as
+// registry tools; execution routes per-actor via executeToolForActor.
 // Returns tool definitions for the provider, an allowed-tools map for execution validation,
 // and the (potentially modified) messages slice when final-iteration stripping appends a hint.
-func (l *Loop) buildFilteredTools(req *RunRequest, hadBootstrap bool, iteration, maxIter int, messages []providers.Message) ([]providers.ToolDefinition, map[string]bool, []providers.Message) {
+func (l *Loop) buildFilteredTools(req *RunRequest, hadBootstrap bool, iteration, maxIter int, messages []providers.Message, userTools []tools.Tool) ([]providers.ToolDefinition, map[string]bool, []providers.Message) {
 	// Build provider request with policy-filtered tools.
 	var toolDefs []providers.ToolDefinition
 	var allowedTools map[string]bool
 	if l.toolPolicy != nil {
-		toolDefs = l.toolPolicy.FilterTools(l.tools, l.id, l.provider.Name(), l.agentToolPolicy, req.ToolAllow, false, false)
+		// Per-user MCP tool objects are NOT in the shared registry (cross-user
+		// isolation — see getUserMCPTools), so FilterTools alone cannot emit them.
+		// Wrap the registry in a request-scoped overlay that adds the calling actor's
+		// per-user tools: FilterTools then evaluates them through the same policy
+		// pipeline (profile/allow/deny, incl. an explicit deny on a per-user tool name)
+		// and emits them via overlay.Get. The overlay is local and discarded after this
+		// call, so the shared registry — and thus other users — stay unaffected.
+		// NewUserToolOverlay returns l.tools unchanged when userTools is empty.
+		registry := tools.NewUserToolOverlay(l.tools, userTools)
+		toolDefs = l.toolPolicy.FilterTools(registry, l.id, l.provider.Name(), l.agentToolPolicy, req.ToolAllow, false, false)
 		allowedTools = make(map[string]bool, len(toolDefs))
 		for _, td := range toolDefs {
-			allowedTools[td.Function.Name] = true
+			if td.Function != nil {
+				allowedTools[td.Function.Name] = true
+			}
 		}
 	} else {
+		// No policy → all tools allowed. ProviderDefs() omits per-user MCP tools (not in
+		// the shared registry), so append their defs directly (dedup by name).
 		toolDefs = l.tools.ProviderDefs()
+		if len(userTools) > 0 {
+			seen := make(map[string]bool, len(toolDefs))
+			for _, td := range toolDefs {
+				if td.Function != nil {
+					seen[td.Function.Name] = true
+				}
+			}
+			for _, t := range userTools {
+				if t == nil || seen[t.Name()] {
+					continue
+				}
+				seen[t.Name()] = true
+				toolDefs = append(toolDefs, tools.ToProviderDef(t))
+			}
+		}
 	}
 
 	// V3 orchestration mode filtering: hide tools the agent shouldn't see.
@@ -38,10 +69,12 @@ func (l *Loop) buildFilteredTools(req *RunRequest, hadBootstrap bool, iteration,
 	if orchDeny := orchModeDenyTools(l.orchMode); len(orchDeny) > 0 {
 		filtered := toolDefs[:0:0]
 		for _, td := range toolDefs {
-			if !orchDeny[td.Function.Name] {
+			if td.Function == nil || !orchDeny[td.Function.Name] {
 				filtered = append(filtered, td)
 			} else {
-				delete(allowedTools, td.Function.Name)
+				if allowedTools != nil {
+					delete(allowedTools, td.Function.Name)
+				}
 			}
 		}
 		toolDefs = filtered
@@ -51,10 +84,12 @@ func (l *Loop) buildFilteredTools(req *RunRequest, hadBootstrap bool, iteration,
 	if len(l.disabledTools) > 0 {
 		filtered := toolDefs[:0]
 		for _, td := range toolDefs {
-			if !l.disabledTools[td.Function.Name] {
+			if td.Function == nil || !l.disabledTools[td.Function.Name] {
 				filtered = append(filtered, td)
 			} else {
-				delete(allowedTools, td.Function.Name)
+				if allowedTools != nil {
+					delete(allowedTools, td.Function.Name)
+				}
 			}
 		}
 		toolDefs = filtered
@@ -65,7 +100,7 @@ func (l *Loop) buildFilteredTools(req *RunRequest, hadBootstrap bool, iteration,
 	if hadBootstrap && l.agentType != store.AgentTypePredefined {
 		var bootstrapDefs []providers.ToolDefinition
 		for _, td := range toolDefs {
-			if bootstrapToolAllowlist[td.Function.Name] {
+			if td.Function != nil && bootstrapToolAllowlist[td.Function.Name] {
 				bootstrapDefs = append(bootstrapDefs, td)
 			}
 		}
@@ -77,7 +112,7 @@ func (l *Loop) buildFilteredTools(req *RunRequest, hadBootstrap bool, iteration,
 	if !l.skillEvolve {
 		filtered := toolDefs[:0:0]
 		for _, td := range toolDefs {
-			if td.Function.Name != "skill_manage" {
+			if td.Function == nil || td.Function.Name != "skill_manage" {
 				filtered = append(filtered, td)
 			}
 		}
@@ -88,10 +123,12 @@ func (l *Loop) buildFilteredTools(req *RunRequest, hadBootstrap bool, iteration,
 	if req.ChannelType != "" {
 		filtered := toolDefs[:0:0]
 		for _, td := range toolDefs {
-			if tool, ok := l.tools.Get(td.Function.Name); ok {
-				if ca, ok := tool.(tools.ChannelAware); ok {
-					if !slices.Contains(ca.RequiredChannelTypes(), req.ChannelType) {
-						continue
+			if td.Function != nil {
+				if tool, ok := l.tools.Get(td.Function.Name); ok {
+					if ca, ok := tool.(tools.ChannelAware); ok {
+						if !slices.Contains(ca.RequiredChannelTypes(), req.ChannelType) {
+							continue
+						}
 					}
 				}
 			}

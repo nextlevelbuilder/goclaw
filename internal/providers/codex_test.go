@@ -1083,3 +1083,43 @@ func TestCodexProviderBuildRequestBodyWithImages(t *testing.T) {
 		t.Errorf("content[1] type = %v, want input_text", content[1]["type"])
 	}
 }
+
+func TestCodexBuildRequestBody_NilFunction_HandlesGracefully(t *testing.T) {
+	p := NewCodexProvider("test", &staticTokenSource{token: "test"}, "", "gpt-4o")
+
+	req := ChatRequest{
+		Messages: []Message{{Role: "user", Content: "Draw and search"}},
+		Tools: []ToolDefinition{
+			{
+				Type:     "some_unsupported_native_tool",
+				Function: nil,
+			},
+			{
+				Type: "function",
+				Function: &ToolFunctionSchema{
+					Name:        "web_search",
+					Description: "Search the web",
+					Parameters:  map[string]any{"type": "object"},
+				},
+			},
+		},
+	}
+
+	body := p.buildRequestBody(req, false)
+
+	tools, ok := body["tools"].([]map[string]any)
+	if !ok {
+		t.Fatalf("tools is not []map[string]any: %T", body["tools"])
+	}
+
+	// Should only serialize the function tool and ignore the native tool with nil Function
+	if len(tools) != 1 {
+		t.Fatalf("expected 1 tool in Codex request, got %d", len(tools))
+	}
+
+	tool := tools[0]
+	if tool["type"] != "function" || tool["name"] != "web_search" {
+		t.Errorf("expected function tool 'web_search', got: %v", tool)
+	}
+}
+

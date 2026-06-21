@@ -39,13 +39,14 @@ var apiBase = "https://bot-api.zaloplatforms.com"
 // Channel connects to the Zalo OA Bot API.
 type Channel struct {
 	*channels.BaseChannel
-	token      string
-	dmPolicy   string
-	mediaMaxMB int
-	blockReply *bool
-	stopCh     chan struct{}
-	client     *http.Client
-	pollClient *http.Client
+	token        string
+	dmPolicy     string
+	mediaMaxMB   int
+	blockReply   *bool
+	chatBehavior *config.ChatBehaviorConfig
+	stopCh       chan struct{}
+	client       *http.Client
+	pollClient   *http.Client
 	// pairingService, pairingDebounce are inherited from channels.BaseChannel.
 }
 
@@ -69,14 +70,15 @@ func New(cfg config.ZaloConfig, msgBus *bus.MessageBus, pairingSvc store.Pairing
 	}
 
 	ch := &Channel{
-		BaseChannel: base,
-		token:       cfg.Token,
-		dmPolicy:    dmPolicy,
-		mediaMaxMB:  mediaMax,
-		blockReply:  cfg.BlockReply,
-		stopCh:      make(chan struct{}),
-		client:      &http.Client{Timeout: 60 * time.Second},
-		pollClient:  &http.Client{Timeout: 0},
+		BaseChannel:  base,
+		token:        cfg.Token,
+		dmPolicy:     dmPolicy,
+		mediaMaxMB:   mediaMax,
+		blockReply:   cfg.BlockReply,
+		chatBehavior: cfg.ChatBehavior,
+		stopCh:       make(chan struct{}),
+		client:       &http.Client{Timeout: 60 * time.Second},
+		pollClient:   &http.Client{Timeout: 0},
 	}
 	ch.SetPairingService(pairingSvc)
 	return ch, nil
@@ -84,6 +86,9 @@ func New(cfg config.ZaloConfig, msgBus *bus.MessageBus, pairingSvc store.Pairing
 
 // BlockReplyEnabled returns the per-channel block_reply override (nil = inherit gateway default).
 func (c *Channel) BlockReplyEnabled() *bool { return c.blockReply }
+
+// ChatBehaviorConfig returns the per-channel chat_behavior override.
+func (c *Channel) ChatBehaviorConfig() *config.ChatBehaviorConfig { return c.chatBehavior }
 
 // Start begins polling for Zalo updates.
 func (c *Channel) Start(ctx context.Context) error {

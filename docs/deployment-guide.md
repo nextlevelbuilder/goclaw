@@ -190,7 +190,9 @@ The remote trigger endpoint fails closed unless `GOCLAW_UPGRADE_TRIGGER_TOKEN` i
 
 ### Automatic Beta Deploy From `dev`
 
-Pushing or merging into `dev` runs `.github/workflows/dev-beta-release.yaml`. After Go/Web checks pass, the workflow creates the next semantic beta tag, publishes the prerelease assets, promotes beta Docker aliases, then deploys that exact beta tag to the zuey VPS through the gateway upgrade endpoint.
+Pushing or merging into `dev` runs `.github/workflows/dev-beta-release.yaml`. After Go/Web checks pass, the workflow creates the next semantic beta tag, publishes the linux amd64 prerelease asset and checksum, then deploys that exact beta tag to the zuey VPS through the gateway upgrade endpoint.
+
+Linux arm64 release assets, full checksums, multi-arch Docker images, and beta Docker aliases continue after the fast zuey deploy path. Release asset completion waits until zuey deploy finishes before using `--clobber`, so the VPS upgrade script cannot race with a release asset refresh while downloading the linux amd64 tarball. Those completion jobs are still required to pass; the workflow remains failed if later artifact completion breaks. Zuey deploy and Docker beta alias promotion both skip stale beta tags so older runs cannot roll back a newer beta.
 
 Required GitHub Actions configuration:
 

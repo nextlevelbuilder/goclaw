@@ -53,12 +53,14 @@ export function CliCredentialEnvVarsSection({
     );
   }, [setManualEnvEntries]);
 
+  const presetEnvVars = activePreset?.env_vars ?? [];
+
   // Preset-driven env var inputs
-  if (!isManualMode && activePreset && activePreset.env_vars.length > 0) {
+  if (!isManualMode && presetEnvVars.length > 0) {
     return (
       <div className="grid gap-3 rounded-md border p-3">
         <p className="text-sm font-medium">{t("form.envVars")}</p>
-        {activePreset.env_vars.map((ev) => (
+        {presetEnvVars.map((ev) => (
           <div key={ev.name} className="grid gap-1.5">
             <Label htmlFor={`env-${ev.name}`}>
               {ev.name}

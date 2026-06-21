@@ -204,3 +204,68 @@ func TestTracesFollowRouteIsNotCapturedAsTraceID(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
 }
+
+func TestTracesListParsesAdvancedFiltersAndScopesViewer(t *testing.T) {
+	token := setupTraceReadToken(t, "caller")
+	tracing := &mockTracingStore{}
+	mux := http.NewServeMux()
+	NewTracesHandler(tracing).RegisterRoutes(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/traces?q=abc-123&from=2026-06-10T01:02:03Z&to=2026-06-11T04:05:06Z&user_id=other&status=error&channel=telegram&agent=helper&channel_query=ops&min_input_tokens=10&max_input_tokens=20&min_output_tokens=30&max_output_tokens=40&min_tool_calls=1&max_tool_calls=3&tool_name=web_%25&has_tool_calls=true&limit=25&offset=50", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if len(tracing.listOpts) != 1 {
+		t.Fatalf("ListTraces calls = %d, want 1", len(tracing.listOpts))
+	}
+	opts := tracing.listOpts[0]
+	if opts.UserID != "caller" {
+		t.Fatalf("opts.UserID = %q, want caller", opts.UserID)
+	}
+	if opts.Query != "abc-123" || opts.AgentQuery != "helper" || opts.ChannelQuery != "ops" || opts.ToolName != "web_%" {
+		t.Fatalf("search opts = %+v, want query/agent/channel/tool filters", opts)
+	}
+	if opts.From == nil || opts.From.Format(time.RFC3339) != "2026-06-10T01:02:03Z" {
+		t.Fatalf("From = %v, want parsed RFC3339", opts.From)
+	}
+	if opts.To == nil || opts.To.Format(time.RFC3339) != "2026-06-11T04:05:06Z" {
+		t.Fatalf("To = %v, want parsed RFC3339", opts.To)
+	}
+	if opts.MinInputTokens == nil || *opts.MinInputTokens != 10 ||
+		opts.MaxInputTokens == nil || *opts.MaxInputTokens != 20 ||
+		opts.MinOutputTokens == nil || *opts.MinOutputTokens != 30 ||
+		opts.MaxOutputTokens == nil || *opts.MaxOutputTokens != 40 ||
+		opts.MinToolCalls == nil || *opts.MinToolCalls != 1 ||
+		opts.MaxToolCalls == nil || *opts.MaxToolCalls != 3 {
+		t.Fatalf("range opts = %+v, want parsed token/tool ranges", opts)
+	}
+	if opts.HasToolCalls == nil || !*opts.HasToolCalls {
+		t.Fatalf("HasToolCalls = %v, want true", opts.HasToolCalls)
+	}
+	if opts.Status != store.TraceStatusError || opts.Channel != "telegram" || opts.Limit != 25 || opts.Offset != 50 {
+		t.Fatalf("existing opts = %+v, want status/channel/pagination preserved", opts)
+	}
+}
+
+func TestTracesListRejectsInvalidDateRange(t *testing.T) {
+	token := setupTraceReadToken(t, "caller")
+	tracing := &mockTracingStore{}
+	mux := http.NewServeMux()
+	NewTracesHandler(tracing).RegisterRoutes(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/traces?from=not-a-time", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+	if len(tracing.listOpts) != 0 {
+		t.Fatalf("ListTraces called %d times, want 0", len(tracing.listOpts))
+	}
+}

@@ -12,6 +12,13 @@ import (
 // Note: Command execution tests are not included here since apk is not available
 // in unit test environments. Integration tests would handle actual execution.
 func TestHandleRequest(t *testing.T) {
+	// Mock runApkFunc to avoid running actual commands or triggering sudo
+	origRunApkFunc := runApkFunc
+	runApkFunc = func(args ...string) ([]byte, error) {
+		return []byte("mock output"), nil
+	}
+	defer func() { runApkFunc = origRunApkFunc }()
+
 	tests := []struct {
 		name         string
 		req          request
@@ -154,6 +161,13 @@ func TestValidPkgName(t *testing.T) {
 
 // TestHandleRequest_AllActionsValidated tests both install and uninstall actions.
 func TestHandleRequest_AllActionsValidated(t *testing.T) {
+	// Mock runApkFunc to avoid running actual commands or triggering sudo
+	origRunApkFunc := runApkFunc
+	runApkFunc = func(args ...string) ([]byte, error) {
+		return []byte("mock output"), nil
+	}
+	defer func() { runApkFunc = origRunApkFunc }()
+
 	tests := []struct {
 		action string
 	}{
@@ -365,6 +379,12 @@ func TestValidPkgNameRegex_Compliance(t *testing.T) {
 
 // TestHandleRequest_ErrorMessages tests that error messages are clear.
 func TestHandleRequest_ErrorMessages(t *testing.T) {
+	origRunApkFunc := runApkFunc
+	runApkFunc = func(args ...string) ([]byte, error) {
+		return []byte("mock output"), nil
+	}
+	defer func() { runApkFunc = origRunApkFunc }()
+
 	tests := []struct {
 		name        string
 		req         request
@@ -404,6 +424,12 @@ func TestHandleRequest_ErrorMessages(t *testing.T) {
 // Note: Actual apk command execution will fail in test environment (no apk available),
 // but validation should pass.
 func TestHandleRequest_SuccessPath(t *testing.T) {
+	origRunApkFunc := runApkFunc
+	runApkFunc = func(args ...string) ([]byte, error) {
+		return []byte("mock output"), nil
+	}
+	defer func() { runApkFunc = origRunApkFunc }()
+
 	tests := []struct {
 		action string
 		pkg    string
@@ -438,6 +464,12 @@ func TestHandleRequest_SuccessPath(t *testing.T) {
 // TestHandleRequest_UpgradeValidation verifies that the upgrade action uses
 // the stricter validApkName regex (lowercase only, no @, no /).
 func TestHandleRequest_UpgradeValidation(t *testing.T) {
+	origRunApkFunc := runApkFunc
+	runApkFunc = func(args ...string) ([]byte, error) {
+		return []byte("mock output"), nil
+	}
+	defer func() { runApkFunc = origRunApkFunc }()
+
 	// Valid names for upgrade (lowercase apk grammar)
 	valid := []string{
 		"curl",
@@ -462,6 +494,12 @@ func TestHandleRequest_UpgradeValidation(t *testing.T) {
 
 // TestHandleRequest_UpgradeInjectionPatterns verifies 5 injection patterns are rejected.
 func TestHandleRequest_UpgradeInjectionPatterns(t *testing.T) {
+	origRunApkFunc := runApkFunc
+	runApkFunc = func(args ...string) ([]byte, error) {
+		return []byte("mock output"), nil
+	}
+	defer func() { runApkFunc = origRunApkFunc }()
+
 	injections := []string{
 		"-malicious",    // leading hyphen
 		"pkg;evil",      // semicolon
@@ -486,6 +524,12 @@ func TestHandleRequest_UpgradeInjectionPatterns(t *testing.T) {
 // by legacy validPkgName for install/uninstall) is REJECTED by upgrade action
 // via the stricter validApkName.
 func TestHandleRequest_UpgradeRejectsLegacySymbols(t *testing.T) {
+	origRunApkFunc := runApkFunc
+	runApkFunc = func(args ...string) ([]byte, error) {
+		return []byte("mock output"), nil
+	}
+	defer func() { runApkFunc = origRunApkFunc }()
+
 	legacySymbols := []string{
 		"pkg@edge",   // @ accepted by validPkgName, rejected by validApkName
 		"@scope/pkg", // npm scoped — rejected by validApkName

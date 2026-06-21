@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChannelFields } from './channel-field-renderer'
 import { configSchema, NETWORK_KEYS, LIMITS_KEYS, STREAMING_KEYS, BEHAVIOR_KEYS, ACCESS_KEYS } from './channel-schemas'
+import { normalizeReasoningDeliveryConfig } from './reasoning-delivery-config'
 import type { ChannelInstanceData } from '../../types/channel'
 
 interface ChannelAdvancedTabProps {
@@ -24,7 +25,7 @@ function getAdvancedFields(channelType: string) {
 }
 
 function deriveInitialValues(instance: ChannelInstanceData): Record<string, unknown> {
-  const config = (instance.config ?? {}) as Record<string, unknown>
+  const config = normalizeReasoningDeliveryConfig((instance.config ?? {}) as Record<string, unknown>)
   const { groups: _groups, ...rest } = config
   return Object.fromEntries(
     Object.entries(rest).filter(([k]) => !ESSENTIAL_KEYS.has(k)),
@@ -53,7 +54,7 @@ export function ChannelAdvancedTab({ instance, onUpdate }: ChannelAdvancedTabPro
       const cleanAdvanced = Object.fromEntries(
         Object.entries(values).filter(([, v]) => v !== undefined && v !== '' && v !== null),
       )
-      const merged = { ...existingConfig, ...cleanAdvanced }
+      const merged = normalizeReasoningDeliveryConfig({ ...existingConfig, ...cleanAdvanced })
       await onUpdate({ config: merged })
     } catch {
       // toast shown by hook

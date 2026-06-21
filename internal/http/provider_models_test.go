@@ -52,6 +52,22 @@ func ollamaModelsRequest(t *testing.T, mux *http.ServeMux, providerID uuid.UUID,
 	return result, w.Code
 }
 
+func providerModelsRequest(t *testing.T, mux *http.ServeMux, providerID uuid.UUID, token string) ProviderModelsResponse {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/v1/providers/"+providerID.String()+"/models", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	var result ProviderModelsResponse
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+	return result
+}
+
 func TestProvidersHandlerListProviderModelsChatGPTOAuthIncludesReasoningMetadata(t *testing.T) {
 	token := setupProvidersAdminToken(t)
 	providerStore := newMockProviderStore()
@@ -116,6 +132,132 @@ func TestProvidersHandlerListProviderModelsChatGPTOAuthIncludesReasoningMetadata
 	}
 }
 
+func TestProvidersHandlerListProviderModelsBailianIncludesQwen37Plus(t *testing.T) {
+	token := setupProvidersAdminToken(t)
+	providerStore := newMockProviderStore()
+	provider := &store.LLMProviderData{
+		BaseModel:    store.BaseModel{ID: uuid.New()},
+		Name:         "bailian-coding",
+		ProviderType: store.ProviderBailian,
+		APIKey:       "token",
+		Enabled:      true,
+	}
+	if err := providerStore.CreateProvider(t.Context(), provider); err != nil {
+		t.Fatalf("CreateProvider() error = %v", err)
+	}
+
+	handler := NewProvidersHandler(providerStore, newMockSecretsStore(), nil, "")
+	mux := http.NewServeMux()
+	handler.RegisterRoutes(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/providers/"+provider.ID.String()+"/models", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var result ProviderModelsResponse
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+
+	for _, model := range result.Models {
+		if model.ID != "qwen3.7-plus" {
+			continue
+		}
+		if model.Name != "Qwen 3.7 Plus" {
+			t.Fatalf("model name = %q, want Qwen 3.7 Plus", model.Name)
+		}
+		if model.Reasoning != nil {
+			t.Fatalf("model reasoning = %#v, want nil for Bailian OpenAI-compatible catalog entry", model.Reasoning)
+		}
+		return
+	}
+
+	t.Fatalf("qwen3.7-plus not found in Bailian model list: %#v", result.Models)
+}
+
+func TestProvidersHandlerListProviderModelsMiniMaxIncludesM3AndLegacyModels(t *testing.T) {
+	token := setupProvidersAdminToken(t)
+	providerStore := newMockProviderStore()
+	provider := &store.LLMProviderData{
+		BaseModel:    store.BaseModel{ID: uuid.New()},
+		Name:         "minimax",
+		ProviderType: store.ProviderMiniMax,
+		APIKey:       "token",
+		Enabled:      true,
+	}
+	if err := providerStore.CreateProvider(t.Context(), provider); err != nil {
+		t.Fatalf("CreateProvider() error = %v", err)
+	}
+
+	handler := NewProvidersHandler(providerStore, newMockSecretsStore(), nil, "")
+	mux := http.NewServeMux()
+	handler.RegisterRoutes(mux)
+
+	result := providerModelsRequest(t, mux, provider.ID, token)
+	assertModelIDsInOrder(t, result.Models, []string{
+		"MiniMax-M3",
+		"MiniMax-M2.7",
+		"MiniMax-M2.5",
+		"MiniMax-M2.1",
+		"MiniMax-M2",
+	})
+}
+
+func TestProvidersHandlerListProviderModelsZaiUsesLocalCatalog(t *testing.T) {
+	token := setupProvidersAdminToken(t)
+
+	for _, providerType := range []string{store.ProviderZai, store.ProviderZaiCoding} {
+		t.Run(providerType, func(t *testing.T) {
+			providerStore := newMockProviderStore()
+			provider := &store.LLMProviderData{
+				BaseModel:    store.BaseModel{ID: uuid.New()},
+				Name:         providerType,
+				ProviderType: providerType,
+				APIKey:       "token",
+				Enabled:      true,
+			}
+			if err := providerStore.CreateProvider(t.Context(), provider); err != nil {
+				t.Fatalf("CreateProvider() error = %v", err)
+			}
+
+			handler := NewProvidersHandler(providerStore, newMockSecretsStore(), nil, "")
+			mux := http.NewServeMux()
+			handler.RegisterRoutes(mux)
+
+			result := providerModelsRequest(t, mux, provider.ID, token)
+			assertModelIDsInOrder(t, result.Models, []string{
+				"glm-5.2",
+				"glm-5.1",
+				"glm-5",
+				"glm-4.7",
+				"glm-4.5",
+			})
+		})
+	}
+}
+
+func assertModelIDsInOrder(t *testing.T, models []ModelInfo, want []string) {
+	t.Helper()
+	position := 0
+	for _, model := range models {
+		if position < len(want) && model.ID == want[position] {
+			position++
+		}
+	}
+	if position != len(want) {
+		got := make([]string, 0, len(models))
+		for _, model := range models {
+			got = append(got, model.ID)
+		}
+		t.Fatalf("model IDs = %#v, want sequence %#v", got, want)
+	}
+}
+
 func TestProvidersHandlerListProviderModelsOpenAICompatAnnotatesKnownModels(t *testing.T) {
 	token := setupProvidersAdminToken(t)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -176,6 +318,73 @@ func TestProvidersHandlerListProviderModelsOpenAICompatAnnotatesKnownModels(t *t
 	}
 	if result.ReasoningDefaults != nil {
 		t.Fatalf("reasoning_defaults = %#v, want nil when provider has no saved defaults", result.ReasoningDefaults)
+	}
+}
+
+func TestProvidersHandlerListProviderModelsKimiCodingSendsRequiredUserAgent(t *testing.T) {
+	token := setupProvidersAdminToken(t)
+	var capturedAuth, capturedUserAgent string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedAuth = r.Header.Get("Authorization")
+		capturedUserAgent = r.Header.Get("User-Agent")
+		if r.URL.Path != "/models" {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]string{
+				{"id": store.KimiCodingDefaultModel},
+			},
+		})
+	}))
+	t.Cleanup(upstream.Close)
+
+	providerStore := newMockProviderStore()
+	provider := &store.LLMProviderData{
+		BaseModel:    store.BaseModel{ID: uuid.New()},
+		Name:         "kimi-coding",
+		ProviderType: store.ProviderKimiCoding,
+		APIBase:      upstream.URL,
+		APIKey:       "kimi-key",
+		Enabled:      true,
+	}
+	if err := providerStore.CreateProvider(t.Context(), provider); err != nil {
+		t.Fatalf("CreateProvider() error = %v", err)
+	}
+
+	handler := NewProvidersHandler(providerStore, newMockSecretsStore(), nil, "")
+	mux := http.NewServeMux()
+	handler.RegisterRoutes(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/providers/"+provider.ID.String()+"/models", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if capturedAuth != "Bearer kimi-key" {
+		t.Fatalf("Authorization = %q, want Bearer kimi-key", capturedAuth)
+	}
+	if capturedUserAgent != store.KimiCodingRequiredUserAgent {
+		t.Fatalf("User-Agent = %q, want %q", capturedUserAgent, store.KimiCodingRequiredUserAgent)
+	}
+	var result ProviderModelsResponse
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+	if len(result.Models) != 1 || result.Models[0].ID != store.KimiCodingDefaultModel {
+		t.Fatalf("models = %#v, want %q", result.Models, store.KimiCodingDefaultModel)
+	}
+}
+
+func TestOpenAIModelsAPIBaseDefaultsKimiCoding(t *testing.T) {
+	if got := openAIModelsAPIBase(store.ProviderKimiCoding, ""); got != store.KimiCodingDefaultAPIBase {
+		t.Fatalf("Kimi default api base = %q, want %q", got, store.KimiCodingDefaultAPIBase)
+	}
+	if got := openAIModelsAPIBase(store.ProviderOpenAICompat, ""); got != "https://api.openai.com/v1" {
+		t.Fatalf("OpenAI compat default api base = %q", got)
 	}
 }
 

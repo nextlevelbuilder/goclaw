@@ -6,14 +6,16 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // CronTool lets agents manage Gateway cron jobs.
 // Matching OpenClaw src/agents/tools/cron-tool.ts.
 type CronTool struct {
-	cronStore store.CronStore
-	permStore store.ConfigPermissionStore // nil = no group restriction
+	cronStore     store.CronStore
+	permStore     store.ConfigPermissionStore // nil = no group restriction
+	providerStore store.ProviderStore         // nil = provider override by name unavailable
 }
 
 func NewCronTool(cronStore store.CronStore) *CronTool {
@@ -23,6 +25,11 @@ func NewCronTool(cronStore store.CronStore) *CronTool {
 // SetConfigPermStore enables group cron mutation restriction.
 func (t *CronTool) SetConfigPermStore(s store.ConfigPermissionStore) {
 	t.permStore = s
+}
+
+// SetProviderStore enables resolving per-job LLM provider overrides by name.
+func (t *CronTool) SetProviderStore(s store.ProviderStore) {
+	t.providerStore = s
 }
 
 func (t *CronTool) Name() string { return "cron" }
@@ -49,6 +56,8 @@ VALID ACTIONS AND EXACT PAYLOAD SHAPES:
     "channel": "string",          // optional, auto-filled from current channel context
     "to": "string",               // optional
     "agentId": "string",          // optional, defaults to current agent
+    "provider": "string",         // optional, LLM provider NAME (e.g. "groq") to run this job on a cheaper model; unset → agent default
+    "model": "string",            // optional, model id for the override provider
     "deleteAfterRun": true|false  // optional, default true for schedule.kind="at"
   }
 }
@@ -65,6 +74,8 @@ VALID ACTIONS AND EXACT PAYLOAD SHAPES:
     "channel": "string",
     "to": "string",
     "agentId": "string",
+    "provider": "string",
+    "model": "string",
     "deleteAfterRun": true|false,
     "disabled": true|false
   }
@@ -110,7 +121,7 @@ func (t *CronTool) Parameters() map[string]any {
 			},
 			"job": map[string]any{
 				"type":                 "object",
-				"description":          "Job definition for add action (name, schedule, message, deliver, channel, to, agentId, deleteAfterRun)",
+				"description":          "Job definition for add action (name, schedule, message, deliver, channel, to, agentId, provider, model, deleteAfterRun)",
 				"additionalProperties": true,
 			},
 			"jobId": map[string]any{
@@ -293,15 +304,36 @@ func (t *CronTool) handleAdd(ctx context.Context, args map[string]any, agentID, 
 		agentID = explicit
 	}
 
+	// Resolve optional per-job provider/model override before creating the job.
+	providerID, errR := t.resolveProviderID(ctx, jobObj)
+	if errR != nil {
+		return errR
+	}
+	modelOverride, _ := jobObj["model"].(string)
+
 	job, err := t.cronStore.AddJob(ctx, name, schedule, message, deliver, channel, to, agentID, userID)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("failed to create cron job: %v", err))
 	}
 
-	// Set wake_heartbeat if requested (triggers heartbeat after cron job completes)
+	// Apply post-create overrides (wake_heartbeat, provider/model) in a single patch.
+	overridePatch := store.CronJobPatch{}
+	needOverride := false
 	if wh, _ := jobObj["wake_heartbeat"].(bool); wh {
 		wakeTrue := true
-		if updated, uErr := t.cronStore.UpdateJob(ctx, job.ID, store.CronJobPatch{WakeHeartbeat: &wakeTrue}); uErr == nil {
+		overridePatch.WakeHeartbeat = &wakeTrue
+		needOverride = true
+	}
+	if providerID != nil {
+		overridePatch.ProviderID = providerID
+		needOverride = true
+	}
+	if modelOverride != "" {
+		overridePatch.Model = &modelOverride
+		needOverride = true
+	}
+	if needOverride {
+		if updated, uErr := t.cronStore.UpdateJob(ctx, job.ID, overridePatch); uErr == nil {
 			job = updated
 		}
 	}
@@ -352,6 +384,15 @@ func (t *CronTool) handleUpdate(ctx context.Context, args map[string]any, agentI
 	// Re-marshal and unmarshal to leverage JSON tags
 	patchJSON, _ := json.Marshal(patchObj)
 	json.Unmarshal(patchJSON, &patch)
+
+	// Resolve provider override by name (providerId UUID is handled by JSON tags above).
+	if name, _ := patchObj["provider"].(string); name != "" {
+		pid, errR := t.resolveProviderID(ctx, patchObj)
+		if errR != nil {
+			return errR
+		}
+		patch.ProviderID = pid
+	}
 
 	// Validate atMs not in the past when updating schedule
 	if patch.Schedule != nil && patch.Schedule.Kind == "at" && patch.Schedule.AtMS != nil {
@@ -445,6 +486,30 @@ func (t *CronTool) handleRuns(ctx context.Context, args map[string]any, agentID,
 	}
 	data, _ := json.MarshalIndent(result, "", "  ")
 	return NewResult(string(data))
+}
+
+// resolveProviderID resolves an optional per-job provider override from a job/patch
+// map. Accepts "providerId" (UUID string) or "provider" (provider name, looked up
+// via the provider store). Returns (nil, nil) when neither is present.
+func (t *CronTool) resolveProviderID(ctx context.Context, m map[string]any) (*uuid.UUID, *Result) {
+	if raw, _ := m["providerId"].(string); raw != "" {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			return nil, ErrorResult(fmt.Sprintf("invalid providerId %q: must be a UUID", raw))
+		}
+		return &id, nil
+	}
+	if name, _ := m["provider"].(string); name != "" {
+		if t.providerStore == nil {
+			return nil, ErrorResult("provider override by name is unavailable; pass providerId instead")
+		}
+		pd, err := t.providerStore.GetProviderByName(ctx, name)
+		if err != nil || pd == nil {
+			return nil, ErrorResult(fmt.Sprintf("provider %q not found; register it first or pass a valid providerId", name))
+		}
+		return &pd.ID, nil
+	}
+	return nil, nil
 }
 
 // --- helpers ---

@@ -1,6 +1,14 @@
-import { CheckCircle2, ShieldCheck, Trash2, XCircle } from "lucide-react";
+import { CheckCircle2, Download, ShieldCheck, Trash2, XCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type { SkillExportFormat } from "./lib/skill-export-download";
 
 interface SkillBulkActionsToolbarProps {
   selectedCount: number;
@@ -8,6 +16,10 @@ interface SkillBulkActionsToolbarProps {
   skippedSystemCount: number;
   agentCount: number;
   loading: boolean;
+  downloadLoading: boolean;
+  exportFormat: SkillExportFormat;
+  onExportFormatChange: (format: SkillExportFormat) => void;
+  onDownload: () => void;
   onEnable: () => void;
   onDisable: () => void;
   onGrantAllAgents: () => void;
@@ -21,6 +33,10 @@ export function SkillBulkActionsToolbar({
   skippedSystemCount,
   agentCount,
   loading,
+  downloadLoading,
+  exportFormat,
+  onExportFormatChange,
+  onDownload,
   onEnable,
   onDisable,
   onGrantAllAgents,
@@ -49,6 +65,26 @@ export function SkillBulkActionsToolbar({
         </span>
       </div>
       <div className="ml-auto flex flex-wrap gap-2">
+        <Select value={exportFormat} onValueChange={(value) => onExportFormatChange(value as SkillExportFormat)}>
+          <SelectTrigger className="h-8 w-[104px]" aria-label={t("export.format")}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="zip">ZIP</SelectItem>
+            <SelectItem value="tar.gz">tar.gz</SelectItem>
+            <SelectItem value="tgz">tgz</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button
+          size="sm"
+          variant="outline"
+          className="gap-1"
+          disabled={loading || downloadLoading || !hasSelection}
+          onClick={onDownload}
+        >
+          <Download className="h-3.5 w-3.5" />
+          {downloadLoading ? t("export.downloading") : t("export.downloadSelected")}
+        </Button>
         <Button size="sm" variant="outline" className="gap-1" disabled={loading || !hasSelection} onClick={onEnable}>
           <CheckCircle2 className="h-3.5 w-3.5" />
           {t("bulk.enable")}

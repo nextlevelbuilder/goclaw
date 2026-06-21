@@ -173,6 +173,66 @@ func TestModelFallbackProviderDoesNotFallbackOnUnknownError(t *testing.T) {
 	}
 }
 
+func TestModelFallbackProviderContinuesAfterContentPolicyFallback(t *testing.T) {
+	primary := &testFallbackProvider{
+		name:  "primary",
+		model: "primary-model",
+		err:   &HTTPError{Status: 429, Body: "rate limited"},
+	}
+	blocked := &testFallbackProvider{
+		name:  "blocked",
+		model: "blocked-model",
+		err:   &HTTPError{Status: 400, Body: `{"error":{"code":"data_inspection_failed","message":"Input text data may contain inappropriate content."}}`},
+	}
+	backup := &testFallbackProvider{name: "backup", model: "backup-model"}
+	provider := NewModelFallbackProvider(FallbackCandidate{
+		ProviderName: "primary",
+		Provider:     primary,
+		Model:        "primary-model",
+	}, []FallbackCandidate{
+		{ProviderName: "blocked", Provider: blocked, Model: "blocked-model"},
+		{ProviderName: "backup", Provider: backup, Model: "backup-model"},
+	}, 0, false)
+
+	resp, err := provider.Chat(context.Background(), ChatRequest{})
+	if err != nil {
+		t.Fatalf("Chat() error = %v", err)
+	}
+	if resp.Content != "backup-model" {
+		t.Fatalf("Chat() content = %q, want backup model", resp.Content)
+	}
+	if primary.calls != 1 || blocked.calls != 1 || backup.calls != 1 {
+		t.Fatalf("calls primary=%d blocked=%d backup=%d, want 1/1/1", primary.calls, blocked.calls, backup.calls)
+	}
+}
+
+func TestModelFallbackProviderFallsBackOnCodexSafetyRefusalString(t *testing.T) {
+	primary := &testFallbackProvider{
+		name:  "codex-digitop",
+		model: "gpt-5.5",
+		err:   errors.New("codex: response failed: Invalid prompt: we've limited access to this content for safety reasons"),
+	}
+	backup := &testFallbackProvider{name: "anthropic", model: "claude-sonnet-4-5"}
+	provider := NewModelFallbackProvider(FallbackCandidate{
+		ProviderName: "codex-digitop",
+		Provider:     primary,
+		Model:        "gpt-5.5",
+	}, []FallbackCandidate{
+		{ProviderName: "anthropic", Provider: backup, Model: "claude-sonnet-4-5"},
+	}, 2, false)
+
+	resp, err := provider.Chat(context.Background(), ChatRequest{})
+	if err != nil {
+		t.Fatalf("Chat() error = %v", err)
+	}
+	if resp.Content != "claude-sonnet-4-5" {
+		t.Fatalf("Chat() content = %q, want fallback model response", resp.Content)
+	}
+	if primary.calls != 1 || backup.calls != 1 {
+		t.Fatalf("calls primary=%d backup=%d, want 1/1", primary.calls, backup.calls)
+	}
+}
+
 func TestModelFallbackProviderMaxAttemptsCapsTotalAttempts(t *testing.T) {
 	primary := &testFallbackProvider{
 		name:  "primary",

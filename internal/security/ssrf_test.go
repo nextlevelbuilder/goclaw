@@ -116,7 +116,7 @@ func TestNewSafeClient_NoRedirects(t *testing.T) {
 	defer srv.Close()
 	redirectTarget = srv.URL
 
-	_, pinnedIP, err := validate(srv.URL+"/", true)
+	_, pinnedIP, err := validate(srv.URL+"/", true, nil)
 	if err != nil {
 		t.Fatalf("validate: %v", err)
 	}

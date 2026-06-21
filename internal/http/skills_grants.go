@@ -50,6 +50,25 @@ func (h *SkillsHandler) handleListAgentGrants(w http.ResponseWriter, r *http.Req
 	writeJSON(w, http.StatusOK, map[string]any{"grants": grants})
 }
 
+func (h *SkillsHandler) handleListUserGrants(w http.ResponseWriter, r *http.Request) {
+	locale := store.LocaleFromContext(r.Context())
+	idStr := r.PathValue("id")
+	skillID, err := uuid.Parse(idStr)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidID, "skill")})
+		return
+	}
+
+	grants, err := h.skills.ListUserGrantsForSkill(r.Context(), skillID)
+	if err != nil {
+		slog.Error("failed to list skill user grants", "skill_id", skillID, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgFailedToList, "skill grants")})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"grants": grants})
+}
+
 func (h *SkillsHandler) handleGrantAgent(w http.ResponseWriter, r *http.Request) {
 	locale := store.LocaleFromContext(r.Context())
 	userID := store.UserIDFromContext(r.Context())
@@ -70,9 +89,10 @@ func (h *SkillsHandler) handleGrantAgent(w http.ResponseWriter, r *http.Request)
 	}
 
 	var req struct {
-		AgentID   string `json:"agent_id"`
-		Version   int    `json:"version"`
-		CanManage *bool  `json:"can_manage"`
+		AgentID       string `json:"agent_id"`
+		Version       int    `json:"version"`
+		PinnedVersion int    `json:"pinned_version"`
+		CanManage     *bool  `json:"can_manage"`
 	}
 	if !bindJSON(w, r, locale, &req) {
 		return
@@ -84,6 +104,9 @@ func (h *SkillsHandler) handleGrantAgent(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	if req.PinnedVersion > 0 {
+		req.Version = req.PinnedVersion
+	}
 	if req.Version <= 0 {
 		req.Version = 1
 	}
@@ -175,6 +198,9 @@ func (h *SkillsHandler) handleGrantUser(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
+	if !h.requireTenantUser(w, r, req.UserID) {
+		return
+	}
 
 	if err := h.skills.GrantToUser(r.Context(), skillID, req.UserID, userID); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -220,6 +246,33 @@ func (h *SkillsHandler) handleRevokeUser(w http.ResponseWriter, r *http.Request)
 	h.emitCacheInvalidate(bus.CacheKindSkillGrants, "", uuid.Nil)
 	emitAudit(h.msgBus, r, "skill.grant_changed", "skill", idStr)
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
+}
+
+func (h *SkillsHandler) requireTenantUser(w http.ResponseWriter, r *http.Request, userID string) bool {
+	locale := store.LocaleFromContext(r.Context())
+	if h.tenantStore == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": i18n.T(locale, i18n.MsgNotImplemented, "tenant store")})
+		return false
+	}
+	tenantID := store.TenantIDFromContext(r.Context())
+	if tenantID == uuid.Nil {
+		tenantID = store.MasterTenantID
+	}
+	role, err := h.tenantStore.GetUserRole(r.Context(), tenantID, userID)
+	if err != nil {
+		slog.Error("skill_grants: tenant user membership check failed", "tenant_id", tenantID, "target_user_id", userID, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgFailedToList, "tenant users")})
+		return false
+	}
+	if role == "" {
+		slog.Warn("security.skill_grant_user_not_tenant_member",
+			"tenant_id", tenantID,
+			"target_user_id", userID,
+			"user_id", store.UserIDFromContext(r.Context()))
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": i18n.T(locale, i18n.MsgPermissionDenied, "tenant user")})
+		return false
+	}
+	return true
 }
 
 // --- Helpers ---

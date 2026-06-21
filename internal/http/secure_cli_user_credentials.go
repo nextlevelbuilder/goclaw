@@ -127,7 +127,7 @@ func (h *SecureCLIHandler) handleSetUserCredentials(w http.ResponseWriter, r *ht
 	// credential_type + host_scope. Audit emits credential_type only — never
 	// the secret or host (host is operator-visible config but still scoped to
 	// the audit channel).
-	envBytes, credType, hostScope, terr := prepareTypedCredentialEnv(locale, body.typedCredentialBody)
+	envBytes, credType, hostScope, terr := prepareTypedCredentialEnv(r.Context(), locale, body.typedCredentialBody)
 	if terr != nil {
 		writeTypedCredentialError(w, terr)
 		return

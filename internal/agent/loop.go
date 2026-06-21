@@ -34,6 +34,28 @@ func (l *Loop) resolveToolCallName(name string) string {
 	return name
 }
 
+func (l *Loop) parallelEligibleToolCall(tc providers.ToolCall) bool {
+	name := l.resolveToolCallName(tc.Name)
+	switch {
+	case name == "exec", name == "bash", name == "wait":
+		return false
+	case strings.HasPrefix(name, "mcp_"):
+		return false
+	case l.registry == nil:
+		return false
+	}
+	tool, ok := l.registry.Get(name)
+	if !ok {
+		return false
+	}
+
+	meta := l.registry.GetMetadata(tool.Name())
+	return meta.IsReadOnly() &&
+		!meta.HasCapability(tools.CapMutating) &&
+		!meta.HasCapability(tools.CapAsync) &&
+		!meta.HasCapability(tools.CapMCPBridged)
+}
+
 // normalizeToolCall rewrites malformed MCP pseudo-calls that some models emit
 // as `exec` with `{action:"mcp_xxx", code|command:"..."}`.
 // We recover the intended MCP tool name from `action` and map payload to MCP

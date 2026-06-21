@@ -13,7 +13,7 @@ package integration
 //     is self-contained — no network, no docker.
 //
 // Auth model:
-//   - Server checks `Authorization: Bearer <expectedToken>` on every request.
+//   - Server checks GitHub-style Basic auth on every request.
 //   - Missing/wrong → 401, which makes git fail immediately.
 //   - Matching → defer to git-http-backend CGI.
 //
@@ -21,6 +21,7 @@ package integration
 // and skip if not present (some minimal CI images strip it).
 
 import (
+	"encoding/base64"
 	"net/http"
 	"net/http/cgi"
 	"net/http/httptest"
@@ -32,7 +33,7 @@ import (
 )
 
 // startGitHTTPServer creates an httptest server backed by git-http-backend
-// serving repos under projectRoot. Requests must carry the bearer token.
+// serving repos under projectRoot. Requests must carry the Basic auth PAT.
 func startGitHTTPServer(t *testing.T, projectRoot, expectedToken string) *httptest.Server {
 	t.Helper()
 
@@ -58,7 +59,8 @@ func startGitHTTPServer(t *testing.T, projectRoot, expectedToken string) *httpte
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		got := r.Header.Get("Authorization")
-		if got != "Bearer "+expectedToken {
+		want := "Basic " + base64.StdEncoding.EncodeToString([]byte("x-access-token:"+expectedToken))
+		if got != want {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}

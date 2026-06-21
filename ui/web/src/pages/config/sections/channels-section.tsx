@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { MultiUserPicker } from "@/components/shared/multi-user-picker";
+import { normalizeReasoningDeliveryConfig, resolveReasoningDeliveryValue } from "@/pages/channels/reasoning-delivery-config";
 
  
 type ChannelsData = Record<string, any>;
@@ -67,13 +68,14 @@ export function ChannelsSection({ data, onSave, saving }: Props) {
     // Strip masked secret fields
     const toSave: ChannelsData = {};
     for (const [ch, val] of Object.entries(draft)) {
-      const copy = { ...val };
+      const copy = normalizeReasoningDeliveryConfig({ ...val });
       const meta = CHANNEL_META[ch];
       if (meta?.secretField && isSecret(copy[meta.secretField])) {
         delete copy[meta.secretField];
       }
       // Also strip other known secret fields
       for (const key of Object.keys(copy)) {
+        if (copy[key] === undefined) delete copy[key];
         if (isSecret(copy[key])) delete copy[key];
       }
       toSave[ch] = copy;
@@ -227,18 +229,21 @@ export function ChannelsSection({ data, onSave, saving }: Props) {
                               />
                             </div>
                           )}
-                          {(!!chData.dm_stream || !!chData.group_stream) && (
-                            <div className="rounded-md border px-3 py-2 flex items-center justify-between">
-                              <div>
-                                <p className="text-sm font-medium">{t("channels.reasoningStream")}</p>
-                                <p className="text-xs text-muted-foreground">{t("channels.reasoningStreamHint")}</p>
-                              </div>
-                              <Switch
-                                checked={chData.reasoning_stream !== false}
-                                onCheckedChange={(v) => updateChannel(ch, { reasoning_stream: v })}
-                              />
-                            </div>
-                          )}
+                          <div className="rounded-md border px-3 py-2 grid gap-1.5 sm:col-span-2">
+                            <Label>{t("channels.reasoningDelivery")}</Label>
+                            <Select
+                              value={resolveReasoningDeliveryValue(chData)}
+                              onValueChange={(v) => updateChannel(ch, { reasoning_delivery: v, reasoning_stream: undefined })}
+                            >
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="streaming_only">{t("channels.reasoningStreamingOnly")}</SelectItem>
+                                <SelectItem value="always_bubbles">{t("channels.reasoningAlwaysBubbles")}</SelectItem>
+                                <SelectItem value="off">{t("channels.reasoningOff")}</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">{t("channels.reasoningDeliveryHint")}</p>
+                          </div>
                         </div>
                         {chData.reaction_level !== undefined && (
                           <div className="grid gap-1.5">

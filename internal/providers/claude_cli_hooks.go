@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
@@ -13,7 +14,7 @@ import (
 // BuildCLIHooksConfig generates a Claude CLI settings file with PreToolUse hooks
 // that enforce GoClaw's security policies (shell deny patterns, path restrictions).
 // Returns settings file path and a cleanup function.
-func BuildCLIHooksConfig(workspace string, restrictToWorkspace bool) (string, func(), error) {
+func BuildCLIHooksConfig(workspace string, restrictToWorkspace bool, denyPatternSets ...[]*regexp.Regexp) (string, func(), error) {
 	tmpDir := filepath.Join(os.TempDir(), "goclaw-cli-hooks")
 	if err := os.MkdirAll(tmpDir, 0755); err != nil {
 		return "", nil, fmt.Errorf("create hooks dir: %w", err)
@@ -22,7 +23,7 @@ func BuildCLIHooksConfig(workspace string, restrictToWorkspace bool) (string, fu
 	id := uuid.New().String()[:8]
 
 	// Write the hook script
-	hookScript := generateHookScript(workspace, restrictToWorkspace)
+	hookScript := generateHookScript(workspace, restrictToWorkspace, denyPatternSets...)
 	hookPath := filepath.Join(tmpDir, fmt.Sprintf("hook-%s.sh", id))
 	if err := os.WriteFile(hookPath, []byte(hookScript), 0755); err != nil {
 		return "", nil, fmt.Errorf("write hook script: %w", err)
@@ -82,7 +83,7 @@ func generateSettingsJSON(hookPath string) []byte {
 }
 
 // generateHookScript creates a bash script that enforces GoClaw security policies.
-func generateHookScript(workspace string, restrictToWorkspace bool) string {
+func generateHookScript(workspace string, restrictToWorkspace bool, denyPatternSets ...[]*regexp.Regexp) string {
 	var sb strings.Builder
 
 	sb.WriteString(`#!/bin/bash
@@ -115,7 +116,7 @@ check_shell_deny() {
   local patterns=(
 `)
 
-	for _, p := range ShellDenyPatterns {
+	for _, p := range hookDenyPatternStrings(denyPatternSets...) {
 		// Escape single quotes for bash
 		escaped := strings.ReplaceAll(p, `'`, `'\''`)
 		fmt.Fprintf(&sb, "    '%s'\n", escaped)
@@ -204,4 +205,18 @@ allow
 `)
 
 	return sb.String()
+}
+
+func hookDenyPatternStrings(denyPatternSets ...[]*regexp.Regexp) []string {
+	if len(denyPatternSets) == 0 {
+		return ShellDenyPatterns
+	}
+	patterns := make([]string, 0, len(denyPatternSets[0]))
+	for _, p := range denyPatternSets[0] {
+		if p == nil {
+			continue
+		}
+		patterns = append(patterns, p.String())
+	}
+	return patterns
 }

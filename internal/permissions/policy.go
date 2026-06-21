@@ -211,6 +211,7 @@ func isAdminMethod(method string) bool {
 		protocol.MethodConfigPatch,
 		protocol.MethodConfigSchema,
 		protocol.MethodConfigDefaults,
+		protocol.MethodChatBehaviorPreview,
 		protocol.MethodConfigPermissionsList,
 		protocol.MethodConfigPermissionsCheck,
 		protocol.MethodConfigPermissionsGrant,
@@ -366,6 +367,7 @@ func isReadMethod(method string) bool {
 		// Sessions read
 		protocol.MethodSessionsList,
 		protocol.MethodSessionsPreview,
+		protocol.MethodRunTimelineGet,
 
 		// Skills read
 		protocol.MethodSkillsList,

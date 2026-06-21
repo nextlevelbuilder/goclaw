@@ -279,6 +279,11 @@ func bridgeContextMiddleware(gatewayToken string, agentStore store.AgentStore, n
 					if agentStore != nil {
 						ag, err := agentStore.GetByIDUnscoped(ctx, id)
 						if err == nil && ag != nil {
+							// Propagate the agent key so bridged session tools (sessions_list/
+							// history/send) can resolve identity via ToolAgentKeyFromCtx. The MCP
+							// bridge otherwise injects only the agent UUID, leaving the key empty
+							// -> session tools fail with "agent context required".
+							ctx = tools.WithToolAgentKey(ctx, ag.AgentKey)
 							groups := ag.ParseShellDenyGroups()
 							if groups != nil {
 								ctx = store.WithShellDenyGroups(ctx, groups)

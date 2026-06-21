@@ -24,7 +24,7 @@ type SkillManifest struct {
 
 // IsEmpty returns true if the manifest has no dependencies.
 func (m *SkillManifest) IsEmpty() bool {
-	return len(m.Requires) == 0 && len(m.RequiresPython) == 0 && len(m.RequiresNode) == 0
+	return len(m.Requires) == 0 && len(m.RequiresPython) == 0 && len(m.RequiresNode) == 0 && len(m.Explicit) == 0
 }
 
 // ScanSkillDeps auto-detects dependencies by statically analyzing the scripts/ directory,

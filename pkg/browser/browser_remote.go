@@ -254,7 +254,7 @@ func resolveRemoteCDP(remoteURL string) (string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("/json/version returned HTTP %d", resp.StatusCode)
+		return "", fmt.Errorf("query /json/version at %s returned HTTP %d", versionURL, resp.StatusCode)
 	}
 
 	var ver struct {

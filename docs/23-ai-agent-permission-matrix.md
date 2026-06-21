@@ -12,6 +12,7 @@ This matrix documents the effective authorization layers for agent actions acros
 | Agent config permissions | Agent config mutations from chat | `agent_config_permissions` | Matches by `agent_id`, `scope`, `config_type`, `user_id`, including wildcard rows. |
 | Workspace file boundary | Filesystem access | tool sandbox/boundary checks | Prevents path escape and unsupported writes. |
 | Context file boundary | Agent identity/context files | `ContextFileInterceptor` | Routes protected files to store and requires group writer permission in group contexts. |
+| Channel context capabilities | MCP + Secure CLI tool execution | `mcp_context_*`, `secure_cli_context_*` | Effective precedence: user credentials > context credentials/grants > agent grants > global defaults. |
 
 ## Agent Config Permission Rows
 
@@ -69,3 +70,17 @@ The Permissions tab should expose a full matrix editor:
 - Permission-store errors fail closed for group mutation boundaries.
 - Backend validation rejects unknown config types and permissions before writing rules.
 - Platform send permissions are still separate from GoClaw permissions; a channel adapter may reject delivery even when GoClaw allows the agent action.
+
+## Channel context capabilities
+
+Channel instances expose stored contexts in the dashboard and API. The base
+context is the channel instance itself; group contexts come from stored channel
+contacts. Capability rows combine MCP and Secure CLI visibility for that
+context, including source, enabled state, tool allow/deny lists, and credential
+presence.
+
+Context credential rows never return secret material. They only project
+metadata such as `has_api_key`, `has_env`, `credential_source`, and key names
+where available. Writes are tenant-admin gated, and runtime resolution carries
+`ChannelContextScope` so grants and credentials are applied only to matching
+channel/group scope.
