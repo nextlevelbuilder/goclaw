@@ -186,7 +186,8 @@ type HookConfig struct {
 // error_detail (BYTEA) is AES-256-GCM encrypted before storage.
 type HookExecution struct {
 	ID          uuid.UUID  `json:"id"`
-	HookID      *uuid.UUID `json:"hook_id,omitempty"` // NULL when hook deleted (ON DELETE SET NULL)
+	HookID      *uuid.UUID `json:"hook_id,omitempty"`  // NULL when hook deleted (ON DELETE SET NULL)
+	TenantID    *uuid.UUID `json:"tenant_id,omitempty"`
 	SessionID   string     `json:"session_id"`
 	Event       HookEvent  `json:"event"`
 	InputHash   string     `json:"input_hash"`  // canonical-JSON sha256, 64 hex chars

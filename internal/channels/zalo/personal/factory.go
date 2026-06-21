@@ -13,20 +13,21 @@ import (
 
 // zaloCreds maps the credentials JSON from the channel_instances table.
 type zaloCreds struct {
-	IMEI      string               `json:"imei"`
+	IMEI      string                `json:"imei"`
 	Cookie    *protocol.CookieUnion `json:"cookie"`
-	UserAgent string               `json:"userAgent"`
-	Language  *string              `json:"language,omitempty"`
+	UserAgent string                `json:"userAgent"`
+	Language  *string               `json:"language,omitempty"`
 }
 
 // zaloInstanceConfig maps the config JSONB from the channel_instances table.
 type zaloInstanceConfig struct {
-	DMPolicy       string   `json:"dm_policy,omitempty"`
-	GroupPolicy    string   `json:"group_policy,omitempty"`
-	RequireMention *bool    `json:"require_mention,omitempty"`
-	HistoryLimit   int      `json:"history_limit,omitempty"`
-	AllowFrom      []string `json:"allow_from,omitempty"`
-	BlockReply     *bool    `json:"block_reply,omitempty"`
+	DMPolicy       string                     `json:"dm_policy,omitempty"`
+	GroupPolicy    string                     `json:"group_policy,omitempty"`
+	RequireMention *bool                      `json:"require_mention,omitempty"`
+	HistoryLimit   int                        `json:"history_limit,omitempty"`
+	AllowFrom      []string                   `json:"allow_from,omitempty"`
+	BlockReply     *bool                      `json:"block_reply,omitempty"`
+	ChatBehavior   *config.ChatBehaviorConfig `json:"chat_behavior,omitempty"`
 }
 
 // Factory creates a Zalo Personal channel from DB instance data.
@@ -62,6 +63,7 @@ func Factory(name string, creds json.RawMessage, cfg json.RawMessage,
 		RequireMention: ic.RequireMention,
 		HistoryLimit:   ic.HistoryLimit,
 		BlockReply:     ic.BlockReply,
+		ChatBehavior:   ic.ChatBehavior,
 	}
 
 	ch, err := New(zaloCfg, msgBus, pairingSvc, nil)
@@ -112,6 +114,7 @@ func FactoryWithPendingStore(pendingStore store.PendingMessageStore) channels.Ch
 			RequireMention: ic.RequireMention,
 			HistoryLimit:   ic.HistoryLimit,
 			BlockReply:     ic.BlockReply,
+			ChatBehavior:   ic.ChatBehavior,
 		}
 
 		ch, err := New(zaloCfg, msgBus, pairingSvc, pendingStore)

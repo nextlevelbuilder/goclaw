@@ -161,6 +161,18 @@ export function getChannelCheckedLabel(
   });
 }
 
+export function shouldShowChannelDiagnosticsCard(
+  status: ChannelRuntimeStatus | null | undefined,
+) {
+  return (
+    status?.state === "failed" ||
+    status?.state === "degraded" ||
+    !!status?.remediation ||
+    !!status?.consecutive_failures ||
+    !!formatRelativeTime(status?.first_failed_at)
+  );
+}
+
 export function getChannelFailureKindLabel(
   kind: ChannelRuntimeStatus["failure_kind"],
   t: TFunction,

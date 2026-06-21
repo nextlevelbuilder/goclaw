@@ -1,0 +1,2 @@
+ALTER TABLE cron_jobs DROP COLUMN IF EXISTS provider_id;
+ALTER TABLE cron_jobs DROP COLUMN IF EXISTS model;

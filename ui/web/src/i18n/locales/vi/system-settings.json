@@ -30,12 +30,6 @@
   "ux": {
     "title": "Hành vi UX",
     "description": "Điều khiển cách gateway hiển thị hoạt động của agent cho người dùng.",
-    "toolStatus": "Hiện tên công cụ khi thực thi",
-    "toolStatusHint": "Hiển thị tên công cụ đang chạy khi agent hoạt động.",
-    "toolStatusInfo": "Tên công cụ được hiện khi agent đang chạy.",
-    "blockReply": "Hiện văn bản trung gian khi gọi công cụ",
-    "blockReplyHint": "Gửi nội dung phụ trợ khi công cụ đang được gọi.",
-    "blockReplyInfo": "Văn bản trung gian được gửi cho người dùng khi thực thi công cụ.",
     "intentClassify": "Phân loại ý định",
     "intentClassifyHint": "Phân loại ý định người dùng trước khi chuyển tới agent.",
     "intentClassifyInfo": "Tin nhắn được phân loại để tối ưu định tuyến agent."

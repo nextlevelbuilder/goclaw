@@ -381,8 +381,6 @@ func (s *SQLiteSecureCLIStore) LookupByBinary(ctx context.Context, binaryName st
 
 	var args []any
 
-	query := `SELECT ` + selectCols
-
 	// Project user-credential columns (encrypted_env + credential_type + host_scope).
 	// When userID is empty we cannot reference uc_user.* — emit NULL placeholders
 	// so the scan column count stays stable.
@@ -390,10 +388,17 @@ func (s *SQLiteSecureCLIStore) LookupByBinary(ctx context.Context, binaryName st
 	hasUserJoinNoAgent := userID != "" && agentID == nil
 
 	if hasUserJoin || hasUserJoinNoAgent {
-		query += `, uc_user.encrypted_env AS user_env, uc_user.credential_type AS user_cred_type, uc_user.host_scope AS user_host_scope FROM secure_cli_binaries b`
+		selectCols += `, uc_user.encrypted_env AS user_env, uc_user.credential_type AS user_cred_type, uc_user.host_scope AS user_host_scope`
 	} else {
-		query += `, NULL AS user_env, NULL AS user_cred_type, NULL AS user_host_scope FROM secure_cli_binaries b`
+		selectCols += `, NULL AS user_env, NULL AS user_cred_type, NULL AS user_host_scope`
 	}
+	if agentID != nil {
+		selectCols += `, ac.encrypted_env AS agent_env, ac.credential_type AS agent_cred_type, ac.host_scope AS agent_host_scope`
+	} else {
+		selectCols += `, NULL AS agent_env, NULL AS agent_cred_type, NULL AS agent_host_scope`
+	}
+
+	query := `SELECT ` + selectCols + ` FROM secure_cli_binaries b`
 
 	// LEFT JOIN agent grant
 	if agentID != nil {
@@ -401,6 +406,14 @@ func (s *SQLiteSecureCLIStore) LookupByBinary(ctx context.Context, binaryName st
 		args = append(args, *agentID)
 	} else {
 		query += ` LEFT JOIN secure_cli_agent_grants g ON 0`
+	}
+	if agentID != nil {
+		query += ` LEFT JOIN secure_cli_agent_credentials ac ON ac.binary_id = b.id AND ac.agent_id = ?`
+		args = append(args, *agentID)
+		if !isCross {
+			query += ` AND ac.tenant_id = ?`
+			args = append(args, tid)
+		}
 	}
 
 	// LEFT JOIN user credentials (only when we project uc_user.*)
@@ -437,7 +450,11 @@ func (s *SQLiteSecureCLIStore) LookupByBinary(ctx context.Context, binaryName st
 	query += ` LIMIT 1`
 
 	row := s.db.QueryRowContext(ctx, query, args...)
-	return s.scanRowWithGrantAndUserEnv(row)
+	b, err := s.scanRowWithGrantAndUserEnv(row)
+	if err != nil || b == nil {
+		return b, err
+	}
+	return s.applyContextSecureCLI(ctx, b)
 }
 
 func (s *SQLiteSecureCLIStore) scanRowWithGrantAndUserEnv(row *sql.Row) (*store.SecureCLIBinary, error) {
@@ -453,6 +470,8 @@ func (s *SQLiteSecureCLIStore) scanRowWithGrantAndUserEnv(row *sql.Row) (*store.
 	var grantEncEnv []byte
 	var userEnv []byte
 	var userCredType, userHostScope *string
+	var agentEnv []byte
+	var agentCredType, agentHostScope *string
 	var createdAt, updatedAt sqliteTime
 
 	err := row.Scan(
@@ -462,6 +481,7 @@ func (s *SQLiteSecureCLIStore) scanRowWithGrantAndUserEnv(row *sql.Row) (*store.
 		&b.Enabled, &b.CreatedBy, &b.AdapterName, &createdAt, &updatedAt,
 		&grantDenyArgs, &grantDenyVerbose, &grantTimeout, &grantTips, &grantEnabled, &grantID, &grantEncEnv,
 		&userEnv, &userCredType, &userHostScope,
+		&agentEnv, &agentCredType, &agentHostScope,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -502,26 +522,100 @@ func (s *SQLiteSecureCLIStore) scanRowWithGrantAndUserEnv(row *sql.Row) (*store.
 		}
 		grant.TimeoutSeconds = grantTimeout
 		grant.Tips = grantTips
-		if len(grantEncEnv) > 0 && s.encKey != "" {
-			if decrypted, err := crypto.Decrypt(string(grantEncEnv), s.encKey); err == nil {
-				grant.EncryptedEnv = []byte(decrypted)
+		if len(grantEncEnv) > 0 {
+			if s.encKey != "" {
+				if decrypted, err := crypto.Decrypt(string(grantEncEnv), s.encKey); err == nil {
+					grant.EncryptedEnv = []byte(decrypted)
+				}
+			} else {
+				grant.EncryptedEnv = grantEncEnv
 			}
 		}
 		b.MergeGrantOverrides(grant)
 	}
 
 	// Decrypt per-user env
-	if len(userEnv) > 0 && s.encKey != "" {
-		if decrypted, err := crypto.Decrypt(string(userEnv), s.encKey); err == nil {
-			b.UserEnv = []byte(decrypted)
+	if len(userEnv) > 0 {
+		if s.encKey != "" {
+			if decrypted, err := crypto.Decrypt(string(userEnv), s.encKey); err == nil {
+				b.UserEnv = []byte(decrypted)
+			}
+		} else {
+			b.UserEnv = userEnv
 		}
 	}
 
 	// Typed-credential metadata from the joined user-credential row.
 	b.UserCredentialType = userCredType
 	b.UserHostScope = userHostScope
+	if len(b.UserEnv) > 0 || userCredType != nil || userHostScope != nil {
+		b.SetEffectiveCredential(b.UserEnv, userCredType, userHostScope, "user", "")
+	}
+	if len(agentEnv) > 0 || agentCredType != nil || agentHostScope != nil {
+		decrypted := agentEnv
+		if len(agentEnv) > 0 && s.encKey != "" {
+			if d, err := crypto.Decrypt(string(agentEnv), s.encKey); err == nil {
+				decrypted = []byte(d)
+			}
+		}
+		if b.CredentialSource == "" {
+			b.SetEffectiveCredential(decrypted, agentCredType, agentHostScope, "agent", "")
+		}
+	}
 
 	return &b, nil
+}
+
+func (s *SQLiteSecureCLIStore) applyContextSecureCLI(ctx context.Context, b *store.SecureCLIBinary) (*store.SecureCLIBinary, error) {
+	scopes := store.ChannelContextScopeChainFromContext(ctx)
+	if len(scopes) == 0 || b == nil {
+		return b, nil
+	}
+	hasUserCredential := b.CredentialSource == "user" || len(b.UserEnv) > 0 || b.UserCredentialType != nil || b.UserHostScope != nil
+	disabledByContext := false
+	for _, scope := range scopes {
+		grants, err := s.ListContextGrantsForScope(ctx, scope)
+		if err != nil {
+			return nil, err
+		}
+		for _, contextGrant := range grants {
+			if contextGrant.BinaryID != b.ID {
+				continue
+			}
+			if !contextGrant.Enabled {
+				disabledByContext = true
+				break
+			}
+			grant := &store.SecureCLIAgentGrant{
+				DenyArgs:       contextGrant.DenyArgs,
+				DenyVerbose:    contextGrant.DenyVerbose,
+				TimeoutSeconds: contextGrant.TimeoutSeconds,
+				Tips:           contextGrant.Tips,
+				EncryptedEnv:   contextGrant.EncryptedEnv,
+			}
+			b.MergeGrantOverrides(grant)
+			disabledByContext = false
+			break
+		}
+	}
+	if disabledByContext {
+		return nil, nil
+	}
+	for _, scope := range scopes {
+		creds, err := s.GetContextCredentialsForScope(ctx, scope, b.ID)
+		if err != nil {
+			return nil, err
+		}
+		if creds == nil || len(creds.EncryptedEnv) == 0 {
+			continue
+		}
+		if !hasUserCredential {
+			b.SetEffectiveCredential(creds.EncryptedEnv, creds.CredentialType, creds.HostScope, "context", scope.ScopeType+":"+scope.ScopeKey)
+		} else {
+			b.EncryptedEnv = creds.EncryptedEnv
+		}
+	}
+	return b, nil
 }
 
 // ListEnabled returns all enabled configs.

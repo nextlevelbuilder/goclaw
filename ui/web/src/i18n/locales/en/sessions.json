@@ -32,7 +32,19 @@
     "showDetails": "show details",
     "hide": "hide",
     "systemMessage": "System Message",
-    "messages": "messages"
+    "messages": "messages",
+    "timeline": {
+      "title": "Run timeline",
+      "loading": "loading",
+      "count": "{{count}} items",
+      "runStatus": "run",
+      "assistant": "assistant",
+      "toolCall": "tool call",
+      "toolResult": "tool result",
+      "trace": "trace",
+      "activity": "activity",
+      "failed": "failed"
+    }
   },
   "toast": {
     "deleted": "Session deleted",

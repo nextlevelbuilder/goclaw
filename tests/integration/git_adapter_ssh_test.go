@@ -164,6 +164,9 @@ func TestGitAdapter_SSH_HostMismatch_NoTmpfile(t *testing.T) {
 	cred := sshCredFor(t, "github.com")
 	adapter := tools.AdapterFor("git")
 
+	// This assertion observes os.TempDir(), which is process-global. Keep it
+	// serial so other SSH lifecycle tests cannot create legitimate temp keys
+	// between the before/after snapshots.
 	before, _ := filepath.Glob(filepath.Join(os.TempDir(), "goclaw-gitkey-*"))
 	_, err := adapter.Prepare(context.Background(), nil, cred,
 		[]string{"clone", "git@gitlab.com:o/r.git"})

@@ -32,7 +32,19 @@
     "showDetails": "显示详情",
     "hide": "隐藏",
     "systemMessage": "系统消息",
-    "messages": "条消息"
+    "messages": "条消息",
+    "timeline": {
+      "title": "运行时间线",
+      "loading": "加载中",
+      "count": "{{count}} 项",
+      "runStatus": "运行",
+      "assistant": "助手",
+      "toolCall": "工具调用",
+      "toolResult": "工具结果",
+      "trace": "追踪",
+      "activity": "活动",
+      "failed": "失败"
+    }
   },
   "toast": {
     "deleted": "Session已删除",

@@ -26,8 +26,11 @@ type GrantChecker interface {
 
 // cacheKey identifies a unique agent+user combination for caching.
 type cacheKey struct {
-	agentID uuid.UUID
-	userID  string
+	agentID             uuid.UUID
+	userID              string
+	channelInstanceName string
+	scopeType           string
+	scopeKey            string
 }
 
 // cacheEntry holds the resolved access info for an agent+user.
@@ -77,6 +80,11 @@ func (gc *storeGrantChecker) IsAllowed(ctx context.Context, agentID uuid.UUID, u
 	}
 
 	key := cacheKey{agentID: agentID, userID: userID}
+	if scope, ok := store.ChannelContextScopeFromContext(ctx); ok {
+		key.channelInstanceName = scope.ChannelInstanceName
+		key.scopeType = scope.ScopeType
+		key.scopeKey = scope.ScopeKey
+	}
 
 	// Try cache first
 	if cached, ok := gc.cache.Load(key); ok {

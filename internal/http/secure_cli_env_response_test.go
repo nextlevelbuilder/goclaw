@@ -14,11 +14,16 @@ import (
 )
 
 type fakeSecureCLIStore struct {
-	binary *store.SecureCLIBinary
-	user   *store.SecureCLIUserCredential
+	binary  *store.SecureCLIBinary
+	user    *store.SecureCLIUserCredential
+	created *store.SecureCLIBinary
 }
 
-func (s *fakeSecureCLIStore) Create(context.Context, *store.SecureCLIBinary) error { return nil }
+func (s *fakeSecureCLIStore) Create(_ context.Context, b *store.SecureCLIBinary) error {
+	cp := *b
+	s.created = &cp
+	return nil
+}
 func (s *fakeSecureCLIStore) Get(context.Context, uuid.UUID) (*store.SecureCLIBinary, error) {
 	cp := *s.binary
 	return &cp, nil

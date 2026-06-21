@@ -7,6 +7,8 @@ import "github.com/nextlevelbuilder/goclaw/internal/providers"
 // The platform does not expose a /v1/models endpoint.
 func bailianModels() []ModelInfo {
 	return []ModelInfo{
+		// qwen3.7-plus: Text Generation + Deep Thinking + Visual Understanding.
+		{ID: "qwen3.7-plus", Name: "Qwen 3.7 Plus"},
 		{ID: "qwen3.6-plus", Name: "Qwen 3.6 Plus"},
 		{ID: "qwen3.5-plus", Name: "Qwen 3.5 Plus"},
 		{ID: "kimi-k2.5", Name: "Kimi K2.5"},

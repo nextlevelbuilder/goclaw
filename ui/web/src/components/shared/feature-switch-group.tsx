@@ -3,6 +3,7 @@ import { Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { InfoLabel } from "@/components/shared/info-label";
 import {
   Card,
   CardContent,
@@ -18,6 +19,8 @@ export interface FeatureSwitchItem {
   label: string;
   /** Short description below the label explaining the impact */
   hint: string;
+  /** Tooltip explaining the purpose of the feature */
+  tooltip?: string;
   checked: boolean;
   onCheckedChange: (v: boolean) => void;
   /** Contextual info message shown when the toggle is ON */
@@ -64,7 +67,13 @@ export function FeatureSwitchGroup({
                   <item.icon className={cn("h-4 w-4 shrink-0", item.iconClass ?? "text-muted-foreground")} />
                 )}
                 <div className="space-y-1">
-                  <Label className="text-sm font-medium">{item.label}</Label>
+                  {item.tooltip ? (
+                    <InfoLabel tip={item.tooltip} labelClassName="text-sm font-medium">
+                      {item.label}
+                    </InfoLabel>
+                  ) : (
+                    <Label className="text-sm font-medium">{item.label}</Label>
+                  )}
                   <p className="text-xs text-muted-foreground">{item.hint}</p>
                 </div>
               </div>

@@ -1,5 +1,6 @@
 // Per-channel-type field definitions for credentials and config.
 // Simplified from web UI — only telegram and discord supported in Lite edition.
+import { reasoningDeliveryOptions } from './reasoning-delivery-config'
 
 export interface FieldDef {
   key: string
@@ -72,7 +73,7 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: 'dm_stream', label: 'DM Streaming', type: 'boolean', defaultValue: true, help: 'Stream response progressively in DMs' },
     { key: 'group_stream', label: 'Group Streaming', type: 'boolean', defaultValue: false, help: 'Stream response progressively in groups' },
     { key: 'draft_transport', label: 'Draft Preview', type: 'boolean', defaultValue: true, help: 'Stealth draft preview for streaming in DMs (requires DM Streaming)' },
-    { key: 'reasoning_stream', label: 'Show Reasoning', type: 'boolean', defaultValue: true, help: 'Display AI thinking before the answer (requires streaming)' },
+    { key: 'reasoning_delivery', label: 'Show Reasoning', type: 'select', options: reasoningDeliveryOptions, defaultValue: 'streaming_only', help: 'Choose how model reasoning is shown in channel messages.' },
     { key: 'reaction_level', label: 'Reaction Level', type: 'select', options: reactionLevelOptions, defaultValue: 'full' },
     { key: 'media_max_mb', label: 'Max Media Size (MB)', type: 'number', defaultValue: 20, help: 'Default: 20 MB. Increase when using local Bot API server.' },
     { key: 'link_preview', label: 'Link Preview', type: 'boolean', defaultValue: true },
@@ -98,6 +99,6 @@ export const ESSENTIAL_CONFIG_KEYS: Record<string, string[]> = {
 // Advanced config grouping keys (for ChannelAdvancedDialog)
 export const NETWORK_KEYS = new Set(['api_server', 'proxy'])
 export const LIMITS_KEYS = new Set(['history_limit', 'media_max_mb'])
-export const STREAMING_KEYS = new Set(['dm_stream', 'group_stream', 'draft_transport', 'reasoning_stream'])
+export const STREAMING_KEYS = new Set(['dm_stream', 'group_stream', 'draft_transport', 'reasoning_delivery'])
 export const BEHAVIOR_KEYS = new Set(['reaction_level', 'link_preview', 'block_reply'])
 export const ACCESS_KEYS = new Set(['allow_from'])

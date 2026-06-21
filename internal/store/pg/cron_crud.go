@@ -101,7 +101,7 @@ func (s *PGCronStore) ListJobs(ctx context.Context, includeDisabled bool, agentI
 	q := `SELECT id, tenant_id, agent_id, user_id, name, enabled, schedule_kind, cron_expression, run_at, timezone,
 		 interval_ms, payload, delete_after_run, stateless, deliver, deliver_channel, deliver_to, wake_heartbeat,
 		 next_run_at, last_run_at, last_status, last_error,
-		 created_at, updated_at FROM cron_jobs WHERE 1=1`
+		 created_at, updated_at, provider_id, model FROM cron_jobs WHERE 1=1`
 
 	var args []any
 	argIdx := 1

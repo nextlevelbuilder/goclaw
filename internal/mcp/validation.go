@@ -2,9 +2,12 @@ package mcp
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
+	"sync/atomic"
 
 	"github.com/nextlevelbuilder/goclaw/internal/security"
 )
@@ -25,13 +28,13 @@ var shellMetaChars = regexp.MustCompile(`[;|&$` + "`" + `(){}[\]<>]`)
 
 // Dangerous arg flags that enable code execution.
 var dangerousArgPatterns = []string{
-	"--eval", "-e", "-c",      // Code execution flags
-	"--require", "-r",         // Module injection
-	"--import",                // ES module injection
-	"exec(", "eval(",          // Inline code
-	"__import__",              // Python import injection
-	"child_process",           // Node.js process spawning
-	"subprocess",              // Python subprocess
+	"--eval", "-e", "-c", // Code execution flags
+	"--require", "-r", // Module injection
+	"--import",       // ES module injection
+	"exec(", "eval(", // Inline code
+	"__import__",    // Python import injection
+	"child_process", // Node.js process spawning
+	"subprocess",    // Python subprocess
 }
 
 // Fail-closed env var allowlist — only these are permitted for env: resolution.
@@ -71,23 +74,17 @@ func ValidateCommand(cmd string) error {
 		return fmt.Errorf("command contains newline characters")
 	}
 
-	// Extract basename for allowlist check
-	basename := cmd
-	if idx := strings.LastIndex(cmd, "/"); idx >= 0 {
-		basename = cmd[idx+1:]
-	}
+	basename := commandBasename(cmd)
 
-	// Allow absolute paths to known commands
-	if strings.HasPrefix(cmd, "/") {
-		if !allowedCommands[basename] {
-			return fmt.Errorf("command %q not in allowlist", basename)
-		}
-		return nil
+	// Only bare runtime names are accepted. Path-bearing commands can point at
+	// workspace-controlled wrappers named after an allowlisted runtime.
+	if strings.ContainsAny(cmd, `/\`) {
+		return fmt.Errorf("command must be a bare allowlisted runtime name, not a path")
 	}
 
 	// Bare command must be in allowlist
-	if !allowedCommands[cmd] {
-		return fmt.Errorf("command %q not in allowlist (allowed: node, npx, python, python3, ruby, go, java, uvx, uv, pipx, deno, bun)", cmd)
+	if !allowedCommands[basename] {
+		return fmt.Errorf("command %q not in allowlist (allowed: %s)", basename, allowedCommandNames())
 	}
 	return nil
 }
@@ -109,6 +106,309 @@ func ValidateArgs(args []string) error {
 	return nil
 }
 
+// ValidateArgsForCommand applies command-specific stdio restrictions after the
+// generic argument scan. Several allowed runtimes also include package runners
+// or remote loaders; those execution modes are blocked for untrusted MCP config.
+func ValidateArgsForCommand(command string, args []string) error {
+	if err := ValidateArgs(args); err != nil {
+		return err
+	}
+
+	switch commandBasename(command) {
+	case "node":
+		return validateNodeArgs(args)
+	case "python", "python2", "python3":
+		return validatePythonArgs(args)
+	case "deno":
+		return validateDenoArgs(args)
+	case "bun":
+		return validateBunArgs(args)
+	case "npx", "npm", "uvx", "uv", "pipx":
+		return validatePackageRunnerArgs(commandBasename(command), args)
+	case "go":
+		return validateGoArgs(args)
+	case "cargo":
+		return validateCargoArgs(args)
+	case "dotnet":
+		return validateDotnetArgs(args)
+	default:
+		return nil
+	}
+}
+
+func commandBasename(command string) string {
+	base := strings.TrimSpace(command)
+	if idx := strings.LastIndexAny(base, `/\`); idx >= 0 {
+		base = base[idx+1:]
+	}
+	base = strings.TrimSuffix(strings.ToLower(base), ".exe")
+	return base
+}
+
+func allowedCommandNames() string {
+	names := make([]string, 0, len(allowedCommands))
+	for name := range allowedCommands {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return strings.Join(names, ", ")
+}
+
+func validateNodeArgs(args []string) error {
+	for i, arg := range args {
+		if isFlag(arg, "-p", "--print", "--loader", "--experimental-loader") {
+			return fmt.Errorf("arg[%d] uses blocked node execution flag %q", i, arg)
+		}
+	}
+	return nil
+}
+
+func validatePythonArgs(args []string) error {
+	for i, arg := range args {
+		lower := strings.ToLower(arg)
+		if lower == "-m" || strings.HasPrefix(lower, "-m") && lower != "--" {
+			return fmt.Errorf("arg[%d] uses blocked python module execution flag %q", i, arg)
+		}
+	}
+	return nil
+}
+
+func validateDenoArgs(args []string) error {
+	if err := validateRuntimeRemoteRefs(args); err != nil {
+		return err
+	}
+	for i, arg := range args {
+		switch strings.ToLower(strings.TrimSpace(arg)) {
+		case "add", "install":
+			return fmt.Errorf("arg[%d] uses blocked deno package subcommand %q", i, args[i])
+		}
+	}
+	return nil
+}
+
+func validateBunArgs(args []string) error {
+	if err := validateRuntimeRemoteRefs(args); err != nil {
+		return err
+	}
+	for i, arg := range args {
+		switch strings.ToLower(strings.TrimSpace(arg)) {
+		case "x", "create", "add", "install", "update", "upgrade":
+			return fmt.Errorf("arg[%d] uses blocked bun package subcommand %q", i, args[i])
+		}
+	}
+	return nil
+}
+
+func validateRuntimeRemoteRefs(args []string) error {
+	for i, arg := range args {
+		if isRemoteCodeReference(arg) {
+			return fmt.Errorf("arg[%d] uses blocked remote code reference %q", i, arg)
+		}
+	}
+	return nil
+}
+
+func validatePackageRunnerArgs(command string, args []string) error {
+	switch command {
+	case "npx":
+		return validatePackageTargetArgs(command, args, []string{"--package", "-p", "--call"})
+	case "uvx":
+		return validatePackageTargetArgs(command, args, []string{"--from", "--with", "--with-editable", "--with-requirements"})
+	case "npm":
+		return validateNPMArgs(args)
+	case "pipx":
+		return validatePipxArgs(args)
+	case "uv":
+		return validateUVArgs(args)
+	default:
+		return nil
+	}
+}
+
+func validatePackageTargetArgs(command string, args []string, blockedFlags []string) error {
+	for i, arg := range args {
+		if isFlag(arg, blockedFlags...) {
+			return fmt.Errorf("arg[%d] uses blocked %s package flag %q", i, command, arg)
+		}
+		if isOptionArg(arg) {
+			continue
+		}
+		if !isLikelyLocalPath(arg) {
+			return fmt.Errorf("arg[%d] uses blocked %s package target %q", i, command, arg)
+		}
+	}
+	return nil
+}
+
+func validateNPMArgs(args []string) error {
+	for i, arg := range args {
+		switch strings.ToLower(strings.TrimSpace(arg)) {
+		case "exec", "x", "run", "run-script", "create", "install", "i", "add", "update", "upgrade":
+			return fmt.Errorf("arg[%d] uses blocked npm subcommand %q", i, args[i])
+		}
+	}
+	return nil
+}
+
+func validatePipxArgs(args []string) error {
+	for i, arg := range args {
+		switch strings.ToLower(strings.TrimSpace(arg)) {
+		case "run", "install", "inject", "upgrade", "upgrade-all", "runpip":
+			return fmt.Errorf("arg[%d] uses blocked pipx subcommand %q", i, args[i])
+		}
+	}
+	return nil
+}
+
+func validateUVArgs(args []string) error {
+	sawTool := false
+	sawPip := false
+	for i, arg := range args {
+		if isFlag(arg, "--with", "--with-editable", "--with-requirements", "--from") {
+			return fmt.Errorf("arg[%d] uses blocked uv package flag %q", i, arg)
+		}
+		lower := strings.ToLower(strings.TrimSpace(arg))
+		if lower == "" || isOptionArg(lower) {
+			continue
+		}
+		switch {
+		case lower == "tool":
+			sawTool = true
+			continue
+		case lower == "pip":
+			sawPip = true
+			continue
+		case sawTool && (lower == "run" || lower == "install" || lower == "upgrade"):
+			return fmt.Errorf("arg[%d] uses blocked uv tool subcommand %q", i, args[i])
+		case sawPip && (lower == "install" || lower == "sync"):
+			return fmt.Errorf("arg[%d] uses blocked uv pip subcommand %q", i, args[i])
+		case lower == "add" || lower == "sync":
+			return fmt.Errorf("arg[%d] uses blocked uv package subcommand %q", i, args[i])
+		}
+	}
+	return nil
+}
+
+func validateGoArgs(args []string) error {
+	for i, arg := range args {
+		switch strings.ToLower(strings.TrimSpace(arg)) {
+		case "run", "install", "get":
+			return fmt.Errorf("arg[%d] uses blocked go package subcommand %q", i, args[i])
+		}
+	}
+	return nil
+}
+
+func validateCargoArgs(args []string) error {
+	for i, arg := range args {
+		switch strings.ToLower(strings.TrimSpace(arg)) {
+		case "run", "install", "add", "update":
+			return fmt.Errorf("arg[%d] uses blocked cargo package subcommand %q", i, args[i])
+		}
+	}
+	return nil
+}
+
+func validateDotnetArgs(args []string) error {
+	sawTool := false
+	sawAdd := false
+	for i, arg := range args {
+		lower := strings.ToLower(strings.TrimSpace(arg))
+		if lower == "" || isOptionArg(lower) {
+			continue
+		}
+		switch {
+		case lower == "run", lower == "restore":
+			return fmt.Errorf("arg[%d] uses blocked dotnet subcommand %q", i, args[i])
+		case lower == "tool":
+			sawTool = true
+			continue
+		case sawTool && (lower == "install" || lower == "update" || lower == "run"):
+			return fmt.Errorf("arg[%d] uses blocked dotnet tool subcommand %q", i, args[i])
+		case lower == "add":
+			sawAdd = true
+			continue
+		case sawAdd && lower == "package":
+			return fmt.Errorf("arg[%d] uses blocked dotnet package subcommand %q", i, args[i])
+		}
+	}
+	return nil
+}
+
+func isFlag(arg string, names ...string) bool {
+	lower := strings.ToLower(strings.TrimSpace(arg))
+	for _, name := range names {
+		if lower == name || strings.HasPrefix(lower, name+"=") {
+			return true
+		}
+	}
+	return false
+}
+
+func isOptionArg(arg string) bool {
+	return strings.HasPrefix(strings.TrimSpace(arg), "-")
+}
+
+func isLikelyLocalPath(arg string) bool {
+	arg = strings.TrimSpace(arg)
+	if strings.HasPrefix(arg, "./") || strings.HasPrefix(arg, `.\`) ||
+		strings.HasPrefix(arg, "/") || strings.HasPrefix(arg, `\`) {
+		return true
+	}
+	return len(arg) >= 3 && arg[1] == ':' && (arg[2] == '\\' || arg[2] == '/')
+}
+
+func isRemoteCodeReference(arg string) bool {
+	arg = strings.TrimSpace(arg)
+	if isLikelyLocalPath(arg) {
+		return false
+	}
+	u, err := url.Parse(strings.TrimSpace(arg))
+	if err != nil {
+		return false
+	}
+	if u.Scheme == "" {
+		return false
+	}
+	if len(u.Scheme) == 1 && len(arg) >= 2 && arg[1] == ':' {
+		return false
+	}
+	switch u.Scheme {
+	case "http", "https", "npm", "jsr", "git", "git+https", "git+ssh", "ssh":
+		return true
+	default:
+		return u.Host != ""
+	}
+}
+
+// mcpAllowedHostsStore holds the operator-configured allowlist of MCP server
+// hostnames that are exempt from the private-IP SSRF block during MCP config
+// validation (see SetAllowedHosts).
+var mcpAllowedHostsStore atomic.Pointer[map[string]bool]
+
+// SetAllowedHosts configures the MCP server hostname allowlist consulted by
+// ValidateURL / ValidateServerConfig. Hostnames are matched
+// case-insensitively against the pre-resolution URL host. Call once at gateway
+// startup; a nil/empty slice disables the allowlist (the default, no behavior
+// change). Only owner/admin gateway config should feed this.
+func SetAllowedHosts(hosts []string) {
+	m := make(map[string]bool, len(hosts))
+	for _, h := range hosts {
+		if h = strings.ToLower(strings.TrimSpace(h)); h != "" {
+			m[h] = true
+		}
+	}
+	mcpAllowedHostsStore.Store(&m)
+}
+
+// allowedHosts returns the current MCP hostname allowlist, or nil if unset.
+func allowedHosts() map[string]bool {
+	if p := mcpAllowedHostsStore.Load(); p != nil {
+		return *p
+	}
+	return nil
+}
+
 // ValidateURL checks URL for SSRF vulnerabilities using the existing security package.
 // This provides DNS rebinding protection via IP pinning.
 func ValidateURL(rawURL string) error {
@@ -116,8 +416,9 @@ func ValidateURL(rawURL string) error {
 		return nil
 	}
 
-	// Reuse existing SSRF validation with DNS rebinding protection
-	_, _, err := security.Validate(rawURL)
+	// Reuse existing SSRF validation; an operator may allowlist trusted internal
+	// MCP hosts (private network self-host) via SetAllowedHosts.
+	_, _, err := security.ValidateAllowingHosts(rawURL, allowedHosts())
 	if err != nil {
 		return fmt.Errorf("URL validation failed: %w", err)
 	}
@@ -150,7 +451,7 @@ func ValidateServerConfig(transport, command string, args []string, url string) 
 		if err := ValidateCommand(command); err != nil {
 			return fmt.Errorf("invalid command: %w", err)
 		}
-		if err := ValidateArgs(args); err != nil {
+		if err := ValidateArgsForCommand(command, args); err != nil {
 			return fmt.Errorf("invalid args: %w", err)
 		}
 	}

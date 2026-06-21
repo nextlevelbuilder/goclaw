@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
+
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // CustomSkillExport holds portable skill metadata (no internal UUIDs in references).
@@ -16,6 +19,7 @@ type CustomSkillExport struct {
 	Description *string         `json:"description,omitempty" db:"description"`
 	Visibility  string          `json:"visibility" db:"visibility"`
 	Version     int             `json:"version" db:"version"`
+	IsSystem    bool            `json:"is_system" db:"is_system"`
 	Frontmatter json.RawMessage `json:"frontmatter,omitempty" db:"frontmatter"`
 	Tags        []string        `json:"tags,omitempty" db:"tags"`
 	Deps        json.RawMessage `json:"deps,omitempty" db:"deps"`
@@ -34,18 +38,50 @@ type SkillsExportPreview struct {
 	TotalGrants  int `json:"total_grants" db:"total_grants"`
 }
 
+// SkillExportSelection describes the skill set requested by the export API.
+type SkillExportSelection struct {
+	IDs           []uuid.UUID
+	IncludeSystem bool
+}
+
 // ExportCustomSkills returns all non-system skills scoped to the current tenant.
 func ExportCustomSkills(ctx context.Context, db *sql.DB) ([]CustomSkillExport, error) {
+	return ExportSkills(ctx, db, SkillExportSelection{})
+}
+
+// ExportSkills returns exportable skill rows for the requested selection.
+// No IDs preserves the legacy custom-skills-only export unless IncludeSystem is true.
+// Explicit IDs may include system skills, while custom skills remain tenant-scoped.
+func ExportSkills(ctx context.Context, db *sql.DB, selection SkillExportSelection) ([]CustomSkillExport, error) {
 	tc, tcArgs, _, err := scopeClause(ctx, 1)
 	if err != nil {
 		return nil, err
 	}
+	where := " WHERE is_system = false" + tc
+	args := tcArgs
+	if len(selection.IDs) > 0 {
+		if store.IsCrossTenant(ctx) {
+			where = " WHERE id = ANY($1)"
+			args = []any{pq.Array(selection.IDs)}
+		} else {
+			scope, err := store.ScopeFromContext(ctx)
+			if err != nil {
+				return nil, err
+			}
+			where = " WHERE id = ANY($1) AND (is_system = true OR tenant_id = $2)"
+			args = []any{pq.Array(selection.IDs), scope.TenantID}
+		}
+	} else if selection.IncludeSystem {
+		where = " WHERE (is_system = true OR (is_system = false" + tc + "))"
+		args = tcArgs
+	}
 	var scanned []customSkillExportRow
 	if err := pkgSqlxDB.SelectContext(ctx, &scanned,
 		"SELECT id, name, slug, description, visibility, version, frontmatter, tags, deps, file_path"+
-			" FROM skills WHERE is_system = false"+tc+
+			", is_system"+
+			" FROM skills"+where+
 			" ORDER BY name",
-		tcArgs...,
+		args...,
 	); err != nil {
 		return nil, err
 	}

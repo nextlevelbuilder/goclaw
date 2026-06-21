@@ -382,6 +382,13 @@ func (h *VaultHandler) handleUpdateDocument(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "document not found"})
 		return
 	}
+	// Verify team boundary before any metadata or content rewrite. PUT can
+	// materialize bytes on disk, so it must match GET/DELETE team access rules.
+	if existing.TeamID != nil && *existing.TeamID != "" && !store.IsOwnerRole(r.Context()) {
+		if !h.validateTeamMembership(r.Context(), w, *existing.TeamID) {
+			return
+		}
+	}
 
 	var body struct {
 		Title    *string        `json:"title"`

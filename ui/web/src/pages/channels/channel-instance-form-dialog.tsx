@@ -134,7 +134,12 @@ export function ChannelInstanceFormDialog({
     setConfigValues((prev) => ({ ...prev, [key]: value }));
   }, []);
 
-  const coerceBoolSelects = (cfg: Record<string, unknown>, schema: FieldDef[]) => {
+  const coerceSelects = (cfg: Record<string, unknown>, schema: FieldDef[]) => {
+    const selectKeys = new Set(schema.filter((f) => f.type === "select").map((f) => f.key));
+    for (const key of selectKeys) {
+      if (cfg[key] === "inherit") delete cfg[key];
+    }
+
     const boolSelectKeys = new Set(
       schema.filter((f) => f.type === "select" && f.options?.some((o) => o.value === "true")).map((f) => f.key),
     );
@@ -159,7 +164,7 @@ export function ChannelInstanceFormDialog({
     const cleanConfig = Object.fromEntries(
       Object.entries(configValues).filter(([, v]) => v !== undefined && v !== "" && v !== null),
     );
-    coerceBoolSelects(cleanConfig, configSchema[values.channelType] ?? []);
+    coerceSelects(cleanConfig, configSchema[values.channelType] ?? []);
 
     // Drop the legacy bitrix24 public_url field if it leaked from an older
     // channel row's config — gateway now derives the URL from the portal's
@@ -244,7 +249,7 @@ export function ChannelInstanceFormDialog({
     const cleanConfig = Object.fromEntries(
       Object.entries(configValues).filter(([, v]) => v !== undefined && v !== "" && v !== null),
     );
-    coerceBoolSelects(cleanConfig, configSchema[channelType] ?? []);
+    coerceSelects(cleanConfig, configSchema[channelType] ?? []);
     setLoading(true);
     setError("");
     try {

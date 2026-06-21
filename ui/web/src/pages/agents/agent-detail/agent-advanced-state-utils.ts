@@ -3,6 +3,7 @@ import type {
   ChatGPTOAuthRoutingConfig,
   CompactionConfig,
   ContextPruningConfig,
+  DeliveryBehaviorConfig,
   InboundDebounceOverrideMode,
   ModelFallbackConfig,
   ReasoningOverrideMode,
@@ -34,6 +35,8 @@ export interface AdvancedDialogState {
   modelFallback: ModelFallbackConfig;
   wsSharing: WorkspaceSharingConfig;
   comp: CompactionConfig;
+  deliveryBehaviorMode: "inherit" | "custom";
+  deliveryBehavior: DeliveryBehaviorConfig;
   inboundDebounceMode: InboundDebounceOverrideMode;
   inboundDebounceMs: number;
   pruneEnabled: boolean;
@@ -80,6 +83,9 @@ export function deriveState(
   const draftRouting = buildDraftRouting(routing);
   const otherConfig = (agent.other_config ?? {}) as Record<string, unknown>;
   const rawInboundDebounceMs = otherConfig.inbound_debounce_ms;
+  const rawDeliveryBehavior = isPlainObject(otherConfig.delivery_behavior)
+    ? otherConfig.delivery_behavior as DeliveryBehaviorConfig
+    : undefined;
   const inboundDebounceMs =
     typeof rawInboundDebounceMs === "number" && Number.isFinite(rawInboundDebounceMs)
       ? Math.max(0, Math.trunc(rawInboundDebounceMs))
@@ -109,6 +115,12 @@ export function deriveState(
       {}
     ) as WorkspaceSharingConfig,
     comp: agent.compaction_config ?? {},
+    deliveryBehaviorMode: rawDeliveryBehavior ? "custom" : "inherit",
+    deliveryBehavior: rawDeliveryBehavior ?? {
+      enabled: true,
+      intermediate_replies: { enabled: false, mode: "sidecar_generated", timeout_ms: 2500, max_tokens: 60, max_chars: 180 },
+      quick_ack: { enabled: true, mode: "sidecar_generated", min_delay_ms: 1000, timeout_ms: 2500, max_tokens: 40, max_chars: 120 },
+    },
     inboundDebounceMode: inboundDebounceMs === undefined ? "inherit" : "custom",
     inboundDebounceMs: inboundDebounceMs ?? 0,
     pruneEnabled: agent.context_pruning?.mode === "cache-ttl",
@@ -133,6 +145,8 @@ export interface BuildAdvancedUpdatePayloadParams {
   modelFallback: ModelFallbackConfig;
   wsSharing: WorkspaceSharingConfig;
   comp: CompactionConfig;
+  deliveryBehaviorMode: "inherit" | "custom";
+  deliveryBehavior: DeliveryBehaviorConfig;
   inboundDebounceMode: InboundDebounceOverrideMode;
   inboundDebounceMs: number;
   pruneEnabled: boolean;
@@ -148,7 +162,7 @@ export function buildAdvancedUpdatePayload(
     agent, currentProvider, providersLoading, providerModelsLoading,
     expertReasoningAvailable, reasoningMode, reasoningEffort, reasoningExpert,
     reasoningFallback, thinkingLevel, chatgptRouting, wsSharing,
-    modelFallback, comp, inboundDebounceMode, inboundDebounceMs,
+    modelFallback, comp, deliveryBehaviorMode, deliveryBehavior, inboundDebounceMode, inboundDebounceMs,
     pruneEnabled, prune, sbEnabled, sb,
   } = params;
 
@@ -174,6 +188,11 @@ export function buildAdvancedUpdatePayload(
     updates.other_config,
     inboundDebounceMode,
     inboundDebounceMs,
+  );
+  updates.other_config = buildOtherConfigWithDeliveryBehavior(
+    updates.other_config,
+    deliveryBehaviorMode,
+    deliveryBehavior,
   );
 
   // Build reasoning_config and thinking_level as top-level fields
@@ -209,6 +228,20 @@ export function buildAdvancedUpdatePayload(
   }
 
   return updates;
+}
+
+function buildOtherConfigWithDeliveryBehavior(
+  base: unknown,
+  mode: "inherit" | "custom",
+  value: DeliveryBehaviorConfig,
+): Record<string, unknown> | null {
+  const bag = isPlainObject(base) ? { ...base } : {};
+  if (mode === "inherit") {
+    delete bag.delivery_behavior;
+  } else {
+    bag.delivery_behavior = value;
+  }
+  return Object.keys(bag).length > 0 ? bag : null;
 }
 
 function buildOtherConfigWithInboundDebounce(

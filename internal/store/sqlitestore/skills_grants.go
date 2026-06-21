@@ -370,18 +370,38 @@ func (s *SQLiteSkillStore) GrantToUser(ctx context.Context, skillID uuid.UUID, u
 	if err := store.ValidateUserID(grantedBy); err != nil {
 		return err
 	}
+	tid := tenantIDForInsert(ctx)
+	if err := s.verifySkillInGrantScope(ctx, skillID, tid); err != nil {
+		return err
+	}
 	id := store.GenNewID()
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO skill_user_grants (id, skill_id, user_id, granted_by, created_at, tenant_id)
 		 VALUES (?, ?, ?, ?, ?, ?)
-		 ON CONFLICT (skill_id, user_id) DO NOTHING`,
-		id, skillID, userID, grantedBy, time.Now().UTC(), tenantIDForInsert(ctx),
+		 ON CONFLICT (skill_id, user_id, tenant_id) DO NOTHING`,
+		id, skillID, userID, grantedBy, time.Now().UTC(), tid,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE skills
+		 SET visibility = 'internal', updated_at = ?
+		 WHERE id = ? AND visibility = 'private' AND (is_system = 1 OR tenant_id = ?)`,
+		time.Now().UTC(), skillID, tid)
+	if err != nil {
+		slog.Warn("skill_grants: failed to auto-promote visibility for user grant", "skill_id", skillID, "error", err)
+	}
+	s.BumpVersion()
+	return nil
 }
 
 // RevokeFromUser revokes a skill grant from a user.
 func (s *SQLiteSkillStore) RevokeFromUser(ctx context.Context, skillID uuid.UUID, userID string) error {
+	tid := tenantIDForInsert(ctx)
+	if err := s.verifySkillInGrantScope(ctx, skillID, tid); err != nil {
+		return err
+	}
 	tClause, tArgs, err := scopeClause(ctx)
 	if err != nil {
 		return err
@@ -389,7 +409,52 @@ func (s *SQLiteSkillStore) RevokeFromUser(ctx context.Context, skillID uuid.UUID
 	_, err = s.db.ExecContext(ctx,
 		"DELETE FROM skill_user_grants WHERE skill_id = ? AND user_id = ?"+tClause,
 		append([]any{skillID, userID}, tArgs...)...)
-	return err
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE skills SET visibility = 'private', updated_at = ?
+		 WHERE id = ? AND visibility = 'internal' AND (is_system = 1 OR tenant_id = ?)
+		   AND NOT EXISTS (SELECT 1 FROM skill_agent_grants WHERE skill_id = ?)
+		   AND NOT EXISTS (SELECT 1 FROM skill_user_grants WHERE skill_id = ?)`,
+		time.Now().UTC(), skillID, tid, skillID, skillID)
+	if err != nil {
+		slog.Warn("skill_grants: failed to auto-demote visibility for user grant", "skill_id", skillID, "error", err)
+	}
+	s.BumpVersion()
+	return nil
+}
+
+// ListUserGrantsForSkill returns all user grants for one skill.
+func (s *SQLiteSkillStore) ListUserGrantsForSkill(ctx context.Context, skillID uuid.UUID) ([]store.SkillUserGrantInfo, error) {
+	if err := s.verifySkillInGrantScope(ctx, skillID, tenantIDForInsert(ctx)); err != nil {
+		return nil, err
+	}
+	tClause, tArgs, err := scopeClause(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT sug.user_id, sug.granted_by
+		   FROM skill_user_grants sug
+		  WHERE sug.skill_id = ?`+strings.ReplaceAll(tClause, "tenant_id", "sug.tenant_id")+`
+		  ORDER BY sug.created_at DESC`,
+		append([]any{skillID}, tArgs...)...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []store.SkillUserGrantInfo
+	for rows.Next() {
+		var g store.SkillUserGrantInfo
+		if err := rows.Scan(&g.UserID, &g.GrantedBy); err != nil {
+			slog.Warn("skill_grants: scan error in ListUserGrantsForSkill", "error", err)
+			continue
+		}
+		result = append(result, g)
+	}
+	return result, rows.Err()
 }
 
 // ListAccessible returns skills accessible to a given agent+user combination.
@@ -404,27 +469,35 @@ func (s *SQLiteSkillStore) ListAccessible(ctx context.Context, agentID uuid.UUID
 		return nil, err
 	}
 	tenantCond := ""
+	agentGrantTenantCond := ""
+	userGrantTenantCond := ""
 	stcJoin := ""
 	stcFilter := ""
 	if len(tArgs) > 0 {
 		tenantCond = " AND (s.is_system = 1 OR s.tenant_id = ?)"
+		agentGrantTenantCond = " AND sag.tenant_id = ?"
+		userGrantTenantCond = " AND sug.tenant_id = ?"
 		stcJoin = " LEFT JOIN skill_tenant_configs stc ON s.id = stc.skill_id AND stc.tenant_id = ?"
 		stcFilter = " AND (stc.enabled IS NULL OR stc.enabled = 1)"
 	}
 
-	// Positional args: agentID, userID, actorID, [tenantID x2 if tenant-scoped], userID, actorID (private-owner clause)
-	queryArgs := []any{agentID, userID, actorID}
+	queryArgs := []any{agentID}
 	if len(tArgs) > 0 {
-		queryArgs = append(queryArgs, tArgs...) // tenant cond
+		queryArgs = append(queryArgs, tArgs...) // sag tenant
+	}
+	queryArgs = append(queryArgs, userID, actorID)
+	if len(tArgs) > 0 {
+		queryArgs = append(queryArgs, tArgs...) // sug tenant
 		queryArgs = append(queryArgs, tArgs...) // stc join
+		queryArgs = append(queryArgs, tArgs...) // tenant cond
 	}
 	// Remove tClause (aliased scope) — we handle it manually above.
 	_ = tClause
 
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT DISTINCT s.name, s.slug, s.description, s.version, s.file_path FROM skills s
-		LEFT JOIN skill_agent_grants sag ON s.id = sag.skill_id AND sag.agent_id = ?
-		LEFT JOIN skill_user_grants sug ON s.id = sug.skill_id AND (sug.user_id = ? OR sug.user_id = ?)`+stcJoin+`
+		LEFT JOIN skill_agent_grants sag ON s.id = sag.skill_id AND sag.agent_id = ?`+agentGrantTenantCond+`
+		LEFT JOIN skill_user_grants sug ON s.id = sug.skill_id AND (sug.user_id = ? OR sug.user_id = ?)`+userGrantTenantCond+stcJoin+`
 		WHERE s.status = 'active'`+tenantCond+stcFilter+` AND (
 			s.is_system = 1
 			OR s.visibility = 'public'

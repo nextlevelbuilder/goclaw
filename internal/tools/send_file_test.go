@@ -462,3 +462,77 @@ func TestSendFile_T13_BinaryFileLargeNoContentRead(t *testing.T) {
 		t.Errorf("Media[0].Path = %q, want %q", result.Media[0].Path, bigFile)
 	}
 }
+
+func TestSendFile_T15_BatchAttachmentsHappyPath(t *testing.T) {
+	ws, reportPDF, subFile, _ := mkSendFileWorkspace(t)
+	tool := NewSendFileTool(ws, true)
+
+	result := tool.Execute(context.Background(), map[string]any{
+		"attachments": []any{
+			map[string]any{"path": reportPDF, "caption": "Q4 report"},
+			map[string]any{"path": subFile, "caption": "Notes"},
+		},
+	})
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", result.ForLLM)
+	}
+	if len(result.Media) != 2 {
+		t.Fatalf("expected 2 Media entries, got %d", len(result.Media))
+	}
+	if result.Media[0].Path != reportPDF || result.Media[1].Path != subFile {
+		t.Errorf("batch order = [%q, %q], want [%q, %q]",
+			result.Media[0].Path, result.Media[1].Path, reportPDF, subFile)
+	}
+	if result.Media[0].Caption != "Q4 report" || result.Media[1].Caption != "Notes" {
+		t.Errorf("captions = [%q, %q], want [Q4 report, Notes]",
+			result.Media[0].Caption, result.Media[1].Caption)
+	}
+}
+
+func TestSendFile_T16_BatchDuplicateRejectedBeforeMarking(t *testing.T) {
+	ws, reportPDF, subFile, _ := mkSendFileWorkspace(t)
+	tool := NewSendFileTool(ws, true)
+	dm := NewDeliveredMedia()
+	ctx := WithDeliveredMedia(context.Background(), dm)
+
+	result := tool.Execute(ctx, map[string]any{
+		"attachments": []any{
+			map[string]any{"path": reportPDF},
+			map[string]any{"path": subFile},
+			map[string]any{"path": reportPDF},
+		},
+	})
+	if !result.IsError {
+		t.Fatal("expected duplicate batch error, got success")
+	}
+	if !strings.Contains(strings.ToLower(result.ForLLM), "duplicate") {
+		t.Errorf("expected duplicate error, got: %s", result.ForLLM)
+	}
+	if dm.IsDelivered(reportPDF) || dm.IsDelivered(subFile) {
+		t.Fatal("duplicate batch must not mark any file delivered")
+	}
+}
+
+func TestSendFile_T17_BatchAlreadyDeliveredRejectedBeforeMarkingNewFiles(t *testing.T) {
+	ws, reportPDF, subFile, _ := mkSendFileWorkspace(t)
+	tool := NewSendFileTool(ws, true)
+	dm := NewDeliveredMedia()
+	dm.Mark(reportPDF)
+	ctx := WithDeliveredMedia(context.Background(), dm)
+
+	result := tool.Execute(ctx, map[string]any{
+		"attachments": []any{
+			map[string]any{"path": subFile},
+			map[string]any{"path": reportPDF},
+		},
+	})
+	if !result.IsError {
+		t.Fatal("expected already-delivered batch error, got success")
+	}
+	if !strings.Contains(strings.ToLower(result.ForLLM), "already") {
+		t.Errorf("expected already-delivered error, got: %s", result.ForLLM)
+	}
+	if dm.IsDelivered(subFile) {
+		t.Fatal("failed batch must not mark new files delivered")
+	}
+}

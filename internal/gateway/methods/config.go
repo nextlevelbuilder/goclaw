@@ -178,19 +178,8 @@ func (m *ConfigMethods) handlePatch(ctx context.Context, client *gateway.Client,
 		return
 	}
 
-	// Merge strategy: serialize current -> deserialize patch on top -> save
-	currentJSON, err := json.Marshal(m.cfg)
-	if err != nil {
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgInternalError, "failed to serialize current config")))
-		return
-	}
-
-	// Start from current config as base
-	merged := config.Default()
-	if err := json.Unmarshal(currentJSON, merged); err != nil {
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgInternalError, "failed to clone config")))
-		return
-	}
+	// Start from a locked current-config snapshot as base.
+	merged := m.cfg.Clone()
 
 	// Apply patch on top
 	if err := json5.Unmarshal([]byte(params.Raw), merged); err != nil {

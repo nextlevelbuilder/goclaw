@@ -17,6 +17,7 @@ type OpenAIProvider struct {
 	providerType string // DB provider_type (e.g. "gemini_native", "openai", "minimax_native")
 	siteURL      string // optional site URL for provider identification (e.g. OpenRouter HTTP-Referer)
 	siteTitle    string // optional site title for provider identification (e.g. OpenRouter X-Title)
+	extraHeaders map[string]string // static headers set on every outgoing request (e.g. fixed User-Agent for kimi_coding)
 	client       *http.Client
 	retryConfig  RetryConfig
 	middlewares  RequestMiddleware // composed middleware chain (nil = no-op)
@@ -61,6 +62,36 @@ func (p *OpenAIProvider) WithSiteInfo(url, title string) *OpenAIProvider {
 	p.siteURL = url
 	p.siteTitle = title
 	return p
+}
+
+// WithExtraHeaders sets static headers attached to every outgoing request.
+// Used by providers that require a fixed identity header (e.g. kimi_coding's
+// User-Agent: claude-code/0.1.0). Repeat calls merge — keys already present are
+// overwritten. Passing an empty map is a no-op.
+func (p *OpenAIProvider) WithExtraHeaders(h map[string]string) *OpenAIProvider {
+	if len(h) == 0 {
+		return p
+	}
+	if p.extraHeaders == nil {
+		p.extraHeaders = make(map[string]string, len(h))
+	}
+	for k, v := range h {
+		p.extraHeaders[k] = v
+	}
+	return p
+}
+
+// ExtraHeaders returns a copy of the static headers configured for this provider.
+// Used by adapter_openai.go to mirror the runtime request headers.
+func (p *OpenAIProvider) ExtraHeaders() map[string]string {
+	if len(p.extraHeaders) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(p.extraHeaders))
+	for k, v := range p.extraHeaders {
+		out[k] = v
+	}
+	return out
 }
 
 // WithRegistry sets the model registry for forward-compat resolution.

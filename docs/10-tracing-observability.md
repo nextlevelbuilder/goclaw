@@ -187,18 +187,60 @@ worker.Stop()
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/v1/traces` | List traces with pagination and filters |
+| GET | `/v1/traces/follow` | Poll trace changes for one session or agent |
 | GET | `/v1/traces/{id}` | Get trace details with all spans |
+| GET | `/v1/traces/{id}/export` | Export a gzipped trace tree with spans and sub-traces |
+| GET | `/v1/runs/{runID}/timeline` | Get persisted run archive timeline items |
 
 ### Query Filters
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
+| `q` | string | Contains search across trace ID, trace previews, session/channel labels, joined agent/channel labels, and span previews/tool names |
 | `agent_id` | UUID | Filter by agent |
 | `user_id` | string | Filter by user |
-| `status` | string | Filter by status (running, success, error, cancelled) |
-| `from` / `to` | timestamp | Date range filter |
+| `session_key` | string | Filter by session key |
+| `status` | string | Filter by status (running, completed, error, cancelled) |
+| `channel` | string | Filter by raw channel |
+| `agent` | string | Contains search over agent display name and key |
+| `channel_query` | string | Contains search over tenant-scoped channel instance labels |
+| `from` / `to` | timestamp | `start_time` range filter; `from` inclusive, `to` exclusive |
+| `min_input_tokens` / `max_input_tokens` | int | Input token range |
+| `min_output_tokens` / `max_output_tokens` | int | Output token range |
+| `min_tool_calls` / `max_tool_calls` | int | Tool-call count range |
+| `tool_name` | string | Contains search over span tool names |
+| `has_tool_calls` | boolean | Filter traces with or without tool calls |
 | `limit` | int | Page size (default 50) |
 | `offset` | int | Pagination offset |
+
+### Operator CLI
+
+The main `goclaw` binary can also act as a thin operator client for trace
+inspection:
+
+```bash
+goclaw traces list --status error --limit 20
+goclaw traces get <trace-id> -o json
+goclaw traces export <trace-id> --file trace.json.gz
+goclaw traces follow --session <session-key> --since 2026-06-12T01:00:00Z
+goclaw traces timeline <trace-id>
+```
+
+By default, commands use the same local gateway config and
+`GOCLAW_GATEWAY_TOKEN` behavior as existing admin commands. For remote
+operations, use explicit overrides:
+
+```bash
+goclaw --server https://goclaw.example.com --token "$GOCLAW_GATEWAY_TOKEN" traces get <trace-id> -o json
+```
+
+`--server` also applies to existing WebSocket/RPC-backed admin commands such as
+`sessions`, `cron`, and `pairing`. The URL can also come from `GOCLAW_SERVER`
+or `GOCLAW_GATEWAY_URL`; `--server` wins when both are set.
+
+The standalone `nextlevelbuilder/goclaw-cli` can remain a compatibility tool,
+but first-party trace operator workflows are now available from the main
+server/runtime binary.
 
 ---
 

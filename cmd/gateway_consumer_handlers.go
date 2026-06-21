@@ -363,13 +363,19 @@ func handleTeammateMessage(
 		}
 
 		routing := announceRouting{
-			LeadAgent:        leadAgent,
-			LeadSessionKey:   leadSessionKey,
-			OrigChannel:      origCh,
-			OrigChatID:       origChatID,
-			OrigPeerKind:     origPeerKind,
-			OrigLocalKey:     origLocalKey,
-			OriginUserID:     inMeta[tools.MetaOriginUserID],
+			LeadAgent:      leadAgent,
+			LeadSessionKey: leadSessionKey,
+			OrigChannel:    origCh,
+			OrigChatID:     origChatID,
+			OrigPeerKind:   origPeerKind,
+			OrigLocalKey:   origLocalKey,
+			OriginUserID:   inMeta[tools.MetaOriginUserID],
+			// Carry the real acting sender + role through the team-task
+			// announce so the Lead's resumed turn doesn't lose attribution
+			// and trip group-scope permission checks. team_tool_dispatch.go
+			// already populates these fields in the dispatch metadata. (#915)
+			OriginSenderID:   inMeta[tools.MetaOriginSenderID],
+			OriginRole:       inMeta[tools.MetaOriginRole],
 			TeamID:           inMeta[tools.MetaTeamID],
 			TeamWorkspace:    inMeta[tools.MetaTeamWorkspace],
 			OriginTraceID:    inMeta[tools.MetaOriginTraceID],

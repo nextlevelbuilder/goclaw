@@ -23,6 +23,7 @@ export {
   getRenderableChannelStatus,
   getChannelCheckedLabel,
   getChannelFailureKindLabel,
+  shouldShowChannelDiagnosticsCard,
   getChannelAttentionPriority,
   getChannelStatusMeta,
   getChannelRemediationMeta,

@@ -3,6 +3,8 @@ package sandbox
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -254,9 +256,10 @@ func (m *DockerManager) Get(ctx context.Context, key string, workspace string, c
 	if cfg.Mode == ModeOff {
 		return nil, ErrSandboxDisabled
 	}
+	cacheKey := dockerCacheKey(key, workspace, cfg)
 
 	m.mu.RLock()
-	if sb, ok := m.sandboxes[key]; ok {
+	if sb, ok := m.sandboxes[cacheKey]; ok {
 		m.mu.RUnlock()
 		return sb, nil
 	}
@@ -266,7 +269,7 @@ func (m *DockerManager) Get(ctx context.Context, key string, workspace string, c
 	defer m.mu.Unlock()
 
 	// Double-check
-	if sb, ok := m.sandboxes[key]; ok {
+	if sb, ok := m.sandboxes[cacheKey]; ok {
 		return sb, nil
 	}
 
@@ -274,29 +277,48 @@ func (m *DockerManager) Get(ctx context.Context, key string, workspace string, c
 	if prefix == "" {
 		prefix = "goclaw-sbx-"
 	}
-	name := prefix + sanitizeKey(key)
+	name := prefix + sanitizeKey(cacheKey)
 	sb, err := newDockerSandbox(ctx, name, cfg, workspace)
 	if err != nil {
 		return nil, err
 	}
 
-	m.sandboxes[key] = sb
+	m.sandboxes[cacheKey] = sb
 	return sb, nil
+}
+
+func dockerCacheKey(key, workspace string, cfg Config) string {
+	if workspace == "" {
+		return key
+	}
+	h := sha256.Sum256([]byte(strings.Join([]string{
+		workspace,
+		string(cfg.WorkspaceAccess),
+		cfg.ContainerWorkdir(),
+		cfg.Image,
+	}, "\x00")))
+	return "w" + hex.EncodeToString(h[:])[:16] + ":" + key
 }
 
 // Release destroys a sandbox by key.
 func (m *DockerManager) Release(ctx context.Context, key string) error {
 	m.mu.Lock()
-	sb, ok := m.sandboxes[key]
-	if ok {
-		delete(m.sandboxes, key)
+	sbs := make([]*DockerSandbox, 0, 1)
+	for cacheKey, sb := range m.sandboxes {
+		if cacheKey == key || strings.HasSuffix(cacheKey, ":"+key) {
+			delete(m.sandboxes, cacheKey)
+			sbs = append(sbs, sb)
+		}
 	}
 	m.mu.Unlock()
 
-	if ok {
-		return sb.Destroy(ctx)
+	var firstErr error
+	for _, sb := range sbs {
+		if err := sb.Destroy(ctx); err != nil && firstErr == nil {
+			firstErr = err
+		}
 	}
-	return nil
+	return firstErr
 }
 
 // ReleaseAll destroys all active sandboxes.

@@ -191,10 +191,10 @@ func resolveChannelType(channelMgr *channels.Manager, name string) string {
 }
 
 // resolveSenderName extracts the sender display name from channel metadata.
-// Checks "sender_name" (Feishu), "first_name" (Telegram), "push_name" (WhatsApp).
+// Checks "sender_name" (Feishu), "first_name" (Telegram), "user_name" (WhatsApp).
 // Sanitizes to prevent prompt injection via newlines/control chars.
 func resolveSenderName(msg bus.InboundMessage) string {
-	for _, key := range []string{"sender_name", "first_name", "push_name", "display_name"} {
+	for _, key := range []string{"sender_name", "first_name", "user_name", "push_name", "display_name"} {
 		if name := msg.Metadata[key]; name != "" {
 			clean := strings.NewReplacer("\n", " ", "\r", " ", "\t", " ").Replace(strings.TrimSpace(name))
 			if len([]rune(clean)) > 100 {

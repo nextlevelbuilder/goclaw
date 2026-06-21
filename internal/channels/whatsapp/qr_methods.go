@@ -28,11 +28,16 @@ type cancelEntry struct {
 type QRMethods struct {
 	instanceStore  store.ChannelInstanceStore
 	manager        *channels.Manager
+	loader         *channels.InstanceLoader
 	activeSessions sync.Map // instanceID (string) -> *cancelEntry
 }
 
-func NewQRMethods(instanceStore store.ChannelInstanceStore, manager *channels.Manager) *QRMethods {
-	return &QRMethods{instanceStore: instanceStore, manager: manager}
+func NewQRMethods(instanceStore store.ChannelInstanceStore, manager *channels.Manager, loader ...*channels.InstanceLoader) *QRMethods {
+	m := &QRMethods{instanceStore: instanceStore, manager: manager}
+	if len(loader) > 0 {
+		m.loader = loader[0]
+	}
+	return m
 }
 
 func (m *QRMethods) Register(router *gateway.MethodRouter) {
@@ -73,14 +78,23 @@ func (m *QRMethods) handleQRStart(ctx context.Context, client *gateway.Client, r
 	// ACK immediately — QR/done events arrive asynchronously.
 	client.SendResponse(goclawprotocol.NewOKResponse(req.ID, map[string]any{"status": "started"}))
 
-	go m.runQRSession(qrCtx, entry, client, params.InstanceID, inst.Name, params.ForceReauth)
+	go m.runQRSession(qrCtx, entry, client, instID, params.InstanceID, inst.Name, params.ForceReauth)
 }
 
 func (m *QRMethods) runQRSession(ctx context.Context, entry *cancelEntry,
-	client *gateway.Client, instanceIDStr, channelName string, forceReauth bool) {
+	client *gateway.Client, instanceID uuid.UUID, instanceIDStr, channelName string, forceReauth bool) {
 
 	defer entry.cancel()
 	defer m.activeSessions.CompareAndDelete(instanceIDStr, entry)
+
+	if m.loader != nil {
+		// Channel Start stores its context for long-lived WhatsApp work; keep tenant values
+		// from the request without tying the channel lifetime to this QR session timeout.
+		loadCtx := context.WithoutCancel(ctx)
+		if err := m.loader.LoadInstanceByID(loadCtx, instanceID); err != nil {
+			slog.Warn("whatsapp QR: targeted channel load failed", "instance", instanceIDStr, "channel", channelName, "error", err)
+		}
+	}
 
 	// Wait for channel to appear in manager — instance creation triggers an async
 	// reload, so the channel may not be registered yet when the wizard fires QR start.

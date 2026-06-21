@@ -35,14 +35,14 @@ func init() {
 // Auth state is stored in PostgreSQL (standard) or SQLite (desktop).
 type Channel struct {
 	*channels.BaseChannel
-	client    *whatsmeow.Client
-	container *sqlstore.Container
-	config    config.WhatsAppConfig
-	mu        sync.Mutex
-	ctx       context.Context
-	cancel    context.CancelFunc
-	parentCtx        context.Context       // stored from Start() for Reauth() context chain
-	audioMgr         *audio.Manager        // unified STT via audio.Manager (nil = no STT)
+	client           *whatsmeow.Client
+	container        *sqlstore.Container
+	config           config.WhatsAppConfig
+	mu               sync.Mutex
+	ctx              context.Context
+	cancel           context.CancelFunc
+	parentCtx        context.Context        // stored from Start() for Reauth() context chain
+	audioMgr         *audio.Manager         // unified STT via audio.Manager (nil = no STT)
 	builtinToolStore store.BuiltinToolStore // reads stt settings (whatsapp_enabled) per voice message; nil = opt-out
 
 	// QR state
@@ -145,6 +145,9 @@ func (c *Channel) Start(ctx context.Context) error {
 
 // BlockReplyEnabled returns the per-channel block_reply override (nil = inherit gateway default).
 func (c *Channel) BlockReplyEnabled() *bool { return c.config.BlockReply }
+
+// ChatBehaviorConfig returns the per-channel chat_behavior override.
+func (c *Channel) ChatBehaviorConfig() *config.ChatBehaviorConfig { return c.config.ChatBehavior }
 
 // Stop gracefully shuts down the WhatsApp channel.
 func (c *Channel) Stop(_ context.Context) error {

@@ -8,6 +8,11 @@ import { toast } from "@/stores/use-toast-store";
 import i18next from "i18next";
 import { userFriendlyError } from "@/lib/error-utils";
 import type { SkillInfo, SkillFile, SkillVersions, SkillAgentGrant } from "@/types/skill";
+import {
+  buildSkillExportPath,
+  skillExportDownloadName,
+  type SkillExportFormat,
+} from "../lib/skill-export-download";
 
 export type { SkillInfo, SkillFile, SkillVersions };
 
@@ -186,6 +191,20 @@ export function useSkills() {
     [http, invalidate],
   );
 
+  const downloadSkills = useCallback(
+    async (targetSkills: SkillInfo[], format: SkillExportFormat) => {
+      const ids = targetSkills.map((skill) => skill.id).filter((id): id is string => !!id);
+      const blob = await http.downloadBlob(buildSkillExportPath(ids, format));
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = skillExportDownloadName(targetSkills, format);
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+    [http],
+  );
+
   const getSkillVersions = useCallback(
     async (id: string) => {
       return http.get<SkillVersions>(`/v1/skills/${id}/versions`);
@@ -302,7 +321,7 @@ export function useSkills() {
     skills, loading, refresh: invalidate, getSkill,
     uploadSkill, updateSkill, deleteSkill,
     listAgentGrants, grantSkillToAgent, grantSkillToAgents, revokeSkillFromAgent,
-    deleteSkills, toggleSkills,
+    deleteSkills, toggleSkills, downloadSkills,
     getSkillVersions, getSkillFiles, getSkillFileContent, rescanDeps, installDeps, installSingleDep, toggleSkill,
     setTenantConfig, deleteTenantConfig,
   };

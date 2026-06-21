@@ -88,6 +88,13 @@ func (d *gatewayDeps) runLifecycle(
 	// Reload global shell deny-group toggles on config changes via pub/sub
 	// so /config edits apply without a process restart.
 	subscribeShellDenyGroupsReload(d.msgBus, d.toolsReg)
+	var providerStore store.ProviderStore
+	var mcpStore store.MCPServerStore
+	if d.pgStores != nil {
+		providerStore = d.pgStores.Providers
+		mcpStore = d.pgStores.MCP
+	}
+	subscribeProviderShellDenyGroupsReload(d.msgBus, d.providerRegistry, providerStore, mcpStore)
 
 	// Reload TTS providers on config changes via pub/sub.
 	d.msgBus.Subscribe("tts-config-reload", func(evt bus.Event) {
@@ -140,7 +147,7 @@ func (d *gatewayDeps) runLifecycle(
 		d.channelMgr.SetContactCollector(contactCollector)
 	}
 
-	go consumeInboundMessages(ctx, d.msgBus, d.agentRouter, d.cfg, deps.sched, d.channelMgr, deps.consumerTeamStore, deps.quotaChecker, d.pgStores.Sessions, d.pgStores.Agents, contactCollector, deps.postTurn, deps.subagentMgr, d.usageCapSvc)
+	go consumeInboundMessages(ctx, d.msgBus, d.agentRouter, d.cfg, deps.sched, d.channelMgr, deps.consumerTeamStore, deps.quotaChecker, d.pgStores.Sessions, d.pgStores.Agents, contactCollector, deps.postTurn, deps.subagentMgr, d.usageCapSvc, d.providerRegistry)
 
 	// Webhook callback worker — delivers async webhook_calls rows to receiver callback_url.
 	// Runs in both editions: Standard (PG, concurrency=4) and Lite (SQLite, concurrency=1).

@@ -196,7 +196,9 @@ type Sandbox interface {
 
 // Manager manages sandbox lifecycle based on scope.
 type Manager interface {
-	// Get returns (or creates) a sandbox for the given scope key.
+	// Get returns (or creates) a sandbox for the given scope key, workspace mount,
+	// and effective config. Implementations must not reuse one container across
+	// different mounted workspaces or workspace access settings.
 	// For session scope: key = sessionKey
 	// For agent scope: key = agentID
 	// For shared scope: key = "shared"

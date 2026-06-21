@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -181,13 +183,19 @@ func TestGitAdapter_PreparePAT(t *testing.T) {
 	wantEnv := map[string]string{
 		"GIT_CONFIG_COUNT":   "1",
 		"GIT_CONFIG_KEY_0":   "http.https://github.com/.extraheader",
-		"GIT_CONFIG_VALUE_0": "Authorization: Bearer ghp_abc",
+		"GIT_CONFIG_VALUE_0": "Authorization: Basic " + base64.StdEncoding.EncodeToString([]byte("x-access-token:ghp_abc")),
 	}
 	if !reflect.DeepEqual(inj.Env, wantEnv) {
 		t.Errorf("Env=%v, want %v", inj.Env, wantEnv)
 	}
-	if len(inj.ScrubValues) != 1 || inj.ScrubValues[0] != "ghp_abc" {
-		t.Errorf("ScrubValues=%v, want [ghp_abc]", inj.ScrubValues)
+	for _, secret := range []string{
+		"ghp_abc",
+		base64.StdEncoding.EncodeToString([]byte("x-access-token:ghp_abc")),
+		wantEnv["GIT_CONFIG_VALUE_0"],
+	} {
+		if !slices.Contains(inj.ScrubValues, secret) {
+			t.Errorf("ScrubValues=%v missing %q", inj.ScrubValues, secret)
+		}
 	}
 	if inj.Cleanup != nil {
 		t.Errorf("Cleanup must be nil for PAT path")

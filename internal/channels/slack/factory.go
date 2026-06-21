@@ -19,18 +19,19 @@ type slackCreds struct {
 
 // slackInstanceConfig maps the non-secret config JSONB from the channel_instances table.
 type slackInstanceConfig struct {
-	DMPolicy       string   `json:"dm_policy,omitempty"`
-	GroupPolicy    string   `json:"group_policy,omitempty"`
-	AllowFrom      []string `json:"allow_from,omitempty"`
-	RequireMention *bool    `json:"require_mention,omitempty"`
-	HistoryLimit   int      `json:"history_limit,omitempty"`
-	DMStream       *bool    `json:"dm_stream,omitempty"`
-	GroupStream    *bool    `json:"group_stream,omitempty"`
-	NativeStream   *bool    `json:"native_stream,omitempty"`
-	ReactionLevel  string   `json:"reaction_level,omitempty"`
-	BlockReply     *bool    `json:"block_reply,omitempty"`
-	DebounceDelay  *int     `json:"debounce_delay,omitempty"`
-	ThreadTTL      *int     `json:"thread_ttl,omitempty"`
+	DMPolicy       string                     `json:"dm_policy,omitempty"`
+	GroupPolicy    string                     `json:"group_policy,omitempty"`
+	AllowFrom      []string                   `json:"allow_from,omitempty"`
+	RequireMention *bool                      `json:"require_mention,omitempty"`
+	HistoryLimit   int                        `json:"history_limit,omitempty"`
+	DMStream       *bool                      `json:"dm_stream,omitempty"`
+	GroupStream    *bool                      `json:"group_stream,omitempty"`
+	NativeStream   *bool                      `json:"native_stream,omitempty"`
+	ReactionLevel  string                     `json:"reaction_level,omitempty"`
+	BlockReply     *bool                      `json:"block_reply,omitempty"`
+	ChatBehavior   *config.ChatBehaviorConfig `json:"chat_behavior,omitempty"`
+	DebounceDelay  *int                       `json:"debounce_delay,omitempty"`
+	ThreadTTL      *int                       `json:"thread_ttl,omitempty"`
 }
 
 // Factory creates a Slack channel from DB instance data.
@@ -72,6 +73,7 @@ func Factory(name string, creds json.RawMessage, cfg json.RawMessage,
 		NativeStream:   ic.NativeStream,
 		ReactionLevel:  ic.ReactionLevel,
 		BlockReply:     ic.BlockReply,
+		ChatBehavior:   ic.ChatBehavior,
 		DebounceDelay:  ic.DebounceDelay,
 		ThreadTTL:      ic.ThreadTTL,
 	}
@@ -129,6 +131,7 @@ func FactoryWithPendingStore(pendingStore store.PendingMessageStore) channels.Ch
 			NativeStream:   ic.NativeStream,
 			ReactionLevel:  ic.ReactionLevel,
 			BlockReply:     ic.BlockReply,
+			ChatBehavior:   ic.ChatBehavior,
 			DebounceDelay:  ic.DebounceDelay,
 			ThreadTTL:      ic.ThreadTTL,
 		}

@@ -35,6 +35,11 @@ func (s *SQLiteSkillStore) LoadSkill(ctx context.Context, name string) (string, 
 	if err != nil {
 		return "", false
 	}
+	// Resolve {baseDir} placeholder so SKILL.md script-invocation lines hold
+	// absolute paths regardless of agent CWD. Mirrors skills.Loader.LoadSkill
+	// substitution; without it, agents reading SKILL.md via this RPC see the
+	// literal placeholder.
+	content = strings.ReplaceAll(content, "{baseDir}", info.BaseDir)
 	return content, true
 }
 

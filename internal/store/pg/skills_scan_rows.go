@@ -84,6 +84,7 @@ type customSkillExportRow struct {
 	Description *string        `db:"description"`
 	Visibility  string         `db:"visibility"`
 	Version     int            `db:"version"`
+	IsSystem    bool           `db:"is_system"`
 	FmRaw       []byte         `db:"frontmatter"`
 	Tags        pq.StringArray `db:"tags"`
 	DepsRaw     []byte         `db:"deps"`
@@ -99,6 +100,7 @@ func (r *customSkillExportRow) toCustomSkillExport() CustomSkillExport {
 		Description: r.Description,
 		Visibility:  r.Visibility,
 		Version:     r.Version,
+		IsSystem:    r.IsSystem,
 		Tags:        []string(r.Tags),
 	}
 	if len(r.FmRaw) > 0 {

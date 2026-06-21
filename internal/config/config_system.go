@@ -87,6 +87,7 @@ func (c *Config) ApplySystemConfigs(configs map[string]string) {
 	str("tts.auto", &c.Tts.Auto)
 	str("tts.mode", &c.Tts.Mode)
 	integer("tts.max_length", &c.Tts.MaxLength)
+	integer("tts.timeout_ms", &c.Tts.TimeoutMs)
 
 	// Cron
 	integer("cron.max_retries", &c.Cron.MaxRetries)

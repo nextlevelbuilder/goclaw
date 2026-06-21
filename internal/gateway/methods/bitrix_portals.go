@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
+	"net"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -13,6 +16,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
+	"github.com/nextlevelbuilder/goclaw/internal/security"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
@@ -69,9 +73,13 @@ type bitrixPortalView struct {
 // Validation regexes. Kept package-level so they compile once and tests can
 // reference them directly.
 var (
-	// Bitrix24 cloud portal hosts. Matches *.bitrix24.{com,eu,ru,de,fr,jp,in,kz,ua,by}
+	// Bitrix24 cloud portal hosts. Matches *.bitrix24.{com,eu,ru,de,fr,jp,in,kz,ua,by,vn,tr,es,com.br,com.ar}
 	// plus self-hosted *.bitrix.info. Subdomain regex matches DNS label rules.
-	bitrixDomainRegex = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.(bitrix24\.(com|eu|ru|de|fr|jp|in|kz|ua|by)|bitrix\.info)$`)
+	bitrixCloudDomainRegex = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.(bitrix24\.(com|eu|ru|de|fr|jp|in|kz|ua|by|vn|tr|es|com\.br|com\.ar)|bitrix\.info)$`)
+
+	// Valid hostname regex for self-hosted Bitrix24 instances (custom domains).
+	// Accepts any valid FQDN or hostname with optional port (e.g. bx.example.com, portal.internal:8443).
+	selfHostedDomainRegex = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(\:\d+)?$`)
 
 	// Portal name: lowercase slug used in install state token + channel config
 	// reference. Underscore allowed for legacy CLI-created portals.
@@ -142,9 +150,17 @@ func (m *BitrixPortalsMethods) handleCreate(ctx context.Context, client *gateway
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidRequest, "name: lowercase letters, digits, hyphen, underscore (2-64 chars)")))
 		return
 	}
-	if !bitrixDomainRegex.MatchString(domain) {
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidRequest, "domain: must be *.bitrix24.{com,eu,ru,…} or *.bitrix.info")))
+	if !bitrixCloudDomainRegex.MatchString(domain) && !selfHostedDomainRegex.MatchString(domain) {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidRequest, "domain: must be a valid hostname (e.g. *.bitrix24.com, *.bitrix.info, or your self-hosted domain)")))
 		return
+	}
+	// SSRF + port validation for self-hosted domains (cloud domains are
+	// Bitrix-operated and implicitly trusted).
+	if !bitrixCloudDomainRegex.MatchString(domain) {
+		if err := validateSelfHostedDomain(domain); err != nil {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidRequest, "domain: "+err.Error())))
+			return
+		}
 	}
 	if clientID == "" || clientSecret == "" {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "client_id and client_secret")))
@@ -350,6 +366,75 @@ func portalRowToView(row store.BitrixPortalData) bitrixPortalView {
 		}
 	}
 	return v
+}
+
+// lookupHost is the DNS resolver used by validateSelfHostedDomain.
+// Replaced in tests to avoid real network calls and to exercise multi-IP
+// SSRF bypass scenarios.
+var lookupHost = net.LookupHost
+
+// validateSelfHostedDomain checks a self-hosted Bitrix24 domain for SSRF
+// risks and invalid port ranges. Cloud domains (*.bitrix24.*, *.bitrix.info)
+// are Bitrix-operated and implicitly trusted — this function is only called
+// for custom/self-hosted domains.
+//
+// Policy:
+//   - Rejects literal private/loopback/metadata IPs (127.x, 10.x, 192.168.x,
+//     169.254.x, ::1, fc00::, etc.)
+//   - Rejects hostnames where ANY resolved IP is blocked (not just the first)
+//   - Rejects .localhost and .local TLDs (commonly used for local dev)
+//   - Validates port range 1-65535 when a port is specified
+func validateSelfHostedDomain(domain string) error {
+	// Extract host and optional port.
+	host := domain
+	portStr := ""
+	if idx := strings.LastIndex(domain, ":"); idx != -1 {
+		host = domain[:idx]
+		portStr = domain[idx+1:]
+	}
+
+	// Validate port range if present.
+	if portStr != "" {
+		port, err := strconv.Atoi(portStr)
+		if err != nil || port < 1 || port > 65535 {
+			return fmt.Errorf("port must be 1-65535")
+		}
+	}
+
+	// Reject .localhost and .local TLDs (commonly used for local development).
+	lowerHost := strings.ToLower(host)
+	if strings.HasSuffix(lowerHost, ".localhost") || strings.HasSuffix(lowerHost, ".local") || lowerHost == "localhost" {
+		return fmt.Errorf("private/internal hostnames (localhost, .local, .localhost) are not allowed")
+	}
+
+	// If the host is a literal IP, check it against blocked CIDRs.
+	if ip := net.ParseIP(host); ip != nil {
+		if security.IsBlocked(ip) {
+			return fmt.Errorf("IP %s is in a blocked range (loopback/private/metadata)", ip)
+		}
+		return nil
+	}
+
+	// For hostnames, resolve and check ALL returned IPs. DNS result ordering
+	// is not a security boundary — a resolver may return a public IP first
+	// followed by a private one (e.g. split-horizon, fallback addresses).
+	addrs, err := lookupHost(host)
+	if err != nil {
+		return fmt.Errorf("cannot resolve hostname %q", host)
+	}
+	if len(addrs) == 0 {
+		return fmt.Errorf("hostname %q resolved to no addresses", host)
+	}
+	for _, addr := range addrs {
+		ip := net.ParseIP(addr)
+		if ip == nil {
+			return fmt.Errorf("resolved address %q is not a valid IP", addr)
+		}
+		if security.IsBlocked(ip) {
+			return fmt.Errorf("hostname %q resolved to blocked IP %s (loopback/private/metadata)", host, ip)
+		}
+	}
+	return nil
 }
 
 // isDuplicateKeyErr probes a store error for a UNIQUE violation. Kept as a

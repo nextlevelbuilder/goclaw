@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -14,8 +15,11 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/hooks"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/workspace"
+	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
 // --- shared test helpers ---
@@ -37,6 +41,17 @@ func defaultState() *RunState {
 	return stateWithInput(minimalInput())
 }
 
+type toolStageHookDispatcher struct {
+	fire func(context.Context, hooks.Event) (hooks.FireResult, error)
+}
+
+func (d toolStageHookDispatcher) Fire(ctx context.Context, ev hooks.Event) (hooks.FireResult, error) {
+	if d.fire == nil {
+		return hooks.FireResult{Decision: hooks.DecisionAllow}, nil
+	}
+	return d.fire(ctx, ev)
+}
+
 // mockTokenCounter returns a fixed count for every call.
 type mockTokenCounter struct {
 	countPerMessage int
@@ -47,7 +62,7 @@ func (m *mockTokenCounter) CountMessages(_ string, msgs []providers.Message) int
 	return len(msgs) * m.countPerMessage
 }
 func (m *mockTokenCounter) CountToolSchemas(_ string, _ []providers.ToolDefinition) int { return 0 }
-func (m *mockTokenCounter) ModelContextWindow(_ string) int                              { return 200_000 }
+func (m *mockTokenCounter) ModelContextWindow(_ string) int                             { return 200_000 }
 
 // --- ThinkStage tests ---
 
@@ -107,6 +122,136 @@ func TestThinkStage_WithToolCalls_ReturnsContinue(t *testing.T) {
 	}
 	if len(state.Think.LastResponse.ToolCalls) != 1 {
 		t.Errorf("ToolCalls len = %d, want 1", len(state.Think.LastResponse.ToolCalls))
+	}
+}
+
+func TestThinkStage_EmptyToolCallContent_DoesNotEmitTemplateAnnouncement(t *testing.T) {
+	t.Parallel()
+	var gotContent, gotSource string
+	deps := &PipelineDeps{
+		Config: PipelineConfig{MaxIterations: 10, MaxTokens: 1000},
+		CallLLM: func(_ context.Context, _ *RunState, _ providers.ChatRequest) (*providers.ChatResponse, error) {
+			return &providers.ChatResponse{
+				FinishReason: "tool_calls",
+				ToolCalls: []providers.ToolCall{{
+					ID:        "tc1",
+					Name:      "search\n`secret`",
+					Arguments: map[string]any{"api_key": "must-not-leak"},
+				}},
+			}, nil
+		},
+		EmitBlockReplyWithSource: func(content, source string) {
+			gotContent = content
+			gotSource = source
+		},
+	}
+	stage := NewThinkStage(deps)
+	state := defaultState()
+
+	err := stage.Execute(context.Background(), state)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if gotContent != "" || gotSource != "" {
+		t.Fatalf("empty tool-call content emitted template block reply: content=%q source=%q", gotContent, gotSource)
+	}
+}
+
+func TestThinkStage_EmptyMultiToolCallContent_DoesNotEmitRawToolNames(t *testing.T) {
+	t.Parallel()
+	var gotContent, gotSource string
+	deps := &PipelineDeps{
+		Config: PipelineConfig{MaxIterations: 10, MaxTokens: 1000},
+		CallLLM: func(_ context.Context, _ *RunState, _ providers.ChatRequest) (*providers.ChatResponse, error) {
+			return &providers.ChatResponse{
+				FinishReason: "tool_calls",
+				ToolCalls: []providers.ToolCall{
+					{ID: "tc1", Name: "skill_search"},
+					{ID: "tc2", Name: "read_file", Arguments: map[string]any{"path": "notes.md"}},
+					{ID: "tc3", Name: "web_fetch", Arguments: map[string]any{"url": "https://example.test"}},
+				},
+			}, nil
+		},
+		EmitBlockReplyWithSource: func(content, source string) {
+			gotContent = content
+			gotSource = source
+		},
+	}
+	stage := NewThinkStage(deps)
+	state := defaultState()
+
+	err := stage.Execute(context.Background(), state)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if gotContent != "" || gotSource != "" {
+		t.Fatalf("empty multi-tool content emitted template block reply: content=%q source=%q", gotContent, gotSource)
+	}
+}
+
+func TestThinkStage_GeneratedToolCallContent_PreservesNaturalProgress(t *testing.T) {
+	t.Parallel()
+	var gotContent, gotSource string
+	deps := &PipelineDeps{
+		Config: PipelineConfig{MaxIterations: 10, MaxTokens: 1000},
+		CallLLM: func(_ context.Context, _ *RunState, _ providers.ChatRequest) (*providers.ChatResponse, error) {
+			return &providers.ChatResponse{
+				Content:      "Tôi sẽ tìm trong kho kỹ năng trước.",
+				FinishReason: "tool_calls",
+				ToolCalls:    []providers.ToolCall{{ID: "tc1", Name: "skill_search"}},
+			}, nil
+		},
+		EmitBlockReplyWithSource: func(content, source string) {
+			gotContent = content
+			gotSource = source
+		},
+	}
+	stage := NewThinkStage(deps)
+	state := defaultState()
+	ctx := store.WithLocale(context.Background(), "vi")
+
+	err := stage.Execute(ctx, state)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	want := "Tôi sẽ tìm trong kho kỹ năng trước."
+	if gotContent != want {
+		t.Fatalf("block reply content = %q", gotContent)
+	}
+	if gotSource != protocol.BlockReplySourceToolAnnouncement {
+		t.Fatalf("block reply source = %q, want %q", gotSource, protocol.BlockReplySourceToolAnnouncement)
+	}
+}
+
+func TestThinkStage_GeneratedToolCallContent_DoesNotDuplicateNamedTool(t *testing.T) {
+	t.Parallel()
+	var gotContent, gotSource string
+	deps := &PipelineDeps{
+		Config: PipelineConfig{MaxIterations: 10, MaxTokens: 1000},
+		CallLLM: func(_ context.Context, _ *RunState, _ providers.ChatRequest) (*providers.ChatResponse, error) {
+			return &providers.ChatResponse{
+				Content:      "Tôi sẽ dùng `skill_search` để tìm capability phù hợp trước.",
+				FinishReason: "tool_calls",
+				ToolCalls:    []providers.ToolCall{{ID: "tc1", Name: "skill_search"}},
+			}, nil
+		},
+		EmitBlockReplyWithSource: func(content, source string) {
+			gotContent = content
+			gotSource = source
+		},
+	}
+	stage := NewThinkStage(deps)
+	state := defaultState()
+
+	err := stage.Execute(context.Background(), state)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if gotContent != "Tôi sẽ dùng `skill_search` để tìm capability phù hợp trước." {
+		t.Fatalf("block reply content = %q", gotContent)
+	}
+	if gotSource != protocol.BlockReplySourceToolAnnouncement {
+		t.Fatalf("block reply source = %q, want %q", gotSource, protocol.BlockReplySourceToolAnnouncement)
 	}
 }
 
@@ -378,6 +523,83 @@ func TestThinkStage_ContextOverflow_TriggersCompaction(t *testing.T) {
 	// Stage returns Continue (nil error) to signal retry this iteration
 	if stage.Result() != Continue {
 		t.Errorf("Result() = %v after compaction, want Continue", stage.Result())
+	}
+}
+
+func TestThinkStage_EmptyLengthResponse_TriggersCompaction(t *testing.T) {
+	t.Parallel()
+	compacted := false
+
+	deps := &PipelineDeps{
+		Config: PipelineConfig{MaxIterations: 10, MaxTokens: 1000},
+		CallLLM: func(_ context.Context, _ *RunState, _ providers.ChatRequest) (*providers.ChatResponse, error) {
+			return &providers.ChatResponse{
+				FinishReason: "length",
+				Usage: &providers.Usage{
+					PromptTokens:     271_343,
+					CompletionTokens: 203,
+					TotalTokens:      271_546,
+					ThinkingTokens:   203,
+				},
+			}, nil
+		},
+		CompactMessages: func(_ context.Context, _ []providers.Message, _ string) ([]providers.Message, error) {
+			compacted = true
+			return []providers.Message{{Role: "user", Content: "[Summary]"}}, nil
+		},
+	}
+
+	stage := NewThinkStage(deps)
+	state := defaultState()
+	state.Messages.SetHistory([]providers.Message{{Role: "user", Content: "long history"}})
+
+	err := stage.Execute(context.Background(), state)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if !compacted {
+		t.Fatal("expected empty length response to trigger compaction")
+	}
+	if state.Think.LastResponse != nil {
+		t.Fatal("LastResponse should stay nil so ObserveStage does not finalize empty content")
+	}
+	if state.Think.OverflowRetries != 1 {
+		t.Errorf("OverflowRetries = %d, want 1", state.Think.OverflowRetries)
+	}
+	if state.Think.TotalUsage.TotalTokens != 271_546 {
+		t.Errorf("TotalTokens = %d, want failed-call usage recorded", state.Think.TotalUsage.TotalTokens)
+	}
+	if got := state.Messages.History(); len(got) != 1 || got[0].Content != "[Summary]" {
+		t.Fatalf("history after compaction = %#v", got)
+	}
+	if stage.Result() != Continue {
+		t.Errorf("Result() = %v, want Continue", stage.Result())
+	}
+}
+
+func TestThinkStage_EmptyLengthResponse_FailsAfterOneRetry(t *testing.T) {
+	t.Parallel()
+
+	deps := &PipelineDeps{
+		Config: PipelineConfig{MaxIterations: 10, MaxTokens: 1000},
+		CallLLM: func(_ context.Context, _ *RunState, _ providers.ChatRequest) (*providers.ChatResponse, error) {
+			return &providers.ChatResponse{FinishReason: "length"}, nil
+		},
+		CompactMessages: func(_ context.Context, _ []providers.Message, _ string) ([]providers.Message, error) {
+			return []providers.Message{{Role: "user", Content: "[Summary]"}}, nil
+		},
+	}
+
+	stage := NewThinkStage(deps)
+	state := defaultState()
+	state.Think.OverflowRetries = 1
+
+	err := stage.Execute(context.Background(), state)
+	if err == nil {
+		t.Fatal("expected error after repeated empty length response")
+	}
+	if !strings.Contains(err.Error(), "truncated before content after compaction") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -935,6 +1157,7 @@ func TestToolStage_MultipleTools_ParallelPath_InvokesRawAndProcessForEach(t *tes
 			procMu.Unlock()
 			return []providers.Message{rawMsg}
 		},
+		ParallelEligibleToolCall: func(providers.ToolCall) bool { return true },
 	}
 	stage := NewToolStage(deps)
 	state := defaultState()
@@ -964,6 +1187,425 @@ func TestToolStage_MultipleTools_ParallelPath_InvokesRawAndProcessForEach(t *tes
 	}
 	if state.Tool.TotalToolCalls != 3 {
 		t.Errorf("TotalToolCalls = %d, want 3", state.Tool.TotalToolCalls)
+	}
+}
+
+func TestToolStage_ParallelPath_PreservesOriginalOrderWhenRawCompletesOutOfOrder(t *testing.T) {
+	t.Parallel()
+	release := map[string]chan struct{}{
+		"1": make(chan struct{}),
+		"2": make(chan struct{}),
+		"3": make(chan struct{}),
+	}
+	started := make(chan string, 3)
+	done := make(chan error, 1)
+
+	deps := &PipelineDeps{
+		ExecuteToolCall: func(_ context.Context, _ *RunState, _ providers.ToolCall) ([]providers.Message, error) {
+			t.Fatal("ExecuteToolCall must not run for eligible parallel batch")
+			return nil, nil
+		},
+		ExecuteToolRaw: func(_ context.Context, tc providers.ToolCall) (providers.Message, any, error) {
+			started <- tc.ID
+			<-release[tc.ID]
+			return providers.Message{Role: "tool", Content: "raw:" + tc.ID, ToolCallID: tc.ID}, nil, nil
+		},
+		ProcessToolResult: func(_ context.Context, _ *RunState, _ providers.ToolCall, rawMsg providers.Message, _ any) []providers.Message {
+			return []providers.Message{rawMsg}
+		},
+		ParallelEligibleToolCall: func(providers.ToolCall) bool { return true },
+	}
+	stage := NewToolStage(deps)
+	state := defaultState()
+	state.Think.LastResponse = &providers.ChatResponse{ToolCalls: []providers.ToolCall{
+		{ID: "1", Name: "read_file"},
+		{ID: "2", Name: "read_file"},
+		{ID: "3", Name: "read_file"},
+	}}
+
+	go func() {
+		done <- stage.Execute(context.Background(), state)
+	}()
+
+	for range 3 {
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for raw calls to start")
+		}
+	}
+	close(release["3"])
+	close(release["2"])
+	close(release["1"])
+
+	if err := <-done; err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	got := []string{}
+	for _, msg := range state.Messages.Pending() {
+		got = append(got, msg.ToolCallID)
+	}
+	if want := []string{"1", "2", "3"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("pending order = %v, want %v", got, want)
+	}
+}
+
+func TestToolStage_ParallelPath_RunsPreToolUseBeforeRawAndAppliesRewrite(t *testing.T) {
+	t.Parallel()
+	rawArgsByID := map[string]map[string]any{}
+	var rawMu sync.Mutex
+	deps := &PipelineDeps{
+		Hooks: toolStageHookDispatcher{fire: func(_ context.Context, ev hooks.Event) (hooks.FireResult, error) {
+			if ev.HookEvent == hooks.EventPreToolUse && ev.ToolName == "read_file" {
+				return hooks.FireResult{
+					Decision:         hooks.DecisionAllow,
+					UpdatedToolInput: map[string]any{"path": "/safe"},
+				}, nil
+			}
+			return hooks.FireResult{Decision: hooks.DecisionAllow}, nil
+		}},
+		ExecuteToolCall: func(_ context.Context, _ *RunState, _ providers.ToolCall) ([]providers.Message, error) {
+			t.Fatal("ExecuteToolCall must not run for eligible parallel batch")
+			return nil, nil
+		},
+		ExecuteToolRaw: func(_ context.Context, tc providers.ToolCall) (providers.Message, any, error) {
+			rawMu.Lock()
+			rawArgsByID[tc.ID] = tc.Arguments
+			rawMu.Unlock()
+			return providers.Message{Role: "tool", Content: "ok", ToolCallID: tc.ID}, nil, nil
+		},
+		ProcessToolResult: func(_ context.Context, _ *RunState, _ providers.ToolCall, rawMsg providers.Message, _ any) []providers.Message {
+			return []providers.Message{rawMsg}
+		},
+		ParallelEligibleToolCall: func(providers.ToolCall) bool { return true },
+	}
+	stage := NewToolStage(deps)
+	state := defaultState()
+	state.Think.LastResponse = &providers.ChatResponse{ToolCalls: []providers.ToolCall{
+		{ID: "1", Name: "read_file", Arguments: map[string]any{"path": "/unsafe"}},
+		{ID: "2", Name: "web_fetch", Arguments: map[string]any{"url": "https://example.com"}},
+	}}
+
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	rawMu.Lock()
+	rawArgs := rawArgsByID["1"]
+	rawMu.Unlock()
+	if got, _ := rawArgs["path"].(string); got != "/safe" {
+		t.Fatalf("raw path = %q, want hook rewrite /safe", got)
+	}
+}
+
+func TestToolStage_ParallelPath_PreservesOriginalOrderWithDuplicateToolCallIDs(t *testing.T) {
+	t.Parallel()
+	deps := &PipelineDeps{
+		ExecuteToolCall: func(_ context.Context, _ *RunState, _ providers.ToolCall) ([]providers.Message, error) {
+			t.Fatal("ExecuteToolCall must not run for eligible parallel batch")
+			return nil, nil
+		},
+		ExecuteToolRaw: func(_ context.Context, tc providers.ToolCall) (providers.Message, any, error) {
+			slot, _ := tc.Arguments["slot"].(string)
+			return providers.Message{Role: "tool", Content: "raw:" + slot, ToolCallID: tc.ID}, nil, nil
+		},
+		ProcessToolResult: func(_ context.Context, _ *RunState, _ providers.ToolCall, rawMsg providers.Message, _ any) []providers.Message {
+			return []providers.Message{rawMsg}
+		},
+		ParallelEligibleToolCall: func(providers.ToolCall) bool { return true },
+	}
+	stage := NewToolStage(deps)
+	state := defaultState()
+	state.Think.LastResponse = &providers.ChatResponse{ToolCalls: []providers.ToolCall{
+		{ID: "dup", Name: "read_file", Arguments: map[string]any{"slot": "1"}},
+		{ID: "dup", Name: "read_file", Arguments: map[string]any{"slot": "2"}},
+		{ID: "dup", Name: "read_file", Arguments: map[string]any{"slot": "3"}},
+	}}
+
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	got := []string{}
+	for _, msg := range state.Messages.Pending() {
+		got = append(got, msg.Content)
+	}
+	if want := []string{"raw:1", "raw:2", "raw:3"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("pending contents = %v, want %v", got, want)
+	}
+}
+
+func TestToolStage_ParallelPath_BlockedPreToolUseSkipsRawExecution(t *testing.T) {
+	t.Parallel()
+	rawCalls := []string{}
+	deps := &PipelineDeps{
+		Hooks: toolStageHookDispatcher{fire: func(_ context.Context, ev hooks.Event) (hooks.FireResult, error) {
+			if ev.HookEvent == hooks.EventPreToolUse && ev.ToolName == "read_file" {
+				return hooks.FireResult{Decision: hooks.DecisionBlock}, nil
+			}
+			return hooks.FireResult{Decision: hooks.DecisionAllow}, nil
+		}},
+		ExecuteToolCall: func(_ context.Context, _ *RunState, _ providers.ToolCall) ([]providers.Message, error) {
+			t.Fatal("ExecuteToolCall must not run when remaining calls are parallel eligible")
+			return nil, nil
+		},
+		ExecuteToolRaw: func(_ context.Context, tc providers.ToolCall) (providers.Message, any, error) {
+			rawCalls = append(rawCalls, tc.ID)
+			return providers.Message{Role: "tool", Content: "raw:" + tc.Name, ToolCallID: tc.ID}, nil, nil
+		},
+		ProcessToolResult: func(_ context.Context, _ *RunState, _ providers.ToolCall, rawMsg providers.Message, _ any) []providers.Message {
+			return []providers.Message{rawMsg}
+		},
+		ParallelEligibleToolCall: func(providers.ToolCall) bool { return true },
+	}
+	stage := NewToolStage(deps)
+	state := defaultState()
+	state.Think.LastResponse = &providers.ChatResponse{ToolCalls: []providers.ToolCall{
+		{ID: "1", Name: "read_file"},
+		{ID: "2", Name: "web_fetch"},
+	}}
+
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if !reflect.DeepEqual(rawCalls, []string{"2"}) {
+		t.Fatalf("raw calls = %v, want only unblocked call 2", rawCalls)
+	}
+	pending := state.Messages.Pending()
+	if len(pending) != 2 {
+		t.Fatalf("pending len = %d, want 2", len(pending))
+	}
+	if pending[0].ToolCallID != "1" || !strings.Contains(pending[0].Content, "Hook blocked") {
+		t.Fatalf("pending[0] = %+v, want blocked message for call 1", pending[0])
+	}
+	if pending[1].ToolCallID != "2" {
+		t.Fatalf("pending[1] = %+v, want raw result for call 2", pending[1])
+	}
+}
+
+func TestToolStage_MultipleTools_IneligibleBatchUsesSequentialExecution(t *testing.T) {
+	t.Parallel()
+	calls := []string{}
+	deps := &PipelineDeps{
+		ExecuteToolCall: func(_ context.Context, _ *RunState, tc providers.ToolCall) ([]providers.Message, error) {
+			calls = append(calls, tc.Name)
+			return []providers.Message{{Role: "tool", Content: "result:" + tc.Name, ToolCallID: tc.ID}}, nil
+		},
+		ExecuteToolRaw: func(_ context.Context, _ providers.ToolCall) (providers.Message, any, error) {
+			t.Fatal("ExecuteToolRaw must not run when any call is ineligible")
+			return providers.Message{}, nil, nil
+		},
+		ProcessToolResult: func(_ context.Context, _ *RunState, _ providers.ToolCall, _ providers.Message, _ any) []providers.Message {
+			t.Fatal("ProcessToolResult must not run when any call is ineligible")
+			return nil
+		},
+		ParallelEligibleToolCall: func(tc providers.ToolCall) bool {
+			return tc.Name == "read_file" || tc.Name == "web_fetch"
+		},
+	}
+	stage := NewToolStage(deps)
+	state := defaultState()
+	state.Think.LastResponse = &providers.ChatResponse{ToolCalls: []providers.ToolCall{
+		{ID: "1", Name: "read_file"},
+		{ID: "2", Name: "write_file"},
+		{ID: "3", Name: "web_fetch"},
+	}}
+
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if want := []string{"read_file", "write_file", "web_fetch"}; !reflect.DeepEqual(calls, want) {
+		t.Fatalf("ExecuteToolCall order = %v, want %v", calls, want)
+	}
+}
+
+func TestToolStage_ParallelBatchFallsBackToSequentialWhenBudgetCannotFitBatch(t *testing.T) {
+	t.Parallel()
+	calls := []string{}
+	deps := &PipelineDeps{
+		Config: PipelineConfig{MaxToolCalls: 2},
+		ExecuteToolCall: func(_ context.Context, _ *RunState, tc providers.ToolCall) ([]providers.Message, error) {
+			calls = append(calls, tc.ID)
+			return []providers.Message{{Role: "tool", Content: "result:" + tc.Name, ToolCallID: tc.ID}}, nil
+		},
+		ExecuteToolRaw: func(_ context.Context, _ providers.ToolCall) (providers.Message, any, error) {
+			t.Fatal("ExecuteToolRaw must not run when full batch exceeds budget")
+			return providers.Message{}, nil, nil
+		},
+		ProcessToolResult: func(_ context.Context, _ *RunState, _ providers.ToolCall, _ providers.Message, _ any) []providers.Message {
+			t.Fatal("ProcessToolResult must not run when full batch exceeds budget")
+			return nil
+		},
+		ParallelEligibleToolCall: func(providers.ToolCall) bool { return true },
+	}
+	stage := NewToolStage(deps)
+	state := defaultState()
+	state.Tool.TotalToolCalls = 1
+	state.Think.LastResponse = &providers.ChatResponse{ToolCalls: []providers.ToolCall{
+		{ID: "1", Name: "read_file"},
+		{ID: "2", Name: "web_fetch"},
+	}}
+
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if !reflect.DeepEqual(calls, []string{"1"}) {
+		t.Fatalf("ExecuteToolCall calls = %v, want [1]", calls)
+	}
+	if stage.Result() != BreakLoop {
+		t.Fatalf("Result() = %v, want BreakLoop", stage.Result())
+	}
+}
+
+func TestToolStage_SequentialFallback_DoesNotPreflightCallsSkippedByBudget(t *testing.T) {
+	t.Parallel()
+	hookCalls := []string{}
+	deps := &PipelineDeps{
+		Config: PipelineConfig{MaxToolCalls: 1},
+		Hooks: toolStageHookDispatcher{fire: func(_ context.Context, ev hooks.Event) (hooks.FireResult, error) {
+			if ev.HookEvent == hooks.EventPreToolUse {
+				hookCalls = append(hookCalls, ev.ToolName)
+			}
+			return hooks.FireResult{Decision: hooks.DecisionAllow}, nil
+		}},
+		ExecuteToolCall: func(_ context.Context, _ *RunState, tc providers.ToolCall) ([]providers.Message, error) {
+			return []providers.Message{{Role: "tool", Content: "result:" + tc.Name, ToolCallID: tc.ID}}, nil
+		},
+		ExecuteToolRaw: func(_ context.Context, _ providers.ToolCall) (providers.Message, any, error) {
+			t.Fatal("ExecuteToolRaw must not run when full batch exceeds budget")
+			return providers.Message{}, nil, nil
+		},
+		ProcessToolResult: func(_ context.Context, _ *RunState, _ providers.ToolCall, _ providers.Message, _ any) []providers.Message {
+			t.Fatal("ProcessToolResult must not run when full batch exceeds budget")
+			return nil
+		},
+		ParallelEligibleToolCall: func(providers.ToolCall) bool { return true },
+	}
+	stage := NewToolStage(deps)
+	state := defaultState()
+	state.Think.LastResponse = &providers.ChatResponse{ToolCalls: []providers.ToolCall{
+		{ID: "1", Name: "read_file"},
+		{ID: "2", Name: "web_fetch"},
+	}}
+
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if !reflect.DeepEqual(hookCalls, []string{"read_file"}) {
+		t.Fatalf("pre_tool_use calls = %v, want only first executable call", hookCalls)
+	}
+	if state.Tool.TotalToolCalls != 1 {
+		t.Fatalf("TotalToolCalls = %d, want 1", state.Tool.TotalToolCalls)
+	}
+	if stage.Result() != BreakLoop {
+		t.Fatalf("Result() = %v, want BreakLoop", stage.Result())
+	}
+}
+
+func TestToolStage_SequentialFallback_DoesNotOvershootBudgetWithBlockedHook(t *testing.T) {
+	t.Parallel()
+	hookCalls := []string{}
+	deps := &PipelineDeps{
+		Config: PipelineConfig{MaxToolCalls: 1},
+		Hooks: toolStageHookDispatcher{fire: func(_ context.Context, ev hooks.Event) (hooks.FireResult, error) {
+			if ev.HookEvent == hooks.EventPreToolUse {
+				hookCalls = append(hookCalls, ev.ToolName)
+				return hooks.FireResult{Decision: hooks.DecisionBlock}, nil
+			}
+			return hooks.FireResult{Decision: hooks.DecisionAllow}, nil
+		}},
+		ExecuteToolCall: func(_ context.Context, _ *RunState, _ providers.ToolCall) ([]providers.Message, error) {
+			t.Fatal("ExecuteToolCall must not run when hook blocks the only budgeted call")
+			return nil, nil
+		},
+		ParallelEligibleToolCall: func(providers.ToolCall) bool { return true },
+	}
+	stage := NewToolStage(deps)
+	state := defaultState()
+	state.Think.LastResponse = &providers.ChatResponse{ToolCalls: []providers.ToolCall{
+		{ID: "1", Name: "read_file"},
+		{ID: "2", Name: "web_fetch"},
+	}}
+
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if !reflect.DeepEqual(hookCalls, []string{"read_file"}) {
+		t.Fatalf("pre_tool_use calls = %v, want only first blocked call", hookCalls)
+	}
+	if state.Tool.TotalToolCalls != 1 {
+		t.Fatalf("TotalToolCalls = %d, want 1", state.Tool.TotalToolCalls)
+	}
+	pending := state.Messages.Pending()
+	if len(pending) != 1 || pending[0].ToolCallID != "1" || !strings.Contains(pending[0].Content, "Hook blocked") {
+		t.Fatalf("pending = %+v, want one blocked message for first call", pending)
+	}
+	if stage.Result() != BreakLoop {
+		t.Fatalf("Result() = %v, want BreakLoop", stage.Result())
+	}
+}
+
+func TestToolStage_ParallelPath_BoundsRawConcurrency(t *testing.T) {
+	t.Parallel()
+	const totalCalls = 8
+	started := make(chan struct{}, totalCalls)
+	release := make(chan struct{})
+	done := make(chan error, 1)
+	var current int32
+	var peak int32
+
+	deps := &PipelineDeps{
+		ExecuteToolCall: func(_ context.Context, _ *RunState, _ providers.ToolCall) ([]providers.Message, error) {
+			t.Fatal("ExecuteToolCall must not run for eligible parallel batch")
+			return nil, nil
+		},
+		ExecuteToolRaw: func(_ context.Context, tc providers.ToolCall) (providers.Message, any, error) {
+			now := atomic.AddInt32(&current, 1)
+			for {
+				prev := atomic.LoadInt32(&peak)
+				if now <= prev || atomic.CompareAndSwapInt32(&peak, prev, now) {
+					break
+				}
+			}
+			started <- struct{}{}
+			<-release
+			atomic.AddInt32(&current, -1)
+			return providers.Message{Role: "tool", Content: "raw:" + tc.Name, ToolCallID: tc.ID}, nil, nil
+		},
+		ProcessToolResult: func(_ context.Context, _ *RunState, _ providers.ToolCall, rawMsg providers.Message, _ any) []providers.Message {
+			return []providers.Message{rawMsg}
+		},
+		ParallelEligibleToolCall: func(providers.ToolCall) bool { return true },
+	}
+	stage := NewToolStage(deps)
+	state := defaultState()
+	calls := make([]providers.ToolCall, 0, totalCalls)
+	for i := range totalCalls {
+		id := strconv.Itoa(i + 1)
+		calls = append(calls, providers.ToolCall{ID: id, Name: "read_file"})
+	}
+	state.Think.LastResponse = &providers.ChatResponse{ToolCalls: calls}
+
+	go func() {
+		done <- stage.Execute(context.Background(), state)
+	}()
+
+	for range defaultParallelToolCallLimit {
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			close(release)
+			t.Fatal("timed out waiting for capped raw calls to start")
+		}
+	}
+	if got := atomic.LoadInt32(&peak); got > int32(defaultParallelToolCallLimit) {
+		close(release)
+		t.Fatalf("peak raw concurrency = %d, want <= %d", got, defaultParallelToolCallLimit)
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if got := atomic.LoadInt32(&peak); got > int32(defaultParallelToolCallLimit) {
+		t.Fatalf("peak raw concurrency = %d, want <= %d", got, defaultParallelToolCallLimit)
 	}
 }
 
@@ -1287,7 +1929,6 @@ func TestObserveStage_DrainInjectCh_AddsToPending(t *testing.T) {
 	}
 	stage := NewObserveStage(deps)
 	state := defaultState()
-	state.Think.LastResponse = &providers.ChatResponse{FinishReason: "stop"}
 
 	err := stage.Execute(context.Background(), state)
 	if err != nil {
@@ -1299,6 +1940,44 @@ func TestObserveStage_DrainInjectCh_AddsToPending(t *testing.T) {
 	}
 	if pending[0].Content != "injected-1" || pending[1].Content != "injected-2" {
 		t.Errorf("pending = %v", pending)
+	}
+}
+
+func TestObserveStage_LateInjectionAfterFinalContinuesRun(t *testing.T) {
+	t.Parallel()
+	injected := []providers.Message{
+		{Role: "user", Content: "answer this follow-up too"},
+	}
+	deps := &PipelineDeps{
+		DrainInjectCh: func() []providers.Message { return injected },
+	}
+	stage := NewObserveStage(deps)
+	state := defaultState()
+	state.Think.LastResponse = &providers.ChatResponse{
+		Content:      "answer to original request",
+		Thinking:     "reasoning",
+		FinishReason: "stop",
+	}
+
+	err := stage.Execute(context.Background(), state)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if !state.Observe.ContinueAfterFinal {
+		t.Fatal("ContinueAfterFinal = false, want true")
+	}
+	if state.Observe.FinalContent != "" {
+		t.Fatalf("FinalContent = %q, want empty until follow-up is answered", state.Observe.FinalContent)
+	}
+	pending := state.Messages.Pending()
+	if len(pending) != 2 {
+		t.Fatalf("pending len = %d, want 2", len(pending))
+	}
+	if pending[0].Role != "assistant" || pending[0].Content != "answer to original request" || !pending[0].Transient {
+		t.Fatalf("pending[0] = %#v, want assistant original answer", pending[0])
+	}
+	if pending[1].Role != "user" || pending[1].Content != "answer this follow-up too" {
+		t.Fatalf("pending[1] = %#v, want user follow-up", pending[1])
 	}
 }
 
@@ -1636,6 +2315,37 @@ func TestCheckpointStage_FlushesAtInterval(t *testing.T) {
 	}
 	if state.Compact.CheckpointFlushedMsgs != 1 {
 		t.Errorf("CheckpointFlushedMsgs = %d, want 1", state.Compact.CheckpointFlushedMsgs)
+	}
+}
+
+func TestCheckpointStage_SkipsTransientMessagesWhenPersisting(t *testing.T) {
+	t.Parallel()
+	var flushedMsgs []providers.Message
+	deps := &PipelineDeps{
+		Config: PipelineConfig{CheckpointInterval: 5},
+		FlushMessages: func(_ context.Context, _ string, msgs []providers.Message) error {
+			flushedMsgs = msgs
+			return nil
+		},
+	}
+	stage := NewCheckpointStage(deps)
+	state := defaultState()
+	state.Iteration = 5
+	state.Messages.AppendPending(providers.Message{Role: "assistant", Content: "draft", Transient: true})
+	state.Messages.AppendPending(providers.Message{Role: "user", Content: "follow-up"})
+
+	err := stage.Execute(context.Background(), state)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if len(flushedMsgs) != 1 {
+		t.Fatalf("flushed %d messages, want 1", len(flushedMsgs))
+	}
+	if flushedMsgs[0].Content != "follow-up" {
+		t.Fatalf("flushed[0].Content = %q, want follow-up", flushedMsgs[0].Content)
+	}
+	if state.Compact.CheckpointFlushedMsgs != 1 {
+		t.Fatalf("CheckpointFlushedMsgs = %d, want 1", state.Compact.CheckpointFlushedMsgs)
 	}
 }
 
@@ -2155,6 +2865,36 @@ func TestFinalizeStage_FlushesRemainingPending(t *testing.T) {
 	}
 }
 
+func TestFinalizeStage_SkipsTransientMessagesWhenPersisting(t *testing.T) {
+	t.Parallel()
+	var flushedMsgs []providers.Message
+	deps := &PipelineDeps{
+		FlushMessages: func(_ context.Context, _ string, msgs []providers.Message) error {
+			flushedMsgs = append(flushedMsgs, msgs...)
+			return nil
+		},
+	}
+	stage := NewFinalizeStage(deps)
+	state := defaultState()
+	state.Observe.FinalContent = "final answer"
+	state.Messages.AppendPending(providers.Message{Role: "assistant", Content: "draft answer", Transient: true})
+	state.Messages.AppendPending(providers.Message{Role: "user", Content: "follow-up"})
+
+	err := stage.Execute(context.Background(), state)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if len(flushedMsgs) != 2 {
+		t.Fatalf("flushed %d messages, want follow-up + final answer", len(flushedMsgs))
+	}
+	if flushedMsgs[0].Content != "follow-up" {
+		t.Fatalf("flushed[0].Content = %q, want follow-up", flushedMsgs[0].Content)
+	}
+	if flushedMsgs[1].Content != "final answer" {
+		t.Fatalf("flushed[1].Content = %q, want final answer", flushedMsgs[1].Content)
+	}
+}
+
 func TestFinalizeStage_CallsBootstrapCleanup_WhenHadBootstrap(t *testing.T) {
 	t.Parallel()
 	cleanupCalled := false
@@ -2306,8 +3046,8 @@ func TestParseTTL_ValidInputs(t *testing.T) {
 		{"5m", 5 * time.Minute},
 		{"30s", 30 * time.Second},
 		{"1h30m", 90 * time.Minute},
-		{"bogus", 5 * time.Minute},  // invalid → fallback
-		{"-1m", 5 * time.Minute},    // negative → fallback
+		{"bogus", 5 * time.Minute}, // invalid → fallback
+		{"-1m", 5 * time.Minute},   // negative → fallback
 	}
 	for _, tc := range cases {
 		got := parseTTL(tc.in)

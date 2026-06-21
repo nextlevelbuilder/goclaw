@@ -1,6 +1,11 @@
 package cmd
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
+)
 
 // TestIsSafeBitrixEntityToken pins the validation contract for webhook-sourced
 // Bitrix entity metadata. The function gates which tokens may be interpolated
@@ -36,5 +41,27 @@ func TestIsSafeBitrixEntityToken(t *testing.T) {
 					tc.s, tc.maxLen, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestResolveSenderNameReadsWhatsAppUserName(t *testing.T) {
+	got := resolveSenderName(bus.InboundMessage{
+		Metadata: map[string]string{
+			"user_name": "Alice\nAdmin",
+		},
+	})
+	if got != "Alice Admin" {
+		t.Fatalf("resolveSenderName() = %q, want sanitized WhatsApp user_name", got)
+	}
+}
+
+func TestResolveSenderNameTruncatesLongMetadata(t *testing.T) {
+	got := resolveSenderName(bus.InboundMessage{
+		Metadata: map[string]string{
+			"display_name": strings.Repeat("x", 120),
+		},
+	})
+	if len([]rune(got)) != 100 {
+		t.Fatalf("resolveSenderName() length = %d, want 100", len([]rune(got)))
 	}
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -29,9 +30,9 @@ type bitrixCreds struct{}
 // sent to imbot.register).
 type bitrixInstanceConfig struct {
 	// Resource link (required)
-	Portal    string `json:"portal"`              // bitrix_portals.name scoped by tenant_id
-	BotCode   string `json:"bot_code"`            // stable key passed to imbot.register / LookupRegisteredBot
-	BotName   string `json:"bot_name"`            // display name
+	Portal    string `json:"portal"`               // bitrix_portals.name scoped by tenant_id
+	BotCode   string `json:"bot_code"`             // stable key passed to imbot.register / LookupRegisteredBot
+	BotName   string `json:"bot_name"`             // display name
 	BotAvatar string `json:"bot_avatar,omitempty"` // optional URL; factory resolves and base64-encodes at Start()
 
 	// BotType — forwarded verbatim to imbot.register TYPE param.
@@ -72,8 +73,9 @@ type bitrixInstanceConfig struct {
 	ReactionLevel string `json:"reaction_level,omitempty"` // off|minimal|full
 
 	// Misc
-	HistoryLimit int   `json:"history_limit,omitempty"`
-	BlockReply   *bool `json:"block_reply,omitempty"`
+	HistoryLimit int                        `json:"history_limit,omitempty"`
+	BlockReply   *bool                      `json:"block_reply,omitempty"`
+	ChatBehavior *config.ChatBehaviorConfig `json:"chat_behavior,omitempty"`
 
 	// Webhook endpoint override. Bitrix24 imbot.register requires absolute
 	// URLs for EVENT_MESSAGE_ADD etc. GoClaw has no global GOCLAW_PUBLIC_URL

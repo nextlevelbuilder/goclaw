@@ -10,6 +10,16 @@ permissions:
   contents: read
 
 jobs:
+  release-versioning:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Release versioning tests
+        run: node --test scripts/ci/semantic-beta-version.test.mjs
+
   go:
     runs-on: ubuntu-latest
     # Postgres service container for integration tests. pgvector/pgvector:pg18

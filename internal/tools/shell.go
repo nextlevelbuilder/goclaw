@@ -260,9 +260,16 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 		}
 		if wd, _ := args["working_dir"].(string); wd != "" {
 			if effectiveRestrict(ctx, t.restrict) {
-				if resolved, err := resolvePath(wd, t.workspace, true); err == nil {
-					cwd = resolved
+				wsBase := ToolWorkspaceFromCtx(ctx)
+				if wsBase == "" {
+					wsBase = t.workspace
 				}
+				allowed := allowedWriteWithTeamWorkspace(ctx, nil)
+				resolved, err := resolvePathWithAllowed(wd, wsBase, true, allowed)
+				if err != nil {
+					return ErrorResult(err.Error())
+				}
+				cwd = resolved
 			} else {
 				cwd = wd
 			}
@@ -644,7 +651,16 @@ func buildHostResult(err error, stdout, stderr *limitedBuffer, ctx context.Conte
 
 // executeInSandbox routes a command through a Docker sandbox container.
 func (t *ExecTool) executeInSandbox(ctx context.Context, command, cwd, sandboxKey string) *Result {
-	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, t.workspace, SandboxConfigFromCtx(ctx))
+	mountWorkspace, err := effectiveSandboxWorkspace(ctx, t.workspace)
+	if err != nil {
+		return ErrorResult(err.Error())
+	}
+	containerCwd, cwdErr := sandboxCwdForHostPath(cwd, mountWorkspace, sandbox.DefaultContainerWorkdir)
+	if cwdErr != nil {
+		return ErrorResult(fmt.Sprintf("sandbox path mapping: %v", cwdErr))
+	}
+
+	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, mountWorkspace, SandboxConfigFromCtx(ctx))
 	if err != nil {
 		if errors.Is(err, sandbox.ErrSandboxDisabled) {
 			return t.executeOnHost(ctx, command, cwd)
@@ -656,12 +672,6 @@ func (t *ExecTool) executeInSandbox(ctx context.Context, command, cwd, sandboxKe
 			"command", truncateCmd(command, 80),
 		)
 		return ErrorResult(fmt.Sprintf("sandbox unavailable: %v (will not fall back to unsandboxed host execution)", err))
-	}
-
-	// Map host workdir to container workdir via SandboxCwd helper.
-	containerCwd, cwdErr := SandboxCwd(ctx, t.workspace, sandbox.DefaultContainerWorkdir)
-	if cwdErr != nil {
-		return ErrorResult(fmt.Sprintf("sandbox path mapping: %v", cwdErr))
 	}
 
 	result, err := sb.Exec(ctx, []string{"sh", "-c", command}, containerCwd) //nolint: no ExecOption for normal exec

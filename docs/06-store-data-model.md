@@ -480,7 +480,14 @@ Pre-computed usage snapshots (hourly aggregations) for analytics dashboards. Tra
 
 ### SecureCLIStore
 
-CLI binary credential configuration with encrypted environment variable injection. Credentials are auto-injected into child processes without exposing them to command output.
+CLI binary credential configuration with encrypted environment variable
+injection. Credentials are auto-injected into child processes without exposing
+them to command output.
+
+Credential rows can live at binary, agent, channel/context, or user scope.
+Runtime resolution prefers user overrides, then context credentials, then agent
+credentials, then binary defaults. The `secure_cli_agent_credentials` table
+stores one encrypted PAT/SSH/env payload per `(binary_id, agent_id, tenant_id)`.
 
 | Method | Purpose |
 |--------|---------|
@@ -492,6 +499,9 @@ CLI binary credential configuration with encrypted environment variable injectio
 | `ListByAgent(agentID)` | Return configs for a specific agent |
 | `LookupByBinary(binaryName, agentID)` | Find best-matching config (agent-specific > global) |
 | `ListEnabled()` | Return enabled configs for TOOLS.md generation |
+| `ListAgentCredentials(binaryID)` | Return masked agent credential metadata |
+| `SetAgentCredentialsTyped(binaryID, agentID, env, type, hostScope)` | Store agent-scoped PAT/SSH/env payload |
+| `DeleteAgentCredentials(binaryID, agentID)` | Remove an agent-scoped credential |
 
 ### APIKeyStore
 
@@ -728,6 +738,13 @@ L0 (Working Memory)           L1 (Episodic Memory)        L2 (Semantic Memory)
 | `vault_versions` | Document version history (prepared for v3.1) | `doc_id`, `version`, `content`, `changed_by`, `created_at` |
 | `kg_entities` | Extended with temporal columns | `valid_from` (TIMESTAMPTZ), `valid_until` (TIMESTAMPTZ) for temporal facts |
 | `kg_relations` | Extended with temporal columns | `valid_from` (TIMESTAMPTZ), `valid_until` (TIMESTAMPTZ) for temporal edges |
+| `channel_memory_extraction_runs` | Passive channel extraction run log | `tenant_id`, `channel_instance_id`, `history_key`, `trigger`, `status`, source range, counts, redaction metadata |
+| `channel_memory_extraction_items` | Review queue for passive channel memory candidates | `tenant_id`, `run_id`, `channel_instance_id`, `item_hash`, `item_type`, `summary`, `topics`, `entities`, `status`, approval/write timestamps |
+
+`ChannelMemoryExtractionStore` is implemented for PostgreSQL and SQLite. It is
+tenant-scoped, stores no raw message bodies, and uses deterministic hashes to
+deduplicate the same channel/history/type/summary candidate across repeated
+runs.
 
 ### 12 Promoted Agent Columns
 

@@ -116,6 +116,10 @@ type ToolInfo struct {
 // DiscoverTools connects temporarily to an MCP server, lists its tools, and disconnects.
 // Used for on-demand discovery when no persistent Manager connection exists (DB-backed servers).
 func DiscoverTools(ctx context.Context, transportType, command string, args []string, env map[string]string, url string, headers map[string]string) ([]ToolInfo, error) {
+	if err := ValidateServerConfig(transportType, command, args, url); err != nil {
+		return nil, fmt.Errorf("invalid MCP server config: %w", err)
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 

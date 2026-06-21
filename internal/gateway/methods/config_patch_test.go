@@ -57,6 +57,80 @@ func TestConfigPatchPersistsInboundDebounceMs(t *testing.T) {
 	}
 }
 
+func TestConfigPatchPersistsShellDenyGroupsFalse(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.Default()
+	cfgPath := filepath.Join(t.TempDir(), "config.json")
+	methods := NewConfigMethods(cfg, cfgPath, nil, nil)
+	client, responses := gateway.NewCapturingTestClient(permissions.RoleOwner, store.MasterTenantID, "owner", 1)
+	params, err := json.Marshal(map[string]string{
+		"raw": `{"tools":{"shellDenyGroups":{"package_install":false}}}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := store.WithTenantID(context.Background(), store.MasterTenantID)
+	methods.handlePatch(
+		ctx,
+		client,
+		&protocol.RequestFrame{
+			Type:   protocol.FrameTypeRequest,
+			ID:     "patch-shell-deny-groups",
+			Method: protocol.MethodConfigPatch,
+			Params: params,
+		},
+	)
+
+	res := readConfigPatchResponse(t, responses)
+	if !res.OK {
+		t.Fatalf("config.patch failed: %#v", res.Error)
+	}
+	shellDenyGroups := cfg.ShellDenyGroupsSnapshot()
+	if v, ok := shellDenyGroups["package_install"]; !ok || v {
+		t.Fatalf("in-memory shellDenyGroups package_install = %v (ok=%v), want false", v, ok)
+	}
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(data, []byte(`"package_install": false`)) {
+		t.Fatalf("saved config missing package_install=false:\n%s", data)
+	}
+
+	methods.handleGet(
+		ctx,
+		client,
+		&protocol.RequestFrame{
+			Type:   protocol.FrameTypeRequest,
+			ID:     "get-shell-deny-groups",
+			Method: protocol.MethodConfigGet,
+		},
+	)
+	getRes := readConfigPatchResponse(t, responses)
+	if !getRes.OK {
+		t.Fatalf("config.get failed: %#v", getRes.Error)
+	}
+	var payload struct {
+		Config struct {
+			Tools struct {
+				ShellDenyGroups map[string]bool `json:"shellDenyGroups"`
+			} `json:"tools"`
+		} `json:"config"`
+	}
+	rawPayload, err := json.Marshal(getRes.Payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(rawPayload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if v, ok := payload.Config.Tools.ShellDenyGroups["package_install"]; !ok || v {
+		t.Fatalf("config.get shellDenyGroups package_install = %v (ok=%v), want false", v, ok)
+	}
+}
+
 func readConfigPatchResponse(t *testing.T, responses <-chan []byte) protocol.ResponseFrame {
 	t.Helper()
 	select {

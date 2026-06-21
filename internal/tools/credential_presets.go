@@ -139,6 +139,17 @@ var CLIPresets = map[string]CLIPreset{
 		Tips:        "Use -A -t for plain output suitable for piping",
 		AdapterName: "psql",
 	},
+	"rapidapi": {
+		BinaryName:  "rapidapi",
+		Description: "RapidAPI CLI",
+		EnvVars: []EnvVarDef{
+			{Name: "RAPIDAPI_KEY", Desc: "RapidAPI application key"},
+		},
+		DenyArgs:    nil,
+		DenyVerbose: []string{`--verbose`, `--debug`, `-v`},
+		Timeout:     60,
+		Tips:        "Use read-only/search commands for scheduled jobs. Configure RAPIDAPI_KEY as a per-user credential and grant the target agent.",
+	},
 }
 
 // GetPreset returns a preset by name, or nil if not found.
@@ -155,6 +166,23 @@ func ListPresetNames() []string {
 	names := make([]string, 0, len(CLIPresets))
 	for name := range CLIPresets {
 		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func requiredCredentialEnvVars(binary string) []string {
+	name := normalizeBinaryName(binary)
+	preset := GetPreset(name)
+	if preset == nil {
+		return nil
+	}
+	names := make([]string, 0, len(preset.EnvVars))
+	for _, envVar := range preset.EnvVars {
+		if envVar.Optional {
+			continue
+		}
+		names = append(names, envVar.Name)
 	}
 	sort.Strings(names)
 	return names

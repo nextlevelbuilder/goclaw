@@ -246,6 +246,61 @@ func TestGitHubUpdateExecutor_NotInstalled(t *testing.T) {
 	}
 }
 
+func TestGitHubUpdateExecutor_DefaultScratchDirUsesRuntimeDir(t *testing.T) {
+	runtimeDir := t.TempDir()
+	t.Setenv("RUNTIME_DIR", runtimeDir)
+
+	cfg := &GitHubPackagesConfig{
+		BinDir:       filepath.Join(string(filepath.Separator), "opt", "goclaw", "bin"),
+		ManifestPath: filepath.Join(t.TempDir(), "manifest.json"),
+	}
+	inst := NewGitHubInstaller(NewGitHubClient(""), cfg)
+
+	exec := NewGitHubUpdateExecutor(inst)
+	candidates := exec.scratchDirCandidates()
+	if len(candidates) == 0 {
+		t.Fatal("scratchDirCandidates returned no candidates")
+	}
+
+	want := filepath.Join(runtimeDir, "tmp")
+	if candidates[0] != want {
+		t.Fatalf("primary scratch dir = %q, want runtime tmp %q", candidates[0], want)
+	}
+}
+
+func TestGitHubUpdateExecutor_CreateScratchDirFallsBackFromBadConfiguredDir(t *testing.T) {
+	runtimeDir := t.TempDir()
+	t.Setenv("RUNTIME_DIR", runtimeDir)
+
+	cfg := &GitHubPackagesConfig{
+		BinDir:       filepath.Join(runtimeDir, "bin"),
+		ManifestPath: filepath.Join(runtimeDir, "github-packages.json"),
+	}
+	inst := NewGitHubInstaller(NewGitHubClient(""), cfg)
+
+	blockedPath := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(blockedPath, []byte("blocked"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	exec := NewGitHubUpdateExecutor(inst)
+	exec.ScratchDir = blockedPath
+
+	scratch, err := exec.createScratchDir("goclaw", "v0.8.0-beta.2")
+	if err != nil {
+		t.Fatalf("createScratchDir should fall back from bad configured dir: %v", err)
+	}
+	defer os.RemoveAll(scratch)
+
+	wantPrefix := filepath.Join(runtimeDir, "tmp") + string(filepath.Separator)
+	if !strings.HasPrefix(scratch, wantPrefix) {
+		t.Fatalf("scratch dir = %q, want prefix %q", scratch, wantPrefix)
+	}
+	if fi, statErr := os.Stat(scratch); statErr != nil || !fi.IsDir() {
+		t.Fatalf("scratch dir not created: info=%v err=%v", fi, statErr)
+	}
+}
+
 func TestGitHubUpdateExecutor_MetaAssertions_NilSafe(t *testing.T) {
 	// Red-team C6: nil-safe map assertions must never panic.
 	cases := []map[string]any{

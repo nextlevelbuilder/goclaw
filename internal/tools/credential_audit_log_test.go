@@ -62,7 +62,7 @@ func TestEmitSystemEnvInjectionAudit_PAT(t *testing.T) {
 	}
 
 	records, raw := capturedAudit(t, func() {
-		emitSystemEnvInjectionAudit("git", "git", "user-42", inj, &scope)
+		emitSystemEnvInjectionAudit("git", "git", "user-42", "agent", inj, &scope)
 	})
 
 	if len(records) != 1 {
@@ -80,6 +80,9 @@ func TestEmitSystemEnvInjectionAudit_PAT(t *testing.T) {
 	}
 	if rec["user_id"] != "user-42" {
 		t.Errorf("user_id=%v, want user-42", rec["user_id"])
+	}
+	if rec["credential_source"] != "agent" {
+		t.Errorf("credential_source=%v, want agent", rec["credential_source"])
 	}
 	if rec["argv_prefix_len"] != float64(0) {
 		t.Errorf("argv_prefix_len=%v, want 0", rec["argv_prefix_len"])
@@ -132,7 +135,7 @@ func TestEmitSystemEnvInjectionAudit_SSH(t *testing.T) {
 	}
 
 	records, raw := capturedAudit(t, func() {
-		emitSystemEnvInjectionAudit("git", "git", "u1", inj, &scope)
+		emitSystemEnvInjectionAudit("git", "git", "u1", "user", inj, &scope)
 	})
 
 	if len(records) != 1 {
@@ -161,7 +164,7 @@ func TestEmitSystemEnvInjectionAudit_SSH(t *testing.T) {
 // 3. Nil injection: emitter is a no-op (audit only fires on actual injection).
 func TestEmitSystemEnvInjectionAudit_NilInjection(t *testing.T) {
 	records, _ := capturedAudit(t, func() {
-		emitSystemEnvInjectionAudit("git", "git", "u1", nil, nil)
+		emitSystemEnvInjectionAudit("git", "git", "u1", "user", nil, nil)
 	})
 	if len(records) != 0 {
 		t.Fatalf("expected 0 records for nil injection, got %d", len(records))
@@ -172,7 +175,7 @@ func TestEmitSystemEnvInjectionAudit_NilInjection(t *testing.T) {
 func TestEmitSystemEnvInjectionAudit_NilHostScope(t *testing.T) {
 	inj := &Injection{Env: map[string]string{"FOO": "bar"}}
 	records, _ := capturedAudit(t, func() {
-		emitSystemEnvInjectionAudit("passthrough", "gh", "u1", inj, nil)
+		emitSystemEnvInjectionAudit("passthrough", "gh", "u1", "", inj, nil)
 	})
 	if len(records) != 1 {
 		t.Fatalf("expected 1 record, got %d", len(records))

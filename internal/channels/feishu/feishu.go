@@ -40,10 +40,10 @@ type Channel struct {
 	cfg             config.FeishuConfig
 	client          *LarkClient
 	botOpenID       string
-	senderCache     sync.Map  // open_id → *senderCacheEntry
-	dedup           sync.Map  // message_id → struct{}
-	reactions       sync.Map  // chatID → *reactionState
-	docCache        *docCache // LRU+TTL cache for Lark docx raw_content lookups
+	senderCache     sync.Map                    // open_id → *senderCacheEntry
+	dedup           sync.Map                    // message_id → struct{}
+	reactions       sync.Map                    // chatID → *reactionState
+	docCache        *docCache                   // LRU+TTL cache for Lark docx raw_content lookups
 	agentStore      store.AgentStore            // optional — agent key → UUID lookup for writer commands
 	configPermStore store.ConfigPermissionStore // optional — group file writer ACL for /addwriter et al.
 	groupAllowList  []string                    // Feishu-specific: per-group sender allowlist (separate from BaseChannel allowList)
@@ -135,8 +135,10 @@ func (c *Channel) Start(ctx context.Context) error {
 	c.GroupHistory().StartFlusher()
 	slog.Info("starting feishu/lark bot")
 
-	// Probe bot identity
-	if err := c.probeBotInfo(ctx); err != nil {
+	// Probe bot identity. Without botOpenID, mention detection degrades to
+	// "any mention counts as bot mention" (see parseMessageEvent), so retry
+	// transient failures before giving up.
+	if err := c.probeBotInfoWithRetry(ctx, 3); err != nil {
 		slog.Warn("feishu bot probe failed (will continue)", "error", err)
 	} else {
 		slog.Info("feishu bot connected", "bot_open_id", c.botOpenID)
@@ -159,6 +161,9 @@ func (c *Channel) Start(ctx context.Context) error {
 
 // BlockReplyEnabled returns the per-channel block_reply override (nil = inherit gateway default).
 func (c *Channel) BlockReplyEnabled() *bool { return c.cfg.BlockReply }
+
+// ChatBehaviorConfig returns the per-channel chat_behavior override.
+func (c *Channel) ChatBehaviorConfig() *config.ChatBehaviorConfig { return c.cfg.ChatBehavior }
 
 // SetPendingCompaction configures LLM-based auto-compaction for pending messages.
 func (c *Channel) SetPendingCompaction(cfg *channels.CompactionConfig) {
@@ -365,6 +370,25 @@ func (c *Channel) probeBotInfo(ctx context.Context) error {
 	}
 	c.botOpenID = openID
 	return nil
+}
+
+// probeBotInfoWithRetry retries probeBotInfo with linear backoff to survive
+// transient startup failures (network blips, token service warm-up).
+func (c *Channel) probeBotInfoWithRetry(ctx context.Context, attempts int) error {
+	var err error
+	for i := 0; i < attempts; i++ {
+		if err = c.probeBotInfo(ctx); err == nil {
+			return nil
+		}
+		if i < attempts-1 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Duration(i+1) * 2 * time.Second):
+			}
+		}
+	}
+	return err
 }
 
 // --- Send helpers ---
