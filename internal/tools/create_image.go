@@ -17,7 +17,16 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/security"
 )
+
+// Reference-image downloads are gateway-side fetches of caller-supplied URLs, so
+// they must go through the SSRF guard with a bounded read.
+const refImageDownloadTimeout = 30 * time.Second
+
+// refImageMaxBytes caps a single reference-image download. Declared as a var so
+// tests can shrink it to exercise the overflow path cheaply.
+var refImageMaxBytes int64 = 20 * 1024 * 1024 // 20 MB
 
 // credentialProvider is a narrow interface for providers that expose API credentials.
 type credentialProvider interface {
@@ -101,6 +110,13 @@ func (t *CreateImageTool) resolveReferenceImages(ctx context.Context, args map[s
 		}
 
 		if url != "" {
+			// Trust boundary: a reference URL is either forwarded to the image
+			// provider (provider fetches it) or fetched gateway-side via
+			// downloadImageBytes (SSRF-guarded there). Either way it must be a
+			// plain HTTP(S) URL — reject file://, gopher://, data:, etc. up front.
+			if !isHTTPURL(url) {
+				return nil, fmt.Errorf("reference image url must be http(s): %q", url)
+			}
 			if seenURLs[url] {
 				return nil, nil
 			}
@@ -420,6 +436,13 @@ func (t *CreateImageTool) callImageGenAPI(ctx context.Context, apiKey, apiBase, 
 				{"type": "text", "text": prompt},
 			}
 			for _, refImg := range refImgs {
+				// Trust boundary: this JSON path forwards the reference URL to the
+				// image provider downstream (the provider fetches it), so the gateway
+				// does NOT dial it here — only HTTP(S) URLs reach this point. The
+				// gateway-side fetch path (OpenAI multipart) goes through
+				// downloadImageBytes, which is SSRF-guarded. Keep these distinct: if a
+				// provider URL ever becomes a gateway-side fetch, route it through
+				// downloadImageBytes.
 				var refURL string
 				if refImg.URL != "" {
 					refURL = refImg.URL
@@ -550,13 +573,34 @@ func (t *CreateImageTool) callStandardImageGenAPI(ctx context.Context, apiKey, a
 	return imageBytes, nil, nil
 }
 
-// downloadImageBytes downloads an image from a URL and returns raw bytes and content type.
-func (t *CreateImageTool) downloadImageBytes(ctx context.Context, url string) ([]byte, string, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+// isHTTPURL reports whether s is a plain http(s) URL. Reference URLs must be
+// HTTP(S) only — this blocks file://, data:, gopher://, etc. before a URL is
+// either forwarded to a provider or fetched gateway-side.
+func isHTTPURL(s string) bool {
+	l := strings.ToLower(s)
+	return strings.HasPrefix(l, "http://") || strings.HasPrefix(l, "https://")
+}
+
+// downloadImageBytes downloads a caller-supplied reference image URL server-side
+// and returns its raw bytes and content type. The URL is attacker-controlled
+// (agent/user-provided ref_images[].url), so it is validated against the SSRF
+// guard and the resolved IP is pinned for the dial; the shared SafeClient also
+// refuses redirects. The response body is read with a hard size cap.
+func (t *CreateImageTool) downloadImageBytes(ctx context.Context, rawURL string) ([]byte, string, error) {
+	// SSRF guard: rejects loopback/private/link-local (incl. cloud metadata
+	// 169.254.169.254) and returns the resolved IP to pin for the dial.
+	_, pinnedIP, err := security.Validate(rawURL)
+	if err != nil {
+		return nil, "", fmt.Errorf("invalid reference image URL: %w", err)
+	}
+	reqCtx := security.WithPinnedIP(ctx, pinnedIP)
+	req, err := http.NewRequestWithContext(reqCtx, "GET", rawURL, nil)
 	if err != nil {
 		return nil, "", err
 	}
-	client := &http.Client{Timeout: 30 * time.Second}
+	// SafeClient dials only the pinned IP and never follows redirects (a 3xx is
+	// returned as-is and rejected by the status check below).
+	client := security.NewSafeClient(refImageDownloadTimeout)
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, "", err
@@ -566,9 +610,14 @@ func (t *CreateImageTool) downloadImageBytes(ctx context.Context, url string) ([
 	if resp.StatusCode != http.StatusOK {
 		return nil, "", fmt.Errorf("HTTP error %d", resp.StatusCode)
 	}
-	data, err := io.ReadAll(resp.Body)
+	// Bounded read: cap the download to avoid memory exhaustion from a hostile
+	// or oversized response. Read one extra byte to detect overflow.
+	data, err := io.ReadAll(io.LimitReader(resp.Body, refImageMaxBytes+1))
 	if err != nil {
 		return nil, "", err
+	}
+	if int64(len(data)) > refImageMaxBytes {
+		return nil, "", fmt.Errorf("reference image exceeds maximum size of %d bytes", refImageMaxBytes)
 	}
 	return data, resp.Header.Get("Content-Type"), nil
 }
