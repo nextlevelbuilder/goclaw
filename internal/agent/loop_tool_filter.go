@@ -100,6 +100,56 @@ func (l *Loop) buildFilteredTools(req *RunRequest, hadBootstrap bool, iteration,
 		toolDefs = filtered
 	}
 
+	// Mode-aware tool filtering: lightweight sessions don't need the full tool
+	// surface, so cut their schemas to save tokens. minimal/none (heartbeat) keep
+	// only core tools; task (subagent/cron) drop heavyweight media/orchestration.
+	// Mode is resolved the same way as the system prompt (loop_history.go).
+	switch resolvePromptMode("", req.SessionKey, l.promptMode) {
+	case PromptMinimal, PromptNone:
+		filtered := toolDefs[:0:0]
+		for _, td := range toolDefs {
+			if modeCoreToolAllowlist[td.Function.Name] {
+				filtered = append(filtered, td)
+			} else {
+				delete(allowedTools, td.Function.Name)
+			}
+		}
+		toolDefs = filtered
+	case PromptTask:
+		filtered := toolDefs[:0:0]
+		for _, td := range toolDefs {
+			if modeTaskToolDenylist[td.Function.Name] {
+				delete(allowedTools, td.Function.Name)
+				continue
+			}
+			filtered = append(filtered, td)
+		}
+		toolDefs = filtered
+	case PromptAiClaw:
+		// ai-claw is MCP-first: keep the allowlisted built-in tools PLUS every MCP
+		// tool (inline or just activated via mcp_tool_search). MCP tools register
+		// into the "mcp" tool group, so consult it — a static name allowlist would
+		// strip MCP tools right after mcp_tool_search activates them, defeating the
+		// whole mode.
+		mcpSet := make(map[string]bool)
+		if l.registry != nil {
+			if members, ok := l.registry.GetToolGroup("mcp"); ok {
+				for _, n := range members {
+					mcpSet[n] = true
+				}
+			}
+		}
+		filtered := toolDefs[:0:0]
+		for _, td := range toolDefs {
+			if modeAiClawToolAllowlist[td.Function.Name] || mcpSet[td.Function.Name] {
+				filtered = append(filtered, td)
+			} else {
+				delete(allowedTools, td.Function.Name)
+			}
+		}
+		toolDefs = filtered
+	}
+
 	// Final iteration: strip all tools to force a text-only response.
 	// Without this the model may keep requesting tools and exit with "...".
 	if iteration == maxIter {

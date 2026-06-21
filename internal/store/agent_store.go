@@ -277,7 +277,7 @@ func ParseInboundDebounceMsFromOtherConfig(raw json.RawMessage) (int, bool) {
 
 // validPromptModes is the set of allowed prompt_mode values.
 var validPromptModes = map[string]bool{
-	"full": true, "task": true, "minimal": true, "none": true,
+	"full": true, "task": true, "aiclaw": true, "minimal": true, "none": true,
 }
 
 // ParsePromptMode returns the configured prompt mode from OtherConfig JSONB.

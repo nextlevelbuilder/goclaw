@@ -232,6 +232,8 @@
         "fullDesc": "所有部分 — 交互聊天、人设、全部功能",
         "task": "任务",
         "taskDesc": "企业自动化 — 记忆、进化、无人设/语气",
+        "aiclaw": "AI-Claw",
+        "aiclawDesc": "ai-claw 产品 — 精简人设、MCP + 网络 + 技能、聚焦工具",
         "minimal": "最小化",
         "minimalDesc": "后台任务 — 核心规则、领域上下文、仅观察",
         "none": "无",

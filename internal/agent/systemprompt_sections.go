@@ -228,6 +228,7 @@ func buildExecutionBiasSection() []string {
 var stableContextFileNames = map[string]bool{
 	bootstrap.AgentsFile:         true,
 	bootstrap.AgentsTaskFile:     true,
+	bootstrap.AgentsAiClawFile:   true,
 	bootstrap.AgentsCoreFile:     true,
 	bootstrap.ToolsFile:          true,
 	bootstrap.UserPredefinedFile: true,
@@ -657,6 +658,17 @@ func buildPersonaReminder(files []bootstrap.ContextFile, agentType, providerType
 	}
 
 	return []string{reminder, ""}
+}
+
+// isAnthropicProvider reports whether the provider is Anthropic-native (Claude).
+// Claude models follow instructions placed at the start of the system prompt, so
+// recency-zone reminders are unnecessary token cost for them.
+func isAnthropicProvider(providerType string) bool {
+	lower := strings.ToLower(providerType)
+	if strings.Contains(lower, "compat") {
+		return false // openai_compat may route to non-Anthropic models
+	}
+	return strings.Contains(lower, "anthropic") || strings.Contains(lower, "claude")
 }
 
 // needsSOULEcho returns true for providers that benefit from recency-zone personality echo.

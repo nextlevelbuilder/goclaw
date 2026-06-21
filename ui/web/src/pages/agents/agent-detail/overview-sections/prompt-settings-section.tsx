@@ -112,7 +112,7 @@ export function PromptSettingsSection({ agent, onUpdate }: Props) {
         delete bag.tts_params;
       }
       await onUpdate({ other_config: bag });
-      const modeRank: Record<string, number> = { none: 0, minimal: 1, task: 2, full: 3 };
+      const modeRank: Record<string, number> = { none: 0, minimal: 1, task: 2, aiclaw: 2, full: 3 };
       if ((modeRank[mode] ?? 3) > (modeRank[savedMode] ?? 3)) {
         toast.info(
           t(
