@@ -225,6 +225,7 @@ type oauthFingerprint struct {
 	TokenEndpoint string
 	GrantType     string
 	Scope         string
+	UseDCR        bool // toggling DCR changes how tokens are obtained → must purge
 }
 
 // extractOAuthFingerprint parses settings.oauth into a comparable fingerprint.
@@ -242,10 +243,17 @@ func extractOAuthFingerprint(settings json.RawMessage) oauthFingerprint {
 			TokenEndpoint string `json:"token_endpoint"`
 			GrantType     string `json:"grant_type"`
 			Scope         string `json:"scope"`
+			UseDCR        *bool  `json:"use_dcr"`
 		} `json:"oauth"`
 	}
 	if err := json.Unmarshal(settings, &s); err != nil {
 		return oauthFingerprint{}
+	}
+	// Absent use_dcr means discover+DCR (matching handleStart), so normalize nil→true
+	// to avoid a spurious purge when a legacy server gains an explicit use_dcr=true.
+	useDCR := true
+	if s.OAuth.UseDCR != nil {
+		useDCR = *s.OAuth.UseDCR
 	}
 	return oauthFingerprint{
 		AuthType:      s.OAuth.AuthType,
@@ -254,6 +262,7 @@ func extractOAuthFingerprint(settings json.RawMessage) oauthFingerprint {
 		TokenEndpoint: s.OAuth.TokenEndpoint,
 		GrantType:     s.OAuth.GrantType,
 		Scope:         s.OAuth.Scope,
+		UseDCR:        useDCR,
 	}
 }
 

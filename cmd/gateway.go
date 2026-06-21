@@ -432,8 +432,9 @@ func runGateway() {
 			FlowMgr:    mcpoauth.NewFlowManager(safeHTTPClient),
 			Refresher:  oauthRefresher,
 			EventBus:   msgBus,
-			PublicURL:  cfg.Gateway.PublicURL,
-			Port:       cfg.Gateway.Port,
+			PublicURL:   cfg.Gateway.PublicURL,
+			Port:        cfg.Gateway.Port,
+			TenantStore: pgStores.Tenants,
 		})
 		// Inject OAuth token provider into MCP tools handler so on-demand tool
 		// discovery can authenticate against OAuth-protected MCP servers.

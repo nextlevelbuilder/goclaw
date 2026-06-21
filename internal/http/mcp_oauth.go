@@ -32,6 +32,9 @@ type MCPOAuthHandler struct {
 	publicURL  string // e.g. "https://goclaw.example.com"
 	port       int
 	evictor    MCPPoolEvictor
+	// tenantStore gates tenant-scoped writes (token mint/revoke/admin status) with a
+	// tenant-admin membership check — RoleAdmin alone is not a tenant check.
+	tenantStore store.TenantStore
 }
 
 // MCPOAuthHandlerDeps contains all dependencies for the OAuth handler.
@@ -42,9 +45,10 @@ type MCPOAuthHandlerDeps struct {
 	FlowMgr    *mcpoauth.FlowManager
 	Refresher  *mcpoauth.Refresher
 	EventBus   bus.EventPublisher
-	PublicURL  string
-	Port       int
-	Evictor    MCPPoolEvictor
+	PublicURL   string
+	Port        int
+	Evictor     MCPPoolEvictor
+	TenantStore store.TenantStore
 }
 
 // NewMCPOAuthHandler creates an MCPOAuthHandler.
@@ -56,9 +60,10 @@ func NewMCPOAuthHandler(deps MCPOAuthHandlerDeps) *MCPOAuthHandler {
 		flowMgr:    deps.FlowMgr,
 		refresher:  deps.Refresher,
 		eventBus:   deps.EventBus,
-		publicURL:  deps.PublicURL,
-		port:       deps.Port,
-		evictor:    deps.Evictor,
+		publicURL:   deps.PublicURL,
+		port:        deps.Port,
+		evictor:     deps.Evictor,
+		tenantStore: deps.TenantStore,
 	}
 }
 
@@ -67,17 +72,18 @@ func (h *MCPOAuthHandler) SetEvictor(e MCPPoolEvictor) { h.evictor = e }
 
 // RegisterRoutes registers all MCP OAuth routes on the given mux.
 func (h *MCPOAuthHandler) RegisterRoutes(mux *http.ServeMux) {
-	// The whole OAuth surface is admin-managed: handleStart mints tokens into the
-	// tenant-scoped mcp_oauth_tokens table, so status (reads client_id/issuer/expiry
-	// and probes other users' tokens via ?user_id=) and revoke (deletes the global
-	// or any per-user token) must require the same RoleAdmin bar. Without it an
-	// operator could revoke the tenant-global token and a viewer could enumerate
-	// other users' OAuth state. Tenant isolation itself is enforced by the
-	// WHERE tenant_id=$N clause in the store.
-	mux.HandleFunc("POST /v1/mcp/oauth/start", requireAuth(permissions.RoleAdmin, h.handleStart))
+	// Authorization is scope-based, mirroring the per-user MCP credentials flow
+	// (resolveTargetUserID in mcp_user_credentials.go): start/status/revoke are
+	// open to any authenticated user, and each handler then calls authorizeOAuthScope —
+	// a user may manage their OWN per-user token (self-service, matching the
+	// MCPUserCredentialsDialog "Authorize" button), while the global/server token
+	// (user_id="") and other users' tokens require tenant-admin. RoleAdmin alone is
+	// not a tenant check; SQL scoping (WHERE tenant_id=$N) is the final layer.
+	// discover only previews AS metadata for a server config — keep it admin-only.
+	mux.HandleFunc("POST /v1/mcp/oauth/start", requireAuth("", h.handleStart))
 	mux.HandleFunc("GET /v1/mcp/oauth/callback", h.handleCallback)
-	mux.HandleFunc("GET /v1/mcp/oauth/status/{id}", requireAuth(permissions.RoleAdmin, h.handleStatus))
-	mux.HandleFunc("DELETE /v1/mcp/oauth/token/{id}", requireAuth(permissions.RoleAdmin, h.handleRevoke))
+	mux.HandleFunc("GET /v1/mcp/oauth/status/{id}", requireAuth("", h.handleStatus))
+	mux.HandleFunc("DELETE /v1/mcp/oauth/token/{id}", requireAuth("", h.handleRevoke))
 	mux.HandleFunc("POST /v1/mcp/oauth/discover/{id}", requireAuth(permissions.RoleAdmin, h.handleDiscover))
 }
 
@@ -144,9 +150,30 @@ type startOAuthResp struct {
 	Completed bool   `json:"completed,omitempty"` // true for client_credentials — token already minted, no redirect needed
 }
 
+// authorizeOAuthScope enforces who may operate on a given OAuth token scope.
+// A per-user token (non-empty targetUserID) may be managed by its owner without
+// admin rights — self-service, matching the per-user MCP credentials flow and the
+// MCPUserCredentialsDialog "Authorize" button. The global/server token
+// (targetUserID="") and another user's per-user token require tenant-admin, so a
+// RoleAdmin who is not a tenant admin cannot mint/revoke tenant-scoped tokens.
+func (h *MCPOAuthHandler) authorizeOAuthScope(w http.ResponseWriter, r *http.Request, targetUserID string) bool {
+	// Self-service: a caller may manage their own per-user token. Only applies to a
+	// non-empty target (the global/server token is shared, never "self").
+	if targetUserID != "" {
+		if callerID := store.UserIDFromContext(r.Context()); callerID != "" && targetUserID == callerID {
+			return true
+		}
+	}
+	// Global token, or a per-user token on behalf of another user → tenant-admin.
+	return requireTenantAdmin(w, r, h.tenantStore)
+}
+
 func (h *MCPOAuthHandler) handleStart(w http.ResponseWriter, r *http.Request) {
 	var req startOAuthReq
 	if !bindJSON(w, r, store.LocaleFromContext(r.Context()), &req) {
+		return
+	}
+	if !h.authorizeOAuthScope(w, r, req.UserID) {
 		return
 	}
 	if req.ServerID == "" || req.MCPURL == "" {
@@ -170,44 +197,84 @@ func (h *MCPOAuthHandler) handleStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Discovery and the resulting resource indicator must bind to the server's
-	// own registered URL, not a client-supplied one. Trusting req.MCPURL would
-	// let the caller mint a token whose resource_uri / AS differ from the server
-	// the agent actually connects to. Fall back to req.MCPURL only when the
-	// server has no stored URL (legacy rows).
-	mcpURL := srv.URL
-	if mcpURL == "" {
-		mcpURL = req.MCPURL
-	}
-
-	// Security: validate MCP URL before discovery.
-	safeClient := security.NewSafeClient(15 * time.Second)
-	// Reuse the shared, cache-backed discoverer when wired (5-min metadata cache);
-	// fall back to a request-local one only when none was injected (e.g. tests).
-	discoverer := h.discoverer
-	if discoverer == nil {
-		discoverer = mcpoauth.NewDiscoverer(safeClient)
-	}
-	disc, err := discoverer.Discover(ctx, mcpURL)
-	if err != nil {
-		slog.Warn("mcpoauth.discover_failed", "server_id", serverID, "url", mcpURL, "error", err)
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "OAuth discovery failed: " + err.Error()})
-		return
-	}
-
-	callbackURI := h.callbackURL(r)
-
-	// Parse server settings — client_id/secret, scope, grant type.
+	// Parse server OAuth settings up front — they decide whether to auto-discover the
+	// AS + dynamically register (use_dcr) or to use operator-supplied endpoints.
+	// use_dcr is a pointer so a legacy/absent value (nil) keeps the discover+DCR path.
 	var oauthSettings struct {
 		OAuth struct {
-			ClientID     string `json:"client_id"`
-			ClientSecret string `json:"client_secret"`
-			Scope        string `json:"scope"`
-			GrantType    string `json:"grant_type"`
+			UseDCR        *bool  `json:"use_dcr"`
+			AuthEndpoint  string `json:"auth_endpoint"`
+			TokenEndpoint string `json:"token_endpoint"`
+			ClientID      string `json:"client_id"`
+			ClientSecret  string `json:"client_secret"`
+			Scope         string `json:"scope"`
+			GrantType     string `json:"grant_type"`
 		} `json:"oauth"`
 	}
 	if len(srv.Settings) > 0 {
 		_ = json.Unmarshal(srv.Settings, &oauthSettings)
+	}
+
+	safeClient := security.NewSafeClient(15 * time.Second)
+	callbackURI := h.callbackURL(r)
+
+	var disc *mcpoauth.DiscoveryResult
+	if oauthSettings.OAuth.UseDCR != nil && !*oauthSettings.OAuth.UseDCR {
+		// Manual mode: the operator disabled DCR and supplied the AS endpoints
+		// directly. We do NOT auto-discover or dynamically register. The endpoints
+		// are SSRF-validated because the token endpoint is dialed server-side and the
+		// authorization endpoint is handed to the browser. A manual client_id is
+		// required (enforced by the no-client_id guard below, since no DCR runs).
+		ae := strings.TrimSpace(oauthSettings.OAuth.AuthEndpoint)
+		te := strings.TrimSpace(oauthSettings.OAuth.TokenEndpoint)
+		// The token endpoint is always required (it is dialed for every grant).
+		// The authorization endpoint is only needed for browser/auth-code grants —
+		// client_credentials has no authorization redirect, matching the UI which
+		// hides the authorization URL field for that grant.
+		if te == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "manual OAuth (use_dcr=false) requires token_endpoint"})
+			return
+		}
+		if oauthSettings.OAuth.GrantType != "client_credentials" && ae == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "manual OAuth (use_dcr=false) requires auth_endpoint for this grant type"})
+			return
+		}
+		// SSRF-validate the token endpoint (always dialed) and the authorization
+		// endpoint when present (handed to the browser).
+		if _, _, verr := security.Validate(te); verr != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid token_endpoint: " + verr.Error()})
+			return
+		}
+		if ae != "" {
+			if _, _, verr := security.Validate(ae); verr != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid auth_endpoint: " + verr.Error()})
+				return
+			}
+		}
+		disc = &mcpoauth.DiscoveryResult{AuthorizationEndpoint: ae, TokenEndpoint: te}
+	} else {
+		// Discovery path. Discovery and the resulting resource indicator must bind to
+		// the server's own registered URL, not a client-supplied one. Trusting
+		// req.MCPURL would let the caller mint a token whose resource_uri / AS differ
+		// from the server the agent actually connects to. Fall back to req.MCPURL only
+		// when the server has no stored URL (legacy rows).
+		mcpURL := srv.URL
+		if mcpURL == "" {
+			mcpURL = req.MCPURL
+		}
+		// Reuse the shared, cache-backed discoverer when wired (5-min metadata cache);
+		// fall back to a request-local one only when none was injected (e.g. tests).
+		discoverer := h.discoverer
+		if discoverer == nil {
+			discoverer = mcpoauth.NewDiscoverer(safeClient)
+		}
+		var derr error
+		disc, derr = discoverer.Discover(ctx, mcpURL)
+		if derr != nil {
+			slog.Warn("mcpoauth.discover_failed", "server_id", serverID, "url", mcpURL, "error", derr)
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "OAuth discovery failed: " + derr.Error()})
+			return
+		}
 	}
 
 	// Determine client credentials — priority:
@@ -515,6 +582,9 @@ type oauthStatusResp struct {
 }
 
 func (h *MCPOAuthHandler) handleStatus(w http.ResponseWriter, r *http.Request) {
+	if !h.authorizeOAuthScope(w, r, r.URL.Query().Get("user_id")) {
+		return
+	}
 	ctx := r.Context()
 	tenantID := store.TenantIDFromContext(ctx)
 	serverID, err := uuid.Parse(r.PathValue("id"))
@@ -555,6 +625,9 @@ func (h *MCPOAuthHandler) handleStatus(w http.ResponseWriter, r *http.Request) {
 // --- DELETE /v1/mcp/oauth/token/{id} ---
 
 func (h *MCPOAuthHandler) handleRevoke(w http.ResponseWriter, r *http.Request) {
+	if !h.authorizeOAuthScope(w, r, r.URL.Query().Get("user_id")) {
+		return
+	}
 	ctx := r.Context()
 	tenantID := store.TenantIDFromContext(ctx)
 	serverID, err := uuid.Parse(r.PathValue("id"))
@@ -605,6 +678,9 @@ type discoverResp struct {
 }
 
 func (h *MCPOAuthHandler) handleDiscover(w http.ResponseWriter, r *http.Request) {
+	if !requireTenantAdmin(w, r, h.tenantStore) {
+		return
+	}
 	ctx := r.Context()
 	serverID, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {

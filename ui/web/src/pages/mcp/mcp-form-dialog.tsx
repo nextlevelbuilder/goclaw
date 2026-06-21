@@ -181,8 +181,11 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit, onTest, on
         auth_type: "oauth",
         use_dcr: data.oauthUseDcr,
         grant_type: data.oauthGrantType,
-        ...(data.oauthAuthEndpoint.trim() ? { auth_endpoint: data.oauthAuthEndpoint.trim() } : {}),
-        ...(data.oauthTokenEndpoint.trim() ? { token_endpoint: data.oauthTokenEndpoint.trim() } : {}),
+        // Manual endpoints only apply when DCR is off; never persist stale values
+        // left in form state after toggling DCR back on (keeps backend + the
+        // token-purge fingerprint consistent with the actual auth mode).
+        ...(!data.oauthUseDcr && data.oauthAuthEndpoint.trim() ? { auth_endpoint: data.oauthAuthEndpoint.trim() } : {}),
+        ...(!data.oauthUseDcr && data.oauthTokenEndpoint.trim() ? { token_endpoint: data.oauthTokenEndpoint.trim() } : {}),
         ...(data.oauthClientId.trim() ? { client_id: data.oauthClientId.trim() } : {}),
         ...(data.oauthClientSecret.trim() ? { client_secret: data.oauthClientSecret.trim() } : {}),
         ...(data.oauthScope.trim() ? { scope: data.oauthScope.trim() } : {}),

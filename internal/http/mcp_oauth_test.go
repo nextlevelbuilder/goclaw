@@ -219,6 +219,22 @@ func adminRequest(method, path string, body any) *http.Request {
 
 // newTestMCPOAuthHandler creates an MCPOAuthHandler with mock dependencies.
 // flowMgr and oauthStore are returned for callers that need to pre-seed state.
+// oauthAdminTS is a test TenantStore that treats every caller as a tenant
+// admin so requireTenantAdmin passes. Negative tests use oauthDenyTS instead.
+type oauthAdminTS struct{ store.TenantStore }
+
+func (oauthAdminTS) GetUserRole(context.Context, uuid.UUID, string) (string, error) {
+	return store.TenantRoleAdmin, nil
+}
+
+// oauthDenyTS is a test TenantStore that grants no role to any caller, so a
+// RoleAdmin caller who is not a tenant admin is rejected by requireTenantAdmin.
+type oauthDenyTS struct{ store.TenantStore }
+
+func (oauthDenyTS) GetUserRole(context.Context, uuid.UUID, string) (string, error) {
+	return "", nil
+}
+
 func newTestMCPOAuthHandler(
 	t *testing.T,
 	mcpStore *mockMCPServerForOAuth,
@@ -230,12 +246,13 @@ func newTestMCPOAuthHandler(
 	setAdminToken(t, "test-admin-token")
 	fm := mcpoauth.NewFlowManager(http.DefaultClient)
 	h := NewMCPOAuthHandler(MCPOAuthHandlerDeps{
-		MCPStore:   mcpStore,
-		OAuthStore: oauthStore,
-		FlowMgr:    fm,
-		EventBus:   eventBus,
-		Evictor:    evictor,
-		Port:       18790,
+		MCPStore:    mcpStore,
+		OAuthStore:  oauthStore,
+		FlowMgr:     fm,
+		EventBus:    eventBus,
+		Evictor:     evictor,
+		Port:        18790,
+		TenantStore: oauthAdminTS{},
 	})
 	return h, fm
 }
@@ -450,6 +467,264 @@ func TestHandleStartWithManualClientID(t *testing.T) {
 	}
 	if !strings.Contains(resp.AuthURL, "https://auth.example.com/authorize") {
 		t.Errorf("auth_url = %q, want auth.example.com", resp.AuthURL)
+	}
+}
+
+// TestHandleStartManualEndpoints verifies use_dcr=false honors operator-supplied
+// auth/token endpoints without auto-discovery (no discovery server is wired).
+func TestHandleStartManualEndpoints(t *testing.T) {
+	security.SetAllowLoopbackForTest(true)
+	defer security.SetAllowLoopbackForTest(false)
+
+	serverID := uuid.New()
+	mcpSt := newMockMCPServerForOAuth()
+	mcpSt.servers[serverID] = &store.MCPServerData{
+		BaseModel: store.BaseModel{ID: serverID},
+		Name:      "manual-server",
+		URL:       "http://127.0.0.1:1/mcp",
+		Settings: json.RawMessage(`{"oauth":{"use_dcr":false,` +
+			`"auth_endpoint":"http://127.0.0.1:1/authorize",` +
+			`"token_endpoint":"http://127.0.0.1:1/token",` +
+			`"client_id":"manual-client-id"}}`),
+	}
+	h, _ := newTestMCPOAuthHandler(t, mcpSt, newMockOAuthTokenStore(), nil, &mockEventBus{})
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+
+	req := adminRequest(http.MethodPost, "/v1/mcp/oauth/start", map[string]string{
+		"server_id": serverID.String(),
+		"mcp_url":   "http://127.0.0.1:1/mcp",
+	})
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		AuthURL  string `json:"auth_url"`
+		ClientID string `json:"client_id"`
+	}
+	_ = json.NewDecoder(w.Body).Decode(&resp)
+	if resp.ClientID != "manual-client-id" {
+		t.Errorf("client_id = %q, want manual-client-id", resp.ClientID)
+	}
+	if !strings.Contains(resp.AuthURL, "http://127.0.0.1:1/authorize") {
+		t.Errorf("auth_url = %q, want the manual authorize endpoint", resp.AuthURL)
+	}
+}
+
+// TestHandleStartManualMissingEndpoints: use_dcr=false without endpoints → 400.
+func TestHandleStartManualMissingEndpoints(t *testing.T) {
+	serverID := uuid.New()
+	mcpSt := newMockMCPServerForOAuth()
+	mcpSt.servers[serverID] = &store.MCPServerData{
+		BaseModel: store.BaseModel{ID: serverID},
+		Name:      "manual-server",
+		URL:       "http://127.0.0.1:1/mcp",
+		Settings:  json.RawMessage(`{"oauth":{"use_dcr":false,"client_id":"x"}}`),
+	}
+	h, _ := newTestMCPOAuthHandler(t, mcpSt, newMockOAuthTokenStore(), nil, &mockEventBus{})
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+
+	req := adminRequest(http.MethodPost, "/v1/mcp/oauth/start", map[string]string{
+		"server_id": serverID.String(), "mcp_url": "http://127.0.0.1:1/mcp",
+	})
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400; body: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestHandleStartManualEndpointSSRF: a manual endpoint pointing at cloud metadata
+// must be rejected by the SSRF guard (no allowLoopback).
+func TestHandleStartManualEndpointSSRF(t *testing.T) {
+	serverID := uuid.New()
+	mcpSt := newMockMCPServerForOAuth()
+	mcpSt.servers[serverID] = &store.MCPServerData{
+		BaseModel: store.BaseModel{ID: serverID},
+		Name:      "manual-server",
+		URL:       "https://mcp.example.com/mcp",
+		Settings: json.RawMessage(`{"oauth":{"use_dcr":false,` +
+			`"auth_endpoint":"http://169.254.169.254/authorize",` +
+			`"token_endpoint":"http://169.254.169.254/token",` +
+			`"client_id":"x"}}`),
+	}
+	h, _ := newTestMCPOAuthHandler(t, mcpSt, newMockOAuthTokenStore(), nil, &mockEventBus{})
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+
+	req := adminRequest(http.MethodPost, "/v1/mcp/oauth/start", map[string]string{
+		"server_id": serverID.String(), "mcp_url": "https://mcp.example.com/mcp",
+	})
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400 (SSRF); body: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "endpoint") {
+		t.Errorf("expected an endpoint SSRF error, got: %s", w.Body.String())
+	}
+}
+
+// TestHandleStartManualClientCredentials: use_dcr=false with client_credentials
+// needs only token_endpoint (no authorization URL) and mints a token directly.
+func TestHandleStartManualClientCredentials(t *testing.T) {
+	security.SetAllowLoopbackForTest(true)
+	defer security.SetAllowLoopbackForTest(false)
+
+	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "cc-access-token",
+			"token_type":   "Bearer",
+			"expires_in":   3600,
+		})
+	}))
+	defer tokenSrv.Close()
+
+	serverID := uuid.New()
+	mcpSt := newMockMCPServerForOAuth()
+	mcpSt.servers[serverID] = &store.MCPServerData{
+		BaseModel: store.BaseModel{ID: serverID},
+		Name:      "cc-server",
+		URL:       "http://127.0.0.1:1/mcp",
+		Settings: json.RawMessage(`{"oauth":{"use_dcr":false,"grant_type":"client_credentials",` +
+			`"token_endpoint":"` + tokenSrv.URL + `",` +
+			`"client_id":"cc-client","client_secret":"cc-secret"}}`),
+	}
+	oauthSt := newMockOAuthTokenStore()
+	h, _ := newTestMCPOAuthHandler(t, mcpSt, oauthSt, nil, &mockEventBus{})
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+
+	req := adminRequest(http.MethodPost, "/v1/mcp/oauth/start", map[string]string{
+		"server_id": serverID.String(), "mcp_url": "http://127.0.0.1:1/mcp",
+	})
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Completed bool `json:"completed"`
+	}
+	_ = json.NewDecoder(w.Body).Decode(&resp)
+	if !resp.Completed {
+		t.Error("expected completed=true for manual client_credentials")
+	}
+	if tok, _ := oauthSt.GetOAuthToken(context.Background(), serverID, uuid.Nil); tok == nil || tok.AccessToken != "cc-access-token" {
+		t.Errorf("expected cc token persisted, got %+v", tok)
+	}
+}
+
+// TestHandleStartRejectsNonTenantAdmin: a RoleAdmin caller that is not a tenant
+// admin for the target tenant must be rejected (Finding 1).
+func TestHandleStartRejectsNonTenantAdmin(t *testing.T) {
+	setAdminToken(t, "test-admin-token")
+	serverID := uuid.New()
+	mcpSt := newMockMCPServerForOAuth()
+	mcpSt.servers[serverID] = &store.MCPServerData{
+		BaseModel: store.BaseModel{ID: serverID},
+		Name:      "srv",
+		URL:       "https://mcp.example.com/mcp",
+	}
+	h := NewMCPOAuthHandler(MCPOAuthHandlerDeps{
+		MCPStore:    mcpSt,
+		OAuthStore:  newMockOAuthTokenStore(),
+		FlowMgr:     mcpoauth.NewFlowManager(http.DefaultClient),
+		TenantStore: oauthDenyTS{}, // RoleAdmin but no tenant-admin role
+		Port:        18790,
+	})
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+
+	req := adminRequest(http.MethodPost, "/v1/mcp/oauth/start", map[string]string{
+		"server_id": serverID.String(), "mcp_url": "https://mcp.example.com/mcp",
+	})
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Errorf("non-tenant-admin start status = %d, want 403; body: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestHandleStartSelfServicePerUser: a non-admin user may authorize their OWN
+// per-user token without tenant-admin rights (matches the user-credentials flow).
+func TestHandleStartSelfServicePerUser(t *testing.T) {
+	security.SetAllowLoopbackForTest(true)
+	defer security.SetAllowLoopbackForTest(false)
+
+	serverID := uuid.New()
+	mcpSt := newMockMCPServerForOAuth()
+	mcpSt.servers[serverID] = &store.MCPServerData{
+		BaseModel: store.BaseModel{ID: serverID},
+		Name:      "manual-server",
+		URL:       "http://127.0.0.1:1/mcp",
+		Settings: json.RawMessage(`{"oauth":{"use_dcr":false,` +
+			`"auth_endpoint":"http://127.0.0.1:1/authorize",` +
+			`"token_endpoint":"http://127.0.0.1:1/token",` +
+			`"client_id":"manual-client-id"}}`),
+	}
+	// denyTenantStore would 403 if the request fell through to the tenant-admin gate.
+	h := NewMCPOAuthHandler(MCPOAuthHandlerDeps{
+		MCPStore:    mcpSt,
+		OAuthStore:  newMockOAuthTokenStore(),
+		FlowMgr:     mcpoauth.NewFlowManager(http.DefaultClient),
+		TenantStore: oauthDenyTS{},
+		Port:        18790,
+	})
+
+	body, _ := json.Marshal(map[string]string{
+		"server_id": serverID.String(),
+		"mcp_url":   "http://127.0.0.1:1/mcp",
+		"user_id":   "user-1",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/mcp/oauth/start", bytes.NewReader(body))
+	// Regular user "user-1" authorizing their own per-user token (call handler
+	// directly, mirroring the user-credentials tests).
+	req = req.WithContext(store.WithTenantID(store.WithUserID(req.Context(), "user-1"), uuid.New()))
+	w := httptest.NewRecorder()
+	h.handleStart(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("self-service per-user start status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestHandleStartPerUserOnBehalfRequiresAdmin: a non-admin user may NOT authorize
+// another user's token — that requires tenant-admin.
+func TestHandleStartPerUserOnBehalfRequiresAdmin(t *testing.T) {
+	serverID := uuid.New()
+	mcpSt := newMockMCPServerForOAuth()
+	mcpSt.servers[serverID] = &store.MCPServerData{
+		BaseModel: store.BaseModel{ID: serverID},
+		Name:      "srv",
+		URL:       "https://mcp.example.com/mcp",
+	}
+	h := NewMCPOAuthHandler(MCPOAuthHandlerDeps{
+		MCPStore:    mcpSt,
+		OAuthStore:  newMockOAuthTokenStore(),
+		FlowMgr:     mcpoauth.NewFlowManager(http.DefaultClient),
+		TenantStore: oauthDenyTS{},
+		Port:        18790,
+	})
+
+	body, _ := json.Marshal(map[string]string{
+		"server_id": serverID.String(),
+		"mcp_url":   "https://mcp.example.com/mcp",
+		"user_id":   "other-user",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/mcp/oauth/start", bytes.NewReader(body))
+	req = req.WithContext(store.WithTenantID(store.WithUserID(req.Context(), "user-1"), uuid.New()))
+	w := httptest.NewRecorder()
+	h.handleStart(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Errorf("on-behalf-of-another start status = %d, want 403; body: %s", w.Code, w.Body.String())
 	}
 }
 
