@@ -122,7 +122,7 @@ func (p *CodexProvider) buildRequestBody(req ChatRequest, stream bool) map[strin
 					"output_format":  "png",
 					"partial_images": 1,
 				})
-			} else {
+			} else if t.Function != nil {
 				// Function tool path (default). Works with both value-type and pointer Function
 				// fields — we only access t.Function when type is not "image_generation".
 				tools = append(tools, map[string]any{

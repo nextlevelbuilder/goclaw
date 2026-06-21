@@ -44,7 +44,9 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 		}
 		allowed := make(map[string]bool, len(toolDefs))
 		for _, td := range toolDefs {
-			allowed[td.Function.Name] = true
+			if td.Function != nil {
+				allowed[td.Function.Name] = true
+			}
 		}
 		state.Tool.AllowedTools = allowed
 	} else {

@@ -194,6 +194,9 @@ func (p *AnthropicProvider) buildRequestBody(model string, req ChatRequest, stre
 	if len(req.Tools) > 0 {
 		var tools []map[string]any
 		for _, t := range req.Tools {
+			if t.Type != "function" || t.Function == nil {
+				continue
+			}
 			cleanedParams := CleanSchemaForProvider("anthropic", t.Function.Parameters)
 			tool := map[string]any{
 				"name":         t.Function.Name,

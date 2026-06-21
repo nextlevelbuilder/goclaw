@@ -239,7 +239,7 @@ func (l *Loop) makeBuildFilteredTools(req *RunRequest) func(state *pipeline.RunS
 		}
 		mcpDefs := 0
 		for _, td := range toolDefs {
-			if strings.HasPrefix(strings.TrimSpace(td.Function.Name), "mcp_") {
+			if td.Function != nil && strings.HasPrefix(strings.TrimSpace(td.Function.Name), "mcp_") {
 				mcpDefs++
 			}
 		}
@@ -508,6 +508,9 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 func shouldRetryTaskMCP(chatReq providers.ChatRequest) bool {
 	hasTaskMCPTool := false
 	for _, td := range chatReq.Tools {
+		if td.Function == nil {
+			continue
+		}
 		name := strings.TrimSpace(td.Function.Name)
 		if strings.HasPrefix(name, "mcp_bx24__") && (strings.Contains(name, "search") || strings.Contains(name, "execute")) {
 			hasTaskMCPTool = true
