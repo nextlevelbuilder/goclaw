@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"go.mau.fi/whatsmeow/proto/waAdv"
 	wastore "go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
@@ -15,6 +16,35 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 )
+
+func TestResetClientLockedDoesNotFallbackToFirstDeviceWhenCredentialJIDMissing(t *testing.T) {
+	ctx := context.Background()
+	db, container := newAuthTestDB(t)
+	existingJID := saveWhatsAppTestDevice(t, container, "15550000001")
+	missingJID := types.NewJID("15550000002", types.DefaultUserServer)
+
+	factory := FactoryWithDB(db, nil, "sqlite3")
+	chRaw, err := factory("wa-target", []byte(fmt.Sprintf(`{"device_jid":%q}`, missingJID.String())), nil, bus.New(), nil)
+	if err != nil {
+		t.Fatalf("factory error = %v", err)
+	}
+	ch := chRaw.(*Channel)
+
+	ch.mu.Lock()
+	if err := ch.resetClientLocked(ctx); err != nil {
+		ch.mu.Unlock()
+		t.Fatalf("resetClientLocked() error = %v", err)
+	}
+	got := ch.client.Store.GetJID()
+	ch.mu.Unlock()
+
+	if got == existingJID {
+		t.Fatalf("resetClientLocked() reused first device %s instead of creating an unpaired scoped device", got)
+	}
+	if !got.IsEmpty() {
+		t.Fatalf("resetClientLocked() Store.ID = %s, want empty JID when scoped credential device is missing", got)
+	}
+}
 
 func TestEnsureQRClientLockedRefreshesDeletedStore(t *testing.T) {
 	ch := newAuthTestChannel(t)
@@ -118,6 +148,17 @@ func TestQRStartUserMessageExplainsDeletedDeviceRecovery(t *testing.T) {
 func newAuthTestChannel(t *testing.T) *Channel {
 	t.Helper()
 
+	_, container := newAuthTestDB(t)
+
+	return &Channel{
+		BaseChannel: channels.NewBaseChannel(channels.TypeWhatsApp, bus.New(), nil),
+		container:   container,
+	}
+}
+
+func newAuthTestDB(t *testing.T) (*sql.DB, *sqlstore.Container) {
+	t.Helper()
+
 	ctx := context.Background()
 	dsn := "file:" + strings.NewReplacer("/", "_", " ", "_").Replace(t.Name()) + "?mode=memory&cache=shared"
 	db, err := sql.Open("sqlite", dsn)
@@ -135,8 +176,23 @@ func newAuthTestChannel(t *testing.T) *Channel {
 		t.Fatalf("upgrade whatsmeow store: %v", err)
 	}
 
-	return &Channel{
-		BaseChannel: channels.NewBaseChannel(channels.TypeWhatsApp, bus.New(), nil),
-		container:   container,
+	return db, container
+}
+
+func saveWhatsAppTestDevice(t *testing.T, container *sqlstore.Container, user string) types.JID {
+	t.Helper()
+
+	jid := types.NewJID(user, types.DefaultUserServer)
+	device := container.NewDevice()
+	device.ID = &jid
+	device.Account = &waAdv.ADVSignedDeviceIdentity{
+		Details:             []byte{},
+		AccountSignatureKey: make([]byte, 32),
+		AccountSignature:    make([]byte, 64),
+		DeviceSignature:     make([]byte, 64),
 	}
+	if err := device.Save(context.Background()); err != nil {
+		t.Fatalf("save test device %s: %v", jid, err)
+	}
+	return jid
 }

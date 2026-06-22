@@ -85,6 +85,19 @@ func TestHandleIncomingMessage_PairedDMPublishesAfterPolicyAllow(t *testing.T) {
 	}
 }
 
+func TestHandleIncomingMessage_OpenDMDropsSenderOutsideConfiguredAllowlist(t *testing.T) {
+	sender := types.NewJID("15550003333", types.DefaultUserServer)
+	cfg := config.WhatsAppConfig{
+		AllowFrom: config.FlexibleStringSlice{"15550004444@s.whatsapp.net"},
+		DMPolicy:  "open",
+	}
+	ch, msgBus, _ := newInboundPolicyTestChannel(t, cfg, whatsappInboundPairingStore{})
+
+	ch.handleIncomingMessage(newWhatsAppTextEvent("msg-dm-open-1", sender, sender, "open but not allowlisted"))
+
+	assertNoWhatsAppInbound(t, msgBus)
+}
+
 func TestHandleIncomingMessage_OpenGroupPolicyPublishesAfterPolicyAllow(t *testing.T) {
 	sender := types.NewJID("15550002222", types.DefaultUserServer)
 	group := types.NewJID("120363025555555555", types.GroupServer)
@@ -153,4 +166,15 @@ func consumeWhatsAppInbound(t *testing.T, msgBus *bus.MessageBus) bus.InboundMes
 		t.Fatal("expected inbound message to be published")
 	}
 	return msg
+}
+
+func assertNoWhatsAppInbound(t *testing.T, msgBus *bus.MessageBus) {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	if msg, ok := msgBus.ConsumeInbound(ctx); ok {
+		t.Fatalf("expected no inbound message, got %+v", msg)
+	}
 }

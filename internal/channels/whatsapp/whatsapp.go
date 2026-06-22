@@ -44,6 +44,7 @@ type Channel struct {
 	parentCtx        context.Context        // stored from Start() for Reauth() context chain
 	audioMgr         *audio.Manager         // unified STT via audio.Manager (nil = no STT)
 	builtinToolStore store.BuiltinToolStore // reads stt settings (whatsapp_enabled) per voice message; nil = opt-out
+	deviceJID        types.JID              // scoped whatsmeow device for DB-backed channel instances
 
 	// QR state
 	lastQRMu        sync.RWMutex
@@ -56,8 +57,27 @@ type Channel struct {
 	typingCancel sync.Map // chatID string → context.CancelFunc
 
 	// reauthMu serializes Reauth() and StartQRFlow() to prevent race when user clicks reauth rapidly.
-	reauthMu sync.Mutex
+	reauthMu                  sync.Mutex
+	legacyFirstDeviceFallback bool // config-file WhatsApp channel migration path only
 	// pairingService, pairingDebounce, approvedGroups, groupHistory are inherited from channels.BaseChannel.
+}
+
+// Option configures optional WhatsApp channel runtime behavior.
+type Option func(*Channel)
+
+// WithDeviceJID scopes the whatsmeow device store to one channel instance.
+func WithDeviceJID(jid types.JID) Option {
+	return func(c *Channel) {
+		c.deviceJID = jid
+	}
+}
+
+// WithLegacyFirstDeviceFallback preserves config-file WhatsApp channels created
+// before DB channel instances stored their own device_jid credential.
+func WithLegacyFirstDeviceFallback() Option {
+	return func(c *Channel) {
+		c.legacyFirstDeviceFallback = true
+	}
 }
 
 // GetLastQRB64 returns the most recent QR PNG (base64).
@@ -88,7 +108,7 @@ func (c *Channel) cacheQR(pngB64 string) {
 func New(cfg config.WhatsAppConfig, msgBus *bus.MessageBus,
 	pairingSvc store.PairingStore, db *sql.DB,
 	pendingStore store.PendingMessageStore, dialect string, audioMgr *audio.Manager,
-	builtinToolStore store.BuiltinToolStore) (*Channel, error) {
+	builtinToolStore store.BuiltinToolStore, opts ...Option) (*Channel, error) {
 
 	base := channels.NewBaseChannel(channels.TypeWhatsApp, msgBus, cfg.AllowFrom)
 	base.ValidatePolicy(cfg.DMPolicy, cfg.GroupPolicy)
@@ -105,6 +125,9 @@ func New(cfg config.WhatsAppConfig, msgBus *bus.MessageBus,
 		audioMgr:         audioMgr,
 		builtinToolStore: builtinToolStore,
 	}
+	for _, opt := range opts {
+		opt(ch)
+	}
 	ch.SetPairingService(pairingSvc)
 	ch.SetGroupHistory(channels.MakeHistory("whatsapp", pendingStore, base.TenantID()))
 	return ch, nil
@@ -118,21 +141,21 @@ func (c *Channel) Start(ctx context.Context) error {
 	c.parentCtx = ctx
 	c.ctx, c.cancel = context.WithCancel(ctx)
 
-	deviceStore, err := c.container.GetFirstDevice(ctx)
-	if err != nil {
+	c.mu.Lock()
+	if err := c.resetClientLocked(ctx); err != nil {
+		c.mu.Unlock()
 		return fmt.Errorf("whatsapp get device: %w", err)
 	}
+	client := c.client
+	c.mu.Unlock()
 
-	c.client = whatsmeow.NewClient(deviceStore, nil)
-	c.client.AddEventHandler(c.handleEvent)
-
-	if c.client.Store.ID == nil {
+	if client.Store.ID == nil {
 		// Not paired yet — QR flow will be triggered by qr_methods.go.
 		slog.Info("whatsapp: not paired yet, waiting for QR scan", "channel", c.Name())
 		c.MarkDegraded("Awaiting QR scan", "Scan QR code to authenticate",
 			channels.ChannelFailureKindAuth, false)
 	} else {
-		if err := c.client.Connect(); err != nil {
+		if err := client.Connect(); err != nil {
 			slog.Warn("whatsapp: initial connect failed", "error", err)
 			c.MarkDegraded("Connection failed", err.Error(),
 				channels.ChannelFailureKindNetwork, true)

@@ -83,6 +83,15 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 		}
 	}
 
+	if peerKind == "direct" && !c.openDMAllowlistAllows(senderID) {
+		slog.Info("whatsapp inbound dropped",
+			c.inboundLogAttrs(peerKind, senderID, chatID,
+				"reason", "dm_allowlist",
+				"policy", effectiveWhatsAppDMPolicy(c.config.DMPolicy),
+				"message_id", string(evt.Info.ID))...)
+		return
+	}
+
 	content := extractTextContent(evt.Message)
 
 	var mediaList []media.MediaInfo
@@ -259,6 +268,16 @@ func effectiveWhatsAppGroupPolicy(policy string) string {
 		return "open"
 	}
 	return policy
+}
+
+func (c *Channel) openDMAllowlistAllows(senderID string) bool {
+	if effectiveWhatsAppDMPolicy(c.config.DMPolicy) != "open" {
+		return true
+	}
+	if !c.HasAllowList() {
+		return true
+	}
+	return c.IsAllowed(senderID)
 }
 
 // extractTextContent extracts text from any WhatsApp message variant.

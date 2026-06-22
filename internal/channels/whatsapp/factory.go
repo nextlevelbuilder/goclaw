@@ -5,12 +5,20 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"go.mau.fi/whatsmeow/types"
+
 	"github.com/nextlevelbuilder/goclaw/internal/audio"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
+
+// whatsappCredentials maps encrypted credentials JSON from channel_instances.
+type whatsappCredentials struct {
+	DeviceJID string `json:"device_jid,omitempty"`
+	BridgeURL string `json:"bridge_url,omitempty"`
+}
 
 // whatsappInstanceConfig maps the non-secret config JSONB from the channel_instances table.
 type whatsappInstanceConfig struct {
@@ -43,23 +51,24 @@ func FactoryWithDBAudio(db *sql.DB, pendingStore store.PendingMessageStore, dial
 			}
 		}
 
-		// Detect old bridge_url config and give clear migration error.
+		var wc whatsappCredentials
+		if len(creds) > 0 {
+			if err := json.Unmarshal(creds, &wc); err != nil {
+				return nil, fmt.Errorf("decode whatsapp credentials: %w", err)
+			}
+			if wc.BridgeURL != "" {
+				return nil, fmt.Errorf("whatsapp: bridge_url is no longer supported - " +
+					"WhatsApp now runs natively via whatsmeow. Remove bridge_url from credentials")
+			}
+		}
+
 		if len(cfg) > 0 {
 			var legacy struct {
 				BridgeURL string `json:"bridge_url"`
 			}
 			if json.Unmarshal(cfg, &legacy) == nil && legacy.BridgeURL != "" {
-				return nil, fmt.Errorf("whatsapp: bridge_url is no longer supported — " +
+				return nil, fmt.Errorf("whatsapp: bridge_url is no longer supported - " +
 					"WhatsApp now runs natively via whatsmeow. Remove bridge_url from config")
-			}
-		}
-		if len(creds) > 0 {
-			var legacy struct {
-				BridgeURL string `json:"bridge_url"`
-			}
-			if json.Unmarshal(creds, &legacy) == nil && legacy.BridgeURL != "" {
-				return nil, fmt.Errorf("whatsapp: bridge_url is no longer supported — " +
-					"WhatsApp now runs natively via whatsmeow. Remove bridge_url from credentials")
 			}
 		}
 
@@ -78,7 +87,16 @@ func FactoryWithDBAudio(db *sql.DB, pendingStore store.PendingMessageStore, dial
 			waCfg.GroupPolicy = "pairing"
 		}
 
-		ch, err := New(waCfg, msgBus, pairingSvc, db, pendingStore, dialect, audioMgr, builtinToolStore)
+		var opts []Option
+		if wc.DeviceJID != "" {
+			jid, err := types.ParseJID(wc.DeviceJID)
+			if err != nil {
+				return nil, fmt.Errorf("decode whatsapp credentials device_jid: %w", err)
+			}
+			opts = append(opts, WithDeviceJID(jid))
+		}
+
+		ch, err := New(waCfg, msgBus, pairingSvc, db, pendingStore, dialect, audioMgr, builtinToolStore, opts...)
 		if err != nil {
 			return nil, err
 		}

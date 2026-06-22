@@ -6,6 +6,8 @@ import (
 	"log/slog"
 
 	"go.mau.fi/whatsmeow"
+	wastore "go.mau.fi/whatsmeow/store"
+	"go.mau.fi/whatsmeow/types"
 )
 
 // StartQRFlow initiates the QR authentication flow.
@@ -117,11 +119,53 @@ func (c *Channel) resetClientLocked(ctx context.Context) error {
 		}
 		c.ctx, c.cancel = context.WithCancel(parent)
 	}
-	deviceStore, err := c.container.GetFirstDevice(ctx)
+	deviceStore, err := c.resolveDeviceStoreLocked(ctx)
 	if err != nil {
 		return err
 	}
 	c.client = whatsmeow.NewClient(deviceStore, nil)
 	c.client.AddEventHandler(c.handleEvent)
 	return nil
+}
+
+func (c *Channel) resolveDeviceStoreLocked(ctx context.Context) (*wastore.Device, error) {
+	if !c.deviceJID.IsEmpty() {
+		deviceStore, err := c.container.GetDevice(ctx, c.deviceJID)
+		if err != nil {
+			return nil, err
+		}
+		if deviceStore != nil && !deviceStore.Deleted {
+			return deviceStore, nil
+		}
+		slog.Info("whatsapp scoped device missing; creating fresh QR device",
+			"channel", c.Name(), "device_hash", hashWhatsAppIdentifier(c.deviceJID.String()))
+		return c.container.NewDevice(), nil
+	}
+
+	if c.legacyFirstDeviceFallback {
+		devices, err := c.container.GetAllDevices(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if len(devices) > 0 {
+			return devices[0], nil
+		}
+	}
+
+	return c.container.NewDevice(), nil
+}
+
+func (c *Channel) currentDeviceJID() types.JID {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.client == nil || c.client.Store == nil {
+		return types.EmptyJID
+	}
+	return c.client.Store.GetJID()
+}
+
+func (c *Channel) setDeviceJID(jid types.JID) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.deviceJID = jid
 }
