@@ -812,6 +812,8 @@
       "maxHistoryShareTip": "Maximum fraction of context window for conversation history (e.g. 0.85 = 85%). Compaction triggers when exceeded.",
       "keepLastMessages": "Keep Last Messages",
       "keepLastMessagesTip": "Recent messages kept after compaction. Older messages are replaced by a summary.",
+      "timeoutSeconds": "Timeout Seconds",
+      "timeoutSecondsTip": "Maximum time to wait for a compaction summary before keeping the original history.",
       "memoryFlush": "Memory Flush",
       "memoryFlushTip": "Before compaction, the agent gets a turn to save important context to memory files. Also triggers Knowledge Graph extraction."
     },

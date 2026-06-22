@@ -797,6 +797,8 @@
       "maxHistoryShareTip": "Tỷ lệ tối đa của cửa sổ ngữ cảnh dành cho lịch sử hội thoại (vd: 0.85 = 85%). Nén kích hoạt khi vượt quá.",
       "keepLastMessages": "Giữ tin nhắn cuối",
       "keepLastMessagesTip": "Số tin nhắn gần nhất giữ lại sau khi nén. Các tin nhắn cũ hơn được thay thế bằng bản tóm tắt.",
+      "timeoutSeconds": "Thời gian chờ (giây)",
+      "timeoutSecondsTip": "Thời gian tối đa chờ bản tóm tắt nén ngữ cảnh trước khi giữ nguyên lịch sử cũ.",
       "memoryFlush": "Ghi nhớ trước nén",
       "memoryFlushTip": "Trước khi nén, agent được một lượt để lưu ngữ cảnh quan trọng vào file bộ nhớ. Cũng kích hoạt trích xuất Knowledge Graph."
     },

@@ -797,6 +797,8 @@
       "maxHistoryShareTip": "上下文窗口用于对话历史的最大比例（如0.85 = 85%）。超过时触发压缩。",
       "keepLastMessages": "保留最后消息数",
       "keepLastMessagesTip": "压缩后保留的最近消息数。旧消息被摘要替换。",
+      "timeoutSeconds": "超时秒数",
+      "timeoutSecondsTip": "等待上下文压缩摘要的最长时间，超时后保留原始历史。",
       "memoryFlush": "压缩前记忆",
       "memoryFlushTip": "压缩前，Agent可以将重要上下文保存到记忆文件。同时触发知识图谱提取。"
     },

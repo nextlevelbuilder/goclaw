@@ -98,6 +98,8 @@
   "agents.compaction.reserveTokensFloorTip": "Bộ đệm token tối thiểu cần dự trữ cho phản hồi mới trước khi nén.",
   "agents.compaction.maxHistoryShare": "Phần lịch sử tối đa (0-1)",
   "agents.compaction.maxHistoryShareTip": "Tỷ lệ cửa sổ ngữ cảnh mà lịch sử cuộc trò chuyện có thể chiếm.",
+  "agents.compaction.timeoutSeconds": "Thời gian chờ (giây)",
+  "agents.compaction.timeoutSecondsTip": "Thời gian tối đa chờ nén ngữ cảnh trước khi giữ nguyên lịch sử cũ.",
 
   "agents.pruning.title": "Cắt bớt ngữ cảnh",
   "agents.pruning.desc": "Cắt bỏ kết quả công cụ cũ để giải phóng không gian ngữ cảnh",

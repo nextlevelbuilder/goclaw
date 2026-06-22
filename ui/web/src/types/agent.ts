@@ -28,6 +28,7 @@ export interface CompactionConfig {
   reserveTokensFloor?: number;
   maxHistoryShare?: number;
   keepLastMessages?: number;
+  timeoutSeconds?: number;
   memoryFlush?: {
     enabled?: boolean;
     softThresholdTokens?: number;

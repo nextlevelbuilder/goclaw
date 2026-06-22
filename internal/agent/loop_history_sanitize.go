@@ -189,7 +189,8 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 	// lastPromptTokens includes everything (system prompt, tools, context files, history).
 	// We subtract estimated overhead so the threshold comparison is history-only.
 	lastPT, lastMC := l.sessions.GetLastPromptTokens(ctx, sessionKey)
-	adjustedLastPT := max(lastPT-l.estimateOverhead(history, lastPT, lastMC), 0)
+	overheadEstimate := l.estimateOverhead(history, lastPT, lastMC)
+	adjustedLastPT := max(lastPT-overheadEstimate, 0)
 	tokenEstimate := EstimateTokensWithCalibration(history, adjustedLastPT, lastMC)
 
 	// Resolve compaction threshold from config: token-only (no message count guard).
@@ -201,6 +202,7 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 
 	threshold := int(float64(l.contextWindow) * historyShare)
 	if tokenEstimate <= threshold {
+		l.logCompactionDecision(sessionKey, "skip", "under_threshold", tokenEstimate, threshold, historyShare, lastPT, lastMC, adjustedLastPT, overheadEstimate)
 		return
 	}
 
@@ -210,9 +212,12 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 	muI, _ := l.summarizeMu.LoadOrStore(sessionKey, &sync.Mutex{})
 	sessionMu := muI.(*sync.Mutex)
 	if !sessionMu.TryLock() {
+		l.logCompactionDecision(sessionKey, "skip", "already_in_progress", tokenEstimate, threshold, historyShare, lastPT, lastMC, adjustedLastPT, overheadEstimate)
 		slog.Debug("summarization already in progress, skipping", "session", sessionKey)
 		return
 	}
+
+	l.logCompactionDecision(sessionKey, "trigger", "", tokenEstimate, threshold, historyShare, lastPT, lastMC, adjustedLastPT, overheadEstimate)
 
 	// Memory flush runs synchronously INSIDE the guard
 	// (so concurrent runs don't both trigger flush for the same compaction cycle).
@@ -234,7 +239,8 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 
 		// Re-check: history may have been truncated by a concurrent summarize
 		// that finished between our threshold check and acquiring the lock.
-		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 120*time.Second)
+		timeout := l.compactionTimeout()
+		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
 		defer cancel()
 
 		history := l.sessions.GetHistory(sctx, sessionKey)
@@ -283,7 +289,19 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 		prompt.WriteString(sb.String())
 
 		inTokens := l.estimateSummaryInputTokens(toSummarize)
-		slog.Info("compact_budget", "agent", l.id, "in_tokens", inTokens, "out_tokens", dynamicSummaryMax(inTokens))
+		slog.Info("compact_budget",
+			"path", "post-turn",
+			"agent", l.id,
+			"session", sessionKey,
+			"in_tokens", inTokens,
+			"out_tokens", dynamicSummaryMax(inTokens),
+			"context_window", l.contextWindow,
+			"threshold", threshold,
+			"token_estimate", tokenEstimate,
+			"max_history_share", historyShare,
+			"reserve_tokens_floor", l.resolveReserveTokens(),
+			"timeout_seconds", int(timeout/time.Second),
+		)
 		chatReq := providers.ChatRequest{
 			Messages: []providers.Message{{Role: "user", Content: prompt.String()}},
 			Model:    l.model,
@@ -330,6 +348,28 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 		})
 		l.sessions.Save(sctx, sessionKey)
 	}()
+}
+
+func (l *Loop) logCompactionDecision(sessionKey, decision, skipReason string, tokenEstimate, threshold int, historyShare float64, lastPromptTokens, lastMessageCount, adjustedLastPromptTokens, overheadEstimate int) {
+	args := []any{
+		"path", "post-turn",
+		"agent", l.id,
+		"session", sessionKey,
+		"decision", decision,
+		"context_window", l.contextWindow,
+		"threshold", threshold,
+		"token_estimate", tokenEstimate,
+		"max_history_share", historyShare,
+		"reserve_tokens_floor", l.resolveReserveTokens(),
+		"last_prompt_tokens", lastPromptTokens,
+		"last_message_count", lastMessageCount,
+		"adjusted_last_prompt_tokens", adjustedLastPromptTokens,
+		"overhead_estimate", overheadEstimate,
+	}
+	if skipReason != "" {
+		args = append(args, "skip_reason", skipReason)
+	}
+	slog.Info("compaction_decision", args...)
 }
 
 // estimateOverhead derives the non-history token overhead (system prompt + tool definitions +

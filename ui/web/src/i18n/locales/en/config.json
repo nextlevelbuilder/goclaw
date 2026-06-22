@@ -98,6 +98,8 @@
   "agents.compaction.reserveTokensFloorTip": "Minimum token buffer to reserve for new responses before compacting.",
   "agents.compaction.maxHistoryShare": "Max History Share (0-1)",
   "agents.compaction.maxHistoryShareTip": "Fraction of the context window that conversation history can occupy.",
+  "agents.compaction.timeoutSeconds": "Timeout Seconds",
+  "agents.compaction.timeoutSecondsTip": "Maximum time to wait for compaction before keeping the original history.",
 
   "agents.pruning.title": "Context Pruning",
   "agents.pruning.desc": "Trim old tool results to free context space",

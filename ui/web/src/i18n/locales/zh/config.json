@@ -98,6 +98,8 @@
   "agents.compaction.reserveTokensFloorTip": "压缩前为新响应保留的最小 Token 缓冲区。",
   "agents.compaction.maxHistoryShare": "最大历史占比（0-1）",
   "agents.compaction.maxHistoryShareTip": "对话历史可占用的上下文窗口比例。",
+  "agents.compaction.timeoutSeconds": "超时秒数",
+  "agents.compaction.timeoutSecondsTip": "等待上下文压缩的最长时间，超时后保留原始历史。",
 
   "agents.pruning.title": "上下文裁剪",
   "agents.pruning.desc": "裁剪旧工具结果以释放上下文空间",

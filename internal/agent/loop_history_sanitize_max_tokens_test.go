@@ -1,7 +1,10 @@
 package agent
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,29 +27,29 @@ type nopSessionStore struct {
 func (n *nopSessionStore) GetOrCreate(_ context.Context, _ string) *store.SessionData {
 	return &store.SessionData{}
 }
-func (n *nopSessionStore) Get(_ context.Context, _ string) *store.SessionData { return nil }
+func (n *nopSessionStore) Get(_ context.Context, _ string) *store.SessionData          { return nil }
 func (n *nopSessionStore) AddMessage(_ context.Context, _ string, _ providers.Message) {}
 func (n *nopSessionStore) GetHistory(_ context.Context, _ string) []providers.Message {
 	return n.history
 }
-func (n *nopSessionStore) GetSummary(_ context.Context, _ string) string   { return "" }
-func (n *nopSessionStore) SetSummary(_ context.Context, _, _ string)       {}
-func (n *nopSessionStore) GetLabel(_ context.Context, _ string) string     { return "" }
-func (n *nopSessionStore) SetLabel(_ context.Context, _, _ string)         {}
+func (n *nopSessionStore) GetSummary(_ context.Context, _ string) string                   { return "" }
+func (n *nopSessionStore) SetSummary(_ context.Context, _, _ string)                       {}
+func (n *nopSessionStore) GetLabel(_ context.Context, _ string) string                     { return "" }
+func (n *nopSessionStore) SetLabel(_ context.Context, _, _ string)                         {}
 func (n *nopSessionStore) SetAgentInfo(_ context.Context, _ string, _ uuid.UUID, _ string) {}
-func (n *nopSessionStore) TruncateHistory(_ context.Context, _ string, _ int) {}
-func (n *nopSessionStore) SetHistory(_ context.Context, _ string, _ []providers.Message) {}
-func (n *nopSessionStore) Reset(_ context.Context, _ string)               {}
-func (n *nopSessionStore) Delete(_ context.Context, _ string) error        { return nil }
-func (n *nopSessionStore) Save(_ context.Context, _ string) error          { return nil }
+func (n *nopSessionStore) TruncateHistory(_ context.Context, _ string, _ int)              {}
+func (n *nopSessionStore) SetHistory(_ context.Context, _ string, _ []providers.Message)   {}
+func (n *nopSessionStore) Reset(_ context.Context, _ string)                               {}
+func (n *nopSessionStore) Delete(_ context.Context, _ string) error                        { return nil }
+func (n *nopSessionStore) Save(_ context.Context, _ string) error                          { return nil }
 
 // SessionMetadataStore methods
-func (n *nopSessionStore) UpdateMetadata(_ context.Context, _, _, _, _ string)      {}
-func (n *nopSessionStore) AccumulateTokens(_ context.Context, _ string, _, _ int64) {}
-func (n *nopSessionStore) IncrementCompaction(_ context.Context, _ string)           {}
-func (n *nopSessionStore) GetCompactionCount(_ context.Context, _ string) int        { return 0 }
+func (n *nopSessionStore) UpdateMetadata(_ context.Context, _, _, _, _ string)           {}
+func (n *nopSessionStore) AccumulateTokens(_ context.Context, _ string, _, _ int64)      {}
+func (n *nopSessionStore) IncrementCompaction(_ context.Context, _ string)               {}
+func (n *nopSessionStore) GetCompactionCount(_ context.Context, _ string) int            { return 0 }
 func (n *nopSessionStore) GetMemoryFlushCompactionCount(_ context.Context, _ string) int { return 0 }
-func (n *nopSessionStore) SetMemoryFlushDone(_ context.Context, _ string)            {}
+func (n *nopSessionStore) SetMemoryFlushDone(_ context.Context, _ string)                {}
 func (n *nopSessionStore) GetSessionMetadata(_ context.Context, _ string) map[string]string {
 	return nil
 }
@@ -123,7 +126,7 @@ func TestMaybeSummarize_MaxTokensDynamic(t *testing.T) {
 		contextWindow: contextWindow,
 		sessions:      sessions,
 		// hasMemory = false → shouldRunMemoryFlush returns false (skip memory flush)
-		hasMemory:     false,
+		hasMemory: false,
 		// compactionCfg nil → uses DefaultHistoryShare (0.85), keepLast=4
 		compactionCfg: nil,
 		// tokenCounter nil → estimateSummaryInputTokens uses rune/3 fallback
@@ -164,6 +167,91 @@ func TestMaybeSummarize_MaxTokensDynamic(t *testing.T) {
 	}
 }
 
+func TestMaybeSummarize_LogsSkipDecisionUnderThreshold(t *testing.T) {
+	sessions := &nopSessionStore{
+		history: []providers.Message{
+			{Role: "user", Content: "short request"},
+			{Role: "assistant", Content: "short response"},
+		},
+		lastPromptTokens: 0,
+		lastMsgCount:     0,
+	}
+	loop := &Loop{
+		id:            "test-agent",
+		provider:      &capturingProvider{response: "unused"},
+		model:         "claude-3-5-sonnet",
+		contextWindow: 10000,
+		sessions:      sessions,
+		hasMemory:     false,
+	}
+
+	logs := captureSlog(t, func() {
+		loop.maybeSummarize(context.Background(), "test-session-key")
+	})
+
+	assertLogContains(t, logs,
+		"compaction_decision",
+		`"path":"post-turn"`,
+		`"decision":"skip"`,
+		`"skip_reason":"under_threshold"`,
+		`"agent":"test-agent"`,
+		`"session":"test-session-key"`,
+		`"context_window":10000`,
+	)
+}
+
+func TestMaybeSummarize_LogsTriggerDecisionOverThreshold(t *testing.T) {
+	const contextWindow = 10000
+
+	longContent := makeLongString(9000)
+	history := make([]providers.Message, 10)
+	for i := range history {
+		if i%2 == 0 {
+			history[i] = providers.Message{Role: "user", Content: longContent}
+		} else {
+			history[i] = providers.Message{Role: "assistant", Content: longContent}
+		}
+	}
+
+	done := make(chan struct{}, 1)
+	provider := &signallingProvider{
+		capturingProvider: capturingProvider{response: "compaction summary"},
+		done:              done,
+	}
+	sessions := &nopSessionStore{
+		history:          history,
+		lastPromptTokens: 0,
+		lastMsgCount:     0,
+	}
+	loop := &Loop{
+		id:            "test-agent",
+		provider:      provider,
+		model:         "claude-3-5-sonnet",
+		contextWindow: contextWindow,
+		sessions:      sessions,
+		hasMemory:     false,
+	}
+
+	logs := captureSlog(t, func() {
+		loop.maybeSummarize(context.Background(), "test-session-key")
+	})
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for maybeSummarize to call provider.Chat")
+	}
+
+	assertLogContains(t, logs,
+		"compaction_decision",
+		`"path":"post-turn"`,
+		`"decision":"trigger"`,
+		`"agent":"test-agent"`,
+		`"session":"test-session-key"`,
+		`"context_window":10000`,
+	)
+}
+
 // makeLongString returns a string of n ASCII characters ('a').
 func makeLongString(n int) string {
 	b := make([]byte, n)
@@ -171,4 +259,26 @@ func makeLongString(n int) string {
 		b[i] = 'a'
 	}
 	return string(b)
+}
+
+func captureSlog(t *testing.T, fn func()) string {
+	t.Helper()
+
+	var buf bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	defer slog.SetDefault(previous)
+
+	fn()
+	return buf.String()
+}
+
+func assertLogContains(t *testing.T, logs string, fragments ...string) {
+	t.Helper()
+
+	for _, fragment := range fragments {
+		if !strings.Contains(logs, fragment) {
+			t.Fatalf("logs do not contain %q\nlogs:\n%s", fragment, logs)
+		}
+	}
 }

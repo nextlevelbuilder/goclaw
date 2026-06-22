@@ -39,6 +39,15 @@ export function CompactionSection({ value, onChange }: CompactionSectionProps) {
             onChange={(e) => onChange({ ...value, keepLastMessages: numOrUndef(e.target.value) })}
           />
         </div>
+        <div className="space-y-2">
+          <InfoLabel tip={t(`${s}.timeoutSecondsTip`)}>{t(`${s}.timeoutSeconds`)}</InfoLabel>
+          <Input
+            type="number"
+            placeholder="120"
+            value={value.timeoutSeconds ?? ""}
+            onChange={(e) => onChange({ ...value, timeoutSeconds: numOrUndef(e.target.value) })}
+          />
+        </div>
       </div>
       <div className="flex items-center gap-2">
         <Switch
