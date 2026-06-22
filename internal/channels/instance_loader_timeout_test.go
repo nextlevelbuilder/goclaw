@@ -141,6 +141,52 @@ func TestLoadInstanceByIDLoadsTargetWithoutReloadingExisting(t *testing.T) {
 	}
 }
 
+func TestLoadInstanceByIDRefreshesSameNameDifferentInstance(t *testing.T) {
+	msgBus := bus.New()
+	mgr := NewManager(msgBus)
+	oldID := uuid.New()
+	newID := uuid.New()
+
+	loader := NewInstanceLoader(&singleInstanceStore{inst: store.ChannelInstanceData{
+		BaseModel:   store.BaseModel{ID: newID},
+		Name:        "whatsapp-main",
+		ChannelType: TypeWhatsApp,
+		Enabled:     true,
+	}}, nil, mgr, msgBus, nil)
+
+	oldChannel := newTimeoutTestChannel("whatsapp-main", TypeWhatsApp, false)
+	mgr.RegisterChannel("whatsapp-main", oldChannel)
+	loader.loaded["whatsapp-main"] = struct{}{}
+	loader.loadedIDs["whatsapp-main"] = oldID
+
+	var loadedChannel *timeoutTestChannel
+	loader.RegisterFactory(TypeWhatsApp, func(name string, _ json.RawMessage, _ json.RawMessage, _ *bus.MessageBus, _ store.PairingStore) (Channel, error) {
+		loadedChannel = newTimeoutTestChannel(name, TypeWhatsApp, false)
+		return loadedChannel, nil
+	})
+
+	if err := loader.LoadInstanceByID(context.Background(), newID); err != nil {
+		t.Fatalf("LoadInstanceByID returned error: %v", err)
+	}
+
+	if oldChannel.stopCalls.Load() == 0 {
+		t.Fatal("expected stale same-name channel to be stopped before targeted reload")
+	}
+	got, ok := mgr.GetChannel("whatsapp-main")
+	if !ok {
+		t.Fatal("expected refreshed channel to be registered")
+	}
+	if got == oldChannel {
+		t.Fatal("expected manager to replace stale same-name channel")
+	}
+	if got != loadedChannel {
+		t.Fatal("manager registered unexpected channel after targeted reload")
+	}
+	if loader.loadedIDs["whatsapp-main"] != newID {
+		t.Fatalf("loadedIDs = %s, want %s", loader.loadedIDs["whatsapp-main"], newID)
+	}
+}
+
 // TestLoadInstance_HungStartDoesNotBlock verifies that a Start() that never
 // returns is abandoned after reloadStartTimeout so Reload() can proceed to
 // other channels instead of deadlocking on the loader mutex.

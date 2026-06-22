@@ -46,7 +46,8 @@ type InstanceLoader struct {
 	msgBus            *bus.MessageBus
 	pairingSvc        store.PairingStore
 	mu                sync.Mutex
-	loaded            map[string]struct{} // channel names managed by this loader
+	loaded            map[string]struct{}  // channel names managed by this loader
+	loadedIDs         map[string]uuid.UUID // channel name -> DB instance ID
 }
 
 // NewInstanceLoader creates a new InstanceLoader.
@@ -65,6 +66,7 @@ func NewInstanceLoader(
 		msgBus:     msgBus,
 		pairingSvc: pairingSvc,
 		loaded:     make(map[string]struct{}),
+		loadedIDs:  make(map[string]uuid.UUID),
 	}
 }
 
@@ -132,6 +134,7 @@ func (l *InstanceLoader) Reload(ctx context.Context) {
 		l.manager.UnregisterChannel(name)
 	}
 	l.loaded = make(map[string]struct{})
+	l.loadedIDs = make(map[string]uuid.UUID)
 
 	// Brief pause to let external APIs (e.g., Telegram getUpdates) release polling locks.
 	time.Sleep(500 * time.Millisecond)
@@ -170,10 +173,19 @@ func (l *InstanceLoader) LoadInstanceByID(ctx context.Context, id uuid.UUID) err
 	}
 
 	if _, ok := l.loaded[inst.Name]; ok {
-		if _, exists := l.manager.GetChannel(inst.Name); exists {
-			return nil
+		if loadedID, hasLoadedID := l.loadedIDs[inst.Name]; hasLoadedID && loadedID == inst.ID {
+			if _, exists := l.manager.GetChannel(inst.Name); exists {
+				return nil
+			}
+		} else if ch, exists := l.manager.GetChannel(inst.Name); exists {
+			if err := ch.Stop(ctx); err != nil {
+				slog.Warn("failed to stop stale channel instance before targeted reload",
+					"name", inst.Name, "old_id", loadedID, "new_id", inst.ID, "error", err)
+			}
+			l.manager.UnregisterChannel(inst.Name)
 		}
 		delete(l.loaded, inst.Name)
+		delete(l.loadedIDs, inst.Name)
 	}
 
 	if !inst.Enabled {
@@ -202,6 +214,7 @@ func (l *InstanceLoader) Stop(ctx context.Context) {
 		l.manager.UnregisterChannel(name)
 	}
 	l.loaded = make(map[string]struct{})
+	l.loadedIDs = make(map[string]uuid.UUID)
 }
 
 // coerceStringBools converts string "true"/"false" values to JSON booleans
@@ -249,6 +262,7 @@ func (l *InstanceLoader) LoadedNames() map[string]struct{} {
 // If false, the caller is responsible for starting (used by LoadAll, where StartAll handles it).
 func (l *InstanceLoader) loadInstance(ctx context.Context, inst store.ChannelInstanceData, autoStart bool) error {
 	l.loaded[inst.Name] = struct{}{}
+	l.loadedIDs[inst.Name] = inst.ID
 
 	factory, ok := l.factories[inst.ChannelType]
 	if !ok {

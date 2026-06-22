@@ -2,6 +2,7 @@ package whatsapp
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -25,6 +26,14 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 	ctx = store.WithTenantID(ctx, c.TenantID())
 
 	if evt.Info.IsFromMe {
+		peerKind := "direct"
+		if evt.Info.Chat.Server == types.GroupServer {
+			peerKind = "group"
+		}
+		slog.Debug("whatsapp inbound dropped",
+			c.inboundLogAttrs(peerKind, evt.Info.Sender.String(), evt.Info.Chat.String(),
+				"reason", "from_self",
+				"message_id", string(evt.Info.ID))...)
 		return
 	}
 
@@ -46,24 +55,32 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 		peerKind = "group"
 	}
 
-	slog.Debug("whatsapp incoming", "peer", peerKind, "sender", senderID, "chat", chatID,
-		"addressing", evt.Info.AddressingMode, "policy", c.config.GroupPolicy)
+	slog.Debug("whatsapp inbound received",
+		c.inboundLogAttrs(peerKind, senderID, chatID,
+			"message_id", string(evt.Info.ID),
+			"addressing", evt.Info.AddressingMode,
+			"dm_policy", effectiveWhatsAppDMPolicy(c.config.DMPolicy),
+			"group_policy", effectiveWhatsAppGroupPolicy(c.config.GroupPolicy))...)
 
 	// DM/Group policy check.
 	if peerKind == "direct" {
 		if !c.checkDMPolicy(ctx, senderID, chatID) {
+			slog.Info("whatsapp inbound dropped",
+				c.inboundLogAttrs(peerKind, senderID, chatID,
+					"reason", "dm_policy",
+					"policy", effectiveWhatsAppDMPolicy(c.config.DMPolicy),
+					"message_id", string(evt.Info.ID))...)
 			return
 		}
 	} else {
 		if !c.checkGroupPolicy(ctx, senderID, chatID) {
-			slog.Info("whatsapp group message rejected by policy", "sender_id", senderID, "chat_id", chatID, "policy", c.config.GroupPolicy)
+			slog.Info("whatsapp inbound dropped",
+				c.inboundLogAttrs(peerKind, senderID, chatID,
+					"reason", "group_policy",
+					"policy", effectiveWhatsAppGroupPolicy(c.config.GroupPolicy),
+					"message_id", string(evt.Info.ID))...)
 			return
 		}
-	}
-
-	if !c.IsAllowed(senderID) {
-		slog.Info("whatsapp message rejected by allowlist", "sender_id", senderID)
-		return
 	}
 
 	content := extractTextContent(evt.Message)
@@ -72,6 +89,10 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 	mediaList = c.downloadMedia(evt)
 
 	if content == "" && len(mediaList) == 0 {
+		slog.Info("whatsapp inbound dropped",
+			c.inboundLogAttrs(peerKind, senderID, chatID,
+				"reason", "empty_message",
+				"message_id", string(evt.Info.ID))...)
 		return
 	}
 	if content == "" {
@@ -85,6 +106,10 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 	}
 	if peerKind == "group" && c.config.RequireMention != nil && *c.config.RequireMention {
 		if !c.isMentioned(evt) {
+			slog.Info("whatsapp inbound dropped",
+				c.inboundLogAttrs(peerKind, senderID, chatID,
+					"reason", "mention_required",
+					"message_id", string(evt.Info.ID))...)
 			// Not mentioned — record for context and skip.
 			senderLabel := evt.Info.PushName
 			if senderLabel == "" {
@@ -173,6 +198,14 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 		userID = senderID[:idx]
 	}
 
+	if c.AgentID() == "" {
+		slog.Warn("whatsapp inbound accepted without configured agent",
+			c.inboundLogAttrs(peerKind, senderID, chatID, "message_id", string(evt.Info.ID))...)
+	} else {
+		slog.Debug("whatsapp inbound accepted",
+			c.inboundLogAttrs(peerKind, senderID, chatID, "message_id", string(evt.Info.ID))...)
+	}
+
 	c.Bus().PublishInbound(bus.InboundMessage{
 		Channel:  c.Name(),
 		SenderID: senderID,
@@ -192,6 +225,40 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 		tmpPaths = append(tmpPaths, mf.Path)
 	}
 	scheduleMediaCleanup(tmpPaths, 5*time.Minute)
+}
+
+func (c *Channel) inboundLogAttrs(peerKind, senderID, chatID string, extra ...any) []any {
+	attrs := []any{
+		"channel", c.Name(),
+		"tenant", c.TenantID(),
+		"peer", peerKind,
+		"sender_hash", hashWhatsAppIdentifier(senderID),
+		"chat_hash", hashWhatsAppIdentifier(chatID),
+		"agent_id_present", c.AgentID() != "",
+	}
+	return append(attrs, extra...)
+}
+
+func hashWhatsAppIdentifier(id string) string {
+	if id == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(id))
+	return fmt.Sprintf("%x", sum[:6])
+}
+
+func effectiveWhatsAppDMPolicy(policy string) string {
+	if policy == "" {
+		return "pairing"
+	}
+	return policy
+}
+
+func effectiveWhatsAppGroupPolicy(policy string) string {
+	if policy == "" {
+		return "open"
+	}
+	return policy
 }
 
 // extractTextContent extracts text from any WhatsApp message variant.
