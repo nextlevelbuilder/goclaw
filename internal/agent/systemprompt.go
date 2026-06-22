@@ -711,29 +711,14 @@ func buildSkillsSection(skillsSummary string, hasSkillSearch, hasSkillManage boo
 	if skillsSummary != "" {
 		// Inline mode: skills XML is in the prompt (like TS).
 		// Agent scans <available_skills> descriptions directly.
-		lines = append(lines,
-			"## Skills (mandatory)",
-			"",
-			"Before replying, scan `<available_skills>` below.",
-			"If a skill clearly applies, read its SKILL.md at the `<location>` path with `read_file`, then follow it.",
-			"If multiple could apply, choose the most specific one. Never read more than one skill up front.",
-			"If none apply, proceed normally.",
-			"",
-			skillsSummary,
-			"",
-		)
+		lines = append(lines, "## Skills (mandatory)", "")
+		lines = append(lines, skillLoadingProtocolLines()...)
+		lines = append(lines, skillsSummary, "")
 	} else if hasSkillSearch {
 		// Search mode: too many skills to inline, agent uses skill_search tool.
+		lines = append(lines, "## Skills (mandatory)", "")
+		lines = append(lines, skillLoadingProtocolLines()...)
 		lines = append(lines,
-			"## Skills (mandatory)",
-			"",
-			"Before replying, check if a skill applies:",
-			"1. Run `skill_search` with **English keywords** describing the domain (e.g. \"weather\", \"translate\", \"github\").",
-			"   Even if the user writes in another language, always search in English.",
-			"2. If a match is found, read its SKILL.md at the returned `location` with `read_file`, then follow it.",
-			"3. If multiple skills match, choose the most specific one. Never read more than one skill up front.",
-			"4. If no match, proceed normally.",
-			"",
 			"Constraints:",
 			"- Prefer `skill_search` over `browser` or `web_search` when the domain might have a skill.",
 			"- If skill_search returns no results, fall back to other tools freely.",

@@ -433,6 +433,18 @@ func (p *Portal) Exchange(ctx context.Context, code string) error {
 	return p.persistState(context.WithoutCancel(ctx))
 }
 
+// RefreshUserToken refreshes an arbitrary per-user Bitrix OAuth token using
+// this portal's client_id/secret (grant_type=refresh_token). Used by the MCP
+// provisioner to renew a stored per-user refresh_token when an inbound event
+// doesn't carry OAuth tokens. Keeps client_id/secret encapsulated in Portal.
+//
+// NOTE: this does NOT touch the portal's own token state — it operates purely
+// on the caller-supplied refresh_token. Bitrix rotates the refresh_token on
+// each call, so the caller MUST persist the returned pair.
+func (p *Portal) RefreshUserToken(ctx context.Context, refreshToken string) (*TokenResponse, error) {
+	return p.client.RefreshToken(ctx, p.creds.ClientID, p.creds.ClientSecret, refreshToken)
+}
+
 func (p *Portal) validateTokenResponseIdentity(flow string, tr *TokenResponse) error {
 	if tr == nil {
 		return fmt.Errorf("bitrix24 %s: nil token response", flow)

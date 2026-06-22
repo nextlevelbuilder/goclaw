@@ -353,7 +353,7 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 	// the MCP server's tools, which is strictly better UX than the channel
 	// denying the message. The typed errors let tests assert behavior
 	// without string matching.
-	if err := c.provisionIfMissing(ctx, senderID, evt.Auth); err != nil {
+	if err := c.provisionIfMissing(ctx, senderID, evt.Params.FromIsConnector, evt.Auth); err != nil {
 		switch {
 		case errors.Is(err, ErrProvisionDisabled),
 			errors.Is(err, ErrProvisionSkippedOpenChannel),

@@ -271,11 +271,7 @@ func buildSkillsHybridSection(pinnedSummary string, hasSearch, hasManage bool) [
 		)
 	}
 	if hasSearch {
-		lines = append(lines,
-			"For other skills, run `skill_search` with **English keywords** describing the domain.",
-			"If a match is found, read its SKILL.md at the returned location, then follow it.",
-			"",
-		)
+		lines = append(lines, skillLoadingProtocolLines()...)
 	}
 	if hasManage {
 		lines = append(lines, "### Skill Creation", "",
@@ -284,6 +280,24 @@ func buildSkillsHybridSection(pinnedSummary string, hasSearch, hasManage bool) [
 			"")
 	}
 	return lines
+}
+
+// skillLoadingProtocolLines is the shared, mechanical protocol for activating
+// and loading skills. Centralized so every skills section (hybrid, inline,
+// search) gives the model identical path-safe steps: read the EXACT location
+// verbatim, never guess a SKILL.md path.
+func skillLoadingProtocolLines() []string {
+	return []string{
+		"Skill loading protocol — follow exactly:",
+		"1. Check the `<available_skills>` list in this prompt.",
+		"2. If a clearly matching skill is listed there: call `use_skill(\"<name>\")`; then, if `use_skill` did not return the skill's full instructions, call `read_file` with the EXACT `<location>` from `<available_skills>` (copy it verbatim, including the leading `/`); then follow the SKILL.md.",
+		"3. If no clear match is listed: call `skill_search` with **English keywords**, pick the most specific result, call `use_skill(\"<name>\")`, then `read_file` the EXACT `location` returned by `skill_search`; then follow the SKILL.md.",
+		"4. Never guess, construct, or modify SKILL.md paths — only use a `location` value copied verbatim.",
+		"5. If `read_file` fails, do not invent another path: call `skill_search` again by skill name and read the `location` it returns.",
+		"6. `use_skill` only activates/traces the skill; it does not load the instructions unless it returns the full content.",
+		"7. Read at most one skill up front; if none apply, proceed normally.",
+		"",
+	}
 }
 
 // buildSandboxSection creates the "## Sandbox" section matching TS system-prompt.ts lines 476-519.

@@ -139,11 +139,14 @@ func (c *Channel) initMCPProvisioner(ctx context.Context) error {
 // HandleMessage regardless, so user messages always get processed.
 //
 // Called from handleMessage after EnsureContact, before HandleMessage.
-func (c *Channel) provisionIfMissing(ctx context.Context, userID string, auth EventAuth) error {
-	// Skip #1: Open Channel bot. No per-user credentials for transient
-	// customers — see type docstring.
-	if c.IsOpenChannelBot() {
-		slog.Debug("bitrix24 mcp: provision skip open channel", "channel", c.Name(), "user_id", userID)
+func (c *Channel) provisionIfMissing(ctx context.Context, userID string, fromConnector bool, auth EventAuth) error {
+	// Skip #1: Open Channel message from an external connector customer.
+	// Transient customers reach the bot via a connector (Zalo/FB/etc.) and
+	// report IS_CONNECTOR=Y — they are not Bitrix users and have no per-user
+	// OAuth, so skip them. Internal staff who join an Open Channel session
+	// report IS_CONNECTOR=N and DO have OAuth, so they must be provisioned.
+	if c.IsOpenChannelBot() && fromConnector {
+		slog.Debug("bitrix24 mcp: provision skip open channel connector", "channel", c.Name(), "user_id", userID)
 		return ErrProvisionSkippedOpenChannel
 	}
 
@@ -210,11 +213,15 @@ func (c *Channel) provisionIfMissing(ctx context.Context, userID string, auth Ev
 	// so a failed auto-onboard can trigger 3–5 attempts per second
 	// without this guard. TTL = 60s covers the retry burst window and
 	// the typical "MCP server blip" recovery time.
-	if c.isMCPProvisionDebounced(c.mcpServerID, userID) {
+	// Atomic check-and-set: an aggressive Bitrix retry burst can deliver
+	// several events for the same user near-simultaneously. A separate
+	// check-then-mark leaves a TOCTOU gap where two of them both pass the gate
+	// and both run a self-refresh, double-rotating the refresh_token (the
+	// second then fails on the now-consumed token). Acquire under one lock.
+	if !c.tryAcquireMCPProvision(c.mcpServerID, userID) {
 		slog.Warn("bitrix24 mcp: provision debounced", "channel", c.Name(), "user_id", userID)
 		return ErrProvisionDebounced
 	}
-	c.markMCPProvisionDebounced(c.mcpServerID, userID)
 
 	// OAuth tokens are plumbed through the webhook event's auth block —
 	// MCP server uses them to call Bitrix REST on behalf of this user.
@@ -222,7 +229,15 @@ func (c *Channel) provisionIfMissing(ctx context.Context, userID string, auth Ev
 	// but surface them here with a clearer error so operators don't have
 	// to trace to mcp_client.go.
 	if auth.Domain == "" || auth.AccessToken == "" || auth.RefreshToken == "" {
-		return fmt.Errorf("bitrix24 mcp: incomplete auth block (domain/access_token/refresh_token required)")
+		// Direct/group chatbot events don't carry OAuth tokens in the top-level
+		// auth[] block — Bitrix only ships them on Open Channel events. If this
+		// user already has stored credentials, refresh the USER-context token
+		// from the stored refresh_token instead of failing, so per-user MCP
+		// stays alive without depending on the event carrying tokens.
+		if err := c.selfRefreshUserCreds(ctx, userID, existing); err != nil {
+			return err
+		}
+		return nil
 	}
 
 	resp, err := c.mcpClient.autoOnboard(ctx, autoOnboardRequest{
@@ -263,36 +278,91 @@ func (c *Channel) provisionIfMissing(ctx context.Context, userID string, auth Ev
 	return nil
 }
 
-// isMCPProvisionDebounced reports whether a provisioning attempt for
-// (serverID, userID) ran within the last mcpProvisionDebounceTTL. Also
-// opportunistically prunes expired entries so the map doesn't grow
-// unbounded across long-lived channels.
-func (c *Channel) isMCPProvisionDebounced(serverID uuid.UUID, userID string) bool {
-	c.mcpProvMu.Lock()
-	defer c.mcpProvMu.Unlock()
-	key := mcpDebounceKey{serverID: serverID, userID: userID}
-	if ts, ok := c.mcpDebounce[key]; ok {
-		if time.Since(ts) < mcpProvisionDebounceTTL {
-			return true
-		}
-		// Expired — delete so the map stays lean. Cheap to do here since
-		// we're already holding the lock for the check.
-		delete(c.mcpDebounce, key)
+// selfRefreshUserCreds renews a user's per-user Bitrix MCP credentials WITHOUT
+// relying on an inbound event carrying OAuth tokens. It refreshes the stored
+// refresh_token via OAuth (grant_type=refresh_token, using the portal's
+// client_id/secret), re-onboards the MCP server with the rotated tokens, and
+// persists them. Bitrix rotates the refresh_token on every call, so persisting
+// the new pair is mandatory — otherwise the next refresh would use a dead token.
+//
+// Returns an error (surfaced to the caller as a degradation notice) when there
+// are no stored credentials to refresh, the stored refresh_token is dead
+// (invalid_grant → user must re-authorize), or onboarding/persisting fails.
+func (c *Channel) selfRefreshUserCreds(ctx context.Context, userID string, existing *store.MCPUserCredentials) error {
+	if existing == nil || existing.Env == nil {
+		return fmt.Errorf("bitrix24 mcp: incomplete auth block and no stored credentials to refresh")
 	}
-	return false
+	refreshToken := strings.TrimSpace(existing.Env["BITRIX_REFRESH_TOKEN"])
+	domain := strings.TrimSpace(existing.Env["BITRIX_DOMAIN"])
+	if refreshToken == "" || domain == "" {
+		return fmt.Errorf("bitrix24 mcp: incomplete auth block and stored credentials missing domain/refresh_token")
+	}
+	if c.portal == nil {
+		return fmt.Errorf("bitrix24 mcp: portal unavailable for self-refresh")
+	}
+
+	tr, err := c.portal.RefreshUserToken(ctx, refreshToken)
+	if err != nil {
+		slog.Warn("bitrix24 mcp: self-refresh oauth failed", "channel", c.Name(), "user_id", userID, "err", err)
+		return fmt.Errorf("bitrix24 mcp: self-refresh oauth failed: %w", err)
+	}
+
+	resp, err := c.mcpClient.autoOnboard(ctx, autoOnboardRequest{
+		Domain:       domain,
+		BitrixUserID: userID,
+		AccessToken:  tr.AccessToken,
+		RefreshToken: tr.RefreshToken,
+		ExpiresIn:    int(tr.ExpiresIn),
+	})
+	if err != nil {
+		slog.Warn("bitrix24 mcp: self-refresh re-onboard failed", "channel", c.Name(), "user_id", userID, "err", err)
+		return fmt.Errorf("bitrix24 mcp: self-refresh re-onboard failed: %w", err)
+	}
+
+	expiresAt := time.Now().Add(time.Duration(tr.ExpiresIn) * time.Second).UTC().Format(time.RFC3339)
+	creds := store.MCPUserCredentials{
+		APIKey: resp.APIKey,
+		Env: map[string]string{
+			"BITRIX_DOMAIN":        domain,
+			"BITRIX_ACCESS_TOKEN":  tr.AccessToken,
+			"BITRIX_REFRESH_TOKEN": tr.RefreshToken, // rotated — persist the new one
+			"BITRIX_EXPIRES_AT":    expiresAt,
+		},
+	}
+	// Decouple persist from the caller's context: once Bitrix rotated the
+	// refresh_token, a canceled request ctx must NOT drop the new token to the
+	// store — the old token is already dead and would strand the user until
+	// re-authorization. Mirrors Portal.refreshLocked's WithoutCancel rationale.
+	if err := c.mcpStore.SetUserCredentials(context.WithoutCancel(ctx), c.mcpServerID, userID, creds); err != nil {
+		return fmt.Errorf("bitrix24 mcp: persist self-refreshed credentials: %w", err)
+	}
+
+	slog.Info("bitrix24 mcp: self-refreshed user credentials",
+		"channel", c.Name(), "user_id", userID, "mcp_server_id", c.mcpServerID, "created", resp.Created)
+	return nil
 }
 
-func (c *Channel) markMCPProvisionDebounced(serverID uuid.UUID, userID string) {
+// tryAcquireMCPProvision atomically checks the debounce window for
+// (serverID, userID) and, if clear, records a fresh attempt — all under a
+// single lock so concurrent webhook-retry events can't both pass the gate
+// (which would double-rotate the refresh_token in selfRefreshUserCreds).
+// Returns true when the caller acquired the slot (NOT debounced), false
+// otherwise. Prunes the entry on the way through to keep the map lean.
+func (c *Channel) tryAcquireMCPProvision(serverID uuid.UUID, userID string) bool {
 	c.mcpProvMu.Lock()
 	defer c.mcpProvMu.Unlock()
 	if c.mcpDebounce == nil {
-		// Defensive: initMCPProvisioner allocates this, but if some code
-		// path bypassed init (e.g. test that constructs Channel directly
-		// and then calls provisionIfMissing with provisioning enabled),
-		// a nil map write would panic. Allocate on demand instead.
+		// Defensive: initMCPProvisioner allocates this, but if some code path
+		// bypassed init (e.g. a test that constructs Channel directly), a nil
+		// map write would panic. Allocate on demand instead.
 		c.mcpDebounce = make(map[mcpDebounceKey]time.Time)
 	}
-	c.mcpDebounce[mcpDebounceKey{serverID: serverID, userID: userID}] = time.Now()
+	key := mcpDebounceKey{serverID: serverID, userID: userID}
+	if ts, ok := c.mcpDebounce[key]; ok && time.Since(ts) < mcpProvisionDebounceTTL {
+		return false // still within the debounce window
+	}
+	c.mcpDebounce[key] = time.Now()
+	return true
 }
 
 // mcpUserNotifyDebounceTTL controls how often a single user can receive

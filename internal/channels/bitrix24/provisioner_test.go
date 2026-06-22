@@ -203,12 +203,18 @@ func TestProvisionIfMissing_OpenChannelBot_Skipped(t *testing.T) {
 	}
 	bc := ch.(*Channel)
 
-	err = bc.provisionIfMissing(context.Background(), "42", validAuth())
+	// IS_CONNECTOR=Y (external connector customer) → skipped: not a Bitrix user.
+	err = bc.provisionIfMissing(context.Background(), "42", true, validAuth())
 	if !errors.Is(err, ErrProvisionSkippedOpenChannel) {
-		t.Fatalf("err = %v; want ErrProvisionSkippedOpenChannel", err)
+		t.Fatalf("connector message: err = %v; want ErrProvisionSkippedOpenChannel", err)
 	}
 	if mcpStore.getUserCallCount != 0 {
-		t.Errorf("Open Channel bot must not hit MCP store; got %d GetUserCredentials calls", mcpStore.getUserCallCount)
+		t.Errorf("Open Channel connector message must not hit MCP store; got %d GetUserCredentials calls", mcpStore.getUserCallCount)
+	}
+
+	// IS_CONNECTOR=N (internal staff in an Open Channel) → must NOT connector-skip.
+	if err := bc.provisionIfMissing(context.Background(), "42", false, validAuth()); errors.Is(err, ErrProvisionSkippedOpenChannel) {
+		t.Fatalf("internal staff (IS_CONNECTOR=N) must not be connector-skipped; got %v", err)
 	}
 }
 
@@ -230,7 +236,7 @@ func TestProvisionIfMissing_Disabled(t *testing.T) {
 	}
 	bc := ch.(*Channel)
 
-	err = bc.provisionIfMissing(context.Background(), "42", validAuth())
+	err = bc.provisionIfMissing(context.Background(), "42", false, validAuth())
 	if !errors.Is(err, ErrProvisionDisabled) {
 		t.Fatalf("err = %v; want ErrProvisionDisabled", err)
 	}
@@ -264,7 +270,7 @@ func TestProvisionIfMissing_ExistingCreds_NoHTTP(t *testing.T) {
 		},
 	}
 
-	if err := bc.provisionIfMissing(context.Background(), "42", validAuth()); err != nil {
+	if err := bc.provisionIfMissing(context.Background(), "42", false, validAuth()); err != nil {
 		t.Fatalf("err = %v; want nil", err)
 	}
 	if httpCalls != 0 {
@@ -302,7 +308,7 @@ func TestProvisionIfMissing_NearExpiry_RefreshHTTP(t *testing.T) {
 		},
 	}
 
-	if err := bc.provisionIfMissing(context.Background(), "42", validAuth()); err != nil {
+	if err := bc.provisionIfMissing(context.Background(), "42", false, validAuth()); err != nil {
 		t.Fatalf("err = %v; want nil", err)
 	}
 	if httpCalls != 1 {
@@ -335,7 +341,7 @@ func TestProvisionIfMissing_LegacyNoExpiry_RefreshHTTP(t *testing.T) {
 		APIKey: "legacy-key",
 	}
 
-	if err := bc.provisionIfMissing(context.Background(), "42", validAuth()); err != nil {
+	if err := bc.provisionIfMissing(context.Background(), "42", false, validAuth()); err != nil {
 		t.Fatalf("err = %v; want nil", err)
 	}
 	if httpCalls != 1 {
@@ -369,7 +375,7 @@ func TestProvisionIfMissing_WarmExpiry_NoHTTP(t *testing.T) {
 		},
 	}
 
-	if err := bc.provisionIfMissing(context.Background(), "42", validAuth()); err != nil {
+	if err := bc.provisionIfMissing(context.Background(), "42", false, validAuth()); err != nil {
 		t.Fatalf("err = %v; want nil", err)
 	}
 	if httpCalls != 0 {
@@ -393,7 +399,7 @@ func TestProvisionIfMissing_MintAndPersist(t *testing.T) {
 	bc := newProvisionerTestChannel(t, mcpStore, srv.URL, "B")
 
 	before := time.Now()
-	err := bc.provisionIfMissing(context.Background(), "42", validAuth())
+	err := bc.provisionIfMissing(context.Background(), "42", false, validAuth())
 	if err != nil {
 		t.Fatalf("provisionIfMissing: %v", err)
 	}
@@ -451,7 +457,7 @@ func TestProvisionIfMissing_Debounce(t *testing.T) {
 	bc := newProvisionerTestChannel(t, mcpStore, srv.URL, "B")
 
 	// First attempt succeeds and marks the debounce.
-	if err := bc.provisionIfMissing(context.Background(), "42", validAuth()); err != nil {
+	if err := bc.provisionIfMissing(context.Background(), "42", false, validAuth()); err != nil {
 		t.Fatalf("first attempt: %v", err)
 	}
 	if httpCalls != 1 {
@@ -466,7 +472,7 @@ func TestProvisionIfMissing_Debounce(t *testing.T) {
 	delete(mcpStore.userCreds, credKey(bc.mcpServerID, "42"))
 	mcpStore.mu.Unlock()
 
-	err := bc.provisionIfMissing(context.Background(), "42", validAuth())
+	err := bc.provisionIfMissing(context.Background(), "42", false, validAuth())
 	if !errors.Is(err, ErrProvisionDebounced) {
 		t.Fatalf("second attempt: %v; want ErrProvisionDebounced", err)
 	}
@@ -489,7 +495,7 @@ func TestProvisionIfMissing_HTTPFailure_Surfaces(t *testing.T) {
 	mcpStore := newFakeMCPStore()
 	bc := newProvisionerTestChannel(t, mcpStore, srv.URL, "B")
 
-	err := bc.provisionIfMissing(context.Background(), "42", validAuth())
+	err := bc.provisionIfMissing(context.Background(), "42", false, validAuth())
 	if err == nil {
 		t.Fatal("401 from MCP must produce an error")
 	}
@@ -534,7 +540,7 @@ func TestProvisionIfMissing_MissingAuthBlock(t *testing.T) {
 			before := httpCalls
 			// Use a fresh userID per subcase so the debounce from a prior
 			// case doesn't mask a regression.
-			err := bc.provisionIfMissing(context.Background(), tc.name, tc.auth)
+			err := bc.provisionIfMissing(context.Background(), tc.name, false, tc.auth)
 			if err == nil {
 				t.Fatalf("missing %s should fail", tc.name)
 			}
