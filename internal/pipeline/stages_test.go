@@ -3183,3 +3183,34 @@ func TestPruneStage_CacheTtlGate_MarkTouchedOnlyOnMutation(t *testing.T) {
 		t.Error("MarkCacheTouched should NOT be called when prune returns no mutation")
 	}
 }
+
+func TestThinkStage_NativeToolWithoutFunctionDoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	var allowed map[string]bool
+	deps := &PipelineDeps{
+		Config: PipelineConfig{MaxIterations: 10, MaxTokens: 1000},
+		BuildFilteredTools: func(_ *RunState) ([]providers.ToolDefinition, error) {
+			return []providers.ToolDefinition{
+				{Type: "image_generation"},
+				{Type: "function", Function: &providers.ToolFunctionSchema{Name: "read_file", Parameters: map[string]any{"type": "object"}}},
+			}, nil
+		},
+		CallLLM: func(_ context.Context, state *RunState, _ providers.ChatRequest) (*providers.ChatResponse, error) {
+			allowed = state.Tool.AllowedTools
+			return &providers.ChatResponse{Content: "ok", FinishReason: "stop"}, nil
+		},
+	}
+	stage := NewThinkStage(deps)
+	state := defaultState()
+
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if !allowed["read_file"] {
+		t.Fatalf("read_file missing from allowed tools: %#v", allowed)
+	}
+	if _, ok := allowed[""]; ok {
+		t.Fatalf("native non-function tool created empty-name allowlist entry: %#v", allowed)
+	}
+}

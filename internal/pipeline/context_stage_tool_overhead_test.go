@@ -96,3 +96,27 @@ func TestContextStage_ToolOverhead_BuildFilteredToolsError_FallsBackToSystemOnly
 			state.Context.OverheadTokens, wantOverhead)
 	}
 }
+
+func TestContextStage_ToolOverhead_NativeToolWithoutFunctionDoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	deps := &PipelineDeps{
+		TokenCounter: tokencount.NewFallbackCounter(),
+		BuildMessages: func(_ context.Context, _ *RunInput, _ []providers.Message, _ string) ([]providers.Message, error) {
+			return []providers.Message{{Role: "system", Content: "system"}}, nil
+		},
+		BuildFilteredTools: func(_ *RunState) ([]providers.ToolDefinition, error) {
+			return []providers.ToolDefinition{{Type: "image_generation"}}, nil
+		},
+	}
+
+	stage := NewContextStage(deps)
+	state := defaultState()
+
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if len(state.Think.Tools) != 1 {
+		t.Fatalf("state.Think.Tools len = %d, want 1", len(state.Think.Tools))
+	}
+}

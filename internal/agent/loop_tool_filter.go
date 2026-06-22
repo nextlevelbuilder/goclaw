@@ -2,6 +2,7 @@ package agent
 
 import (
 	"slices"
+	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -12,6 +13,13 @@ import (
 // is passed through by the Codex/OpenAI request builder as a bare {"type":"image_generation"}
 // object — no "function" wrapper, no parameters.
 var imageGenToolDef = providers.ToolDefinition{Type: "image_generation"}
+
+func toolDefFunctionName(td providers.ToolDefinition) string {
+	if td.Function == nil {
+		return ""
+	}
+	return strings.TrimSpace(td.Function.Name)
+}
 
 // buildFilteredTools resolves the per-iteration tool definitions based on policy,
 // disabled tools, bootstrap mode, skill visibility, channel type, and iteration budget.
@@ -39,7 +47,9 @@ func (l *Loop) buildFilteredTools(req *RunRequest, hadBootstrap bool, iteration,
 		toolDefs = l.toolPolicy.FilterTools(registry, l.id, l.provider.Name(), l.agentToolPolicy, req.ToolAllow, false, false)
 		allowedTools = make(map[string]bool, len(toolDefs))
 		for _, td := range toolDefs {
-			allowedTools[td.Function.Name] = true
+			if name := toolDefFunctionName(td); name != "" {
+				allowedTools[name] = true
+			}
 		}
 	} else {
 		// No policy → all tools allowed. ProviderDefs() omits per-user MCP tools (not in
@@ -48,8 +58,8 @@ func (l *Loop) buildFilteredTools(req *RunRequest, hadBootstrap bool, iteration,
 		if len(userTools) > 0 {
 			seen := make(map[string]bool, len(toolDefs))
 			for _, td := range toolDefs {
-				if td.Function != nil {
-					seen[td.Function.Name] = true
+				if name := toolDefFunctionName(td); name != "" {
+					seen[name] = true
 				}
 			}
 			for _, t := range userTools {
@@ -67,10 +77,11 @@ func (l *Loop) buildFilteredTools(req *RunRequest, hadBootstrap bool, iteration,
 	if orchDeny := orchModeDenyTools(l.orchMode); len(orchDeny) > 0 {
 		filtered := toolDefs[:0:0]
 		for _, td := range toolDefs {
-			if !orchDeny[td.Function.Name] {
+			name := toolDefFunctionName(td)
+			if name == "" || !orchDeny[name] {
 				filtered = append(filtered, td)
 			} else {
-				delete(allowedTools, td.Function.Name)
+				delete(allowedTools, name)
 			}
 		}
 		toolDefs = filtered
@@ -80,10 +91,11 @@ func (l *Loop) buildFilteredTools(req *RunRequest, hadBootstrap bool, iteration,
 	if len(l.disabledTools) > 0 {
 		filtered := toolDefs[:0]
 		for _, td := range toolDefs {
-			if !l.disabledTools[td.Function.Name] {
+			name := toolDefFunctionName(td)
+			if name == "" || !l.disabledTools[name] {
 				filtered = append(filtered, td)
 			} else {
-				delete(allowedTools, td.Function.Name)
+				delete(allowedTools, name)
 			}
 		}
 		toolDefs = filtered
@@ -94,7 +106,7 @@ func (l *Loop) buildFilteredTools(req *RunRequest, hadBootstrap bool, iteration,
 	if hadBootstrap && l.agentType != store.AgentTypePredefined {
 		var bootstrapDefs []providers.ToolDefinition
 		for _, td := range toolDefs {
-			if bootstrapToolAllowlist[td.Function.Name] {
+			if name := toolDefFunctionName(td); name != "" && bootstrapToolAllowlist[name] {
 				bootstrapDefs = append(bootstrapDefs, td)
 			}
 		}
@@ -106,7 +118,7 @@ func (l *Loop) buildFilteredTools(req *RunRequest, hadBootstrap bool, iteration,
 	if !l.skillEvolve {
 		filtered := toolDefs[:0:0]
 		for _, td := range toolDefs {
-			if td.Function.Name != "skill_manage" {
+			if toolDefFunctionName(td) != "skill_manage" {
 				filtered = append(filtered, td)
 			}
 		}
@@ -117,10 +129,13 @@ func (l *Loop) buildFilteredTools(req *RunRequest, hadBootstrap bool, iteration,
 	if req.ChannelType != "" {
 		filtered := toolDefs[:0:0]
 		for _, td := range toolDefs {
-			if tool, ok := l.tools.Get(td.Function.Name); ok {
-				if ca, ok := tool.(tools.ChannelAware); ok {
-					if !slices.Contains(ca.RequiredChannelTypes(), req.ChannelType) {
-						continue
+			name := toolDefFunctionName(td)
+			if name != "" {
+				if tool, ok := l.tools.Get(name); ok {
+					if ca, ok := tool.(tools.ChannelAware); ok {
+						if !slices.Contains(ca.RequiredChannelTypes(), req.ChannelType) {
+							continue
+						}
 					}
 				}
 			}
