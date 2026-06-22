@@ -84,21 +84,10 @@ func processNormalMessage(
 	}
 
 	// Group-scoped UserID: context files, memory, traces, and seeding scope.
-	// - Discord guilds: "guild:{guildID}:user:{senderID}" — per-user per-server,
-	//   shared across all channels within the same server. Session key stays per-channel.
-	// - Other platforms: "group:{channel}:{chatID}" — shared by all users in the chat.
-	// Individual senderID is preserved in InboundMessage for pairing/dedup/mention gate.
-	userID := msg.UserID
-	if peerKind == string(sessions.PeerGroup) && msg.ChatID != "" {
-		if guildID := msg.Metadata["guild_id"]; guildID != "" && msg.SenderID != "" {
-			// Discord guild: per-user scope so each member has own profile
-			// across all channels in the same server.
-			userID = fmt.Sprintf("guild:%s:user:%s", guildID, msg.SenderID)
-		} else {
-			groupID := msg.ChatID
-			userID = fmt.Sprintf("group:%s:%s", msg.Channel, groupID)
-		}
-	}
+	// See deriveGroupUserID for the precedence (Discord guild → openline
+	// participant → group fallback). Individual senderID is preserved in
+	// InboundMessage for pairing/dedup/mention gating regardless of scope.
+	userID := deriveGroupUserID(msg, peerKind)
 
 	// Persist friendly names from channel metadata into session + user profile.
 	sessionMeta := extractSessionMetadata(msg, peerKind)
@@ -714,4 +703,33 @@ func isSafeBitrixEntityToken(s string, maxLen int) bool {
 		}
 	}
 	return true
+}
+
+// deriveGroupUserID computes the per-message scope userID used for context
+// files, memory, traces, and seeding. Direct messages keep msg.UserID. Group
+// messages pick a synthetic scope, in precedence order:
+//
+//  1. Discord guild member: "guild:{guildID}:user:{senderID}" — per-user across
+//     every channel in the same server.
+//  2. Openline participant: the per-participant id minted by bitrix24/handle.go
+//     ("openlines:{instance}:{chat}:{uid}") when a connector relayed a customer
+//     message carrying a stable uid — so each external person gets their own
+//     USER.md / memory instead of collapsing into the shared connector proxy.
+//     Absent for legacy/name-only/operator messages → falls through.
+//  3. Group fallback: "group:{channel}:{chatID}" — shared by everyone in the chat.
+//
+// The individual senderID stays on InboundMessage for pairing / dedup / mention
+// gating regardless of which scope is chosen.
+func deriveGroupUserID(msg bus.InboundMessage, peerKind string) string {
+	if peerKind != string(sessions.PeerGroup) || msg.ChatID == "" {
+		return msg.UserID
+	}
+	switch {
+	case msg.Metadata["guild_id"] != "" && msg.SenderID != "":
+		return fmt.Sprintf("guild:%s:user:%s", msg.Metadata["guild_id"], msg.SenderID)
+	case msg.Metadata[bitrix24.MetaKeyParticipantUserID] != "":
+		return msg.Metadata[bitrix24.MetaKeyParticipantUserID]
+	default:
+		return fmt.Sprintf("group:%s:%s", msg.Channel, msg.ChatID)
+	}
 }

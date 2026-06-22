@@ -232,6 +232,16 @@ func buildAddressMention(meta map[string]string, botID int) string {
 	if userID == "" {
 		return ""
 	}
+	// [USER=<id>] BBCode is only valid for a numeric Bitrix user id. Synthetic
+	// scope ids — notably the openline per-participant id
+	// "openlines:{instance}:{chat}:{uid}" set by handle.go — are not real Bitrix
+	// users; emitting them would render as literal garbage in the chat. The
+	// external customer behind a connector relay has no Bitrix user id to mention
+	// anyway (routing is driven by the leading "#msgId" echo), so skip the
+	// mention for any non-numeric addressee.
+	if !isNumericID(userID) {
+		return ""
+	}
 	// Self-mention guard: bot replying to its own synthetic relay, or a
 	// future code path injecting the bot's id by mistake. Don't @mention
 	// the bot to itself — Bitrix would render "@Bot Synity" in the bot's
@@ -240,6 +250,20 @@ func buildAddressMention(meta map[string]string, botID int) string {
 		return ""
 	}
 	return "[USER=" + userID + "][/USER]"
+}
+
+// isNumericID reports whether s is a non-empty run of ASCII digits — the shape
+// of a real Bitrix user id. Used to gate [USER=<id>] BBCode emission.
+func isNumericID(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // isRateLimitErr detects Bitrix24's rate-limit response. The canonical code
