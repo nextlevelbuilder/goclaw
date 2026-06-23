@@ -34,6 +34,10 @@ const (
 	ctxRunKind     toolContextKey = "tool_run_kind"    // "notification", "announce", "delegation"
 )
 
+// ctxRateLimitOverride carries a per-agent tool rate limit (calls/hour) that
+// overrides the global tools.rate_limit_per_hour. 0 means "use the global".
+const ctxRateLimitOverride toolContextKey = "tool_rate_limit_override"
+
 // Well-known channel names used for routing and access control.
 const (
 	ChannelSystem    = "system"
@@ -157,6 +161,18 @@ func WithToolSessionKey(ctx context.Context, key string) context.Context {
 
 func ToolSessionKeyFromCtx(ctx context.Context) string {
 	v, _ := ctx.Value(ctxSessionKey).(string)
+	return v
+}
+
+// WithToolRateLimitOverride sets a per-agent tool rate limit (calls/hour) that
+// overrides the global tools.rate_limit_per_hour for tools executed under ctx.
+func WithToolRateLimitOverride(ctx context.Context, perHour int) context.Context {
+	return context.WithValue(ctx, ctxRateLimitOverride, perHour)
+}
+
+// ToolRateLimitOverrideFromCtx returns the per-agent override, or 0 if unset.
+func ToolRateLimitOverrideFromCtx(ctx context.Context) int {
+	v, _ := ctx.Value(ctxRateLimitOverride).(int)
 	return v
 }
 

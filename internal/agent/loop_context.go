@@ -113,6 +113,9 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 		waitToolCfg = l.agentToolPolicy.Wait
 		ctx = tools.WithWaitToolConfig(ctx, waitToolCfg)
 	}
+	if l.agentToolPolicy != nil && l.agentToolPolicy.RateLimitPerHour > 0 {
+		ctx = tools.WithToolRateLimitOverride(ctx, l.agentToolPolicy.RateLimitPerHour)
+	}
 	if l.sandboxCfg != nil {
 		ctx = tools.WithSandboxConfig(ctx, l.sandboxCfg)
 	}

@@ -28,11 +28,23 @@ func NewToolRateLimiter(maxPerHour int) *ToolRateLimiter {
 	}
 }
 
-// Allow checks if a tool execution is allowed for the given key.
-// Returns nil if allowed, or an error describing the rate limit.
+// Allow checks if a tool execution is allowed for the given key against the
+// limiter's configured max. Returns nil if allowed, or an error.
 func (rl *ToolRateLimiter) Allow(key string) error {
+	return rl.AllowWithLimit(key, 0)
+}
+
+// AllowWithLimit is Allow with a per-call max override (calls/hour). When
+// maxOverride > 0 it replaces the configured max for this check — used for the
+// per-agent tools.rate_limit_per_hour. maxOverride <= 0 uses the configured max.
+func (rl *ToolRateLimiter) AllowWithLimit(key string, maxOverride int) error {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
+
+	max := rl.maxPerHr
+	if maxOverride > 0 {
+		max = maxOverride
+	}
 
 	now := time.Now()
 	cutoff := now.Add(-rl.window)
@@ -45,8 +57,8 @@ func (rl *ToolRateLimiter) Allow(key string) error {
 	}
 	entries = entries[start:]
 
-	if len(entries) >= rl.maxPerHr {
-		return fmt.Errorf("tool rate limit exceeded: %d actions/hour for key %s", rl.maxPerHr, key)
+	if len(entries) >= max {
+		return fmt.Errorf("tool rate limit exceeded: %d actions/hour for key %s", max, key)
 	}
 
 	// Record this action

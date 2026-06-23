@@ -537,6 +537,9 @@ type ToolPolicySpec struct {
 	ByProvider     map[string]*ToolPolicySpec `json:"byProvider,omitempty"`
 	Wait           *WaitToolPolicy            `json:"wait,omitempty"`
 	ToolCallPrefix string                     `json:"toolCallPrefix,omitempty"` // prefix to strip from model's tool call names before registry lookup
+	// RateLimitPerHour overrides the global tools.rate_limit_per_hour for this
+	// agent (applied per session key). 0 = inherit the global limit.
+	RateLimitPerHour int `json:"rate_limit_per_hour,omitempty"`
 }
 
 // WaitToolPolicy configures per-agent safety bounds for the wait tool.

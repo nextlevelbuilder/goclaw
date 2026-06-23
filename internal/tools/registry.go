@@ -200,9 +200,10 @@ func (r *Registry) ExecuteWithContext(ctx context.Context, name string, args map
 		ctx = WithToolAsyncCB(ctx, asyncCB)
 	}
 
-	// Rate limit check (per session key)
+	// Rate limit check (per session key). A per-agent override
+	// (tools.rate_limit_per_hour, threaded via context) wins over the global max.
 	if r.rateLimiter != nil && sessionKey != "" {
-		if err := r.rateLimiter.Allow(sessionKey); err != nil {
+		if err := r.rateLimiter.AllowWithLimit(sessionKey, ToolRateLimitOverrideFromCtx(ctx)); err != nil {
 			return ErrorResult(err.Error())
 		}
 	}

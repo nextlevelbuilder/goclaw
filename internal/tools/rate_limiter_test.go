@@ -61,6 +61,28 @@ func TestToolRateLimiter_SeparateKeys(t *testing.T) {
 	}
 }
 
+func TestToolRateLimiter_AllowWithLimit_Override(t *testing.T) {
+	rl := NewToolRateLimiter(100) // global default 100
+
+	// A per-agent override of 2 caps this key at 2, regardless of the global 100.
+	if err := rl.AllowWithLimit("agentA", 2); err != nil {
+		t.Fatalf("call 1 should be allowed: %v", err)
+	}
+	if err := rl.AllowWithLimit("agentA", 2); err != nil {
+		t.Fatalf("call 2 should be allowed: %v", err)
+	}
+	if err := rl.AllowWithLimit("agentA", 2); err == nil {
+		t.Error("call 3 should be blocked by the override of 2")
+	}
+
+	// maxOverride <= 0 falls back to the configured global (100), on its own key.
+	for i := range 3 {
+		if err := rl.AllowWithLimit("agentB", 0); err != nil {
+			t.Fatalf("agentB call %d should use global 100: %v", i, err)
+		}
+	}
+}
+
 func TestToolRateLimiter_WindowExpiry(t *testing.T) {
 	rl := &ToolRateLimiter{
 		windows:  make(map[string][]time.Time),
