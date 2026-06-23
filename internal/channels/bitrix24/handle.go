@@ -339,7 +339,19 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 		} else {
 			contactName, contactUsername = c.resolveContactName(ctx, senderID)
 		}
-		cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, contactName, contactUsername, peerKind, "user", "", "")
+		// userID column carries the cross-context person handle ("<connector>:<uid>",
+		// e.g. "zalo:3393421773556008363") so auto-merge can collapse the same
+		// external person across chats/groups (same connector) into one tenant_user
+		// without having to parse synthetic sender_id back. Falls back to senderID
+		// when no handle is available (legacy / unknown connector / staff) so the
+		// existing per-channel mirror behavior is preserved.
+		contactUserID := senderID
+		if participantSenderID != "" {
+			if h := personHandle(evt.Params.ChatEntityID, senderTag.UID); h != "" {
+				contactUserID = h
+			}
+		}
+		cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, contactUserID, contactName, contactUsername, peerKind, "user", "", "")
 		if isGroup && chatID != "" {
 			cc.EnsureContact(ctx, c.Type(), c.Name(), chatID, "", "", "", "group", "group", "", "")
 		}
