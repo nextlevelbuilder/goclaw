@@ -16,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 49
+const SchemaVersion = 50
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -852,6 +852,12 @@ CREATE INDEX IF NOT EXISTS idx_skill_user_grants_tenant ON skill_user_grants(ten
 	47: addSkillSelfEvolutionTables,
 	// Version 48 → 49: append-only usage event analytics.
 	48: addUsageEventAnalyticsTables,
+	// Version 49 → 50: no-op for SQLite. The PG counterpart (migration 81)
+	// backfills channel_contacts.user_id for Openline rows written before the
+	// person-handle follow-up. SQLite (Lite edition) doesn't ship Bitrix24
+	// connectors, so there's no legacy Openline data to rewrite — but we
+	// bump the version anyway to keep PG / SQLite version numbers in sync.
+	49: `SELECT 1;`,
 }
 
 const addUsageEventAnalyticsTables = `
