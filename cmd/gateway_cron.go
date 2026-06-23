@@ -25,6 +25,11 @@ import (
 // Safe because cron jobs only fire after Start(), well after this is set.
 var cronHeartbeatWakeFn func(agentID string)
 
+// cronCLISessionReset clears the Claude CLI on-disk session (.jsonl + CLAUDE.md)
+// for a session key, mirroring the sessions.reset RPC. Indirected through a var
+// so the stateless-reset behavior can be unit-tested without filesystem effects.
+var cronCLISessionReset = providers.ResetCLISession
+
 func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg *config.Config, channelMgr *channels.Manager, sessionMgr store.SessionStore, agentStore store.AgentStore, providerStore store.ProviderStore, providerReg *providers.Registry) func(job *store.CronJob) (*store.CronJobResult, error) {
 	return func(job *store.CronJob) (*store.CronJobResult, error) {
 		agentID := job.AgentID
@@ -89,13 +94,25 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 			cronCtx = store.WithCredentialUserID(cronCtx, job.Payload.CredentialUserID)
 		}
 
-		// Reset session before each cron run to prevent tool errors from previous
-		// runs from polluting the context and blocking future executions (#294).
-		// Save() persists the empty session to DB so stale data won't reload after restart.
-		// Stateless jobs skip this — they intentionally carry no session history.
-		if !job.Stateless {
-			sessionMgr.Reset(cronCtx, sessionKey)
-			sessionMgr.Save(cronCtx, sessionKey)
+		// Reset the session before each STATELESS cron run so the run starts fresh:
+		// no carried-over history (the whole point of stateless — saves tokens) and
+		// no tool errors from a previous run polluting the context (#294). Clear BOTH
+		// layers — the goclaw session store AND the Claude CLI's own on-disk session —
+		// because a claude-cli agent resumes its .jsonl by a deterministic per-key
+		// UUID and would otherwise replay the full accumulated history every run
+		// regardless of this flag (i.e. "stateless" had no effect on what the model
+		// actually sees). Stateful jobs (stateless=false) intentionally keep their
+		// session across runs.
+		//
+		// NOTE: this condition was previously `!job.Stateless`, which inverted the
+		// flag — stateless jobs accumulated unbounded history while stateful jobs were
+		// wiped each run.
+		if job.Stateless {
+			if sessionMgr != nil {
+				sessionMgr.Reset(cronCtx, sessionKey)
+				sessionMgr.Save(cronCtx, sessionKey)
+			}
+			cronCLISessionReset("", sessionKey)
 		}
 
 		// Resolve per-job provider/model override (mirrors heartbeat). Unset → agent default.
