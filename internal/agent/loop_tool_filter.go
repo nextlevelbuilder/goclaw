@@ -11,7 +11,7 @@ import (
 // imageGenToolDef is the native image_generation tool sentinel. Its Type-only form
 // is passed through by the Codex/OpenAI request builder as a bare {"type":"image_generation"}
 // object — no "function" wrapper, no parameters.
-var imageGenToolDef = providers.ToolDefinition{Type: "image_generation"}
+var imageGenToolDef = providers.ToolDefinition{Type: "image_generation", Function: &providers.ToolFunctionSchema{Name: "image_generation"}}
 
 // buildFilteredTools resolves the per-iteration tool definitions based on policy,
 // disabled tools, bootstrap mode, skill visibility, channel type, and iteration budget.
