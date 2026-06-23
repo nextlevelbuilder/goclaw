@@ -962,3 +962,97 @@ func TestHandleMessage_OL_NoTag_DegradesToGroupLevel(t *testing.T) {
 		t.Errorf("untagged message must not set an echo prefix, got %q", pfx)
 	}
 }
+
+// TestHandleMessage_OL_ThreeToken_StoresZaloHandleInContactUserID verifies the
+// follow-up to the per-participant identity refactor: when the connector ships
+// a 3-token sender tag on a known connector (synity_zalo_personal), the
+// channel_contacts upsert MUST carry user_id = "<connector>:<uid>" (e.g.
+// "zalo:111222") instead of mirroring the synthetic sender_id. This is what a
+// future auto-merge worker keys on to collapse the same external person across
+// multiple chats / groups into one tenant_user without parsing the synthetic
+// sender_id back. Legacy / no-tag / unknown-connector paths are covered by
+// TestHandleMessage_OL_LegacyOneToken_NoParticipantID +
+// TestHandleMessage_OL_NoTag_DegradesToGroupLevel above — those keep the
+// mirror-sender-id behavior, which is what we assert here too as the negative.
+func TestHandleMessage_OL_ThreeToken_StoresZaloHandleInContactUserID(t *testing.T) {
+	ch, _, cs := newChannelWithContactCollector(t, 1058, false)
+	defer resetWebhookRouterForTest()
+
+	ch.DispatchEvent(context.Background(), &Event{
+		Type: EventMessageAdd,
+		Params: EventParams{
+			FromUserID:       "960",
+			DialogID:         "chat4878",
+			MessageID:        "297178",
+			MessageType:      "L",
+			ChatEntityType:   "LINES",
+			ChatEntityID:     "synity_zalo_personal|20|zpersonal_grp_X|960",
+			Message:          "[Trung Hee] #111222 #777888 alo bot",
+			MessageOriginal:  "[USER=1058]bot[/USER] [Trung Hee] #111222 #777888 alo bot",
+			MentionedList:    map[string]string{"1058": "1058"},
+			FromIsConnector:  true,
+		},
+	})
+
+	// Two upserts expected: the participant contact + the group container.
+	var participant *fakeUpsertCall
+	for i, c := range cs.snapshot() {
+		if c.contactType == "user" {
+			participant = &cs.snapshot()[i]
+			break
+		}
+	}
+	if participant == nil {
+		t.Fatal("expected a user-type contact upsert for the participant")
+	}
+	// sender_id stays the synthetic per-participant id (PR #1 behavior).
+	if !strings.Contains(participant.senderID, "111222") || !strings.Contains(participant.senderID, "chat4878") {
+		t.Errorf("sender_id = %q; want synthetic id containing uid + chatID", participant.senderID)
+	}
+	// user_id is the cross-context person handle: "<connector>:<uid>" — NOT
+	// mirroring sender_id. This is the F1 follow-up assertion.
+	if participant.userID != "zalo:111222" {
+		t.Errorf("user_id = %q; want %q (person handle for auto-merge)", participant.userID, "zalo:111222")
+	}
+}
+
+// TestHandleMessage_OL_UnknownConnector_FallsBackToMirrorUserID is the negative
+// of the test above: when a 3-token tag arrives over a connector NOT in the
+// personHandlePrefixes registry, user_id must fall back to mirroring sender_id
+// (legacy behavior) — no guessed handle.
+func TestHandleMessage_OL_UnknownConnector_FallsBackToMirrorUserID(t *testing.T) {
+	ch, _, cs := newChannelWithContactCollector(t, 1058, false)
+	defer resetWebhookRouterForTest()
+
+	ch.DispatchEvent(context.Background(), &Event{
+		Type: EventMessageAdd,
+		Params: EventParams{
+			FromUserID:      "960",
+			DialogID:        "chat4878",
+			MessageID:       "297178",
+			MessageType:     "L",
+			ChatEntityType:  "LINES",
+			ChatEntityID:    "future_unknown_connector|20|x|960", // not in registry
+			Message:         "[Trung Hee] #111222 #777888 alo bot",
+			MessageOriginal: "[USER=1058]bot[/USER] [Trung Hee] #111222 #777888 alo bot",
+			MentionedList:   map[string]string{"1058": "1058"},
+			FromIsConnector: true,
+		},
+	})
+
+	var participant *fakeUpsertCall
+	calls := cs.snapshot()
+	for i, c := range calls {
+		if c.contactType == "user" {
+			participant = &calls[i]
+			break
+		}
+	}
+	if participant == nil {
+		t.Fatal("expected a user-type contact upsert")
+	}
+	if participant.userID != participant.senderID {
+		t.Errorf("unknown connector: user_id = %q, sender_id = %q; want them to mirror (no guessed handle)",
+			participant.userID, participant.senderID)
+	}
+}
