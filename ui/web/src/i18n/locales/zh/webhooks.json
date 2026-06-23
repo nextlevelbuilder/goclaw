@@ -7,6 +7,12 @@
   "emptyTitle": "暂无 Webhook",
   "emptyDescription": "创建第一个 Webhook，通过 HTTP 暴露智能体或频道。",
   "neverUsed": "从未使用",
+  "pager": {
+    "prev": "上一页",
+    "next": "下一页",
+    "pageOf": "第 {{page}} 页 / 共 {{total}} 页",
+    "noMore": "没有更多 webhook。"
+  },
   "kind": {
     "llm": "LLM",
     "message": "消息"
@@ -111,7 +117,7 @@
     "emptyTitle": "尚无调用",
     "emptyDescription": "对此 Webhook 的调用将显示在此处。",
     "noMore": "没有更多调用。",
-    "page": "第 {{page}} 页",
+    "pageOf": "第 {{page}} 页 / 共 {{total}} 页",
     "prev": "上一页",
     "next": "下一页"
   },

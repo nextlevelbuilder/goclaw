@@ -89,6 +89,14 @@ func (s *adminWebhookStore) List(ctx context.Context, f store.WebhookListFilter)
 	return out, nil
 }
 
+func (s *adminWebhookStore) Count(ctx context.Context, f store.WebhookListFilter) (int, error) {
+	rows, err := s.List(ctx, f)
+	if err != nil {
+		return 0, err
+	}
+	return len(rows), nil
+}
+
 func (s *adminWebhookStore) Update(_ context.Context, id uuid.UUID, updates map[string]any) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -537,12 +545,15 @@ func TestWebhookAdmin_FullFlow_CreateListGetRotateRevoke(t *testing.T) {
 		if w.Code != http.StatusOK {
 			t.Fatalf("list: want 200, got %d: %s", w.Code, w.Body.String())
 		}
-		var rows []store.WebhookData
-		if err := json.NewDecoder(w.Body).Decode(&rows); err != nil {
+		var body struct {
+			Items []store.WebhookData `json:"items"`
+			Total int                 `json:"total"`
+		}
+		if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
 			t.Fatalf("list decode: %v", err)
 		}
 		found := false
-		for _, row := range rows {
+		for _, row := range body.Items {
 			if row.ID == id {
 				found = true
 			}

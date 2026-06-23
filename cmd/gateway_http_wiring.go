@@ -16,6 +16,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
+	"github.com/nextlevelbuilder/goclaw/internal/webhooks"
 )
 
 // httpHandlers bundles the results of wireHTTP() for passing to wireHTTPHandlersOnServer.
@@ -232,6 +233,7 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 				d.pgStores.Webhooks,
 				sharedWebhookLimiter, // K10: shared limiter
 				nil,                  // lane: nil → internal default (4-slot); configurable in future via cfg
+				webhooks.ResolveTimeoutSec(d.cfg.Gateway.WebhookSyncTimeoutSec),
 			)
 			llmH.SetEncKey(webhookEncKey) // K6: decrypt secret at HMAC verify time
 			d.server.SetWebhookLLMHandler(llmH)

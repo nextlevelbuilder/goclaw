@@ -54,9 +54,6 @@ const (
 	// callbackResponseStorageLimit is the max bytes stored in webhook_calls.response.
 	callbackResponseStorageLimit = 32 * 1024 // 32 KB
 
-	// asyncAgentTimeout is the max time to invoke the LLM agent for async_llm mode.
-	asyncAgentTimeout = 30 * time.Second
-
 	// retryAfterCap caps the Retry-After header value to 6 hours.
 	retryAfterCap = 6 * time.Hour
 )
@@ -117,6 +114,9 @@ type WorkerConfig struct {
 	// PerTenantConcurrency is the per-tenant cap passed to CallbackLimiter.
 	// 0 = default (4).
 	PerTenantConcurrency int
+
+	// AsyncAgentTimeout is the deadline for each async agent run. 0 → DefaultAgentTimeout (600s).
+	AsyncAgentTimeout time.Duration
 }
 
 // WebhookWorker is the background callback delivery service. It is started once per
@@ -151,6 +151,9 @@ func NewWebhookWorker(
 ) *WebhookWorker {
 	if cfg.WorkerConcurrency <= 0 {
 		cfg.WorkerConcurrency = 4
+	}
+	if cfg.AsyncAgentTimeout <= 0 {
+		cfg.AsyncAgentTimeout = DefaultAgentTimeout
 	}
 	if limiter == nil {
 		limiter = NewCallbackLimiter(cfg.PerTenantConcurrency)
@@ -762,7 +765,7 @@ func (w *WebhookWorker) invokeAgent(
 		TraceTags:         []string{"webhook", "async"},
 	}
 
-	runCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), asyncAgentTimeout)
+	runCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), w.cfg.AsyncAgentTimeout)
 	defer cancel()
 
 	result, runErr := ag.Run(runCtx, rr)

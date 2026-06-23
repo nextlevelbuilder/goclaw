@@ -14,15 +14,32 @@ import type {
   WebhookCallDetail,
   WebhookTestInput,
   WebhookTestResult,
+  Paginated,
 } from "@/types/webhook";
 
-export function useWebhooks() {
+export interface WebhookListParams {
+  limit: number;
+  offset: number;
+  q?: string;
+  includeRevoked?: boolean;
+}
+
+export function useWebhooks(params: WebhookListParams) {
   const http = useHttp();
   const queryClient = useQueryClient();
 
-  const { data: webhooks = [], isLoading: loading } = useQuery({
-    queryKey: queryKeys.webhooks.all,
-    queryFn: () => http.get<WebhookData[]>("/v1/webhooks"),
+  const { data, isLoading: loading } = useQuery({
+    queryKey: queryKeys.webhooks.list(params as unknown as Record<string, unknown>),
+    queryFn: () => {
+      const q: Record<string, string> = {
+        limit: String(params.limit),
+        offset: String(params.offset),
+      };
+      if (params.q) q.q = params.q;
+      if (params.includeRevoked) q.include_revoked = "true";
+      return http.get<Paginated<WebhookData>>("/v1/webhooks", q);
+    },
+    placeholderData: (prev) => prev,
     staleTime: 60_000,
   });
 
@@ -95,7 +112,17 @@ export function useWebhooks() {
     [http],
   );
 
-  return { webhooks, loading, refresh: invalidate, createWebhook, updateWebhook, rotateSecret, revokeWebhook, testWebhook };
+  return {
+    webhooks: data?.items ?? [],
+    total: data?.total ?? 0,
+    loading,
+    refresh: invalidate,
+    createWebhook,
+    updateWebhook,
+    rotateSecret,
+    revokeWebhook,
+    testWebhook,
+  };
 }
 
 export function useWebhookCalls(
@@ -108,19 +135,19 @@ export function useWebhookCalls(
   const http = useHttp();
   const params = { status, limit, offset };
 
-  const { data = [], isLoading: loading, isFetching, refetch } = useQuery({
+  const { data, isLoading: loading, isFetching, refetch } = useQuery({
     queryKey: queryKeys.webhooks.calls(id ?? "", params),
     queryFn: () => {
       const q: Record<string, string> = { limit: String(limit), offset: String(offset) };
       if (status) q.status = status;
-      return http.get<WebhookCallData[]>(`/v1/webhooks/${id}/calls`, q);
+      return http.get<Paginated<WebhookCallData>>(`/v1/webhooks/${id}/calls`, q);
     },
     enabled: enabled && !!id,
     placeholderData: (prev) => prev,
     staleTime: 10_000,
   });
 
-  return { calls: data, loading, isFetching, refetch };
+  return { calls: data?.items ?? [], total: data?.total ?? 0, loading, isFetching, refetch };
 }
 
 export function useWebhookCallDetail(webhookId: string | null, callId: string | null) {

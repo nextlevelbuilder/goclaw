@@ -114,6 +114,9 @@ func (s *msgCallStore) ClaimNext(_ context.Context, _ uuid.UUID, _ time.Time) (*
 func (s *msgCallStore) List(_ context.Context, _ store.WebhookCallListFilter) ([]store.WebhookCallData, error) {
 	return nil, nil
 }
+func (s *msgCallStore) Count(_ context.Context, _ store.WebhookCallListFilter) (int, error) {
+	return 0, nil
+}
 func (s *msgCallStore) DeleteOlderThan(_ context.Context, _ uuid.UUID, _ time.Time) (int64, error) {
 	return 0, nil
 }
@@ -136,6 +139,9 @@ func (s *msgWebhookStore) GetByHash(_ context.Context, _ string) (*store.Webhook
 }
 func (s *msgWebhookStore) List(_ context.Context, _ store.WebhookListFilter) ([]store.WebhookData, error) {
 	return nil, nil
+}
+func (s *msgWebhookStore) Count(_ context.Context, _ store.WebhookListFilter) (int, error) {
+	return 0, nil
 }
 func (s *msgWebhookStore) Update(_ context.Context, _ uuid.UUID, _ map[string]any) error {
 	return nil

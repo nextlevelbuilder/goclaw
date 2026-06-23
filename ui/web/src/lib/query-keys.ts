@@ -73,6 +73,7 @@ export const queryKeys = {
   },
   webhooks: {
     all: ["webhooks"] as const,
+    list: (params: Record<string, unknown>) => ["webhooks", "list", params] as const,
     calls: (id: string, params: Record<string, unknown>) => ["webhooks", id, "calls", params] as const,
     call: (id: string, callId: string) => ["webhooks", id, "calls", callId] as const,
   },

@@ -46,7 +46,7 @@ export function WebhookCallsDialog({ webhook, onClose }: Props) {
   const [page, setPage] = useState(0);
   const [detailCallId, setDetailCallId] = useState<string | null>(null);
   const effectiveStatus = status === ALL ? "" : status;
-  const { calls, isFetching, refetch } = useWebhookCalls(
+  const { calls, total, isFetching, refetch } = useWebhookCalls(
     webhook?.id ?? null,
     effectiveStatus,
     !!webhook,
@@ -59,8 +59,8 @@ export function WebhookCallsDialog({ webhook, onClose }: Props) {
     setPage(0);
   }, [webhook?.id, status]);
 
-  // No total count from the API → infer "has more" from a full page.
-  const hasNext = calls.length === PAGE_SIZE;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const hasNext = (page + 1) * PAGE_SIZE < total;
   const hasPrev = page > 0;
 
   return (
@@ -146,7 +146,7 @@ export function WebhookCallsDialog({ webhook, onClose }: Props) {
 
         {(hasPrev || hasNext) && (
           <div className="flex items-center justify-between border-t pt-3">
-            <span className="text-xs text-muted-foreground">{t("calls.page", { page: page + 1 })}</span>
+            <span className="text-xs text-muted-foreground">{t("calls.pageOf", { page: page + 1, total: totalPages })}</span>
             <div className="flex items-center gap-1">
               <Button
                 variant="outline"

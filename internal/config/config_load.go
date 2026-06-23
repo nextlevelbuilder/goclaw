@@ -251,6 +251,18 @@ func (c *Config) applyEnvOverrides() {
 			c.Skills.MaxUploadSizeMB = ClampSkillMaxUploadSizeMB(mb)
 		}
 	}
+	// Webhook agent-run timeouts (seconds). Bounds (default 600, cap 3600) are
+	// applied at consumption via webhooks.ResolveTimeoutSec.
+	if v := os.Getenv("GOCLAW_WEBHOOK_ASYNC_TIMEOUT_SEC"); v != "" {
+		if sec, err := strconv.Atoi(v); err == nil && sec > 0 {
+			c.Gateway.WebhookAsyncTimeoutSec = sec
+		}
+	}
+	if v := os.Getenv("GOCLAW_WEBHOOK_SYNC_TIMEOUT_SEC"); v != "" {
+		if sec, err := strconv.Atoi(v); err == nil && sec > 0 {
+			c.Gateway.WebhookSyncTimeoutSec = sec
+		}
+	}
 	envBoolPtr := func(key string, dst **bool) {
 		if v := os.Getenv(key); v != "" {
 			b := parseEnvBool(v)

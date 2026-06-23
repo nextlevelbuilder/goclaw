@@ -426,6 +426,8 @@ type GatewayConfig struct {
 	ChatBehavior            *ChatBehaviorConfig `json:"chat_behavior,omitempty"`              // human-like channel delivery behavior (default disabled)
 	ToolStatus              *bool               `json:"tool_status,omitempty"`                // show tool name in streaming preview during tool execution (default true)
 	TaskRecoveryIntervalSec int                 `json:"task_recovery_interval_sec,omitempty"` // team task recovery ticker interval in seconds (default 300 = 5min)
+	WebhookAsyncTimeoutSec  int                 `json:"webhook_async_timeout_sec,omitempty"`  // async webhook worker agent-run deadline in seconds (default 600, cap 3600)
+	WebhookSyncTimeoutSec   int                 `json:"webhook_sync_timeout_sec,omitempty"`   // sync + test webhook handler agent-run deadline in seconds (default 600, cap 3600). NOTE: sync holds the HTTP connection open for this duration — a value above an upstream proxy/LB read timeout may be cut.
 	BackgroundProvider      string              `json:"background_provider,omitempty"`        // LLM provider for background workers (vault enrichment, consolidation)
 	BackgroundModel         string              `json:"background_model,omitempty"`           // LLM model for background workers
 	PublicURL               string              `json:"public_url,omitempty"`                 // public base URL for OAuth callbacks (e.g. "https://goclaw.example.com")

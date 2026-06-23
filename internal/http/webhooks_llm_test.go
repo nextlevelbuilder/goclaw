@@ -73,6 +73,9 @@ func (s *llmCallStore) ClaimNext(_ context.Context, _ uuid.UUID, _ time.Time) (*
 func (s *llmCallStore) List(_ context.Context, _ store.WebhookCallListFilter) ([]store.WebhookCallData, error) {
 	return nil, nil
 }
+func (s *llmCallStore) Count(_ context.Context, _ store.WebhookCallListFilter) (int, error) {
+	return 0, nil
+}
 func (s *llmCallStore) DeleteOlderThan(_ context.Context, _ uuid.UUID, _ time.Time) (int64, error) {
 	return 0, nil
 }
