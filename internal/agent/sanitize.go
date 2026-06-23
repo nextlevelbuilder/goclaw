@@ -96,9 +96,20 @@ var fullToolCallBlockPattern = regexp.MustCompile(
 // dropped text-encoded tool call can be logged with the tool it tried to call.
 var invokeNamePattern = regexp.MustCompile(`(?i)<invoke\s+name="([^"]+)"`)
 
+// bareInvokeBlockPattern matches a complete `<invoke name="...">...</invoke>`
+// block emitted as text WITHOUT the surrounding <function_calls> wrapper. Some
+// models — and the claude-cli proxy under a degraded session — drop the wrapper
+// and emit just the invoke block, which fullToolCallBlockPattern misses; the
+// tag-only strip would then leak the inner <parameter> text. Applied after the
+// wrapped form so wrapper-nested invokes are already gone.
+var bareInvokeBlockPattern = regexp.MustCompile(
+	`(?is)<invoke\s+name="[^"]*".*?</invoke>`,
+)
+
 var garbledToolXMLIndicators = []string{
 	"invfunction_calls",
 	"functioninvoke",
+	"<invoke name=",
 	"<parameter name=",
 	"</parameter",
 	"<function_call",
@@ -122,26 +133,35 @@ func stripGarbledToolXML(content string) string {
 
 	original := content
 
-	// A COMPLETE <function_calls>...</function_calls> block is not "garble" — it
-	// is a tool call the model wrote as TEXT instead of invoking it natively. This
-	// shows up with the claude-cli thin-proxy provider, where tool execution lives
-	// inside the CLI: when the model emits the call as text the tool never runs,
-	// and the tag-only strip below would leave the inner <parameter> values
-	// mangled into the reply. Remove whole blocks and log the attempted tool
-	// name(s) at WARN so this otherwise-silent no-op is diagnosable.
-	if blocks := fullToolCallBlockPattern.FindAllString(content, -1); len(blocks) > 0 {
-		tools := make([]string, 0, len(blocks))
+	// A COMPLETE tool-call block is not "garble" — it is a tool call the model
+	// wrote as TEXT instead of invoking it natively. This shows up with the
+	// claude-cli thin-proxy provider, where tool execution lives inside the CLI:
+	// when the model emits the call as text the tool never runs, and the tag-only
+	// strip below would leave the inner <parameter> values mangled into the reply.
+	// Remove whole blocks — <function_calls>...</function_calls> wrappers first,
+	// then any bare <invoke>...</invoke> left without a wrapper — and log the
+	// attempted tool name(s) at WARN so this otherwise-silent no-op is diagnosable.
+	var droppedTools []string
+	var droppedBlocks int
+	for _, re := range []*regexp.Regexp{fullToolCallBlockPattern, bareInvokeBlockPattern} {
+		blocks := re.FindAllString(content, -1)
+		if len(blocks) == 0 {
+			continue
+		}
+		droppedBlocks += len(blocks)
 		for _, b := range blocks {
 			for _, m := range invokeNamePattern.FindAllStringSubmatch(b, -1) {
-				tools = append(tools, m[1])
+				droppedTools = append(droppedTools, m[1])
 			}
 		}
+		content = re.ReplaceAllString(content, "")
+	}
+	if droppedBlocks > 0 {
 		slog.Warn("dropped text-encoded tool call from response",
-			"tools", tools,
-			"blocks", len(blocks),
+			"tools", droppedTools,
+			"blocks", droppedBlocks,
 			"hint", "model wrote a tool call as text instead of invoking it; the tool did not run",
 		)
-		content = fullToolCallBlockPattern.ReplaceAllString(content, "")
 	}
 
 	// Strip any remaining stray tags (partial DeepSeek/GLM/Minimax artifacts).

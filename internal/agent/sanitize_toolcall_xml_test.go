@@ -36,6 +36,20 @@ func TestStripGarbledToolXML_FullToolCallBlock(t *testing.T) {
 			input: "Result here <tool_call>oops",
 			want:  "Result here oops",
 		},
+		{
+			name: "removes bare <invoke> block without function_calls wrapper",
+			input: "Collecting PRs.\n\n" +
+				"<invoke name=\"mcp__goclaw-bridge__exec\">\n" +
+				"<parameter name=\"command\">gh pr view 1218</parameter>\n" +
+				"</invoke>",
+			want: "Collecting PRs.",
+		},
+		{
+			name: "bare invoke-only response collapses to empty",
+			input: "<invoke name=\"mcp__goclaw-bridge__message\">" +
+				"<parameter name=\"text\">hi</parameter></invoke>",
+			want: "",
+		},
 	}
 
 	for _, tt := range tests {
@@ -64,5 +78,24 @@ func TestSanitizeAssistantContent_NoToolCallArgumentLeak(t *testing.T) {
 	}
 	if got != "Done." {
 		t.Errorf("SanitizeAssistantContent() = %q, want %q", got, "Done.")
+	}
+}
+
+// Regression: claude-cli under a degraded session emits a tool call as a BARE
+// <invoke> block with no <function_calls> wrapper. The whole block must be
+// removed so the command argument does not leak into the user-facing reply.
+func TestSanitizeAssistantContent_BareInvokeNoWrapper(t *testing.T) {
+	input := "Format error, retrying.\n\n" +
+		"<invoke name=\"mcp__goclaw-bridge__exec\">\n" +
+		"<parameter name=\"command\">( cd ~/secret-path && gh pr view 1218 )</parameter>\n" +
+		"</invoke>"
+
+	got := SanitizeAssistantContent(input)
+
+	if strings.Contains(got, "secret-path") || strings.Contains(got, "gh pr view") {
+		t.Errorf("bare-invoke command argument leaked into reply: %q", got)
+	}
+	if got != "Format error, retrying." {
+		t.Errorf("SanitizeAssistantContent() = %q, want %q", got, "Format error, retrying.")
 	}
 }
