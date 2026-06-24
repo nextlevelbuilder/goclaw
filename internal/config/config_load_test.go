@@ -119,6 +119,37 @@ func TestLoad_EnvVarOverrides(t *testing.T) {
 	}
 }
 
+func TestLoad_WebhookTimeoutsFromFileAndEnv(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.json5")
+	os.WriteFile(cfgPath, []byte(`{"gateway":{"webhook_async_timeout_sec":120,"webhook_sync_timeout_sec":90}}`), 0644)
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load error: %v", err)
+	}
+	if cfg.Gateway.WebhookAsyncTimeoutSec != 120 {
+		t.Fatalf("file async timeout: got %d, want 120", cfg.Gateway.WebhookAsyncTimeoutSec)
+	}
+	if cfg.Gateway.WebhookSyncTimeoutSec != 90 {
+		t.Fatalf("file sync timeout: got %d, want 90", cfg.Gateway.WebhookSyncTimeoutSec)
+	}
+
+	// Env overrides the file values.
+	t.Setenv("GOCLAW_WEBHOOK_ASYNC_TIMEOUT_SEC", "300")
+	t.Setenv("GOCLAW_WEBHOOK_SYNC_TIMEOUT_SEC", "240")
+	cfg, err = Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load with env error: %v", err)
+	}
+	if cfg.Gateway.WebhookAsyncTimeoutSec != 300 {
+		t.Fatalf("env async timeout: got %d, want 300", cfg.Gateway.WebhookAsyncTimeoutSec)
+	}
+	if cfg.Gateway.WebhookSyncTimeoutSec != 240 {
+		t.Fatalf("env sync timeout: got %d, want 240", cfg.Gateway.WebhookSyncTimeoutSec)
+	}
+}
+
 func TestLoad_SkillsMaxUploadSizeFromFileAndEnv(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.json5")

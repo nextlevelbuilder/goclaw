@@ -254,7 +254,18 @@ Triggers an agent with an input prompt. Available in all editions.
 }
 ```
 
-Sync mode times out at **30 seconds**. On timeout: `504 Gateway Timeout` with `webhook.llm_timeout`.
+Sync mode times out after the configured deadline (default **600s**). On timeout: `504 Gateway Timeout` with `webhook.llm_timeout`.
+
+#### Agent-run timeouts (configurable)
+
+Both webhook agent-run deadlines default to **600s** and are capped at **3600s**. Configure via `config.json` or environment variables (env overrides config):
+
+| Setting (config) | Env var | Applies to | Default |
+|------------------|---------|-----------|---------|
+| `gateway.webhook_sync_timeout_sec` | `GOCLAW_WEBHOOK_SYNC_TIMEOUT_SEC` | sync + admin test calls | 600 |
+| `gateway.webhook_async_timeout_sec` | `GOCLAW_WEBHOOK_ASYNC_TIMEOUT_SEC` | async worker runs | 600 |
+
+> Sync mode holds the HTTP connection open for the whole run — a value above an upstream proxy/load-balancer read timeout may be cut before the agent finishes. Async mode returns `202` immediately and runs in the background, so a longer deadline is safe.
 
 ### Async Response — 202 Accepted
 

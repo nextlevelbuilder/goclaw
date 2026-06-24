@@ -21,8 +21,9 @@ import (
 )
 
 const (
-	// webhookLLMTimeout is the hard deadline for synchronous LLM invocations.
-	webhookLLMTimeout = 30 * time.Second
+	// webhookLLMTimeout is the default hard deadline for webhook LLM invocations
+	// (sync + admin test). Overridable per-handler via syncTimeout from config.
+	webhookLLMTimeout = 600 * time.Second
 
 	// webhookLLMResponseTruncate is the maximum bytes stored in the audit row response column.
 	webhookLLMResponseTruncate = 32 * 1024
@@ -100,7 +101,8 @@ type WebhookLLMHandler struct {
 	limiter     *webhookLimiter
 	lane        *scheduler.Lane
 	encKey      string // AES-256-GCM key for decrypting encrypted_secret at HMAC verify time
-	// syncTimeout overrides webhookLLMTimeout (30s) — set in tests only.
+	// syncTimeout overrides the webhookLLMTimeout default (600s); set from
+	// gateway.webhook_sync_timeout_sec config (and in tests). 0 → use default.
 	syncTimeout time.Duration
 }
 
@@ -112,6 +114,7 @@ func NewWebhookLLMHandler(
 	webhooks store.WebhookStore,
 	limiter *webhookLimiter,
 	lane *scheduler.Lane,
+	syncTimeout time.Duration,
 ) *WebhookLLMHandler {
 	if lane == nil {
 		lane = scheduler.NewLane(webhookLaneName, webhookLaneDefaultConcurrency)
@@ -122,6 +125,7 @@ func NewWebhookLLMHandler(
 		webhooks:    webhooks,
 		limiter:     limiter,
 		lane:        lane,
+		syncTimeout: syncTimeout,
 	}
 }
 
