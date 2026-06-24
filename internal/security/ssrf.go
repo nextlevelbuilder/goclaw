@@ -52,6 +52,10 @@ func init() {
 		"172.16.0.0/12",
 		"192.168.0.0/16",
 		"fc00::/7",
+		// Benchmarking (RFC 2544)
+		"198.18.0.0/15",
+		// Reserved for future use
+		"240.0.0.0/4",
 		// Multicast
 		"224.0.0.0/4",
 		"ff00::/8",

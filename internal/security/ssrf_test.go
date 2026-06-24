@@ -45,6 +45,20 @@ func TestValidate_RejectsRFC1918(t *testing.T) {
 	}
 }
 
+func TestValidate_RejectsBenchmarking(t *testing.T) {
+	_, _, err := Validate("http://198.18.1.1/")
+	if err == nil {
+		t.Fatal("expected error for benchmarking range (198.18.0.0/15), got nil")
+	}
+}
+
+func TestValidate_RejectsReserved(t *testing.T) {
+	_, _, err := Validate("http://240.1.2.3/")
+	if err == nil {
+		t.Fatal("expected error for reserved range (240.0.0.0/4), got nil")
+	}
+}
+
 func TestValidate_RejectsMulticast(t *testing.T) {
 	_, _, err := Validate("http://224.0.0.1/")
 	if err == nil {

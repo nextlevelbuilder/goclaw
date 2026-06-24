@@ -131,7 +131,9 @@ func isPrivateIP(ipStr string) bool {
 		{"169.254.0.0", 16},  // link-local
 		{"172.16.0.0", 12},   // private
 		{"192.168.0.0", 16},  // private
-		{"100.64.0.0", 10},   // carrier-grade NAT
+		{"100.64.0.0", 10},   // carrier-grade NAT (RFC 6598)
+		{"198.18.0.0", 15},   // benchmarking (RFC 2544)
+		{"240.0.0.0", 4},     // reserved for future use
 	}
 
 	for _, r := range privateRanges {
