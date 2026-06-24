@@ -240,6 +240,17 @@ func runGateway() {
 	} else {
 		toolsReg.SetRateLimiter(nil)
 	}
+
+	// Re-apply user-configured allowed paths for the same reason as the rate
+	// limiter above: setupToolRegistry wired the filesystem tools' AllowPaths
+	// from the JSON5 default before ApplySystemConfigs overlaid
+	// system_configs['allowed_paths'], so DB-driven paths never reached the tools.
+	// Re-run now that cfg reflects the DB value. Safe: server has not started, no
+	// in-flight tool calls.
+	if paths := cfg.Agents.Defaults.AllowedPaths; len(paths) > 0 {
+		applyUserAllowedPaths(toolsReg, paths)
+		slog.Info("filesystem allowed paths reapplied from system_configs", "paths", len(paths))
+	}
 	setupMemoryEmbeddings(pgStores, providerRegistry)
 	usageCapSvc := usagecaps.NewService(pgStores.UsageCaps, pgStores.Providers)
 
