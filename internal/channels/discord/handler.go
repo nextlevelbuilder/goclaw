@@ -187,7 +187,33 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 	// When not mentioned, record message to pending history for later context.
 	// `mentioned` was pre-computed above for policy gating.
 	if peerKind == "group" && c.RequireMention() {
-		if !mentioned {
+		// Check if this message is in a thread where bot was previously mentioned.
+		inMentionedThread := false
+		if c.isThreadChannel(ctx, channelID) {
+			c.mentionedThreadsMu.Lock()
+			inMentionedThread = c.mentionedThreads[channelID]
+			c.mentionedThreadsMu.Unlock()
+		}
+
+		if mentioned {
+			// Track this thread so future messages don't need a mention.
+			if c.isThreadChannel(ctx, channelID) {
+				c.mentionedThreadsMu.Lock()
+				c.mentionedThreads[channelID] = true
+				// Cap to prevent unbounded growth
+				if len(c.mentionedThreads) > 5000 {
+					i := 0
+					for k := range c.mentionedThreads {
+						if i >= 2500 {
+							break
+						}
+						delete(c.mentionedThreads, k)
+						i++
+					}
+				}
+				c.mentionedThreadsMu.Unlock()
+			}
+		} else if !inMentionedThread {
 			// Collect media file paths for group history context.
 			var mediaPaths []string
 			for _, mf := range mediaFiles {
