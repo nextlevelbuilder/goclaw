@@ -70,7 +70,7 @@ func (t *TtsTool) Parameters() map[string]any {
 			},
 			"provider": map[string]any{
 				"type":        "string",
-				"description": "TTS provider: openai, elevenlabs, edge, minimax. Optional — uses primary if omitted.",
+				"description": "TTS provider: openai, elevenlabs, edge, minimax, gemini. Optional — uses configured primary if omitted.",
 			},
 		},
 		"required": []string{"text"},
@@ -88,11 +88,11 @@ type ttsOverride struct {
 // agentAudioConfig is the JSON shape read from AgentAudioSnapshot.OtherConfig
 // for per-agent TTS tuning. Keys match the agents.other_config column.
 type agentAudioConfig struct {
-	TTSVoiceID string         `json:"tts_voice_id,omitempty"`
-	TTSModelID string         `json:"tts_model_id,omitempty"`
+	TTSVoiceID string `json:"tts_voice_id,omitempty"`
+	TTSModelID string `json:"tts_model_id,omitempty"`
 	// TTSParams carries the per-agent generic TTS override keys (speed, emotion, style).
 	// Stored as generic keys; AdaptAgentParams converts to provider-specific keys per attempt.
-	TTSParams  map[string]any `json:"tts_params,omitempty"`
+	TTSParams map[string]any `json:"tts_params,omitempty"`
 }
 
 // resolveVoiceAndModel computes the effective voice + model IDs for the
@@ -170,6 +170,23 @@ func (t *TtsTool) resolvePrimary(ctx context.Context, mgr *tts.Manager) string {
 	return mgr.PrimaryProvider()
 }
 
+// resolveTenantProvider returns the DB-configured TTS provider for this request.
+// When requestedProvider is non-empty, only the matching tenant provider is
+// accepted so an explicit provider never silently routes elsewhere.
+func (t *TtsTool) resolveTenantProvider(ctx context.Context, mgr *tts.Manager, requestedProvider string) (audio.TTSProvider, string, bool) {
+	if mgr == nil {
+		return nil, "", false
+	}
+	p, name, _, ok := mgr.ResolveTenantProvider(ctx)
+	if !ok || p == nil || name == "" {
+		return nil, "", false
+	}
+	if requestedProvider != "" && requestedProvider != name {
+		return nil, "", false
+	}
+	return p, name, true
+}
+
 // resolveAgentGenericTTSParams reads the per-agent TTSParams generic map from
 // the dispatcher-injected AgentAudioSnapshot. Returns nil when no snapshot
 // is present or no tts_params are configured. The caller is responsible for
@@ -240,31 +257,45 @@ func (t *TtsTool) Execute(ctx context.Context, args map[string]any) *Result {
 		// Adapt generic agent params to this specific provider's native keys.
 		p, ok := mgr.GetProvider(providerName)
 		if !ok {
-			return &Result{ForLLM: fmt.Sprintf("error: tts provider not found: %s", providerName), IsError: true}
+			var tenantName string
+			p, tenantName, ok = t.resolveTenantProvider(ctx, mgr, providerName)
+			if !ok {
+				return &Result{ForLLM: fmt.Sprintf("error: tts provider not found: %s", providerName), IsError: true}
+			}
+			providerName = tenantName
 		}
 		if adapted := audio.AdaptAgentParams(genericAgentParams, providerName); len(adapted) > 0 {
 			opts.Params = mergeParams(opts.Params, adapted)
 		}
 		result, err = p.Synthesize(ctx, text, opts)
 	} else {
-		// Resolve primary from tenant settings or default.
-		primary := t.resolvePrimary(ctx, mgr)
-		if p, ok := mgr.GetProvider(primary); ok {
-			// Adapt for the primary provider attempt specifically.
-			primaryOpts := opts
-			if adapted := audio.AdaptAgentParams(genericAgentParams, primary); len(adapted) > 0 {
-				primaryOpts.Params = mergeParams(opts.Params, adapted)
+		// Prefer the DB-configured tenant provider used by /tts and auto-TTS.
+		if p, tenantName, ok := t.resolveTenantProvider(ctx, mgr, ""); ok {
+			tenantOpts := opts
+			if adapted := audio.AdaptAgentParams(genericAgentParams, tenantName); len(adapted) > 0 {
+				tenantOpts.Params = mergeParams(opts.Params, adapted)
 			}
-			result, err = p.Synthesize(ctx, text, primaryOpts)
-			if err != nil {
-				slog.Warn("tts primary provider failed, trying fallback", "provider", primary, "error", err)
-				// SynthesizeWithFallbackAdapted adapts genericAgentParams per-attempt
-				// (Finding #1 CRITICAL): each fallback provider receives its own
-				// provider-native keys, not the primary's adapted map.
+			result, err = p.Synthesize(ctx, text, tenantOpts)
+		} else {
+			// Resolve primary from tenant settings or default.
+			primary := t.resolvePrimary(ctx, mgr)
+			if p, ok := mgr.GetProvider(primary); ok {
+				// Adapt for the primary provider attempt specifically.
+				primaryOpts := opts
+				if adapted := audio.AdaptAgentParams(genericAgentParams, primary); len(adapted) > 0 {
+					primaryOpts.Params = mergeParams(opts.Params, adapted)
+				}
+				result, err = p.Synthesize(ctx, text, primaryOpts)
+				if err != nil {
+					slog.Warn("tts primary provider failed, trying fallback", "provider", primary, "error", err)
+					// SynthesizeWithFallbackAdapted adapts genericAgentParams per-attempt
+					// (Finding #1 CRITICAL): each fallback provider receives its own
+					// provider-native keys, not the primary's adapted map.
+					result, err = mgr.SynthesizeWithFallbackAdapted(ctx, text, opts, genericAgentParams)
+				}
+			} else {
 				result, err = mgr.SynthesizeWithFallbackAdapted(ctx, text, opts, genericAgentParams)
 			}
-		} else {
-			result, err = mgr.SynthesizeWithFallbackAdapted(ctx, text, opts, genericAgentParams)
 		}
 	}
 
