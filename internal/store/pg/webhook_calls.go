@@ -160,7 +160,7 @@ func (s *PGWebhookCallStore) ClaimNext(ctx context.Context, tenantID uuid.UUID, 
 	lease := uuid.New().String()
 	row := tx.QueryRowContext(ctx,
 		`UPDATE webhook_calls
-		 SET status = 'running', started_at = $1, lease_token = $2
+		 SET status = 'running', started_at = $1, lease_token = $2, last_heartbeat_at = $1
 		 WHERE id = $3
 		 RETURNING `+webhookCallColumns,
 		now, lease, callID,
@@ -274,21 +274,48 @@ func (s *PGWebhookCallStore) DeleteOlderThan(ctx context.Context, tenantID uuid.
 }
 
 // ReclaimStale resets stale running rows back to queued so the worker can retry them.
-// A row is considered stale when started_at < staleThreshold (i.e., the worker that
-// claimed it crashed before completing UpdateStatus).
+// A row is considered stale when last_heartbeat_at < staleThreshold (the worker stopped
+// renewing its lease, indicating it crashed or hung). Rows with NULL last_heartbeat_at
+// (legacy/never-heartbeated running rows) are also reclaimed defensively.
 // Cross-tenant: no tenant_id filter — the retention worker sweeps the whole table.
 func (s *PGWebhookCallStore) ReclaimStale(ctx context.Context, staleThreshold time.Time) (int64, error) {
 	// Clear lease_token so any in-flight UpdateStatusCAS from the crashed worker returns ErrLeaseExpired.
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE webhook_calls
-		 SET status = 'queued', started_at = NULL, lease_token = NULL
-		 WHERE mode = 'async' AND status = 'running' AND started_at < $1`,
+		 SET status = 'queued', started_at = NULL, lease_token = NULL, last_heartbeat_at = NULL
+		 WHERE mode = 'async' AND status = 'running'
+		   AND (last_heartbeat_at IS NULL OR last_heartbeat_at < $1)`,
 		staleThreshold,
 	)
 	if err != nil {
 		return 0, err
 	}
 	return res.RowsAffected()
+}
+
+// Heartbeat renews the lease for a running call (CAS on lease_token + tenant).
+// Returns store.ErrLeaseExpired if 0 rows matched (row reclaimed → caller must stop the run).
+// Hand-rolled (not execMapUpdateWhereTenantLease) because we also need AND status='running'
+// to reject renewing terminal-state rows — the shared helper has no status guard.
+func (s *PGWebhookCallStore) Heartbeat(ctx context.Context, callID uuid.UUID, lease string, now time.Time) error {
+	tid, err := requireTenantID(ctx)
+	if err != nil {
+		return err
+	}
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE webhook_calls
+		 SET last_heartbeat_at = $1
+		 WHERE id = $2 AND tenant_id = $3 AND lease_token = $4 AND status = 'running'`,
+		now, callID, tid, lease,
+	)
+	if err != nil {
+		return err
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return store.ErrLeaseExpired
+	}
+	return nil
 }
 
 // execMapUpdateWhereTenantLease is like execMapUpdateWhereTenantNoUpdatedAt but adds

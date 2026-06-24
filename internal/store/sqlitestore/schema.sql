@@ -2072,6 +2072,7 @@ CREATE TABLE IF NOT EXISTS webhook_calls (
     delivery_id      TEXT     NOT NULL,
     next_attempt_at  TEXT,
     started_at       TEXT,
+    last_heartbeat_at TEXT,
     lease_token      TEXT,
     request_payload  TEXT,
     response         TEXT,

@@ -123,6 +123,9 @@ func (s *msgCallStore) DeleteOlderThan(_ context.Context, _ uuid.UUID, _ time.Ti
 func (s *msgCallStore) ReclaimStale(_ context.Context, _ time.Time) (int64, error) {
 	return 0, nil
 }
+func (s *msgCallStore) Heartbeat(_ context.Context, _ uuid.UUID, _ string, _ time.Time) error {
+	return nil
+}
 
 // ---- stub: store.WebhookStore (message handler tests — minimal no-op) ----
 

@@ -138,6 +138,9 @@ func (s *stubWebhookCallStore) DeleteOlderThan(_ context.Context, _ uuid.UUID, _
 func (s *stubWebhookCallStore) ReclaimStale(_ context.Context, _ time.Time) (int64, error) {
 	return 0, nil
 }
+func (s *stubWebhookCallStore) Heartbeat(_ context.Context, _ uuid.UUID, _ string, _ time.Time) error {
+	return nil
+}
 
 // ---- helpers ----
 

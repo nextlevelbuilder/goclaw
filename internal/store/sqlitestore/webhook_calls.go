@@ -171,8 +171,8 @@ func (s *SQLiteWebhookCallStore) ClaimNext(ctx context.Context, tenantID uuid.UU
 	// Attempts untouched — worker increments post-send.
 	lease := uuid.New().String()
 	_, err = tx.ExecContext(ctx,
-		`UPDATE webhook_calls SET status = 'running', started_at = ?, lease_token = ? WHERE id = ?`,
-		now, lease, callID,
+		`UPDATE webhook_calls SET status = 'running', started_at = ?, lease_token = ?, last_heartbeat_at = ? WHERE id = ?`,
+		now, lease, now, callID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("webhook_calls ClaimNext update: %w", err)
@@ -287,19 +287,47 @@ func (s *SQLiteWebhookCallStore) DeleteOlderThan(ctx context.Context, tenantID u
 }
 
 // ReclaimStale resets stale running rows back to queued so the worker can retry them.
+// A row is stale when last_heartbeat_at < staleThreshold (worker stopped renewing its lease);
+// NULL last_heartbeat_at (legacy/never-heartbeated running rows) is also reclaimed defensively.
 // Clears lease_token so any in-flight UpdateStatusCAS from the crashed goroutine returns ErrLeaseExpired.
 // SQLite stores timestamps as ISO-8601 strings; comparison uses standard string ordering.
 func (s *SQLiteWebhookCallStore) ReclaimStale(ctx context.Context, staleThreshold time.Time) (int64, error) {
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE webhook_calls
-		 SET status = 'queued', started_at = NULL, lease_token = NULL
-		 WHERE mode = 'async' AND status = 'running' AND started_at < ?`,
+		 SET status = 'queued', started_at = NULL, lease_token = NULL, last_heartbeat_at = NULL
+		 WHERE mode = 'async' AND status = 'running'
+		   AND (last_heartbeat_at IS NULL OR last_heartbeat_at < ?)`,
 		staleThreshold,
 	)
 	if err != nil {
 		return 0, err
 	}
 	return res.RowsAffected()
+}
+
+// Heartbeat renews the lease for a running call (CAS on lease_token + tenant).
+// Returns store.ErrLeaseExpired if 0 rows matched (row reclaimed → caller must stop the run).
+// Hand-rolled (not execMapUpdateWhereTenantLeaseNoUpdatedAt) because we also need
+// AND status='running' to reject renewing terminal-state rows — the shared helper has no status guard.
+func (s *SQLiteWebhookCallStore) Heartbeat(ctx context.Context, callID uuid.UUID, lease string, now time.Time) error {
+	tid, err := requireTenantID(ctx)
+	if err != nil {
+		return err
+	}
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE webhook_calls
+		 SET last_heartbeat_at = ?
+		 WHERE id = ? AND tenant_id = ? AND lease_token = ? AND status = 'running'`,
+		now, callID, tid, lease,
+	)
+	if err != nil {
+		return err
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return store.ErrLeaseExpired
+	}
+	return nil
 }
 
 // execMapUpdateWhereTenantLeaseNoUpdatedAt is like execMapUpdateWhereTenantNoUpdatedAt but adds

@@ -82,6 +82,9 @@ func (s *llmCallStore) DeleteOlderThan(_ context.Context, _ uuid.UUID, _ time.Ti
 func (s *llmCallStore) ReclaimStale(_ context.Context, _ time.Time) (int64, error) {
 	return 0, nil
 }
+func (s *llmCallStore) Heartbeat(_ context.Context, _ uuid.UUID, _ string, _ time.Time) error {
+	return nil
+}
 
 // ---- helpers ----
 

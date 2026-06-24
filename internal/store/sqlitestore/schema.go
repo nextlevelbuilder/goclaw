@@ -16,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 51
+const SchemaVersion = 52
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -881,6 +881,9 @@ CREATE INDEX IF NOT EXISTS idx_skill_user_grants_tenant ON skill_user_grants(ten
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_oauth_tokens_global_uq ON mcp_oauth_tokens (server_id, tenant_id) WHERE user_id IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_oauth_tokens_user_uq ON mcp_oauth_tokens (server_id, tenant_id, user_id) WHERE user_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_mcp_oauth_tokens_server_tenant ON mcp_oauth_tokens (server_id, tenant_id);`,
+	// Version 51 → 52: add last_heartbeat_at to webhook_calls for lease heartbeat.
+	// Mirrors PG migration 000085. Idempotent-guarded via idempotentColumnMigration(51).
+	51: `ALTER TABLE webhook_calls ADD COLUMN last_heartbeat_at TEXT;`,
 }
 
 const addUsageEventAnalyticsTables = `
@@ -1479,6 +1482,8 @@ func idempotentColumnMigration(version int) (string, string, bool) {
 		return "secure_cli_user_credentials", "host_scope", true
 	case 41:
 		return "secure_cli_binaries", "adapter_name", true
+	case 51:
+		return "webhook_calls", "last_heartbeat_at", true
 	default:
 		return "", "", false
 	}

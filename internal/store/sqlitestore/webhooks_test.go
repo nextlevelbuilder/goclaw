@@ -5,6 +5,7 @@ package sqlitestore
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"testing"
 	"time"
 
@@ -312,5 +313,104 @@ func TestWebhookCallIdempotencyConflict(t *testing.T) {
 	}
 	if err != store.ErrIdempotencyConflict {
 		t.Errorf("expected ErrIdempotencyConflict, got: %v", err)
+	}
+}
+
+// TestWebhookCallHeartbeat verifies Heartbeat renews last_heartbeat_at when lease matches,
+// and returns ErrLeaseExpired when the lease is wrong.
+func TestWebhookCallHeartbeat(t *testing.T) {
+	db := openTestWebhookDB(t)
+	ws := NewSQLiteWebhookStore(db)
+	cs := NewSQLiteWebhookCallStore(db)
+
+	tenantID := uuid.New()
+	ctx := testTenantCtx(tenantID)
+	wh := &store.WebhookData{
+		ID: uuid.New(), TenantID: tenantID, Name: "wh-hb", Kind: "llm",
+		SecretHash: "h-hb", Scopes: []string{}, IPAllowlist: []string{},
+		RateLimitPerMin: 60, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}
+	if err := ws.Create(ctx, wh); err != nil {
+		t.Fatalf("Create webhook: %v", err)
+	}
+
+	now := time.Now().UTC()
+	queued := &store.WebhookCallData{
+		ID: uuid.New(), TenantID: tenantID, WebhookID: wh.ID,
+		DeliveryID: uuid.New(), Mode: "async", Status: "queued", CreatedAt: now,
+	}
+	if err := cs.Create(ctx, queued); err != nil {
+		t.Fatalf("Create queued: %v", err)
+	}
+
+	claimed, err := cs.ClaimNext(ctx, tenantID, now)
+	if err != nil {
+		t.Fatalf("ClaimNext: %v", err)
+	}
+	lease := ""
+	if claimed.LeaseToken != nil {
+		lease = *claimed.LeaseToken
+	}
+	if lease == "" {
+		t.Fatal("ClaimNext must set lease_token")
+	}
+
+	// Correct lease → renews, no error.
+	if err := cs.Heartbeat(ctx, claimed.ID, lease, time.Now().UTC()); err != nil {
+		t.Fatalf("Heartbeat with valid lease: %v", err)
+	}
+
+	// Wrong lease → ErrLeaseExpired.
+	err = cs.Heartbeat(ctx, claimed.ID, "wrong-lease", time.Now().UTC())
+	if !errors.Is(err, store.ErrLeaseExpired) {
+		t.Errorf("Heartbeat wrong lease: got %v, want ErrLeaseExpired", err)
+	}
+}
+
+// TestWebhookCallReclaimStaleRespectsHeartbeat verifies a row with a fresh heartbeat
+// is NOT reclaimed even if started_at is old.
+func TestWebhookCallReclaimStaleRespectsHeartbeat(t *testing.T) {
+	db := openTestWebhookDB(t)
+	ws := NewSQLiteWebhookStore(db)
+	cs := NewSQLiteWebhookCallStore(db)
+
+	tenantID := uuid.New()
+	ctx := testTenantCtx(tenantID)
+	wh := &store.WebhookData{
+		ID: uuid.New(), TenantID: tenantID, Name: "wh-hb2", Kind: "llm",
+		SecretHash: "h-hb2", Scopes: []string{}, IPAllowlist: []string{},
+		RateLimitPerMin: 60, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}
+	if err := ws.Create(ctx, wh); err != nil {
+		t.Fatalf("Create webhook: %v", err)
+	}
+
+	oldStart := time.Now().UTC().Add(-time.Hour)
+	freshHB := time.Now().UTC() // recent heartbeat
+	id := uuid.New()
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO webhook_calls (id,tenant_id,webhook_id,delivery_id,mode,status,attempts,created_at,started_at,last_heartbeat_at,lease_token)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+		id, tenantID, wh.ID, uuid.New(), "async", "running", 0, oldStart, oldStart, freshHB, "lease-x",
+	)
+	if err != nil {
+		t.Fatalf("insert running row: %v", err)
+	}
+
+	// Threshold = now - 90s. Fresh heartbeat (now) is NOT older than threshold → not reclaimed.
+	n, err := cs.ReclaimStale(ctx, time.Now().UTC().Add(-90*time.Second))
+	if err != nil {
+		t.Fatalf("ReclaimStale: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("reclaimed %d rows, want 0 (fresh heartbeat must protect row)", n)
+	}
+
+	var status string
+	if err := db.QueryRowContext(ctx, `SELECT status FROM webhook_calls WHERE id = ?`, id).Scan(&status); err != nil {
+		t.Fatalf("select row: %v", err)
+	}
+	if status != "running" {
+		t.Fatalf("status = %q, want running", status)
 	}
 }

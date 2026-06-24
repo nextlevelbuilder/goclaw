@@ -163,6 +163,11 @@ type WebhookCallStore interface {
 	// Returns sql.ErrNoRows if the queue is empty.
 	ClaimNext(ctx context.Context, tenantID uuid.UUID, now time.Time) (*WebhookCallData, error)
 
+	// Heartbeat renews the lease for a running call (CAS on lease_token).
+	// Sets last_heartbeat_at = now WHERE id=callID AND lease_token=lease AND status='running'.
+	// Returns store.ErrLeaseExpired if 0 rows match (lease was reclaimed) — the caller MUST stop the current run.
+	Heartbeat(ctx context.Context, callID uuid.UUID, lease string, now time.Time) error
+
 	// List returns calls for the context tenant with optional filters.
 	List(ctx context.Context, f WebhookCallListFilter) ([]WebhookCallData, error)
 
@@ -173,9 +178,9 @@ type WebhookCallStore interface {
 	// If tenantID is uuid.Nil, deletes across all tenants (retention worker).
 	DeleteOlderThan(ctx context.Context, tenantID uuid.UUID, ts time.Time) (int64, error)
 
-	// ReclaimStale resets rows stuck in status='running' with started_at older than
-	// staleThreshold back to status='queued'. Called on worker startup and periodically
-	// (every 60s) to recover from crashes between ClaimNext and UpdateStatus.
-	// Returns the number of rows reclaimed.
+	// ReclaimStale resets rows stuck in status='running' whose last_heartbeat_at is older
+	// than staleThreshold (or NULL — never-heartbeated/legacy rows) back to status='queued'.
+	// Called on worker startup and periodically (every 60s) to recover from a worker that
+	// crashed or hung and stopped renewing its lease. Returns the number of rows reclaimed.
 	ReclaimStale(ctx context.Context, staleThreshold time.Time) (int64, error)
 }

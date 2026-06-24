@@ -90,6 +90,7 @@ func (s *adminCallStore) DeleteOlderThan(context.Context, uuid.UUID, time.Time) 
 	return 0, nil
 }
 func (s *adminCallStore) ReclaimStale(context.Context, time.Time) (int64, error) { return 0, nil }
+func (s *adminCallStore) Heartbeat(context.Context, uuid.UUID, string, time.Time) error { return nil }
 
 // ---- stub testers ----
 

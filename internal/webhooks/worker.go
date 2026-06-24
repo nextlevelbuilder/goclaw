@@ -36,6 +36,10 @@ const (
 	// staleRunningWindow is how long a running row must be inactive before being reclaimed.
 	staleRunningWindow = 90 * time.Second
 
+	// heartbeatInterval is how often a running agent renews its lease.
+	// = staleRunningWindow / 3 → safe margin so a live run is never reclaimed.
+	heartbeatInterval = 30 * time.Second
+
 	// reclaimTickInterval is how often the reclaim sweep runs after startup.
 	reclaimTickInterval = 60 * time.Second
 
@@ -340,7 +344,7 @@ func (w *WebhookWorker) execute(ctx context.Context, call *store.WebhookCallData
 	var agentErrMsg string
 
 	if len(call.Response) == 0 && call.AgentID != nil {
-		out, usage, invokeErr := w.invokeAgent(tctx, call, req)
+		out, usage, invokeErr := w.invokeAgentWithHeartbeat(tctx, call, req, lease)
 		if invokeErr != nil {
 			agentErrMsg = invokeErr.Error()
 			slog.Warn("webhook.worker.agent_invoke_failed",
@@ -706,9 +710,10 @@ func (w *WebhookWorker) resetToQueued(ctx context.Context, call *store.WebhookCa
 	}
 	tctx := store.WithTenantID(ctx, tenantID)
 	updates := map[string]any{
-		"status":      "queued",
-		"started_at":  nil,
-		"lease_token": nil, // clear lease so next claimer can acquire
+		"status":            "queued",
+		"started_at":        nil,
+		"lease_token":       nil, // clear lease so next claimer can acquire
+		"last_heartbeat_at": nil, // clear heartbeat — row is no longer running
 		// attempts left unchanged — this was not a real send attempt
 	}
 	if err := w.calls.UpdateStatusCAS(tctx, call.ID, lease, updates); err != nil {
@@ -721,6 +726,63 @@ func (w *WebhookWorker) resetToQueued(ctx context.Context, call *store.WebhookCa
 			"reason", reason,
 			"error", err,
 		)
+	}
+}
+
+// invokeAgentWithHeartbeat runs the agent alongside a heartbeat goroutine that renews the lease.
+// If the lease is lost (row reclaimed), the heartbeat cancels runCtx so the agent stops immediately
+// and writes no further MCP side-effects. ctx must already be detached from worker-shutdown
+// cancellation (execute passes tctx).
+func (w *WebhookWorker) invokeAgentWithHeartbeat(
+	ctx context.Context,
+	call *store.WebhookCallData,
+	req asyncPayload,
+	lease string,
+) (string, *callbackUsage, error) {
+	runCtx, cancelRun := context.WithCancel(ctx)
+	defer cancelRun()
+
+	hbStop := make(chan struct{})
+	// Deferred so the heartbeat goroutine is stopped even if invokeAgent panics
+	// (the panic unwinds past this frame; execute's recover() runs afterwards).
+	defer close(hbStop)
+	go w.heartbeatLoop(ctx, call.ID, lease, heartbeatInterval, hbStop, cancelRun)
+
+	return w.invokeAgent(runCtx, call, req)
+}
+
+// heartbeatLoop calls Heartbeat every interval until stop is closed. When Heartbeat returns
+// ErrLeaseExpired (lease reclaimed), it calls cancelRun() to stop the current run, then returns.
+// It uses ctx (detached from shutdown) for the DB call so the heartbeat is not cancelled with runCtx.
+func (w *WebhookWorker) heartbeatLoop(
+	ctx context.Context,
+	callID uuid.UUID,
+	lease string,
+	interval time.Duration,
+	stop <-chan struct{},
+	cancelRun context.CancelFunc,
+) {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-stop:
+			return
+		case <-t.C:
+			// Bound each heartbeat DB call so a stalled connection can't block the goroutine
+			// past the next tick — it should retry on the next interval, not hang indefinitely.
+			hbCtx, hbCancel := context.WithTimeout(ctx, 5*time.Second)
+			err := w.calls.Heartbeat(hbCtx, callID, lease, time.Now())
+			hbCancel()
+			if err != nil {
+				if errors.Is(err, store.ErrLeaseExpired) {
+					slog.Warn("webhook.worker.lease_lost_cancel_run", "call_id", callID)
+					cancelRun()
+					return
+				}
+				slog.Error("webhook.worker.heartbeat_failed", "call_id", callID, "error", err)
+			}
+		}
 	}
 }
 
@@ -770,10 +832,13 @@ func (w *WebhookWorker) invokeAgent(
 		TraceTags:         []string{"webhook", "async"},
 	}
 
-	runCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), w.cfg.AsyncAgentTimeout)
+	// Honor ctx so heartbeatLoop can cancel the run on lease loss. execute already detached
+	// ctx from worker-shutdown cancellation (tctx = WithoutCancel), so dropping WithoutCancel
+	// here does NOT let shutdown kill the run — only cancelRun() from the heartbeat does.
+	agentCtx, cancel := context.WithTimeout(ctx, w.cfg.AsyncAgentTimeout)
 	defer cancel()
 
-	result, runErr := ag.Run(runCtx, rr)
+	result, runErr := ag.Run(agentCtx, rr)
 	if runErr != nil {
 		return "", nil, runErr
 	}
