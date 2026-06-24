@@ -58,14 +58,20 @@ func (s *ToolStage) Execute(ctx context.Context, state *RunState) error {
 	}
 
 	// Sequential fallback: ExecuteToolCall handles both I/O and state mutation.
+	// Non-tool messages (warnings, nudges) are deferred until all tool results
+	// are emitted to maintain correct tool_result grouping for OpenAI-compatible
+	// providers. See https://github.com/nextlevelbuilder/goclaw/issues/1177
 	cumulativeWaitMs := 0
+	var deferredNonTool []providers.Message
 	for _, tc := range toolCalls {
 		if s.shouldStopBeforeTool(ctx, state) {
+			appendDeferredMessages(state, deferredNonTool)
 			return nil
 		}
 		if s.deps.SequentialToolCall != nil && s.deps.SequentialToolCall(tc) {
 			cumulativeWaitMs += toolCallTimeMs(tc)
 			if cumulativeWaitMs > maxSequentialWaitBatchMs {
+				appendDeferredMessages(state, deferredNonTool)
 				s.result = AbortRun
 				return nil
 			}
@@ -82,9 +88,7 @@ func (s *ToolStage) Execute(ctx context.Context, state *RunState) error {
 		if err != nil {
 			return fmt.Errorf("execute tool %s: %w", tc.Name, err)
 		}
-		for _, msg := range msgs {
-			state.Messages.AppendPending(msg)
-		}
+		appendToolBatchMessages(state, msgs, &deferredNonTool)
 		state.Tool.TotalToolCalls++
 
 		// Hook: async PostToolUse — fire and forget with detached context.
@@ -102,15 +106,18 @@ func (s *ToolStage) Execute(ctx context.Context, state *RunState) error {
 		}
 
 		if state.Tool.LoopKilled {
+			appendDeferredMessages(state, deferredNonTool)
 			s.result = BreakLoop
 			return nil
 		}
 		if ctx.Err() != nil {
+			appendDeferredMessages(state, deferredNonTool)
 			s.result = AbortRun
 			return nil
 		}
 	}
 
+	appendDeferredMessages(state, deferredNonTool)
 	s.checkExitConditions(state)
 	return nil
 }
@@ -277,11 +284,13 @@ func (s *ToolStage) executeParallel(ctx context.Context, state *RunState, prefli
 		"limit", defaultParallelToolCallLimit,
 		"duration_ms", time.Since(startedAt).Milliseconds())
 
-	// Phase 2: sequential state mutation (safe, deterministic order)
+	// Phase 2: sequential state mutation (safe, deterministic order).
+	// Non-tool messages deferred until all tool results are emitted (#1177).
 	resultByIndex := make(map[int]rawResult, len(results))
 	for _, r := range results {
 		resultByIndex[r.index] = r
 	}
+	var deferredNonTool []providers.Message
 	for _, item := range preflight.ordered {
 		tc := item.tc
 		if item.blocked != nil {
@@ -297,9 +306,7 @@ func (s *ToolStage) executeParallel(ctx context.Context, state *RunState, prefli
 			return fmt.Errorf("execute tool %s: %w", tc.Name, r.err)
 		}
 		processed := s.deps.ProcessToolResult(ctx, state, tc, r.msg, r.rawData)
-		for _, msg := range processed {
-			state.Messages.AppendPending(msg)
-		}
+		appendToolBatchMessages(state, processed, &deferredNonTool)
 		state.Tool.TotalToolCalls++
 
 		// Hook: async PostToolUse for parallel path — fire and forget.
@@ -318,13 +325,36 @@ func (s *ToolStage) executeParallel(ctx context.Context, state *RunState, prefli
 		}
 
 		if state.Tool.LoopKilled {
+			appendDeferredMessages(state, deferredNonTool)
 			s.result = BreakLoop
 			return nil
 		}
 	}
 
+	appendDeferredMessages(state, deferredNonTool)
 	s.checkExitConditions(state)
 	return nil
+}
+
+// appendToolBatchMessages appends tool-role messages immediately and defers
+// non-tool messages (warnings, nudges) so that all tool results for a single
+// assistant turn stay contiguous. This prevents OpenAI-compatible providers
+// from rejecting the transcript due to interleaved user messages (#1177).
+func appendToolBatchMessages(state *RunState, msgs []providers.Message, deferred *[]providers.Message) {
+	for _, msg := range msgs {
+		if msg.Role == "tool" {
+			state.Messages.AppendPending(msg)
+		} else {
+			*deferred = append(*deferred, msg)
+		}
+	}
+}
+
+// appendDeferredMessages flushes deferred non-tool messages into pending.
+func appendDeferredMessages(state *RunState, deferred []providers.Message) {
+	for _, msg := range deferred {
+		state.Messages.AppendPending(msg)
+	}
 }
 
 // checkExitConditions checks read-only streak and tool budget.

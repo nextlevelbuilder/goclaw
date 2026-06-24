@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -262,5 +263,120 @@ func TestSanitizeHistory_EmptyToolCallID(t *testing.T) {
 	// user + assistant + synth(tc1)
 	if len(result) != 3 {
 		t.Fatalf("expected 3 messages, got %d", len(result))
+	}
+}
+
+// --- sanitizeHistory: interleaved user warning between tool results (#1177) ---
+// When a synthetic user message (loop warning) appears between tool results
+// for the same assistant, it should be deferred after all tool results.
+
+func TestSanitizeHistory_InterleavedUserWarningBetweenToolResults(t *testing.T) {
+	msgs := []providers.Message{
+		{Role: "user", Content: "do work"},
+		{Role: "assistant", Content: "", ToolCalls: []providers.ToolCall{
+			{ID: "tc1", Name: "read_file", Arguments: map[string]any{}},
+			{ID: "tc2", Name: "read_file", Arguments: map[string]any{}},
+			{ID: "tc3", Name: "read_file", Arguments: map[string]any{}},
+		}},
+		{Role: "tool", Content: "result1", ToolCallID: "tc1"},
+		{Role: "user", Content: "loop warning: read-only streak"}, // interleaved!
+		{Role: "tool", Content: "result2", ToolCallID: "tc2"},
+		{Role: "tool", Content: "result3", ToolCallID: "tc3"},
+		{Role: "user", Content: "next question"},
+	}
+
+	result, dropped := sanitizeHistory(msgs)
+
+	// All tool results should be contiguous, warning deferred after them.
+	// Expected order: user, assistant, tool(tc1), tool(tc2), tool(tc3), user(warning), user(next)
+	// The two consecutive user messages will be merged by role-alternation fix.
+	if dropped < 0 {
+		t.Fatalf("unexpected negative dropped: %d", dropped)
+	}
+
+	// Verify tool results are contiguous (no non-tool message between them)
+	toolStart := -1
+	toolEnd := -1
+	for i, m := range result {
+		if m.Role == "tool" {
+			if toolStart == -1 {
+				toolStart = i
+			}
+			toolEnd = i
+		}
+	}
+	if toolStart >= 0 {
+		for i := toolStart; i <= toolEnd; i++ {
+			if result[i].Role != "tool" {
+				t.Fatalf("non-tool message at index %d between tool results (role=%s, content=%q)",
+					i, result[i].Role, result[i].Content)
+			}
+		}
+	}
+
+	// Verify all 3 tool call IDs are present
+	toolIDs := make(map[string]bool)
+	for _, m := range result {
+		if m.Role == "tool" {
+			toolIDs[m.ToolCallID] = true
+		}
+	}
+	for _, id := range []string{"tc1", "tc2", "tc3"} {
+		if !toolIDs[id] {
+			t.Fatalf("missing tool result for %s", id)
+		}
+	}
+
+	// Verify warning appears after all tool results
+	warningIdx := slices.IndexFunc(result, func(m providers.Message) bool {
+		return m.Role == "user" && strings.Contains(m.Content, "loop warning")
+	})
+	if warningIdx >= 0 && warningIdx <= toolEnd {
+		t.Fatalf("warning (index %d) should appear after last tool result (index %d)", warningIdx, toolEnd)
+	}
+}
+
+// --- sanitizeHistory: multiple warnings interleaved between tool results (#1177) ---
+
+func TestSanitizeHistory_MultipleWarningsBetweenToolResults(t *testing.T) {
+	msgs := []providers.Message{
+		{Role: "user", Content: "go"},
+		{Role: "assistant", Content: "", ToolCalls: []providers.ToolCall{
+			{ID: "tc1", Name: "exec", Arguments: map[string]any{}},
+			{ID: "tc2", Name: "exec", Arguments: map[string]any{}},
+		}},
+		{Role: "tool", Content: "r1", ToolCallID: "tc1"},
+		{Role: "user", Content: "warning1"},
+		{Role: "user", Content: "warning2"},
+		{Role: "tool", Content: "r2", ToolCallID: "tc2"},
+	}
+
+	result, _ := sanitizeHistory(msgs)
+
+	// Tool results must be contiguous
+	toolStart := -1
+	toolEnd := -1
+	for i, m := range result {
+		if m.Role == "tool" {
+			if toolStart == -1 {
+				toolStart = i
+			}
+			toolEnd = i
+		}
+	}
+	if toolStart >= 0 {
+		for i := toolStart; i <= toolEnd; i++ {
+			if result[i].Role != "tool" {
+				t.Fatalf("non-tool message at index %d between tool results", i)
+			}
+		}
+	}
+
+	// Both tool results present
+	if !slices.ContainsFunc(result, func(m providers.Message) bool { return m.ToolCallID == "tc1" }) {
+		t.Fatal("missing tc1")
+	}
+	if !slices.ContainsFunc(result, func(m providers.Message) bool { return m.ToolCallID == "tc2" }) {
+		t.Fatal("missing tc2")
 	}
 }

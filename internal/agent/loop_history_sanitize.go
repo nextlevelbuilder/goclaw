@@ -113,22 +113,36 @@ func sanitizeHistory(msgs []providers.Message) ([]providers.Message, int) {
 
 			result = append(result, msg)
 
-			// Collect matching tool results that follow
-			for i+1 < len(msgs) && msgs[i+1].Role == "tool" {
-				i++
-				toolMsg := msgs[i]
-				if queue, ok := idQueue[toolMsg.ToolCallID]; ok && len(queue) > 0 {
-					newID := queue[0]
-					idQueue[toolMsg.ToolCallID] = queue[1:]
-					toolMsg.ToolCallID = newID
-					result = append(result, toolMsg)
-					delete(expectedIDs, newID)
+			// Collect matching tool results that follow.
+			// Non-tool messages (warnings, nudges) interleaved between tool results
+			// are deferred until all tool results for this assistant turn are collected,
+			// maintaining contiguous tool_result grouping (#1177).
+			var deferredNonTool []providers.Message
+			for i+1 < len(msgs) {
+				next := msgs[i+1]
+				if next.Role == "tool" {
+					i++
+					if queue, ok := idQueue[next.ToolCallID]; ok && len(queue) > 0 {
+						newID := queue[0]
+						idQueue[next.ToolCallID] = queue[1:]
+						next.ToolCallID = newID
+						result = append(result, next)
+						delete(expectedIDs, newID)
+					} else {
+						slog.Debug("sanitizeHistory: dropping mismatched tool result",
+							"tool_call_id", next.ToolCallID)
+						dropped++
+					}
+				} else if next.Role != "assistant" && hasPendingToolResultAhead(msgs, i+2, idQueue) {
+					// Non-tool, non-assistant message with more tool results ahead — defer it.
+					i++
+					deferredNonTool = append(deferredNonTool, next)
 				} else {
-					slog.Debug("sanitizeHistory: dropping mismatched tool result",
-						"tool_call_id", toolMsg.ToolCallID)
-					dropped++
+					break
 				}
 			}
+			// Flush deferred non-tool messages after all tool results.
+			result = append(result, deferredNonTool...)
 
 			// Synthesize missing tool results
 			for _, tc := range msg.ToolCalls {
@@ -180,6 +194,23 @@ func sanitizeHistory(msgs []providers.Message) ([]providers.Message, int) {
 	}
 
 	return result, dropped
+}
+
+// hasPendingToolResultAhead returns true if there is at least one tool-role
+// message after position start whose ToolCallID is still expected (present
+// in idQueue). Stops scanning at the next assistant message.
+func hasPendingToolResultAhead(msgs []providers.Message, start int, idQueue map[string][]string) bool {
+	for j := start; j < len(msgs); j++ {
+		if msgs[j].Role == "assistant" {
+			return false
+		}
+		if msgs[j].Role == "tool" {
+			if queue := idQueue[msgs[j].ToolCallID]; len(queue) > 0 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
