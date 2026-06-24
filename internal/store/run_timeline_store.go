@@ -61,4 +61,12 @@ type RunTimelineListOpts struct {
 type RunTimelineStore interface {
 	AppendRunTimelineItem(ctx context.Context, item *RunTimelineItem) error
 	ListRunTimelineItems(ctx context.Context, opts RunTimelineListOpts) ([]RunTimelineItem, error)
+	// RecoverInterruptedRuns reconciles runs left mid-execution when the gateway
+	// stopped: a run with a "started" run.status item but no terminal
+	// (completed/failed/cancelled) run.status sibling. For each, it appends a
+	// terminal failed run.status item so the run is no longer reported as
+	// perpetually running. Intended to run once on startup (cross-tenant),
+	// mirroring the cron scheduler's stale-'running' reset. Returns the number
+	// of runs recovered.
+	RecoverInterruptedRuns(ctx context.Context) (int64, error)
 }

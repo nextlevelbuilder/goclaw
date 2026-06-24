@@ -28,6 +28,10 @@ func (s *recordingTimelineStore) ListRunTimelineItems(context.Context, store.Run
 	return nil, nil
 }
 
+func (s *recordingTimelineStore) RecoverInterruptedRuns(context.Context) (int64, error) {
+	return 0, nil
+}
+
 func TestRunTimelineItemFromEventScrubsToolArguments(t *testing.T) {
 	tenantID := uuid.Must(uuid.NewV7())
 	item, ok := runTimelineItemFromEvent(AgentEvent{

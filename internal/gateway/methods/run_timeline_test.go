@@ -34,6 +34,10 @@ func (s *stubRunTimelineStore) ListRunTimelineItems(_ context.Context, opts stor
 	return s.items, nil
 }
 
+func (s *stubRunTimelineStore) RecoverInterruptedRuns(context.Context) (int64, error) {
+	return 0, nil
+}
+
 func TestRunTimelineGetScopesViewerByUser(t *testing.T) {
 	timeline := &stubRunTimelineStore{
 		items: []store.RunTimelineItem{

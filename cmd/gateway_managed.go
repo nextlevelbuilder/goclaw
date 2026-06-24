@@ -206,6 +206,17 @@ func wireExtras(
 		slog.Info("agent hooks dispatcher wired", "handlers", "command,http,prompt")
 	}
 	timelineRecorder := agent.NewRunTimelineRecorder(stores.RunTimeline)
+	// Reconcile runs left mid-execution by a previous gateway stop. A run whose
+	// process was killed never emits its terminal run.status, so it would show as
+	// perpetually "running" and never be recorded as failed. Mark such runs failed
+	// on startup, mirroring the cron scheduler's stale-'running' reset.
+	if stores.RunTimeline != nil {
+		if n, err := stores.RunTimeline.RecoverInterruptedRuns(context.Background()); err != nil {
+			slog.Warn("run timeline: failed to recover interrupted runs on startup", "error", err)
+		} else if n > 0 {
+			slog.Info("run timeline: marked interrupted runs as failed on startup", "count", n)
+		}
+	}
 
 	resolver := agent.NewManagedResolver(agent.ResolverDeps{
 		AgentStore:             stores.Agents,

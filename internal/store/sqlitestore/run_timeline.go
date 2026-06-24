@@ -153,3 +153,85 @@ func scanRunTimelineRows(rows *sql.Rows) ([]store.RunTimelineItem, error) {
 	}
 	return items, rows.Err()
 }
+
+const interruptedRunPreview = "interrupted: gateway stopped while this run was in progress"
+
+// interruptedRunMetadata marks a backfilled terminal status so it is
+// distinguishable from a genuine agent failure in the timeline.
+var interruptedRunMetadata = []byte(`{"event_type":"run.failed","interrupted":true,"reason":"server_restart"}`)
+
+// RecoverInterruptedRuns appends a terminal failed run.status item to every run
+// that has a "started" run.status but no terminal sibling — i.e. runs killed
+// mid-execution by a previous gateway stop, which would otherwise stay
+// "running" forever. Cross-tenant (startup reconciliation); see the interface doc.
+func (s *SQLiteRunTimelineStore) RecoverInterruptedRuns(ctx context.Context) (int64, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT st.tenant_id, st.run_id, st.session_key, st.agent_id, st.user_id, st.channel, st.chat_id, agg.max_seq
+		FROM (
+			SELECT run_id, MAX(seq) AS max_seq,
+			       MAX(item_type = 'run.status' AND status = 'started') AS has_start,
+			       MAX(item_type = 'run.status' AND status IN ('completed', 'failed', 'cancelled')) AS has_term
+			FROM run_timeline_items
+			GROUP BY run_id
+		) agg
+		JOIN run_timeline_items st
+		  ON st.run_id = agg.run_id AND st.item_type = 'run.status' AND st.status = 'started'
+		WHERE agg.has_start = 1 AND IFNULL(agg.has_term, 0) = 0`)
+	if err != nil {
+		return 0, fmt.Errorf("list interrupted runs: %w", err)
+	}
+	orphans, err := scanInterruptedRuns(rows)
+	if err != nil {
+		return 0, err
+	}
+
+	var recovered int64
+	for i := range orphans {
+		item := &orphans[i]
+		if err := s.AppendRunTimelineItem(store.WithTenantID(ctx, item.TenantID), item); err != nil {
+			return recovered, fmt.Errorf("append interrupted terminal for run %s: %w", item.RunID, err)
+		}
+		recovered++
+	}
+	return recovered, nil
+}
+
+// scanInterruptedRuns reads orphaned-run rows and pre-builds the terminal failed
+// item to append for each. Rows are fully drained and closed before returning so
+// the caller can issue inserts on the same connection without cursor contention.
+func scanInterruptedRuns(rows *sql.Rows) ([]store.RunTimelineItem, error) {
+	defer rows.Close()
+	var items []store.RunTimelineItem
+	for rows.Next() {
+		var (
+			tenantID                uuid.UUID
+			runID, sessionKey       string
+			agentID                 uuid.NullUUID
+			userID, channel, chatID sql.NullString
+			maxSeq                  int
+		)
+		if err := rows.Scan(&tenantID, &runID, &sessionKey, &agentID, &userID, &channel, &chatID, &maxSeq); err != nil {
+			return nil, fmt.Errorf("scan interrupted run: %w", err)
+		}
+		item := store.RunTimelineItem{
+			TenantID:   tenantID,
+			RunID:      runID,
+			SessionKey: sessionKey,
+			UserID:     userID.String,
+			Channel:    channel.String,
+			ChatID:     chatID.String,
+			Seq:        maxSeq + 1,
+			ItemType:   store.RunTimelineItemTypeRunStatus,
+			Status:     store.RunTimelineStatusFailed,
+			Title:      "Run failed",
+			Preview:    interruptedRunPreview,
+			Metadata:   interruptedRunMetadata,
+		}
+		if agentID.Valid {
+			id := agentID.UUID
+			item.AgentID = &id
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
