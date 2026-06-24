@@ -238,6 +238,31 @@ func (s *SQLiteWebhookCallStore) List(ctx context.Context, f store.WebhookCallLi
 	return out, rows.Err()
 }
 
+func (s *SQLiteWebhookCallStore) Count(ctx context.Context, f store.WebhookCallListFilter) (int, error) {
+	tid, err := requireTenantID(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	q := `SELECT COUNT(*) FROM webhook_calls WHERE tenant_id = ?`
+	args := []any{tid}
+
+	if f.WebhookID != nil {
+		q += ` AND webhook_id = ?`
+		args = append(args, *f.WebhookID)
+	}
+	if f.Status != "" {
+		q += ` AND status = ?`
+		args = append(args, f.Status)
+	}
+
+	var total int
+	if err := s.db.QueryRowContext(ctx, q, args...).Scan(&total); err != nil {
+		return 0, err
+	}
+	return total, nil
+}
+
 func (s *SQLiteWebhookCallStore) DeleteOlderThan(ctx context.Context, tenantID uuid.UUID, ts time.Time) (int64, error) {
 	var res sql.Result
 	var err error

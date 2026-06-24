@@ -70,14 +70,16 @@ type WebhookCallData struct {
 	CompletedAt    *time.Time `json:"completed_at,omitempty" db:"completed_at"`
 }
 
-// WebhookListFilter controls filtering for WebhookStore.List.
+// WebhookListFilter controls filtering for WebhookStore.List / Count.
 type WebhookListFilter struct {
-	AgentID *uuid.UUID // filter by bound agent (nil = all)
-	Limit   int        // 0 = default (50)
-	Offset  int
+	AgentID        *uuid.UUID // filter by bound agent (nil = all)
+	IncludeRevoked bool       // false (default) excludes revoked = true
+	Query          string     // case-insensitive match on name OR prefix-match on secret_prefix ("" = no filter)
+	Limit          int        // 0 = default (50)
+	Offset         int
 }
 
-// WebhookCallListFilter controls filtering for WebhookCallStore.List.
+// WebhookCallListFilter controls filtering for WebhookCallStore.List / Count.
 type WebhookCallListFilter struct {
 	WebhookID *uuid.UUID // filter by parent webhook (nil = all in tenant)
 	Status    string     // "" = all statuses
@@ -112,6 +114,9 @@ type WebhookStore interface {
 
 	// List returns webhooks for the context tenant, with optional agent filter.
 	List(ctx context.Context, f WebhookListFilter) ([]WebhookData, error)
+
+	// Count returns the total number of webhooks matching the filter (ignores Limit/Offset).
+	Count(ctx context.Context, f WebhookListFilter) (int, error)
 
 	// Update applies a partial update via column→value map.
 	// Caller validates keys; store validates against allowlist.
@@ -160,6 +165,9 @@ type WebhookCallStore interface {
 
 	// List returns calls for the context tenant with optional filters.
 	List(ctx context.Context, f WebhookCallListFilter) ([]WebhookCallData, error)
+
+	// Count returns the total number of calls matching the filter (ignores Limit/Offset).
+	Count(ctx context.Context, f WebhookCallListFilter) (int, error)
 
 	// DeleteOlderThan deletes terminal calls (done/failed/dead) older than ts.
 	// If tenantID is uuid.Nil, deletes across all tenants (retention worker).

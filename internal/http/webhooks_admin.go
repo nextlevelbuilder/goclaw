@@ -289,8 +289,11 @@ func (h *WebhooksAdminHandler) handleList(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Optional ?agent_id= filter.
-	var f store.WebhookListFilter
+	f := store.WebhookListFilter{
+		Query:          r.URL.Query().Get("q"),
+		IncludeRevoked: r.URL.Query().Get("include_revoked") == "true",
+		Limit:          webhookListDefaultLimit,
+	}
 	if agentIDStr := r.URL.Query().Get("agent_id"); agentIDStr != "" {
 		aid, err := uuid.Parse(agentIDStr)
 		if err != nil {
@@ -299,6 +302,19 @@ func (h *WebhooksAdminHandler) handleList(w http.ResponseWriter, r *http.Request
 		}
 		f.AgentID = &aid
 	}
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if n, perr := strconv.Atoi(l); perr == nil && n > 0 {
+			if n > webhookListMaxLimit {
+				n = webhookListMaxLimit
+			}
+			f.Limit = n
+		}
+	}
+	if o := r.URL.Query().Get("offset"); o != "" {
+		if n, perr := strconv.Atoi(o); perr == nil && n >= 0 {
+			f.Offset = n
+		}
+	}
 
 	rows, err := h.webhooks.List(r.Context(), f)
 	if err != nil {
@@ -306,10 +322,21 @@ func (h *WebhooksAdminHandler) handleList(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusInternalServerError, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToList, "webhooks"))
 		return
 	}
+	total, err := h.webhooks.Count(r.Context(), f)
+	if err != nil {
+		slog.Error("webhook.admin.count_failed", "error", err)
+		writeError(w, http.StatusInternalServerError, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToList, "webhooks"))
+		return
+	}
 	if rows == nil {
 		rows = []store.WebhookData{}
 	}
-	writeJSON(w, http.StatusOK, rows)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"items":  rows,
+		"total":  total,
+		"limit":  f.Limit,
+		"offset": f.Offset,
+	})
 }
 
 // --- Get ---
@@ -586,7 +613,12 @@ type webhookCallResp struct {
 }
 
 const (
-	webhookCallsDefaultLimit = 50
+	webhookListDefaultLimit = 20
+	webhookListMaxLimit     = 200
+)
+
+const (
+	webhookCallsDefaultLimit = 20
 	webhookCallsMaxLimit     = 200
 )
 
@@ -647,6 +679,12 @@ func (h *WebhooksAdminHandler) handleListCalls(w http.ResponseWriter, r *http.Re
 		writeError(w, http.StatusInternalServerError, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToList, "webhook calls"))
 		return
 	}
+	total, err := h.calls.Count(ctx, f)
+	if err != nil {
+		slog.Error("webhook.admin.count_calls_failed", "error", err, "id", id)
+		writeError(w, http.StatusInternalServerError, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToList, "webhook calls"))
+		return
+	}
 
 	out := make([]webhookCallResp, 0, len(rows))
 	for i := range rows {
@@ -665,7 +703,12 @@ func (h *WebhooksAdminHandler) handleListCalls(w http.ResponseWriter, r *http.Re
 			Response:      string(c.Response),
 		})
 	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"items":  out,
+		"total":  total,
+		"limit":  f.Limit,
+		"offset": f.Offset,
+	})
 }
 
 // --- Get Call (single delivery detail) ---

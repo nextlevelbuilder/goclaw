@@ -125,3 +125,11 @@ export interface WebhookTestMessageResult {
 }
 
 export type WebhookTestResult = WebhookTestLLMResult | WebhookTestMessageResult;
+
+// Paginated list envelope — matches {items,total,limit,offset} from the admin handlers.
+export interface Paginated<T> {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+}

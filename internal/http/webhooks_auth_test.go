@@ -78,6 +78,9 @@ func (s *stubWebhookStore) Create(_ context.Context, _ *store.WebhookData) error
 func (s *stubWebhookStore) List(_ context.Context, _ store.WebhookListFilter) ([]store.WebhookData, error) {
 	return nil, nil
 }
+func (s *stubWebhookStore) Count(_ context.Context, _ store.WebhookListFilter) (int, error) {
+	return 0, nil
+}
 func (s *stubWebhookStore) Update(_ context.Context, _ uuid.UUID, _ map[string]any) error {
 	return nil
 }
@@ -125,6 +128,9 @@ func (s *stubWebhookCallStore) ClaimNext(_ context.Context, _ uuid.UUID, _ time.
 }
 func (s *stubWebhookCallStore) List(_ context.Context, _ store.WebhookCallListFilter) ([]store.WebhookCallData, error) {
 	return nil, nil
+}
+func (s *stubWebhookCallStore) Count(_ context.Context, _ store.WebhookCallListFilter) (int, error) {
+	return 0, nil
 }
 func (s *stubWebhookCallStore) DeleteOlderThan(_ context.Context, _ uuid.UUID, _ time.Time) (int64, error) {
 	return 0, nil

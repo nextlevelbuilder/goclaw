@@ -154,6 +154,13 @@ func (s *SQLiteWebhookStore) List(ctx context.Context, f store.WebhookListFilter
 		q += ` AND agent_id = ?`
 		args = append(args, *f.AgentID)
 	}
+	if !f.IncludeRevoked {
+		q += ` AND revoked = 0`
+	}
+	if f.Query != "" {
+		q += ` AND (name LIKE ? COLLATE NOCASE OR secret_prefix LIKE ?)`
+		args = append(args, "%"+f.Query+"%", f.Query+"%")
+	}
 	q += ` ORDER BY created_at DESC`
 
 	limit := f.Limit
@@ -178,6 +185,34 @@ func (s *SQLiteWebhookStore) List(ctx context.Context, f store.WebhookListFilter
 		out = append(out, *w)
 	}
 	return out, rows.Err()
+}
+
+func (s *SQLiteWebhookStore) Count(ctx context.Context, f store.WebhookListFilter) (int, error) {
+	tid, err := requireTenantID(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	q := `SELECT COUNT(*) FROM webhooks WHERE tenant_id = ?`
+	args := []any{tid}
+
+	if f.AgentID != nil {
+		q += ` AND agent_id = ?`
+		args = append(args, *f.AgentID)
+	}
+	if !f.IncludeRevoked {
+		q += ` AND revoked = 0`
+	}
+	if f.Query != "" {
+		q += ` AND (name LIKE ? COLLATE NOCASE OR secret_prefix LIKE ?)`
+		args = append(args, "%"+f.Query+"%", f.Query+"%")
+	}
+
+	var total int
+	if err := s.db.QueryRowContext(ctx, q, args...).Scan(&total); err != nil {
+		return 0, err
+	}
+	return total, nil
 }
 
 func (s *SQLiteWebhookStore) Update(ctx context.Context, id uuid.UUID, updates map[string]any) error {

@@ -94,6 +94,9 @@ func (s *stubCallStore) ClaimNext(_ context.Context, _ uuid.UUID, _ time.Time) (
 func (s *stubCallStore) List(_ context.Context, _ store.WebhookCallListFilter) ([]store.WebhookCallData, error) {
 	return nil, nil
 }
+func (s *stubCallStore) Count(_ context.Context, _ store.WebhookCallListFilter) (int, error) {
+	return 0, nil
+}
 func (s *stubCallStore) DeleteOlderThan(_ context.Context, _ uuid.UUID, _ time.Time) (int64, error) {
 	return 0, nil
 }
@@ -118,6 +121,9 @@ func (s *stubWebhookStore) GetByHash(_ context.Context, _ string) (*store.Webhoo
 }
 func (s *stubWebhookStore) List(_ context.Context, _ store.WebhookListFilter) ([]store.WebhookData, error) {
 	return nil, nil
+}
+func (s *stubWebhookStore) Count(_ context.Context, _ store.WebhookListFilter) (int, error) {
+	return 0, nil
 }
 func (s *stubWebhookStore) Update(_ context.Context, _ uuid.UUID, _ map[string]any) error { return nil }
 func (s *stubWebhookStore) RotateSecret(_ context.Context, _ uuid.UUID, _, _, _ string) error {

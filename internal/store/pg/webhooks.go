@@ -158,6 +158,14 @@ func (s *PGWebhookStore) List(ctx context.Context, f store.WebhookListFilter) ([
 		args = append(args, *f.AgentID)
 		n++
 	}
+	if !f.IncludeRevoked {
+		q += ` AND revoked = false`
+	}
+	if f.Query != "" {
+		q += fmt.Sprintf(` AND (name ILIKE $%d OR secret_prefix LIKE $%d)`, n, n+1)
+		args = append(args, "%"+f.Query+"%", f.Query+"%")
+		n += 2
+	}
 	q += ` ORDER BY created_at DESC`
 
 	limit := f.Limit
@@ -182,6 +190,37 @@ func (s *PGWebhookStore) List(ctx context.Context, f store.WebhookListFilter) ([
 		out = append(out, *w)
 	}
 	return out, rows.Err()
+}
+
+func (s *PGWebhookStore) Count(ctx context.Context, f store.WebhookListFilter) (int, error) {
+	tid, err := requireTenantID(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	q := `SELECT COUNT(*) FROM webhooks WHERE tenant_id = $1`
+	args := []any{tid}
+	n := 2
+
+	if f.AgentID != nil {
+		q += fmt.Sprintf(` AND agent_id = $%d`, n)
+		args = append(args, *f.AgentID)
+		n++
+	}
+	if !f.IncludeRevoked {
+		q += ` AND revoked = false`
+	}
+	if f.Query != "" {
+		q += fmt.Sprintf(` AND (name ILIKE $%d OR secret_prefix LIKE $%d)`, n, n+1)
+		args = append(args, "%"+f.Query+"%", f.Query+"%")
+		n += 2
+	}
+
+	var total int
+	if err := s.db.QueryRowContext(ctx, q, args...).Scan(&total); err != nil {
+		return 0, err
+	}
+	return total, nil
 }
 
 func (s *PGWebhookStore) Update(ctx context.Context, id uuid.UUID, updates map[string]any) error {

@@ -222,6 +222,34 @@ func (s *PGWebhookCallStore) List(ctx context.Context, f store.WebhookCallListFi
 	return out, rows.Err()
 }
 
+func (s *PGWebhookCallStore) Count(ctx context.Context, f store.WebhookCallListFilter) (int, error) {
+	tid, err := requireTenantID(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	q := `SELECT COUNT(*) FROM webhook_calls WHERE tenant_id = $1`
+	args := []any{tid}
+	n := 2
+
+	if f.WebhookID != nil {
+		q += fmt.Sprintf(` AND webhook_id = $%d`, n)
+		args = append(args, *f.WebhookID)
+		n++
+	}
+	if f.Status != "" {
+		q += fmt.Sprintf(` AND status = $%d`, n)
+		args = append(args, f.Status)
+		n++
+	}
+
+	var total int
+	if err := s.db.QueryRowContext(ctx, q, args...).Scan(&total); err != nil {
+		return 0, err
+	}
+	return total, nil
+}
+
 func (s *PGWebhookCallStore) DeleteOlderThan(ctx context.Context, tenantID uuid.UUID, ts time.Time) (int64, error) {
 	var res sql.Result
 	var err error

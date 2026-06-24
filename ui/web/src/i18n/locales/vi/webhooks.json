@@ -7,6 +7,12 @@
   "emptyTitle": "Chưa có webhook",
   "emptyDescription": "Tạo webhook đầu tiên để mở agent hoặc channel qua HTTP.",
   "neverUsed": "Chưa dùng",
+  "pager": {
+    "prev": "Trước",
+    "next": "Sau",
+    "pageOf": "Trang {{page}} / {{total}}",
+    "noMore": "Không còn webhook nào."
+  },
   "kind": {
     "llm": "LLM",
     "message": "Tin nhắn"
@@ -111,7 +117,7 @@
     "emptyTitle": "Chưa có lần gọi nào",
     "emptyDescription": "Các lần gọi webhook này sẽ hiển thị ở đây.",
     "noMore": "Không còn lần gọi nào.",
-    "page": "Trang {{page}}",
+    "pageOf": "Trang {{page}} / {{total}}",
     "prev": "Trước",
     "next": "Sau"
   },

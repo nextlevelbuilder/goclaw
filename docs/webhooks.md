@@ -95,9 +95,27 @@ Fields:
 
 ### List — `GET /v1/webhooks`
 
-Query params: `agent_id=<uuid>` (optional filter).
+Query params (all optional):
+- `agent_id=<uuid>` — filter by bound agent.
+- `q=<text>` — case-insensitive match on name, or prefix match on `secret_prefix`.
+- `include_revoked=true` — include revoked webhooks (default: excluded).
+- `limit` — page size (default 20, max 200).
+- `offset` — page offset (default 0).
 
-Returns array of webhook objects. `secret` and `hmac_signing_key` are **not** included.
+Returns a paginated envelope. `secret` and `hmac_signing_key` are **not** included.
+
+```json
+{
+  "items": [ /* webhook objects */ ],
+  "total": 42,
+  "limit": 20,
+  "offset": 0
+}
+```
+
+### List calls — `GET /v1/webhooks/{id}/calls`
+
+Delivery history for a webhook. Query params (all optional): `status` (`queued`|`running`|`done`|`failed`|`dead`), `limit` (default 20, max 200), `offset`. Returns the same `{items, total, limit, offset}` envelope.
 
 ### Get — `GET /v1/webhooks/{id}`
 

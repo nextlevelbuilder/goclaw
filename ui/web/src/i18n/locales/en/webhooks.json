@@ -7,6 +7,12 @@
   "emptyTitle": "No webhooks",
   "emptyDescription": "Create your first webhook to expose an agent or channel over HTTP.",
   "neverUsed": "Never used",
+  "pager": {
+    "prev": "Previous",
+    "next": "Next",
+    "pageOf": "Page {{page}} of {{total}}",
+    "noMore": "No more webhooks."
+  },
   "kind": {
     "llm": "LLM",
     "message": "Message"
@@ -111,7 +117,7 @@
     "emptyTitle": "No deliveries yet",
     "emptyDescription": "Calls to this webhook will appear here.",
     "noMore": "No more calls.",
-    "page": "Page {{page}}",
+    "pageOf": "Page {{page}} of {{total}}",
     "prev": "Previous",
     "next": "Next"
   },
