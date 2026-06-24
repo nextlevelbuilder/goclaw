@@ -117,6 +117,11 @@ type WorkerConfig struct {
 
 	// AsyncAgentTimeout is the deadline for each async agent run. 0 → DefaultAgentTimeout (600s).
 	AsyncAgentTimeout time.Duration
+
+	// Stream controls whether the async agent run streams provider responses so the
+	// upstream can populate/serve its prompt cache. Resolve via webhooks.ResolveStream
+	// (default true) before constructing the config.
+	Stream bool
 }
 
 // WebhookWorker is the background callback delivery service. It is started once per
@@ -758,7 +763,7 @@ func (w *WebhookWorker) invokeAgent(
 		ChatID:            call.WebhookID.String(),
 		RunID:             runID,
 		UserID:            req.UserID,
-		Stream:            false,
+		Stream:            w.cfg.Stream,
 		ModelOverride:     req.Model,
 		ExtraSystemPrompt: extraSystem,
 		TraceName:         "webhook.async",

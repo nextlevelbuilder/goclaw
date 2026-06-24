@@ -285,6 +285,16 @@ Both webhook agent-run deadlines default to **600s** and are capped at **3600s**
 
 > Sync mode holds the HTTP connection open for the whole run — a value above an upstream proxy/load-balancer read timeout may be cut before the agent finishes. Async mode returns `202` immediately and runs in the background, so a longer deadline is safe.
 
+#### Prompt caching (internal streaming)
+
+Server-side webhook agent runs (sync, async, and admin test) stream provider responses internally by default. This lets OpenAI-compatible providers/routers populate and serve their prompt cache for the large, stable system+tools+history prefix — non-streaming requests are not cached by some routers, so webhook runs would otherwise pay full input-token price on every turn even with a stable session. The response returned to the caller is unchanged (the gateway assembles the streamed chunks into the same JSON/SSE payload).
+
+| Setting (config) | Env var | Applies to | Default |
+|------------------|---------|-----------|---------|
+| `gateway.webhook_stream` | `GOCLAW_WEBHOOK_STREAM` | sync + async + test webhook agent runs | `true` |
+
+> Set to `false` to restore non-streaming requests (e.g. for a provider that misbehaves when streaming). Caching for `cache_control`-style providers (Anthropic/DashScope) is unaffected by this flag.
+
 ### Async Response — 202 Accepted
 
 ```json

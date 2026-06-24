@@ -104,6 +104,11 @@ type WebhookLLMHandler struct {
 	// syncTimeout overrides the webhookLLMTimeout default (600s); set from
 	// gateway.webhook_sync_timeout_sec config (and in tests). 0 → use default.
 	syncTimeout time.Duration
+	// stream controls whether sync + test webhook agent runs stream provider
+	// responses so the upstream can populate/serve its prompt cache. The response
+	// returned to the caller is unchanged (assembled JSON). Set from
+	// gateway.webhook_stream config via webhooks.ResolveStream (default true).
+	stream bool
 }
 
 // NewWebhookLLMHandler constructs a WebhookLLMHandler.
@@ -115,6 +120,7 @@ func NewWebhookLLMHandler(
 	limiter *webhookLimiter,
 	lane *scheduler.Lane,
 	syncTimeout time.Duration,
+	stream bool,
 ) *WebhookLLMHandler {
 	if lane == nil {
 		lane = scheduler.NewLane(webhookLaneName, webhookLaneDefaultConcurrency)
@@ -126,6 +132,7 @@ func NewWebhookLLMHandler(
 		limiter:     limiter,
 		lane:        lane,
 		syncTimeout: syncTimeout,
+		stream:      stream,
 	}
 }
 
@@ -301,7 +308,7 @@ func (h *WebhookLLMHandler) handleSync(
 		ChatID:            webhook.ID.String(),
 		RunID:             runID,
 		UserID:            req.UserID,
-		Stream:            false,
+		Stream:            h.stream,
 		ModelOverride:     req.Model,
 		ExtraSystemPrompt: extraSystemPrompt,
 		HistoryLimit:      0,
@@ -562,7 +569,7 @@ func (h *WebhookLLMHandler) RunTest(ctx context.Context, wh *store.WebhookData, 
 		Channel:       "webhook",
 		ChatID:        wh.ID.String(),
 		RunID:         runID,
-		Stream:        false,
+		Stream:        h.stream,
 		ModelOverride: model,
 		TraceName:     "webhook.llm.test",
 		TraceTags:     []string{"webhook", "test"},

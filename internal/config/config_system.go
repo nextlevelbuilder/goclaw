@@ -54,6 +54,7 @@ func (c *Config) ApplySystemConfigs(configs map[string]string) {
 	integer("gateway.task_recovery_interval_sec", &c.Gateway.TaskRecoveryIntervalSec)
 	integer("gateway.webhook_async_timeout_sec", &c.Gateway.WebhookAsyncTimeoutSec)
 	integer("gateway.webhook_sync_timeout_sec", &c.Gateway.WebhookSyncTimeoutSec)
+	boolean("gateway.webhook_stream", &c.Gateway.WebhookStream)
 
 	// Background workers (vault enrichment, consolidation)
 	str("background.provider", &c.Gateway.BackgroundProvider)

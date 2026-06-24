@@ -173,6 +173,7 @@ func (d *gatewayDeps) runLifecycle(
 				WorkerConcurrency:    workerConcurrency,
 				PerTenantConcurrency: 4,
 				AsyncAgentTimeout:    webhooks.ResolveTimeoutSec(d.cfg.Gateway.WebhookAsyncTimeoutSec),
+				Stream:               webhooks.ResolveStream(d.cfg.Gateway.WebhookStream),
 			},
 		)
 		// K6: decrypt raw secret for outbound HMAC signing using the same key as inbound verify.

@@ -274,6 +274,8 @@ func (c *Config) applyEnvOverrides() {
 			*dst = parseEnvBool(v)
 		}
 	}
+	// Webhook internal streaming toggle (default true; nil → on via webhooks.ResolveStream).
+	envBoolPtr("GOCLAW_WEBHOOK_STREAM", &c.Gateway.WebhookStream)
 	envBoolPtr("GOCLAW_SKILLS_SLASH_COMMANDS_ENABLED", &c.Skills.SlashCommands.Enabled)
 	envBoolPtr("GOCLAW_SKILLS_SLASH_COMMANDS_SUGGEST_NOT_FOUND", &c.Skills.SlashCommands.SuggestNotFound)
 	envBool("GOCLAW_SKILLS_SLASH_COMMANDS_PARTIAL_MATCHING", &c.Skills.SlashCommands.PartialMatching)

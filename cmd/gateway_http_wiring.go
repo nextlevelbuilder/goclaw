@@ -234,6 +234,7 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 				sharedWebhookLimiter, // K10: shared limiter
 				nil,                  // lane: nil → internal default (4-slot); configurable in future via cfg
 				webhooks.ResolveTimeoutSec(d.cfg.Gateway.WebhookSyncTimeoutSec),
+				webhooks.ResolveStream(d.cfg.Gateway.WebhookStream),
 			)
 			llmH.SetEncKey(webhookEncKey) // K6: decrypt secret at HMAC verify time
 			d.server.SetWebhookLLMHandler(llmH)
