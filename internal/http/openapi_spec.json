@@ -191,24 +191,6 @@
         }
       }
     },
-    "/v1/api-keys/{id}": {
-      "delete": {
-        "tags": ["API Keys"],
-        "summary": "Revoke an API key",
-        "description": "Revokes an API key. Revoked keys can no longer be used for authentication. This action cannot be undone.",
-        "parameters": [
-          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
-        ],
-        "responses": {
-          "200": {
-            "description": "Key revoked",
-            "content": { "application/json": { "schema": { "type": "object", "properties": { "status": { "type": "string", "example": "revoked" } } } } }
-          },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "404": { "$ref": "#/components/responses/NotFound" }
-        }
-      }
-    },
     "/v1/auth/chatgpt/{provider}/quota": {
       "get": {
         "tags": ["OAuth"],
