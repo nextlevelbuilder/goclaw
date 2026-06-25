@@ -33,7 +33,7 @@ func baseValidCommandHook() hooks.HookConfig {
 
 func TestValidate_AcceptsValidCommandHook(t *testing.T) {
 	h := baseValidCommandHook()
-	if err := h.Validate(edition.Lite); err != nil {
+	if err := h.Validate(edition.Lite, false); err != nil {
 		t.Fatalf("expected nil error; got %v", err)
 	}
 }
@@ -44,7 +44,7 @@ func TestValidate_AcceptsValidHTTPHook(t *testing.T) {
 	h.Config = map[string]any{"url": "https://example.com/hook"}
 	h.Matcher = "" // http hook without matcher is allowed (matches all tools)
 	h.IfExpr = ""
-	if err := h.Validate(edition.Standard); err != nil {
+	if err := h.Validate(edition.Standard, false); err != nil {
 		t.Fatalf("expected nil error; got %v", err)
 	}
 }
@@ -55,7 +55,7 @@ func TestValidate_AcceptsValidPromptHook(t *testing.T) {
 	h.Config = map[string]any{"prompt_template": "Review this action"}
 	h.Matcher = "^Write$"
 	h.IfExpr = ""
-	if err := h.Validate(edition.Standard); err != nil {
+	if err := h.Validate(edition.Standard, false); err != nil {
 		t.Fatalf("expected nil error; got %v", err)
 	}
 }
@@ -68,7 +68,7 @@ func TestValidate_RejectsPromptWithoutFilter(t *testing.T) {
 	h.Config = map[string]any{"template": "x"}
 	h.Matcher = ""
 	h.IfExpr = ""
-	err := h.Validate(edition.Standard)
+	err := h.Validate(edition.Standard, false)
 	if err == nil {
 		t.Fatal("expected validation error for prompt without matcher/if_expr")
 	}
@@ -80,7 +80,7 @@ func TestValidate_RejectsPromptWithoutFilter(t *testing.T) {
 func TestValidate_RejectsInvalidRegex(t *testing.T) {
 	h := baseValidCommandHook()
 	h.Matcher = "[unclosed"
-	err := h.Validate(edition.Lite)
+	err := h.Validate(edition.Lite, false)
 	if err == nil {
 		t.Fatal("expected error for malformed regex")
 	}
@@ -92,7 +92,7 @@ func TestValidate_RejectsInvalidRegex(t *testing.T) {
 func TestValidate_RejectsMalformedCEL(t *testing.T) {
 	h := baseValidCommandHook()
 	h.IfExpr = `tool_name ===== "bad"` // CEL syntax error
-	err := h.Validate(edition.Lite)
+	err := h.Validate(edition.Lite, false)
 	if err == nil {
 		t.Fatal("expected error for malformed CEL")
 	}
@@ -107,7 +107,7 @@ func TestValidate_RejectsCommandOnStandardTenant(t *testing.T) {
 	h := baseValidCommandHook()
 	h.Scope = hooks.ScopeTenant
 	h.TenantID = uuid.New()
-	err := h.Validate(edition.Standard)
+	err := h.Validate(edition.Standard, false)
 	if err == nil {
 		t.Fatal("expected error for command on Standard+tenant")
 	}
@@ -122,7 +122,7 @@ func TestValidate_RejectsCommandOnStandardAgent(t *testing.T) {
 	h.TenantID = uuid.New()
 	agentID := uuid.New()
 	h.AgentID = &agentID
-	err := h.Validate(edition.Standard)
+	err := h.Validate(edition.Standard, false)
 	if err == nil {
 		t.Fatal("expected error for command on Standard+agent")
 	}
@@ -139,7 +139,7 @@ func TestValidate_AcceptsCommandOnLiteAnyScope(t *testing.T) {
 			agentID := uuid.New()
 			h.AgentID = &agentID
 		}
-		if err := h.Validate(edition.Lite); err != nil {
+		if err := h.Validate(edition.Lite, false); err != nil {
 			t.Errorf("Lite+command+%s should be valid; got %v", scope, err)
 		}
 	}
@@ -150,7 +150,7 @@ func TestValidate_AcceptsCommandOnLiteAnyScope(t *testing.T) {
 func TestValidate_AppliesTimeoutDefault(t *testing.T) {
 	h := baseValidCommandHook()
 	h.TimeoutMS = 0
-	if err := h.Validate(edition.Lite); err != nil {
+	if err := h.Validate(edition.Lite, false); err != nil {
 		t.Fatalf("Validate: %v", err)
 	}
 	if h.TimeoutMS != hooks.DefaultTimeoutMS {
@@ -164,7 +164,7 @@ func TestValidate_AppliesOnTimeoutDefault(t *testing.T) {
 	h := baseValidCommandHook()
 	h.OnTimeout = ""
 	h.Event = hooks.EventPreToolUse // blocking
-	if err := h.Validate(edition.Lite); err != nil {
+	if err := h.Validate(edition.Lite, false); err != nil {
 		t.Fatalf("Validate: %v", err)
 	}
 	if h.OnTimeout != hooks.DecisionBlock {
@@ -174,7 +174,7 @@ func TestValidate_AppliesOnTimeoutDefault(t *testing.T) {
 	h2 := baseValidCommandHook()
 	h2.OnTimeout = ""
 	h2.Event = hooks.EventPostToolUse // non-blocking
-	if err := h2.Validate(edition.Lite); err != nil {
+	if err := h2.Validate(edition.Lite, false); err != nil {
 		t.Fatalf("Validate: %v", err)
 	}
 	if h2.OnTimeout != hooks.DecisionAllow {
@@ -186,7 +186,7 @@ func TestValidate_AppliesOnTimeoutDefault(t *testing.T) {
 func TestValidate_AppliesVersionDefault(t *testing.T) {
 	h := baseValidCommandHook()
 	h.Version = 0
-	if err := h.Validate(edition.Lite); err != nil {
+	if err := h.Validate(edition.Lite, false); err != nil {
 		t.Fatalf("Validate: %v", err)
 	}
 	if h.Version != 1 {
@@ -199,7 +199,7 @@ func TestValidate_AppliesVersionDefault(t *testing.T) {
 func TestValidate_AppliesSourceDefault(t *testing.T) {
 	h := baseValidCommandHook()
 	h.Source = ""
-	if err := h.Validate(edition.Lite); err != nil {
+	if err := h.Validate(edition.Lite, false); err != nil {
 		t.Fatalf("Validate: %v", err)
 	}
 	if h.Source != "ui" {
@@ -210,7 +210,7 @@ func TestValidate_AppliesSourceDefault(t *testing.T) {
 func TestValidate_RejectsUnknownEvent(t *testing.T) {
 	h := baseValidCommandHook()
 	h.Event = hooks.HookEvent("webhook_magic")
-	err := h.Validate(edition.Lite)
+	err := h.Validate(edition.Lite, false)
 	if err == nil {
 		t.Fatal("expected error for unknown event")
 	}
@@ -220,7 +220,7 @@ func TestValidate_RejectsGlobalScopeWithNonSentinelTenant(t *testing.T) {
 	h := baseValidCommandHook()
 	h.Scope = hooks.ScopeGlobal
 	h.TenantID = uuid.New() // must be sentinel for global
-	err := h.Validate(edition.Lite)
+	err := h.Validate(edition.Lite, false)
 	if err == nil {
 		t.Fatal("expected error for global scope with non-sentinel tenant")
 	}
@@ -231,7 +231,7 @@ func TestValidate_RejectsAgentScopeWithoutAgentID(t *testing.T) {
 	h.Scope = hooks.ScopeAgent
 	h.TenantID = uuid.New()
 	h.AgentID = nil
-	err := h.Validate(edition.Lite)
+	err := h.Validate(edition.Lite, false)
 	if err == nil {
 		t.Fatal("expected error for agent scope without agent_id")
 	}
@@ -240,7 +240,7 @@ func TestValidate_RejectsAgentScopeWithoutAgentID(t *testing.T) {
 func TestValidate_RejectsNegativeTimeout(t *testing.T) {
 	h := baseValidCommandHook()
 	h.TimeoutMS = -1
-	err := h.Validate(edition.Lite)
+	err := h.Validate(edition.Lite, false)
 	if err == nil {
 		t.Fatal("expected error for negative timeout")
 	}
@@ -249,7 +249,7 @@ func TestValidate_RejectsNegativeTimeout(t *testing.T) {
 func TestValidate_CapsTimeoutToMax(t *testing.T) {
 	h := baseValidCommandHook()
 	h.TimeoutMS = 60 * 1000 // 60s — exceeds chain wall-time budget
-	err := h.Validate(edition.Lite)
+	err := h.Validate(edition.Lite, false)
 	if err == nil {
 		t.Fatal("expected error for timeout > MaxTimeoutMS")
 	}
@@ -266,7 +266,7 @@ func baseValidScriptHook() hooks.HookConfig {
 
 func TestValidate_AcceptsValidScriptHook(t *testing.T) {
 	h := baseValidScriptHook()
-	if err := h.Validate(edition.Standard); err != nil {
+	if err := h.Validate(edition.Standard, false); err != nil {
 		t.Fatalf("expected nil error; got %v", err)
 	}
 }
@@ -274,7 +274,7 @@ func TestValidate_AcceptsValidScriptHook(t *testing.T) {
 func TestValidate_RejectsEmptyScriptSource(t *testing.T) {
 	h := baseValidScriptHook()
 	h.Config = map[string]any{"source": ""}
-	err := h.Validate(edition.Standard)
+	err := h.Validate(edition.Standard, false)
 	if err == nil || !strings.Contains(err.Error(), "non-empty") {
 		t.Fatalf("expected non-empty source error; got %v", err)
 	}
@@ -284,7 +284,7 @@ func TestValidate_RejectsOversizedScriptSource(t *testing.T) {
 	h := baseValidScriptHook()
 	big := strings.Repeat("// pad\n", 6000) // >32 KiB
 	h.Config = map[string]any{"source": big}
-	err := h.Validate(edition.Standard)
+	err := h.Validate(edition.Standard, false)
 	if err == nil || !strings.Contains(err.Error(), "exceeds") {
 		t.Fatalf("expected exceeds-bytes error; got %v", err)
 	}
@@ -294,7 +294,7 @@ func TestValidate_RejectsScriptCompileError(t *testing.T) {
 	h := baseValidScriptHook()
 	// Missing closing brace → parser error with line:col.
 	h.Config = map[string]any{"source": `function handle(e) { return {`}
-	err := h.Validate(edition.Standard)
+	err := h.Validate(edition.Standard, false)
 	if err == nil || !strings.Contains(err.Error(), "compile error") {
 		t.Fatalf("expected compile error; got %v", err)
 	}
@@ -303,7 +303,7 @@ func TestValidate_RejectsScriptCompileError(t *testing.T) {
 func TestValidate_RejectsOnTimeoutAsk(t *testing.T) {
 	h := baseValidScriptHook()
 	h.OnTimeout = hooks.DecisionAsk
-	err := h.Validate(edition.Standard)
+	err := h.Validate(edition.Standard, false)
 	if err == nil || !strings.Contains(err.Error(), "on_timeout") {
 		t.Fatalf("expected on_timeout rejection; got %v", err)
 	}
@@ -312,8 +312,56 @@ func TestValidate_RejectsOnTimeoutAsk(t *testing.T) {
 func TestValidate_RejectsOnTimeoutDefer(t *testing.T) {
 	h := baseValidScriptHook()
 	h.OnTimeout = hooks.DecisionDefer
-	err := h.Validate(edition.Standard)
+	err := h.Validate(edition.Standard, false)
 	if err == nil || !strings.Contains(err.Error(), "on_timeout") {
 		t.Fatalf("expected on_timeout rejection; got %v", err)
 	}
+}
+
+// TestValidate_MasterScopeAllowsSystemTenantHooks verifies that master/owner
+// callers can create ScopeTenant and ScopeAgent hooks whose TenantID equals
+// MasterTenantID (the real system tenant row). Before this fix, validateScope
+// rejected such hooks because SentinelTenantID == MasterTenantID.
+func TestValidate_MasterScopeAllowsSystemTenantHooks(t *testing.T) {
+	systemTenantID := hooks.SentinelTenantID // same UUID as MasterTenantID
+
+	t.Run("ScopeTenant with MasterTenantID as master", func(t *testing.T) {
+		h := baseValidCommandHook()
+		h.Scope = hooks.ScopeTenant
+		h.TenantID = systemTenantID
+		if err := h.Validate(edition.Lite, true); err != nil {
+			t.Errorf("master scope should accept ScopeTenant+MasterTenantID; got %v", err)
+		}
+	})
+
+	t.Run("ScopeAgent with MasterTenantID as master", func(t *testing.T) {
+		h := baseValidCommandHook()
+		h.Scope = hooks.ScopeAgent
+		h.TenantID = systemTenantID
+		agentID := uuid.New()
+		h.AgentID = &agentID
+		if err := h.Validate(edition.Lite, true); err != nil {
+			t.Errorf("master scope should accept ScopeAgent+MasterTenantID; got %v", err)
+		}
+	})
+
+	t.Run("ScopeTenant with MasterTenantID as non-master is rejected", func(t *testing.T) {
+		h := baseValidCommandHook()
+		h.Scope = hooks.ScopeTenant
+		h.TenantID = systemTenantID
+		if err := h.Validate(edition.Lite, false); err == nil {
+			t.Error("non-master scope should reject ScopeTenant+MasterTenantID")
+		}
+	})
+
+	t.Run("ScopeAgent with uuid.Nil is always rejected", func(t *testing.T) {
+		h := baseValidCommandHook()
+		h.Scope = hooks.ScopeAgent
+		h.TenantID = uuid.Nil
+		agentID := uuid.New()
+		h.AgentID = &agentID
+		if err := h.Validate(edition.Lite, true); err == nil {
+			t.Error("uuid.Nil tenant_id should always be rejected for agent scope")
+		}
+	})
 }

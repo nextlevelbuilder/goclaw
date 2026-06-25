@@ -42,17 +42,23 @@ var knownEvents = map[HookEvent]struct{}{
 // the DB or the dispatcher. Side effects (on success): TimeoutMS, OnTimeout,
 // Version, and Source may be populated with their defaults.
 //
+// isMasterScope must be true when the caller is master/owner scope (e.g.
+// store.IsMasterScope(ctx)). Master callers may legitimately create
+// ScopeTenant and ScopeAgent hooks whose TenantID equals MasterTenantID
+// (the system tenant). Regular callers cannot use MasterTenantID / the
+// sentinel UUID for tenant-or-agent-scoped hooks.
+//
 // Validation order matters — cheap checks run first so we fail fast:
 //  1. Event enum — zero-cost map lookup.
 //  2. Scope / tenant / agent invariants — no I/O.
 //  3. Edition gate — pure-function policy.
 //  4. Matcher + CEL compile — most expensive; done last.
-func (h *HookConfig) Validate(ed edition.Edition) error {
+func (h *HookConfig) Validate(ed edition.Edition, isMasterScope bool) error {
 	if _, ok := knownEvents[h.Event]; !ok {
 		return fmt.Errorf("hook: unknown event %q", h.Event)
 	}
 
-	if err := h.validateScope(); err != nil {
+	if err := h.validateScope(isMasterScope); err != nil {
 		return err
 	}
 
@@ -80,20 +86,26 @@ func (h *HookConfig) Validate(ed edition.Edition) error {
 
 // validateScope enforces (scope, tenant_id, agent_id) invariants:
 //   - global → tenant_id MUST be the sentinel UUID.
-//   - tenant → tenant_id MUST be non-sentinel.
-//   - agent  → tenant_id MUST be non-sentinel AND agent_id non-nil.
-func (h *HookConfig) validateScope() error {
+//   - tenant → tenant_id MUST be non-sentinel (or MasterTenantID when isMasterScope).
+//   - agent  → same tenant_id rule AND at least one agent_id non-nil.
+//
+// isMasterScope relaxes the sentinel check for tenant/agent scope: master/owner
+// callers creating hooks for the system tenant legitimately supply MasterTenantID
+// (which equals SentinelTenantID), so we must not reject them.
+func (h *HookConfig) validateScope(isMasterScope bool) error {
 	switch h.Scope {
 	case ScopeGlobal:
 		if h.TenantID != SentinelTenantID {
 			return fmt.Errorf("hook: global scope requires sentinel tenant_id, got %s", h.TenantID)
 		}
 	case ScopeTenant:
-		if h.TenantID == SentinelTenantID || h.TenantID == uuid.Nil {
+		// Master-scope callers may use MasterTenantID (== SentinelTenantID) because
+		// they are scoping the hook to the real system tenant row.
+		if h.TenantID == uuid.Nil || (!isMasterScope && h.TenantID == SentinelTenantID) {
 			return fmt.Errorf("hook: tenant scope requires a real tenant_id")
 		}
 	case ScopeAgent:
-		if h.TenantID == SentinelTenantID || h.TenantID == uuid.Nil {
+		if h.TenantID == uuid.Nil || (!isMasterScope && h.TenantID == SentinelTenantID) {
 			return fmt.Errorf("hook: agent scope requires a real tenant_id")
 		}
 		if len(h.AgentIDs) == 0 {

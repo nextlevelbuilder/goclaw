@@ -153,7 +153,7 @@ func (m *HookMethods) handleCreate(ctx context.Context, client *gateway.Client, 
 		cfg.TenantID = hooks.SentinelTenantID
 	}
 
-	if err := cfg.Validate(m.edition); err != nil {
+	if err := cfg.Validate(m.edition, store.IsMasterScope(ctx)); err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, err.Error()))
 		return
 	}
@@ -215,7 +215,7 @@ func (m *HookMethods) handleUpdate(ctx context.Context, client *gateway.Client, 
 		return
 	}
 	merged := applyHookPatch(*current, params.Updates)
-	if verr := merged.Validate(m.edition); verr != nil {
+	if verr := merged.Validate(m.edition, store.IsMasterScope(ctx)); verr != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, verr.Error()))
 		return
 	}
@@ -377,7 +377,7 @@ func (m *HookMethods) handleTest(ctx context.Context, client *gateway.Client, re
 	if cfg.Scope == hooks.ScopeGlobal {
 		cfg.TenantID = hooks.SentinelTenantID
 	}
-	if err := cfg.Validate(m.edition); err != nil {
+	if err := cfg.Validate(m.edition, store.IsMasterScope(ctx)); err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, err.Error()))
 		return
 	}

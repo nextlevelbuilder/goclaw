@@ -87,7 +87,7 @@ func TestHooksF4_TenantAdminCreatesScriptHook(t *testing.T) {
 
 	cfg := hookCfgScript(tenantA, hooks.EventUserPromptSubmit, "ui",
 		`function handle(e) { return {decision: "allow", reason: "ok"}; }`)
-	if err := cfg.Validate(edition.Standard); err != nil {
+	if err := cfg.Validate(edition.Standard, false); err != nil {
 		t.Fatalf("Validate: %v", err)
 	}
 	id, err := hs.Create(tenantCtx(tenantA), cfg)
@@ -144,7 +144,7 @@ func TestHooksF5_CommandHandlerRejectedOnStandard(t *testing.T) {
 		Enabled:     true,
 		Source:      "ui",
 	}
-	err := cfg.Validate(edition.Standard)
+	err := cfg.Validate(edition.Standard, false)
 	if err == nil {
 		t.Fatal("Standard Validate accepted command handler; want rejection")
 	}
@@ -153,7 +153,7 @@ func TestHooksF5_CommandHandlerRejectedOnStandard(t *testing.T) {
 	}
 
 	// Sanity: Lite accepts the same config (regression guard).
-	if err := cfg.Validate(edition.Lite); err != nil {
+	if err := cfg.Validate(edition.Lite, false); err != nil {
 		t.Errorf("Lite Validate rejected command handler: %v", err)
 	}
 }
