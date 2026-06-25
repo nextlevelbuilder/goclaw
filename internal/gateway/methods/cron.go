@@ -258,6 +258,21 @@ func (m *CronMethods) handleUpdate(ctx context.Context, client *gateway.Client, 
 		return
 	}
 
+	// A command payload on update must clear the same gate as create: command
+	// cron must be enabled and the spec must be valid. Without this, a normal job
+	// could be mutated into a command job (or persisted with an invalid spec) on a
+	// gateway where command cron is disabled.
+	if params.Patch.Command != nil {
+		if !m.cfg.Cron.CommandEnabled {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgCommandCronDisabled)))
+			return
+		}
+		if err := store.ValidateCronCommandSpec(params.Patch.Command); err != nil {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, err.Error()))
+			return
+		}
+	}
+
 	job, err := m.service.UpdateJob(ctx, jobID, params.Patch)
 	if err != nil {
 		code := protocol.ErrInvalidRequest

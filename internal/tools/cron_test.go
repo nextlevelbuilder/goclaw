@@ -151,3 +151,45 @@ func TestCronToolBlocksCredentialBoundRunByDifferentUser(t *testing.T) {
 		t.Fatalf("RunJob called %d times, want 0", cronStore.runCnt)
 	}
 }
+
+// A command payload must not be slipped in via update when command cron is
+// disabled — the disabled-gateway contract is that command jobs cannot be
+// created OR mutated into existence.
+func TestCronToolUpdateBlocksCommandWhenDisabled(t *testing.T) {
+	cronStore := newTestCronStore(&store.CronJob{ID: "job-1", Payload: store.CronPayload{Message: "old"}})
+	tool := NewCronTool(cronStore) // commandEnabled defaults to false
+
+	result := tool.Execute(context.Background(), map[string]any{
+		"action": "update",
+		"jobId":  "job-1",
+		"patch":  map[string]any{"commandArgv": []any{"echo", "hi"}},
+	})
+
+	if !result.IsError || !strings.Contains(result.ForLLM, "disabled") {
+		t.Fatalf("expected command-disabled error, got %#v", result)
+	}
+	if cronStore.updateCnt != 0 {
+		t.Fatalf("UpdateJob called %d times, want 0", cronStore.updateCnt)
+	}
+}
+
+// Update must validate the command spec; an invalid argv must be rejected even
+// when command cron is enabled.
+func TestCronToolUpdateRejectsInvalidCommandSpec(t *testing.T) {
+	cronStore := newTestCronStore(&store.CronJob{ID: "job-1", Payload: store.CronPayload{Message: "old"}})
+	tool := NewCronTool(cronStore)
+	tool.SetCommandEnabled(true)
+
+	result := tool.Execute(context.Background(), map[string]any{
+		"action": "update",
+		"jobId":  "job-1",
+		"patch":  map[string]any{"commandArgv": []any{""}}, // argv[0] empty → invalid
+	})
+
+	if !result.IsError {
+		t.Fatalf("expected invalid command spec error, got %#v", result)
+	}
+	if cronStore.updateCnt != 0 {
+		t.Fatalf("UpdateJob called %d times, want 0", cronStore.updateCnt)
+	}
+}

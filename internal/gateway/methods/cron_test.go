@@ -352,3 +352,65 @@ func TestCronRun_BlocksCredentialBoundJobByDifferentUser(t *testing.T) {
 		t.Fatalf("RunJob called %d times, want 0", svc.runCnt)
 	}
 }
+
+// ---- Tests: handleUpdate command gate ----
+
+// A normal job must not be mutable into a command job when the gateway has
+// command cron disabled.
+func TestCronUpdate_BlocksCommandWhenDisabled(t *testing.T) {
+	svc := newStubCronStore()
+	svc.jobs["job-1"] = &store.CronJob{ID: "job-1", UserID: ""}
+	m := buildCronMethods(t, svc) // cfg.Cron.CommandEnabled defaults to false
+	client := nullClient()
+
+	req := cronReqFrame(t, protocol.MethodCronUpdate, map[string]any{
+		"jobId": "job-1",
+		"patch": map[string]any{"command": map[string]any{"argv": []any{"echo", "hi"}}},
+	})
+	m.handleUpdate(context.Background(), client, req)
+
+	if svc.updateCnt != 0 {
+		t.Fatalf("UpdateJob called %d times, want 0", svc.updateCnt)
+	}
+}
+
+// Update must validate the command spec; an empty argv must be rejected even
+// when command cron is enabled.
+func TestCronUpdate_RejectsInvalidCommandSpec(t *testing.T) {
+	svc := newStubCronStore()
+	svc.jobs["job-1"] = &store.CronJob{ID: "job-1", UserID: ""}
+	cfg := &config.Config{}
+	cfg.Cron.CommandEnabled = true
+	m := NewCronMethods(svc, &stubEventPub{}, cfg)
+	client := nullClient()
+
+	req := cronReqFrame(t, protocol.MethodCronUpdate, map[string]any{
+		"jobId": "job-1",
+		"patch": map[string]any{"command": map[string]any{"argv": []any{}}}, // empty argv → invalid
+	})
+	m.handleUpdate(context.Background(), client, req)
+
+	if svc.updateCnt != 0 {
+		t.Fatalf("UpdateJob called %d times, want 0", svc.updateCnt)
+	}
+}
+
+// A valid command payload on update is accepted when command cron is enabled.
+func TestCronUpdate_EnabledValidCommand_Updates(t *testing.T) {
+	svc := newStubCronStore()
+	svc.jobs["job-1"] = &store.CronJob{ID: "job-1", UserID: ""}
+	cfg := &config.Config{}
+	cfg.Cron.CommandEnabled = true
+	m := NewCronMethods(svc, &stubEventPub{}, cfg)
+	client := nullClient()
+
+	req := cronReqFrame(t, protocol.MethodCronUpdate, map[string]any{
+		"jobId": "job-1",
+		"patch": map[string]any{"command": map[string]any{"argv": []any{"df", "-h"}}},
+	})
+	m.handleUpdate(context.Background(), client, req)
+
+	if svc.updateCnt != 1 {
+		t.Fatalf("UpdateJob called %d times, want 1", svc.updateCnt)
+	}
+}

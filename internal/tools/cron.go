@@ -411,10 +411,29 @@ func (t *CronTool) handleUpdate(ctx context.Context, args map[string]any, agentI
 		return ErrorResult("patch object is required for update action")
 	}
 
+	// A command payload on update follows the same forms (shell string or argv)
+	// and the same gate as add. Parse it out first and drop the raw keys so the
+	// generic patch unmarshal below — whose Command field is a structured spec —
+	// can't choke on a shell string, and so update can't slip a command payload
+	// past the command-enabled gate.
+	cmdSpec := parseCronCommandSpec(patchObj)
+	delete(patchObj, "command")
+	delete(patchObj, "commandArgv")
+
 	var patch store.CronJobPatch
 	// Re-marshal and unmarshal to leverage JSON tags
 	patchJSON, _ := json.Marshal(patchObj)
 	json.Unmarshal(patchJSON, &patch)
+
+	if cmdSpec != nil {
+		if !t.commandEnabled {
+			return ErrorResult("command cron is disabled on this gateway (set cron.command_enabled=true to allow it)")
+		}
+		if err := store.ValidateCronCommandSpec(cmdSpec); err != nil {
+			return ErrorResult(err.Error())
+		}
+		patch.Command = cmdSpec
+	}
 
 	// Resolve provider override by name (providerId UUID is handled by JSON tags above).
 	if name, _ := patchObj["provider"].(string); name != "" {
