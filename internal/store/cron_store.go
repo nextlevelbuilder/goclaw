@@ -15,6 +15,14 @@ var (
 	ErrCronJobNotFound             = errors.New("cron job not found")
 	ErrCronJobNoFutureRun          = errors.New("cron job has no future run")
 	ErrCronCredentialOwnerMismatch = errors.New("cron credential context belongs to a different user")
+	ErrCronCommandInvalid          = errors.New("invalid cron command payload")
+)
+
+// Cron payload kinds. A job either runs an LLM/agent turn ("agent_turn") or a
+// deterministic shell command in the gateway process ("command", no model cost).
+const (
+	CronPayloadKindAgentTurn = "agent_turn"
+	CronPayloadKindCommand   = "command"
 )
 
 // CronJob represents a scheduled job.
@@ -49,12 +57,55 @@ type CronSchedule struct {
 	TZ      string `json:"tz,omitempty" db:"-"`
 }
 
+// CronCommandSpec is a deterministic shell command run by a cron job whose
+// payload Kind is "command". It executes inside the gateway process WITHOUT an
+// LLM/agent turn (zero model tokens). It is a trusted automation surface gated
+// by cron.command_enabled — argv is run with the gateway process's privileges.
+type CronCommandSpec struct {
+	// Argv is the executable plus arguments. No shell parsing is done; wrap as
+	// ["sh", "-c", "<script>"] for shell syntax.
+	Argv []string `json:"argv,omitempty"`
+	// Cwd is the working directory (default: gateway process cwd).
+	Cwd string `json:"cwd,omitempty"`
+	// Env adds environment variables, merged over the gateway process env.
+	Env map[string]string `json:"env,omitempty"`
+	// Input is written to the command's stdin.
+	Input string `json:"input,omitempty"`
+	// TimeoutSeconds is the per-command wall-clock timeout (0 = cron.command_timeout default).
+	TimeoutSeconds int `json:"timeoutSeconds,omitempty"`
+	// NoOutputTimeoutSeconds kills the command if it produces no output for this
+	// long (0 = disabled).
+	NoOutputTimeoutSeconds int `json:"noOutputTimeoutSeconds,omitempty"`
+	// OutputMaxBytes caps captured stdout/stderr per stream (0 = default).
+	OutputMaxBytes int `json:"outputMaxBytes,omitempty"`
+}
+
 // CronPayload describes what a job does when triggered.
 type CronPayload struct {
-	Kind             string `json:"kind" db:"-"`
-	Message          string `json:"message" db:"-"`
-	Command          string `json:"command,omitempty" db:"-"`
-	CredentialUserID string `json:"credentialUserId,omitempty" db:"-"`
+	Kind             string           `json:"kind" db:"-"`
+	Message          string           `json:"message" db:"-"`
+	Command          *CronCommandSpec `json:"command,omitempty" db:"-"` // set when Kind=="command" (deterministic, no LLM)
+	CredentialUserID string           `json:"credentialUserId,omitempty" db:"-"`
+}
+
+// IsCommand reports whether this payload runs a deterministic shell command
+// (no LLM turn) rather than an agent turn.
+func (p CronPayload) IsCommand() bool {
+	return p.Kind == CronPayloadKindCommand
+}
+
+// ValidateCronCommandSpec checks structural validity of a command payload.
+func ValidateCronCommandSpec(spec *CronCommandSpec) error {
+	if spec == nil || len(spec.Argv) == 0 {
+		return fmt.Errorf("%w: argv must be non-empty", ErrCronCommandInvalid)
+	}
+	if spec.Argv[0] == "" {
+		return fmt.Errorf("%w: argv[0] (the executable) must not be empty", ErrCronCommandInvalid)
+	}
+	if spec.TimeoutSeconds < 0 || spec.NoOutputTimeoutSeconds < 0 || spec.OutputMaxBytes < 0 {
+		return fmt.Errorf("%w: timeout/output limits must be non-negative", ErrCronCommandInvalid)
+	}
+	return nil
 }
 
 // CheckCronCredentialOwner blocks user-triggered mutation/execution of a
@@ -117,19 +168,20 @@ type CronJobResult struct {
 
 // CronJobPatch holds optional fields for updating a job.
 type CronJobPatch struct {
-	Name           string        `json:"name,omitempty" db:"-"`
-	AgentID        *string       `json:"agentId,omitempty" db:"-"`
-	Enabled        *bool         `json:"enabled,omitempty" db:"-"`
-	Schedule       *CronSchedule `json:"schedule,omitempty" db:"-"`
-	Message        string        `json:"message,omitempty" db:"-"`
-	DeleteAfterRun *bool         `json:"deleteAfterRun,omitempty" db:"-"`
-	Stateless      *bool         `json:"stateless,omitempty" db:"-"`
-	Deliver        *bool         `json:"deliver,omitempty" db:"-"`
-	DeliverChannel *string       `json:"deliverChannel,omitempty" db:"-"`
-	DeliverTo      *string       `json:"deliverTo,omitempty" db:"-"`
-	WakeHeartbeat  *bool         `json:"wakeHeartbeat,omitempty" db:"-"`
-	ProviderID     *uuid.UUID    `json:"providerId,omitempty" db:"-"`
-	Model          *string       `json:"model,omitempty" db:"-"`
+	Name           string           `json:"name,omitempty" db:"-"`
+	AgentID        *string          `json:"agentId,omitempty" db:"-"`
+	Enabled        *bool            `json:"enabled,omitempty" db:"-"`
+	Schedule       *CronSchedule    `json:"schedule,omitempty" db:"-"`
+	Message        string           `json:"message,omitempty" db:"-"`
+	Command        *CronCommandSpec `json:"command,omitempty" db:"-"` // set → switches the job to a deterministic command payload
+	DeleteAfterRun *bool            `json:"deleteAfterRun,omitempty" db:"-"`
+	Stateless      *bool            `json:"stateless,omitempty" db:"-"`
+	Deliver        *bool            `json:"deliver,omitempty" db:"-"`
+	DeliverChannel *string          `json:"deliverChannel,omitempty" db:"-"`
+	DeliverTo      *string          `json:"deliverTo,omitempty" db:"-"`
+	WakeHeartbeat  *bool            `json:"wakeHeartbeat,omitempty" db:"-"`
+	ProviderID     *uuid.UUID       `json:"providerId,omitempty" db:"-"`
+	Model          *string          `json:"model,omitempty" db:"-"`
 }
 
 // CronEvent represents a job lifecycle event sent to subscribers.

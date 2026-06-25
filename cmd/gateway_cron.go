@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/cronexec"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
 	"github.com/nextlevelbuilder/goclaw/internal/sessions"
@@ -66,6 +68,12 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 
 		// Resolve channel type for system prompt context.
 		channelType := resolveChannelType(channelMgr, channel)
+
+		// Deterministic command payload: run the shell command in-process WITHOUT
+		// an LLM/agent turn (zero model tokens). Gated by cron.command_enabled.
+		if job.Payload.IsCommand() {
+			return runCommandCronJob(cfg, job, msgBus, peerKind)
+		}
 
 		// Build cron context so the agent knows delivery target and requester.
 		var extraPrompt string
@@ -165,31 +173,7 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 		result := outcome.Result
 
 		// If job wants delivery to a channel, send the agent response to the target chat.
-		if job.Deliver && job.DeliverChannel != "" && job.DeliverTo != "" {
-			if cronOutputContainsNoReplySentinel(result.Content) {
-				slog.Info("cron: suppressed delivery because output contained NO_REPLY",
-					"job_id", job.ID,
-					"job_name", job.Name,
-					"channel", job.DeliverChannel,
-					"to", job.DeliverTo,
-					"content_len", len(result.Content),
-				)
-			} else {
-				outMsg := bus.OutboundMessage{
-					Channel: job.DeliverChannel,
-					ChatID:  job.DeliverTo,
-					Content: result.Content,
-				}
-				if peerKind == "group" {
-					outMsg.Metadata = map[string]string{"group_id": job.DeliverTo}
-				}
-				appendMediaToOutbound(&outMsg, result.Media)
-				msgBus.PublishOutbound(outMsg)
-			}
-		} else if job.Deliver {
-			slog.Warn("cron: delivery configured but channel/chatID missing — output discarded",
-				"job_id", job.ID, "job_name", job.Name, "channel", job.DeliverChannel, "to", job.DeliverTo)
-		}
+		deliverCronOutput(msgBus, job, result.Content, result.Media, peerKind)
 
 		cronResult := &store.CronJobResult{
 			Content: result.Content,
@@ -207,6 +191,78 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 
 		return cronResult, nil
 	}
+}
+
+// deliverCronOutput publishes a cron job's output to the configured delivery
+// channel, honoring the NO_REPLY sentinel. Shared by the agent-turn and the
+// deterministic command-payload paths.
+func deliverCronOutput(msgBus *bus.MessageBus, job *store.CronJob, content string, media []agent.MediaResult, peerKind string) {
+	if job.Deliver && job.DeliverChannel != "" && job.DeliverTo != "" {
+		if cronOutputContainsNoReplySentinel(content) {
+			slog.Info("cron: suppressed delivery because output contained NO_REPLY",
+				"job_id", job.ID,
+				"job_name", job.Name,
+				"channel", job.DeliverChannel,
+				"to", job.DeliverTo,
+				"content_len", len(content),
+			)
+			return
+		}
+		outMsg := bus.OutboundMessage{
+			Channel: job.DeliverChannel,
+			ChatID:  job.DeliverTo,
+			Content: content,
+		}
+		if peerKind == "group" {
+			outMsg.Metadata = map[string]string{"group_id": job.DeliverTo}
+		}
+		appendMediaToOutbound(&outMsg, media)
+		msgBus.PublishOutbound(outMsg)
+		return
+	}
+	if job.Deliver {
+		slog.Warn("cron: delivery configured but channel/chatID missing — output discarded",
+			"job_id", job.ID, "job_name", job.Name, "channel", job.DeliverChannel, "to", job.DeliverTo)
+	}
+}
+
+// runCommandCronJob executes a deterministic command-payload cron job in-process
+// without an LLM turn. On success it delivers the command output (stdout, else
+// stderr) like an agent turn. On failure it returns an error so the run is
+// recorded as "error" and retried per cron.max_retries — failures are NOT
+// delivered, mirroring the agent path where only successful output is announced.
+func runCommandCronJob(cfg *config.Config, job *store.CronJob, msgBus *bus.MessageBus, peerKind string) (*store.CronJobResult, error) {
+	if !cfg.Cron.CommandEnabled {
+		return nil, fmt.Errorf("cron command payloads are disabled; set cron.command_enabled=true to allow them")
+	}
+	spec := job.Payload.Command
+	if err := store.ValidateCronCommandSpec(spec); err != nil {
+		return nil, err
+	}
+
+	cmdTimeout := cfg.Cron.CommandTimeoutDuration()
+	if spec.TimeoutSeconds > 0 {
+		cmdTimeout = time.Duration(spec.TimeoutSeconds) * time.Second
+	}
+	// The job timeout is a hard ceiling above the per-command timeout.
+	ctx, cancel := context.WithTimeout(store.WithTenantID(context.Background(), job.TenantID), cfg.Cron.JobTimeoutDuration())
+	defer cancel()
+
+	res := cronexec.Run(ctx, cronexec.Spec{
+		Argv:            spec.Argv,
+		Cwd:             spec.Cwd,
+		Env:             spec.Env,
+		Input:           spec.Input,
+		Timeout:         cmdTimeout,
+		NoOutputTimeout: time.Duration(spec.NoOutputTimeoutSeconds) * time.Second,
+		OutputMaxBytes:  spec.OutputMaxBytes,
+	})
+	if res.Status != cronexec.StatusOK {
+		return nil, res.Err
+	}
+
+	deliverCronOutput(msgBus, job, res.Summary, nil, peerKind)
+	return &store.CronJobResult{Content: res.Summary}, nil
 }
 
 func cronOutputContainsNoReplySentinel(content string) bool {

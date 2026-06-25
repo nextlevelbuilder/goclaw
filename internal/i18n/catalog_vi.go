@@ -52,8 +52,9 @@ func init() {
 		MsgInstanceNotFound:   "không tìm thấy phiên bản",
 
 		// Cron
-		MsgJobNotFound:     "không tìm thấy tác vụ",
-		MsgInvalidCronExpr: "biểu thức cron không hợp lệ: %s",
+		MsgJobNotFound:         "không tìm thấy tác vụ",
+		MsgInvalidCronExpr:     "biểu thức cron không hợp lệ: %s",
+		MsgCommandCronDisabled: "tác vụ cron dạng lệnh đang bị tắt trên gateway này (đặt cron.command_enabled=true để cho phép)",
 
 		// Config
 		MsgConfigHashMismatch: "cấu hình đã thay đổi (hash không khớp)",

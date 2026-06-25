@@ -202,12 +202,67 @@ Both jobs run with 5-minute timeout and tenant-scoped context. Failed analyses l
 
 ---
 
+## 6. Command Payloads — Deterministic (No LLM)
+
+Most cron jobs run an **agent turn**: the scheduled `message` is sent to the LLM, which costs model tokens on every fire. For purely deterministic work — health probes, backups, syncs, anything that does not need the model — a job can instead carry a **command payload** that runs a shell command directly in the gateway process, with **zero model tokens**.
+
+A job is a command job when its payload `kind` is `command` and it carries a `command` spec instead of a `message`:
+
+| Field | Meaning |
+|-------|---------|
+| `argv` | Executable + args (no shell parsing). Wrap as `["sh","-c","…"]` for shell syntax. |
+| `cwd` | Working directory (default: gateway process cwd) |
+| `env` | Extra environment variables, merged over the gateway env |
+| `input` | Written to the command's stdin |
+| `timeoutSeconds` | Per-command wall-clock timeout (default: `cron.command_timeout`) |
+| `noOutputTimeoutSeconds` | Kill if no output is produced for this long (0 = disabled) |
+| `outputMaxBytes` | Cap on captured stdout/stderr per stream |
+
+### Execution Semantics
+
+- Runs in-process via a dedicated runner (`internal/cronexec`) with process-group termination, so a timed-out command's forked children are also killed.
+- Output is the command's stdout (preferred), else stderr. On success the output is delivered to the configured channel exactly like an agent turn (honoring the `NO_REPLY` sentinel).
+- A non-zero exit, timeout, or no-output timeout records the run as **error** and is retried per `cron.max_retries`. Failures are **not** delivered — only successful output is announced, so a failing job cannot spam a channel.
+- Token usage is recorded as `0` input / `0` output.
+
+### Security Gate
+
+Command payloads run host commands with the gateway process's privileges, so they are **disabled by default**. An operator must opt in per gateway:
+
+```jsonc
+{
+  "cron": {
+    "command_enabled": true,   // allow command payloads (default false)
+    "command_timeout": "5m"    // default per-command timeout
+  }
+}
+```
+
+When disabled, both the RPC (`cron.create`) and the agent `cron` tool reject command payloads, and a command job that somehow exists will refuse to run.
+
+### Creating a Command Job
+
+Via the CLI (operator):
+
+```bash
+goclaw cron create --name disk-probe --cron '*/15 * * * *' \
+  --command 'df -h /' --deliver --channel telegram --to '-100123'
+
+goclaw cron create --name nightly-backup --at 2026-07-01T18:00:00Z \
+  --argv '["/opt/backup.sh","--full"]' --timeout 5m
+```
+
+Via the agent `cron` tool (`action: "add"`), set `command` (a shell string) or `commandArgv` (an array) on the job object instead of `message`.
+
+---
+
 ## File Reference
 
 | Module | Path | Purpose |
 |---|---|---|
 | Scheduler | `internal/scheduler/` | Lane-based concurrency (lanes, queue, drop policies, debounce, cancel, draining) |
 | Cron service | `internal/cron/` | In-memory run loop (1s tick), job CRUD, retry with backoff, schedule parsing, types |
+| Command runner | `internal/cronexec/` | Deterministic command-payload execution (timeout, no-output watchdog, output cap, process-group kill) |
 | Cron store | `internal/store/pg/cron*.go`, `internal/store/cron_store.go` | CronStore interface + PostgreSQL persistence (create, list, update, delete, execution, scanning) |
 | Gateway wiring | `cmd/gateway_cron.go`, `internal/gateway/methods/cron.go` | Scheduler lane routing, RPC handlers (list, create, update, delete, toggle, run, runs) |
 

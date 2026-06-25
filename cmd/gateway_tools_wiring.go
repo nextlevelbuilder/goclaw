@@ -32,6 +32,7 @@ func wireExtraTools(
 	agentCfg config.AgentDefaults,
 	globalSkillsDir string,
 	builtinSkillsDir string,
+	cronCommandEnabled bool,
 ) (heartbeatTool *tools.HeartbeatTool, hasMemory bool) {
 	// web_search: tenant-scoped resolve requires stores + msgBus — register here.
 	toolsReg.Register(tools.NewWebSearchTool(pgStores.ConfigSecrets, msgBus))
@@ -44,6 +45,7 @@ func wireExtraTools(
 	// Cron tool (agent-facing)
 	cronTool := tools.NewCronTool(pgStores.Cron)
 	cronTool.SetProviderStore(pgStores.Providers)
+	cronTool.SetCommandEnabled(cronCommandEnabled)
 	toolsReg.Register(cronTool)
 	slog.Info("cron tool registered")
 

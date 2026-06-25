@@ -346,7 +346,7 @@ func runGateway() {
 	_ = skillSearchTool // used via wireExtras → skillsLoader; kept for type clarity
 
 	// Register cron/heartbeat/session/message tools, aliases, allow-paths, store wiring.
-	heartbeatTool, hasMemory := wireExtraTools(pgStores, toolsReg, msgBus, workspace, dataDir, agentCfg, globalSkillsDir, builtinSkillsDir)
+	heartbeatTool, hasMemory := wireExtraTools(pgStores, toolsReg, msgBus, workspace, dataDir, agentCfg, globalSkillsDir, builtinSkillsDir, cfg.Cron.CommandEnabled)
 
 	// Register workstation_exec + claude_remote tools (Standard edition only; deny-all until Phase 6).
 	// cleanupWorkstation stops the activity sink retention goroutine and drains the write buffer.

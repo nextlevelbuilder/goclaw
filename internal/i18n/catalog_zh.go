@@ -52,8 +52,9 @@ func init() {
 		MsgInstanceNotFound:   "未找到实例",
 
 		// Cron
-		MsgJobNotFound:     "未找到任务",
-		MsgInvalidCronExpr: "无效的 cron 表达式：%s",
+		MsgJobNotFound:         "未找到任务",
+		MsgInvalidCronExpr:     "无效的 cron 表达式：%s",
+		MsgCommandCronDisabled: "此网关已禁用命令型 cron 任务（设置 cron.command_enabled=true 以允许）",
 
 		// Config
 		MsgConfigHashMismatch: "配置已更改（hash 不匹配）",

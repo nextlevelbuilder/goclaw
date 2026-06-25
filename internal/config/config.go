@@ -480,10 +480,15 @@ type CronConfig struct {
 	RetryMaxDelay   string `json:"retry_max_delay,omitempty"`  // maximum backoff delay (default "30s", Go duration)
 	DefaultTimezone string `json:"default_timezone,omitempty"` // IANA timezone for cron expressions when not set per-job (e.g. "Asia/Ho_Chi_Minh")
 	JobTimeout      string `json:"job_timeout,omitempty"`      // max duration per cron job execution (default "10m", Go duration)
+	CommandEnabled  bool   `json:"command_enabled,omitempty"`  // allow deterministic shell-command cron payloads (kind="command"). Default false. These run inside the gateway process with its privileges — enable only on trusted deployments.
+	CommandTimeout  string `json:"command_timeout,omitempty"`  // default per-command wall-clock timeout when a job sets none (default "5m", Go duration)
 }
 
 // DefaultJobTimeout is the fallback timeout for cron job execution.
 const DefaultJobTimeout = 10 * time.Minute
+
+// DefaultCommandTimeout is the fallback per-command timeout for command cron payloads.
+const DefaultCommandTimeout = 5 * time.Minute
 
 // JobTimeoutDuration returns the configured job timeout or the default (10m).
 func (cc CronConfig) JobTimeoutDuration() time.Duration {
@@ -495,6 +500,19 @@ func (cc CronConfig) JobTimeoutDuration() time.Duration {
 		slog.Warn("cron: invalid job_timeout, using default", "value", cc.JobTimeout, "default", DefaultJobTimeout)
 	}
 	return DefaultJobTimeout
+}
+
+// CommandTimeoutDuration returns the configured default per-command timeout or
+// the default (5m). A per-job timeoutSeconds, when set, overrides this.
+func (cc CronConfig) CommandTimeoutDuration() time.Duration {
+	if cc.CommandTimeout != "" {
+		d, err := time.ParseDuration(cc.CommandTimeout)
+		if err == nil && d > 0 {
+			return d
+		}
+		slog.Warn("cron: invalid command_timeout, using default", "value", cc.CommandTimeout, "default", DefaultCommandTimeout)
+	}
+	return DefaultCommandTimeout
 }
 
 // ToRetryConfig converts CronConfig to cron.RetryConfig with defaults applied.

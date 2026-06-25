@@ -63,15 +63,16 @@ func (m *CronMethods) handleList(ctx context.Context, client *gateway.Client, re
 func (m *CronMethods) handleCreate(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	locale := store.LocaleFromContext(ctx)
 	var params struct {
-		Name           string             `json:"name"`
-		Schedule       store.CronSchedule `json:"schedule"`
-		Message        string             `json:"message"`
-		Deliver        bool               `json:"deliver"`
-		DeliverChannel string             `json:"deliverChannel"`
-		DeliverTo      string             `json:"deliverTo"`
-		WakeHeartbeat  bool               `json:"wakeHeartbeat"`
-		Stateless      *bool              `json:"stateless"` // default true for new crons
-		AgentID        string             `json:"agentId"`
+		Name           string                 `json:"name"`
+		Schedule       store.CronSchedule     `json:"schedule"`
+		Message        string                 `json:"message"`
+		Command        *store.CronCommandSpec `json:"command"` // set → deterministic command payload (no LLM)
+		Deliver        bool                   `json:"deliver"`
+		DeliverChannel string                 `json:"deliverChannel"`
+		DeliverTo      string                 `json:"deliverTo"`
+		WakeHeartbeat  bool                   `json:"wakeHeartbeat"`
+		Stateless      *bool                  `json:"stateless"` // default true for new crons
+		AgentID        string                 `json:"agentId"`
 	}
 	if req.Params != nil {
 		json.Unmarshal(req.Params, &params)
@@ -85,7 +86,18 @@ func (m *CronMethods) handleCreate(ctx context.Context, client *gateway.Client, 
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidSlug, "name")))
 		return
 	}
-	if params.Message == "" {
+
+	isCommand := params.Command != nil
+	if isCommand {
+		if !m.cfg.Cron.CommandEnabled {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgCommandCronDisabled)))
+			return
+		}
+		if err := store.ValidateCronCommandSpec(params.Command); err != nil {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, err.Error()))
+			return
+		}
+	} else if params.Message == "" {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgMsgRequired)))
 		return
 	}
@@ -106,6 +118,9 @@ func (m *CronMethods) handleCreate(ctx context.Context, client *gateway.Client, 
 		patch := store.CronJobPatch{Stateless: &statelessVal}
 		if params.WakeHeartbeat {
 			patch.WakeHeartbeat = &params.WakeHeartbeat
+		}
+		if isCommand {
+			patch.Command = params.Command
 		}
 		if updated, pErr := m.service.UpdateJob(ctx, job.ID, patch); pErr == nil {
 			job = updated

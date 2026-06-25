@@ -52,8 +52,9 @@ func init() {
 		MsgInstanceNotFound:   "instance not found",
 
 		// Cron
-		MsgJobNotFound:     "job not found",
-		MsgInvalidCronExpr: "invalid cron expression: %s",
+		MsgJobNotFound:         "job not found",
+		MsgInvalidCronExpr:     "invalid cron expression: %s",
+		MsgCommandCronDisabled: "command cron jobs are disabled on this gateway (set cron.command_enabled=true to allow them)",
 
 		// Config
 		MsgConfigHashMismatch: "config has changed (hash mismatch)",

@@ -13,9 +13,10 @@ import (
 // CronTool lets agents manage Gateway cron jobs.
 // Matching OpenClaw src/agents/tools/cron-tool.ts.
 type CronTool struct {
-	cronStore     store.CronStore
-	permStore     store.ConfigPermissionStore // nil = no group restriction
-	providerStore store.ProviderStore         // nil = provider override by name unavailable
+	cronStore      store.CronStore
+	permStore      store.ConfigPermissionStore // nil = no group restriction
+	providerStore  store.ProviderStore         // nil = provider override by name unavailable
+	commandEnabled bool                        // allow deterministic command payloads (mirrors cron.command_enabled)
 }
 
 func NewCronTool(cronStore store.CronStore) *CronTool {
@@ -30,6 +31,12 @@ func (t *CronTool) SetConfigPermStore(s store.ConfigPermissionStore) {
 // SetProviderStore enables resolving per-job LLM provider overrides by name.
 func (t *CronTool) SetProviderStore(s store.ProviderStore) {
 	t.providerStore = s
+}
+
+// SetCommandEnabled allows this tool to create deterministic command-payload
+// cron jobs (kind="command", no LLM). Mirrors the gateway's cron.command_enabled.
+func (t *CronTool) SetCommandEnabled(enabled bool) {
+	t.commandEnabled = enabled
 }
 
 func (t *CronTool) Name() string { return "cron" }
@@ -103,7 +110,16 @@ RULES:
 - "name" must match: lowercase letters, numbers, hyphens only.
 - Before creating or updating a scheduled job, call the datetime tool first to get the precise current time and unix_ms timestamp. Never guess timestamps.
 - Omit optional fields when unknown; do not invent placeholder values like "", 0, or null unless required.
-- Jobs run as isolated agent turns using the provided "message".`
+- Jobs run as isolated agent turns using the provided "message".
+
+DETERMINISTIC COMMAND JOBS (no LLM, zero tokens):
+- Instead of "message", set "command" to a shell string (run as sh -c) OR
+  "commandArgv" to an explicit argv array (no shell parsing).
+- Optional: "commandCwd", "commandEnv" {"KEY":"VAL"}, "commandTimeoutSeconds".
+- The command runs inside the gateway process. Only available when the gateway
+  has cron.command_enabled=true; otherwise add returns an error.
+- Use for scheduled probes/scripts that don't need the model. Output is delivered
+  like a normal job when "deliver" is set; a non-zero exit records the run as an error.`
 }
 
 func (t *CronTool) Parameters() map[string]any {
@@ -222,9 +238,20 @@ func (t *CronTool) handleAdd(ctx context.Context, args map[string]any, agentID, 
 		return ErrorResult("job.schedule is required")
 	}
 
+	// Optional deterministic command payload (runs a shell command, no LLM turn).
+	cmdSpec := parseCronCommandSpec(jobObj)
+	if cmdSpec != nil {
+		if !t.commandEnabled {
+			return ErrorResult("command cron is disabled on this gateway (set cron.command_enabled=true to allow it)")
+		}
+		if err := store.ValidateCronCommandSpec(cmdSpec); err != nil {
+			return ErrorResult(err.Error())
+		}
+	}
+
 	message, _ := jobObj["message"].(string)
-	if message == "" {
-		return ErrorResult("job.message is required")
+	if cmdSpec == nil && message == "" {
+		return ErrorResult("job.message is required (or set job.command/job.commandArgv for a deterministic command job)")
 	}
 
 	// Parse schedule
@@ -330,6 +357,10 @@ func (t *CronTool) handleAdd(ctx context.Context, args map[string]any, agentID, 
 	}
 	if modelOverride != "" {
 		overridePatch.Model = &modelOverride
+		needOverride = true
+	}
+	if cmdSpec != nil {
+		overridePatch.Command = cmdSpec
 		needOverride = true
 	}
 	if needOverride {
@@ -532,4 +563,50 @@ func stringFromMap(m map[string]any, key string) string {
 func numberFromMap(m map[string]any, key string) (float64, bool) {
 	v, ok := m[key].(float64)
 	return v, ok
+}
+
+// parseCronCommandSpec extracts an optional deterministic command payload from a
+// cron tool "job" object. It accepts either a shell string ("command", wrapped
+// as ["sh","-c",...]) or an explicit argv array ("commandArgv"). Returns nil
+// when no command fields are present (i.e. it's a normal agent-turn job).
+func parseCronCommandSpec(jobObj map[string]any) *store.CronCommandSpec {
+	var argv []string
+	if raw, ok := jobObj["commandArgv"].([]any); ok {
+		for _, v := range raw {
+			if s, ok := v.(string); ok {
+				argv = append(argv, s)
+			}
+		}
+	}
+	if len(argv) == 0 {
+		if s, _ := jobObj["command"].(string); s != "" {
+			argv = []string{"sh", "-c", s}
+		}
+	}
+	if len(argv) == 0 {
+		return nil
+	}
+
+	spec := &store.CronCommandSpec{Argv: argv}
+	if cwd, _ := jobObj["commandCwd"].(string); cwd != "" {
+		spec.Cwd = cwd
+	}
+	if v, ok := numberFromMap(jobObj, "commandTimeoutSeconds"); ok {
+		spec.TimeoutSeconds = int(v)
+	}
+	if v, ok := numberFromMap(jobObj, "commandNoOutputTimeoutSeconds"); ok {
+		spec.NoOutputTimeoutSeconds = int(v)
+	}
+	if v, ok := numberFromMap(jobObj, "commandOutputMaxBytes"); ok {
+		spec.OutputMaxBytes = int(v)
+	}
+	if env, ok := jobObj["commandEnv"].(map[string]any); ok && len(env) > 0 {
+		spec.Env = make(map[string]string, len(env))
+		for k, v := range env {
+			if s, ok := v.(string); ok {
+				spec.Env[k] = s
+			}
+		}
+	}
+	return spec
 }

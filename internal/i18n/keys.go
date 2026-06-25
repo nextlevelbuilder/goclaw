@@ -53,8 +53,9 @@ const (
 	MsgInstanceNotFound   = "error.instance_not_found"   // "instance not found"
 
 	// --- Cron ---
-	MsgJobNotFound     = "error.job_not_found"     // "job not found"
-	MsgInvalidCronExpr = "error.invalid_cron_expr" // "invalid cron expression: %s"
+	MsgJobNotFound         = "error.job_not_found"         // "job not found"
+	MsgInvalidCronExpr     = "error.invalid_cron_expr"     // "invalid cron expression: %s"
+	MsgCommandCronDisabled = "error.command_cron_disabled" // "command cron jobs are disabled on this gateway"
 
 	// --- Config ---
 	MsgConfigHashMismatch = "error.config_hash_mismatch" // "config has changed (hash mismatch)"
