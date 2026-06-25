@@ -14,11 +14,15 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/typing"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
 // handleMessage processes an incoming Telegram update.
 func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
+	// Inject tenant scope so store queries filter by the correct tenant_id.
+	ctx = store.WithTenantID(ctx, c.TenantID())
+
 	message := update.Message
 	if message == nil {
 		return

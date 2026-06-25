@@ -244,9 +244,9 @@ func (r *webhookRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// Route by conversation type.
 	switch convType {
 	case "INBOX":
-		target.handleMessagingEvent(normalized)
+		target.handleMessagingEvent(req.Context(), normalized)
 	case "COMMENT":
-		target.handleCommentEvent(normalized)
+		target.handleCommentEvent(req.Context(), normalized)
 	default:
 		slog.Debug("pancake: skipping unknown conversation type",
 			"page_id", pageID, "conv_type", convType)

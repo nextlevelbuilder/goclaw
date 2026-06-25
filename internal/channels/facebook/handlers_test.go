@@ -1,6 +1,7 @@
 package facebook
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -146,7 +147,7 @@ func TestHandleAPIError_MapsToHealthStates(t *testing.T) {
 func TestHandleCommentEvent_FeatureGated(t *testing.T) {
 	ch := newTestChannel(t, "111", facebookInstanceConfig{})
 	// Feature not enabled → handler returns early without side effects.
-	ch.handleCommentEvent(WebhookEntry{ID: "111"}, ChangeValue{Item: "comment", Verb: "add", CommentID: "c1"})
+	ch.handleCommentEvent(context.Background(), WebhookEntry{ID: "111"}, ChangeValue{Item: "comment", Verb: "add", CommentID: "c1"})
 }
 
 // TestHandleCommentEvent_DropsEditsAndRemoves verifies only Verb="add" events
@@ -156,8 +157,8 @@ func TestHandleCommentEvent_DropsEditsAndRemoves(t *testing.T) {
 	cfg.Features.CommentReply = true
 	ch := newTestChannel(t, "111", cfg)
 
-	ch.handleCommentEvent(WebhookEntry{ID: "111"}, ChangeValue{Verb: "edit", CommentID: "c1"})
-	ch.handleCommentEvent(WebhookEntry{ID: "111"}, ChangeValue{Verb: "remove", CommentID: "c2"})
+	ch.handleCommentEvent(context.Background(), WebhookEntry{ID: "111"}, ChangeValue{Verb: "edit", CommentID: "c1"})
+	ch.handleCommentEvent(context.Background(), WebhookEntry{ID: "111"}, ChangeValue{Verb: "remove", CommentID: "c2"})
 }
 
 // TestHandleCommentEvent_PageRouting verifies events for other pages are
@@ -167,7 +168,7 @@ func TestHandleCommentEvent_PageRouting(t *testing.T) {
 	cfg.Features.CommentReply = true
 	ch := newTestChannel(t, "111", cfg)
 	// Different page in entry.ID → dropped.
-	ch.handleCommentEvent(WebhookEntry{ID: "999"}, ChangeValue{Verb: "add", CommentID: "c1", From: FBUser{ID: "u1"}})
+	ch.handleCommentEvent(context.Background(), WebhookEntry{ID: "999"}, ChangeValue{Verb: "add", CommentID: "c1", From: FBUser{ID: "u1"}})
 }
 
 // TestHandleCommentEvent_SelfReplySkipped verifies comments from the page
@@ -176,7 +177,7 @@ func TestHandleCommentEvent_SelfReplySkipped(t *testing.T) {
 	cfg := facebookInstanceConfig{}
 	cfg.Features.CommentReply = true
 	ch := newTestChannel(t, "111", cfg)
-	ch.handleCommentEvent(WebhookEntry{ID: "111"}, ChangeValue{
+	ch.handleCommentEvent(context.Background(), WebhookEntry{ID: "111"}, ChangeValue{
 		Verb:      "add",
 		CommentID: "c1",
 		From:      FBUser{ID: "111"}, // matches pageID → self reply
@@ -198,8 +199,8 @@ func TestHandleCommentEvent_DedupSecondCallDropped(t *testing.T) {
 		PostID:    "p1",
 		Message:   "hi",
 	}
-	ch.handleCommentEvent(WebhookEntry{ID: "111"}, change)
-	ch.handleCommentEvent(WebhookEntry{ID: "111"}, change) // second call hits dedup
+	ch.handleCommentEvent(context.Background(), WebhookEntry{ID: "111"}, change)
+	ch.handleCommentEvent(context.Background(), WebhookEntry{ID: "111"}, change) // second call hits dedup
 }
 
 // TestHandleCommentEvent_EnrichedContent verifies the enrichment path runs
@@ -211,7 +212,7 @@ func TestHandleCommentEvent_EnrichedContent(t *testing.T) {
 	cfg.CommentReplyOptions.MaxThreadDepth = 3
 
 	ch := newTestChannel(t, "111", cfg)
-	ch.handleCommentEvent(WebhookEntry{ID: "111"}, ChangeValue{
+	ch.handleCommentEvent(context.Background(), WebhookEntry{ID: "111"}, ChangeValue{
 		Verb:      "add",
 		CommentID: "c-enrich",
 		From:      FBUser{ID: "u1", Name: "Alice"},
@@ -225,7 +226,7 @@ func TestHandleCommentEvent_EnrichedContent(t *testing.T) {
 // dropped when messenger_auto_reply is off.
 func TestHandleMessagingEvent_FeatureGated(t *testing.T) {
 	ch := newTestChannel(t, "111", facebookInstanceConfig{})
-	ch.handleMessagingEvent(WebhookEntry{ID: "111"}, MessagingEvent{
+	ch.handleMessagingEvent(context.Background(), WebhookEntry{ID: "111"}, MessagingEvent{
 		Sender:  FBUser{ID: "u1"},
 		Message: &IncomingMessage{MID: "m1", Text: "hi"},
 	})
@@ -236,7 +237,7 @@ func TestHandleMessagingEvent_PageRouting(t *testing.T) {
 	cfg := facebookInstanceConfig{}
 	cfg.Features.MessengerAutoReply = true
 	ch := newTestChannel(t, "111", cfg)
-	ch.handleMessagingEvent(WebhookEntry{ID: "999"}, MessagingEvent{
+	ch.handleMessagingEvent(context.Background(), WebhookEntry{ID: "999"}, MessagingEvent{
 		Sender:  FBUser{ID: "u1"},
 		Message: &IncomingMessage{MID: "m1", Text: "hi"},
 	})
@@ -248,7 +249,7 @@ func TestHandleMessagingEvent_SelfSkipped(t *testing.T) {
 	cfg := facebookInstanceConfig{}
 	cfg.Features.MessengerAutoReply = true
 	ch := newTestChannel(t, "111", cfg)
-	ch.handleMessagingEvent(WebhookEntry{ID: "111"}, MessagingEvent{
+	ch.handleMessagingEvent(context.Background(), WebhookEntry{ID: "111"}, MessagingEvent{
 		Sender:  FBUser{ID: "111"}, // self
 		Message: &IncomingMessage{MID: "m1", Text: "hi"},
 	})
@@ -260,7 +261,7 @@ func TestHandleMessagingEvent_ReceiptsDropped(t *testing.T) {
 	cfg := facebookInstanceConfig{}
 	cfg.Features.MessengerAutoReply = true
 	ch := newTestChannel(t, "111", cfg)
-	ch.handleMessagingEvent(WebhookEntry{ID: "111"}, MessagingEvent{
+	ch.handleMessagingEvent(context.Background(), WebhookEntry{ID: "111"}, MessagingEvent{
 		Sender: FBUser{ID: "u1"},
 	})
 }
@@ -273,21 +274,21 @@ func TestHandleMessagingEvent_TextAndPostback(t *testing.T) {
 	ch := newTestChannel(t, "111", cfg)
 
 	// Text message
-	ch.handleMessagingEvent(WebhookEntry{ID: "111"}, MessagingEvent{
+	ch.handleMessagingEvent(context.Background(), WebhookEntry{ID: "111"}, MessagingEvent{
 		Sender:    FBUser{ID: "u1"},
 		Timestamp: 1111,
 		Message:   &IncomingMessage{MID: "m1", Text: "hi"},
 	})
 
 	// Postback
-	ch.handleMessagingEvent(WebhookEntry{ID: "111"}, MessagingEvent{
+	ch.handleMessagingEvent(context.Background(), WebhookEntry{ID: "111"}, MessagingEvent{
 		Sender:    FBUser{ID: "u2"},
 		Timestamp: 2222,
 		Postback:  &Postback{Title: "Start", Payload: "START"},
 	})
 
 	// Attachment-only (text empty, nil postback → dropped)
-	ch.handleMessagingEvent(WebhookEntry{ID: "111"}, MessagingEvent{
+	ch.handleMessagingEvent(context.Background(), WebhookEntry{ID: "111"}, MessagingEvent{
 		Sender:    FBUser{ID: "u3"},
 		Timestamp: 3333,
 		Message:   &IncomingMessage{MID: "m3", Text: ""},
@@ -304,8 +305,8 @@ func TestHandleMessagingEvent_DedupSkipped(t *testing.T) {
 		Sender:  FBUser{ID: "u1"},
 		Message: &IncomingMessage{MID: "dedup-mid", Text: "hi"},
 	}
-	ch.handleMessagingEvent(WebhookEntry{ID: "111"}, event)
-	ch.handleMessagingEvent(WebhookEntry{ID: "111"}, event) // dedup drops
+	ch.handleMessagingEvent(context.Background(), WebhookEntry{ID: "111"}, event)
+	ch.handleMessagingEvent(context.Background(), WebhookEntry{ID: "111"}, event) // dedup drops
 }
 
 // TestSend_MessengerMode verifies Send routes to the Messenger API when
@@ -347,7 +348,7 @@ func TestHandleMessagingEvent_PageEchoDoesNotTrackAdminReply(t *testing.T) {
 	now := time.Now()
 	ch.botSentAt.Store("user-1", now)
 
-	ch.handleMessagingEvent(WebhookEntry{ID: "111"}, MessagingEvent{
+	ch.handleMessagingEvent(context.Background(), WebhookEntry{ID: "111"}, MessagingEvent{
 		Sender:    FBUser{ID: "111"},
 		Recipient: FBUser{ID: "user-1"},
 		Timestamp: now.UnixMilli(),

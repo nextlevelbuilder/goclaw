@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // mentionMatcher is the compiled-once regex + rendered tag string used to
@@ -95,6 +96,9 @@ func (c *Channel) DispatchEvent(ctx context.Context, evt *Event) {
 //     to the right dialog + message ID later.
 //  6. Forward to BaseChannel.HandleMessage → publishes bus.InboundMessage.
 func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
+	// Inject tenant scope so store queries filter by the correct tenant_id.
+	ctx = store.WithTenantID(ctx, c.TenantID())
+
 	if evt.Params.FromUserID == "" {
 		return // malformed event; router already logged if this matters
 	}

@@ -1,13 +1,17 @@
 package facebook
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"strings"
+
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // handleCommentEvent processes a feed webhook change where item == "comment".
-func (ch *Channel) handleCommentEvent(entry WebhookEntry, change ChangeValue) {
+func (ch *Channel) handleCommentEvent(ctx context.Context, entry WebhookEntry, change ChangeValue) {
+	ctx = store.WithTenantID(ctx, ch.TenantID())
 	// Feature gate.
 	if !ch.config.Features.CommentReply {
 		return

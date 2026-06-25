@@ -1,6 +1,7 @@
 package facebook
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -18,8 +19,8 @@ type WebhookHandler struct {
 	appSecret    string
 	verifyToken  string
 	extraSecrets []string // additional app secrets for multi-Meta-App deployments
-	onComment    func(entry WebhookEntry, change ChangeValue)
-	onMessage    func(entry WebhookEntry, event MessagingEvent)
+	onComment    func(ctx context.Context, entry WebhookEntry, change ChangeValue)
+	onMessage    func(ctx context.Context, entry WebhookEntry, event MessagingEvent)
 }
 
 // NewWebhookHandler creates a new WebhookHandler.
@@ -114,19 +115,20 @@ func (wh *WebhookHandler) handleEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx := r.Context()
 	for _, entry := range payload.Entry {
 		// Feed events (comments, posts).
 		for _, change := range entry.Changes {
 			if change.Field == "feed" && change.Value.Item == "comment" {
 				if wh.onComment != nil {
-					wh.onComment(entry, change.Value)
+					wh.onComment(ctx, entry, change.Value)
 				}
 			}
 		}
 		// Messenger events.
 		for _, event := range entry.Messaging {
 			if wh.onMessage != nil {
-				wh.onMessage(entry, event)
+				wh.onMessage(ctx, entry, event)
 			}
 		}
 	}

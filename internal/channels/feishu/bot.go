@@ -11,6 +11,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // messageContext holds parsed information from a Feishu message event.
@@ -36,6 +37,9 @@ type mentionInfo struct {
 
 // handleMessageEvent processes an incoming Feishu message event.
 func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
+	// Inject tenant scope so store queries filter by the correct tenant_id.
+	ctx = store.WithTenantID(ctx, c.TenantID())
+
 	if event == nil {
 		return
 	}

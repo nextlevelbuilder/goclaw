@@ -1,6 +1,7 @@
 package pancake
 
 import (
+	"context"
 	"fmt"
 	"html"
 	"log/slog"
@@ -8,10 +9,12 @@ import (
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // handleMessagingEvent converts a Pancake "messaging" webhook event to bus.InboundMessage.
-func (ch *Channel) handleMessagingEvent(data MessagingData) {
+func (ch *Channel) handleMessagingEvent(ctx context.Context, data MessagingData) {
+	ctx = store.WithTenantID(ctx, ch.TenantID())
 	slog.Debug("pancake: handleMessagingEvent called",
 		"page_id", ch.pageID,
 		"sender_id", data.Message.SenderID,

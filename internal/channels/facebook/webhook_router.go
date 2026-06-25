@@ -1,6 +1,7 @@
 package facebook
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -86,20 +87,20 @@ func (r *webhookRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		verifyToken:  verifyToken,
 		extraSecrets: extraSecrets,
 	}
-	routingWH.onComment = func(entry WebhookEntry, change ChangeValue) {
+	routingWH.onComment = func(ctx context.Context, entry WebhookEntry, change ChangeValue) {
 		r.mu.RLock()
 		target := r.instances[entry.ID]
 		r.mu.RUnlock()
 		if target != nil {
-			target.handleCommentEvent(entry, change)
+			target.handleCommentEvent(ctx, entry, change)
 		}
 	}
-	routingWH.onMessage = func(entry WebhookEntry, event MessagingEvent) {
+	routingWH.onMessage = func(ctx context.Context, entry WebhookEntry, event MessagingEvent) {
 		r.mu.RLock()
 		target := r.instances[entry.ID]
 		r.mu.RUnlock()
 		if target != nil {
-			target.handleMessagingEvent(entry, event)
+			target.handleMessagingEvent(ctx, entry, event)
 		}
 	}
 	routingWH.ServeHTTP(w, req)

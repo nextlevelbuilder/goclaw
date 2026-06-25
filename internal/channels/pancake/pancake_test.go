@@ -194,7 +194,11 @@ func TestWebhookRouterReturns200(t *testing.T) {
 // If the self-reply guard were absent, ch.bus (nil) would panic — making no-panic the assertion.
 func TestMessageHandlerSkipsSelfReply(t *testing.T) {
 	const pageID = "page-123"
-	ch := &Channel{pageID: pageID}
+	msgBus := bus.New()
+	ch := &Channel{
+		BaseChannel: channels.NewBaseChannel(channels.TypePancake, msgBus, nil),
+		pageID:      pageID,
+	}
 
 	data := MessagingData{
 		PageID:         pageID,
@@ -210,7 +214,7 @@ func TestMessageHandlerSkipsSelfReply(t *testing.T) {
 	}
 
 	// Must not panic. If self-reply guard is missing, nil bus dereference panics here.
-	ch.handleMessagingEvent(data)
+	ch.handleMessagingEvent(context.Background(), data)
 
 	// Dedup entry is stored (dedup check runs before self-reply check).
 	_, stored := ch.dedup.Load("msg:msg-self-1")
@@ -226,7 +230,7 @@ func TestMessageHandlerPublishesMessageIDMetadata(t *testing.T) {
 		pageID:      "page-123",
 	}
 
-	ch.handleMessagingEvent(MessagingData{
+	ch.handleMessagingEvent(context.Background(), MessagingData{
 		PageID:         "page-123",
 		ConversationID: "conv-1",
 		Type:           "INBOX",
@@ -258,7 +262,7 @@ func TestMessageHandlerSkipsRecentOutboundEcho(t *testing.T) {
 	}
 	ch.rememberOutboundEcho("conv-1", "hello from bot")
 
-	ch.handleMessagingEvent(MessagingData{
+	ch.handleMessagingEvent(context.Background(), MessagingData{
 		PageID:         "page-123",
 		ConversationID: "conv-1",
 		Type:           "INBOX",
@@ -451,14 +455,14 @@ func TestMessageHandlerEmptyMessageID(t *testing.T) {
 	}
 
 	// First message with empty ID — should be published
-	ch.handleMessagingEvent(MessagingData{
+	ch.handleMessagingEvent(context.Background(), MessagingData{
 		PageID: "page-123", ConversationID: "conv-1",
 		Type: "INBOX", Platform: "facebook",
 		Message: MessagingMessage{ID: "", SenderID: "user-1", Content: "hello"},
 	})
 
 	// Second message with empty ID, different conversation — should ALSO be published
-	ch.handleMessagingEvent(MessagingData{
+	ch.handleMessagingEvent(context.Background(), MessagingData{
 		PageID: "page-123", ConversationID: "conv-2",
 		Type: "INBOX", Platform: "facebook",
 		Message: MessagingMessage{ID: "", SenderID: "user-2", Content: "world"},

@@ -390,7 +390,7 @@ func (l *InstanceLoader) loadInstance(ctx context.Context, inst store.ChannelIns
 	// derives from it — e.g. Telegram's pollCtx — are not cancelled out from
 	// under a successful start.
 	if autoStart {
-		l.startChannelWithTimeout(ctx, inst, ch)
+		l.startChannelWithTimeout(instCtx, inst, ch)
 	}
 
 	slog.Info("channel instance loaded",

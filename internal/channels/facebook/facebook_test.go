@@ -1,6 +1,7 @@
 package facebook
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -120,7 +121,7 @@ func TestWebhookHandlerPostEvents(t *testing.T) {
 	t.Run("valid comment event dispatches callback", func(t *testing.T) {
 		var gotChange ChangeValue
 		wh := NewWebhookHandler(appSecret, "token")
-		wh.onComment = func(entry WebhookEntry, change ChangeValue) {
+		wh.onComment = func(_ context.Context, entry WebhookEntry, change ChangeValue) {
 			gotChange = change
 		}
 
@@ -161,7 +162,7 @@ func TestWebhookHandlerPostEvents(t *testing.T) {
 	t.Run("valid messenger event dispatches callback", func(t *testing.T) {
 		var gotEvent MessagingEvent
 		wh := NewWebhookHandler(appSecret, "token")
-		wh.onMessage = func(_ WebhookEntry, event MessagingEvent) {
+		wh.onMessage = func(_ context.Context, _ WebhookEntry, event MessagingEvent) {
 			gotEvent = event
 		}
 
@@ -197,7 +198,7 @@ func TestWebhookHandlerPostEvents(t *testing.T) {
 	t.Run("non-page object ignored", func(t *testing.T) {
 		called := false
 		wh := NewWebhookHandler(appSecret, "token")
-		wh.onComment = func(_ WebhookEntry, _ ChangeValue) { called = true }
+		wh.onComment = func(_ context.Context, _ WebhookEntry, _ ChangeValue) { called = true }
 
 		payload := map[string]any{"object": "user", "entry": []any{}}
 		body, _ := json.Marshal(payload)

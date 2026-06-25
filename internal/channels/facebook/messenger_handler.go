@@ -1,13 +1,17 @@
 package facebook
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"time"
+
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // handleMessagingEvent processes a Messenger inbox event.
-func (ch *Channel) handleMessagingEvent(entry WebhookEntry, event MessagingEvent) {
+func (ch *Channel) handleMessagingEvent(ctx context.Context, entry WebhookEntry, event MessagingEvent) {
+	ctx = store.WithTenantID(ctx, ch.TenantID())
 	// Feature gate.
 	if !ch.config.Features.MessengerAutoReply {
 		return

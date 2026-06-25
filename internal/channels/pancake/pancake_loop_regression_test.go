@@ -21,7 +21,7 @@ func TestMessageHandlerSkipsRecentOutboundEchoWithHTMLFormatting(t *testing.T) {
 	}
 	ch.rememberOutboundEcho("conv-1", "Line 1\nLine 2")
 
-	ch.handleMessagingEvent(MessagingData{
+	ch.handleMessagingEvent(context.Background(), MessagingData{
 		PageID:         "page-123",
 		ConversationID: "conv-1",
 		Type:           "INBOX",

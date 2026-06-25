@@ -85,7 +85,7 @@ func TestHandleCommentEvent_FeatureGated(t *testing.T) {
 	cfg.Features.CommentReply = false
 	ch, msgBus := newTestChannel(t, "page-1", cfg)
 
-	ch.handleCommentEvent(commentEvent("page-1", "conv-1", "user-1", "msg-1", "hello"))
+	ch.handleCommentEvent(context.Background(), commentEvent("page-1", "conv-1", "user-1", "msg-1", "hello"))
 
 	_, ok := consumeInbound(t, msgBus, 50*time.Millisecond)
 	if ok {
@@ -99,8 +99,8 @@ func TestHandleCommentEvent_FeatureDisabledLogsDiagnostic(t *testing.T) {
 	buf, restore := capturePancakeSlog(t)
 	defer restore()
 
-	ch.handleCommentEvent(commentEvent("page-1", "conv-1", "user-1", "msg-1", "hello"))
-	ch.handleCommentEvent(commentEvent("page-1", "conv-2", "user-2", "msg-2", "hello again"))
+	ch.handleCommentEvent(context.Background(), commentEvent("page-1", "conv-1", "user-1", "msg-1", "hello"))
+	ch.handleCommentEvent(context.Background(), commentEvent("page-1", "conv-2", "user-2", "msg-2", "hello again"))
 
 	out := buf.String()
 	if count := strings.Count(out, "comment_reply and auto_react are disabled"); count != 1 {
@@ -121,7 +121,7 @@ func TestHandleCommentEvent_FeatureEnabled(t *testing.T) {
 	cfg.Features.CommentReply = true
 	ch, msgBus := newTestChannel(t, "page-1", cfg)
 
-	ch.handleCommentEvent(commentEvent("page-1", "conv-1", "user-1", "msg-1", "hello"))
+	ch.handleCommentEvent(context.Background(), commentEvent("page-1", "conv-1", "user-1", "msg-1", "hello"))
 
 	msg, ok := consumeInbound(t, msgBus, 100*time.Millisecond)
 	if !ok {
@@ -140,7 +140,7 @@ func TestHandleCommentEvent_SkipsSelfReply(t *testing.T) {
 	ch, msgBus := newTestChannel(t, "page-1", cfg)
 
 	// senderID == pageID: must be skipped without panic
-	ch.handleCommentEvent(commentEvent("page-1", "conv-1", "page-1", "msg-self", "own reply"))
+	ch.handleCommentEvent(context.Background(), commentEvent("page-1", "conv-1", "page-1", "msg-self", "own reply"))
 
 	_, ok := consumeInbound(t, msgBus, 50*time.Millisecond)
 	if ok {
@@ -155,7 +155,7 @@ func TestHandleCommentEvent_SkipsAssignedStaff(t *testing.T) {
 
 	data := commentEvent("page-1", "conv-1", "staff-1", "msg-staff", "staff comment")
 	data.AssigneeIDs = []string{"staff-1"}
-	ch.handleCommentEvent(data)
+	ch.handleCommentEvent(context.Background(), data)
 
 	_, ok := consumeInbound(t, msgBus, 50*time.Millisecond)
 	if ok {
@@ -171,8 +171,8 @@ func TestHandleCommentEvent_DedupDropsSecondCall(t *testing.T) {
 	ch, msgBus := newTestChannel(t, "page-1", cfg)
 
 	evt := commentEvent("page-1", "conv-1", "user-1", "msg-dup", "hello")
-	ch.handleCommentEvent(evt)
-	ch.handleCommentEvent(evt)
+	ch.handleCommentEvent(context.Background(), evt)
+	ch.handleCommentEvent(context.Background(), evt)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
@@ -191,8 +191,8 @@ func TestHandleCommentEvent_EmptyMsgIDNotDeduped(t *testing.T) {
 	cfg.Features.CommentReply = true
 	ch, msgBus := newTestChannel(t, "page-1", cfg)
 
-	ch.handleCommentEvent(commentEvent("page-1", "conv-1", "user-1", "", "msg A"))
-	ch.handleCommentEvent(commentEvent("page-1", "conv-1", "user-1", "", "msg B"))
+	ch.handleCommentEvent(context.Background(), commentEvent("page-1", "conv-1", "user-1", "", "msg A"))
+	ch.handleCommentEvent(context.Background(), commentEvent("page-1", "conv-1", "user-1", "", "msg B"))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
@@ -351,7 +351,7 @@ func TestHandleCommentEvent_MetadataFields(t *testing.T) {
 			Content:    "test comment",
 		},
 	}
-	ch.handleCommentEvent(data)
+	ch.handleCommentEvent(context.Background(), data)
 
 	msg, ok := consumeInbound(t, msgBus, 100*time.Millisecond)
 	if !ok {
@@ -381,7 +381,7 @@ func TestHandleCommentEvent_ChatIDIsConversationID(t *testing.T) {
 	cfg.Features.CommentReply = true
 	ch, msgBus := newTestChannel(t, "page-1", cfg)
 
-	ch.handleCommentEvent(commentEvent("page-1", "conv-distinct", "user-1", "msg-1", "hello"))
+	ch.handleCommentEvent(context.Background(), commentEvent("page-1", "conv-distinct", "user-1", "msg-1", "hello"))
 
 	msg, ok := consumeInbound(t, msgBus, 100*time.Millisecond)
 	if !ok {
@@ -429,7 +429,7 @@ func TestHandleCommentEvent_AutoReactEnabled(t *testing.T) {
 	ch.apiClient.httpClient = srv.Client()
 
 	evt := commentEvent("page-1", "conv-abc", "user-1", "msg-xyz", "hello page!")
-	ch.handleCommentEvent(evt)
+	ch.handleCommentEvent(context.Background(), evt)
 
 	select {
 	case gotID := <-done:
@@ -462,7 +462,7 @@ func TestHandleCommentEvent_AutoReactDisabled(t *testing.T) {
 	ch.apiClient.httpClient = srv.Client()
 
 	evt := commentEvent("page-1", "conv-1", "user-1", "123456789012345", "test comment")
-	ch.handleCommentEvent(evt)
+	ch.handleCommentEvent(context.Background(), evt)
 
 	time.Sleep(100 * time.Millisecond)
 	select {
@@ -494,7 +494,7 @@ func TestHandleCommentEvent_AutoReact_IndependentOfCommentReply(t *testing.T) {
 	ch.apiClient.httpClient = srv.Client()
 
 	evt := commentEvent("page-1", "conv-1", "user-1", "123456789012345", "hi!")
-	ch.handleCommentEvent(evt)
+	ch.handleCommentEvent(context.Background(), evt)
 
 	select {
 	case <-done:
@@ -527,7 +527,7 @@ func TestHandleCommentEvent_AutoReact_SkipNonFacebook(t *testing.T) {
 
 	evt := commentEvent("page-1", "conv-1", "user-1", "123456789012345", "hi!")
 	evt.Platform = "instagram"
-	ch.handleCommentEvent(evt)
+	ch.handleCommentEvent(context.Background(), evt)
 
 	time.Sleep(100 * time.Millisecond)
 	select {
@@ -560,7 +560,7 @@ func TestHandleCommentEvent_AutoReact_EmptyMessageID(t *testing.T) {
 
 	// Empty message ID → must not react (guards against malformed webhook)
 	evt := commentEvent("page-1", "conv-1", "user-1", "", "hi!")
-	ch.handleCommentEvent(evt)
+	ch.handleCommentEvent(context.Background(), evt)
 
 	time.Sleep(100 * time.Millisecond)
 	select {

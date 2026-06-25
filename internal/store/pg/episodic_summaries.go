@@ -180,12 +180,12 @@ func (s *PGEpisodicStore) ExistsBySourceID(ctx context.Context, agentID, userID,
 	return exists, err
 }
 
-// PruneExpired deletes episodic summaries past their expiry within the caller's tenant.
+// PruneExpired deletes all episodic summaries past their expiry across all tenants.
+// This is a global maintenance operation and does not filter by tenant.
 func (s *PGEpisodicStore) PruneExpired(ctx context.Context) (int, error) {
-	tenantID := store.TenantIDFromContext(ctx)
 	res, err := s.db.ExecContext(ctx, `
 		DELETE FROM episodic_summaries
-		WHERE expires_at IS NOT NULL AND expires_at < NOW() AND tenant_id = $1`, tenantID)
+		WHERE expires_at IS NOT NULL AND expires_at < NOW()`)
 	if err != nil {
 		return 0, err
 	}

@@ -8,11 +8,13 @@ import (
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // handleCommentEvent processes a Pancake COMMENT webhook event.
 // Mirrors the inbox handler pattern with additional comment-specific guards.
-func (ch *Channel) handleCommentEvent(data MessagingData) {
+func (ch *Channel) handleCommentEvent(ctx context.Context, data MessagingData) {
+	ctx = store.WithTenantID(ctx, ch.TenantID())
 	// Feature gate — exit if nothing to do.
 	if !ch.config.Features.CommentReply && !ch.config.Features.AutoReact {
 		ch.commentReplyDisabledOnce.Do(func() {

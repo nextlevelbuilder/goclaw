@@ -131,14 +131,14 @@ func (s *SQLiteEpisodicStore) ExistsBySourceID(ctx context.Context, agentID, use
 	return exists, err
 }
 
-// PruneExpired deletes episodic summaries past their expiry.
+// PruneExpired deletes all episodic summaries past their expiry across all tenants.
+// This is a global maintenance operation and does not filter by tenant.
 func (s *SQLiteEpisodicStore) PruneExpired(ctx context.Context) (int, error) {
-	tenantID := tenantIDForInsert(ctx)
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	res, err := s.db.ExecContext(ctx, `
 		DELETE FROM episodic_summaries
-		WHERE expires_at IS NOT NULL AND expires_at < ? AND tenant_id = ?`,
-		now, tenantID.String())
+		WHERE expires_at IS NOT NULL AND expires_at < ?`,
+		now)
 	if err != nil {
 		return 0, err
 	}
