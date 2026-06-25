@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -703,6 +704,47 @@ func TestHandleUpload_ResponseIncludesIsNew(t *testing.T) {
 }
 
 // --- Security Guard Tests ---
+
+func TestHandleUpload_NormalizesBackslashZipEntryPaths(t *testing.T) {
+	handler, skillStore, ctx, _ := newTestUploadHandler(t)
+	stubUploadDepFns(t,
+		func(context.Context, *skills.SkillManifest, []string) (*skills.InstallResult, error) {
+			return nil, nil
+		},
+		func(*skills.SkillManifest) (bool, []string) { return true, nil },
+	)
+
+	req := newZipUploadRequest(t, ctx, map[string]string{
+		"SKILL.md":           skillMarkdown("Windows ZIP Skill", "windows-zip-skill"),
+		"scripts\\search.py": "print('ok')\n",
+	})
+	w := httptest.NewRecorder()
+	handler.handleUpload(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+
+	var resp struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	info, ok := skillStore.GetSkillByID(ctx, uuid.MustParse(resp.ID))
+	if !ok {
+		t.Fatal("GetSkillByID returned !ok")
+	}
+
+	wantPath := filepath.Join(info.BaseDir, "scripts", "search.py")
+	if _, err := os.Stat(wantPath); err != nil {
+		t.Fatalf("expected normalized path %s to exist: %v", wantPath, err)
+	}
+	flatPath := filepath.Join(info.BaseDir, `scripts\search.py`)
+	if _, err := os.Stat(flatPath); !os.IsNotExist(err) {
+		t.Fatalf("flat backslash path %s exists or stat failed unexpectedly: %v", flatPath, err)
+	}
+}
 
 func TestHandleUpload_MaliciousContent_CurlPipeBash_Rejected(t *testing.T) {
 	handler, _, ctx, _ := newTestUploadHandler(t)
