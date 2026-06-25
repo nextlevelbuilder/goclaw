@@ -94,7 +94,7 @@ func (h *HookConfig) validateScope() error {
 		}
 	case ScopeAgent:
 		if h.TenantID == SentinelTenantID || h.TenantID == uuid.Nil {
-			return fmt.Errorf("hook: agent scope requires a real tenant_id")
+			return fmt.Errorf("agent-scoped hooks cannot be created in the master/system tenant. Please create a workspace tenant first")
 		}
 		if len(h.AgentIDs) == 0 {
 			if h.AgentID != nil && *h.AgentID != uuid.Nil {

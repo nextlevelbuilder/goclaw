@@ -22,6 +22,7 @@ export const hookFormSchema = z
   .object({
     name: z.string().max(255).optional(),
     agent_ids: z.array(z.string()).optional(),
+    tenant_id: z.string().uuid().or(z.literal("")).optional(),
     event: HookEventEnum,
     handler_type: HookHandlerTypeEnum,
     scope: HookScopeEnum,
