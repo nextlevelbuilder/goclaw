@@ -276,6 +276,10 @@ func (t *TtsTool) Execute(ctx context.Context, args map[string]any) *Result {
 				tenantOpts.Params = mergeParams(opts.Params, adapted)
 			}
 			result, err = p.Synthesize(ctx, text, tenantOpts)
+			if err != nil {
+				slog.Warn("tts tenant provider failed, trying fallback", "provider", tenantName, "error", err)
+				result, err = mgr.SynthesizeWithFallbackAdapted(ctx, text, opts, genericAgentParams)
+			}
 		} else {
 			// Resolve primary from tenant settings or default.
 			primary := t.resolvePrimary(ctx, mgr)

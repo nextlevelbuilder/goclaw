@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -12,12 +13,16 @@ import (
 type tenantRoutingTTSProvider struct {
 	name  string
 	calls int
+	err   error
 }
 
 func (p *tenantRoutingTTSProvider) Name() string { return p.name }
 
 func (p *tenantRoutingTTSProvider) Synthesize(_ context.Context, _ string, _ tts.Options) (*tts.SynthResult, error) {
 	p.calls++
+	if p.err != nil {
+		return nil, p.err
+	}
 	return &tts.SynthResult{Audio: []byte("audio"), Extension: "mp3", MimeType: "audio/mpeg"}, nil
 }
 
@@ -79,6 +84,32 @@ func TestTtsTool_ExplicitTenantProviderWhenMissingFromGlobalManager(t *testing.T
 	}
 	if edgeProvider.calls != 0 {
 		t.Fatalf("global edge calls = %d, want 0", edgeProvider.calls)
+	}
+}
+
+func TestTtsTool_TenantProviderFailureFallsBackWhenProviderOmitted(t *testing.T) {
+	t.Parallel()
+
+	edgeProvider := &tenantRoutingTTSProvider{name: "edge"}
+	geminiProvider := &tenantRoutingTTSProvider{name: "gemini", err: errors.New("tenant unavailable")}
+	mgr := newTenantRoutingManager("edge", edgeProvider)
+	mgr.SetTenantResolver(func(context.Context) (audio.TTSProvider, string, audio.AutoMode, error) {
+		return geminiProvider, "gemini", audio.AutoOff, nil
+	})
+
+	tool := NewTtsTool(mgr)
+	result := tool.Execute(context.Background(), map[string]any{
+		"text": "hello with tenant fallback",
+	})
+
+	if result.IsError {
+		t.Fatalf("unexpected error: %s", result.ForLLM)
+	}
+	if geminiProvider.calls != 1 {
+		t.Fatalf("tenant gemini calls = %d, want 1", geminiProvider.calls)
+	}
+	if edgeProvider.calls != 1 {
+		t.Fatalf("global edge calls = %d, want 1", edgeProvider.calls)
 	}
 }
 
