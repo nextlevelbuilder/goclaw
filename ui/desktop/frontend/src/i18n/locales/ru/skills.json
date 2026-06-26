@@ -1,0 +1,122 @@
+{
+  "title": "Скиллы",
+  "description": "Управление скиллами и возможностями агентов",
+  "searchPlaceholder": "Поиск скиллов...",
+  "emptyTitle": "Нет скиллов",
+  "emptyDescription": "Пока не зарегистрировано ни одного скилла.",
+  "noMatchTitle": "Нет подходящих скиллов",
+  "noMatchDescription": "Попробуйте другой поисковый запрос.",
+  "columns": {
+    "name": "Имя",
+    "description": "Описание",
+    "source": "Источник",
+    "author": "Автор",
+    "visibility": "Видимость",
+    "status": "Статус",
+    "actions": "Действия"
+  },
+  "noDescription": "Нет описания",
+  "visibility": {
+    "clickToCycle": "Нажмите для изменения видимости"
+  },
+  "delete": {
+    "title": "Удалить скилл",
+    "description": "Вы уверены, что хотите удалить \"{{name}}\"? Это действие нельзя отменить.",
+    "confirmLabel": "Удалить"
+  },
+  "upload": {
+    "title": "Загрузить скиллы",
+    "description": "Загрузите ZIP-файлы, содержащие SKILL.md с YAML frontmatter (name, description, slug).",
+    "button": "Загрузить",
+    "uploading": "Загрузка...",
+    "dropOrClick": "Нажмите или перетащите .zip файлы",
+    "dropHere": "Перетащите .zip файлы сюда",
+    "onlyZip": "Принимаются только .zip файлы",
+    "cancel": "Отмена",
+    "done": "Готово",
+    "tooLarge": "Файл превышает лимит 20МБ",
+    "invalidZip": "Неверный ZIP-файл",
+    "noSkillMd": "ZIP должен содержать SKILL.md в корне",
+    "emptySkillMd": "SKILL.md пуст",
+    "noFrontmatter": "В SKILL.md отсутствует YAML frontmatter",
+    "nameRequired": "name обязателен в frontmatter SKILL.md",
+    "invalidSlug": "Неверный формат slug",
+    "failed": "Загрузка не удалась",
+    "validating": "Валидация...",
+    "validCount": "{{valid}} из {{total}} валидны",
+    "uploadCount": "Загрузить ({{count}})",
+    "successCount": "{{success}} из {{total}} загружено успешно",
+    "remove": "Удалить файл"
+  },
+  "edit": {
+    "title": "Редактировать скилл",
+    "name": "Имя",
+    "description": "Описание",
+    "visibility": "Видимость",
+    "tags": "Теги",
+    "addTag": "Добавить тег...",
+    "add": "Добавить",
+    "cancel": "Отмена",
+    "save": "Сохранить",
+    "saving": "Сохранение...",
+    "privateOption": "Приватный (только владелец)",
+    "internalOption": "Внутренний (предоставленные агенты/пользователи)",
+    "publicOption": "Публичный (все агенты)"
+  },
+  "system": "Система",
+  "tabs": {
+    "core": "Основные",
+    "custom": "Свои"
+  },
+  "toggle": {
+    "enable": "Включить скилл",
+    "disable": "Отключить скилл",
+    "disabled": "Отключён"
+  },
+  "tenant": {
+    "enabled": "Включён",
+    "disabled": "Отключён",
+    "default": "По умолчанию",
+    "overrideHint": "Переопределение для этого тенанта",
+    "resetDefault": "Сбросить на умолчание"
+  },
+  "deps": {
+    "rescan": "Пересканировать зависимости",
+    "rescanning": "Сканирование...",
+    "rescanSuccess": "Обновлено {{count}} скиллов",
+    "missing": "Отсутствуют: {{deps}}",
+    "install": "Установить зависимости",
+    "installing": "Установка...",
+    "installSuccess": "Зависимости установлены успешно",
+    "installPartial": "Некоторые зависимости не удалось установить",
+    "installItem": "Установить",
+    "itemSuccess": "Установлено",
+    "itemError": "Ошибка",
+    "missingTitle": "Отсутствующие зависимости",
+    "systemLabel": "Система",
+    "pythonLabel": "Python",
+    "nodeLabel": "Node.js",
+    "statusActive": "Активны",
+    "statusArchived": "Отсутствуют зависимости",
+    "runtimeMissing": "Отсутствуют рантаймы",
+    "runtimeMissingDesc": "Для основных скиллов требуются Python и/или Node.js. Пересоберите с ENABLE_PYTHON=true, ENABLE_NODE=true или ENABLE_FULL_SKILLS=true, или установите вручную.",
+    "runtimeRequired": "Сначала установите рантаймы"
+  },
+  "detail": {
+    "title": "Детали скилла",
+    "content": "Содержимое",
+    "files": "Файлы",
+    "version": "Версия:",
+    "current": "(текущая)",
+    "noContent": "Содержимое недоступно."
+  },
+  "toast": {
+    "updated": "Скилл обновлён",
+    "updateFailed": "Не удалось обновить скилл",
+    "deleted": "Скилл удалён",
+    "deleteFailed": "Не удалось удалить скилл",
+    "rescanUpdated": "{{count}} скилл(ов) обновлено",
+    "rescanNoChanges": "Все скиллы актуальны",
+    "rescanFailed": "Не удалось пересканировать зависимости"
+  }
+}

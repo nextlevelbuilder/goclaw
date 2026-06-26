@@ -1,0 +1,159 @@
+{
+  "onboarding": {
+    "welcome": "Настройка GoClaw",
+    "welcomeDesc": "Давайте запустим ваш шлюз",
+    "providerStep": "Настройка провайдера",
+    "providerStepDesc": "Выберите AI провайдера и введите учётные данные.",
+    "modelStep": "Выбор и проверка модели",
+    "modelStepDesc": "Выберите модель и проверьте подключение.",
+    "agentStep": "Создание агента",
+    "agentStepDesc": "Определите личность вашего агента.",
+    "descPlaceholder": "Опишите личность вашего агента...",
+    "complete": "Настройка завершена",
+    "stepProvider": "Провайдер",
+    "stepModel": "Модель",
+    "stepAgent": "Агент",
+    "createProvider": "Создать провайдера"
+  },
+  "summoning": {
+    "title": "Вызов агента",
+    "weavingSoul": "Создание души для {{name}}",
+    "completed": "Агент готов!",
+    "completedTitle": "Агент готов!",
+    "failedTitle": "Ошибка вызова",
+    "failed": "Ошибка вызова",
+    "wait": "Это может занять некоторое время",
+    "fileLabelSOUL": "Базовая личность",
+    "fileLabelIDENTITY": "Идентичность и знания",
+    "agentReady": "{{name}} готов!",
+    "retrying": "Повторная попытка..."
+  },
+  "settings": {
+    "title": "Настройки",
+    "tabs": {
+      "appearance": "Внешний вид",
+      "providers": "Провайдеры",
+      "agents": "Агенты",
+      "channels": "Каналы",
+      "mcp": "MCP",
+      "skills": "Скиллы",
+      "tools": "Инструменты",
+      "cron": "Крон",
+      "traces": "Трейсы",
+      "storage": "Хранилище",
+      "about": "О приложении"
+    },
+    "theme": "Тема",
+    "dark": "Тёмная",
+    "light": "Светлая",
+    "language": "Язык",
+    "timezone": "Часовой пояс",
+    "timezoneHint": "Измените часовой пояс через иконку часов в верхней панели."
+  },
+  "sidebar": {
+    "newChat": "Новый чат",
+    "connected": "Подключено",
+    "offline": "Оффлайн",
+    "lightMode": "Светлая тема",
+    "darkMode": "Тёмная тема",
+    "settings": "Настройки",
+    "teams": "Команды"
+  },
+  "about": {
+    "title": "GoClaw Lite",
+    "subtitle": "Десктопная версия",
+    "version": "Версия",
+    "edition": "Редакция",
+    "runtime": "Среда выполнения",
+    "runtimeValue": "Wails v2",
+    "editionLimits": "Лимиты редакции",
+    "agents": "Агенты",
+    "teams": "Команды",
+    "teamMembers": "Участники команды",
+    "database": "База данных",
+    "users": "Пользователи",
+    "maxAgents": "макс. 5",
+    "maxTeams": "макс. 1",
+    "maxTeamMembers": "макс. 5",
+    "databaseValue": "SQLite (локально)",
+    "usersValue": "Один пользователь",
+    "builtWith": "Создано с Go + React + Wails",
+    "reset": {
+      "title": "Опасная зона",
+      "description": "Удалить базу данных и перезапустить приложение. Все агенты, сессии, провайдеры и настройки будут безвозвратно потеряны.",
+      "button": "Сбросить базу данных",
+      "confirmTitle": "Сбросить базу данных?",
+      "confirmDescription": "Это удалит все ваши данные и перезапустит приложение с нуля.",
+      "confirmPrompt": "Введите {{word}} для подтверждения",
+      "cancel": "Отмена",
+      "confirm": "Сбросить и перезапустить",
+      "resetting": "Сброс..."
+    }
+  },
+  "presets": {
+    "researcher": {
+      "label": "🔬 Исследователь",
+      "prompt": "Name: Scholar. A meticulous research analyst who leaves no stone unturned.\nPersonality: Methodical, thorough, and precise. Presents information in well-structured reports with citations. Balances depth with clarity.\n\nPurpose: Deep research across any domain — academic papers, market analysis, technical investigations. Synthesizes multiple sources into actionable insights. Always distinguishes facts from opinions."
+    },
+    "writer": {
+      "label": "✍️ Писатель",
+      "prompt": "Name: Quill. A versatile writer who adapts voice and tone to any audience.\nPersonality: Creative, articulate, and empathetic. Understands the power of words. Balances clarity with elegance.\n\nPurpose: Content creation specialist — blog posts, articles, copywriting, storytelling, technical writing. Skilled at structuring arguments, crafting narratives, and maintaining consistent tone across long-form content."
+    },
+    "coder": {
+      "label": "👨‍💻 Программист",
+      "prompt": "Name: Dev. A senior software engineer with deep expertise across the full stack.\nPersonality: Pragmatic and efficient. Writes clean, maintainable code. Explains complex concepts simply. Follows best practices but knows when to bend rules.\n\nPurpose: Code reviews, architecture design, debugging, implementation. Proficient in multiple languages and frameworks. Prioritizes correctness, performance, and security."
+    }
+  },
+  "agent": {
+    "summon": "Вызвать",
+    "summoning": "Вызов...",
+    "verifyModel": "Проверить модель",
+    "verifying": "Проверка...",
+    "verified": "Проверено",
+    "verifyFailed": "Ошибка проверки"
+  },
+  "chat": {
+    "emptyTitle": "Чат с {{name}}",
+    "emptyTitleDefault": "Начните разговор",
+    "emptyDescAgent": "Задайте вопрос, напишите что-то или исследуйте идеи.",
+    "emptyDescNoAgent": "Выберите агента из боковой панели для начала.",
+    "suggestions": ["Какие последние новости?", "Расскажи анекдот", "Придумай идеи для эпохи AI"]
+  },
+  "activity": {
+    "thinking": "Думает",
+    "executingTool": "Выполняет инструмент",
+    "compacting": "Сжимает контекст",
+    "streaming": "Потоковая передача",
+    "retrying": "Повторная попытка",
+    "processing": "Обработка",
+    "runningTool": "Запущен {{tool}}",
+    "retryingAttempt": "Повторная попытка (попытка {{n}})",
+    "step": "шаг {{n}}"
+  },
+  "toast": {
+    "agentCreated": "Агент создан",
+    "agentUpdated": "Агент обновлён",
+    "agentDeleted": "Агент удалён",
+    "providerCreated": "Провайдер создан",
+    "providerUpdated": "Провайдер обновлён",
+    "providerDeleted": "Провайдер удалён",
+    "serverCreated": "MCP сервер создан",
+    "serverUpdated": "MCP сервер обновлён",
+    "serverDeleted": "MCP сервер удалён",
+    "skillUploaded": "Скилл загружен",
+    "skillDeleted": "Скилл удалён",
+    "grantUpdated": "Грант обновлён",
+    "saveFailed": "Не удалось сохранить",
+    "deleteFailed": "Не удалось удалить",
+    "createFailed": "Не удалось создать"
+  },
+  "update": {
+    "available": "GoClaw Lite v{{version}} доступен",
+    "now": "Обновить сейчас",
+    "downloading": "Загрузка обновления...",
+    "ready": "Обновление установлено! Перезапустите для применения.",
+    "restart": "Перезапустить сейчас",
+    "failed": "Ошибка обновления.",
+    "retry": "Повторить"
+  }
+}

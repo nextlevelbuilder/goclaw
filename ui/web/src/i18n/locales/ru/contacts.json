@@ -1,0 +1,58 @@
+{
+  "title": "Контакты",
+  "description": "Автоматически собранные контакты из всех взаимодействий каналов.",
+  "searchPlaceholder": "Поиск по имени, username или ID...",
+  "filter": "Фильтр",
+  "emptyTitle": "Нет контактов",
+  "emptyDescription": "Контакты появятся здесь, когда пользователи будут взаимодействовать с вашими агентами через каналы.",
+  "noMatchTitle": "Контакты не найдены",
+  "noMatchDescription": "Попробуйте другой поисковый запрос или фильтр.",
+  "columns": {
+    "name": "Имя",
+    "username": "Username",
+    "senderId": "Sender ID",
+    "channelType": "Канал",
+    "peerKind": "Тип",
+    "lastSeen": "Последний визит",
+    "merged": "Объединён"
+  },
+  "permissionsNote": {
+    "title": "Разрешения каналов для имён контактов",
+    "telegram": "Telegram — Имена и username доступны автоматически.",
+    "discord": "Discord — Display names и username доступны автоматически.",
+    "zalo": "Zalo — Display names доступны автоматически.",
+    "slack": "Slack — Display names разрешаются через Slack API (бот должен быть в workspace).",
+    "feishu": "Feishu/Lark — Требуется разрешение contact:user.base:readonly. Без этого имена будут пустыми."
+  },
+  "selectedCount": "{{count}} выбрано",
+  "merge": {
+    "button": "Объединить",
+    "unmergeButton": "Разъединить",
+    "dialogTitle": "Объединить контакты",
+    "dialogDescription": "Связать выбранные контакты с тенант-пользователем. Это идентифицирует их как одного человека в разных каналах.",
+    "linkExisting": "Связать с существующим пользователем",
+    "createNew": "Создать нового пользователя",
+    "selectUser": "Выберите тенант-пользователя...",
+    "displayName": "Отображаемое имя",
+    "displayNamePlaceholder": "напр. Иван Петров",
+    "userId": "ID пользователя",
+    "userIdPlaceholder": "Уникальный идентификатор",
+    "confirm": "Объединить",
+    "cancel": "Отмена",
+    "success": "Контакты успешно объединены",
+    "unmergeSuccess": "Контакты успешно разъединены",
+    "error": "Не удалось объединить контакты",
+    "unmergeError": "Не удалось разъединить контакты",
+    "comingSoon": "Эта функция в разработке и пока недоступна."
+  },
+  "types": {
+    "user": "Пользователь",
+    "group": "Группа"
+  },
+  "filters": {
+    "allChannels": "Все каналы",
+    "allTypes": "Все типы",
+    "direct": "Личные",
+    "group": "Группа"
+  }
+}
