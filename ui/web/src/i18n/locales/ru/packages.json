@@ -1,0 +1,66 @@
+{
+  "title": "Среды выполнения и пакеты (Runtime & Packages)",
+  "description": "Управление средами выполнения и установленными пакетами внутри активного контейнера GoClaw",
+  "runtimes": {
+    "title": "Среды выполнения (Runtimes)",
+    "scopeTitle": "Статус сред выполнения (на уровне контейнера)",
+    "scopeDesc": "Эти проверки выполняются внутри активного контейнера GoClaw. Среды, установленные на хосте, изменения профиля оболочки и бинарные файлы, управляемые nvm, здесь не используются.",
+    "minimalImageHint": "Опубликованный образ latest является минимальным, поэтому в нем может не быть сред выполнения Python или Node. Используйте варианты образа python, node или full, пересоберите с ENABLE_PYTHON=true / ENABLE_NODE=true / ENABLE_FULL_SKILLS=true, или установите среды выполнения вручную в этом контейнере.",
+    "available": "Доступно",
+    "missing": "Отсутствует",
+    "missingInContainer": "Отсутствует в контейнере"
+  },
+  "system": {
+    "title": "Системные пакеты",
+    "placeholder": "Имя пакета (например, github-cli)"
+  },
+  "pip": {
+    "title": "Пакеты Python (pip)",
+    "placeholder": "Имя пакета (например, pandas)"
+  },
+  "npm": {
+    "title": "Пакеты Node (npm)",
+    "placeholder": "Имя пакета (например, typescript)"
+  },
+  "github": {
+    "title": "Бинарные файлы GitHub",
+    "placeholder": "owner/repo[@tag] (например, cli/cli@v2.45.0)",
+    "browse": "Просмотр релизов",
+    "muslWarning": "Alpine Linux использует musl libc. Бинарные файлы, скомпилированные для glibc, могут не работать. Отдавайте предпочтение статическим или musl-совместимым релизам.",
+    "muslDismiss": "Закрыть",
+    "pickerTitle": "Выберите релиз из {{repo}}",
+    "pickerEmpty": "Релизы для {{repo}} не найдены",
+    "pickerLoading": "Загрузка релизов...",
+    "pickerMatchingAssets": "{{count}} подходящих / {{total}} всего",
+    "pickerPrerelease": "Пре-релиз",
+    "pickerSelect": "Выбрать",
+    "columns": {
+      "repo": "Репозиторий",
+      "tag": "Версия",
+      "binaries": "Бинарники",
+      "installedAt": "Установлено"
+    }
+  },
+  "actions": {
+    "install": "Установить",
+    "uninstall": "Удалить",
+    "installing": "Установка...",
+    "uninstalling": "Удаление..."
+  },
+  "messages": {
+    "installSuccess": "{{name}} успешно установлен",
+    "installError": "Не удалось установить {{name}}",
+    "uninstallSuccess": "{{name}} успешно удален",
+    "uninstallError": "Не удалось удалить {{name}}"
+  },
+  "confirmUninstall": {
+    "title": "Подтверждение удаления",
+    "description": "Вы уверены, что хотите удалить {{name}}? Это действие нельзя отменить."
+  },
+  "table": {
+    "name": "Имя",
+    "version": "Версия",
+    "actions": "Действия",
+    "empty": "Нет установленных пакетов"
+  }
+}

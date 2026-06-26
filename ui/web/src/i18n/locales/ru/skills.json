@@ -1,0 +1,129 @@
+{
+  "title": "Навыки",
+  "description": "Управление навыками и возможностями агентов",
+  "searchPlaceholder": "Поиск навыков...",
+  "emptyTitle": "Нет навыков",
+  "emptyDescription": "Навыки еще не были зарегистрированы.",
+  "noMatchTitle": "Навыки не найдены",
+  "noMatchDescription": "Попробуйте другой поисковый запрос.",
+  "columns": {
+    "name": "Имя",
+    "description": "Описание",
+    "source": "Источник",
+    "author": "Автор",
+    "visibility": "Видимость",
+    "status": "Статус",
+    "actions": "Действия"
+  },
+  "noDescription": "Нет описания",
+  "visibility": {
+    "clickToCycle": "Нажмите, чтобы изменить видимость"
+  },
+  "delete": {
+    "title": "Удалить навык",
+    "description": "Вы уверены, что хотите удалить \"{{name}}\"? Это действие нельзя отменить.",
+    "confirmLabel": "Удалить"
+  },
+  "upload": {
+    "title": "Загрузить навыки",
+    "description": "Загрузите ZIP-файлы, содержащие SKILL.md с YAML frontmatter (name, description, slug).",
+    "button": "Загрузить",
+    "uploading": "Загрузка...",
+    "dropOrClick": "Нажмите или перетащите .zip файлы сюда",
+    "dropHere": "Бросьте .zip файлы сюда",
+    "onlyZip": "Принимаются только файлы .zip",
+    "cancel": "Отмена",
+    "done": "Готово",
+    "tooLarge": "Файл превышает лимит в 20MB",
+    "invalidZip": "Недопустимый ZIP-файл",
+    "noSkillMd": "ZIP должен содержать SKILL.md в корне",
+    "emptySkillMd": "Файл SKILL.md пуст",
+    "noFrontmatter": "В SKILL.md отсутствует YAML frontmatter",
+    "nameRequired": "поле name обязательно в frontmatter SKILL.md",
+    "invalidSlug": "Недопустимый формат слага (slug)",
+    "failed": "Загрузка не удалась",
+    "validating": "Проверка...",
+    "validCount": "{{valid}} из {{total}} валидны",
+    "uploadCount": "Загрузить ({{count}})",
+    "successCount": "{{success}} из {{total}} успешно загружено",
+    "remove": "Удалить файл",
+    "tooManySkills": "В ZIP слишком много навыков (макс. 50)",
+    "multiDetected": "Обнаружено {{count}} навыков",
+    "skillUnchanged": "Содержимое не изменилось — пропущено",
+    "slugConflict": "Слаг конфликтует с системным навыком",
+    "unchanged": "Без изменений",
+    "new": "Новый"
+  },
+  "edit": {
+    "title": "Редактировать навык",
+    "name": "Имя",
+    "description": "Описание",
+    "visibility": "Видимость",
+    "tags": "Теги",
+    "addTag": "Добавить тег...",
+    "add": "Добавить",
+    "cancel": "Отмена",
+    "save": "Сохранить",
+    "saving": "Сохранение...",
+    "privateOption": "Приватный (только для владельца)",
+    "internalOption": "Внутренний (для разрешенных агентов/пользователей)",
+    "publicOption": "Публичный (для всех агентов)"
+  },
+  "system": "Система",
+  "tabs": {
+    "core": "Основные (Core)",
+    "custom": "Пользовательские"
+  },
+  "toggle": {
+    "enable": "Включить навык",
+    "disable": "Отключить навык",
+    "disabled": "Отключен"
+  },
+  "tenant": {
+    "enabled": "Включено",
+    "disabled": "Отключено",
+    "default": "По умолчанию",
+    "overrideHint": "Переопределение для этого тенанта",
+    "resetDefault": "Сбросить к умолчаниям"
+  },
+  "deps": {
+    "rescan": "Пересканировать зависимости",
+    "rescanning": "Сканирование...",
+    "rescanSuccess": "Обновлено {{count}} навыков",
+    "missing": "Отсутствуют: {{deps}}",
+    "install": "Установить зависимости",
+    "installing": "Установка...",
+    "installSuccess": "Зависимости успешно установлены",
+    "installPartial": "Некоторые зависимости не удалось установить",
+    "installItem": "Установить",
+    "itemSuccess": "Установлено",
+    "itemError": "Ошибка",
+    "missingTitle": "Отсутствующие зависимости",
+    "systemLabel": "Система",
+    "pythonLabel": "Python",
+    "nodeLabel": "Node.js",
+    "statusActive": "Активен",
+    "statusArchived": "Отсутствуют зав.",
+    "runtimeMissing": "Отсутствуют необходимые среды выполнения (Runtimes)",
+    "runtimeMissingDesc": "Для основных навыков (core) требуются среды выполнения Python и/или Node.js внутри контейнера GoClaw. Среды, установленные на хосте, здесь не используются. Если вы используете публичный 'latest' образ, то это ожидаемо.",
+    "runtimeMissingAction": "Откройте страницу 'Пакеты' (Packages), чтобы проверить или установить среды выполнения в этом контейнере.",
+    "runtimeRequired": "Сначала установите среды выполнения контейнера"
+  },
+  "detail": {
+    "title": "Детали навыка",
+    "content": "Содержимое",
+    "files": "Файлы",
+    "version": "Версия:",
+    "current": "(текущая)",
+    "noContent": "Содержимое недоступно."
+  },
+  "toast": {
+    "updated": "Навык обновлен",
+    "updateFailed": "Не удалось обновить навык",
+    "deleted": "Навык удален",
+    "deleteFailed": "Не удалось удалить навык",
+    "rescanUpdated": "{{count}} навык(ов) обновлено",
+    "rescanNoChanges": "Все навыки в актуальном состоянии",
+    "rescanFailed": "Не удалось пересканировать зависимости"
+  }
+}
