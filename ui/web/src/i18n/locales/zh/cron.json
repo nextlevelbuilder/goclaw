@@ -143,7 +143,10 @@
     "bytes": "{{count}} bytes",
     "defaultValue": "默认值",
     "none": "无",
-    "envVars": "{{count}}个变量"
+    "envVars": "{{count}}个变量",
+    "commandJson": "命令 JSON",
+    "commandJsonHelp": "以 JSON 编辑命令 payload。argv 必填，且必须是非空字符串数组。",
+    "invalidCommandJson": "命令 JSON 无效：argv 必须是非空数组。"
   },
   "stateless": "无状态",
   "statelessHelp": "跳过会话持久化。每次运行从零开始。为不需要历史上下文的定时任务节省令牌。",

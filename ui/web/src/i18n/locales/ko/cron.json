@@ -143,7 +143,10 @@
     "bytes": "{{count}} bytes",
     "defaultValue": "기본값",
     "none": "없음",
-    "envVars": "{{count}}개"
+    "envVars": "{{count}}개",
+    "commandJson": "명령 JSON",
+    "commandJsonHelp": "명령 payload를 JSON으로 수정합니다. argv는 필수이며 비어 있지 않은 문자열 배열이어야 합니다.",
+    "invalidCommandJson": "명령 JSON이 올바르지 않습니다: argv는 비어 있지 않은 배열이어야 합니다."
   },
   "stateless": "상태 없음",
   "statelessHelp": "세션 지속성 건너뜁니다. 각 실행은 이전 메시지 없이 새로 시작됩니다. 이전 컨텍스트가 필요 없는 cron의 토큰을 절약합니다.",

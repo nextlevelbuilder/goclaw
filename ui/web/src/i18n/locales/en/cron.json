@@ -143,7 +143,10 @@
     "bytes": "{{count}} bytes",
     "defaultValue": "Default",
     "none": "None",
-    "envVars": "{{count}} vars"
+    "envVars": "{{count}} vars",
+    "commandJson": "Command JSON",
+    "commandJsonHelp": "Edit the command payload as JSON. argv is required and must be a non-empty string array.",
+    "invalidCommandJson": "Invalid command JSON: argv must be a non-empty array."
   },
   "stateless": "Stateless",
   "statelessHelp": "Skip session persistence. Each run starts fresh without loading previous messages. Saves tokens for crons that don't need past context.",

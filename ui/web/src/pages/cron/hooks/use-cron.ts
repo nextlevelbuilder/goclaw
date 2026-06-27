@@ -37,6 +37,7 @@ export interface CronJobPatch {
   enabled?: boolean;
   schedule?: CronSchedule;
   message?: string;
+  command?: CronCommandSpec;
   deliver?: boolean;
   deliverChannel?: string;
   deliverTo?: string;

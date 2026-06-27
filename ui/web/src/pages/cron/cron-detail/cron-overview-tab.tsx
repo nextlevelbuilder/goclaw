@@ -53,6 +53,7 @@ export function CronOverviewTab({ job, onUpdate }: CronOverviewTabProps) {
   const [agentId, setAgentId] = useState(job.agentId ?? "");
   const [enabled, setEnabled] = useState(job.enabled);
   const [editingMessage, setEditingMessage] = useState(false);
+  const [editingCommand, setEditingCommand] = useState(false);
 
   // Delivery fields
   const [deliver, setDeliver] = useState(job.deliver ?? false);
@@ -67,6 +68,7 @@ export function CronOverviewTab({ job, onUpdate }: CronOverviewTabProps) {
 
   const [saving, setSaving] = useState(false);
   const command = job.payload?.command;
+  const [commandJson, setCommandJson] = useState(() => JSON.stringify(command ?? { argv: [] }, null, 2));
   const commandEnvCount = command?.env ? Object.keys(command.env).length : 0;
 
   // Fetch delivery targets on mount
@@ -88,6 +90,23 @@ export function CronOverviewTab({ job, onUpdate }: CronOverviewTabProps) {
       toast.error(t("detail.invalidTimezone", "Invalid timezone"));
       return;
     }
+
+    const commandChanged = isCommandCron(job)
+      && commandJson.trim() !== JSON.stringify(command ?? { argv: [] }, null, 2).trim();
+    let parsedCommand: import("../hooks/use-cron").CronCommandSpec | undefined;
+    if (commandChanged) {
+      try {
+        parsedCommand = JSON.parse(commandJson);
+        if (!Array.isArray(parsedCommand?.argv) || parsedCommand.argv.length === 0 || !parsedCommand.argv[0]) {
+          toast.error(t("detail.invalidCommandJson"));
+          return;
+        }
+      } catch {
+        toast.error(t("detail.invalidCommandJson"));
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       let schedule;
@@ -101,6 +120,7 @@ export function CronOverviewTab({ job, onUpdate }: CronOverviewTabProps) {
       const patch: import("../hooks/use-cron").CronJobPatch = {
         schedule,
         message: isCommandCron(job) ? undefined : message.trim(),
+        command: commandChanged ? parsedCommand : undefined,
         agentId: agentId.trim() || "",
         deliver,
         deliverChannel: deliver ? channel.trim() || undefined : undefined,
@@ -113,6 +133,7 @@ export function CronOverviewTab({ job, onUpdate }: CronOverviewTabProps) {
       if (enabled !== job.enabled) patch.enabled = enabled;
       await onUpdate(job.id, patch);
       setEditingMessage(false);
+      setEditingCommand(false);
     } catch {
       // toast shown by hook
     } finally {
@@ -143,19 +164,37 @@ export function CronOverviewTab({ job, onUpdate }: CronOverviewTabProps) {
               <Terminal className="h-4 w-4 text-amber-600 dark:text-amber-400" />
               <h3 className="text-sm font-medium">{t("detail.commandSection")}</h3>
             </div>
-            <span className="rounded-full border border-amber-300 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-700 dark:border-amber-800 dark:text-amber-300">
-              {t("payload.command")}
-            </span>
-          </div>
-          <div className="space-y-3 rounded-md border bg-background/80 p-3 sm:p-4">
-            <div>
-              <div className="mb-1 text-xs font-medium text-muted-foreground">{t("detail.commandArgv")}</div>
-              {formatCommand(job) ? (
-                <pre className="overflow-x-auto rounded-md bg-muted px-3 py-2 text-xs"><code>{formatCommand(job)}</code></pre>
-              ) : (
-                <p className="text-sm italic text-muted-foreground">{t("detail.noCommand")}</p>
+            <div className="flex items-center gap-2">
+              <span className="rounded-full border border-amber-300 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-700 dark:border-amber-800 dark:text-amber-300">
+                {t("payload.command")}
+              </span>
+              {!readonly && (
+                <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground"
+                  onClick={() => setEditingCommand(!editingCommand)}>
+                  <Pencil className="h-3 w-3" />
+                  {editingCommand ? t("detail.preview") : t("detail.edit")}
+                </Button>
               )}
             </div>
+          </div>
+          <div className="space-y-3 rounded-md border bg-background/80 p-3 sm:p-4">
+            {editingCommand ? (
+              <div>
+                <div className="mb-1 text-xs font-medium text-muted-foreground">{t("detail.commandJson")}</div>
+                <Textarea value={commandJson} onChange={(e) => setCommandJson(e.target.value)}
+                  rows={10} className="font-mono text-base md:text-sm" />
+                <p className="mt-1 text-xs text-muted-foreground">{t("detail.commandJsonHelp")}</p>
+              </div>
+            ) : (
+              <div>
+                <div className="mb-1 text-xs font-medium text-muted-foreground">{t("detail.commandArgv")}</div>
+                {formatCommand(job) ? (
+                  <pre className="overflow-x-auto rounded-md bg-muted px-3 py-2 text-xs"><code>{formatCommand(job)}</code></pre>
+                ) : (
+                  <p className="text-sm italic text-muted-foreground">{t("detail.noCommand")}</p>
+                )}
+              </div>
+            )}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="min-w-0">
                 <div className="text-xs font-medium text-muted-foreground">{t("detail.commandCwd")}</div>
