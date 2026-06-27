@@ -283,6 +283,7 @@ func TestApplySystemConfigs(t *testing.T) {
 		"tools.browser.enabled":     "false",
 		"tools.browser.remote_url":  "ws://chrome:9222",
 		"tools.browser.max_pages":   "9",
+		"cron.command_enabled":      "true",
 	})
 
 	if cfg.Agents.Defaults.Provider != "openai" {
@@ -305,6 +306,9 @@ func TestApplySystemConfigs(t *testing.T) {
 	}
 	if cfg.Tools.Browser.MaxPages != 9 {
 		t.Errorf("tools.browser.max_pages: got %d", cfg.Tools.Browser.MaxPages)
+	}
+	if !cfg.Cron.CommandEnabled {
+		t.Error("cron.command_enabled: got false, want true")
 	}
 }
 

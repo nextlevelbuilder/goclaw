@@ -95,6 +95,7 @@ func (c *Config) ApplySystemConfigs(configs map[string]string) {
 	// Cron
 	integer("cron.max_retries", &c.Cron.MaxRetries)
 	str("cron.default_timezone", &c.Cron.DefaultTimezone)
+	boolValue("cron.command_enabled", &c.Cron.CommandEnabled)
 
 	// Pending message compaction
 	if _, ok := configs["compaction.threshold"]; ok {
