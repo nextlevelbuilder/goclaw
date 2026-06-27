@@ -41,7 +41,12 @@ export function CronFormDialog({ open, onOpenChange, onSubmit }: CronFormDialogP
       name: "",
       payloadKind: "agent_turn",
       message: "",
-      commandJson: JSON.stringify({ argv: ["sh", "-c", "echo hello"] }, null, 2),
+      commandArgvText: "sh\n-c\necho hello",
+      commandCwd: "",
+      commandTimeoutSeconds: "",
+      commandNoOutputTimeoutSeconds: "",
+      commandOutputMaxBytes: "",
+      commandInput: "",
       agentId: "",
       scheduleKind: "every",
       everyValue: "60",
@@ -63,7 +68,14 @@ export function CronFormDialog({ open, onOpenChange, onSubmit }: CronFormDialogP
     }
 
     const command = data.payloadKind === "command"
-      ? JSON.parse(data.commandJson || "{}") as CronCommandSpec
+      ? {
+        argv: (data.commandArgvText || "").split("\n").map((v) => v.trim()).filter(Boolean),
+        cwd: data.commandCwd?.trim() || undefined,
+        timeoutSeconds: data.commandTimeoutSeconds ? Number(data.commandTimeoutSeconds) : undefined,
+        noOutputTimeoutSeconds: data.commandNoOutputTimeoutSeconds ? Number(data.commandNoOutputTimeoutSeconds) : undefined,
+        outputMaxBytes: data.commandOutputMaxBytes ? Number(data.commandOutputMaxBytes) : undefined,
+        input: data.commandInput || undefined,
+      } satisfies CronCommandSpec
       : undefined;
 
     await onSubmit({
@@ -200,18 +212,41 @@ export function CronFormDialog({ open, onOpenChange, onSubmit }: CronFormDialogP
               )}
             </div>
           ) : (
-            <div className="space-y-2">
-              <Label>{t("detail.commandJson")}</Label>
-              <Textarea
-                {...register("commandJson")}
-                rows={8}
-                className="font-mono text-base md:text-sm"
-              />
-              {errors.commandJson ? (
-                <p className="text-xs text-destructive">{errors.commandJson.message}</p>
-              ) : (
-                <p className="text-xs text-muted-foreground">{t("detail.commandJsonHelp")}</p>
-              )}
+            <div className="space-y-3 rounded-md border p-3">
+              <div className="space-y-2">
+                <Label>{t("detail.commandArgv")}</Label>
+                <Textarea {...register("commandArgvText")} rows={4} className="font-mono text-base md:text-sm" />
+                {errors.commandArgvText ? (
+                  <p className="text-xs text-destructive">{errors.commandArgvText.message}</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">{t("detail.commandArgvHelp")}</p>
+                )}
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>{t("detail.commandCwd")}</Label>
+                  <Input {...register("commandCwd")} placeholder={t("detail.defaultWorkingDirectory")} />
+                </div>
+                <div className="space-y-2">
+                  <Label>{t("detail.commandTimeout")}</Label>
+                  <Input type="number" min={0} {...register("commandTimeoutSeconds")} placeholder={t("detail.defaultValue")} />
+                  {errors.commandTimeoutSeconds && <p className="text-xs text-destructive">{errors.commandTimeoutSeconds.message}</p>}
+                </div>
+                <div className="space-y-2">
+                  <Label>{t("detail.commandNoOutputTimeout")}</Label>
+                  <Input type="number" min={0} {...register("commandNoOutputTimeoutSeconds")} placeholder={t("detail.none")} />
+                  {errors.commandNoOutputTimeoutSeconds && <p className="text-xs text-destructive">{errors.commandNoOutputTimeoutSeconds.message}</p>}
+                </div>
+                <div className="space-y-2">
+                  <Label>{t("detail.commandOutputLimit")}</Label>
+                  <Input type="number" min={0} {...register("commandOutputMaxBytes")} placeholder={t("detail.defaultValue")} />
+                  {errors.commandOutputMaxBytes && <p className="text-xs text-destructive">{errors.commandOutputMaxBytes.message}</p>}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>{t("detail.commandInput")}</Label>
+                <Textarea {...register("commandInput")} rows={3} className="font-mono text-base md:text-sm" placeholder={t("detail.none")} />
+              </div>
             </div>
           )}
         </div>
@@ -221,7 +256,7 @@ export function CronFormDialog({ open, onOpenChange, onSubmit }: CronFormDialogP
           </Button>
           <Button
             onClick={handleSubmit(onFormSubmit)}
-            disabled={isSubmitting || !!errors.name || (payloadKind === "agent_turn" ? !!errors.message : !!errors.commandJson)}
+            disabled={isSubmitting || !!errors.name || (payloadKind === "agent_turn" ? !!errors.message : !!errors.commandArgvText)}
           >
             {isSubmitting ? t("create.creating") : t("create.create")}
           </Button>

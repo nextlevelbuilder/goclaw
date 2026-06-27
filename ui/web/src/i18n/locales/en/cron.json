@@ -147,7 +147,8 @@
     "envVars": "{{count}} vars",
     "commandJson": "Command JSON",
     "commandJsonHelp": "Edit the command payload as JSON. argv is required and must be a non-empty string array.",
-    "invalidCommandJson": "Invalid command JSON: argv must be a non-empty array."
+    "invalidCommandJson": "Invalid command JSON: argv must be a non-empty array.",
+    "commandArgvHelp": "One argument per line. Use sh / -c / your script for shell syntax."
   },
   "stateless": "Stateless",
   "statelessHelp": "Skip session persistence. Each run starts fresh without loading previous messages. Saves tokens for crons that don't need past context.",

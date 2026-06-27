@@ -147,7 +147,8 @@
     "envVars": "{{count}}个变量",
     "commandJson": "命令 JSON",
     "commandJsonHelp": "以 JSON 编辑命令 payload。argv 必填，且必须是非空字符串数组。",
-    "invalidCommandJson": "命令 JSON 无效：argv 必须是非空数组。"
+    "invalidCommandJson": "命令 JSON 无效：argv 必须是非空数组。",
+    "commandArgvHelp": "每行一个参数。如需 shell 语法，请使用 sh / -c / script。"
   },
   "stateless": "无状态",
   "statelessHelp": "跳过会话持久化。每次运行从零开始。为不需要历史上下文的定时任务节省令牌。",

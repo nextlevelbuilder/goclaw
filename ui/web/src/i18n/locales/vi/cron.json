@@ -147,7 +147,8 @@
     "envVars": "{{count}} biến",
     "commandJson": "JSON lệnh",
     "commandJsonHelp": "Chỉnh sửa payload lệnh dưới dạng JSON. argv là bắt buộc và phải là mảng chuỗi không rỗng.",
-    "invalidCommandJson": "JSON lệnh không hợp lệ: argv phải là mảng không rỗng."
+    "invalidCommandJson": "JSON lệnh không hợp lệ: argv phải là mảng không rỗng.",
+    "commandArgvHelp": "Mỗi dòng là một đối số. Dùng sh / -c / script nếu cần cú pháp shell."
   },
   "stateless": "Không trạng thái",
   "statelessHelp": "Bỏ qua lưu session. Mỗi lần chạy bắt đầu mới. Tiết kiệm token cho các cron không cần context cũ.",

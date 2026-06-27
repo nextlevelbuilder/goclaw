@@ -8,7 +8,12 @@ export const cronCreateSchema = z.object({
     .refine(isValidSlug, "Only lowercase letters, numbers, and hyphens"),
   payloadKind: z.enum(["agent_turn", "command"]),
   message: z.string().optional(),
-  commandJson: z.string().optional(),
+  commandArgvText: z.string().optional(),
+  commandCwd: z.string().optional(),
+  commandTimeoutSeconds: z.string().optional(),
+  commandNoOutputTimeoutSeconds: z.string().optional(),
+  commandOutputMaxBytes: z.string().optional(),
+  commandInput: z.string().optional(),
   agentId: z.string().optional(),
   scheduleKind: z.enum(["every", "cron", "at"]),
   everyValue: z.string().min(1, "Required"),
@@ -19,12 +24,18 @@ export const cronCreateSchema = z.object({
   }
   if (data.payloadKind === "command") {
     try {
-      const parsed = JSON.parse(data.commandJson || "");
-      if (!Array.isArray(parsed?.argv) || parsed.argv.length === 0 || !parsed.argv[0]) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["commandJson"], message: "argv must be a non-empty array" });
+      const argv = (data.commandArgvText || "").split("\n").map((v) => v.trim()).filter(Boolean);
+      if (argv.length === 0 || !argv[0]) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["commandArgvText"], message: "argv must be a non-empty list" });
+      }
+      for (const field of ["commandTimeoutSeconds", "commandNoOutputTimeoutSeconds", "commandOutputMaxBytes"] as const) {
+        const raw = data[field];
+        if (raw && (!/^\d+$/.test(raw) || Number(raw) < 0)) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, path: [field], message: "Must be a non-negative integer" });
+        }
       }
     } catch {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["commandJson"], message: "Invalid JSON" });
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["commandArgvText"], message: "Invalid command" });
     }
   }
 });
