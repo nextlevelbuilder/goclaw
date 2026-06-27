@@ -43,7 +43,8 @@
     "messagePlaceholder": "에이전트가 무엇을 해야 하나요?",
     "cancel": "취소",
     "create": "만들기",
-    "creating": "만드는 중..."
+    "creating": "만드는 중...",
+    "payloadType": "Payload 유형"
   },
   "enable": {
     "title": "Cron 작업 활성화",

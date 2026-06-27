@@ -43,7 +43,8 @@
     "messagePlaceholder": "Agent应该做什么？",
     "cancel": "取消",
     "create": "创建",
-    "creating": "创建中..."
+    "creating": "创建中...",
+    "payloadType": "Payload 类型"
   },
   "enable": {
     "title": "启用定时任务",

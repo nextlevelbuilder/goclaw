@@ -43,7 +43,8 @@
     "messagePlaceholder": "What should the agent do?",
     "cancel": "Cancel",
     "create": "Create",
-    "creating": "Creating..."
+    "creating": "Creating...",
+    "payloadType": "Payload type"
   },
   "enable": {
     "title": "Enable Cron Job",

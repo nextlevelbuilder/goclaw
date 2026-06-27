@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { CronSchedule } from "./hooks/use-cron";
+import type { CronCommandSpec, CronSchedule } from "./hooks/use-cron";
 import { slugify } from "@/lib/slug";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
 import { cronCreateSchema, type CronCreateFormData } from "@/schemas/cron.schema";
@@ -24,7 +24,8 @@ interface CronFormDialogProps {
   onSubmit: (data: {
     name: string;
     schedule: CronSchedule;
-    message: string;
+    message?: string;
+    command?: CronCommandSpec;
     agentId?: string;
   }) => Promise<void>;
 }
@@ -38,7 +39,9 @@ export function CronFormDialog({ open, onOpenChange, onSubmit }: CronFormDialogP
     mode: "onChange",
     defaultValues: {
       name: "",
+      payloadKind: "agent_turn",
       message: "",
+      commandJson: JSON.stringify({ argv: ["sh", "-c", "echo hello"] }, null, 2),
       agentId: "",
       scheduleKind: "every",
       everyValue: "60",
@@ -47,6 +50,7 @@ export function CronFormDialog({ open, onOpenChange, onSubmit }: CronFormDialogP
   });
 
   const scheduleKind = watch("scheduleKind");
+  const payloadKind = watch("payloadKind");
 
   const onFormSubmit = async (data: CronCreateFormData) => {
     let schedule: CronSchedule;
@@ -58,10 +62,15 @@ export function CronFormDialog({ open, onOpenChange, onSubmit }: CronFormDialogP
       schedule = { kind: "at", atMs: Date.now() + 60000 };
     }
 
+    const command = data.payloadKind === "command"
+      ? JSON.parse(data.commandJson || "{}") as CronCommandSpec
+      : undefined;
+
     await onSubmit({
       name: data.name,
       schedule,
-      message: data.message,
+      message: data.payloadKind === "agent_turn" ? data.message : undefined,
+      command,
       agentId: data.agentId || undefined,
     });
     onOpenChange(false);
@@ -115,6 +124,24 @@ export function CronFormDialog({ open, onOpenChange, onSubmit }: CronFormDialogP
             />
           </div>
 
+
+          <div className="space-y-2">
+            <Label>{t("create.payloadType")}</Label>
+            <div className="flex gap-2">
+              {(["agent_turn", "command"] as const).map((kind) => (
+                <Button
+                  key={kind}
+                  type="button"
+                  variant={payloadKind === kind ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setValue("payloadKind", kind, { shouldValidate: true })}
+                >
+                  {kind === "command" ? t("payload.command") : t("payload.agent")}
+                </Button>
+              ))}
+            </div>
+          </div>
+
           <div className="space-y-2">
             <Label>{t("create.scheduleType")}</Label>
             <div className="flex gap-2">
@@ -160,17 +187,33 @@ export function CronFormDialog({ open, onOpenChange, onSubmit }: CronFormDialogP
             </p>
           )}
 
-          <div className="space-y-2">
-            <Label>{t("create.message")}</Label>
-            <Textarea
-              {...register("message")}
-              placeholder={t("create.messagePlaceholder")}
-              rows={3}
-            />
-            {errors.message && (
-              <p className="text-xs text-destructive">{errors.message.message}</p>
-            )}
-          </div>
+          {payloadKind === "agent_turn" ? (
+            <div className="space-y-2">
+              <Label>{t("create.message")}</Label>
+              <Textarea
+                {...register("message")}
+                placeholder={t("create.messagePlaceholder")}
+                rows={3}
+              />
+              {errors.message && (
+                <p className="text-xs text-destructive">{errors.message.message}</p>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label>{t("detail.commandJson")}</Label>
+              <Textarea
+                {...register("commandJson")}
+                rows={8}
+                className="font-mono text-base md:text-sm"
+              />
+              {errors.commandJson ? (
+                <p className="text-xs text-destructive">{errors.commandJson.message}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">{t("detail.commandJsonHelp")}</p>
+              )}
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
@@ -178,7 +221,7 @@ export function CronFormDialog({ open, onOpenChange, onSubmit }: CronFormDialogP
           </Button>
           <Button
             onClick={handleSubmit(onFormSubmit)}
-            disabled={isSubmitting || !!errors.name || !!errors.message}
+            disabled={isSubmitting || !!errors.name || (payloadKind === "agent_turn" ? !!errors.message : !!errors.commandJson)}
           >
             {isSubmitting ? t("create.creating") : t("create.create")}
           </Button>

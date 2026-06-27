@@ -43,7 +43,8 @@
     "messagePlaceholder": "Agent cần làm gì?",
     "cancel": "Hủy",
     "create": "Tạo",
-    "creating": "Đang tạo..."
+    "creating": "Đang tạo...",
+    "payloadType": "Loại payload"
   },
   "enable": {
     "title": "Bật tác vụ định kỳ",

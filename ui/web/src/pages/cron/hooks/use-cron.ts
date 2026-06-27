@@ -106,7 +106,8 @@ export function useCron() {
     async (params: {
       name: string;
       schedule: CronSchedule;
-      message: string;
+      message?: string;
+      command?: CronCommandSpec;
       agentId?: string;
       deliver?: boolean;
       channel?: string;
