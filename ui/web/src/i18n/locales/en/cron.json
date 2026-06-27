@@ -128,7 +128,22 @@
     "deleteAfterRun": "Delete after run",
     "deleteAfterRunDesc": "Auto-delete this job after first successful run",
     "timezone": "Timezone",
-    "timezoneDesc": "Timezone for cron expressions"
+    "timezoneDesc": "Timezone for cron expressions",
+    "commandSection": "Command",
+    "commandArgv": "Command",
+    "noCommand": "No command configured",
+    "commandCwd": "Working directory",
+    "defaultWorkingDirectory": "Gateway default",
+    "commandTimeout": "Timeout",
+    "commandOutputLimit": "Output limit",
+    "commandEnv": "Environment",
+    "commandInput": "Input",
+    "commandNoOutputTimeout": "No-output timeout",
+    "seconds": "{{count}}s",
+    "bytes": "{{count}} bytes",
+    "defaultValue": "Default",
+    "none": "None",
+    "envVars": "{{count}} vars"
   },
   "stateless": "Stateless",
   "statelessHelp": "Skip session persistence. Each run starts fresh without loading previous messages. Saves tokens for crons that don't need past context.",
@@ -145,5 +160,9 @@
     "failedRun": "Failed to run cron job",
     "updated": "Job updated",
     "failedUpdate": "Failed to update job"
+  },
+  "payload": {
+    "agent": "Agent",
+    "command": "Command"
   }
 }

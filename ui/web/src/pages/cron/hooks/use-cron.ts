@@ -15,10 +15,20 @@ export interface CronSchedule {
   tz?: string;
 }
 
+export interface CronCommandSpec {
+  argv?: string[];
+  cwd?: string;
+  env?: Record<string, string>;
+  input?: string;
+  timeoutSeconds?: number;
+  noOutputTimeoutSeconds?: number;
+  outputMaxBytes?: number;
+}
+
 export interface CronPayload {
   kind: string;
   message: string;
-  command?: string;
+  command?: CronCommandSpec;
 }
 
 export interface CronJobPatch {

@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { CronJob } from "./hooks/use-cron";
-import { formatSchedule, CronStatusBadge } from "./cron-utils";
+import { formatSchedule, CronStatusBadge, formatCommand, isCommandCron } from "./cron-utils";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
 
 interface CronListRowProps {
@@ -38,6 +38,9 @@ export function CronListRow({ job, onClick, onRun, onDelete }: CronListRowProps)
         </div>
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Badge variant="outline" className="text-2xs px-1 py-0">{job.schedule.kind}</Badge>
+          <Badge variant={isCommandCron(job) ? "secondary" : "outline"} className="text-2xs px-1 py-0">
+            {isCommandCron(job) ? t("payload.command") : t("payload.agent")}
+          </Badge>
           <span className="truncate">{formatSchedule(job)}</span>
         </div>
       </div>
@@ -52,9 +55,9 @@ export function CronListRow({ job, onClick, onRun, onDelete }: CronListRowProps)
         {agent?.display_name || agent?.agent_key || job.agentId || t("card.defaultAgent")}
       </div>
 
-      {/* Message preview */}
+      {/* Message / command preview */}
       <div className="hidden shrink-0 text-xs text-muted-foreground/60 lg:block lg:w-40 lg:truncate">
-        {job.payload?.message}
+        {isCommandCron(job) ? formatCommand(job) : job.payload?.message}
       </div>
 
       {/* Actions */}

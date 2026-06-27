@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Calendar, Clock, AlertTriangle, Pencil } from "lucide-react";
+import { Calendar, Clock, AlertTriangle, Pencil, Terminal } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ import { useChannels } from "@/pages/channels/hooks/use-channels";
 import { useWs } from "@/hooks/use-ws";
 import { Methods } from "@/api/protocol";
 import type { CronJob, CronJobPatch } from "../hooks/use-cron";
-import { CronStatusBadge } from "../cron-utils";
+import { CronStatusBadge, formatCommand, isCommandCron } from "../cron-utils";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
 import { CronScheduleSection } from "./cron-schedule-section";
 import { CronDeliverySection } from "./cron-delivery-section";
@@ -66,6 +66,8 @@ export function CronOverviewTab({ job, onUpdate }: CronOverviewTabProps) {
   const [stateless, setStateless] = useState(job.stateless ?? false);
 
   const [saving, setSaving] = useState(false);
+  const command = job.payload?.command;
+  const commandEnvCount = command?.env ? Object.keys(command.env).length : 0;
 
   // Fetch delivery targets on mount
   const fetchTargets = useCallback(async () => {
@@ -98,7 +100,7 @@ export function CronOverviewTab({ job, onUpdate }: CronOverviewTabProps) {
       }
       const patch: import("../hooks/use-cron").CronJobPatch = {
         schedule,
-        message: message.trim(),
+        message: isCommandCron(job) ? undefined : message.trim(),
         agentId: agentId.trim() || "",
         deliver,
         deliverChannel: deliver ? channel.trim() || undefined : undefined,
@@ -134,31 +136,88 @@ export function CronOverviewTab({ job, onUpdate }: CronOverviewTabProps) {
         readonly={readonly}
       />
 
-      {/* Message section */}
-      <section className="space-y-3 rounded-lg border p-3 sm:p-4 overflow-hidden">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium">{t("detail.messageSection")}</h3>
-          {!readonly && (
-            <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground"
-              onClick={() => setEditingMessage(!editingMessage)}>
-              <Pencil className="h-3 w-3" />
-              {editingMessage ? t("detail.preview") : t("detail.edit")}
-            </Button>
-          )}
-        </div>
-        {editingMessage ? (
-          <Textarea value={message} onChange={(e) => setMessage(e.target.value)}
-            rows={6} placeholder={t("create.messagePlaceholder")} className="text-base md:text-sm resize-none" />
-        ) : (
-          <div className="rounded-md border bg-muted/30 p-3 sm:p-4">
-            {message ? (
-              <MarkdownRenderer content={message} className="prose-sm max-w-none" />
-            ) : (
-              <p className="text-sm italic text-muted-foreground">{t("detail.noMessage")}</p>
+      {isCommandCron(job) ? (
+        <section className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/40 p-3 sm:p-4 overflow-hidden dark:border-amber-900/50 dark:bg-amber-950/20">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Terminal className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <h3 className="text-sm font-medium">{t("detail.commandSection")}</h3>
+            </div>
+            <span className="rounded-full border border-amber-300 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-700 dark:border-amber-800 dark:text-amber-300">
+              {t("payload.command")}
+            </span>
+          </div>
+          <div className="space-y-3 rounded-md border bg-background/80 p-3 sm:p-4">
+            <div>
+              <div className="mb-1 text-xs font-medium text-muted-foreground">{t("detail.commandArgv")}</div>
+              {formatCommand(job) ? (
+                <pre className="overflow-x-auto rounded-md bg-muted px-3 py-2 text-xs"><code>{formatCommand(job)}</code></pre>
+              ) : (
+                <p className="text-sm italic text-muted-foreground">{t("detail.noCommand")}</p>
+              )}
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="min-w-0">
+                <div className="text-xs font-medium text-muted-foreground">{t("detail.commandCwd")}</div>
+                <div className="truncate text-sm">{command?.cwd || t("detail.defaultWorkingDirectory")}</div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">{t("detail.commandTimeout")}</div>
+                <div className="text-sm">{command?.timeoutSeconds ? t("detail.seconds", { count: command.timeoutSeconds }) : t("detail.defaultValue")}</div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">{t("detail.commandOutputLimit")}</div>
+                <div className="text-sm">{command?.outputMaxBytes ? t("detail.bytes", { count: command.outputMaxBytes }) : t("detail.defaultValue")}</div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">{t("detail.commandEnv")}</div>
+                <div className="text-sm">{commandEnvCount ? t("detail.envVars", { count: commandEnvCount }) : t("detail.none")}</div>
+              </div>
+            </div>
+            {(command?.input || command?.noOutputTimeoutSeconds) && (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {command.input && (
+                  <div>
+                    <div className="text-xs font-medium text-muted-foreground">{t("detail.commandInput")}</div>
+                    <pre className="max-h-32 overflow-auto rounded-md bg-muted px-3 py-2 text-xs"><code>{command.input}</code></pre>
+                  </div>
+                )}
+                {command.noOutputTimeoutSeconds ? (
+                  <div>
+                    <div className="text-xs font-medium text-muted-foreground">{t("detail.commandNoOutputTimeout")}</div>
+                    <div className="text-sm">{t("detail.seconds", { count: command.noOutputTimeoutSeconds })}</div>
+                  </div>
+                ) : null}
+              </div>
             )}
           </div>
-        )}
-      </section>
+        </section>
+      ) : (
+        <section className="space-y-3 rounded-lg border p-3 sm:p-4 overflow-hidden">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium">{t("detail.messageSection")}</h3>
+            {!readonly && (
+              <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground"
+                onClick={() => setEditingMessage(!editingMessage)}>
+                <Pencil className="h-3 w-3" />
+                {editingMessage ? t("detail.preview") : t("detail.edit")}
+              </Button>
+            )}
+          </div>
+          {editingMessage ? (
+            <Textarea value={message} onChange={(e) => setMessage(e.target.value)}
+              rows={6} placeholder={t("create.messagePlaceholder")} className="text-base md:text-sm resize-none" />
+          ) : (
+            <div className="rounded-md border bg-muted/30 p-3 sm:p-4">
+              {message ? (
+                <MarkdownRenderer content={message} className="prose-sm max-w-none" />
+              ) : (
+                <p className="text-sm italic text-muted-foreground">{t("detail.noMessage")}</p>
+              )}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Delivery section */}
       <CronDeliverySection

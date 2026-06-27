@@ -128,7 +128,22 @@
     "deleteAfterRun": "运行后删除",
     "deleteAfterRunDesc": "首次成功运行后自动删除此任务",
     "timezone": "时区",
-    "timezoneDesc": "Cron表达式的时区"
+    "timezoneDesc": "Cron表达式的时区",
+    "commandSection": "命令",
+    "commandArgv": "命令",
+    "noCommand": "未配置命令",
+    "commandCwd": "工作目录",
+    "defaultWorkingDirectory": "网关默认值",
+    "commandTimeout": "超时",
+    "commandOutputLimit": "输出限制",
+    "commandEnv": "环境变量",
+    "commandInput": "输入",
+    "commandNoOutputTimeout": "无输出超时",
+    "seconds": "{{count}}秒",
+    "bytes": "{{count}} bytes",
+    "defaultValue": "默认值",
+    "none": "无",
+    "envVars": "{{count}}个变量"
   },
   "stateless": "无状态",
   "statelessHelp": "跳过会话持久化。每次运行从零开始。为不需要历史上下文的定时任务节省令牌。",
@@ -145,5 +160,9 @@
     "failedRun": "运行定时任务失败",
     "updated": "任务已更新",
     "failedUpdate": "更新任务失败"
+  },
+  "payload": {
+    "agent": "Agent",
+    "command": "命令"
   }
 }

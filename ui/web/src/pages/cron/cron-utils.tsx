@@ -1,6 +1,16 @@
 import { Badge } from "@/components/ui/badge";
 import type { CronJob } from "./hooks/use-cron";
 
+export function isCommandCron(job: CronJob): boolean {
+  return job.payload?.kind === "command";
+}
+
+export function formatCommand(job: CronJob): string {
+  const argv = job.payload?.command?.argv;
+  if (argv && argv.length > 0) return argv.join(" ");
+  return "";
+}
+
 export function formatSchedule(job: CronJob): string {
   const s = job.schedule;
   if (s.kind === "every" && s.everyMs) {

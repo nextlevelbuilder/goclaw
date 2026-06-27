@@ -128,7 +128,22 @@
     "deleteAfterRun": "실행 후 삭제",
     "deleteAfterRunDesc": "첫 번째 성공적인 실행 후 이 작업 자동 삭제",
     "timezone": "시간대",
-    "timezoneDesc": "Cron 표현식의 시간대"
+    "timezoneDesc": "Cron 표현식의 시간대",
+    "commandSection": "명령",
+    "commandArgv": "명령",
+    "noCommand": "설정된 명령 없음",
+    "commandCwd": "작업 디렉터리",
+    "defaultWorkingDirectory": "게이트웨이 기본값",
+    "commandTimeout": "타임아웃",
+    "commandOutputLimit": "출력 제한",
+    "commandEnv": "환경 변수",
+    "commandInput": "입력",
+    "commandNoOutputTimeout": "무출력 타임아웃",
+    "seconds": "{{count}}초",
+    "bytes": "{{count}} bytes",
+    "defaultValue": "기본값",
+    "none": "없음",
+    "envVars": "{{count}}개"
   },
   "stateless": "상태 없음",
   "statelessHelp": "세션 지속성 건너뜁니다. 각 실행은 이전 메시지 없이 새로 시작됩니다. 이전 컨텍스트가 필요 없는 cron의 토큰을 절약합니다.",
@@ -145,5 +160,9 @@
     "failedRun": "Cron 작업 실행 실패",
     "updated": "작업 업데이트됨",
     "failedUpdate": "작업 업데이트 실패"
+  },
+  "payload": {
+    "agent": "에이전트",
+    "command": "명령"
   }
 }
