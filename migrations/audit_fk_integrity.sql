@@ -66,11 +66,18 @@ FROM webhooks w
 LEFT JOIN channel_instances ci ON ci.id = w.channel_id
 WHERE w.channel_id IS NOT NULL AND ci.id IS NULL;
 
--- channel_contacts: merged_id self-ref orphans
-SELECT 'channel_contacts.merged_id orphans' AS check_name, COUNT(*) AS violations
+-- channel_contacts: merged_id tenant_users orphans
+SELECT 'channel_contacts.merged_id tenant_users orphans' AS check_name, COUNT(*) AS violations
 FROM channel_contacts cc
-LEFT JOIN channel_contacts cc2 ON cc2.id = cc.merged_id
-WHERE cc.merged_id IS NOT NULL AND cc2.id IS NULL;
+LEFT JOIN tenant_users tu ON tu.id = cc.merged_id
+WHERE cc.merged_id IS NOT NULL AND tu.id IS NULL;
+
+-- channel_contacts: merged_id tenant drift
+SELECT 'channel_contacts.merged_id tenant drift' AS check_name, COUNT(*) AS violations
+FROM channel_contacts cc
+JOIN tenant_users tu ON tu.id = cc.merged_id
+WHERE cc.merged_id IS NOT NULL
+  AND cc.tenant_id <> tu.tenant_id;
 
 -- traces: parent_trace_id self-ref orphans
 SELECT 'traces.parent_trace_id orphans' AS check_name, COUNT(*) AS violations
