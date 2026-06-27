@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
+	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -382,6 +383,22 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 	// the agent with their MIME type preserved. Best-effort: failures are logged
 	// inside downloadEventFiles and never block the text from reaching the agent.
 	mediaFiles := c.downloadEventFiles(ctx, c.BotID(), evt.Params.Files)
+	// Prepend <media:*> tags so the LLM sees the attachment alongside the body
+	// text. The agent loop's enrichInputMedia REPLACES tags it finds (it does
+	// NOT insert new ones), so without this step a Bitrix-borne PDF / audio
+	// arrives as bare text — the LLM never realizes an attachment exists and
+	// degrades to "no file attached" or hallucinates a CRM document. Match
+	// the Telegram / Slack / Discord pattern (shared media.BuildMediaTags) so
+	// the tag shape stays uniform across channels.
+	if len(mediaFiles) > 0 {
+		if tags := media.BuildMediaTags(mediaFilesToInfos(mediaFiles)); tags != "" {
+			if text == "" {
+				text = tags
+			} else {
+				text = tags + "\n" + text
+			}
+		}
+	}
 	slog.Info("bitrix24 message: publish to bus",
 		"sender_id", senderID,
 		"chat_id", chatID,
