@@ -31,9 +31,12 @@ func (c *Channel) parseMessageEvent(event *MessageEvent) *messageContext {
 	mentionedBot := false
 	for _, m := range msg.Mentions {
 		mi := mentionInfo{
-			Key:    m.Key,
-			OpenID: m.ID.OpenID,
-			Name:   m.Name,
+			Key:       m.Key,
+			OpenID:    m.ID.OpenID,
+			UserID:    m.ID.UserID,
+			UnionID:   m.ID.UnionID,
+			Name:      m.Name,
+			TenantKey: m.TenantKey,
 		}
 		mentions = append(mentions, mi)
 
@@ -250,4 +253,16 @@ func resolveMentions(text string, mentions []mentionInfo, botOpenID string) stri
 		}
 	}
 	return strings.TrimSpace(text)
+}
+
+func formatMentionInfos(mentions []mentionInfo) []string {
+	if len(mentions) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(mentions))
+	for _, m := range mentions {
+		out = append(out, fmt.Sprintf("key=%s open_id=%s user_id=%s union_id=%s name=%s tenant=%s",
+			m.Key, m.OpenID, m.UserID, m.UnionID, m.Name, m.TenantKey))
+	}
+	return out
 }

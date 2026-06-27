@@ -63,6 +63,7 @@ func (c *Channel) checkGroupPolicy(ctx context.Context, senderID, chatID string)
 	if groupPolicy == "" {
 		groupPolicy = "open"
 	}
+	channelName := c.channelNameForLog()
 
 	switch groupPolicy {
 	case "disabled":
@@ -72,21 +73,68 @@ func (c *Channel) checkGroupPolicy(ctx context.Context, senderID, chatID string)
 	case "pairing":
 		// Feishu groupAllowList bypass: per-user sender allowlist specific to Feishu.
 		if c.isInGroupAllowList(senderID) {
+			slog.Debug("feishu group policy allowed by group allowlist",
+				"channel", channelName,
+				"sender_id", senderID,
+				"chat_id", chatID,
+				"group_policy", groupPolicy,
+			)
 			return true
 		}
 		// Delegate remaining pairing logic to BaseChannel (handles allowList, approvedGroups, DB check).
 		result := c.CheckGroupPolicy(ctx, senderID, chatID, groupPolicy)
+		groupSenderID := fmt.Sprintf("group:%s", chatID)
+		slog.Debug("feishu group policy checked",
+			"channel", channelName,
+			"sender_id", senderID,
+			"group_sender_id", groupSenderID,
+			"chat_id", chatID,
+			"group_policy", groupPolicy,
+			"result", policyResultLabel(result),
+			"tenant_id", c.TenantID(),
+		)
 		switch result {
 		case channels.PolicyAllow:
 			return true
 		case channels.PolicyNeedsPairing:
-			groupSenderID := fmt.Sprintf("group:%s", chatID)
 			c.sendPairingReply(ctx, groupSenderID, chatID)
 			return false
 		default:
 			return false
 		}
 	default: // "open"
+		return true
+	}
+}
+
+func (c *Channel) canRecordUnmentionedGroupMessage(ctx context.Context, senderID, chatID string) bool {
+	groupPolicy := c.cfg.GroupPolicy
+	if groupPolicy == "" {
+		groupPolicy = "open"
+	}
+	channelName := c.channelNameForLog()
+
+	switch groupPolicy {
+	case "disabled":
+		return false
+	case "allowlist":
+		return c.IsAllowed(senderID) || c.isInGroupAllowList(senderID)
+	case "pairing":
+		if c.isInGroupAllowList(senderID) {
+			return true
+		}
+		result := c.CheckGroupPolicy(ctx, senderID, chatID, groupPolicy)
+		slog.Debug("feishu unmentioned group history policy checked",
+			"channel", channelName,
+			"sender_id", senderID,
+			"group_sender_id", fmt.Sprintf("group:%s", chatID),
+			"chat_id", chatID,
+			"group_policy", groupPolicy,
+			"result", policyResultLabel(result),
+			"tenant_id", c.TenantID(),
+		)
+		return result == channels.PolicyAllow
+	default:
 		return true
 	}
 }
@@ -110,14 +158,61 @@ func (c *Channel) sendPairingReply(ctx context.Context, senderID, chatID string)
 	if ps == nil {
 		return
 	}
+	channelName := c.channelNameForLog()
+
+	paired, err := ps.IsPaired(ctx, senderID, channelName)
+	if err != nil {
+		slog.Warn("security.pairing_check_failed, denying pairing request (fail-closed)",
+			"sender_id", senderID,
+			"channel", channelName,
+			"chat_id", chatID,
+			"tenant_id", c.TenantID(),
+			"error", err,
+		)
+		return
+	}
+	if paired {
+		if strings.HasPrefix(senderID, "group:") {
+			c.MarkGroupApproved(chatID)
+		}
+		slog.Debug("feishu pairing reply skipped; sender already paired",
+			"sender_id", senderID,
+			"channel", channelName,
+			"chat_id", chatID,
+			"tenant_id", c.TenantID(),
+			"source", pairingReplySource(senderID),
+		)
+		return
+	}
+	slog.Debug("feishu pairing reply gate needs pairing",
+		"sender_id", senderID,
+		"channel", channelName,
+		"chat_id", chatID,
+		"tenant_id", c.TenantID(),
+		"source", pairingReplySource(senderID),
+	)
 
 	if !c.CanSendPairingNotif(senderID, pairingDebounceTime) {
+		slog.Debug("feishu pairing reply skipped by debounce",
+			"sender_id", senderID,
+			"channel", channelName,
+			"chat_id", chatID,
+			"tenant_id", c.TenantID(),
+			"source", pairingReplySource(senderID),
+		)
 		return
 	}
 
-	code, err := ps.RequestPairing(ctx, senderID, c.Name(), chatID, "default", nil)
+	code, err := ps.RequestPairing(ctx, senderID, channelName, chatID, "default", nil)
 	if err != nil {
-		slog.Debug("feishu pairing request failed", "sender_id", senderID, "error", err)
+		slog.Debug("feishu pairing request failed",
+			"sender_id", senderID,
+			"channel", channelName,
+			"chat_id", chatID,
+			"tenant_id", c.TenantID(),
+			"source", pairingReplySource(senderID),
+			"error", err,
+		)
 		return
 	}
 
@@ -128,9 +223,50 @@ func (c *Channel) sendPairingReply(ctx context.Context, senderID, chatID string)
 
 	receiveIDType := resolveReceiveIDType(chatID)
 	if err := c.sendText(context.Background(), chatID, receiveIDType, replyText, ""); err != nil {
-		slog.Warn("failed to send feishu pairing reply", "error", err)
+		slog.Warn("failed to send feishu pairing reply",
+			"sender_id", senderID,
+			"channel", channelName,
+			"chat_id", chatID,
+			"tenant_id", c.TenantID(),
+			"source", pairingReplySource(senderID),
+			"error", err,
+		)
 	} else {
 		c.MarkPairingNotifSent(senderID)
-		slog.Info("feishu pairing reply sent", "sender_id", senderID, "code", code)
+		slog.Info("feishu pairing reply sent",
+			"sender_id", senderID,
+			"channel", channelName,
+			"chat_id", chatID,
+			"tenant_id", c.TenantID(),
+			"source", pairingReplySource(senderID),
+			"code", code,
+		)
+	}
+}
+
+func (c *Channel) channelNameForLog() string {
+	if c == nil || c.BaseChannel == nil {
+		return ""
+	}
+	return c.Name()
+}
+
+func pairingReplySource(senderID string) string {
+	if strings.HasPrefix(senderID, "group:") {
+		return "group_policy"
+	}
+	return "dm_policy"
+}
+
+func policyResultLabel(result channels.PolicyResult) string {
+	switch result {
+	case channels.PolicyAllow:
+		return "allow"
+	case channels.PolicyDeny:
+		return "deny"
+	case channels.PolicyNeedsPairing:
+		return "needs_pairing"
+	default:
+		return fmt.Sprintf("unknown_%d", result)
 	}
 }

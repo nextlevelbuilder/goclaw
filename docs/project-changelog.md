@@ -4,6 +4,36 @@ Significant changes, features, and fixes in reverse chronological order.
 
 ---
 
+## 2026-06-27
+
+### Feishu/Lark group pairing stability
+
+**Fixes**
+
+- Group pairing now only runs after the target bot is actually mentioned, so
+  other agents in the same Lark group stay silent and do not create pair codes.
+- Feishu group messages with explicit mentions that do not match the current
+  bot are now dropped before media resolution, policy checks, pairing, or agent
+  routing, even when `require_mention` is disabled for the channel.
+- Feishu WebSocket/webhook message events are now guarded by `header.app_id`
+  before dispatching to a channel instance, preventing app-routing mismatch from
+  reaching pairing logic.
+- Feishu now re-checks pairing state immediately before sending a pair code,
+  preventing stale policy decisions from creating duplicate requests.
+- Feishu pairing and bot identity logs now include channel/chat/tenant context so
+  multi-agent Lark groups can be diagnosed without inferring from log order.
+
+**Tests**
+
+- Added Feishu regressions for non-target mentions, target mentions, and unknown
+  bot identity fail-closed behavior.
+- Added Feishu WebSocket regressions for app-id mismatch vs match handling.
+- Added Feishu regression for non-target mentions when `require_mention` is
+  disabled.
+- Added Feishu regression coverage for already-paired group mentions.
+
+---
+
 ## 2026-06-13
 
 ### Cron NO_REPLY delivery suppression (issue #141)

@@ -16,31 +16,41 @@ import (
 
 // messageContext holds parsed information from a Feishu message event.
 type messageContext struct {
-	ChatID      string
-	MessageID   string
-	SenderID    string // sender_id.open_id
-	ChatType    string // "p2p" or "group"
-	Content     string
-	ContentType string // "text", "post", "image", etc.
+	ChatID       string
+	MessageID    string
+	SenderID     string // sender_id.open_id
+	ChatType     string // "p2p" or "group"
+	Content      string
+	ContentType  string // "text", "post", "image", etc.
 	MentionedBot bool
-	RootID      string // reply-chain root (populated on ANY reply, incl. plain quote reply)
-	ParentID    string // direct parent in reply chain
-	ThreadID    string // set ONLY when message is inside an actual topic thread
-	Mentions    []mentionInfo
+	RootID       string // reply-chain root (populated on ANY reply, incl. plain quote reply)
+	ParentID     string // direct parent in reply chain
+	ThreadID     string // set ONLY when message is inside an actual topic thread
+	Mentions     []mentionInfo
 }
 
 type mentionInfo struct {
-	Key    string // @_user_N placeholder
-	OpenID string
-	Name   string
+	Key       string // @_user_N placeholder
+	OpenID    string
+	UserID    string
+	UnionID   string
+	Name      string
+	TenantKey string
 }
 
 // handleMessageEvent processes an incoming Feishu message event.
 func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
+	c.handleMessageEventFrom(ctx, event, "direct")
+}
+
+func (c *Channel) handleMessageEventFrom(ctx context.Context, event *MessageEvent, source string) {
 	// Inject tenant scope so store queries filter by the correct tenant_id.
 	ctx = store.WithTenantID(ctx, c.TenantID())
 
 	if event == nil {
+		return
+	}
+	if !c.shouldProcessMessageEvent(event, source) {
 		return
 	}
 
@@ -63,6 +73,7 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 	if mc == nil {
 		return
 	}
+	c.logParsedMessage(event, mc, source)
 
 	// 2a. Slash commands in DMs are rejected early with a clear hint so
 	// they never reach the agent pipeline (otherwise users typing
@@ -70,6 +81,21 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 	// command router is gated behind group policy below at step 5a.
 	if mc.ChatType != "group" && c.isWriterSlashCommand(mc) {
 		c.sendCommandReply(ctx, mc, "This command only works in group chats.")
+		return
+	}
+
+	if mc.ChatType == "group" && len(mc.Mentions) > 0 && !mc.MentionedBot {
+		slog.Info("feishu group message skipped; explicit mention is not this bot",
+			"source", source,
+			"decision", "skip_non_target_mention",
+			"channel", c.Name(),
+			"event_id", event.Header.EventID,
+			"message_id", mc.MessageID,
+			"chat_id", mc.ChatID,
+			"sender_id", mc.SenderID,
+			"bot_open_id", c.botOpenID,
+			"mention_count", len(mc.Mentions),
+		)
 		return
 	}
 
@@ -96,24 +122,45 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 
 	// 5. Group policy
 	if mc.ChatType == "group" {
-		if !c.checkGroupPolicy(ctx, mc.SenderID, mc.ChatID) {
-			slog.Debug("feishu group message rejected by policy", "sender_id", mc.SenderID, "chat_id", mc.ChatID)
-			return
-		}
+		isWriterCommand := c.isWriterSlashCommand(mc)
 
-		// 5a. Writer management slash commands run AFTER the group policy
-		// gate so commands cannot bypass allowlists or pairing. Commands
-		// short-circuit the agent pipeline to avoid consuming LLM tokens.
-		if c.maybeHandleWriterCommand(ctx, mc) {
-			return
-		}
-
-		// 6. RequireMention check — record to history if not mentioned
+		// 5a. RequireMention check runs before pairing for normal messages so
+		// non-target bots stay silent in multi-agent groups. Do not create a
+		// pairing request for messages that did not mention this bot.
 		requireMention := true
 		if c.cfg.RequireMention != nil {
 			requireMention = *c.cfg.RequireMention
 		}
-		if requireMention && !mc.MentionedBot {
+		slog.Debug("feishu group mention gate",
+			"source", source,
+			"decision", "evaluate_group_gate",
+			"channel", c.Name(),
+			"event_id", event.Header.EventID,
+			"message_id", mc.MessageID,
+			"chat_id", mc.ChatID,
+			"sender_id", mc.SenderID,
+			"bot_open_id", c.botOpenID,
+			"mentioned_bot", mc.MentionedBot,
+			"mention_count", len(mc.Mentions),
+			"mentions", formatMentionInfos(mc.Mentions),
+			"require_mention", requireMention,
+			"group_policy", c.cfg.GroupPolicy,
+			"is_writer_command", isWriterCommand,
+		)
+		if !isWriterCommand && requireMention && !mc.MentionedBot {
+			if !c.canRecordUnmentionedGroupMessage(ctx, mc.SenderID, mc.ChatID) {
+				slog.Debug("feishu group message skipped; no bot mention and policy not approved",
+					"source", source,
+					"decision", "skip_no_mention_unapproved",
+					"channel", c.Name(),
+					"event_id", event.Header.EventID,
+					"message_id", mc.MessageID,
+					"chat_id", mc.ChatID,
+					"sender_id", mc.SenderID,
+				)
+				return
+			}
+
 			historyKey := mc.ChatID
 			if mc.RootID != "" && c.cfg.TopicSessionMode == "enabled" {
 				historyKey = fmt.Sprintf("%s:topic:%s", mc.ChatID, mc.RootID)
@@ -132,9 +179,35 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 				cc.EnsureContact(ctx, c.Type(), c.Name(), mc.SenderID, mc.SenderID, senderName, "", "group", "user", "", "")
 			}
 
-			slog.Debug("feishu group message recorded (no mention)",
-				"chat_id", mc.ChatID, "sender", senderName,
+			slog.Debug("feishu group message recorded without bot mention",
+				"source", source,
+				"decision", "record_no_mention_history",
+				"channel", c.Name(),
+				"event_id", event.Header.EventID,
+				"message_id", mc.MessageID,
+				"chat_id", mc.ChatID,
+				"sender", senderName,
 			)
+			return
+		}
+
+		if !c.checkGroupPolicy(ctx, mc.SenderID, mc.ChatID) {
+			slog.Debug("feishu group message rejected by policy",
+				"source", source,
+				"decision", "reject_group_policy",
+				"channel", c.Name(),
+				"event_id", event.Header.EventID,
+				"message_id", mc.MessageID,
+				"sender_id", mc.SenderID,
+				"chat_id", mc.ChatID,
+			)
+			return
+		}
+
+		// 5b. Writer management slash commands run AFTER the group policy
+		// gate so commands cannot bypass allowlists or pairing. Commands
+		// short-circuit the agent pipeline to avoid consuming LLM tokens.
+		if isWriterCommand && c.maybeHandleWriterCommand(ctx, mc) {
 			return
 		}
 	}
@@ -179,7 +252,12 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 		chatID = fmt.Sprintf("%s:topic:%s", mc.ChatID, mc.RootID)
 	}
 
-	slog.Debug("feishu message received",
+	slog.Debug("feishu message accepted",
+		"source", source,
+		"decision", "publish_inbound",
+		"channel", c.Name(),
+		"event_id", event.Header.EventID,
+		"message_id", mc.MessageID,
 		"sender_id", mc.SenderID,
 		"sender_name", senderName,
 		"chat_id", chatID,

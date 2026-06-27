@@ -2,10 +2,12 @@ package feishu
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 )
 
@@ -28,6 +30,80 @@ func TestWSEventAdapter_HandleEvent_NonMessageEvent_NoError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("non-message event should not error: %v", err)
 	}
+}
+
+func TestWSEventAdapter_HandleEvent_AppIDMismatchSkipsMessage(t *testing.T) {
+	requireMention := true
+	ps := &feishuPolicyPairingStore{paired: map[string]bool{}}
+	msgBus := bus.New()
+	defer msgBus.Close()
+
+	ch, err := New(config.FeishuConfig{
+		AppID:          "app-cppai",
+		AppSecret:      "secret",
+		GroupPolicy:    "pairing",
+		RequireMention: &requireMention,
+	}, msgBus, ps, nil, nil)
+	if err != nil {
+		t.Fatalf("New feishu channel: %v", err)
+	}
+	ch.SetName("lark-cppai-pm")
+	ch.botOpenID = "ou_0b6fac6e84cf8c773a0c2768147799e2"
+
+	event := feishuGroupTextEvent(t, "om_app_mismatch", "ou_alice", "oc_group", "@_user_1 help", []EventMention{
+		feishuMention("@_user_1", ch.botOpenID, "CPPAI PM"),
+	})
+	event.Header.EventType = "im.message.receive_v1"
+	event.Header.AppID = "app-itsddnv"
+	payload := mustMarshalMessageEvent(t, event)
+
+	adapter := &wsEventAdapter{ch: ch}
+	if err := adapter.HandleEvent(context.Background(), payload); err != nil {
+		t.Fatalf("HandleEvent error: %v", err)
+	}
+
+	if ps.requests != 0 {
+		t.Fatalf("pairing requests = %d, want 0 for app_id mismatch", ps.requests)
+	}
+	assertNoFeishuInbound(t, msgBus)
+}
+
+func TestWSEventAdapter_HandleEvent_AppIDMatchProcessesMessage(t *testing.T) {
+	requireMention := true
+	ps := &feishuPolicyPairingStore{paired: map[string]bool{}}
+	msgBus := bus.New()
+	defer msgBus.Close()
+
+	ch, err := New(config.FeishuConfig{
+		AppID:          "app-cppai",
+		AppSecret:      "secret",
+		GroupPolicy:    "pairing",
+		RequireMention: &requireMention,
+	}, msgBus, ps, nil, nil)
+	if err != nil {
+		t.Fatalf("New feishu channel: %v", err)
+	}
+	ch.SetName("lark-cppai-pm")
+	ch.botOpenID = "ou_0b6fac6e84cf8c773a0c2768147799e2"
+	srv := newSimpleMockServer(t, `{"code":0,"msg":"ok","data":{"message_id":"om_sent"}}`)
+	ch.client = NewLarkClient("app-cppai", "secret", srv.URL)
+
+	event := feishuGroupTextEvent(t, "om_app_match", "ou_alice", "oc_group", "@_user_1 help", []EventMention{
+		feishuMention("@_user_1", ch.botOpenID, "CPPAI PM"),
+	})
+	event.Header.EventType = "im.message.receive_v1"
+	event.Header.AppID = "app-cppai"
+	payload := mustMarshalMessageEvent(t, event)
+
+	adapter := &wsEventAdapter{ch: ch}
+	if err := adapter.HandleEvent(context.Background(), payload); err != nil {
+		t.Fatalf("HandleEvent error: %v", err)
+	}
+
+	if ps.requests != 1 {
+		t.Fatalf("pairing requests = %d, want 1 for matching app_id", ps.requests)
+	}
+	assertNoFeishuInbound(t, msgBus)
 }
 
 // --- probeBotInfo ---
@@ -226,4 +302,13 @@ func newLifecycleTestChannel(t *testing.T) *Channel {
 		t.Fatalf("newTestChannel: New() error: %v", err)
 	}
 	return ch
+}
+
+func mustMarshalMessageEvent(t *testing.T, event *MessageEvent) []byte {
+	t.Helper()
+	payload, err := json.Marshal(event)
+	if err != nil {
+		t.Fatalf("marshal message event: %v", err)
+	}
+	return payload
 }

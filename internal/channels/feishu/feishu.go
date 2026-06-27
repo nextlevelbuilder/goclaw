@@ -135,13 +135,12 @@ func (c *Channel) Start(ctx context.Context) error {
 	c.GroupHistory().StartFlusher()
 	slog.Info("starting feishu/lark bot")
 
-	// Probe bot identity. Without botOpenID, mention detection degrades to
-	// "any mention counts as bot mention" (see parseMessageEvent), so retry
-	// transient failures before giving up.
+	// Probe bot identity. Group mention detection fails closed without
+	// botOpenID, so retry transient failures before giving up.
 	if err := c.probeBotInfoWithRetry(ctx, 3); err != nil {
-		slog.Warn("feishu bot probe failed (will continue)", "error", err)
+		slog.Warn("feishu bot probe failed (will continue)", "channel", c.Name(), "error", err)
 	} else {
-		slog.Info("feishu bot connected", "bot_open_id", c.botOpenID)
+		slog.Info("feishu bot connected", "channel", c.Name(), "bot_open_id", c.botOpenID)
 	}
 
 	mode := c.cfg.ConnectionMode
@@ -275,7 +274,7 @@ func (a *wsEventAdapter) HandleEvent(ctx context.Context, payload []byte) error 
 		return fmt.Errorf("parse event: %w", err)
 	}
 	if event.Header.EventType == "im.message.receive_v1" {
-		a.ch.handleMessageEvent(ctx, &event)
+		a.ch.handleMessageEventFrom(ctx, &event, "websocket")
 	}
 	return nil
 }
@@ -316,7 +315,7 @@ func (c *Channel) WebhookHandler() (string, http.Handler) {
 
 	handler := NewWebhookHandler(c.cfg.VerificationToken, c.cfg.EncryptKey, func(event *MessageEvent) {
 		ctx := store.WithTenantID(context.Background(), c.TenantID())
-		c.handleMessageEvent(ctx, event)
+		c.handleMessageEventFrom(ctx, event, "webhook-main")
 	})
 
 	return path, http.HandlerFunc(handler)
@@ -337,7 +336,7 @@ func (c *Channel) startWebhook(ctx context.Context) error {
 
 	handler := NewWebhookHandler(c.cfg.VerificationToken, c.cfg.EncryptKey, func(event *MessageEvent) {
 		ctx := store.WithTenantID(context.Background(), c.TenantID())
-		c.handleMessageEvent(ctx, event)
+		c.handleMessageEventFrom(ctx, event, "webhook-server")
 	})
 
 	mux := http.NewServeMux()
@@ -356,6 +355,87 @@ func (c *Channel) startWebhook(ctx context.Context) error {
 
 	slog.Info("feishu Webhook server listening", "port", port)
 	return nil
+}
+
+func (c *Channel) shouldProcessMessageEvent(event *MessageEvent, source string) bool {
+	eventType := strings.TrimSpace(event.Header.EventType)
+	if eventType != "" && eventType != "im.message.receive_v1" {
+		slog.Debug("feishu inbound event skipped; unsupported event type",
+			"source", source,
+			"decision", "skip_event_type",
+			"channel", c.Name(),
+			"event_id", event.Header.EventID,
+			"event_type", event.Header.EventType,
+			"event_app_id", appIDForLog(event.Header.AppID),
+			"configured_app_id", appIDForLog(c.cfg.AppID),
+		)
+		return false
+	}
+
+	appIDMatch := c.eventAppIDMatches(event)
+	slog.Debug("feishu inbound message event received",
+		"source", source,
+		"decision", "received",
+		"channel", c.Name(),
+		"event_id", event.Header.EventID,
+		"event_type", event.Header.EventType,
+		"event_app_id", appIDForLog(event.Header.AppID),
+		"configured_app_id", appIDForLog(c.cfg.AppID),
+		"app_id_match", appIDMatch,
+		"message_id", event.Event.Message.MessageID,
+		"chat_id", event.Event.Message.ChatID,
+		"chat_type", event.Event.Message.ChatType,
+		"message_type", event.Event.Message.MessageType,
+		"sender_open_id", event.Event.Sender.SenderID.OpenID,
+		"mention_count", len(event.Event.Message.Mentions),
+	)
+	if !appIDMatch {
+		slog.Info("feishu inbound message skipped; app id mismatch",
+			"source", source,
+			"decision", "skip_app_mismatch",
+			"channel", c.Name(),
+			"event_id", event.Header.EventID,
+			"event_app_id", appIDForLog(event.Header.AppID),
+			"configured_app_id", appIDForLog(c.cfg.AppID),
+			"message_id", event.Event.Message.MessageID,
+			"chat_id", event.Event.Message.ChatID,
+		)
+		return false
+	}
+	return true
+}
+
+func (c *Channel) eventAppIDMatches(event *MessageEvent) bool {
+	expected := strings.TrimSpace(c.cfg.AppID)
+	actual := strings.TrimSpace(event.Header.AppID)
+	return expected == "" || actual == "" || expected == actual
+}
+
+func (c *Channel) logParsedMessage(event *MessageEvent, mc *messageContext, source string) {
+	slog.Debug("feishu message parsed",
+		"source", source,
+		"decision", "parsed",
+		"channel", c.Name(),
+		"event_id", event.Header.EventID,
+		"message_id", mc.MessageID,
+		"chat_id", mc.ChatID,
+		"chat_type", mc.ChatType,
+		"content_type", mc.ContentType,
+		"sender_open_id", mc.SenderID,
+		"bot_open_id", c.botOpenID,
+		"mentioned_bot", mc.MentionedBot,
+		"mention_count", len(mc.Mentions),
+		"mentions", formatMentionInfos(mc.Mentions),
+		"preview", channels.Truncate(mc.Content, 80),
+	)
+}
+
+func appIDForLog(appID string) string {
+	appID = strings.TrimSpace(appID)
+	if len(appID) <= 8 {
+		return appID
+	}
+	return appID[:4] + "..." + appID[len(appID)-4:]
 }
 
 // --- Bot probe ---

@@ -8,9 +8,9 @@ import (
 
 func TestParseMessageContent_Text(t *testing.T) {
 	cases := []struct {
-		name    string
-		raw     string
-		want    string
+		name string
+		raw  string
+		want string
 	}{
 		{"normal text", `{"text":"hello world"}`, "hello world"},
 		{"empty raw", "", ""},
@@ -214,10 +214,8 @@ func TestResolveMentions_NoBotID_AllMentionsReplacedWithName(t *testing.T) {
 		{Key: "@_user_2", OpenID: "ou_B", Name: "Bob"},
 	}
 	got := resolveMentions(text, mentions, "")
-	// botOpenID is empty: all mentions treated as bot → stripped
-	// (because the condition is: if botOpenID != "" && openID == botOpenID → strip, else → replace with name)
-	// When botOpenID == "", neither branch strips unless openID matches empty string.
-	// Both get replaced with @Name.
+	// botOpenID is empty: no mention is treated as this bot, so all user
+	// mentions are preserved as readable names.
 	if got != "@Alice and @Bob" {
 		t.Errorf("got %q, want %q", got, "@Alice and @Bob")
 	}
@@ -273,6 +271,28 @@ func TestParseMessageEvent_BotMentioned(t *testing.T) {
 	// Bot mention key should be stripped from content
 	if mc.Content == "@_user_1 please help" {
 		t.Error("bot mention key should be stripped from content")
+	}
+}
+
+func TestParseMessageEvent_UnknownBotIDDoesNotTreatAnyMentionAsBot(t *testing.T) {
+	ch := &Channel{}
+	ev := &MessageEvent{}
+	ev.Event.Message.MessageType = "text"
+	ev.Event.Message.Content = `{"text":"@_user_1 please help"}`
+	ev.Event.Message.Mentions = []EventMention{
+		{Key: "@_user_1", ID: struct {
+			OpenID  string `json:"open_id"`
+			UserID  string `json:"user_id"`
+			UnionID string `json:"union_id"`
+		}{OpenID: "ou_other_bot"}, Name: "OtherBot"},
+	}
+
+	mc := ch.parseMessageEvent(ev)
+	if mc.MentionedBot {
+		t.Fatal("MentionedBot must be false when bot open_id is unknown")
+	}
+	if mc.Content != "@OtherBot please help" {
+		t.Fatalf("content = %q, want other mention preserved", mc.Content)
 	}
 }
 
