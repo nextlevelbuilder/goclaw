@@ -145,13 +145,22 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 	// without an explicit mention, traffic is dropped so the bot doesn't
 	// spam the customer or interfere with operator handling.
 	if isOpenChannel {
-		if !c.isMentionedParams(&evt.Params) {
-			slog.Info("bitrix24 message: dropped OL message without mention",
-				"from_user_id", evt.Params.FromUserID,
-				"from_connector", evt.Params.FromIsConnector,
-				"dialog_id", evt.Params.DialogID,
-				"message_id", evt.Params.MessageID)
-			return
+		// Mention gate is now scoped per-connector: see shouldRequireMentionForOpenline
+		// for the policy (internal staff always gate; external customer gates only
+		// for group-style connectors like Zalo personal; 1-to-1 connectors reply
+		// to every customer message). Connector whitelist is overridable via
+		// BITRIX24_REQUIRE_MENTION_CONNECTORS env so adding e.g. a future Zalo group
+		// connector doesn't need a code change.
+		if shouldRequireMentionForOpenline(evt.Params.FromIsConnector, evt.Params.ChatEntityID) {
+			if !c.isMentionedParams(&evt.Params) {
+				slog.Info("bitrix24 message: dropped OL message without mention",
+					"from_user_id", evt.Params.FromUserID,
+					"from_connector", evt.Params.FromIsConnector,
+					"chat_entity_id", evt.Params.ChatEntityID,
+					"dialog_id", evt.Params.DialogID,
+					"message_id", evt.Params.MessageID)
+				return
+			}
 		}
 	}
 	if isGroup {

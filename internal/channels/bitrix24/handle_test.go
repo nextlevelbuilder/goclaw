@@ -654,10 +654,13 @@ func TestHandleMessage_Blocked_DoesNotCollectContact(t *testing.T) {
 // --- Open Channel (MESSAGE_TYPE="L") gating ---------------------------------
 
 // TestHandleMessage_OpenChannel_ConnectorWithoutMentionDropped covers the
-// customer side of the Open Channel gate without an explicit mention: a
-// Zalo/FB customer (IS_CONNECTOR=Y) sending into the session WITHOUT
-// @-mentioning the bot must NOT trigger the agent. Humans handle plain
-// customer traffic; the bot only steps in when explicitly called.
+// customer side of the Open Channel gate on a GROUP-style connector
+// (Zalo personal) without an explicit mention: customers chatting amongst
+// themselves in the same Open Channel chat must NOT trigger the agent.
+// The CHAT_ENTITY_ID prefix is what tells us "this connector is
+// group-style and therefore needs the gate" — connectors that don't
+// match the whitelist are handled by sibling tests (no gate, every
+// message forwards).
 func TestHandleMessage_OpenChannel_ConnectorWithoutMentionDropped(t *testing.T) {
 	ch, mb := newHandleTestChannel(t, 1058, false)
 	defer resetWebhookRouterForTest()
@@ -670,12 +673,42 @@ func TestHandleMessage_OpenChannel_ConnectorWithoutMentionDropped(t *testing.T) 
 			MessageID:       "m-ol-customer",
 			MessageType:     "L",
 			ChatEntityType:  "LINES",
+			ChatEntityID:    "synity_zalo_personal|20|grp|960",
 			Message:         "Em hỏi giá sản phẩm A",
 			FromIsConnector: true,
 		},
 	})
 	if _, ok := drainOne(mb, 100*time.Millisecond); ok {
-		t.Error("Open Channel connector messages without mention must be dropped")
+		t.Error("Open Channel connector (whitelisted group-style) messages without mention must be dropped")
+	}
+}
+
+// TestHandleMessage_OpenChannel_OneToOneConnectorWithoutMentionForwarded
+// covers the inverse case: a 1-to-1 connector (e.g. Facebook Messenger,
+// Zalo OA) where each customer has their own Open Channel chat. Every
+// customer message is addressed to the bot by construction; gating
+// would silently drop legitimate customer turns. CHAT_ENTITY_ID prefix
+// "facebook" is not in the require-mention whitelist, so the message
+// MUST forward without a mention.
+func TestHandleMessage_OpenChannel_OneToOneConnectorWithoutMentionForwarded(t *testing.T) {
+	ch, mb := newHandleTestChannel(t, 1058, false)
+	defer resetWebhookRouterForTest()
+
+	ch.DispatchEvent(context.Background(), &Event{
+		Type: EventMessageAdd,
+		Params: EventParams{
+			FromUserID:      "1074",
+			DialogID:        "chat5208",
+			MessageID:       "m-fb-customer",
+			MessageType:     "L",
+			ChatEntityType:  "LINES",
+			ChatEntityID:    "facebook|34|36305652112415023|1074",
+			Message:         "hello, do you have product X in stock?",
+			FromIsConnector: true,
+		},
+	})
+	if _, ok := drainOne(mb, 200*time.Millisecond); !ok {
+		t.Error("1-to-1 connector (facebook) customer messages must forward without requiring mention")
 	}
 }
 
