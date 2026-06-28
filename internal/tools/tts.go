@@ -103,7 +103,12 @@ type agentAudioConfig struct {
 // Empty return values signal "use provider default" downstream — they are not
 // errors. Missing agent snapshot emits slog.Warn so operators can spot
 // dispatch-layer regressions; missing tenant settings are quiet (common).
-func (t *TtsTool) resolveVoiceAndModel(ctx context.Context, argVoice, argModel string) (voice, model string) {
+//
+// voiceFromAgent is true when the returned voice originated from the agent's
+// tts_voice_id override (not from tool args or tenant defaults). Callers use
+// this flag to emit a warning when the voice is later found incompatible with
+// the selected provider.
+func (t *TtsTool) resolveVoiceAndModel(ctx context.Context, argVoice, argModel string) (voice, model string, voiceFromAgent bool) {
 	voice, model = argVoice, argModel
 
 	// Pull agent-level config from the dispatcher-injected snapshot.
@@ -136,6 +141,7 @@ func (t *TtsTool) resolveVoiceAndModel(ctx context.Context, argVoice, argModel s
 	if voice == "" {
 		if agentCfg.TTSVoiceID != "" {
 			voice = agentCfg.TTSVoiceID
+			voiceFromAgent = true
 		} else if tenantCfg.DefaultVoiceID != "" {
 			voice = tenantCfg.DefaultVoiceID
 		}
@@ -147,7 +153,23 @@ func (t *TtsTool) resolveVoiceAndModel(ctx context.Context, argVoice, argModel s
 			model = tenantCfg.DefaultModel
 		}
 	}
-	return voice, model
+	return voice, model, voiceFromAgent
+}
+
+// applyVoiceCompat checks whether voice is compatible with the named provider.
+// When incompatible and the voice came from an agent override, it logs a
+// warning and replaces the voice with the provider's default. The filtered
+// voice (possibly unchanged) is returned.
+func applyVoiceCompat(provider, voice string, voiceFromAgent bool) string {
+	filtered, changed := audio.FilterVoiceForProvider(provider, voice, voiceFromAgent)
+	if changed && voiceFromAgent {
+		slog.Warn("tts: agent tts_voice_id is incompatible with selected provider, using provider default",
+			"provider", provider,
+			"agent_voice", voice,
+			"fallback_voice", filtered,
+		)
+	}
+	return filtered
 }
 
 // resolvePrimary returns the effective primary provider name for the request.
@@ -231,7 +253,7 @@ func (t *TtsTool) Execute(ctx context.Context, args map[string]any) *Result {
 	providerName, _ := args["provider"].(string)
 
 	// Resolve voice/model via args > agent (ctx snapshot) > tenant > default.
-	voice, model := t.resolveVoiceAndModel(ctx, argVoice, argModel)
+	voice, model, voiceFromAgent := t.resolveVoiceAndModel(ctx, argVoice, argModel)
 
 	// Read generic agent TTS params once; adapt PER-ATTEMPT below (Finding #1 CRITICAL).
 	// Storing generic keys here so each fallback provider gets its own adapted copy.
@@ -264,6 +286,7 @@ func (t *TtsTool) Execute(ctx context.Context, args map[string]any) *Result {
 			}
 			providerName = tenantName
 		}
+		opts.Voice = applyVoiceCompat(providerName, opts.Voice, voiceFromAgent)
 		if adapted := audio.AdaptAgentParams(genericAgentParams, providerName); len(adapted) > 0 {
 			opts.Params = mergeParams(opts.Params, adapted)
 		}
@@ -272,6 +295,7 @@ func (t *TtsTool) Execute(ctx context.Context, args map[string]any) *Result {
 		// Prefer the DB-configured tenant provider used by /tts and auto-TTS.
 		if p, tenantName, ok := t.resolveTenantProvider(ctx, mgr, ""); ok {
 			tenantOpts := opts
+			tenantOpts.Voice = applyVoiceCompat(tenantName, tenantOpts.Voice, voiceFromAgent)
 			if adapted := audio.AdaptAgentParams(genericAgentParams, tenantName); len(adapted) > 0 {
 				tenantOpts.Params = mergeParams(opts.Params, adapted)
 			}
@@ -286,6 +310,7 @@ func (t *TtsTool) Execute(ctx context.Context, args map[string]any) *Result {
 			if p, ok := mgr.GetProvider(primary); ok {
 				// Adapt for the primary provider attempt specifically.
 				primaryOpts := opts
+				primaryOpts.Voice = applyVoiceCompat(primary, primaryOpts.Voice, voiceFromAgent)
 				if adapted := audio.AdaptAgentParams(genericAgentParams, primary); len(adapted) > 0 {
 					primaryOpts.Params = mergeParams(opts.Params, adapted)
 				}
