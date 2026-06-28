@@ -90,7 +90,7 @@ type pipelineCallbackSet struct {
 	checkReadOnly      func(state *pipeline.RunState) (*providers.Message, bool)
 	sanitizeContent    func(string) string
 	flushMessages      func(ctx context.Context, sessionKey string, msgs []providers.Message) error
-	updateMetadata     func(ctx context.Context, sessionKey string, usage providers.Usage) error
+	updateMetadata     func(ctx context.Context, sessionKey string, usage providers.Usage, msgCount int) error
 	bootstrapCleanup   func(ctx context.Context, state *pipeline.RunState) error
 	maybeSummarize     func(ctx context.Context, sessionKey string)
 }
@@ -633,12 +633,15 @@ func (l *Loop) makeFlushMessages(req *RunRequest) func(ctx context.Context, sess
 	}
 }
 
-func (l *Loop) makeUpdateMetadata(req *RunRequest) func(ctx context.Context, sessionKey string, usage providers.Usage) error {
-	return func(ctx context.Context, sessionKey string, usage providers.Usage) error {
+func (l *Loop) makeUpdateMetadata(req *RunRequest) func(ctx context.Context, sessionKey string, usage providers.Usage, msgCount int) error {
+	return func(ctx context.Context, sessionKey string, usage providers.Usage, msgCount int) error {
 		l.sessions.UpdateMetadata(ctx, sessionKey, l.model, l.provider.Name(), req.Channel)
 		l.sessions.AccumulateTokens(ctx, sessionKey, int64(usage.PromptTokens), int64(usage.CompletionTokens))
 		// Persist session to DB (matching v2 finalizeRun behavior).
 		// FlushMessages already ran, so all pending messages are in the cache.
+		if usage.PromptTokens > 0 {
+			l.sessions.SetLastPromptTokens(ctx, sessionKey, usage.PromptTokens, msgCount)
+		}
 		l.sessions.Save(ctx, sessionKey)
 		return nil
 	}

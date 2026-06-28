@@ -110,16 +110,19 @@ func (s *FinalizeStage) Execute(ctx context.Context, state *RunState) error {
 	state.Messages.AppendPending(assistantMsg)
 
 	// 4. Flush remaining pending messages to session store
+	historyCountBeforeFlush := len(state.Messages.History())
 	pending := state.Messages.FlushPending()
+	persistablePending := persistableMessages(pending)
 	if len(pending) > 0 && s.deps.FlushMessages != nil {
-		if err := s.deps.FlushMessages(ctx, state.Input.SessionKey, persistableMessages(pending)); err != nil {
+		if err := s.deps.FlushMessages(ctx, state.Input.SessionKey, persistablePending); err != nil {
 			slog.Warn("finalize flush failed", "err", err)
 		}
 	}
 
 	// 5. Update session metadata (token usage)
 	if s.deps.UpdateMetadata != nil {
-		if err := s.deps.UpdateMetadata(ctx, state.Input.SessionKey, state.Think.TotalUsage); err != nil {
+		msgCount := historyCountBeforeFlush + len(persistablePending)
+		if err := s.deps.UpdateMetadata(ctx, state.Input.SessionKey, state.Think.TotalUsage, msgCount); err != nil {
 			slog.Warn("finalize metadata update failed", "err", err)
 		}
 	}
