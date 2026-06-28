@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
+	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -144,23 +145,42 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 	// without an explicit mention, traffic is dropped so the bot doesn't
 	// spam the customer or interfere with operator handling.
 	if isOpenChannel {
-		if !c.isMentionedParams(&evt.Params) {
-			slog.Info("bitrix24 message: dropped OL message without mention",
-				"from_user_id", evt.Params.FromUserID,
-				"from_connector", evt.Params.FromIsConnector,
-				"dialog_id", evt.Params.DialogID,
-				"message_id", evt.Params.MessageID)
-			return
+		// Mention gate is now scoped per-connector: see shouldRequireMentionForOpenline
+		// for the policy (internal staff always gate; external customer gates only
+		// for group-style connectors like Zalo personal; 1-to-1 connectors reply
+		// to every customer message). Connector whitelist is overridable via
+		// BITRIX24_REQUIRE_MENTION_CONNECTORS env so adding e.g. a future Zalo group
+		// connector doesn't need a code change.
+		if shouldRequireMentionForOpenline(evt.Params.FromIsConnector, evt.Params.ChatEntityID) {
+			if !c.isMentionedParams(&evt.Params) {
+				slog.Info("bitrix24 message: dropped OL message without mention",
+					"from_user_id", evt.Params.FromUserID,
+					"from_connector", evt.Params.FromIsConnector,
+					"chat_entity_id", evt.Params.ChatEntityID,
+					"dialog_id", evt.Params.DialogID,
+					"message_id", evt.Params.MessageID)
+				return
+			}
 		}
 	}
 	if isGroup {
+		// Mention DROP CHECK is scoped to native group chats (CRM deal/task,
+		// plain groups) only. Open Channel sessions own their mention policy
+		// via shouldRequireMentionForOpenline above — re-applying the channel-
+		// level RequireMention flag here would silently drop, e.g., every
+		// Facebook Messenger customer turn (whose connector isn't in the
+		// require-mention whitelist) even though the upstream gate let it
+		// through. Text processing below (mention strip + readable rewrite)
+		// stays unconditional so Openline staff messages with bot BBCode tags
+		// still get cleaned up.
+		//
 		// Authority-ordered fallback: structured MENTIONED_LIST → raw
 		// MESSAGE_ORIGINAL → stripped MESSAGE. In group chats Bitrix24 strips
 		// the @mention from MESSAGE before sending the webhook, so checking
 		// MESSAGE alone misses every group mention. See
 		// plans/bitrix24-mcp-refactor/reports/retrospective.md §2 for context.
 		mentioned := c.isMentionedParams(&evt.Params)
-		if c.RequireMention() && !mentioned {
+		if !isOpenChannel && c.RequireMention() && !mentioned {
 			slog.Info("bitrix24 message: dropped missing mention",
 				"from_user_id", evt.Params.FromUserID,
 				"dialog_id", evt.Params.DialogID,
@@ -382,6 +402,22 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 	// the agent with their MIME type preserved. Best-effort: failures are logged
 	// inside downloadEventFiles and never block the text from reaching the agent.
 	mediaFiles := c.downloadEventFiles(ctx, c.BotID(), evt.Params.Files)
+	// Prepend <media:*> tags so the LLM sees the attachment alongside the body
+	// text. The agent loop's enrichInputMedia REPLACES tags it finds (it does
+	// NOT insert new ones), so without this step a Bitrix-borne PDF / audio
+	// arrives as bare text — the LLM never realizes an attachment exists and
+	// degrades to "no file attached" or hallucinates a CRM document. Match
+	// the Telegram / Slack / Discord pattern (shared media.BuildMediaTags) so
+	// the tag shape stays uniform across channels.
+	if len(mediaFiles) > 0 {
+		if tags := media.BuildMediaTags(mediaFilesToInfos(mediaFiles)); tags != "" {
+			if text == "" {
+				text = tags
+			} else {
+				text = tags + "\n" + text
+			}
+		}
+	}
 	slog.Info("bitrix24 message: publish to bus",
 		"sender_id", senderID,
 		"chat_id", chatID,

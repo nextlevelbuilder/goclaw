@@ -121,7 +121,7 @@ type PipelineDeps struct {
 	DeduplicateMediaSuffix func(content, suffix string) string
 	IsSilentReply          func(content string) bool
 	EmitSessionCompleted   func(ctx context.Context, sessionKey string, msgCount, tokensUsed, compactionCount int)
-	UpdateMetadata         func(ctx context.Context, sessionKey string, usage providers.Usage) error
+	UpdateMetadata         func(ctx context.Context, sessionKey string, usage providers.Usage, msgCount int) error
 	BootstrapCleanup       func(ctx context.Context, state *RunState) error
 	MaybeSummarize         func(ctx context.Context, sessionKey string)
 }

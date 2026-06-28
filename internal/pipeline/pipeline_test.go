@@ -80,6 +80,69 @@ func TestPipeline_SetupRunsOnce(t *testing.T) {
 	}
 }
 
+func TestNewDefaultPipeline_PrunesBeforeThink(t *testing.T) {
+	t.Parallel()
+
+	history := []providers.Message{
+		{Role: "user", Content: "old 1"},
+		{Role: "assistant", Content: "old 2"},
+		{Role: "user", Content: "old 3"},
+		{Role: "assistant", Content: "old 4"},
+		{Role: "user", Content: "old 5"},
+		{Role: "assistant", Content: "old 6"},
+		{Role: "user", Content: "old 7"},
+		{Role: "assistant", Content: "old 8"},
+		{Role: "user", Content: "old 9"},
+		{Role: "assistant", Content: "old 10"},
+	}
+	compacted := []providers.Message{{Role: "assistant", Content: "compacted history"}}
+	var compactCalled bool
+	var llmMessages []providers.Message
+
+	deps := PipelineDeps{
+		Config: PipelineConfig{
+			MaxIterations: 1,
+			ContextWindow: 1000,
+			MaxTokens:     100,
+		},
+		TokenCounter: &mockTokenCounter{countPerMessage: 100},
+		LoadSessionHistory: func(_ context.Context, _ string) ([]providers.Message, string) {
+			return history, ""
+		},
+		BuildMessages: func(_ context.Context, _ *RunInput, loaded []providers.Message, _ string) ([]providers.Message, error) {
+			msgs := []providers.Message{{Role: "system", Content: "system"}}
+			msgs = append(msgs, loaded...)
+			return msgs, nil
+		},
+		PruneMessages: func(msgs []providers.Message, _ int) ([]providers.Message, PruneStats) {
+			return msgs, PruneStats{}
+		},
+		CompactMessages: func(_ context.Context, _ []providers.Message, _ string) ([]providers.Message, error) {
+			compactCalled = true
+			return compacted, nil
+		},
+		CallLLM: func(_ context.Context, _ *RunState, req providers.ChatRequest) (*providers.ChatResponse, error) {
+			llmMessages = append([]providers.Message(nil), req.Messages...)
+			return &providers.ChatResponse{Content: "ok", FinishReason: "stop"}, nil
+		},
+	}
+
+	p := NewDefaultPipeline(deps)
+	_, err := p.Run(context.Background(), buildMinimalRunState())
+	if err != nil {
+		t.Fatalf("Run() error: %v", err)
+	}
+	if !compactCalled {
+		t.Fatal("CompactMessages was not called")
+	}
+	if len(llmMessages) != 2 {
+		t.Fatalf("CallLLM received %d messages, want system + compacted history: %#v", len(llmMessages), llmMessages)
+	}
+	if llmMessages[1].Content != "compacted history" {
+		t.Fatalf("CallLLM second message = %#v, want compacted history", llmMessages[1])
+	}
+}
+
 func TestPipeline_FinalizeRunsOnce(t *testing.T) {
 	t.Parallel()
 	finalize := newMockStageNoResult("finalize")
