@@ -105,25 +105,36 @@ func (m *Manager) appendReasoningBubbleFromThinkTagChunk(runID string, rc *RunCo
 	var done bool
 
 	rc.mu.Lock()
-	if rc.thinkingDone || rc.tagParseSkipped {
+	if rc.thinkingDone {
 		rc.mu.Unlock()
 		return
 	}
 
-	candidate := rc.streamBuffer + content
+	candidate := rc.streamBuffer + rc.tagParsePending + content
 	split := SplitThinkTags(candidate)
-	if split.Thinking == "" {
-		rc.tagParseSkipped = true
+	if !split.Found && split.Pending == "" {
+		rc.streamBuffer = split.Answer
 		rc.mu.Unlock()
 		return
+	}
+	if !split.Found && split.Pending != "" {
+		rc.streamBuffer = split.Answer
+		rc.tagParsePending = split.Pending
+		rc.mu.Unlock()
+		return
+	}
+	if split.Pending != "" {
+		rc.streamBuffer = split.Answer
+		rc.tagParsePending = split.Pending
 	}
 
 	previousThinking := rc.thinkingBuffer
-	rc.streamBuffer = candidate
+	rc.streamBuffer = split.Answer
+	rc.tagParsePending = split.Pending
 	rc.thinkingBuffer = split.Thinking
 	if !split.Partial {
 		rc.thinkingDone = true
-		rc.streamBuffer = split.Answer
+		rc.tagParsePending = ""
 		done = true
 	}
 	delta = reasoningDelta(previousThinking, split.Thinking)

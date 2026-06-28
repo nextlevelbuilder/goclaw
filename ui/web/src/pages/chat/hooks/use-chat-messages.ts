@@ -8,6 +8,7 @@ import { toFileUrl, mediaKindFromMime } from "@/lib/file-helpers";
 import { transformHistoryMessages } from "@/adapters/chat-message.adapter";
 import { useChatTeamTasks } from "./use-chat-team-tasks";
 import { useChatMessagesStore } from "@/stores/use-chat-messages-store";
+import { appendFilteredThinkingChunk, createThinkTagStreamFilterState } from "@/lib/think-tag-stream";
 
 // Stable empty array — avoids creating a new reference on every render inside
 // Zustand selectors, which would trigger an infinite re-render loop (React #185).
@@ -41,6 +42,7 @@ export function useChatMessages(sessionKey: string, agentId: string) {
   const expectingRunRef = useRef(false);
   const streamRef = useRef("");
   const thinkingRef = useRef("");
+  const streamFilterRef = useRef(createThinkTagStreamFilterState());
   const toolStreamRef = useRef<ToolStreamEntry[]>([]);
   const agentIdRef = useRef(agentId);
   agentIdRef.current = agentId;
@@ -96,6 +98,7 @@ export function useChatMessages(sessionKey: string, agentId: string) {
     expectingRunRef.current = false;
     streamRef.current = "";
     thinkingRef.current = "";
+    streamFilterRef.current = createThinkTagStreamFilterState();
     toolStreamRef.current = [];
     activityRef.current = null;
     blockRepliesRef.current = [];
@@ -158,6 +161,7 @@ export function useChatMessages(sessionKey: string, agentId: string) {
           setToolStream([]);
           streamRef.current = "";
           thinkingRef.current = "";
+          streamFilterRef.current = createThinkTagStreamFilterState();
           toolStreamRef.current = [];
         }
         return;
@@ -179,7 +183,11 @@ export function useChatMessages(sessionKey: string, agentId: string) {
           break;
         }
         case "chunk": {
-          streamRef.current += event.payload?.content ?? "";
+          streamFilterRef.current = appendFilteredThinkingChunk(streamFilterRef.current, event.payload?.content ?? "");
+          if (streamFilterRef.current.thinkingDelta) {
+            thinkingRef.current += streamFilterRef.current.thinkingDelta;
+          }
+          streamRef.current = streamFilterRef.current.text;
           if (!rafPendingRef.current) {
             rafPendingRef.current = true;
             rafHandleRef.current = requestAnimationFrame(() => {
@@ -246,6 +254,7 @@ export function useChatMessages(sessionKey: string, agentId: string) {
           setToolStream([]);
           streamRef.current = "";
           thinkingRef.current = "";
+          streamFilterRef.current = createThinkTagStreamFilterState();
           toolStreamRef.current = [];
           activityRef.current = null;
           setActivity(null);
@@ -269,6 +278,7 @@ export function useChatMessages(sessionKey: string, agentId: string) {
           setToolStream([]);
           streamRef.current = "";
           thinkingRef.current = "";
+          streamFilterRef.current = createThinkTagStreamFilterState();
           activityRef.current = null;
           setActivity(null);
           blockRepliesRef.current = [];
@@ -286,6 +296,7 @@ export function useChatMessages(sessionKey: string, agentId: string) {
           setToolStream([]);
           streamRef.current = "";
           thinkingRef.current = "";
+          streamFilterRef.current = createThinkTagStreamFilterState();
           toolStreamRef.current = [];
           activityRef.current = null;
           setActivity(null);

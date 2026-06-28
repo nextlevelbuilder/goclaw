@@ -203,6 +203,57 @@ func TestHandleAgentEvent_ReasoningOffStripsThinkTagsFromStreamingAnswer(t *test
 	}
 }
 
+func TestHandleAgentEvent_ReasoningOffStripsLateThinkTagsFromStreamingAnswer(t *testing.T) {
+	mb := bus.New()
+	mgr := NewManager(mb)
+	ch := &reasoningStreamingTestChannel{name: "test", reasoningEnabled: true}
+	mgr.RegisterChannel("test", ch)
+	delivery := ResolveReasoningDelivery(ReasoningDeliveryOff, nil)
+	mgr.RegisterRunWithBehavior("run-1", "test", "chat-1", "msg-1", nil, uuid.Nil, true, false, true, ResolvedChatBehavior{}, delivery)
+
+	mgr.HandleAgentEvent(protocol.AgentEventRunStarted, "run-1", nil)
+	mgr.HandleAgentEvent(protocol.ChatEventChunk, "run-1", map[string]string{"content": "Visible prefix "})
+	mgr.HandleAgentEvent(protocol.ChatEventChunk, "run-1", map[string]string{"content": "<thinking>hidden reasoning</thinking> visible answer"})
+
+	if len(ch.streams) != 1 {
+		t.Fatalf("streams = %d, want answer stream only", len(ch.streams))
+	}
+	got := ch.streams[0].lastUpdate()
+	if strings.Contains(got, "<thinking>") || strings.Contains(got, "hidden reasoning") {
+		t.Fatalf("stream leaked thinking tag content: %q", got)
+	}
+	if got != "Visible prefix  visible answer" {
+		t.Fatalf("stream updates = %q, want clean answer", got)
+	}
+}
+
+func TestHandleAgentEvent_ReasoningOffStripsSplitThinkTagsFromStreamingAnswer(t *testing.T) {
+	mb := bus.New()
+	mgr := NewManager(mb)
+	ch := &reasoningStreamingTestChannel{name: "test", reasoningEnabled: true}
+	mgr.RegisterChannel("test", ch)
+	delivery := ResolveReasoningDelivery(ReasoningDeliveryOff, nil)
+	mgr.RegisterRunWithBehavior("run-1", "test", "chat-1", "msg-1", nil, uuid.Nil, true, false, true, ResolvedChatBehavior{}, delivery)
+
+	mgr.HandleAgentEvent(protocol.AgentEventRunStarted, "run-1", nil)
+	mgr.HandleAgentEvent(protocol.ChatEventChunk, "run-1", map[string]string{"content": "Visible "})
+	mgr.HandleAgentEvent(protocol.ChatEventChunk, "run-1", map[string]string{"content": "<think"})
+
+	if got := ch.streams[0].lastUpdate(); got != "Visible " {
+		t.Fatalf("partial tag name leaked before completion: %q", got)
+	}
+
+	mgr.HandleAgentEvent(protocol.ChatEventChunk, "run-1", map[string]string{"content": "ing>hidden reasoning</thinking> answer"})
+
+	got := ch.streams[0].lastUpdate()
+	if strings.Contains(got, "<thinking>") || strings.Contains(got, "hidden reasoning") {
+		t.Fatalf("stream leaked split thinking tag content: %q", got)
+	}
+	if got != "Visible  answer" {
+		t.Fatalf("stream updates = %q, want clean answer", got)
+	}
+}
+
 func TestHandleAgentEvent_AlwaysBubblesExtractsThinkTagsFromStreamingChunk(t *testing.T) {
 	mb := bus.New()
 	mgr := NewManager(mb)
@@ -267,3 +318,10 @@ func (s *reasoningRecordingStream) Stop(context.Context) error {
 }
 
 func (s *reasoningRecordingStream) MessageID() int { return 1 }
+
+func (s *reasoningRecordingStream) lastUpdate() string {
+	if len(s.updates) == 0 {
+		return ""
+	}
+	return s.updates[len(s.updates)-1]
+}

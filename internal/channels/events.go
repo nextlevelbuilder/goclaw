@@ -98,10 +98,10 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 			currentStream := rc.stream
 			rc.stream = nil
 			rc.inToolPhase = true
-			rc.thinkingDone = false    // allow new thinking in next iteration
-			rc.thinkingBuffer = ""     // reset thinking buffer for new iteration
-			rc.hasThinking = false     // new iteration starts fresh
-			rc.tagParseSkipped = false // re-enable tag parsing for next iteration
+			rc.thinkingDone = false // allow new thinking in next iteration
+			rc.thinkingBuffer = ""  // reset thinking buffer for new iteration
+			rc.hasThinking = false  // new iteration starts fresh
+			rc.tagParsePending = "" // discard any incomplete tag from the previous iteration
 			rc.mu.Unlock()
 			if currentStream != nil {
 				if err := currentStream.Stop(ctx); err != nil {
@@ -135,19 +135,22 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 				// Fallback <think> tag parsing: for providers that embed thinking
 				// in the content stream (DeepSeek-via-OpenRouter, Qwen, some Ollama models).
 				// Only activates when no native ChatEventThinking was received.
-				if !rc.hasThinking && !rc.thinkingDone && !rc.tagParseSkipped {
-					candidate := rc.streamBuffer + content
+				if !rc.hasThinking && !rc.thinkingDone {
+					previousAnswer := rc.streamBuffer
+					candidate := rc.streamBuffer + rc.tagParsePending + content
 					split := SplitThinkTags(candidate)
-					if split.Thinking != "" {
+					if split.Found || split.Pending != "" {
 						// Found think tags — commit to buffer and route or suppress reasoning
 						// before any tagged content can leak into the answer lane.
 						displayReasoningInStream := rc.ReasoningDelivery.ShowInChannel && !rc.ReasoningDelivery.BubbleDelivery && sc.ReasoningStreamEnabled()
 						previousThinking := rc.thinkingBuffer
-						rc.streamBuffer = candidate
 						rc.thinkingBuffer = split.Thinking
 						thinkText := rc.thinkingBuffer
 						currentStream := rc.stream
-						if split.Partial {
+						if split.Partial || split.Pending != "" {
+							rc.streamBuffer = split.Answer
+							rc.tagParsePending = split.Pending
+							answerText := rc.streamBuffer
 							// Still inside <think> — wait for the close tag before streaming
 							// answer content. Native thinking uses hasThinking; tag parsing
 							// keeps it false until close so later chunks continue parsing.
@@ -158,9 +161,12 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 								}
 							} else if displayReasoningInStream && currentStream != nil {
 								currentStream.Update(ctx, formatReasoningPreview(thinkText))
+							} else if currentStream != nil {
+								currentStream.Update(ctx, answerText)
 							}
 							break
 						}
+						rc.tagParsePending = ""
 						// Tag closed — transition to answer, or strip reasoning entirely
 						// when Show Reasoning is off.
 						answerText := split.Answer
@@ -177,7 +183,7 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 							m.flushReasoningBubbles(runID)
 						}
 
-						if !displayReasoningInStream {
+						if previousAnswer != "" || !displayReasoningInStream {
 							if reasoningStream != nil && answerText != "" {
 								reasoningStream.Update(ctx, answerText)
 							}
@@ -209,9 +215,6 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 						}
 						break
 					}
-					// No think tags found — mark as skipped so we don't re-parse.
-					// Don't commit to streamBuffer here — the normal flow below appends content.
-					rc.tagParseSkipped = true
 				}
 
 				// Reasoning→answer transition: first chunk after native thinking events.

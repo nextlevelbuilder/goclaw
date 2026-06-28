@@ -54,7 +54,7 @@ type RunContext struct {
 	thinkingBuffer       string        // accumulated thinking/reasoning text
 	hasThinking          bool          // true if any thinking events received this iteration
 	thinkingDone         bool          // true after first chunk arrives (reasoning→answer transition complete)
-	tagParseSkipped      bool          // true after first chunk with no <think> tags (skip re-parsing)
+	tagParsePending      string        // raw trailing text withheld because it may be a split <think> tag
 	reasoningBubbles     *reasoningBubbleBuffer
 	reasoningBubbleTimer *time.Timer
 }

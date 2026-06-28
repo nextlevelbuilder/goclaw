@@ -55,16 +55,17 @@ func (s *ObserveStage) drainInjectedMessages() []providers.Message {
 }
 
 func (s *ObserveStage) observeFinalResponse(state *RunState, resp *providers.ChatResponse, injected []providers.Message) {
+	content, thinking := splitTaggedThinkingContent(resp.Content, resp.Thinking)
 	if len(injected) == 0 {
-		state.Observe.FinalContent = resp.Content
-		state.Observe.FinalThinking = resp.Thinking
+		state.Observe.FinalContent = content
+		state.Observe.FinalThinking = thinking
 		return
 	}
 
 	state.Messages.AppendPending(providers.Message{
 		Role:      "assistant",
-		Content:   resp.Content,
-		Thinking:  resp.Thinking,
+		Content:   content,
+		Thinking:  thinking,
 		Transient: true,
 	})
 	appendPendingMessages(state, injected)

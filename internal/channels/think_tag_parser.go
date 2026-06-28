@@ -17,6 +17,8 @@ type ThinkTagSplit struct {
 	Thinking string // content inside <think> tags (empty if no tags found)
 	Answer   string // content outside <think> tags
 	Partial  bool   // true if an unclosed <think> tag is present (buffer for more)
+	Found    bool   // true if an opening think tag was found
+	Pending  string // trailing text withheld because it may be a split opening tag
 }
 
 // SplitThinkTags extracts thinking content from <think>...</think> tags.
@@ -28,11 +30,13 @@ func SplitThinkTags(text string) ThinkTagSplit {
 	if !strings.Contains(lower, "<think") &&
 		!strings.Contains(lower, "<thought") &&
 		!strings.Contains(lower, "<antthinking") {
-		return ThinkTagSplit{Answer: text}
+		answer, pending := splitTrailingThinkTagPrefix(text)
+		return ThinkTagSplit{Answer: answer, Pending: pending}
 	}
 
 	var thinking, answer strings.Builder
 	remaining := text
+	found := false
 
 	for remaining != "" {
 		// Find opening tag
@@ -47,6 +51,7 @@ func SplitThinkTags(text string) ThinkTagSplit {
 		if openLoc[0] > 0 {
 			answer.WriteString(remaining[:openLoc[0]])
 		}
+		found = true
 
 		// Find closing tag after the opening tag
 		afterOpen := remaining[openLoc[1]:]
@@ -58,6 +63,8 @@ func SplitThinkTags(text string) ThinkTagSplit {
 				Thinking: thinking.String(),
 				Answer:   answer.String(),
 				Partial:  true,
+				Found:    true,
+				Pending:  remaining[openLoc[0]:],
 			}
 		}
 
@@ -66,8 +73,46 @@ func SplitThinkTags(text string) ThinkTagSplit {
 		remaining = afterOpen[closeLoc[1]:]
 	}
 
+	answerText := answer.String()
+	pending := ""
+	if !found {
+		answerText, pending = splitTrailingThinkTagPrefix(answerText)
+	}
+
 	return ThinkTagSplit{
 		Thinking: thinking.String(),
-		Answer:   answer.String(),
+		Answer:   answerText,
+		Found:    found,
+		Pending:  pending,
 	}
+}
+
+func splitTrailingThinkTagPrefix(text string) (answer, pending string) {
+	idx := strings.LastIndex(text, "<")
+	if idx < 0 {
+		return text, ""
+	}
+	suffix := text[idx:]
+	if strings.Contains(suffix, ">") || !isPossibleThinkOpenPrefix(suffix) {
+		return text, ""
+	}
+	return text[:idx], suffix
+}
+
+func isPossibleThinkOpenPrefix(suffix string) bool {
+	lower := strings.ToLower(suffix)
+	if !strings.HasPrefix(lower, "<") {
+		return false
+	}
+	rest := strings.TrimLeft(lower[1:], " \t\r\n")
+	normalized := "<" + rest
+	if normalized == "<" {
+		return true
+	}
+	for _, tag := range []string{"<think", "<thinking", "<thought", "<antthinking"} {
+		if strings.HasPrefix(tag, normalized) || strings.HasPrefix(normalized, tag) {
+			return true
+		}
+	}
+	return false
 }

@@ -2,6 +2,7 @@ import type { Message } from "@/types/session";
 import type { ChatMessage, ToolStreamEntry, MediaItem } from "@/types/chat";
 import { toFileUrl } from "@/lib/file-helpers";
 import { messageToTimestamp } from "@/lib/message-utils";
+import { splitThinkingTagsFromText } from "@/lib/think-tag-stream";
 
 /**
  * Transform raw Message[] from history RPC into ChatMessage[] for display.
@@ -21,8 +22,13 @@ export function transformHistoryMessages(
   }
 
   const msgs: ChatMessage[] = allMsgs.map((m: Message, i: number) => {
+    const normalized = m.role === "assistant"
+      ? splitThinkingTagsFromText(m.content ?? "", m.thinking ?? "")
+      : { content: m.content, thinking: m.thinking };
     const chatMsg: ChatMessage = {
       ...m,
+      content: normalized.content,
+      thinking: normalized.thinking,
       timestamp: messageToTimestamp(m, i, allMsgs.length),
     };
 

@@ -1981,6 +1981,27 @@ func TestObserveStage_LateInjectionAfterFinalContinuesRun(t *testing.T) {
 	}
 }
 
+func TestObserveStage_MovesTaggedThinkingIntoFinalThinking(t *testing.T) {
+	t.Parallel()
+	stage := NewObserveStage(&PipelineDeps{})
+	state := defaultState()
+	state.Think.LastResponse = &providers.ChatResponse{
+		Content:  "Visible <thinking>hidden reasoning</thinking> answer",
+		Thinking: "native",
+	}
+
+	err := stage.Execute(context.Background(), state)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if state.Observe.FinalContent != "Visible  answer" {
+		t.Errorf("FinalContent = %q, want %q", state.Observe.FinalContent, "Visible  answer")
+	}
+	if state.Observe.FinalThinking != "native\nhidden reasoning" {
+		t.Errorf("FinalThinking = %q, want %q", state.Observe.FinalThinking, "native\nhidden reasoning")
+	}
+}
+
 func TestObserveStage_FinalContent_SetWhenNoToolCalls(t *testing.T) {
 	t.Parallel()
 	deps := &PipelineDeps{}
@@ -2437,6 +2458,35 @@ func TestFinalizeStage_SanitizesContent(t *testing.T) {
 	}
 	if state.Observe.FinalContent != "sanitized:raw content" {
 		t.Errorf("FinalContent = %q, want sanitized:raw content", state.Observe.FinalContent)
+	}
+}
+
+func TestFinalizeStage_SuppressesSilentReplyAfterFlush(t *testing.T) {
+	t.Parallel()
+	finalContent := "This is directed at Bảo Ly Content, not me. I should stay silent.NO_REPLY"
+	var flushed []providers.Message
+	deps := &PipelineDeps{
+		IsSilentReply: func(content string) bool {
+			return content == finalContent
+		},
+		FlushMessages: func(_ context.Context, _ string, messages []providers.Message) error {
+			flushed = append(flushed, messages...)
+			return nil
+		},
+	}
+	stage := NewFinalizeStage(deps)
+	state := defaultState()
+	state.Observe.FinalContent = finalContent
+
+	err := stage.Execute(context.Background(), state)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if state.Observe.FinalContent != "" {
+		t.Fatalf("FinalContent = %q, want empty after silent reply suppression", state.Observe.FinalContent)
+	}
+	if len(flushed) == 0 || flushed[len(flushed)-1].Content != finalContent {
+		t.Fatalf("flushed final content = %#v, want original silent reply persisted before suppression", flushed)
 	}
 }
 
@@ -3332,4 +3382,3 @@ func TestToolStage_Parallel_DefersNonToolMessages(t *testing.T) {
 		t.Errorf("pending[3].Content = %q, want nudge", pending[3].Content)
 	}
 }
-
