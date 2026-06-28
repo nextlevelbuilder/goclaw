@@ -164,13 +164,23 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 		}
 	}
 	if isGroup {
+		// Mention DROP CHECK is scoped to native group chats (CRM deal/task,
+		// plain groups) only. Open Channel sessions own their mention policy
+		// via shouldRequireMentionForOpenline above — re-applying the channel-
+		// level RequireMention flag here would silently drop, e.g., every
+		// Facebook Messenger customer turn (whose connector isn't in the
+		// require-mention whitelist) even though the upstream gate let it
+		// through. Text processing below (mention strip + readable rewrite)
+		// stays unconditional so Openline staff messages with bot BBCode tags
+		// still get cleaned up.
+		//
 		// Authority-ordered fallback: structured MENTIONED_LIST → raw
 		// MESSAGE_ORIGINAL → stripped MESSAGE. In group chats Bitrix24 strips
 		// the @mention from MESSAGE before sending the webhook, so checking
 		// MESSAGE alone misses every group mention. See
 		// plans/bitrix24-mcp-refactor/reports/retrospective.md §2 for context.
 		mentioned := c.isMentionedParams(&evt.Params)
-		if c.RequireMention() && !mentioned {
+		if !isOpenChannel && c.RequireMention() && !mentioned {
 			slog.Info("bitrix24 message: dropped missing mention",
 				"from_user_id", evt.Params.FromUserID,
 				"dialog_id", evt.Params.DialogID,
