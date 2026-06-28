@@ -715,7 +715,7 @@ func buildSkillsSection(skillsSummary string, hasSkillSearch, hasSkillManage boo
 			"## Skills (mandatory)",
 			"",
 			"Before replying, scan `<available_skills>` below.",
-			"If a skill clearly applies, read its SKILL.md at the `<location>` path with `read_file`, then follow it.",
+			"If a skill clearly applies, read its SKILL.md at the `<location>` path with `read_file` (use the EXACT absolute path provided), then follow it.",
 			"If multiple could apply, choose the most specific one. Never read more than one skill up front.",
 			"If none apply, proceed normally.",
 			"",
@@ -730,7 +730,7 @@ func buildSkillsSection(skillsSummary string, hasSkillSearch, hasSkillManage boo
 			"Before replying, check if a skill applies:",
 			"1. Run `skill_search` with **English keywords** describing the domain (e.g. \"weather\", \"translate\", \"github\").",
 			"   Even if the user writes in another language, always search in English.",
-			"2. If a match is found, read its SKILL.md at the returned `location` with `read_file`, then follow it.",
+			"2. If a match is found, read its SKILL.md at the returned `location` with `read_file` (use the EXACT absolute path provided), then follow it.",
 			"3. If multiple skills match, choose the most specific one. Never read more than one skill up front.",
 			"4. If no match, proceed normally.",
 			"",
@@ -763,7 +763,7 @@ func buildSkillsSection(skillsSummary string, hasSkillSearch, hasSkillManage boo
 func buildWorkspaceSection(workspace string, sandboxEnabled bool, containerDir string) []string {
 	// Matching TS: when sandboxed, display container workdir; add guidance about host paths for file tools.
 	displayDir := workspace
-	guidance := "All file tool paths resolve relative to this directory. Use relative paths (e.g. \"docs/notes.md\", \".\") — do not guess absolute paths."
+	guidance := "All file tool paths resolve relative to this directory. Use relative paths (e.g. \"docs/notes.md\", \".\") for your own files. For skills, use the EXACT absolute path provided."
 	if sandboxEnabled && containerDir != "" {
 		displayDir = containerDir
 		guidance = fmt.Sprintf(
