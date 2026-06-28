@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useContactResolver } from "@/hooks/use-contact-resolver";
 import { useAgentInstances, type UserInstance } from "../hooks/use-agent-instances";
 import { UserPickerCombobox } from "@/components/shared/user-picker-combobox";
+import { buildAgentInstanceDisplay, getAgentInstanceResolveIds } from "./agent-instance-display-utils";
 
 interface AgentInstancesTabProps {
   agentId: string;
@@ -53,13 +54,18 @@ export function AgentInstancesTab({ agentId }: AgentInstancesTabProps) {
   const isDirty = content !== originalContent;
 
   // Resolve user_ids to contact names for instances without metadata
-  const instanceUserIDs = useMemo(() => instances.map((i) => i.user_id), [instances]);
+  const instanceUserIDs = useMemo(() => getAgentInstanceResolveIds(instances), [instances]);
   const { resolve } = useContactResolver(instanceUserIDs);
 
   // Existing instance user_ids for deduplication
   const existingIDs = useMemo(() => new Set(instances.map((i) => i.user_id)), [instances]);
 
   const [addUserId, setAddUserId] = useState("");
+  const selectedInstanceDisplay = useMemo(() => {
+    if (!selected) return null;
+    const selectedInstance = instances.find((inst) => inst.user_id === selected) ?? { user_id: selected };
+    return buildAgentInstanceDisplay(selectedInstance, resolve);
+  }, [instances, resolve, selected]);
 
   const handleAddUser = (val: string) => {
     setAddUserId(val);
@@ -75,7 +81,7 @@ export function AgentInstancesTab({ agentId }: AgentInstancesTabProps) {
   return (
     <div className="flex gap-4" style={{ minHeight: 400 }}>
       {/* Instance list */}
-      <div className="w-64 shrink-0 space-y-1 overflow-y-auto rounded-md border p-2">
+      <div className="w-80 shrink-0 space-y-1 overflow-y-auto rounded-md border p-2">
         <div className="px-1 pb-2">
           <UserPickerCombobox
             value={addUserId}
@@ -121,7 +127,9 @@ export function AgentInstancesTab({ agentId }: AgentInstancesTabProps) {
             <div className="flex items-center gap-2">
               <FileText className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium">USER.md</span>
-              <span className="text-xs text-muted-foreground">— {selected}</span>
+              <span className="truncate text-xs text-muted-foreground" title={selectedInstanceDisplay?.rawUserId}>
+                — {selectedInstanceDisplay?.label ?? selected}
+              </span>
             </div>
             <Textarea
               className="flex-1 font-mono text-sm"
@@ -146,8 +154,7 @@ export function AgentInstancesTab({ agentId }: AgentInstancesTabProps) {
 
 function InstanceRow({ instance, isSelected, onClick, resolve }: { instance: UserInstance; isSelected: boolean; onClick: () => void; resolve: (id: string) => import("@/types/contact").ChannelContact | null }) {
   const lastSeen = instance.last_seen_at ? formatRelative(instance.last_seen_at) : null;
-  const contact = resolve(instance.user_id);
-  const displayName = instance.metadata?.display_name || instance.metadata?.chat_title || contact?.display_name || null;
+  const display = buildAgentInstanceDisplay(instance, resolve);
 
   return (
     <button
@@ -157,12 +164,9 @@ function InstanceRow({ instance, isSelected, onClick, resolve }: { instance: Use
         isSelected ? "bg-accent text-accent-foreground" : "hover:bg-muted/50"
       }`}
     >
-      <span className="truncate text-xs font-medium">
-        {displayName || instance.user_id}
+      <span className="whitespace-normal break-words text-xs font-medium leading-snug" title={display.label}>
+        {display.label}
       </span>
-      {displayName && (
-        <span className="truncate font-mono text-2xs text-muted-foreground">{instance.user_id}</span>
-      )}
       <div className="flex items-center gap-2">
         {instance.file_count > 0 && (
           <Badge variant="outline" className="text-2xs">
