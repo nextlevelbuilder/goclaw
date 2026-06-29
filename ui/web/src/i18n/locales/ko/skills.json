@@ -46,7 +46,9 @@
     "validCount": "{{total}}개 중 {{valid}}개 유효",
     "uploadCount": "업로드 ({{count}}개)",
     "successCount": "{{total}}개 중 {{success}}개 성공적으로 업로드됨",
-    "remove": "파일 제거"
+    "remove": "파일 제거",
+    "securityViolations": "보안 위반:",
+    "violationLine": "{{line}}번 줄: {{reason}}"
   },
   "edit": {
     "title": "스킬 편집",

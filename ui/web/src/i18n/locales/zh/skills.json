@@ -101,7 +101,9 @@
     "summaryUploaded": "已上传 {{count}} 个",
     "summaryWarnings": "{{count}} 个警告",
     "summaryUnchanged": "{{count}} 个未更改",
-    "summaryFailed": "{{count}} 个失败"
+    "summaryFailed": "{{count}} 个失败",
+    "securityViolations": "安全违规：",
+    "violationLine": "第 {{line}} 行：{{reason}}"
   },
   "edit": {
     "title": "编辑Skill",

@@ -24,4 +24,12 @@ export class ApiError extends Error {
     super(message);
     this.name = "ApiError";
   }
+
+  /** Extract violations from details if present (for skill upload security errors). */
+  getViolations(): Array<{ line: number; reason: string }> | null {
+    if (!this.details || typeof this.details !== "object") return null;
+    const violations = (this.details as Record<string, unknown>).violations;
+    if (!Array.isArray(violations)) return null;
+    return violations as Array<{ line: number; reason: string }>;
+  }
 }

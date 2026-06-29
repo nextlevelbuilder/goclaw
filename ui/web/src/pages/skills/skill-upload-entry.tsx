@@ -153,6 +153,21 @@ export function SkillSubtitle({
   t: TFunc;
 }) {
   if (skill.status === "invalid" || skill.status === "error") {
+    // Display security violations as structured list if available
+    if (skill.violations && skill.violations.length > 0) {
+      return (
+        <div className="text-xs text-destructive space-y-0.5">
+          <p className="font-medium">{t("upload.securityViolations")}</p>
+          <ul className="list-disc list-inside space-y-0.5 pl-0">
+            {skill.violations.map((v, i) => (
+              <li key={i} className="text-destructive">
+                {t("upload.violationLine", { line: v.line, reason: v.reason })}
+              </li>
+            ))}
+          </ul>
+        </div>
+      );
+    }
     return (
       <p className="text-xs text-destructive truncate">
         {skill.error ? t(skill.error) : t("upload.failed")}

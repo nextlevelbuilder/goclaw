@@ -101,7 +101,9 @@
     "summaryUploaded": "{{count}} đã tải lên",
     "summaryWarnings": "{{count}} cảnh báo",
     "summaryUnchanged": "{{count}} không đổi",
-    "summaryFailed": "{{count}} thất bại"
+    "summaryFailed": "{{count}} thất bại",
+    "securityViolations": "Vi phạm bảo mật:",
+    "violationLine": "Dòng {{line}}: {{reason}}"
   },
   "edit": {
     "title": "Chỉnh sửa skill",

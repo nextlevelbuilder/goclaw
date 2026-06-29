@@ -87,7 +87,9 @@ export class HttpClient {
       const nested = typeof err.error === "object" && err.error !== null ? err.error : null;
       const code = nested?.code ?? err.code ?? "HTTP_ERROR";
       const message = nested?.message ?? (typeof err.error === "string" ? err.error : null) ?? err.message ?? res.statusText;
-      throw new ApiError(code, message);
+      // Capture violations from API response for skill upload errors
+      const details = nested || err;
+      throw new ApiError(code, message, details);
     }
 
     return this.readJson<T>(res);

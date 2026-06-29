@@ -19,6 +19,8 @@ export interface SkillEntry {
   slug?: string;
   contentHash?: string;
   error?: string;
+  /** Structured security violations (line number + reason) from failed upload. */
+  violations?: Array<{ line: number; reason: string }>;
 }
 
 export interface FileEntry {

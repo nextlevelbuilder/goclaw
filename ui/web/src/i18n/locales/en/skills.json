@@ -151,7 +151,9 @@
     "summaryUploaded": "{{count}} uploaded",
     "summaryWarnings": "{{count}} warning(s)",
     "summaryUnchanged": "{{count}} unchanged",
-    "summaryFailed": "{{count}} failed"
+    "summaryFailed": "{{count}} failed",
+    "securityViolations": "Security violations:",
+    "violationLine": "Line {{line}}: {{reason}}"
   },
   "edit": {
     "title": "Edit Skill",

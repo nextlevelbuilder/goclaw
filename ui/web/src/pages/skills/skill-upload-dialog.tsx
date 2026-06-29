@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Upload } from "lucide-react";
+import { ApiError } from "@/api/errors";
 import {
   Dialog,
   DialogContent,
@@ -188,6 +189,17 @@ export function SkillUploadDialog({ open, onOpenChange, onUpload }: SkillUploadD
           ),
         );
       } catch (err) {
+        // Extract violations if present (from security scan failure)
+        let violations: Array<{ line: number; reason: string }> | undefined;
+        let errorMsg = t("upload.failed");
+
+        if (err instanceof ApiError) {
+          errorMsg = err.message;
+          violations = err.getViolations() ?? undefined;
+        } else if (err instanceof Error) {
+          errorMsg = err.message;
+        }
+
         setEntries((prev) =>
           prev.map((e) =>
             e.id === fileEntry.id
@@ -198,7 +210,8 @@ export function SkillUploadDialog({ open, onOpenChange, onUpload }: SkillUploadD
                       ? {
                           ...s,
                           status: "error" as SkillStatus,
-                          error: err instanceof Error ? err.message : t("upload.failed"),
+                          error: errorMsg,
+                          violations,
                         }
                       : s,
                   ),
