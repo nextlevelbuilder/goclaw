@@ -128,20 +128,21 @@ func registerProviders(registry *providers.Registry, cfg *config.Config, modelRe
 	}
 
 	// Local / self-hosted Ollama — gated on Host, no API key required.
-	// Ollama's OpenAI-compat endpoint accepts any non-empty Bearer value.
+	// Uses the native Ollama Go client for proper options.num_ctx support.
 	if cfg.Providers.Ollama.Host != "" {
 		host := cfg.Providers.Ollama.Host
-		registry.Register(providers.NewOpenAIProvider("ollama", "ollama", host+"/v1", "llama3.3"))
+		registry.Register(providers.NewOllamaProvider("ollama", host, "llama3.3", nil, nil))
 		slog.Info("registered provider", "name", "ollama")
 	}
 
 	// Ollama Cloud — API key required (generate at ollama.com/settings/keys).
+	// Uses the native Ollama Go client; the cloud endpoint is Ollama-native, not OpenAI-compat.
 	if cfg.Providers.OllamaCloud.APIKey != "" {
 		base := cfg.Providers.OllamaCloud.APIBase
 		if base == "" {
-			base = "https://ollama.com/v1"
+			base = "https://ollama.com"
 		}
-		registry.Register(providers.NewOpenAIProvider("ollama-cloud", cfg.Providers.OllamaCloud.APIKey, base, "llama3.3"))
+		registry.Register(providers.NewOllamaProvider("ollama-cloud", base, "llama3.3", nil, nil))
 		slog.Info("registered provider", "name", "ollama-cloud")
 	}
 
@@ -299,9 +300,11 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 		if p.ProviderType == store.ProviderOllama {
 			host := p.APIBase
 			if host == "" {
-				host = "http://localhost:11434/v1"
+				host = "http://localhost:11434"
 			}
-			registry.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, "ollama", config.DockerLocalhost(host), "llama3.3"))
+			numCtx := resolveOllamaNumCtx(&p, config.DockerLocalhost(host), "")
+			prov := providers.NewOllamaProvider(p.Name, config.DockerLocalhost(host), "llama3.3", numCtx, nil)
+			registry.RegisterForTenant(p.TenantID, prov)
 			slog.Info("registered provider from DB", "name", p.Name)
 			continue
 		}
@@ -377,9 +380,11 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 		case store.ProviderOllamaCloud:
 			base := p.APIBase
 			if base == "" {
-				base = "https://ollama.com/v1"
+				base = "https://ollama.com"
 			}
-			registry.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, p.APIKey, base, "llama3.3"))
+			numCtx := resolveOllamaNumCtx(&p, base, p.APIKey)
+			prov := providers.NewOllamaProvider(p.Name, base, "llama3.3", numCtx, nil)
+			registry.RegisterForTenant(p.TenantID, prov)
 		case store.ProviderNovita:
 			base := p.APIBase
 			if base == "" {
@@ -438,6 +443,27 @@ func openAIProviderDefaults(providerType, apiBase string) (string, string) {
 	default:
 		return apiBase, ""
 	}
+}
+
+// resolveOllamaNumCtx returns the num_ctx to use for an Ollama provider, or nil
+// when the built-in default should be used (provider handles it internally).
+// Priority:
+//  1. User-configured num_ctx from provider settings JSONB (explicit override wins).
+//  2. Value queried from Ollama /api/show for the provider's default model.
+//  3. nil when neither is available (OllamaProvider omits options.num_ctx, using Ollama's default).
+func resolveOllamaNumCtx(p *store.LLMProviderData, apiBase, apiKey string) *int {
+	if s := store.ParseOllamaSettings(p.Settings); s != nil {
+		return s.NumCtx
+	}
+	// Query the Ollama API for the model's native context length.
+	// Use a short timeout so startup is not blocked by a slow/absent Ollama server.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	numCtx := providers.FetchOllamaModelContext(ctx, apiBase, "llama3.3", apiKey)
+	if numCtx != providers.OllamaDefaultNumCtx {
+		return &numCtx
+	}
+	return nil
 }
 
 func registerClaudeCLIFromConfig(registry *providers.Registry, cfg *config.Config) {

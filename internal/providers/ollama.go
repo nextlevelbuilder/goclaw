@@ -1,0 +1,295 @@
+package providers
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"net/url"
+	"strings"
+
+	ollamaapi "github.com/ollama/ollama/api"
+)
+
+// OllamaProvider implements Provider using the official Ollama Go client.
+// It sends requests to the native /api/chat endpoint, which honors
+// options.num_ctx, tool calls, and thinking (think parameter).
+type OllamaProvider struct {
+	name         string
+	apiBase      string
+	defaultModel string
+	apiKey       string
+	numCtx       *int
+	client       *ollamaapi.Client
+	retryConfig  RetryConfig
+}
+
+// NewOllamaProvider creates an OllamaProvider.
+// apiBase is the Ollama root URL (e.g. "http://localhost:11434").
+// The /v1 suffix is stripped automatically if present.
+// apiKey is optional; Ollama does not require authentication by default.
+// numCtx overrides the model's default context window when non-nil.
+// httpClient may be nil to use a default client.
+func NewOllamaProvider(name, apiBase, defaultModel string, numCtx *int, httpClient *http.Client) *OllamaProvider {
+	// Strip trailing /v1 so the Ollama client reaches the root API.
+	base := strings.TrimRight(strings.TrimSuffix(strings.TrimRight(apiBase, "/"), "/v1"), "/")
+	if base == "" {
+		base = "http://localhost:11434"
+	}
+
+	parsedURL, err := url.Parse(base)
+	if err != nil {
+		slog.Warn("ollama: invalid api_base, falling back to localhost", "api_base", base, "error", err)
+		parsedURL, _ = url.Parse("http://localhost:11434")
+	}
+
+	if httpClient == nil {
+		httpClient = NewDefaultHTTPClient()
+	}
+
+	return &OllamaProvider{
+		name:         name,
+		apiBase:      base,
+		defaultModel: defaultModel,
+		numCtx:       numCtx,
+		client:       ollamaapi.NewClient(parsedURL, httpClient),
+		retryConfig:  DefaultRetryConfig(),
+	}
+}
+
+// Name returns the provider identifier.
+func (p *OllamaProvider) Name() string { return p.name }
+
+// DefaultModel returns the default model.
+func (p *OllamaProvider) DefaultModel() string { return p.defaultModel }
+
+// Capabilities declares what Ollama supports.
+func (p *OllamaProvider) Capabilities() ProviderCapabilities {
+	return ProviderCapabilities{
+		Streaming:        true,
+		ToolCalling:      true,
+		StreamWithTools:  true,
+		Thinking:         false,
+		Vision:           false,
+		CacheControl:     false,
+		MaxContextWindow: OllamaDefaultNumCtx,
+		TokenizerID:      "",
+	}
+}
+
+// Chat sends a non-streaming chat request to Ollama and returns the full response.
+func (p *OllamaProvider) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
+	var result *ChatResponse
+	var chatErr error
+
+	fn := func() (*ChatResponse, error) {
+		var finalResp *ChatResponse
+		streamFn := func(resp ollamaapi.ChatResponse) error {
+			if resp.Done {
+				finalResp = p.buildResponse(resp)
+			}
+			return nil
+		}
+		if err := p.client.Chat(ctx, p.buildRequest(req, false), streamFn); err != nil {
+			return nil, fmt.Errorf("%s: chat: %w", p.name, err)
+		}
+		if finalResp == nil {
+			finalResp = &ChatResponse{FinishReason: "stop"}
+		}
+		return finalResp, nil
+	}
+
+	result, chatErr = RetryDo(ctx, p.retryConfig, fn)
+	return result, chatErr
+}
+
+// ChatStream sends a streaming chat request to Ollama, calling onChunk for each
+// content delta, and returns the accumulated final response.
+func (p *OllamaProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk func(StreamChunk)) (*ChatResponse, error) {
+	result := &ChatResponse{FinishReason: "stop"}
+
+	fn := func() (*ChatResponse, error) {
+		acc := &ChatResponse{FinishReason: "stop"}
+
+		streamFn := func(resp ollamaapi.ChatResponse) error {
+			delta := resp.Message.Content
+			if delta != "" {
+				acc.Content += delta
+				onChunk(StreamChunk{Content: delta})
+			}
+
+			thinking := resp.Message.Thinking
+			if thinking != "" {
+				acc.Thinking += thinking
+				onChunk(StreamChunk{Thinking: thinking})
+			}
+
+			if resp.Done {
+				// Tool calls come in the final response message.
+				for _, tc := range resp.Message.ToolCalls {
+					call := ToolCall{
+						ID:        tc.ID,
+						Name:      tc.Function.Name,
+						Arguments: tc.Function.Arguments.ToMap(),
+					}
+					acc.ToolCalls = append(acc.ToolCalls, call)
+				}
+				acc.FinishReason = mapDoneReason(resp.DoneReason)
+				if len(acc.ToolCalls) > 0 && acc.FinishReason != "length" {
+					acc.FinishReason = "tool_calls"
+				}
+				acc.Usage = &Usage{
+					PromptTokens:     resp.PromptEvalCount,
+					CompletionTokens: resp.EvalCount,
+					TotalTokens:      resp.PromptEvalCount + resp.EvalCount,
+					RequestCount:     1,
+				}
+			}
+			return nil
+		}
+
+		if err := p.client.Chat(ctx, p.buildRequest(req, true), streamFn); err != nil {
+			return nil, fmt.Errorf("%s: chat stream: %w", p.name, err)
+		}
+		return acc, nil
+	}
+
+	var chatErr error
+	result, chatErr = RetryDo(ctx, p.retryConfig, fn)
+	return result, chatErr
+}
+
+// buildRequest converts a generic ChatRequest into an Ollama-native api.ChatRequest.
+func (p *OllamaProvider) buildRequest(req ChatRequest, stream bool) *ollamaapi.ChatRequest {
+	model := req.Model
+	if model == "" {
+		model = p.defaultModel
+	}
+
+	msgs := make([]ollamaapi.Message, 0, len(req.Messages))
+	for _, m := range req.Messages {
+		msg := ollamaapi.Message{
+			Role:       m.Role,
+			Content:    m.Content,
+			ToolCallID: m.ToolCallID,
+		}
+		// Map outgoing tool calls on assistant messages.
+		for _, tc := range m.ToolCalls {
+			args := ollamaapi.NewToolCallFunctionArguments()
+			for k, v := range tc.Arguments {
+				args.Set(k, v)
+			}
+			msg.ToolCalls = append(msg.ToolCalls, ollamaapi.ToolCall{
+				ID: tc.ID,
+				Function: ollamaapi.ToolCallFunction{
+					Name:      tc.Name,
+					Arguments: args,
+				},
+			})
+		}
+		msgs = append(msgs, msg)
+	}
+
+	ollamaReq := &ollamaapi.ChatRequest{
+		Model:    model,
+		Messages: msgs,
+		Stream:   &stream,
+	}
+
+	// Inject tools.
+	for _, td := range req.Tools {
+		if td.Type != "function" || td.Function == nil {
+			continue
+		}
+		props := ollamaapi.NewToolPropertiesMap()
+		if params, ok := td.Function.Parameters["properties"].(map[string]any); ok {
+			for propName, propVal := range params {
+				if propMap, ok2 := propVal.(map[string]any); ok2 {
+					prop := ollamaapi.ToolProperty{}
+					if desc, ok3 := propMap["description"].(string); ok3 {
+						prop.Description = desc
+					}
+					if typ, ok3 := propMap["type"].(string); ok3 {
+						prop.Type = ollamaapi.PropertyType{typ}
+					}
+					props.Set(propName, prop)
+				}
+			}
+		}
+		required, _ := td.Function.Parameters["required"].([]string)
+		tool := ollamaapi.Tool{
+			Type: "function",
+			Function: ollamaapi.ToolFunction{
+				Name:        td.Function.Name,
+				Description: td.Function.Description,
+				Parameters: ollamaapi.ToolFunctionParameters{
+					Type:       "object",
+					Required:   required,
+					Properties: props,
+				},
+			},
+		}
+		ollamaReq.Tools = append(ollamaReq.Tools, tool)
+	}
+
+	// Build options map: num_ctx + caller overrides.
+	opts := make(map[string]any)
+	if p.numCtx != nil {
+		opts["num_ctx"] = *p.numCtx
+	}
+	if temp, ok := req.Options[OptTemperature]; ok {
+		opts["temperature"] = temp
+	}
+	if maxTokens, ok := req.Options[OptMaxTokens]; ok {
+		opts["num_predict"] = maxTokens
+	}
+	ollamaReq.Options = opts
+
+	slog.Debug("ollama.request", "provider", p.name, "model", model, "num_ctx", opts["num_ctx"])
+	return ollamaReq
+}
+
+// buildResponse converts a final Ollama ChatResponse into the generic ChatResponse.
+func (p *OllamaProvider) buildResponse(resp ollamaapi.ChatResponse) *ChatResponse {
+	result := &ChatResponse{
+		Content:      resp.Message.Content,
+		Thinking:     resp.Message.Thinking,
+		FinishReason: mapDoneReason(resp.DoneReason),
+	}
+
+	for _, tc := range resp.Message.ToolCalls {
+		result.ToolCalls = append(result.ToolCalls, ToolCall{
+			ID:        tc.ID,
+			Name:      tc.Function.Name,
+			Arguments: tc.Function.Arguments.ToMap(),
+		})
+	}
+
+	if len(result.ToolCalls) > 0 && result.FinishReason != "length" {
+		result.FinishReason = "tool_calls"
+	}
+
+	result.Usage = &Usage{
+		PromptTokens:     resp.PromptEvalCount,
+		CompletionTokens: resp.EvalCount,
+		TotalTokens:      resp.PromptEvalCount + resp.EvalCount,
+		RequestCount:     1,
+	}
+
+	return result
+}
+
+// mapDoneReason converts an Ollama done_reason string to the standard finish_reason.
+func mapDoneReason(reason string) string {
+	switch reason {
+	case "stop":
+		return "stop"
+	case "length":
+		return "length"
+	case "tool_calls", "function_call":
+		return "tool_calls"
+	default:
+		return "stop"
+	}
+}
+

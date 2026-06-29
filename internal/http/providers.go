@@ -248,15 +248,14 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) providerRu
 	}
 	// Ollama doesn't need an API key — handle before the key guard (same as startup).
 	// In Docker, swap localhost → host.docker.internal so the container can reach the host.
-	// api_base is stored with /v1 (normalized at write time), so no suffix appending needed.
 	if p.ProviderType == store.ProviderOllama {
 		host := p.APIBase
 		if host == "" {
-			host = "http://localhost:11434/v1"
+			host = "http://localhost:11434"
 		}
 		dockerHost := config.DockerLocalhost(host)
-		prov := providers.NewOpenAIProvider(p.Name, "ollama", dockerHost, "llama3.3")
-		h.applyOllamaNumCtx(prov, p, dockerHost, "")
+		numCtx := h.resolveOllamaNumCtx(p, dockerHost, "")
+		prov := providers.NewOllamaProvider(p.Name, dockerHost, "llama3.3", numCtx, nil)
 		h.providerReg.RegisterForTenant(p.TenantID, prov)
 		return providerRuntimeRegistered
 	}
@@ -346,10 +345,10 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) providerRu
 	case store.ProviderOllamaCloud:
 		base := apiBase
 		if base == "" {
-			base = "https://ollama.com/v1"
+			base = "https://ollama.com"
 		}
-		prov := providers.NewOpenAIProvider(p.Name, p.APIKey, base, "llama3.3")
-		h.applyOllamaNumCtx(prov, p, base, p.APIKey)
+		numCtx := h.resolveOllamaNumCtx(p, base, p.APIKey)
+		prov := providers.NewOllamaProvider(p.Name, base, "llama3.3", numCtx, nil)
 		h.providerReg.RegisterForTenant(p.TenantID, prov)
 	default:
 		base, model := openAIProviderDefaults(p.ProviderType, apiBase)
@@ -359,22 +358,27 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) providerRu
 	return providerRuntimeRegistered
 }
 
-// applyOllamaNumCtx configures the context window size on an Ollama OpenAIProvider.
-// Priority:
+// resolveOllamaNumCtx returns the num_ctx to pass to NewOllamaProvider, or nil
+// when the built-in default should apply. Priority:
 //  1. User-configured num_ctx from provider settings JSONB.
-//  2. Value queried from Ollama /api/show for the provider's default model.
-//  3. Built-in default (131072) is used automatically when neither is available.
-func (h *ProvidersHandler) applyOllamaNumCtx(prov *providers.OpenAIProvider, p *store.LLMProviderData, apiBase, apiKey string) {
+//  2. Value queried from Ollama /api/show.
+//  3. nil (OllamaProvider omits options.num_ctx, using Ollama's model default).
+func (h *ProvidersHandler) resolveOllamaNumCtx(p *store.LLMProviderData, apiBase, apiKey string) *int {
+	slog.Debug("ollama.startup: resolveOllamaNumCtx called", "provider", p.Name, "api_base", apiBase)
 	if s := store.ParseOllamaSettings(p.Settings); s != nil {
-		prov.WithOllamaNumCtx(*s.NumCtx)
-		return
+		slog.Info("ollama.startup: using num_ctx from provider settings", "provider", p.Name, "num_ctx", *s.NumCtx)
+		return s.NumCtx
 	}
+	slog.Debug("ollama.startup: no settings num_ctx, querying /api/show", "provider", p.Name)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	numCtx := providers.FetchOllamaModelContext(ctx, apiBase, prov.DefaultModel(), apiKey)
+	numCtx := providers.FetchOllamaModelContext(ctx, apiBase, "llama3.3", apiKey)
 	if numCtx != providers.OllamaDefaultNumCtx {
-		prov.WithOllamaNumCtx(numCtx)
+		slog.Info("ollama.startup: applying num_ctx from /api/show", "provider", p.Name, "num_ctx", numCtx)
+		return &numCtx
 	}
+	slog.Debug("ollama.startup: /api/show returned default, using nil (model default)", "provider", p.Name)
+	return nil
 }
 
 func openAIProviderDefaults(providerType, apiBase string) (string, string) {
@@ -389,9 +393,9 @@ func openAIProviderDefaults(providerType, apiBase string) (string, string) {
 	}
 }
 
-// normalizeOllamaAPIBase ensures Ollama and OllamaCloud api_base values include the
-// /v1 suffix required for OpenAI-compatible endpoints. Normalizing at write time means
-// resolveAPIBase() always returns a ready-to-use base URL.
+// normalizeOllamaAPIBase normalizes the api_base stored for Ollama providers.
+// The /v1 suffix is added at write time for backward compatibility; NewOllamaProvider
+// strips it automatically before constructing the native Ollama client URL.
 func normalizeOllamaAPIBase(p *store.LLMProviderData) {
 	if p.ProviderType != store.ProviderOllama && p.ProviderType != store.ProviderOllamaCloud {
 		return
