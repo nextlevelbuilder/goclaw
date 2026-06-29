@@ -40,27 +40,27 @@ func isDashScopeAPIBase(apiBase string) bool {
 	return strings.Contains(strings.ToLower(apiBase), "dashscope")
 }
 
-// dashScopePassthroughKeys is true when enable_thinking / thinking_budget may be added to the JSON body.
-// Uses the same DashScope/Bailian route detection as prompt-cache wrapping.
-func (p *OpenAIProvider) dashScopePassthroughKeys() bool {
-	return p.isDashScope()
-}
-
-// isOllamaEndpoint returns true for local or cloud Ollama inference endpoints.
-// Ollama requires options.num_ctx in the request body to control the context window
-// (prevents context-window errors on long conversations).
-// Uses 3-source detection (URL + providerType + name) to handle reverse-proxied endpoints.
+// isOllamaEndpoint returns true for local or self-hosted Ollama instances.
+// Ollama models such as qwq and deepseek-r1 have thinking enabled by default;
+// goclaw must send think=false to suppress it unless the user explicitly opts in.
+// Detection uses providerType (DB), name, and apiBase so both ProviderOllama and
+// ProviderOllamaCloud are covered, as well as self-hosted instances behind a proxy.
 func (p *OpenAIProvider) isOllamaEndpoint() bool {
-	if strings.Contains(strings.ToLower(p.apiBase), "ollama") {
-		return true
-	}
-	if strings.Contains(strings.ToLower(strings.TrimSpace(p.providerType)), "ollama") {
+	pt := strings.ToLower(strings.TrimSpace(p.providerType))
+	if pt == "ollama" || pt == "ollama_cloud" {
 		return true
 	}
 	if strings.Contains(strings.ToLower(p.name), "ollama") {
 		return true
 	}
-	return false
+	b := strings.ToLower(p.apiBase)
+	return strings.Contains(b, "11434") || strings.Contains(b, "ollama")
+}
+
+// dashScopePassthroughKeys is true when enable_thinking / thinking_budget may be added to the JSON body.
+// Uses the same DashScope/Bailian route detection as prompt-cache wrapping.
+func (p *OpenAIProvider) dashScopePassthroughKeys() bool {
+	return p.isDashScope()
 }
 
 // ollamaNativeURL returns the full URL for Ollama's native /api/chat endpoint.

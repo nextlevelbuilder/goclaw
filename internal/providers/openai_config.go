@@ -143,9 +143,12 @@ func (p *OpenAIProvider) OllamaNumCtx() *int {
 	return p.ollamaNumCtx
 }
 
-func (p *OpenAIProvider) Name() string           { return p.name }
-func (p *OpenAIProvider) DefaultModel() string   { return p.defaultModel }
-func (p *OpenAIProvider) SupportsThinking() bool { return true }
+func (p *OpenAIProvider) Name() string         { return p.name }
+func (p *OpenAIProvider) DefaultModel() string { return p.defaultModel }
+
+// SupportsThinking returns false for Ollama endpoints, which disable thinking by default
+// (models like qwq and deepseek-r1 have thinking on by default and goclaw suppresses it).
+func (p *OpenAIProvider) SupportsThinking() bool { return !p.isOllamaEndpoint() }
 func (p *OpenAIProvider) APIKey() string         { return p.apiKey }
 func (p *OpenAIProvider) APIBase() string        { return p.apiBase }
 func (p *OpenAIProvider) AuthPrefix() string     { return p.authPrefix }
@@ -157,7 +160,7 @@ func (p *OpenAIProvider) Capabilities() ProviderCapabilities {
 		Streaming:        true,
 		ToolCalling:      true,
 		StreamWithTools:  true,
-		Thinking:         true,
+		Thinking:         !p.isOllamaEndpoint(),
 		Vision:           true,
 		CacheControl:     false,
 		MaxContextWindow: 128_000,
