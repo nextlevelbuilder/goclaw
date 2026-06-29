@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -253,7 +254,10 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) providerRu
 		if host == "" {
 			host = "http://localhost:11434/v1"
 		}
-		h.providerReg.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, "ollama", config.DockerLocalhost(host), "llama3.3"))
+		dockerHost := config.DockerLocalhost(host)
+		prov := providers.NewOpenAIProvider(p.Name, "ollama", dockerHost, "llama3.3")
+		h.applyOllamaNumCtx(prov, p, dockerHost, "")
+		h.providerReg.RegisterForTenant(p.TenantID, prov)
 		return providerRuntimeRegistered
 	}
 	// Vertex supports ADC (empty api_key) — handle before the generic key guard.
@@ -339,12 +343,38 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) providerRu
 			"User-Agent": store.KimiCodingRequiredUserAgent,
 		})
 		h.providerReg.RegisterForTenant(p.TenantID, prov)
+	case store.ProviderOllamaCloud:
+		base := apiBase
+		if base == "" {
+			base = "https://ollama.com/v1"
+		}
+		prov := providers.NewOpenAIProvider(p.Name, p.APIKey, base, "llama3.3")
+		h.applyOllamaNumCtx(prov, p, base, p.APIKey)
+		h.providerReg.RegisterForTenant(p.TenantID, prov)
 	default:
 		base, model := openAIProviderDefaults(p.ProviderType, apiBase)
 		prov := providers.NewOpenAIProvider(p.Name, p.APIKey, base, model)
 		h.providerReg.RegisterForTenant(p.TenantID, prov)
 	}
 	return providerRuntimeRegistered
+}
+
+// applyOllamaNumCtx configures the context window size on an Ollama OpenAIProvider.
+// Priority:
+//  1. User-configured num_ctx from provider settings JSONB.
+//  2. Value queried from Ollama /api/show for the provider's default model.
+//  3. Built-in default (131072) is used automatically when neither is available.
+func (h *ProvidersHandler) applyOllamaNumCtx(prov *providers.OpenAIProvider, p *store.LLMProviderData, apiBase, apiKey string) {
+	if s := store.ParseOllamaSettings(p.Settings); s != nil {
+		prov.WithOllamaNumCtx(*s.NumCtx)
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	numCtx := providers.FetchOllamaModelContext(ctx, apiBase, prov.DefaultModel(), apiKey)
+	if numCtx != providers.OllamaDefaultNumCtx {
+		prov.WithOllamaNumCtx(numCtx)
+	}
 }
 
 func openAIProviderDefaults(providerType, apiBase string) (string, string) {

@@ -141,6 +141,13 @@
     "workDirPlaceholder": "/tmp/workspace",
     "workDirHint": "Thư mục làm việc cho tiến trình con agent (tùy chọn)"
   },
+  "ollama": {
+    "title": "Cấu hình Ollama",
+    "description": "Các cài đặt dành riêng cho Ollama",
+    "numCtx": "Cửa sổ ngữ cảnh (tokens)",
+    "numCtxPlaceholder": "Bỏ trống để tự động phát hiện từ mô hình",
+    "numCtxHelp": "Số lượng token tối đa. Bỏ trống để tự động phát hiện qua API Ollama."
+  },
   "oauth": {
     "checkingStatus": "Đang kiểm tra trạng thái xác thực...",
     "authSuccessful": "Xác thực thành công!",

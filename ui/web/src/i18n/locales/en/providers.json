@@ -136,6 +136,13 @@
     "workDirPlaceholder": "/tmp/workspace",
     "workDirHint": "Working directory for agent subprocesses (optional)"
   },
+  "ollama": {
+    "title": "Ollama Configuration",
+    "description": "Ollama-specific settings",
+    "numCtx": "Context Window (tokens)",
+    "numCtxPlaceholder": "Leave empty to auto-detect from model",
+    "numCtxHelp": "Maximum number of tokens. Leave empty to auto-detect via Ollama API."
+  },
   "oauth": {
     "checkingStatus": "Checking authentication status...",
     "authSuccessful": "Authentication successful!",

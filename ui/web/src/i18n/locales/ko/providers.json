@@ -136,6 +136,13 @@
     "workDirPlaceholder": "/tmp/workspace",
     "workDirHint": "에이전트 서브프로세스의 작업 디렉터리 (선택사항)"
   },
+  "ollama": {
+    "title": "Ollama 구성",
+    "description": "Ollama 고유 설정",
+    "numCtx": "컨텍스트 윈도우(토큰)",
+    "numCtxPlaceholder": "모델에서 자동 감지하려면 비워두세요",
+    "numCtxHelp": "최대 토큰 수입니다. Ollama API를 통해 자동 감지하려면 비워두세요."
+  },
   "oauth": {
     "checkingStatus": "인증 상태 확인 중...",
     "authSuccessful": "인증 성공!",

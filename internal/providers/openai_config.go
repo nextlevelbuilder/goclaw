@@ -22,7 +22,8 @@ type OpenAIProvider struct {
 	retryConfig  RetryConfig
 	middlewares  RequestMiddleware // composed middleware chain (nil = no-op)
 	registry     ModelRegistry     // model resolution registry (nil = skip)
-	noAuthHeader bool              // when true, doRequest() skips setting Authorization (e.g. Vertex OAuth transport injects its own)
+	noAuthHeader  bool              // when true, doRequest() skips setting Authorization (e.g. Vertex OAuth transport injects its own)
+	ollamaNumCtx  *int              // optional Ollama options.num_ctx override (nil = use queried or default value)
 }
 
 func NewOpenAIProvider(name, apiKey, apiBase, defaultModel string) *OpenAIProvider {
@@ -125,6 +126,21 @@ func (p *OpenAIProvider) WithHTTPClient(c *http.Client) *OpenAIProvider {
 func (p *OpenAIProvider) WithoutAuthHeader() *OpenAIProvider {
 	p.noAuthHeader = true
 	return p
+}
+
+// WithOllamaNumCtx sets a static options.num_ctx value injected on every Ollama request.
+// When set, this takes precedence over the value queried from /api/show and the built-in
+// default of 131072. A non-positive value is ignored.
+func (p *OpenAIProvider) WithOllamaNumCtx(n int) *OpenAIProvider {
+	if n > 0 {
+		p.ollamaNumCtx = &n
+	}
+	return p
+}
+
+// OllamaNumCtx returns the configured num_ctx override, or nil if not set.
+func (p *OpenAIProvider) OllamaNumCtx() *int {
+	return p.ollamaNumCtx
 }
 
 func (p *OpenAIProvider) Name() string           { return p.name }

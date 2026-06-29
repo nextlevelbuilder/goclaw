@@ -39,6 +39,7 @@ function deriveState(provider: ProviderData) {
     acpIdleTTL: (s?.idle_ttl as string) || "",
     acpPermMode: (s?.perm_mode as string) || "approve-all",
     acpWorkDir: (s?.work_dir as string) || "",
+    numCtx: (s?.num_ctx as string) || "",
   };
 }
 
@@ -64,6 +65,7 @@ export function ProviderAdvancedDialog({
   const [acpIdleTTL, setAcpIdleTTL] = useState(init.acpIdleTTL);
   const [acpPermMode, setAcpPermMode] = useState(init.acpPermMode);
   const [acpWorkDir, setAcpWorkDir] = useState(init.acpWorkDir);
+  const [numCtx, setNumCtx] = useState(init.numCtx);
 
   // Re-sync when dialog opens
   useEffect(() => {
@@ -75,7 +77,8 @@ export function ProviderAdvancedDialog({
     setAcpIdleTTL(s.acpIdleTTL);
     setAcpPermMode(s.acpPermMode);
     setAcpWorkDir(s.acpWorkDir);
-     
+    setNumCtx(s.numCtx);
+
   }, [open, provider]);
 
   const [saving, setSaving] = useState(false);
@@ -98,6 +101,12 @@ export function ProviderAdvancedDialog({
         if (Object.keys(settings).length > 0) data.settings = settings;
       } else if (isStandard) {
         data.api_base = apiBase.trim() || undefined;
+        // Handle Ollama-specific settings
+        if (provider.provider_type === "ollama" || provider.provider_type === "ollama_cloud") {
+          const settings: Record<string, unknown> = {};
+          if (numCtx.trim()) settings.num_ctx = parseInt(numCtx.trim(), 10);
+          if (Object.keys(settings).length > 0) data.settings = settings;
+        }
       }
 
       await onUpdate(provider.id, data);
@@ -153,6 +162,30 @@ export function ProviderAdvancedDialog({
                   placeholder={typeInfo?.placeholder || typeInfo?.apiBase || "https://api.example.com/v1"}
                   className="text-base md:text-sm"
                 />
+              </div>
+            </>
+          )}
+
+          {/* Ollama Configuration */}
+          {(provider.provider_type === "ollama" || provider.provider_type === "ollama_cloud") && (
+            <>
+              <ConfigGroupHeader
+                title={t("ollama.title")}
+                description={t("ollama.description")}
+              />
+              <div className="space-y-2">
+                <Label htmlFor="numCtx">{t("ollama.numCtx")}</Label>
+                <Input
+                  id="numCtx"
+                  type="number"
+                  value={numCtx}
+                  onChange={(e) => setNumCtx(e.target.value)}
+                  placeholder={t("ollama.numCtxPlaceholder")}
+                  min="512"
+                  max="1000000"
+                  className="text-base md:text-sm"
+                />
+                <p className="text-xs text-muted-foreground">{t("ollama.numCtxHelp")}</p>
               </div>
             </>
           )}

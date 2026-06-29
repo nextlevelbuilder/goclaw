@@ -46,6 +46,23 @@ func (p *OpenAIProvider) dashScopePassthroughKeys() bool {
 	return p.isDashScope()
 }
 
+// isOllamaEndpoint returns true for local or cloud Ollama inference endpoints.
+// Ollama requires options.num_ctx in the request body to control the context window
+// (prevents context-window errors on long conversations).
+// Uses 3-source detection (URL + providerType + name) to handle reverse-proxied endpoints.
+func (p *OpenAIProvider) isOllamaEndpoint() bool {
+	if strings.Contains(strings.ToLower(p.apiBase), "ollama") {
+		return true
+	}
+	if strings.Contains(strings.ToLower(strings.TrimSpace(p.providerType)), "ollama") {
+		return true
+	}
+	if strings.Contains(strings.ToLower(p.name), "ollama") {
+		return true
+	}
+	return false
+}
+
 // isDashScope returns true when this provider routes requests to DashScope/Bailian
 // (supports cache_control:ephemeral wire format - verified live 2026-05-08).
 // Uses 3-source detection (URL + providerType + name) to handle reverse-proxied

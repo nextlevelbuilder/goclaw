@@ -269,6 +269,20 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 		}
 	}
 
+	// Ollama-specific: inject options.num_ctx to set the context window size.
+	// Without this, Ollama defaults to a small context (often 2048) and returns
+	// context-window errors on long conversations.
+	// Priority: user-configured ollamaNumCtx > pre-queried /api/show value > 131072 default.
+	if p.isOllamaEndpoint() {
+		numCtx := OllamaDefaultNumCtx
+		if p.ollamaNumCtx != nil {
+			numCtx = *p.ollamaNumCtx
+		}
+		body["options"] = map[string]any{
+			"num_ctx": numCtx,
+		}
+	}
+
 	// DashScope-specific passthrough keys — never send to other OpenAI-compat hosts.
 	if p.dashScopePassthroughKeys() {
 		if level, ok := req.Options[OptThinkingLevel].(string); ok && level != "" && level != "off" && dashscopeThinkingModels[model] {

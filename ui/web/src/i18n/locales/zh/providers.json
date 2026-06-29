@@ -150,6 +150,13 @@
     "workDirPlaceholder": "/tmp/workspace",
     "workDirHint": "代理子进程的工作目录（可选）"
   },
+  "ollama": {
+    "title": "Ollama 配置",
+    "description": "Ollama 特定设置",
+    "numCtx": "上下文窗口（标记数）",
+    "numCtxPlaceholder": "留空自动从模型检测",
+    "numCtxHelp": "最大标记数。留空以通过 Ollama API 自动检测。"
+  },
   "oauth": {
     "checkingStatus": "正在检查认证状态...",
     "authSuccessful": "认证成功！",
