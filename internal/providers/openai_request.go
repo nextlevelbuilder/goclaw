@@ -275,11 +275,26 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 	// Priority: user-configured ollamaNumCtx > pre-queried /api/show value > 131072 default.
 	if p.isOllamaEndpoint() {
 		numCtx := OllamaDefaultNumCtx
+		numCtxSource := "default"
 		if p.ollamaNumCtx != nil {
 			numCtx = *p.ollamaNumCtx
+			numCtxSource = "configured"
 		}
+		slog.Debug("ollama.request: injecting num_ctx into options",
+			"provider", p.name,
+			"model", model,
+			"num_ctx", numCtx,
+			"source", numCtxSource,
+		)
 		body["options"] = map[string]any{
 			"num_ctx": numCtx,
+		}
+		if bodyBytes, err := json.Marshal(body); err == nil {
+			raw := string(bodyBytes)
+			if len(raw) > 500 {
+				raw = raw[:500] + "..."
+			}
+			slog.Debug("ollama.request: final request body (first 500 chars)", "provider", p.name, "model", model, "body_prefix", raw)
 		}
 	}
 

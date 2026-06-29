@@ -26,9 +26,11 @@ func FetchOllamaModelContext(ctx context.Context, apiBase, model, apiKey string)
 	base := strings.TrimRight(strings.TrimSuffix(strings.TrimRight(apiBase, "/"), "/v1"), "/")
 	url := base + "/api/show"
 
+	slog.Debug("ollama.context: querying /api/show", "api_base", apiBase, "resolved_base", base, "model", model)
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		slog.Warn("ollama.context: build request failed", "model", model, "error", err)
+		slog.Warn("ollama.context: build request failed", "model", model, "error", err, "fallback", OllamaDefaultNumCtx)
 		return OllamaDefaultNumCtx
 	}
 	q := req.URL.Query()
@@ -40,29 +42,40 @@ func FetchOllamaModelContext(ctx context.Context, apiBase, model, apiKey string)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		slog.Warn("ollama.context: request failed", "model", model, "error", err)
+		slog.Warn("ollama.context: request failed", "model", model, "error", err, "fallback", OllamaDefaultNumCtx)
 		return OllamaDefaultNumCtx
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		slog.Warn("ollama.context: non-200 response", "model", model, "status", resp.StatusCode, "body", string(body))
+		slog.Warn("ollama.context: non-200 response", "model", model, "status", resp.StatusCode, "body", string(body), "fallback", OllamaDefaultNumCtx)
 		return OllamaDefaultNumCtx
 	}
+
+	rawBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		slog.Warn("ollama.context: read body failed", "model", model, "error", err, "fallback", OllamaDefaultNumCtx)
+		return OllamaDefaultNumCtx
+	}
+	slog.Debug("ollama.context: /api/show raw response", "model", model, "response", string(rawBody))
 
 	var result struct {
 		ModelInfo struct {
 			ContextLength int `json:"context_length"`
 		} `json:"model_info"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		slog.Warn("ollama.context: decode failed", "model", model, "error", fmt.Sprintf("%v", err))
+	if err := json.Unmarshal(rawBody, &result); err != nil {
+		slog.Warn("ollama.context: decode failed", "model", model, "error", fmt.Sprintf("%v", err), "fallback", OllamaDefaultNumCtx)
 		return OllamaDefaultNumCtx
 	}
 
+	slog.Debug("ollama.context: extracted context_length", "model", model, "context_length", result.ModelInfo.ContextLength)
+
 	if result.ModelInfo.ContextLength <= 0 {
+		slog.Debug("ollama.context: context_length not positive, using default", "model", model, "fallback", OllamaDefaultNumCtx)
 		return OllamaDefaultNumCtx
 	}
+	slog.Info("ollama.context: resolved context window", "model", model, "num_ctx", result.ModelInfo.ContextLength)
 	return result.ModelInfo.ContextLength
 }
