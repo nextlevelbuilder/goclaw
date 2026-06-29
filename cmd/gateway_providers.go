@@ -131,7 +131,14 @@ func registerProviders(registry *providers.Registry, cfg *config.Config, modelRe
 	// Uses the native Ollama Go client for proper options.num_ctx support.
 	if cfg.Providers.Ollama.Host != "" {
 		host := cfg.Providers.Ollama.Host
-		registry.Register(providers.NewOllamaProvider("ollama", host, "llama3.3", nil, nil))
+		ctx5s, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		numCtx := providers.FetchOllamaModelContext(ctx5s, config.DockerLocalhost(host), "llama3.3", "")
+		cancel()
+		var numCtxPtr *int
+		if numCtx != providers.OllamaDefaultNumCtx {
+			numCtxPtr = &numCtx
+		}
+		registry.Register(providers.NewOllamaProvider("ollama", host, "llama3.3", numCtxPtr, nil))
 		slog.Info("registered provider", "name", "ollama")
 	}
 
@@ -142,7 +149,14 @@ func registerProviders(registry *providers.Registry, cfg *config.Config, modelRe
 		if base == "" {
 			base = "https://ollama.com"
 		}
-		registry.Register(providers.NewOllamaProvider("ollama-cloud", base, "llama3.3", nil, nil))
+		ctx5s, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		numCtx := providers.FetchOllamaModelContext(ctx5s, config.DockerLocalhost(base), "llama3.3", "")
+		cancel()
+		var numCtxPtr *int
+		if numCtx != providers.OllamaDefaultNumCtx {
+			numCtxPtr = &numCtx
+		}
+		registry.Register(providers.NewOllamaProvider("ollama-cloud", base, "llama3.3", numCtxPtr, nil))
 		slog.Info("registered provider", "name", "ollama-cloud")
 	}
 
