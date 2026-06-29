@@ -12,15 +12,14 @@
 //	     - collapseConsecutiveDuplicateBlocks()
 //
 // Additional Go-specific:
-//	  5. stripEchoedSystemMessages()       → strip hallucinated [System Message] blocks
-//	  6. stripGarbledToolXML()             → strip garbled XML from models like DeepSeek
+//  5. stripEchoedSystemMessages()       → strip hallucinated [System Message] blocks
+//  6. stripGarbledToolXML()             → strip garbled XML from models like DeepSeek
 package agent
 
 import (
 	"log/slog"
 	"regexp"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -230,8 +229,10 @@ func stripDowngradedToolCallText(content string) string {
 
 // Matches TS stripThinkingTagsFromText() with strict mode.
 // Strips: <redacted_thinking>...</redacted_thinking>, <think>...</think>,
-//         <thinking>...</thinking>, <thought>...</thought>,
-//         <antThinking>...</antThinking>
+//
+//	<thinking>...</thinking>, <thought>...</thought>,
+//	<antThinking>...</antThinking>
+//
 // Go regexp doesn't support backreferences, so we use separate patterns.
 var thinkingTagPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?is)<redacted_thinking\b[^>]*>.*?</redacted_thinking\s*>`),
@@ -438,17 +439,12 @@ func StripConfigLeak(content, agentType string) string {
 
 // --- NO_REPLY detection ---
 
-// IsSilentReply checks if the text begins with a NO_REPLY token.
+// IsSilentReply checks if the text contains a standalone NO_REPLY token.
 //
-// Divergent from TS isSilentReplyText() (exact-match only) — we match broadly:
-// decorative wrappers (`NO_REPLY_`, `"NO_REPLY"`, `**NO_REPLY**`) AND trailing
-// explanations (`NO_REPLY because offline`, `NO_REPLY: note`) suppress delivery.
-// Only requirement: the token is not glued to another word (`NO_REPLYING` is NOT silent).
-// Case-insensitive.
-//
-// Trade-off vs upstream #19537: upstream guards against suppressing substantive
-// replies that end in NO_REPLY. We accept that risk because observed model output
-// leans toward "NO_REPLY + reason" rather than "real reply ending in NO_REPLY".
+// Divergent from TS isSilentReplyText() (exact-match only) — we match broadly so
+// both prefix forms (`NO_REPLY because offline`) and terminal sentinel forms
+// (`not for me. NO_REPLY`) suppress delivery. The token must not be glued to
+// another word (`NO_REPLYING` and `XNO_REPLY` are not silent). Case-insensitive.
 func IsSilentReply(text string) bool {
 	trimmed := strings.TrimSpace(text)
 	if trimmed == "" {
@@ -457,18 +453,31 @@ func IsSilentReply(text string) bool {
 	// Strip decorative wrappers from both ends (quotes, markdown emphasis, punctuation).
 	stripped := strings.Trim(trimmed, "_ \t\n\r.,:;!?\"'`*~#>-()[]{}")
 	const token = "NO_REPLY"
-	if len(stripped) < len(token) {
+	return containsStandaloneNoReplyToken(stripped, token)
+}
+
+func containsStandaloneNoReplyToken(text, token string) bool {
+	if len(text) < len(token) {
 		return false
 	}
-	if !strings.EqualFold(stripped[:len(token)], token) {
-		return false
+	for i := 0; i+len(token) <= len(text); i++ {
+		if !strings.EqualFold(text[i:i+len(token)], token) {
+			continue
+		}
+		beforeOK := i == 0 || !isAlphaNumByte(text[i-1])
+		after := i + len(token)
+		afterOK := after == len(text) || !isAlphaNumByte(text[after])
+		if beforeOK && afterOK {
+			return true
+		}
 	}
-	if len(stripped) == len(token) {
-		return true
-	}
-	// Token must not be glued to another word — next rune must be non-alphanumeric.
-	next, _ := utf8.DecodeRuneInString(stripped[len(token):])
-	return !isAlphaNum(next)
+	return false
+}
+
+func isAlphaNumByte(b byte) bool {
+	return (b >= 'a' && b <= 'z') ||
+		(b >= 'A' && b <= 'Z') ||
+		(b >= '0' && b <= '9')
 }
 
 func isAlphaNum(r rune) bool {

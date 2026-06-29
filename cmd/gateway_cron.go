@@ -266,30 +266,7 @@ func runCommandCronJob(cfg *config.Config, job *store.CronJob, msgBus *bus.Messa
 }
 
 func cronOutputContainsNoReplySentinel(content string) bool {
-	text := strings.TrimSpace(content)
-	if text == "" {
-		return false
-	}
-
-	const token = "NO_REPLY"
-	for i := 0; i+len(token) <= len(text); i++ {
-		if !strings.EqualFold(text[i:i+len(token)], token) {
-			continue
-		}
-		beforeOK := i == 0 || !cronNoReplyAlphaNumByte(text[i-1])
-		after := i + len(token)
-		afterOK := after == len(text) || !cronNoReplyAlphaNumByte(text[after])
-		if beforeOK && afterOK {
-			return true
-		}
-	}
-	return false
-}
-
-func cronNoReplyAlphaNumByte(b byte) bool {
-	return (b >= 'a' && b <= 'z') ||
-		(b >= 'A' && b <= 'Z') ||
-		(b >= '0' && b <= '9')
+	return agent.IsSilentReply(content)
 }
 
 // resolveCronPeerKind infers peer kind from the cron job's user ID.

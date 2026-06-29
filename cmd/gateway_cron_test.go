@@ -78,6 +78,8 @@ func TestCronOutputContainsNoReplySentinel(t *testing.T) {
 		{name: "exact", in: "NO_REPLY", want: true},
 		{name: "prefix explanation", in: "NO_REPLY - nothing to report", want: true},
 		{name: "suffix", in: "No relevant update. NO_REPLY", want: true},
+		{name: "terminal glued punctuation", in: "This is directed at Bảo Ly Content, not me. I should stay silent.NO_REPLY", want: true},
+		{name: "standalone suffix after space", in: "This is not for me. NO_REPLY", want: true},
 		{name: "mid sentence", in: "No changes found. NO_REPLY for this run.", want: true},
 		{name: "lowercase", in: "no_reply", want: true},
 		{name: "decorative underscore", in: "NO_REPLY_", want: true},
