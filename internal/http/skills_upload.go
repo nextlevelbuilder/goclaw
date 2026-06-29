@@ -140,9 +140,20 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 			"user_id", userID,
 			"violations", len(violations),
 			"first_rule", violations[0].Reason)
+		type guardViolationResponse struct {
+			Line   int    `json:"line"`
+			Reason string `json:"reason"`
+		}
+		violationsResponse := make([]guardViolationResponse, len(violations))
+		for idx, v := range violations {
+			violationsResponse[idx] = guardViolationResponse{
+				Line:   v.Line,
+				Reason: v.Reason,
+			}
+		}
 		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"error":      i18n.T(locale, i18n.MsgInvalidRequest, "skill content failed security scan"),
-			"violations": skills.FormatGuardViolations(violations),
+			"violations": violationsResponse,
 		})
 		return
 	}
