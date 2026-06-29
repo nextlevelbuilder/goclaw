@@ -63,6 +63,10 @@ func (p *OllamaProvider) Name() string { return p.name }
 // DefaultModel returns the default model.
 func (p *OllamaProvider) DefaultModel() string { return p.defaultModel }
 
+// APIBase returns the Ollama root URL with /v1 suffix, matching the format
+// stored in the database and expected by tests that introspect the registered provider.
+func (p *OllamaProvider) APIBase() string { return p.apiBase + "/v1" }
+
 // Capabilities declares what Ollama supports.
 func (p *OllamaProvider) Capabilities() ProviderCapabilities {
 	return ProviderCapabilities{
@@ -233,9 +237,14 @@ func (p *OllamaProvider) buildRequest(req ChatRequest, stream bool) *ollamaapi.C
 	}
 
 	// Build options map: num_ctx + caller overrides.
+	// Always set num_ctx so Ollama uses a large context window even when the caller
+	// did not configure a specific value. Without this, Ollama defaults to 4096 and
+	// rejects conversations that exceed that limit.
 	opts := make(map[string]any)
 	if p.numCtx != nil {
 		opts["num_ctx"] = *p.numCtx
+	} else {
+		opts["num_ctx"] = OllamaDefaultNumCtx
 	}
 	if temp, ok := req.Options[OptTemperature]; ok {
 		opts["temperature"] = temp

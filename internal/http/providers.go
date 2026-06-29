@@ -358,11 +358,10 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) providerRu
 	return providerRuntimeRegistered
 }
 
-// resolveOllamaNumCtx returns the num_ctx to pass to NewOllamaProvider, or nil
-// when the built-in default should apply. Priority:
+// resolveOllamaNumCtx returns the num_ctx to pass to NewOllamaProvider. Priority:
 //  1. User-configured num_ctx from provider settings JSONB.
 //  2. Value queried from Ollama /api/show.
-//  3. nil (OllamaProvider omits options.num_ctx, using Ollama's model default).
+//  3. OllamaDefaultNumCtx (131072) — never nil, so Ollama always uses a large context window.
 func (h *ProvidersHandler) resolveOllamaNumCtx(p *store.LLMProviderData, apiBase, apiKey string) *int {
 	slog.Debug("ollama.startup: resolveOllamaNumCtx called", "provider", p.Name, "api_base", apiBase)
 	if s := store.ParseOllamaSettings(p.Settings); s != nil {
@@ -373,12 +372,8 @@ func (h *ProvidersHandler) resolveOllamaNumCtx(p *store.LLMProviderData, apiBase
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	numCtx := providers.FetchOllamaModelContext(ctx, apiBase, "llama3.3", apiKey)
-	if numCtx != providers.OllamaDefaultNumCtx {
-		slog.Info("ollama.startup: applying num_ctx from /api/show", "provider", p.Name, "num_ctx", numCtx)
-		return &numCtx
-	}
-	slog.Debug("ollama.startup: /api/show returned default, using nil (model default)", "provider", p.Name)
-	return nil
+	slog.Info("ollama.startup: applying num_ctx from /api/show (or default fallback)", "provider", p.Name, "num_ctx", numCtx)
+	return &numCtx
 }
 
 func openAIProviderDefaults(providerType, apiBase string) (string, string) {
