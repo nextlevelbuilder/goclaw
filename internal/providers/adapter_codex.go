@@ -128,6 +128,33 @@ func (a *CodexAdapter) FromStreamChunk(data []byte) (*StreamChunk, error) {
 	return nil, nil
 }
 
+func usageFromCodexUsage(u *codexUsage) *Usage {
+	if u == nil {
+		return nil
+	}
+	usage := &Usage{
+		PromptTokens:     u.InputTokens,
+		CompletionTokens: u.OutputTokens,
+		TotalTokens:      u.TotalTokens,
+	}
+	if u.InputTokensDetails != nil {
+		usage.CacheReadTokens = u.InputTokensDetails.CachedTokens
+		usage.PromptTokensIncludeCachedSegments = true
+	}
+	if u.PromptTokensDetails != nil {
+		// Some Responses API payloads use the older Chat Completions naming.
+		// Prefer the larger value if both aliases are present.
+		if u.PromptTokensDetails.CachedTokens > usage.CacheReadTokens {
+			usage.CacheReadTokens = u.PromptTokensDetails.CachedTokens
+		}
+		usage.PromptTokensIncludeCachedSegments = true
+	}
+	if u.OutputTokensDetails != nil {
+		usage.ThinkingTokens = u.OutputTokensDetails.ReasoningTokens
+	}
+	return usage
+}
+
 // parseCodexAPIResponse converts a Codex API response to internal ChatResponse.
 // Simple concatenation — does not handle phase-aware ordering like the streaming
 // path (codex_stream_state.go). Sufficient for Pipeline non-streaming use.
@@ -169,16 +196,7 @@ func parseCodexAPIResponse(resp *codexAPIResponse) *ChatResponse {
 		result.FinishReason = "length"
 	}
 
-	if resp.Usage != nil {
-		result.Usage = &Usage{
-			PromptTokens:     resp.Usage.InputTokens,
-			CompletionTokens: resp.Usage.OutputTokens,
-			TotalTokens:      resp.Usage.TotalTokens,
-		}
-		if resp.Usage.OutputTokensDetails != nil {
-			result.Usage.ThinkingTokens = resp.Usage.OutputTokensDetails.ReasoningTokens
-		}
-	}
+	result.Usage = usageFromCodexUsage(resp.Usage)
 
 	return result
 }

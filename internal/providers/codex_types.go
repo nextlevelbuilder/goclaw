@@ -42,31 +42,37 @@ type codexSummary struct {
 }
 
 type codexUsage struct {
-	InputTokens         int                 `json:"input_tokens"`
-	OutputTokens        int                 `json:"output_tokens"`
-	TotalTokens         int                 `json:"total_tokens"`
-	OutputTokensDetails *codexTokensDetails `json:"output_tokens_details,omitempty"`
+	InputTokens         int                       `json:"input_tokens"`
+	OutputTokens        int                       `json:"output_tokens"`
+	TotalTokens         int                       `json:"total_tokens"`
+	InputTokensDetails  *codexInputTokensDetails  `json:"input_tokens_details,omitempty"`
+	PromptTokensDetails *codexInputTokensDetails  `json:"prompt_tokens_details,omitempty"`
+	OutputTokensDetails *codexOutputTokensDetails `json:"output_tokens_details,omitempty"`
 }
 
-type codexTokensDetails struct {
+type codexInputTokensDetails struct {
+	CachedTokens int `json:"cached_tokens"`
+}
+
+type codexOutputTokensDetails struct {
 	ReasoningTokens int `json:"reasoning_tokens"`
 }
 
 // SSE streaming types
 
 type codexSSEEvent struct {
-	Type               string            `json:"type"`
-	Delta              string            `json:"delta,omitempty"`
-	Text               string            `json:"text,omitempty"`
-	ItemID             string            `json:"item_id,omitempty"`
-	OutputIndex        int               `json:"output_index,omitempty"`
-	ContentIndex       int               `json:"content_index,omitempty"`
-	Item               *codexItem        `json:"item,omitempty"`
-	Part               *codexContentPart `json:"part,omitempty"`
-	Response           *codexAPIResponse `json:"response,omitempty"`
-	OutputFormat       string            `json:"output_format,omitempty"`        // response.image_generation_call.partial_image
-	PartialImageB64    string            `json:"partial_image_b64,omitempty"`    // response.image_generation_call.partial_image
-	PartialImageIndex  int               `json:"partial_image_index,omitempty"`  // response.image_generation_call.partial_image
+	Type              string            `json:"type"`
+	Delta             string            `json:"delta,omitempty"`
+	Text              string            `json:"text,omitempty"`
+	ItemID            string            `json:"item_id,omitempty"`
+	OutputIndex       int               `json:"output_index,omitempty"`
+	ContentIndex      int               `json:"content_index,omitempty"`
+	Item              *codexItem        `json:"item,omitempty"`
+	Part              *codexContentPart `json:"part,omitempty"`
+	Response          *codexAPIResponse `json:"response,omitempty"`
+	OutputFormat      string            `json:"output_format,omitempty"`       // response.image_generation_call.partial_image
+	PartialImageB64   string            `json:"partial_image_b64,omitempty"`   // response.image_generation_call.partial_image
+	PartialImageIndex int               `json:"partial_image_index,omitempty"` // response.image_generation_call.partial_image
 }
 
 type codexToolCallAcc struct {

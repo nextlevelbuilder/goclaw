@@ -313,15 +313,7 @@ func (p *CodexProvider) processSSEEvent(event *codexSSEEvent, result *ChatRespon
 				}
 			}
 			if event.Response.Usage != nil {
-				u := event.Response.Usage
-				result.Usage = &Usage{
-					PromptTokens:     u.InputTokens,
-					CompletionTokens: u.OutputTokens,
-					TotalTokens:      u.TotalTokens,
-				}
-				if u.OutputTokensDetails != nil {
-					result.Usage.ThinkingTokens = u.OutputTokensDetails.ReasoningTokens
-				}
+				result.Usage = usageFromCodexUsage(event.Response.Usage)
 			}
 			if event.Response.Status == "incomplete" {
 				result.FinishReason = "length"

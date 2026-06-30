@@ -151,6 +151,7 @@ func TestCodexAdapter_FromResponse_TextAndUsage(t *testing.T) {
 			"input_tokens":10,
 			"output_tokens":3,
 			"total_tokens":13,
+			"input_tokens_details":{"cached_tokens":7},
 			"output_tokens_details":{"reasoning_tokens":2}
 		}
 	}`)
@@ -169,6 +170,12 @@ func TestCodexAdapter_FromResponse_TextAndUsage(t *testing.T) {
 	}
 	if resp.Usage == nil || resp.Usage.ThinkingTokens != 2 {
 		t.Errorf("Usage ThinkingTokens = %+v, want 2", resp.Usage)
+	}
+	if resp.Usage == nil || resp.Usage.CacheReadTokens != 7 {
+		t.Errorf("Usage CacheReadTokens = %+v, want 7", resp.Usage)
+	}
+	if resp.Usage == nil || !resp.Usage.PromptTokensIncludeCachedSegments {
+		t.Errorf("Usage PromptTokensIncludeCachedSegments = %+v, want true", resp.Usage)
 	}
 }
 
@@ -351,3 +358,31 @@ func TestCodexAdapter_ToRequest_StreamOption(t *testing.T) {
 
 // ensure the adapter satisfies the interface at compile time.
 var _ ProviderAdapter = (*CodexAdapter)(nil)
+
+func TestCodexAdapter_FromResponse_PromptTokensDetailsAlias(t *testing.T) {
+	a, _ := NewCodexAdapter(ProviderConfig{})
+	raw := []byte(`{
+		"id":"resp_cache_alias",
+		"object":"response",
+		"status":"completed",
+		"output":[
+			{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ok"}]}
+		],
+		"usage":{
+			"input_tokens":100,
+			"output_tokens":5,
+			"total_tokens":105,
+			"prompt_tokens_details":{"cached_tokens":80}
+		}
+	}`)
+	resp, err := a.FromResponse(raw)
+	if err != nil {
+		t.Fatalf("FromResponse: %v", err)
+	}
+	if resp.Usage == nil || resp.Usage.CacheReadTokens != 80 {
+		t.Fatalf("CacheReadTokens = %+v, want 80", resp.Usage)
+	}
+	if !resp.Usage.PromptTokensIncludeCachedSegments {
+		t.Fatal("PromptTokensIncludeCachedSegments = false, want true")
+	}
+}
