@@ -2,7 +2,10 @@ package agent
 
 import (
 	"context"
+	"strings"
 	"testing"
+
+	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/pipeline"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
@@ -52,5 +55,50 @@ func TestMakeCallLLM_StreamsFinalThinkingWhenNoThinkingChunkArrives(t *testing.T
 	payload, ok := thinking[0].Payload.(map[string]string)
 	if !ok || payload["content"] != "final streamed thinking" {
 		t.Fatalf("thinking payload = %+v", thinking[0].Payload)
+	}
+}
+
+func TestPromptCacheOptionsHelpers(t *testing.T) {
+	tenantID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	agentID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+
+	key1 := defaultPromptCacheKey(tenantID, agentID, "codex", "session-a")
+	key2 := defaultPromptCacheKey(tenantID, agentID, "codex", "session-a")
+	key3 := defaultPromptCacheKey(tenantID, agentID, "codex", "session-b")
+	if key1 != key2 {
+		t.Fatalf("defaultPromptCacheKey not stable: %q != %q", key1, key2)
+	}
+	if key1 == key3 {
+		t.Fatal("defaultPromptCacheKey should vary by session")
+	}
+	if !strings.HasPrefix(key1, "goclaw/") {
+		t.Fatalf("defaultPromptCacheKey = %q, want goclaw/ prefix", key1)
+	}
+
+	opts := map[string]any{}
+	setDefaultPromptCacheOptions(opts, tenantID, agentID, "codex", "session-a")
+	if opts[providers.OptPromptCacheKey] != key1 {
+		t.Fatalf("prompt cache key = %v, want %s", opts[providers.OptPromptCacheKey], key1)
+	}
+	if opts[providers.OptPromptCacheRetention] != "24h" {
+		t.Fatalf("prompt cache retention = %v, want 24h", opts[providers.OptPromptCacheRetention])
+	}
+
+	opts = map[string]any{
+		providers.OptPromptCacheKey:       "custom-key",
+		providers.OptPromptCacheRetention: "in_memory",
+	}
+	setDefaultPromptCacheOptions(opts, tenantID, agentID, "codex", "session-a")
+	if opts[providers.OptPromptCacheKey] != "custom-key" || opts[providers.OptPromptCacheRetention] != "in_memory" {
+		t.Fatalf("custom prompt cache options were overwritten: %+v", opts)
+	}
+}
+
+func TestSupportsPromptCacheParams(t *testing.T) {
+	if !supportsPromptCacheParams(providers.NewCodexProvider("codex", nil, "", "")) {
+		t.Fatal("CodexProvider should support prompt cache params")
+	}
+	if supportsPromptCacheParams(finalThinkingStreamProvider{}) {
+		t.Fatal("generic provider should not support prompt cache params")
 	}
 }

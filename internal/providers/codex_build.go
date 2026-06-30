@@ -140,6 +140,13 @@ func (p *CodexProvider) buildRequestBody(req ChatRequest, stream bool) map[strin
 		body["reasoning"] = map[string]any{"effort": level}
 	}
 
+	if cacheKey, ok := req.Options[OptPromptCacheKey]; ok {
+		body["prompt_cache_key"] = cacheKey
+	}
+	if retention, ok := req.Options[OptPromptCacheRetention]; ok {
+		body["prompt_cache_retention"] = retention
+	}
+
 	return body
 }
 

@@ -1128,3 +1128,29 @@ func TestCodexBuildRequestBody_NilFunction_HandlesGracefully(t *testing.T) {
 		t.Errorf("expected function tool 'web_search', got: %v", tool)
 	}
 }
+
+func TestCodexBuildRequestBodyPromptCacheControls(t *testing.T) {
+	p := NewCodexProvider("test", &staticTokenSource{token: "tok"}, "", "gpt-4o")
+
+	body := p.buildRequestBody(ChatRequest{
+		Messages: []Message{{Role: "user", Content: "Hello"}},
+		Options: map[string]any{
+			OptPromptCacheKey:       "agent/session/provider",
+			OptPromptCacheRetention: "24h",
+		},
+	}, true)
+
+	if got := body["prompt_cache_key"]; got != "agent/session/provider" {
+		t.Fatalf("prompt_cache_key = %v, want agent/session/provider", got)
+	}
+	if got := body["prompt_cache_retention"]; got != "24h" {
+		t.Fatalf("prompt_cache_retention = %v, want 24h", got)
+	}
+}
+
+func TestCodexProviderCapabilitiesCacheControl(t *testing.T) {
+	p := NewCodexProvider("test", &staticTokenSource{token: "tok"}, "", "gpt-4o")
+	if !p.Capabilities().CacheControl {
+		t.Fatal("CodexProvider Capabilities().CacheControl = false, want true")
+	}
+}

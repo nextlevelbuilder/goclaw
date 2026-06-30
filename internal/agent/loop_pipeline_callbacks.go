@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -328,8 +330,12 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 		chatReq.Options[providers.OptPeerKind] = req.PeerKind
 		chatReq.Options[providers.OptLocalKey] = req.LocalKey
 		chatReq.Options[providers.OptWorkspace] = tools.ToolWorkspaceFromCtx(ctx)
-		if tid := store.TenantIDFromContext(ctx); tid != uuid.Nil {
-			chatReq.Options[providers.OptTenantID] = tid.String()
+		tenantID := store.TenantIDFromContext(ctx)
+		if tenantID != uuid.Nil {
+			chatReq.Options[providers.OptTenantID] = tenantID.String()
+		}
+		if supportsPromptCacheParams(provider) {
+			setDefaultPromptCacheOptions(chatReq.Options, tenantID, l.agentUUID, provider.Name(), req.SessionKey)
 		}
 
 		// Reasoning decision: resolve effort level for thinking models (o3, DeepSeek-R1, Kimi).
@@ -696,4 +702,35 @@ func (l *Loop) reserveLLMUsageFor(ctx context.Context, req *RunRequest, iteratio
 		Messages:        chatReq.Messages,
 		MaxOutputTokens: l.maxOutputTokensFromRequest(chatReq),
 	})
+}
+
+func supportsPromptCacheParams(provider providers.Provider) bool {
+	switch provider.(type) {
+	case *providers.CodexProvider, *providers.ChatGPTOAuthRouter:
+		return true
+	default:
+		return false
+	}
+}
+
+func setDefaultPromptCacheOptions(opts map[string]any, tenantID, agentID uuid.UUID, providerName, sessionKey string) {
+	if opts == nil {
+		return
+	}
+	if _, ok := opts[providers.OptPromptCacheKey]; !ok {
+		opts[providers.OptPromptCacheKey] = defaultPromptCacheKey(tenantID, agentID, providerName, sessionKey)
+	}
+	if _, ok := opts[providers.OptPromptCacheRetention]; !ok {
+		opts[providers.OptPromptCacheRetention] = "24h"
+	}
+}
+
+func defaultPromptCacheKey(tenantID, agentID uuid.UUID, providerName, sessionKey string) string {
+	h := sha256.Sum256([]byte(strings.Join([]string{
+		tenantID.String(),
+		agentID.String(),
+		providerName,
+		sessionKey,
+	}, "\x00")))
+	return "goclaw/" + hex.EncodeToString(h[:16])
 }

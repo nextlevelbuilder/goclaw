@@ -51,7 +51,7 @@ func (a *CodexAdapter) Capabilities() ProviderCapabilities {
 		StreamWithTools:  true,
 		Thinking:         true,
 		Vision:           true,
-		CacheControl:     false,
+		CacheControl:     true,
 		ImageGeneration:  true, // Codex (OpenAI Responses API) supports native image_generation tool
 		MaxContextWindow: 1_050_000,
 		TokenizerID:      "o200k_base",

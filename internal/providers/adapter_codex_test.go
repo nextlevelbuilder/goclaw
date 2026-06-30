@@ -386,3 +386,35 @@ func TestCodexAdapter_FromResponse_PromptTokensDetailsAlias(t *testing.T) {
 		t.Fatal("PromptTokensIncludeCachedSegments = false, want true")
 	}
 }
+
+func TestCodexAdapter_ToRequestPromptCacheControls(t *testing.T) {
+	a, _ := NewCodexAdapter(ProviderConfig{})
+	body, _, err := a.ToRequest(ChatRequest{
+		Messages: []Message{{Role: "user", Content: "hi"}},
+		Options: map[string]any{
+			OptPromptCacheKey:       "tenant/agent/session",
+			OptPromptCacheRetention: "1h",
+		},
+	})
+	if err != nil {
+		t.Fatalf("ToRequest: %v", err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if got := payload["prompt_cache_key"]; got != "tenant/agent/session" {
+		t.Fatalf("prompt_cache_key = %v, want tenant/agent/session", got)
+	}
+	if got := payload["prompt_cache_retention"]; got != "1h" {
+		t.Fatalf("prompt_cache_retention = %v, want 1h", got)
+	}
+}
+
+func TestCodexAdapter_CapabilitiesCacheControl(t *testing.T) {
+	a, _ := NewCodexAdapter(ProviderConfig{})
+	if !a.Capabilities().CacheControl {
+		t.Fatal("CodexAdapter Capabilities().CacheControl = false, want true")
+	}
+}

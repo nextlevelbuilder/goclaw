@@ -70,6 +70,27 @@ func (p *ChatGPTOAuthRouter) DefaultModel() string {
 
 func (p *ChatGPTOAuthRouter) SupportsThinking() bool { return true }
 
+// Capabilities reports the Codex capability set exposed by the routed OAuth pool.
+func (p *ChatGPTOAuthRouter) Capabilities() ProviderCapabilities {
+	selection, err := p.orderedProviders(context.Background(), chatGPTOAuthModalityChat, false)
+	if err == nil && len(selection) > 0 {
+		if ca, ok := selection[0].(CapabilitiesAware); ok {
+			return ca.Capabilities()
+		}
+	}
+	return ProviderCapabilities{
+		Streaming:        true,
+		ToolCalling:      true,
+		StreamWithTools:  true,
+		Thinking:         true,
+		Vision:           true,
+		CacheControl:     true,
+		ImageGeneration:  true,
+		MaxContextWindow: 1_050_000,
+		TokenizerID:      "o200k_base",
+	}
+}
+
 func (p *ChatGPTOAuthRouter) HasRegisteredProviders() bool {
 	return len(p.registeredProviders()) > 0
 }

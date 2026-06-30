@@ -10,7 +10,7 @@ type ProviderCapabilities struct {
 	StreamWithTools  bool   // can stream while tool calls are in-flight
 	Thinking         bool   // supports extended thinking / reasoning
 	Vision           bool   // supports image inputs
-	CacheControl     bool   // supports cache_control blocks (Anthropic)
+	CacheControl     bool   // supports provider prompt cache controls
 	ImageGeneration  bool   // supports native image_generation tool (Codex/OpenAI Responses API)
 	MaxContextWindow int    // default context window for default model
 	TokenizerID      string // for tokencount package mapping
