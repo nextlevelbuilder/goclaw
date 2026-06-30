@@ -1411,6 +1411,18 @@ func EnsureSchema(db *sql.DB) error {
 					patch = `SELECT 1;`
 				}
 			}
+			if v == 49 {
+				patch, err = sqliteCronProviderMigrationPatch(db)
+				if err != nil {
+					return fmt.Errorf("inspect cron_jobs provider override columns: %w", err)
+				}
+			}
+			if v == 52 {
+				patch, err = sqliteUsageEventTokenMigrationPatch(db)
+				if err != nil {
+					return fmt.Errorf("inspect usage event token columns: %w", err)
+				}
+			}
 			// Migrations that rebuild a table referenced by another table's FK
 			// require foreign_keys=OFF per SQLite altertable §7. The pragma is
 			// a no-op inside a transaction, so toggle it around BEGIN/COMMIT.
@@ -1500,6 +1512,58 @@ func idempotentColumnMigration(version int) (string, string, bool) {
 	default:
 		return "", "", false
 	}
+}
+
+func sqliteCronProviderMigrationPatch(db *sql.DB) (string, error) {
+	hasProviderID, err := sqliteColumnExists(db, "cron_jobs", "provider_id")
+	if err != nil {
+		return "", err
+	}
+	hasModel, err := sqliteColumnExists(db, "cron_jobs", "model")
+	if err != nil {
+		return "", err
+	}
+
+	patch := ""
+	if !hasProviderID {
+		patch += "ALTER TABLE cron_jobs ADD COLUMN provider_id TEXT REFERENCES llm_providers(id) ON DELETE SET NULL;\n"
+	}
+	if !hasModel {
+		patch += "ALTER TABLE cron_jobs ADD COLUMN model VARCHAR(200);\n"
+	}
+	if patch == "" {
+		patch = "SELECT 1;"
+	}
+	return patch, nil
+}
+
+func sqliteUsageEventTokenMigrationPatch(db *sql.DB) (string, error) {
+	columns := []struct {
+		table string
+		name  string
+	}{
+		{table: "usage_events", name: "cache_read_tokens"},
+		{table: "usage_events", name: "cache_create_tokens"},
+		{table: "usage_events", name: "thinking_tokens"},
+		{table: "usage_event_rollups", name: "cache_read_tokens"},
+		{table: "usage_event_rollups", name: "cache_create_tokens"},
+		{table: "usage_event_rollups", name: "thinking_tokens"},
+	}
+
+	patch := ""
+	for _, col := range columns {
+		hasColumn, err := sqliteColumnExists(db, col.table, col.name)
+		if err != nil {
+			return "", err
+		}
+		if !hasColumn {
+			patch += fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s BIGINT NOT NULL DEFAULT 0;\n", col.table, col.name)
+		}
+	}
+	if patch == "" {
+		patch = "SELECT 1;"
+	}
+	return patch, nil
 }
 
 func sqliteColumnExists(db *sql.DB, tableName, columnName string) (bool, error) {
