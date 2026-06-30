@@ -86,6 +86,9 @@ func (l *Loop) recordToolUsageEvent(ctx context.Context, req *RunRequest, canoni
 		event.InputTokens = int64(result.Usage.PromptTokens)
 		event.OutputTokens = int64(result.Usage.CompletionTokens)
 		event.TotalTokens = int64(result.Usage.TotalTokens)
+		event.CacheReadTokens = int64(result.Usage.CacheReadTokens)
+		event.CacheCreateTokens = int64(result.Usage.CacheCreationTokens)
+		event.ThinkingTokens = int64(result.Usage.ThinkingTokens)
 		if event.TotalTokens == 0 {
 			event.TotalTokens = event.InputTokens + event.OutputTokens
 		}

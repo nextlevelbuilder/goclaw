@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/internal/tracing"
@@ -114,6 +115,34 @@ func TestRecordToolUsageEvent_UseSkillCountsSkillName(t *testing.T) {
 	}
 	if event.Source != store.UsageSourceUseSkill {
 		t.Fatalf("source = %q, want use_skill", event.Source)
+	}
+}
+
+func TestRecordToolUsageEvent_PreservesProviderCacheUsage(t *testing.T) {
+	storeSpy := newFakeUsageEventStore()
+	loop := &Loop{usageEvents: storeSpy, agentUUID: uuid.New(), tenantID: uuid.New()}
+	ctx := tracing.WithTraceID(store.WithTenantID(t.Context(), loop.tenantID), uuid.New())
+	result := tools.NewResult("ok")
+	result.Provider = "openai-codex"
+	result.Model = "gpt-5.5"
+	result.Usage = &providers.Usage{
+		PromptTokens:        100,
+		CompletionTokens:    20,
+		TotalTokens:         120,
+		CacheReadTokens:     80,
+		CacheCreationTokens: 10,
+		ThinkingTokens:      5,
+	}
+
+	loop.recordToolUsageEvent(ctx, &RunRequest{RunID: "run-1", SessionKey: "session-1"}, "read_image", "read_image", "call-1",
+		nil, time.Now().Add(-time.Millisecond), result, uuid.New())
+
+	event := waitUsageEvent(t, storeSpy)
+	if event.InputTokens != 100 || event.OutputTokens != 20 || event.TotalTokens != 120 {
+		t.Fatalf("tokens = input %d output %d total %d", event.InputTokens, event.OutputTokens, event.TotalTokens)
+	}
+	if event.CacheReadTokens != 80 || event.CacheCreateTokens != 10 || event.ThinkingTokens != 5 {
+		t.Fatalf("cache/thinking tokens = read %d create %d thinking %d", event.CacheReadTokens, event.CacheCreateTokens, event.ThinkingTokens)
 	}
 }
 

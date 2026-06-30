@@ -20,8 +20,8 @@ func NewPGUsageEventStore(db *sql.DB) *PGUsageEventStore {
 	return &PGUsageEventStore{db: db}
 }
 
-const usageEventFieldCount = 28
-const usageRollupFieldCount = 21
+const usageEventFieldCount = 31
+const usageRollupFieldCount = 24
 
 func (s *PGUsageEventStore) InsertEvent(ctx context.Context, event *store.UsageEvent) error {
 	if event == nil {
@@ -52,7 +52,8 @@ func (s *PGUsageEventStore) InsertEvents(ctx context.Context, events []store.Usa
 			event.EventType, event.ResourceType, event.ResourceName, event.ResourceID, event.Source,
 			nilUUID(event.AgentID), nilUUID(event.TeamID), nilUUID(event.TraceID), nilUUID(event.SpanID),
 			event.RunID, event.SessionKey, event.Channel, event.Provider, event.Model, event.Status,
-			event.InputTokens, event.OutputTokens, event.TotalTokens, event.CostUSD,
+			event.InputTokens, event.OutputTokens, event.TotalTokens,
+			event.CacheReadTokens, event.CacheCreateTokens, event.ThinkingTokens, event.CostUSD,
 			event.DurationMS, event.CallCount, event.ErrorCount, jsonOrNull(event.Metadata), event.CreatedAt,
 		)
 	}
@@ -62,7 +63,8 @@ func (s *PGUsageEventStore) InsertEvents(ctx context.Context, events []store.Usa
 		event_type, resource_type, resource_name, resource_id, source,
 		agent_id, team_id, trace_id, span_id,
 		run_id, session_key, channel, provider, model, status,
-		input_tokens, output_tokens, total_tokens, cost_usd,
+		input_tokens, output_tokens, total_tokens,
+		cache_read_tokens, cache_create_tokens, thinking_tokens, cost_usd,
 		duration_ms, call_count, error_count, metadata, created_at
 	) VALUES ` + strings.Join(vals, ", ") + `
 	ON CONFLICT DO NOTHING`
@@ -88,6 +90,9 @@ func (s *PGUsageEventStore) RefreshEventRollupHour(ctx context.Context, bucketHo
 		COALESCE(SUM(input_tokens), 0),
 		COALESCE(SUM(output_tokens), 0),
 		COALESCE(SUM(total_tokens), 0),
+		COALESCE(SUM(cache_read_tokens), 0),
+		COALESCE(SUM(cache_create_tokens), 0),
+		COALESCE(SUM(thinking_tokens), 0),
 		COALESCE(SUM(cost_usd), 0),
 		CASE WHEN COALESCE(SUM(call_count), 0) > 0
 			THEN COALESCE(SUM(duration_ms * call_count), 0) / SUM(call_count)
@@ -111,7 +116,8 @@ func (s *PGUsageEventStore) RefreshEventRollupHour(ctx context.Context, bucketHo
 			&rollup.TenantID, &rollup.BucketHour, &rollup.EventType, &rollup.ResourceType,
 			&rollup.ResourceName, &rollup.Source, &rollup.AgentID, &rollup.Channel,
 			&rollup.Provider, &rollup.Model, &rollup.Status,
-			&rollup.InputTokens, &rollup.OutputTokens, &rollup.TotalTokens, &rollup.CostUSD,
+			&rollup.InputTokens, &rollup.OutputTokens, &rollup.TotalTokens,
+			&rollup.CacheReadTokens, &rollup.CacheCreateTokens, &rollup.ThinkingTokens, &rollup.CostUSD,
 			&rollup.DurationMS, &rollup.CallCount, &rollup.ErrorCount,
 		); err != nil {
 			return fmt.Errorf("scan usage event rollup: %w", err)
@@ -153,14 +159,16 @@ func (s *PGUsageEventStore) upsertEventRollups(ctx context.Context, rollups []st
 			rollup.ID, rollup.TenantID, rollup.BucketHour, rollup.EventType, rollup.ResourceType,
 			rollup.ResourceName, rollup.Source, nilUUID(rollup.AgentID), rollup.Channel,
 			rollup.Provider, rollup.Model, rollup.Status, rollup.InputTokens, rollup.OutputTokens,
-			rollup.TotalTokens, rollup.CostUSD, rollup.DurationMS, rollup.CallCount,
+			rollup.TotalTokens, rollup.CacheReadTokens, rollup.CacheCreateTokens, rollup.ThinkingTokens,
+			rollup.CostUSD, rollup.DurationMS, rollup.CallCount,
 			rollup.ErrorCount, rollup.CreatedAt, rollup.UpdatedAt,
 		)
 	}
 	query := `INSERT INTO usage_event_rollups (
 		id, tenant_id, bucket_hour, event_type, resource_type, resource_name, source,
 		agent_id, channel, provider, model, status,
-		input_tokens, output_tokens, total_tokens, cost_usd,
+		input_tokens, output_tokens, total_tokens,
+		cache_read_tokens, cache_create_tokens, thinking_tokens, cost_usd,
 		duration_ms, call_count, error_count, created_at, updated_at
 	) VALUES ` + strings.Join(vals, ", ") + `
 	ON CONFLICT (
@@ -179,6 +187,9 @@ func (s *PGUsageEventStore) upsertEventRollups(ctx context.Context, rollups []st
 		input_tokens = EXCLUDED.input_tokens,
 		output_tokens = EXCLUDED.output_tokens,
 		total_tokens = EXCLUDED.total_tokens,
+		cache_read_tokens = EXCLUDED.cache_read_tokens,
+		cache_create_tokens = EXCLUDED.cache_create_tokens,
+		thinking_tokens = EXCLUDED.thinking_tokens,
 		cost_usd = EXCLUDED.cost_usd,
 		duration_ms = EXCLUDED.duration_ms,
 		call_count = EXCLUDED.call_count,
@@ -201,6 +212,9 @@ func (s *PGUsageEventStore) GetEventTimeSeries(ctx context.Context, q store.Usag
 		COALESCE(SUM(input_tokens), 0),
 		COALESCE(SUM(output_tokens), 0),
 		COALESCE(SUM(total_tokens), 0),
+		COALESCE(SUM(cache_read_tokens), 0),
+		COALESCE(SUM(cache_create_tokens), 0),
+		COALESCE(SUM(thinking_tokens), 0),
 		COALESCE(SUM(cost_usd), 0),
 		CASE WHEN COALESCE(SUM(call_count), 0) > 0
 			THEN COALESCE(SUM(duration_ms * call_count), 0) / SUM(call_count)
@@ -222,6 +236,7 @@ func (s *PGUsageEventStore) GetEventTimeSeries(ctx context.Context, q store.Usag
 		if err := rows.Scan(
 			&point.BucketTime, &point.Calls, &point.Errors,
 			&point.InputTokens, &point.OutputTokens, &point.TotalTokens,
+			&point.CacheReadTokens, &point.CacheCreateTokens, &point.ThinkingTokens,
 			&point.CostUSD, &point.AvgDurationMS,
 		); err != nil {
 			return nil, fmt.Errorf("scan usage event timeseries: %w", err)
@@ -255,6 +270,9 @@ func (s *PGUsageEventStore) GetEventBreakdown(ctx context.Context, q store.Usage
 		COALESCE(SUM(input_tokens), 0),
 		COALESCE(SUM(output_tokens), 0),
 		COALESCE(SUM(total_tokens), 0),
+		COALESCE(SUM(cache_read_tokens), 0),
+		COALESCE(SUM(cache_create_tokens), 0),
+		COALESCE(SUM(thinking_tokens), 0),
 		COALESCE(SUM(cost_usd), 0),
 		CASE WHEN COALESCE(SUM(call_count), 0) > 0
 			THEN COALESCE(SUM(duration_ms * call_count), 0) / SUM(call_count)
@@ -277,6 +295,7 @@ func (s *PGUsageEventStore) GetEventBreakdown(ctx context.Context, q store.Usage
 		if err := rows.Scan(
 			&row.Key, &row.EventType, &row.ResourceType, &row.ResourceName, &row.Source,
 			&row.Calls, &row.Errors, &row.InputTokens, &row.OutputTokens, &row.TotalTokens,
+			&row.CacheReadTokens, &row.CacheCreateTokens, &row.ThinkingTokens,
 			&row.CostUSD, &row.AvgDurationMS,
 		); err != nil {
 			return nil, fmt.Errorf("scan usage event breakdown: %w", err)
@@ -294,6 +313,9 @@ func (s *PGUsageEventStore) GetEventSummary(ctx context.Context, q store.UsageEv
 		COALESCE(SUM(input_tokens), 0),
 		COALESCE(SUM(output_tokens), 0),
 		COALESCE(SUM(total_tokens), 0),
+		COALESCE(SUM(cache_read_tokens), 0),
+		COALESCE(SUM(cache_create_tokens), 0),
+		COALESCE(SUM(thinking_tokens), 0),
 		COALESCE(SUM(cost_usd), 0),
 		CASE WHEN COALESCE(SUM(call_count), 0) > 0
 			THEN COALESCE(SUM(duration_ms * call_count), 0) / SUM(call_count)
@@ -302,7 +324,8 @@ func (s *PGUsageEventStore) GetEventSummary(ctx context.Context, q store.UsageEv
 	var summary store.UsageEventSummary
 	if err := s.db.QueryRowContext(ctx, query, args...).Scan(
 		&summary.Calls, &summary.Errors, &summary.InputTokens, &summary.OutputTokens,
-		&summary.TotalTokens, &summary.CostUSD, &summary.AvgDurationMS,
+		&summary.TotalTokens, &summary.CacheReadTokens, &summary.CacheCreateTokens, &summary.ThinkingTokens,
+		&summary.CostUSD, &summary.AvgDurationMS,
 	); err != nil {
 		return nil, fmt.Errorf("get usage event summary: %w", err)
 	}

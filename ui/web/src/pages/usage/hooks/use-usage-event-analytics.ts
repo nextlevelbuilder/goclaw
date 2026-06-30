@@ -10,6 +10,9 @@ export interface UsageEventSummary {
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
+  cache_read_tokens: number;
+  cache_create_tokens: number;
+  thinking_tokens: number;
   cost_usd: number;
   avg_duration_ms: number;
 }
@@ -25,6 +28,9 @@ export interface UsageEventBreakdown {
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
+  cache_read_tokens: number;
+  cache_create_tokens: number;
+  thinking_tokens: number;
   cost_usd: number;
   avg_duration_ms: number;
 }
@@ -36,6 +42,9 @@ export interface UsageEventTimeSeries {
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
+  cache_read_tokens: number;
+  cache_create_tokens: number;
+  thinking_tokens: number;
   cost_usd: number;
   avg_duration_ms: number;
 }

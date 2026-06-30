@@ -22,9 +22,9 @@ func NewSQLiteUsageEventStore(db *sql.DB) *SQLiteUsageEventStore {
 	return &SQLiteUsageEventStore{db: db}
 }
 
-const sqliteUsageEventFieldCount = 28
+const sqliteUsageEventFieldCount = 31
 const sqliteUsageEventBatchSize = 30
-const sqliteUsageRollupFieldCount = 21
+const sqliteUsageRollupFieldCount = 24
 
 func (s *SQLiteUsageEventStore) InsertEvent(ctx context.Context, event *store.UsageEvent) error {
 	if event == nil {
@@ -62,7 +62,8 @@ func (s *SQLiteUsageEventStore) insertBatch(ctx context.Context, events []store.
 			event.EventType, event.ResourceType, event.ResourceName, event.ResourceID, event.Source,
 			nilUUID(event.AgentID), nilUUID(event.TeamID), nilUUID(event.TraceID), nilUUID(event.SpanID),
 			event.RunID, event.SessionKey, event.Channel, event.Provider, event.Model, event.Status,
-			event.InputTokens, event.OutputTokens, event.TotalTokens, event.CostUSD,
+			event.InputTokens, event.OutputTokens, event.TotalTokens,
+			event.CacheReadTokens, event.CacheCreateTokens, event.ThinkingTokens, event.CostUSD,
 			event.DurationMS, event.CallCount, event.ErrorCount, jsonOrNull(event.Metadata), event.CreatedAt,
 		)
 	}
@@ -71,7 +72,8 @@ func (s *SQLiteUsageEventStore) insertBatch(ctx context.Context, events []store.
 		event_type, resource_type, resource_name, resource_id, source,
 		agent_id, team_id, trace_id, span_id,
 		run_id, session_key, channel, provider, model, status,
-		input_tokens, output_tokens, total_tokens, cost_usd,
+		input_tokens, output_tokens, total_tokens,
+		cache_read_tokens, cache_create_tokens, thinking_tokens, cost_usd,
 		duration_ms, call_count, error_count, metadata, created_at
 	) VALUES ` + strings.Join(vals, ", ") + `
 	ON CONFLICT DO NOTHING`
@@ -97,6 +99,9 @@ func (s *SQLiteUsageEventStore) RefreshEventRollupHour(ctx context.Context, buck
 		COALESCE(SUM(input_tokens), 0),
 		COALESCE(SUM(output_tokens), 0),
 		COALESCE(SUM(total_tokens), 0),
+		COALESCE(SUM(cache_read_tokens), 0),
+		COALESCE(SUM(cache_create_tokens), 0),
+		COALESCE(SUM(thinking_tokens), 0),
 		COALESCE(SUM(cost_usd), 0),
 		CASE WHEN COALESCE(SUM(call_count), 0) > 0
 			THEN COALESCE(SUM(duration_ms * call_count), 0) / SUM(call_count)
@@ -121,7 +126,8 @@ func (s *SQLiteUsageEventStore) RefreshEventRollupHour(ctx context.Context, buck
 			&rollup.TenantID, &bucketTime, &rollup.EventType, &rollup.ResourceType,
 			&rollup.ResourceName, &rollup.Source, &rollup.AgentID, &rollup.Channel,
 			&rollup.Provider, &rollup.Model, &rollup.Status,
-			&rollup.InputTokens, &rollup.OutputTokens, &rollup.TotalTokens, &rollup.CostUSD,
+			&rollup.InputTokens, &rollup.OutputTokens, &rollup.TotalTokens,
+			&rollup.CacheReadTokens, &rollup.CacheCreateTokens, &rollup.ThinkingTokens, &rollup.CostUSD,
 			&rollup.DurationMS, &rollup.CallCount, &rollup.ErrorCount,
 		); err != nil {
 			return fmt.Errorf("scan usage event rollup: %w", err)
@@ -160,14 +166,16 @@ func (s *SQLiteUsageEventStore) upsertEventRollups(ctx context.Context, rollups 
 			rollup.ID, rollup.TenantID, rollup.BucketHour, rollup.EventType, rollup.ResourceType,
 			rollup.ResourceName, rollup.Source, nilUUID(rollup.AgentID), rollup.Channel,
 			rollup.Provider, rollup.Model, rollup.Status, rollup.InputTokens, rollup.OutputTokens,
-			rollup.TotalTokens, rollup.CostUSD, rollup.DurationMS, rollup.CallCount,
+			rollup.TotalTokens, rollup.CacheReadTokens, rollup.CacheCreateTokens, rollup.ThinkingTokens,
+			rollup.CostUSD, rollup.DurationMS, rollup.CallCount,
 			rollup.ErrorCount, rollup.CreatedAt, rollup.UpdatedAt,
 		)
 	}
 	query := `INSERT INTO usage_event_rollups (
 		id, tenant_id, bucket_hour, event_type, resource_type, resource_name, source,
 		agent_id, channel, provider, model, status,
-		input_tokens, output_tokens, total_tokens, cost_usd,
+		input_tokens, output_tokens, total_tokens,
+		cache_read_tokens, cache_create_tokens, thinking_tokens, cost_usd,
 		duration_ms, call_count, error_count, created_at, updated_at
 	) VALUES ` + strings.Join(vals, ", ") + `
 	ON CONFLICT (
@@ -186,6 +194,9 @@ func (s *SQLiteUsageEventStore) upsertEventRollups(ctx context.Context, rollups 
 		input_tokens = excluded.input_tokens,
 		output_tokens = excluded.output_tokens,
 		total_tokens = excluded.total_tokens,
+		cache_read_tokens = excluded.cache_read_tokens,
+		cache_create_tokens = excluded.cache_create_tokens,
+		thinking_tokens = excluded.thinking_tokens,
 		cost_usd = excluded.cost_usd,
 		duration_ms = excluded.duration_ms,
 		call_count = excluded.call_count,
@@ -208,6 +219,9 @@ func (s *SQLiteUsageEventStore) GetEventTimeSeries(ctx context.Context, q store.
 		COALESCE(SUM(input_tokens), 0),
 		COALESCE(SUM(output_tokens), 0),
 		COALESCE(SUM(total_tokens), 0),
+		COALESCE(SUM(cache_read_tokens), 0),
+		COALESCE(SUM(cache_create_tokens), 0),
+		COALESCE(SUM(thinking_tokens), 0),
 		COALESCE(SUM(cost_usd), 0),
 		CASE WHEN COALESCE(SUM(call_count), 0) > 0
 			THEN COALESCE(SUM(duration_ms * call_count), 0) / SUM(call_count)
@@ -230,6 +244,7 @@ func (s *SQLiteUsageEventStore) GetEventTimeSeries(ctx context.Context, q store.
 		if err := rows.Scan(
 			&bucketTime, &point.Calls, &point.Errors,
 			&point.InputTokens, &point.OutputTokens, &point.TotalTokens,
+			&point.CacheReadTokens, &point.CacheCreateTokens, &point.ThinkingTokens,
 			&point.CostUSD, &point.AvgDurationMS,
 		); err != nil {
 			return nil, fmt.Errorf("scan usage event timeseries: %w", err)
@@ -262,6 +277,9 @@ func (s *SQLiteUsageEventStore) GetEventBreakdown(ctx context.Context, q store.U
 		COALESCE(SUM(input_tokens), 0),
 		COALESCE(SUM(output_tokens), 0),
 		COALESCE(SUM(total_tokens), 0),
+		COALESCE(SUM(cache_read_tokens), 0),
+		COALESCE(SUM(cache_create_tokens), 0),
+		COALESCE(SUM(thinking_tokens), 0),
 		COALESCE(SUM(cost_usd), 0),
 		CASE WHEN COALESCE(SUM(call_count), 0) > 0
 			THEN COALESCE(SUM(duration_ms * call_count), 0) / SUM(call_count)
@@ -284,6 +302,7 @@ func (s *SQLiteUsageEventStore) GetEventBreakdown(ctx context.Context, q store.U
 		if err := rows.Scan(
 			&row.Key, &row.EventType, &row.ResourceType, &row.ResourceName, &row.Source,
 			&row.Calls, &row.Errors, &row.InputTokens, &row.OutputTokens, &row.TotalTokens,
+			&row.CacheReadTokens, &row.CacheCreateTokens, &row.ThinkingTokens,
 			&row.CostUSD, &row.AvgDurationMS,
 		); err != nil {
 			return nil, fmt.Errorf("scan usage event breakdown: %w", err)
@@ -301,6 +320,9 @@ func (s *SQLiteUsageEventStore) GetEventSummary(ctx context.Context, q store.Usa
 		COALESCE(SUM(input_tokens), 0),
 		COALESCE(SUM(output_tokens), 0),
 		COALESCE(SUM(total_tokens), 0),
+		COALESCE(SUM(cache_read_tokens), 0),
+		COALESCE(SUM(cache_create_tokens), 0),
+		COALESCE(SUM(thinking_tokens), 0),
 		COALESCE(SUM(cost_usd), 0),
 		CASE WHEN COALESCE(SUM(call_count), 0) > 0
 			THEN COALESCE(SUM(duration_ms * call_count), 0) / SUM(call_count)
@@ -309,7 +331,8 @@ func (s *SQLiteUsageEventStore) GetEventSummary(ctx context.Context, q store.Usa
 	var summary store.UsageEventSummary
 	if err := s.db.QueryRowContext(ctx, query, args...).Scan(
 		&summary.Calls, &summary.Errors, &summary.InputTokens, &summary.OutputTokens,
-		&summary.TotalTokens, &summary.CostUSD, &summary.AvgDurationMS,
+		&summary.TotalTokens, &summary.CacheReadTokens, &summary.CacheCreateTokens, &summary.ThinkingTokens,
+		&summary.CostUSD, &summary.AvgDurationMS,
 	); err != nil {
 		return nil, fmt.Errorf("get usage event summary: %w", err)
 	}
