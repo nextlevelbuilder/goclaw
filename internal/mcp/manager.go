@@ -146,6 +146,13 @@ func WithConfigs(cfgs map[string]*config.MCPServerConfig) ManagerOption {
 	}
 }
 
+// SetConfigs replaces the static server config map on an already-constructed Manager.
+// This is used by the gateway to populate configs from the database after the store
+// is initialised, before calling Start.
+func (m *Manager) SetConfigs(cfgs map[string]*config.MCPServerConfig) {
+	m.configs = cfgs
+}
+
 // WithStore sets the MCPServerStore for DB-backed MCP server loading.
 func WithStore(s store.MCPServerStore) ManagerOption {
 	return func(m *Manager) {
@@ -653,7 +660,10 @@ type MCPToolPreviewInfo struct {
 //
 // Per-tool descriptions are populated from the server's tool_hints settings when present.
 func (m *Manager) ListToolsForAgent(ctx context.Context, agentID uuid.UUID, userID string) ([]MCPToolPreviewInfo, error) {
+	slog.Debug("mcp.ListToolsForAgent.called", "agent_id", agentID, "user_id", userID)
+
 	if m.store == nil {
+		slog.Debug("mcp.ListToolsForAgent.no_store", "agent_id", agentID)
 		return nil, nil
 	}
 
@@ -662,13 +672,18 @@ func (m *Manager) ListToolsForAgent(ctx context.Context, agentID uuid.UUID, user
 		return nil, fmt.Errorf("list accessible MCP servers: %w", err)
 	}
 
+	slog.Debug("mcp.ListToolsForAgent.accessible_servers", "agent_id", agentID, "count", len(accessible))
+
 	var result []MCPToolPreviewInfo
 	for _, info := range accessible {
+		slog.Debug("mcp.ListToolsForAgent.server", "server", info.Server.Name, "enabled", info.Server.Enabled, "tool_allow_count", len(info.ToolAllow), "tool_deny_count", len(info.ToolDeny), "has_settings", len(info.Server.Settings) > 0)
 		if !info.Server.Enabled {
+			slog.Debug("mcp.ListToolsForAgent.server_disabled", "server", info.Server.Name)
 			continue
 		}
 		hints := ParseToolHints(info.Server.Settings)
 		effectivePrefix := ensureMCPPrefix(info.Server.ToolPrefix, info.Server.Name)
+		slog.Debug("mcp.ListToolsForAgent.server_hints", "server", info.Server.Name, "global_hint", hints.Global, "tool_hints_count", len(hints.Tools), "effective_prefix", effectivePrefix)
 
 		if len(info.ToolAllow) == 0 {
 			// Unknown tool list — emit one placeholder entry for the server.
@@ -677,6 +692,7 @@ func (m *Manager) ListToolsForAgent(ctx context.Context, agentID uuid.UUID, user
 			if desc == "" {
 				desc = "MCP server: " + info.Server.Name
 			}
+			slog.Debug("mcp.ListToolsForAgent.placeholder_entry", "server", info.Server.Name, "placeholder", placeholder)
 			result = append(result, MCPToolPreviewInfo{
 				RegisteredName: placeholder,
 				Description:    desc,
@@ -690,8 +706,10 @@ func (m *Manager) ListToolsForAgent(ctx context.Context, agentID uuid.UUID, user
 			denySet[d] = struct{}{}
 		}
 
+		var serverTools []string
 		for _, toolName := range info.ToolAllow {
 			if _, denied := denySet[toolName]; denied {
+				slog.Debug("mcp.ListToolsForAgent.tool_denied", "server", info.Server.Name, "tool", toolName)
 				continue
 			}
 			registeredName := effectivePrefix + "__" + toolName
@@ -699,12 +717,16 @@ func (m *Manager) ListToolsForAgent(ctx context.Context, agentID uuid.UUID, user
 			if desc == "" && hints.Global != "" {
 				desc = hints.Global
 			}
+			serverTools = append(serverTools, registeredName)
 			result = append(result, MCPToolPreviewInfo{
 				RegisteredName: registeredName,
 				Description:    desc,
 			})
 		}
+		slog.Debug("mcp.ListToolsForAgent.server_tools_added", "server", info.Server.Name, "tools", serverTools)
 	}
+
+	slog.Info("mcp.ListToolsForAgent.result", "agent_id", agentID, "user_id", userID, "total_tools", len(result))
 	return result, nil
 }
 

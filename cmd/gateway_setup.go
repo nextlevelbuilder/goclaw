@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -161,14 +162,11 @@ func setupToolRegistry(
 		slog.Info("credential scrubbing disabled")
 	}
 
-	// MCP servers (config-based: shared across all agents)
-	if len(cfg.Tools.McpServers) > 0 {
-		mcpMgr = mcpbridge.NewManager(toolsReg, mcpbridge.WithConfigs(cfg.Tools.McpServers))
-		if err := mcpMgr.Start(context.Background()); err != nil {
-			slog.Warn("mcp.startup_errors", "error", err)
-		}
-		slog.Info("MCP servers initialized", "configured", len(cfg.Tools.McpServers), "tools", len(mcpMgr.ToolNames()))
-	}
+	// MCP servers are loaded from the database in gateway.go after the store is
+	// initialised. The manager is created here so that the return value is always
+	// non-nil and downstream wiring (pool, grant-checker, etc.) can be applied
+	// unconditionally in gateway.go.
+	mcpMgr = mcpbridge.NewManager(toolsReg)
 
 	// Exec approval system — always active (deny patterns + safe bins + configurable ask mode)
 	{
@@ -603,4 +601,75 @@ func setupSkillsSystem(
 	}
 
 	return skillsLoader, skillSearchTool, globalSkillsDir, bundledSkillsDir, builtinSkillsDir
+}
+
+// initMCPFromDB loads all enabled MCP servers from the database and connects them
+// into the shared manager. This replaces the former config-file-based initialisation.
+// Non-fatal: individual server connection failures are logged as warnings.
+func initMCPFromDB(ctx context.Context, mgr *mcpbridge.Manager, mcpStore store.MCPServerStore) error {
+	servers, err := mcpStore.ListServers(ctx)
+	if err != nil {
+		return fmt.Errorf("list mcp servers from db: %w", err)
+	}
+
+	cfgs := make(map[string]*config.MCPServerConfig, len(servers))
+	for i := range servers {
+		srv := &servers[i]
+		if !srv.Enabled {
+			continue
+		}
+
+		var args []string
+		if len(srv.Args) > 0 {
+			if jsonErr := json.Unmarshal(srv.Args, &args); jsonErr != nil {
+				slog.Warn("mcp.db.invalid_args", "server", srv.Name, "error", jsonErr)
+			}
+		}
+
+		var headers map[string]string
+		if len(srv.Headers) > 0 {
+			if jsonErr := json.Unmarshal(srv.Headers, &headers); jsonErr != nil {
+				slog.Warn("mcp.db.invalid_headers", "server", srv.Name, "error", jsonErr)
+			}
+		}
+
+		var env map[string]string
+		if len(srv.Env) > 0 {
+			if jsonErr := json.Unmarshal(srv.Env, &env); jsonErr != nil {
+				slog.Warn("mcp.db.invalid_env", "server", srv.Name, "error", jsonErr)
+			}
+		}
+
+		// Inject decrypted APIKey as Authorization header when not already set.
+		if srv.APIKey != "" && headers["Authorization"] == "" {
+			if headers == nil {
+				headers = make(map[string]string)
+			}
+			headers["Authorization"] = "Bearer " + srv.APIKey
+		}
+
+		enabled := true
+		cfgs[srv.Name] = &config.MCPServerConfig{
+			Transport:  srv.Transport,
+			Command:    srv.Command,
+			Args:       args,
+			Env:        env,
+			URL:        srv.URL,
+			Headers:    headers,
+			Enabled:    &enabled,
+			ToolPrefix: srv.ToolPrefix,
+			TimeoutSec: srv.TimeoutSec,
+		}
+	}
+
+	if len(cfgs) == 0 {
+		slog.Info("mcp.db: no enabled servers found")
+		return nil
+	}
+
+	mgr.SetConfigs(cfgs)
+	if startErr := mgr.Start(ctx); startErr != nil {
+		slog.Warn("mcp.db.startup_errors", "error", startErr)
+	}
+	return nil
 }

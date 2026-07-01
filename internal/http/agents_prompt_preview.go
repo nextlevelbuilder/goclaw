@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -84,6 +85,7 @@ func (h *AgentsHandler) handleSystemPromptPreview(w http.ResponseWriter, r *http
 	// Build preview prompt — reuses same BuildSystemPrompt() as LLM pipeline.
 	// Runtime-only fields (channel, peer kind, credentials) are zero-valued;
 	// BuildSystemPrompt nil-checks every field so these sections are simply skipped.
+	slog.Debug("handleSystemPromptPreview.mcp_lister", "agent_id", ag.ID, "mcp_lister_nil", h.mcpPreviewMgr == nil)
 	result := agent.BuildPreviewPrompt(ctx, ag, mode, r.URL.Query().Get("user_id"), agent.PreviewDeps{
 		AgentStore:       h.agents,
 		TeamStore:        h.teamStore,
@@ -99,6 +101,18 @@ func (h *AgentsHandler) handleSystemPromptPreview(w http.ResponseWriter, r *http
 	counter := tokencount.NewFallbackCounter()
 	tokens := counter.Count("claude-3", result.Prompt)
 	sections := parseSections(result.Prompt)
+
+	// Log MCP section presence for debugging
+	mcpStart := strings.Index(result.Prompt, "mcp_")
+	if mcpStart >= 0 {
+		end := mcpStart + 500
+		if end > len(result.Prompt) {
+			end = len(result.Prompt)
+		}
+		slog.Info("handleSystemPromptPreview.mcp_section_found", "agent_id", ag.ID, "preview", result.Prompt[mcpStart:end])
+	} else {
+		slog.Info("handleSystemPromptPreview.no_mcp_section", "agent_id", ag.ID, "prompt_len", len(result.Prompt))
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(promptPreviewResponse{

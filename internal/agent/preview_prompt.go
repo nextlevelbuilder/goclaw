@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"log/slog"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -153,10 +154,14 @@ func BuildPreviewPrompt(ctx context.Context, ag *store.AgentData, mode PromptMod
 			mcpToolDescs = descs
 		}
 	}
+	slog.Debug("preview_prompt.mcp_from_registry", "agent_id", ag.ID, "live_mcp_tools", len(mcpToolDescs))
+
 	// Then supplement (or replace) with store-based MCP tools so that configured
 	// MCP servers appear in the preview even when not currently loaded in the registry.
+	slog.Debug("preview_prompt.mcp_lister_check", "agent_id", ag.ID, "mcp_lister_nil", deps.MCPLister == nil)
 	if deps.MCPLister != nil {
 		storeMCPTools, err := deps.MCPLister.ListToolsForAgent(ctx, ag.ID, userID)
+		slog.Debug("preview_prompt.mcp_lister_result", "agent_id", ag.ID, "user_id", userID, "store_tools_count", len(storeMCPTools), "error", err)
 		if err == nil && len(storeMCPTools) > 0 {
 			if mcpToolDescs == nil {
 				mcpToolDescs = make(map[string]string, len(storeMCPTools))
@@ -164,10 +169,16 @@ func BuildPreviewPrompt(ctx context.Context, ag *store.AgentData, mode PromptMod
 			for _, mt := range storeMCPTools {
 				if _, alreadyPresent := mcpToolDescs[mt.RegisteredName]; !alreadyPresent {
 					mcpToolDescs[mt.RegisteredName] = mt.Description
+					slog.Debug("preview_prompt.mcp_tool_added", "tool", mt.RegisteredName, "has_desc", mt.Description != "")
+				} else {
+					slog.Debug("preview_prompt.mcp_tool_already_present", "tool", mt.RegisteredName)
 				}
 			}
+		} else if err != nil {
+			slog.Info("preview_prompt.mcp_lister_error", "agent_id", ag.ID, "error", err)
 		}
 	}
+	slog.Info("preview_prompt.mcp_tool_descs_final", "agent_id", ag.ID, "total_mcp_tools", len(mcpToolDescs))
 
 	// --- Sandbox ---
 	sandboxCfg := ag.ParseSandboxConfig()

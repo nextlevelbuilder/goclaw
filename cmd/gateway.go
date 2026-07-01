@@ -251,6 +251,17 @@ func runGateway() {
 		applyUserAllowedPaths(toolsReg, paths)
 		slog.Info("filesystem allowed paths reapplied from system_configs", "paths", len(paths))
 	}
+	// MCP servers: load from database (single source of truth).
+	// pgStores.MCP is nil on SQLite/desktop builds that don't support MCP tables.
+	if pgStores.MCP != nil {
+		if err := initMCPFromDB(context.Background(), mcpMgr, pgStores.MCP); err != nil {
+			slog.Warn("mcp.db_load_errors", "error", err)
+		}
+		if mcpMgr != nil {
+			slog.Info("MCP servers loaded from database", "tools", len(mcpMgr.ToolNames()))
+		}
+	}
+
 	setupMemoryEmbeddings(pgStores, providerRegistry)
 	usageCapSvc := usagecaps.NewService(pgStores.UsageCaps, pgStores.Providers)
 
