@@ -432,6 +432,9 @@ func runGateway() {
 			skillAccess, _ = pgStores.Skills.(store.SkillAccessStore)
 		}
 		agentsH.SetPreviewStores(pgStores.Teams, pgStores.AgentLinks, skillAccess)
+		if mcpMgr != nil {
+			agentsH.SetPreviewMCPManager(httpapi.NewMCPPreviewAdapter(mcpMgr))
+		}
 	}
 
 	// External wake/trigger API

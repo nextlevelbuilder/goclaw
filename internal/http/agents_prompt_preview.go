@@ -1,14 +1,47 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
+	"github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/tokencount"
 )
+
+// mcpPreviewAdapter wraps *mcp.Manager to satisfy agent.MCPPreviewLister.
+// It converts mcp.MCPToolPreviewInfo to agent.MCPToolPreviewInfo so the
+// agent package does not need to import the mcp package (which would cycle).
+type mcpPreviewAdapter struct {
+	mgr *mcp.Manager
+}
+
+// NewMCPPreviewAdapter wraps an *mcp.Manager as an agent.MCPPreviewLister.
+// Use this when wiring up the prompt preview handler in cmd/gateway.go.
+func NewMCPPreviewAdapter(mgr *mcp.Manager) agent.MCPPreviewLister {
+	return &mcpPreviewAdapter{mgr: mgr}
+}
+
+// ListToolsForAgent implements agent.MCPPreviewLister.
+func (a *mcpPreviewAdapter) ListToolsForAgent(ctx context.Context, agentID uuid.UUID, userID string) ([]agent.MCPToolPreviewInfo, error) {
+	mcpTools, err := a.mgr.ListToolsForAgent(ctx, agentID, userID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]agent.MCPToolPreviewInfo, 0, len(mcpTools))
+	for _, mt := range mcpTools {
+		result = append(result, agent.MCPToolPreviewInfo{
+			RegisteredName: mt.RegisteredName,
+			Description:    mt.Description,
+		})
+	}
+	return result, nil
+}
 
 // promptPreviewSection represents a named section in the system prompt.
 type promptPreviewSection struct {
@@ -59,6 +92,7 @@ func (h *AgentsHandler) handleSystemPromptPreview(w http.ResponseWriter, r *http
 		ToolLister:       h.toolsReg,
 		SkillsLoader:     h.skillsLoader,
 		SkillAccessStore: h.skillAccessStore,
+		MCPLister:        h.mcpPreviewMgr,
 		DataDir:          h.dataDir,
 	})
 

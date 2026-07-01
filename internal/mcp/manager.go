@@ -632,6 +632,82 @@ func (m *Manager) Stop() {
 	m.poolToolNames = nil
 }
 
+// MCPToolPreviewInfo describes an MCP tool as seen from the store configuration,
+// without requiring a live connection to the MCP server.
+type MCPToolPreviewInfo struct {
+	// RegisteredName is the tool name as it appears in the tool registry (with mcp_ prefix).
+	RegisteredName string
+	// Description is derived from server tool hints, if configured.
+	Description string
+}
+
+// ListToolsForAgent returns a best-effort list of MCP tool names and descriptions
+// for a given agent+user based on store configuration only — no actual MCP
+// server connections are made. It is intended for prompt preview.
+//
+// For each accessible server:
+//   - If the agent grant has an explicit ToolAllow list, those tool names are
+//     used (minus any ToolDeny entries).
+//   - If ToolAllow is empty (all tools allowed), only a single placeholder entry
+//     is returned for the server (the exact tool list is unknown without connecting).
+//
+// Per-tool descriptions are populated from the server's tool_hints settings when present.
+func (m *Manager) ListToolsForAgent(ctx context.Context, agentID uuid.UUID, userID string) ([]MCPToolPreviewInfo, error) {
+	if m.store == nil {
+		return nil, nil
+	}
+
+	accessible, err := m.store.ListAccessible(ctx, agentID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list accessible MCP servers: %w", err)
+	}
+
+	var result []MCPToolPreviewInfo
+	for _, info := range accessible {
+		if !info.Server.Enabled {
+			continue
+		}
+		hints := ParseToolHints(info.Server.Settings)
+		effectivePrefix := ensureMCPPrefix(info.Server.ToolPrefix, info.Server.Name)
+
+		if len(info.ToolAllow) == 0 {
+			// Unknown tool list — emit one placeholder entry for the server.
+			placeholder := effectivePrefix + "__*"
+			desc := hints.Global
+			if desc == "" {
+				desc = "MCP server: " + info.Server.Name
+			}
+			result = append(result, MCPToolPreviewInfo{
+				RegisteredName: placeholder,
+				Description:    desc,
+			})
+			continue
+		}
+
+		// Build deny set
+		denySet := make(map[string]struct{}, len(info.ToolDeny))
+		for _, d := range info.ToolDeny {
+			denySet[d] = struct{}{}
+		}
+
+		for _, toolName := range info.ToolAllow {
+			if _, denied := denySet[toolName]; denied {
+				continue
+			}
+			registeredName := effectivePrefix + "__" + toolName
+			desc := hints.HintFor(toolName)
+			if desc == "" && hints.Global != "" {
+				desc = hints.Global
+			}
+			result = append(result, MCPToolPreviewInfo{
+				RegisteredName: registeredName,
+				Description:    desc,
+			})
+		}
+	}
+	return result, nil
+}
+
 // ServerStatus returns the status of all connected MCP servers.
 func (m *Manager) ServerStatus() []ServerStatus {
 	m.mu.RLock()

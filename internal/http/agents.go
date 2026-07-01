@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
@@ -40,6 +41,7 @@ type AgentsHandler struct {
 	skillAccessStore          store.SkillAccessStore    // for system prompt preview skill filtering (nil = skip)
 	teamStore                 store.TeamStore           // for system prompt preview team context (nil = skip)
 	agentLinkStore            store.AgentLinkStore      // for system prompt preview delegation targets (nil = skip)
+	mcpPreviewMgr             agent.MCPPreviewLister    // for store-based MCP tool preview (nil = skip)
 	secureCLI                 store.SecureCLIStore
 	secureCLIGrants           store.SecureCLIAgentGrantStore
 	secureCLIAgentCreds       store.SecureCLIAgentCredentialStore
@@ -108,6 +110,13 @@ type SkillPreviewBuilder interface {
 func (h *AgentsHandler) SetPreviewDeps(tl ToolPreviewLister, sl SkillPreviewBuilder) {
 	h.toolsReg = tl
 	h.skillsLoader = sl
+}
+
+// SetPreviewMCPManager attaches the MCP manager for store-based MCP tool preview.
+// When set, configured MCP tools appear in the prompt preview even when not
+// currently loaded in the live tool registry.
+func (h *AgentsHandler) SetPreviewMCPManager(lister agent.MCPPreviewLister) {
+	h.mcpPreviewMgr = lister
 }
 
 // SetPreviewStores attaches team + agent link stores for system prompt preview.
