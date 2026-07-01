@@ -229,7 +229,7 @@ func (c *Channel) handleTextMessage(msg *zaloMessage) {
 		"platform":   "zalo",
 	}
 
-	c.HandleMessage(senderID, chatID, content, nil, metadata, "direct")
+	c.HandleAuthorizedMessage(senderID, chatID, content, nil, metadata, "direct")
 }
 
 func (c *Channel) handleImageMessage(msg *zaloMessage) {
@@ -287,7 +287,7 @@ func (c *Channel) handleImageMessage(msg *zaloMessage) {
 		"platform":   "zalo",
 	}
 
-	c.HandleMessage(senderID, chatID, content, media, metadata, "direct")
+	c.HandleAuthorizedMessage(senderID, chatID, content, media, metadata, "direct")
 }
 
 // --- DM Policy ---

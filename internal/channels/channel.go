@@ -619,6 +619,17 @@ func (c *BaseChannel) ValidatePolicy(dmPolicy, groupPolicy string) {
 // This is the standard way for channels to forward received messages.
 // peerKind should be "direct" or "group" (see sessions.PeerDirect, sessions.PeerGroup).
 func (c *BaseChannel) HandleMessage(senderID, chatID, content string, media []string, metadata map[string]string, peerKind string) {
+	c.handleMessage(senderID, chatID, content, media, metadata, peerKind, false)
+}
+
+// HandleAuthorizedMessage publishes a message after the caller has already
+// enforced the channel policy. It preserves the default direct-message safety
+// net for adapters that do not have an explicit policy gate.
+func (c *BaseChannel) HandleAuthorizedMessage(senderID, chatID, content string, media []string, metadata map[string]string, peerKind string) {
+	c.handleMessage(senderID, chatID, content, media, metadata, peerKind, true)
+}
+
+func (c *BaseChannel) handleMessage(senderID, chatID, content string, media []string, metadata map[string]string, peerKind string, policyChecked bool) {
 	// Convert string paths to MediaFile (legacy path-only callers).
 	// Use filepath.Base(p) as filename so persistMedia's sanitizer gets a
 	// meaningful stem instead of falling back to UUID. MimeType is left empty —
@@ -627,7 +638,7 @@ func (c *BaseChannel) HandleMessage(senderID, chatID, content string, media []st
 	for _, p := range media {
 		mediaFiles = append(mediaFiles, bus.MediaFile{Path: p, Filename: filepath.Base(p)})
 	}
-	c.HandleMessageMedia(senderID, chatID, content, mediaFiles, metadata, peerKind)
+	c.handleMessageMedia(senderID, chatID, content, mediaFiles, metadata, peerKind, policyChecked)
 }
 
 // HandleMessageMedia is the richer sibling of HandleMessage: it accepts
@@ -637,12 +648,22 @@ func (c *BaseChannel) HandleMessage(senderID, chatID, content string, media []st
 // loses that information. Channels that already know the content type at
 // download time (e.g. Bitrix24 file events) should call this directly.
 func (c *BaseChannel) HandleMessageMedia(senderID, chatID, content string, media []bus.MediaFile, metadata map[string]string, peerKind string) {
+	c.handleMessageMedia(senderID, chatID, content, media, metadata, peerKind, false)
+}
+
+// HandleAuthorizedMessageMedia is the media-preserving variant for callers
+// that have already enforced the channel policy.
+func (c *BaseChannel) HandleAuthorizedMessageMedia(senderID, chatID, content string, media []bus.MediaFile, metadata map[string]string, peerKind string) {
+	c.handleMessageMedia(senderID, chatID, content, media, metadata, peerKind, true)
+}
+
+func (c *BaseChannel) handleMessageMedia(senderID, chatID, content string, media []bus.MediaFile, metadata map[string]string, peerKind string, policyChecked bool) {
 	// For DMs, enforce the allowlist as a safety net.
 	// For group messages, skip this check — group access is already enforced
 	// by the channel-specific group policy (checkGroupPolicy / CheckPolicy).
 	// Re-checking the sender here would incorrectly block users who are not
 	// individually listed but are in an allowed (or open-policy) group.
-	if peerKind != "group" && !c.IsAllowed(senderID) {
+	if peerKind != "group" && !policyChecked && !c.IsAllowed(senderID) {
 		return
 	}
 

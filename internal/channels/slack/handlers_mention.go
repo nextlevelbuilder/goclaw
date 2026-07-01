@@ -98,7 +98,7 @@ func (c *Channel) handleAppMention(ev *slackevents.AppMentionEvent) {
 		metadata["message_thread_id"] = replyThreadTS
 	}
 
-	c.HandleMessage(senderID, channelID, finalContent, nil, metadata, "group")
+	c.HandleAuthorizedMessage(senderID, channelID, finalContent, nil, metadata, "group")
 
 	// Record thread participation
 	if replyThreadTS != "" {

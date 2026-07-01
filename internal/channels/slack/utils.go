@@ -17,8 +17,16 @@ import (
 // is in the allowlist, enabling group-level allowlisting without requiring individual user IDs.
 // This is Slack-specific: other channels only check senderID in BaseChannel.HandleMessage.
 func (c *Channel) HandleMessage(senderID, chatID, content string, mediaPaths []string, metadata map[string]string, peerKind string) {
+	c.publishMessage(senderID, chatID, content, mediaPaths, metadata, peerKind, false)
+}
+
+func (c *Channel) HandleAuthorizedMessage(senderID, chatID, content string, mediaPaths []string, metadata map[string]string, peerKind string) {
+	c.publishMessage(senderID, chatID, content, mediaPaths, metadata, peerKind, true)
+}
+
+func (c *Channel) publishMessage(senderID, chatID, content string, mediaPaths []string, metadata map[string]string, peerKind string, policyChecked bool) {
 	// Allow if either the sender or the Slack channel ID is in the allowlist.
-	if !c.IsAllowed(senderID) && !c.IsAllowed(chatID) {
+	if !policyChecked && !c.IsAllowed(senderID) && !c.IsAllowed(chatID) {
 		return
 	}
 
