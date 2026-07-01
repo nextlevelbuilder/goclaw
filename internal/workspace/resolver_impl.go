@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 )
 
 // masterTenantID is the sentinel UUID for the master/default tenant.
@@ -123,22 +125,13 @@ func (r *defaultResolver) resolvePersonal(p ResolveParams) *WorkspaceContext {
 
 // tenantPath returns tenant-scoped directory.
 // Master tenant returns base dir directly (backward compat with v2).
-// Uses slug when available (matches config.TenantWorkspace), falls back to UUID.
+// Uses slug when available (matches config.TenantWorkspace), falls back to
+// tenantID. Sanitizes both identifiers (workspace tenant IDs/slugs are not
+// always valid UUIDs, unlike config's uuid.UUID-typed call sites) before
+// delegating the actual join+traversal-defense logic to the single canonical
+// implementation, config.TenantScopedDir.
 func tenantPath(base, tenantID, tenantSlug string) string {
-	if tenantID == "" || tenantID == masterTenantID {
-		return base
-	}
-	segment := tenantSlug
-	if segment == "" {
-		segment = tenantID
-	}
-	result := filepath.Join(base, "tenants", sanitizeSegment(segment))
-	// Path traversal defense: ensure result stays under tenants/ base
-	tenantsBase := filepath.Join(base, "tenants") + string(filepath.Separator)
-	if !strings.HasPrefix(result+string(filepath.Separator), tenantsBase) {
-		return filepath.Join(base, "tenants", sanitizeSegment(tenantID))
-	}
-	return result
+	return config.TenantScopedDir(base, sanitizeSegment(tenantID), sanitizeSegment(tenantSlug))
 }
 
 // userChatSegment returns the isolation segment: chatID for group, userID for direct.

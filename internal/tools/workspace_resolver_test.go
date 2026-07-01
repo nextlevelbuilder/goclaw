@@ -2,6 +2,7 @@ package tools
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -174,6 +175,31 @@ func TestResolveWorkspace_SharedTrue(t *testing.T) {
 	)
 	if got != "/data" {
 		t.Errorf("shared=true should skip segment, got %s", got)
+	}
+}
+
+// TestResolveWorkspace_TenantScopedBaseDir_NoDoubleJoin pins a regression:
+// when the base dir passed in is ALREADY tenant-scoped (as internal/agent's
+// Loop.dataDir is — see resolver.go's config.TenantDataDir call), applying
+// TeamLayer alone must produce the tenant segment exactly once, matching the
+// path the web UI file-upload handler writes to (internal/http/files.go via
+// config.TenantWorkspace). Regression: an earlier version of internal/agent's
+// loop_context.go re-applied TenantLayer on top of this already-scoped base,
+// producing "tenants/acme/tenants/acme/teams/<id>".
+func TestResolveWorkspace_TenantScopedBaseDir_NoDoubleJoin(t *testing.T) {
+	teamID := uuid.MustParse("0193c000-0000-7000-8000-000000000003")
+	alreadyTenantScopedBase := filepath.Join("/data", "tenants", "acme")
+
+	got := ResolveWorkspace(alreadyTenantScopedBase,
+		TeamLayer(teamID),
+	)
+
+	want := filepath.Join("/data", "tenants", "acme", "teams", teamID.String())
+	if got != want {
+		t.Errorf("want %s, got %s", want, got)
+	}
+	if n := strings.Count(got, "tenants"+string(filepath.Separator)+"acme"); n != 1 {
+		t.Errorf("expected tenant segment to appear exactly once, got %d occurrences in %q", n, got)
 	}
 }
 

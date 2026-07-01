@@ -122,6 +122,46 @@ func TestResolve_TeamShared(t *testing.T) {
 	}
 }
 
+// TestResolve_TeamShared_TenantScopedBaseDir_NoDoubleJoin pins a regression:
+// callers whose BaseDir is already tenant-scoped (e.g. internal/agent's
+// Loop.dataDir, built via config.TenantDataDir) must pass an empty
+// TenantID/TenantSlug so resolveTeam's tenantPath() call is a no-op. An
+// earlier bug passed both an already-scoped BaseDir AND a non-empty
+// TenantID/TenantSlug into this same call, producing
+// ".../tenants/acme/tenants/acme/teams/<id>" for the agent-facing path,
+// while the web UI upload handler (config.TenantWorkspace, single join)
+// correctly produced ".../tenants/acme/teams/<id>".
+func TestResolve_TeamShared_TenantScopedBaseDir_NoDoubleJoin(t *testing.T) {
+	rawBase := t.TempDir()
+	alreadyTenantScopedBase := filepath.Join(rawBase, "tenants", "acme")
+	r := NewResolver()
+	teamID := "team-abc"
+
+	wc, err := r.Resolve(context.Background(), ResolveParams{
+		AgentID:    "agent-1",
+		AgentType:  "open",
+		UserID:     "user-1",
+		ChatID:     "chat-1",
+		TenantID:   "", // intentionally empty: BaseDir is already tenant-scoped
+		TenantSlug: "",
+		PeerKind:   "direct",
+		TeamID:     &teamID,
+		TeamConfig: &TeamWorkspaceConfig{WorkspaceScope: "shared"},
+		BaseDir:    alreadyTenantScopedBase,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := filepath.Join(rawBase, "tenants", "acme", "teams", "team-abc")
+	if wc.ActivePath != want {
+		t.Errorf("ActivePath = %q, want %q", wc.ActivePath, want)
+	}
+	if n := strings.Count(wc.ActivePath, filepath.Join("tenants", "acme")); n != 1 {
+		t.Errorf("expected tenant segment to appear exactly once, got %d occurrences in %q", n, wc.ActivePath)
+	}
+}
+
 func TestResolve_TeamIsolated(t *testing.T) {
 	base := t.TempDir()
 	r := NewResolver()
