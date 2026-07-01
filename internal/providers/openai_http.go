@@ -76,8 +76,12 @@ func (p *OpenAIProvider) doRequest(ctx context.Context, body any) (io.ReadCloser
 	return resp.Body, nil
 }
 
-func (p *OpenAIProvider) parseResponse(resp *openAIResponse) *ChatResponse {
+func (p *OpenAIProvider) parseResponse(resp *openAIResponse, tools ...[]ToolDefinition) *ChatResponse {
 	result := &ChatResponse{FinishReason: "stop"}
+	var toolDefs []ToolDefinition
+	if len(tools) > 0 {
+		toolDefs = tools[0]
+	}
 
 	if len(resp.Choices) > 0 {
 		msg := resp.Choices[0].Message
@@ -129,6 +133,14 @@ func (p *OpenAIProvider) parseResponse(resp *openAIResponse) *ChatResponse {
 				Data:     b64Data,
 			})
 		}
+
+		normalized := normalizeControlOutput(result.Content, result.Thinking, toolDefs)
+		result.Content = normalized.Content
+		result.Thinking = normalized.Thinking
+		result.ToolCalls = append(result.ToolCalls, normalized.ToolCalls...)
+		if len(result.ToolCalls) > 0 && result.FinishReason != "length" {
+			result.FinishReason = "tool_calls"
+		}
 	}
 
 	if resp.Usage != nil {
@@ -152,6 +164,21 @@ func (p *OpenAIProvider) parseResponse(resp *openAIResponse) *ChatResponse {
 	}
 
 	return result
+}
+
+func emitNormalizedControlChunk(result *ChatResponse, normalized controlOutput, stripThinking bool, onChunk func(StreamChunk)) {
+	if normalized.Thinking != "" && !stripThinking {
+		result.Thinking = joinThinking(result.Thinking, normalized.Thinking)
+		if onChunk != nil {
+			onChunk(StreamChunk{Thinking: normalized.Thinking})
+		}
+	}
+	if normalized.Content != "" {
+		result.Content += normalized.Content
+		if onChunk != nil {
+			onChunk(StreamChunk{Content: normalized.Content})
+		}
+	}
 }
 
 // maxTokensLimitRe matches "supports at most N completion tokens" from OpenAI 400 errors.

@@ -16,7 +16,7 @@ func (p *OpenAIProvider) Chat(ctx context.Context, req ChatRequest) (*ChatRespon
 	body := p.buildRequestBody(model, req, false)
 	body = ApplyMiddlewares(body, p.middlewares, p.middlewareConfig(model, req))
 
-	chatFn := p.chatRequestFn(ctx, body)
+	chatFn := p.chatRequestFn(ctx, body, req.Tools)
 
 	resp, err := RetryDo(ctx, p.retryConfig, chatFn)
 
@@ -42,7 +42,7 @@ func (p *OpenAIProvider) Chat(ctx context.Context, req ChatRequest) (*ChatRespon
 
 // chatRequestFn returns a closure that performs a single non-streaming chat request.
 // Shared between initial attempt and post-clamp retry to avoid duplication.
-func (p *OpenAIProvider) chatRequestFn(ctx context.Context, body map[string]any) func() (*ChatResponse, error) {
+func (p *OpenAIProvider) chatRequestFn(ctx context.Context, body map[string]any, tools []ToolDefinition) func() (*ChatResponse, error) {
 	return func() (*ChatResponse, error) {
 		respBody, err := p.doRequest(ctx, body)
 		if err != nil {
@@ -55,7 +55,7 @@ func (p *OpenAIProvider) chatRequestFn(ctx context.Context, body map[string]any)
 			return nil, fmt.Errorf("%s: decode response: %w", p.name, err)
 		}
 
-		return p.parseResponse(&oaiResp), nil
+		return p.parseResponse(&oaiResp, tools), nil
 	}
 }
 
@@ -90,6 +90,8 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 
 	result := &ChatResponse{FinishReason: "stop"}
 	accumulators := make(map[int]*toolCallAccumulator)
+	normalizer := newControlOutputNormalizer(req.Tools)
+	var textToolCalls []ToolCall
 
 	sse := NewSSEScanner(cb)
 	for sse.Next() {
@@ -139,10 +141,9 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 			}
 		}
 		if delta.Content != "" {
-			result.Content += delta.Content
-			if onChunk != nil {
-				onChunk(StreamChunk{Content: delta.Content})
-			}
+			normalized := normalizer.Append(delta.Content)
+			emitNormalizedControlChunk(result, normalized, stripThinking, onChunk)
+			textToolCalls = append(textToolCalls, normalized.ToolCalls...)
 		}
 
 		// Accumulate images from delta.images[].
@@ -185,6 +186,10 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 
 	}
 
+	normalized := normalizer.Finish()
+	emitNormalizedControlChunk(result, normalized, stripThinking, onChunk)
+	textToolCalls = append(textToolCalls, normalized.ToolCalls...)
+
 	// Check for scanner errors (timeout, connection reset, etc.)
 	if err := sse.Err(); err != nil {
 		return result, fmt.Errorf("%s: stream read error: %w", p.name, err)
@@ -205,6 +210,7 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 		}
 		result.ToolCalls = append(result.ToolCalls, acc.ToolCall)
 	}
+	result.ToolCalls = append(result.ToolCalls, textToolCalls...)
 
 	// Only override finish_reason when stream wasn't truncated.
 	// Preserve "length" so agent loop can detect truncation and retry.
