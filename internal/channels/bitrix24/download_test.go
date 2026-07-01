@@ -67,7 +67,7 @@ func TestResolveMime_FallbackOctetStream(t *testing.T) {
 
 // TestResolveMime_DefaultOctetStream tests the final fallback to octet-stream.
 func TestResolveMime_DefaultOctetStream(t *testing.T) {
-	f := EventFile{Mime: "", Name: "unknown.xyz"}
+	f := EventFile{Mime: "", Name: "unknown"}
 	got := resolveMime(f, "")
 	if got != "application/octet-stream" {
 		t.Errorf("want application/octet-stream (final fallback), got %q", got)

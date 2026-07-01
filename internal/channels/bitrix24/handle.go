@@ -424,7 +424,7 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 		"message_id", evt.Params.MessageID,
 		"media_count", len(mediaFiles),
 	)
-	c.HandleMessageMedia(senderID, chatID, text, mediaFiles, meta, peerKind)
+	c.HandleAuthorizedMessageMedia(senderID, chatID, text, mediaFiles, meta, peerKind)
 }
 
 // handleJoin sends a short welcome the first time the bot is added to a

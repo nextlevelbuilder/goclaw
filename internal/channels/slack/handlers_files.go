@@ -20,27 +20,29 @@ import (
 // --- Message debounce/batching ---
 
 type debounceEntry struct {
-	timer     *time.Timer
-	messages  []string
-	mu        sync.Mutex
-	senderID  string
-	channelID string
-	media     []string
-	metadata  map[string]string
-	peerKind  string
+	timer      *time.Timer
+	messages   []string
+	mu         sync.Mutex
+	senderID   string
+	channelID  string
+	media      []string
+	metadata   map[string]string
+	peerKind   string
+	authorized bool
 }
 
 // debounceMessage batches rapid messages. Returns true if message was debounced.
-func (c *Channel) debounceMessage(localKey, senderID, channelID, content string, media []string, metadata map[string]string, peerKind string) bool {
+func (c *Channel) debounceMessage(localKey, senderID, channelID, content string, media []string, metadata map[string]string, peerKind string, authorized bool) bool {
 	c.debounceMu.Lock()
 	entry, loaded := c.debounceTimers[localKey]
 	if !loaded {
 		entry = &debounceEntry{
-			senderID:  senderID,
-			channelID: channelID,
-			media:     media,
-			metadata:  metadata,
-			peerKind:  peerKind,
+			senderID:   senderID,
+			channelID:  channelID,
+			media:      media,
+			metadata:   metadata,
+			peerKind:   peerKind,
+			authorized: authorized,
 		}
 		c.debounceTimers[localKey] = entry
 	}
@@ -85,7 +87,7 @@ func (c *Channel) flushDebounce(localKey string) {
 	combined := strings.Join(entry.messages, "\n")
 	entry.mu.Unlock()
 
-	c.HandleMessage(entry.senderID, entry.channelID, combined, entry.media, entry.metadata, entry.peerKind)
+	c.publishMessage(entry.senderID, entry.channelID, combined, entry.media, entry.metadata, entry.peerKind, entry.authorized)
 
 	if entry.peerKind == "group" {
 		c.GroupHistory().Clear(localKey)

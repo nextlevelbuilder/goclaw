@@ -4,6 +4,25 @@ Significant changes, features, and fixes in reverse chronological order.
 
 ---
 
+## 2026-07-01
+
+### Paired DM routing after policy checks
+
+**Fixes**
+
+- Policy-checked direct messages now pass the shared channel safety gate for
+  Zalo OA, Zalo Personal, Bitrix24, and Slack when the sender is paired but not
+  listed in static `allow_from`.
+- Direct-message callers without an explicit policy gate still use the default
+  `allow_from` safety net.
+
+**Tests**
+
+- Added regression coverage for paired Zalo-style and Slack DMs with an
+  allowlist mismatch, plus guard coverage for non-policy direct callers.
+
+---
+
 ## 2026-06-27
 
 ### Feishu/Lark group pairing stability

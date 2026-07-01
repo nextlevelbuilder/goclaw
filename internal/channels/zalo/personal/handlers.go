@@ -72,7 +72,7 @@ func (c *Channel) handleDM(msg protocol.UserMessage) {
 		"platform":     channels.TypeZaloPersonal,
 		"display_name": channels.SanitizeDisplayName(senderName),
 	}
-	c.HandleMessage(senderID, threadID, content, media, metadata, "direct")
+	c.HandleAuthorizedMessage(senderID, threadID, content, media, metadata, "direct")
 }
 
 func (c *Channel) handleGroupMessage(msg protocol.GroupMessage) {
