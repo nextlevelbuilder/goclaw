@@ -11,7 +11,11 @@ import {
 import { ConfigGroupHeader } from "@/components/shared/config-group-header";
 import { ChannelFields } from "../channel-fields";
 import { configSchema } from "../channel-schemas";
-import { normalizeReasoningDeliveryConfig } from "../reasoning-delivery-config";
+import {
+  buildAdvancedConfigUpdate,
+  deriveAdvancedInitialValues,
+  ESSENTIAL_CONFIG_KEYS,
+} from "./channel-advanced-config";
 import type { ChannelInstanceData } from "@/types/channel";
 
 interface ChannelAdvancedDialogProps {
@@ -20,8 +24,6 @@ interface ChannelAdvancedDialogProps {
   instance: ChannelInstanceData;
   onUpdate: (updates: Record<string, unknown>) => Promise<void>;
 }
-
-const ESSENTIAL_CONFIG_KEYS = new Set(["dm_policy", "group_policy", "require_mention", "mention_mode"]);
 
 const NETWORK_KEYS = new Set(["api_server", "proxy", "domain", "connection_mode", "webhook_port", "webhook_path", "webhook_url"]);
 const LIMITS_KEYS = new Set(["history_limit", "media_max_mb", "text_chunk_limit"]);
@@ -41,14 +43,6 @@ function getAdvancedFields(channelType: string) {
   };
 }
 
-function deriveInitialValues(instance: ChannelInstanceData): Record<string, unknown> {
-  const config = normalizeReasoningDeliveryConfig((instance.config ?? {}) as Record<string, unknown>);
-  // Only keep advanced keys (exclude essential + groups)
-  return Object.fromEntries(
-    Object.entries(config).filter(([k]) => !ESSENTIAL_CONFIG_KEYS.has(k) && k !== "groups"),
-  );
-}
-
 export function ChannelAdvancedDialog({
   open,
   onOpenChange,
@@ -58,14 +52,13 @@ export function ChannelAdvancedDialog({
   const { t } = useTranslation("channels");
   const groups = getAdvancedFields(instance.channel_type);
 
-  const [values, setValues] = useState<Record<string, unknown>>(() => deriveInitialValues(instance));
+  const [values, setValues] = useState<Record<string, unknown>>(() => deriveAdvancedInitialValues(instance.config));
   const [saving, setSaving] = useState(false);
 
   // Re-sync local state when dialog opens
   useEffect(() => {
     if (!open) return;
-    setValues(deriveInitialValues(instance));
-     
+    setValues(deriveAdvancedInitialValues(instance.config));
   }, [open, instance]);
 
   const handleChange = useCallback((key: string, value: unknown) => {
@@ -75,13 +68,7 @@ export function ChannelAdvancedDialog({
   const handleSave = async () => {
     setSaving(true);
     try {
-      const existingConfig = (instance.config ?? {}) as Record<string, unknown>;
-      const cleanAdvanced = Object.fromEntries(
-        Object.entries(values).filter(([, v]) => v !== undefined && v !== "" && v !== null),
-      );
-      // Merge: preserve essential keys and groups from existing, overwrite advanced keys
-      const merged = normalizeReasoningDeliveryConfig({ ...existingConfig, ...cleanAdvanced });
-      await onUpdate({ config: merged });
+      await onUpdate({ config: buildAdvancedConfigUpdate(instance.config, values) });
       onOpenChange(false);
     } catch { // toast shown by hook
     } finally {
