@@ -39,9 +39,9 @@ func argMapKeys(m map[string]any) string {
 // safe reconnection without data races.
 type BridgeTool struct {
 	serverName        string
-	serverID          uuid.UUID    // MCP server ID (for grant recheck)
-	toolName          string       // original MCP tool name
-	registeredName    string       // may include prefix: "{prefix}__{toolName}"
+	serverID          uuid.UUID // MCP server ID (for grant recheck)
+	toolName          string    // original MCP tool name
+	registeredName    string    // may include prefix: "{prefix}__{toolName}"
 	description       string
 	descriptionSuffix string         // admin-authored hints appended to description (see WithHints)
 	inputSchema       map[string]any // JSON Schema for parameters
@@ -224,6 +224,22 @@ func (t *BridgeTool) Execute(ctx context.Context, args map[string]any) *tools.Re
 	// instead of omitting them, causing MCP servers to reject invalid values
 	// (e.g. empty string for UUID fields).
 	cleanedArgs := t.stripEmptyOptionalArgs(args)
+	var coercedPaths []string
+	var normalizeErr error
+	cleanedArgs, coercedPaths, normalizeErr = t.normalizeArgsForSchema(cleanedArgs)
+	if normalizeErr != nil {
+		return tools.ErrorResult(fmt.Sprintf(
+			"MCP tool %q argument error: %v. For object or array parameters, pass native JSON values, not stringified JSON.",
+			t.registeredName, normalizeErr))
+	}
+	if len(coercedPaths) > 0 {
+		slog.Warn("mcp.tool.args.coerced",
+			"server", t.serverName,
+			"tool", t.registeredName,
+			"user_id", store.UserIDFromContext(ctx),
+			"agent_id", store.AgentIDFromContext(ctx),
+			"paths", strings.Join(coercedPaths, ","))
+	}
 
 	req := mcpgo.CallToolRequest{}
 	req.Params.Name = t.toolName

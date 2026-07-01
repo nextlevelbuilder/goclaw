@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -235,10 +236,10 @@ func TestStripEmptyOptionalArgs(t *testing.T) {
 
 	args := map[string]any{
 		"url":      "https://example.com",
-		"api_key":  "optional",    // placeholder → strip
-		"timeout":  nil,           // nil → strip
-		"debug":    true,          // real boolean → keep
-		"keywords": "",            // empty string for string-typed → keep
+		"api_key":  "optional", // placeholder → strip
+		"timeout":  nil,        // nil → strip
+		"debug":    true,       // real boolean → keep
+		"keywords": "",         // empty string for string-typed → keep
 	}
 
 	cleaned := bt.stripEmptyOptionalArgs(args)
@@ -284,6 +285,177 @@ func TestStripEmptyOptionalArgs_EmptyStringNonString(t *testing.T) {
 	}
 	if _, ok := cleaned["count"]; ok {
 		t.Error("empty string should be stripped for integer-typed param")
+	}
+}
+
+func TestNormalizeArgsForSchema_CoercesStringifiedLarkTaskPatchArgs(t *testing.T) {
+	bt := &BridgeTool{
+		inputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"path": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"task_guid": map[string]any{"type": "string"},
+					},
+				},
+				"params": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"user_id_type": map[string]any{"type": "string"},
+					},
+				},
+				"data": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"task": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"completed_at": map[string]any{"type": "string"},
+							},
+						},
+						"update_fields": map[string]any{
+							"type":  "array",
+							"items": map[string]any{"type": "string"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	args := map[string]any{
+		"path":   `{"task_guid":"2d446187-084d-4d45-883b-5d238242b9fc"}`,
+		"params": `{"user_id_type":"open_id"}`,
+		"data":   `{"task":{"completed_at":"1782906226000"},"update_fields":["completed_at"]}`,
+	}
+
+	normalized, coercedPaths, err := bt.normalizeArgsForSchema(args)
+	if err != nil {
+		t.Fatalf("normalizeArgsForSchema returned error: %v", err)
+	}
+
+	pathArg, ok := normalized["path"].(map[string]any)
+	if !ok {
+		t.Fatalf("path should be object after normalization, got %T", normalized["path"])
+	}
+	if pathArg["task_guid"] != "2d446187-084d-4d45-883b-5d238242b9fc" {
+		t.Errorf("unexpected task_guid: %v", pathArg["task_guid"])
+	}
+
+	dataArg, ok := normalized["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("data should be object after normalization, got %T", normalized["data"])
+	}
+	taskArg, ok := dataArg["task"].(map[string]any)
+	if !ok {
+		t.Fatalf("data.task should be object after normalization, got %T", dataArg["task"])
+	}
+	if taskArg["completed_at"] != "1782906226000" {
+		t.Errorf("unexpected completed_at: %v", taskArg["completed_at"])
+	}
+
+	wantPaths := map[string]bool{"$.path": true, "$.params": true, "$.data": true}
+	for _, path := range coercedPaths {
+		delete(wantPaths, path)
+	}
+	if len(wantPaths) != 0 {
+		t.Errorf("missing coerced paths: %v; got %v", wantPaths, coercedPaths)
+	}
+}
+
+func TestNormalizeArgsForSchema_CoercesNestedStringifiedContainers(t *testing.T) {
+	bt := &BridgeTool{
+		inputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"data": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"task": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"completed_at": map[string]any{"type": "string"},
+							},
+						},
+						"update_fields": map[string]any{
+							"type":  "array",
+							"items": map[string]any{"type": "string"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	args := map[string]any{
+		"data": map[string]any{
+			"task":          `{"completed_at":"1782906226000"}`,
+			"update_fields": `["completed_at"]`,
+		},
+	}
+
+	normalized, coercedPaths, err := bt.normalizeArgsForSchema(args)
+	if err != nil {
+		t.Fatalf("normalizeArgsForSchema returned error: %v", err)
+	}
+
+	dataArg := normalized["data"].(map[string]any)
+	if _, ok := dataArg["task"].(map[string]any); !ok {
+		t.Fatalf("data.task should be object after normalization, got %T", dataArg["task"])
+	}
+	if fields, ok := dataArg["update_fields"].([]any); !ok || len(fields) != 1 || fields[0] != "completed_at" {
+		t.Fatalf("update_fields should be array after normalization, got %#v", dataArg["update_fields"])
+	}
+
+	wantPaths := map[string]bool{"$.data.task": true, "$.data.update_fields": true}
+	for _, path := range coercedPaths {
+		delete(wantPaths, path)
+	}
+	if len(wantPaths) != 0 {
+		t.Errorf("missing coerced paths: %v; got %v", wantPaths, coercedPaths)
+	}
+}
+
+func TestNormalizeArgsForSchema_RejectsStringifiedContainerWithWrongShape(t *testing.T) {
+	bt := &BridgeTool{
+		inputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"path": map[string]any{"type": "object"},
+			},
+		},
+	}
+
+	_, _, err := bt.normalizeArgsForSchema(map[string]any{"path": `["not","object"]`})
+	if err == nil {
+		t.Fatal("expected error for array string when schema requires object")
+	}
+	if !strings.Contains(err.Error(), "$.path must be object") {
+		t.Fatalf("expected actionable path/type error, got: %v", err)
+	}
+}
+
+func TestNormalizeArgsForSchema_DoesNotCoerceStringTypedProperty(t *testing.T) {
+	bt := &BridgeTool{
+		inputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"content": map[string]any{"type": "string"},
+			},
+		},
+	}
+
+	args := map[string]any{"content": `{"literal":"json text"}`}
+	normalized, coercedPaths, err := bt.normalizeArgsForSchema(args)
+	if err != nil {
+		t.Fatalf("normalizeArgsForSchema returned error: %v", err)
+	}
+	if normalized["content"] != `{"literal":"json text"}` {
+		t.Errorf("string-typed property should remain unchanged, got %#v", normalized["content"])
+	}
+	if len(coercedPaths) != 0 {
+		t.Errorf("string-typed property should not be coerced, got paths %v", coercedPaths)
 	}
 }
 
