@@ -41,6 +41,57 @@ const (
 	// name-only, or non-connector (operator) messages — those degrade safely to the
 	// group-level userID.
 	MetaKeyParticipantUserID = "participant_user_id"
+
+	// ---- Chat entity context keys (populated from EntityContext.ToMeta) ----
+	//
+	// Emitted by entity_context.go on top of the raw bitrix_chat_entity_type /
+	// bitrix_chat_entity_id fields already set by handle.go. Only present when
+	// the source Bitrix payload carries a decodable value, so agents / tools can
+	// treat "key missing" as "not applicable" without extra flags.
+
+	// MetaKeyChatTitle is the human-readable chat name Bitrix ships in
+	// data[PARAMS][CHAT_TITLE]. Populated for every chat that has a title
+	// (group chats, Open Channel sessions, tasks, workgroups). Absent on
+	// 1-1 DMs where Bitrix does not attach a title.
+	MetaKeyChatTitle = "bitrix_chat_title"
+
+	// MetaKeyChatType mirrors data[PARAMS][CHAT_TYPE] — the single-letter
+	// Bitrix chat classifier ("L" openline, "C" group/CRM, "X" tasks, "B"
+	// collab, "P" private, ...). More precise than ChatEntityType for
+	// disambiguating surfaces.
+	MetaKeyChatType = "bitrix_chat_type"
+
+	// Openline (LINES) session fields, decoded from CHAT_ENTITY_ID
+	// ("<connector>|<line>|<external_uid>|<bitrix_user_id>") and
+	// CHAT_ENTITY_DATA_1 (10-token session state).
+	MetaKeyOLConnectorCode  = "bitrix_ol_connector_code"
+	MetaKeyOLLineID         = "bitrix_ol_line_id"
+	MetaKeyOLExternalUID    = "bitrix_ol_external_uid"
+	MetaKeyOLBitrixUserID   = "bitrix_ol_bitrix_user_id"
+	MetaKeyOLLineConfigID   = "bitrix_ol_line_config_id"
+	MetaKeyOLSessionStarted = "bitrix_ol_session_started_at"
+	MetaKeyOLActiveCRMType  = "bitrix_ol_active_crm_type"
+	MetaKeyOLActiveCRMID    = "bitrix_ol_active_crm_id"
+
+	// CRM linkage — sourced from CHAT_ENTITY_DATA_2 on Openline chats
+	// (schema "LEAD|<id>|COMPANY|<id>|CONTACT|<id>|DEAL|<id>"), or from
+	// CHAT_ENTITY_ID on native CRM-integrated chats (2-token
+	// "<TYPE>|<id>"). Only the ids that are non-zero are emitted.
+	MetaKeyCRMLeadID    = "bitrix_crm_lead_id"
+	MetaKeyCRMCompanyID = "bitrix_crm_company_id"
+	MetaKeyCRMContactID = "bitrix_crm_contact_id"
+	MetaKeyCRMDealID    = "bitrix_crm_deal_id"
+
+	// Native CRM chat scalars — from CHAT_ENTITY_ID like "CONTACT|1780".
+	// Kept alongside the type-specific *_id keys so agents can either look
+	// up the entity id directly or dispatch on the type token.
+	MetaKeyCRMEntityType = "bitrix_crm_type"
+	MetaKeyCRMEntityID   = "bitrix_crm_id"
+
+	// Single-token ENTITY_ID cases (Task / Workgroup / Mail).
+	MetaKeyTaskID      = "bitrix_task_id"
+	MetaKeyWorkgroupID = "bitrix_workgroup_id"
+	MetaKeyMailID      = "bitrix_mail_id"
 )
 
 // Values for MetaKeyVisibility. Stored as strings (not bool) so callers

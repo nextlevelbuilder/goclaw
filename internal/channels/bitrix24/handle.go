@@ -339,6 +339,17 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 		meta["bitrix_chat_entity_id"] = evt.Params.ChatEntityID
 	}
 
+	// Decoded entity context — pull out the per-connector fields from the
+	// raw ENTITY_ID / ENTITY_DATA_* payloads (Openline session state, CRM
+	// linkage, single-token task / workgroup / mail ids) plus CHAT_TITLE
+	// and CHAT_TYPE. Only non-empty keys are emitted so DMs / plain groups
+	// pay no cost. See entity_context.go for parser semantics.
+	if ec, ok := ParseEntityContext(&evt.Params); ok {
+		for k, v := range ec.ToMeta(&evt.Params) {
+			meta[k] = v
+		}
+	}
+
 	// Collect contact for processed messages (matches Telegram pattern at
 	// channels/telegram/handlers.go:617-630). Runs AFTER policy gating so
 	// blocked senders aren't recorded, and BEFORE HandleMessage so the
