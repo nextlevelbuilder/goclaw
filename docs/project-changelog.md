@@ -6,6 +6,19 @@ Significant changes, features, and fixes in reverse chronological order.
 
 ## 2026-07-01
 
+### Usage event analytics schema gate
+
+**Fixes**
+
+- Bumped required PostgreSQL schema version to include the usage event cache and
+  thinking token migration required by Resource Event Analytics.
+- Added a migration-version regression test so new SQL migrations cannot ship
+  without updating the binary schema gate.
+
+**Tests**
+
+- Added `internal/upgrade` coverage for required schema version parity.
+
 ### Paired DM routing after policy checks
 
 **Fixes**
