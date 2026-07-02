@@ -458,14 +458,78 @@ func (l *Loader) BuildSummary(ctx context.Context, allowList []string) string {
 	return strings.Join(lines, "\n")
 }
 
-// BuildPinnedSummary generates XML summary for only the pinned skill names.
-// Delegates to BuildSummary with pinned names as allowlist.
+// skillInlineMaxBytes caps how many bytes of a single pinned skill's SKILL.md
+// body may be inlined directly into the system prompt. Sampled SKILL.md sizes
+// run 3.6KB-10KB typical; skills above this cap fall back to pointer-only
+// format (name/description/location) so the agent uses use_skill+read_file.
+const skillInlineMaxBytes = 10000
+
+// skillInlineTotalMaxBytes caps the combined inlined size across all pinned
+// skills in a single prompt. Skills that don't fit (in allowlist order) fall
+// back to pointer-only format.
+const skillInlineTotalMaxBytes = skillInlineMaxBytes * 3
+
+// BuildPinnedSummary generates an XML summary for only the pinned skill
+// names, with each skill's full SKILL.md content (frontmatter stripped)
+// inlined directly via <skill_instructions>. Skills whose content exceeds
+// skillInlineMaxBytes, or that would push the combined total over
+// skillInlineTotalMaxBytes, fall back to a pointer-only <skill> entry
+// (name/description/location) so the agent can use_skill+read_file instead.
 // Returns empty string if none match.
 func (l *Loader) BuildPinnedSummary(ctx context.Context, pinnedNames []string) string {
 	if len(pinnedNames) == 0 {
 		return ""
 	}
-	return l.BuildSummary(ctx, pinnedNames)
+
+	allSkills := l.ListSkills(ctx)
+	if len(allSkills) == 0 {
+		return ""
+	}
+
+	byName := make(map[string]bool, len(pinnedNames))
+	for _, name := range pinnedNames {
+		byName[name] = true
+	}
+
+	var filtered []Info
+	for _, s := range allSkills {
+		if byName[s.Slug] {
+			filtered = append(filtered, s)
+		}
+	}
+	if len(filtered) == 0 {
+		return ""
+	}
+
+	var lines []string
+	lines = append(lines, "<available_skills>")
+	totalInlined := 0
+	for _, s := range filtered {
+		content, ok := l.LoadSkill(ctx, s.Slug)
+		content = strings.TrimSpace(content)
+		fits := ok && len(content) <= skillInlineMaxBytes && totalInlined+len(content) <= skillInlineTotalMaxBytes
+		if fits {
+			lines = append(lines, fmt.Sprintf("  <skill_instructions name=%q>", s.Name))
+			lines = append(lines, content)
+			lines = append(lines, "  </skill_instructions>")
+			totalInlined += len(content)
+			continue
+		}
+
+		lines = append(lines, "  <skill>")
+		lines = append(lines, fmt.Sprintf("    <name>%s</name>", escapeXML(s.Name)))
+		desc := s.Description
+		if len([]rune(desc)) > skillDescMaxLen {
+			desc = string([]rune(desc)[:skillDescMaxLen]) + "…"
+		}
+		lines = append(lines, fmt.Sprintf("    <description>%s</description>", escapeXML(desc)))
+		lines = append(lines, fmt.Sprintf("    <location>%s</location>", escapeXML(s.Path)))
+		lines = append(lines, "    <note>content too large to inline, use use_skill+read_file</note>")
+		lines = append(lines, "  </skill>")
+	}
+	lines = append(lines, "</available_skills>")
+
+	return strings.Join(lines, "\n")
 }
 
 // Version returns the current skill snapshot version.

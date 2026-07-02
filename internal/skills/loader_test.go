@@ -763,3 +763,86 @@ func TestLoader_Dirs(t *testing.T) {
 		}
 	}
 }
+
+// --- BuildPinnedSummary (inline content) ---
+
+// TestLoader_BuildPinnedSummary_InlinesFullContent proves a pinned skill's
+// FULL SKILL.md body (not just name/description) appears in the summary.
+func TestLoader_BuildPinnedSummary_InlinesFullContent(t *testing.T) {
+	ws := t.TempDir()
+	makeSkillDir(t, filepath.Join(ws, "skills"), "my-skill",
+		"---\nname: My Skill\ndescription: does a thing\n---\n\nTHIS IS THE FULL BODY CONTENT that must appear inline.")
+
+	l := NewLoader(ws, "", "")
+	summary := l.BuildPinnedSummary(context.Background(), []string{"my-skill"})
+
+	if !strings.Contains(summary, "THIS IS THE FULL BODY CONTENT that must appear inline.") {
+		t.Fatalf("expected full body content inlined, got: %s", summary)
+	}
+	if !strings.Contains(summary, `<skill_instructions name="My Skill">`) {
+		t.Fatalf("expected <skill_instructions> wrapper, got: %s", summary)
+	}
+	if strings.Contains(summary, "<note>") {
+		t.Fatalf("normal-sized skill should not fall back to pointer format: %s", summary)
+	}
+}
+
+// TestLoader_BuildPinnedSummary_SizeCapFallback proves a skill whose body
+// exceeds skillInlineMaxBytes falls back to pointer-only format instead of
+// inlining the oversized content.
+func TestLoader_BuildPinnedSummary_SizeCapFallback(t *testing.T) {
+	ws := t.TempDir()
+	bigBody := strings.Repeat("x", skillInlineMaxBytes+1)
+	makeSkillDir(t, filepath.Join(ws, "skills"), "big-skill",
+		"---\nname: Big Skill\ndescription: too large\n---\n\n"+bigBody)
+
+	l := NewLoader(ws, "", "")
+	summary := l.BuildPinnedSummary(context.Background(), []string{"big-skill"})
+
+	if strings.Contains(summary, bigBody) {
+		t.Fatalf("oversized skill body must not be inlined: summary too long (%d bytes)", len(summary))
+	}
+	if !strings.Contains(summary, "<skill>") || !strings.Contains(summary, "<note>content too large to inline") {
+		t.Fatalf("expected pointer-only fallback with note, got: %s", summary)
+	}
+	if !strings.Contains(summary, "<name>Big Skill</name>") {
+		t.Fatalf("expected name in pointer fallback, got: %s", summary)
+	}
+}
+
+// TestLoader_BuildPinnedSummary_TenantIsolation mirrors
+// TestLoader_ManagedSkills_TenantIsolation: two tenants publish a managed
+// pinned skill with the SAME slug but DIFFERENT content. The inlined content
+// for tenant A must never leak tenant B's content, and vice versa.
+func TestLoader_BuildPinnedSummary_TenantIsolation(t *testing.T) {
+	dataDir := t.TempDir()
+
+	tenantA := uuid.MustParse("00000000-0000-0000-0000-0000000000aa")
+	tenantB := uuid.MustParse("00000000-0000-0000-0000-0000000000bb")
+
+	dirA := filepath.Join(dataDir, "tenants", tenantA.String(), "skills-store", "shared-slug", "1")
+	os.MkdirAll(dirA, 0755)
+	os.WriteFile(filepath.Join(dirA, "SKILL.md"),
+		[]byte("---\nname: Tenant A Content\n---\nTENANT A SECRET"), 0644)
+
+	dirB := filepath.Join(dataDir, "tenants", tenantB.String(), "skills-store", "shared-slug", "1")
+	os.MkdirAll(dirB, 0755)
+	os.WriteFile(filepath.Join(dirB, "SKILL.md"),
+		[]byte("---\nname: Tenant B Content\n---\nTENANT B SECRET"), 0644)
+
+	l := NewLoader("", "", "")
+	l.SetManagedDir(dataDir)
+
+	ctxA := store.WithTenantID(context.Background(), tenantA)
+	ctxB := store.WithTenantID(context.Background(), tenantB)
+
+	summaryA := l.BuildPinnedSummary(ctxA, []string{"shared-slug"})
+	if !strings.Contains(summaryA, "TENANT A SECRET") || strings.Contains(summaryA, "TENANT B SECRET") {
+		t.Fatalf("tenant A pinned summary leaked cross-tenant content: %q", summaryA)
+	}
+
+	summaryB := l.BuildPinnedSummary(ctxB, []string{"shared-slug"})
+	if !strings.Contains(summaryB, "TENANT B SECRET") || strings.Contains(summaryB, "TENANT A SECRET") {
+		t.Fatalf("tenant B pinned summary leaked cross-tenant content: %q", summaryB)
+	}
+}
