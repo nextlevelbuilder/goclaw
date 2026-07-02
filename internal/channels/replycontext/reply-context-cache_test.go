@@ -29,6 +29,39 @@ func TestCacheBuild_MultiLevelReplyChain(t *testing.T) {
 	}
 }
 
+func TestCacheBuild_MultiLevelReplyChainWithUncachedRootQuote(t *testing.T) {
+	cache := NewCache(Options{MaxDepth: 8, MaxTotalChars: 6000, MaxCharsPerMessage: 1000})
+	scope := Scope{TenantID: "tenant-a", ChannelID: "zalo-main", ThreadID: "thread-1"}
+
+	cache.Store(scope, Message{
+		IDs:       []string{"reply-1"},
+		ParentIDs: []string{"root"},
+		ParentQuote: Quote{
+			IDs:    []string{"root"},
+			Sender: "Agent",
+			Body:   "original outbound message",
+		},
+		Sender: "Alice",
+		Body:   "reply 1",
+	})
+	cache.Store(scope, Message{IDs: []string{"reply-2"}, ParentIDs: []string{"reply-1"}, Sender: "Bob", Body: "reply 2"})
+	cache.Store(scope, Message{IDs: []string{"reply-3"}, ParentIDs: []string{"reply-2"}, Sender: "Carol", Body: "reply 3"})
+	cache.Store(scope, Message{IDs: []string{"reply-4"}, ParentIDs: []string{"reply-3"}, Sender: "Dan", Body: "reply 4"})
+	cache.Store(scope, Message{IDs: []string{"reply-5"}, ParentIDs: []string{"reply-4"}, Sender: "Eve", Body: "reply 5"})
+	cache.Store(scope, Message{IDs: []string{"reply-6"}, ParentIDs: []string{"reply-5"}, Sender: "Frank", Body: "reply 6"})
+
+	got := cache.Build(scope, Quote{IDs: []string{"reply-6"}, Sender: "Frank", Body: "direct fallback"})
+	for _, want := range []string{"original outbound message", "reply 1", "reply 2", "reply 3", "reply 4", "reply 5", "reply 6"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("missing %q in %q", want, got)
+		}
+	}
+	assertOrder(t, got, "original outbound message", "reply 1", "reply 2", "reply 3", "reply 4", "reply 5", "reply 6")
+	if strings.Contains(got, "direct fallback") {
+		t.Fatalf("used fallback despite cache hit: %q", got)
+	}
+}
+
 func TestCacheBuild_FallbackOnCacheMiss(t *testing.T) {
 	cache := NewCache(Options{})
 	scope := Scope{TenantID: "tenant-a", ChannelID: "zalo-main", ThreadID: "thread-1"}

@@ -28,6 +28,14 @@ func RenderQuote(quote Quote) string {
 	return renderQuote(quote, DefaultOptions())
 }
 
+func normalizeQuote(quote Quote, opts Options) Quote {
+	return Quote{
+		IDs:    NormalizeIDs(quote.IDs),
+		Sender: strings.TrimSpace(quote.Sender),
+		Body:   truncateText(strings.TrimSpace(quote.Body), opts.MaxCharsPerMessage),
+	}
+}
+
 func renderQuote(quote Quote, opts Options) string {
 	body := strings.TrimSpace(quote.Body)
 	if body == "" {

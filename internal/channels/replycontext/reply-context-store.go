@@ -36,13 +36,26 @@ func (c *Cache) collectChainLocked(scope Scope, start *node) []renderMessage {
 		}
 		visited[n.key] = struct{}{}
 		reversed = append(reversed, renderMessage{sender: n.sender, body: n.body})
-		n = c.lookupLocked(scope, n.parentIDs)
+		parent := c.lookupLocked(scope, n.parentIDs)
+		if parent == nil && len(reversed) < c.opts.MaxDepth {
+			if fallback := n.parentFallback(); fallback.body != "" {
+				reversed = append(reversed, fallback)
+			}
+		}
+		n = parent
 	}
 
 	for i, j := 0, len(reversed)-1; i < j; i, j = i+1, j-1 {
 		reversed[i], reversed[j] = reversed[j], reversed[i]
 	}
 	return reversed
+}
+
+func (n *node) parentFallback() renderMessage {
+	return renderMessage{
+		sender: n.parentQuote.Sender,
+		body:   n.parentQuote.Body,
+	}
 }
 
 func (c *Cache) purgeExpiredLocked(now time.Time) {

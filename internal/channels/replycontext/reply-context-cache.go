@@ -23,11 +23,12 @@ type Scope struct {
 
 // Message is a platform-normalized accepted message stored for future replies.
 type Message struct {
-	IDs       []string
-	ParentIDs []string
-	Sender    string
-	Body      string
-	CreatedAt time.Time
+	IDs         []string
+	ParentIDs   []string
+	ParentQuote Quote
+	Sender      string
+	Body        string
+	CreatedAt   time.Time
 }
 
 // Quote is the platform-normalized immediate quote payload on a reply.
@@ -61,12 +62,13 @@ type cacheKey struct {
 }
 
 type node struct {
-	key       cacheKey
-	ids       []string
-	parentIDs []string
-	sender    string
-	body      string
-	createdAt time.Time
+	key         cacheKey
+	ids         []string
+	parentIDs   []string
+	parentQuote Quote
+	sender      string
+	body        string
+	createdAt   time.Time
 }
 
 func DefaultOptions() Options {
@@ -132,13 +134,16 @@ func (c *Cache) Store(scope Scope, msg Message) {
 	if old := c.nodes[key]; old != nil {
 		c.deleteNodeLocked(key, old)
 	}
+	parentQuote := normalizeQuote(msg.ParentQuote, c.opts)
+	parentIDs := NormalizeIDs(append(msg.ParentIDs, parentQuote.IDs...))
 	n := &node{
-		key:       key,
-		ids:       ids,
-		parentIDs: NormalizeIDs(msg.ParentIDs),
-		sender:    strings.TrimSpace(msg.Sender),
-		body:      body,
-		createdAt: createdAt,
+		key:         key,
+		ids:         ids,
+		parentIDs:   parentIDs,
+		parentQuote: parentQuote,
+		sender:      strings.TrimSpace(msg.Sender),
+		body:        body,
+		createdAt:   createdAt,
 	}
 	c.nodes[key] = n
 	for _, id := range ids {

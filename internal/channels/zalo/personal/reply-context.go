@@ -19,10 +19,11 @@ func (c *Channel) rememberReplyContext(threadID, sender string, msg protocol.TMe
 		return
 	}
 	c.replyCache.Store(c.replyScope(threadID), replycontext.Message{
-		IDs:       zaloMessageIDs(msg),
-		ParentIDs: zaloQuoteIDs(msg.Quote),
-		Sender:    sender,
-		Body:      body,
+		IDs:         zaloMessageIDs(msg),
+		ParentIDs:   zaloQuoteIDs(msg.Quote),
+		ParentQuote: zaloQuote(msg.Quote),
+		Sender:      sender,
+		Body:        body,
 	})
 }
 

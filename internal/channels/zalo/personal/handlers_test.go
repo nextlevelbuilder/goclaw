@@ -123,6 +123,108 @@ func TestZaloReplyContext_BuildsMultiLevelChainFromCache(t *testing.T) {
 	}
 }
 
+func TestZaloReplyContext_KeepsUncachedOriginalQuoteAcrossDeepReplies(t *testing.T) {
+	ch := newTestChannel(t, config.ZaloPersonalConfig{DMPolicy: "open", GroupPolicy: "open"})
+	threadID := "direct-1"
+
+	ch.rememberReplyContext(threadID, "Cppai", protocol.TMessage{
+		MsgID:    "msg-1",
+		CliMsgID: "cli-1",
+		UIDFrom:  "u-1",
+		Quote: &protocol.TQuote{
+			OwnerID:     "agent",
+			CliMsgID:    "cli-root",
+			GlobalMsgID: "msg-root",
+			FromD:       "Tue Linh Pm - Cppai",
+			Msg:         "Chao ban! Minh la CPPAI PM.",
+		},
+	}, "Anh Duc Day")
+	ch.rememberReplyContext(threadID, "Cppai", protocol.TMessage{
+		MsgID:    "msg-2",
+		CliMsgID: "cli-2",
+		UIDFrom:  "u-2",
+		Quote: &protocol.TQuote{
+			OwnerID:     "u-1",
+			CliMsgID:    "cli-1",
+			GlobalMsgID: "msg-1",
+		},
+	}, "Em biet anh la ai khong?")
+	ch.rememberReplyContext(threadID, "Cppai", protocol.TMessage{
+		MsgID:    "msg-3",
+		CliMsgID: "cli-3",
+		UIDFrom:  "u-3",
+		Quote: &protocol.TQuote{
+			OwnerID:     "u-2",
+			CliMsgID:    "cli-2",
+			GlobalMsgID: "msg-2",
+		},
+	}, "Chac chua?")
+	ch.rememberReplyContext(threadID, "Cppai", protocol.TMessage{
+		MsgID:    "msg-4",
+		CliMsgID: "cli-4",
+		UIDFrom:  "u-4",
+		Quote: &protocol.TQuote{
+			OwnerID:     "u-3",
+			CliMsgID:    "cli-3",
+			GlobalMsgID: "msg-3",
+		},
+	}, "That?")
+	ch.rememberReplyContext(threadID, "Cppai", protocol.TMessage{
+		MsgID:    "msg-5",
+		CliMsgID: "cli-5",
+		UIDFrom:  "u-5",
+		Quote: &protocol.TQuote{
+			OwnerID:     "u-4",
+			CliMsgID:    "cli-4",
+			GlobalMsgID: "msg-4",
+		},
+	}, "Reply 5")
+	ch.rememberReplyContext(threadID, "Cppai", protocol.TMessage{
+		MsgID:    "msg-6",
+		CliMsgID: "cli-6",
+		UIDFrom:  "u-6",
+		Quote: &protocol.TQuote{
+			OwnerID:     "u-5",
+			CliMsgID:    "cli-5",
+			GlobalMsgID: "msg-5",
+		},
+	}, "Reply 6")
+
+	got := ch.buildReplyContext(threadID, &protocol.TQuote{
+		OwnerID:     "u-6",
+		CliMsgID:    "cli-6",
+		GlobalMsgID: "msg-6",
+		FromD:       "Cppai",
+		Msg:         "direct fallback",
+	})
+
+	for _, want := range []string{
+		"Chao ban! Minh la CPPAI PM.",
+		"Anh Duc Day",
+		"Em biet anh la ai khong?",
+		"Chac chua?",
+		"That?",
+		"Reply 5",
+		"Reply 6",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("missing %q in %q", want, got)
+		}
+	}
+	assertContainsInOrder(t, got,
+		"Chao ban! Minh la CPPAI PM.",
+		"Anh Duc Day",
+		"Em biet anh la ai khong?",
+		"Chac chua?",
+		"That?",
+		"Reply 5",
+		"Reply 6",
+	)
+	if strings.Contains(got, "direct fallback") {
+		t.Fatalf("used direct fallback despite cache hit: %q", got)
+	}
+}
+
 func TestHandleDM_RejectedMessageDoesNotDownloadAttachment(t *testing.T) {
 	var hits atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
