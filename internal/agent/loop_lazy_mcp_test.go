@@ -326,7 +326,7 @@ func TestLoop_LazyMCP_DenyList_BlockedOnFirstCall(t *testing.T) {
 	if allowedTools != nil && !allowedTools[toolName] {
 		if reg.TryActivateDeferred(toolName) {
 			// This is the NEW deny check added by the fix.
-			if pe.IsDenied(toolName, nil) {
+			if pe.IsDenied(reg, toolName, nil) {
 				result = tools.ErrorResult("tool not allowed by policy: " + toolName)
 			} else {
 				allowedTools[toolName] = true
@@ -367,10 +367,8 @@ func TestLoop_LazyMCP_DenyList_GroupDeny(t *testing.T) {
 	pe := tools.NewPolicyEngine(&config.ToolsConfig{
 		Deny: []string{"group:mcp_test"},
 	})
-	// PolicyEngine needs registry to expand group:mcp_test
-	pe.SetRegistry(reg)
 
-	if !pe.IsDenied("mcp_svc__get_data", nil) {
+	if !pe.IsDenied(reg, "mcp_svc__get_data", nil) {
 		t.Error("tool should be denied via group: pattern")
 	}
 }

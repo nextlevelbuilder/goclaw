@@ -118,7 +118,7 @@ func makeToolHandler(reg *tools.Registry, toolName string, msgBus *bus.MessageBu
 		// invoke any bridge tool regardless of its configured tool policy.
 		if policyEngine != nil {
 			agentPolicy := tools.ToolAgentPolicyFromCtx(ctx)
-			if !policyEngine.WouldAllow(toolName, bridgeProviderName, agentPolicy, nil) {
+			if !policyEngine.WouldAllow(reg, toolName, bridgeProviderName, agentPolicy, nil) {
 				slog.Warn("security.mcp_bridge_denied",
 					"tool", toolName, "agent_key", tools.ToolAgentKeyFromCtx(ctx))
 				return mcpgo.NewToolResultError("tool not allowed by policy: " + toolName), nil

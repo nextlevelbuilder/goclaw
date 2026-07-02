@@ -302,7 +302,7 @@ func (l *Loop) makeAuthorizeToolCall() func(ctx context.Context, state *pipeline
 		if l.tools != nil && l.tools.TryActivateDeferred(name) {
 			// Re-check deny policy to prevent a lazy-activated tool from bypassing
 			// an explicit deny rule.
-			if l.toolPolicy != nil && l.toolPolicy.IsDenied(name, l.agentToolPolicy) {
+			if l.toolPolicy != nil && l.toolPolicy.IsDenied(tools.ResolveConcreteRegistry(l.tools), name, l.agentToolPolicy) {
 				return false, "tool not allowed by policy: " + name
 			}
 			allowed[name] = true

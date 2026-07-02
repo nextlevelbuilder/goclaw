@@ -71,5 +71,17 @@ func (o *userToolOverlay) List() []string {
 	return out
 }
 
+// Unwrap returns the concrete *Registry backing this overlay's base executor,
+// so PolicyEngine group-expansion (which needs the concrete type to read
+// per-Registry tool groups) still works when a caller passes an overlay
+// instead of the raw registry. Returns nil if the base isn't a *Registry
+// (e.g. in tests using a mock ToolExecutor) — callers must tolerate nil.
+func (o *userToolOverlay) Unwrap() *Registry {
+	if reg, ok := o.ToolExecutor.(*Registry); ok {
+		return reg
+	}
+	return nil
+}
+
 // Compile-time check: the overlay satisfies ToolExecutor.
 var _ ToolExecutor = (*userToolOverlay)(nil)
