@@ -218,6 +218,21 @@ func (m *Manager) connectViaPool(ctx context.Context, tenantID uuid.UUID, name, 
 	// Create per-agent BridgeTools from the pool's shared connection
 	registeredNames := m.registerPoolBridgeTools(entry, name, toolPrefix, timeoutSec, serverID, hints, toolAllow, toolDeny)
 
+	// Cache tool descriptions for prompt preview (no live connection needed)
+	if serverID != uuid.Nil && m.store != nil && len(entry.tools) > 0 {
+		toolDescs := make(map[string]string, len(entry.tools))
+		for _, t := range entry.tools {
+			toolDescs[t.Name] = t.Description
+		}
+		go func(sid uuid.UUID, descs map[string]string) {
+			cacheCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := m.store.CacheToolDescriptions(cacheCtx, sid, descs); err != nil {
+				slog.Debug("mcp.cache_tool_descriptions.failed", "server_id", sid, "error", err)
+			}
+		}(serverID, toolDescs)
+	}
+
 	// Track server state and per-agent tool names.
 	// poolServers/poolToolNames keyed by plain name for Close() iteration.
 	// poolKeys maps plain name → pool compound key for Release().
