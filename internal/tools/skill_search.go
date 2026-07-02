@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"github.com/google/uuid"
 
@@ -12,12 +13,21 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
+// tenantIndexState holds a per-tenant BM25 index and the loader version
+// it was built against, so tenants never share (or clobber) each other's
+// cached search index.
+type tenantIndexState struct {
+	index       *skills.Index
+	lastVersion int64 // tracks loader version for lazy rebuild
+}
+
 // SkillSearchTool implements the skill_search tool with BM25 search
 // and optional hybrid search (BM25 + embedding).
 type SkillSearchTool struct {
-	index       *skills.Index
-	loader      *skills.Loader
-	lastVersion int64 // tracks loader version for lazy rebuild
+	mu      sync.Mutex
+	indexes map[uuid.UUID]*tenantIndexState // keyed by tenant ID (uuid.Nil = master/no-tenant)
+
+	loader *skills.Loader
 
 	// Optional: embedding-based search
 	embSearcher store.EmbeddingSkillSearcher
@@ -29,11 +39,10 @@ type SkillSearchTool struct {
 	skillAccess store.SkillAccessStore
 }
 
-// NewSkillSearchTool creates a skill_search tool backed by a BM25 index.
+// NewSkillSearchTool creates a skill_search tool backed by per-tenant BM25 indexes.
 func NewSkillSearchTool(loader *skills.Loader) *SkillSearchTool {
-	idx := skills.NewIndex()
-	t := &SkillSearchTool{index: idx, loader: loader}
-	t.rebuildIndex(context.Background())
+	t := &SkillSearchTool{indexes: make(map[uuid.UUID]*tenantIndexState), loader: loader}
+	t.ensureIndex(context.Background())
 	return t
 }
 
@@ -48,20 +57,33 @@ func (t *SkillSearchTool) SetSkillAccessStore(sas store.SkillAccessStore) {
 	t.skillAccess = sas
 }
 
-// rebuildIndex refreshes the BM25 index from the current skill set.
-func (t *SkillSearchTool) rebuildIndex(ctx context.Context) {
-	allSkills := t.loader.ListSkills(ctx)
-	t.index.Build(allSkills)
-	t.lastVersion = t.loader.Version()
-	slog.Info("skill_search index rebuilt", "docs", len(allSkills), "version", t.lastVersion)
-}
-
-// ensureIndex rebuilds the BM25 index if skills have changed since last build.
-func (t *SkillSearchTool) ensureIndex(ctx context.Context) {
+// ensureIndex returns the BM25 index for the tenant resolved from ctx,
+// building or rebuilding it if it doesn't exist yet or skills have changed
+// since it was last built. Each tenant's index is isolated in its own
+// map entry so search results never leak across tenants.
+func (t *SkillSearchTool) ensureIndex(ctx context.Context) *skills.Index {
+	tenantID := store.TenantIDFromContext(ctx)
 	current := t.loader.Version()
-	if current > t.lastVersion {
-		t.rebuildIndex(ctx)
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	state, ok := t.indexes[tenantID]
+	if !ok {
+		state = &tenantIndexState{index: skills.NewIndex(), lastVersion: -1}
+		t.indexes[tenantID] = state
 	}
+
+	if state.lastVersion >= current {
+		return state.index
+	}
+
+	allSkills := t.loader.ListSkills(ctx)
+	state.index.Build(allSkills)
+	state.lastVersion = current
+	slog.Info("skill_search index rebuilt", "docs", len(allSkills), "version", current, "tenant", tenantID)
+
+	return state.index
 }
 
 func (t *SkillSearchTool) Name() string { return "skill_search" }
@@ -98,11 +120,11 @@ func (t *SkillSearchTool) Execute(ctx context.Context, args map[string]any) *Res
 		maxResults = int(mr)
 	}
 
-	// Lazy rebuild: check if skills changed since last index build
-	t.ensureIndex(ctx)
+	// Lazy rebuild: resolve the tenant-scoped index, rebuilding if skills changed
+	index := t.ensureIndex(ctx)
 
 	// BM25 search (always available)
-	bm25Results := t.index.Search(query, maxResults*2)
+	bm25Results := index.Search(query, maxResults*2)
 
 	// If embedding searcher is available, run hybrid search
 	var results []skills.SkillSearchResult
