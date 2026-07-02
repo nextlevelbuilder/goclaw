@@ -10,6 +10,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
+	"github.com/nextlevelbuilder/goclaw/internal/channels/replycontext"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/typing"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/zalo/personal/protocol"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
@@ -22,6 +23,7 @@ type Channel struct {
 	*channels.BaseChannel
 	config      config.ZaloPersonalConfig
 	typingCtrls sync.Map // threadID → *typing.Controller
+	replyCache  *replycontext.Cache
 
 	mu       sync.RWMutex // protects sess and listener
 	sess     *protocol.Session
@@ -59,6 +61,7 @@ func New(cfg config.ZaloPersonalConfig, msgBus *bus.MessageBus, pairingSvc store
 	ch := &Channel{
 		BaseChannel: base,
 		config:      cfg,
+		replyCache:  replycontext.NewCache(replycontext.DefaultOptions()),
 		stopCh:      make(chan struct{}),
 	}
 	ch.SetPairingService(pairingSvc)
@@ -153,6 +156,9 @@ func (c *Channel) Stop(_ context.Context) error {
 		c.typingCtrls.Delete(key)
 		return true
 	})
+	if c.replyCache != nil {
+		c.replyCache.Clear()
+	}
 	if ln := c.getListener(); ln != nil {
 		ln.Stop()
 	}

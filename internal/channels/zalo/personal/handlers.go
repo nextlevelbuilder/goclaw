@@ -3,20 +3,14 @@ package personal
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
-	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
-	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
+	"github.com/nextlevelbuilder/goclaw/internal/channels/replycontext"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/typing"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/zalo/personal/protocol"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
-	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
 func (c *Channel) handleMessage(msg protocol.Message) {
@@ -38,12 +32,13 @@ func (c *Channel) handleDM(msg protocol.UserMessage) {
 	senderID := msg.Data.UIDFrom
 	threadID := msg.ThreadID()
 
-	content, media := extractContentAndMedia(msg.Data.Content)
-	if content == "" {
+	if !c.checkDMPolicy(ctx, senderID, threadID) {
 		return
 	}
 
-	if !c.checkDMPolicy(ctx, senderID, threadID) {
+	body, media := extractContentAndMedia(msg.Data.Content)
+	content := replycontext.Compose(c.buildReplyContext(threadID, msg.Data.Quote), body)
+	if content == "" {
 		return
 	}
 
@@ -52,6 +47,7 @@ func (c *Channel) handleDM(msg protocol.UserMessage) {
 	if senderName != "" {
 		content = fmt.Sprintf("[From: %s]\n%s", senderName, content)
 	}
+	c.rememberReplyContext(threadID, displayNameOrID(senderName, senderID), msg.Data, cacheBodyForContent(msg.Data.Content))
 
 	slog.Debug("zalo_personal DM received",
 		"sender", senderID,
@@ -81,11 +77,6 @@ func (c *Channel) handleGroupMessage(msg protocol.GroupMessage) {
 	senderID := msg.Data.UIDFrom
 	threadID := msg.ThreadID()
 
-	content, media := extractContentAndMedia(msg.Data.Content)
-	if content == "" {
-		return
-	}
-
 	// Step 1: enforce access policy (allowlist/pairing). Hard reject — don't record history.
 	if !c.checkGroupPolicy(ctx, senderID, threadID) {
 		return
@@ -95,6 +86,13 @@ func (c *Channel) handleGroupMessage(msg protocol.GroupMessage) {
 	if senderName == "" {
 		senderName = senderID
 	}
+
+	body, media := extractContentAndMedia(msg.Data.Content)
+	content := replycontext.Compose(c.buildReplyContext(threadID, msg.Data.Quote), body)
+	if content == "" {
+		return
+	}
+	c.rememberReplyContext(threadID, senderName, msg.Data.TMessage, cacheBodyForContent(msg.Data.Content))
 
 	// Step 2: @mention gating — record non-mentioned messages in history and return.
 	if c.RequireMention() {
@@ -179,99 +177,7 @@ func (c *Channel) startTyping(threadID string, threadType protocol.ThreadType) {
 	ctrl.Start()
 }
 
-// extractContentAndMedia returns text content (with <media:*> tags) and optional local media
-// file paths from a Zalo message. For text messages, media is nil. For attachments, the file
-// is downloaded and classified by MIME type, matching the pattern used by Telegram/Discord/Feishu.
-func extractContentAndMedia(content protocol.Content) (string, []string) {
-	if text := content.Text(); text != "" {
-		return text, nil
-	}
-	att := content.ParseAttachment()
-	if att == nil || att.Href == "" {
-		return "", nil
-	}
-
-	// Download the attachment file.
-	filePath, err := downloadFile(context.Background(), att.Href)
-	if err != nil {
-		slog.Warn("zalo_personal: failed to download attachment", "url", att.Href, "error", err)
-		// Return human-readable fallback so the message isn't silently dropped.
-		if text := content.AttachmentText(); text != "" {
-			return text, nil
-		}
-		return "", nil
-	}
-
-	// Classify by MIME type (image, video, audio, document) — same as Discord/Feishu.
-	mimeType := media.DetectMIMEType(filePath)
-	mediaKind := media.MediaKindFromMime(mimeType)
-
-	// For images, also check via Zalo CDN path patterns (e.g. /jpg/, /png/) since
-	// temp files lose the original extension context.
-	if mediaKind != media.TypeImage && att.IsImage() {
-		mediaKind = media.TypeImage
-	}
-
-	// Build the <media:*> tag that the agent loop's enrichImageIDs/enrichMediaIDs expects.
-	tag := media.BuildMediaTags([]media.MediaInfo{{
-		Type:        mediaKind,
-		FilePath:    filePath,
-		ContentType: mimeType,
-		FileName:    att.Title,
-	}})
-
-	return tag, []string{filePath}
-}
-
-const maxMediaBytes = 20 * 1024 * 1024 // 20MB (matches Telegram default)
-
-// downloadFile downloads a URL to a temp file and returns the local path.
-// Validates against SSRF and enforces timeout and size limits.
-func downloadFile(ctx context.Context, fileURL string) (string, error) {
-	if err := tools.CheckSSRF(fileURL); err != nil {
-		return "", fmt.Errorf("ssrf check: %w", err)
-	}
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fileURL, nil)
-	if err != nil {
-		return "", fmt.Errorf("download: %w", err)
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("download: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("download status %d", resp.StatusCode)
-	}
-
-	// Strip query params before extracting extension.
-	path := fileURL
-	if i := strings.IndexByte(path, '?'); i >= 0 {
-		path = path[:i]
-	}
-	ext := filepath.Ext(path)
-	if ext == "" || len(ext) > 5 {
-		ext = ".bin"
-	}
-
-	tmpFile, err := os.CreateTemp("", "goclaw_zca_*"+ext)
-	if err != nil {
-		return "", fmt.Errorf("create temp: %w", err)
-	}
-	defer tmpFile.Close()
-
-	written, err := io.Copy(tmpFile, io.LimitReader(resp.Body, maxMediaBytes+1))
-	if err != nil {
-		os.Remove(tmpFile.Name())
-		return "", fmt.Errorf("save: %w", err)
-	}
-	if written > maxMediaBytes {
-		os.Remove(tmpFile.Name())
-		return "", fmt.Errorf("file too large: %d bytes (max %d)", written, maxMediaBytes)
-	}
-
-	return tmpFile.Name(), nil
+func extractContentAndMediaWithQuote(content protocol.Content, quote *protocol.TQuote) (string, []string) {
+	text, media := extractContentAndMedia(content)
+	return replycontext.Compose(formatQuoteContext(quote), text), media
 }

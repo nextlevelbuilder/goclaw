@@ -266,10 +266,13 @@ func TestAttachment_IsImage(t *testing.T) {
 func TestTMessage_UnmarshalJSON(t *testing.T) {
 	raw := `{
 		"msgId": "123",
+		"cliMsgId": 9007199254740993,
+		"realMsgId": "9007199254740994",
+		"globalMsgId": 9007199254740995,
 		"uidFrom": "456",
 		"idTo": "789",
 		"dName": "Test User",
-		"ts": "1709300000",
+		"ts": 1709300000,
 		"content": "hello",
 		"msgType": "chat.message",
 		"cmd": 501,
@@ -284,11 +287,66 @@ func TestTMessage_UnmarshalJSON(t *testing.T) {
 	if msg.MsgID != "123" {
 		t.Errorf("MsgID = %q", msg.MsgID)
 	}
+	if msg.CliMsgID != "9007199254740993" {
+		t.Errorf("CliMsgID = %q", msg.CliMsgID)
+	}
+	if msg.RealMsgID != "9007199254740994" {
+		t.Errorf("RealMsgID = %q", msg.RealMsgID)
+	}
+	if msg.GlobalMsgID != "9007199254740995" {
+		t.Errorf("GlobalMsgID = %q", msg.GlobalMsgID)
+	}
+	if msg.TS != "1709300000" {
+		t.Errorf("TS = %q", msg.TS)
+	}
 	if msg.Content.Text() != "hello" {
 		t.Errorf("Content = %q", msg.Content.Text())
 	}
 	if msg.CMD != 501 {
 		t.Errorf("CMD = %d", msg.CMD)
+	}
+}
+
+func TestTMessage_UnmarshalJSON_WithQuote(t *testing.T) {
+	raw := `{
+		"msgId": "124",
+		"uidFrom": "456",
+		"idTo": "789",
+		"dName": "Test User",
+		"ts": "1709300000",
+		"content": "reply text",
+		"quote": {
+			"ownerId": 315077459047,
+			"cliMsgId": 9007199254740993,
+			"globalMsgId": "019f22c1",
+			"cliMsgType": 1,
+			"ts": 1709300001,
+			"msg": "quoted task text",
+			"attach": "{\"title\":\"screen.png\",\"href\":\"https://f20-zpc.zdn.vn/jpg/abc123\"}",
+			"fromD": "Duc Nguyen CPP",
+			"ttl": 0
+		},
+		"msgType": "chat.message",
+		"cmd": 501,
+		"st": 1,
+		"at": 0
+	}`
+
+	var msg TMessage
+	if err := json.Unmarshal([]byte(raw), &msg); err != nil {
+		t.Fatal(err)
+	}
+	if msg.Quote == nil {
+		t.Fatal("expected quote to be preserved")
+	}
+	if msg.Quote.OwnerID != "315077459047" {
+		t.Errorf("Quote.OwnerID = %q", msg.Quote.OwnerID)
+	}
+	if msg.Quote.CliMsgID != "9007199254740993" {
+		t.Errorf("Quote.CliMsgID = %q", msg.Quote.CliMsgID)
+	}
+	if msg.Quote.Text() != "quoted task text\n[Quoted image: screen.png]" {
+		t.Errorf("Quote.Text() = %q", msg.Quote.Text())
 	}
 }
 
