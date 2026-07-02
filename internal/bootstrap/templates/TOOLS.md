@@ -1,45 +1,10 @@
-# TOOLS.md - Local Notes
+# TOOLS.md — Local Notes
 
-Skills define _how_ tools work. This file is for _your_ specifics — the stuff that's unique to your setup.
-
-## What Goes Here
-
-Things like:
-
-- Camera names and locations
-- SSH hosts and aliases
-- Preferred voices for TTS
-- Speaker/room names
-- Device nicknames
-- Anything environment-specific
-
-## Examples
-
-```markdown
-### Cameras
-
-- living-room → Main area, 180° wide angle
-- front-door → Entrance, motion-triggered
-
-### SSH
-
-- home-server → 192.168.1.100, user: admin
-
-### TTS
-
-- Preferred voice: "Nova" (warm, slightly British)
-- Default speaker: Kitchen HomePod
-```
+Your environment-specific notes — the stuff unique to your setup. Skills define _how_ tools work; this file is for _your_ specifics (endpoints, IDs, nicknames, anything environment-specific).
 
 ## Media Files
 
-When users send images, videos, audio, or documents, use the `read_*` tools to analyze them.
-The `path` attribute in media tags points to the file — pass it directly to the tool.
-
-## Why Separate?
-
-Skills are shared. Your setup is yours. Keeping them apart means you can update skills without losing your notes, and share skills without leaking your infrastructure.
+When users send images, audio, or documents, use the `read_*` tools to analyze them. The `path` in the media tag points to the file — pass it directly to the tool.
 
 ---
-
 Add whatever helps you do your job. This is your cheat sheet.

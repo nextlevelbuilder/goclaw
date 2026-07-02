@@ -27,8 +27,9 @@ const (
 
 	// mcpToolInlineMaxCount is the threshold above which MCP tools switch
 	// to search mode (deferred loading via mcp_tool_search) instead of
-	// being registered inline in the tool registry.
-	mcpToolInlineMaxCount = 40
+	// being registered inline in the tool registry. Lowered to 20 to cap the
+	// token cost of inlining many MCP tool schemas on every request.
+	mcpToolInlineMaxCount = 20
 )
 
 // ServerStatus reports the connection status of an MCP server.
@@ -406,6 +407,14 @@ func (m *Manager) LoadForAgent(ctx context.Context, agentID uuid.UUID, userID st
 	if m.store == nil {
 		return nil
 	}
+
+	if agentID != uuid.Nil {
+		ctx = store.WithAgentID(ctx, agentID)
+	}
+	if userID != "" {
+		ctx = store.WithUserID(ctx, userID)
+	}
+
 
 	accessible, err := m.store.ListAccessible(ctx, agentID, userID)
 	if err != nil {

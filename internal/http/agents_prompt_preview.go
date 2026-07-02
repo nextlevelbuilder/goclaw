@@ -66,12 +66,12 @@ func (h *AgentsHandler) handleSystemPromptPreview(w http.ResponseWriter, r *http
 	agentID := r.PathValue("id")
 	mode := agent.PromptMode(r.URL.Query().Get("mode"))
 	switch mode {
-	case agent.PromptFull, agent.PromptTask, agent.PromptMinimal, agent.PromptNone:
+	case agent.PromptFull, agent.PromptTask, agent.PromptAiClaw, agent.PromptMinimal, agent.PromptNone:
 		// valid
 	case "":
 		mode = agent.PromptFull
 	default:
-		http.Error(w, "invalid mode: must be full, task, minimal, or none", http.StatusBadRequest)
+		http.Error(w, "invalid mode: must be full, task, aiclaw, minimal, or none", http.StatusBadRequest)
 		return
 	}
 

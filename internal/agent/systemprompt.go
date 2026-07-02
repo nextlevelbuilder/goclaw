@@ -42,12 +42,14 @@ type PromptMode string
 const (
 	PromptFull    PromptMode = "full"    // main agent — all sections
 	PromptTask    PromptMode = "task"    // enterprise automation — lean but capable
+	PromptAiClaw  PromptMode = "aiclaw"  // ai-claw product — task-tier sections + ai-claw tool allowlist
 	PromptMinimal PromptMode = "minimal" // subagent/cron — reduced sections
 	PromptNone    PromptMode = "none"    // identity line only
 )
 
 // modeRank defines ordinal ranking for minMode comparison.
-var modeRank = map[PromptMode]int{PromptFull: 3, PromptTask: 2, PromptMinimal: 1, PromptNone: 0}
+// aiclaw shares task's tier (2): same lean-but-capable section budget.
+var modeRank = map[PromptMode]int{PromptFull: 3, PromptTask: 2, PromptAiClaw: 2, PromptMinimal: 1, PromptNone: 0}
 
 // minMode returns the more restrictive of two modes.
 func minMode(a, b PromptMode) PromptMode {
@@ -181,47 +183,47 @@ func (cfg SystemPromptConfig) sectionContent(id string, defaultFn func() []strin
 // coreToolSummaries maps tool names to one-line descriptions.
 // Shown in the ## Tooling section of the system prompt.
 var coreToolSummaries = map[string]string{
-	"read_file":              "Read file contents — only accesses your agent workspace. For docs returned by vault_search (shared/personal/team vault), use vault_read instead",
-	"write_file":             "Create or overwrite files (set deliver=true to also send as chat attachment)",
-	"send_file":              "Send an EXISTING workspace file as a chat attachment — use to resend/share files; does NOT create or modify the file (use write_file for that)",
+	"read_file":              "Read a workspace file. For vault_search results, use vault_read instead",
+	"write_file":             "Create or overwrite files (deliver=true also sends as chat attachment)",
+	"send_file":              "Send an EXISTING workspace file as attachment; does NOT create/modify (use write_file)",
 	"list_files":             "List directory contents",
 	"exec":                   "Run shell commands",
 	"memory_search":          "Search indexed memory files (MEMORY.md + memory/*.md)",
 	"memory_get":             "Read specific sections of memory files",
-	"spawn":                  "Spawn a self-clone subagent to handle a task in the background",
+	"spawn":                  "Spawn a subagent to handle a task in the background",
 	"web_search":             "Search the web",
 	"web_fetch":              "Fetch and extract content from a URL",
 	"datetime":               "Get current date/time with timezone — use before creating cron jobs",
-	"cron":                   "Manage scheduled jobs and reminders (e.g. 'remind me at 9am', 'check every morning')",
-	"heartbeat":              "Periodic background monitoring with HEARTBEAT.md. Unlike cron, auto-suppresses 'all OK' via HEARTBEAT_OK",
-	"skill_search":           "Search available skills by keyword (weather, translate, github, etc.)",
-	"skill_manage":           "Create, patch, or delete skills from conversation experience",
-	"publish_skill":          "Register a skill directory in the system database, making it discoverable",
+	"cron":                   "Manage scheduled jobs and reminders",
+	"heartbeat":              "Periodic background monitoring with HEARTBEAT.md (auto-suppresses 'all OK')",
+	"skill_search":           "Search available skills by keyword",
+	"skill_manage":           "Create, patch, or delete skills",
+	"publish_skill":          "Register a skill directory to make it discoverable",
 	"use_skill":              "Invoke a skill by name and follow its instructions",
-	"mcp_tool_search":        "Search for available MCP external integration tools by keyword",
+	"mcp_tool_search":        "Search available MCP external integration tools by keyword",
 	"browser":                "Browse web pages interactively",
 	"tts":                    "Convert text to speech audio",
 	"edit":                   "Edit a file by replacing exact text matches",
-	"message":                "Send a PROACTIVE message to another channel/chat — do NOT use this to reply to the user, just respond directly",
+	"message":                "Send a PROACTIVE message to another channel/chat — NOT for replying to the user",
 	"sessions_list":          "List sessions for this agent",
 	"session_status":         "Show session status (model, tokens, compaction count)",
 	"sessions_history":       "Fetch message history for a session",
 	"sessions_send":          "Send a message into another session",
-	"read_image":             "Analyze images — call with path from <media:image> tags, or a direct HTTP/HTTPS URL via the 'url' parameter",
-	"read_audio":             "Analyze audio — call with media_id from <media:audio> tags",
-	"read_video":             "Analyze video — call with media_id from <media:video> tags, or a direct HTTP/HTTPS URL via the 'url' parameter",
-	"create_video":           "Generate videos from text descriptions using AI",
-	"read_document":          "Analyze documents (PDF, DOCX) from <media:document> tags. If fails, use a skill instead. Path is directly accessible",
-	"create_image":           "Generate images from text descriptions using AI",
-	"create_audio":           "Generate music or sound effects from text descriptions using AI",
-	"knowledge_graph_search": "Find people, projects, and their connections — use for relationship questions (who works with whom, project dependencies) that memory_search may miss",
-	"team_tasks":             "Team task board — track progress, manage dependencies (spawn auto-creates delegation tasks)",
-	"list_group_members":     "List all members of the current group chat (Feishu/Lark only)",
+	"read_image":             "Analyze images — path from <media:image> tags, or HTTP(S) URL via 'url'",
+	"read_audio":             "Analyze audio — media_id from <media:audio> tags",
+	"read_video":             "Analyze video — media_id from <media:video> tags, or HTTP(S) URL via 'url'",
+	"create_video":           "Generate videos from text using AI",
+	"read_document":          "Analyze PDF/DOCX from <media:document> tags",
+	"create_image":           "Generate images from text using AI",
+	"create_audio":           "Generate music or sound effects from text using AI",
+	"knowledge_graph_search": "Find people, projects, and their connections (relationship questions)",
+	"team_tasks":             "Team task board — track progress and dependencies",
+	"list_group_members":     "List members of the current group chat (Feishu/Lark only)",
 	"create_forum_topic":     "Create a forum topic in a Telegram supergroup",
-	"delegate":               "Delegate a task to a linked agent (requires agent_links). See ## Delegation Targets for available agents",
-	"memory_expand":          "Retrieve full session details from episodic memory results — use after memory_search returns episodic hits",
-	"vault_search":           "Search documents in the knowledge vault (hybrid keyword + semantic). Pass the returned doc_id to vault_read for full content",
-	"vault_read":             "Read full content of a vault document by doc_id (from vault_search). Use for shared/personal/team vault docs that read_file cannot reach",
+	"delegate":               "Delegate a task to a linked agent (see ## Delegation Targets)",
+	"memory_expand":          "Retrieve full session details after memory_search episodic hits",
+	"vault_search":           "Search the knowledge vault; pass the returned doc_id to vault_read",
+	"vault_read":             "Read full vault document content by doc_id (from vault_search)",
 
 	// Tool aliases (edit_file, sessions_spawn, Read, Write, Edit, Bash, etc.)
 	// are registered in the tool registry but excluded from the system prompt
@@ -233,7 +235,10 @@ var coreToolSummaries = map[string]string{
 func BuildSystemPrompt(cfg SystemPromptConfig) string {
 	// Mode flags for section gating.
 	isFull := cfg.Mode == PromptFull || cfg.Mode == ""
-	isTask := cfg.Mode == PromptTask
+	// aiclaw mirrors task's section structure (lean but capable); it diverges only
+	// in its context-file allowlist (bootstrap.ModeAllowlist) and tool allowlist
+	// (loop_tool_filter.go), so it reuses every task-gated section here.
+	isTask := cfg.Mode == PromptTask || cfg.Mode == PromptAiClaw
 	isMinimal := cfg.Mode == PromptMinimal
 	isNone := cfg.Mode == PromptNone
 
@@ -534,7 +539,11 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 
 	// 16. Recency reinforcements — full mode only (skip bootstrap, task, minimal)
 	if isFull && !cfg.IsBootstrap {
-		if len(personaFiles) > 0 {
+		// Claude respects instructions at the prompt start, so the persona recency
+		// reminder is redundant token cost for Anthropic open agents. Predefined
+		// agents keep it for the confidentiality/owner guardrails it carries.
+		skipPersonaReminder := isAnthropicProvider(cfg.ProviderType) && cfg.AgentType != store.AgentTypePredefined
+		if len(personaFiles) > 0 && !skipPersonaReminder {
 			lines = append(lines, buildPersonaReminder(personaFiles, cfg.AgentType, cfg.ProviderType)...)
 		}
 		lines = append(lines, "Reminder: Follow AGENTS.md rules — NO_REPLY when silent, match the user's language.", "")

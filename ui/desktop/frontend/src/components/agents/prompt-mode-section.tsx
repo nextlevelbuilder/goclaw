@@ -3,26 +3,28 @@ interface PromptModeSectionProps {
   onModeChange: (mode: string) => void
 }
 
-const PROMPT_MODES = ['full', 'task', 'minimal', 'none'] as const
+const PROMPT_MODES = ['full', 'task', 'aiclaw', 'minimal', 'none'] as const
 
 const MODE_SECTIONS: Record<string, string[]> = {
   full: ['persona', 'tools', 'exec-bias', 'call-style', 'safety', 'skills', 'mcp', 'memory', 'sandbox', 'evolution', 'channel'],
   task: ['style', 'tools', 'exec-bias', 'safety-sm', 'skill-search', 'mcp-search', 'memory-sm'],
+  aiclaw: ['persona', 'tools', 'exec-bias', 'safety-sm', 'skill-search', 'mcp-search', 'memory-sm'],
   minimal: ['tools', 'safety', 'pinned'],
   none: [],
 }
 
 const MODE_TOKENS: Record<string, string> = {
-  full: '~3.2K', task: '~2.3K', minimal: '~1.4K', none: '~6',
+  full: '~3.2K', task: '~2.3K', aiclaw: '~1.4K', minimal: '~1.4K', none: '~6',
 }
 
 const MODE_ICONS: Record<string, string> = {
-  full: '⚡', task: '🔧', minimal: '📦', none: '⛔',
+  full: '⚡', task: '🔧', aiclaw: '🐾', minimal: '📦', none: '⛔',
 }
 
 const MODE_DESC: Record<string, string> = {
   full: 'Complete system prompt with all sections',
   task: 'Optimized for sub-agent and cron tasks',
+  aiclaw: 'ai-claw product: lean persona, MCP + web + skills, focused tools',
   minimal: 'Essential tools and safety only',
   none: 'No system prompt injected',
 }

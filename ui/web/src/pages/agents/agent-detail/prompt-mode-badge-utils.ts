@@ -3,6 +3,8 @@ export function promptModeBadgeClass(mode: string): string {
   switch (mode) {
     case "task":
       return "border-purple-300 text-purple-700 dark:border-purple-700 dark:text-purple-300";
+    case "aiclaw":
+      return "border-teal-300 text-teal-700 dark:border-teal-700 dark:text-teal-300";
     case "minimal":
       return "border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-300";
     case "none":

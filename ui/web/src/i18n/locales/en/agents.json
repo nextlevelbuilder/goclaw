@@ -200,6 +200,8 @@
         "fullDesc": "All sections — interactive chat, persona, full features",
         "task": "Task",
         "taskDesc": "Enterprise automation — memory, evolution, no persona/vibe",
+        "aiclaw": "AI-Claw",
+        "aiclawDesc": "ai-claw product — lean persona, MCP + web + skills, focused tools",
         "minimal": "Minimal",
         "minimalDesc": "Background tasks — core rules, domain context, observe-only",
         "none": "None",

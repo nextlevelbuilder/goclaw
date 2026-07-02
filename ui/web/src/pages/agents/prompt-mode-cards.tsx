@@ -1,14 +1,15 @@
 import { useTranslation } from "react-i18next";
-import { Zap, Wrench, Package, CircleOff } from "lucide-react";
+import { Zap, Wrench, Cat, Package, CircleOff } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export const PROMPT_MODES = ["full", "task", "minimal", "none"] as const;
+export const PROMPT_MODES = ["full", "task", "aiclaw", "minimal", "none"] as const;
 export type PromptMode = (typeof PROMPT_MODES)[number];
 
 export const MODE_ICONS: Record<PromptMode, LucideIcon> = {
   full: Zap,
   task: Wrench,
+  aiclaw: Cat,
   minimal: Package,
   none: CircleOff,
 };
@@ -16,11 +17,12 @@ export const MODE_ICONS: Record<PromptMode, LucideIcon> = {
 /**
  * Section tags per mode — accurate to systemprompt.go gating logic (v3).
  * Context files filtered by ModeAllowlist: full=all, task=AGENTS_TASK+TOOLS+CAPABILITIES+SOUL+IDENTITY,
- * minimal=AGENTS_CORE+CAPABILITIES, none=TOOLS only.
+ * aiclaw=task set + USER profile, minimal=AGENTS_CORE+CAPABILITIES, none=TOOLS only.
  */
 export const MODE_SECTIONS: Record<PromptMode, string[]> = {
   full: ["persona", "tools", "execBias", "callStyle", "safety", "skills", "mcp", "memory", "sandbox", "evolution", "channelHints"],
   task: ["styleEcho", "tools", "execBias", "safetySm", "skillsHybrid", "mcpSearch", "memorySm"],
+  aiclaw: ["persona", "tools", "execBias", "safetySm", "skillsSearch", "mcpSearch", "memorySm"],
   minimal: ["tools", "pinnedSkills", "memoryMin", "domainCtx"],
   none: ["tools", "toolNotes", "pinnedSkills", "mcpSearch", "workspace"],
 };
@@ -29,6 +31,7 @@ export const MODE_SECTIONS: Record<PromptMode, string[]> = {
 export const MODE_TOKENS: Record<PromptMode, string> = {
   full: "~4.8K",
   task: "~1.3K",
+  aiclaw: "~1.4K",
   minimal: "~570",
   none: "~640",
 };

@@ -22,6 +22,7 @@ var templateFiles = []string{
 	CapabilitiesFile,
 	AgentsCoreFile,
 	AgentsTaskFile,
+	AgentsAiClawFile,
 }
 
 // ReadTemplate returns the content of an embedded template file.

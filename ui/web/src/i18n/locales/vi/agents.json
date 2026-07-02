@@ -232,6 +232,8 @@
         "fullDesc": "Tất cả phần — chat tương tác, persona, đầy đủ tính năng",
         "task": "Tác vụ",
         "taskDesc": "Tự động hóa — memory, evolution, không persona/vibe",
+        "aiclaw": "AI-Claw",
+        "aiclawDesc": "Sản phẩm ai-claw — persona gọn, MCP + web + skills, tool tập trung",
         "minimal": "Tối giản",
         "minimalDesc": "Tác vụ nền — rules cốt lõi, domain context, observe-only",
         "none": "Không",

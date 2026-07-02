@@ -31,6 +31,7 @@ const (
 	CapabilitiesFile  = "CAPABILITIES.md"
 	AgentsCoreFile    = "AGENTS_CORE.md"
 	AgentsTaskFile    = "AGENTS_TASK.md"
+	AgentsAiClawFile  = "AGENTS_AICLAW.md"
 
 	// Deprecated: v1 remnant. Heartbeat uses AGENTS_CORE.md via ModeAllowlist("minimal").
 	AgentsMinimalFile = "AGENTS_MINIMAL.md"
@@ -82,6 +83,20 @@ func ModeAllowlist(mode string) map[string]bool {
 			CapabilitiesFile: true,
 			SoulFile:         true, // persona (splitPersonaFiles extracts to primacy zone)
 			IdentityFile:     true,
+		}
+	case "aiclaw":
+		// ai-claw product mode: dedicated MCP-first doctrine (AGENTS_AICLAW.md)
+		// instead of plain task rules, plus the lean file set + per-user profile
+		// (USER.md for open agents, USER_PREDEFINED.md for predefined) so the
+		// company assistant keeps user context that plain task mode drops.
+		return map[string]bool{
+			AgentsAiClawFile:   true,
+			ToolsFile:          true,
+			CapabilitiesFile:   true,
+			SoulFile:           true,
+			IdentityFile:       true,
+			UserFile:           true,
+			UserPredefinedFile: true,
 		}
 	case "minimal":
 		return map[string]bool{
