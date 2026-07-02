@@ -271,6 +271,17 @@ func (pe *PolicyEngine) evaluate(
 		allowed = unionWithSpec(reg, allowed, allTools, agentToolPolicy.AlsoAllow)
 	}
 
+	// Deny always wins: re-apply the same deny specs as a final step so that
+	// AlsoAllow can never reintroduce a tool (or a group containing it) that
+	// was explicitly denied above. Without this, unionWithSpec adds tools back
+	// from allTools without re-checking the deny list.
+	if len(g.Deny) > 0 {
+		allowed = subtractSpec(reg, allowed, g.Deny)
+	}
+	if agentToolPolicy != nil && len(agentToolPolicy.Deny) > 0 {
+		allowed = subtractSpec(reg, allowed, agentToolPolicy.Deny)
+	}
+
 	return allowed
 }
 
