@@ -433,11 +433,6 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 		lines = append(lines, buildTeamWorkspaceSection(cfg.TeamWorkspace)...)
 	}
 
-	// 6.4. ## Team Members — inject roster so agent knows who to assign tasks to
-	if !isNone && !cfg.IsBootstrap && cfg.IsTeamContext && len(cfg.TeamMembers) > 0 {
-		lines = append(lines, buildTeamMembersSection(cfg.TeamMembers, cfg.TeamGuidance)...)
-	}
-
 	// 6.45. ## Delegation Targets — from agent_links (ModeDelegate or ModeTeam with targets)
 	if !isNone && !cfg.IsBootstrap && len(cfg.DelegateTargets) > 0 && cfg.OrchMode != ModeSpawn {
 		lines = append(lines, buildOrchestrationSection(OrchestrationSectionData{
