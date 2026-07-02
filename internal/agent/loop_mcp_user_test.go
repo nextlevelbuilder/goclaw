@@ -85,6 +85,9 @@ func (m *minimalMCPServerStore) SetUserCredentials(_ context.Context, _ uuid.UUI
 func (m *minimalMCPServerStore) DeleteUserCredentials(_ context.Context, _ uuid.UUID, _ string) error {
 	panic("not implemented")
 }
+func (m *minimalMCPServerStore) CacheToolDescriptions(_ context.Context, _ uuid.UUID, _ map[string]string) error {
+	return nil
+}
 
 // recordingOAuthProvider records calls to GetValidToken for assertion.
 type recordingOAuthProvider struct {

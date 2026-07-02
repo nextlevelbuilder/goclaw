@@ -121,6 +121,9 @@ func (f *fakeMCPStore) ReviewRequest(_ context.Context, _ uuid.UUID, _ bool, _, 
 func (f *fakeMCPStore) DeleteUserCredentials(_ context.Context, _ uuid.UUID, _ string) error {
 	return nil
 }
+func (f *fakeMCPStore) CacheToolDescriptions(_ context.Context, _ uuid.UUID, _ map[string]string) error {
+	return nil
+}
 
 // --- Test helpers --------------------------------------------------------
 

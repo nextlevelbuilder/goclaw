@@ -37,6 +37,9 @@ func (m *mockMCPStore) UpdateServer(ctx context.Context, id uuid.UUID, updates m
 	return nil
 }
 func (m *mockMCPStore) DeleteServer(ctx context.Context, id uuid.UUID) error           { return nil }
+func (m *mockMCPStore) CacheToolDescriptions(ctx context.Context, serverID uuid.UUID, toolDescriptions map[string]string) error {
+	return nil
+}
 func (m *mockMCPStore) GrantToAgent(ctx context.Context, g *store.MCPAgentGrant) error { return nil }
 func (m *mockMCPStore) RevokeFromAgent(ctx context.Context, serverID, agentID uuid.UUID) error {
 	return nil

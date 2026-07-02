@@ -111,6 +111,9 @@ func (m *mockMCPServerForOAuth) SetUserCredentials(_ context.Context, _ uuid.UUI
 func (m *mockMCPServerForOAuth) DeleteUserCredentials(_ context.Context, _ uuid.UUID, _ string) error {
 	return nil
 }
+func (m *mockMCPServerForOAuth) CacheToolDescriptions(_ context.Context, _ uuid.UUID, _ map[string]string) error {
+	return nil
+}
 
 // mockOAuthTokenStore is a minimal in-memory MCPOAuthTokenStore.
 type mockOAuthTokenStore struct {
