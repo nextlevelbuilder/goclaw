@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -234,5 +235,73 @@ func TestBuildPreviewPrompt_ToolDefs(t *testing.T) {
 	}
 	if !found {
 		t.Error("expected alias 'Read' in tool defs")
+	}
+}
+
+// TestBuildPreviewPrompt_DeniedToolAliasExcludedFromDefs proves that when a
+// canonical tool is denied via tools_config, its alias must NOT reappear in
+// ToolDefs (regression test for the alias-reinjection bug: aliases were
+// previously appended unconditionally regardless of the deny filter).
+func TestBuildPreviewPrompt_DeniedToolAliasExcludedFromDefs(t *testing.T) {
+	ag := baseAgent()
+	ag.ToolsConfig = []byte(`{"deny":["exec"]}`)
+	r := BuildPreviewPrompt(context.Background(), ag, PromptFull, "", PreviewDeps{
+		ToolLister: &mockToolLister{
+			tools: map[string]string{
+				"read_file": "Read a file",
+				"exec":      "Execute shell",
+			},
+			aliases: map[string]string{
+				"Bash": "exec",
+			},
+		},
+	})
+	for _, td := range r.ToolDefs {
+		if td.Function.Name == "Bash" || td.Function.Name == "exec" {
+			t.Errorf("denied tool %q (or its alias) should not appear in ToolDefs, got defs: %+v", td.Function.Name, r.ToolDefs)
+		}
+	}
+	found := false
+	for _, td := range r.ToolDefs {
+		if td.Function.Name == "read_file" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected non-denied tool 'read_file' in ToolDefs")
+	}
+}
+
+// TestBuildPreviewPrompt_MCPToolInDefs proves that store-based MCP tool
+// descriptions (from MCPLister, no live registry entry) are converted into
+// ToolDefinition entries with at least name+description populated.
+func TestBuildPreviewPrompt_MCPToolInDefs(t *testing.T) {
+	ag := baseAgent()
+	r := BuildPreviewPrompt(context.Background(), ag, PromptFull, "u1", PreviewDeps{
+		ToolLister: &mockToolLister{
+			tools: map[string]string{
+				"read_file": "Read a file",
+			},
+		},
+		MCPLister: &mockMCPLister{
+			tools: []MCPToolPreviewInfo{
+				{RegisteredName: "mcp_pg_query", Description: "Run PostgreSQL queries"},
+			},
+		},
+	})
+	var found *providers.ToolDefinition
+	for i := range r.ToolDefs {
+		if r.ToolDefs[i].Function.Name == "mcp_pg_query" {
+			found = &r.ToolDefs[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("expected mcp_pg_query in ToolDefs, got: %+v", r.ToolDefs)
+	}
+	if found.Function.Description != "Run PostgreSQL queries" {
+		t.Errorf("expected description to be populated, got %q", found.Function.Description)
+	}
+	if found.Function.Parameters == nil {
+		t.Error("expected placeholder parameters schema, got nil")
 	}
 }

@@ -67,6 +67,16 @@ func (m *mockSkillsLoader) BuildSummary(_ context.Context, allowList []string) s
 	return m.summary
 }
 
+// mockMCPLister implements MCPPreviewLister for testing.
+type mockMCPLister struct {
+	tools []MCPToolPreviewInfo
+	err   error
+}
+
+func (m *mockMCPLister) ListToolsForAgent(_ context.Context, _ uuid.UUID, _ string) ([]MCPToolPreviewInfo, error) {
+	return m.tools, m.err
+}
+
 // mockSkillAccessStore returns canned skill access lists.
 type mockSkillAccessStore struct {
 	accessible []store.SkillInfo

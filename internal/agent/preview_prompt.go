@@ -275,8 +275,19 @@ func BuildPreviewPrompt(ctx context.Context, ag *store.AgentData, mode PromptMod
 				toolDefs = append(toolDefs, tools.ToProviderDef(tool))
 			}
 		}
-		// Include alias definitions (LLM receives both canonical + aliases)
+		// Include alias definitions (LLM receives both canonical + aliases),
+		// but only for aliases whose canonical tool survived the deny/gating
+		// filters above (toolNames). Without this check, denied tools would
+		// reappear in the schema via their alias name even though they were
+		// correctly excluded from ToolNames/the main loop.
+		toolNameSet := make(map[string]bool, len(toolNames))
+		for _, n := range toolNames {
+			toolNameSet[n] = true
+		}
 		for alias, canonical := range deps.ToolLister.Aliases() {
+			if !toolNameSet[canonical] {
+				continue
+			}
 			if tool, ok := deps.ToolLister.Get(canonical); ok {
 				toolDefs = append(toolDefs, providers.ToolDefinition{
 					Type: "function",
@@ -287,6 +298,39 @@ func BuildPreviewPrompt(ctx context.Context, ag *store.AgentData, mode PromptMod
 					},
 				})
 			}
+		}
+	}
+
+	// --- MCP tool schemas (store-based preview, no live connection) ---
+	// mcpToolDescs only has name+description (no live-connected schema is
+	// available in preview mode), so we emit a minimal placeholder
+	// parameters schema. Once a real conversation starts and the MCP
+	// server is live-connected, the actual JSON schema from the server's
+	// tool hints is used instead (see internal/mcp/bridge_tool.go).
+	// Skip names already emitted via the main toolNames loop above (those
+	// come from a live-loaded registry tool and already have a real schema).
+	if len(mcpToolDescs) > 0 {
+		alreadyEmitted := make(map[string]bool, len(toolNames))
+		for _, n := range toolNames {
+			alreadyEmitted[n] = true
+		}
+		mcpNames := make([]string, 0, len(mcpToolDescs))
+		for name := range mcpToolDescs {
+			if alreadyEmitted[name] {
+				continue
+			}
+			mcpNames = append(mcpNames, name)
+		}
+		slices.Sort(mcpNames)
+		for _, name := range mcpNames {
+			toolDefs = append(toolDefs, providers.ToolDefinition{
+				Type: "function",
+				Function: &providers.ToolFunctionSchema{
+					Name:        name,
+					Description: mcpToolDescs[name],
+					Parameters:  map[string]any{"type": "object"},
+				},
+			})
 		}
 	}
 
