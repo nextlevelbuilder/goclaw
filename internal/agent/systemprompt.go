@@ -383,11 +383,17 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 	}
 
 	// 4. ## Skills — full + task (pinned skills use hybrid section)
-	if (isFull || isTask) && !cfg.IsBootstrap && (cfg.SkillsSummary != "" || cfg.HasSkillSearch || cfg.HasSkillManage || cfg.PinnedSkillsSummary != "") {
-		if cfg.PinnedSkillsSummary != "" {
-			// Hybrid mode: pinned skills inline + search for rest
-			lines = append(lines, buildSkillsHybridSection(cfg.PinnedSkillsSummary, cfg.HasSkillSearch, isFull && cfg.HasSkillManage)...)
-		} else if isTask {
+	// Pinned skills must always be inlined, even on bootstrap turns — only the
+	// search/manage guidance and non-pinned skill summary are suppressed then.
+	switch {
+	case (isFull || isTask) && cfg.PinnedSkillsSummary != "" && cfg.IsBootstrap:
+		// Bootstrap: pinned skills only, no search/manage guidance.
+		lines = append(lines, buildSkillsHybridSection(cfg.PinnedSkillsSummary, false, false)...)
+	case (isFull || isTask) && !cfg.IsBootstrap && cfg.PinnedSkillsSummary != "":
+		// Hybrid mode: pinned skills inline + search for rest
+		lines = append(lines, buildSkillsHybridSection(cfg.PinnedSkillsSummary, cfg.HasSkillSearch, isFull && cfg.HasSkillManage)...)
+	case (isFull || isTask) && !cfg.IsBootstrap && (cfg.SkillsSummary != "" || cfg.HasSkillSearch || cfg.HasSkillManage):
+		if isTask {
 			// Task mode without pinned: search-only
 			lines = append(lines, buildSkillsSection("", cfg.HasSkillSearch, false)...)
 		} else {
@@ -396,7 +402,7 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 	}
 
 	// 4.1. Pinned skills — minimal/none mode standalone (pinned skills are explicitly chosen, always relevant)
-	if (isMinimal || isNone) && !cfg.IsBootstrap && cfg.PinnedSkillsSummary != "" {
+	if (isMinimal || isNone) && cfg.PinnedSkillsSummary != "" {
 		lines = append(lines, buildPinnedSkillsMinimalSection(cfg.PinnedSkillsSummary)...)
 	}
 

@@ -15,10 +15,10 @@ func TestBuildSystemPrompt_BootstrapStates(t *testing.T) {
 	populatedUserMD := "# USER.md\n\n- **Name:** Alice\n- **Language:** English\n- **Timezone:** UTC+7\n"
 
 	tests := []struct {
-		name       string
-		cfg        SystemPromptConfig
-		wantIn     string // substring that MUST appear
-		wantNotIn  string // substring that MUST NOT appear (empty = skip check)
+		name      string
+		cfg       SystemPromptConfig
+		wantIn    string // substring that MUST appear
+		wantNotIn string // substring that MUST NOT appear (empty = skip check)
 	}{
 		{
 			name: "open agent with BOOTSTRAP.md → FIRST RUN slim mode",
@@ -142,10 +142,10 @@ func TestBuildSystemPrompt_PredefinedBootstrapSoftened(t *testing.T) {
 	}
 
 	tests := []struct {
-		name       string
-		cfg        SystemPromptConfig
-		wantIn     []string
-		wantNotIn  []string
+		name      string
+		cfg       SystemPromptConfig
+		wantIn    []string
+		wantNotIn []string
 	}{
 		{
 			name: "A: ws channel uses softened copy",
@@ -236,5 +236,90 @@ func TestBuildSystemPrompt_NoBootstrapNoUser(t *testing.T) {
 	}
 	if strings.Contains(prompt, "USER PROFILE INCOMPLETE") {
 		t.Error("unexpected USER PROFILE INCOMPLETE section with no context files")
+	}
+}
+
+// TestBuildSystemPrompt_PinnedSkillsAlwaysRenderOnBootstrap verifies that
+// pinned skills are inlined into the system prompt even on bootstrap turns.
+// Pinned skills are advertised in the UI as "always inlined in the system
+// prompt" (ui/web/src/pages/agents/agent-detail/overview-sections/pinned-skills-section.tsx)
+// so IsBootstrap must not suppress them, across all prompt modes.
+func TestBuildSystemPrompt_PinnedSkillsAlwaysRenderOnBootstrap(t *testing.T) {
+	const pinnedXML = "<available_skills><skill><name>weather-lookup</name></skill></available_skills>"
+
+	tests := []struct {
+		name string
+		cfg  SystemPromptConfig
+	}{
+		{
+			name: "full mode bootstrap",
+			cfg: SystemPromptConfig{
+				IsBootstrap:         true,
+				AgentType:           store.AgentTypePredefined,
+				ToolNames:           []string{"write_file"},
+				PinnedSkillsSummary: pinnedXML,
+			},
+		},
+		{
+			name: "task mode bootstrap",
+			cfg: SystemPromptConfig{
+				IsBootstrap:         true,
+				Mode:                PromptTask,
+				AgentType:           store.AgentTypePredefined,
+				ToolNames:           []string{"write_file"},
+				PinnedSkillsSummary: pinnedXML,
+			},
+		},
+		{
+			name: "minimal mode bootstrap",
+			cfg: SystemPromptConfig{
+				IsBootstrap:         true,
+				Mode:                PromptMinimal,
+				AgentType:           store.AgentTypeOpen,
+				ToolNames:           []string{"write_file"},
+				PinnedSkillsSummary: pinnedXML,
+			},
+		},
+		{
+			name: "none mode bootstrap",
+			cfg: SystemPromptConfig{
+				IsBootstrap:         true,
+				Mode:                PromptNone,
+				AgentType:           store.AgentTypeOpen,
+				ToolNames:           []string{"write_file"},
+				PinnedSkillsSummary: pinnedXML,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prompt := BuildSystemPrompt(tt.cfg)
+			if !strings.Contains(prompt, pinnedXML) {
+				t.Errorf("expected pinned skills XML in bootstrap system prompt (mode %q), got:\n%s", tt.cfg.Mode, prompt)
+			}
+		})
+	}
+}
+
+// TestBuildSystemPrompt_PinnedSkillsNonBootstrapUnchanged verifies pinned
+// skills continue to render normally on non-bootstrap turns, alongside the
+// search/manage guidance that bootstrap turns must suppress.
+func TestBuildSystemPrompt_PinnedSkillsNonBootstrapUnchanged(t *testing.T) {
+	const pinnedXML = "<available_skills><skill><name>weather-lookup</name></skill></available_skills>"
+
+	prompt := BuildSystemPrompt(SystemPromptConfig{
+		IsBootstrap:         false,
+		AgentType:           store.AgentTypePredefined,
+		ToolNames:           []string{"write_file", "skill_search"},
+		PinnedSkillsSummary: pinnedXML,
+		HasSkillSearch:      true,
+	})
+
+	if !strings.Contains(prompt, pinnedXML) {
+		t.Error("expected pinned skills XML in non-bootstrap system prompt")
+	}
+	if !strings.Contains(prompt, "skill_search") {
+		t.Error("expected skill_search guidance in non-bootstrap system prompt")
 	}
 }
