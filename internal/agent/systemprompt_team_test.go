@@ -34,8 +34,8 @@ func TestBuildSystemPrompt_TeamContextInjection(t *testing.T) {
 				ContextFiles:  []bootstrap.ContextFile{teamMD},
 				AgentType:     store.AgentTypePredefined,
 			},
-			wantIn:    []string{"Team Shared Workspace", "Team Members"},
-			wantNotIn: []string{"Sub-Agent Spawning"},
+			wantIn:    []string{"Team Shared Workspace"},
+			wantNotIn: []string{"Sub-Agent Spawning", "Team Members"},
 		},
 		{
 			name: "member-only inbound chat — spawn present, no team sections",
@@ -60,8 +60,8 @@ func TestBuildSystemPrompt_TeamContextInjection(t *testing.T) {
 				ContextFiles:  []bootstrap.ContextFile{teamMD},
 				AgentType:     store.AgentTypePredefined,
 			},
-			wantIn:    []string{"Team Shared Workspace", "Team Members"},
-			wantNotIn: []string{"Sub-Agent Spawning"},
+			wantIn:    []string{"Team Shared Workspace"},
+			wantNotIn: []string{"Sub-Agent Spawning", "Team Members"},
 		},
 		{
 			name: "solo agent (no team) — spawn present, availability note",
@@ -115,8 +115,8 @@ func TestBuildSystemPrompt_TeamContextInjection(t *testing.T) {
 				ContextFiles:  []bootstrap.ContextFile{teamMD},
 				AgentType:     store.AgentTypePredefined,
 			},
-			wantIn:    []string{"Team Shared Workspace", "Team Members"},
-			wantNotIn: []string{"Sub-Agent Spawning"},
+			wantIn:    []string{"Team Shared Workspace"},
+			wantNotIn: []string{"Sub-Agent Spawning", "Team Members"},
 		},
 		{
 			name: "member-only with spawn — spawn guidance present",
