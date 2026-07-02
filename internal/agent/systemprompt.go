@@ -606,6 +606,10 @@ func sanitizePromptContextValue(value string) string {
 // --- Section builders ---
 
 func buildToolingSection(toolNames []string, hasSandbox bool, shellDenyGroups map[string]bool) []string {
+	if len(toolNames) == 0 {
+		return nil
+	}
+
 	lines := []string{
 		"## Tooling",
 		"",
