@@ -1,6 +1,8 @@
 package agent
 
-import "context"
+import (
+	"context"
+)
 
 // Hybrid skill thresholds: when skill count and total token estimate are below
 // these limits, inline all skills as XML in the system prompt (like TS).

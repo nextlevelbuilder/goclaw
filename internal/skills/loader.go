@@ -202,7 +202,8 @@ func (l *Loader) ListSkills(ctx context.Context) []Info {
 
 	// Managed skills (versioned, DB-seeded) come before builtin so their workspace paths win.
 	if managedDir != "" {
-		for _, info := range l.listManagedSkills(managedDir) {
+		managedSkills := l.listManagedSkills(managedDir)
+		for _, info := range managedSkills {
 			if seen[info.Slug] {
 				continue
 			}
