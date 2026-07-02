@@ -45,6 +45,7 @@ func (a *mcpPreviewAdapter) ListToolsForAgent(ctx context.Context, agentID uuid.
 		result = append(result, agent.MCPToolPreviewInfo{
 			RegisteredName: mt.RegisteredName,
 			Description:    mt.Description,
+			Parameters:     mt.Parameters,
 		})
 	}
 	return result, nil
