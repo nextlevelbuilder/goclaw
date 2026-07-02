@@ -109,6 +109,10 @@ func TestBuildPreviewPrompt_SkillAccessStoreError(t *testing.T) {
 	}
 }
 
+// TestBuildPreviewPrompt_MCPToolDescs proves that when MCP tools are present,
+// the prompt text carries the behavioral note (prefer-MCP-over-core-tools,
+// optional-parameter guidance) but no longer enumerates per-tool name+description
+// lines — that's now pure duplication with the real schema in ToolDefs/`tools:`.
 func TestBuildPreviewPrompt_MCPToolDescs(t *testing.T) {
 	r := BuildPreviewPrompt(context.Background(), baseAgent(), PromptFull, "", PreviewDeps{
 		ToolLister: &mockToolLister{
@@ -118,8 +122,14 @@ func TestBuildPreviewPrompt_MCPToolDescs(t *testing.T) {
 			},
 		},
 	})
-	if !strings.Contains(r.Prompt, "mcp_pg_query") {
-		t.Error("expected MCP tool description in prompt")
+	if !strings.Contains(r.Prompt, "## MCP Tools (prefer over core tools)") {
+		t.Error("expected MCP Tools behavioral section header in prompt")
+	}
+	if !strings.Contains(r.Prompt, "always prefer the MCP tool") {
+		t.Error("expected prefer-MCP-over-core-tools instruction in prompt")
+	}
+	if strings.Contains(r.Prompt, "mcp_pg_query:") {
+		t.Error("expected per-tool MCP description enumeration to be removed from prompt text (now duplicated by ToolDefs schema)")
 	}
 }
 
@@ -404,11 +414,11 @@ func TestBuildPreviewPrompt_MCPToolGlobalDenyApplied(t *testing.T) {
 		ToolPolicy: pe,
 	})
 
+	// Prompt text no longer enumerates per-tool names/descriptions (removed as
+	// pure duplication of the real schema now carried in ToolDefs/`tools:`) —
+	// so allow/deny is asserted against ToolDefs below, not prompt text.
 	if strings.Contains(r.Prompt, "mcp_cloudflare__delete_dns_record") {
 		t.Error("expected globally-denied MCP tool to be excluded from preview prompt")
-	}
-	if !strings.Contains(r.Prompt, "mcp_cloudflare__list_dns_records") {
-		t.Error("expected non-denied MCP tool from the same server to remain in preview prompt")
 	}
 
 	for _, def := range r.ToolDefs {
