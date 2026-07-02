@@ -391,7 +391,37 @@ func isEmptyOrNullJSONUpdate(v any) bool {
 	}
 }
 
+func (s *PGAgentStore) aggregateAndDeleteAgentUsage(ctx context.Context, agentID uuid.UUID) error {
+	// Upsert this agent's usage_snapshots into NULL-agent aggregate rows, then delete the agent rows.
+	// This is necessary because the unique index uses COALESCE(agent_id, '00000000...') so ON DELETE SET NULL
+	// would cause a unique-constraint violation when multiple agent rows share the same bucket/provider/model/channel/tenant.
+	const upsertQuery = `
+		INSERT INTO usage_snapshots
+			(bucket_hour, agent_id, provider, model, channel, tenant_id, input_tokens, output_tokens, created_at)
+		SELECT bucket_hour, NULL, provider, model, channel, tenant_id,
+		       SUM(input_tokens), SUM(output_tokens), NOW()
+		FROM usage_snapshots
+		WHERE agent_id = $1
+		GROUP BY bucket_hour, provider, model, channel, tenant_id
+		ON CONFLICT (bucket_hour, COALESCE(agent_id, '00000000-0000-0000-0000-000000000000'::uuid),
+		             provider, model, channel, tenant_id)
+		DO UPDATE SET
+			input_tokens  = EXCLUDED.input_tokens  + usage_snapshots.input_tokens,
+			output_tokens = EXCLUDED.output_tokens + usage_snapshots.output_tokens
+	`
+	if _, err := s.db.ExecContext(ctx, upsertQuery, agentID); err != nil {
+		return fmt.Errorf("aggregate agent usage: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, "DELETE FROM usage_snapshots WHERE agent_id = $1", agentID); err != nil {
+		return fmt.Errorf("delete agent usage snapshots: %w", err)
+	}
+	return nil
+}
+
 func (s *PGAgentStore) Delete(ctx context.Context, id uuid.UUID) error {
+	if err := s.aggregateAndDeleteAgentUsage(ctx, id); err != nil {
+		return err
+	}
 	if store.IsCrossTenant(ctx) {
 		_, err := s.db.ExecContext(ctx, "DELETE FROM agents WHERE id = $1", id)
 		return err
