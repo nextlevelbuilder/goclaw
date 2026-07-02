@@ -54,12 +54,23 @@ var BridgeToolNames = map[string]bool{
 	"delegate": true,
 }
 
+// bridgeProviderName identifies the caller for per-provider tool policy
+// overrides (config.ToolPolicySpec.ByProvider) when enforcing bridge access.
+// All MCP bridge traffic originates from the Claude CLI subprocess.
+const bridgeProviderName = "claude-cli"
+
 // NewBridgeServer creates a StreamableHTTPServer that exposes GoClaw tools as MCP tools.
 // It reads tools from the registry, filters to BridgeToolNames, and serves them
 // over streamable-http transport (stateless mode).
 // msgBus is optional; when non-nil, tools that produce media (deliver:true) will
 // publish file attachments directly to the outbound bus.
-func NewBridgeServer(reg *tools.Registry, version string, msgBus *bus.MessageBus) *mcpserver.StreamableHTTPServer {
+// policyEngine is optional; when non-nil, every tool call is additionally checked
+// against the calling agent's policy-filtered allowlist (see
+// tools.WithToolAgentPolicy / ToolAgentPolicyFromCtx) before execution, so a
+// tool present in BridgeToolNames is still rejected if the agent's own tool
+// policy denies it. When nil, only the static BridgeToolNames set applies
+// (legacy behavior).
+func NewBridgeServer(reg *tools.Registry, version string, msgBus *bus.MessageBus, policyEngine *tools.PolicyEngine) *mcpserver.StreamableHTTPServer {
 	srv := mcpserver.NewMCPServer("goclaw-bridge", version,
 		mcpserver.WithToolCapabilities(false),
 	)
@@ -73,7 +84,7 @@ func NewBridgeServer(reg *tools.Registry, version string, msgBus *bus.MessageBus
 		}
 
 		mcpTool := convertToMCPTool(t)
-		handler := makeToolHandler(reg, name, msgBus)
+		handler := makeToolHandler(reg, name, msgBus, policyEngine)
 		srv.AddTool(mcpTool, handler)
 		registered++
 	}
@@ -98,8 +109,22 @@ func convertToMCPTool(t tools.Tool) mcpgo.Tool {
 // makeToolHandler creates a ToolHandlerFunc that delegates to the GoClaw tool registry.
 // When msgBus is non-nil and a tool result contains Media paths, the handler publishes
 // them as outbound media attachments so files reach the user (e.g. Telegram document).
-func makeToolHandler(reg *tools.Registry, toolName string, msgBus *bus.MessageBus) mcpserver.ToolHandlerFunc {
+func makeToolHandler(reg *tools.Registry, toolName string, msgBus *bus.MessageBus, policyEngine *tools.PolicyEngine) mcpserver.ToolHandlerFunc {
 	return func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+		// Enforce the calling agent's own tool policy before execution. Static
+		// membership in BridgeToolNames only bounds what the bridge process
+		// COULD ever expose; it does not know which agent is calling. Without
+		// this check, any agent reaching the bridge (e.g. via Claude CLI) can
+		// invoke any bridge tool regardless of its configured tool policy.
+		if policyEngine != nil {
+			agentPolicy := tools.ToolAgentPolicyFromCtx(ctx)
+			if !policyEngine.WouldAllow(toolName, bridgeProviderName, agentPolicy, nil) {
+				slog.Warn("security.mcp_bridge_denied",
+					"tool", toolName, "agent_key", tools.ToolAgentKeyFromCtx(ctx))
+				return mcpgo.NewToolResultError("tool not allowed by policy: " + toolName), nil
+			}
+		}
+
 		args := req.GetArguments()
 
 		// Pass routing context (channel, chatID, peerKind, sessionKey) so native

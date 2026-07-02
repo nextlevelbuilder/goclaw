@@ -485,6 +485,7 @@ func runGateway() {
 	server.SetVersion(Version)
 	server.SetDB(pgStores.DB)
 	server.SetPolicyEngine(permPE)
+	server.SetToolPolicy(toolPE)
 	server.SetPairingService(pgStores.Pairing)
 	server.SetMessageBus(msgBus)
 	server.SetOAuthHandler(httpapi.NewOAuthHandler(pgStores.Providers, pgStores.ConfigSecrets, providerRegistry, msgBus))

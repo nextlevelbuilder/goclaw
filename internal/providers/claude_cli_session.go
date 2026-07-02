@@ -8,11 +8,53 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 )
+
+// cliNativeToolGoclawEquivalent maps Claude CLI native built-in tool names to
+// their GoClaw canonical registry equivalents. A native tool is only allowed
+// (omitted from --disallowedTools) when its GoClaw equivalent is present in
+// the agent's policy-filtered allowed tool set.
+var cliNativeToolGoclawEquivalent = map[string]string{
+	"Bash":      "exec",
+	"Edit":      "edit",
+	"Write":     "write_file",
+	"Read":      "read_file",
+	"WebFetch":  "web_fetch",
+	"WebSearch": "web_search",
+}
+
+// cliNativeToolsAlwaysBlocked lists Claude CLI native tools with no GoClaw
+// policy equivalent. They are always disallowed so agent tool policy cannot
+// be bypassed through them.
+var cliNativeToolsAlwaysBlocked = []string{
+	"Glob", "Grep", "TodoRead", "TodoWrite", "NotebookRead", "NotebookEdit",
+}
+
+// disallowedCLITools computes the --disallowedTools value for the Claude CLI
+// subprocess from the agent's policy-filtered allowed GoClaw tool names.
+// allowedToolNames == nil is treated as "no tools allowed" (fail closed):
+// every native tool with a GoClaw equivalent is blocked, same as an empty set.
+func disallowedCLITools(allowedToolNames []string) []string {
+	allowed := make(map[string]bool, len(allowedToolNames))
+	for _, name := range allowedToolNames {
+		allowed[name] = true
+	}
+
+	blocked := make([]string, 0, len(cliNativeToolGoclawEquivalent)+len(cliNativeToolsAlwaysBlocked))
+	for native, equivalent := range cliNativeToolGoclawEquivalent {
+		if !allowed[equivalent] {
+			blocked = append(blocked, native)
+		}
+	}
+	blocked = append(blocked, cliNativeToolsAlwaysBlocked...)
+	slices.Sort(blocked)
+	return blocked
+}
 
 // validCLIModels lists accepted model aliases for the Claude CLI.
 var validCLIModels = map[string]bool{
@@ -30,7 +72,10 @@ func validateCLIModel(model string) error {
 // buildArgs constructs CLI arguments.
 // mcpConfigPath is the resolved per-session MCP config file (may differ per call).
 // effort is the reasoning effort level (low/medium/high); empty or "off" omits the flag.
-func (p *ClaudeCLIProvider) buildArgs(model, workDir, mcpConfigPath string, cliSessionID uuid.UUID, outputFormat string, hasImages, disableTools bool, effort string) []string {
+// allowedToolNames is the agent's policy-filtered canonical GoClaw tool set for this
+// turn; it drives which Claude CLI native built-in tools are permitted (see
+// disallowedCLITools). nil means "no tools allowed" (fail closed).
+func (p *ClaudeCLIProvider) buildArgs(model, workDir, mcpConfigPath string, cliSessionID uuid.UUID, outputFormat string, hasImages, disableTools bool, effort string, allowedToolNames []string) []string {
 	args := []string{
 		"-p",
 		"--output-format", outputFormat,
@@ -66,13 +111,17 @@ func (p *ClaudeCLIProvider) buildArgs(model, workDir, mcpConfigPath string, cliS
 		args = append(args, "--input-format", "stream-json")
 	}
 
+	// --disallowedTools is always computed, regardless of whether an MCP config
+	// path was resolved: when disableTools is set (e.g. summoner), no native
+	// tools are permitted; otherwise the agent's policy-filtered allowed tool
+	// set determines which native CLI tools (with a GoClaw equivalent) may run.
+	// This must never be skipped — omitting it previously let the CLI
+	// subprocess run with its full native toolset unrestricted whenever no MCP
+	// config was resolved.
 	if disableTools {
-		// Summoner: disable all tools entirely via disallowedTools
-		args = append(args, "--disallowedTools", "Bash,Edit,Read,Write,Glob,Grep,WebFetch,WebSearch,TodoRead,TodoWrite,NotebookRead,NotebookEdit")
-	} else if mcpConfigPath != "" {
-		// Chat with MCP bridge: disable CLI built-in tools, only allow MCP bridge tools.
-		// This ensures all tool execution goes through GoClaw's controlled MCP bridge.
-		args = append(args, "--disallowedTools", "Bash,Edit,Read,Write,Glob,Grep,WebFetch,WebSearch,TodoRead,TodoWrite,NotebookRead,NotebookEdit")
+		args = append(args, "--disallowedTools", strings.Join(disallowedCLITools(nil), ","))
+	} else {
+		args = append(args, "--disallowedTools", strings.Join(disallowedCLITools(allowedToolNames), ","))
 	}
 
 	if p.hooksSettingsPath != "" {
@@ -165,6 +214,24 @@ func extractBoolOpt(opts map[string]any, key string) bool {
 		}
 	}
 	return false
+}
+
+// extractStringSliceOpt gets a []string value from Options map by key.
+// Returns nil if absent or of an unexpected type (fail closed: callers must
+// treat nil as "no tools allowed", not "unrestricted").
+func extractStringSliceOpt(opts map[string]any, key string) []string {
+	if opts == nil {
+		return nil
+	}
+	v, ok := opts[key]
+	if !ok {
+		return nil
+	}
+	names, ok := v.([]string)
+	if !ok {
+		return nil
+	}
+	return names
 }
 
 // bridgeContextFromOpts builds a BridgeContext from the Options map.

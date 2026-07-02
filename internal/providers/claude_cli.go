@@ -39,6 +39,14 @@ const OptTenantID = "tenant_id"
 // OptLocalKey passes the composite local key (e.g. "-100123:topic:42") for forum topic routing.
 const OptLocalKey = "local_key"
 
+// OptAllowedToolNames passes the agent's policy-filtered canonical GoClaw tool
+// names ([]string) for the current turn. Used to derive --disallowedTools for
+// the Claude CLI subprocess so native CLI tools (Bash, Edit, Write, Read,
+// WebFetch, WebSearch) are only permitted when their GoClaw equivalent is
+// allowed by the agent's tool policy. A nil/absent value is treated as "no
+// tools allowed" (fail closed).
+const OptAllowedToolNames = "allowed_tool_names"
+
 // ClaudeCLIProvider implements Provider by shelling out to the `claude` CLI binary.
 // It acts as a thin proxy: CLI manages session history, tool execution, and context.
 // GoClaw only forwards the latest user message and streams back the response.
