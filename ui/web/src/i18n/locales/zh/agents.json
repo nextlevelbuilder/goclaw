@@ -608,7 +608,12 @@
     "insertContact": "搜索联系人以插入...",
     "contentPlaceholder": "文件内容...",
     "systemPromptPreview": "系统提示词",
-    "tokens": "tokens"
+    "tokens": "tokens",
+    "toolsAvailable": "{{count}} 个可用工具",
+    "toolsSection": "工具",
+    "toolParameters": "参数",
+    "noParameters": "无参数",
+    "noTools": "没有可用工具"
   },
   "fileEditor": {
     "editWithAi": "AI 编辑",

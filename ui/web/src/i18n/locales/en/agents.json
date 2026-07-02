@@ -623,7 +623,12 @@
     "insertContact": "Search contact to insert...",
     "contentPlaceholder": "File content...",
     "systemPromptPreview": "System Prompt",
-    "tokens": "tokens"
+    "tokens": "tokens",
+    "toolsAvailable": "{{count}} tools available",
+    "toolsSection": "Tools",
+    "toolParameters": "Parameters",
+    "noParameters": "No parameters",
+    "noTools": "No tools available"
   },
   "fileEditor": {
     "editWithAi": "Edit with AI",

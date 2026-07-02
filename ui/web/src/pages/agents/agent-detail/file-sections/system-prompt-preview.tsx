@@ -5,6 +5,7 @@ import { Eye, Loader2 } from "lucide-react";
 import { useHttp } from "@/hooks/use-ws";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
+import { ToolsPreviewSection, type ToolDefinition } from "./tools-preview-section";
 
 const MODES = ["full", "task", "minimal", "none"] as const;
 type PromptMode = (typeof MODES)[number];
@@ -14,6 +15,7 @@ interface PreviewResponse {
   prompt: string;
   token_count: number;
   sections: { name: string; start: number; end: number }[];
+  tools?: ToolDefinition[];
 }
 
 interface SystemPromptPreviewProps {
@@ -84,9 +86,12 @@ export function SystemPromptPreview({ agentKey }: SystemPromptPreviewProps) {
         ) : error ? (
           <p className="text-sm text-destructive">{error}</p>
         ) : data ? (
-          <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-foreground/90">
-            {renderPromptWithBoundary(data.prompt)}
-          </pre>
+          <>
+            <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-foreground/90">
+              {renderPromptWithBoundary(data.prompt)}
+            </pre>
+            <ToolsPreviewSection tools={data.tools} />
+          </>
         ) : null}
       </div>
     </div>

@@ -7,6 +7,7 @@ import {
 import { MarkdownRenderer } from "@/components/shared/markdown-renderer";
 import { useHttp } from "@/hooks/use-ws";
 import { cn } from "@/lib/utils";
+import { ToolsPreviewSection, type ToolDefinition } from "./file-sections/tools-preview-section";
 
 const MODES = ["full", "task", "minimal", "none"] as const;
 type PromptMode = (typeof MODES)[number];
@@ -16,6 +17,7 @@ interface PreviewResponse {
   prompt: string;
   token_count: number;
   sections: { name: string; start: number; end: number }[];
+  tools?: ToolDefinition[];
 }
 
 interface SystemPromptDialogProps {
@@ -103,8 +105,11 @@ export function SystemPromptDialog({ agentKey, open, onOpenChange }: SystemPromp
           {error ? (
             <p className="text-sm text-destructive p-4">{error}</p>
           ) : data ? (
-            <div className="prose prose-sm dark:prose-invert max-w-none p-1">
-              <MarkdownRenderer content={insertCacheBoundary(data.prompt)} />
+            <div className="p-1">
+              <div className="prose prose-sm dark:prose-invert max-w-none">
+                <MarkdownRenderer content={insertCacheBoundary(data.prompt)} />
+              </div>
+              <ToolsPreviewSection tools={data.tools} />
             </div>
           ) : null}
         </div>

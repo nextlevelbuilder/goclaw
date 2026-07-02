@@ -608,7 +608,12 @@
     "insertContact": "Tìm liên hệ để chèn...",
     "contentPlaceholder": "Nội dung tệp...",
     "systemPromptPreview": "System Prompt",
-    "tokens": "tokens"
+    "tokens": "tokens",
+    "toolsAvailable": "{{count}} công cụ khả dụng",
+    "toolsSection": "Công cụ",
+    "toolParameters": "Tham số",
+    "noParameters": "Không có tham số",
+    "noTools": "Không có công cụ nào"
   },
   "fileEditor": {
     "editWithAi": "Chỉnh sửa với AI",
