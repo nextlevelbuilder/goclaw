@@ -717,8 +717,41 @@ func (m *Manager) ListToolsForAgent(ctx context.Context, agentID uuid.UUID, user
 			}
 		}
 
+		// Build deny set
+		denySet := make(map[string]struct{}, len(info.ToolDeny))
+		for _, d := range info.ToolDeny {
+			denySet[d] = struct{}{}
+		}
+
 		if len(info.ToolAllow) == 0 {
-			// Unknown tool list — emit one placeholder entry for the server.
+			if len(toolCache) > 0 {
+				// Unrestricted grant, but we have real tool names cached from a
+				// prior connection — enumerate them instead of a placeholder.
+				var serverTools []string
+				for toolName := range toolCache {
+					if _, denied := denySet[toolName]; denied {
+						slog.Debug("mcp.ListToolsForAgent.tool_denied", "server", info.Server.Name, "tool", toolName)
+						continue
+					}
+					registeredName := effectivePrefix + "__" + toolName
+					desc := hints.HintFor(toolName)
+					if desc == "" {
+						desc = toolCache[toolName]
+					}
+					if desc == "" && hints.Global != "" {
+						desc = hints.Global
+					}
+					serverTools = append(serverTools, registeredName)
+					result = append(result, MCPToolPreviewInfo{
+						RegisteredName: registeredName,
+						Description:    desc,
+					})
+				}
+				slog.Debug("mcp.ListToolsForAgent.server_tools_added_from_cache", "server", info.Server.Name, "tools", serverTools)
+				continue
+			}
+
+			// Unknown tool list and nothing cached — emit one placeholder entry.
 			placeholder := effectivePrefix + "__*"
 			desc := hints.Global
 			if desc == "" {
@@ -730,12 +763,6 @@ func (m *Manager) ListToolsForAgent(ctx context.Context, agentID uuid.UUID, user
 				Description:    desc,
 			})
 			continue
-		}
-
-		// Build deny set
-		denySet := make(map[string]struct{}, len(info.ToolDeny))
-		for _, d := range info.ToolDeny {
-			denySet[d] = struct{}{}
 		}
 
 		var serverTools []string
