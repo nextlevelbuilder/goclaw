@@ -216,7 +216,22 @@ func BuildPreviewPrompt(ctx context.Context, ag *store.AgentData, mode PromptMod
 			}
 			toolPolicyCfg := ag.ParseToolsConfig()
 			for _, mt := range storeMCPTools {
-				if deps.ToolPolicy != nil && !deps.ToolPolicy.WouldAllow(toolRegistry, mt.RegisteredName, ag.Provider, toolPolicyCfg, nil) {
+				// MCP tool grant/access is already fully resolved by
+				// ListToolsForAgent's own tool_allow/tool_deny per-server
+				// logic above. Here we only need to catch the narrower case
+				// of a literal-name deny (global or per-agent tools.deny
+				// listing this exact tool name). We deliberately do NOT run
+				// the full WouldAllow group-expansion pipeline: MCP tools are
+				// only ever registered into ephemeral per-agent registry
+				// clones at live-connection time (internal/mcp/manager_connect.go),
+				// never into the shared/global registry used here, so
+				// "group:mcp" (and any other group spec) can never resolve
+				// correctly against toolRegistry in this connection-free
+				// preview context. Passing reg=nil forces IsDenied to fall
+				// back to a plain literal-name match with no group
+				// expansion, which is exactly what's needed and is immune to
+				// this class of registry-dependency bug.
+				if deps.ToolPolicy != nil && deps.ToolPolicy.IsDenied(nil, mt.RegisteredName, toolPolicyCfg) {
 					slog.Debug("preview_prompt.mcp_tool_denied_by_policy", "tool", mt.RegisteredName)
 					continue
 				}

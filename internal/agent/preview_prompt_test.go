@@ -394,11 +394,11 @@ func TestBuildPreviewPrompt_GlobalDenyApplied(t *testing.T) {
 
 // TestBuildPreviewPrompt_MCPToolGlobalDenyApplied proves that MCP tools
 // injected from deps.MCPLister (store-based, not live registry) are also
-// subject to deps.ToolPolicy.WouldAllow filtering. A globally-denied MCP
-// tool must be excluded from both the prompt text and ToolDefs, while other
-// MCP tools from the same server remain included. This closes the gap where
-// the MCPLister supplement path added MCP tools without consulting
-// ToolPolicy at all.
+// subject to a literal-name deny check via deps.ToolPolicy.IsDenied. A
+// globally-denied MCP tool must be excluded from both the prompt text and
+// ToolDefs, while other MCP tools from the same server remain included.
+// This closes the gap where the MCPLister supplement path added MCP tools
+// without consulting ToolPolicy at all.
 func TestBuildPreviewPrompt_MCPToolGlobalDenyApplied(t *testing.T) {
 	ag := baseAgent() // tools_config is nil — no per-agent deny
 	pe := tools.NewPolicyEngine(&config.ToolsConfig{
@@ -477,5 +477,50 @@ func TestBuildPreviewPrompt_MCPToolAllowedViaGroupExpansion(t *testing.T) {
 	}
 	if found == nil {
 		t.Fatalf("expected mcp_pg_query (granted via group:mcp AlsoAllow) in ToolDefs, got: %+v", r.ToolDefs)
+	}
+}
+
+// TestBuildPreviewPrompt_MCPToolNotDeniedIncludedWithoutGroupExpansion proves
+// that MCP tools supplied via deps.MCPLister are included in preview purely
+// because they are NOT literally denied — inclusion does NOT depend on
+// group-expansion machinery (e.g. "group:mcp" resolving against a registry)
+// at all. This is a regression test for the preview-vs-live tool-visibility
+// gap: MCP tools are only ever registered into ephemeral per-agent registry
+// clones at live-connection time (internal/mcp/manager_connect.go), never
+// into the shared/global registry used by preview, so any check that
+// requires "group:mcp" to expand against a registry can never work correctly
+// here. The agent's tools_config below deliberately has a restrictive Allow
+// list (excluding the MCP tool by literal name) and no AlsoAllow group grant
+// at all — under the old WouldAllow-based gate this MCP tool would have been
+// incorrectly excluded, since group:mcp cannot resolve against the (empty)
+// global registry. With the fix, since the tool is not in any Deny list, it
+// must still appear.
+func TestBuildPreviewPrompt_MCPToolNotDeniedIncludedWithoutGroupExpansion(t *testing.T) {
+	ag := baseAgent()
+	// Restrictive Allow list that does NOT include the MCP tool by literal
+	// name, and NO AlsoAllow group grant — the exact scenario where
+	// group-expansion-dependent gating would previously have failed.
+	ag.ToolsConfig = []byte(`{"allow":["read_file"]}`)
+	pe := tools.NewPolicyEngine(&config.ToolsConfig{
+		Deny: []string{"mcp_cloudflare__delete_dns_record"}, // unrelated tool, different name
+	})
+
+	r := BuildPreviewPrompt(context.Background(), ag, PromptFull, "u1", PreviewDeps{
+		MCPLister: &mockMCPLister{
+			tools: []MCPToolPreviewInfo{
+				{RegisteredName: "mcp_pg_query", Description: "Run PostgreSQL queries"},
+			},
+		},
+		ToolPolicy: pe,
+	})
+
+	var found *providers.ToolDefinition
+	for i := range r.ToolDefs {
+		if r.ToolDefs[i].Function != nil && r.ToolDefs[i].Function.Name == "mcp_pg_query" {
+			found = &r.ToolDefs[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("expected mcp_pg_query (not literally denied) in ToolDefs regardless of group-expansion resolution, got: %+v", r.ToolDefs)
 	}
 }
