@@ -150,7 +150,9 @@ func WithConfigs(cfgs map[string]*config.MCPServerConfig) ManagerOption {
 // This is used by the gateway to populate configs from the database after the store
 // is initialised, before calling Start.
 func (m *Manager) SetConfigs(cfgs map[string]*config.MCPServerConfig) {
+	slog.Debug("mcp.Manager.SetConfigs: applying configs", "count", len(cfgs))
 	m.configs = cfgs
+	slog.Debug("mcp.Manager.SetConfigs: configs applied successfully", "count", len(cfgs))
 }
 
 // WithStore sets the MCPServerStore for DB-backed MCP server loading.
@@ -158,6 +160,12 @@ func WithStore(s store.MCPServerStore) ManagerOption {
 	return func(m *Manager) {
 		m.store = s
 	}
+}
+
+// SetStore sets the MCP store on an already-constructed Manager.
+// Use this when the store is not yet available at construction time.
+func (m *Manager) SetStore(s store.MCPServerStore) {
+	m.store = s
 }
 
 // WithPool sets a shared connection pool for MCP servers.
@@ -198,17 +206,20 @@ func NewManager(registry *tools.Registry, opts ...ManagerOption) *Manager {
 // Start connects to all config-file MCP servers.
 // Non-fatal: logs warnings for servers that fail to connect and continues.
 func (m *Manager) Start(ctx context.Context) error {
+	slog.Debug("mcp.Manager.Start: called", "configs", len(m.configs))
 	if len(m.configs) == 0 {
+		slog.Debug("mcp.Manager.Start: no configs, returning early")
 		return nil
 	}
 
 	var errs []string
 	for name, cfg := range m.configs {
 		if !cfg.IsEnabled() {
-			slog.Info("mcp.server.disabled", "server", name)
+			slog.Debug("mcp.server.disabled", "server", name)
 			continue
 		}
 
+		slog.Debug("mcp.Manager.Start: starting server", "name", name, "transport", cfg.Transport)
 		// Config-path servers have no DB ID — pass uuid.Nil
 		headers, err := resolveEnvVars(cfg.Headers)
 		if err != nil {
@@ -222,9 +233,19 @@ func (m *Manager) Start(ctx context.Context) error {
 		if err := m.connectServer(ctx, name, cfg.Transport, cfg.Command, cfg.Args, cfg.Env, cfg.URL, headers, cfg.ToolPrefix, cfg.TimeoutSec, uuid.Nil, ToolHints{}, nil, nil); err != nil {
 			slog.Warn("mcp.server.connect_failed", "server", name, "error", err)
 			errs = append(errs, fmt.Sprintf("%s: %v", name, err))
+		} else {
+			m.mu.RLock()
+			toolCount := 0
+			if ss, ok := m.servers[name]; ok {
+				toolCount = len(ss.toolNames)
+			}
+			m.mu.RUnlock()
+			slog.Debug("mcp.Manager.Start: server started", "name", name, "tools", toolCount)
 		}
 	}
 
+	totalTools := len(m.ToolNames())
+	slog.Debug("mcp.Manager.Start: fully started", "total_tools", totalTools, "errors", len(errs))
 	if len(errs) > 0 {
 		return fmt.Errorf("some MCP servers failed to connect: %s", joinErrors(errs))
 	}

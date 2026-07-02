@@ -25,6 +25,12 @@ type mcpPreviewAdapter struct {
 // NewMCPPreviewAdapter wraps an *mcp.Manager as an agent.MCPPreviewLister.
 // Use this when wiring up the prompt preview handler in cmd/gateway.go.
 func NewMCPPreviewAdapter(mgr *mcp.Manager) agent.MCPPreviewLister {
+	slog.Debug("NewMCPPreviewAdapter called", "mgr_nil", mgr == nil)
+	if mgr == nil {
+		slog.Warn("NewMCPPreviewAdapter: mgr is nil — MCP tools will not appear in prompt preview")
+	} else {
+		slog.Debug("NewMCPPreviewAdapter: MCP preview adapter created with manager")
+	}
 	return &mcpPreviewAdapter{mgr: mgr}
 }
 
@@ -109,9 +115,9 @@ func (h *AgentsHandler) handleSystemPromptPreview(w http.ResponseWriter, r *http
 		if end > len(result.Prompt) {
 			end = len(result.Prompt)
 		}
-		slog.Info("handleSystemPromptPreview.mcp_section_found", "agent_id", ag.ID, "preview", result.Prompt[mcpStart:end])
+		slog.Debug("handleSystemPromptPreview.mcp_section_found", "agent_id", ag.ID, "preview", result.Prompt[mcpStart:end])
 	} else {
-		slog.Info("handleSystemPromptPreview.no_mcp_section", "agent_id", ag.ID, "prompt_len", len(result.Prompt))
+		slog.Debug("handleSystemPromptPreview.no_mcp_section", "agent_id", ag.ID, "prompt_len", len(result.Prompt))
 	}
 
 	w.Header().Set("Content-Type", "application/json")

@@ -607,15 +607,21 @@ func setupSkillsSystem(
 // into the shared manager. This replaces the former config-file-based initialisation.
 // Non-fatal: individual server connection failures are logged as warnings.
 func initMCPFromDB(ctx context.Context, mgr *mcpbridge.Manager, mcpStore store.MCPServerStore) error {
+	slog.Debug("initMCPFromDB starting")
+	slog.Debug("querying mcp_servers from database")
 	servers, err := mcpStore.ListServers(ctx)
 	if err != nil {
+		slog.Error("initMCPFromDB: failed to query mcp_servers", "error", err)
 		return fmt.Errorf("list mcp servers from db: %w", err)
 	}
+	slog.Debug("found mcp_servers from database", "count", len(servers))
 
 	cfgs := make(map[string]*config.MCPServerConfig, len(servers))
 	for i := range servers {
 		srv := &servers[i]
+		slog.Debug("initMCPFromDB: processing server", "name", srv.Name, "transport", srv.Transport, "enabled", srv.Enabled)
 		if !srv.Enabled {
+			slog.Debug("initMCPFromDB: skipping disabled server", "name", srv.Name)
 			continue
 		}
 
@@ -663,13 +669,18 @@ func initMCPFromDB(ctx context.Context, mgr *mcpbridge.Manager, mcpStore store.M
 	}
 
 	if len(cfgs) == 0 {
-		slog.Info("mcp.db: no enabled servers found")
+		slog.Debug("mcp.db: no enabled servers found")
 		return nil
 	}
 
+	slog.Debug("initMCPFromDB: building config map", "servers", len(cfgs))
+	slog.Debug("initMCPFromDB: calling mgr.SetConfigs()")
 	mgr.SetConfigs(cfgs)
+	slog.Debug("initMCPFromDB: calling mgr.Start()")
 	if startErr := mgr.Start(ctx); startErr != nil {
 		slog.Warn("mcp.db.startup_errors", "error", startErr)
 	}
+	toolCount := len(mgr.ToolNames())
+	slog.Debug("initMCPFromDB: MCP init complete", "tools_registered", toolCount)
 	return nil
 }

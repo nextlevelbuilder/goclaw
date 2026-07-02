@@ -67,6 +67,7 @@ type PreviewResult struct {
 // (channel, peer kind, session context, credentials) are left at zero values —
 // BuildSystemPrompt already nil-checks every field.
 func BuildPreviewPrompt(ctx context.Context, ag *store.AgentData, mode PromptMode, userID string, deps PreviewDeps) PreviewResult {
+	slog.Debug("BuildPreviewPrompt called", "agent_id", ag.ID, "mode", mode, "user_id", userID, "mcp_lister_nil", deps.MCPLister == nil)
 	// --- Context files ---
 	var contextFiles []bootstrap.ContextFile
 	if deps.AgentStore != nil {
@@ -160,6 +161,7 @@ func BuildPreviewPrompt(ctx context.Context, ag *store.AgentData, mode PromptMod
 	// MCP servers appear in the preview even when not currently loaded in the registry.
 	slog.Debug("preview_prompt.mcp_lister_check", "agent_id", ag.ID, "mcp_lister_nil", deps.MCPLister == nil)
 	if deps.MCPLister != nil {
+		slog.Debug("preview_prompt: calling MCPLister.ListToolsForAgent", "agent_id", ag.ID, "user_id", userID)
 		storeMCPTools, err := deps.MCPLister.ListToolsForAgent(ctx, ag.ID, userID)
 		slog.Debug("preview_prompt.mcp_lister_result", "agent_id", ag.ID, "user_id", userID, "store_tools_count", len(storeMCPTools), "error", err)
 		if err == nil && len(storeMCPTools) > 0 {
@@ -175,10 +177,10 @@ func BuildPreviewPrompt(ctx context.Context, ag *store.AgentData, mode PromptMod
 				}
 			}
 		} else if err != nil {
-			slog.Info("preview_prompt.mcp_lister_error", "agent_id", ag.ID, "error", err)
+			slog.Debug("preview_prompt.mcp_lister_error", "agent_id", ag.ID, "error", err)
 		}
 	}
-	slog.Info("preview_prompt.mcp_tool_descs_final", "agent_id", ag.ID, "total_mcp_tools", len(mcpToolDescs))
+	slog.Debug("preview_prompt.mcp_tool_descs_final", "agent_id", ag.ID, "total_mcp_tools", len(mcpToolDescs))
 
 	// --- Sandbox ---
 	sandboxCfg := ag.ParseSandboxConfig()
@@ -325,6 +327,7 @@ func BuildPreviewPrompt(ctx context.Context, ag *store.AgentData, mode PromptMod
 		// PeerKind, OwnerIDs, ExtraPrompt, CredentialCLIContext, IsBootstrap,
 		// SandboxWorkspaceAccess
 	})
+	slog.Debug("BuildPreviewPrompt: prompt preview built", "agent_id", ag.ID, "mcp_tools", len(mcpToolDescs), "prompt_len", len(prompt), "tool_defs", len(toolDefs))
 	return PreviewResult{Prompt: prompt, ToolDefs: toolDefs}
 }
 

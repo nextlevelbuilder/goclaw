@@ -262,7 +262,9 @@ func runGateway() {
 		tools.DetectServerIPs(context.Background())
 	}
 
+	slog.Debug("creating mcpMgr via setupToolRegistry")
 	toolsReg, execApprovalMgr, mcpMgr, sandboxMgr, browserMgr, webFetchTool, ttsTool, audioMgr, permPE, toolPE, dataDir, agentCfg := setupToolRegistry(cfg, workspace, providerRegistry)
+	slog.Debug("setupToolRegistry completed", "mcpMgr_nil", mcpMgr == nil)
 	if browserMgr != nil {
 		defer browserMgr.Close()
 	}
@@ -348,13 +350,25 @@ func runGateway() {
 	}
 	// MCP servers: load from database (single source of truth).
 	// pgStores.MCP is nil on SQLite/desktop builds that don't support MCP tables.
+	// Apply store to MCP manager so ListToolsForAgent can query DB.
+	// mcpMgr is created before pgStores is available, so the store must be set here.
+	if pgStores.MCP != nil && mcpMgr != nil {
+		mcpMgr.SetStore(pgStores.MCP)
+		slog.Info("applied store to MCPManager")
+	}
+	slog.Debug("checking MCP store availability", "pgStores_MCP_nil", pgStores == nil || pgStores.MCP == nil, "mcpMgr_nil", mcpMgr == nil)
 	if pgStores.MCP != nil {
+		slog.Debug("initializing MCP from database")
 		if err := initMCPFromDB(context.Background(), mcpMgr, pgStores.MCP); err != nil {
 			slog.Warn("mcp.db_load_errors", "error", err)
+		} else {
+			slog.Debug("initMCPFromDB completed successfully")
 		}
 		if mcpMgr != nil {
-			slog.Info("MCP servers loaded from database", "tools", len(mcpMgr.ToolNames()))
+			slog.Info("MCP manager started", "tools", len(mcpMgr.ToolNames()))
 		}
+	} else {
+		slog.Debug("skipping MCP database init: pgStores.MCP is nil")
 	}
 
 	setupMemoryEmbeddings(pgStores, providerRegistry)
@@ -538,8 +552,10 @@ func runGateway() {
 			skillAccess, _ = pgStores.Skills.(store.SkillAccessStore)
 		}
 		agentsH.SetPreviewStores(pgStores.Teams, pgStores.AgentLinks, skillAccess)
+		slog.Debug("wiring MCP preview manager", "mcpMgr_nil", mcpMgr == nil)
 		if mcpMgr != nil {
 			agentsH.SetPreviewMCPManager(httpapi.NewMCPPreviewAdapter(mcpMgr))
+			slog.Debug("set MCP preview manager on agentsH")
 		}
 	}
 
