@@ -196,6 +196,40 @@ func (s *SQLiteMCPServerStore) DeleteServer(ctx context.Context, id uuid.UUID) e
 	return err
 }
 
+// CacheToolDescriptions stores a map of tool name → description into the
+// server's settings JSON under the "tool_cache" key.
+// SQLite has no jsonb_set(); we read-modify-write the settings column instead.
+func (s *SQLiteMCPServerStore) CacheToolDescriptions(ctx context.Context, serverID uuid.UUID, toolDescriptions map[string]string) error {
+	row := s.db.QueryRowContext(ctx, `SELECT COALESCE(settings, '{}') FROM mcp_servers WHERE id = ?`, serverID)
+	var rawSettings []byte
+	if err := row.Scan(&rawSettings); err != nil {
+		return fmt.Errorf("mcp_servers.cache_tool_descriptions read: %w", err)
+	}
+
+	var settings map[string]json.RawMessage
+	if err := json.Unmarshal(rawSettings, &settings); err != nil {
+		settings = make(map[string]json.RawMessage)
+	}
+
+	cacheJSON, err := json.Marshal(toolDescriptions)
+	if err != nil {
+		return fmt.Errorf("marshal tool descriptions: %w", err)
+	}
+	settings["tool_cache"] = json.RawMessage(cacheJSON)
+
+	merged, err := json.Marshal(settings)
+	if err != nil {
+		return fmt.Errorf("marshal settings: %w", err)
+	}
+
+	_, err = s.db.ExecContext(ctx, `UPDATE mcp_servers SET settings = ?, updated_at = ? WHERE id = ?`,
+		string(merged), time.Now().UTC(), serverID)
+	if err != nil {
+		return fmt.Errorf("mcp_servers.cache_tool_descriptions write: %w", err)
+	}
+	return nil
+}
+
 // encryptJSON encrypts a JSON blob by wrapping ciphertext as a JSON string.
 // Unencrypted: {"key":"val"} (JSON object). Encrypted: "aes-gcm:..." (JSON string).
 func (s *SQLiteMCPServerStore) encryptJSON(data []byte) []byte {

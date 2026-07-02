@@ -158,4 +158,8 @@ type MCPServerStore interface {
 	GetUserCredentials(ctx context.Context, serverID uuid.UUID, userID string) (*MCPUserCredentials, error)
 	SetUserCredentials(ctx context.Context, serverID uuid.UUID, userID string, creds MCPUserCredentials) error
 	DeleteUserCredentials(ctx context.Context, serverID uuid.UUID, userID string) error
+
+	// CacheToolDescriptions stores a map of tool name → description into the
+	// server's settings JSONB under the "tool_cache" key.
+	CacheToolDescriptions(ctx context.Context, serverID uuid.UUID, toolDescriptions map[string]string) error
 }

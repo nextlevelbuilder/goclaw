@@ -706,6 +706,17 @@ func (m *Manager) ListToolsForAgent(ctx context.Context, agentID uuid.UUID, user
 		effectivePrefix := ensureMCPPrefix(info.Server.ToolPrefix, info.Server.Name)
 		slog.Debug("mcp.ListToolsForAgent.server_hints", "server", info.Server.Name, "global_hint", hints.Global, "tool_hints_count", len(hints.Tools), "effective_prefix", effectivePrefix)
 
+		// Parse tool cache from settings as fallback descriptions
+		toolCache := make(map[string]string)
+		if len(info.Server.Settings) > 0 {
+			var settingsMap map[string]json.RawMessage
+			if err := json.Unmarshal(info.Server.Settings, &settingsMap); err == nil {
+				if cacheRaw, ok := settingsMap["tool_cache"]; ok {
+					_ = json.Unmarshal(cacheRaw, &toolCache)
+				}
+			}
+		}
+
 		if len(info.ToolAllow) == 0 {
 			// Unknown tool list — emit one placeholder entry for the server.
 			placeholder := effectivePrefix + "__*"
@@ -735,6 +746,9 @@ func (m *Manager) ListToolsForAgent(ctx context.Context, agentID uuid.UUID, user
 			}
 			registeredName := effectivePrefix + "__" + toolName
 			desc := hints.HintFor(toolName)
+			if desc == "" {
+				desc = toolCache[toolName]
+			}
 			if desc == "" && hints.Global != "" {
 				desc = hints.Global
 			}

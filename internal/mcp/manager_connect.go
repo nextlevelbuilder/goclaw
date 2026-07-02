@@ -116,6 +116,21 @@ func (m *Manager) connectServer(ctx context.Context, name, transportType, comman
 	registeredNames := m.registerBridgeTools(ss, mcpTools, name, toolPrefix, timeoutSec, serverID, hints, toolAllow, toolDeny)
 	ss.toolNames = registeredNames
 
+	// Cache tool descriptions for prompt preview (no live connection needed)
+	if serverID != uuid.Nil && m.store != nil && len(mcpTools) > 0 {
+		toolDescs := make(map[string]string, len(mcpTools))
+		for _, t := range mcpTools {
+			toolDescs[t.Name] = t.Description
+		}
+		go func(sid uuid.UUID, descs map[string]string) {
+			cacheCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := m.store.CacheToolDescriptions(cacheCtx, sid, descs); err != nil {
+				slog.Debug("mcp.cache_tool_descriptions.failed", "server_id", sid, "error", err)
+			}
+		}(serverID, toolDescs)
+	}
+
 	// Create health monitoring context
 	hctx, hcancel := context.WithCancel(context.Background())
 	ss.cancel = hcancel

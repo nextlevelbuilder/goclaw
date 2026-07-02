@@ -197,6 +197,27 @@ func (s *PGMCPServerStore) DeleteServer(ctx context.Context, id uuid.UUID) error
 	return err
 }
 
+// CacheToolDescriptions stores a map of tool name → description into the
+// server's settings JSONB under the "tool_cache" key using jsonb_set().
+func (s *PGMCPServerStore) CacheToolDescriptions(ctx context.Context, serverID uuid.UUID, toolDescriptions map[string]string) error {
+	descJSON, err := json.Marshal(toolDescriptions)
+	if err != nil {
+		return fmt.Errorf("marshal tool descriptions: %w", err)
+	}
+
+	query := `
+		UPDATE mcp_servers
+		SET settings = jsonb_set(settings, '{tool_cache}', $1::jsonb, true),
+		    updated_at = NOW()
+		WHERE id = $2
+	`
+	_, err = s.db.ExecContext(ctx, query, string(descJSON), serverID)
+	if err != nil {
+		return fmt.Errorf("mcp_servers.cache_tool_descriptions: %w", err)
+	}
+	return nil
+}
+
 // encryptJSONB encrypts a JSONB blob (env, headers) by converting it to a JSON string literal.
 // Unencrypted: {"key":"val"} (JSONB object). Encrypted: "aes-gcm:..." (JSONB string).
 func (s *PGMCPServerStore) encryptJSONB(data []byte) []byte {
