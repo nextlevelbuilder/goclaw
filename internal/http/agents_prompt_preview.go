@@ -98,6 +98,7 @@ func (h *AgentsHandler) handleSystemPromptPreview(w http.ResponseWriter, r *http
 		AgentLinks:       h.agentLinkStore,
 		ProviderReg:      h.providerReg,
 		ToolLister:       h.toolsReg,
+		ToolPolicy:       h.toolPE,
 		SkillsLoader:     h.skillsLoader,
 		SkillAccessStore: h.skillAccessStore,
 		MCPLister:        h.mcpPreviewMgr,

@@ -111,7 +111,7 @@ func (m *mockMCPServerForOAuth) SetUserCredentials(_ context.Context, _ uuid.UUI
 func (m *mockMCPServerForOAuth) DeleteUserCredentials(_ context.Context, _ uuid.UUID, _ string) error {
 	return nil
 }
-func (m *mockMCPServerForOAuth) CacheToolDescriptions(_ context.Context, _ uuid.UUID, _ map[string]string) error {
+func (m *mockMCPServerForOAuth) CacheToolDescriptions(_ context.Context, _ uuid.UUID, _ map[string]store.CachedToolInfo) error {
 	return nil
 }
 

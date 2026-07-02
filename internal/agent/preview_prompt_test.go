@@ -2,14 +2,17 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
 func baseAgent() *store.AgentData {
@@ -274,7 +277,9 @@ func TestBuildPreviewPrompt_DeniedToolAliasExcludedFromDefs(t *testing.T) {
 
 // TestBuildPreviewPrompt_MCPToolInDefs proves that store-based MCP tool
 // descriptions (from MCPLister, no live registry entry) are converted into
-// ToolDefinition entries with at least name+description populated.
+// ToolDefinition entries with at least name+description populated, and that
+// when the MCPLister entry has NO cached parameter schema, the genuine
+// unknown-schema placeholder is used as a fallback.
 func TestBuildPreviewPrompt_MCPToolInDefs(t *testing.T) {
 	ag := baseAgent()
 	r := BuildPreviewPrompt(context.Background(), ag, PromptFull, "u1", PreviewDeps{
@@ -303,5 +308,121 @@ func TestBuildPreviewPrompt_MCPToolInDefs(t *testing.T) {
 	}
 	if found.Function.Parameters == nil {
 		t.Error("expected placeholder parameters schema, got nil")
+	}
+}
+
+// TestBuildPreviewPrompt_MCPToolRealSchemaInDefs proves that when the
+// MCPLister provides a real cached parameter schema (captured from a live
+// MCP connection, see buildCachedToolInfo in internal/mcp/manager_connect.go),
+// BuildPreviewPrompt's ToolDefs uses that REAL schema instead of the honest
+// "unknown schema" placeholder — closing the gap between preview and the
+// live conversation path (which always sends real schemas via
+// BridgeTool.Parameters()).
+func TestBuildPreviewPrompt_MCPToolRealSchemaInDefs(t *testing.T) {
+	ag := baseAgent()
+	realSchema := `{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}`
+	r := BuildPreviewPrompt(context.Background(), ag, PromptFull, "u1", PreviewDeps{
+		MCPLister: &mockMCPLister{
+			tools: []MCPToolPreviewInfo{
+				{
+					RegisteredName: "mcp_pg_query",
+					Description:    "Run PostgreSQL queries",
+					Parameters:     json.RawMessage(realSchema),
+				},
+			},
+		},
+	})
+	var found *providers.ToolDefinition
+	for i := range r.ToolDefs {
+		if r.ToolDefs[i].Function.Name == "mcp_pg_query" {
+			found = &r.ToolDefs[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("expected mcp_pg_query in ToolDefs, got: %+v", r.ToolDefs)
+	}
+	params := found.Function.Parameters
+	props, ok := params["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected real schema properties, got %+v", params)
+	}
+	if _, ok := props["query"]; !ok {
+		t.Errorf("expected real schema property 'query', got %+v", props)
+	}
+}
+
+// TestBuildPreviewPrompt_GlobalDenyApplied proves that a globally-denied tool
+// (configured via the web UI's global Tools policy, with NO per-agent deny
+// config) is excluded from preview's tool list. This mirrors the bug where
+// preview hand-rolled a deny-only reimplementation that only consulted
+// per-agent deny and never the PolicyEngine's global deny.
+func TestBuildPreviewPrompt_GlobalDenyApplied(t *testing.T) {
+	ag := baseAgent() // tools_config is nil — no per-agent deny
+	pe := tools.NewPolicyEngine(&config.ToolsConfig{
+		Deny: []string{"cron", "delegate"},
+	})
+	r := BuildPreviewPrompt(context.Background(), ag, PromptFull, "", PreviewDeps{
+		ToolLister: &mockToolLister{
+			tools: map[string]string{
+				"read_file": "Read a file",
+				"cron":      "Schedule tasks",
+				"delegate":  "Delegate to sub-agent",
+			},
+		},
+		ToolPolicy: pe,
+	})
+	if strings.Contains(r.Prompt, "cron") {
+		t.Error("expected globally-denied tool 'cron' to be excluded from preview prompt")
+	}
+	if strings.Contains(r.Prompt, "delegate") {
+		t.Error("expected globally-denied tool 'delegate' to be excluded from preview prompt")
+	}
+	if !strings.Contains(r.Prompt, "read_file") {
+		t.Error("expected non-denied tool 'read_file' to remain in preview prompt")
+	}
+}
+
+// TestBuildPreviewPrompt_MCPToolGlobalDenyApplied proves that MCP tools
+// injected from deps.MCPLister (store-based, not live registry) are also
+// subject to deps.ToolPolicy.WouldAllow filtering. A globally-denied MCP
+// tool must be excluded from both the prompt text and ToolDefs, while other
+// MCP tools from the same server remain included. This closes the gap where
+// the MCPLister supplement path added MCP tools without consulting
+// ToolPolicy at all.
+func TestBuildPreviewPrompt_MCPToolGlobalDenyApplied(t *testing.T) {
+	ag := baseAgent() // tools_config is nil — no per-agent deny
+	pe := tools.NewPolicyEngine(&config.ToolsConfig{
+		Deny: []string{"mcp_cloudflare__delete_dns_record"},
+	})
+	r := BuildPreviewPrompt(context.Background(), ag, PromptFull, "u1", PreviewDeps{
+		MCPLister: &mockMCPLister{
+			tools: []MCPToolPreviewInfo{
+				{RegisteredName: "mcp_cloudflare__delete_dns_record", Description: "Delete a DNS record"},
+				{RegisteredName: "mcp_cloudflare__list_dns_records", Description: "List DNS records"},
+			},
+		},
+		ToolPolicy: pe,
+	})
+
+	if strings.Contains(r.Prompt, "mcp_cloudflare__delete_dns_record") {
+		t.Error("expected globally-denied MCP tool to be excluded from preview prompt")
+	}
+	if !strings.Contains(r.Prompt, "mcp_cloudflare__list_dns_records") {
+		t.Error("expected non-denied MCP tool from the same server to remain in preview prompt")
+	}
+
+	for _, def := range r.ToolDefs {
+		if def.Function != nil && def.Function.Name == "mcp_cloudflare__delete_dns_record" {
+			t.Errorf("expected globally-denied MCP tool to be excluded from ToolDefs, got: %+v", r.ToolDefs)
+		}
+	}
+	var foundAllowed bool
+	for _, def := range r.ToolDefs {
+		if def.Function != nil && def.Function.Name == "mcp_cloudflare__list_dns_records" {
+			foundAllowed = true
+		}
+	}
+	if !foundAllowed {
+		t.Errorf("expected non-denied MCP tool in ToolDefs, got: %+v", r.ToolDefs)
 	}
 }

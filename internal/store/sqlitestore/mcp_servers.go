@@ -196,10 +196,11 @@ func (s *SQLiteMCPServerStore) DeleteServer(ctx context.Context, id uuid.UUID) e
 	return err
 }
 
-// CacheToolDescriptions stores a map of tool name → description into the
-// server's settings JSON under the "tool_cache" key.
+// CacheToolDescriptions stores a map of tool name → cached tool info
+// (description + parameter schema) into the server's settings JSON under
+// the "tool_cache" key.
 // SQLite has no jsonb_set(); we read-modify-write the settings column instead.
-func (s *SQLiteMCPServerStore) CacheToolDescriptions(ctx context.Context, serverID uuid.UUID, toolDescriptions map[string]string) error {
+func (s *SQLiteMCPServerStore) CacheToolDescriptions(ctx context.Context, serverID uuid.UUID, toolInfo map[string]store.CachedToolInfo) error {
 	row := s.db.QueryRowContext(ctx, `SELECT COALESCE(settings, '{}') FROM mcp_servers WHERE id = ?`, serverID)
 	var rawSettings []byte
 	if err := row.Scan(&rawSettings); err != nil {
@@ -211,7 +212,7 @@ func (s *SQLiteMCPServerStore) CacheToolDescriptions(ctx context.Context, server
 		settings = make(map[string]json.RawMessage)
 	}
 
-	cacheJSON, err := json.Marshal(toolDescriptions)
+	cacheJSON, err := json.Marshal(toolInfo)
 	if err != nil {
 		return fmt.Errorf("marshal tool descriptions: %w", err)
 	}

@@ -197,10 +197,11 @@ func (s *PGMCPServerStore) DeleteServer(ctx context.Context, id uuid.UUID) error
 	return err
 }
 
-// CacheToolDescriptions stores a map of tool name → description into the
-// server's settings JSONB under the "tool_cache" key using jsonb_set().
-func (s *PGMCPServerStore) CacheToolDescriptions(ctx context.Context, serverID uuid.UUID, toolDescriptions map[string]string) error {
-	descJSON, err := json.Marshal(toolDescriptions)
+// CacheToolDescriptions stores a map of tool name → cached tool info
+// (description + parameter schema) into the server's settings JSONB under
+// the "tool_cache" key using jsonb_set().
+func (s *PGMCPServerStore) CacheToolDescriptions(ctx context.Context, serverID uuid.UUID, toolInfo map[string]store.CachedToolInfo) error {
+	descJSON, err := json.Marshal(toolInfo)
 	if err != nil {
 		return fmt.Errorf("marshal tool descriptions: %w", err)
 	}

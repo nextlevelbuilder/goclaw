@@ -159,7 +159,21 @@ type MCPServerStore interface {
 	SetUserCredentials(ctx context.Context, serverID uuid.UUID, userID string, creds MCPUserCredentials) error
 	DeleteUserCredentials(ctx context.Context, serverID uuid.UUID, userID string) error
 
-	// CacheToolDescriptions stores a map of tool name → description into the
+	// CacheToolDescriptions stores a map of tool name → cached tool info
+	// (description + real parameter schema, when available) into the
 	// server's settings JSONB under the "tool_cache" key.
-	CacheToolDescriptions(ctx context.Context, serverID uuid.UUID, toolDescriptions map[string]string) error
+	CacheToolDescriptions(ctx context.Context, serverID uuid.UUID, toolInfo map[string]CachedToolInfo) error
+}
+
+// CachedToolInfo is the cached, per-tool information stored under an MCP
+// server's settings "tool_cache" key. It is used to render prompt previews
+// without a live connection to the MCP server.
+type CachedToolInfo struct {
+	// Description is the tool's human-readable description.
+	Description string `json:"description"`
+	// Parameters is the tool's full JSON Schema for its input parameters,
+	// captured from the live MCP connection at cache-write time. It may be
+	// nil for cache entries written before this field existed, or for
+	// servers whose tools genuinely expose no schema.
+	Parameters json.RawMessage `json:"parameters,omitempty"`
 }

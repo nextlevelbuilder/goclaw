@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"path/filepath"
 	"slices"
@@ -29,6 +30,10 @@ type MCPToolPreviewInfo struct {
 	RegisteredName string
 	// Description is the tool description from server tool hints, if any.
 	Description string
+	// Parameters is the tool's cached JSON Schema for input parameters, if
+	// one was captured at connect-time. nil when no schema is cached yet
+	// (e.g. server never connected, or cached before schema capture existed).
+	Parameters json.RawMessage
 }
 
 // PreviewDeps holds optional dependencies for building a preview system prompt.
@@ -44,6 +49,11 @@ type PreviewDeps struct {
 		Get(name string) (tools.Tool, bool)
 		Aliases() map[string]string
 	}
+	// ToolPolicy is the gateway's live PolicyEngine, used to resolve the full
+	// allow/deny/alsoAllow pipeline (including global deny) for preview tool
+	// names. nil = skip policy filtering (only skill_manage gating and alias
+	// exclusion apply).
+	ToolPolicy *tools.PolicyEngine
 	SkillsLoader interface {
 		BuildPinnedSummary(ctx context.Context, names []string) string
 		BuildSummary(ctx context.Context, allowList []string) string
@@ -109,9 +119,24 @@ func BuildPreviewPrompt(ctx context.Context, ag *store.AgentData, mode PromptMod
 		toolNames = filtered
 	}
 
-	// --- Basic agent tool policy: deny-only (Allow/AlsoAllow/ByProvider not applied).
-	// Full PolicyEngine requires runtime state (provider name, channel) not available in preview. ---
-	if toolPolicy := ag.ParseToolsConfig(); toolPolicy != nil && len(toolPolicy.Deny) > 0 {
+	// --- Full agent tool policy (profile→allow→deny→alsoAllow, including global deny) ---
+	// Uses the gateway's live PolicyEngine via WouldAllow, mirroring the real chat
+	// loop's resolution exactly, modulo channel-specific filtering (genuinely
+	// unavailable here — preview has no channel/session context).
+	if deps.ToolPolicy != nil {
+		toolPolicy := ag.ParseToolsConfig()
+		filtered := make([]string, 0, len(toolNames))
+		for _, n := range toolNames {
+			if deps.ToolPolicy.WouldAllow(nil, n, ag.Provider, toolPolicy, nil) {
+				filtered = append(filtered, n)
+			}
+		}
+		toolNames = filtered
+	} else if toolPolicy := ag.ParseToolsConfig(); toolPolicy != nil && len(toolPolicy.Deny) > 0 {
+		// Fallback when no PolicyEngine is wired (e.g. caller didn't set
+		// ToolPolicy): degrade to per-agent deny-only, matching the
+		// pre-PolicyEngine preview behavior. Global deny is unavailable in
+		// this fallback since it requires the PolicyEngine's global policy.
 		denySet := make(map[string]bool, len(toolPolicy.Deny))
 		for _, d := range toolPolicy.Deny {
 			denySet[d] = true
@@ -139,20 +164,31 @@ func BuildPreviewPrompt(ctx context.Context, ag *store.AgentData, mode PromptMod
 	}
 
 	// --- MCP tool descriptions (matches loop_history_supplement.go:44-58) ---
+	// mcpToolParams tracks real parameter schemas alongside descriptions, keyed
+	// by the same RegisteredName. Populated when a real schema is available
+	// (live registry tool, or cached schema from a prior live connection).
 	// First populate from live registry (tools currently loaded in active sessions).
 	var mcpToolDescs map[string]string
+	var mcpToolParams map[string]map[string]any
 	if deps.ToolLister != nil {
 		descs := make(map[string]string)
+		params := make(map[string]map[string]any)
 		for _, name := range toolNames {
 			if !strings.HasPrefix(name, "mcp_") || name == "mcp_tool_search" {
 				continue
 			}
 			if tool, ok := deps.ToolLister.Get(name); ok {
 				descs[name] = tool.Description()
+				if p := tool.Parameters(); len(p) > 0 {
+					params[name] = p
+				}
 			}
 		}
 		if len(descs) > 0 {
 			mcpToolDescs = descs
+		}
+		if len(params) > 0 {
+			mcpToolParams = params
 		}
 	}
 	slog.Debug("preview_prompt.mcp_from_registry", "agent_id", ag.ID, "live_mcp_tools", len(mcpToolDescs))
@@ -168,19 +204,37 @@ func BuildPreviewPrompt(ctx context.Context, ag *store.AgentData, mode PromptMod
 			if mcpToolDescs == nil {
 				mcpToolDescs = make(map[string]string, len(storeMCPTools))
 			}
+			toolPolicyCfg := ag.ParseToolsConfig()
 			for _, mt := range storeMCPTools {
+				if deps.ToolPolicy != nil && !deps.ToolPolicy.WouldAllow(nil, mt.RegisteredName, ag.Provider, toolPolicyCfg, nil) {
+					slog.Debug("preview_prompt.mcp_tool_denied_by_policy", "tool", mt.RegisteredName)
+					continue
+				}
 				if _, alreadyPresent := mcpToolDescs[mt.RegisteredName]; !alreadyPresent {
 					mcpToolDescs[mt.RegisteredName] = mt.Description
 					slog.Debug("preview_prompt.mcp_tool_added", "tool", mt.RegisteredName, "has_desc", mt.Description != "")
 				} else {
 					slog.Debug("preview_prompt.mcp_tool_already_present", "tool", mt.RegisteredName)
 				}
+				// Cached parameter schema, when present, is only used when the
+				// live registry did not already supply a real schema above.
+				if _, alreadyHasParams := mcpToolParams[mt.RegisteredName]; !alreadyHasParams && len(mt.Parameters) > 0 {
+					var schema map[string]any
+					if jsonErr := json.Unmarshal(mt.Parameters, &schema); jsonErr == nil {
+						if mcpToolParams == nil {
+							mcpToolParams = make(map[string]map[string]any, len(storeMCPTools))
+						}
+						mcpToolParams[mt.RegisteredName] = schema
+					} else {
+						slog.Debug("preview_prompt.mcp_tool_params_unmarshal_failed", "tool", mt.RegisteredName, "error", jsonErr)
+					}
+				}
 			}
 		} else if err != nil {
 			slog.Debug("preview_prompt.mcp_lister_error", "agent_id", ag.ID, "error", err)
 		}
 	}
-	slog.Debug("preview_prompt.mcp_tool_descs_final", "agent_id", ag.ID, "total_mcp_tools", len(mcpToolDescs))
+	slog.Debug("preview_prompt.mcp_tool_descs_final", "agent_id", ag.ID, "total_mcp_tools", len(mcpToolDescs), "total_mcp_params", len(mcpToolParams))
 
 	// --- Sandbox ---
 	sandboxCfg := ag.ParseSandboxConfig()
@@ -302,11 +356,11 @@ func BuildPreviewPrompt(ctx context.Context, ag *store.AgentData, mode PromptMod
 	}
 
 	// --- MCP tool schemas (store-based preview, no live connection) ---
-	// mcpToolDescs only has name+description (no live-connected schema is
-	// available in preview mode), so we emit a minimal placeholder
-	// parameters schema. Once a real conversation starts and the MCP
-	// server is live-connected, the actual JSON schema from the server's
-	// tool hints is used instead (see internal/mcp/bridge_tool.go).
+	// mcpToolParams carries the REAL cached parameter schema for a tool when
+	// one is available (from a live registry tool, or from the connect-time
+	// tool_cache captured in internal/mcp/manager_connect.go). This makes
+	// preview parity with the live conversation path, which always sends
+	// real schemas via BridgeTool.Parameters() (internal/mcp/bridge_tool.go).
 	// Skip names already emitted via the main toolNames loop above (those
 	// come from a live-loaded registry tool and already have a real schema).
 	if len(mcpToolDescs) > 0 {
@@ -323,12 +377,21 @@ func BuildPreviewPrompt(ctx context.Context, ag *store.AgentData, mode PromptMod
 		}
 		slices.Sort(mcpNames)
 		for _, name := range mcpNames {
+			params, ok := mcpToolParams[name]
+			if !ok {
+				// Genuine unknown-schema fallback: no live connection has ever
+				// cached a real schema for this tool (e.g. server never
+				// connected yet, or cache predates schema capture). This is
+				// NOT the routine case — most tools reach here with a real
+				// cached schema once the server has connected at least once.
+				params = map[string]any{"type": "object"}
+			}
 			toolDefs = append(toolDefs, providers.ToolDefinition{
 				Type: "function",
 				Function: &providers.ToolFunctionSchema{
 					Name:        name,
 					Description: mcpToolDescs[name],
-					Parameters:  map[string]any{"type": "object"},
+					Parameters:  params,
 				},
 			})
 		}

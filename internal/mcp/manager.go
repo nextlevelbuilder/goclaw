@@ -667,6 +667,11 @@ type MCPToolPreviewInfo struct {
 	RegisteredName string
 	// Description is derived from server tool hints, if configured.
 	Description string
+	// Parameters is the tool's cached JSON Schema for input parameters, captured
+	// at connect-time (see buildCachedToolInfo in manager_connect.go). nil when
+	// no schema has been cached yet (server never connected, or cache predates
+	// schema capture).
+	Parameters json.RawMessage
 }
 
 // ListToolsForAgent returns a best-effort list of MCP tool names and descriptions
@@ -706,13 +711,28 @@ func (m *Manager) ListToolsForAgent(ctx context.Context, agentID uuid.UUID, user
 		effectivePrefix := ensureMCPPrefix(info.Server.ToolPrefix, info.Server.Name)
 		slog.Debug("mcp.ListToolsForAgent.server_hints", "server", info.Server.Name, "global_hint", hints.Global, "tool_hints_count", len(hints.Tools), "effective_prefix", effectivePrefix)
 
-		// Parse tool cache from settings as fallback descriptions
-		toolCache := make(map[string]string)
+		// Parse tool cache from settings as fallback descriptions + parameter schemas.
+		toolCache := make(map[string]store.CachedToolInfo)
 		if len(info.Server.Settings) > 0 {
 			var settingsMap map[string]json.RawMessage
 			if err := json.Unmarshal(info.Server.Settings, &settingsMap); err == nil {
 				if cacheRaw, ok := settingsMap["tool_cache"]; ok {
-					_ = json.Unmarshal(cacheRaw, &toolCache)
+					if err := json.Unmarshal(cacheRaw, &toolCache); err != nil {
+						// Backward-compat: pre-schema-caching rows stored a bare
+						// map[string]string (name -> description). Fall back to
+						// that shape and treat entries as description-only (no
+						// parameter schema). Stale rows self-heal on next connect
+						// since the write path always writes the new shape.
+						var legacyCache map[string]string
+						if legacyErr := json.Unmarshal(cacheRaw, &legacyCache); legacyErr == nil {
+							toolCache = make(map[string]store.CachedToolInfo, len(legacyCache))
+							for name, desc := range legacyCache {
+								toolCache[name] = store.CachedToolInfo{Description: desc}
+							}
+						} else {
+							slog.Debug("mcp.ListToolsForAgent.tool_cache_unmarshal_failed", "server", info.Server.Name, "error", err)
+						}
+					}
 				}
 			}
 		}
@@ -734,9 +754,10 @@ func (m *Manager) ListToolsForAgent(ctx context.Context, agentID uuid.UUID, user
 						continue
 					}
 					registeredName := effectivePrefix + "__" + toolName
+					cached := toolCache[toolName]
 					desc := hints.HintFor(toolName)
 					if desc == "" {
-						desc = toolCache[toolName]
+						desc = cached.Description
 					}
 					if desc == "" && hints.Global != "" {
 						desc = hints.Global
@@ -745,6 +766,7 @@ func (m *Manager) ListToolsForAgent(ctx context.Context, agentID uuid.UUID, user
 					result = append(result, MCPToolPreviewInfo{
 						RegisteredName: registeredName,
 						Description:    desc,
+						Parameters:     cached.Parameters,
 					})
 				}
 				slog.Debug("mcp.ListToolsForAgent.server_tools_added_from_cache", "server", info.Server.Name, "tools", serverTools)
@@ -772,9 +794,10 @@ func (m *Manager) ListToolsForAgent(ctx context.Context, agentID uuid.UUID, user
 				continue
 			}
 			registeredName := effectivePrefix + "__" + toolName
+			cached := toolCache[toolName]
 			desc := hints.HintFor(toolName)
 			if desc == "" {
-				desc = toolCache[toolName]
+				desc = cached.Description
 			}
 			if desc == "" && hints.Global != "" {
 				desc = hints.Global
@@ -783,6 +806,7 @@ func (m *Manager) ListToolsForAgent(ctx context.Context, agentID uuid.UUID, user
 			result = append(result, MCPToolPreviewInfo{
 				RegisteredName: registeredName,
 				Description:    desc,
+				Parameters:     cached.Parameters,
 			})
 		}
 		slog.Debug("mcp.ListToolsForAgent.server_tools_added", "server", info.Server.Name, "tools", serverTools)

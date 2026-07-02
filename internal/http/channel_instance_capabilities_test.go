@@ -83,7 +83,7 @@ func (s *fakeChannelCapabilityMCPStore) SetUserCredentials(context.Context, uuid
 func (s *fakeChannelCapabilityMCPStore) DeleteUserCredentials(context.Context, uuid.UUID, string) error {
 	return nil
 }
-func (s *fakeChannelCapabilityMCPStore) CacheToolDescriptions(context.Context, uuid.UUID, map[string]string) error {
+func (s *fakeChannelCapabilityMCPStore) CacheToolDescriptions(context.Context, uuid.UUID, map[string]store.CachedToolInfo) error {
 	return nil
 }
 

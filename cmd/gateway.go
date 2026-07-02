@@ -548,6 +548,7 @@ func runGateway() {
 	// Wire dependencies for system prompt preview parity.
 	if agentsH != nil {
 		agentsH.SetPreviewDeps(toolsReg, skillsLoader)
+		agentsH.SetPreviewToolPolicy(toolPE)
 		var skillAccess store.SkillAccessStore
 		if pgStores.Skills != nil {
 			skillAccess, _ = pgStores.Skills.(store.SkillAccessStore)

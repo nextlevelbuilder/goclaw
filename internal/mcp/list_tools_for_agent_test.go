@@ -76,6 +76,124 @@ func TestListToolsForAgent_EmptyToolAllowUsesCache(t *testing.T) {
 	}
 }
 
+// TestListToolsForAgent_CacheWithRealSchemaReturnsParameters verifies that
+// when the server's tool_cache uses the new shape (map[string]CachedToolInfo,
+// written by buildCachedToolInfo in manager_connect.go), ListToolsForAgent
+// returns the real cached parameter schema on MCPToolPreviewInfo.Parameters,
+// closing the gap between preview and the live conversation path.
+func TestListToolsForAgent_CacheWithRealSchemaReturnsParameters(t *testing.T) {
+	serverID := uuid.New()
+
+	toolCache := map[string]store.CachedToolInfo{
+		"pg_query": {
+			Description: "Run PostgreSQL queries",
+			Parameters:  json.RawMessage(`{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}`),
+		},
+	}
+	settings, err := json.Marshal(map[string]any{
+		"tool_cache": toolCache,
+	})
+	if err != nil {
+		t.Fatalf("marshal settings: %v", err)
+	}
+
+	mockStore := &mockMCPStore{
+		accessible: []store.MCPAccessInfo{
+			{
+				Server: store.MCPServerData{
+					BaseModel: store.BaseModel{ID: serverID},
+					Name:      "postgres",
+					Enabled:   true,
+					Settings:  settings,
+				},
+				ToolAllow: nil, // unrestricted grant
+				ToolDeny:  nil,
+			},
+		},
+	}
+
+	mgr := NewManager(tools.NewRegistry(), WithStore(mockStore))
+
+	got, err := mgr.ListToolsForAgent(t.Context(), uuid.New(), "user-1")
+	if err != nil {
+		t.Fatalf("ListToolsForAgent: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 tool entry, got %d: %+v", len(got), got)
+	}
+	entry := got[0]
+	if entry.RegisteredName != "mcp_postgres__pg_query" {
+		t.Fatalf("unexpected registered name: %q", entry.RegisteredName)
+	}
+	if entry.Description != "Run PostgreSQL queries" {
+		t.Fatalf("unexpected description: %q", entry.Description)
+	}
+	if len(entry.Parameters) == 0 {
+		t.Fatal("expected real cached parameter schema, got empty")
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(entry.Parameters, &schema); err != nil {
+		t.Fatalf("unmarshal cached parameters: %v", err)
+	}
+	props, ok := schema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected properties in cached schema, got %+v", schema)
+	}
+	if _, ok := props["query"]; !ok {
+		t.Errorf("expected 'query' property in cached schema, got %+v", props)
+	}
+}
+
+// TestListToolsForAgent_LegacyCacheShapeDegradesGracefully verifies that old
+// cache rows stored as a bare map[string]string (name -> description, from
+// before schema caching existed) are handled gracefully: descriptions are
+// preserved via the backward-compat fallback path, and Parameters is left
+// nil (no schema ever cached) rather than crashing on the unmarshal error.
+func TestListToolsForAgent_LegacyCacheShapeDegradesGracefully(t *testing.T) {
+	serverID := uuid.New()
+
+	legacyCache := map[string]string{
+		"list_zones": "List DNS zones",
+	}
+	settings, err := json.Marshal(map[string]any{
+		"tool_cache": legacyCache,
+	})
+	if err != nil {
+		t.Fatalf("marshal settings: %v", err)
+	}
+
+	mockStore := &mockMCPStore{
+		accessible: []store.MCPAccessInfo{
+			{
+				Server: store.MCPServerData{
+					BaseModel: store.BaseModel{ID: serverID},
+					Name:      "cloudflare",
+					Enabled:   true,
+					Settings:  settings,
+				},
+				ToolAllow: nil,
+				ToolDeny:  nil,
+			},
+		},
+	}
+
+	mgr := NewManager(tools.NewRegistry(), WithStore(mockStore))
+
+	got, err := mgr.ListToolsForAgent(t.Context(), uuid.New(), "user-1")
+	if err != nil {
+		t.Fatalf("ListToolsForAgent: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 tool entry from legacy cache, got %d: %+v", len(got), got)
+	}
+	if got[0].Description != "List DNS zones" {
+		t.Fatalf("expected legacy description preserved, got %q", got[0].Description)
+	}
+	if got[0].Parameters != nil {
+		t.Errorf("expected nil Parameters for legacy cache entry, got %s", got[0].Parameters)
+	}
+}
+
 // TestListToolsForAgent_EmptyToolAllowNoCacheFallsBackToPlaceholder verifies
 // that when a server has never been connected (no tool_cache present), the
 // existing single-placeholder behavior is preserved.
