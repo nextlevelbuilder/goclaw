@@ -6,6 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/google/uuid"
+
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 func TestMain(m *testing.M) {
@@ -522,7 +526,9 @@ func TestNormalizeLineEndings(t *testing.T) {
 // --- Managed skills versioning ---
 
 func TestLoader_ManagedSkills_LatestVersion(t *testing.T) {
-	managed := t.TempDir()
+	dataDir := t.TempDir()
+	// Master tenant's managed dir resolves to <dataDir>/skills-store (config.TenantSkillsStoreDir).
+	managed := filepath.Join(dataDir, "skills-store")
 
 	// Create versioned structure: managed/my-skill/1/SKILL.md, managed/my-skill/2/SKILL.md
 	os.MkdirAll(filepath.Join(managed, "my-skill", "1"), 0755)
@@ -533,7 +539,7 @@ func TestLoader_ManagedSkills_LatestVersion(t *testing.T) {
 		[]byte("---\nname: My Skill v2\n---\nVersion 2"), 0644)
 
 	l := NewLoader("", "", "")
-	l.SetManagedDir(managed)
+	l.SetManagedDir(dataDir)
 
 	skills := l.ListSkills(context.Background())
 	if len(skills) != 1 {
@@ -550,7 +556,8 @@ func TestLoader_ManagedSkills_LatestVersion(t *testing.T) {
 
 func TestLoader_ManagedSkills_WorkspaceTakesPriority(t *testing.T) {
 	ws := t.TempDir()
-	managed := t.TempDir()
+	dataDir := t.TempDir()
+	managed := filepath.Join(dataDir, "skills-store")
 
 	// Same slug in both workspace and managed
 	makeSkillDir(t, filepath.Join(ws, "skills"), "shared-skill", "---\nname: Workspace Version\n---\n")
@@ -559,7 +566,7 @@ func TestLoader_ManagedSkills_WorkspaceTakesPriority(t *testing.T) {
 		[]byte("---\nname: Managed Version\n---\n"), 0644)
 
 	l := NewLoader(ws, "", "")
-	l.SetManagedDir(managed)
+	l.SetManagedDir(dataDir)
 
 	skills := l.ListSkills(context.Background())
 	if len(skills) != 1 {
@@ -567,6 +574,82 @@ func TestLoader_ManagedSkills_WorkspaceTakesPriority(t *testing.T) {
 	}
 	if skills[0].Name != "Workspace Version" {
 		t.Errorf("workspace should take priority over managed, got %q", skills[0].Name)
+	}
+}
+
+// TestLoader_ManagedSkills_TenantIsolation is the core security invariant test:
+// two tenants each publish a managed skill with the SAME slug but DIFFERENT
+// content. Resolving skills under tenant A's context must return ONLY A's
+// content, never B's, and vice versa — proven via ListSkills, LoadSkill, and
+// GetSkill (which is cache-backed, so this also proves the cache doesn't leak).
+func TestLoader_ManagedSkills_TenantIsolation(t *testing.T) {
+	dataDir := t.TempDir()
+
+	tenantA := uuid.MustParse("00000000-0000-0000-0000-0000000000aa")
+	tenantB := uuid.MustParse("00000000-0000-0000-0000-0000000000bb")
+
+	// Master tenant dir: <dataDir>/skills-store/<slug>/<ver>/SKILL.md
+	masterDir := filepath.Join(dataDir, "skills-store", "shared-slug", "1")
+	os.MkdirAll(masterDir, 0755)
+	os.WriteFile(filepath.Join(masterDir, "SKILL.md"),
+		[]byte("---\nname: Master Content\n---\nMASTER SECRET"), 0644)
+
+	// Tenant A dir: <dataDir>/tenants/<A>/skills-store/<slug>/<ver>/SKILL.md
+	dirA := filepath.Join(dataDir, "tenants", tenantA.String(), "skills-store", "shared-slug", "1")
+	os.MkdirAll(dirA, 0755)
+	os.WriteFile(filepath.Join(dirA, "SKILL.md"),
+		[]byte("---\nname: Tenant A Content\n---\nTENANT A SECRET"), 0644)
+
+	// Tenant B dir: <dataDir>/tenants/<B>/skills-store/<slug>/<ver>/SKILL.md
+	dirB := filepath.Join(dataDir, "tenants", tenantB.String(), "skills-store", "shared-slug", "1")
+	os.MkdirAll(dirB, 0755)
+	os.WriteFile(filepath.Join(dirB, "SKILL.md"),
+		[]byte("---\nname: Tenant B Content\n---\nTENANT B SECRET"), 0644)
+
+	l := NewLoader("", "", "")
+	l.SetManagedDir(dataDir)
+
+	ctxA := store.WithTenantID(context.Background(), tenantA)
+	ctxB := store.WithTenantID(context.Background(), tenantB)
+	ctxMaster := context.Background()
+
+	// --- ListSkills: each tenant sees only its own content ---
+	skillsA := l.ListSkills(ctxA)
+	if len(skillsA) != 1 || skillsA[0].Name != "Tenant A Content" {
+		t.Fatalf("tenant A ListSkills leaked or missing: got %+v", skillsA)
+	}
+	skillsB := l.ListSkills(ctxB)
+	if len(skillsB) != 1 || skillsB[0].Name != "Tenant B Content" {
+		t.Fatalf("tenant B ListSkills leaked or missing: got %+v", skillsB)
+	}
+	skillsMaster := l.ListSkills(ctxMaster)
+	if len(skillsMaster) != 1 || skillsMaster[0].Name != "Master Content" {
+		t.Fatalf("master ListSkills leaked or missing: got %+v", skillsMaster)
+	}
+
+	// --- LoadSkill: content bodies must not cross tenant boundaries ---
+	contentA, ok := l.LoadSkill(ctxA, "shared-slug")
+	if !ok || !strings.Contains(contentA, "TENANT A SECRET") || strings.Contains(contentA, "TENANT B SECRET") || strings.Contains(contentA, "MASTER SECRET") {
+		t.Fatalf("tenant A LoadSkill leaked cross-tenant content: %q", contentA)
+	}
+	contentB, ok := l.LoadSkill(ctxB, "shared-slug")
+	if !ok || !strings.Contains(contentB, "TENANT B SECRET") || strings.Contains(contentB, "TENANT A SECRET") || strings.Contains(contentB, "MASTER SECRET") {
+		t.Fatalf("tenant B LoadSkill leaked cross-tenant content: %q", contentB)
+	}
+
+	// --- GetSkill: cache-backed lookup must remain tenant-scoped ---
+	infoA, ok := l.GetSkill(ctxA, "shared-slug")
+	if !ok || infoA.Name != "Tenant A Content" {
+		t.Fatalf("tenant A GetSkill leaked or missing: %+v", infoA)
+	}
+	infoB, ok := l.GetSkill(ctxB, "shared-slug")
+	if !ok || infoB.Name != "Tenant B Content" {
+		t.Fatalf("tenant B GetSkill leaked or missing: %+v", infoB)
+	}
+	// Re-check A again after B was populated — proves the cache didn't get overwritten.
+	infoA2, ok := l.GetSkill(ctxA, "shared-slug")
+	if !ok || infoA2.Name != "Tenant A Content" {
+		t.Fatalf("tenant A GetSkill got clobbered by tenant B lookup: %+v", infoA2)
 	}
 }
 

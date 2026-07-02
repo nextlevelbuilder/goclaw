@@ -527,8 +527,11 @@ func setupSkillsSystem(
 	if pgStores.Skills != nil {
 		storeDirs := pgStores.Skills.Dirs()
 		if len(storeDirs) > 0 {
-			skillsLoader.SetManagedDir(storeDirs[0])
-			slog.Info("skills-store directory wired into loader", "dir", storeDirs[0])
+			// Pass the root data dir, not storeDirs[0] (which is the master
+			// tenant's pre-resolved skills-store path) — the loader resolves
+			// each tenant's own skills-store directory per request from this root.
+			skillsLoader.SetManagedDir(dataDir)
+			slog.Info("skills-store directory wired into loader", "dataDir", dataDir)
 
 			// Seed system/bundled skills into DB
 			bundledSkillsDir = os.Getenv("GOCLAW_BUNDLED_SKILLS_DIR")
