@@ -249,6 +249,11 @@ func bridgeContextMiddleware(gatewayToken string, agentStore store.AgentStore, n
 		workspace := r.Header.Get("X-Workspace")
 		localKey := r.Header.Get("X-Local-Key")
 		sessionKey := r.Header.Get("X-Session-Key")
+		// Sender + role headers carry the real acting user behind a bridge call so
+		// group-scoped permission checks (CheckCronPermission, CheckFileWriterPermission)
+		// can attribute to the original user instead of an empty principal (#915).
+		senderID := r.Header.Get("X-Sender-ID")
+		roleHdr := r.Header.Get("X-Role")
 
 		if agentIDStr != "" || userID != "" {
 			// Reject context headers when no gateway token — prevents unauthenticated impersonation.
@@ -260,9 +265,11 @@ func bridgeContextMiddleware(gatewayToken string, agentStore store.AgentStore, n
 			}
 
 			// Verify HMAC signature over all context fields.
+			// Extras order MUST match SignBridgeContext call in claude_cli_mcp.go:
+			//   localKey | sessionKey | senderID | role
 			tenantIDStr := r.Header.Get("X-Tenant-ID")
 			sig := r.Header.Get("X-Bridge-Sig")
-			ok, tenantVerified := providers.VerifyBridgeContext(gatewayToken, agentIDStr, userID, channel, chatID, peerKind, workspace, tenantIDStr, sig, localKey, sessionKey)
+			ok, tenantVerified := providers.VerifyBridgeContext(gatewayToken, agentIDStr, userID, channel, chatID, peerKind, workspace, tenantIDStr, sig, localKey, sessionKey, senderID, roleHdr)
 			if !ok {
 				slog.Warn("security.mcp_bridge: invalid bridge context signature",
 					"agent_id", agentIDStr, "user_id", userID)
@@ -294,6 +301,16 @@ func bridgeContextMiddleware(gatewayToken string, agentStore store.AgentStore, n
 			}
 			if userID != "" {
 				ctx = store.WithUserID(ctx, userID)
+			}
+			// Inject sender ID + role only when HMAC was valid (we're inside the
+			// `if ok { ... }` block from VerifyBridgeContext). These are used by
+			// group-scoped permission checks downstream — see CheckCronPermission /
+			// CheckFileWriterPermission. Without HMAC coverage we never trust these.
+			if senderID != "" {
+				ctx = store.WithSenderID(ctx, senderID)
+			}
+			if roleHdr != "" {
+				ctx = store.WithRole(ctx, roleHdr)
 			}
 			// Only inject tenant_id when HMAC actually covers it (level 1).
 			// Fallback levels (pre-tenantID sessions) must not trust unsigned tenant headers.

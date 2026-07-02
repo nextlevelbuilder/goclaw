@@ -92,6 +92,8 @@ type BridgeContext struct {
 	Workspace string
 	TenantID  string
 	LocalKey  string
+	SenderID  string // real acting sender (#915) — needed by group-scoped permission checks
+	Role      string // caller RBAC role (#915) — admin/operator/owner bypass per-user grants
 }
 
 // WriteMCPConfig writes a per-session MCP config file with agent context headers.
@@ -99,10 +101,10 @@ type BridgeContext struct {
 // outside the agent's workDir so tokens are not exposed.
 // Skips write if content is unchanged. Returns the file path.
 func (d *MCPConfigData) WriteMCPConfig(ctx context.Context, sessionKey string, bc BridgeContext) string {
-	return d.writeMCPConfigInternal(ctx, sessionKey, bc.AgentID, bc.UserID, bc.Channel, bc.ChatID, bc.PeerKind, bc.Workspace, bc.TenantID, bc.LocalKey)
+	return d.writeMCPConfigInternal(ctx, sessionKey, bc.AgentID, bc.UserID, bc.Channel, bc.ChatID, bc.PeerKind, bc.Workspace, bc.TenantID, bc.LocalKey, bc.SenderID, bc.Role)
 }
 
-func (d *MCPConfigData) writeMCPConfigInternal(ctx context.Context, sessionKey, agentID, userID, channel, chatID, peerKind, workspace, tenantID, localKey string) string {
+func (d *MCPConfigData) writeMCPConfigInternal(ctx context.Context, sessionKey, agentID, userID, channel, chatID, peerKind, workspace, tenantID, localKey, senderID, role string) string {
 	if d == nil || (len(d.Servers) == 0 && d.GatewayAddr == "" && d.AgentMCPLookup == nil) {
 		return ""
 	}
@@ -158,9 +160,17 @@ func (d *MCPConfigData) writeMCPConfigInternal(ctx context.Context, sessionKey, 
 		if sessionKey != "" && !strings.ContainsAny(sessionKey, "\r\n\x00") {
 			headers["X-Session-Key"] = sessionKey
 		}
-		// HMAC signature over all context fields to prevent header forgery
+		if senderID != "" && !strings.ContainsAny(senderID, "\r\n\x00") {
+			headers["X-Sender-ID"] = senderID
+		}
+		if role != "" && !strings.ContainsAny(role, "\r\n\x00") {
+			headers["X-Role"] = role
+		}
+		// HMAC signature over all context fields to prevent header forgery.
+		// Order MUST match VerifyBridgeContext extras in bridgeContextMiddleware:
+		//   localKey | sessionKey | senderID | role
 		if d.GatewayToken != "" && (agentID != "" || userID != "") {
-			headers["X-Bridge-Sig"] = SignBridgeContext(d.GatewayToken, agentID, userID, channel, chatID, peerKind, workspace, tenantID, localKey, sessionKey)
+			headers["X-Bridge-Sig"] = SignBridgeContext(d.GatewayToken, agentID, userID, channel, chatID, peerKind, workspace, tenantID, localKey, sessionKey, senderID, role)
 		}
 
 		bridgeEntry := map[string]any{
@@ -279,13 +289,23 @@ func SignBridgeContext(key, agentID, userID, channel, chatID, peerKind, workspac
 // Returns (ok, tenantVerified): ok indicates signature is valid, tenantVerified indicates
 // the tenantID field was covered by the HMAC (only true at level 1).
 // Falls back to old formats for backward compatibility with sessions whose MCP config
-// was written before the workspace or tenantID fields were added.
+// was written before the workspace, tenantID, or sender/role fields were added.
 // Callers must NOT trust the tenantID header when tenantVerified is false.
+//
+// Extras passed in current format (in order):
+//   localKey | sessionKey | senderID | role
 func VerifyBridgeContext(key, agentID, userID, channel, chatID, peerKind, workspace, tenantID, sig string, extra ...string) (bool, bool) {
-	// Current format: all fields including localKey
+	// Current format: all fields including localKey, sessionKey, senderID, role
 	expected := SignBridgeContext(key, agentID, userID, channel, chatID, peerKind, workspace, tenantID, extra...)
 	if hmac.Equal([]byte(expected), []byte(sig)) {
 		return true, true
+	}
+	// Fallback: pre-sender/role sessions — drop the last 2 extras (senderID, role).
+	if len(extra) >= 2 {
+		preSender := SignBridgeContext(key, agentID, userID, channel, chatID, peerKind, workspace, tenantID, extra[:len(extra)-2]...)
+		if hmac.Equal([]byte(preSender), []byte(sig)) {
+			return true, true
+		}
 	}
 	// Fallback: without extra fields (pre-localKey sessions)
 	noExtra := SignBridgeContext(key, agentID, userID, channel, chatID, peerKind, workspace, tenantID)

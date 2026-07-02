@@ -39,6 +39,18 @@ const OptTenantID = "tenant_id"
 // OptLocalKey passes the composite local key (e.g. "-100123:topic:42") for forum topic routing.
 const OptLocalKey = "local_key"
 
+// OptSenderID passes the real acting sender (e.g. raw Telegram user ID) for
+// per-user permission checks (CheckCronPermission, CheckFileWriterPermission)
+// on group-scoped tools called via MCP bridge. Without this, group cron/file
+// mutations fail with senderID="" because bridge middleware has no way to know
+// who actually triggered the turn (#915 follow-up).
+const OptSenderID = "sender_id"
+
+// OptRole passes the caller's RBAC role (admin/operator/owner/...) so bridge
+// permission checks can apply the admin bypass (#915) for tenant-authenticated
+// dispatches that route through MCP bridge.
+const OptRole = "role"
+
 // ClaudeCLIProvider implements Provider by shelling out to the `claude` CLI binary.
 // It acts as a thin proxy: CLI manages session history, tool execution, and context.
 // GoClaw only forwards the latest user message and streams back the response.

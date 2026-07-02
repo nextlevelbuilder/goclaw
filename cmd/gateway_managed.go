@@ -455,10 +455,25 @@ func wireExtras(
 				SessionKey:    sessionKey,
 				Message:       req.Task,
 				UserID:        req.UserID,
-				Channel:       "delegate",
+				// Propagate real acting sender + RBAC role through delegate so that
+				// downstream group-scoped permission checks (CheckCronPermission /
+				// CheckFileWriterPermission) attribute to the original user instead
+				// of an empty principal. Without these two lines, any cron/file
+				// mutation inside a delegated turn in a group context fails with
+				// `senderID=""` because loop_context.injectContext skips
+				// WithSenderID when req.SenderID is empty (#915 follow-up).
+				SenderID:      req.SenderID,
+				Role:          req.Role,
+				Channel:       req.Channel,
+				ChannelType:   "", // resolver not available here; consumer-only field
+				ChatID:        req.ChatID,
+				PeerKind:      req.PeerKind,
 				RunKind:       "delegate",
 				DelegationID:  req.DelegationID,
 				ParentAgentID: req.FromAgentKey,
+			}
+			if runReq.Channel == "" {
+				runReq.Channel = "delegate"
 			}
 			result, err := loop.Run(delegateCtx, runReq)
 			if err != nil {

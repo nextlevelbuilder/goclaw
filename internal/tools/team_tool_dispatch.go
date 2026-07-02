@@ -164,6 +164,21 @@ func (m *TeamToolManager) dispatchTaskToAgent(ctx context.Context, task *store.T
 		}
 	}
 
+	// Diagnostic: if we still have no real sender and the dispatch lands in
+	// a group, downstream group-scoped permission checks (cron, file_writer)
+	// will deny. Log so admins can identify the upstream source.
+	if (originSenderID == "" || bus.IsInternalSender(originSenderID)) && originPeerKind == "group" {
+		slog.Warn("team dispatch: no real sender for group target — group permissions will deny",
+			"task_id", task.ID.String(),
+			"team_id", teamID.String(),
+			"to_agent", ag.AgentKey,
+			"ctx_sender", store.SenderIDFromContext(ctx),
+			"task_meta_sender", task.Metadata["origin_sender_id"],
+			"peer_kind", originPeerKind,
+			"chat_id", originChatID,
+		)
+	}
+
 	meta := map[string]string{
 		MetaOriginChannel:   originChannel,
 		MetaOriginPeerKind:  originPeerKind,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -255,7 +256,17 @@ func CheckCronPermission(ctx context.Context, permStore ConfigPermissionStore) e
 	}
 	senderID := SenderIDFromContext(ctx)
 	if senderID == "" || isSyntheticSender(senderID) {
-		return fmt.Errorf("permission denied: system context cannot manage cron jobs in group chats")
+		// Diagnostic log: emit full ctx fingerprint so admins can find the
+		// upstream caller that lost sender attribution.
+		slog.Warn("CheckCronPermission denied: no real sender",
+			"reason", "synthetic_or_empty_sender",
+			"sender_id", senderID,
+			"user_id", userID,
+			"agent_id", agentID.String(),
+			"role", RoleFromContext(ctx),
+			"tenant_id", TenantIDFromContext(ctx).String(),
+		)
+		return fmt.Errorf("permission denied: cron mutation requires a real user sender (got senderID=%q in scope=%q). System contexts (subagent/teammate/notification/ticker/system) cannot manage cron jobs in groups. Check goclaw.log for `CheckCronPermission denied` warning to identify the upstream caller losing sender attribution", senderID, userID)
 	}
 	numericID := strings.SplitN(senderID, "|", 2)[0]
 
@@ -273,7 +284,19 @@ func CheckCronPermission(ctx context.Context, permStore ConfigPermissionStore) e
 		return fmt.Errorf("permission denied: file writer permission check failed: %w", err)
 	}
 	if !allowed {
-		return fmt.Errorf("permission denied: only users with cron or file_writer permission can manage cron jobs in group chats")
+		slog.Warn("CheckCronPermission denied: no grant",
+			"reason", "no_grant",
+			"sender_id", numericID,
+			"user_id", userID,
+			"agent_id", agentID.String(),
+			"checked_types", []string{ConfigTypeCron, ConfigTypeFileWriter},
+		)
+		return fmt.Errorf(
+			"permission denied: cron requires a `%s` or `%s` grant — none found for user=%s in scope=%q. "+
+				"Fix: ask an existing writer to run `/addcron` (reply to your message) in this group, "+
+				"or `/addwriter` for full file_writer access. Verify with `/croners` or `/writers`.",
+			ConfigTypeCron, ConfigTypeFileWriter, numericID, userID,
+		)
 	}
 	return nil
 }

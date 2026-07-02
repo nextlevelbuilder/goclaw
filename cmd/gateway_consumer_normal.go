@@ -423,20 +423,39 @@ func processNormalMessage(
 
 	// Resolve effective sender: prefer MetaOriginSenderID when the on-wire
 	// SenderID is an internal/synthetic one (e.g. "notification:progress",
-	// "ticker:system", "system:escalation", "session_send_tool"). This lets
+	// "ticker:system", "system:escalation", "session_send_tool") OR is
+	// empty (some publish paths drop SenderID even though the originating
+	// turn carried a real user via MetaOriginSenderID). This lets
 	// system-initiated turns that DO have a real user behind them (because
 	// they propagated the origin via metadata) attribute actions to that user
-	// — e.g. for CheckFileWriterPermission in group chats (#915). Synthetic
-	// senders without propagation keep their on-wire value and hit F1's
-	// deny-in-group rule (safe default).
+	// — e.g. for CheckFileWriterPermission / CheckCronPermission in group
+	// chats (#915). Synthetic / empty senders without propagation keep their
+	// on-wire value and hit F1's deny-in-group rule (safe default).
 	effectiveSenderID := msg.SenderID
-	if bus.IsInternalSender(effectiveSenderID) {
+	if effectiveSenderID == "" || bus.IsInternalSender(effectiveSenderID) {
 		// Defense-in-depth: if a propagation bug ever writes a synthetic
 		// value into MetaOriginSenderID, do NOT honour it. We want only real
-		// user senders to override the on-wire synthetic.
+		// user senders to override the on-wire synthetic/empty.
 		if realSender := msg.Metadata[tools.MetaOriginSenderID]; realSender != "" && !bus.IsInternalSender(realSender) {
 			effectiveSenderID = realSender
 		}
+	}
+	// Diagnostic: warn when we end up with an empty sender for a group
+	// context. This is almost always a propagation bug somewhere upstream
+	// (channel handler, re-ingress publisher, or skill that lost ctx).
+	// CheckFileWriterPermission / CheckCronPermission will deny this turn.
+	if effectiveSenderID == "" && peerKind == string(sessions.PeerGroup) {
+		mk := make([]string, 0, len(msg.Metadata))
+		for k := range msg.Metadata {
+			mk = append(mk, k)
+		}
+		slog.Warn("group inbound has empty SenderID — group-scoped permission checks will deny",
+			"channel", msg.Channel,
+			"chat_id", msg.ChatID,
+			"on_wire_sender", msg.SenderID,
+			"meta_origin_sender", msg.Metadata[tools.MetaOriginSenderID],
+			"meta_keys", mk,
+		)
 	}
 	// Role propagation: carry the RBAC role of the originating actor so
 	// permission checks during the re-ingress turn can bypass per-user
