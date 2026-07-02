@@ -286,6 +286,52 @@ func TestOpenAIProviderChatStream_NormalizesSplitKimiTextToolCallBeforeEmittingC
 	}
 }
 
+func TestOpenAIProviderChatStream_PreservesWhitespaceAcrossContentDeltas(t *testing.T) {
+	events := []string{
+		`data: {"choices":[{"delta":{"content":"Dạ"}}]}` + "\n\n",
+		`data: {"choices":[{"delta":{"content":" em"}}]}` + "\n\n",
+		`data: {"choices":[{"delta":{"content":" xin"}}]}` + "\n\n",
+		`data: {"choices":[{"delta":{"content":" lỗi"}}]}` + "\n\n",
+		`data: {"choices":[{"delta":{"content":" anh"}}]}` + "\n\n",
+		`data: {"choices":[{"finish_reason":"stop","delta":{}}]}` + "\n\n",
+	}
+	srv := newOpenAISSEServer(t, events)
+	defer srv.Close()
+
+	p := NewOpenAIProvider("openai-compatible", "sk", srv.URL, "model")
+	var streamed strings.Builder
+	resp, err := p.ChatStream(context.Background(), ChatRequest{
+		Messages: []Message{{Role: "user", Content: "say it"}},
+	}, func(chunk StreamChunk) {
+		streamed.WriteString(chunk.Content)
+	})
+	if err != nil {
+		t.Fatalf("ChatStream: %v", err)
+	}
+
+	const want = "Dạ em xin lỗi anh"
+	if resp.Content != want {
+		t.Fatalf("Content = %q, want %q", resp.Content, want)
+	}
+	if got := streamed.String(); got != want {
+		t.Fatalf("streamed content = %q, want %q", got, want)
+	}
+}
+
+func TestControlOutputNormalizer_PreservesWhitespaceAroundNormalText(t *testing.T) {
+	n := newControlOutputNormalizer(nil)
+	var got strings.Builder
+	got.WriteString(n.Append("Dạ").Content)
+	got.WriteString(n.Append(" em").Content)
+	got.WriteString(n.Append(" xin").Content)
+	got.WriteString(n.Append(" lỗi").Content)
+	got.WriteString(n.Finish().Content)
+
+	if got.String() != "Dạ em xin lỗi" {
+		t.Fatalf("normalized stream content = %q, want %q", got.String(), "Dạ em xin lỗi")
+	}
+}
+
 func newOpenAIJSONServer(t *testing.T, body string) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

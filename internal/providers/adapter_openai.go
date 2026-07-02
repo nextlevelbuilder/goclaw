@@ -112,10 +112,8 @@ func (a *OpenAIAdapter) FromStreamChunk(data []byte) (*StreamChunk, error) {
 
 	// Text content
 	if delta.Content != "" {
-		normalized := normalizeControlOutput(delta.Content, "", nil)
-		sc.Content = normalized.Content
-		sc.Thinking = strings.TrimSpace(strings.Join([]string{sc.Thinking, normalized.Thinking}, "\n"))
-		hasContent = sc.Content != "" || sc.Thinking != ""
+		sc.Content = delta.Content
+		hasContent = true
 	}
 
 	if !hasContent {

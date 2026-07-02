@@ -185,6 +185,20 @@ func TestOpenAIAdapter_FromStreamChunk(t *testing.T) {
 		}
 	})
 
+	t.Run("content delta preserves leading whitespace", func(t *testing.T) {
+		raw := []byte(`{"choices":[{"delta":{"content":" xin lỗi"}}]}`)
+		sc, err := a.FromStreamChunk(raw)
+		if err != nil {
+			t.Fatalf("err: %v", err)
+		}
+		if sc == nil {
+			t.Fatal("want stream chunk, got nil")
+		}
+		if sc.Content != " xin lỗi" {
+			t.Errorf("want leading whitespace preserved, got %q", sc.Content)
+		}
+	})
+
 	t.Run("reasoning_content delta", func(t *testing.T) {
 		raw := []byte(`{"choices":[{"delta":{"reasoning_content":"thinking..."}}]}`)
 		sc, err := a.FromStreamChunk(raw)

@@ -70,7 +70,6 @@ func normalizeControlOutput(content, thinking string, tools []ToolDefinition) co
 	out.Content, extracted = extractThinkingTags(out.Content)
 	out.Thinking = joinThinking(out.Thinking, extracted)
 
-	out.Content = strings.TrimSpace(out.Content)
 	return out
 }
 
