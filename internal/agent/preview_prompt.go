@@ -119,6 +119,16 @@ func BuildPreviewPrompt(ctx context.Context, ag *store.AgentData, mode PromptMod
 		toolNames = filtered
 	}
 
+	// --- Resolve concrete *tools.Registry (needed by WouldAllow to expand
+	// group:* specs like "group:mcp" in Allow/AlsoAllow). Falls back to nil
+	// when deps.ToolLister is a narrower test mock that doesn't fully
+	// implement tools.ToolExecutor — WouldAllow tolerates a nil registry by
+	// skipping group expansion, matching prior behavior for such mocks.
+	var toolRegistry *tools.Registry
+	if executor, ok := deps.ToolLister.(tools.ToolExecutor); ok {
+		toolRegistry = tools.ResolveConcreteRegistry(executor)
+	}
+
 	// --- Full agent tool policy (profile→allow→deny→alsoAllow, including global deny) ---
 	// Uses the gateway's live PolicyEngine via WouldAllow, mirroring the real chat
 	// loop's resolution exactly, modulo channel-specific filtering (genuinely
@@ -127,7 +137,7 @@ func BuildPreviewPrompt(ctx context.Context, ag *store.AgentData, mode PromptMod
 		toolPolicy := ag.ParseToolsConfig()
 		filtered := make([]string, 0, len(toolNames))
 		for _, n := range toolNames {
-			if deps.ToolPolicy.WouldAllow(nil, n, ag.Provider, toolPolicy, nil) {
+			if deps.ToolPolicy.WouldAllow(toolRegistry, n, ag.Provider, toolPolicy, nil) {
 				filtered = append(filtered, n)
 			}
 		}
@@ -206,7 +216,7 @@ func BuildPreviewPrompt(ctx context.Context, ag *store.AgentData, mode PromptMod
 			}
 			toolPolicyCfg := ag.ParseToolsConfig()
 			for _, mt := range storeMCPTools {
-				if deps.ToolPolicy != nil && !deps.ToolPolicy.WouldAllow(nil, mt.RegisteredName, ag.Provider, toolPolicyCfg, nil) {
+				if deps.ToolPolicy != nil && !deps.ToolPolicy.WouldAllow(toolRegistry, mt.RegisteredName, ag.Provider, toolPolicyCfg, nil) {
 					slog.Debug("preview_prompt.mcp_tool_denied_by_policy", "tool", mt.RegisteredName)
 					continue
 				}

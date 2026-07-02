@@ -436,3 +436,46 @@ func TestBuildPreviewPrompt_MCPToolGlobalDenyApplied(t *testing.T) {
 		t.Errorf("expected non-denied MCP tool in ToolDefs, got: %+v", r.ToolDefs)
 	}
 }
+
+// TestBuildPreviewPrompt_MCPToolAllowedViaGroupExpansion proves that an MCP
+// tool granted only through a "group:mcp" AlsoAllow spec — the exact pattern
+// production uses (see agentToolPolicyWithMCP in resolver_helpers.go, which
+// injects AlsoAllow: ["group:mcp"] for every agent) — is correctly INCLUDED
+// in BuildPreviewPrompt's ToolDefs and tool names.
+//
+// This is a regression test for the reg=nil bug: WouldAllow(nil, ...) cannot
+// expand "group:mcp" (group expansion requires a concrete *tools.Registry to
+// look up group membership), so with a restrictive Allow list that excludes
+// the tool by literal name, the AlsoAllow group grant would silently fail to
+// restore it — exactly what happened for every MCP tool in production preview.
+// Using a *tools.Registry (not the narrower mockToolLister) here exercises the
+// real reg-resolution path added by ResolveConcreteRegistry.
+func TestBuildPreviewPrompt_MCPToolAllowedViaGroupExpansion(t *testing.T) {
+	ag := baseAgent()
+	// Mirrors production: Allow restricts to a literal core-tool name only,
+	// and AlsoAllow additively grants the whole "group:mcp" set (the pattern
+	// injected for every agent by resolver_helpers.go's agentToolPolicyWithMCP).
+	ag.ToolsConfig = []byte(`{"allow":["read_file"],"alsoAllow":["group:mcp"]}`)
+
+	reg := tools.NewRegistry()
+	reg.Register(&mockTool{name: "read_file", desc: "Read a file"})
+	reg.Register(&mockTool{name: "mcp_pg_query", desc: "Run PostgreSQL queries"})
+	reg.RegisterToolGroup("mcp", []string{"mcp_pg_query"})
+
+	pe := tools.NewPolicyEngine(&config.ToolsConfig{})
+
+	r := BuildPreviewPrompt(context.Background(), ag, PromptFull, "u1", PreviewDeps{
+		ToolLister: reg,
+		ToolPolicy: pe,
+	})
+
+	var found *providers.ToolDefinition
+	for i := range r.ToolDefs {
+		if r.ToolDefs[i].Function.Name == "mcp_pg_query" {
+			found = &r.ToolDefs[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("expected mcp_pg_query (granted via group:mcp AlsoAllow) in ToolDefs, got: %+v", r.ToolDefs)
+	}
+}
