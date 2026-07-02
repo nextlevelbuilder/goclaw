@@ -222,11 +222,12 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 		}
 		if result != nil && result.Usage != nil {
 			completedPayload["usage"] = map[string]any{
-				"prompt_tokens":         result.Usage.PromptTokens,
-				"completion_tokens":     result.Usage.CompletionTokens,
-				"total_tokens":          result.Usage.TotalTokens,
-				"cache_creation_tokens": result.Usage.CacheCreationTokens,
-				"cache_read_tokens":     result.Usage.CacheReadTokens,
+				"prompt_tokens":                         result.Usage.PromptTokens,
+				"completion_tokens":                     result.Usage.CompletionTokens,
+				"total_tokens":                          result.Usage.TotalTokens,
+				"cache_creation_tokens":                 result.Usage.CacheCreationTokens,
+				"cache_read_tokens":                     result.Usage.CacheReadTokens,
+				"prompt_tokens_include_cached_segments": result.Usage.PromptTokensIncludeCachedSegments,
 			}
 		}
 		if result != nil && len(result.Media) > 0 {

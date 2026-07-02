@@ -139,6 +139,40 @@ func TestValidateUsagePricingFieldsRejectsNegativeValues(t *testing.T) {
 	}
 }
 
+func TestPGUsageCapStoreUpsertPricingCatalogSkipsInvalidEntries(t *testing.T) {
+	db := hooksTestDB(t)
+	usageStore := NewPGUsageCapStore(db)
+	inputPrice := "0.000001"
+	outputPrice := "0.000002"
+	negativePrice := "-0.000001"
+	entries := []store.UsagePricingCatalogEntry{
+		{ModelID: "invalid/negative-output", Pricing: store.UsagePricingFields{Input: &inputPrice, Output: &negativePrice}, SyncedAt: time.Now().UTC()},
+		{ModelID: "openai/gpt-valid", Pricing: store.UsagePricingFields{Input: &inputPrice, Output: &outputPrice}, SyncedAt: time.Now().UTC()},
+	}
+
+	count, err := usageStore.UpsertPricingCatalog(context.Background(), entries)
+	if err != nil {
+		t.Fatalf("UpsertPricingCatalog: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("upserted count = %d, want 1", count)
+	}
+	listed, err := usageStore.ListPricingCatalog(context.Background(), store.UsagePricingQuery{ModelID: "gpt-valid"})
+	if err != nil {
+		t.Fatalf("ListPricingCatalog valid: %v", err)
+	}
+	if len(listed) != 1 || listed[0].ModelID != "openai/gpt-valid" {
+		t.Fatalf("valid entries = %+v, want openai/gpt-valid", listed)
+	}
+	listed, err = usageStore.ListPricingCatalog(context.Background(), store.UsagePricingQuery{ModelID: "negative-output"})
+	if err != nil {
+		t.Fatalf("ListPricingCatalog invalid: %v", err)
+	}
+	if len(listed) != 0 {
+		t.Fatalf("invalid entries = %+v, want none", listed)
+	}
+}
+
 func TestPGUsageCapStoreResolvePricingUsesOpenRouterAliases(t *testing.T) {
 	db := hooksTestDB(t)
 	usageStore := NewPGUsageCapStore(db)
@@ -146,8 +180,10 @@ func TestPGUsageCapStoreResolvePricingUsesOpenRouterAliases(t *testing.T) {
 	outputPrice := "0.000002"
 	entries := []store.UsagePricingCatalogEntry{
 		{ModelID: "openai/gpt-4o-mini", CanonicalModelID: "openai/gpt-4o-mini", Pricing: store.UsagePricingFields{Input: &inputPrice, Output: &outputPrice}, SyncedAt: time.Now().UTC()},
+		{ModelID: "openai/gpt-5.5", CanonicalModelID: "openai/gpt-5.5", Pricing: store.UsagePricingFields{Input: &inputPrice, Output: &outputPrice}, SyncedAt: time.Now().UTC()},
 		{ModelID: "anthropic/claude-3-5-haiku-latest", CanonicalModelID: "anthropic/claude-3-5-haiku-latest", Pricing: store.UsagePricingFields{Input: &inputPrice, Output: &outputPrice}, SyncedAt: time.Now().UTC()},
 		{ModelID: "google/gemini-2.5-flash", CanonicalModelID: "google/gemini-2.5-flash", Pricing: store.UsagePricingFields{Input: &inputPrice, Output: &outputPrice}, SyncedAt: time.Now().UTC()},
+		{ModelID: "qwen/qwen3.7-plus", CanonicalModelID: "qwen/qwen3.7-plus", Pricing: store.UsagePricingFields{Input: &inputPrice, Output: &outputPrice}, SyncedAt: time.Now().UTC()},
 	}
 	if _, err := usageStore.UpsertPricingCatalog(context.Background(), entries); err != nil {
 		t.Fatalf("UpsertPricingCatalog: %v", err)
@@ -161,8 +197,10 @@ func TestPGUsageCapStoreResolvePricingUsesOpenRouterAliases(t *testing.T) {
 		wantModelID  string
 	}{
 		{name: "openai compat", providerName: "openai", providerType: store.ProviderOpenAICompat, modelID: "gpt-4o-mini", wantModelID: "openai/gpt-4o-mini"},
+		{name: "openai compat custom gpt model", providerName: "cppai", providerType: store.ProviderOpenAICompat, modelID: "gpt-5.5", wantModelID: "openai/gpt-5.5"},
 		{name: "anthropic native", providerName: "anthropic", providerType: store.ProviderAnthropicNative, modelID: "claude-3-5-haiku-latest", wantModelID: "anthropic/claude-3-5-haiku-latest"},
 		{name: "gemini native", providerName: "gemini", providerType: store.ProviderGeminiNative, modelID: "gemini-2.5-flash", wantModelID: "google/gemini-2.5-flash"},
+		{name: "bailian qwen model", providerName: "bailian", providerType: store.ProviderBailian, modelID: "qwen3.7-plus", wantModelID: "qwen/qwen3.7-plus"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

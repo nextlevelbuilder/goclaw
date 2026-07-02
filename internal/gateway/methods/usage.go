@@ -13,23 +13,35 @@ import (
 // UsageMethods handles usage.get, usage.summary.
 // Queries SessionStore for real token data (accumulated via AccumulateTokens in agent loop).
 type UsageMethods struct {
-	sessions store.SessionStore
+	sessions     store.SessionStore
+	sessionCosts sessionCostReader
+}
+
+type sessionCostReader interface {
+	GetSessionCosts(ctx context.Context, sessionKeys []string) (map[string]float64, error)
 }
 
 // UsageRecord is a single usage entry derived from session data.
 type UsageRecord struct {
-	AgentID      string `json:"agentId"`
-	SessionKey   string `json:"sessionKey"`
-	Model        string `json:"model"`
-	Provider     string `json:"provider"`
-	InputTokens  int64  `json:"inputTokens"`
-	OutputTokens int64  `json:"outputTokens"`
-	TotalTokens  int64  `json:"totalTokens"`
-	Timestamp    int64  `json:"timestamp"`
+	AgentID      string  `json:"agentId"`
+	SessionKey   string  `json:"sessionKey"`
+	Model        string  `json:"model"`
+	Provider     string  `json:"provider"`
+	InputTokens  int64   `json:"inputTokens"`
+	OutputTokens int64   `json:"outputTokens"`
+	TotalTokens  int64   `json:"totalTokens"`
+	Cost         float64 `json:"cost"`
+	Timestamp    int64   `json:"timestamp"`
 }
 
-func NewUsageMethods(sessStore store.SessionStore) *UsageMethods {
-	return &UsageMethods{sessions: sessStore}
+func NewUsageMethods(sessStore store.SessionStore, tracingStores ...store.TracingStore) *UsageMethods {
+	m := &UsageMethods{sessions: sessStore}
+	if len(tracingStores) > 0 && tracingStores[0] != nil {
+		if costs, ok := tracingStores[0].(sessionCostReader); ok {
+			m.sessionCosts = costs
+		}
+	}
+	return m
 }
 
 func (m *UsageMethods) Register(router *gateway.MethodRouter) {
@@ -86,6 +98,17 @@ func (m *UsageMethods) handleGet(ctx context.Context, client *gateway.Client, re
 	offset := min(params.Offset, total)
 	end := min(offset+params.Limit, total)
 	records = records[offset:end]
+	if m.sessionCosts != nil && len(records) > 0 {
+		sessionKeys := make([]string, 0, len(records))
+		for _, record := range records {
+			sessionKeys = append(sessionKeys, record.SessionKey)
+		}
+		if costs, err := m.sessionCosts.GetSessionCosts(ctx, sessionKeys); err == nil {
+			for i := range records {
+				records[i].Cost = costs[records[i].SessionKey]
+			}
+		}
+	}
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"records": records,

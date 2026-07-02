@@ -3,6 +3,8 @@ package tracing
 import (
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
+	usagepricing "github.com/nextlevelbuilder/goclaw/internal/usage/pricing"
 )
 
 // CalculateCost computes the USD cost for a single LLM call based on token usage and pricing.
@@ -46,6 +48,21 @@ func CalculateCost(pricing *config.ModelPricing, usage *providers.Usage) float64
 		cost += float64(usage.CacheCreationTokens) * pricing.CacheCreatePerMillion / 1_000_000
 	}
 	return cost
+}
+
+func CalculateCostFromUsagePricing(fields store.UsagePricingFields, usage *providers.Usage) (float64, error) {
+	if usage == nil {
+		return 0, nil
+	}
+	billable := usagepricing.FromProviderUsage(usage)
+	if fields.Request == nil {
+		billable.RequestCount = 0
+	}
+	micros, err := usagepricing.CostMicros(fields, billable)
+	if err != nil {
+		return 0, err
+	}
+	return float64(micros) / 1_000_000, nil
 }
 
 // LookupPricing finds the model pricing from config.

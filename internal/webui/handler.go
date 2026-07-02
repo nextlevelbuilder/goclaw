@@ -47,9 +47,7 @@ func (h *spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/assets/") {
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		} else {
-			// index.html and other root files must never be cached so the
-			// browser always gets the latest asset manifest after a deploy.
-			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+			setIndexCacheHeaders(w)
 		}
 		h.fileServer.ServeHTTP(w, r)
 		return
@@ -57,6 +55,13 @@ func (h *spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// SPA fallback: serve index.html for any unmatched route.
 	// This handles client-side routing (React Router).
+	setIndexCacheHeaders(w)
 	r.URL.Path = "/"
 	h.fileServer.ServeHTTP(w, r)
+}
+
+func setIndexCacheHeaders(w http.ResponseWriter) {
+	// index.html and SPA fallback routes must never be cached so the browser
+	// always fetches the latest Vite asset manifest after an embedded UI rebuild.
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 }

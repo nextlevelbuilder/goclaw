@@ -121,7 +121,13 @@ The exporter lives in a separate sub-package (`internal/tracing/otelexport/`) so
 
 ## 5. Cost Calculation
 
-Per-span cost is calculated using the `CalculateCost()` function in `internal/tracing/cost.go`. For each LLM call span:
+Per-span cost is calculated in `internal/tracing/cost.go`. For each LLM call span, pricing resolves in this order:
+
+1. Tenant/provider/model override
+2. OpenRouter-backed pricing catalog
+3. Legacy `telemetry.model_pricing` config fallback
+
+Catalog and override prices are stored as USD per token/unit. Legacy config prices remain USD per million tokens:
 
 ```
 Cost = (PromptTokens × InputCostPerMillion) / 1,000,000
@@ -130,9 +136,11 @@ Cost = (PromptTokens × InputCostPerMillion) / 1,000,000
       + (CacheCreationTokens × CacheCreateCostPerMillion) / 1,000,000
 ```
 
-Model pricing is loaded from `config.ModelPricing` and keyed by `provider/model` (with fallback to `model` only). Cost is stored in the `total_cost` field of each LLM call span. The trace aggregation sums costs from all child `llm_call` spans to compute the trace-level `total_cost`.
+Cost is stored in the `total_cost` field of each LLM call span. The trace aggregation sums costs from all child `llm_call` spans to compute the trace-level `total_cost`.
 
-Cache token costs (read + create) are optional and only applied if the pricing config specifies non-zero values.
+Cache token costs (read + create) are optional and only applied when the resolved catalog, override, or fallback config provides those price dimensions.
+
+At startup, after the OpenRouter catalog sync succeeds, PostgreSQL tracing runs an idempotent historical backfill for LLM spans whose `total_cost` is still zero. The backfill uses the same override/catalog precedence, refreshes trace totals, and refreshes the affected `usage_snapshots` buckets so the Usage dashboard updates without waiting for new traffic. Bailian/DashScope Qwen model IDs and common unprefixed OpenAI-compatible model IDs are mapped to OpenRouter catalog IDs for observability pricing; usage cap enforcement rules remain separate.
 
 ---
 

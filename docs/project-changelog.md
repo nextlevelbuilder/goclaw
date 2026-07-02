@@ -4,6 +4,122 @@ Significant changes, features, and fixes in reverse chronological order.
 
 ---
 
+## 2026-07-03
+
+### Usage cost display precision
+
+**Fixes**
+
+- Usage and overview cost values now render with two decimal places for API cost
+  displays, matching dashboard expectations such as `$1.02` and `$5.93`.
+
+**Tests**
+
+- Added web formatter regression coverage for two-decimal API cost rendering.
+
+### Usage analytics historical cost audit
+
+**Fixes**
+
+- Backfilled zero-cost historical `usage_snapshots` rows from the synced pricing
+  catalog, fixing 7-day and 30-day totals that previously showed the same cost
+  despite different token counts.
+- Usage analytics span aggregation now includes model-using `tool_call` spans in
+  token and cost totals while keeping direct LLM call counts scoped to
+  `llm_call` spans.
+- Added trace aggregate reconciliation so overview daily token/cost cards match
+  the same `llm_call` + `tool_call` usage scope used by usage analytics.
+
+**Tests**
+
+- Added PostgreSQL and SQLite regressions for cost backfill and trace aggregate
+  reconciliation with tool-call model usage.
+
+### Live usage cost refresh
+
+**Fixes**
+
+- Usage summary and breakdown endpoints now include current-hour live trace/span
+  data, so dashboard cost cards and top model costs update immediately after a
+  completed LLM call instead of waiting for the hourly snapshot worker.
+
+**Tests**
+
+- Added HTTP regression coverage for current-hour summary cost and provider/model
+  breakdown cost when no usage snapshot exists yet.
+
+### Usage cost backfill after pricing sync
+
+**Fixes**
+
+- Added startup backfill for historical `llm_call` spans with zero cost after
+  OpenRouter catalog sync succeeds.
+- Backfill now refreshes trace totals and affected usage snapshot buckets so
+  dashboard cost numbers update for existing data.
+- Added catalog aliases for Bailian/DashScope Qwen models and common unprefixed
+  OpenAI-compatible GPT/o-series model IDs.
+
+**Tests**
+
+- Added PG regression coverage for catalog-backed trace cost backfill.
+- Extended pricing resolver coverage for custom OpenAI-compatible and Bailian
+  model aliases.
+
+---
+
+## 2026-07-02
+
+### Automatic model pricing for usage costs
+
+**Fixes**
+
+- Tracing cost now resolves tenant/provider/model pricing overrides first, then
+  the OpenRouter catalog, before falling back to legacy telemetry config.
+- OpenRouter model pricing catalog now syncs automatically at gateway startup
+  and once per day, while preserving the manual dashboard sync action.
+
+**Tests**
+
+- Added regressions for catalog-backed trace cost precedence, config fallback,
+  and cached-token price calculation.
+
+### Zalo Personal nested reply context
+
+**Fixes**
+
+- Preserved Zalo Personal `quote` payloads on inbound messages so agents receive
+  quoted-message context when users reply to a reply.
+- Rendered quoted text and quoted attachment placeholders into DM and group
+  prompts before mention gating/history flush.
+- Added a channel-agnostic bounded reply-context cache so Zalo Personal can
+  render multi-level reply chains without DB persistence or Zalo API backfill.
+- Moved Zalo Personal policy checks before attachment download/media extraction
+  so rejected messages cannot trigger media fetches or reply-cache writes.
+
+**Tests**
+
+- Added Zalo Personal protocol and handler regressions for quoted text, quoted
+  attachments, and nested-style replies.
+- Added reply-context cache coverage for scoped lookup, multi-level chains,
+  fallback, depth/size caps, cycle guard, TTL expiry, and clear-on-stop behavior.
+- Added a Zalo Personal regression proving denied attachment messages do not
+  download media before policy rejection.
+
+### Lark MCP skill guidance
+
+**Added**
+
+- Added bundled `lark-pm` and `lark-playbook` skills so GoClaw agents handle
+  Lark/Feishu PM operations through MCP only.
+- Documented schema-first LarkBase writes, writable field checks, person-field
+  payload shape, per-record updates, and canonical user ID verification.
+
+**Docs**
+
+- Updated the core skills system list to include the new Lark MCP skills.
+
+---
+
 ## 2026-07-01
 
 ### Usage event analytics schema gate

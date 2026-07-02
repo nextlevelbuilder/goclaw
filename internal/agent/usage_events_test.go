@@ -12,6 +12,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/internal/tracing"
+	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 )
 
 type fakeUsageEventStore struct {
@@ -143,6 +144,50 @@ func TestRecordToolUsageEvent_PreservesProviderCacheUsage(t *testing.T) {
 	}
 	if event.CacheReadTokens != 80 || event.CacheCreateTokens != 10 || event.ThinkingTokens != 5 {
 		t.Fatalf("cache/thinking tokens = read %d create %d thinking %d", event.CacheReadTokens, event.CacheCreateTokens, event.ThinkingTokens)
+	}
+}
+
+func TestRecordToolUsageEvent_ComputesCost(t *testing.T) {
+	tenantID := uuid.New()
+	providerID := uuid.New()
+	storeSpy := newFakeUsageEventStore()
+	input := "0.000001"
+	output := "0.000002"
+	usageStore := &tracePricingUsageStore{resolved: &store.ResolvedUsagePricing{
+		ModelID: "openai/gpt-4o-mini",
+		Source:  "catalog",
+		Pricing: store.UsagePricingFields{Input: &input, Output: &output},
+	}}
+	providerStore := &tracePricingProviderStore{provider: &store.LLMProviderData{
+		BaseModel:    store.BaseModel{ID: providerID},
+		TenantID:     tenantID,
+		Name:         "openai",
+		ProviderType: store.ProviderOpenAICompat,
+		APIKey:       "sk-test",
+		Enabled:      true,
+	}}
+	loop := &Loop{
+		usageEvents: storeSpy,
+		agentUUID:   uuid.New(),
+		tenantID:    tenantID,
+		usageCaps:   usagecaps.NewService(usageStore, providerStore),
+	}
+	ctx := tracing.WithTraceID(store.WithTenantID(t.Context(), tenantID), uuid.New())
+	result := tools.NewResult("ok")
+	result.Provider = "openai"
+	result.Model = "gpt-4o-mini"
+	result.Usage = &providers.Usage{
+		PromptTokens:     1000,
+		CompletionTokens: 500,
+		TotalTokens:      1500,
+	}
+
+	loop.recordToolUsageEvent(ctx, &RunRequest{RunID: "run-1", SessionKey: "session-1"}, "read_image", "read_image", "call-1",
+		nil, time.Now().Add(-time.Millisecond), result, uuid.New())
+
+	event := waitUsageEvent(t, storeSpy)
+	if !floatClose(event.CostUSD, 0.002) {
+		t.Fatalf("cost = %.9f, want 0.002", event.CostUSD)
 	}
 }
 

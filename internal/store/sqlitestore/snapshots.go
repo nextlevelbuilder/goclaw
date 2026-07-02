@@ -184,6 +184,10 @@ func (s *SQLiteSnapshotStore) GetBreakdown(ctx context.Context, q store.Snapshot
 		groupCol = "model"
 		orderExpr = "SUM(CASE WHEN provider != '' THEN input_tokens ELSE 0 END) DESC"
 		extraFilter = " AND provider != '' AND model != ''"
+	case "provider_model":
+		groupCol = "provider || '/' || model"
+		orderExpr = "SUM(CASE WHEN provider != '' THEN input_tokens ELSE 0 END) DESC"
+		extraFilter = " AND provider != '' AND model != ''"
 	case "channel":
 		groupCol = "channel"
 		orderExpr = "SUM(CASE WHEN provider = '' AND model = '' THEN request_count ELSE 0 END) DESC"

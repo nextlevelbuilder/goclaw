@@ -54,13 +54,12 @@ func (h *UsageHandler) handleTimeSeries(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Gap-fill: if "to" extends into current incomplete hour, query live traces
-	now := time.Now().UTC()
-	currentHourStart := now.Truncate(time.Hour)
-	if q.To.After(currentHourStart) && currentHourStart.After(q.From) {
-		livePoint := h.queryLiveHour(r, currentHourStart, now, q)
-		if livePoint != nil {
-			points = append(points, *livePoint)
+	if from, to, ok := liveUsageWindow(q, time.Now().UTC()); ok {
+		livePoint, err := h.queryLiveTimeSeries(r, from, to, q)
+		if err != nil {
+			slog.Warn("usage.timeseries live query failed", "error", err)
+		} else if livePoint != nil {
+			points = mergeSnapshotTimeSeries(points, *livePoint, q.GroupBy)
 		}
 	}
 
@@ -82,6 +81,14 @@ func (h *UsageHandler) handleBreakdown(w http.ResponseWriter, r *http.Request) {
 		slog.Error("usage.breakdown query failed", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 		return
+	}
+	if from, to, ok := liveUsageWindow(q, time.Now().UTC()); ok {
+		liveRows, err := h.queryLiveBreakdown(r, from, to, q)
+		if err != nil {
+			slog.Warn("usage.breakdown live query failed", "error", err)
+		} else {
+			rows = mergeSnapshotBreakdowns(rows, liveRows, q.GroupBy)
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"rows": rows})
 }
@@ -124,7 +131,7 @@ func (h *UsageHandler) handleSummary(w http.ResponseWriter, r *http.Request) {
 	previousQ.To = currentFrom
 	previousQ.GroupBy = "hour"
 
-	currentSummary := h.aggregateTimeSeries(r, currentQ)
+	currentSummary := h.aggregateTimeSeriesWithLive(r, currentQ, now)
 	previousSummary := h.aggregateTimeSeries(r, previousQ)
 
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -227,79 +234,7 @@ func (h *UsageHandler) aggregateTimeSeries(r *http.Request, q store.SnapshotQuer
 		return usageSummary{}
 	}
 
-	var s usageSummary
-	var totalWeightedDuration int64
-	for _, p := range points {
-		s.Requests += p.RequestCount
-		s.InputTokens += p.InputTokens
-		s.OutputTokens += p.OutputTokens
-		s.Cost += p.TotalCost
-		s.UniqueUsers += p.UniqueUsers
-		s.Errors += p.ErrorCount
-		s.LLMCalls += p.LLMCallCount
-		s.ToolCalls += p.ToolCallCount
-		totalWeightedDuration += int64(p.AvgDurationMS) * int64(p.RequestCount)
-	}
-	if s.Requests > 0 {
-		s.AvgDurationMS = int(totalWeightedDuration / int64(s.Requests))
-	}
-	return s
-}
-
-// queryLiveHour runs a lightweight query on traces for the current incomplete hour.
-func (h *UsageHandler) queryLiveHour(r *http.Request, from, to time.Time, q store.SnapshotQuery) *store.SnapshotTimeSeries {
-	query := `SELECT
-		COUNT(*),
-		COUNT(*) FILTER (WHERE status = 'error'),
-		COUNT(DISTINCT user_id),
-		COALESCE(SUM(total_input_tokens), 0),
-		COALESCE(SUM(total_output_tokens), 0),
-		COALESCE(SUM(total_cost), 0),
-		COALESCE(SUM(llm_call_count), 0),
-		COALESCE(SUM(tool_call_count), 0),
-		COALESCE(AVG(duration_ms), 0)::INTEGER
-	FROM traces
-	WHERE start_time >= $1 AND start_time < $2
-	  AND parent_trace_id IS NULL`
-
-	args := []any{from, to}
-	idx := 3
-
-	// Tenant isolation: scope to caller's tenant
-	if !store.IsOwnerRole(r.Context()) {
-		tid := store.TenantIDFromContext(r.Context())
-		if tid != uuid.Nil {
-			query += fmt.Sprintf(" AND tenant_id = $%d", idx)
-			args = append(args, tid)
-			idx++
-		}
-	}
-
-	if q.AgentID != nil {
-		query += fmt.Sprintf(" AND agent_id = $%d", idx)
-		args = append(args, *q.AgentID)
-		idx++
-	}
-	if q.Channel != "" {
-		query += fmt.Sprintf(" AND channel = $%d", idx)
-		args = append(args, q.Channel)
-		idx++
-	}
-	// Note: provider/model filters are not applied here because the traces table
-	// does not have provider/model columns (those live on spans). The live gap-fill
-	// is a rough approximation for the current incomplete hour.
-
-	var p store.SnapshotTimeSeries
-	p.BucketTime = from
-	err := h.db.QueryRowContext(r.Context(), query, args...).Scan(
-		&p.RequestCount, &p.ErrorCount, &p.UniqueUsers,
-		&p.InputTokens, &p.OutputTokens, &p.TotalCost,
-		&p.LLMCallCount, &p.ToolCallCount, &p.AvgDurationMS,
-	)
-	if err != nil || p.RequestCount == 0 {
-		return nil
-	}
-	return &p
+	return summarizeTimeSeries(points)
 }
 
 func parseSnapshotFilters(r *http.Request) store.SnapshotQuery {

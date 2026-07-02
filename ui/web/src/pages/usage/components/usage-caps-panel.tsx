@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { formatCost, formatDate, formatTokens } from "@/lib/format";
+import { formatApiCost, formatDate, formatTokens } from "@/lib/format";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
 import { useProviders } from "@/pages/providers/hooks/use-providers";
 import { useUsageCaps } from "../hooks/use-usage-caps";
@@ -183,7 +183,7 @@ export function UsageCapsPanel() {
             {blockedEvents.slice(0, 4).map((event) => (
               <div key={event.id} className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs">
                 <div className="font-medium">{event.reason || t("caps.blocked")}</div>
-                <div className="text-muted-foreground">{formatDate(event.created_at)} · {formatTokens(event.estimated_tokens)} · {formatCost(event.estimated_cost_micros / 1_000_000)}</div>
+                <div className="text-muted-foreground">{formatDate(event.created_at)} · {formatTokens(event.estimated_tokens)} · {formatApiCost(event.estimated_cost_micros / 1_000_000)}</div>
               </div>
             ))}
           </div>

@@ -1,6 +1,7 @@
+import { useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useHttp } from "@/hooks/use-ws";
-import type { UsageFilters } from "../context/usage-filter-context";
+import { buildTimeRange, type UsageFilters } from "../context/usage-filter-context";
 
 export interface SnapshotTimeSeries {
   bucket_time: string;
@@ -50,9 +51,10 @@ interface SummaryResponse {
 }
 
 function buildParams(filters: UsageFilters, extra?: Record<string, string>): Record<string, string> {
+  const range = filters.period === "custom" ? filters : buildTimeRange(filters.period);
   const p: Record<string, string> = {
-    from: filters.from,
-    to: filters.to,
+    from: range.from,
+    to: range.to,
   };
   if (filters.agentId) p.agent_id = filters.agentId;
   if (filters.provider) p.provider = filters.provider;
@@ -66,9 +68,14 @@ function filterKey(f: UsageFilters) {
   return [f.from, f.to, f.agentId, f.provider, f.model, f.channel] as const;
 }
 
-// Snapshots update hourly — no need to re-fetch on window focus or within 60s.
-const STALE_TIME = 60_000;
-const QUERY_OPTS = { staleTime: STALE_TIME, refetchOnWindowFocus: false } as const;
+// Current-hour usage is filled from live traces, so keep the open dashboard fresh.
+const REFRESH_INTERVAL = 30_000;
+const QUERY_OPTS = {
+  staleTime: REFRESH_INTERVAL,
+  refetchInterval: REFRESH_INTERVAL,
+  refetchIntervalInBackground: false,
+  refetchOnWindowFocus: true,
+} as const;
 
 export function useUsageAnalytics(filters: UsageFilters) {
   const http = useHttp();
@@ -98,6 +105,14 @@ export function useUsageAnalytics(filters: UsageFilters) {
     ...QUERY_OPTS,
   });
 
+  const providerModelQuery = useQuery({
+    queryKey: ["usage", "breakdown", "provider_model", ...fk],
+    queryFn: () =>
+      http.get<{ rows: SnapshotBreakdown[] }>("/v1/usage/breakdown", buildParams(filters, { group_by: "provider_model" })),
+    placeholderData: (prev) => prev,
+    ...QUERY_OPTS,
+  });
+
   const channelQuery = useQuery({
     queryKey: ["usage", "breakdown", "channel", ...fk],
     queryFn: () =>
@@ -114,22 +129,51 @@ export function useUsageAnalytics(filters: UsageFilters) {
     ...QUERY_OPTS,
   });
 
+  const refreshAnalytics = useCallback(async () => {
+    await Promise.all([
+      timeseriesQuery.refetch(),
+      providerQuery.refetch(),
+      modelQuery.refetch(),
+      providerModelQuery.refetch(),
+      channelQuery.refetch(),
+      summaryQuery.refetch(),
+    ]);
+  }, [
+    timeseriesQuery.refetch,
+    providerQuery.refetch,
+    modelQuery.refetch,
+    providerModelQuery.refetch,
+    channelQuery.refetch,
+    summaryQuery.refetch,
+  ]);
+
   // isLoading = first mount only (no cached data) → shows skeleton.
   // placeholderData keeps previous results visible during refetch → no flicker.
   const loading =
     timeseriesQuery.isLoading ||
     providerQuery.isLoading ||
     modelQuery.isLoading ||
+    providerModelQuery.isLoading ||
     channelQuery.isLoading ||
     summaryQuery.isLoading;
+  const refreshing =
+    timeseriesQuery.isFetching ||
+    providerQuery.isFetching ||
+    modelQuery.isFetching ||
+    providerModelQuery.isFetching ||
+    channelQuery.isFetching ||
+    summaryQuery.isFetching;
 
   return {
     timeseries: timeseriesQuery.data?.points ?? [],
     providerBreakdown: providerQuery.data?.rows ?? [],
     modelBreakdown: modelQuery.data?.rows ?? [],
+    providerModelBreakdown: providerModelQuery.data?.rows ?? [],
     channelBreakdown: channelQuery.data?.rows ?? [],
     summary: summaryQuery.data ?? null,
     loading,
+    refreshing,
+    refreshAnalytics,
     error: timeseriesQuery.error,
   };
 }

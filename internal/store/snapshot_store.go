@@ -42,7 +42,7 @@ type SnapshotQuery struct {
 	Provider string     // optional: cross-filter by provider
 	Model    string     // optional: cross-filter by model
 	Channel  string     // optional: cross-filter by channel
-	GroupBy  string     // "hour" (default), "day", "provider", "model", "channel", "agent"
+	GroupBy  string     // "hour" (default), "day", "provider", "model", "provider_model", "channel", "agent"
 }
 
 // SnapshotTimeSeries is a single point in a time series response.
@@ -81,6 +81,10 @@ type SnapshotBreakdown struct {
 	AvgDurationMS     int     `json:"avg_duration_ms" db:"avg_duration_ms"`
 }
 
+type SnapshotCostBackfillStats struct {
+	SnapshotRowsUpdated int64
+}
+
 // SnapshotStore manages pre-computed usage snapshots.
 type SnapshotStore interface {
 	// UpsertSnapshots inserts or updates (on conflict, replace) a batch of snapshots.
@@ -89,7 +93,7 @@ type SnapshotStore interface {
 	// GetTimeSeries returns hourly (or daily) aggregated time series.
 	GetTimeSeries(ctx context.Context, q SnapshotQuery) ([]SnapshotTimeSeries, error)
 
-	// GetBreakdown returns aggregated data grouped by a dimension (provider, model, channel, agent).
+	// GetBreakdown returns aggregated data grouped by a dimension (provider, model, provider_model, channel, agent).
 	GetBreakdown(ctx context.Context, q SnapshotQuery) ([]SnapshotBreakdown, error)
 
 	// GetLatestBucket returns the most recent bucket_hour, used by worker to know where to resume.

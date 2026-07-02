@@ -138,6 +138,16 @@ type CostSummaryRow struct {
 	TraceCount        int        `json:"trace_count" db:"trace_count"`
 }
 
+type TraceCostBackfillStats struct {
+	SpanRowsUpdated  int64
+	TraceRowsUpdated int64
+	SnapshotBuckets  []time.Time
+}
+
+type TraceUsageAggregateStats struct {
+	TraceRowsUpdated int64
+}
+
 // CodexPoolSpan holds the fields from a single LLM span for Codex pool activity analysis.
 type CodexPoolSpan struct {
 	SpanID     uuid.UUID

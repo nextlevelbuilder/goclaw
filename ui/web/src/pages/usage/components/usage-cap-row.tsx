@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 import { Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatCost, formatTokens } from "@/lib/format";
+import { formatApiCost, formatCost, formatTokens } from "@/lib/format";
 import type { UsageCapPolicy, UsageCapUtilization } from "@/types/usage-caps";
 
 interface UsageCapRowProps {
@@ -31,7 +31,7 @@ export function UsageCapRow({ row, onEdit, onDelete }: UsageCapRowProps) {
       </td>
       <td className="px-3 py-2"><Badge variant="outline">{t(`caps.windows.${p.window}`)}</Badge></td>
       <td className="px-3 py-2 text-right">{p.max_tokens ? `${formatTokens(tokenUsed)} / ${formatTokens(p.max_tokens)} (${tokenPct}%)` : "-"}</td>
-      <td className="px-3 py-2 text-right">{p.max_cost_micros ? `${formatCost(costUsed / 1_000_000)} / ${formatCost(p.max_cost_micros / 1_000_000)} (${costPct}%)` : "-"}</td>
+      <td className="px-3 py-2 text-right">{p.max_cost_micros ? `${formatApiCost(costUsed / 1_000_000)} / ${formatCost(p.max_cost_micros / 1_000_000)} (${costPct}%)` : "-"}</td>
       <td className="px-3 py-2 text-right"><Badge variant={p.enabled ? "default" : "secondary"}>{p.enabled ? t("caps.enabled") : t("caps.disabled")}</Badge></td>
       <td className="px-3 py-2 text-right">
         <div className="flex justify-end gap-1">

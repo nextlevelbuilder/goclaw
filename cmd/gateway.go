@@ -50,6 +50,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
+	usagepricing "github.com/nextlevelbuilder/goclaw/internal/usage/pricing"
 	"github.com/nextlevelbuilder/goclaw/internal/vault"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 
@@ -74,6 +75,100 @@ func gatewayLogOutput() io.Writer {
 	}
 	fmt.Fprintf(os.Stderr, "logging to %s\n", logFile)
 	return io.MultiWriter(os.Stdout, f)
+}
+
+type traceCostBackfiller interface {
+	BackfillLLMCosts(context.Context) (store.TraceCostBackfillStats, error)
+}
+
+type traceUsageAggregateReconciler interface {
+	ReconcileTraceUsageAggregates(context.Context) (store.TraceUsageAggregateStats, error)
+}
+
+type usageEventCostBackfiller interface {
+	BackfillUsageEventCosts(context.Context) (store.UsageEventCostBackfillStats, error)
+}
+
+type snapshotCostBackfiller interface {
+	BackfillSnapshotCosts(context.Context) (store.SnapshotCostBackfillStats, error)
+}
+
+type snapshotBucketRefresher interface {
+	RefreshBuckets(context.Context, []time.Time) (int, error)
+}
+
+func backfillTraceCostsAfterPricingSync(ctx context.Context, stores *store.Stores, snapshots snapshotBucketRefresher) {
+	if stores == nil {
+		return
+	}
+	backfillCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+
+	if stores.Tracing != nil {
+		backfiller, ok := stores.Tracing.(traceCostBackfiller)
+		if ok {
+			stats, err := backfiller.BackfillLLMCosts(backfillCtx)
+			if err != nil {
+				slog.Warn("usage_pricing.trace_cost_backfill_failed", "error", err)
+			} else {
+				refreshedBuckets := 0
+				if snapshots != nil && len(stats.SnapshotBuckets) > 0 {
+					refreshedBuckets, err = snapshots.RefreshBuckets(backfillCtx, stats.SnapshotBuckets)
+					if err != nil {
+						slog.Warn("usage_pricing.trace_cost_snapshot_refresh_failed", "error", err, "buckets", len(stats.SnapshotBuckets))
+					}
+				}
+				if stats.SpanRowsUpdated > 0 || stats.TraceRowsUpdated > 0 || refreshedBuckets > 0 {
+					slog.Info("usage_pricing.trace_cost_backfill_complete",
+						"spans", stats.SpanRowsUpdated,
+						"traces", stats.TraceRowsUpdated,
+						"snapshot_buckets", refreshedBuckets,
+					)
+				}
+			}
+		}
+	}
+
+	if stores.Tracing != nil {
+		reconciler, ok := stores.Tracing.(traceUsageAggregateReconciler)
+		if ok {
+			stats, err := reconciler.ReconcileTraceUsageAggregates(backfillCtx)
+			if err != nil {
+				slog.Warn("usage_pricing.trace_usage_aggregate_reconcile_failed", "error", err)
+			} else if stats.TraceRowsUpdated > 0 {
+				slog.Info("usage_pricing.trace_usage_aggregate_reconcile_complete", "traces", stats.TraceRowsUpdated)
+			}
+		}
+	}
+
+	if stores.Snapshots != nil {
+		backfiller, ok := stores.Snapshots.(snapshotCostBackfiller)
+		if ok {
+			stats, err := backfiller.BackfillSnapshotCosts(backfillCtx)
+			if err != nil {
+				slog.Warn("usage_pricing.snapshot_cost_backfill_failed", "error", err)
+			} else if stats.SnapshotRowsUpdated > 0 {
+				slog.Info("usage_pricing.snapshot_cost_backfill_complete", "snapshots", stats.SnapshotRowsUpdated)
+			}
+		}
+	}
+
+	if stores.UsageEvents != nil {
+		backfiller, ok := stores.UsageEvents.(usageEventCostBackfiller)
+		if ok {
+			stats, err := backfiller.BackfillUsageEventCosts(backfillCtx)
+			if err != nil {
+				slog.Warn("usage_pricing.usage_event_cost_backfill_failed", "error", err)
+				return
+			}
+			if stats.EventRowsUpdated > 0 || len(stats.RollupBuckets) > 0 {
+				slog.Info("usage_pricing.usage_event_cost_backfill_complete",
+					"events", stats.EventRowsUpdated,
+					"rollup_buckets", len(stats.RollupBuckets),
+				)
+			}
+		}
+	}
 }
 
 func runGateway() {
@@ -525,7 +620,7 @@ func runGateway() {
 	// Register all RPC methods
 	server.SetLogTee(logTee)
 	server.SetRuntimeLogsHandler(httpapi.NewRuntimeLogsHandler(logTee))
-	pairingMethods, heartbeatMethods, chatMethods, cfgPermsMethods := registerAllMethods(server, agentRouter, pgStores.Sessions, pgStores.RunTimeline, pgStores.Cron, pgStores.Pairing, cfg, cfgPath, workspace, dataDir, msgBus, execApprovalMgr, pgStores.Agents, pgStores.Skills, pgStores.ConfigSecrets, pgStores.Teams, contextFileInterceptor, logTee, pgStores.Heartbeats, pgStores.ConfigPermissions, pgStores.SystemConfigs, pgStores.Tenants, pgStores.SkillTenantCfgs, audioMgr, usageCapSvc, providerRegistry)
+	pairingMethods, heartbeatMethods, chatMethods, cfgPermsMethods := registerAllMethods(server, agentRouter, pgStores.Sessions, pgStores.Tracing, pgStores.RunTimeline, pgStores.Cron, pgStores.Pairing, cfg, cfgPath, workspace, dataDir, msgBus, execApprovalMgr, pgStores.Agents, pgStores.Skills, pgStores.ConfigSecrets, pgStores.Teams, contextFileInterceptor, logTee, pgStores.Heartbeats, pgStores.ConfigPermissions, pgStores.SystemConfigs, pgStores.Tenants, pgStores.SkillTenantCfgs, audioMgr, usageCapSvc, providerRegistry)
 
 	// Phase 3: Agent hooks RPC methods (hooks.list/create/update/delete/toggle/test/history).
 	if hs, ok := pgStores.Hooks.(hooks.HookStore); ok && hs != nil {
@@ -706,6 +801,10 @@ func runGateway() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	go backfillTraceCostsAfterPricingSync(ctx, pgStores, snapshotWorker)
+	usagepricing.StartOpenRouterCatalogAutoSync(ctx, pgStores.UsageCaps, usagepricing.DefaultOpenRouterCatalogSyncInterval, func(syncCtx context.Context, _ int) {
+		backfillTraceCostsAfterPricingSync(syncCtx, pgStores, snapshotWorker)
+	})
 	server.StartUpdateChecker(ctx)
 
 	sigCh := make(chan os.Signal, 1)

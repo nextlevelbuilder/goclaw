@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Cable, Sparkles, Terminal, Wrench } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatCost, formatDuration, formatTokens } from "@/lib/format";
+import { formatApiCost, formatDuration, formatTokens } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useUsageFilterContext } from "../context/usage-filter-context";
 import { useUsageEventAnalytics, type UsageEventResourceType } from "../hooks/use-usage-event-analytics";
@@ -66,7 +66,7 @@ export function UsageEventAnalyticsPanel() {
         <Metric label={t("analytics.events.metrics.errorRate")} value={`${errorRate.toFixed(1)}%`} loading={loading} />
         <Metric label={t("analytics.events.metrics.tokens")} value={formatTokens(current.total_tokens)} loading={loading} />
         <Metric label={t("analytics.events.metrics.avgDuration")} value={formatDuration(current.avg_duration_ms)} loading={loading} />
-        <Metric label={t("analytics.events.metrics.cost")} value={formatCost(current.cost_usd)} loading={loading} />
+        <Metric label={t("analytics.events.metrics.cost")} value={formatApiCost(current.cost_usd)} loading={loading} />
       </div>
 
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -116,7 +116,7 @@ export function UsageEventAnalyticsPanel() {
                     <td className="px-3 py-2 text-right text-muted-foreground">{rowErrorRate.toFixed(1)}%</td>
                     <td className="px-3 py-2 text-right text-muted-foreground">{formatDuration(row.avg_duration_ms)}</td>
                     <td className="px-3 py-2 text-right text-muted-foreground">{formatTokens(row.total_tokens)}</td>
-                    <td className="px-3 py-2 text-right">{formatCost(row.cost_usd)}</td>
+                    <td className="px-3 py-2 text-right">{formatApiCost(row.cost_usd)}</td>
                   </tr>
                 );
               })

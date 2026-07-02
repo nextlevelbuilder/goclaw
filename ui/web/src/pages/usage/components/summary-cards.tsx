@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
-import { formatTokens, formatCost } from "@/lib/format";
+import { formatTokens, formatApiCost } from "@/lib/format";
 import type { SummaryData } from "../hooks/use-usage-analytics";
 
 interface SummaryCardsProps {
@@ -82,7 +82,7 @@ export function SummaryCards({ current, previous, loading }: SummaryCardsProps) 
     },
     {
       label: t("analytics.cost"),
-      value: formatCost(current.cost),
+      value: formatApiCost(current.cost),
       trend: trendPercent(current.cost, previous.cost),
       hint: allCostZero ? t("analytics.configurePricing") : undefined,
     },

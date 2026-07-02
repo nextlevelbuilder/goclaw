@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
-import { formatTokens, formatCost, formatDuration } from "@/lib/format";
+import { formatTokens, formatApiCost, formatDuration } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useUsageFilterContext } from "../context/usage-filter-context";
 import type { SnapshotBreakdown } from "../hooks/use-usage-analytics";
@@ -15,7 +15,7 @@ interface TopModelsTableProps {
 
 export function TopModelsTable({ data, loading }: TopModelsTableProps) {
   const { t } = useTranslation("usage");
-  const { filters, toggleFilter } = useUsageFilterContext();
+  const { filters, setFilter } = useUsageFilterContext();
   const [sortKey, setSortKey] = useState<SortKey>("llm_call_count");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
@@ -55,6 +55,12 @@ export function TopModelsTable({ data, loading }: TopModelsTableProps) {
     );
   }
 
+  function parseProviderModelKey(key: string) {
+    const idx = key.indexOf("/");
+    if (idx < 0) return { provider: "", model: key };
+    return { provider: key.slice(0, idx), model: key.slice(idx + 1) };
+  }
+
   if (loading) {
     return (
       <div className="rounded-lg border bg-card p-4">
@@ -90,10 +96,17 @@ export function TopModelsTable({ data, loading }: TopModelsTableProps) {
           </thead>
           <tbody>
             {sorted.map((row) => {
-              const isActive = filters.model === row.key;
-              const [model, provider] = row.key.includes("/")
-                ? row.key.split("/", 2)
-                : [row.key, "—"];
+              const { provider, model } = parseProviderModelKey(row.key);
+              const isActive = filters.model === model && (!provider || filters.provider === provider);
+              const toggleProviderModel = () => {
+                if (isActive) {
+                  setFilter("provider", undefined);
+                  setFilter("model", undefined);
+                  return;
+                }
+                setFilter("provider", provider || undefined);
+                setFilter("model", model);
+              };
               return (
                 <tr
                   key={row.key}
@@ -101,15 +114,15 @@ export function TopModelsTable({ data, loading }: TopModelsTableProps) {
                     "border-b last:border-0 hover:bg-muted/30 cursor-pointer transition-colors",
                     isActive && "bg-primary/5",
                   )}
-                  onClick={() => toggleFilter("model", row.key)}
+                  onClick={toggleProviderModel}
                 >
                   <td className="px-3 py-2 font-medium">{model}</td>
-                  <td className="px-3 py-2 text-muted-foreground">{provider}</td>
+                  <td className="px-3 py-2 text-muted-foreground">{provider || "—"}</td>
                   <td className="px-3 py-2 text-right">{row.llm_call_count.toLocaleString()}</td>
                   <td className="px-3 py-2 text-right text-muted-foreground">{formatTokens(row.input_tokens)}</td>
                   <td className="px-3 py-2 text-right text-muted-foreground">{formatTokens(row.output_tokens)}</td>
                   <td className="px-3 py-2 text-right text-muted-foreground">{formatDuration(row.avg_duration_ms)}</td>
-                  <td className="px-3 py-2 text-right">{formatCost(row.total_cost)}</td>
+                  <td className="px-3 py-2 text-right">{formatApiCost(row.total_cost)}</td>
                 </tr>
               );
             })}

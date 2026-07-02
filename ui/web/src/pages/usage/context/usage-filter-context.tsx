@@ -23,7 +23,7 @@ interface UsageFilterContextValue {
   activeFilterCount: number;
 }
 
-function buildTimeRange(period: Period): { from: string; to: string; granularity: "hour" | "day" } {
+export function buildTimeRange(period: Period): { from: string; to: string; granularity: "hour" | "day" } {
   const now = new Date();
   let from: Date;
   let granularity: "hour" | "day";

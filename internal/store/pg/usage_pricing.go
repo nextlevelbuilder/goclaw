@@ -43,12 +43,13 @@ ON CONFLICT (model_id) DO UPDATE SET
 	web_search_price = EXCLUDED.web_search_price,
 	synced_at = EXCLUDED.synced_at,
 	updated_at = now()`
+	upserted := 0
 	for _, e := range entries {
 		if strings.TrimSpace(e.ModelID) == "" {
 			continue
 		}
 		if err := validateUsagePricingFields(e.Pricing); err != nil {
-			return 0, err
+			continue
 		}
 		if len(e.RawPricing) == 0 {
 			e.RawPricing = json.RawMessage(`{}`)
@@ -65,8 +66,9 @@ ON CONFLICT (model_id) DO UPDATE SET
 		); err != nil {
 			return 0, err
 		}
+		upserted++
 	}
-	return len(entries), nil
+	return upserted, nil
 }
 
 func (s *PGUsageCapStore) ListPricingCatalog(ctx context.Context, q store.UsagePricingQuery) ([]store.UsagePricingCatalogEntry, error) {
@@ -216,6 +218,9 @@ func usagePricingModelCandidates(providerName, providerType, modelID string) []s
 	for _, prefix := range openRouterProviderPrefixes(providerName, providerType) {
 		out = appendUniqueString(out, prefix+"/"+modelID)
 	}
+	for _, prefix := range openRouterModelPrefixes(modelID) {
+		out = appendUniqueString(out, prefix+"/"+modelID)
+	}
 	return out
 }
 
@@ -251,8 +256,28 @@ func openRouterProviderPrefixes(providerName, providerType string) []string {
 		return []string{"cohere"}
 	case store.ProviderPerplexity:
 		return []string{"perplexity"}
-	case store.ProviderDashScope:
+	case store.ProviderDashScope, store.ProviderBailian:
 		return []string{"qwen"}
+	default:
+		return nil
+	}
+}
+
+func openRouterModelPrefixes(modelID string) []string {
+	modelID = strings.ToLower(strings.TrimSpace(modelID))
+	switch {
+	case strings.HasPrefix(modelID, "gpt-"),
+		strings.HasPrefix(modelID, "o1"),
+		strings.HasPrefix(modelID, "o3"),
+		strings.HasPrefix(modelID, "o4"),
+		strings.HasPrefix(modelID, "o5"):
+		return []string{"openai"}
+	case strings.HasPrefix(modelID, "qwen"):
+		return []string{"qwen"}
+	case strings.HasPrefix(modelID, "claude-"):
+		return []string{"anthropic"}
+	case strings.HasPrefix(modelID, "gemini-"):
+		return []string{"google"}
 	default:
 		return nil
 	}

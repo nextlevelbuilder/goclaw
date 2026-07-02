@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useHttp } from "@/hooks/use-ws";
-import type { UsageFilters } from "../context/usage-filter-context";
+import { buildTimeRange, type UsageFilters } from "../context/usage-filter-context";
 
 export type UsageEventResourceType = "tool" | "skill" | "mcp_tool" | "runtime_tool";
 
@@ -50,9 +50,10 @@ export interface UsageEventTimeSeries {
 }
 
 function buildParams(filters: UsageFilters, resourceType: UsageEventResourceType, extra?: Record<string, string>): Record<string, string> {
+  const range = filters.period === "custom" ? filters : buildTimeRange(filters.period);
   const p: Record<string, string> = {
-    from: filters.from,
-    to: filters.to,
+    from: range.from,
+    to: range.to,
     resource_type: resourceType,
   };
   if (filters.agentId) p.agent_id = filters.agentId;
@@ -66,7 +67,13 @@ function filterKey(f: UsageFilters, resourceType: UsageEventResourceType) {
   return [resourceType, f.from, f.to, f.agentId, f.provider, f.model, f.channel, f.granularity] as const;
 }
 
-const QUERY_OPTS = { staleTime: 60_000, refetchOnWindowFocus: false } as const;
+const REFRESH_INTERVAL = 30_000;
+const QUERY_OPTS = {
+  staleTime: REFRESH_INTERVAL,
+  refetchInterval: REFRESH_INTERVAL,
+  refetchIntervalInBackground: false,
+  refetchOnWindowFocus: true,
+} as const;
 
 export function useUsageEventAnalytics(filters: UsageFilters, resourceType: UsageEventResourceType) {
   const http = useHttp();

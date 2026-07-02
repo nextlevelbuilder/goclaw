@@ -40,6 +40,14 @@ export function formatCost(cost: number | null | undefined): string {
   return `$${cost.toFixed(2)}`;
 }
 
+export function formatApiCost(cost: number | null | undefined): string {
+  if (cost == null || cost === 0) return "$0.00";
+  return `$${cost.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 export function formatDuration(ms: number | undefined | null): string {
   if (ms == null || isNaN(ms)) return "—";
   if (ms < 1000) return `${ms}ms`;

@@ -25,6 +25,8 @@ Current bundled core skills:
 | `skill-creator` | Meta-skill for creating new skills |
 | `workspace-organizing` | Workspace layout and file organization guidance |
 | `goclaw` | Gateway CLI/runtime administration and troubleshooting |
+| `lark-pm` | Lark/Feishu project-management workflows through GoClaw MCP tools |
+| `lark-playbook` | Troubleshooting playbook for failed Lark/Feishu MCP operations |
 
 Shared helper modules live in `skills/_shared/` and are copied alongside each skill but not registered as standalone skills.
 
@@ -91,6 +93,10 @@ skills/
 ├── skill-creator/
 │   └── SKILL.md
 ├── workspace-organizing/
+│   └── SKILL.md
+├── lark-pm/
+│   └── SKILL.md
+├── lark-playbook/
 │   └── SKILL.md
 └── goclaw/
     └── SKILL.md

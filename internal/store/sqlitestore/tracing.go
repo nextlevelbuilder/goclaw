@@ -245,6 +245,64 @@ func (s *SQLiteTracingStore) ListChildTraces(ctx context.Context, parentTraceID 
 	return scanTraceRows(rows)
 }
 
+func (s *SQLiteTracingStore) GetSessionCosts(ctx context.Context, sessionKeys []string) (map[string]float64, error) {
+	result := make(map[string]float64, len(sessionKeys))
+	keys := compactSessionKeys(sessionKeys)
+	if len(keys) == 0 {
+		return result, nil
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(keys)), ",")
+	q := `SELECT session_key, COALESCE(SUM(total_cost), 0)
+		FROM traces
+		WHERE session_key IN (` + placeholders + `)
+		  AND parent_trace_id IS NULL`
+	args := make([]any, 0, len(keys)+1)
+	for _, key := range keys {
+		args = append(args, key)
+	}
+	if !store.IsCrossTenant(ctx) {
+		tid := store.TenantIDFromContext(ctx)
+		if tid == uuid.Nil {
+			return result, nil
+		}
+		q += ` AND tenant_id = ?`
+		args = append(args, tid)
+	}
+	q += ` GROUP BY session_key`
+
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var sessionKey string
+		var cost float64
+		if err := rows.Scan(&sessionKey, &cost); err != nil {
+			return nil, err
+		}
+		result[sessionKey] = cost
+	}
+	return result, rows.Err()
+}
+
+func compactSessionKeys(sessionKeys []string) []string {
+	seen := make(map[string]struct{}, len(sessionKeys))
+	keys := make([]string, 0, len(sessionKeys))
+	for _, key := range sessionKeys {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		keys = append(keys, key)
+	}
+	return keys
+}
+
 func (s *SQLiteTracingStore) GetMonthlyAgentCost(ctx context.Context, agentID uuid.UUID, year int, month time.Month) (float64, error) {
 	start := time.Date(year, month, 1, 0, 0, 0, 0, time.UTC)
 	end := start.AddDate(0, 1, 0)

@@ -11,6 +11,7 @@ export interface UsageRecord {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  cost: number;
   timestamp: number;
 }
 

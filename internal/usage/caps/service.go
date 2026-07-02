@@ -163,6 +163,18 @@ func (s *Service) Preflight(ctx context.Context, req Request) (*Reservation, err
 	}, nil
 }
 
+func (s *Service) ResolvePricing(ctx context.Context, tenantID uuid.UUID, providerName, modelID string) (*store.ResolvedUsagePricing, error) {
+	if s == nil || s.store == nil {
+		return nil, sql.ErrNoRows
+	}
+	ctx = scopedRequestContext(ctx, Request{TenantID: tenantID, ProviderName: providerName, ModelID: modelID})
+	providerData, err := s.resolveProvider(ctx, tenantID, providerName)
+	if err != nil {
+		return nil, err
+	}
+	return s.store.ResolvePricing(ctx, tenantID, providerData.ID, providerData.Name, providerData.ProviderType, modelID)
+}
+
 func (r *Reservation) Reconcile(ctx context.Context, resp *providers.ChatResponse, callErr error) {
 	r.reconcile(ctx, resp, callErr, false)
 }

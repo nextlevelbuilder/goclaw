@@ -6,6 +6,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 func floatEquals(a, b float64) bool {
@@ -44,8 +45,8 @@ func TestCalculateCost_CacheTokens(t *testing.T) {
 	pricing := &config.ModelPricing{
 		InputPerMillion:       3.0,
 		OutputPerMillion:      15.0,
-		CacheReadPerMillion:   0.3,   // 10% of input
-		CacheCreatePerMillion: 3.75,  // 25% premium
+		CacheReadPerMillion:   0.3,  // 10% of input
+		CacheCreatePerMillion: 3.75, // 25% premium
 	}
 	usage := &providers.Usage{
 		PromptTokens:        1_000_000,
@@ -192,5 +193,43 @@ func TestLookupPricing_ProviderQualified(t *testing.T) {
 	// Nil map
 	if p := LookupPricing(nil, "x", "y"); p != nil {
 		t.Errorf("expected nil for nil map, got %+v", p)
+	}
+}
+
+func TestCalculateCostFromUsagePricingSeparatesIncludedCacheTokens(t *testing.T) {
+	input := "0.000001"
+	cacheRead := "0.0000001"
+	got, err := CalculateCostFromUsagePricing(store.UsagePricingFields{
+		Input:     &input,
+		CacheRead: &cacheRead,
+	}, &providers.Usage{
+		PromptTokens:                      2006,
+		CacheReadTokens:                   1920,
+		PromptTokensIncludeCachedSegments: true,
+	})
+	if err != nil {
+		t.Fatalf("CalculateCostFromUsagePricing: %v", err)
+	}
+	if !floatEquals(got, 0.000278) {
+		t.Fatalf("cost = %.9f, want 0.000278", got)
+	}
+}
+
+func TestCalculateCostFromUsagePricingIgnoresUnpricedRequestTelemetry(t *testing.T) {
+	input := "0.000001"
+	output := "0.000002"
+	got, err := CalculateCostFromUsagePricing(store.UsagePricingFields{
+		Input:  &input,
+		Output: &output,
+	}, &providers.Usage{
+		PromptTokens:     1000,
+		CompletionTokens: 500,
+		RequestCount:     1,
+	})
+	if err != nil {
+		t.Fatalf("CalculateCostFromUsagePricing: %v", err)
+	}
+	if !floatEquals(got, 0.002) {
+		t.Fatalf("cost = %.9f, want 0.002", got)
 	}
 }

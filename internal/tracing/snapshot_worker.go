@@ -21,6 +21,8 @@ type SnapshotWorker struct {
 	wg          sync.WaitGroup
 }
 
+const recentUsageRefreshWindow = 2 * time.Hour
+
 func NewSnapshotWorker(db *sql.DB, snapshots store.SnapshotStore, usageEvents store.UsageEventStore) *SnapshotWorker {
 	return &SnapshotWorker{
 		db:          db,
@@ -72,7 +74,7 @@ func (w *SnapshotWorker) loop() {
 	}
 }
 
-// catchUp computes snapshots for all missed hours between latest bucket and current hour.
+// catchUp computes missing buckets and refreshes recent closed buckets that may have late writes.
 func (w *SnapshotWorker) catchUp() {
 	ctx := context.Background()
 	w.catchUpSnapshots(ctx)
@@ -89,13 +91,7 @@ func (w *SnapshotWorker) catchUpSnapshots(ctx context.Context) {
 		return
 	}
 
-	var startHour time.Time
-	if latest == nil {
-		// No snapshots yet — only compute the previous hour (backfill handles history)
-		startHour = targetHour
-	} else {
-		startHour = latest.Add(time.Hour)
-	}
+	startHour := usageCatchUpStartHour(latest, targetHour)
 
 	for h := startHour; !h.After(targetHour); h = h.Add(time.Hour) {
 		start := time.Now()
@@ -120,10 +116,7 @@ func (w *SnapshotWorker) catchUpUsageEvents(ctx context.Context) {
 		return
 	}
 
-	startHour := targetHour
-	if latest != nil {
-		startHour = latest.Add(time.Hour)
-	}
+	startHour := usageCatchUpStartHour(latest, targetHour)
 
 	for h := startHour; !h.After(targetHour); h = h.Add(time.Hour) {
 		start := time.Now()
@@ -133,6 +126,21 @@ func (w *SnapshotWorker) catchUpUsageEvents(ctx context.Context) {
 		}
 		slog.Info("usage event rollup computed", "hour", h.Format(time.RFC3339), "duration_ms", time.Since(start).Milliseconds())
 	}
+}
+
+func usageCatchUpStartHour(latest *time.Time, targetHour time.Time) time.Time {
+	targetHour = targetHour.UTC().Truncate(time.Hour)
+	if latest == nil {
+		// Historical backfill handles older data; steady-state startup should refresh the last closed bucket.
+		return targetHour
+	}
+
+	nextMissing := latest.UTC().Truncate(time.Hour).Add(time.Hour)
+	refreshStart := targetHour.Add(-recentUsageRefreshWindow)
+	if nextMissing.Before(refreshStart) {
+		return nextMissing
+	}
+	return refreshStart
 }
 
 // Backfill populates usage_snapshots from historical trace/span data.
@@ -171,6 +179,23 @@ func (w *SnapshotWorker) Backfill(ctx context.Context) (int, error) {
 		return count, err
 	}
 	return count + eventCount, nil
+}
+
+func (w *SnapshotWorker) RefreshBuckets(ctx context.Context, buckets []time.Time) (int, error) {
+	seen := make(map[time.Time]struct{}, len(buckets))
+	count := 0
+	for _, bucket := range buckets {
+		hour := bucket.UTC().Truncate(time.Hour)
+		if _, ok := seen[hour]; ok {
+			continue
+		}
+		seen[hour] = struct{}{}
+		if err := w.aggregateHour(ctx, hour); err != nil {
+			return count, fmt.Errorf("refresh snapshot bucket %s: %w", hour.Format(time.RFC3339), err)
+		}
+		count++
+	}
+	return count, nil
 }
 
 func (w *SnapshotWorker) backfillUsageEvents(ctx context.Context) (int, error) {
@@ -315,7 +340,7 @@ func querySpanAggregates(ctx context.Context, db *sql.DB, from, to time.Time) ([
 			COALESCE(t.channel, '') as channel,
 			COALESCE(s.provider, '') as provider,
 			COALESCE(s.model, '') as model,
-			COUNT(*) as llm_call_count,
+			COUNT(*) FILTER (WHERE s.span_type = 'llm_call') as llm_call_count,
 			COALESCE(SUM(s.input_tokens), 0) as span_input_tokens,
 			COALESCE(SUM(s.output_tokens), 0) as span_output_tokens,
 			COALESCE(SUM(s.total_cost), 0) as span_cost,
@@ -323,7 +348,7 @@ func querySpanAggregates(ctx context.Context, db *sql.DB, from, to time.Time) ([
 			COALESCE(SUM(CAST(s.metadata->>'cache_creation_tokens' AS INTEGER)), 0) as cache_create_tokens,
 			COALESCE(SUM(CAST(s.metadata->>'thinking_tokens' AS INTEGER)), 0) as thinking_tokens
 		FROM traces t
-		JOIN spans s ON s.trace_id = t.id AND s.span_type = 'llm_call'
+		JOIN spans s ON s.trace_id = t.id AND s.span_type IN ('llm_call', 'tool_call')
 		WHERE t.start_time >= $1 AND t.start_time < $2
 		  AND t.parent_trace_id IS NULL
 		GROUP BY t.agent_id, t.channel, s.provider, s.model`, from, to)

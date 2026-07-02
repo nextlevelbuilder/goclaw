@@ -149,6 +149,11 @@ type UsageEventRollup struct {
 	UpdatedAt         time.Time  `json:"updated_at" db:"updated_at"`
 }
 
+type UsageEventCostBackfillStats struct {
+	EventRowsUpdated int64
+	RollupBuckets    []time.Time
+}
+
 type UsageEventStore interface {
 	InsertEvent(ctx context.Context, event *UsageEvent) error
 	InsertEvents(ctx context.Context, events []UsageEvent) error

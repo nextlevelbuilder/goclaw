@@ -10533,7 +10533,9 @@
               "enum": [
                 "agent",
                 "provider",
-                "model"
+                "model",
+                "provider_model",
+                "channel"
               ]
             }
           }

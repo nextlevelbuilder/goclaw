@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Pagination } from "@/components/shared/pagination";
 import { ErrorBoundary } from "@/components/shared/error-boundary";
-import { formatTokens, formatCost } from "@/lib/format";
+import { formatTokens, formatApiCost } from "@/lib/format";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
 import { useUsage } from "./hooks/use-usage";
 import { useUsageAnalytics } from "./hooks/use-usage-analytics";
@@ -30,7 +30,7 @@ function AnalyticsDashboard() {
   const { t } = useTranslation("usage");
   const { filters, setFilter } = useUsageFilterContext();
   const { agents } = useAgents();
-  const { timeseries, providerBreakdown, modelBreakdown, channelBreakdown, summary, loading, error } =
+  const { timeseries, providerBreakdown, modelBreakdown, providerModelBreakdown, channelBreakdown, summary, loading, refreshing, refreshAnalytics, error } =
     useUsageAnalytics(filters);
 
   // Legacy records table state
@@ -42,9 +42,20 @@ function AnalyticsDashboard() {
   const setPageSize = (size: number) => { setPageSizeRaw(size); setPage(1); setGlobalPageSize(size); };
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
+  const loadCurrentRecords = useCallback(() => {
+    return loadRecords({ limit: pageSize, offset: (page - 1) * pageSize, agentId: filters.agentId });
+  }, [loadRecords, page, pageSize, filters.agentId]);
+
   useEffect(() => {
-    loadRecords({ limit: pageSize, offset: (page - 1) * pageSize, agentId: filters.agentId });
-  }, [page, pageSize, filters.agentId]);
+    loadCurrentRecords();
+  }, [loadCurrentRecords]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      void loadCurrentRecords();
+    }, 30_000);
+    return () => window.clearInterval(id);
+  }, [loadCurrentRecords]);
 
   const agentList = agents.map((a) => ({
     id: a.id,
@@ -75,10 +86,15 @@ function AnalyticsDashboard() {
     URL.revokeObjectURL(url);
   }, [timeseries, filters.period]);
 
+  const handleRefresh = useCallback(() => {
+    void Promise.all([refreshAnalytics(), loadCurrentRecords()]);
+  }, [refreshAnalytics, loadCurrentRecords]);
+
   const current = summary?.current ?? EMPTY_SUMMARY;
   const previous = summary?.previous ?? EMPTY_SUMMARY;
 
   const apiError = error instanceof Error ? error.message : error ? String(error) : null;
+  const isRefreshing = recLoading || refreshing;
 
   return (
     <div className="p-4 sm:p-6 space-y-4">
@@ -86,8 +102,8 @@ function AnalyticsDashboard() {
         title={t("analytics.title")}
         description={t("description")}
         actions={
-          <Button variant="outline" size="sm" onClick={() => loadRecords()} disabled={recLoading} className="gap-1">
-            <RefreshCw className={`h-3.5 w-3.5${recLoading ? " animate-spin" : ""}`} />
+          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing} className="gap-1">
+            <RefreshCw className={`h-3.5 w-3.5${isRefreshing ? " animate-spin" : ""}`} />
             {t("common:refresh", "Refresh")}
           </Button>
         }
@@ -142,7 +158,7 @@ function AnalyticsDashboard() {
       </ErrorBoundary>
 
       <ErrorBoundary>
-        <TopModelsTable data={modelBreakdown} loading={loading} />
+        <TopModelsTable data={providerModelBreakdown} loading={loading} />
       </ErrorBoundary>
 
       {/* Legacy records table */}
@@ -178,7 +194,7 @@ function AnalyticsDashboard() {
                       <td className="px-4 py-3 text-muted-foreground">—</td>
                       <td className="px-4 py-3 text-right text-muted-foreground">{formatTokens(r.inputTokens)}</td>
                       <td className="px-4 py-3 text-right text-muted-foreground">{formatTokens(r.outputTokens)}</td>
-                      <td className="px-4 py-3 text-right">{formatCost(0)}</td>
+                      <td className="px-4 py-3 text-right">{formatApiCost(r.cost)}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -56,16 +56,17 @@ Streaming fallback is conservative: backup models are tried only if the stream f
 
 ## Usage Cap Pricing Enforcement
 
-Standard edition can enforce AI budget caps before billable provider dispatch. API-key providers use OpenRouter `/models` pricing as the catalog source, with optional tenant/provider/model overrides in the dashboard.
+Standard edition can enforce AI budget caps before billable provider dispatch. API-key providers use OpenRouter `/models` pricing as the catalog source, with optional tenant/provider/model overrides in the dashboard. The gateway syncs the OpenRouter catalog automatically at startup and then once per day; the dashboard sync action remains available for manual refresh.
 
 Excluded provider classes:
-- `chatgpt_oauth`, `claude_cli`, and `bailian` are treated as subscription/non-API pricing in round one.
+- `chatgpt_oauth`, `claude_cli`, and `bailian` are skipped for budget-cap enforcement in round one.
+- Tracing observability can still map Bailian/DashScope Qwen model IDs to the OpenRouter catalog for market-price dashboard reporting.
 - local/no-key subprocess providers such as `acp` and `ollama` are skipped unless a future feature explicitly enables pricing for them.
 
 Runtime flow:
 1. Resolve the stored provider by name and skip non-billable provider classes.
 2. Load matching policies for tenant, agent, provider, provider type, and model.
-3. Resolve custom pricing override first, then OpenRouter catalog pricing when a matching policy has a cost ceiling. Native provider model IDs are mapped to OpenRouter prefixes for common providers such as OpenAI, Anthropic, and Gemini.
+3. Resolve custom pricing override first, then OpenRouter catalog pricing when a matching policy has a cost ceiling. Native provider model IDs are mapped to OpenRouter prefixes for common providers such as OpenAI, Anthropic, and Gemini. Tracing cost calculation uses the same override/catalog resolver, with legacy `telemetry.model_pricing` kept only as a fallback.
 4. Reserve estimated tokens and cost atomically before each dispatch attempt.
 5. Reconcile reserved counters after the provider returns usage or after a failed call.
 

@@ -188,9 +188,9 @@ func (l *Loop) emitLLMSpanEnd(ctx context.Context, spanID uuid.UUID, start time.
 		if resp.Usage != nil {
 			updates["input_tokens"] = resp.Usage.PromptTokens
 			updates["output_tokens"] = resp.Usage.CompletionTokens
-			hasMeta := resp.Usage.CacheCreationTokens > 0 || resp.Usage.CacheReadTokens > 0 || resp.Usage.ThinkingTokens > 0
+			hasMeta := resp.Usage.CacheCreationTokens > 0 || resp.Usage.CacheReadTokens > 0 || resp.Usage.ThinkingTokens > 0 || resp.Usage.PromptTokensIncludeCachedSegments
 			if hasMeta {
-				meta := map[string]int{}
+				meta := map[string]any{}
 				if resp.Usage.CacheCreationTokens > 0 {
 					meta["cache_creation_tokens"] = resp.Usage.CacheCreationTokens
 				}
@@ -200,17 +200,16 @@ func (l *Loop) emitLLMSpanEnd(ctx context.Context, spanID uuid.UUID, start time.
 				if resp.Usage.ThinkingTokens > 0 {
 					meta["thinking_tokens"] = resp.Usage.ThinkingTokens
 				}
+				if resp.Usage.PromptTokensIncludeCachedSegments {
+					meta["prompt_tokens_include_cached_segments"] = true
+				}
 				if b, err := json.Marshal(meta); err == nil {
 					spanMetadata = b
 				}
 			}
 		}
-		// Calculate cost if pricing config is available.
-		if pricing := tracing.LookupPricing(l.modelPricing, spanOpts.provider, spanOpts.model); pricing != nil {
-			cost := tracing.CalculateCost(pricing, resp.Usage)
-			if cost > 0 {
-				updates["total_cost"] = cost
-			}
+		if cost := l.calculateLLMCost(ctx, spanOpts.provider, spanOpts.model, resp.Usage); cost > 0 {
+			updates["total_cost"] = cost
 		}
 		updates["finish_reason"] = resp.FinishReason
 		limit := previewLimitForVerbose(collector.Verbose())
@@ -325,23 +324,29 @@ func (l *Loop) emitToolSpanEnd(ctx context.Context, spanID uuid.UUID, start time
 		updates["output_tokens"] = result.Usage.CompletionTokens
 		updates["provider"] = result.Provider
 		updates["model"] = result.Model
-		if result.Usage.CacheCreationTokens > 0 || result.Usage.CacheReadTokens > 0 {
-			meta := map[string]int{
+		hasMeta := result.Usage.CacheCreationTokens > 0 ||
+			result.Usage.CacheReadTokens > 0 ||
+			result.Usage.ThinkingTokens > 0 ||
+			result.Usage.PromptTokensIncludeCachedSegments
+		if hasMeta {
+			meta := map[string]any{
 				"cache_creation_tokens": result.Usage.CacheCreationTokens,
 				"cache_read_tokens":     result.Usage.CacheReadTokens,
+			}
+			if result.Usage.ThinkingTokens > 0 {
+				meta["thinking_tokens"] = result.Usage.ThinkingTokens
+			}
+			if result.Usage.PromptTokensIncludeCachedSegments {
+				meta["prompt_tokens_include_cached_segments"] = true
 			}
 			if b, err := json.Marshal(meta); err == nil {
 				updates["metadata"] = b
 			}
 		}
-		// Calculate cost for tool's internal LLM calls.
 		provider := result.Provider
 		model := result.Model
-		if pricing := tracing.LookupPricing(l.modelPricing, provider, model); pricing != nil {
-			cost := tracing.CalculateCost(pricing, result.Usage)
-			if cost > 0 {
-				updates["total_cost"] = cost
-			}
+		if cost := l.calculateLLMCost(ctx, provider, model, result.Usage); cost > 0 {
+			updates["total_cost"] = cost
 		}
 	}
 
@@ -422,7 +427,7 @@ func (l *Loop) emitAgentSpanEnd(ctx context.Context, agentSpanID uuid.UUID, star
 		limit := previewLimitForVerbose(collector.Verbose())
 		updates["output_preview"] = tracing.TruncateMid(result.Content, limit)
 		// Note: token counts are NOT set on agent spans to avoid double-counting
-		// with child llm_call spans. Trace aggregation sums only llm_call spans.
+		// with child spans that directly report model usage.
 	}
 
 	collector.EmitSpanUpdate(agentSpanID, traceID, updates)

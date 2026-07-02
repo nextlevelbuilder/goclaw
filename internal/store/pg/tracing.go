@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -286,6 +287,60 @@ func (s *PGTracingStore) ListChildTraces(ctx context.Context, parentTraceID uuid
 	return traceRowsToData(rows), nil
 }
 
+func (s *PGTracingStore) GetSessionCosts(ctx context.Context, sessionKeys []string) (map[string]float64, error) {
+	result := make(map[string]float64, len(sessionKeys))
+	keys := compactSessionKeys(sessionKeys)
+	if len(keys) == 0 {
+		return result, nil
+	}
+	q := `SELECT session_key, COALESCE(SUM(total_cost), 0)
+		FROM traces
+		WHERE session_key = ANY($1)
+		  AND parent_trace_id IS NULL`
+	args := []any{pq.Array(keys)}
+	if !store.IsCrossTenant(ctx) {
+		tid := store.TenantIDFromContext(ctx)
+		if tid == uuid.Nil {
+			return result, nil
+		}
+		q += ` AND tenant_id = $2`
+		args = append(args, tid)
+	}
+	q += ` GROUP BY session_key`
+
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var sessionKey string
+		var cost float64
+		if err := rows.Scan(&sessionKey, &cost); err != nil {
+			return nil, err
+		}
+		result[sessionKey] = cost
+	}
+	return result, rows.Err()
+}
+
+func compactSessionKeys(sessionKeys []string) []string {
+	seen := make(map[string]struct{}, len(sessionKeys))
+	keys := make([]string, 0, len(sessionKeys))
+	for _, key := range sessionKeys {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		keys = append(keys, key)
+	}
+	return keys
+}
+
 func (s *PGTracingStore) CreateSpan(ctx context.Context, span *store.SpanData) error {
 	if span.ID == uuid.Nil {
 		span.ID = store.GenNewID()
@@ -397,15 +452,15 @@ func (s *PGTracingStore) BatchUpdateTraceAggregates(ctx context.Context, traceID
 			span_count = (SELECT COUNT(*) FROM spans WHERE trace_id = $1),
 			llm_call_count = (SELECT COUNT(*) FROM spans WHERE trace_id = $1 AND span_type = 'llm_call'),
 			tool_call_count = (SELECT COUNT(*) FROM spans WHERE trace_id = $1 AND span_type = 'tool_call'),
-			total_input_tokens = COALESCE((SELECT SUM(input_tokens) FROM spans WHERE trace_id = $1 AND span_type = 'llm_call' AND input_tokens IS NOT NULL), 0),
-			total_output_tokens = COALESCE((SELECT SUM(output_tokens) FROM spans WHERE trace_id = $1 AND span_type = 'llm_call' AND output_tokens IS NOT NULL), 0),
+			total_input_tokens = COALESCE((SELECT SUM(input_tokens) FROM spans WHERE trace_id = $1 AND span_type IN ('llm_call', 'tool_call') AND input_tokens IS NOT NULL), 0),
+			total_output_tokens = COALESCE((SELECT SUM(output_tokens) FROM spans WHERE trace_id = $1 AND span_type IN ('llm_call', 'tool_call') AND output_tokens IS NOT NULL), 0),
 			total_cost = COALESCE((SELECT SUM(total_cost) FROM spans WHERE trace_id = $1 AND total_cost IS NOT NULL), 0),
 			metadata = (
 				SELECT jsonb_build_object(
 					'total_cache_read_tokens', COALESCE(SUM((metadata->>'cache_read_tokens')::int), 0),
 					'total_cache_creation_tokens', COALESCE(SUM((metadata->>'cache_creation_tokens')::int), 0)
 				)
-				FROM spans WHERE trace_id = $1 AND span_type = 'llm_call' AND metadata IS NOT NULL
+				FROM spans WHERE trace_id = $1 AND span_type IN ('llm_call', 'tool_call') AND metadata IS NOT NULL
 			)
 		WHERE id = $1`, traceID)
 	return err

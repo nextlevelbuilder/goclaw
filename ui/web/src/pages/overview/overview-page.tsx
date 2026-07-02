@@ -13,7 +13,7 @@ import { useProviders } from "@/pages/providers/hooks/use-providers";
 import { useTraces } from "@/pages/traces/hooks/use-traces";
 import { Methods, Events } from "@/api/protocol";
 import { ROUTES } from "@/lib/constants";
-import { formatTokens, formatCost } from "@/lib/format";
+import { formatTokens, formatApiCost } from "@/lib/format";
 
 import type {
   HealthPayload,
@@ -220,7 +220,7 @@ export function OverviewPage() {
             <StatCard
               icon={DollarSign}
               label={t("statCards.costToday", "Cost Today")}
-              value={formatCost(quota?.costToday)}
+              value={formatApiCost(quota?.costToday)}
               sparkline={sparklines?.costSparkline}
               trend={sparklines?.trends.cost}
             />
