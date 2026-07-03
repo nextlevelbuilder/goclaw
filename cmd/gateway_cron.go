@@ -95,7 +95,7 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 		// multi-run dialog.
 		// Save() persists the empty session to DB so stale data won't reload
 		// after restart (#294).
-		if job.Stateless {
+		if job.Stateless && sessionMgr != nil {
 			sessionMgr.Reset(cronCtx, sessionKey)
 			sessionMgr.Save(cronCtx, sessionKey)
 		}
