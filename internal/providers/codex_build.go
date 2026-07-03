@@ -140,11 +140,18 @@ func (p *CodexProvider) buildRequestBody(req ChatRequest, stream bool) map[strin
 		body["reasoning"] = map[string]any{"effort": level}
 	}
 
-	if cacheKey, ok := req.Options[OptPromptCacheKey]; ok {
-		body["prompt_cache_key"] = cacheKey
-	}
-	if retention, ok := req.Options[OptPromptCacheRetention]; ok {
-		body["prompt_cache_retention"] = retention
+	// Prompt caching params (prompt_cache_key, prompt_cache_retention) are accepted
+	// only by native OpenAI endpoints. The ChatGPT subscription OAuth backend
+	// (chatgpt.com/backend-api) rejects them with HTTP 400, so gate on the endpoint —
+	// the same native-only policy CacheMiddleware already applies. Server-side prefix
+	// caching still works on the OAuth backend without these params.
+	if isOpenAINativeEndpoint(p.apiBase) {
+		if cacheKey, ok := req.Options[OptPromptCacheKey]; ok {
+			body["prompt_cache_key"] = cacheKey
+		}
+		if retention, ok := req.Options[OptPromptCacheRetention]; ok {
+			body["prompt_cache_retention"] = retention
+		}
 	}
 
 	return body

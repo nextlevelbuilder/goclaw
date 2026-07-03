@@ -1131,21 +1131,33 @@ func TestCodexBuildRequestBody_NilFunction_HandlesGracefully(t *testing.T) {
 }
 
 func TestCodexBuildRequestBodyPromptCacheControls(t *testing.T) {
-	p := NewCodexProvider("test", &staticTokenSource{token: "tok"}, "", "gpt-4o")
-
-	body := p.buildRequestBody(ChatRequest{
+	req := ChatRequest{
 		Messages: []Message{{Role: "user", Content: "Hello"}},
 		Options: map[string]any{
 			OptPromptCacheKey:       "agent/session/provider",
 			OptPromptCacheRetention: "24h",
 		},
-	}, true)
+	}
 
+	// Native OpenAI endpoint accepts prompt cache params.
+	native := NewCodexProvider("test", &staticTokenSource{token: "tok"}, "https://api.openai.com/v1", "gpt-4o")
+	body := native.buildRequestBody(req, true)
 	if got := body["prompt_cache_key"]; got != "agent/session/provider" {
-		t.Fatalf("prompt_cache_key = %v, want agent/session/provider", got)
+		t.Fatalf("native prompt_cache_key = %v, want agent/session/provider", got)
 	}
 	if got := body["prompt_cache_retention"]; got != "24h" {
-		t.Fatalf("prompt_cache_retention = %v, want 24h", got)
+		t.Fatalf("native prompt_cache_retention = %v, want 24h", got)
+	}
+
+	// ChatGPT subscription OAuth backend (default apiBase) rejects these params
+	// with HTTP 400, so they must be omitted.
+	oauth := NewCodexProvider("test", &staticTokenSource{token: "tok"}, "", "gpt-4o")
+	oauthBody := oauth.buildRequestBody(req, true)
+	if _, ok := oauthBody["prompt_cache_key"]; ok {
+		t.Fatal("prompt_cache_key must not be sent to the ChatGPT OAuth backend")
+	}
+	if _, ok := oauthBody["prompt_cache_retention"]; ok {
+		t.Fatal("prompt_cache_retention must not be sent to the ChatGPT OAuth backend")
 	}
 }
 

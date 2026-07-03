@@ -388,18 +388,20 @@ func TestCodexAdapter_FromResponse_PromptTokensDetailsAlias(t *testing.T) {
 }
 
 func TestCodexAdapter_ToRequestPromptCacheControls(t *testing.T) {
-	a, _ := NewCodexAdapter(ProviderConfig{})
-	body, _, err := a.ToRequest(ChatRequest{
+	req := ChatRequest{
 		Messages: []Message{{Role: "user", Content: "hi"}},
 		Options: map[string]any{
 			OptPromptCacheKey:       "tenant/agent/session",
 			OptPromptCacheRetention: "1h",
 		},
-	})
+	}
+
+	// Native OpenAI endpoint accepts prompt cache params.
+	nativeAdapter, _ := NewCodexAdapter(ProviderConfig{BaseURL: "https://api.openai.com/v1"})
+	body, _, err := nativeAdapter.ToRequest(req)
 	if err != nil {
 		t.Fatalf("ToRequest: %v", err)
 	}
-
 	var payload map[string]any
 	if err := json.Unmarshal(body, &payload); err != nil {
 		t.Fatalf("decode body: %v", err)
@@ -409,6 +411,23 @@ func TestCodexAdapter_ToRequestPromptCacheControls(t *testing.T) {
 	}
 	if got := payload["prompt_cache_retention"]; got != "1h" {
 		t.Fatalf("prompt_cache_retention = %v, want 1h", got)
+	}
+
+	// Default ChatGPT OAuth backend rejects these params with HTTP 400 — must omit.
+	oauthAdapter, _ := NewCodexAdapter(ProviderConfig{})
+	oauthBody, _, err := oauthAdapter.ToRequest(req)
+	if err != nil {
+		t.Fatalf("ToRequest (oauth): %v", err)
+	}
+	var oauthPayload map[string]any
+	if err := json.Unmarshal(oauthBody, &oauthPayload); err != nil {
+		t.Fatalf("decode oauth body: %v", err)
+	}
+	if _, ok := oauthPayload["prompt_cache_key"]; ok {
+		t.Fatal("prompt_cache_key must not be sent to the ChatGPT OAuth backend")
+	}
+	if _, ok := oauthPayload["prompt_cache_retention"]; ok {
+		t.Fatal("prompt_cache_retention must not be sent to the ChatGPT OAuth backend")
 	}
 }
 
