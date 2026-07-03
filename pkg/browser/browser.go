@@ -163,10 +163,15 @@ func (m *Manager) Start(ctx context.Context) error {
 		m.logger.Info("Chrome launched", "cdp", controlURL, "headless", m.headless, "pid", l.PID())
 	}
 
-	connectCtx, connectCancel := context.WithTimeout(ctx, 15*time.Second)
-	defer connectCancel()
-
-	b := rod.New().Context(connectCtx).ControlURL(controlURL)
+	// Connect using a long-lived background context, the same way reconnectLocked
+	// does. Binding m.browser to a timeout/request context here would cancel it
+	// the moment Start returns (via defer), leaving the shared browser handle with
+	// a dead context. Later operations that reuse it — notably m.browser.Incognito()
+	// in tenantBrowserLocked — then fail immediately with "context canceled", which
+	// is why a successful "start" is followed by a failing "open"/tab creation.
+	// resolveRemoteCDP already bounds remote reachability, and the local launcher
+	// path is bounded by launchCtx above.
+	b := rod.New().ControlURL(controlURL)
 	if err := b.Connect(); err != nil {
 		// If local launch succeeded but connect failed, kill the orphan process
 		if m.launcher != nil {
