@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
+	"time"
 )
 
 type CodexRoutingDefaults struct {
@@ -131,6 +131,42 @@ func (p *CodexProvider) middlewareConfig(req ChatRequest) MiddlewareConfig {
 }
 
 func (p *CodexProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk func(StreamChunk)) (*ChatResponse, error) {
+	cfg := p.retryConfig
+	if cfg.Attempts <= 0 {
+		cfg.Attempts = 1
+	}
+
+	var lastErr error
+	for attempt := 1; attempt <= cfg.Attempts; attempt++ {
+		result, emitted, err := p.chatStreamOnce(ctx, req, onChunk)
+		if err == nil {
+			return result, nil
+		}
+		lastErr = err
+
+		// If any user-visible chunk already escaped, do not replay the run: retrying
+		// could duplicate streamed text/tool calls/images. Pre-output Codex backend
+		// failures (e.g. response.failed: "processing your request…retry") are safe
+		// to retry here and are exactly the flaky 429-ish case this guard targets.
+		if emitted || !IsRetryableError(err) || attempt == cfg.Attempts {
+			return result, err
+		}
+
+		delay := computeDelay(cfg, attempt, err)
+		if hook := retryHookFromContext(ctx); hook != nil {
+			hook(attempt, cfg.Attempts, err)
+		}
+		select {
+		case <-ctx.Done():
+			return result, ctx.Err()
+		case <-time.After(delay):
+		}
+	}
+
+	return nil, lastErr
+}
+
+func (p *CodexProvider) chatStreamOnce(ctx context.Context, req ChatRequest, onChunk func(StreamChunk)) (*ChatResponse, bool, error) {
 	// stripThinking: drop reasoning summaries from ChatResponse.Thinking and
 	// onChunk callbacks. Usage.ThinkingTokens is still populated from the
 	// final response.usage payload (Phase 1 billing accuracy).
@@ -138,11 +174,9 @@ func (p *CodexProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk
 	body := p.buildRequestBody(req, true)
 	body = ApplyMiddlewares(body, p.middlewares, p.middlewareConfig(req))
 
-	respBody, err := RetryDo(ctx, p.retryConfig, func() (io.ReadCloser, error) {
-		return p.doRequest(ctx, body)
-	})
+	respBody, err := p.doRequest(ctx, body)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	// Wrap respBody so ctx cancellation closes the socket, unblocking bufio.Scanner.
 	cb := NewCtxBody(ctx, respBody)
@@ -152,6 +186,16 @@ func (p *CodexProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk
 	toolCalls := make(map[string]*codexToolCallAcc) // keyed by item_id
 	streamState := newCodexMessageStreamState()
 	imageState := newCodexImageState()
+	emitted := false
+	wrappedOnChunk := onChunk
+	if onChunk != nil {
+		wrappedOnChunk = func(chunk StreamChunk) {
+			if chunk.Content != "" || chunk.Thinking != "" || len(chunk.Images) > 0 {
+				emitted = true
+			}
+			onChunk(chunk)
+		}
+	}
 
 	sse := NewSSEScanner(cb)
 	for sse.Next() {
@@ -162,13 +206,13 @@ func (p *CodexProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk
 			continue
 		}
 
-		if err := p.processSSEEvent(&event, result, toolCalls, streamState, imageState, onChunk, stripThinking); err != nil {
-			return nil, err
+		if err := p.processSSEEvent(&event, result, toolCalls, streamState, imageState, wrappedOnChunk, stripThinking); err != nil {
+			return result, emitted || codexResultHasVisibleOutput(result), err
 		}
 	}
 
 	if err := sse.Err(); err != nil {
-		return result, fmt.Errorf("%s: stream read error: %w", p.name, err)
+		return result, emitted || codexResultHasVisibleOutput(result), fmt.Errorf("%s: stream read error: %w", p.name, err)
 	}
 
 	// Assemble generated images from image accumulator into ChatResponse.
@@ -202,7 +246,14 @@ func (p *CodexProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk
 		onChunk(StreamChunk{Done: true})
 	}
 
-	return result, nil
+	return result, emitted || codexResultHasVisibleOutput(result), nil
+}
+
+func codexResultHasVisibleOutput(result *ChatResponse) bool {
+	if result == nil {
+		return false
+	}
+	return result.Content != "" || result.Thinking != "" || len(result.ToolCalls) > 0 || len(result.Images) > 0
 }
 
 // processSSEEvent handles a single SSE event during streaming.
