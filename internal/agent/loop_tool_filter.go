@@ -13,6 +13,27 @@ import (
 // object — no "function" wrapper, no parameters.
 var imageGenToolDef = providers.ToolDefinition{Type: "image_generation"}
 
+func (l *Loop) toolVisibleForChannel(name, channelType string, telegramManagerPermissions []string) bool {
+	if name == "telegram_manager" {
+		return channelType == "telegram" && len(telegramManagerPermissions) > 0
+	}
+	if l.tools == nil {
+		return true
+	}
+	tool, ok := l.tools.Get(name)
+	if !ok {
+		return true
+	}
+	ca, ok := tool.(tools.ChannelAware)
+	if !ok {
+		return true
+	}
+	if channelType == "" {
+		return false
+	}
+	return slices.Contains(ca.RequiredChannelTypes(), channelType)
+}
+
 // buildFilteredTools resolves the per-iteration tool definitions based on policy,
 // disabled tools, bootstrap mode, skill visibility, channel type, and iteration budget.
 // Per-user MCP tools (require_user_credentials servers) are passed in via userTools —
@@ -119,23 +140,20 @@ func (l *Loop) buildFilteredTools(req *RunRequest, hadBootstrap bool, iteration,
 		toolDefs = filtered
 	}
 
-	// Hide channel-specific tools when channel type doesn't match.
-	if req.ChannelType != "" {
-		filtered := toolDefs[:0:0]
-		for _, td := range toolDefs {
-			if td.Function != nil {
-				if tool, ok := l.tools.Get(td.Function.Name); ok {
-					if ca, ok := tool.(tools.ChannelAware); ok {
-						if !slices.Contains(ca.RequiredChannelTypes(), req.ChannelType) {
-							continue
-						}
-					}
-				}
+	// Hide channel-specific tools when channel type doesn't match. Channel-aware
+	// tools are hidden when there is no channel context; telegram_manager also
+	// requires explicit channel permissions before it is visible to the LLM.
+	filtered := toolDefs[:0:0]
+	for _, td := range toolDefs {
+		if td.Function != nil && !l.toolVisibleForChannel(td.Function.Name, req.ChannelType, req.TelegramManagerPermissions) {
+			if allowedTools != nil {
+				delete(allowedTools, td.Function.Name)
 			}
-			filtered = append(filtered, td)
+			continue
 		}
-		toolDefs = filtered
+		filtered = append(filtered, td)
 	}
+	toolDefs = filtered
 
 	// Final iteration: strip all tools to force a text-only response.
 	// Without this the model may keep requesting tools and exit with "...".

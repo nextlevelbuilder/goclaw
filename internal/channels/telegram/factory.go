@@ -41,6 +41,7 @@ type telegramInstanceConfig struct {
 	ForceIPv4         bool                                   `json:"force_ipv4,omitempty"`
 	AllowFrom         []string                               `json:"allow_from,omitempty"`
 	Groups            map[string]*config.TelegramGroupConfig `json:"groups,omitempty"`
+	TelegramManager   *config.TelegramManagerConfig          `json:"telegram_manager,omitempty"`
 }
 
 // Factory creates a Telegram channel from DB instance data (no extra stores).
@@ -120,6 +121,7 @@ func buildChannel(name string, creds json.RawMessage, cfg json.RawMessage,
 		BlockReply:        ic.BlockReply,
 		ChatBehavior:      ic.ChatBehavior,
 		ForceIPv4:         ic.ForceIPv4,
+		TelegramManager:   ic.TelegramManager,
 		Groups:            ic.Groups,
 	}
 

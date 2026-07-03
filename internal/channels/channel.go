@@ -701,6 +701,41 @@ type GroupMemberProvider interface {
 	ListGroupMembers(ctx context.Context, chatID string) ([]GroupMember, error)
 }
 
+// TelegramManagerRequest describes a whitelisted Telegram Bot API management
+// action requested by the agent-facing telegram_manager tool.
+type TelegramManagerRequest struct {
+	Action              string         `json:"action"`
+	ChatID              string         `json:"chat_id,omitempty"`
+	MessageThreadID     int            `json:"message_thread_id,omitempty"`
+	MessageID           int            `json:"message_id,omitempty"`
+	UserID              int64          `json:"user_id,omitempty"`
+	Name                string         `json:"name,omitempty"`
+	Text                string         `json:"text,omitempty"`
+	InviteLink          string         `json:"invite_link,omitempty"`
+	IconColor           int            `json:"icon_color,omitempty"`
+	IconCustomEmojiID   string         `json:"icon_custom_emoji_id,omitempty"`
+	ExpireDate          int64          `json:"expire_date,omitempty"`
+	MemberLimit         int            `json:"member_limit,omitempty"`
+	DisableNotification bool           `json:"disable_notification,omitempty"`
+	CreatesJoinRequest  bool           `json:"creates_join_request,omitempty"`
+	OnlyIfBanned        bool           `json:"only_if_banned,omitempty"`
+	RevokeMessages      bool           `json:"revoke_messages,omitempty"`
+	Params              map[string]any `json:"params,omitempty"`
+}
+
+// TelegramManagerResult is a normalized response returned by Telegram-capable
+// channels after executing a whitelisted management action.
+type TelegramManagerResult struct {
+	Action string         `json:"action"`
+	Result map[string]any `json:"result,omitempty"`
+}
+
+// TelegramManagerProvider is optionally implemented by channels that expose
+// Telegram Bot API management actions through the channel manager.
+type TelegramManagerProvider interface {
+	ManageTelegram(ctx context.Context, req TelegramManagerRequest) (TelegramManagerResult, error)
+}
+
 // PendingCompactable is optionally implemented by channels that have a PendingHistory
 // supporting LLM-based compaction. InstanceLoader uses this to wire compaction config
 // after channel creation.

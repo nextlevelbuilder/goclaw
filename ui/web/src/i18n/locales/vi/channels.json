@@ -109,6 +109,8 @@
     "behaviorDesc": "Cấu hình hành vi phản hồi",
     "accessControl": "Kiểm soát truy cập",
     "accessControlDesc": "Giới hạn truy cập người dùng",
+    "telegramManagement": "Quản trị Telegram",
+    "telegramManagementDesc": "Bật tool ẩn và chọn quyền thao tác Telegram cho agent chạy qua channel này",
     "reviewDiagnostics": "Xem chẩn đoán mới nhất của channel này trước khi thay đổi cài đặt.",
     "whatHappened": "Điều gì đã xảy ra",
     "recommendedAction": "Hành động được khuyến nghị",
@@ -309,6 +311,16 @@
     "media_max_mb": { "label": "Kích thước media tối đa (MB)" },
     "link_preview": { "label": "Xem trước liên kết" },
     "allow_from": { "label": "Người dùng được phép" },
+    "telegram_manager": {
+      "enabled": {
+        "label": "Bật công cụ quản trị Telegram",
+        "help": "Chỉ áp dụng cho agent chạy qua channel Telegram này. Tool này là tool ẩn, không hiện trong hồ sơ công cụ chung."
+      },
+      "allowed_actions": {
+        "label": "Quyền quản trị Telegram",
+        "help": "Chọn các thao tác Telegram mà agent được phép dùng. Nếu chưa chọn quyền nào thì tool không được cấp cho agent."
+      }
+    },
     "domain": { "label": "Tên miền" },
     "connection_mode": { "label": "Chế độ kết nối", "help": "WebSocket không cần IP công khai — chỉ kết nối ra ngoài" },
     "webhook_port": { "label": "Cổng webhook", "help": "0 = chia sẻ cổng gateway chính (khuyến nghị)" },
@@ -433,6 +445,16 @@
       "streaming_only": "Chỉ khi streaming",
       "always_bubbles": "Luôn thành bubble",
       "off": "Tắt"
+    },
+    "telegram_manager": {
+      "allowed_actions": {
+        "topic": "Quản lý chủ đề",
+        "message": "Quản lý tin nhắn",
+        "member": "Quản lý thành viên",
+        "invite": "Quản lý link mời",
+        "chat": "Thông tin/cài đặt nhóm",
+        "join_request": "Duyệt yêu cầu tham gia"
+      }
     },
     "chat_behavior": {
       "enabled": {

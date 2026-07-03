@@ -72,39 +72,40 @@ func (rs *RunState) BuildResult() *RunResult {
 // RunInput is the pipeline's view of a run request.
 // Converted from agent.RunRequest by the adapter in Phase 8.
 type RunInput struct {
-	SessionKey         string
-	Message            string
-	Media              []bus.MediaFile
-	ForwardMedia       []bus.MediaFile
-	Channel            string
-	ChannelType        string
-	BitrixPortalDomain string // bitrix24-only: portal domain for entity URL construction
-	ChatTitle          string
-	ChatID             string
-	PeerKind           string
-	RunID              string
-	UserID             string
-	SenderID           string
-	SenderName         string
-	Stream             bool
-	ExtraSystemPrompt  string
-	SkillFilter        []string
-	HistoryLimit       int
-	ToolAllow          []string
-	LightContext       bool
-	RunKind            string
-	DelegationID       string
-	TeamID             string
-	TeamTaskID         string
-	ParentAgentID      string
-	MaxIterations      int
-	ModelOverride      string
-	HideInput          bool
-	ContentSuffix      string
-	LeaderAgentID      string
-	WorkspaceChannel   string
-	WorkspaceChatID    string
-	TeamWorkspace      string
+	SessionKey                 string
+	Message                    string
+	Media                      []bus.MediaFile
+	ForwardMedia               []bus.MediaFile
+	Channel                    string
+	ChannelType                string
+	BitrixPortalDomain         string // bitrix24-only: portal domain for entity URL construction
+	ChatTitle                  string
+	ChatID                     string
+	PeerKind                   string
+	RunID                      string
+	UserID                     string
+	SenderID                   string
+	SenderName                 string
+	Stream                     bool
+	ExtraSystemPrompt          string
+	SkillFilter                []string
+	HistoryLimit               int
+	ToolAllow                  []string
+	TelegramManagerPermissions []string
+	LightContext               bool
+	RunKind                    string
+	DelegationID               string
+	TeamID                     string
+	TeamTaskID                 string
+	ParentAgentID              string
+	MaxIterations              int
+	ModelOverride              string
+	HideInput                  bool
+	ContentSuffix              string
+	LeaderAgentID              string
+	WorkspaceChannel           string
+	WorkspaceChatID            string
+	TeamWorkspace              string
 }
 
 // MediaResult represents a media file produced during tool execution.

@@ -322,6 +322,22 @@ func (m *Manager) ListGroupMembers(ctx context.Context, channelName, chatID stri
 	return gmp.ListGroupMembers(ctx, chatID)
 }
 
+// ManageTelegram delegates a whitelisted Telegram management action to a
+// Telegram-capable channel instance.
+func (m *Manager) ManageTelegram(ctx context.Context, channelName string, req TelegramManagerRequest) (TelegramManagerResult, error) {
+	m.mu.RLock()
+	ch, ok := m.channels[channelName]
+	m.mu.RUnlock()
+	if !ok {
+		return TelegramManagerResult{}, fmt.Errorf("channel %q not found", channelName)
+	}
+	mp, ok := ch.(TelegramManagerProvider)
+	if !ok {
+		return TelegramManagerResult{}, fmt.Errorf("channel %q does not support Telegram management", channelName)
+	}
+	return mp.ManageTelegram(ctx, req)
+}
+
 // UnregisterChannel removes a channel from the manager.
 func (m *Manager) UnregisterChannel(name string) {
 	m.mu.Lock()

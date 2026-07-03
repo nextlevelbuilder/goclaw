@@ -67,7 +67,11 @@ func wireExtraTools(
 	toolsReg.Register(tools.NewSendFileTool(workspace, agentCfg.RestrictToWorkspace))
 	// Group members tool (list members in group chats)
 	toolsReg.Register(tools.NewListGroupMembersTool())
-	slog.Info("session + message + send_file tools registered")
+	// Telegram manager tool (admin/forum/message management; gated by tool policy)
+	// create_forum_topic is kept as a backward-compatible wrapper for topic.create.
+	toolsReg.Register(tools.NewCreateForumTopicTool(nil))
+	toolsReg.Register(tools.NewTelegramManagerTool())
+	slog.Info("session + message + send_file + telegram_manager tools registered")
 
 	// Register legacy tool aliases (backward-compat names from policy.go).
 	for alias, canonical := range tools.LegacyToolAliases() {

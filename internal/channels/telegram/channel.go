@@ -561,6 +561,219 @@ func (c *Channel) CreateForumTopic(ctx context.Context, chatID int64, name strin
 	return topic.MessageThreadID, topic.Name, nil
 }
 
+// ManageTelegram executes whitelisted Telegram Bot API management actions.
+func (c *Channel) ManageTelegram(ctx context.Context, req channels.TelegramManagerRequest) (channels.TelegramManagerResult, error) {
+	result := func(values map[string]any) channels.TelegramManagerResult {
+		return channels.TelegramManagerResult{Action: req.Action, Result: values}
+	}
+	ok := func() channels.TelegramManagerResult {
+		return result(map[string]any{"ok": true})
+	}
+
+	switch req.Action {
+	case "topic.get_icon_stickers":
+		stickers, err := c.bot.GetForumTopicIconStickers(ctx)
+		if err != nil {
+			return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+		}
+		return result(map[string]any{"stickers": stickers, "count": len(stickers)}), nil
+	}
+
+	chatID, err := parseRawChatID(req.ChatID)
+	if err != nil {
+		return channels.TelegramManagerResult{}, fmt.Errorf("invalid chat_id %q: %w", req.ChatID, err)
+	}
+	tgChatID := telego.ChatID{ID: chatID}
+
+	switch req.Action {
+	case "chat.get":
+		chat, err := c.bot.GetChat(ctx, &telego.GetChatParams{ChatID: tgChatID})
+		if err != nil {
+			return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+		}
+		return result(map[string]any{"chat": chat}), nil
+	case "chat.get_administrators":
+		admins, err := c.bot.GetChatAdministrators(ctx, &telego.GetChatAdministratorsParams{ChatID: tgChatID})
+		if err != nil {
+			return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+		}
+		return result(map[string]any{"administrators": admins, "count": len(admins)}), nil
+	case "chat.get_member_count":
+		count, err := c.bot.GetChatMemberCount(ctx, &telego.GetChatMemberCountParams{ChatID: tgChatID})
+		if err != nil {
+			return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+		}
+		return result(map[string]any{"count": count}), nil
+	case "chat.get_member":
+		member, err := c.bot.GetChatMember(ctx, &telego.GetChatMemberParams{ChatID: tgChatID, UserID: req.UserID})
+		if err != nil {
+			return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+		}
+		return result(map[string]any{"member": member}), nil
+	case "chat.set_title":
+		if err := c.bot.SetChatTitle(ctx, &telego.SetChatTitleParams{ChatID: tgChatID, Title: req.Text}); err != nil {
+			return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+		}
+		return ok(), nil
+	case "chat.set_description":
+		if err := c.bot.SetChatDescription(ctx, &telego.SetChatDescriptionParams{ChatID: tgChatID, Description: req.Text}); err != nil {
+			return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+		}
+		return ok(), nil
+	case "chat.leave":
+		if err := c.bot.LeaveChat(ctx, &telego.LeaveChatParams{ChatID: tgChatID}); err != nil {
+			return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+		}
+		return ok(), nil
+	case "member.ban":
+		if err := c.bot.BanChatMember(ctx, &telego.BanChatMemberParams{ChatID: tgChatID, UserID: req.UserID, RevokeMessages: req.RevokeMessages}); err != nil {
+			return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+		}
+		return ok(), nil
+	case "member.unban":
+		if err := c.bot.UnbanChatMember(ctx, &telego.UnbanChatMemberParams{ChatID: tgChatID, UserID: req.UserID, OnlyIfBanned: req.OnlyIfBanned}); err != nil {
+			return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+		}
+		return ok(), nil
+	case "member.set_custom_title":
+		if err := c.bot.SetChatAdministratorCustomTitle(ctx, &telego.SetChatAdministratorCustomTitleParams{ChatID: tgChatID, UserID: req.UserID, CustomTitle: req.Text}); err != nil {
+			return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+		}
+		return ok(), nil
+	case "join_request.approve":
+		if err := c.bot.ApproveChatJoinRequest(ctx, &telego.ApproveChatJoinRequestParams{ChatID: tgChatID, UserID: req.UserID}); err != nil {
+			return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+		}
+		return ok(), nil
+	case "join_request.decline":
+		if err := c.bot.DeclineChatJoinRequest(ctx, &telego.DeclineChatJoinRequestParams{ChatID: tgChatID, UserID: req.UserID}); err != nil {
+			return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+		}
+		return ok(), nil
+	case "invite.export":
+		inviteLink, err := c.bot.ExportChatInviteLink(ctx, &telego.ExportChatInviteLinkParams{ChatID: tgChatID})
+		if err != nil {
+			return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+		}
+		return result(map[string]any{"invite_link": inviteLink}), nil
+	case "invite.create":
+		inviteLink, err := c.bot.CreateChatInviteLink(ctx, &telego.CreateChatInviteLinkParams{ChatID: tgChatID, Name: req.Name, ExpireDate: req.ExpireDate, MemberLimit: req.MemberLimit, CreatesJoinRequest: req.CreatesJoinRequest})
+		if err != nil {
+			return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+		}
+		return result(map[string]any{"invite_link": inviteLink}), nil
+	case "invite.revoke":
+		inviteLink, err := c.bot.RevokeChatInviteLink(ctx, &telego.RevokeChatInviteLinkParams{ChatID: tgChatID, InviteLink: req.InviteLink})
+		if err != nil {
+			return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+		}
+		return result(map[string]any{"invite_link": inviteLink}), nil
+	case "message.delete":
+		if err := c.bot.DeleteMessage(ctx, &telego.DeleteMessageParams{ChatID: tgChatID, MessageID: req.MessageID}); err != nil {
+			return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+		}
+		return ok(), nil
+	case "message.pin":
+		if err := c.bot.PinChatMessage(ctx, &telego.PinChatMessageParams{ChatID: tgChatID, MessageID: req.MessageID, DisableNotification: req.DisableNotification}); err != nil {
+			return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+		}
+		return ok(), nil
+	case "message.unpin":
+		if err := c.bot.UnpinChatMessage(ctx, &telego.UnpinChatMessageParams{ChatID: tgChatID, MessageID: req.MessageID}); err != nil {
+			return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+		}
+		return ok(), nil
+	case "message.unpin_all":
+		if err := c.bot.UnpinAllChatMessages(ctx, &telego.UnpinAllChatMessagesParams{ChatID: tgChatID}); err != nil {
+			return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+		}
+		return ok(), nil
+	case "topic.create":
+		return c.manageCreateForumTopic(ctx, req, tgChatID)
+	case "topic.edit":
+		iconEmojiID := req.IconCustomEmojiID
+		params := &telego.EditForumTopicParams{ChatID: tgChatID, MessageThreadID: req.MessageThreadID, Name: req.Name}
+		if iconEmojiID != "" {
+			params.IconCustomEmojiID = &iconEmojiID
+		}
+		if err := c.bot.EditForumTopic(ctx, params); err != nil {
+			return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+		}
+		return ok(), nil
+	case "topic.close":
+		if err := c.bot.CloseForumTopic(ctx, &telego.CloseForumTopicParams{ChatID: tgChatID, MessageThreadID: req.MessageThreadID}); err != nil {
+			return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+		}
+		return ok(), nil
+	case "topic.reopen":
+		if err := c.bot.ReopenForumTopic(ctx, &telego.ReopenForumTopicParams{ChatID: tgChatID, MessageThreadID: req.MessageThreadID}); err != nil {
+			return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+		}
+		return ok(), nil
+	case "topic.delete":
+		if err := c.bot.DeleteForumTopic(ctx, &telego.DeleteForumTopicParams{ChatID: tgChatID, MessageThreadID: req.MessageThreadID}); err != nil {
+			return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+		}
+		return ok(), nil
+	case "topic.unpin_all_messages":
+		if err := c.bot.UnpinAllForumTopicMessages(ctx, &telego.UnpinAllForumTopicMessagesParams{ChatID: tgChatID, MessageThreadID: req.MessageThreadID}); err != nil {
+			return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+		}
+		return ok(), nil
+	case "topic.general.edit":
+		if err := c.bot.EditGeneralForumTopic(ctx, &telego.EditGeneralForumTopicParams{ChatID: tgChatID, Name: req.Name}); err != nil {
+			return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+		}
+		return ok(), nil
+	case "topic.general.close":
+		if err := c.bot.CloseGeneralForumTopic(ctx, &telego.CloseGeneralForumTopicParams{ChatID: tgChatID}); err != nil {
+			return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+		}
+		return ok(), nil
+	case "topic.general.reopen":
+		if err := c.bot.ReopenGeneralForumTopic(ctx, &telego.ReopenGeneralForumTopicParams{ChatID: tgChatID}); err != nil {
+			return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+		}
+		return ok(), nil
+	case "topic.general.hide":
+		if err := c.bot.HideGeneralForumTopic(ctx, &telego.HideGeneralForumTopicParams{ChatID: tgChatID}); err != nil {
+			return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+		}
+		return ok(), nil
+	case "topic.general.unhide":
+		if err := c.bot.UnhideGeneralForumTopic(ctx, &telego.UnhideGeneralForumTopicParams{ChatID: tgChatID}); err != nil {
+			return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+		}
+		return ok(), nil
+	case "topic.general.unpin_all_messages":
+		if err := c.bot.UnpinAllGeneralForumTopicMessages(ctx, &telego.UnpinAllGeneralForumTopicMessagesParams{ChatID: tgChatID}); err != nil {
+			return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+		}
+		return ok(), nil
+	default:
+		return channels.TelegramManagerResult{}, fmt.Errorf("unsupported Telegram management action %q", req.Action)
+	}
+}
+
+func (c *Channel) manageCreateForumTopic(ctx context.Context, req channels.TelegramManagerRequest, chatID telego.ChatID) (channels.TelegramManagerResult, error) {
+	params := &telego.CreateForumTopicParams{ChatID: chatID, Name: req.Name}
+	if req.IconColor > 0 {
+		params.IconColor = req.IconColor
+	}
+	if req.IconCustomEmojiID != "" {
+		params.IconCustomEmojiID = req.IconCustomEmojiID
+	}
+	topic, err := c.bot.CreateForumTopic(ctx, params)
+	if err != nil {
+		return channels.TelegramManagerResult{}, fmt.Errorf("telegram API: %w", err)
+	}
+	return channels.TelegramManagerResult{Action: req.Action, Result: map[string]any{
+		"message_thread_id": topic.MessageThreadID,
+		"name":              topic.Name,
+		"chat_id":           req.ChatID,
+	}}, nil
+}
+
 // telegramGeneralTopicID is the fixed topic ID for the "General" topic in forum supergroups.
 // TS ref: TELEGRAM_GENERAL_TOPIC_ID in src/telegram/bot/helpers.ts:12.
 const telegramGeneralTopicID = 1

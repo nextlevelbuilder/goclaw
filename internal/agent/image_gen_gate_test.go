@@ -9,6 +9,7 @@ package agent
 // Additionally: final-iteration stripping takes priority — all tools removed.
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
@@ -152,10 +153,10 @@ func TestImageGenGate_FilteringNoPanic(t *testing.T) {
 		provider:             prov,
 		allowImageGeneration: true,
 		tools:                exec,
-		orchMode:             "spawn",                          // Triggers orchModeDenyTools
+		orchMode:             "spawn",                            // Triggers orchModeDenyTools
 		disabledTools:        map[string]bool{"read_file": true}, // Triggers disabled tools filter
-		agentType:            "open",                           // Triggers bootstrap filter
-		skillEvolve:          false,                            // Triggers skill evolve filter
+		agentType:            "open",                             // Triggers bootstrap filter
+		skillEvolve:          false,                              // Triggers skill evolve filter
 	}
 
 	req := &RunRequest{
@@ -174,3 +175,63 @@ func TestImageGenGate_FilteringNoPanic(t *testing.T) {
 	_ = defs
 }
 
+func TestChannelAwareToolsHiddenWithoutChannelType(t *testing.T) {
+	reg := tools.NewRegistry()
+	reg.Register(tools.NewTelegramManagerTool())
+	l := &Loop{
+		provider:             &stubProvider{},
+		allowImageGeneration: false,
+		tools:                reg,
+	}
+
+	defs, _, _ := l.buildFilteredTools(&RunRequest{}, false, 1, 10, nil, nil)
+
+	if hasFunctionTool(defs, "telegram_manager") {
+		t.Fatal("telegram_manager must be hidden when no channel type is present")
+	}
+}
+
+func TestTelegramManagerHiddenUntilChannelPermissionEnabled(t *testing.T) {
+	reg := tools.NewRegistry()
+	reg.Register(tools.NewTelegramManagerTool())
+	l := &Loop{
+		provider:             &stubProvider{},
+		allowImageGeneration: false,
+		tools:                reg,
+	}
+
+	defs, _, _ := l.buildFilteredTools(&RunRequest{ChannelType: "telegram"}, false, 1, 10, nil, nil)
+	if hasFunctionTool(defs, "telegram_manager") {
+		t.Fatal("telegram_manager must be hidden for Telegram runs until the channel grants permissions")
+	}
+
+	defs, _, _ = l.buildFilteredTools(&RunRequest{
+		ChannelType:                "telegram",
+		TelegramManagerPermissions: []string{"topic"},
+	}, false, 1, 10, nil, nil)
+	if !hasFunctionTool(defs, "telegram_manager") {
+		t.Fatal("telegram_manager must be visible for Telegram runs with channel permissions")
+	}
+}
+
+func TestTelegramManagerHiddenFromPromptUntilChannelPermissionEnabled(t *testing.T) {
+	reg := tools.NewRegistry()
+	reg.Register(tools.NewTelegramManagerTool())
+	l := &Loop{tools: reg}
+
+	if slices.Contains(l.filteredToolNamesForChannel("telegram", nil), "telegram_manager") {
+		t.Fatal("telegram_manager must be hidden from prompt until channel permissions are granted")
+	}
+	if !slices.Contains(l.filteredToolNamesForChannel("telegram", []string{"topic"}), "telegram_manager") {
+		t.Fatal("telegram_manager must appear in prompt for Telegram runs with channel permissions")
+	}
+}
+
+func hasFunctionTool(defs []providers.ToolDefinition, name string) bool {
+	for _, d := range defs {
+		if d.Function != nil && d.Function.Name == name {
+			return true
+		}
+	}
+	return false
+}

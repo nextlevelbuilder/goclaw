@@ -109,6 +109,8 @@
     "behaviorDesc": "响应行为配置",
     "accessControl": "访问控制",
     "accessControlDesc": "用户访问限制",
+    "telegramManagement": "Telegram 管理",
+    "telegramManagementDesc": "为使用此频道的 Agent 启用隐藏工具并选择 Telegram 操作权限",
     "reviewDiagnostics": "在更改设置前，请先查看此 Channel 的最新诊断。",
     "whatHappened": "发生了什么",
     "recommendedAction": "建议操作",
@@ -309,6 +311,16 @@
     "media_max_mb": { "label": "最大媒体大小 (MB)" },
     "link_preview": { "label": "链接预览" },
     "allow_from": { "label": "允许的用户" },
+    "telegram_manager": {
+      "enabled": {
+        "label": "启用 Telegram 管理工具",
+        "help": "仅适用于通过此 Telegram 频道运行的 Agent。此工具为隐藏工具，不会出现在共享工具配置中。"
+      },
+      "allowed_actions": {
+        "label": "Telegram 管理权限",
+        "help": "选择 Agent 可执行的 Telegram 操作。未选择任何权限时，不会向 Agent 授予此工具。"
+      }
+    },
     "domain": { "label": "域名" },
     "connection_mode": { "label": "连接模式", "help": "WebSocket 无需公网 IP — 仅需出站连接" },
     "webhook_port": { "label": "Webhook 端口", "help": "0 = 共享主网关端口（推荐）" },
@@ -433,6 +445,16 @@
       "streaming_only": "仅流式传输时",
       "always_bubbles": "始终作为气泡",
       "off": "关闭"
+    },
+    "telegram_manager": {
+      "allowed_actions": {
+        "topic": "管理话题",
+        "message": "管理消息",
+        "member": "管理成员",
+        "invite": "管理邀请链接",
+        "chat": "群组信息/设置",
+        "join_request": "审批入群请求"
+      }
     },
     "chat_behavior": {
       "enabled": {

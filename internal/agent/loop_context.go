@@ -91,6 +91,9 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 	if req.ChannelType != "" {
 		ctx = tools.WithToolChannelType(ctx, req.ChannelType)
 	}
+	if len(req.TelegramManagerPermissions) > 0 {
+		ctx = tools.WithTelegramManagerPermissions(ctx, req.TelegramManagerPermissions)
+	}
 	// Inject per-agent overrides from DB so tools honor per-agent settings.
 	if l.restrictToWs != nil {
 		ctx = tools.WithRestrictToWorkspace(ctx, *l.restrictToWs)

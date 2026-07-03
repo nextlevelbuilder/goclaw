@@ -53,6 +53,24 @@ describe("telegram configSchema", () => {
       expect(field.help?.trim(), `${field.key} should have tooltip help`).toBeTruthy();
     }
   });
+
+  it("exposes Telegram manager permissions as fixed multi-select actions", () => {
+    const enabled = telegramConfig.find((field) => field.key === "telegram_manager.enabled");
+    const allowedActions = telegramConfig.find((field) => field.key === "telegram_manager.allowed_actions");
+
+    expect(enabled).toBeDefined();
+    expect(enabled!.type).toBe("boolean");
+    expect(allowedActions).toBeDefined();
+    expect(allowedActions!.type).toBe("multi-select");
+    expect(allowedActions!.options!.map((option) => option.value)).toEqual([
+      "topic",
+      "message",
+      "member",
+      "invite",
+      "chat",
+      "join_request",
+    ]);
+  });
 });
 
 describe("pancake configSchema", () => {

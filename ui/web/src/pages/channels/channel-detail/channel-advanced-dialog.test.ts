@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildAdvancedConfigUpdate, deriveAdvancedInitialValues } from "./channel-advanced-config";
+import { getAdvancedFields } from "./channel-advanced-dialog";
 
 describe("channel advanced config payload", () => {
   it("removes a stale allow_from entry when the allowed users picker is cleared", () => {
@@ -60,5 +61,14 @@ describe("channel advanced config payload", () => {
         },
       },
     });
+  });
+
+  it("shows Telegram manager settings in the advanced edit dialog", () => {
+    const groups = getAdvancedFields("telegram");
+
+    expect(groups.telegramManagement.map((field) => field.key)).toEqual([
+      "telegram_manager.enabled",
+      "telegram_manager.allowed_actions",
+    ]);
   });
 });

@@ -139,7 +139,7 @@ func (l *Loop) makeBuildMessages() func(ctx context.Context, input *pipeline.Run
 			input.SessionKey, input.Channel, input.ChannelType,
 			input.BitrixPortalDomain,
 			input.ChatTitle, input.ChatID, input.PeerKind, input.UserID, input.SenderName,
-			input.HistoryLimit, input.SkillFilter, input.LightContext)
+			input.HistoryLimit, input.SkillFilter, input.LightContext, input.TelegramManagerPermissions)
 		return msgs, nil
 	}
 }

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 )
 
 // ForumTopicCreator can create forum topics in a Telegram supergroup.
@@ -19,12 +21,15 @@ type ForumTopicCreatorProvider func() ForumTopicCreator
 // CreateForumTopicTool lets agents create forum topics in Telegram supergroups.
 type CreateForumTopicTool struct {
 	provider ForumTopicCreatorProvider
+	manager  TelegramManagerFunc
 }
 
 // NewCreateForumTopicTool creates a new create_forum_topic tool.
 func NewCreateForumTopicTool(provider ForumTopicCreatorProvider) *CreateForumTopicTool {
 	return &CreateForumTopicTool{provider: provider}
 }
+
+func (t *CreateForumTopicTool) SetTelegramManager(m TelegramManagerFunc) { t.manager = m }
 
 func (t *CreateForumTopicTool) Name() string { return "create_forum_topic" }
 
@@ -61,6 +66,12 @@ func (t *CreateForumTopicTool) Parameters() map[string]any {
 }
 
 func (t *CreateForumTopicTool) Execute(ctx context.Context, args map[string]any) *Result {
+	if t.manager != nil {
+		return t.executeViaTelegramManager(ctx, args)
+	}
+	if t.provider == nil {
+		return &Result{ForLLM: "Error: no Telegram channel available", IsError: true}
+	}
 	creator := t.provider()
 	if creator == nil {
 		return &Result{ForLLM: "Error: no Telegram channel available", IsError: true}
@@ -100,4 +111,43 @@ func (t *CreateForumTopicTool) Execute(ctx context.Context, args map[string]any)
 
 	jsonBytes, _ := json.Marshal(result)
 	return &Result{ForLLM: string(jsonBytes)}
+}
+
+func (t *CreateForumTopicTool) executeViaTelegramManager(ctx context.Context, args map[string]any) *Result {
+	channel := argString(args, "channel")
+	if channel == "" {
+		channel = ToolChannelFromCtx(ctx)
+	}
+	if channel == "" {
+		return ErrorResult("channel is required (no current channel in context)")
+	}
+
+	chatID := argString(args, "chat_id")
+	if chatID == "" {
+		chatID = ToolChatIDFromCtx(ctx)
+	}
+	if chatID == "" {
+		return ErrorResult("chat_id is required (no current chat in context)")
+	}
+
+	name := argString(args, "name")
+	if name == "" {
+		return ErrorResult("name is required")
+	}
+	if len(name) > 128 {
+		return ErrorResult("topic name must be 1-128 characters")
+	}
+
+	result, err := t.manager(ctx, channel, channels.TelegramManagerRequest{
+		Action:            "topic.create",
+		ChatID:            chatID,
+		Name:              name,
+		IconColor:         argInt(args, "icon_color"),
+		IconCustomEmojiID: argString(args, "icon_custom_emoji_id"),
+	})
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("Error creating forum topic: %v", err))
+	}
+	jsonBytes, _ := json.Marshal(result.Result)
+	return NewResult(string(jsonBytes))
 }

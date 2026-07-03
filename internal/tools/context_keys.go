@@ -21,18 +21,19 @@ import (
 type toolContextKey string
 
 const (
-	ctxChannel     toolContextKey = "tool_channel"
-	ctxChannelType toolContextKey = "tool_channel_type"
-	ctxChatID      toolContextKey = "tool_chat_id"
-	ctxPeerKind    toolContextKey = "tool_peer_kind"
-	ctxLocalKey    toolContextKey = "tool_local_key" // composite key with topic/thread suffix for routing
-	ctxSandboxKey  toolContextKey = "tool_sandbox_key"
-	ctxAsyncCB     toolContextKey = "tool_async_cb"
-	ctxWorkspace   toolContextKey = "tool_workspace"
-	ctxAgentKey    toolContextKey = "tool_agent_key"
-	ctxAgentPolicy toolContextKey = "tool_agent_policy" // per-agent tool policy for MCP bridge enforcement
-	ctxSessionKey  toolContextKey = "tool_session_key"  // origin session key for announce routing
-	ctxRunKind     toolContextKey = "tool_run_kind"     // "notification", "announce", "delegation"
+	ctxChannel                    toolContextKey = "tool_channel"
+	ctxChannelType                toolContextKey = "tool_channel_type"
+	ctxChatID                     toolContextKey = "tool_chat_id"
+	ctxPeerKind                   toolContextKey = "tool_peer_kind"
+	ctxLocalKey                   toolContextKey = "tool_local_key" // composite key with topic/thread suffix for routing
+	ctxSandboxKey                 toolContextKey = "tool_sandbox_key"
+	ctxAsyncCB                    toolContextKey = "tool_async_cb"
+	ctxWorkspace                  toolContextKey = "tool_workspace"
+	ctxAgentKey                   toolContextKey = "tool_agent_key"
+	ctxAgentPolicy                toolContextKey = "tool_agent_policy" // per-agent tool policy for MCP bridge enforcement
+	ctxSessionKey                 toolContextKey = "tool_session_key"  // origin session key for announce routing
+	ctxRunKind                    toolContextKey = "tool_run_kind"     // "notification", "announce", "delegation"
+	ctxTelegramManagerPermissions toolContextKey = "telegram_manager_permissions"
 )
 
 // ctxRateLimitOverride carries a per-agent tool rate limit (calls/hour) that
@@ -73,6 +74,15 @@ func ToolChannelTypeFromCtx(ctx context.Context) string {
 		return rc.ChannelType
 	}
 	return ""
+}
+
+func WithTelegramManagerPermissions(ctx context.Context, permissions []string) context.Context {
+	return context.WithValue(ctx, ctxTelegramManagerPermissions, permissions)
+}
+
+func TelegramManagerPermissionsFromCtx(ctx context.Context) []string {
+	v, _ := ctx.Value(ctxTelegramManagerPermissions).([]string)
+	return v
 }
 
 func WithToolChatID(ctx context.Context, chatID string) context.Context {

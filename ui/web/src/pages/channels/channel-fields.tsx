@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { MultiUserPicker } from "@/components/shared/multi-user-picker";
@@ -275,6 +276,43 @@ function FieldRenderer({
           {inlineHelp && <p className="text-xs text-muted-foreground">{inlineHelp}</p>}
         </div>
       );
+
+    case "multi-select": {
+      const selected = new Set(Array.isArray(value) ? value.map(String) : []);
+      const toggleOption = (optionValue: string) => {
+        const next = new Set(selected);
+        if (next.has(optionValue)) {
+          next.delete(optionValue);
+        } else {
+          next.add(optionValue);
+        }
+        onChange(next.size > 0 ? Array.from(next) : undefined);
+      };
+
+      return (
+        <div className="grid gap-1.5">
+          <FieldLabel text={`${label}${labelSuffix}`} tip={tooltipHelp} />
+          <div className="flex flex-wrap gap-2">
+            {field.options?.map((opt) => {
+              const active = selected.has(opt.value);
+              return (
+                <Button
+                  key={opt.value}
+                  type="button"
+                  variant={active ? "default" : "outline"}
+                  size="sm"
+                  aria-pressed={active}
+                  onClick={() => toggleOption(opt.value)}
+                >
+                  {t(`fieldOptions.${field.key}.${opt.value}`, { defaultValue: opt.label })}
+                </Button>
+              );
+            })}
+          </div>
+          {inlineHelp && <p className="text-xs text-muted-foreground">{inlineHelp}</p>}
+        </div>
+      );
+    }
 
     case "tristate": {
       // Tri-state: undefined = inherit, value = override.

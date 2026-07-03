@@ -19,19 +19,20 @@ type MediaFile struct {
 
 // InboundMessage represents a message received from a channel (Telegram, Discord, etc.)
 type InboundMessage struct {
-	Channel      string            `json:"channel"`
-	SenderID     string            `json:"sender_id"`
-	ChatID       string            `json:"chat_id"`
-	Content      string            `json:"content"`
-	Media        []MediaFile       `json:"media,omitempty"`
-	SessionKey   string            `json:"session_key"`             // deprecated: gateway builds canonical key
-	PeerKind     string            `json:"peer_kind,omitempty"`     // "direct" or "group" (used for session key)
-	TenantID     uuid.UUID         `json:"tenant_id,omitempty"`     // tenant scope from channel instance
-	AgentID      string            `json:"agent_id,omitempty"`      // target agent (for multi-agent routing)
-	UserID       string            `json:"user_id,omitempty"`       // external user ID for per-user scoping (memory, bootstrap)
-	HistoryLimit int               `json:"history_limit,omitempty"` // max turns to keep in context (0=unlimited, from channel config)
-	ToolAllow    []string          `json:"tool_allow,omitempty"`    // per-group tool allow list (nil = no restriction)
-	Metadata     map[string]string `json:"metadata,omitempty"`
+	Channel                    string            `json:"channel"`
+	SenderID                   string            `json:"sender_id"`
+	ChatID                     string            `json:"chat_id"`
+	Content                    string            `json:"content"`
+	Media                      []MediaFile       `json:"media,omitempty"`
+	SessionKey                 string            `json:"session_key"`                            // deprecated: gateway builds canonical key
+	PeerKind                   string            `json:"peer_kind,omitempty"`                    // "direct" or "group" (used for session key)
+	TenantID                   uuid.UUID         `json:"tenant_id,omitempty"`                    // tenant scope from channel instance
+	AgentID                    string            `json:"agent_id,omitempty"`                     // target agent (for multi-agent routing)
+	UserID                     string            `json:"user_id,omitempty"`                      // external user ID for per-user scoping (memory, bootstrap)
+	HistoryLimit               int               `json:"history_limit,omitempty"`                // max turns to keep in context (0=unlimited, from channel config)
+	ToolAllow                  []string          `json:"tool_allow,omitempty"`                   // per-group tool allow list (nil = no restriction)
+	TelegramManagerPermissions []string          `json:"telegram_manager_permissions,omitempty"` // hidden Telegram management permission groups for this inbound run
+	Metadata                   map[string]string `json:"metadata,omitempty"`
 }
 
 // OutboundMessage represents a message to be sent to a channel.

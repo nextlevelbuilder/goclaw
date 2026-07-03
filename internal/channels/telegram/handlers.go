@@ -697,25 +697,72 @@ func (c *Channel) processResolvedMessage(ctx context.Context, rctx resolvedMessa
 		}
 	}
 
+	telegramManagerPermissions := c.telegramManagerPermissions()
 	c.Bus().PublishInbound(bus.InboundMessage{
-		Channel:      c.Name(),
-		SenderID:     rctx.senderID,
-		ChatID:       rctx.chatIDStr,
-		Content:      finalContent,
-		Media:        mediaFiles,
-		PeerKind:     peerKind,
-		UserID:       rctx.userID,
-		AgentID:      targetAgentID,
-		HistoryLimit: c.HistoryLimit(),
-		ToolAllow:    rctx.topicCfg.tools,
-		TenantID:     c.TenantID(),
-		Metadata:     metadata,
+		Channel:                    c.Name(),
+		SenderID:                   rctx.senderID,
+		ChatID:                     rctx.chatIDStr,
+		Content:                    finalContent,
+		Media:                      mediaFiles,
+		PeerKind:                   peerKind,
+		UserID:                     rctx.userID,
+		AgentID:                    targetAgentID,
+		HistoryLimit:               c.HistoryLimit(),
+		ToolAllow:                  telegramToolAllowWithManager(rctx.topicCfg.tools, telegramManagerPermissions),
+		TelegramManagerPermissions: telegramManagerPermissions,
+		TenantID:                   c.TenantID(),
+		Metadata:                   metadata,
 	})
 
 	// Clear pending history after sending to agent.
 	if rctx.isGroup {
 		c.GroupHistory().Clear(rctx.localKey)
 	}
+}
+
+func (c *Channel) telegramManagerPermissions() []string {
+	if c.config.TelegramManager == nil || !c.config.TelegramManager.Enabled {
+		return nil
+	}
+	return normalizeTelegramManagerPermissions(c.config.TelegramManager.AllowedActions)
+}
+
+func normalizeTelegramManagerPermissions(values []string) []string {
+	allowed := map[string]struct{}{
+		"chat":         {},
+		"member":       {},
+		"join_request": {},
+		"invite":       {},
+		"message":      {},
+		"topic":        {},
+	}
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		key := strings.ToLower(strings.TrimSpace(value))
+		if _, ok := allowed[key]; !ok {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, key)
+	}
+	return out
+}
+
+func telegramToolAllowWithManager(toolAllow []string, permissions []string) []string {
+	if len(toolAllow) == 0 || len(permissions) == 0 {
+		return toolAllow
+	}
+	for _, name := range toolAllow {
+		if name == "telegram_manager" {
+			return toolAllow
+		}
+	}
+	merged := append([]string{}, toolAllow...)
+	return append(merged, "telegram_manager")
 }
 
 func (c *Channel) transcribeMediaAudio(ctx context.Context, m MediaInfo) (string, error) {

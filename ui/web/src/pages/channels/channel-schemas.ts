@@ -5,7 +5,7 @@ import { reasoningDeliveryOptions } from "./reasoning-delivery-config";
 export interface FieldDef {
   key: string;
   label: string;
-  type: "text" | "password" | "number" | "boolean" | "select" | "tags" | "tristate" | "textarea" | "tool-select" | "skill-select";
+  type: "text" | "password" | "number" | "boolean" | "select" | "multi-select" | "tags" | "tristate" | "textarea" | "tool-select" | "skill-select";
   placeholder?: string;
   required?: boolean;
   defaultValue?: string | number | boolean | string[];
@@ -71,6 +71,15 @@ export const groupPolicyOptions = [
 const mentionModeOptions = [
   { value: "strict", label: "Default (follow @mention setting)" },
   { value: "yield", label: "Multi-bot (respond unless another bot is @mentioned)" },
+];
+
+const telegramManagerActionOptions = [
+  { value: "topic", label: "Manage topics" },
+  { value: "message", label: "Manage messages" },
+  { value: "member", label: "Manage members" },
+  { value: "invite", label: "Manage invite links" },
+  { value: "chat", label: "Manage chat settings" },
+  { value: "join_request", label: "Approve join requests" },
 ];
 
 // --- Credentials schemas ---
@@ -156,6 +165,8 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "media_max_mb", label: "Max Media Size (MB)", type: "number", defaultValue: 20, help: "Default: 20 MB (cloud API). Increase when using local Bot API server." },
     { key: "link_preview", label: "Link Preview", type: "boolean", defaultValue: true },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "User IDs or @usernames, one per line or comma-separated" },
+    { key: "telegram_manager.enabled", label: "Telegram Management Tool", type: "boolean", defaultValue: false, help: "Enable the hidden Telegram-only management tool for agents using this channel." },
+    { key: "telegram_manager.allowed_actions", label: "Telegram Management Permissions", type: "multi-select", options: telegramManagerActionOptions, help: "Choose which Telegram management actions the hidden tool may run for agents using this channel. The tool stays hidden unless at least one permission is selected." },
     ...chatBehaviorOverrideFields,
   ],
   discord: [

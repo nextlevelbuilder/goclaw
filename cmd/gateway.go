@@ -717,6 +717,14 @@ func runGateway() {
 			gl.SetGroupMemberLister(channelMgr.ListGroupMembers)
 		}
 	}
+	// Wire Telegram manager on telegram_manager tool.
+	for _, toolName := range []string{"telegram_manager", "create_forum_topic"} {
+		if t, ok := toolsReg.Get(toolName); ok {
+			if tm, ok := t.(tools.TelegramManagerAware); ok {
+				tm.SetTelegramManager(channelMgr.ManageTelegram)
+			}
+		}
+	}
 
 	// Load channel instances from DB.
 	var instanceLoader *channels.InstanceLoader

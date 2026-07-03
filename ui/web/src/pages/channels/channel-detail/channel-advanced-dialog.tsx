@@ -30,8 +30,9 @@ const LIMITS_KEYS = new Set(["history_limit", "media_max_mb", "text_chunk_limit"
 const STREAMING_KEYS = new Set(["dm_stream", "group_stream", "draft_transport", "reasoning_delivery", "native_stream", "debounce_delay", "thread_ttl"]);
 const BEHAVIOR_KEYS = new Set(["reaction_level", "link_preview", "render_mode", "topic_session_mode"]);
 const ACCESS_KEYS = new Set(["allow_from", "group_allow_from"]);
+const TELEGRAM_MANAGEMENT_KEYS = new Set(["telegram_manager.enabled", "telegram_manager.allowed_actions"]);
 
-function getAdvancedFields(channelType: string) {
+export function getAdvancedFields(channelType: string) {
   const allFields = configSchema[channelType] ?? [];
   const advanced = allFields.filter((f) => !ESSENTIAL_CONFIG_KEYS.has(f.key));
   return {
@@ -40,6 +41,7 @@ function getAdvancedFields(channelType: string) {
     streaming: advanced.filter((f) => STREAMING_KEYS.has(f.key)),
     behavior: advanced.filter((f) => BEHAVIOR_KEYS.has(f.key) || f.key.startsWith("chat_behavior.")),
     access: advanced.filter((f) => ACCESS_KEYS.has(f.key)),
+    telegramManagement: advanced.filter((f) => TELEGRAM_MANAGEMENT_KEYS.has(f.key)),
   };
 }
 
@@ -166,6 +168,21 @@ export function ChannelAdvancedDialog({
                 values={values}
                 onChange={handleChange}
                 idPrefix="adv-acc"
+              />
+            </>
+          )}
+
+          {groups.telegramManagement.length > 0 && (
+            <>
+              <ConfigGroupHeader
+                title={t("detail.telegramManagement")}
+                description={t("detail.telegramManagementDesc")}
+              />
+              <ChannelFields
+                fields={groups.telegramManagement}
+                values={values}
+                onChange={handleChange}
+                idPrefix="adv-tgm"
               />
             </>
           )}

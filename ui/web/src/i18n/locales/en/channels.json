@@ -110,6 +110,8 @@
     "behaviorDesc": "Response behavior configuration",
     "accessControl": "Access Control",
     "accessControlDesc": "User access restrictions",
+    "telegramManagement": "Telegram Management",
+    "telegramManagementDesc": "Enable the hidden tool and choose Telegram actions for agents using this channel",
     "reviewDiagnostics": "Review the latest diagnosis in this channel before changing settings.",
     "whatHappened": "What happened",
     "recommendedAction": "Recommended action",
@@ -346,6 +348,16 @@
     "media_max_mb": { "label": "Max Media Size (MB)" },
     "link_preview": { "label": "Link Preview" },
     "allow_from": { "label": "Allowed Users" },
+    "telegram_manager": {
+      "enabled": {
+        "label": "Enable Telegram management tool",
+        "help": "Only applies to agents running through this Telegram channel. This is a hidden tool and does not appear in shared tool profiles."
+      },
+      "allowed_actions": {
+        "label": "Telegram management permissions",
+        "help": "Choose which Telegram actions the agent may use. If no permission is selected, the tool is not granted to the agent."
+      }
+    },
     "domain": { "label": "Domain" },
     "connection_mode": {
       "label": "Connection Mode",
@@ -503,6 +515,16 @@
       "streaming_only": "Streaming only",
       "always_bubbles": "Always as bubbles",
       "off": "Off"
+    },
+    "telegram_manager": {
+      "allowed_actions": {
+        "topic": "Manage topics",
+        "message": "Manage messages",
+        "member": "Manage members",
+        "invite": "Manage invite links",
+        "chat": "Chat info/settings",
+        "join_request": "Approve join requests"
+      }
     },
     "chat_behavior": {
       "enabled": {
