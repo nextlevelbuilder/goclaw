@@ -155,7 +155,12 @@
     "description": "Ollama 特定设置",
     "numCtx": "上下文窗口（标记数）",
     "numCtxPlaceholder": "留空自动从模型检测",
-    "numCtxHelp": "最大标记数。留空以通过 Ollama API 自动检测。"
+    "numCtxHelp": "最大标记数。留空以通过 Ollama API 自动检测。",
+    "thinkingEnabled": "推理 / 思考标记",
+    "thinkingEnabledDefault": "默认（关闭）",
+    "thinkingEnabledOn": "开启",
+    "thinkingEnabledOff": "关闭",
+    "thinkingEnabledHelp": "控制该提供商是否要求模型输出可见的推理（“思考”）标记。默认关闭，以避免 qwq、deepseek-r1 等模型产生冗长的思维链输出。"
   },
   "oauth": {
     "checkingStatus": "正在检查认证状态...",

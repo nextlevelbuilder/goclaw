@@ -141,7 +141,12 @@
     "description": "Ollama 고유 설정",
     "numCtx": "컨텍스트 윈도우(토큰)",
     "numCtxPlaceholder": "모델에서 자동 감지하려면 비워두세요",
-    "numCtxHelp": "최대 토큰 수입니다. Ollama API를 통해 자동 감지하려면 비워두세요."
+    "numCtxHelp": "최대 토큰 수입니다. Ollama API를 통해 자동 감지하려면 비워두세요.",
+    "thinkingEnabled": "추론 / 사고 토큰",
+    "thinkingEnabledDefault": "기본값 (끔)",
+    "thinkingEnabledOn": "켜짐",
+    "thinkingEnabledOff": "꺼짐",
+    "thinkingEnabledHelp": "이 제공자가 모델에게 표시되는 추론(\"사고\") 토큰을 생성하도록 요청할지 여부를 제어합니다. qwq나 deepseek-r1 같은 모델의 장황한 사고 과정 출력을 방지하기 위해 기본값은 꺼짐입니다."
   },
   "oauth": {
     "checkingStatus": "인증 상태 확인 중...",

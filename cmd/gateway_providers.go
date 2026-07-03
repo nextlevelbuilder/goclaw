@@ -317,7 +317,8 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 				host = "http://localhost:11434"
 			}
 			numCtx := resolveOllamaNumCtx(&p, config.DockerLocalhost(host), "")
-			prov := providers.NewOllamaProvider(p.Name, config.DockerLocalhost(host), "llama3.3", numCtx, nil)
+			prov := providers.NewOllamaProvider(p.Name, config.DockerLocalhost(host), "llama3.3", numCtx, nil).
+				WithThinkingEnabled(store.ParseThinkingEnabled(p.Settings))
 			registry.RegisterForTenant(p.TenantID, prov)
 			slog.Info("registered provider from DB", "name", p.Name)
 			continue
@@ -397,7 +398,8 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 				base = "https://ollama.com"
 			}
 			numCtx := resolveOllamaNumCtx(&p, base, p.APIKey)
-			prov := providers.NewOllamaProvider(p.Name, base, "llama3.3", numCtx, nil)
+			prov := providers.NewOllamaProvider(p.Name, base, "llama3.3", numCtx, nil).
+				WithThinkingEnabled(store.ParseThinkingEnabled(p.Settings))
 			registry.RegisterForTenant(p.TenantID, prov)
 		case store.ProviderNovita:
 			base := p.APIBase
@@ -438,6 +440,7 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 			base, model := openAIProviderDefaults(p.ProviderType, p.APIBase)
 			prov := providers.NewOpenAIProvider(p.Name, p.APIKey, base, model)
 			prov.WithProviderType(p.ProviderType)
+			prov.WithThinkingEnabled(store.ParseThinkingEnabled(p.Settings))
 			if p.ProviderType == store.ProviderOpenRouter {
 				prov.WithSiteInfo("https://goclaw.sh", "GoClaw")
 			}

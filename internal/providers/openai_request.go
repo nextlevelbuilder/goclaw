@@ -298,9 +298,17 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 			}
 			slog.Debug("ollama.request: final request body (first 500 chars)", "provider", p.name, "model", model, "body_prefix", raw)
 		}
-		// Disable thinking by default; only enable if caller explicitly requests it.
-		if level, _ := req.Options[OptThinkingLevel].(string); level == "" || level == "off" {
-			body["think"] = false
+		// Thinking visibility: provider-level override (settings.thinking_enabled)
+		// takes precedence; otherwise disable thinking by default (models like
+		// qwq/deepseek-r1 have thinking on by default) unless the caller
+		// explicitly requests a reasoning effort level.
+		switch {
+		case p.thinkingEnabled != nil:
+			body["think"] = *p.thinkingEnabled
+		default:
+			if level, _ := req.Options[OptThinkingLevel].(string); level == "" || level == "off" {
+				body["think"] = false
+			}
 		}
 	}
 

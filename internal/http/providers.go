@@ -255,7 +255,8 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) providerRu
 		}
 		dockerHost := config.DockerLocalhost(host)
 		numCtx := h.resolveOllamaNumCtx(p, dockerHost, "")
-		prov := providers.NewOllamaProvider(p.Name, dockerHost, "llama3.3", numCtx, nil)
+		prov := providers.NewOllamaProvider(p.Name, dockerHost, "llama3.3", numCtx, nil).
+			WithThinkingEnabled(store.ParseThinkingEnabled(p.Settings))
 		h.providerReg.RegisterForTenant(p.TenantID, prov)
 		return providerRuntimeRegistered
 	}
@@ -348,11 +349,13 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) providerRu
 			base = "https://ollama.com"
 		}
 		numCtx := h.resolveOllamaNumCtx(p, base, p.APIKey)
-		prov := providers.NewOllamaProvider(p.Name, base, "llama3.3", numCtx, nil)
+		prov := providers.NewOllamaProvider(p.Name, base, "llama3.3", numCtx, nil).
+			WithThinkingEnabled(store.ParseThinkingEnabled(p.Settings))
 		h.providerReg.RegisterForTenant(p.TenantID, prov)
 	default:
 		base, model := openAIProviderDefaults(p.ProviderType, apiBase)
 		prov := providers.NewOpenAIProvider(p.Name, p.APIKey, base, model)
+		prov.WithThinkingEnabled(store.ParseThinkingEnabled(p.Settings))
 		h.providerReg.RegisterForTenant(p.TenantID, prov)
 	}
 	return providerRuntimeRegistered

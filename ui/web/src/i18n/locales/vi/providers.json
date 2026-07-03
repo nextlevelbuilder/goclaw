@@ -146,7 +146,12 @@
     "description": "Các cài đặt dành riêng cho Ollama",
     "numCtx": "Cửa sổ ngữ cảnh (tokens)",
     "numCtxPlaceholder": "Bỏ trống để tự động phát hiện từ mô hình",
-    "numCtxHelp": "Số lượng token tối đa. Bỏ trống để tự động phát hiện qua API Ollama."
+    "numCtxHelp": "Số lượng token tối đa. Bỏ trống để tự động phát hiện qua API Ollama.",
+    "thinkingEnabled": "Token suy luận / tư duy",
+    "thinkingEnabledDefault": "Mặc định (tắt)",
+    "thinkingEnabledOn": "Bật",
+    "thinkingEnabledOff": "Tắt",
+    "thinkingEnabledHelp": "Kiểm soát việc nhà cung cấp này có yêu cầu mô hình phát ra token suy luận (\"tư duy\") hiển thị hay không. Mặc định là tắt để tránh đầu ra chuỗi suy luận cồng kềnh từ các mô hình như qwq hoặc deepseek-r1."
   },
   "oauth": {
     "checkingStatus": "Đang kiểm tra trạng thái xác thực...",

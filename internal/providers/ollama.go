@@ -22,6 +22,11 @@ type OllamaProvider struct {
 	numCtx       *int
 	client       *ollamaapi.Client
 	retryConfig  RetryConfig
+
+	// thinkingEnabled is the provider-level override for whether requests
+	// should ask Ollama to emit visible reasoning/thinking tokens.
+	// nil = default off (see buildRequest).
+	thinkingEnabled *bool
 }
 
 // NewOllamaProvider creates an OllamaProvider.
@@ -55,6 +60,20 @@ func NewOllamaProvider(name, apiBase, defaultModel string, numCtx *int, httpClie
 		client:       ollamaapi.NewClient(parsedURL, httpClient),
 		retryConfig:  DefaultRetryConfig(),
 	}
+}
+
+// WithThinkingEnabled sets the provider-level override for whether native
+// Ollama chat requests should ask the model to emit visible reasoning
+// ("think") tokens. nil (not calling this) preserves the existing default
+// of disabling thinking.
+func (p *OllamaProvider) WithThinkingEnabled(enabled *bool) *OllamaProvider {
+	p.thinkingEnabled = enabled
+	return p
+}
+
+// ThinkingEnabled returns the configured provider-level thinking override, or nil if not set.
+func (p *OllamaProvider) ThinkingEnabled() *bool {
+	return p.thinkingEnabled
 }
 
 // Name returns the provider identifier.
@@ -200,6 +219,16 @@ func (p *OllamaProvider) buildRequest(req ChatRequest, stream bool) *ollamaapi.C
 		Stream:   &stream,
 	}
 
+	// Thinking visibility: default off (models like qwq/deepseek-r1 have
+	// thinking on by default and goclaw suppresses it to avoid bloated
+	// chain-of-thought responses), unless the provider config explicitly
+	// enables it via settings.thinking_enabled=true.
+	thinkingEnabled := false
+	if p.thinkingEnabled != nil {
+		thinkingEnabled = *p.thinkingEnabled
+	}
+	ollamaReq.Think = &ollamaapi.ThinkValue{Value: thinkingEnabled}
+
 	// Inject tools.
 	for _, td := range req.Tools {
 		if td.Type != "function" || td.Function == nil {
@@ -301,4 +330,3 @@ func mapDoneReason(reason string) string {
 		return "stop"
 	}
 }
-
