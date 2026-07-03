@@ -627,3 +627,125 @@ func allowlistID(name string) uuid.UUID {
 	// Stable deterministic UUID per label so cfg.ID matches the lookup.
 	return uuid.NewSHA1(uuid.NameSpaceDNS, []byte("test.allowlist/"+name))
 }
+
+// TestDispatcher_MatchedThenCELErrors_FailsClosed verifies the narrow
+// fail-closed contract: a hook whose matcher successfully matches the tool
+// name, but whose CEL `if` expression then fails to compile, must BLOCK that
+// specific tool call rather than silently allow it through.
+func TestDispatcher_MatchedThenCELErrors_FailsClosed(t *testing.T) {
+	cfg := newBaseHook(hooks.HandlerHTTP, hooks.EventPreToolUse)
+	cfg.Matcher = "shell_exec"                // matches the tool name below
+	cfg.IfExpr = "tool_input.foo +++ bogus((" // deliberately invalid CEL
+	fs := &fakeStore{hooks: []hooks.HookConfig{cfg}}
+
+	handler := &fakeHandler{decision: hooks.DecisionAllow}
+	d := hooks.NewStdDispatcher(hooks.StdDispatcherOpts{
+		Store:    fs,
+		Audit:    hooks.NewAuditWriter(fs, ""),
+		Handlers: map[hooks.HandlerType]hooks.Handler{hooks.HandlerHTTP: handler},
+	})
+
+	r, err := d.Fire(context.Background(), hooks.Event{
+		EventID:   "e-cel-error",
+		HookEvent: hooks.EventPreToolUse,
+		ToolName:  "shell_exec",
+		ToolInput: map[string]any{},
+	})
+	if err != nil {
+		t.Fatalf("Fire: %v", err)
+	}
+	if r.Decision != hooks.DecisionBlock {
+		t.Fatalf("decision=%q, want block (matched hook with broken CEL must fail-closed)", r.Decision)
+	}
+	if atomic.LoadInt32(&handler.calls) != 0 {
+		t.Errorf("handler.calls=%d, want 0 — the hook must never execute once prefilter errors", handler.calls)
+	}
+}
+
+// TestDispatcher_MatcherNoMatch_ProceedsNormally confirms the fail-closed
+// change is scoped to "matched but then errored" only: a hook whose matcher
+// regex simply doesn't match the tool name must NOT block the call — it's
+// normal pass-through, not an error condition.
+func TestDispatcher_MatcherNoMatch_ProceedsNormally(t *testing.T) {
+	cfg := newBaseHook(hooks.HandlerHTTP, hooks.EventPreToolUse)
+	cfg.Matcher = "^does_not_match$"
+	fs := &fakeStore{hooks: []hooks.HookConfig{cfg}}
+
+	handler := &fakeHandler{decision: hooks.DecisionBlock} // would block if it ran
+	d := hooks.NewStdDispatcher(hooks.StdDispatcherOpts{
+		Store:    fs,
+		Audit:    hooks.NewAuditWriter(fs, ""),
+		Handlers: map[hooks.HandlerType]hooks.Handler{hooks.HandlerHTTP: handler},
+	})
+
+	r, err := d.Fire(context.Background(), hooks.Event{
+		EventID:   "e-no-match",
+		HookEvent: hooks.EventPreToolUse,
+		ToolName:  "shell_exec",
+		ToolInput: map[string]any{},
+	})
+	if err != nil {
+		t.Fatalf("Fire: %v", err)
+	}
+	if r.Decision != hooks.DecisionAllow {
+		t.Fatalf("decision=%q, want allow — a non-matching hook must not affect the call", r.Decision)
+	}
+	if atomic.LoadInt32(&handler.calls) != 0 {
+		t.Errorf("handler.calls=%d, want 0 — non-matching hook must not execute", handler.calls)
+	}
+}
+
+// consoleCapturingHandler mimics a script handler writing captured
+// console.log/console.error output into the ctx-carried ScriptResult, the
+// same way handlers.ScriptHandler.Execute does after running goja.
+type consoleCapturingHandler struct {
+	stdout string
+}
+
+func (h *consoleCapturingHandler) Execute(ctx context.Context, _ hooks.HookConfig, _ hooks.Event) (hooks.Decision, error) {
+	if r := hooks.ScriptResultFrom(ctx); r != nil {
+		r.Stdout = h.stdout
+	}
+	return hooks.DecisionAllow, nil
+}
+
+// TestDispatcher_ScriptConsoleOutput_CapturedInAuditRecord verifies that
+// console.log/console.error output from a script hook execution is persisted
+// on the audit record (HookExecution.ConsoleOutput + mirrored into Metadata).
+func TestDispatcher_ScriptConsoleOutput_CapturedInAuditRecord(t *testing.T) {
+	cfg := newBaseHook(hooks.HandlerScript, hooks.EventPreToolUse)
+	fs := &fakeStore{hooks: []hooks.HookConfig{cfg}}
+
+	h := &consoleCapturingHandler{stdout: "log: hello from script\n"}
+	d := hooks.NewStdDispatcher(hooks.StdDispatcherOpts{
+		Store:    fs,
+		Audit:    hooks.NewAuditWriter(fs, ""),
+		Handlers: map[hooks.HandlerType]hooks.Handler{hooks.HandlerScript: h},
+	})
+
+	r, err := d.Fire(context.Background(), hooks.Event{
+		EventID:   "e-console",
+		HookEvent: hooks.EventPreToolUse,
+		ToolName:  "shell_exec",
+		ToolInput: map[string]any{},
+	})
+	if err != nil {
+		t.Fatalf("Fire: %v", err)
+	}
+	if r.Decision != hooks.DecisionAllow {
+		t.Fatalf("decision=%q, want allow", r.Decision)
+	}
+
+	execs := fs.snapshotExecs()
+	if len(execs) != 1 {
+		t.Fatalf("len(execs)=%d, want 1", len(execs))
+	}
+	exec := execs[0]
+	if exec.ConsoleOutput != h.stdout {
+		t.Errorf("exec.ConsoleOutput=%q, want %q", exec.ConsoleOutput, h.stdout)
+	}
+	got, ok := exec.Metadata["console_output"].(string)
+	if !ok || got != h.stdout {
+		t.Errorf("exec.Metadata[console_output]=%v, want %q", exec.Metadata["console_output"], h.stdout)
+	}
+}

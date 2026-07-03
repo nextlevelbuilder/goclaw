@@ -203,6 +203,9 @@ func (h *ScriptHandler) Execute(ctx context.Context, cfg hooks.HookConfig, ev ho
 	// Write non-decision outputs for dispatcher pickup (Phase 03 applies them
 	// only when cfg.Source == "builtin"). Standalone tests may not provision a
 	// ScriptResult — ScriptResultFrom returns nil in that case, which is fine.
+	if out := stdout.String(); out != "" {
+		slog.Debug("hooks.script.console_output", "hook_id", cfg.ID, "output", out)
+	}
 	if r := hooks.ScriptResultFrom(ctx); r != nil {
 		r.Reason = reason
 		r.UpdatedInput = updated

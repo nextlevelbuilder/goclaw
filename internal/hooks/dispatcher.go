@@ -202,11 +202,30 @@ func (d *stdDispatcher) runSync(ctx context.Context, ev Event, chain []HookConfi
 		if !cfg.Enabled {
 			continue
 		}
+		slog.Debug("hooks.prefilter.considered",
+			"hook_id", cfg.ID, "tool_name", evMut.ToolName, "agent_id", evMut.AgentID, "hook_event", evMut.HookEvent)
 		if d.cb.isTripped(cfg.ID, d.now()) {
-			d.writeExec(ctx, cfg, evMut, DecisionBlock, 0, "circuit breaker open")
+			slog.Warn("hooks.dispatch.decision",
+				"hook_id", cfg.ID, "decision", "block", "reason", "circuit breaker open")
+			d.writeExec(ctx, cfg, evMut, DecisionBlock, 0, "circuit breaker open", "")
 			return FireResult{Decision: DecisionBlock}, nil
 		}
-		if !d.prefilter(cfg, evMut) {
+		pf := d.prefilter(cfg, evMut)
+		if pf.errored {
+			// Fail-closed (narrow scope): the matcher matched this call, but
+			// the CEL condition then failed to compile/evaluate. We cannot
+			// know whether the hook intended to block or allow, so we treat
+			// this specific tool call as blocked rather than silently
+			// letting it through. Other hooks/calls are unaffected.
+			blockMsg := fmt.Sprintf("hook evaluation failed: %v", pf.err)
+			slog.Warn("hooks.dispatch.decision",
+				"hook_id", cfg.ID, "decision", "block", "reason", blockMsg)
+			d.writeExec(ctx, cfg, evMut, DecisionBlock, 0, blockMsg, "")
+			return FireResult{Decision: DecisionBlock}, nil
+		}
+		if !pf.match {
+			slog.Debug("hooks.dispatch.decision",
+				"hook_id", cfg.ID, "decision", "skip", "reason", "prefilter did not match")
 			continue
 		}
 
@@ -221,7 +240,9 @@ func (d *stdDispatcher) runSync(ctx context.Context, ev Event, chain []HookConfi
 		if execErr != nil {
 			errMsg = execErr.Error()
 		}
-		d.writeExec(ctx, cfg, evMut, dec, duration, errMsg)
+		slog.Debug("hooks.dispatch.decision",
+			"hook_id", cfg.ID, "decision", string(dec), "duration_ms", duration.Milliseconds(), "err", errMsg)
+		d.writeExec(ctx, cfg, evMut, dec, duration, errMsg, scriptRes.Stdout)
 
 		// Apply mutation to the local copy only when the hook is builtin-source.
 		// Non-builtin scripts get their updatedInput stripped + warned.
@@ -357,20 +378,40 @@ const SourceBuiltin = "builtin"
 // goroutine-per-hook; Phase 2 will route through the eventbus worker pool.
 func (d *stdDispatcher) runAsync(ctx context.Context, ev Event, chain []HookConfig) {
 	for _, cfg := range chain {
-		if !cfg.Enabled || !d.prefilter(cfg, ev) {
+		if !cfg.Enabled {
+			continue
+		}
+		slog.Debug("hooks.prefilter.considered",
+			"hook_id", cfg.ID, "tool_name", ev.ToolName, "agent_id", ev.AgentID, "hook_event", ev.HookEvent)
+		pf := d.prefilter(cfg, ev)
+		if pf.errored {
+			// Non-blocking event: there is no tool call to block, so we log
+			// loudly and skip this hook rather than fail-closed. Fail-closed
+			// blocking only applies to the synchronous (blocking) chain.
+			slog.Warn("hooks.dispatch.decision",
+				"hook_id", cfg.ID, "decision", "skip", "reason", fmt.Sprintf("prefilter error: %v", pf.err))
+			continue
+		}
+		if !pf.match {
+			slog.Debug("hooks.dispatch.decision",
+				"hook_id", cfg.ID, "decision", "skip", "reason", "prefilter did not match")
 			continue
 		}
 		go func(c HookConfig) {
-			dec, execErr, duration := d.runOne(ctx, c, ev)
+			scriptRes := &ScriptResult{}
+			hctx := WithScriptResult(ctx, scriptRes)
+			dec, execErr, duration := d.runOne(hctx, c, ev)
 			errMsg := ""
 			if execErr != nil {
 				errMsg = execErr.Error()
 			}
+			slog.Debug("hooks.dispatch.decision",
+				"hook_id", c.ID, "decision", string(dec), "duration_ms", duration.Milliseconds(), "err", errMsg)
 			// Use WithoutCancel to preserve context values (TenantID, UserID)
 			// but detach from parent deadline, then add a timeout to prevent indefinite hang
 			writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 			defer cancel()
-			d.writeExec(writeCtx, c, ev, dec, duration, errMsg)
+			d.writeExec(writeCtx, c, ev, dec, duration, errMsg, scriptRes.Stdout)
 		}(cfg)
 	}
 }
@@ -400,54 +441,92 @@ func (d *stdDispatcher) runOne(ctx context.Context, cfg HookConfig, ev Event) (D
 	return dec, err, duration
 }
 
+// prefilterResult distinguishes "hook legitimately did not match" (match=false,
+// errored=false — normal pass-through, no side effects) from "matcher matched
+// but the CEL condition then failed to compile/evaluate" (errored=true — the
+// caller must fail-closed for blocking events). Matcher regex compile
+// failures are treated as a non-match (pre-existing behavior, out of the
+// narrow fail-closed scope requested) since there is no successful match to
+// fail closed on.
+type prefilterResult struct {
+	match   bool
+	errored bool
+	err     error
+}
+
 // prefilter applies the matcher + CEL gate; Phase 1 keeps it lightweight and
 // pushes the actual compile through matcher.go's cached helpers.
-func (d *stdDispatcher) prefilter(cfg HookConfig, ev Event) bool {
+func (d *stdDispatcher) prefilter(cfg HookConfig, ev Event) prefilterResult {
 	if cfg.Matcher != "" {
 		re, err := CompileMatcher(cfg.Matcher)
-		if err != nil || !MatchToolName(re, ev.ToolName) {
-			return false
+		if err != nil {
+			slog.Warn("hooks.prefilter.error",
+				"hook_id", cfg.ID, "stage", "matcher_compile", "matcher", cfg.Matcher, "err", err)
+			return prefilterResult{match: false}
+		}
+		matched := MatchToolName(re, ev.ToolName)
+		slog.Debug("hooks.prefilter.matcher_checked",
+			"hook_id", cfg.ID, "tool_name", ev.ToolName, "matcher", cfg.Matcher, "matched", matched)
+		if !matched {
+			return prefilterResult{match: false}
 		}
 	}
 	if cfg.IfExpr != "" {
 		prg, err := CompileCELExpr(cfg.IfExpr)
 		if err != nil {
-			return false
+			slog.Warn("hooks.prefilter.error",
+				"hook_id", cfg.ID, "stage", "cel_compile", "expr", cfg.IfExpr, "err", err)
+			return prefilterResult{errored: true, err: fmt.Errorf("CEL compile failed: %w", err)}
 		}
 		ok, err := EvalCEL(prg, map[string]any{
 			"tool_name":  ev.ToolName,
 			"tool_input": ev.ToolInput,
 			"depth":      ev.Depth,
 		})
-		if err != nil || !ok {
-			return false
+		if err != nil {
+			slog.Warn("hooks.prefilter.error",
+				"hook_id", cfg.ID, "stage", "cel_eval", "err", err)
+			return prefilterResult{errored: true, err: fmt.Errorf("CEL evaluation failed: %w", err)}
+		}
+		slog.Debug("hooks.prefilter.condition_evaluated",
+			"hook_id", cfg.ID, "result", ok)
+		if !ok {
+			return prefilterResult{match: false}
 		}
 	}
-	return true
+	return prefilterResult{match: true}
 }
 
 // writeExec assembles the audit row and routes it through AuditWriter which
 // handles truncation, redaction, and encryption. Failures are logged but do
 // not propagate — audit is observability, not policy.
-func (d *stdDispatcher) writeExec(ctx context.Context, cfg HookConfig, ev Event, dec Decision, duration time.Duration, errMsg string) {
+func (d *stdDispatcher) writeExec(ctx context.Context, cfg HookConfig, ev Event, dec Decision, duration time.Duration, errMsg string, consoleOutput string) {
 	if d.audit == nil {
 		return
 	}
 	inputHash, _ := CanonicalInputHash(ev.ToolName, ev.ToolInput)
 	hookID := cfg.ID
+	metadata := map[string]any{}
+	if consoleOutput != "" {
+		// No dedicated DB column for console output — mirrored into the
+		// already-persisted JSON metadata column so it survives AuditWriter.Log
+		// without a schema migration.
+		metadata["console_output"] = consoleOutput
+	}
 	exec := HookExecution{
-		ID:         uuid.New(),
-		HookID:     &hookID,
-		TenantID:   &ev.TenantID,
-		SessionID:  ev.SessionID,
-		Event:      ev.HookEvent,
-		InputHash:  inputHash,
-		Decision:   dec,
-		DurationMS: int(duration / time.Millisecond),
-		DedupKey:   cfg.ID.String() + ":" + ev.EventID,
-		Error:      errMsg,
-		Metadata:   map[string]any{},
-		CreatedAt:  d.now(),
+		ID:            uuid.New(),
+		HookID:        &hookID,
+		TenantID:      &ev.TenantID,
+		SessionID:     ev.SessionID,
+		Event:         ev.HookEvent,
+		InputHash:     inputHash,
+		Decision:      dec,
+		DurationMS:    int(duration / time.Millisecond),
+		DedupKey:      cfg.ID.String() + ":" + ev.EventID,
+		Error:         errMsg,
+		Metadata:      metadata,
+		ConsoleOutput: consoleOutput,
+		CreatedAt:     d.now(),
 	}
 	if err := d.audit.Log(ctx, exec); err != nil {
 		slog.Warn("security.hook.audit_write_failed", "err", err, "hook_id", cfg.ID)

@@ -158,47 +158,52 @@ type FireResult struct {
 // HookConfig mirrors the agent_hooks DB row. All pointer fields correspond to
 // nullable columns.
 type HookConfig struct {
-	ID          uuid.UUID          `json:"id"`
-	TenantID    uuid.UUID          `json:"tenant_id"`
-	AgentID     *uuid.UUID         `json:"agent_id,omitempty"`     // DEPRECATED: kept for JSON backward compat
-	AgentIDs    []uuid.UUID        `json:"agent_ids,omitempty"`
-	Event       HookEvent          `json:"event"`
-	HandlerType HandlerType        `json:"handler_type"`
-	Scope       Scope              `json:"scope"`
-	Name        string             `json:"name,omitempty"`
+	ID          uuid.UUID   `json:"id"`
+	TenantID    uuid.UUID   `json:"tenant_id"`
+	AgentID     *uuid.UUID  `json:"agent_id,omitempty"` // DEPRECATED: kept for JSON backward compat
+	AgentIDs    []uuid.UUID `json:"agent_ids,omitempty"`
+	Event       HookEvent   `json:"event"`
+	HandlerType HandlerType `json:"handler_type"`
+	Scope       Scope       `json:"scope"`
+	Name        string      `json:"name,omitempty"`
 	// Config holds handler-specific options (command path, HTTP URL, prompt template).
-	Config      map[string]any     `json:"config"`
-	Matcher     string             `json:"matcher,omitempty"`
-	IfExpr      string             `json:"if_expr,omitempty"`
-	TimeoutMS   int                `json:"timeout_ms"`
-	OnTimeout   Decision           `json:"on_timeout"`
-	Priority    int                `json:"priority"`
-	Enabled     bool               `json:"enabled"`
-	Version     int                `json:"version"`
-	Source      string             `json:"source"`
-	Metadata    map[string]any     `json:"metadata"`
-	CreatedBy   *uuid.UUID         `json:"created_by,omitempty"`
-	CreatedAt   time.Time          `json:"created_at"`
-	UpdatedAt   time.Time          `json:"updated_at"`
+	Config    map[string]any `json:"config"`
+	Matcher   string         `json:"matcher,omitempty"`
+	IfExpr    string         `json:"if_expr,omitempty"`
+	TimeoutMS int            `json:"timeout_ms"`
+	OnTimeout Decision       `json:"on_timeout"`
+	Priority  int            `json:"priority"`
+	Enabled   bool           `json:"enabled"`
+	Version   int            `json:"version"`
+	Source    string         `json:"source"`
+	Metadata  map[string]any `json:"metadata"`
+	CreatedBy *uuid.UUID     `json:"created_by,omitempty"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
 }
 
 // HookExecution mirrors the hook_executions DB row.
 // error_detail (BYTEA) is AES-256-GCM encrypted before storage.
 type HookExecution struct {
-	ID          uuid.UUID  `json:"id"`
-	HookID      *uuid.UUID `json:"hook_id,omitempty"`  // NULL when hook deleted (ON DELETE SET NULL)
-	TenantID    *uuid.UUID `json:"tenant_id,omitempty"`
-	SessionID   string     `json:"session_id"`
-	Event       HookEvent  `json:"event"`
-	InputHash   string     `json:"input_hash"`  // canonical-JSON sha256, 64 hex chars
-	Decision    Decision   `json:"decision"`
-	DurationMS  int        `json:"duration_ms"`
-	Retry       int        `json:"retry"`
-	DedupKey    string     `json:"dedup_key"`   // (hook_id, event_id) composite
-	Error       string     `json:"error"`        // truncated to 256 chars
-	ErrorDetail []byte     `json:"error_detail"` // encrypted; nil if no error
+	ID          uuid.UUID      `json:"id"`
+	HookID      *uuid.UUID     `json:"hook_id,omitempty"` // NULL when hook deleted (ON DELETE SET NULL)
+	TenantID    *uuid.UUID     `json:"tenant_id,omitempty"`
+	SessionID   string         `json:"session_id"`
+	Event       HookEvent      `json:"event"`
+	InputHash   string         `json:"input_hash"` // canonical-JSON sha256, 64 hex chars
+	Decision    Decision       `json:"decision"`
+	DurationMS  int            `json:"duration_ms"`
+	Retry       int            `json:"retry"`
+	DedupKey    string         `json:"dedup_key"`    // (hook_id, event_id) composite
+	Error       string         `json:"error"`        // truncated to 256 chars
+	ErrorDetail []byte         `json:"error_detail"` // encrypted; nil if no error
 	Metadata    map[string]any `json:"metadata"`
-	CreatedAt   time.Time  `json:"created_at"`
+	// ConsoleOutput carries captured `console.log`/`console.error` text from
+	// script-handler executions (bounded by handlers.MaxStdoutBytes). Not a
+	// dedicated DB column — the dispatcher mirrors it into Metadata["console_output"]
+	// before AuditWriter.Log persists the row, so no schema migration is needed.
+	ConsoleOutput string    `json:"console_output,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 // Event is the payload passed to the dispatcher and stored for audit.
@@ -211,13 +216,13 @@ type Event struct {
 	TenantID  uuid.UUID
 	AgentID   uuid.UUID
 	// ToolName is populated for PreToolUse/PostToolUse events.
-	ToolName  string
+	ToolName string
 	// ToolInput is the raw tool arguments map for CEL evaluation.
 	ToolInput map[string]any
 	// RawInput is the user's raw message text (for UserPromptSubmit).
-	RawInput  string
+	RawInput string
 	// Depth tracks sub-agent nesting level; max 3 before loop rejection.
-	Depth     int
+	Depth int
 	// HookEvent is the lifecycle event type.
 	HookEvent HookEvent
 }
