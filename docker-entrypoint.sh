@@ -38,7 +38,7 @@ export PIP_CACHE_DIR="$RUNTIME_DIR/pip-cache"
 # NODE_PATH includes both pre-installed system globals and runtime-installed globals.
 export NPM_CONFIG_PREFIX="$RUNTIME_DIR/npm-global"
 export NODE_PATH="/usr/local/lib/node_modules:$RUNTIME_DIR/npm-global/lib/node_modules:${NODE_PATH:-}"
-export PATH="$RUNTIME_DIR/bin:$RUNTIME_DIR/npm-global/bin:$RUNTIME_DIR/pip/bin:$PATH"
+export PATH="/app:$RUNTIME_DIR/bin:$RUNTIME_DIR/npm-global/bin:$RUNTIME_DIR/pip/bin:$PATH"
 
 # System packages: re-install on-demand packages persisted across recreates.
 # After chown above, root owns .runtime and can create this file.
