@@ -31,6 +31,8 @@ func TestIsRetryableError(t *testing.T) {
 		{"broken_pipe", errors.New("write: broken pipe"), true},
 		{"eof", errors.New("unexpected EOF"), true},
 		{"timeout_string", errors.New("i/o timeout"), true},
+		{"codex_retry_guidance", errors.New("codex: response failed: An error occurred while processing your request. You can retry your request, or contact us through our help center."), true},
+		{"codex_rate_limit_wording", errors.New("codex: response failed: rate limit exceeded"), true},
 		{"generic_error", errors.New("something went wrong"), false},
 		{"wrapped_retryable", fmt.Errorf("provider: %w", &HTTPError{Status: 429}), true},
 		{"wrapped_non_retryable", fmt.Errorf("provider: %w", &HTTPError{Status: 400}), false},

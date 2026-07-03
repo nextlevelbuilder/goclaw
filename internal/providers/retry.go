@@ -83,12 +83,20 @@ func IsRetryableError(err error) bool {
 		return true // includes timeouts
 	}
 
-	// Check for connection reset / broken pipe / EOF in error string
+	// Check for connection reset / broken pipe / EOF in error string.
+	// Some streaming providers (notably Codex/Responses) surface transient
+	// backend failures as SSE `response.failed` events instead of HTTP 429/5xx.
+	// Treat explicit retry guidance/rate-limit wording as retryable too.
 	errStr := err.Error()
+	lowerErr := strings.ToLower(errStr)
 	if strings.Contains(errStr, "connection reset") ||
 		strings.Contains(errStr, "broken pipe") ||
 		strings.Contains(errStr, "EOF") ||
-		strings.Contains(errStr, "timeout") {
+		strings.Contains(lowerErr, "timeout") ||
+		strings.Contains(lowerErr, "rate limit") ||
+		strings.Contains(lowerErr, "429") ||
+		(strings.Contains(lowerErr, "response failed") && strings.Contains(lowerErr, "retry")) ||
+		strings.Contains(lowerErr, "while processing your request") {
 		return true
 	}
 
