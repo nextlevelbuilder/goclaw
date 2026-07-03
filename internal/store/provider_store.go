@@ -13,6 +13,7 @@ const (
 	ProviderOpenAICompat    = "openai_compat"
 	ProviderGeminiNative    = "gemini_native"
 	ProviderOpenRouter      = "openrouter"
+	ProviderAIMLAPI         = "aimlapi"
 	ProviderGroq            = "groq"
 	ProviderDeepSeek        = "deepseek"
 	ProviderMistral         = "mistral"
@@ -72,6 +73,7 @@ var ValidProviderTypes = map[string]bool{
 	ProviderOpenAICompat:    true,
 	ProviderGeminiNative:    true,
 	ProviderOpenRouter:      true,
+	ProviderAIMLAPI:         true,
 	ProviderGroq:            true,
 	ProviderDeepSeek:        true,
 	ProviderMistral:         true,

@@ -6,6 +6,7 @@ export interface ProviderTypeInfo {
 }
 
 export const PROVIDER_TYPES: ProviderTypeInfo[] = [
+  { value: 'aimlapi', label: 'AI/ML API', apiBase: 'https://api.aimlapi.com/v1', needsKey: true },
   { value: 'anthropic_native', label: 'Anthropic (Native)', apiBase: '', needsKey: true },
   { value: 'openai_compat', label: 'OpenAI Compatible', apiBase: '', needsKey: true },
   { value: 'gemini_native', label: 'Google Gemini', apiBase: 'https://generativelanguage.googleapis.com/v1beta/openai', needsKey: true },

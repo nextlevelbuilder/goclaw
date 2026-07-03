@@ -434,6 +434,10 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 				"User-Agent": store.KimiCodingRequiredUserAgent,
 			})
 			registry.RegisterForTenant(p.TenantID, prov)
+		case store.ProviderAIMLAPI:
+			prov := providers.NewAIMLAPIProvider(p.Name, p.APIKey, p.APIBase)
+			prov.WithProviderType(p.ProviderType)
+			registry.RegisterForTenant(p.TenantID, prov)
 		default:
 			base, model := openAIProviderDefaults(p.ProviderType, p.APIBase)
 			prov := providers.NewOpenAIProvider(p.Name, p.APIKey, base, model)

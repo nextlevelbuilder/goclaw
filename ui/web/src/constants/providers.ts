@@ -12,6 +12,7 @@ type ProviderAliasSource = string | { name?: string | null };
 export const DEFAULT_CODEX_OAUTH_ALIAS = "openai-codex";
 
 export const PROVIDER_TYPES: ProviderTypeInfo[] = [
+  { value: "aimlapi", label: "AI/ML API", apiBase: "https://api.aimlapi.com/v1", placeholder: "" },
   { value: "chatgpt_oauth", label: "ChatGPT Subscription (OAuth)", apiBase: "", placeholder: "" },
   { value: "anthropic_native", label: "Anthropic (Native)", apiBase: "", placeholder: "https://api.anthropic.com" },
   { value: "openai_compat", label: "OpenAI Compatible", apiBase: "", placeholder: "https://api.openai.com/v1" },

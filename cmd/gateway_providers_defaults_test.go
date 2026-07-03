@@ -73,6 +73,14 @@ func TestRegisterProvidersFromDBUsesCurrentMiniMaxAndZaiDefaults(t *testing.T) {
 			{
 				BaseModel:    store.BaseModel{ID: uuid.New()},
 				TenantID:     tenantID,
+				Name:         "db-aimlapi",
+				ProviderType: store.ProviderAIMLAPI,
+				APIKey:       "aimlapi-token",
+				Enabled:      true,
+			},
+			{
+				BaseModel:    store.BaseModel{ID: uuid.New()},
+				TenantID:     tenantID,
 				Name:         "db-minimax",
 				ProviderType: store.ProviderMiniMax,
 				APIKey:       "minimax-token",
@@ -100,6 +108,7 @@ func TestRegisterProvidersFromDBUsesCurrentMiniMaxAndZaiDefaults(t *testing.T) {
 	registry := providers.NewRegistry(nil)
 	registerProvidersFromDB(registry, providerStore, nil, "", "", nil, &config.Config{}, providers.NewInMemoryRegistry())
 
+	assertProviderDefault(t, registry, tenantID, "db-aimlapi", providers.AIMLAPIDefaultModel, providers.AIMLAPIDefaultAPIBase)
 	assertProviderDefault(t, registry, tenantID, "db-minimax", "MiniMax-M3", "https://api.minimax.io/v1")
 	assertProviderDefault(t, registry, tenantID, "db-zai", "glm-5.2", "https://api.z.ai/api/paas/v4")
 	assertProviderDefault(t, registry, tenantID, "db-zai-coding", "glm-5.2", "https://api.z.ai/api/coding/paas/v4")
