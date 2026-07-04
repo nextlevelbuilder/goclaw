@@ -11,55 +11,76 @@ import (
 // SSEScanner reads an SSE (Server-Sent Events) stream line by line,
 // extracting data payloads. Shared by OpenAI, Anthropic, and Codex providers.
 type SSEScanner struct {
-	scanner   *bufio.Scanner
+	reader    *bufio.Reader
 	data      string
 	eventType string
 	err       error
+	done      bool
 }
 
-// NewSSEScanner creates an SSE scanner with appropriate buffer sizes.
+// NewSSEScanner creates an SSE scanner.
+//
+// It reads lines with bufio.Reader.ReadString, which grows to fit a line of
+// any length, instead of bufio.Scanner, whose fixed max-token size (formerly
+// SSEScanBufMax) overflowed with "token too long" on a single data line
+// carrying a full base64 image — image generation streams multi-MB frames in
+// a single SSE line. SSEScanBufInit is reused as the reader's initial size.
 func NewSSEScanner(r io.Reader) *SSEScanner {
-	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 0, SSEScanBufInit), SSEScanBufMax)
-	return &SSEScanner{scanner: sc}
+	return &SSEScanner{reader: bufio.NewReaderSize(r, SSEScanBufInit)}
 }
 
 // Next advances to the next data line. Returns false when the stream ends
 // or "[DONE]" is encountered. After Next returns false, call Err() for errors.
 func (s *SSEScanner) Next() bool {
-	for s.scanner.Scan() {
-		line := s.scanner.Text()
+	if s.done {
+		return false
+	}
+	for {
+		line, err := s.reader.ReadString('\n')
+		if len(line) > 0 {
+			// Trim the trailing newline ("\n" or "\r\n").
+			line = strings.TrimSuffix(line, "\n")
+			line = strings.TrimSuffix(line, "\r")
 
-		// Track event type (e.g. "event: message_start")
-		if after, ok := strings.CutPrefix(line, "event: "); ok {
-			s.eventType = after
-			continue
+			if after, ok := strings.CutPrefix(line, "event: "); ok {
+				s.eventType = after
+			} else if after, ok := strings.CutPrefix(line, "event:"); ok {
+				s.eventType = strings.TrimSpace(after)
+			} else {
+				payload, isData := "", false
+				if after, ok := strings.CutPrefix(line, "data: "); ok {
+					payload, isData = after, true
+				} else if after, ok := strings.CutPrefix(line, "data:"); ok {
+					payload, isData = after, true
+				}
+				if isData {
+					// "[DONE]" is the OpenAI/Codex stream terminator.
+					if payload == "[DONE]" {
+						s.done = true
+						return false
+					}
+					s.data = payload
+					// A final line may arrive together with io.EOF (no trailing
+					// newline). Deliver it now; the next call reports the end.
+					if err != nil {
+						s.done = true
+						if err != io.EOF {
+							s.err = err
+						}
+					}
+					return true
+				}
+				// Non event/data line (blank line, ":" comment, other field): skip.
+			}
 		}
-		if after, ok := strings.CutPrefix(line, "event:"); ok {
-			s.eventType = strings.TrimSpace(after)
-			continue
-		}
-
-		// Extract data payload
-		var payload string
-		if after, ok := strings.CutPrefix(line, "data: "); ok {
-			payload = after
-		} else if after, ok := strings.CutPrefix(line, "data:"); ok {
-			payload = after
-		} else {
-			continue // skip empty lines, comments, other fields
-		}
-
-		// "[DONE]" is the OpenAI/Codex stream terminator
-		if payload == "[DONE]" {
+		if err != nil {
+			if err != io.EOF {
+				s.err = err
+			}
+			s.done = true
 			return false
 		}
-
-		s.data = payload
-		return true
 	}
-	s.err = s.scanner.Err()
-	return false
 }
 
 // Data returns the current data payload (valid after Next returns true).
@@ -78,7 +99,7 @@ func (s *SSEScanner) Err() error {
 }
 
 // CtxBody wraps an http.Response.Body so that ctx cancellation closes the
-// underlying socket, unblocking a goroutine stuck inside bufio.Scanner.Scan().
+// underlying socket, unblocking a goroutine stuck inside a blocking read.
 // Safe for concurrent Close (sync.Once). Caller MUST defer Close() to release
 // the watchdog goroutine even on success.
 type CtxBody struct {

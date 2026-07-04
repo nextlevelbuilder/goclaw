@@ -11,9 +11,10 @@ const (
 	// ctx cancellation from unblocking bufio.Scanner. Use NewDefaultHTTPClient() instead.
 	DefaultHTTPTimeout = 300 * time.Second
 
-	// SSE stream scanner buffer sizes (OpenAI-compat, Anthropic, Codex).
-	SSEScanBufInit = 64 * 1024   // 64KB initial buffer
-	SSEScanBufMax  = 1024 * 1024 // 1MB max line for large tool call / thinking chunks
+	// SSE stream reader initial buffer size (OpenAI-compat, Anthropic, Codex).
+	// No max: bufio.Reader.ReadString grows to fit a line of any length — a full
+	// base64 image in a single image-generation SSE data line can exceed several MB.
+	SSEScanBufInit = 64 * 1024 // 64KB initial buffer
 
 	// Stdio/JSONRPC scanner buffer sizes (Claude CLI, ACP).
 	StdioScanBufInit = 256 * 1024       // 256KB initial buffer
