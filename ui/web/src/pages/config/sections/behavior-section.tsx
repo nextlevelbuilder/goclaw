@@ -96,7 +96,7 @@ export function BehaviorSection({ config, onPatch, saving }: Props) {
       tools: { scrub_credentials: security.scrub_credentials },
       sessions,
       channels: { pending_compaction: pendingCompaction },
-    });
+    }).catch(() => {});
   };
 
   return (

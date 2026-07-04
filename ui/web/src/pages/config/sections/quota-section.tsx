@@ -139,7 +139,7 @@ export function QuotaSection({ data, onSave, saving }: Props) {
           <div className="flex justify-end pt-2">
             <Button
               size="sm"
-              onClick={() => onSave({ quota: draft })}
+              onClick={() => { onSave({ quota: draft }).catch(() => {}); }}
               disabled={saving}
               className="gap-1.5"
             >

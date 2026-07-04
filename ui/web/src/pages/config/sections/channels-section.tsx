@@ -80,7 +80,7 @@ export function ChannelsSection({ data, onSave, saving }: Props) {
       }
       toSave[ch] = copy;
     }
-    onSave(toSave);
+    onSave(toSave).catch(() => {});
   };
 
   if (!data) return null;

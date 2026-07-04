@@ -97,7 +97,7 @@ export function CronSection({ data, onSave, saving }: Props) {
                 toast.error(t("cron.invalidTimezone", "Invalid timezone"));
                 return;
               }
-              onSave(draft);
+              onSave(draft).catch(() => {});
             }} disabled={saving} className="gap-1.5">
               <Save className="h-3.5 w-3.5" /> {saving ? t("saving") : t("save")}
             </Button>

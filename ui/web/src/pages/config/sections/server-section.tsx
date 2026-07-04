@@ -51,7 +51,7 @@ export function ServerSection({ data, onSave, saving }: Props) {
   const handleSave = () => {
     const toSave = { ...draft };
     if (isSecret(toSave.token)) delete toSave.token;
-    onSave(toSave);
+    onSave(toSave).catch(() => {});
   };
 
   if (!data) return null;

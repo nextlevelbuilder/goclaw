@@ -59,8 +59,12 @@ export function ShellSecuritySection({ data, onSave, saving }: Props) {
   }, []);
 
   const handleSave = async () => {
-    await onSave({ ...data, shellDenyGroups: draft });
-    setDirty(false);
+    try {
+      await onSave({ ...data, shellDenyGroups: draft });
+      setDirty(false);
+    } catch {
+      /* toast already shown by useConfig's patch() */
+    }
   };
 
   // Resolve effective state: draft override → group default.

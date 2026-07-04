@@ -44,7 +44,7 @@ export function TelemetrySection({ data, onSave, saving }: Props) {
   };
 
   const handleSave = () => {
-    onSave({ ...draft, headers: Object.keys(headers).length > 0 ? headers : undefined });
+    onSave({ ...draft, headers: Object.keys(headers).length > 0 ? headers : undefined }).catch(() => {});
   };
 
   if (!data) return null;

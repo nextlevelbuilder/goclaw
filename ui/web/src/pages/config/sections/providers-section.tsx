@@ -74,7 +74,7 @@ export function ProvidersSection({ data, onSave, saving }: Props) {
       }
       toSave[key] = clean;
     }
-    onSave(toSave);
+    onSave(toSave).catch(() => {});
   };
 
   if (!data) return null;
