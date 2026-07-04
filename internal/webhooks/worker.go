@@ -25,6 +25,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/crypto"
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/security"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -104,9 +105,28 @@ type callbackPayload struct {
 
 // callbackUsage mirrors providers.Usage for the callback payload.
 type callbackUsage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	PromptTokens                      int  `json:"prompt_tokens"`
+	CompletionTokens                  int  `json:"completion_tokens"`
+	TotalTokens                       int  `json:"total_tokens"`
+	CacheReadTokens                   int  `json:"cache_read_input_tokens,omitempty"`
+	CacheCreationTokens               int  `json:"cache_creation_input_tokens,omitempty"`
+	PromptTokensIncludeCachedSegments bool `json:"prompt_tokens_include_cached_segments,omitempty"`
+}
+
+// newCallbackUsage maps a provider usage record onto the callback envelope.
+// Returns nil when u is nil (usage omitted from the payload).
+func newCallbackUsage(u *providers.Usage) *callbackUsage {
+	if u == nil {
+		return nil
+	}
+	return &callbackUsage{
+		PromptTokens:                      u.PromptTokens,
+		CompletionTokens:                  u.CompletionTokens,
+		TotalTokens:                       u.TotalTokens,
+		CacheReadTokens:                   u.CacheReadTokens,
+		CacheCreationTokens:               u.CacheCreationTokens,
+		PromptTokensIncludeCachedSegments: u.PromptTokensIncludeCachedSegments,
+	}
 }
 
 // WorkerConfig holds tunable parameters for WebhookWorker.
@@ -843,14 +863,7 @@ func (w *WebhookWorker) invokeAgent(
 		return "", nil, runErr
 	}
 
-	var usage *callbackUsage
-	if result.Usage != nil {
-		usage = &callbackUsage{
-			PromptTokens:     result.Usage.PromptTokens,
-			CompletionTokens: result.Usage.CompletionTokens,
-			TotalTokens:      result.Usage.TotalTokens,
-		}
-	}
+	usage := newCallbackUsage(result.Usage)
 	return result.Content, usage, nil
 }
 

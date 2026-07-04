@@ -218,7 +218,14 @@ func TestWebhookLLMHandler_SyncHappyPath(t *testing.T) {
 			return &agent.RunResult{
 				Content: "42",
 				RunID:   "run-1",
-				Usage:   &providers.Usage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
+				Usage: &providers.Usage{
+					PromptTokens:                      10,
+					CompletionTokens:                  5,
+					TotalTokens:                       15,
+					CacheReadTokens:                   8,
+					CacheCreationTokens:               2,
+					PromptTokensIncludeCachedSegments: true,
+				},
 			}, nil
 		},
 	}
@@ -255,6 +262,12 @@ func TestWebhookLLMHandler_SyncHappyPath(t *testing.T) {
 	}
 	if resp.Usage == nil || resp.Usage.TotalTokens != 15 {
 		t.Errorf("unexpected usage: %+v", resp.Usage)
+	}
+	if resp.Usage.CacheReadTokens != 8 || resp.Usage.CacheCreationTokens != 2 {
+		t.Errorf("cache tokens not propagated: read=%d create=%d", resp.Usage.CacheReadTokens, resp.Usage.CacheCreationTokens)
+	}
+	if !resp.Usage.PromptTokensIncludeCachedSegments {
+		t.Errorf("prompt_tokens_include_cached_segments not propagated")
 	}
 	if resp.AgentID != agentUUID.String() {
 		t.Errorf("expected agent_id %s, got %s", agentUUID, resp.AgentID)

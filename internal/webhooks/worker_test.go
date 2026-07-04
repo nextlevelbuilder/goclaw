@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/crypto"
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/security"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -179,6 +180,33 @@ func newTestCall(callbackURL string, agentID *uuid.UUID) *store.WebhookCallData 
 	b, _ := json.Marshal(payload)
 	call.RequestPayload = b
 	return call
+}
+
+func TestNewCallbackUsageMapsCacheTokens(t *testing.T) {
+	if got := newCallbackUsage(nil); got != nil {
+		t.Fatalf("nil usage must map to nil, got %+v", got)
+	}
+	u := &providers.Usage{
+		PromptTokens:                      10,
+		CompletionTokens:                  5,
+		TotalTokens:                       15,
+		CacheReadTokens:                   8,
+		CacheCreationTokens:               2,
+		PromptTokensIncludeCachedSegments: true,
+	}
+	got := newCallbackUsage(u)
+	if got == nil {
+		t.Fatal("expected non-nil callbackUsage")
+	}
+	if got.PromptTokens != 10 || got.CompletionTokens != 5 || got.TotalTokens != 15 {
+		t.Errorf("base tokens wrong: %+v", got)
+	}
+	if got.CacheReadTokens != 8 || got.CacheCreationTokens != 2 {
+		t.Errorf("cache tokens not mapped: read=%d create=%d", got.CacheReadTokens, got.CacheCreationTokens)
+	}
+	if !got.PromptTokensIncludeCachedSegments {
+		t.Error("include-cached flag not mapped")
+	}
 }
 
 func TestDecodeAsyncPayload_UnwrapsAuditEnvelope(t *testing.T) {

@@ -266,11 +266,19 @@ Triggers an agent with an input prompt. Available in all editions.
   "usage": {
     "prompt_tokens": 150,
     "completion_tokens": 200,
-    "total_tokens": 350
+    "total_tokens": 350,
+    "cache_read_input_tokens": 120,
+    "cache_creation_input_tokens": 30,
+    "prompt_tokens_include_cached_segments": true
   },
   "finish_reason": "stop"
 }
 ```
+
+> `cache_read_input_tokens` and `cache_creation_input_tokens` are present only when
+> prompt caching was active (omitted otherwise). When
+> `prompt_tokens_include_cached_segments` is `true`, `prompt_tokens` already counts
+> the cached segments, so non-cached input = `prompt_tokens - cache_read_input_tokens`.
 
 Sync mode times out after the configured deadline (default **600s**). On timeout: `504 Gateway Timeout` with `webhook.llm_timeout`.
 
@@ -428,7 +436,10 @@ User-Agent: goclaw-webhook/1
   "usage": {
     "prompt_tokens": 150,
     "completion_tokens": 200,
-    "total_tokens": 350
+    "total_tokens": 350,
+    "cache_read_input_tokens": 120,
+    "cache_creation_input_tokens": 30,
+    "prompt_tokens_include_cached_segments": true
   },
   "metadata": {},
   "error": ""
