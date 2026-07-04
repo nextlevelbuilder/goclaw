@@ -350,6 +350,25 @@
 
   "bindings.any": "Bất kỳ",
 
+  "tabs.systemMessages": "Thông báo hệ thống",
+  "systemMessages.title": "Tùy chỉnh thông báo hệ thống",
+  "systemMessages.description": "Ghi đè các thông báo mà gateway gửi trực tiếp qua kênh",
+  "systemMessages.message": "Thông báo",
+  "systemMessages.messageTip": "Chọn loại thông báo hệ thống cần tùy chỉnh.",
+  "systemMessages.locale": "Ngôn ngữ",
+  "systemMessages.defaultLocale": "Ngôn ngữ gửi mặc định",
+  "systemMessages.defaultLocaleTip": "Ngôn ngữ dùng khi kênh không cung cấp locale.",
+  "systemMessages.localeTip": "Ngôn ngữ của mẫu cần sửa. Để trống thì dùng mẫu mặc định có sẵn.",
+  "systemMessages.locale.en": "Tiếng Anh",
+  "systemMessages.locale.vi": "Tiếng Việt",
+  "systemMessages.locale.zh": "Tiếng Trung",
+  "systemMessages.locale.ko": "Tiếng Hàn",
+  "systemMessages.override": "Mẫu ghi đè",
+  "systemMessages.overrideTip": "Mẫu sẽ được gửi thay cho thông báo có sẵn. Biến dùng dạng {{name}}.",
+  "systemMessages.defaultTemplate": "Mẫu mặc định",
+  "systemMessages.defaultTemplateTip": "Mẫu có sẵn được dùng khi phần ghi đè để trống.",
+  "systemMessages.useDefault": "Dùng mặc định",
+
   "toast": {
     "saved": "Đã lưu cấu hình",
     "saveFailed": "Không thể lưu cấu hình"

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"slices"
 
 	"github.com/titanous/json5"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/systemmessages"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -301,12 +303,43 @@ func (m *ConfigMethods) handleSchema(_ context.Context, client *gateway.Client, 
 				"type":        "object",
 				"description": "Session storage configuration",
 			},
+			"system_messages": map[string]any{
+				"type":        "object",
+				"description": "Custom operator-facing system messages sent outside normal LLM replies",
+				"properties": map[string]any{
+					"default_locale": map[string]any{
+						"type":        "string",
+						"enum":        []string{"en", "vi", "zh", "ko"},
+						"description": "Default locale used when a channel caller does not provide a locale",
+					},
+					"messages": map[string]any{
+						"type":        "object",
+						"description": "Message template overrides keyed by message key and locale",
+					},
+				},
+				"definitions": systemMessageSchemaDefinitions(),
+			},
 		},
 	}
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"json": schema,
 	}))
+}
+
+func systemMessageSchemaDefinitions() []systemmessages.Definition {
+	defaults := systemmessages.Defaults()
+	keys := make([]string, 0, len(defaults))
+	for key := range defaults {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+
+	defs := make([]systemmessages.Definition, 0, len(keys))
+	for _, key := range keys {
+		defs = append(defs, defaults[key])
+	}
+	return defs
 }
 
 // saveSecretsToStore extracts non-LLM/non-channel secrets from the config

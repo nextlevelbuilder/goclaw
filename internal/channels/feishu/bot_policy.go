@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
+	"github.com/nextlevelbuilder/goclaw/internal/systemmessages"
 )
 
 // --- Sender name resolution ---
@@ -216,10 +217,11 @@ func (c *Channel) sendPairingReply(ctx context.Context, senderID, chatID string)
 		return
 	}
 
-	replyText := fmt.Sprintf(
-		"GoClaw: access not configured.\n\nYour Feishu open_id: %s\n\nPairing code: %s\n\nAsk the bot owner to approve with:\n  goclaw pairing approve %s",
-		senderID, code, code,
-	)
+	replyText := c.SystemMessage("", systemmessages.KeyPairingAccountRequired, systemmessages.Vars{
+		"platform":  "Feishu",
+		"sender_id": senderID,
+		"code":      code,
+	})
 
 	receiveIDType := resolveReceiveIDType(chatID)
 	if err := c.sendText(context.Background(), chatID, receiveIDType, replyText, ""); err != nil {

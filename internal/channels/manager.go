@@ -11,6 +11,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/systemmessages"
 )
 
 // ChannelStream is the per-run streaming handle stored on RunContext.
@@ -69,6 +70,7 @@ type Manager struct {
 	dispatchTask     *asyncTask
 	mu               sync.RWMutex
 	contactCollector *store.ContactCollector
+	systemMessages   *systemmessages.Resolver
 }
 
 type asyncTask struct {
@@ -196,11 +198,33 @@ func (m *Manager) RegisterChannel(name string, channel Channel) {
 			bc.SetContactCollector(m.contactCollector)
 		}
 	}
+	if m.systemMessages != nil {
+		if sm, ok := channel.(interface {
+			SetSystemMessages(*systemmessages.Resolver)
+		}); ok {
+			sm.SetSystemMessages(m.systemMessages)
+		}
+	}
 	m.channels[name] = channel
 	if hc, ok := channel.(interface{ MarkRegistered(string) }); ok {
 		hc.MarkRegistered("Configured")
 	}
 	m.syncChannelHealthLocked(name, channel)
+}
+
+// SetSystemMessages sets the resolver propagated to channels registered now and
+// in the future.
+func (m *Manager) SetSystemMessages(r *systemmessages.Resolver) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.systemMessages = r
+	for _, channel := range m.channels {
+		if sm, ok := channel.(interface {
+			SetSystemMessages(*systemmessages.Resolver)
+		}); ok {
+			sm.SetSystemMessages(r)
+		}
+	}
 }
 
 // RecordHealth stores runtime health for an instance, including failures before registration.

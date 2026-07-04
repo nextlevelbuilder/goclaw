@@ -308,6 +308,25 @@
 
   "bindings.any": "모두",
 
+  "tabs.systemMessages": "시스템 메시지",
+  "systemMessages.title": "사용자 지정 시스템 메시지",
+  "systemMessages.description": "채널에서 직접 보내는 기본 게이트웨이 메시지를 재정의합니다",
+  "systemMessages.message": "메시지",
+  "systemMessages.messageTip": "사용자 지정할 기본 시스템 메시지 키입니다.",
+  "systemMessages.locale": "언어",
+  "systemMessages.defaultLocale": "기본 전송 언어",
+  "systemMessages.defaultLocaleTip": "채널이 locale을 제공하지 않을 때 사용할 언어입니다.",
+  "systemMessages.localeTip": "편집할 locale 재정의입니다. 비워 두면 기본값을 사용합니다.",
+  "systemMessages.locale.en": "영어",
+  "systemMessages.locale.vi": "베트남어",
+  "systemMessages.locale.zh": "중국어",
+  "systemMessages.locale.ko": "한국어",
+  "systemMessages.override": "재정의 템플릿",
+  "systemMessages.overrideTip": "기본 메시지 대신 보낼 템플릿입니다. 변수는 {{name}} 형식입니다.",
+  "systemMessages.defaultTemplate": "기본 템플릿",
+  "systemMessages.defaultTemplateTip": "재정의가 비어 있을 때 사용하는 기본 템플릿입니다.",
+  "systemMessages.useDefault": "기본값 사용",
+
   "toast": {
     "saved": "설정 저장됨",
     "saveFailed": "설정 저장 실패"

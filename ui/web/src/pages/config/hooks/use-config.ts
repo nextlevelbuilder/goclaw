@@ -10,6 +10,7 @@ import { userFriendlyError } from "@/lib/error-utils";
 
 interface ConfigData {
   config: Record<string, unknown>;
+  schema: Record<string, any> | null;
   hash: string;
   path: string;
 }
@@ -25,15 +26,19 @@ export function useConfig() {
   const { data, isPending: loading } = useQuery({
     queryKey: queryKeys.config.all,
     queryFn: async (): Promise<ConfigData> => {
-      const res = await ws.call<ConfigData>(Methods.CONFIG_GET);
+      const [res, schemaRes] = await Promise.all([
+        ws.call<ConfigData>(Methods.CONFIG_GET),
+        ws.call<{ json: Record<string, any> }>(Methods.CONFIG_SCHEMA),
+      ]);
       hashRef.current = res.hash;
-      return res;
+      return { ...res, schema: schemaRes.json ?? null };
     },
     staleTime: 5 * 60_000,
     enabled: connected,
   });
 
   const config = data?.config ?? null;
+  const schema = data?.schema ?? null;
   const hash = data?.hash ?? "";
   const configPath = data?.path ?? "";
 
@@ -90,5 +95,5 @@ export function useConfig() {
     [ws, invalidate],
   );
 
-  return { config, hash, configPath, loading, saving, error, refresh: invalidate, applyRaw, patch };
+  return { config, schema, hash, configPath, loading, saving, error, refresh: invalidate, applyRaw, patch };
 }

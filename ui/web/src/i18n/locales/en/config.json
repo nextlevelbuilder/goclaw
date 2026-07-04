@@ -351,6 +351,25 @@
 
   "bindings.any": "Any",
 
+  "tabs.systemMessages": "System Messages",
+  "systemMessages.title": "Custom System Messages",
+  "systemMessages.description": "Override built-in gateway messages sent directly by channels",
+  "systemMessages.message": "Message",
+  "systemMessages.messageTip": "Built-in system message key to customize.",
+  "systemMessages.locale": "Language",
+  "systemMessages.defaultLocale": "Default delivery language",
+  "systemMessages.defaultLocaleTip": "Language used when a channel does not provide a locale.",
+  "systemMessages.localeTip": "Locale override to edit. Empty values fall back to the built-in default.",
+  "systemMessages.locale.en": "English",
+  "systemMessages.locale.vi": "Vietnamese",
+  "systemMessages.locale.zh": "Chinese",
+  "systemMessages.locale.ko": "Korean",
+  "systemMessages.override": "Override Template",
+  "systemMessages.overrideTip": "Template sent instead of the built-in message for the selected locale. Variables use {{name}}.",
+  "systemMessages.defaultTemplate": "Default Template",
+  "systemMessages.defaultTemplateTip": "Built-in fallback template used when the override is empty.",
+  "systemMessages.useDefault": "Use Default",
+
   "toast": {
     "saved": "Config saved",
     "saveFailed": "Failed to save config"

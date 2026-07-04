@@ -8,16 +8,25 @@ import (
 
 	"github.com/mymmrac/telego"
 	tu "github.com/mymmrac/telego/telegoutil"
+
+	"github.com/nextlevelbuilder/goclaw/internal/systemmessages"
 )
 
 // --- Pairing UX ---
 
 // buildPairingReply builds the pairing reply message for unpaired users.
-func buildPairingReply(code string) string {
-	return fmt.Sprintf(
-		"🔗 This account hasn't been paired yet.\n\nPairing code: %s\n\nShare this code with the bot owner to get access.",
-		code,
-	)
+func (c *Channel) buildPairingReply(code string) string {
+	return c.SystemMessage("", systemmessages.KeyPairingAccountSimpleRequired, systemmessages.Vars{
+		"platform": "Telegram",
+		"code":     code,
+	})
+}
+
+func (c *Channel) buildGroupPairingReply(code string) string {
+	return c.SystemMessage("", systemmessages.KeyPairingGroupRequired, systemmessages.Vars{
+		"platform": "Telegram",
+		"code":     code,
+	})
 }
 
 // sendPairingReply generates a pairing code and sends the reply to the user.
@@ -40,7 +49,7 @@ func (c *Channel) sendPairingReply(ctx context.Context, chatID int64, userID, us
 		return
 	}
 
-	replyText := buildPairingReply(code)
+	replyText := c.buildPairingReply(code)
 	msg := tu.Message(tu.ID(chatID), replyText)
 	if _, err := c.bot.SendMessage(ctx, msg); err != nil {
 		slog.Warn("failed to send pairing reply", "chat_id", chatID, "error", err)
@@ -77,10 +86,7 @@ func (c *Channel) sendGroupPairingReply(ctx context.Context, chatID int64, chatI
 		return
 	}
 
-	replyText := fmt.Sprintf(
-		"🔗 This group hasn't been paired yet.\n\nPairing code: %s\n\nShare this code with the bot owner to get access.",
-		code,
-	)
+	replyText := c.buildGroupPairingReply(code)
 	msg := tu.Message(tu.ID(chatID), replyText)
 	if messageThreadID > 0 {
 		msg.MessageThreadID = messageThreadID
@@ -110,7 +116,9 @@ func (c *Channel) SendPairingApproved(ctx context.Context, chatID, botName strin
 		botName = "GoClaw"
 	}
 
-	msg := tu.Message(tu.ID(id), fmt.Sprintf("✅ %s access approved. Send a message to start chatting.", botName))
+	msg := tu.Message(tu.ID(id), c.SystemMessage("", systemmessages.KeyPairingApproved, systemmessages.Vars{
+		"app_name": botName,
+	}))
 
 	// Extract thread ID from topic/thread suffix for forum groups.
 	if idx := strings.Index(chatID, ":topic:"); idx > 0 {

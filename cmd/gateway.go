@@ -48,6 +48,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/security"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/systemmessages"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 	usagepricing "github.com/nextlevelbuilder/goclaw/internal/usage/pricing"
@@ -689,6 +690,7 @@ func runGateway() {
 
 	// Channel manager
 	channelMgr := channels.NewManager(msgBus)
+	channelMgr.SetSystemMessages(systemmessages.NewResolver(cfg))
 	deps.channelMgr = channelMgr
 
 	// Wire channel member resolver into permission grant paths (WS + HTTP) so

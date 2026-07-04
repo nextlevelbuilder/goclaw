@@ -22,6 +22,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/systemmessages"
 )
 
 // PolicyResult is returned by BaseChannel policy checks.
@@ -214,6 +215,7 @@ type BaseChannel struct {
 
 	// Shared policy + pairing fields (set via setters after construction).
 	pairingService  store.PairingStore
+	systemMessages  *systemmessages.Resolver
 	groupHistory    *PendingHistory
 	historyLimit    int
 	approvedGroups  sync.Map // chatID → true (in-memory cache for paired group approval)
@@ -271,6 +273,17 @@ func (c *BaseChannel) SetPairingService(ps store.PairingStore) { c.pairingServic
 
 // PairingService returns the configured pairing store (may be nil).
 func (c *BaseChannel) PairingService() store.PairingStore { return c.pairingService }
+
+// SetSystemMessages sets the resolver used for operator/system messages.
+func (c *BaseChannel) SetSystemMessages(r *systemmessages.Resolver) { c.systemMessages = r }
+
+// SystemMessage renders a configurable operator/system message.
+func (c *BaseChannel) SystemMessage(locale, key string, vars systemmessages.Vars) string {
+	if c.systemMessages != nil {
+		return c.systemMessages.Render(locale, key, vars)
+	}
+	return systemmessages.Render(locale, key, vars)
+}
 
 // SetGroupHistory sets the pending group history tracker.
 func (c *BaseChannel) SetGroupHistory(gh *PendingHistory) { c.groupHistory = gh }

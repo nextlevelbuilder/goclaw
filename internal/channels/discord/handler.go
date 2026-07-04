@@ -16,6 +16,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/typing"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/systemmessages"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
@@ -404,10 +405,11 @@ func (c *Channel) sendPairingReply(ctx context.Context, senderID, channelID stri
 		return
 	}
 
-	replyText := fmt.Sprintf(
-		"GoClaw: access not configured.\n\nYour Discord user ID: %s\n\nPairing code: %s\n\nAsk the bot owner to approve with:\n  goclaw pairing approve %s",
-		senderID, code, code,
-	)
+	replyText := c.SystemMessage("", systemmessages.KeyPairingAccountRequired, systemmessages.Vars{
+		"platform":  "Discord",
+		"sender_id": senderID,
+		"code":      code,
+	})
 
 	if _, err := c.session.ChannelMessageSend(channelID, replyText); err != nil {
 		slog.Warn("failed to send discord pairing reply", "error", err)

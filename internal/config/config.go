@@ -60,6 +60,7 @@ type Config struct {
 	Bindings  []AgentBinding  `json:"bindings,omitempty"`
 	Hooks     HooksConfig     `json:"hooks"`
 	Packages  PackagesConfig  `json:"packages"` // runtime package mgmt (GitHub updater)
+	Messages  SystemMsgConfig `json:"system_messages,omitempty"`
 	mu        sync.RWMutex
 }
 
@@ -82,6 +83,38 @@ type PackagesConfig struct {
 }
 
 // UpdatesCheckTTLDuration parses UpdatesCheckTTL returning 1h on empty/invalid.
+// SystemMsgConfig customizes operator-facing system messages that GoClaw
+// sends directly, outside normal LLM replies. Message templates use
+// {{variable}} placeholders and may be overridden per locale.
+type SystemMsgConfig struct {
+	DefaultLocale string                            `json:"default_locale,omitempty"`
+	Messages      map[string]LocalizedSystemMessage `json:"messages,omitempty"`
+}
+
+// LocalizedSystemMessage maps locale code ("en", "vi", "zh", "ko") to a
+// template override for one system message key.
+type LocalizedSystemMessage map[string]string
+
+// Clone returns a deep copy safe for snapshots and ReplaceFrom.
+func (s SystemMsgConfig) Clone() SystemMsgConfig {
+	out := SystemMsgConfig{DefaultLocale: strings.TrimSpace(s.DefaultLocale)}
+	if len(s.Messages) == 0 {
+		return out
+	}
+	out.Messages = make(map[string]LocalizedSystemMessage, len(s.Messages))
+	for key, byLocale := range s.Messages {
+		if len(byLocale) == 0 {
+			continue
+		}
+		cp := make(LocalizedSystemMessage, len(byLocale))
+		for locale, template := range byLocale {
+			cp[locale] = template
+		}
+		out.Messages[key] = cp
+	}
+	return out
+}
+
 func (p PackagesConfig) UpdatesCheckTTLDuration() time.Duration {
 	if p.UpdatesCheckTTL == "" {
 		return time.Hour
@@ -583,6 +616,7 @@ func (c *Config) ReplaceFrom(src *Config) {
 	c.Telemetry = src.Telemetry
 	c.Tailscale = src.Tailscale
 	c.Bindings = src.Bindings
+	c.Messages = src.Messages.Clone()
 }
 
 // Clone returns a deep copy of the config while holding the read lock.
@@ -613,6 +647,14 @@ func (c *Config) ShellDenyGroupsSnapshot() map[string]bool {
 	groups := make(map[string]bool, len(c.Tools.ShellDenyGroups))
 	maps.Copy(groups, c.Tools.ShellDenyGroups)
 	return groups
+}
+
+// SystemMessagesSnapshot returns a deep copy of configured system-message
+// overrides without exposing mutable config state to long-lived channels.
+func (c *Config) SystemMessagesSnapshot() SystemMsgConfig {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.Messages.Clone()
 }
 
 // IdentityConfig defines agent persona / display identity.

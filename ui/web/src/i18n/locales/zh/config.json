@@ -350,6 +350,25 @@
 
   "bindings.any": "任意",
 
+  "tabs.systemMessages": "系统消息",
+  "systemMessages.title": "自定义系统消息",
+  "systemMessages.description": "覆盖频道直接发送的内置网关消息",
+  "systemMessages.message": "消息",
+  "systemMessages.messageTip": "要自定义的内置系统消息键。",
+  "systemMessages.locale": "语言",
+  "systemMessages.defaultLocale": "默认发送语言",
+  "systemMessages.defaultLocaleTip": "频道未提供 locale 时使用的语言。",
+  "systemMessages.localeTip": "要编辑的 locale 覆盖。留空则使用内置默认值。",
+  "systemMessages.locale.en": "英语",
+  "systemMessages.locale.vi": "越南语",
+  "systemMessages.locale.zh": "中文",
+  "systemMessages.locale.ko": "韩语",
+  "systemMessages.override": "覆盖模板",
+  "systemMessages.overrideTip": "替代内置消息发送的模板。变量使用 {{name}}。",
+  "systemMessages.defaultTemplate": "默认模板",
+  "systemMessages.defaultTemplateTip": "覆盖为空时使用的内置回退模板。",
+  "systemMessages.useDefault": "使用默认值",
+
   "toast": {
     "saved": "配置已保存",
     "saveFailed": "保存配置失败"

@@ -9,6 +9,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/zalo/personal/protocol"
+	"github.com/nextlevelbuilder/goclaw/internal/systemmessages"
 )
 
 const pairingDebounce = 60 * time.Second
@@ -62,10 +63,11 @@ func (c *Channel) sendPairingReply(ctx context.Context, senderID, chatID string)
 		return
 	}
 
-	replyText := fmt.Sprintf(
-		"GoClaw: access not configured.\n\nYour Zalo user id: %s\n\nPairing code: %s\n\nAsk the bot owner to approve with:\n  goclaw pairing approve %s",
-		senderID, code, code,
-	)
+	replyText := c.SystemMessage("", systemmessages.KeyPairingAccountRequired, systemmessages.Vars{
+		"platform":  "Zalo",
+		"sender_id": senderID,
+		"code":      code,
+	})
 
 	threadType := protocol.ThreadTypeUser
 	if strings.HasPrefix(senderID, "group:") {

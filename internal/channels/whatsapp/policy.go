@@ -9,6 +9,7 @@ import (
 	"go.mau.fi/whatsmeow/types"
 
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
+	"github.com/nextlevelbuilder/goclaw/internal/systemmessages"
 )
 
 // checkGroupPolicy evaluates the group policy for a sender.
@@ -64,10 +65,11 @@ func (c *Channel) sendPairingReply(ctx context.Context, senderID, chatID string)
 		return
 	}
 
-	replyText := fmt.Sprintf(
-		"GoClaw: access not configured.\n\nYour WhatsApp ID: %s\n\nPairing code: %s\n\nAsk the account owner to approve with:\n  goclaw pairing approve %s",
-		senderID, code, code,
-	)
+	replyText := c.SystemMessage("", systemmessages.KeyPairingAccountRequired, systemmessages.Vars{
+		"platform":  "WhatsApp",
+		"sender_id": senderID,
+		"code":      code,
+	})
 
 	if c.client == nil || !c.client.IsConnected() {
 		slog.Warn("whatsapp not connected, cannot send pairing reply")
