@@ -47,6 +47,17 @@ func extractContentAndMedia(content protocol.Content) (string, []string) {
 		ContentType: mimeType,
 		FileName:    att.Title,
 	}})
+	// Zalo photo messages carry the user's caption in the attachment title.
+	// Keep it next to the media tag — dropping it loses the actual request text.
+	if att.IsImage() {
+		caption := strings.TrimSpace(att.Title)
+		if caption == "" {
+			caption = strings.TrimSpace(att.Description)
+		}
+		if caption != "" {
+			tag = tag + "\n" + caption
+		}
+	}
 	return tag, []string{filePath}
 }
 
@@ -111,5 +122,67 @@ func downloadFile(ctx context.Context, fileURL string) (string, error) {
 		os.Remove(tmpFile.Name())
 		return "", fmt.Errorf("file too large: %d bytes (max %d)", written, maxMediaBytes)
 	}
-	return tmpFile.Name(), nil
+	return fixDownloadedExt(tmpFile.Name()), nil
+}
+
+// fixDownloadedExt renames a downloaded temp file to match its sniffed content
+// type when the URL-derived extension misclassifies it. Zalo CDN URLs often
+// carry no usable file extension, so downloads land as .bin — downstream media
+// classification (persistMedia infers MIME from extension) would then treat an
+// image as a document and the agent's vision input would silently skip it.
+func fixDownloadedExt(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return path
+	}
+	buf := make([]byte, 512)
+	n, _ := io.ReadFull(f, buf)
+	f.Close()
+	if n == 0 {
+		return path
+	}
+	sniffed := http.DetectContentType(buf[:n])
+	if !strings.HasPrefix(sniffed, "image/") {
+		return path
+	}
+	if strings.HasPrefix(media.DetectMIMEType(path), "image/") {
+		return path // extension already says image — nothing to fix
+	}
+	var ext string
+	switch sniffed {
+	case "image/jpeg":
+		ext = ".jpg"
+	case "image/png":
+		ext = ".png"
+	case "image/gif":
+		ext = ".gif"
+	case "image/webp":
+		ext = ".webp"
+	default:
+		return path
+	}
+	newPath := strings.TrimSuffix(path, filepath.Ext(path)) + ext
+	if err := os.Rename(path, newPath); err != nil {
+		return path
+	}
+	return newPath
+}
+
+// extractQuoteMedia downloads the image attached to a quoted message, so a
+// reply like “make a poster from this photo” actually carries the photo.
+// Non-image quotes (files, stickers) stay text-only placeholders.
+func extractQuoteMedia(quote *protocol.TQuote) []string {
+	if quote == nil {
+		return nil
+	}
+	att := quote.Attach.ParseAttachment()
+	if att == nil || !att.IsImage() || att.URL() == "" {
+		return nil
+	}
+	filePath, err := downloadFile(context.Background(), att.URL())
+	if err != nil {
+		slog.Warn("zalo_personal: failed to download quoted attachment", "url", att.URL(), "error", err)
+		return nil
+	}
+	return []string{filePath}
 }

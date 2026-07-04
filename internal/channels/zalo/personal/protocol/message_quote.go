@@ -101,6 +101,19 @@ func (a QuoteAttachment) MarshalJSON() ([]byte, error) {
 	return a.Raw, nil
 }
 
+// ParseAttachment decodes the quoted attachment payload into an Attachment.
+// Returns nil when there is no payload or it does not decode as an object.
+func (a QuoteAttachment) ParseAttachment() *Attachment {
+	if len(a.Raw) == 0 {
+		return nil
+	}
+	var att Attachment
+	if err := json.Unmarshal(a.Raw, &att); err != nil {
+		return nil
+	}
+	return &att
+}
+
 func (a QuoteAttachment) AttachmentText() string {
 	if len(a.Raw) == 0 {
 		return ""

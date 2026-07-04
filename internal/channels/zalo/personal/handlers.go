@@ -37,6 +37,9 @@ func (c *Channel) handleDM(msg protocol.UserMessage) {
 	}
 
 	body, media := extractContentAndMedia(msg.Data.Content)
+	// A reply to an image should carry the image itself, not just the
+	// "[Quoted image]" placeholder — download it and attach as media.
+	media = append(media, extractQuoteMedia(msg.Data.Quote)...)
 	content := replycontext.Compose(c.buildReplyContext(threadID, msg.Data.Quote), body)
 	if content == "" {
 		return
@@ -88,6 +91,9 @@ func (c *Channel) handleGroupMessage(msg protocol.GroupMessage) {
 	}
 
 	body, media := extractContentAndMedia(msg.Data.Content)
+	// A reply to an image should carry the image itself, not just the
+	// "[Quoted image]" placeholder — download it and attach as media.
+	media = append(media, extractQuoteMedia(msg.Data.Quote)...)
 	content := replycontext.Compose(c.buildReplyContext(threadID, msg.Data.Quote), body)
 	if content == "" {
 		return
@@ -179,5 +185,6 @@ func (c *Channel) startTyping(threadID string, threadType protocol.ThreadType) {
 
 func extractContentAndMediaWithQuote(content protocol.Content, quote *protocol.TQuote) (string, []string) {
 	text, media := extractContentAndMedia(content)
+	media = append(media, extractQuoteMedia(quote)...)
 	return replycontext.Compose(formatQuoteContext(quote), text), media
 }
