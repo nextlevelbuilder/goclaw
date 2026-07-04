@@ -234,13 +234,19 @@ func TestMaybeSummarize_LogsTriggerDecisionOverThreshold(t *testing.T) {
 
 	logs := captureSlog(t, func() {
 		loop.maybeSummarize(context.Background(), "test-session-key")
-	})
 
-	select {
-	case <-done:
-	case <-time.After(5 * time.Second):
-		t.Fatal("timed out waiting for maybeSummarize to call provider.Chat")
-	}
+		// Wait for the background summarize goroutine to reach the point where it
+		// calls provider.Chat (which happens strictly after the "compact_budget"
+		// slog.Info write). This must happen INSIDE the captureSlog closure so the
+		// buffer is not read until the background goroutine's logging is done —
+		// otherwise buf.String() races with the goroutine's concurrent slog.Info
+		// write to the same bytes.Buffer under -race.
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for maybeSummarize to call provider.Chat")
+		}
+	})
 
 	assertLogContains(t, logs,
 		"compaction_decision",
