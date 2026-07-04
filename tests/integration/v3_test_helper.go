@@ -106,6 +106,20 @@ func seedTenantAgent(t *testing.T, db *sql.DB) (tenantID, agentID uuid.UUID) {
 
 	// Cleanup after test — delete in FK order (children first, parents last).
 	t.Cleanup(func() {
+		// Knowledge stores — must run BEFORE agent_teams is deleted. vault_documents.team_id
+		// is ON DELETE SET NULL with a BEFORE UPDATE trigger that force-sets scope='personal',
+		// which violates vault_documents_scope_consistency for team-scoped docs whose agent_id
+		// is NULL. Deleting the rows outright avoids the trigger entirely.
+		// vault_links has no tenant_id column (it links vault_documents by from/to_doc_id) and
+		// cascades automatically via vault_links_{from,to}_doc_id_fkey ON DELETE CASCADE, so no
+		// explicit delete is needed here.
+		db.Exec("DELETE FROM vault_documents WHERE tenant_id = $1", tenantID)
+		db.Exec("DELETE FROM kg_dedup_candidates WHERE tenant_id = $1", tenantID)
+		db.Exec("DELETE FROM kg_relations WHERE tenant_id = $1", tenantID)
+		db.Exec("DELETE FROM kg_entities WHERE tenant_id = $1", tenantID)
+		db.Exec("DELETE FROM memory_chunks WHERE tenant_id = $1", tenantID)
+		db.Exec("DELETE FROM memory_documents WHERE tenant_id = $1", tenantID)
+
 		// Team-related (deepest children first)
 		db.Exec("DELETE FROM team_task_comments WHERE tenant_id = $1", tenantID)
 		db.Exec("DELETE FROM team_task_events WHERE tenant_id = $1", tenantID)
@@ -120,15 +134,6 @@ func seedTenantAgent(t *testing.T, db *sql.DB) (tenantID, agentID uuid.UUID) {
 		// Cron
 		db.Exec("DELETE FROM cron_run_logs WHERE job_id IN (SELECT id FROM cron_jobs WHERE tenant_id = $1)", tenantID)
 		db.Exec("DELETE FROM cron_jobs WHERE tenant_id = $1", tenantID)
-
-		// Knowledge stores
-		db.Exec("DELETE FROM vault_links WHERE tenant_id = $1", tenantID)
-		db.Exec("DELETE FROM vault_documents WHERE tenant_id = $1", tenantID)
-		db.Exec("DELETE FROM kg_dedup_candidates WHERE tenant_id = $1", tenantID)
-		db.Exec("DELETE FROM kg_relations WHERE tenant_id = $1", tenantID)
-		db.Exec("DELETE FROM kg_entities WHERE tenant_id = $1", tenantID)
-		db.Exec("DELETE FROM memory_chunks WHERE tenant_id = $1", tenantID)
-		db.Exec("DELETE FROM memory_documents WHERE tenant_id = $1", tenantID)
 
 		// Sessions
 		db.Exec("DELETE FROM sessions WHERE tenant_id = $1", tenantID)
@@ -156,7 +161,9 @@ func seedTenantAgent(t *testing.T, db *sql.DB) (tenantID, agentID uuid.UUID) {
 		db.Exec("DELETE FROM agent_context_files WHERE agent_id = $1", agentID)
 		db.Exec("DELETE FROM user_context_files WHERE agent_id = $1", agentID)
 		db.Exec("DELETE FROM user_agent_overrides WHERE agent_id = $1", agentID)
-		db.Exec("DELETE FROM agent_user_profiles WHERE agent_id = $1", agentID)
+		// Note: agent_user_profiles does not exist in the current schema (the table is
+		// user_agent_profiles, scoped by tenant_id + agent_id; there is nothing per-agent
+		// to clean here beyond what tenant-scoped deletes below already cover).
 		db.Exec("DELETE FROM agent_evolution_suggestions WHERE agent_id = $1", agentID)
 		db.Exec("DELETE FROM agent_evolution_metrics WHERE agent_id = $1", agentID)
 		db.Exec("DELETE FROM agents WHERE id = $1", agentID)

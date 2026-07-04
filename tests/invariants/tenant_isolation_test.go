@@ -347,7 +347,8 @@ func TestTenantIsolation_VaultStore(t *testing.T) {
 		t.Fatalf("create vault doc: %v", err)
 	}
 	t.Cleanup(func() {
-		db.Exec("DELETE FROM vault_links WHERE tenant_id = $1", tenantA)
+		// vault_links has no tenant_id column; it cascades via
+		// vault_links_{from,to}_doc_id_fkey ON DELETE CASCADE when vault_documents is deleted.
 		db.Exec("DELETE FROM vault_documents WHERE id = $1", docID)
 	})
 
