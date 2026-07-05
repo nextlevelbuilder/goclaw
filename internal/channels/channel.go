@@ -245,7 +245,12 @@ func (c *BaseChannel) Type() string {
 }
 
 // SetName overrides the channel name (used by InstanceLoader for DB instances).
-func (c *BaseChannel) SetName(name string) { c.name = name }
+func (c *BaseChannel) SetName(name string) {
+	c.name = name
+	if c.groupHistory != nil {
+		c.groupHistory.SetChannelName(name)
+	}
+}
 
 // SetType sets the platform type (used by InstanceLoader for DB instances).
 func (c *BaseChannel) SetType(t string) { c.channelType = t }
@@ -286,7 +291,12 @@ func (c *BaseChannel) SystemMessage(locale, key string, vars systemmessages.Vars
 }
 
 // SetGroupHistory sets the pending group history tracker.
-func (c *BaseChannel) SetGroupHistory(gh *PendingHistory) { c.groupHistory = gh }
+func (c *BaseChannel) SetGroupHistory(gh *PendingHistory) {
+	c.groupHistory = gh
+	if c.groupHistory != nil {
+		c.groupHistory.SetChannelName(c.name)
+	}
+}
 
 // GroupHistory returns the pending group history tracker (may be nil).
 func (c *BaseChannel) GroupHistory() *PendingHistory { return c.groupHistory }

@@ -102,6 +102,16 @@ func NewPersistentHistory(channelName string, s store.PendingMessageStore, tenan
 // IsPersistent returns true if this history is backed by a DB store.
 func (ph *PendingHistory) IsPersistent() bool { return ph.store != nil }
 
+// SetChannelName updates the channel identity used for DB persistence.
+// DB-backed channel instances are constructed with a platform type first and
+// renamed to the instance name before start.
+func (ph *PendingHistory) SetChannelName(name string) {
+	if name == "" {
+		return
+	}
+	ph.channelName = name
+}
+
 // SetCompactionConfig sets the LLM compaction config. Call after creation.
 func (ph *PendingHistory) SetCompactionConfig(cfg *CompactionConfig) {
 	ph.compactionCfg = cfg
