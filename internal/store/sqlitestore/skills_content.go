@@ -129,13 +129,17 @@ func (s *SQLiteSkillStore) GetSkill(ctx context.Context, name string) (*store.Sk
 		return &enriched[0], true
 	}
 
+	// "archived" means a system skill has missing dependencies (see seeder.go); it does not
+	// mean the skill is hidden from lookup. ListSkills() and GetSkillByID() both include
+	// active + archived skills, so name/slug lookup must match to avoid 404s on archived
+	// skills that are otherwise still enabled.
 	if id, err := uuid.Parse(name); err == nil {
 		return scan(baseSelect+"id = ? AND status IN ('active', 'archived')"+scope, append([]any{id}, args...)...)
 	}
-	if info, ok := scan(baseSelect+"slug = ? AND status = 'active'"+scope, append([]any{name}, args...)...); ok {
+	if info, ok := scan(baseSelect+"slug = ? AND status IN ('active', 'archived')"+scope, append([]any{name}, args...)...); ok {
 		return info, true
 	}
-	return scan(baseSelect+"name = ? AND status = 'active'"+scope+" ORDER BY id LIMIT 1", append([]any{name}, args...)...)
+	return scan(baseSelect+"name = ? AND status IN ('active', 'archived')"+scope+" ORDER BY id LIMIT 1", append([]any{name}, args...)...)
 }
 
 func (s *SQLiteSkillStore) FilterSkills(ctx context.Context, allowList []string) []store.SkillInfo {
