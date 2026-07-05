@@ -111,7 +111,11 @@
     "files": "파일",
     "version": "버전:",
     "current": "(현재)",
-    "noContent": "사용 가능한 내용이 없습니다."
+    "noContent": "사용 가능한 내용이 없습니다.",
+    "editContent": "내용 편집",
+    "editContentLoading": "불러오는 중...",
+    "editContentSystemHint": "시스템 스킬은 읽기 전용이며 웹 UI에서 편집할 수 없습니다.",
+    "editContentLoadFailed": "편집을 위한 스킬 내용을 불러오지 못했습니다"
   },
   "toast": {
     "updated": "스킬 업데이트됨",

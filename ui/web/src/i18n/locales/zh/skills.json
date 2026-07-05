@@ -177,7 +177,11 @@
     "filesShown": "{{shown}} / {{total}} 个文件",
     "copyLink": "复制链接",
     "copySuccess": "已复制 Deeplink",
-    "copyFailed": "复制 Deeplink 失败"
+    "copyFailed": "复制 Deeplink 失败",
+    "editContent": "编辑内容",
+    "editContentLoading": "加载中...",
+    "editContentSystemHint": "系统技能为只读，无法在网页界面中编辑。",
+    "editContentLoadFailed": "加载技能内容以进行编辑失败"
   },
   "evolution": {
     "tab": "进化",

@@ -48,7 +48,7 @@ export function SkillsPage() {
     skills, loading, refresh, getSkill, uploadSkill, updateSkill, deleteSkill,
     listAgentGrants, grantSkillToAgent, grantSkillToAgents, revokeSkillFromAgent,
     deleteSkills, toggleSkills, downloadSkills,
-    getSkillVersions, getSkillFiles, getSkillFileContent, rescanDeps, installDeps, installSingleDep, toggleSkill,
+    getSkillVersions, getSkillFiles, getSkillFileContent, updateSkillFileContent, rescanDeps, installDeps, installSingleDep, toggleSkill,
     setTenantConfig, deleteTenantConfig,
   } = useSkills();
   const [params, setParams] = useSearchParams();
@@ -288,6 +288,12 @@ export function SkillsPage() {
     try { await setTenantConfig(id, enabled); } finally { setToggling(null); }
   };
 
+  const handleSaveSkillContent = async (id: string, content: string) => {
+    await updateSkillFileContent(id, "SKILL.md", content);
+    const detail = await getSkill(id);
+    if (detail) setSelectedSkill(detail);
+  };
+
   const handleDeleteTenantConfig = async (id: string) => {
     setToggling(id);
     try { await deleteTenantConfig(id); } finally { setToggling(null); }
@@ -446,6 +452,7 @@ export function SkillsPage() {
           getSkillVersions={getSkillVersions}
           getSkillFiles={getSkillFiles}
           getSkillFileContent={getSkillFileContent}
+          onSaveContent={handleSaveSkillContent}
         />
       )}
 

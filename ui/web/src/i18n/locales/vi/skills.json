@@ -177,7 +177,11 @@
     "filesShown": "{{shown}} / {{total}} tệp",
     "copyLink": "Copy link",
     "copySuccess": "Đã copy deeplink",
-    "copyFailed": "Không thể copy deeplink"
+    "copyFailed": "Không thể copy deeplink",
+    "editContent": "Chỉnh sửa nội dung",
+    "editContentLoading": "Đang tải...",
+    "editContentSystemHint": "Kỹ năng hệ thống chỉ đọc và không thể chỉnh sửa từ giao diện web.",
+    "editContentLoadFailed": "Không thể tải nội dung kỹ năng để chỉnh sửa"
   },
   "evolution": {
     "tab": "Tự tiến hóa",

@@ -13,7 +13,9 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -258,6 +260,102 @@ func (h *SkillsHandler) handleReadFile(w http.ResponseWriter, r *http.Request) {
 		"path":    relPath,
 		"size":    info.Size(),
 	})
+}
+
+// handleWriteFile overwrites a single file within the CURRENT version directory
+// of a managed (non-system) skill. System/bundled skills are read-only via the
+// API — editing them here would silently diverge from the shipped source and
+// is rejected. Historical versions are immutable; only the current version's
+// working copy can be edited in place.
+func (h *SkillsHandler) handleWriteFile(w http.ResponseWriter, r *http.Request) {
+	locale := store.LocaleFromContext(r.Context())
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidID, "skill")})
+		return
+	}
+
+	relPath := r.PathValue("path")
+	if relPath == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgRequired, "path")})
+		return
+	}
+	if strings.Contains(relPath, "..") {
+		slog.Warn("security.skill_files_traversal", "path", relPath)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
+		return
+	}
+
+	var body struct {
+		Content string `json:"content"`
+	}
+	if !bindJSON(w, r, locale, &body) {
+		return
+	}
+
+	filePath, _, currentVersion, isSystem, ok := h.skills.GetSkillFilePath(r.Context(), id)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "skill", id.String())})
+		return
+	}
+	if isSystem {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "cannot edit a system skill"})
+		return
+	}
+
+	// Ownership check (admins bypass) — mirrors handleUpdate/handleDelete.
+	auth := resolveAuth(r)
+	if !permissions.HasMinRole(auth.Role, permissions.RoleAdmin) {
+		userID := store.UserIDFromContext(r.Context())
+		if ownerID, found := h.skills.GetSkillOwnerID(r.Context(), id); found && ownerID != userID {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "only the skill owner can perform this action"})
+			return
+		}
+	}
+
+	slugDir := store.SkillSlugDir(filePath)
+	if slugDir == "" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgFileNotFound)})
+		return
+	}
+	versionDir := filepath.Join(slugDir, strconv.Itoa(currentVersion))
+	if info, err := os.Stat(versionDir); err != nil || !info.IsDir() {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgFileNotFound)})
+		return
+	}
+
+	cleanRelPath := filepath.Clean(relPath)
+	absPath := filepath.Join(versionDir, cleanRelPath)
+	if !strings.HasPrefix(absPath, versionDir+string(filepath.Separator)) {
+		slog.Warn("security.skill_files_escape", "resolved", absPath, "root", versionDir)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
+		return
+	}
+	if fi, err := os.Lstat(absPath); err == nil {
+		if fi.Mode()&os.ModeSymlink != 0 {
+			slog.Warn("security.skill_files_symlink", "path", absPath)
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
+			return
+		}
+		if fi.IsDir() {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
+			return
+		}
+	}
+	if skills.IsSystemArtifact(filepath.Base(cleanRelPath)) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
+		return
+	}
+
+	if err := os.WriteFile(absPath, []byte(body.Content), 0o644); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	h.skills.BumpVersion()
+	h.emitCacheInvalidate(bus.CacheKindSkills, id.String(), uuid.Nil)
+	emitAudit(h.msgBus, r, "skill.file_updated", "skill", id.String())
+	writeJSON(w, http.StatusOK, map[string]string{"ok": "true", "path": relPath})
 }
 
 func readableSkillRoots(versionDir, slug string, isSystem bool, bundledDir string) []string {
