@@ -18,9 +18,14 @@ import (
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
-// MCPToolLister returns discovered tool names for a specific MCP server.
+// MCPToolLister returns discovered tool names/info for a specific MCP server.
 type MCPToolLister interface {
 	ServerToolNames(serverName string) []string
+	// ServerToolInfos returns the original (bare, unprefixed) tool name and
+	// real description for each tool of an already-connected server. Bare
+	// names match the shape returned by mcp.DiscoverTools, so callers don't
+	// have to special-case "already connected" vs. "on-demand discovery".
+	ServerToolInfos(serverName string) []mcp.ToolInfo
 }
 
 // MCPPoolEvictor evicts pooled connections for a tenant+server (called on credential rotation).

@@ -47,6 +47,57 @@ func (m *Manager) ServerToolNames(serverName string) []string {
 	return nil
 }
 
+// ServerToolInfos returns ToolInfo (original/bare tool name + real description)
+// for a server that is already live-connected in this Manager, by looking up
+// each registered (prefixed) tool name in the registry and reading its
+// original MCP name and description off the live *BridgeTool.
+//
+// This exists so callers needing tool metadata for an already-connected
+// server (e.g. handleListServerTools) get the SAME bare-name shape as the
+// on-demand DiscoverTools fallback (manager_tools.go DiscoverTools), instead
+// of the registered/prefixed names returned by ServerToolNames. Mixing the
+// two shapes previously caused a server's tool_allow grant (built from
+// whichever name shape the UI happened to see, depending on whether the
+// server was already connected) to end up keyed by a prefixed name that
+// never matches the bare-name keys used by buildCachedToolInfo
+// (manager_connect.go) and ListToolsForAgent's tool_cache lookups
+// (manager.go), silently producing empty description/parameters in the
+// prompt preview for tools whose grant was captured while the server was
+// live-connected — most commonly a server (like goclaw's own CRUD server)
+// that self-connects and therefore tends to already be live by the time an
+// operator configures its grants.
+func (m *Manager) ServerToolInfos(serverName string) []ToolInfo {
+	m.mu.RLock()
+	var registeredNames []string
+	if _, isPool := m.poolServers[serverName]; isPool {
+		registeredNames = m.poolToolNames[serverName]
+	} else if ss, ok := m.servers[serverName]; ok {
+		registeredNames = ss.toolNames
+	}
+	m.mu.RUnlock()
+
+	if len(registeredNames) == 0 {
+		return nil
+	}
+
+	infos := make([]ToolInfo, 0, len(registeredNames))
+	for _, registeredName := range registeredNames {
+		tool, ok := m.registry.Get(registeredName)
+		if !ok {
+			continue
+		}
+		bridgeTool, ok := tool.(*BridgeTool)
+		if !ok {
+			continue
+		}
+		infos = append(infos, ToolInfo{
+			Name:        bridgeTool.OriginalName(),
+			Description: bridgeTool.Description(),
+		})
+	}
+	return infos
+}
+
 // updateMCPGroup rebuilds the "mcp" group with all MCP tool names across servers.
 // Must be called with m.mu NOT held (it acquires RLock).
 func (m *Manager) updateMCPGroup() {
