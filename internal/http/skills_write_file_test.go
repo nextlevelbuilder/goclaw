@@ -14,7 +14,7 @@ import (
 
 func TestHandleWriteFile_UpdatesManagedSkillContent(t *testing.T) {
 	baseDir := t.TempDir()
-	versionDir := filepath.Join(baseDir, "my-skill", "1")
+	versionDir := filepath.Join(baseDir, "skills-store", "my-skill", "1")
 	if err := os.MkdirAll(versionDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +37,28 @@ func TestHandleWriteFile_UpdatesManagedSkillContent(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
-	got, err := os.ReadFile(filepath.Join(versionDir, "SKILL.md"))
+
+	// The original version directory remains untouched (historical versions
+	// are immutable).
+	origGot, err := os.ReadFile(filepath.Join(versionDir, "SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(origGot) != "old content" {
+		t.Fatalf("original version content = %q, want unchanged %q", origGot, "old content")
+	}
+
+	// A new version directory was created with the edited content, and the
+	// skill's DB row now points at it with a bumped version number.
+	updated, ok := skillStore.skills[id]
+	if !ok {
+		t.Fatal("skill not found in store after update")
+	}
+	if updated.Version != 2 {
+		t.Fatalf("version = %d, want 2", updated.Version)
+	}
+	newVersionDir := filepath.Join(baseDir, "skills-store", "my-skill", "2")
+	got, err := os.ReadFile(filepath.Join(newVersionDir, "SKILL.md"))
 	if err != nil {
 		t.Fatal(err)
 	}

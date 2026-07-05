@@ -343,14 +343,14 @@ export function SkillDetailDialog({
           )}
         </DialogHeader>
 
-        <Tabs value={activeDetailTab} className="flex-1 overflow-hidden flex flex-col" onValueChange={handleTabChange}>
+        <Tabs value={activeDetailTab} className="flex-1 min-h-0 overflow-hidden flex flex-col" onValueChange={handleTabChange}>
           <TabsList>
             <TabsTrigger value="content">{t("detail.content")}</TabsTrigger>
             {hasFiles && <TabsTrigger value="files">{t("detail.files")}</TabsTrigger>}
             {hasEvolution && <TabsTrigger value="evolution">{t("evolution.tab")}</TabsTrigger>}
           </TabsList>
 
-          <TabsContent value="content" className="flex-1 overflow-y-auto mt-2 -mx-4 px-4 sm:-mx-6 sm:px-6 flex flex-col gap-2">
+          <TabsContent value="content" className="flex-1 min-h-0 overflow-y-auto mt-2 -mx-4 px-4 sm:-mx-6 sm:px-6 flex flex-col gap-2">
             <div className="flex justify-end">
               {editingContent ? (
                 <div className="flex gap-2">
@@ -393,7 +393,7 @@ export function SkillDetailDialog({
               <Textarea
                 value={editContentValue}
                 onChange={(e) => setEditContentValue(e.target.value)}
-                className="min-h-[50vh] flex-1 font-mono text-base md:text-sm"
+                className="field-sizing-fixed min-h-[50vh] flex-1 resize-none overflow-y-auto font-mono text-base md:text-sm"
                 spellCheck={false}
                 aria-label={t("detail.editContent")}
               />
@@ -409,7 +409,7 @@ export function SkillDetailDialog({
           </TabsContent>
 
           {hasFiles && (
-            <TabsContent value="files" className="flex-1 overflow-hidden flex flex-col mt-2 gap-2">
+            <TabsContent value="files" className="flex-1 min-h-0 overflow-hidden flex flex-col mt-2 gap-2">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <SearchInput
                   value={fileQuery}
@@ -433,7 +433,7 @@ export function SkillDetailDialog({
           )}
 
           {hasEvolution && (
-            <TabsContent value="evolution" className="flex-1 overflow-y-auto mt-2 -mx-4 px-4 sm:-mx-6 sm:px-6">
+            <TabsContent value="evolution" className="flex-1 min-h-0 overflow-y-auto mt-2 -mx-4 px-4 sm:-mx-6 sm:px-6">
               <SkillEvolutionPanel skill={skill} active={activeDetailTab === "evolution"} />
             </TabsContent>
           )}
