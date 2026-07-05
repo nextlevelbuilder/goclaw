@@ -91,16 +91,46 @@ func (s *SQLiteTeamStore) UpdateTeam(ctx context.Context, teamID uuid.UUID, upda
 }
 
 func (s *SQLiteTeamStore) DeleteTeam(ctx context.Context, teamID uuid.UUID) error {
-	if store.IsCrossTenant(ctx) {
-		_, err := s.db.ExecContext(ctx, `DELETE FROM agent_teams WHERE id = ?`, teamID)
-		return err
-	}
+	crossTenant := store.IsCrossTenant(ctx)
 	tid := store.TenantIDFromContext(ctx)
-	if tid == uuid.Nil {
+	if !crossTenant && tid == uuid.Nil {
 		return fmt.Errorf("tenant_id required for delete")
 	}
-	_, err := s.db.ExecContext(ctx, `DELETE FROM agent_teams WHERE id = ? AND tenant_id = ?`, teamID, tid)
-	return err
+
+	// Team deletion must not fail when the team owns vault documents (issue #1077).
+	// The team_id FK is ON DELETE SET NULL, but SQLite fires no scope-fixing trigger
+	// during the FK action, so a team-scoped doc would be left as scope='team' with a
+	// NULL team_id and abort the delete on the vault_documents_scope_consistency CHECK.
+	// Convert team-scoped docs first (agent_id IS NULL -> 'shared'; the CASE guards
+	// any legacy 'team' rows that carry an agent_id). Custom-scope docs are left as-is;
+	// the FK SET NULL clears their team_id and 'custom' has no consistency constraint.
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	const fixScopeSQL = `UPDATE vault_documents
+		SET scope = CASE WHEN agent_id IS NOT NULL THEN 'personal' ELSE 'shared' END,
+		    team_id = NULL
+		WHERE team_id = ? AND scope = 'team'`
+	if crossTenant {
+		if _, err := tx.ExecContext(ctx, fixScopeSQL, teamID); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM agent_teams WHERE id = ?`, teamID); err != nil {
+			return err
+		}
+		return tx.Commit()
+	}
+
+	if _, err := tx.ExecContext(ctx, fixScopeSQL+` AND tenant_id = ?`, teamID, tid); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM agent_teams WHERE id = ? AND tenant_id = ?`, teamID, tid); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *SQLiteTeamStore) ListTeams(ctx context.Context) ([]store.TeamData, error) {
