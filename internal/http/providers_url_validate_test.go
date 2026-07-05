@@ -19,15 +19,17 @@ func stubResolver(m map[string][]string) func(host string) ([]string, error) {
 }
 
 // saveAndRestoreGlobals saves mutable package-level vars and restores them after
-// the test. Call at the start of any test that touches dnsResolverFn or
-// allowPrivateProviderURLsFn.
+// the test. Call at the start of any test that touches dnsResolverFn,
+// allowPrivateProviderURLsFn, or ollamaAllowedHostsFn.
 func saveAndRestoreGlobals(t *testing.T) {
 	t.Helper()
 	origResolver := dnsResolverFn
 	origAllow := allowPrivateProviderURLsFn
+	origOllamaAllowedHosts := ollamaAllowedHostsFn
 	t.Cleanup(func() {
 		dnsResolverFn = origResolver
 		allowPrivateProviderURLsFn = origAllow
+		ollamaAllowedHostsFn = origOllamaAllowedHosts
 	})
 }
 
@@ -36,6 +38,7 @@ func saveAndRestoreGlobals(t *testing.T) {
 func TestValidateProviderURL(t *testing.T) {
 	saveAndRestoreGlobals(t)
 	allowPrivateProviderURLsFn = func() bool { return false }
+	ollamaAllowedHostsFn = func() []string { return nil }
 	absClaudePath := filepath.Join(t.TempDir(), "claude")
 
 	dnsResolverFn = stubResolver(map[string][]string{
@@ -323,4 +326,46 @@ func TestValidateProviderURL_PublicHostOK(t *testing.T) {
 	if err := validateProviderURL("https://api.openai.com/v1", "openai_compat"); err != nil {
 		t.Errorf("expected public host to pass, got: %v", err)
 	}
+}
+
+// --- GOCLAW_OLLAMA_ALLOWED_HOSTS opt-in for local provider types ---
+
+func TestValidateProviderURL_OllamaAllowedHosts(t *testing.T) {
+	saveAndRestoreGlobals(t)
+	allowPrivateProviderURLsFn = func() bool { return false }
+
+	t.Run("rejected when not configured", func(t *testing.T) {
+		ollamaAllowedHostsFn = func() []string { return nil }
+		if err := validateProviderURL("http://192.168.3.31:11434/v1", "ollama"); err == nil {
+			t.Error("expected LAN host to be rejected when GOCLAW_OLLAMA_ALLOWED_HOSTS is not configured")
+		}
+	})
+
+	t.Run("accepted when present in configured list", func(t *testing.T) {
+		ollamaAllowedHostsFn = func() []string { return []string{"192.168.3.31", "ollama.lan"} }
+		if err := validateProviderURL("http://192.168.3.31:11434/v1", "ollama"); err != nil {
+			t.Errorf("expected configured LAN IP to be allowed, got: %v", err)
+		}
+		if err := validateProviderURL("http://ollama.lan:11434/v1", "acp"); err != nil {
+			t.Errorf("expected configured LAN hostname to be allowed for acp, got: %v", err)
+		}
+		// Case-insensitive host match, matching the existing style in this file.
+		if err := validateProviderURL("http://OLLAMA.LAN:11434/v1", "ollama"); err != nil {
+			t.Errorf("expected case-insensitive host match to be allowed, got: %v", err)
+		}
+	})
+
+	t.Run("rejected when host not in configured list", func(t *testing.T) {
+		ollamaAllowedHostsFn = func() []string { return []string{"192.168.3.31"} }
+		if err := validateProviderURL("http://10.0.0.9:11434/v1", "ollama"); err == nil {
+			t.Error("expected host outside the configured list to be rejected")
+		}
+	})
+
+	t.Run("default localhost behavior unchanged when list configured", func(t *testing.T) {
+		ollamaAllowedHostsFn = func() []string { return []string{"192.168.3.31"} }
+		if err := validateProviderURL("http://localhost:11434/v1", "ollama"); err != nil {
+			t.Errorf("expected localhost to still be allowed, got: %v", err)
+		}
+	})
 }
