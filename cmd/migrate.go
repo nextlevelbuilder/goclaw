@@ -9,11 +9,11 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/golang-migrate/migrate/v4/source"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/spf13/cobra"
 
@@ -39,36 +39,26 @@ func resolveMigrationsDir() string {
 	return filepath.Join(filepath.Dir(exe), "migrations")
 }
 
-// absoluteToFileURI formats an already-absolute path into an RFC 8089-compliant
-// file:// URL. golang-migrate's file source driver rejects Windows paths like
-// "file://F:\\project\\migrations" because "F" is parsed as the host and
-// ":\\..." as the port. The fix is shape-driven (presence of a drive-letter
-// colon at index 1), so no runtime.GOOS branch is needed — the same code is
-// correct for POSIX inputs ("/app/x" → "file:///app/x") and for Windows inputs
-// on any OS ("F:\\x" → "file:///F:/x"). strings.ReplaceAll covers the case
-// where a Windows path is seen on a non-Windows runner (filepath.ToSlash is a
-// no-op outside Windows).
-func absoluteToFileURI(abs string) string {
-	abs = strings.ReplaceAll(filepath.ToSlash(abs), `\`, `/`)
-	if len(abs) >= 2 && abs[1] == ':' {
-		abs = "/" + abs
-	}
-	return "file://" + abs
-}
-
-// migrationsSourceURL resolves dir to an absolute path and formats it for
-// golang-migrate's file source driver.
-func migrationsSourceURL(dir string) string {
-	abs, err := filepath.Abs(dir)
+// newMigrationSource opens the migrations directory as a golang-migrate source.
+// It uses an iofs source over os.DirFS rather than a file:// URL: golang-migrate's
+// file source driver mis-parses Windows absolute paths — the drive-letter URL
+// "file:///D:/..." fails with "open ." errors — whereas os.DirFS uses native OS
+// path handling and behaves identically on every platform.
+func newMigrationSource() (source.Driver, error) {
+	dir := resolveMigrationsDir()
+	src, err := iofs.New(os.DirFS(dir), ".")
 	if err != nil {
-		abs = dir
+		return nil, fmt.Errorf("open migrations dir %q: %w", dir, err)
 	}
-	return absoluteToFileURI(abs)
+	return src, nil
 }
 
 func newMigrator(dsn string) (*migrate.Migrate, error) {
-	dir := resolveMigrationsDir()
-	m, err := migrate.New(migrationsSourceURL(dir), dsn)
+	src, err := newMigrationSource()
+	if err != nil {
+		return nil, err
+	}
+	m, err := migrate.NewWithSourceInstance("iofs", src, dsn)
 	if err != nil {
 		return nil, fmt.Errorf("create migrator: %w", err)
 	}
