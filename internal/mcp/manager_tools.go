@@ -167,11 +167,33 @@ type ToolInfo struct {
 // DiscoverTools connects temporarily to an MCP server, lists its tools, and disconnects.
 // Used for on-demand discovery when no persistent Manager connection exists (DB-backed servers).
 func DiscoverTools(ctx context.Context, transportType, command string, args []string, env map[string]string, url string, headers map[string]string) ([]ToolInfo, error) {
+	mcpTools, err := discoverRawTools(ctx, transportType, command, args, env, url, headers, discoverToolsTimeout)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]ToolInfo, 0, len(mcpTools))
+	for _, t := range mcpTools {
+		result = append(result, ToolInfo{Name: t.Name, Description: t.Description})
+	}
+	return result, nil
+}
+
+// discoverToolsTimeout bounds a full DiscoverTools/discoverRawTools round trip
+// (connect + initialize + list tools) against a remote MCP server.
+const discoverToolsTimeout = 15 * time.Second
+
+// discoverRawTools connects temporarily to an MCP server, lists its tools with
+// their full mcpgo.Tool definitions (including input schema), and disconnects.
+// Shared by DiscoverTools (name+description only, for the admin browse UI) and
+// the ListToolsForAgent on-demand fallback (full schema, for prompt preview
+// caching), so both callers see identical live tool data.
+func discoverRawTools(ctx context.Context, transportType, command string, args []string, env map[string]string, url string, headers map[string]string, timeout time.Duration) ([]mcpgo.Tool, error) {
 	if err := ValidateServerConfig(transportType, command, args, url); err != nil {
 		return nil, fmt.Errorf("invalid MCP server config: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	client, err := createClient(transportType, command, args, env, url, headers)
@@ -198,9 +220,5 @@ func DiscoverTools(ctx context.Context, transportType, command string, args []st
 		return nil, fmt.Errorf("list tools: %w", err)
 	}
 
-	result := make([]ToolInfo, 0, len(toolsResult.Tools))
-	for _, t := range toolsResult.Tools {
-		result = append(result, ToolInfo{Name: t.Name, Description: t.Description})
-	}
-	return result, nil
+	return toolsResult.Tools, nil
 }

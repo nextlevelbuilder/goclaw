@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -674,6 +675,67 @@ type MCPToolPreviewInfo struct {
 	Parameters json.RawMessage
 }
 
+// mcpPreviewDiscoveryTimeout bounds the on-demand tool discovery
+// ListToolsForAgent performs when a server has never been live-connected for
+// this agent (empty tool_cache and empty registry). Kept short since it's on
+// the hot path of a prompt-preview HTTP request, unlike the longer
+// discoverToolsTimeout used by the dedicated admin "test connection"/"browse
+// tools" endpoints.
+const mcpPreviewDiscoveryTimeout = 5 * time.Second
+
+// bareMCPToolName strips a persisted "{effectivePrefix}__" prefix from a
+// stored tool_allow/tool_deny entry, if present.
+//
+// Historically, some agent grants were captured while their MCP server was
+// already live-connected and ended up storing the registered (prefixed) tool
+// name instead of the bare original MCP tool name — see ServerToolInfos'
+// doc comment for how that mismatch happened. Those legacy rows are never
+// rewritten automatically, so ListToolsForAgent must accept both shapes
+// going forward: bare names (the current, correct shape) and prefixed names
+// (already-persisted legacy grants), normalizing to bare before matching
+// against tool_cache keys or the live tool registry.
+func bareMCPToolName(stored, effectivePrefix string) string {
+	if bare, ok := strings.CutPrefix(stored, effectivePrefix+"__"); ok {
+		return bare
+	}
+	return stored
+}
+
+// resolveMCPToolInfo resolves the description and parameter schema for a bare
+// MCP tool name, preferring the CURRENT live registry entry (if the server is
+// connected right now) over the settings-persisted tool_cache snapshot, which
+// can be stale or entirely absent. Admin-authored hints always take priority
+// over both sources; the server's global hint is the last-resort fallback.
+func (m *Manager) resolveMCPToolInfo(toolName, effectivePrefix string, hints ToolHints, toolCache map[string]store.CachedToolInfo) (string, json.RawMessage) {
+	desc := hints.HintFor(toolName)
+	var params json.RawMessage
+
+	if tool, ok := m.registry.Get(effectivePrefix + "__" + toolName); ok {
+		if bridgeTool, isBridge := tool.(*BridgeTool); isBridge {
+			if desc == "" {
+				desc = bridgeTool.Description()
+			}
+			if schema := bridgeTool.Parameters(); schema != nil {
+				if schemaJSON, err := json.Marshal(schema); err == nil {
+					params = schemaJSON
+				}
+			}
+		}
+	}
+
+	cached := toolCache[toolName]
+	if desc == "" {
+		desc = cached.Description
+	}
+	if params == nil {
+		params = cached.Parameters
+	}
+	if desc == "" && hints.Global != "" {
+		desc = hints.Global
+	}
+	return desc, params
+}
+
 // ListToolsForAgent returns a best-effort list of MCP tool names and descriptions
 // for a given agent+user based on store configuration only — no actual MCP
 // server connections are made. It is intended for prompt preview.
@@ -737,10 +799,42 @@ func (m *Manager) ListToolsForAgent(ctx context.Context, agentID uuid.UUID, user
 			}
 		}
 
-		// Build deny set
+		// Nothing persisted yet and no live registry entries either (the
+		// server has never actually been connected for this agent, e.g. a
+		// freshly added MCP server before the agent's first real chat turn
+		// triggers Manager.LoadForAgent). ListToolsForAgent is otherwise
+		// documented as "no actual MCP server connections are made", which
+		// left the prompt preview permanently showing empty descriptions and
+		// "{type: object}" schemas until a real session happened to connect.
+		// Do a single bounded on-demand discovery here (same live path the
+		// admin "browse tools" endpoint already uses, see handleListServerTools
+		// in internal/http/mcp_tools.go) so the preview reflects real tool
+		// data immediately, and persist it so subsequent calls hit the cache.
+		if len(toolCache) == 0 && len(m.ServerToolInfos(info.Server.Name)) == 0 {
+			if rs := m.resolveServerCredentials(ctx, info, userID); rs != nil {
+				discovered, err := discoverRawTools(ctx, info.Server.Transport, info.Server.Command, rs.args, rs.env, info.Server.URL, rs.headers, mcpPreviewDiscoveryTimeout)
+				if err != nil {
+					slog.Debug("mcp.ListToolsForAgent.on_demand_discovery_failed", "server", info.Server.Name, "error", err)
+				} else {
+					toolCache = buildCachedToolInfo(discovered)
+					if info.Server.ID != uuid.Nil && m.store != nil && len(toolCache) > 0 {
+						go func(sid uuid.UUID, cache map[string]store.CachedToolInfo) {
+							cacheCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+							defer cancel()
+							if cacheErr := m.store.CacheToolDescriptions(cacheCtx, sid, cache); cacheErr != nil {
+								slog.Debug("mcp.ListToolsForAgent.cache_tool_descriptions_failed", "server_id", sid, "error", cacheErr)
+							}
+						}(info.Server.ID, toolCache)
+					}
+				}
+			}
+		}
+
+		// Build deny set, normalizing legacy prefixed entries to bare names
+		// (see bareMCPToolName) so they match tool_cache/registry lookups.
 		denySet := make(map[string]struct{}, len(info.ToolDeny))
 		for _, d := range info.ToolDeny {
-			denySet[d] = struct{}{}
+			denySet[bareMCPToolName(d, effectivePrefix)] = struct{}{}
 		}
 
 		if len(info.ToolAllow) == 0 {
@@ -754,19 +848,12 @@ func (m *Manager) ListToolsForAgent(ctx context.Context, agentID uuid.UUID, user
 						continue
 					}
 					registeredName := effectivePrefix + "__" + toolName
-					cached := toolCache[toolName]
-					desc := hints.HintFor(toolName)
-					if desc == "" {
-						desc = cached.Description
-					}
-					if desc == "" && hints.Global != "" {
-						desc = hints.Global
-					}
+					desc, params := m.resolveMCPToolInfo(toolName, effectivePrefix, hints, toolCache)
 					serverTools = append(serverTools, registeredName)
 					result = append(result, MCPToolPreviewInfo{
 						RegisteredName: registeredName,
 						Description:    desc,
-						Parameters:     cached.Parameters,
+						Parameters:     params,
 					})
 				}
 				slog.Debug("mcp.ListToolsForAgent.server_tools_added_from_cache", "server", info.Server.Name, "tools", serverTools)
@@ -788,25 +875,22 @@ func (m *Manager) ListToolsForAgent(ctx context.Context, agentID uuid.UUID, user
 		}
 
 		var serverTools []string
-		for _, toolName := range info.ToolAllow {
+		for _, storedName := range info.ToolAllow {
+			// Normalize legacy prefixed entries (persisted before the grant-capture
+			// fix in mcp_tools.go) to the bare tool name so they resolve against
+			// tool_cache and the live registry the same as current bare entries.
+			toolName := bareMCPToolName(storedName, effectivePrefix)
 			if _, denied := denySet[toolName]; denied {
 				slog.Debug("mcp.ListToolsForAgent.tool_denied", "server", info.Server.Name, "tool", toolName)
 				continue
 			}
 			registeredName := effectivePrefix + "__" + toolName
-			cached := toolCache[toolName]
-			desc := hints.HintFor(toolName)
-			if desc == "" {
-				desc = cached.Description
-			}
-			if desc == "" && hints.Global != "" {
-				desc = hints.Global
-			}
+			desc, params := m.resolveMCPToolInfo(toolName, effectivePrefix, hints, toolCache)
 			serverTools = append(serverTools, registeredName)
 			result = append(result, MCPToolPreviewInfo{
 				RegisteredName: registeredName,
 				Description:    desc,
-				Parameters:     cached.Parameters,
+				Parameters:     params,
 			})
 		}
 		slog.Debug("mcp.ListToolsForAgent.server_tools_added", "server", info.Server.Name, "tools", serverTools)
