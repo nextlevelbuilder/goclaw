@@ -184,6 +184,7 @@ func (c *Config) applyEnvOverrides() {
 	envStr("GOCLAW_VERTEX_REGION", &c.Providers.Vertex.Region)
 	envStr("GOCLAW_VERTEX_MODEL", &c.Providers.Vertex.Model)
 	envStr("GOCLAW_GATEWAY_TOKEN", &c.Gateway.Token)
+	envStr("GOCLAW_MCP_SERVER_TOKEN", &c.Gateway.MCPServerToken)
 	envStr("GOCLAW_TELEGRAM_TOKEN", &c.Channels.Telegram.Token)
 	envStr("GOCLAW_DISCORD_TOKEN", &c.Channels.Discord.Token)
 	envStr("GOCLAW_ZALO_TOKEN", &c.Channels.Zalo.Token)

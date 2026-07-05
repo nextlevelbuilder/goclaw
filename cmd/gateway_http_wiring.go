@@ -346,6 +346,9 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 		// Wire WS method — provider nil means each request resolves key via secretStore at HTTP layer.
 		// For WS, use same cache. Provider is resolved via secretStore at WS level in a future phase.
 		methods.NewVoicesMethods(voiceCache, nil).Register(d.server.Router())
+		// Wire the same cache + secret store into the CRUD MCP server (see
+		// internal/mcp/crud_server.go, mounted at /api/mcp/ in BuildMux()).
+		d.server.SetVoiceCache(voiceCache, secretStore)
 	}
 
 	// TTS synthesize endpoint — shares audio.Manager with setupTTS.

@@ -445,7 +445,12 @@ func (s *PGAgentStore) List(ctx context.Context, ownerID string) ([]store.AgentD
 		argIdx++
 	}
 
-	if clause, targs, _, err := scopeClause(ctx, argIdx); err == nil && clause != "" {
+	clause, targs, _, err := scopeClause(ctx, argIdx)
+	if err != nil {
+		slog.Warn("agents.List: tenant context missing, returning empty (fail-closed)", "error", err)
+		return nil, nil
+	}
+	if clause != "" {
 		q += clause
 		args = append(args, targs...)
 		argIdx++

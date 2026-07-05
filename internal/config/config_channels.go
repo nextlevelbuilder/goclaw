@@ -426,6 +426,7 @@ type GatewayConfig struct {
 	Host                    string              `json:"host"`
 	Port                    int                 `json:"port"`
 	Token                   string              `json:"token,omitempty"`                      // bearer token for WS/HTTP auth
+	MCPServerToken          string              `json:"mcp_server_token,omitempty"`           // bearer token gating the CRUD MCP server mounted at /api/mcp/; callers may pass an optional "X-GoClaw-Tenant-Id" header (UUID or slug) to scope a request to a tenant, defaulting to the master tenant when absent (see internal/mcp/crud_server.go)
 	OwnerIDs                []string            `json:"owner_ids,omitempty"`                  // sender IDs considered "owner"
 	AllowedOrigins          []string            `json:"allowed_origins,omitempty"`            // WebSocket CORS whitelist (empty = allow all)
 	MCPAllowedHosts         []string            `json:"mcp_allowed_hosts,omitempty"`          // trusted MCP server hostnames exempt from the private-IP SSRF block during config validation (empty = none)

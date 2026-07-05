@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"crypto/subtle"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -17,8 +18,11 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
+	"github.com/nextlevelbuilder/goclaw/internal/audio"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/hooks"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
@@ -52,8 +56,33 @@ type Server struct {
 	pairingService store.PairingStore
 	apiKeyStore    store.APIKeyStore   // for API key auth lookup
 	agentStore     store.AgentStore    // for context injection in tools_invoke
+	skillStore     store.SkillStore    // for the CRUD MCP server (/api/mcp/) skill tools
+	cronStore      store.CronStore     // for the CRUD MCP server (/api/mcp/) cron tools
 	msgBus         *bus.MessageBus     // for MCP bridge media delivery
 	toolPolicy     *tools.PolicyEngine // for per-agent tool policy enforcement in MCP bridge
+
+	// Additional CRUD MCP server (/api/mcp/) dependencies — all optional, same
+	// degrade-gracefully contract as skillStore/cronStore above.
+	agentLinkStore   store.AgentLinkStore
+	configPermStore  store.ConfigPermissionStore
+	bitrixStore      store.BitrixPortalStore
+	runTimelineStore store.RunTimelineStore
+	teamStore        store.TeamStore
+	channelInstStore store.ChannelInstanceStore
+	channelMgr       *channels.Manager
+	hookStore        hooks.HookStore
+	heartbeatStore   store.HeartbeatStore
+	providerStore    store.ProviderStore
+	execApprovalMgr  *tools.ExecApprovalManager
+	quotaChecker     *channels.QuotaChecker
+	sqlDB            *sql.DB           // for the CRUD MCP server's quota usage tool (today's trace summary)
+	tenantStore      store.TenantStore // for the CRUD MCP server's "X-GoClaw-Tenant-Id" header resolution
+
+	// Phase 3 CRUD MCP server (/api/mcp/) dependencies: chat/LLM/logs/send/voices.
+	llmProviders      *providers.Registry
+	llmDefaults       mcpbridge.LLMDefaults
+	voiceCache        *audio.VoiceCache
+	voiceSecretsStore store.ConfigSecretsStore
 
 	upgrader    websocket.Upgrader
 	rateLimiter *RateLimiter
@@ -222,6 +251,78 @@ func (s *Server) BuildMux() *http.ServeMux {
 		}
 	}
 
+	// CRUD MCP server: exposes goclaw's agents/sessions/skills/cron/config
+	// resource management as MCP tools, backed directly by the real stores.
+	// Distinct from /mcp/bridge (agent tool bridge for Claude CLI) above —
+	// this one is meant for external automation/admin clients. Gated by its
+	// own bearer token (gateway.mcp_server_token / GOCLAW_MCP_SERVER_TOKEN),
+	// independent from the general gateway token, so it can be rotated or
+	// disabled separately. When unset, the server is not constructed and the
+	// route is not mounted at all (no 403 handler either) — the endpoint
+	// simply does not exist, so it can never leak the fact that a CRUD MCP
+	// surface is present on this deployment.
+	//
+	// Mounted under /api/mcp/ (NOT /mcp/) -- the web UI owns the client-side
+	// route "/mcp" (see ui/web/src/lib/routes.ts) for its "manage external
+	// MCP servers" page. http.ServeMux resolves the longest matching pattern
+	// first, so a subtree registration at "/mcp/" would shadow the SPA
+	// catch-all on every full page load/refresh of that route (the browser
+	// requests "/mcp" directly from the backend, bypassing React Router
+	// entirely). /api/mcp/ lives in a namespace no frontend route will ever
+	// occupy, so it can never collide with future client-side routes either.
+	if s.cfg.Gateway.MCPServerToken != "" {
+		var agentRuntime mcpbridge.AgentRuntimeLookup
+		var chatRunner mcpbridge.ChatRunner
+		if s.agents != nil {
+			agentRuntime = func(ctx context.Context, agentID string) (string, bool, error) {
+				loop, err := s.agents.Get(ctx, agentID)
+				if err != nil {
+					return "", false, fmt.Errorf("get agent %q: %w", agentID, err)
+				}
+				return loop.ID(), loop.IsRunning(), nil
+			}
+			chatRunner = &agentChatRunner{agents: s.agents}
+		}
+		var runtimeLogs mcpbridge.RuntimeLogSnapshotter
+		if s.logTee != nil {
+			runtimeLogs = s.logTee
+		}
+		crudHandler := mcpbridge.NewCRUDServer(mcpbridge.CRUDDeps{
+			Agents:            s.agentStore,
+			AgentRuntime:      agentRuntime,
+			Sessions:          s.sessions,
+			Skills:            s.skillStore,
+			Cron:              s.cronStore,
+			Config:            s.cfg,
+			AgentLinks:        s.agentLinkStore,
+			APIKeys:           s.apiKeyStore,
+			ConfigPermissions: s.configPermStore,
+			Bitrix:            s.bitrixStore,
+			RunTimeline:       s.runTimelineStore,
+			Teams:             s.teamStore,
+			ChannelInstances:  s.channelInstStore,
+			ChannelManager:    s.channelMgr,
+			Hooks:             s.hookStore,
+			Heartbeats:        s.heartbeatStore,
+			Providers:         s.providerStore,
+			Pairing:           s.pairingService,
+			ExecApproval:      s.execApprovalMgr,
+			Quota:             s.quotaChecker,
+			DB:                s.sqlDB,
+			ChatRunner:        chatRunner,
+			LLMProviders:      s.llmProviders,
+			LLMDefaults:       s.llmDefaults,
+			MessageBus:        s.msgBus,
+			RuntimeLogs:       runtimeLogs,
+			VoiceCache:        s.voiceCache,
+			VoiceSecretsStore: s.voiceSecretsStore,
+			Tenants:           s.tenantStore,
+		}, s.version)
+		mux.Handle("/api/mcp/", mcpServerTokenAuthMiddleware(s.cfg.Gateway.MCPServerToken, crudHandler))
+	} else {
+		slog.Info("mcp.crud_disabled: no gateway.mcp_server_token configured, CRUD MCP server is not mounted at /api/mcp/")
+	}
+
 	// Embedded web UI (built with -tags embedui). Catch-all after all API routes.
 	// When the build does NOT include the embedui tag, webui.Handler() returns nil
 	// and there's no handler for "/" — http.ServeMux would then return an opaque
@@ -351,6 +452,24 @@ func tokenAuthMiddleware(token string, next http.Handler) http.Handler {
 		auth := r.Header.Get("Authorization")
 		provided := strings.TrimPrefix(auth, "Bearer ")
 		if !strings.HasPrefix(auth, "Bearer ") || subtle.ConstantTimeCompare([]byte(provided), []byte(token)) != 1 {
+			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// mcpServerTokenAuthMiddleware gates the CRUD MCP server (/api/mcp/) with its own
+// bearer token, distinct from the general gateway token used elsewhere.
+// Auth failures are logged as security events (missing/invalid token), never
+// silently dropped, so operators can spot brute-force or misconfiguration.
+func mcpServerTokenAuthMiddleware(token string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth := r.Header.Get("Authorization")
+		provided := strings.TrimPrefix(auth, "Bearer ")
+		if !strings.HasPrefix(auth, "Bearer ") || subtle.ConstantTimeCompare([]byte(provided), []byte(token)) != 1 {
+			slog.Warn("security.mcp_auth_failed", "path", r.URL.Path, "remote", r.RemoteAddr)
+			w.Header().Set("Content-Type", "application/json")
 			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 			return
 		}
@@ -692,6 +811,90 @@ func (s *Server) SetAgentStore(as store.AgentStore) { s.agentStore = as }
 
 // SetMessageBus sets the message bus for MCP bridge media delivery.
 func (s *Server) SetMessageBus(mb *bus.MessageBus) { s.msgBus = mb }
+
+// SetSkillStore sets the skill store, used by the CRUD MCP server (see
+// internal/mcp/crud_server.go) to expose skill listing/lookup tools.
+func (s *Server) SetSkillStore(ss store.SkillStore) { s.skillStore = ss }
+
+// SetCronStore sets the cron store, used by the CRUD MCP server (see
+// internal/mcp/crud_server.go) to expose cron job CRUD tools.
+func (s *Server) SetCronStore(cs store.CronStore) { s.cronStore = cs }
+
+// SetAgentLinkStore sets the agent link store, used by the CRUD MCP server
+// (see internal/mcp/crud_server.go) to expose agent-link CRUD tools.
+func (s *Server) SetAgentLinkStore(als store.AgentLinkStore) { s.agentLinkStore = als }
+
+// SetConfigPermissionStore sets the config permission store, used by the
+// CRUD MCP server (see internal/mcp/crud_server.go) to expose config
+// permission CRUD tools.
+func (s *Server) SetConfigPermissionStore(cps store.ConfigPermissionStore) { s.configPermStore = cps }
+
+// SetBitrixPortalStore sets the Bitrix24 portal store, used by the CRUD MCP
+// server (see internal/mcp/crud_server.go) to expose Bitrix24 portal CRUD tools.
+func (s *Server) SetBitrixPortalStore(bs store.BitrixPortalStore) { s.bitrixStore = bs }
+
+// SetRunTimelineStore sets the run timeline store, used by the CRUD MCP
+// server (see internal/mcp/crud_server.go) to expose the run timeline read tool.
+func (s *Server) SetRunTimelineStore(rts store.RunTimelineStore) { s.runTimelineStore = rts }
+
+// SetTeamStore sets the team store, used by the CRUD MCP server (see
+// internal/mcp/crud_server.go) to expose teams/tasks/workspace CRUD tools.
+func (s *Server) SetTeamStore(ts store.TeamStore) { s.teamStore = ts }
+
+// SetChannelInstanceStore sets the channel instance store, used by the CRUD
+// MCP server (see internal/mcp/crud_server.go) to expose channel instance
+// CRUD tools.
+func (s *Server) SetChannelInstanceStore(cis store.ChannelInstanceStore) { s.channelInstStore = cis }
+
+// SetChannelManager sets the channel runtime manager, used by the CRUD MCP
+// server (see internal/mcp/crud_server.go) to expose channels.list/status tools.
+func (s *Server) SetChannelManager(cm *channels.Manager) { s.channelMgr = cm }
+
+// SetHookStore sets the hook store, used by the CRUD MCP server (see
+// internal/mcp/crud_server.go) to expose hooks CRUD tools.
+func (s *Server) SetHookStore(hs hooks.HookStore) { s.hookStore = hs }
+
+// SetHeartbeatStore sets the heartbeat store, used by the CRUD MCP server
+// (see internal/mcp/crud_server.go) to expose heartbeat CRUD tools.
+func (s *Server) SetHeartbeatStore(hb store.HeartbeatStore) { s.heartbeatStore = hb }
+
+// SetProviderStore sets the provider store, used by the CRUD MCP server
+// (see internal/mcp/crud_server.go) to resolve provider names in heartbeat.set.
+func (s *Server) SetProviderStore(ps store.ProviderStore) { s.providerStore = ps }
+
+// SetTenantStore sets the tenant store, used by the CRUD MCP server (see
+// internal/mcp/crud_server.go) to resolve the optional "X-GoClaw-Tenant-Id"
+// request header (UUID or slug) to a concrete tenant for every CRUD MCP call.
+func (s *Server) SetTenantStore(ts store.TenantStore) { s.tenantStore = ts }
+
+// SetExecApprovalManager sets the exec approval manager, used by the CRUD MCP
+// server (see internal/mcp/crud_server.go) to expose exec approval tools.
+func (s *Server) SetExecApprovalManager(m *tools.ExecApprovalManager) { s.execApprovalMgr = m }
+
+// SetQuotaChecker sets the channel quota checker, used by the CRUD MCP server
+// (see internal/mcp/crud_server.go) to expose the quota usage tool.
+func (s *Server) SetQuotaChecker(qc *channels.QuotaChecker) { s.quotaChecker = qc }
+
+// SetSQLDB sets the raw *sql.DB handle, used by the CRUD MCP server (see
+// internal/mcp/crud_server.go) to query today's quota trace summary. Distinct
+// from SetDB's narrow PingContext-only interface used for health checks.
+func (s *Server) SetSQLDB(db *sql.DB) { s.sqlDB = db }
+
+// SetLLMProviders sets the provider registry and background provider/model
+// fallback used by the CRUD MCP server (see internal/mcp/crud_server.go) to
+// expose goclaw_llm_complete, mirroring internal/gateway/methods/llm.go.
+func (s *Server) SetLLMProviders(reg *providers.Registry, defaultProvider, defaultModel string) {
+	s.llmProviders = reg
+	s.llmDefaults = mcpbridge.LLMDefaults{Provider: defaultProvider, Model: defaultModel}
+}
+
+// SetVoiceCache sets the shared TTS voice cache and per-tenant secrets store,
+// used by the CRUD MCP server (see internal/mcp/crud_server.go) to expose
+// goclaw_voices_{list,refresh}, mirroring internal/http/voices.go.
+func (s *Server) SetVoiceCache(cache *audio.VoiceCache, secretStore store.ConfigSecretsStore) {
+	s.voiceCache = cache
+	s.voiceSecretsStore = secretStore
+}
 
 // SetWorkstationsHandler sets the workstations CRUD handler (Standard edition only).
 func (s *Server) SetWorkstationsHandler(h *httpapi.WorkstationsHandler) {

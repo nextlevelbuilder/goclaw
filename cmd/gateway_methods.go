@@ -69,6 +69,9 @@ func registerAllMethods(server *gateway.Server, agents *agent.Router, sessStore 
 	// Phase 2: Usage (queries SessionStore for real token data)
 	methods.NewUsageMethods(sessStore, tracingStore).Register(router)
 	methods.NewLLMMethods(providerReg, cfg.Gateway.BackgroundProvider, cfg.Gateway.BackgroundModel).Register(router)
+	// Wire the same provider registry into the CRUD MCP server (see
+	// internal/mcp/crud_server.go, mounted at /api/mcp/ in BuildMux()).
+	server.SetLLMProviders(providerReg, cfg.Gateway.BackgroundProvider, cfg.Gateway.BackgroundModel)
 
 	// Phase 2: Exec approval (always registered — returns empty when manager is nil)
 	methods.NewExecApprovalMethods(execApprovalMgr, msgBus).Register(router)
