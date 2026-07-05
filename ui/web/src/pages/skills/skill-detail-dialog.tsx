@@ -149,6 +149,13 @@ export function SkillDetailDialog({
     setFileContent(null);
   }, [skill.id, selectedVersionParam]);
 
+  // Re-fetch the version list whenever the skill's current version changes
+  // (e.g. after a content save bumps the version) so the header badge/selector
+  // and "current" marker reflect the latest version instead of a stale cache.
+  useEffect(() => {
+    setVersions(null);
+  }, [skill.version]);
+
   const loadVersions = useCallback(async () => {
     if (!skill.id || versions) return;
     const v = await getSkillVersions(skill.id);
@@ -398,7 +405,7 @@ export function SkillDetailDialog({
                 aria-label={t("detail.editContent")}
               />
             ) : skill.content ? (
-              <div className="overflow-hidden rounded-md border bg-muted/30 p-4">
+              <div className="rounded-md border bg-muted/30 p-4">
                 <MarkdownRenderer content={skill.content} />
               </div>
             ) : (
