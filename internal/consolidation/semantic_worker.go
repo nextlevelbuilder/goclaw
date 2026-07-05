@@ -45,6 +45,7 @@ func (w *semanticWorker) Handle(ctx context.Context, event eventbus.DomainEvent)
 		slog.Warn("semantic: extraction failed", "episodic_id", payload.EpisodicID, "err", err)
 		return nil // non-fatal: extraction failure doesn't block pipeline
 	}
+	bgalert.ClearProviderError(ctx, w.alertDeps.SystemConfigs)
 	if len(result.Entities) == 0 && len(result.Relations) == 0 {
 		return nil
 	}
