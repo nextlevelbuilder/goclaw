@@ -158,33 +158,43 @@ func providerCacheTenantID(ctx context.Context, tenantID uuid.UUID) uuid.UUID {
 
 // RegisterRoutes registers all provider management routes on the given mux.
 func (h *ProvidersHandler) RegisterRoutes(mux *http.ServeMux) {
-	// Provider CRUD
-	mux.HandleFunc("GET /v1/providers", h.auth(h.handleListProviders))
+	// Provider CRUD — reads are needed by /setup for browser-paired Operators
+	// (issue #1075), so GET routes use read-level auth (GET→Viewer) while
+	// mutations stay Admin-only.
+	mux.HandleFunc("GET /v1/providers", h.readAuth(h.handleListProviders))
 	mux.HandleFunc("POST /v1/providers", h.auth(h.handleCreateProvider))
-	mux.HandleFunc("GET /v1/providers/{id}", h.auth(h.handleGetProvider))
+	mux.HandleFunc("GET /v1/providers/{id}", h.readAuth(h.handleGetProvider))
 	mux.HandleFunc("PUT /v1/providers/{id}", h.auth(h.handleUpdateProvider))
 	mux.HandleFunc("DELETE /v1/providers/{id}", h.auth(h.handleDeleteProvider))
 
 	// Model listing (proxied to upstream provider API)
-	mux.HandleFunc("GET /v1/providers/{id}/models", h.auth(h.handleListProviderModels))
+	mux.HandleFunc("GET /v1/providers/{id}/models", h.readAuth(h.handleListProviderModels))
 
-	// Provider + model verification (pre-flight check)
+	// Provider + model verification (pre-flight check) — mutating actions, Admin.
 	mux.HandleFunc("POST /v1/providers/{id}/reconnect", h.auth(h.handleReconnectProvider))
 	mux.HandleFunc("POST /v1/providers/{id}/verify", h.auth(h.handleVerifyProvider))
 	mux.HandleFunc("POST /v1/providers/{id}/verify-embedding", h.auth(h.handleVerifyEmbedding))
 
-	// Provider-scoped Codex pool activity monitor
-	mux.HandleFunc("GET /v1/providers/{id}/codex-pool-activity", h.auth(h.handleProviderCodexPoolActivity))
+	// Provider-scoped Codex pool activity monitor (read-only status)
+	mux.HandleFunc("GET /v1/providers/{id}/codex-pool-activity", h.readAuth(h.handleProviderCodexPoolActivity))
 
-	// Embedding system status
-	mux.HandleFunc("GET /v1/embedding/status", h.auth(h.handleEmbeddingStatus))
+	// Embedding system status (read-only)
+	mux.HandleFunc("GET /v1/embedding/status", h.readAuth(h.handleEmbeddingStatus))
 
-	// Claude CLI auth status (global — not per-provider)
-	mux.HandleFunc("GET /v1/providers/claude-cli/auth-status", h.auth(h.handleClaudeCLIAuthStatus))
+	// Claude CLI auth status (global — not per-provider; read-only status)
+	mux.HandleFunc("GET /v1/providers/claude-cli/auth-status", h.readAuth(h.handleClaudeCLIAuthStatus))
 }
 
+// auth gates provider mutations at Admin.
 func (h *ProvidersHandler) auth(next http.HandlerFunc) http.HandlerFunc {
 	return requireAuth(permissions.RoleAdmin, next)
+}
+
+// readAuth gates read-only provider endpoints at the method-derived minimum
+// (GET→Viewer), so browser-paired Operators can complete /setup (issue #1075).
+// Responses already mask API keys, and provider queries stay tenant-scoped.
+func (h *ProvidersHandler) readAuth(next http.HandlerFunc) http.HandlerFunc {
+	return requireAuth("", next)
 }
 
 // maskAPIKey replaces non-empty API keys with "***".

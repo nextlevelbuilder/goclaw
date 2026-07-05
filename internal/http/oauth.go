@@ -59,25 +59,32 @@ func NewOAuthHandler(provStore store.ProviderStore, secretStore store.ConfigSecr
 
 // RegisterRoutes registers OAuth routes on the given mux.
 func (h *OAuthHandler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /v1/auth/chatgpt/{provider}/status", h.auth(h.handleStatus))
-	mux.HandleFunc("GET /v1/auth/chatgpt/{provider}/quota", h.auth(h.handleQuota))
+	// Read-only status/quota — needed by /setup for browser-paired Operators
+	// (issue #1075). Managing OAuth (start/callback/logout) stays Admin-only.
+	mux.HandleFunc("GET /v1/auth/chatgpt/{provider}/status", h.readAuth(h.handleStatus))
+	mux.HandleFunc("GET /v1/auth/chatgpt/{provider}/quota", h.readAuth(h.handleQuota))
 	mux.HandleFunc("POST /v1/auth/chatgpt/{provider}/start", h.auth(h.handleStart))
 	mux.HandleFunc("POST /v1/auth/chatgpt/{provider}/callback", h.auth(h.handleManualCallback))
 	mux.HandleFunc("POST /v1/auth/chatgpt/{provider}/logout", h.auth(h.handleLogout))
 
-	mux.HandleFunc("GET /v1/auth/openai/status", h.auth(h.handleStatus))
-	mux.HandleFunc("GET /v1/auth/openai/quota", h.auth(h.handleQuota))
+	mux.HandleFunc("GET /v1/auth/openai/status", h.readAuth(h.handleStatus))
+	mux.HandleFunc("GET /v1/auth/openai/quota", h.readAuth(h.handleQuota))
 	mux.HandleFunc("POST /v1/auth/openai/start", h.auth(h.handleStart))
 	mux.HandleFunc("POST /v1/auth/openai/callback", h.auth(h.handleManualCallback))
 	mux.HandleFunc("POST /v1/auth/openai/logout", h.auth(h.handleLogout))
 }
 
-// auth requires RoleAdmin for all OAuth endpoints.
-// Breaking change from pre-#450: previously used requireAuth("", next) which
-// allowed any authenticated user including operators. Now only admins can
-// manage OAuth providers.
+// auth requires RoleAdmin for OAuth management (start/callback/logout).
+// Since #450 these mutating flows are admin-only; #1075 keeps that for writes
+// but splits reads out via readAuth so setup can check connection status.
 func (h *OAuthHandler) auth(next http.HandlerFunc) http.HandlerFunc {
 	return requireAuth(permissions.RoleAdmin, next)
+}
+
+// readAuth gates read-only OAuth status/quota at the method-derived minimum
+// (GET→Viewer). Responses expose only connection state and quota, never tokens.
+func (h *OAuthHandler) readAuth(next http.HandlerFunc) http.HandlerFunc {
+	return requireAuth("", next)
 }
 
 func oauthTenantID(ctx context.Context) uuid.UUID {

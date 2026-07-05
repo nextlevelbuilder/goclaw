@@ -420,8 +420,11 @@ func TestOAuthHandlerProviderLogoutRoute(t *testing.T) {
 	}
 }
 
-func TestProvidersHandlerRequiresAdmin(t *testing.T) {
-	token := "operator-key"
+// operatorAPIKeyRequest builds a request authenticated as a browser-pairing-style
+// Operator (operator.write scope → RoleOperator).
+func operatorAPIKeyRequest(t *testing.T, method, path string) *http.Request {
+	t.Helper()
+	token := "operator-key-" + method + path
 	setupTestCache(t, map[string]*store.APIKeyData{
 		crypto.HashAPIKey(token): {
 			ID:       uuid.New(),
@@ -429,41 +432,49 @@ func TestProvidersHandlerRequiresAdmin(t *testing.T) {
 			TenantID: store.MasterTenantID,
 		},
 	})
+	req := httptest.NewRequest(method, path, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	return req
+}
 
+// TestProvidersHandler_OperatorReadsButCannotMutate is a regression for issue #1075:
+// browser-paired Operators must read providers so /setup can proceed, while
+// create/update/delete stay Admin-only.
+func TestProvidersHandler_OperatorReadsButCannotMutate(t *testing.T) {
 	h := NewProvidersHandler(newMockProviderStore(), newMockSecretsStore(), nil, "")
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 
-	req := httptest.NewRequest("GET", "/v1/providers", nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
+	wGet := httptest.NewRecorder()
+	mux.ServeHTTP(wGet, operatorAPIKeyRequest(t, "GET", "/v1/providers"))
+	if wGet.Code != http.StatusOK {
+		t.Fatalf("operator GET /v1/providers = %d, want 200", wGet.Code)
+	}
 
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("status code = %d, want %d", w.Code, http.StatusForbidden)
+	wPost := httptest.NewRecorder()
+	mux.ServeHTTP(wPost, operatorAPIKeyRequest(t, "POST", "/v1/providers"))
+	if wPost.Code != http.StatusForbidden {
+		t.Fatalf("operator POST /v1/providers = %d, want 403", wPost.Code)
 	}
 }
 
-func TestOAuthHandlerRequiresAdmin(t *testing.T) {
-	token := "operator-key"
-	setupTestCache(t, map[string]*store.APIKeyData{
-		crypto.HashAPIKey(token): {
-			ID:       uuid.New(),
-			Scopes:   []string{"operator.write"},
-			TenantID: store.MasterTenantID,
-		},
-	})
+// TestOAuthHandler_OperatorReadsStatusButCannotManage: Operator can read OAuth
+// status for setup; managing OAuth (start) remains Admin-only (issue #1075, #450).
+func TestOAuthHandler_OperatorReadsStatusButCannotManage(t *testing.T) {
 	h := newTestOAuthHandler(t, "")
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 
-	req := httptest.NewRequest("GET", "/v1/auth/openai/status", nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
+	wGet := httptest.NewRecorder()
+	mux.ServeHTTP(wGet, operatorAPIKeyRequest(t, "GET", "/v1/auth/openai/status"))
+	if wGet.Code != http.StatusOK {
+		t.Fatalf("operator GET oauth status = %d, want 200", wGet.Code)
+	}
 
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("status code = %d, want %d", w.Code, http.StatusForbidden)
+	wPost := httptest.NewRecorder()
+	mux.ServeHTTP(wPost, operatorAPIKeyRequest(t, "POST", "/v1/auth/openai/start"))
+	if wPost.Code != http.StatusForbidden {
+		t.Fatalf("operator POST oauth start = %d, want 403", wPost.Code)
 	}
 }
 
