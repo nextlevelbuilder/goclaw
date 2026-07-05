@@ -19,6 +19,8 @@ type TableDef struct {
 	HasTenantID bool   // direct tenant_id column
 	ScopeColumn string // explicit filter column when not tenant_id (e.g. tenants.id)
 	ParentJoin  string // JOIN clause for tables without direct tenant_id
+	OrderBy     string // deterministic export ordering; defaults to "id" when empty.
+	// Tables without an `id` column (composite PKs) MUST set this to real columns.
 }
 
 // TenantTables returns all tenant-scoped tables in FK dependency order (parents first).
@@ -35,7 +37,7 @@ func TenantTables() []TableDef {
 		{Name: "agents", Tier: 2, HasTenantID: true},
 		{Name: "sessions", Tier: 2, HasTenantID: true},
 		{Name: "api_keys", Tier: 2, HasTenantID: true},
-		{Name: "config_secrets", Tier: 2, HasTenantID: true},
+		{Name: "config_secrets", Tier: 2, HasTenantID: true, OrderBy: "key"}, // PK (key, tenant_id) — no id column
 		{Name: "skills", Tier: 2, HasTenantID: true},
 		{Name: "mcp_servers", Tier: 2, HasTenantID: true},
 		{Name: "secure_cli_binaries", Tier: 2, HasTenantID: true},
@@ -43,11 +45,13 @@ func TenantTables() []TableDef {
 		{Name: "channel_instances", Tier: 2, HasTenantID: true},
 		{Name: "agent_teams", Tier: 2, HasTenantID: true},
 		{Name: "llm_providers", Tier: 2, HasTenantID: true},
+		{Name: "hooks", Tier: 2, HasTenantID: true},
+		{Name: "tenant_hook_budget", Tier: 2, HasTenantID: true, OrderBy: "tenant_id"}, // PK tenant_id — no id column
 
 		// Tier 3: FK to Tier 2
 		{Name: "agent_context_files", Tier: 3, HasTenantID: true},
 		{Name: "user_context_files", Tier: 3, HasTenantID: true},
-		{Name: "user_agent_profiles", Tier: 3, HasTenantID: true},
+		{Name: "user_agent_profiles", Tier: 3, HasTenantID: true, OrderBy: "agent_id, user_id"}, // PK (agent_id, user_id) — no id column
 		{Name: "user_agent_overrides", Tier: 3, HasTenantID: true},
 		{Name: "episodic_summaries", Tier: 3, HasTenantID: true},
 		{Name: "memory_documents", Tier: 3, HasTenantID: true},
@@ -59,7 +63,7 @@ func TenantTables() []TableDef {
 		{Name: "agent_evolution_suggestions", Tier: 3, HasTenantID: true},
 		{Name: "channel_contacts", Tier: 3, HasTenantID: true},
 		{Name: "subagent_tasks", Tier: 3, HasTenantID: true},
-		{Name: "agent_team_members", Tier: 3, HasTenantID: true},
+		{Name: "agent_team_members", Tier: 3, HasTenantID: true, OrderBy: "team_id, agent_id"}, // PK (team_id, agent_id) — no id column
 		{Name: "agent_links", Tier: 3, HasTenantID: true},
 		{Name: "agent_shares", Tier: 3, HasTenantID: true},
 		{Name: "agent_config_permissions", Tier: 3, HasTenantID: true},
@@ -71,9 +75,18 @@ func TenantTables() []TableDef {
 		{Name: "mcp_user_credentials", Tier: 3, HasTenantID: true},
 		{Name: "secure_cli_agent_grants", Tier: 3, HasTenantID: true},
 		{Name: "secure_cli_user_credentials", Tier: 3, HasTenantID: true},
-		{Name: "system_configs", Tier: 3, HasTenantID: true},
-		{Name: "builtin_tool_tenant_configs", Tier: 3, HasTenantID: true},
-		{Name: "skill_tenant_configs", Tier: 3, HasTenantID: true},
+		{Name: "system_configs", Tier: 3, HasTenantID: true, OrderBy: "key"},                        // PK (key, tenant_id) — no id column
+		{Name: "builtin_tool_tenant_configs", Tier: 3, HasTenantID: true, OrderBy: "tool_name"},      // PK (tool_name, tenant_id) — no id column
+		{Name: "skill_tenant_configs", Tier: 3, HasTenantID: true, OrderBy: "skill_id"},              // PK (skill_id, tenant_id) — no id column
+		{Name: "webhooks", Tier: 3, HasTenantID: true}, // FK -> agents, channel_instances
+		// hook_agents has no tenant_id — filter via JOIN hooks; composite PK (hook_id, agent_id).
+		{
+			Name:        "hook_agents",
+			Tier:        3,
+			HasTenantID: false,
+			ParentJoin:  "hook_agents vl JOIN hooks h ON vl.hook_id = h.id WHERE h.tenant_id = $1",
+			OrderBy:     "vl.hook_id, vl.agent_id",
+		},
 
 		// Tier 4: FK to Tier 3
 		{Name: "kg_relations", Tier: 4, HasTenantID: true},
@@ -105,7 +118,13 @@ func (t TableDef) tenantFilterColumn() string {
 
 func (t TableDef) exportQuery() (string, error) {
 	if t.ParentJoin != "" {
-		return fmt.Sprintf("SELECT vl.* FROM %s ORDER BY vl.id", t.ParentJoin), nil
+		// ParentJoin aliases the child table as `vl`. Order by OrderBy when set
+		// (required for composite-PK children like hook_agents that have no id).
+		orderBy := t.OrderBy
+		if orderBy == "" {
+			orderBy = "vl.id"
+		}
+		return fmt.Sprintf("SELECT vl.* FROM %s ORDER BY %s", t.ParentJoin, orderBy), nil
 	}
 
 	column := t.tenantFilterColumn()
@@ -113,7 +132,11 @@ func (t TableDef) exportQuery() (string, error) {
 		return "", fmt.Errorf("table %s: no tenant filter defined", t.Name)
 	}
 
-	return fmt.Sprintf("SELECT * FROM %s WHERE %s = $1 ORDER BY id", t.Name, column), nil
+	orderBy := t.OrderBy
+	if orderBy == "" {
+		orderBy = "id"
+	}
+	return fmt.Sprintf("SELECT * FROM %s WHERE %s = $1 ORDER BY %s", t.Name, column, orderBy), nil
 }
 
 func (t TableDef) deleteQuery() (string, error) {

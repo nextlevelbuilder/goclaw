@@ -53,6 +53,8 @@ func ValidateTableRegistry(ctx context.Context, db *sql.DB) []string {
 		"pairing_requests": true, "paired_devices": true,
 		"channel_pending_messages": true, "cron_run_logs": true,
 		"team_user_grants": true,
+		// Ephemeral hook/webhook run history — not restored (regenerated at runtime).
+		"hook_executions": true, "webhook_calls": true,
 	}
 
 	var warnings []string

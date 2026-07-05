@@ -79,8 +79,12 @@ func CheckActiveConnections(ctx context.Context, dsn string) (int, error) {
 	defer db.Close()
 
 	var count int
+	// Exclude the gateway's own pool connections, tagged application_name='goclaw'
+	// (see pg.PoolApplicationName). Otherwise a running gateway blocks its own
+	// restore on a fresh server (issue #1338). External clients are still counted.
 	query := `SELECT COUNT(*) FROM pg_stat_activity
-	           WHERE datname = $1 AND pid <> pg_backend_pid()`
+	           WHERE datname = $1 AND pid <> pg_backend_pid()
+	             AND application_name <> 'goclaw'`
 	if err := db.QueryRowContext(ctx, query, creds.DBName).Scan(&count); err != nil {
 		return 0, fmt.Errorf("query pg_stat_activity: %w", err)
 	}
