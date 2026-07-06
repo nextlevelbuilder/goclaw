@@ -414,6 +414,39 @@ func CopyDir(src, dst string) error {
 	})
 }
 
+// HashDir computes a content hash and total size for all regular files under
+// dir (skipping directories and symlinks). Used to detect skill content
+// changes after writing a new version directory.
+func HashDir(dir string) (string, int64, error) {
+	var size int64
+	h := sha256.New()
+	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || d.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		size += info.Size()
+		rel, _ := filepath.Rel(dir, path)
+		h.Write([]byte(filepath.ToSlash(rel)))
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		h.Write(data)
+		return nil
+	})
+	if err != nil {
+		return "", 0, err
+	}
+	return fmt.Sprintf("%x", h.Sum(nil)), size, nil
+}
+
 // needsReCopy returns true when the managed copy's scripts/ is missing or has fewer
 // entries than the bundled source — symptom of a previous failed copy caused by a
 // symlink-to-directory stopping filepath.Walk early (e.g. scripts/office/ symlink).

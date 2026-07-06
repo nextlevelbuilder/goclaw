@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -9,6 +10,8 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
+	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -98,5 +101,79 @@ func handleSkillsUpdate(skills store.SkillStore, manage store.SkillManageStore) 
 		}
 		skills.BumpVersion()
 		return jsonToolResult(map[string]string{"ok": "true"})
+	}
+}
+
+// registerSkillWriteFileCRUDTool registers goclaw_skills_write_file, letting
+// MCP callers edit a managed (non-system) skill's file content on disk —
+// mirroring the web UI's skill file editor (SkillsHandler.handleWriteFile in
+// internal/http/skills_versions.go). Both surfaces call the same
+// skills.WriteVersionedFile helper so validation and versioning stay
+// identical. Only wired when the skill store implements
+// store.SkillManageStore, same gate as registerSkillUpdateCRUDTool.
+func registerSkillWriteFileCRUDTool(srv *mcpserver.MCPServer, skillStore store.SkillStore, manage store.SkillManageStore, cfg *config.Config) {
+	srv.AddTool(mcpgo.NewTool("goclaw_skills_write_file",
+		mcpgo.WithDescription("Write a file's content within a managed (non-system) skill, creating a new immutable version of that skill."),
+		mcpgo.WithString("name", mcpgo.Description("Skill name; used to resolve the skill if id is not given.")),
+		mcpgo.WithString("id", mcpgo.Description("Skill UUID.")),
+		mcpgo.WithString("path", mcpgo.Required(), mcpgo.Description("File path relative to the skill's directory (e.g. \"SKILL.md\").")),
+		mcpgo.WithString("content", mcpgo.Required(), mcpgo.Description("New full content of the file.")),
+	), handleSkillsWriteFile(skillStore, manage, cfg))
+}
+
+func handleSkillsWriteFile(skillStore store.SkillStore, manage store.SkillManageStore, cfg *config.Config) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+		name := req.GetString("name", "")
+		idStr := req.GetString("id", "")
+		if name == "" && idStr == "" {
+			return mcpgo.NewToolResultError("skills.write_file: one of name or id is required"), nil
+		}
+
+		relPath, err := req.RequireString("path")
+		if err != nil {
+			return toolError("skills.write_file", err)
+		}
+		content, err := req.RequireString("content")
+		if err != nil {
+			return toolError("skills.write_file", err)
+		}
+
+		var skillID uuid.UUID
+		if idStr != "" {
+			id, err := uuid.Parse(idStr)
+			if err != nil {
+				return toolError("skills.write_file", fmt.Errorf("invalid id: %w", err))
+			}
+			skillID = id
+		} else {
+			info, ok := skillStore.GetSkill(ctx, name)
+			if !ok {
+				return mcpgo.NewToolResultError("skills.write_file: skill not found: " + name), nil
+			}
+			id, err := uuid.Parse(info.ID)
+			if err != nil {
+				return toolError("skills.write_file", fmt.Errorf("cannot resolve skill id: %w", err))
+			}
+			skillID = id
+		}
+
+		tenantID := store.TenantIDFromContext(ctx)
+		tenantSlug := store.TenantSlugFromContext(ctx)
+		tenantSkillsDir := config.TenantSkillsStoreDir(cfg.DataDir, tenantID, tenantSlug)
+
+		path, version, err := skills.WriteVersionedFile(ctx, manage, tenantSkillsDir, skillID, relPath, content)
+		if err != nil {
+			switch {
+			case errors.Is(err, skills.ErrSkillFileNotFound):
+				return mcpgo.NewToolResultError("skills.write_file: file or skill not found"), nil
+			case errors.Is(err, skills.ErrSkillIsSystem):
+				return mcpgo.NewToolResultError("skills.write_file: cannot edit a system skill"), nil
+			case errors.Is(err, skills.ErrSkillInvalidPath):
+				return mcpgo.NewToolResultError("skills.write_file: invalid file path"), nil
+			default:
+				return toolError("skills.write_file", err)
+			}
+		}
+		return jsonToolResult(map[string]any{"ok": "true", "path": path, "version": version})
 	}
 }

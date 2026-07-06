@@ -117,6 +117,10 @@ func NewCRUDServer(deps CRUDDeps, version string) *mcpserver.StreamableHTTPServe
 		if manage, ok := deps.Skills.(store.SkillManageStore); ok {
 			registerSkillUpdateCRUDTool(srv, deps.Skills, manage)
 			registered++
+			if deps.Config != nil {
+				registerSkillWriteFileCRUDTool(srv, deps.Skills, manage, deps.Config)
+				registered++
+			}
 		}
 	}
 	if deps.Cron != nil {
