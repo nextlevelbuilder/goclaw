@@ -94,6 +94,7 @@ func (h *SkillsHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/agents/{agentID}/skills", h.authMiddleware(h.handleListAgentSkills))
 	mux.HandleFunc("GET /v1/skills/{id}/versions", h.authMiddleware(h.handleListVersions))
 	mux.HandleFunc("GET /v1/skills/{id}/files/{path...}", h.authMiddleware(h.handleReadFile))
+	mux.HandleFunc("PUT /v1/skills/{id}/files/{path...}", h.adminMiddleware(h.handleWriteFile))
 	mux.HandleFunc("GET /v1/skills/{id}/files", h.authMiddleware(h.handleListFiles))
 	mux.HandleFunc("GET /v1/skills/{id}/evolution", h.authMiddleware(h.handleGetEvolution))
 	mux.HandleFunc("GET /v1/skills/{id}/metrics", h.authMiddleware(h.handleGetSkillMetrics))

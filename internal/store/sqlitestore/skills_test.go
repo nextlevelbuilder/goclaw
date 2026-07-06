@@ -70,7 +70,12 @@ func TestSQLiteSkillStore_CreateSkillManaged_PersistsArchivedDependencyState(t *
 	}
 }
 
-func TestSQLiteSkillStore_GetSkill_UUIDCanReadArchivedSlugStaysActiveOnly(t *testing.T) {
+func TestSQLiteSkillStore_GetSkill_ArchivedFoundByUUIDAndSlugAndName(t *testing.T) {
+	// "archived" means a system skill has missing dependencies (see internal/skills/seeder.go);
+	// it is still enabled and must be discoverable the same way as via ListSkills() and
+	// GetSkillByID(), which both include active + archived skills. Regression test for a bug
+	// where archived-but-enabled skills (e.g. docx, pdf, pptx, skill-creator, xlsx when deps
+	// are missing) 404'd when looked up by name/slug while UUID lookup worked fine.
 	ctx, skillStore := newTestSQLiteSkillStore(t)
 	skillID, err := skillStore.CreateSkillManaged(ctx, store.SkillCreateParams{
 		Name:       "Archived Detail",
@@ -84,15 +89,28 @@ func TestSQLiteSkillStore_GetSkill_UUIDCanReadArchivedSlugStaysActiveOnly(t *tes
 		t.Fatalf("CreateSkillManaged error: %v", err)
 	}
 
-	if _, ok := skillStore.GetSkill(ctx, "archived-detail"); ok {
-		t.Fatal("GetSkill by slug returned archived skill; want active-only slug lookup")
-	}
 	info, ok := skillStore.GetSkill(ctx, skillID.String())
 	if !ok {
 		t.Fatal("GetSkill by UUID returned !ok for archived skill")
 	}
 	if info.Status != "archived" {
 		t.Fatalf("Status = %q, want archived", info.Status)
+	}
+
+	slugInfo, ok := skillStore.GetSkill(ctx, "archived-detail")
+	if !ok {
+		t.Fatal("GetSkill by slug returned !ok for archived skill; want consistency with ListSkills/GetSkillByID inclusion policy")
+	}
+	if slugInfo.Status != "archived" {
+		t.Fatalf("Status = %q, want archived", slugInfo.Status)
+	}
+
+	nameInfo, ok := skillStore.GetSkill(ctx, "Archived Detail")
+	if !ok {
+		t.Fatal("GetSkill by name returned !ok for archived skill; want consistency with ListSkills/GetSkillByID inclusion policy")
+	}
+	if nameInfo.Status != "archived" {
+		t.Fatalf("Status = %q, want archived", nameInfo.Status)
 	}
 }
 

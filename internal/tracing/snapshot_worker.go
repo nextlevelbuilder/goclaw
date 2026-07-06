@@ -340,7 +340,7 @@ func querySpanAggregates(ctx context.Context, db *sql.DB, from, to time.Time) ([
 			COALESCE(t.channel, '') as channel,
 			COALESCE(s.provider, '') as provider,
 			COALESCE(s.model, '') as model,
-			COUNT(*) FILTER (WHERE s.span_type = 'llm_call') as llm_call_count,
+			COUNT(*) as llm_call_count,
 			COALESCE(SUM(s.input_tokens), 0) as span_input_tokens,
 			COALESCE(SUM(s.output_tokens), 0) as span_output_tokens,
 			COALESCE(SUM(s.total_cost), 0) as span_cost,
@@ -348,7 +348,7 @@ func querySpanAggregates(ctx context.Context, db *sql.DB, from, to time.Time) ([
 			COALESCE(SUM(CAST(s.metadata->>'cache_creation_tokens' AS INTEGER)), 0) as cache_create_tokens,
 			COALESCE(SUM(CAST(s.metadata->>'thinking_tokens' AS INTEGER)), 0) as thinking_tokens
 		FROM traces t
-		JOIN spans s ON s.trace_id = t.id AND s.span_type IN ('llm_call', 'tool_call')
+		JOIN spans s ON s.trace_id = t.id AND s.span_type = 'llm_call'
 		WHERE t.start_time >= $1 AND t.start_time < $2
 		  AND t.parent_trace_id IS NULL
 		GROUP BY t.agent_id, t.channel, s.provider, s.model`, from, to)
@@ -480,6 +480,27 @@ type agentChannelKey struct {
 	Channel string
 }
 
+// findTotalsSnapshotIndex returns the index of the existing totals row
+// (Provider=="" && Model=="") in snapshots matching key, or -1 if none found.
+func findTotalsSnapshotIndex(snapshots []store.UsageSnapshot, key agentChannelKey) int {
+	for i, snap := range snapshots {
+		if snap.Provider != "" || snap.Model != "" {
+			continue
+		}
+		if snap.Channel != key.Channel {
+			continue
+		}
+		var agentID uuid.UUID
+		if snap.AgentID != nil {
+			agentID = *snap.AgentID
+		}
+		if agentID == key.AgentID {
+			return i
+		}
+	}
+	return -1
+}
+
 func mergeTraceAndSpanRows(
 	bucketStart time.Time,
 	traceRows []traceAggregate,
@@ -526,8 +547,29 @@ func mergeTraceAndSpanRows(
 		snapshots = append(snapshots, snap)
 	}
 
-	// 2. Create detail rows from span data (with actual provider/model)
+	// 2. Create detail rows from span data (with actual provider/model).
+	// Defense in depth: a span row with empty provider/model would collide
+	// with the totals row's conflict-target key (agent_id, provider='',
+	// model='', channel). Instead of appending a duplicate row, merge its
+	// metrics into the existing totals row for that (agent_id, channel).
 	for _, sp := range spanRows {
+		if sp.Provider == "" && sp.Model == "" {
+			key := agentChannelKey{Channel: sp.Channel}
+			if sp.AgentID != nil {
+				key.AgentID = *sp.AgentID
+			}
+			if idx := findTotalsSnapshotIndex(snapshots, key); idx >= 0 {
+				snapshots[idx].LLMCallCount += sp.LLMCallCount
+				snapshots[idx].InputTokens += sp.InputTokens
+				snapshots[idx].OutputTokens += sp.OutputTokens
+				snapshots[idx].TotalCost += sp.TotalCost
+				snapshots[idx].CacheReadTokens += sp.CacheReadTokens
+				snapshots[idx].CacheCreateTokens += sp.CacheCreateTokens
+				snapshots[idx].ThinkingTokens += sp.ThinkingTokens
+				continue
+			}
+		}
+
 		snapshots = append(snapshots, store.UsageSnapshot{
 			BucketHour:        bucketStart,
 			AgentID:           sp.AgentID,

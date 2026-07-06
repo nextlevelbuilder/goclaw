@@ -135,13 +135,17 @@ func (s *PGSkillStore) GetSkill(ctx context.Context, name string) (*store.SkillI
 		return &enriched[0], true
 	}
 
+	// "archived" means a system skill has missing dependencies (see seeder.go); it does not
+	// mean the skill is hidden from lookup. ListSkills() and GetSkillByID() both include
+	// active + archived skills, so name/slug lookup must match to avoid 404s on archived
+	// skills that are otherwise still enabled.
 	if id, err := uuid.Parse(name); err == nil {
 		return scan(baseSelect+"id = $"+fmt.Sprint(len(args)+1)+" AND status IN ('active', 'archived')"+scope, append(args, id)...)
 	}
-	if info, ok := scan(baseSelect+"slug = $"+fmt.Sprint(len(args)+1)+" AND status = 'active'"+scope, append(args, name)...); ok {
+	if info, ok := scan(baseSelect+"slug = $"+fmt.Sprint(len(args)+1)+" AND status IN ('active', 'archived')"+scope, append(args, name)...); ok {
 		return info, true
 	}
-	return scan(baseSelect+"name = $"+fmt.Sprint(len(args)+1)+" AND status = 'active'"+scope+" ORDER BY id LIMIT 1", append(args, name)...)
+	return scan(baseSelect+"name = $"+fmt.Sprint(len(args)+1)+" AND status IN ('active', 'archived')"+scope+" ORDER BY id LIMIT 1", append(args, name)...)
 }
 
 func (s *PGSkillStore) FilterSkills(ctx context.Context, allowList []string) []store.SkillInfo {

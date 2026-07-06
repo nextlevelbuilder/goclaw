@@ -47,6 +47,57 @@ func (m *Manager) ServerToolNames(serverName string) []string {
 	return nil
 }
 
+// ServerToolInfos returns ToolInfo (original/bare tool name + real description)
+// for a server that is already live-connected in this Manager, by looking up
+// each registered (prefixed) tool name in the registry and reading its
+// original MCP name and description off the live *BridgeTool.
+//
+// This exists so callers needing tool metadata for an already-connected
+// server (e.g. handleListServerTools) get the SAME bare-name shape as the
+// on-demand DiscoverTools fallback (manager_tools.go DiscoverTools), instead
+// of the registered/prefixed names returned by ServerToolNames. Mixing the
+// two shapes previously caused a server's tool_allow grant (built from
+// whichever name shape the UI happened to see, depending on whether the
+// server was already connected) to end up keyed by a prefixed name that
+// never matches the bare-name keys used by buildCachedToolInfo
+// (manager_connect.go) and ListToolsForAgent's tool_cache lookups
+// (manager.go), silently producing empty description/parameters in the
+// prompt preview for tools whose grant was captured while the server was
+// live-connected — most commonly a server (like goclaw's own CRUD server)
+// that self-connects and therefore tends to already be live by the time an
+// operator configures its grants.
+func (m *Manager) ServerToolInfos(serverName string) []ToolInfo {
+	m.mu.RLock()
+	var registeredNames []string
+	if _, isPool := m.poolServers[serverName]; isPool {
+		registeredNames = m.poolToolNames[serverName]
+	} else if ss, ok := m.servers[serverName]; ok {
+		registeredNames = ss.toolNames
+	}
+	m.mu.RUnlock()
+
+	if len(registeredNames) == 0 {
+		return nil
+	}
+
+	infos := make([]ToolInfo, 0, len(registeredNames))
+	for _, registeredName := range registeredNames {
+		tool, ok := m.registry.Get(registeredName)
+		if !ok {
+			continue
+		}
+		bridgeTool, ok := tool.(*BridgeTool)
+		if !ok {
+			continue
+		}
+		infos = append(infos, ToolInfo{
+			Name:        bridgeTool.OriginalName(),
+			Description: bridgeTool.Description(),
+		})
+	}
+	return infos
+}
+
 // updateMCPGroup rebuilds the "mcp" group with all MCP tool names across servers.
 // Must be called with m.mu NOT held (it acquires RLock).
 func (m *Manager) updateMCPGroup() {
@@ -116,11 +167,33 @@ type ToolInfo struct {
 // DiscoverTools connects temporarily to an MCP server, lists its tools, and disconnects.
 // Used for on-demand discovery when no persistent Manager connection exists (DB-backed servers).
 func DiscoverTools(ctx context.Context, transportType, command string, args []string, env map[string]string, url string, headers map[string]string) ([]ToolInfo, error) {
+	mcpTools, err := discoverRawTools(ctx, transportType, command, args, env, url, headers, discoverToolsTimeout)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]ToolInfo, 0, len(mcpTools))
+	for _, t := range mcpTools {
+		result = append(result, ToolInfo{Name: t.Name, Description: t.Description})
+	}
+	return result, nil
+}
+
+// discoverToolsTimeout bounds a full DiscoverTools/discoverRawTools round trip
+// (connect + initialize + list tools) against a remote MCP server.
+const discoverToolsTimeout = 15 * time.Second
+
+// discoverRawTools connects temporarily to an MCP server, lists its tools with
+// their full mcpgo.Tool definitions (including input schema), and disconnects.
+// Shared by DiscoverTools (name+description only, for the admin browse UI) and
+// the ListToolsForAgent on-demand fallback (full schema, for prompt preview
+// caching), so both callers see identical live tool data.
+func discoverRawTools(ctx context.Context, transportType, command string, args []string, env map[string]string, url string, headers map[string]string, timeout time.Duration) ([]mcpgo.Tool, error) {
 	if err := ValidateServerConfig(transportType, command, args, url); err != nil {
 		return nil, fmt.Errorf("invalid MCP server config: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	client, err := createClient(transportType, command, args, env, url, headers)
@@ -147,9 +220,5 @@ func DiscoverTools(ctx context.Context, transportType, command string, args []st
 		return nil, fmt.Errorf("list tools: %w", err)
 	}
 
-	result := make([]ToolInfo, 0, len(toolsResult.Tools))
-	for _, t := range toolsResult.Tools {
-		result = append(result, ToolInfo{Name: t.Name, Description: t.Description})
-	}
-	return result, nil
+	return toolsResult.Tools, nil
 }

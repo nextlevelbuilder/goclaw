@@ -10,6 +10,7 @@ import { AgentOverviewTab } from "./agent-overview-tab";
 import { AgentFilesTab } from "./agent-files-tab";
 import { AgentInstancesTab } from "./agent-instances-tab";
 import { AgentPermissionsTab } from "./agent-permissions-tab";
+import { AgentSharesTab } from "./agent-shares-tab";
 import { AgentEvolutionTab } from "./evolution-tab/agent-evolution-tab";
 import { AgentHooksTab } from "./agent-hooks-tab";
 import { SummoningModal } from "../summoning-modal";
@@ -80,6 +81,7 @@ export function AgentDetailPage({ agentId, onBack }: AgentDetailPageProps) {
               <TabsTrigger value="agent">{t("detail.tabs.agent")}</TabsTrigger>
               <TabsTrigger value="files">{t("detail.tabs.files")}</TabsTrigger>
               <TabsTrigger value="permissions">{t("detail.tabs.permissions")}</TabsTrigger>
+              <TabsTrigger value="shares">{t("detail.tabs.shares")}</TabsTrigger>
               <TabsTrigger value="evolution">{t("detail.tabs.evolution")}</TabsTrigger>
               <TabsTrigger value="hooks">{t("detail.tabs.hooks")}</TabsTrigger>
               {agent.agent_type === "predefined" && (
@@ -116,6 +118,10 @@ export function AgentDetailPage({ agentId, onBack }: AgentDetailPageProps) {
 
             <TabsContent value="permissions" className="mt-4">
               <AgentPermissionsTab agentId={agentId} />
+            </TabsContent>
+
+            <TabsContent value="shares" className="mt-4">
+              <AgentSharesTab agentId={agentId} />
             </TabsContent>
 
             <TabsContent value="evolution" className="mt-4">

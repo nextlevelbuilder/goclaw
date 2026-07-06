@@ -231,6 +231,24 @@ export function useSkills() {
     [http],
   );
 
+  const updateSkillFileContent = useCallback(
+    async (id: string, path: string, content: string) => {
+      try {
+        const res = await http.put<{ ok: string; path: string }>(
+          `/v1/skills/${id}/files/${encodeURIComponent(path)}`,
+          { content },
+        );
+        await invalidate();
+        toast.success(i18next.t("skills:toast.updated"));
+        return res;
+      } catch (err) {
+        toast.error(i18next.t("skills:toast.updateFailed"), userFriendlyError(err));
+        throw err;
+      }
+    },
+    [http, invalidate],
+  );
+
   const rescanDeps = useCallback(
     async () => {
       try {
@@ -322,7 +340,7 @@ export function useSkills() {
     uploadSkill, updateSkill, deleteSkill,
     listAgentGrants, grantSkillToAgent, grantSkillToAgents, revokeSkillFromAgent,
     deleteSkills, toggleSkills, downloadSkills,
-    getSkillVersions, getSkillFiles, getSkillFileContent, rescanDeps, installDeps, installSingleDep, toggleSkill,
+    getSkillVersions, getSkillFiles, getSkillFileContent, updateSkillFileContent, rescanDeps, installDeps, installSingleDep, toggleSkill,
     setTenantConfig, deleteTenantConfig,
   };
 }

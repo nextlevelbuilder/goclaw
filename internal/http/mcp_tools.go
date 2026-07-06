@@ -89,14 +89,19 @@ func (h *MCPHandler) handleListServerTools(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Try runtime Manager first — returns names only (no descriptions available).
+	// Try runtime Manager first — returns the original (bare, unprefixed) MCP
+	// tool names with their real descriptions, sourced from the live
+	// *BridgeTool for each registered tool. This must match the bare-name
+	// shape returned by the DiscoverTools fallback below: tool_allow grants
+	// saved from whichever shape this endpoint happens to return are matched
+	// against bare names by ListToolsForAgent's tool_cache lookups
+	// (internal/mcp/manager.go), so returning the registered/prefixed name
+	// here (as before) silently broke prompt-preview schemas for any server
+	// that was already live-connected when its grants were configured.
 	var tools []mcpbridge.ToolInfo
 	if h.mgr != nil {
-		if names := h.mgr.ServerToolNames(srv.Name); len(names) > 0 {
-			tools = make([]mcpbridge.ToolInfo, len(names))
-			for i, n := range names {
-				tools[i] = mcpbridge.ToolInfo{Name: n}
-			}
+		if infos := h.mgr.ServerToolInfos(srv.Name); len(infos) > 0 {
+			tools = infos
 		}
 	}
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Copy, Download } from "lucide-react";
+import { Copy, Download, Pencil, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -17,10 +17,14 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { SearchInput } from "@/components/shared/search-input";
 import { MarkdownRenderer } from "@/components/shared/markdown-renderer";
 import { toast } from "@/stores/use-toast-store";
 import type { SkillInfo, SkillFile, SkillVersions } from "@/types/skill";
+
+const SKILL_MARKDOWN_PATH = "SKILL.md";
 import { buildTree } from "./skill-file-helpers";
 import { FileBrowser } from "./skill-file-browser";
 import { normalizeSkillDetailTab, parseSkillDetailVersionParam, shouldLoadSkillDetailFile } from "./lib/skill-detail-deeplink";
@@ -42,6 +46,7 @@ interface SkillDetailDialogProps {
   getSkillVersions: (id: string) => Promise<SkillVersions>;
   getSkillFiles: (id: string, version?: number) => Promise<SkillFile[]>;
   getSkillFileContent: (id: string, path: string, version?: number) => Promise<{ content: string; path: string; size: number }>;
+  onSaveContent?: (id: string, content: string) => Promise<unknown>;
 }
 
 export function SkillDetailDialog({
@@ -58,10 +63,55 @@ export function SkillDetailDialog({
   getSkillVersions,
   getSkillFiles,
   getSkillFileContent,
+  onSaveContent,
 }: SkillDetailDialogProps) {
   const { t } = useTranslation("skills");
   const hasFiles = !!skill.id;
   const hasEvolution = !!skill.id;
+  const canEditContent = !!skill.id && !skill.is_system && !!onSaveContent;
+
+  // Content editing state (raw SKILL.md, including frontmatter, edited in place)
+  const [editingContent, setEditingContent] = useState(false);
+  const [editContentValue, setEditContentValue] = useState("");
+  const [editContentLoading, setEditContentLoading] = useState(false);
+  const [savingContent, setSavingContent] = useState(false);
+
+  useEffect(() => {
+    setEditingContent(false);
+    setEditContentValue("");
+  }, [skill.id]);
+
+  const startEditContent = useCallback(async () => {
+    if (!skill.id) return;
+    setEditContentLoading(true);
+    try {
+      const res = await getSkillFileContent(skill.id, SKILL_MARKDOWN_PATH);
+      setEditContentValue(res.content);
+      setEditingContent(true);
+    } catch (err) {
+      toast.error(t("detail.editContentLoadFailed"), err instanceof Error ? err.message : String(err));
+    } finally {
+      setEditContentLoading(false);
+    }
+  }, [skill.id, getSkillFileContent, t]);
+
+  const cancelEditContent = () => {
+    setEditingContent(false);
+    setEditContentValue("");
+  };
+
+  const saveEditContent = async () => {
+    if (!skill.id || !onSaveContent) return;
+    setSavingContent(true);
+    try {
+      await onSaveContent(skill.id, editContentValue);
+      setEditingContent(false);
+    } catch {
+      // toast shown by hook — keep editor open so the user can retry
+    } finally {
+      setSavingContent(false);
+    }
+  };
   const activeDetailTab = normalizeSkillDetailTab(detailTab, hasFiles, hasEvolution);
   const accessModeKey = getSkillAccessModeKey(skill.visibility);
   const accessModeLabel = accessModeKey === "unknown"
@@ -98,6 +148,13 @@ export function SkillDetailDialog({
     setFileQuery("");
     setFileContent(null);
   }, [skill.id, selectedVersionParam]);
+
+  // Re-fetch the version list whenever the skill's current version changes
+  // (e.g. after a content save bumps the version) so the header badge/selector
+  // and "current" marker reflect the latest version instead of a stale cache.
+  useEffect(() => {
+    setVersions(null);
+  }, [skill.version]);
 
   const loadVersions = useCallback(async () => {
     if (!skill.id || versions) return;
@@ -293,16 +350,62 @@ export function SkillDetailDialog({
           )}
         </DialogHeader>
 
-        <Tabs value={activeDetailTab} className="flex-1 overflow-hidden flex flex-col" onValueChange={handleTabChange}>
+        <Tabs value={activeDetailTab} className="flex-1 min-h-0 overflow-hidden flex flex-col" onValueChange={handleTabChange}>
           <TabsList>
             <TabsTrigger value="content">{t("detail.content")}</TabsTrigger>
             {hasFiles && <TabsTrigger value="files">{t("detail.files")}</TabsTrigger>}
             {hasEvolution && <TabsTrigger value="evolution">{t("evolution.tab")}</TabsTrigger>}
           </TabsList>
 
-          <TabsContent value="content" className="flex-1 overflow-y-auto mt-2 -mx-4 px-4 sm:-mx-6 sm:px-6">
-            {skill.content ? (
-              <div className="overflow-hidden rounded-md border bg-muted/30 p-4">
+          <TabsContent value="content" className="flex-1 min-h-0 overflow-y-auto mt-2 -mx-4 px-4 sm:-mx-6 sm:px-6 flex flex-col gap-2">
+            <div className="flex justify-end">
+              {editingContent ? (
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={cancelEditContent} disabled={savingContent}>
+                    {t("edit.cancel")}
+                  </Button>
+                  <Button size="sm" onClick={saveEditContent} disabled={savingContent}>
+                    {savingContent && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                    {savingContent ? t("edit.saving") : t("edit.save")}
+                  </Button>
+                </div>
+              ) : (
+                <TooltipProvider delayDuration={200}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 gap-1"
+                          disabled={!canEditContent || editContentLoading}
+                          onClick={startEditContent}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          {editContentLoading ? t("detail.editContentLoading") : t("detail.editContent")}
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    {!canEditContent && (
+                      <TooltipContent side="top">
+                        <p className="text-xs">{t("detail.editContentSystemHint")}</p>
+                      </TooltipContent>
+                    )}
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+            </div>
+            {editingContent ? (
+              <Textarea
+                value={editContentValue}
+                onChange={(e) => setEditContentValue(e.target.value)}
+                className="field-sizing-fixed min-h-[50vh] flex-1 resize-none overflow-y-auto font-mono text-base md:text-sm"
+                spellCheck={false}
+                aria-label={t("detail.editContent")}
+              />
+            ) : skill.content ? (
+              <div className="rounded-md border bg-muted/30 p-4">
                 <MarkdownRenderer content={skill.content} />
               </div>
             ) : (
@@ -313,7 +416,7 @@ export function SkillDetailDialog({
           </TabsContent>
 
           {hasFiles && (
-            <TabsContent value="files" className="flex-1 overflow-hidden flex flex-col mt-2 gap-2">
+            <TabsContent value="files" className="flex-1 min-h-0 overflow-hidden flex flex-col mt-2 gap-2">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <SearchInput
                   value={fileQuery}
@@ -337,7 +440,7 @@ export function SkillDetailDialog({
           )}
 
           {hasEvolution && (
-            <TabsContent value="evolution" className="flex-1 overflow-y-auto mt-2 -mx-4 px-4 sm:-mx-6 sm:px-6">
+            <TabsContent value="evolution" className="flex-1 min-h-0 overflow-y-auto mt-2 -mx-4 px-4 sm:-mx-6 sm:px-6">
               <SkillEvolutionPanel skill={skill} active={activeDetailTab === "evolution"} />
             </TabsContent>
           )}

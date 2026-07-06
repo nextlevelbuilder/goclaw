@@ -446,6 +446,27 @@ var allowPrivateProviderURLsFn = sync.OnceValue(func() bool {
 	return v == "1" || v == "true" || v == "yes"
 })
 
+// ollamaAllowedHostsFn returns the operator-configured extra hosts permitted
+// for local provider types (ollama, acp) via GOCLAW_OLLAMA_ALLOWED_HOSTS
+// (comma-separated hostnames/IPs, e.g. "192.168.3.31,ollama.lan"). These are
+// added on top of allowedLocalHosts, allowing LAN-hosted Ollama servers.
+// Evaluated once at first call so tests can override the variable before that happens.
+var ollamaAllowedHostsFn = sync.OnceValue(func() []string {
+	raw := os.Getenv("GOCLAW_OLLAMA_ALLOWED_HOSTS")
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	hosts := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			hosts = append(hosts, p)
+		}
+	}
+	return hosts
+})
+
 // validateProviderURL rejects provider base URLs pointing to internal/private networks.
 // Defense-in-depth: prevents SSRF when providers are later used for API calls.
 //
@@ -454,9 +475,10 @@ var allowPrivateProviderURLsFn = sync.OnceValue(func() bool {
 //  2. Claude CLI → api_base is an executable path/command, not a URL.
 //  3. Scheme check (http/https only) → enforced for URL-based types, including
 //     local URL types. Blocks file://, gopher://, dict://, etc.
-//  4. Local URL types (ollama, acp) → host must be in allowedLocalHosts
-//     (explicit allowlist prevents reaching 169.254.169.254 or internal services
-//     via the local-type bypass).
+//  4. Local URL types (ollama, acp) → host must be in allowedLocalHosts, or in
+//     the operator-configured GOCLAW_OLLAMA_ALLOWED_HOSTS list (explicit
+//     allowlist prevents reaching 169.254.169.254 or internal services via the
+//     local-type bypass, while still allowing LAN-hosted Ollama servers).
 //  5. Remote types → if GOCLAW_ALLOW_PRIVATE_PROVIDER_URLS is set, allow and log.
 //     Otherwise: resolve DNS hostname; reject if ANY resolved IP satisfies
 //     security.IsBlocked (covers loopback, link-local, private, multicast,
@@ -493,8 +515,13 @@ func validateProviderURL(rawURL string, providerType string) error {
 				return nil
 			}
 		}
+		for _, a := range ollamaAllowedHostsFn() {
+			if strings.EqualFold(host, a) {
+				return nil
+			}
+		}
 		slog.Warn("security.provider_url.local_type_denied", "host", host, "provider_type", providerType)
-		return fmt.Errorf("provider type %q only allows localhost URLs (localhost, 127.0.0.1, ::1, host.docker.internal), got host %q", providerType, host)
+		return fmt.Errorf("provider type %q only allows localhost URLs (localhost, 127.0.0.1, ::1, host.docker.internal, or GOCLAW_OLLAMA_ALLOWED_HOSTS), got host %q", providerType, host)
 	}
 
 	// Operator opt-in to allow private-network provider URLs (e.g. LAN-hosted vLLM).
