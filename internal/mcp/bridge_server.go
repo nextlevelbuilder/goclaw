@@ -15,8 +15,13 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
-// BridgeToolNames is the subset of GoClaw tools exposed via the MCP bridge.
-// Excluded: spawn (agent loop), create_forum_topic (channels).
+// BridgeToolNames is the LEGACY conservative tool set, kept as the fallback
+// surface for callers that carry no verified agent tool policy in context
+// (no/invalid X-Agent-ID headers, or an agent without a tools_config). For
+// callers WITH an agent policy, the bridge surface is derived from that
+// policy instead — see bridgeToolAllowed. This removes the drift where the
+// system prompt requires tools (e.g. use_skill) that a static list forgot to
+// expose (#1373), without widening exposure for unauthenticated callers.
 // delegate is included: it self-gates via CanDelegate/agent_links and resolves
 // its source agent from the X-Agent-ID header context, same as team_tasks.
 var BridgeToolNames = map[string]bool{
@@ -54,6 +59,62 @@ var BridgeToolNames = map[string]bool{
 	"delegate": true,
 }
 
+// bridgeExcludedTools lists tools that cannot operate over the bridge at all,
+// regardless of any agent policy: spawn drives the in-process agent loop and
+// create_forum_topic needs a live channel connection owned by the gateway.
+var bridgeExcludedTools = map[string]bool{
+	"spawn":              true,
+	"create_forum_topic": true,
+}
+
+// bridgeRegisteredToolNames returns every registry tool the bridge may ever
+// expose: the full registry minus hard exclusions. Which subset a given
+// caller can actually list/call is decided per-request by bridgeToolAllowed.
+func bridgeRegisteredToolNames(reg *tools.Registry) []string {
+	var names []string
+	for _, name := range reg.List() {
+		if bridgeExcludedTools[name] {
+			continue
+		}
+		names = append(names, name)
+	}
+	return names
+}
+
+// bridgeToolAllowed is the single predicate for both tools/list filtering and
+// tools/call gating:
+//   - hard-excluded tools are never allowed;
+//   - callers WITHOUT a verified agent policy (or when no policy engine is
+//     wired) fall back to the legacy conservative BridgeToolNames set, so
+//     anonymous exposure is unchanged;
+//   - callers WITH an agent policy get exactly the policy-filtered surface
+//     (same WouldAllow predicate the call path always enforced).
+func bridgeToolAllowed(reg *tools.Registry, policyEngine *tools.PolicyEngine, ctx context.Context, name string) bool {
+	if bridgeExcludedTools[name] {
+		return false
+	}
+	agentPolicy := tools.ToolAgentPolicyFromCtx(ctx)
+	if policyEngine == nil || agentPolicy == nil {
+		return BridgeToolNames[name]
+	}
+	return policyEngine.WouldAllow(reg, name, bridgeProviderName, agentPolicy, nil)
+}
+
+// newBridgeToolFilter returns a tools/list filter so each caller only sees
+// the tools it can actually call. Without this, the CLI probes tools that the
+// call path then denies, wasting agent turns and spamming denial logs.
+func newBridgeToolFilter(reg *tools.Registry, policyEngine *tools.PolicyEngine) mcpserver.ToolFilterFunc {
+	return func(ctx context.Context, listed []mcpgo.Tool) []mcpgo.Tool {
+		filtered := make([]mcpgo.Tool, 0, len(listed))
+		for _, tool := range listed {
+			if bridgeToolAllowed(reg, policyEngine, ctx, tool.Name) {
+				filtered = append(filtered, tool)
+			}
+		}
+		return filtered
+	}
+}
+
 // bridgeProviderName identifies the caller for per-provider tool policy
 // overrides (config.ToolPolicySpec.ByProvider) when enforcing bridge access.
 // All MCP bridge traffic originates from the Claude CLI subprocess.
@@ -73,11 +134,15 @@ const bridgeProviderName = "claude-cli"
 func NewBridgeServer(reg *tools.Registry, version string, msgBus *bus.MessageBus, policyEngine *tools.PolicyEngine) *mcpserver.StreamableHTTPServer {
 	srv := mcpserver.NewMCPServer("goclaw-bridge", version,
 		mcpserver.WithToolCapabilities(false),
+		// Per-caller list filtering: each agent only sees its callable surface.
+		mcpserver.WithToolFilter(newBridgeToolFilter(reg, policyEngine)),
 	)
 
-	// Register each safe tool from the GoClaw registry
+	// Register the full bridge-capable surface (registry minus hard
+	// exclusions). Per-caller visibility and callability are both decided by
+	// bridgeToolAllowed at request time.
 	var registered int
-	for name := range BridgeToolNames {
+	for _, name := range bridgeRegisteredToolNames(reg) {
 		t, ok := reg.Get(name)
 		if !ok {
 			continue
@@ -111,18 +176,17 @@ func convertToMCPTool(t tools.Tool) mcpgo.Tool {
 // them as outbound media attachments so files reach the user (e.g. Telegram document).
 func makeToolHandler(reg *tools.Registry, toolName string, msgBus *bus.MessageBus, policyEngine *tools.PolicyEngine) mcpserver.ToolHandlerFunc {
 	return func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
-		// Enforce the calling agent's own tool policy before execution. Static
-		// membership in BridgeToolNames only bounds what the bridge process
-		// COULD ever expose; it does not know which agent is calling. Without
-		// this check, any agent reaching the bridge (e.g. via Claude CLI) can
-		// invoke any bridge tool regardless of its configured tool policy.
-		if policyEngine != nil {
-			agentPolicy := tools.ToolAgentPolicyFromCtx(ctx)
-			if !policyEngine.WouldAllow(reg, toolName, bridgeProviderName, agentPolicy, nil) {
-				slog.Warn("security.mcp_bridge_denied",
-					"tool", toolName, "agent_key", tools.ToolAgentKeyFromCtx(ctx))
-				return mcpgo.NewToolResultError("tool not allowed by policy: " + toolName), nil
-			}
+		// Gate execution with the same predicate that filters tools/list, so
+		// visibility and callability can never drift apart. Registration only
+		// bounds what the bridge process COULD ever expose; it does not know
+		// which agent is calling.
+		// Info (not Warn): the per-call gate is the intended enforcement
+		// point and the CLI legitimately probes; list filtering already keeps
+		// this rare.
+		if !bridgeToolAllowed(reg, policyEngine, ctx, toolName) {
+			slog.Info("mcp_bridge_denied",
+				"tool", toolName, "agent_key", tools.ToolAgentKeyFromCtx(ctx))
+			return mcpgo.NewToolResultError("tool not allowed by policy: " + toolName), nil
 		}
 
 		args := req.GetArguments()
