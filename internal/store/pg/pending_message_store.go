@@ -63,7 +63,7 @@ func (s *PGPendingMessageStore) ListByKey(ctx context.Context, channelName, hist
 		`SELECT id, channel_name, history_key, sender, sender_id, body, platform_msg_id, is_summary, created_at, updated_at
 		 FROM channel_pending_messages
 		 WHERE channel_name = $1 AND history_key = $2`+tClause+`
-		 ORDER BY created_at ASC`,
+		 ORDER BY created_at ASC, id ASC`,
 		append([]any{channelName, historyKey}, tArgs...)...,
 	)
 	return result, err

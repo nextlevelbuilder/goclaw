@@ -30,6 +30,7 @@ func TestParseConfigNormalizesBoundsAndTypes(t *testing.T) {
 			"allowed_types": ["people", "people", "unknown", "todos"],
 			"exclude_users": ["u1", ""],
 			"exclude_patterns": ["secret", "["],
+			"exclude_history_keys": ["group-1", ""],
 			"min_messages": 1,
 			"group_only": false
 		}
@@ -55,6 +56,9 @@ func TestParseConfigNormalizesBoundsAndTypes(t *testing.T) {
 	}
 	if !slices.Equal(cfg.ExcludePatterns, []string{"secret"}) {
 		t.Fatalf("exclude patterns = %v", cfg.ExcludePatterns)
+	}
+	if !slices.Equal(cfg.ExcludeHistoryKeys, []string{"group-1"}) {
+		t.Fatalf("exclude history keys = %v", cfg.ExcludeHistoryKeys)
 	}
 	if cfg.MinMessages != 2 {
 		t.Fatalf("min messages = %d, want lower bound 2", cfg.MinMessages)

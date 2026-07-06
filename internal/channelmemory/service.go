@@ -27,10 +27,42 @@ type Service struct {
 }
 
 type Status struct {
-	Config       Config                              `json:"config"`
-	LastRun      *store.ChannelMemoryExtractionRun   `json:"last_run,omitempty"`
-	PendingCount int                                 `json:"pending_count"`
-	RecentItems  []store.ChannelMemoryExtractionItem `json:"recent_items"`
+	Config                  Config                              `json:"config"`
+	LastRun                 *store.ChannelMemoryExtractionRun   `json:"last_run,omitempty"`
+	PendingCount            int                                 `json:"pending_count"`
+	UnprocessedMessageCount int                                 `json:"unprocessed_message_count"`
+	RecentItems             []store.ChannelMemoryExtractionItem `json:"recent_items"`
+}
+
+type ProcessAllResult struct {
+	Runs              []store.ChannelMemoryExtractionRun `json:"runs"`
+	RunCount          int                                `json:"run_count"`
+	MessageCount      int                                `json:"message_count"`
+	ItemCount         int                                `json:"item_count"`
+	SkippedGroupCount int                                `json:"skipped_group_count"`
+	ErrorCount        int                                `json:"error_count"`
+}
+
+type ProcessAllEvent struct {
+	Type              string                            `json:"type"`
+	ChannelName       string                            `json:"channel_name,omitempty"`
+	HistoryKey        string                            `json:"history_key,omitempty"`
+	Run               *store.ChannelMemoryExtractionRun `json:"run,omitempty"`
+	Error             string                            `json:"error,omitempty"`
+	RunCount          int                               `json:"run_count"`
+	MessageCount      int                               `json:"message_count"`
+	ItemCount         int                               `json:"item_count"`
+	SkippedGroupCount int                               `json:"skipped_group_count"`
+	ErrorCount        int                               `json:"error_count"`
+}
+
+type GroupOption struct {
+	ChannelName  string    `json:"channel_name"`
+	HistoryKey   string    `json:"history_key"`
+	GroupTitle   string    `json:"group_title,omitempty"`
+	MessageCount int       `json:"message_count"`
+	LastActivity time.Time `json:"last_activity"`
+	Excluded     bool      `json:"excluded"`
 }
 
 func (s *Service) Status(ctx context.Context, inst *store.ChannelInstanceData) (*Status, error) {
@@ -49,11 +81,42 @@ func (s *Service) Status(ctx context.Context, inst *store.ChannelInstanceData) (
 			pending++
 		}
 	}
+	unprocessed, err := s.UnprocessedMessageCount(ctx, inst)
+	if err != nil {
+		return nil, err
+	}
 	var last *store.ChannelMemoryExtractionRun
 	if len(runs) > 0 {
 		last = &runs[0]
 	}
-	return &Status{Config: cfg, LastRun: last, PendingCount: pending, RecentItems: items}, nil
+	return &Status{Config: cfg, LastRun: last, PendingCount: pending, UnprocessedMessageCount: unprocessed, RecentItems: items}, nil
+}
+
+func (s *Service) GroupOptions(ctx context.Context, inst *store.ChannelInstanceData) ([]GroupOption, error) {
+	cfg := ParseConfig(inst.Config)
+	groups, err := s.Pending.ListGroups(ctx)
+	if err != nil {
+		return nil, err
+	}
+	titles, err := s.Pending.ResolveGroupTitles(ctx, groups)
+	if err != nil {
+		titles = nil
+	}
+	out := make([]GroupOption, 0, len(groups))
+	for _, group := range groups {
+		if group.ChannelName != inst.Name || group.HistoryKey == "" {
+			continue
+		}
+		out = append(out, GroupOption{
+			ChannelName:  group.ChannelName,
+			HistoryKey:   group.HistoryKey,
+			GroupTitle:   titles[group.ChannelName+":"+group.HistoryKey],
+			MessageCount: group.MessageCount,
+			LastActivity: group.LastActivity,
+			Excluded:     contains(cfg.ExcludeHistoryKeys, group.HistoryKey),
+		})
+	}
+	return out, nil
 }
 
 func (s *Service) RunNow(ctx context.Context, inst *store.ChannelInstanceData, trigger string) (*store.ChannelMemoryExtractionRun, error) {
@@ -69,16 +132,118 @@ func (s *Service) RunNow(ctx context.Context, inst *store.ChannelInstanceData, t
 		if group.ChannelName != inst.Name || !eligibleHistoryKey(group.HistoryKey, cfg) {
 			continue
 		}
-		if trigger != "manual" && !s.shouldRunScheduled(ctx, inst.ID, group, cfg) {
+		messages, err := s.unprocessedMessages(ctx, inst.ID, group)
+		if err != nil {
+			return nil, err
+		}
+		if len(messages) == 0 {
 			continue
 		}
-		return s.runGroup(ctx, inst, cfg, group, trigger)
+		if trigger != "manual" && !s.shouldRunScheduled(ctx, inst.ID, group, cfg, len(messages)) {
+			continue
+		}
+		return s.runMessages(ctx, inst, cfg, group, messages, trigger)
 	}
 	return nil, fmt.Errorf("no eligible channel messages")
 }
 
-func (s *Service) shouldRunScheduled(ctx context.Context, instID uuid.UUID, group store.PendingMessageGroup, cfg Config) bool {
-	if group.MessageCount >= cfg.MessageCap {
+func (s *Service) RunAll(ctx context.Context, inst *store.ChannelInstanceData, trigger string) (*ProcessAllResult, error) {
+	return s.RunAllWithProgress(ctx, inst, trigger, nil)
+}
+
+func (s *Service) RunAllWithProgress(ctx context.Context, inst *store.ChannelInstanceData, trigger string, emit func(ProcessAllEvent) error) (*ProcessAllResult, error) {
+	cfg := ParseConfig(inst.Config)
+	if !cfg.Enabled && trigger != "manual_all" {
+		return nil, fmt.Errorf("passive memory disabled")
+	}
+	groups, err := s.Pending.ListGroups(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := &ProcessAllResult{}
+	for _, group := range groups {
+		if group.ChannelName != inst.Name || !eligibleHistoryKey(group.HistoryKey, cfg) {
+			continue
+		}
+		messages, err := s.unprocessedMessages(ctx, inst.ID, group)
+		if err != nil {
+			return result, err
+		}
+		if len(messages) == 0 {
+			continue
+		}
+		if trigger != "manual_all" && !s.shouldRunScheduled(ctx, inst.ID, group, cfg, len(messages)) {
+			continue
+		}
+		if len(messages) < cfg.MinMessages {
+			result.SkippedGroupCount++
+			if err := emitProcessAllEvent(emit, "group_skipped", group, nil, "", result); err != nil {
+				return result, err
+			}
+			continue
+		}
+		run, err := s.runMessages(ctx, inst, cfg, group, messages, trigger)
+		if err != nil {
+			result.ErrorCount++
+			if emitErr := emitProcessAllEvent(emit, "group_failed", group, nil, err.Error(), result); emitErr != nil {
+				return result, emitErr
+			}
+			continue
+		}
+		result.Runs = append(result.Runs, *run)
+		result.RunCount++
+		result.MessageCount += run.MessageCount
+		result.ItemCount += run.ItemCount
+		if err := emitProcessAllEvent(emit, "group_completed", group, run, "", result); err != nil {
+			return result, err
+		}
+	}
+	if err := emitProcessAllEvent(emit, "final", store.PendingMessageGroup{}, nil, "", result); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
+func emitProcessAllEvent(emit func(ProcessAllEvent) error, typ string, group store.PendingMessageGroup, run *store.ChannelMemoryExtractionRun, errMsg string, result *ProcessAllResult) error {
+	if emit == nil {
+		return nil
+	}
+	return emit(ProcessAllEvent{
+		Type:              typ,
+		ChannelName:       group.ChannelName,
+		HistoryKey:        group.HistoryKey,
+		Run:               run,
+		Error:             errMsg,
+		RunCount:          result.RunCount,
+		MessageCount:      result.MessageCount,
+		ItemCount:         result.ItemCount,
+		SkippedGroupCount: result.SkippedGroupCount,
+		ErrorCount:        result.ErrorCount,
+	})
+}
+
+func (s *Service) UnprocessedMessageCount(ctx context.Context, inst *store.ChannelInstanceData) (int, error) {
+	cfg := ParseConfig(inst.Config)
+	groups, err := s.Pending.ListGroups(ctx)
+	if err != nil {
+		return 0, err
+	}
+	total := 0
+	for _, group := range groups {
+		if group.ChannelName != inst.Name || !eligibleHistoryKey(group.HistoryKey, cfg) {
+			continue
+		}
+		messages, err := s.unprocessedMessages(ctx, inst.ID, group)
+		if err != nil {
+			return 0, err
+		}
+		total += len(messages)
+	}
+	return total, nil
+}
+
+func (s *Service) shouldRunScheduled(ctx context.Context, instID uuid.UUID, group store.PendingMessageGroup, cfg Config, unprocessedCount int) bool {
+	if unprocessedCount >= cfg.MessageCap {
 		return true
 	}
 	runs, err := s.Extractions.ListRuns(ctx, store.ChannelMemoryRunListOptions{
@@ -93,11 +258,44 @@ func (s *Service) shouldRunScheduled(ctx context.Context, instID uuid.UUID, grou
 	return time.Since(runs[0].CreatedAt) >= cfg.Interval()
 }
 
-func (s *Service) runGroup(ctx context.Context, inst *store.ChannelInstanceData, cfg Config, group store.PendingMessageGroup, trigger string) (*store.ChannelMemoryExtractionRun, error) {
+func (s *Service) unprocessedMessages(ctx context.Context, instID uuid.UUID, group store.PendingMessageGroup) ([]store.PendingMessage, error) {
 	messages, err := s.Pending.ListByKey(ctx, group.ChannelName, group.HistoryKey)
 	if err != nil {
 		return nil, err
 	}
+	if len(messages) == 0 {
+		return nil, nil
+	}
+	runs, err := s.Extractions.ListRuns(ctx, store.ChannelMemoryRunListOptions{
+		ChannelInstanceID: instID,
+		HistoryKey:        group.HistoryKey,
+		Status:            store.ChannelMemoryRunCompleted,
+		Limit:             1,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(runs) == 0 {
+		return messages, nil
+	}
+	run := runs[0]
+	for idx, msg := range messages {
+		if messageSourceID(msg) == run.SourceEndID {
+			return messages[idx+1:], nil
+		}
+	}
+	if run.SourceEndAt == nil {
+		return messages, nil
+	}
+	for idx, msg := range messages {
+		if msg.CreatedAt.After(*run.SourceEndAt) {
+			return messages[idx:], nil
+		}
+	}
+	return nil, nil
+}
+
+func (s *Service) runMessages(ctx context.Context, inst *store.ChannelInstanceData, cfg Config, group store.PendingMessageGroup, messages []store.PendingMessage, trigger string) (*store.ChannelMemoryExtractionRun, error) {
 	if len(messages) < cfg.MinMessages {
 		return nil, fmt.Errorf("not enough useful messages")
 	}
@@ -126,7 +324,7 @@ func (s *Service) runGroup(ctx context.Context, inst *store.ChannelInstanceData,
 		MessageCount:      len(redacted.Messages),
 		RedactionCount:    redacted.Count,
 		RedactionTypes:    redactionTypes,
-		StartedAt:         new(time.Now().UTC()),
+		StartedAt:         timePtr(time.Now().UTC()),
 	}
 	if err := s.Extractions.CreateRun(ctx, run); err != nil {
 		return nil, err

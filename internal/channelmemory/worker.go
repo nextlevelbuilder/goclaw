@@ -49,8 +49,17 @@ func (w *Worker) scan(ctx context.Context) {
 			continue
 		}
 		scoped := store.WithTenantID(ctx, inst.TenantID)
-		if _, err := w.Service.RunNow(scoped, &inst, "scheduled"); err != nil {
+		result, err := w.Service.RunAll(scoped, &inst, "scheduled")
+		if err != nil {
 			slog.Debug("channel_memory.scan.skip", "channel", inst.Name, "error", err)
+			continue
+		}
+		if result.RunCount > 0 || result.SkippedGroupCount > 0 || result.ErrorCount > 0 {
+			slog.Debug("channel_memory.scan.groups",
+				"channel", inst.Name,
+				"runs", result.RunCount,
+				"skipped_groups", result.SkippedGroupCount,
+				"errors", result.ErrorCount)
 		}
 	}
 }

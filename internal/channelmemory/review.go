@@ -36,7 +36,7 @@ func (s *Service) Approve(ctx context.Context, itemID uuid.UUID, approver string
 			KeyTopics:  decodeStrings(item.Topics),
 			SourceID:   sourceID,
 			SourceType: "channel",
-			ExpiresAt:  new(time.Now().UTC().Add(90 * 24 * time.Hour)),
+			ExpiresAt:  timePtr(time.Now().UTC().Add(90 * 24 * time.Hour)),
 		}
 		if err := s.Episodic.Create(ctx, ep); err != nil {
 			return nil, err

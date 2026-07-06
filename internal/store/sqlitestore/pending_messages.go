@@ -61,7 +61,7 @@ func (s *SQLitePendingMessageStore) ListByKey(ctx context.Context, channelName, 
 		`SELECT id, channel_name, history_key, sender, sender_id, body, platform_msg_id, is_summary, created_at, updated_at
 		 FROM channel_pending_messages
 		 WHERE channel_name = ? AND history_key = ?`+tClause+`
-		 ORDER BY created_at ASC`,
+		 ORDER BY created_at ASC, id ASC`,
 		args...,
 	)
 	if err != nil {

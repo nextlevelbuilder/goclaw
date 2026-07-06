@@ -152,6 +152,8 @@ func (h *ChannelInstancesHandler) RegisterRoutes(mux *http.ServeMux) {
 		mux.HandleFunc("GET /v1/channels/instances/{id}/memory-extraction", h.auth(h.handleMemoryExtractionStatus))
 		mux.HandleFunc("PUT /v1/channels/instances/{id}/memory-extraction/settings", h.adminAuth(h.handleMemoryExtractionSettings))
 		mux.HandleFunc("POST /v1/channels/instances/{id}/memory-extraction/run", h.adminAuth(h.handleMemoryExtractionRun))
+		mux.HandleFunc("POST /v1/channels/instances/{id}/memory-extraction/run-all", h.adminAuth(h.handleMemoryExtractionRunAll))
+		mux.HandleFunc("GET /v1/channels/instances/{id}/memory-extraction/groups", h.auth(h.handleMemoryExtractionGroups))
 		mux.HandleFunc("GET /v1/channels/instances/{id}/memory-extraction/items", h.auth(h.handleMemoryExtractionItems))
 		mux.HandleFunc("POST /v1/channels/instances/{id}/memory-extraction/items/{itemID}/approve", h.adminAuth(h.handleMemoryExtractionApprove))
 		mux.HandleFunc("POST /v1/channels/instances/{id}/memory-extraction/items/{itemID}/reject", h.adminAuth(h.handleMemoryExtractionReject))

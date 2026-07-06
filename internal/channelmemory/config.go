@@ -10,16 +10,17 @@ import (
 var DefaultAllowedTypes = []string{"people", "projects", "decisions", "todos", "preferences", "events"}
 
 type Config struct {
-	Enabled         bool     `json:"enabled"`
-	ReviewMode      bool     `json:"review_mode"`
-	IntervalMinutes int      `json:"interval_minutes"`
-	MessageCap      int      `json:"message_cap"`
-	RetentionHours  int      `json:"retention_hours"`
-	AllowedTypes    []string `json:"allowed_types"`
-	ExcludeUsers    []string `json:"exclude_users"`
-	ExcludePatterns []string `json:"exclude_patterns"`
-	MinMessages     int      `json:"min_messages"`
-	GroupOnly       bool     `json:"group_only"`
+	Enabled            bool     `json:"enabled"`
+	ReviewMode         bool     `json:"review_mode"`
+	IntervalMinutes    int      `json:"interval_minutes"`
+	MessageCap         int      `json:"message_cap"`
+	RetentionHours     int      `json:"retention_hours"`
+	AllowedTypes       []string `json:"allowed_types"`
+	ExcludeUsers       []string `json:"exclude_users"`
+	ExcludePatterns    []string `json:"exclude_patterns"`
+	ExcludeHistoryKeys []string `json:"exclude_history_keys"`
+	MinMessages        int      `json:"min_messages"`
+	GroupOnly          bool     `json:"group_only"`
 }
 
 func DefaultConfig() Config {
@@ -55,6 +56,7 @@ func ParseConfig(raw json.RawMessage) Config {
 	cfg.AllowedTypes = normalizeAllowedTypes(in.AllowedTypes)
 	cfg.ExcludeUsers = boundedStrings(in.ExcludeUsers, 50, 255)
 	cfg.ExcludePatterns = boundedPatterns(in.ExcludePatterns, 20, 255)
+	cfg.ExcludeHistoryKeys = boundedStrings(in.ExcludeHistoryKeys, 200, 255)
 	cfg.MinMessages = clampInt(in.MinMessages, 2, 100, cfg.MinMessages)
 	cfg.GroupOnly = true
 	return cfg

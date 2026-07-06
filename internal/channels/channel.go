@@ -724,6 +724,18 @@ type GroupMemberProvider interface {
 	ListGroupMembers(ctx context.Context, chatID string) ([]GroupMember, error)
 }
 
+// GroupTitleProvider is optionally implemented by channels that can resolve
+// a platform group/channel ID to a human-readable title.
+type GroupTitleProvider interface {
+	ResolveGroupTitle(ctx context.Context, chatID string) (string, error)
+}
+
+// GroupTitlesProvider is optionally implemented by channels that can resolve
+// multiple platform group/channel IDs in one best-effort operation.
+type GroupTitlesProvider interface {
+	ResolveGroupTitles(ctx context.Context, chatIDs []string) (map[string]string, error)
+}
+
 // TelegramManagerRequest describes a whitelisted Telegram Bot API management
 // action requested by the agent-facing telegram_manager tool.
 type TelegramManagerRequest struct {

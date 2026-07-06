@@ -84,6 +84,7 @@ type ChannelMemoryItemListOptions struct {
 	RunID             uuid.UUID
 	Status            string
 	Limit             int
+	Offset            int
 }
 
 type ChannelMemoryExtractionStore interface {
@@ -95,5 +96,6 @@ type ChannelMemoryExtractionStore interface {
 	CreateItem(ctx context.Context, item *ChannelMemoryExtractionItem) error
 	GetItem(ctx context.Context, id uuid.UUID) (*ChannelMemoryExtractionItem, error)
 	ListItems(ctx context.Context, opts ChannelMemoryItemListOptions) ([]ChannelMemoryExtractionItem, error)
+	CountItems(ctx context.Context, opts ChannelMemoryItemListOptions) (int, error)
 	UpdateItem(ctx context.Context, id uuid.UUID, updates map[string]any) error
 }

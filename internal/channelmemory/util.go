@@ -32,6 +32,9 @@ func (s *Service) itemFromExtracted(run *store.ChannelMemoryExtractionRun, extra
 }
 
 func eligibleHistoryKey(key string, cfg Config) bool {
+	if slices.Contains(cfg.ExcludeHistoryKeys, key) {
+		return false
+	}
 	if !cfg.GroupOnly {
 		return key != ""
 	}
@@ -53,7 +56,7 @@ func decodeStrings(raw json.RawMessage) []string {
 }
 
 //go:fix inline
-func timePtr(t time.Time) *time.Time { return new(t) }
+func timePtr(t time.Time) *time.Time { return &t }
 
 func contains(values []string, v string) bool {
 	return slices.Contains(values, v)
