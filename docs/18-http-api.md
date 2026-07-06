@@ -1149,9 +1149,10 @@ require tenant admin.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/v1/channels/instances/{id}/memory-extraction` | Get config, latest run, pending count, and recent items |
+| `GET` | `/v1/channels/instances/{id}/memory-extraction` | Get config, latest run, review pending count, unprocessed message count, and recent items |
 | `PUT` | `/v1/channels/instances/{id}/memory-extraction/settings` | Replace normalized `passive_memory` config in the channel instance config |
-| `POST` | `/v1/channels/instances/{id}/memory-extraction/run` | Trigger a manual extraction run |
+| `POST` | `/v1/channels/instances/{id}/memory-extraction/run` | Trigger a manual extraction run for the latest eligible group |
+| `POST` | `/v1/channels/instances/{id}/memory-extraction/run-all` | Trigger manual extraction for all eligible groups, skipping groups below `min_messages` |
 | `GET` | `/v1/channels/instances/{id}/memory-extraction/items` | List review queue items; optional `status` filter |
 | `POST` | `/v1/channels/instances/{id}/memory-extraction/items/{itemID}/approve` | Write candidate to episodic memory and publish KG event |
 | `POST` | `/v1/channels/instances/{id}/memory-extraction/items/{itemID}/reject` | Reject candidate |
