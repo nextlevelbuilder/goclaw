@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/bgalert"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/knowledgegraph"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
@@ -153,31 +154,57 @@ func (m *mockKGStore) DedupAfterExtraction(_ context.Context, _, _ string, _ []s
 
 // Implement remaining store.KnowledgeGraphStore methods
 func (m *mockKGStore) UpsertEntity(context.Context, *store.Entity) error { return nil }
-func (m *mockKGStore) GetEntity(context.Context, string, string, string) (*store.Entity, error) { return nil, nil }
+func (m *mockKGStore) GetEntity(context.Context, string, string, string) (*store.Entity, error) {
+	return nil, nil
+}
 func (m *mockKGStore) DeleteEntity(context.Context, string, string, string) error { return nil }
-func (m *mockKGStore) ListEntities(context.Context, string, string, store.EntityListOptions) ([]store.Entity, error) { return nil, nil }
-func (m *mockKGStore) SearchEntities(context.Context, string, string, string, int) ([]store.Entity, error) { return nil, nil }
-func (m *mockKGStore) UpsertRelation(context.Context, *store.Relation) error { return nil }
+func (m *mockKGStore) ListEntities(context.Context, string, string, store.EntityListOptions) ([]store.Entity, error) {
+	return nil, nil
+}
+func (m *mockKGStore) SearchEntities(context.Context, string, string, string, int) ([]store.Entity, error) {
+	return nil, nil
+}
+func (m *mockKGStore) UpsertRelation(context.Context, *store.Relation) error        { return nil }
 func (m *mockKGStore) DeleteRelation(context.Context, string, string, string) error { return nil }
-func (m *mockKGStore) ListRelations(context.Context, string, string, string) ([]store.Relation, error) { return nil, nil }
-func (m *mockKGStore) ListAllRelations(context.Context, string, string, int) ([]store.Relation, error) { return nil, nil }
-func (m *mockKGStore) Traverse(context.Context, string, string, string, int) ([]store.TraversalResult, error) { return nil, nil }
-func (m *mockKGStore) PruneByConfidence(context.Context, string, string, float64) (int, error) { return 0, nil }
-func (m *mockKGStore) ScanDuplicates(context.Context, string, string, float64, int) (int, error) { return 0, nil }
-func (m *mockKGStore) ListDedupCandidates(context.Context, string, string, int) ([]store.DedupCandidate, error) { return nil, nil }
-func (m *mockKGStore) MergeEntities(context.Context, string, string, string, string) error { return nil }
+func (m *mockKGStore) ListRelations(context.Context, string, string, string) ([]store.Relation, error) {
+	return nil, nil
+}
+func (m *mockKGStore) ListAllRelations(context.Context, string, string, int) ([]store.Relation, error) {
+	return nil, nil
+}
+func (m *mockKGStore) Traverse(context.Context, string, string, string, int) ([]store.TraversalResult, error) {
+	return nil, nil
+}
+func (m *mockKGStore) PruneByConfidence(context.Context, string, string, float64) (int, error) {
+	return 0, nil
+}
+func (m *mockKGStore) ScanDuplicates(context.Context, string, string, float64, int) (int, error) {
+	return 0, nil
+}
+func (m *mockKGStore) ListDedupCandidates(context.Context, string, string, int) ([]store.DedupCandidate, error) {
+	return nil, nil
+}
+func (m *mockKGStore) MergeEntities(context.Context, string, string, string, string) error {
+	return nil
+}
 func (m *mockKGStore) DismissCandidate(context.Context, string, string) error { return nil }
-func (m *mockKGStore) Stats(context.Context, string, string) (*store.GraphStats, error) { return nil, nil }
-func (m *mockKGStore) ListEntitiesTemporal(context.Context, string, string, store.EntityListOptions, store.TemporalQueryOptions) ([]store.Entity, error) { return nil, nil }
-func (m *mockKGStore) SupersedeEntity(context.Context, *store.Entity, *store.Entity) error { return nil }
+func (m *mockKGStore) Stats(context.Context, string, string) (*store.GraphStats, error) {
+	return nil, nil
+}
+func (m *mockKGStore) ListEntitiesTemporal(context.Context, string, string, store.EntityListOptions, store.TemporalQueryOptions) ([]store.Entity, error) {
+	return nil, nil
+}
+func (m *mockKGStore) SupersedeEntity(context.Context, *store.Entity, *store.Entity) error {
+	return nil
+}
 func (m *mockKGStore) SetEmbeddingProvider(store.EmbeddingProvider) {}
-func (m *mockKGStore) Close() error { return nil }
+func (m *mockKGStore) Close() error                                 { return nil }
 
 // mockMemoryStore implements store.MemoryStore for testing.
 type mockMemoryStore struct {
-	docs      map[string]string
-	indexed   map[string]bool
-	mu        sync.Mutex
+	docs    map[string]string
+	indexed map[string]bool
+	mu      sync.Mutex
 }
 
 func newMockMemoryStore() *mockMemoryStore {
@@ -202,17 +229,31 @@ func (m *mockMemoryStore) IndexDocument(_ context.Context, _, _, path string) er
 }
 
 // Implement remaining store.MemoryStore methods
-func (m *mockMemoryStore) GetDocument(context.Context, string, string, string) (string, error) { return "", nil }
+func (m *mockMemoryStore) GetDocument(context.Context, string, string, string) (string, error) {
+	return "", nil
+}
 func (m *mockMemoryStore) DeleteDocument(context.Context, string, string, string) error { return nil }
-func (m *mockMemoryStore) ListDocuments(context.Context, string, string) ([]store.DocumentInfo, error) { return nil, nil }
-func (m *mockMemoryStore) ListAllDocumentsGlobal(context.Context) ([]store.DocumentInfo, error) { return nil, nil }
-func (m *mockMemoryStore) ListAllDocuments(context.Context, string) ([]store.DocumentInfo, error) { return nil, nil }
-func (m *mockMemoryStore) GetDocumentDetail(context.Context, string, string, string) (*store.DocumentDetail, error) { return nil, nil }
-func (m *mockMemoryStore) ListChunks(context.Context, string, string, string) ([]store.ChunkInfo, error) { return nil, nil }
-func (m *mockMemoryStore) Search(context.Context, string, string, string, store.MemorySearchOptions) ([]store.MemorySearchResult, error) { return nil, nil }
+func (m *mockMemoryStore) ListDocuments(context.Context, string, string) ([]store.DocumentInfo, error) {
+	return nil, nil
+}
+func (m *mockMemoryStore) ListAllDocumentsGlobal(context.Context) ([]store.DocumentInfo, error) {
+	return nil, nil
+}
+func (m *mockMemoryStore) ListAllDocuments(context.Context, string) ([]store.DocumentInfo, error) {
+	return nil, nil
+}
+func (m *mockMemoryStore) GetDocumentDetail(context.Context, string, string, string) (*store.DocumentDetail, error) {
+	return nil, nil
+}
+func (m *mockMemoryStore) ListChunks(context.Context, string, string, string) ([]store.ChunkInfo, error) {
+	return nil, nil
+}
+func (m *mockMemoryStore) Search(context.Context, string, string, string, store.MemorySearchOptions) ([]store.MemorySearchResult, error) {
+	return nil, nil
+}
 func (m *mockMemoryStore) IndexAll(context.Context, string, string) error { return nil }
-func (m *mockMemoryStore) SetEmbeddingProvider(store.EmbeddingProvider) {}
-func (m *mockMemoryStore) Close() error { return nil }
+func (m *mockMemoryStore) SetEmbeddingProvider(store.EmbeddingProvider)   {}
+func (m *mockMemoryStore) Close() error                                   { return nil }
 
 // mockSessionStore implements store.SessionCoreStore for testing.
 type mockSessionStore struct {
@@ -221,8 +262,8 @@ type mockSessionStore struct {
 }
 
 func (m *mockSessionStore) GetOrCreate(context.Context, string) *store.SessionData { return nil }
-func (m *mockSessionStore) Get(context.Context, string) *store.SessionData { return nil }
-func (m *mockSessionStore) AddMessage(context.Context, string, providers.Message) {}
+func (m *mockSessionStore) Get(context.Context, string) *store.SessionData         { return nil }
+func (m *mockSessionStore) AddMessage(context.Context, string, providers.Message)  {}
 
 func (m *mockSessionStore) GetHistory(_ context.Context, _ string) []providers.Message {
 	return m.history
@@ -232,15 +273,58 @@ func (m *mockSessionStore) GetSummary(_ context.Context, _ string) string {
 	return m.summary
 }
 
-func (m *mockSessionStore) SetSummary(context.Context, string, string) {}
-func (m *mockSessionStore) GetLabel(context.Context, string) string { return "" }
-func (m *mockSessionStore) SetLabel(context.Context, string, string) {}
+func (m *mockSessionStore) SetSummary(context.Context, string, string)              {}
+func (m *mockSessionStore) GetLabel(context.Context, string) string                 { return "" }
+func (m *mockSessionStore) SetLabel(context.Context, string, string)                {}
 func (m *mockSessionStore) SetAgentInfo(context.Context, string, uuid.UUID, string) {}
-func (m *mockSessionStore) TruncateHistory(context.Context, string, int) {}
+func (m *mockSessionStore) TruncateHistory(context.Context, string, int)            {}
 func (m *mockSessionStore) SetHistory(context.Context, string, []providers.Message) {}
-func (m *mockSessionStore) Reset(context.Context, string) {}
-func (m *mockSessionStore) Delete(context.Context, string) error { return nil }
-func (m *mockSessionStore) Save(context.Context, string) error { return nil }
+func (m *mockSessionStore) Reset(context.Context, string)                           {}
+func (m *mockSessionStore) Delete(context.Context, string) error                    { return nil }
+func (m *mockSessionStore) Save(context.Context, string) error                      { return nil }
+
+type mockSystemConfigStore struct {
+	data       map[string]string
+	deleteKeys []string
+	mu         sync.Mutex
+}
+
+func (m *mockSystemConfigStore) Get(_ context.Context, key string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if val, ok := m.data[key]; ok {
+		return val, nil
+	}
+	return "", errors.New("not found")
+}
+
+func (m *mockSystemConfigStore) Set(_ context.Context, key, value string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.data == nil {
+		m.data = make(map[string]string)
+	}
+	m.data[key] = value
+	return nil
+}
+
+func (m *mockSystemConfigStore) Delete(_ context.Context, key string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.data, key)
+	m.deleteKeys = append(m.deleteKeys, key)
+	return nil
+}
+
+func (m *mockSystemConfigStore) List(context.Context) (map[string]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make(map[string]string, len(m.data))
+	for k, v := range m.data {
+		out[k] = v
+	}
+	return out, nil
+}
 
 // mockDomainEventBus implements eventbus.DomainEventBus for testing.
 type mockDomainEventBus struct {
@@ -312,11 +396,11 @@ func TestEpisodicWorkerHandle_WithSummary(t *testing.T) {
 		AgentID:  uuid.New().String(),
 		UserID:   "test-user",
 		Payload: &eventbus.SessionCompletedPayload{
-			SessionKey:     "session-123",
+			SessionKey:      "session-123",
 			CompactionCount: 1,
-			Summary:        "Pre-computed summary",
-			MessageCount:   10,
-			TokensUsed:     1000,
+			Summary:         "Pre-computed summary",
+			MessageCount:    10,
+			TokensUsed:      1000,
 		},
 	}
 
@@ -500,6 +584,46 @@ func TestSemanticWorkerHandle_WithValidExtraction(t *testing.T) {
 	}
 }
 
+func TestSemanticWorkerHandle_SuccessClearsBackgroundProviderAlert(t *testing.T) {
+	mockKG := &mockKGStore{}
+	mockExtractor := &mockExtractor{
+		result: &knowledgegraph.ExtractionResult{
+			Entities: []store.Entity{{Name: "Entity1", EntityType: "Person"}},
+		},
+	}
+	sc := &mockSystemConfigStore{
+		data: map[string]string{
+			bgalert.AlertKeyProviderError: `{"reason":"auth_permanent","worker":"kg_extraction"}`,
+		},
+	}
+	worker := &semanticWorker{
+		kgStore:   mockKG,
+		extractor: mockExtractor,
+		eventBus:  newMockDomainEventBus(),
+		alertDeps: bgalert.AlertDeps{SystemConfigs: sc},
+	}
+
+	err := worker.Handle(context.Background(), eventbus.DomainEvent{
+		Type:     eventbus.EventEpisodicCreated,
+		TenantID: uuid.New().String(),
+		AgentID:  uuid.New().String(),
+		UserID:   "test-user",
+		Payload: &eventbus.EpisodicCreatedPayload{
+			EpisodicID: "ep-123",
+			Summary:    "Alice works at TechCorp",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Handle failed: %v", err)
+	}
+	if _, ok := sc.data[bgalert.AlertKeyProviderError]; ok {
+		t.Fatal("expected successful extraction to clear stale background provider alert")
+	}
+	if len(sc.deleteKeys) != 1 || sc.deleteKeys[0] != bgalert.AlertKeyProviderError {
+		t.Fatalf("deleteKeys = %#v, want [%q]", sc.deleteKeys, bgalert.AlertKeyProviderError)
+	}
+}
+
 func TestSemanticWorkerHandle_NilExtractor(t *testing.T) {
 	worker := &semanticWorker{
 		extractor: nil,
@@ -571,9 +695,9 @@ func TestDedupWorkerHandle_ValidPayload(t *testing.T) {
 
 	ctx := context.Background()
 	event := eventbus.DomainEvent{
-		Type:     eventbus.EventEntityUpserted,
-		AgentID:  "agent-123",
-		UserID:   "user-123",
+		Type:    eventbus.EventEntityUpserted,
+		AgentID: "agent-123",
+		UserID:  "user-123",
 		Payload: &eventbus.EntityUpsertedPayload{
 			EntityIDs: []string{"e1", "e2", "e3"},
 		},
@@ -653,9 +777,9 @@ func TestDreamingWorkerHandle_BelowThreshold(t *testing.T) {
 
 	ctx := context.Background()
 	event := eventbus.DomainEvent{
-		Type:     eventbus.EventEpisodicCreated,
-		AgentID:  "agent-123",
-		UserID:   "user-123",
+		Type:    eventbus.EventEpisodicCreated,
+		AgentID: "agent-123",
+		UserID:  "user-123",
 		Payload: &eventbus.EpisodicCreatedPayload{},
 	}
 

@@ -220,6 +220,14 @@ func setupToolRegistry(
 				filepath.Join(dataDir, "skills-store")+"/",
 				filepath.Join(dataDir, "tenants")+"/",
 			)
+			// Allow the goclaw-managed Python venv interpreter to be invoked with its
+			// absolute path. venv/bin/python3 is a symlink to the real interpreter
+			// (e.g. linuxbrew cellar), and matchesAnyPathExemption resolves symlinks
+			// before comparing — so we must exempt the *resolved* target dir.
+			// Resolved at startup; falls back silently if venv not present.
+			if real, err := filepath.EvalSymlinks(filepath.Join(filepath.Dir(dataDir), "venv", "bin", "python3")); err == nil {
+				et.AllowPathExemptions(filepath.Dir(real) + "/")
+			}
 			// Harden: block access to internal workspace files via shell commands.
 			// Prevents `cat ../config.json`, `cat memory.db` etc. from user workspaces.
 			et.DenyPaths(

@@ -541,6 +541,7 @@ func (w *EnrichWorker) chatWithRetry(ctx context.Context, provider providers.Pro
 		if resp.FinishReason == "length" {
 			slog.Warn(logPrefix+": truncated", "finish_reason", "length", "model", req.Model, "content_len", len(resp.Content), "max_tokens", req.Options["max_tokens"])
 		}
+		bgalert.ClearProviderError(ctx, w.alertDeps.SystemConfigs)
 		return strings.TrimSpace(resp.Content), nil
 	}
 	bgalert.ReportProviderError(ctx, w.alertDeps, "vault_enrich", lastErr)

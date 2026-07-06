@@ -187,5 +187,6 @@ func (w *episodicWorker) summarizeFromMessages(ctx context.Context, provider pro
 	if err != nil {
 		return "", err
 	}
+	bgalert.ClearProviderError(ctx, w.alertDeps.SystemConfigs)
 	return resp.Content, nil
 }

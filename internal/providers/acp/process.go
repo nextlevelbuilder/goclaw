@@ -216,6 +216,38 @@ func (pp *ProcessPool) spawn(ctx context.Context, poolKey string) (*ACPProcess, 
 				slog.Warn("acp: session/update parse failed", "error", err)
 				return
 			}
+			// Surface tool-call notifications at Info level so operators can
+			// distinguish "permission granted" (security.tool_granted) from
+			// "tool actually executed / produced output". Without this the
+			// status transitions are buried in Debug-level params dumps.
+			if update.ToolCall != nil {
+				preview := ""
+				for _, c := range update.ToolCall.Content {
+					if c.Type == "text" && c.Text != "" {
+						preview += c.Text
+						if len(preview) > 400 {
+							break
+						}
+					}
+				}
+				if len(preview) > 400 {
+					preview = preview[:400] + "...(truncated)"
+				}
+				slog.Info("acp: tool_call_update",
+					"sid", update.SessionID,
+					"id", update.ToolCall.ID,
+					"name", update.ToolCall.Name,
+					"status", update.ToolCall.Status,
+					"content_preview", preview)
+			}
+			if update.Update.SessionUpdate == "tool_call" || update.Update.SessionUpdate == "tool_call_update" {
+				slog.Info("acp: tool_call_update (inline)",
+					"sid", update.SessionID,
+					"id", update.Update.ToolCallID,
+					"title", update.Update.Title,
+					"kind", update.Update.Kind,
+					"status", update.Update.Status)
+			}
 			proc.dispatchUpdate(update)
 		}
 	}

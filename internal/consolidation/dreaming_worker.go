@@ -230,6 +230,7 @@ func (w *dreamingWorker) synthesize(ctx context.Context, provider providers.Prov
 	if err != nil {
 		return "", fmt.Errorf("dreaming chat: %w", err)
 	}
+	bgalert.ClearProviderError(ctx, w.alertDeps.SystemConfigs)
 	return resp.Content, nil
 }
 
