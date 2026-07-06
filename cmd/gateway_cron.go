@@ -32,12 +32,34 @@ var cronHeartbeatWakeFn func(agentID string)
 // so the stateless-reset behavior can be unit-tested without filesystem effects.
 var cronCLISessionReset = providers.ResetCLISession
 
-func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg *config.Config, channelMgr *channels.Manager, sessionMgr store.SessionStore, agentStore store.AgentStore, providerStore store.ProviderStore, providerReg *providers.Registry) func(job *store.CronJob) (*store.CronJobResult, error) {
+// cronTenantContext scopes a context to the job's tenant. It sets BOTH the
+// tenant ID and the tenant SLUG: tenant-scoped filesystem paths
+// (skills-store, workspace, media via config.TenantScopedDir) key off the
+// slug, and resolve to an id-based path when the slug is absent — a different
+// directory than where HTTP/WS upload materialized the files. Without the
+// slug, a cron agent turn sees NONE of its tenant's managed skills. tenantStore
+// may be nil (older wiring) — then only the tenant ID is set, preserving prior
+// behavior. Master tenant needs no slug (TenantScopedDir returns the base).
+func cronTenantContext(ctx context.Context, tenantStore store.TenantStore, tenantID uuid.UUID) context.Context {
+	ctx = store.WithTenantID(ctx, tenantID)
+	if tenantStore == nil || tenantID == uuid.Nil || tenantID == store.MasterTenantID {
+		return ctx
+	}
+	tenant, err := tenantStore.GetTenant(ctx, tenantID)
+	if err != nil || tenant == nil || tenant.Slug == "" {
+		slog.Warn("cron: could not resolve tenant slug; tenant-scoped skills/workspace may be invisible",
+			"tenant_id", tenantID, "error", err)
+		return ctx
+	}
+	return store.WithTenantSlug(ctx, tenant.Slug)
+}
+
+func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg *config.Config, channelMgr *channels.Manager, sessionMgr store.SessionStore, agentStore store.AgentStore, tenantStore store.TenantStore, providerStore store.ProviderStore, providerReg *providers.Registry) func(job *store.CronJob) (*store.CronJobResult, error) {
 	return func(job *store.CronJob) (*store.CronJobResult, error) {
 		agentID := job.AgentID
 		if agentID == "" && agentStore != nil {
 			// Resolve real default agent from DB instead of using literal "default" string.
-			tenantCtx := store.WithTenantID(context.Background(), job.TenantID)
+			tenantCtx := cronTenantContext(context.Background(), tenantStore, job.TenantID)
 			if defaultAgent, err := agentStore.GetDefault(tenantCtx); err == nil {
 				agentID = defaultAgent.AgentKey
 			} else {
@@ -48,7 +70,7 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 		} else if id, err := uuid.Parse(agentID); err == nil && agentStore != nil {
 			// Resolve agentKey from UUID so session key uses agentKey
 			// (consistent with chat/WS/team paths, fixes cache invalidation mismatch).
-			cronCtx := store.WithTenantID(context.Background(), job.TenantID)
+			cronCtx := cronTenantContext(context.Background(), tenantStore, job.TenantID)
 			if ag, err := agentStore.GetByID(cronCtx, id); err == nil {
 				agentID = ag.AgentKey
 			}
@@ -72,7 +94,7 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 		// Deterministic command payload: run the shell command in-process WITHOUT
 		// an LLM/agent turn (zero model tokens). Gated by cron.command_enabled.
 		if job.Payload.IsCommand() {
-			return runCommandCronJob(cfg, job, msgBus, peerKind)
+			return runCommandCronJob(cfg, job, tenantStore, msgBus, peerKind)
 		}
 
 		// Build cron context so the agent knows delivery target and requester.
@@ -97,7 +119,7 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 		jobTimeout := cfg.Cron.JobTimeoutDuration()
 		cronCtx, cancelCron := context.WithTimeout(context.Background(), jobTimeout)
 		defer cancelCron()
-		cronCtx = store.WithTenantID(cronCtx, job.TenantID)
+		cronCtx = cronTenantContext(cronCtx, tenantStore, job.TenantID)
 		if job.Payload.CredentialUserID != "" {
 			cronCtx = store.WithCredentialUserID(cronCtx, job.Payload.CredentialUserID)
 		}
@@ -232,7 +254,7 @@ func deliverCronOutput(msgBus *bus.MessageBus, job *store.CronJob, content strin
 // stderr) like an agent turn. On failure it returns an error so the run is
 // recorded as "error" and retried per cron.max_retries — failures are NOT
 // delivered, mirroring the agent path where only successful output is announced.
-func runCommandCronJob(cfg *config.Config, job *store.CronJob, msgBus *bus.MessageBus, peerKind string) (*store.CronJobResult, error) {
+func runCommandCronJob(cfg *config.Config, job *store.CronJob, tenantStore store.TenantStore, msgBus *bus.MessageBus, peerKind string) (*store.CronJobResult, error) {
 	if !cfg.Cron.CommandEnabled {
 		return nil, fmt.Errorf("cron command payloads are disabled; set cron.command_enabled=true to allow them")
 	}
@@ -246,7 +268,7 @@ func runCommandCronJob(cfg *config.Config, job *store.CronJob, msgBus *bus.Messa
 		cmdTimeout = time.Duration(spec.TimeoutSeconds) * time.Second
 	}
 	// The job timeout is a hard ceiling above the per-command timeout.
-	ctx, cancel := context.WithTimeout(store.WithTenantID(context.Background(), job.TenantID), cfg.Cron.JobTimeoutDuration())
+	ctx, cancel := context.WithTimeout(cronTenantContext(context.Background(), tenantStore, job.TenantID), cfg.Cron.JobTimeoutDuration())
 	defer cancel()
 
 	res := cronexec.Run(ctx, cronexec.Spec{

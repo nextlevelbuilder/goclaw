@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -38,6 +39,7 @@ func TestCronJobHandlerInjectsPayloadCredentialUserID(t *testing.T) {
 		sched,
 		nil,
 		&config.Config{},
+		nil,
 		nil,
 		nil,
 		nil,
@@ -141,6 +143,7 @@ func TestCronJobHandlerSuppressesNoReplyDelivery(t *testing.T) {
 				nil,
 				nil,
 				nil,
+				nil,
 			)
 
 			result, err := handler(&store.CronJob{
@@ -230,7 +233,7 @@ func TestCronJobHandler_StatelessResetsSession(t *testing.T) {
 			)
 			defer sched.Stop()
 
-			handler := makeCronJobHandler(sched, nil, &config.Config{}, nil, fakeStore, nil, nil, nil)
+			handler := makeCronJobHandler(sched, nil, &config.Config{}, nil, fakeStore, nil, nil, nil, nil)
 
 			if _, err := handler(&store.CronJob{
 				ID:        uuid.NewString(),
@@ -251,5 +254,71 @@ func TestCronJobHandler_StatelessResetsSession(t *testing.T) {
 				t.Errorf("CLI session reset called=%v, want %v", gotCLI, tc.wantReset)
 			}
 		})
+	}
+}
+
+// fakeTenantStore implements only GetTenant; embedding the interface satisfies
+// the rest (calling any other method would nil-panic, which none of these tests do).
+type fakeTenantStore struct {
+	store.TenantStore
+	byID map[uuid.UUID]*store.TenantData
+	err  error
+}
+
+func (f *fakeTenantStore) GetTenant(_ context.Context, id uuid.UUID) (*store.TenantData, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.byID[id], nil
+}
+
+func TestCronTenantContext_InjectsSlugForNonMasterTenant(t *testing.T) {
+	tid := uuid.Must(uuid.NewV7())
+	ts := &fakeTenantStore{byID: map[uuid.UUID]*store.TenantData{
+		tid: {ID: tid, Slug: "family-pilot"},
+	}}
+
+	ctx := cronTenantContext(context.Background(), ts, tid)
+
+	if got := store.TenantIDFromContext(ctx); got != tid {
+		t.Errorf("tenant id = %v, want %v", got, tid)
+	}
+	// The slug is what tenant-scoped skills-store/workspace paths key off; without
+	// it a cron agent turn sees none of its tenant's managed skills.
+	if got := store.TenantSlugFromContext(ctx); got != "family-pilot" {
+		t.Errorf("tenant slug = %q, want %q (skills-store would resolve to the wrong dir)", got, "family-pilot")
+	}
+}
+
+func TestCronTenantContext_MasterTenantNeedsNoSlug(t *testing.T) {
+	// Master tenant paths resolve to the base dir regardless of slug; the store
+	// must not even be consulted.
+	ts := &fakeTenantStore{err: fmt.Errorf("GetTenant must not be called for master")}
+	ctx := cronTenantContext(context.Background(), ts, store.MasterTenantID)
+	if got := store.TenantIDFromContext(ctx); got != store.MasterTenantID {
+		t.Errorf("tenant id = %v, want master", got)
+	}
+}
+
+func TestCronTenantContext_NilStore_TenantIDOnly(t *testing.T) {
+	tid := uuid.Must(uuid.NewV7())
+	ctx := cronTenantContext(context.Background(), nil, tid)
+	if got := store.TenantIDFromContext(ctx); got != tid {
+		t.Errorf("tenant id = %v, want %v", got, tid)
+	}
+	if got := store.TenantSlugFromContext(ctx); got != "" {
+		t.Errorf("slug = %q, want empty when store is nil", got)
+	}
+}
+
+func TestCronTenantContext_LookupError_FallsBackToIDOnly(t *testing.T) {
+	tid := uuid.Must(uuid.NewV7())
+	ts := &fakeTenantStore{err: fmt.Errorf("db down")}
+	ctx := cronTenantContext(context.Background(), ts, tid)
+	if got := store.TenantSlugFromContext(ctx); got != "" {
+		t.Errorf("slug = %q, want empty on lookup error", got)
+	}
+	if got := store.TenantIDFromContext(ctx); got != tid {
+		t.Errorf("tenant id = %v, want %v (must still scope by id)", got, tid)
 	}
 }
