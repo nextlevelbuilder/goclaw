@@ -80,11 +80,12 @@ ARG ENABLE_CLAUDE_CLI=false
 # requirements-skills.txt: additional deps only for ENABLE_FULL_SKILLS.
 COPY docker/requirements-base.txt docker/requirements-skills.txt /tmp/
 
-# Install ca-certificates + wget (healthcheck) + optional runtimes.
+# Install ca-certificates + wget (healthcheck) + tzdata (zoneinfo for Go
+# time.LoadLocation and Python zoneinfo in skill scripts) + optional runtimes.
 # ENABLE_FULL_SKILLS=true pre-installs all skill deps (larger image, no on-demand install needed).
 # Otherwise, skill packages are installed on-demand via the admin UI.
 RUN set -eux; \
-    apk add --no-cache ca-certificates wget su-exec; \
+    apk add --no-cache ca-certificates wget su-exec tzdata; \
     if [ "$ENABLE_SANDBOX" = "true" ]; then \
         apk add --no-cache docker-cli; \
     fi; \
