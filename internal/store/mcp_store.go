@@ -78,9 +78,9 @@ type MCPAccessInfo struct {
 
 // MCPUserCredentials holds per-user credential overrides for an MCP server.
 type MCPUserCredentials struct {
-	APIKey  string            `json:"api_key,omitempty" db:"-"`  // decrypted
-	Headers map[string]string `json:"headers,omitempty" db:"-"`  // decrypted
-	Env     map[string]string `json:"env,omitempty" db:"-"`      // decrypted
+	APIKey  string            `json:"api_key,omitempty" db:"-"` // decrypted
+	Headers map[string]string `json:"headers,omitempty" db:"-"` // decrypted
+	Env     map[string]string `json:"env,omitempty" db:"-"`     // decrypted
 }
 
 // MCPServerStore manages MCP server configs and access grants.

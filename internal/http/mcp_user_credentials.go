@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -15,12 +16,21 @@ import (
 type MCPUserCredentialsHandler struct {
 	store       store.MCPServerStore
 	tenantStore store.TenantStore
+	poolEvictor MCPUserPoolEvictor
+}
+
+// MCPUserPoolEvictor evicts pooled user connections after credential rotation.
+type MCPUserPoolEvictor interface {
+	EvictUser(tenantID uuid.UUID, serverName, userID string)
 }
 
 // NewMCPUserCredentialsHandler creates a handler for MCP user credential endpoints.
 func NewMCPUserCredentialsHandler(s store.MCPServerStore, ts store.TenantStore) *MCPUserCredentialsHandler {
 	return &MCPUserCredentialsHandler{store: s, tenantStore: ts}
 }
+
+// SetPoolEvictor wires the MCP connection pool used by runtime execution.
+func (h *MCPUserCredentialsHandler) SetPoolEvictor(e MCPUserPoolEvictor) { h.poolEvictor = e }
 
 // RegisterRoutes registers MCP user credential routes.
 func (h *MCPUserCredentialsHandler) RegisterRoutes(mux *http.ServeMux) {
@@ -104,6 +114,7 @@ func (h *MCPUserCredentialsHandler) handleSet(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	h.evictUserConnection(r.Context(), serverID, userID)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }
 
@@ -127,12 +138,19 @@ func (h *MCPUserCredentialsHandler) handleGet(w http.ResponseWriter, r *http.Req
 	}
 
 	creds, err := h.store.GetUserCredentials(r.Context(), serverID, userID)
-	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"has_credentials": false})
+	if err != nil || creds == nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"user_id":         userID,
+			"has_credentials": false,
+			"has_api_key":     false,
+			"has_headers":     false,
+			"has_env":         false,
+		})
 		return
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
+		"user_id":         userID,
 		"has_credentials": true,
 		"has_api_key":     creds.APIKey != "",
 		"has_headers":     len(creds.Headers) > 0,
@@ -164,7 +182,21 @@ func (h *MCPUserCredentialsHandler) handleDelete(w http.ResponseWriter, r *http.
 		return
 	}
 
+	h.evictUserConnection(r.Context(), serverID, userID)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+func (h *MCPUserCredentialsHandler) evictUserConnection(ctx context.Context, serverID uuid.UUID, userID string) {
+	if h.poolEvictor == nil || userID == "" {
+		return
+	}
+	srv, err := h.store.GetServer(ctx, serverID)
+	if err != nil || srv == nil {
+		slog.Warn("mcp.user_credentials.evict_lookup_failed", "server_id", serverID, "user", userID, "error", err)
+		return
+	}
+	tid := store.TenantIDFromContext(ctx)
+	h.poolEvictor.EvictUser(tid, srv.Name, userID)
 }
 
 // httpStatusText returns a short error message for common HTTP status codes.

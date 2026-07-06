@@ -111,8 +111,10 @@ export function MCPUserCredentialsDialog({
       if (Object.keys(data.env).length > 0) creds.env = data.env as Record<string, string>;
       const targetUser = canManageUsers ? selectedUserId : undefined;
       await onSetCredentials(server.id, creds, targetUser);
+      const nextStatus = await onGetCredentials(server.id, targetUser);
+      setStatus(nextStatus);
+      reset({ apiKey: "", headers: {}, env: {} });
       toast.success(i18next.t("mcp:userCredentials.saved"));
-      onOpenChange(false);
     } catch (err) {
       toast.error(i18next.t("mcp:userCredentials.saveFailed"), err instanceof Error ? err.message : "");
     } finally {
@@ -125,8 +127,9 @@ export function MCPUserCredentialsDialog({
     try {
       const targetUser = canManageUsers ? selectedUserId : undefined;
       await onDeleteCredentials(server.id, targetUser);
+      const nextStatus = await onGetCredentials(server.id, targetUser);
+      setStatus(nextStatus);
       toast.success(i18next.t("mcp:userCredentials.deleted"));
-      onOpenChange(false);
     } catch (err) {
       toast.error(i18next.t("mcp:userCredentials.deleteFailed"), err instanceof Error ? err.message : "");
     } finally {

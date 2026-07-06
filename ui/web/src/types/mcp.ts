@@ -62,6 +62,7 @@ export interface MCPAgentGrant {
 }
 
 export interface MCPUserCredentialStatus {
+  user_id?: string;
   has_credentials: boolean;
   has_api_key: boolean;
   has_headers: boolean;

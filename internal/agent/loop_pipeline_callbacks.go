@@ -229,6 +229,22 @@ func (l *Loop) makeBuildFilteredTools(req *RunRequest) func(state *pipeline.RunS
 		allMsgs := state.Messages.All()
 		toolDefs, _, returnedMsgs := l.buildFilteredTools(req, state.Context.HadBootstrap,
 			state.Iteration, maxIter, allMsgs)
+		if state.Iteration != maxIter && len(userTools) > 0 {
+			existing := make(map[string]struct{}, len(toolDefs)+len(userTools))
+			for _, td := range toolDefs {
+				if td.Function != nil {
+					existing[td.Function.Name] = struct{}{}
+				}
+			}
+			for _, t := range userTools {
+				name := t.Name()
+				if _, ok := existing[name]; ok {
+					continue
+				}
+				toolDefs = append(toolDefs, tools.ToProviderDef(t))
+				existing[name] = struct{}{}
+			}
+		}
 		// buildFilteredTools returns the full messages slice; only messages appended
 		// beyond the original length are injections (e.g. final-iteration hint).
 		// Appending the entire slice would duplicate system+history into pending.
