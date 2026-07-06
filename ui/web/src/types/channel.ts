@@ -60,6 +60,7 @@ export interface ChannelMemoryConfig {
   allowed_types: string[];
   exclude_users?: string[];
   exclude_patterns?: string[];
+  exclude_history_keys?: string[];
   min_messages: number;
   group_only: boolean;
 }
@@ -78,6 +79,44 @@ export interface ChannelMemoryExtractionRun {
   started_at?: string;
   completed_at?: string;
   created_at: string;
+}
+
+export interface ChannelMemoryProcessAllResult {
+  runs: ChannelMemoryExtractionRun[];
+  run_count: number;
+  message_count: number;
+  item_count: number;
+  skipped_group_count: number;
+  error_count: number;
+}
+
+export interface ChannelMemoryProcessAllEvent {
+  type: "group_completed" | "group_skipped" | "group_failed" | "final" | "error";
+  channel_name?: string;
+  history_key?: string;
+  run?: ChannelMemoryExtractionRun;
+  error?: string;
+  run_count: number;
+  message_count: number;
+  item_count: number;
+  skipped_group_count: number;
+  error_count: number;
+}
+
+export interface ChannelMemoryItemsResponse {
+  items: ChannelMemoryExtractionItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ChannelMemoryGroupOption {
+  channel_name: string;
+  history_key: string;
+  group_title?: string;
+  message_count: number;
+  last_activity: string;
+  excluded: boolean;
 }
 
 export interface ChannelMemoryExtractionItem {
@@ -101,6 +140,7 @@ export interface ChannelMemoryStatus {
   config: ChannelMemoryConfig;
   last_run?: ChannelMemoryExtractionRun;
   pending_count: number;
+  unprocessed_message_count: number;
   recent_items: ChannelMemoryExtractionItem[];
 }
 
