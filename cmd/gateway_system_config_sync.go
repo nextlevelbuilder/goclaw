@@ -108,6 +108,7 @@ func seedConfigForContext(ctx context.Context, sc store.SystemConfigStore, cfg *
 	setIntAllowZero("gateway.inbound_debounce_ms", cfg.Gateway.InboundDebounceMs)
 	setBool("gateway.block_reply", cfg.Gateway.BlockReply)
 	setBool("gateway.tool_status", cfg.Gateway.ToolStatus)
+	setBool("gateway.team_work_classify", cfg.Gateway.TeamWorkClassify)
 	setInt("gateway.task_recovery_interval_sec", cfg.Gateway.TaskRecoveryIntervalSec)
 
 	// Background workers

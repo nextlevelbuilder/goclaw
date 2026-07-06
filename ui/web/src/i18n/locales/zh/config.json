@@ -59,7 +59,7 @@
   "agents.workspaceTip": "Agent 文件操作的根目录，运行时自动创建每用户子目录。",
   "agents.restrictToWorkspace": "限制在工作区内",
   "agents.restrictToWorkspaceTip": "阻止 Agent 读写工作区路径以外的文件。",
-  "agents.intentClassify": "意图分类",
+  "agents.intentClassify": "Agent 忙碌时的消息分类",
   "agents.saveError": "保存 Agent 默认值失败",
 
   "agents.subagents.title": "子 Agent",
@@ -122,8 +122,12 @@
 
   "behavior.uxTitle": "界面行为",
   "behavior.uxDescription": "影响网关与用户交互方式的高影响开关",
-  "behavior.intentClassifyHint": "在路由之前对用户意图进行分类，以减少不必要的 Agent 调用。",
-  "behavior.intentClassifyInfo": "仅当分类器检测到可执行意图时才调用 Agent。",
+  "behavior.intentClassifyHint": "当 Agent 正在处理上一轮请求时，将新消息分类为状态询问、取消、补充指令或新的请求。",
+  "behavior.intentClassifyInfo": "此功能只在会话忙碌时生效；它不会判断请求是否需要团队工作流。",
+  "behavior.teamWorkClassify": "Team Work 分类",
+  "behavior.teamWorkClassifyHint": "将新请求分类为自行处理或 team/delegate 工作流。",
+  "behavior.teamWorkClassifyInfo": "当请求超出当前 Agent 的职责范围或适合拆分协作时，系统使用 embedding 作为证据，并让模型决定自行处理还是使用 team/delegate 工作流。系统还会检查 lead/member 权限；member 只有在团队启用成员请求并开启自动分配时才能创建求助 request。",
+  "behavior.teamWorkClassifyEmbeddingRequired": "需要先配置 embedding 才能启用 Team Work 分类。",
   "behavior.chatTitle": "拟人化频道投递",
   "behavior.chatDescription": "为非流式频道提供 sidecar 确认、中间进度和安全的最终回复拆分",
   "behavior.chatEnabled": "启用频道投递行为",

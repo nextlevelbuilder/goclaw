@@ -30,9 +30,13 @@
   "ux": {
     "title": "UX Behavior",
     "description": "Control how the gateway displays agent activity to users.",
-    "intentClassify": "Intent classification",
-    "intentClassifyHint": "Classify user intent before routing to the agent.",
-    "intentClassifyInfo": "Messages are classified to optimize agent routing and behavior."
+    "intentClassify": "Busy agent message classification",
+    "intentClassifyHint": "When the agent is already processing a previous turn, classify new messages as status questions, cancel requests, steering instructions, or new requests.",
+    "intentClassifyInfo": "This only applies while a session is busy; it does not decide whether a request needs team workflow.",
+    "teamWorkClassify": "Team Work Classification",
+    "teamWorkClassifyHint": "Classify new requests as direct handling or team/delegate workflow.",
+    "teamWorkClassifyInfo": "When a request exceeds the current agent's scope or should be split, the system uses embeddings as evidence and asks the model to decide between direct handling and team/delegate workflow. The system also checks lead/member permissions; members can only create help requests when the team has enabled member requests and auto-dispatch.",
+    "teamWorkClassifyEmbeddingRequired": "Configure embeddings before enabling Team Work Classification."
   },
   "kg": {
     "title": "Knowledge Graph",

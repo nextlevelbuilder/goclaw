@@ -625,6 +625,7 @@ type RunRequest struct {
 	Role                       string             // caller's RBAC role (admin/operator/viewer/owner); bypasses per-user grants for authenticated admins (#915)
 	Stream                     bool               // whether to stream response chunks
 	ExtraSystemPrompt          string             // optional: injected into system prompt (skills, subagent context, etc.)
+	TeamWorkDirective          *TeamWorkDirective // optional: force this turn through team/delegate workflow
 	SkillFilter                []string           // per-request skill override: nil=use agent default, []=no skills, ["x","y"]=whitelist
 	HistoryLimit               int                // max user turns to keep in context (0=unlimited, from channel config)
 	ToolAllow                  []string           // per-group tool allow list (nil = no restriction, supports "group:xxx")

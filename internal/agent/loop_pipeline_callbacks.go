@@ -48,7 +48,7 @@ func (l *Loop) pipelineCallbacks(req *RunRequest, bridgeRS *runState) pipelineCa
 		loadSessionHistory: l.makeLoadSessionHistory(),
 		resolveWorkspace:   l.makeResolveWorkspace(req),
 		loadContextFiles:   l.makeLoadContextFiles(),
-		buildMessages:      l.makeBuildMessages(),
+		buildMessages:      l.makeBuildMessages(req),
 		enrichMedia:        l.makeEnrichMedia(req),
 		injectReminders:    l.makeInjectReminders(req),
 		buildFilteredTools: l.makeBuildFilteredTools(req),
@@ -132,8 +132,14 @@ func (l *Loop) makeLoadContextFiles() func(ctx context.Context, userID string) (
 	}
 }
 
-func (l *Loop) makeBuildMessages() func(ctx context.Context, input *pipeline.RunInput, history []providers.Message, summary string) ([]providers.Message, error) {
+func (l *Loop) makeBuildMessages(req *RunRequest) func(ctx context.Context, input *pipeline.RunInput, history []providers.Message, summary string) ([]providers.Message, error) {
 	return func(ctx context.Context, input *pipeline.RunInput, history []providers.Message, summary string) ([]providers.Message, error) {
+		if prompt := buildTeamWorkDirectivePrompt(req.TeamWorkDirective); prompt != "" {
+			if input.ExtraSystemPrompt != "" {
+				input.ExtraSystemPrompt += "\n\n"
+			}
+			input.ExtraSystemPrompt += prompt
+		}
 		msgs, _ := l.buildMessages(ctx, history, summary,
 			input.Message, input.ExtraSystemPrompt,
 			input.SessionKey, input.Channel, input.ChannelType,
@@ -497,9 +503,29 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 			}(),
 			"tools_provided", len(chatReq.Tools))
 
+		if err == nil && teamWorkDirectiveNeedsRetry(req.TeamWorkDirective, state.Iteration, resp) {
+			retryReq := buildTeamWorkDirectiveRetryRequest(chatReq, req.TeamWorkDirective)
+			resp, err = callProvider("team-work-directive-retry", retryReq)
+			slog.Info("team_work_classify: directive retry response",
+				"has_error", err != nil,
+				"required_tool", req.TeamWorkDirective.normalizedRequiredTool(),
+				"tool_calls_count", func() int {
+					if resp == nil {
+						return -1
+					}
+					return len(resp.ToolCalls)
+				}())
+			if err == nil && teamWorkDirectiveNeedsRetry(req.TeamWorkDirective, state.Iteration, resp) {
+				resp = &providers.ChatResponse{
+					Content:      teamWorkDirectiveBlocker(req.TeamWorkDirective),
+					FinishReason: "stop",
+				}
+			}
+		}
+
 		// One guarded retry when MCP task tools are available but the model
 		// returns text-only instead of tool calls.
-		retryEligible := err == nil && resp != nil && len(resp.ToolCalls) == 0 && shouldRetryTaskMCP(chatReq)
+		retryEligible := req.TeamWorkDirective == nil && err == nil && resp != nil && len(resp.ToolCalls) == 0 && shouldRetryTaskMCP(chatReq)
 		slog.Info("debug.llm.retry_guard", "retry_eligible", retryEligible)
 		if retryEligible {
 			retryReq := chatReq

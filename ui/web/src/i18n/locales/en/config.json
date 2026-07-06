@@ -59,7 +59,7 @@
   "agents.workspaceTip": "Root directory for agent file operations. Per-user subdirectories are created automatically.",
   "agents.restrictToWorkspace": "Restrict to Workspace",
   "agents.restrictToWorkspaceTip": "Prevent agents from reading or writing files outside the workspace path.",
-  "agents.intentClassify": "Intent Classification",
+  "agents.intentClassify": "Busy Agent Message Classification",
   "agents.saveError": "Failed to save agent defaults",
 
   "agents.subagents.title": "Subagents",
@@ -122,8 +122,12 @@
 
   "behavior.uxTitle": "UX Behavior",
   "behavior.uxDescription": "High-impact toggles that change how the gateway interacts with users",
-  "behavior.intentClassifyHint": "Classify user intent before routing to reduce unnecessary agent invocations.",
-  "behavior.intentClassifyInfo": "Agent will only be invoked when the classifier detects actionable intent.",
+  "behavior.intentClassifyHint": "When the agent is already processing a previous turn, classify new messages as status questions, cancel requests, steering instructions, or new requests.",
+  "behavior.intentClassifyInfo": "This only applies while a session is busy; it does not decide whether a request needs team workflow.",
+  "behavior.teamWorkClassify": "Team Work Classification",
+  "behavior.teamWorkClassifyHint": "Classify new requests as direct handling or team/delegate workflow.",
+  "behavior.teamWorkClassifyInfo": "When a request exceeds the current agent's scope or should be split, the system uses embeddings as evidence and asks the model to decide between direct handling and team/delegate workflow. The system also checks lead/member permissions; members can only create help requests when the team has enabled member requests and auto-dispatch.",
+  "behavior.teamWorkClassifyEmbeddingRequired": "Configure embeddings before enabling Team Work Classification.",
   "behavior.chatTitle": "Human-like Channel Delivery",
   "behavior.chatDescription": "Sidecar acknowledgement, intermediate progress, and safe final reply splitting for non-streaming channels",
   "behavior.chatEnabled": "Enable channel delivery behavior",

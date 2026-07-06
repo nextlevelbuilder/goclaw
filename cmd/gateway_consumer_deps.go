@@ -7,6 +7,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -23,6 +24,7 @@ type ConsumerDeps struct {
 	ChannelMgr       *channels.Manager
 	MsgBus           *bus.MessageBus
 	TeamStore        store.TeamStore
+	AgentLinkStore   store.AgentLinkStore
 	AgentStore       store.AgentStore
 	SessStore        store.SessionStore
 	PostTurn         tools.PostTurnProcessor
@@ -32,6 +34,7 @@ type ConsumerDeps struct {
 	SubagentMgr      *tools.SubagentManager
 	UsageCaps        *usagecaps.Service
 	ProviderReg      *providers.Registry
+	TeamWorkEmbedder memory.EmbeddingProvider
 	BgWg             sync.WaitGroup
 	GetAnnounceMu    func(string) *sync.Mutex
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
+	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
@@ -370,9 +371,11 @@ func wireTracingAndCron(
 func setupMemoryEmbeddings(
 	pgStores *store.Stores,
 	providerRegistry *providers.Registry,
-) {
+) memory.EmbeddingProvider {
+	var resolved memory.EmbeddingProvider
 	if pgStores.Memory != nil {
 		if embProvider := resolveEmbeddingProvider(pgStores.Providers, providerRegistry, pgStores.SystemConfigs); embProvider != nil {
+			resolved = embProvider
 			pgStores.Memory.SetEmbeddingProvider(embProvider)
 			slog.Info("memory embeddings enabled", "provider", embProvider.Name(), "model", embProvider.Model())
 
@@ -431,6 +434,7 @@ func setupMemoryEmbeddings(
 			slog.Warn("memory embeddings disabled (no API key), chunks stored without vectors")
 		}
 	}
+	return resolved
 }
 
 // seedSystemConfigs ensures system_configs has all expected keys for all tenants.

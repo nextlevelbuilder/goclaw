@@ -29,6 +29,7 @@ export function BehaviorSection({ config, onPatch, saving }: Props) {
   // UX toggles (from gateway + agents.defaults)
   const [ux, setUx] = useState({
     intent_classify: ag.intent_classify !== false,
+    team_work_classify: gw.team_work_classify === true,
   });
 
   // Rate limiting (from gateway)
@@ -62,6 +63,7 @@ export function BehaviorSection({ config, onPatch, saving }: Props) {
   useEffect(() => {
     setUx({
       intent_classify: ag.intent_classify !== false,
+      team_work_classify: gw.team_work_classify === true,
     });
     setRate({
       max_message_chars: gw.max_message_chars,
@@ -89,6 +91,7 @@ export function BehaviorSection({ config, onPatch, saving }: Props) {
         inbound_debounce_ms: rate.inbound_debounce_ms,
         injection_action: security.injection_action,
         chat_behavior: chatBehavior,
+        team_work_classify: ux.team_work_classify,
       },
       agents: {
         defaults: { intent_classify: ux.intent_classify },

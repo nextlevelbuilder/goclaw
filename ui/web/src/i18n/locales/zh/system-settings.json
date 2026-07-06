@@ -30,9 +30,13 @@
   "ux": {
     "title": "UX行为",
     "description": "控制网关如何向用户展示Agent活动。",
-    "intentClassify": "意图分类",
-    "intentClassifyHint": "在路由到Agent之前分类用户意图。",
-    "intentClassifyInfo": "消息被分类以优化Agent路由和行为。"
+    "intentClassify": "Agent 忙碌时的消息分类",
+    "intentClassifyHint": "当 Agent 正在处理上一轮请求时，将新消息分类为状态询问、取消、补充指令或新的请求。",
+    "intentClassifyInfo": "此功能只在会话忙碌时生效；它不会判断请求是否需要团队工作流。",
+    "teamWorkClassify": "Team Work 分类",
+    "teamWorkClassifyHint": "将新请求分类为自行处理或 team/delegate 工作流。",
+    "teamWorkClassifyInfo": "当请求超出当前 Agent 的职责范围或适合拆分协作时，系统使用 embedding 作为证据，并让模型决定自行处理还是使用 team/delegate 工作流。系统还会检查 lead/member 权限；member 只有在团队启用成员请求并开启自动分配时才能创建求助 request。",
+    "teamWorkClassifyEmbeddingRequired": "需要先配置 embedding 才能启用 Team Work 分类。"
   },
   "kg": {
     "title": "知识图谱",

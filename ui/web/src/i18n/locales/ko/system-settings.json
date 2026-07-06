@@ -36,9 +36,13 @@
     "blockReply": "도구 호출 중 중간 텍스트 표시",
     "blockReplyHint": "도구 호출 중 부분 어시스턴트 텍스트를 스트리밍합니다.",
     "blockReplyInfo": "도구 실행 중 사용자에게 중간 텍스트가 스트리밍됩니다.",
-    "intentClassify": "의도 분류",
-    "intentClassifyHint": "에이전트로 라우팅하기 전에 사용자 의도를 분류합니다.",
-    "intentClassifyInfo": "에이전트 라우팅 및 동작 최적화를 위해 메시지가 분류됩니다."
+    "intentClassify": "에이전트 작업 중 메시지 분류",
+    "intentClassifyHint": "에이전트가 이전 요청을 처리 중일 때 새 메시지를 상태 질문, 취소, 추가 지시, 새 요청으로 분류합니다.",
+    "intentClassifyInfo": "이 기능은 세션이 작업 중일 때만 적용되며, 요청에 팀 워크플로가 필요한지는 판단하지 않습니다.",
+    "teamWorkClassify": "Team Work 분류",
+    "teamWorkClassifyHint": "새 요청을 직접 처리 또는 team/delegate 워크플로로 분류합니다.",
+    "teamWorkClassifyInfo": "요청이 현재 에이전트의 범위를 넘거나 분담이 필요하면 시스템이 embedding을 근거로 사용하고 모델이 직접 처리와 team/delegate 워크플로 중 하나를 결정하게 합니다. 시스템은 lead/member 권한도 확인합니다. member는 팀에서 member request와 auto-dispatch를 모두 켠 경우에만 도움 요청을 만들 수 있습니다.",
+    "teamWorkClassifyEmbeddingRequired": "Team Work 분류를 켜려면 먼저 embedding을 설정해야 합니다."
   },
   "kg": {
     "title": "지식 그래프",

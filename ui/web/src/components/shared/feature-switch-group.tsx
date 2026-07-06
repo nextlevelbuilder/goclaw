@@ -23,6 +23,8 @@ export interface FeatureSwitchItem {
   tooltip?: string;
   checked: boolean;
   onCheckedChange: (v: boolean) => void;
+  disabled?: boolean;
+  disabledHint?: string;
   /** Contextual info message shown when the toggle is ON */
   infoWhenOn?: string;
   /** Accent classes for the info box (border + bg + text + dark variants) */
@@ -80,12 +82,20 @@ export function FeatureSwitchGroup({
               <Switch
                 checked={item.checked}
                 onCheckedChange={item.onCheckedChange}
+                disabled={item.disabled}
                 className="shrink-0"
               />
             </div>
 
+            {item.disabled && item.disabledHint && (
+              <div className="mt-3 flex items-start gap-2 rounded-md border border-muted bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>{item.disabledHint}</span>
+              </div>
+            )}
+
             {/* Conditional info box when enabled */}
-            {item.checked && item.infoWhenOn && (
+            {item.checked && !item.disabled && item.infoWhenOn && (
               <div className={cn(
                 "mt-3 flex items-start gap-2 rounded-md border px-3 py-2 text-xs",
                 item.infoClass ?? "border-primary/20 bg-primary/5 text-primary dark:bg-primary/10",

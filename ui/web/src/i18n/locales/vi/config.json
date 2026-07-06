@@ -59,7 +59,7 @@
   "agents.workspaceTip": "Thư mục gốc cho các thao tác tệp của agent. Thư mục con theo người dùng được tạo tự động.",
   "agents.restrictToWorkspace": "Giới hạn trong workspace",
   "agents.restrictToWorkspaceTip": "Ngăn agent đọc hoặc ghi tệp ngoài đường dẫn workspace.",
-  "agents.intentClassify": "Phân loại ý định",
+  "agents.intentClassify": "Phân loại tin nhắn khi agent đang bận",
   "agents.saveError": "Lưu mặc định agent thất bại",
 
   "agents.subagents.title": "Subagent",
@@ -122,8 +122,12 @@
 
   "behavior.uxTitle": "Hành vi giao diện",
   "behavior.uxDescription": "Các công tắc có tác động lớn thay đổi cách gateway tương tác với người dùng",
-  "behavior.intentClassifyHint": "Phân loại ý định người dùng trước khi định tuyến để giảm các lần gọi agent không cần thiết.",
-  "behavior.intentClassifyInfo": "Agent chỉ được gọi khi bộ phân loại phát hiện ý định có thể thực hiện.",
+  "behavior.intentClassifyHint": "Khi agent đang xử lý một lượt trước đó, phân loại tin nhắn mới thành hỏi trạng thái, huỷ, bổ sung hướng dẫn hoặc yêu cầu mới.",
+  "behavior.intentClassifyInfo": "Tính năng này chỉ áp dụng khi session đang bận; nó không quyết định yêu cầu có cần làm việc theo team hay không.",
+  "behavior.teamWorkClassify": "Phân Loại Team Work",
+  "behavior.teamWorkClassifyHint": "Phân loại yêu cầu mới thành tự xử lý hoặc làm theo team/delegate workflow.",
+  "behavior.teamWorkClassifyInfo": "Khi yêu cầu vượt chuyên môn hoặc nên chia việc, hệ thống dùng embedding làm bằng chứng rồi để model quyết định tự xử lý hay dùng team/delegate workflow. Hệ thống xét cả quyền lead/member; member chỉ được tạo request nhờ hỗ trợ khi team đã bật Yêu cầu thành viên và Tự động phân phối.",
+  "behavior.teamWorkClassifyEmbeddingRequired": "Cần cấu hình embedding trước khi bật Phân Loại Team Work.",
   "behavior.chatTitle": "Gửi tin nhắn giống người hơn",
   "behavior.chatDescription": "Xác nhận sidecar, tiến độ trung gian và tách phản hồi cuối an toàn cho kênh không streaming",
   "behavior.chatEnabled": "Bật hành vi gửi tin theo kênh",

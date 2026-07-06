@@ -30,9 +30,13 @@
   "ux": {
     "title": "Hành vi UX",
     "description": "Điều khiển cách gateway hiển thị hoạt động của agent cho người dùng.",
-    "intentClassify": "Phân loại ý định",
-    "intentClassifyHint": "Phân loại ý định người dùng trước khi chuyển tới agent.",
-    "intentClassifyInfo": "Tin nhắn được phân loại để tối ưu định tuyến agent."
+    "intentClassify": "Phân loại tin nhắn khi agent đang bận",
+    "intentClassifyHint": "Khi agent đang xử lý một lượt trước đó, phân loại tin nhắn mới thành hỏi trạng thái, huỷ, bổ sung hướng dẫn hoặc yêu cầu mới.",
+    "intentClassifyInfo": "Tính năng này chỉ áp dụng khi session đang bận; nó không quyết định yêu cầu có cần làm việc theo team hay không.",
+    "teamWorkClassify": "Phân Loại Team Work",
+    "teamWorkClassifyHint": "Phân loại yêu cầu mới thành tự xử lý hoặc làm theo team/delegate workflow.",
+    "teamWorkClassifyInfo": "Khi yêu cầu vượt chuyên môn hoặc nên chia việc, hệ thống dùng embedding làm bằng chứng rồi để model quyết định tự xử lý hay dùng team/delegate workflow. Hệ thống xét cả quyền lead/member; member chỉ được tạo request nhờ hỗ trợ khi team đã bật Yêu cầu thành viên và Tự động phân phối.",
+    "teamWorkClassifyEmbeddingRequired": "Cần cấu hình embedding trước khi bật Phân Loại Team Work."
   },
   "kg": {
     "title": "Đồ thị tri thức",

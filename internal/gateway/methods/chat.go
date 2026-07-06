@@ -16,9 +16,11 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sessions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/teamworkclassify"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
@@ -26,15 +28,19 @@ import (
 
 // ChatMethods handles chat.send, chat.history, chat.abort, chat.inject.
 type ChatMethods struct {
-	agents      *agent.Router
-	sessions    store.SessionStore
-	cfg         *config.Config
-	rateLimiter *gateway.RateLimiter
-	eventBus    bus.EventPublisher
-	postTurn    tools.PostTurnProcessor
-	audioMgr    *audio.Manager // for TTS auto-apply on WS responses (nil = disabled)
-	usageCaps   *usagecaps.Service
-	debouncer   *chatDebouncer
+	agents           *agent.Router
+	sessions         store.SessionStore
+	cfg              *config.Config
+	rateLimiter      *gateway.RateLimiter
+	eventBus         bus.EventPublisher
+	postTurn         tools.PostTurnProcessor
+	audioMgr         *audio.Manager // for TTS auto-apply on WS responses (nil = disabled)
+	usageCaps        *usagecaps.Service
+	debouncer        *chatDebouncer
+	agentStore       store.AgentStore
+	teamStore        store.TeamStore
+	linkStore        store.AgentLinkStore
+	teamWorkEmbedder memory.EmbeddingProvider
 }
 
 func NewChatMethods(agents *agent.Router, sess store.SessionStore, cfg *config.Config, rl *gateway.RateLimiter, eventBus bus.EventPublisher) *ChatMethods {
@@ -50,6 +56,13 @@ func (m *ChatMethods) SetAudioManager(mgr *audio.Manager) {
 
 func (m *ChatMethods) SetUsageCapService(s *usagecaps.Service) {
 	m.usageCaps = s
+}
+
+func (m *ChatMethods) SetTeamWorkClassification(agentStore store.AgentStore, teamStore store.TeamStore, linkStore store.AgentLinkStore, embedder memory.EmbeddingProvider) {
+	m.agentStore = agentStore
+	m.teamStore = teamStore
+	m.linkStore = linkStore
+	m.teamWorkEmbedder = embedder
 }
 
 // SetPostTurnProcessor sets the post-turn processor for team task dispatch.
@@ -247,6 +260,54 @@ func (m *ChatMethods) abortChatSession(reqID string, client *gateway.Client, ses
 	}))
 }
 
+type chatTeamWorkGateOutcome struct {
+	message   string
+	directive *agent.TeamWorkDirective
+}
+
+func (m *ChatMethods) applyTeamWorkGate(ctx context.Context, params chatSendParams, loop agent.Agent, sessionKey string) chatTeamWorkGateOutcome {
+	out := chatTeamWorkGateOutcome{message: params.Message}
+	if m.cfg == nil || m.cfg.Gateway.TeamWorkClassify == nil || !*m.cfg.Gateway.TeamWorkClassify {
+		return out
+	}
+	if m.teamWorkEmbedder == nil || m.agentStore == nil {
+		slog.Info("team_work_classify: ws skipped; embedding or agent store unavailable", "session", sessionKey, "agent", params.AgentID)
+		return out
+	}
+	agentUUID := loop.UUID()
+	if agentUUID == uuid.Nil {
+		return out
+	}
+	mode := agent.ResolveOrchestrationMode(ctx, agentUUID, m.teamStore, m.linkStore)
+	if mode == agent.ModeSpawn {
+		slog.Info("team_work_classify: ws skipped; no team/delegate capability", "session", sessionKey, "agent", params.AgentID)
+		return out
+	}
+	input := teamworkclassify.BuildInputFromStores(ctx, teamworkclassify.ProfileStores{
+		Agents:     m.agentStore,
+		Teams:      m.teamStore,
+		AgentLinks: m.linkStore,
+	}, teamworkclassify.BuildInputOptions{
+		Mode:     teamworkclassify.Mode(mode),
+		Message:  params.Message,
+		AgentID:  agentUUID,
+		Embedder: m.teamWorkEmbedder,
+	})
+	result := teamworkclassify.ClassifyWithLLM(ctx, input, loop.Provider(), loop.Model(), m.usageCaps)
+	slog.Info("team_work_classify: ws decision", "session", sessionKey, "agent", params.AgentID, "mode", mode, "decision", result.Decision, "self_score", result.SelfScore, "collaboration_score", result.CollaborationScore, "reason", result.Reason)
+	if result.Decision == teamworkclassify.DecisionTeam {
+		out.directive = &agent.TeamWorkDirective{
+			Mode:            string(result.Mode),
+			Source:          "llm",
+			Reason:          result.Reason,
+			OriginalMessage: params.Message,
+			RequiredTool:    result.RequiredTool,
+			WorkflowHint:    result.WorkflowHint,
+		}
+	}
+	return out
+}
+
 func (m *ChatMethods) dispatchChatSends(requests []chatSendRequest) {
 	if len(requests) == 0 {
 		return
@@ -279,6 +340,8 @@ func (m *ChatMethods) dispatchChatSends(requests []chatSendRequest) {
 	if userID != "" {
 		runCtxBase = store.WithUserID(runCtxBase, userID)
 	}
+	gate := m.applyTeamWorkGate(runCtxBase, params, loop, sessionKey)
+	params.Message = gate.message
 	// Inject team dispatch tracker: gates team_tasks create (must search/list first)
 	// and defers task dispatch to post-turn.
 	runCtxBase, drainTeamDispatch := tools.InjectTeamDispatch(runCtxBase, m.postTurn)
@@ -324,16 +387,17 @@ func (m *ChatMethods) dispatchChatSends(requests []chatSendRequest) {
 		}
 
 		result, err := loop.Run(runCtx, agent.RunRequest{
-			SessionKey:      sessionKey,
-			Message:         message,
-			Media:           mediaFiles,
-			Channel:         "ws",
-			ChatID:          userID, // use stable userID for team/workspace isolation (not ephemeral client.ID())
-			WorkspaceChatID: userID, // mirror ChatID so vault chat_id isolation activates for WS direct flow
-			RunID:           runID,
-			UserID:          userID,
-			Stream:          params.Stream,
-			InjectCh:        injectCh,
+			SessionKey:        sessionKey,
+			Message:           message,
+			Media:             mediaFiles,
+			Channel:           "ws",
+			ChatID:            userID, // use stable userID for team/workspace isolation (not ephemeral client.ID())
+			WorkspaceChatID:   userID, // mirror ChatID so vault chat_id isolation activates for WS direct flow
+			RunID:             runID,
+			UserID:            userID,
+			Stream:            params.Stream,
+			TeamWorkDirective: gate.directive,
+			InjectCh:          injectCh,
 			// Wire trace ID back to the active run so force-abort can mark the
 			// correct trace as cancelled if the goroutine does not exit within 3s.
 			OnTraceCreated: func(traceID uuid.UUID) {

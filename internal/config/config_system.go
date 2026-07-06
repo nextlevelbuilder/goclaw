@@ -51,6 +51,7 @@ func (c *Config) ApplySystemConfigs(configs map[string]string) {
 	integer("gateway.inbound_debounce_ms", &c.Gateway.InboundDebounceMs)
 	boolean("gateway.block_reply", &c.Gateway.BlockReply)
 	boolean("gateway.tool_status", &c.Gateway.ToolStatus)
+	boolean("gateway.team_work_classify", &c.Gateway.TeamWorkClassify)
 	integer("gateway.task_recovery_interval_sec", &c.Gateway.TaskRecoveryIntervalSec)
 	integer("gateway.webhook_async_timeout_sec", &c.Gateway.WebhookAsyncTimeoutSec)
 	integer("gateway.webhook_sync_timeout_sec", &c.Gateway.WebhookSyncTimeoutSec)
