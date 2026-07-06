@@ -31,8 +31,14 @@ var cliNativeToolGoclawEquivalent = map[string]string{
 // cliNativeToolsAlwaysBlocked lists Claude CLI native tools with no GoClaw
 // policy equivalent. They are always disallowed so agent tool policy cannot
 // be bypassed through them.
+//
+// TodoRead and NotebookRead were removed here: current Claude CLI releases
+// (>= 2.x) no longer register them, and a deny rule naming an unknown tool
+// makes the CLI print "Permission deny rule ... matches no known tool" on
+// every invocation. Their write-side counterparts TodoWrite/NotebookEdit
+// still exist in the CLI and remain blocked.
 var cliNativeToolsAlwaysBlocked = []string{
-	"Glob", "Grep", "TodoRead", "TodoWrite", "NotebookRead", "NotebookEdit",
+	"Glob", "Grep", "TodoWrite", "NotebookEdit",
 }
 
 // disallowedCLITools computes the --disallowedTools value for the Claude CLI

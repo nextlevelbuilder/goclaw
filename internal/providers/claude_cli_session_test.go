@@ -123,3 +123,29 @@ func TestBuildStreamJSONInput_NoText(t *testing.T) {
 		t.Errorf("content blocks = %d, want 1 (image only)", len(msg.Message.Content))
 	}
 }
+
+// TestDisallowedCLITools_NoStaleToolNames guards against deny rules that name
+// tools the current Claude CLI no longer registers. A stale name makes the CLI
+// print `Permission deny rule "<name>" matches no known tool` on every
+// invocation (including background episodic summarization), which buries real
+// errors. TodoRead/NotebookRead were removed from the CLI in 2.x; their
+// write-side counterparts must stay blocked.
+func TestDisallowedCLITools_NoStaleToolNames(t *testing.T) {
+	blocked := disallowedCLITools(nil) // nil = fail closed: everything blocked
+
+	got := make(map[string]bool, len(blocked))
+	for _, name := range blocked {
+		got[name] = true
+	}
+
+	for _, stale := range []string{"TodoRead", "NotebookRead"} {
+		if got[stale] {
+			t.Errorf("disallowedCLITools includes %q, which current Claude CLI no longer registers (causes 'matches no known tool' warnings)", stale)
+		}
+	}
+	for _, required := range []string{"TodoWrite", "NotebookEdit", "Glob", "Grep"} {
+		if !got[required] {
+			t.Errorf("disallowedCLITools missing %q — native tool without GoClaw equivalent must stay blocked", required)
+		}
+	}
+}
