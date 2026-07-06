@@ -208,6 +208,7 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 			// Collect contact even when bot is not mentioned (cache prevents DB spam).
 			if cc := c.ContactCollector(); cc != nil {
 				cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, senderName, m.Author.Username, "group", "user", "", "")
+				cc.EnsureContact(ctx, c.Type(), c.Name(), channelID, "", c.resolveCachedChannelTitle(channelID), "", "group", "group", "", "")
 			}
 
 			slog.Debug("discord group message recorded (no mention)",
@@ -331,6 +332,9 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 	// Collect contact for processed messages (DM + group-mentioned).
 	if cc := c.ContactCollector(); cc != nil {
 		cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, senderName, m.Author.Username, peerKind, "user", "", "")
+		if peerKind == "group" {
+			cc.EnsureContact(ctx, c.Type(), c.Name(), channelID, "", c.resolveCachedChannelTitle(channelID), "", "group", "group", "", "")
+		}
 	}
 
 	// Publish directly to bus (to preserve MediaFile MIME types)
@@ -440,4 +444,72 @@ func (c *Channel) resolveCachedChannelTitle(channelID string) string {
 		return ""
 	}
 	return channels.SanitizeDisplayName(ch.Name)
+}
+
+func (c *Channel) ResolveGroupTitle(_ context.Context, channelID string) (string, error) {
+	if title := c.resolveCachedChannelTitle(channelID); title != "" {
+		return title, nil
+	}
+	return "", fmt.Errorf("discord channel title not cached")
+}
+
+func (c *Channel) ResolveGroupTitles(ctx context.Context, channelIDs []string) (map[string]string, error) {
+	if c == nil || c.session == nil || len(channelIDs) == 0 {
+		return map[string]string{}, nil
+	}
+	remaining := make(map[string]struct{}, len(channelIDs))
+	titles := make(map[string]string, len(channelIDs))
+	for _, id := range channelIDs {
+		if id == "" {
+			continue
+		}
+		if title := c.resolveCachedChannelTitle(id); title != "" {
+			titles[id] = title
+			continue
+		}
+		remaining[id] = struct{}{}
+	}
+	if len(remaining) == 0 || c.session.State == nil {
+		return titles, nil
+	}
+
+	c.session.State.RLock()
+	guildIDs := make([]string, 0, len(c.session.State.Guilds))
+	for _, guild := range c.session.State.Guilds {
+		if guild != nil && guild.ID != "" {
+			guildIDs = append(guildIDs, guild.ID)
+		}
+	}
+	c.session.State.RUnlock()
+
+	for _, guildID := range guildIDs {
+		select {
+		case <-ctx.Done():
+			return titles, nil
+		default:
+		}
+		lookupCtx, cancel := context.WithTimeout(ctx, 750*time.Millisecond)
+		guildChannels, err := c.session.GuildChannels(guildID, discordgo.WithContext(lookupCtx))
+		cancel()
+		if err != nil {
+			slog.Debug("discord channel title batch lookup failed", "guild_id", guildID, "error", err)
+			continue
+		}
+		for _, ch := range guildChannels {
+			if ch == nil {
+				continue
+			}
+			if _, ok := remaining[ch.ID]; !ok {
+				continue
+			}
+			if title := channels.SanitizeDisplayName(ch.Name); title != "" {
+				titles[ch.ID] = title
+				delete(remaining, ch.ID)
+			}
+		}
+		if len(remaining) == 0 {
+			break
+		}
+	}
+	return titles, nil
 }
