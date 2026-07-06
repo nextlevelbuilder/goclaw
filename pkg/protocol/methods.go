@@ -165,6 +165,18 @@ const (
 	MethodTeamsEventsList = "teams.events.list"
 )
 
+// Tenants (multi-tenant management)
+const (
+	MethodTenantsList        = "tenants.list"
+	MethodTenantsGet         = "tenants.get"
+	MethodTenantsCreate      = "tenants.create"
+	MethodTenantsUpdate      = "tenants.update"
+	MethodTenantsUsersList   = "tenants.users.list"
+	MethodTenantsUsersAdd    = "tenants.users.add"
+	MethodTenantsUsersRemove = "tenants.users.remove"
+	MethodTenantsMine        = "tenants.mine"
+)
+
 // API key management
 const (
 	MethodAPIKeysList   = "api_keys.list"

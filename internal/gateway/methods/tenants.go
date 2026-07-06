@@ -34,14 +34,14 @@ func NewTenantsMethods(tenantStore store.TenantStore, msgBus *bus.MessageBus, wo
 
 // Register registers tenant management RPC methods.
 func (m *TenantsMethods) Register(router *gateway.MethodRouter) {
-	router.Register("tenants.list", m.handleList)
-	router.Register("tenants.get", m.handleGet)
-	router.Register("tenants.create", m.handleCreate)
-	router.Register("tenants.update", m.handleUpdate)
-	router.Register("tenants.users.list", m.handleUsersList)
-	router.Register("tenants.users.add", m.handleUsersAdd)
-	router.Register("tenants.users.remove", m.handleUsersRemove)
-	router.Register("tenants.mine", m.handleMine)
+	router.Register(protocol.MethodTenantsList, m.handleList)
+	router.Register(protocol.MethodTenantsGet, m.handleGet)
+	router.Register(protocol.MethodTenantsCreate, m.handleCreate)
+	router.Register(protocol.MethodTenantsUpdate, m.handleUpdate)
+	router.Register(protocol.MethodTenantsUsersList, m.handleUsersList)
+	router.Register(protocol.MethodTenantsUsersAdd, m.handleUsersAdd)
+	router.Register(protocol.MethodTenantsUsersRemove, m.handleUsersRemove)
+	router.Register(protocol.MethodTenantsMine, m.handleMine)
 }
 
 func (m *TenantsMethods) handleList(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
