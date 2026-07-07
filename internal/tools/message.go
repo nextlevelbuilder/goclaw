@@ -270,16 +270,20 @@ func (t *MessageTool) executeEdit(ctx context.Context, args map[string]any) *Res
 		return ErrorResult("message (the new full text) is required for edit")
 	}
 
-	channel := argString(args, "channel")
+	// Edits target the message the user replied to in the CURRENT chat, so prefer
+	// the context channel/chat (reliable) over LLM-supplied args — models often
+	// pass the platform name ("telegram") instead of the channel instance, or a
+	// null target. Fall back to args only when context is absent.
+	channel := ToolChannelFromCtx(ctx)
 	if channel == "" {
-		channel = ToolChannelFromCtx(ctx)
+		channel = argString(args, "channel")
 	}
 	if channel == "" {
 		return ErrorResult("channel is required (no current channel in context)")
 	}
-	target := argString(args, "target")
+	target := ToolChatIDFromCtx(ctx)
 	if target == "" {
-		target = ToolChatIDFromCtx(ctx)
+		target = argString(args, "target")
 	}
 	if target == "" {
 		return ErrorResult("target chat ID is required (no current chat in context)")

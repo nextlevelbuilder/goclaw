@@ -902,3 +902,27 @@ func TestMessageToolEditRequiresMessageID(t *testing.T) {
 		t.Error("edit without message_id must error")
 	}
 }
+
+func TestMessageToolEditPrefersContextChannel(t *testing.T) {
+	var gotChannel, gotChat string
+	tool := NewMessageTool("", true)
+	tool.SetChannelEditor(func(_ context.Context, ch, chatID string, _ int, _ string) error {
+		gotChannel, gotChat = ch, chatID
+		return nil
+	})
+	// Context has the real channel instance + chat; LLM wrongly passes platform name + null target.
+	ctx := WithToolChatID(WithToolChannel(context.Background(), "pavel"), "-1003995384344")
+	r := tool.Execute(ctx, map[string]any{
+		"action":     "edit",
+		"channel":    "telegram", // wrong — must be ignored in favor of ctx
+		"target":     nil,
+		"message_id": float64(42),
+		"message":    "МАЙ_вода\nЕвгений: ✅\nЛК: ✅",
+	})
+	if r.IsError {
+		t.Fatalf("unexpected error: %s", r.ForLLM)
+	}
+	if gotChannel != "pavel" || gotChat != "-1003995384344" {
+		t.Errorf("editor got channel=%q chat=%q, want pavel/-1003995384344 (context wins)", gotChannel, gotChat)
+	}
+}
