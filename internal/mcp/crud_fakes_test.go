@@ -836,7 +836,7 @@ func (f *fakeChatRunner) Send(_ context.Context, agentID, sessionKey, message st
 	if f.sendResult != nil {
 		return f.sendResult, nil
 	}
-	return &ChatSendResult{RunID: "run-1", Content: "ok"}, nil
+	return &ChatSendResult{RunID: "run-1", SessionKey: sessionKey, Content: "ok"}, nil
 }
 
 func (f *fakeChatRunner) Abort(_ context.Context, _, _ string) (*ChatAbortResult, error) {

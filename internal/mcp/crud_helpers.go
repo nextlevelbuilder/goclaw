@@ -103,12 +103,13 @@ type ChatMediaItem struct {
 
 // ChatSendResult is the outcome of a goclaw_chat_send call.
 type ChatSendResult struct {
-	RunID     string `json:"runId"`
-	Content   string `json:"content"`
-	Usage     any    `json:"usage,omitempty"`
-	Thinking  string `json:"thinking,omitempty"`
-	Media     any    `json:"media,omitempty"`
-	Cancelled bool   `json:"cancelled,omitempty"`
+	RunID        string `json:"runId"`
+	SessionKey   string `json:"sessionKey"`
+	Content      string `json:"content"`
+	Usage        any    `json:"usage,omitempty"`
+	Thinking     string `json:"thinking,omitempty"`
+	Media        any    `json:"media,omitempty"`
+	Cancelled    bool   `json:"cancelled,omitempty"`
 }
 
 // ChatAbortResult is the outcome of a goclaw_chat_abort call, mirroring

@@ -67,17 +67,18 @@ func (r *agentChatRunner) Send(ctx context.Context, agentID, sessionKey, message
 	})
 	if err != nil {
 		if ctx.Err() != nil {
-			return &mcpbridge.ChatSendResult{Cancelled: true}, nil
+			return &mcpbridge.ChatSendResult{Cancelled: true, SessionKey: sessionKey}, nil
 		}
 		return nil, fmt.Errorf("run agent %q: %w", agentID, err)
 	}
 
 	return &mcpbridge.ChatSendResult{
-		RunID:    result.RunID,
-		Content:  result.Content,
-		Usage:    result.Usage,
-		Thinking: result.Thinking,
-		Media:    result.Media,
+		RunID:      result.RunID,
+		SessionKey: sessionKey,
+		Content:    result.Content,
+		Usage:      result.Usage,
+		Thinking:   result.Thinking,
+		Media:      result.Media,
 	}, nil
 }
 
