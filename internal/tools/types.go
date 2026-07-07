@@ -111,6 +111,16 @@ type ChannelEditorAware interface {
 	SetChannelEditor(ChannelEditor)
 }
 
+// TopicResolver resolves a forum topic name to its message_thread_id within a
+// specific chat, so the agent can post into a named topic (e.g. "Ебала").
+// Returns ("", false) when the topic is unknown.
+type TopicResolver func(ctx context.Context, channel, chatID, topicName string) (threadID string, ok bool)
+
+// TopicResolverAware tools can receive a forum topic resolver.
+type TopicResolverAware interface {
+	SetTopicResolver(TopicResolver)
+}
+
 // ChannelTenantChecker returns the tenant UUID for a channel instance.
 // Used by the message tool to prevent cross-tenant sends.
 // Returns (tenantID, exists). Zero tenantID means legacy/config-based channel.

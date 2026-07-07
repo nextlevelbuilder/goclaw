@@ -27,6 +27,7 @@ type MessageTool struct {
 	restrict      bool
 	sender        ChannelSender
 	editor        ChannelEditor
+	topicResolver TopicResolver
 	msgBus        *bus.MessageBus
 	tenantChecker ChannelTenantChecker
 }
@@ -37,6 +38,7 @@ func NewMessageTool(workspace string, restrict bool) *MessageTool {
 
 func (t *MessageTool) SetChannelSender(s ChannelSender)               { t.sender = s }
 func (t *MessageTool) SetChannelEditor(e ChannelEditor)               { t.editor = e }
+func (t *MessageTool) SetTopicResolver(r TopicResolver)               { t.topicResolver = r }
 func (t *MessageTool) SetMessageBus(b *bus.MessageBus)                { t.msgBus = b }
 func (t *MessageTool) SetChannelTenantChecker(c ChannelTenantChecker) { t.tenantChecker = c }
 
@@ -57,6 +59,10 @@ func (t *MessageTool) Parameters() map[string]any {
 			"message_id": map[string]any{
 				"type":        "integer",
 				"description": "For action='edit': the id of the message to change. Take it from reply_to_message_id when the user replied to the message they want edited.",
+			},
+			"topic": map[string]any{
+				"type":        "string",
+				"description": "For action='send' in a forum group: the name of the target topic to post into (e.g. 'Ебала'). Posts into that topic of the CURRENT group. Omit to reply in the current topic/chat.",
 			},
 			"channel": map[string]any{
 				"type":        "string",
@@ -90,6 +96,11 @@ func (t *MessageTool) Execute(ctx context.Context, args map[string]any) *Result 
 	}
 	if action != "send" {
 		return ErrorResult(fmt.Sprintf("unsupported action: %s (only 'send' and 'edit' are supported)", action))
+	}
+
+	// Posting into a named forum topic of the current group.
+	if topic := argString(args, "topic"); topic != "" {
+		return t.executeTopicSend(ctx, args, topic)
 	}
 
 	message := argString(args, "message")
@@ -252,6 +263,51 @@ func (t *MessageTool) Execute(ctx context.Context, args map[string]any) *Result 
 	}
 
 	return ErrorResult("no channel sender or message bus available")
+}
+
+// executeTopicSend posts a message into a named forum topic of the current group.
+// The topic is always in the current chat, so channel/chat come from context
+// (reliable) — this also sidesteps the self-send guard, since a topic post is a
+// deliberate cross-topic delivery, not a reply loop.
+func (t *MessageTool) executeTopicSend(ctx context.Context, args map[string]any, topicName string) *Result {
+	message := argString(args, "message")
+	if message == "" {
+		return ErrorResult("message is required")
+	}
+	channel := ToolChannelFromCtx(ctx)
+	if channel == "" {
+		channel = argString(args, "channel")
+	}
+	target := ToolChatIDFromCtx(ctx)
+	if target == "" {
+		target = argString(args, "target")
+	}
+	if channel == "" || target == "" {
+		return ErrorResult("posting to a topic needs the current channel/chat context")
+	}
+	if t.topicResolver == nil {
+		return ErrorResult("topic posting is not supported in this context")
+	}
+	threadID, ok := t.topicResolver(ctx, channel, target, topicName)
+	if !ok {
+		return ErrorResult(fmt.Sprintf("topic %q not found in this group — I only know topics created while I'm in the group. Ask an admin to (re)create it, or tell me the topic differently.", topicName))
+	}
+	if err := t.validateChannelTenant(ctx, channel, target); err != nil {
+		return err
+	}
+	if t.msgBus == nil {
+		return ErrorResult("topic posting requires the message bus")
+	}
+	t.msgBus.PublishOutbound(bus.OutboundMessage{
+		Channel: channel,
+		ChatID:  target,
+		Content: message,
+		Metadata: map[string]string{
+			"group_id":          target,
+			"message_thread_id": threadID,
+		},
+	})
+	return SilentResult(fmt.Sprintf(`{"status":"sent","channel":"%s","target":"%s","topic":"%s","thread_id":"%s"}`, channel, target, topicName, threadID))
 }
 
 // executeEdit edits an existing message in a channel (e.g. flip a ❌ to a ✅ in a

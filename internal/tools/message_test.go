@@ -926,3 +926,48 @@ func TestMessageToolEditPrefersContextChannel(t *testing.T) {
 		t.Errorf("editor got channel=%q chat=%q, want pavel/-1003995384344 (context wins)", gotChannel, gotChat)
 	}
 }
+
+func TestMessageToolTopicSend(t *testing.T) {
+	var gotChannel, gotChat, gotTopic string
+	tool := NewMessageTool("", true)
+	tool.SetTopicResolver(func(_ context.Context, ch, chatID, name string) (string, bool) {
+		gotChannel, gotChat, gotTopic = ch, chatID, name
+		if name == "Ебала" {
+			return "77", true
+		}
+		return "", false
+	})
+	mb := bus.New()
+	tool.SetMessageBus(mb)
+
+	ctx := WithToolChatID(WithToolChannel(context.Background(), "pavel"), "-100500")
+	r := tool.Execute(ctx, map[string]any{
+		"action":  "send",
+		"topic":   "Ебала",
+		"message": "счёт за воду оплачен в ЛК, Евгений не переводил",
+	})
+	if r.IsError {
+		t.Fatalf("unexpected error: %s", r.ForLLM)
+	}
+	if gotChannel != "pavel" || gotChat != "-100500" || gotTopic != "Ебала" {
+		t.Errorf("resolver got %q/%q/%q, want pavel/-100500/Ебала", gotChannel, gotChat, gotTopic)
+	}
+	out, ok := mb.SubscribeOutbound(ctx)
+	if !ok {
+		t.Fatal("expected an outbound message")
+	}
+	if out.Metadata["message_thread_id"] != "77" {
+		t.Errorf("outbound thread id = %q, want 77", out.Metadata["message_thread_id"])
+	}
+}
+
+func TestMessageToolTopicNotFound(t *testing.T) {
+	tool := NewMessageTool("", true)
+	tool.SetTopicResolver(func(_ context.Context, _, _, _ string) (string, bool) { return "", false })
+	tool.SetMessageBus(bus.New())
+	ctx := WithToolChatID(WithToolChannel(context.Background(), "pavel"), "-100500")
+	r := tool.Execute(ctx, map[string]any{"action": "send", "topic": "Нету", "message": "x"})
+	if !r.IsError {
+		t.Error("unknown topic must return an error")
+	}
+}

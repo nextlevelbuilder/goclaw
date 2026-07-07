@@ -14,6 +14,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/typing"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
@@ -36,6 +37,24 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 		slog.Info("telegram: group migrated to supergroup (inbound)",
 			"old_chat_id", message.Chat.ID, "new_chat_id", message.MigrateToChatID)
 		c.migrateGroupChat(ctx, message.Chat.ID, message.MigrateToChatID)
+		return
+	}
+
+	// Learn forum topics (name → thread id) so the agent can later post to a
+	// topic by name. forum_topic_created is a service message (no content), so
+	// capture it BEFORE the isServiceMessage skip below.
+	if message.ForumTopicCreated != nil && message.MessageThreadID != 0 {
+		if cc := c.ContactCollector(); cc != nil {
+			topicCtx := store.WithTenantID(ctx, c.TenantID())
+			cc.EnsureContact(topicCtx, c.Type(), c.Name(),
+				fmt.Sprintf("%d", message.Chat.ID), "",
+				message.ForumTopicCreated.Name, "",
+				"group", "topic",
+				fmt.Sprintf("%d", message.MessageThreadID), "topic")
+		}
+		slog.Info("telegram: forum topic learned",
+			"chat_id", message.Chat.ID, "thread_id", message.MessageThreadID,
+			"name", message.ForumTopicCreated.Name)
 		return
 	}
 
@@ -360,7 +379,9 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 				// Collect forum topic as a distinct delivery target (including General).
 				if isForum && messageThreadID > 0 {
 					threadStr := fmt.Sprintf("%d", messageThreadID)
-					cc.EnsureContact(ctx, c.Type(), c.Name(), chatIDStr, "", message.Chat.Title, "", "group", "topic", threadStr, "topic")
+					// Empty display_name: don't overwrite the real topic name learned
+					// from forum_topic_created with the group title (COALESCE keeps it).
+					cc.EnsureContact(ctx, c.Type(), c.Name(), chatIDStr, "", "", "", "group", "topic", threadStr, "topic")
 				}
 			}
 
@@ -706,7 +727,7 @@ func (c *Channel) processResolvedMessage(ctx context.Context, rctx resolvedMessa
 			// Collect forum topic as a distinct delivery target (including General).
 			if rctx.isForum && rctx.messageThreadID > 0 {
 				threadStr := fmt.Sprintf("%d", rctx.messageThreadID)
-				cc.EnsureContact(ctx, c.Type(), c.Name(), rctx.chatIDStr, "", rep.Chat.Title, "", "group", "topic", threadStr, "topic")
+				cc.EnsureContact(ctx, c.Type(), c.Name(), rctx.chatIDStr, "", "", "", "group", "topic", threadStr, "topic")
 			}
 		}
 	}
