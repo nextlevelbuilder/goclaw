@@ -10,6 +10,7 @@ import (
 	"github.com/mymmrac/telego"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // triggerWordsTTL bounds how long parsed IDENTITY.md trigger words are cached
@@ -49,6 +50,10 @@ func (c *Channel) agentTriggerWords(ctx context.Context) map[string]struct{} {
 		c.triggerWords = nil
 		return nil
 	}
+	// The agent + context-file stores are tenant-scoped: without tenant in ctx
+	// they error with "tenant_id required" and trigger words would silently never
+	// load. Inject scope up front for both lookups.
+	ctx = store.WithTenantID(ctx, c.TenantID())
 	agentID, err := c.resolveAgentUUID(ctx)
 	if err != nil {
 		slog.Debug("telegram: trigger words — resolve agent failed", "channel", c.Name(), "error", err)
