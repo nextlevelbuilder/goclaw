@@ -19,10 +19,16 @@ import (
 
 // handleMessage processes an incoming Telegram update.
 func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
+	// Channel posts arrive as update.ChannelPost (same *telego.Message type) and
+	// are routed through the same group-style gate below.
 	message := update.Message
+	if message == nil {
+		message = update.ChannelPost
+	}
 	if message == nil {
 		return
 	}
+	user, isChannel := resolveMessageSender(message)
 
 	// Proactive migration detection: group upgraded to supergroup.
 	// Must run BEFORE isServiceMessage() — migration messages have no text/media.
@@ -45,15 +51,16 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 		return
 	}
 
-	user := message.From
 	if user == nil {
+		// Non-channel message with no sender (e.g. some service posts): drop.
 		return
 	}
 
 	userID := fmt.Sprintf("%d", user.ID)
 	senderID := userID
 
-	isGroup := message.Chat.Type == "group" || message.Chat.Type == "supergroup"
+	// Channels reuse the group path (mention/trigger gate, pairing, history).
+	isGroup := message.Chat.Type == "group" || message.Chat.Type == "supergroup" || isChannel
 
 	slog.Debug("telegram message received",
 		"chat_type", message.Chat.Type,

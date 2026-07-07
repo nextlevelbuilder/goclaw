@@ -241,6 +241,7 @@ func (c *Channel) Start(ctx context.Context) error {
 		AllowedUpdates: []string{
 			"message",
 			"edited_message",
+			"channel_post",
 			"callback_query",
 			"my_chat_member",
 		},
@@ -300,7 +301,7 @@ func (c *Channel) Start(ctx context.Context) error {
 					slog.Info("telegram updates channel closed")
 					return
 				}
-				if update.Message != nil {
+				if update.Message != nil || update.ChannelPost != nil {
 					select {
 					case c.handlerSem <- struct{}{}:
 						c.handlerWg.Add(1)

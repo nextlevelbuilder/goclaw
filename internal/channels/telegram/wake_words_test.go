@@ -137,3 +137,29 @@ func TestTextHasWakeWord_EmptySet(t *testing.T) {
 		t.Error("empty set must never match")
 	}
 }
+
+func TestResolveMessageSender(t *testing.T) {
+	// Channel post: From is nil → synthesize sender from the channel.
+	post := &telego.Message{Chat: telego.Chat{ID: -100123, Type: "channel", Title: "My Channel", Username: "mychan"}}
+	u, isCh := resolveMessageSender(post)
+	if !isCh {
+		t.Error("channel post must be detected as channel")
+	}
+	if u == nil || u.ID != -100123 || u.FirstName != "My Channel" || u.Username != "mychan" {
+		t.Errorf("synthetic sender = %+v, want channel-derived", u)
+	}
+
+	// Group message with a real sender: returned unchanged, not a channel.
+	from := &telego.User{ID: 42, FirstName: "Ann"}
+	grp := &telego.Message{Chat: telego.Chat{ID: -55, Type: "supergroup"}, From: from}
+	u2, isCh2 := resolveMessageSender(grp)
+	if isCh2 || u2 != from {
+		t.Errorf("group sender = %+v isChannel=%v, want original sender, not channel", u2, isCh2)
+	}
+
+	// DM with no From and not a channel: nil sender (dropped by caller).
+	dm := &telego.Message{Chat: telego.Chat{ID: 7, Type: "private"}}
+	if u3, isCh3 := resolveMessageSender(dm); u3 != nil || isCh3 {
+		t.Errorf("private no-From = %+v isChannel=%v, want nil/false", u3, isCh3)
+	}
+}
