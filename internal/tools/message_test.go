@@ -862,3 +862,43 @@ func TestMessageTargetEnforced(t *testing.T) {
 		}
 	}
 }
+
+func TestMessageToolEditAction(t *testing.T) {
+	var gotChannel, gotChat, gotContent string
+	var gotMsgID int
+	tool := NewMessageTool("", true)
+	tool.SetChannelEditor(func(_ context.Context, ch, chatID string, messageID int, content string) error {
+		gotChannel, gotChat, gotMsgID, gotContent = ch, chatID, messageID, content
+		return nil
+	})
+	r := tool.Execute(context.Background(), map[string]any{
+		"action":     "edit",
+		"channel":    "telegram",
+		"target":     float64(-1003995384344),
+		"message_id": float64(42),
+		"message":    "Май_вода\nЛк: ✅\nЕвгений: ✅",
+	})
+	if r.IsError {
+		t.Fatalf("unexpected error: %s", r.ForLLM)
+	}
+	if gotChannel != "telegram" || gotChat != "-1003995384344" || gotMsgID != 42 {
+		t.Errorf("editor got channel=%q chat=%q msgID=%d, want telegram/-1003995384344/42", gotChannel, gotChat, gotMsgID)
+	}
+	if gotContent == "" || !strings.Contains(gotContent, "Евгений: ✅") {
+		t.Errorf("editor content = %q, want new status text", gotContent)
+	}
+}
+
+func TestMessageToolEditRequiresMessageID(t *testing.T) {
+	tool := NewMessageTool("", true)
+	tool.SetChannelEditor(func(_ context.Context, _, _ string, _ int, _ string) error { return nil })
+	r := tool.Execute(context.Background(), map[string]any{
+		"action":  "edit",
+		"channel": "telegram",
+		"target":  "123",
+		"message": "x",
+	})
+	if !r.IsError {
+		t.Error("edit without message_id must error")
+	}
+}

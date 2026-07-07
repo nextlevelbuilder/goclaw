@@ -160,6 +160,29 @@ func (m *Manager) SendToChannel(ctx context.Context, channelName, chatID, conten
 	return channel.Send(ctx, msg)
 }
 
+// MessageEditor is optionally implemented by channels that support editing an
+// existing message in place (e.g. Telegram admin editing a channel post).
+type MessageEditor interface {
+	EditMessage(ctx context.Context, chatID string, messageID int, content string) error
+}
+
+// EditChannelMessage edits an existing message in a channel by name. Returns an
+// error if the channel is unknown or its type does not support editing.
+func (m *Manager) EditChannelMessage(ctx context.Context, channelName, chatID string, messageID int, content string) error {
+	m.mu.RLock()
+	channel, exists := m.channels[channelName]
+	m.mu.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("channel %s not found", channelName)
+	}
+	editor, ok := channel.(MessageEditor)
+	if !ok {
+		return fmt.Errorf("channel %s (%s) does not support editing messages", channelName, channel.Type())
+	}
+	return editor.EditMessage(ctx, chatID, messageID, content)
+}
+
 // SendMediaToChannel delivers a message with media attachments to a specific channel by name.
 // media must be non-empty; use SendToChannel for text-only messages.
 // Returns ErrMediaUnsupported if the channel type does not support media.

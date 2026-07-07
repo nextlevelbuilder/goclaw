@@ -26,6 +26,7 @@ type MessageTool struct {
 	workspace     string
 	restrict      bool
 	sender        ChannelSender
+	editor        ChannelEditor
 	msgBus        *bus.MessageBus
 	tenantChecker ChannelTenantChecker
 }
@@ -35,6 +36,7 @@ func NewMessageTool(workspace string, restrict bool) *MessageTool {
 }
 
 func (t *MessageTool) SetChannelSender(s ChannelSender)               { t.sender = s }
+func (t *MessageTool) SetChannelEditor(e ChannelEditor)               { t.editor = e }
 func (t *MessageTool) SetMessageBus(b *bus.MessageBus)                { t.msgBus = b }
 func (t *MessageTool) SetChannelTenantChecker(c ChannelTenantChecker) { t.tenantChecker = c }
 
@@ -49,8 +51,12 @@ func (t *MessageTool) Parameters() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Action to perform: 'send'",
-				"enum":        []string{"send"},
+				"description": "Action: 'send' a new message, or 'edit' an existing one (change its text in place). To edit, the user usually replies to the target message — use its id from reply_to_message_id in your context.",
+				"enum":        []string{"send", "edit"},
+			},
+			"message_id": map[string]any{
+				"type":        "integer",
+				"description": "For action='edit': the id of the message to change. Take it from reply_to_message_id when the user replied to the message they want edited.",
 			},
 			"channel": map[string]any{
 				"type":        "string",
@@ -79,8 +85,11 @@ func (t *MessageTool) Parameters() map[string]any {
 
 func (t *MessageTool) Execute(ctx context.Context, args map[string]any) *Result {
 	action := argString(args, "action")
+	if action == "edit" {
+		return t.executeEdit(ctx, args)
+	}
 	if action != "send" {
-		return ErrorResult(fmt.Sprintf("unsupported action: %s (only 'send' is supported)", action))
+		return ErrorResult(fmt.Sprintf("unsupported action: %s (only 'send' and 'edit' are supported)", action))
 	}
 
 	message := argString(args, "message")
@@ -243,6 +252,66 @@ func (t *MessageTool) Execute(ctx context.Context, args map[string]any) *Result 
 	}
 
 	return ErrorResult("no channel sender or message bus available")
+}
+
+// executeEdit edits an existing message in a channel (e.g. flip a ❌ to a ✅ in a
+// status post). The message_id is typically the id of the message the user
+// replied to — surfaced to the agent as reply_to_message_id in context.
+func (t *MessageTool) executeEdit(ctx context.Context, args map[string]any) *Result {
+	if t.editor == nil {
+		return ErrorResult("editing messages is not supported in this context")
+	}
+	messageID := argInt(args, "message_id")
+	if messageID == 0 {
+		return ErrorResult("message_id is required for edit (use the id of the message to change — usually the one the user replied to)")
+	}
+	message := argString(args, "message")
+	if message == "" {
+		return ErrorResult("message (the new full text) is required for edit")
+	}
+
+	channel := argString(args, "channel")
+	if channel == "" {
+		channel = ToolChannelFromCtx(ctx)
+	}
+	if channel == "" {
+		return ErrorResult("channel is required (no current channel in context)")
+	}
+	target := argString(args, "target")
+	if target == "" {
+		target = ToolChatIDFromCtx(ctx)
+	}
+	if target == "" {
+		return ErrorResult("target chat ID is required (no current chat in context)")
+	}
+
+	if err := t.validateChannelTenant(ctx, channel, target); err != nil {
+		return err
+	}
+	if err := t.editor(ctx, channel, target, messageID, message); err != nil {
+		return ErrorResult(fmt.Sprintf("failed to edit message: %v", err))
+	}
+	return SilentResult(fmt.Sprintf(`{"status":"edited","channel":"%s","target":"%s","message_id":%d}`, channel, target, messageID))
+}
+
+// argInt reads a tool argument as an int (LLM JSON encodes numbers as float64).
+func argInt(m map[string]any, key string) int {
+	switch v := m[key].(type) {
+	case float64:
+		return int(v)
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case json.Number:
+		n, _ := v.Int64()
+		return int(n)
+	case string:
+		n, _ := strconv.Atoi(strings.TrimSpace(v))
+		return n
+	default:
+		return 0
+	}
 }
 
 // validateChannelTenant checks the target channel belongs to the current tenant.

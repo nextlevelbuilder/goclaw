@@ -516,6 +516,9 @@ func runGateway() {
 		if cs, ok := t.(tools.ChannelSenderAware); ok {
 			cs.SetChannelSender(channelMgr.SendToChannel)
 		}
+		if ce, ok := t.(tools.ChannelEditorAware); ok {
+			ce.SetChannelEditor(channelMgr.EditChannelMessage)
+		}
 		if tc, ok := t.(tools.ChannelTenantCheckerAware); ok {
 			tc.SetChannelTenantChecker(channelMgr.ChannelTenantID)
 		}

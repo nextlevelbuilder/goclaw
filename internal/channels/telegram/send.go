@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -789,6 +790,18 @@ func (c *Channel) sendDocument(ctx context.Context, chatID telego.ChatID, filePa
 		_, err = c.bot.SendDocument(ctx, params)
 	}
 	return err
+}
+
+// EditMessage edits an existing message's text by chat id string, applying the
+// same markdown→HTML rendering as outbound sends. Implements channels.MessageEditor
+// so the agent's `message` tool (action=edit) can flip status markers in place.
+// The bot must be an admin with edit rights in the target chat/channel.
+func (c *Channel) EditMessage(ctx context.Context, chatID string, messageID int, content string) error {
+	id, err := strconv.ParseInt(chatID, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid telegram chat id %q: %w", chatID, err)
+	}
+	return c.editMessage(ctx, id, messageID, markdownToTelegramHTML(content))
 }
 
 // editMessage edits an existing message's text.

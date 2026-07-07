@@ -101,6 +101,16 @@ type ChannelSenderAware interface {
 	SetChannelSender(ChannelSender)
 }
 
+// ChannelEditor abstracts editing an existing message in a channel.
+// Implemented by channels.Manager.EditChannelMessage. Not all channel types
+// support editing arbitrary messages; unsupported channels return an error.
+type ChannelEditor func(ctx context.Context, channel, chatID string, messageID int, content string) error
+
+// ChannelEditorAware tools can receive a channel editor function.
+type ChannelEditorAware interface {
+	SetChannelEditor(ChannelEditor)
+}
+
 // ChannelTenantChecker returns the tenant UUID for a channel instance.
 // Used by the message tool to prevent cross-tenant sends.
 // Returns (tenantID, exists). Zero tenantID means legacy/config-based channel.

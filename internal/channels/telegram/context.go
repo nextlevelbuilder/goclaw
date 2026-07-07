@@ -30,6 +30,7 @@ type ReplyInfo struct {
 	Sender      string // sender name
 	Body        string // quoted message text
 	IsBotReply  bool   // true if replying to bot's own message
+	MessageID   int    // id of the replied-to message (edit target)
 }
 
 // LocationInfo contains geographic coordinates.
@@ -66,10 +67,11 @@ func enrichContentWithContext(content string, msgCtx *MessageContext) string {
 
 	result.WriteString(content)
 
-	// Append reply context
+	// Append reply context. Include the replied-to message id so the agent can
+	// target it with message(action=edit) — e.g. flip a status marker in place.
 	if msgCtx.ReplyInfo != nil && msgCtx.ReplyInfo.Body != "" {
-		result.WriteString(fmt.Sprintf("\n\n[Replying to %s]\n%s\n[/Replying]",
-			msgCtx.ReplyInfo.Sender, msgCtx.ReplyInfo.Body))
+		result.WriteString(fmt.Sprintf("\n\n[Replying to %s | reply_to_message_id=%d]\n%s\n[/Replying]",
+			msgCtx.ReplyInfo.Sender, msgCtx.ReplyInfo.MessageID, msgCtx.ReplyInfo.Body))
 	}
 
 	// Append location
@@ -123,7 +125,7 @@ func extractReplyInfo(msg *telego.Message, botUsername string) *ReplyInfo {
 		return nil
 	}
 
-	info := &ReplyInfo{}
+	info := &ReplyInfo{MessageID: reply.MessageID}
 
 	// Determine sender name
 	if reply.From != nil {
