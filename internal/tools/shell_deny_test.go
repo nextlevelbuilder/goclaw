@@ -130,14 +130,19 @@ func TestPrivilegeEscalationGaps(t *testing.T) {
 	)
 
 	mustAllow(t, patterns,
-		"summit",    // not "su"
-		"sugar",     // not "su"
-		"surplus",   // not "su"
-		"issue",     // not "su"
-		"result",    // not "su"
-		"resume",    // not "su"
-		"visual",    // not "su"
-		"sushi",     // not "su"
+		"summit",  // not "su"
+		"sugar",   // not "su"
+		"surplus", // not "su"
+		"issue",   // not "su"
+		"result",  // not "su"
+		"resume",  // not "su"
+		"visual",  // not "su"
+		"sushi",   // not "su"
+		// non-ASCII (Vietnamese) text: ASCII "su" adjacent to an accented
+		// vowel must NOT match the su command (Go RE2 word boundaries are ASCII-only).
+		"hiệu suất",
+		"năng suất",
+		"báo cáo hiệu suất tháng",
 		"doaspkg",   // not "doas" (no word boundary)
 		"pkexecute", // not "pkexec" (no word boundary)
 	)
