@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -41,6 +42,8 @@ var cliNativeToolsAlwaysBlocked = []string{
 	"Glob", "Grep", "TodoWrite", "NotebookEdit",
 }
 
+var unknownDisallowedToolRe = regexp.MustCompile(`Permission deny rule "([^"]+)" matches no known tool`)
+
 // disallowedCLITools computes the --disallowedTools value for the Claude CLI
 // subprocess from the agent's policy-filtered allowed GoClaw tool names.
 // allowedToolNames == nil is treated as "no tools allowed" (fail closed):
@@ -60,6 +63,42 @@ func disallowedCLITools(allowedToolNames []string) []string {
 	blocked = append(blocked, cliNativeToolsAlwaysBlocked...)
 	slices.Sort(blocked)
 	return blocked
+}
+
+// filterInvalidDisallowedTools removes deny rules that the local Claude CLI has
+// already rejected as unknown. Claude Code occasionally changes native tool
+// names; retrying without rejected names keeps the provider usable while still
+// denying every rule the installed CLI recognizes.
+func (p *ClaudeCLIProvider) filterInvalidDisallowedTools(tools []string) []string {
+	if len(tools) == 0 {
+		return tools
+	}
+	filtered := tools[:0]
+	for _, tool := range tools {
+		if _, invalid := p.invalidDisallowedToolNames.Load(tool); invalid {
+			continue
+		}
+		filtered = append(filtered, tool)
+	}
+	return filtered
+}
+
+// noteInvalidDisallowedTool records a Claude CLI deny rule rejected by the
+// installed CLI. It returns true only the first time the tool is observed so
+// callers can bound retries.
+func (p *ClaudeCLIProvider) noteInvalidDisallowedTool(stderr string) (string, bool) {
+	match := unknownDisallowedToolRe.FindStringSubmatch(stderr)
+	if len(match) != 2 {
+		return "", false
+	}
+	tool := match[1]
+	if tool == "" {
+		return "", false
+	}
+	if _, loaded := p.invalidDisallowedToolNames.LoadOrStore(tool, struct{}{}); loaded {
+		return tool, false
+	}
+	return tool, true
 }
 
 // validCLIModels lists accepted model aliases for the Claude CLI.
@@ -124,11 +163,14 @@ func (p *ClaudeCLIProvider) buildArgs(model, workDir, mcpConfigPath string, cliS
 	// This must never be skipped — omitting it previously let the CLI
 	// subprocess run with its full native toolset unrestricted whenever no MCP
 	// config was resolved.
+	var blockedTools []string
 	if disableTools {
-		args = append(args, "--disallowedTools", strings.Join(disallowedCLITools(nil), ","))
+		blockedTools = disallowedCLITools(nil)
 	} else {
-		args = append(args, "--disallowedTools", strings.Join(disallowedCLITools(allowedToolNames), ","))
+		blockedTools = disallowedCLITools(allowedToolNames)
 	}
+	blockedTools = p.filterInvalidDisallowedTools(blockedTools)
+	args = append(args, "--disallowedTools", strings.Join(blockedTools, ","))
 
 	if p.hooksSettingsPath != "" {
 		args = append(args, "--settings", p.hooksSettingsPath)

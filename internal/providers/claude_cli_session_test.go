@@ -149,3 +149,49 @@ func TestDisallowedCLITools_NoStaleToolNames(t *testing.T) {
 		}
 	}
 }
+
+func TestClaudeCLIRemembersUnknownDisallowedToolRules(t *testing.T) {
+	p := NewClaudeCLIProvider("claude")
+
+	if _, retry := p.noteInvalidDisallowedTool(`Permission deny rule "NotebookRead" matches no known tool — check for typos.`); !retry {
+		t.Fatalf("first unknown tool observation should request retry")
+	}
+	if _, retry := p.noteInvalidDisallowedTool(`Permission deny rule "NotebookRead" matches no known tool — check for typos.`); retry {
+		t.Fatalf("repeated unknown tool observation should not request another retry")
+	}
+
+	filtered := p.filterInvalidDisallowedTools([]string{"Bash", "NotebookRead", "TodoWrite"})
+	want := []string{"Bash", "TodoWrite"}
+	if len(filtered) != len(want) {
+		t.Fatalf("filtered tools = %v, want %v", filtered, want)
+	}
+	for i := range want {
+		if filtered[i] != want[i] {
+			t.Fatalf("filtered tools = %v, want %v", filtered, want)
+		}
+	}
+}
+
+func TestClaudeCLIDisallowedToolsExcludeRemovedReadOnlyTools(t *testing.T) {
+	blocked := disallowedCLITools(nil)
+	for _, removed := range []string{"NotebookRead", "TodoRead"} {
+		for _, got := range blocked {
+			if got == removed {
+				t.Fatalf("disallowedCLITools included removed Claude CLI tool %q in %v", removed, blocked)
+			}
+		}
+	}
+
+	for _, want := range []string{"NotebookEdit", "TodoWrite"} {
+		found := false
+		for _, got := range blocked {
+			if got == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("disallowedCLITools missing still-supported tool %q in %v", want, blocked)
+		}
+	}
+}
