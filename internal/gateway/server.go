@@ -512,8 +512,11 @@ func (s *Server) Start(ctx context.Context) error {
 
 	addr := fmt.Sprintf("%s:%d", s.cfg.Gateway.Host, s.cfg.Gateway.Port)
 	s.httpServer = &http.Server{
-		Addr:    addr,
-		Handler: handler,
+		Addr:         addr,
+		Handler:      handler,
+		ReadTimeout:  3600 * time.Second,  // 1h: allow large uploads, long-running reads
+		WriteTimeout: 3600 * time.Second,  // 1h: allow streaming responses, slow clients
+		IdleTimeout:  30 * time.Second,    // 30s: close idle connections
 	}
 
 	slog.Info("gateway starting", "addr", addr)
