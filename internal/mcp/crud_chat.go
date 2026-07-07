@@ -2,6 +2,8 @@ package mcp
 
 import (
 	"context"
+	"log/slog"
+	"time"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
@@ -62,10 +64,19 @@ func handleChatSend(runner ChatRunner) mcpserver.ToolHandlerFunc {
 		}
 		agentID := req.GetString("agent_id", "")
 		sessionKey := req.GetString("session_key", "")
+
+		startTime := time.Now()
+		slog.Info("mcp.chat_send.start", "agent_id", agentID, "session_key", sessionKey, "message_len", len(message))
+
 		result, err := runner.Send(ctx, agentID, sessionKey, message, nil)
+
+		duration := time.Since(startTime)
 		if err != nil {
+			slog.Warn("mcp.chat_send.error", "agent_id", agentID, "session_key", sessionKey, "duration_ms", duration.Milliseconds(), "error", err)
 			return toolError("chat.send", err)
 		}
+
+		slog.Info("mcp.chat_send.done", "agent_id", agentID, "session_key", sessionKey, "run_id", result.RunID, "duration_ms", duration.Milliseconds(), "content_len", len(result.Content))
 		return jsonToolResult(result)
 	}
 }
