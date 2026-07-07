@@ -40,6 +40,9 @@ type Channel struct {
 	reactions         sync.Map                    // localKey string → *StatusReactionController
 	threadIDs         sync.Map                    // localKey string → messageThreadID int (for forum topic routing)
 	mentionMode       string                      // "strict" (default) or "yield"
+	triggerWords      map[string]struct{}         // cached, normalized agent trigger-words from IDENTITY.md; whole-word, case-insensitive
+	triggerWordsAt    time.Time                   // when triggerWords was last refreshed
+	triggerMu         sync.Mutex                  // guards triggerWords/triggerWordsAt
 	botDisplayName    string                      // bot's first_name from GetMe (e.g. "ViệtBot"); captured once at Start
 	pollCtx           context.Context             // long-polling context (cancelled by pollCancel); promoted from Start-local so background helpers (e.g. albumAggregator) can derive from it
 	pollCancel        context.CancelFunc          // cancels the long polling context

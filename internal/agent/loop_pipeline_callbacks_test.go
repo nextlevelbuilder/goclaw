@@ -54,3 +54,19 @@ func TestMakeCallLLM_StreamsFinalThinkingWhenNoThinkingChunkArrives(t *testing.T
 		t.Fatalf("thinking payload = %+v", thinking[0].Payload)
 	}
 }
+
+// A Function-nil tool definition (e.g. the native image_generation sentinel,
+// providers.ToolDefinition{Type: "image_generation"}) must not panic the
+// mcp-def counter. Regression for the v3.14.0 nil-pointer crash.
+func TestCountMCPToolDefs_SkipsNilFunction(t *testing.T) {
+	defs := []providers.ToolDefinition{
+		{Type: "image_generation"}, // Function == nil
+		{Function: &providers.ToolFunctionSchema{Name: "mcp_notion_search"}},
+		{Function: &providers.ToolFunctionSchema{Name: " mcp_slack_post "}},
+		{Function: &providers.ToolFunctionSchema{Name: "read_file"}},
+	}
+
+	if got := countMCPToolDefs(defs); got != 2 {
+		t.Errorf("countMCPToolDefs = %d, want 2", got)
+	}
+}

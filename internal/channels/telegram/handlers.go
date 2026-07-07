@@ -292,6 +292,12 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 			wasMentioned = true
 		}
 
+		// Trigger words: naming the bot by one of its agent's IDENTITY.md aliases
+		// (e.g. "Паша") wakes it in groups without an explicit @mention.
+		if !wasMentioned && c.matchesTriggerWords(ctx, message) {
+			wasMentioned = true
+		}
+
 		// Yield mode: skip only if another bot/user is explicitly mentioned (not us).
 		// If nobody is mentioned → respond. If we are mentioned → respond.
 		if mentionMode == "yield" && !wasMentioned {
@@ -464,7 +470,7 @@ func (c *Channel) processResolvedMessage(ctx context.Context, rctx resolvedMessa
 
 	var mediaFiles []bus.MediaFile
 	if len(mediaList) > 0 {
-		var extraContent string
+		var extraContent strings.Builder
 		for i := range mediaList {
 			m := &mediaList[i]
 			switch m.Type {
@@ -484,7 +490,7 @@ func (c *Channel) processResolvedMessage(ctx context.Context, rctx resolvedMessa
 					if err != nil {
 						slog.Warn("document extraction failed", "file", m.FileName, "error", err)
 					} else if docContent != "" {
-						extraContent += "\n\n" + docContent
+						extraContent.WriteString("\n\n" + docContent)
 					}
 				}
 			case "video", "animation":
@@ -511,8 +517,8 @@ func (c *Channel) processResolvedMessage(ctx context.Context, rctx resolvedMessa
 				content = fullTags
 			}
 		}
-		if extraContent != "" {
-			content += extraContent
+		if extraContent.String() != "" {
+			content += extraContent.String()
 		}
 	}
 
