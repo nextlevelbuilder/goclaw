@@ -24,6 +24,7 @@ import (
 var (
 	parseErrRe           = regexp.MustCompile(`(?i)can't parse entities|parse entities|find end of the entity`)
 	messageNotModifiedRe = regexp.MustCompile(`(?i)message is not modified`)
+	noTextToEditRe       = regexp.MustCompile(`(?i)no text in the message to edit`)
 	threadNotFoundRe     = regexp.MustCompile(`(?i)message thread not found`)
 	messageTooLongRe     = regexp.MustCompile(`(?i)message is too long|entities too long`)
 	htmlTagRe            = regexp.MustCompile(`<[^>]*>`)
@@ -801,7 +802,32 @@ func (c *Channel) EditMessage(ctx context.Context, chatID string, messageID int,
 	if err != nil {
 		return fmt.Errorf("invalid telegram chat id %q: %w", chatID, err)
 	}
-	return c.editMessage(ctx, id, messageID, markdownToTelegramHTML(content))
+	html := markdownToTelegramHTML(content)
+	err = c.editMessage(ctx, id, messageID, html)
+	// Media messages (photo/document with a caption, e.g. a receipt image with a
+	// status line) have no text — editMessageText returns "there is no text in the
+	// message to edit". Fall back to editing the caption instead.
+	if err != nil && noTextToEditRe.MatchString(err.Error()) {
+		return c.editMessageCaption(ctx, id, messageID, html)
+	}
+	return err
+}
+
+// editMessageCaption edits the caption of a media message (photo/document).
+func (c *Channel) editMessageCaption(ctx context.Context, chatID int64, messageID int, htmlCaption string) error {
+	editCap := &telego.EditMessageCaptionParams{
+		ChatID:    tu.ID(chatID),
+		MessageID: messageID,
+		Caption:   htmlCaption,
+		ParseMode: telego.ModeHTML,
+	}
+	return c.retrySend(ctx, "editMessageCaption", nil, func(ctx context.Context) error {
+		_, err := c.bot.EditMessageCaption(ctx, editCap)
+		if err != nil && messageNotModifiedRe.MatchString(err.Error()) {
+			return nil
+		}
+		return err
+	})
 }
 
 // editMessage edits an existing message's text.
