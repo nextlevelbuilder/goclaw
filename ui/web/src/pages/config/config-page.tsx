@@ -11,6 +11,7 @@ import { useMinLoading } from "@/hooks/use-min-loading";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import { useIsMobile } from "@/hooks/use-media-query";
 import { ServerSection } from "./sections/server-section";
+import { BrandingSection } from "./sections/branding-section";
 import { BehaviorSection } from "./sections/behavior-section";
 import { AiDefaultsSection } from "./sections/ai-defaults-section";
 import { QuotaSection } from "./sections/quota-section";
@@ -107,6 +108,11 @@ export function ConfigPage() {
           <ServerSection
             data={config.gateway as any}
             onSave={(v) => patch({ gateway: v })}
+            saving={saving}
+          />
+          <BrandingSection
+            data={config.branding as any}
+            onSave={(v) => patch({ branding: v })}
             saving={saving}
           />
         </TabsContent>

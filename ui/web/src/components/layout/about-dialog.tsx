@@ -5,6 +5,7 @@ import { useWsCall } from "@/hooks/use-ws-call";
 import { Methods } from "@/api/protocol";
 import type { HealthPayload } from "@/pages/overview/types";
 import { cleanVersion } from "@/lib/clean-version";
+import { getRuntimeBranding } from "@/lib/branding";
 import {
   Dialog,
   DialogContent,
@@ -49,13 +50,14 @@ export function AboutDialog({ open, onOpenChange }: AboutDialogProps) {
   const updateAvailable = health?.updateAvailable ?? false;
   const updateUrl = health?.updateUrl;
   const releaseNotes = health?.releaseNotes;
+  const branding = getRuntimeBranding();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2.5">
-            <img src="/goclaw-icon.svg" alt="GoClaw" className="h-7 w-7" />
+            <img src={branding.logoUrl} alt={branding.appName} className="h-7 w-7" />
             {t("about.title")}
             {updateAvailable && latestVersion && (
               <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">

@@ -12,6 +12,7 @@ import { usePackageRuntimes } from "./hooks/use-package-runtimes";
 import { RuntimesStickyHeader } from "./runtimes-sticky-header";
 import { useUpdates } from "./hooks/use-updates";
 import { UpdatesList } from "./components/updates-list";
+import { getRuntimeBranding } from "@/lib/branding";
 
 // --- Lazy tab bodies (each is a separate chunk) ---
 const SystemPackagesTab = lazy(() =>
@@ -46,9 +47,10 @@ function isValidTab(v: string | null): v is TabId {
 
 // --- Tab fallback skeleton ---
 function TabLoader() {
+  const branding = getRuntimeBranding();
   return (
     <div className="py-8 flex justify-center text-muted-foreground">
-      <img src="/goclaw-icon.svg" alt="" className="h-6 w-6 animate-pulse opacity-40" />
+      <img src={branding.logoUrl} alt="" className="h-6 w-6 animate-pulse opacity-40" />
     </div>
   );
 }

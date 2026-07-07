@@ -141,6 +141,8 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 		})
 	}
 
+	d.server.SetBrandingAssetsHandler(httpapi.NewBrandingAssetsHandler(d.dataDir))
+
 	// Usage analytics API
 	if d.pgStores.Snapshots != nil {
 		d.server.SetUsageHandler(httpapi.NewUsageHandler(d.pgStores.Snapshots, d.pgStores.UsageEvents, d.pgStores.DB))

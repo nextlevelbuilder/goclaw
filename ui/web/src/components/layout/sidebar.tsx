@@ -42,6 +42,7 @@ import { cn } from "@/lib/utils";
 import { usePendingPairingsCount } from "@/hooks/use-pending-pairings-count";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { useTenants } from "@/hooks/use-tenants";
+import { getRuntimeBranding } from "@/lib/branding";
 
 interface SidebarProps {
   collapsed: boolean;
@@ -54,6 +55,7 @@ export function Sidebar({ collapsed, onNavItemClick }: SidebarProps) {
   const role = useAuthStore((s) => s.role);
   const { isOwner } = useTenants();
   const isAdmin = role === "admin" || role === "owner";
+  const branding = getRuntimeBranding();
 
   return (
     <aside
@@ -72,14 +74,14 @@ export function Sidebar({ collapsed, onNavItemClick }: SidebarProps) {
       <div className="flex h-14 items-center border-b px-4">
         {!collapsed && (
           <div className="flex items-center gap-2.5">
-            <img src="/goclaw-icon.svg" alt="GoClaw" className="h-8 w-8" />
+            <img src={branding.logoUrl} alt={branding.appName} className="h-8 w-8" />
             <span className="text-lg font-bold tracking-tight text-sidebar-primary">
-              GoClaw
+              {branding.appShortName}
             </span>
           </div>
         )}
         {collapsed && (
-          <img src="/goclaw-icon.svg" alt="GoClaw" className="mx-auto h-7 w-7" />
+          <img src={branding.logoUrl} alt={branding.appName} className="mx-auto h-7 w-7" />
         )}
       </div>
 

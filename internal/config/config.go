@@ -44,6 +44,7 @@ func (f *FlexibleStringSlice) UnmarshalJSON(data []byte) error {
 // Config is the root configuration for the GoClaw Gateway.
 type Config struct {
 	DataDir   string          `json:"data_dir,omitempty"` // persistent data directory (default: ~/.goclaw/data)
+	Branding  BrandingConfig  `json:"branding,omitempty"`
 	Agents    AgentsConfig    `json:"agents"`
 	Channels  ChannelsConfig  `json:"channels"`
 	Providers ProvidersConfig `json:"providers"`
@@ -62,6 +63,39 @@ type Config struct {
 	Packages  PackagesConfig  `json:"packages"` // runtime package mgmt (GitHub updater)
 	Messages  SystemMsgConfig `json:"system_messages,omitempty"`
 	mu        sync.RWMutex
+}
+
+// BrandingConfig customizes public app metadata and media used by the web UI.
+// URL fields may point to external URLs or to uploaded /branding-assets/* files.
+type BrandingConfig struct {
+	AppName           string `json:"app_name,omitempty"`
+	AppShortName      string `json:"app_short_name,omitempty"`
+	MetaTitle         string `json:"meta_title,omitempty"`
+	MetaDescription   string `json:"meta_description,omitempty"`
+	MetaKeywords      string `json:"meta_keywords,omitempty"`
+	LogoURL           string `json:"logo_url,omitempty"`
+	FaviconURL        string `json:"favicon_url,omitempty"`
+	AppleTouchIconURL string `json:"apple_touch_icon_url,omitempty"`
+	OGTitle           string `json:"og_title,omitempty"`
+	OGDescription     string `json:"og_description,omitempty"`
+	OGImageURL        string `json:"og_image_url,omitempty"`
+	ThemeColor        string `json:"theme_color,omitempty"`
+}
+
+// HasValues reports whether any branding override is configured.
+func (b BrandingConfig) HasValues() bool {
+	return strings.TrimSpace(b.AppName) != "" ||
+		strings.TrimSpace(b.AppShortName) != "" ||
+		strings.TrimSpace(b.MetaTitle) != "" ||
+		strings.TrimSpace(b.MetaDescription) != "" ||
+		strings.TrimSpace(b.MetaKeywords) != "" ||
+		strings.TrimSpace(b.LogoURL) != "" ||
+		strings.TrimSpace(b.FaviconURL) != "" ||
+		strings.TrimSpace(b.AppleTouchIconURL) != "" ||
+		strings.TrimSpace(b.OGTitle) != "" ||
+		strings.TrimSpace(b.OGDescription) != "" ||
+		strings.TrimSpace(b.OGImageURL) != "" ||
+		strings.TrimSpace(b.ThemeColor) != ""
 }
 
 // PackagesConfig tunes the runtime package update flow (Phase 1: GitHub
@@ -603,6 +637,7 @@ func (c *Config) ReplaceFrom(src *Config) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.DataDir = src.DataDir
+	c.Branding = src.Branding
 	c.Agents = src.Agents
 	c.Channels = src.Channels
 	c.Providers = src.Providers
@@ -633,6 +668,14 @@ func (c *Config) Clone() *Config {
 		return &Config{}
 	}
 	return cp
+}
+
+// BrandingSnapshot returns the current branding overrides without exposing the
+// mutable root config to HTTP handlers.
+func (c *Config) BrandingSnapshot() BrandingConfig {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.Branding
 }
 
 // ShellDenyGroupsSnapshot returns a copy of the current global shell deny-group

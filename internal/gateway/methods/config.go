@@ -256,6 +256,60 @@ func (m *ConfigMethods) handleSchema(_ context.Context, client *gateway.Client, 
 				"type":        "object",
 				"description": "Gateway server settings (host, port, token)",
 			},
+			"branding": map[string]any{
+				"type":        "object",
+				"description": "Public app branding and SEO metadata",
+				"properties": map[string]any{
+					"app_name": map[string]any{
+						"type":        "string",
+						"description": "Application name shown in browser metadata and UI chrome",
+					},
+					"app_short_name": map[string]any{
+						"type":        "string",
+						"description": "Short application name for compact surfaces",
+					},
+					"meta_title": map[string]any{
+						"type":        "string",
+						"description": "HTML document title override",
+					},
+					"meta_description": map[string]any{
+						"type":        "string",
+						"description": "HTML meta description override",
+					},
+					"meta_keywords": map[string]any{
+						"type":        "string",
+						"description": "HTML meta keywords override",
+					},
+					"logo_url": map[string]any{
+						"type":        "string",
+						"description": "Logo URL or uploaded /branding-assets/* path",
+					},
+					"favicon_url": map[string]any{
+						"type":        "string",
+						"description": "Favicon URL or uploaded /branding-assets/* path",
+					},
+					"apple_touch_icon_url": map[string]any{
+						"type":        "string",
+						"description": "Apple touch icon URL or uploaded /branding-assets/* path",
+					},
+					"og_title": map[string]any{
+						"type":        "string",
+						"description": "Open Graph title override",
+					},
+					"og_description": map[string]any{
+						"type":        "string",
+						"description": "Open Graph description override",
+					},
+					"og_image_url": map[string]any{
+						"type":        "string",
+						"description": "Open Graph image URL or uploaded /branding-assets/* path",
+					},
+					"theme_color": map[string]any{
+						"type":        "string",
+						"description": "Browser theme-color value",
+					},
+				},
+			},
 			"tools": map[string]any{
 				"type":        "object",
 				"description": "Tool configuration (browser, exec, web search)",

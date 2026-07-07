@@ -229,7 +229,7 @@ func (s *Server) BuildMux() *http.ServeMux {
 	// browser to check the service. Install a minimal JSON index handler in that
 	// case so the root responds with something useful (and any unmatched path
 	// still returns 404, just with a JSON body).
-	if h := webui.Handler(); h != nil {
+	if h := webui.Handler(s.cfg); h != nil {
 		mux.Handle("/", h)
 		slog.Info("serving embedded web UI")
 	} else {
@@ -651,6 +651,11 @@ func (s *Server) SetRuntimeLogsHandler(h *httpapi.RuntimeLogsHandler) {
 
 // SetSystemConfigsHandler sets the system configs handler.
 func (s *Server) SetSystemConfigsHandler(h *httpapi.SystemConfigsHandler) {
+	s.handlers = append(s.handlers, h)
+}
+
+// SetBrandingAssetsHandler sets the public branding asset upload/serve handler.
+func (s *Server) SetBrandingAssetsHandler(h *httpapi.BrandingAssetsHandler) {
 	s.handlers = append(s.handlers, h)
 }
 
