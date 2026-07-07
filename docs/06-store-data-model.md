@@ -720,7 +720,7 @@ L0 (Working Memory)           L1 (Episodic Memory)        L2 (Semantic Memory)
 
 | Interface | Purpose | Key Methods |
 |-----------|---------|-------------|
-| `EpisodicStore` | Tier 1.5 memory CRUD + hybrid search | `Create`, `Search`, `ExistsBySourceID`, `ListUnpromoted`, `MarkPromoted` |
+| `EpisodicStore` | Tier 1.5 memory CRUD + hybrid search | `Create`, `Search`, `ExistsBySourceID`, `GetBySourceID`, `ListUnpromoted`, `MarkPromoted` |
 | `EvolutionMetricsStore` | Stage 1: record metrics (retrieval, tool, feedback) | `RecordMetric`, `AggregateToolMetrics`, `AggregateRetrievalMetrics` |
 | `EvolutionSuggestionStore` | Stage 2: generate & track improvement suggestions | `CreateSuggestion`, `ListSuggestions`, `UpdateSuggestionStatus` |
 | `VaultStore` | Knowledge Vault: document registry + links | `UpsertDocument`, `Search`, `CreateLink`, `GetOutLinks`, `GetBacklinks` |
@@ -744,7 +744,7 @@ L0 (Working Memory)           L1 (Episodic Memory)        L2 (Semantic Memory)
 `ChannelMemoryExtractionStore` is implemented for PostgreSQL and SQLite. It is
 tenant-scoped, stores no raw message bodies, and uses deterministic hashes to
 deduplicate the same channel/history/type/summary candidate across repeated
-runs.
+runs for the same channel instance.
 
 ### 12 Promoted Agent Columns
 

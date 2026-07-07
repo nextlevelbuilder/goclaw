@@ -25,7 +25,7 @@ func NewPGEpisodicStore(db *sql.DB) *PGEpisodicStore {
 }
 
 func (s *PGEpisodicStore) SetEmbeddingProvider(p store.EmbeddingProvider) { s.embProvider = p }
-func (s *PGEpisodicStore) Close() error                                  { return nil }
+func (s *PGEpisodicStore) Close() error                                   { return nil }
 
 // Create inserts a new episodic summary with optional embedding.
 func (s *PGEpisodicStore) Create(ctx context.Context, ep *store.EpisodicSummary) error {
@@ -178,6 +178,17 @@ func (s *PGEpisodicStore) ExistsBySourceID(ctx context.Context, agentID, userID,
 		WHERE agent_id = $1 AND user_id = $2 AND source_id = $3 AND tenant_id = $4)`,
 		agentID, userID, sourceID, store.TenantIDFromContext(ctx)).Scan(&exists)
 	return exists, err
+}
+
+func (s *PGEpisodicStore) GetBySourceID(ctx context.Context, agentID, userID, sourceID string) (*store.EpisodicSummary, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT id, tenant_id, agent_id, user_id, session_key, summary, key_topics,
+		       turn_count, token_count, l0_abstract, source_id, source_type,
+		       created_at, expires_at, recall_count, recall_score, last_recalled_at
+		FROM episodic_summaries
+		WHERE agent_id = $1 AND user_id = $2 AND source_id = $3 AND tenant_id = $4`,
+		agentID, userID, sourceID, store.TenantIDFromContext(ctx))
+	return scanEpisodic(row)
 }
 
 // PruneExpired deletes all episodic summaries past their expiry across all tenants.

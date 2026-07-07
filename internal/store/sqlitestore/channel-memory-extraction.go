@@ -136,7 +136,7 @@ func (s *SQLiteChannelMemoryExtractionStore) CreateItem(ctx context.Context, ite
 	return s.db.QueryRowContext(ctx, `INSERT INTO channel_memory_extraction_items
 		(`+sqliteChannelMemoryItemCols+`)
 		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-		ON CONFLICT (tenant_id, run_id, item_hash) DO UPDATE SET updated_at = excluded.updated_at
+		ON CONFLICT (tenant_id, channel_instance_id, item_hash) DO UPDATE SET updated_at = excluded.updated_at
 		RETURNING id`,
 		item.ID, item.TenantID, item.RunID, item.ChannelInstanceID, item.AgentID, item.UserID,
 		item.ItemHash, item.ItemType, item.Summary, string(item.Topics), string(item.Entities),

@@ -65,6 +65,15 @@ func (m *mockEpisodicStore) ExistsBySourceID(_ context.Context, _, _, sourceID s
 	return m.existsByID[sourceID], nil
 }
 
+func (m *mockEpisodicStore) GetBySourceID(_ context.Context, _, _, sourceID string) (*store.EpisodicSummary, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.existsByID[sourceID] {
+		return nil, nil
+	}
+	return &store.EpisodicSummary{ID: uuid.New(), SourceID: sourceID}, nil
+}
+
 func (m *mockEpisodicStore) PruneExpired(_ context.Context) (int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

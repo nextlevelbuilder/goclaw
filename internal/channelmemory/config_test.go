@@ -83,3 +83,19 @@ func TestMergeIntoInstanceConfigPreservesSiblingFields(t *testing.T) {
 		t.Fatalf("passive_memory missing: %s", raw)
 	}
 }
+
+func TestApplyConfigPatchPreservesUnspecifiedReviewMode(t *testing.T) {
+	base := DefaultConfig()
+	base.ReviewMode = true
+
+	cfg, err := ApplyConfigPatch(base, []byte(`{"enabled":true}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Enabled {
+		t.Fatal("enabled patch was not applied")
+	}
+	if !cfg.ReviewMode {
+		t.Fatal("partial patch must preserve review_mode")
+	}
+}

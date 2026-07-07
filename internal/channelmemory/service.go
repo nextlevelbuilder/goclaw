@@ -75,11 +75,12 @@ func (s *Service) Status(ctx context.Context, inst *store.ChannelInstanceData) (
 	if err != nil {
 		return nil, err
 	}
-	pending := 0
-	for _, item := range items {
-		if item.Status == store.ChannelMemoryItemPendingReview {
-			pending++
-		}
+	pending, err := s.Extractions.CountItems(ctx, store.ChannelMemoryItemListOptions{
+		ChannelInstanceID: inst.ID,
+		Status:            store.ChannelMemoryItemPendingReview,
+	})
+	if err != nil {
+		return nil, err
 	}
 	unprocessed, err := s.UnprocessedMessageCount(ctx, inst)
 	if err != nil {
@@ -295,7 +296,7 @@ func (s *Service) unprocessedMessages(ctx context.Context, instID uuid.UUID, gro
 	return nil, nil
 }
 
-func (s *Service) runMessages(ctx context.Context, inst *store.ChannelInstanceData, cfg Config, group store.PendingMessageGroup, messages []store.PendingMessage, trigger string) (*store.ChannelMemoryExtractionRun, error) {
+func (s *Service) runMessages(ctx context.Context, inst *store.ChannelInstanceData, cfg Config, group store.PendingMessageGroup, messages []store.PendingMessage, trigger string) (run *store.ChannelMemoryExtractionRun, err error) {
 	if len(messages) < cfg.MinMessages {
 		return nil, fmt.Errorf("not enough useful messages")
 	}
@@ -307,9 +308,13 @@ func (s *Service) runMessages(ctx context.Context, inst *store.ChannelInstanceDa
 	if len(redacted.Messages) < cfg.MinMessages {
 		return nil, fmt.Errorf("not enough redacted messages")
 	}
-	start, end := redacted.Messages[0], redacted.Messages[len(redacted.Messages)-1]
+	consumed := messagesWithinExtractionBudget(redacted.Messages, extractionRetryMaxInputChars)
+	if len(consumed) < cfg.MinMessages {
+		return nil, fmt.Errorf("not enough extractable messages")
+	}
+	start, end := consumed[0], consumed[len(consumed)-1]
 	redactionTypes, _ := json.Marshal(redacted.Types)
-	run := &store.ChannelMemoryExtractionRun{
+	run = &store.ChannelMemoryExtractionRun{
 		ChannelInstanceID: inst.ID,
 		ChannelName:       inst.Name,
 		AgentID:           inst.AgentID,
@@ -321,7 +326,7 @@ func (s *Service) runMessages(ctx context.Context, inst *store.ChannelInstanceDa
 		SourceEndID:       messageSourceID(end),
 		SourceStartAt:     &start.CreatedAt,
 		SourceEndAt:       &end.CreatedAt,
-		MessageCount:      len(redacted.Messages),
+		MessageCount:      len(consumed),
 		RedactionCount:    redacted.Count,
 		RedactionTypes:    redactionTypes,
 		StartedAt:         timePtr(time.Now().UTC()),
@@ -329,12 +334,23 @@ func (s *Service) runMessages(ctx context.Context, inst *store.ChannelInstanceDa
 	if err := s.Extractions.CreateRun(ctx, run); err != nil {
 		return nil, err
 	}
-	provider, model := providerresolve.ResolveBackgroundProvider(ctx, run.TenantID, s.Registry, s.SystemConfigs)
-	items, err := Extract(ctx, provider, model, s.UsageCaps, redacted.Messages, cfg.AllowedTypes)
-	if err != nil {
+	completed := false
+	defer func() {
+		if err == nil || completed {
+			return
+		}
 		_ = s.Extractions.UpdateRun(ctx, run.ID, map[string]any{
-			"status": store.ChannelMemoryRunFailed, "error_message": err.Error(), "completed_at": time.Now().UTC(),
+			"status":        store.ChannelMemoryRunFailed,
+			"error_message": err.Error(),
+			"item_count":    run.ItemCount,
+			"completed_at":  time.Now().UTC(),
 		})
+		run.Status = store.ChannelMemoryRunFailed
+		run.ErrorMessage = err.Error()
+	}()
+	provider, model := providerresolve.ResolveBackgroundProvider(ctx, run.TenantID, s.Registry, s.SystemConfigs)
+	items, err := Extract(ctx, provider, model, s.UsageCaps, consumed, cfg.AllowedTypes)
+	if err != nil {
 		return run, err
 	}
 	for _, extracted := range items {
@@ -357,5 +373,6 @@ func (s *Service) runMessages(ctx context.Context, inst *store.ChannelInstanceDa
 		"status": status, "item_count": run.ItemCount, "completed_at": time.Now().UTC(),
 	})
 	run.Status = status
+	completed = true
 	return run, nil
 }

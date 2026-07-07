@@ -2,6 +2,7 @@ package http
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -66,13 +67,18 @@ func (h *ChannelInstancesHandler) handleMemoryExtractionSettings(w http.Response
 	if inst == nil {
 		return
 	}
-	var cfg channelmemory.Config
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&cfg); err != nil {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
+	if err != nil {
 		locale := store.LocaleFromContext(r.Context())
 		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidJSON))
 		return
 	}
-	normalized := channelmemory.ParseConfig(channelmemory.MergeIntoInstanceConfig(nil, cfg))
+	normalized, err := channelmemory.ApplyConfigPatch(channelmemory.ParseConfig(inst.Config), body)
+	if err != nil {
+		locale := store.LocaleFromContext(r.Context())
+		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidJSON))
+		return
+	}
 	configJSON := channelmemory.MergeIntoInstanceConfig(inst.Config, normalized)
 	if err := h.store.Update(r.Context(), inst.ID, map[string]any{"config": configJSON}); err != nil {
 		writeError(w, http.StatusInternalServerError, protocol.ErrInternal, "failed to update memory extraction settings")

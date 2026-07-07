@@ -69,32 +69,12 @@ func callExtractionProvider(
 	maxOutputTokens int,
 	purpose string,
 ) (*providers.ChatResponse, error) {
-	var sb strings.Builder
-	for _, msg := range messages {
-		sb.WriteString(msg.CreatedAt.Format(time.RFC3339))
-		sb.WriteString(" ")
-		if msg.Sender != "" {
-			sb.WriteString(msg.Sender)
-		} else {
-			sb.WriteString(msg.SenderID)
-		}
-		sb.WriteString(": ")
-		body := msg.Body
-		if len([]rune(body)) > 800 {
-			body = string([]rune(body)[:800]) + "..."
-		}
-		sb.WriteString(body)
-		sb.WriteByte('\n')
-		if sb.Len() > maxInputChars {
-			sb.WriteString("...(truncated)\n")
-			break
-		}
-	}
+	input := buildExtractionInput(messagesWithinExtractionBudget(messages, maxInputChars))
 	req := providers.ChatRequest{
 		Model: model,
 		Messages: []providers.Message{
 			{Role: "system", Content: extractionPrompt(allowed)},
-			{Role: "user", Content: sb.String()},
+			{Role: "user", Content: input},
 		},
 		Options: map[string]any{"max_tokens": maxOutputTokens, "temperature": 0.1},
 	}
@@ -106,6 +86,53 @@ func callExtractionProvider(
 		})
 	}
 	return provider.Chat(ctx, req)
+}
+
+func messagesWithinExtractionBudget(messages []store.PendingMessage, maxInputChars int) []store.PendingMessage {
+	if maxInputChars <= 0 {
+		return nil
+	}
+	var sb strings.Builder
+	out := make([]store.PendingMessage, 0, len(messages))
+	for _, msg := range messages {
+		line := extractionMessageLine(msg)
+		if len(out) > 0 && sb.Len()+len(line) > maxInputChars {
+			break
+		}
+		if len(out) == 0 && len(line) > maxInputChars {
+			break
+		}
+		sb.WriteString(line)
+		out = append(out, msg)
+	}
+	return out
+}
+
+func buildExtractionInput(messages []store.PendingMessage) string {
+	var sb strings.Builder
+	for _, msg := range messages {
+		sb.WriteString(extractionMessageLine(msg))
+	}
+	return sb.String()
+}
+
+func extractionMessageLine(msg store.PendingMessage) string {
+	var sb strings.Builder
+	sb.WriteString(msg.CreatedAt.Format(time.RFC3339))
+	sb.WriteString(" ")
+	if msg.Sender != "" {
+		sb.WriteString(msg.Sender)
+	} else {
+		sb.WriteString(msg.SenderID)
+	}
+	sb.WriteString(": ")
+	body := msg.Body
+	if len([]rune(body)) > 800 {
+		body = string([]rune(body)[:800]) + "..."
+	}
+	sb.WriteString(body)
+	sb.WriteByte('\n')
+	return sb.String()
 }
 
 func extractionPrompt(allowed []string) string {

@@ -131,6 +131,18 @@ func (s *SQLiteEpisodicStore) ExistsBySourceID(ctx context.Context, agentID, use
 	return exists, err
 }
 
+func (s *SQLiteEpisodicStore) GetBySourceID(ctx context.Context, agentID, userID, sourceID string) (*store.EpisodicSummary, error) {
+	tenantID := tenantIDForInsert(ctx)
+	row := s.db.QueryRowContext(ctx, `
+		SELECT id, tenant_id, agent_id, user_id, session_key, summary, key_topics,
+		       turn_count, token_count, l0_abstract, source_id, source_type,
+		       created_at, expires_at, recall_count, recall_score, last_recalled_at
+		FROM episodic_summaries
+		WHERE agent_id = ? AND user_id = ? AND source_id = ? AND tenant_id = ?`,
+		agentID, userID, sourceID, tenantID.String())
+	return scanSQLiteEpisodic(row)
+}
+
 // PruneExpired deletes all episodic summaries past their expiry across all tenants.
 // This is a global maintenance operation and does not filter by tenant.
 func (s *SQLiteEpisodicStore) PruneExpired(ctx context.Context) (int, error) {

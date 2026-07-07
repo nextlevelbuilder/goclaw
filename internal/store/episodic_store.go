@@ -28,7 +28,7 @@ type EpisodicSummary struct {
 	// Phase 10 — dreaming weighted scoring signals. Populated by
 	// EpisodicStore.RecordRecall; consumed by consolidation.ComputeRecallScore.
 	RecallCount    int        `json:"recall_count" db:"recall_count"`
-	RecallScore    float64    `json:"recall_score" db:"recall_score"`         // running average of memory_search hit scores
+	RecallScore    float64    `json:"recall_score" db:"recall_score"` // running average of memory_search hit scores
 	LastRecalledAt *time.Time `json:"last_recalled_at,omitempty" db:"last_recalled_at"`
 }
 
@@ -64,6 +64,7 @@ type EpisodicStore interface {
 
 	// Lifecycle
 	ExistsBySourceID(ctx context.Context, agentID, userID, sourceID string) (bool, error)
+	GetBySourceID(ctx context.Context, agentID, userID, sourceID string) (*EpisodicSummary, error)
 	PruneExpired(ctx context.Context) (int, error)
 
 	// Promotion lifecycle (used by consolidation pipeline)

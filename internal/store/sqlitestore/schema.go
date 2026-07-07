@@ -16,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 53
+const SchemaVersion = 54
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -891,6 +891,8 @@ ALTER TABLE usage_events ADD COLUMN thinking_tokens BIGINT NOT NULL DEFAULT 0;
 ALTER TABLE usage_event_rollups ADD COLUMN cache_read_tokens BIGINT NOT NULL DEFAULT 0;
 ALTER TABLE usage_event_rollups ADD COLUMN cache_create_tokens BIGINT NOT NULL DEFAULT 0;
 ALTER TABLE usage_event_rollups ADD COLUMN thinking_tokens BIGINT NOT NULL DEFAULT 0;`,
+	// Version 53 → 54: dedupe passive memory extraction items across runs for the same channel instance.
+	53: addChannelMemoryItemChannelHashUnique,
 }
 
 const addUsageEventAnalyticsTables = `
@@ -1128,12 +1130,39 @@ CREATE TABLE IF NOT EXISTS channel_memory_extraction_items (
     episodic_id         VARCHAR(64) NOT NULL DEFAULT '',
     created_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    UNIQUE (tenant_id, run_id, item_hash)
+    UNIQUE (tenant_id, channel_instance_id, item_hash)
 );
 CREATE INDEX IF NOT EXISTS idx_channel_memory_items_channel_status
   ON channel_memory_extraction_items(tenant_id, channel_instance_id, status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_channel_memory_items_run
   ON channel_memory_extraction_items(tenant_id, run_id);`
+
+const addChannelMemoryItemChannelHashUnique = `
+DELETE FROM channel_memory_extraction_items
+WHERE id NOT IN (
+    SELECT id
+    FROM (
+        SELECT id,
+               ROW_NUMBER() OVER (
+                   PARTITION BY tenant_id, channel_instance_id, item_hash
+                   ORDER BY
+                       CASE status
+                           WHEN 'written' THEN 5
+                           WHEN 'approved' THEN 4
+                           WHEN 'pending_review' THEN 3
+                           WHEN 'rejected' THEN 2
+                           WHEN 'deleted' THEN 1
+                           ELSE 0
+                       END DESC,
+                       created_at DESC,
+                       id DESC
+               ) AS rn
+        FROM channel_memory_extraction_items
+    )
+    WHERE rn = 1
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_channel_memory_items_tenant_channel_hash_unique
+    ON channel_memory_extraction_items(tenant_id, channel_instance_id, item_hash);`
 
 const addChannelContextCapabilityTables = `
 CREATE TABLE IF NOT EXISTS mcp_context_grants (

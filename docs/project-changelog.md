@@ -4,6 +4,23 @@ Significant changes, features, and fixes in reverse chronological order.
 
 ---
 
+## 2026-07-07
+
+### Passive channel memory extraction reliability
+
+**Fixes**
+
+- Fixed partial settings updates so enabling passive memory no longer clears review mode or other omitted options.
+- Extraction runs now checkpoint only messages actually sent within the extraction input budget, preventing skipped channel messages.
+- Pending review counts now count the full queue, retention uses the configured `retention_hours`, duplicate approvals preserve the existing episodic ID, and failed item writes mark the run as failed.
+- Passive memory candidates now dedupe across runs for the same channel instance and item hash in both PostgreSQL and SQLite.
+
+**Tests**
+
+- Added regression coverage for config patching, checkpoint bounds, pending counts, run failure finalization, retention, duplicate approval, and SQLite cross-run dedupe.
+
+---
+
 ## 2026-07-03
 
 ### Usage cost display precision
