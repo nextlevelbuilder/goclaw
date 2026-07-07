@@ -401,7 +401,8 @@ func handleResetCommand(
 
 	agentID := msg.AgentID
 	if agentID == "" {
-		agentID = resolveAgentRoute(deps.Cfg, msg.Channel, msg.ChatID, msg.PeerKind)
+		ctx := inboundMessageTenantContext(context.Background(), msg)
+		agentID = resolveAgentRouteForInbound(ctx, deps.Cfg, deps.AgentStore, msg.Channel, msg.ChatID, msg.PeerKind)
 	}
 	peerKind := msg.PeerKind
 	if peerKind == "" {
@@ -437,7 +438,8 @@ func handleStopCommand(
 
 	agentID := msg.AgentID
 	if agentID == "" {
-		agentID = resolveAgentRoute(deps.Cfg, msg.Channel, msg.ChatID, msg.PeerKind)
+		ctx := inboundMessageTenantContext(context.Background(), msg)
+		agentID = resolveAgentRouteForInbound(ctx, deps.Cfg, deps.AgentStore, msg.Channel, msg.ChatID, msg.PeerKind)
 	}
 	peerKind := msg.PeerKind
 	if peerKind == "" {

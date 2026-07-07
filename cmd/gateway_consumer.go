@@ -147,7 +147,7 @@ func consumeInboundMessages(ctx context.Context, msgBus *bus.MessageBus, agents 
 		}
 
 		// --- Normal messages: route through debouncer ---
-		prepareInboundDebounceMessage(&msg, deps)
+		prepareInboundDebounceMessage(ctx, &msg, deps)
 		debouncer.Push(msg)
 	}
 }

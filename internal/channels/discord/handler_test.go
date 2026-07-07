@@ -11,6 +11,8 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
+	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 )
 
 // --- resolveDisplayName ---
@@ -68,6 +70,30 @@ func TestResolveCachedChannelTitle(t *testing.T) {
 	}
 	if got := ch.resolveCachedChannelTitle("missing"); got != "" {
 		t.Fatalf("missing channel title = %q, want empty", got)
+	}
+}
+
+func TestTargetAgentIDUsesConfiguredChannelAgent(t *testing.T) {
+	ch := &Channel{BaseChannel: channels.NewBaseChannel(channels.TypeDiscord, nil, nil)}
+	ch.SetAgentID("co-assistant")
+
+	if got := ch.targetAgentID(nil); got != "co-assistant" {
+		t.Fatalf("targetAgentID() = %q, want configured channel agent", got)
+	}
+}
+
+func TestTargetAgentIDVoiceOverrideOnlyForAudio(t *testing.T) {
+	ch := &Channel{
+		BaseChannel: channels.NewBaseChannel(channels.TypeDiscord, nil, nil),
+		config:      config.DiscordConfig{VoiceAgentID: "voice-agent"},
+	}
+	ch.SetAgentID("co-assistant")
+
+	if got := ch.targetAgentID([]media.MediaInfo{{Type: media.TypeImage}}); got != "co-assistant" {
+		t.Fatalf("image targetAgentID() = %q, want channel agent", got)
+	}
+	if got := ch.targetAgentID([]media.MediaInfo{{Type: media.TypeVoice}}); got != "voice-agent" {
+		t.Fatalf("voice targetAgentID() = %q, want voice override", got)
 	}
 }
 

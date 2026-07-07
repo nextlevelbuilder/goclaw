@@ -40,12 +40,25 @@ func processNormalMessage(
 	// Determine target agent via bindings or explicit AgentID
 	agentID := msg.AgentID
 	if agentID == "" {
-		agentID = resolveAgentRoute(deps.Cfg, msg.Channel, msg.ChatID, msg.PeerKind)
+		agentID = resolveAgentRouteForInbound(ctx, deps.Cfg, deps.AgentStore, msg.Channel, msg.ChatID, msg.PeerKind)
 	}
 
 	agentLoop, err := deps.Agents.Get(ctx, agentID)
 	if err != nil {
-		slog.Warn("inbound: agent not found", "agent", agentID, "channel", msg.Channel)
+		slog.Warn("inbound: agent not found", "agent", agentID, "channel", msg.Channel, "error", err)
+		errContent := formatAgentError(err)
+		if deps.ChannelMgr != nil {
+			if ct := deps.ChannelMgr.ChannelTypeForName(msg.Channel); isExternalChannel(ct) {
+				errContent = ""
+			}
+		}
+		deps.MsgBus.PublishOutbound(bus.OutboundMessage{
+			Channel:  msg.Channel,
+			ChatID:   msg.ChatID,
+			Content:  errContent,
+			Metadata: msg.Metadata,
+			TenantID: msg.TenantID,
+		})
 		return
 	}
 

@@ -18,11 +18,12 @@ import (
 // debouncing (issue #63). See plans/260528-1351-multi-attachment-debounce/.
 const mediaDebounceFloorMs = 1000
 
-func prepareInboundDebounceMessage(msg *bus.InboundMessage, deps *ConsumerDeps) {
+func prepareInboundDebounceMessage(ctx context.Context, msg *bus.InboundMessage, deps *ConsumerDeps) {
 	if msg == nil || deps == nil || deps.Cfg == nil || msg.AgentID != "" {
 		return
 	}
-	msg.AgentID = resolveAgentRoute(deps.Cfg, msg.Channel, msg.ChatID, msg.PeerKind)
+	routeCtx := inboundMessageTenantContext(ctx, *msg)
+	msg.AgentID = resolveAgentRouteForInbound(routeCtx, deps.Cfg, deps.AgentStore, msg.Channel, msg.ChatID, msg.PeerKind)
 }
 
 func resolveInboundDebounceDelay(ctx context.Context, msg bus.InboundMessage, deps *ConsumerDeps) time.Duration {

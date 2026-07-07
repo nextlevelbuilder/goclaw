@@ -1,16 +1,20 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"mime"
 	"path/filepath"
 	"strings"
+
+	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/sessions"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
@@ -19,24 +23,58 @@ import (
 // Matching TS resolve-route.ts binding resolution.
 func resolveAgentRoute(cfg *config.Config, channel, chatID, peerKind string) string {
 	for _, binding := range cfg.Bindings {
-		match := binding.Match
-		if match.Channel != channel {
-			continue
+		if bindingMatchesInbound(binding, channel, chatID, peerKind) {
+			return config.NormalizeAgentID(binding.AgentID)
 		}
-
-		// Peer-level match (most specific)
-		if match.Peer != nil {
-			if match.Peer.Kind == peerKind && match.Peer.ID == chatID {
-				return config.NormalizeAgentID(binding.AgentID)
-			}
-			continue // has peer constraint but doesn't match — skip
-		}
-
-		// Channel-level match (least specific, no peer constraint)
-		return config.NormalizeAgentID(binding.AgentID)
 	}
 
 	return cfg.ResolveDefaultAgentID()
+}
+
+type defaultAgentGetter interface {
+	GetDefault(ctx context.Context) (*store.AgentData, error)
+}
+
+func resolveAgentRouteForInbound(ctx context.Context, cfg *config.Config, agentStore defaultAgentGetter, channel, chatID, peerKind string) string {
+	if cfg == nil {
+		return config.DefaultAgentID
+	}
+	for _, binding := range cfg.Bindings {
+		if bindingMatchesInbound(binding, channel, chatID, peerKind) {
+			return config.NormalizeAgentID(binding.AgentID)
+		}
+	}
+	if agentStore != nil {
+		if ag, err := agentStore.GetDefault(ctx); err == nil && ag != nil && ag.AgentKey != "" {
+			return ag.AgentKey
+		}
+	}
+	return cfg.ResolveDefaultAgentID()
+}
+
+func bindingMatchesInbound(binding config.AgentBinding, channel, chatID, peerKind string) bool {
+	match := binding.Match
+	if match.Channel != channel {
+		return false
+	}
+
+	// Peer-level match (most specific)
+	if match.Peer != nil {
+		return match.Peer.Kind == peerKind && match.Peer.ID == chatID
+	}
+
+	// Channel-level match (least specific, no peer constraint)
+	return true
+}
+
+func inboundMessageTenantContext(ctx context.Context, msg bus.InboundMessage) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if msg.TenantID != uuid.Nil {
+		return store.WithTenantID(ctx, msg.TenantID)
+	}
+	return store.WithTenantID(ctx, store.MasterTenantID)
 }
 
 // overrideSessionKeyFromLocalKey extracts topic/thread ID from the composite

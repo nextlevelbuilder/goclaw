@@ -304,30 +304,7 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 		}
 	}
 
-	// PATCHED: Clear AgentID so the gateway consumer's resolveAgentRoute
-	// (cmd/gateway_consumer_normal.go:40-43) matches via cfg.Bindings.
-	// The consumer checks: if msg.AgentID == "" → resolveAgentRoute(cfg, msg.Channel, msg.ChatID, msg.PeerKind)
-	// Bindings in config.json match by channel name + peer.kind + peer.id.
-	// If no binding matches, resolveAgentRoute falls back to cfg.ResolveDefaultAgentID().
-	targetAgentID := ""
-	slog.Info("discord: binding routing enabled",
-		"channel_id", channelID,
-		"channel_name", c.Name(),
-		"peer_kind", peerKind,
-	)
-
-	// Voice agent routing
-	if c.config.VoiceAgentID != "" {
-		for _, mi := range mediaList {
-			if mi.Type == media.TypeAudio || mi.Type == media.TypeVoice {
-				targetAgentID = c.config.VoiceAgentID
-				slog.Debug("discord: routing voice inbound to speaking agent",
-					"agent_id", targetAgentID, "media_type", mi.Type,
-				)
-				break
-			}
-		}
-	}
+	targetAgentID := c.targetAgentID(mediaList)
 
 	// Collect contact for processed messages (DM + group-mentioned).
 	if cc := c.ContactCollector(); cc != nil {
@@ -355,6 +332,22 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 	if peerKind == "group" {
 		c.GroupHistory().Clear(channelID)
 	}
+}
+
+func (c *Channel) targetAgentID(mediaList []media.MediaInfo) string {
+	targetAgentID := c.AgentID()
+	if c.config.VoiceAgentID == "" {
+		return targetAgentID
+	}
+	for _, mi := range mediaList {
+		if mi.Type == media.TypeAudio || mi.Type == media.TypeVoice {
+			slog.Debug("discord: routing voice inbound to speaking agent",
+				"agent_id", c.config.VoiceAgentID, "media_type", mi.Type,
+			)
+			return c.config.VoiceAgentID
+		}
+	}
+	return targetAgentID
 }
 
 // checkGroupPolicy evaluates the group policy for a sender, with pairing support.
