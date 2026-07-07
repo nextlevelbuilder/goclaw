@@ -77,6 +77,14 @@ type Server struct {
 	quotaChecker     *channels.QuotaChecker
 	sqlDB            *sql.DB           // for the CRUD MCP server's quota usage tool (today's trace summary)
 	tenantStore      store.TenantStore // for the CRUD MCP server's "X-GoClaw-Tenant-Id" header resolution
+	memoryStore      store.MemoryStore
+	kgStore          store.KnowledgeGraphStore
+	tracingStore     store.TracingStore
+	contactStore     store.ContactStore
+	pendingMsgStore  store.PendingMessageStore
+	activityStore    store.ActivityStore
+	systemCfgStore   store.SystemConfigStore
+	secureCLIStore   store.SecureCLIStore
 
 	// Phase 3 CRUD MCP server (/api/mcp/) dependencies: chat/LLM/logs/send/voices.
 	llmProviders      *providers.Registry
@@ -317,6 +325,14 @@ func (s *Server) BuildMux() *http.ServeMux {
 			VoiceCache:        s.voiceCache,
 			VoiceSecretsStore: s.voiceSecretsStore,
 			Tenants:           s.tenantStore,
+			Memory:            s.memoryStore,
+			KnowledgeGraph:    s.kgStore,
+			Tracing:           s.tracingStore,
+			Contacts:          s.contactStore,
+			PendingMessages:   s.pendingMsgStore,
+			Activity:          s.activityStore,
+			SystemConfigs:     s.systemCfgStore,
+			SecureCLI:         s.secureCLIStore,
 		}, s.version)
 		mux.Handle("/api/mcp/", mcpServerTokenAuthMiddleware(s.cfg.Gateway.MCPServerToken, crudHandler))
 	} else {
@@ -866,6 +882,41 @@ func (s *Server) SetProviderStore(ps store.ProviderStore) { s.providerStore = ps
 // internal/mcp/crud_server.go) to resolve the optional "X-GoClaw-Tenant-Id"
 // request header (UUID or slug) to a concrete tenant for every CRUD MCP call.
 func (s *Server) SetTenantStore(ts store.TenantStore) { s.tenantStore = ts }
+
+// SetMemoryStore sets the memory store, used by the CRUD MCP server (see
+// internal/mcp/crud_server.go) to expose goclaw_memory_* tools.
+func (s *Server) SetMemoryStore(ms store.MemoryStore) { s.memoryStore = ms }
+
+// SetKnowledgeGraphStore sets the knowledge graph store, used by the CRUD
+// MCP server (see internal/mcp/crud_server.go) to expose goclaw_kg_* tools.
+func (s *Server) SetKnowledgeGraphStore(kg store.KnowledgeGraphStore) { s.kgStore = kg }
+
+// SetTracingStore sets the LLM call tracing store, used by the CRUD MCP
+// server (see internal/mcp/crud_server.go) to expose goclaw_traces_* tools.
+func (s *Server) SetTracingStore(ts store.TracingStore) { s.tracingStore = ts }
+
+// SetContactStore sets the channel contact store, used by the CRUD MCP
+// server (see internal/mcp/crud_server.go) to expose goclaw_contacts_* tools.
+func (s *Server) SetContactStore(cs store.ContactStore) { s.contactStore = cs }
+
+// SetPendingMessageStore sets the pending-message store, used by the CRUD
+// MCP server (see internal/mcp/crud_server.go) to expose
+// goclaw_pending_messages_* tools.
+func (s *Server) SetPendingMessageStore(pm store.PendingMessageStore) { s.pendingMsgStore = pm }
+
+// SetActivityStore sets the audit-log store, used by the CRUD MCP server
+// (see internal/mcp/crud_server.go) to expose goclaw_activity_list.
+func (s *Server) SetActivityStore(as store.ActivityStore) { s.activityStore = as }
+
+// SetSystemConfigStore sets the system config store, used by the CRUD MCP
+// server (see internal/mcp/crud_server.go) to expose goclaw_system_config_*
+// tools.
+func (s *Server) SetSystemConfigStore(sc store.SystemConfigStore) { s.systemCfgStore = sc }
+
+// SetSecureCLIStore sets the secure-CLI binary registry store, used by the
+// CRUD MCP server (see internal/mcp/crud_server.go) to expose
+// goclaw_secure_cli_binaries_* tools.
+func (s *Server) SetSecureCLIStore(sc store.SecureCLIStore) { s.secureCLIStore = sc }
 
 // SetExecApprovalManager sets the exec approval manager, used by the CRUD MCP
 // server (see internal/mcp/crud_server.go) to expose exec approval tools.

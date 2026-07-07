@@ -85,6 +85,17 @@ type CRUDDeps struct {
 	// store.MasterTenantID (same fail-safe default resolveMCPTenantID uses
 	// when the header is absent/unresolvable).
 	Tenants store.TenantStore
+
+	// Phase 4: read-heavy/admin surfaces (memory, knowledge graph, tracing,
+	// tenants, providers) closing the CLI-vs-MCP coverage gap.
+	Memory          store.MemoryStore
+	KnowledgeGraph  store.KnowledgeGraphStore
+	Tracing         store.TracingStore
+	Contacts        store.ContactStore
+	PendingMessages store.PendingMessageStore
+	Activity        store.ActivityStore
+	SystemConfigs   store.SystemConfigStore
+	SecureCLI       store.SecureCLIStore
 }
 
 // NewCRUDServer builds a StreamableHTTPServer exposing goclaw's CRUD
@@ -102,6 +113,8 @@ func NewCRUDServer(deps CRUDDeps, version string) *mcpserver.StreamableHTTPServe
 	if deps.Agents != nil {
 		registerAgentCRUDTools(srv, deps.Agents)
 		registered += 5
+		registerAgentSkillPinCRUDTools(srv, deps.Agents)
+		registered += 2
 	}
 	if deps.Agents != nil && deps.AgentRuntime != nil {
 		registerAgentRuntimeCRUDTools(srv, deps.Agents, deps.AgentRuntime)
@@ -117,8 +130,12 @@ func NewCRUDServer(deps CRUDDeps, version string) *mcpserver.StreamableHTTPServe
 		if manage, ok := deps.Skills.(store.SkillManageStore); ok {
 			registerSkillUpdateCRUDTool(srv, deps.Skills, manage)
 			registered++
+			registerSkillGrantCRUDTools(srv, deps.Skills, manage)
+			registered += 2
 			if deps.Config != nil {
 				registerSkillWriteFileCRUDTool(srv, deps.Skills, manage, deps.Config)
+				registered++
+				registerSkillCreateCRUDTool(srv, manage, deps.Config)
 				registered++
 			}
 		}
@@ -217,6 +234,58 @@ func NewCRUDServer(deps CRUDDeps, version string) *mcpserver.StreamableHTTPServe
 		registerVoicesCRUDTools(srv, deps.VoiceCache, deps.VoiceSecretsStore)
 		registered += 2
 	}
+
+	// Phase 4: read-heavy/admin surfaces closing CLI-vs-MCP coverage gaps.
+	if deps.Memory != nil {
+		registerMemoryCRUDTools(srv, deps.Memory)
+		registered += 5
+	}
+	if deps.KnowledgeGraph != nil {
+		registerKnowledgeGraphCRUDTools(srv, deps.KnowledgeGraph)
+		registered += 14
+	}
+	if deps.Tenants != nil {
+		registerTenantsCRUDTools(srv, deps.Tenants)
+		registered += 6
+	}
+	if deps.Providers != nil {
+		registerProvidersCRUDTools(srv, deps.Providers)
+		registered += 5
+	}
+	if deps.Tracing != nil {
+		registerTracesCRUDTools(srv, deps.Tracing)
+		registered += 2
+	}
+	if deps.Contacts != nil {
+		registerContactsCRUDTools(srv, deps.Contacts)
+		registered += 4
+	}
+	if deps.PendingMessages != nil {
+		registerPendingMessagesCRUDTools(srv, deps.PendingMessages)
+		registered += 3
+	}
+	if deps.Activity != nil {
+		registerActivityCRUDTools(srv, deps.Activity)
+		registered++
+	}
+	if deps.SystemConfigs != nil {
+		registerSystemConfigCRUDTools(srv, deps.SystemConfigs)
+		registered += 4
+	}
+	if deps.Config != nil {
+		registerStorageCRUDTools(srv, deps.Config)
+		registered += 4
+	}
+	if deps.Agents != nil {
+		registerAgentExportCRUDTools(srv, deps.Agents)
+		registered += 2
+	}
+	if deps.SecureCLI != nil {
+		registerSecureCLICRUDTools(srv, deps.SecureCLI)
+		registered += 5
+	}
+	registerHealthCRUDTool(srv, deps.DB, version)
+	registered++
 
 	slog.Info("mcp.crud: tools registered", "count", registered)
 

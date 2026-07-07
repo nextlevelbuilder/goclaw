@@ -71,23 +71,9 @@ func handleSkillsUpdate(skills store.SkillStore, manage store.SkillManageStore) 
 			return mcpgo.NewToolResultError("skills.update: one of name or id is required"), nil
 		}
 
-		var skillID uuid.UUID
-		if idStr != "" {
-			id, err := uuid.Parse(idStr)
-			if err != nil {
-				return toolError("skills.update", fmt.Errorf("invalid id: %w", err))
-			}
-			skillID = id
-		} else {
-			info, ok := skills.GetSkill(ctx, name)
-			if !ok {
-				return mcpgo.NewToolResultError("skills.update: skill not found: " + name), nil
-			}
-			id, err := uuid.Parse(info.ID)
-			if err != nil {
-				return toolError("skills.update", fmt.Errorf("cannot resolve skill id: %w", err))
-			}
-			skillID = id
+		skillID, err := resolveSkillID(ctx, skills, idStr, name)
+		if err != nil {
+			return toolError("skills.update", err)
 		}
 
 		args := req.GetArguments()
@@ -101,6 +87,53 @@ func handleSkillsUpdate(skills store.SkillStore, manage store.SkillManageStore) 
 		}
 		skills.BumpVersion()
 		return jsonToolResult(map[string]string{"ok": "true"})
+	}
+}
+
+// registerSkillCreateCRUDTool registers goclaw_skills_create, letting MCP
+// callers create a new managed skill from SKILL.md content — the single-file
+// equivalent of the web UI's ZIP-based skill upload
+// (SkillsHandler.handleUpload in internal/http/skills_upload.go), via
+// skills.CreateFromContent. There is no per-caller identity on this MCP
+// surface (see crud_server.go doc comment), so owner_id is an explicit
+// param — same pattern as registerAgentCRUDTools' goclaw_agents_create,
+// which defaults owner_id to "system" when omitted.
+func registerSkillCreateCRUDTool(srv *mcpserver.MCPServer, manage store.SkillManageStore, cfg *config.Config) {
+	srv.AddTool(mcpgo.NewTool("goclaw_skills_create",
+		mcpgo.WithDescription("Create a new managed skill from a SKILL.md content string (name/slug/description are parsed from its YAML frontmatter)."),
+		mcpgo.WithString("content", mcpgo.Required(), mcpgo.Description("Full SKILL.md content, including YAML frontmatter (name, slug, description).")),
+		mcpgo.WithString("owner_id", mcpgo.Description("Owner user ID; defaults to \"system\".")),
+	), handleSkillsCreate(manage, cfg))
+}
+
+func handleSkillsCreate(manage store.SkillManageStore, cfg *config.Config) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+		content, err := req.RequireString("content")
+		if err != nil {
+			return toolError("skills.create", err)
+		}
+		ownerID := req.GetString("owner_id", "system")
+
+		tenantID := store.TenantIDFromContext(ctx)
+		tenantSlug := store.TenantSlugFromContext(ctx)
+		tenantSkillsDir := config.TenantSkillsStoreDir(cfg.DataDir, tenantID, tenantSlug)
+
+		id, slug, err := skills.CreateFromContent(ctx, manage, tenantSkillsDir, content, ownerID)
+		if err != nil {
+			switch {
+			case errors.Is(err, skills.ErrSkillNameRequired):
+				return mcpgo.NewToolResultError("skills.create: name is required in SKILL.md frontmatter"), nil
+			case errors.Is(err, skills.ErrSkillSlugInvalid):
+				return mcpgo.NewToolResultError("skills.create: invalid slug"), nil
+			case errors.Is(err, skills.ErrSkillSlugConflict):
+				return mcpgo.NewToolResultError("skills.create: slug conflicts with a system skill"), nil
+			case errors.Is(err, skills.ErrSkillGuardRejected):
+				return mcpgo.NewToolResultError("skills.create: " + err.Error()), nil
+			default:
+				return toolError("skills.create", err)
+			}
+		}
+		return jsonToolResult(map[string]any{"id": id.String(), "slug": slug})
 	}
 }
 
@@ -138,23 +171,9 @@ func handleSkillsWriteFile(skillStore store.SkillStore, manage store.SkillManage
 			return toolError("skills.write_file", err)
 		}
 
-		var skillID uuid.UUID
-		if idStr != "" {
-			id, err := uuid.Parse(idStr)
-			if err != nil {
-				return toolError("skills.write_file", fmt.Errorf("invalid id: %w", err))
-			}
-			skillID = id
-		} else {
-			info, ok := skillStore.GetSkill(ctx, name)
-			if !ok {
-				return mcpgo.NewToolResultError("skills.write_file: skill not found: " + name), nil
-			}
-			id, err := uuid.Parse(info.ID)
-			if err != nil {
-				return toolError("skills.write_file", fmt.Errorf("cannot resolve skill id: %w", err))
-			}
-			skillID = id
+		skillID, err := resolveSkillID(ctx, skillStore, idStr, name)
+		if err != nil {
+			return toolError("skills.write_file", err)
 		}
 
 		tenantID := store.TenantIDFromContext(ctx)
@@ -175,5 +194,123 @@ func handleSkillsWriteFile(skillStore store.SkillStore, manage store.SkillManage
 			}
 		}
 		return jsonToolResult(map[string]any{"ok": "true", "path": path, "version": version})
+	}
+}
+
+// registerSkillGrantCRUDTools registers goclaw_skills_grant/goclaw_skills_revoke,
+// letting MCP callers grant/revoke an agent's access to a skill — mirrors the
+// goclaw CLI's `skills grant`/`skills revoke` (internal/http/skills_grants.go
+// handleGrantAgent/handleRevokeAgent) via store.SkillManageStore.GrantToAgent/
+// RevokeFromAgent. Note: granting access is distinct from pinning a skill
+// into an agent's always-loaded context — see registerAgentSkillPinCRUDTools.
+func registerSkillGrantCRUDTools(srv *mcpserver.MCPServer, skillStore store.SkillStore, manage store.SkillManageStore) {
+	srv.AddTool(mcpgo.NewTool("goclaw_skills_grant",
+		mcpgo.WithDescription("Grant an agent access to a skill."),
+		mcpgo.WithString("name", mcpgo.Description("Skill name; used to resolve the skill if id is not given.")),
+		mcpgo.WithString("id", mcpgo.Description("Skill UUID.")),
+		mcpgo.WithString("agent_id", mcpgo.Required(), mcpgo.Description("Agent UUID to grant access to.")),
+		mcpgo.WithNumber("version", mcpgo.Description("Skill version to pin the grant to; defaults to the skill's current version.")),
+		mcpgo.WithBoolean("can_manage", mcpgo.Description("Whether the granted agent can also edit/manage this skill (default false).")),
+	), handleSkillsGrant(skillStore, manage))
+
+	srv.AddTool(mcpgo.NewTool("goclaw_skills_revoke",
+		mcpgo.WithDescription("Revoke an agent's access to a skill."),
+		mcpgo.WithString("name", mcpgo.Description("Skill name; used to resolve the skill if id is not given.")),
+		mcpgo.WithString("id", mcpgo.Description("Skill UUID.")),
+		mcpgo.WithString("agent_id", mcpgo.Required(), mcpgo.Description("Agent UUID to revoke access from.")),
+	), handleSkillsRevoke(skillStore, manage))
+}
+
+// resolveSkillID resolves a skill UUID from either an explicit id or a
+// name lookup — shared by every goclaw_skills_* tool that accepts both.
+func resolveSkillID(ctx context.Context, skillStore store.SkillStore, idStr, name string) (uuid.UUID, error) {
+	if idStr != "" {
+		id, err := uuid.Parse(idStr)
+		if err != nil {
+			return uuid.Nil, fmt.Errorf("invalid id: %w", err)
+		}
+		return id, nil
+	}
+	info, ok := skillStore.GetSkill(ctx, name)
+	if !ok {
+		return uuid.Nil, fmt.Errorf("skill not found: %s", name)
+	}
+	id, err := uuid.Parse(info.ID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("cannot resolve skill id: %w", err)
+	}
+	return id, nil
+}
+
+func handleSkillsGrant(skillStore store.SkillStore, manage store.SkillManageStore) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+		name := req.GetString("name", "")
+		idStr := req.GetString("id", "")
+		if name == "" && idStr == "" {
+			return mcpgo.NewToolResultError("skills.grant: one of name or id is required"), nil
+		}
+		agentIDStr, err := req.RequireString("agent_id")
+		if err != nil {
+			return toolError("skills.grant", err)
+		}
+		agentID, err := uuid.Parse(agentIDStr)
+		if err != nil {
+			return toolError("skills.grant", fmt.Errorf("invalid agent_id: %w", err))
+		}
+
+		skillID, err := resolveSkillID(ctx, skillStore, idStr, name)
+		if err != nil {
+			return toolError("skills.grant", err)
+		}
+
+		version := 0
+		if v, ok := req.GetArguments()["version"]; ok {
+			if f, ok := v.(float64); ok {
+				version = int(f)
+			}
+		}
+		if version == 0 {
+			info, ok := manage.GetSkillByID(ctx, skillID)
+			if !ok {
+				return mcpgo.NewToolResultError("skills.grant: skill not found"), nil
+			}
+			version = info.Version
+		}
+
+		canManage := req.GetBool("can_manage", false)
+		if err := manage.GrantToAgent(ctx, skillID, agentID, version, "mcp", canManage); err != nil {
+			return toolError("skills.grant", err)
+		}
+		skillStore.BumpVersion()
+		return jsonToolResult(map[string]string{"ok": "true"})
+	}
+}
+
+func handleSkillsRevoke(skillStore store.SkillStore, manage store.SkillManageStore) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+		name := req.GetString("name", "")
+		idStr := req.GetString("id", "")
+		if name == "" && idStr == "" {
+			return mcpgo.NewToolResultError("skills.revoke: one of name or id is required"), nil
+		}
+		agentIDStr, err := req.RequireString("agent_id")
+		if err != nil {
+			return toolError("skills.revoke", err)
+		}
+		agentID, err := uuid.Parse(agentIDStr)
+		if err != nil {
+			return toolError("skills.revoke", fmt.Errorf("invalid agent_id: %w", err))
+		}
+
+		skillID, err := resolveSkillID(ctx, skillStore, idStr, name)
+		if err != nil {
+			return toolError("skills.revoke", err)
+		}
+
+		if err := manage.RevokeFromAgent(ctx, skillID, agentID); err != nil {
+			return toolError("skills.revoke", err)
+		}
+		skillStore.BumpVersion()
+		return jsonToolResult(map[string]string{"ok": "true"})
 	}
 }

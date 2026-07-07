@@ -538,6 +538,30 @@ func runGateway() {
 	if pgStores.Tenants != nil {
 		server.SetTenantStore(pgStores.Tenants)
 	}
+	if pgStores.Memory != nil {
+		server.SetMemoryStore(pgStores.Memory)
+	}
+	if pgStores.KnowledgeGraph != nil {
+		server.SetKnowledgeGraphStore(pgStores.KnowledgeGraph)
+	}
+	if pgStores.Tracing != nil {
+		server.SetTracingStore(pgStores.Tracing)
+	}
+	if pgStores.Contacts != nil {
+		server.SetContactStore(pgStores.Contacts)
+	}
+	if pgStores.PendingMessages != nil {
+		server.SetPendingMessageStore(pgStores.PendingMessages)
+	}
+	if pgStores.Activity != nil {
+		server.SetActivityStore(pgStores.Activity)
+	}
+	if pgStores.SystemConfigs != nil {
+		server.SetSystemConfigStore(pgStores.SystemConfigs)
+	}
+	if pgStores.SecureCLI != nil {
+		server.SetSecureCLIStore(pgStores.SecureCLI)
+	}
 	server.SetSQLDB(pgStores.DB)
 
 	// Build OAuth token refresher before wireExtras so the resolver can inject tokens.

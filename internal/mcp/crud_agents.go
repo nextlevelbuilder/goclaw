@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -444,5 +445,145 @@ func handleAgentsFilesSet(agents store.AgentStore) mcpserver.ToolHandlerFunc {
 			"file":       map[string]any{"name": name, "missing": false, "size": len(content), "content": content},
 			"propagated": propagated,
 		})
+	}
+}
+
+// maxPinnedSkillsPerAgent mirrors the invariant documented on
+// store.AgentData.ParsePinnedSkills (agent_store.go) — pinned skills are
+// always-loaded into every turn's system prompt, so the count is capped to
+// bound prompt size.
+const maxPinnedSkillsPerAgent = 10
+
+// registerAgentSkillPinCRUDTools registers goclaw_agents_pin_skill/
+// goclaw_agents_unpin_skill. Pinning is distinct from granting access
+// (registerSkillGrantCRUDTools in crud_skills.go): a pinned skill is
+// auto-loaded into the agent's system prompt every turn (see
+// internal/agent/resolver.go's ParsePinnedSkills / PinnedSkillsSummary),
+// while a grant only makes the skill available for on-demand use_skill
+// calls. There is no dedicated pin/unpin RPC on the gateway — the web UI
+// sets other_config.pinned_skills via the general agents.update WS method
+// (internal/gateway/methods/agents_update.go), which replaces the whole
+// other_config JSONB blob wholesale. These handlers replicate that by
+// reading the agent's current other_config, splicing pinned_skills, and
+// writing the full blob back — a naive partial write would silently drop
+// every other other_config field (self_evolution_metrics, tts_params, etc).
+func registerAgentSkillPinCRUDTools(srv *mcpserver.MCPServer, agents store.AgentStore) {
+	srv.AddTool(mcpgo.NewTool("goclaw_agents_pin_skill",
+		mcpgo.WithDescription("Pin a skill onto an agent so it's auto-loaded into that agent's system prompt every turn (distinct from granting access)."),
+		mcpgo.WithString("id", mcpgo.Required(), mcpgo.Description("Agent UUID.")),
+		mcpgo.WithString("skill", mcpgo.Required(), mcpgo.Description("Skill slug/name to pin.")),
+	), handleAgentsPinSkill(agents))
+
+	srv.AddTool(mcpgo.NewTool("goclaw_agents_unpin_skill",
+		mcpgo.WithDescription("Unpin a skill from an agent (does not revoke access, only removes it from the always-loaded set)."),
+		mcpgo.WithString("id", mcpgo.Required(), mcpgo.Description("Agent UUID.")),
+		mcpgo.WithString("skill", mcpgo.Required(), mcpgo.Description("Skill slug/name to unpin.")),
+	), handleAgentsUnpinSkill(agents))
+}
+
+// spliceOtherConfigPinnedSkills reads ag's other_config JSONB, applies edit
+// to its pinned_skills list, and returns the full re-marshaled blob ready
+// to pass as agents.Update's "other_config" value (a full-blob replace, not
+// a merge — see registerAgentSkillPinCRUDTools doc comment).
+func spliceOtherConfigPinnedSkills(ag store.AgentData, edit func(current []string) ([]string, error)) (json.RawMessage, error) {
+	bag := map[string]any{}
+	if len(ag.OtherConfig) > 0 {
+		if err := json.Unmarshal(ag.OtherConfig, &bag); err != nil {
+			return nil, fmt.Errorf("cannot parse existing other_config: %w", err)
+		}
+	}
+	next, err := edit(ag.ParsePinnedSkills())
+	if err != nil {
+		return nil, err
+	}
+	bag["pinned_skills"] = next
+	return json.Marshal(bag)
+}
+
+func handleAgentsPinSkill(agents store.AgentStore) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+		idStr, err := req.RequireString("id")
+		if err != nil {
+			return toolError("agents.pin_skill", err)
+		}
+		id, err := uuid.Parse(idStr)
+		if err != nil {
+			return toolError("agents.pin_skill", fmt.Errorf("invalid id: %w", err))
+		}
+		skill, err := req.RequireString("skill")
+		if err != nil {
+			return toolError("agents.pin_skill", err)
+		}
+
+		ag, err := agents.GetByID(ctx, id)
+		if err != nil {
+			return toolError("agents.pin_skill", err)
+		}
+
+		raw, err := spliceOtherConfigPinnedSkills(*ag, func(current []string) ([]string, error) {
+			if slices.Contains(current, skill) {
+				return current, nil
+			}
+			if len(current) >= maxPinnedSkillsPerAgent {
+				return nil, fmt.Errorf("agent already has %d pinned skills (max %d)", len(current), maxPinnedSkillsPerAgent)
+			}
+			return append(current, skill), nil
+		})
+		if err != nil {
+			return toolError("agents.pin_skill", err)
+		}
+
+		if err := agents.Update(ctx, id, map[string]any{"other_config": []byte(raw)}); err != nil {
+			return toolError("agents.pin_skill", err)
+		}
+		updated, err := agents.GetByID(ctx, id)
+		if err != nil {
+			return toolError("agents.pin_skill", err)
+		}
+		return jsonToolResult(map[string]any{"ok": "true", "pinned_skills": updated.ParsePinnedSkills()})
+	}
+}
+
+func handleAgentsUnpinSkill(agents store.AgentStore) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+		idStr, err := req.RequireString("id")
+		if err != nil {
+			return toolError("agents.unpin_skill", err)
+		}
+		id, err := uuid.Parse(idStr)
+		if err != nil {
+			return toolError("agents.unpin_skill", fmt.Errorf("invalid id: %w", err))
+		}
+		skill, err := req.RequireString("skill")
+		if err != nil {
+			return toolError("agents.unpin_skill", err)
+		}
+
+		ag, err := agents.GetByID(ctx, id)
+		if err != nil {
+			return toolError("agents.unpin_skill", err)
+		}
+
+		raw, err := spliceOtherConfigPinnedSkills(*ag, func(current []string) ([]string, error) {
+			out := make([]string, 0, len(current))
+			for _, s := range current {
+				if s != skill {
+					out = append(out, s)
+				}
+			}
+			return out, nil
+		})
+		if err != nil {
+			return toolError("agents.unpin_skill", err)
+		}
+
+		if err := agents.Update(ctx, id, map[string]any{"other_config": []byte(raw)}); err != nil {
+			return toolError("agents.unpin_skill", err)
+		}
+		updated, err := agents.GetByID(ctx, id)
+		if err != nil {
+			return toolError("agents.unpin_skill", err)
+		}
+		return jsonToolResult(map[string]any{"ok": "true", "pinned_skills": updated.ParsePinnedSkills()})
 	}
 }
