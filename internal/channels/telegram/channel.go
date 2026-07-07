@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -308,6 +309,14 @@ func (c *Channel) Start(ctx context.Context) error {
 						go func(u telego.Update) {
 							defer c.handlerWg.Done()
 							defer func() { <-c.handlerSem }()
+							// Never let a single malformed update crash the whole
+							// gateway — recover and log instead of propagating.
+							defer func() {
+								if r := recover(); r != nil {
+									slog.Error("telegram: handleMessage panic recovered",
+										"channel", c.Name(), "panic", r, "stack", string(debug.Stack()))
+								}
+							}()
 							c.handleMessage(pollCtx, u)
 						}(update)
 					case <-pollCtx.Done():

@@ -445,7 +445,12 @@ func (c *Channel) processResolvedMessage(ctx context.Context, rctx resolvedMessa
 		return
 	}
 	rep := members[0]
-	user := rep.From
+	// Channel posts have no From — synthesize a sender from the channel (same as
+	// handleMessage) so the user.* metadata below never nil-derefs.
+	user, _ := resolveMessageSender(rep)
+	if user == nil {
+		return
+	}
 	content := rctx.content
 
 	// --- Media download (only when bot will process the message) ---
