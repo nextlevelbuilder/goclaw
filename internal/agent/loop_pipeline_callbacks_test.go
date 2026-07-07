@@ -70,3 +70,19 @@ func TestCountMCPToolDefs_SkipsNilFunction(t *testing.T) {
 		t.Errorf("countMCPToolDefs = %d, want 2", got)
 	}
 }
+
+// The image_generation sentinel must carry a non-nil Function so the many
+// pipeline/provider sites that read td.Function.Name (think_stage, codex_build,
+// shouldRetryTaskMCP, history tool names, …) never nil-deref. Root-cause guard
+// for the v3.14.0 crash — one landmine removed instead of guarding every site.
+func TestImageGenToolDef_FunctionNonNil(t *testing.T) {
+	if imageGenToolDef.Type != "image_generation" {
+		t.Fatalf("sentinel Type = %q, want image_generation", imageGenToolDef.Type)
+	}
+	if imageGenToolDef.Function == nil {
+		t.Fatal("sentinel Function must be non-nil to avoid downstream nil-deref")
+	}
+	if imageGenToolDef.Function.Name != "image_generation" {
+		t.Errorf("sentinel Function.Name = %q, want image_generation", imageGenToolDef.Function.Name)
+	}
+}
