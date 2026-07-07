@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -40,6 +41,9 @@ type Channel struct {
 	reactions         sync.Map                    // localKey string → *StatusReactionController
 	threadIDs         sync.Map                    // localKey string → messageThreadID int (for forum topic routing)
 	mentionMode       string                      // "strict" (default) or "yield"
+	triggerWords      map[string]struct{}         // cached, normalized agent trigger-words from IDENTITY.md; whole-word, case-insensitive
+	triggerWordsAt    time.Time                   // when triggerWords was last refreshed
+	triggerMu         sync.Mutex                  // guards triggerWords/triggerWordsAt
 	botDisplayName    string                      // bot's first_name from GetMe (e.g. "ViệtBot"); captured once at Start
 	pollCtx           context.Context             // long-polling context (cancelled by pollCancel); promoted from Start-local so background helpers (e.g. albumAggregator) can derive from it
 	pollCancel        context.CancelFunc          // cancels the long polling context
@@ -238,6 +242,7 @@ func (c *Channel) Start(ctx context.Context) error {
 		AllowedUpdates: []string{
 			"message",
 			"edited_message",
+			"channel_post",
 			"callback_query",
 			"my_chat_member",
 		},
@@ -297,13 +302,21 @@ func (c *Channel) Start(ctx context.Context) error {
 					slog.Info("telegram updates channel closed")
 					return
 				}
-				if update.Message != nil {
+				if update.Message != nil || update.ChannelPost != nil {
 					select {
 					case c.handlerSem <- struct{}{}:
 						c.handlerWg.Add(1)
 						go func(u telego.Update) {
 							defer c.handlerWg.Done()
 							defer func() { <-c.handlerSem }()
+							// Never let a single malformed update crash the whole
+							// gateway — recover and log instead of propagating.
+							defer func() {
+								if r := recover(); r != nil {
+									slog.Error("telegram: handleMessage panic recovered",
+										"channel", c.Name(), "panic", r, "stack", string(debug.Stack()))
+								}
+							}()
 							c.handleMessage(pollCtx, u)
 						}(update)
 					case <-pollCtx.Done():

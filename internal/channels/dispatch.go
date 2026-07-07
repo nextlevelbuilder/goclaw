@@ -195,6 +195,52 @@ func (m *Manager) SendToChannel(ctx context.Context, channelName, chatID, conten
 	return channel.Send(ctx, msg)
 }
 
+// MessageEditor is optionally implemented by channels that support editing an
+// existing message in place (e.g. Telegram admin editing a channel post).
+type MessageEditor interface {
+	EditMessage(ctx context.Context, chatID string, messageID int, content string) error
+}
+
+// EditChannelMessage edits an existing message in a channel by name. Returns an
+// error if the channel is unknown or its type does not support editing.
+func (m *Manager) EditChannelMessage(ctx context.Context, channelName, chatID string, messageID int, content string) error {
+	m.mu.RLock()
+	channel, exists := m.channels[channelName]
+	m.mu.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("channel %s not found", channelName)
+	}
+	editor, ok := channel.(MessageEditor)
+	if !ok {
+		return fmt.Errorf("channel %s (%s) does not support editing messages", channelName, channel.Type())
+	}
+	return editor.EditMessage(ctx, chatID, messageID, content)
+}
+
+// TopicMessagePoster is optionally implemented by channels that can post a
+// message into a forum topic and return the sent message's id.
+type TopicMessagePoster interface {
+	PostToTopic(ctx context.Context, chatID string, threadID int, content string) (int, error)
+}
+
+// PostToTopic posts a message into a forum topic of a channel and returns the
+// sent message id. Errors if the channel is unknown or does not support it.
+func (m *Manager) PostToTopic(ctx context.Context, channelName, chatID string, threadID int, content string) (int, error) {
+	m.mu.RLock()
+	channel, exists := m.channels[channelName]
+	m.mu.RUnlock()
+
+	if !exists {
+		return 0, fmt.Errorf("channel %s not found", channelName)
+	}
+	poster, ok := channel.(TopicMessagePoster)
+	if !ok {
+		return 0, fmt.Errorf("channel %s (%s) does not support topic posting", channelName, channel.Type())
+	}
+	return poster.PostToTopic(ctx, chatID, threadID, content)
+}
+
 // SendMediaToChannel delivers a message with media attachments to a specific channel by name.
 // media must be non-empty; use SendToChannel for text-only messages.
 // Returns ErrMediaUnsupported if the channel type does not support media.

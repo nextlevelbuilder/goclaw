@@ -718,6 +718,35 @@ func runGateway() {
 		if cs, ok := t.(tools.ChannelSenderAware); ok {
 			cs.SetChannelSender(channelMgr.SendToChannel)
 		}
+		if ce, ok := t.(tools.ChannelEditorAware); ok {
+			ce.SetChannelEditor(channelMgr.EditChannelMessage)
+		}
+		if tr, ok := t.(tools.TopicResolverAware); ok && pgStores != nil && pgStores.Contacts != nil {
+			contacts := pgStores.Contacts
+			tr.SetTopicResolver(func(ctx context.Context, channel, chatID, topicName string) (string, bool) {
+				list, err := contacts.ListContacts(ctx, store.ContactListOpts{
+					ChannelInstance: channel,
+					ContactType:     "topic",
+					Limit:           500,
+				})
+				if err != nil {
+					return "", false
+				}
+				want := strings.ToLower(strings.TrimSpace(topicName))
+				for _, c := range list {
+					if c.SenderID != chatID || c.ThreadID == nil || c.DisplayName == nil {
+						continue
+					}
+					if strings.ToLower(strings.TrimSpace(*c.DisplayName)) == want {
+						return *c.ThreadID, true
+					}
+				}
+				return "", false
+			})
+		}
+		if tp, ok := t.(tools.TopicPosterAware); ok {
+			tp.SetTopicPoster(channelMgr.PostToTopic)
+		}
 		if tc, ok := t.(tools.ChannelTenantCheckerAware); ok {
 			tc.SetChannelTenantChecker(channelMgr.ChannelTenantID)
 		}

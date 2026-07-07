@@ -41,6 +41,23 @@ func stripBotMention(text, botUsername string) string {
 	return strings.TrimSpace(regexp.MustCompile(pattern).ReplaceAllString(text, "$1"))
 }
 
+// resolveMessageSender returns the effective sender for a message and whether it
+// is a channel post. Channel posts are authored by the channel and carry no From,
+// so a synthetic sender is derived from the channel itself, letting channel posts
+// flow through the same group-style gate and routing as group messages.
+func resolveMessageSender(message *telego.Message) (*telego.User, bool) {
+	isChannel := message.Chat.Type == "channel"
+	user := message.From
+	if user == nil && isChannel {
+		user = &telego.User{
+			ID:        message.Chat.ID,
+			FirstName: message.Chat.Title,
+			Username:  message.Chat.Username,
+		}
+	}
+	return user, isChannel
+}
+
 // detectMention checks if a Telegram message mentions the bot.
 // Checks both msg.Text/Entities (text messages) and msg.Caption/CaptionEntities (photo/media messages).
 func (c *Channel) detectMention(msg *telego.Message, botUsername string) bool {

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 var (
 	parseErrRe           = regexp.MustCompile(`(?i)can't parse entities|parse entities|find end of the entity`)
 	messageNotModifiedRe = regexp.MustCompile(`(?i)message is not modified`)
+	noTextToEditRe       = regexp.MustCompile(`(?i)no text in the message to edit`)
 	threadNotFoundRe     = regexp.MustCompile(`(?i)message thread not found`)
 	messageTooLongRe     = regexp.MustCompile(`(?i)message is too long|entities too long`)
 	htmlTagRe            = regexp.MustCompile(`<[^>]*>`)
@@ -789,6 +791,71 @@ func (c *Channel) sendDocument(ctx context.Context, chatID telego.ChatID, filePa
 		_, err = c.bot.SendDocument(ctx, params)
 	}
 	return err
+}
+
+// EditMessage edits an existing message's text by chat id string, applying the
+// same markdown→HTML rendering as outbound sends. Implements channels.MessageEditor
+// so the agent's `message` tool (action=edit) can flip status markers in place.
+// The bot must be an admin with edit rights in the target chat/channel.
+func (c *Channel) EditMessage(ctx context.Context, chatID string, messageID int, content string) error {
+	id, err := strconv.ParseInt(chatID, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid telegram chat id %q: %w", chatID, err)
+	}
+	html := markdownToTelegramHTML(content)
+	err = c.editMessage(ctx, id, messageID, html)
+	// Media messages (photo/document with a caption, e.g. a receipt image with a
+	// status line) have no text — editMessageText returns "there is no text in the
+	// message to edit". Fall back to editing the caption instead.
+	if err != nil && noTextToEditRe.MatchString(err.Error()) {
+		return c.editMessageCaption(ctx, id, messageID, html)
+	}
+	return err
+}
+
+// editMessageCaption edits the caption of a media message (photo/document).
+func (c *Channel) editMessageCaption(ctx context.Context, chatID int64, messageID int, htmlCaption string) error {
+	editCap := &telego.EditMessageCaptionParams{
+		ChatID:    tu.ID(chatID),
+		MessageID: messageID,
+		Caption:   htmlCaption,
+		ParseMode: telego.ModeHTML,
+	}
+	return c.retrySend(ctx, "editMessageCaption", nil, func(ctx context.Context) error {
+		_, err := c.bot.EditMessageCaption(ctx, editCap)
+		if err != nil && messageNotModifiedRe.MatchString(err.Error()) {
+			return nil
+		}
+		return err
+	})
+}
+
+// PostToTopic posts a message into a forum topic (thread) and returns the sent
+// message id, so the agent can remember it and edit that exact post later.
+// Implements channels.TopicMessagePoster. Applies the same markdown→HTML render
+// as regular sends. threadID <= 0 posts to the group's General topic.
+func (c *Channel) PostToTopic(ctx context.Context, chatID string, threadID int, content string) (int, error) {
+	id, err := strconv.ParseInt(chatID, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid telegram chat id %q: %w", chatID, err)
+	}
+	msg := tu.Message(tu.ID(id), markdownToTelegramHTML(content))
+	msg.ParseMode = telego.ModeHTML
+	if threadID > 0 {
+		msg.MessageThreadID = threadID
+	}
+	var sentID int
+	err = c.retrySend(ctx, "sendMessage", nil, func(ctx context.Context) error {
+		sent, e := c.bot.SendMessage(ctx, msg)
+		if e != nil {
+			return e
+		}
+		if sent != nil {
+			sentID = sent.MessageID
+		}
+		return nil
+	})
+	return sentID, err
 }
 
 // editMessage edits an existing message's text.

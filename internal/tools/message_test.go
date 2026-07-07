@@ -905,3 +905,143 @@ func TestMessageTargetEnforced(t *testing.T) {
 		}
 	}
 }
+
+func TestMessageToolEditAction(t *testing.T) {
+	var gotChannel, gotChat, gotContent string
+	var gotMsgID int
+	tool := NewMessageTool("", true)
+	tool.SetChannelEditor(func(_ context.Context, ch, chatID string, messageID int, content string) error {
+		gotChannel, gotChat, gotMsgID, gotContent = ch, chatID, messageID, content
+		return nil
+	})
+	r := tool.Execute(context.Background(), map[string]any{
+		"action":     "edit",
+		"channel":    "telegram",
+		"target":     float64(-1003995384344),
+		"message_id": float64(42),
+		"message":    "Status\nItem: ✅\nAlice: ✅",
+	})
+	if r.IsError {
+		t.Fatalf("unexpected error: %s", r.ForLLM)
+	}
+	if gotChannel != "telegram" || gotChat != "-1003995384344" || gotMsgID != 42 {
+		t.Errorf("editor got channel=%q chat=%q msgID=%d, want telegram/-1003995384344/42", gotChannel, gotChat, gotMsgID)
+	}
+	if gotContent == "" || !strings.Contains(gotContent, "Alice: ✅") {
+		t.Errorf("editor content = %q, want new status text", gotContent)
+	}
+}
+
+func TestMessageToolEditRequiresMessageID(t *testing.T) {
+	tool := NewMessageTool("", true)
+	tool.SetChannelEditor(func(_ context.Context, _, _ string, _ int, _ string) error { return nil })
+	r := tool.Execute(context.Background(), map[string]any{
+		"action":  "edit",
+		"channel": "telegram",
+		"target":  "123",
+		"message": "x",
+	})
+	if !r.IsError {
+		t.Error("edit without message_id must error")
+	}
+}
+
+func TestMessageToolEditPrefersContextChannel(t *testing.T) {
+	var gotChannel, gotChat string
+	tool := NewMessageTool("", true)
+	tool.SetChannelEditor(func(_ context.Context, ch, chatID string, _ int, _ string) error {
+		gotChannel, gotChat = ch, chatID
+		return nil
+	})
+	// Context has the real channel instance + chat; LLM wrongly passes platform name + null target.
+	ctx := WithToolChatID(WithToolChannel(context.Background(), "mychan"), "-1003995384344")
+	r := tool.Execute(ctx, map[string]any{
+		"action":     "edit",
+		"channel":    "telegram", // wrong — must be ignored in favor of ctx
+		"target":     nil,
+		"message_id": float64(42),
+		"message":    "Status\nAlice: ✅\nItem: ✅",
+	})
+	if r.IsError {
+		t.Fatalf("unexpected error: %s", r.ForLLM)
+	}
+	if gotChannel != "mychan" || gotChat != "-1003995384344" {
+		t.Errorf("editor got channel=%q chat=%q, want mychan/-1003995384344 (context wins)", gotChannel, gotChat)
+	}
+}
+
+func TestMessageToolTopicSend(t *testing.T) {
+	var gotChannel, gotChat, gotTopic string
+	tool := NewMessageTool("", true)
+	tool.SetTopicResolver(func(_ context.Context, ch, chatID, name string) (string, bool) {
+		gotChannel, gotChat, gotTopic = ch, chatID, name
+		if name == "Announcements" {
+			return "77", true
+		}
+		return "", false
+	})
+	mb := bus.New()
+	tool.SetMessageBus(mb)
+
+	ctx := WithToolChatID(WithToolChannel(context.Background(), "mychan"), "-100500")
+	r := tool.Execute(ctx, map[string]any{
+		"action":  "send",
+		"topic":   "Announcements",
+		"message": "invoice marked paid, but Alice has not transferred yet",
+	})
+	if r.IsError {
+		t.Fatalf("unexpected error: %s", r.ForLLM)
+	}
+	if gotChannel != "mychan" || gotChat != "-100500" || gotTopic != "Announcements" {
+		t.Errorf("resolver got %q/%q/%q, want mychan/-100500/Announcements", gotChannel, gotChat, gotTopic)
+	}
+	out, ok := mb.SubscribeOutbound(ctx)
+	if !ok {
+		t.Fatal("expected an outbound message")
+	}
+	if out.Metadata["message_thread_id"] != "77" {
+		t.Errorf("outbound thread id = %q, want 77", out.Metadata["message_thread_id"])
+	}
+}
+
+func TestMessageToolTopicNotFound(t *testing.T) {
+	tool := NewMessageTool("", true)
+	tool.SetTopicResolver(func(_ context.Context, _, _, _ string) (string, bool) { return "", false })
+	tool.SetMessageBus(bus.New())
+	ctx := WithToolChatID(WithToolChannel(context.Background(), "mychan"), "-100500")
+	r := tool.Execute(ctx, map[string]any{"action": "send", "topic": "Nonexistent", "message": "x"})
+	if !r.IsError {
+		t.Error("unknown topic must return an error")
+	}
+}
+
+func TestMessageToolTopicSendReturnsMessageID(t *testing.T) {
+	var gotThread int
+	tool := NewMessageTool("", true)
+	tool.SetTopicResolver(func(_ context.Context, _, _, name string) (string, bool) {
+		if name == "Announcements" {
+			return "77", true
+		}
+		return "", false
+	})
+	// Synchronous poster returns the sent message id.
+	tool.SetTopicPoster(func(_ context.Context, ch, chatID string, threadID int, content string) (int, error) {
+		gotThread = threadID
+		return 4242, nil
+	})
+	ctx := WithToolChatID(WithToolChannel(context.Background(), "mychan"), "-100500")
+	r := tool.Execute(ctx, map[string]any{
+		"action":  "send",
+		"topic":   "Announcements",
+		"message": "Terminator 2 — not watched",
+	})
+	if r.IsError {
+		t.Fatalf("unexpected error: %s", r.ForLLM)
+	}
+	if gotThread != 77 {
+		t.Errorf("poster got thread %d, want 77", gotThread)
+	}
+	if !strings.Contains(r.ForLLM, `"message_id":4242`) {
+		t.Errorf("result must include the sent message_id, got: %s", r.ForLLM)
+	}
+}

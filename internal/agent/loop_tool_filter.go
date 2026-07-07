@@ -8,10 +8,16 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
-// imageGenToolDef is the native image_generation tool sentinel. Its Type-only form
-// is passed through by the Codex/OpenAI request builder as a bare {"type":"image_generation"}
-// object — no "function" wrapper, no parameters.
-var imageGenToolDef = providers.ToolDefinition{Type: "image_generation"}
+// imageGenToolDef is the native image_generation tool sentinel. The request
+// builder keys off Type (Codex emits a bare {"type":"image_generation"} object,
+// no function wrapper). Function is populated with a name-only schema so the many
+// pipeline/provider sites that read td.Function.Name (think_stage allowlist,
+// shouldRetryTaskMCP, history tool names, non-codex request builders) never
+// nil-deref — the v3.14.0 crash was one such site.
+var imageGenToolDef = providers.ToolDefinition{
+	Type:     "image_generation",
+	Function: &providers.ToolFunctionSchema{Name: "image_generation"},
+}
 
 func (l *Loop) toolVisibleForChannel(name, channelType string, telegramManagerPermissions []string) bool {
 	if name == "telegram_manager" {

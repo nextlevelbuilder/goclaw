@@ -102,3 +102,35 @@ func TestSupportsPromptCacheParams(t *testing.T) {
 		t.Fatal("generic provider should not support prompt cache params")
 	}
 }
+
+// A Function-nil tool definition (e.g. the native image_generation sentinel,
+// providers.ToolDefinition{Type: "image_generation"}) must not panic the
+// mcp-def counter. Regression for the v3.14.0 nil-pointer crash.
+func TestCountMCPToolDefs_SkipsNilFunction(t *testing.T) {
+	defs := []providers.ToolDefinition{
+		{Type: "image_generation"}, // Function == nil
+		{Function: &providers.ToolFunctionSchema{Name: "mcp_notion_search"}},
+		{Function: &providers.ToolFunctionSchema{Name: " mcp_slack_post "}},
+		{Function: &providers.ToolFunctionSchema{Name: "read_file"}},
+	}
+
+	if got := countMCPToolDefs(defs); got != 2 {
+		t.Errorf("countMCPToolDefs = %d, want 2", got)
+	}
+}
+
+// The image_generation sentinel must carry a non-nil Function so the many
+// pipeline/provider sites that read td.Function.Name (think_stage, codex_build,
+// shouldRetryTaskMCP, history tool names, …) never nil-deref. Root-cause guard
+// for the v3.14.0 crash — one landmine removed instead of guarding every site.
+func TestImageGenToolDef_FunctionNonNil(t *testing.T) {
+	if imageGenToolDef.Type != "image_generation" {
+		t.Fatalf("sentinel Type = %q, want image_generation", imageGenToolDef.Type)
+	}
+	if imageGenToolDef.Function == nil {
+		t.Fatal("sentinel Function must be non-nil to avoid downstream nil-deref")
+	}
+	if imageGenToolDef.Function.Name != "image_generation" {
+		t.Errorf("sentinel Function.Name = %q, want image_generation", imageGenToolDef.Function.Name)
+	}
+}

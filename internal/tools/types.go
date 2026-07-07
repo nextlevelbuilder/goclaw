@@ -101,6 +101,36 @@ type ChannelSenderAware interface {
 	SetChannelSender(ChannelSender)
 }
 
+// ChannelEditor abstracts editing an existing message in a channel.
+// Implemented by channels.Manager.EditChannelMessage. Not all channel types
+// support editing arbitrary messages; unsupported channels return an error.
+type ChannelEditor func(ctx context.Context, channel, chatID string, messageID int, content string) error
+
+// ChannelEditorAware tools can receive a channel editor function.
+type ChannelEditorAware interface {
+	SetChannelEditor(ChannelEditor)
+}
+
+// TopicResolver resolves a forum topic name to its message_thread_id within a
+// specific chat, so the agent can post into a named topic (e.g. "Announcements").
+// Returns ("", false) when the topic is unknown.
+type TopicResolver func(ctx context.Context, channel, chatID, topicName string) (threadID string, ok bool)
+
+// TopicResolverAware tools can receive a forum topic resolver.
+type TopicResolverAware interface {
+	SetTopicResolver(TopicResolver)
+}
+
+// TopicPoster synchronously posts a message into a forum topic (by thread id)
+// and returns the sent message's id, so the agent can remember it and edit that
+// exact message later instead of posting a duplicate.
+type TopicPoster func(ctx context.Context, channel, chatID string, threadID int, content string) (messageID int, err error)
+
+// TopicPosterAware tools can receive a topic poster.
+type TopicPosterAware interface {
+	SetTopicPoster(TopicPoster)
+}
+
 // ChannelTenantChecker returns the tenant UUID for a channel instance.
 // Used by the message tool to prevent cross-tenant sends.
 // Returns (tenantID, exists). Zero tenantID means legacy/config-based channel.

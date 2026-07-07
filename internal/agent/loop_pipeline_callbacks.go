@@ -267,18 +267,29 @@ func (l *Loop) makeBuildFilteredTools(req *RunRequest) func(state *pipeline.RunS
 			cacheValid = true
 		}
 
-		mcpDefs := 0
-		for _, td := range toolDefs {
-			if td.Function != nil && strings.HasPrefix(strings.TrimSpace(td.Function.Name), "mcp_") {
-				mcpDefs++
-			}
-		}
 		slog.Debug("mcp.filtered_tools",
 			"tool_defs_count", len(toolDefs),
-			"mcp_defs_count", mcpDefs,
+			"mcp_defs_count", countMCPToolDefs(toolDefs),
 			"iteration", state.Iteration)
 		return toolDefs, nil
 	}
+}
+
+// countMCPToolDefs counts MCP-bridged tool definitions (name prefix "mcp_").
+// It skips entries with a nil Function — e.g. the native image_generation
+// sentinel providers.ToolDefinition{Type: "image_generation"} — which would
+// otherwise nil-deref (the v3.14.0 panic on every message for codex agents).
+func countMCPToolDefs(toolDefs []providers.ToolDefinition) int {
+	n := 0
+	for _, td := range toolDefs {
+		if td.Function == nil {
+			continue
+		}
+		if strings.HasPrefix(strings.TrimSpace(td.Function.Name), "mcp_") {
+			n++
+		}
+	}
+	return n
 }
 
 // makeAuthorizeToolCall enforces a runtime fail-closed allowlist check before
