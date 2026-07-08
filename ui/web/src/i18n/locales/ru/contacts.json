@@ -1,0 +1,59 @@
+{
+  "title": "Contacts",
+  "description": "Auto-collected contacts from all channel interactions.",
+  "searchPlaceholder": "Search by name, username, or ID...",
+  "filter": "Filter",
+  "emptyTitle": "No contacts",
+  "emptyDescription": "Contacts will appear here as users interact with your agents through channels.",
+  "noMatchTitle": "No matching contacts",
+  "noMatchDescription": "Try a different search term or filter.",
+  "columns": {
+    "name": "Name",
+    "username": "Username",
+    "senderId": "Sender ID",
+    "channelType": "Channel",
+    "peerKind": "Type",
+    "lastSeen": "Last Seen",
+    "merged": "Merged"
+  },
+  "permissionsNote": {
+    "title": "Channel permissions for contact names",
+    "telegram": "Telegram — Names and usernames available automatically.",
+    "discord": "Discord — Display names and usernames available automatically.",
+    "zalo": "Zalo — Display names available automatically.",
+    "slack": "Slack — Display names resolved via Slack API (bot must be in workspace).",
+    "feishu": "Feishu/Lark — Requires contact:user.base:readonly permission. Without this, names will be empty.",
+    "bitrix24": "Bitrix24 — Requires `user` scope + one `user.get` call per new sender. Names may be empty briefly on first message."
+  },
+  "selectedCount": "{{count}} selected",
+  "merge": {
+    "button": "Merge",
+    "unmergeButton": "Unmerge",
+    "dialogTitle": "Merge Contacts",
+    "dialogDescription": "Link selected contacts to a tenant user identity. This identifies them as the same person across channels.",
+    "linkExisting": "Link to existing user",
+    "createNew": "Create new user",
+    "selectUser": "Select a tenant user...",
+    "displayName": "Display Name",
+    "displayNamePlaceholder": "e.g. John Doe",
+    "userId": "User ID",
+    "userIdPlaceholder": "Unique identifier",
+    "confirm": "Merge",
+    "cancel": "Cancel",
+    "success": "Contacts merged successfully",
+    "unmergeSuccess": "Contacts unmerged successfully",
+    "error": "Failed to merge contacts",
+    "unmergeError": "Failed to unmerge contacts",
+    "comingSoon": "This feature is under development and not yet available."
+  },
+  "types": {
+    "user": "User",
+    "group": "Group"
+  },
+  "filters": {
+    "allChannels": "All Channels",
+    "allTypes": "All Types",
+    "direct": "Direct",
+    "group": "Group"
+  }
+}

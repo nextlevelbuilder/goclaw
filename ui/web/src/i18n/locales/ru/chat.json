@@ -1,0 +1,34 @@
+{
+  "deleteChat": "Delete chat",
+  "deleteChatConfirm": "This will permanently delete this conversation and all its messages.",
+  "newChat": "New Chat",
+  "openSessions": "Open sessions",
+  "readOnly": "Read-only — this session belongs to another user",
+  "contextUsage": {
+    "tooltip": "{{used}} / {{max}} tokens ({{percent}}%) · {{compactions}} compactions · last: {{lastCompact}}",
+    "never": "never"
+  },
+  "empty": {
+    "title": "Start a conversation",
+    "description": "Send a message to begin chatting with the agent."
+  },
+  "media": {
+    "image": "Image",
+    "video": "Video",
+    "audio": "Audio",
+    "voice": "Voice message",
+    "document": "Document",
+    "animation": "Animation",
+    "attached": "attached"
+  },
+  "forwardedFrom": "Forwarded from",
+  "replyingTo": "Replying to",
+  "error": {
+    "notConnected": "Not connected. Please wait for the connection to be established."
+  },
+  "selectAgent": {
+    "title": "Select an agent",
+    "description": "Choose an agent to start chatting"
+  },
+  "imageGenDownloadName": "generated-{{timestamp}}.png"
+}

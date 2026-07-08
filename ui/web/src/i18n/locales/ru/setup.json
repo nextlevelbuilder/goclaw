@@ -1,0 +1,122 @@
+{
+  "layout": {
+    "subtitle": "Let's get your gateway up and running"
+  },
+  "steps": {
+    "provider": "Provider",
+    "model": "Model",
+    "agent": "Agent",
+    "channel": "Channel",
+    "channelOptional": "(Optional)"
+  },
+  "complete": {
+    "title": "Setup Complete!",
+    "ready": "Your system is ready to go!",
+    "description": "Provider, agent, and channel have been configured. You can manage them anytime from the dashboard.",
+    "goToDashboard": "Go to Dashboard"
+  },
+  "provider": {
+    "title": "Configure LLM Provider",
+    "descriptionCli": "Connect using your local Claude CLI installation. No API key needed.",
+    "descriptionOauth": "Sign in to create one named OpenAI Codex OAuth account. Give it an alias now, then add more aliases later for pool members or round robin.",
+    "description": "Connect to an AI provider to power your agents. You'll need an API key.",
+    "providerType": "Provider Type",
+    "providerTypeHint": "The LLM service you want to connect. OpenRouter is recommended for access to multiple models.",
+    "name": "Name",
+    "nameHint": "Internal identifier for this provider. Auto-generated from provider type.",
+    "oauthAlias": "Account Alias",
+    "oauthAliasPlaceholder": "e.g. primary",
+    "oauthAliasHint": "Use a unique lowercase alias such as primary, work, or team for this OpenAI/Codex account. The alias becomes the provider/model prefix used by agents.",
+    "displayName": "Display Name (Optional)",
+    "displayNameHint": "Friendly label for this OpenAI/Codex account. Helpful when you add more aliases later.",
+    "displayNamePlaceholder": "Primary Codex account",
+    "apiKey": "API Key *",
+    "apiKeyHint": "Your provider's secret key. Encrypted server-side and never exposed in API responses.",
+    "apiBase": "API Base URL",
+    "apiBaseHint": "The endpoint URL for API requests. Auto-filled based on provider type. Override only if using a custom proxy.",
+    "creating": "Creating...",
+    "create": "Create Provider",
+    "errors": {
+      "apiKeyRequired": "API key is required",
+      "oauthProviderNotFound": "OAuth authentication succeeded, but the provider could not be found. Please try again.",
+      "failedCreate": "Failed to create provider"
+    }
+  },
+  "model": {
+    "title": "Select & Verify Model",
+    "description": "Choose a model and verify that your provider connection works.",
+    "provider": "Provider:",
+    "model": "Model *",
+    "modelHint": "The AI model to use. Select from the list or type a model ID manually if not listed.",
+    "loadingModels": "Loading models...",
+    "selectModel": "Select or type a model ID",
+    "noModelsHint": "This provider doesn't list models — type the model ID manually.",
+    "verified": "Verified",
+    "verify": "Verify",
+    "verifying": "Verifying...",
+    "continue": "Continue",
+    "modelVerified": "Model verified",
+    "modelVerifiedDesc": "{{model}} is working correctly",
+    "verificationFailed": "Verification failed. Check your API key and model."
+  },
+  "agent": {
+    "title": "Create Your First Agent",
+    "description": "An agent is your AI assistant. Customize its name and personality.",
+    "provider": "Provider:",
+    "model": "Model:",
+    "displayName": "Display Name",
+    "displayNameHint": "Will be auto-generated during summoning based on the agent personality.",
+    "agentKey": "Agent Key",
+    "agentKeyHint": "Unique identifier for the agent. Lowercase letters, numbers, and hyphens only.",
+    "agentKeyPlaceholder": "my-agent",
+    "personality": "Agent Personality",
+    "personalityHint": "Describe your agent's role and behavior. AI will generate context files from this during summoning.",
+    "personalityPlaceholder": "Describe your agent's personality, purpose, and behavior...",
+    "personalityHintBottom": "Customize this prompt to shape your agent's personality and expertise.",
+    "selfEvolve": "Self-Evolution",
+    "selfEvolveDesc": "Allow agent to evolve its communication style over time via SOUL.md",
+    "gatewayOperatorAccess": "Gateway operator access",
+    "gatewayOperatorAccessDesc": "Grant revocable SecureCLI access to the local goclaw CLI for this first agent.",
+    "gatewayOperatorGranted": "Gateway operator access granted",
+    "gatewayOperatorGrantedDesc": "The agent can use the local goclaw CLI. Review or revoke it in Packages → CLI Credentials.",
+    "gatewayOperatorWarning": "Gateway operator access warning",
+    "creating": "Creating...",
+    "create": "Create Agent",
+    "summoningFailed": "Summoning failed. Please adjust your settings and try again.",
+    "errors": {
+      "noProvider": "No provider available",
+      "failedCreate": "Failed to create agent"
+    }
+  },
+  "channel": {
+    "title": "Connect a Channel",
+    "description": "Connect a messaging platform to your agent. You can always add channels later.",
+    "skip": "Skip",
+    "skipFinish": "Skip & Finish",
+    "agent": "Agent:",
+    "channelType": "Channel Type",
+    "channelTypeHint": "The messaging platform to connect. E.g. Telegram, Discord, Zalo.",
+    "name": "Name",
+    "nameHint": "Internal identifier for this channel instance. Auto-generated from channel type.",
+    "namePlaceholder": "my-telegram",
+    "displayName": "Display Name",
+    "displayNameHint": "A friendly name shown in the UI. Optional.",
+    "displayNamePlaceholder": "Sales Bot",
+    "credentials": "Credentials",
+    "credentialsHint": "Encrypted server-side. Never returned in API responses.",
+    "creating": "Creating...",
+    "create": "Create Channel",
+    "errors": {
+      "noAgent": "No agent available",
+      "requiredFields": "Required: {{fields}}",
+      "failedCreate": "Failed to create channel"
+    }
+  },
+  "common": {
+    "back": "Back"
+  },
+  "skipSetup": "Skip setup and go to dashboard",
+  "skipSetupConfirm": "Are you sure you want to skip setup? You can always configure providers and agents later from the dashboard.",
+  "switchTenant": "Switch",
+  "allTenants": "All Tenants"
+}

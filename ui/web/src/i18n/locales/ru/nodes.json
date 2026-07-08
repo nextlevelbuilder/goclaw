@@ -1,0 +1,35 @@
+{
+  "title": "Nodes",
+  "description": "Manage paired devices and pending pairing requests",
+  "emptyTitle": "No devices",
+  "emptyDescription": "No paired devices or pending pairing requests.",
+  "pendingRequests": "Pending Requests ({{count}})",
+  "pairedDevices": "Paired Devices ({{count}})",
+  "sender": "Sender:",
+  "chat": "Chat:",
+  "columns": {
+    "channel": "Channel",
+    "senderId": "Sender ID",
+    "paired": "Paired",
+    "by": "By",
+    "actions": "Actions"
+  },
+  "approve": "Approve",
+  "deny": "Deny",
+  "revoke": "Revoke",
+  "confirmApprove": {
+    "title": "Approve Pairing",
+    "description": "Approve pairing request from {{channel}}:{{senderId}} (code: {{code}})? This device will be able to interact with agents.",
+    "confirmLabel": "Approve"
+  },
+  "confirmDeny": {
+    "title": "Deny Pairing",
+    "description": "Deny pairing request from {{channel}}:{{senderId}} (code: {{code}})? The request will be removed.",
+    "confirmLabel": "Deny"
+  },
+  "confirmRevoke": {
+    "title": "Revoke Device",
+    "description": "Revoke pairing for {{channel}}:{{senderId}}? The device will need to re-pair.",
+    "confirmLabel": "Revoke"
+  }
+}

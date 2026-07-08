@@ -1,0 +1,125 @@
+{
+  "title": "Runtime & Packages",
+  "description": "Manage runtimes and installed packages inside the active GoClaw runtime container",
+  "runtimes": {
+    "title": "Runtimes",
+    "scopeTitle": "Container-scoped runtime status",
+    "scopeDesc": "These checks run inside the active GoClaw runtime container. Host-installed runtimes, shell profile changes, and nvm-managed binaries are not used here.",
+    "minimalImageHint": "Published latest includes Python but not Node. Use the full image for Node/npm and bundled extras, use base for the smallest image, rebuild with ENABLE_NODE=true / ENABLE_FULL_SKILLS=true, or install runtimes manually in this container.",
+    "available": "Available",
+    "missing": "Missing",
+    "missingInContainer": "Missing in container"
+  },
+  "system": {
+    "title": "System Packages",
+    "placeholder": "Package name (e.g. github-cli)"
+  },
+  "pip": {
+    "title": "Python Packages",
+    "placeholder": "Package name (e.g. pandas)"
+  },
+  "npm": {
+    "title": "Node Packages",
+    "placeholder": "Package name (e.g. typescript)"
+  },
+  "github": {
+    "title": "GitHub Binaries",
+    "placeholder": "owner/repo[@tag] (e.g. cli/cli@v2.45.0)",
+    "browse": "Browse releases",
+    "muslWarning": "Alpine Linux uses musl libc. Binaries compiled against glibc may fail at runtime. Prefer static or musl-compatible releases.",
+    "muslDismiss": "Dismiss",
+    "pickerTitle": "Select release from {{repo}}",
+    "pickerEmpty": "No releases found for {{repo}}",
+    "pickerLoading": "Loading releases...",
+    "pickerMatchingAssets": "{{count}} matching / {{total}} total",
+    "pickerPrerelease": "Pre-release",
+    "pickerSelect": "Select",
+    "columns": {
+      "repo": "Repository",
+      "tag": "Version",
+      "binaries": "Binaries",
+      "installedAt": "Installed"
+    }
+  },
+  "updates": {
+    "available": "{{count}} updates available",
+    "none": "All packages up-to-date",
+    "refresh": "Refresh",
+    "refreshing": "Refreshing...",
+    "lastCheckedAgo": "Last checked {{ago}}",
+    "neverChecked": "Not checked yet",
+    "update": "Update",
+    "updateAll": "Update All",
+    "updating": "Updating {{name}}...",
+    "updateSucceeded": "{{name}} updated to {{version}}",
+    "updateFailed": "Failed to update {{name}}: {{reason}}",
+    "updateAllResult": "{{succeeded}} succeeded, {{failed}} failed",
+    "confirmAllTitle": "Update {{count}} packages?",
+    "confirmAllBody": "This may take several minutes. Individual updates are applied sequentially.",
+    "selected": "{{count}} selected",
+    "manifestDesyncWarn": "Binary was updated but the manifest save failed. Manual recovery required for {{name}}.",
+    "cacheStale": "Updates cache is stale. Please refresh first.",
+    "adminOnly": "Administrator access required",
+    "empty": "No updates available",
+    "source": {
+      "github": "GitHub",
+      "pip": "pip",
+      "npm": "npm",
+      "apk": "apk"
+    },
+    "filter": {
+      "all": "All sources",
+      "label": "Filter"
+    },
+    "unavailable": {
+      "pip": "pip not installed",
+      "npm": "npm not installed",
+      "apk": "apk not available on this system"
+    },
+    "button": {
+      "tooltip": {
+        "github": "Update from GitHub release",
+        "pip": "Update via pip",
+        "npm": "Update via npm",
+        "apk": "Update via apk (system package)"
+      }
+    },
+    "summary": {
+      "perSource": "{{source}}: {{count}}"
+    }
+  },
+  "actions": {
+    "install": "Install",
+    "uninstall": "Uninstall",
+    "installing": "Installing...",
+    "uninstalling": "Removing..."
+  },
+  "messages": {
+    "installSuccess": "{{name}} installed successfully",
+    "installError": "Failed to install {{name}}",
+    "uninstallSuccess": "{{name}} removed successfully",
+    "uninstallError": "Failed to remove {{name}}"
+  },
+  "confirmUninstall": {
+    "title": "Confirm Uninstall",
+    "description": "Are you sure you want to remove {{name}}? This action cannot be undone."
+  },
+  "table": {
+    "name": "Name",
+    "version": "Version",
+    "actions": "Actions",
+    "empty": "No packages installed"
+  },
+  "tabs": {
+    "system": "System",
+    "python": "Python",
+    "node": "Node",
+    "github": "GitHub",
+    "cliCredentials": "CLI Credentials"
+  },
+  "runtimesHeader": {
+    "title": "Runtimes",
+    "available": "Available",
+    "missing": "Missing"
+  }
+}

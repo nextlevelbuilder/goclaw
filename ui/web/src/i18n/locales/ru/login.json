@@ -1,0 +1,41 @@
+{
+  "subtitle": "Sign in to the gateway dashboard",
+  "selectTenant": "Select Tenant",
+  "selectTenantDescription": "Choose a tenant to continue",
+  "allTenantsOption": "All Tenants",
+  "allTenantsDescription": "View data from all tenants",
+  "noAccess": "No Access",
+  "noAccessDescription": "You don't have access to any tenant. Contact your administrator.",
+  "tabs": {
+    "token": "Token",
+    "pairing": "Pairing"
+  },
+  "token": {
+    "userId": "User ID",
+    "userIdPlaceholder": "your-user-id",
+    "userIdHint": "Use \"system\" for full system access",
+    "gatewayToken": "Gateway Token",
+    "tokenPlaceholder": "Bearer token",
+    "connect": "Connect",
+    "connecting": "Connecting...",
+    "errorInvalidCredentials": "Invalid credentials. Check your token and user ID.",
+    "errorServer": "Server returned {{status}}. Please try again.",
+    "errorCannotConnect": "Cannot connect to gateway. Check if the server is running."
+  },
+  "pairing": {
+    "userId": "User ID",
+    "userIdPlaceholder": "your-user-id",
+    "noTokenNeeded": "No token needed. A pairing code will be generated for an admin to approve.",
+    "requestAccess": "Request Access",
+    "connecting": "Connecting...",
+    "errorConnectionLost": "Connection lost. Please try again.",
+    "errorCannotConnect": "Could not connect to gateway.",
+    "askAdmin": "Ask an admin to approve this code:",
+    "orRun": "Or run:",
+    "waitingForApproval": "Waiting for approval...",
+    "cancel": "Cancel",
+    "approved": "Access approved! Redirecting..."
+  },
+  "noAccessHint": "Ask your administrator to add you to a tenant, or use a different account.",
+  "logout": "Sign Out"
+}

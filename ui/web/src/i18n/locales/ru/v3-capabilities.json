@@ -1,0 +1,56 @@
+{
+  "title": "Agent Capabilities V3",
+  "subtitle": "Core systems powering your agent's intelligence",
+  "note": "All capabilities are always-on for v3 agents.",
+  "tabs": {
+    "pipeline": "Pipeline",
+    "memory": "Memory",
+    "knowledge": "Knowledge",
+    "orchestration": "Orchestration"
+  },
+  "pipeline": {
+    "title": "8-Stage Execution Pipeline",
+    "description": "Every message passes through 8 structured stages in 3 phases.",
+    "setup": "Setup",
+    "setupDesc": "Enriches context with agent config, workspace metadata, user history, and auto-injected memories from past sessions.",
+    "iteration": "Iteration Loop",
+    "iterationDesc": "Repeats until task complete or max iterations reached.",
+    "think": "Think",
+    "thinkDesc": "LLM reasoning with full context",
+    "prune": "Prune",
+    "pruneDesc": "Token management and compaction",
+    "tools": "Tools",
+    "toolsDesc": "Execute tool calls from LLM",
+    "observe": "Observe",
+    "observeDesc": "Capture and validate output",
+    "checkpoint": "Checkpoint",
+    "checkpointDesc": "Save intermediate state",
+    "finalize": "Finalize",
+    "finalizeDesc": "Persist metadata, emit events for memory consolidation, and clean up the run."
+  },
+  "memory": {
+    "title": "3-Tier Memory System",
+    "description": "Progressive memory from conversation to long-term knowledge.",
+    "l0Title": "L0 Working Memory",
+    "l0Desc": "Session history with token-based auto-compaction. When history exceeds the context window threshold, older messages are summarized via LLM and truncated. Memory flush extracts key facts into persistent files before compaction.",
+    "l1Title": "L1 Episodic Memory",
+    "l1Desc": "Session summaries created after each conversation run. Each gets an L0 abstract (~50 tokens) for fast injection. Hybrid FTS + vector search with 90-day TTL. Relevant abstracts are auto-injected into the system prompt every turn.",
+    "l2Title": "L2 Semantic Memory",
+    "l2Desc": "Knowledge graph with entities and relations extracted via LLM (confidence threshold 0.75). Auto-dedup merges similar entities. Dreaming consolidates 5+ episodic entries into long-term fact documents searchable via memory tools.",
+    "eventFlow": "Event-driven: session.completed triggers L1 creation, which triggers L2 extraction and dreaming."
+  },
+  "knowledge": {
+    "kgTitle": "Knowledge Graph",
+    "kgDesc": "Entities (people, projects, technologies) and their relations are extracted from session summaries via LLM. Temporal versioning tracks when facts were valid. Searchable via the knowledge_graph_search tool with multi-hop traversal up to 5 levels deep.",
+    "vaultTitle": "Knowledge Vault",
+    "vaultDesc": "Document registry with [[wikilink]] resolution. Unified search blends vault documents (40%), episodic memories (30%), and KG entities (30%) into a single ranked result set. SHA-256 hashing detects content changes for incremental indexing.",
+    "dreamingTitle": "Dreaming",
+    "dreamingDesc": "When 5+ session summaries accumulate, LLM synthesizes long-term facts: user preferences, project architecture, recurring patterns, and key decisions with rationale. Stored as searchable memory documents. Debounced at 10-minute intervals per agent."
+  },
+  "orchestration": {
+    "delegateTitle": "Agent Delegation",
+    "delegateDesc": "Agents delegate tasks to linked agents via agent_links with permission checking. Sync mode blocks up to a configurable timeout waiting for results. Async mode fires immediately and announces results back via message bus when complete.",
+    "evolutionTitle": "Self-Evolution",
+    "evolutionDesc": "Tracks tool usage and retrieval metrics on a weekly cycle. Detects three patterns: low retrieval usage (< 20%), high tool failure rates (< 10% success), and repeated tool patterns (> 100 calls/week). Suggests configuration adjustments with guardrail-protected auto-apply and rollback."
+  }
+}

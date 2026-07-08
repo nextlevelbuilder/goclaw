@@ -1,0 +1,36 @@
+{
+  "title": "Realtime Events",
+  "description": "Live WebSocket events across all teams and agents",
+  "live": "Live",
+  "paused": "Paused",
+  "resume": "Resume",
+  "pause": "Pause",
+  "clear": "Clear",
+  "scrollToBottom": "Scroll to bottom",
+  "eventCount": "{{count}} event",
+  "eventCountPlural": "{{count}} events",
+  "categories": {
+    "all": "All",
+    "task": "Task",
+    "message": "Message",
+    "agent": "Agent",
+    "teamCrud": "Team CRUD",
+    "agentLink": "Agent Link"
+  },
+  "filters": {
+    "allTeams": "All teams",
+    "allUsers": "All users",
+    "allChats": "All chats"
+  },
+  "global": "Global",
+  "emptyTitle": "No events yet",
+  "emptyPaused": "Event capture is paused. Resume to see new events.",
+  "emptyWaiting": "Waiting for real-time events... Events will appear as agents work.",
+  "detail": {
+    "copy": "Copy",
+    "copied": "Copied"
+  },
+  "toolBadge": { "error": "error", "activated": "activated", "ok": "ok" },
+  "moreArgs": "...{{count}} more",
+  "parentLabel": "parent:"
+}

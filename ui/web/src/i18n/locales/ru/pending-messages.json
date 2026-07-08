@@ -1,0 +1,50 @@
+{
+  "title": "Pending Messages",
+  "description": "Buffered channel messages awaiting agent processing",
+  "emptyTitle": "No pending messages",
+  "emptyDescription": "No buffered message groups found. Messages appear here when channels buffer incoming messages before agent processing.",
+  "howItWorks": {
+    "title": "How it works",
+    "step1": "Messages from channels (Telegram, Discord, etc.) are buffered here while the agent is busy or offline.",
+    "step2": "When the buffer reaches the threshold (default: 50 messages), auto-compaction kicks in — an LLM summarizes older messages, keeping only the 15 most recent.",
+    "step3": "On the agent's next turn, the compacted summary + recent messages are injected as context, so the agent catches up without being overwhelmed.",
+    "compactAction": "Compact — Manually trigger LLM summarization now. Useful when you want the agent to process a clean summary instead of raw message flood.",
+    "clearAction": "Clear — Permanently delete all buffered messages for a group. Use when messages are no longer relevant."
+  },
+  "columns": {
+    "channel": "Channel",
+    "group": "Group",
+    "messages": "Messages",
+    "status": "Status",
+    "lastActivity": "Last Activity",
+    "actions": "Actions"
+  },
+  "status": {
+    "compacted": "Compacted",
+    "raw": "Raw"
+  },
+  "compact": "Compact",
+  "compacting": "Compacting…",
+  "clear": "Clear",
+  "confirmClear": {
+    "title": "Clear messages?",
+    "description": "This will permanently delete all messages in {{channel}} / {{key}}. This action cannot be undone.",
+    "cancel": "Cancel",
+    "confirm": "Clear"
+  },
+  "dialog": {
+    "title": "Messages — {{name}}",
+    "noMessages": "No messages found.",
+    "summary": "Summary"
+  },
+  "toast": {
+    "compacted": "Compaction complete",
+    "compactedSummarized": "Summarized to {{count}} messages",
+    "compactedDeleted": "All messages deleted (no LLM provider available)",
+    "compacting": "Compacting…",
+    "compactingDesc": "LLM summarization running in background. List will refresh automatically.",
+    "failedCompact": "Compaction failed",
+    "cleared": "Messages cleared",
+    "failedClear": "Failed to clear messages"
+  }
+}

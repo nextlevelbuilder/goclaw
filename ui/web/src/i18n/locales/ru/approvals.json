@@ -1,0 +1,33 @@
+{
+  "title": "Approvals",
+  "description": "Pending execution approvals",
+  "pending": "{{count}} pending",
+  "emptyTitle": "No pending approvals",
+  "emptyDescription": "All execution requests have been resolved. New requests will appear here in real-time.",
+  "allowOnce": "Allow Once",
+  "allowAlways": "Allow Always",
+  "deny": "Deny",
+  "confirmAllowOnce": {
+    "title": "Allow Once",
+    "description": "Allow execution of \"{{command}}\" from agent \"{{agentId}}\"?"
+  },
+  "confirmAllowAlways": {
+    "title": "Allow Always",
+    "description": "Permanently allow \"{{command}}\" for agent \"{{agentId}}\"? This command will be auto-approved in the future."
+  },
+  "confirmDeny": {
+    "title": "Deny Execution",
+    "description": "Deny execution request \"{{command}}\" from agent \"{{agentId}}\"?",
+    "confirmLabel": "Deny"
+  },
+  "toast": {
+    "approved": "Approved",
+    "approvedAlways": "Command always allowed",
+    "approvedOnce": "Command approved",
+    "approveFailed": "Failed to approve",
+    "denied": "Denied",
+    "deniedDesc": "Command denied",
+    "denyFailed": "Failed to deny",
+    "unknownError": "Unknown error"
+  }
+}

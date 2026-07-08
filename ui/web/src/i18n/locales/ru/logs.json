@@ -1,0 +1,15 @@
+{
+  "title": "Logs",
+  "description": "Live log tailing",
+  "descriptionLive": "Live tailing at {{level}} level",
+  "live": "Live",
+  "start": "Start",
+  "stop": "Stop",
+  "clear": "Clear",
+  "filterPlaceholder": "Filter logs...",
+  "logLevelTitle": "Log level",
+  "emptyWaiting": "Waiting for logs...",
+  "emptyFilter": "No logs match filter.",
+  "emptyStart": "Click \"Start\" to begin streaming logs.",
+  "count": "{{filtered}}/{{total}}"
+}

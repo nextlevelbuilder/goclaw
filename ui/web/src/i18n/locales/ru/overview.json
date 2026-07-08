@@ -1,0 +1,93 @@
+{
+  "title": "Dashboard",
+  "description": "Gateway overview and quota usage",
+  "tabs": {
+    "overview": "Overview",
+    "usage": "Usage"
+  },
+  "statCards": {
+    "requestsToday": "Requests Today",
+    "tokensToday": "Tokens Today",
+    "costToday": "Cost Today",
+    "agents": "Agents",
+    "channels": "Channels",
+    "channelsAttention": "{{count}} need attention",
+    "running": "running",
+    "online": "online",
+    "users": "{{count}} users",
+    "inOut": "{{input}} in / {{output}} out"
+  },
+  "providers": {
+    "noProvidersTitle": "No LLM providers configured",
+    "noEnabledTitle": "No LLM providers enabled",
+    "noProvidersDesc": "You need to add at least one LLM provider before agents can work. ",
+    "noEnabledDesc": "All providers are currently disabled. Enable at least one to start using agents. ",
+    "goToSettings": "Go to Provider Settings"
+  },
+  "systemHealth": {
+    "title": "System Health",
+    "uptime": "Uptime",
+    "version": "Version",
+    "database": "Database",
+    "providers": "Providers",
+    "tools": "Tools",
+    "sessions": "Sessions",
+    "clients": "Clients",
+    "channels": "Channels",
+    "needsAttention": "Needs attention",
+    "channelsNeedingAttention": "{{count}} channels",
+    "failedCount": "{{count}} failed",
+    "warningCountOne": "{{count}} warning",
+    "warningCountOther": "{{count}} warnings",
+    "moreAttention": "+{{count}} more",
+    "active": "{{count}} active",
+    "none": "none",
+    "runtimes": "Runtimes"
+  },
+  "connectedClients": {
+    "title": "Connected Clients",
+    "noClients": "No clients connected",
+    "columns": {
+      "ip": "IP",
+      "user": "User",
+      "role": "Role",
+      "connected": "Connected"
+    },
+    "you": "you"
+  },
+  "cronJobs": {
+    "title": "Cron Jobs",
+    "manage": "Manage",
+    "noJobs": "No cron jobs configured",
+    "disabled": "disabled"
+  },
+  "recentRequests": {
+    "title": "Recent Requests",
+    "viewAll": "View All",
+    "noRequests": "No recent requests",
+    "columns": {
+      "time": "Time",
+      "name": "Name",
+      "user": "User",
+      "channel": "Channel",
+      "tokens": "Tokens",
+      "duration": "Duration",
+      "status": "Status"
+    }
+  },
+  "quotaUsage": {
+    "title": "Quota Usage",
+    "columns": {
+      "userGroup": "User / Group",
+      "hour": "Hour",
+      "day": "Day",
+      "week": "Week"
+    },
+    "noLimit": "no limit"
+  },
+  "embedding": {
+    "title": "Embedding",
+    "notConfigured": "Not configured",
+    "configure": "Configure in Providers →"
+  }
+}
