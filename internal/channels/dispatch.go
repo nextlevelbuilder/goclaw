@@ -85,53 +85,7 @@ func (m *Manager) dispatchOutbound(ctx context.Context) {
 			}
 
 			if err := channel.Send(sendCtx, msg); err != nil {
-				slog.Error("error sending message to channel",
-					"channel", msg.Channel,
-					"chat_id", msg.ChatID,
-					"content_len", len(msg.Content),
-					"content_preview", Truncate(msg.Content, 160),
-					"error", err,
-				)
-
-				// Cross-target forwards (message tool, forward=true) are fire-and-forget
-				// onto this bus — the tool already returned "sent" to the model and
-				// announced success to the origin chat before this consumer ever ran.
-				// If the destination itself was bad (e.g. the model passed a display
-				// name instead of a real chat ID), tell the ORIGIN chat the truth
-				// instead of retrying against the same broken destination or, worse,
-				// silently dropping a text-only failure as the old code did.
-				if originCh := msg.Metadata[bus.MetaForwardOriginChannel]; originCh != "" {
-					originChat := msg.Metadata[bus.MetaForwardOriginChatID]
-					m.mu.RLock()
-					origin, originExists := m.channels[originCh]
-					m.mu.RUnlock()
-					if originExists && originChat != "" {
-						notifyMsg := bus.OutboundMessage{
-							Channel: originCh,
-							ChatID:  originChat,
-							Content: fmt.Sprintf("⚠️ Không gửi được tin nhắn forward tới %q — kiểm tra lại đích gửi (có thể chưa đúng ID nhóm/chat).", msg.ChatID),
-						}
-						if err2 := origin.Send(sendCtx, notifyMsg); err2 != nil {
-							slog.Warn("failed to send forward-failure notice to origin",
-								"origin_channel", originCh, "origin_chat", originChat, "error", err2)
-						}
-					}
-				} else if len(msg.Media) > 0 {
-					// Try to send a text-only error notification back to the chat.
-					// Only for media failures — text-only failures likely mean the chat
-					// is inaccessible (kicked, blocked, etc.) so retrying won't help.
-					notifyMsg := bus.OutboundMessage{
-						Channel:  msg.Channel,
-						ChatID:   msg.ChatID,
-						Content:  formatChannelSendError(err),
-						Metadata: sendErrorMeta(msg.Metadata),
-						TenantID: msg.TenantID,
-					}
-					if err2 := channel.Send(sendCtx, notifyMsg); err2 != nil {
-						slog.Warn("failed to send error notification",
-							"channel", msg.Channel, "error", err2)
-					}
-				}
+				m.handleSendFailure(sendCtx, channel, msg, err)
 			}
 
 			// Clean up temp media files only. Workspace-generated files are preserved
@@ -144,6 +98,63 @@ func (m *Manager) dispatchOutbound(ctx context.Context) {
 					}
 				}
 			}
+		}
+	}
+}
+
+// handleSendFailure reports a failed channel.Send from dispatchOutbound.
+//
+// Cross-target forwards (message tool, forward=true) are fire-and-forget onto
+// the bus — the tool already returned "sent" to the model and announced
+// success to the origin chat before this consumer ever ran. If the
+// destination itself was bad (e.g. the model passed a display name instead
+// of a real chat ID), this tells the ORIGIN chat the truth instead of
+// retrying against the same broken destination or, for text-only forwards,
+// silently dropping the failure.
+//
+// Non-forward sends keep the older behavior: retry-notify the same chat, and
+// only for media failures (text-only failures on a chat the agent is already
+// bound to usually mean the chat itself is inaccessible — kicked, blocked —
+// so retrying won't help).
+func (m *Manager) handleSendFailure(sendCtx context.Context, channel Channel, msg bus.OutboundMessage, sendErr error) {
+	slog.Error("error sending message to channel",
+		"channel", msg.Channel,
+		"chat_id", msg.ChatID,
+		"content_len", len(msg.Content),
+		"content_preview", Truncate(msg.Content, 160),
+		"error", sendErr,
+	)
+
+	if originCh := msg.Metadata[bus.MetaForwardOriginChannel]; originCh != "" {
+		originChat := msg.Metadata[bus.MetaForwardOriginChatID]
+		m.mu.RLock()
+		origin, originExists := m.channels[originCh]
+		m.mu.RUnlock()
+		if originExists && originChat != "" {
+			notifyMsg := bus.OutboundMessage{
+				Channel: originCh,
+				ChatID:  originChat,
+				Content: fmt.Sprintf("⚠️ Không gửi được tin nhắn forward tới %q — kiểm tra lại đích gửi (có thể chưa đúng ID nhóm/chat).", msg.ChatID),
+			}
+			if err2 := origin.Send(sendCtx, notifyMsg); err2 != nil {
+				slog.Warn("failed to send forward-failure notice to origin",
+					"origin_channel", originCh, "origin_chat", originChat, "error", err2)
+			}
+		}
+		return
+	}
+
+	if len(msg.Media) > 0 {
+		notifyMsg := bus.OutboundMessage{
+			Channel:  msg.Channel,
+			ChatID:   msg.ChatID,
+			Content:  formatChannelSendError(sendErr),
+			Metadata: sendErrorMeta(msg.Metadata),
+			TenantID: msg.TenantID,
+		}
+		if err2 := channel.Send(sendCtx, notifyMsg); err2 != nil {
+			slog.Warn("failed to send error notification",
+				"channel", msg.Channel, "error", err2)
 		}
 	}
 }

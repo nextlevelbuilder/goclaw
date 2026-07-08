@@ -840,6 +840,49 @@ func TestMessageToolCrossTargetGuard_NoNoticeOnSendFailure(t *testing.T) {
 	}
 }
 
+// A cross-target group forward must tag the outbound message with the origin
+// channel/chat (in addition to group_id) so dispatchOutbound can notify the
+// origin chat if the downstream send actually fails — otherwise a bad target
+// (e.g. a display name instead of a real chat ID) fails silently.
+func TestMessageToolForward_TagsOriginMetadataOnGroupSend(t *testing.T) {
+	tool := NewMessageTool(t.TempDir(), false)
+	mb := bus.New()
+	tool.SetMessageBus(mb)
+
+	ctx := context.Background()
+	ctx = WithToolSessionKey(ctx, "agent:a:zalo:group:747300108647389888")
+	ctx = WithToolChannel(ctx, "bunny-zalo-personal")
+	ctx = WithToolChatID(ctx, "747300108647389888")
+	ctx = WithToolPeerKind(ctx, "group")
+
+	res := tool.Execute(ctx, map[string]any{
+		"action": "send", "channel": "bunny-zalo-personal", "target": "Ban Điều Hành",
+		"forward": true, "forward_reason": "forward to Ban Điều Hành",
+		"message": "Anh Tài ơi, xem giúp comment khách hàng nhé.",
+	})
+	if res != nil && res.IsError {
+		t.Fatalf("unexpected error: %s", res.ForLLM)
+	}
+
+	got := drainBusNow(mb)
+	if len(got) == 0 {
+		t.Fatal("expected at least one outbound message")
+	}
+	forwardMsg := got[0]
+	if forwardMsg.ChatID != "Ban Điều Hành" {
+		t.Fatalf("forward target = %q, want %q", forwardMsg.ChatID, "Ban Điều Hành")
+	}
+	if forwardMsg.Metadata[bus.MetaForwardOriginChannel] != "bunny-zalo-personal" {
+		t.Errorf("MetaForwardOriginChannel = %q, want %q", forwardMsg.Metadata[bus.MetaForwardOriginChannel], "bunny-zalo-personal")
+	}
+	if forwardMsg.Metadata[bus.MetaForwardOriginChatID] != "747300108647389888" {
+		t.Errorf("MetaForwardOriginChatID = %q, want %q", forwardMsg.Metadata[bus.MetaForwardOriginChatID], "747300108647389888")
+	}
+	if forwardMsg.Metadata["group_id"] != "Ban Điều Hành" {
+		t.Errorf("group_id metadata = %q, want %q (must survive alongside forward tracking)", forwardMsg.Metadata["group_id"], "Ban Điều Hành")
+	}
+}
+
 func TestMessageTargetEnforced(t *testing.T) {
 	cases := []struct {
 		key  string
