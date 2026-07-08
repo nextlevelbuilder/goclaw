@@ -8,9 +8,9 @@
   "logoutConfirm": "Вы уверены, что хотите выйти?",
   "language": "Язык",
   "timezone": "Часовой пояс",
-  "pairingRequests": "Запросы на сопряжение",
-  "pendingPairingRequest": "{{count}} ожидающий запрос на сопряжение",
-  "pendingPairingRequests": "{{count}} ожидающих запросов на сопряжение",
+  "pairingRequests": "Запросы на привязку",
+  "pendingPairingRequest": "{{count}} ожидающий запрос на привязку",
+  "pendingPairingRequests": "{{count}} ожидающих запросов на привязку",
   "apiKeys": "Ключи API",
   "documents": "Документы",
   "about": {
