@@ -1,0 +1,122 @@
+{
+  "title": "Навыки",
+  "description": "Управление навыками и возможностями агентов",
+  "searchPlaceholder": "Поиск навыков...",
+  "emptyTitle": "Нет навыков",
+  "emptyDescription": "Пока не зарегистрировано ни одного навыка.",
+  "noMatchTitle": "Нет подходящих навыков",
+  "noMatchDescription": "Попробуйте другой поисковый запрос.",
+  "columns": {
+    "name": "Имя",
+    "description": "Описание",
+    "source": "Источник",
+    "author": "Автор",
+    "visibility": "Видимость",
+    "status": "Статус",
+    "actions": "Действия"
+  },
+  "noDescription": "Нет описания",
+  "visibility": {
+    "clickToCycle": "Нажмите, чтобы изменить видимость"
+  },
+  "delete": {
+    "title": "Удалить навык",
+    "description": "Вы уверены, что хотите удалить «{{name}}»? Это действие нельзя отменить.",
+    "confirmLabel": "Удалить"
+  },
+  "upload": {
+    "title": "Загрузка навыков",
+    "description": "Загрузите ZIP-файлы, содержащие SKILL.md с YAML-заголовком (name, description, slug).",
+    "button": "Загрузить",
+    "uploading": "Загрузка...",
+    "dropOrClick": "Нажмите или перетащите .zip-файлы",
+    "dropHere": "Перетащите .zip-файлы сюда",
+    "onlyZip": "Принимаются только .zip-файлы",
+    "cancel": "Отмена",
+    "done": "Готово",
+    "tooLarge": "Файл превышает лимит 20 МБ",
+    "invalidZip": "Некорректный ZIP-файл",
+    "noSkillMd": "ZIP должен содержать SKILL.md в корне",
+    "emptySkillMd": "SKILL.md пуст",
+    "noFrontmatter": "В SKILL.md отсутствует YAML-заголовок",
+    "nameRequired": "В YAML-заголовке SKILL.md обязательно поле name",
+    "invalidSlug": "Некорректный формат slug",
+    "failed": "Не удалось загрузить",
+    "validating": "Проверка...",
+    "validCount": "{{valid}} из {{total}} корректны",
+    "uploadCount": "Загрузить ({{count}})",
+    "successCount": "{{success}} из {{total}} успешно загружено",
+    "remove": "Удалить файл"
+  },
+  "edit": {
+    "title": "Редактировать навык",
+    "name": "Имя",
+    "description": "Описание",
+    "visibility": "Видимость",
+    "tags": "Теги",
+    "addTag": "Добавить тег...",
+    "add": "Добавить",
+    "cancel": "Отмена",
+    "save": "Сохранить",
+    "saving": "Сохранение...",
+    "privateOption": "Приватный (только владелец)",
+    "internalOption": "Внутренний (агенты/пользователи с доступом)",
+    "publicOption": "Публичный (все агенты)"
+  },
+  "system": "Системный",
+  "tabs": {
+    "core": "Основные",
+    "custom": "Пользовательские"
+  },
+  "toggle": {
+    "enable": "Включить навык",
+    "disable": "Отключить навык",
+    "disabled": "Отключён"
+  },
+  "tenant": {
+    "enabled": "Включён",
+    "disabled": "Отключён",
+    "default": "По умолчанию",
+    "overrideHint": "Переопределение этого навыка для арендатора",
+    "resetDefault": "Сбросить по умолчанию"
+  },
+  "deps": {
+    "rescan": "Пересканировать зависимости",
+    "rescanning": "Сканирование...",
+    "rescanSuccess": "Обновлено навыков: {{count}}",
+    "missing": "Отсутствуют: {{deps}}",
+    "install": "Установить зависимости",
+    "installing": "Установка...",
+    "installSuccess": "Зависимости успешно установлены",
+    "installPartial": "Некоторые зависимости не удалось установить",
+    "installItem": "Установить",
+    "itemSuccess": "Установлено",
+    "itemError": "Не удалось",
+    "missingTitle": "Отсутствующие зависимости",
+    "systemLabel": "Система",
+    "pythonLabel": "Python",
+    "nodeLabel": "Node.js",
+    "statusActive": "Активен",
+    "statusArchived": "Нет зависимостей",
+    "runtimeMissing": "Отсутствуют предпосылки среды выполнения",
+    "runtimeMissingDesc": "Основным навыкам требуются среды выполнения Python и/или Node.js. Пересоберите с ENABLE_PYTHON=true, ENABLE_NODE=true или ENABLE_FULL_SKILLS=true, либо установите вручную.",
+    "runtimeRequired": "Сначала установите среды выполнения"
+  },
+  "detail": {
+    "title": "Детали навыка",
+    "content": "Содержимое",
+    "files": "Файлы",
+    "version": "Версия:",
+    "current": "(текущая)",
+    "noContent": "Содержимое недоступно."
+  },
+  "toast": {
+    "updated": "Навык обновлён",
+    "updateFailed": "Не удалось обновить навык",
+    "deleted": "Навык удалён",
+    "deleteFailed": "Не удалось удалить навык",
+    "rescanUpdated": "Обновлено навыков: {{count}}",
+    "rescanNoChanges": "Все навыки актуальны",
+    "rescanFailed": "Не удалось пересканировать зависимости"
+  }
+}

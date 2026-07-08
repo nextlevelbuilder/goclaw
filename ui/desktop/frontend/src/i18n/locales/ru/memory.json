@@ -1,0 +1,191 @@
+{
+  "title": "Память",
+  "description": "Просмотр и управление документами памяти агентов, фрагментами и эмбеддингами",
+  "search": "Поиск",
+  "create": "Создать",
+  "indexAll": "Индексировать всё",
+  "indexing": "Индексация...",
+  "emptyTitle": "Нет документов памяти",
+  "emptyAgentDescription": "У этого агента пока нет документов памяти.",
+  "emptyGlobalDescription": "Ни у одного агента не найдено документов памяти.",
+  "filters": {
+    "agent": "Агент",
+    "allAgents": "Все агенты",
+    "scope": "Область",
+    "allScope": "Все (глобальные + личные)",
+    "selectAgent": "Выберите агента"
+  },
+  "tabs": {
+    "documents": "Документы",
+    "knowledgeGraph": "Граф знаний"
+  },
+  "columns": {
+    "path": "Путь",
+    "agent": "Агент",
+    "scope": "Область",
+    "hash": "Хеш",
+    "updated": "Обновлено",
+    "actions": "Действия"
+  },
+  "scopeLabel": {
+    "personal": "Личная",
+    "global": "Глобальная"
+  },
+  "delete": {
+    "title": "Удалить документ памяти",
+    "description": "Вы уверены, что хотите удалить «{{path}}»? Это также удалит все связанные фрагменты и эмбеддинги.",
+    "confirmLabel": "Удалить"
+  },
+  "createDialog": {
+    "title": "Создать документ памяти",
+    "path": "Путь *",
+    "pathPlaceholder": "напр. notes/project-overview.md",
+    "content": "Содержимое *",
+    "contentPlaceholder": "Содержимое документа...",
+    "agentId": "Агент *",
+    "agentIdPlaceholder": "Выберите агента...",
+    "scope": "Область",
+    "existingScope": "Существующая область",
+    "customScope": "Своя",
+    "selectGroupUser": "Выберите группу/пользователя...",
+    "scopeHint": "Глобальная = общая для всех пользователей. Личная = ограничена конкретным пользователем или групповым чатом.",
+    "autoIndex": "Автоиндексация после создания",
+    "agentRequired": "Пожалуйста, выберите агента",
+    "pathRequired": "Путь обязателен",
+    "contentRequired": "Содержимое обязательно",
+    "cancel": "Отмена",
+    "create": "Создать",
+    "creating": "Создание..."
+  },
+  "documentDialog": {
+    "title": "Документ памяти",
+    "path": "Путь:",
+    "agent": "Агент:",
+    "scope": "Область:",
+    "hash": "Хеш:",
+    "updated": "Обновлено:",
+    "content": "Содержимое",
+    "chunks": "Фрагменты ({{count}})",
+    "chunkIndex": "Фрагмент {{index}}",
+    "noChunks": "Нет фрагментов",
+    "embedded": "С эмбеддингом",
+    "noEmbedding": "Без эмбеддинга"
+  },
+  "searchDialog": {
+    "title": "Поиск в памяти",
+    "query": "Поисковый запрос",
+    "queryPlaceholder": "Введите поисковый запрос...",
+    "agentId": "ID агента",
+    "agentIdPlaceholder": "Фильтр по агенту...",
+    "limit": "Лимит",
+    "search": "Поиск",
+    "searching": "Поиск...",
+    "results": "Результаты",
+    "noResults": "Результатов не найдено",
+    "similarity": "сходство",
+    "path": "Путь:"
+  },
+  "kg": {
+    "pageTitle": "Граф знаний",
+    "pageDescription": "Изучение сущностей и связей, извлечённых из памяти агента.",
+    "selectAgentTitle": "Выберите агента",
+    "selectAgentDescription": "Выберите агента, чтобы просмотреть его граф знаний.",
+    "emptyTitle": "Нет сущностей",
+    "emptyDescription": "У этого агента пока нет сущностей графа знаний.",
+    "emptySearchDescription": "Ни одна сущность не соответствует вашему поиску.",
+    "stats": {
+      "entities": "Сущности: {{count}}",
+      "relations": "Связи: {{count}}"
+    },
+    "search": {
+      "placeholder": "Поиск сущностей...",
+      "button": "Поиск",
+      "clear": "Очистить"
+    },
+    "refresh": "Обновить",
+    "extract": "Извлечь",
+    "columns": {
+      "name": "Имя",
+      "type": "Тип",
+      "description": "Описание",
+      "confidence": "Достоверность",
+      "actions": "Действия",
+      "observations": "Наблюдения",
+      "relations": "Связи"
+    },
+    "deleteEntity": {
+      "title": "Удалить сущность",
+      "description": "Удалить «{{name}}»? Это также удалит все связанные связи.",
+      "confirmLabel": "Удалить"
+    },
+    "entity": {
+      "externalId": "Внешний ID:",
+      "confidence": "Достоверность:",
+      "description": "Описание:",
+      "source": "Источник:",
+      "properties": "Свойства:",
+      "relations": "Связи",
+      "traverse": "Обход (2 перехода)",
+      "traversing": "Обход...",
+      "loading": "Загрузка...",
+      "noRelations": "Связи не найдены.",
+      "traversalResults": "Результаты обхода ({{count}})",
+      "direction": {
+        "outgoing": "→ исходящая",
+        "incoming": "← входящая"
+      },
+      "columns": {
+        "direction": "Направление",
+        "relation": "Связь",
+        "target": "Цель",
+        "confidence": "Достоверность"
+      }
+    },
+    "extractDialog": {
+      "title": "Извлечь сущности из текста",
+      "providerLabel": "Провайдер извлечения",
+      "modelLabel": "Модель извлечения",
+      "textLabel": "Текст для извлечения",
+      "textPlaceholder": "Вставьте текст разговора, заметки или любое содержимое для извлечения сущностей и связей...",
+      "extract": "Извлечь",
+      "extracting": "Извлечение...",
+      "cancel": "Отмена",
+      "agentId": "ID агента",
+      "agentIdPlaceholder": "Оставьте пустым для глобального"
+    },
+    "graphView": {
+      "loading": "Загрузка графа...",
+      "empty": "Нет сущностей для визуализации",
+      "nodes": "{{count}} узлов",
+      "edges": "{{count}} рёбер"
+    }
+  },
+  "toast": {
+    "created": "Документ памяти создан",
+    "deleted": "Документ памяти удалён",
+    "indexed": "Все документы проиндексированы",
+    "failedCreate": "Не удалось создать документ",
+    "failedDelete": "Не удалось удалить документ",
+    "failedIndex": "Не удалось проиндексировать документы",
+    "entitySaved": "Сущность сохранена",
+    "entitySaveFailed": "Не удалось сохранить сущность",
+    "entityDeleted": "Сущность удалена",
+    "entityDeleteFailed": "Не удалось удалить сущность",
+    "extractionComplete": "Извлечение завершено",
+    "extractionFailed": "Не удалось выполнить извлечение",
+    "traversalFailed": "Не удалось выполнить обход",
+    "unknownError": "Неизвестная ошибка",
+    "docCreated": "Документ создан",
+    "docCreateFailed": "Не удалось создать документ",
+    "docUpdated": "Документ обновлён",
+    "docUpdateFailed": "Не удалось обновить документ",
+    "docDeleted": "Документ удалён",
+    "docDeleteFailed": "Не удалось удалить документ",
+    "docIndexed": "Документ проиндексирован",
+    "docIndexFailed": "Не удалось проиндексировать документ",
+    "allIndexed": "Все документы проиндексированы",
+    "allIndexFailed": "Не удалось проиндексировать все",
+    "searchFailed": "Не удалось выполнить поиск",
+    "docLoadFailed": "Не удалось загрузить документ"
+  }
+}
