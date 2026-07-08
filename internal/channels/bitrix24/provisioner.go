@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -141,12 +142,26 @@ func (c *Channel) initMCPProvisioner(ctx context.Context) error {
 		return nil
 	}
 
-	// Base URL sourcing: for the id-based path we trust the mcp_servers row
-	// (single source of truth). Legacy path stays on MCPBaseURL so a
-	// half-migrated fleet keeps working until Phase 5 rewrites configs.
+	// Base URL sourcing: for the id-based path we derive the ORIGIN
+	// (scheme://host[:port]) from the mcp_servers row. The row's URL is
+	// the MCP JSON-RPC endpoint (e.g. https://mcp.example.com/mcp), but
+	// the /api/auto-onboard REST call the provisioner will POST expects
+	// the origin only — appending "/api/auto-onboard" to the JSON-RPC
+	// path would 404. Legacy path stays on MCPBaseURL, which historically
+	// was already the origin (admin gave us "https://mcp.example.com"),
+	// so a half-migrated fleet keeps working until Phase 5 rewrites configs.
 	baseURL := strings.TrimSpace(c.cfg.MCPBaseURL)
 	if hasServerID {
-		baseURL = strings.TrimSpace(server.URL)
+		derived, deriveErr := deriveAutoOnboardBaseURL(server.URL)
+		if deriveErr != nil {
+			slog.Warn("bitrix24 mcp: provisioning disabled — mcp_servers.url unparseable",
+				"channel", c.Name(),
+				"mcp_server", server.Name,
+				"url", server.URL,
+				"err", deriveErr)
+			return nil
+		}
+		baseURL = derived
 	}
 	if baseURL == "" {
 		slog.Warn("bitrix24 mcp: provisioning disabled — mcp_servers row has empty url",
@@ -374,6 +389,47 @@ func (c *Channel) selfRefreshUserCreds(ctx context.Context, userID string, exist
 	slog.Info("bitrix24 mcp: self-refreshed user credentials",
 		"channel", c.Name(), "user_id", userID, "mcp_server_id", c.mcpServerID, "created", resp.Created)
 	return nil
+}
+
+// deriveAutoOnboardBaseURL strips the path/query/fragment from an MCP server
+// URL so what's left is safe to append "/api/auto-onboard" to. The
+// mcp_servers.url column stores the JSON-RPC endpoint the agent loop dials
+// for tool calls (which usually lives under a subpath like /mcp), while the
+// per-user credential-minting REST call the Bitrix24 channel makes lives at
+// the origin. This helper bridges the two conventions with a single URL
+// column so operators don't have to fill in a second field.
+//
+// Examples:
+//   - "https://mcp.example.com/mcp"       → "https://mcp.example.com"
+//   - "https://mcp.example.com/mcp/"      → "https://mcp.example.com"
+//   - "https://mcp.example.com/"          → "https://mcp.example.com"
+//   - "https://mcp.example.com"           → "https://mcp.example.com"
+//   - "http://localhost:8080/some/path"   → "http://localhost:8080"
+//
+// Returns an error when the string cannot be parsed as an absolute URL or
+// carries no host — either case would produce a nonsensical base URL for
+// the auto-onboard client and we prefer to disable provisioning rather than
+// send credentials to a bogus origin.
+func deriveAutoOnboardBaseURL(raw string) (string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", errors.New("mcp_servers.url is empty")
+	}
+	u, err := url.Parse(trimmed)
+	if err != nil {
+		return "", fmt.Errorf("parse mcp_servers.url: %w", err)
+	}
+	if u.Scheme == "" || u.Host == "" {
+		return "", fmt.Errorf("mcp_servers.url %q has no scheme or host", trimmed)
+	}
+	// Reset every component that could turn the origin back into a full URL
+	// so a future field addition here doesn't silently break the invariant.
+	u.Path = ""
+	u.RawPath = ""
+	u.RawQuery = ""
+	u.Fragment = ""
+	u.Opaque = ""
+	return u.String(), nil
 }
 
 // tryAcquireMCPProvision atomically checks the debounce window for

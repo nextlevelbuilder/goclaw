@@ -658,6 +658,54 @@ func TestInitMCPProvisioner_DisabledModes(t *testing.T) {
 	})
 }
 
+// TestDeriveAutoOnboardBaseURL guards the fix for the Phase 2 regression
+// where mcp_servers.url (JSON-RPC endpoint under /mcp) was passed verbatim
+// to mcp_client.newMCPClient — which appends "/api/auto-onboard" to it,
+// producing "…/mcp/api/auto-onboard" (404). The origin extraction is the
+// contract the Bitrix24 auto-onboard client expects.
+func TestDeriveAutoOnboardBaseURL(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"jsonrpc subpath", "https://mcp.example.com/mcp", "https://mcp.example.com"},
+		{"jsonrpc trailing slash", "https://mcp.example.com/mcp/", "https://mcp.example.com"},
+		{"origin trailing slash", "https://mcp.example.com/", "https://mcp.example.com"},
+		{"origin only", "https://mcp.example.com", "https://mcp.example.com"},
+		{"deep path with query", "http://localhost:8080/some/path?x=1#frag", "http://localhost:8080"},
+		{"prod b24 syn mcp", "https://b24-mcp-dev.synity.so/mcp", "https://b24-mcp-dev.synity.so"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := deriveAutoOnboardBaseURL(tc.in)
+			if err != nil {
+				t.Fatalf("deriveAutoOnboardBaseURL(%q) unexpected error: %v", tc.in, err)
+			}
+			if got != tc.want {
+				t.Errorf("deriveAutoOnboardBaseURL(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+
+	errCases := []struct {
+		name string
+		in   string
+	}{
+		{"empty", ""},
+		{"whitespace only", "   \t"},
+		{"no scheme", "mcp.example.com/mcp"},
+		{"no host", "https:///path"},
+	}
+	for _, tc := range errCases {
+		t.Run("err_"+tc.name, func(t *testing.T) {
+			if _, err := deriveAutoOnboardBaseURL(tc.in); err == nil {
+				t.Errorf("deriveAutoOnboardBaseURL(%q) expected error, got nil", tc.in)
+			}
+		})
+	}
+}
+
 // TestInitMCPProvisioner_MCPServerID exercises the v3.15+ id-based wiring:
 // mcp_server_id resolves to a live mcp_servers row whose URL becomes the
 // base URL for /api/auto-onboard. Legacy MCPServerName + MCPBaseURL are
@@ -669,6 +717,10 @@ func TestInitMCPProvisioner_MCPServerID(t *testing.T) {
 
 	mcpStore := newFakeMCPStore()
 	serverID := uuid.MustParse("019df803-ec13-76c3-b1f5-60b0e80d3eec")
+	// URL carries a /mcp subpath because that's how partner MCP servers
+	// really configure the JSON-RPC endpoint. initMCPProvisioner must
+	// strip it before handing the value to mcp_client (which appends
+	// /api/auto-onboard). Regression guard for the Phase 2 fix.
 	mcpStore.serversByID[serverID] = &store.MCPServerData{
 		BaseModel: store.BaseModel{ID: serverID},
 		Name:      "b24-syn-mcp",
