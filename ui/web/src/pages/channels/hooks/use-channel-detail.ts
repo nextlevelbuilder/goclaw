@@ -71,6 +71,22 @@ export function useChannelDetail(instanceId: string | undefined) {
     [instanceId, http, invalidate],
   );
 
+  const refreshDiscordMetadata = useCallback(
+    async () => {
+      if (!instanceId) return;
+      try {
+        await http.post(`/v1/channels/instances/${instanceId}/metadata/refresh`);
+        queryClient.invalidateQueries({ queryKey: queryKeys.channels.memoryExtractionGroups(instanceId), exact: true });
+        await invalidate();
+        toast.success(i18next.t("channels:detail.discordMetadataRefreshed"));
+      } catch (err) {
+        toast.error(i18next.t("channels:detail.discordMetadataRefreshFailed"), userFriendlyError(err));
+        throw err;
+      }
+    },
+    [http, instanceId, invalidate, queryClient],
+  );
+
   // Managers API (backend routes still use /writers paths)
   const listManagerGroups = useCallback(
     async (): Promise<GroupManagerGroupInfo[]> => {
@@ -216,6 +232,7 @@ export function useChannelDetail(instanceId: string | undefined) {
     setContextCredentials,
     deleteContextCredentials,
     listContacts,
+    refreshDiscordMetadata,
     refresh: invalidate,
   };
 }

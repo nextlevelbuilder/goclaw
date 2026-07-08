@@ -5,8 +5,45 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { formatDate } from "@/lib/format";
 import type { ChannelMemoryExtractionItem } from "@/types/channel";
+
+export type MemoryItemDebugBadge = {
+  kind: "topic" | "entity";
+  label: string;
+};
+
+export function memoryItemDebugBadges(item: Pick<ChannelMemoryExtractionItem, "topics" | "entities">): MemoryItemDebugBadge[] {
+  const badges: MemoryItemDebugBadge[] = [];
+  for (const topic of item.topics ?? []) {
+    const label = topic.trim();
+    if (label) badges.push({ kind: "topic", label });
+  }
+  for (const entity of item.entities ?? []) {
+    const label = entity.trim();
+    if (label) badges.push({ kind: "entity", label });
+  }
+  return badges;
+}
+
+export function memoryItemDebugBadgeClass(kind: MemoryItemDebugBadge["kind"]): string {
+  if (kind === "topic") {
+    return "cursor-help border-sky-500/30 bg-sky-500/10 text-sky-700 dark:border-sky-500/25 dark:bg-sky-500/10 dark:text-sky-300";
+  }
+  return "cursor-help border-violet-500/30 bg-violet-500/10 text-violet-700 dark:border-violet-500/25 dark:bg-violet-500/10 dark:text-violet-300";
+}
+
+export function memoryItemDebugBadgeTooltipKey(kind: MemoryItemDebugBadge["kind"]): string {
+  return kind === "topic"
+    ? "detail.passiveMemory.debugBadge.topic"
+    : "detail.passiveMemory.debugBadge.entity";
+}
 
 export function ToggleRow({
   label,
@@ -110,6 +147,7 @@ export function MemoryItemRow({
   onAction: (action: "approve" | "reject" | "delete") => void;
 }) {
   const { t } = useTranslation("channels");
+  const debugBadges = memoryItemDebugBadges(item);
   return (
     <div className="rounded-lg border p-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -120,6 +158,26 @@ export function MemoryItemRow({
         <span className="text-xs text-muted-foreground">{Math.round(item.confidence * 100)}%</span>
       </div>
       <p className="mt-2 text-sm">{item.summary}</p>
+      {debugBadges.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          <TooltipProvider>
+            {debugBadges.map((badge) => (
+              <Tooltip key={`${badge.kind}:${badge.label}`}>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex">
+                    <Badge variant="outline" className={memoryItemDebugBadgeClass(badge.kind)}>
+                      {badge.label}
+                    </Badge>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  {t(memoryItemDebugBadgeTooltipKey(badge.kind))}
+                </TooltipContent>
+              </Tooltip>
+            ))}
+          </TooltipProvider>
+        </div>
+      )}
       <div className="mt-3 flex flex-wrap gap-2">
         {item.status === "pending_review" && (
           <>

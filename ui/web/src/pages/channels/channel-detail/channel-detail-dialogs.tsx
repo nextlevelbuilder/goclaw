@@ -17,6 +17,7 @@ interface ChannelDetailDialogsProps {
   supportsReauth: boolean;
   onDelete?: (instance: { id: string; name: string }) => void;
   onUpdate: (updates: Record<string, unknown>) => Promise<void>;
+  onRefreshDiscordMetadata: () => Promise<void>;
 }
 
 export function ChannelDetailDialogs({
@@ -30,6 +31,7 @@ export function ChannelDetailDialogs({
   supportsReauth,
   onDelete,
   onUpdate,
+  onRefreshDiscordMetadata,
 }: ChannelDetailDialogsProps) {
   const { t } = useTranslation("channels");
 
@@ -44,6 +46,7 @@ export function ChannelDetailDialogs({
         onOpenChange={setAdvancedOpen}
         instance={instance}
         onUpdate={onUpdate}
+        onRefreshDiscordMetadata={onRefreshDiscordMetadata}
       />
 
       {ReauthDialog && (

@@ -111,6 +111,12 @@
     "accessControlDesc": "用户访问限制",
     "telegramManagement": "Telegram 管理",
     "telegramManagementDesc": "为使用此频道的 Agent 启用隐藏工具并选择 Telegram 操作权限",
+    "discordMetadata": "Discord 元数据",
+    "discordMetadataDesc": "从正在运行的机器人刷新缓存的 Discord 频道、分类、线程和已知用户名称。",
+    "refreshDiscordMetadata": "刷新 Discord 元数据",
+    "refreshingDiscordMetadata": "刷新中...",
+    "discordMetadataRefreshed": "Discord 元数据已刷新",
+    "discordMetadataRefreshFailed": "刷新 Discord 元数据失败",
     "reviewDiagnostics": "在更改设置前，请先查看此 Channel 的最新诊断。",
     "whatHappened": "发生了什么",
     "recommendedAction": "建议操作",
@@ -213,6 +219,7 @@
       "types": "记忆类型",
       "excludeUsers": "排除用户",
       "excludePatterns": "排除规则",
+      "channelCustomPrompt": "频道提取指令",
       "excludeGroups": "排除的 Discord 频道",
       "excludeGroupsPlaceholder": "选择要排除的频道",
       "manualExcludePlaceholder": "粘贴 Discord 频道 ID",
@@ -245,6 +252,10 @@
       "approve": "批准",
       "reject": "拒绝",
       "delete": "删除",
+      "debugBadge": {
+        "topic": "主题",
+        "entity": "实体"
+      },
       "type": {
         "people": "人物",
         "projects": "项目",
@@ -252,7 +263,10 @@
         "todos": "待办",
         "preferences": "偏好",
         "events": "事件"
-      }
+      },
+      "groupCustomPrompt": "群组提取指令",
+      "groupCustomPromptPlaceholder": "选择要调优的群组",
+      "noPromptGroups": "尚未发现 Discord 频道历史。"
     },
     "timeline": {
       "title": "时间线",
@@ -302,30 +316,92 @@
     }
   },
   "fieldConfig": {
-    "token": { "label": "Bot Token", "help": "来自 @BotFather" },
-    "bot_token": { "label": "Bot Token" },
-    "app_token": { "label": "应用级Token", "help": "具有 connections:write 权限的应用级Token（Socket Mode 必需）" },
-    "user_token": { "label": "用户Token（可选）", "help": "可选：用于自定义Bot身份的用户OAuth Token。留空使用默认Bot身份。" },
-    "app_id": { "label": "App ID" },
-    "app_secret": { "label": "App Secret" },
-    "encrypt_key": { "label": "加密密钥", "help": "用于Webhook模式" },
-    "verification_token": { "label": "验证Token", "help": "用于Webhook模式" },
-    "webhook_secret": { "label": "Webhook Secret" },
-    "api_server": { "label": "API 服务器 URL", "help": "自定义 Telegram Bot API 服务器用于大文件上传（最大 2GB）。留空使用默认服务器。" },
-    "proxy": { "label": "HTTP 代理", "help": "通过 HTTP 代理路由Bot流量" },
-    "dm_policy": { "label": "私聊策略" },
-    "group_policy": { "label": "群组策略" },
-    "require_mention": { "label": "群组中需要 @提及", "disabledHint": "多机器人模式始终监听所有消息" },
-    "mention_mode": { "label": "群组响应行为", "help": "机器人在多机器人群组中如何决定何时响应。" },
-    "history_limit": { "label": "群组历史限制", "help": "上下文中最大待处理群组消息数（0 = 禁用）" },
-    "dm_stream": { "label": "私聊流式传输", "help": "在私聊中逐步传输回复" },
-    "group_stream": { "label": "群聊流式传输", "help": "在群聊中逐步传输回复" },
-    "draft_transport": { "label": "草稿预览", "help": "在私聊中使用隐形草稿预览回答流 — 每次编辑无通知（需启用私聊流式传输）" },
-    "reasoning_delivery": { "label": "显示推理", "help": "选择如何在频道消息中显示模型推理。" },
-    "reaction_level": { "label": "表情回应级别" },
-    "media_max_mb": { "label": "最大媒体大小 (MB)" },
-    "link_preview": { "label": "链接预览" },
-    "allow_from": { "label": "允许的用户" },
+    "token": {
+      "label": "Bot Token",
+      "help": "来自 @BotFather"
+    },
+    "bot_token": {
+      "label": "Bot Token"
+    },
+    "app_token": {
+      "label": "应用级Token",
+      "help": "具有 connections:write 权限的应用级Token（Socket Mode 必需）"
+    },
+    "user_token": {
+      "label": "用户Token（可选）",
+      "help": "可选：用于自定义Bot身份的用户OAuth Token。留空使用默认Bot身份。"
+    },
+    "app_id": {
+      "label": "App ID"
+    },
+    "app_secret": {
+      "label": "App Secret"
+    },
+    "encrypt_key": {
+      "label": "加密密钥",
+      "help": "用于Webhook模式"
+    },
+    "verification_token": {
+      "label": "验证Token",
+      "help": "用于Webhook模式"
+    },
+    "webhook_secret": {
+      "label": "Webhook Secret"
+    },
+    "api_server": {
+      "label": "API 服务器 URL",
+      "help": "自定义 Telegram Bot API 服务器用于大文件上传（最大 2GB）。留空使用默认服务器。"
+    },
+    "proxy": {
+      "label": "HTTP 代理",
+      "help": "通过 HTTP 代理路由Bot流量"
+    },
+    "dm_policy": {
+      "label": "私聊策略"
+    },
+    "group_policy": {
+      "label": "群组策略"
+    },
+    "require_mention": {
+      "label": "群组中需要 @提及",
+      "disabledHint": "多机器人模式始终监听所有消息"
+    },
+    "mention_mode": {
+      "label": "群组响应行为",
+      "help": "机器人在多机器人群组中如何决定何时响应。"
+    },
+    "history_limit": {
+      "label": "群组历史限制",
+      "help": "上下文中最大待处理群组消息数（0 = 禁用）"
+    },
+    "dm_stream": {
+      "label": "私聊流式传输",
+      "help": "在私聊中逐步传输回复"
+    },
+    "group_stream": {
+      "label": "群聊流式传输",
+      "help": "在群聊中逐步传输回复"
+    },
+    "draft_transport": {
+      "label": "草稿预览",
+      "help": "在私聊中使用隐形草稿预览回答流 — 每次编辑无通知（需启用私聊流式传输）"
+    },
+    "reasoning_delivery": {
+      "label": "显示推理",
+      "help": "选择如何在频道消息中显示模型推理。"
+    },
+    "reaction_level": {
+      "label": "表情回应级别"
+    },
+    "media_max_mb": {
+      "label": "最大媒体大小 (MB)"
+    },
+    "link_preview": {
+      "label": "链接预览"
+    },
+    "allow_from": {
+      "label": "允许的用户"
+    },
     "telegram_manager": {
       "enabled": {
         "label": "启用 Telegram 管理工具",
@@ -336,21 +412,62 @@
         "help": "选择 Agent 可执行的 Telegram 操作。未选择任何权限时，不会向 Agent 授予此工具。"
       }
     },
-    "domain": { "label": "域名" },
-    "connection_mode": { "label": "连接模式", "help": "WebSocket 无需公网 IP — 仅需出站连接" },
-    "webhook_port": { "label": "Webhook 端口", "help": "0 = 共享主网关端口（推荐）" },
-    "webhook_path": { "label": "Webhook 路径", "help": "主服务器上 Lark 事件的路径" },
-    "webhook_url": { "label": "Webhook URL" },
-    "topic_session_mode": { "label": "话题会话模式", "help": "使用线程 root_id 进行会话隔离" },
-    "render_mode": { "label": "渲染模式" },
-    "text_chunk_limit": { "label": "文本分段限制", "help": "每条消息最大字符数" },
-    "group_allow_from": { "label": "群组允许的用户", "help": "群组发送者的单独白名单" },
-    "native_stream": { "label": "原生流式传输 (Agents & AI Apps)", "help": "使用 Slack 的 ChatStreamer API 进行原生流式传输。不可用时回退到原地编辑。" },
-    "debounce_delay": { "label": "防抖延迟 (ms)", "help": "发送快速消息前等待的毫秒数。设为 0 禁用。" },
-    "thread_ttl": { "label": "线程参与 TTL（小时）", "help": "Bot 停止自动回复已参与线程的小时数。0 = 始终需要 @提及。" },
-    "skills": { "label": "Skill过滤", "help": "限制此群组可用的Skill" },
-    "tools": { "label": "工具白名单", "help": "限制Agent在此群组中可使用的工具" },
-    "system_prompt": { "label": "系统提示词" },
+    "domain": {
+      "label": "域名"
+    },
+    "connection_mode": {
+      "label": "连接模式",
+      "help": "WebSocket 无需公网 IP — 仅需出站连接"
+    },
+    "webhook_port": {
+      "label": "Webhook 端口",
+      "help": "0 = 共享主网关端口（推荐）"
+    },
+    "webhook_path": {
+      "label": "Webhook 路径",
+      "help": "主服务器上 Lark 事件的路径"
+    },
+    "webhook_url": {
+      "label": "Webhook URL"
+    },
+    "topic_session_mode": {
+      "label": "话题会话模式",
+      "help": "使用线程 root_id 进行会话隔离"
+    },
+    "render_mode": {
+      "label": "渲染模式"
+    },
+    "text_chunk_limit": {
+      "label": "文本分段限制",
+      "help": "每条消息最大字符数"
+    },
+    "group_allow_from": {
+      "label": "群组允许的用户",
+      "help": "群组发送者的单独白名单"
+    },
+    "native_stream": {
+      "label": "原生流式传输 (Agents & AI Apps)",
+      "help": "使用 Slack 的 ChatStreamer API 进行原生流式传输。不可用时回退到原地编辑。"
+    },
+    "debounce_delay": {
+      "label": "防抖延迟 (ms)",
+      "help": "发送快速消息前等待的毫秒数。设为 0 禁用。"
+    },
+    "thread_ttl": {
+      "label": "线程参与 TTL（小时）",
+      "help": "Bot 停止自动回复已参与线程的小时数。0 = 始终需要 @提及。"
+    },
+    "skills": {
+      "label": "Skill过滤",
+      "help": "限制此群组可用的Skill"
+    },
+    "tools": {
+      "label": "工具白名单",
+      "help": "限制Agent在此群组中可使用的工具"
+    },
+    "system_prompt": {
+      "label": "系统提示词"
+    },
     "chat_behavior": {
       "enabled": {
         "label": "自然投递行为",
@@ -423,8 +540,14 @@
         }
       }
     },
-    "platform": { "label": "平台", "help": "选择此 Pancake 页面所服务的平台。" },
-    "tiktok_type": { "label": "TikTok 类型", "help": "选择此页面的 TikTok 账户类型" },
+    "platform": {
+      "label": "平台",
+      "help": "选择此 Pancake 页面所服务的平台。"
+    },
+    "tiktok_type": {
+      "label": "TikTok 类型",
+      "help": "选择此页面的 TikTok 账户类型"
+    },
     "features.private_reply": {
       "label": "私信回复（评论 → 私信）",
       "help": "在公开回复后向评论者发送一次性私信。仅支持 Facebook/Instagram，Meta 允许在评论后 7 天内发送。"
@@ -529,17 +652,17 @@
       "card": "卡片"
     },
     "platform": {
-      "facebook":    "Facebook",
-      "instagram":   "Instagram",
-      "threads":     "Threads (测试版)",
-      "tiktok":      "TikTok",
-      "youtube":     "YouTube (测试版)",
-      "shopee":      "Shopee",
-      "line":        "Line",
-      "google":      "Google",
+      "facebook": "Facebook",
+      "instagram": "Instagram",
+      "threads": "Threads (测试版)",
+      "tiktok": "TikTok",
+      "youtube": "YouTube (测试版)",
+      "shopee": "Shopee",
+      "line": "Line",
+      "google": "Google",
       "chat_plugin": "Chat Plugin",
-      "lazada":      "Lazada",
-      "tokopedia":   "Tokopedia"
+      "lazada": "Lazada",
+      "tokopedia": "Tokopedia"
     }
   },
   "groupOverrides": {
@@ -555,10 +678,22 @@
     "addTopicPlaceholder": "话题线程 ID",
     "addTopic": "添加话题",
     "fieldConfig": {
-      "dm_stream": { "label": "私聊流式传输", "help": "在私聊中逐步传输回复" },
-      "group_stream": { "label": "群聊流式传输", "help": "在群聊中逐步传输回复" },
-      "draft_transport": { "label": "草稿预览", "help": "在私聊中使用隐形草稿预览回答流 — 每次编辑无通知（需启用私聊流式传输）" },
-      "reasoning_delivery": { "label": "显示推理", "help": "选择如何在频道消息中显示模型推理。" }
+      "dm_stream": {
+        "label": "私聊流式传输",
+        "help": "在私聊中逐步传输回复"
+      },
+      "group_stream": {
+        "label": "群聊流式传输",
+        "help": "在群聊中逐步传输回复"
+      },
+      "draft_transport": {
+        "label": "草稿预览",
+        "help": "在私聊中使用隐形草稿预览回答流 — 每次编辑无通知（需启用私聊流式传输）"
+      },
+      "reasoning_delivery": {
+        "label": "显示推理",
+        "help": "选择如何在频道消息中显示模型推理。"
+      }
     },
     "fields": {
       "groupPolicy": "群组策略",

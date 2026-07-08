@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Save, Settings, Loader2 } from "lucide-react";
+import { RefreshCw, Save, Settings, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -23,6 +23,7 @@ interface ChannelAdvancedDialogProps {
   onOpenChange: (open: boolean) => void;
   instance: ChannelInstanceData;
   onUpdate: (updates: Record<string, unknown>) => Promise<void>;
+  onRefreshDiscordMetadata: () => Promise<void>;
 }
 
 const NETWORK_KEYS = new Set(["api_server", "proxy", "domain", "connection_mode", "webhook_port", "webhook_path", "webhook_url"]);
@@ -50,12 +51,14 @@ export function ChannelAdvancedDialog({
   onOpenChange,
   instance,
   onUpdate,
+  onRefreshDiscordMetadata,
 }: ChannelAdvancedDialogProps) {
   const { t } = useTranslation("channels");
   const groups = getAdvancedFields(instance.channel_type);
 
   const [values, setValues] = useState<Record<string, unknown>>(() => deriveAdvancedInitialValues(instance.config));
   const [saving, setSaving] = useState(false);
+  const [refreshingMetadata, setRefreshingMetadata] = useState(false);
 
   // Re-sync local state when dialog opens
   useEffect(() => {
@@ -78,7 +81,19 @@ export function ChannelAdvancedDialog({
     }
   };
 
+  const handleRefreshMetadata = async () => {
+    setRefreshingMetadata(true);
+    try {
+      await onRefreshDiscordMetadata();
+    } catch {
+      // toast shown by hook
+    } finally {
+      setRefreshingMetadata(false);
+    }
+  };
+
   const hasAnyGroup = Object.values(groups).some((g) => g.length > 0);
+  const showDiscordMetadataRefresh = instance.channel_type === "discord";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -94,6 +109,26 @@ export function ChannelAdvancedDialog({
         <div className="overflow-y-auto min-h-0 -mx-4 px-4 sm:-mx-6 sm:px-6 space-y-4">
           {!hasAnyGroup && (
             <p className="text-sm text-muted-foreground">{t("detail.config.noSchema")}</p>
+          )}
+
+          {showDiscordMetadataRefresh && (
+            <>
+              <ConfigGroupHeader
+                title={t("detail.discordMetadata")}
+                description={t("detail.discordMetadataDesc")}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleRefreshMetadata}
+                disabled={refreshingMetadata}
+              >
+                {refreshingMetadata ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                {refreshingMetadata
+                  ? t("detail.refreshingDiscordMetadata")
+                  : t("detail.refreshDiscordMetadata")}
+              </Button>
+            </>
           )}
 
           {groups.network.length > 0 && (
@@ -190,10 +225,10 @@ export function ChannelAdvancedDialog({
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-2 pt-4 border-t shrink-0">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving || refreshingMetadata}>
             {t("form.cancel")}
           </Button>
-          <Button onClick={handleSave} disabled={saving}>
+          <Button onClick={handleSave} disabled={saving || refreshingMetadata}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             {saving ? t("form.saving") : t("detail.config.saveConfig")}
           </Button>

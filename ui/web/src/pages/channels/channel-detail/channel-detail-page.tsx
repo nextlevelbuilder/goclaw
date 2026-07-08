@@ -70,6 +70,7 @@ export function ChannelDetailPage({
     deleteContextGrant,
     setContextCredentials,
     deleteContextCredentials,
+    refreshDiscordMetadata,
   } = useChannelDetail(instanceId);
   const { agents } = useAgents();
   const { channels } = useChannels();
@@ -289,6 +290,7 @@ export function ChannelDetailPage({
         supportsReauth={supportsReauth}
         onDelete={onDelete}
         onUpdate={updateInstance}
+        onRefreshDiscordMetadata={refreshDiscordMetadata}
       />
     </div>
   );

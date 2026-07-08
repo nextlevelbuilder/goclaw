@@ -11,14 +11,12 @@
   "failedToSave": "Lưu cấu hình thất bại",
   "saveConfig": "Lưu cấu hình",
   "usingGlobalDefaults": "Đang dùng cài đặt mặc định",
-
   "tabs.server": "Máy chủ",
   "tabs.behavior": "Hành vi",
   "tabs.aiDefaults": "Mặc định AI",
   "tabs.quota": "Hạn mức",
   "tabs.tools": "Công cụ",
   "tabs.integrations": "Tích hợp",
-
   "server.title": "Máy chủ Gateway",
   "server.description": "Cài đặt mạng, token xác thực và kiểm soát truy cập",
   "branding.title": "Cài đặt giao diện",
@@ -53,7 +51,6 @@
   "branding.uploadFailed": "Tải asset thương hiệu thất bại",
   "branding.uploadErrors.too_large": "Tệp phải nhỏ hơn hoặc bằng 2 MB.",
   "branding.uploadErrors.unsupported_type": "Dùng tệp SVG, PNG, JPG, WEBP hoặc ICO.",
-
   "gateway.host": "Host",
   "gateway.hostTip": "Giao diện mạng mà gateway lắng nghe. Dùng 0.0.0.0 để lắng nghe trên tất cả giao diện.",
   "gateway.port": "Cổng",
@@ -74,7 +71,6 @@
   "gateway.inboundDebounceMs": "Debounce đầu vào (ms)",
   "gateway.inboundDebounceMsTip": "Độ trễ tính bằng mili giây trước khi xử lý các tin nhắn nhanh liên tiếp từ channel hoặc Web Chat. Đặt 0 để không debounce; giá trị dương sẽ gộp tin nhắn sau thời gian chờ đó.",
   "gateway.injectionAction": "Hành động phát hiện injection",
-
   "agents.title": "Mặc định agent",
   "agents.description": "Provider LLM, model và cài đặt runtime mặc định áp dụng cho tất cả agent trừ khi được ghi đè",
   "agents.providerTip": "Provider LLM mặc định dùng khi agent không chỉ định provider.",
@@ -93,7 +89,6 @@
   "agents.restrictToWorkspaceTip": "Ngăn agent đọc hoặc ghi tệp ngoài đường dẫn workspace.",
   "agents.intentClassify": "Phân loại tin nhắn khi agent đang bận",
   "agents.saveError": "Lưu mặc định agent thất bại",
-
   "agents.subagents.title": "Subagent",
   "agents.subagents.desc": "Giới hạn tạo subagent",
   "agents.subagents.maxConcurrent": "Tối đa đồng thời",
@@ -107,7 +102,6 @@
   "agents.subagents.modelOverride": "Ghi đè model",
   "agents.subagents.modelOverrideTip": "Buộc tất cả subagent dùng model cụ thể. Để trống để kế thừa từ agent cha.",
   "agents.subagents.modelOverridePlaceholder": "(kế thừa từ agent)",
-
   "agents.memory.title": "Bộ nhớ",
   "agents.memory.desc": "Tìm kiếm bộ nhớ ngữ nghĩa và nhúng",
   "agents.memory.enabled": "Đã bật",
@@ -123,7 +117,6 @@
   "agents.memory.chunkOverlapTip": "Số ký tự chồng lấp giữa các chunk để giữ ngữ cảnh.",
   "agents.memory.minScore": "Điểm tối thiểu",
   "agents.memory.minScoreTip": "Điểm tương đồng tối thiểu (0-1) để đưa mục bộ nhớ vào kết quả.",
-
   "agents.compaction.title": "Nén ngữ cảnh",
   "agents.compaction.desc": "Cài đặt nén cửa sổ ngữ cảnh",
   "agents.compaction.reserveTokensFloor": "Sàn token dự trữ",
@@ -132,13 +125,11 @@
   "agents.compaction.maxHistoryShareTip": "Tỷ lệ cửa sổ ngữ cảnh mà lịch sử cuộc trò chuyện có thể chiếm.",
   "agents.compaction.timeoutSeconds": "Thời gian chờ (giây)",
   "agents.compaction.timeoutSecondsTip": "Thời gian tối đa chờ nén ngữ cảnh trước khi giữ nguyên lịch sử cũ.",
-
   "agents.pruning.title": "Cắt bớt ngữ cảnh",
   "agents.pruning.desc": "Cắt bỏ kết quả công cụ cũ để giải phóng không gian ngữ cảnh",
   "agents.pruning.mode": "Chế độ",
   "agents.pruning.keepLastAssistants": "Giữ trợ lý cuối",
   "agents.pruning.keepLastAssistantsTip": "Số lượt trợ lý gần nhất luôn được giữ lại trong quá trình cắt bớt.",
-
   "agents.sandbox.title": "Hộp cát",
   "agents.sandbox.desc": "Hộp cát Docker để thực thi code",
   "agents.sandbox.mode": "Chế độ",
@@ -151,7 +142,6 @@
   "agents.sandbox.timeoutSec": "Hết giờ (giây)",
   "agents.sandbox.timeoutSecTip": "Thời gian thực thi tối đa tính bằng giây trước khi hộp cát bị dừng.",
   "agents.sandbox.networkEnabled": "Bật mạng",
-
   "behavior.uxTitle": "Hành vi giao diện",
   "behavior.uxDescription": "Các công tắc có tác động lớn thay đổi cách gateway tương tác với người dùng",
   "behavior.intentClassifyHint": "Khi agent đang xử lý một lượt trước đó, phân loại tin nhắn mới thành hỏi trạng thái, huỷ, bổ sung hướng dẫn hoặc yêu cầu mới.",
@@ -224,12 +214,10 @@
   "behavior.scrubCredentialsHint": "Tự động ẩn khóa API, token và mật khẩu tìm thấy trong đầu ra công cụ trước khi trả về agent.",
   "behavior.scrubCredentialsInfo": "Các mẫu thông tin xác thực trong phản hồi công cụ được che đi trước khi agent nhìn thấy.",
   "behavior.scrubCredentialsOffInfo": "Tính năng ẩn thông tin xác thực bị tắt. Bí mật trong đầu ra công cụ có thể bị lộ với agent.",
-
   "sessions.scope": "Phạm vi phiên",
   "sessions.scopeTip": "Xác định cách phân vùng phiên. 'Theo người gửi' cho mỗi người dùng một phiên riêng; 'Toàn cục' chia sẻ một phiên cho tất cả người dùng.",
   "sessions.dmScope": "Phạm vi tin nhắn riêng",
   "sessions.dmScopeTip": "Cách đặt khóa phiên tin nhắn riêng. 'Theo kênh và đối tác' là mặc định được khuyến nghị.",
-
   "quota.title": "Hạn mức sử dụng",
   "quota.description": "Giới hạn hạn mức tin nhắn mỗi người dùng với tùy chọn ghi đè theo provider, kênh và nhóm",
   "quota.enabled": "Bật hạn mức",
@@ -254,7 +242,6 @@
   "quota.selectProvider": "Chọn provider",
   "quota.selectChannel": "Chọn kênh",
   "quota.selectGroup": "Chọn nhóm",
-
   "tools.title": "Hồ sơ công cụ",
   "tools.description": "Tính khả dụng công cụ mặc định và giới hạn tốc độ gọi mỗi giờ cho tất cả agent",
   "tools.profile": "Hồ sơ",
@@ -282,7 +269,6 @@
   "tools.commandKeywordAllowlistJsonError": "JSON không hợp lệ.",
   "tools.commandKeywordAllowlistArrayError": "Dùng mảng JSON các rule.",
   "tools.scrubCredentials": "Ẩn thông tin xác thực",
-
   "browser.title": "Tự động hóa trình duyệt",
   "browser.description": "Cài đặt runtime cho công cụ trình duyệt phía máy chủ",
   "browser.enabled": "Đã bật",
@@ -299,14 +285,12 @@
   "browser.idleTimeoutTip": "Đóng trang không hoạt động sau thời lượng này. Đặt 0 để tắt.",
   "browser.cookieSync": "Đồng bộ cookie đã chọn",
   "browser.cookieSyncHint": "Áp dụng cookie được đồng bộ rõ ràng vào phiên trình duyệt đúng người dùng và agent.",
-
   "tts.title": "Chuyển văn bản thành giọng nói",
   "tts.configured": "Đã cấu hình",
   "tts.disabled": "Đã tắt",
   "tts.providerInfo": "Provider: {{provider}} — Tự động: {{auto}}",
   "tts.noProvider": "Chưa cấu hình provider TTS.",
   "tts.manageLink": "Quản lý cài đặt TTS",
-
   "cron.title": "Trình lập lịch Cron",
   "cron.description": "Hành vi thử lại cho các tác vụ định kỳ thất bại",
   "cron.maxRetries": "Số lần thử lại tối đa",
@@ -318,7 +302,6 @@
   "cron.defaultTimezone": "Múi giờ mặc định",
   "cron.defaultTimezoneTip": "Múi giờ IANA cho biểu thức cron khi không được đặt cho từng job (vd: Asia/Ho_Chi_Minh). Để trống sẽ dùng múi giờ hệ thống.",
   "cron.defaultTimezonePlaceholder": "Múi giờ hệ thống",
-
   "telemetry.title": "Telemetry (OpenTelemetry)",
   "telemetry.description": "Xuất trace và metric sang backend tương thích OpenTelemetry",
   "telemetry.enabled": "Đã bật",
@@ -336,7 +319,6 @@
   "telemetry.headerKeyPlaceholder": "Tên header",
   "telemetry.headerValuePlaceholder": "Giá trị header",
   "telemetry.addHeader": "Thêm header",
-
   "bindings.title": "Ràng buộc agent",
   "bindings.description": "Định tuyến kênh, đối tác hoặc tài khoản cụ thể đến agent được chỉ định",
   "bindings.add": "Thêm ràng buộc",
@@ -345,7 +327,6 @@
   "bindings.channel": "Kênh",
   "bindings.peerKind": "Loại đối tác",
   "bindings.peerId": "ID đối tác",
-
   "providers.title": "Khóa API provider",
   "providers.description": "Ghi đè khóa API và URL cơ sở cho các provider LLM đã cấu hình",
   "providers.noProviders": "Không tìm thấy provider nào trong tệp cấu hình.",
@@ -353,7 +334,6 @@
   "providers.apiBaseUrl": "URL cơ sở",
   "providers.apiBaseUrlPlaceholder": "https://api.example.com/v1",
   "providers.managedVia": "Được quản lý qua biến môi trường {{envKey}}.",
-
   "channels.title": "Cài đặt kênh",
   "channels.description": "Cấu hình tích hợp kênh tích hợp sẵn (token, chính sách, streaming)",
   "channels.noChannels": "Không tìm thấy kênh nào trong tệp cấu hình.",
@@ -383,9 +363,7 @@
   "channels.reactionFull": "Đầy đủ",
   "channels.connectionWebsocket": "WebSocket",
   "channels.connectionWebhook": "Webhook",
-
   "bindings.any": "Bất kỳ",
-
   "tabs.systemMessages": "Thông báo hệ thống",
   "systemMessages.title": "Tùy chỉnh thông báo hệ thống",
   "systemMessages.description": "Ghi đè các thông báo mà gateway gửi trực tiếp qua kênh",
@@ -404,9 +382,11 @@
   "systemMessages.defaultTemplate": "Mẫu mặc định",
   "systemMessages.defaultTemplateTip": "Mẫu có sẵn được dùng khi phần ghi đè để trống.",
   "systemMessages.useDefault": "Dùng mặc định",
-
   "toast": {
     "saved": "Đã lưu cấu hình",
     "saveFailed": "Không thể lưu cấu hình"
-  }
+  },
+  "behavior.passiveMemoryTitle": "Trích xuất bộ nhớ thụ động",
+  "behavior.passiveMemoryDescription": "Prompt trích xuất cấp tenant cho bộ nhớ thụ động từ channel.",
+  "behavior.passiveMemoryPromptPlaceholder": "Ví dụ: Tránh fact trùng lặp và gộp các cập nhật lặp lại thành một mục ngắn gọn."
 }

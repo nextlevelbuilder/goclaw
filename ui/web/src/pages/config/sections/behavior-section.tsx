@@ -8,6 +8,7 @@ import { BehaviorSessionsCard } from "./behavior-sessions-card";
 import { BehaviorSecurityCard } from "./behavior-security-card";
 import { BehaviorPendingCompactionCard, type PendingCompactionValues } from "./behavior-pending-compaction-card";
 import { BehaviorChatCard, type ChatBehaviorValues } from "./behavior-chat-card";
+import { BehaviorPassiveMemoryCard } from "./behavior-passive-memory-card";
 
  
 
@@ -110,6 +111,7 @@ export function BehaviorSection({ config, onPatch, saving }: Props) {
       <BehaviorSessionsCard value={sessions} onChange={markDirty(setSessions)} />
       <BehaviorSecurityCard value={security} onChange={markDirty(setSecurity)} />
       <BehaviorPendingCompactionCard value={pendingCompaction} onChange={markDirty(setPendingCompaction)} />
+      <BehaviorPassiveMemoryCard />
 
       {dirty && (
         <div className="flex justify-end pt-2">

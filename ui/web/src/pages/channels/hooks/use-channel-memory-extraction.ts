@@ -152,7 +152,7 @@ export function useChannelMemoryExtraction(instanceId: string | undefined, param
     items: itemsQuery.data?.items ?? statusQuery.data?.recent_items ?? [],
     itemsTotal: itemsQuery.data?.total ?? statusQuery.data?.recent_items?.length ?? 0,
     groupOptions: groupsQuery.data ?? [],
-    loading: statusQuery.isLoading || itemsQuery.isLoading || (params.loadGroupOptions === true && groupsQuery.isLoading),
+    loading: statusQuery.isLoading || itemsQuery.isLoading,
     saveSettings,
     runNow,
     runAll,

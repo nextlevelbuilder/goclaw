@@ -11,14 +11,12 @@
   "failedToSave": "설정 저장 실패",
   "saveConfig": "설정 저장",
   "usingGlobalDefaults": "전역 기본값 사용",
-
   "tabs.server": "서버",
   "tabs.behavior": "동작",
   "tabs.aiDefaults": "AI 기본값",
   "tabs.quota": "할당량",
   "tabs.tools": "도구",
   "tabs.integrations": "통합",
-
   "server.title": "게이트웨이 서버",
   "server.description": "네트워크 바인딩, 인증 토큰 및 접근 제어",
   "branding.title": "화면 설정",
@@ -53,7 +51,6 @@
   "branding.uploadFailed": "브랜딩 자산 업로드 실패",
   "branding.uploadErrors.too_large": "파일은 2 MB 이하여야 합니다.",
   "branding.uploadErrors.unsupported_type": "SVG, PNG, JPG, WEBP 또는 ICO 파일을 사용하세요.",
-
   "gateway.host": "호스트",
   "gateway.hostTip": "게이트웨이가 수신하는 네트워크 인터페이스입니다. 모든 인터페이스에서 수신하려면 0.0.0.0을 사용하세요.",
   "gateway.port": "포트",
@@ -76,7 +73,6 @@
   "gateway.inboundDebounceMs": "인바운드 디바운스 (ms)",
   "gateway.inboundDebounceMsTip": "새 메시지를 처리하기 전 대기할 밀리초입니다. 빠른 후속 메시지를 통합하기 위해 사용합니다. 비활성화하려면 -1로 설정하세요.",
   "gateway.injectionAction": "주입 감지 조치",
-
   "agents.title": "에이전트 기본값",
   "agents.description": "재정의하지 않는 한 모든 에이전트에 적용되는 기본 LLM 공급자, 모델 및 런타임 설정",
   "agents.providerTip": "에이전트가 지정하지 않을 때 사용되는 기본 LLM 공급자입니다.",
@@ -95,7 +91,6 @@
   "agents.restrictToWorkspaceTip": "에이전트가 워크스페이스 경로 외부의 파일을 읽거나 쓸 수 없도록 합니다.",
   "agents.intentClassify": "에이전트 작업 중 메시지 분류",
   "agents.saveError": "에이전트 기본값 저장 실패",
-
   "agents.subagents.title": "서브에이전트",
   "agents.subagents.desc": "서브에이전트 생성 제한",
   "agents.subagents.maxConcurrent": "최대 동시",
@@ -109,7 +104,6 @@
   "agents.subagents.modelOverride": "모델 재정의",
   "agents.subagents.modelOverrideTip": "모든 서브에이전트가 특정 모델을 사용하도록 강제합니다. 부모 에이전트에서 상속하려면 비워두세요.",
   "agents.subagents.modelOverridePlaceholder": "(에이전트에서 상속)",
-
   "agents.memory.title": "메모리",
   "agents.memory.desc": "의미 메모리 검색 및 임베딩",
   "agents.memory.enabled": "활성화됨",
@@ -125,20 +119,17 @@
   "agents.memory.chunkOverlapTip": "컨텍스트 연속성을 위한 청크 간 겹침 문자 수입니다.",
   "agents.memory.minScore": "최소 점수",
   "agents.memory.minScoreTip": "결과에 포함될 메모리 항목의 최소 유사도 점수 (0-1)입니다.",
-
   "agents.compaction.title": "압축",
   "agents.compaction.desc": "컨텍스트 창 압축 설정",
   "agents.compaction.reserveTokensFloor": "예약 토큰 하한",
   "agents.compaction.reserveTokensFloorTip": "압축 전 새 응답을 위해 예약할 최소 토큰 버퍼입니다.",
   "agents.compaction.maxHistoryShare": "최대 기록 비율 (0-1)",
   "agents.compaction.maxHistoryShareTip": "대화 기록이 차지할 수 있는 컨텍스트 창의 비율입니다.",
-
   "agents.pruning.title": "컨텍스트 정리",
   "agents.pruning.desc": "컨텍스트 공간 확보를 위해 오래된 도구 결과 제거",
   "agents.pruning.mode": "모드",
   "agents.pruning.keepLastAssistants": "마지막 어시스턴트 유지",
   "agents.pruning.keepLastAssistantsTip": "정리 중 항상 보존할 최근 어시스턴트 턴 수입니다.",
-
   "agents.sandbox.title": "샌드박스",
   "agents.sandbox.desc": "코드 실행을 위한 Docker 샌드박스",
   "agents.sandbox.mode": "모드",
@@ -151,7 +142,6 @@
   "agents.sandbox.timeoutSec": "타임아웃 (초)",
   "agents.sandbox.timeoutSecTip": "샌드박스가 종료되기 전 최대 실행 시간(초)입니다.",
   "agents.sandbox.networkEnabled": "네트워크 활성화됨",
-
   "behavior.uxTitle": "UX 동작",
   "behavior.uxDescription": "게이트웨이가 사용자와 상호작용하는 방식을 변경하는 주요 토글",
   "behavior.toolStatusHint": "에이전트 실행 중 사용자에게 실시간 도구 실행 상태 메시지를 표시합니다.",
@@ -191,12 +181,10 @@
   "behavior.scrubCredentialsHint": "에이전트에 반환하기 전에 도구 출력에서 발견된 API 키, 토큰 및 비밀번호를 자동으로 수정합니다.",
   "behavior.scrubCredentialsInfo": "도구 응답의 자격증명 패턴은 에이전트가 보기 전에 마스킹됩니다.",
   "behavior.scrubCredentialsOffInfo": "자격증명 스크러빙이 비활성화되어 있습니다. 도구 출력의 시크릿이 에이전트에 노출될 수 있습니다.",
-
   "sessions.scope": "세션 범위",
   "sessions.scopeTip": "세션 분할 방법을 결정합니다. '발신자별'은 각 사용자에게 별도 세션을 제공하고, '전역'은 모든 사용자가 하나의 세션을 공유합니다.",
   "sessions.dmScope": "DM 범위",
   "sessions.dmScopeTip": "DM 세션이 키로 구분되는 방법입니다. '채널 피어별'이 권장 기본값입니다.",
-
   "quota.title": "사용 할당량",
   "quota.description": "선택적 공급자, 채널 및 그룹별 재정의가 있는 사용자별 메시지 할당량 제한",
   "quota.enabled": "할당량 활성화",
@@ -221,7 +209,6 @@
   "quota.selectProvider": "공급자 선택",
   "quota.selectChannel": "채널 선택",
   "quota.selectGroup": "그룹 선택",
-
   "tools.title": "도구 프로파일",
   "tools.description": "모든 에이전트에 대한 기본 도구 가용성 및 시간당 호출 속도 제한",
   "tools.profile": "프로파일",
@@ -260,14 +247,12 @@
   "tools.browserEnabled": "활성화됨",
   "tools.browserHeadless": "헤드리스",
   "tools.scrubCredentials": "자격증명 스크러빙",
-
   "tts.title": "텍스트 음성 변환",
   "tts.configured": "설정됨",
   "tts.disabled": "비활성화됨",
   "tts.providerInfo": "공급자: {{provider}} — 자동: {{auto}}",
   "tts.noProvider": "TTS 공급자가 설정되지 않았습니다.",
   "tts.manageLink": "TTS 설정 관리",
-
   "cron.title": "Cron 스케줄러",
   "cron.description": "실패한 예약 작업의 재시도 동작",
   "cron.maxRetries": "최대 재시도",
@@ -279,7 +264,6 @@
   "cron.defaultTimezone": "기본 시간대",
   "cron.defaultTimezoneTip": "작업별로 설정되지 않은 경우 cron 표현식의 IANA 시간대입니다 (예: Asia/Seoul). 서버 시스템 시간대를 사용하려면 비워두세요.",
   "cron.defaultTimezonePlaceholder": "시스템 시간대",
-
   "telemetry.title": "텔레메트리 (OpenTelemetry)",
   "telemetry.description": "OpenTelemetry 호환 백엔드로 추적 및 메트릭 내보내기",
   "telemetry.enabled": "활성화됨",
@@ -297,7 +281,6 @@
   "telemetry.headerKeyPlaceholder": "헤더 이름",
   "telemetry.headerValuePlaceholder": "헤더 값",
   "telemetry.addHeader": "헤더 추가",
-
   "bindings.title": "에이전트 바인딩",
   "bindings.description": "특정 채널, 피어 또는 계정을 지정된 에이전트로 라우팅합니다",
   "bindings.add": "바인딩 추가",
@@ -306,7 +289,6 @@
   "bindings.channel": "채널",
   "bindings.peerKind": "피어 종류",
   "bindings.peerId": "피어 ID",
-
   "providers.title": "공급자 API 키",
   "providers.description": "설정된 LLM 공급자의 API 키와 기본 URL을 재정의합니다",
   "providers.noProviders": "설정 파일에서 공급자를 찾을 수 없습니다.",
@@ -314,7 +296,6 @@
   "providers.apiBaseUrl": "기본 URL",
   "providers.apiBaseUrlPlaceholder": "https://api.example.com/v1",
   "providers.managedVia": "{{envKey}} 환경 변수를 통해 관리됩니다.",
-
   "channels.title": "채널 설정",
   "channels.description": "내장 채널 통합 설정 (토큰, 정책, 스트리밍)",
   "channels.noChannels": "설정 파일에서 채널을 찾을 수 없습니다.",
@@ -341,9 +322,7 @@
   "channels.reactionFull": "전체",
   "channels.connectionWebsocket": "WebSocket",
   "channels.connectionWebhook": "웹훅",
-
   "bindings.any": "모두",
-
   "tabs.systemMessages": "시스템 메시지",
   "systemMessages.title": "사용자 지정 시스템 메시지",
   "systemMessages.description": "채널에서 직접 보내는 기본 게이트웨이 메시지를 재정의합니다",
@@ -362,9 +341,11 @@
   "systemMessages.defaultTemplate": "기본 템플릿",
   "systemMessages.defaultTemplateTip": "재정의가 비어 있을 때 사용하는 기본 템플릿입니다.",
   "systemMessages.useDefault": "기본값 사용",
-
   "toast": {
     "saved": "설정 저장됨",
     "saveFailed": "설정 저장 실패"
-  }
+  },
+  "behavior.passiveMemoryTitle": "수동 메모리 추출",
+  "behavior.passiveMemoryDescription": "채널 수동 메모리에 적용되는 테넌트 전체 추출 지침입니다.",
+  "behavior.passiveMemoryPromptPlaceholder": "예: 중복 사실을 피하고 반복 업데이트를 하나의 간결한 항목으로 병합합니다."
 }

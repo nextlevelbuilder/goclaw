@@ -11,14 +11,12 @@
   "failedToSave": "保存配置失败",
   "saveConfig": "保存配置",
   "usingGlobalDefaults": "使用全局默认值",
-
   "tabs.server": "服务器",
   "tabs.behavior": "行为",
   "tabs.aiDefaults": "AI 默认值",
   "tabs.quota": "配额",
   "tabs.tools": "工具",
   "tabs.integrations": "集成",
-
   "server.title": "网关服务器",
   "server.description": "网络绑定、认证令牌和访问控制",
   "branding.title": "界面设置",
@@ -53,7 +51,6 @@
   "branding.uploadFailed": "品牌资源上传失败",
   "branding.uploadErrors.too_large": "文件必须不超过 2 MB。",
   "branding.uploadErrors.unsupported_type": "请使用 SVG、PNG、JPG、WEBP 或 ICO 文件。",
-
   "gateway.host": "主机",
   "gateway.hostTip": "网关监听的网络接口。使用 0.0.0.0 监听所有接口。",
   "gateway.port": "端口",
@@ -74,7 +71,6 @@
   "gateway.inboundDebounceMs": "入站防抖（毫秒）",
   "gateway.inboundDebounceMsTip": "处理来自频道或 Web Chat 的快速连续消息前的延迟毫秒数。设为 0 表示不防抖；正数会在该等待时间后合并连续消息。",
   "gateway.injectionAction": "注入检测动作",
-
   "agents.title": "Agent 默认值",
   "agents.description": "默认 LLM 提供商、模型和运行时设置，适用于所有 Agent（除非被覆盖）",
   "agents.providerTip": "当 Agent 未指定提供商时使用的默认 LLM 提供商。",
@@ -93,7 +89,6 @@
   "agents.restrictToWorkspaceTip": "阻止 Agent 读写工作区路径以外的文件。",
   "agents.intentClassify": "Agent 忙碌时的消息分类",
   "agents.saveError": "保存 Agent 默认值失败",
-
   "agents.subagents.title": "子 Agent",
   "agents.subagents.desc": "子 Agent 生成限制",
   "agents.subagents.maxConcurrent": "最大并发数",
@@ -107,7 +102,6 @@
   "agents.subagents.modelOverride": "模型覆盖",
   "agents.subagents.modelOverrideTip": "强制所有子 Agent 使用特定模型。留空则从父 Agent 继承。",
   "agents.subagents.modelOverridePlaceholder": "（从 Agent 继承）",
-
   "agents.memory.title": "记忆",
   "agents.memory.desc": "语义记忆搜索和嵌入",
   "agents.memory.enabled": "已启用",
@@ -123,7 +117,6 @@
   "agents.memory.chunkOverlapTip": "连续块之间的重叠字符数，用于保持上下文连续性。",
   "agents.memory.minScore": "最低分数",
   "agents.memory.minScoreTip": "记忆条目被纳入结果的最低相似度分数（0-1）。",
-
   "agents.compaction.title": "上下文压缩",
   "agents.compaction.desc": "上下文窗口压缩设置",
   "agents.compaction.reserveTokensFloor": "保留 Token 下限",
@@ -132,13 +125,11 @@
   "agents.compaction.maxHistoryShareTip": "对话历史可占用的上下文窗口比例。",
   "agents.compaction.timeoutSeconds": "超时秒数",
   "agents.compaction.timeoutSecondsTip": "等待上下文压缩的最长时间，超时后保留原始历史。",
-
   "agents.pruning.title": "上下文裁剪",
   "agents.pruning.desc": "裁剪旧工具结果以释放上下文空间",
   "agents.pruning.mode": "模式",
   "agents.pruning.keepLastAssistants": "保留最后的助手轮次",
   "agents.pruning.keepLastAssistantsTip": "裁剪期间始终保留的最近助手轮次数量。",
-
   "agents.sandbox.title": "沙箱",
   "agents.sandbox.desc": "用于代码执行的 Docker 沙箱",
   "agents.sandbox.mode": "模式",
@@ -151,7 +142,6 @@
   "agents.sandbox.timeoutSec": "超时（秒）",
   "agents.sandbox.timeoutSecTip": "沙箱被终止前的最大执行时间（秒）。",
   "agents.sandbox.networkEnabled": "启用网络",
-
   "behavior.uxTitle": "界面行为",
   "behavior.uxDescription": "影响网关与用户交互方式的高影响开关",
   "behavior.intentClassifyHint": "当 Agent 正在处理上一轮请求时，将新消息分类为状态询问、取消、补充指令或新的请求。",
@@ -224,12 +214,10 @@
   "behavior.scrubCredentialsHint": "在返回给 Agent 之前，自动从工具输出中删除 API 密钥、令牌和密码。",
   "behavior.scrubCredentialsInfo": "工具响应中的凭证模式在 Agent 看到之前被屏蔽。",
   "behavior.scrubCredentialsOffInfo": "凭证擦除已禁用，工具输出中的密钥可能暴露给 Agent。",
-
   "sessions.scope": "会话范围",
   "sessions.scopeTip": "确定会话分区方式。「按发送者」为每个用户提供单独的会话；「全局」在所有用户之间共享一个会话。",
   "sessions.dmScope": "私信范围",
   "sessions.dmScopeTip": "私信会话的键控方式。推荐默认使用「按频道对等方」。",
-
   "quota.title": "使用配额",
   "quota.description": "每用户消息配额限制，可选按提供商、频道和群组覆盖",
   "quota.enabled": "启用配额",
@@ -254,7 +242,6 @@
   "quota.selectProvider": "选择提供商",
   "quota.selectChannel": "选择频道",
   "quota.selectGroup": "选择群组",
-
   "tools.title": "工具配置文件",
   "tools.description": "所有 Agent 的默认工具可用性和每小时调用速率限制",
   "tools.profile": "配置文件",
@@ -282,7 +269,6 @@
   "tools.commandKeywordAllowlistJsonError": "JSON 无效。",
   "tools.commandKeywordAllowlistArrayError": "请使用规则 JSON 数组。",
   "tools.scrubCredentials": "擦除凭证",
-
   "browser.title": "浏览器自动化",
   "browser.description": "服务器端浏览器工具的运行时设置",
   "browser.enabled": "已启用",
@@ -299,14 +285,12 @@
   "browser.idleTimeoutTip": "页面空闲超过此时间后关闭。设为 0 禁用。",
   "browser.cookieSync": "选定 Cookie 同步",
   "browser.cookieSyncHint": "将明确同步的 Cookie 应用于匹配的用户和 Agent 浏览器会话。",
-
   "tts.title": "文字转语音",
   "tts.configured": "已配置",
   "tts.disabled": "已禁用",
   "tts.providerInfo": "提供商：{{provider}} — 自动：{{auto}}",
   "tts.noProvider": "未配置 TTS 提供商。",
   "tts.manageLink": "管理 TTS 设置",
-
   "cron.title": "定时任务调度器",
   "cron.description": "失败定时任务的重试行为",
   "cron.maxRetries": "最大重试次数",
@@ -318,7 +302,6 @@
   "cron.defaultTimezone": "默认时区",
   "cron.defaultTimezoneTip": "未为单个任务设置时区时，cron 表达式使用的 IANA 时区（例如 Asia/Shanghai）。留空则使用服务器系统时区。",
   "cron.defaultTimezonePlaceholder": "系统时区",
-
   "telemetry.title": "遥测（OpenTelemetry）",
   "telemetry.description": "将追踪和指标导出到兼容 OpenTelemetry 的后端",
   "telemetry.enabled": "已启用",
@@ -336,7 +319,6 @@
   "telemetry.headerKeyPlaceholder": "请求头名称",
   "telemetry.headerValuePlaceholder": "请求头值",
   "telemetry.addHeader": "添加请求头",
-
   "bindings.title": "Agent 绑定",
   "bindings.description": "将特定频道、对等方或账户路由到指定的 Agent",
   "bindings.add": "添加绑定",
@@ -345,7 +327,6 @@
   "bindings.channel": "频道",
   "bindings.peerKind": "对等方类型",
   "bindings.peerId": "对等方 ID",
-
   "providers.title": "提供商 API 密钥",
   "providers.description": "覆盖已配置 LLM 提供商的 API 密钥和基础 URL",
   "providers.noProviders": "配置文件中未找到任何提供商。",
@@ -353,7 +334,6 @@
   "providers.apiBaseUrl": "基础 URL",
   "providers.apiBaseUrlPlaceholder": "https://api.example.com/v1",
   "providers.managedVia": "通过 {{envKey}} 环境变量管理。",
-
   "channels.title": "频道设置",
   "channels.description": "配置内置频道集成（令牌、策略、流式传输）",
   "channels.noChannels": "配置文件中未找到任何频道。",
@@ -383,9 +363,7 @@
   "channels.reactionFull": "完整",
   "channels.connectionWebsocket": "WebSocket",
   "channels.connectionWebhook": "Webhook",
-
   "bindings.any": "任意",
-
   "tabs.systemMessages": "系统消息",
   "systemMessages.title": "自定义系统消息",
   "systemMessages.description": "覆盖频道直接发送的内置网关消息",
@@ -404,9 +382,11 @@
   "systemMessages.defaultTemplate": "默认模板",
   "systemMessages.defaultTemplateTip": "覆盖为空时使用的内置回退模板。",
   "systemMessages.useDefault": "使用默认值",
-
   "toast": {
     "saved": "配置已保存",
     "saveFailed": "保存配置失败"
-  }
+  },
+  "behavior.passiveMemoryTitle": "被动记忆提取",
+  "behavior.passiveMemoryDescription": "面向租户的频道被动记忆提取指令。",
+  "behavior.passiveMemoryPromptPlaceholder": "例如：避免重复事实，并将重复更新合并为一条简洁项目。"
 }
