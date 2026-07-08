@@ -12,8 +12,8 @@ type EventType string
 const (
 	EventSessionCompleted EventType = "session.completed"
 	EventEpisodicCreated  EventType = "episodic.created"
-	EventEntityUpserted EventType = "entity.upserted"
-	EventRunCompleted   EventType = "run.completed"
+	EventEntityUpserted   EventType = "entity.upserted"
+	EventRunCompleted     EventType = "run.completed"
 	EventToolExecuted     EventType = "tool.executed"
 
 	// Context pruning observability (Phase 05)
@@ -69,6 +69,7 @@ type EpisodicCreatedPayload struct {
 	EpisodicID  string
 	SessionKey  string
 	Summary     string
+	KeyTopics   []string
 	KeyEntities []string
 }
 
@@ -127,8 +128,8 @@ type ContextPrunedPayload struct {
 	TokensBefore   int
 	TokensAfter    int
 	Budget         int
-	ResultsTrimmed int    // soft-trimmed count
-	ResultsCleared int    // hard-cleared count
+	ResultsTrimmed int // soft-trimmed count
+	ResultsCleared int // hard-cleared count
 	Compacted      bool
 	Trigger        string // "soft" | "hard" | "compact"
 }

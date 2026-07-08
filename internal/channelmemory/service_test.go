@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -116,6 +117,7 @@ func (f *fakeExtractionStore) UpdateItem(_ context.Context, id uuid.UUID, update
 type fakePendingStore struct {
 	groups   []store.PendingMessageGroup
 	messages map[string][]store.PendingMessage
+	titles   map[string]string
 }
 
 func (f *fakePendingStore) AppendBatch(context.Context, []store.PendingMessage) error {
@@ -151,7 +153,7 @@ func (f *fakePendingStore) CountByKey(context.Context, string, string) (int, err
 }
 
 func (f *fakePendingStore) ResolveGroupTitles(context.Context, []store.PendingMessageGroup) (map[string]string, error) {
-	return nil, nil
+	return f.titles, nil
 }
 
 type fakeChannelStore struct {
@@ -176,6 +178,22 @@ type fakeEpisodicStore struct {
 	existsErr error
 	getByErr  error
 }
+
+type fakeDomainEventBus struct {
+	published []eventbus.DomainEvent
+}
+
+func (f *fakeDomainEventBus) Publish(event eventbus.DomainEvent) {
+	f.published = append(f.published, event)
+}
+
+func (f *fakeDomainEventBus) Subscribe(eventbus.EventType, eventbus.DomainEventHandler) func() {
+	return func() {}
+}
+
+func (f *fakeDomainEventBus) Start(context.Context) {}
+
+func (f *fakeDomainEventBus) Drain(time.Duration) error { return nil }
 
 func (f *fakeEpisodicStore) Create(_ context.Context, ep *store.EpisodicSummary) error {
 	if f.createErr != nil {
@@ -355,6 +373,39 @@ func TestRunAllSkipsThreadWhenParentHistoryKeyExcluded(t *testing.T) {
 	}
 }
 
+func TestGroupOptionsIncludesParentTitle(t *testing.T) {
+	inst := &store.ChannelInstanceData{
+		BaseModel:   store.BaseModel{ID: uuid.New()},
+		Name:        "discord",
+		ChannelType: "discord",
+		Config:      MergeIntoInstanceConfig(nil, Config{Enabled: true}),
+	}
+	pending := &fakePendingStore{
+		groups: []store.PendingMessageGroup{
+			{ChannelName: "discord", HistoryKey: "thread-1", ParentHistoryKey: "parent-channel", MessageCount: 3},
+		},
+		titles: map[string]string{
+			"discord:thread-1":       "launch-thread",
+			"discord:parent-channel": "product-planning",
+		},
+	}
+	svc := &Service{Pending: pending, Extractions: &fakeExtractionStore{}}
+
+	options, err := svc.GroupOptions(context.Background(), inst)
+	if err != nil {
+		t.Fatalf("GroupOptions returned error: %v", err)
+	}
+	if len(options) != 1 {
+		t.Fatalf("len(options) = %d, want 1", len(options))
+	}
+	if options[0].GroupTitle != "launch-thread" {
+		t.Fatalf("group title = %q, want launch-thread", options[0].GroupTitle)
+	}
+	if options[0].ParentGroupTitle != "product-planning" {
+		t.Fatalf("parent group title = %q, want product-planning", options[0].ParentGroupTitle)
+	}
+}
+
 func TestItemHashIsStableAcrossRuns(t *testing.T) {
 	runA := &store.ChannelMemoryExtractionRun{ID: uuid.New(), ChannelInstanceID: uuid.New(), HistoryKey: "group"}
 	runB := *runA
@@ -418,7 +469,13 @@ func TestRunMessagesCheckpointsOnlyExtractedBudget(t *testing.T) {
 			CreatedAt:   time.Date(2026, 7, 7, 10, i, 0, 0, time.UTC),
 		})
 	}
-	consumed := messagesWithinExtractionBudget(messages, extractionRetryMaxInputChars)
+	extractionCtx := ExtractionContext{
+		Platform:          "discord",
+		ChannelName:       strings.Repeat("operations-", 40),
+		ParentChannelName: strings.Repeat("parent-", 40),
+		CategoryName:      strings.Repeat("planning-", 40),
+	}
+	consumed := messagesWithinExtractionBudget(messages, messageBudgetForExtraction(extractionRetryMaxInputChars, extractionCtx))
 	if len(consumed) == 0 || len(consumed) == len(messages) {
 		t.Fatalf("test fixture should be partially consumed, got %d of %d", len(consumed), len(messages))
 	}
@@ -426,7 +483,13 @@ func TestRunMessagesCheckpointsOnlyExtractedBudget(t *testing.T) {
 	registry := providers.NewRegistry(store.TenantIDFromContext)
 	registry.RegisterForTenant(tenantID, provider)
 	extractions := &fakeExtractionStore{}
-	svc := &Service{Extractions: extractions, Registry: registry}
+	svc := &Service{
+		Extractions: extractions,
+		Registry:    registry,
+		ContextResolver: ContextResolverFunc(func(context.Context, *store.ChannelInstanceData, store.PendingMessageGroup) (ExtractionContext, error) {
+			return extractionCtx, nil
+		}),
+	}
 
 	ctx := store.WithTenantID(context.Background(), tenantID)
 	run, err := svc.runMessages(ctx, inst, cfg, store.PendingMessageGroup{ChannelName: "discord", HistoryKey: "group-a"}, messages, "manual")
@@ -459,7 +522,7 @@ func TestRunMessagesMarksRunFailedWhenItemWriteFails(t *testing.T) {
 	cfg.AllowedTypes = DefaultAllowedTypes
 	cfg.ReviewMode = true
 	provider := &fakeExtractionProvider{responses: []providers.ChatResponse{{
-		Content:      `[{"type":"todos","summary":"Follow up on launch checklist","topics":["launch"],"entities":["GoClaw"],"confidence":0.91}]`,
+		Content:      `[{"type":"todos","summary":"Follow up on launch checklist","topics":["launch"],"entities":["ExampleGateway"],"confidence":0.91}]`,
 		FinishReason: "stop",
 	}}}
 	registry := providers.NewRegistry(store.TenantIDFromContext)
@@ -481,6 +544,45 @@ func TestRunMessagesMarksRunFailedWhenItemWriteFails(t *testing.T) {
 	}
 	if last["error_message"] != "create item boom" {
 		t.Fatalf("error_message = %v", last["error_message"])
+	}
+}
+
+func TestRunMessagesAppendsGroupCustomPrompt(t *testing.T) {
+	tenantID := uuid.New()
+	inst := &store.ChannelInstanceData{
+		BaseModel: store.BaseModel{ID: uuid.New()},
+		TenantID:  tenantID,
+		Name:      "discord",
+		AgentID:   uuid.New(),
+		CreatedBy: "user-1",
+	}
+	cfg := DefaultConfig()
+	cfg.MinMessages = 2
+	cfg.AllowedTypes = DefaultAllowedTypes
+	cfg.ReviewMode = true
+	cfg.GroupCustomPrompts = map[string]string{
+		"parent-channel": "This parent channel is only for Project Orion launch planning.",
+	}
+	provider := &fakeExtractionProvider{responses: []providers.ChatResponse{{Content: `[]`, FinishReason: "stop"}}}
+	registry := providers.NewRegistry(store.TenantIDFromContext)
+	registry.RegisterForTenant(tenantID, provider)
+	svc := &Service{Extractions: &fakeExtractionStore{}, Registry: registry}
+
+	ctx := store.WithTenantID(context.Background(), tenantID)
+	_, err := svc.runMessages(ctx, inst, cfg, store.PendingMessageGroup{
+		ChannelName:      "discord",
+		HistoryKey:       "thread-1",
+		ParentHistoryKey: "parent-channel",
+	}, extractionTestMessages(3), "manual")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(provider.requests) != 1 {
+		t.Fatalf("provider calls = %d, want 1", len(provider.requests))
+	}
+	systemPrompt := provider.requests[0].Messages[0].Content
+	if !strings.Contains(systemPrompt, cfg.GroupCustomPrompts["parent-channel"]) {
+		t.Fatalf("group custom prompt missing from system prompt:\n%s", systemPrompt)
 	}
 }
 
@@ -527,6 +629,59 @@ func TestApproveUsesConfiguredRetentionHours(t *testing.T) {
 	max := time.Now().UTC().Add(2*time.Hour + time.Second)
 	if expires.Before(min) || expires.After(max) {
 		t.Fatalf("expires_at = %s, want around 2h from approval", expires)
+	}
+}
+
+func TestApprovePublishesTopicsAndEntitiesForSemanticHints(t *testing.T) {
+	instID := uuid.New()
+	itemID := uuid.New()
+	eventBus := &fakeDomainEventBus{}
+	extractions := &fakeExtractionStore{items: map[uuid.UUID]*store.ChannelMemoryExtractionItem{
+		itemID: {
+			ID:                itemID,
+			TenantID:          uuid.New(),
+			ChannelInstanceID: instID,
+			AgentID:           uuid.New(),
+			UserID:            "user-1",
+			SourceID:          "channel:item-1",
+			Status:            store.ChannelMemoryItemPendingReview,
+			Summary:           "Project Orion uses ExampleCo for collaboration.",
+			Topics:            []byte(`["collaboration","planning"]`),
+			Entities:          []byte(`["Project Orion","ExampleCo"]`),
+		},
+	}}
+	episodic := &fakeEpisodicStore{}
+	svc := &Service{
+		Extractions: extractions,
+		Episodic:    episodic,
+		EventBus:    eventBus,
+		Channels: &fakeChannelStore{inst: &store.ChannelInstanceData{
+			BaseModel: store.BaseModel{ID: instID},
+			Config:    MergeIntoInstanceConfig(nil, DefaultConfig()),
+		}},
+	}
+
+	if _, err := svc.Approve(context.Background(), itemID, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	if len(episodic.created) != 1 {
+		t.Fatalf("created episodic count = %d, want 1", len(episodic.created))
+	}
+	if got := episodic.created[0].KeyTopics; strings.Join(got, ",") != "collaboration,planning" {
+		t.Fatalf("episodic key_topics = %#v", got)
+	}
+	if len(eventBus.published) != 1 {
+		t.Fatalf("published events = %d, want 1", len(eventBus.published))
+	}
+	payload, ok := eventBus.published[0].Payload.(*eventbus.EpisodicCreatedPayload)
+	if !ok {
+		t.Fatalf("published payload type = %T", eventBus.published[0].Payload)
+	}
+	if got := strings.Join(payload.KeyTopics, ","); got != "collaboration,planning" {
+		t.Fatalf("payload KeyTopics = %q", got)
+	}
+	if got := strings.Join(payload.KeyEntities, ","); got != "Project Orion,ExampleCo" {
+		t.Fatalf("payload KeyEntities = %q", got)
 	}
 }
 

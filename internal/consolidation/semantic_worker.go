@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -34,12 +35,13 @@ func (w *semanticWorker) Handle(ctx context.Context, event eventbus.DomainEvent)
 		}
 	}
 
-	if w.extractor == nil || payload.Summary == "" {
+	extractionInput := formatSemanticExtractionInput(payload)
+	if w.extractor == nil || extractionInput == "" {
 		return nil
 	}
 
 	// Extract entities/relations from summary (much cheaper than full session)
-	result, err := w.extractor.Extract(ctx, payload.Summary)
+	result, err := w.extractor.Extract(ctx, extractionInput)
 	if err != nil {
 		bgalert.ReportProviderError(ctx, w.alertDeps, "kg_extraction", err)
 		slog.Warn("semantic: extraction failed", "episodic_id", payload.EpisodicID, "err", err)
@@ -85,4 +87,59 @@ func (w *semanticWorker) Handle(ctx context.Context, event eventbus.DomainEvent)
 	slog.Info("semantic: extracted", "entities", len(result.Entities),
 		"relations", len(result.Relations), "episodic_id", payload.EpisodicID)
 	return nil
+}
+
+func formatSemanticExtractionInput(payload *eventbus.EpisodicCreatedPayload) string {
+	if payload == nil {
+		return ""
+	}
+	summary := strings.TrimSpace(payload.Summary)
+	if summary == "" {
+		return ""
+	}
+	topics := compactSemanticHints(payload.KeyTopics)
+	entities := compactSemanticHints(payload.KeyEntities)
+	if len(topics) == 0 && len(entities) == 0 {
+		return summary
+	}
+
+	var b strings.Builder
+	b.WriteString("Fact summary:\n")
+	b.WriteString(summary)
+	b.WriteString("\n\nContext hints for disambiguation only. Do not create entities or relations solely because a value appears below; only extract facts supported by the fact summary.")
+	if len(entities) > 0 {
+		b.WriteString("\n\nCandidate entities:\n")
+		for _, entity := range entities {
+			b.WriteString("- ")
+			b.WriteString(entity)
+			b.WriteByte('\n')
+		}
+	}
+	if len(topics) > 0 {
+		b.WriteString("\nTopics / context tags:\n")
+		for _, topic := range topics {
+			b.WriteString("- ")
+			b.WriteString(topic)
+			b.WriteByte('\n')
+		}
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func compactSemanticHints(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		key := strings.ToLower(value)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, value)
+	}
+	return out
 }

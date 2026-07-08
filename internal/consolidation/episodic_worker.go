@@ -122,6 +122,7 @@ func (w *episodicWorker) Handle(ctx context.Context, event eventbus.DomainEvent)
 			EpisodicID:  ep.ID.String(),
 			SessionKey:  payload.SessionKey,
 			Summary:     summary,
+			KeyTopics:   entities,
 			KeyEntities: entities,
 		},
 	})

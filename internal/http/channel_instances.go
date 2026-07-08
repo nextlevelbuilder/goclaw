@@ -69,6 +69,30 @@ func (h *ChannelInstancesHandler) SetMemberResolver(r channels.MemberResolver) {
 // in cmd/gateway.go's startup ordering.
 func (h *ChannelInstancesHandler) SetChannelManager(mgr *channels.Manager) {
 	h.channelMgr = mgr
+	if h.memoryService != nil {
+		h.memoryService.ContextResolver = channelmemory.ContextResolverFunc(func(ctx context.Context, inst *store.ChannelInstanceData, group store.PendingMessageGroup) (channelmemory.ExtractionContext, error) {
+			return resolveMemoryExtractionContextFromManager(ctx, mgr, inst, group)
+		})
+	}
+}
+
+type memoryExtractionContextProvider interface {
+	ResolveMemoryExtractionContext(ctx context.Context, inst *store.ChannelInstanceData, group store.PendingMessageGroup) (channelmemory.ExtractionContext, error)
+}
+
+func resolveMemoryExtractionContextFromManager(ctx context.Context, mgr *channels.Manager, inst *store.ChannelInstanceData, group store.PendingMessageGroup) (channelmemory.ExtractionContext, error) {
+	if mgr == nil || inst == nil || inst.Name == "" {
+		return channelmemory.ExtractionContext{}, nil
+	}
+	ch, ok := mgr.GetChannel(inst.Name)
+	if !ok {
+		return channelmemory.ExtractionContext{}, nil
+	}
+	provider, ok := ch.(memoryExtractionContextProvider)
+	if !ok {
+		return channelmemory.ExtractionContext{}, nil
+	}
+	return provider.ResolveMemoryExtractionContext(ctx, inst, group)
 }
 
 // SetCapabilityStores wires MCP and Secure CLI stores for channel-context
@@ -103,6 +127,7 @@ func (h *ChannelInstancesHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/channels/instances/{id}", h.auth(h.handleGet))
 	mux.HandleFunc("PUT /v1/channels/instances/{id}", h.adminAuth(h.handleUpdate))
 	mux.HandleFunc("DELETE /v1/channels/instances/{id}", h.adminAuth(h.handleDelete))
+	mux.HandleFunc("POST /v1/channels/instances/{id}/metadata/refresh", h.adminAuth(h.handleRefreshChannelMetadata))
 
 	// Channel contacts (global, not per-agent)
 	if h.contactStore != nil {

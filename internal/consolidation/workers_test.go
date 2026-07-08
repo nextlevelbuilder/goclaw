@@ -593,6 +593,51 @@ func TestSemanticWorkerHandle_WithValidExtraction(t *testing.T) {
 	}
 }
 
+func TestSemanticWorkerHandle_PassesTopicsAndEntitiesAsContextHints(t *testing.T) {
+	mockExtractor := &mockExtractor{result: &knowledgegraph.ExtractionResult{}}
+	worker := &semanticWorker{
+		kgStore:   &mockKGStore{},
+		extractor: mockExtractor,
+		eventBus:  newMockDomainEventBus(),
+	}
+
+	err := worker.Handle(context.Background(), eventbus.DomainEvent{
+		Type:     eventbus.EventEpisodicCreated,
+		TenantID: uuid.New().String(),
+		AgentID:  uuid.New().String(),
+		UserID:   "test-user",
+		Payload: &eventbus.EpisodicCreatedPayload{
+			EpisodicID:  "ep-123",
+			Summary:     "Project Orion uses ExampleCo for collaboration.",
+			KeyEntities: []string{"Project Orion", "ExampleCo"},
+			KeyTopics:   []string{"collaboration", "planning"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Handle failed: %v", err)
+	}
+	if len(mockExtractor.inputs) != 1 {
+		t.Fatalf("extractor calls = %d, want 1", len(mockExtractor.inputs))
+	}
+	input := mockExtractor.inputs[0]
+	for _, want := range []string{
+		"Fact summary:",
+		"Project Orion uses ExampleCo for collaboration.",
+		"Context hints for disambiguation only",
+		"Do not create entities or relations solely because a value appears below",
+		"Candidate entities:",
+		"- Project Orion",
+		"- ExampleCo",
+		"Topics / context tags:",
+		"- collaboration",
+		"- planning",
+	} {
+		if !strings.Contains(input, want) {
+			t.Fatalf("semantic extraction input missing %q:\n%s", want, input)
+		}
+	}
+}
+
 func TestSemanticWorkerHandle_SuccessClearsBackgroundProviderAlert(t *testing.T) {
 	mockKG := &mockKGStore{}
 	mockExtractor := &mockExtractor{

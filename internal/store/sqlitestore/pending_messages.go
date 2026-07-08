@@ -232,10 +232,15 @@ func (s *SQLitePendingMessageStore) ResolveGroupTitles(ctx context.Context, grou
 		return nil, nil
 	}
 
+	result, missing := s.resolveGroupTitlesFromContacts(ctx, groups)
+	if len(missing) == 0 {
+		return result, nil
+	}
+
 	// Build OR conditions using LIKE with ? placeholders
-	conditions := make([]string, 0, len(groups))
-	args := make([]any, 0, len(groups)*2)
-	for _, g := range groups {
+	conditions := make([]string, 0, len(missing))
+	args := make([]any, 0, len(missing)*2)
+	for _, g := range missing {
 		conditions = append(conditions, "(session_key LIKE '%:' || ? || ':group:' || ? || '%')")
 		args = append(args, g.ChannelName, g.HistoryKey)
 	}
@@ -265,13 +270,12 @@ func (s *SQLitePendingMessageStore) ResolveGroupTitles(ctx context.Context, grou
 	}
 	defer rows.Close()
 
-	result := make(map[string]string)
 	for rows.Next() {
 		var sessionKey, title string
 		if err := rows.Scan(&sessionKey, &title); err != nil {
 			return nil, err
 		}
-		for _, g := range groups {
+		for _, g := range missing {
 			pattern := ":" + g.ChannelName + ":group:" + g.HistoryKey
 			if strings.Contains(sessionKey, pattern) {
 				mapKey := g.ChannelName + ":" + g.HistoryKey
@@ -283,4 +287,79 @@ func (s *SQLitePendingMessageStore) ResolveGroupTitles(ctx context.Context, grou
 		}
 	}
 	return result, rows.Err()
+}
+
+func (s *SQLitePendingMessageStore) resolveGroupTitlesFromContacts(ctx context.Context, groups []store.PendingMessageGroup) (map[string]string, []store.PendingMessageGroup) {
+	result := make(map[string]string, len(groups))
+	unique := uniquePendingTitleGroups(groups)
+	if len(unique) == 0 {
+		return result, nil
+	}
+
+	conditions := make([]string, 0, len(unique))
+	args := make([]any, 0, len(unique)*2+1)
+	for _, g := range unique {
+		conditions = append(conditions, "(channel_instance = ? AND sender_id = ?)")
+		args = append(args, g.ChannelName, g.HistoryKey)
+	}
+
+	tenantFilter := ""
+	if !store.IsCrossTenant(ctx) {
+		tid := store.TenantIDFromContext(ctx)
+		if tid == uuid.Nil {
+			tid = store.MasterTenantID
+		}
+		tenantFilter = " AND tenant_id = ?"
+		args = append(args, tid.String())
+	}
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT channel_instance, sender_id, display_name
+		 FROM channel_contacts
+		 WHERE display_name IS NOT NULL
+		   AND display_name <> ''
+		   AND contact_type IN ('group', 'topic')
+		   AND (`+strings.Join(conditions, " OR ")+`)`+tenantFilter,
+		args...,
+	)
+	if err != nil {
+		return result, unique
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var channelName, senderID, title string
+		if err := rows.Scan(&channelName, &senderID, &title); err != nil {
+			return result, unique
+		}
+		result[channelName+":"+senderID] = title
+	}
+	if err := rows.Err(); err != nil {
+		return result, unique
+	}
+
+	missing := make([]store.PendingMessageGroup, 0, len(unique)-len(result))
+	for _, g := range unique {
+		if result[g.ChannelName+":"+g.HistoryKey] == "" {
+			missing = append(missing, g)
+		}
+	}
+	return result, missing
+}
+
+func uniquePendingTitleGroups(groups []store.PendingMessageGroup) []store.PendingMessageGroup {
+	out := make([]store.PendingMessageGroup, 0, len(groups))
+	seen := make(map[string]struct{}, len(groups))
+	for _, g := range groups {
+		if g.ChannelName == "" || g.HistoryKey == "" {
+			continue
+		}
+		key := g.ChannelName + ":" + g.HistoryKey
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, g)
+	}
+	return out
 }

@@ -2,8 +2,12 @@ package channelmemory
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,15 +19,26 @@ import (
 )
 
 type Service struct {
-	Channels      store.ChannelInstanceStore
-	Pending       store.PendingMessageStore
-	Extractions   store.ChannelMemoryExtractionStore
-	Episodic      store.EpisodicStore
-	EventBus      eventbus.DomainEventBus
-	SystemConfigs store.SystemConfigStore
-	Registry      *providers.Registry
-	UsageCaps     *usagecaps.Service
-	Redactor      *Redactor
+	Channels        store.ChannelInstanceStore
+	Pending         store.PendingMessageStore
+	Extractions     store.ChannelMemoryExtractionStore
+	Episodic        store.EpisodicStore
+	EventBus        eventbus.DomainEventBus
+	SystemConfigs   store.SystemConfigStore
+	Registry        *providers.Registry
+	UsageCaps       *usagecaps.Service
+	Redactor        *Redactor
+	ContextResolver ContextResolver
+}
+
+type ContextResolver interface {
+	ResolveExtractionContext(ctx context.Context, inst *store.ChannelInstanceData, group store.PendingMessageGroup) (ExtractionContext, error)
+}
+
+type ContextResolverFunc func(ctx context.Context, inst *store.ChannelInstanceData, group store.PendingMessageGroup) (ExtractionContext, error)
+
+func (f ContextResolverFunc) ResolveExtractionContext(ctx context.Context, inst *store.ChannelInstanceData, group store.PendingMessageGroup) (ExtractionContext, error) {
+	return f(ctx, inst, group)
 }
 
 type Status struct {
@@ -62,6 +77,7 @@ type GroupOption struct {
 	HistoryKey       string    `json:"history_key"`
 	ParentHistoryKey string    `json:"parent_history_key,omitempty"`
 	GroupTitle       string    `json:"group_title,omitempty"`
+	ParentGroupTitle string    `json:"parent_group_title,omitempty"`
 	MessageCount     int       `json:"message_count"`
 	LastActivity     time.Time `json:"last_activity"`
 	Excluded         bool      `json:"excluded"`
@@ -101,7 +117,7 @@ func (s *Service) GroupOptions(ctx context.Context, inst *store.ChannelInstanceD
 	if err != nil {
 		return nil, err
 	}
-	titles, err := s.Pending.ResolveGroupTitles(ctx, groups)
+	titles, err := s.Pending.ResolveGroupTitles(ctx, groupTitleLookupGroups(groups))
 	if err != nil {
 		titles = nil
 	}
@@ -115,12 +131,39 @@ func (s *Service) GroupOptions(ctx context.Context, inst *store.ChannelInstanceD
 			HistoryKey:       group.HistoryKey,
 			ParentHistoryKey: group.ParentHistoryKey,
 			GroupTitle:       titles[group.ChannelName+":"+group.HistoryKey],
+			ParentGroupTitle: titles[group.ChannelName+":"+group.ParentHistoryKey],
 			MessageCount:     group.MessageCount,
 			LastActivity:     group.LastActivity,
 			Excluded:         contains(cfg.ExcludeHistoryKeys, group.HistoryKey) || contains(cfg.ExcludeHistoryKeys, group.ParentHistoryKey),
 		})
 	}
 	return out, nil
+}
+
+func groupTitleLookupGroups(groups []store.PendingMessageGroup) []store.PendingMessageGroup {
+	out := make([]store.PendingMessageGroup, 0, len(groups)*2)
+	seen := make(map[string]struct{}, len(groups)*2)
+	add := func(group store.PendingMessageGroup) {
+		if group.ChannelName == "" || group.HistoryKey == "" {
+			return
+		}
+		key := group.ChannelName + ":" + group.HistoryKey
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+		out = append(out, group)
+	}
+	for _, group := range groups {
+		add(group)
+		if group.ParentHistoryKey != "" {
+			add(store.PendingMessageGroup{
+				ChannelName: group.ChannelName,
+				HistoryKey:  group.ParentHistoryKey,
+			})
+		}
+	}
+	return out
 }
 
 func (s *Service) RunNow(ctx context.Context, inst *store.ChannelInstanceData, trigger string) (*store.ChannelMemoryExtractionRun, error) {
@@ -312,7 +355,8 @@ func (s *Service) runMessages(ctx context.Context, inst *store.ChannelInstanceDa
 	if len(redacted.Messages) < cfg.MinMessages {
 		return nil, fmt.Errorf("not enough redacted messages")
 	}
-	consumed := messagesWithinExtractionBudget(redacted.Messages, extractionRetryMaxInputChars)
+	extractionCtx := s.extractionContext(ctx, inst, group)
+	consumed := messagesWithinExtractionBudget(redacted.Messages, messageBudgetForExtraction(extractionRetryMaxInputChars, extractionCtx))
 	if len(consumed) < cfg.MinMessages {
 		return nil, fmt.Errorf("not enough extractable messages")
 	}
@@ -353,7 +397,13 @@ func (s *Service) runMessages(ctx context.Context, inst *store.ChannelInstanceDa
 		run.ErrorMessage = err.Error()
 	}()
 	provider, model := providerresolve.ResolveBackgroundProvider(ctx, run.TenantID, s.Registry, s.SystemConfigs)
-	items, err := Extract(ctx, provider, model, s.UsageCaps, consumed, cfg.AllowedTypes)
+	items, err := ExtractWithOptions(ctx, provider, model, s.UsageCaps, consumed, ExtractionOptions{
+		AllowedTypes:        cfg.AllowedTypes,
+		GlobalCustomPrompt:  s.globalCustomPrompt(ctx),
+		ChannelCustomPrompt: cfg.CustomPrompt,
+		GroupCustomPrompt:   groupCustomPrompt(cfg, group),
+		Context:             extractionCtx,
+	})
 	if err != nil {
 		return run, err
 	}
@@ -379,4 +429,85 @@ func (s *Service) runMessages(ctx context.Context, inst *store.ChannelInstanceDa
 	run.Status = status
 	completed = true
 	return run, nil
+}
+
+func (s *Service) globalCustomPrompt(ctx context.Context) string {
+	if s == nil || s.SystemConfigs == nil {
+		return ""
+	}
+	value, err := s.SystemConfigs.Get(ctx, GlobalCustomPromptConfigKey)
+	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) && !strings.Contains(err.Error(), "system config not found") {
+			slog.Warn("channel_memory.extraction.custom_prompt unavailable", "error", err)
+		}
+		return ""
+	}
+	return normalizeCustomPrompt(value)
+}
+
+func groupCustomPrompt(cfg Config, group store.PendingMessageGroup) string {
+	if len(cfg.GroupCustomPrompts) == 0 {
+		return ""
+	}
+	if prompt := cfg.GroupCustomPrompts[group.HistoryKey]; prompt != "" {
+		return prompt
+	}
+	if group.ParentHistoryKey != "" {
+		return cfg.GroupCustomPrompts[group.ParentHistoryKey]
+	}
+	return ""
+}
+
+func (s *Service) extractionContext(ctx context.Context, inst *store.ChannelInstanceData, group store.PendingMessageGroup) ExtractionContext {
+	base := ExtractionContext{
+		ChannelInstance: inst.Name,
+		HistoryKey:      group.HistoryKey,
+		ChannelID:       group.HistoryKey,
+		ParentChannelID: group.ParentHistoryKey,
+	}
+	if inst.ChannelType != "" {
+		base.Platform = inst.ChannelType
+	} else {
+		base.Platform = group.ChannelName
+	}
+	if s == nil || s.ContextResolver == nil {
+		return base
+	}
+	resolved, err := s.ContextResolver.ResolveExtractionContext(ctx, inst, group)
+	if err != nil {
+		slog.Debug("channel_memory extraction context resolver failed", "channel", inst.Name, "history_key", group.HistoryKey, "error", err)
+		return base
+	}
+	return mergeExtractionContext(base, resolved)
+}
+
+func mergeExtractionContext(base, resolved ExtractionContext) ExtractionContext {
+	if resolved.Platform != "" {
+		base.Platform = resolved.Platform
+	}
+	if resolved.ChannelInstance != "" {
+		base.ChannelInstance = resolved.ChannelInstance
+	}
+	if resolved.HistoryKey != "" {
+		base.HistoryKey = resolved.HistoryKey
+	}
+	if resolved.ChannelID != "" {
+		base.ChannelID = resolved.ChannelID
+	}
+	if resolved.ChannelName != "" {
+		base.ChannelName = resolved.ChannelName
+	}
+	if resolved.ParentChannelID != "" {
+		base.ParentChannelID = resolved.ParentChannelID
+	}
+	if resolved.ParentChannelName != "" {
+		base.ParentChannelName = resolved.ParentChannelName
+	}
+	if resolved.CategoryID != "" {
+		base.CategoryID = resolved.CategoryID
+	}
+	if resolved.CategoryName != "" {
+		base.CategoryName = resolved.CategoryName
+	}
+	return base
 }

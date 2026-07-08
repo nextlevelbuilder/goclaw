@@ -55,6 +55,24 @@ func (c *ContactCollector) EnsureContact(ctx context.Context, channelType, chann
 	c.seen.Set(ctx, key, true, contactSeenTTL)
 }
 
+// RefreshContact upserts a contact without the short-lived hot-path dedup.
+// Background metadata syncs use this so fresher platform names are persisted
+// even when the message ingestion path recently saw the same ID.
+func (c *ContactCollector) RefreshContact(ctx context.Context, channelType, channelInstance, senderID, userID, displayName, username, peerKind, contactType, threadID, threadType string) {
+	if contactType == "" {
+		contactType = "user"
+	}
+	if err := c.store.UpsertContact(ctx, channelType, channelInstance, senderID, userID, displayName, username, peerKind, contactType, threadID, threadType); err != nil {
+		slog.Warn("contact_collector.refresh_failed",
+			"error", err,
+			"tenant_id", TenantIDFromContext(ctx),
+			"channel", channelType,
+			"instance", channelInstance,
+			"sender", senderID,
+		)
+	}
+}
+
 // ResolveTenantUserID delegates to the underlying ContactStore.
 func (c *ContactCollector) ResolveTenantUserID(ctx context.Context, channelType, senderID string) (string, error) {
 	return c.store.ResolveTenantUserID(ctx, channelType, senderID)

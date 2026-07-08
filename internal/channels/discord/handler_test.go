@@ -10,9 +10,11 @@ import (
 	"github.com/bwmarrin/discordgo"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/channelmemory"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // --- resolveDisplayName ---
@@ -51,6 +53,22 @@ func TestResolveDisplayName(t *testing.T) {
 	}
 }
 
+func TestDiscordAuthorLabelIncludesHandleAndID(t *testing.T) {
+	m := &discordgo.MessageCreate{Message: &discordgo.Message{
+		Author: &discordgo.User{
+			ID:         "u123",
+			Username:   "alexproducer",
+			GlobalName: "Alex Producer",
+		},
+	}}
+
+	got := discordAuthorLabel(m.Author, m.Member)
+	want := "Alex Producer (@alexproducer, id: u123)"
+	if got != want {
+		t.Fatalf("discordAuthorLabel() = %q, want %q", got, want)
+	}
+}
+
 func TestResolveCachedChannelTitle(t *testing.T) {
 	session, err := discordgo.New("Bot test-token")
 	if err != nil {
@@ -70,6 +88,52 @@ func TestResolveCachedChannelTitle(t *testing.T) {
 	}
 	if got := ch.resolveCachedChannelTitle("missing"); got != "" {
 		t.Fatalf("missing channel title = %q, want empty", got)
+	}
+}
+
+func TestResolveMemoryExtractionContextIncludesThreadParentAndCategory(t *testing.T) {
+	session, err := discordgo.New("Bot test-token")
+	if err != nil {
+		t.Fatalf("discordgo.New() error = %v", err)
+	}
+	session.State = discordgo.NewState()
+	if err := session.State.GuildAdd(&discordgo.Guild{ID: "guild-1"}); err != nil {
+		t.Fatalf("GuildAdd() error = %v", err)
+	}
+	for _, ch := range []*discordgo.Channel{
+		{ID: "cat-1", GuildID: "guild-1", Name: "Launch", Type: discordgo.ChannelTypeGuildCategory},
+		{ID: "parent-1", GuildID: "guild-1", Name: "design", ParentID: "cat-1", Type: discordgo.ChannelTypeGuildText},
+		{ID: "thread-1", GuildID: "guild-1", Name: "project-thread", ParentID: "parent-1", Type: discordgo.ChannelTypeGuildPublicThread},
+	} {
+		if err := session.State.ChannelAdd(ch); err != nil {
+			t.Fatalf("ChannelAdd(%s) error = %v", ch.ID, err)
+		}
+	}
+
+	ch := &Channel{BaseChannel: channels.NewBaseChannel(channels.TypeDiscord, nil, nil), session: session}
+	ch.SetName("discord-main")
+
+	ctx, err := ch.ResolveMemoryExtractionContext(context.Background(), &store.ChannelInstanceData{Name: "discord-main"}, store.PendingMessageGroup{
+		ChannelName:      "discord-main",
+		HistoryKey:       "thread-1",
+		ParentHistoryKey: "parent-1",
+	})
+	if err != nil {
+		t.Fatalf("ResolveMemoryExtractionContext() error = %v", err)
+	}
+	want := channelmemory.ExtractionContext{
+		Platform:          channels.TypeDiscord,
+		ChannelInstance:   "discord-main",
+		HistoryKey:        "thread-1",
+		ChannelID:         "thread-1",
+		ChannelName:       "project-thread",
+		ParentChannelID:   "parent-1",
+		ParentChannelName: "design",
+		CategoryID:        "cat-1",
+		CategoryName:      "Launch",
+	}
+	if ctx != want {
+		t.Fatalf("context = %+v, want %+v", ctx, want)
 	}
 }
 

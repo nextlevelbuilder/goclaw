@@ -5,6 +5,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/audio"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/cache"
+	"github.com/nextlevelbuilder/goclaw/internal/channelmemory"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
@@ -28,6 +29,7 @@ type gatewayDeps struct {
 	pgStores         *store.Stores
 	providerRegistry *providers.Registry
 	channelMgr       *channels.Manager
+	channelMemorySvc *channelmemory.Service
 	agentRouter      *agent.Router
 	toolsReg         *tools.Registry
 	skillsLoader     *skills.Loader         // optional: enables skill creation in evolution approval

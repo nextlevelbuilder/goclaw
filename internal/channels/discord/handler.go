@@ -35,7 +35,8 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 	}
 
 	senderID := m.Author.ID
-	senderName := resolveDisplayName(m)
+	displayName := resolveDisplayName(m)
+	authorLabel := discordAuthorLabel(m.Author, m.Member)
 
 	channelID := m.ChannelID
 	isDM := m.GuildID == ""
@@ -71,7 +72,7 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 		if !c.checkGroupPolicy(ctx, senderID, channelID, mentioned) {
 			slog.Debug("discord group message rejected by policy",
 				"user_id", senderID,
-				"username", senderName,
+				"username", displayName,
 			)
 			return
 		}
@@ -89,7 +90,7 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 	if m.ReferencedMessage != nil {
 		author := "unknown"
 		if m.ReferencedMessage.Author != nil {
-			author = m.ReferencedMessage.Author.Username
+			author = discordAuthorLabel(m.ReferencedMessage.Author, m.ReferencedMessage.Member)
 		}
 		body := channels.Truncate(m.ReferencedMessage.Content, 500)
 		replyCtx := fmt.Sprintf("[Replying to %s]\n%s\n[/Replying]", author, body)
@@ -198,7 +199,7 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 			}
 			parentHistoryKey := c.parentHistoryKeyForChannel(ctx, channelID)
 			c.GroupHistory().Record(channelID, channels.HistoryEntry{
-				Sender:           senderName,
+				Sender:           authorLabel,
 				SenderID:         senderID,
 				Body:             content,
 				ParentHistoryKey: parentHistoryKey,
@@ -209,14 +210,14 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 
 			// Collect contact even when bot is not mentioned (cache prevents DB spam).
 			if cc := c.ContactCollector(); cc != nil {
-				cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, senderName, m.Author.Username, "group", "user", "", "")
+				cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, displayName, m.Author.Username, "group", "user", "", "")
 				cc.EnsureContact(ctx, c.Type(), c.Name(), channelID, "", c.resolveCachedChannelTitle(channelID), "", "group", "group", "", "")
 			}
 
 			slog.Debug("discord group message recorded (no mention)",
 				"channel_id", channelID,
 				"user_id", senderID,
-				"username", senderName,
+				"username", displayName,
 			)
 			return
 		}
@@ -270,7 +271,7 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 	// Build final content with group context.
 	finalContent := content
 	if peerKind == "group" {
-		annotated := fmt.Sprintf("[From: %s (<@%s>)]\n%s", senderName, senderID, content)
+		annotated := fmt.Sprintf("[From: %s (<@%s>)]\n%s", displayName, senderID, content)
 		if threadBackfill.Context != "" {
 			annotated = threadBackfill.Context + "\n\n" + annotated
 		}
@@ -294,7 +295,7 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 		"message_id":      m.ID,
 		"user_id":         senderID,
 		"username":        m.Author.Username,
-		"display_name":    channels.SanitizeDisplayName(senderName),
+		"display_name":    channels.SanitizeDisplayName(displayName),
 		"guild_id":        m.GuildID,
 		"channel_id":      channelID,
 		"is_dm":           fmt.Sprintf("%t", isDM),
@@ -310,7 +311,7 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 
 	// Collect contact for processed messages (DM + group-mentioned).
 	if cc := c.ContactCollector(); cc != nil {
-		cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, senderName, m.Author.Username, peerKind, "user", "", "")
+		cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, displayName, m.Author.Username, peerKind, "user", "", "")
 		if peerKind == "group" {
 			cc.EnsureContact(ctx, c.Type(), c.Name(), channelID, "", c.resolveCachedChannelTitle(channelID), "", "group", "group", "", "")
 		}
@@ -421,13 +422,68 @@ func (c *Channel) sendPairingReply(ctx context.Context, senderID, channelID stri
 // resolveDisplayName returns the best available display name for a Discord message author.
 // Priority: server nickname > global display name > username.
 func resolveDisplayName(m *discordgo.MessageCreate) string {
-	if m.Member != nil && m.Member.Nick != "" {
-		return m.Member.Nick
+	if m == nil {
+		return ""
 	}
-	if m.Author.GlobalName != "" {
-		return m.Author.GlobalName
+	return discordDisplayName(m.Author, m.Member)
+}
+
+func discordAuthorLabel(user *discordgo.User, member *discordgo.Member) string {
+	display := discordDisplayName(user, member)
+	if display == "" {
+		display = "unknown"
 	}
-	return m.Author.Username
+	handle := discordHandle(user)
+	if handle == "" && user != nil {
+		handle = user.Username
+	}
+	if user == nil || user.ID == "" {
+		if handle == "" {
+			return display
+		}
+		return fmt.Sprintf("%s (@%s)", display, handle)
+	}
+	if handle == "" {
+		return fmt.Sprintf("%s (id: %s)", display, user.ID)
+	}
+	return fmt.Sprintf("%s (@%s, id: %s)", display, handle, user.ID)
+}
+
+func discordDisplayName(user *discordgo.User, member *discordgo.Member) string {
+	if member != nil {
+		if member.Nick != "" {
+			return member.Nick
+		}
+		if member.User != nil {
+			if member.User.GlobalName != "" {
+				return member.User.GlobalName
+			}
+			if member.User.Username != "" {
+				return member.User.Username
+			}
+		}
+	}
+	if user == nil {
+		return ""
+	}
+	if user.GlobalName != "" {
+		return user.GlobalName
+	}
+	return user.Username
+}
+
+func discordHandle(user *discordgo.User) string {
+	if user == nil {
+		return ""
+	}
+	handle := strings.TrimSpace(user.Username)
+	if handle == "" {
+		return ""
+	}
+	if user.Discriminator != "" && user.Discriminator != "0" {
+		return handle + "#" + user.Discriminator
+	}
+	return handle
 }
 
 func (c *Channel) resolveCachedChannelTitle(channelID string) string {
@@ -464,18 +520,21 @@ func (c *Channel) ResolveGroupTitles(ctx context.Context, channelIDs []string) (
 		}
 		remaining[id] = struct{}{}
 	}
-	if len(remaining) == 0 || c.session.State == nil {
+	if len(remaining) == 0 {
 		return titles, nil
 	}
 
-	c.session.State.RLock()
-	guildIDs := make([]string, 0, len(c.session.State.Guilds))
-	for _, guild := range c.session.State.Guilds {
-		if guild != nil && guild.ID != "" {
-			guildIDs = append(guildIDs, guild.ID)
+	var guildIDs []string
+	if c.session.State != nil {
+		c.session.State.RLock()
+		guildIDs = make([]string, 0, len(c.session.State.Guilds))
+		for _, guild := range c.session.State.Guilds {
+			if guild != nil && guild.ID != "" {
+				guildIDs = append(guildIDs, guild.ID)
+			}
 		}
+		c.session.State.RUnlock()
 	}
-	c.session.State.RUnlock()
 
 	for _, guildID := range guildIDs {
 		select {
@@ -504,6 +563,26 @@ func (c *Channel) ResolveGroupTitles(ctx context.Context, channelIDs []string) (
 		}
 		if len(remaining) == 0 {
 			break
+		}
+	}
+	for id := range remaining {
+		select {
+		case <-ctx.Done():
+			return titles, nil
+		default:
+		}
+		lookupCtx, cancel := context.WithTimeout(ctx, 750*time.Millisecond)
+		ch, err := c.session.Channel(id, discordgo.WithContext(lookupCtx))
+		cancel()
+		if err != nil {
+			slog.Debug("discord channel title direct lookup failed", "channel_id", id, "error", err)
+			continue
+		}
+		if ch == nil {
+			continue
+		}
+		if title := channels.SanitizeDisplayName(ch.Name); title != "" {
+			titles[id] = title
 		}
 	}
 	return titles, nil

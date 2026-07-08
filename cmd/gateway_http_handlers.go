@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"context"
+
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channelmemory"
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
@@ -142,4 +145,23 @@ func makeChannelMemoryService(stores *store.Stores, domainBus eventbus.DomainEve
 		UsageCaps:     usageCapSvc,
 		Redactor:      channelmemory.NewRedactor(),
 	}
+}
+
+type channelMemoryContextProvider interface {
+	ResolveMemoryExtractionContext(ctx context.Context, inst *store.ChannelInstanceData, group store.PendingMessageGroup) (channelmemory.ExtractionContext, error)
+}
+
+func resolveChannelMemoryExtractionContext(ctx context.Context, mgr *channels.Manager, inst *store.ChannelInstanceData, group store.PendingMessageGroup) (channelmemory.ExtractionContext, error) {
+	if mgr == nil || inst == nil || inst.Name == "" {
+		return channelmemory.ExtractionContext{}, nil
+	}
+	ch, ok := mgr.GetChannel(inst.Name)
+	if !ok {
+		return channelmemory.ExtractionContext{}, nil
+	}
+	provider, ok := ch.(channelMemoryContextProvider)
+	if !ok {
+		return channelmemory.ExtractionContext{}, nil
+	}
+	return provider.ResolveMemoryExtractionContext(ctx, inst, group)
 }

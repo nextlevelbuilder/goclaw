@@ -54,6 +54,7 @@ func (s *Service) Approve(ctx context.Context, itemID uuid.UUID, approver string
 					EpisodicID:  ep.ID.String(),
 					SessionKey:  ep.SessionKey,
 					Summary:     item.Summary,
+					KeyTopics:   decodeStrings(item.Topics),
 					KeyEntities: decodeStrings(item.Entities),
 				},
 			})

@@ -24,14 +24,15 @@ const pairingDebounceTime = 60 * time.Second
 // Channel connects to Discord via the Bot API using gateway events.
 type Channel struct {
 	*channels.BaseChannel
-	session         *discordgo.Session
-	config          config.DiscordConfig
-	botUserID       string                      // populated on start
-	placeholders    sync.Map                    // placeholderKey string → messageID string
-	typingCtrls     sync.Map                    // channelID string → *typing.Controller
-	agentStore      store.AgentStore            // for agent key lookup (nil = writer commands disabled)
-	configPermStore store.ConfigPermissionStore // for group file writer management (nil = writer commands disabled)
-	audioMgr        *audio.Manager              // unified STT via audio.Manager (nil = no STT)
+	session              *discordgo.Session
+	config               config.DiscordConfig
+	botUserID            string                      // populated on start
+	placeholders         sync.Map                    // placeholderKey string → messageID string
+	typingCtrls          sync.Map                    // channelID string → *typing.Controller
+	agentStore           store.AgentStore            // for agent key lookup (nil = writer commands disabled)
+	configPermStore      store.ConfigPermissionStore // for group file writer management (nil = writer commands disabled)
+	audioMgr             *audio.Manager              // unified STT via audio.Manager (nil = no STT)
+	contactRefreshCancel context.CancelFunc
 	// pairingService, pairingDebounce, approvedGroups, groupHistory, historyLimit, requireMention
 	// are inherited from channels.BaseChannel.
 }
@@ -81,7 +82,7 @@ func New(cfg config.DiscordConfig, msgBus *bus.MessageBus, pairingSvc store.Pair
 }
 
 // Start opens the Discord gateway connection and begins receiving events.
-func (c *Channel) Start(_ context.Context) error {
+func (c *Channel) Start(ctx context.Context) error {
 	c.GroupHistory().StartFlusher()
 	slog.Info("starting discord bot")
 
@@ -101,6 +102,9 @@ func (c *Channel) Start(_ context.Context) error {
 
 	c.SetRunning(true)
 	slog.Info("discord bot connected", "username", user.Username, "id", user.ID)
+	refreshCtx, cancel := context.WithCancel(ctx)
+	c.contactRefreshCancel = cancel
+	go c.runContactRefreshLoop(refreshCtx)
 
 	return nil
 }
@@ -127,6 +131,10 @@ func (c *Channel) SetPendingHistoryTenantID(id uuid.UUID) {
 
 // Stop closes the Discord gateway connection.
 func (c *Channel) Stop(_ context.Context) error {
+	if c.contactRefreshCancel != nil {
+		c.contactRefreshCancel()
+		c.contactRefreshCancel = nil
+	}
 	c.GroupHistory().StopFlusher()
 	slog.Info("stopping discord bot")
 	c.SetRunning(false)

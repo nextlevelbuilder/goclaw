@@ -22,9 +22,11 @@ func testRegistry(p providers.Provider) *providers.Registry {
 type mockExtractor struct {
 	result *knowledgegraph.ExtractionResult
 	err    error
+	inputs []string
 }
 
-func (m *mockExtractor) Extract(_ context.Context, _ string) (*knowledgegraph.ExtractionResult, error) {
+func (m *mockExtractor) Extract(_ context.Context, text string) (*knowledgegraph.ExtractionResult, error) {
+	m.inputs = append(m.inputs, text)
 	return m.result, m.err
 }
 
@@ -43,4 +45,4 @@ func (m *mockProvider) ChatStream(_ context.Context, _ providers.ChatRequest, _ 
 }
 
 func (m *mockProvider) Name() string         { return "mock" }
-func (m *mockProvider) DefaultModel() string  { return "mock-model" }
+func (m *mockProvider) DefaultModel() string { return "mock-model" }

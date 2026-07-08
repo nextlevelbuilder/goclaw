@@ -4,37 +4,46 @@ import (
 	"encoding/json"
 	"regexp"
 	"slices"
+	"strings"
 	"time"
 )
 
 var DefaultAllowedTypes = []string{"people", "projects", "decisions", "todos", "preferences", "events"}
 
+const maxCustomPromptChars = 4000
+
+const GlobalCustomPromptConfigKey = "channel_memory.extraction.custom_prompt"
+
 type Config struct {
-	Enabled            bool     `json:"enabled"`
-	ReviewMode         bool     `json:"review_mode"`
-	IntervalMinutes    int      `json:"interval_minutes"`
-	MessageCap         int      `json:"message_cap"`
-	RetentionHours     int      `json:"retention_hours"`
-	AllowedTypes       []string `json:"allowed_types"`
-	ExcludeUsers       []string `json:"exclude_users"`
-	ExcludePatterns    []string `json:"exclude_patterns"`
-	ExcludeHistoryKeys []string `json:"exclude_history_keys"`
-	MinMessages        int      `json:"min_messages"`
-	GroupOnly          bool     `json:"group_only"`
+	Enabled            bool              `json:"enabled"`
+	ReviewMode         bool              `json:"review_mode"`
+	IntervalMinutes    int               `json:"interval_minutes"`
+	MessageCap         int               `json:"message_cap"`
+	RetentionHours     int               `json:"retention_hours"`
+	AllowedTypes       []string          `json:"allowed_types"`
+	ExcludeUsers       []string          `json:"exclude_users"`
+	ExcludePatterns    []string          `json:"exclude_patterns"`
+	ExcludeHistoryKeys []string          `json:"exclude_history_keys"`
+	CustomPrompt       string            `json:"custom_prompt"`
+	GroupCustomPrompts map[string]string `json:"group_custom_prompts"`
+	MinMessages        int               `json:"min_messages"`
+	GroupOnly          bool              `json:"group_only"`
 }
 
 type ConfigPatch struct {
-	Enabled            *bool     `json:"enabled"`
-	ReviewMode         *bool     `json:"review_mode"`
-	IntervalMinutes    *int      `json:"interval_minutes"`
-	MessageCap         *int      `json:"message_cap"`
-	RetentionHours     *int      `json:"retention_hours"`
-	AllowedTypes       *[]string `json:"allowed_types"`
-	ExcludeUsers       *[]string `json:"exclude_users"`
-	ExcludePatterns    *[]string `json:"exclude_patterns"`
-	ExcludeHistoryKeys *[]string `json:"exclude_history_keys"`
-	MinMessages        *int      `json:"min_messages"`
-	GroupOnly          *bool     `json:"group_only"`
+	Enabled            *bool              `json:"enabled"`
+	ReviewMode         *bool              `json:"review_mode"`
+	IntervalMinutes    *int               `json:"interval_minutes"`
+	MessageCap         *int               `json:"message_cap"`
+	RetentionHours     *int               `json:"retention_hours"`
+	AllowedTypes       *[]string          `json:"allowed_types"`
+	ExcludeUsers       *[]string          `json:"exclude_users"`
+	ExcludePatterns    *[]string          `json:"exclude_patterns"`
+	ExcludeHistoryKeys *[]string          `json:"exclude_history_keys"`
+	CustomPrompt       *string            `json:"custom_prompt"`
+	GroupCustomPrompts *map[string]string `json:"group_custom_prompts"`
+	MinMessages        *int               `json:"min_messages"`
+	GroupOnly          *bool              `json:"group_only"`
 }
 
 func DefaultConfig() Config {
@@ -71,6 +80,8 @@ func ParseConfig(raw json.RawMessage) Config {
 	cfg.ExcludeUsers = boundedStrings(in.ExcludeUsers, 50, 255)
 	cfg.ExcludePatterns = boundedPatterns(in.ExcludePatterns, 20, 255)
 	cfg.ExcludeHistoryKeys = boundedStrings(in.ExcludeHistoryKeys, 200, 255)
+	cfg.CustomPrompt = normalizeCustomPrompt(in.CustomPrompt)
+	cfg.GroupCustomPrompts = normalizeGroupCustomPrompts(in.GroupCustomPrompts)
 	cfg.MinMessages = clampInt(in.MinMessages, 2, 100, cfg.MinMessages)
 	cfg.GroupOnly = true
 	return cfg
@@ -109,6 +120,12 @@ func ApplyConfigPatch(base Config, raw []byte) (Config, error) {
 	if patch.ExcludeHistoryKeys != nil {
 		cfg.ExcludeHistoryKeys = *patch.ExcludeHistoryKeys
 	}
+	if patch.CustomPrompt != nil {
+		cfg.CustomPrompt = *patch.CustomPrompt
+	}
+	if patch.GroupCustomPrompts != nil {
+		cfg.GroupCustomPrompts = *patch.GroupCustomPrompts
+	}
 	if patch.MinMessages != nil {
 		cfg.MinMessages = *patch.MinMessages
 	}
@@ -116,6 +133,14 @@ func ApplyConfigPatch(base Config, raw []byte) (Config, error) {
 		cfg.GroupOnly = *patch.GroupOnly
 	}
 	return ParseConfig(MergeIntoInstanceConfig(nil, cfg)), nil
+}
+
+func ApplyInstanceConfigPatch(raw json.RawMessage, patch []byte) (json.RawMessage, Config, error) {
+	cfg, err := ApplyConfigPatch(ParseConfig(raw), patch)
+	if err != nil {
+		return nil, Config{}, err
+	}
+	return MergeIntoInstanceConfig(raw, cfg), cfg, nil
 }
 
 func MergeIntoInstanceConfig(raw json.RawMessage, cfg Config) json.RawMessage {
@@ -148,6 +173,7 @@ func normalizeAllowedTypes(in []string) []string {
 func boundedStrings(in []string, maxCount, maxLen int) []string {
 	out := make([]string, 0, min(len(in), maxCount))
 	for _, v := range in {
+		v = strings.TrimSpace(v)
 		if v == "" || len(v) > maxLen {
 			continue
 		}
@@ -181,4 +207,37 @@ func clampInt(v, minV, maxV, fallback int) int {
 		return maxV
 	}
 	return v
+}
+
+func normalizeCustomPrompt(v string) string {
+	v = strings.TrimSpace(v)
+	if len([]rune(v)) > maxCustomPromptChars {
+		v = string([]rune(v)[:maxCustomPromptChars])
+	}
+	return v
+}
+
+func normalizeGroupCustomPrompts(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]string, min(len(in), 200))
+	for key, value := range in {
+		key = strings.TrimSpace(key)
+		if key == "" || len(key) > 255 {
+			continue
+		}
+		value = normalizeCustomPrompt(value)
+		if value == "" {
+			continue
+		}
+		out[key] = value
+		if len(out) >= 200 {
+			break
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }

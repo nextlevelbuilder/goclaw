@@ -407,8 +407,10 @@ func runGateway() {
 		}
 	}
 
+	var channelMemorySvc *channelmemory.Service
 	if memorySvc := makeChannelMemoryService(pgStores, domainBus, providerRegistry, usageCapSvc); memorySvc != nil {
-		cleanupChannelMemory := (&channelmemory.Worker{Service: memorySvc}).Start(context.Background())
+		channelMemorySvc = memorySvc
+		cleanupChannelMemory := (&channelmemory.Worker{Service: channelMemorySvc}).Start(context.Background())
 		defer cleanupChannelMemory()
 		slog.Info("channel memory extraction worker registered")
 	}
@@ -527,6 +529,7 @@ func runGateway() {
 		skillsLoader:     skillsLoader,
 		enrichProgress:   enrichProgress,
 		enrichWorker:     enrichWorker,
+		channelMemorySvc: channelMemorySvc,
 		workspace:        workspace,
 		dataDir:          dataDir,
 		domainBus:        domainBus,
@@ -703,6 +706,11 @@ func runGateway() {
 		// created — required for handleDelete to invoke ChannelDestroyer on
 		// Bitrix24 channels (imbot.unregister bot cleanup).
 		channelInstancesH.SetChannelManager(channelMgr)
+	}
+	if deps.channelMemorySvc != nil {
+		deps.channelMemorySvc.ContextResolver = channelmemory.ContextResolverFunc(func(ctx context.Context, inst *store.ChannelInstanceData, group store.PendingMessageGroup) (channelmemory.ExtractionContext, error) {
+			return resolveChannelMemoryExtractionContext(ctx, channelMgr, inst, group)
+		})
 	}
 
 	// Wire channel sender + tenant checker on message tool (now that channelMgr exists)

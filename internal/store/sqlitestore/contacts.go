@@ -29,8 +29,8 @@ func (s *SQLiteContactStore) UpsertContact(ctx context.Context, channelType, cha
 		tenantID = store.MasterTenantID
 	}
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO channel_contacts (channel_type, channel_instance, sender_id, user_id, display_name, username, peer_kind, contact_type, thread_id, thread_type, tenant_id)
-		VALUES (?, NULLIF(?,?), ?, NULLIF(?,?), NULLIF(?,?), NULLIF(?,?), NULLIF(?,?), ?, NULLIF(?,?), NULLIF(?,?), ?)
+		INSERT INTO channel_contacts (id, channel_type, channel_instance, sender_id, user_id, display_name, username, peer_kind, contact_type, thread_id, thread_type, tenant_id)
+		VALUES (?, ?, NULLIF(?,?), ?, NULLIF(?,?), NULLIF(?,?), NULLIF(?,?), NULLIF(?,?), ?, NULLIF(?,?), NULLIF(?,?), ?)
 		ON CONFLICT (tenant_id, channel_type, sender_id, COALESCE(thread_id, '')) DO UPDATE SET
 			display_name     = COALESCE(NULLIF(excluded.display_name,''), channel_contacts.display_name),
 			username         = COALESCE(NULLIF(excluded.username,''), channel_contacts.username),
@@ -40,6 +40,7 @@ func (s *SQLiteContactStore) UpsertContact(ctx context.Context, channelType, cha
 			contact_type     = excluded.contact_type,
 			thread_type      = COALESCE(NULLIF(excluded.thread_type,''), channel_contacts.thread_type),
 			last_seen_at     = CURRENT_TIMESTAMP`,
+		store.GenNewID().String(),
 		channelType,
 		channelInstance, "",
 		senderID,

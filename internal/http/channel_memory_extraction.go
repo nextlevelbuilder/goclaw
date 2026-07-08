@@ -73,13 +73,12 @@ func (h *ChannelInstancesHandler) handleMemoryExtractionSettings(w http.Response
 		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidJSON))
 		return
 	}
-	normalized, err := channelmemory.ApplyConfigPatch(channelmemory.ParseConfig(inst.Config), body)
+	configJSON, normalized, err := channelmemory.ApplyInstanceConfigPatch(inst.Config, body)
 	if err != nil {
 		locale := store.LocaleFromContext(r.Context())
 		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidJSON))
 		return
 	}
-	configJSON := channelmemory.MergeIntoInstanceConfig(inst.Config, normalized)
 	if err := h.store.Update(r.Context(), inst.ID, map[string]any{"config": configJSON}); err != nil {
 		writeError(w, http.StatusInternalServerError, protocol.ErrInternal, "failed to update memory extraction settings")
 		return
@@ -102,24 +101,6 @@ func (h *ChannelInstancesHandler) handleMemoryExtractionGroups(w http.ResponseWr
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, protocol.ErrInternal, "failed to list memory extraction groups")
 		return
-	}
-	if h.channelMgr != nil {
-		historyKeys := make([]string, 0, len(groups))
-		for i := range groups {
-			if groups[i].HistoryKey != "" {
-				historyKeys = append(historyKeys, groups[i].HistoryKey)
-			}
-		}
-		titles, err := h.channelMgr.ResolveGroupTitles(r.Context(), inst.Name, historyKeys)
-		if err == nil {
-			for i := range groups {
-				title := titles[groups[i].HistoryKey]
-				if title == "" {
-					continue
-				}
-				groups[i].GroupTitle = title
-			}
-		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"groups": groups})
 }
