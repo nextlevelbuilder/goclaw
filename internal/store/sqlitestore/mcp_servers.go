@@ -17,7 +17,7 @@ import (
 )
 
 const mcpServerSelectCols = `id, name, display_name, transport, command, args, url, headers, env,
-		 api_key, tool_prefix, timeout_sec, settings, enabled, created_by, created_at, updated_at`
+		 api_key, tool_prefix, timeout_sec, settings, enabled, require_user_credentials, created_by, created_at, updated_at`
 
 // SQLiteMCPServerStore implements store.MCPServerStore backed by SQLite.
 type SQLiteMCPServerStore struct {
@@ -59,12 +59,12 @@ func (s *SQLiteMCPServerStore) CreateServer(ctx context.Context, srv *store.MCPS
 
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO mcp_servers (id, name, display_name, transport, command, args, url, headers, env,
-		 api_key, tool_prefix, timeout_sec, settings, enabled, created_by, created_at, updated_at, tenant_id)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		 api_key, tool_prefix, timeout_sec, settings, enabled, require_user_credentials, created_by, created_at, updated_at, tenant_id)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		srv.ID, srv.Name, nilStr(srv.DisplayName), srv.Transport, nilStr(srv.Command),
 		jsonOrEmpty(srv.Args), nilStr(srv.URL), encHeaders, encEnv,
 		nilStr(apiKey), nilStr(srv.ToolPrefix), srv.TimeoutSec,
-		jsonOrEmpty(srv.Settings), srv.Enabled, srv.CreatedBy, now, now, tenantID,
+		jsonOrEmpty(srv.Settings), srv.Enabled, srv.RequireUserCredentials, srv.CreatedBy, now, now, tenantID,
 	)
 	return err
 }

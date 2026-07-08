@@ -12,6 +12,8 @@ export interface MCPServerData {
   timeout_sec: number
   settings?: { require_user_credentials?: boolean }
   enabled: boolean
+  /** Top-level twin of `settings.require_user_credentials` (Phase 89 rollout). */
+  require_user_credentials?: boolean
   created_by: string
   agent_count?: number
   created_at: string
@@ -30,6 +32,8 @@ export interface MCPServerInput {
   tool_prefix?: string
   timeout_sec?: number
   enabled?: boolean
+  /** Top-level flag written since Phase 89; backends still accept the legacy JSONB entry. */
+  require_user_credentials?: boolean
 }
 
 export interface MCPAgentGrant {

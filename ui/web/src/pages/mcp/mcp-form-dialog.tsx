@@ -100,7 +100,10 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit, onTest, on
         toolPrefix: server?.tool_prefix ?? "",
         timeout: server?.timeout_sec ?? 60,
         enabled: server?.enabled ?? true,
-        requireUserCreds: server?.settings?.require_user_credentials ?? false,
+        // Prefer the top-level column (Phase 89 backfilled from settings JSONB);
+        // fall back to the legacy settings entry so cached responses from
+        // pre-upgrade backends still render the checkbox with the right value.
+        requireUserCreds: server?.require_user_credentials ?? server?.settings?.require_user_credentials ?? false,
         toolHintsGlobal: server?.settings?.tool_hints?.global ?? "",
         toolHintsTools: server?.settings?.tool_hints?.tools ?? {},
         oauthEnabled: oauth?.auth_type === "oauth",
@@ -190,6 +193,10 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit, onTest, on
       timeout_sec: data.timeout,
       settings,
       enabled: data.enabled,
+      // Send the promoted top-level flag alongside the legacy settings
+      // twin so both backends (pre- and post-Phase 89) stay in sync during
+      // the migration window. Phase 5 drops the settings entry.
+      require_user_credentials: data.requireUserCreds,
     };
   };
 

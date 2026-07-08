@@ -41,6 +41,14 @@ export interface MCPServerData {
   timeout_sec: number;
   settings?: MCPServerSettings;
   enabled: boolean;
+  /**
+   * True when the server mints credentials per-user at message time
+   * (Bitrix24 auto-onboard etc.). Promoted from `settings.require_user_credentials`
+   * to a top-level column; the settings entry stays for one release cycle
+   * so legacy readers keep working. Prefer this field over the settings
+   * entry when both are present.
+   */
+  require_user_credentials?: boolean;
   created_by: string;
   agent_count?: number;
   created_at: string;
@@ -60,6 +68,12 @@ export interface MCPServerInput {
   timeout_sec?: number;
   settings?: MCPServerSettings;
   enabled?: boolean;
+  /**
+   * Top-level twin of `settings.require_user_credentials`. Send both while
+   * the server backend is still on the migration window (readers may hit
+   * either field); after Phase 5 lands the settings entry disappears.
+   */
+  require_user_credentials?: boolean;
 }
 
 export interface MCPToolInfo {

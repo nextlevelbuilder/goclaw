@@ -17,6 +17,7 @@ import { SkillNameSelect } from "@/components/shared/skill-name-select";
 import { ProviderModelSelect } from "@/components/shared/provider-model-select";
 import { InfoLabel } from "@/components/shared/info-label";
 import { BitrixPortalSelect } from "./bitrix24/bitrix-portal-select";
+import { MCPServerSelect } from "./bitrix24/mcp-server-select";
 import { deliveryModelKey, isDeliveryModelKey, isDeliveryProviderKey } from "./channel-delivery-provider-fields";
 import type { FieldDef } from "./channel-schemas";
 
@@ -418,6 +419,19 @@ function FieldRenderer({
           <SkillNameSelect
             value={(value as string[]) ?? []}
             onChange={(v) => onChange(v.length > 0 ? v : undefined)}
+            placeholder={field.placeholder}
+          />
+          {inlineHelp && <p className="text-xs text-muted-foreground">{inlineHelp}</p>}
+        </div>
+      );
+
+    case "mcp-select":
+      return (
+        <div className="grid gap-1.5">
+          <FieldLabel htmlFor={id} text={label} tip={tooltipHelp} />
+          <MCPServerSelect
+            value={(value as string) ?? ""}
+            onChange={onChange}
             placeholder={field.placeholder}
           />
           {inlineHelp && <p className="text-xs text-muted-foreground">{inlineHelp}</p>}

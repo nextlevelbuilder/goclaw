@@ -74,7 +74,8 @@ var mcpServerAllowedFields = map[string]bool{
 	"name": true, "display_name": true, "transport": true, "command": true, "args": true,
 	"url": true, "api_key": true, "env": true, "headers": true,
 	"enabled": true, "tool_prefix": true, "timeout_sec": true,
-	"agent_id": true, "config": true, "settings": true,
+	"require_user_credentials": true,
+	"agent_id":                 true, "config": true, "settings": true,
 }
 
 var channelInstanceAllowedFields = map[string]bool{

@@ -56,12 +56,12 @@ func (s *PGMCPServerStore) CreateServer(ctx context.Context, srv *store.MCPServe
 
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO mcp_servers (id, name, display_name, transport, command, args, url, headers, env,
-		 api_key, tool_prefix, timeout_sec, settings, enabled, created_by, created_at, updated_at, tenant_id)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+		 api_key, tool_prefix, timeout_sec, settings, enabled, require_user_credentials, created_by, created_at, updated_at, tenant_id)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
 		srv.ID, srv.Name, nilStr(srv.DisplayName), srv.Transport, nilStr(srv.Command),
 		jsonOrEmpty(srv.Args), nilStr(srv.URL), encHeaders, encEnv,
 		nilStr(apiKey), nilStr(srv.ToolPrefix), srv.TimeoutSec,
-		jsonOrEmpty(srv.Settings), srv.Enabled, srv.CreatedBy, now, now, tenantID,
+		jsonOrEmpty(srv.Settings), srv.Enabled, srv.RequireUserCredentials, srv.CreatedBy, now, now, tenantID,
 	)
 	return err
 }
@@ -69,7 +69,7 @@ func (s *PGMCPServerStore) CreateServer(ctx context.Context, srv *store.MCPServe
 const mcpServerSelectCols = `id, name, COALESCE(display_name, '') AS display_name, transport,
 		 COALESCE(command, '') AS command, args, COALESCE(url, '') AS url, headers, env,
 		 COALESCE(api_key, '') AS api_key, COALESCE(tool_prefix, '') AS tool_prefix,
-		 timeout_sec, settings, enabled, created_by, created_at, updated_at`
+		 timeout_sec, settings, enabled, require_user_credentials, created_by, created_at, updated_at`
 
 func (s *PGMCPServerStore) GetServer(ctx context.Context, id uuid.UUID) (*store.MCPServerData, error) {
 	q := `SELECT ` + mcpServerSelectCols + ` FROM mcp_servers WHERE id = $1`

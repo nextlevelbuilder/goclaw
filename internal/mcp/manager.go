@@ -280,7 +280,10 @@ func (m *Manager) resolveServerCredentials(ctx context.Context, info store.MCPAc
 	}
 
 	// Skip server if it requires scoped/user credentials and none are present.
-	if requireUserCreds(srv.Settings) {
+	// Prefer the top-level column (Phase 89 backfilled from settings JSONB);
+	// fall back to the legacy JSONB entry for cases where a caller mutated
+	// settings directly without touching the column.
+	if srv.RequireUserCredentials || requireUserCreds(srv.Settings) {
 		if userID == "" {
 			return nil
 		}
@@ -368,7 +371,7 @@ func (m *Manager) resolveServerCredentials(ctx context.Context, info store.MCPAc
 		}
 		tenantID := store.TenantIDFromContext(ctx)
 		oauthUserID := ""
-		if requireUserCreds(srv.Settings) {
+		if srv.RequireUserCredentials || requireUserCreds(srv.Settings) {
 			oauthUserID = userID
 		}
 		token, err2 := m.oauthTokenProvider.GetValidToken(ctx, srv.ID, tenantID, oauthUserID)
@@ -441,7 +444,7 @@ func (m *Manager) LoadForAgent(ctx context.Context, agentID uuid.UUID, userID st
 	for _, info := range accessible {
 		// When loading at startup (userID=""), store servers requiring per-user
 		// credentials for later per-request resolution instead of skipping them.
-		if userID == "" && requireUserCreds(info.Server.Settings) && info.Server.Enabled {
+		if userID == "" && (info.Server.RequireUserCredentials || requireUserCreds(info.Server.Settings)) && info.Server.Enabled {
 			m.userCredServers = append(m.userCredServers, info)
 			slog.Debug("mcp.server.deferred_user_creds", "server", info.Server.Name)
 			continue

@@ -16,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 55
+const SchemaVersion = 57
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -898,6 +898,45 @@ ALTER TABLE usage_event_rollups ADD COLUMN thinking_tokens BIGINT NOT NULL DEFAU
 CREATE INDEX IF NOT EXISTS idx_channel_pending_messages_parent
   ON channel_pending_messages(channel_name, parent_history_key)
   WHERE parent_history_key <> '';`,
+	// Version 55 → 56: promote require_user_credentials from settings JSONB
+	// to a top-level column so channel factories can filter directly.
+	// Backfill reads the legacy JSONB via json_extract so no admin needs to
+	// re-tick after upgrading. Mirrors PG migration 000092. Idempotent-guarded
+	// via idempotentColumnMigration(55).
+	55: `ALTER TABLE mcp_servers ADD COLUMN require_user_credentials BOOLEAN NOT NULL DEFAULT 0;
+UPDATE mcp_servers
+   SET require_user_credentials = COALESCE(CAST(json_extract(settings, '$.require_user_credentials') AS INTEGER), 0)
+ WHERE settings IS NOT NULL
+   AND json_extract(settings, '$.require_user_credentials') IS NOT NULL;`,
+	// Version 56 → 57: backfill Bitrix24 channel_instances.config with
+	// mcp_server_id by resolving the legacy mcp_server_name against
+	// mcp_servers (matched on the channel's agent tenant_id since
+	// channel_instances doesn't carry tenant_id directly). Mirrors PG
+	// migration 000093. Idempotent — only touches rows without an
+	// existing mcp_server_id key.
+	56: `UPDATE channel_instances
+        SET config = json_set(
+                COALESCE(config, '{}'),
+                '$.mcp_server_id',
+                (SELECT srv.id
+                   FROM mcp_servers srv
+                  WHERE srv.name = json_extract(channel_instances.config, '$.mcp_server_name')
+                    AND srv.tenant_id = (
+                        SELECT a.tenant_id FROM agents a WHERE a.id = channel_instances.agent_id
+                    )
+                  LIMIT 1)
+        ),
+            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      WHERE channel_type = 'bitrix24'
+        AND json_extract(config, '$.mcp_server_name') IS NOT NULL
+        AND json_extract(config, '$.mcp_server_id') IS NULL
+        AND EXISTS (
+            SELECT 1 FROM mcp_servers srv
+             WHERE srv.name = json_extract(channel_instances.config, '$.mcp_server_name')
+               AND srv.tenant_id = (
+                   SELECT a.tenant_id FROM agents a WHERE a.id = channel_instances.agent_id
+               )
+        );`,
 }
 
 const addUsageEventAnalyticsTables = `
@@ -1549,6 +1588,8 @@ func idempotentColumnMigration(version int) (string, string, bool) {
 		return "secure_cli_binaries", "adapter_name", true
 	case 51:
 		return "webhook_calls", "last_heartbeat_at", true
+	case 55:
+		return "mcp_servers", "require_user_credentials", true
 	default:
 		return "", "", false
 	}

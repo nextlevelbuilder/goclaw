@@ -94,41 +94,75 @@ func (c *Channel) initMCPProvisioner(ctx context.Context) error {
 			"channel", c.Name())
 		return nil
 	}
-	if strings.TrimSpace(c.cfg.MCPServerName) == "" || strings.TrimSpace(c.cfg.MCPBaseURL) == "" {
-		slog.Debug("bitrix24 mcp: provisioning disabled (mcp_server_name or mcp_base_url empty)",
+
+	hasServerID := strings.TrimSpace(c.cfg.MCPServerID) != ""
+	hasLegacy := strings.TrimSpace(c.cfg.MCPServerName) != "" && strings.TrimSpace(c.cfg.MCPBaseURL) != ""
+	if !hasServerID && !hasLegacy {
+		slog.Debug("bitrix24 mcp: provisioning disabled (no mcp_server_id and legacy fields empty)",
 			"channel", c.Name())
 		return nil
 	}
 
-	// Resolve server name → UUID once at startup. If the server name is
-	// wrong or the row doesn't exist yet, log and disable provisioning —
-	// don't block channel startup. Admin can create the server + reload
-	// the channel later.
+	// Resolve the mcp_servers row. Preferred path: mcp_server_id (UUID
+	// dashboards write since v3.15). Fallback: legacy name lookup for
+	// configs written before the refactor and not yet migrated.
 	//
-	// PGMCPServerStore.GetServerByName scopes the lookup by tenant_id from
-	// context (multi-tenant isolation). Channel.Start receives ctx from the
-	// instance loader without that scope set — wrap it explicitly with the
-	// channel's own tenant id so the lookup matches the row a tenant admin
-	// created via `bitrix-portal create` / dashboard.
+	// GetServer / GetServerByName both scope by tenant_id from context.
+	// Channel.Start receives ctx from the instance loader without that
+	// scope set — wrap it explicitly with the channel's own tenant id so
+	// the lookup matches the row a tenant admin created via the dashboard
+	// or `bitrix-portal create`.
 	lookupCtx := ctx
 	if tid := c.TenantID(); tid != uuid.Nil {
 		lookupCtx = store.WithTenantID(ctx, tid)
 	}
-	server, err := c.mcpStore.GetServerByName(lookupCtx, c.cfg.MCPServerName)
+
+	var (
+		server *store.MCPServerData
+		err    error
+	)
+	if hasServerID {
+		serverUUID, parseErr := uuid.Parse(strings.TrimSpace(c.cfg.MCPServerID))
+		if parseErr != nil {
+			slog.Warn("bitrix24 mcp: provisioning disabled — invalid mcp_server_id",
+				"channel", c.Name(), "mcp_server_id", c.cfg.MCPServerID, "err", parseErr)
+			return nil
+		}
+		server, err = c.mcpStore.GetServer(lookupCtx, serverUUID)
+	} else {
+		server, err = c.mcpStore.GetServerByName(lookupCtx, c.cfg.MCPServerName)
+	}
 	if err != nil || server == nil {
 		slog.Warn("bitrix24 mcp: provisioning disabled — server not found",
-			"channel", c.Name(), "mcp_server_name", c.cfg.MCPServerName, "err", err)
+			"channel", c.Name(),
+			"mcp_server_id", c.cfg.MCPServerID,
+			"mcp_server_name", c.cfg.MCPServerName,
+			"err", err)
+		return nil
+	}
+
+	// Base URL sourcing: for the id-based path we trust the mcp_servers row
+	// (single source of truth). Legacy path stays on MCPBaseURL so a
+	// half-migrated fleet keeps working until Phase 5 rewrites configs.
+	baseURL := strings.TrimSpace(c.cfg.MCPBaseURL)
+	if hasServerID {
+		baseURL = strings.TrimSpace(server.URL)
+	}
+	if baseURL == "" {
+		slog.Warn("bitrix24 mcp: provisioning disabled — mcp_servers row has empty url",
+			"channel", c.Name(), "mcp_server", server.Name)
 		return nil
 	}
 
 	c.mcpServerID = server.ID
-	c.mcpClient = newMCPClient(c.cfg.MCPBaseURL, 10*time.Second)
+	c.mcpClient = newMCPClient(baseURL, 10*time.Second)
 	c.mcpDebounce = make(map[mcpDebounceKey]time.Time)
 
 	slog.Info("bitrix24 mcp: provisioning enabled",
 		"channel", c.Name(),
-		"mcp_server", c.cfg.MCPServerName,
-		"mcp_server_id", server.ID)
+		"mcp_server", server.Name,
+		"mcp_server_id", server.ID,
+		"require_user_credentials", server.RequireUserCredentials)
 	return nil
 }
 

@@ -750,8 +750,9 @@ func runGateway() {
 		// the one used by pg.NewPGStores → NewPGBitrixPortalStore.
 		bitrixEncKey := os.Getenv("GOCLAW_ENCRYPTION_KEY")
 		// Use the MCP-aware factory variant so channels that opt into
-		// lazy per-user credential provisioning (via mcp_server_name +
-		// mcp_base_url in their instance config) can reach the partner's
+		// lazy per-user credential provisioning (via mcp_server_id — or
+		// the legacy mcp_server_name + mcp_base_url pair — in their
+		// instance config) can reach the partner's
 		// MCPServerStore. The MCP server authenticates each onboard call
 		// via the caller-supplied Bitrix access_token (the "Bitrix24
 		// OAuth → existing mcp_user_credentials bridge" — Bitrix-specific

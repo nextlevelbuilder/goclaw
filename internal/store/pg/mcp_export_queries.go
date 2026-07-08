@@ -20,9 +20,10 @@ type MCPServerExport struct {
 	Args        json.RawMessage `json:"args,omitempty"`
 	URL         string          `json:"url,omitempty"`
 	ToolPrefix  string          `json:"tool_prefix,omitempty"`
-	TimeoutSec  int             `json:"timeout_sec"`
-	Settings    json.RawMessage `json:"settings,omitempty"`
-	Enabled     bool            `json:"enabled"`
+	TimeoutSec     int             `json:"timeout_sec"`
+	Settings       json.RawMessage `json:"settings,omitempty"`
+	Enabled        bool            `json:"enabled"`
+	RequireUserCredentials bool `json:"require_user_credentials,omitempty"`
 }
 
 // MCPGrantWithKey references an MCP agent grant by server_name and agent_key (portable).
@@ -51,7 +52,7 @@ func ExportMCPServers(ctx context.Context, db *sql.DB) ([]MCPServerExport, error
 	rows, err := db.QueryContext(ctx,
 		"SELECT name, COALESCE(display_name,''), transport,"+
 			" COALESCE(command,''), args, COALESCE(url,''),"+
-			" COALESCE(tool_prefix,''), timeout_sec, settings, enabled"+
+			" COALESCE(tool_prefix,''), timeout_sec, settings, enabled, require_user_credentials"+
 			" FROM mcp_servers WHERE 1=1"+tc+
 			" ORDER BY name",
 		tcArgs...,
@@ -71,7 +72,7 @@ func ExportMCPServers(ctx context.Context, db *sql.DB) ([]MCPServerExport, error
 		if err := rows.Scan(
 			&srv.Name, &srv.DisplayName, &srv.Transport,
 			&srv.Command, &argsRaw, &srv.URL,
-			&srv.ToolPrefix, &srv.TimeoutSec, &settings, &srv.Enabled,
+			&srv.ToolPrefix, &srv.TimeoutSec, &settings, &srv.Enabled, &srv.RequireUserCredentials,
 		); err != nil {
 			slog.Warn("mcp_export.servers.scan", "error", err)
 			continue
@@ -185,12 +186,12 @@ func ImportMCPServer(ctx context.Context, db *sql.DB, srv MCPServerExport, creat
 	_, err = db.ExecContext(ctx,
 		`INSERT INTO mcp_servers
 		   (id, name, display_name, transport, command, args, url,
-		    tool_prefix, timeout_sec, settings, enabled,
+		    tool_prefix, timeout_sec, settings, enabled, require_user_credentials,
 		    created_by, created_at, updated_at, tenant_id)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW(),NOW(),$13)`,
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW(),NOW(),$14)`,
 		id, srv.Name, srv.DisplayName, srv.Transport,
 		srv.Command, jsonOrNull(srv.Args), srv.URL,
-		srv.ToolPrefix, srv.TimeoutSec, jsonOrNull(srv.Settings), srv.Enabled,
+		srv.ToolPrefix, srv.TimeoutSec, jsonOrNull(srv.Settings), srv.Enabled, srv.RequireUserCredentials,
 		createdBy, tid,
 	)
 	if err != nil {

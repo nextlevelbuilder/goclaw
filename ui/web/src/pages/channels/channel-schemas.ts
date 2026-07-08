@@ -5,7 +5,7 @@ import { reasoningDeliveryOptions } from "./reasoning-delivery-config";
 export interface FieldDef {
   key: string;
   label: string;
-  type: "text" | "password" | "number" | "boolean" | "select" | "multi-select" | "tags" | "tristate" | "textarea" | "tool-select" | "skill-select";
+  type: "text" | "password" | "number" | "boolean" | "select" | "multi-select" | "tags" | "tristate" | "textarea" | "tool-select" | "skill-select" | "mcp-select";
   placeholder?: string;
   required?: boolean;
   defaultValue?: string | number | boolean | string[];
@@ -298,8 +298,14 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "allow_from", label: "Allowed Users (DM)", type: "tags", help: "Bitrix24 user IDs allowed to DM the bot. Empty = no allowlist filter." },
     { key: "group_allow_from", label: "Allowed Users (Group)", type: "tags", help: "Separate allowlist for group senders." },
     ...chatBehaviorOverrideFields,
-    { key: "mcp_server_name", label: "MCP Server Name", type: "text", advanced: true, placeholder: "bitrix24-prod", help: "Optional — name from mcp_servers table. Must be set together with MCP Base URL to enable per-user MCP credential auto-onboard. Leave both empty to disable." },
-    { key: "mcp_base_url", label: "MCP Base URL", type: "text", advanced: true, placeholder: "https://mcp.example.com", help: "Optional — HTTPS root of the partner MCP server. Channel POSTs {mcp_base_url}/api/auto-onboard to mint per-user credentials on first-sight. The MCP server authenticates each call via the caller's Bitrix access_token, so no admin secret is required." },
+    // Preferred single-select input backed by mcp_servers.require_user_credentials.
+    // Base URL is resolved from the selected row at Start() — no separate field needed.
+    { key: "mcp_server_id", label: "MCP Server", type: "mcp-select", help: "Optional — pick a per-user MCP server (only servers with \"Require user credentials\" ticked appear here). Channel POSTs {server.url}/api/auto-onboard on first-sight to mint the caller's per-user credential. Leave empty to disable MCP provisioning for this channel." },
+    // Legacy string fields — kept for backward-compat with configs written before
+    // the mcp_server_id rollout. Phase 5 migrates every existing channel to
+    // mcp_server_id and drops these entries.
+    { key: "mcp_server_name", label: "MCP Server Name (legacy)", type: "text", advanced: true, placeholder: "bitrix24-prod", help: "Deprecated — use \"MCP Server\" dropdown instead. Kept for backward-compat with pre-Phase-89 configs; will be removed once every channel is migrated." },
+    { key: "mcp_base_url", label: "MCP Base URL (legacy)", type: "text", advanced: true, placeholder: "https://mcp.example.com", help: "Deprecated — see the \"MCP Server\" dropdown. Legacy base URL used only when the new dropdown is empty and the legacy name is set." },
   ],
 };
 

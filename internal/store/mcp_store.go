@@ -24,7 +24,13 @@ type MCPServerData struct {
 	TimeoutSec  int             `json:"timeout_sec" db:"timeout_sec"`
 	Settings    json.RawMessage `json:"settings,omitempty" db:"settings"`
 	Enabled     bool            `json:"enabled" db:"enabled"`
-	CreatedBy   string          `json:"created_by" db:"created_by"`
+	// RequireUserCredentials marks servers that mint credentials per-user at
+	// message time (e.g. Bitrix24 channel auto-onboard) instead of sharing a
+	// single admin api_key across every caller. Promoted from
+	// settings.require_user_credentials (JSONB) to a top-level column so
+	// channel factories can filter mcp_servers directly.
+	RequireUserCredentials bool   `json:"require_user_credentials" db:"require_user_credentials"`
+	CreatedBy              string `json:"created_by" db:"created_by"`
 }
 
 // MCPAgentGrant represents an MCP server grant to an agent.

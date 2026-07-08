@@ -88,31 +88,43 @@ type bitrixInstanceConfig struct {
 
 	// Optional MCP lazy-provisioning binding (Phase C).
 	//
-	// When MCPServerName + MCPBaseURL are set AND the factory variant that
-	// accepts a MCPServerStore is used (FactoryWithPortalStoreAndMCP), the
-	// channel tries to mint per-user MCP credentials on first message:
+	// When MCPServerID (or the legacy MCPServerName+MCPBaseURL pair) is set
+	// AND the factory variant that accepts a MCPServerStore is used
+	// (FactoryWithPortalStoreAndMCP), the channel tries to mint per-user MCP
+	// credentials on first message:
 	//
 	//   1. Channel receives message from user U with OAuth tokens in event.
 	//   2. Channel looks up MCPUserCredentials(serverID, senderID). Present
-	//      → skip. Absent → POST /api/auto-onboard on MCPBaseURL forwarding
-	//      U's OAuth tokens. MCP server authenticates the call via Bitrix
-	//      `profile` against the supplied access_token — no shared admin
-	//      secret required — and responds with a per-user api_key, which
-	//      channel stores via SetUserCredentials (the "Bitrix24 OAuth →
-	//      existing mcp_user_credentials bridge" — Bitrix-specific glue,
-	//      not a generic MCP architecture pattern).
+	//      → skip. Absent → POST /api/auto-onboard on the resolved base URL
+	//      forwarding U's OAuth tokens. MCP server authenticates the call
+	//      via Bitrix `profile` against the supplied access_token — no
+	//      shared admin secret required — and responds with a per-user
+	//      api_key, which channel stores via SetUserCredentials (the
+	//      "Bitrix24 OAuth → existing mcp_user_credentials bridge" —
+	//      Bitrix-specific glue, not a generic MCP architecture pattern).
 	//   3. Agent pipeline downstream reads those creds naturally.
 	//
 	// Best-effort: if any step fails, channel logs a warning and forwards
 	// the message anyway — agent loop will just see no creds and skip
 	// that MCP server's tools. User gets a response, albeit without MCP.
 	//
-	// Half-config fails at factory load: both fields set or both empty.
-	//
 	// Skipped entirely for Open Channel bots (bot_type=O) — transient
 	// customers don't map to tenant_users.
-	MCPServerName string `json:"mcp_server_name,omitempty"` // mcp_servers.name
-	MCPBaseURL    string `json:"mcp_base_url,omitempty"`    // HTTPS root
+	//
+	// MCPServerID is the preferred wiring since v3.15: admin picks an MCP
+	// server from the dashboard dropdown (filtered to
+	// require_user_credentials=true rows) and the channel resolves both
+	// name and URL from the mcp_servers row.
+	MCPServerID string `json:"mcp_server_id,omitempty"` // mcp_servers.id (UUID)
+
+	// Deprecated: MCPServerName + MCPBaseURL are kept for backward-compat
+	// with configs written before the MCPServerID rollout. If MCPServerID
+	// is empty and both legacy fields are set the channel falls back to
+	// GetServerByName and uses MCPBaseURL as the base URL. New configs
+	// should only set MCPServerID; Phase 5 of the refactor migrates every
+	// existing row and drops these fields.
+	MCPServerName string `json:"mcp_server_name,omitempty"` // legacy — mcp_servers.name
+	MCPBaseURL    string `json:"mcp_base_url,omitempty"`    // legacy — HTTPS root
 }
 
 // Factory is the base channels.ChannelFactory signature. Bitrix24 requires a
@@ -198,13 +210,17 @@ func FactoryWithPortalStoreAndMCP(portalStore store.BitrixPortalStore, mcpStore 
 			return nil, fmt.Errorf("bitrix24: invalid bot_type %q (must be \"B\" or \"O\")", ic.BotType)
 		}
 
-		// MCP provisioning config is all-or-nothing. Catching half-config here
-		// prevents a silent "provisioning disabled but you meant to enable it"
-		// surprise — admin either sets both or neither.
+		// MCP provisioning config uses mcp_server_id (preferred) or the
+		// legacy mcp_server_name + mcp_base_url pair. Catching half-config
+		// here prevents a silent "provisioning disabled but you meant to
+		// enable it" surprise when someone only fills one of the legacy
+		// fields. The new mcp_server_id path is self-contained (server
+		// name + URL both derived from the mcp_servers row at Start()).
+		hasServerID := strings.TrimSpace(ic.MCPServerID) != ""
 		hasServerName := strings.TrimSpace(ic.MCPServerName) != ""
 		hasBaseURL := strings.TrimSpace(ic.MCPBaseURL) != ""
-		if hasServerName != hasBaseURL {
-			return nil, errors.New("bitrix24: mcp_server_name and mcp_base_url must both be set, or both empty")
+		if !hasServerID && hasServerName != hasBaseURL {
+			return nil, errors.New("bitrix24: mcp_server_name and mcp_base_url must both be set, or both empty (or use mcp_server_id)")
 		}
 
 		// Shared process-wide router. InitWebhookRouter uses sync.Once so the
