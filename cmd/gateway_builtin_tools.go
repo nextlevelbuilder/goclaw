@@ -26,6 +26,13 @@ func builtinToolSeedData() []store.BuiltinToolDef {
 			Metadata: json.RawMessage(`{"config_hint":"Config → Tools → Exec Approval"}`),
 		},
 		{Name: "wait", DisplayName: "Wait", Description: "Pause the current agent tool sequence for a bounded number of milliseconds", Category: "runtime", Enabled: true},
+		{Name: "datetime", DisplayName: "Date/Time", Description: "Get the current date and time with timezone support, for precise timestamps in scheduling and memory", Category: "runtime", Enabled: true},
+		{Name: "workstation_exec", DisplayName: "Workstation Exec", Description: "Execute an allowlisted command on a linked remote workstation", Category: "runtime", Enabled: true,
+			Requires: []string{"workstation"},
+		},
+		{Name: "claude_remote", DisplayName: "Claude Remote", Description: "Run Claude Code CLI on a remote workstation via workstation_exec", Category: "runtime", Enabled: true,
+			Requires: []string{"workstation"},
+		},
 
 		// web
 		{Name: "web_search", DisplayName: "Web Search", Description: "Search the web for information using a search engine (Brave or DuckDuckGo)", Category: "web", Enabled: true,
@@ -45,6 +52,15 @@ func builtinToolSeedData() []store.BuiltinToolDef {
 		{Name: "knowledge_graph_search", DisplayName: "Knowledge Graph Search", Description: "Search entities, relationships, and observations in the agent's knowledge graph", Category: "memory", Enabled: true,
 			Settings: json.RawMessage(`{"extract_on_memory_write":false,"extraction_provider":"","extraction_model":"","min_confidence":0.75}`),
 			Requires: []string{"knowledge_graph"},
+		},
+		{Name: "memory_expand", DisplayName: "Memory Expand", Description: "Expand a memory search result with surrounding context from the same document", Category: "memory", Enabled: true,
+			Requires: []string{"memory"},
+		},
+		{Name: "vault_search", DisplayName: "Vault Search", Description: "Search the Knowledge Vault (documents, wikilinks, episodic and knowledge graph fan-out)", Category: "vault", Enabled: true,
+			Requires: []string{"vault"},
+		},
+		{Name: "vault_read", DisplayName: "Vault Read", Description: "Read the full content of a Knowledge Vault document by doc_id", Category: "vault", Enabled: true,
+			Requires: []string{"vault"},
 		},
 
 		// media — user must configure provider chain via UI before use
@@ -94,15 +110,21 @@ func builtinToolSeedData() []store.BuiltinToolDef {
 		{Name: "message", DisplayName: "Message", Description: "Send a proactive message to a user on a connected channel (Telegram, Discord, etc.)", Category: "messaging", Enabled: true},
 		{Name: "send_file", DisplayName: "Send File", Description: "Send an existing workspace file as an attachment in the current chat (does not create or modify the file)", Category: "messaging", Enabled: true},
 		{Name: "create_forum_topic", DisplayName: "Create Telegram Forum Topic", Description: "Create a Telegram forum topic and return its message_thread_id for routing", Category: "messaging", Enabled: true},
+		{Name: "list_group_members", DisplayName: "List Group Members", Description: "List the members of the current group chat", Category: "messaging", Enabled: true},
+		{Name: "zalo_list_groups", DisplayName: "Zalo List Groups", Description: "Resolve a Zalo group's real chat ID from its display name", Category: "messaging", Enabled: true},
 
 		// scheduling
 		{Name: "cron", DisplayName: "Cron Scheduler", Description: "Schedule or manage recurring tasks using cron expressions, at-times, or intervals", Category: "scheduling", Enabled: true,
 			Metadata: json.RawMessage(`{"config_hint":"Config → Cron"}`),
 		},
+		{Name: "heartbeat", DisplayName: "Heartbeat", Description: "Schedule or manage the agent's recurring self-check-in heartbeat", Category: "scheduling", Enabled: true},
 
 		// subagents
 		{Name: "spawn", DisplayName: "Spawn", Description: "Spawn a subagent to handle a task in the background", Category: "subagents", Enabled: true,
 			Metadata: json.RawMessage(`{"config_hint":"Config → Agents Defaults"}`),
+		},
+		{Name: "delegate", DisplayName: "Delegate", Description: "Delegate a task to a linked agent for inter-agent orchestration", Category: "subagents", Enabled: true,
+			Requires: []string{"agent_links"},
 		},
 
 		// skills
@@ -110,6 +132,9 @@ func builtinToolSeedData() []store.BuiltinToolDef {
 		{Name: "use_skill", DisplayName: "Use Skill", Description: "Activate a skill to use its specialized capabilities (tracing marker)", Category: "skills", Enabled: true},
 		{Name: "publish_skill", DisplayName: "Publish Skill", Description: "Register a skill directory (created via skill-creator) in the system database, making it discoverable and grantable to agents", Category: "skills", Enabled: true},
 		{Name: "skill_manage", DisplayName: "Skill Manager", Description: "Create, patch, or delete skills from conversation experience", Category: "skills", Enabled: true},
+		{Name: "mcp_tool_search", DisplayName: "MCP Tool Search", Description: "Search for available MCP external integration tools by keyword (search mode, deferred loading)", Category: "skills", Enabled: true,
+			Requires: []string{"mcp"},
+		},
 
 		// teams
 		{Name: "team_tasks", DisplayName: "Team Tasks", Description: "View, create, update, and complete tasks on the team task board", Category: "teams", Enabled: true,
