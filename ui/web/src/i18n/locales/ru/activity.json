@@ -1,26 +1,26 @@
 {
-  "title": "Activity Log",
-  "description": "Audit trail of admin and configuration changes.",
+  "title": "Журнал активности",
+  "description": "Аудиторский след изменений администрирования и конфигурации.",
   "filters": {
-    "action": "Action",
-    "allActions": "All Actions",
-    "agentCreated": "Agent Created",
-    "agentUpdated": "Agent Updated",
-    "agentDeleted": "Agent Deleted",
-    "entityType": "Entity Type",
-    "allEntities": "All Entities",
-    "agent": "Agent"
+    "action": "Действие",
+    "allActions": "Все действия",
+    "agentCreated": "Агент создан",
+    "agentUpdated": "Агент обновлён",
+    "agentDeleted": "Агент удалён",
+    "entityType": "Тип сущности",
+    "allEntities": "Все сущности",
+    "agent": "Агент"
   },
   "table": {
-    "action": "Action",
-    "actor": "Actor",
-    "entity": "Entity",
-    "entityId": "Entity ID",
-    "ip": "IP Address",
-    "time": "Time"
+    "action": "Действие",
+    "actor": "Инициатор",
+    "entity": "Сущность",
+    "entityId": "ID сущности",
+    "ip": "IP-адрес",
+    "time": "Время"
   },
   "empty": {
-    "title": "No activity logs",
-    "description": "Activity logs will appear here when admin actions are performed."
+    "title": "Нет журналов активности",
+    "description": "Журналы активности появятся здесь при выполнении действий администратора."
   }
 }

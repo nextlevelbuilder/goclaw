@@ -1,87 +1,87 @@
 {
-  "title": "API Keys",
-  "description": "Manage gateway API keys with fine-grained permissions.",
-  "addKey": "Create API Key",
-  "searchPlaceholder": "Search keys...",
-  "emptyTitle": "No API keys",
-  "emptyDescription": "Create your first API key to authenticate with the gateway.",
+  "title": "Ключи API",
+  "description": "Управление ключами API шлюза с гранулярными разрешениями.",
+  "addKey": "Создать ключ API",
+  "searchPlaceholder": "Поиск ключей...",
+  "emptyTitle": "Нет ключей API",
+  "emptyDescription": "Создайте свой первый ключ API для аутентификации на шлюзе.",
   "columns": {
-    "name": "Name",
-    "prefix": "Key",
-    "scopes": "Scopes",
-    "lastUsed": "Last Used",
-    "created": "Created",
-    "status": "Status",
-    "actions": "Actions"
+    "name": "Имя",
+    "prefix": "Ключ",
+    "scopes": "Области",
+    "lastUsed": "Последнее использование",
+    "created": "Создан",
+    "status": "Статус",
+    "actions": "Действия"
   },
   "status": {
-    "active": "Active",
-    "revoked": "Revoked",
-    "expired": "Expired"
+    "active": "Активен",
+    "revoked": "Отозван",
+    "expired": "Истёк"
   },
   "form": {
-    "title": "Create API Key",
-    "name": "Name",
-    "namePlaceholder": "e.g. ci-deploy, dashboard-readonly",
-    "scopes": "Scopes",
+    "title": "Создать ключ API",
+    "name": "Имя",
+    "namePlaceholder": "напр. ci-deploy, dashboard-readonly",
+    "scopes": "Области",
     "scopeDescriptions": {
-      "operator.admin": "Full admin access",
-      "operator.read": "Read-only access",
-      "operator.write": "Read + write access",
-      "operator.approvals": "Manage exec approvals",
-      "operator.pairing": "Manage device pairing",
-      "operator.provision": "Provision new tenants"
+      "operator.admin": "Полный доступ администратора",
+      "operator.read": "Доступ только для чтения",
+      "operator.write": "Доступ на чтение и запись",
+      "operator.approvals": "Управление одобрениями выполнения",
+      "operator.pairing": "Управление сопряжением устройств",
+      "operator.provision": "Создание новых арендаторов"
     },
-    "tenant": "Tenant",
-    "tenantSystem": "System (all tenants)",
-    "expiry": "Expiry",
+    "tenant": "Арендатор",
+    "tenantSystem": "Система (все арендаторы)",
+    "expiry": "Срок действия",
     "expiryOptions": {
-      "never": "Never",
-      "7d": "7 days",
-      "30d": "30 days",
-      "90d": "90 days"
+      "never": "Никогда",
+      "7d": "7 дней",
+      "30d": "30 дней",
+      "90d": "90 дней"
     },
-    "cancel": "Cancel",
-    "create": "Create",
-    "creating": "Creating..."
+    "cancel": "Отмена",
+    "create": "Создать",
+    "creating": "Создание..."
   },
   "created": {
-    "title": "API Key Created",
-    "description": "Copy this key now — it won't be shown again.",
-    "copied": "Copied!",
-    "copy": "Copy to clipboard",
-    "done": "Done"
+    "title": "Ключ API создан",
+    "description": "Скопируйте этот ключ сейчас — он больше не будет показан.",
+    "copied": "Скопировано!",
+    "copy": "Копировать в буфер обмена",
+    "done": "Готово"
   },
   "revoke": {
-    "title": "Revoke API Key",
-    "description": "Are you sure you want to revoke \"{{name}}\"? This cannot be undone.",
-    "confirmLabel": "Revoke"
+    "title": "Отозвать ключ API",
+    "description": "Вы уверены, что хотите отозвать «{{name}}»? Это действие нельзя отменить.",
+    "confirmLabel": "Отозвать"
   },
   "toast": {
-    "created": "API key created",
-    "revoked": "API key revoked",
-    "failedCreate": "Failed to create API key",
-    "failedRevoke": "Failed to revoke API key"
+    "created": "Ключ API создан",
+    "revoked": "Ключ API отозван",
+    "failedCreate": "Не удалось создать ключ API",
+    "failedRevoke": "Не удалось отозвать ключ API"
   },
-  "never": "Never",
-  "neverUsed": "Never used",
-  "tenantBadgeSystem": "System",
-  "tenantBadgeUnknown": "Unknown",
-  "columns.expiry": "Expiry",
+  "never": "Никогда",
+  "neverUsed": "Не использовался",
+  "tenantBadgeSystem": "Система",
+  "tenantBadgeUnknown": "Неизвестно",
+  "columns.expiry": "Срок действия",
   "codeDialog": {
-    "title": "API Key Usage",
-    "description": "Use this API key to authenticate with the gateway HTTP API.",
-    "copy": "Copy",
-    "copied": "Copied!",
+    "title": "Использование ключа API",
+    "description": "Используйте этот ключ API для аутентификации в HTTP API шлюза.",
+    "copy": "Копировать",
+    "copied": "Скопировано!",
     "tabs": {
       "curl": "cURL",
       "typescript": "TypeScript",
       "go": "Go"
     },
     "comments": {
-      "chat": "Chat with an agent (OpenAI-compatible)",
-      "listAgents": "List agents",
-      "listSessions": "List sessions"
+      "chat": "Чат с агентом (совместимо с OpenAI)",
+      "listAgents": "Список агентов",
+      "listSessions": "Список сессий"
     }
   }
 }

@@ -1,50 +1,50 @@
 {
-  "title": "Pending Messages",
-  "description": "Buffered channel messages awaiting agent processing",
-  "emptyTitle": "No pending messages",
-  "emptyDescription": "No buffered message groups found. Messages appear here when channels buffer incoming messages before agent processing.",
+  "title": "Ожидающие сообщения",
+  "description": "Буферизованные сообщения каналов, ожидающие обработки агентом",
+  "emptyTitle": "Нет ожидающих сообщений",
+  "emptyDescription": "Буферизованные группы сообщений не найдены. Сообщения появляются здесь, когда каналы буферизуют входящие сообщения до обработки агентом.",
   "howItWorks": {
-    "title": "How it works",
-    "step1": "Messages from channels (Telegram, Discord, etc.) are buffered here while the agent is busy or offline.",
-    "step2": "When the buffer reaches the threshold (default: 50 messages), auto-compaction kicks in — an LLM summarizes older messages, keeping only the 15 most recent.",
-    "step3": "On the agent's next turn, the compacted summary + recent messages are injected as context, so the agent catches up without being overwhelmed.",
-    "compactAction": "Compact — Manually trigger LLM summarization now. Useful when you want the agent to process a clean summary instead of raw message flood.",
-    "clearAction": "Clear — Permanently delete all buffered messages for a group. Use when messages are no longer relevant."
+    "title": "Как это работает",
+    "step1": "Сообщения из каналов (Telegram, Discord и т. д.) буферизуются здесь, пока агент занят или не в сети.",
+    "step2": "Когда буфер достигает порога (по умолчанию: 50 сообщений), включается автосжатие — LLM обобщает старые сообщения, сохраняя только 15 самых свежих.",
+    "step3": "При следующем ходе агента сжатая сводка + недавние сообщения внедряются как контекст, чтобы агент наверстал упущенное, не будучи перегруженным.",
+    "compactAction": "Сжать — вручную запустить обобщение LLM сейчас. Полезно, когда вы хотите, чтобы агент обработал чистую сводку вместо потока сырых сообщений.",
+    "clearAction": "Очистить — навсегда удалить все буферизованные сообщения группы. Используйте, когда сообщения больше не актуальны."
   },
   "columns": {
-    "channel": "Channel",
-    "group": "Group",
-    "messages": "Messages",
-    "status": "Status",
-    "lastActivity": "Last Activity",
-    "actions": "Actions"
+    "channel": "Канал",
+    "group": "Группа",
+    "messages": "Сообщения",
+    "status": "Статус",
+    "lastActivity": "Последняя активность",
+    "actions": "Действия"
   },
   "status": {
-    "compacted": "Compacted",
-    "raw": "Raw"
+    "compacted": "Сжато",
+    "raw": "Сырое"
   },
-  "compact": "Compact",
-  "compacting": "Compacting…",
-  "clear": "Clear",
+  "compact": "Сжать",
+  "compacting": "Сжатие…",
+  "clear": "Очистить",
   "confirmClear": {
-    "title": "Clear messages?",
-    "description": "This will permanently delete all messages in {{channel}} / {{key}}. This action cannot be undone.",
-    "cancel": "Cancel",
-    "confirm": "Clear"
+    "title": "Очистить сообщения?",
+    "description": "Это навсегда удалит все сообщения в {{channel}} / {{key}}. Это действие нельзя отменить.",
+    "cancel": "Отмена",
+    "confirm": "Очистить"
   },
   "dialog": {
-    "title": "Messages — {{name}}",
-    "noMessages": "No messages found.",
-    "summary": "Summary"
+    "title": "Сообщения — {{name}}",
+    "noMessages": "Сообщения не найдены.",
+    "summary": "Сводка"
   },
   "toast": {
-    "compacted": "Compaction complete",
-    "compactedSummarized": "Summarized to {{count}} messages",
-    "compactedDeleted": "All messages deleted (no LLM provider available)",
-    "compacting": "Compacting…",
-    "compactingDesc": "LLM summarization running in background. List will refresh automatically.",
-    "failedCompact": "Compaction failed",
-    "cleared": "Messages cleared",
-    "failedClear": "Failed to clear messages"
+    "compacted": "Сжатие завершено",
+    "compactedSummarized": "Обобщено до {{count}} сообщений",
+    "compactedDeleted": "Все сообщения удалены (провайдер LLM недоступен)",
+    "compacting": "Сжатие…",
+    "compactingDesc": "Обобщение LLM выполняется в фоне. Список обновится автоматически.",
+    "failedCompact": "Сжатие не удалось",
+    "cleared": "Сообщения очищены",
+    "failedClear": "Не удалось очистить сообщения"
   }
 }

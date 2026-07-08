@@ -1,66 +1,66 @@
 {
-  "title": "Runtime & Packages",
-  "description": "Manage runtimes and installed packages inside the active GoClaw runtime container",
+  "title": "Среда выполнения и пакеты",
+  "description": "Управление средами выполнения и установленными пакетами внутри активного контейнера среды выполнения GoClaw",
   "runtimes": {
-    "title": "Runtimes",
-    "scopeTitle": "Container-scoped runtime status",
-    "scopeDesc": "These checks run inside the active GoClaw runtime container. Host-installed runtimes, shell profile changes, and nvm-managed binaries are not used here.",
-    "minimalImageHint": "Published latest includes Python but not Node. Use the full image for Node/npm and bundled extras, use base for the smallest image, rebuild with ENABLE_NODE=true / ENABLE_FULL_SKILLS=true, or install runtimes manually in this container.",
-    "available": "Available",
-    "missing": "Missing",
-    "missingInContainer": "Missing in container"
+    "title": "Среды выполнения",
+    "scopeTitle": "Статус сред выполнения в рамках контейнера",
+    "scopeDesc": "Эти проверки выполняются внутри активного контейнера среды выполнения GoClaw. Среды выполнения, установленные на хосте, изменения профиля оболочки и бинарные файлы, управляемые nvm, здесь не используются.",
+    "minimalImageHint": "Опубликованный образ latest включает Python, но не Node. Используйте образ full для Node/npm и встроенных дополнений, base для минимального образа, пересоберите с ENABLE_NODE=true / ENABLE_FULL_SKILLS=true или установите среды выполнения вручную в этом контейнере.",
+    "available": "Доступно",
+    "missing": "Отсутствует",
+    "missingInContainer": "Отсутствует в контейнере"
   },
   "system": {
-    "title": "System Packages",
-    "placeholder": "Package name (e.g. github-cli)"
+    "title": "Системные пакеты",
+    "placeholder": "Имя пакета (напр. github-cli)"
   },
   "pip": {
-    "title": "Python Packages",
-    "placeholder": "Package name (e.g. pandas)"
+    "title": "Пакеты Python",
+    "placeholder": "Имя пакета (напр. pandas)"
   },
   "npm": {
-    "title": "Node Packages",
-    "placeholder": "Package name (e.g. typescript)"
+    "title": "Пакеты Node",
+    "placeholder": "Имя пакета (напр. typescript)"
   },
   "github": {
-    "title": "GitHub Binaries",
-    "placeholder": "owner/repo[@tag] (e.g. cli/cli@v2.45.0)",
-    "browse": "Browse releases",
-    "muslWarning": "Alpine Linux uses musl libc. Binaries compiled against glibc may fail at runtime. Prefer static or musl-compatible releases.",
-    "muslDismiss": "Dismiss",
-    "pickerTitle": "Select release from {{repo}}",
-    "pickerEmpty": "No releases found for {{repo}}",
-    "pickerLoading": "Loading releases...",
-    "pickerMatchingAssets": "{{count}} matching / {{total}} total",
-    "pickerPrerelease": "Pre-release",
-    "pickerSelect": "Select",
+    "title": "Бинарные файлы GitHub",
+    "placeholder": "owner/repo[@tag] (напр. cli/cli@v2.45.0)",
+    "browse": "Обзор релизов",
+    "muslWarning": "Alpine Linux использует musl libc. Бинарные файлы, скомпилированные под glibc, могут не работать во время выполнения. Предпочитайте статические или совместимые с musl релизы.",
+    "muslDismiss": "Закрыть",
+    "pickerTitle": "Выберите релиз из {{repo}}",
+    "pickerEmpty": "Релизы для {{repo}} не найдены",
+    "pickerLoading": "Загрузка релизов...",
+    "pickerMatchingAssets": "{{count}} подходящих / {{total}} всего",
+    "pickerPrerelease": "Предварительный выпуск",
+    "pickerSelect": "Выбрать",
     "columns": {
-      "repo": "Repository",
-      "tag": "Version",
-      "binaries": "Binaries",
-      "installedAt": "Installed"
+      "repo": "Репозиторий",
+      "tag": "Версия",
+      "binaries": "Бинарные файлы",
+      "installedAt": "Установлено"
     }
   },
   "updates": {
-    "available": "{{count}} updates available",
-    "none": "All packages up-to-date",
-    "refresh": "Refresh",
-    "refreshing": "Refreshing...",
-    "lastCheckedAgo": "Last checked {{ago}}",
-    "neverChecked": "Not checked yet",
-    "update": "Update",
-    "updateAll": "Update All",
-    "updating": "Updating {{name}}...",
-    "updateSucceeded": "{{name}} updated to {{version}}",
-    "updateFailed": "Failed to update {{name}}: {{reason}}",
-    "updateAllResult": "{{succeeded}} succeeded, {{failed}} failed",
-    "confirmAllTitle": "Update {{count}} packages?",
-    "confirmAllBody": "This may take several minutes. Individual updates are applied sequentially.",
-    "selected": "{{count}} selected",
-    "manifestDesyncWarn": "Binary was updated but the manifest save failed. Manual recovery required for {{name}}.",
-    "cacheStale": "Updates cache is stale. Please refresh first.",
-    "adminOnly": "Administrator access required",
-    "empty": "No updates available",
+    "available": "Доступно обновлений: {{count}}",
+    "none": "Все пакеты актуальны",
+    "refresh": "Обновить",
+    "refreshing": "Обновление...",
+    "lastCheckedAgo": "Последняя проверка {{ago}}",
+    "neverChecked": "Ещё не проверялось",
+    "update": "Обновить",
+    "updateAll": "Обновить все",
+    "updating": "Обновление {{name}}...",
+    "updateSucceeded": "{{name}} обновлён до {{version}}",
+    "updateFailed": "Не удалось обновить {{name}}: {{reason}}",
+    "updateAllResult": "Успешно: {{succeeded}}, с ошибкой: {{failed}}",
+    "confirmAllTitle": "Обновить пакетов: {{count}}?",
+    "confirmAllBody": "Это может занять несколько минут. Отдельные обновления применяются последовательно.",
+    "selected": "Выбрано: {{count}}",
+    "manifestDesyncWarn": "Бинарный файл обновлён, но не удалось сохранить манифест. Требуется ручное восстановление для {{name}}.",
+    "cacheStale": "Кэш обновлений устарел. Пожалуйста, сначала обновите.",
+    "adminOnly": "Требуется доступ администратора",
+    "empty": "Нет доступных обновлений",
     "source": {
       "github": "GitHub",
       "pip": "pip",
@@ -68,20 +68,20 @@
       "apk": "apk"
     },
     "filter": {
-      "all": "All sources",
-      "label": "Filter"
+      "all": "Все источники",
+      "label": "Фильтр"
     },
     "unavailable": {
-      "pip": "pip not installed",
-      "npm": "npm not installed",
-      "apk": "apk not available on this system"
+      "pip": "pip не установлен",
+      "npm": "npm не установлен",
+      "apk": "apk недоступен в этой системе"
     },
     "button": {
       "tooltip": {
-        "github": "Update from GitHub release",
-        "pip": "Update via pip",
-        "npm": "Update via npm",
-        "apk": "Update via apk (system package)"
+        "github": "Обновить из релиза GitHub",
+        "pip": "Обновить через pip",
+        "npm": "Обновить через npm",
+        "apk": "Обновить через apk (системный пакет)"
       }
     },
     "summary": {
@@ -89,37 +89,37 @@
     }
   },
   "actions": {
-    "install": "Install",
-    "uninstall": "Uninstall",
-    "installing": "Installing...",
-    "uninstalling": "Removing..."
+    "install": "Установить",
+    "uninstall": "Удалить",
+    "installing": "Установка...",
+    "uninstalling": "Удаление..."
   },
   "messages": {
-    "installSuccess": "{{name}} installed successfully",
-    "installError": "Failed to install {{name}}",
-    "uninstallSuccess": "{{name}} removed successfully",
-    "uninstallError": "Failed to remove {{name}}"
+    "installSuccess": "{{name}} успешно установлен",
+    "installError": "Не удалось установить {{name}}",
+    "uninstallSuccess": "{{name}} успешно удалён",
+    "uninstallError": "Не удалось удалить {{name}}"
   },
   "confirmUninstall": {
-    "title": "Confirm Uninstall",
-    "description": "Are you sure you want to remove {{name}}? This action cannot be undone."
+    "title": "Подтвердить удаление",
+    "description": "Вы уверены, что хотите удалить {{name}}? Это действие нельзя отменить."
   },
   "table": {
-    "name": "Name",
-    "version": "Version",
-    "actions": "Actions",
-    "empty": "No packages installed"
+    "name": "Имя",
+    "version": "Версия",
+    "actions": "Действия",
+    "empty": "Пакеты не установлены"
   },
   "tabs": {
-    "system": "System",
+    "system": "Система",
     "python": "Python",
     "node": "Node",
     "github": "GitHub",
-    "cliCredentials": "CLI Credentials"
+    "cliCredentials": "Учётные данные CLI"
   },
   "runtimesHeader": {
-    "title": "Runtimes",
-    "available": "Available",
-    "missing": "Missing"
+    "title": "Среды выполнения",
+    "available": "Доступно",
+    "missing": "Отсутствует"
   }
 }

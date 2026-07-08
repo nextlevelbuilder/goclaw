@@ -1,35 +1,35 @@
 {
-  "title": "Nodes",
-  "description": "Manage paired devices and pending pairing requests",
-  "emptyTitle": "No devices",
-  "emptyDescription": "No paired devices or pending pairing requests.",
-  "pendingRequests": "Pending Requests ({{count}})",
-  "pairedDevices": "Paired Devices ({{count}})",
-  "sender": "Sender:",
-  "chat": "Chat:",
+  "title": "Узлы",
+  "description": "Управление сопряжёнными устройствами и ожидающими запросами на сопряжение",
+  "emptyTitle": "Нет устройств",
+  "emptyDescription": "Нет сопряжённых устройств или ожидающих запросов на сопряжение.",
+  "pendingRequests": "Ожидающие запросы ({{count}})",
+  "pairedDevices": "Сопряжённые устройства ({{count}})",
+  "sender": "Отправитель:",
+  "chat": "Чат:",
   "columns": {
-    "channel": "Channel",
-    "senderId": "Sender ID",
-    "paired": "Paired",
-    "by": "By",
-    "actions": "Actions"
+    "channel": "Канал",
+    "senderId": "ID отправителя",
+    "paired": "Сопряжено",
+    "by": "Кем",
+    "actions": "Действия"
   },
-  "approve": "Approve",
-  "deny": "Deny",
-  "revoke": "Revoke",
+  "approve": "Одобрить",
+  "deny": "Отклонить",
+  "revoke": "Отозвать",
   "confirmApprove": {
-    "title": "Approve Pairing",
-    "description": "Approve pairing request from {{channel}}:{{senderId}} (code: {{code}})? This device will be able to interact with agents.",
-    "confirmLabel": "Approve"
+    "title": "Одобрить сопряжение",
+    "description": "Одобрить запрос на сопряжение от {{channel}}:{{senderId}} (код: {{code}})? Это устройство сможет взаимодействовать с агентами.",
+    "confirmLabel": "Одобрить"
   },
   "confirmDeny": {
-    "title": "Deny Pairing",
-    "description": "Deny pairing request from {{channel}}:{{senderId}} (code: {{code}})? The request will be removed.",
-    "confirmLabel": "Deny"
+    "title": "Отклонить сопряжение",
+    "description": "Отклонить запрос на сопряжение от {{channel}}:{{senderId}} (код: {{code}})? Запрос будет удалён.",
+    "confirmLabel": "Отклонить"
   },
   "confirmRevoke": {
-    "title": "Revoke Device",
-    "description": "Revoke pairing for {{channel}}:{{senderId}}? The device will need to re-pair.",
-    "confirmLabel": "Revoke"
+    "title": "Отозвать устройство",
+    "description": "Отозвать сопряжение для {{channel}}:{{senderId}}? Устройству потребуется повторное сопряжение.",
+    "confirmLabel": "Отозвать"
   }
 }

@@ -1,34 +1,34 @@
 {
-  "deleteChat": "Delete chat",
-  "deleteChatConfirm": "This will permanently delete this conversation and all its messages.",
-  "newChat": "New Chat",
-  "openSessions": "Open sessions",
-  "readOnly": "Read-only — this session belongs to another user",
+  "deleteChat": "Удалить чат",
+  "deleteChatConfirm": "Это навсегда удалит эту беседу и все её сообщения.",
+  "newChat": "Новый чат",
+  "openSessions": "Открытые сессии",
+  "readOnly": "Только чтение — эта сессия принадлежит другому пользователю",
   "contextUsage": {
-    "tooltip": "{{used}} / {{max}} tokens ({{percent}}%) · {{compactions}} compactions · last: {{lastCompact}}",
-    "never": "never"
+    "tooltip": "{{used}} / {{max}} токенов ({{percent}}%) · сжатий: {{compactions}} · последнее: {{lastCompact}}",
+    "never": "никогда"
   },
   "empty": {
-    "title": "Start a conversation",
-    "description": "Send a message to begin chatting with the agent."
+    "title": "Начните беседу",
+    "description": "Отправьте сообщение, чтобы начать общение с агентом."
   },
   "media": {
-    "image": "Image",
-    "video": "Video",
-    "audio": "Audio",
-    "voice": "Voice message",
-    "document": "Document",
-    "animation": "Animation",
-    "attached": "attached"
+    "image": "Изображение",
+    "video": "Видео",
+    "audio": "Аудио",
+    "voice": "Голосовое сообщение",
+    "document": "Документ",
+    "animation": "Анимация",
+    "attached": "прикреплено"
   },
-  "forwardedFrom": "Forwarded from",
-  "replyingTo": "Replying to",
+  "forwardedFrom": "Переслано от",
+  "replyingTo": "Ответ на",
   "error": {
-    "notConnected": "Not connected. Please wait for the connection to be established."
+    "notConnected": "Нет соединения. Пожалуйста, дождитесь установления соединения."
   },
   "selectAgent": {
-    "title": "Select an agent",
-    "description": "Choose an agent to start chatting"
+    "title": "Выберите агента",
+    "description": "Выберите агента, чтобы начать общение"
   },
   "imageGenDownloadName": "generated-{{timestamp}}.png"
 }

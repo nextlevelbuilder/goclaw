@@ -1,93 +1,93 @@
 {
-  "title": "Dashboard",
-  "description": "Gateway overview and quota usage",
+  "title": "Панель управления",
+  "description": "Обзор шлюза и использование квот",
   "tabs": {
-    "overview": "Overview",
-    "usage": "Usage"
+    "overview": "Обзор",
+    "usage": "Использование"
   },
   "statCards": {
-    "requestsToday": "Requests Today",
-    "tokensToday": "Tokens Today",
-    "costToday": "Cost Today",
-    "agents": "Agents",
-    "channels": "Channels",
-    "channelsAttention": "{{count}} need attention",
-    "running": "running",
-    "online": "online",
-    "users": "{{count}} users",
-    "inOut": "{{input}} in / {{output}} out"
+    "requestsToday": "Запросов сегодня",
+    "tokensToday": "Токенов сегодня",
+    "costToday": "Стоимость за сегодня",
+    "agents": "Агенты",
+    "channels": "Каналы",
+    "channelsAttention": "{{count}} требуют внимания",
+    "running": "выполняется",
+    "online": "онлайн",
+    "users": "{{count}} пользователей",
+    "inOut": "{{input}} вход / {{output}} выход"
   },
   "providers": {
-    "noProvidersTitle": "No LLM providers configured",
-    "noEnabledTitle": "No LLM providers enabled",
-    "noProvidersDesc": "You need to add at least one LLM provider before agents can work. ",
-    "noEnabledDesc": "All providers are currently disabled. Enable at least one to start using agents. ",
-    "goToSettings": "Go to Provider Settings"
+    "noProvidersTitle": "Провайдеры LLM не настроены",
+    "noEnabledTitle": "Нет включённых провайдеров LLM",
+    "noProvidersDesc": "Необходимо добавить хотя бы одного провайдера LLM, прежде чем агенты смогут работать. ",
+    "noEnabledDesc": "Все провайдеры сейчас отключены. Включите хотя бы одного, чтобы начать использовать агентов. ",
+    "goToSettings": "Перейти к настройкам провайдеров"
   },
   "systemHealth": {
-    "title": "System Health",
-    "uptime": "Uptime",
-    "version": "Version",
-    "database": "Database",
-    "providers": "Providers",
-    "tools": "Tools",
-    "sessions": "Sessions",
-    "clients": "Clients",
-    "channels": "Channels",
-    "needsAttention": "Needs attention",
-    "channelsNeedingAttention": "{{count}} channels",
-    "failedCount": "{{count}} failed",
-    "warningCountOne": "{{count}} warning",
-    "warningCountOther": "{{count}} warnings",
-    "moreAttention": "+{{count}} more",
-    "active": "{{count}} active",
-    "none": "none",
-    "runtimes": "Runtimes"
+    "title": "Состояние системы",
+    "uptime": "Время работы",
+    "version": "Версия",
+    "database": "База данных",
+    "providers": "Провайдеры",
+    "tools": "Инструменты",
+    "sessions": "Сессии",
+    "clients": "Клиенты",
+    "channels": "Каналы",
+    "needsAttention": "Требует внимания",
+    "channelsNeedingAttention": "{{count}} каналов",
+    "failedCount": "{{count}} с ошибкой",
+    "warningCountOne": "{{count}} предупреждение",
+    "warningCountOther": "{{count}} предупреждений",
+    "moreAttention": "+ещё {{count}}",
+    "active": "{{count}} активно",
+    "none": "нет",
+    "runtimes": "Среды выполнения"
   },
   "connectedClients": {
-    "title": "Connected Clients",
-    "noClients": "No clients connected",
+    "title": "Подключённые клиенты",
+    "noClients": "Нет подключённых клиентов",
     "columns": {
       "ip": "IP",
-      "user": "User",
-      "role": "Role",
-      "connected": "Connected"
+      "user": "Пользователь",
+      "role": "Роль",
+      "connected": "Подключён"
     },
-    "you": "you"
+    "you": "вы"
   },
   "cronJobs": {
-    "title": "Cron Jobs",
-    "manage": "Manage",
-    "noJobs": "No cron jobs configured",
-    "disabled": "disabled"
+    "title": "Задачи Cron",
+    "manage": "Управление",
+    "noJobs": "Задачи cron не настроены",
+    "disabled": "отключено"
   },
   "recentRequests": {
-    "title": "Recent Requests",
-    "viewAll": "View All",
-    "noRequests": "No recent requests",
+    "title": "Недавние запросы",
+    "viewAll": "Показать все",
+    "noRequests": "Нет недавних запросов",
     "columns": {
-      "time": "Time",
-      "name": "Name",
-      "user": "User",
-      "channel": "Channel",
-      "tokens": "Tokens",
-      "duration": "Duration",
-      "status": "Status"
+      "time": "Время",
+      "name": "Название",
+      "user": "Пользователь",
+      "channel": "Канал",
+      "tokens": "Токены",
+      "duration": "Длительность",
+      "status": "Статус"
     }
   },
   "quotaUsage": {
-    "title": "Quota Usage",
+    "title": "Использование квоты",
     "columns": {
-      "userGroup": "User / Group",
-      "hour": "Hour",
-      "day": "Day",
-      "week": "Week"
+      "userGroup": "Пользователь / Группа",
+      "hour": "Час",
+      "day": "День",
+      "week": "Неделя"
     },
-    "noLimit": "no limit"
+    "noLimit": "без лимита"
   },
   "embedding": {
-    "title": "Embedding",
-    "notConfigured": "Not configured",
-    "configure": "Configure in Providers →"
+    "title": "Эмбеддинги",
+    "notConfigured": "Не настроено",
+    "configure": "Настроить в разделе «Провайдеры» →"
   }
 }

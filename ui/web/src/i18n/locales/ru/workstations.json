@@ -1,82 +1,82 @@
 {
-  "title": "Workstations",
-  "description": "Manage remote workstation connections (SSH, Docker) for agents to execute commands.",
-  "addWorkstation": "Add Workstation",
-  "emptyTitle": "No workstations configured",
-  "emptyDescription": "Add a workstation to allow agents to run commands on remote machines.",
+  "title": "Рабочие станции",
+  "description": "Управление подключениями к удалённым рабочим станциям (SSH, Docker) для выполнения команд агентами.",
+  "addWorkstation": "Добавить рабочую станцию",
+  "emptyTitle": "Рабочие станции не настроены",
+  "emptyDescription": "Добавьте рабочую станцию, чтобы агенты могли выполнять команды на удалённых машинах.",
   "backend": {
     "ssh": "SSH",
     "docker": "Docker"
   },
   "status": {
-    "active": "Active",
-    "inactive": "Inactive"
+    "active": "Активна",
+    "inactive": "Неактивна"
   },
   "columns": {
-    "name": "Name",
-    "key": "Key",
-    "backend": "Backend",
-    "status": "Status",
-    "created": "Created",
-    "actions": "Actions"
+    "name": "Имя",
+    "key": "Ключ",
+    "backend": "Бэкенд",
+    "status": "Статус",
+    "created": "Создана",
+    "actions": "Действия"
   },
   "actions": {
-    "edit": "Edit",
-    "delete": "Delete",
-    "test": "Test Connection",
-    "activate": "Activate",
-    "deactivate": "Deactivate"
+    "edit": "Изменить",
+    "delete": "Удалить",
+    "test": "Проверить подключение",
+    "activate": "Активировать",
+    "deactivate": "Деактивировать"
   },
   "createDialog": {
-    "title": "Add Workstation",
-    "description": "Configure a new remote workstation connection.",
-    "nameLabel": "Display Name",
-    "namePlaceholder": "My Dev Server",
-    "keyLabel": "Workstation Key",
+    "title": "Добавить рабочую станцию",
+    "description": "Настройте новое подключение к удалённой рабочей станции.",
+    "nameLabel": "Отображаемое имя",
+    "namePlaceholder": "Мой сервер разработки",
+    "keyLabel": "Ключ рабочей станции",
     "keyPlaceholder": "dev-server",
-    "keyHint": "Lowercase letters, digits, hyphens. Used by agents to reference this workstation.",
-    "backendLabel": "Backend Type",
+    "keyHint": "Строчные буквы, цифры, дефисы. Используется агентами для ссылки на эту рабочую станцию.",
+    "backendLabel": "Тип бэкенда",
     "sshOption": "SSH",
     "dockerOption": "Docker",
-    "hostLabel": "Host",
+    "hostLabel": "Хост",
     "hostPlaceholder": "192.168.1.100",
-    "portLabel": "Port",
-    "userLabel": "SSH User",
+    "portLabel": "Порт",
+    "userLabel": "Пользователь SSH",
     "userPlaceholder": "ubuntu",
-    "identityFileLabel": "Identity File (optional)",
+    "identityFileLabel": "Файл идентификации (необязательно)",
     "identityFilePlaceholder": "~/.ssh/id_rsa",
-    "containerLabel": "Container Name / ID",
+    "containerLabel": "Имя / ID контейнера",
     "containerPlaceholder": "my-container",
-    "dockerHostLabel": "Docker Host (optional)",
+    "dockerHostLabel": "Docker-хост (необязательно)",
     "dockerHostPlaceholder": "unix:///var/run/docker.sock",
-    "cancel": "Cancel",
-    "create": "Create"
+    "cancel": "Отмена",
+    "create": "Создать"
   },
   "deleteDialog": {
-    "title": "Delete Workstation",
-    "description": "Are you sure you want to delete \"{{name}}\"? This cannot be undone.",
-    "confirmLabel": "Delete"
+    "title": "Удалить рабочую станцию",
+    "description": "Вы уверены, что хотите удалить «{{name}}»? Это нельзя отменить.",
+    "confirmLabel": "Удалить"
   },
   "testResult": {
-    "success": "Connection successful",
-    "notImplemented": "Connection test is not yet available"
+    "success": "Подключение успешно",
+    "notImplemented": "Проверка подключения пока недоступна"
   },
   "activity": {
-    "title": "Recent Activity",
-    "emptyTitle": "No activity yet",
-    "emptyDescription": "Exec events will appear here once agents run commands.",
+    "title": "Недавняя активность",
+    "emptyTitle": "Активности пока нет",
+    "emptyDescription": "События выполнения появятся здесь, как только агенты запустят команды.",
     "columns": {
-      "action": "Action",
-      "cmdPreview": "Command",
-      "exitCode": "Exit Code",
-      "duration": "Duration",
-      "agent": "Agent",
-      "timestamp": "Time"
+      "action": "Действие",
+      "cmdPreview": "Команда",
+      "exitCode": "Код выхода",
+      "duration": "Длительность",
+      "agent": "Агент",
+      "timestamp": "Время"
     },
     "actions": {
-      "exec": "Exec",
-      "deny": "Denied"
+      "exec": "Выполнить",
+      "deny": "Отклонено"
     },
-    "loadMore": "Load more"
+    "loadMore": "Загрузить ещё"
   }
 }

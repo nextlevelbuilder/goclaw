@@ -1,25 +1,25 @@
 {
-  "title": "Storage",
-  "description": "Workspace file browser",
+  "title": "Хранилище",
+  "description": "Обозреватель файлов рабочей области",
   "descriptionWithPath": "{{path}} — {{size}}",
-  "sizeCacheInfo": "Storage size is cached for 60 minutes",
-  "unsupportedFile": "This file type is not supported for preview",
-  "download": "Download",
+  "sizeCacheInfo": "Размер хранилища кэшируется на 60 минут",
+  "unsupportedFile": "Предпросмотр этого типа файла не поддерживается",
+  "download": "Скачать",
   "delete": {
-    "fileTitle": "Delete file",
-    "folderTitle": "Delete folder",
-    "description": "Are you sure you want to delete {{name}}?",
-    "folderWarning": " All contents will be removed recursively.",
-    "undone": " This action cannot be undone.",
-    "deleting": "Deleting...",
-    "confirmLabel": "Delete"
+    "fileTitle": "Удалить файл",
+    "folderTitle": "Удалить папку",
+    "description": "Вы уверены, что хотите удалить {{name}}?",
+    "folderWarning": " Всё содержимое будет удалено рекурсивно.",
+    "undone": " Это действие нельзя отменить.",
+    "deleting": "Удаление...",
+    "confirmLabel": "Удалить"
   },
   "upload": {
-    "title": "Upload to Storage",
-    "description": "Upload files to the data directory"
+    "title": "Загрузка в хранилище",
+    "description": "Загрузка файлов в каталог данных"
   },
   "toast": {
-    "deleted": "File deleted",
-    "deleteFailed": "Failed to delete file"
+    "deleted": "Файл удалён",
+    "deleteFailed": "Не удалось удалить файл"
   }
 }
