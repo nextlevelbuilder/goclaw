@@ -39,10 +39,17 @@ func (c *Channel) handleDM(msg protocol.UserMessage) {
 	body, media := extractContentAndMedia(msg.Data.Content)
 	// A reply to an image should carry the image itself, not just the
 	// "[Quoted image]" placeholder — download it and attach as media.
-	media = append(media, extractQuoteMedia(msg.Data.Quote)...)
+	quoteMedia := extractQuoteMedia(msg.Data.Quote)
+	media = append(media, quoteMedia...)
 	content := replycontext.Compose(c.buildReplyContext(threadID, msg.Data.Quote), body)
 	if content == "" {
 		return
+	}
+	// The quote wrapper text above is just the "[Quoted image]" placeholder —
+	// append a real <media:image> tag so the model has a path to reference
+	// (e.g. to forward the file elsewhere), not just vision access to it.
+	if tag := buildQuoteMediaTag(quoteMedia); tag != "" {
+		content = content + "\n" + tag
 	}
 
 	// Annotate with sender display name so the agent knows who is messaging.
@@ -93,10 +100,17 @@ func (c *Channel) handleGroupMessage(msg protocol.GroupMessage) {
 	body, media := extractContentAndMedia(msg.Data.Content)
 	// A reply to an image should carry the image itself, not just the
 	// "[Quoted image]" placeholder — download it and attach as media.
-	media = append(media, extractQuoteMedia(msg.Data.Quote)...)
+	quoteMedia := extractQuoteMedia(msg.Data.Quote)
+	media = append(media, quoteMedia...)
 	content := replycontext.Compose(c.buildReplyContext(threadID, msg.Data.Quote), body)
 	if content == "" {
 		return
+	}
+	// The quote wrapper text above is just the "[Quoted image]" placeholder —
+	// append a real <media:image> tag so the model has a path to reference
+	// (e.g. to forward the file elsewhere), not just vision access to it.
+	if tag := buildQuoteMediaTag(quoteMedia); tag != "" {
+		content = content + "\n" + tag
 	}
 	c.rememberReplyContext(threadID, senderName, msg.Data.TMessage, cacheBodyForContent(msg.Data.Content))
 
@@ -185,6 +199,11 @@ func (c *Channel) startTyping(threadID string, threadType protocol.ThreadType) {
 
 func extractContentAndMediaWithQuote(content protocol.Content, quote *protocol.TQuote) (string, []string) {
 	text, media := extractContentAndMedia(content)
-	media = append(media, extractQuoteMedia(quote)...)
-	return replycontext.Compose(formatQuoteContext(quote), text), media
+	quoteMedia := extractQuoteMedia(quote)
+	media = append(media, quoteMedia...)
+	composed := replycontext.Compose(formatQuoteContext(quote), text)
+	if tag := buildQuoteMediaTag(quoteMedia); tag != "" {
+		composed = composed + "\n" + tag
+	}
+	return composed, media
 }

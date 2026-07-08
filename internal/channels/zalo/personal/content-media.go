@@ -186,3 +186,29 @@ func extractQuoteMedia(quote *protocol.TQuote) []string {
 	}
 	return []string{filePath}
 }
+
+// buildQuoteMediaTag renders a bare <media:image> content tag for each image
+// downloaded from a quoted message (extractQuoteMedia).
+//
+// Without this, a quote-forwarded image has NO reference anywhere in the
+// text content — it's only reachable through the Media list, which lets the
+// model see it via vision but gives it no path to hand back to
+// message(MEDIA:<path>) to forward the file elsewhere. The later agent-side
+// enrichment (enrichImageIDs/enrichImagePaths in internal/agent/media.go)
+// only fills in id/path attributes on a bare tag it finds already present in
+// content — it has nothing to enrich if no tag exists at all, which was the
+// actual bug (the model reported "no direct file/path" even though the file
+// was sitting on disk). Order matters: this must be appended to content
+// AFTER any tag from the current message's own attachment, matching the
+// order paths are appended in the media slice (own attachment first, quoted
+// image second), so positional id/path enrichment lines up correctly.
+func buildQuoteMediaTag(paths []string) string {
+	if len(paths) == 0 {
+		return ""
+	}
+	tags := make([]string, len(paths))
+	for i := range paths {
+		tags[i] = "<media:image>"
+	}
+	return strings.Join(tags, "\n")
+}
