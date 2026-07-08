@@ -4,6 +4,17 @@ import (
 	"regexp"
 )
 
+// unicodeCmdWord matches a command name (or alternation) as a standalone
+// word using a Unicode-aware boundary. Go's RE2 \b is ASCII-only, so a
+// pattern like \bsu\b matches the "su" inside non-ASCII words such as the
+// Vietnamese "suất" (the accented 'ấ' is not an ASCII word char, so \b
+// sees a spurious boundary right after "su"). Treating Unicode letters and
+// digits (\pL, \pN) as word chars avoids those false positives while still
+// matching the real `su` command.
+func unicodeCmdWord(alt string) *regexp.Regexp {
+	return regexp.MustCompile(`(?:^|[^\pL\pN_])(?:` + alt + `)(?:[^\pL\pN_]|$)`)
+}
+
 // DenyGroup is a named set of shell command deny patterns.
 type DenyGroup struct {
 	Name        string           // machine name: "package_install"
@@ -83,7 +94,7 @@ var DenyGroupRegistry = map[string]*DenyGroup{
 		Default:     true,
 		Patterns: []*regexp.Regexp{
 			regexp.MustCompile(`\bsudo\b`),
-			regexp.MustCompile(`\bsu\b`),
+			unicodeCmdWord("su"),
 			regexp.MustCompile(`\bdoas\b`),
 			regexp.MustCompile(`\bpkexec\b`),
 			regexp.MustCompile(`\brunuser\b`),
