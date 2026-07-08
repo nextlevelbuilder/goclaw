@@ -92,10 +92,34 @@ func (m *Manager) dispatchOutbound(ctx context.Context) {
 					"content_preview", Truncate(msg.Content, 160),
 					"error", err,
 				)
-				// Try to send a text-only error notification back to the chat.
-				// Only for media failures — text-only failures likely mean the chat
-				// is inaccessible (kicked, blocked, etc.) so retrying won't help.
-				if len(msg.Media) > 0 {
+
+				// Cross-target forwards (message tool, forward=true) are fire-and-forget
+				// onto this bus — the tool already returned "sent" to the model and
+				// announced success to the origin chat before this consumer ever ran.
+				// If the destination itself was bad (e.g. the model passed a display
+				// name instead of a real chat ID), tell the ORIGIN chat the truth
+				// instead of retrying against the same broken destination or, worse,
+				// silently dropping a text-only failure as the old code did.
+				if originCh := msg.Metadata[bus.MetaForwardOriginChannel]; originCh != "" {
+					originChat := msg.Metadata[bus.MetaForwardOriginChatID]
+					m.mu.RLock()
+					origin, originExists := m.channels[originCh]
+					m.mu.RUnlock()
+					if originExists && originChat != "" {
+						notifyMsg := bus.OutboundMessage{
+							Channel: originCh,
+							ChatID:  originChat,
+							Content: fmt.Sprintf("⚠️ Không gửi được tin nhắn forward tới %q — kiểm tra lại đích gửi (có thể chưa đúng ID nhóm/chat).", msg.ChatID),
+						}
+						if err2 := origin.Send(sendCtx, notifyMsg); err2 != nil {
+							slog.Warn("failed to send forward-failure notice to origin",
+								"origin_channel", originCh, "origin_chat", originChat, "error", err2)
+						}
+					}
+				} else if len(msg.Media) > 0 {
+					// Try to send a text-only error notification back to the chat.
+					// Only for media failures — text-only failures likely mean the chat
+					// is inaccessible (kicked, blocked, etc.) so retrying won't help.
 					notifyMsg := bus.OutboundMessage{
 						Channel:  msg.Channel,
 						ChatID:   msg.ChatID,

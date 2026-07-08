@@ -20,7 +20,7 @@ var builtinToolGroups = map[string][]string{
 	"sessions":   {"sessions_list", "sessions_history", "sessions_send", "spawn", "session_status"},
 	"ui":         {"browser"},
 	"automation": {"cron"},
-	"messaging":  {"message", "create_forum_topic", "list_group_members"},
+	"messaging":  {"message", "create_forum_topic", "list_group_members", "zalo_list_groups"},
 	"team":       {"team_tasks"},
 	"vault":      {"vault_search", "vault_read"},
 	// Composite group: all goclaw native tools (excludes MCP/custom plugins).
@@ -32,7 +32,7 @@ var builtinToolGroups = map[string][]string{
 		"sessions_list", "sessions_history", "sessions_send", "spawn", "session_status",
 		"delegate",
 		"cron", "datetime", "heartbeat",
-		"message", "create_forum_topic", "list_group_members",
+		"message", "create_forum_topic", "list_group_members", "zalo_list_groups",
 		"read_image", "read_document", "read_audio", "read_video",
 		"create_image", "create_video", "create_audio",
 		"skill_search", "skill_manage", "publish_skill", "use_skill",

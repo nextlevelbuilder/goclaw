@@ -58,7 +58,7 @@ func (t *MessageTool) Parameters() map[string]any {
 			},
 			"target": map[string]any{
 				"type":        "string",
-				"description": "Chat ID to send to (default: current chat from context)",
+				"description": "Chat ID to send to (default: current chat from context). Must be a real chat/group ID, NOT a display name — passing a human-readable name here will fail (or silently go nowhere). If you only know a group by its display name, resolve the real ID first (e.g. zalo_list_groups on Zalo) instead of guessing.",
 			},
 			"message": map[string]any{
 				"type":        "string",
@@ -191,13 +191,11 @@ func (t *MessageTool) Execute(ctx context.Context, args map[string]any) *Result 
 	// If we found embedded media and bus is available, prefer bus path (supports media attachments).
 	if len(embeddedMedia) > 0 && t.msgBus != nil {
 		outMsg := bus.OutboundMessage{
-			Channel: channel,
-			ChatID:  target,
-			Content: message,
-			Media:   embeddedMedia,
-		}
-		if isGroupContext(ctx) {
-			outMsg.Metadata = map[string]string{"group_id": target}
+			Channel:  channel,
+			ChatID:   target,
+			Content:  message,
+			Media:    embeddedMedia,
+			Metadata: t.buildOutboundMetadata(ctx, target, forwardReason),
 		}
 		t.msgBus.PublishOutbound(outMsg)
 		// Mark each embedded media path as delivered.
@@ -223,12 +221,10 @@ func (t *MessageTool) Execute(ctx context.Context, args map[string]any) *Result 
 	// can distinguish group sends from DMs.
 	if t.msgBus != nil {
 		outMsg := bus.OutboundMessage{
-			Channel: channel,
-			ChatID:  target,
-			Content: message,
-		}
-		if isGroupContext(ctx) {
-			outMsg.Metadata = map[string]string{"group_id": target}
+			Channel:  channel,
+			ChatID:   target,
+			Content:  message,
+			Metadata: t.buildOutboundMetadata(ctx, target, forwardReason),
 		}
 		t.msgBus.PublishOutbound(outMsg)
 		return noticeOnSuccess(SilentResult(fmt.Sprintf(`{"status":"sent","channel":"%s","target":"%s"}`, channel, target)))
@@ -243,6 +239,33 @@ func (t *MessageTool) Execute(ctx context.Context, args map[string]any) *Result 
 	}
 
 	return ErrorResult("no channel sender or message bus available")
+}
+
+// buildOutboundMetadata merges group-context routing metadata with
+// forward-origin tracking. The bus consumer (dispatchOutbound) runs async
+// with no path back to this call, so when forwardReason is non-empty we
+// stash the origin channel/chat here — that's the only way a downstream
+// delivery failure can be reported back to the chat that requested the
+// forward instead of vanishing silently.
+func (t *MessageTool) buildOutboundMetadata(ctx context.Context, target, forwardReason string) map[string]string {
+	var meta map[string]string
+	if isGroupContext(ctx) {
+		meta = map[string]string{"group_id": target}
+	}
+	if forwardReason == "" {
+		return meta
+	}
+	origCh := ToolChannelFromCtx(ctx)
+	origChat := ToolChatIDFromCtx(ctx)
+	if origCh == "" || origChat == "" {
+		return meta
+	}
+	if meta == nil {
+		meta = make(map[string]string, 2)
+	}
+	meta[bus.MetaForwardOriginChannel] = origCh
+	meta[bus.MetaForwardOriginChatID] = origChat
+	return meta
 }
 
 // validateChannelTenant checks the target channel belongs to the current tenant.

@@ -67,6 +67,8 @@ func wireExtraTools(
 	toolsReg.Register(tools.NewSendFileTool(workspace, agentCfg.RestrictToWorkspace))
 	// Group members tool (list members in group chats)
 	toolsReg.Register(tools.NewListGroupMembersTool())
+	// Zalo group list tool (resolve a group's real chat ID from its display name)
+	toolsReg.Register(tools.NewListGroupsTool())
 	// Telegram manager tool (admin/forum/message management; gated by tool policy)
 	// create_forum_topic is kept as a backward-compatible wrapper for topic.create.
 	toolsReg.Register(tools.NewCreateForumTopicTool(nil))

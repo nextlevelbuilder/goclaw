@@ -724,6 +724,20 @@ type GroupMemberProvider interface {
 	ListGroupMembers(ctx context.Context, chatID string) ([]GroupMember, error)
 }
 
+// GroupInfo represents a group/channel chat the account belongs to.
+type GroupInfo struct {
+	GroupID     string `json:"group_id"`
+	Name        string `json:"name"`
+	TotalMember int    `json:"total_member,omitempty"`
+}
+
+// GroupListProvider is optionally implemented by channels that can list the
+// groups/chats the connected account belongs to — lets the agent resolve a
+// group's display name to its real chat ID instead of guessing.
+type GroupListProvider interface {
+	ListGroups(ctx context.Context) ([]GroupInfo, error)
+}
+
 // GroupTitleProvider is optionally implemented by channels that can resolve
 // a platform group/channel ID to a human-readable title.
 type GroupTitleProvider interface {

@@ -47,6 +47,18 @@ type OutboundMessage struct {
 	AgentOtherConfig []byte            `json:"agent_other_config,omitempty"` // agent's other_config for TTS voice/model
 }
 
+// Metadata keys on OutboundMessage.Metadata used to track the origin chat of
+// a cross-target forward (message tool, forward=true). The outbound dispatch
+// consumer runs async with no path back to the tool call that queued it, so
+// these let it notify the ORIGIN chat if delivery to the forward target
+// actually fails — otherwise a bad target (e.g. a display name instead of a
+// real chat ID) fails silently downstream while the tool already reported
+// success back to the model.
+const (
+	MetaForwardOriginChannel = "forward_origin_channel"
+	MetaForwardOriginChatID  = "forward_origin_chat_id"
+)
+
 // MediaAttachment represents a media file to be sent with a message.
 type MediaAttachment struct {
 	URL         string `json:"url"`                    // file path or URL

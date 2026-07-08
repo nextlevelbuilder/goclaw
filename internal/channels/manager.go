@@ -346,6 +346,21 @@ func (m *Manager) ListGroupMembers(ctx context.Context, channelName, chatID stri
 	return gmp.ListGroupMembers(ctx, chatID)
 }
 
+// ListGroups delegates to the channel's GroupListProvider if available.
+func (m *Manager) ListGroups(ctx context.Context, channelName string) ([]GroupInfo, error) {
+	m.mu.RLock()
+	ch, ok := m.channels[channelName]
+	m.mu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("channel %q not found", channelName)
+	}
+	glp, ok := ch.(GroupListProvider)
+	if !ok {
+		return nil, fmt.Errorf("channel %q does not support listing groups", channelName)
+	}
+	return glp.ListGroups(ctx)
+}
+
 // ResolveGroupTitle delegates to the channel's GroupTitleProvider if available.
 func (m *Manager) ResolveGroupTitle(ctx context.Context, channelName, chatID string) (string, error) {
 	m.mu.RLock()

@@ -728,6 +728,12 @@ func runGateway() {
 			gl.SetGroupMemberLister(channelMgr.ListGroupMembers)
 		}
 	}
+	// Wire group lister on zalo_list_groups tool
+	if t, ok := toolsReg.Get("zalo_list_groups"); ok {
+		if gl, ok := t.(tools.GroupListerAware); ok {
+			gl.SetGroupLister(channelMgr.ListGroups)
+		}
+	}
 	// Wire Telegram manager on telegram_manager tool.
 	for _, toolName := range []string{"telegram_manager", "create_forum_topic"} {
 		if t, ok := toolsReg.Get(toolName); ok {

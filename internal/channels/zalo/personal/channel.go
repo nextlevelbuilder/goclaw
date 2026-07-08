@@ -91,6 +91,27 @@ func (c *Channel) getListener() *protocol.Listener {
 	return c.listener
 }
 
+// ListGroups implements channels.GroupListProvider — returns the real Zalo
+// group ID + display name for every group the authenticated account belongs
+// to. Lets the agent resolve a group by name (e.g. "Ban Điều Hành") to the
+// chat ID the message tool actually requires, instead of guessing/passing
+// the display name as target.
+func (c *Channel) ListGroups(ctx context.Context) ([]channels.GroupInfo, error) {
+	sess := c.session()
+	if sess == nil {
+		return nil, fmt.Errorf("zalo_personal: not connected")
+	}
+	groups, err := protocol.FetchGroups(ctx, sess)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]channels.GroupInfo, len(groups))
+	for i, g := range groups {
+		out[i] = channels.GroupInfo{GroupID: g.GroupID, Name: g.Name, TotalMember: g.TotalMember}
+	}
+	return out, nil
+}
+
 // Start authenticates and begins listening for Zalo messages.
 func (c *Channel) Start(ctx context.Context) error {
 	if gh := c.GroupHistory(); gh != nil {

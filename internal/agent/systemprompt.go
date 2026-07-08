@@ -217,6 +217,7 @@ var coreToolSummaries = map[string]string{
 	"knowledge_graph_search": "Find people, projects, and their connections — use for relationship questions (who works with whom, project dependencies) that memory_search may miss",
 	"team_tasks":             "Team task board — track progress, manage dependencies (spawn auto-creates delegation tasks)",
 	"list_group_members":     "List all members of the current group chat (Feishu/Lark only)",
+	"zalo_list_groups":       "List all Zalo groups the account belongs to (group_id + name) — resolve a group's real ID before sending/forwarding to it by name (Zalo only)",
 	"create_forum_topic":     "Create a forum topic in a Telegram supergroup",
 	"delegate":               "Delegate a task to a linked agent (requires agent_links). See ## Delegation Targets for available agents",
 	"memory_expand":          "Retrieve full session details from episodic memory results — use after memory_search returns episodic hits",
