@@ -21,15 +21,27 @@ func filterBootstrapTools(toolNames []string) []string {
 // filteredToolNames returns tool names after applying policy filters.
 // Used for system prompt so denied tools don't appear in ## Tooling section.
 func (l *Loop) filteredToolNames() []string {
+	var names []string
 	if l.toolPolicy == nil {
-		return l.tools.List()
-	}
-	defs := l.toolPolicy.FilterTools(l.tools, l.id, l.provider.Name(), l.agentToolPolicy, nil, false, false)
-	names := make([]string, 0, len(defs))
-	for _, d := range defs {
-		if d.Function != nil {
-			names = append(names, d.Function.Name)
+		names = l.tools.List()
+	} else {
+		defs := l.toolPolicy.FilterTools(l.tools, l.id, l.provider.Name(), l.agentToolPolicy, nil, false, false)
+		names = make([]string, 0, len(defs))
+		for _, d := range defs {
+			if d.Function != nil {
+				names = append(names, d.Function.Name)
+			}
 		}
+	}
+	// Per-tenant tool exclusions: remove tools disabled for this agent's tenant.
+	if len(l.disabledTools) > 0 {
+		filtered := names[:0]
+		for _, name := range names {
+			if !l.disabledTools[name] {
+				filtered = append(filtered, name)
+			}
+		}
+		names = filtered
 	}
 	return names
 }

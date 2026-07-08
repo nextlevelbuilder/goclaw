@@ -32,17 +32,18 @@ type AgentsHandler struct {
 	providerReg               *providers.Registry
 	db                        *sql.DB
 	tracingStore              store.TracingStore
-	memoryStore               store.MemoryStore         // for import (nil = disabled)
-	kgStore                   store.KnowledgeGraphStore // for import (nil = disabled)
-	episodicStore             store.EpisodicStore       // for import (nil in SQLite/lite builds)
-	vaultStore                store.VaultStore          // for vault import (nil = disabled)
-	toolsReg                  ToolPreviewLister         // for system prompt preview tool resolution (nil = fallback)
-	toolPE                    *tools.PolicyEngine       // for system prompt preview tool policy resolution (nil = skip policy filtering)
-	skillsLoader              SkillPreviewBuilder       // for system prompt preview pinned skills (nil = skip)
-	skillAccessStore          store.SkillAccessStore    // for system prompt preview skill filtering (nil = skip)
-	teamStore                 store.TeamStore           // for system prompt preview team context (nil = skip)
-	agentLinkStore            store.AgentLinkStore      // for system prompt preview delegation targets (nil = skip)
-	mcpPreviewMgr             agent.MCPPreviewLister    // for store-based MCP tool preview (nil = skip)
+	memoryStore               store.MemoryStore                  // for import (nil = disabled)
+	kgStore                   store.KnowledgeGraphStore          // for import (nil = disabled)
+	episodicStore             store.EpisodicStore                // for import (nil in SQLite/lite builds)
+	vaultStore                store.VaultStore                   // for vault import (nil = disabled)
+	toolsReg                  ToolPreviewLister                  // for system prompt preview tool resolution (nil = fallback)
+	toolPE                    *tools.PolicyEngine                // for system prompt preview tool policy resolution (nil = skip policy filtering)
+	skillsLoader              SkillPreviewBuilder                // for system prompt preview pinned skills (nil = skip)
+	skillAccessStore          store.SkillAccessStore             // for system prompt preview skill filtering (nil = skip)
+	teamStore                 store.TeamStore                    // for system prompt preview team context (nil = skip)
+	agentLinkStore            store.AgentLinkStore               // for system prompt preview delegation targets (nil = skip)
+	mcpPreviewMgr             agent.MCPPreviewLister             // for store-based MCP tool preview (nil = skip)
+	disabledToolsStore        store.BuiltinToolTenantConfigStore // for per-tenant disabled tool filtering in preview (nil = skip)
 	secureCLI                 store.SecureCLIStore
 	secureCLIGrants           store.SecureCLIAgentGrantStore
 	secureCLIAgentCreds       store.SecureCLIAgentCredentialStore
@@ -126,6 +127,13 @@ func (h *AgentsHandler) SetPreviewToolPolicy(pe *tools.PolicyEngine) {
 // currently loaded in the live tool registry.
 func (h *AgentsHandler) SetPreviewMCPManager(lister agent.MCPPreviewLister) {
 	h.mcpPreviewMgr = lister
+}
+
+// SetDisabledToolsStore attaches the tenant config store for per-tenant disabled
+// tool filtering in system prompt preview. nil is safe — no per-tenant filtering
+// is applied.
+func (h *AgentsHandler) SetDisabledToolsStore(dts store.BuiltinToolTenantConfigStore) {
+	h.disabledToolsStore = dts
 }
 
 // SetPreviewStores attaches team + agent link stores for system prompt preview.

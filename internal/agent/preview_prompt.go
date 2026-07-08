@@ -53,7 +53,7 @@ type PreviewDeps struct {
 	// allow/deny/alsoAllow pipeline (including global deny) for preview tool
 	// names. nil = skip policy filtering (only skill_manage gating and alias
 	// exclusion apply).
-	ToolPolicy *tools.PolicyEngine
+	ToolPolicy   *tools.PolicyEngine
 	SkillsLoader interface {
 		BuildPinnedSummary(ctx context.Context, names []string) string
 		BuildSummary(ctx context.Context, allowList []string) string
@@ -62,7 +62,9 @@ type PreviewDeps struct {
 	// When set, MCP tool descriptions are populated from configured servers
 	// even if those servers are not currently loaded in the tool registry.
 	MCPLister MCPPreviewLister
-	DataDir   string // for team workspace path construction
+	// DisabledTools is the per-tenant set of disabled tool names (nil/empty = none disabled).
+	DisabledTools map[string]bool
+	DataDir       string // for team workspace path construction
 }
 
 // PreviewResult holds the output of BuildPreviewPrompt.
@@ -171,6 +173,17 @@ func BuildPreviewPrompt(ctx context.Context, ag *store.AgentData, mode PromptMod
 			}
 			toolNames = filtered
 		}
+	}
+
+	// --- Per-tenant disabled tools (matches loop_tool_filter.go:105-117) ---
+	if len(deps.DisabledTools) > 0 {
+		filtered := make([]string, 0, len(toolNames))
+		for _, n := range toolNames {
+			if !deps.DisabledTools[n] {
+				filtered = append(filtered, n)
+			}
+		}
+		toolNames = filtered
 	}
 
 	// --- MCP tool descriptions (matches loop_history_supplement.go:44-58) ---

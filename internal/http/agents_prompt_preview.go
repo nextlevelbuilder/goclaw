@@ -92,6 +92,18 @@ func (h *AgentsHandler) handleSystemPromptPreview(w http.ResponseWriter, r *http
 	// Build preview prompt — reuses same BuildSystemPrompt() as LLM pipeline.
 	// Runtime-only fields (channel, peer kind, credentials) are zero-valued;
 	// BuildSystemPrompt nil-checks every field so these sections are simply skipped.
+	// Load per-tenant disabled tools for this agent's tenant.
+	var disabledTools map[string]bool
+	if h.disabledToolsStore != nil && ag.TenantID != uuid.Nil {
+		if disabled, err := h.disabledToolsStore.ListDisabled(ctx, ag.TenantID); err == nil && len(disabled) > 0 {
+			disabledTools = make(map[string]bool, len(disabled))
+			for _, name := range disabled {
+				disabledTools[name] = true
+			}
+			slog.Debug("handleSystemPromptPreview.disabled_tools", "agent_id", ag.ID, "tenant", ag.TenantID, "disabled", len(disabled))
+		}
+	}
+
 	slog.Debug("handleSystemPromptPreview.mcp_lister", "agent_id", ag.ID, "mcp_lister_nil", h.mcpPreviewMgr == nil)
 	result := agent.BuildPreviewPrompt(ctx, ag, mode, r.URL.Query().Get("user_id"), agent.PreviewDeps{
 		AgentStore:       h.agents,
@@ -103,6 +115,7 @@ func (h *AgentsHandler) handleSystemPromptPreview(w http.ResponseWriter, r *http
 		SkillsLoader:     h.skillsLoader,
 		SkillAccessStore: h.skillAccessStore,
 		MCPLister:        h.mcpPreviewMgr,
+		DisabledTools:    disabledTools,
 		DataDir:          h.dataDir,
 	})
 
