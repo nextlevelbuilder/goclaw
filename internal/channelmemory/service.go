@@ -47,6 +47,7 @@ type ProcessAllEvent struct {
 	Type              string                            `json:"type"`
 	ChannelName       string                            `json:"channel_name,omitempty"`
 	HistoryKey        string                            `json:"history_key,omitempty"`
+	GroupMessageCount int                               `json:"group_message_count,omitempty"`
 	Run               *store.ChannelMemoryExtractionRun `json:"run,omitempty"`
 	Error             string                            `json:"error,omitempty"`
 	RunCount          int                               `json:"run_count"`
@@ -57,12 +58,13 @@ type ProcessAllEvent struct {
 }
 
 type GroupOption struct {
-	ChannelName  string    `json:"channel_name"`
-	HistoryKey   string    `json:"history_key"`
-	GroupTitle   string    `json:"group_title,omitempty"`
-	MessageCount int       `json:"message_count"`
-	LastActivity time.Time `json:"last_activity"`
-	Excluded     bool      `json:"excluded"`
+	ChannelName      string    `json:"channel_name"`
+	HistoryKey       string    `json:"history_key"`
+	ParentHistoryKey string    `json:"parent_history_key,omitempty"`
+	GroupTitle       string    `json:"group_title,omitempty"`
+	MessageCount     int       `json:"message_count"`
+	LastActivity     time.Time `json:"last_activity"`
+	Excluded         bool      `json:"excluded"`
 }
 
 func (s *Service) Status(ctx context.Context, inst *store.ChannelInstanceData) (*Status, error) {
@@ -109,12 +111,13 @@ func (s *Service) GroupOptions(ctx context.Context, inst *store.ChannelInstanceD
 			continue
 		}
 		out = append(out, GroupOption{
-			ChannelName:  group.ChannelName,
-			HistoryKey:   group.HistoryKey,
-			GroupTitle:   titles[group.ChannelName+":"+group.HistoryKey],
-			MessageCount: group.MessageCount,
-			LastActivity: group.LastActivity,
-			Excluded:     contains(cfg.ExcludeHistoryKeys, group.HistoryKey),
+			ChannelName:      group.ChannelName,
+			HistoryKey:       group.HistoryKey,
+			ParentHistoryKey: group.ParentHistoryKey,
+			GroupTitle:       titles[group.ChannelName+":"+group.HistoryKey],
+			MessageCount:     group.MessageCount,
+			LastActivity:     group.LastActivity,
+			Excluded:         contains(cfg.ExcludeHistoryKeys, group.HistoryKey) || contains(cfg.ExcludeHistoryKeys, group.ParentHistoryKey),
 		})
 	}
 	return out, nil
@@ -130,7 +133,7 @@ func (s *Service) RunNow(ctx context.Context, inst *store.ChannelInstanceData, t
 		return nil, err
 	}
 	for _, group := range groups {
-		if group.ChannelName != inst.Name || !eligibleHistoryKey(group.HistoryKey, cfg) {
+		if group.ChannelName != inst.Name || !eligibleHistoryGroup(group, cfg) {
 			continue
 		}
 		messages, err := s.unprocessedMessages(ctx, inst.ID, group)
@@ -163,7 +166,7 @@ func (s *Service) RunAllWithProgress(ctx context.Context, inst *store.ChannelIns
 	}
 	result := &ProcessAllResult{}
 	for _, group := range groups {
-		if group.ChannelName != inst.Name || !eligibleHistoryKey(group.HistoryKey, cfg) {
+		if group.ChannelName != inst.Name || !eligibleHistoryGroup(group, cfg) {
 			continue
 		}
 		messages, err := s.unprocessedMessages(ctx, inst.ID, group)
@@ -178,7 +181,7 @@ func (s *Service) RunAllWithProgress(ctx context.Context, inst *store.ChannelIns
 		}
 		if len(messages) < cfg.MinMessages {
 			result.SkippedGroupCount++
-			if err := emitProcessAllEvent(emit, "group_skipped", group, nil, "", result); err != nil {
+			if err := emitProcessAllEvent(emit, "group_skipped", group, len(messages), nil, "", result); err != nil {
 				return result, err
 			}
 			continue
@@ -186,7 +189,7 @@ func (s *Service) RunAllWithProgress(ctx context.Context, inst *store.ChannelIns
 		run, err := s.runMessages(ctx, inst, cfg, group, messages, trigger)
 		if err != nil {
 			result.ErrorCount++
-			if emitErr := emitProcessAllEvent(emit, "group_failed", group, nil, err.Error(), result); emitErr != nil {
+			if emitErr := emitProcessAllEvent(emit, "group_failed", group, len(messages), nil, err.Error(), result); emitErr != nil {
 				return result, emitErr
 			}
 			continue
@@ -195,17 +198,17 @@ func (s *Service) RunAllWithProgress(ctx context.Context, inst *store.ChannelIns
 		result.RunCount++
 		result.MessageCount += run.MessageCount
 		result.ItemCount += run.ItemCount
-		if err := emitProcessAllEvent(emit, "group_completed", group, run, "", result); err != nil {
+		if err := emitProcessAllEvent(emit, "group_completed", group, run.MessageCount, run, "", result); err != nil {
 			return result, err
 		}
 	}
-	if err := emitProcessAllEvent(emit, "final", store.PendingMessageGroup{}, nil, "", result); err != nil {
+	if err := emitProcessAllEvent(emit, "final", store.PendingMessageGroup{}, 0, nil, "", result); err != nil {
 		return result, err
 	}
 	return result, nil
 }
 
-func emitProcessAllEvent(emit func(ProcessAllEvent) error, typ string, group store.PendingMessageGroup, run *store.ChannelMemoryExtractionRun, errMsg string, result *ProcessAllResult) error {
+func emitProcessAllEvent(emit func(ProcessAllEvent) error, typ string, group store.PendingMessageGroup, groupMessageCount int, run *store.ChannelMemoryExtractionRun, errMsg string, result *ProcessAllResult) error {
 	if emit == nil {
 		return nil
 	}
@@ -213,6 +216,7 @@ func emitProcessAllEvent(emit func(ProcessAllEvent) error, typ string, group sto
 		Type:              typ,
 		ChannelName:       group.ChannelName,
 		HistoryKey:        group.HistoryKey,
+		GroupMessageCount: groupMessageCount,
 		Run:               run,
 		Error:             errMsg,
 		RunCount:          result.RunCount,
@@ -231,7 +235,7 @@ func (s *Service) UnprocessedMessageCount(ctx context.Context, inst *store.Chann
 	}
 	total := 0
 	for _, group := range groups {
-		if group.ChannelName != inst.Name || !eligibleHistoryKey(group.HistoryKey, cfg) {
+		if group.ChannelName != inst.Name || !eligibleHistoryGroup(group, cfg) {
 			continue
 		}
 		messages, err := s.unprocessedMessages(ctx, inst.ID, group)

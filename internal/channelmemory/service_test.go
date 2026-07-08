@@ -258,7 +258,11 @@ func TestRunAllSkipsLowVolumeGroupsAndContinues(t *testing.T) {
 	}
 	svc := &Service{Pending: pending, Extractions: &fakeExtractionStore{}}
 
-	result, err := svc.RunAll(context.Background(), inst, "scheduled")
+	var events []ProcessAllEvent
+	result, err := svc.RunAllWithProgress(context.Background(), inst, "scheduled", func(event ProcessAllEvent) error {
+		events = append(events, event)
+		return nil
+	})
 	if err != nil {
 		t.Fatalf("RunAll returned error: %v", err)
 	}
@@ -267,6 +271,15 @@ func TestRunAllSkipsLowVolumeGroupsAndContinues(t *testing.T) {
 	}
 	if result.RunCount != 0 {
 		t.Fatalf("expected no runs for low-volume groups, got %d", result.RunCount)
+	}
+	if len(events) < 2 {
+		t.Fatalf("expected skipped events, got %d", len(events))
+	}
+	if events[0].Type != "group_skipped" || events[0].GroupMessageCount != 1 {
+		t.Fatalf("first skipped event = %+v, want group_message_count 1", events[0])
+	}
+	if events[1].Type != "group_skipped" || events[1].GroupMessageCount != 2 {
+		t.Fatalf("second skipped event = %+v, want group_message_count 2", events[1])
 	}
 }
 
@@ -296,6 +309,49 @@ func TestRunAllSkipsExcludedHistoryKeys(t *testing.T) {
 	}
 	if result.RunCount != 0 || result.SkippedGroupCount != 0 {
 		t.Fatalf("excluded group should not be processed or counted: %+v", result)
+	}
+}
+
+func TestRunAllSkipsThreadWhenParentHistoryKeyExcluded(t *testing.T) {
+	inst := &store.ChannelInstanceData{
+		BaseModel: store.BaseModel{ID: uuid.New()},
+		Name:      "discord",
+		Config:    MergeIntoInstanceConfig(nil, Config{Enabled: true, MinMessages: 2, ExcludeHistoryKeys: []string{"parent-channel"}}),
+	}
+	pending := &fakePendingStore{
+		groups: []store.PendingMessageGroup{
+			{ChannelName: "discord", HistoryKey: "thread-1", ParentHistoryKey: "parent-channel", MessageCount: 3},
+		},
+		messages: map[string][]store.PendingMessage{
+			"discord:thread-1": {
+				{ID: uuid.New(), ChannelName: "discord", HistoryKey: "thread-1", ParentHistoryKey: "parent-channel", Body: "one", CreatedAt: time.Now().UTC()},
+				{ID: uuid.New(), ChannelName: "discord", HistoryKey: "thread-1", ParentHistoryKey: "parent-channel", Body: "two", CreatedAt: time.Now().UTC()},
+				{ID: uuid.New(), ChannelName: "discord", HistoryKey: "thread-1", ParentHistoryKey: "parent-channel", Body: "three", CreatedAt: time.Now().UTC()},
+			},
+		},
+	}
+	svc := &Service{Pending: pending, Extractions: &fakeExtractionStore{}}
+
+	result, err := svc.RunAll(context.Background(), inst, "scheduled")
+	if err != nil {
+		t.Fatalf("RunAll returned error: %v", err)
+	}
+	if result.RunCount != 0 || result.SkippedGroupCount != 0 {
+		t.Fatalf("thread under excluded parent should not be processed or counted: %+v", result)
+	}
+	count, err := svc.UnprocessedMessageCount(context.Background(), inst)
+	if err != nil {
+		t.Fatalf("UnprocessedMessageCount returned error: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("unprocessed count = %d, want 0 for thread under excluded parent", count)
+	}
+	options, err := svc.GroupOptions(context.Background(), inst)
+	if err != nil {
+		t.Fatalf("GroupOptions returned error: %v", err)
+	}
+	if len(options) != 1 || !options[0].Excluded || options[0].ParentHistoryKey != "parent-channel" {
+		t.Fatalf("group option = %+v, want excluded thread with parent key", options)
 	}
 }
 

@@ -1166,6 +1166,7 @@ CREATE TABLE IF NOT EXISTS channel_pending_messages (
     id              TEXT NOT NULL PRIMARY KEY,
     channel_name    VARCHAR(100) NOT NULL,
     history_key     VARCHAR(200) NOT NULL,
+    parent_history_key VARCHAR(200) NOT NULL DEFAULT '',
     sender          VARCHAR(255) NOT NULL,
     sender_id       VARCHAR(255) NOT NULL DEFAULT '',
     body            TEXT NOT NULL,
@@ -1177,6 +1178,7 @@ CREATE TABLE IF NOT EXISTS channel_pending_messages (
 );
 
 CREATE INDEX IF NOT EXISTS idx_channel_pending_messages_lookup ON channel_pending_messages(channel_name, history_key, created_at);
+CREATE INDEX IF NOT EXISTS idx_channel_pending_messages_parent ON channel_pending_messages(channel_name, parent_history_key) WHERE parent_history_key <> '';
 CREATE INDEX IF NOT EXISTS idx_channel_pending_messages_tenant ON channel_pending_messages(tenant_id);
 
 -- ============================================================

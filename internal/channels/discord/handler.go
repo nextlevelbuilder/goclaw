@@ -196,13 +196,15 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 					mediaPaths = append(mediaPaths, mf.Path)
 				}
 			}
+			parentHistoryKey := c.parentHistoryKeyForChannel(ctx, channelID)
 			c.GroupHistory().Record(channelID, channels.HistoryEntry{
-				Sender:    senderName,
-				SenderID:  senderID,
-				Body:      content,
-				Media:     mediaPaths,
-				Timestamp: m.Timestamp,
-				MessageID: m.ID,
+				Sender:           senderName,
+				SenderID:         senderID,
+				Body:             content,
+				ParentHistoryKey: parentHistoryKey,
+				Media:            mediaPaths,
+				Timestamp:        m.Timestamp,
+				MessageID:        m.ID,
 			}, c.HistoryLimit())
 
 			// Collect contact even when bot is not mentioned (cache prevents DB spam).

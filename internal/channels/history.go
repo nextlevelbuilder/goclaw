@@ -45,13 +45,14 @@ type MediaRef struct {
 
 // HistoryEntry represents a single tracked group message.
 type HistoryEntry struct {
-	Sender    string
-	SenderID  string
-	Body      string
-	Media     []string   // temp file paths for images/attachments (RAM-only, not persisted to DB)
-	MediaRefs []MediaRef // deferred media refs for lazy download (RAM-only, not persisted)
-	Timestamp time.Time
-	MessageID string
+	Sender           string
+	SenderID         string
+	Body             string
+	ParentHistoryKey string
+	Media            []string   // temp file paths for images/attachments (RAM-only, not persisted to DB)
+	MediaRefs        []MediaRef // deferred media refs for lazy download (RAM-only, not persisted)
+	Timestamp        time.Time
+	MessageID        string
 }
 
 // PendingHistory tracks group messages across multiple groups.
@@ -181,13 +182,14 @@ func (ph *PendingHistory) Record(historyKey string, entry HistoryEntry, limit in
 	// Queue for DB persistence (batched flush)
 	if ph.store != nil {
 		ph.enqueueFlush(store.PendingMessage{
-			ChannelName:   ph.channelName,
-			HistoryKey:    historyKey,
-			Sender:        entry.Sender,
-			SenderID:      entry.SenderID,
-			Body:          entry.Body,
-			PlatformMsgID: entry.MessageID,
-			CreatedAt:     entry.Timestamp,
+			ChannelName:      ph.channelName,
+			HistoryKey:       historyKey,
+			ParentHistoryKey: entry.ParentHistoryKey,
+			Sender:           entry.Sender,
+			SenderID:         entry.SenderID,
+			Body:             entry.Body,
+			PlatformMsgID:    entry.MessageID,
+			CreatedAt:        entry.Timestamp,
 		})
 	}
 
@@ -215,11 +217,12 @@ func (ph *PendingHistory) loadFromDB(historyKey string) []HistoryEntry {
 	entries := make([]HistoryEntry, 0, len(msgs))
 	for _, m := range msgs {
 		entries = append(entries, HistoryEntry{
-			Sender:    m.Sender,
-			SenderID:  m.SenderID,
-			Body:      m.Body,
-			Timestamp: m.CreatedAt,
-			MessageID: m.PlatformMsgID,
+			Sender:           m.Sender,
+			SenderID:         m.SenderID,
+			Body:             m.Body,
+			ParentHistoryKey: m.ParentHistoryKey,
+			Timestamp:        m.CreatedAt,
+			MessageID:        m.PlatformMsgID,
 		})
 	}
 

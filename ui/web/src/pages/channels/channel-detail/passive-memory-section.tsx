@@ -90,7 +90,10 @@ export function PassiveMemorySection({ instanceId, channelType }: PassiveMemoryS
       excluded: true,
     }
   ));
-  const availableGroupOptions = groupOptions.filter((group) => !excludedHistoryKeys.includes(group.history_key));
+  const availableGroupOptions = groupOptions.filter((group) => {
+    return !excludedHistoryKeys.includes(group.history_key) &&
+      !excludedHistoryKeys.includes(group.parent_history_key ?? "");
+  });
 
   const updateConfig = (patch: Partial<ChannelMemoryConfig>) => {
     setConfig((current) => ({ ...current, ...patch }));
@@ -366,6 +369,7 @@ function formatGroupLabel(group: { history_key: string; group_title?: string }) 
 function formatRunAllEvent(event: {
   type: string;
   history_key?: string;
+  group_message_count?: number;
   error?: string;
 }, t: (key: string, opts?: Record<string, unknown>) => string) {
   const historyKey = event.history_key || "-";
@@ -373,7 +377,7 @@ function formatRunAllEvent(event: {
     case "group_completed":
       return t("detail.passiveMemory.groupCompleted", { historyKey });
     case "group_skipped":
-      return t("detail.passiveMemory.groupSkipped", { historyKey });
+      return t("detail.passiveMemory.groupSkipped", { historyKey, messageCount: event.group_message_count ?? 0 });
     case "group_failed":
       return t("detail.passiveMemory.groupFailed", { historyKey, error: event.error || "" });
     default:

@@ -27,8 +27,8 @@ func (s *PGPendingMessageStore) AppendBatch(ctx context.Context, msgs []store.Pe
 		return nil
 	}
 
-	// Build multi-row INSERT: VALUES ($1,$2,...,$11), ($12,$13,...,$22), ...
-	const cols = 11
+	// Build multi-row INSERT: VALUES ($1,$2,...,$12), ($13,$14,...), ...
+	const cols = 12
 	placeholders := make([]string, len(msgs))
 	args := make([]any, 0, len(msgs)*cols)
 	now := time.Now()
@@ -39,14 +39,14 @@ func (s *PGPendingMessageStore) AppendBatch(ctx context.Context, msgs []store.Pe
 			msgs[i].ID = uuid.Must(uuid.NewV7())
 		}
 		base := i * cols
-		placeholders[i] = fmt.Sprintf("($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)",
-			base+1, base+2, base+3, base+4, base+5, base+6, base+7, base+8, base+9, base+10, base+11)
-		args = append(args, msgs[i].ID, msgs[i].ChannelName, msgs[i].HistoryKey,
+		placeholders[i] = fmt.Sprintf("($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)",
+			base+1, base+2, base+3, base+4, base+5, base+6, base+7, base+8, base+9, base+10, base+11, base+12)
+		args = append(args, msgs[i].ID, msgs[i].ChannelName, msgs[i].HistoryKey, msgs[i].ParentHistoryKey,
 			msgs[i].Sender, msgs[i].SenderID, msgs[i].Body, msgs[i].PlatformMsgID, msgs[i].IsSummary, now, now, tid)
 	}
 
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO channel_pending_messages (id, channel_name, history_key, sender, sender_id, body, platform_msg_id, is_summary, created_at, updated_at, tenant_id)
+		`INSERT INTO channel_pending_messages (id, channel_name, history_key, parent_history_key, sender, sender_id, body, platform_msg_id, is_summary, created_at, updated_at, tenant_id)
 		 VALUES `+strings.Join(placeholders, ","),
 		args...,
 	)
@@ -60,7 +60,7 @@ func (s *PGPendingMessageStore) ListByKey(ctx context.Context, channelName, hist
 	}
 	var result []store.PendingMessage
 	err = pkgSqlxDB.SelectContext(ctx, &result,
-		`SELECT id, channel_name, history_key, sender, sender_id, body, platform_msg_id, is_summary, created_at, updated_at
+		`SELECT id, channel_name, history_key, parent_history_key, sender, sender_id, body, platform_msg_id, is_summary, created_at, updated_at
 		 FROM channel_pending_messages
 		 WHERE channel_name = $1 AND history_key = $2`+tClause+`
 		 ORDER BY created_at ASC, id ASC`,
@@ -120,9 +120,9 @@ func (s *PGPendingMessageStore) Compact(ctx context.Context, deleteIDs []uuid.UU
 	}
 	now := time.Now()
 	_, err = tx.ExecContext(ctx,
-		`INSERT INTO channel_pending_messages (id, channel_name, history_key, sender, sender_id, body, platform_msg_id, is_summary, created_at, updated_at, tenant_id)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-		summary.ID, summary.ChannelName, summary.HistoryKey, summary.Sender, summary.SenderID, summary.Body, summary.PlatformMsgID, true, now, now, tenantIDForInsert(ctx),
+		`INSERT INTO channel_pending_messages (id, channel_name, history_key, parent_history_key, sender, sender_id, body, platform_msg_id, is_summary, created_at, updated_at, tenant_id)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+		summary.ID, summary.ChannelName, summary.HistoryKey, summary.ParentHistoryKey, summary.Sender, summary.SenderID, summary.Body, summary.PlatformMsgID, true, now, now, tenantIDForInsert(ctx),
 	)
 	if err != nil {
 		return fmt.Errorf("compact insert summary: %w", err)
@@ -155,7 +155,7 @@ func (s *PGPendingMessageStore) ListGroups(ctx context.Context) ([]store.Pending
 	}
 	var result []store.PendingMessageGroup
 	err = pkgSqlxDB.SelectContext(ctx, &result,
-		`SELECT channel_name, history_key,
+		`SELECT channel_name, history_key, MAX(parent_history_key) AS parent_history_key,
 		        COUNT(*) AS message_count,
 		        BOOL_OR(is_summary)
 		          AND NOT EXISTS (

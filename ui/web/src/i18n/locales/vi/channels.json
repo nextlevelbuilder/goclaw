@@ -232,7 +232,7 @@
       "runAllProgress": "Tiến độ chạy tất cả nhóm",
       "runAllProgressStats": "{{runs}} xong, {{skipped}} bỏ qua, {{errors}} lỗi, {{messages}} tin nhắn",
       "groupCompleted": "Đã xử lý nhóm {{historyKey}}",
-      "groupSkipped": "Bỏ qua nhóm {{historyKey}} vì chưa đủ số tin nhắn tối thiểu",
+      "groupSkipped": "Bỏ qua nhóm {{historyKey}} vì chưa đủ số tin nhắn tối thiểu ({{messageCount}} tin nhắn)",
       "groupFailed": "Nhóm {{historyKey}} lỗi: {{error}}",
       "itemUpdated": "Đã cập nhật mục bộ nhớ",
       "itemFailed": "Thao tác mục bộ nhớ thất bại",

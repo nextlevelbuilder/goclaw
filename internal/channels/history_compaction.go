@@ -115,11 +115,12 @@ func CompactGroup(ctx context.Context, s store.PendingMessageStore, channelName,
 
 	// Step 4: Compact in DB (atomic tx: delete old + insert summary)
 	summary := &store.PendingMessage{
-		ChannelName: channelName,
-		HistoryKey:  historyKey,
-		Sender:      "[summary]",
-		Body:        resp.Content,
-		IsSummary:   true,
+		ChannelName:      channelName,
+		HistoryKey:       historyKey,
+		ParentHistoryKey: firstParentHistoryKey(entries),
+		Sender:           "[summary]",
+		Body:             resp.Content,
+		IsSummary:        true,
 	}
 	if err := s.Compact(ctx, deleteIDs, summary); err != nil {
 		return 0, fmt.Errorf("db compact: %w", err)
@@ -134,6 +135,15 @@ func CompactGroup(ctx context.Context, s store.PendingMessageStore, channelName,
 		"total_after", remaining,
 	)
 	return remaining, nil
+}
+
+func firstParentHistoryKey(entries []store.PendingMessage) string {
+	for _, entry := range entries {
+		if entry.ParentHistoryKey != "" {
+			return entry.ParentHistoryKey
+		}
+	}
+	return ""
 }
 
 // sweepCompaction checks DB for groups exceeding compaction threshold.
@@ -212,10 +222,11 @@ func (ph *PendingHistory) runCompaction(historyKey string, cfg *CompactionConfig
 		rebuilt := make([]HistoryEntry, 0, len(fresh))
 		for _, f := range fresh {
 			rebuilt = append(rebuilt, HistoryEntry{
-				Sender:    f.Sender,
-				Body:      f.Body,
-				Timestamp: f.CreatedAt,
-				MessageID: f.PlatformMsgID,
+				Sender:           f.Sender,
+				Body:             f.Body,
+				ParentHistoryKey: f.ParentHistoryKey,
+				Timestamp:        f.CreatedAt,
+				MessageID:        f.PlatformMsgID,
 			})
 		}
 		ph.entries[historyKey] = rebuilt

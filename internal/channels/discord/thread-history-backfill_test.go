@@ -157,6 +157,32 @@ func TestDiscordThreadBackfillDoesNotDuplicatePendingThreadHistory(t *testing.T)
 	}
 }
 
+func TestDiscordThreadPendingHistoryStoresParentChannel(t *testing.T) {
+	server := newDiscordThreadBackfillServer(t, discordThreadBackfillFixture{})
+	defer server.Close()
+	ch, _ := newThreadBackfillTestChannel(t, server)
+
+	ch.handleMessage(ch.session, &discordgo.MessageCreate{Message: &discordgo.Message{
+		ID:        "prior-1",
+		ChannelID: "thread-1",
+		GuildID:   "guild-1",
+		Content:   "unmentioned thread context",
+		Author:    &discordgo.User{ID: "user-1", Username: "Alice"},
+		Timestamp: time.Now(),
+	}})
+
+	entries := ch.GroupHistory().GetEntries("thread-1")
+	if len(entries) != 1 {
+		t.Fatalf("pending entries = %d, want 1: %#v", len(entries), entries)
+	}
+	if entries[0].ParentHistoryKey != "parent-1" {
+		t.Fatalf("parent history key = %q, want parent-1", entries[0].ParentHistoryKey)
+	}
+	if entries[0].Body != "unmentioned thread context" {
+		t.Fatalf("entry body = %q, want recorded content", entries[0].Body)
+	}
+}
+
 type discordThreadBackfillFixture struct {
 	channelJSON   string
 	historyStatus int

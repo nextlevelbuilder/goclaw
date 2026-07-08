@@ -42,6 +42,13 @@ func eligibleHistoryKey(key string, cfg Config) bool {
 	return key != "" && !strings.Contains(k, "dm") && !strings.Contains(k, "private")
 }
 
+func eligibleHistoryGroup(group store.PendingMessageGroup, cfg Config) bool {
+	if group.ParentHistoryKey != "" && slices.Contains(cfg.ExcludeHistoryKeys, group.ParentHistoryKey) {
+		return false
+	}
+	return eligibleHistoryKey(group.HistoryKey, cfg)
+}
+
 func messageSourceID(msg store.PendingMessage) string {
 	if msg.PlatformMsgID != "" {
 		return msg.PlatformMsgID

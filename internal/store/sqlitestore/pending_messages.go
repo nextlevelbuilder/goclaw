@@ -28,7 +28,7 @@ func (s *SQLitePendingMessageStore) AppendBatch(ctx context.Context, msgs []stor
 		return nil
 	}
 
-	const cols = 11
+	const cols = 12
 	placeholders := make([]string, len(msgs))
 	args := make([]any, 0, len(msgs)*cols)
 	now := time.Now()
@@ -38,13 +38,13 @@ func (s *SQLitePendingMessageStore) AppendBatch(ctx context.Context, msgs []stor
 		if msgs[i].ID == uuid.Nil {
 			msgs[i].ID = uuid.Must(uuid.NewV7())
 		}
-		placeholders[i] = "(?,?,?,?,?,?,?,?,?,?,?)"
-		args = append(args, msgs[i].ID, msgs[i].ChannelName, msgs[i].HistoryKey,
+		placeholders[i] = "(?,?,?,?,?,?,?,?,?,?,?,?)"
+		args = append(args, msgs[i].ID, msgs[i].ChannelName, msgs[i].HistoryKey, msgs[i].ParentHistoryKey,
 			msgs[i].Sender, msgs[i].SenderID, msgs[i].Body, msgs[i].PlatformMsgID, msgs[i].IsSummary, now, now, tid)
 	}
 
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO channel_pending_messages (id, channel_name, history_key, sender, sender_id, body, platform_msg_id, is_summary, created_at, updated_at, tenant_id)
+		`INSERT INTO channel_pending_messages (id, channel_name, history_key, parent_history_key, sender, sender_id, body, platform_msg_id, is_summary, created_at, updated_at, tenant_id)
 		 VALUES `+strings.Join(placeholders, ","),
 		args...,
 	)
@@ -58,7 +58,7 @@ func (s *SQLitePendingMessageStore) ListByKey(ctx context.Context, channelName, 
 	}
 	args := append([]any{channelName, historyKey}, tArgs...)
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, channel_name, history_key, sender, sender_id, body, platform_msg_id, is_summary, created_at, updated_at
+		`SELECT id, channel_name, history_key, parent_history_key, sender, sender_id, body, platform_msg_id, is_summary, created_at, updated_at
 		 FROM channel_pending_messages
 		 WHERE channel_name = ? AND history_key = ?`+tClause+`
 		 ORDER BY created_at ASC, id ASC`,
@@ -73,7 +73,7 @@ func (s *SQLitePendingMessageStore) ListByKey(ctx context.Context, channelName, 
 	for rows.Next() {
 		var m store.PendingMessage
 		createdAt, updatedAt := scanTimePair()
-		if err := rows.Scan(&m.ID, &m.ChannelName, &m.HistoryKey, &m.Sender, &m.SenderID, &m.Body, &m.PlatformMsgID, &m.IsSummary, createdAt, updatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.ChannelName, &m.HistoryKey, &m.ParentHistoryKey, &m.Sender, &m.SenderID, &m.Body, &m.PlatformMsgID, &m.IsSummary, createdAt, updatedAt); err != nil {
 			return nil, err
 		}
 		m.CreatedAt = createdAt.Time
@@ -132,9 +132,9 @@ func (s *SQLitePendingMessageStore) Compact(ctx context.Context, deleteIDs []uui
 	}
 	now := time.Now()
 	_, err = tx.ExecContext(ctx,
-		`INSERT INTO channel_pending_messages (id, channel_name, history_key, sender, sender_id, body, platform_msg_id, is_summary, created_at, updated_at, tenant_id)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		summary.ID, summary.ChannelName, summary.HistoryKey, summary.Sender, summary.SenderID, summary.Body, summary.PlatformMsgID, true, now, now, tenantIDForInsert(ctx),
+		`INSERT INTO channel_pending_messages (id, channel_name, history_key, parent_history_key, sender, sender_id, body, platform_msg_id, is_summary, created_at, updated_at, tenant_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		summary.ID, summary.ChannelName, summary.HistoryKey, summary.ParentHistoryKey, summary.Sender, summary.SenderID, summary.Body, summary.PlatformMsgID, true, now, now, tenantIDForInsert(ctx),
 	)
 	if err != nil {
 		return fmt.Errorf("compact insert summary: %w", err)
@@ -162,7 +162,7 @@ func (s *SQLitePendingMessageStore) ListGroups(ctx context.Context) ([]store.Pen
 		return nil, err
 	}
 	// SQLite: BOOL_OR → MAX(is_summary), EXISTS subquery logic preserved
-	q := `SELECT channel_name, history_key,
+	q := `SELECT channel_name, history_key, MAX(parent_history_key) AS parent_history_key,
 		        COUNT(*) AS message_count,
 		        MAX(is_summary) AND NOT EXISTS (
 		            SELECT 1 FROM channel_pending_messages n
@@ -192,7 +192,7 @@ func (s *SQLitePendingMessageStore) ListGroups(ctx context.Context) ([]store.Pen
 	var result []store.PendingMessageGroup
 	for rows.Next() {
 		var g store.PendingMessageGroup
-		if err := rows.Scan(&g.ChannelName, &g.HistoryKey, &g.MessageCount, &g.HasSummary, &g.LastActivity); err != nil {
+		if err := rows.Scan(&g.ChannelName, &g.HistoryKey, &g.ParentHistoryKey, &g.MessageCount, &g.HasSummary, &g.LastActivity); err != nil {
 			return nil, err
 		}
 		result = append(result, g)

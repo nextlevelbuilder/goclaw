@@ -233,7 +233,7 @@
       "runAllProgress": "Run all groups progress",
       "runAllProgressStats": "{{runs}} done, {{skipped}} skipped, {{errors}} failed, {{messages}} messages",
       "groupCompleted": "Completed group {{historyKey}}",
-      "groupSkipped": "Skipped group {{historyKey}} below the minimum message count",
+      "groupSkipped": "Skipped group {{historyKey}} below the minimum message count ({{messageCount}} messages)",
       "groupFailed": "Group {{historyKey}} failed: {{error}}",
       "itemUpdated": "Memory item updated",
       "itemFailed": "Memory item action failed",

@@ -16,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 54
+const SchemaVersion = 55
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -893,6 +893,11 @@ ALTER TABLE usage_event_rollups ADD COLUMN cache_create_tokens BIGINT NOT NULL D
 ALTER TABLE usage_event_rollups ADD COLUMN thinking_tokens BIGINT NOT NULL DEFAULT 0;`,
 	// Version 53 → 54: dedupe passive memory extraction items across runs for the same channel instance.
 	53: addChannelMemoryItemChannelHashUnique,
+	// Version 54 → 55: preserve Discord thread parent channel for passive-memory excludes.
+	54: `ALTER TABLE channel_pending_messages ADD COLUMN parent_history_key VARCHAR(200) NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_channel_pending_messages_parent
+  ON channel_pending_messages(channel_name, parent_history_key)
+  WHERE parent_history_key <> '';`,
 }
 
 const addUsageEventAnalyticsTables = `
@@ -1452,6 +1457,12 @@ func EnsureSchema(db *sql.DB) error {
 					return fmt.Errorf("inspect usage event token columns: %w", err)
 				}
 			}
+			if v == 54 {
+				patch, err = sqlitePendingMessageParentMigrationPatch(db)
+				if err != nil {
+					return fmt.Errorf("inspect channel pending message parent column: %w", err)
+				}
+			}
 			// Migrations that rebuild a table referenced by another table's FK
 			// require foreign_keys=OFF per SQLite altertable §7. The pragma is
 			// a no-op inside a transaction, so toggle it around BEGIN/COMMIT.
@@ -1592,6 +1603,21 @@ func sqliteUsageEventTokenMigrationPatch(db *sql.DB) (string, error) {
 	if patch == "" {
 		patch = "SELECT 1;"
 	}
+	return patch, nil
+}
+
+func sqlitePendingMessageParentMigrationPatch(db *sql.DB) (string, error) {
+	hasColumn, err := sqliteColumnExists(db, "channel_pending_messages", "parent_history_key")
+	if err != nil {
+		return "", err
+	}
+	patch := ""
+	if !hasColumn {
+		patch += "ALTER TABLE channel_pending_messages ADD COLUMN parent_history_key VARCHAR(200) NOT NULL DEFAULT '';\n"
+	}
+	patch += `CREATE INDEX IF NOT EXISTS idx_channel_pending_messages_parent
+  ON channel_pending_messages(channel_name, parent_history_key)
+  WHERE parent_history_key <> '';`
 	return patch, nil
 }
 

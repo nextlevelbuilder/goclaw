@@ -90,20 +90,33 @@ func (c *Channel) backfillThreadHistory(ctx context.Context, m *discordgo.Messag
 }
 
 func (c *Channel) isThreadChannel(ctx context.Context, channelID string) bool {
+	_, ok := c.threadChannel(ctx, channelID)
+	return ok
+}
+
+func (c *Channel) parentHistoryKeyForChannel(ctx context.Context, channelID string) string {
+	ch, ok := c.threadChannel(ctx, channelID)
+	if !ok || ch.ParentID == "" {
+		return ""
+	}
+	return ch.ParentID
+}
+
+func (c *Channel) threadChannel(ctx context.Context, channelID string) (*discordgo.Channel, bool) {
 	if c.session == nil {
-		return false
+		return nil, false
 	}
 	if c.session.State != nil {
 		if ch, err := c.session.State.Channel(channelID); err == nil && ch != nil {
-			return ch.IsThread()
+			return ch, ch.IsThread()
 		}
 	}
 	ch, err := c.session.Channel(channelID, discordgo.WithContext(ctx))
 	if err != nil {
 		slog.Warn("discord: thread channel lookup failed", "channel_id", channelID, "error", err)
-		return false
+		return nil, false
 	}
-	return ch != nil && ch.IsThread()
+	return ch, ch != nil && ch.IsThread()
 }
 
 func (c *Channel) resolveThreadHistoryAttachments(ctx context.Context, attachments []*discordgo.MessageAttachment, maxBytes int64, remaining int) []threadHistoryAttachment {
