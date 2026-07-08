@@ -527,7 +527,11 @@ func StripToolPrefix(tmpl, name string) string {
 	if strings.Contains(tmpl, placeholder) {
 		parts := strings.SplitN(tmpl, placeholder, 2)
 		prefix, suffix := parts[0], parts[1]
-		if strings.HasPrefix(name, prefix) && strings.HasSuffix(name, suffix) {
+		// Require the name to be at least as long as prefix+suffix so an
+		// overlapping match (e.g. tmpl "pre_{tool_name}_suf", name "pre_suf")
+		// doesn't slice with a negative length and panic.
+		if strings.HasPrefix(name, prefix) && strings.HasSuffix(name, suffix) &&
+			len(prefix)+len(suffix) <= len(name) {
 			result := name[len(prefix):]
 			if suffix != "" {
 				result = result[:len(result)-len(suffix)]

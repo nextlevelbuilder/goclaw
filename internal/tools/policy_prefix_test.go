@@ -16,6 +16,7 @@ func TestStripToolPrefix(t *testing.T) {
 		{"template no match", "proxy_{tool_name}", "other_exec", "other_exec"},
 		{"template empty result", "proxy_{tool_name}", "proxy_", "proxy_"},
 		{"template exact placeholder", "{tool_name}", "exec", "exec"},
+		{"template prefix+suffix overlap (regression)", "pre_{tool_name}_suf", "pre_suf", "pre_suf"},
 
 		// Literal prefix
 		{"literal prefix with separator", "proxy_", "proxy_exec", "exec"},
