@@ -276,6 +276,10 @@ type ProvidersConfig struct {
 	BytePlus       ProviderConfig  `json:"byteplus"`        // BytePlus ModelArk (Seed 2.0)
 	BytePlusCoding ProviderConfig  `json:"byteplus_coding"` // BytePlus ModelArk Coding Plan
 	Vertex         VertexConfig    `json:"vertex"`          // Google Cloud Vertex AI (OAuth2 service account + ADC)
+
+	// RequestTimeoutSec bounds provider verify and models-list HTTP calls.
+	// Tenant-scoped, overridable via the "providers.request_timeout_sec" system config.
+	RequestTimeoutSec int `json:"request_timeout_sec,omitempty"`
 }
 
 // VertexConfig configures Google Cloud Vertex AI.

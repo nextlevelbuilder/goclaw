@@ -86,6 +86,9 @@ func (c *Config) ApplySystemConfigs(configs map[string]string) {
 	boolValue(SkillSlashPartialMatchingSystemConfigKey, &c.Skills.SlashCommands.PartialMatching)
 	str(SkillSlashCommandPrefixSystemConfigKey, &c.Skills.SlashCommands.Prefix)
 
+	// Providers
+	integer("providers.request_timeout_sec", &c.Providers.RequestTimeoutSec)
+
 	// TTS
 	str("tts.provider", &c.Tts.Provider)
 	str("tts.auto", &c.Tts.Auto)

@@ -127,6 +127,9 @@ func seedConfigForContext(ctx context.Context, sc store.SystemConfigStore, cfg *
 	setInt("tools.browser.max_pages", cfg.Tools.Browser.MaxPages)
 	set("tools.browser.cookie_sync_enabled", fmt.Sprintf("%t", cfg.Tools.Browser.CookieSyncEnabled))
 
+	// Providers
+	setInt("providers.request_timeout_sec", cfg.Providers.RequestTimeoutSec)
+
 	// TTS
 	set("tts.provider", cfg.Tts.Provider)
 	set("tts.auto", cfg.Tts.Auto)

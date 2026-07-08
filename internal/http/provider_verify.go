@@ -125,7 +125,8 @@ func (h *ProvidersHandler) handleVerifyProvider(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	timeoutSec := loadProviderRequestTimeoutSec(r.Context(), h.sysConfigStore)
+	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(timeoutSec)*time.Second)
 	defer cancel()
 	ctx = store.WithTenantID(ctx, p.TenantID)
 

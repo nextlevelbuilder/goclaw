@@ -59,6 +59,7 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
   // Background Workers
   const [bgProvider, setBgProvider] = useState("");
   const [bgModel, setBgModel] = useState("");
+  const [providerRequestTimeoutSec, setProviderRequestTimeoutSec] = useState("");
   const [skillUploadMaxSize, setSkillUploadMaxSize] = useState("20");
   const [skillSlashEnabled, setSkillSlashEnabled] = useState(true);
   const [skillSlashSuggest, setSkillSlashSuggest] = useState(true);
@@ -80,6 +81,7 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
       kgProvider: kgSettings?.extraction_provider ?? "", kgModel: kgSettings?.extraction_model ?? "",
       kgMinConfidence: String(kgSettings?.min_confidence ?? 0.75),
       bgProvider: configs["background.provider"] ?? "", bgModel: configs["background.model"] ?? "",
+      providerRequestTimeoutSec: configs["providers.request_timeout_sec"] ?? "",
       skillUploadMaxSize: configs["skills.max_upload_size_mb"] ?? "20",
       skillSlashEnabled: parseBool(configs["skills.slash_commands.enabled"], true),
       skillSlashSuggest: parseBool(configs["skills.slash_commands.suggest_not_found"], true),
@@ -93,6 +95,7 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
     setCompProvider(s.compProvider); setCompModel(s.compModel); setCompThreshold(s.compThreshold); setCompKeepRecent(s.compKeepRecent); setCompMaxTokens(s.compMaxTokens);
     setKgProvider(s.kgProvider); setKgModel(s.kgModel); setKgMinConfidence(s.kgMinConfidence);
     setBgProvider(s.bgProvider); setBgModel(s.bgModel);
+    setProviderRequestTimeoutSec(s.providerRequestTimeoutSec);
     setSkillUploadMaxSize(s.skillUploadMaxSize);
     setSkillSlashEnabled(s.skillSlashEnabled);
     setSkillSlashSuggest(s.skillSlashSuggest);
@@ -140,6 +143,7 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
       if (compMaxTokens !== init.compMaxTokens) updates["compaction.max_tokens"] = compMaxTokens;
       if (bgProvider !== init.bgProvider) updates["background.provider"] = bgProvider;
       if (bgModel !== init.bgModel) updates["background.model"] = bgModel;
+      if (providerRequestTimeoutSec !== init.providerRequestTimeoutSec) updates["providers.request_timeout_sec"] = providerRequestTimeoutSec.trim();
       if (skillUploadMaxSize !== init.skillUploadMaxSize) updates["skills.max_upload_size_mb"] = skillUploadMaxSize;
       if (skillSlashEnabled !== init.skillSlashEnabled) updates["skills.slash_commands.enabled"] = String(skillSlashEnabled);
       if (skillSlashSuggest !== init.skillSlashSuggest) updates["skills.slash_commands.suggest_not_found"] = String(skillSlashSuggest);
@@ -213,6 +217,11 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
               </CardHeader>
               <CardContent className="space-y-4 pt-0">
                 <ProviderModelSelect provider={bgProvider} onProviderChange={(v) => { setBgProvider(v); setBgModel(""); }} model={bgModel} onModelChange={setBgModel} allowEmpty providerLabel={t("bg.provider")} modelLabel={t("bg.model")} providerTip={t("bg.providerTip")} modelTip={t("bg.modelTip")} providerPlaceholder={t("bg.providerPlaceholder")} modelPlaceholder={t("bg.modelPlaceholder")} />
+                <div className="space-y-1.5">
+                  <Label htmlFor="providerRequestTimeout" className="text-xs">{t("providers.requestTimeout")}</Label>
+                  <Input id="providerRequestTimeout" type="number" min={1} step={1} placeholder="30" value={providerRequestTimeoutSec} onChange={(e) => setProviderRequestTimeoutSec(e.target.value)} className="max-w-[120px] text-base md:text-sm" />
+                  <p className="text-xs text-muted-foreground">{t("providers.requestTimeoutHint")}</p>
+                </div>
                 <div className="flex items-start gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-950/30 dark:text-slate-300">
                   <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span>{t("bg.info")}</span>
                 </div>

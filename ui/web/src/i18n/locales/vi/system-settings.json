@@ -62,6 +62,10 @@
     "modelPlaceholder": "(mặc định)",
     "info": "Dùng cho vault enrichment (tóm tắt tài liệu), consolidation (tóm tắt phiên) và dreaming. Để trống sẽ fallback về agent default provider."
   },
+  "providers": {
+    "requestTimeout": "Thời gian chờ yêu cầu provider (giây)",
+    "requestTimeoutHint": "Thời gian chờ để xác minh model và liệt kê các model khả dụng (mặc định 30). Tăng lên cho các model chậm. Để trống để dùng giá trị mặc định."
+  },
   "skills": {
     "title": "Skills",
     "description": "Cài đặt gói skill và slash command theo tenant.",

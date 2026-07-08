@@ -62,6 +62,10 @@
     "modelPlaceholder": "(默认)",
     "info": "用于知识库文档摘要、会话整合和梦境。留空则回退到Agent默认Provider。"
   },
+  "providers": {
+    "requestTimeout": "Provider请求超时（秒）",
+    "requestTimeoutHint": "用于模型验证和列出可用模型的超时时间（默认30）。慢速模型请调大。留空则使用默认值。"
+  },
   "skills": {
     "title": "技能",
     "description": "租户技能包和斜杠命令设置。",

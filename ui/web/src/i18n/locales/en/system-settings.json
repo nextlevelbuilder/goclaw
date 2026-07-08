@@ -62,6 +62,10 @@
     "modelPlaceholder": "(default)",
     "info": "Used for vault enrichment (document summarization), consolidation (session summaries), and dreaming. Leave empty to fall back to the agent default provider."
   },
+  "providers": {
+    "requestTimeout": "Provider request timeout (seconds)",
+    "requestTimeoutHint": "Timeout for model verification and listing available models (default 30). Increase for slow models. Leave empty to use the default."
+  },
   "skills": {
     "title": "Skills",
     "description": "Tenant skill package and slash command settings.",

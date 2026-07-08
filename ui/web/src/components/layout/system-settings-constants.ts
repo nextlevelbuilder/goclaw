@@ -43,6 +43,7 @@ export interface InitState {
   kgMinConfidence: string;
   bgProvider: string;
   bgModel: string;
+  providerRequestTimeoutSec: string;
   skillUploadMaxSize: string;
   skillSlashEnabled: boolean;
   skillSlashSuggest: boolean;
@@ -59,6 +60,7 @@ export const DEFAULTS: InitState = {
   compThreshold: "", compKeepRecent: "", compMaxTokens: "",
   kgProvider: "", kgModel: "", kgMinConfidence: "0.75",
   bgProvider: "", bgModel: "",
+  providerRequestTimeoutSec: "",
   skillUploadMaxSize: "20",
   skillSlashEnabled: true,
   skillSlashSuggest: true,
