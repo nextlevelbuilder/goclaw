@@ -196,10 +196,35 @@ func SeedUserFiles(ctx context.Context, agentStore store.AgentStore, agentID uui
 		return nil, nil
 	}
 
+	// For predefined agents: load agent-level files once to use as seed fallback.
+	// USER.md at agent-level may contain a pre-configured owner profile (e.g. set by
+	// the wizard or management dashboard). Use it as the per-user seed instead of the
+	// blank embedded template so the agent starts with the correct owner context.
+	var agentLevelFiles map[string]string
+	if agentType == store.AgentTypePredefined {
+		agentFiles, err := agentStore.GetAgentContextFiles(ctx, agentID)
+		if err == nil && len(agentFiles) > 0 {
+			agentLevelFiles = make(map[string]string, len(agentFiles))
+			for _, f := range agentFiles {
+				if f.Content != "" {
+					agentLevelFiles[f.FileName] = f.Content
+				}
+			}
+		}
+	}
+
+	// When a predefined agent has an operator-authored USER_PREDEFINED.md, the
+	// operator owns the entire user-context portion of the system prompt. Skip
+	// seeding the built-in USER.md and BOOTSTRAP.md templates so they never
+	// impose themselves (or their per-turn name/timezone/pronoun nag) on top
+	// of the operator's own content.
+	_, hasUserPredefined := agentLevelFiles[UserPredefinedFile]
+	skipBuiltinUserFiles := agentType == store.AgentTypePredefined && hasUserPredefined
+
 	// Channel-provided contact info: skip bootstrap, pre-fill USER.md directly.
 	// Currently only Pancake channel (Facebook Messenger) provides enough user info
 	// (display_name from Facebook profile) to skip the interactive onboarding flow.
-	if shouldSkipBootstrap(channelMeta) {
+	if !skipBuiltinUserFiles && shouldSkipBootstrap(channelMeta) {
 		userContent := buildPrefilledUser(channelMeta)
 		if err := retryOnBusy(func() error {
 			return agentStore.SetUserContextFile(ctx, agentID, userID, UserFile, userContent)
@@ -241,27 +266,14 @@ func SeedUserFiles(ctx context.Context, agentStore store.AgentStore, agentID uui
 		}
 	}
 
-	// For predefined agents: load agent-level files once to use as seed fallback.
-	// USER.md at agent-level may contain a pre-configured owner profile (e.g. set by
-	// the wizard or management dashboard). Use it as the per-user seed instead of the
-	// blank embedded template so the agent starts with the correct owner context.
-	var agentLevelFiles map[string]string
-	if agentType == store.AgentTypePredefined {
-		agentFiles, err := agentStore.GetAgentContextFiles(ctx, agentID)
-		if err == nil && len(agentFiles) > 0 {
-			agentLevelFiles = make(map[string]string, len(agentFiles))
-			for _, f := range agentFiles {
-				if f.Content != "" {
-					agentLevelFiles[f.FileName] = f.Content
-				}
-			}
-		}
-	}
-
 	var seeded []string
 	for _, name := range files {
 		if hasFile[name] {
 			continue // already has personalized content, don't overwrite
+		}
+
+		if skipBuiltinUserFiles && (name == UserFile || name == BootstrapFile) {
+			continue // operator-authored USER_PREDEFINED.md owns the user-context prompt
 		}
 
 		// For predefined agents seeding USER.md: prefer agent-level content as seed.

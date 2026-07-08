@@ -235,6 +235,57 @@ func TestSeedUserFiles_PredefinedAgent_DoesNotOverwriteExistingPerUserContent(t 
 	}
 }
 
+// TestSeedUserFiles_PredefinedAgent_WithUserPredefined_SkipsBuiltinUserAndBootstrap
+// verifies that when a predefined agent has an operator-authored USER_PREDEFINED.md,
+// SeedUserFiles skips seeding both the built-in USER.md and BOOTSTRAP.md templates —
+// the operator owns the user-context portion of the system prompt.
+func TestSeedUserFiles_PredefinedAgent_WithUserPredefined_SkipsBuiltinUserAndBootstrap(t *testing.T) {
+	as := newSeedStub()
+	agentID := uuid.New()
+	as.agentFiles[UserPredefinedFile] = "# USER_PREDEFINED.md\nOperator-authored user context"
+
+	seeded, err := SeedUserFiles(context.Background(), as, agentID, "user-erin", store.AgentTypePredefined, false, nil)
+	if err != nil {
+		t.Fatalf("SeedUserFiles returned error: %v", err)
+	}
+
+	for _, f := range seeded {
+		if f == UserFile || f == BootstrapFile {
+			t.Errorf("USER.md/BOOTSTRAP.md must not be seeded when USER_PREDEFINED.md exists, got seeded=%v", seeded)
+		}
+	}
+	if _, wrote := as.seededUserFiles[UserFile]; wrote {
+		t.Error("USER.md should not be written when USER_PREDEFINED.md exists")
+	}
+	if _, wrote := as.seededUserFiles[BootstrapFile]; wrote {
+		t.Error("BOOTSTRAP.md should not be written when USER_PREDEFINED.md exists")
+	}
+}
+
+// TestSeedUserFiles_PredefinedAgent_WithUserPredefined_SkipsChannelPrefill verifies
+// that the channel-provided contact info prefill path (shouldSkipBootstrap) also
+// respects USER_PREDEFINED.md and does not write a prefilled USER.md.
+func TestSeedUserFiles_PredefinedAgent_WithUserPredefined_SkipsChannelPrefill(t *testing.T) {
+	as := newSeedStub()
+	agentID := uuid.New()
+	as.agentFiles[UserPredefinedFile] = "# USER_PREDEFINED.md\nOperator-authored user context"
+	meta := &ChannelMeta{ChannelType: "pancake", DisplayName: "Alice", DefaultTimezone: "Asia/Ho_Chi_Minh"}
+
+	seeded, err := SeedUserFiles(context.Background(), as, agentID, "user-fay", store.AgentTypePredefined, false, meta)
+	if err != nil {
+		t.Fatalf("SeedUserFiles returned error: %v", err)
+	}
+
+	for _, f := range seeded {
+		if f == UserFile {
+			t.Errorf("USER.md must not be seeded via channel prefill when USER_PREDEFINED.md exists, got seeded=%v", seeded)
+		}
+	}
+	if _, wrote := as.seededUserFiles[UserFile]; wrote {
+		t.Error("USER.md should not be written via channel prefill when USER_PREDEFINED.md exists")
+	}
+}
+
 // TestSeedUserFiles_OpenAgent_UsesEmbeddedTemplate verifies that open agents
 // are completely unaffected — they still receive embedded templates per-user.
 func TestSeedUserFiles_OpenAgent_UsesEmbeddedTemplate(t *testing.T) {

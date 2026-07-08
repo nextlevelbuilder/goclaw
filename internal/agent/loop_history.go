@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"strings"
 
 	"github.com/google/uuid"
@@ -307,14 +308,14 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 // but base-only files (like auto-injected delegation info) are preserved.
 func (l *Loop) resolveContextFiles(ctx context.Context, userID string) []bootstrap.ContextFile {
 	if l.contextFileLoader == nil || userID == "" {
-		return l.contextFiles
+		return dropBuiltinUserFileIfPredefined(l.agentType, l.contextFiles)
 	}
 	userFiles := l.contextFileLoader(ctx, l.agentUUID, userID, l.agentType)
 	if len(userFiles) == 0 {
-		return l.contextFiles
+		return dropBuiltinUserFileIfPredefined(l.agentType, l.contextFiles)
 	}
 	if len(l.contextFiles) == 0 {
-		return userFiles
+		return dropBuiltinUserFileIfPredefined(l.agentType, userFiles)
 	}
 
 	// Merge: start with per-user files, then append base-only files
@@ -329,7 +330,36 @@ func (l *Loop) resolveContextFiles(ctx context.Context, userID string) []bootstr
 			merged = append(merged, base)
 		}
 	}
-	return merged
+	return dropBuiltinUserFileIfPredefined(l.agentType, merged)
+}
+
+// dropBuiltinUserFileIfPredefined removes the built-in USER.md entry from the
+// merged context files when the agent is predefined AND has an operator-authored
+// USER_PREDEFINED.md. The operator owns the entire user-context portion of the
+// system prompt in that case, so the built-in USER.md template must never be
+// injected alongside it (per-turn name/timezone/pronoun nag).
+func dropBuiltinUserFileIfPredefined(agentType string, files []bootstrap.ContextFile) []bootstrap.ContextFile {
+	if agentType != store.AgentTypePredefined {
+		return files
+	}
+	hasUserPredefined := false
+	for _, f := range files {
+		if filepath.Base(f.Path) == bootstrap.UserPredefinedFile {
+			hasUserPredefined = true
+			break
+		}
+	}
+	if !hasUserPredefined {
+		return files
+	}
+	filtered := make([]bootstrap.ContextFile, 0, len(files))
+	for _, f := range files {
+		if filepath.Base(f.Path) == bootstrap.UserFile {
+			continue
+		}
+		filtered = append(filtered, f)
+	}
+	return filtered
 }
 
 // mergeContextFallback adds fallback (in-memory) files into contextFiles,
