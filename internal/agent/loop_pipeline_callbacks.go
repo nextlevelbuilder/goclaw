@@ -560,6 +560,13 @@ func (l *Loop) makeCompactMessages(req *RunRequest) func(ctx context.Context, ms
 		if compacted == nil {
 			return msgs, nil // compaction failed, return original
 		}
+		// The compacted slice replaces run history and is persisted verbatim —
+		// repair tool_use/tool_result pairing now so an orphaned role:"tool"
+		// message never reaches the provider (OpenAI rejects it with a 400).
+		compacted, repaired := sanitizeHistory(compacted)
+		if repaired > 0 {
+			slog.Warn("post_compaction_sanitize", "agent", l.id, "repaired", repaired)
+		}
 		// Stamp session metadata with the compaction timestamp so operators
 		// can diagnose compaction cadence without a dedicated column. Stored
 		// as RFC3339 string in sessions.metadata JSONB (flushed on next save).
