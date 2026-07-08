@@ -716,12 +716,27 @@ Default behavior is privacy-first:
 - Runs by manual trigger, message cap, or interval.
 - New extraction tables store metadata, summaries, topics/entities, confidence,
   status, and redaction counts, but not raw message bodies.
+- Tenant admins may append non-secret extraction instructions globally from
+  `/config` with `system_configs["channel_memory.extraction.custom_prompt"]`,
+  per channel with `channel_instances.config.passive_memory.custom_prompt`, and
+  per Discord group/history key with
+  `channel_instances.config.passive_memory.group_custom_prompts`. These prompts
+  append after the built-in extraction instructions in global, channel, then
+  group order; they do not replace redaction or strict JSON requirements.
+- Discord extraction input includes best-effort channel context when available:
+  channel/thread ID, channel name, parent channel, category, and history key.
+  Lookup failures fall back to IDs and do not fail extraction.
+- New Discord pending history rows include display name, handle when available,
+  and stable Discord user ID in sender/reply labels to make extracted facts less
+  ambiguous when display names change.
 
 Approved items write an `episodic_summaries` row with `source_type='channel'`
 and a deterministic `source_id`; existing consolidation workers then handle KG
-promotion. Reject/delete prevents later writes. Delete also removes the linked
-episodic row when one exists; already-promoted KG nodes are not synchronously
-deleted in v1.
+promotion. Candidate `topics` and `entities` are forwarded to KG extraction as
+disambiguation hints only; they do not create graph nodes or relations unless
+the approved summary supports the fact. Reject/delete prevents later writes.
+Delete also removes the linked episodic row when one exists; already-promoted KG
+nodes are not synchronously deleted in v1.
 
 ---
 

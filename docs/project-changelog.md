@@ -4,6 +4,27 @@ Significant changes, features, and fixes in reverse chronological order.
 
 ---
 
+## 2026-07-08
+
+### Passive memory extraction tuning
+
+**Features**
+
+- Added tenant-global and per-channel custom prompt append points for passive
+  memory extraction without replacing the built-in privacy and JSON guards.
+- Moved tenant-global passive extraction prompt tuning to `/config` and added
+  per-Discord-group extraction prompts keyed by history key.
+- Enriched Discord passive extraction context with channel/thread/parent/category
+  metadata and stable display/handle/user-ID author labels.
+- Web review queue now surfaces candidate `topics` and `entities` for tuning.
+
+**Docs**
+
+- Updated channel, memory, and HTTP API docs for the new prompt fields and
+  Discord extraction context behavior.
+
+---
+
 ## 2026-07-07
 
 ### Passive channel memory extraction reliability
@@ -1510,8 +1531,6 @@ Implementation is evidence-backed against the native ChatGPT Responses API event
 - **`send_file` tool** (`internal/tools/send_file.go`): dedicated tool for sending existing workspace files as chat attachments. Takes `path` (required) and `caption` (optional). Replaces implicit `message(MEDIA:path)` convention for re-delivering already-created files. Marks `DeliveredMedia` on success to prevent duplicate delivery.
 - **`DeliveredMedia` mark on `message(MEDIA:)` sends** (`internal/tools/message.go`): patched to call `IsDelivered` / mark after successful MEDIA upload — closes the cross-tool duplicate-delivery gap where a file sent via `message(MEDIA:)` was not tracked and could be re-sent by `send_file`.
 - Registered as builtin tool in `cmd/gateway_tools_wiring.go` and seeded in `cmd/gateway_builtin_tools.go`.
-
----
 
 ## 2026-04-22
 

@@ -1098,6 +1098,7 @@ Accepts partial updates. Flag keys are validated against recognized v3 flags.
 | `GET` | `/v1/channels/instances/{id}` | Get instance |
 | `PUT` | `/v1/channels/instances/{id}` | Update instance |
 | `DELETE` | `/v1/channels/instances/{id}` | Delete instance (not default) |
+| `POST` | `/v1/channels/instances/{id}/metadata/refresh` | Trigger a Discord metadata refresh into the channel contact cache |
 
 ### Contacts
 
@@ -1153,6 +1154,7 @@ require tenant admin.
 | `PUT` | `/v1/channels/instances/{id}/memory-extraction/settings` | Replace normalized `passive_memory` config in the channel instance config |
 | `POST` | `/v1/channels/instances/{id}/memory-extraction/run` | Trigger a manual extraction run for the latest eligible group |
 | `POST` | `/v1/channels/instances/{id}/memory-extraction/run-all` | Trigger manual extraction for all eligible groups, skipping groups below `min_messages` |
+| `GET` | `/v1/channels/instances/{id}/memory-extraction/groups` | List Discord history groups for tuning, including best-effort `group_title` and `parent_group_title` |
 | `GET` | `/v1/channels/instances/{id}/memory-extraction/items` | List review queue items; optional `status` filter |
 | `POST` | `/v1/channels/instances/{id}/memory-extraction/items/{itemID}/approve` | Write candidate to episodic memory and publish KG event |
 | `POST` | `/v1/channels/instances/{id}/memory-extraction/items/{itemID}/reject` | Reject candidate |
@@ -1160,9 +1162,25 @@ require tenant admin.
 
 Config fields: `enabled`, `review_mode`, `interval_minutes`, `message_cap`,
 `retention_hours`, `allowed_types`, `exclude_users`, `exclude_patterns`,
+`exclude_history_keys`, `custom_prompt`, `group_custom_prompts`,
 `min_messages`, `group_only`. Defaults are disabled, review mode on, group-only,
-360 minute interval, 100 message cap, 168 hour retention, and durable types:
-people, projects, decisions, todos, preferences, events.
+empty custom prompts, 360 minute interval, 100 message cap, 168 hour retention,
+and durable types: people, projects, decisions, todos, preferences, events.
+
+`custom_prompt` is a per-channel instruction append stored under
+`channel_instances.config.passive_memory.custom_prompt`. It is non-secret
+operator guidance for extraction tuning and is appended after the built-in
+extraction prompt.
+
+`group_custom_prompts` is an object keyed by Discord `history_key`. Values are
+non-secret per-group instruction appends. For Discord threads, extraction uses
+the exact thread prompt when present, then falls back to the parent channel
+prompt. Tenant-global prompt remains stored in system config key
+`channel_memory.extraction.custom_prompt`.
+
+Review queue items include `topics` and `entities` arrays for prompt tuning and
+debugging. Extraction run/item tables store candidate summaries and metadata but
+do not store raw prompt or raw input text.
 
 ---
 
@@ -1759,6 +1777,10 @@ Key-value system configuration store.
 | `GET` | `/v1/system-configs/{key}` | Get config by key |
 | `PUT` | `/v1/system-configs/{key}` | Set config value (admin) |
 | `DELETE` | `/v1/system-configs/{key}` | Delete config (admin) |
+
+Passive memory extraction uses
+`channel_memory.extraction.custom_prompt` as the tenant-global extraction
+instruction append. The value is plain text, non-secret, and scoped by tenant.
 
 ---
 

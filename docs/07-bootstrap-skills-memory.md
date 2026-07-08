@@ -599,13 +599,15 @@ flowchart LR
 **Passive channel memory** (`internal/channelmemory`):
 1. Reads existing channel pending-message groups only when a channel admin enables `passive_memory.enabled`
 2. Redacts secrets, tokens, connection strings, payment-like numbers, emails, phones, and configured excluded users/patterns
-3. Writes extracted candidates to `channel_memory_extraction_items` for review by default
-4. On approval, creates an `episodic_summaries` row with `source_type='channel'`
-5. Publishes `episodic.created` so SemanticWorker/DedupWorker use the same KG path as session memory
+3. Builds the extraction prompt from the built-in extraction prompt plus optional tenant-global `channel_memory.extraction.custom_prompt`, per-channel `passive_memory.custom_prompt`, and per-group `passive_memory.group_custom_prompts`
+4. For Discord, prepends best-effort channel/thread/parent/category context and stable author labels before extraction
+5. Writes extracted candidates, including `topics` and `entities`, to `channel_memory_extraction_items` for review by default
+6. On approval, creates an `episodic_summaries` row with `source_type='channel'`
+7. Publishes `episodic.created` with the approved summary plus `topics`/`entities` as KG extraction hints, so SemanticWorker/DedupWorker use the same KG path as session memory
 
 **SemanticWorker** (`internal/consolidation/semantic_worker.go`):
 1. Listens to `episodic.created` events
-2. Parses summary for entity mentions + relationships
+2. Parses summary for entity mentions + relationships, using `topics`/`entities` only as disambiguation hints
 3. Inserts entities into `kg_entities` with confidence score
 4. Inserts relations into `kg_relations`
 5. Publishes `entity.upserted` for dedup
