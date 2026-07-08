@@ -10,6 +10,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/google/uuid"
+
+	"github.com/nextlevelbuilder/goclaw/internal/crypto"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -228,6 +231,97 @@ func (r *Router) handleInstall(w http.ResponseWriter, req *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write([]byte(installSuccessHTML))
+}
+
+// handleUserOAuthCallback serves /bitrix24/oauth/user/callback — where
+// Bitrix redirects a user's browser after they approve or decline the
+// per-user re-authorization link sent via DM (oauth_state_codec.go
+// BuildUserAuthorizeURL, handle.go sendOAuthInvite).
+//
+// Public — no gateway auth, same as installPath (design.md §9 Q5). Safety
+// comes entirely from the HMAC-signed + TTL-bound state (design.md §5): a
+// malformed or expired state is rejected before any Bitrix network call or
+// dispatcher lookup.
+func (r *Router) handleUserOAuthCallback(w http.ResponseWriter, req *http.Request) {
+	if req.Method == http.MethodHead {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if req.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	q := req.URL.Query()
+	code := strings.TrimSpace(q.Get("code"))
+	stateParam := strings.TrimSpace(q.Get("state"))
+	errParam := strings.TrimSpace(q.Get("error"))
+
+	if stateParam == "" {
+		// Bitrix24 partner registration may validate this URL with a bare GET.
+		renderBitrixPlaceholder(w, "GoClaw — Bitrix24 OAuth Callback",
+			"This URL is invoked by Bitrix24 after a user approves or declines an access request.")
+		return
+	}
+
+	keyBytes, err := crypto.DeriveKey(r.encKey)
+	if err != nil {
+		slog.Warn("bitrix24 oauth user callback: derive state key failed", "err", err)
+		renderBitrixPlaceholder(w, "Liên kết không hợp lệ", "Không thể xác thực yêu cầu này. Vui lòng thử lại từ tin nhắn bot.")
+		return
+	}
+	payload, err := decodeOAuthState(stateParam, keyBytes)
+	if err != nil {
+		slog.Warn("bitrix24 oauth user callback: invalid state", "err", err)
+		renderBitrixPlaceholder(w, "Liên kết không hợp lệ hoặc đã hết hạn", "Vui lòng nhắn lại cho bot để nhận link cấp quyền mới.")
+		return
+	}
+
+	if errParam != "" {
+		slog.Info("bitrix24 oauth user callback: user declined",
+			"user_id", payload.UserID, "bot_id", payload.BotID, "error", errParam)
+		renderBitrixPlaceholder(w, "Đã từ chối cấp quyền", "Bot sẽ không truy cập được CRM thay mặt bạn. Bạn có thể nhắn lại bot để thử lại.")
+		return
+	}
+
+	dispatcher, ok := r.DispatcherByBotID(payload.BotID)
+	if !ok {
+		slog.Warn("bitrix24 oauth user callback: bot not registered",
+			"user_id", payload.UserID, "bot_id", payload.BotID)
+		renderBitrixPlaceholder(w, "Không tìm thấy bot", "Bot có thể đã bị gỡ khỏi portal. Vui lòng liên hệ admin.")
+		return
+	}
+	ch, ok := dispatcher.(*Channel)
+	if !ok {
+		slog.Warn("bitrix24 oauth user callback: dispatcher is not a *Channel", "bot_id", payload.BotID)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	tid, err := uuid.Parse(payload.TenantID)
+	if err != nil {
+		slog.Warn("bitrix24 oauth user callback: invalid tenant id in state", "tenant_id", payload.TenantID, "err", err)
+		renderBitrixPlaceholder(w, "Liên kết không hợp lệ", "Vui lòng nhắn lại cho bot để nhận link cấp quyền mới.")
+		return
+	}
+	ctx := store.WithTenantID(req.Context(), tid)
+
+	result, err := ch.HandleUserOAuthCallback(ctx, code, payload)
+	if err != nil {
+		slog.Warn("bitrix24 oauth user callback: failed",
+			"user_id", payload.UserID, "bot_id", payload.BotID, "err", err)
+		renderBitrixPlaceholder(w, "Cấp quyền thất bại", "Đã xảy ra lỗi khi xử lý yêu cầu. Vui lòng nhắn lại cho bot để thử lại.")
+		return
+	}
+
+	switch result.Outcome {
+	case "identity_mismatch":
+		renderBitrixPlaceholder(w, "Tài khoản không khớp",
+			"Bạn đã đăng nhập bằng tài khoản Bitrix24 khác với người mà bot đã gửi lời mời. Vui lòng đăng nhập đúng tài khoản và thử lại.")
+	default: // "success"
+		renderBitrixPlaceholder(w, "Đã cấp quyền thành công",
+			"Bạn có thể quay lại chat với bot để tiếp tục.")
+	}
 }
 
 // handleInstallLocalApp finishes install for a Bitrix24 Local App. Body already

@@ -214,7 +214,7 @@ func TestProvisionIfMissing_OpenChannelBot_Skipped(t *testing.T) {
 	bc := ch.(*Channel)
 
 	// IS_CONNECTOR=Y (external connector customer) → skipped: not a Bitrix user.
-	err = bc.provisionIfMissing(context.Background(), "42", true, validAuth())
+	err = bc.provisionIfMissing(context.Background(), "42", true, validAuth(), "chat123")
 	if !errors.Is(err, ErrProvisionSkippedOpenChannel) {
 		t.Fatalf("connector message: err = %v; want ErrProvisionSkippedOpenChannel", err)
 	}
@@ -223,7 +223,7 @@ func TestProvisionIfMissing_OpenChannelBot_Skipped(t *testing.T) {
 	}
 
 	// IS_CONNECTOR=N (internal staff in an Open Channel) → must NOT connector-skip.
-	if err := bc.provisionIfMissing(context.Background(), "42", false, validAuth()); errors.Is(err, ErrProvisionSkippedOpenChannel) {
+	if err := bc.provisionIfMissing(context.Background(), "42", false, validAuth(), "chat123"); errors.Is(err, ErrProvisionSkippedOpenChannel) {
 		t.Fatalf("internal staff (IS_CONNECTOR=N) must not be connector-skipped; got %v", err)
 	}
 }
@@ -246,7 +246,7 @@ func TestProvisionIfMissing_Disabled(t *testing.T) {
 	}
 	bc := ch.(*Channel)
 
-	err = bc.provisionIfMissing(context.Background(), "42", false, validAuth())
+	err = bc.provisionIfMissing(context.Background(), "42", false, validAuth(), "chat123")
 	if !errors.Is(err, ErrProvisionDisabled) {
 		t.Fatalf("err = %v; want ErrProvisionDisabled", err)
 	}
@@ -280,7 +280,7 @@ func TestProvisionIfMissing_ExistingCreds_NoHTTP(t *testing.T) {
 		},
 	}
 
-	if err := bc.provisionIfMissing(context.Background(), "42", false, validAuth()); err != nil {
+	if err := bc.provisionIfMissing(context.Background(), "42", false, validAuth(), "chat123"); err != nil {
 		t.Fatalf("err = %v; want nil", err)
 	}
 	if httpCalls != 0 {
@@ -318,7 +318,7 @@ func TestProvisionIfMissing_NearExpiry_RefreshHTTP(t *testing.T) {
 		},
 	}
 
-	if err := bc.provisionIfMissing(context.Background(), "42", false, validAuth()); err != nil {
+	if err := bc.provisionIfMissing(context.Background(), "42", false, validAuth(), "chat123"); err != nil {
 		t.Fatalf("err = %v; want nil", err)
 	}
 	if httpCalls != 1 {
@@ -351,7 +351,7 @@ func TestProvisionIfMissing_LegacyNoExpiry_RefreshHTTP(t *testing.T) {
 		APIKey: "legacy-key",
 	}
 
-	if err := bc.provisionIfMissing(context.Background(), "42", false, validAuth()); err != nil {
+	if err := bc.provisionIfMissing(context.Background(), "42", false, validAuth(), "chat123"); err != nil {
 		t.Fatalf("err = %v; want nil", err)
 	}
 	if httpCalls != 1 {
@@ -385,7 +385,7 @@ func TestProvisionIfMissing_WarmExpiry_NoHTTP(t *testing.T) {
 		},
 	}
 
-	if err := bc.provisionIfMissing(context.Background(), "42", false, validAuth()); err != nil {
+	if err := bc.provisionIfMissing(context.Background(), "42", false, validAuth(), "chat123"); err != nil {
 		t.Fatalf("err = %v; want nil", err)
 	}
 	if httpCalls != 0 {
@@ -409,7 +409,7 @@ func TestProvisionIfMissing_MintAndPersist(t *testing.T) {
 	bc := newProvisionerTestChannel(t, mcpStore, srv.URL, "B")
 
 	before := time.Now()
-	err := bc.provisionIfMissing(context.Background(), "42", false, validAuth())
+	err := bc.provisionIfMissing(context.Background(), "42", false, validAuth(), "chat123")
 	if err != nil {
 		t.Fatalf("provisionIfMissing: %v", err)
 	}
@@ -467,7 +467,7 @@ func TestProvisionIfMissing_Debounce(t *testing.T) {
 	bc := newProvisionerTestChannel(t, mcpStore, srv.URL, "B")
 
 	// First attempt succeeds and marks the debounce.
-	if err := bc.provisionIfMissing(context.Background(), "42", false, validAuth()); err != nil {
+	if err := bc.provisionIfMissing(context.Background(), "42", false, validAuth(), "chat123"); err != nil {
 		t.Fatalf("first attempt: %v", err)
 	}
 	if httpCalls != 1 {
@@ -482,7 +482,7 @@ func TestProvisionIfMissing_Debounce(t *testing.T) {
 	delete(mcpStore.userCreds, credKey(bc.mcpServerID, "42"))
 	mcpStore.mu.Unlock()
 
-	err := bc.provisionIfMissing(context.Background(), "42", false, validAuth())
+	err := bc.provisionIfMissing(context.Background(), "42", false, validAuth(), "chat123")
 	if !errors.Is(err, ErrProvisionDebounced) {
 		t.Fatalf("second attempt: %v; want ErrProvisionDebounced", err)
 	}
@@ -505,7 +505,7 @@ func TestProvisionIfMissing_HTTPFailure_Surfaces(t *testing.T) {
 	mcpStore := newFakeMCPStore()
 	bc := newProvisionerTestChannel(t, mcpStore, srv.URL, "B")
 
-	err := bc.provisionIfMissing(context.Background(), "42", false, validAuth())
+	err := bc.provisionIfMissing(context.Background(), "42", false, validAuth(), "chat123")
 	if err == nil {
 		t.Fatal("401 from MCP must produce an error")
 	}
@@ -550,7 +550,7 @@ func TestProvisionIfMissing_MissingAuthBlock(t *testing.T) {
 			before := httpCalls
 			// Use a fresh userID per subcase so the debounce from a prior
 			// case doesn't mask a regression.
-			err := bc.provisionIfMissing(context.Background(), tc.name, false, tc.auth)
+			err := bc.provisionIfMissing(context.Background(), tc.name, false, tc.auth, "chat123")
 			if err == nil {
 				t.Fatalf("missing %s should fail", tc.name)
 			}
@@ -558,6 +558,136 @@ func TestProvisionIfMissing_MissingAuthBlock(t *testing.T) {
 				t.Errorf("incomplete auth must not hit HTTP; got +%d calls", httpCalls-before)
 			}
 		})
+	}
+}
+
+// attachTestPortal wires a real *Portal (OAuth calls routed to oauthSrv) onto
+// an already-built provisioner test channel, plus a derivable encKey — needed
+// for the ErrUserAuthRequired branch tests below, which call
+// Channel.BuildUserAuthorizeURL (requires portal.PublicURL() + a valid key).
+func attachTestPortal(t *testing.T, bc *Channel, oauthSrv *httptest.Server) {
+	t.Helper()
+	bc.encKey = testOAuthEncKey
+	portalFS := newFakeStore()
+	portal := newTestPortal(t, oauthSrv, portalFS, bc.TenantID(), "p",
+		store.BitrixPortalState{PublicURL: "https://goclaw.example.com"})
+	bc.startMu.Lock()
+	bc.portal = portal
+	bc.startMu.Unlock()
+}
+
+// TestProvisionIfMissing_NewUser_ReturnsAuthRequired covers the brand-new-user
+// branch (existing == nil, no auth in the event): must return
+// *ErrUserAuthRequired with a non-empty URL, WITHOUT calling the MCP server
+// or attempting a Bitrix token refresh (there's nothing to refresh).
+func TestProvisionIfMissing_NewUser_ReturnsAuthRequired(t *testing.T) {
+	mcpSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("brand-new user with no auth in event must not hit MCP auto-onboard")
+	}))
+	defer mcpSrv.Close()
+	oauthSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("brand-new user must not attempt a Bitrix token refresh either")
+	}))
+	defer oauthSrv.Close()
+
+	mcpStore := newFakeMCPStore()
+	bc := newProvisionerTestChannel(t, mcpStore, mcpSrv.URL, "B")
+	attachTestPortal(t, bc, oauthSrv)
+
+	err := bc.provisionIfMissing(context.Background(), "999", false, EventAuth{}, "chat123")
+	var authErr *ErrUserAuthRequired
+	if !errors.As(err, &authErr) {
+		t.Fatalf("err = %v, want *ErrUserAuthRequired", err)
+	}
+	if authErr.URL == "" {
+		t.Error("ErrUserAuthRequired.URL must not be empty")
+	}
+}
+
+// TestProvisionIfMissing_DeadRefreshToken_ReturnsAuthRequired_RowUntouched
+// covers the "existing user, refresh_token is dead" branch: Bitrix rejects
+// the refresh with invalid_grant → must escalate to *ErrUserAuthRequired
+// WITHOUT deleting the existing mcp_user_credentials row (design.md §12 —
+// SetUserCredentials upserts in place once the user re-authorizes; deleting
+// first would be unnecessary churn).
+func TestProvisionIfMissing_DeadRefreshToken_ReturnsAuthRequired_RowUntouched(t *testing.T) {
+	mcpSrv := httptest.NewServer(mcpAutoOnboardHandler())
+	defer mcpSrv.Close()
+	oauthSrv := httptest.NewServer(oauthTokenHandler(0, true)) // invalid_grant
+	defer oauthSrv.Close()
+
+	mcpStore := newFakeMCPStore()
+	bc := newProvisionerTestChannel(t, mcpStore, mcpSrv.URL, "B")
+	attachTestPortal(t, bc, oauthSrv)
+
+	staleCreds := store.MCPUserCredentials{
+		APIKey: "old-key",
+		Env: map[string]string{
+			"BITRIX_DOMAIN":        "portal.bitrix24.com",
+			"BITRIX_ACCESS_TOKEN":  "old-access",
+			"BITRIX_REFRESH_TOKEN": "dead-refresh",
+			"BITRIX_EXPIRES_AT":    time.Now().Add(-time.Hour).UTC().Format(time.RFC3339),
+		},
+	}
+	mcpStore.mu.Lock()
+	mcpStore.userCreds[credKey(bc.mcpServerID, "1058")] = staleCreds
+	mcpStore.mu.Unlock()
+
+	err := bc.provisionIfMissing(context.Background(), "1058", false, EventAuth{}, "chat123")
+	var authErr *ErrUserAuthRequired
+	if !errors.As(err, &authErr) {
+		t.Fatalf("err = %v, want *ErrUserAuthRequired", err)
+	}
+
+	mcpStore.mu.Lock()
+	got, ok := mcpStore.userCreds[credKey(bc.mcpServerID, "1058")]
+	mcpStore.mu.Unlock()
+	if !ok {
+		t.Fatal("existing row must NOT be deleted on dead-token classification")
+	}
+	if got.APIKey != "old-key" {
+		t.Errorf("row was modified; APIKey = %q, want unchanged %q", got.APIKey, "old-key")
+	}
+}
+
+// TestProvisionIfMissing_TransientRefreshError_NotAuthRequired ensures a
+// non-classified refresh failure (network/5xx — here a bare 500 with no
+// Bitrix `error` field, so APIError.Code == "") does NOT escalate to
+// *ErrUserAuthRequired — it must fall through to the existing generic error
+// path (handle.go's notifyUserOfMCPIssueOnce), since a retry might just work
+// without bothering the user for re-authorization.
+func TestProvisionIfMissing_TransientRefreshError_NotAuthRequired(t *testing.T) {
+	mcpSrv := httptest.NewServer(mcpAutoOnboardHandler())
+	defer mcpSrv.Close()
+	oauthSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer oauthSrv.Close()
+
+	mcpStore := newFakeMCPStore()
+	bc := newProvisionerTestChannel(t, mcpStore, mcpSrv.URL, "B")
+	attachTestPortal(t, bc, oauthSrv)
+
+	staleCreds := store.MCPUserCredentials{
+		Env: map[string]string{
+			"BITRIX_DOMAIN":        "portal.bitrix24.com",
+			"BITRIX_ACCESS_TOKEN":  "old-access",
+			"BITRIX_REFRESH_TOKEN": "still-alive-refresh",
+			"BITRIX_EXPIRES_AT":    time.Now().Add(-time.Hour).UTC().Format(time.RFC3339),
+		},
+	}
+	mcpStore.mu.Lock()
+	mcpStore.userCreds[credKey(bc.mcpServerID, "42")] = staleCreds
+	mcpStore.mu.Unlock()
+
+	err := bc.provisionIfMissing(context.Background(), "42", false, EventAuth{}, "chat123")
+	var authErr *ErrUserAuthRequired
+	if errors.As(err, &authErr) {
+		t.Fatalf("transient 5xx must NOT escalate to ErrUserAuthRequired, got %v", err)
+	}
+	if err == nil {
+		t.Fatal("expected a transient error, got nil")
 	}
 }
 

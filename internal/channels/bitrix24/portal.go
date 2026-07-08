@@ -445,6 +445,26 @@ func (p *Portal) RefreshUserToken(ctx context.Context, refreshToken string) (*To
 	return p.client.RefreshToken(ctx, p.creds.ClientID, p.creds.ClientSecret, refreshToken)
 }
 
+// ExchangeUserAuthCode exchanges an authorization code for a per-user OAuth
+// token pair WITHOUT touching the portal's own bot-level token state — mirrors
+// Exchange's code-exchange + identity-validation steps (portal/domain/member
+// checks), but the caller decides what to do with the resulting user tokens
+// (mint MCP credentials) instead of persisting them as portal state. Used by
+// the per-user OAuth re-auth flow (oauth_user_flow.go).
+func (p *Portal) ExchangeUserAuthCode(ctx context.Context, code string) (*TokenResponse, error) {
+	if code == "" {
+		return nil, errors.New("bitrix24 user exchange: code required")
+	}
+	tr, err := p.client.ExchangeAuthCode(ctx, p.creds.ClientID, p.creds.ClientSecret, code)
+	if err != nil {
+		return nil, fmt.Errorf("bitrix24 user exchange: %w", err)
+	}
+	if err := p.validateTokenResponseIdentity("user-exchange", tr); err != nil {
+		return nil, err
+	}
+	return tr, nil
+}
+
 func (p *Portal) validateTokenResponseIdentity(flow string, tr *TokenResponse) error {
 	if tr == nil {
 		return fmt.Errorf("bitrix24 %s: nil token response", flow)
