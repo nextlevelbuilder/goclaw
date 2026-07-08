@@ -71,9 +71,9 @@ var (
 // (network, 5xx, DB persist failure) is treated as transient and falls
 // through to the existing notifyUserOfMCPIssueOnce path instead.
 var deadTokenCodes = map[string]bool{
-	"invalid_grant":  true,
-	"expired_token":  true,
-	"NO_AUTH_FOUND":  true,
+	"invalid_grant": true,
+	"expired_token": true,
+	"NO_AUTH_FOUND": true,
 }
 
 // isDeadTokenCode reports whether a Bitrix APIError.Code indicates the

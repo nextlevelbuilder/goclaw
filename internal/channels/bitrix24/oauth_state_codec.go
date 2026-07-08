@@ -93,18 +93,22 @@ func signOAuthStatePart(encodedPayload string, key []byte) []byte {
 }
 
 // BuildUserAuthorizeURL builds the Bitrix `/oauth/authorize/` link the DM
-// invite (handle.go, sendOAuthInvite) points at. Bitrix does not accept a
-// `scope` parameter here — the portal always grants the app's registered
-// scope in full (confirmed against official Bitrix OAuth docs during design
-// brainstorm, design.md §9 — no way to request a narrower scope per call).
+// invite (handle.go, sendOAuthInvite) points at.
+//
+// No `scope` parameter — the portal always grants the app's registered scope
+// in full (confirmed against official Bitrix OAuth docs, design.md §9 — no
+// way to request a narrower scope per call).
+//
+// No `redirect_uri` parameter either — Local Apps ignore it. Confirmed
+// against live behavior: Bitrix always redirects back to the app's
+// registered "Application URL" (handlerPath, /bitrix24/handler,
+// webhook.go handleAppPage) regardless of what's passed here. Passing it
+// anyway would be dead weight (design.md §12 changelog documents the
+// correction) — omitted so a future reader doesn't assume it's honored.
 func (c *Channel) BuildUserAuthorizeURL(userID, dialogID string) (string, error) {
 	portal := c.Portal()
 	if portal == nil {
 		return "", errors.New("bitrix24 oauth: portal not available")
-	}
-	base := strings.TrimSpace(portal.PublicURL())
-	if base == "" {
-		return "", errors.New("bitrix24 oauth: portal has no captured public_url yet")
 	}
 	keyBytes, err := crypto.DeriveKey(c.encKey)
 	if err != nil {
@@ -124,10 +128,8 @@ func (c *Channel) BuildUserAuthorizeURL(userID, dialogID string) (string, error)
 		return "", err
 	}
 
-	redirectURI := base + "/bitrix24/oauth/user/callback"
 	q := url.Values{}
 	q.Set("client_id", portal.creds.ClientID)
 	q.Set("state", state)
-	q.Set("redirect_uri", redirectURI)
 	return "https://" + portal.Domain() + "/oauth/authorize/?" + q.Encode(), nil
 }

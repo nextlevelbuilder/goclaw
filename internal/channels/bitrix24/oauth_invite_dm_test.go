@@ -258,6 +258,43 @@ func TestHandleMessage_OAuthInvite_DMSendFails_FallsBackToChat(t *testing.T) {
 	}
 }
 
+// TestHandleMessage_OAuthInvite_TotalFailure_ReleasesDebounce covers the
+// double-failure case (DM AND the chatID fallback both error) — the user got
+// NOTHING delivered, so the debounce slot taken for this attempt must be
+// released immediately rather than blocking a retry for the full 5-minute TTL.
+func TestHandleMessage_OAuthInvite_TotalFailure_ReleasesDebounce(t *testing.T) {
+	imbot := newFakeImbotServer()
+	imbot.failDialogIDs["1058"] = true    // DM fails
+	imbot.failDialogIDs["chat777"] = true // fallback also fails
+	srv := httptest.NewServer(imbot.handler())
+	defer srv.Close()
+
+	bc, _ := newOAuthInviteTestChannel(t, srv)
+
+	bc.DispatchEvent(context.Background(), &Event{
+		Type: EventMessageAdd,
+		Params: EventParams{
+			FromUserID:  "1058",
+			DialogID:    "chat777",
+			ChatID:      "777",
+			MessageID:   "m-1",
+			MessageType: "chat",
+			Message:     "hello bot",
+		},
+	})
+
+	calls := imbot.snapshot()
+	if len(calls) != 2 {
+		t.Fatalf("expected 2 attempted calls (DM + fallback, both failing), got %d: %+v", len(calls), calls)
+	}
+
+	// The debounce slot must have been released — a second trigger right
+	// after must be allowed to attempt delivery again immediately.
+	if !bc.tryAcquireOAuthInviteNotify("1058") {
+		t.Fatal("debounce slot should have been released after total delivery failure, but a retry was blocked")
+	}
+}
+
 // TestOAuthInviteDebounce_IndependentOfNotifyDebounce exercises
 // tryAcquireOAuthInviteNotify directly (unit-level, not through the full
 // DispatchEvent pipeline — the outer 60s auto-onboard debounce in
@@ -293,5 +330,44 @@ func TestOAuthInviteDebounce_IndependentOfNotifyDebounce(t *testing.T) {
 	bc.notifyMu.Unlock()
 	if !bc.tryAcquireOAuthInviteNotify("777") {
 		t.Fatal("oauthInviteDebounce must be independent of notifyDebounce — user 777 was only debounced in the OTHER map")
+	}
+}
+
+// TestOAuthInviteDebounce_SweepsExpiredEntries verifies tryAcquireOAuthInviteNotify
+// evicts stale entries instead of letting the map grow unbounded for the life
+// of the process (code-review finding: the map must not repeat the never-evicted
+// pattern of mcpDebounce/notifyDebounce).
+func TestOAuthInviteDebounce_SweepsExpiredEntries(t *testing.T) {
+	imbot := newFakeImbotServer()
+	srv := httptest.NewServer(imbot.handler())
+	defer srv.Close()
+	bc, _ := newOAuthInviteTestChannel(t, srv)
+
+	// Seed an already-expired entry directly (can't sleep 5 real minutes in a test).
+	bc.oauthInviteMu.Lock()
+	bc.oauthInviteDebounce = map[string]time.Time{
+		"stale-user": time.Now().Add(-mcpUserNotifyDebounceTTL - time.Second),
+	}
+	bc.oauthInviteMu.Unlock()
+
+	// Any call sweeps expired entries before doing its own check-and-set.
+	if !bc.tryAcquireOAuthInviteNotify("fresh-user") {
+		t.Fatal("acquire for a new user should succeed")
+	}
+
+	bc.oauthInviteMu.Lock()
+	_, staleStillPresent := bc.oauthInviteDebounce["stale-user"]
+	_, freshPresent := bc.oauthInviteDebounce["fresh-user"]
+	mapSize := len(bc.oauthInviteDebounce)
+	bc.oauthInviteMu.Unlock()
+
+	if staleStillPresent {
+		t.Error("expired entry 'stale-user' should have been swept, but is still present")
+	}
+	if !freshPresent {
+		t.Error("'fresh-user' should be present after its own acquire")
+	}
+	if mapSize != 1 {
+		t.Errorf("map should contain exactly 1 entry (fresh-user) after sweep, got %d", mapSize)
 	}
 }
