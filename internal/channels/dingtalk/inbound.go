@@ -13,6 +13,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
+	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
 	"github.com/nextlevelbuilder/goclaw/internal/safego"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -316,37 +317,45 @@ func (c *Channel) processMessage(ctx context.Context, data *chatbot.BotCallbackD
 	chatID := c.chatID(in)
 	senderName := channels.SanitizeDisplayName(in.SenderName)
 
-	if in.IsGroup {
-		if !c.checkGroupPolicy(ctx, in, chatID) {
-			return
-		}
-		if c.RequireMention() && !in.MentionedBot {
-			// Not addressed to us, but keep it so the next @ has context.
-			c.GroupHistory().Record(chatID, channels.HistoryEntry{
-				Sender:    senderName,
-				SenderID:  in.SenderID,
-				Body:      in.Text,
-				Timestamp: time.Now(),
-				MessageID: in.MessageID,
-			}, c.HistoryLimit())
-			slog.Debug("dingtalk group message recorded without reply; bot not mentioned",
-				"channel", c.Name(), "chat_id", chatID, "msg_id", in.MessageID)
-			return
-		}
-	} else if !c.checkDMPolicy(ctx, in) {
+	if in.IsGroup && !c.checkGroupPolicy(ctx, in, chatID) {
+		return
+	}
+	if !in.IsGroup && !c.checkDMPolicy(ctx, in) {
 		return
 	}
 
-	// Attachments are redeemed in phase 5. Until then a message carrying only
-	// an attachment has nothing to say to the agent, and publishing an empty
-	// turn would waste a run.
-	if in.Text == "" {
-		slog.Info("dingtalk message has no text; media support lands in phase 5",
-			"channel", c.Name(), "msgtype", in.MsgType, "media_refs", len(in.Media))
+	// Attachments are fetched before the mention gate so a file dropped into a
+	// group without an @ still reaches the agent when someone does @ later.
+	mediaInfos := c.resolveMedia(ctx, in)
+
+	if in.IsGroup && c.RequireMention() && !in.MentionedBot {
+		c.GroupHistory().Record(chatID, channels.HistoryEntry{
+			Sender:    senderName,
+			SenderID:  in.SenderID,
+			Body:      in.Text,
+			Media:     mediaPaths(mediaInfos),
+			Timestamp: time.Now(),
+			MessageID: in.MessageID,
+		}, c.HistoryLimit())
+		slog.Debug("dingtalk group message recorded without reply; bot not mentioned",
+			"channel", c.Name(), "chat_id", chatID, "msg_id", in.MessageID)
+		return
+	}
+
+	// A message with neither text nor a usable attachment has nothing to say.
+	if in.Text == "" && len(mediaInfos) == 0 {
 		return
 	}
 
 	content := in.Text
+	if tags := media.BuildMediaTags(mediaInfos); tags != "" {
+		if content == "" {
+			content = tags
+		} else {
+			content = content + "\n" + tags
+		}
+	}
+
 	peerKind := "direct"
 	if in.IsGroup {
 		peerKind = "group"
@@ -361,6 +370,7 @@ func (c *Channel) processMessage(ctx context.Context, data *chatbot.BotCallbackD
 		SenderID:     in.SenderID,
 		ChatID:       chatID,
 		Content:      content,
+		Media:        mediaFiles(mediaInfos),
 		PeerKind:     peerKind,
 		UserID:       in.SenderID,
 		AgentID:      c.AgentID(),
@@ -372,6 +382,35 @@ func (c *Channel) processMessage(ctx context.Context, data *chatbot.BotCallbackD
 	if in.IsGroup {
 		c.GroupHistory().Clear(chatID)
 	}
+}
+
+// mediaFiles converts resolved media into the bus representation, preserving the
+// MIME type the agent's media tools dispatch on.
+func mediaFiles(infos []media.MediaInfo) []bus.MediaFile {
+	if len(infos) == 0 {
+		return nil
+	}
+	out := make([]bus.MediaFile, 0, len(infos))
+	for _, m := range infos {
+		out = append(out, bus.MediaFile{
+			Path:     m.FilePath,
+			MimeType: m.ContentType,
+			Filename: m.FileName,
+		})
+	}
+	return out
+}
+
+// mediaPaths lists file paths for the group-history record.
+func mediaPaths(infos []media.MediaInfo) []string {
+	if len(infos) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(infos))
+	for _, m := range infos {
+		out = append(out, m.FilePath)
+	}
+	return out
 }
 
 // buildMetadata carries the DingTalk-specific handles the outbound path needs.

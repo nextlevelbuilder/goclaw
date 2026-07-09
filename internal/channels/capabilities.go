@@ -36,6 +36,7 @@ const (
 //   - zalo_oa: internal/channels/zalo/zalo.go:115 — Send() does NOT consume msg.Media
 var mediaCapableTypes = map[string]bool{
 	TypeTelegram:     true,
+	TypeDingtalk:     true,
 	TypeDiscord:      true,
 	TypeWhatsApp:     true,
 	TypeFeishu:       true,

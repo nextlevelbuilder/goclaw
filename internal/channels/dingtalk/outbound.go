@@ -40,17 +40,17 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 	isGroup := msg.Metadata["dingtalk_chat_type"] == "group"
 	msgType := c.replyMsgType(isGroup)
 
-	text := strings.TrimSpace(msg.Content)
-	if text == "" {
-		return nil
-	}
-
-	for _, chunk := range channels.ChunkMarkdown(text, c.cfg.TextChunkLimit) {
-		if err := c.deliver(ctx, msg, isGroup, msgType, chunk); err != nil {
-			return err
+	if text := strings.TrimSpace(msg.Content); text != "" {
+		for _, chunk := range channels.ChunkMarkdown(text, c.cfg.TextChunkLimit) {
+			if err := c.deliver(ctx, msg, isGroup, msgType, chunk); err != nil {
+				return err
+			}
 		}
 	}
-	return nil
+
+	// Media cannot ride the session webhook; sendMedia always uses the
+	// proactive API.
+	return c.sendMedia(ctx, msg, isGroup)
 }
 
 // replyMsgType picks the wire message type for a non-card reply.
@@ -101,14 +101,18 @@ func (c *Channel) webhookUsable(msg bus.OutboundMessage) bool {
 	return c.now().Before(time.UnixMilli(ms))
 }
 
-// sendProactive posts through the robot OpenAPI, which works with no inbound
-// message to reply to.
+// sendProactive posts text through the robot OpenAPI, which works with no
+// inbound message to reply to.
 func (c *Channel) sendProactive(ctx context.Context, msg bus.OutboundMessage, isGroup bool, msgType, text string) error {
 	msgKey, msgParam, err := buildMsgPayload(msgType, text)
 	if err != nil {
 		return err
 	}
+	return c.postProactive(ctx, msg, isGroup, msgKey, msgParam)
+}
 
+// postProactive posts a prepared msgKey/msgParam pair. Media and text share it.
+func (c *Channel) postProactive(ctx context.Context, msg bus.OutboundMessage, isGroup bool, msgKey, msgParam string) error {
 	var (
 		path string
 		body map[string]any
