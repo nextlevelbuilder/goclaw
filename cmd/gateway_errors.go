@@ -92,6 +92,7 @@ func isExternalChannel(channelType string) bool {
 	case channels.TypeFacebook,
 		channels.TypeTelegram,
 		channels.TypeDiscord,
+		channels.TypeDingtalk,
 		channels.TypeFeishu,
 		channels.TypeWhatsApp,
 		channels.TypeZaloOA,
