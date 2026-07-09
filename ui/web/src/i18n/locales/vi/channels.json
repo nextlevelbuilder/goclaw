@@ -793,7 +793,15 @@
       "createFirst": "Kết nối portal Bitrix24 đầu tiên",
       "createNew": "Tạo portal mới",
       "pendingBadge": "Chưa authorize — click để resume",
-      "loadError": "Không tải được danh sách portal. Refresh để thử lại."
+      "loadError": "Không tải được danh sách portal. Refresh để thử lại.",
+      "deleteAria": "Xoá portal {{name}}",
+      "deleteConfirm": {
+        "title": "Xoá portal chờ cài đặt",
+        "description": "Xoá portal chờ cài đặt \"{{name}}\"? Portal chưa hoàn tất cài đặt và chưa được channel nào dùng. Không thể hoàn tác.",
+        "confirmLabel": "Xoá",
+        "success": "Đã xoá portal \"{{name}}\"",
+        "error": "Xoá portal thất bại"
+      }
     },
     "errors": {
       "portalRequired": "Vui lòng chọn portal.",

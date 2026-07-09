@@ -794,7 +794,15 @@
       "createFirst": "Connect your first Bitrix24 portal",
       "createNew": "Create new portal",
       "pendingBadge": "Pending install — click to resume",
-      "loadError": "Failed to load portals. Refresh to retry."
+      "loadError": "Failed to load portals. Refresh to retry.",
+      "deleteAria": "Delete portal {{name}}",
+      "deleteConfirm": {
+        "title": "Delete pending portal",
+        "description": "Delete pending portal \"{{name}}\"? It hasn't finished install and isn't used by any channel. This cannot be undone.",
+        "confirmLabel": "Delete",
+        "success": "Portal \"{{name}}\" deleted",
+        "error": "Failed to delete portal"
+      }
     },
     "errors": {
       "portalRequired": "Please select a portal.",

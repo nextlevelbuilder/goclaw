@@ -793,7 +793,15 @@
       "createFirst": "连接第一个 Bitrix24 门户",
       "createNew": "创建新门户",
       "pendingBadge": "等待授权 — 点击继续",
-      "loadError": "门户加载失败，请刷新重试。"
+      "loadError": "门户加载失败，请刷新重试。",
+      "deleteAria": "删除门户 {{name}}",
+      "deleteConfirm": {
+        "title": "删除待安装门户",
+        "description": "删除待安装门户\"{{name}}\"？它尚未完成安装，也未被任何渠道使用。此操作不可撤销。",
+        "confirmLabel": "删除",
+        "success": "已删除门户\"{{name}}\"",
+        "error": "删除门户失败"
+      }
     },
     "errors": {
       "portalRequired": "请选择一个门户。",
